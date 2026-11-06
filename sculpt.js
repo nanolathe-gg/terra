@@ -6,7 +6,8 @@ import {controlRow} from './sculpt-workspace.js';
 import {copyColumn, columnHasCapBed} from './sculpt-column.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps} from './sculpt-shape-presets.js';
-import {strokeKind,TOOL_PRESETS,SPUR_OUTLINE_KEYS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver} from './sculpt-scene.js';
+import {strokeKind,TOOL_PRESETS,SPUR_OUTLINE_KEYS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
+  shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,hexColors,rendererColors,weatheredCell,bilinearCells,FIELD_KEYS,regionalCheck,pagedTime} from './sculpt-scene.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -525,7 +526,6 @@ function craterletSpot(n,seed,radius,k) {
   const angle=craterletRand(seed,k,1)*Math.PI*2+turn,dist=radius*(.9+craterletRand(seed,k,2)*1.1),small=radius*(.1+.22*craterletRand(seed,k,3));
   return {p:{x:clamp(c.x+Math.cos(angle)*dist,0,size-1),y:clamp(c.y+Math.sin(angle)*dist,0,size-1)},small};
 }
-const FIELD_KEYS=['h','p','r','c','v','x',...MASK_KEYS];
 function addNode(n) {
   nodes.push(n); regionalFields.changed(nodeBounds(n));
 }
@@ -620,8 +620,7 @@ function regionalDirtyRect(from,rect) {
 }
 // Shape runs on the GPU: the compute passes of engine-shape.wgsl (sculpt-gpu-fields.js) draw every brush; a node they do not draw draws nothing.
 const shapeKnob=(key) => renderer?.variantNumber?.(key,worldSetting(key))??worldSetting(key);
-const shapeContext=() => ({params:n => ({...shapeDefaults(),...n.params}),seed,repose:Math.tan((renderer?.variantNumber?.('talusAngle',40)??40)*Math.PI/180),sea:config.seaLevel,baseHeight:config.baseHeight,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
-    frost:{gapSize:worldSetting('frostGapSize'),gapDepth:worldSetting('frostGapDepth'),gaps:worldSetting('frostGaps'),gapReach:worldSetting('frostGapReach')}});
+const shapeContext=() => shapeContextIn({config,settings:experiment,seed,talusAngle:renderer?.variantNumber?.('talusAngle',40)??40,minH:MIN_HEIGHT,maxH:MAX_HEIGHT});
 // H5b: a map over 1168 samples a side runs its fields and Time pass in pages. gpuPages=force pages a smaller map too: a test hook for comparing pages with the whole map, not a switch (both are the GPU).
 const gpuPagesForced=() => new URLSearchParams(location.search).get('gpuPages')==='force';
 const pagedWanted=() => worldGrid>1168 || gpuPagesForced();
@@ -734,20 +733,18 @@ function endRegionalMove(commit=true) {
   else if (gesture.changed) checkpoint();
   selectNode(gesture.index); updateControls(); schedule(); queueWeather(); return commit?gesture.index:false;
 }
-function currentDrawOptions() {
-  return {clay:$('clay').checked,light:$('light').value,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100};
-}
+const surfaceValues=() => Object.fromEntries(SURFACE_SLIDER_IDS.map(id => [id,Number($(id).value)]));
+function currentDrawOptions() { return drawOptions(surfaceValues(),{clay:$('clay').checked,light:$('light').value}); }
 function regionalHeightCell(x,y) {
-  const h=regionalFields.cell(x,y),i=y*worldGrid+x;
+  const h=regionalFields.cell(x,y);
   if (!refined || !refinedBase || !$('weather').checked || !refinementValid(refinedInvalidRect,x,y)) return h;
-  return Math.fround(h+(refined[i]-refinedBase[i])*(1-smooth(0,10,Math.abs(h-refinedBase[i])))*(1-regionalFields.cell(x,y,'r')));
+  return weatheredCell(h,regionalFields.cell(x,y,'r'),y*worldGrid+x,refined,refinedBase);
 }
 function sampleRegional(x,y) {
   if (pagedOn()) return regionalFields.sampleEroded(x,y);
   if (gpuWeather && !gpuWeather.cpuHeight && !stroke && !moving && $('weather').checked) gpuWeatherCpu(false).catch(() => {});   // H6b: the first CPU reader asks for the Time pass's height
   if (!refined || !refinedBase || !$('weather').checked) return regionalFields.sample(x,y);
-  const gx=clamp(x/spacing,0,worldGrid-1),gy=clamp(y/spacing,0,worldGrid-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,worldGrid-1),jy=Math.min(iy+1,worldGrid-1),fx=gx-ix,fy=gy-iy;
-  return (regionalHeightCell(ix,iy)*(1-fx)+regionalHeightCell(jx,iy)*fx)*(1-fy)+(regionalHeightCell(ix,jy)*(1-fx)+regionalHeightCell(jx,jy)*fx)*fy;
+  return bilinearCells(x,y,spacing,worldGrid,regionalHeightCell);
 }
 // H6b: the map canvas fed from the GPU fields (Green's engine, maps up to 1168 samples a side). The Time pass reads the
 // fields' buffers and leaves its result in two GPU buffers (gpuWeather: weather = authored then eroded height, maps = the three packed layers); a chunk
@@ -790,16 +787,7 @@ async function gpuWeatherCpu(withMaps) {
 // H5b: the Time pass in pages: the knobs the pass reads (all of them in the key, so a change drops every page's weather), and the runner a page's window goes through.
 function configurePagedTime(fields=regionalFields) {
   if (!weatherOn()) return fields.setTime(null);
-  const p={age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),columnContrast:renderer.variantNumber('columnContrast',1),
-    envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)};
-  const material=materialKnobs();
-  return fields.setTime({key:JSON.stringify({...p,material,column:config.column,variant:config.variant}),material:Boolean(material),run:async win => {
-    const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer);
-    const r=await erosion.runGpu({...p,planes:win.planes,masks:win.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid:win.grid,size,spacing,seaLevel:config.seaLevel,ox:win.ox,oy:win.oy,drainage:drainagePlane()});
-    // The window's eroded height (plane 1 of the pass's weather buffer) makes the material field; the page keeps its core of it.
-    if (material) r.field=await erosion.materialField({heightBuffer:r.weather,heightOffset:win.grid*win.grid,grid:win.grid,size,ox:win.ox,oy:win.oy,seaLevel:config.seaLevel,baseHeight:config.baseHeight,seed:material.seed,depositSpread:material.depositSpread,profile:{...config.material,mineral:material.mineral}});
-    return r;
-  }});
+  return fields.setTime(pagedTime({config,renderer,size,spacing,material:materialKnobs(),drainage:drainagePlane}));
 }
 // P21: the drainage plane. One exact drainage area for the whole map on a 16-px lattice (sculpt-drainage.js), computed in the Time stage from the authored
 // height once an edit settles, stored on the GPU, and handed to the Time pass (engine-weather.wgsl drainageAt). It is out of date from the moment the fields
@@ -1092,7 +1080,7 @@ function queueWeather() {
 }
 // H12: the material field's knobs, or null when the Material weathering control is 0. The field comes from the Time pass's eroded height on the GPU
 // (engine-weather.wgsl mf*) and joins the chunk feed in gridTexture layer 1; a change of any of these drops the weather like a change of the pass's own knobs.
-const materialKnobs=() => { const amount=Number($('material-weathering')?.value)/100; return amount>0?{depositSpread:Number($('deposit-spread').value)/100,seed:refinementSeed,mineral:renderer.variant.get('transition')==='mineral'}:null; };
+const materialKnobs=() => materialKnobsIn(surfaceValues(),refinementSeed,renderer.variant.get('transition'));
 // H6b: the Time pass on the fields' GPU buffers; see gpuFeedSource. Nothing comes back to the CPU here.
 async function runFedWeather(job) {
   try {
@@ -1101,11 +1089,10 @@ async function runFedWeather(job) {
     const b=regionalFields.gpuBuffers();
     if (!b || job!==weatherJob) return;
     gpuPassBytes=grid*grid*120+Math.ceil(grid/8)**2*12;
-    const request={planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
-      envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)};
+    const request={planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,...timeKnobs(renderer)};
     request.drainage=drainagePlane();
     const result=await erosion.runGpu(request),material=materialKnobs();
-    if (material && job===weatherJob && !stroke) result.field=await erosion.materialField({heightBuffer:result.weather,heightOffset:grid*grid,grid,size,seaLevel:config.seaLevel,baseHeight:config.baseHeight,seed:material.seed,depositSpread:material.depositSpread,profile:{...config.material,mineral:material.mineral}});
+    if (material && job===weatherJob && !stroke) result.field=await erosion.materialField(materialRequest(config,material,{heightBuffer:result.weather,heightOffset:grid*grid,grid,size}));
     gpuPassBytes=0;
     if (job!==weatherJob || stroke) { retireGpuWeather(result); return; }
     const previous=gpuWeather,release=previous?leaseGpuWeather(previous):()=>{};let dirty;
@@ -1548,16 +1535,10 @@ function saveWorlds() { try { localStorage.setItem(WORLD_STORE,JSON.stringify(wo
 // A variant's colors (card C5) stay in config.colors; the world keeps only its base ones, so choosing a variant never writes into the world's own store.
 function activeWorld() { return worlds[worldId] ??= {name:config.biome,base:config.biomeId,colors:{...(config.baseColors||config.colors||{})},knobs:{}}; }
 const hexColor=c => '#'+c.map(v => Math.round(clamp(v,0,1)*255).toString(16).padStart(2,'0')).join('');
-const rgbColor=h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255);
 // A world's colors: the server's defaults for its base world, then the
 // world's own choices; null means explicitly off (the texture's own color).
-function mergedColors() {
-  const out={...(config.colors||{}),...(activeWorld().colors||{})};
-  // ?sunColor=ffd9a8&skyColor=8fb0ff try the light's colors on a page without changing the world (renders, review sheets).
-  for (const key of ['sun','sky']) { const q=experiment.get(key+'Color'); if (q && /^#?[0-9a-f]{6}$/i.test(q)) out[key]=q.startsWith('#')?q:'#'+q; }
-  return out;
-}
-function worldColors() { const out={}; for (const [k,v] of Object.entries(mergedColors())) if (typeof v==='string' && /^#[0-9a-f]{6}$/i.test(v)) out[k]=rgbColor(v); columnOverride?.colors?.forEach((c,i)=>{out['strata'+(i+1)]=c.map(v=>v/255);});return out; }
+function mergedColors() { return hexColors({...(config.colors||{}),...(activeWorld().colors||{})},experiment); }
+function worldColors() { return rendererColors(mergedColors(),columnOverride?.colors); }
 function columnForEdit(){const column=structuredClone(config.column);if(column?.colors){const colors=worldColors();column.colors=column.colors.map((c,i)=>colors['strata'+(i+1)]?.map(v=>v*255)||c);}return column;}
 function restoreColumn(column){
   columnOverride=column;config.column=column||defaultColumn;columnEditing=false;
@@ -1811,17 +1792,10 @@ async function boot() {
     buildShapeOptions();
     for (const kind of Object.keys(HELP)) toolSettings[kind]=toolDefaults(kind);
     showTool(toolSettings[tool]);
-    $('relief').value=Math.round((config.material?.surfaceRelief??1)*100);
-    $('material-weathering').value=Math.round((config.material?.materialWeathering??0)*100);
-    $('deposit-spread').value=Math.round((config.material?.depositSpread??.65)*100);
-    $('transition-detail').value=Math.round((config.material?.transitionDetail??.65)*100);
+    // The surface sliders open at the world's material values; the address may set the ring's three (a world's own fringe settings, 0..1).
+    for (const [id,value] of Object.entries(surfaceSliders(config,experiment))) $(id).value=value;
     $('transition-detail-control').hidden=!config.layers.includes('body');
     $('ring-controls').hidden=!config.layers.includes('ring');
-    $('mineral-ring').value=Math.round((config.material?.ringAmount??0)*100);
-    $('ring-spread').value=Math.round((config.material?.ringSpread??.65)*100);
-    $('ring-variation').value=Math.round((config.material?.ringVariation??.7)*100);
-    // The address may set the three ring sliders (a world's own fringe settings, 0..1).
-    for (const [key,id] of [['ringAmount','mineral-ring'],['ringSpread','ring-spread'],['ringVariation','ring-variation']]) if (experiment.has(key)) $(id).value=Math.round(Number(experiment.get(key))*100);
     await bootMap();
   } catch (err) { error(err.message); status('The experimental renderer could not start.'); }
 }
@@ -1838,44 +1812,10 @@ async function shapeCompare() {
   regionalFields.changed(); await idle(); const b=copy(grab(regionalFields.readCells(all)));
   return {grid:worldGrid,repeat:comparePlanes(a,b,worldGrid,MASK_KEYS)};
 }
-// H12b: the regional check on the map. The map's paged fields (gpuPages=force) read each quadrant of the map; the same
-// shape engine runs the same window directly; every authored plane must match exactly. Quadrant windows, so each window
-// is a regional run on its own.
-async function gpuRegionalCheck() {
-  if (!regionalFields?.readRect) throw new Error('the regional check needs the paged fields: open the map with gpuPages=force');
-  await regionalFields.ready?.();
-  const G=worldGrid,engine=await createShapeEngine({device:renderer.device,grid:G,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT}),ctx=shapeContext();
-  const planes=Object.fromEntries(FIELD_KEYS.map(k => [k,{mismatches:0,maxDifference:0,firstMismatch:null}]));
-  let mismatches=0;
-  try {
-    const middle=Math.floor(G/2);
-    for (const [y0,y1] of [[0,middle-1],[middle,G-1]]) for (const [x0,x1] of [[0,middle-1],[middle,G-1]]) {
-      const rect={x0,y0,x1,y1},W=x1-x0+1,out=await engine.run(nodes.slice(),ctx,rect),rp=await regionalFields.readRect(rect,{weather:false});
-      const expected={h:out.floats[0],p:out.floats[1],r:out.floats[2],c:out.floats[3],v:out.floats[4],x:out.floats[5]};
-      for (const key of FIELD_KEYS) {
-        const j=MASK_KEYS.indexOf(key),want=j>=0?out.masks[j]:expected[key],got=rp.fields[key],p=planes[key];
-        for (let i=0;i<W*W;i++) {
-          const a=want[i],b=got[i]; if (a===b && Number.isFinite(b)) continue;
-          p.mismatches++; mismatches++; p.maxDifference=Math.max(p.maxDifference,Math.abs(b-a)||Infinity); p.firstMismatch??={x:x0+i%W,y:y0+Math.floor(i/W),engine:a,paged:b};
-        }
-      }
-    }
-    // P21: the drainage plane from the paged fields' coarse lattice against the one from the whole-map engine's heights: the same (area, receiver) in every cell.
-    {
-      const {computeDrainage,latticeWidth,DRAIN_STEP}=await import('./sculpt-drainage.js');
-      if (!pagedCoarseStarted) { pagedCoarseStarted=true; regionalFields.startCoarse().catch(() => {}); }
-      await regionalFields.coarseSettled();
-      const c=regionalFields.coarseLattice(),whole=(await engine.run(nodes.slice(),ctx,null)).floats[0],w=latticeWidth(G),heights=new Float32Array(w*w);
-      for (let j=0;j<w;j++) for (let i=0;i<w;i++) heights[j*w+i]=whole[j*DRAIN_STEP*G+i*DRAIN_STEP];
-      const a=await computeDrainage(renderer.device,{heights,width:w,sea:config.seaLevel}),b=await computeDrainage(renderer.device,{heights:c.heights,width:c.width,sea:config.seaLevel});
-      const read=async plane => new Uint32Array(await readBuffer(renderer.device,plane.buffer,0,plane.bytes));
-      const [pa,pb]=[await read(a),await read(b)],p={mismatches:0,maxDifference:0,firstMismatch:null};
-      if (c.width!==w) throw new Error('the coarse lattice is not the drainage lattice');
-      for (let i=0;i<pa.length;i++) if (pa[i]!==pb[i]) { p.mismatches++; mismatches++; p.maxDifference=Math.max(p.maxDifference,Math.abs(pa[i]-pb[i])); p.firstMismatch??={cell:i>>1,what:i&1?'receiver':'area',engine:pa[i],paged:pb[i]}; }
-      planes.drainage=p; a.retire(); b.retire();
-    }
-    return {grid:G,planes,mismatches,gpuShape:true};
-  } finally { engine.destroy(); }
+// H12b: the regional check on the map (sculpt-scene.js regionalCheck; repro/regional.mjs): the paged fields (gpuPages=force) against the shape engine.
+function gpuRegionalCheck() {
+  return regionalCheck({fields:regionalFields,device:renderer.device,nodes,context:shapeContext(),config,grid:worldGrid,spacing,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
+    startCoarse:() => { if (!pagedCoarseStarted) { pagedCoarseStarted=true; regionalFields.startCoarse().catch(() => {}); } }});
 }
 // P21: the drainage plane's checks. drainageRun gives a lattice of heights to the GPU passes and reads the plane back; drainageLive waits for the live map's plane to be
 // current and reads it back with the heights it came from (repro/drainage.mjs compares both with a CPU reference). The stored plane is also what status() reports.
@@ -1921,7 +1861,7 @@ window.sculptDebug.pagedWeatherCompare=async () => {
   await regionalFields.readRect({x0:0,y0:0,x1:G-1,y1:G-1},{weather:true});
   const eng=await createShapeEngine({device:renderer.device,grid:G,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT});
   await eng.run(nodes.slice(),shapeContext(),null);
-  const p={age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)};
+  const p=timeKnobs(renderer);
   const whole=await erosion.runGpu({...p,planes:eng.planes,masks:eng.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid:G,size,seaLevel:config.seaLevel});
   const wa=new Float32Array(await readBuffer(renderer.device,whole.weather,0,n*4)),we=new Float32Array(await readBuffer(renderer.device,whole.weather,n*4,n*4)),wm=await Promise.all(whole.maps.map(m => readBuffer(renderer.device,m,0,n*4).then(b => new Uint8Array(b))));
   let maxE=0,maxA=0,nE=0,mapBad=[0,0,0],mapMax=[0,0,0],pages=0,at=null;

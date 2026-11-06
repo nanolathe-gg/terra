@@ -4,6 +4,9 @@
 // (sculpt.py world_configs) and, where the page's address may override them, the page's settings (pageSettings).
 import {FACING_CHOICES,FORMS} from './sculpt-shape-presets.js';
 import {applyRiver,isRiver} from './sculpt-river.js';
+import {createShapeEngine,readBuffer} from './sculpt-gpu-fields.js';
+import {computeDrainage,latticeWidth,DRAIN_STEP} from './sculpt-drainage.js';
+import {erosionOf} from './sculpt-erosion.js';
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 // Biomes choose starting values for the same brushes. These presets can be
 // borrowed independently of the canvas materials and then edited per tool.
@@ -264,3 +267,103 @@ export function sceneNodes(config,list,{ground=true,seed=DEFAULT_SEED,settings=p
 // A river's path, migrated over the map (or the working field without one).
 export const migrateRiver=(config,node) => applyRiver(node,{w:config.map?.width??config.worldSize??config.size,h:config.map?.height??config.worldSize??config.size});
 
+// What the page runs a scene with besides its nodes, so the headless runner runs it the same way.
+// The shape engine's context (sculpt-gpu-fields.js): each node's options over the world's, the brush seed, the talus slope, the sea and
+// base, the height range the fields clamp to (heightRange) and the frost gaps (world settings the address may override).
+export const heightRange=config => ({minH:config.seaLevel-90,maxH:config.seaLevel+300});
+export const shapeContext=({config,settings,seed,talusAngle=40,minH,maxH}) => ({params:n => ({...shapeDefaults(config),...n.params}),seed,repose:Math.tan(talusAngle*Math.PI/180),sea:config.seaLevel,baseHeight:config.baseHeight,minH,maxH,
+  frost:{gapSize:worldSetting(config,settings,'frostGapSize'),gapDepth:worldSetting(config,settings,'frostGapDepth'),gaps:worldSetting(config,settings,'frostGaps'),gapReach:worldSetting(config,settings,'frostGapReach')}});
+// The Time pass's knobs (sculpt-erosion.js runGpu), from the renderer's settings: the engine's, the world's, then the address.
+export const timeKnobs=renderer => ({age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
+  envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)});
+// H5b: the Time pass of a paged map (createPagedFields setTime): the knobs the pass reads, all of them in the key (so a change drops every page's
+// weather), and the runner a page's window goes through. `material` is materialKnobs' answer; `drainage` gives the plane to hand the pass (P21).
+export function pagedTime({config,renderer,size,spacing,material,drainage=() => null}) {
+  const p={...timeKnobs(renderer),columnContrast:renderer.variantNumber('columnContrast',1)};
+  return {key:JSON.stringify({...p,material,column:config.column,variant:config.variant}),material:Boolean(material),run:async win => {
+    const erosion=await erosionOf(renderer);
+    const r=await erosion.runGpu({...p,planes:win.planes,masks:win.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid:win.grid,size,spacing,seaLevel:config.seaLevel,ox:win.ox,oy:win.oy,drainage:drainage()});
+    // The window's eroded height (plane 1 of the pass's weather buffer) makes the material field; the page keeps its core of it.
+    if (material) r.field=await erosion.materialField(materialRequest(config,material,{heightBuffer:r.weather,heightOffset:win.grid*win.grid,grid:win.grid,size,ox:win.ox,oy:win.oy}));
+    return r;
+  }};
+}
+// The surface sliders (sculpt.html's range inputs, by id): the material value each opens at and its default, then the slider's min, max and
+// step. A page opens each at round(value x 100), clamped and snapped to its step as the browser does; the address may set the ring's three.
+const SURFACE_SLIDERS={relief:['surfaceRelief',1,0,160,5],'material-weathering':['materialWeathering',0,0,100,1],'deposit-spread':['depositSpread',.65,0,100,1],
+  'transition-detail':['transitionDetail',.65,0,100,1],'mineral-ring':['ringAmount',0,0,100,1],'ring-spread':['ringSpread',.65,0,100,1],'ring-variation':['ringVariation',.7,0,100,1]};
+export const SURFACE_SLIDER_IDS=Object.keys(SURFACE_SLIDERS);
+export const sliderRange=id => SURFACE_SLIDERS[id].slice(2);
+export const sliderValue=(id,v) => { const [,,lo,hi,step]=SURFACE_SLIDERS[id]; return clamp(lo+step*Math.round((clamp(v,lo,hi)-lo)/step),lo,hi); };
+export const surfaceSliders=(config,settings) => Object.fromEntries(Object.entries(SURFACE_SLIDERS).map(([id,[key,fallback]]) =>
+  [id,sliderValue(id,Math.round((['ringAmount','ringSpread','ringVariation'].includes(key)&&settings.has(key)?Number(settings.get(key)):config.material?.[key]??fallback)*100))]));
+// The draw's options from the slider values (by id) and the view switches.
+export const drawOptions=(s,{clay=false,light='original'}={}) => ({clay,light,detail:s.relief/100,ring:s['mineral-ring']/100,ringSpread:s['ring-spread']/100,ringVariation:s['ring-variation']/100,
+  materialWeathering:s['material-weathering']/100,transitionDetail:s['transition-detail']/100});
+// The material field's knobs, or null when Material weathering is 0 (sculpt-erosion.js materialField; `seed` is the refinement seed), and its
+// request over the Time pass's eroded height (heightBuffer, heightOffset cells in; ox, oy a page's first lattice cell).
+export const materialKnobs=(s,seed,transition) => s['material-weathering']/100>0?{depositSpread:s['deposit-spread']/100,seed,mineral:transition==='mineral'}:null;
+export const materialRequest=(config,material,{heightBuffer,heightOffset,grid,size,ox,oy}) => ({heightBuffer,heightOffset,grid,size,ox,oy,seaLevel:config.seaLevel,baseHeight:config.baseHeight,
+  seed:material.seed,depositSpread:material.depositSpread,profile:{...config.material,mineral:material.mineral}});
+// A world's colors for the renderer ([r, g, b], 0..1): the world's hex colors (null is off: the texture's own), ?sunColor=ffd9a8&skyColor=8fb0ff
+// from the address (a light's colors tried on a page without changing the world: renders, review sheets), and an edited column's strata.
+export function hexColors(colors,settings) {
+  const out={...colors};
+  for (const key of ['sun','sky']) { const q=settings.get(key+'Color'); if (q && /^#?[0-9a-f]{6}$/i.test(q)) out[key]=q.startsWith('#')?q:'#'+q; }
+  return out;
+}
+export const rgbColor=h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255);
+export function rendererColors(hex,strata) { const out={}; for (const [k,v] of Object.entries(hex)) if (typeof v==='string' && /^#[0-9a-f]{6}$/i.test(v)) out[k]=rgbColor(v); strata?.forEach((c,i)=>{out['strata'+(i+1)]=c.map(v=>v/255);});return out; }
+// A world as it opens with no choices of its own (sculpt.js activeWorld): the colors it starts from.
+export const openingColors=(config,settings) => hexColors({...(config.colors||{}),...(config.baseColors||config.colors||{})},settings);
+
+// The weathered height the page shows and samples (sculpt.js sampleRegional; render.mjs's heights): a cell's authored height h plus the Time pass's
+// change there (refined - refinedBase at cell i), faded where h has moved off the height the pass started from and on protected cells (r), and
+// bilinear between cells.
+const smooth=(a,b,v) => { const t=clamp((v-a)/(b-a),0,1); return t*t*(3-2*t); };
+export const weatheredCell=(h,r,i,refined,refinedBase) => Math.fround(h+(refined[i]-refinedBase[i])*(1-smooth(0,10,Math.abs(h-refinedBase[i])))*(1-r));
+export function bilinearCells(x,y,spacing,grid,cell) {
+  const gx=clamp(x/spacing,0,grid-1),gy=clamp(y/spacing,0,grid-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,grid-1),jy=Math.min(iy+1,grid-1),fx=gx-ix,fy=gy-iy;
+  return (cell(ix,iy)*(1-fx)+cell(jx,iy)*fx)*(1-fy)+(cell(ix,jy)*(1-fx)+cell(jx,jy)*fx)*fy;
+}
+
+// The planes a map's fields hold: the six authored planes, then the masks.
+export const FIELD_KEYS=['h','p','r','c','v','x',...MASK_KEYS];
+// H12b: the regional check of a scene on a map whose fields are paged (gpuPages=force): each quadrant of the map read from the pages against the same
+// shape engine run directly over that window; every authored plane must match exactly. Quadrant windows, so each window is a regional run on its own.
+// Then (P21) the drainage plane from the pages' coarse lattice against the one from the whole-map engine's heights: the same (area, receiver) in every
+// cell. `fields` is the map's paged fields (createPagedFields over `nodes`), `startCoarse` starts their coarse lattice if nothing has yet.
+export async function regionalCheck({fields,device,nodes,context,config,grid,spacing,minH,maxH,startCoarse=() => fields.startCoarse()}) {
+  if (!fields?.readRect) throw new Error('the regional check needs the paged fields: open the map with gpuPages=force');
+  await fields.ready?.();
+  const G=grid,engine=await createShapeEngine({device,grid:G,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH,maxH}),ctx=context;
+  const planes=Object.fromEntries(FIELD_KEYS.map(k => [k,{mismatches:0,maxDifference:0,firstMismatch:null}]));
+  let mismatches=0;
+  try {
+    const middle=Math.floor(G/2);
+    for (const [y0,y1] of [[0,middle-1],[middle,G-1]]) for (const [x0,x1] of [[0,middle-1],[middle,G-1]]) {
+      const rect={x0,y0,x1,y1},W=x1-x0+1,out=await engine.run(nodes.slice(),ctx,rect),rp=await fields.readRect(rect,{weather:false});
+      const expected={h:out.floats[0],p:out.floats[1],r:out.floats[2],c:out.floats[3],v:out.floats[4],x:out.floats[5]};
+      for (const key of FIELD_KEYS) {
+        const j=MASK_KEYS.indexOf(key),want=j>=0?out.masks[j]:expected[key],got=rp.fields[key],p=planes[key];
+        for (let i=0;i<W*W;i++) {
+          const a=want[i],b=got[i]; if (a===b && Number.isFinite(b)) continue;
+          p.mismatches++; mismatches++; p.maxDifference=Math.max(p.maxDifference,Math.abs(b-a)||Infinity); p.firstMismatch??={x:x0+i%W,y:y0+Math.floor(i/W),engine:a,paged:b};
+        }
+      }
+    }
+    {
+      startCoarse();
+      await fields.coarseSettled();
+      const c=fields.coarseLattice(),whole=(await engine.run(nodes.slice(),ctx,null)).floats[0],w=latticeWidth(G),heights=new Float32Array(w*w);
+      for (let j=0;j<w;j++) for (let i=0;i<w;i++) heights[j*w+i]=whole[j*DRAIN_STEP*G+i*DRAIN_STEP];
+      const a=await computeDrainage(device,{heights,width:w,sea:config.seaLevel}),b=await computeDrainage(device,{heights:c.heights,width:c.width,sea:config.seaLevel});
+      const read=async plane => new Uint32Array(await readBuffer(device,plane.buffer,0,plane.bytes));
+      const [pa,pb]=[await read(a),await read(b)],p={mismatches:0,maxDifference:0,firstMismatch:null};
+      if (c.width!==w) throw new Error('the coarse lattice is not the drainage lattice');
+      for (let i=0;i<pa.length;i++) if (pa[i]!==pb[i]) { p.mismatches++; mismatches++; p.maxDifference=Math.max(p.maxDifference,Math.abs(pa[i]-pb[i])); p.firstMismatch??={cell:i>>1,what:i&1?'receiver':'area',engine:pa[i],paged:pb[i]}; }
+      planes.drainage=p; a.retire(); b.retire();
+    }
+    return {grid:G,planes,mismatches,gpuShape:true};
+  } finally { engine.destroy(); }
+}
