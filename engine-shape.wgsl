@@ -721,6 +721,13 @@ fn lfCraterEjecta(wx: f32, wy: f32, trunk: u32) -> vec2f {
   let blanket = sm(0.85, 1.05, sr) * pow(sr, -3.0) * (1.0 - sm(1.5, 1.9, sr));
   return vec2f(u.ejAmt * w * (0.5 * blanket + tongue) * (0.8 + 0.4 * hum), lip);
 }
+// lfcrater: a spur off a section that peaks before its path (a crater's rim, u.lfPeak the peak's share of the half width from the foot) carries the section
+// from the foot to that peak, both sides, so it ridges out from the rim at the rim's height instead of carrying the bowl along it.
+fn lfCraterSpurShare(c: f32, e: f32, wm: f32) -> f32 {
+  let r = sqrt(c * c + e * e); let w = max(u.lfFront * wm, 0.5);
+  if (r >= w) { return 0.0; }
+  return curveAt(u.curveBase, u.lfPeak * (1.0 - r / w));
+}
 // One segment's candidate at a cell: (the value before combine, q clamped to 0..1).
 // trunkShare: the cell's place along the path (0 to 1), for a trunk segment; a spur piece carries its root's.
 fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32, nB: f32, nC: f32, trunkShare: f32, x: i32, y: i32, i: u32, cells: u32) -> vec3f {
@@ -750,7 +757,8 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
     cc = c * moved; ee = e * moved;
     wm = wm0 * exp(1.35 * u.lfWidth * wt * nB);
   }
-  let q = lfShare(cc, ee, cap, s1.w, wm);
+  var q = lfShare(cc, ee, cap, s1.w, wm);
+  if (spur && u.lfPeak > 0.0) { q = lfCraterSpurShare(cc, ee, wm); }
   let along = clamp(curveRaw(u.alongBase, share), 0.0, 1.2);
   let lfB = select(u.baseH, base, u.lfGround != 0u); let lfE = select(u.elev, base + u.elev, u.lfGround != 0u);
   let crest = lfB + (lfE - lfB) * along * hm;   // the plain is the map's base height (with Height reference Ground, the cell's own ground); a spur piece rises hm of the way from it   // the plain is the map's base height (with Height reference Ground, the cell's own ground); a spur piece rises hm of the way from it

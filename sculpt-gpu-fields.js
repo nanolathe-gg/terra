@@ -1,7 +1,7 @@
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {isRiver, isBraided, riverWidth, riverCurvature} from './sculpt-river.js';
-import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, impactOn, impactSetup, impactPath, impactSpread, impactWeight, landformPeak} from './sculpt-shape-presets.js';
+import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, landformGround, impactOn, impactSetup, impactPath, impactSpread, impactWeight, landformPeak} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -59,7 +59,9 @@ const NODE_FIELDS = [
   // lfcrater: a landform's Ground height reference (its elevation an offset from the ground under each cell) and a signed section (a knot below 0).
   ...['lfGround', 'lfSigned'].map(k => [k, 'u']),
   // lfcrater: the ejecta (height at the rim, the rim's distance from the path on each side) and the impact's spread (downrange, asymmetry, forbidden zones, wings).
-  ...['ejAmt', 'ejPeakF', 'ejPeakB', 'imX', 'imY', 'ejAsym', 'ejFz', 'ejWing', 'ejDz'].map(k => [k, 'f'])];
+  ...['ejAmt', 'ejPeakF', 'ejPeakB', 'imX', 'imY', 'ejAsym', 'ejFz', 'ejWing', 'ejDz'].map(k => [k, 'f']),
+  // lfcrater: where a signed section peaks (its share of the half width from the foot), for spurs rooted on that peak; 0 elsewhere.
+  ...['lfPeak'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -320,7 +322,11 @@ export function prepareNode(n, geom, c) {
     // its root's place along the path. Its back side follows its own direction the way the trunk's does.
     if (Math.round(q.spurCount) >= 1) {
       const rs = {...q, radius, seed, rot: [Math.cos(turn), Math.sin(turn)], inv};
-      for (const pc of spurPieces(rs, ridgeRoots(rs, path, cum, total), 1, 0)) {
+      // lfcrater: a signed section that peaks before its path (a crater's rim) roots its spurs on that peak, and each spur carries the section's outer flank
+      // (foot to peak) across its own width (lfCraterSpurShare).
+      const pk = landformSigned(q) ? landformPeak(q) : 0, sd0 = landformSides({...q, radius}), roots = ridgeRoots(rs, path, cum, pk > 0 && total < 1 ? 0 : total);   // a click's spurs leave all round it
+      if (pk > 0) for (const r of roots) { r.x += Math.cos(r.heading) * (1 - pk) * sd0.front; r.y += Math.sin(r.heading) * (1 - pk) * sd0.front; }
+      for (const pc of spurPieces(rs, roots, 1, 0)) {
         const e = pc.b || pc.a, at = segs.length, ex = landformReach(q, frameScale, Math.max(pc.r0, pc.r1)) + (q.spurBulb > 0 ? q.spurBulb * radius : 0);
         segs.push({px: pc.a.x, py: pc.a.y, ex: e.x, ey: e.y, f0: [0, 0], f1: [-1 - (pc.share ?? 0), landformBackSide(lean, turn, e.x - pc.a.x, e.y - pc.a.y)], nx: pc.r0, ny: pc.r1, w2: pc.h0, w3: pc.h1});
         segs[at].box = [clamp(Math.floor((Math.min(pc.a.x, e.x) - ex) / spacing), 0, grid - 1), clamp(Math.floor((Math.min(pc.a.y, e.y) - ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.x, e.x) + ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.y, e.y) + ex) / spacing), 0, grid - 1)];
@@ -370,7 +376,9 @@ export function prepareNode(n, geom, c) {
       cgTiers: q.crystalTiers ?? 0, cgStep: q.crystalStep ?? 0, cgVar: q.crystalVariation ?? 0, bgFace: q.bergFace, bgTilt: q.bergTilt, bgFlat: q.bergFlat, bgRough: q.bergRough, bgTx: Math.cos(bt), bgTy: Math.sin(bt), bgJit: clamp(q.bergJitter, 0, 1), bgTurn: turn});
   }
   // Angular facets re-tile a raised result; a landform with shore features keeps its coast pass instead (shapeControlAvailable hides the row there).
-  const facetMode = n.satellite ? 0 : kind === 'crater' && q.craterFacets > 0 ? 1 : q.iceFacets > 0 && kind === 'landform' && !landformShore(q) ? 2 : 0;
+  // lfcrater: a landform that digs into the ground it lands on (Height reference Ground, below 0) fits its facets to its own surface up and down, the pass a
+  // crater's Bowl facets ran (mode 1), at its Facet size, with the world's facet step and skin; a raised one keeps the angular facets (mode 2).
+  const facetMode = n.satellite ? 0 : kind === 'crater' && q.craterFacets > 0 ? 1 : q.iceFacets > 0 && kind === 'landform' && !landformShore(q) ? (landformGround(q) && q.elevation < 0 ? 1 : 2) : 0;
   if ((shoreShape || facetMode) && region) { const co = coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facetMode); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
   // H15 part 2: the stroke's curve tables, after every other extra row (rim sectors, coast sites); the shader reads them at curveBase and backBase.
   const cv = strokeCurve(kind, q);
@@ -389,7 +397,7 @@ export function prepareNode(n, geom, c) {
       // sides are), given in the shape's own frame, where the pattern runs.
       gully: .45 * clamp(q.gullies || 0, 0, 1.5), gullySize: clamp(clamp(q.gullySize ?? .4, .1, 1) * Math.max(sd.front, sd.back), 16, 480) / frameScale,
       // P17 Talus: cones below the Gullies' chutes, as long as the reach (world px) at the repose of the world's talusAngle; only where Gullies cut and the stroke raises.
-      talusReach: talusOn(q) ? clamp(q.talus, 0, 400) : 0, talusTan: c.repose ?? .84,
+      talusReach: talusOn(q) ? clamp(q.talus, 0, 400) : 0, talusTan: c.repose ?? .84, lfPeak: Math.round(q.spurCount) >= 1 && landformSigned(q) ? landformPeak(q) : 0,
       lfGround: Math.round(q.heightReference || 0) === 2 ? 1 : 0, lfSigned: landformSigned(q) ? 1 : 0});
     if (impact) Object.assign(main.u, impactUniforms(q, sd, impact, c));
   }
@@ -442,9 +450,9 @@ function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0
   const {grid, spacing, refSpacing = spacing} = geom;
   if (facet) {
     // Crater and mountain facets: a pass over the node's own result. The seeds of the 3 x 3 lattice neighbours lie within 2 widths of a cell, and read 3 cells round themselves.
-    const L = facet === 1 ? (q.crystalCraterPx > 0 ? q.crystalCraterPx : clamp(radius * .36, 14, 36)) : clamp(q.iceFacetSize, 16, 96), mF = Math.ceil(2.1 * L / spacing) + 6, boxF = expand(region, mF, grid), am = clamp(q.iceFacets, 0, 1);
+    const L = facet === 1 && !shoreShape ? (q.crystalCraterPx > 0 ? q.crystalCraterPx : clamp(radius * .36, 14, 36)) : clamp(q.iceFacetSize, 16, 96), mF = Math.ceil(2.1 * L / spacing) + 6, boxF = expand(region, mF, grid), am = clamp(q.iceFacets, 0, 1);
     return {box: boxF, readR: mF + 2, fingers: false, layers: false, plates: false, facet, scal: false, blurR: 1, maxCells: 0, sites: {i0: 0, j0: 0, ni: 0, nj: 0}, siteFloats: 0, sideR: 0, extra: [],
-      u: {fcMode: facet, fcL: L, fcStrength: clamp(q.craterFacets, 0, 1), fcStep: q.crystalCraterStep ?? 0, fcSkin: q.crystalCraterSkin >= .5 ? 1 : 0, fcShare: .2 + .5 * am, coPutW: 1, coBx0: boxF.x0, coBy0: boxF.y0, coBx1: boxF.x1, coBy1: boxF.y1}};
+      u: {fcMode: facet, fcL: L, fcStrength: clamp(shoreShape ? q.iceFacets : q.craterFacets, 0, 1), fcStep: q.crystalCraterStep ?? 0, fcSkin: q.crystalCraterSkin >= .5 ? 1 : 0, fcShare: .2 + .5 * am, coPutW: 1, coBx0: boxF.x0, coBy0: boxF.y0, coBx1: boxF.x1, coBy1: boxF.y1}};
   }
   const fReach = .5 * radius, fLimit = fReach + spacing * 3, lReach = layers ? coastLayerReach(q) : 0, reach = Math.max(fingers ? fLimit : 0, lReach, beach ? BEACH_REACH : 0, plates ? Math.max(plWater, plLand) + 2 * spacing : 0);
   const m = Math.ceil(reach / spacing) + 12, box = expand(region, m, grid), blurR = Math.max(1, Math.round(10 * refSpacing / spacing));
