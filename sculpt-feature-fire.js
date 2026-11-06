@@ -1,6 +1,7 @@
 // Fire for the feature generator (sculpt-feature-gen.js): the tree and shrub burn sequences, built as a simulation of rising
-// hot gas instead of per-frame flame shapes. Plain ES module, no dependencies; the simulation uses only + - * / and
-// Math.floor, so it gives the same bytes in Node and in the browser. Palette indices are the game's (flame 192-216).
+// hot gas instead of per-frame flame shapes. Plain ES module, no dependencies, seeded; no transcendental functions (only
+// arithmetic, floor/round/ceil and sqrt, all exactly rounded), so it gives the same bytes in Node and in the browser.
+// Palette indices are the game's (flame 192-216).
 //
 // What retail does (measured frame by frame on Tree1, Tree4 and Shrub1, 2 game ticks = 66.7 ms per frame):
 // - One flame column stands on a small flat foot at the trunk (7 columns at ignition, about 20 when burning). Its top grows
