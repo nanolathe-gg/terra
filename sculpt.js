@@ -798,7 +798,7 @@ function configurePagedTime(fields=regionalFields) {
 // P21: the drainage plane. One exact drainage area for the whole map on a 16-px lattice (sculpt-drainage.js), computed in the Time stage from the authored
 // height once an edit settles, stored on the GPU, and handed to the Time pass (engine-weather.wgsl drainageAt). It is out of date from the moment the fields
 // change until the plane for the new revision is computed; the Memory budgets panel says so.
-let drainage=null, drainageRun=null;   // drainageRun: the computation under way, which resolves once it stops
+let drainage=null, drainageBusy=false;
 const fieldsRevision=() => regionalFields?.stats?.().revision??0;
 const drainagePlane=() => drainage&&!drainage.destroyed?drainage:null;
 function showDrainage() {
@@ -817,22 +817,20 @@ async function drainageSource() {
   await regionalFields.gpuReady(); if (regionalFields.gpuPending()) return null;
   const b=regionalFields.gpuBuffers(); return b&&{revision:fieldsRevision(),input:{planes:b.planes,grid:b.grid}};
 }
-// Starts the plane for the fields' revision, or joins the run under way; the promise resolves once the plane is current (the run follows a
-// revision that moves under it, eight tries at most) or an edit has started.
-function queueDrainage() {
-  if (drainageRun) return drainageRun;
-  if (!weatherOn()||!regionalFields?.active?.()||stroke||moving||(drainage&&drainage.revision===fieldsRevision())) { showDrainage(); return Promise.resolve(); }
-  return drainageRun=(async () => {
-    try {
-      const {computeDrainage}=await import('./sculpt-drainage.js');
-      for (let tries=0;tries<8&&!stroke&&!moving&&!(drainage&&drainage.revision===fieldsRevision());tries++) {
-        const source=await drainageSource(); if (!source) continue;
-        const cells=(source.input.width??Math.floor((source.input.grid-1)/8)+1)**2; drainageTransient=cells*48;
-        let plane; try { plane=await computeDrainage(renderer.device,{...source.input,sea:config.seaLevel}); } finally { drainageTransient=0; }
-        plane.revision=source.revision; const old=drainage; drainage=plane; old?.retire(); showDrainage();
-      }
-    } catch (err) { console.error(err); }
-  })().finally(() => { drainageRun=null; showDrainage(); });
+async function queueDrainage() {
+  if (drainageBusy) return;
+  if (!weatherOn()||!regionalFields?.active?.()||stroke||moving||(drainage&&drainage.revision===fieldsRevision())) { showDrainage(); return; }
+  drainageBusy=true;
+  try {
+    const {computeDrainage}=await import('./sculpt-drainage.js');
+    for (let tries=0;tries<8&&!stroke&&!moving&&!(drainage&&drainage.revision===fieldsRevision());tries++) {
+      const source=await drainageSource(); if (!source) continue;
+      const cells=(source.input.width??Math.floor((source.input.grid-1)/8)+1)**2; drainageTransient=cells*48;
+      let plane; try { plane=await computeDrainage(renderer.device,{...source.input,sea:config.seaLevel}); } finally { drainageTransient=0; }
+      plane.revision=source.revision; const old=drainage; drainage=plane; old?.retire(); showDrainage();
+    }
+  } catch (err) { console.error(err); }
+  finally { drainageBusy=false; showDrainage(); }
 }
 function queuePagedWeather() {
   if (stroke||moving) return;
@@ -1090,7 +1088,6 @@ async function runFedWeather(job) {
   try {
     const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer);
     await regionalFields.gpuQuiet();   // the shape runs' own scratch (whole-map noise: peak 259 MB) is gone before the pass allocates its 120 B a cell
-    await queueDrainage();   // P21: the pass reads the plane of these fields (queueWeather started it), not the last edit's; the headless runner does the same
     const b=regionalFields.gpuBuffers();
     if (!b || job!==weatherJob) return;
     gpuPassBytes=grid*grid*120+Math.ceil(grid/8)**2*12;
@@ -1735,7 +1732,7 @@ window.drainageRun=async ({heights,width,sea=-1e30}) => {
 };
 window.drainageLive=async () => {
   const {DRAIN_STEP}=await import('./sculpt-drainage.js');
-  for (let i=0;i<400&&!(drainage&&drainage.revision===fieldsRevision()&&!drainageRun);i++) { queueDrainage(); await new Promise(r => setTimeout(r,100)); }
+  for (let i=0;i<400&&!(drainage&&drainage.revision===fieldsRevision()&&!drainageBusy);i++) { queueDrainage(); await new Promise(r => setTimeout(r,100)); }
   const d=drainage; if (!d||d.revision!==fieldsRevision()) return {error:'no current plane',weatherOn:weatherOn()};
   const raw=new Uint32Array(await readBuffer(renderer.device,d.buffer,0,d.bytes)),b64=a => { let t='';for (let i=0;i<a.byteLength;i+=8192)t+=String.fromCharCode(...new Uint8Array(a.buffer,a.byteOffset+i,Math.min(8192,a.byteLength-i)));return btoa(t); };
   let heights;
