@@ -2,7 +2,10 @@
 // world's three reproduction scenes (repro/scenes), on the real engine, and the render is compared with the unmoved one: repro/compare.py's
 // mean |diff| and share of pixels moved, and measure/impact.py's block share of the knob's class (decision 11: a kept control must move at least
 // 5% of its class at 1x, beside a noise floor of 1-3%). A zero is inactive on these scenes; check parent gates and variants before calling a control dead.
-//   node measure/geology_controls.mjs [--server http://127.0.0.1:8885] [--port 9685] [--out DIR] [--only desert,lava] [--knobs banding,strata] [--probe archipelago.ringScatter=0] [--family geology|fractures|shores|bodies|impacts] [--scenes DIR] [--list]
+//   node measure/geology_controls.mjs [--out DIR] [--only desert,lava] [--knobs banding,strata] [--probe archipelago.ringScatter=0] [--family geology|fractures|shores|bodies|impacts] [--scenes DIR] [--list]
+//        [--configs DIR] [--chrome --server http://127.0.0.1:<yours> --port <cdp>]
+// The renders are repro/render.mjs's: under Node on Dawn by default, from this checkout's files (the world configs dumped once), or in the page
+// with --chrome, which needs --server (your own sculpt.py server; there is no default).
 // --family impacts (H21): crater/rim/skin and regolith controls. Shape cards and top-level options win over query defaults;
 // only matching stroke kinds count. --scenes DIR supplies probe scenes (missing files fall back to repro/scenes).
 // --family fractures (H17): the crack, joint, gully, facet and block knobs. Each scene's own value is read as the page reads it (the query, then
@@ -13,7 +16,10 @@
 import {execFileSync} from 'node:child_process';
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 const args = process.argv.slice(2), opt = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
-const server = opt('--server', 'http://127.0.0.1:8885'), port = opt('--port', '9685'), out = opt('--out', 'geology-controls');
+const chrome = args.includes('--chrome'), server = opt('--server', ''), port = opt('--port', '9685'), out = opt('--out', 'geology-controls');
+if (chrome && !server) { console.error('geology_controls.mjs: --chrome needs --server http://127.0.0.1:<port> of your own sculpt.py server (there is no default server).'); process.exit(2); }
+// How render.mjs runs: in the page on the server, or under Node from the server's files or (no --server) this checkout's, its configs dumped once.
+const hostArgs = chrome ? ['--chrome', '--server', server, '--port', port] : server ? ['--server', server] : ['--configs', opt('--configs', '') || (await import('../repro/headless.mjs')).dumpConfigs()];
 const only = opt('--only', '').split(',').filter(Boolean), knobsOnly = opt('--knobs', '').split(',').filter(Boolean);
 const py = process.env.PYTHON || '/Users/daniel/src/terraform/.venv/bin/python';
 const here = new URL('..', import.meta.url).pathname;
@@ -132,7 +138,7 @@ function render(world, dir, query, edit) {
       }
       scene = `${dir}/${world}-${n}.scene.json`; mkdirSync(dir, {recursive: true}); writeFileSync(scene, JSON.stringify(s));
     }
-    const res = execFileSync('node', [`${here}repro/render.mjs`, scene, `${dir}/${world}-${n}`, '--server', server, '--port', port, ...(query ? ['--query', query] : [])]).toString().trim().split('\n').pop();
+    const res = execFileSync('node', [`${here}repro/render.mjs`, scene, `${dir}/${world}-${n}`, ...hostArgs, ...(query ? ['--query', query] : [])]).toString().trim().split('\n').pop();
     const info = JSON.parse(res);
     if (info.console.length || info.mismatch) logs.push(`${world}-${n} ${query}: ${JSON.stringify(info.console)} mismatch ${info.mismatch}`);
   }
