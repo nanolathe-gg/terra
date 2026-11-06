@@ -123,7 +123,9 @@ const smooth=(a,b,v) => { const t=clamp((v-a)/(b-a),0,1); return t*t*(3-2*t); };
 // Zero slope at the crown avoids the knife edge of a skewed power-law dome.
 setFailureHandler(err => error(err?.message??String(err)));
 function error(message='') { $('error').textContent=message; $('error').hidden=!message; }
-function status(message) { $('status').textContent=message; }
+// A load's note about features it left out (sculpt-features.js) rides along with the load's own message, once.
+let featureNotice='';
+function status(message) { $('status').textContent=featureNotice&&message!==featureNotice?message+' '+featureNotice:message; if(message!==featureNotice)featureNotice=''; }
 // Height slider range per shape kind; Raise / lower is signed.
 const amountRange=kind => kind==='crystal'?[5,200]:kind==='fissure'?[2,60]:['smooth','sand','grass','paint'].includes(kind)?[5,100]:[5,160];
 function toolDefaults(entry,preset=config?.biomeId||'green') { return toolDefaultsIn(config,entry,preset); }
@@ -159,9 +161,12 @@ function updateControls() {
   $('transform-mode').setAttribute('aria-pressed',String(!pathEditing&&drawMode!=='add'));
   $('selection-panel').classList.toggle('path-mode',pathEditing);
   const selectedNode=nodes[selected],hasSelection=Boolean(selectedNode?.points?.length),selectionActive=hasSelection&&tool==='move'&&!featureActive;
-  $('selection-empty').hidden=hasSelection;
+  // Generated features share the Select tool (sculpt-features.js): their values replace the shape's transform rows while any is selected.
+  const featureSelection=!featureActive&&tool==='move'&&(mapFeatures?.selectionCount||0)>0;
+  $('feature-selection').hidden=!featureSelection;$('selection-mode-buttons').hidden=$('shape-selection-actions').hidden=featureSelection;
+  $('selection-empty').hidden=hasSelection||featureSelection;
   $('path-actions').hidden=!pathEditing||!hasSelection;
-  $('transform-controls').hidden=pathEditing||!hasSelection||drawMode==='add';$('path-help').hidden=drawMode==='add';
+  $('transform-controls').hidden=pathEditing||!hasSelection||drawMode==='add';$('path-help').hidden=drawMode==='add'||featureSelection;
   $('selection-hud').hidden=!selectionActive;
   $('selection-hud').classList.toggle('path-mode',pathEditing);
   $('selection-mode').textContent=selectionActive?`${drawMode==='add'?'Add path':pathAdding?'Extend / branch':pathEditing?'Edit paths':'Transform'} · ${NODE_NAMES[selectedNode.kind]||selectedNode.kind} #${selected+1}`:'';
@@ -264,6 +269,7 @@ function updateControls() {
   syncToolGroups(`${tool}:${selected}`);
   editorUI.syncTools?.(activeTool,editing?nodes[selected].kind:null,locked,featureActive);
   if(featureActive)$('tool-help').textContent=mapFeatures.hint||'Place features and starts · Space + drag to pan';
+  else if(featureSelection)$('tool-help').textContent='Drag to move the selected features on the cell grid · Shift-click adds or removes · Delete removes · Escape deselects';
 }
 
 function canExport() {
@@ -967,7 +973,7 @@ function pickNode(p) {
 function selectNode(i) {
   if(selected!==i){pathPoint=-1;pathIndex=0;}
   pathAdding=false;drawMode='select';selected=i;
-  const n=nodes[i];
+  const n=nodes[i];if(n)mapFeatures?.clearSelection?.(false);
   if (n && n.params && (HELP[n.kind]||n.kind==='landform')) {
     if (tool!=='move') { rememberTool(); tool='move'; }
     mapFeatures?.deactivate();
@@ -1312,6 +1318,7 @@ $('draw-new').onclick=()=>{if(stroke||moving||loading)return;const n=nodes[selec
 $('draw-add').onclick=()=>{if(stroke||moving||loading||!nodes[selected]?.points||nodes[selected].hidden)return;drawMode='add';pathEditing=false;pathAdding=false;pathPoint=-1;updateControls();schedule();};
 for(const [id,value] of [['rotate-left',-Math.PI/12],['rotate-right',Math.PI/12],['scale-down',1/1.1],['scale-up',1.1]])$(id).onclick=()=>changeSelected(n=>transformNode(n,nodeState(n),about(nodePivot(n),id.startsWith('rotate')?rotation(value):scaling(value))));
 document.addEventListener('terraform-feature-mode',()=>updateControls());
+document.addEventListener('terraform-status',event=>{featureNotice=event.detail;status(event.detail);});
 $('tool-style').addEventListener('change',() => {
   const preset=$('tool-style').value;if(!Object.hasOwn(TOOL_PRESETS,preset))return;
   // A selected landform takes the world's version of the palette entry its section form belongs to.

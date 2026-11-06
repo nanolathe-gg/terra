@@ -109,7 +109,11 @@ func (s *terrainStream) finish() (*exportResult, error) {
 	if err = s.checkTNT(tnt, mini); err != nil {
 		return nil, fmt.Errorf("TNT self-check: %w", err)
 	}
-	archiveTemp, err := s.stage("archive", func(w io.Writer) error { return writeStreamArchive(w, s.req.Name, ota, tnt) })
+	var extra []vfs.ArchiveFile
+	if s.pack != nil {
+		extra = s.pack.files
+	}
+	archiveTemp, err := s.stage("archive", func(w io.Writer) error { return writeStreamArchive(w, s.req.Name, ota, tnt, extra) })
 	if err != nil {
 		return nil, err
 	}
@@ -330,36 +334,47 @@ func (s *terrainStream) checkTNT(file *os.File, mini []byte) error {
 	return nil
 }
 
-// Public vfs.WriteArchive accepts whole file byte slices. Reuse its canonical
-// empty-file directory, patch only the two stored record pointers/sizes, then
-// copy the files through a fixed buffer [fmt hpi] "Writing archives".
-func writeStreamArchive(w io.Writer, name string, ota []byte, tnt *os.File) error {
+// Public vfs.WriteArchive accepts whole file byte slices. Write every file but
+// the TNT whole (the OTA and the generated features' TDF and GAF are small),
+// leave the TNT empty, then patch its record and copy it through a fixed buffer
+// [fmt hpi] "Writing archives". Files go in directory order and "maps" sorts
+// after "anims" and "features", ".tnt" after ".ota": the TNT's bytes are the
+// last before the copyright trailer.
+func writeStreamArchive(w io.Writer, name string, ota []byte, tnt *os.File, extra []vfs.ArchiveFile) error {
 	stat, err := tnt.Stat()
 	if err != nil {
 		return err
 	}
 	var directory bytes.Buffer
-	if err = vfs.WriteArchive(&directory, []vfs.ArchiveFile{{Path: "maps/" + name + ".ota"}, {Path: "maps/" + name + ".tnt"}}, vfs.ArchiveWriteOptions{}); err != nil {
+	files := append([]vfs.ArchiveFile{{Path: "maps/" + name + ".ota", Data: ota}, {Path: "maps/" + name + ".tnt"}}, extra...)
+	if err = vfs.WriteArchive(&directory, files, vfs.ArchiveWriteOptions{}); err != nil {
 		return err
 	}
 	data := directory.Bytes()
 	le := binary.LittleEndian
-	end := int(le.Uint32(data[8:]))
-	root := int(le.Uint32(data[16:]))
-	rootEntry := int(le.Uint32(data[root+4:]))
-	maps := int(le.Uint32(data[rootEntry+4:]))
-	entries := int(le.Uint32(data[maps+4:]))
-	offset := uint32(end)
-	for i, size := range []int64{int64(len(ota)), stat.Size()} {
-		record := int(le.Uint32(data[entries+9*i+4:]))
-		le.PutUint32(data[record:], offset)
-		le.PutUint32(data[record+4:], uint32(size))
-		offset += uint32(size)
+	node := int(le.Uint32(data[16:]))
+	for _, part := range []string{"maps", name + ".tnt"} {
+		count, entries := int(le.Uint32(data[node:])), int(le.Uint32(data[node+4:]))
+		found := -1
+		for i := 0; i < count; i++ {
+			entry := entries + 9*i
+			at := int(le.Uint32(data[entry:]))
+			if end := bytes.IndexByte(data[at:], 0); end >= 0 && strings.EqualFold(string(data[at:at+end]), part) {
+				found = int(le.Uint32(data[entry+4:]))
+				break
+			}
+		}
+		if found < 0 {
+			return fmt.Errorf("archive directory has no %s", part)
+		}
+		node = found
 	}
-	if _, err = w.Write(data[:end]); err != nil {
-		return err
+	trailer := len(data) - len("Copyright 1997 Cavedog Entertainment")
+	if int(le.Uint32(data[node:])) != trailer || le.Uint32(data[node+4:]) != 0 {
+		return fmt.Errorf("archive TNT record is not the last file")
 	}
-	if _, err = w.Write(ota); err != nil {
+	le.PutUint32(data[node+4:], uint32(stat.Size()))
+	if _, err = w.Write(data[:trailer]); err != nil {
 		return err
 	}
 	if _, err = tnt.Seek(0, io.SeekStart); err != nil {
@@ -368,7 +383,7 @@ func writeStreamArchive(w io.Writer, name string, ota []byte, tnt *os.File) erro
 	if _, err = io.CopyBuffer(w, tnt, make([]byte, 64<<10)); err != nil {
 		return err
 	}
-	_, err = w.Write(data[end:])
+	_, err = w.Write(data[trailer:])
 	return err
 }
 
@@ -434,6 +449,9 @@ func (s *terrainStream) checkStreamArchive(path string, ota []byte, tnt *os.File
 	}
 	if offset != entries[1].Size {
 		return fmt.Errorf("archive TNT length differs")
+	}
+	if s.pack != nil {
+		return checkPackFiles(fs, s.pack)
 	}
 	return nil
 }

@@ -1,9 +1,12 @@
-// Card D phase 2. Placements belong to the map, never to its baked terrain art.
-const CELL=16, FILL_KINDS=['tree','foliage','rock'];
-const DEFAULT_FILL={kind:'tree',region:'brush',density:15,clustering:.5,gap:1,seed:2701,margin:96,radius:128};
+// Generated map features (owner, November 5-6 2026). Each map carries its own feature set: a recipe in the save (sculpt-feature-set.js)
+// from which sculpt-feature-gen.js draws every variant, lit by the map's light. Placements belong to the map, never to its baked terrain
+// art. Deposits and vents are painted into the ground: the view draws them from the export art under them, with the export's painter.
+import {GROUND_KINDS,FILL_KINDS,LABELS,PLURALS,MAX_VARIANTS,worldKinds,defaultSet,normalizeSet,variants as kindVariants,pickVariant,typeLabel,normalizePlacement,hash32} from './sculpt-feature-set.js';
+const CELL=16,PATCH=128,DEFAULT_FILL={kind:'tree',region:'brush',density:15,clustering:.5,gap:1,seed:2701,margin:96,radius:128};
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
-const key=p => p.name.toLowerCase()+'@'+p.x+','+p.z;
-const ordered=(a,b) => a.z-b.z || a.x-b.x || (a.name<b.name?-1:a.name>b.name?1:0);
+const key=p => p.kind+'@'+p.x+','+p.z;
+const ordered=(a,b) => a.z-b.z || a.x-b.x || (a.kind<b.kind?-1:a.kind>b.kind?1:0) || a.v-b.v;
+const intersects=(a,b) => a.x<b.x+b.width && b.x<a.x+a.width && a.y<b.y+b.height && b.y<a.y+a.height;
 function hash(x,z,seed) {
   let n=Math.imul(x,374761393)^Math.imul(z,668265263)^seed;
   n=Math.imul(n^(n>>>13),1274126177); return ((n^(n>>>16))>>>0)/4294967296;
@@ -50,116 +53,387 @@ export function featureRegionBounds(region,cols,rows,radius) {
 }
 
 export async function mountMapFeatures(api) {
-  const {config,canvas}=api,map=config.map;
-  if (!map) return {serialize:() => ({features:[],starts:[],fill:{...DEFAULT_FILL}}),load:() => {},draw:() => {},get active(){return false;},get busy(){return false;},deactivate:() => {}};
-  const cols=map.playRight/CELL,rows=map.playBottom/CELL,doc=canvas.ownerDocument;
+  const {config,canvas}=api,map=config.map,doc=canvas.ownerDocument,$=id => doc.getElementById(id);
+  const nothing=() => {};
+  if (!map) return {serialize:() => ({features:[],featureSet:{},starts:[],fill:{...DEFAULT_FILL}}),load:nothing,draw:nothing,deactivate:nothing,activate:() => false,clearSelection:nothing,pointerSelect:() => false,hitAt:() => null,fitGround:async () => false,groundChanged:nothing,stats:() => ({imageBytes:0}),get selectionCount(){return 0;},get active(){return false;},get busy(){return false;}};
+  const cols=map.playRight/CELL,rows=map.playBottom/CELL,shift=Math.floor(config.baseHeight/2),kinds=worldKinds(config);
   const defaults=() => { const mx=map.unitsX===1?128:256,mz=map.unitsY===1?128:256; return [{x:mx,z:mz},{x:map.playRight-mx,z:map.playBottom-mz}]; };
-  let placements=[],starts=defaults(),fill={...DEFAULT_FILL},generated=new Set(),mode='',selectedName='',selectedFeature=-1,selectedStart=0;
-  let gesture=null,hover=null,space=false,ready=false,catalogue=null,catalogueError='',message='Reading the world’s feature catalogue…';
-  const definitions=new Map(),images=new Map(),buttons=new Map(),panPointers=new Set();
-  const root=doc.createElement('section'); root.className='section'; root.id='map-features-panel';
-  root.innerHTML=`<h3>Features and starts</h3><fieldset id="map-features-controls" style="border:0;padding:0;margin:0;min-width:0" disabled>
-    <div class="tools" data-tools style="margin-top:9px"></div>
-    <p class="small" data-help></p><p class="small" data-catalogue></p>
-    <div data-catalogue-controls><div class="row"><label>Kind <select data-filter><option value="all">All features</option><option value="tree">Trees</option><option value="foliage">Foliage</option><option value="rock">Rocks</option><option value="deposit">Metal deposits</option><option value="other">Other</option></select></label></div>
-    <div data-catalogue-list style="max-height:220px;overflow:auto;margin:8px 0"></div><p class="small" data-selected></p></div>
-    <div class="control"><label>Start positions <select data-starts style="width:100%;margin-top:4px"></select></label><button type="button" data-remove-start style="margin-top:6px">Remove selected start</button><p class="small">Click empty ground to add a start. Drag a numbered marker, or Shift-click ground, to move the selected start. Keep 1–10 starts.</p></div>
-    <details data-fill><summary>Tree, foliage and rock fill</summary><div class="row"><label>Mix <select data-fill-kind><option value="tree">Trees</option><option value="foliage">Foliage</option><option value="rock">Rocks</option></select></label><label>Region <select data-fill-region><option value="brush">Brush</option><option value="lasso">Lasso</option><option value="flood">Flood</option></select></label></div>
-      <div data-fill-controls></div><p class="small">Fill uses the world’s usage-weighted mix on dry cells whose four exported corner heights differ by at most 10. Brush and lasso fill on release; flood follows connected gentle dry ground.</p>
-    </details><p class="small" data-count></p><p class="small" data-state role="status"></p>
-  </fieldset>`;
-  api.host.append(root);
-  const $=selector => root.querySelector(selector),controls=$('fieldset'),fillInputs=new Map();
-  const enabled=() => ready && api.enabled();
-  const status=text => { message=text; $('[data-state]').textContent=text; };
+  let set=defaultSet(config),placements=[],starts=defaults(),fill={...DEFAULT_FILL},generated=new Set(),mode='',placeKind='deposit',placeVariant=-1,selectedStart=0,rolls=0;
+  let selection=new Set(),gesture=null,hover=null,space=false,message='';
+  const panPointers=new Set(),controls=$('map-features-controls'),buttons=new Map([...doc.querySelectorAll('[data-feature-mode]')].map(b => [b.dataset.featureMode,b]));
+  const enabled=() => api.enabled();
+  const status=text => { message=text; $('feature-state').textContent=text; };
   const guard=() => { if (enabled()) return true; status('Map editing is unavailable while terrain is loading or export is running.'); return false; };
-  const definition=name => definitions.get(String(name).toLowerCase());
-  const rectangle=(p,d=definition(p.name)) => ({x0:p.x*CELL,z0:p.z*CELL,x1:(p.x+d.footprintX)*CELL,z1:(p.z+d.footprintZ)*CELL});
-  const deposit=d => d && (d.kind==='deposit' || d.name.toLowerCase()===String(catalogue?.depositName||'').toLowerCase());
-  const scatter=d => d && FILL_KINDS.includes(d.kind);
+
+  // ---- the set's variants ----
+  // Each set edit makes a new `set`, so a kind's list is kept until the set object changes (draw asks for it per feature, per frame).
+  const lists=new Map(); let listsOf=null;
+  function variantList(kind) { if (listsOf!==set) { lists.clear(); listsOf=set; } let list=lists.get(kind); if (!list) { list=kindVariants(kind,set,config); lists.set(kind,list); } return list; }
+  const variantOf=p => variantList(p.kind)[p.v];
+  const footprint=p => variantOf(p)?.footprint||[1,1];
+  const rectangle=p => { const [fw,fz]=footprint(p); return {x0:p.x*CELL,z0:p.z*CELL,x1:(p.x+fw)*CELL,z1:(p.z+fz)*CELL}; };
   function pointDistance(p,r) { return Math.hypot(Math.max(r.x0-p.x,0,p.x-r.x1),Math.max(r.z0-p.z,0,p.z-r.z1)); }
   function rectDistance(a,b) { return Math.hypot(Math.max(a.x0-b.x1,b.x0-a.x1,0),Math.max(a.z0-b.z1,b.z0-a.z1,0)); }
-  function inBounds(p,d) { return Number.isInteger(p.x) && Number.isInteger(p.z) && p.x>=0 && p.z>=0 && p.x+d.footprintX<=cols && p.z+d.footprintZ<=rows; }
+  function inBounds(p) { const [fw,fz]=footprint(p); return Number.isInteger(p.x) && Number.isInteger(p.z) && p.x>=0 && p.z>=0 && p.x+fw<=cols && p.z+fz<=rows; }
   function validStart(p) { return Number.isInteger(p.x) && Number.isInteger(p.z) && p.x>=0 && p.z>=0 && p.x<map.playRight && p.z<map.playBottom; }
-  function overlaps(a,ad,b,bd,gap=0) { return a.x< b.x+bd.footprintX+gap && a.x+ad.footprintX+gap>b.x && a.z<b.z+bd.footprintZ+gap && a.z+ad.footprintZ+gap>b.z; }
-  function nearMargin(p,d,margin,list=placements,bases=starts) {
-    const rect=rectangle(p,d);
-    return bases.some(s => pointDistance(s,rect)<margin) || list.some(q => deposit(definition(q.name)) && rectDistance(rect,rectangle(q))<margin);
+  function overlaps(a,b,gap=0) { const [aw,az]=footprint(a),[bw,bz]=footprint(b); return a.x<b.x+bw+gap && a.x+aw+gap>b.x && a.z<b.z+bz+gap && a.z+az+gap>b.z; }
+  const deposit=p => p.kind==='deposit';
+  const scatter=p => FILL_KINDS.includes(p.kind);
+  function nearMargin(p,margin,list=placements,bases=starts) {
+    const rect=rectangle(p);
+    return bases.some(s => pointDistance(s,rect)<margin) || list.some(q => deposit(q) && rectDistance(rect,rectangle(q))<margin);
   }
   function trimGenerated(margin=fill.margin,list=placements,bases=starts) {
     let removed=0;
-    const kept=list.filter(p => { const d=definition(p.name),drop=generated.has(key(p)) && scatter(d) && nearMargin(p,d,margin,list,bases); if (drop) { generated.delete(key(p)); removed++; } return !drop; });
+    const kept=list.filter(p => { const drop=generated.has(key(p)) && scatter(p) && nearMargin(p,margin,list,bases); if (drop) { generated.delete(key(p)); selection.delete(p); removed++; } return !drop; });
     return {kept,removed};
   }
-  function update() {
-    controls.disabled=!enabled();
-    for (const [name,button] of buttons) { button.setAttribute('aria-pressed',String(mode===name)); button.disabled=!ready || (['place','erase','fill'].includes(name) && !definitions.size) || (name==='deposit' && !definition(catalogue?.depositName)); }
-    $('[data-catalogue-controls]').hidden=mode!=='place'||!definitions.size;
-    $('[data-starts]').closest('.control').hidden=mode!=='starts';
-    $('[data-fill]').hidden=mode!=='fill';if(mode==='fill')$('[data-fill]').open=true;
-    $('[data-selected]').textContent=selectedName && definition(selectedName)?metadata(definition(selectedName)):'';
-    const select=$('[data-starts]'); select.replaceChildren(...starts.map((s,i) => { const option=doc.createElement('option'); option.value=i; option.textContent=`${i+1}: (${s.x}, ${s.z})`; return option; }));
-    select.value=String(selectedStart); $('[data-remove-start]').disabled=starts.length<=1 || selectedStart<0;
-    $('[data-count]').textContent=`${placements.length} features · ${starts.length} starts`;
-    $('[data-state]').textContent=message;
-    const hints={place:'Click a cell to place the selected feature. Clicking an occupied footprint selects it; Delete removes it.',erase:'Click or drag across feature footprints to erase them.',deposit:'Click a cell to place the world’s metal deposit. Fill inside its margin is cleared.',starts:'Click empty ground to add a start. Drag a marker, or Shift-click ground, to move the selected start.',fill:`${fill.kind} fill: ${fill.region==='brush'?'drag a brush':fill.region==='lasso'?'draw a closed lasso':'click connected gentle dry ground'}. Space or middle-drag still pans.`};
-    $('[data-help]').textContent=hints[mode]||'Choose a feature tool, or keep sculpting terrain. Space or middle-drag pans in every tool.';
-    for (const [name,input] of fillInputs) input.value=String(fill[name]);
-    api.schedule();
-  }
-  function changed(text) { selectedFeature=-1; status(text); update(); api.change(); }
-  function activate(next) {
-    if (!guard()) return false;
-    finishGesture(false);mode=next==='deposit'&&!definition(catalogue?.depositName)?'starts':next;hover=null;update();doc.dispatchEvent(new Event('terraform-feature-mode'));return true;
-  }
-  function deactivate() { const wasActive=Boolean(mode);finishGesture(false);mode='';hover=null;update();if(wasActive)doc.dispatchEvent(new Event('terraform-feature-mode')); }
-  function metadata(d) { return `${d.name} · ${d.footprintX}×${d.footprintZ} cells · metal ${d.metal} · energy ${d.energy} · ${d.blocking?'blocking':'nonblocking'} · ${d.reclaimable?'reclaimable':'not reclaimable'} · ${d.uses} map uses${d.animTrans||d.shadTrans?' · translucent preview at 50% alpha':''}`; }
-  function refreshCatalogue() {
-    const list=$('[data-catalogue-list]'),kind=$('[data-filter]').value; list.replaceChildren();
-    for (const d of definitions.values()) {
-      if (kind!=='all' && d.kind!==kind) continue;
-      const button=doc.createElement('button'); button.type='button'; button.style.cssText='display:flex;align-items:center;gap:8px;width:100%;text-align:left;margin:3px 0;padding:5px';
-      if (d.sprite) { const img=doc.createElement('img'); img.src=d.sprite.url; img.alt=''; img.loading='lazy'; img.style.cssText='width:40px;height:40px;object-fit:contain;image-rendering:pixelated;flex:none'; button.append(img); }
-      const text=doc.createElement('span'); text.textContent=`${d.name} · ${d.footprintX}×${d.footprintZ} · ${d.uses} uses`; button.append(text); button.title=metadata(d);
-      button.setAttribute('aria-pressed',String(selectedName===d.name)); button.onclick=() => { if (!guard()) return; selectedName=d.name; selectedFeature=-1; activate('place'); refreshCatalogue(); }; list.append(button);
-    }
-  }
-  for (const [name,label] of [['place','Place feature'],['erase','Erase'],['deposit','Metal deposit'],['starts','Starts'],['fill','Fill']]) {
-    const button=doc.createElement('button'); button.type='button';button.dataset.featureMode=name;button.textContent=label;button.onclick=()=>activate(name); $('[data-tools]').append(button); buttons.set(name,button);
-  }
-  $('[data-filter]').onchange=() => { if (guard()) refreshCatalogue(); };
-  $('[data-starts]').onchange=event => { if (!guard()) { update(); return; } selectedStart=Number(event.target.value); activate('starts'); };
-  $('[data-remove-start]').onclick=() => removeStart(selectedStart);
-  $('[data-fill-kind]').onchange=event => { if (setFill({kind:event.target.value})) activate('fill'); };
-  $('[data-fill-region]').onchange=event => { if (setFill({region:event.target.value})) activate('fill'); };
-  for (const [name,label,min,max,step] of [['density','Density (%)',0,100,1],['clustering','Clustering',0,1,.05],['gap','Footprint gap (cells)',0,16,1],['seed','Seed',0,4294967295,1],['margin','Start / deposit margin (px)',0,4096,16],['radius','Brush radius (px)',16,1024,16]]) {
-    const labelNode=doc.createElement('label'); labelNode.className='control'; labelNode.style.display='block'; labelNode.textContent=label;
-    const input=doc.createElement('input'); input.type='number'; input.min=min; input.max=max; input.step=step; input.value=fill[name]; input.style.cssText='display:block;width:100%;box-sizing:border-box';
-    input.onchange=() => { if (!setFill({[name]:Number(input.value)})) update(); }; labelNode.append(input); $('[data-fill-controls]').append(labelNode); fillInputs.set(name,input);
+  // A placement's variant after the set changed: its own index while the set still has it, else one of the same footprint, so the
+  // features already placed keep their footprint (null when the kind has none of that size any more).
+  function refit(p,list=variantList(p.kind)) {
+    if (p.v<list.length) return p.v;
+    const [fw,fz]=footprint({...p,v:p.v%list.length}),old=p.oldFootprint;
+    const same=list.filter(v => old?v.footprint[0]===old[0]&&v.footprint[1]===old[1]:v.footprint[0]===fw&&v.footprint[1]===fz);
+    return same.length?same[p.v%same.length].index:null;
   }
 
-  function addFeature(name,x,z,options={}) {
+  // ---- pixels: a worker draws sprites and paints deposits and vents ----
+  let worker=null,jobId=0,workerError='';
+  const jobs=new Map();
+  function work(message,transfer=[]) {
+    if (!worker) {
+      worker=new Worker(new URL('./sculpt-feature-worker.js',import.meta.url),{type:'module'});
+      worker.onmessage=({data}) => { const job=jobs.get(data.id); jobs.delete(data.id); if (!job) return; if (data.error) job.reject(new Error(data.error)); else job.resolve(data); };
+      worker.onerror=event => { workerError=event.message||'The feature generator could not start.'; for (const job of jobs.values()) job.reject(new Error(workerError)); jobs.clear(); status(workerError); };
+    }
+    const id=++jobId;
+    return new Promise((resolve,reject) => { jobs.set(id,{resolve,reject}); worker.postMessage({...message,id},transfer); });
+  }
+  // TA's view lifts a point by half its height: the sun's screen direction is (east, south - up / 2) of the renderer's light.
+  function light() { const sun=api.light?.(); return sun?{x:Math.round(sun[0]*1000)/1000,y:Math.round((sun[1]-sun[2]/2)*1000)/1000}:null; }
+  async function bitmapOf(s) {
+    if (!s) return null;
+    const alpha=new Uint8Array(s.w*s.h); for (let i=0;i<alpha.length;i++) alpha[i]=s.rgba[i*4+3]?1:0;
+    return {bitmap:await createImageBitmap(new ImageData(s.rgba,s.w,s.h)),w:s.w,h:s.h,ax:s.ax,ay:s.ay,alpha};
+  }
+  const sprites=new Map();
+  const spriteKey=(v,sun) => { const at=sun.x+','+sun.y; if (v.keyLight!==at) { v.key=v.kind+'|'+v.seed+'|'+JSON.stringify(v.params)+'|'+at; v.keyLight=at; } return v.key; };
+  function sprite(v) {
+    const sun=light(); if (!sun || !v || GROUND_KINDS.includes(v.kind)) return null;
+    const k=spriteKey(v,sun);
+    let e=sprites.get(k);
+    if (!e) {
+      e={ready:false}; sprites.set(k,e);
+      work({type:'sprite',kind:v.kind,params:v.params,seed:v.seed,light:sun}).then(async r => {
+        Object.assign(e,{body:await bitmapOf(r.body),shadow:await bitmapOf(r.shadow),bodyBlend:r.bodyBlend,shadowBlend:r.shadowBlend,gameplay:r.gameplay,ready:true});
+        if (sprites.get(k)!==e) return release(e);
+        refreshVariants(); refreshSelection(); api.schedule();
+      },err => { e.error=err.message; status('A feature could not be drawn: '+err.message); });
+    }
+    return e.ready?e:null;
+  }
+  function release(e) { e.body?.bitmap.close?.(); e.shadow?.bitmap.close?.(); e.bitmap?.close?.(); }
+  // Keep only the current set's pixels.
+  function prune() {
+    const sun=light(),keep=new Set();
+    if (sun) for (const kind of kinds) for (const v of variantList(kind)) keep.add(spriteKey(v,sun));
+    for (const [k,e] of sprites) if (!keep.has(k)) { sprites.delete(k); release(e); }
+    const live=new Set(placements.filter(p => GROUND_KINDS.includes(p.kind)).map(key)),origins=new Set();
+    for (const [k,s] of stamps) if (!live.has(k)) { stamps.delete(k); release(s); }
+    for (const p of placements) if (GROUND_KINDS.includes(p.kind)) { const o=exactOrigin(p); if (o) origins.add(o.ox+','+o.oy); }
+    for (const [k,g] of grounds) if (!origins.has(k) && !g.pending) grounds.delete(k);
+    for (const kind of GROUND_KINDS) for (const v of variantList(kind)) keep.add('ground|'+kind+'|'+v.seed+'|'+JSON.stringify(kind==='deposit'?{...v.params,metal:set.deposit.metal}:v.params));
+    for (const k of thumbs.keys()) if (!keep.has(k)) thumbs.delete(k);
+  }
+
+  // ---- positions (client.featureScreenPos/featureAnchorY: the footprint centre, lifted by half the mean of the anchor cell's four
+  // rounded, clamped corner bytes). `anchor` is in the export art's (TA screen) pixels; the view is lower by half the base height. ----
+  const corner=(x,z) => { const h=api.sample(x*CELL,z*CELL); return Number.isFinite(h)?Math.round(clamp(h,0,255)):-1; };
+  function anchor(p) {
+    const [fw,fz]=footprint(p),sum=corner(p.x,p.z)+corner(p.x+1,p.z)+corner(p.x,p.z+1)+corner(p.x+1,p.z+1);
+    return {x:p.x*CELL+fw*8,y:p.z*CELL+fz*8-(sum>>3)};
+  }
+  const viewPoint=p => { const a=anchor(p); return {x:a.x,y:Math.floor(a.y+config.baseHeight/2)}; };
+  function project(p) { const h=api.sample(p.x,p.z); return {x:p.x,z:p.z-Math.floor(clamp(Number.isFinite(h)?h:0,0,255)/2)+config.baseHeight/2}; }
+
+  // ---- deposits and vents: painted into a 128 px patch of the export art centred on the anchor. The anchor is the export's: the
+  // anchor cell's four corner bytes as the TNT carries them (sculpt-canvas.js reads them as the export samples them); the view's own
+  // height stands in until they are read. Each patch is clean export art, so overlapping halos paint as the export paints them. ----
+  const grounds=new Map(),stamps=new Map(),thumbs=new Map();let groundGen=0;
+  const originOf=(p,corners) => { const [fw,fz]=footprint(p),sum=corners[0]+corners[1]+corners[2]+corners[3]; return {ox:p.x*CELL+fw*8-PATCH/2,oy:p.z*CELL+fz*8-(sum>>3)-PATCH/2}; };
+  const exactOrigin=p => { const s=stamps.get(key(p)); return s?.exact && !s.exactStale?s.exact:null; };
+  function groundOrigin(p) { const exact=exactOrigin(p); if (exact) return exact; const a=anchor(p); return {ox:a.x-PATCH/2,oy:a.y-PATCH/2}; }
+  function flatGround() {
+    const c=(api.groundColor?.()||[.21,.36,.1]).map(v => Math.round(clamp(v,0,1)*255)),rgba=new Uint8ClampedArray(PATCH*PATCH*4);
+    for (let i=0;i<PATCH*PATCH;i++) { rgba[i*4]=c[0]; rgba[i*4+1]=c[1]; rgba[i*4+2]=c[2]; }
+    return rgba;   // alpha 0: the painter marks what it writes
+  }
+  // A patch of export art (the part inside the map; the rest stays the world's mean ground, never written back), alpha 0.
+  function patchOf(origin,rect,data) {
+    const rgba=flatGround();
+    for (let row=0;row<rect.height;row++) rgba.set(data.subarray(row*rect.width*4,(row+1)*rect.width*4),((rect.y-origin.oy+row)*PATCH+rect.x-origin.ox)*4);
+    for (let i=3;i<rgba.length;i+=4) rgba[i]=0;
+    return rgba;
+  }
+  const patchRect=o => { const x=Math.max(0,o.ox),y=Math.max(0,o.oy),x1=Math.min(map.width,o.ox+PATCH),y1=Math.min(map.height,o.oy+PATCH); return x1>x && y1>y?{x,y,width:x1-x,height:y1-y}:null; };
+  const paintParams=p => p.kind==='deposit'?{...variantOf(p).params,metal:p.metal}:variantOf(p).params;
+  const paint=(p,rgba) => { const v=variantOf(p); return work({type:'paint',kind:p.kind,params:paintParams(p),seed:v.seed,w:PATCH,h:PATCH,cx:PATCH/2,cy:PATCH/2,rgba},[rgba.buffer]).then(r => r.rgba); };
+  function stampFor(p) {
+    const pk=key(p);
+    let s=stamps.get(pk); if (!s) { s={bitmap:null,want:'',painting:'',exact:null,exactStale:true}; stamps.set(pk,s); }
+    const exact=exactOrigin(p),gk=exact?exact.ox+','+exact.oy:'';
+    let g=exact?grounds.get(gk):null;
+    if (exact && !g) { g={ox:exact.ox,oy:exact.oy,rgba:null,gen:0,stale:true,pending:false,failed:false,input:null}; grounds.set(gk,g); }
+    const want=variantOf(p).seed+'|'+JSON.stringify(paintParams(p))+'|'+(g?.rgba?gk+'|'+g.gen:'flat');
+    if (s.want!==want && s.painting!==want) {
+      s.painting=want;
+      paint(p,g?.rgba?g.rgba.slice():flatGround()).then(async rgba => {
+        if (s.painting!==want) return;
+        const bitmap=await createImageBitmap(new ImageData(rgba,PATCH,PATCH));
+        if (s.painting!==want) { bitmap.close(); return; }
+        s.bitmap?.close?.(); Object.assign(s,{bitmap,want,painting:''}); api.schedule();
+      },err => { s.painting=''; status('A deposit or vent could not be painted: '+err.message); });
+    }
+    return s;
+  }
+  // One step of fitting the shown deposits and vents to the export, when the view is idle (sculpt-canvas.js): read an anchor's
+  // corner bytes, or bake a patch of export art under one. Visible ones first. True when it did something.
+  async function fitGround(view=null) {
+    const seen=p => !view || intersects({x:p.x*CELL-64,y:p.z*CELL-160,width:PATCH+64,height:PATCH+224},view);
+    const shown=placements.filter(p => GROUND_KINDS.includes(p.kind) && stamps.has(key(p))).sort((a,b) => seen(b)-seen(a));
+    for (const p of shown) {
+      const s=stamps.get(key(p)); if (s.exact && !s.exactStale) continue;
+      s.exactStale=false; const corners=await api.exportCorners?.(p.x,p.z);
+      if (!corners) { s.exactStale=true; return Boolean(api.exportCorners); }
+      if (stamps.get(key(p))===s) { s.exact=originOf(p,corners); api.schedule(); }
+      return true;
+    }
+    const live=new Set(shown.map(exactOrigin).filter(Boolean).map(o => o.ox+','+o.oy));
+    for (const [gk,g] of grounds) if (!live.has(gk) && !g.pending) grounds.delete(gk);
+    let best=null;
+    for (const g of grounds.values()) { if (!g.stale || g.pending || g.failed) continue; const visible=!view || intersects({x:g.ox,y:g.oy+shift,width:PATCH,height:PATCH},view); if (!best || visible && !best.visible) best={g,visible}; }
+    if (!best || !api.bakeArt) return false;
+    const g=best.g,rect=patchRect(g);
+    if (!rect) { Object.assign(g,{rgba:flatGround(),gen:++groundGen,stale:false}); return true; }
+    g.pending=true;
+    try { const r=await api.bakeArt(rect); if (r) Object.assign(g,{rgba:patchOf(g,rect,r.data),gen:++groundGen,stale:false,input:r.input}); api.schedule(); }
+    catch (err) { if (err.name!=='AbortError') { console.error(err); g.failed=true; } }
+    finally { g.pending=false; }
+    return true;
+  }
+  function groundChanged(rect) {
+    for (const g of grounds.values()) if (!rect || !g.input || intersects(rect,g.input)) { g.stale=true; g.failed=false; }
+    for (const p of placements) { if (!GROUND_KINDS.includes(p.kind)) continue; const s=stamps.get(key(p)),[fw,fz]=footprint(p); if (s && (!rect || intersects(rect,{x:p.x*CELL-CELL,y:p.z*CELL-CELL,width:(fw+2)*CELL,height:(fz+2)*CELL}))) s.exactStale=true; }
+  }
+
+  // ---- the panel (sculpt.html #map-features-panel) ----
+  const unavailable=['tree','shrub','rock','scar'].filter(k => !kinds.includes(k));
+  for (const option of $('feature-kind').options) option.disabled=!kinds.includes(option.value);
+  for (const option of $('fill-kind').options) option.disabled=!kinds.includes(option.value);
+  $('feature-kind-note').textContent=unavailable.length?`No generated ${unavailable.map(k => PLURALS[k]).join(', ').replace(/, ([^,]*)$/,' or $1')} for this world yet.`:'';
+  const settingInputs=[...doc.querySelectorAll('#feature-place [data-setting]')];
+  function update() {
+    controls.disabled=!enabled();
+    for (const [name,button] of buttons) { button.setAttribute('aria-pressed',String(mode===name)); button.disabled=name==='fill' && !FILL_KINDS.some(k => kinds.includes(k)); button.title=button.disabled?'Fill places generated trees, shrubs and rocks; this world has none yet.':''; }
+    $('feature-place').hidden=mode!=='place';
+    $('feature-starts').hidden=mode!=='starts';
+    $('feature-fill').hidden=mode!=='fill'; if (mode==='fill') $('feature-fill').open=true;
+    $('feature-kind').value=placeKind;
+    const entry=set[placeKind];
+    if (doc.activeElement!==$('feature-count')) $('feature-count').value=String(entry?.count??1);
+    $('feature-count').max=String(MAX_VARIANTS);
+    for (const row of doc.querySelectorAll('#feature-place [data-kind]')) row.hidden=row.dataset.kind!==placeKind;
+    for (const input of settingInputs) {
+      const [kind,name,end]=input.dataset.setting.split('.'),value=set[kind]?.[name];
+      if (value===undefined || doc.activeElement===input) continue;
+      input.value=String(end===undefined?value:value[Number(end)]);
+      const out=$(input.id+'-value'); if (out) out.textContent=Number(input.value).toFixed(2);
+    }
+    const select=$('start-list'); select.replaceChildren(...starts.map((s,i) => { const option=doc.createElement('option'); option.value=i; option.textContent=`${i+1}: (${s.x}, ${s.z})`; return option; }));
+    select.value=String(selectedStart); $('start-remove').disabled=starts.length<=1 || selectedStart<0;
+    $('fill-kind').value=fill.kind; $('fill-region').value=fill.region;
+    for (const [name,input] of fillInputs) if (doc.activeElement!==input) input.value=String(fill[name]);
+    $('feature-count-line').textContent=`${placements.length} features · ${starts.length} starts`;
+    $('feature-state').textContent=message;
+    const hints={place:`Click a cell to place a ${LABELS[placeKind].toLowerCase()} (${placeVariant>=0?`variant ${placeVariant+1}`:'a random variant'}). Select (V) moves, re-rolls and deletes placed features.`,erase:'Click or drag across feature footprints to erase them.',starts:'Click empty ground to add a start. Drag a marker, or Shift-click ground, to move the selected start.',fill:`${PLURALS[fill.kind]} fill: ${fill.region==='brush'?'drag a brush':fill.region==='lasso'?'draw a closed lasso':'click connected gentle dry ground'}. Space or middle-drag still pans.`};
+    $('feature-help').textContent=hints[mode]||'Choose a feature tool, or keep sculpting terrain. Space or middle-drag pans in every tool.';
+    refreshVariants();
+    api.schedule();
+  }
+  function refreshVariants() {
+    if (mode!=='place') return;
+    const host=$('feature-variants'),list=variantList(placeKind),sun=light(),key0=placeKind+JSON.stringify(set[placeKind])+placeVariant+(sun?sun.x+','+sun.y:'');
+    if (host.dataset.key!==key0 || host.children.length!==list.length+1) {
+      host.dataset.key=key0;
+      const random=doc.createElement('button'); random.type='button'; random.textContent='Random'; random.title='Each click picks a variant at random, in retail’s mix'; random.setAttribute('aria-pressed',String(placeVariant<0)); random.onclick=() => { placeVariant=-1; update(); };
+      host.replaceChildren(random,...list.map(v => {
+        const b=doc.createElement('button'); b.type='button'; b.dataset.variant=v.index; b.setAttribute('aria-pressed',String(placeVariant===v.index));
+        b.title=`Variant ${v.index+1}${typeLabel(v.kind,v.params)?' · '+typeLabel(v.kind,v.params):''}`; b.setAttribute('aria-label',b.title);
+        const c=doc.createElement('canvas'); c.width=c.height=48; b.append(c); b.onclick=() => { placeVariant=v.index; update(); }; return b;
+      }));
+    }
+    for (const b of host.querySelectorAll('button[data-variant]')) {
+      const v=list[Number(b.dataset.variant)],c=b.querySelector('canvas'); if (!v || c.dataset.drawn) continue;
+      const image=thumbnail(v); if (!image) continue;
+      const g=c.getContext('2d'),k=Math.min(1,46/Math.max(image.width,image.height)); g.imageSmoothingEnabled=k<1; g.clearRect(0,0,48,48);
+      g.drawImage(image,0,0,image.width,image.height,(48-image.width*k)/2,(48-image.height*k)/2,image.width*k,image.height*k); c.dataset.drawn='1';
+    }
+  }
+  // A variant's picture for its button: the body and shadow, or a deposit or vent painted on the world's mean ground.
+  function thumbnail(v) {
+    if (!GROUND_KINDS.includes(v.kind)) {
+      const e=sprite(v); if (!e) return null;
+      const k=spriteKey(v,light());
+      let t=thumbs.get(k);
+      if (!t) {
+        const x0=Math.min(-e.body.ax,e.shadow?-e.shadow.ax:0),y0=Math.min(-e.body.ay,e.shadow?-e.shadow.ay:0),x1=Math.max(e.body.w-e.body.ax,e.shadow?e.shadow.w-e.shadow.ax:0),y1=Math.max(e.body.h-e.body.ay,e.shadow?e.shadow.h-e.shadow.ay:0);
+        t=new OffscreenCanvas(x1-x0,y1-y0); const g=t.getContext('2d');
+        if (e.shadow) { g.globalAlpha=e.shadowBlend; g.drawImage(e.shadow.bitmap,-x0-e.shadow.ax,-y0-e.shadow.ay); }
+        g.globalAlpha=e.bodyBlend; g.drawImage(e.body.bitmap,-x0-e.body.ax,-y0-e.body.ay); thumbs.set(k,t);
+      }
+      return t;
+    }
+    const params=v.kind==='deposit'?{...v.params,metal:set.deposit.metal}:v.params,k='ground|'+v.kind+'|'+v.seed+'|'+JSON.stringify(params);
+    const t=thumbs.get(k); if (t) return t.ready?t.canvas:null;
+    const entry={ready:false}; thumbs.set(k,entry);
+    const rgba=flatGround(); for (let i=3;i<rgba.length;i+=4) rgba[i]=255;
+    work({type:'paint',kind:v.kind,params,seed:v.seed,w:PATCH,h:PATCH,cx:PATCH/2,cy:PATCH/2,rgba},[rgba.buffer]).then(r => {
+      const c=new OffscreenCanvas(80,80); c.getContext('2d').putImageData(new ImageData(r.rgba,PATCH,PATCH),-24,-24); Object.assign(entry,{ready:true,canvas:c,close:nothing}); refreshVariants();
+    },() => {});
+    return null;
+  }
+  // The selection's values (#feature-selection in the Select tool's panel).
+  function refreshSelection() {
+    const list=[...selection],box=$('feature-selection'); if (!box) return;
+    const counts=new Map(); for (const p of list) counts.set(p.kind,(counts.get(p.kind)||0)+1);
+    const deposits=list.filter(deposit),one=list.length===1?list[0]:null;
+    let title='',values='';
+    if (one) {
+      const v=variantOf(one),[fw,fz]=v.footprint,type=typeLabel(one.kind,v.params),e=sprite(v),g=e?.gameplay,cells=`${fw}×${fz} ${fw*fz>1?'cells':'cell'}`;
+      title=`${LABELS[one.kind]} · variant ${one.v+1} of ${variantList(one.kind).length}${type?' · '+type:''}`;
+      values={deposit:`${cells} · painted into the ground · metal for extractors on its cells`,vent:`${cells} · painted into the ground · a geothermal plant can stand on it`,
+        tree:`${cells} · energy ${g?.energy??'…'} · blocks units · burns to a burnt tree`,shrub:`${cells} · energy ${g?.energy??'…'} · units pass over it · burns`,
+        rock:`${cells} · metal ${v.params.metal} · blocks units · reclaimable`,scar:`${cells} · a mark on the ground · no gameplay`}[one.kind];
+    } else if (list.length) {
+      title=`${list.length} features selected`;
+      values=[...counts].map(([kind,n]) => `${n} ${n===1?LABELS[kind].toLowerCase():PLURALS[kind]}`).join(', ');
+    }
+    $('feature-selection-title').textContent=title; $('feature-selection-values').textContent=values;
+    $('feature-selection-metal-control').hidden=!deposits.length;
+    const metal=$('feature-selection-metal');
+    if (doc.activeElement!==metal) metal.value=deposits.length && deposits.every(p => p.metal===deposits[0].metal)?String(deposits[0].metal):'';
+    $('feature-reroll').disabled=!list.some(p => variantList(p.kind).length>1);
+  }
+  function selectionChanged() { refreshSelection(); doc.dispatchEvent(new Event('terraform-feature-mode')); api.schedule(); }
+  function changed(text) { status(text); prune(); refreshSelection(); update(); api.change(); doc.dispatchEvent(new Event('terraform-feature-mode')); }
+  function activate(next) {
     if (!guard()) return false;
-    const d=definition(name),p={name:d?.name||String(name),x,z};
-    if (!d) { status('Choose an available feature from this world.'); return false; }
-    if (options.generated && !scatter(d)) { status('Only trees, foliage and rocks belong to a generated fill.'); return false; }
-    if (!inBounds(p,d)) { status('The whole feature footprint must fit inside the play area.'); return false; }
-    let list=placements,removed=0;
-    if (deposit(d)) {
-      list=placements.filter(q => { const drop=generated.has(key(q)) && scatter(definition(q.name)) && rectDistance(rectangle(p,d),rectangle(q))<fill.margin; if (drop) removed++; return !drop; });
+    finishGesture(false);
+    if (GROUND_KINDS.includes(next) || set[next]) { placeKind=next; placeVariant=-1; next='place'; }
+    mode=next; hover=null; clearSelection(false); update(); doc.dispatchEvent(new Event('terraform-feature-mode')); return true;
+  }
+  function deactivate() { const wasActive=Boolean(mode)||selection.size>0; finishGesture(false); mode=''; hover=null; clearSelection(false); update(); if (wasActive) doc.dispatchEvent(new Event('terraform-feature-mode')); }
+  function clearSelection(notify=true) { if (!selection.size) return; selection=new Set(); if (notify) selectionChanged(); else refreshSelection(); }
+
+  for (const [name,button] of buttons) button.onclick=() => activate(name);
+  $('feature-kind').onchange=event => { if (!guard()) { update(); return; } placeKind=event.target.value; placeVariant=-1; update(); };
+  $('feature-count').onchange=event => { if (!changeSet(placeKind,{count:Number(event.target.value)})) update(); };
+  $('feature-new-set').onclick=() => { if (!guard()) return; const seed=hash32(set[placeKind].seed,Date.now()>>>0); changeSet(placeKind,{seed},`New set of ${PLURALS[placeKind]}; placed ${PLURALS[placeKind]} take its looks.`); };
+  for (const input of settingInputs) {
+    const [kind,name,end]=input.dataset.setting.split('.'),out=$(input.id+'-value');
+    input.addEventListener('input',() => { if (out) out.textContent=Number(input.value).toFixed(2); });
+    input.addEventListener('change',() => {
+      const value=Number(input.value); if (!Number.isFinite(value)) { update(); return; }
+      const next=end===undefined?value:Object.assign([...set[kind][name]],{[Number(end)]:value});
+      if (!changeSet(kind,{[name]:next})) update();
+    });
+  }
+  $('start-list').onchange=event => { if (!guard()) { update(); return; } selectedStart=Number(event.target.value); activate('starts'); };
+  $('start-remove').onclick=() => removeStart(selectedStart);
+  $('fill-kind').onchange=event => { if (setFill({kind:event.target.value})) activate('fill'); };
+  $('fill-region').onchange=event => { if (setFill({region:event.target.value})) activate('fill'); };
+  const fillInputs=new Map(['density','clustering','gap','seed','margin','radius'].map(name => [name,$('fill-'+name)]));
+  for (const [name,input] of fillInputs) input.onchange=() => { if (!setFill({[name]:Number(input.value)})) update(); };
+  $('feature-selection-metal').onchange=event => { const value=Number(event.target.value); if (event.target.value.trim()==='' || !Number.isFinite(value)) { refreshSelection(); return; } setSelectedMetal(value); };
+  $('feature-reroll').onclick=() => rerollSelected();
+  $('feature-delete').onclick=() => removeSelected();
+
+  // ---- edits ----
+  // A set edit re-draws the kind's variants; placed features keep their variant number (or one of the same footprint).
+  function changeSet(kind,edit,text) {
+    if (!guard() || !set[kind]) return false;
+    const next=normalizeSet({...set,[kind]:{...set[kind],...edit}},config);
+    if (JSON.stringify(next[kind])===JSON.stringify(set[kind])) return false;
+    const old=new Map(placements.filter(p => p.kind===kind).map(p => [p,footprint(p)]));
+    set=next; const list=variantList(kind); let dropped=0;
+    const kept=[];
+    for (const p of placements) {
+      if (p.kind!==kind) { kept.push(p); continue; }
+      const v=refit({...p,oldFootprint:old.get(p)},list);
+      if (v===null) { dropped++; selection.delete(p); generated.delete(key(p)); continue; }
+      p.v=v; kept.push(p);
     }
-    if (list.some(q => overlaps(p,d,q,definition(q.name)))) { status('That footprint overlaps another feature.'); return false; }
-    if (options.generated) {
-      if (!gentleFootprint(p,d,terrainMask()) || nearMargin(p,d,fill.margin) || placements.some(q => overlaps(p,d,q,definition(q.name),fill.gap))) { status('Fill needs gentle dry ground, a free footprint and the selected margins.'); return false; }
-    }
-    const kept=new Set(list.map(key)); for (const k of generated) if (!kept.has(k)) generated.delete(k);
-    placements=[...list,p]; if (options.generated) generated.add(key(p));
-    changed(`Placed ${d.name}${removed?`; cleared ${removed} fill features inside its margin`:''}.`); return true;
+    placements=kept; if (placeVariant>=list.length) placeVariant=-1;
+    changed(text||(dropped?`Updated ${PLURALS[kind]}; removed ${dropped} that no variant of their size is left for.`:`Updated the ${LABELS[kind].toLowerCase()} set.`)); return true;
+  }
+  function addFeature(kind,x,z,options={}) {
+    if (!guard()) return false;
+    if (!kinds.includes(kind)) { status(`This world has no generated ${PLURALS[kind]||'features of that kind'} yet.`); return false; }
+    const list=variantList(kind),v=Number.isInteger(options.v)&&options.v>=0&&options.v<list.length?options.v:pickVariant(list,hash32(hash32(x,z),++rolls)/4294967296);
+    const p={kind,v,x,z}; if (kind==='deposit') p.metal=Math.round(clamp(Number.isFinite(options.metal)?options.metal:set.deposit.metal,0,255));
+    if (options.generated && !scatter(p)) { status('Only trees, shrubs and rocks belong to a fill.'); return false; }
+    if (!inBounds(p)) { status('The whole feature footprint must fit inside the play area.'); return false; }
+    let list2=placements,removed=0;
+    if (deposit(p)) list2=placements.filter(q => { const drop=generated.has(key(q)) && scatter(q) && rectDistance(rectangle(p),rectangle(q))<fill.margin; if (drop) { removed++; selection.delete(q); } return !drop; });
+    if (list2.some(q => overlaps(p,q))) { status('That footprint overlaps another feature.'); return false; }
+    if (options.generated && (!gentleFootprint(p,terrainMask()) || nearMargin(p,fill.margin) || placements.some(q => overlaps(p,q,fill.gap)))) { status('Fill needs gentle dry ground, a free footprint and the selected margins.'); return false; }
+    const kept=new Set(list2.map(key)); for (const k of generated) if (!kept.has(k)) generated.delete(k);
+    placements=[...list2,p]; rolls++; if (options.generated) generated.add(key(p));
+    changed(`Placed ${LABELS[kind].toLowerCase()} ${v+1} of ${list.length}${removed?`; cleared ${removed} fill features inside its margin`:''}.`); return true;
   }
   function removeFeature(index,notify=true) {
     if (!guard() || !Number.isInteger(index) || index<0 || index>=placements.length) return false;
-    const [p]=placements.splice(index,1); generated.delete(key(p)); selectedFeature=-1;
-    if (notify) changed(`Removed ${p.name}.`); else api.schedule(); return true;
+    const [p]=placements.splice(index,1); generated.delete(key(p)); selection.delete(p);
+    if (notify) changed(`Removed ${LABELS[p.kind].toLowerCase()}.`); else api.schedule(); return true;
+  }
+  function removeSelected() {
+    if (!guard() || !selection.size) return false;
+    const n=selection.size; placements=placements.filter(p => { const drop=selection.has(p); if (drop) generated.delete(key(p)); return !drop; }); selection=new Set();
+    changed(`Deleted ${n} ${n===1?'feature':'features'}.`); return true;
+  }
+  // Re-roll: another variant of the same kind and footprint (any other footprint that still fits when it has none).
+  function rerollSelected() {
+    if (!guard() || !selection.size) return false;
+    let swapped=0;
+    for (const p of selection) {
+      const list=variantList(p.kind),[fw,fz]=footprint(p),others=placements.filter(q => q!==p);
+      let pool=list.filter(v => v.index!==p.v && v.footprint[0]===fw && v.footprint[1]===fz);
+      if (!pool.length) pool=list.filter(v => v.index!==p.v && inBounds({...p,v:v.index}) && !others.some(q => overlaps({...p,v:v.index},q)));
+      if (!pool.length) continue;
+      p.v=pickVariant(pool,hash32(hash32(p.x,p.z),++rolls)/4294967296); swapped++;
+    }
+    if (!swapped) { status('Each selected feature is the only variant of its kind and size.'); return false; }
+    changed(`Re-rolled ${swapped} ${swapped===1?'feature':'features'}.`); return true;
+  }
+  function setSelectedMetal(value) {
+    if (!guard()) return false;
+    const metal=Math.round(clamp(value,0,255)),list=[...selection].filter(deposit).filter(p => p.metal!==metal);
+    if (!list.length) { refreshSelection(); return false; }
+    for (const p of list) p.metal=metal;
+    changed(`Set ${list.length===1?'the deposit’s':list.length+' deposits’'} metal to ${metal}.`); return true;
+  }
+  // Moves the selection by whole cells; every moved footprint must stay in the play area and clear of the features left in place.
+  function movable(dx,dz) {
+    const rest=placements.filter(p => !selection.has(p));
+    return [...selection].every(p => { const q={...p,x:p.x+dx,z:p.z+dz}; return inBounds(q) && !rest.some(r => overlaps(q,r)); });
+  }
+  function moveSelected(dx,dz) {
+    if (!guard() || !selection.size || (!dx && !dz)) return false;
+    if (!movable(dx,dz)) { status('That move would leave the play area or overlap a feature.'); return false; }
+    // Old keys go first, so a feature moving onto a cell another one leaves keeps its own fill mark and painted stamp.
+    const carried=[...selection].map(p => { const before=key(p),entry={p,fill:generated.delete(before),stamp:stamps.get(before)}; stamps.delete(before); return entry; });
+    for (const {p,fill:wasFill,stamp} of carried) { p.x+=dx; p.z+=dz; if (wasFill) generated.add(key(p)); if (stamp) { stamp.exactStale=true; stamps.set(key(p),stamp); } }
+    changed(`Moved ${selection.size} ${selection.size===1?'feature':'features'} ${Math.abs(dx)+Math.abs(dz)===1?'one cell':'by '+dx+', '+dz+' cells'}.`); return true;
   }
   function addStart(x,z) {
     if (!guard()) return false;
@@ -186,12 +460,12 @@ export async function mountMapFeatures(api) {
   }
   function setFill(value) {
     if (!guard()) return false;
-    fill=fillOptions(value,fill); $('[data-fill-kind]').value=fill.kind; $('[data-fill-region]').value=fill.region;
+    if (value.kind && !kinds.includes(value.kind)) { status(`This world has no generated ${PLURALS[value.kind]} yet.`); update(); return false; }
+    fill=fillOptions(value,fill);
     const trimmed=trimGenerated(); placements=trimmed.kept;
     changed(trimmed.removed?`Updated fill; cleared ${trimmed.removed} generated features inside the margin.`:'Updated fill controls.'); return true;
   }
 
-  const corner=(x,z) => { const h=api.sample(x*CELL,z*CELL); return Number.isFinite(h)?Math.round(clamp(h,0,255)):-1; };
   function terrainMask(bounds={x0:0,z0:0,x1:cols,z1:rows}) {
     const corners=new Int16Array((cols+1)*(rows+1)),gentle=new Uint8Array(cols*rows),stride=cols+1;
     for (let z=bounds.z0;z<=bounds.z1;z++) for (let x=bounds.x0;x<=bounds.x1;x++) corners[z*stride+x]=corner(x,z);
@@ -203,8 +477,9 @@ export async function mountMapFeatures(api) {
     }
     return gentle;
   }
-  function gentleFootprint(p,d,mask) {
-    for (let z=p.z;z<p.z+d.footprintZ;z++) for (let x=p.x;x<p.x+d.footprintX;x++) if (!mask[z*cols+x]) return false;
+  function gentleFootprint(p,mask) {
+    const [fw,fz]=footprint(p);
+    for (let z=p.z;z<p.z+fz;z++) for (let x=p.x;x<p.x+fw;x++) if (!mask[z*cols+x]) return false;
     return true;
   }
   function regionMask(region,gentle,bounds) {
@@ -231,9 +506,9 @@ export async function mountMapFeatures(api) {
   }
   function fillRegion(kind,region,options={}) {
     if (!guard()) return {added:0};
-    const settings=fillOptions({...options,kind},fill),mix=[...definitions.values()].filter(d => d.kind===settings.kind);
-    if (!mix.length) { status(`This world has no ${settings.kind} features to fill.`); return {added:0}; }
-    const bounds=featureRegionBounds(region,cols,rows,fill.radius),gentle=terrainMask(bounds),area=regionMask(region,gentle,bounds),total=mix.reduce((sum,d) => sum+Math.max(1,d.uses),0),candidates=[];
+    const settings=fillOptions({...options,kind},fill),list=kinds.includes(settings.kind)?variantList(settings.kind):[];
+    if (!list.length) { status(`This world has no generated ${PLURALS[settings.kind]} to fill.`); return {added:0}; }
+    const bounds=featureRegionBounds(region,cols,rows,fill.radius),gentle=terrainMask(bounds),area=regionMask(region,gentle,bounds),candidates=[];
     // Acceptance depends only on the cell and seed. Reject it before sorting;
     // accepted candidates retain exactly the same relative placement order.
     for (let z=bounds.z0;z<bounds.z1;z++) for (let x=bounds.x0;x<bounds.x1;x++) if (area[z*cols+x]) {
@@ -241,60 +516,88 @@ export async function mountMapFeatures(api) {
       if (hash(x,z,settings.seed^0x517ad0f3)<probability) candidates.push({x,z,rank:hash(x,z,settings.seed^0x34da72f1)});
     }
     candidates.sort((a,b) => a.rank-b.rank || a.z-b.z || a.x-b.x);
-    const occupied=new Uint8Array(cols*rows),put=p => { const d=definition(p.name); for (let z=p.z;z<p.z+d.footprintZ;z++) for (let x=p.x;x<p.x+d.footprintX;x++) occupied[z*cols+x]=1; };
+    const occupied=new Uint8Array(cols*rows),put=p => { const [fw,fz]=footprint(p); for (let z=p.z;z<p.z+fz;z++) for (let x=p.x;x<p.x+fw;x++) occupied[z*cols+x]=1; };
     for (const p of placements) put(p);
-    const deposits=placements.filter(p=>deposit(definition(p.name)));
+    const deposits=placements.filter(deposit);
     let added=0;
-    for (const p of candidates) {
-      // mapgenFeatures/placeVegetation use each definition's observed usage
-      // as its weight. Position-keyed authoring randomness keeps a repeatable mix.
-      let ticket=hash(p.x,p.z,settings.seed^0x25cd781b)*total,d=mix[mix.length-1];
-      for (const candidate of mix) { ticket-=Math.max(1,candidate.uses); if (ticket<0) { d=candidate; break; } }
-      const placed={name:d.name,x:p.x,z:p.z};
-      if (!inBounds(placed,d) || !gentleFootprint(placed,d,gentle) || nearMargin(placed,d,settings.margin,deposits)) continue;
+    for (const c of candidates) {
+      // The variants' weights carry retail's use shares (sculpt-feature-set.js). Position-keyed authoring randomness keeps a repeatable mix.
+      const placed={kind:settings.kind,v:pickVariant(list,hash(c.x,c.z,settings.seed^0x25cd781b)),x:c.x,z:c.z},[fw,fz]=footprint(placed);
+      if (!inBounds(placed) || !gentleFootprint(placed,gentle) || nearMargin(placed,settings.margin,deposits)) continue;
       let free=true;
-      for (let z=p.z;z<p.z+d.footprintZ && free;z++) for (let x=p.x;x<p.x+d.footprintX;x++) if (!area[z*cols+x]) { free=false; break; }
-      for (let z=Math.max(0,p.z-settings.gap);z<Math.min(rows,p.z+d.footprintZ+settings.gap) && free;z++) for (let x=Math.max(0,p.x-settings.gap);x<Math.min(cols,p.x+d.footprintX+settings.gap);x++) if (occupied[z*cols+x]) { free=false; break; }
+      for (let z=c.z;z<c.z+fz && free;z++) for (let x=c.x;x<c.x+fw;x++) if (!area[z*cols+x]) { free=false; break; }
+      for (let z=Math.max(0,c.z-settings.gap);z<Math.min(rows,c.z+fz+settings.gap) && free;z++) for (let x=Math.max(0,c.x-settings.gap);x<Math.min(cols,c.x+fw+settings.gap);x++) if (occupied[z*cols+x]) { free=false; break; }
       if (!free) continue;
       placements.push(placed); generated.add(key(placed)); put(placed); added++;
     }
-    if (added) changed(`Filled ${added} ${settings.kind} features.`); else status('No features fit this region with the current density, terrain, spacing and margins.');
+    if (added) changed(`Filled ${added} ${PLURALS[settings.kind]}.`); else status('No features fit this region with the current density, terrain, spacing and margins.');
     return {added};
   }
 
   function serialize() {
-    return {features:placements.map(p => ({...p})).sort(ordered),starts:starts.map(p => ({...p})),fill:{...fill,generated:placements.filter(p => generated.has(key(p))).map(p => ({...p})).sort(ordered)}};
+    const plain=p => { const out={kind:p.kind,v:p.v,x:p.x,z:p.z}; if (deposit(p)) out.metal=p.metal; return out; };
+    return {features:placements.map(plain).sort(ordered),featureSet:structuredClone(set),starts:starts.map(p => ({...p})),fill:{...fill,generated:placements.filter(p => generated.has(key(p))).map(plain).sort(ordered)}};
   }
+  // An old save's retail placements (named, with no kind) load without them; anything that no longer fits is left out. Either is said once.
   function load(data={}) {
-    const next=[],nextStarts=(data.starts===undefined?defaults():data.starts),nextFill=fillOptions(data.fill||{});
+    const nextSet=normalizeSet(data.featureSet,config),nextStarts=(data.starts===undefined?defaults():data.starts),nextFill=fillOptions(data.fill?.kind==='foliage'?{...data.fill,kind:'shrub'}:data.fill||{});
     if (!Array.isArray(data.features??[]) || !Array.isArray(nextStarts) || nextStarts.length<1 || nextStarts.length>10) throw new Error('Map placements need a feature list and 1–10 starts.');
-    for (const p of data.features||[]) {
-      const d=definition(p?.name);
-      if (!d) throw new Error(`Feature ${String(p?.name)} is unavailable in this world${catalogueError?': '+catalogueError:''}.`);
-      const placed={name:d.name,x:p.x,z:p.z};
-      if (!inBounds(placed,d) || next.some(q => overlaps(placed,d,q,definition(q.name)))) throw new Error(`Feature ${d.name} has an out-of-play or overlapping footprint.`);
-      next.push(placed);
-    }
     const bases=nextStarts.map(p => ({x:p?.x,z:p?.z}));
     if (bases.some((p,i) => !validStart(p) || bases.some((q,j) => j<i && p.x===q.x && p.z===q.z))) throw new Error('Every start must be a distinct pixel position inside the play area.');
-    const recorded=new Set((Array.isArray(data.fill?.generated)?data.fill.generated:[]).filter(p => p && typeof p.name==='string').map(key));
+    set=nextSet;
+    const next=[]; let retail=0,unfit=0;
+    for (const raw of data.features||[]) {
+      const p=normalizePlacement(raw);
+      if (!p) { if (typeof raw?.name==='string') retail++; else unfit++; continue; }
+      if (!kinds.includes(p.kind)) { unfit++; continue; }
+      const list=variantList(p.kind); if (p.v>=list.length) p.v=p.v%list.length;
+      if (!inBounds(p) || next.some(q => overlaps(p,q))) { unfit++; continue; }
+      next.push(p);
+    }
+    const recorded=new Set((Array.isArray(data.fill?.generated)?data.fill.generated:[]).map(normalizePlacement).filter(Boolean).map(key));
     const previousGesture=gesture; gesture=null;
     if (previousGesture && canvas.hasPointerCapture?.(previousGesture.id)) canvas.releasePointerCapture(previousGesture.id);
-    placements=next; starts=bases; fill=nextFill; generated=new Set(next.filter(p => scatter(definition(p.name)) && recorded.has(key(p))).map(key));
-    selectedFeature=-1; selectedStart=Math.min(Math.max(0,selectedStart),starts.length-1); gesture=null; hover=null;
-    $('[data-fill-kind]').value=fill.kind; $('[data-fill-region]').value=fill.region; update();
+    placements=next; starts=bases; fill=nextFill; generated=new Set(next.filter(p => scatter(p) && recorded.has(key(p))).map(key));
+    selection=new Set(); selectedStart=Math.min(Math.max(0,selectedStart),starts.length-1); hover=null;
+    if (placeVariant>=(variantList(placeKind)?.length??0)) placeVariant=-1;
+    if (retail || unfit) status([retail?`This map’s ${retail} retail ${retail===1?'feature was':'features were'} left out: each map now generates its own features.`:'',unfit?`${unfit} saved ${unfit===1?'feature does':'features do'} not fit this world or map and ${unfit===1?'was':'were'} left out.`:''].filter(Boolean).join(' '));
+    if (retail || unfit) doc.dispatchEvent(new CustomEvent('terraform-status',{detail:message}));
+    prune(); refreshSelection(); update(); doc.dispatchEvent(new Event('terraform-feature-mode'));
   }
+
+  // ---- pointer and keys ----
   function screenPoint(event) { if (api.screenPoint) return api.screenPoint(event); const r=canvas.getBoundingClientRect(); return {x:(event.clientX-r.left)*canvas.width/r.width,z:(event.clientY-r.top)*canvas.height/r.height}; }
   function pick(p) { const q=api.pick(p.x,p.z); return q && Number.isFinite(q[0]) && Number.isFinite(q[1]) && q[0]>=0 && q[1]>=0 && q[0]<map.playRight && q[1]<map.playBottom?{x:q[0],z:q[1]}:null; }
-  function project(p) { const h=api.sample(p.x,p.z); return {x:p.x,z:p.z-Math.floor(clamp(Number.isFinite(h)?h:0,0,255)/2)+config.baseHeight/2}; }
-  function featurePoint(p,d) {
-    // client.featureScreenPos/featureAnchorY: footprint centre, but the four
-    // rounded/clamped bytes at the anchor cell supply the integer half-height.
-    const sum=corner(p.x,p.z)+corner(p.x+1,p.z)+corner(p.x,p.z+1)+corner(p.x+1,p.z+1);
-    return {x:p.x*CELL+d.footprintX*8,z:p.z*CELL+d.footprintZ*8-(sum>>3)+config.baseHeight/2};
-  }
-  function hitFeature(p) { const x=Math.floor(p.x/CELL),z=Math.floor(p.z/CELL); return placements.findIndex(q => { const d=definition(q.name); return x>=q.x && x<q.x+d.footprintX && z>=q.z && z<q.z+d.footprintZ; }); }
+  function hitFeature(p) { const x=Math.floor(p.x/CELL),z=Math.floor(p.z/CELL); return placements.findIndex(q => { const [fw,fz]=footprint(q); return x>=q.x && x<q.x+fw && z>=q.z && z<q.z+fz; }); }
   function hitStart(screen) { let found=-1,distance=16; starts.forEach((s,i) => { const p=project(s),d=Math.hypot(screen.x-p.x,screen.z-p.z); if (d<distance) { distance=d; found=i; } }); return found; }
+  const drawOrder=(a,b) => (a.z*CELL+footprint(a)[1]*8)-(b.z*CELL+footprint(b)[1]*8) || ordered(a,b);
+  // The feature under a screen point, the frontmost first: a drawn body pixel, then a body's box, then a deposit's or vent's
+  // footprint, then any footprint under the picked ground cell.
+  function hitAt(screen) {
+    const near=placements.filter(p => Math.abs(p.x*CELL+8-screen.x)<112 && screen.z>p.z*CELL-160 && screen.z<p.z*CELL+200).filter(p => { const a=viewPoint(p); return Math.abs(a.x-screen.x)<96 && screen.z<a.y+96 && screen.z>a.y-128; }).sort(drawOrder).reverse();
+    for (const pass of [0,1]) for (const p of near) {
+      if (GROUND_KINDS.includes(p.kind)) continue;
+      const e=sprite(variantOf(p)); if (!e) continue;
+      const a=viewPoint(p),x=Math.floor(screen.x)-(a.x-e.body.ax),y=Math.floor(screen.z)-(a.y-e.body.ay),pad=pass?2:0;
+      if (x>=-pad && y>=-pad && x<e.body.w+pad && y<e.body.h+pad && (pass || e.body.alpha[y*e.body.w+x])) return p;
+    }
+    for (const p of near) if (GROUND_KINDS.includes(p.kind)) { const a=viewPoint(p),[fw,fz]=footprint(p); if (Math.abs(screen.x-a.x)<=fw*8+4 && Math.abs(screen.z-a.y)<=fz*8+4) return p; }
+    const ground=pick(screen),i=ground?hitFeature(ground):-1;
+    return i>=0?placements[i]:null;
+  }
+  // The Select tool (V): sculpt-canvas.js asks first, before shapes. A click selects (Shift adds or removes), a drag moves the
+  // selection on the cell grid.
+  function pointerSelect(event,screen) {
+    if (mode || !enabled()) return false;
+    const p=hitAt(screen);
+    if (!p) { if (!event.shiftKey) clearSelection(); return false; }
+    if (event.shiftKey) { if (selection.has(p)) selection.delete(p); else selection.add(p); }
+    else if (!selection.has(p)) selection=new Set([p]);
+    api.deselectShapes?.(); selectionChanged();
+    if (selection.has(p)) { const at=pick(screen); if (at) gesture={id:event.pointerId,type:'drag',origin:at,delta:{x:0,z:0},valid:true}; }
+    status(selection.size===1?`Selected ${LABELS[p.kind].toLowerCase()}. Drag to move it; Delete removes it.`:`${selection.size} features selected.`);
+    return true;
+  }
   const stop=event => { event.preventDefault(); event.stopImmediatePropagation(); };
   function finishGesture(commit=true) {
     const g=gesture; gesture=null;
@@ -304,6 +607,7 @@ export async function mountMapFeatures(api) {
     if (commit && enabled()) {
       if (g.type==='fill') fillRegion(fill.kind,{type:fill.region,points:g.points,radius:fill.radius});
       else if (g.type==='start' && g.target) moveStart(g.index,g.target.x,g.target.z);
+      else if (g.type==='drag' && (g.delta.x || g.delta.z)) moveSelected(g.delta.x,g.delta.z);
     }
     update();
   }
@@ -325,14 +629,17 @@ export async function mountMapFeatures(api) {
     else if (p && mode==='fill') {
       if (fill.region==='flood') fillRegion(fill.kind,{type:'flood',...p});
       else gesture={id:event.pointerId,type:'fill',points:[p]};
-    } else if (p) {
-      const hit=hitFeature(p);
-      if (hit>=0 && mode==='place') { selectedFeature=hit; selectedName=placements[hit].name; status('Selected '+selectedName+'; Delete removes it.'); refreshCatalogue(); }
-      else addFeature(mode==='deposit'?catalogue?.depositName:selectedName,Math.floor(p.x/CELL),Math.floor(p.z/CELL));
-    }
+    } else if (p && mode==='place') { const at=placeAt(p); addFeature(placeKind,at.x,at.z,{v:at.v}); }
     if (gesture) canvas.setPointerCapture(event.pointerId); update();
   },true);
   canvas.addEventListener('pointermove',event => {
+    if (gesture?.type==='drag' && gesture.id===event.pointerId) {
+      stop(event); if (!enabled()) { finishGesture(false); return; }
+      const at=pick(screenPoint(event)); if (!at) return;
+      const delta={x:Math.round((at.x-gesture.origin.x)/CELL),z:Math.round((at.z-gesture.origin.z)/CELL)};
+      if (delta.x!==gesture.delta.x || delta.z!==gesture.delta.z) { gesture.delta=delta; gesture.valid=movable(delta.x,delta.z); }
+      api.schedule(); return;
+    }
     if (!mode || panPointers.has(event.pointerId) || space && !gesture || event.buttons===4) return;
     if (gesture && gesture.id!==event.pointerId) { stop(event); return; }
     stop(event); const screen=screenPoint(event),p=pick(screen); hover=p;
@@ -348,12 +655,13 @@ export async function mountMapFeatures(api) {
     if (panPointers.has(event.pointerId)) { panPointers.delete(event.pointerId); return; }
     if (gesture?.id===event.pointerId) {
       stop(event);
-      if (type==='pointerup' && enabled()) {
+      if (type==='pointerup' && enabled() && gesture.type!=='drag') {
         const screen=screenPoint(event),p=pick(screen);
         if (p && gesture.type==='fill' && Math.hypot(p.x-gesture.points.at(-1).x,p.z-gesture.points.at(-1).z)>0) gesture.points.push(p);
         else if (p && gesture.type==='start' && Math.hypot(screen.x-gesture.origin.x,screen.z-gesture.origin.z)>=2) gesture.target=p;
         else if (p && gesture.type==='erase') { const i=hitFeature(p); if (i>=0) { removeFeature(i,false); gesture.changed=true; } }
       }
+      if (gesture.type==='drag' && type==='pointerup' && !gesture.valid && (gesture.delta.x || gesture.delta.z)) { status('That move would leave the play area or overlap a feature.'); finishGesture(false); return; }
       finishGesture(type==='pointerup');
     } else if (mode && !space && event.button===0 && type!=='lostpointercapture') stop(event);
   },true);
@@ -362,35 +670,55 @@ export async function mountMapFeatures(api) {
   doc.addEventListener('keydown',event => {
     if (typing(event.target)) return;
     if (event.code==='Space') { if (event.target?.tagName!=='BUTTON') space=true; return; }
+    if (!mode && selection.size && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (['Delete','Backspace'].includes(event.key)) { stop(event); if (!event.repeat) removeSelected(); return; }
+      if (event.key==='Escape') { stop(event); if (gesture) finishGesture(false); else clearSelection(); return; }
+    }
     if (!mode) return;
     if ((event.metaKey||event.ctrlKey) && event.key.toLowerCase()==='z') { deactivate(); return; }
     if (event.key==='Escape') { stop(event); deactivate(); }
-    else if (['Delete','Backspace'].includes(event.key)) { stop(event); if (!event.repeat) { if (mode==='starts') removeStart(selectedStart); else if (selectedFeature>=0) removeFeature(selectedFeature); } }
+    else if (['Delete','Backspace'].includes(event.key)) { stop(event); if (!event.repeat && mode==='starts') removeStart(selectedStart); }
   },true);
   doc.addEventListener('keyup',event => { if (event.code==='Space') space=false; },true);
   doc.defaultView?.addEventListener('blur',() => { space=false; panPointers.clear(); finishGesture(false); });
 
+  // What a click on a ground point places: the chosen variant, or a random one drawn for the cell (the same until something is placed,
+  // so the outline under the pointer is the footprint the click makes), centred on the cell.
+  function placeAt(p) {
+    const list=variantList(placeKind),cx=Math.floor(p.x/CELL),cz=Math.floor(p.z/CELL),v=placeVariant>=0?placeVariant:pickVariant(list,hash32(hash32(cx,cz),rolls+1)/4294967296);
+    const [fw,fz]=list[v]?.footprint||[1,1]; return {kind:placeKind,v,x:Math.floor(cx-(fw-1)/2),z:Math.floor(cz-(fz-1)/2)};
+  }
   function draw(ink,view=null) {
     controls.disabled=!enabled(); ink.save(); ink.imageSmoothingEnabled=false;
-    const sorted=placements.map((p,i) => ({p,i,d:definition(p.name)})).filter(({p,d}) => { if (!view) return true; const at={x:p.x*CELL+d.footprintX*8,z:p.z*CELL+d.footprintZ*8+config.baseHeight/2},reach=Math.max(d.sprite?.width||0,d.sprite?.height||0,d.shadow?.width||0,d.shadow?.height||0,32)+128; return at.x+reach>=view.x && at.x-reach<=view.x+view.width && at.z+reach>=view.y && at.z-reach<=view.y+view.height; }).sort((a,b) => (a.p.z*CELL+a.d.footprintZ*8)-(b.p.z*CELL+b.d.footprintZ*8) || ordered(a.p,b.p));
-    for (const {p,d} of sorted) {
-      const at=featurePoint(p,d);
-      for (const [sprite,translucent] of [[d.shadow,d.shadTrans],[d.sprite,d.animTrans]]) {
-        const image=sprite && images.get(sprite.url); if (!image) continue;
-        // Use the export crop's north-row tie when base/2 is a half pixel.
-        // Native sprite pixels stay sharp; every body and shadow shares it.
-        ink.globalAlpha=translucent ? .5 : 1; ink.drawImage(image,Math.floor(at.x)-sprite.xOffset,Math.floor(at.z)-sprite.yOffset);
-      }
+    const drag=gesture?.type==='drag'?gesture.delta:null;
+    // Before the height samples: a feature's art reaches at most 160 px around its cell and 128 px up with the ground's height.
+    const seen=p => { if (!view) return true; const x=p.x*CELL,z=p.z*CELL+config.baseHeight/2; return x+224>=view.x && x-160<=view.x+view.width && z+224>=view.y && z-320<=view.y+view.height; };
+    const shown=[];
+    for (const source of placements) { const p=drag && selection.has(source)?{...source,x:source.x+drag.x,z:source.z+drag.z}:source; if (seen(p)) shown.push({p,source,row:p.z*CELL+footprint(p)[1]*8}); }
+    shown.sort((a,b) => a.row-b.row || ordered(a.p,b.p));
+    // Deposits and vents are ground: under every sprite, in row order (as the export paints them).
+    for (const {p,source} of shown) {
+      if (!GROUND_KINDS.includes(p.kind)) continue;
+      const s=stampFor(source),o=groundOrigin(p);   // a dragged copy has no anchor read yet: the view's height places it
+      if (s.bitmap) ink.drawImage(s.bitmap,o.ox,o.oy+shift);
+      else outline(p,'#b8eef3',[3,3]);
+    }
+    for (const {p} of shown) {
+      if (GROUND_KINDS.includes(p.kind)) continue;
+      const e=sprite(variantOf(p)); if (!e) { outline(p,'#b8eef3',[3,3]); continue; }
+      const a=viewPoint(p);
+      if (e.shadow) { ink.globalAlpha=e.shadowBlend; ink.drawImage(e.shadow.bitmap,a.x-e.shadow.ax,a.y-e.shadow.ay); }
+      ink.globalAlpha=e.bodyBlend; ink.drawImage(e.body.bitmap,a.x-e.body.ax,a.y-e.body.ay);
     }
     ink.globalAlpha=1;
-    function outline(p,d,color) {
-      const r=rectangle(p,d),points=[{x:r.x0,z:r.z0},{x:r.x1,z:r.z0},{x:r.x1,z:r.z1},{x:r.x0,z:r.z1}].map(project);
-      ink.beginPath(); points.forEach((q,i) => i?ink.lineTo(q.x,q.z):ink.moveTo(q.x,q.z)); ink.closePath(); ink.strokeStyle=color; ink.lineWidth=1.5; ink.stroke();
+    function outline(p,color,dash=[]) {
+      const r=rectangle(p),points=[{x:r.x0,z:r.z0},{x:r.x1,z:r.z0},{x:r.x1,z:r.z1},{x:r.x0,z:r.z1}].map(project);
+      ink.beginPath(); points.forEach((q,i) => i?ink.lineTo(q.x,q.z):ink.moveTo(q.x,q.z)); ink.closePath(); ink.strokeStyle=color; ink.lineWidth=1.5/(view?.scale||1); ink.setLineDash(dash.map(d => d/(view?.scale||1))); ink.stroke(); ink.setLineDash([]);
     }
-    if (mode && selectedFeature>=0 && placements[selectedFeature]) outline(placements[selectedFeature],definition(placements[selectedFeature].name),'#ffe69c');
-    if (hover && ['place','deposit'].includes(mode)) {
-      const d=definition(mode==='deposit'?catalogue?.depositName:selectedName),p={x:Math.floor(hover.x/CELL),z:Math.floor(hover.z/CELL)};
-      if (d) outline(p,d,inBounds(p,d) && !placements.some(q => overlaps(p,d,q,definition(q.name)))?'#b8eef3':'#ff877e');
+    for (const {p,source} of shown) if (selection.has(source)) outline(p,drag && !gesture.valid?'#ff877e':'#ffe69c');
+    if (hover && mode==='place') {
+      const p=placeAt(hover);
+      outline(p,inBounds(p) && !placements.some(q => overlaps(p,q))?'#b8eef3':'#ff877e');
     }
     starts.forEach((s,i) => {
       const at=project(gesture?.type==='start' && gesture.index===i && gesture.target?gesture.target:s);
@@ -404,31 +732,91 @@ export async function mountMapFeatures(api) {
     }
     ink.restore(); if (mode) canvas.style.cursor=space?'grab':'crosshair';
   }
-
-  try {
-    if (config.services?.features?.available===false) throw new Error(config.services.features.reason);
-    if (config.biomeId==='zhon') throw new Error('Zhon has no retail feature set; feature tools are disabled until the owner chooses one.');
-    const response=await fetch('map-features/'+encodeURIComponent(config.biomeId)+'/catalog.json');
-    if (!response.ok) { const data=await response.json().catch(()=>({})); throw new Error(data.error||'Feature catalogue unavailable (HTTP '+response.status+'). Build map-features with: go build -o <assets-root>/bin/map-features ./features'); }
-    catalogue=await response.json();
-    if (catalogue.unavailable) throw new Error(catalogue.unavailable);
-    if (catalogue.world!==config.biomeId || !Array.isArray(catalogue.features)) throw new Error('The feature catalogue does not match this world.');
-    const safeSprite=s => s && typeof s.url==='string' && s.url.startsWith('/map-features/'+encodeURIComponent(config.biomeId)+'/') && !s.url.includes('..') && /\.png$/.test(s.url) && Number.isInteger(s.width) && s.width>0 && Number.isInteger(s.height) && s.height>0 && Number.isFinite(s.xOffset) && Number.isFinite(s.yOffset)?s:null;
-    for (const raw of [...catalogue.features].sort((a,b) => String(a.name)<String(b.name)?-1:String(a.name)>String(b.name)?1:0)) {
-      if (typeof raw.name!=='string' || !raw.name || !Number.isInteger(raw.footprintX) || !Number.isInteger(raw.footprintZ) || raw.footprintX<1 || raw.footprintZ<1) continue;
-      const d={...raw,sprite:safeSprite(raw.sprite),shadow:safeSprite(raw.shadow),uses:Math.max(0,Math.floor(Number(raw.uses)||0))}; definitions.set(d.name.toLowerCase(),d);
-    }
-    selectedName=[...definitions.values()][0]?.name||'';
-    let missing=0;
-    const urls=new Set([...definitions.values()].flatMap(d => [d.sprite?.url,d.shadow?.url]).filter(Boolean));
-    await Promise.all([...urls].map(url => new Promise(resolve => { const image=new Image(); image.onload=() => { images.set(url,image); api.schedule(); resolve(); }; image.onerror=() => { missing++; resolve(); }; image.src=url; })));
-    $('[data-catalogue]').textContent=`${definitions.size} features from ${catalogue.planet||catalogue.world}.${missing?' '+missing+' sprite images could not load.':''} Translucent bodies and shadows use 50% alpha in this first-frame preview.`;
-    status('Feature catalogue ready.');
-  } catch (error) {
-    catalogueError=error.message; $('[data-catalogue]').textContent=catalogueError; status('Feature placement is unavailable; start positions remain editable.');
+  // ---- export: the map's feature pack (export/featurepack.go) and its painted deposits and vents ----
+  // Names carry a prefix of the map's own: TF and six base-36 digits of a hash of everything the pack's bytes depend on, the map's
+  // name included, so two maps never share a name with different bytes (a feature lookup takes the first definition it finds).
+  const base64=bytes => { let text=''; for (let i=0;i<bytes.length;i+=0x8000) text+=String.fromCharCode(...bytes.subarray(i,i+0x8000)); return btoa(text); };
+  const frameOf=(s,duration=10) => ({width:s.w,height:s.h,x:s.ax,y:s.ay,duration,pixels:base64(s.idx),opaque:base64(s.a)});
+  const hashText=text => { let h=0x811c9dc5; for (let i=0;i<text.length;i++) h=hash32(h,text.charCodeAt(i)); return h; };
+  const rockHeight=([fw,fz]) => fw*fz===1?10:fw*fz<=4?15:20;   // retail rocks: 7-20 by size (spec section 4)
+  function exportNames(prefix) {
+    const P=prefix,counts={tree:'Tree',shrub:'Shrub',rock:'Rock',scar:'Scar'};
+    return p => p.kind==='deposit'?`${P}Metal${p.metal}`:p.kind==='vent'?`${P}Vent`:`${P}${counts[p.kind]}${p.v+1}`;
   }
-  ready=true; refreshCatalogue(); update();
-  // What the exporter needs of the catalogue: the placed features' names and footprints, and the world and planet it was prepared for.
-  const exportCatalogue=() => placements.length?{world:catalogue.world,planet:catalogue.planet,features:[...new Set(placements.map(p => definition(p.name)))].map(d => ({name:d.name,footprintX:d.footprintX,footprintZ:d.footprintZ}))}:null;
-  return {serialize,load,draw,deactivate,activate,exportCatalogue,stats:()=>({imageBytes:[...images.values()].reduce((total,image)=>total+(image.naturalWidth||image.width)*(image.naturalHeight||image.height)*4,0)}),addFeature,removeFeature,addStart,moveStart,removeStart,setFill,fillRegion,get hint(){return $('[data-help]').textContent;},get active(){return Boolean(mode);},get busy(){return Boolean(gesture);},get status(){return message;}};
+  async function featurePack(name) {
+    const sun=light(); if (!sun) throw new Error('Wait for the terrain to draw before exporting its features.');
+    const used=[...new Map(placements.map(p => [p.kind+'|'+(p.kind==='deposit'?p.metal:GROUND_KINDS.includes(p.kind)?'':p.v),p])).values()].sort(ordered);
+    const prefix='TF'+(hashText(JSON.stringify({name,world:config.biomeId,variant:config.variant||'',set,sun,used:used.map(p => [p.kind,p.v,p.metal??null])}))).toString(36).padStart(6,'0').slice(-6);
+    const P=prefix,b=prefix.toLowerCase(),nameOf=exportNames(P),defs=[],sequences=[];
+    const def=(n,keys) => defs.push({name:n,keys:[...keys,['filename',b]].map(([k,v]) => [k,String(v)])});
+    const seq=(n,frames) => { sequences.push({name:n,frames}); return n; };
+    const full=(kind,params,seed) => work({type:'full',kind,params,seed,light:sun});
+    const successors={};
+    const smudge=async () => successors.smudge??=(async () => { const f=await full('scar',{type:'smudge'},hash32(set.scar?.seed??4783,0x5d06e));
+      def(`${P}Smudge`,[['description','Scorch Mark'],['footprintx',1],['footprintz',1],['height',0],['seqname',seq(`${b}sm`,[frameOf(f.body)])],['animtrans',1],['reclaimable',0],['blocking',0],['featuredead',`${P}Smudge`]]); return `${P}Smudge`; })();
+    const stain=async () => successors.stain??=(async () => { const f=await full('scar',{type:'stain',size:1},hash32(set.scar?.seed??4783,0x57a1));
+      def(`${P}Stain`,[['description','Rock Rubble'],['footprintx',1],['footprintz',1],['height',0],['seqname',seq(`${b}st`,[frameOf(f.body)])],...(f.shadow?[['seqnameshad',seq(`${b}sts`,[frameOf(f.shadow)])]]:[]),['shadtrans',1],['damage',20000],['reclaimable',0],['blocking',0],['featuredead',`${P}Stain`]]); return `${P}Stain`; })();
+    let voidSeq=null;
+    const transparent=() => voidSeq??=seq(`${b}v`,[{width:1,height:1,x:0,y:0,duration:10,pixels:base64(new Uint8Array([9])),opaque:base64(new Uint8Array([0]))}]);
+    for (const p of used) {
+      const n=nameOf(p),v=variantOf(p),i=p.v+1;
+      if (p.kind==='deposit') { def(n,[['description','Metal'],['footprintx',3],['footprintz',3],['height',4],['seqname',transparent()],['metal',p.metal],['damage',32009],['indestructible',1],['reclaimable',0],['blocking',0],['shadtrans',1]]); continue; }
+      if (p.kind==='vent') { def(n,[['description','Thermal Vent'],['footprintx',1],['footprintz',1],['height',0],['seqname',transparent()],['animating',1],['geothermal',1],['indestructible',1],['blocking',0]]); continue; }
+      const f=await full(p.kind,v.params,v.seed),g=f.gameplay,[fw,fz]=v.footprint;
+      if (p.kind==='tree') {
+        const dead=await smudge(),burn=f.burn.map(s => frameOf(s,2));   // 96 frames of 2 ticks: the 192-tick burn (spec section 4)
+        def(n,[['description','Tree'],['footprintx',1],['footprintz',1],['height',40],['seqname',seq(`${b}t${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}t${i}s`,[frameOf(f.shadow)])],['seqnameburn',seq(`${b}t${i}b`,burn)],
+          ['energy',g.energy],['featureburnt',`${n}B`],['featuredead',dead],['featurereclamate',dead],['sparktime',5],['spreadchance',g.spreadChance],['burnweapon','TreeBurn'],['animtrans',0],['shadtrans',1],['flamable',1],['reclaimable',1],['blocking',1]]);
+        def(`${n}B`,[['description','Burnt Tree'],['footprintx',1],['footprintz',1],['height',40],['seqname',seq(`${b}t${i}x`,[frameOf(f.burnt.body)])],['seqnameshad',seq(`${b}t${i}xs`,[frameOf(f.burnt.shadow)])],
+          ['energy',f.burnt.gameplay.energy],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['flamable',0],['reclaimable',1],['blocking',1]]);
+      } else if (p.kind==='shrub') {
+        const dead=await smudge();   // retail shrubs burn to nothing and die to a smudge
+        def(n,[['description','Shrub'],['footprintx',1],['footprintz',1],['height',4],['seqname',seq(`${b}h${i}`,[frameOf(f.body)])],['seqnameburn',seq(`${b}h${i}b`,f.burn.map(s => frameOf(s,2)))],
+          ['energy',g.energy],['featuredead',dead],['featurereclamate',dead],['sparktime',5],['spreadchance',g.spreadChance],['burnweapon','ShrubBurn'],['animtrans',0],['shadtrans',1],['flamable',1],['reclaimable',1],['blocking',0]]);
+      } else if (p.kind==='rock') {
+        const dead=await stain();
+        def(n,[['description','Rock'],['footprintx',fw],['footprintz',fz],['height',rockHeight(v.footprint)],['seqname',seq(`${b}r${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}r${i}s`,[frameOf(f.shadow)])],
+          ['metal',g.metal],['damage',2000],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['reclaimable',1],['blocking',1]]);
+      } else if (p.kind==='scar') {
+        const smudgeType=v.params.type!=='stain';
+        def(n,[['description',smudgeType?'Scorch Mark':'Rock Stain'],['footprintx',1],['footprintz',1],['height',0],['seqname',seq(`${b}c${i}`,[frameOf(f.body)])],...(f.shadow?[['seqnameshad',seq(`${b}c${i}s`,[frameOf(f.shadow)])]]:[]),
+          ['animtrans',smudgeType?1:0],['shadtrans',1],['damage',smudgeType?0:20000],['reclaimable',0],['blocking',0],['featuredead',n]]);
+      }
+    }
+    return {pack:{prefix,defs,sequences},nameOf};
+  }
+  // Everything the export needs of the features: the pack, the placements by name, and each deposit's and vent's painted pixels at
+  // its place in the export art (anchored on the exported heights, painted on clean export art, in the order the view draws them).
+  async function exportFeatures({name,heights,width,bakeArt,signal}) {
+    if (!placements.length) return {pack:null,placements:[],stamps:[]};
+    const {pack,nameOf}=await featurePack(name),out=[];
+    for (const p of placements.filter(q => GROUND_KINDS.includes(q.kind)).sort(drawOrder)) {
+      signal?.throwIfAborted();
+      const at=(x,z) => heights[z*width+x],origin=originOf(p,[at(p.x,p.z),at(p.x+1,p.z),at(p.x,p.z+1),at(p.x+1,p.z+1)]),g=grounds.get(origin.ox+','+origin.oy),rect=patchRect(origin);
+      let rgba=g?.rgba && !g.stale?g.rgba.slice():null;
+      if (!rgba) { const art=rect && await bakeArt(rect); if (rect && !art) throw new Error('The map changed while its deposits were painted; export again.'); rgba=art?patchOf(origin,rect,art.data):flatGround(); }
+      out.push({ox:origin.ox,oy:origin.oy,rgba:await paint(p,rgba)});
+    }
+    return {pack,placements:placements.map(p => ({name:nameOf(p),x:p.x,z:p.z})).sort(ordered),stamps:out};
+  }
+
+  // Resolves when every requested sprite and stamp is drawn and no ground waits to be read (tests and captures).
+  async function settled() {
+    const frame=() => new Promise(resolve => requestAnimationFrame(resolve));
+    api.schedule(); await frame(); await frame();   // a draw asks for what the view shows
+    for (let i=0;i<600;i++) {
+      const waiting=jobs.size || [...grounds.values()].some(g => g.stale && !g.failed) || [...stamps.values()].some(s => s.painting || !s.exact || s.exactStale);
+      if (!waiting) return true;
+      await new Promise(resolve => setTimeout(resolve,50));
+    }
+    return false;
+  }
+
+  status(kinds.length>2?'Features ready.':'This world has generated deposits and vents only.'); update();
+  return {serialize,load,draw,deactivate,activate,addFeature,removeFeature,removeSelected,rerollSelected,setSelectedMetal,moveSelected,changeSet,addStart,moveStart,removeStart,setFill,fillRegion,
+    pointerSelect,hitAt,clearSelection,fitGround,exportFeatures,viewPoint:index => placements[index]?viewPoint(placements[index]):null,selected:() => [...selection].map(p => placements.indexOf(p)).sort((a,b) => a-b),select:list => { selection=new Set(list.map(i => placements[i]).filter(Boolean)); selectionChanged(); },groundChanged,settled,
+    stats:() => ({imageBytes:[...sprites.values()].reduce((n,e) => n+(e.body?e.body.w*e.body.h*4:0)+(e.shadow?e.shadow.w*e.shadow.h*4:0),0)+[...stamps.values()].filter(s => s.bitmap).length*PATCH*PATCH*4,
+      sprites:sprites.size,stamps:stamps.size,grounds:{fitted:[...grounds.values()].filter(g => g.rgba && !g.stale).length,waiting:[...grounds.values()].filter(g => g.stale && !g.failed).length,failed:[...grounds.values()].filter(g => g.failed).length}}),
+    anchors:() => placements.filter(p => GROUND_KINDS.includes(p.kind)).map(p => ({kind:p.kind,x:p.x,z:p.z,origin:exactOrigin(p)})),
+    get placements(){return placements.map(p => ({...p}));},get selectionCount(){return selection.size;},get hint(){return $('feature-help').textContent;},get active(){return Boolean(mode);},get busy(){return Boolean(gesture);},get status(){return message;}};
 }

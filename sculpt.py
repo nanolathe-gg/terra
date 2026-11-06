@@ -18,7 +18,7 @@ HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-workspace.js', 'sculpt-workspace.css', 'sculpt-help.js', 'sculpt-help-examples.js', 'sculpt-control-schema.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-paths.js', 'sculpt-river.js', 'sculpt-renderer.js', 'sculpt-webgpu.js', 'sculpt-vert.wgsl',
     'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-palette.wgsl', 'engine-weather.wgsl',
-    'engine-erosion.wgsl', 'engine-drainage.wgsl', 'sculpt-drainage.js', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-gates.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-export-worker.js', 'sculpt-features.js', 'sculpt-canvas.js', 'sculpt-share.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js', 'sculpt-scene.js',)}
+    'engine-erosion.wgsl', 'engine-drainage.wgsl', 'sculpt-drainage.js', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-gates.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-export-worker.js', 'sculpt-features.js', 'sculpt-feature-set.js', 'sculpt-feature-gen.js', 'sculpt-feature-fire.js', 'sculpt-feature-worker.js', 'sculpt-canvas.js', 'sculpt-share.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js', 'sculpt-scene.js',)}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -852,6 +852,8 @@ def biome_config(biome):
               'material': table['material'], 'water': table['water'], **world}
     if 'river' in table:
         config['river'] = table['river']   # the river variant's material and water numbers (WORLD_VARIANTS)
+    if 'features' in table:
+        config['features'] = table['features']   # the generated feature kinds the world has (trees, shrubs, rocks, scars); every world has deposits and vents
     return world_knobs(biome, config)
 
 
@@ -873,9 +875,6 @@ def world_configs(biomes):
 
 # What the page loads from a static host or from this server, by the same relative paths: the world configs (config/<world>.json and
 # config/<world>--<variant>.json), the map catalog and services.json (which server-side services exist). Everything else is a source file.
-STATIC_SERVICES = {
-    'features': 'The retail feature catalog is not part of the online editor, so no features can be placed. Run the editor locally with sculpt.py to place them.',
-}
 
 
 def site_data(biomes, configs, catalogue, services):
@@ -954,8 +953,7 @@ class Exporter:
 def build_site(out, biomes, configs, catalogue, maps_url=MAPS_URL):
     """Write the static site: out/index.html (opens the current build) and out/b/<content hash>/ (the page, its sources, the worlds' tables,
     ui-previews/ and the generated files). A build folder never changes once written, so a deploy cannot mix new scripts with cached old shaders."""
-    services = {'defaultWorld': biomes[0], 'worlds': biomes, **{name: {'available': False, 'reason': reason} for name, reason in STATIC_SERVICES.items()},
-                'maps': {'available': True, 'url': maps_url}}
+    services = {'defaultWorld': biomes[0], 'worlds': biomes, 'maps': {'available': True, 'url': maps_url}}
     files = {name: path.read_bytes() for name, path in SOURCES.items()}
     for leaf in sorted((HERE / 'ui-previews').iterdir()):
         if leaf.suffix in ('.png', '.json'):
@@ -984,11 +982,10 @@ def main():
     parser.add_argument('--biomes', default='green,red,archipelago,moon,zhon,lava,desert,crystal,ice',
                         help='comma-separated biomes to serve; the first is the default world')
     parser.add_argument('--assets-root', type=Path, default=Path('/private/tmp/nanolathe-map-editor'),
-                        help='where exports, save links and the map and feature catalogues live; the worlds themselves need nothing here')
+                        help='where save links and the map catalogue live; the worlds themselves need nothing here')
     parser.add_argument('--export-tool', type=Path, help='Card D map exporter binary (default <assets-root>/map-export); only reads the world catalogue from installed content without --prepared (the page exports by itself)')
-    parser.add_argument('--feature-tool', type=Path, help='Card D feature catalogue binary (default <assets-root>/bin/map-features)')
     parser.add_argument('--game-root', action='append', type=Path, help='content root for exports; repeat in mount order')
-    parser.add_argument('--prepared', action='store_true', help='read the saved map-catalog.json and feature catalogues in the assets root instead of the retail sources (BUNDLE.md); worlds never read retail sources')
+    parser.add_argument('--prepared', action='store_true', help='read the saved map-catalog.json in the assets root instead of the retail sources (BUNDLE.md); worlds never read retail sources')
     parser.add_argument('--maps-url', default=os.environ.get('TERRAFORM_MAPS_URL') or MAPS_URL, help='with --build-site: the save-link service the static page uses (default: $TERRAFORM_MAPS_URL, else the live Worker)')
     parser.add_argument('--build-site', type=Path, metavar='DIR', help='write the static site into DIR (index.html and b/<version>/) and exit; serve it with any static host')
     parser.add_argument('--dump-configs', type=Path, metavar='DIR', help='write the generated files the page loads (config/<world>.json, config/catalog.json, services.json) into DIR and exit: the headless renderer (repro/render.mjs) reads them with the checkout\'s sources, with no server')
@@ -1000,9 +997,6 @@ def main():
             (args.dump_configs / name).parent.mkdir(parents=True, exist_ok=True)
             (args.dump_configs / name).write_bytes(body)
         return
-    feature_tool = args.feature_tool or args.assets_root / 'bin' / 'map-features'
-    # A world has features to offer when its catalogue is saved (prepared) or the helper that makes it is built.
-    features_installed = lambda world: (args.assets_root / 'features' / world / 'catalog.json').is_file() or (not args.prepared and feature_tool.is_file())
     if args.build_site:
         try:
             print(build_site(args.build_site, biomes, configs, catalogue, args.maps_url))
@@ -1010,10 +1004,10 @@ def main():
             parser.exit(1, f'sculpt.py --build-site: {err}\n')
         return
     from sculpt_export import MapExport
-    map_export = MapExport(args.assets_root, args.export_tool or args.assets_root / 'map-export', args.game_root or [Path.home() / 'TotalAnnihilation'], args.feature_tool or args.assets_root / 'bin' / 'map-features', args.prepared)
+    map_export = MapExport(args.assets_root, args.export_tool or args.assets_root / 'map-export', args.game_root or [Path.home() / 'TotalAnnihilation'], args.prepared)
     from sculpt_maps import SavedMaps
     saved_maps = SavedMaps(args.assets_root)
-    services = {'defaultWorld': biomes[0], 'worlds': biomes, 'features': {'available': True}, 'maps': {'available': True, 'url': 'api/maps'}}
+    services = {'defaultWorld': biomes[0], 'worlds': biomes, 'maps': {'available': True, 'url': 'api/maps'}}
     generated = site_data(biomes, configs, catalogue, services)
     exporter = Exporter()
 
@@ -1029,11 +1023,6 @@ def main():
             if saved_maps.get(self, self.path):
                 return
             path = urlsplit(self.path).path
-            parts = path.split('/')
-            if len(parts) == 4 and parts[1] == 'map-features' and parts[3] == 'catalog.json' and not features_installed(parts[2]):
-                # A server without the installed content has no feature set to offer: an empty catalogue, with the reason.
-                map_export.reply(self, {'world': parts[2], 'features': [], 'unavailable': 'This server has no feature catalogue installed, so no features can be placed; start positions remain editable.'})
-                return
             try:
                 if map_export.get(self, self.path):
                     return

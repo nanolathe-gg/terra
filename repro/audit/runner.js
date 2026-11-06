@@ -203,7 +203,7 @@ $('features').onclick=()=>run('Feature placement and metadata sensitivity',async
   const samples=[];for(const value of [lo,hi]){clean();const options={...base,[key]:value};f.setFill(options);const t=performance.now();f.fillRegion('tree',key==='radius'?{...region,radius:value}:region,options);samples.push({value,ms:performance.now()-t,data:f.serialize().features});}
   rows.push({key,loCount:samples[0].data.length,hiCount:samples[1].data.length,changed:JSON.stringify(samples[0].data)!==JSON.stringify(samples[1].data),loMs:samples[0].ms,hiMs:samples[1].ms});
  }
- for(const kind of ['tree','foliage','rock']){clean();const t=performance.now();f.fillRegion(kind,region,base);rows.push({key:'kind:'+kind,count:f.serialize().features.length,ms:performance.now()-t});}
+ for(const kind of ['tree','shrub','rock']){clean();const t=performance.now();f.fillRegion(kind,region,base);rows.push({key:'kind:'+kind,count:f.serialize().features.length,ms:performance.now()-t});}
  for(const [type,r] of [['brush',region],['lasso',{type:'lasso',points:[[400,400],[900,400],[900,700],[400,700]]}],['flood',{type:'flood',x:500,z:500}]]){clean();const t=performance.now();f.fillRegion('tree',r,{...base,density:8});rows.push({key:'region:'+type,count:f.serialize().features.length,ms:performance.now()-t});}
  clean();const starts0=f.serialize().starts;f.addStart(900,900);f.moveStart(0,600,550);const starts1=f.serialize().starts;f.removeStart(2);const saved=f.serialize();f.load(saved);rows.push({key:'starts',before:starts0,after:starts1,roundtrip:JSON.stringify(saved)===JSON.stringify(f.serialize())});
  const original=api.metadata.serialize(),settings={minWind:7,maxWind:23,tidal:19,solar:13,gravity:111,surfaceMetal:9,mohoMetal:22,lava:true};api.metadata.load({name:'Audit fixture',description:'Metadata sensitivity fixture',settings});rows.push({key:'metadata',expected:settings,actual:api.metadata.serialize(),roundtrip:JSON.stringify(api.metadata.serialize().settings)===JSON.stringify(settings)});api.metadata.load(original);clean();api.setBusy(true);
@@ -244,16 +244,16 @@ $('surface').onclick=()=>run('Surface and legacy-control sensitivity',async()=>{
 });
 
 $('feature-perf').onclick=()=>run('Bounded feature-fill comparison',async()=>{
- const api=await load('green'),{mountMapFeatures:before}=await import('/audit/features-before.js'),{mountMapFeatures:after}=await import('/sculpt-features.js'),rows=[],checks=[],catalog=await(await fetch('/map-features/green/catalog.json')).json();
+ const api=await load('green'),{mountMapFeatures:before}=await import('/audit/features-before.js'),{mountMapFeatures:after}=await import('/sculpt-features.js'),rows=[],checks=[];
  for(const units of [4,40]){
   const play=units*512,config={...api.config,map:{...api.config.map,unitsX:units,unitsY:units,playRight:play,playBottom:play}},counts=[0,0];
-  const instances=await Promise.all([before,after].map((mount,i)=>mount({config,canvas:document.createElement('canvas'),host:document.createElement('div'),enabled:()=>true,change:()=>{},schedule:()=>{},pick:()=>({x:0,z:0}),screenPoint:()=>({x:0,z:0}),sample:(x,z)=>{counts[i]++;return z>play*.8?60:99+8*Math.sin(x/80)*Math.cos(z/60);}})));
+  const instances=await Promise.all([before,after].map((mount,i)=>mount({config,canvas:frame.contentDocument.createElement('canvas'),enabled:()=>true,change:()=>{},schedule:()=>{},pick:()=>({x:0,z:0}),screenPoint:()=>({x:0,z:0}),sample:(x,z)=>{counts[i]++;return z>play*.8?60:99+8*Math.sin(x/80)*Math.cos(z/60);}})));
   const cases=[['brush',{type:'brush',points:[[500,500],[900,600]],radius:220},40],['edge',{type:'brush',points:[[-60,-20],[160,100]],radius:120},85],['lasso',{type:'lasso',points:[[400,400],[900,400],[900,700],[400,700]]},40],['concave',{type:'lasso',points:[[400,400],[900,400],[600,550],[900,700],[400,700]]},40],['flood',{type:'flood',x:500,z:500},units===40?.02:8]];
   for(const [name,region,density] of cases){const trials=[];for(let repeat=0;repeat<3;repeat++){
    const pair=[];for(const i of repeat%2?[1,0]:[0,1]){const f=instances[i];f.load({features:[],starts:[{x:500,z:500},{x:play-100,z:play-100}],fill:{density,seed:2701,margin:96}});counts[i]=0;const t=performance.now();f.fillRegion('tree',region,{density,seed:2701,margin:96});pair[i]={ms:performance.now()-t,samples:counts[i],features:f.serialize().features};}trials.push({beforeMs:pair[0].ms,afterMs:pair[1].ms,beforeSamples:pair[0].samples,afterSamples:pair[1].samples,count:pair[0].features.length,identical:JSON.stringify(pair[0].features)===JSON.stringify(pair[1].features)});
   }rows.push({units,region:name,trials});line(`${units} units ${name}: identical=${trials.every(r=>r.identical)}, ${trials[1].beforeMs.toFixed(1)} -> ${trials[1].afterMs.toFixed(1)} ms`);await save(`${$('label').value}/feature-performance.json`,rows);}
-  if(units===4)for(const kind of ['tree','foliage','rock'])for(const seed of [0,4294967295]){
-   const initial=catalog.features.filter(d=>d.kind==='deposit').slice(0,1).map(d=>({name:d.name,x:38,z:35}));
+  if(units===4)for(const kind of ['tree','shrub','rock'])for(const seed of [0,4294967295]){
+   const initial=[{kind:'deposit',v:0,x:38,z:35,metal:127}];   // a generated deposit (sculpt-features.js): fill keeps its margin
    const out=instances.map(f=>{f.load({features:initial,starts:[{x:500,z:500}],fill:{seed}});f.fillRegion(kind,{type:'brush',points:[[450,400],[1000,700]],radius:200},{density:40,seed,margin:96});f.fillRegion(kind,{type:'lasso',points:[[450,400],[1000,400],[1000,700],[450,700]]},{density:85,seed,margin:96});return f.serialize();});
    checks.push({kind,seed,count:out[0].features.length,identical:JSON.stringify(out[0])===JSON.stringify(out[1])});
   }

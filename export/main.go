@@ -88,7 +88,7 @@ func run() error {
 	catalogFile := flag.String("catalog-file", "", "read the worlds, palette and map names from a saved --catalog JSON instead of the content roots' maps")
 	input := flag.String("input", "", "local JSON export manifest")
 	out := flag.String("out", "", "output directory for the UFO and indexed PNG")
-	featuresRoot := flag.String("features-root", "", "prepared feature catalogue root, required for placed features")
+	featuresRoot := flag.String("features-root", "", "directory holding the map's feature pack (pack.json, written by the editor), required for placed features")
 	stream := flag.Bool("stream", false, "accept chunk/finish JSON commands on stdin, replying once per command")
 	work := flag.String("work", "", "private temporary directory (default OS temporary directory)")
 	tileBudget := flag.Int("tile-budget-mb", 16, "unique tile bytes retained in RAM before spilling (0..64 MiB)")
@@ -132,16 +132,16 @@ func run() error {
 	if err := refuseRootOutput(*out, roots); err != nil {
 		return err
 	}
-	allowed, err := readExportFeatures(*featuresRoot, req, catalog)
+	pack, err := readExportFeatures(*featuresRoot, req)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	if *stream {
-		return runStream(ctx, req, catalog, *out, *work, *tileBudget<<20, allowed)
+		return runStream(ctx, req, catalog, *out, *work, *tileBudget<<20, pack)
 	}
-	result, err := exportMap(ctx, req, catalog, filepath.Dir(*input), *out, *work, *tileBudget<<20, allowed)
+	result, err := exportMap(ctx, req, catalog, filepath.Dir(*input), *out, *work, *tileBudget<<20, pack)
 	if err != nil {
 		return err
 	}
@@ -239,8 +239,8 @@ func validateText(field, value string) error {
 	return nil
 }
 
-func exportMap(ctx context.Context, req exportRequest, catalog catalog, manifestDir, out, work string, tileBudget int, allowed map[string]mapdata.Feature) (*exportResult, error) {
-	s, err := newTerrainStream(ctx, req, catalog, out, work, tileBudget, allowed)
+func exportMap(ctx context.Context, req exportRequest, catalog catalog, manifestDir, out, work string, tileBudget int, pack *packedFeatures) (*exportResult, error) {
+	s, err := newTerrainStream(ctx, req, catalog, out, work, tileBudget, pack)
 	if err != nil {
 		return nil, err
 	}

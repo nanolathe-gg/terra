@@ -6,13 +6,13 @@ import argparse, importlib.util, json, mimetypes, sys
 from pathlib import Path
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlsplit, parse_qs
-p=argparse.ArgumentParser();p.add_argument('--source',type=Path,required=True);p.add_argument('--port',type=int,required=True);p.add_argument('--out',type=Path,required=True);p.add_argument('--assets',type=Path,default=Path('/private/tmp/terraform-tool-audit/assets'));p.add_argument('--evidence',type=Path,default=Path('/private/tmp/terraform-tool-audit'));p.add_argument('--export-tool',type=Path,default=Path('/private/tmp/nanolathe-map-editor/map-export'));p.add_argument('--feature-tool',type=Path,default=Path('/private/tmp/nanolathe-map-editor/bin/map-features'));p.add_argument('--report',type=Path);a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--source',type=Path,required=True);p.add_argument('--port',type=int,required=True);p.add_argument('--out',type=Path,required=True);p.add_argument('--assets',type=Path,default=Path('/private/tmp/terraform-tool-audit/assets'));p.add_argument('--evidence',type=Path,default=Path('/private/tmp/terraform-tool-audit'));p.add_argument('--export-tool',type=Path,default=Path('/private/tmp/nanolathe-map-editor/map-export'));p.add_argument('--report',type=Path);a=p.parse_args()
 ROOT=a.source.resolve(); AUDIT=Path(__file__).resolve().parent; ASSETS=a.assets.resolve();a.out.mkdir(parents=True,exist_ok=True)
 sys.path.insert(0,str(ROOT));spec=importlib.util.spec_from_file_location('audit_sculpt',ROOT/'sculpt.py');s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s)
 from sculpt_export import MapExport
-exports=MapExport(ASSETS,a.export_tool,[Path.home()/'TotalAnnihilation'],a.feature_tool,True)
+exports=MapExport(ASSETS,a.export_tool,[Path.home()/'TotalAnnihilation'],True)
 configs,catalogue=s.world_configs(list(s.BIOME_NAMES))
-generated=s.site_data(list(s.BIOME_NAMES),configs,catalogue,{'defaultWorld':'green','worlds':list(s.BIOME_NAMES),'features':{'available':True}})
+generated=s.site_data(list(s.BIOME_NAMES),configs,catalogue,{'defaultWorld':'green','worlds':list(s.BIOME_NAMES)})
 class Handler(BaseHTTPRequestHandler):
  def reply(self,data,kind='application/json',status=200):
   if not isinstance(data,bytes):data=json.dumps(data).encode()

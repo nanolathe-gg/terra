@@ -84,7 +84,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     for(const e of cache.values())if(!(refinement&&(e.fit||e.weathered===false))&&(!rect||intersects(rect,e.input??e))){
       if(!e.dirty)dirtyMarks++;e.dirty=true;retainedInvalidations++;
     }
-    coarseColour=true;schedule();
+    coarseColour=true;features?.groundChanged?.(rect);schedule();
   }
   function trimTo(limit){limit=Math.max(0,limit);const v=state();for(const[key,e]of cache)if(cacheBytes>limit&&!intersects(e,v))remove(key);while(cacheBytes>limit&&cache.size)remove(cache.keys().next().value);}
   function configureChunks() {
@@ -336,6 +336,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           await (!overview||!levels?tick():undefined);
         }
         if(!rerun&&token===epoch)pointerTurn=true;   // nothing newer arrived while this plan ran: the next move starts on the pointer's turn
+        // Generated deposits and vents sit where the export puts them and take their colors from the export art under them
+        // (sculpt-features.js): one anchor read or one 128 px patch per idle frame, after the view's own images and only once the
+        // weather the export reads is in.
+        if(!rerun&&token===epoch&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&(!api.canExport||api.canExport())&&await features?.fitGround?.(state()))rerun=true;
       }
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
     }catch(err){if(err.name==='AbortError')rerun=true;else{console.error(err);$('error').hidden=false;$('error').textContent=err.message;}}
@@ -397,7 +401,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function refreshHover(event){
     if(gesture||pan||busy||features?.active||api.currentTool()!=='move'||api.drawMode?.()==='add'||api.pathAdding?.()){hoveredNode=-1;overlay.style.cursor=pan?'grabbing':'crosshair';return;}
     const q=screen(event),hit=hitSelection(geometry(api.selection()),{x:q.x,y:q.z},api.pathEditing?.());
-    hoveredNode=api.pickAt(localPoint(event));
+    const feature=!hit&&!api.pathEditing?.()&&features?.hitAt?.(q);
+    hoveredNode=feature?-1:api.pickAt(localPoint(event));
+    if(feature){overlay.style.cursor='move';return;}
     overlay.style.cursor=hit?.action==='rotate'?'grab':hit?.action==='scale'?'nwse-resize':hit?.action==='point'?'crosshair':hoveredNode>=0||hit?'move':'default';
   }
   overlay.addEventListener('pointerdown',event=>{
@@ -405,6 +411,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(space||event.button===1){pan={id:event.pointerId,x:event.clientX,y:event.clientY,left:viewport.scrollLeft,top:viewport.scrollTop};return;}
     if(features?.active)return;
     const p=localPoint(event),start=performance.now();hover=[p.x,p.y];
+    // Select (V) picks a generated feature before a shape, unless a selected shape's handle is under the pointer (sculpt-features.js).
+    if(api.currentTool()==='move'&&api.drawMode?.()!=='add'&&!api.pathEditing?.()&&!api.pathAdding?.()){const q=screen(event);if(!hitSelection(geometry(api.selection()),{x:q.x,y:q.z})&&features?.pointerSelect(event,q)){schedule();return;}}
     if(api.pathAdding?.()){api.addPathPoint(p);schedule();return;}
     if(api.currentTool()==='move'&&api.drawMode?.()!=='add'){
       const screenPoint=screen(event),selected=api.selection(),handles=geometry(selected);
@@ -461,17 +469,30 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       for(let yy=0;yy<nz;yy++)for(let xx=0;xx<nx;xx++){const h=sampleField(r,(x+xx)*16,(z+yy)*16);if(h<0||h>255)clipped++;heights[(z+yy)*map.widthCells+x+xx]=Math.round(clamp(h,0,255));}metrics();await tick();
     }return{heights,clipped};
   }
-  async function exportChunks(accept,signal){
+  // paint(context, rect) draws on each chunk of export art before it is encoded: the map's painted deposits and vents.
+  async function exportChunks(accept,signal,paint=null){
     await idle();const size=chunkSize(),total=Math.ceil(map.width/size)*Math.ceil(map.height/size);let index=0;
-    for(let y=0;y<map.height;y+=size)for(let x=0;x<map.width;x+=size){signal?.throwIfAborted();const rect={x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)},entry=await bake(rect,true,signal),tile=new OffscreenCanvas(rect.width,rect.height);tile.getContext('2d').drawImage(entry.bitmap,0,0);entry.bitmap.close?.();const png=await tile.convertToBlob({type:'image/png'});await accept({...rect,png},index++,total);tile.width=tile.height=1;metrics();}
+    for(let y=0;y<map.height;y+=size)for(let x=0;x<map.width;x+=size){signal?.throwIfAborted();const rect={x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)},entry=await bake(rect,true,signal),tile=new OffscreenCanvas(rect.width,rect.height),c=tile.getContext('2d');c.drawImage(entry.bitmap,0,0);entry.bitmap.close?.();paint?.(c,rect);const png=await tile.convertToBlob({type:'image/png'});await accept({...rect,png},index++,total);tile.width=tile.height=1;metrics();}
   }
   // H6b: with the GPU feed the chunks rebake as a change is submitted (they read the GPU buffers); the overview and the save wait until the CPU copy holds it.
   const invalidate=change=>clear(api.expandDirty?.(change?.rect??null)??change?.rect??null);
   api.subscribeSubmit?.(change=>{if(api.gpuFeedActive?.()){pendingStrokeTime ||= performance.now();invalidate(change);}});
   api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();markCoarse(change?.rect??null);if(!api.gpuFeedActive?.())invalidate(change);});
   function setBusy(on){busy=on;api.setBusy(on);$('weathered-view').disabled=on;find('[data-gpu]').disabled=on;find('[data-heap]').disabled=on;if(!on){if(resizePending)resize();else schedule();}}
-  features=await mountMapFeatures({config,host:$('feature-tool-host'),canvas:overlay,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();schedule();},schedule,enabled:()=>api.ready()&&!busy});api.registerFeatures?.(features);
-  metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??epoch,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
+  // The export's own numbers for one feature: an anchor cell's four corner bytes, sampled as sampleHeights samples them, and a
+  // rectangle of export art. Either answers null when the scene changed while it was read.
+  async function exportCorners(x,z){
+    const seq=changeSeq,r=await(api.readAsync?api.readAsync({x:x*16,y:z*16,width:16,height:16}):api.read({x:x*16,y:z*16,width:16,height:16}));checkHeap(r);
+    if(changedSince(seq,{x:x*16-16,y:z*16-16,width:48,height:48}))return null;
+    return [[0,0],[1,0],[0,1],[1,1]].map(([dx,dz])=>Math.round(clamp(sampleField(r,(x+dx)*16,(z+dz)*16),0,255)));
+  }
+  async function bakeArt(rect){
+    const seq=changeSeq,e=await bake(rect,true),tile=new OffscreenCanvas(rect.width,rect.height),c=tile.getContext('2d');c.drawImage(e.bitmap,0,0);e.bitmap.close?.();
+    return changedSince(seq,e.input)?null:{data:c.getImageData(0,0,rect.width,rect.height).data,input:e.input};
+  }
+  features=await mountMapFeatures({config,canvas:overlay,exportCorners,bakeArt,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();schedule();},schedule,enabled:()=>api.ready()&&!busy,
+    light:()=>renderer.worldSun,groundColor:()=>renderer.means?.ground,deselectShapes:()=>{if(api.selection()>=0)api.select?.(-1);}});api.registerFeatures?.(features);
+  metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks,bakeArt},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??epoch,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
   // H12: the least the terrain budget must hold besides the fields: the canvases, the bake lattice reserve and one 32 px chunk with the materials.
   // H13: what the paged fields must leave free: the canvas, one canonical chunk's whole working set (every mask layer the world has) and its copy.
   // It was a 32 px chunk's, so the fields took the rest of the budget and the first 512 px bake could not be allocated beside them.

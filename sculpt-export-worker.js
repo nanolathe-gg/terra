@@ -5,7 +5,7 @@
 // past its memory budget the tile store spills to disk as the native exporter's does, and the finished .ufo and indexed PNG are
 // disk-backed Files the page offers as downloads without copying them into memory.
 //
-//   {op:'start', job, metadata, catalog, features} -> {type:'ready', width, height, maxChunkSide}
+//   {op:'start', job, metadata, catalog, features} -> {type:'ready', width, height, maxChunkSide}   (features: the map's feature pack, or null)
 //   {op:'chunk', x, y, width, height, png}         -> {type:'progress', receivedTiles, totalTiles, uniqueTiles, tileLimit}
 //   {op:'finish'}                                  -> {type:'result', result, archive: File, indexed: File}
 // A failure answers {type:'error', message}. The page cancels by terminating the worker; it removes the job's folder afterwards.
@@ -180,7 +180,7 @@ async function start({job,metadata,catalog,features,budgetMB}) {
   const {instance}=await WebAssembly.instantiate(bytes,go.importObject);
   mkdirs('/job/features'); mkdirs(`/work/export-${job}`); mkdirs('/out');
   putFile('/job/catalog.json',encoder.encode(JSON.stringify(catalog))); putFile('/job/metadata.json',encoder.encode(JSON.stringify(metadata)));
-  if (features) { mkdirs(`/job/features/${metadata.world}`); putFile(`/job/features/${metadata.world}/catalog.json`,encoder.encode(JSON.stringify(features))); }
+  if (features) putFile('/job/features/pack.json',encoder.encode(JSON.stringify(features)));   // the map's generated features (export/featurepack.go)
   go.argv=['map-export','--stream','--catalog-file','/job/catalog.json','--input','/job/metadata.json','--out','/out','--work',`/work/export-${job}`,'--features-root','/job/features',
     ...(budgetMB==null?[]:['--tile-budget-mb',String(budgetMB)])];
   go.env={HOME:'/'};

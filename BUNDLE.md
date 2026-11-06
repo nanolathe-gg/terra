@@ -14,13 +14,12 @@ publish it to users. Unpack it to an assets root, for example
   feature TDFs for those features;
 - `repro/`: the retail crops that `repro/all.sh` compares against.
 
-Run the server in prepared mode. It loads the saved map and feature
-catalogues instead of the retail sources and maps:
+Run the server in prepared mode. It loads the saved map catalogue instead of
+the retail sources and maps:
 
 ```sh
 R=/private/tmp/nanolathe-map-editor
 go build -o $R/map-export ./export
-go build -o $R/bin/map-features ./features
 python3 sculpt.py --port 8801 --assets-root $R --game-root $R/content --prepared
 REPRO_CROPS=$R/repro PYTHON=python3 sh repro/all.sh $R/repro-out/base http://127.0.0.1:8801 9450
 ```

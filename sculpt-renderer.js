@@ -861,6 +861,7 @@ export class TerrainRenderer {
     // lit from due west as every retail Lunar map measures).
     const tilt = this.variant.has('sunTilt') ? Number(this.variant.get('sunTilt')) : 1;
     let sun = [light === 'alternate' ? 0.72 : -0.72, (front ? 0.38 : -0.38) * tilt, 0.82];
+    this.worldSun = sun.map(v => v / Math.hypot(...sun));   // the map's own sun, as exports draw it (sculpt-features.js lights the features by it)
     // Review sun (card H1): the page's ?sun=<azimuth>,<elevation> turns the light, for looking at the relief from other
     // suns (ink keeps its shade, geometry does not). Azimuth is degrees added to the world's own sun direction on the
     // screen plane (0: unchanged), elevation degrees above the horizon (empty: the world's own). Exports never take it (exact).

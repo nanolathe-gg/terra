@@ -2,7 +2,7 @@
 //   node repro/export-bytes.mjs --server http://127.0.0.1:8901 --port 9791 [--maps green:4:landforms,lava:8:dense,red:16:dense]
 //        [--features 6] [--out dir] [--native path/to/map-export (default: built here from export/)]
 // For each map (world:units:layout; layouts as measure/tilecount.mjs: bare, landforms, dense) it opens a map of that size, draws the
-// layout, places up to --features catalogue features (where the server has a feature catalogue), and exports it twice in the page,
+// layout, places up to --features generated features (every kind the world has), and exports it twice in the page,
 // keeping a copy of every PNG chunk the page sends its exporter. The captured request and chunks then go to the native exporter
 // (`map-export --catalog-file --input --features-root`). It prints one JSON line per map: the SHA-256 of the .ufo and the indexed PNG
 // from each browser export and from the native one, the export times and memory, and `same` (all three equal). Exit 1 if any differ.
@@ -85,11 +85,10 @@ for (const {world, units, layout} of maps) {
         const cells = Math.max(2, Math.round(units * .32)), tools = ['hill', 'mountain', 'plateau', 'valleyV', 'deep', 'river', 'hill', 'crater'];
         let n = 0; for (let j = 0; j < cells; j++) for (let i = 0; i < cells; i++) await stroke(send, ev, tools[n++ % tools.length], .06 + .88 * i / cells, .06 + .88 * (j + .5) / cells, .88 / cells * .8, 800);
       }
-      // A few catalogue features on a diagonal of the play area, where the server has a feature catalogue.
-      row.features = featureCount ? await ev(`(async () => { const c = await fetch('map-features/${world}/catalog.json').then(r => r.ok ? r.json() : null).catch(() => null); if (!c?.features?.length) return 0;
-        const names = c.features.map(f => f.name).sort(); let placed = 0;
-        for (let i = 0; i < ${featureCount}; i++) if (sculptCanvas.features.addFeature(names[(i * 7) % names.length], 8 + i * Math.floor(${units} * 32 / ${featureCount + 1}), 8 + i * Math.floor(${units} * 32 / ${featureCount + 1}))) placed++;
-        return placed; })()`) : 0;
+      // A few of the map's generated features on a diagonal of the play area, every kind the world has in turn (deposits and vents first).
+      row.features = featureCount ? await ev(`(async () => { const kinds = Object.keys(sculptCanvas.features.serialize().featureSet); let placed = 0;
+        for (let i = 0; i < ${featureCount}; i++) if (sculptCanvas.features.addFeature(kinds[i % kinds.length], 8 + i * Math.floor(${units} * 32 / ${featureCount + 1}), 8 + i * Math.floor(${units} * 32 / ${featureCount + 1}), {v: 0})) placed++;
+        await sculptCanvas.features.settled(); return placed; })()`) : 0;
       await ev('sculptCanvas.idle()');
       for (let i = 0; i < 2400 && await ev(`document.getElementById('map-export').disabled`); i++) await sleep(250);
       await ev(CAPTURE);
@@ -110,7 +109,7 @@ for (const {world, units, layout} of maps) {
       }
       writeFileSync(join(dir, 'catalog.json'), JSON.stringify(start.catalog));
       writeFileSync(join(dir, 'manifest.json'), JSON.stringify({...start.metadata, chunks}));
-      if (start.features) { mkdirSync(join(dir, 'features', world), {recursive: true}); writeFileSync(join(dir, 'features', world, 'catalog.json'), JSON.stringify(start.features)); }
+      if (start.features) { mkdirSync(join(dir, 'features'), {recursive: true}); writeFileSync(join(dir, 'features', 'pack.json'), JSON.stringify(start.features)); }
       row.chunks = count; row.console = logs;
     });
     mkdirSync(join(dir, 'native'), {recursive: true});

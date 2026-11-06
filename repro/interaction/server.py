@@ -7,7 +7,7 @@ p=argparse.ArgumentParser();p.add_argument('--source',type=Path,required=True);p
 root=a.source.resolve();here=Path(__file__).resolve().parent;a.out.mkdir(parents=True,exist_ok=True)
 sys.path.insert(0,str(root));spec=importlib.util.spec_from_file_location('perf_sculpt',root/'sculpt.py');s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s)
 configs,catalogue=s.world_configs(list(s.BIOME_NAMES))
-generated=s.site_data(list(s.BIOME_NAMES),configs,catalogue,{'defaultWorld':'green','worlds':list(s.BIOME_NAMES),**{k:{'available':True} for k in ('export','features')}})
+generated=s.site_data(list(s.BIOME_NAMES),configs,catalogue,{'defaultWorld':'green','worlds':list(s.BIOME_NAMES),**{k:{'available':True} for k in ('export',)}})
 class Handler(BaseHTTPRequestHandler):
  def reply(self,data,kind='application/json',status=200):
   if not isinstance(data,bytes):data=json.dumps(data).encode()
@@ -19,7 +19,6 @@ class Handler(BaseHTTPRequestHandler):
   try:
    if name in generated:self.reply(generated[name]);return
    if name=='interaction/scenes.json':self.reply({f.stem:json.loads(f.read_text()) for f in (root/'repro/scenes').glob('*.json')});return
-   if name.startswith('map-features/') and name.endswith('/catalog.json'):self.reply({'features':[],'unavailable':'Performance fixture: no retail feature assets loaded.'});return
    if name.startswith('interaction/'):
     f=(here/name.removeprefix('interaction/')).resolve()
     if not f.is_relative_to(here):raise ValueError('invalid path')

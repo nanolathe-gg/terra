@@ -18,7 +18,8 @@ You need:
 - a Total Annihilation install at `~/TotalAnnihilation`. It is only read.
 
 The Go helpers use Nanolathe's public `formats` and `vfs` packages, pinned
-in `go.mod`, and read feature definitions with `internal/featuredef`.
+in `go.mod`. Map features are generated in the page (`sculpt-feature-gen.js`)
+and packed by the exporter; no feature is read from the installed content.
 Files derived from retail content live under the assets root and are never
 committed. Build the helpers and run the server:
 
@@ -26,7 +27,6 @@ committed. Build the helpers and run the server:
 R=/private/tmp/nanolathe-map-editor
 mkdir -p $R/bin
 go build -o $R/map-export ./export
-go build -o $R/bin/map-features ./features
 python3 sculpt.py --port 8801 --assets-root $R
 ```
 
@@ -41,9 +41,9 @@ Where the terrain engine is going (ground, weathering, surface and light) is
 in [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md).
 
 The nine worlds need nothing under the assets root: each is drawn from its committed table in `materials/`, and a server with an
-empty assets root opens every world and exports it (without feature sprites, which read the installed content). Helpers read `~/TotalAnnihilation` without writing
+empty assets root opens every world and exports it, with its generated features. Helpers read `~/TotalAnnihilation` without writing
 to it. To use other content, repeat `--game-root DIR` in mount order.
-`--export-tool PATH` and `--feature-tool PATH` select helpers built elsewhere.
+`--export-tool PATH` selects a helper built elsewhere.
 Restart the server after Python edits or changing installed content. Each
 world's derived catalogue is refreshed once per server run from its configured
 content roots, even when private files already exist.
