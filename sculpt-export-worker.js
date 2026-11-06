@@ -205,7 +205,7 @@ async function finish() {
   const result=await reply; memory();
   if (await exited) throw new Error(errorText.trim()||'The exporter failed after its result.');
   const file=async name => { const n=resolve('/out/'+name).node; if (n.handle) { n.handle.flush(); n.handle.close(); n.handle=null; } return n.fh.getFile(); };
-  result.metrics={...result.metrics,wasmMemoryBytes:peakMemory};
+  result.metrics={...result.metrics,peakRSSBytes:peakMemory};   // the module's linear memory: it never shrinks, so this is its peak (export/rss_js.go)
   return {result,archive:await file(result.archive),indexed:await file(result.indexed)};
 }
 

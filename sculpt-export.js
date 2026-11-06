@@ -66,7 +66,8 @@ export function mountMapExport(api) {
     await removeOldExports(); job={release:await holdLock(`${STORE}/${id}`),urls:[]};
     const worker=exporter(); signal.addEventListener('abort',worker.stop,{once:true});
     try {
-      await worker.call({op:'start',job:id,metadata,catalog:{worlds:catalogue.worlds,palette,installedNames:[]},features:api.features?.()?.exportCatalogue?.()??null});
+      // The tile store's largest budget: a map within the TNT's 65,536 tiles keeps every tile in memory, and only a larger one spills to OPFS.
+      await worker.call({op:'start',job:id,metadata,catalog:{worlds:catalogue.worlds,palette,installedNames:[]},features:api.features?.()?.exportCatalogue?.()??null,budgetMB:64});
       await api.stream.exportChunks(async (chunk,index,total) => {
         signal.throwIfAborted(); if (api.revision()!==token) throw new Error('Map changed during export.');
         const png=await chunk.png.arrayBuffer();

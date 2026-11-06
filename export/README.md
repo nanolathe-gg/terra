@@ -190,10 +190,10 @@ The worker passes `--catalog-file` with the page's world defaults
 (`config/catalog.json`, committed in `materials/<world>.json`), the palette
 (`materials/palette.json`) and no installed map names, and, when features are
 placed, `--features-root` with a catalogue of just their names and footprints
-from the page's feature tool. It reads no game content. `peakRSSBytes` is the
-Go runtime's share of linear memory (`runtime.MemStats.Sys`); the worker adds
-`wasmMemoryBytes`, the size of the module's linear memory, which never
-shrinks, so it is the peak.
+from the page's feature tool. It reads no game content. The result's
+`peakRSSBytes` is the size of the module's linear memory, which never shrinks,
+so it is the peak (the worker reads it; Go's own `MemStats.Sys` counts
+reserved address space and reads more than twice as high).
 
 The WebAssembly and the native exporter write the same bytes for the same
 chunks. Tile merging converts every summed product explicitly, because Go may
