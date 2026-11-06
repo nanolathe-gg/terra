@@ -40,6 +40,14 @@ func (s *terrainStream) finish() (*exportResult, error) {
 	if s.received != len(s.indices) {
 		return nil, fmt.Errorf("received %d of %d tiles; include the engine's outer strips", s.received, len(s.indices))
 	}
+	// Past the u16 limit, the least important tiles are replaced by their nearest kept tile first.
+	if s.store.count > s.tileLimit {
+		summary, err := s.mergeTiles()
+		if err != nil {
+			return nil, err
+		}
+		s.merge = summary
+	}
 	// First appearances in the global tile grid define the final numbering.
 	// Browser chunk dimensions and the tile-byte spill budget affect neither
 	// the TNT index map nor the order of unique tile graphics.
@@ -52,7 +60,7 @@ func (s *terrainStream) finish() (*exportResult, error) {
 			remap[old] = int32(len(s.order))
 			s.order = append(s.order, old)
 		}
-		s.indices[i] = uint16(remap[old])
+		s.indices[i] = uint32(remap[old])
 	}
 	s.hashes = nil
 	ota, err := encodeOTA(s.req, s.world, s.starts)
@@ -150,7 +158,7 @@ func (s *terrainStream) finish() (*exportResult, error) {
 	s.metrics.ExportMilliseconds = time.Since(s.begin).Milliseconds()
 	complete = true
 	return &exportResult{Name: s.req.Name, Archive: archiveName, Indexed: indexedName, WidthCells: s.width, HeightCells: s.height,
-		UniqueTiles: s.store.count, TileSlots: len(s.indices), ExactPixels: s.exact, NearestPixels: s.nearest, FeatureCount: len(s.req.Features), Starts: s.starts,
+		UniqueTiles: s.store.count, Merge: s.merge, TileSlots: len(s.indices), ExactPixels: s.exact, NearestPixels: s.nearest, FeatureCount: len(s.req.Features), Starts: s.starts,
 		SelfCheck: selfCheck{TNT: true, OTA: true, Archive: true}, Metrics: s.metrics}, nil
 }
 
@@ -192,9 +200,9 @@ func (s *terrainStream) tntHeader() []byte {
 	mapData := 64
 	mapAttr := mapData + 2*len(s.indices)
 	tileGfx := mapAttr + 4*len(s.heights)
-	tileAnims := tileGfx + s.store.count*1024
+	tileAnims := tileGfx + len(s.order)*1024
 	miniMap := tileAnims + 132*len(s.names)
-	words := []uint32{0x2000, uint32(s.width), uint32(s.height), uint32(mapData), uint32(mapAttr), uint32(tileGfx), uint32(s.store.count), uint32(len(s.names)), uint32(tileAnims), uint32(*s.req.SeaLevel), uint32(miniMap), 1, 0, 0, 0, 0}
+	words := []uint32{0x2000, uint32(s.width), uint32(s.height), uint32(mapData), uint32(mapAttr), uint32(tileGfx), uint32(len(s.order)), uint32(len(s.names)), uint32(tileAnims), uint32(*s.req.SeaLevel), uint32(miniMap), 1, 0, 0, 0, 0}
 	header := make([]byte, 0, 64)
 	for _, v := range words {
 		header = binary.LittleEndian.AppendUint32(header, v)
@@ -208,7 +216,7 @@ func (s *terrainStream) writeTNT(w io.Writer, mini []byte) error {
 	}
 	var word [4]byte
 	for _, index := range s.indices {
-		binary.LittleEndian.PutUint16(word[:], index)
+		binary.LittleEndian.PutUint16(word[:], uint16(index))
 		if _, err := w.Write(word[:2]); err != nil {
 			return err
 		}
@@ -267,7 +275,7 @@ func (s *terrainStream) checkTNT(file *os.File, mini []byte) error {
 		if _, err := io.ReadFull(r, cell[:2]); err != nil {
 			return err
 		}
-		if int(want) >= s.store.count || binary.LittleEndian.Uint16(cell[:]) != want {
+		if int(want) >= len(s.order) || uint32(binary.LittleEndian.Uint16(cell[:])) != want {
 			return fmt.Errorf("decoded tile index %d differs", i)
 		}
 	}

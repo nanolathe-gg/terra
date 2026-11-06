@@ -859,6 +859,8 @@ byte-identical unless the table says otherwise.
   preview. Fine relief helps, because it dithers naturally.
 - **Tile budget.** A 16×16 map has 257×260 = 66,820 tile slots, more than
   the 65,536 a TNT can index. Richer detail makes nearly every tile unique.
-  Phase 4 decides how tiles are reused. It does not block small maps.
+  The exporter merges the most alike tiles of a map that needs more
+  (`export/merge.go`); `measure/tilecount.mjs` counts the tiles. It does not
+  block small maps.
 - **Prototype rules.** There are no tests and no Go gates. Retail-derived
   files stay outside git.

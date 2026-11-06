@@ -59,8 +59,16 @@ distance, with the lowest index winning ties. There is no noise or dithering.
 Only exact indexed 32×32 tiles are shared. Unique tiles are numbered by their
 first appearance in the complete row-major tile grid, so changing chunk
 dimensions, the browser's GPU budget or the exporter's spill budget does not
-change TNT bytes. More than 65536 unique tiles is refused cleanly; phase 3
-does not merge or approximate tiles. The 252×252 minimap follows
+change TNT bytes. A map with at most 65536 unique tiles is exact. With more,
+the exporter merges tiles before numbering them (`merge.go`): weighted median
+cut over each tile's 4x4 grid of mean palette colors, 65536 clusters at most,
+each drawn with its member nearest the cluster centroid. A tile used by many
+slots resists merging, one-off grit merges first, and the result is
+deterministic. The export result then carries a `merge` object (distinct tiles
+before, kept, merged, slots changed, mean, 99th percentile and worst per-tile
+RMS RGB error, the worst slots, milliseconds); `uniqueTiles` is the count before
+merging. A map under the limit never reaches this code and exports the same
+bytes as before. The 252×252 minimap follows
 `research/formats/tnt.md` "Minimap": fit the play area to its long side and
 fill the unused short axis with palette index `0x64`. Each used pixel averages
 all indexed-art RGB values in its source block. Blocks use truncated integer
