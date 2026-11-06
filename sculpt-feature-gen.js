@@ -969,9 +969,9 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
       let b = 0, bd = 1e9; seeds.forEach((sd, i) => { const d = Math.hypot(sd.x - x, sd.y - y) + (vnoise(x / 2.5, y / 2.5, seed + ci * 7 + i) - 0.5) * 3; if (d < bd) { bd = d; b = i; } });
       chunkId[by * bw + bx] = ci;
       // brushed metal: horizontal streaks (each row has its own tone offset and runs of 3-6 px), a noisier grain, and specular glints in short bright runs
-      const rowOff = (hash2(y, ci + 3, seed) - 0.5) * 0.36 + (hash2(y >> 1, ci + 9, seed) - 0.5) * 0.2, run = vnoise(x / 4.2, y * 7.3 + ci * 13, seed + 40 + ci);
-      const base = [0.74, 0.5, 0.2][seeds[b].cls] + rowOff + (run - 0.5) * 0.6 + (vnoise(x / 2.2, y / 2.2, seed + 50 + ci) - 0.5) * 0.18;
-      let tone = clamp(base + (rn() - 0.5) * 0.22, 0, 1), c = STONE_RAMP[clamp(Math.round(tone * (STONE_RAMP.length - 1) + (rn() + rn() - 1) * 1.3), 0, STONE_RAMP.length - 1)];
+      const rowOff = (hash2(y, ci + 3, seed) - 0.5) * 0.36 + (hash2(y >> 1, ci + 9, seed) - 0.5) * 0.2, run = vnoise(x / (2.2 + 4.5 * hash2(y, ci + 21, seed)) + 50 * hash2(y, ci + 5, seed), y * 7.3 + ci * 13, seed + 40 + ci);   // run length and phase differ per row, so the streaks break up
+      const base = [0.66, 0.46, 0.2][seeds[b].cls] + rowOff * 0.8 + (run - 0.5) * 0.5 + (vnoise(x / 2.2, y / 2.2, seed + 50 + ci) - 0.5) * 0.3 + (vnoise(x / 1.2, y / 1.2, seed + 60 + ci) - 0.5) * 0.25;
+      let tone = clamp(base + (rn() - 0.5) * 0.4, 0, 1), c = STONE_RAMP[clamp(Math.round(tone * (STONE_RAMP.length - 1) + (rn() + rn() - 1) * 2.2 + (rn() < 0.1 ? (rn() < 0.5 ? -4 : 4) : 0)), 0, STONE_RAMP.length - 1)];   // fine pixel grain plus a few off-tone specks
       if (hash2(x >> 2, y, seed + ci * 5 + 11) < 0.075) c = rn() < 0.14 ? 255 : pick(rn, [224, 216, 130, 114, 224]);          // a glint
       setGround(ground, x, y, palette[c]);
     }
