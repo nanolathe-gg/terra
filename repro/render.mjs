@@ -25,7 +25,7 @@ mkdirSync(out, {recursive: true});
 // The page used to fall back to the server's first world for an unknown one,
 // so a Moon scene could be written out as Green. Refuse before rendering:
 // the config request must answer for the scene's world (review A3).
-const sceneConfigResponse = await fetch(`${server}/sculpt-config.json?biome=${encodeURIComponent(scene.biome)}`);
+const sceneConfigResponse = await fetch(`${server}/config/${encodeURIComponent(scene.biome)}.json`);
 if (!sceneConfigResponse.ok) {
   console.error(`render.mjs: ${sceneFile}: world ${scene.biome} is not served (HTTP ${sceneConfigResponse.status})`);
   process.exit(1);
@@ -35,7 +35,7 @@ if (sceneConfig.biomeId !== scene.biome) {
   console.error(`render.mjs: ${sceneFile}: asked for world ${scene.biome}, the server returned ${sceneConfig.biomeId}`);
   process.exit(1);
 }
-const url = `${server}/sculpt?biome=${scene.biome}&mapX=${MAPX}&mapY=${MAPY}&scratch=1&gpuMB=512&heapMB=1536${seaArg !== '' ? '&sea=' + seaArg : ''}${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;
+const url = `${server}/sculpt.html?biome=${scene.biome}&mapX=${MAPX}&mapY=${MAPY}&scratch=1&gpuMB=512&heapMB=1536${seaArg !== '' ? '&sea=' + seaArg : ''}${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;
 await cdpPortFree(port);
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal',
   `--remote-debugging-port=${port}`, `--user-data-dir=${join(tmpdir(), `terraform-render-${port}`)}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});

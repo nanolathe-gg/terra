@@ -35,7 +35,7 @@ function illustration(kind){
 export function mountHelp(){
   const tip=element('aside','visual-help');tip.id='visual-help';tip.hidden=true;tip.setAttribute('role','tooltip');document.body.append(tip);
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
-  const previews=fetch('/ui-previews/manifest.json').then(r=>r.ok?r.json():null).catch(()=>null);
+  const previews=fetch('ui-previews/manifest.json').then(r=>r.ok?r.json():null).catch(()=>null);
   let hoverTimer,frameTimer,owner,revision=0;
   const hide=()=>{clearTimeout(hoverTimer);clearTimeout(frameTimer);revision++;owner?.removeAttribute('aria-describedby');owner=null;tip.hidden=true;tip.replaceChildren();};
   const position=target=>{const r=target.getBoundingClientRect();tip.style.left=Math.max(8,Math.min(innerWidth-tip.offsetWidth-8,r.left<innerWidth/2?r.right+10:r.left-tip.offsetWidth-10))+'px';tip.style.top=Math.max(8,Math.min(innerHeight-tip.offsetHeight-8,r.top))+'px';};
@@ -57,7 +57,7 @@ export function mountHelp(){
         const available=Boolean(index)&&(tool?HELP_TOOLS.includes(tool)&&index.tools?.includes(tool):frames?.every((f,i)=>index.controls?.[key]?.[i]?.value===f.value)&&index.controls[key].length===frames.length);
         const fallback=()=>{if(!valid())return;if(tool){art.innerHTML=illustration(tool);caption.textContent='Illustration';}else{art.remove();caption.remove();}position(target);};
         if(!available){fallback();return;}
-        const url='/ui-previews/'+helpImage(tool?{tool}:{control:key}),image=new Image();
+        const url='ui-previews/'+helpImage(tool?{tool}:{control:key}),image=new Image();
         image.alt=tool?name+' terrain example':'';
         image.onload=()=>{
           if(!valid())return;

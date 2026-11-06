@@ -477,10 +477,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(saving){saveAgain=true;return;}saving=true;updateDocumentControls();find('[data-save-state]').textContent='Saving to server…';
     try {
       const id=find('[data-document]').value.trim();if(!/^[A-Za-z0-9_-]{1,100}$/.test(id))throw new Error('Use letters, numbers, hyphens and underscores for the document name.');if(id!==docId){docId=id;maskVersions.clear();lastMetadata='';}
-      const writeChunk=async(key,bytes)=>{const version=hash(bytes);if(maskVersions.get(key)===version)return;await json('/map-document/chunk?'+new URLSearchParams({id,key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(key,version);};
+      const writeChunk=async(key,bytes)=>{const version=hash(bytes);if(maskVersions.get(key)===version)return;await json('map-document/chunk?'+new URLSearchParams({id,key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(key,version);};
       const sketch=api.sketch(),body={format:'nanolathe-map-document',version:1,sketch,mapData:api.mapData(),map,biome:config.biomeId,seaLevel:config.seaLevel};
-      const chunks=(await api.maskChunks?.())||[];for(const chunk of chunks){const header=new TextEncoder().encode(JSON.stringify({rect:chunk.rect,gridWidth:chunk.gridWidth,gridHeight:chunk.gridHeight,gridOrigin:chunk.gridOrigin,gridSpacing:chunk.gridSpacing,keys:api.maskKeys})),planes=chunk.planes||[],bytes=new Uint8Array(4+header.length+planes.reduce((sum,a)=>sum+a.byteLength,0));new DataView(bytes.buffer).setUint32(0,header.length,true);bytes.set(header,4);let offset=4+header.length;for(const plane of planes){bytes.set(new Uint8Array(plane.buffer,plane.byteOffset,plane.byteLength),offset);offset+=plane.byteLength;}const version=hash(bytes);if(maskVersions.get(chunk.key)===version)continue;await json('/map-document/chunk?'+new URLSearchParams({id,key:chunk.key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(chunk.key,version);}
-      const encoded=JSON.stringify(body);if(encoded!==lastMetadata){await json('/map-document?'+new URLSearchParams({id}),{method:'PUT',headers:{'Content-Type':'application/json'},body:encoded});lastMetadata=encoded;}
+      const chunks=(await api.maskChunks?.())||[];for(const chunk of chunks){const header=new TextEncoder().encode(JSON.stringify({rect:chunk.rect,gridWidth:chunk.gridWidth,gridHeight:chunk.gridHeight,gridOrigin:chunk.gridOrigin,gridSpacing:chunk.gridSpacing,keys:api.maskKeys})),planes=chunk.planes||[],bytes=new Uint8Array(4+header.length+planes.reduce((sum,a)=>sum+a.byteLength,0));new DataView(bytes.buffer).setUint32(0,header.length,true);bytes.set(header,4);let offset=4+header.length;for(const plane of planes){bytes.set(new Uint8Array(plane.buffer,plane.byteOffset,plane.byteLength),offset);offset+=plane.byteLength;}const version=hash(bytes);if(maskVersions.get(chunk.key)===version)continue;await json('map-document/chunk?'+new URLSearchParams({id,key:chunk.key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(chunk.key,version);}
+      const encoded=JSON.stringify(body);if(encoded!==lastMetadata){await json('map-document?'+new URLSearchParams({id}),{method:'PUT',headers:{'Content-Type':'application/json'},body:encoded});lastMetadata=encoded;}
       find('[data-save-state]').textContent='Saved to server · '+id;
     }catch(err){find('[data-save-state]').textContent=err.message;throw err;}finally{saving=false;updateDocumentControls();if(saveAgain){saveAgain=false;queueSave();}}
   }
@@ -489,7 +489,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     documentLoading=true;updateDocumentControls();
     try {
     clearTimeout(saveTimer);while(saving)await tick();clearTimeout(saveTimer);
-    const id=find('[data-document]').value.trim(),data=await json('/map-document?'+new URLSearchParams({id}));
+    const id=find('[data-document]').value.trim(),data=await json('map-document?'+new URLSearchParams({id}));
     const documentData=data.document??data.metadata??data;
     if(documentData.biome!==config.biomeId||documentData.map?.unitsX!==map.unitsX||documentData.map?.unitsY!==map.unitsY||documentData.seaLevel!==config.seaLevel)throw new Error('Open a canvas with the document’s world, dimensions and sea level before loading it.');
     const sketch=documentData.sketch;

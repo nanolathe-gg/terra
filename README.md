@@ -175,3 +175,12 @@ hashes, tile indices and attributes in memory, spills tile bytes under its own
 budget, and writes the indexed PNG and archive without a full-map image buffer.
 Cancel removes the exact temporary job and publishes no partial archive. More
 than 65536 distinct tiles is refused; the tile reuse policy is still phase 4.
+
+## The static site
+
+`python3 sculpt.py --build-site <dir>` writes `<dir>/index.html` (opens the current build) and `<dir>/b/<version>/` (the page, its shaders and
+modules, `materials/`, `ui-previews/`, `config/<world>.json`, `config/<world>--<variant>.json`, `config/catalog.json` and `services.json`). The
+version is a hash of the contents, so a deploy never mixes new scripts with cached old shaders. Any static host serves it
+(`cd <dir>/b/<version> && python3 -m http.server`, then open `/sculpt.html`). `sculpt.py` serves the same relative paths for development.
+`services.json` says which server services exist (map export, the retail feature catalog, saving to a server); on the static site they are
+off and their controls say why. `.github/workflows/pages.yml` checks, builds and deploys the site to GitHub Pages.

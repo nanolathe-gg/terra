@@ -2,7 +2,9 @@
 """Local common-surface terrain experiment; no engine integration."""
 import argparse
 import copy
+import hashlib
 import json
+import shutil
 import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -806,8 +808,8 @@ def apply_variant(config, biome, variant):
 # Every world is described by one committed table, materials/<world>.json (measured and fitted by measure/): the materials its layers are
 # made from, its `material` and `water` numbers, its page defaults and base height (`world`), and, for Zhon, its river variant. Nothing
 # here reads an image or a retail source, so a server needs no assets folder to draw a world.
-MATERIAL_TABLES = {'green': '/materials/green.json', 'moon': '/materials/moon.json', 'desert': '/materials/desert.json', 'zhon': '/materials/zhon.json', 'lava': '/materials/lava.json', 'ice': '/materials/ice.json', 'red': '/materials/red.json', 'crystal': '/materials/crystal.json', 'archipelago': '/materials/archipelago.json'}
-SOURCES.update({table.lstrip('/'): HERE / table.lstrip('/') for table in MATERIAL_TABLES.values()})
+MATERIAL_TABLES = {world: f'materials/{world}.json' for world in ('green', 'moon', 'desert', 'zhon', 'lava', 'ice', 'red', 'crystal', 'archipelago')}   # paths relative to the page, like every other file it loads
+SOURCES.update({table: HERE / table for table in MATERIAL_TABLES.values()})
 SOURCES['materials/palette.json'] = HERE / 'materials' / 'palette.json'
 
 
@@ -831,12 +833,12 @@ def world_knobs(biome, config):
 
 def export_defaults(biome):
     """The map export's per-world defaults (retail planet, sea level, OTA climate medians), committed in the world's table."""
-    return json.loads((HERE / MATERIAL_TABLES[biome].lstrip('/')).read_text())['world']['export']
+    return json.loads((HERE / MATERIAL_TABLES[biome]).read_text())['world']['export']
 
 
 def biome_config(biome):
     """One world's page configuration, built from its table."""
-    table = json.loads((HERE / MATERIAL_TABLES[biome].lstrip('/')).read_text())
+    table = json.loads((HERE / MATERIAL_TABLES[biome]).read_text())
     world = copy.deepcopy(table['world'])
     world.pop('export', None)   # the page's world catalogue (EXPORT_DEFAULTS), not the page's config
     config = {'biome': BIOME_NAMES[biome], 'biomeId': biome, 'size': 1024, 'grid': 512, 'seaLevel': 0, 'baseHeight': world.pop('baseHeight', 24),
@@ -847,49 +849,101 @@ def biome_config(biome):
     return world_knobs(biome, config)
 
 
+def world_configs(biomes):
+    """The page's configuration of each world, and the map catalog (what the page reads of it is committed with the worlds; only an
+    export reads the installed content)."""
+    configs = {b: biome_config(b) for b in biomes}
+    # Any world may take another's ground pattern (World panel); the
+    # pattern's mean is replaced by the world's ground colour.
+    # A table world with no tile data (a quilted plain generated as a layer) has no pattern to lend; every other world does.
+    patterns = {b: {'name': BIOME_NAMES[b], 'groundTable': configs[b]['materialTable']} for b in biomes
+                if 'ground' in json.loads((HERE / configs[b]['materialTable']).read_text())}
+    for config in configs.values():
+        config['biomes'] = {b: BIOME_NAMES[b] for b in biomes}
+        config['groundPatterns'] = patterns
+        config['variants'] = {k: v['label'] for k, v in WORLD_VARIANTS.get(config['biomeId'], {}).items()}
+    return configs, {'worlds': {b: export_defaults(b) for b in biomes}}
+
+
+# What the page loads from a static host or from this server, by the same relative paths: the world configs (config/<world>.json and
+# config/<world>--<variant>.json), the map catalog and services.json (which server-side services exist). Everything else is a source file.
+STATIC_SERVICES = {
+    'export': 'Export needs the map exporter and the installed game content, which the online editor does not have. Run the editor locally with sculpt.py to export a playable map.',
+    'features': 'The retail feature catalog is not part of the online editor, so no features can be placed. Run the editor locally with sculpt.py to place them.',
+    'documents': 'The online editor has no server to save to. Use Save and Load to keep a map recipe as a file.',
+}
+
+
+def site_data(biomes, configs, catalogue, services):
+    """Every generated file of the site, as {relative path: bytes}: one table the dev server answers from and the static build writes."""
+    files = {'services.json': services, 'config/catalog.json': catalogue}
+    for b in biomes:
+        files[f'config/{b}.json'] = configs[b]
+        for variant in WORLD_VARIANTS.get(b, {}):
+            files[f'config/{b}--{variant}.json'] = apply_variant(configs[b], b, variant)
+    return {name: json.dumps(data).encode() for name, data in files.items()}
+
+
+def build_site(out, biomes, configs, catalogue):
+    """Write the static site: out/index.html (opens the current build) and out/b/<content hash>/ (the page, its sources, the worlds' tables,
+    ui-previews/ and the generated files). A build folder never changes once written, so a deploy cannot mix new scripts with cached old shaders."""
+    services = {'defaultWorld': biomes[0], 'worlds': biomes, **{name: {'available': False, 'reason': reason} for name, reason in STATIC_SERVICES.items()}}
+    files = {name: path.read_bytes() for name, path in SOURCES.items()}
+    for leaf in sorted((HERE / 'ui-previews').iterdir()):
+        if leaf.suffix in ('.png', '.json'):
+            files['ui-previews/' + leaf.name] = leaf.read_bytes()
+    files.update(site_data(biomes, configs, catalogue, services))
+    digest = hashlib.sha256()
+    for name in sorted(files):
+        digest.update(name.encode() + b'\0' + hashlib.sha256(files[name]).digest())
+    version = digest.hexdigest()[:10]
+    target = Path(out) / 'b' / version
+    for name, body in files.items():
+        (target / name).parent.mkdir(parents=True, exist_ok=True)
+        (target / name).write_bytes(body)
+    index = ('<!DOCTYPE html>\n<html lang="en-US"><head><meta charset="utf-8"><title>Terraform</title>'
+             f'<script>location.replace("b/{version}/sculpt.html"+location.search+location.hash)</script>'
+             f'<noscript><meta http-equiv="refresh" content="0;url=b/{version}/sculpt.html"></noscript></head>'
+             f'<body><a href="b/{version}/sculpt.html">Open Terraform</a></body></html>\n')
+    (Path(out) / 'index.html').write_text(index)
+    return target
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8767)
     parser.add_argument('--biomes', default='green,red,archipelago,moon,zhon,lava,desert,crystal,ice',
-                        help='comma-separated biomes to serve; the first is the default')
+                        help='comma-separated biomes to serve; the first is the default world')
     parser.add_argument('--assets-root', type=Path, default=Path('/private/tmp/nanolathe-map-editor'),
                         help='where exports, saved documents and the map and feature catalogues live; the worlds themselves need nothing here')
     parser.add_argument('--export-tool', type=Path, help='Card D map exporter binary (default <assets-root>/map-export)')
     parser.add_argument('--feature-tool', type=Path, help='Card D feature catalogue binary (default <assets-root>/bin/map-features)')
     parser.add_argument('--game-root', action='append', type=Path, help='content root for exports; repeat in mount order')
     parser.add_argument('--prepared', action='store_true', help='read the saved map-catalog.json and feature catalogues in the assets root instead of the retail sources (BUNDLE.md); worlds never read retail sources')
+    parser.add_argument('--build-site', type=Path, metavar='DIR', help='write the static site into DIR (index.html and b/<version>/) and exit; serve it with any static host')
     args = parser.parse_args()
+    biomes = [b for b in args.biomes.split(',') if b in BIOME_NAMES]
+    configs, catalogue = world_configs(biomes)
+    feature_tool = args.feature_tool or args.assets_root / 'bin' / 'map-features'
+    # A world has features to offer when its catalogue is saved (prepared) or the helper that makes it is built.
+    features_installed = lambda world: (args.assets_root / 'features' / world / 'catalog.json').is_file() or (not args.prepared and feature_tool.is_file())
+    if args.build_site:
+        print(build_site(args.build_site, biomes, configs, catalogue))
+        return
     from sculpt_export import MapExport
     from sculpt_document import MapDocument
     map_export = MapExport(args.assets_root, args.export_tool or args.assets_root / 'map-export', args.game_root or [Path.home() / 'TotalAnnihilation'], args.feature_tool or args.assets_root / 'bin' / 'map-features', args.prepared)
     map_document = MapDocument(args.assets_root / 'documents')
     from sculpt_maps import SavedMaps
     saved_maps = SavedMaps(args.assets_root)
-    biomes = [b for b in args.biomes.split(',') if b in BIOME_NAMES]
-    configs = {b: biome_config(b) for b in biomes}
-    # What the page reads of the map catalogue is committed with the worlds; only an export reads the installed content.
-    catalogue = {'worlds': {b: export_defaults(b) for b in biomes}}
-    feature_tool = args.feature_tool or args.assets_root / 'bin' / 'map-features'
-    # A world has features to offer when its catalogue is saved (prepared) or the helper that makes it is built.
-    features_installed = lambda world: (args.assets_root / 'features' / world / 'catalog.json').is_file() or (not args.prepared and feature_tool.is_file())
-    # Any world may take another's ground pattern (World panel); the
-    # pattern's mean is replaced by the world's ground colour.
-    # A table world with no tile data (a quilted plain generated as a layer) has no pattern to lend; every other world does.
-    patterns = {b: {'name': BIOME_NAMES[b], 'groundTable': configs[b]['materialTable']} for b in biomes
-                if 'ground' in json.loads((HERE / configs[b]['materialTable'].lstrip('/')).read_text())}
-    for config in configs.values():
-        config['biomes'] = {b: BIOME_NAMES[b] for b in biomes}
-        config['groundPatterns'] = patterns
-        config['variants'] = {k: v['label'] for k, v in WORLD_VARIANTS.get(config['biomeId'], {}).items()}
+    services = {'defaultWorld': biomes[0], 'worlds': biomes, 'export': {'available': True}, 'features': {'available': True}, 'documents': {'available': True}}
+    generated = site_data(biomes, configs, catalogue, services)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             if saved_maps.get(self, self.path):
                 return
             path = urlsplit(self.path).path
-            if path == '/map-catalog.json':
-                map_export.reply(self, catalogue)
-                return
             parts = path.split('/')
             if len(parts) == 4 and parts[1] == 'map-features' and parts[3] == 'catalog.json' and not features_installed(parts[2]):
                 # A server without the installed content has no feature set to offer: an empty catalogue, with the reason.
@@ -902,27 +956,11 @@ def main():
                 map_export.reply(self, {'error': str(err)}, 400)
                 return
             content_type = 'text/plain; charset=utf-8'
-            if path == '/sculpt-config.json':
-                # An unknown or unavailable world is an error, not a silent
-                # fallback to the first world: a labelled render must never
-                # be another world's terrain (review A3, 2026-10-27).
-                requested = parse_qs(urlsplit(self.path).query).get('biome')
-                biome = requested[0] if requested else (biomes[0] if biomes else '')
-                config = configs.get(biome)
-                if config is None:
-                    self.send_error(404, f'unknown or unavailable world: {biome}')
-                    return
-                # A variant of the world (card C5 stage 3); none is the world's own preset.
-                variant = parse_qs(urlsplit(self.path).query).get('variant', [''])[0]
-                if variant:
-                    config = apply_variant(config, biome, variant)
-                    if config is None:
-                        self.send_error(404, f'unknown variant {variant} of world {biome}')
-                        return
-                body = json.dumps(config).encode()
+            name = path.strip('/')
+            if name in generated:
+                body = generated[name]
                 content_type = 'application/json'
             else:
-                name = path.strip('/')
                 if name in ('', 'sculpt'):
                     name = 'sculpt.html'
                 file = SOURCES.get(name)

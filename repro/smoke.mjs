@@ -64,7 +64,7 @@ const strokeAt = async (send, ev, tool) => {
 
 let bad = 0;
 for (const world of worlds) {
-  const url = `${server}/sculpt?biome=${world}&scratch=smoke-${world}-${Date.now()}&gpuMB=512&heapMB=1536`;
+  const url = `${server}/sculpt.html?biome=${world}&scratch=smoke-${world}-${Date.now()}&gpuMB=512&heapMB=1536`;
   const result = await session(url, async ({send, ev, logs}) => {
     const r = {world, brushes: {}, export: null};
     try {
@@ -103,7 +103,7 @@ for (const world of worlds) {
   console.log(JSON.stringify(result));
 }
 if (page8) for (const world of worlds8) {
-  const url = `${server}/sculpt?biome=${world}&mapX=8&mapY=8&scratch=smoke-8-${world}-${Date.now()}&gpuMB=512&heapMB=1536`;
+  const url = `${server}/sculpt.html?biome=${world}&mapX=8&mapY=8&scratch=smoke-8-${world}-${Date.now()}&gpuMB=512&heapMB=1536`;
   const r = await session(url, async ({send, ev, logs}) => {
     const r = {page8: true, world};
     try {

@@ -23,7 +23,7 @@ try{
   const send=(method,params={})=>new Promise(r=>{const n=++id;pending.set(n,r);ws.send(JSON.stringify({id:n,method,params}));});
   const ev=async expression=>{const r=await send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(r.result?.exceptionDetails)throw Error(JSON.stringify(r.result.exceptionDetails));return r.result.result.value;};
   const ready=async()=>{for(let i=0;i<480;i++){if(await ev('!!window.sculptCanvas&&!document.getElementById("map-export").disabled')){await ev('sculptCanvas.idle()');return;}await sleep(150);}throw Error('Preview renderer did not become ready: '+errors.join('\n'));};
-  await send('Runtime.enable');await send('Page.navigate',{url:`${server}/sculpt?biome=green&mapX=4&mapY=4&scratch=hover-previews&gpuMB=512&heapMB=1536`});await ready();
+  await send('Runtime.enable');await send('Page.navigate',{url:`${server}/sculpt.html?biome=green&mapX=4&mapY=4&scratch=hover-previews&gpuMB=512&heapMB=1536`});await ready();
   // A fixed art-only crop. All variants keep the same seed, light and camera.
   const manifest={frame:HELP_FRAME,tools:[],controls:{}},written=new Set();
   const save=(name,bytes)=>{const file=join(out,name);writeFileSync(file+'.tmp',bytes);renameSync(file+'.tmp',file);written.add(name);};

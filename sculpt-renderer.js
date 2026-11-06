@@ -170,9 +170,9 @@ export class TerrainRenderer {
     // Every world's materials are numbers: the config names its table (config.materialTable).
     const tableUrl = this.config.materialTable;
     this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl.replace(/^\//, ''), 'engine-palette.wgsl', 'materials/palette.json'];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
-      const r = await fetch('/' + name);
+      const r = await fetch(name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));

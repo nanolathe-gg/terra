@@ -30,7 +30,7 @@ def scenes(world, name, knobs, scene_list=SCENES):
     for example, seed in scene_list:
         q = {'biome': world, 'scratch': f'cal-{world}-{name}', 'example': example, **knobs}
         out.append({'name': f'{world}-{name}-{example}-{seed}', 'heights': True, 'seed': seed, 'example': example,
-                    'url': f'http://127.0.0.1:{PORT}/sculpt?{urlencode(q)}'})
+                    'url': f'http://127.0.0.1:{PORT}/sculpt.html?{urlencode(q)}'})
     return out
 
 

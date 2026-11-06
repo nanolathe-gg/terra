@@ -14,7 +14,7 @@ async function pipelinesOf(device) {
   let p = pipelines.get(device);
   if (p) return p;
   p = (async () => {
-    const module = device.createShaderModule({label: 'engine-drainage', code: await (await fetch('/engine-drainage.wgsl')).text()});
+    const module = device.createShaderModule({label: 'engine-drainage', code: await (await fetch('engine-drainage.wgsl')).text()});
     const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
     if (errors.length) throw new Error('nanolathe: engine-drainage.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
     const out = {};
