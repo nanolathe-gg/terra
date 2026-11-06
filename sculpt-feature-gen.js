@@ -166,6 +166,16 @@ function makeShadow(body, o, r) {
   const out = cropSprite(sh);
   return out;
 }
+// Rock shadow (retail: a large soft dark patch to the right and below, wider than tall): the silhouette offset and grown a little.
+function offsetShadow(body, dx, dy, grow, colors, r) {
+  const pad = Math.ceil(Math.abs(dx)) + 6, w = body.w + pad * 2, h = body.h + pad * 2, sh = newSprite(w, h, body.ax + pad, body.ay + pad);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let hit = 0;
+    for (let g = -grow; g <= grow; g++) for (let f = -grow; f <= grow; f++) if (at(body, x - pad - Math.round(dx) + f, y - pad - Math.round(dy) + g)) hit++;
+    if (hit > (grow ? 2 : 0) || (hit > 0 && r() < 0.5)) { sh.a[y * w + x] = 1; sh.idx[y * w + x] = weighted(r, colors); }
+  }
+  return cropSprite(sh);
+}
 const TREE_SHADOW_COLORS = [[245, 39], [95, 38], [92, 6], [93, 6], [94, 5], [44, 2], [45, 2], [46, 2]];
 const ROCK_SHADOW_COLORS = [[47, 78], [95, 20], [245, 2]];
 
@@ -463,7 +473,7 @@ function shrubFrame(P, seed, ctx) {
 }
 
 // ---- rocks -----------------------------------------------------------------------------------------------------
-const ROCK_DEFAULTS = { cells: '2x2', size: 1, angular: 0.4, lean: 0, metal: null };
+const ROCK_DEFAULTS = { cells: '2x2', size: 1, angular: 0.55, lean: 0, metal: null };
 const ROCK_CELLS = { '1x1': [1, 1], '2x2': [2, 2], '3x2': [3, 2], '3x3': [3, 3], '4x3': [4, 3] };
 function rockFrame(P, seed, ctx) {
   const L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 9));
@@ -483,10 +493,10 @@ function rockFrame(P, seed, ctx) {
     const smooth = 1 + a2 * Math.cos(2 * th + f1) + a3 * Math.cos(3 * th + f2);
     return lerp(smooth, poly, P.angular);
   };
-  const Wh = W / 2, Hh = H / 2, mask = new Uint8Array(w * h);
+  const Wh = W / 2, Hh = H / 2, mask = new Uint8Array(w * h), tilt0 = (r() < 0.5 ? -1 : 1) * (0.15 + 0.3 * r());
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const dx = (x - cx) / Wh, dy = (y - cy) / Hh;
-    const th = Math.atan2(dy, dx) - ph, e = dy > 0 ? 3.2 : 2.2;      // flat-ish base
+    const ux = (x - cx) / Wh, uy = (y - cy) / Hh, dx = ux * Math.cos(tilt0) + uy * Math.sin(tilt0), dy = -ux * Math.sin(tilt0) + uy * Math.cos(tilt0);   // a tilted oval
+    const th = Math.atan2(dy, dx) - ph, e = 2.3;
     const rr = Math.pow(Math.pow(Math.abs(dx), e) + Math.pow(Math.abs(dy), e), 1 / e);
     if (rr < radial(th) * (1 + 0.04 * (fbm(x / 4, y / 4, seed) - 0.5)) && (rr > 0 || true)) mask[y * w + x] = 1;
   }
@@ -504,9 +514,9 @@ function rockFrame(P, seed, ctx) {
     const k = y * w + x; if (!mask[k]) continue;
     const zx = zf(x + 1, y) - zf(x - 1, y), zy = zf(x, y + 1) - zf(x, y - 1), nn = Math.hypot(zx, zy, 2);
     let t = (-zx / nn) * L.v[0] + (-zy / nn) * L.v[1] + (2 / nn) * L.v[2];
-    t += 0.18 * (L.x * (x - cx) / Wh + L.y * (y - cy) / Hh);                       // broad fall-off from the sun side
-    if (y > h * 0.72) t -= ((y / h - 0.72) / 0.28) * 0.3;                             // dark base
-    if (dist[k] <= 1 && lowerRight(k)) t -= 0.35;                                     // a dark edge on the shadow side only
+    t += 0.1 * (L.x * (x - cx) / Wh + L.y * (y - cy) / Hh);                       // broad fall-off from the sun side
+    if (y > h * 0.75) t -= ((y / h - 0.75) / 0.25) * 0.15;                            // moderately dark base
+    if (dist[k] <= 1) t -= lowerRight(k) ? 0.55 : 0.3;                                   // a dark one-pixel rim all round, stronger on the shadow side
     tone[k] = t + (rn() - 0.5) * 0.02; hasPx.push(k);
   }
   const ranked = hasPx.slice().sort((a, b) => tone[b] - tone[a]), N = ranked.length, soft = () => (rn() + rn() - 1) * 0.045;
@@ -514,7 +524,7 @@ function rockFrame(P, seed, ctx) {
   const CREAM = [64, 65, 66, 67, 68, 69, 70], PINKS = [16, 17, 18, 19, 20, 21, 22], WHITES = [255, 81, 82, 83, 84];
   const hiEnd = 0.383, litEnd = hiEnd + 0.18, midEnd = litEnd + 0.245;
   // the mottling field: pink where a soft noise is high (about 39% of the non-white highlight)
-  const mott = k => vnoise((k % w) / 6, ((k / w) | 0) / 6, seed + 77) + fbm((k % w) / 12, ((k / w) | 0) / 12, seed + 78, 2) * 0.6;
+  const mott = k => vnoise((k % w) / 1.7, ((k / w) | 0) / 1.7, seed + 77) * 0.8 + fbm((k % w) / 10, ((k / w) | 0) / 10, seed + 78, 2) * 0.5;   // fine grain, not blotches
   const hiList = ranked.slice(0, Math.round(N * hiEnd)).filter((k, i) => i >= Math.round(N * hiEnd * 0.27)).map(k => mott(k)).sort((a, b) => a - b);
   const pinkCut = hiList[Math.floor(hiList.length * 0.39)] ?? 0.5;
   ranked.forEach((k, i) => {
@@ -523,7 +533,7 @@ function rockFrame(P, seed, ctx) {
     if (u < hiEnd) {
       const v = u / hiEnd;
       if (v < 0.27) c = bright(WHITES, 1 - v / 0.27 * 0.8 - 0.1 + (rn() - 0.5) * 0.2);                                      // the broad highlight
-      else { const f = (v - 0.27) / 0.73, pinkish = mott(k) + (rn() - 0.5) * 0.1 < pinkCut; c = pinkish ? bright(PINKS, 1 - (1 - f) * 0.8 - 0.1 + (rn() - 0.5) * 0.12) : bright(CREAM, 1 - (1 - f) * 0.9 - 0.05 + (rn() - 0.5) * 0.12); }
+      else { const f = (v - 0.27) / 0.73, pinkish = mott(k) + (rn() - 0.5) * 0.25 < pinkCut; c = pinkish ? bright(PINKS, 1 - (1 - f) * 0.8 - 0.1 + (rn() - 0.5) * 0.12) : bright(CREAM, 1 - (1 - f) * 0.9 - 0.05 + (rn() - 0.5) * 0.12); }
     } else if (u < litEnd) c = bright([85, 86, 87, 88, 89], 1 - (u - hiEnd) / (litEnd - hiEnd) + (rn() - 0.5) * 0.3);
     else if (u < midEnd) c = bright([92, 91, 90], (u - litEnd) / (midEnd - litEnd) + (rn() - 0.5) * 0.4);
     else { const f = (u - midEnd) / (1 - midEnd); c = rn() < 0.1 ? weighted(rn, [[127, 3], [125, 1]]) : bright([93, 94, 95], 1 - f + (rn() - 0.5) * 0.3); }
@@ -765,7 +775,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     body = R.body;
     const [fw, fh] = ROCK_CELLS[P.cells] || [2, 2];
     footprint = [fw, fh];
-    shadow = makeShadow(body, { side: L.shadowSide, shx: 0.5, up: -0.22, groundY: body.h - 3, colors: ROCK_SHADOW_COLORS, soften: 1, grow: 0.2 }, rng(mix32(seed, 43)));
+    shadow = offsetShadow(body, L.shadowSide * body.w * 0.2, body.h * 0.12, 1, ROCK_SHADOW_COLORS, rng(mix32(seed, 43)));
     const cellsN = fw * fh, metalDefault = Math.round((7.6 * cellsN + 22.5) / 25) * 25;
     gameplay = { energy: 0, metal: P.metal ?? Math.max(25, Math.min(100, metalDefault)), metalLinear: Math.round(7.6 * cellsN + 22.5), hp: 2000, blocking: true, reclaimable: true };
   } else if (kind === 'scar') {
