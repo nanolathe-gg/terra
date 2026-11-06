@@ -376,7 +376,7 @@ function burntFrame(P, seed, ctx) {
   const yFork = ay - Math.round(H * 0.52);
   for (let y = ay; y >= yFork; y--) {
     const t = (ay - y) / (ay - yFork), flare = y >= ay - 3 ? (y === ay ? 3 : 12 - (ay - y) * 0.7) : 0;
-    const wd = Math.max(flare, lerp(12, 7.2, t) * (0.9 + 0.2 * vnoise(y / 4, 1, s1 + 4)) + (y > ay - 6 ? 1.5 : 0));
+    const wd = Math.max(flare, lerp(13, 8.8, t) * (0.9 + 0.2 * vnoise(y / 4, 1, s1 + 4)) + (y > ay - 6 ? 1.5 : 0));
     const xc = ax + wob(y) * (1 - 0.4 * (1 - t));
     for (let x = Math.floor(xc - wd / 2 - 1); x <= Math.ceil(xc + wd / 2 + 1); x++) { const edge = Math.abs(x - xc) - wd / 2 + (vnoise(x / 1.8, y / 1.8, s1 + 9) - 0.5) * 2.2; if (edge <= 0) mask[y * w + x] = 1; }
   }
@@ -437,7 +437,7 @@ function shrubFrame(P, seed, ctx) {
   const W = Math.round(P.width), H = Math.round(P.height), w = W + 6, h = H + 8, cx = w / 2, cy = (h - 6) / 2 + 1;
   const ax = Math.round(cx) + (r() < 0.5 ? 0 : -1), ay = h - 5;
   const sp = newSprite(w, h, ax, ay), occ = new Uint8Array(w * h);
-  const dd = clamp(P.density / 0.5, 0, 1), fill = lerp(0.135, 0.4, dd), N = Math.round(fill * W * H);
+  const dd = clamp(P.density / 0.5, 0, 1), fill = lerp(0.15, 0.43, dd), N = Math.round(fill * W * H);
   const s1 = (r() * 1e6) | 0;
   const env = (x, y) => { const e = ((x - cx) / (W / 2)) ** 2 + ((y - cy) / (H / 2)) ** 2; return e * 0.85 + (vnoise(x / 3, y / 3, s1) - 0.5) * 0.3 <= 1; };
   const inside = []; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (env(x, y)) inside.push([x, y]);
@@ -464,8 +464,8 @@ function shrubFrame(P, seed, ctx) {
     for (const [x, y] of cells) {
       const under = !has(x, y + 1), upper = !has(x, y - 1);
       let c;
-      if (under) c = rn() < 0.36 ? 173 : weighted(rn, [[165, 4], [167, 3], [164, 2], [169, 1], [168, 1]]);        // the darker underside
-      else if (upper) c = weighted(rn, [[163, 28 * hi], [164, 12], [165, 34], [162, 3 * hi], [167, 6], [166, 2]]);   // lit yellow-green top
+      if (under) c = rn() < 0.42 ? 173 : weighted(rn, [[165, 5], [167, 2], [164, 3], [163, 2], [169, 1]]);        // the darker underside
+      else if (upper) c = weighted(rn, [[163, 32 * hi], [164, 14], [165, 32], [162, 4 * hi], [167, 4], [166, 1]]);   // lit yellow-green top
       else c = weighted(rn, [[165, 34], [167, 10], [164, 8], [163, 8], [166, 3], [168, 2], [173, 4]]);
       put(sp, x, y, c);
     }
@@ -886,7 +886,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const r = rng(seed), rn = rng(mix32(seed, 2));
   const mt = clamp((P.metal - 86) / (223 - 86), 0, 1);
   const look = P.look === 'auto' ? (P.metal >= 160 ? 'cluster' : 'plates') : P.look;
-  const total = stonePixelsFor(P.metal) * (0.95 + 0.1 * r()) * (look === 'cluster' ? 0.98 : 1);
+  const total = stonePixelsFor(P.metal) * (0.95 + 0.1 * r()) * (look === 'cluster' ? 0.8 : 1);
   const dom = look === 'cluster' ? clamp(lerp(0.66, 0.86, mt) + (r() - 0.5) * 0.05, 0.62, 0.88) : clamp(0.54 + (r() - 0.5) * 0.06, 0.5, 0.6);
   const small = [0, 0, 0].map(() => 0.5 + r()), ss = small.reduce((a, b) => a + b, 0);
   const areas = [total * dom, ...small.map(v => Math.max(15, total * (1 - dom) * v / ss))];
@@ -914,15 +914,15 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     let pts;
     for (let attempt = 0; attempt < 9; attempt++) {
     if (ci === 0 && look === 'cluster') {                // ragged cluster of 2-4 touching facets (solidity about 0.6)
-      const k = 3 + (r() < 0.5 ? 1 : 0), per = areas[0] / (k * 0.75), rad = Math.sqrt(per / Math.PI), parts = [];
+      const k = 4 + (r() < 0.5 ? 1 : 0), per = areas[0] / (k * 0.6), rad = Math.sqrt(per / Math.PI), parts = [];
       let ang = r() * TAU;
-      for (let j = 0; j < k; j++) { ang += 1.3 + r() * 1.2; const d = rad * (0.9 + 0.5 * r()); parts.push(sized(px + Math.cos(ang) * d, py + Math.sin(ang) * d, per, 4 + Math.floor(r() * 2), 1 + r() * 0.5, r() * TAU)); }
+      for (let j = 0; j < k; j++) { ang += 1.3 + r() * 1.2; const d = rad * (1.25 + 0.8 * r()); parts.push(sized(px + Math.cos(ang) * d, py + Math.sin(ang) * d, per, 4 + Math.floor(r() * 2), 1 + r() * 0.5, r() * TAU)); }
       pts = union(parts);
       const arms = [];                                    // 8-12 short thin arms off the cluster rim
       const edge = pts.filter(([x, y]) => !pts.some(([u, v]) => u === x + 1 && v === y) || !pts.some(([u, v]) => u === x - 1 && v === y));
-      const nArm = 8 + Math.floor(r() * 5);
+      const nArm = 10 + Math.floor(r() * 5);
       for (let j = 0; j < nArm && edge.length; j++) {
-        const [sx, sy] = edge[(r() * edge.length) | 0]; let a = Math.atan2(sy - py, sx - px) + (r() - 0.5) * 0.9; const len = 3 + Math.floor(r() * 4);
+        const [sx, sy] = edge[(r() * edge.length) | 0]; let a = Math.atan2(sy - py, sx - px) + (r() - 0.5) * 0.9; const len = 4 + Math.floor(r() * 6);
         for (let t = 1; t <= len; t++) { a += (r() - 0.5) * 0.5; arms.push([Math.round(sx + Math.cos(a) * t), Math.round(sy + Math.sin(a) * t)]); if (r() < 0.2) arms.push([Math.round(sx + Math.cos(a) * t), Math.round(sy + Math.sin(a) * t) + 1]); }
       }
       pts = union([pts, arms]);
