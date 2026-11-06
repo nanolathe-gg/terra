@@ -3,7 +3,7 @@
 #   repro/all.sh <out-dir> [server] [cdp-port] [--chrome]
 # The scenes render under Node on Dawn (render.mjs's default, repro/headless.mjs): with no server, from this checkout (the world configs are
 # dumped once with sculpt.py --dump-configs); with a server, from its files; the CDP port is not used. --chrome renders them in headless
-# Chrome instead (the page itself, the old path), against the server (default the owner's, 8801: pass your own) on the CDP port (default 9450).
+# Chrome instead (the page itself), against the server, which --chrome needs (your own; there is no default), on the CDP port (default 9450).
 # Both write the same files for the same pixels.
 # Retail crops are read from $REPRO_CROPS/<world> (retail_crop.py output;
 # default /private/tmp/nanolathe-map-editor/repro-r7, the crops every merge
@@ -19,6 +19,7 @@ for arg; do
     *) if [ -z "$out" ]; then out=$arg; elif [ -z "$server" ]; then server=$arg; elif [ -z "$port" ]; then port=$arg; fi ;;
   esac
 done
+if [ -n "$chrome" ] && [ -z "$server" ]; then echo "all.sh: --chrome needs a server: repro/all.sh <out-dir> http://127.0.0.1:<port> <cdp-port> --chrome, with your own sculpt.py server" >&2; exit 2; fi
 crops=${REPRO_CROPS:-/private/tmp/nanolathe-map-editor/repro-r7}
 py=${PYTHON:-/Users/daniel/src/terraform/.venv/bin/python}
 here=$(cd "$(dirname "$0")" && pwd)
@@ -36,7 +37,7 @@ for scene in "$here"/scenes/*.json; do
   mkdir -p "$out/$world"
   cp "$crops/$crop/retail.png" "$crops/$crop/heights.npy" "$crops/$crop/crop.json" "$out/$world/"
   printf '%s: ' "$world"
-  if [ -n "$chrome" ]; then node "$here/render.mjs" "$scene" "$out/$world" --chrome --server "${server:-http://127.0.0.1:8801}" --port "${port:-9450}" ${REPRO_QUERY:+--query "$REPRO_QUERY"}
+  if [ -n "$chrome" ]; then node "$here/render.mjs" "$scene" "$out/$world" --chrome --server "$server" --port "${port:-9450}" ${REPRO_QUERY:+--query "$REPRO_QUERY"}
   elif [ -n "$server" ]; then node "$here/render.mjs" "$scene" "$out/$world" --server "$server" ${REPRO_QUERY:+--query "$REPRO_QUERY"}
   else node "$here/render.mjs" "$scene" "$out/$world" --configs "$configs" ${REPRO_QUERY:+--query "$REPRO_QUERY"}
   fi

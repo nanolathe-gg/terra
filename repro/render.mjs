@@ -1,5 +1,5 @@
 // Render a reproduction scene and save its window: under Node on Dawn (repro/headless.mjs, the default), or in headless Chrome (WebGPU) with --chrome.
-//   node render.mjs <scene.json> <out-dir> [--server http://127.0.0.1:8801] [--port 9450] [--query 'sun=90,45&cavity=.5'] [--clay] [--chrome]
+//   node render.mjs <scene.json> <out-dir> [--server http://127.0.0.1:<yours>] [--port <cdp>] [--query 'sun=90,45&cavity=.5'] [--clay] [--chrome]
 //        [--map 4x4] [--configs DIR]
 // --query appends page parameters after the scene's own (review sun, knob trials); --clay ticks the Clay box.
 // The scene is {"biome": "green", "query": "", "ground": true, "strokes": [[kind, [[x,y],...], options], ...]}
@@ -7,7 +7,8 @@
 // the window is the map's top-left 1024 px; --sea N sets the sea, default the map's), and the window is captured at 1x. Writes <out-dir>/ours.png (the
 // window) and ours-heights.json (the displayed heights over the window, 512 x 512 samples at 2 px). Both hosts write the same bytes for the same pixels.
 // Under Node the engine's files come from --server, or with no --server from this checkout (the world configs from sculpt.py --dump-configs, or
-// --configs DIR); --port is Chrome's alone, and with --chrome the server defaults to the owner's (8801), so pass your own.
+// --configs DIR); --port is Chrome's alone (default 9450). --chrome needs --server: the page path has no default server, so it never loads
+// another session's editor.
 import {cdpPortFree} from './cdp-port.mjs';
 import {encodePng} from './png.mjs';
 import {spawn} from 'node:child_process';
@@ -18,7 +19,8 @@ import {join} from 'node:path';
 const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
 const flag = name => args.includes(name) && args.splice(args.indexOf(name), 1).length > 0;
-const chrome = flag('--chrome'), serverArg = opt('--server', ''), server = serverArg || 'http://127.0.0.1:8801', port = Number(opt('--port', 9450));
+const chrome = flag('--chrome'), serverArg = opt('--server', ''), server = serverArg, port = Number(opt('--port', 9450));
+if (chrome && !server) { console.error('render.mjs: --chrome needs --server http://127.0.0.1:<port> of your own sculpt.py server (there is no default server).'); process.exit(2); }
 const extraQuery = opt('--query', ''), configs = opt('--configs', ''), [MAPX, MAPY] = opt('--map', '4x4').split('x').map(Number), WINDOW = 1024;
 const TILE_PX = 16;   // the most pixels of a window the tile size may move
 const clayOn = flag('--clay');

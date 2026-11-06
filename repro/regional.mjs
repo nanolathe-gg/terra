@@ -1,8 +1,8 @@
 // Compare every authored field with four regional replays (sculpt-scene.js regionalCheck): under Node on Dawn (repro/headless.mjs, the default), or
 // in an owned headless browser with --chrome.
-//   node regional.mjs <scene.json> [--server http://127.0.0.1:8801] [--port 9450] [--chrome] [--configs DIR]
+//   node regional.mjs <scene.json> [--server http://127.0.0.1:<yours>] [--port <cdp>] [--chrome] [--configs DIR]
 // Under Node the engine's files come from --server, or with no --server from this checkout (world configs from sculpt.py --dump-configs, or
-// --configs DIR), and --port is not used. With --chrome the server defaults to the owner's (8801): pass your own.
+// --configs DIR), and --port is not used. --chrome needs --server (your own sculpt.py server; there is no default) and --port (default 9450).
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
 import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
@@ -10,10 +10,10 @@ import {createServer} from 'node:net';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-const usage = 'Usage: node repro/regional.mjs <scene.json> [--server http://127.0.0.1:8801] [--port 9450] [--chrome] [--configs DIR]';
+const usage = 'Usage: node repro/regional.mjs <scene.json> [--server http://127.0.0.1:<yours>] [--port <cdp>] [--chrome] [--configs DIR]';
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 function argumentsFor(args) {
-  const options = {server: 'http://127.0.0.1:8801', port: 9450, chrome: false, configs: ''}, seen = new Set();
+  const options = {server: 'http://127.0.0.1/', port: 9450, chrome: false, configs: ''}, seen = new Set();
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--help' || arg === '-h') return null;
@@ -25,6 +25,7 @@ function argumentsFor(args) {
     else options.sceneFile = arg;
   }
   if (!options.sceneFile) throw new Error(usage);
+  if (options.chrome && !seen.has('--server')) throw new Error(`--chrome needs --server http://127.0.0.1:<port> of your own sculpt.py server (there is no default server).\n${usage}`);
   if (!/^\d+$/.test(String(options.port)) || !Number.isInteger(Number(options.port)) || Number(options.port) < 1 || Number(options.port) > 65535) throw new Error(`CDP port must be an integer from 1 to 65535.\n${usage}`);
   options.port = Number(options.port);
   let server;
