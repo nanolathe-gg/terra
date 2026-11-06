@@ -1,7 +1,9 @@
-<h2>Verdict per kind, round 7 (compared directly with retail)</h2>
-<p>Round 7 changed two things: the fire's edge texture and the rocks' mottling. Everything else is as in round 6. Retail sheets stay local; the owner's copies are in the compare folder.</p>
+<h2>Verdict per kind, round 8 (compared directly with retail)</h2>
+<p>Round 8 is the fire work plus the owner's six notes. Retail sheets and animation strips stay on my machine (the owner has them in the compare folder).</p>
 <ul>
-<li><b>Fire.</b> Measured boundary pixels per fire pixel (frames 20-60, fire indices only). Tree1: retail 0.355 (main blob 0.298, 15.5 small detached pieces, area 1102), ours now 0.296 (0.244, 12.5 pieces, area 1197), up from 0.205 and 9 pieces; Tree4: retail 0.320, ours 0.321. The flame is a solid mass with torn rim nibbles, a foot that dissolves into specks and many small detached bits. Overlap of consecutive frames is 0.51 (retail 0.57); tail and color shares are unchanged. By eye retail's body is taller and slimmer, with a narrower foot, and its licks are longer than mine.</li>
-<li><b>Rocks.</b> Cream, pink and white now interleave as 1-3 px clusters instead of flat blotches; band shares kept (highlight 0.41, retail 0.383). By eye retail's warm tint is more diffuse still.</li>
-<li>Everything else was left alone. Not built: tree death and reclaim.</li>
+<li><b>Fire.</b> A slimmer, taller column with blunt tongue tips, hard-edged color patches with pixel-level jitter instead of smooth gradients, 4-7 curling 2 px licks per frame, more crown showing, detached bits beside the body. Measured against retail Tree1 (frames 9-22): width per row at 3 / 8 / 16 / 30 rows below the top retail 6.0 / 5.5 / 7.6 / 11.1, ours 2.2 / 4.5 / 7.4 / 17.5 (the lower body is still too wide); crown share of drawn pixels retail 0.48, ours 0.42. Edge per fire pixel: retail 0.355, ours 0.27. Tail over frames 91-95, retail 0.77 / 0.74 / 0.61 / 0.34 / 0.16: broadleaf 0.77 / 0.76 / 0.62 / 0.42 / 0.15, conifer 0.80 / 0.77 / 0.58 / 0.39 / 0.15. Overlap 0.5 (retail 0.57). The foot was not narrowed: retail Tree1 has about 21 columns reaching the ground and ours 14. Embers stay on the burn-out frames; the burnt successor sprites carry none (tested).</li>
+<li><b>Trees.</b> Broadleaf crowns taper toward the top with irregular peaks; both are controls (taper, peaks, retail Green 0.5) and vary by seed. Bright leaf pixels are placed where the crown faces the sun and the sparkle follows the light.</li>
+<li><b>Rocks.</b> New shade control (default 0.6). The lower right never carries a highlight pixel (tested) and shades more strongly.</li>
+<li><b>Deposits.</b> Brushed horizontal streaks, a noisier grain and specular glints; no grass or moss is ever enclosed by a plate (tested). By eye retail's glints are denser and its moss rim darker.</li>
+<li>Burnt trees, shrubs, conifers (other than the fire), vents and scars were left alone. Not built: tree death and reclaim.</li>
 </ul>
