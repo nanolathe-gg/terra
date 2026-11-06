@@ -43,11 +43,11 @@ KNOB_DEFAULTS = dict(
     # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it, and the cracks of ordered rock are lit relief, not ink.
     rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5,
     grooveSpacing=36, grooveAngle=0, grooveRun=120, bedHeight=0, rockFrom=.6,
-    craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
-    crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
-    crystalVariation=.5, crystalTiers=0,
-    # Berg form (card E5; only read when a Crystals stroke sets crystalForm 2): faces in units per px, jitter, broken corners, roughness in units, top tilt in units per px and its direction in degrees.
-    crystalAlign=0, bergFace=.9, bergJitter=.5, bergBreak=3, bergRough=6, bergTilt=.1, bergTiltDir=90, bergFlat=.25,
+    worms=0, rockCrown=0, apron=0,
+    # A landform's Facets (stepped columns and prisms; sculpt-scene.js SHAPE_FIELDS): the step in units, the prisms' sides, flat top share and variation, Level tops,
+    # Align to the path, outline jitter, corner cuts and face roughness in units.
+    crystalStep=16, crystalSides=6, crystalTop=.2, crystalVariation=.5, crystalTiers=0,
+    crystalAlign=0, bergJitter=.5, bergBreak=3, bergRough=6,
     shorePlates=0, plateWaterPx=64, plateLandPx=96, plateSize=28, plateGap=2, plateHeight=3, plateMaterial=1,
     crystalGrain=0, crystalFace=1, crystalInk=0, crystalTone=1, crystalSeam=0,
     # Ice (card E5): shade keeps its blue (0 grey, as every world was).
@@ -79,13 +79,10 @@ KNOB_DEFAULTS = dict(
     # shallow to deep colour, and level ground with no painted lumps beyond
     # plainRelief's.
     waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=0, deepEdge=0, lumpRelief=4,
-    # Line features (card C4): everything off by default; spur and rim details only matter once spurs, sectors or gaps are set.
-    spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestJag=0, crestVary=0, crestTaper=0,
-    rimSectors=0, rimUnequal=.6, rimGaps=0, rimGapWidth=70,
+    # Line features (card C4): everything off by default; spur details only matter once spurs are set.
+    spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestVary=0, crestTaper=0,
     # Local vegetation (card C5 stage 2): change about the world's own cover, 0 none.
     styleVegetation=0,
-    # Crater rim height as a share of its depth (card C4); .34 is the rim every crater had.
-    rimHeight=.34,
     # Placed fissures (card C4 stage 2): only the Fissure tool reads them.
     fissureWidth=5, fissureJag=.5, fissureBranches=3, fissureBranchLen=90, fissureBranchSpread=.5, fissureTaper=.6,
     fissureNetwork=0, fissureCell=70, fissureCrack=.4, fissureDark=.6,
@@ -103,7 +100,7 @@ KNOB_DEFAULTS.update(shineStretch=1, shineWhite=.35)
 for _m in SHINE_MATERIALS:
     KNOB_DEFAULTS.update({f'shine{_m}': 0, f'shine{_m}Sharp': 24, f'shine{_m}Rough': 0, f'shine{_m}Scale': 6})
 # E7 (Crystal): every knob's default is the earlier output.
-KNOB_DEFAULTS.update(crystalFacet=0, crystalSizeVar=0, crystalSmooth=0, craterFacets=0, crystalShallow=0, crystalShallowPx=10)
+KNOB_DEFAULTS.update(crystalFacet=0, crystalSizeVar=0, crystalShallow=0, crystalShallowPx=10)
 # G7 (Crystal): craters with smaller, softer facets (0: the earlier output).
 KNOB_DEFAULTS.update(crystalCraterPx=0, crystalCraterStep=3, crystalCraterSkin=0, crystalCraterWeb=0, crystalCraterWebPx=14, crystalCraterWobble=0,
                      crystalCraterGap=0, crystalCraterTone=0, crystalCraterLight=1)
@@ -111,8 +108,6 @@ KNOB_DEFAULTS.update(crystalCraterPx=0, crystalCraterStep=3, crystalCraterSkin=0
 KNOB_DEFAULTS.update(crystalShoreSeam=.5, crystalSeamEnd=.74, crystalShallowInk=.55)
 # H20b (Crystal): the share of shore slabs that break into a fine mesh inside their own outline (0: the earlier output).
 KNOB_DEFAULTS.update(plateVary=0)
-# E8 (Painted Desert): ragged feet (outline shift, px) and bumpy aprons (height units); 0 is every world as it was.
-KNOB_DEFAULTS.update(baseVary=0, baseBump=0)
 # E8: the grey band at the foot of the raised ground (strength; its height window above the plain, how far the window
 # drifts, and the share of its length that is missing).
 KNOB_DEFAULTS.update(baseBand=0, baseBandLow=4, baseBandHigh=6.5, baseBandWander=1, baseBandGaps=.45)
@@ -156,7 +151,6 @@ KNOB_DEFAULTS.update(moonRibs=0, moonRibDepth=1, moonRibDark=0)
 # G8, Moon: thin dark folds that follow the form across lit and moderate slopes (0: none), and the height between their contours.
 KNOB_DEFAULTS.update(moonFolds=0, moonFoldSpacing=.9)
 # G8, Moon: how far a hill's whole outline strays in lobes, as a share of its radius (a shape option; 0: the smooth outline).
-KNOB_DEFAULTS.update(moonLobes=0)
 # E6, Ice mountains: monotone slate faces (0: rock and snow interleaved) and the rock art's contrast (1: as drawn).
 KNOB_DEFAULTS.update(iceSlate=0, mineralDetail=1, iceCrystal=0, iceCrest=0)
 # G6, Ice blocks and mesas (retail ice-3, Polar Range): rounded light, snow on the flat tops, fibres down the faces, a hatched apron (0: none of them).
@@ -429,8 +423,8 @@ WORLD_KNOBS = {
                    cliffFollow=1, cliffReach=40, cliffBed=0,
                    # E8: retail's aprons and mesa feet are ragged (cells 16 px wide, edges 10-20 px off a smooth
                    # lobe) and bumpy (heights vary 7-12 across an apron whose mean rise is ~8). The ridge presets carry
-                   # this as variation (sculpt.js TOOL_PRESETS); the knobs still shape a crater's spurs.
-                   baseVary=36, baseBump=3.5, baseBand=1,
+                   # this as variation (sculpt.js TOOL_PRESETS).
+                   baseBand=1,
                    # G4: level ground in the pale cap zone is one sheet, as in retail (cap orange 10-12% against ours' 22%).
                    desertCapFlat=1),
     # Moon slopes were too dark and smeared (retail mean luminance .773 vs
@@ -446,7 +440,7 @@ WORLD_KNOBS = {
     # Card E6: retail's hills and crater walls are one rough, pitted surface from crest to
     # foot with no cracks, so crackSeverity, worms and wrinkles are 0 (they were .35, .4 and
     # .8: the Moon variant 'cracked' restores that look) and the pits are drawn by pockmark.
-    'moon': dict(looseSupply=.1, looseSize=3.5, crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
+    'moon': dict(looseSupply=.1, looseSize=3.5, crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4,
                  worms=0, undulation=4, plainRelief=.6, banding=0, crackDark=.6,
                  sunTilt=0, faceFill=0, ambient=.25,
                  # H19: at 1 the lit relief on a shaded wall reads as hard plates, at .5 as rock (repro/walls/moon.json).
@@ -469,8 +463,7 @@ WORLD_KNOBS = {
                  # height, warped); .55 of the amount that read as a contour map.
                  moonFolds=.55,
                  # G8: retail's hills and walls fold: lumpy, lobed outlines. The ridge presets carry them as
-                 # variation (sculpt.js TOOL_PRESETS); the knob still folds a crater's spurs.
-                 moonLobes=.5,
+                 # variation (sculpt.js TOOL_PRESETS).
                  # E6: pits about 4 x 6 px every 7.5 px on every raised or sloped surface, and a
                  # faint sheen with a fine round grain there (the plain keeps its own grain).
                  pockmark=0, pockSize=7.5, shineGate=1, shineWhite=1, shineStretch=3,
@@ -537,7 +530,7 @@ WORLD_KNOBS = {
     # tops stepped ~16 units (measure/crystal_geometry.py).
     'crystal': dict(paletteMix=1, undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1,
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
-                    crystalForm=1, crystalSize=32, crystalStep=16, crystalVariation=.35, crystalTiers=1,
+                    crystalStep=16, crystalVariation=.35, crystalTiers=1,
                     crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.16, crystalSeam=1,
                     plateMaterial=1, plateWaterPx=90, plateLandPx=48, plateSize=28,
                     # Shine (card E2): retail Crystal is much shinier. Silver-lilac streaks run along
@@ -556,10 +549,6 @@ WORLD_KNOBS = {
                     crystalFacet=.7,
                     # E7: three column widths mixed over a mound, the small ones at the crest.
                     crystalSizeVar=.7,
-                    # E7: some columns stay smooth hill between the crystals.
-                    crystalSmooth=.35,
-                    # E7: craters tiled with crystal facets.
-                    craterFacets=1,
                     # E7: shallow water carries a mosaic of small crystal cells; the shore slabs
                     # shrink from 20 to 14 px (retail's band is a fine mesh, plates 12-80 px).
                     crystalShallow=1, crystalShallowPx=8,
@@ -601,8 +590,7 @@ WORLD_KNOBS = {
     # Its Crystals brush makes ice blocks: four-sided, flat-topped (top ~0.45
     # of the base), sides ~0.7 units/px, no lean (measure/ice_features.py).
     'ice': dict(undulation=4, plainRelief=.6, crackSeverity=0, crackMajor=.4, crackMinor=.3, crackHairline=.2,
-                crackBlocks=.2, beachWidth=0, bankRock=0, crystalForm=0, crystalSides=4, crystalTop=.45,
-                crystalSize=220, crystalCount=1, crystalLean=0, crystalVariation=.2,
+                crackBlocks=.2, beachWidth=0, bankRock=0, crystalSides=4, crystalTop=.45, crystalVariation=.2,
                 # Shore (card E5): frost crystals are the Ice shore. Retail's band is
                 # mostly plain white ice with sparse fine straight lines (windows ice-1
                 # and Ice Scream), broken by blue gaps that grow more frequent toward
@@ -746,11 +734,11 @@ WORLD_VARIANTS = {
     'moon': {
         # Pitted (card E6): one pitted surface from crest to foot, dots 4 x 6 px at one density over all raised
         # ground, a trace of sheen, no cracks. The default's lit cups (G8) replace it.
-        'pitted': dict(label='Pitted: E6 dots on all raised ground', knobs=dict(pockmark=1, moonCups=0, moonRibs=0, moonFolds=0, moonLobes=0, banding=.3)),
+        'pitted': dict(label='Pitted: E6 dots on all raised ground', knobs=dict(pockmark=1, moonCups=0, moonRibs=0, moonFolds=0, banding=.3)),
         # Cracked slopes (the look before card E6): smooth hill tops, wormy and crazed sides,
         # carved cracks, no pits and no sheen.
         'cracked': dict(label='Cracked slopes: smooth tops',
-                        knobs=dict(crackSeverity=.35, worms=.4, wrinkles=.8, pockmark=0, moonCups=0, moonRibs=0, moonFolds=0, moonLobes=0, banding=.3, shineGate=0, shineWhite=.35, shineStretch=1,
+                        knobs=dict(crackSeverity=.35, worms=.4, wrinkles=.8, pockmark=0, moonCups=0, moonRibs=0, moonFolds=0, banding=.3, shineGate=0, shineWhite=.35, shineStretch=1,
                                    shineGround=0, shineGroundSharp=24, shineGroundRough=0, shineGroundScale=6,
                                    shineSlope=0, shineSlopeSharp=24, shineSlopeRough=0, shineSlopeScale=6,
                                    shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),

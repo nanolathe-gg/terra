@@ -7,7 +7,7 @@ import {copyColumn} from './sculpt-column.js';
 import {KNOBS,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformSteps,impactPath} from './sculpt-shape-presets.js';
-import {strokeKind,TOOL_PRESETS,SPUR_OUTLINE_KEYS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
+import {strokeKind,TOOL_PRESETS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
   shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,FIELD_KEYS,regionalCheck,repeatCheck,pagedTime} from './sculpt-scene.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER,lfcWidth} from './sculpt-gpu-fields.js';
 
@@ -73,7 +73,7 @@ let tool='plateau', seed=DEFAULT_SEED, varySeed=true, refinementSeed=DEFAULT_SEE
 const randomSeed=current=>{const next=(Math.random()*4294967296)>>>0;return next===current?(next+1)>>>0:next;};
 let history=[], historyIndex=-1, historySerial=0;
 let revision=0, autosaveTimer, ready=false;
-const TOOL_NAMES={crystal:'Faceted forms',plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',valleyV:'V valley',valleyU:'U valley',valleyT:'Terraced valley',river:'River',braided:'Braided river'};
+const TOOL_NAMES={crater:'Crater',crystal:'Faceted forms',plateau:'Plateau',hill:'Rounded ridge',mountain:'Peaked ridge',ramp:'Ramp',deep:'Deep water',shallow:'Shallow water',valleyV:'V valley',valleyU:'U valley',valleyT:'Terraced valley',river:'River',braided:'Braided river'};
 const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',40,800],amount:['amount',-80,160],roughness:['roughness',0,100],softness:['softness',0,100]};
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldSetting=key => worldSettingIn(config,experiment,key);
@@ -86,7 +86,6 @@ function buildShapeOptions() {
   // editors are the page's own (#section-preview-control, in the curve dock).
   syncToolGroups=groupToolControls(SHAPE_FIELDS,([key,id,label,,lo,hi,step,,help,choices]) => {
     label=controlLabel(key,label);
-    if(key==='crystalForm')choices=[[0,'Faceted shards'],[1,'Column mound'],[2,'Planar blocks']];
     if(key==='fissureNetwork')choices=[[0,'Path cut'],[1,'Fracture network']];
     if(key==='plateMaterial')choices=[[1,'Polygonal slabs'],[2,'Needle band']];
     const wrap=controlRow({id,label:`${label} <output id="${id}-value"${choices?' hidden':''}></output>`,range:`min="${lo}" max="${hi}" step="${step}"`,choices,select:' style="width:100%"',help});
@@ -127,7 +126,7 @@ function error(message='') { $('error').textContent=message; $('error').hidden=!
 let featureNotice='';
 function status(message) { $('status').textContent=featureNotice&&message!==featureNotice?message+' '+featureNotice:message; if(message!==featureNotice)featureNotice=''; }
 // Height slider range per shape kind; Raise / lower is signed.
-const amountRange=kind => kind==='crystal'?[5,200]:kind==='fissure'?[2,60]:['smooth','sand','grass','paint'].includes(kind)?[5,100]:[5,160];
+const amountRange=kind => kind==='fissure'?[2,60]:['smooth','sand','grass','paint'].includes(kind)?[5,100]:[5,160];
 function toolDefaults(entry,preset=config?.biomeId||'green') { return toolDefaultsIn(config,entry,preset); }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool]};
@@ -211,7 +210,7 @@ function updateControls() {
   $('lf-elevation-control').querySelector('label').firstChild.textContent=shapeValue('heightReference')===1?'Height above sea (units) ':shapeValue('heightReference')===2?'Height above ground (units) ':'Elevation (height units) ';
   const fixed=['erase','landform'].includes(kind);
   $('amount-control').hidden=fixed;
-  $('amount-label').textContent=kind==='smooth' || isCover(kind)?'Strength':kind==='crystal'?'Height':kind==='crater' || kind==='fissure'?'Depth':'Rise';
+  $('amount-label').textContent=kind==='smooth' || isCover(kind)?'Strength':kind==='fissure'?'Depth':'Rise';
   const [lo,hi]=amountRange(kind); $('amount').min=String(lo); $('amount').max=String(hi);
   $('amount').value=String(clamp(Number($('amount').value),lo,hi));
   const amountNow=Number($('amount').value);
@@ -221,23 +220,18 @@ function updateControls() {
   $('roughness-label').textContent=['erase','sand','grass','paint'].includes(kind)?'Edge freedom':'Roughness';
   // A fissure's outline is its own jaggedness; Roughness would do nothing.
   $('roughness').closest('.control').hidden=kind==='fissure'||kind==='landform';
-  $('softness-control').hidden=!['crater','erase','sand','grass','paint'].includes(kind);
-  if (kind==='crystal') $('roughness-label').textContent='Irregularity';
-  $('cracks-control').hidden=!['crater','landform'].includes(kind);
+  $('softness-control').hidden=!['erase','sand','grass','paint'].includes(kind);
+  $('cracks-control').hidden=kind!=='landform';
   $('cracks-value').textContent=$('cracks').value+'%';
-  // Spur, rim and gully details show once their switch (spurs, sectors, gaps, gullies) is on.
-  const gate={gullySize:'gullies',talus:'gullies',layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerSize:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',rimUnequal:'rimSectors',rimGapWidth:'rimGaps',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
+  // Spur and gully details show once their switch (spurs, gullies) is on.
+  const gate={gullySize:'gullies',talus:'gullies',layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerSize:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
   if(kind==='landform')for(const key of Object.keys(gate))if(gate[key]==='shoreLayers')delete gate[key];
-  // On a crater, the crest options only shape its spurs.
-  if (kind==='crater') { gate.crestJag='spurCount'; gate.crestVary='spurCount'; }
   // A fissure in network mode has no branches, taper or path jag to set; line mode has no block size.
   const net=kind==='fissure' && Number($('fissure-network').value)>=.5;
   const modeOff=key => kind==='fissure' && (net?['fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper'].includes(key):key==='fissureCell');
-  // Berg options show only for the berg form.
   const frostOff=key => key==='frostNeedles' && Number($('plate-material').value)<2;
-  const bergOff=key => kind==='crystal' && ['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat'].includes(key) && Number($('crystal-form').value)<2;
   const shapeOptions={...Object.fromEntries(SHAPE_FIELDS.map(([key])=>[key,shapeValue(key)])),curve:currentCurve(),world:renderer?worldPanelValues():{}};
-  const gated=key => !shapeControlAvailable(key,kind,shapeOptions) || modeOff(key) || bergOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
+  const gated=key => !shapeControlAvailable(key,kind,shapeOptions) || modeOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
   for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(kind) || gated(key) ; $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
   // P28: on a river, Wander is how far in px the migration may carry the drawn line (its band), not an outline noise; once the path is edited by hand it cannot be migrated again.
   { const riv=kind==='landform'&&isRiver(shapeOptions),node=nodes[selected],stale=riv&&Boolean(node?.params)&&(node.params.river?.sig===undefined||node.params.river.sig!==pointsSignature(node.points)),why='The path was edited by hand, so it is not migrated again: draw a new river to change its bends.';
@@ -526,17 +520,7 @@ function markChanged() { markViewChanged(false); error(); }
 // (a hill on a plateau rises with it). prefix[i] keeps the surface before
 // node i, so an edit replays only from the edited node onward.
 let nodes=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
-const NODE_NAMES={landform:'Landform',crystal:'Faceted form',sand:'Sand cover',paint:'Surface paint',grass:'Ground cover',erase:'Reset ground',ground:'Ground undulation',crater:'Crater',fissure:'Fissure',smooth:'Smooth',raster:'Imported surface',compact:'Height scale',flowbake:'Flow bake'};
-const craterFacetWidth=q => q.crystalCraterPx>0?q.crystalCraterPx:clamp(q.radius*.36,14,36);
-// The crystal mark of a crater's skin (G7): the shader reads exactly this value, which no column's mark (.8 and over) or seam (.5) has.
-const craterletRand=(seed,k,a) => { let x=Math.imul((seed>>>0)+k*7919+a*104729,2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; return (x>>>0)/4294967296; };
-// Craterlet k of crater node n: center and radius, from the crater's seed
-// alone (region replay needs the centers before it replays anything).
-function craterletSpot(n,seed,radius,k) {
-  const first=shapePaths(n)[0],c=n.points[first[first.length>>1]],turn=isIdentity(n.frame)?0:Math.atan2(n.frame[1],n.frame[0]);
-  const angle=craterletRand(seed,k,1)*Math.PI*2+turn,dist=radius*(.9+craterletRand(seed,k,2)*1.1),small=radius*(.1+.22*craterletRand(seed,k,3));
-  return {p:{x:clamp(c.x+Math.cos(angle)*dist,0,size-1),y:clamp(c.y+Math.sin(angle)*dist,0,size-1)},small};
-}
+const NODE_NAMES={landform:'Landform',sand:'Sand cover',paint:'Surface paint',grass:'Ground cover',erase:'Reset ground',ground:'Ground undulation',fissure:'Fissure',smooth:'Smooth',raster:'Imported surface',compact:'Height scale',flowbake:'Flow bake'};
 function addNode(n) {
   nodes.push(n); regionalFields.changed(nodeBounds(n));
 }
@@ -544,8 +528,8 @@ function nodeBounds(n) {
   // World-space reach of a shape, from the same extents its brush uses.
   if (!n.points) return {x0:0,y0:0,x1:grid-1,y1:grid-1};
   const q=nodeShapeParams(n),radius=q.radius||40,rough=q.rough??.35;
-  const reach={erase:Math.min(1.7,1+rough*1.3)+1.9*rough,sand:Math.min(1.7,1+rough*1.3)+1.9*rough,grass:Math.min(1.7,1+rough*1.3)+1.9*rough,paint:Math.min(1.7,1+rough*1.3)+1.9*rough,crater:2.9*(1+.45*rough)+.9*rough}[n.kind] ?? 1+.4*rough;
-  let r=n.kind==='crystal'?radius*(q.crystalForm>=.5 && q.crystalForm<1.5?1.35:1)+(q.crystalForm>=.5 && q.crystalForm<1.5?0:(q.crystalSize||24)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)*1.6)+12*spacing:radius*reach+12*spacing;
+  const reach={erase:Math.min(1.7,1+rough*1.3)+1.9*rough,sand:Math.min(1.7,1+rough*1.3)+1.9*rough,grass:Math.min(1.7,1+rough*1.3)+1.9*rough,paint:Math.min(1.7,1+rough*1.3)+1.9*rough}[n.kind] ?? 1+.4*rough;
+  let r=radius*reach+12*spacing;
   // A landform reaches its widest side grown by the width variation, the wander and the spurs (the same reach its segment boxes use).
   if(n.kind==='landform'){
     r=landformReach({...q,radius},n.frame?Math.hypot(n.frame[0],n.frame[1]):1)+12*spacing;
@@ -558,38 +542,19 @@ function nodeBounds(n) {
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   // A fissure reaches its branches (and their forks) and, in network mode, its footprint.
   if (n.kind==='fissure') { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r=(q.fissureNetwork>=.5?radius*1.1:0)+(Math.round(q.fissureBranches)>=1?(q.fissureBranchLen||0)*2.4*k:0)+(q.fissureWidth||5)*3*k+24+12*spacing; }
-  // Spurs (card C4) reach up to one and a half spur lengths past the ridge or rim, plus their own width.
+  // Spurs (card C4) reach up to one and a half spur lengths past the ridge, plus their own width.
   // A spur's root flares to about 1.7 times Spur width.
-  if (Math.round(q.spurCount)>=1 && ['crater','landform'].includes(n.kind)) { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r+=(q.spurLength||0)*(q.spurForks>0?2.1:1.6)*k+radius*Math.max(1,((q.spurWidth||.8)+(q.spurBulb||0)*.7)*1.7); }
+  if (Math.round(q.spurCount)>=1 && n.kind==='landform') { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r+=(q.spurLength||0)*(q.spurForks>0?2.1:1.6)*k+radius*Math.max(1,((q.spurWidth||.8)+(q.spurBulb||0)*.7)*1.7); }
   return {x0:clamp(Math.floor((ax-r)/spacing-originCellX),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing-originCellY),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing-originCellX),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing-originCellY),0,grid-1)};
 }
 const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1)};
 const overlaps=(a,b) => a.x0<=b.x1 && b.x0<=a.x1 && a.y0<=b.y1 && b.y0<=a.y1;
 function evaluate(from=0,rect=null) {
-  regionalFields.changed(regionalDirtyRect(from,rect),regionalStages(nodes.slice(0,from)).length); markChanged();
+  regionalFields.changed(regionalDirtyRect(from,rect)); markChanged();
 }
 
-// Satellite crater baselines see the completed bowl and preceding satellites.
-// Split those steps into prefix stages rather than pulling a whole crater into
-// every touched tile. Their dabs do not write the parent's masks/crack field,
-// so applying that parent-only field before its satellites preserves ordering.
-function regionalStages(list=nodes) {
-  const out=[];
-  for (const n of list) {
-    if (n.hidden) continue;
-    if (n.kind!=='crater') { out.push(n); continue; }
-    const q=nodeShapeParams(n),s=n.seed??seed;
-    out.push({...n,regionalBody:true});
-    for (let k=0;k<Math.round(q.craterlets||0);k++) {
-      const {p,small}=craterletSpot(n,s,q.radius,k);
-      out.push({...n,points:[p],paths:undefined,params:{...q,radius:small,amount:q.amount*(.25+.3*craterletRand(s,k,4)),craterlets:0},seed:(s+k*2654435761)>>>0,regionalChild:true});
-    }
-    if (Math.round(q.spurCount)>=1) out.push({...n,regionalSpurs:true});
-  }
-  return out;
-}
 function regionalReadApron(n) {
-  if (!n.points || n.regionalChild || n.regionalSpurs) return 0;
+  if (!n.points) return 0;
   const q=nodeShapeParams(n);
   let cells=n.kind==='smooth'?clamp(Math.round(q.radius/(spacing*7)),1,24):0;
   // A framed finger cache is keyed on authoring cells; include every world
@@ -612,22 +577,17 @@ function regionalReadApron(n) {
   // G6: a facet plane is fitted at its center, up to half a facet away and three cells either side of it, in the stroke's frame.
   // lfcrystal: stepped columns read the envelope at seeds up to about two widths away (a prism evaluates the section at its seed and reads only its own cell).
   if(n.kind==='landform'&&q.iceFacets>0&&Math.round(q.facetForm||0)!==2){const f=n.frame??IDENTITY,lfc=Math.round(q.facetForm||0)===1,L=lfc?lfcWidth(q):clamp(q.iceFacetSize,16,640);cells+=Math.ceil((lfc?2.3:1.95)*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+(lfc?6:4);}
-  if(n.kind==='crater'&&q.craterFacets>0){const f=n.frame??IDENTITY,L=craterFacetWidth(q);cells+=Math.ceil(1.95*L*Math.max(Math.abs(f[0])+Math.abs(f[2]),Math.abs(f[1])+Math.abs(f[3]))/spacing+.5)+3;}
   if (n.kind==='landform' && q.shorePlates>0) cells+=Math.ceil(Math.max(q.plateWaterPx,q.plateLandPx)/spacing)+2;
   return cells;
 }
-// A remote baseline can change a later shape far outside the edited cells.
+// A shape that reads cells round its footprint (a smooth, a coast or facet pass) changes where the edit reaches into what it reads.
 // This is dirty-output metadata only: it never enlarges a field read window.
 function regionalDirtyRect(from,rect) {
   if (!rect) return null;
   let dirty={...rect};
-  const pointTouched=p => { const x=p.x/spacing,y=p.y/spacing; return overlaps(dirty,{x0:Math.floor(x),y0:Math.floor(y),x1:Math.ceil(x),y1:Math.ceil(y)}); };
   for (let i=Math.max(0,from+1);i<nodes.length;i++) {
     const n=nodes[i]; if (n.hidden || !n.points?.length) continue;
-    const b=nodeBounds(n),points=n.kind==='crater'?[n.points[0]]:[];   // a crater reads its rim height at its first point
-    if (n.kind==='crater') for (let k=0;k<Math.round(n.params?.craterlets??worldDefault('craterlets'));k++) points.push(craterletSpot(n,n.seed??seed,n.params?.radius??40,k).p);
-    if (points.some(pointTouched)) { dirty=unionRect(dirty,b); continue; }
-    const pad=regionalReadApron(n),reach={x0:Math.max(0,dirty.x0-pad),y0:Math.max(0,dirty.y0-pad),x1:Math.min(worldGrid-1,dirty.x1+pad),y1:Math.min(worldGrid-1,dirty.y1+pad)};
+    const b=nodeBounds(n),pad=regionalReadApron(n),reach={x0:Math.max(0,dirty.x0-pad),y0:Math.max(0,dirty.y0-pad),x1:Math.min(worldGrid-1,dirty.x1+pad),y1:Math.min(worldGrid-1,dirty.y1+pad)};
     if (pad && overlaps(reach,b)) dirty=unionRect(dirty,{x0:Math.max(reach.x0,b.x0),y0:Math.max(reach.y0,b.y0),x1:Math.min(reach.x1,b.x1),y1:Math.min(reach.y1,b.y1)});
   }
   return dirty;
@@ -652,7 +612,7 @@ function makeRegionalFields() {
 // field snapshot or world-sized noise array in map mode.
 function currentStrokeOptions() {
   applySeedControl();
-  return {radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,softness:Number($('softness').value)/100,cracks:Number($('cracks').value)/100,seed,...Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),...Object.fromEntries(SPUR_OUTLINE_KEYS.map(k => [k,worldDefault(k)])),...(toolSettings[tool]?.curve?{curve:toolSettings[tool].curve}:{}),...(toolSettings[tool]?.along?{along:toolSettings[tool].along}:{})};
+  return {radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,softness:Number($('softness').value)/100,cracks:Number($('cracks').value)/100,seed,...Object.fromEntries(SHAPE_FIELDS.map(([key]) => [key,shapeValue(key)])),...(toolSettings[tool]?.curve?{curve:toolSettings[tool].curve}:{}),...(toolSettings[tool]?.along?{along:toolSettings[tool].along}:{})};
 }
 function regionalPoints(points) {
   if (!Array.isArray(points) || !points.length || points.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) throw new Error('Invalid terrain stroke.');

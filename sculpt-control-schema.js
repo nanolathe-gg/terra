@@ -22,9 +22,9 @@ const LABELS={plainRelief:'Ground bumps',lumpRelief:'Painted ground bumps',rockO
  lavaCrust:'Pillow crust strength',lavaCalm:'Replace fine relief with crust',lavaDusk:'Shade away from light',
  moonCups:'Slope cups',moonRibs:'Slope ribs',moonFolds:'Contour folds',
  iceSlate:'Slate faces',iceCrystal:'Straight face fibres',iceCrest:'Cap lumps',iceSoft:'Rounded lighting',iceSnow:'Snow on level caps',iceFall:'Slope fibres',iceApron:'Hatched foot apron',iceFrost:'Needle hairlines',
- crystalForm:'Form',crystalSize:'Element width (px)',crystalCount:'Elements per cluster',crystalSides:'Polygon sides',crystalTop:'Flat top share',crystalLean:'Apex lean',
- crystalTiers:'Level tops',crystalAlign:'Align to the path',crystalStep:'Step height',crystalFacet:'Top tilt',crystalSizeVar:'Size mix',facetForm:'Facet shape',bergFace:'Face steepness',bergJitter:'Outline jitter',bergBreak:'Corner cuts',bergRough:'Face roughness',bergTilt:'Top tilt',bergFlat:'Level top share',bergTiltDir:'Tilt direction (degrees)',
- craterFacets:'Bowl facets',crystalCraterPx:'Facet width (px)',crystalCraterStep:'Facet step height',crystalCraterSkin:'Fine seam shading',crystalShoreSeam:'Slab seam weight',plateVary:'Slab variety',
+ crystalSides:'Polygon sides',crystalTop:'Flat top share',
+ crystalTiers:'Level tops',crystalAlign:'Align to the path',crystalStep:'Step height',crystalFacet:'Top tilt',crystalSizeVar:'Size mix',facetForm:'Facet shape',bergJitter:'Outline jitter',bergBreak:'Corner cuts',bergRough:'Face roughness',
+ crystalCraterPx:'Facet width (px)',crystalCraterStep:'Facet step height',crystalCraterSkin:'Fine seam shading',crystalShoreSeam:'Slab seam weight',plateVary:'Slab variety',
  iceFacets:'Facets',iceFacetSize:'Facet width (px)',lavaSpread:'Layer width spread',lavaCircleVary:'Circular bite variation',
  fissureNetwork:'Cut layout',plateMaterial:'Shore structure',fingers:'Shore lobes',fingerSize:'Lobe size',
  styleVegetation:'Local vegetation',
@@ -53,7 +53,7 @@ export function shapeControlAvailable(key,kind,p){
   if(['ejecta','secondaries'].includes(key))return !isRiver(p);
  }
 
- const form=Math.round(p.crystalForm||0),plates=p.shorePlates>0,slab=p.plateMaterial<2;
+ const plates=p.shorePlates>0,slab=p.plateMaterial<2;
  // The face wanders on the shoulder of Reset ground and the cover brushes.
  if(key==='faceVariation')return ['erase','paint','sand','grass'].includes(kind);
  // p.world is what worldControlRequirement reads.
@@ -68,14 +68,7 @@ export function shapeControlAvailable(key,kind,p){
   const front=sampleKnots(k.knots),back=sampleKnots(k.back);return front.some((v,i)=>v!==back[i]);
  }
  if(key==='facing')return p.lean>0;
- if(kind==='crystal'){
-  if(['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth'].includes(key))return form===1;
-  if(['crystalCount','crystalSides','crystalVariation'].includes(key))return form!==1;
-  if(['crystalTop','crystalLean'].includes(key))return form===0;
-  if(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergFlat','bergTiltDir'].includes(key))return form===2&&(!['bergFlat','bergTiltDir'].includes(key)||p.bergTilt>0);
- }
  if(['plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','plateVary'].includes(key))return plates&&(key==='frostNeedles'?!slab:key==='crystalShoreSeam'||key==='plateVary'?slab:true);
- if(['crystalCraterPx','crystalCraterStep','crystalCraterSkin'].includes(key))return p.craterFacets>0;
  // A landform's coast pass and its facets are one pass over its result; shore features take it.
  if(kind==='landform'&&['iceFacets','iceFacetSize','facetForm',...LANDFORM_FACET_KEYS].includes(key)&&landformShore(landformSteps(p)))return false;
  if(['iceFacetSize','facetForm'].includes(key))return p.iceFacets>0;
