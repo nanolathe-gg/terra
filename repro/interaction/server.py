@@ -8,9 +8,8 @@ root=a.source.resolve();here=Path(__file__).resolve().parent;a.out.mkdir(parents
 sys.path.insert(0,str(root));spec=importlib.util.spec_from_file_location('perf_sculpt',root/'sculpt.py');s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s)
 from sculpt_document import MapDocument
 documents=MapDocument(a.out/'documents')
-configs={b:s.biome_config(b) for b in s.BIOME_NAMES}
-patterns={b:{'name':s.BIOME_NAMES[b],'groundTable':c['materialTable']} for b,c in configs.items() if 'ground' in json.loads((root/c['materialTable'].lstrip('/')).read_text())}
-for b,c in configs.items():c.update(biomes=s.BIOME_NAMES,groundPatterns=patterns,variants={k:v['label'] for k,v in s.WORLD_VARIANTS.get(b,{}).items()})
+configs,catalogue=s.world_configs(list(s.BIOME_NAMES))
+generated=s.site_data(list(s.BIOME_NAMES),configs,catalogue,{'defaultWorld':'green','worlds':list(s.BIOME_NAMES),**{k:{'available':True} for k in ('export','features','documents')}})
 class Handler(BaseHTTPRequestHandler):
  def reply(self,data,kind='application/json',status=200):
   if not isinstance(data,bytes):data=json.dumps(data).encode()
@@ -20,9 +19,7 @@ class Handler(BaseHTTPRequestHandler):
  def do_GET(self):
   u=urlsplit(self.path);q=parse_qs(u.query);name=u.path.strip('/')
   try:
-   if name=='map-catalog.json':self.reply({'worlds':{b:s.export_defaults(b) for b in configs}});return
-   if name=='sculpt-config.json':
-    b=q.get('biome',['green'])[0];v=q.get('variant',[''])[0];self.reply(s.apply_variant(configs[b],b,v) if v else configs[b]);return
+   if name in generated:self.reply(generated[name]);return
    if name=='interaction/scenes.json':self.reply({f.stem:json.loads(f.read_text()) for f in (root/'repro/scenes').glob('*.json')});return
    if name.startswith('map-features/') and name.endswith('/catalog.json'):self.reply({'features':[],'unavailable':'Performance fixture: no retail feature assets loaded.'});return
    if documents.get(self,self.path):return

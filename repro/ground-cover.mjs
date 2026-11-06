@@ -22,7 +22,7 @@ try{
   const click=async selector=>{const p=await point(selector);await mouse('mousePressed',p);await mouse('mouseReleased',p);};
 
   await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
-  const url=variant=>`${server}/sculpt?biome=green&variant=${variant}&mapX=4&mapY=4&scratch=cover-check&gpuMB=512&heapMB=1536`;
+  const url=variant=>`${server}/sculpt.html?biome=green&variant=${variant}&mapX=4&mapY=4&scratch=cover-check&gpuMB=512&heapMB=1536`;
   await send('Page.navigate',{url:url('modern')});await ready();await click('#tab-world');
   const keys=['vegetationCover','plantRelief','flowerDensity'];
   report.controls=await ev(`Object.fromEntries(${JSON.stringify(keys.concat('plainRelief'))}.map(k=>{const e=document.getElementById('knob-'+k);return [k,{disabled:e.disabled,value:e.value,section:e.closest('.world-section').dataset.group}]}))`);

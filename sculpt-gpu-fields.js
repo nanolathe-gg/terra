@@ -460,7 +460,7 @@ export function preprocessShader(text, defines = []) {
 const readRadius = p => p?.smoothR || p?.coast?.readR || 0;
 const windowMargin = (ops, j) => { let m = 0; for (let k = 0; k < j; k++) m += readRadius(ops[k].p); return m; };
 export async function createShapeEngine({device, grid, spacing, baseHeight, sea, minH, maxH, refSpacing = spacing, pages = false}) {
-  const raw = await (await fetch('/engine-shape.wgsl')).text();
+  const raw = await (await fetch('engine-shape.wgsl')).text();
   const S = GPUShaderStage.COMPUTE, rw = {type: 'storage'}, ro = {type: 'read-only-storage'};
   const layout = device.createBindGroupLayout({entries: [
     {binding: 0, visibility: S, buffer: {type: 'uniform', hasDynamicOffset: true}}, {binding: 1, visibility: S, buffer: rw}, {binding: 2, visibility: S, buffer: rw},
@@ -1392,7 +1392,7 @@ export function feedPasses(device) {
   let cached = feedCache.get(device);
   if (cached) return cached;
   cached = (async () => {
-    const module = device.createShaderModule({label: 'engine-feed', code: await (await fetch('/engine-feed.wgsl')).text()});
+    const module = device.createShaderModule({label: 'engine-feed', code: await (await fetch('engine-feed.wgsl')).text()});
     const info = await module.getCompilationInfo(), errors = info.messages.filter(m => m.type === 'error');
     if (errors.length) throw new Error('nanolathe: engine-feed.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
     const pipes = {};

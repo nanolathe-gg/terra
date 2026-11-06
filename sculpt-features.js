@@ -406,8 +406,9 @@ export async function mountMapFeatures(api) {
   }
 
   try {
+    if (config.services?.features?.available===false) throw new Error(config.services.features.reason);
     if (config.biomeId==='zhon') throw new Error('Zhon has no retail feature set; feature tools are disabled until the owner chooses one.');
-    const response=await fetch('/map-features/'+encodeURIComponent(config.biomeId)+'/catalog.json');
+    const response=await fetch('map-features/'+encodeURIComponent(config.biomeId)+'/catalog.json');
     if (!response.ok) { const data=await response.json().catch(()=>({})); throw new Error(data.error||'Feature catalogue unavailable (HTTP '+response.status+'). Build map-features with: go build -o <assets-root>/bin/map-features ./features'); }
     catalogue=await response.json();
     if (catalogue.unavailable) throw new Error(catalogue.unavailable);

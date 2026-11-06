@@ -1,0 +1,13 @@
+# Copy to wrangler.toml (not committed: it names your account's bucket) and run `npx wrangler deploy` from this folder.
+name = "terraform-savelinks"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+
+[[r2_buckets]]
+binding = "MAPS"
+bucket_name = "terraform-maps"
+
+[vars]
+ALLOWED_ORIGINS = "https://terra.nanolathe.gg"
+ALLOW_LOCALHOST = "1"
+# ADMIN_TOKEN is a secret: `npx wrangler secret put ADMIN_TOKEN`. Never write it here.

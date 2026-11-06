@@ -19,9 +19,10 @@ export function mountMapExport(api) {
   // TNT numbers tile pictures with 16 bits, so a map keeps at most 65,536 distinct 32x32 tiles; the exporter merges the most alike tiles of a map with more.
   const TILE_LIMIT=65536,tileSlots=() => map?(map.unitsX*16+1)*(map.unitsY*16+4):0;
   const tileNote=() => tileSlots()>TILE_LIMIT?` This map has ${tileSlots().toLocaleString('en-US')} tile slots. If more than ${TILE_LIMIT.toLocaleString('en-US')} of them differ, the export merges the most alike tiles.`:'';
-  const update=() => { $('map-export').disabled=busy || !map || !catalogue?.worlds?.[config.biomeId]?.climate || !api.ready(); };
-  const readCatalogue=config.exportCatalog?Promise.resolve(config.exportCatalog):fetch('/map-catalog.json').then(async r => { const data=await r.json(); if (!r.ok) throw new Error(data.error||'Catalogue unavailable'); return data; });
-  readCatalogue.then(data => { catalogue=data; const w=data.worlds[config.biomeId]; if (!map && Number.isInteger(w?.defaultSeaLevel)) $('map-sea').value=w.defaultSeaLevel; if (!loadedSettings) setSettings(w?.climate); $('map-export-state').textContent=w?.climate?`OTA planet: ${w.planet}. Climate: medians from its installed maps.${tileNote()}`:'Export disabled: '+(w?.disabledReason||'no retail planet was established for this world.'); update(); }).catch(err => { $('map-export-state').textContent=err.message; });
+  const exportOff=config.services?.export?.available===false?config.services.export.reason:'';
+  const update=() => { $('map-export').disabled=Boolean(exportOff) || busy || !map || !catalogue?.worlds?.[config.biomeId]?.climate || !api.ready(); };
+  const readCatalogue=config.exportCatalog?Promise.resolve(config.exportCatalog):fetch('config/catalog.json').then(async r => { const data=await r.json(); if (!r.ok) throw new Error(data.error||'Catalogue unavailable'); return data; });
+  readCatalogue.then(data => { catalogue=data; if (exportOff) { $('map-export-state').textContent='Export disabled: '+exportOff; return update(); } const w=data.worlds[config.biomeId]; if (!map && Number.isInteger(w?.defaultSeaLevel)) $('map-sea').value=w.defaultSeaLevel; if (!loadedSettings) setSettings(w?.climate); $('map-export-state').textContent=w?.climate?`OTA planet: ${w.planet}. Climate: medians from its installed maps.${tileNote()}`:'Export disabled: '+(w?.disabledReason||'no retail planet was established for this world.'); update(); }).catch(err => { $('map-export-state').textContent=err.message; });
   setSettings(defaults());
   for (const id of ['map-name','map-description','map-lava',...SETTINGS.map(([key]) => 'map-'+key)]) $(id).addEventListener('change',() => { loadedSettings=true; api.change?.(); });
   $('map-defaults').onclick=() => { setSettings(defaults()); loadedSettings=false; api.change?.(); };
@@ -32,26 +33,26 @@ export function mountMapExport(api) {
   };
   api.onUpdate(update);
   const responseJSON=async response => { const result=await response.json(); if (!response.ok) throw new Error(result.error||'Map export failed.'); return result; };
-  $('map-cancel').onclick=() => { abort?.abort(); $('map-cancel').disabled=true; $('map-export-state').textContent='Canceling export…'; if (exportId) fetch('/map-export?id='+encodeURIComponent(exportId),{method:'DELETE'}).catch(()=>{}); };
+  $('map-cancel').onclick=() => { abort?.abort(); $('map-cancel').disabled=true; $('map-export-state').textContent='Canceling export…'; if (exportId) fetch('map-export?id='+encodeURIComponent(exportId),{method:'DELETE'}).catch(()=>{}); };
   async function streamedExport(name,description,settings,placements,token) {
     const signal=abort.signal;
     $('map-export-state').textContent='Sampling TNT cell corners…';
     const sampled=await api.stream.sampleHeights(signal);
     const warning=sampled.clipped?`Warning: ${sampled.clipped} cell heights clamped to 0–255. `:'';
     const body={name,description,world:config.biomeId,unitsX:map.unitsX,unitsY:map.unitsY,seaLevel:config.seaLevel,heights:Array.from(sampled.heights),settings,features:placements.features,starts:placements.starts};
-    const started=await fetch('/map-export/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal}).then(responseJSON);
+    const started=await fetch('map-export/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal}).then(responseJSON);
     exportId=started.id;
     await api.stream.exportChunks(async (chunk,index,total) => {
       signal.throwIfAborted(); if (api.revision()!==token) throw new Error('Map changed during export.');
       const query=new URLSearchParams({id:exportId,x:chunk.x,y:chunk.y,width:chunk.width,height:chunk.height});
-      const result=await fetch('/map-export/chunk?'+query,{method:'POST',headers:{'Content-Type':'image/png'},body:chunk.png,signal}).then(responseJSON);
+      const result=await fetch('map-export/chunk?'+query,{method:'POST',headers:{'Content-Type':'image/png'},body:chunk.png,signal}).then(responseJSON);
       // Projected from the slots received so far; a dense map reads within 10% of its final count after 5% of the slots.
       const projected=result.receivedTiles>=result.totalTiles/20?Math.round(result.uniqueTiles/result.receivedTiles*result.totalTiles):0;
       $('map-export-state').textContent=warning+`Baking and encoding ${index+1} / ${total} chunks · ${result.uniqueTiles} unique tiles`+(projected>TILE_LIMIT?` · about ${projected.toLocaleString('en-US')} expected, over ${TILE_LIMIT.toLocaleString('en-US')}: similar tiles will be merged`:'');
       await new Promise(resolve=>setTimeout(resolve,0));
     },signal);
     $('map-export-state').textContent=warning+'Checking TNT, OTA and archive…';
-    const result=await fetch('/map-export/finish?id='+encodeURIComponent(exportId),{method:'POST',signal}).then(responseJSON);
+    const result=await fetch('map-export/finish?id='+encodeURIComponent(exportId),{method:'POST',signal}).then(responseJSON);
     exportId=null; return {...result,clampedCells:sampled.clipped};
   }
   async function exportMap(name=$('map-name').value,description=$('map-description').value) {
@@ -77,14 +78,14 @@ export function mountMapExport(api) {
       $('map-export-state').textContent=warning+`Encoding ${chunks.length} chunks and checking TNT, OTA and archive…`;
       const body={name,description,world:config.biomeId,unitsX:map.unitsX,unitsY:map.unitsY,seaLevel:config.seaLevel,heights:sampled.heights,chunks,settings};
       if (placements.features) body.features=placements.features; if (placements.starts) body.starts=placements.starts;
-      const response=await fetch('/map-export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:abort.signal});
+      const response=await fetch('map-export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:abort.signal});
       result=await response.json(); if (!response.ok) throw new Error(result.error||'Map export failed.');
       }
       const completedWarning=api.stream&&result.clampedCells?`Warning: ${result.clampedCells} cell heights clamped to 0–255. `:warning;
       $('map-export-state').textContent=completedWarning+(result.merge?`${result.merge.distinctTiles} distinct tiles merged into ${result.merge.keptTiles}: ${(100*result.merge.replacedSlots/result.tileSlots).toFixed(1)}% of ${result.tileSlots} slots use a similar tile instead (about ${(result.merge.meanRMS/Math.sqrt(3)).toFixed(1)} of 255 apart per color). `:`${result.uniqueTiles} unique tiles / ${result.tileSlots} slots. `)+`Self-check passed. ${result.featureCount??0} features, ${result.starts.length} starts.`;
       for (const [label,key] of [['Download .ufo','archive'],['Indexed terrain image','indexed']]) { if (!result[key]) continue; const a=document.createElement('a'); a.textContent=label; a.href='/map-exports/'+encodeURIComponent(result[key]); a.download=result[key]; a.style.display='block'; $('map-download').append(a); }
       return {...result,clampedCells:result.clampedCells??sampled.clipped};
-    } catch (err) { if (exportId) await fetch('/map-export?id='+encodeURIComponent(exportId),{method:'DELETE'}).catch(()=>{}); exportId=null; $('map-export-state').textContent=err.name==='AbortError'?'Export canceled. No partial archive was published.':warning+err.message; throw err; }
+    } catch (err) { if (exportId) await fetch('map-export?id='+encodeURIComponent(exportId),{method:'DELETE'}).catch(()=>{}); exportId=null; $('map-export-state').textContent=err.name==='AbortError'?'Export canceled. No partial archive was published.':warning+err.message; throw err; }
     finally { api.restore?.(); abort=null; $('map-cancel').hidden=true; busy=false; $('map-controls').disabled=false; api.busy(false); update(); }
   }
   $('map-export').onclick=() => exportMap().catch(()=>{});

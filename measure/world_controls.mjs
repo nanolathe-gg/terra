@@ -139,7 +139,7 @@ try {
   })()`;
   const load = async (world, query) => {
     if(VARIANT){const params=new URLSearchParams(query);params.set('variant',VARIANT);query=params.toString();}
-    await send('Page.navigate', {url: `${server}/sculpt?biome=${world}&mapX=4&mapY=4&scratch=wc${Date.now()}&audit=1&gpuMB=512&heapMB=2048${query ? '&' + query : ''}`});
+    await send('Page.navigate', {url: `${server}/sculpt.html?biome=${world}&mapX=4&mapY=4&scratch=wc${Date.now()}&audit=1&gpuMB=512&heapMB=2048${query ? '&' + query : ''}`});
     for (let i = 0; i < 400; i++) { await sleep(150); try { if (await ev('!!window.terraformAudit&&document.readyState==="complete"')) break; } catch {} }
     await ev('terraformAudit.ready()'); await ev(HELPERS.replace('KINDS', JSON.stringify(Object.fromEntries(Object.keys(KIND_AT).map(k => [k, 1]))))); await ev('terraformAudit.idle()');
   };

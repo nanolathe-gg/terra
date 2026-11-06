@@ -81,7 +81,7 @@ async function main() {
   const {server, port, scene: sceneFile} = options;
   const scene = sceneFile ? JSON.parse(readFileSync(sceneFile, 'utf8')) : {biome: 'green', strokes: [], ground: true};
   await freePort(port);
-  const url = new URL('sculpt', server); url.searchParams.set('biome', scene.biome); url.searchParams.set('scratch', '1');
+  const url = new URL('sculpt.html', server); url.searchParams.set('biome', scene.biome); url.searchParams.set('scratch', '1');
   for (const [key, value] of [['mapX', String(options.map)], ['mapY', String(options.map)], ['gpuMB', '512'], ['heapMB', '1536']]) url.searchParams.set(key, value);
   if (options.paged) url.searchParams.set('gpuPages', 'force');
   for (const [key, value] of new URLSearchParams(scene.query || '')) url.searchParams.append(key, value);

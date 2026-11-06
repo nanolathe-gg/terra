@@ -1,3 +1,4 @@
+import {requestAdapter} from './sculpt-webgpu.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
@@ -54,7 +55,9 @@ let mapUpdate=() => {},mapFeatures=null,mapMetadata=null,mapRevision=0;
 const mapData=() => ({...mapFeatures?.serialize(),...mapMetadata?.serialize()});
 function restoreMapData(data={}) { mapFeatures?.load(data||{}); mapMetadata?.load(data||{}); mapRevision++; }
 function mapChanged() { mapRevision++; checkpoint(true); schedule(false); }
-let config, renderer, grid, size, spacing;
+let config, renderer, grid, size, spacing, services;
+// A world's configuration file, by the same relative path on a static host and on sculpt.py: config/<world>.json, or config/<world>--<variant>.json.
+const configUrl=(world,variant)=>`config/${encodeURIComponent(world)}${variant?'--'+encodeURIComponent(variant):''}.json`;
 let defaultColumn, columnOverride=null, columnEditing=false, syncColumnPanel=()=>{};
 let pagedCoarseStarted=false, mapCanvas=null, regionalFields=null, originCellX=0, originCellY=0, worldSize=0, worldGrid=0, regionalWeather=null;
 // Integer origins preserve the canonical multiplication order: (cell + origin)
@@ -1485,7 +1488,7 @@ async function loadSketchFile(s,commit=true,documentId=null) {
   if (biome && (biome!==config.biomeId || mapChanged || (s.variant||'')!==(config.variant||''))) {
     let served=false,variant='';
     try {
-      const response=await fetch('/sculpt-config.json?biome='+encodeURIComponent(biome));
+      const response=await fetch(configUrl(biome));
       const servedConfig=response.ok?await response.json():null;
       served=servedConfig?.biomeId===biome;
       variant=served && typeof s.variant==='string' && servedConfig.variants?.[s.variant]?s.variant:'';
@@ -1945,7 +1948,9 @@ async function bootMap() {
 }
 async function boot() {
   try {
-    const response=await fetch('/sculpt-config.json?'+new URLSearchParams([...(experiment.has('biome')?[['biome',experiment.get('biome')]]:[]),...(experiment.get('variant')?[['variant',experiment.get('variant')]]:[])])); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json();
+    await requestAdapter();   // a browser without WebGPU, or an adapter below the engine's limits, gets a plain message before anything loads
+    services=await (await fetch('services.json')).json();   // which server-side services this host has (export, features, saving to a server)
+    const response=await fetch(configUrl(experiment.get('biome')||services.defaultWorld,experiment.get('variant'))); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=await response.json(); config.services=services;
     defaultColumn=config.column;
     // H12b: the editor always works on a map; an address without a size opens the default 4x4 one.
     if (!experiment.has('mapX') && !experiment.has('mapY')) {
@@ -1956,7 +1961,7 @@ async function boot() {
       else { experiment.set('mapX','4'); experiment.set('mapY','4'); }
     }
     {
-      const response=await fetch('/map-catalog.json'),data=await response.json(); if (!response.ok) throw new Error(data.error||'Could not read map defaults from the installed content.');
+      const response=await fetch('config/catalog.json'),data=await response.json(); if (!response.ok) throw new Error(data.error||'Could not read map defaults from the installed content.');
       config.exportCatalog=data; config.defaultSeaLevel=config.exportCatalog.worlds[config.biomeId]?.defaultSeaLevel;
     }
     configureMap(config,experiment); MIN_HEIGHT=config.seaLevel-90; MAX_HEIGHT=config.seaLevel+300;

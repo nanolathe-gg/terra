@@ -13,9 +13,8 @@ from sculpt_export import MapExport
 from sculpt_document import MapDocument
 exports=MapExport(ASSETS,a.export_tool,[Path.home()/'TotalAnnihilation'],a.feature_tool,True)
 documents=MapDocument(a.out/'documents')
-configs={b:s.biome_config(b) for b in s.BIOME_NAMES}
-patterns={b:{'name':s.BIOME_NAMES[b],'groundTable':c['materialTable']} for b,c in configs.items() if 'ground' in json.loads((ROOT/c['materialTable'].lstrip('/')).read_text())}
-for b,c in configs.items():c.update(biomes=s.BIOME_NAMES,groundPatterns=patterns,variants={k:v['label'] for k,v in s.WORLD_VARIANTS.get(b,{}).items()})
+configs,catalogue=s.world_configs(list(s.BIOME_NAMES))
+generated=s.site_data(list(s.BIOME_NAMES),configs,catalogue,{'defaultWorld':'green','worlds':list(s.BIOME_NAMES),**{k:{'available':True} for k in ('export','features','documents')}})
 class Handler(BaseHTTPRequestHandler):
  def reply(self,data,kind='application/json',status=200):
   if not isinstance(data,bytes):data=json.dumps(data).encode()
@@ -26,8 +25,7 @@ class Handler(BaseHTTPRequestHandler):
   u=urlsplit(self.path);q=parse_qs(u.query);name=u.path.strip('/')
   try:
    if documents.get(self,self.path) or exports.get(self,self.path):return
-   if name=='sculpt-config.json':
-    b=q.get('biome',['green'])[0];c=configs[b];v=q.get('variant',[''])[0];self.reply(s.apply_variant(c,b,v) if v else c);return
+   if name in generated:self.reply(generated[name]);return
    if name in ('audit/erosion-before.js','audit/fields-before.js','audit/features-before.js'):
     source='sculpt-erosion.js' if 'erosion' in name else 'sculpt-features.js' if 'features' in name else 'sculpt-gpu-fields.js'
     data=((a.evidence/'baseline')/source).read_text().replace("from './sculpt-","from '/sculpt-")

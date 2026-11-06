@@ -23,7 +23,7 @@ const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--po
 const TILE_PX = 16, W = 1024, O = 256;
 const [sceneFile] = args;
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
-const url = `${server}/sculpt?biome=${scene.biome}&mapX=${map}&mapY=${map}&scratch=1&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}`;
+const url = `${server}/sculpt.html?biome=${scene.biome}&mapX=${map}&mapY=${map}&scratch=1&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}`;
 await cdpPortFree(port);
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal',
   `--remote-debugging-port=${port}`, `--user-data-dir=${join(tmpdir(), `terraform-zoom-${port}`)}`, `--window-size=${vw},${vh}`, '--no-first-run', 'about:blank'], {stdio: 'ignore'});

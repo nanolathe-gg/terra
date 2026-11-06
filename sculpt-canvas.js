@@ -55,6 +55,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   documentHost.innerHTML='<label>Server document<input data-document aria-label="Server document name"></label><div class="row"><button data-save disabled>Save to server</button><button data-load disabled>Reload</button></div><p class="small" data-save-state>Changes save incrementally on this local server.</p>';
   const find=s=>document.querySelector(s),navigatorCanvas=find('[data-nav]'),ng=navigatorCanvas.getContext('2d');
   find('[data-document]').value=docId;
+  if (config.services?.documents?.available===false) find('[data-save-state]').textContent=config.services.documents.reason;
   function state() { return {x:viewport.scrollLeft/(scale||1),y:viewport.scrollTop/(scale||1),width:canvas.width/(scale||1),height:canvas.height/(scale||1),scale,overview}; }
   const sourceSample=api.sample;
   function heightSample(x,y){for(const e of cache.values()){const r=e.heightPatch;if(e.weathered===weatheredView&&r&&x>=r.gridOrigin[0]&&y>=r.gridOrigin[1]&&x<=r.gridOrigin[0]+(r.gridWidth-1)*r.gridSpacing&&y<=r.gridOrigin[1]+(r.gridHeight-1)*r.gridSpacing)return sampleField(r,x,y);}return null;}
@@ -471,16 +472,16 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     await idle();const size=chunkSize(),total=Math.ceil(map.width/size)*Math.ceil(map.height/size);let index=0;
     for(let y=0;y<map.height;y+=size)for(let x=0;x<map.width;x+=size){signal?.throwIfAborted();const rect={x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)},entry=await bake(rect,true,signal),tile=new OffscreenCanvas(rect.width,rect.height);tile.getContext('2d').drawImage(entry.bitmap,0,0);entry.bitmap.close?.();const png=await tile.convertToBlob({type:'image/png'});await accept({...rect,png},index++,total);tile.width=tile.height=1;metrics();}
   }
-  function updateDocumentControls(){const locked=!api.ready()||busy||documentLoading||Boolean(gesture);find('[data-save]').disabled=locked||saving;find('[data-load]').disabled=locked||saving;find('[data-document]').disabled=locked||saving;}
+  function updateDocumentControls(){const locked=config.services?.documents?.available===false||!api.ready()||busy||documentLoading||Boolean(gesture);find('[data-save]').disabled=locked||saving;find('[data-load]').disabled=locked||saving;find('[data-document]').disabled=locked||saving;}
   async function saveDocument() {
     if(!api.ready()||busy||gesture||documentLoading){find('[data-save-state]').textContent='Wait for the editor to finish loading or editing.';return;}
     if(saving){saveAgain=true;return;}saving=true;updateDocumentControls();find('[data-save-state]').textContent='Saving to server…';
     try {
       const id=find('[data-document]').value.trim();if(!/^[A-Za-z0-9_-]{1,100}$/.test(id))throw new Error('Use letters, numbers, hyphens and underscores for the document name.');if(id!==docId){docId=id;maskVersions.clear();lastMetadata='';}
-      const writeChunk=async(key,bytes)=>{const version=hash(bytes);if(maskVersions.get(key)===version)return;await json('/map-document/chunk?'+new URLSearchParams({id,key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(key,version);};
+      const writeChunk=async(key,bytes)=>{const version=hash(bytes);if(maskVersions.get(key)===version)return;await json('map-document/chunk?'+new URLSearchParams({id,key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(key,version);};
       const sketch=api.sketch(),body={format:'nanolathe-map-document',version:1,sketch,mapData:api.mapData(),map,biome:config.biomeId,seaLevel:config.seaLevel};
-      const chunks=(await api.maskChunks?.())||[];for(const chunk of chunks){const header=new TextEncoder().encode(JSON.stringify({rect:chunk.rect,gridWidth:chunk.gridWidth,gridHeight:chunk.gridHeight,gridOrigin:chunk.gridOrigin,gridSpacing:chunk.gridSpacing,keys:api.maskKeys})),planes=chunk.planes||[],bytes=new Uint8Array(4+header.length+planes.reduce((sum,a)=>sum+a.byteLength,0));new DataView(bytes.buffer).setUint32(0,header.length,true);bytes.set(header,4);let offset=4+header.length;for(const plane of planes){bytes.set(new Uint8Array(plane.buffer,plane.byteOffset,plane.byteLength),offset);offset+=plane.byteLength;}const version=hash(bytes);if(maskVersions.get(chunk.key)===version)continue;await json('/map-document/chunk?'+new URLSearchParams({id,key:chunk.key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(chunk.key,version);}
-      const encoded=JSON.stringify(body);if(encoded!==lastMetadata){await json('/map-document?'+new URLSearchParams({id}),{method:'PUT',headers:{'Content-Type':'application/json'},body:encoded});lastMetadata=encoded;}
+      const chunks=(await api.maskChunks?.())||[];for(const chunk of chunks){const header=new TextEncoder().encode(JSON.stringify({rect:chunk.rect,gridWidth:chunk.gridWidth,gridHeight:chunk.gridHeight,gridOrigin:chunk.gridOrigin,gridSpacing:chunk.gridSpacing,keys:api.maskKeys})),planes=chunk.planes||[],bytes=new Uint8Array(4+header.length+planes.reduce((sum,a)=>sum+a.byteLength,0));new DataView(bytes.buffer).setUint32(0,header.length,true);bytes.set(header,4);let offset=4+header.length;for(const plane of planes){bytes.set(new Uint8Array(plane.buffer,plane.byteOffset,plane.byteLength),offset);offset+=plane.byteLength;}const version=hash(bytes);if(maskVersions.get(chunk.key)===version)continue;await json('map-document/chunk?'+new URLSearchParams({id,key:chunk.key}),{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:bytes});maskVersions.set(chunk.key,version);}
+      const encoded=JSON.stringify(body);if(encoded!==lastMetadata){await json('map-document?'+new URLSearchParams({id}),{method:'PUT',headers:{'Content-Type':'application/json'},body:encoded});lastMetadata=encoded;}
       find('[data-save-state]').textContent='Saved to server · '+id;
     }catch(err){find('[data-save-state]').textContent=err.message;throw err;}finally{saving=false;updateDocumentControls();if(saveAgain){saveAgain=false;queueSave();}}
   }
@@ -489,14 +490,14 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     documentLoading=true;updateDocumentControls();
     try {
     clearTimeout(saveTimer);while(saving)await tick();clearTimeout(saveTimer);
-    const id=find('[data-document]').value.trim(),data=await json('/map-document?'+new URLSearchParams({id}));
+    const id=find('[data-document]').value.trim(),data=await json('map-document?'+new URLSearchParams({id}));
     const documentData=data.document??data.metadata??data;
     if(documentData.biome!==config.biomeId||documentData.map?.unitsX!==map.unitsX||documentData.map?.unitsY!==map.unitsY||documentData.seaLevel!==config.seaLevel)throw new Error('Open a canvas with the document’s world, dimensions and sea level before loading it.');
     const sketch=documentData.sketch;
     if(await api.loadSketch(sketch,id)===false)return;api.restoreMapData(documentData.mapData);api.checkpoint();docId=id;lastMetadata=JSON.stringify(documentData);maskVersions.clear();clear();find('[data-save-state]').textContent='Reloaded server document · '+id;
     }finally{documentLoading=false;updateDocumentControls();}
   }
-  function queueSave(){clearTimeout(saveTimer);if(gesture||busy||documentLoading)return;saveTimer=setTimeout(()=>saveDocument().catch(()=>{}),700);}
+  function queueSave(){clearTimeout(saveTimer);if(config.services?.documents?.available===false||gesture||busy||documentLoading)return;saveTimer=setTimeout(()=>saveDocument().catch(()=>{}),700);}
   find('[data-save]').onclick=()=>saveDocument().catch(()=>{});find('[data-load]').onclick=()=>loadDocument().catch(err=>{find('[data-save-state]').textContent=err.message;});
   // H6b: with the GPU feed the chunks rebake as a change is submitted (they read the GPU buffers); the overview and the save wait until the CPU copy holds it.
   const invalidate=change=>clear(api.expandDirty?.(change?.rect??null)??change?.rect??null);

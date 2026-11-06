@@ -25,17 +25,19 @@ mkdirSync(out, {recursive: true});
 // The page used to fall back to the server's first world for an unknown one,
 // so a Moon scene could be written out as Green. Refuse before rendering:
 // the config request must answer for the scene's world (review A3).
-const sceneConfigResponse = await fetch(`${server}/sculpt-config.json?biome=${encodeURIComponent(scene.biome)}`);
+const sceneConfigResponse = await fetch(`${server}/config/${encodeURIComponent(scene.biome)}.json`);
 if (!sceneConfigResponse.ok) {
   console.error(`render.mjs: ${sceneFile}: world ${scene.biome} is not served (HTTP ${sceneConfigResponse.status})`);
   process.exit(1);
 }
 const sceneConfig = await sceneConfigResponse.json();
+// A host without the exporter (the static site) leaves the export button off, so, as for Zhon, the enabled editor stands in for it.
+const noExport = (await (await fetch(`${server}/services.json`)).json()).export?.available === false;
 if (sceneConfig.biomeId !== scene.biome) {
   console.error(`render.mjs: ${sceneFile}: asked for world ${scene.biome}, the server returned ${sceneConfig.biomeId}`);
   process.exit(1);
 }
-const url = `${server}/sculpt?biome=${scene.biome}&mapX=${MAPX}&mapY=${MAPY}&scratch=1&gpuMB=512&heapMB=1536${seaArg !== '' ? '&sea=' + seaArg : ''}${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;
+const url = `${server}/sculpt.html?biome=${scene.biome}&mapX=${MAPX}&mapY=${MAPY}&scratch=1&gpuMB=512&heapMB=1536${seaArg !== '' ? '&sea=' + seaArg : ''}${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;
 await cdpPortFree(port);
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal',
   `--remote-debugging-port=${port}`, `--user-data-dir=${join(tmpdir(), `terraform-render-${port}`)}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
@@ -57,7 +59,7 @@ try {
   const send = (method, params = {}) => new Promise(r => { const k = ++id; wait.set(k, r); ws.send(JSON.stringify({id: k, method, params})); });
   const ev = async expr => { const r = await send('Runtime.evaluate', {expression: expr, returnByValue: true, awaitPromise: true}); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text); return r.result?.result?.value; };
   // A Zhon map cannot export (by design), so its export button never enables: its editor being enabled and the canvas idle stand in.
-  const ready = async () => { for (let i = 0; i < 480; i++) { await sleep(250); if (await ev(`!!window.sculptCanvas && (!document.getElementById('map-export')?.disabled || (${scene.biome === 'zhon'} && !document.getElementById('editor')?.disabled && sculptCanvas.idle().then(() => true)))`)) { if (scene.biome === 'zhon') await sleep(2500); return true; } } return false; };
+  const ready = async () => { for (let i = 0; i < 480; i++) { await sleep(250); if (await ev(`!!window.sculptCanvas && (!document.getElementById('map-export')?.disabled || (${scene.biome === 'zhon' || noExport} && !document.getElementById('editor')?.disabled && sculptCanvas.idle().then(() => true)))`)) { if (scene.biome === 'zhon' || noExport) await sleep(2500); return true; } } return false; };
   await send('Runtime.enable'); await send('Page.enable');
   await send('Page.navigate', {url});
   if (!await ready()) throw new Error('editor never became ready: ' + await ev(`document.getElementById('error').textContent`));

@@ -16,7 +16,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 let bad = 0;
 for (const file of scenes) {
   const scene = JSON.parse(readFileSync(file, 'utf8')), name = basename(file, '.json');
-  const url = `${server}/sculpt?biome=${scene.biome}&mapX=${mapSize}&mapY=${mapSize}&scratch=shapecheck${Date.now()}&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}`;
+  const url = `${server}/sculpt.html?biome=${scene.biome}&mapX=${mapSize}&mapY=${mapSize}&scratch=shapecheck${Date.now()}&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}`;
   await cdpPortFree(port);
   const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
     `--user-data-dir=${out}/prof-${port}-${Date.now()}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});

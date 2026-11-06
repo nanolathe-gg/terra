@@ -90,14 +90,15 @@ async function main() {
   catch (error) { throw new Error(`Cannot read scene ${sceneFile}: ${error.message}`); }
   if (!scene || typeof scene !== 'object' || typeof scene.biome !== 'string' || !scene.biome.trim() || !Array.isArray(scene.strokes) || (scene.query !== undefined && typeof scene.query !== 'string')) throw new Error(`Invalid scene ${sceneFile}: expected biome, strokes and an optional query string.`);
   await freePort(port);
-  const configURL = new URL('sculpt-config.json', server); configURL.searchParams.set('biome', scene.biome);
+  const noExport = (await (await fetch(new URL('services.json', server))).json()).export?.available === false;   // the static site has no exporter: the enabled editor stands in for the export button
+  const configURL = new URL(`config/${encodeURIComponent(scene.biome)}.json`, server);
   let response;
   try { response = await fetch(configURL, {signal: AbortSignal.timeout(10000)}); }
   catch (error) { throw new Error(`Cannot fetch config for world ${scene.biome}: ${error.message}`); }
   if (!response.ok) throw new Error(`${sceneFile}: world ${scene.biome} is not served (HTTP ${response.status}).`);
   const config = await response.json();
   if (config?.biomeId !== scene.biome) throw new Error(`${sceneFile}: asked for world ${scene.biome}, the server returned ${config?.biomeId}.`);
-  const url = new URL('sculpt', server); url.searchParams.set('biome', scene.biome); url.searchParams.set('scratch', '1');
+  const url = new URL('sculpt.html', server); url.searchParams.set('biome', scene.biome); url.searchParams.set('scratch', '1');
   // H12b: the scene runs on a 4x4 map whose fields are paged (gpuPages=force), so the check reads the map's own regional fields.
   for (const [key, value] of [['mapX', '4'], ['mapY', '4'], ['gpuPages', 'force'], ['gpuMB', '512'], ['heapMB', '1536']]) url.searchParams.set(key, value);
   for (const [key, value] of new URLSearchParams(scene.query || '')) url.searchParams.append(key, value);
@@ -143,7 +144,7 @@ async function main() {
       for (let i = 0; i < 480; i++) {
         checkErrors();
         // A Zhon map cannot export (by design): its editor being enabled stands in for the export button.
-        const state = await evaluate(`(() => { const button=document.getElementById('map-export'), ready=Boolean(window.sculptCanvas&&window.sculptDebug&&((button&&!button.disabled)||(${scene.biome==='zhon'}&&!document.getElementById('editor')?.disabled))); return {ready,running:false,error:document.getElementById('error')?.textContent?.trim()||''}; })()`);
+        const state = await evaluate(`(() => { const button=document.getElementById('map-export'), ready=Boolean(window.sculptCanvas&&window.sculptDebug&&((button&&!button.disabled)||(${scene.biome==='zhon'||noExport}&&!document.getElementById('editor')?.disabled))); return {ready,running:false,error:document.getElementById('error')?.textContent?.trim()||''}; })()`);
         if (state.error) throw new Error(`Editor error: ${state.error}`);
         if (state.ready && !state.running) { checkErrors(); return; }
         await sleep(250);

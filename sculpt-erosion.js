@@ -46,7 +46,7 @@ export class GpuErosion {
   async mapsPipeline() {
     if (this.maps) return this.maps;
     const {device} = this, C = GPUShaderStage.COMPUTE, buffer = (type, binding) => ({binding, visibility: C, buffer: {type}});
-    const source = this.renderer.preprocessShader(await (await fetch('/engine-weather.wgsl')).text());
+    const source = this.renderer.preprocessShader(await (await fetch('engine-weather.wgsl')).text());
     const module = device.createShaderModule({label: 'engine-weather', code: source});
     const info = await module.getCompilationInfo(), errors = info.messages.filter(m => m.type === 'error');
     if (errors.length) throw new Error('nanolathe: engine-weather.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
@@ -140,7 +140,7 @@ export class GpuErosion {
     await this.ready;
     const {device} = this, n = grid * grid, spacing = (size - 1) / (grid - 1), spread = clamp(depositSpread, 0, 1);
     if (!this.field) {
-      const module = device.createShaderModule({label: 'engine-weather material field', code: this.renderer.preprocessShader(await (await fetch('/engine-weather.wgsl')).text())});
+      const module = device.createShaderModule({label: 'engine-weather material field', code: this.renderer.preprocessShader(await (await fetch('engine-weather.wgsl')).text())});
       const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
       if (errors.length) throw new Error('nanolathe: engine-weather.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
       const entries = {source: 'mfSourceMain', drops: 'mfDropsMain', counts: 'mfCountsMain', blur: 'mfBlurMain', combine: 'mfCombineMain'};
@@ -188,7 +188,7 @@ export class GpuErosion {
 // H6b: the renderer's erosion instance, built on first use (Green's engine steps over active tiles).
 export async function erosionOf(renderer) {
   if (!renderer.erosion) {
-    const source = await (await fetch('/engine-erosion.wgsl')).text();
+    const source = await (await fetch('engine-erosion.wgsl')).text();
     renderer.erosion ??= new GpuErosion(renderer, renderer.preprocessShader(source), true);
   }
   return renderer.erosion;
