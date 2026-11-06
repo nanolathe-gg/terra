@@ -871,7 +871,6 @@ def world_configs(biomes):
 STATIC_SERVICES = {
     'export': 'Export needs the map exporter and the installed game content, which the online editor does not have. Run the editor locally with sculpt.py to export a playable map.',
     'features': 'The retail feature catalog is not part of the online editor, so no features can be placed. Run the editor locally with sculpt.py to place them.',
-    'documents': 'The online editor has no server to save to. Use Save and Load to keep a map recipe as a file.',
 }
 
 
@@ -920,7 +919,7 @@ def main():
     parser.add_argument('--biomes', default='green,red,archipelago,moon,zhon,lava,desert,crystal,ice',
                         help='comma-separated biomes to serve; the first is the default world')
     parser.add_argument('--assets-root', type=Path, default=Path('/private/tmp/nanolathe-map-editor'),
-                        help='where exports, saved documents and the map and feature catalogues live; the worlds themselves need nothing here')
+                        help='where exports, save links and the map and feature catalogues live; the worlds themselves need nothing here')
     parser.add_argument('--export-tool', type=Path, help='Card D map exporter binary (default <assets-root>/map-export)')
     parser.add_argument('--feature-tool', type=Path, help='Card D feature catalogue binary (default <assets-root>/bin/map-features)')
     parser.add_argument('--game-root', action='append', type=Path, help='content root for exports; repeat in mount order')
@@ -937,12 +936,10 @@ def main():
         print(build_site(args.build_site, biomes, configs, catalogue, args.maps_url))
         return
     from sculpt_export import MapExport
-    from sculpt_document import MapDocument
     map_export = MapExport(args.assets_root, args.export_tool or args.assets_root / 'map-export', args.game_root or [Path.home() / 'TotalAnnihilation'], args.feature_tool or args.assets_root / 'bin' / 'map-features', args.prepared)
-    map_document = MapDocument(args.assets_root / 'documents')
     from sculpt_maps import SavedMaps
     saved_maps = SavedMaps(args.assets_root)
-    services = {'defaultWorld': biomes[0], 'worlds': biomes, 'export': {'available': True}, 'features': {'available': True}, 'documents': {'available': True}, 'maps': {'available': True, 'url': 'api/maps'}}
+    services = {'defaultWorld': biomes[0], 'worlds': biomes, 'export': {'available': True}, 'features': {'available': True}, 'maps': {'available': True, 'url': 'api/maps'}}
     generated = site_data(biomes, configs, catalogue, services)
 
     class Handler(BaseHTTPRequestHandler):
@@ -956,7 +953,7 @@ def main():
                 map_export.reply(self, {'world': parts[2], 'features': [], 'unavailable': 'This server has no feature catalogue installed, so no features can be placed; start positions remain editable.'})
                 return
             try:
-                if map_document.get(self, self.path) or map_export.get(self, self.path):
+                if map_export.get(self, self.path):
                     return
             except (OSError, ValueError, subprocess.SubprocessError) as err:
                 map_export.reply(self, {'error': str(err)}, 400)
@@ -1003,16 +1000,9 @@ def main():
             except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as err:
                 map_export.reply(self, {'error': str(err)}, 400)
 
-        def do_PUT(self):
-            try:
-                if not map_document.put(self, self.path):
-                    self.send_error(404)
-            except (OSError, ValueError, KeyError, TypeError) as err:
-                map_export.reply(self, {'error': str(err)}, 400)
-
         def do_DELETE(self):
             try:
-                if not map_document.delete(self, self.path) and not map_export.delete(self, self.path):
+                if not map_export.delete(self, self.path):
                     self.send_error(404)
             except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as err:
                 map_export.reply(self, {'error': str(err)}, 400)

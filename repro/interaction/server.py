@@ -6,10 +6,8 @@ from urllib.parse import urlsplit, parse_qs
 p=argparse.ArgumentParser();p.add_argument('--source',type=Path,required=True);p.add_argument('--port',type=int,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args()
 root=a.source.resolve();here=Path(__file__).resolve().parent;a.out.mkdir(parents=True,exist_ok=True)
 sys.path.insert(0,str(root));spec=importlib.util.spec_from_file_location('perf_sculpt',root/'sculpt.py');s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s)
-from sculpt_document import MapDocument
-documents=MapDocument(a.out/'documents')
 configs,catalogue=s.world_configs(list(s.BIOME_NAMES))
-generated=s.site_data(list(s.BIOME_NAMES),configs,catalogue,{'defaultWorld':'green','worlds':list(s.BIOME_NAMES),**{k:{'available':True} for k in ('export','features','documents')}})
+generated=s.site_data(list(s.BIOME_NAMES),configs,catalogue,{'defaultWorld':'green','worlds':list(s.BIOME_NAMES),**{k:{'available':True} for k in ('export','features')}})
 class Handler(BaseHTTPRequestHandler):
  def reply(self,data,kind='application/json',status=200):
   if not isinstance(data,bytes):data=json.dumps(data).encode()
@@ -22,7 +20,6 @@ class Handler(BaseHTTPRequestHandler):
    if name in generated:self.reply(generated[name]);return
    if name=='interaction/scenes.json':self.reply({f.stem:json.loads(f.read_text()) for f in (root/'repro/scenes').glob('*.json')});return
    if name.startswith('map-features/') and name.endswith('/catalog.json'):self.reply({'features':[],'unavailable':'Performance fixture: no retail feature assets loaded.'});return
-   if documents.get(self,self.path):return
    if name.startswith('interaction/'):
     f=(here/name.removeprefix('interaction/')).resolve()
     if not f.is_relative_to(here):raise ValueError('invalid path')
@@ -43,10 +40,6 @@ class Handler(BaseHTTPRequestHandler):
   n=int(self.headers.get('Content-Length','0'))
   if n>32*1024*1024:self.send_error(413);return
   f=a.out/name;f.parent.mkdir(parents=True,exist_ok=True);f.write_bytes(self.rfile.read(n));self.reply({'saved':name})
- def do_PUT(self):
-  if not documents.put(self,self.path):self.send_error(404)
- def do_DELETE(self):
-  if not documents.delete(self,self.path):self.send_error(404)
  def log_message(self,fmt,*args):
   if len(args)>1 and str(args[1]) not in ('200','304'):super().log_message(fmt,*args)
 print(f'Interaction host http://127.0.0.1:{a.port}/interaction/index.html source={root}',flush=True)

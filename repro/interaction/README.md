@@ -30,7 +30,7 @@ asserting the new responsiveness behavior. Frame timings measure application
 callbacks and canvas paints, not physical input-to-display latency. Visible
 completion and completion of the surrounding cache are reported separately.
 
-`/interaction/loading.html?auto=1` loads a nine-shape 8×8 server document and
+`/interaction/loading.html?auto=1` reloads a nine-shape 8×8 map from its recipe and
 immediately switches to 1×. It measures the first detailed tile, intermediate
 coverage, final coverage, gaps between final tile submissions, and background
 coarse work during the visible fill. It asserts that visible final tiles precede

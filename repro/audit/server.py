@@ -10,11 +10,9 @@ p=argparse.ArgumentParser();p.add_argument('--source',type=Path,required=True);p
 ROOT=a.source.resolve(); AUDIT=Path(__file__).resolve().parent; ASSETS=a.assets.resolve();a.out.mkdir(parents=True,exist_ok=True)
 sys.path.insert(0,str(ROOT));spec=importlib.util.spec_from_file_location('audit_sculpt',ROOT/'sculpt.py');s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s)
 from sculpt_export import MapExport
-from sculpt_document import MapDocument
 exports=MapExport(ASSETS,a.export_tool,[Path.home()/'TotalAnnihilation'],a.feature_tool,True)
-documents=MapDocument(a.out/'documents')
 configs,catalogue=s.world_configs(list(s.BIOME_NAMES))
-generated=s.site_data(list(s.BIOME_NAMES),configs,catalogue,{'defaultWorld':'green','worlds':list(s.BIOME_NAMES),**{k:{'available':True} for k in ('export','features','documents')}})
+generated=s.site_data(list(s.BIOME_NAMES),configs,catalogue,{'defaultWorld':'green','worlds':list(s.BIOME_NAMES),**{k:{'available':True} for k in ('export','features')}})
 class Handler(BaseHTTPRequestHandler):
  def reply(self,data,kind='application/json',status=200):
   if not isinstance(data,bytes):data=json.dumps(data).encode()
@@ -24,7 +22,7 @@ class Handler(BaseHTTPRequestHandler):
  def do_GET(self):
   u=urlsplit(self.path);q=parse_qs(u.query);name=u.path.strip('/')
   try:
-   if documents.get(self,self.path) or exports.get(self,self.path):return
+   if exports.get(self,self.path):return
    if name in generated:self.reply(generated[name]);return
    if name in ('audit/erosion-before.js','audit/fields-before.js','audit/features-before.js'):
     source='sculpt-erosion.js' if 'erosion' in name else 'sculpt-features.js' if 'features' in name else 'sculpt-gpu-fields.js'
@@ -63,10 +61,6 @@ class Handler(BaseHTTPRequestHandler):
   f=a.out/name;f.parent.mkdir(parents=True,exist_ok=True);f.write_bytes(self.rfile.read(n));self.reply({'saved':name})
  def do_DELETE(self):
   if not exports.delete(self,self.path):self.send_error(404)
- def do_PUT(self):
-  try:
-   if not documents.put(self,self.path):self.send_error(404)
-  except Exception as e:self.reply({'error':str(e)},status=400)
  def log_message(self,fmt,*args):
   if args and len(args)>1 and str(args[1]) not in ('200','304'):super().log_message(fmt,*args)
 print(f'Audit host http://127.0.0.1:{a.port}/audit/index.html source={ROOT}',flush=True)

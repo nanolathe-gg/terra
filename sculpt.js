@@ -1145,7 +1145,7 @@ const sculptRegion={
   setViewFocus:v=>regionalFields?.setFocus?.({x:(v.x+v.width/2)/spacing,y:(v.y+v.height/2)/spacing}),
   read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:n.frame?.slice()}:undefined; },
   loadGraph:list => { if (!Array.isArray(list) || list.some(n => n.kind==='raster')) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); cancelWeather(); nodes=next; selected=-1;pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
-  sketch,loadSketch:(s,id)=>loadSketchFile(s,false,id),maskKeys:MASK_KEYS,maskChunks:() => regionalFields.maskChunks(),stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
+  sketch,loadSketch:s=>loadSketchFile(s,false),maskKeys:MASK_KEYS,stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
   residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuTransientBytes,gpuFeedActive:() => gpuFeedEligible(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
   beginStroke:(kind,p,options,attachment=-1)=>beginRegionalStroke(kind,p,options,attachment,drawMode==='add'?selected:-1,varySeed),previewStroke:previewRegionalStroke,endStroke:(commit=true)=>endRegionalStroke(commit,$('simplify-strokes').checked),beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),previewActive:() => Boolean(stroke||moving||controlsEditing),
@@ -1482,7 +1482,7 @@ async function takePendingSketch(token) {
     return data?.format==='nanolathe-sketch-handoff' && data.token===token?data.sketch:null;
   } catch (_) { return null; }
 }
-async function loadSketchFile(s,commit=true,documentId=null) {
+async function loadSketchFile(s,commit=true) {
   if(!s || s.format!=='nanolathe-terrain-sculpt' || ![4,5,6].includes(s.version) || !Array.isArray(s.nodes) || s.nodes.some(n=>!n || n.kind==='raster'))throw new Error('Load a map stroke graph.');
   const biome=typeof s?.biome==='string'?s.biome:'';
   const mapChanged=(s?.map?.unitsX??0)!==(config.map?.unitsX??0) || (s?.map?.unitsY??0)!==(config.map?.unitsY??0) || (s?.map && s.seaLevel!==config.seaLevel);
@@ -1501,7 +1501,7 @@ async function loadSketchFile(s,commit=true,documentId=null) {
     try { await stashPendingSketch(token,s); }
     catch (err) { error('The saved terrain could not be carried to '+biome+': '+err.message); return false; }
     status(`Opening ${biome} for the saved terrain…`);
-    goToWorld(biome,null,{pendingSketch:token,variant,document:documentId,mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
+    goToWorld(biome,null,{pendingSketch:token,variant,mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
     return false;
   }
   loadSketch(s); if(commit)checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather();return true;
@@ -1791,7 +1791,7 @@ function editColumn(value){
   if(JSON.stringify(next)===JSON.stringify(columnOverride))return;
   restoreColumn(next);columnEditing=true;schedule();queueWeather();persistLater();
 }
-function commitColumn(){if(!columnEditing)return;columnEditing=false;checkpoint();queueWeather();mapCanvas.saveDocument().catch(()=>{});}
+function commitColumn(){if(!columnEditing)return;columnEditing=false;checkpoint();queueWeather();}
 function defaultColor(key) {
   const flower=/^flower([1-4])$/.exec(key);if(flower)return (config.material?.groundCover?.plants?.flowers?.palette?.[Number(flower[1])-1]?.slice(0,3)||[255,255,255]).map(v=>v/255);
   const m=renderer.means,w=config.water||{},mat=config.material||{};
