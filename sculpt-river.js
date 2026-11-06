@@ -15,7 +15,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const RIVER_MIN_WIDTH = 32;          // px: narrower and the channel is not orthogonally connected on the 16-px height grid (measured at 18 px: not connected)
 export const RIVER_STEPS_PER_WANDER = 4;    // Wander 0..120 is 0..480 migration steps (the bends reach the band at about 100)
 export const RIVER_SPAN = 6;                // the section's half width over the channel's half width: the floodplain, levees and valley walls reach this far
-export const BRAIDED_SPAN = 22;             // and for a braided belt (half a belt is 4.8 widths = 9.6 channel half widths, over a level floor to 11)
+export const BRAIDED_SPAN = 22;             // and for a braided bed (half the bed is 4.8 widths = 9.6 half widths, over a level floor to 11; Width sizes its bars)
 export const RIVER_BELT = 2;                // the most a bend can grow, in channel widths from the drawn line (a whole bend stops from .6 of it to .97)...
 export const RIVER_BELT_PX = 256;           // ...and in px, so a wide river's bends stay a band the artist can predict
 export const RIVER_FREEZE = 4;              // widths either side of a point in which the farthest point stands for its bend: a bend stops as one

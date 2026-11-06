@@ -649,24 +649,73 @@ fn riverChannel(fl: f32, qq: f32, c: f32, e: f32, kw: f32, silt: f32, wx: f32, w
   }
   return vec2f(min(fp, h), sand);
 }
-// P28 braided belt: three threads of water that wander across the path (each a seeded noise offset along it, up to 1.2 widths either way) and so cross, merge and split,
-// with gravel bars a little above the sea between them, in a belt about five widths either side of the path. Each thread is a width across at its core (32 px
-// at the narrowest width, the least a river is orthogonally connected on the 16-px height grid). fl is the valley floor the belt lies on.
-fn braidedBelt(fl: f32, c: f32, e: f32, sAlong: f32, wx: f32, wy: f32) -> f32 {
+// Braided bed (the riverfix card): a mostly dry bed of gravel bars a little above the sea, with thin threads of water that split and rejoin round them.
+// The bars are the cells of a jittered lattice stretched along the path (BR_LEN widths by BR_ACROSS: lens-shaped bars about 3.5 times as long as wide, in
+// (along, across) px, so they follow the bends); the threads run on the edges between neighbouring bars. An edge holds water where its seed passes a share that
+// is high in the active tract (a band about a wandering line, where the flow is) and low out of it, so the braid is irregular and the outer bed mostly dry;
+// a dry edge is a shallow channel scar. A thread is 3 to 9 px wide, widest in the active tract and varied along its length, and cut 2 to 3 units under the
+// sea, which the per-pixel draw shows as water from a 2-px field (a thread under 3 px wide breaks into dashes on that lattice, and one under 2.5 units deep
+// breaks at the waterline's jitter). Bars rise from the threads by an age their seed and their place on the bare braid plain (wider than the tract) give:
+// young bars stay low (1.4 to 2 above the sea) under sand (the second result, the cover plane), old bars stand to the valley floor bare of sand, so the
+// ground pass grows grass on them.
+// Everything is a function of the cell's place along and across the path and the stroke's seed, so a regional replay draws the same bed. fl is the valley
+// floor the belt lies on; the belt reaches 4.8 widths either side of the path.
+const BR_LEN = 5.6;      // a bar's lattice length along the path, in widths
+const BR_ACROSS = 1.6;   // and across it
+fn braidedBelt(fl: f32, c: f32, e: f32, sAlong: f32, wx: f32, wy: f32) -> vec2f {
   let W = u.lfRiver; let B = 4.8 * W;
   let d = sqrt(c * c + e * e);
-  if (d > B + 6.0) { return fl; }
+  if (d > B + 6.0) { return vec2f(fl, 0.0); }
   let sea = u.sea;
   let cc = select(-1.0, 1.0, c >= 0.0) * d;
-  var w = 0.0;
-  for (var j = 0; j < 3; j++) {
-    let o = (f32(j) - 1.0) * 2.4 * W + 1.2 * W * vnoise(sAlong / (7.0 * W) + f32(j) * 5.1, 0.37 * f32(j) + 0.11, u.seed ^ 0x95u);
-    w = max(w, 1.0 - sm(0.5 * W, 0.85 * W, abs(cc - o)));
+  let LX = BR_LEN * W; let LY = BR_ACROSS * W;
+  // The active tract: a band about 1.5 widths either side of a line that wanders 2.2 widths across the path, over about 9 widths along it.
+  let mid = 2.2 * W * vnoise(sAlong / (9.0 * W), 0.37, u.seed ^ 0x95u);
+  let tract = 1.0 - sm(1.2 * W, 3.4 * W, abs(cc - mid));
+  let plain = 1.0 - sm(2.5 * W, 4.6 * W, abs(cc - 0.5 * mid));   // the bare braid plain, wider than the tract
+  // The two nearest bar sites in lattice units (x along, y across), rows offset by half a bar so the lattice is staggered. The lookup is bent by smooth noise
+  // (a quarter of a bar across, an eighth along), so the edges between bars curve and the bars round into lenses.
+  let q0 = vec2f(sAlong / LX, cc / LY);
+  let q = q0 + vec2f(0.12 * vnoise(q0.x * 1.7 + 3.1, q0.y * 1.3, u.seed ^ 0xb7u), 0.25 * vnoise(q0.x * 2.3, q0.y * 0.9 + 7.7, u.seed ^ 0xb8u));
+  let iy0 = i32(floor(q.y));
+  var d1 = 1.0e9; var d2 = 1.0e9; var a = vec2f(0.0); var b = vec2f(0.0); var ia = vec2i(0); var ib = vec2i(0);
+  for (var jy = -1; jy <= 1; jy++) {
+    let cy = iy0 + jy;
+    let shift = 0.5 * f32(cy & 1);
+    let ix0 = i32(floor(q.x - shift));
+    for (var jx = -1; jx <= 1; jx++) {
+      let cx = ix0 + jx;
+      let site = vec2f(f32(cx) + shift + 0.5 + 0.38 * hashi(cx, cy, u.seed ^ 0xb1u), f32(cy) + 0.5 + 0.3 * hashi(cx, cy, u.seed ^ 0xb2u));
+      let dd = dot(q - site, q - site);
+      if (dd < d1) { d2 = d1; b = a; ib = ia; d1 = dd; a = site; ia = vec2i(cx, cy); }
+      else if (dd < d2) { d2 = dd; b = site; ib = vec2i(cx, cy); }
+    }
   }
-  let edge = sm(B - 6.0, B + 6.0, d + 3.0 * vnoise(wx / 14.0, wy / 14.0, u.seed ^ 0x94u));
-  let bar = sea + 1.8 + 0.5 * vnoise(wx / 5.0, wy / 5.0, u.seed ^ 0x98u);
-  let bed = bar - w * (bar - (sea - 0.18 * W));
-  return min(fl, mix(bed, fl, edge));
+  // The distance in px from the edge between the two bars (the bisector of a and b in lattice units is a line in px too).
+  let g = (a - b) / vec2f(LX, LY);
+  let edgePx = (d2 - d1) / max(2.0 * length(g), 1e-6);
+  // The edge's seed: the two bars' ids in either order.
+  let lo = select(ib, ia, ia.x < ib.x || (ia.x == ib.x && ia.y < ib.y)); let hi = select(ia, ib, ia.x < ib.x || (ia.x == ib.x && ia.y < ib.y));
+  let he = 0.5 + 0.5 * hashi(lo.x * 7919 + hi.x, lo.y * 104729 + hi.y, u.seed ^ 0xb3u);
+  let hw = 0.5 + 0.5 * hashi(lo.x * 7919 + hi.x, lo.y * 104729 + hi.y, u.seed ^ 0xb4u);
+  // An edge between bars in the same row is a short one across the flow: it holds water about a third as often (a cross link), so the threads run along the flow.
+  let wet = he < mix(0.06, 0.95, tract) * select(1.0, 0.35, ia.y == ib.y);
+  let width = mix(3.0, 5.0, hw) * (1.0 + 0.8 * tract) * (0.8 + 0.25 * vnoise(wx / 23.0, wy / 23.0, u.seed ^ 0xb5u));
+  // The bar: its age from its seed and the bare plain (old out of it), its rise from the edge over 45% of a bar's width.
+  let age = clamp(0.62 * (0.5 + 0.5 * hashi(ia.x, ia.y, u.seed ^ 0xb6u)) + 0.6 * (1.0 - plain), 0.0, 1.0);
+  let rise = sm(0.0, 0.45 * LY, edgePx);
+  let barTop = sea + 1.4 + 0.25 * vnoise(wx / 5.0, wy / 5.0, u.seed ^ 0x98u) + rise * mix(0.5, 3.4, age * age);
+  var h = barTop;
+  if (wet) {
+    let f = 1.0 - sm(0.5 * width - 1.0, 0.5 * width + 1.0, edgePx);
+    h = mix(barTop, sea - (2.0 + 1.0 * tract), f);
+  } else {
+    let f = 1.0 - sm(0.5 * width - 1.0, 0.5 * width + 2.0, edgePx);
+    h = mix(barTop, sea + 1.3, f);   // a dry channel scar, above the waterline's relief
+  }
+  let sand = (1.0 - sm(0.35, 0.7, age)) * 0.9;
+  let rim = sm(B - 6.0, B + 6.0, d + 3.0 * vnoise(wx / 14.0, wy / 14.0, u.seed ^ 0x94u));
+  return vec2f(min(fl, mix(h, fl, rim)), sand * (1.0 - rim));
 }
 // One segment's candidate at a cell: (the value before combine, q clamped to 0..1).
 // trunkShare: the cell's place along the path (0 to 1), for a trunk segment; a spur piece carries its root's.
@@ -704,7 +753,7 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
   var value = base + (crest - base) * qt;
   var bar = 0.0;
   if (u.lfRiver > 0.0 && !spur) {
-    if (u.lfBraid > 0.0) { value = braidedBelt(value, c, e, share * s1.z, wx, wy); }
+    if (u.lfBraid > 0.0) { let bb = braidedBelt(value, c, e, share * s1.z, wx, wy); value = bb.x; bar = bb.y; }
     else { let ch = riverChannel(value, q, c, e, mix(s2.y, s2.z, tt), s2.w, wx, wy); value = ch.x; bar = ch.y; }
   }
   if (u.lfHeight > 0.0) { value = value + u.lfHeight * lfWeight(q) * nC * sm(0.0, 0.15, q); }
