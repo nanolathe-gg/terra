@@ -1,14 +1,16 @@
 // Bright-pixel clustering of the generated broadleaf trees: clumps of 4+ px (4-connected) of index 37/38 and of the wider bright set,
 // their median and largest size, and the share of bright pixels with no bright 8-neighbor.
 //   node measure/feature_gen_clump_stats.mjs [module]
+import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
+const palette = JSON.parse(readFileSync(new URL('../materials/palette.json', import.meta.url))).indexed;
 const mod = await import(process.argv[2] ? pathToFileURL(process.argv[2]).href : '../sculpt-feature-gen.js');
 const sets = {'37/38': [37, 38], 'bright set (37-39, 34-36, 233, 234, 54, 53)': [37, 38, 39, 36, 35, 34, 233, 234, 54, 53]};
 const out = {};
 for (const [name, list] of Object.entries(sets)) {
   const acc = {clumps: [], median: [], largest: [], isolated: [], inClumps: []};
   for (let i = 0; i < 12; i++) {
-    const s = mod.generateFeature('tree', {}, 1000 + i * 7).body, m = new Uint8Array(s.w * s.h);
+    const s = mod.generateFeature('tree', {}, 1000 + i * 7, {palette}).body, m = new Uint8Array(s.w * s.h);
     for (let k = 0; k < m.length; k++) m[k] = s.a[k] && list.includes(s.idx[k]) ? 1 : 0;
     const seen = new Uint8Array(m.length), sizes = []; let total = 0, iso = 0;
     for (let k = 0; k < m.length; k++) if (m[k]) {

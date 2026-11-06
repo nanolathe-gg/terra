@@ -1446,6 +1446,16 @@
    234
   ]
  },
+ "features": {
+  "note": "Round 9, the shared generators in Desert's colors (ramp measured from DryRock01-15 by luma octile: smooth pitted blue-grey boulders, often several in one feature). Shares from retail uses (features/desert/catalog.json), metal 25-100. Retail's deposits sit in a halo darker than the sand.",
+  "rock": {"count": 8, "shade": 0.6, "metal": [25, 100], "types": [
+   {"share": 0.25, "params": {"cells": "3x4", "angular": 0.05, "lump": 0.3, "pits": 0.6, "grain": 0.5, "colors": ["#000000", "#18181d", "#32353b", "#494950", "#5c5c5f", "#656e75", "#837876", "#a09684"], "mottle": [["#53778b", 0.15], ["#abab83", 0.12]]}, "vary": {"pieces": [1, 4]}},
+   {"share": 0.25, "params": {"cells": "4x3", "angular": 0.05, "lump": 0.3, "pits": 0.6, "grain": 0.5, "colors": ["#000000", "#18181d", "#32353b", "#494950", "#5c5c5f", "#656e75", "#837876", "#a09684"], "mottle": [["#53778b", 0.15], ["#abab83", 0.12]]}, "vary": {"pieces": [1, 4]}},
+   {"share": 0.25, "params": {"cells": "3x3", "angular": 0.05, "lump": 0.3, "pits": 0.6, "grain": 0.5, "colors": ["#000000", "#18181d", "#32353b", "#494950", "#5c5c5f", "#656e75", "#837876", "#a09684"], "mottle": [["#53778b", 0.15], ["#abab83", 0.12]]}, "vary": {"pieces": [1, 4]}},
+   {"share": 0.15, "params": {"cells": "2x2", "angular": 0.05, "lump": 0.3, "pits": 0.6, "grain": 0.5, "colors": ["#000000", "#18181d", "#32353b", "#494950", "#5c5c5f", "#656e75", "#837876", "#a09684"], "mottle": [["#53778b", 0.15], ["#abab83", 0.12]]}, "vary": {"pieces": [1, 4]}},
+   {"share": 0.1, "params": {"cells": "4x4", "angular": 0.05, "lump": 0.3, "pits": 0.6, "grain": 0.5, "colors": ["#000000", "#18181d", "#32353b", "#494950", "#5c5c5f", "#656e75", "#837876", "#a09684"], "mottle": [["#53778b", 0.15], ["#abab83", 0.12]]}, "vary": {"pieces": [1, 4]}}]},
+  "deposit": {"params": {"halo": 0.7, "haloSat": 1}}
+ },
  "world": {
   "defaults": {
    "coverage": "form",

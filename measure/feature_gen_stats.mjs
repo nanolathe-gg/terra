@@ -22,10 +22,10 @@ const sets = {
 };
 for (const [dir, [kind, params]] of Object.entries(sets)) {
   for (let i = 0; i < N; i++) {
-    const f = generateFeature(kind, kind === 'tree' && params.species === 'conifer' ? {...params, height: 57 + (i % 4) * 2, width: 0.44 + (i % 5) * 0.04} : params, 1000 + i * 7);
+    const f = generateFeature(kind, kind === 'tree' && params.species === 'conifer' ? {...params, height: 57 + (i % 4) * 2, width: 0.44 + (i % 5) * 0.04} : params, 1000 + i * 7, {palette});
     save(join(out, dir), `${dir}-${i}`, f, {category: dir});
     if (kind === 'tree' && dir === 'tree-broadleaf' && i < N) save(join(out, 'burnt'), `burnt-${i}`, f.burnt, {category: 'burnt'});
   }
 }
-for (const cells of ['1x1', '3x3', '4x3']) for (let i = 0; i < 4; i++) save(join(out, 'rock-' + cells), `rock-${cells}-${i}`, generateFeature('rock', {cells}, 50 + i), {category: 'rock'});
+for (const cells of ['1x1', '3x3', '4x3']) for (let i = 0; i < 4; i++) save(join(out, 'rock-' + cells), `rock-${cells}-${i}`, generateFeature('rock', {cells}, 50 + i, {palette}), {category: 'rock'});
 console.log('wrote', out);

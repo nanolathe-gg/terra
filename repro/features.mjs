@@ -91,14 +91,23 @@ try {
   const loaded = await ev(`(async()=>{const s=sculptRegion.sketch();s.mapData={...s.mapData,features:[{name:'Tree1',x:5,z:5},...s.mapData.features]};sculptRegion.loadSketch(s);await sculptCanvas.idle();return {n:sculptCanvas.features.serialize().features.length,status:document.getElementById('status').textContent};})()`);
   assert.equal(loaded.n, 4); assert.match(loaded.status, /1 retail feature was left out/); report.oldSave = loaded.status;
   report.select = 'select, drag, metal, re-roll, Shift-add, Delete, refused overlap';
-  // A world without generated trees says so; deposits and vents still place.
+  // A world with only some generated kinds says which it lacks (Moon: rocks, no plants or scars); they place and fill.
   await send('Page.navigate', {url: `${server}/sculpt.html?biome=moon&mapX=4&mapY=4&scratch=features-test-moon&gpuMB=512&heapMB=1536`}); await ready();
+  await press('#feature-tool');
+  assert.equal(await ev('document.getElementById("feature-kind-note").textContent'), 'No generated trees, shrubs or scars for this world yet.');
+  assert.deepEqual(await ev('[...document.getElementById("feature-kind").options].filter(o=>!o.disabled).map(o=>o.value)'), ['deposit', 'vent', 'rock']);
+  assert.equal(await ev('document.querySelector("[data-feature-mode=fill]").disabled'), false);
+  assert.equal(await ev('sculptCanvas.features.addFeature("rock",20,20)'), true); assert.equal(await ev('sculptCanvas.features.addFeature("tree",30,30)'), false);
+  await settled(); await shot('moon-rock.png');
+  report.moon = 'rocks, deposits and vents; the panel says what it lacks';
+  // A world without a generated set (Zhon) says so; deposits and vents still place.
+  await send('Page.navigate', {url: `${server}/sculpt.html?biome=zhon&mapX=4&mapY=4&scratch=features-test-zhon&gpuMB=512&heapMB=1536`}); await ready();
   await press('#feature-tool');
   assert.equal(await ev('document.getElementById("feature-kind-note").textContent'), 'No generated trees, shrubs, rocks or scars for this world yet.');
   assert.deepEqual(await ev('[...document.getElementById("feature-kind").options].filter(o=>!o.disabled).map(o=>o.value)'), ['deposit', 'vent']);
   assert.equal(await ev('document.querySelector("[data-feature-mode=fill]").disabled'), true);
   assert.equal(await ev('sculptCanvas.features.addFeature("vent",20,20)'), true); assert.equal(await ev('sculptCanvas.features.addFeature("tree",30,30)'), false);
-  report.moon = 'deposits and vents only, the panel says why';
+  report.zhon = 'deposits and vents only, the panel says why';
   assert.deepEqual(errors, []);
   console.log(JSON.stringify(report, null, 1));
 } finally { ws?.close(); browser.kill(); }

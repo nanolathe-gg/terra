@@ -10,7 +10,8 @@ export const FILL_KINDS = ['tree', 'shrub', 'rock'];
 export const LABELS = {deposit: 'Metal deposit', vent: 'Geothermal vent', tree: 'Tree', shrub: 'Shrub', rock: 'Rock', scar: 'Scar'};
 export const PLURALS = {deposit: 'metal deposits', vent: 'geothermal vents', tree: 'trees', shrub: 'shrubs', rock: 'rocks', scar: 'scars'};
 export const MAX_VARIANTS = 16;
-const ROCK_CELLS = {'1x1': [1, 1], '2x2': [2, 2], '3x2': [3, 2], '3x3': [3, 3], '4x3': [4, 3]};
+// A footprint 'WxD' in cells (rocks from 1x1 to Lava's 7x7 spires; Red's Mars plants are 2x2).
+export const cellsOf = c => { const m = /^(\d+)x(\d+)$/.exec(String(c || '')); return m ? [Math.min(16, Math.max(1, +m[1])), Math.min(16, Math.max(1, +m[2]))] : null; };
 // The same on every world: Green's deposits (spec 11: 3x3, metal 86-223; RockMetal1's 127 is the most placed) and vents (GreenVent01-10,
 // 1x1; crack length 0.8-1.25 of the generator's). Their looks are Green's until another world's are measured.
 const COMMON = {
@@ -39,7 +40,12 @@ const unit = (a, b) => hash32(a, b) / 4294967296;
 export function worldKinds(config) {
   return KINDS.filter(kind => GROUND_KINDS.includes(kind) || config?.features?.[kind]?.types?.length);
 }
-function kindData(kind, config) { return GROUND_KINDS.includes(kind) ? COMMON[kind] : config?.features?.[kind]; }
+// Deposits and vents are the same on every world but their look: a world's table may set their painter's params (the halo's tone).
+function kindData(kind, config) {
+  if (!GROUND_KINDS.includes(kind)) return config?.features?.[kind];
+  const look = config?.features?.[kind]?.params;
+  return look ? {...COMMON[kind], types: COMMON[kind].types.map(t => ({...t, params: {...t.params, ...look}}))} : COMMON[kind];
+}
 
 export function defaultSet(config) {
   const out = {};
@@ -95,11 +101,11 @@ export function variants(kind, set, config) {
       params[key] = Number.isInteger(lo) && Number.isInteger(hi) ? Math.round(value) : Math.round(value * 100) / 100;
     }
     if (kind === 'tree') Object.assign(params, {taper: entry.taper, peaks: entry.peaks, energy: [...entry.energy]});
-    let footprint = [1, 1];
+    let footprint = cellsOf(params.cells) || [1, 1];
     if (kind === 'rock') {
-      footprint = ROCK_CELLS[params.cells] || [2, 2];
+      footprint = cellsOf(params.cells) || [2, 2];
       // Retail rock metal tracks footprint area (spec 4): the range's low end on a single cell, its high end from 3x3 up.
-      params.shade = entry.shade; params.metal = Math.round(entry.metal[0] + (entry.metal[1] - entry.metal[0]) * Math.min(1, (footprint[0] * footprint[1] - 1) / 8));
+      params.shade = entry.shade; params.metal = type.params.metal === 0 ? 0 : Math.round(entry.metal[0] + (entry.metal[1] - entry.metal[0]) * Math.min(1, (footprint[0] * footprint[1] - 1) / 8));
     }
     if (kind === 'deposit') footprint = [3, 3];
     return {kind, index, seed, params, footprint, weight: type.share / counts.get(t), type: t};
@@ -115,9 +121,9 @@ export function pickVariant(list, u) {
 
 // Words for a variant in the panel: its type ("broadleaf", "2x2", "rock stain").
 export function typeLabel(kind, params) {
-  if (kind === 'tree') return params.species === 'conifer' ? 'conifer' : 'broadleaf';
+  if (kind === 'tree') return params.species === 'conifer' ? 'conifer' : params.species === 'tendril' ? 'tendril plant' : params.clusters > 0 ? 'clustered' : 'broadleaf';
   if (kind === 'shrub') return params.density < 0.3 ? 'sparse' : 'dense';
-  if (kind === 'rock') return (params.cells || '2x2').replace('x', '×');
+  if (kind === 'rock') return (params.tall > 0.4 ? 'spire ' : '') + (params.cells || '2x2').replace('x', '×');
   if (kind === 'scar') return params.type === 'stain' ? 'rock stain' : 'smudge';
   return '';
 }

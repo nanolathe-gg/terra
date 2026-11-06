@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {worldKinds, defaultSet, normalizeSet, variants, pickVariant, normalizePlacement, MAX_VARIANTS} from '../sculpt-feature-set.js';
 import {generateFeature} from '../sculpt-feature-gen.js';
+const palette = JSON.parse(readFileSync(new URL('../materials/palette.json', import.meta.url))).indexed;
 
 const table = world => JSON.parse(readFileSync(new URL(`../materials/${world}.json`, import.meta.url), 'utf8'));
 const green = {features: table('green').features}, bare = {};
@@ -11,7 +12,18 @@ const green = {features: table('green').features}, bare = {};
 test('every world has deposits and vents; trees, shrubs, rocks and scars come from the world table', () => {
   assert.deepEqual(worldKinds(green), ['deposit', 'vent', 'tree', 'shrub', 'rock', 'scar']);
   assert.deepEqual(worldKinds(bare), ['deposit', 'vent']);
-  for (const world of ['red', 'moon', 'archipelago', 'desert', 'lava', 'ice', 'crystal', 'zhon']) assert.deepEqual(worldKinds({features: table(world).features}), ['deposit', 'vent'], world);
+  const kinds = {red: ['tree', 'rock', 'scar'], moon: ['rock'], archipelago: ['tree', 'shrub'], desert: ['rock'], lava: ['rock', 'scar'], ice: ['rock'], crystal: ['rock'], zhon: []};
+  for (const [world, own] of Object.entries(kinds)) assert.deepEqual(worldKinds({features: table(world).features}), ['deposit', 'vent', ...own], world);
+});
+
+test("a world's deposit and vent look reaches the painter; footprints take any size", () => {
+  const red = {features: table('red').features}, lava = {features: table('lava').features};
+  assert.equal(variants('deposit', defaultSet(red), red)[0].params.halo, 0.9);
+  assert.equal(variants('vent', defaultSet(lava), lava)[0].params.rim, 0.55);
+  assert.equal(variants('deposit', defaultSet(green), green)[0].params.halo, undefined);   // Green's look is the painter's default
+  assert.deepEqual(variants('tree', defaultSet(red), red)[0].footprint, [2, 2]);
+  const spire = variants('rock', defaultSet(lava), lava).find(v => v.params.tall === 1);
+  assert.deepEqual(spire.footprint, [6, 5]); assert.equal(spire.params.metal, 0);
 });
 
 test('a saved recipe is kept to the world kinds and the settings bounds', () => {
@@ -49,7 +61,7 @@ test('a new seed redraws every variant; rock metal follows footprint across the 
 test('the view draws the same body and shadow as the export, without burn frames', () => {
   const set = defaultSet(green);
   for (const kind of ['tree', 'shrub', 'rock', 'scar']) for (const v of variants(kind, set, green).slice(0, 3)) {
-    const full = generateFeature(kind, v.params, v.seed, {light: {x: -0.62, y: -0.03}}), view = generateFeature(kind, v.params, v.seed, {light: {x: -0.62, y: -0.03}, bodyOnly: true});
+    const full = generateFeature(kind, v.params, v.seed, {light: {x: -0.62, y: -0.03}, palette}), view = generateFeature(kind, v.params, v.seed, {light: {x: -0.62, y: -0.03}, bodyOnly: true, palette});
     for (const part of ['body', 'shadow']) assert.deepEqual(view[part] && [...view[part].idx, ...view[part].a, view[part].ax, view[part].ay], full[part] && [...full[part].idx, ...full[part].a, full[part].ax, full[part].ay], `${kind} ${part}`);
     assert.deepEqual(view.gameplay, full.gameplay);
     if (kind === 'tree') assert.ok(full.burn && !view.burn && !view.burnt);

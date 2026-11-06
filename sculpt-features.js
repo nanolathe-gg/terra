@@ -112,15 +112,24 @@ export async function mountMapFeatures(api) {
     const id=++jobId;
     return new Promise((resolve,reject) => { jobs.set(id,{resolve,reject}); worker.postMessage({...message,id},transfer); });
   }
-  // TA's view lifts a point by half its height: the sun's screen direction is (east, south - up / 2) of the renderer's light.
-  function light() { const sun=api.light?.(); return sun?{x:Math.round(sun[0]*1000)/1000,y:Math.round((sun[1]-sun[2]/2)*1000)/1000}:null; }
+  // The map's light for the generator: its sun in the sprites' view (TA's view looks down (0, south 1, up 2): x east, y the sun's
+  // screen height, z toward the viewer) and, unless both are white, the world's sun and sky colors, its ambient share and the sun's
+  // height, so features are lit and tinted as the ground under them (sculpt-feature-gen.js tintOf).
+  const r3=v => Math.round(v*1000)/1000;
+  function light() {
+    const sun=api.light?.(); if (!sun) return null;
+    const out={x:r3(sun[0]),y:r3(0.8944*sun[1]-0.4472*sun[2]),z:r3(0.4472*sun[1]+0.8944*sun[2])},c=api.lightColors?.()||{},white=v => !v || v.every(x => Math.abs(x-1)<1e-4);
+    if (!white(c.sun) || !white(c.sky)) out.tint={sun:(c.sun||[1,1,1]).map(r3),sky:(c.sky||[1,1,1]).map(r3),ambient:r3(c.ambient??.42),up:r3(sun[2])};
+    return out;
+  }
+  const lightKey=sun => sun?JSON.stringify(sun):'';
   async function bitmapOf(s) {
     if (!s) return null;
     const alpha=new Uint8Array(s.w*s.h); for (let i=0;i<alpha.length;i++) alpha[i]=s.rgba[i*4+3]?1:0;
     return {bitmap:await createImageBitmap(new ImageData(s.rgba,s.w,s.h)),w:s.w,h:s.h,ax:s.ax,ay:s.ay,alpha};
   }
   const sprites=new Map();
-  const spriteKey=(v,sun) => { const at=sun.x+','+sun.y; if (v.keyLight!==at) { v.key=v.kind+'|'+v.seed+'|'+JSON.stringify(v.params)+'|'+at; v.keyLight=at; } return v.key; };
+  const spriteKey=(v,sun) => { const at=lightKey(sun); if (v.keyLight!==at) { v.key=v.kind+'|'+v.seed+'|'+JSON.stringify(v.params)+'|'+at; v.keyLight=at; } return v.key; };
   function sprite(v) {
     const sun=light(); if (!sun || !v || GROUND_KINDS.includes(v.kind)) return null;
     const k=spriteKey(v,sun);
@@ -180,14 +189,14 @@ export async function mountMapFeatures(api) {
   }
   const patchRect=o => { const x=Math.max(0,o.ox),y=Math.max(0,o.oy),x1=Math.min(map.width,o.ox+PATCH),y1=Math.min(map.height,o.oy+PATCH); return x1>x && y1>y?{x,y,width:x1-x,height:y1-y}:null; };
   const paintParams=p => p.kind==='deposit'?{...variantOf(p).params,metal:p.metal}:variantOf(p).params;
-  const paint=(p,rgba) => { const v=variantOf(p); return work({type:'paint',kind:p.kind,params:paintParams(p),seed:v.seed,w:PATCH,h:PATCH,cx:PATCH/2,cy:PATCH/2,rgba},[rgba.buffer]).then(r => r.rgba); };
+  const paint=(p,rgba,sun=light()) => { const v=variantOf(p); return work({type:'paint',kind:p.kind,params:paintParams(p),seed:v.seed,light:sun,w:PATCH,h:PATCH,cx:PATCH/2,cy:PATCH/2,rgba},[rgba.buffer]).then(r => r.rgba); };
   function stampFor(p) {
     const pk=key(p);
     let s=stamps.get(pk); if (!s) { s={bitmap:null,want:'',painting:'',exact:null,exactStale:true}; stamps.set(pk,s); }
     const exact=exactOrigin(p),gk=exact?exact.ox+','+exact.oy:'';
     let g=exact?grounds.get(gk):null;
     if (exact && !g) { g={ox:exact.ox,oy:exact.oy,rgba:null,gen:0,stale:true,pending:false,failed:false,input:null}; grounds.set(gk,g); }
-    const want=variantOf(p).seed+'|'+JSON.stringify(paintParams(p))+'|'+(g?.rgba?gk+'|'+g.gen:'flat');
+    const want=variantOf(p).seed+'|'+JSON.stringify(paintParams(p))+'|'+lightKey(light())+'|'+(g?.rgba?gk+'|'+g.gen:'flat');
     if (s.want!==want && s.painting!==want) {
       s.painting=want;
       paint(p,g?.rgba?g.rgba.slice():flatGround()).then(async rgba => {
@@ -265,7 +274,7 @@ export async function mountMapFeatures(api) {
   }
   function refreshVariants() {
     if (mode!=='place') return;
-    const host=$('feature-variants'),list=variantList(placeKind),sun=light(),key0=placeKind+JSON.stringify(set[placeKind])+placeVariant+(sun?sun.x+','+sun.y:'');
+    const host=$('feature-variants'),list=variantList(placeKind),sun=light(),key0=placeKind+JSON.stringify(set[placeKind])+placeVariant+lightKey(sun);
     if (host.dataset.key!==key0 || host.children.length!==list.length+1) {
       host.dataset.key=key0;
       const random=doc.createElement('button'); random.type='button'; random.textContent='Random'; random.title='Each click picks a variant at random, in retail’s mix'; random.setAttribute('aria-pressed',String(placeVariant<0)); random.onclick=() => { placeVariant=-1; update(); };
@@ -296,11 +305,11 @@ export async function mountMapFeatures(api) {
       }
       return t;
     }
-    const params=v.kind==='deposit'?{...v.params,metal:set.deposit.metal}:v.params,k='ground|'+v.kind+'|'+v.seed+'|'+JSON.stringify(params);
+    const params=v.kind==='deposit'?{...v.params,metal:set.deposit.metal}:v.params,sun=light(),k='ground|'+v.kind+'|'+v.seed+'|'+JSON.stringify(params)+'|'+lightKey(sun);
     const t=thumbs.get(k); if (t) return t.ready?t.canvas:null;
     const entry={ready:false}; thumbs.set(k,entry);
     const rgba=flatGround(); for (let i=3;i<rgba.length;i+=4) rgba[i]=255;
-    work({type:'paint',kind:v.kind,params,seed:v.seed,w:PATCH,h:PATCH,cx:PATCH/2,cy:PATCH/2,rgba},[rgba.buffer]).then(r => {
+    work({type:'paint',kind:v.kind,params,seed:v.seed,light:sun,w:PATCH,h:PATCH,cx:PATCH/2,cy:PATCH/2,rgba},[rgba.buffer]).then(r => {
       const c=new OffscreenCanvas(80,80); c.getContext('2d').putImageData(new ImageData(r.rgba,PATCH,PATCH),-24,-24); Object.assign(entry,{ready:true,canvas:c,close:nothing}); refreshVariants();
     },() => {});
     return null;
@@ -768,9 +777,9 @@ export async function mountMapFeatures(api) {
       const f=await full(p.kind,v.params,v.seed),g=f.gameplay,[fw,fz]=v.footprint;
       if (p.kind==='tree') {
         const dead=await smudge(),burn=f.burn.map(s => frameOf(s,2));   // 96 frames of 2 ticks: the 192-tick burn (spec section 4)
-        def(n,[['description','Tree'],['footprintx',1],['footprintz',1],['height',40],['seqname',seq(`${b}t${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}t${i}s`,[frameOf(f.shadow)])],['seqnameburn',seq(`${b}t${i}b`,burn)],
+        def(n,[['description','Tree'],['footprintx',fw],['footprintz',fz],['height',40],['seqname',seq(`${b}t${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}t${i}s`,[frameOf(f.shadow)])],['seqnameburn',seq(`${b}t${i}b`,burn)],
           ['energy',g.energy],['featureburnt',`${n}B`],['featuredead',dead],['featurereclamate',dead],['sparktime',5],['spreadchance',g.spreadChance],['burnweapon','TreeBurn'],['animtrans',0],['shadtrans',1],['flamable',1],['reclaimable',1],['blocking',1]]);
-        def(`${n}B`,[['description','Burnt Tree'],['footprintx',1],['footprintz',1],['height',40],['seqname',seq(`${b}t${i}x`,[frameOf(f.burnt.body)])],['seqnameshad',seq(`${b}t${i}xs`,[frameOf(f.burnt.shadow)])],
+        def(`${n}B`,[['description','Burnt Tree'],['footprintx',fw],['footprintz',fz],['height',40],['seqname',seq(`${b}t${i}x`,[frameOf(f.burnt.body)])],['seqnameshad',seq(`${b}t${i}xs`,[frameOf(f.burnt.shadow)])],
           ['energy',f.burnt.gameplay.energy],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['flamable',0],['reclaimable',1],['blocking',1]]);
       } else if (p.kind==='shrub') {
         const dead=await smudge();   // retail shrubs burn to nothing and die to a smudge
@@ -778,8 +787,8 @@ export async function mountMapFeatures(api) {
           ['energy',g.energy],['featuredead',dead],['featurereclamate',dead],['sparktime',5],['spreadchance',g.spreadChance],['burnweapon','ShrubBurn'],['animtrans',0],['shadtrans',1],['flamable',1],['reclaimable',1],['blocking',0]]);
       } else if (p.kind==='rock') {
         const dead=await stain();
-        def(n,[['description','Rock'],['footprintx',fw],['footprintz',fz],['height',rockHeight(v.footprint)],['seqname',seq(`${b}r${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}r${i}s`,[frameOf(f.shadow)])],
-          ['metal',g.metal],['damage',2000],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['reclaimable',1],['blocking',1]]);
+        def(n,[['description','Rock'],['footprintx',fw],['footprintz',fz],['height',v.params.tall>0.4?60:rockHeight(v.footprint)],['seqname',seq(`${b}r${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}r${i}s`,[frameOf(f.shadow)])],
+          ['metal',g.metal],['damage',2000],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['reclaimable',v.params.reclaimable===false?0:1],['blocking',1]]);
       } else if (p.kind==='scar') {
         const smudgeType=v.params.type!=='stain';
         def(n,[['description',smudgeType?'Scorch Mark':'Rock Stain'],['footprintx',1],['footprintz',1],['height',0],['seqname',seq(`${b}c${i}`,[frameOf(f.body)])],...(f.shadow?[['seqnameshad',seq(`${b}c${i}s`,[frameOf(f.shadow)])]]:[]),
@@ -792,13 +801,13 @@ export async function mountMapFeatures(api) {
   // its place in the export art (anchored on the exported heights, painted on clean export art, in the order the view draws them).
   async function exportFeatures({name,heights,width,bakeArt,signal}) {
     if (!placements.length) return {pack:null,placements:[],stamps:[]};
-    const {pack,nameOf}=await featurePack(name),out=[];
+    const sun=light(),{pack,nameOf}=await featurePack(name),out=[];
     for (const p of placements.filter(q => GROUND_KINDS.includes(q.kind)).sort(drawOrder)) {
       signal?.throwIfAborted();
       const at=(x,z) => heights[z*width+x],origin=originOf(p,[at(p.x,p.z),at(p.x+1,p.z),at(p.x,p.z+1),at(p.x+1,p.z+1)]),g=grounds.get(origin.ox+','+origin.oy),rect=patchRect(origin);
       let rgba=g?.rgba && !g.stale?g.rgba.slice():null;
       if (!rgba) { const art=rect && await bakeArt(rect); if (rect && !art) throw new Error('The map changed while its deposits were painted; export again.'); rgba=art?patchOf(origin,rect,art.data):flatGround(); }
-      out.push({ox:origin.ox,oy:origin.oy,rgba:await paint(p,rgba)});
+      out.push({ox:origin.ox,oy:origin.oy,rgba:await paint(p,rgba,sun)});
     }
     return {pack,placements:placements.map(p => ({name:nameOf(p),x:p.x,z:p.z})).sort(ordered),stamps:out};
   }

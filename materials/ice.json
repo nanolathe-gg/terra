@@ -1517,6 +1517,16 @@
    }
   }
  },
+ "features": {
+  "note": "Round 9, the shared generators in Ice's colors (ramp measured from IceChunk01-14 by luma octile: flat-faced shards, often several). Shares from retail uses (features/ice/catalog.json): no metal, not reclaimable. Retail's deposits sit in a halo a little darker than the snow.",
+  "rock": {"count": 8, "shade": 0.4, "metal": [0, 0], "types": [
+   {"share": 0.3, "params": {"cells": "4x4", "angular": 1, "lump": 0.15, "grain": 0.25, "colors": ["#44789b", "#5c85a0", "#8db0c8", "#b6d2e6", "#cce3f4", "#ebeef9", "#ffffff", "#ffffff"], "mottle": [["#c7dfe7", 0.1]], "metal": 0, "reclaimable": false}, "vary": {"pieces": [1, 5]}},
+   {"share": 0.2, "params": {"cells": "2x2", "angular": 1, "lump": 0.15, "grain": 0.25, "colors": ["#44789b", "#5c85a0", "#8db0c8", "#b6d2e6", "#cce3f4", "#ebeef9", "#ffffff", "#ffffff"], "mottle": [["#c7dfe7", 0.1]], "metal": 0, "reclaimable": false}, "vary": {"pieces": [1, 5]}},
+   {"share": 0.2, "params": {"cells": "5x4", "angular": 1, "lump": 0.15, "grain": 0.25, "colors": ["#44789b", "#5c85a0", "#8db0c8", "#b6d2e6", "#cce3f4", "#ebeef9", "#ffffff", "#ffffff"], "mottle": [["#c7dfe7", 0.1]], "metal": 0, "reclaimable": false}, "vary": {"pieces": [1, 5]}},
+   {"share": 0.15, "params": {"cells": "3x4", "angular": 1, "lump": 0.15, "grain": 0.25, "colors": ["#44789b", "#5c85a0", "#8db0c8", "#b6d2e6", "#cce3f4", "#ebeef9", "#ffffff", "#ffffff"], "mottle": [["#c7dfe7", 0.1]], "metal": 0, "reclaimable": false}, "vary": {"pieces": [1, 5]}},
+   {"share": 0.15, "params": {"cells": "3x3", "angular": 1, "lump": 0.15, "grain": 0.25, "colors": ["#44789b", "#5c85a0", "#8db0c8", "#b6d2e6", "#cce3f4", "#ebeef9", "#ffffff", "#ffffff"], "mottle": [["#c7dfe7", 0.1]], "metal": 0, "reclaimable": false}, "vary": {"pieces": [1, 5]}}]},
+  "deposit": {"params": {"halo": 0.85, "haloSat": 1}}
+ },
  "world": {
   "defaults": {
    "coverage": "form",

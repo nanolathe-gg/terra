@@ -24,7 +24,7 @@ const R = {};
 for (const [name, params] of [['broadleaf', {}], ['conifer', {species: 'conifer', height: 61, width: 0.5}]]) {
   const rows = [];
   for (let i = 0; i < 12; i++) {
-    const s = mod.generateFeature('tree', params, 1000 + i * 7).body, o = {};
+    const s = mod.generateFeature('tree', params, 1000 + i * 7, {palette}).body, o = {};
     o.share3738 = share(s, k => k === 37 || k === 38); o.share3740 = share(s, k => k >= 37 && k <= 40);
     o.nearWhite = (() => { let n = 0; for (let k = 0; k < s.w * s.h; k++) if (s.a[k]) { const c = palette[s.idx[k]]; if (luma(s.idx[k]) > 130 && !(c[1] > c[0] + 8 && c[1] > c[2] + 8)) n++; } return n; })();
     o.bright130 = share(s, k => luma(k) > 130);
@@ -42,7 +42,7 @@ for (const [name, params] of [['broadleaf', {}], ['conifer', {species: 'conifer'
 {
   const rows = [];
   for (let i = 0; i < 12; i++) {
-    const s = mod.generateFeature('rock', {cells: ['1x1', '2x2', '3x2', '3x3', '4x3'][i % 5]}, 50 + i * 3).body, o = {};
+    const s = mod.generateFeature('rock', {cells: ['1x1', '2x2', '3x2', '3x3', '4x3'][i % 5]}, 50 + i * 3, {palette}).body, o = {};
     const cream = k => k >= 64 && k <= 70, pink = k => k >= 16 && k <= 22, white = k => k === 255 || (k >= 81 && k <= 84);
     o.cream = share(s, cream); o.pink = share(s, pink); o.white = share(s, white); o.highlight = o.cream + o.pink + o.white;
     const shade = k => [93, 94, 95, 127, 125, 47, 62, 159].includes(k);
@@ -76,7 +76,7 @@ for (const [name, params] of [['broadleaf', {}], ['conifer', {species: 'conifer'
 for (const [name, params] of [['burnt-broadleaf', {}], ['burnt-conifer', {species: 'conifer', height: 58, width: 0.5}]]) {
   const rows = [];
   for (let i = 0; i < 12; i++) {
-    const s = mod.generateFeature('burnt', params, 3000 + i * 5).body, o = {}, n = drawn(s);
+    const s = mod.generateFeature('burnt', params, 3000 + i * 5, {palette}).body, o = {}, n = drawn(s);
     o.w = s.w; o.h = s.h; o.area = n; o.fill = n / (s.w * s.h);
     let iso = 0; for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if (s.a[y * s.w + x]) { let nb = 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const X = x + dx, Y = y + dy; if (X >= 0 && Y >= 0 && X < s.w && Y < s.h && s.a[Y * s.w + X]) nb++; } if (nb <= 1) iso++; }
     o.isolated = iso / n; o.gt30 = share(s, k => luma(k) > 30); o.green = share(s, k => { const c = palette[k]; return c[1] > c[0] + 8 && c[1] > c[2] + 8; });
@@ -89,7 +89,7 @@ for (const [name, params] of [['burnt-broadleaf', {}], ['burnt-conifer', {specie
 for (const [name, params] of [['shrub-dense', {density: 0.6, width: 27, height: 20}], ['shrub-sparse', {density: 0.12, width: 33, height: 26}]]) {
   const rows = [];
   for (let i = 0; i < 12; i++) {
-    const s = mod.generateFeature('shrub', params, 400 + i * 9).body, o = {}, n = drawn(s), a = s.a;
+    const s = mod.generateFeature('shrub', params, 400 + i * 9, {palette}).body, o = {}, n = drawn(s), a = s.a;
     o.w = s.w; o.h = s.h; o.area = n; o.fill = n / (s.w * s.h);
     const bl = comps(s.w, s.h, a, true).map(c => c.length).sort((x, y) => y - x); o.blobs = bl.length; o.largestShare = bl[0] / n;
     let iso = 0; for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if (a[y * s.w + x]) { let nb = 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const X = x + dx, Y = y + dy; if (X >= 0 && Y >= 0 && X < s.w && Y < s.h && a[Y * s.w + X]) nb++; } if (nb <= 1) iso++; }
@@ -100,7 +100,7 @@ for (const [name, params] of [['shrub-dense', {density: 0.6, width: 27, height: 
 }
 // shrub burn last frame, vents
 {
-  const f = mod.generateFeature('shrub', {}, 4001).burn.at(-1), n = drawn(f), c = {};
+  const f = mod.generateFeature('shrub', {}, 4001, {palette}).burn.at(-1), n = drawn(f), c = {};
   for (let k = 0; k < f.w * f.h; k++) if (f.a[k]) c[f.idx[k]] = (c[f.idx[k]] || 0) + 1;
   R.shrubBurnLast = {px: n, shares: Object.fromEntries(Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 7).map(([k, v]) => [k, fx(v / n, 2)]))};
   const rows = [];
