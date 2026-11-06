@@ -29,13 +29,13 @@ const SHORE_CLASS = k => /^(shoal(Stairs|ShoreSoft)|crispShore|shoreEdge|shore)$
 const IMPACTS = /^(moon\w*|crater\w*|pock\w*|crystalCrater\w*|rim(Sectors|Unequal|Gaps|GapWidth|Height)|worms|wrinkles|slopeMarks)$/;
 const IMPACT_CLASS = k => /^(worms|wrinkles|slopeMarks|moon(Ribs|RibDepth|RibDark|Cups|CupSize|CupDepth))$/.test(k) ? 'slope' : /^moonFold/.test(k) ? 'fold' : 'impact';
 const CLASS = k => bodies ? BODY_CLASS(k) : impacts ? IMPACT_CLASS(k) : shores ? SHORE_CLASS(k) : fractures ? (/^(crack|ribTilt)/.test(k) ? 'slope' : 'face') : /^(ring|mineral)/.test(k) ? 'halo' : /^(layer|shoreLayers|lava)/.test(k) ? 'bank' : 'raised';
-// Card units of the stroke options (sculpt.js SHAPE_FIELDS' last scale): a stroke that carries its own value is moved with the world's.
+// Card units of the stroke options (sculpt-scene.js SHAPE_FIELDS' last scale): a stroke that carries its own value is moved with the world's.
 const CARD_SCALE = {fingers: 100, fingerSize: 100, bankPx: 1, shorePlates: 1, plateWaterPx: 1, plateLandPx: 1, plateSize: 1, plateGap: 10, plateHeight: 10, plateMaterial: 1,
   crystalShoreSeam: 100, shelves: 100, bankWidth: 100, beachFlatness: 100, waterDeep: 1, waterBed: 1, shoreLayers: 1, layerPx: 1, layerCircle: 1, layerStyle: 1, layerRiser: 10, layerLedge: 100, layerRough: 100, layerVary: 100, lavaSpread: 100, lavaCircleVary: 100};
 // Shape options that no world sets: red-2's own stroke carries terraces 7, ledge 40, jitter 60 (card units). Moved on that scene's card.
 const CARD_ONLY = [{world: 'red', knob: 'terraces', from: 7, to: 0}, {world: 'red', knob: 'ledge', from: 40, to: 90}, {world: 'red', knob: 'terraceJitter', from: 60, to: 0}];
 // H21: read card limits/scales from the same declarations as toolDefaults. Top-level scriptedScene options use engine units and win over the card.
-const impactFields = Object.fromEntries([...readFileSync(`${here}sculpt.js`, 'utf8').matchAll(/\['(\w+)','[^']*','[^']*',\[([^\]]*)\],([\d.]+),([\d.]+),[\d.]+,([\d.]+)/g)]
+const impactFields = Object.fromEntries([...readFileSync(`${here}sculpt-scene.js`, 'utf8').matchAll(/\['(\w+)','[^']*','[^']*',\[([^\]]*)\],([\d.]+),([\d.]+),[\d.]+,([\d.]+)/g)]
   .filter(m => IMPACTS.test(m[1])).map(m => [m[1], {kinds: [...m[2].matchAll(/'([^']+)'/g)].map(x => x[1]), lo: +m[3], hi: +m[4], scale: +m[5]}]));
 // Crater spurs are child hills and inherit the crater's outline parameters (prepareNode); spurCount defaults to zero.
 const impactStroke = (knob, st) => impactFields[knob].kinds.includes(st[0]) || (knob === 'moonLobes' && st[0] === 'crater' && (st[2]?.spurCount ?? st[2]?.card?.spurCount ?? 0) > 0);
@@ -44,7 +44,7 @@ const family = opt('--family', 'geology');
 const FRACTURES = /^(crack(Severity|Spacing|Major|Minor|Hairline|Blocks|Width|Network|Dark)|groove(Spacing|Angle|Run)|gully(Depth|Width|Shade)|ribTilt|rock(Scale|Age)|rockOpen|hillBlocks)$/;
 const BODIES = /^(crystal[A-Z]\w*|ice[A-Z]\w*|frost[A-Z]\w*|lava(Calm|Chip|Crust|Dusk|Pillow|Veins))$/;
 const BODY_CLASS = k => /^crystalCrater/.test(k) ? 'crater' : /^crystalShallow/.test(k) ? 'shallows' : /^(crystalShore|crystalSeam|frost|iceFrost)/.test(k) ? 'shore' : 'raised';
-// The stroke kinds that carry each shape option (sculpt.js SHAPE_FIELDS), and the scale of the card's unit.
+// The stroke kinds that carry each shape option (sculpt-scene.js SHAPE_FIELDS), and the scale of the card's unit.
 const KINDS = {crystalForm: ['crystal'], crystalTiers: ['crystal'], crystalSides: ['crystal'], crystalSize: ['crystal'], crystalStep: ['crystal'], crystalCount: ['crystal'], crystalTop: ['crystal'], crystalLean: ['crystal'], crystalVariation: ['crystal'],
   crystalAlign: ['crystal'], crystalFacet: ['crystal'], crystalSizeVar: ['crystal'], crystalSmooth: ['crystal'], crystalCraterPx: ['crater'], crystalCraterStep: ['crater'], crystalCraterSkin: ['crater'],
   crystalShoreSeam: ['landform'], frostNeedles: ['landform'], iceFacets: ['landform'], iceFacetSize: ['landform']};
