@@ -66,8 +66,9 @@ export async function mountMapFeatures(api) {
   const guard=() => { if (enabled()) return true; status('Map editing is unavailable while terrain is loading or export is running.'); return false; };
 
   // ---- the set's variants ----
-  const lists=new Map();
-  function variantList(kind) { const k=kind+JSON.stringify(set[kind]); let list=lists.get(k); if (!list) { list=kindVariants(kind,set,config); lists.set(k,list); } return list; }
+  // Each set edit makes a new `set`, so a kind's list is kept until the set object changes (draw asks for it per feature, per frame).
+  const lists=new Map(); let listsOf=null;
+  function variantList(kind) { if (listsOf!==set) { lists.clear(); listsOf=set; } let list=lists.get(kind); if (!list) { list=kindVariants(kind,set,config); lists.set(kind,list); } return list; }
   const variantOf=p => variantList(p.kind)[p.v];
   const footprint=p => variantOf(p)?.footprint||[1,1];
   const rectangle=p => { const [fw,fz]=footprint(p); return {x0:p.x*CELL,z0:p.z*CELL,x1:(p.x+fw)*CELL,z1:(p.z+fz)*CELL}; };
@@ -116,9 +117,10 @@ export async function mountMapFeatures(api) {
     return {bitmap:await createImageBitmap(new ImageData(s.rgba,s.w,s.h)),w:s.w,h:s.h,ax:s.ax,ay:s.ay,alpha};
   }
   const sprites=new Map();
+  const spriteKey=(v,sun) => { const at=sun.x+','+sun.y; if (v.keyLight!==at) { v.key=v.kind+'|'+v.seed+'|'+JSON.stringify(v.params)+'|'+at; v.keyLight=at; } return v.key; };
   function sprite(v) {
     const sun=light(); if (!sun || !v || GROUND_KINDS.includes(v.kind)) return null;
-    const k=v.kind+'|'+v.seed+'|'+JSON.stringify(v.params)+'|'+sun.x+','+sun.y;
+    const k=spriteKey(v,sun);
     let e=sprites.get(k);
     if (!e) {
       e={ready:false}; sprites.set(k,e);
@@ -134,7 +136,7 @@ export async function mountMapFeatures(api) {
   // Keep only the current set's pixels.
   function prune() {
     const sun=light(),keep=new Set();
-    if (sun) for (const kind of kinds) for (const v of variantList(kind)) keep.add(v.kind+'|'+v.seed+'|'+JSON.stringify(v.params)+'|'+sun.x+','+sun.y);
+    if (sun) for (const kind of kinds) for (const v of variantList(kind)) keep.add(spriteKey(v,sun));
     for (const [k,e] of sprites) if (!keep.has(k)) { sprites.delete(k); release(e); }
     const live=new Set(placements.filter(p => GROUND_KINDS.includes(p.kind)).map(key)),origins=new Set();
     for (const [k,s] of stamps) if (!live.has(k)) { stamps.delete(k); release(s); }
@@ -142,7 +144,6 @@ export async function mountMapFeatures(api) {
     for (const k of grounds.keys()) if (!origins.has(k)) grounds.delete(k);
     for (const kind of GROUND_KINDS) for (const v of variantList(kind)) keep.add('ground|'+kind+'|'+v.seed+'|'+JSON.stringify(kind==='deposit'?{...v.params,metal:set.deposit.metal}:v.params));
     for (const k of thumbs.keys()) if (!keep.has(k)) thumbs.delete(k);
-    if (lists.size>64) lists.clear();
   }
 
   // ---- positions (client.featureScreenPos/featureAnchorY: the footprint centre, lifted by half the mean of the anchor cell's four
@@ -265,7 +266,7 @@ export async function mountMapFeatures(api) {
   function thumbnail(v) {
     if (!GROUND_KINDS.includes(v.kind)) {
       const e=sprite(v); if (!e) return null;
-      const sun=light(),k=v.kind+'|'+v.seed+'|'+JSON.stringify(v.params)+'|'+sun.x+','+sun.y;
+      const k=spriteKey(v,light());
       let t=thumbs.get(k);
       if (!t) {
         const x0=Math.min(-e.body.ax,e.shadow?-e.shadow.ax:0),y0=Math.min(-e.body.ay,e.shadow?-e.shadow.ay:0),x1=Math.max(e.body.w-e.body.ax,e.shadow?e.shadow.w-e.shadow.ax:0),y1=Math.max(e.body.h-e.body.ay,e.shadow?e.shadow.h-e.shadow.ay:0);
@@ -673,18 +674,19 @@ export async function mountMapFeatures(api) {
   function draw(ink,view=null) {
     controls.disabled=!enabled(); ink.save(); ink.imageSmoothingEnabled=false;
     const drag=gesture?.type==='drag'?gesture.delta:null;
-    const shown=placements.map(p => drag && selection.has(p)?{...p,x:p.x+drag.x,z:p.z+drag.z,source:p}:{...p,source:p}).filter(p => {
-      // Before the height samples: a feature's art reaches at most 160 px around its cell and 128 px up with the ground's height.
-      if (!view) return true; const x=p.x*CELL,z=p.z*CELL+config.baseHeight/2; return x+224>=view.x && x-160<=view.x+view.width && z+224>=view.y && z-320<=view.y+view.height;
-    }).sort(drawOrder);
+    // Before the height samples: a feature's art reaches at most 160 px around its cell and 128 px up with the ground's height.
+    const seen=p => { if (!view) return true; const x=p.x*CELL,z=p.z*CELL+config.baseHeight/2; return x+224>=view.x && x-160<=view.x+view.width && z+224>=view.y && z-320<=view.y+view.height; };
+    const shown=[];
+    for (const source of placements) { const p=drag && selection.has(source)?{...source,x:source.x+drag.x,z:source.z+drag.z}:source; if (seen(p)) shown.push({p,source,row:p.z*CELL+footprint(p)[1]*8}); }
+    shown.sort((a,b) => a.row-b.row || ordered(a.p,b.p));
     // Deposits and vents are ground: under every sprite, in row order (as the export paints them).
-    for (const p of shown) {
+    for (const {p,source} of shown) {
       if (!GROUND_KINDS.includes(p.kind)) continue;
-      const s=stampFor(p.source),o=groundOrigin(p);
+      const s=stampFor(source),o=groundOrigin(p);
       if (s.bitmap) ink.drawImage(s.bitmap,o.ox,o.oy+shift);
       else outline(p,'#b8eef3',[3,3]);
     }
-    for (const p of shown) {
+    for (const {p} of shown) {
       if (GROUND_KINDS.includes(p.kind)) continue;
       const e=sprite(variantOf(p)); if (!e) { outline(p,'#b8eef3',[3,3]); continue; }
       const a=viewPoint(p);
@@ -696,7 +698,7 @@ export async function mountMapFeatures(api) {
       const r=rectangle(p),points=[{x:r.x0,z:r.z0},{x:r.x1,z:r.z0},{x:r.x1,z:r.z1},{x:r.x0,z:r.z1}].map(project);
       ink.beginPath(); points.forEach((q,i) => i?ink.lineTo(q.x,q.z):ink.moveTo(q.x,q.z)); ink.closePath(); ink.strokeStyle=color; ink.lineWidth=1.5/(view?.scale||1); ink.setLineDash(dash.map(d => d/(view?.scale||1))); ink.stroke(); ink.setLineDash([]);
     }
-    for (const p of shown) if (selection.has(p.source)) outline(p,drag && !gesture.valid?'#ff877e':'#ffe69c');
+    for (const {p,source} of shown) if (selection.has(source)) outline(p,drag && !gesture.valid?'#ff877e':'#ffe69c');
     if (hover && mode==='place') {
       const p=placeAt(hover);
       outline(p,inBounds(p) && !placements.some(q => overlaps(p,q))?'#b8eef3':'#ff877e');
