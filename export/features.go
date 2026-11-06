@@ -5,12 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"path/filepath"
 	"slices"
 	"strings"
-
-	"github.com/nanolathe-gg/terraform/internal/featuredef"
-	"github.com/nanolathe-gg/terraform/mapdata"
 )
 
 // Track omission separately from JSON null without changing the reusable
@@ -62,44 +58,6 @@ type featurePlacement struct {
 	Name string `json:"name"`
 	X    int    `json:"x"`
 	Z    int    `json:"z"`
-}
-
-// readExportFeatures reads the placed features' names and footprints from the
-// prepared catalogue (map-features writes it from the game's feature TDFs, so
-// the footprints are checked there). The browser's exporter gets a catalogue
-// of the placed features from the page; neither reads game content.
-func readExportFeatures(root string, req exportRequest, catalog catalog) (map[string]mapdata.Feature, error) {
-	if len(req.Features) == 0 {
-		return nil, nil
-	}
-	if root == "" {
-		return nil, fmt.Errorf("--features-root DIR is required when features are placed")
-	}
-	world, ok := catalog.Worlds[req.World]
-	if !ok || world.DisabledReason != "" {
-		return nil, fmt.Errorf("world %q has no exportable feature catalogue", req.World)
-	}
-	var prepared mapdata.FeatureCatalog
-	if err := mapdata.ReadJSON(filepath.Join(root, req.World, "catalog.json"), &prepared); err != nil {
-		return nil, err
-	}
-	if prepared.World != req.World || !strings.EqualFold(prepared.Planet, world.Planet) {
-		return nil, fmt.Errorf("prepared feature catalogue is for %q/%q, expected %q/%q", prepared.World, prepared.Planet, req.World, world.Planet)
-	}
-	allowed := make(map[string]mapdata.Feature, len(prepared.Features))
-	for _, f := range prepared.Features {
-		key := featuredef.Key(f.Name)
-		if _, exists := allowed[key]; exists {
-			return nil, fmt.Errorf("prepared catalogue repeats feature %q", f.Name)
-		}
-		allowed[key] = f
-	}
-	for _, placed := range req.Features {
-		if _, ok := allowed[featuredef.Key(placed.Name)]; !ok {
-			return nil, fmt.Errorf("feature %q is not in world's %s prepared catalogue", placed.Name, req.World)
-		}
-	}
-	return allowed, nil
 }
 
 // OTA's integer fields are parsed into signed 32-bit words; SurfaceMetal is
@@ -158,7 +116,7 @@ func mapStarts(req exportRequest) ([]start, error) {
 
 // Follow [fmt tnt] "Attribute map" / "Feature records": deterministic name
 // table, top-left anchor index and 0xFFFE throughout the remaining footprint.
-func encodeFeatures(req exportRequest, allowed map[string]mapdata.Feature) ([]string, []uint16, error) {
+func encodeFeatures(req exportRequest, pack *packedFeatures) ([]string, []uint16, error) {
 	if len(req.Features) == 0 {
 		return nil, nil, nil
 	}
@@ -169,19 +127,19 @@ func encodeFeatures(req exportRequest, allowed map[string]mapdata.Feature) ([]st
 	}
 	keys := []string{}
 	for _, placed := range req.Features {
-		key := featuredef.Key(placed.Name)
-		f, ok := allowed[key]
+		key := featureKey(placed.Name)
+		f, ok := pack.defs[key]
 		if !ok {
 			return nil, nil, fmt.Errorf("feature %q has no validated world definition", placed.Name)
 		}
-		if f.FootprintX <= 0 || f.FootprintZ <= 0 {
+		if f.footprintX <= 0 || f.footprintZ <= 0 {
 			return nil, nil, fmt.Errorf("feature %q has no positive footprint", placed.Name)
 		}
-		if placed.X < 0 || placed.Z < 0 || placed.X >= w-2 || placed.Z >= h-8 || f.FootprintX > w-2-placed.X || f.FootprintZ > h-8-placed.Z {
+		if placed.X < 0 || placed.Z < 0 || placed.X >= w-2 || placed.Z >= h-8 || f.footprintX > w-2-placed.X || f.footprintZ > h-8-placed.Z {
 			return nil, nil, fmt.Errorf("feature %q footprint at (%d,%d) is outside the %dx%d cell play area", placed.Name, placed.X, placed.Z, w-2, h-8)
 		}
-		if f.Name == "" || len(f.Name) > 127 || strings.ContainsRune(f.Name, 0) {
-			return nil, nil, fmt.Errorf("feature %q does not fit a TNT record name", f.Name)
+		if f.name == "" || len(f.name) > 127 || strings.ContainsRune(f.name, 0) {
+			return nil, nil, fmt.Errorf("feature %q does not fit a TNT record name", f.name)
 		}
 		keys = append(keys, key)
 	}
@@ -193,14 +151,14 @@ func encodeFeatures(req exportRequest, allowed map[string]mapdata.Feature) ([]st
 	names := make([]string, len(keys))
 	records := make(map[string]uint16, len(keys))
 	for i, key := range keys {
-		names[i] = allowed[key].Name
+		names[i] = pack.defs[key].name
 		records[key] = uint16(i)
 	}
 	for _, placed := range req.Features {
-		key := featuredef.Key(placed.Name)
-		f := allowed[key]
-		for z := placed.Z; z < placed.Z+f.FootprintZ; z++ {
-			for x := placed.X; x < placed.X+f.FootprintX; x++ {
+		key := featureKey(placed.Name)
+		f := pack.defs[key]
+		for z := placed.Z; z < placed.Z+f.footprintZ; z++ {
+			for x := placed.X; x < placed.X+f.footprintX; x++ {
 				if cells[z*w+x] != 0xFFFF {
 					return nil, nil, fmt.Errorf("feature %q at (%d,%d) overlaps another footprint at cell (%d,%d)", placed.Name, placed.X, placed.Z, x, z)
 				}

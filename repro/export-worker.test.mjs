@@ -63,8 +63,17 @@ test('the worker exports the same bytes as the native exporter, and leaves only 
   // A 2x2 map: (2*32+2)*16 by (2*32+8)*16 px, in 512 px chunks; grit off the palette (nearest colors) and repeated ground (shared tiles).
   const width = 66 * 16, height = 72 * 16, metadata = {name: 'Worker Test', description: 'shim', world: 'green', unitsX: 2, unitsY: 2, seaLevel: 75,
     heights: Array.from({length: 66 * 72}, (_, i) => 40 + (i * 7) % 90), settings: world.climate, starts: [{x: 100, z: 200}, {x: 900, z: 700}],
-    features: [{name: 'TestRock', x: 4, z: 6}, {name: 'TestTree', x: 20, z: 30}, {name: 'TestRock', x: 40, z: 9}]};
-  const features = {world: 'green', planet: world.planet, features: [{name: 'TestRock', footprintX: 2, footprintZ: 2}, {name: 'TestTree', footprintX: 1, footprintZ: 1}]};
+    features: [{name: 'TFtestRock', x: 4, z: 6}, {name: 'TFtestTree', x: 20, z: 30}, {name: 'TFtestRock', x: 40, z: 9}]};
+  // A feature pack as sculpt-features.js writes one: a rock, a tree that burns to a scar, and the scar (export/featurepack.go).
+  const frame = (w, h, x, y, duration = 10, index = 90) => ({width: w, height: h, x, y, duration, pixels: Buffer.alloc(w * h, index).toString('base64'), opaque: Buffer.from(Array.from({length: w * h}, (_, i) => i % 7 ? 1 : 0)).toString('base64')});
+  const common = name => [['filename', 'tftest'], ['featuredead', name], ['featurereclamate', name]];
+  const features = {prefix: 'TFtest', defs: [
+    {name: 'TFtestRock', keys: [['description', 'Rock'], ['footprintx', '2'], ['footprintz', '2'], ['height', '15'], ['seqname', 'tftestrock'], ['seqnameshad', 'tftestrocks'], ['metal', '50'], ['damage', '2000'], ['reclaimable', '1'], ['blocking', '1'], ...common('TFtestScar')]},
+    {name: 'TFtestTree', keys: [['description', 'Tree'], ['footprintx', '1'], ['footprintz', '1'], ['height', '40'], ['seqname', 'tftesttree'], ['seqnameburn', 'tftestburn'], ['energy', '250'], ['flamable', '1'], ['featureburnt', 'TFtestScar'], ['burnweapon', 'TreeBurn'], ...common('TFtestScar')]},
+    {name: 'TFtestScar', keys: [['description', 'Scar'], ['footprintx', '1'], ['footprintz', '1'], ['seqname', 'tftestscar'], ['animtrans', '1'], ...common('TFtestScar')]},
+    {name: 'TFtestUnused', keys: [['footprintx', '1'], ['footprintz', '1'], ['filename', 'tftest'], ['seqname', 'tftestscar']]}],
+  sequences: [{name: 'tftestrock', frames: [frame(30, 24, 15, 16)]}, {name: 'tftestrocks', frames: [frame(20, 10, 2, 4, 10, 47)]}, {name: 'tftesttree', frames: [frame(40, 60, 20, 58, 10, 42)]},
+    {name: 'tftestburn', frames: Array.from({length: 6}, (_, i) => frame(40, 60 + i, 20, 58 + i, 2, 200 + i))}, {name: 'tftestscar', frames: [frame(20, 16, 10, 8, 10, 63)]}]};
   const pixel = (x, y) => { const c = palette[96 + ((x >> 6) + (y >> 6)) % 24]; return (x * 31 + y * 17) % 11 ? c : c.map(v => Math.min(255, v + 3)); };
   const chunks = [];
   for (let y = 0; y < height; y += 512) for (let x = 0; x < width; x += 512) {
@@ -72,7 +81,7 @@ test('the worker exports the same bytes as the native exporter, and leaves only 
     writeFileSync(path, bytes); chunks.push({x, y, width: Math.min(512, width - x), height: Math.min(512, height - y), bytes, path});
   }
   // Native: the command line, as the tools run it.
-  mkdirSync(join(work, 'features', 'green'), {recursive: true}); writeFileSync(join(work, 'features', 'green', 'catalog.json'), JSON.stringify(features));
+  mkdirSync(join(work, 'features'), {recursive: true}); writeFileSync(join(work, 'features', 'pack.json'), JSON.stringify(features));
   writeFileSync(join(work, 'catalog.json'), JSON.stringify(catalog)); writeFileSync(join(work, 'manifest.json'), JSON.stringify({...metadata, chunks: chunks.map(({x, y, path}) => ({x, y, path}))}));
   const native = JSON.parse(execFileSync(nativePath, ['--catalog-file', join(work, 'catalog.json'), '--input', join(work, 'manifest.json'), '--out', join(work, 'out'), '--features-root', join(work, 'features')], {encoding: 'utf8'}));
   // The page's: the worker, fed as sculpt-export.js feeds it, with the tile store's budget at 0 so every tile spills to the stand-in OPFS.

@@ -12,8 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-
-	"github.com/nanolathe-gg/terraform/mapdata"
 )
 
 const maxChunkSide = 4096
@@ -141,7 +139,8 @@ type terrainStream struct {
 	heights        []byte
 	features       []uint16
 	names          []string
-	indices        []uint32 // per tile slot: the distinct tile's number in order of discovery, until finish renumbers it
+	pack           *packedFeatures // the map's generated features, written beside its OTA and TNT
+	indices        []uint32        // per tile slot: the distinct tile's number in order of discovery, until finish renumbers it
 	covered        []uint64
 	received       int
 	lastX, lastY   int
@@ -162,7 +161,7 @@ type terrainStream struct {
 	stageID        string
 }
 
-func newTerrainStream(ctx context.Context, req exportRequest, catalog catalog, out, work string, tileBudget int, allowed map[string]mapdata.Feature) (*terrainStream, error) {
+func newTerrainStream(ctx context.Context, req exportRequest, catalog catalog, out, work string, tileBudget int, pack *packedFeatures) (*terrainStream, error) {
 	world, err := validateRequest(req, catalog)
 	if err != nil {
 		return nil, err
@@ -171,7 +170,7 @@ func newTerrainStream(ctx context.Context, req exportRequest, catalog catalog, o
 	if err != nil {
 		return nil, err
 	}
-	names, features, err := encodeFeatures(req, allowed)
+	names, features, err := encodeFeatures(req, pack)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +186,7 @@ func newTerrainStream(ctx context.Context, req exportRequest, catalog catalog, o
 		}
 	}
 	req.Heights, req.Chunks = nil, nil
-	s := &terrainStream{ctx: ctx, req: req, world: world, starts: starts, width: w, height: h, heights: heights, features: features, names: names,
+	s := &terrainStream{ctx: ctx, req: req, world: world, starts: starts, width: w, height: h, heights: heights, features: features, names: names, pack: pack,
 		indices: make([]uint32, (w/2)*(h/2)), covered: make([]uint64, ((w/2)*(h/2)+63)/64), hashes: make(map[[32]byte][]uint32), tileLimit: maxTiles,
 		store: tileStore{budget: tileBudget, dir: work}, quantize: newQuantizer(catalog.Palette), palette: catalog.Palette,
 		out: out, work: work, begin: time.Now(), lastX: -1, lastY: -1}
@@ -352,8 +351,8 @@ func (s *terrainStream) measure(paths ...string) {
 	}
 }
 
-func runStream(ctx context.Context, req exportRequest, catalog catalog, out, work string, budget int, allowed map[string]mapdata.Feature) error {
-	s, err := newTerrainStream(ctx, req, catalog, out, work, budget, allowed)
+func runStream(ctx context.Context, req exportRequest, catalog catalog, out, work string, budget int, pack *packedFeatures) error {
+	s, err := newTerrainStream(ctx, req, catalog, out, work, budget, pack)
 	if err != nil {
 		return err
 	}
