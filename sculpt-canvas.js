@@ -486,7 +486,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();markCoarse(change?.rect??null);if(!api.gpuFeedActive?.())invalidate(change);});
   function setBusy(on){busy=on;api.setBusy(on);$('weathered-view').disabled=on;find('[data-gpu]').disabled=on;find('[data-heap]').disabled=on;if(!on){if(resizePending)resize();else schedule();}}
   features=await mountMapFeatures({config,canvas:overlay,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();schedule();},schedule,enabled:()=>api.ready()&&!busy,
-    light:()=>renderer.sun,groundColor:()=>renderer.means?.ground,deselectShapes:()=>{if(api.selection()>=0)api.select?.(-1);}});api.registerFeatures?.(features);
+    light:()=>renderer.worldSun,groundColor:()=>renderer.means?.ground,deselectShapes:()=>{if(api.selection()>=0)api.select?.(-1);}});api.registerFeatures?.(features);
   metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??epoch,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
   // H12: the least the terrain budget must hold besides the fields: the canvases, the bake lattice reserve and one 32 px chunk with the materials.
   // H13: what the paged fields must leave free: the canvas, one canonical chunk's whole working set (every mask layer the world has) and its copy.
