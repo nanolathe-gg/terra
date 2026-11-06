@@ -123,6 +123,7 @@ struct Uniforms {
     shallowLayer: i32,
     groundLayer: i32,      // H14b: the generated layer that is the plain's quilted image, or -1 (the plain is the sampled image or the tiles)
     groundTiles: i32,
+    tileShift: f32,        // the export's TNT tile grid starts this many screen rows down: floor(base height / 2), the TA projection's offset (sculpt-chunk-renderer.js requiredRegion)
     sandGrain: f32,
     // Bake (relief-bake.wgsl).
     reliefScale: f32,     // wavelength of the first octave, world px

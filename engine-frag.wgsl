@@ -231,13 +231,15 @@ fn weatheredCover(cover: f32, deposits: vec4f, grain: vec4f) -> f32 {
 // tile grid, so level ground costs only uGroundTiles unique tiles. The tiles
 // are measured offline from retail neighbour statistics (the table's `ground` data) and
 // drawn into the first row of the ground texture at startup.
+// The grid is the export's: its rows start tileShift screen rows down (TA's projection offset), so a tile of the plain is one TNT tile
+// (16 on a bare Green map, where a grid on the screen's rows cut every TNT tile across two of them and made 256).
 fn groundHash(q: vec3i) -> f32 {
     var n = u32(q.x) * 374761393u + u32(q.y) * 668265263u + u32(q.z) * 2246822519u;
     n = (n ^ (n >> 13u)) * 1274126177u;
     return f32(n ^ (n >> 16u)) / 4294967295.0;
 }
 fn groundTile(world: vec2f) -> vec3f {
-    let pixel = grainPixel(world);
+    let pixel = grainPixel(world - vec2f(0.0, u.tileShift));
     let cell = vec2i(floor(pixel / 32.0));
     let local = vec2i(glslMod(floor(pixel), 32.0));
     let tile = min(i32(groundHash(vec3i(cell, 7)) * f32(u.groundTiles)), 15);

@@ -1005,6 +1005,7 @@ export class TerrainRenderer {
     this.i('uGroundBorrowed', this.groundSource() !== this.ownGround);
     this.i('uGroundLayer', this.materialData ? this.materialData.order.indexOf('quilt') : -1);   // H14b: a table's quilted plain is the layer after the others
     this.i('uGroundTiles', variant.has('groundTiles') ? Number(variant.get('groundTiles')) : 16);
+    this.f('uTileShift', Math.floor(this.config.baseHeight / 2));   // the export's tile grid in screen rows (TA's projection offset; requiredRegion's shift)
     this.f('uCrispShore', variant.has('crispShore') ? Number(variant.get('crispShore')) : 1.0);
     this.f('uBankRock', variant.has('bankRock') ? Number(variant.get('bankRock')) : 0.25);
     this.f('uWaterSoft', variant.has('waterSoft') ? Number(variant.get('waterSoft')) : 32);
