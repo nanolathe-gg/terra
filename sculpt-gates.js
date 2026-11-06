@@ -28,12 +28,13 @@ export function extractGates(source, fields) {
   return {source: text + '\n' + [...gates.keys()].map(id => `override ${id}: bool;`).join('\n') + '\n', gates};
 }
 
-// The gates' values for the uniform data now: the constants a pipeline is built with.
+// The gates' values for the uniform data now: the constants a pipeline is built with. They are 1 and 0, not true and false: a pipeline's
+// `constants` are numbers (GPUPipelineConstantValue is a double); Chrome converts a boolean, Dawn's Node binding refuses one.
 export function gateValues(gates, view) {
   const out = {};
   for (const g of gates.values()) {
     const value = g.kind === 'i' ? view.getInt32(g.offset, true) : view.getFloat32(g.offset, true);
-    out[g.id] = COMPARE[g.op](value, g.constant);
+    out[g.id] = COMPARE[g.op](value, g.constant) ? 1 : 0;
   }
   return out;
 }

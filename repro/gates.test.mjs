@@ -24,13 +24,13 @@ test('per-chunk uniforms, GPU-written flags, arrays and arithmetic on the right 
  assert.equal(gates.size,0);
  assert.equal(source.split('\n').slice(0,4).join('\n'),src);
 });
-test('gate values follow the uniform data, and the key follows the values',()=>{
+test('gate values (1 or 0: pipeline constants are numbers) follow the uniform data, and the key follows the values',()=>{
  const {gates}=extractGates('if (u.layered != 0) {}\nif (u.rillDepth <= 0.0) {}',fields);
  const view=new DataView(new ArrayBuffer(64));
  let v=gateValues(gates,view);
- assert.deepEqual(v,{gate_layered_ne_0:false,gate_rillDepth_le_0p0:true});
+ assert.deepEqual(v,{gate_layered_ne_0:0,gate_rillDepth_le_0p0:1});
  view.setInt32(0,1,true);view.setFloat32(4,0.25,true);
  v=gateValues(gates,view);
- assert.deepEqual(v,{gate_layered_ne_0:true,gate_rillDepth_le_0p0:false});
+ assert.deepEqual(v,{gate_layered_ne_0:1,gate_rillDepth_le_0p0:0});
  assert.equal(gateKey(v,['gate_layered_ne_0','gate_rillDepth_le_0p0']),'10');
 });
