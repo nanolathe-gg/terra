@@ -13,19 +13,21 @@
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export const RIVER_MIN_WIDTH = 32;          // px: narrower and the channel is not orthogonally connected on the 16-px height grid (measured at 18 px: not connected)
-export const RIVER_STEPS_PER_WANDER = 4;    // Wander 0..120 is 0..480 migration steps (the bends reach the band at about 100)
 export const RIVER_SPAN = 6;                // the section's half width over the channel's half width: the floodplain, levees and valley walls reach this far
 export const BRAIDED_SPAN = 22;             // and for a braided bed (half the bed is 4.8 widths = 9.6 half widths, over a level floor to 11; Width sizes its bars)
-export const RIVER_BELT = 2;                // the most a bend can grow, in channel widths from the drawn line (a whole bend stops from .6 of it to .97)...
-export const RIVER_BELT_PX = 256;           // ...and in px, so a wide river's bends stay a band the artist can predict
+export const RIVER_BELT = 4;                // the most a river may stray from the drawn line, in channel widths: Wander (px) is the band, up to this
 export const RIVER_FREEZE = 4;              // widths either side of a point in which the farthest point stands for its bend: a bend stops as one
-export const riverBelt = W => Math.min(RIVER_BELT * W, RIVER_BELT_PX);
+// A river's band: how far, in px, its channel may stray from the drawn line (a whole bend stops from .6 of it to .97). Wander is that reach, as a
+// landform's Wander is how far its outline wanders, at most RIVER_BELT channel widths.
+export const riverBand = (wander, W) => clamp(Number(wander) || 0, 0, RIVER_BELT * Math.max(RIVER_MIN_WIDTH, W));
+// The migration steps that fill a band (the steps are not the unit any more): 150 a channel width of band, from 80, at most 700 (measured: the bends
+// nearly stop growing there at 32 and 48 px; a 4-width band reaches 3.5 widths).
+export const riverSteps = (band, W) => band > 0 ? Math.round(Math.min(700, 80 + 150 * band / Math.max(RIVER_MIN_WIDTH, W))) : 0;
 export const RIVER_MAX_POINTS = 600;        // a drawn line longer than this many half-widths is thinned by the width, not by the cap
 export const isBraided = q => q?.curve?.form === 'lfBraided';
 export const isRiver = q => q?.curve?.form === 'lfRiver' || isBraided(q);
 export const riverSpan = q => isBraided(q) ? BRAIDED_SPAN : RIVER_SPAN;
 export const riverWidth = q => Math.max(RIVER_MIN_WIDTH, 2 * (q?.radius || 0));
-export const riverSteps = wander => Math.round(clamp(Number(wander) || 0, 0, 120) * RIVER_STEPS_PER_WANDER);
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -69,9 +71,13 @@ function nearest(line, x, y) {
 }
 
 // Migrate a drawn line. `points` are {x, y}; returns {path, oxbows, drawn} with points as {x, y} and each oxbow {points, age} (age 0 for the last cutoff, 1 for the
-// first). bounds {w, h} keeps the river on the map. Fewer than two distinct points, or zero steps, return the drawn line resampled (no migration).
-export function migrateRiver(points, {width = RIVER_MIN_WIDTH, steps = 0, seed = 1, bounds = null, rate = 0.6, WOB = 0.8, smooth = 0.05, lag = 1} = {}) {
-  const W = Math.max(RIVER_MIN_WIDTH, width), BELT = riverBelt(W);
+// first). band is how far in px the channel may stray (riverBand), steps by default enough to fill it (riverSteps); bounds {w, h} keeps the river on the map.
+// reseed: each step the seeded wobble nudges the line again a little (that share of a width), so bends keep starting at the upstream end as the first ones
+// travel downstream (without it the first third of a long straight line stayed nearly straight). Fewer than two distinct points, or no band, return the drawn
+// line resampled (no migration).
+export function migrateRiver(points, {width = RIVER_MIN_WIDTH, band = 0, steps, seed = 1, bounds = null, rate = 0.6, WOB = 0.8, smooth = 0.05, lag = 1, reseed = 0.004} = {}) {
+  const W = Math.max(RIVER_MIN_WIDTH, width), BELT = riverBand(band, W);
+  steps ??= riverSteps(BELT, W);
   let ds = W * 0.5;
   let total = 0;
   for (let i = 1; i < points.length; i++) total += len(points[i - 1].x, points[i - 1].y, points[i].x, points[i].y);
@@ -81,7 +87,7 @@ export function migrateRiver(points, {width = RIVER_MIN_WIDTH, steps = 0, seed =
   const r = rng(seed), drawn = resample(raw, ds);
   const count = Math.max(0, Math.min(Math.round(steps), 1000));
   const xy = a => a.map(p => ({x: p[0], y: p[1]}));
-  if (!count) return {path: xy(drawn), oxbows: [], drawn: xy(drawn), steps: 0};   // Wander 0 keeps the line as drawn
+  if (!count || BELT <= 0) return {path: xy(drawn), oxbows: [], drawn: xy(drawn), steps: 0};   // Wander 0 keeps the line as drawn
   let pts = drawn.map(p => p.slice());
   // A straight line has no curvature to grow from: a seeded wobble starts the bends, off the line by up to about a width, in two waves whose lengths the seed
   // picks (8 to 13 widths and 4 to 6.5; the second .25 to .75 of the first), so no two rivers bend alike. It fades to nothing over the first and last two widths,
@@ -93,7 +99,7 @@ export function migrateRiver(points, {width = RIVER_MIN_WIDTH, steps = 0, seed =
   for (let i = 1; i < pts.length; i++) { arc += len(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]); arcs.push(arc); }
   for (let i = 1; i < pts.length - 1; i++) {
     const a = pts[i - 1], b = pts[i + 1], tl = len(a[0], a[1], b[0], b[1]) || 1, e = Math.min(arcs[i], arc - arcs[i]) / (2 * W), fade = e >= 1 ? 1 : e * e * (3 - 2 * e);
-    const off = fade * W * WOB * (tri(arcs[i] / (w0 * W) + ph1) + a1 * tri(arcs[i] / (w1 * W) + ph2));
+    const off = fade * Math.min(W * WOB, 0.5 * BELT) * (tri(arcs[i] / (w0 * W) + ph1) + a1 * tri(arcs[i] / (w1 * W) + ph2));   // inside half the band
     pts[i][0] += -(b[1] - a[1]) / tl * off; pts[i][1] += (b[0] - a[0]) / tl * off;
   }
   const oxbows = [], belt2 = BELT * BELT, decay = (lag * W) / (lag * W + ds), scale = W / 18, reach = Math.max(1, Math.round(RIVER_FREEZE * W / ds));
@@ -132,6 +138,11 @@ export function migrateRiver(points, {width = RIVER_MIN_WIDTH, steps = 0, seed =
       const f = far / BELT, g = f <= 0.6 ? 0 : f >= 0.97 ? 1 : (f - 0.6) / 0.37;
       still[i] = 1 - g * g * (3 - 2 * g);
       next[i][0] += mvx[i] * still[i]; next[i][1] += mvy[i] * still[i];
+      if (reseed) {
+        const tx = pts[i + 1][0] - pts[i - 1][0], ty = pts[i + 1][1] - pts[i - 1][1], tl = Math.sqrt(tx * tx + ty * ty) || 1, e = Math.min(along[i], along[n - 1] - along[i]) / (5 * W), anchor = e >= 1 ? 1 : e * e * (3 - 2 * e);
+        const w = reseed * W * still[i] * anchor * (tri(along[i] / (w0 * W) + ph1) + a1 * tri(along[i] / (w1 * W) + ph2));
+        next[i][0] += -ty / tl * w; next[i][1] += tx / tl * w;
+      }
     }
     for (let i = 1; i < n - 1; i++) {   // bank stiffness: no kinks
       next[i][0] += smooth * still[i] * (pts[i - 1][0] + pts[i + 1][0] - 2 * pts[i][0]);
@@ -165,10 +176,10 @@ export const pointsSignature = points => { let s = 0; for (let i = 0; i < points
 export function applyRiver(node, bounds) {
   const q = node.params, rv = q?.river;
   if (!isRiver(q) || !rv?.drawn?.length) return false;
-  const width = riverWidth(q), steps = riverSteps(q.wander), key = [Math.round(width * 8), steps, node.seed >>> 0].join('|');
+  const width = riverWidth(q), band = riverBand(q.wander, width), key = [Math.round(width * 8), Math.round(band * 8), node.seed >>> 0].join('|');
   if (rv.key === key && rv.sig === pointsSignature(node.points)) return false;
   if (rv.sig !== undefined && rv.sig !== pointsSignature(node.points)) return false;   // edited by hand since: the stored path stays as it is
-  const m = migrateRiver(rv.drawn, {width, steps, seed: node.seed >>> 0, bounds});
+  const m = migrateRiver(rv.drawn, {width, band, seed: node.seed >>> 0, bounds});
   const points = [...m.path], paths = [m.path.map((_, i) => i)];
   for (const o of m.oxbows) { paths.push(o.points.map((_, i) => points.length + i)); points.push(...o.points); }
   node.points = points;

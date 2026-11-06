@@ -345,7 +345,7 @@ export function prepareNode(n, geom, c) {
     // H27: the elevation and how it combines, the two half widths, the along curve's table, and the variation (px in the shape's own frame: wander scales with it).
     const sd = landformSides({...q, radius});
     Object.assign(main.u, {elev: landformElevation(q, c.sea), combine: clamp(Math.round(q.combine || 0), 0, 2), lfFront: sd.front, lfBack: sd.back, alongBase: put(sampleKnots(alongKnots(q))),
-      lfRiver: isRiver(q) ? riverWidth(q) : 0, lfBraid: isBraided(q) ? 1 : 0, lfWander: isRiver(q) ? 0 : Math.max(0, q.wander || 0) * frameScale,   // a river's Wander is its migration steps (sculpt-river.js), not an outline noise
+      lfRiver: isRiver(q) ? riverWidth(q) : 0, lfBraid: isBraided(q) ? 1 : 0, lfWander: isRiver(q) ? 0 : Math.max(0, q.wander || 0) * frameScale,   // a river's Wander is the band its migration may fill (sculpt-river.js), not an outline noise
       lfWidth: Math.max(0, q.widthVary || 0), lfHeight: Math.max(0, q.heightVary || 0), lfSize: Math.max(8, q.varySize || 0),
       lfFoot: q.varyFoot ?? 1, lfMid: q.varyMiddle ?? 1, lfTaper: clamp(q.crestTaper || 0, 0, 1), lfRoute: clamp(q.routeSmooth || 0, 0, 1),
       // P1 Gullies: 100% is the research lab's depth (.45 per wavelength per unit slope); the first wavelength is a share of the wider side (world px, as the

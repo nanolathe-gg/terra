@@ -5,14 +5,14 @@
 // turned 15 degrees, wavelength twice their median spacing, amplitude the median farthest point of a half bend from its chord), the oxbows a river leaves and
 // the JS time per stroke. Retail (river_retail.py's table, courses that do not turn through a junction): sin8 1.03 to 1.20 (median 1.12), off8 0.4 to 1.6
 // widths, bends 2.4 to 6 widths long and .1 to .6 widths high.
-//   node measure/river_band.mjs [--width 48] [--wander 80,...] [--checkout DIR]     (DIR: another checkout's sculpt-river.js, e.g. main's, for a before)
+//   node measure/river_band.mjs [--width 48] [--wander 0,24,...,192] [--checkout DIR]     (DIR: another checkout's sculpt-river.js, e.g. main's, for a before)
 import {pathToFileURL} from 'node:url';
 import {resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const args = process.argv.slice(2), opt = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
 const checkout = resolve(opt('--checkout', resolve(dirname(fileURLToPath(import.meta.url)), '..')));
 const R = await import(pathToFileURL(checkout + '/sculpt-river.js').href);
-const width = Number(opt('--width', 48)), wanders = opt('--wander', '0,20,40,60,80,100,120').split(',').map(Number), W = Math.max(R.RIVER_MIN_WIDTH, width);
+const width = Number(opt("--width", 48)), wanders = opt("--wander", "0,24,48,72,96,120,144,168,192").split(",").map(Number), W = Math.max(R.RIVER_MIN_WIDTH, width);
 export const PATHS = {
   straight: Array.from({length: 12}, (_, i) => ({x: 200 + i * 150, y: 1088})),
   gentle: Array.from({length: 23}, (_, i) => { const t = i / 22; return {x: 200 + 1650 * t, y: 1188 - 400 * t * (1 - t)}; }),
@@ -58,12 +58,15 @@ function stats(path) {
   return out;
 }
 const f = (v, d = 2) => v === null || v === undefined ? '  -  ' : v.toFixed(d);
-console.log(`checkout ${checkout}, width ${width} px (channel ${W}), band ${R.riverBelt ? R.riverBelt(W) : (R.RIVER_BELT || 8) * W} px`);
+// Wander is the band in px here (sculpt-river.js riverBand); an older checkout (main before riverfix, where Wander was steps in 4s and the belt 8 widths) is run its own way.
+const run = (pts, wander, seed) => R.riverBand ? R.migrateRiver(pts, {width: W, band: R.riverBand(wander, W), seed, bounds: {w: 2080, h: 2176}})
+  : R.migrateRiver(pts, {width: W, steps: R.riverSteps(wander), seed, bounds: {w: 2080, h: 2176}});
+console.log(`checkout ${checkout}, width ${width} px (channel ${W})`);
 console.log('wander path      far med/max W  length  sin4   sin8   off8 W  bend wl W  amp W  oxbows  ms/stroke');
 for (const wander of wanders) for (const [name, pts] of Object.entries(PATHS)) {
   const far = [], grow = [], st = [], ox = [], ms = [];
   for (let k = 0; k < 24; k++) {
-    const t0 = performance.now(), m = R.migrateRiver(pts, {width: W, steps: R.riverSteps(wander), seed: (2701 + k * 7919) >>> 0, bounds: {w: 2080, h: 2176}});
+    const t0 = performance.now(), m = run(pts, wander, (2701 + k * 7919) >>> 0);
     ms.push(performance.now() - t0);
     far.push(Math.max(...m.path.map(p => near(m.drawn, p))) / W); grow.push(length(m.path) / length(m.drawn)); ox.push(m.oxbows.length); st.push(stats(m.path));
   }
