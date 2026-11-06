@@ -184,9 +184,11 @@ const ROCK_SHADOW_COLORS = [[47, 78], [95, 20], [245, 2]];
 const TREE_DEFAULTS = {
   species: 'broadleaf',  // 'broadleaf' or 'conifer'
   height: 68,            // px, broadleaf 66-71, conifer 57-64
-  width: 0.64,           // width / height, broadleaf 0.68-0.73, conifer 0.44-0.62
+  width: 0.68,           // width / height, broadleaf 0.68-0.73, conifer 0.44-0.62
   crown: 0.6,            // 0 smooth egg .. 1 deeply lobed and ragged
   density: 0.45,         // 0 sparse and holey .. 1 solid
+  taper: 0.5,            // broadleaf crown: 0 round top .. 1 narrow toward the top (retail Green 0.5; a biome knob)
+  peaks: 0.5,            // broadleaf crown: 0 smooth top .. 1 irregular peaks along the top (retail Green 0.5)
   lean: 0,               // -1 olive, 0 retail, +1 lush
   energy: [250, 250],    // gameplay range (retail: 250 for every tree)
 };
@@ -205,7 +207,7 @@ function treeFrame(P, seed, ctx) {
   const bump = !conifer && r() < 0.4, bumpX = (r() - 0.5) * 0.5;
   const tiers = conifer ? 5 + Math.floor(r() * 3) : 0, tierPh = r() * TAU;
   const s1 = (r() * 1e6) | 0, s2 = (r() * 1e6) | 0, s3 = (r() * 1e6) | 0, s4 = (r() * 1e6) | 0;
-  const crown = P.crown, dens = P.density;
+  const crown = P.crown, dens = P.density, taperV = clamp(P.taper + (r() - 0.5) * 0.3, 0, 1), peaksV = clamp(P.peaks + (r() - 0.5) * 0.3, 0, 1);
   const prof = tt => {
     tt = clamp(tt, 0, 1);
     if (conifer) {
@@ -213,11 +215,12 @@ function treeFrame(P, seed, ctx) {
       p *= 1 + 0.1 * Math.sin(tiers * TAU * tt + tierPh) * Math.min(1, tt * 3);
       return p;
     }
-    if (tt < tp) { const s = tt / tp; return Math.pow(Math.max(0, 1 - Math.pow(1 - s, 2.3)), 0.5); }
+    const narrow = 1 - taperV * 0.55 * Math.pow(1 - tt, 1.5);     // thinner toward the top
+    if (tt < tp) { const s = tt / tp; return Math.pow(Math.max(0, 1 - Math.pow(1 - s, 2.3 - 0.6 * taperV)), 0.5) * narrow; }
     const s = (tt - tp) / (1 - tp);
     let p = 1 - 0.3 * Math.pow(s, 1.5);
     if (s > 0.7) p *= Math.sqrt(Math.max(0, 1 - Math.pow((s - 0.7) / 0.3, 2.2)));
-    return p;
+    return p * narrow;
   };
   const mask = new Uint8Array(w * h);
   const nl = (x, y) => fbm(x / 7.5, y / 7.5, s1, 2) * 2 - 1;
@@ -229,7 +232,7 @@ function treeFrame(P, seed, ctx) {
     const ttv = tt + (conifer ? 0.012 : 0.04) * crown * lob;
     let pr = prof(ttv);
     if (bump && !conifer) pr += 0.22 * Math.exp(-Math.pow((x - cx) / Wh - bumpX, 2) * 12) * Math.exp(-Math.pow(tt / 0.1, 2));
-    const lim = pr * (1 + crown * (conifer ? 0.15 : 0.27) * lob) + crown * (conifer ? 0.12 : 0.17) * rag * (0.35 + 0.65 * Math.min(1, tt * 4));
+    const lim = pr * (1 + crown * (conifer ? 0.15 : 0.27) * lob) + crown * (conifer ? 0.12 : 0.17) * rag * (0.35 + 0.65 * Math.min(1, tt * 4)) + (conifer ? 0 : peaksV * 0.6 * Math.pow(clamp(vnoise(x / 3.1, y / 2.6, s1 + 13) - 0.5, 0, 1) * 2, 1.2) * (1 - clamp(tt / 0.5, 0, 1)));   // irregular peaks along the top
     if (u < lim && lim > 0.02) mask[y * w + x] = 1;
   }
   // trunk stub
@@ -270,10 +273,11 @@ function treeFrame(P, seed, ctx) {
   if (!conifer) {
     const inside = [];
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (mask[y * w + x] === 1 && dist[y * w + x] >= 2) inside.push([x, y]);
-    const quad = () => weighted(r, [[0, 0.56], [1, 0.2], [2, 0.21], [3, 0.03]]);
-    for (let tries = 0; clumpList.length < Math.round(P.clumps ?? 72) && tries < 20000 && inside.length; tries++) {
-      const [x, y] = inside[(r() * inside.length) | 0], q = quad();
-      if ((x < cx ? 0 : 1) + (y < ycen ? 0 : 2) !== q) continue;
+    // bright pixels follow the light: a bunch can only sit where the crown's surface faces the sun (lit lobes and sun-facing rims)
+    const lamAt = (x, y) => { const zx = zf(x + 1, y) - zf(x - 1, y), zy = zf(x, y + 1) - zf(x, y - 1), nn = Math.hypot(zx, zy, 2); return (-zx / nn) * L.v[0] + (-zy / nn) * L.v[1] + (2 / nn) * L.v[2]; };
+    for (let tries = 0; clumpList.length < Math.round(P.clumps ?? 72) && tries < 40000 && inside.length; tries++) {
+      const [x, y] = inside[(r() * inside.length) | 0];
+      if (r() > Math.pow(clamp((lamAt(x, y) - 0.55) * 2.6, 0, 1), 1.3)) continue;
       if (clumpList.some(c => Math.hypot(c.x - x, c.y - y) < 3.5)) continue;
       clumpList.push({ x, y, rad: 1.2 + r() * 1.3, str: 4 + r() * 2.5 });
     }
@@ -299,7 +303,7 @@ function treeFrame(P, seed, ctx) {
     if (tt > 0.78) lev -= ((tt - 0.78) / 0.22) * (conifer ? 2.2 : 4.4);
     const white = (rn() + rn() - 1), cell = vnoise(x / (1.9 + needleX * 0.35), y / 1.9, s1 + 31) * 2 - 1;
     let nz = (conifer ? 0.8 : 0.62) * white * 1.4 + (conifer ? 0.2 : 0.38) * cell * 1.5;
-    if (!conifer && rn() < 0.1) nz += (rn() < 0.5 ? -1 : 1) * 2.2;       // sparkle
+    if (!conifer && rn() < 0.1) nz += (lam > 0.66 ? 1 : lam < 0.52 ? -1 : 0) * 2.2;       // sparkle follows the light: bright on sun-facing leaves, dark in gaps
     lev += sigma * nz;
     const zone = zoneN(x, y);
     let col;
@@ -795,7 +799,7 @@ function pickValue(range, sizeFrac, r) {
 export const DEFAULTS = { tree: TREE_DEFAULTS, burnt: BURNT_DEFAULTS, shrub: SHRUB_DEFAULTS, rock: ROCK_DEFAULTS, scar: SCAR_DEFAULTS };
 // Artist-facing controls per kind: [key, min, max, default, what it changes]
 export const CONTROLS = {
-  tree: [['species', 'broadleaf|conifer', null, 'broadleaf', 'leafy crown or narrow conifer'], ['height', 55, 72, 68, 'size in px (broadleaf 66-71, conifer 57-64 in retail)'], ['width', 0.42, 0.74, 0.7, 'width over height'], ['crown', 0, 1, 0.6, 'smooth to lobed, ragged silhouette'], ['density', 0, 1, 0.6, 'solid to holey and sparse'], ['lean', -1, 1, 0, 'olive and yellow, to lush and bright'], ['energy', '[lo,hi]', null, '[250,250]', 'gameplay energy range; tracks height inside the range']],
+  tree: [['species', 'broadleaf|conifer', null, 'broadleaf', 'leafy crown or narrow conifer'], ['height', 55, 72, 68, 'size in px (broadleaf 66-71, conifer 57-64 in retail)'], ['width', 0.42, 0.74, 0.7, 'width over height'], ['crown', 0, 1, 0.6, 'smooth to lobed, ragged silhouette'], ['density', 0, 1, 0.6, 'solid to holey and sparse'], ['taper', 0, 1, 0.5, 'broadleaf crown: round top to narrowing toward the top (biome knob)'], ['peaks', 0, 1, 0.5, 'broadleaf crown: smooth top to irregular peaks (biome knob)'], ['lean', -1, 1, 0, 'olive and yellow, to lush and bright'], ['energy', '[lo,hi]', null, '[250,250]', 'gameplay energy range; tracks height inside the range']],
   burnt: [['height', 50, 66, 58, 'size in px'], ['width', 0.4, 0.75, 0.55, 'width over height'], ['forks', 2, 5, 3, 'branch forks off the trunk'], ['ash', 0, 1, 0.5, 'amount of pale ash pixels']],
   shrub: [['width', 20, 36, 29, 'width in px'], ['height', 14, 28, 22, 'height in px'], ['density', 0, 1, 0.5, 'sparse scatter to full clump'], ['lean', -1, 1, 0, 'brightness of the leaf highlights']],
   rock: [['cells', '1x1|2x2|3x2|3x3|4x3', null, '2x2', 'footprint class, sets the pixel size and the metal'], ['size', 0.7, 1.15, 1, 'scale inside the class'], ['angular', 0, 1, 0.6, 'round boulder to faceted block']],
