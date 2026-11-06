@@ -376,14 +376,14 @@ function burntFrame(P, seed, ctx) {
   const yFork = ay - Math.round(H * 0.52);
   for (let y = ay; y >= yFork; y--) {
     const t = (ay - y) / (ay - yFork), flare = y >= ay - 3 ? (y === ay ? 3 : 12 - (ay - y) * 0.7) : 0;
-    const wd = Math.max(flare, lerp(7.5, 10.5, t) * (0.9 + 0.2 * vnoise(y / 4, 1, s1 + 4)) + (y > ay - 6 ? 1.5 : 0));
+    const wd = Math.max(flare, lerp(12, 7.2, t) * (0.9 + 0.2 * vnoise(y / 4, 1, s1 + 4)) + (y > ay - 6 ? 1.5 : 0));
     const xc = ax + wob(y) * (1 - 0.4 * (1 - t));
     for (let x = Math.floor(xc - wd / 2 - 1); x <= Math.ceil(xc + wd / 2 + 1); x++) { const edge = Math.abs(x - xc) - wd / 2 + (vnoise(x / 1.8, y / 1.8, s1 + 9) - 0.5) * 2.2; if (edge <= 0) mask[y * w + x] = 1; }
   }
   const xFork = ax + wob(yFork);
   // Round 4 (compared with Tree1-3Dead): few thick limbs that kink and splay sideways before turning up, one heavier side, no even crown of
   // upright twigs. A main limb continues the trunk; 2-3 side limbs leave nearly horizontally; short stubs; forks only near the ends.
-  const nL = clamp(Math.round(P.forks), 2, 4), tips = [];
+  const nL = clamp(Math.round(P.forks) + 1, 3, 5), tips = [];
   const limb = (x, y, ang, len, wd, depth) => {
     let left = len;
     while (left > 0) {
@@ -399,11 +399,11 @@ function burntFrame(P, seed, ctx) {
     stamp(x, y - 1, 1);
   };
   const lean = (r() - 0.5) * 0.7;
-  limb(xFork, yFork + 1, lean, (yFork - y0) * 1.02, 3.8, 0);                           // the main limb carries on up
+  limb(xFork, yFork + 1, lean, (yFork - y0) * 1.02, 3.0, 0);                           // the main limb carries on up
   const side = r() < 0.5 ? -1 : 1;
   for (let i = 0; i < nL; i++) {
     const sd = i % 2 ? -side : side, yS = yFork + 3 - Math.round(r() * 6) - i * 3;
-    limb(xFork + sd * 2, yS, sd * (1.0 + r() * 0.5), 12 + r() * 12 + (sd === side ? 4 : 0), 2.8 + r() * 1.0, 1);
+    limb(xFork + sd * 2, yS, sd * (1.0 + r() * 0.5), 12 + r() * 12 + (sd === side ? 4 : 0), 2.1 + r() * 0.8, 1);
   }
   for (let k = 0; k < 2 + Math.round(r() * 2); k++) { const yy = ay - 8 - Math.round(r() * (ay - yFork)), sd = r() < 0.5 ? -1 : 1; for (let t = 0; t < 4; t++) stamp(xFork + sd * (5 + t), yy - Math.floor(t / 2), 1.5); }   // stubs on the trunk
   for (let k = 0; k < Math.round(4 + 6 * P.ash); k++) {          // broken twig bits near the tips
@@ -465,7 +465,7 @@ function shrubFrame(P, seed, ctx) {
       const under = !has(x, y + 1), upper = !has(x, y - 1);
       let c;
       if (under) c = rn() < 0.36 ? 173 : weighted(rn, [[165, 4], [167, 3], [164, 2], [169, 1], [168, 1]]);        // the darker underside
-      else if (upper) c = weighted(rn, [[163, 22 * hi], [164, 11], [165, 34], [162, 2 * hi], [167, 7], [166, 2]]);   // lit yellow-green top
+      else if (upper) c = weighted(rn, [[163, 28 * hi], [164, 12], [165, 34], [162, 3 * hi], [167, 6], [166, 2]]);   // lit yellow-green top
       else c = weighted(rn, [[165, 34], [167, 10], [164, 8], [163, 8], [166, 3], [168, 2], [173, 4]]);
       put(sp, x, y, c);
     }
