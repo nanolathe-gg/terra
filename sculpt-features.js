@@ -55,7 +55,7 @@ export function featureRegionBounds(region,cols,rows,radius) {
 export async function mountMapFeatures(api) {
   const {config,canvas}=api,map=config.map,doc=canvas.ownerDocument,$=id => doc.getElementById(id);
   const nothing=() => {};
-  if (!map) return {serialize:() => ({features:[],featureSet:{},starts:[],fill:{...DEFAULT_FILL}}),load:nothing,draw:nothing,deactivate:nothing,activate:() => false,clearSelection:nothing,pointerSelect:() => false,hitAt:() => null,groundJob:() => null,groundReady:nothing,groundChanged:nothing,stats:() => ({imageBytes:0}),get selectionCount(){return 0;},get active(){return false;},get busy(){return false;}};
+  if (!map) return {serialize:() => ({features:[],featureSet:{},starts:[],fill:{...DEFAULT_FILL}}),load:nothing,draw:nothing,deactivate:nothing,activate:() => false,clearSelection:nothing,pointerSelect:() => false,hitAt:() => null,fitGround:async () => false,groundChanged:nothing,stats:() => ({imageBytes:0}),get selectionCount(){return 0;},get active(){return false;},get busy(){return false;}};
   const cols=map.playRight/CELL,rows=map.playBottom/CELL,shift=Math.floor(config.baseHeight/2),kinds=worldKinds(config);
   const defaults=() => { const mx=map.unitsX===1?128:256,mz=map.unitsY===1?128:256; return [{x:mx,z:mz},{x:map.playRight-mx,z:map.playBottom-mz}]; };
   let set=defaultSet(config),placements=[],starts=defaults(),fill={...DEFAULT_FILL},generated=new Set(),mode='',placeKind='deposit',placeVariant=-1,selectedStart=0,rolls=0;
@@ -140,8 +140,8 @@ export async function mountMapFeatures(api) {
     for (const [k,e] of sprites) if (!keep.has(k)) { sprites.delete(k); release(e); }
     const live=new Set(placements.filter(p => GROUND_KINDS.includes(p.kind)).map(key)),origins=new Set();
     for (const [k,s] of stamps) if (!live.has(k)) { stamps.delete(k); release(s); }
-    for (const p of placements) if (GROUND_KINDS.includes(p.kind)) { const o=groundOrigin(p); origins.add(o.ox+','+o.oy); }
-    for (const k of grounds.keys()) if (!origins.has(k)) grounds.delete(k);
+    for (const p of placements) if (GROUND_KINDS.includes(p.kind)) { const o=exactOrigin(p); if (o) origins.add(o.ox+','+o.oy); }
+    for (const [k,g] of grounds) if (!origins.has(k) && !g.pending) grounds.delete(k);
     for (const kind of GROUND_KINDS) for (const v of variantList(kind)) keep.add('ground|'+kind+'|'+v.seed+'|'+JSON.stringify(kind==='deposit'?{...v.params,metal:set.deposit.metal}:v.params));
     for (const k of thumbs.keys()) if (!keep.has(k)) thumbs.delete(k);
   }
@@ -156,58 +156,75 @@ export async function mountMapFeatures(api) {
   const viewPoint=p => { const a=anchor(p); return {x:a.x,y:Math.floor(a.y+config.baseHeight/2)}; };
   function project(p) { const h=api.sample(p.x,p.z); return {x:p.x,z:p.z-Math.floor(clamp(Number.isFinite(h)?h:0,0,255)/2)+config.baseHeight/2}; }
 
-  // ---- deposits and vents: painted into a 128 px patch of the export art centred on the anchor ----
+  // ---- deposits and vents: painted into a 128 px patch of the export art centred on the anchor. The anchor is the export's: the
+  // anchor cell's four corner bytes as the TNT carries them (sculpt-canvas.js reads them as the export samples them); the view's own
+  // height stands in until they are read. Each patch is clean export art, so overlapping halos paint as the export paints them. ----
   const grounds=new Map(),stamps=new Map(),thumbs=new Map();let groundGen=0;
-  function groundOrigin(p) { const a=anchor(p); return {ox:a.x-PATCH/2,oy:a.y-PATCH/2}; }
+  const originOf=(p,corners) => { const [fw,fz]=footprint(p),sum=corners[0]+corners[1]+corners[2]+corners[3]; return {ox:p.x*CELL+fw*8-PATCH/2,oy:p.z*CELL+fz*8-(sum>>3)-PATCH/2}; };
+  const exactOrigin=p => { const s=stamps.get(key(p)); return s?.exact && !s.exactStale?s.exact:null; };
+  function groundOrigin(p) { const exact=exactOrigin(p); if (exact) return exact; const a=anchor(p); return {ox:a.x-PATCH/2,oy:a.y-PATCH/2}; }
   function flatGround() {
     const c=(api.groundColor?.()||[.21,.36,.1]).map(v => Math.round(clamp(v,0,1)*255)),rgba=new Uint8ClampedArray(PATCH*PATCH*4);
     for (let i=0;i<PATCH*PATCH;i++) { rgba[i*4]=c[0]; rgba[i*4+1]=c[1]; rgba[i*4+2]=c[2]; }
     return rgba;   // alpha 0: the painter marks what it writes
   }
+  // A patch of export art (the part inside the map; the rest stays the world's mean ground, never written back), alpha 0.
+  function patchOf(origin,rect,data) {
+    const rgba=flatGround();
+    for (let row=0;row<rect.height;row++) rgba.set(data.subarray(row*rect.width*4,(row+1)*rect.width*4),((rect.y-origin.oy+row)*PATCH+rect.x-origin.ox)*4);
+    for (let i=3;i<rgba.length;i+=4) rgba[i]=0;
+    return rgba;
+  }
+  const patchRect=o => { const x=Math.max(0,o.ox),y=Math.max(0,o.oy),x1=Math.min(map.width,o.ox+PATCH),y1=Math.min(map.height,o.oy+PATCH); return x1>x && y1>y?{x,y,width:x1-x,height:y1-y}:null; };
   const paintParams=p => p.kind==='deposit'?{...variantOf(p).params,metal:p.metal}:variantOf(p).params;
+  const paint=(p,rgba) => { const v=variantOf(p); return work({type:'paint',kind:p.kind,params:paintParams(p),seed:v.seed,w:PATCH,h:PATCH,cx:PATCH/2,cy:PATCH/2,rgba},[rgba.buffer]).then(r => r.rgba); };
   function stampFor(p) {
-    const {ox,oy}=groundOrigin(p),gk=ox+','+oy,v=variantOf(p),params=paintParams(p),pk=key(p);
-    let g=grounds.get(gk); if (!g) { g={ox,oy,rgba:null,gen:0,stale:true,pending:false,failed:false,input:null}; grounds.set(gk,g); }
-    let s=stamps.get(pk); if (!s) { s={bitmap:null,want:'',painting:''}; stamps.set(pk,s); }
-    const want=v.seed+'|'+JSON.stringify(params)+'|'+gk+'|'+(g.rgba?g.gen:0);
+    const pk=key(p);
+    let s=stamps.get(pk); if (!s) { s={bitmap:null,want:'',painting:'',exact:null,exactStale:true}; stamps.set(pk,s); }
+    const exact=exactOrigin(p),gk=exact?exact.ox+','+exact.oy:'';
+    let g=exact?grounds.get(gk):null;
+    if (exact && !g) { g={ox:exact.ox,oy:exact.oy,rgba:null,gen:0,stale:true,pending:false,failed:false,input:null}; grounds.set(gk,g); }
+    const want=variantOf(p).seed+'|'+JSON.stringify(paintParams(p))+'|'+(g?.rgba?gk+'|'+g.gen:'flat');
     if (s.want!==want && s.painting!==want) {
-      s.painting=want; const rgba=g.rgba?g.rgba.slice():flatGround();
-      work({type:'paint',kind:p.kind,params,seed:v.seed,w:PATCH,h:PATCH,cx:PATCH/2,cy:PATCH/2,rgba},[rgba.buffer]).then(async r => {
+      s.painting=want;
+      paint(p,g?.rgba?g.rgba.slice():flatGround()).then(async rgba => {
         if (s.painting!==want) return;
-        const bitmap=await createImageBitmap(new ImageData(r.rgba,PATCH,PATCH));
+        const bitmap=await createImageBitmap(new ImageData(rgba,PATCH,PATCH));
         if (s.painting!==want) { bitmap.close(); return; }
         s.bitmap?.close?.(); Object.assign(s,{bitmap,want,painting:''}); api.schedule();
       },err => { s.painting=''; status('A deposit or vent could not be painted: '+err.message); });
     }
     return s;
   }
-  // The next patch of export art to read for a deposit or vent, the visible ones first (sculpt-canvas.js bakes it when the view is idle).
-  function groundJob(view=null) {
-    // A patch whose deposit or vent has since moved (or whose ground rose while the weather came in) is never read.
-    const live=new Set(placements.filter(p => GROUND_KINDS.includes(p.kind)).map(p => { const o=groundOrigin(p); return o.ox+','+o.oy; }));
+  // One step of fitting the shown deposits and vents to the export, when the view is idle (sculpt-canvas.js): read an anchor's
+  // corner bytes, or bake a patch of export art under one. Visible ones first. True when it did something.
+  async function fitGround(view=null) {
+    const seen=p => !view || intersects({x:p.x*CELL-64,y:p.z*CELL-160,width:PATCH+64,height:PATCH+224},view);
+    const shown=placements.filter(p => GROUND_KINDS.includes(p.kind) && stamps.has(key(p))).sort((a,b) => seen(b)-seen(a));
+    for (const p of shown) {
+      const s=stamps.get(key(p)); if (s.exact && !s.exactStale) continue;
+      s.exactStale=false; const corners=await api.exportCorners?.(p.x,p.z);
+      if (!corners) { s.exactStale=true; return Boolean(api.exportCorners); }
+      if (stamps.get(key(p))===s) { s.exact=originOf(p,corners); api.schedule(); }
+      return true;
+    }
+    const live=new Set(shown.map(exactOrigin).filter(Boolean).map(o => o.ox+','+o.oy));
     for (const [gk,g] of grounds) if (!live.has(gk) && !g.pending) grounds.delete(gk);
     let best=null;
-    for (const [gk,g] of grounds) {
-      if (!g.stale || g.pending || g.failed) continue;
-      const seen=!view || intersects({x:g.ox,y:g.oy+shift,width:PATCH,height:PATCH},view);
-      if (!best || seen && !best.seen) best={gk,g,seen};
-      if (seen) break;
-    }
-    if (!best) return null;
-    const {gk,g}=best,x=Math.max(0,g.ox),y=Math.max(0,g.oy),x1=Math.min(map.width,g.ox+PATCH),y1=Math.min(map.height,g.oy+PATCH);
-    if (x1<=x || y1<=y) { g.rgba=flatGround(); g.gen=++groundGen; g.stale=false; return groundJob(view); }
-    g.pending=true; return {key:gk,rect:{x,y,width:x1-x,height:y1-y}};
+    for (const g of grounds.values()) { if (!g.stale || g.pending || g.failed) continue; const visible=!view || intersects({x:g.ox,y:g.oy+shift,width:PATCH,height:PATCH},view); if (!best || visible && !best.visible) best={g,visible}; }
+    if (!best || !api.bakeArt) return false;
+    const g=best.g,rect=patchRect(g);
+    if (!rect) { Object.assign(g,{rgba:flatGround(),gen:++groundGen,stale:false}); return true; }
+    g.pending=true;
+    try { const r=await api.bakeArt(rect); if (r) Object.assign(g,{rgba:patchOf(g,rect,r.data),gen:++groundGen,stale:false,input:r.input}); api.schedule(); }
+    catch (err) { if (err.name!=='AbortError') { console.error(err); g.failed=true; } }
+    finally { g.pending=false; }
+    return true;
   }
-  function groundReady(job,data,input) {
-    const g=grounds.get(job.key); if (!g) return;
-    g.pending=false;
-    if (!data) { g.failed=input==='failed'; return; }
-    const rgba=flatGround();
-    for (let row=0;row<job.rect.height;row++) rgba.set(data.subarray(row*job.rect.width*4,(row+1)*job.rect.width*4),((job.rect.y-g.oy+row)*PATCH+job.rect.x-g.ox)*4);
-    for (let i=3;i<rgba.length;i+=4) rgba[i]=0;
-    Object.assign(g,{rgba,gen:++groundGen,stale:false,input}); api.schedule();
+  function groundChanged(rect) {
+    for (const g of grounds.values()) if (!rect || !g.input || intersects(rect,g.input)) { g.stale=true; g.failed=false; }
+    for (const p of placements) { if (!GROUND_KINDS.includes(p.kind)) continue; const s=stamps.get(key(p)),[fw,fz]=footprint(p); if (s && (!rect || intersects(rect,{x:p.x*CELL-CELL,y:p.z*CELL-CELL,width:(fw+2)*CELL,height:(fz+2)*CELL}))) s.exactStale=true; }
   }
-  function groundChanged(rect) { for (const g of grounds.values()) if (!rect || !g.input || intersects(rect,g.input)) { g.stale=true; g.failed=false; } }
 
   // ---- the panel (sculpt.html #map-features-panel) ----
   const unavailable=['tree','shrub','rock','scar'].filter(k => !kinds.includes(k));
@@ -415,7 +432,7 @@ export async function mountMapFeatures(api) {
     if (!movable(dx,dz)) { status('That move would leave the play area or overlap a feature.'); return false; }
     // Old keys go first, so a feature moving onto a cell another one leaves keeps its own fill mark and painted stamp.
     const carried=[...selection].map(p => { const before=key(p),entry={p,fill:generated.delete(before),stamp:stamps.get(before)}; stamps.delete(before); return entry; });
-    for (const {p,fill:wasFill,stamp} of carried) { p.x+=dx; p.z+=dz; if (wasFill) generated.add(key(p)); if (stamp) stamps.set(key(p),stamp); }
+    for (const {p,fill:wasFill,stamp} of carried) { p.x+=dx; p.z+=dz; if (wasFill) generated.add(key(p)); if (stamp) { stamp.exactStale=true; stamps.set(key(p),stamp); } }
     changed(`Moved ${selection.size} ${selection.size===1?'feature':'features'} ${Math.abs(dx)+Math.abs(dz)===1?'one cell':'by '+dx+', '+dz+' cells'}.`); return true;
   }
   function addStart(x,z) {
@@ -682,7 +699,7 @@ export async function mountMapFeatures(api) {
     // Deposits and vents are ground: under every sprite, in row order (as the export paints them).
     for (const {p,source} of shown) {
       if (!GROUND_KINDS.includes(p.kind)) continue;
-      const s=stampFor(source),o=groundOrigin(p);
+      const s=stampFor(source),o=groundOrigin(p);   // a dragged copy has no anchor read yet: the view's height places it
       if (s.bitmap) ink.drawImage(s.bitmap,o.ox,o.oy+shift);
       else outline(p,'#b8eef3',[3,3]);
     }
@@ -720,7 +737,7 @@ export async function mountMapFeatures(api) {
     const frame=() => new Promise(resolve => requestAnimationFrame(resolve));
     api.schedule(); await frame(); await frame();   // a draw asks for what the view shows
     for (let i=0;i<600;i++) {
-      const waiting=jobs.size || [...grounds.values()].some(g => g.stale && !g.failed) || [...stamps.values()].some(s => s.painting);
+      const waiting=jobs.size || [...grounds.values()].some(g => g.stale && !g.failed) || [...stamps.values()].some(s => s.painting || !s.exact || s.exactStale);
       if (!waiting) return true;
       await new Promise(resolve => setTimeout(resolve,50));
     }
@@ -729,8 +746,9 @@ export async function mountMapFeatures(api) {
 
   status(kinds.length>2?'Features ready.':'This world has generated deposits and vents only.'); update();
   return {serialize,load,draw,deactivate,activate,addFeature,removeFeature,removeSelected,rerollSelected,setSelectedMetal,moveSelected,changeSet,addStart,moveStart,removeStart,setFill,fillRegion,
-    pointerSelect,hitAt,clearSelection,viewPoint:index => placements[index]?viewPoint(placements[index]):null,selected:() => [...selection].map(p => placements.indexOf(p)).sort((a,b) => a-b),select:list => { selection=new Set(list.map(i => placements[i]).filter(Boolean)); selectionChanged(); },groundJob,groundReady,groundChanged,settled,
+    pointerSelect,hitAt,clearSelection,fitGround,viewPoint:index => placements[index]?viewPoint(placements[index]):null,selected:() => [...selection].map(p => placements.indexOf(p)).sort((a,b) => a-b),select:list => { selection=new Set(list.map(i => placements[i]).filter(Boolean)); selectionChanged(); },groundChanged,settled,
     stats:() => ({imageBytes:[...sprites.values()].reduce((n,e) => n+(e.body?e.body.w*e.body.h*4:0)+(e.shadow?e.shadow.w*e.shadow.h*4:0),0)+[...stamps.values()].filter(s => s.bitmap).length*PATCH*PATCH*4,
       sprites:sprites.size,stamps:stamps.size,grounds:{fitted:[...grounds.values()].filter(g => g.rgba && !g.stale).length,waiting:[...grounds.values()].filter(g => g.stale && !g.failed).length,failed:[...grounds.values()].filter(g => g.failed).length}}),
+    anchors:() => placements.filter(p => GROUND_KINDS.includes(p.kind)).map(p => ({kind:p.kind,x:p.x,z:p.z,origin:exactOrigin(p)})),
     get placements(){return placements.map(p => ({...p}));},get selectionCount(){return selection.size;},get hint(){return $('feature-help').textContent;},get active(){return Boolean(mode);},get busy(){return Boolean(gesture);},get status(){return message;}};
 }
