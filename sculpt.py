@@ -70,6 +70,8 @@ KNOB_DEFAULTS = dict(
     # Landform (card H27): the crest's height (fixed or sea-relative) and how it combines (0 raise to, 1 cut to, 2 flatten to); the variation along and
     # across the path (wander px, width as a share, height in units, the wavelength px, and the weights at the foot and from the middle up of the section).
     heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, talus=0, surf=0, varySize=140, varyFoot=1, varyMiddle=1,
+    # lfcrater: a landform's impact features (sculpt-scene.js CRATER_KEYS), off by default: ejecta round it and secondaries beyond them.
+    ejecta=0, secondaries=0,
     # Painted masks (card C5): the Paint brush's first choice.
     paintChannel=1,
     # Water looks (card E1). The two stroke options are 0 (the world's own),

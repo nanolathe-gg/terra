@@ -57,7 +57,8 @@ if (args.includes('--recheck')) {
 }
 const SURFACE = [['relief', 0, 160], ['transition-detail', 0, 100], ['mineral-ring', 0, 100], ['ring-spread', 0, 100], ['ring-variation', 0, 100], ['material-weathering', 0, 100], ['deposit-spread', 0, 100]];
 // The stroke kinds that carry SHAPE_FIELDS rows, drawn one each on a grid of the 1024 px window.
-const KIND_AT = {crater: [630, 500], crystal: [880, 500], fissure: [130, 830], erase: [380, 830], paint: [630, 830], landform: [880, 830]};
+// lfcrater: the Crater button draws a landform, so the old crater kind has no stroke here; its rows go with it.
+const KIND_AT = {crystal: [880, 500], fissure: [130, 830], erase: [380, 830], paint: [630, 830], landform: [880, 830]};
 // The retired tools' strokes as the landforms the shape buttons draw (sea-relative, about as tall above this map's plain as the old fixtures' Rise).
 const PLATEAU = (pts, rise, card = {}) => ['landform', pts, {card: {heightReference: 1, elevation: 24 + rise, wander: 40, widthVary: 30, ...card}}];
 const RIDGE = (pts, rise, card = {}) => ['landform', pts, {card: {heightReference: 1, elevation: 24 + rise, lean: 100, wander: 8, widthVary: 0, ...card}, curve: {form: 'lfMountain'}}];

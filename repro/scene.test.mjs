@@ -10,13 +10,16 @@ const config = {biomeId: 'green', baseHeight: 99, seaLevel: 75, size: 2336, worl
   defaults: {undulation: 10, undulationScale: 200, undulationCover: .45, lean: 0}, material: {surfaceRelief: 1.12, materialWeathering: 0}};
 
 test('a scene is the ground undulation, then one node per stroke with its seed', () => {
-  const nodes = sceneNodes(config, [['hill', [[100, 100], [300, 120]], {card: {diameter: 240}}], ['crater', [[500, 500]], {}]], {settings: pageSettings(config)});
-  assert.deepEqual(nodes.map(n => n.kind), ['ground', 'landform', 'crater']);
+  const nodes = sceneNodes(config, [['hill', [[100, 100], [300, 120]], {card: {diameter: 240}}], ['fissure', [[500, 500]], {}]], {settings: pageSettings(config)});
+  assert.deepEqual(nodes.map(n => n.kind), ['ground', 'landform', 'fissure']);
   assert.equal(nodes[0].seed, DEFAULT_SEED ^ 0x9e37);
   assert.deepEqual(nodes.slice(1).map(n => n.seed), [DEFAULT_SEED, (DEFAULT_SEED + 7919) >>> 0]);
   assert.equal(nodes[1].params.radius, 120);
   assert.equal(strokeKind('hill'), 'landform');
-  assert.deepEqual(sceneNodes(config, [['crater', [[0, 0]], {}]], {ground: false}).map(n => n.kind), ['crater']);
+  assert.deepEqual(sceneNodes(config, [['fissure', [[0, 0]], {}]], {ground: false}).map(n => n.kind), ['fissure']);
+  // lfcrater: the Crater button draws a landform from its preset (a signed section dug into the ground).
+  assert.equal(strokeKind('crater'), 'landform');
+  assert.equal(sceneNodes(config, [['crater', [[0, 0]], {}]], {ground: false})[0].params.heightReference, 2);
   assert.deepEqual(sceneNodes(config, [['hill', [[1, 2]], {}]]), sceneNodes(config, [['hill', [[1, 2]], {}]]), 'the same strokes give the same nodes');
 });
 
