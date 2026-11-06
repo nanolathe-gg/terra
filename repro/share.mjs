@@ -95,6 +95,11 @@ await session(async ({send, ev, shot, open}) => {
   await shot('2-unknown-link');
   await open(link);
   { const now = await sketchJson(ev); check('shared map is the same', nodesOf(now) === nodesOf(sharedJson), differs(sharedJson, now)); }
+  // Sharing the loaded map again gives the same link (close the popover that opened itself, then open it).
+  await ev(`document.getElementById('share-link').click(); true`); await sleep(300);
+  await ev(`document.getElementById('share-result').hidden=true; document.getElementById('share-url').value=''; document.getElementById('share-link').click(); true`);
+  for (let i = 0; i < 100 && !await ev(`document.getElementById('share-url').value`); i++) await sleep(200);
+  check('share, open, share again: same link', await ev(`document.getElementById('share-url').value`) === link, await ev(`document.getElementById('share-url').value`));
   check('map= dropped from the address', !(await ev('location.search')).includes('map='));
   check('previous map offered', await ev(`!document.getElementById('share-previous').hidden`));
   await shot('3-opened-shared');
@@ -103,6 +108,32 @@ await session(async ({send, ev, shot, open}) => {
   await shot('4-restored');
   // A reload keeps the visitor's edits: nothing re-opens the shared map.
   await open(page); check('reload keeps the restored map', nodesOf(await sketchJson(ev)) === nodesOf(ownJson));
+});
+// A link to another world: the page navigates and reloads, and the popover opens itself with the restore offer.
+let redLink = '';
+await session(async ({send, ev, shot, open}) => {
+  await open(page + (page.includes('?') ? '&' : '?') + 'biome=red&mapX=4&mapY=4');
+  await stroke(send, ev, 'mountain', 650, 700);
+  await ev(`document.getElementById('share-link').click(); true`);
+  for (let i = 0; i < 100 && !await ev(`document.getElementById('share-url').value`); i++) await sleep(200);
+  redLink = await ev(`document.getElementById('share-url').value`);
+});
+await session(async ({send, ev, shot, open}) => {
+  await open(page + (page.includes('?') ? '&' : '?') + 'mapX=4&mapY=4');
+  await stroke(send, ev, 'hill', 600, 800);
+  const own = await sketchJson(ev); await sleep(1200);
+  await open(redLink);
+  for (let i = 0; i < 100 && !await ev(`document.getElementById('share-menu').open`); i++) await sleep(200);
+  check('world switch: world changed', await ev('sculptRegion.sketch().biome') === 'red');
+  check('world switch: popover opened itself with the offer', await ev(`document.getElementById('share-menu').open && !document.getElementById('share-previous').hidden && /Opened a shared map/.test(document.getElementById('share-message').textContent)`));
+  check('world switch: no map= or shared= left in the address', !/[?&](map|shared)=/.test(await ev('location.search')), await ev('location.search'));
+  await shot('5-world-switch');
+  await ev(`document.getElementById('share-restore').click(); true`);
+  for (let i = 0; i < 100 && await ev('window.sculptRegion?.sketch().biome').catch(() => 'red') !== 'green'; i++) await sleep(300);
+  for (let i = 0; i < 100 && !await ev(`window.sculptRegion?.ready?.() && !document.getElementById('editor').disabled`).catch(() => false); i++) await sleep(300);
+  await sleep(1500);
+  check('restore across worlds: own map back', nodesOf(await sketchJson(ev)) === nodesOf(own), differs(own, await sketchJson(ev)));
+  check('restore across worlds: slot cleared, no lingering button', await ev(`localStorage.getItem('terraform-previous-map-v1')===null`));
 });
 check('console clean', logs.filter(l => !/favicon|404/.test(l)).length === 0, logs.join(' | ').slice(0, 300));
 if (tokenFile && link) {

@@ -1482,6 +1482,7 @@ async function takePendingSketch(token) {
     return data?.format==='nanolathe-sketch-handoff' && data.token===token?data.sketch:null;
   } catch (_) { return null; }
 }
+let leavingForWorld=false,openingShared=false;   // set while a load hands the map to another world's page; the second marks a shared map
 async function loadSketchFile(s,commit=true) {
   if(!s || s.format!=='nanolathe-terrain-sculpt' || ![4,5,6].includes(s.version) || !Array.isArray(s.nodes) || s.nodes.some(n=>!n || n.kind==='raster'))throw new Error('Load a map stroke graph.');
   const biome=typeof s?.biome==='string'?s.biome:'';
@@ -1501,7 +1502,8 @@ async function loadSketchFile(s,commit=true) {
     try { await stashPendingSketch(token,s); }
     catch (err) { error('The saved terrain could not be carried to '+biome+': '+err.message); return false; }
     status(`Opening ${biome} for the saved terrain…`);
-    goToWorld(biome,null,{pendingSketch:token,variant,mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
+    leavingForWorld=true;
+    goToWorld(biome,null,{pendingSketch:token,variant,shared:openingShared?1:'',mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
     return false;
   }
   loadSketch(s); if(commit)checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather();return true;
@@ -1631,10 +1633,17 @@ $('share-restore').addEventListener('click',async () => {
   try {
     const previous=JSON.parse(text);
     dropPrevious(localStorage);
-    if (await loadSketchFile(previous)) { showPrevious(); shareMessage('Your previous map is back.'); }
+    leavingForWorld=false;
+    const done=await loadSketchFile(previous);
+    if (done) { showPrevious(); shareMessage('Your previous map is back.'); }
+    else if (!leavingForWorld) keepPrevious(localStorage,text);   // the load failed: the slot stays
   } catch (err) { keepPrevious(localStorage,text); error(err.message); }
   finally { loading=false; $('editor').disabled=false; updateControls(); }
 });
+function announceShared() {
+  status('Opened a shared map.'); shareMessage('Opened a shared map.'); showPrevious();
+  if (!$('share-previous').hidden) { shareOpenedByLoad=true; $('share-menu').open=true; }
+}
 // Called once the editor is ready: a ?map=<id> address opens that shared map.
 async function openSharedMap() {
   const id=mapIdFromSearch(location.search); if (id===null || experiment.has('pendingSketch')) return;
@@ -1645,11 +1654,11 @@ async function openSharedMap() {
     status('Opening the shared map…');
     const shared=await getMap(service.url,id);
     if (nodes.some(n => n.kind!=='ground')) keepPrevious(localStorage,JSON.stringify(workingCopy()));   // the visitor's own map, before it is replaced
-    if (await loadSketchFile(shared)) {
+    openingShared=true; leavingForWorld=false;
+    const opened=await loadSketchFile(shared); openingShared=false;
+    if (opened) {
       window.history.replaceState(null,'',withoutMap(location.href));
-      status('Opened a shared map.'); shareMessage('Opened a shared map.'); showPrevious();
-      if (!$('share-previous').hidden) { shareOpenedByLoad=true; $('share-menu').open=true; }
-      persistLater();
+      announceShared(); persistLater();
     }
   } catch (err) { error(err.message); }
   finally { loading=false; $('editor').disabled=false; updateControls(); }
@@ -1996,7 +2005,7 @@ async function bootMap() {
   ready=true; $('editor').disabled=false; $('world-editor').disabled=false;
   history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
   const pending=await takePendingSketch(experiment.get('pendingSketch'));
-  if (pending) { try { loadSketch(pending); checkpoint(); status('Loaded the saved map.'); } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
+  if (pending) { try { loadSketch(pending); checkpoint(); status('Loaded the saved map.'); if (experiment.get('shared')) { window.history.replaceState(null,'',(u => (u.searchParams.delete('shared'),u.toString()))(new URL(location.href))); announceShared(); } } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
   updateControls(); resize(); schedule(); queueWeather();
   $('one').click();   // every page load starts at 1x, centered on the map
