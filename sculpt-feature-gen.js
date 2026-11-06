@@ -858,7 +858,7 @@ const STONE_CLASSES = [
 ];
 const MOSS_WEIGHTS = [[170, 18], [168, 7], [61, 8.5], [169, 6.5], [238, 6.5], [60, 6], [73, 4.7], [172, 4], [62, 4.5], [175, 4], [173, 3], [90, 3], [167, 2.2]];
 // Retail stone is fine grain, not flat facets: dark to light ramp, each pixel drawn from a tone with a +-1.6 index jitter (34-37 colors per chunk)
-const STONE_RAMP = [219, 117, 89, 116, 88, 87, 148, 115, 147, 131, 217, 114, 130, 145, 224, 216, 255];
+const STONE_RAMP = [219, 117, 89, 116, 88, 87, 148, 115, 147, 131, 217, 114, 130, 145, 224, 216, 224];
 // Stone pixels track metal as retail's four deposits do (spec 16.1): 86 -> 198, 127 -> 564, 187 -> 806, 223 -> 886, linear between.
 const STONE_BY_METAL = [[86, 198], [127, 564], [187, 806], [223, 886]];
 export function stonePixelsFor(metal) {
@@ -875,7 +875,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const r = rng(seed), rn = rng(mix32(seed, 2));
   const mt = clamp((P.metal - 86) / (223 - 86), 0, 1);
   const look = P.look === 'auto' ? (P.metal >= 160 ? 'cluster' : 'plates') : P.look;
-  const total = stonePixelsFor(P.metal) * (0.95 + 0.1 * r()) * (look === 'cluster' ? 0.78 : 1);
+  const total = stonePixelsFor(P.metal) * (0.95 + 0.1 * r()) * (look === 'cluster' ? 0.98 : 1);
   const dom = look === 'cluster' ? clamp(lerp(0.66, 0.86, mt) + (r() - 0.5) * 0.05, 0.62, 0.88) : clamp(0.54 + (r() - 0.5) * 0.06, 0.5, 0.6);
   const small = [0, 0, 0].map(() => 0.5 + r()), ss = small.reduce((a, b) => a + b, 0);
   const areas = [total * dom, ...small.map(v => Math.max(15, total * (1 - dom) * v / ss))];
@@ -899,8 +899,9 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const rDom = Math.sqrt(areas[0] / Math.PI / 0.85);
   for (let i = 0; i < 3; i++) { const a = r() * TAU + i * 2.1, d = rDom * (look === 'cluster' ? 0.95 : 0.7) + 7 + r() * 6; layout.push([Math.cos(a) * d, Math.sin(a) * d * 0.9]); }
   for (let ci = 0; ci < 4; ci++) {
-    const px = cx + layout[ci][0], py = cy + layout[ci][1];
+    let px = cx + layout[ci][0], py = cy + layout[ci][1];
     let pts;
+    for (let attempt = 0; attempt < 9; attempt++) {
     if (ci === 0 && look === 'cluster') {                // ragged cluster of 2-4 touching facets (solidity about 0.6)
       const k = 3 + (r() < 0.5 ? 1 : 0), per = areas[0] / (k * 0.75), rad = Math.sqrt(per / Math.PI), parts = [];
       let ang = r() * TAU;
@@ -915,9 +916,13 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
       }
       pts = union([pts, arms]);
     } else pts = sized(px, py, areas[ci], 4 + Math.floor(r() * 2), 1 + r() * (ci === 0 ? 0.5 : 0.9), r() * TAU);
+    // plates stay distinct stones: at least 3 px of moss between them
+    if (ci === 0 || look === 'cluster' || !pts.some(p => chunks.some(c => c.some(q => Math.abs(q[0] - p[0]) < 4 && Math.abs(q[1] - p[1]) < 4)))) break;
+    const ang = Math.atan2(layout[ci][1], layout[ci][0]); px += Math.cos(ang) * 2.5; py += Math.sin(ang) * 2.5;
+    }
     { const set = new Set(pts.map(p => p[1] * 4096 + p[0])), out = [];
-      for (const p of pts) { const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => set.has((p[1] + dy) * 4096 + p[0] + dx)).length; if ((nb === 4 && !(look === 'cluster' && r() < 0.1)) || (nb < 4 && r() > 0.3)) out.push(p); }
-      for (const p of pts) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const k = (p[1] + dy) * 4096 + p[0] + dx; if (!set.has(k) && r() < 0.07) { set.add(k); out.push([p[0] + dx, p[1] + dy]); } }
+      for (const p of pts) { const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => set.has((p[1] + dy) * 4096 + p[0] + dx)).length; if ((nb === 4 && !(look === 'cluster' && r() < 0.2)) || (nb < 4 && r() > 0.14)) out.push(p); }
+      for (const p of pts) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const k = (p[1] + dy) * 4096 + p[0] + dx; if (!set.has(k) && r() < 0.03) { set.add(k); out.push([p[0] + dx, p[1] + dy]); } }
       pts = out; }
     chunks.push(pts);
     const nf = ci === 0 ? 2 + Math.floor(r() * 3) : 2, seeds = [];
@@ -927,7 +932,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
       const bx = x - ox, by = y - oy; if (bx < 0 || by < 0 || bx >= bw || by >= bh) continue;
       let b = 0, bd = 1e9; seeds.forEach((sd, i) => { const d = Math.hypot(sd.x - x, sd.y - y) + (vnoise(x / 2.5, y / 2.5, seed + ci * 7 + i) - 0.5) * 3; if (d < bd) { bd = d; b = i; } });
       chunkId[by * bw + bx] = ci;
-      const base = [0.73, 0.46, 0.16][seeds[b].cls] + (vnoise(x / 2.2, y / 2.2, seed + 40 + ci) - 0.5) * 0.45, tone = clamp(base + (rn() - 0.5) * 0.3, 0, 1);
+      const base = [0.8, 0.52, 0.2][seeds[b].cls] + (vnoise(x / 2.2, y / 2.2, seed + 40 + ci) - 0.5) * 0.45, tone = clamp(base + (rn() - 0.5) * 0.3, 0, 1);
       setGround(ground, x, y, palette[STONE_RAMP[clamp(Math.round(tone * (STONE_RAMP.length - 1) + (rn() + rn() - 1) * 1.6), 0, STONE_RAMP.length - 1)]]);
     }
   }
