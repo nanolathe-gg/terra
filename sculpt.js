@@ -1557,6 +1557,7 @@ $('draw-new').onclick=()=>{if(stroke||moving||loading)return;const n=nodes[selec
 $('draw-add').onclick=()=>{if(stroke||moving||loading||!nodes[selected]?.points||nodes[selected].hidden)return;drawMode='add';pathEditing=false;pathAdding=false;pathPoint=-1;updateControls();schedule();};
 for(const [id,value] of [['rotate-left',-Math.PI/12],['rotate-right',Math.PI/12],['scale-down',1/1.1],['scale-up',1.1]])$(id).onclick=()=>changeSelected(n=>transformNode(n,nodeState(n),about(nodePivot(n),id.startsWith('rotate')?rotation(value):scaling(value))));
 document.addEventListener('terraform-feature-mode',()=>updateControls());
+document.addEventListener('terraform-status',event=>status(event.detail));
 $('tool-style').addEventListener('change',() => {
   const preset=$('tool-style').value;if(!Object.hasOwn(TOOL_PRESETS,preset))return;
   // A selected landform takes the world's version of the palette entry its section form belongs to.

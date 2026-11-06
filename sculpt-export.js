@@ -39,7 +39,7 @@ export function mountMapExport(api) {
     $('map-export-state').textContent='Sampling TNT cell corners…';
     const sampled=await api.stream.sampleHeights(signal);
     const warning=sampled.clipped?`Warning: ${sampled.clipped} cell heights clamped to 0–255. `:'';
-    const body={name,description,world:config.biomeId,unitsX:map.unitsX,unitsY:map.unitsY,seaLevel:config.seaLevel,heights:Array.from(sampled.heights),settings,features:placements.features,starts:placements.starts};
+    const body={name,description,world:config.biomeId,unitsX:map.unitsX,unitsY:map.unitsY,seaLevel:config.seaLevel,heights:Array.from(sampled.heights),settings,features:[],starts:placements.starts};   // generated features are packed by the browser exporter (not yet)
     const started=await fetch('map-export/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal}).then(responseJSON);
     exportId=started.id;
     await api.stream.exportChunks(async (chunk,index,total) => {
@@ -77,12 +77,12 @@ export function mountMapExport(api) {
       if (api.revision()!==token) throw new Error('Map changed during export; export the finished view again.');
       $('map-export-state').textContent=warning+`Encoding ${chunks.length} chunks and checking TNT, OTA and archive…`;
       const body={name,description,world:config.biomeId,unitsX:map.unitsX,unitsY:map.unitsY,seaLevel:config.seaLevel,heights:sampled.heights,chunks,settings};
-      if (placements.features) body.features=placements.features; if (placements.starts) body.starts=placements.starts;
+      if (placements.starts) body.starts=placements.starts;
       const response=await fetch('map-export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:abort.signal});
       result=await response.json(); if (!response.ok) throw new Error(result.error||'Map export failed.');
       }
       const completedWarning=api.stream&&result.clampedCells?`Warning: ${result.clampedCells} cell heights clamped to 0–255. `:warning;
-      $('map-export-state').textContent=completedWarning+(result.merge?`${result.merge.distinctTiles} distinct tiles merged into ${result.merge.keptTiles}: ${(100*result.merge.replacedSlots/result.tileSlots).toFixed(1)}% of ${result.tileSlots} slots use a similar tile instead (about ${(result.merge.meanRMS/Math.sqrt(3)).toFixed(1)} of 255 apart per color). `:`${result.uniqueTiles} unique tiles / ${result.tileSlots} slots. `)+`Self-check passed. ${result.featureCount??0} features, ${result.starts.length} starts.`;
+      $('map-export-state').textContent=completedWarning+(result.merge?`${result.merge.distinctTiles} distinct tiles merged into ${result.merge.keptTiles}: ${(100*result.merge.replacedSlots/result.tileSlots).toFixed(1)}% of ${result.tileSlots} slots use a similar tile instead (about ${(result.merge.meanRMS/Math.sqrt(3)).toFixed(1)} of 255 apart per color). `:`${result.uniqueTiles} unique tiles / ${result.tileSlots} slots. `)+`Self-check passed. ${result.starts.length} starts; generated features are not in exported maps yet.`;
       for (const [label,key] of [['Download .ufo','archive'],['Indexed terrain image','indexed']]) { if (!result[key]) continue; const a=document.createElement('a'); a.textContent=label; a.href='/map-exports/'+encodeURIComponent(result[key]); a.download=result[key]; a.style.display='block'; $('map-download').append(a); }
       return {...result,clampedCells:result.clampedCells??sampled.clipped};
     } catch (err) { if (exportId) await fetch('map-export?id='+encodeURIComponent(exportId),{method:'DELETE'}).catch(()=>{}); exportId=null; $('map-export-state').textContent=err.name==='AbortError'?'Export canceled. No partial archive was published.':warning+err.message; throw err; }

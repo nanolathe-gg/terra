@@ -84,7 +84,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     for(const e of cache.values())if(!(refinement&&(e.fit||e.weathered===false))&&(!rect||intersects(rect,e.input??e))){
       if(!e.dirty)dirtyMarks++;e.dirty=true;retainedInvalidations++;
     }
-    coarseColour=true;schedule();
+    coarseColour=true;features?.groundChanged?.(rect);schedule();
   }
   function trimTo(limit){limit=Math.max(0,limit);const v=state();for(const[key,e]of cache)if(cacheBytes>limit&&!intersects(e,v))remove(key);while(cacheBytes>limit&&cache.size)remove(cache.keys().next().value);}
   function configureChunks() {
@@ -336,6 +336,17 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           await (!overview||!levels?tick():undefined);
         }
         if(!rerun&&token===epoch)pointerTurn=true;   // nothing newer arrived while this plan ran: the next move starts on the pointer's turn
+        // Generated deposits and vents take their colors from the export art under them (sculpt-features.js): one 128 px patch per
+        // idle frame, read after the view's own images and only once the weather the export reads is in.
+        if(!rerun&&token===epoch&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&(!api.canExport||api.canExport())){
+          const job=features?.groundJob?.(state());
+          if(job){
+            let data=null,input=null;const seq=changeSeq;
+            try{const e=await bake(job.rect,true),tile=new OffscreenCanvas(job.rect.width,job.rect.height),c=tile.getContext('2d');c.drawImage(e.bitmap,0,0);e.bitmap.close?.();if(token===epoch&&!changedSince(seq,e.input)){data=c.getImageData(0,0,job.rect.width,job.rect.height).data;input=e.input;}}
+            catch(err){if(err.name!=='AbortError'){console.error(err);input='failed';}}
+            features.groundReady(job,data,input);rerun=true;
+          }
+        }
       }
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
     }catch(err){if(err.name==='AbortError')rerun=true;else{console.error(err);$('error').hidden=false;$('error').textContent=err.message;}}
@@ -470,7 +481,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   api.subscribeSubmit?.(change=>{if(api.gpuFeedActive?.()){pendingStrokeTime ||= performance.now();invalidate(change);}});
   api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();markCoarse(change?.rect??null);if(!api.gpuFeedActive?.())invalidate(change);});
   function setBusy(on){busy=on;api.setBusy(on);$('weathered-view').disabled=on;find('[data-gpu]').disabled=on;find('[data-heap]').disabled=on;if(!on){if(resizePending)resize();else schedule();}}
-  features=await mountMapFeatures({config,host:$('feature-tool-host'),canvas:overlay,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();schedule();},schedule,enabled:()=>api.ready()&&!busy});api.registerFeatures?.(features);
+  features=await mountMapFeatures({config,canvas:overlay,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();schedule();},schedule,enabled:()=>api.ready()&&!busy,
+    light:()=>renderer.sun,groundColor:()=>renderer.means?.ground,deselectShapes:()=>{if(api.selection()>=0)api.select?.(-1);}});api.registerFeatures?.(features);
   metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??epoch,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
   // H12: the least the terrain budget must hold besides the fields: the canvases, the bake lattice reserve and one 32 px chunk with the materials.
   // H13: what the paged fields must leave free: the canvas, one canonical chunk's whole working set (every mask layer the world has) and its copy.
