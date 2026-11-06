@@ -182,6 +182,9 @@ export async function mountMapFeatures(api) {
   }
   // The next patch of export art to read for a deposit or vent, the visible ones first (sculpt-canvas.js bakes it when the view is idle).
   function groundJob(view=null) {
+    // A patch whose deposit or vent has since moved (or whose ground rose while the weather came in) is never read.
+    const live=new Set(placements.filter(p => GROUND_KINDS.includes(p.kind)).map(p => { const o=groundOrigin(p); return o.ox+','+o.oy; }));
+    for (const [gk,g] of grounds) if (!live.has(gk) && !g.pending) grounds.delete(gk);
     let best=null;
     for (const [gk,g] of grounds) {
       if (!g.stale || g.pending || g.failed) continue;
@@ -213,7 +216,7 @@ export async function mountMapFeatures(api) {
   const settingInputs=[...doc.querySelectorAll('#feature-place [data-setting]')];
   function update() {
     controls.disabled=!enabled();
-    for (const [name,button] of buttons) { button.setAttribute('aria-pressed',String(mode===name)); button.disabled=name==='fill' && !FILL_KINDS.some(k => kinds.includes(k)); }
+    for (const [name,button] of buttons) { button.setAttribute('aria-pressed',String(mode===name)); button.disabled=name==='fill' && !FILL_KINDS.some(k => kinds.includes(k)); button.title=button.disabled?'Fill places generated trees, shrubs and rocks; this world has none yet.':''; }
     $('feature-place').hidden=mode!=='place';
     $('feature-starts').hidden=mode!=='starts';
     $('feature-fill').hidden=mode!=='fill'; if (mode==='fill') $('feature-fill').open=true;
@@ -367,7 +370,7 @@ export async function mountMapFeatures(api) {
     if (list2.some(q => overlaps(p,q))) { status('That footprint overlaps another feature.'); return false; }
     if (options.generated && (!gentleFootprint(p,terrainMask()) || nearMargin(p,fill.margin) || placements.some(q => overlaps(p,q,fill.gap)))) { status('Fill needs gentle dry ground, a free footprint and the selected margins.'); return false; }
     const kept=new Set(list2.map(key)); for (const k of generated) if (!kept.has(k)) generated.delete(k);
-    placements=[...list2,p]; if (options.generated) generated.add(key(p));
+    placements=[...list2,p]; rolls++; if (options.generated) generated.add(key(p));
     changed(`Placed ${LABELS[kind].toLowerCase()} ${v+1} of ${list.length}${removed?`; cleared ${removed} fill features inside its margin`:''}.`); return true;
   }
   function removeFeature(index,notify=true) {
@@ -608,7 +611,7 @@ export async function mountMapFeatures(api) {
     else if (p && mode==='fill') {
       if (fill.region==='flood') fillRegion(fill.kind,{type:'flood',...p});
       else gesture={id:event.pointerId,type:'fill',points:[p]};
-    } else if (p && mode==='place') { const [fw,fz]=placeFootprint(); addFeature(placeKind,Math.floor(p.x/CELL-(fw-1)/2),Math.floor(p.z/CELL-(fz-1)/2),{v:placeVariant}); }
+    } else if (p && mode==='place') { const at=placeAt(p); addFeature(placeKind,at.x,at.z,{v:at.v}); }
     if (gesture) canvas.setPointerCapture(event.pointerId); update();
   },true);
   canvas.addEventListener('pointermove',event => {
@@ -661,7 +664,12 @@ export async function mountMapFeatures(api) {
   doc.addEventListener('keyup',event => { if (event.code==='Space') space=false; },true);
   doc.defaultView?.addEventListener('blur',() => { space=false; panPointers.clear(); finishGesture(false); });
 
-  const placeFootprint=() => variantList(placeKind)[placeVariant>=0?placeVariant:0]?.footprint||[1,1];
+  // What a click on a ground point places: the chosen variant, or a random one drawn for the cell (the same until something is placed,
+  // so the outline under the pointer is the footprint the click makes), centred on the cell.
+  function placeAt(p) {
+    const list=variantList(placeKind),cx=Math.floor(p.x/CELL),cz=Math.floor(p.z/CELL),v=placeVariant>=0?placeVariant:pickVariant(list,hash32(hash32(cx,cz),rolls+1)/4294967296);
+    const [fw,fz]=list[v]?.footprint||[1,1]; return {kind:placeKind,v,x:Math.floor(cx-(fw-1)/2),z:Math.floor(cz-(fz-1)/2)};
+  }
   function draw(ink,view=null) {
     controls.disabled=!enabled(); ink.save(); ink.imageSmoothingEnabled=false;
     const drag=gesture?.type==='drag'?gesture.delta:null;
@@ -690,7 +698,7 @@ export async function mountMapFeatures(api) {
     }
     for (const p of shown) if (selection.has(p.source)) outline(p,drag && !gesture.valid?'#ff877e':'#ffe69c');
     if (hover && mode==='place') {
-      const [fw,fz]=placeFootprint(),p={kind:placeKind,v:placeVariant>=0?placeVariant:0,x:Math.floor(hover.x/CELL-(fw-1)/2),z:Math.floor(hover.z/CELL-(fz-1)/2)};
+      const p=placeAt(hover);
       outline(p,inBounds(p) && !placements.some(q => overlaps(p,q))?'#b8eef3':'#ff877e');
     }
     starts.forEach((s,i) => {
@@ -707,6 +715,8 @@ export async function mountMapFeatures(api) {
   }
   // Resolves when every requested sprite and stamp is drawn and no ground waits to be read (tests and captures).
   async function settled() {
+    const frame=() => new Promise(resolve => requestAnimationFrame(resolve));
+    api.schedule(); await frame(); await frame();   // a draw asks for what the view shows
     for (let i=0;i<600;i++) {
       const waiting=jobs.size || [...grounds.values()].some(g => g.stale && !g.failed) || [...stamps.values()].some(s => s.painting);
       if (!waiting) return true;
