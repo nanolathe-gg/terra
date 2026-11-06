@@ -11,6 +11,7 @@ const save = (dir, name, s, sh) => {
   writeFileSync(join(dir, name + '.png'), encodePNG(s.w, s.h, toRGBA(s, palette)));
   const meta = {xOffset: s.ax, yOffset: s.ay};
   if (sh) { writeFileSync(join(dir, name + '-shadow.png'), encodePNG(sh.w, sh.h, toRGBA(sh, palette))); meta.shadow = {xOffset: sh.ax, yOffset: sh.ay}; }
+  meta.idx = Array.from(s.idx).map((v, k) => (s.a[k] ? v : -1)); meta.w = s.w;     // palette indices, so statistics need no color lookup (the palette has duplicate colors)
   writeFileSync(join(dir, name + '.json'), JSON.stringify(meta));
 };
 const F = (kind, params, seed) => generateFeature(kind, params, seed);

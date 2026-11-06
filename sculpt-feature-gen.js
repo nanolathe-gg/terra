@@ -639,20 +639,22 @@ function drawFlame(cv, o, rr) {
     let coreP = 0;
     if (o.lump) coreP = coreH * Math.max(0, 1 - Math.pow(dx / (coreHW + 2 * (nz(x, y, 4, 5) - 0.5)), 2));
     else for (const lb of lobes) coreP = Math.max(coreP, lb.h * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(x - lb.x) / (lb.hw + 2 * (nz(x, y, 4, 5) - 0.5)), 2)), 0.75));
-    const rag = (nz(x, y, 3.4, 9) - 0.5) * 8;
+    const rag = (nz(x, y, 3.6, 9) - 0.5) * 8;
     if (up > Math.max(tp, coreP) + rag) continue;
-    if (dx > 18 && !o.lump && hash2(x, y >> 3, S) < 0.5) continue;       // far flank: gaps
+    if (dx > 18 && !o.lump && nz(x, y, 7, 61) < 0.42) continue;       // far flank: gaps
     const loc = Math.max(tp, coreP) + 1;
-    const h = 0.9 - 0.1 * Math.pow(clamp(up / loc, 0, 1.2), 0.95) - 0.3 * Math.pow(dx / Math.max(half, 6), 1.2) + 1.25 * (nz(x, y, 4.2, 11, 1.1) - 0.5) + 0.3 * (nz(x, y, 2, 13, 0.8) - 0.5);
+    const h = 0.9 - 0.1 * Math.pow(clamp(up / loc, 0, 1.2), 0.95) - 0.3 * Math.pow(dx / Math.max(half, 6), 1.2) + 0.8 * (nz(x, y, 4.2, 11, 1.1) - 0.5) + 0.3 * (nz(x, y, 2, 13, 0.8) - 0.5);
     pts.push(y * cv.w + x); heat.push(h);
   }
   // ragged edges: high-frequency erosion at the rim, holes inside, then detached fragments and thin wisps (retail frames are busier than a clean outline)
   { const W0 = cv.w, set0 = new Set(pts), keep = [];
     for (let i = 0; i < pts.length; i++) {
       const k = pts[i], x = k % W0, y = (k / W0) | 0, miss = [k - 1, k + 1, k - W0, k + W0].filter(q => !set0.has(q)).length;
-      const hf = nz(x, y, 1.5, 31, 2.8);
+      const hf = nz(x, y, 2.6, 31, 2.8), streak = vnoise(x / 2.2 + Math.cos(th) * 2, y / 10 + Math.sin(th) * 2, S + 77), up = ay - y;
       let drop = false;
-      if (!o.lump || true) { if (miss > 0 && hf > 0.56 - 0.1 * miss) drop = true;  }
+      if (miss > 0 && (hf > 0.6 - 0.08 * miss || (streak > 0.62 && up > 8))) drop = true;
+      else if (miss > 0 && rr() < 0.36 + 0.1 * miss) drop = true;                      // torn single-pixel nibbles along the rim
+      else if (up < 7 && !o.lump && rr() < 0.3) drop = true;                          // the foot dissolves into specks   // notches only at the rim; the main mass stays solid (retail's main blob has about 0.3 boundary per pixel of area)
       if (!drop) keep.push(i);
     }
     const np = keep.map(i => pts[i]), nh = keep.map(i => heat[i]); pts.length = 0; heat.length = 0; pts.push(...np); heat.push(...nh);
@@ -660,11 +662,11 @@ function drawFlame(cv, o, rr) {
     for (const k of pts) { const x = k % W0, y = (k / W0) | 0; if (!colTopOf.has(x) || colTopOf.get(x) > y) colTopOf.set(x, y); }
     const add = (x, y, h) => { const k = y * W0 + x; if (x >= 1 && y >= 1 && x < W0 - 1 && y < cv.h - 1 && !set1.has(k)) { set1.add(k); pts.push(k); heat.push(h); } };
     const cols = [...colTopOf.keys()];
-    const nFrag = o.lump ? 2 : 6 + Math.floor(rr() * 5);
+    const nFrag = o.lump ? 2 : 20 + Math.floor(rr() * 6);
     for (let f = 0; f < nFrag && cols.length; f++) {                        // detached licks floating above and beside the body
       const cx0 = cols[(rr() * cols.length) | 0], ty = colTopOf.get(cx0), side = rr() < 0.55 ? 1 : -1;
       let x = cx0 + side * Math.round(rr() * 6), y = ty - 3 - Math.round(rr() * (o.lump ? 4 : 12));
-      const n = 2 + Math.floor(rr() * 6);
+      const n = 3 + Math.floor(rr() * 8);
       for (let t = 0; t < n; t++) { add(x, y, 0.2 + 0.2 * rr()); const d = pick(rr, [[1, 0], [-1, 0], [0, -1], [0, -1], [0, 1]]); x += d[0]; y += d[1]; }
     }
     const nW = o.lump ? 0 : 2 + Math.floor(rr() * 3);
@@ -715,7 +717,7 @@ function burnSequence(tree, burnt, seed, nFrames = 96, conifer = false) {
   const skel = newSprite(w, h, ax, ay);
   for (let y = 0; y < b.h; y++) for (let x = 0; x < b.w; x++) if (b.a[y * b.w + x]) put(skel, x - b.ax + ax, y - b.ay + ay, b.idx[y * b.w + x]);
   const flameHalf = conifer ? Math.round(cw * 0.4) : Math.round(cw * 0.33), top0 = Math.min(padT + body.ay - 4, conifer ? 72 : 76);
-  const base = { ax, ay, half: flameHalf, top: top0, coreH: conifer ? 22 : 32, coreHW: conifer ? 4.5 : 6.0, deep: conifer ? 5 : 3, sparks: 9, coreSeed: (seed * 7) & 1023, phase: 0 };
+  const base = { ax, ay, half: flameHalf, top: top0, coreH: conifer ? 20 : 30, coreHW: conifer ? 4.5 : 6.0, deep: conifer ? 5 : 3, sparks: 9, coreSeed: (seed * 7) & 1023, phase: 0 };
   const compose = (under, flameO, fseed, extra) => {
     const cv = cloneSprite(under), fl = newSprite(w, h, ax, ay);
     drawFlame(fl, flameO, rng(fseed));
