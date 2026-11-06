@@ -56,7 +56,7 @@ const stroke = async (send, ev, tool, fx, fy, len = .18, diameter = 0) => {
 const PLAN = [['hill', .22, .25], ['mountain', .55, .22], ['plateau', .2, .6], ['deep', .6, .62], ['river', .38, .45], ['valleyV', .7, .8]];
 
 for (const world of worlds) for (const size of sizes) {
-  const url = `${server}/sculpt?biome=${world}${variant ? '&variant=' + variant : ''}&mapX=${size}&mapY=${size}&scratch=tc-${world}-${size}-${Date.now()}&gpuMB=512&heapMB=1536`;
+  const url = `${server}/sculpt.html?biome=${world}${variant ? '&variant=' + variant : ''}&mapX=${size}&mapY=${size}&scratch=tc-${world}-${size}-${Date.now()}&gpuMB=512&heapMB=1536`;
   const row = {world, units: size};
   try {
     await session(url, async ({send, ev}) => {
