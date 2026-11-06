@@ -885,7 +885,7 @@ def site_data(biomes, configs, catalogue, services):
     return {name: json.dumps(data).encode() for name, data in files.items()}
 
 
-MAPS_URL = 'https://terraform-savelinks.danielgtaylor.workers.dev'   # the live save-link Worker (deploy/worker/)
+MAPS_URL = 'https://terraform-savelinks.danielgtaylor.workers.dev/maps'   # the live save-link Worker's maps endpoint (deploy/worker/)
 
 
 def build_site(out, biomes, configs, catalogue, maps_url=MAPS_URL):

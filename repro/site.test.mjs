@@ -26,7 +26,7 @@ test('every world and variant has a config file, and the services are declared',
   }
   assert.ok(JSON.parse(read('config/catalog.json')).worlds.green);
   assert.equal(services.maps.available, true);
-  assert.match(services.maps.url, /^https:\/\/terraform-savelinks\.[a-z0-9-]+\.workers\.dev$/);
+  assert.match(services.maps.url, /^https:\/\/terraform-savelinks\.[a-z0-9-]+\.workers\.dev\/maps$/);
   for (const name of ['export', 'features', 'documents']) assert.equal(services[name].available, false), assert.ok(services[name].reason.length > 20);
 });
 
