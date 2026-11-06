@@ -24,7 +24,10 @@ import (
 // resists merging, and the many one-off tiles of noisy ground in dense regions
 // merge first. Nothing here is random, nothing depends on the order in which
 // browser chunks arrive, and only integers and explicit float64 conversions
-// decide a comparison, so the same map gives the same bytes on the same machine.
+// decide a comparison, so the same map gives the same bytes on any machine:
+// every product that is summed is converted explicitly, because Go may fuse
+// x*y+z into one rounding on arm64 and amd64 and WebAssembly never does, and
+// the native and the browser exporter must agree (TestMergeTilesPinned).
 // It reads each distinct tile once, keeps 192 bytes per tile and sorts index
 // slices, so it also fits WebAssembly's 32-bit memory for the largest map
 // (40x40 units, about 410,000 tiles, 79 MB). A 4x4 grid (48 bytes) merges
@@ -258,7 +261,7 @@ func (s *terrainStream) mergeTiles() (*mergeSummary, error) {
 			for k := 0; k < descLen; k++ {
 				// Distance from the centroid, scaled by the cluster's weight.
 				e := float64(uint64(m.at(id, k))*w) - float64(s[k])
-				d += e * e
+				d += float64(e * e) // the conversion forbids fusing x*y+z (arm64 would, WebAssembly cannot)
 			}
 			if d < best || d == best && m.rank[id] < m.rank[bestID] {
 				best, bestID = d, id
@@ -299,7 +302,7 @@ func (s *terrainStream) mergeTiles() (*mergeSummary, error) {
 		losses = append(losses, loss{uint32(id), rms})
 		summary.MergedTiles++
 		summary.ReplacedSlots += int(m.weight[id])
-		sumRMS += rms * float64(m.weight[id])
+		sumRMS += float64(rms * float64(m.weight[id])) // unfused, as above
 	}
 	if summary.ReplacedSlots > 0 {
 		summary.MeanRMS = sumRMS / float64(summary.ReplacedSlots)
