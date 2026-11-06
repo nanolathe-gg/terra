@@ -10,6 +10,7 @@ import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBu
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
 import {selectionTransform} from './sculpt-selection.js';
+import {gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap,keepPrevious,takePrevious,dropPrevious} from './sculpt-share.js';
 import {applyRiver,isRiver,pointsSignature,RIVER_MIN_WIDTH} from './sculpt-river.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
@@ -1599,6 +1600,60 @@ $('file').addEventListener('change',async () => {
   try { if (file.size>64*1024*1024) throw new Error('This sculpt sketch is too large to load.'); await loadSketchFile(JSON.parse(await file.text())); } catch (err) { error(err.message); }
   finally { loading=false; $('editor').disabled=false; updateControls(); }
 });
+// Share link: the save, gzipped the same way every time, goes to the save-link service; the link is this page with ?map=<id>.
+// Opening such a link keeps the visitor's own map in the one "previous map" slot first, and offers to bring it back.
+const shareMessage=text => { $('share-message').textContent=text; };
+function showPrevious() { $('share-previous').hidden=takePrevious(localStorage)===null; }
+$('share-menu').addEventListener('toggle',async () => {
+  if (!$('share-menu').open) return;
+  showPrevious();
+  if (shareOpenedByLoad) { shareOpenedByLoad=false; return; }
+  $('share-result').hidden=true;
+  const service=mapsService(services);
+  if (!service.url) { shareMessage(service.reason); return; }
+  if (!ready || loading || stroke) { shareMessage('The map is still loading. Try again in a moment.'); return; }
+  shareMessage('Making your link…');
+  try {
+    const id=await postMap(service.url,await gzipText(JSON.stringify(sketch())));
+    $('share-url').value=shareUrl(location.href,id); $('share-result').hidden=false;
+    shareMessage('Anyone with this link opens a copy of your map. Later edits are not included.');
+    $('share-url').select();
+  } catch (err) { shareMessage(err.message); }
+});
+let shareOpenedByLoad=false;
+$('share-copy').addEventListener('click',async () => {
+  $('share-url').select();
+  try { await navigator.clipboard.writeText($('share-url').value); shareMessage('Link copied.'); } catch (_) { shareMessage('Press Ctrl+C (Cmd+C on a Mac) to copy the selected link.'); }
+});
+$('share-restore').addEventListener('click',async () => {
+  const text=takePrevious(localStorage); if (text===null || stroke || loading) return;
+  loading=true; $('editor').disabled=true;
+  try {
+    const previous=JSON.parse(text);
+    dropPrevious(localStorage);
+    if (await loadSketchFile(previous)) { showPrevious(); shareMessage('Your previous map is back.'); }
+  } catch (err) { keepPrevious(localStorage,text); error(err.message); }
+  finally { loading=false; $('editor').disabled=false; updateControls(); }
+});
+// Called once the editor is ready: a ?map=<id> address opens that shared map.
+async function openSharedMap() {
+  const id=mapIdFromSearch(location.search); if (id===null || experiment.has('pendingSketch')) return;
+  const service=mapsService(services);
+  if (!service.url) { error(service.reason); return; }
+  loading=true; $('editor').disabled=true;
+  try {
+    status('Opening the shared map…');
+    const shared=await getMap(service.url,id);
+    if (nodes.some(n => n.kind!=='ground')) keepPrevious(localStorage,JSON.stringify(workingCopy()));   // the visitor's own map, before it is replaced
+    if (await loadSketchFile(shared)) {
+      window.history.replaceState(null,'',withoutMap(location.href));
+      status('Opened a shared map.'); shareMessage('Opened a shared map.'); showPrevious();
+      if (!$('share-previous').hidden) { shareOpenedByLoad=true; $('share-menu').open=true; }
+      persistLater();
+    }
+  } catch (err) { error(err.message); }
+  finally { loading=false; $('editor').disabled=false; updateControls(); }
+}
 $('export').addEventListener('click',async () => {
   if (!canExport()) return;
   try { await mapCanvas.idle(); canvas.toBlob(blob => { if (blob) download(blob,'terrain-view.png'); else error('PNG export is unavailable for this view.'); },'image/png'); }
@@ -1945,6 +2000,7 @@ async function bootMap() {
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
   updateControls(); resize(); schedule(); queueWeather();
   $('one').click();   // every page load starts at 1x, centered on the map
+  await openSharedMap();
 }
 async function boot() {
   try {
