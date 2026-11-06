@@ -293,6 +293,11 @@ export function pagedTime({config,renderer,size,spacing,material,drainage=() => 
 const SURFACE_SLIDERS={relief:['surfaceRelief',1,0,160,5],'material-weathering':['materialWeathering',0,0,100,1],'deposit-spread':['depositSpread',.65,0,100,1],
   'transition-detail':['transitionDetail',.65,0,100,1],'mineral-ring':['ringAmount',0,0,100,1],'ring-spread':['ringSpread',.65,0,100,1],'ring-variation':['ringVariation',.7,0,100,1]};
 export const SURFACE_SLIDER_IDS=Object.keys(SURFACE_SLIDERS);
+// The slider groups the World panel shows or hides by the world's layers (sculpt.js boot sets these containers' hidden; the rest of the panel is
+// its markup): Transition detail needs a body layer, the fringe's three a ring layer.
+export const surfaceGroupsHidden=config => ({'transition-detail-control':!config.layers.includes('body'),'ring-controls':!config.layers.includes('ring')});
+// The sliders the material field reads (materialKnobs): moving one runs the Time pass again; the others only redraw.
+export const TIME_SLIDER_IDS=['material-weathering','deposit-spread'];
 export const sliderRange=id => SURFACE_SLIDERS[id].slice(2);
 export const sliderValue=(id,v) => { const [,,lo,hi,step]=SURFACE_SLIDERS[id]; return clamp(lo+step*Math.round((clamp(v,lo,hi)-lo)/step),lo,hi); };
 export const surfaceSliders=(config,settings) => Object.fromEntries(Object.entries(SURFACE_SLIDERS).map(([id,[key,fallback]]) =>
@@ -314,8 +319,9 @@ export function hexColors(colors,settings) {
 }
 export const rgbColor=h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255);
 export function rendererColors(hex,strata) { const out={}; for (const [k,v] of Object.entries(hex)) if (typeof v==='string' && /^#[0-9a-f]{6}$/i.test(v)) out[k]=rgbColor(v); strata?.forEach((c,i)=>{out['strata'+(i+1)]=c.map(v=>v/255);});return out; }
-// A world as it opens with no choices of its own (sculpt.js activeWorld): the colors it starts from.
-export const openingColors=(config,settings) => hexColors({...(config.colors||{}),...(config.baseColors||config.colors||{})},settings);
+// A world's hex colors (sculpt.js mergedColors): the server's defaults for its base world, then the world's own choices (`own`; a world that
+// opens with no choices of its own, sculpt.js activeWorld, starts from its base colors), then the address.
+export const worldHexColors=(config,settings,own=config.baseColors||config.colors||{}) => hexColors({...(config.colors||{}),...own},settings);
 
 // The weathered height the page shows and samples (sculpt.js sampleRegional; render.mjs's heights): a cell's authored height h plus the Time pass's
 // change there (refined - refinedBase at cell i), faded where h has moved off the height the pass started from and on protected cells (r), and

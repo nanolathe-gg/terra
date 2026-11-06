@@ -3,11 +3,12 @@ import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
-import {copyColumn, columnHasCapBed} from './sculpt-column.js';
+import {copyColumn} from './sculpt-column.js';
+import {KNOBS,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformSteps} from './sculpt-shape-presets.js';
 import {strokeKind,TOOL_PRESETS,SPUR_OUTLINE_KEYS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
-  shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,hexColors,rendererColors,weatheredCell,bilinearCells,FIELD_KEYS,regionalCheck,pagedTime} from './sculpt-scene.js';
+  shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,bilinearCells,FIELD_KEYS,regionalCheck,pagedTime} from './sculpt-scene.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -150,7 +151,7 @@ function showTool(state={},kind=strokeKind(tool)) {
   $('tool-style').value=Object.hasOwn(TOOL_PRESETS,state.preset)?state.preset:'custom';
 }
 function updateControls() {
-  const picks=JSON.stringify([strokeWaterPicks(),slopeReplaced()]);if(picks!==panelPicks){panelPicks=picks;syncWorldControls();}   // a stroke's water choice, or the transition replacing the slope color, wakes or idles world rows
+  const picks=JSON.stringify([strokeWaterPicks(nodes),slopeReplaced(panelFacts())]);if(picks!==panelPicks){panelPicks=picks;syncWorldControls();}   // a stroke's water choice, or the transition replacing the slope color, wakes or idles world rows
   const featureActive=Boolean(mapFeatures?.active);
   for (const b of document.querySelectorAll('[data-tool]')) b.setAttribute('aria-pressed',String(!featureActive&&b.dataset.tool===tool));
   $('feature-tool').setAttribute('aria-pressed',String(featureActive));
@@ -1326,9 +1327,8 @@ $('tool-style').addEventListener('change',() => {
   if(selected>=0){editSelectedFromControls({curve:toolSettings[tool].curve,along:toolSettings[tool].along});checkpoint();queueWeather();}
   updateControls();schedule();persistLater();
 });
-for (const id of ['relief','transition-detail']) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
-for (const id of ['mineral-ring','ring-spread','ring-variation']) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
-for(const id of ['material-weathering','deposit-spread']) $(id).addEventListener('input',()=>{markViewChanged();updateControls();schedule();queueWeather();persistLater();});
+// A surface slider redraws; the two the material field reads (TIME_SLIDER_IDS) run the Time pass again.
+for (const id of SURFACE_SLIDER_IDS) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); if (TIME_SLIDER_IDS.includes(id)) queueWeather(); persistLater(); });
 function applySeedControl() {
   const next=clamp(Math.trunc(Number($('seed').value) || 0),0,4294967295);
   // Saving or adding a path must never copy the selected shape's seed into
@@ -1464,70 +1464,6 @@ window.addEventListener('keydown',event => {
 new ResizeObserver(resize).observe($('viewport'));
 
 
-// Surface knobs: each writes the page address and the renderer's variant,
-// then the renderer re-reads its uniforms and re-bakes its fields.
-const KNOBS = [
-  ['Ground', [['groundTiles','Unique ground tiles',1,16,1,16],['groundContrast','Pattern contrast',0,2,.05,1],['undulation','Undulation height',0,16,.5,10],['undulationScale','Undulation size (px)',48,400,8,200],['undulationCover','Undulating share of land',0,1,.05,.45]]],
-  ['Relief', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
-    ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Level-ground lumps',0,3,.05,1.2],['lumpRelief','Painted ground lumps (Paint brush)',0,8,.1,4],['reliefOctaves','Octaves',1,6,1,5],['worms','Wormy relief on slopes',0,1,.05,0]]],
-  ['Light', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13],['shadeDepth','Directional shading kept',0,1,.05,1],['sunTilt','Light from the south (0: due west)',-1,1,.05,1],['ambient','Ambient (unlit share)',0,.8,.02,.42]]],
-  ['Vegetation & flowers', [['vegetationCover','Vegetation cover',0,2,.05,1],['lushness','Lushness',-1,1,.05,0],['wetSwath','Moisture',0,1,.05,0],['plantRelief','Vegetation relief',0,2,.05,1],['flowerDensity','Flower density',0,4,.05,1]]],
-  ['Faces', [['hillLight','Hill cover brightness (Archipelago)',.6,1.6,.01,1],['ringFade','Mineral ring fade length (Archipelago)',0,2,.05,0],['faceFill','Fill light on shaded faces',0,.5,.02,0],['rockCrown','Bare rock to the crown',0,1,.05,0],['sandCrown','Painted sand to the crown (sand bars)',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['crevice','Crevices',0,1,.05,0],['slopeMarks','Dark marks on slopes (Moon)',0,1,.05,0],['wrinkles','Joined wrinkles on slopes (Moon; terracettes on grass)',0,1,.05,0]]],
-  ['Shine', [['shineStretch','Grain streak length (x its width)',1,8,.25,1],['shineWhite','Highlight whiteness (0 material hue, 1 white)',0,1,.05,.35]]],
-  ['Shine: ground', [['shineGround','Gloss (highlight strength)',0,2,.05,0],['shineGroundSharp','Sharpness (lobe exponent)',2,200,2,24],['shineGroundRough','Roughness (grain slope)',0,2,.05,0],['shineGroundScale','Grain width (px)',1,24,.5,6]]],
-  ['Shine: slope cover', [['shineSlope','Gloss (highlight strength)',0,2,.05,0],['shineSlopeSharp','Sharpness (lobe exponent)',2,200,2,24],['shineSlopeRough','Roughness (grain slope)',0,2,.05,0],['shineSlopeScale','Grain width (px)',1,24,.5,6]]],
-  ['Shine: rock', [['shineRock','Gloss (highlight strength)',0,2,.05,0],['shineRockSharp','Sharpness (lobe exponent)',2,200,2,24],['shineRockRough','Roughness (grain slope)',0,2,.05,0],['shineRockScale','Grain width (px)',1,24,.5,6]]],
-  ['Shine: sand', [['shineSand','Gloss (highlight strength)',0,2,.05,0],['shineSandSharp','Sharpness (lobe exponent)',2,200,2,24],['shineSandRough','Roughness (grain slope)',0,2,.05,0],['shineSandScale','Grain width (px)',1,24,.5,6]]],
-  ['Shine: crystal', [['shineCrystal','Gloss (highlight strength)',0,2,.05,0],['shineCrystalSharp','Sharpness (lobe exponent)',2,200,2,24],['shineCrystalRough','Roughness (grain slope)',0,2,.05,0],['shineCrystalScale','Grain width (px)',1,24,.5,6]]],
-  ['Loose stone', [['looseSupply','Supply',0,1,.05,0],['looseSize','Size (median, px)',2,24,1,6]]],
-  ['Sand', [['sand','Weathering supply',0,2,.05,0],
-    ['wind','Wind toward (deg)',0,360,5,20],['sandDust','Dusting tint',0,1,.05,.5],['sandGrass','Grass regrowing over sand',0,1,.05,.6],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
-    ['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4]]],
-  ['Cracks', [['crackSeverity','Frost (crack depth; above 1 the fine fractures fill in)',0,1.5,.05,.6],['crackSpacing','Block size (px)',16,96,2,40],
-    ['crackMajor','Major cracks',0,1,.05,.8],['crackMinor','Minor cracks',0,1,.05,.75],['crackHairline','Hairline crazing',0,1,.05,.6],['crackBlocks','Facets (block relief)',0,1.5,.05,.6],
-    ['crackWidth','Width (px)',.5,2.5,.1,1],['crackNetwork','Majors: rills to plates',0,1,.05,.35],
-    ['crackDark','Floor darkness',0,1,.05,.75]]],
-  ['Rock structure', [['rockOrder','Order (0 scattered, ink cracks; 1 beds, joints, lit relief cracks)',0,1,.05,0],['rockFrom','Beds and joints from slope (painted rock always)',.3,2,.05,.6],['bedSpacing','Bed thickness (px along the ground, or height units)',3,80,1,12],['bedHeight','Beds spaced by height (0 px along the ground)',0,1,.05,0],['bedVary','Bed thickness variation',0,1,.05,.5],
-    ['bedDip','Bed tilt (height per px; 2 north: level rows)',-4,4,.05,0],['bedDipDir','Bed tilt toward (deg, 0 east, 90 south)',0,360,5,90],['bedLedge','Ledges (step strength; above 1 taller lips and notches)',0,2,.05,.5],
-    ['grooveSpacing','Joint and gully spacing (px)',12,120,2,36],['grooveAngle','Joint and gully lean from north-south (deg)',-60,60,1,0],['grooveRun','Joint and gully length (px)',30,400,10,120]]],
-  ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSoftness','Riser share',.05,1,.05,.35],['bandWater','Rings in water color',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
-  ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataContrast','Color strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1]]],
-  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Color depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline (shore to shallow)',0,1,.05,1],['deepEdge','Hard shallow-to-deep step (0 ramp)',0,1,1,0],['bedLit','Lit bed under shallow water (0 noise water)',0,1,.05,0],['bedTint','Bed tint strength',0,1,.05,.85],['bedBright','Tinted bed brightness',.5,1.5,.02,1],['bedContrast','Bed light carried through the tint',0,1.5,.05,1],['bedRelief','Bed lumps (lit relief under shallows)',0,3,.05,0],['shoreEdge','Coast rim and lip (Lava)',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
-  ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
-  // E8 (Painted Desert): the gray band at the foot of the raised ground (strata color 5); its heights are above the plain.
-  ['Desert foot band', [['baseBand','Gray band strength',0,1,.05,0],['baseBandLow','Window from (height)',0,12,.5,4],['baseBandHigh','Window to (height)',1,16,.5,6.5],['baseBandWander','Window drift (height)',0,4,.25,1],['baseBandGaps','Share missing',0,.9,.05,.45]]],
-  // G4 (Painted Desert): the pale cap kept as one sheet.
-  ['Desert caps', [['desertCapFlat','Level cap kept cool (0 beds as before)',0,1,.05,0]]],
-  // E9 (Green rock faces); every default is the earlier look.
-  ['Rock face', [['rockMoss','Green kept in the rock art (1 all, 0 none)',0,1,.05,1],['rockDetail','Rock tile blotch contrast (1 as drawn, 0 flat)',0,1,.05,1],['faceRelief','Rock relief lit on walls that face the viewer (0: world-space look)',0,1,.05,1],['shineOutside','Rock glints kept outside painted rock',0,1,.05,1],
-    ['bedPunch','Beds differ in strength',0,1,.05,0]]],
-  ['Rock face: gullies and ribs', [['gullyDepth','Gully depth (height; 0 none)',0,16,.5,0],['gullyWidth','Gully width (px)',4,40,1,14],
-    ['rockStain','Stain (darkness of gully floors and of ledge curtains)',0,3,.05,0],['ribTilt','Rib tilt (height per px)',0,1,.02,0]]],
-  // Card P10: the rock model's blocks (the rock type is the world's preset; Size and Age are its two rows).
-  ['Rock face: blocks', [['rockScale','Block size (share of the rock type\'s)',.4,3,.05,1],['rockAge','Age (rounds edges, opens joints, wears chips)',0,1,.05,.5],['rockOpen','Open joints (joint depth and crevice darkness, share of the rock type\'s)',0,2,.05,1]]],
-  // G2: rock faces follow the slope; every default is the earlier look.
-  ['Rock face: follows the slope', [['cliffFollow','Beds on the contours, joints down the fall line (0 fixed screen directions)',0,1,1,0],['cliffReach','Fall line smoothing radius (px)',6,60,1,20],['cliffWide','Wide fall line radius, level ground under rock (px)',20,160,2,56],['cliffFlat','Slope under which structure fades into broken rock',0,.3,.005,.04],['cliffRise','Bed riser height (units; 0 the bed\'s own)',0,40,1,0],['cliffBed','Beds follow the smoothed ground (0 the grid\'s own bumps)',0,1,.05,.5],['cliffStagger','Joints offset from bed to bed (share of spacing)',0,.8,.05,0],['cliffDomain','Joint lattice patch size (px)',30,240,5,90]]],
-  // E11: shallow water round 2 and Archipelago's fringe lines.
-  ['Shallow water, round 2', [['stepSoftPx','Threshold edge softness (px)',1,40,1,1],['shelfWander','Shelf wander (depth units)',0,40,1,0],['bedFlat','Bed lit by its own relief only',0,1,.05,0],['bedDots','Dark dots in the bed (Red)',0,1,.02,0],['bedDotCell','Dot spacing (px)',6,40,1,14],['crackedStep','Cracked-bed step depth (Red; 0: the world\'s)',0,60,1,0]]],
-  // G1: shallow water round 3.
-  ['Shallow water, round 3', [['shoalBump','Lit bumps in the bed (slope)',0,6,.1,0],['shoalBumpPx','Bump size (px)',2,16,.5,6],['shoalGrain','Ground grain through the tint (Red)',0,1,.05,0],['shoalRag','Shallow-to-deep notches (px)',0,16,.5,0],['shoalStairs','Hard waterline stairs (px)',0,6,.1,0],['shoalShoreSoft','Default waterline blur (px; Archipelago)',0,12,.5,0]]],
-  ['Fringe lines (Archipelago)', [['ringContrast','Fringe contour lines: contrast',0,1,.05,0],['ringCount','Fringe contour lines: count',1,30,1,7],['ringSize','Fringe contour lines: reach',.1,2,.05,1]]],
-  // G3
-  ['Fringe copies (Archipelago)', [['ringShift','Offset between copies (px; 0: concentric lines)',0,30,.5,0],['ringShiftDir','Drift direction (deg clockwise from east)',0,360,5,315],['ringScatter','Direction wander (share of a half turn)',0,1,.05,.5],['ringWobble','Outline waver (px)',0,10,.5,3],['ringLobe','Lobe size (px)',8,60,1,22],['ringFill','Pale tint where copies overlap',0,1,.05,0],['ringPatch','Reach varies along the outline',0,1,.05,0],['ringPatchSize','Reach variation size (px)',30,400,5,120],['ringTone','Retail rose, paler outward',0,1,.05,0]]],
-  // E10 (Lava)
-  ['Lava hill rock', [['lavaCrust','Crust: pillows, chips and creases on hills',0,1,.05,0],['lavaPillow','Pillow size (px)',16,80,1,34],['lavaChip','Chip size (px)',3,12,.5,5.5],['lavaVeins','Veins hanging down the slope',0,1,.05,0],['lavaCalm','Fall-line relief replaced by the crust',0,1,.05,.6],['lavaDusk','Dusk on rock turned from the sun',0,2,.05,0]]],
-  ['Lava banks', [['layerCrease','Dark crease at each step foot, any facing',0,1,.05,0],['shineSlopeGate','Shine only on slopes above (0: everywhere)',0,1.5,.05,0]]],
-  // E6
-  ['Shine: gate and headroom', [['shineGate','Roughness only on raised ground and slopes',0,1,.05,0],['shineHeadroom','Dim the body between glints (near-white ice)',0,1,.05,0]]],
-  ['Pockmarks (Moon)', [['pockmark','Dark pits on raised ground and slopes',0,1,.05,0],['pockSize','Pit spacing (px)',3,12,.5,5]]],
-  // G8 (Moon)
-  ['Moon surface', [['moonCups','Lit cups on shaded steep faces',0,1,.05,0],['moonCupSize','Cup spacing (px)',3,12,.5,5.5],['moonCupDepth','Cup depth (wall steepness)',.4,3,.1,1.4],['moonRibs','Strokes down steep faces',0,1,.05,0],['moonRibDepth','Stroke steepness',.2,3,.1,1],['moonRibDark','Darker where turned from the sun',0,.9,.05,0],['moonFolds','Folds: thin dark lines that follow the form',0,1,.05,0],['moonFoldSpacing','Fold spacing (height units)',.3,3,.1,.9]]],
-  ['Ice mountains', [['iceSlate','Monotone slate faces from the first slope',0,1,.05,0],['mineralDetail','Rock art contrast',0,2,.05,1],['iceCrystal','Crystal mountains: straight strokes on the faces',0,1,.05,0],['iceCrest','Crystal mountains: share of the raised ground under snow lumps',0,1,.05,0]]],
-  // G6
-  ['Ice blocks and mesas', [['iceSoft','Rounded light: raised ice lit by its blurred height',0,1,.05,0],['iceSnow','Snow on the flat tops of raised ice',0,1,.05,0],['iceFall','Smooth fibres down the faces',0,1,.05,0],['iceApron','Hatched drifts past the foot',0,1,.05,0]]],
-  ['Ice frost lines', [['iceFrost','Fine hairlines in the frost band',0,1,.05,0]]],
-  ['Ice frost band', [['frostGaps','Melt pockets: share of cells at the coast',0,.6,.01,.17],['frostGapReach','Melt pockets: reach inland (share of the band)',.2,1.2,.05,.65],['frostGapSize','Melt pockets: size (px)',3,24,1,11],['frostGapDepth','Melt pockets: depth below the sea',.5,6,.1,3]]],
-];
 // Worlds. A world is a biome's materials (prepared per biome by the server)
 // plus the map-wide settings and base colors chosen for it. Built-in worlds
 // can be adjusted; New world copies the current one under a new name. Kept in
@@ -1535,7 +1471,6 @@ const KNOBS = [
 const WORLD_STORE='nanolathe-map-editor-worlds';
 // Card P12b: the light's two colors ride with the world's colors; white (off) is the grey light. Help for each row is shown under it.
 const LIGHT_COLOR_HELP={sun:'The direct light and the glints it mirrors. A warm sun lights slopes that face it.',sky:'The ambient light that fills the shade. A cool sky keeps shaded ground and the lee of hills blue.'};
-const COLOR_KEYS=[['ground','Ground'],['slope','Slope cover'],['rock','Rock'],['sand','Sand'],['beach','Beach'],['shallow','Shallow water'],['deep','Deep water'],['crystal','Crystal'],...Array.from({length:4},(_,i)=>['flower'+(i+1),'Flower '+(i+1)]),['sun','Sun color'],['sky','Sky color'],['strata1','Strata 1'],['strata2','Strata 2'],['strata3','Strata 3'],['strata4','Strata 4'],['strata5','Strata 5']];
 let worlds={},worldId=null;
 function loadWorlds() { try { worlds=JSON.parse(localStorage.getItem(WORLD_STORE)||'{}')||{}; } catch (_) { worlds={}; } }
 function saveWorlds() { try { localStorage.setItem(WORLD_STORE,JSON.stringify(worlds)); } catch (_) {} }
@@ -1544,7 +1479,7 @@ function activeWorld() { return worlds[worldId] ??= {name:config.biome,base:conf
 const hexColor=c => '#'+c.map(v => Math.round(clamp(v,0,1)*255).toString(16).padStart(2,'0')).join('');
 // A world's colors: the server's defaults for its base world, then the
 // world's own choices; null means explicitly off (the texture's own color).
-function mergedColors() { return hexColors({...(config.colors||{}),...(activeWorld().colors||{})},experiment); }
+function mergedColors() { return worldHexColors(config,experiment,activeWorld().colors||{}); }
 function worldColors() { return rendererColors(mergedColors(),columnOverride?.colors); }
 function columnForEdit(){const column=structuredClone(config.column);if(column?.colors){const colors=worldColors();column.colors=column.colors.map((c,i)=>colors['strata'+(i+1)]?.map(v=>v*255)||c);}return column;}
 function restoreColumn(column){
@@ -1592,15 +1527,12 @@ function buildWorldPanel() {
   variantSelect.value=config.variant||'';
   variantSelect.onchange=() => { if(worldId!==config.biomeId){world.variant=variantSelect.value;saveWorlds();}goToWorld(config.biomeId,worldId===config.biomeId?null:worldId,{variant:variantSelect.value}); };
   const rows=$('world-colors'); rows.replaceChildren();
-  for (const [key,label] of COLOR_KEYS) {
-    if(key.startsWith('flower')&&!config.material?.groundCover?.plants?.flowers?.palette?.[Number(key.slice(6))-1])continue;
-    if (key==='beach' && !config.layers.includes('beach')) continue;
-    if (key.startsWith('strata') && (config.column?.colors || !(Number(experiment.get('strata'))>0))) continue;
+  for (const [key,label] of colorRows(config,experiment)) {
     const row=document.createElement('div'); row.className='color-row';
     const set=mergedColors()[key];
     row.innerHTML=`<span>${label}</span><input type="checkbox" aria-label="Use a base color for ${label}"${set?' checked':''}><input type="color" aria-label="${label} base color" value="${set||hexColor(defaultColor(key))}">`;
     const [box,pick]=row.querySelectorAll('input');
-    const apply=() => { if (box.checked) world.colors[key]=pick.value; else if (config.colors?.[key]) world.colors[key]=null; else delete world.colors[key]; saveWorlds(); renderer.setColors(worldColors()); syncWorldControls(); updateControls(); markViewChanged(); schedule(); };
+    const apply=() => { world.colors=pickWorldColor(config,world.colors,key,box.checked?pick.value:null); saveWorlds(); renderer.setColors(worldColors()); syncWorldControls(); updateControls(); markViewChanged(); schedule(); };
     box.addEventListener('change',apply); pick.addEventListener('input',() => { box.checked=true; apply(); });
     rows.append(row);
     if (LIGHT_COLOR_HELP[key]) { const help=document.createElement('p'); help.className='small'; help.textContent=LIGHT_COLOR_HELP[key]; rows.append(help); }
@@ -1692,43 +1624,19 @@ function buildKnobs() {
   }
   syncWorldControls=mountWorldControlIndex(root,worldPanelValues);
 }
-// A shape's own water choices, which turn the hard step, the ramp and the lit bed on inside its footprint whatever the world says (engine-frag.wgsl's `pick`).
-function strokeWaterPicks() {
-  const water=nodes.filter(n=>n.kind==='landform'),picked=(key,...choices)=>water.some(n=>choices.includes(Math.round(n.params?.[key]||0)))?1:0;
-  return {deepEdge:picked('waterDeep',1),fadedEdge:picked('waterDeep',2),bedLit:picked('waterBed',1,3),crackedBed:picked('waterBed',3)};
-}
-// A Shallow water or Deep water base color picked in the Colors panel: the water is then two flat tones, whatever the world's own (engine-frag.wgsl skips the lit bed and the third colour).
-function waterColored() { const c=worldColors(); return Boolean(c.shallow||c.deep); }
-// How many tones the world's water has: 1 where shallow and deep are one colour, 3 where a third colour follows the depth, else 2; a picked base color makes it 2.
-function waterTones() {
-  const w=config.water||{};
-  if(waterColored())return 2;
-  return w.midRGB&&config.material?.midDepth?3:w.shallow===w.deep&&String(w.shallowRGB)===String(w.deepRGB)?1:2;
-}
-// engine-frag.wgsl's sediment transition: at full Material weathering its color (built from the ground, before the slope cover is mixed in) replaces the slope cover's outright.
-function slopeReplaced() { const own=renderer.variant; return Boolean(renderer.transitionBody&&config.material?.groundFringe===true&&weatherOn()&&own.get('deposits')!=='off'&&own.get('transition')==='mineral'&&own.get('margins')!=='slope'&&Number($('material-weathering').value)>=100); }
-// What worldControlRequirement may read: the renderer's settings, a stroke's water choices counted as the switch they turn on, and the facts of the world's material that no slider sets.
-function worldPanelValues() {
-  const layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks();
-  const cover=config.material?.groundCover,plants=cover?.plants;
-  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(),waterColored:waterColored()?1:0,slopeReplaced:slopeReplaced()?1:0,column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0,groundCover:cover?1:0,plants:plants&&(plants.tuft>0||plants.shrub>0)?1:0,flowers:plants?.flowers?.density>0&&plants.flowers.palette?.some(c=>c[3]>0)?1:0};
-}
+// The facts the World panel enables a row by (sculpt-knobs.js worldPanelValues, which worldControlRequirement reads).
+const panelFacts=() => ({config,renderer,nodes,colors:worldColors(),weathering:weatherOn(),materialWeathering:Number($('material-weathering').value)});
+function worldPanelValues() { return worldPanelValuesOf(panelFacts()); }
+// A world row's change (sculpt-knobs.js applyKnob, which the headless host shares): the address, the world's store and the panel here, the
+// renderer's settings there, then the reload, shape and Time pass it asks for.
 function setKnob(key, value) {
   const url = new URL(location.href); url.searchParams.set(key, value); window.history.replaceState(null, '', url);
-  experiment.set(key, value);
+  const next = applyKnob({key, value, settings: experiment, renderer, nodes, seed});
   if (config) { activeWorld().knobs[key] = String(value); saveWorlds(); if (key==='strata') buildWorldPanel(); }
-  // Textures are chosen when the renderer starts, so this switch reloads.
-  if (key === 'ground' || key === 'groundPattern') { location.reload(); return; }
-  renderer.variant.set(key, value); renderer.applyKnobs(); syncWorldControls(); markViewChanged(); schedule();
-  if (key==='undulation' || key==='undulationScale' || key==='undulationCover') {
-    const i=nodes.findIndex(n => n.kind==='ground');
-    if (i>=0) { nodes[i][{undulation:'amplitude',undulationScale:'wavelength',undulationCover:'coverage'}[key]]=Number(value); cancelWeather(); evaluate(i); checkpoint(); queueWeather(); }
-    else if (key==='undulation' && Number(value)>0) { nodes.unshift({kind:'ground',amplitude:Number(value),wavelength:160,seed:seed^0x9e37}); cancelWeather(); evaluate(0); checkpoint(); queueWeather(); }
-    return;
-  }
-  if (['frostGaps','frostGapReach','frostGapSize','frostGapDepth','talusAngle'].includes(key)) { cancelWeather();evaluate(0);queueWeather();return; }
-  // Deposit supply changes the generated deposit field.
-  if (['sand'].includes(key)) { cancelWeather(); queueWeather(); }
+  if (next.reload) { location.reload(); return; }
+  syncWorldControls(); markViewChanged(); schedule();
+  if (!next.weather) return;
+  cancelWeather(); if (next.evaluate!==undefined) evaluate(next.evaluate); if (next.checkpoint) checkpoint(); queueWeather();
 }
 async function bootMap() {
   worldSize=config.worldSize??config.size; worldGrid=config.worldGrid??config.grid;
@@ -1801,8 +1709,7 @@ async function boot() {
     showTool(toolSettings[tool]);
     // The surface sliders open at the world's material values; the address may set the ring's three (a world's own fringe settings, 0..1).
     for (const [id,value] of Object.entries(surfaceSliders(config,experiment))) $(id).value=value;
-    $('transition-detail-control').hidden=!config.layers.includes('body');
-    $('ring-controls').hidden=!config.layers.includes('ring');
+    for (const [id,hidden] of Object.entries(surfaceGroupsHidden(config))) $(id).hidden=hidden;
     await bootMap();
   } catch (err) { error(err.message); status('The experimental renderer could not start.'); }
 }
