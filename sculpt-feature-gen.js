@@ -262,7 +262,6 @@ const TREE_DEFAULTS = {
   density: 0.45,         // 0 sparse and holey .. 1 solid
   taper: 0.5,            // broadleaf crown: 0 round top .. 1 narrow toward the top (retail Green 0.5; a biome knob)
   peaks: 0.5,            // broadleaf crown: 0 smooth top .. 1 irregular peaks along the top (retail Green 0.5)
-  lean: 0,               // -1 olive, 0 retail, +1 lush
   colors: null,          // the leaf ramp, darkest first (null: the species' retail Green ramp)
   gap: null,             // the ramp of the dark gaps between leaves (branches and shade seen through the crown)
   trunk: ['#120e0b', '#231f13', '#3b3323', '#534333'],
@@ -353,11 +352,10 @@ function treeFrame(P, seed, ctx) {
   const leaves = info.filter(q => !q.trunk), gapShare = (P.gapShare ?? look.gapShare) * (1.25 - 0.5 * clamp(P.density, 0, 1));
   const gapScore = q => (1 - q.ao) + 0.7 * (1 - q.t) + 0.55 * q.j, byGap = leaves.slice().sort((p, q) => gapScore(q) - gapScore(p) || p.k - q.k), nGap = Math.round(byGap.length * gapShare), gapSet = new Set(byGap.slice(0, nGap).map(q => q.k));
   const colors = recolorStops(P.colors || look.colors, P.recolor), gap = P.gap || look.gap, flecks = (P.flecks || look.flecks).map(([hex, share]) => [rampOf([recolorHex(hex, P.recolor)])[0], share]);
-  const c = newCanvas(w, h, R.ox, R.oy), olive = [92, 107, 42], lean = clamp(P.lean, -1, 1);
+  const c = newCanvas(w, h, R.ox, R.oy);
   const paintRank = (list, ramp, fl) => list.sort((p, q) => p.t - q.t || p.k - q.k).forEach((q, i) => {
-    let u = clamp((i + 0.5) / list.length + (lean > 0 ? lean * 0.06 : 0), 0, 1), col = rampAt(ramp, u);
+    let u = (i + 0.5) / list.length, col = rampAt(ramp, u);
     if (fl && u > 0.84 && q.direct > 0.45) { let acc = 0; const v = rn(); for (const [rgb, share] of fl) { if (v >= acc && v < acc + share) { const f = lumaRGB(col) / Math.max(1, lumaRGB(rgb)); col = rgb.map(x => x * Math.min(1.25, f)); break; } acc += share; } }
-    if (lean < 0) { const f = lumaRGB(col) / lumaRGB(olive); col = col.map((x, j) => lerp(x, olive[j] * f, -lean * 0.45)); }
     paintRGB(c, q.k % w, (q.k / w) | 0, col, q.direct);
   });
   paintRank(leaves.filter(q => !gapSet.has(q.k)), colors, flecks);
@@ -530,7 +528,7 @@ function burntFrame(P, seed, ctx) {
 
 // ---- shrubs ----------------------------------------------------------------------------------------------------
 // colors: the shrub's ramp (retail Green's Shrub1-3 by luma octile); flecks: second hues among its light leaves (Archipelago's fronds)
-const SHRUB_DEFAULTS = { width: 28, height: 19, density: 0.55, lean: 0, colors: ['#0f2700', '#0f2700', '#163705', '#2a6c18', '#3a8a25', '#43972b', '#459b2b', '#58b236'], flecks: [], energy: [20, 20] };
+const SHRUB_DEFAULTS = { width: 28, height: 19, density: 0.55, colors: ['#0f2700', '#0f2700', '#163705', '#2a6c18', '#3a8a25', '#43972b', '#459b2b', '#58b236'], flecks: [], energy: [20, 20] };
 // Spec 15 B4: density 0.12 is the sparse Shrub3 (fill 0.17, about 24 small blobs); density 0.5 and up is the dense
 // Shrub1/2 (fill 0.36-0.39, one mass holding 75% of the pixels). Texture is single-pixel speckle of 6-7 greens
 // with the dark 173 as the under-leaf shade on every edge.
@@ -545,7 +543,7 @@ function shrubFrame(P, seed, ctx) {
   const inside = []; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (env(x, y)) inside.push([x, y]);
   // an irregular scatter of small leaf clumps (1-6 px). Dense shrubs overlap and attach into one mass; sparse ones stay apart.
   const clumps = [], cellAt = new Map(); let total = 0;
-  const hi = P.lean > 0 ? 1.6 : 1, near = (x, y, d) => { for (let dy = -d; dy <= d; dy++) for (let dx = -d; dx <= d; dx++) if (occ[(y + dy) * w + x + dx]) return true; return false; };
+  const near = (x, y, d) => { for (let dy = -d; dy <= d; dy++) for (let dx = -d; dx <= d; dx++) if (occ[(y + dy) * w + x + dx]) return true; return false; };
   for (let tries = 0; total < N && tries < 4000; tries++) {
     let [sx, sy] = inside[(r() * inside.length) | 0];
     const e = ((sx - cx) / (W / 2)) ** 2 + ((sy - cy) / (H / 2)) ** 2;
@@ -567,7 +565,7 @@ function shrubFrame(P, seed, ctx) {
       const under = !has(x, y + 1), upper = !has(x, y - 1);
       // ramp position: the underside dark, the lit top light (toward the sun's side a little lighter), speckled leaf by leaf
       const side = clamp(-((x - cx) * L.x + (y - cy) * L.y) / (W / 2), -1, 1) * 0.08;
-      let u = under ? 0.04 + 0.4 * rn() : upper ? 0.6 + 0.4 * rn() * hi : 0.3 + 0.48 * rn();
+      let u = under ? 0.04 + 0.4 * rn() : upper ? 0.6 + 0.4 * rn() : 0.3 + 0.48 * rn();
       u = clamp(u + side, 0, 1);
       let col = rampAt(colors, u);
       if (u > 0.35 && fl.length) { let acc = 0; const v = rn(); for (const [rgb, share] of fl) { if (v >= acc && v < acc + share) { const f = lumaRGB(col) / Math.max(1, lumaRGB(rgb)); col = rgb.map(q => q * Math.min(1.2, f)); break; } acc += share; } }
@@ -808,14 +806,23 @@ function pickValue(range, sizeFrac, r) {
 // ---- public API ------------------------------------------------------------------------------------------------
 export const DEFAULTS = { tree: TREE_DEFAULTS, burnt: BURNT_DEFAULTS, shrub: SHRUB_DEFAULTS, rock: ROCK_DEFAULTS, scar: SCAR_DEFAULTS };
 // Artist-facing controls per kind: [key, min, max, default, what it changes]
+// The generators' parameters per kind (a world's table sets them per type; the panel exposes taper, peaks, shade, angular, the
+// kind colors and the gameplay ranges): [key, min, max, default, what it changes].
 export const CONTROLS = {
-  tree: [['species', 'broadleaf|conifer', null, 'broadleaf', 'leafy crown or narrow conifer'], ['height', 55, 72, 68, 'size in px (broadleaf 66-71, conifer 57-64 in retail)'], ['width', 0.42, 0.74, 0.7, 'width over height'], ['crown', 0, 1, 0.6, 'smooth to lobed, ragged silhouette'], ['density', 0, 1, 0.6, 'solid to holey and sparse'], ['taper', 0, 1, 0.5, 'broadleaf crown: round top to narrowing toward the top (biome knob)'], ['peaks', 0, 1, 0.5, 'broadleaf crown: smooth top to irregular peaks (biome knob)'], ['lean', -1, 1, 0, 'olive and yellow, to lush and bright'], ['energy', '[lo,hi]', null, '[250,250]', 'gameplay energy range; tracks height inside the range']],
+  tree: [['species', 'broadleaf|conifer|tendril', null, 'broadleaf', 'leafy crown, tiered cone, or ground tendrils from a bulb'], ['height', 50, 110, 68, 'size in px'], ['width', 0.42, 1.05, 0.72, 'width over height'],
+    ['crown', 0, 1, 0.6, 'smooth to lobed and ragged'], ['density', 0, 1, 0.45, 'holey to solid'], ['taper', 0, 1, 0.5, 'round top to narrowing upward'], ['peaks', 0, 1, 0.5, 'smooth top to peaks'],
+    ['clusters', 0, 1, 0, 'one crown to leaf clusters on visible branches'], ['arms', 3, 12, 7, 'tendrils (tendril)'], ['curl', 0, 1, 0.6, 'tendril kinks (tendril)'], ['cells', '1x1|2x2', null, '1x1', 'footprint'],
+    ['colors', 'ramp', null, 'Green', 'leaf ramp, darkest first'], ['gap', 'ramp', null, 'Green', 'ramp of the gaps between leaves'], ['flecks', '[[color, share]]', null, 'Green', 'second hues on sunlit leaves'],
+    ['recolor', '{from, to}', null, 'none', 'the artist color'], ['energy', '[lo,hi]', null, '[250,250]', 'gameplay energy range; tracks height inside the range']],
   burnt: [['height', 50, 66, 58, 'size in px'], ['width', 0.4, 0.75, 0.55, 'width over height'], ['forks', 2, 5, 3, 'branch forks off the trunk'], ['ash', 0, 1, 0.5, 'amount of pale ash pixels']],
-  shrub: [['width', 20, 36, 29, 'width in px'], ['height', 14, 28, 22, 'height in px'], ['density', 0, 1, 0.5, 'sparse scatter to full clump'], ['lean', -1, 1, 0, 'brightness of the leaf highlights']],
-  rock: [['cells', '1x1|2x2|3x2|3x3|4x3', null, '2x2', 'footprint class, sets the pixel size and the metal'], ['shade', 0, 1, 0.6, 'soft to strong shading away from the sun'], ['size', 0.7, 1.15, 1, 'scale inside the class'], ['angular', 0, 1, 0.6, 'round boulder to faceted block']],
+  shrub: [['width', 20, 50, 28, 'width in px'], ['height', 14, 40, 19, 'height in px'], ['density', 0, 1, 0.55, 'sparse scatter to full clump'], ['colors', 'ramp', null, 'Green', 'leaf ramp'],
+    ['flecks', '[[color, share]]', null, '[]', 'second hues among the light leaves'], ['recolor', '{from, to}', null, 'none', 'the artist color']],
+  rock: [['cells', 'WxD', null, '2x2', 'footprint, sets the pixel size and the metal'], ['size', 0.7, 1.15, 1, 'scale inside the footprint'], ['shade', 0, 1, 0.6, 'soft to strong shading away from the sun'],
+    ['angular', 0, 1, 0.5, 'round boulder to sharp facets'], ['tall', 0, 1, 0, 'boulder to spire'], ['pieces', 1, 8, 1, 'stones in the feature'], ['pits', 0, 1, 0, 'pocked surface'], ['lump', 0, 1, 0.6, 'uneven outline and surface'],
+    ['grain', 0, 1, 0.6, 'fine dither'], ['colors', 'ramp', null, 'Green', 'rock ramp'], ['mottle', '[[color, share]]', null, 'Green', 'second hues in the mid and light tones'], ['recolor', '{from, to}', null, 'none', 'the artist color']],
   scar: [['type', 'smudge|stain', null, 'smudge', 'scorch blot or rock stain'], ['size', 0.3, 1.3, 1, 'size'], ['density', 0, 1, 0.55, 'stipple density']],
-  deposit: [['metal', 86, 223, 127, 'metal value; sets the chunk count (7 to 23) and the halo']],
-  vent: [['size', 0.6, 1.6, 1, 'crack length and thickness'], ['forks', 2, 4, 3, 'how often the crack forks']],
+  deposit: [['metal', 86, 223, 127, 'metal value; sets the stone area'], ['halo', 0.4, 1.4, 0.82, 'the halo\'s lightness against the ground'], ['haloSat', 0.5, 1.5, 1.1, 'the halo\'s hue against the ground\'s']],
+  vent: [['size', 0.6, 1.6, 1, 'crack length and thickness'], ['forks', 2, 4, 3, 'how often the crack forks'], ['rim', 0.4, 1.2, 0.72, 'the rim\'s lightness against the ground']],
 };
 const NAMES = { tree: 'Tree', burnt: 'TreeDead', shrub: 'Shrub', rock: 'Rock', scar: 'Smudge' };
 
