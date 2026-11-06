@@ -10,8 +10,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
-	"syscall"
 	"time"
 
 	"github.com/nanolathe-gg/terraform/mapdata"
@@ -248,15 +246,8 @@ func (s *terrainStream) add(chunk preparedChunk) error {
 }
 
 func (s *terrainStream) measure(paths ...string) {
-	var usage syscall.Rusage
-	if syscall.Getrusage(syscall.RUSAGE_SELF, &usage) == nil {
-		rss := usage.Maxrss
-		if runtime.GOOS != "darwin" {
-			rss *= 1024
-		}
-		if rss > s.metrics.PeakRSSBytes {
-			s.metrics.PeakRSSBytes = rss
-		}
+	if rss := peakRSS(); rss > s.metrics.PeakRSSBytes {
+		s.metrics.PeakRSSBytes = rss
 	}
 	var disk int64
 	if s.work != "" {
