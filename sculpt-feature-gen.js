@@ -184,7 +184,7 @@ const ROCK_SHADOW_COLORS = [[47, 78], [95, 20], [245, 2]];
 const TREE_DEFAULTS = {
   species: 'broadleaf',  // 'broadleaf' or 'conifer'
   height: 68,            // px, broadleaf 66-71, conifer 57-64
-  width: 0.68,           // width / height, broadleaf 0.68-0.73, conifer 0.44-0.62
+  width: 0.72,           // width / height, broadleaf 0.68-0.73, conifer 0.44-0.62
   crown: 0.6,            // 0 smooth egg .. 1 deeply lobed and ragged
   density: 0.45,         // 0 sparse and holey .. 1 solid
   taper: 0.5,            // broadleaf crown: 0 round top .. 1 narrow toward the top (retail Green 0.5; a biome knob)
@@ -197,10 +197,10 @@ function treeFrame(P, seed, ctx) {
   const L = lightOf(ctx), conifer = P.species === 'conifer';
   const r = rng(seed), rn = rng(mix32(seed, 77));
   const H = Math.round(P.height), W = Math.round(H * P.width);
-  const pad = 8, w = W + pad * 2 + 4, h = H + 3;
+  const pad = 8, head = conifer ? 0 : 12, w = W + pad * 2 + 4, h = H + 3 + head;   // headroom above a broadleaf crown for its peaks
   const jx = (r() - 0.5) * 3, cx = w / 2 + jx;
   const ay = h - 3, ax = Math.round(cx) + (conifer ? 0 : Math.round((r() - 0.5) * 2));
-  const stubRows = conifer ? 9 : 6, y0 = 2, yc = ay - (conifer ? 1 : 4);
+  const stubRows = conifer ? 9 : 6, y0 = conifer ? 2 : 2 + head + Math.round(5 * P.peaks), yc = ay - (conifer ? 1 : 4);
   const Wh = W / 2;
   // silhouette profile
   const tp = conifer ? 0.5 + r() * 0.14 : 0.28 + r() * 0.3;
@@ -234,6 +234,19 @@ function treeFrame(P, seed, ctx) {
     if (bump && !conifer) pr += 0.22 * Math.exp(-Math.pow((x - cx) / Wh - bumpX, 2) * 12) * Math.exp(-Math.pow(tt / 0.1, 2));
     const lim = pr * (1 + crown * (conifer ? 0.15 : 0.27) * lob) + crown * (conifer ? 0.12 : 0.17) * rag * (0.35 + 0.65 * Math.min(1, tt * 4)) + (conifer ? 0 : peaksV * 0.6 * Math.pow(clamp(vnoise(x / 3.1, y / 2.6, s1 + 13) - 0.5, 0, 1) * 2, 1.2) * (1 - clamp(tt / 0.5, 0, 1)));   // irregular peaks along the top
     if (u < lim && lim > 0.02) mask[y * w + x] = 1;
+  }
+  // crown top: several upward-reaching branch and leaf clusters with points, leaning toward the sun (broadleaf)
+  if (!conifer) {
+    const ytop = new Int16Array(w).fill(-1); for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) if (mask[y * w + x]) { ytop[x] = y; break; }
+    const nPk = 2 + Math.round(peaksV * 4 * (0.7 + 0.6 * r())), xs = [];
+    for (let t = 0; t < 60 && xs.length < nPk; t++) { const xi = Math.round(cx + (r() - 0.5) * W * 0.8); if (ytop[xi] >= 0 && xs.every(q => Math.abs(q - xi) >= 6)) xs.push(xi); }
+    for (const xi of xs) {
+      const base = ytop[xi] + 2, hp = Math.min(y0 - 2, Math.round((5 + r() * 8) * (0.55 + 0.9 * peaksV))), wp = 4 + r() * 4, lean = L.x * (0.25 + 0.3 * r());
+      for (let dy = 0; dy <= hp; dy++) {
+        const half = (wp / 2) * Math.pow(1 - dy / (hp + 1), 0.9), xc = xi + lean * dy + (vnoise(dy / 2.5, xi, s2) - 0.5) * 1.6, yy = base - dy;
+        for (let x = Math.round(xc - half); x <= Math.round(xc + half); x++) if (x >= 0 && x < w && yy >= 0 && (x !== Math.round(xc - half) || r() < 0.7)) mask[yy * w + x] = 1;
+      }
+    }
   }
   // trunk stub
   const stub = [];
