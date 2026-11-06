@@ -110,11 +110,12 @@ function broadColor(lev, r, lean, zone) {
   if (darkness > 0 && r() < 0.6 * darkness + 0.1 * (L < 4.5 ? 1 : 0)) {
     // a dark gap between leaves: gray, a little brown
     const g = clamp(Math.round(L * 0.85 + (r() - 0.5) * 2.2 + (r() < 0.12 ? 3 : 0)), 0, 10);
-    return r() < 0.3 ? weighted(r, [[62, 3], [61, 3], [60, 3], [59, 2], [58, 1], [57, 0.5]]) : GR[g];
+    return r() < 0.3 ? weighted(r, [[62, 3], [61, 3], [60, 3], [59, 2], [58, 1], [57, 0.5]]) : (r() < 0.07 ? pick(r, [127, 125, 47]) : GR[g]);
   }
   let ramp = G;
   if (lean < 0 && zone < -lean * 0.9) ramp = IDX.YELLOW_GREEN;
   const x = r();
+  if (L > 6.2 && x < 0.05) return pick(r, [233, 234, 54, 35, 53]);          // bright yellow-green flecks on the lit lobes
   if (x < 0.1) return nearestExtra(lumaOfLevel(L) + (r() - 0.5) * 40);
   if (x < 0.105) return pick(r, [233, 234, 35, 53, 52]);   // saturated or gray-green flecks, never white, gray or pink
   if (x < 0.12 && L < 7) return IDX.OLIVE[clamp(Math.round(L * 0.6), 0, 6)];
@@ -123,7 +124,7 @@ function broadColor(lev, r, lean, zone) {
 }
 function coniferColor(lev, r, lean, zone, brownP) {
   const L = clamp(lev, 0, 10.49), li = Math.round(L);
-  if (r() < brownP) return weighted(r, [[62, 3], [61, 4], [60, 3], [59, 3], [58, 2], [57, 1]]);
+  if (r() < brownP) return weighted(r, [[62, 2], [61, 3], [60, 3], [59, 3], [58, 3], [57, 3], [55, 1.5]]);   // retail's conifer brown runs lighter, gray-olive in the sun
   const x = r();
   if (x < 0.035 + (lean < 0 ? -lean * 0.2 : 0)) return IDX.OLIVE[clamp(Math.round(L * 0.8 + (r() - 0.5) * 3), 0, 6)];
   if (x < 0.05) return pick(r, [53, 54, 171, 237]);   // gray-green flecks; conifers have no pixel brighter than luma 123
@@ -262,8 +263,8 @@ function treeFrame(P, seed, ctx) {
   };
   const body = newSprite(w, h, ax, ay);
   const amb = L.ambient;
-  const mid = conifer ? 3.4 : 5.35, lamGain = conifer ? 3.0 : 4.0, gxGain = conifer ? 2.6 : 1.3, gyGain = conifer ? 0.3 : 0.9;
-  const sigma = conifer ? 1.9 : 4.3;
+  const mid = conifer ? 3.4 : 4.9, lamGain = conifer ? 3.0 : 4.0, gxGain = conifer ? 2.6 : 1.3, gyGain = conifer ? 0.3 : 0.9;
+  const sigma = conifer ? 2.3 : 5.0;
   // bright leaf bunches (spec 15 B6): about 34 rounded 3-6 px clumps that lean to the upper-left lobes
   const clumpList = [];
   if (!conifer) {
@@ -297,7 +298,7 @@ function treeFrame(P, seed, ctx) {
     // base darkening: ambient occlusion, never an outline
     if (tt > 0.78) lev -= ((tt - 0.78) / 0.22) * (conifer ? 2.2 : 4.4);
     const white = (rn() + rn() - 1), cell = vnoise(x / (1.9 + needleX * 0.35), y / 1.9, s1 + 31) * 2 - 1;
-    let nz = 0.5 * white * 1.4 + 0.5 * cell * 1.5;
+    let nz = (conifer ? 0.8 : 0.62) * white * 1.4 + (conifer ? 0.2 : 0.38) * cell * 1.5;
     if (!conifer && rn() < 0.1) nz += (rn() < 0.5 ? -1 : 1) * 2.2;       // sparkle
     lev += sigma * nz;
     const zone = zoneN(x, y);
@@ -305,7 +306,7 @@ function treeFrame(P, seed, ctx) {
     if (conifer) {
       const bf = brownField(x, y);
       const lowerHalf = clamp((tt - 0.4) / 0.6, 0, 1);
-      const brownP = clamp((bf - 0.5) * 3.2, 0, 1) * (0.25 + 0.65 * lowerHalf) + (Math.abs(x - cx) < 2 && tt > 0.55 ? 0.35 : 0);
+      const brownP = clamp((bf - 0.45) * 3.2, 0, 1) * (0.3 + 0.7 * lowerHalf) + (Math.abs(x - cx) < 2 && tt > 0.55 ? 0.35 : 0);
       col = coniferColor(lev, rn, P.lean, zone, brownP);
     } else {
       const brownP = tt > 0.55 && dist[k] > 1 ? 0.16 * Math.max(0, vnoise(x / 3, y / 3, s2 + 7) - 0.4) * 3 : 0;
