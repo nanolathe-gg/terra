@@ -405,7 +405,7 @@ export function shrubBurn(shrub, seed, nFrames = 42) {
   const CS = { lean: -0.9, from: 2, full: 18, vary: 6, waves: [[9, 1.2, 0.7], [14, 1.6, 0.8], [20, 2, 0.6]] };
   // the burning shrub: a narrow foot and a rounded body of fuel above it, both pulsing; at the end the fuel runs low
   const plan = t => {
-    const s = sources(), grow = clamp((t + 2.5) / 5, 0.3, 1), die = t > nFrames - 3 ? 0.4 : 1;
+    const s = sources(), grow = clamp((t + 2.5) / 5, 0.3, 1), die = t > nFrames - 2 ? 0.35 : 1;
     for (let up = -1; up <= zH * grow; up++) {
       const u = (up / zH - 0.45) / 0.6, hz = (up < 2 ? 2.5 : halfB * Math.sqrt(Math.max(0, 1 - u * u))) * (0.75 + 0.5 * noise2(up / 4, t / 2.5, seed + 71)) * grow;
       for (let x = Math.floor(ax - hz - 1); x <= Math.ceil(ax + hz + 1); x++) {
