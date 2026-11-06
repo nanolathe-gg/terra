@@ -174,13 +174,14 @@ async function feedFor(s, request, options) {
 }
 
 // The picture of a window, in tiles of `tile` px as the canvas bakes them (sculpt-canvas.js bake: fed, full quality, at 1x): RGBA bytes, opaque.
-export async function renderWindow(s, {x = 0, y = 0, width = 1024, height = 1024, tile = 256, options = s.drawOptions()} = {}) {
+// exportArt bakes the export's art as sculpt-canvas.js exportChunks does (bake with exportArt: weathered, completed before it returns).
+export async function renderWindow(s, {x = 0, y = 0, width = 1024, height = 1024, tile = 256, options = s.drawOptions(), exportArt = false} = {}) {
   const {renderer, canvas, config} = s, device = renderer.device, out = new Uint8Array(width * height * 4), reads = [];
   for (let ty = 0; ty < height; ty += tile) for (let tx = 0; tx < width; tx += tile) {
     const w = Math.min(tile, width - tx), h = Math.min(tile, height - ty);
-    const request = {x: x + tx, y: y + ty, width: w, height: h, exportArt: false, worldSize: config.worldSize ?? config.size, worldGrid: config.worldGrid ?? config.grid};
+    const request = {x: x + tx, y: y + ty, width: w, height: h, exportArt, worldSize: config.worldSize ?? config.size, worldGrid: config.worldGrid ?? config.grid};
     const feed = await feedFor(s, request, options);
-    try { await renderer.renderChunk(request, {...options, quality: 'full', feed, scale: 1, deferCompletion: true}); } finally { feed.release?.(); }
+    try { await renderer.renderChunk(request, {...options, quality: 'full', feed, scale: 1, deferCompletion: !exportArt}); } finally { feed.release?.(); }
     const row = Math.ceil(w * 4 / 256) * 256, buffer = device.createBuffer({label: 'headless readback', size: row * h, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ});
     const encoder = device.createCommandEncoder({label: 'headless readback'});
     encoder.copyTextureToBuffer({texture: canvas.gpu.texture}, {buffer, bytesPerRow: row}, [w, h]);
@@ -197,6 +198,48 @@ export async function renderWindow(s, {x = 0, y = 0, width = 1024, height = 1024
   return out;
 }
 
+// The Time pass's height on the CPU (sculpt.js gpuWeatherCpu): the authored height it started from and the eroded one, read back once a pass.
+async function timeHeights(s) {
+  if (!s.time.cpu) { const n = s.worldGrid ** 2, raw = await s.fieldsModule.readBuffer(s.renderer.device, s.time.weather, 0, n * 8); s.time.cpu = {refinedBase: new Float32Array(raw, 0, n), refined: new Float32Array(raw, n * 4, n)}; }
+  return s.time.cpu;
+}
+// The weathered field over a region, as the page's export reads it (sculpt.js readRegional): a paged map's pages, or the fields' CPU copy with
+// the Time pass's height laid on (sculpt-scene.js weatheredHeights).
+async function readWeathered(s, request) {
+  if (s.paged) return s.fields.readAsync(request);
+  await s.fields.ready();
+  const r = s.fields.read(request);
+  return s.time ? {...r, fields: {...r.fields, h: s.engine.weatheredHeights(r, {...await timeHeights(s), grid: s.worldGrid, spacing: s.spacing})}} : r;
+}
+
+// A map's export as the page makes it (sculpt-export.js streamedExport; sculpt-canvas.js sampleHeights and exportChunks) through the page's
+// exporter (sculpt-export-worker.js on export/ built for WebAssembly: repro/export-node.mjs, `wasm` its bytes): the corner heights from the
+// weathered field (sculpt-map.js cellHeights), then the export art baked a canonical chunk at a time and written as PNG (repro/png.mjs), with the
+// metadata the Export pane opens with. Only the engine's art: the page paints placed deposits and vents into the chunks with a 2D canvas, so a
+// map with features exports in Chrome. onChunk(reply, done, total) sees the exporter's answer to each chunk.
+export async function exportMap(s, {name, description, wasm, onChunk = () => {}}) {
+  const {config} = s, map = config.map;
+  if (!map) throw new Error('an export needs a map: mapX and mapY in the address');
+  const {cellHeights} = await import('../sculpt-map.js'), page = await import('../sculpt-export.js'), {defaultStarts} = await import('../sculpt-features.js');
+  const {encodePng} = await import('./png.mjs'), {exportWorker} = await import('./export-node.mjs');
+  const catalogue = config.exportCatalog, climate = catalogue.worlds[config.biomeId]?.climate;
+  if (!climate) throw new Error(`export is unavailable for ${config.biomeId}: ${catalogue.worlds[config.biomeId]?.disabledReason || 'no retail planet'}`);
+  const sampled = await cellHeights(map, request => readWeathered(s, request)), palette = (await json('materials/palette.json')).indexed;
+  const job = Array.from({length: 16}, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join('');
+  const call = exportWorker(wasm), start = page.exportStart({job, config, map, catalogue, palette, name, description: description ?? page.DEFAULT_DESCRIPTION,
+    settings: page.climateSettings(climate), heights: sampled.heights, starts: defaultStarts(map)});
+  await call(start);
+  const size = Math.min(512, s.renderer.chunkSize()), total = Math.ceil(map.width / size) * Math.ceil(map.height / size), chunks = [];
+  for (let y = 0; y < map.height; y += size) for (let x = 0; x < map.width; x += size) {
+    const rect = {x, y, width: Math.min(size, map.width - x), height: Math.min(size, map.height - y)};
+    const png = encodePng(rect.width, rect.height, await renderWindow(s, {...rect, tile: size, exportArt: true}));
+    const reply = await call({op: 'chunk', ...rect, png: png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength)});
+    chunks.push({...rect, png}); onChunk(reply, chunks.length, total);
+  }
+  const done = await call({op: 'finish'});
+  return {start, chunks, clipped: sampled.clipped, result: done.result, archive: new Uint8Array(await done.archive.arrayBuffer()), indexed: new Uint8Array(await done.indexed.arrayBuffer())};
+}
+
 // The displayed heights over a window, `step` px apart (render.mjs's ours-heights.json): the page's weathered sampler (sculpt.js sampleRegional).
 export async function windowHeights(s, {x = 0, y = 0, samples = 512, step = 2} = {}) {
   const {fields, engine, time, worldGrid: grid, spacing, renderer} = s, out = new Array(samples * samples);
@@ -205,8 +248,7 @@ export async function windowHeights(s, {x = 0, y = 0, samples = 512, step = 2} =
   else {
     await fields.ready();
     if (time) {
-      const {readBuffer} = s.fieldsModule, n = grid * grid, raw = await readBuffer(renderer.device, time.weather, 0, n * 8);
-      const refinedBase = new Float32Array(raw, 0, n), refined = new Float32Array(raw, n * 4, n);
+      const {refined, refinedBase} = await timeHeights(s);
       const cell = (cx, cy) => engine.weatheredCell(fields.cell(cx, cy), fields.cell(cx, cy, 'r'), cy * grid + cx, refined, refinedBase);
       sample = (px, py) => engine.bilinearCells(px, py, spacing, grid, cell);
     } else sample = (px, py) => fields.sample(px, py);

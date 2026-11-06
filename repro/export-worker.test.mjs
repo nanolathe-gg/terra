@@ -1,14 +1,15 @@
 // The page's exporter (sculpt-export-worker.js running export/ built for WebAssembly) against the native one, without a browser: the
-// worker runs in a Node context with an in-memory stand-in for the Origin Private File System's synchronous access handles. Needs Go.
+// worker runs in a Node context with an in-memory stand-in for the Origin Private File System's synchronous access handles
+// (repro/export-node.mjs, which the headless export shares). Needs Go.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {mkdtempSync, readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createHash, webcrypto} from 'node:crypto';
+import {createHash} from 'node:crypto';
 import {deflateSync, crc32} from 'node:zlib';
-import vm from 'node:vm';
+import {storage, exportWorker, buildWasm} from './export-node.mjs';
 
 const root = new URL('..', import.meta.url).pathname, work = mkdtempSync(join(tmpdir(), 'export-worker-'));
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -24,38 +25,9 @@ function png(width, height, pixel) {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 
-// The OPFS calls the worker makes, in memory: directories, files, one synchronous access handle per file at a time.
-function storage() {
-  const file = name => ({name, data: new Uint8Array(0), size: 0, locked: false,
-    async createSyncAccessHandle() {
-      if (this.locked) throw Object.assign(new Error('locked'), {name: 'NoModificationAllowedError'});
-      this.locked = true; const f = this;
-      const grow = n => { if (n > f.data.length) { const d = new Uint8Array(Math.max(n, f.data.length * 2)); d.set(f.data.subarray(0, f.size)); f.data = d; } };
-      return {read(view, {at = 0} = {}) { const n = Math.max(0, Math.min(view.length, f.size - at)); view.set(f.data.subarray(at, at + n)); return n; },
-        write(view, {at = 0} = {}) { grow(at + view.length); f.data.set(view, at); f.size = Math.max(f.size, at + view.length); return view.length; },
-        getSize: () => f.size, truncate(n) { grow(n); f.data.fill(0, Math.min(n, f.size), n); f.size = n; }, flush() {}, close() { f.locked = false; }};
-    },
-    async getFile() { return new File([this.data.slice(0, this.size)], this.name); }});
-  const dir = () => ({entries: new Map(),
-    async getDirectoryHandle(name, {create} = {}) { if (!this.entries.has(name) && create) this.entries.set(name, dir()); const d = this.entries.get(name); if (!d?.entries) throw Object.assign(new Error(name), {name: 'NotFoundError'}); return d; },
-    async getFileHandle(name, {create} = {}) { if (!this.entries.has(name) && create) this.entries.set(name, file(name)); const f = this.entries.get(name); if (!f || f.entries) throw Object.assign(new Error(name), {name: 'NotFoundError'}); return f; },
-    async removeEntry(name) { const e = this.entries.get(name); if (e?.locked) throw Object.assign(new Error(name), {name: 'NoModificationAllowedError'}); this.entries.delete(name); }});
-  return dir();
-}
-
-function worker(wasm, top) {
-  const replies = [], context = {navigator: {storage: {getDirectory: async () => top}}, FileSystemSyncAccessHandle: class {}, crypto: webcrypto, performance, TextEncoder, TextDecoder,
-    console, setTimeout, clearTimeout, File,
-    fetch: async () => ({ok: true, arrayBuffer: async () => wasm}), postMessage: message => replies.push(message)};
-  context.self = context; vm.createContext(context);
-  context.importScripts = name => vm.runInContext(readFileSync(join(go, 'lib', 'wasm', name), 'utf8'), context);
-  vm.runInContext(readFileSync(join(root, 'sculpt-export-worker.js'), 'utf8'), context);
-  return async message => { const n = replies.length; await context.onmessage({data: message}); assert.equal(replies.length, n + 1); const reply = replies.at(-1); assert.notEqual(reply.type, 'error', reply.message); return reply; };
-}
-
 test('the worker exports the same bytes as the native exporter, and leaves only the two downloads behind', {skip: !go && 'needs Go'}, async () => {
   const wasmPath = join(work, 'map-export.wasm'), nativePath = join(work, 'map-export');
-  execFileSync('go', ['build', '-trimpath', '-buildvcs=false', '-ldflags=-s -w', '-o', wasmPath, './export'], {cwd: root, env: {...process.env, GOOS: 'js', GOARCH: 'wasm'}});
+  buildWasm(wasmPath);
   execFileSync('go', ['build', '-o', nativePath, './export'], {cwd: root});
   const palette = JSON.parse(readFileSync(join(root, 'materials', 'palette.json'), 'utf8')).indexed;
   const world = JSON.parse(readFileSync(join(root, 'materials', 'green.json'), 'utf8')).world.export;
@@ -85,7 +57,7 @@ test('the worker exports the same bytes as the native exporter, and leaves only 
   writeFileSync(join(work, 'catalog.json'), JSON.stringify(catalog)); writeFileSync(join(work, 'manifest.json'), JSON.stringify({...metadata, chunks: chunks.map(({x, y, path}) => ({x, y, path}))}));
   const native = JSON.parse(execFileSync(nativePath, ['--catalog-file', join(work, 'catalog.json'), '--input', join(work, 'manifest.json'), '--out', join(work, 'out'), '--features-root', join(work, 'features')], {encoding: 'utf8'}));
   // The page's: the worker, fed as sculpt-export.js feeds it, with the tile store's budget at 0 so every tile spills to the stand-in OPFS.
-  const top = storage(), call = worker(readFileSync(wasmPath), top), job = '0123456789abcdef0123456789abcdef';
+  const top = storage(), call = exportWorker(readFileSync(wasmPath), top, go), job = '0123456789abcdef0123456789abcdef';
   const ready = await call({op: 'start', job, metadata, catalog, features, budgetMB: 0});
   assert.deepEqual([ready.width, ready.height], [width, height]);
   for (const c of chunks) { const reply = await call({op: 'chunk', x: c.x, y: c.y, width: c.width, height: c.height, png: c.bytes.buffer.slice(c.bytes.byteOffset, c.bytes.byteOffset + c.bytes.length)}); assert.equal(reply.type, 'progress'); }
