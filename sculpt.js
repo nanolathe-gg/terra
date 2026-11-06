@@ -10,7 +10,7 @@ import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBu
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
 import {selectionTransform} from './sculpt-selection.js';
-import {gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap,keepPrevious,takePrevious,dropPrevious} from './sculpt-share.js';
+import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap,keepPrevious,takePrevious,dropPrevious} from './sculpt-share.js';
 import {applyRiver,isRiver,pointsSignature,RIVER_MIN_WIDTH} from './sculpt-river.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
@@ -1614,7 +1614,7 @@ $('share-menu').addEventListener('toggle',async () => {
   if (!ready || loading || stroke) { shareMessage('The map is still loading. Try again in a moment.'); return; }
   shareMessage('Making your link…');
   try {
-    const id=await postMap(service.url,await gzipText(JSON.stringify(sketch())));
+    const id=await postMap(service.url,await gzipText(shareText(sketch())));
     $('share-url').value=shareUrl(location.href,id); $('share-result').hidden=false;
     shareMessage('Anyone with this link opens a copy of your map. Later edits are not included.');
     $('share-url').select();

@@ -4,6 +4,12 @@
 export const PREVIOUS_KEY = 'terraform-previous-map-v1';   // the one "previous map" slot: the visitor's own map, kept when a shared map replaces it
 export const ID_RE = /^[a-z2-7]{16}$/;
 
+// The text that is shared: the save with sorted keys and without fields that only say "default" (`hidden: false`, undefined values), so a
+// stroke gives the same bytes whether it was drawn or loaded from a link, and sharing a loaded map again gives the same link.
+const canon = (v, key) => Array.isArray(v) ? v.map(x => canon(x)) : v && typeof v === 'object'
+  ? Object.fromEntries(Object.keys(v).sort().filter(k => v[k] !== undefined && !(k === 'hidden' && v[k] === false)).map(k => [k, canon(v[k], k)])) : v;
+export const shareText = save => JSON.stringify(canon(save));
+
 let crcTable = null;
 export function crc32(bytes) {
   if (!crcTable) crcTable = Uint32Array.from({length: 256}, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });

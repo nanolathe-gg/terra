@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {gunzipSync, gzipSync} from 'node:zlib';
-import {gzipText, crc32, shareUrl, mapIdFromSearch, withoutMap, mapsService, postMap, getMap, keepPrevious, takePrevious, dropPrevious, PREVIOUS_KEY} from '../sculpt-share.js';
+import {shareText, gzipText, crc32, shareUrl, mapIdFromSearch, withoutMap, mapsService, postMap, getMap, keepPrevious, takePrevious, dropPrevious, PREVIOUS_KEY} from '../sculpt-share.js';
 import {mapId} from '../deploy/worker/worker.js';
 
 const text = JSON.stringify({format: 'nanolathe-terrain-sculpt', version: 6, nodes: [{kind: 'hill', x: 1.5}], note: 'é'.repeat(500)});
@@ -66,4 +66,15 @@ test('the previous-map slot holds one map and survives a failing store', () => {
   dropPrevious(storage); assert.equal(takePrevious(storage), null);
   const full = {getItem() { throw new Error('x'); }, setItem() { throw new Error('full'); }, removeItem() { throw new Error('x'); }};
   assert.equal(keepPrevious(full, 'x'), false); assert.equal(takePrevious(full), null); dropPrevious(full);
+});
+
+test('share, open, share again gives the same id', async () => {
+  // A drawn stroke has no `hidden`; a loaded one has `hidden: false`, keys in another order, and an undefined leftover.
+  const drawn = {format: 'nanolathe-terrain-sculpt', version: 6, nodes: [{kind: 'hill', seed: 3, params: {amount: 70, along: [[0, 1], [1, 0.5]]}}], size: 64, seed: 9};
+  const loaded = JSON.parse(JSON.stringify({seed: 9, size: 64, nodes: [{params: {along: [[0, 1], [1, 0.5]], amount: 70}, hidden: false, seed: 3, kind: 'hill', frame: undefined}], version: 6, format: 'nanolathe-terrain-sculpt'}));
+  assert.equal(await mapId(await gzipText(shareText(drawn))), await mapId(await gzipText(shareText(loaded))));
+  // What the service stores is the text that was shared, so opening it and sharing it again is a fixed point.
+  const text = shareText(drawn);
+  assert.equal(shareText(JSON.parse(text)), text);
+  assert.notEqual(shareText({...drawn, nodes: [{...drawn.nodes[0], hidden: true}]}), text);   // a hidden stroke is a real difference
 });
