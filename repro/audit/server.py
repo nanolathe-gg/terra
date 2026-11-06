@@ -12,7 +12,7 @@ sys.path.insert(0,str(ROOT));spec=importlib.util.spec_from_file_location('audit_
 from sculpt_export import MapExport
 exports=MapExport(ASSETS,a.export_tool,[Path.home()/'TotalAnnihilation'],a.feature_tool,True)
 configs,catalogue=s.world_configs(list(s.BIOME_NAMES))
-generated=s.site_data(list(s.BIOME_NAMES),configs,catalogue,{'defaultWorld':'green','worlds':list(s.BIOME_NAMES),**{k:{'available':True} for k in ('export','features')}})
+generated=s.site_data(list(s.BIOME_NAMES),configs,catalogue,{'defaultWorld':'green','worlds':list(s.BIOME_NAMES),'features':{'available':True}})
 class Handler(BaseHTTPRequestHandler):
  def reply(self,data,kind='application/json',status=200):
   if not isinstance(data,bytes):data=json.dumps(data).encode()
@@ -52,7 +52,6 @@ class Handler(BaseHTTPRequestHandler):
    self.reply(data,mimetypes.guess_type(str(file))[0] or 'application/octet-stream')
   except Exception as e:self.reply({'error':str(e)},status=400)
  def do_POST(self):
-  if exports.post(self,self.path):return
   name=urlsplit(self.path).path.removeprefix('/audit/save/')
   if not self.path.startswith('/audit/save/') or any(x in name for x in ['..','\\']) or name.startswith('/') or Path(name).suffix not in ('.json','.png'):
    self.send_error(400);return

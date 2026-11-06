@@ -41,7 +41,7 @@ Where the terrain engine is going (ground, weathering, surface and light) is
 in [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md).
 
 The nine worlds need nothing under the assets root: each is drawn from its committed table in `materials/`, and a server with an
-empty assets root opens every world (without feature sprites or exports, which read the installed content). Helpers read `~/TotalAnnihilation` without writing
+empty assets root opens every world and exports it (without feature sprites, which read the installed content). Helpers read `~/TotalAnnihilation` without writing
 to it. To use other content, repeat `--game-root DIR` in mount order.
 `--export-tool PATH` and `--feature-tool PATH` select helpers built elsewhere.
 Restart the server after Python edits or changing installed content. Each
@@ -101,11 +101,13 @@ for the entire image, including half-pixel ties. Export captures tile-aligned
 PNG chunks, adds no noise, and deduplicates identical indexed tiles. The
 minimap averages RGB within each block before its nearest-palette lookup.
 
-Finished archives and indexed PNGs are downloadable and saved to
-`<assets-root>/exports/`. Each archive contains `maps/<name>.ota` and
-`maps/<name>.tnt`. Installed map names and existing exports are refused.
-The helper decodes and checks the TNT cells, feature anchors/fringe, tiles,
-minimap, OTA settings/starts and archive before publishing it.
+The export runs in the page, on `sculpt.py` and on the static site alike: the
+exporter (`export/`, built for WebAssembly) runs in a worker and offers the
+finished archive and indexed PNG as downloads; nothing is saved on the server.
+Each archive contains `maps/<name>.ota` and `maps/<name>.tnt`. The exporter
+decodes and checks the TNT cells, feature anchors/fringe, tiles, minimap, OTA
+settings/starts and archive before offering it. The page has no list of the
+maps installed on a player's machine, so it does not refuse their names.
 See [the export format contract](export/README.md).
 
 Full-size maps keep the stroke graph as their source. Field prefix tiles replay
@@ -168,17 +170,20 @@ static build) and shows `?map=<id>`. Opening such a link keeps your own map in o
 slot and offers to restore it. The working copy autosaves in the browser; **Save** and **Load**
 write and read a file.
 
-Export streams one tile-aligned PNG at a time to the helper. The helper keeps
-hashes, tile indices and attributes in memory, spills tile bytes under its own
-budget, and writes the indexed PNG and archive without a full-map image buffer.
-Cancel removes the exact temporary job and publishes no partial archive. More
-than 65536 distinct tiles is refused; the tile reuse policy is still phase 4.
+Export streams one tile-aligned PNG at a time to the exporter's worker. It
+keeps hashes, tile indices and attributes in memory, spills tile bytes past its
+budget to the browser's Origin Private File System, and writes the indexed PNG
+and archive there without a full-map image buffer. Cancel stops the worker and
+offers no partial archive; its files are removed. A map with more than 65,536
+distinct tiles has its most alike tiles merged (`export/merge.go`).
 
 ## The static site
 
 `python3 sculpt.py --build-site <dir>` writes `<dir>/index.html` (opens the current build) and `<dir>/b/<version>/` (the page, its shaders and
-modules, `materials/`, `ui-previews/`, `config/<world>.json`, `config/<world>--<variant>.json`, `config/catalog.json` and `services.json`). The
+modules, `materials/`, `ui-previews/`, `config/<world>.json`, `config/<world>--<variant>.json`, `config/catalog.json`, `services.json`, and
+the map exporter: `map-export.wasm`, built then from `export/` with Go, and that Go's `wasm_exec.js`; neither is committed). The
 version is a hash of the contents, so a deploy never mixes new scripts with cached old shaders. Any static host serves it
-(`cd <dir>/b/<version> && python3 -m http.server`, then open `/sculpt.html`). `sculpt.py` serves the same relative paths for development.
-`services.json` says which server services exist (map export, the retail feature catalog, saving to a server); on the static site they are
-off and their controls say why. `.github/workflows/pages.yml` checks, builds and deploys the site to GitHub Pages.
+(`cd <dir>/b/<version> && python3 -m http.server`, then open `/sculpt.html`). `sculpt.py` serves the same relative paths for development;
+it builds the exporter when it starts and again after a Go source changes; without Go, an export says so in the Export pane.
+`services.json` says which server services exist (the retail feature catalog, saving to a server); on the static site the feature catalog is
+off and its controls say why. `.github/workflows/pages.yml` checks, builds and deploys the site to GitHub Pages.

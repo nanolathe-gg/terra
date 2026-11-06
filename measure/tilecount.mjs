@@ -1,16 +1,16 @@
 // Export maps of growing size through the editor's real export and report how many distinct 32x32 tiles each uses.
 //   node measure/tilecount.mjs --server http://127.0.0.1:8841 --port 9741 [--worlds green,red,lava] [--sizes 4,8,12,16,20] [--variant modern]
-//        [--layout bare|landforms] [--name Prefix] [--dry (print the Export pane's line and stop)] [--fixed-name (no timestamp in the map name, so two builds' archives compare byte for byte)] [--out dir] [--exports dir (the server's exports directory, to size the archives)]
+//        [--layout bare|landforms] [--name Prefix] [--dry (print the Export pane's line and stop)] [--fixed-name (no timestamp in the map name, so two builds' archives compare byte for byte: archiveSHA256)] [--out dir]
 // Prints one JSON line per world and size: distinct tiles (uniqueTiles; before merging when the exporter merged), tile slots, the share of
 // slots that are unique, export seconds, archive bytes, and the merge summary if the exporter merged. The default layout is a few landforms
 // (hill, mountain, plateau, deep water, river, valley) spread over the map; 'bare' leaves the world's flat default ground.
 import {cdpPortFree} from '../repro/cdp-port.mjs';
 import {spawn} from 'node:child_process';
-import {mkdirSync, statSync} from 'node:fs';
+import {mkdirSync} from 'node:fs';
 
 const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
-const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450)), out = opt('--out', 'tilecount-out'), exportsDir = opt('--exports', '');
+const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450)), out = opt('--out', 'tilecount-out');
 const worlds = opt('--worlds', 'green').split(','), sizes = opt('--sizes', '4,8').split(',').map(Number), variant = opt('--variant', ''), layout = opt('--layout', 'landforms'), prefix = opt('--name', 'Tiles'), stamp = args.includes('--fixed-name'), dry = args.includes('--dry');
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -80,7 +80,7 @@ for (const world of worlds) for (const size of sizes) {
         const q = await ev('window.tc');
         const m = /(\d+) \/ (\d+) chunks · (\d+) unique tiles/.exec(await ev(`document.getElementById('map-export-state').textContent`) || '');
         if (m && !row.progress.some(p => p[0] === +m[1])) row.progress.push([+m[1], +m[2], +m[3]]);
-        if (q?.done) { row.seconds = +((Date.now() - t0) / 1000).toFixed(1); if (q.error) row.error = q.error; else { const x = q.x; Object.assign(row, {uniqueTiles: x.uniqueTiles, tileSlots: x.tileSlots, uniqueShare: +(x.uniqueTiles / x.tileSlots).toFixed(4), merge: x.merge, metrics: x.metrics, selfCheck: x.selfCheck}); if (exportsDir) { try { row.archiveBytes = statSync(`${exportsDir}/${x.archive}`).size; } catch {} } row.archive = x.archive; } break; } await sleep(500); }
+        if (q?.done) { row.seconds = +((Date.now() - t0) / 1000).toFixed(1); if (q.error) row.error = q.error; else { const x = q.x; Object.assign(row, {uniqueTiles: x.uniqueTiles, tileSlots: x.tileSlots, uniqueShare: +(x.uniqueTiles / x.tileSlots).toFixed(4), merge: x.merge, metrics: x.metrics, selfCheck: x.selfCheck, archiveBytes: x.archiveBytes}); row.archive = x.archive; row.archiveSHA256 = await ev(`window.tc.x.files.archive.arrayBuffer().then(b => crypto.subtle.digest('SHA-256', b)).then(h => [...new Uint8Array(h)].map(v => v.toString(16).padStart(2, '0')).join(''))`); } break; } await sleep(500); }
       row.state = await ev(`document.getElementById('map-export-state').textContent`);   // what the Export pane says afterwards
       row.done ??= true;
     });

@@ -428,5 +428,7 @@ export async function mountMapFeatures(api) {
     catalogueError=error.message; $('[data-catalogue]').textContent=catalogueError; status('Feature placement is unavailable; start positions remain editable.');
   }
   ready=true; refreshCatalogue(); update();
-  return {serialize,load,draw,deactivate,activate,stats:()=>({imageBytes:[...images.values()].reduce((total,image)=>total+(image.naturalWidth||image.width)*(image.naturalHeight||image.height)*4,0)}),addFeature,removeFeature,addStart,moveStart,removeStart,setFill,fillRegion,get hint(){return $('[data-help]').textContent;},get active(){return Boolean(mode);},get busy(){return Boolean(gesture);},get status(){return message;}};
+  // What the exporter needs of the catalogue: the placed features' names and footprints, and the world and planet it was prepared for.
+  const exportCatalogue=() => placements.length?{world:catalogue.world,planet:catalogue.planet,features:[...new Set(placements.map(p => definition(p.name)))].map(d => ({name:d.name,footprintX:d.footprintX,footprintZ:d.footprintZ}))}:null;
+  return {serialize,load,draw,deactivate,activate,exportCatalogue,stats:()=>({imageBytes:[...images.values()].reduce((total,image)=>total+(image.naturalWidth||image.width)*(image.naturalHeight||image.height)*4,0)}),addFeature,removeFeature,addStart,moveStart,removeStart,setFill,fillRegion,get hint(){return $('[data-help]').textContent;},get active(){return Boolean(mode);},get busy(){return Boolean(gesture);},get status(){return message;}};
 }

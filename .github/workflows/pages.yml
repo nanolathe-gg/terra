@@ -26,6 +26,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      # site.test.mjs builds the site, and the site carries the map exporter: export/ built for WebAssembly.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
       - run: node --test repro/*.test.mjs
       - run: sh repro/gate.sh
 
@@ -42,6 +46,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-go@v5   # the page's map exporter is built from export/ (GOOS=js GOARCH=wasm) into the build folder
+        with:
+          go-version-file: go.mod
       - name: Build the site
         run: |
           python3 sculpt.py --build-site _site
