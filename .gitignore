@@ -4,3 +4,5 @@ __pycache__/
 .venv/
 perf-out/
 deploy/worker/wrangler.toml
+smoke-out/
+.cloudflare/
