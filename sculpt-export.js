@@ -1,5 +1,5 @@
 const $=id => document.getElementById(id);
-const SETTINGS=[['minWind','Minimum wind'],['maxWind','Maximum wind'],['tidal','Tidal strength'],['solar','Solar strength'],['gravity','Gravity'],['surfaceMetal','Surface metal'],['mohoMetal','Moho metal']];
+export const SETTINGS=[['minWind','Minimum wind'],['maxWind','Maximum wind'],['tidal','Tidal strength'],['solar','Solar strength'],['gravity','Gravity'],['surfaceMetal','Surface metal'],['mohoMetal','Moho metal']];
 // The exporter runs in the page: export/ (Go) built for WebAssembly, in a worker, with its files in the Origin Private File System.
 const STORE='terraform-export',UNSUPPORTED=typeof Worker!=='function' || typeof WebAssembly!=='object' || !navigator.storage?.getDirectory || !navigator.locks?
   'This browser cannot export maps: it needs WebAssembly, web workers and the Origin Private File System. Use a current Chrome, Edge, Firefox or Safari.':'';
@@ -22,6 +22,16 @@ function exporter() {
     stop:() => { worker.terminate(); settle(new DOMException('Export canceled.','AbortError')); }};
 }
 
+// What a map's export starts from without the pane: the OTA settings as the pane's fields open at a world's climate (setSettings: a number the
+// climate gives, else the field's 0, and Molten terrain unless the climate says), and the description the pane opens with.
+export const climateSettings=climate => ({...Object.fromEntries(SETTINGS.map(([key]) => [key,Number.isFinite(climate?.[key])?climate[key]:climate&&Object.hasOwn(climate,key)&&(climate[key]===null||Number.isNaN(climate[key]))?NaN:0])),lava:typeof climate?.lava==='boolean'?climate.lava:false});
+export const DEFAULT_DESCRIPTION='Terrain editor prototype';
+// The exporter's start message (export/README.md --stream): the map's metadata, the catalog and the map's feature pack (null without features).
+export function exportStart({job,config,map,catalogue,palette,name,description,settings,heights,placements=[],starts,pack=null}) {
+  return {op:'start',job,metadata:{name,description,world:config.biomeId,unitsX:map.unitsX,unitsY:map.unitsY,seaLevel:config.seaLevel,heights:Array.from(heights),settings,features:placements,starts},
+    catalog:{worlds:catalogue.worlds,palette,installedNames:[]},features:pack,budgetMB:64};
+}
+
 // Format encoding and round-trip checks live in Go. The terrain canvas stays
 // separate from the feature overlay, so sprites never enter TNT tile art.
 export function mountMapExport(api) {
@@ -35,7 +45,7 @@ export function mountMapExport(api) {
   const defaults=() => catalogue?.worlds?.[config.biomeId]?.climate||config.exportCatalog?.worlds?.[config.biomeId]?.climate;
   function setSettings(data) { if (!data) return; for (const [key] of SETTINGS) if (Number.isFinite(data[key])) $('map-'+key).value=data[key]; else if (Object.hasOwn(data,key) && (data[key]===null || Number.isNaN(data[key]))) $('map-'+key).value=''; if (typeof data.lava==='boolean') $('map-lava').checked=data.lava; }
   function serialize() { return {name:$('map-name').value,description:$('map-description').value,settings:{...Object.fromEntries(SETTINGS.map(([key]) => [key,$('map-'+key).valueAsNumber])),lava:$('map-lava').checked}}; }
-  function load(data={}) { $('map-name').value=typeof data.name==='string'?data.name:'Sculpt map'; $('map-description').value=typeof data.description==='string'?data.description:'Terrain editor prototype'; setSettings(defaults()); loadedSettings=Boolean(data.settings); if (data.settings) setSettings(data.settings); }
+  function load(data={}) { $('map-name').value=typeof data.name==='string'?data.name:'Sculpt map'; $('map-description').value=typeof data.description==='string'?data.description:DEFAULT_DESCRIPTION; setSettings(defaults()); loadedSettings=Boolean(data.settings); if (data.settings) setSettings(data.settings); }
   // TNT numbers tile pictures with 16 bits, so a map keeps at most 65,536 distinct 32x32 tiles; the exporter merges the most alike tiles of a map with more.
   const TILE_LIMIT=65536,tileSlots=() => map?(map.unitsX*16+1)*(map.unitsY*16+4):0;
   const tileNote=() => tileSlots()>TILE_LIMIT?` This map has ${tileSlots().toLocaleString('en-US')} tile slots. If more than ${TILE_LIMIT.toLocaleString('en-US')} of them differ, the export merges the most alike tiles.`:'';
@@ -65,7 +75,6 @@ export function mountMapExport(api) {
     const drawn=await api.features?.()?.exportFeatures?.({name,heights:sampled.heights,width:map.widthCells,bakeArt:api.stream.bakeArt,signal})??{pack:null,placements:[],stamps:[]};
     const stamps=drawn.stamps.map(s => { const c=new OffscreenCanvas(128,128); c.getContext('2d').putImageData(new ImageData(s.rgba,128,128),0,0); return {...s,canvas:c}; });
     const paint=(context,rect) => { for (const s of stamps) if (s.ox<rect.x+rect.width && s.ox+128>rect.x && s.oy<rect.y+rect.height && s.oy+128>rect.y) context.drawImage(s.canvas,s.ox-rect.x,s.oy-rect.y); };
-    const metadata={name,description,world:config.biomeId,unitsX:map.unitsX,unitsY:map.unitsY,seaLevel:config.seaLevel,heights:Array.from(sampled.heights),settings,features:drawn.placements,starts:placements.starts};
     $('map-export-state').textContent=warning+'Loading the map exporter…';
     const palette=await fetch('materials/palette.json').then(r => r.json()).then(data => data.indexed);
     const id=Array.from(crypto.getRandomValues(new Uint8Array(16)),b => b.toString(16).padStart(2,'0')).join('');
@@ -73,7 +82,7 @@ export function mountMapExport(api) {
     const worker=exporter(); signal.addEventListener('abort',worker.stop,{once:true});
     try {
       // The tile store's largest budget: a map within the TNT's 65,536 tiles keeps every tile in memory, and only a larger one spills to OPFS.
-      await worker.call({op:'start',job:id,metadata,catalog:{worlds:catalogue.worlds,palette,installedNames:[]},features:drawn.pack,budgetMB:64});
+      await worker.call(exportStart({job:id,config,map,catalogue,palette,name,description,settings,heights:sampled.heights,placements:drawn.placements,starts:placements.starts,pack:drawn.pack}));
       await api.stream.exportChunks(async (chunk,index,total) => {
         signal.throwIfAborted(); if (api.revision()!==token) throw new Error('Map changed during export.');
         const png=await chunk.png.arrayBuffer();

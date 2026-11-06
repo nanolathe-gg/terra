@@ -1,7 +1,7 @@
 import {createPreviewFields} from './sculpt-preview.js';
 import {selectionGeometry,hitSelection,drawSelection} from './sculpt-selection.js';
 import {TerrainRenderer} from './sculpt-renderer.js';
-import {drawMapBounds} from './sculpt-map.js';
+import {drawMapBounds,sampleField,cellHeights} from './sculpt-map.js';
 import {mountMapExport} from './sculpt-export.js';
 import {mountMapFeatures} from './sculpt-features.js';
 import {pagedBudget,VIEW_CANVASES} from './sculpt-scene.js';
@@ -458,17 +458,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   window.addEventListener('blur',()=>{space=false;pan=null;navigationPointer=null;if(gesture)end({pointerId:gesture.id,type:'pointercancel'});schedule();});
   function budgets(){gpuBudget=clamp(Number(find('[data-gpu]').value)||512,128,4096)*MB;heapBudget=clamp(Number(find('[data-heap]').value)||1024,128,8192)*MB;api.setBudget?.(heapBudget*.65);api.fitGpuBudget?.();configureChunks();metrics();schedule();}
   find('[data-gpu]').onchange=budgets;find('[data-heap]').onchange=budgets;
-  function sampleField(r,x,y){const a=r.fields.h,w=r.gridWidth,h=r.gridHeight,step=r.gridSpacing,ox=Math.round(r.gridOrigin[0]/step),oy=Math.round(r.gridOrigin[1]/step),gx=clamp(x/step-ox,0,w-1),gy=clamp(y/step-oy,0,h-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,w-1),jy=Math.min(iy+1,h-1),fx=gx-ix,fy=gy-iy;return(a[iy*w+ix]*(1-fx)+a[iy*w+jx]*fx)*(1-fy)+(a[jy*w+ix]*(1-fx)+a[jy*w+jx]*fx)*fy;}
   async function idle(){do{while(drawing||pending||renderer.busy||navigationTimer||navigating())await tick();await renderer.previousChunk;}while(drawing||pending||renderer.busy||navigationTimer||navigating());}
+  // Each corner is sampled from an awaited canonical weather field (sculpt-map.js cellHeights). No uncached preview height may enter the TNT
+  // while lazy tiles are refining.
   async function sampleHeights(signal){
-    await idle();const heights=new Uint8Array(map.widthCells*map.heightCells);let clipped=0;
-    // Each corner is sampled from an awaited canonical weather field. No
-    // uncached preview height may enter the TNT while lazy tiles are refining.
-    for(let z=0;z<map.heightCells;z+=32)for(let x=0;x<map.widthCells;x+=32){
-      signal?.throwIfAborted();const nx=Math.min(32,map.widthCells-x),nz=Math.min(32,map.heightCells-z),req={x:x*16,y:z*16,width:(nx-1)*16,height:(nz-1)*16};
-      const r=await(api.readAsync?api.readAsync(req,signal):api.read(req));checkHeap(r);
-      for(let yy=0;yy<nz;yy++)for(let xx=0;xx<nx;xx++){const h=sampleField(r,(x+xx)*16,(z+yy)*16);if(h<0||h>255)clipped++;heights[(z+yy)*map.widthCells+x+xx]=Math.round(clamp(h,0,255));}metrics();await tick();
-    }return{heights,clipped};
+    await idle();
+    return cellHeights(map,async req=>{const r=await(api.readAsync?api.readAsync(req,signal):api.read(req));checkHeap(r);return r;},{signal,step:async()=>{metrics();await tick();}});
   }
   // paint(context, rect) draws on each chunk of export art before it is encoded: the map's painted deposits and vents.
   async function exportChunks(accept,signal,paint=null){

@@ -341,6 +341,13 @@ export const worldHexColors=(config,settings,own=config.baseColors||config.color
 // bilinear between cells.
 const smooth=(a,b,v) => { const t=clamp((v-a)/(b-a),0,1); return t*t*(3-2*t); };
 export const weatheredCell=(h,r,i,refined,refinedBase) => Math.fround(h+(refined[i]-refinedBase[i])*(1-smooth(0,10,Math.abs(h-refinedBase[i])))*(1-r));
+// A region read of the fields (r: its lattice, fields.h and fields.r) with the Time pass's height laid on where the refinement is `valid`
+// (sculpt.js readRegional, which the export's corner heights read; the headless export reads the same): a copy of h.
+export function weatheredHeights(r,{refined,refinedBase,grid,spacing,valid=() => true}) {
+  const h=r.fields.h.slice(),ox=Math.round(r.gridOrigin[0]/spacing),oy=Math.round(r.gridOrigin[1]/spacing);
+  for (let y=0;y<r.gridHeight;y++) for (let x=0;x<r.gridWidth;x++) if (valid(x+ox,y+oy)) { const i=y*r.gridWidth+x; h[i]=weatheredCell(r.fields.h[i],r.fields.r[i],(y+oy)*grid+x+ox,refined,refinedBase); }
+  return h;
+}
 export function bilinearCells(x,y,spacing,grid,cell) {
   const gx=clamp(x/spacing,0,grid-1),gy=clamp(y/spacing,0,grid-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,grid-1),jy=Math.min(iy+1,grid-1),fx=gx-ix,fy=gy-iy;
   return (cell(ix,iy)*(1-fx)+cell(jx,iy)*fx)*(1-fy)+(cell(ix,jy)*(1-fx)+cell(jx,jy)*fx)*fy;

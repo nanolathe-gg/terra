@@ -6,14 +6,19 @@ export function configureMap(config, query) {
   if (!query.has('mapX') && !query.has('mapY')) return null;
   const unitsX=Number(query.get('mapX')),unitsY=Number(query.get('mapY')),sea=Number(query.get('sea')??config.defaultSeaLevel??64);
   if (![unitsX,unitsY].every(n => Number.isInteger(n) && n>=1 && n<=40) || !Number.isInteger(sea) || sea<0 || sea>255) throw new Error('Map size must be 1–40 units on each side; sea level must be 0–255.');
-  const widthCells=unitsX*32+2,heightCells=unitsY*32+8,width=widthCells*16,height=heightCells*16;
   // DESIGN_MAP_GENERATOR geometry; 160 extra pixels cover base/2 even at
   // sea 255. Fields and GPU bakes are regional; this is the canonical lattice.
-  config.map={unitsX,unitsY,widthCells,heightCells,width,height,playRight:unitsX*512,playBottom:unitsY*512};
-  config.size=Math.max(width,height)+160; config.grid=config.size/2;
+  config.map=mapGeometry(unitsX,unitsY);
+  config.size=Math.max(config.map.width,config.map.height)+160; config.grid=config.size/2;
   config.worldSize=config.size; config.worldGrid=config.grid;
   config.baseHeight+=sea-config.seaLevel; config.seaLevel=sea;
   return config.map;
+}
+
+// A map of unitsX x unitsY units: its TNT cells (two more columns, eight more rows than the play area's 32 a unit), its pixels and its play area.
+export function mapGeometry(unitsX,unitsY) {
+  const widthCells=unitsX*32+2,heightCells=unitsY*32+8;
+  return {unitsX,unitsY,widthCells,heightCells,width:widthCells*16,height:heightCells*16,playRight:unitsX*512,playBottom:unitsY*512};
 }
 
 export function drawMapBounds(ink,map,config,sample) {
@@ -35,4 +40,24 @@ export function drawMapBounds(ink,map,config,sample) {
     ink.stroke();
   }
   ink.restore();
+}
+
+// The TNT's height bytes: one per 16-px cell corner, map.widthCells x map.heightCells, each the field's height at the corner (bilinear on the
+// read's lattice), rounded and clamped to 0..255; `clipped` counts the corners outside that range. `read` answers a region of the weathered
+// field for a block of 32 x 32 corners (sculpt.js readRegional); `step` runs after each block. The page's export (sculpt-canvas.js
+// sampleHeights) and the headless one (repro/headless.mjs) sample with this.
+export function sampleField(r,x,y) {
+  const a=r.fields.h,w=r.gridWidth,h=r.gridHeight,step=r.gridSpacing,ox=Math.round(r.gridOrigin[0]/step),oy=Math.round(r.gridOrigin[1]/step),clamp=(v,lo,hi) => Math.max(lo,Math.min(hi,v));
+  const gx=clamp(x/step-ox,0,w-1),gy=clamp(y/step-oy,0,h-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,w-1),jy=Math.min(iy+1,h-1),fx=gx-ix,fy=gy-iy;
+  return (a[iy*w+ix]*(1-fx)+a[iy*w+jx]*fx)*(1-fy)+(a[jy*w+ix]*(1-fx)+a[jy*w+jx]*fx)*fy;
+}
+export async function cellHeights(map,read,{signal,step=async () => {}}={}) {
+  const heights=new Uint8Array(map.widthCells*map.heightCells);let clipped=0;
+  for(let z=0;z<map.heightCells;z+=32)for(let x=0;x<map.widthCells;x+=32){
+    signal?.throwIfAborted();const nx=Math.min(32,map.widthCells-x),nz=Math.min(32,map.heightCells-z),req={x:x*16,y:z*16,width:(nx-1)*16,height:(nz-1)*16};
+    const r=await read(req);
+    for(let yy=0;yy<nz;yy++)for(let xx=0;xx<nx;xx++){const h=sampleField(r,(x+xx)*16,(z+yy)*16);if(h<0||h>255)clipped++;heights[(z+yy)*map.widthCells+x+xx]=Math.round(Math.max(0,Math.min(255,h)));}
+    await step();
+  }
+  return {heights,clipped};
 }

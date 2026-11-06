@@ -52,12 +52,15 @@ export function featureRegionBounds(region,cols,rows,radius) {
   return {x0:clamp(Math.floor((x0-reach)/CELL),0,cols),z0:clamp(Math.floor((z0-reach)/CELL),0,rows),x1:clamp(Math.ceil((x1+reach)/CELL)+1,0,cols),z1:clamp(Math.ceil((z1+reach)/CELL)+1,0,rows)};
 }
 
+// A map's starts until the artist moves them: two, a unit in from opposite corners of the play area (half a unit on a one-unit side).
+export function defaultStarts(map) { const mx=map.unitsX===1?128:256,mz=map.unitsY===1?128:256; return [{x:mx,z:mz},{x:map.playRight-mx,z:map.playBottom-mz}]; }
+
 export async function mountMapFeatures(api) {
   const {config,canvas}=api,map=config.map,doc=canvas.ownerDocument,$=id => doc.getElementById(id);
   const nothing=() => {};
   if (!map) return {serialize:() => ({features:[],featureSet:{},starts:[],fill:{...DEFAULT_FILL}}),load:nothing,draw:nothing,deactivate:nothing,activate:() => false,clearSelection:nothing,pointerSelect:() => false,hitAt:() => null,fitGround:async () => false,groundChanged:nothing,stats:() => ({imageBytes:0}),get selectionCount(){return 0;},get active(){return false;},get busy(){return false;}};
   const cols=map.playRight/CELL,rows=map.playBottom/CELL,shift=Math.floor(config.baseHeight/2),kinds=worldKinds(config);
-  const defaults=() => { const mx=map.unitsX===1?128:256,mz=map.unitsY===1?128:256; return [{x:mx,z:mz},{x:map.playRight-mx,z:map.playBottom-mz}]; };
+  const defaults=() => defaultStarts(map);
   let set=defaultSet(config),placements=[],starts=defaults(),fill={...DEFAULT_FILL},generated=new Set(),mode='',placeKind='deposit',placeVariant=-1,selectedStart=0,rolls=0;
   let selection=new Set(),gesture=null,hover=null,space=false,message='';
   const panPointers=new Set(),controls=$('map-features-controls'),buttons=new Map([...doc.querySelectorAll('[data-feature-mode]')].map(b => [b.dataset.featureMode,b]));
