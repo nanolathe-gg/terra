@@ -105,7 +105,6 @@ fieldset{min-width:0;border:0;padding:0;margin:0}
 .inspector-tabs button{flex:1;padding:10px 2px;border:0;border-bottom:2px solid transparent;background:transparent;border-radius:0;color:var(--muted);font-size:11px}
 .inspector-tabs button[aria-selected=true]{border-bottom-color:var(--accent);color:var(--text)}
 .inspector-content{overflow:auto;min-height:0;padding:14px;scrollbar-width:thin}
-.eyebrow{color:var(--muted);font-size:9px;letter-spacing:1.3px;text-transform:uppercase}
 .world-name{font-size:18px;margin:3px 0 5px}
 .color-row{display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;margin-top:6px;font-size:11px}
 .color-row input[type=color]{width:32px;height:22px;padding:0;border:1px solid var(--line);border-radius:3px;background:none}

@@ -4,7 +4,7 @@ POST /api/maps takes a gzipped Terraform save and replies {"id"}; GET /api/maps/
 The id is the first 16 base32 characters of the SHA-256 of the gzipped bytes. Files live in <assets root>/maps/. There is no
 delete here: remove a file by hand.
 """
-import base64, gzip, hashlib, json, re, zlib
+import base64, hashlib, json, re, zlib
 from pathlib import Path
 from urllib.parse import urlsplit
 

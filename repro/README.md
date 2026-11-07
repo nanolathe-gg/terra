@@ -82,14 +82,13 @@ set the new shape options in `options.card` in the units of their sliders
 (`faceCurve` -100..100, shares as percent, widths in px).
 
 `demo/masks-*.json` (card C5, painted masks): `masks-green` (rock patches on a hill,
-moss, a wet band by a lake), `masks-desert` (a rocky mesa through the plateau's
-Paint inside option, next to a plain one), `masks-ice` (snow and rock paint, and a
-mountain painted snow through its own footprint) and `masks-moon` (a boulder field
-painted denser on the left; the World sliders stay at 0, since denser paint supplies
-its own stones). A paint stroke is `["paint", points, {"card": {"paintChannel": n, ...}}]`
-with `paintChannel` 1 rock, 2 snow or ice, 3 wet ground, 4 moss, 5 denser scatter,
-6 sparser scatter, 7 erase all masks; a landform paints its own footprint with
-`maskChannel` (0 off, 1..6 as above) and `maskAmount` (percent).
+moss, a wet band by a lake), `masks-ice` (snow and rock paint) and `masks-moon` (a
+boulder field painted denser on the left; the World sliders stay at 0, since denser
+paint supplies its own stones). `masks-desert` (two mesas and a hill) is the
+landform-only companion. A paint stroke is
+`["paint", points, {"card": {"paintChannel": n, ...}}]` with `paintChannel` 1 rock,
+2 snow or ice, 3 wet ground, 4 moss, 5 denser scatter and 6 sparser scatter; 7
+erases all masks and style.
 
 The line-feature demos (card C4) are `ridge-moon` (Crater-button craters, one
 with radiating spurs, and a tapering crescent ridge with spurs), `ridge-red`

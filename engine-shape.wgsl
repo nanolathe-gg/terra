@@ -48,8 +48,6 @@ fn noiseValue(f: u32, s: u32, x: f32, y: f32) -> f32 {
   return w.y * vnoise(x / w.x, y / w.x, s ^ k.x) + w.w * vnoise(x / w.z, y / w.z, s ^ k.y);
 }
 
-fn gcells() -> u32 { return u.grid * u.grid; }
-
 #ifdef PAGES
 // H5b: the planes may be a page: a pw x ph block of the map whose first cell is (ox, oy) in the world lattice (a whole map: ox = oy = 0, pw = ph = grid, so
 // every index below is the old y * grid + x). x, y stay world lattice coordinates; u.grid stays the whole map's size, which clamps and bounds the lattice.
@@ -918,8 +916,6 @@ fn lfRun(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, nA: f32, nB: f32, tr
   if (cap && ee > 0.0) { foot = mix(fw, bw, 0.5 + 0.5 * back / max(r, 1e-5)); }
   return vec3f(foot - r, foot, select(0.0, 1.0, back > 0.0));
 }
-// The cone profile: 0 at the apex, 1 at the toe, steeper than the mean near the apex and gentler near the toe (slopes 1.31 and 0.69 of the mean).
-fn coneProfile(t: f32) -> f32 { let v = clamp(t, 0.0, 1.0); return (1.15 * v - 0.275 * v * v) / 0.875; }
 // The height of the talus above the ground at a cell, or 0 (the caller takes the higher of this and the face). Each chute (a valley of the Gullies' widest
 // stripes, which run on straight below the foot) lays a cone whose slope is the repose (talusAngle) and whose length is the reach, with a low apron between the
 // cones, and nothing on a face whose section is nowhere steeper than the repose; inside the footprint the cone climbs the face at the repose until the face rises through it.

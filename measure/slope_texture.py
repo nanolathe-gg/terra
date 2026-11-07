@@ -13,12 +13,10 @@ level luma when an image has too little level ground):
            per 1000 px by area: 1-3, 4-12, 13-40, 41-150, >150 px
   edge     mean luma step across a mark's boundary per px (crispness)
 """
-import json
 import sys
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
 from scipy import ndimage
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))

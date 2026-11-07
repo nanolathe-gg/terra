@@ -14,7 +14,7 @@ import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBu
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
 import {selectionTransform} from './sculpt-selection.js';
 import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap,keepPrevious,takePrevious,dropPrevious} from './sculpt-share.js';
-import {isRiver,pointsSignature,RIVER_MIN_WIDTH} from './sculpt-river.js';
+import {isRiver,pointsSignature} from './sculpt-river.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
 
@@ -595,7 +595,6 @@ function regionalDirtyRect(from,rect) {
   return dirty;
 }
 // Shape runs on the GPU: the compute passes of engine-shape.wgsl (sculpt-gpu-fields.js) draw every brush; a node they do not draw draws nothing.
-const shapeKnob=(key) => renderer?.variantNumber?.(key,worldSetting(key))??worldSetting(key);
 const shapeContext=() => shapeContextIn({config,settings:experiment,seed,talusAngle:renderer?.variantNumber?.('talusAngle',40)??40,minH:MIN_HEIGHT,maxH:MAX_HEIGHT});
 // H5b: a map over 1168 samples a side runs its fields and Time pass in pages. gpuPages=force pages a smaller map too: a test hook for comparing pages with the whole map, not a switch (both are the GPU).
 const gpuPagesForced=() => new URLSearchParams(location.search).get('gpuPages')==='force';
