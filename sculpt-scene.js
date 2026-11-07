@@ -50,6 +50,13 @@ export const LANDFORM_TOOLS={
 };
 // lfcrater: a crater with no rim in its heights (retail Red and Crystal: rim/depth -.12..0), a .06 lip for the art and a wide bowl.
 export const CRATER_BOWL=[[0,0],[.25,-.02],[.4,-.06],[.5,.04],[.6,.3],[.72,.58],[.83,.82],[.93,.97],[1,1]];
+// The retired stroke kinds (November 6): Crater and Crystals draw landforms. An old save's strokes of these kinds load without them, said once (AGENTS.md
+// rule 7: no migrations), as an old save's retail features are (sculpt-features.js).
+export const RETIRED_KINDS=['crater','crystal'];
+export function retiredStrokeNote(list) {
+  const n=(Array.isArray(list)?list:[]).filter(s => RETIRED_KINDS.includes(s?.kind)).length;
+  return n?`This map’s ${n} old crater and crystal ${n===1?'stroke was':'strokes were'} left out: the Crater and Crystals buttons now draw landforms.`:'';
+}
 // A palette entry's stroke kind: the shape buttons all draw landforms.
 export const strokeKind=t => Object.hasOwn(LANDFORM_TOOLS,t)?'landform':t;
 export const TOOL_PRESETS={

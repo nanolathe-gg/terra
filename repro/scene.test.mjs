@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {sceneNodes, pageSettings, surfaceSliders, drawOptions, sliderRange, SURFACE_SLIDER_IDS, DEFAULT_SEED, strokeKind} from '../sculpt-scene.js';
+import {sceneNodes, pageSettings, surfaceSliders, drawOptions, sliderRange, SURFACE_SLIDER_IDS, DEFAULT_SEED, strokeKind, retiredStrokeNote, RETIRED_KINDS} from '../sculpt-scene.js';
 import {landformTool} from '../sculpt-shape-presets.js';
 
 const root = new URL('..', import.meta.url).pathname;
@@ -22,6 +22,19 @@ test('a scene is the ground undulation, then one node per stroke with its seed',
   assert.equal(strokeKind('crater'), 'landform');
   assert.equal(sceneNodes(config, [['crater', [[0, 0]], {}]], {ground: false})[0].params.heightReference, 2);
   assert.deepEqual(sceneNodes(config, [['hill', [[1, 2]], {}]]), sceneNodes(config, [['hill', [[1, 2]], {}]]), 'the same strokes give the same nodes');
+});
+
+test('an old save\'s crater and crystal strokes are left out, said once', () => {
+  // The retired kinds (November 6): the Crater and Crystals buttons draw landforms; an old save's strokes of those kinds load without them (AGENTS.md rule 7).
+  assert.deepEqual(RETIRED_KINDS, ['crater', 'crystal']);
+  const save = [{kind: 'ground'}, {kind: 'crater', points: [{x: 1, y: 2}]}, {kind: 'landform'}, {kind: 'crystal'}, {kind: 'crystal'}];
+  assert.equal(retiredStrokeNote(save), 'This map’s 3 old crater and crystal strokes were left out: the Crater and Crystals buttons now draw landforms.');
+  assert.equal(retiredStrokeNote([{kind: 'crater'}]), 'This map’s 1 old crater and crystal stroke was left out: the Crater and Crystals buttons now draw landforms.');
+  assert.equal(retiredStrokeNote([{kind: 'landform'}, {kind: 'fissure'}]), '');
+  assert.equal(retiredStrokeNote(undefined), '');
+  // The page keeps only kinds it draws (sculpt.js deserializeNodes and NODE_NAMES): neither retired kind is one.
+  const page = readFileSync(`${root}sculpt.js`, 'utf8'), names = page.match(/const NODE_NAMES=\{([^}]*)\}/)[1];
+  for (const kind of RETIRED_KINDS) assert.ok(!new RegExp(`\\b${kind}:`).test(names), `${kind} is not a node the page keeps`);
 });
 
 test('a stroke\'s palette entry is the button whose preset draws its section form', () => {

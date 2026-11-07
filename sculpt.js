@@ -7,7 +7,7 @@ import {copyColumn} from './sculpt-column.js';
 import {KNOBS,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps,impactPath} from './sculpt-shape-presets.js';
-import {strokeKind,TOOL_PRESETS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
+import {strokeKind,retiredStrokeNote,TOOL_PRESETS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
   shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,FIELD_KEYS,regionalCheck,repeatCheck,pagedTime} from './sculpt-scene.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER,lfcWidth} from './sculpt-gpu-fields.js';
 
@@ -122,7 +122,7 @@ const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 // Zero slope at the crown avoids the knife edge of a skewed power-law dome.
 setFailureHandler(err => error(err?.message??String(err)));
 function error(message='') { $('error').textContent=message; $('error').hidden=!message; }
-// A load's note about features it left out (sculpt-features.js) rides along with the load's own message, once.
+// A load's note about features or strokes it left out (sculpt-features.js, retiredStrokeNote) rides along with the load's own message, once.
 let featureNotice='';
 function status(message) { $('status').textContent=featureNotice&&message!==featureNotice?message+' '+featureNotice:message; if(message!==featureNotice)featureNotice=''; }
 // Height slider range per shape kind; Raise / lower is signed.
@@ -1170,7 +1170,7 @@ let keepSaved=false;   // set while the saved copy failed to load: leaving the p
 addEventListener('pagehide',() => { if (!stroke && !moving && !loading && !keepSaved) saveWorking(); });
 function loadSketch(s,carry=false) {
   if (!s || s.format!=='nanolathe-terrain-sculpt' || ![4,5,6].includes(s.version) || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n || n.kind==='raster')) throw new Error('Load a map stroke graph with the same canvas and grid size.');
-  const next=deserializeNodes(carry?carryNodes(s.nodes):s.nodes),column=copyColumn(s.column,defaultColumn);
+  const next=deserializeNodes(carry?carryNodes(s.nodes):s.nodes),column=copyColumn(s.column,defaultColumn),retired=retiredStrokeNote(s.nodes);
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
   if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
@@ -1188,6 +1188,8 @@ function loadSketch(s,carry=false) {
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
   restoreColumn(column);syncColumnPanel();
   nodes=next; selected=-1;pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
+  // An old save's crater and crystal strokes were left out (deserializeNodes keeps only kinds the editor draws): said once, with the load's own message.
+  if (retired) featureNotice=featureNotice?featureNotice+' '+retired:retired;
 }
 // A sketch remembers the world it was drawn in. Loading one in another world
 // reloads the recorded world first, then plays the sketch there. The file is
