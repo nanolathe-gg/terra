@@ -58,6 +58,14 @@ export function retiredStrokeNote(list) {
   const n=(Array.isArray(list)?list:[]).filter(s => RETIRED_KINDS.includes(s?.kind)).length;
   return n?`This map’s ${n} old crater and crystal ${n===1?'stroke was':'strokes were'} left out: the Crater and Crystals buttons now draw landforms.`:'';
 }
+// A save's brush card for a palette button counts only if this editor made it: every setting it holds is one the button's card has today (or its
+// curves and preset). A card from an older editor, such as the retired Crater and Crystals tools' or one holding a removed option, starts from the
+// button's preset instead; otherwise its old settings would outvote the preset's (AGENTS.md rule 7: an old save loads without a removed option).
+export function savedToolCard(config,entry,card) {
+  if (!card || typeof card!=='object') return null;
+  const current=new Set([...Object.keys(toolDefaults(config,entry)),'curve','along','preset']);
+  return Object.keys(card).every(k => current.has(k))?card:null;
+}
 // A palette entry's stroke kind: the shape buttons all draw landforms.
 export const strokeKind=t => Object.hasOwn(LANDFORM_TOOLS,t)?'landform':t;
 export const TOOL_PRESETS={

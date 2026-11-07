@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {sceneNodes, pageSettings, surfaceSliders, drawOptions, sliderRange, SURFACE_SLIDER_IDS, DEFAULT_SEED, strokeKind, retiredStrokeNote, RETIRED_KINDS} from '../sculpt-scene.js';
+import {sceneNodes, pageSettings, surfaceSliders, drawOptions, sliderRange, SURFACE_SLIDER_IDS, DEFAULT_SEED, strokeKind, retiredStrokeNote, RETIRED_KINDS, savedToolCard, toolDefaults} from '../sculpt-scene.js';
 import {landformTool} from '../sculpt-shape-presets.js';
 
 const root = new URL('..', import.meta.url).pathname;
@@ -35,6 +35,21 @@ test('an old save\'s crater and crystal strokes are left out, said once', () => 
   // The page keeps only kinds it draws (sculpt.js deserializeNodes and NODE_NAMES): neither retired kind is one.
   const page = readFileSync(`${root}sculpt.js`, 'utf8'), names = page.match(/const NODE_NAMES=\{([^}]*)\}/)[1];
   for (const kind of RETIRED_KINDS) assert.ok(!new RegExp(`\\b${kind}:`).test(names), `${kind} is not a node the page keeps`);
+});
+
+test('a save\'s brush card counts only if this editor made it', () => {
+  // An old save's Crater card (the retired tool's, which held craterlets and Fixed elevation 169) must not outvote the Crater preset.
+  const fresh = toolDefaults(config, 'crater');
+  assert.equal(fresh.heightReference, 2);
+  const mine = {...fresh, elevation: -30, preset: 'custom', curve: fresh.curve, along: null};
+  assert.equal(savedToolCard(config, 'crater', mine), mine, 'a card this editor made, with the artist\'s changes, is kept');
+  assert.equal(savedToolCard(config, 'crater', {...fresh, heightReference: 0, elevation: 169, craterlets: 5}), null, 'a card holding a removed option starts from the preset');
+  assert.equal(savedToolCard(config, 'plateau', {shallowMode: false, elevation: 3}), null, 'the November 3 retired tools\' cards too');
+  assert.equal(savedToolCard(config, 'crater', undefined), null);
+  for (const entry of ['plateau', 'crater', 'crystal', 'river', 'fissure', 'paint', 'erase']) {
+    const card = toolDefaults(config, entry);
+    assert.equal(savedToolCard(config, entry, card), card, `${entry}: today's own card is kept`);
+  }
 });
 
 test('a stroke\'s palette entry is the button whose preset draws its section form', () => {

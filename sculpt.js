@@ -7,7 +7,7 @@ import {copyColumn} from './sculpt-column.js';
 import {KNOBS,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {controlLabel,shapeControlAvailable,PARKED_WORLD_CONTROLS,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps,impactPath} from './sculpt-shape-presets.js';
-import {strokeKind,retiredStrokeNote,TOOL_PRESETS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
+import {strokeKind,retiredStrokeNote,savedToolCard,TOOL_PRESETS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
   shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,FIELD_KEYS,regionalCheck,repeatCheck,pagedTime} from './sculpt-scene.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER,lfcWidth} from './sculpt-gpu-fields.js';
 
@@ -1174,12 +1174,9 @@ function loadSketch(s,carry=false) {
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
   if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
-  // A shape button's saved settings count only when a landform made them (its section carries landform knots); the retired tools' settings start from the preset.
-  // A shape button's saved settings count only when a landform made them: the retired tools' (shallowMode marks every one) start from the preset,
-  // and Plateau takes the old Landform brush's own.
-  const retired=t => Boolean(t) && Object.hasOwn(t,'shallowMode'),saved=kind => { const t=s.toolSettings?.[kind]; return strokeKind(kind)!=='landform'||!retired(t)?t:kind==='plateau'?s.toolSettings?.landform:null; };
+  // A button's saved brush card counts only if this editor made it (savedToolCard); an older editor's card starts from the button's preset.
   // Carried into another world, the brush cards and the world's sliders stay at that world's defaults.
-  if (!carry) for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(saved(kind)||{})};
+  if (!carry) for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(savedToolCard(config,kind,s.toolSettings?.[kind])||{})};
   showTool(toolSettings[tool]);
   if (!carry) for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
   if (!carry) for (const [key,id,lo,hi] of [['softness','softness',0,100],['relief','relief',0,160],['mineralRing','mineral-ring',0,100],['ringSpread','ring-spread',0,100],['ringVariation','ring-variation',0,100],['materialWeathering','material-weathering',0,100],['depositSpread','deposit-spread',0,100],['transitionDetail','transition-detail',0,100]]) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
