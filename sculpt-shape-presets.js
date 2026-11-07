@@ -31,11 +31,8 @@ export const sampleKnots = knots => { const f = knotCurve(knots); return Array.f
 // ---- forms: short functions of softness that return knots ----
 const at = (f, xs) => xs.map(x => [x, f(x)]);
 const even = n => Array.from({length: n + 1}, (_, i) => i / n);
-const ridge = m => t => t <= 0 ? 0 : (1 - (1 - t) ** 2) ** m;
 const SMOOTH = at(sm, even(48));
 export const FORMS = {
-  // A crater's spurs: (1 - (1 - t)^2)^m, m 3.5 at softness .5 and 5.9 at 0, dense near the foot where the power law bends.
-  mountain: s => ({knots: at(ridge(3.5 * 2 ** ((.5 - s) * 1.5)), even(48))}),
   // Reset ground and the cover brushes: a smoothstep over the face.
   plateau: () => ({knots: SMOOTH}),
   // Desert's mesa: a concave apron (a share of the face), then a smoothstep face to the flat cap.

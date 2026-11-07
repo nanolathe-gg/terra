@@ -16,14 +16,12 @@ test('a lip knot above 1 does not ring: the curve stays within the knot heights'
  assert.equal(strokeCurve('landform',{softness:.5,curve:{form:'lfPlateau',knots:[[0,0],[.8,1.3],[1,1]]},terraces:0}).u.cvLip,1);
  assert.equal(strokeCurve('erase',{softness:.5,terraces:0}).u.cvLip,0);
 });
-test('every form is a knot list from the foot to the top, and the spurs\' mountain form follows softness',()=>{
+test('every form is a knot list from the foot to the top',()=>{
  for(const name of Object.keys(FORMS)){
   const k=FORMS[name](.5).knots;
   assert.equal(k[0][0],0);assert.equal(k.at(-1)[0],1);
   for(let i=1;i<k.length;i++)assert.ok(k[i][0]>k[i-1][0]);
  }
- assert.notDeepEqual(FORMS.mountain(0).knots,FORMS.mountain(1).knots);
- assert.deepEqual(strokeKnots('spurs',{softness:.5}).knots,FORMS.mountain(.5).knots);
  assert.deepEqual(strokeKnots('landform',{softness:.5,curve:{form:'cliff'}}).knots,FORMS.cliff(.5).knots);
  const own=[[0,0],[1,1]];assert.deepEqual(strokeKnots('landform',{softness:.5,curve:{form:'cliff',knots:own}}).knots,own);
 });
