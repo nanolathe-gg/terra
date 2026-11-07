@@ -29,6 +29,8 @@ try{
  const before=await ev('JSON.stringify(sculptDebug.sketch())'),art=await ev('document.getElementById("terrain").toDataURL()');
  await click('#view-passability');await until('sculptCanvas.passability.stats().ready','analyze');await ev('sculptCanvas.idle()');
  assert.equal(await ev('document.getElementById("view-rendered").getAttribute("aria-pressed")'),'false');
+ const settledState=await ev('document.getElementById("passability-state").textContent');await click('#view-passability');
+ assert.equal(await ev('document.getElementById("passability-state").textContent'),settledState,'clicking the active view keeps the completed status');
  assert.equal(await ev('JSON.stringify(sculptDebug.sketch())'),before,'a diagnostic view does not change the map recipe');
  assert.ok(await ev('document.getElementById("terrain").toDataURL()')===art,'the diagnostic is an overlay; terrain art is unchanged');
  const report={analysis:await ev('sculptCanvas.passability.stats()')};

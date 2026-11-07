@@ -10,6 +10,7 @@ export function mountPassability({config,sampleHeights,revision,ready,mapData,sc
   function syncButtons(){for(const [id,on] of [['view-passability',active],['view-rendered',!active&&!$('clay').checked],['view-clay',!active&&$('clay').checked]])$(id).setAttribute('aria-pressed',String(on));}
   function legend(){const f=family();$('passability-overview-key').hidden=Boolean(f);$('passability-family-key').hidden=!f;$('passability-reference').textContent=f?`${f.label}: ${f.profiles.map(p=>`${p.size}×${p.size} / slope ${p.slope}${p.depth<10000?` / depth ≤${p.depth}`:''}${p.minDepth>0?` / depth ≥${p.minDepth}`:''}`).join(' · ')}`:'Overlapping movement families · hover terrain for the full set';}
   function setActive(on){
+    if(active===on)return;
     active=on;$('passability-tools').hidden=!on;$('passability-legend').hidden=!on;syncButtons();
     if(!on){job?.controller.abort();job=null;model=null;cacheKey='';surface.width=surface.height=1;}
     else{legend();$('passability-state').textContent='Waiting for finished terrain…';$('passability-readout').textContent='Approximate reference profiles · Air crosses terrain; landing is not shown.';}
