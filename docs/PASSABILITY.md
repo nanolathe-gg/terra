@@ -91,5 +91,34 @@ legible in the narrow in-app browser using the existing Focus canvas control.
 
 Unfinished: exhaustive profile calibration, Nanolathe traversal parity for each
 reference, connected-route checks, turning/traffic, landing suitability, and
-larger-map performance qualification. No claim covers arbitrary mods. This is
-committed for review on its branch, not merged to main.
+larger-map performance qualification. No claim covers arbitrary mods. The view retains these documented limits when merged to main.
+
+
+## Landing validation after merging main
+
+Baseline: `0caa88ec`. Main merged cleanly into the passability branch before
+repeating the checks. Review also fixed reselecting the active Passability view:
+it now keeps its completed analysis status rather than displaying a waiting
+message that never completes. Chrome acceptance checks the second click.
+
+Measured after that fix:
+
+- 135 unit/static-build tests pass. All 30 reference PNGs are byte-identical
+  to current main. Green and modern Green regional replay have zero mismatches.
+  The world-name gate passes with exactly the baseline's 126 entries.
+- All nine worlds pass 171 brush/undo checks. Eight map exports pass their
+  self-checks; Zhon export remains disabled by design. Green `--page8`, the
+  feature selection/undo/export regression, and the owner's 8×8 passability
+  acceptance test pass. Opening the diagnostic still preserves recipe and art.
+- Three alternating complete `map8 --no-export` performance comparisons finish
+  through scroll with no browser errors. Drag frame p95 stays 16.7–16.8 ms.
+  First updated-chunk p95 is 20.0/17.4/19.0 ms before and 19.5/17.9/17.6 ms
+  after. Pointer-chunk p95 is 116.2/67.8/73.6 ms before and 71.3/76.2/328.5 ms
+  after; two pointer samples in the last after run are censored. These traces
+  contain no main-thread tasks over 50 ms. The pointer-specific outlier recurs
+  during ordinary brush chunk scheduling with the diagnostic closed; its cause
+  remains unresolved, so these runs establish stable frame timing, not pointer
+  latency equivalence. It remains a follow-up rather than a claim of improvement.
+
+The reference-profile and traversal limits above remain unchanged. No unit
+catalog or retail asset files are included.
