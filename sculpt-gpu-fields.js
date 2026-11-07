@@ -175,7 +175,7 @@ function ridgeRoots(s, path, cum, L) {
 // Buckling's height is on the same scale (lfimpact2: Buckling 70 draws what Ejecta 70 buckled before the two were split), on a landform that digs.
 function impactUniforms(q, sd, imp, c) {
   const pk = landformPeak(q), relief = Math.abs(Math.round(q.heightReference || 0) === 2 ? q.elevation : landformElevation(q, c.sea) - (c.baseHeight ?? 0)), sp = impactSpread(imp.angle);
-  return {ejAmt: .3 * clamp(q.ejecta || 0, 0, 2) * relief, bkAmt: bucklingOn(q) ? .3 * clamp(q.buckling || 0, 0, 2) * relief : 0, ejPeakF: pk > 0 ? (1 - pk) * sd.front : sd.front, ejPeakB: pk > 0 ? (1 - pk) * sd.back : sd.back,
+  return {ejAmt: .3 * clamp(q.ejecta || 0, 0, 3) * relief, bkAmt: bucklingOn(q) ? .3 * clamp(q.buckling || 0, 0, 3) * relief : 0, ejPeakF: pk > 0 ? (1 - pk) * sd.front : sd.front, ejPeakB: pk > 0 ? (1 - pk) * sd.back : sd.back,
     imX: imp.dx, imY: imp.dy, ejAsym: sp.asym, ejFz: sp.fz, ejWing: sp.wing, ejDz: sp.dz};
 }
 // lfcrater: the secondaries: small copies of the stroke (its section, Height reference and options, its relief scaled with its width,
