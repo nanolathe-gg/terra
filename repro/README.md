@@ -74,6 +74,13 @@ the retail crops stay outside git.
    reliefs, to check the strokes follow the retail layout before judging
    materials.
 
+5. Check a change: `repro/check.sh quick` renders every scene (`all.sh`,
+   four at a time) and compares it with the renders of the commit the
+   branch grew from, which it makes once and keeps in `$R/baseline/`
+   (`compare.py`: the scenes that changed, and with `--worlds` a failure
+   when another world's scene moves). `land` and `full` add the Chrome
+   checks and the sweeps (AGENTS.md "Checks").
+
 `demo/` holds scenes for tools that have no retail crop (the cross-section
 control, card C1): `profile-plateau`, `-escarpment`, `-hill-mountain`,
 `-terraced-dome`, `-lake` (and `-lake-red`, `-lake-terraced`, `-shallow`), `-desert-apron` and `-lip`. They are
