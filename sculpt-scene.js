@@ -39,6 +39,7 @@ export const LANDFORM_TOOLS={
   // measure/river_retail.py).
   river:{diameter:48,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:96,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfRiver',knots:FORMS.lfRiver().knots}},
   // A braided river: the same preset with a braided bed (its form: dry bars, thin threads, engine-shape.wgsl braidedBelt) and no migration unless Wander is raised.
+  // The bed is 1.8 widths either side of the line (about 150 px across at this 40 px brush); raise Brush diameter to widen it.
   braided:{diameter:40,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfBraided',knots:FORMS.lfBraided().knots}},
   // lfcrater: the Crater button. A bowl dug 20 below the ground it lands on with a rim .42 of that above it (the lfCrater section), 360 px foot to foot (a 200 px
   // rim), three secondaries, so a drag is the projectile's path (sculpt-shape-presets.js impactPoint, impactEnd): Roughness 35 as Wander and Height variation. Its

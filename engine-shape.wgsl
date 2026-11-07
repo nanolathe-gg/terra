@@ -589,7 +589,7 @@ fn riverChannel(fl: f32, qq: f32, c: f32, e: f32, kw: f32, silt: f32, wx: f32, w
 // the flow and none ends square. Threads are cut 2 to 3 units under the sea, which the per-pixel draw shows as water from a 2-px field (one under 3 px wide
 // breaks into dashes on that lattice, one under 2.5 units deep at the waterline's jitter); an edge too narrow to hold water is a dry scar. Everything is a
 // function of the cell's place along and across the path and the stroke's seed, so a regional replay draws the same bed. fl is the valley floor the bed lies
-// on; the bed reaches 4.8 widths either side of the path, and past an end it runs straight on to its round rim.
+// on; the bed reaches 1.8 widths either side of the path, and past an end it runs straight on to its round rim.
 const BR_LEN = 5.6;      // a bar's lattice length along the path, in widths
 const BR_ACROSS = 1.4;   // and across it
 const BR_HEAD = 1.5;     // the distance upstream of a bar's site counts this much (a blunt head)...
@@ -618,7 +618,7 @@ fn braidAge(cell: vec2i, site: vec2f, LX: f32, LY: f32, W: f32) -> f32 {
   return clamp(0.62 * (0.5 + 0.5 * hashi(cell.x, cell.y, u.seed ^ 0xb6u)) + 0.6 * (1.0 - plain), 0.0, 1.0);
 }
 fn braidedBelt(fl: f32, c: f32, e: f32, sAlong: f32, wx: f32, wy: f32) -> vec2f {
-  let W = u.lfRiver; let B = 4.8 * W;
+  let W = u.lfRiver; let B = 1.8 * W;
   let d = sqrt(c * c + e * e);
   if (d > B + 6.0) { return vec2f(fl, 0.0); }
   let sea = u.sea;

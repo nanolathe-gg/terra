@@ -14,7 +14,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export const RIVER_MIN_WIDTH = 32;          // px: narrower and the channel is not orthogonally connected on the 16-px height grid (measured at 18 px: not connected)
 export const RIVER_SPAN = 6;                // the section's half width over the channel's half width: the floodplain, levees and valley walls reach this far
-export const BRAIDED_SPAN = 22;             // and for a braided bed (half the bed is 4.8 widths = 9.6 half widths, over a level floor to 11; Width sizes its bars)
+export const BRAIDED_SPAN = 8;              // and for a braided bed (half the bed is 1.8 widths = 3.6 half widths, over a level floor to 4; Width sizes its bars)
 export const RIVER_BELT = 4;                // the most a river may stray from the drawn line, in channel widths: Wander (px) is the band, up to this
 export const RIVER_FREEZE = 4;              // widths either side of a point in which the farthest point stands for its bend: a bend stops as one
 // A river's band: how far, in px, its channel may stray from the drawn line (a whole bend stops from .6 of it to .97). Wander is that reach, as a
