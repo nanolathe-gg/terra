@@ -80,7 +80,7 @@ KNOB_DEFAULTS = dict(
     # plainRelief's.
     waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=0, deepEdge=0, lumpRelief=4,
     # Line features (card C4): everything off by default; spur details only matter once spurs are set.
-    spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestTaper=0,
+    spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestVary=0, crestTaper=0,
     # Local vegetation (card C5 stage 2): change about the world's own cover, 0 none.
     styleVegetation=0,
     # Placed fissures (card C4 stage 2): only the Fissure tool reads them.

@@ -49,6 +49,8 @@ const CONTROLS = {
   ejecta: {base: {secondaries: 1}, set: {ejecta: 100}},
   secondaries: {base: {ejecta: 5}, set: {secondaries: 6}},
   // lfcrystal: the faceted structure (Facet shape) and each shape's rows, with facets on and that shape chosen; the size and coverage on prisms.
+  // Spur variation: the spurs' width and height along them, read with six spurs on.
+  crestVary: {base: {spurCount: 6, spurLength: 160}, set: {crestVary: 100}},
   facetForm: {base: {iceFacets: 65}, set: {facetForm: 1}},
   crystalStep: {base: {iceFacets: 65, facetForm: 1, crystalStep: 0}, set: {crystalStep: 32}},
   crystalTiers: {base: {iceFacets: 65, facetForm: 1, crystalTiers: 0}, set: {crystalTiers: 100}},

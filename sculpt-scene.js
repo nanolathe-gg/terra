@@ -87,7 +87,7 @@ export const TOOL_PRESETS={
 // options that describe it. Wired like every shape option: SHAPE_FIELDS, the
 // card scriptedScene builds, strokeParams and KNOB_DEFAULTS (sculpt.py).
 // Line features (card C4): spurs and the crest's taper. All default off; spurs branch off a landform's crest (or a signed section's peak).
-export const RIDGE_KEYS=['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb','crestTaper'];
+export const RIDGE_KEYS=['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb','crestVary','crestTaper'];
 // Placed fissures (card C4 stage 2): the Fissure tool and its options. Depth is
 // the stroke's own amount; the rest are shape options kept in the shape.
 export const FISSURE_KEYS=['fissureWidth','fissureJag','fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper','fissureNetwork','fissureCell','fissureCrack','fissureDark'];
@@ -163,6 +163,7 @@ export const SHAPE_FIELDS=[
   ['spurHeight','spur-height','Spur height',['landform'],10,100,5,100,'A spur\'s root height as a share of the ridge\'s crest (of the peak it leaves from).'],
   ['spurForks','spur-forks','Spur forks',['landform'],0,100,5,100,'The share of spurs that fork once, two thirds of the way out, into a shorter spur.'],
   ['spurBulb','spur-bulb','Bulbous spur tips',['landform'],0,100,5,100,'Swells the outer half of every spur into a rounded lobe, so it ends in a knuckle, not a point.'],
+  ['crestVary','crest-vary','Spur variation',['landform'],0,100,5,100,'Each spur swells and narrows, and rises and dips, along its length, in waves about two spur widths long, so the spurs read as uneven ridges, not smooth tapering ones. 0: even spurs. It acts on spurs, so it shows once Spurs is on.'],
   ['crestTaper','crest-taper','Crest taper (both ends)',['landform'],0,100,5,100,'The crest narrows and lowers toward both ends of its path; it multiplies the height along the path.'],
   ['fissureWidth','fissure-width','Width (px)',['fissure'],2,24,1,1,'Width of the cut at its widest. The grid is 2 px, so a cut never reads narrower than about 4 px, however thin it is set.'],
   ['fissureJag','fissure-jag','Jaggedness',['fissure'],0,100,5,100,'How far the cut zigzags off its path, and how its depth varies along it.'],

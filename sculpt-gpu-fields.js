@@ -124,18 +124,19 @@ function fissurePieces(f, path, s, seed, radius) {
   return out;
 }
 // H9: line features (card C4): lineMultipliers and spurPieces of sculpt.js, the seeded arithmetic that lays out a landform's spurs as short pieces.
-function lineMultipliers(s, a, len, taper, ends) {
-  const f = len > 0 ? clamp(a / len, 0, 1) : 0, u = ends ? 1 - smooth(0, .4, Math.min(f, 1 - f)) : smooth(0, 1, f);
-  return [(1 - .62 * taper * u) * (ends ? 1 : 1 + .5 * (1 - smooth(0, .4, f))), 1 - .7 * taper * u];
+// Spur variation (crestVary) swells and narrows each piece, and lowers it, along the spur in waves of about two widths (one noise for width, one for height).
+function lineMultipliers(s, a, len, salt, taper, ends) {
+  const R = s.radius, f = len > 0 ? clamp(a / len, 0, 1) : 0, u = ends ? 1 - smooth(0, .4, Math.min(f, 1 - f)) : smooth(0, 1, f), n = valueNoise(a / (R * 2.2), .37, s.seed ^ salt), m = valueNoise(a / (R * 1.6), 2.9, s.seed ^ (salt + 0x55));
+  return [clamp(1 + .45 * s.crestVary * n, .6, 1.4) * (1 - .62 * taper * u) * (ends ? 1 : 1 + .5 * (1 - smooth(0, .4, f))), (1 - .45 * s.crestVary * (.5 - .5 * m)) * (1 - .7 * taper * u)];
 }
 function spurPieces(s, roots) {
   const kf = s.inv ? 1 / Math.hypot(s.inv[0], s.inv[1]) : 1, spread = s.spurSpread, bulb = s.spurBulb, out = [];
   const grow = (x, y, heading, len, rootR, rootH, k, level) => {
-    const step = len / 3, curl = (.1 + .3 * spread) * Math.PI;
+    const step = len / 3, curl = (.1 + .3 * spread) * Math.PI, salt = 0x300 + k * 97;
     let h = heading;
     for (let j = 0; j < 3; j++) {
       h += (rand01(s.seed, k, 20 + j) - .5) * curl;
-      const nx = x + Math.cos(h) * step, ny = y + Math.sin(h) * step, m0 = lineMultipliers(s, step * j, len, s.spurTaper, false), m1 = lineMultipliers(s, step * (j + 1), len, s.spurTaper, false);
+      const nx = x + Math.cos(h) * step, ny = y + Math.sin(h) * step, m0 = lineMultipliers(s, step * j, len, salt, s.spurTaper, false), m1 = lineMultipliers(s, step * (j + 1), len, salt, s.spurTaper, false);
       let r0 = m0[0], r1 = m1[0], e0 = m0[1], e1 = m1[1];
       if (bulb > 0) { const b0 = bulb * smooth(.5, 1, j / 3), b1 = bulb * smooth(.5, 1, (j + 1) / 3); r0 += b0 * .7; r1 += b1 * .7; e0 += (1 - e0) * b0; e1 += (1 - e1) * b1; }
       out.push(mkPiece({x, y}, {x: nx, y: ny}, rootR * r0, rootR * r1, rootH * e0, rootH * e1));
