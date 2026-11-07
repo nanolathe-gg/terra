@@ -40,11 +40,16 @@ What it says:
   whose residual (25 to 50 units at 3 to 4 R) swamps anything at the rim. Neither shows a
   ring to build to.
 
-As built: rings of raised blocks 0.3 R apart from just outside the rim, wandering along the
-ring and broken into sections, highest by the rim and gone by 1.72 R, at 3 times Ejecta's own
-height, following the impact's spread, and scaled by the rim radius from none under 48 px to
-all of it from 280 px. On a flat Moon fixture with Diameter 900 (a 560-px rim) it gives 6
-blocks at 1.39 R, 25 degrees wide, .39 of the depth.
+As built (lfimpact): rings of raised blocks 0.3 R apart from just outside the rim, wandering
+along the ring and broken into sections, highest by the rim and gone by 1.72 R, at 3 times
+Ejecta's own height, following the impact's spread, and scaled by the rim radius from none
+under 48 px to all of it from 280 px. On a flat Moon fixture with Diameter 900 (a 560-px rim)
+it gives 6 blocks at 1.39 R, 25 degrees wide, .39 of the depth.
+
+Since lfimpact2: the Buckling row sets the height (Buckling 70 draws what Ejecta 70 did; 0 to
+300%), apart from Ejecta, on a landform that digs, and the rim radius scales it from none under
+32 px to all of it from 160 px, so the medium class above buckles: on a flat Moon fixture the
+Crater button's preset at Diameter 360 (a 220-px rim) draws 5 blocks, against 2 before.
 
 ## Where small craters fall round a big one (card lfimpact2)
 
@@ -65,6 +70,6 @@ Small craters gather 1 to 2 rim radii out (within 2 R: median 1.46 R, p25 1.21, 
 craters beside its 1152 px crater sit 1.11, 1.22 and 1.44 R out.
 
 As built: the Secondaries' distance row sets where the band starts; the secondaries fall from
-there to twice as far (median 1.62 times it) and a third of them start a chain farther out.
-Its default is 1 (median 1.62 R; 1.6 before the row, median 2.59 R, in the band retail leaves
-nearly empty).
+there to twice as far (median 1.62 times it) and about a third start a chain farther out. The
+Crater preset sets 1 (median 1.62 R); every other shape keeps 1.6, the distance before the row
+(median 2.59 R, in the band retail leaves nearly empty round a crater).
