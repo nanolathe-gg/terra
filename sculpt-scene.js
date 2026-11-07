@@ -41,9 +41,10 @@ export const LANDFORM_TOOLS={
   // A braided river: the same preset with a braided bed (its form: dry bars, thin threads, engine-shape.wgsl braidedBelt) and no migration unless Wander is raised.
   braided:{diameter:40,lean:100,combine:1,heightReference:1,elevation:3,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,surf:0,curve:{form:'lfBraided',knots:FORMS.lfBraided().knots}},
   // lfcrater: the Crater button. A bowl dug 20 below the ground it lands on with a rim .42 of that above it (the lfCrater section), 360 px foot to foot (a 200 px
-  // rim), three secondaries, so a drag is the projectile's path (sculpt-shape-presets.js impactPoint, impactEnd): Roughness 35 as Wander and Height variation. Every preset value
-  // sits on its slider's step (the panel snaps any other).
-  crater:{diameter:360,lean:100,heightReference:2,elevation:-20,combine:2,cracks:30,wander:20,widthVary:10,heightVary:2,varySize:100,varyFoot:100,varyMiddle:100,ejecta:0,secondaries:3,curve:{form:'lfCrater',knots:FORMS.lfCrater().knots}},
+  // rim), three secondaries, so a drag is the projectile's path (sculpt-shape-presets.js impactPoint, impactEnd): Roughness 35 as Wander and Height variation. Its
+  // Length vs. height curve rises from nothing at the drag's start to the whole crater at its end, so the approach is a scar that deepens and widens into the
+  // crater (a click reads the curve at its end: a whole crater). Every preset value sits on its slider's step (the panel snaps any other).
+  crater:{diameter:360,lean:100,heightReference:2,elevation:-20,combine:2,cracks:30,wander:20,widthVary:10,heightVary:2,varySize:100,varyFoot:100,varyMiddle:100,ejecta:0,secondaries:3,along:[[0,0],[1,1]],curve:{form:'lfCrater',knots:FORMS.lfCrater().knots}},
   // lfcrystal: Crystals (the palette's Faceted forms) is a landform broken into prisms by its Facet shape: a click is a cluster round the point, a drag
   // rows along the path. The section is the old cluster's falloff (each prism stood 1 - .45 x its distance share lower toward the rim), the rise its Height.
   crystal:{diameter:200,elevation:40,lean:100,combine:0,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:200,varyFoot:100,varyMiddle:100,iceFacets:100,facetForm:2,facetSurface:1,iceFacetSize:32,
