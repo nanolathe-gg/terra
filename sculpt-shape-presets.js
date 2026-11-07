@@ -131,10 +131,10 @@ export function landformBackSide(lean, turn, dx, dy) {
   return lean.side || ((dy * bx - dx * by) < 0 ? -1 : 1);
 }
 // H27: the most a cell can stand from a landform's path and still be on it (world px; `scale` is the frame's), over the widest side grown by the width
-// variation at its largest weight, the wander, and the spurs. The segment boxes and nodeBounds both use it.
-export function landformReach(q, scale = 1, widthMul = 1) {
+// variation at its largest weight, the wander, and the spurs. The segment boxes (stamp: the ejecta, not the secondaries, which are nodes of their own) and nodeBounds (all of it) both use it.
+export function landformReach(q, scale = 1, widthMul = 1, stamp = false) {
   const {front, back} = landformSides(q), weight = Math.max(q.varyFoot ?? 1, q.varyMiddle ?? 1);
-  return Math.max(front, back) * widthMul * Math.exp(1.35 * (q.widthVary || 0) * weight) + (isRiver(q) ? 0 : (q.wander || 0) * scale * weight) + 2 + (talusOn(q) ? clamp(q.talus, 0, 400) : 0) + impactReach(q) * widthMul;
+  return Math.max(front, back) * widthMul * Math.exp(1.35 * (q.widthVary || 0) * weight) + (isRiver(q) ? 0 : (q.wander || 0) * scale * weight) + 2 + (talusOn(q) ? clamp(q.talus, 0, 400) : 0) + (stamp ? ejectaReach(q) : impactReach(q)) * widthMul;
 }
 
 // ---- lfcrater: the impact features (Ejecta, Secondaries) and the impact the drawn path describes ----
@@ -191,6 +191,8 @@ export function landformPeak(q) {
 }
 // How far past the footprint the impact features reach (px): the secondaries and their chains (5.2 peak distances from the path, a quarter of the width for their own
 // size) take in the ejecta's ragged edge (3.6).
+// The stroke's own stamp reaches only its ejecta (2.6 peak distances from the path: lfCraterEjecta): the secondaries are nodes of their own, with their own boxes.
+export const ejectaReach = q => { if (!((q?.ejecta || 0) > 0)) return 0; const {front, back} = landformSides(q), W = Math.max(front, back), pk = landformPeak(q), share = pk > 0 ? 1 - pk : 1; return W * Math.max(0, 2.6 * share - 1); };
 export const impactReach = q => { if (!impactOn(q)) return 0; const {front, back} = landformSides(q), W = Math.max(front, back), pk = landformPeak(q), share = pk > 0 ? 1 - pk : 1; return W * Math.max(0, 5.2 * share + .25 - 1); };
 
 // P17: a landform lays talus cones where it raises ground and Gullies cut its faces (the cones' chutes are the gullies' widest valleys).

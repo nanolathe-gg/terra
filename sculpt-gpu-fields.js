@@ -218,7 +218,7 @@ export function prepareNode(n, geom, c) {
   const vary = variability(kind, {naturalPlateau}, q);
   const amp = q.rough * radius * vary.amp;
   const frameScale = inv ? 1 / Math.hypot(inv[0], inv[1]) : 1;
-  const extent = kind === 'landform' ? landformReach(q, frameScale) : fis ? fis.reach : radius * (vary.wK ? Math.min(vary.wHi, 1 + q.rough * vary.wK) : 1) * (!lean.family && lean.ratio > 1 ? lean.ratio : 1) + 2 * amp;
+  const extent = kind === 'landform' ? landformReach(q, frameScale, 1, true) : fis ? fis.reach : radius * (vary.wK ? Math.min(vary.wHi, 1 + q.rough * vary.wK) : 1) * (!lean.family && lean.ratio > 1 ? lean.ratio : 1) + 2 * amp;
   // The stored noise tables (7 fields) at a lattice cell, as framedNoise or makeNoise would hold them in a Float32Array.
   const cellNoise = (f, ix, iy) => {
     const wx = ix * spacing, wy = iy * spacing;
@@ -267,7 +267,7 @@ export function prepareNode(n, geom, c) {
       const pk = landformSigned(q) ? landformPeak(q) : 0, sd0 = landformSides({...q, radius}), roots = ridgeRoots(rs, path, cum, pk > 0 && total < 1 ? 0 : total);   // a click's spurs leave all round it
       if (pk > 0) for (const r of roots) { r.x += Math.cos(r.heading) * (1 - pk) * sd0.front; r.y += Math.sin(r.heading) * (1 - pk) * sd0.front; }
       for (const pc of spurPieces(rs, roots)) {
-        const e = pc.b || pc.a, at = segs.length, ex = landformReach(q, frameScale, Math.max(pc.r0, pc.r1)) + (q.spurBulb > 0 ? q.spurBulb * radius : 0);
+        const e = pc.b || pc.a, at = segs.length, ex = landformReach(q, frameScale, Math.max(pc.r0, pc.r1), true) + (q.spurBulb > 0 ? q.spurBulb * radius : 0);
         segs.push({px: pc.a.x, py: pc.a.y, ex: e.x, ey: e.y, f0: [0, 0], f1: [-1 - (pc.share ?? 0), landformBackSide(lean, turn, e.x - pc.a.x, e.y - pc.a.y)], nx: pc.r0, ny: pc.r1, w2: pc.h0, w3: pc.h1});
         segs[at].box = [clamp(Math.floor((Math.min(pc.a.x, e.x) - ex) / spacing), 0, grid - 1), clamp(Math.floor((Math.min(pc.a.y, e.y) - ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.x, e.x) + ex) / spacing), 0, grid - 1), clamp(Math.ceil((Math.max(pc.a.y, e.y) + ex) / spacing), 0, grid - 1)];
       }
