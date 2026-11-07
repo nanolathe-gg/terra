@@ -67,6 +67,9 @@ export function retiredStrokeNote(list) {
 // button's preset instead; otherwise its old settings would outvote the preset's (AGENTS.md rule 7: an old save loads without a removed option).
 export function savedToolCard(config,entry,card) {
   if (!card || typeof card!=='object') return null;
+  // A card still on a world's preset was never edited (every edit marks it custom), so it is that preset as this editor has it: a preset's change
+  // reaches a working map's buttons as it reaches a new map's (Shallow water's Shelf section, November 7).
+  if (Object.hasOwn(TOOL_PRESETS,card.preset)) return toolDefaults(config,entry,card.preset);
   const current=new Set([...Object.keys(toolDefaults(config,entry)),'curve','along','preset']);
   return Object.keys(card).every(k => current.has(k))?card:null;
 }

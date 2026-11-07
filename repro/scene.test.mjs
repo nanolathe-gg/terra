@@ -43,7 +43,8 @@ test('a save\'s brush card counts only if this editor made it', () => {
   assert.equal(fresh.heightReference, 2);
   const mine = {...fresh, elevation: -30, preset: 'custom', curve: fresh.curve, along: null};
   assert.equal(savedToolCard(config, 'crater', mine), mine, 'a card this editor made, with the artist\'s changes, is kept');
-  assert.equal(savedToolCard(config, 'crater', {...fresh, heightReference: 0, elevation: 169, craterlets: 5}), null, 'a card holding a removed option starts from the preset');
+  assert.equal(savedToolCard(config, 'crater', {...fresh, preset: 'custom', heightReference: 0, elevation: 169, craterlets: 5}), null, 'a card holding a removed option starts from the preset');
+  assert.deepEqual(savedToolCard(config, 'crater', {...fresh, heightReference: 0, elevation: 169, craterlets: 5}), fresh, 'so does one still on the preset');
   assert.equal(savedToolCard(config, 'plateau', {shallowMode: false, elevation: 3}), null, 'the November 3 retired tools\' cards too');
   assert.equal(savedToolCard(config, 'crater', undefined), null);
   // lfimpact2: a card saved by main e98bf1f7 (before the Buckling and Secondaries' distance rows) holds no key since removed, so it is kept and takes the new
@@ -52,8 +53,14 @@ test('a save\'s brush card counts only if this editor made it', () => {
   assert.equal(savedToolCard(config, 'crater', older), older, 'a card from before the two impact rows is kept');
   for (const entry of ['plateau', 'crater', 'crystal', 'river', 'fissure', 'paint', 'erase']) {
     const card = toolDefaults(config, entry);
-    assert.equal(savedToolCard(config, entry, card), card, `${entry}: today's own card is kept`);
+    assert.deepEqual(savedToolCard(config, entry, card), card, `${entry}: today's own card is kept`);
   }
+  // A card still on a world's preset was never edited, so it is that preset as it is today: a working map saved before Shallow water's Shelf section
+  // draws the Shelf. A card the artist changed (custom) keeps its own curve; a card on another world's preset keeps that world's.
+  const before = {...toolDefaults(config, 'shallow'), curve: {form: 'lfShore', knots: [[0, 0], [.9, 1], [1, 1]]}};
+  assert.equal(savedToolCard(config, 'shallow', before).curve.form, 'lfShelf');
+  assert.equal(savedToolCard(config, 'shallow', {...before, preset: 'custom'}).curve.form, 'lfShore');
+  assert.deepEqual(savedToolCard(config, 'deep', {...toolDefaults(config, 'deep', 'red'), diameter: 999}), toolDefaults(config, 'deep', 'red'));
 });
 
 test('a stroke\'s palette entry is the button whose preset draws its section form', () => {
