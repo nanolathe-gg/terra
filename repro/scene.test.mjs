@@ -46,9 +46,10 @@ test('a save\'s brush card counts only if this editor made it', () => {
   assert.equal(savedToolCard(config, 'crater', {...fresh, heightReference: 0, elevation: 169, craterlets: 5}), null, 'a card holding a removed option starts from the preset');
   assert.equal(savedToolCard(config, 'plateau', {shallowMode: false, elevation: 3}), null, 'the November 3 retired tools\' cards too');
   assert.equal(savedToolCard(config, 'crater', undefined), null);
-  // lfimpact2: a card saved by main e98bf1f7 (before Buckling had a row) holds no key since removed, so it is kept and takes the new rows from the preset.
-  const older = Object.fromEntries(Object.entries(mine).filter(([k]) => k !== 'buckling'));
-  assert.equal(savedToolCard(config, 'crater', older), older, 'a card from before the Buckling row is kept');
+  // lfimpact2: a card saved by main e98bf1f7 (before the Buckling and Secondaries' distance rows) holds no key since removed, so it is kept and takes the new
+  // rows from the preset.
+  const older = Object.fromEntries(Object.entries(mine).filter(([k]) => !['buckling', 'secondaryDistance'].includes(k)));
+  assert.equal(savedToolCard(config, 'crater', older), older, 'a card from before the two impact rows is kept');
   for (const entry of ['plateau', 'crater', 'crystal', 'river', 'fissure', 'paint', 'erase']) {
     const card = toolDefaults(config, entry);
     assert.equal(savedToolCard(config, entry, card), card, `${entry}: today's own card is kept`);
