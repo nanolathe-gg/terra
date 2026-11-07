@@ -13,7 +13,7 @@ The reviewed shore prototype lands from `landform-shores`, including the request
 | Excavate a basin | Cut to, elevation below sea, positive 0–1 section |
 | Continuous shore / depth-colored water | Smooth section; shallow/deep materials follow bed depth |
 | Physical shallow shelf | Flat section segment near sea − 7, followed by a drop to sea − 55 |
-| Shallow area over land or an existing deep bed | Flatten to sea − 7 |
+| Shallow area over land or an existing deep bed | Flatten to sea − 7 (Shallow water draws the Shelf section since November 7, 2026: a level, wadeable bed; docs/PASSABILITY.md) |
 | Shallow passage that leaves higher ground intact | Raise to sea − 7 |
 | Lava bank | Smooth cut plus shared shoreline layers; Fingers as desired |
 
