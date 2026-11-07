@@ -45,3 +45,26 @@ ring and broken into sections, highest by the rim and gone by 1.72 R, at 3 times
 height, following the impact's spread, and scaled by the rim radius from none under 48 px to
 all of it from 280 px. On a flat Moon fixture with Diameter 900 (a 560-px rim) it gives 6
 blocks at 1.39 R, 25 degrees wide, .39 of the depth.
+
+## Where small craters fall round a big one (card lfimpact2)
+
+Measured with `measure/crater_secondaries.py` on the same heights: the big craters are the
+ones above (rim diameter 150 px or more, 73 of them on the twelve maps), the small ones are
+bowls (a cell lower than its neighbours and 6 or more units under the cells 2 to 3 cells
+away) outside every rim. Each small crater counts once, round the big crater it is nearest
+to in rim radii, and the density of each annulus is set against the density 3 to 5 R out.
+
+| Distance from the centre (R) | 1.0-1.5 | 1.5-2.0 | 2.0-2.5 | 2.5-3.0 | 3.0-4.0 | 4.0-5.0 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Small craters (6+ units deep) | 73 | 62 | 13 | 24 | 68 | 72 |
+| Density, x the density 3-5 R out | 4.14 | 2.52 | 0.43 | 0.68 | 0.93 | 1.07 |
+| Same, small craters 4+ units deep | 2.12 | 1.45 | 0.65 | 0.87 | 0.93 | 1.07 |
+
+Small craters gather 1 to 2 rim radii out (within 2 R: median 1.46 R, p25 1.21, p75 1.64);
+2 to 3 R holds fewer than the plain beyond. The repro windows agree: moon-1's three small
+craters beside its 1152 px crater sit 1.11, 1.22 and 1.44 R out.
+
+As built: the Secondaries' distance row sets where the band starts; the secondaries fall from
+there to twice as far (median 1.62 times it) and a third of them start a chain farther out.
+Its default is 1 (median 1.62 R; 1.6 before the row, median 2.59 R, in the band retail leaves
+nearly empty).

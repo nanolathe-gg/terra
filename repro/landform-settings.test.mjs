@@ -81,3 +81,18 @@ test('lfimpact2: Buckling is its own impact row, on a landform that digs',async(
   assert.ok(Math.abs(u(crater).bkAmt-.3*.7*20)<1e-9); assert.equal(u(crater).ejAmt,0);
   assert.equal(u({...crater,ejecta:.7,buckling:0}).bkAmt,0); assert.ok(u({...crater,ejecta:.7,buckling:0}).ejAmt>0);
 });
+
+test('lfimpact2: Secondaries\' distance moves the whole band, and the bounds with it',async()=>{
+  const {impactReach}=await import('../sculpt-shape-presets.js');
+  const {prepareNode}=await import('../sculpt-gpu-fields.js');
+  const ctx={seed:1,baseHeight:99,sea:75,params:n=>new Proxy(n.params,{get:(o,k)=>o[k]??0})};
+  const q={radius:200,ejecta:0,buckling:0,secondaries:6,curve:{form:'lfCrater',knots:[[0,0],[.39,-.4],[.56,-.04],[1,1]]},heightReference:2,elevation:-20,combine:2};
+  const spots=near=>prepareNode({kind:'landform',seed:7,points:[{x:2000,y:2000}],params:{...q,secondaryDistance:near}},{grid:2048,spacing:2},ctx).multi.slice(1).map(m=>Math.hypot(m.segs[0].px-2000,m.segs[0].py-2000));
+  // The same seed throws to the same azimuths and draws; every distance scales with the row.
+  const a=spots(1.6),b=spots(1.1),c=spots(3.2);
+  assert.equal(a.length,b.length); for(let i=0;i<a.length;i++){assert.ok(Math.abs(b[i]/a[i]-1.1/1.6)<1e-6); assert.ok(Math.abs(c[i]/a[i]-2)<1e-6);}
+  // 1.6, the distance before the row, keeps the old bound (5.2 rim radii); the bound grows with the row.
+  const W=200;
+  assert.ok(impactReach({...q,secondaryDistance:3.2})>impactReach({...q,secondaryDistance:1.6})*1.9);
+  assert.ok(Math.max(...c)<impactReach({...q,secondaryDistance:3.2})+W);
+});

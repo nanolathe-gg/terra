@@ -34,6 +34,9 @@ test('faceted forms and shoreline materials keep their own dependent controls',(
  assert.equal(available('buckling','landform',dig),true);
  assert.equal(available('buckling','landform',{heightReference:2,elevation:12}),false);
  assert.equal(available('buckling','landform',{heightReference:0,elevation:-18}),false);
+ // Secondaries' distance shows once there is a secondary.
+ assert.equal(available('secondaryDistance','landform',{secondaries:0}),false);
+ assert.equal(available('secondaryDistance','landform',{secondaries:1}),true);
  assert.equal(available('frostNeedles','landform',{shorePlates:1,plateMaterial:1}),false);
  assert.equal(available('frostNeedles','landform',{shorePlates:1,plateMaterial:2}),true);
  assert.equal(available('crystalShoreSeam','landform',{shorePlates:1,plateMaterial:2}),false);

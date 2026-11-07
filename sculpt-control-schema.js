@@ -53,6 +53,8 @@ export function shapeControlAvailable(key,kind,p){
   if(['ejecta','secondaries'].includes(key))return !isRiver(p);
   // lfimpact2: the ground buckles beyond the rim of a shape that digs into the ground it lands on (the engine's bucklingOn); its help says so.
   if(key==='buckling')return !isRiver(p)&&landformDigs(p);
+  // Secondaries' distance places the secondaries: it shows once there is one (its help says so).
+  if(key==='secondaryDistance')return !isRiver(p)&&Math.round(Number(p.secondaries)||0)>=1;
   // Spur variation acts on spurs: it shows once Spurs is on (its help says so).
   if(key==='crestVary')return Math.round(Number(p.spurCount)||0)>=1;
  }

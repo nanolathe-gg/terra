@@ -185,11 +185,13 @@ export function landformPeak(q) {
   for (let j = 1; j <= CV_N + 1; j++) { const v = sign * tab[j]; if (v > best + 1e-6) { best = v; at = (j - 1) / CV_N; } }
   return at >= .9 ? 0 : at;
 }
-// How far past the footprint the impact features reach (px): the secondaries and their chains (5.2 peak distances from the path, a quarter of the width for their own
-// size) take in the ejecta's ragged edge (3.6).
+// lfimpact2: the secondaries fall from this many rim radii out (Secondaries' distance) to twice as far; 1.6 before the row.
+export const secondaryNear = q => clamp(q?.secondaryDistance ?? 1, .8, 4);
+// How far past the footprint the impact features reach (px): the secondaries and their chains (3.25 x Secondaries' distance peak distances from the path: 5.2 at
+// 1.6, past the farthest chain's 3.12; a quarter of the width for their own size) and the ejecta's ragged edge (2.6).
 // The stroke's own stamp reaches only its ejecta and buckling (2.6 peak distances from the path: lfCraterEjecta): the secondaries are nodes of their own, with their own boxes.
 export const ejectaReach = q => { if (!((q?.ejecta || 0) > 0) && !bucklingOn(q)) return 0; const {front, back} = landformSides(q), W = Math.max(front, back), pk = landformPeak(q), share = pk > 0 ? 1 - pk : 1; return W * Math.max(0, 2.6 * share - 1); };
-export const impactReach = q => { if (!impactOn(q)) return 0; const {front, back} = landformSides(q), W = Math.max(front, back), pk = landformPeak(q), share = pk > 0 ? 1 - pk : 1; return W * Math.max(0, 5.2 * share + .25 - 1); };
+export const impactReach = q => { if (!impactOn(q)) return 0; const {front, back} = landformSides(q), W = Math.max(front, back), pk = landformPeak(q), share = pk > 0 ? 1 - pk : 1; return W * Math.max(0, Math.max(2.6, 3.25 * secondaryNear(q)) * share + .25 - 1); };
 
 // P17: a landform lays talus cones where it raises ground and Gullies cut its faces (the cones' chutes are the gullies' widest valleys).
 export const talusOn = q => (q.talus || 0) > 0 && (q.gullies || 0) > 0 && !(q.combine > 0);

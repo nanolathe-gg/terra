@@ -438,6 +438,7 @@ try {
       if (key === 'gullySize' || key === 'talus') p.gullies = 1;
       if (key === 'waterDeep') p.waterBed = 1;   // a stroke's edge choice shows where its own Lit bed draws the deep share
       if (key === 'buckling') Object.assign(p, {heightReference: 2, elevation: -20, combine: 2});   // lfimpact2: the ground buckles round a shape that digs
+      if (key === 'secondaryDistance') p.secondaries = 3;   // it places the secondaries
       if(kind==='landform'&&(key.startsWith('layer')||key.startsWith('lava')))Object.assign(p,{stepReference:key==='layerCircle'||key==='lavaCircleVary'?2:1,terraces:5,ledge:.7,terraceJitter:.5});
       return p;
     };

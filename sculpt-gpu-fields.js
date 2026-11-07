@@ -1,7 +1,7 @@
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {isRiver, isBraided, riverWidth, riverCurvature} from './sculpt-river.js';
-import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, landformDigs, impactOn, bucklingOn, impactSetup, impactPoint, impactEnd, impactSpread, impactWeight, landformPeak} from './sculpt-shape-presets.js';
+import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, landformDigs, impactOn, bucklingOn, secondaryNear, impactSetup, impactPoint, impactEnd, impactSpread, impactWeight, landformPeak} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -179,12 +179,13 @@ function impactUniforms(q, sd, imp, c) {
     imX: imp.dx, imY: imp.dy, ejAsym: sp.asym, ejFz: sp.fz, ejWing: sp.wing, ejDz: sp.dz};
 }
 // lfcrater: the secondaries: small copies of the stroke (its section, Height reference and options, its relief scaled with its width,
-// no ejecta or secondaries of their own; a tenth to a quarter of its width), thrown beyond the ejecta blanket (1.6 to 3.2 rim radii from the path) at azimuths drawn from the impact's spread, so an
+// no ejecta or secondaries of their own; a tenth to a quarter of its width), thrown from Secondaries' distance to twice as far (rim radii from the path; lfimpact2:
+// 1.6 to 3.2 before the row, 1 to 2 by default) at azimuths drawn from the impact's spread, so an
 // oblique impact's land downrange and a grazing one's to the sides. About a third start a chain of one or two smaller ones farther out along the same ray.
 // They are thrown from the impact point, the path's end.
 function secondaryNodes(n, q, imp, seed, geom, c) {
   const count = Math.round(clamp(q.secondaries, 0, 12)), sd = landformSides(q), pk = landformPeak(q), rp = pk > 0 ? (1 - pk) * Math.max(sd.front, sd.back) : Math.max(sd.front, sd.back);
-  const sp = impactSpread(imp.angle), world = geom.spacing * (geom.grid - 1) + 1, rnd = (k, a) => rand01(seed ^ 0x51ec, k, a), out = [];
+  const sp = impactSpread(imp.angle), world = geom.spacing * (geom.grid - 1) + 1, rnd = (k, a) => rand01(seed ^ 0x51ec, k, a), out = [], near = secondaryNear(q);
   const at = impactPoint(shapePaths(n)[0].map(i => n.points[i])), down = Math.atan2(imp.dy, imp.dx), aimed = imp.dx !== 0 || imp.dy !== 0;
   const ref = Math.round(q.heightReference || 0), lift = (k) => ref === 2 ? q.elevation * k : (landformElevation(q, c.sea) - c.baseHeight) * k + c.baseHeight - (ref === 1 ? c.sea : 0);
   for (let k = 0; k < count; k++) {
@@ -192,7 +193,7 @@ function secondaryNodes(n, q, imp, seed, geom, c) {
     let phi = 0;
     for (let j = 0; j < 16; j++) { phi = (rnd(k, 10 + j) * 2 - 1) * Math.PI; if (rnd(k, 40 + j) * 1.9 < impactWeight(sp, phi) || j === 15) break; }
     const ang = aimed ? down + phi : phi;
-    const dist = rp * (1.6 + 1.6 * Math.pow(rnd(k, 5), .7)), size = (.1 + .16 * rnd(k, 6)), chain = rnd(k, 7) < .35 ? 1 + (rnd(k, 8) < .5 ? 1 : 0) : 0;
+    const dist = rp * (near + near * Math.pow(rnd(k, 5), .7)), size = (.1 + .16 * rnd(k, 6)), chain = rnd(k, 7) < .35 ? 1 + (rnd(k, 8) < .5 ? 1 : 0) : 0;
     for (let m = 0; m <= chain; m++) {
       const f = 1 + .28 * m, k2 = size * Math.pow(.7, m), spot = {x: clamp(at.x + Math.cos(ang + (rnd(k, 20 + m) - .5) * .12) * dist * f, 0, world - 1), y: clamp(at.y + Math.sin(ang + (rnd(k, 20 + m) - .5) * .12) * dist * f, 0, world - 1)};
       out.push(prepareNode({kind: 'landform', satellite: true, points: [spot], frame: n.frame, seed: (seed + (k * 3 + m + 1) * 2654435761) >>> 0,

@@ -50,6 +50,8 @@ const CONTROLS = {
   secondaries: {base: {ejecta: 5}, set: {secondaries: 6}},
   // lfimpact2: Buckling, on a crater that digs (Ground, below 0) and is big enough to buckle (a 280 px rim radius: all of it), with no other impact row on.
   buckling: {base: {diameter: 900, heightReference: 2, elevation: -20, combine: 2, curve: {form: 'lfCrater'}}, set: {buckling: 100}},
+  // lfimpact2: Secondaries' distance, its default (1 rim radius) to 3, with six secondaries.
+  secondaryDistance: {base: {secondaries: 6, secondaryDistance: 10}, set: {secondaryDistance: 30}},
   // lfcrystal: the faceted structure (Facet shape) and each shape's rows, with facets on and that shape chosen; the size and coverage on prisms.
   // Spur variation: the spurs' width and height along them, read with six spurs on.
   crestVary: {base: {spurCount: 6, spurLength: 160}, set: {crestVary: 100}},
