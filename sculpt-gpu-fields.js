@@ -1,7 +1,7 @@
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {isRiver, isBraided, riverWidth, riverCurvature} from './sculpt-river.js';
-import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, landformGround, impactOn, impactSetup, impactPath, impactSpread, impactWeight, landformPeak} from './sculpt-shape-presets.js';
+import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, landformDigs, impactOn, impactSetup, impactPath, impactSpread, impactWeight, landformPeak} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -46,7 +46,7 @@ function shapeMaskWrites(kind, q, sat) {
 
 // The uniform struct, in one list so the WGSL and the writer cannot drift apart: [name, type] with type f (f32), u (u32), i (i32).
 const NODE_FIELDS = [
-  ...['fcMode', 'fcSkin'].map(k => [k, 'u']), ...['fcL', 'fcStrength', 'fcStep', 'fcShare'].map(k => [k, 'f']), ...['cgSize', 'cgFacet', 'cgSizeVar', 'cgSmooth', 'cgTiers', 'cgStep', 'cgVar', 'bgRough', 'bgJit'].map(k => [k, 'f']),
+  ...['fcMode', 'fcSurface'].map(k => [k, 'u']), ...['fcL', 'fcStrength', 'fcStep', 'fcShare'].map(k => [k, 'f']), ...['cgSize', 'cgFacet', 'cgSizeVar', 'cgSmooth', 'cgTiers', 'cgStep', 'cgVar', 'bgRough', 'bgJit'].map(k => [k, 'f']),
   ...['plMat'].map(k => [k, 'u']), ...['plWater', 'plLand', 'plSize', 'plGap', 'plHeight', 'plSeam', 'plVary', 'plNeedles', 'frGapSize', 'frGapDepth', 'frGaps', 'frGapReach'].map(k => [k, 'f']),
   ...['grid', 'kind', 'nseg', 'seed', 'framed', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'curveBase', 'backBase', 'cvLip', 'sSteps', 'coPutW', 'coMoved', 'coSrc', 'coScal', 'coN', 'coSNI', 'coSNJ', 'combine', 'alongBase'].map(k => [k, 'u']),
   ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy', 'coStep', 'coSI0', 'coSJ0', 'coBx0', 'coBy0', 'coBx1', 'coBy1'].map(k => [k, 'i']),
@@ -294,10 +294,10 @@ export function prepareNode(n, geom, c) {
       rotX: Math.cos(turn), rotY: Math.sin(turn),
       ...(inv ? Object.fromEntries(inv.map((v, i) => ['inv' + i, v])) : {}),
       fHw: fis?.hw0 ?? 0, fKf: fis?.kf ?? 0, fJag: fis?.jag ?? 0, fAmp: fis?.amp ?? 0, fCell: q.fissureCell, fCrack: q.fissureCrack, fNet: fis?.net ? 1 : 0, fDark: q.fissureDark}};
-  // Angular facets re-tile a raised result; a landform with shore features keeps its coast pass instead (shapeControlAvailable hides the row there).
-  // lfcrater: a landform that digs into the ground it lands on (Height reference Ground, below 0) fits its facets to its own surface up and down, the pass a
-  // crater's Bowl facets ran (mode 1), at its Facet size, with the world's facet step and skin; a raised one keeps the angular facets (mode 2).
-  const facetMode = n.satellite || kind !== 'landform' || !(q.iceFacets > 0) || landformShore(q) ? 0 : landformGround(q) && q.elevation < 0 ? 1 : 2;
+  // Facets re-tile the landform's result; a landform with shore features keeps its coast pass instead (shapeControlAvailable hides the row there). A landform
+  // that digs into the ground it lands on (landformDigs: Height reference Ground, below 0) takes angular facets fitted to its own surface up and down (mode 1);
+  // a raised one takes its Facet shape (mode 2).
+  const facetMode = n.satellite || kind !== 'landform' || !(q.iceFacets > 0) || landformShore(q) ? 0 : landformDigs(q) ? 1 : 2;
   // lfcrystal: Facet shape (1 stepped columns, 2 prisms) breaks the landform's envelope into elements on the same pass; prisms stand past the footprint by up to their own width.
   const lfc = facetMode === 2 ? clamp(Math.round(q.facetForm || 0), 0, 2) : 0, lfcL = lfc ? lfcWidth(q) * frameScale : 0;
   if (lfc === 2 && region) main.region = region = expand(region, Math.ceil(.9 * lfcL / spacing) + 2, grid);
@@ -352,11 +352,11 @@ function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0
   if (!fingers && !layers && !plates && !facet && !beach) return null;
   const {grid, spacing, refSpacing = spacing} = geom;
   if (facet) {
-    // Crater and mountain facets: a pass over the node's own result. The seeds of the 3 x 3 lattice neighbours lie within 2 widths of a cell, and read 3 cells round themselves.
-    // lfcrystal: columns read the envelope at seeds up to about two widths away; prisms evaluate the section at their seeds and read only their own cell.
+    // Facets: a pass over the node's own result. Angular facets' seeds (the 3 x 3 lattice neighbours) lie within 2 widths of a cell, and read 3 cells round
+    // themselves; columns read the envelope at seeds up to about two widths away; prisms evaluate the section at their seeds and read only their own cell.
     const L = lfcL || clamp(q.iceFacetSize, 16, 640), mF = lfcL && Math.round(q.facetForm) === 2 ? 2 : Math.ceil((lfcL ? 2.2 : 2.1) * L / spacing) + 6, boxF = expand(region, mF, grid), am = clamp(q.iceFacets, 0, 1);
     return {box: boxF, readR: mF + 2, fingers: false, layers: false, plates: false, facet, lfc: lfcL > 0, scal: false, blurR: 1, maxCells: 0, sites: {i0: 0, j0: 0, ni: 0, nj: 0}, siteFloats: 0, sideR: 0, extra: [],
-      u: {fcMode: facet, fcL: L, fcStrength: clamp(q.iceFacets, 0, 1), fcStep: q.crystalCraterStep ?? 0, fcSkin: q.crystalCraterSkin >= .5 ? 1 : 0, fcShare: .2 + .5 * am, coPutW: 1, coBx0: boxF.x0, coBy0: boxF.y0, coBx1: boxF.x1, coBy1: boxF.y1}};
+      u: {fcMode: facet, fcL: L, fcStrength: clamp(q.iceFacets, 0, 1), fcStep: Math.max(0, q.crystalStep ?? 0), fcSurface: Math.round(q.facetSurface || 0) >= 1 ? 1 : 0, fcShare: .2 + .5 * am, coPutW: 1, coBx0: boxF.x0, coBy0: boxF.y0, coBx1: boxF.x1, coBy1: boxF.y1}};
   }
   const fReach = .5 * radius, fLimit = fReach + spacing * 3, lReach = layers ? coastLayerReach(q) : 0, reach = Math.max(fingers ? fLimit : 0, lReach, beach ? BEACH_REACH : 0, plates ? Math.max(plWater, plLand) + 2 * spacing : 0);
   const m = Math.ceil(reach / spacing) + 12, box = expand(region, m, grid), blurR = Math.max(1, Math.round(10 * refSpacing / spacing));

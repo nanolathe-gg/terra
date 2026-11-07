@@ -44,9 +44,9 @@ KNOB_DEFAULTS = dict(
     rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5,
     grooveSpacing=36, grooveAngle=0, grooveRun=120, bedHeight=0, rockFrom=.6,
     worms=0, rockCrown=0, apron=0,
-    # A landform's Facets (stepped columns and prisms; sculpt-scene.js SHAPE_FIELDS): the step in units, the prisms' sides, flat top share and variation, Level tops,
-    # Align to the path, outline jitter, corner cuts and face roughness in units.
-    crystalStep=16, crystalSides=6, crystalTop=.2, crystalVariation=.5, crystalTiers=0,
+    # A landform's Facets (sculpt-scene.js SHAPE_FIELDS): Step height in units (5 is the angular facets' earlier fixed step), the prisms' sides, flat top share and
+    # variation, Level tops, Align to the path, outline jitter, corner cuts and face roughness in units.
+    crystalStep=5, crystalSides=6, crystalTop=.2, crystalVariation=.5, crystalTiers=0,
     crystalAlign=0, bergJitter=.5, bergBreak=3, bergRough=6,
     shorePlates=0, plateWaterPx=64, plateLandPx=96, plateSize=28, plateGap=2, plateHeight=3, plateMaterial=1,
     crystalGrain=0, crystalFace=1, crystalInk=0, crystalTone=1, crystalSeam=0,
@@ -101,8 +101,8 @@ for _m in SHINE_MATERIALS:
     KNOB_DEFAULTS.update({f'shine{_m}': 0, f'shine{_m}Sharp': 24, f'shine{_m}Rough': 0, f'shine{_m}Scale': 6})
 # E7 (Crystal): every knob's default is the earlier output.
 KNOB_DEFAULTS.update(crystalFacet=0, crystalSizeVar=0, crystalShallow=0, crystalShallowPx=10)
-# G7 (Crystal): craters with smaller, softer facets (0: the earlier output).
-KNOB_DEFAULTS.update(crystalCraterPx=0, crystalCraterStep=3, crystalCraterSkin=0, crystalCraterWeb=0, crystalCraterWebPx=14, crystalCraterWobble=0,
+# G7 (Crystal): the thin web the draw lays over a crystal skin (a landform's angular Facets with Surface Crystal; 0: none).
+KNOB_DEFAULTS.update(crystalCraterWeb=0, crystalCraterWebPx=14, crystalCraterWobble=0,
                      crystalCraterGap=0, crystalCraterTone=0, crystalCraterLight=1)
 # G7 (Crystal): finer shore slabs and fainter seams (the defaults are the earlier output).
 KNOB_DEFAULTS.update(crystalShoreSeam=.5, crystalSeamEnd=.74, crystalShallowInk=.55)
@@ -159,8 +159,8 @@ KNOB_DEFAULTS.update(iceSoft=0, iceSnow=0, iceFall=0, iceApron=0)
 KNOB_DEFAULTS.update(iceFrost=0)
 # G6, Ice: angular facets on hills and mountains (share of the mountain broken into facets; facet width in px). Off by default everywhere.
 KNOB_DEFAULTS.update(iceFacets=0, iceFacetSize=36)
-# lfcrystal: a landform's Facet shape (0 angular facets, as before; 1 stepped columns; 2 prisms).
-KNOB_DEFAULTS.update(facetForm=0)
+# A landform's Facet shape (0 angular facets, 1 stepped columns, 2 prisms) and Surface (0 rock: the shape's own ground; 1 crystal).
+KNOB_DEFAULTS.update(facetForm=0, facetSurface=0)
 # G1 (shallow water round 3): shoalBump is the slope of the lit bumps the shallow bed carries
 # (0: none, the earlier bed), shoalBumpPx their size in screen px.
 KNOB_DEFAULTS.update(shoalBump=0, shoalBumpPx=6)
@@ -557,7 +557,6 @@ WORLD_KNOBS = {
                     # 1-unit step, one skin mark, the web drawn by the shader, and the sun's light and shade
                     # pushed 1.6 times harder on the wall. H21: the west wall read too dark and busy;
                     # ordinary contrast and a fainter web keep the planes visible (crystal-1).
-                    crystalCraterPx=16, crystalCraterStep=1, crystalCraterSkin=1,
                     crystalCraterWeb=.35, crystalCraterWebPx=18, crystalCraterWobble=4, crystalCraterGap=.25,
                     crystalCraterTone=.12, crystalCraterLight=1,
                     # G7/H20b: the shore slabs draw at 28 px, under thinner seams (.56, ending at .68).

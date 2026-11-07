@@ -51,7 +51,7 @@ export function groupToolControls(fields,buildRow){
  [null,'Water appearance',['waterDeep','waterBed']],
  [null,'Surf',['surf']],
  [null,'Crest variation',['crestTaper']],
- ['iceFacets','Facets',['iceFacets','facetForm','iceFacetSize','crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSides','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']]
+ ['iceFacets','Facets',['iceFacets','facetForm','facetSurface','iceFacetSize','crystalStep','crystalTiers','crystalFacet','crystalSizeVar','crystalSides','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']]
  ];
  function wire(d,controls,master=null){
   const memory=new Map(),box=master?d.querySelector(':scope > summary > input'):undefined;
@@ -65,7 +65,7 @@ export function groupToolControls(fields,buildRow){
  }
  const basics=document.querySelector('#brush-panel > .brush-basics');wire(basics,['tool-style','diameter','amount','roughness','softness'].map(id=>$(id).closest('.control')));
  for(const [key,label,keys] of definitions){const present=fields.filter(f=>keys.includes(f[0]));if(!present.length)continue;present.forEach(f=>claimed.add(f[0]));make(label,present.map(buildRow),key?present.find(f=>f[0]===key)[1]:null);}
- for(const field of fields){const [key,id,label,,lo]=field;if(claimed.has(key))continue;make(controlLabel(key,label).replace(/ \(.*$/,''),[buildRow(field)],lo<=0&&!['crystalForm','bergTiltDir'].includes(key)?id:null);}
+ for(const field of fields){const [key,id,label,,lo]=field;if(claimed.has(key))continue;make(controlLabel(key,label).replace(/ \(.*$/,''),[buildRow(field)],lo<=0?id:null);}
  // The generated groups go ahead of Cracks, the one group the page declares in #shape-options.
  root.prepend(...created);
  wire($('cracks-control').closest('details'),[$('cracks-control')],$('cracks'));

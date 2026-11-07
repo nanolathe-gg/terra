@@ -1642,10 +1642,13 @@ fn cgWorld(l: vec2f) -> vec2f {
   return vec2f(a * l.x + c * l.y + e, b * l.x + d * l.y + f);
 }
 
-// ---- H10: crater and mountain facets, a pass over the node's own result ----
-// facetSnap copies the node's result to plane R; facetApply then re-tiles the cells the node touched (footprint plane W > 0) with Voronoi facets, each the plane through the
-// result at the facet's seed (height and slope over 3 cells, read from R inside the footprint and from the prefix B elsewhere). Every read is of R, B or W, which no
-// thread of the pass writes, so a repeat run is identical. Reads clamp to the node's box (the host grows it by the seeds' reach).
+// ---- H10: a landform's Facets, a pass over the node's own result ----
+// facetSnap copies the node's result to plane R; facetApply then re-tiles the cells the node touched (footprint plane W > 0) with Voronoi facets (Facet shape:
+// angular facets), each the plane through the result at the facet's seed (height and slope over 3 cells, read from R inside the footprint and from the prefix B
+// elsewhere). Every read is of R, B or W, which no thread of the pass writes, so a repeat run is identical. Reads clamp to the node's box (the host grows it by
+// the seeds' reach). fcMode 1 is a landform that digs into the ground it lands on: the planes are fitted to its surface up and down and replace it by the Facets
+// share (fcStrength); fcMode 2 a raised one: a share of tilted, steeper planes stand out of it. Step height (fcStep) steps each facet off its neighbours.
+// Surface Crystal (fcSurface) marks them as one crystal skin (the crystal field's 0.74, whose thin web the draw adds); Rock leaves the shape's own ground.
 @compute @workgroup_size(8, 8)
 fn facetSnap(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
@@ -1657,22 +1660,22 @@ fn fcAt(gx: i32, gy: i32, cells: u32) -> f32 {
   let j = cIdx(clamp(gx, max(u.coBx0, 0), min(u.coBx1, i32(u.grid) - 1)), clamp(gy, max(u.coBy0, 0), min(u.coBy1, i32(u.grid) - 1)));
   return select(Sc[CB * cells + j], Sc[CRR * cells + j], Sc[CW * cells + j] > 0.0);
 }
-struct FcSeed { l: vec2f, w: vec2f, h: f32, dx: f32, dy: f32, step: f32, shade: f32, steep: f32, on: bool }
+struct FcSeed { l: vec2f, w: vec2f, h: f32, dx: f32, dy: f32, step: f32, steep: f32, on: bool }
 fn fcSeed(i: i32, j: i32, cells: u32) -> FcSeed {
-  let L = u.fcL; let crater = u.fcMode == 1u;
-  let jit = select(1.0, 0.9, crater);
+  let L = u.fcL; let dig = u.fcMode == 1u;
+  let jit = select(1.0, 0.9, dig);
   let l = cgPoint(i, j, L, jit, 0u); let w = cgWorld(l);
   let gx = i32(floor(w.x / u.spacing + 0.5)); let gy = i32(floor(w.y / u.spacing + 0.5)); let e3 = 3;
   var s: FcSeed; s.l = l; s.w = w;
   s.h = fcAt(gx, gy, cells);
   s.dx = (fcAt(gx + e3, gy, cells) - fcAt(gx - e3, gy, cells)) / (2.0 * 3.0 * u.spacing);
   s.dy = (fcAt(gx, gy + e3, cells) - fcAt(gx, gy - e3, cells)) / (2.0 * 3.0 * u.spacing);
-  s.step = 0.0; s.shade = 0.0; s.steep = 1.0; s.on = true;
-  if (crater) { s.step = (cgRnd(i, j, 3u) - 0.5) * 2.0 * u.fcStep; s.shade = 0.7 + 0.17 * cgRnd(i, j, 5u); }
+  s.step = 0.0; s.steep = 1.0; s.on = true;
+  if (dig) { s.step = (cgRnd(i, j, 3u) - 0.5) * 2.0 * u.fcStep; }
   else {
     s.on = cgRnd(i, j, 4u) < u.fcShare;
     s.dx = s.dx + (cgRnd(i, j, 6u) - 0.5) * 0.7; s.dy = s.dy + (cgRnd(i, j, 7u) - 0.5) * 0.7;
-    s.steep = 1.1 + 0.3 * cgRnd(i, j, 5u); s.step = (cgRnd(i, j, 3u) - 0.2) * 10.0;
+    s.steep = 1.1 + 0.3 * cgRnd(i, j, 5u); s.step = (cgRnd(i, j, 3u) - 0.2) * 2.0 * u.fcStep;
   }
   return s;
 }
@@ -1683,32 +1686,29 @@ fn facetApply(@builtin(global_invocation_id) g: vec3u) {
   let cells = cCells(); let i = cIdx(x, y);
   if (!(Sc[CW * cells + i] > 0.0)) { return; }
   let snap = Sc[CRR * cells + i]; let base = Sc[CB * cells + i]; let relief = snap - base;
-  let crater = u.fcMode == 1u;
-  if (crater) { if (abs(relief) < 0.6) { return; } } else { if (relief < 2.0) { return; } }
+  let dig = u.fcMode == 1u;
+  if (dig) { if (abs(relief) < 0.6) { return; } } else { if (relief < 2.0) { return; } }
   let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
   var lx = wx; var ly = wy;
   if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
   let L = u.fcL; let ci = i32(floor(lx / L)); let cj = i32(floor(ly / L));
   var d1 = 3.0e38; var d2 = 3.0e38; var bi = 0; var bj = 0;
   for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
-    let d = length(vec2f(lx, ly) - cgPoint(ii, j, L, select(1.0, 0.9, crater), 0u));
+    let d = length(vec2f(lx, ly) - cgPoint(ii, j, L, select(1.0, 0.9, dig), 0u));
     if (d < d1) { d2 = d1; d1 = d; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
   } }
   let s = fcSeed(bi, bj, cells);
-  if (crater) {
+  if (dig) {
     let facet = s.h + s.dx * (wx - s.w.x) + s.dy * (wy - s.w.y) + s.step * sm(0.0, 4.0, abs(relief));
-    let value = snap + (facet - snap) * u.fcStrength;
-    F[PH * cells + i] = clamp(select(value, max(value, u.sea + 1.5), base > u.sea + 1.0), u.minH, u.maxH);
-    if (abs(relief) >= 2.0) {
-      F[PP * cells + i] = 1.0;
-      if (u.fcSkin != 0u) { F[PX * cells + i] = 0.74; } else { F[PX * cells + i] = select(s.shade, 0.5, d2 - d1 < max(1.2, u.spacing * 0.6)); }
-    }
+    F[PH * cells + i] = clamp(snap + (facet - snap) * u.fcStrength, u.minH, u.maxH);
+    if (abs(relief) >= 2.0 && u.fcSurface != 0u) { F[PP * cells + i] = 1.0; F[PX * cells + i] = 0.74; }
     return;
   }
   if (!s.on) { return; }
   let plane = s.h + (s.dx * (wx - s.w.x) + s.dy * (wy - s.w.y)) * s.steep + s.step * sm(0.0, 10.0, relief);
   let value = max(plane, base); let fade = sm(2.0, 10.0, relief);
   F[PH * cells + i] = clamp(snap + (value - snap) * fade, u.minH, u.maxH);
+  if (u.fcSurface != 0u) { F[PP * cells + i] = 1.0; F[PX * cells + i] = 0.74; }
 }
 
 // ---- lfcrystal: a landform's faceted structure (Facet shape 1 stepped columns, 2 prisms), a pass over the landform's own result ----
@@ -1855,14 +1855,16 @@ fn lfCrystalColumns(x: i32, y: i32, i: u32, cells: u32) {
   let base = Sc[CB * cells + i];
   let value = lfCrystalCombine(base, top);
   if (abs(value - base) <= 0.5) { F[PH * cells + i] = base; return; }
-  F[PH * cells + i] = clamp(value, u.minH, u.maxH); F[PP * cells + i] = 1.0;
-  F[PX * cells + i] = select(shade, 0.5, d2 - d1 < max(1.2, u.spacing * 0.6));
+  F[PH * cells + i] = clamp(value, u.minH, u.maxH);
+  // Surface Crystal: each column is crystal, shaded by its own brightness, with a dark seam to its neighbours; Rock keeps the shape's own ground.
+  if (u.fcSurface == 0u) { return; }
+  F[PP * cells + i] = 1.0; F[PX * cells + i] = select(shade, 0.5, d2 - d1 < max(1.2, u.spacing * 0.6));
 }
 
 // Prisms: on the lattice of Facet width, a Facet coverage share of the sites carries a polygonal prism (Polygon sides, turned square to the path by Align,
 // its outline jittered and its corners cut), as high as the envelope at its seed; its faces climb from its outline to a flat top (Flat top share), level or
-// following the envelope (Level tops). Between prisms the ground is the prefix. Face roughness 0 keeps clean crystal faces (the crystal mark); above 0 the
-// faces are rough and take the world's own slope relief and light, as the old berg form's did.
+// following the envelope (Level tops). Between prisms the ground is the prefix. Face roughness roughens the faces; Surface Crystal marks each prism as clean
+// crystal (the crystal field), Rock leaves it the shape's own ground, lit with the world's slope relief and light (ice blocks).
 fn lfCrystalPrisms(x: i32, y: i32, i: u32, cells: u32) {
   let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
   let pc = lfCrystalCoord(vec2f(wx, wy)); let k0 = u32(pc.z);
@@ -1906,7 +1908,7 @@ fn lfCrystalPrisms(x: i32, y: i32, i: u32, cells: u32) {
     best = best + u.bgRough * f * sm(0.0, 4.0, best);
   }
   F[PH * cells + i] = clamp(lfCrystalCombine(base, base + best), u.minH, u.maxH);
-  if (u.bgRough > 0.0) { return; }
+  if (u.fcSurface == 0u) { return; }
   F[PP * cells + i] = 1.0;
   F[PX * cells + i] = max(F[PX * cells + i], sm(0.2, 1.5, best));
 }

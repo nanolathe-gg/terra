@@ -222,6 +222,8 @@ export const landformElevation = (q, sea) => q.elevation + (Math.round(q.heightR
 // lfcrater: Height reference Ground (2) makes the elevation an offset from the ground under each cell, so a shape follows the ground it lands on (a crater
 // on a slope, a levee beside a channel); its "plain" is that ground, 0.
 export const landformGround = q => Math.round(q?.heightReference || 0) === 2;
+// A landform that digs into the ground it lands on (Ground, below 0): its Facets are angular facets fitted to its own surface, up and down.
+export const landformDigs = q => landformGround(q) && Number(q?.elevation) < 0;
 // A signed section: a knot below 0 reaches past the ground, away from the elevation (a rim beside a bowl, a levee beside a channel, a moat round a mound).
 // Those cells are part of the shape (engine-shape.wgsl lfCraterCover); they show where Combine keeps them (Flatten to; Raise to keeps a rim, Cut to a moat).
 export const landformSigned = q => { const k = strokeKnots('landform', q); return k.knots.some(p => p[1] < 0) || (k.back ?? []).some(p => p[1] < 0); };

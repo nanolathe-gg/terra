@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {shapeControlAvailable as available,controlLabel,PARKED_WORLD_CONTROLS} from '../sculpt-control-schema.js';
 import {prepareNode} from '../sculpt-gpu-fields.js';
 
-test('a landform takes angular facets unless its coast pass is on',()=>{
+test('a landform takes facets unless its coast pass is on',()=>{
  assert.equal(available('iceFacetSize','landform',{iceFacets:1}),true);
  assert.equal(available('iceFacetSize','landform',{iceFacets:0}),false);
  assert.equal(available('iceFacets','landform',{iceFacets:1,fingers:1}),false);
@@ -21,6 +21,15 @@ test('faceted forms and shoreline materials keep their own dependent controls',(
  assert.equal(available('crystalTiers','landform',{iceFacets:.6,facetForm:0}),false);
  assert.equal(available('crystalTiers','landform',{iceFacets:.6,facetForm:2}),true);
  assert.equal(available('bergRough','landform',{iceFacets:.6,facetForm:2,stepReference:1,terraces:4}),false);
+ // One Facets feature: Surface and width for every shape, Step height for angular facets and columns, and a landform that digs takes angular facets.
+ assert.equal(available('facetSurface','landform',{iceFacets:.6,facetForm:0}),true);
+ assert.equal(available('facetSurface','landform',{iceFacets:0}),false);
+ assert.equal(available('crystalStep','landform',{iceFacets:.6,facetForm:0}),true);
+ const dig={iceFacets:1,heightReference:2,elevation:-18};
+ assert.equal(available('facetForm','landform',{...dig,facetForm:2}),false);
+ assert.equal(available('crystalStep','landform',{...dig,facetForm:2}),true);
+ assert.equal(available('crystalTop','landform',{...dig,facetForm:2}),false);
+ assert.equal(available('facetForm','landform',{iceFacets:1,heightReference:2,elevation:12}),true);
  assert.equal(available('frostNeedles','landform',{shorePlates:1,plateMaterial:1}),false);
  assert.equal(available('frostNeedles','landform',{shorePlates:1,plateMaterial:2}),true);
  assert.equal(available('crystalShoreSeam','landform',{shorePlates:1,plateMaterial:2}),false);

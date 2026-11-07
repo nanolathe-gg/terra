@@ -51,11 +51,11 @@ const BODIES = /^(crystal[A-Z]\w*|ice[A-Z]\w*|frost[A-Z]\w*|lava(Calm|Chip|Crust
 const BODY_CLASS = k => /^crystalCrater/.test(k) ? 'crater' : /^crystalShallow/.test(k) ? 'shallows' : /^(crystalShore|crystalSeam|frost|iceFrost)/.test(k) ? 'shore' : 'raised';
 // The stroke kinds that carry each shape option (sculpt-scene.js SHAPE_FIELDS), and the scale of the card's unit.
 const KINDS = {crystalTiers: ['landform'], crystalSides: ['landform'], crystalStep: ['landform'], crystalTop: ['landform'], crystalVariation: ['landform'],
-  crystalAlign: ['landform'], crystalFacet: ['landform'], crystalSizeVar: ['landform'], crystalCraterPx: ['crater'], crystalCraterStep: ['crater'], crystalCraterSkin: ['crater'],
+  crystalAlign: ['landform'], crystalFacet: ['landform'], crystalSizeVar: ['landform'],
   crystalShoreSeam: ['landform'], frostNeedles: ['landform'], iceFacets: ['landform'], iceFacetSize: ['landform']};
 const isWater = st => st[0] === 'landform' && [st[2]?.curve?.form, st[2]?.card?.curve?.form].includes('lfShore');
 const BODY_SCALE = {crystalTiers: 100, crystalSides: 1, crystalStep: 1, crystalTop: 100, crystalVariation: 100, crystalAlign: 100, crystalFacet: 100, crystalSizeVar: 100,
-  crystalCraterPx: 1, crystalCraterStep: 10, crystalCraterSkin: 100, crystalShoreSeam: 100, frostNeedles: 100, iceFacets: 100, iceFacetSize: 1};
+  crystalShoreSeam: 100, frostNeedles: 100, iceFacets: 100, iceFacetSize: 1};
 const impacts = family === 'impacts', shores = family === 'shores', bodies = family === 'bodies', fractures = family === 'fractures' || shores || bodies || impacts;   // both read each scene's own effective value
 const scenes = {};   // world -> the three scenes' variants, for the page's own values
 const queries = {};   // world -> the three scenes' own query pairs (zhon-1: beachWidth=0), which win over every table
