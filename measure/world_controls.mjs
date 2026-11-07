@@ -57,7 +57,7 @@ if (args.includes('--recheck')) {
 }
 const SURFACE = [['relief', 0, 160], ['transition-detail', 0, 100], ['mineral-ring', 0, 100], ['ring-spread', 0, 100], ['ring-variation', 0, 100], ['material-weathering', 0, 100], ['deposit-spread', 0, 100]];
 // The stroke kinds that carry SHAPE_FIELDS rows, drawn one each on a grid of the 1024 px window.
-// lfcrater, lfcrystal: the Crater and Crystals buttons draw landforms, so the old crater and crystal kinds have no stroke here; their rows go with them.
+// The Crater and Crystals buttons draw landforms, so the retired crater and crystal kinds have no rows here (BUTTONS_AT keeps a stroke of each button).
 const KIND_AT = {fissure: [130, 830], erase: [380, 830], paint: [630, 830], landform: [880, 830]};
 // The retired tools' strokes as the landforms the shape buttons draw (sea-relative, about as tall above this map's plain as the old fixtures' Rise).
 const PLATEAU = (pts, rise, card = {}) => ['landform', pts, {card: {heightReference: 1, elevation: 24 + rise, wander: 40, widthVary: 30, ...card}}];
@@ -282,7 +282,10 @@ try {
     [560, 960, {waterBed: 3, waterDeep: 1}, {diameter: 200, shorePlates: 1, plateMaterial: 1}]]
     .map(([x, y, picks, card]) => WATER([[x, y], [x + 400, y]], {diameter: 150, ...card}, picks));
   // The stroke fixture: one stroke of each kind carrying a shape option, shifted by `variant` so a second one differs in size and amount. The third is as wide as a world's own plateau.
-  const strokeFixture = variant => Object.entries(KIND_AT).map(([kind, [x, y]]) => [kind, [[x - 70, y], [x + 70, y + (variant ? 30 : 0)]], {card: {diameter: [180, 260, 560][variant], amount: variant ? 100 : 70, roughness: variant ? 55 : 35}}]);
+  // The Crater and Crystals buttons draw landforms now: one stroke of each stays where the retired crater and crystal kinds stood, after the rows' own strokes
+  // (a row is read on the first stroke of its kind), so the fixtures keep what they held round the landform's row.
+  const BUTTONS_AT = {crater: [630, 500], crystal: [880, 500]};
+  const strokeFixture = variant => [...Object.entries(KIND_AT), ...Object.entries(BUTTONS_AT)].map(([kind, [x, y]]) => [kind, [[x - 70, y], [x + 70, y + (variant ? 30 : 0)]], {card: {diameter: [180, 260, 560][variant], amount: variant ? 100 : 70, roughness: variant ? 55 : 35}}]);
   // Two Sand strokes over the first stroke fixture's rows, for the options that scale what lies on the ground (Style: deposits).
   const sandOver = () => [170, 500, 830].map(y => ['sand', [[60, y], [950, y]], {card: {diameter: 300, amount: 100}}]);
   const fmt = r => `${r.world.padEnd(12)}${r.type.padEnd(8)}${(r.stroke ? r.stroke + ':' : '') + r.key}`.padEnd(40) + `${String(r.max).padStart(4)}${String(r.px).padStart(9)}  ${r.fixture}${r.state === 'gated' ? ' gated ' + JSON.stringify(r.gates) : ''}${r.zero && !r.allowed ? '  !' : ''}${r.hides ? '  ! hidden: ' + r.reason : ''}`;
