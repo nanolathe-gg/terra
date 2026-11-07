@@ -42,3 +42,19 @@ test('variability: the per-kind constants of the brushes, a crater\'s spurs and 
  const s=variability('spurs',{});assert.deepEqual([s.amp,s.wK,s.hgtA,s.hgtB],[.2,0,0,.09]);
  const l=variability('landform',{});assert.deepEqual([l.amp,l.wK,l.wLo,l.wHi,l.hgtA,l.hgtB],[.2,0,1,1,0,0]);
 });
+
+test('Shallow water\'s shelf: a ford wide enough to wade and a pool whose dry bank vehicles can climb',()=>{
+ // The units the passability view checks (sculpt-passability.js): vehicles and KBots wade up to 12 deep and climb a 16 px cell whose four corner
+ // heights span at most 15. Green's plain is 99, its sea 75; the default Shallow stroke is 200 px wide with its bed 7 under the sea.
+ const f=knotCurve(FORMS.lfShelf().knots),R=100,sea=75,bed=68;
+ for(let i=0;i<=100;i++)if(i/100>=.55)assert.ok(f(i/100)>.9999,'level over the inner 45% of the half width');
+ // A ford raised over a deep bed at 20: at any offset, five corners across it stand at most 12 deep (a 4 x 4 footprint fits).
+ for(const ox of [0,4,8,12]){let n=0;for(let x=-8;x<=8;x++){const d=Math.abs(x*16-ox);if(d<R&&20+(bed-20)*f(1-d/R)>=sea-12)n++;}assert.ok(n>=5,`ford corners at offset ${ox}: ${n}`);}
+ // A round pool flattened into the plain: every dry cell's span stays within 15, whichever way the lattice falls.
+ let worst=0;
+ for(const ox of [0,4,8,12])for(const oy of [0,5,11]){
+  const h=(X,Y)=>{const r=Math.hypot(X-ox,Y-oy);return r>=R?99:99-(99-bed)*f(1-r/R);};
+  for(let z=-8;z<8;z++)for(let x=-8;x<8;x++){const c=[h(x*16,z*16),h(x*16+16,z*16),h(x*16,z*16+16),h(x*16+16,z*16+16)];if(Math.min(...c)>=sea)worst=Math.max(worst,Math.max(...c)-Math.min(...c));}
+ }
+ assert.ok(worst<=15,`worst dry span ${worst.toFixed(1)}`);
+});

@@ -48,6 +48,11 @@ export const FORMS = {
   lfTerraced: () => ({knots: [[0, 0], [.08, 0], [.2, .3], [.34, .3], [.46, .62], [.6, .62], [.72, 1], [1, 1]]}),
   // The reviewed shore (landform-shores retail windows): a smoothstep over the outer 90% of the half width, level at the path.
   lfShore: () => ({knots: [...even(24).map(x => [Math.round(900 * x) / 1000, Math.round(1000 * sm(x)) / 1000]), [1, 1]]}),
+  // Shallow water's shelf: a level bed over the inner 45% of the half width, so water drawn shallow is shallow enough to wade across its width (retail
+  // fords are level beds 7-11 deep: docs/PASSABILITY.md), and a bank that eases in (distance share ^ 1.4) over the outer 55%. At the default 200 px, a
+  // ford over a deep bed keeps five 16 px cells at most 12 deep, and a pool flattened 31 units into Green's plain keeps every dry cell within a vehicle's
+  // slope of 15 (14.7 at worst on an ideal lattice; repro/knots.test.mjs). The shore's smoothstep reached its depth only at the path.
+  lfShelf: () => ({knots: [...even(8).map(x => [Math.round(550 * x) / 1000, Math.round(1000 * x ** 1.4) / 1000]), [1, 1]]}),
   // The valleys (cut-to landforms: the ground falls from the foot, 0, to the floor on the path, 1). V: the rise above the floor is linear in the distance (a river's
   // walls stand at one slope); U: the rise is the distance squared (a glacier's trough: a flat floor and steep upper walls). A terraced valley is the V with steps.
   lfValleyV: () => ({knots: [[0, 0], [1, 1]]}),
@@ -67,10 +72,10 @@ export const FORMS = {
   lfCrystal: () => ({knots: [[0, 0], [.03, .55], [1, 1]]}),
 };
 // A landform's presets: its own four, and main's mesa and cliff where they fit.
-export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff'], ['lfShore', 'Shore'], ['lfRamp', 'Ramp'], ['lfValleyV', 'Valley V'], ['lfValleyU', 'Valley U'], ['lfRiver', 'River'], ['lfBraided', 'Braided river'], ['lfCrater', 'Crater'], ['lfCrystal', 'Crystal cluster']];
+export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff'], ['lfShore', 'Shore'], ['lfShelf', 'Shelf'], ['lfRamp', 'Ramp'], ['lfValleyV', 'Valley V'], ['lfValleyU', 'Valley U'], ['lfRiver', 'River'], ['lfBraided', 'Braided river'], ['lfCrater', 'Crater'], ['lfCrystal', 'Crystal cluster']];
 // The palette entry a landform belongs to (the brush title, the Tool preset menu's restyle and Draw new): the button whose preset draws its section form, and
 // nothing else (Facets, impact features or Height reference never change it: a faceted hill is a Hill); a shore is deep water when it cuts.
-export const landformTool = p => ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow', lfValleyU: 'valleyU', lfRiver: 'river', lfBraided: 'braided', lfCrater: 'crater', lfCrystal: 'crystal',
+export const landformTool = p => ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow', lfShelf: 'shallow', lfValleyU: 'valleyU', lfRiver: 'river', lfBraided: 'braided', lfCrater: 'crater', lfCrystal: 'crystal',
   lfValleyV: Math.round(p?.terraces || 0) > 0 ? 'valleyT' : 'valleyV'})[p?.curve?.form] ?? 'plateau';
 // The form a kind draws by default (only a landform's section is edited).
 export const defaultForm = kind => kind === 'landform' ? 'lfPlateau' : 'plateau';

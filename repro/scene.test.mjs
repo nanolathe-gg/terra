@@ -62,6 +62,11 @@ test('a stroke\'s palette entry is the button whose preset draws its section for
   // Facets never move a stroke to the Crystals button: a faceted hill is a Hill.
   assert.equal(landformTool({curve: {form: 'lfHill'}, iceFacets: 1, facetForm: 1}), 'hill');
   assert.equal(landformTool({curve: {form: 'lfPlateau'}, iceFacets: 1, facetForm: 2}), 'plateau');
+  // Shallow water draws the Shelf section; a Shore that does not cut (an older Shallow stroke) is still Shallow water.
+  assert.equal(sceneNodes(config, [['shallow', [[0, 0], [0, 200]], {}]], {ground: false})[0].params.curve.form, 'lfShelf');
+  assert.equal(landformTool({curve: {form: 'lfShelf'}, combine: 2}), 'shallow');
+  assert.equal(landformTool({curve: {form: 'lfShore'}, combine: 2}), 'shallow');
+  assert.equal(landformTool({curve: {form: 'lfShore'}, combine: 1}), 'deep');
   assert.equal(strokeKind('crystal'), 'landform');
   assert.equal(sceneNodes(config, [['crystal', [[0, 0]], {}]], {ground: false})[0].params.curve.form, 'lfCrystal');
 });

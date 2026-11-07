@@ -53,7 +53,7 @@ const BODY_CLASS = k => /^crystalCrater/.test(k) ? 'crater' : /^crystalShallow/.
 const KINDS = {crystalTiers: ['landform'], crystalSides: ['landform'], crystalStep: ['landform'], crystalTop: ['landform'], crystalVariation: ['landform'],
   crystalAlign: ['landform'], crystalFacet: ['landform'], crystalSizeVar: ['landform'],
   crystalShoreSeam: ['landform'], frostNeedles: ['landform'], iceFacets: ['landform'], iceFacetSize: ['landform']};
-const isWater = st => st[0] === 'landform' && [st[2]?.curve?.form, st[2]?.card?.curve?.form].includes('lfShore');
+const isWater = st => st[0] === 'landform' && [st[2]?.curve?.form, st[2]?.card?.curve?.form].some(f => f === 'lfShore' || f === 'lfShelf');
 const BODY_SCALE = {crystalTiers: 100, crystalSides: 1, crystalStep: 1, crystalTop: 100, crystalVariation: 100, crystalAlign: 100, crystalFacet: 100, crystalSizeVar: 100,
   crystalShoreSeam: 100, frostNeedles: 100, iceFacets: 100, iceFacetSize: 1};
 const impacts = family === 'impacts', shores = family === 'shores', bodies = family === 'bodies', fractures = family === 'fractures' || shores || bodies || impacts;   // both read each scene's own effective value

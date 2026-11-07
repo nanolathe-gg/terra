@@ -28,7 +28,8 @@ export const LANDFORM_TOOLS={
     curve:{form:'lfMountain',knots:[[0,0],[.12,.01],[.25,.05],[.4,.2],[.55,.45],[.7,.68],[.85,.88],[1,1]]}},
   ramp:{diameter:200,lean:100,combine:2,routeSmooth:100,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:160,varyFoot:100,varyMiddle:100,along:[[0,0],[1,1]],curve:{form:'lfRamp',knots:FORMS.lfRamp().knots}},
   deep:{diameter:200,lean:100,heightReference:1,elevation:-55,combine:1,cracks:0,wander:30,widthVary:30,heightVary:0,varySize:210,varyFoot:100,varyMiddle:100,curve:{form:'lfShore',knots:FORMS.lfShore().knots}},
-  shallow:{diameter:200,lean:100,heightReference:1,elevation:-7,combine:2,cracks:0,wander:4,widthVary:0,heightVary:0,varySize:210,varyFoot:100,varyMiddle:100,curve:{form:'lfShore',knots:FORMS.lfShore().knots}},
+  // Shallow water is a ford's level bed 7 under the sea, inside the 12 vehicles and KBots wade (docs/PASSABILITY.md), on the Shelf section.
+  shallow:{diameter:200,lean:100,heightReference:1,elevation:-7,combine:2,cracks:0,wander:4,widthVary:0,heightVary:0,varySize:210,varyFoot:100,varyMiddle:100,curve:{form:'lfShelf',knots:FORMS.lfShelf().knots}},
   valleyV:valley('lfValleyV'),
   valleyU:valley('lfValleyU'),
   valleyT:valley('lfValleyV',{terraces:4,ledge:55,terraceJitter:30}),
