@@ -4,6 +4,7 @@ import {TerrainRenderer} from './sculpt-renderer.js';
 import {drawMapBounds,sampleField,cellHeights} from './sculpt-map.js';
 import {mountMapExport} from './sculpt-export.js';
 import {mountMapFeatures} from './sculpt-features.js';
+import {mountPassability} from './sculpt-passability-view.js';
 import {pagedBudget,VIEW_CANVASES} from './sculpt-scene.js';
 const $=id=>document.getElementById(id),MB=1024*1024;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -35,7 +36,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const levels=query.get('levels')!=='0',levelsOverlay=query.get('levelsOverlay')==='1';   // H7b: levels 0 is the final-only canvas
   let dirtyMarks=0,retainedInvalidations=0;
   const interacting=()=>Boolean(gesture||api.previewActive?.());
-  let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,epoch=0,viewEpoch=0,busy=false,features,metadata,canonicalSize=512;
+  let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,epoch=0,viewEpoch=0,busy=false,features,metadata,passability,canonicalSize=512;
   let paintedView=-1,navigationTimer=null,activeBake=null;
   // Only optional background work and hover detail wait for navigation to
   // settle. Visible terrain starts immediately, including during a held pan.
@@ -68,7 +69,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   api.checkMemory=(extra=0)=>{let m=metrics();if(m.accountedHeapBytes+extra>heapBudget){api.evict?.();for(const e of cache.values())e.heightPatch=null;m=metrics();if(m.accountedHeapBytes+extra>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}};
   function metrics() {
     const fields=api.stats?.()??{},render=renderer.stats(),heap=performance.memory?.usedJSHeapSize??0,gpu=gpuResident();
-    const heightBytes=[...new Set([...cache.values()].map(e=>e.heightPatch?.fields.h.buffer).filter(Boolean))].reduce((n,b)=>n+b.byteLength,0),owned=ownedBytes(),accounted=heap+owned;
+    const heightBytes=[...new Set([...cache.values()].map(e=>e.heightPatch?.fields.h.buffer).filter(Boolean))].reduce((n,b)=>n+b.byteLength,0),owned=ownedBytes()+(passability?.stats().bytes||0),accounted=heap+owned;
     peakGPU=Math.max(peakGPU,gpu);peakHeap=Math.max(peakHeap,heap);peakAccountedHeap=Math.max(peakAccountedHeap,accounted);
     find('[data-memory]').textContent=`Terrain ${(gpu/MB).toFixed(1)} / ${gpuBudget/MB} MiB · heap ${(accounted/MB).toFixed(1)} / ${heapBudget/MB} MiB · ${cache.size} cached · ${evictions} evictions · ${canonicalSize}px bake`;
     return {gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,gpuBudget,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,preview:previewFields.stats(),dirtyChunks:[...cache.values()].filter(e=>e.dirty).length,dirtyMarks,retainedInvalidations,evictions,bakes,hits,rebakes,levels:{quarter:[...cache.values()].filter(e=>(e.scale??1)>1).length,final:[...cache.values()].filter(e=>(e.scale??1)===1).length,quarterBytes:[...cache.values()].filter(e=>(e.scale??1)>1).reduce((n,e)=>n+e.bytes,0)},canonicalChunkSize:canonicalSize,displayChunkSize:viewChunkSize(),field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
@@ -206,6 +207,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   function overlays() {
     const v=state(); ink.setTransform(1,0,0,1,0,0); ink.clearRect(0,0,overlay.width,overlay.height); ink.save(); ink.scale(scale,scale); ink.translate(-v.x,-v.y);
+    passability?.draw(ink,v,scale);
     // Map-coordinate height cells; this guide is only an overlay, never art.
     if($('tile-grid').checked){
       const step=scale>=.5?16:128,x0=Math.max(0,Math.floor(v.x/step)*step),x1=Math.min(map.width,v.x+v.width),y0=Math.max(0,Math.floor(v.y/step)*step),y1=Math.min(map.height,v.y+v.height);
@@ -449,7 +451,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   overlay.addEventListener('pointermove',event=>{
     if(pan?.id===event.pointerId){viewport.scrollLeft=pan.left-event.clientX+pan.x;viewport.scrollTop=pan.top-event.clientY+pan.y;navigationChanged();return;}
     if(navigating()&&!gesture)return;
-    preview(event);refreshHover(event);if(gesture?.id===event.pointerId)schedule();overlays();
+    preview(event);refreshHover(event);if(passability?.active){const p=pickWorld(screen(event));passability.inspect(...p);}if(gesture?.id===event.pointerId)schedule();overlays();
   });
   overlay.addEventListener('pointerleave',()=>{hoveredNode=-1;hover=null;overlays();});
   const end=event=>{if(pan?.id===event.pointerId){pan=null;navigationChanged();}if(gesture?.id===event.pointerId){const commit=event.type==='pointerup';if(commit)preview(event,true);const s=gesture;gesture=null;if(s.type==='move')api.endMove(commit);else api.endStroke(commit);if(commit)pendingStrokeTime=performance.now();}if(overlay.hasPointerCapture(event.pointerId))overlay.releasePointerCapture(event.pointerId);schedule();};
@@ -489,11 +491,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   features=await mountMapFeatures({config,canvas:overlay,exportCorners,bakeArt,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();schedule();},schedule,enabled:()=>api.ready()&&!busy,
     light:()=>renderer.worldSun,lightColors:()=>({sun:renderer.colorOverrides?.sun||null,sky:renderer.colorOverrides?.sky||null,ambient:renderer.variant?.has('ambient')?Number(renderer.variant.get('ambient')):.42}),groundColor:()=>renderer.means?.ground,deselectShapes:()=>{if(api.selection()>=0)api.select?.(-1);}});api.registerFeatures?.(features);
   metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks,bakeArt},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??epoch,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
+  passability=mountPassability({config,sampleHeights,revision:()=>api.revision?.()??epoch,ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!interacting()&&!busy&&!features.busy,mapData:api.mapData,schedule,checkMemory:bytes=>api.checkMemory?.(bytes)});
   // H12: the least the terrain budget must hold besides the fields: the canvases, the bake lattice reserve and one 32 px chunk with the materials.
   // H13: what the paged fields must leave free: the canvas, one canonical chunk's whole working set (every mask layer the world has) and its copy.
   // It was a 32 px chunk's, so the fields took the rest of the budget and the first 512 px bake could not be allocated beside them.
   // The terrain canvas and its overlay share the view's size (resize); the paged fields' budget is the shared one (sculpt-scene.js pagedBudget).
   function minimumBytes(){return pagedBudget({gpuMB:0,renderer,chunk:canonicalSize,maskCount:api.maskKeys?.length,view:{width:canvas.width,height:canvas.height},preview:previewReserved,featureBytes:features?.stats?.().imageBytes||0}).minimum;}
-  const result={renderer,minimumBytes,foregroundPending,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,invalidate:clear,zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets();},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),seq:e.seq,scale:e.scale,input:e.input}))};
+  const result={renderer,passability,minimumBytes,foregroundPending,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,invalidate:clear,zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets();},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),seq:e.seq,scale:e.scale,input:e.input}))};
   window.sculptCanvas=result;resize();budgets();return result;
 }

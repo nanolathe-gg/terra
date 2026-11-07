@@ -198,9 +198,9 @@ function updateControls() {
   $('path-remove').disabled=!pathEditing||paths.length<=1||locked;
   if(pathEditing){$('shape-path-list').replaceChildren(...paths.map((path,i)=>{const b=document.createElement('button');b.textContent=`Path ${i+1} · ${path.length} points`;b.setAttribute('aria-pressed',String(i===pathIndex));b.disabled=locked;b.onclick=()=>{pathIndex=i;pathPoint=-1;pathAdding=false;updateControls();schedule();};return b;}));}
   for(const id of ['rotate-left','rotate-right','scale-down','scale-up'])$(id).disabled=!nodes[selected]?.points;
-  $('view-clay').setAttribute('aria-pressed',String($('clay').checked));
-  $('view-rendered').setAttribute('aria-pressed',String(!$('clay').checked));
-  for(const id of ['save','load','view-clay','view-rendered','blank'])$(id).disabled=!ready||loading||Boolean(stroke||moving);
+  $('view-clay').setAttribute('aria-pressed',String(!$('view-passability').matches('[aria-pressed=true]')&&$('clay').checked));
+  $('view-rendered').setAttribute('aria-pressed',String(!$('view-passability').matches('[aria-pressed=true]')&&!$('clay').checked));
+  for(const id of ['save','load','view-clay','view-rendered','view-passability','blank'])$(id).disabled=!ready||loading||Boolean(stroke||moving);
   const pointCount=nodes[selected]?.points?.length||0;
   $('path-help').textContent=pathEditing?pathAdding?'Click to extend from the selected point. An interior point starts a branch. Escape finishes.':`${paths.length} path${paths.length===1?'':'s'} · ${pointCount} points${pathPoint>=0?' · point '+(pathPoint+1)+' selected':''}. Select a point to insert, extend, or branch.`:'Drag to move · labeled handles rotate / scale · Shift snaps handles · arrow keys nudge.';
   // With Select active, show the selected shape's own controls; a palette entry shows its stroke kind's (the shape buttons draw landforms).
