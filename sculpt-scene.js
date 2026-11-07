@@ -43,8 +43,10 @@ export const LANDFORM_TOOLS={
   // lfcrater: the Crater button. A bowl dug 20 below the ground it lands on with a rim .42 of that above it (the lfCrater section), 360 px foot to foot (a 200 px
   // rim), three secondaries, so a drag is the projectile's path (sculpt-shape-presets.js impactPoint, impactEnd): Roughness 35 as Wander and Height variation. Its
   // Length vs. height curve rises from nothing at the drag's start to the whole crater at its end, so the approach is a scar that deepens and widens into the
-  // crater (a click reads the curve at its end: a whole crater). Every preset value sits on its slider's step (the panel snaps any other).
-  crater:{diameter:360,lean:100,heightReference:2,elevation:-20,combine:2,cracks:30,wander:20,widthVary:10,heightVary:2,varySize:100,varyFoot:100,varyMiddle:100,ejecta:0,buckling:0,secondaries:3,along:[[0,0],[1,1]],curve:{form:'lfCrater',knots:FORMS.lfCrater().knots}},
+  // crater (a click reads the curve at its end: a whole crater). Every preset value sits on its slider's step (the panel snaps any other). lfimpact2: the
+  // secondaries fall from the rim to twice as far out (Secondaries' distance 1; retail Moon's small craters gather 1-2 rim radii out round a big one, median
+  // 1.46: measure/crater_secondaries.py; every other shape keeps 1.6).
+  crater:{diameter:360,lean:100,heightReference:2,elevation:-20,combine:2,cracks:30,wander:20,widthVary:10,heightVary:2,varySize:100,varyFoot:100,varyMiddle:100,ejecta:0,buckling:0,secondaries:3,secondaryDistance:10,along:[[0,0],[1,1]],curve:{form:'lfCrater',knots:FORMS.lfCrater().knots}},
   // lfcrystal: Crystals (the palette's Faceted forms) is a landform broken into prisms by its Facet shape: a click is a cluster round the point, a drag
   // rows along the path. The section is the old cluster's falloff (each prism stood 1 - .45 x its distance share lower toward the rim), the rise its Height.
   crystal:{diameter:200,elevation:40,lean:100,combine:0,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:200,varyFoot:100,varyMiddle:100,iceFacets:100,facetForm:2,facetSurface:1,iceFacetSize:32,

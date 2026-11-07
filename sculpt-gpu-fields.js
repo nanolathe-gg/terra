@@ -180,7 +180,7 @@ function impactUniforms(q, sd, imp, c) {
 }
 // lfcrater: the secondaries: small copies of the stroke (its section, Height reference and options, its relief scaled with its width,
 // no ejecta or secondaries of their own; a tenth to a quarter of its width), thrown from Secondaries' distance to twice as far (rim radii from the path; lfimpact2:
-// 1.6 to 3.2 before the row, 1 to 2 by default) at azimuths drawn from the impact's spread, so an
+// 1.6 to 3.2 by default, as before the row; 1 to 2 on the Crater preset) at azimuths drawn from the impact's spread, so an
 // oblique impact's land downrange and a grazing one's to the sides. About a third start a chain of one or two smaller ones farther out along the same ray.
 // They are thrown from the impact point, the path's end.
 function secondaryNodes(n, q, imp, seed, geom, c) {

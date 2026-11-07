@@ -186,7 +186,7 @@ export function landformPeak(q) {
   return at >= .9 ? 0 : at;
 }
 // lfimpact2: the secondaries fall from this many rim radii out (Secondaries' distance) to twice as far; 1.6 before the row.
-export const secondaryNear = q => clamp(q?.secondaryDistance ?? 1, .8, 4);
+export const secondaryNear = q => clamp(q?.secondaryDistance ?? 1.6, .8, 4);
 // How far past the footprint the impact features reach (px): the secondaries and their chains (3.25 x Secondaries' distance peak distances from the path: 5.2 at
 // 1.6, past the farthest chain's 3.12; a quarter of the width for their own size) and the ejecta's ragged edge (2.6).
 // The stroke's own stamp reaches only its ejecta and buckling (2.6 peak distances from the path: lfCraterEjecta): the secondaries are nodes of their own, with their own boxes.

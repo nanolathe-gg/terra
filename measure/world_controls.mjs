@@ -438,7 +438,7 @@ try {
       if (key === 'gullySize' || key === 'talus') p.gullies = 1;
       if (key === 'waterDeep') p.waterBed = 1;   // a stroke's edge choice shows where its own Lit bed draws the deep share
       if (key === 'buckling') Object.assign(p, {heightReference: 2, elevation: -20, combine: 2});   // lfimpact2: the ground buckles round a shape that digs
-      if (key === 'secondaryDistance') p.secondaries = 3;   // it places the secondaries
+      if (key === 'secondaryDistance') p.secondaries = 12;   // lfimpact2: it places the secondaries (all of them, as Secondaries is read)
       if(kind==='landform'&&(key.startsWith('layer')||key.startsWith('lava')))Object.assign(p,{stepReference:key==='layerCircle'||key==='lavaCircleVary'?2:1,terraces:5,ledge:.7,terraceJitter:.5});
       return p;
     };
@@ -458,6 +458,8 @@ try {
       // Shore controls need a sea crossing: the ordinary raised landform fixture has none.
       if(kind==='landform'&&key==='stepReference')return {elevation:-55,combine:1,heightVary:0,terraces:6,ledge:.8};
       if(kind==='landform'&&key==='heightReference')return {elevation:110,heightReference:0};
+      // lfimpact2: the secondaries' distance on a shape that digs (small pits, where a raised fixture's lie under its own flank near the rim).
+      if(kind==='landform'&&key==='secondaryDistance')return {heightReference:2,elevation:-20,combine:2};
       if(kind==='landform'&&(key.startsWith('finger')||key.startsWith('layer')||key.startsWith('lava')||key.startsWith('plate')||key==='shorePlates'||key.startsWith('frost')||key.startsWith('crystalShore')||key.startsWith('water')||key==='surf'))return {elevation:-55,combine:1,heightVary:0};
       return {};
     };
