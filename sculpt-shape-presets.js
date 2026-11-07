@@ -139,12 +139,13 @@ export function landformReach(q, scale = 1, widthMul = 1, stamp = false) {
 
 // ---- lfcrater: the impact features (Ejecta, Secondaries) and the impact the drawn path describes ----
 // Ejecta and secondaries are landform features: any landform throws them (a crater's bowl, a mound's foot). A stroke that throws them reads its path as the
-// impact's track: the direction from the path's start to its end is downrange, and the drag's length L against the diameter D sets the impact angle,
+// projectile's: the direction from the path's start to its end is downrange, and the drag's length L against the diameter D sets the impact angle,
 // tan(angle) = tan(12 deg) D / L. A click is a vertical impact; a drag of a fifth of the diameter is 47 deg, where the ejecta begin to gather downrange
 // (Herrick and Forsberg-Taylor 2003, the Moon: asymmetric below about 45 deg); two fifths is 28 deg, where an uprange forbidden zone opens (theirs:
-// about 25 deg); a drag as long as the diameter is 12 deg, where craters elongate and the ejecta take a butterfly pattern (theirs: fly-wing below about
-// 10 deg; Gault and Wedekind 1978: craters round above about 20 deg, forbidden zone and butterfly at grazing angles). A drag shorter than the diameter
-// leaves the shape round at the drag's midpoint; a longer one spans the drag, foot to foot, along the drawn path.
+// about 25 deg); a drag as long as the diameter is 12 deg, where the ejecta take a butterfly pattern (theirs: fly-wing below about 10 deg; Gault and
+// Wedekind 1978: craters round above about 20 deg, forbidden zone and butterfly at grazing angles). The path's end is where the projectile came to rest:
+// the shape lands there whole, as a click of it (impactPoint), and the ejecta, secondaries and spurs spread round it; the drawn path before it is the
+// approach, a groove of the same section that the along curve scales (impactEnd).
 export const IMPACT_TAN = Math.tan(12 * Math.PI / 180);
 export const impactOn = q => (q?.ejecta || 0) > 0 || Math.round(q?.secondaries || 0) >= 1;
 const pathLength = path => { let L = 0; for (let k = 1; k < path.length; k++) L += Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y); return L; };
@@ -159,15 +160,12 @@ export function impactSetup(q, path) {
   if (L < .5 || cl < .5) return {dx: 0, dy: 0, L: 0, D, angle: 90};
   return {dx: (b.x - a.x) / cl, dy: (b.y - a.y) / cl, L, D, angle: Math.atan(IMPACT_TAN * D / L) * 180 / Math.PI};
 }
-// The path a stroke with impact features sweeps: its midpoint (a point) when the drag is no longer than the diameter, else the drag less half the diameter
-// at each end, so the footprint spans the drag.
-export function impactPath(q, path) {
-  if (!impactOn(q) || path.length < 2) return path;
-  const D = 2 * (q.radius || 1), L = pathLength(path);
-  if (L <= D) return [pointAlong(path, L / 2).p];
-  const s = pointAlong(path, D / 2), e = pointAlong(path, L - D / 2);
-  return [s.p, ...path.slice(s.k, e.k), e.p];
-}
+// Where the impact lands: the drawn path's end.
+export const impactPoint = path => path[path.length - 1];
+// The approach before the impact is the drawn path swept as a groove whose width follows its depth: at each place the shape scaled by the along curve's value
+// there over its value at the end (this, at least .05), so every place along it is the impact's own shape at that scale. The Crater preset's along curve,
+// rising from the drag's start to its end, cuts a scar that deepens and widens into the crater; an edited curve reshapes it.
+export const impactEnd = q => Math.max(readTable(sampleKnots(alongKnots(q)), 1), .05);
 const sstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 // How the ejecta and the secondaries spread round the impact at angle (degrees), as weights of the azimuth from downrange: the downrange share of the
 // blanket (asym), the uprange forbidden zone's half angle (fz, radians), the butterfly's cross-range wings (wing) and its downrange gap (dz, radians).

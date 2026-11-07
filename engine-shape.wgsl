@@ -504,7 +504,8 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
 // segment nearest it (the first on a tie, as stampRamp), finds how far up the section it stands (q: 0 at the feet, 1 at the crest, a lip above), and reads the
 // crest's height at its place along the path from the along table. The cell's value is base + (crest - base) * q, `base` being the height the strokes before
 // it left, and combine keeps max(base, value) (raise to), min (cut to) or value (flatten to). Every read is the cell's own height and its position, so a
-// regional replay of a window finds what the whole map did. A spur piece (s1.z < 0, its root's place along the trunk -1 - s1.z) is a candidate of its own.
+// regional replay of a window finds what the whole map did. A spur piece (s1.z < 0, its root's place along the trunk -1 - s1.z) is a candidate of its own, and so is
+// an impact's landing (s1.x 1: the whole section at the path's end, the node's first segment; u.grooveEnd), which the trunk, the approach's groove, meets.
 // Segment layout: s0 = a, b; s1 = (length before, length, the path's length | -1 - place, the back side: +1 left of the way drawn, -1 right);
 // s2 = a trunk's end flags (1 start, 2 end: the section closes round it) | a spur piece's (width, width, height, height) at its ends.
 fn lfFractal(x: f32, y: f32, salt: u32) -> f32 {
@@ -751,7 +752,9 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
   let share = select(trunkShare, -1.0 - s1.z, spur);
   // The existing crest taper narrows and lowers the trunk; its along curve remains independently editable.
   let taper = select(u.lfTaper * (1.0 - sm(0.0, 0.4, min(share, 1.0 - share))), 0.0, spur || s1.z < 1.0);
-  let wm0 = select(1.0 - 0.62 * taper, mix(s2.x, s2.y, tt), spur);
+  var wm0 = select(1.0 - 0.62 * taper, mix(s2.x, s2.y, tt), spur);
+  // lfcrater: an impact's groove (the trunk before its landing) is as wide, at each place, as the along curve is high there over its end: the shape at that scale.
+  if (u.grooveEnd != 0.0 && !spur) { wm0 = wm0 * clamp(clamp(curveRaw(u.alongBase, share), 0.0, 1.2) / u.grooveEnd, 0.0, 2.0); }
   let hm = select(1.0 - 0.7 * taper, mix(s2.z, s2.w, tt), spur);
   var cc = c; var ee = e; var wm = wm0;
   if (u.lfWander > 0.0 || u.lfWidth > 0.0) {
@@ -765,8 +768,8 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
     wm = wm0 * exp(1.35 * u.lfWidth * wt * nB);
   }
   var q = lfShare(cc, ee, cap, s1.w, wm);
-  if (spur && u.lfPeak > 0.0) { q = lfCraterSpurShare(cc, ee, wm); }
-  let along = clamp(curveRaw(u.alongBase, share), 0.0, 1.2);
+  if (spur && u.lfPeak > 0.0 && s1.x == 0.0) { q = lfCraterSpurShare(cc, ee, wm); }   // an impact's landing (s1.x 1) draws the whole section
+  let along = clamp(curveRaw(u.alongBase, select(share, 1.0, !spur && s1.z < 1.0)), 0.0, 1.2);   // a click (no length) reads its along curve at the end
   let lfB = select(u.baseH, base, u.lfGround != 0u); let lfE = select(u.elev, base + u.elev, u.lfGround != 0u);
   let crest = lfB + (lfE - lfB) * along * hm;   // the plain is the map's base height (with Height reference Ground, the cell's own ground); a spur piece rises hm of the way from it   // the plain is the map's base height (with Height reference Ground, the cell's own ground); a spur piece rises hm of the way from it
   let qt = terraced(q, x, y, i, cells);
@@ -956,6 +959,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   }
   var nearest = 3.0e38; var trunk = 0xffffffffu;
   var pick = vec3f(base, 0.0, 0.0); var seen = false; var pk = 0u; var psh = 0.0;
+  var land = vec3f(base, 0.0, 0.0);
   var tShare = 0.0;
   for (var k = 0u; k < u.nseg; k++) {
     let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
@@ -970,6 +974,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
     }
     let cand = lfEval(s0, s1, s2, wx, wy, base, nA, nB, nC, 0.0, x, y, i, cells);
     if (cand.y <= 0.0) { continue; }
+    if (k == 0u && u.grooveEnd != 0.0) { land = cand; continue; }   // an impact's landing meets the groove below
     var better = !seen;
     if (seen) {
       if (u.combine == 0u) { better = cand.x > pick.x; } else if (u.combine == 1u) { better = cand.x < pick.x; } else { better = abs(cand.x - base) > abs(pick.x - base); }
@@ -1000,7 +1005,15 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
       sw += w; ss += w * clamp((s1.x + t * s1.y) / max(s1.z, 1e-4), 0.0, 1.0);
     }
     tShare = ss / sw;
-    let cand = lfEval(Seg[(u.segBase + trunk) * 4u], Seg[(u.segBase + trunk) * 4u + 1u], Seg[(u.segBase + trunk) * 4u + 2u], wx, wy, base, nA, nB, nC, ss / sw, x, y, i, cells);
+    var cand = lfEval(Seg[(u.segBase + trunk) * 4u], Seg[(u.segBase + trunk) * 4u + 1u], Seg[(u.segBase + trunk) * 4u + 2u], wx, wy, base, nA, nB, nC, ss / sw, x, y, i, cells);
+    // An impact's landing and its groove are one shape: where both cover the cell, the deeper of their cuts below the ground and the higher of their rises above
+    // it, added (the groove's floor breaches the rim, the bowl stays whole, a raised shape keeps the higher); either alone stands. Each is level with the
+    // ground at its foot, so the two meet with no step.
+    if (land.y > 0.0) {
+      if (cand.y <= 0.0) { cand = land; }
+      else { let rc = cand.x - base; let rl = land.x - base; cand = vec3f(base + min(min(rc, 0.0), min(rl, 0.0)) + max(max(rc, 0.0), max(rl, 0.0)), max(cand.y, land.y), cand.z); }
+      land = vec3f(base, 0.0, 0.0);
+    }
     if (cand.y > 0.0) {
       var better = !seen;
       if (seen) {
@@ -1009,11 +1022,12 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
       if (better) { pick = cand; seen = true; pk = trunk; psh = ss / sw; }
     }
   }
+  if (land.y > 0.0 && !seen) { pick = land; seen = true; }   // a landing no groove segment reaches (its box is the trunk's own; kept for safety)
   // P17: the talus cones, where Gullies cut the faces (the chutes are theirs) and the stroke raises. Beyond the footprint the cone is all there is.
   var talus = 0.0;
   if (u.talusReach > 0.0 && u.gully > 0.0 && u.combine == 0u && trunk != 0xffffffffu) { talus = landformTalus(wx, wy, lx, ly, x, y, trunk, tShare, nA, nB, base, select(0.0, pick.x - base, seen)); }
   var ej = 0.0; var lipK = 1.0;
-  if (u.ejAmt > 0.0 && trunk != 0xffffffffu) { let ev = lfCraterEjecta(wx, wy, trunk); ej = ev.x; lipK = ev.y; }
+  if (u.ejAmt > 0.0 && trunk != 0xffffffffu) { let ev = lfCraterEjecta(wx, wy, select(trunk, 0u, u.grooveEnd != 0.0)); ej = ev.x; lipK = ev.y; }   // an impact's round its landing
   if (!seen) {
     if (talus > 0.0) { F[PH * cells + i] = clamp(base + talus, u.minH, u.maxH); }
     if (ej > 0.0) { F[PH * cells + i] = clamp(F[PH * cells + i] + ej, u.minH, u.maxH); }

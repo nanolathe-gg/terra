@@ -42,18 +42,17 @@ test('landform step details follow the active reference and count',async()=>{
   }
 });
 
-test('lfcrater: a stroke with impact features reads its path as the impact track',async()=>{
-  const {impactSetup,impactPath,impactSpread,impactWeight,landformSigned,landformPeak}=await import('../sculpt-shape-presets.js');
+test('lfcrater: a stroke with impact features reads its path as the projectile\'s',async()=>{
+  const {impactSetup,impactPoint,impactEnd,impactSpread,impactWeight,landformSigned,landformPeak}=await import('../sculpt-shape-presets.js');
   const q={radius:100,ejecta:1,secondaries:0,curve:{form:'lfCrater',knots:[[0,0],[.39,-.4],[.56,-.04],[1,1]]},heightReference:2,elevation:-15,combine:2};
   const drag=L=>[{x:0,y:0},{x:L,y:0}];
   // A click is vertical; a drag as long as the diameter is the 12 degree grazing threshold; a fifth of it about 47 degrees.
   assert.equal(impactSetup(q,[{x:5,y:5}]).angle,90);
   assert.ok(Math.abs(impactSetup(q,drag(200)).angle-12)<1e-9);
   assert.ok(Math.abs(impactSetup(q,drag(40)).angle-46.7)<.1);
-  // A drag no longer than the diameter collapses to its midpoint; a longer one spans it, half the diameter in from each end.
-  assert.deepEqual(impactPath(q,drag(120)),[{x:60,y:0}]);
-  assert.deepEqual(impactPath(q,drag(500)).map(p=>p.x),[100,400]);
-  assert.deepEqual(impactPath({...q,ejecta:0},drag(120)),drag(120),'no impact features: the path is swept as drawn');
+  // The impact lands at the path's end; the path before it is a groove whose width follows the along curve over its value at the end (at least .05).
+  assert.deepEqual(impactPoint(drag(120)),{x:120,y:0});
+  assert.equal(impactEnd(q),1); assert.equal(impactEnd({...q,along:[[0,0],[1,.5]]}),.5); assert.equal(impactEnd({...q,along:[[0,1],[1,0]]}),.05);
   // Spread: even round a vertical impact; an uprange gap at 20 degrees; the sides only at 5 degrees.
   const at=(angle,deg)=>impactWeight(impactSpread(angle),deg*Math.PI/180);
   assert.equal(at(90,0),1); assert.equal(at(90,180),1);
