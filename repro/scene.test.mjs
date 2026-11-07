@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {sceneNodes, pageSettings, surfaceSliders, drawOptions, sliderRange, SURFACE_SLIDER_IDS, DEFAULT_SEED, strokeKind} from '../sculpt-scene.js';
+import {landformTool} from '../sculpt-shape-presets.js';
 
 const root = new URL('..', import.meta.url).pathname;
 const config = {biomeId: 'green', baseHeight: 99, seaLevel: 75, size: 2336, worldSize: 2336, map: {width: 2080, height: 2176},
@@ -21,6 +22,16 @@ test('a scene is the ground undulation, then one node per stroke with its seed',
   assert.equal(strokeKind('crater'), 'landform');
   assert.equal(sceneNodes(config, [['crater', [[0, 0]], {}]], {ground: false})[0].params.heightReference, 2);
   assert.deepEqual(sceneNodes(config, [['hill', [[1, 2]], {}]]), sceneNodes(config, [['hill', [[1, 2]], {}]]), 'the same strokes give the same nodes');
+});
+
+test('a stroke\'s palette entry is the button whose preset draws its section form', () => {
+  assert.equal(landformTool({curve: {form: 'lfCrater'}, heightReference: 2, elevation: -20}), 'crater');
+  assert.equal(landformTool({curve: {form: 'lfCrystal'}, iceFacets: .6, facetForm: 2}), 'crystal');
+  // Facets never move a stroke to the Crystals button: a faceted hill is a Hill.
+  assert.equal(landformTool({curve: {form: 'lfHill'}, iceFacets: 1, facetForm: 1}), 'hill');
+  assert.equal(landformTool({curve: {form: 'lfPlateau'}, iceFacets: 1, facetForm: 2}), 'plateau');
+  assert.equal(strokeKind('crystal'), 'landform');
+  assert.equal(sceneNodes(config, [['crystal', [[0, 0]], {}]], {ground: false})[0].params.curve.form, 'lfCrystal');
 });
 
 test('the surface sliders open where the browser puts them, and their ranges are sculpt.html\'s', () => {

@@ -66,14 +66,17 @@ export const FORMS = {
   // .42 of the depth above the ground at .4 of the half width (1.1 rim radii, the foot at 1.8), the wall falls past the ground at .53 to the floor, flat from .93.
   // Measured from retail Moon's 80-120 px craters (16-px heights: rim .32-.43 of the depth, flank down by 1.4-1.8 rim radii); Red's and Crystal's carry no rim.
   lfCrater: () => ({knots: [[0, 0], [.12, -.06], [.26, -.16], [.36, -.36], [.4, -.42], [.46, -.3], [.53, -.06], [.7, .4], [.84, .8], [.93, .97], [1, 1]]}),
+  // A crystal cluster: shards stand nearly as high from the foot in as at the center (the old cluster's falloff, each shard 1 - .45 x its distance share lower toward the rim).
+  lfCrystal: () => ({knots: [[0, 0], [.03, .55], [1, 1]]}),
 };
 // A landform's presets: its own four, and main's mesa and cliff where they fit.
-export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff'], ['lfShore', 'Shore'], ['lfRamp', 'Ramp'], ['lfValleyV', 'Valley V'], ['lfValleyU', 'Valley U'], ['lfRiver', 'River'], ['lfBraided', 'Braided river'], ['lfCrater', 'Crater']];
-// The palette entry a landform's section form belongs to (the Tool preset menu restyles a selected landform as that entry); a shore is deep water when it cuts.
-export const landformTool = p => p?.iceFacets > 0 && Math.round(p?.facetForm || 0) > 0 ? 'crystal' : ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow', lfValleyU: 'valleyU', lfRiver: 'river', lfBraided: 'braided', lfCrater: 'crater',
+export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff'], ['lfShore', 'Shore'], ['lfRamp', 'Ramp'], ['lfValleyV', 'Valley V'], ['lfValleyU', 'Valley U'], ['lfRiver', 'River'], ['lfBraided', 'Braided river'], ['lfCrater', 'Crater'], ['lfCrystal', 'Crystal cluster']];
+// The palette entry a landform belongs to (the brush title, the Tool preset menu's restyle and Draw new): the button whose preset draws its section form, and
+// nothing else (Facets, impact features or Height reference never change it: a faceted hill is a Hill); a shore is deep water when it cuts.
+export const landformTool = p => ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow', lfValleyU: 'valleyU', lfRiver: 'river', lfBraided: 'braided', lfCrater: 'crater', lfCrystal: 'crystal',
   lfValleyV: Math.round(p?.terraces || 0) > 0 ? 'valleyT' : 'valleyV'})[p?.curve?.form] ?? 'plateau';
 // The form a kind draws by default (only a landform's section is edited).
-export const defaultForm = kind => kind === 'spurs' ? 'mountain' : kind === 'landform' ? 'lfPlateau' : 'plateau';
+export const defaultForm = kind => kind === 'landform' ? 'lfPlateau' : 'plateau';
 
 // Lean and facing. Lean is the back's length over the face's: the slope toward the lean side runs `ratio` times the length of the other (0: the kind's own,
 // which for Reset ground and the cover brushes is 1.7: the face widened .7 * .32 north^2 on the side toward north).
@@ -110,7 +113,7 @@ export function strokeKnots(kind, q) {
 // The front table (and the back one where the shape needs a second curve) of a stroke, with the uniforms its curve adds, or null for a kind with no
 // cross-section. lip: the table leaves 0..1 (a land lip above 1, a water lip below 0), which the shader then keeps instead of clamping.
 export function strokeCurve(kind, q) {
-  if (!['paint', 'erase', 'sand', 'grass', 'smooth', 'spurs', 'landform'].includes(kind)) return null;
+  if (!['paint', 'erase', 'sand', 'grass', 'smooth', 'landform'].includes(kind)) return null;
   const k = strokeKnots(kind, q), out = {front: sampleKnots(k.knots), u: {}};
   // A landform always has a back: the front's own until the sides are unlinked.
   const back = kind === 'landform' ? k.back ?? k.knots : k.back;
