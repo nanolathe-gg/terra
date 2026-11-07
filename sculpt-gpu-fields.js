@@ -1,7 +1,7 @@
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {isRiver, isBraided, riverWidth, riverCurvature} from './sculpt-river.js';
-import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, landformDigs, impactOn, impactSetup, impactPoint, impactEnd, impactSpread, impactWeight, landformPeak} from './sculpt-shape-presets.js';
+import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, landformDigs, impactOn, bucklingOn, impactSetup, impactPoint, impactEnd, impactSpread, impactWeight, landformPeak} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -63,6 +63,8 @@ const NODE_FIELDS = [
   ...['lfPeak'].map(k => [k, 'f']),
   // lfcrater: an impact's groove: the along curve's value at its end (the groove's width is scaled by the curve over it); 0: none.
   ...['grooveEnd'].map(k => [k, 'f']),
+  // lfimpact2: the buckled ground's height (Buckling x .3 of the relief; BK_AMP in engine-shape.wgsl scales it), apart from the ejecta's; 0: none.
+  ...['bkAmt'].map(k => [k, 'f']),
   // lfcrystal: a landform's faceted structure (Facet shape, the share of sites with an element, its polygon's sides, how square it turns to the path, corner cuts).
   ...['lfcForm'].map(k => [k, 'u']), ...['lfcShare', 'lfcSides', 'lfcAlign', 'lfcBreak'].map(k => [k, 'f']),
   // The seed table of a landform's columns and prisms (lfcSeedTable): where its rows start in MW, its seeds, its path-and-level blocks and width levels, the
@@ -170,9 +172,10 @@ function ridgeRoots(s, path, cum, L) {
 }
 // lfcrater: the ejecta's uniforms. Their height is Ejecta x .3 of the shape's relief at the rim (the old crater's was .16 of its depth), thinning as the cube of the
 // distance (McGetchin et al. 1973), from the section's peak (landformPeak; a section that peaks on its path throws from its foot); the spread is the impact's.
+// Buckling's height is on the same scale (lfimpact2: Buckling 70 draws what Ejecta 70 buckled before the two were split), on a landform that digs.
 function impactUniforms(q, sd, imp, c) {
   const pk = landformPeak(q), relief = Math.abs(Math.round(q.heightReference || 0) === 2 ? q.elevation : landformElevation(q, c.sea) - (c.baseHeight ?? 0)), sp = impactSpread(imp.angle);
-  return {ejAmt: .3 * clamp(q.ejecta || 0, 0, 2) * relief, ejPeakF: pk > 0 ? (1 - pk) * sd.front : sd.front, ejPeakB: pk > 0 ? (1 - pk) * sd.back : sd.back,
+  return {ejAmt: .3 * clamp(q.ejecta || 0, 0, 2) * relief, bkAmt: bucklingOn(q) ? .3 * clamp(q.buckling || 0, 0, 2) * relief : 0, ejPeakF: pk > 0 ? (1 - pk) * sd.front : sd.front, ejPeakB: pk > 0 ? (1 - pk) * sd.back : sd.back,
     imX: imp.dx, imY: imp.dy, ejAsym: sp.asym, ejFz: sp.fz, ejWing: sp.wing, ejDz: sp.dz};
 }
 // lfcrater: the secondaries: small copies of the stroke (its section, Height reference and options, its relief scaled with its width,
@@ -193,7 +196,7 @@ function secondaryNodes(n, q, imp, seed, geom, c) {
     for (let m = 0; m <= chain; m++) {
       const f = 1 + .28 * m, k2 = size * Math.pow(.7, m), spot = {x: clamp(at.x + Math.cos(ang + (rnd(k, 20 + m) - .5) * .12) * dist * f, 0, world - 1), y: clamp(at.y + Math.sin(ang + (rnd(k, 20 + m) - .5) * .12) * dist * f, 0, world - 1)};
       out.push(prepareNode({kind: 'landform', satellite: true, points: [spot], frame: n.frame, seed: (seed + (k * 3 + m + 1) * 2654435761) >>> 0,
-        params: {...n.params, radius: q.radius * k2, elevation: lift(Math.min(1, k2 * 1.6)), ejecta: 0, secondaries: 0, spurCount: 0, gullies: 0, talus: 0, along: undefined, wander: (q.wander || 0) * k2, varySize: Math.max(20, (q.varySize || 140) * k2)}}, geom, c));
+        params: {...n.params, radius: q.radius * k2, elevation: lift(Math.min(1, k2 * 1.6)), ejecta: 0, buckling: 0, secondaries: 0, spurCount: 0, gullies: 0, talus: 0, along: undefined, wander: (q.wander || 0) * k2, varySize: Math.max(20, (q.varySize || 140) * k2)}}, geom, c));
     }
   }
   return out;

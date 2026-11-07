@@ -30,6 +30,10 @@ test('faceted forms and shoreline materials keep their own dependent controls',(
  assert.equal(available('crystalStep','landform',{...dig,facetForm:2}),true);
  assert.equal(available('crystalTop','landform',{...dig,facetForm:2}),false);
  assert.equal(available('facetForm','landform',{iceFacets:1,heightReference:2,elevation:12}),true);
+ // lfimpact2: Buckling shows on a landform that digs, as the engine draws it there only.
+ assert.equal(available('buckling','landform',dig),true);
+ assert.equal(available('buckling','landform',{heightReference:2,elevation:12}),false);
+ assert.equal(available('buckling','landform',{heightReference:0,elevation:-18}),false);
  assert.equal(available('frostNeedles','landform',{shorePlates:1,plateMaterial:1}),false);
  assert.equal(available('frostNeedles','landform',{shorePlates:1,plateMaterial:2}),true);
  assert.equal(available('crystalShoreSeam','landform',{shorePlates:1,plateMaterial:2}),false);

@@ -698,9 +698,9 @@ fn lfCraterSpread(c: f32, sn: f32) -> f32 {
 // outer flank is broken into 6-7 blocks of uplifted ground, 22-37 deg of the ring each, centred 1.2-1.4 rim radii out and standing .19-.54 of the depth over
 // the smooth flank, a second crest on 11-18% of the azimuth, and nothing in the heights past 2 rim radii; craters under about 260 px carry lumps at their own,
 // lower scale. Here: rings of raised blocks BK_WAVE rim radii apart from just outside the rim, wandering along the ring, each ring broken into sections that
-// stand to different heights, highest by the rim and gone by 1.72 rim radii. The ejecta's height and spread carry it (none in the forbidden zone, more
-// downrange); the rim radius rp scales it from none under BK_R0 px to all of it from BK_R1 px. In the shape's frame (lr: the cell's ray's rim point), so
-// every tile computes the same value.
+// stand to different heights, highest by the rim and gone by 1.72 rim radii. Its own height (u.bkAmt, the Buckling row) and the impact's spread carry it
+// (none in the forbidden zone, more downrange); the rim radius rp scales it from none under BK_R0 px to all of it from BK_R1 px. In the shape's frame (lr:
+// the cell's ray's rim point), so every tile computes the same value.
 const BK_R0 = 48.0;
 const BK_R1 = 280.0;
 const BK_WAVE = 0.3;
@@ -733,8 +733,8 @@ fn lfCraterEjecta(wx: f32, wy: f32, trunk: u32) -> vec2f {
   let sr = r / rp;
   var w = 1.0;
   if (u.imX != 0.0 || u.imY != 0.0) { w = lfCraterSpread(rh.x * u.imX + rh.y * u.imY, u.imX * rh.y - u.imY * rh.x); }
-  // An oblique impact lowers its rim where it throws little (Herrick and Forsberg-Taylor 2003: the uprange rim first, then the downrange one).
-  let lip = mix(1.0, 0.4 + 0.6 * clamp(w, 0.0, 1.0), sm(0.0, 0.3, u.ejFz + u.ejDz));
+  // An oblique impact lowers its rim where it throws little ejecta (Herrick and Forsberg-Taylor 2003: the uprange rim first, then the downrange one).
+  let lip = select(1.0, mix(1.0, 0.4 + 0.6 * clamp(w, 0.0, 1.0), sm(0.0, 0.3, u.ejFz + u.ejDz)), u.ejAmt > 0.0);
   if (sr < 0.8 || sr > 2.6 || w <= 0.0) { return vec2f(0.0, lip); }
   let lt = max(8.0, 0.2 * rp);
   let wig = 0.6 * lt * vnoise(r / 15.0, f32(trunk) * 7.3 + 0.37 * dot(rh, vec2f(13.1, 7.7)), u.seed ^ 0x2c61u);
@@ -748,7 +748,7 @@ fn lfCraterEjecta(wx: f32, wy: f32, trunk: u32) -> vec2f {
   let along = clamp((sr - 1.0) / (tip - 1.0), 0.0, 1.0);
   let tongue = sm(0.05, 0.6, ray) * sm(0.95, 1.08, sr) * pow(1.0 - along, 0.6) * select(1.0, 0.0, sr >= tip);
   let blanket = sm(0.85, 1.05, sr) * pow(sr, -3.0) * (1.0 - sm(1.5, 1.9, sr));
-  return vec2f(u.ejAmt * (w * (0.5 * blanket + tongue) * (0.8 + 0.4 * hum) + lfImpactBuckle(sr, rp, lr, w)), lip);
+  return vec2f(u.ejAmt * (w * (0.5 * blanket + tongue) * (0.8 + 0.4 * hum)) + u.bkAmt * lfImpactBuckle(sr, rp, lr, w), lip);
 }
 // lfcrater: a spur off a section that peaks before its path (a crater's rim, u.lfPeak the peak's share of the half width from the foot) carries the section
 // from the foot to that peak, both sides, so it ridges out from the rim at the rim's height instead of carrying the bowl along it.
@@ -1046,7 +1046,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   var talus = 0.0;
   if (u.talusReach > 0.0 && u.gully > 0.0 && u.combine == 0u && trunk != 0xffffffffu) { talus = landformTalus(wx, wy, lx, ly, x, y, trunk, tShare, nA, nB, base, select(0.0, pick.x - base, seen)); }
   var ej = 0.0; var lipK = 1.0;
-  if (u.ejAmt > 0.0 && trunk != 0xffffffffu) { let ev = lfCraterEjecta(wx, wy, select(trunk, 0u, u.grooveEnd != 0.0)); ej = ev.x; lipK = ev.y; }   // an impact's round its landing
+  if ((u.ejAmt > 0.0 || u.bkAmt > 0.0) && trunk != 0xffffffffu) { let ev = lfCraterEjecta(wx, wy, select(trunk, 0u, u.grooveEnd != 0.0)); ej = ev.x; lipK = ev.y; }   // an impact's round its landing
   if (!seen) {
     if (talus > 0.0) { F[PH * cells + i] = clamp(base + talus, u.minH, u.maxH); }
     if (ej > 0.0) { F[PH * cells + i] = clamp(F[PH * cells + i] + ej, u.minH, u.maxH); }

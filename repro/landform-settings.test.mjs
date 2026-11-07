@@ -62,3 +62,22 @@ test('lfcrater: a stroke with impact features reads its path as the projectile\'
   assert.ok(landformSigned(q)); assert.ok(!landformSigned({curve:{form:'lfHill'}}));
   assert.ok(Math.abs(landformPeak(q)-.39)<.02);
 });
+
+test('lfimpact2: Buckling is its own impact row, on a landform that digs',async()=>{
+  const {impactOn,bucklingOn,ejectaReach}=await import('../sculpt-shape-presets.js');
+  const {shapeControlAvailable:available}=await import('../sculpt-control-schema.js');
+  const {prepareNode}=await import('../sculpt-gpu-fields.js');
+  const crater={radius:200,ejecta:0,buckling:.7,secondaries:0,curve:{form:'lfCrater',knots:[[0,0],[.39,-.4],[.56,-.04],[1,1]]},heightReference:2,elevation:-20,combine:2};
+  const mound={...crater,heightReference:0,elevation:60,combine:0};
+  // Buckling alone makes an impact (a drag lands at its end) and reaches the ejecta's distance; on a shape that does not dig it is off, and its row hidden.
+  assert.ok(bucklingOn(crater)&&impactOn(crater)&&ejectaReach(crater)>0);
+  assert.ok(!bucklingOn(mound)&&!impactOn(mound)&&ejectaReach(mound)===0);
+  assert.equal(available('buckling','landform',crater),true);
+  assert.equal(available('buckling','landform',mound),false);
+  assert.equal(available('buckling','landform',{...crater,curve:{form:'lfRiver'}}),false);
+  // Ejecta no longer drives it: each has its own height, on the same scale (.3 of the relief per 100%).
+  const ctx={seed:1,baseHeight:99,sea:75,params:n=>new Proxy(n.params,{get:(o,k)=>o[k]??0})};
+  const u=params=>prepareNode({kind:'landform',seed:1,points:[{x:500,y:500}],params},{grid:512,spacing:2},ctx).u;
+  assert.ok(Math.abs(u(crater).bkAmt-.3*.7*20)<1e-9); assert.equal(u(crater).ejAmt,0);
+  assert.equal(u({...crater,ejecta:.7,buckling:0}).bkAmt,0); assert.ok(u({...crater,ejecta:.7,buckling:0}).ejAmt>0);
+});

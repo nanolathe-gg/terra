@@ -137,7 +137,7 @@ export function landformReach(q, scale = 1, widthMul = 1, stamp = false) {
   return Math.max(front, back) * widthMul * Math.exp(1.35 * (q.widthVary || 0) * weight) + (isRiver(q) ? 0 : (q.wander || 0) * scale * weight) + 2 + (talusOn(q) ? clamp(q.talus, 0, 400) : 0) + (stamp ? ejectaReach(q) : impactReach(q)) * widthMul;
 }
 
-// ---- lfcrater: the impact features (Ejecta, Secondaries) and the impact the drawn path describes ----
+// ---- lfcrater: the impact features (Ejecta, Buckling, Secondaries) and the impact the drawn path describes ----
 // Ejecta and secondaries are landform features: any landform throws them (a crater's bowl, a mound's foot). A stroke that throws them reads its path as the
 // projectile's: the direction from the path's start to its end is downrange, and the drag's length L against the diameter D sets the impact angle,
 // tan(angle) = tan(12 deg) D / L. A click is a vertical impact; a drag of a fifth of the diameter is 47 deg, where the ejecta begin to gather downrange
@@ -147,7 +147,10 @@ export function landformReach(q, scale = 1, widthMul = 1, stamp = false) {
 // the shape lands there whole, as a click of it (impactPoint), and the ejecta, secondaries and spurs spread round it; the drawn path before it is the
 // approach, a groove of the same section that the along curve scales (impactEnd).
 export const IMPACT_TAN = Math.tan(12 * Math.PI / 180);
-export const impactOn = q => (q?.ejecta || 0) > 0 || Math.round(q?.secondaries || 0) >= 1;
+// lfimpact2: Buckling, the ground raised in broken rings beyond the rim, is an impact feature of a landform that digs into the ground it lands on (a crater's
+// bowl); the panel shows its row there only (sculpt-control-schema.js), and the engine draws it there only.
+export const bucklingOn = q => (q?.buckling || 0) > 0 && landformDigs(q);
+export const impactOn = q => (q?.ejecta || 0) > 0 || Math.round(q?.secondaries || 0) >= 1 || bucklingOn(q);
 const pathLength = path => { let L = 0; for (let k = 1; k < path.length; k++) L += Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y); return L; };
 // The impact a drawn path describes: the downrange unit vector (0, 0 for a click), the drag length and the angle from the horizontal (degrees).
 export function impactSetup(q, path) {
@@ -184,8 +187,8 @@ export function landformPeak(q) {
 }
 // How far past the footprint the impact features reach (px): the secondaries and their chains (5.2 peak distances from the path, a quarter of the width for their own
 // size) take in the ejecta's ragged edge (3.6).
-// The stroke's own stamp reaches only its ejecta (2.6 peak distances from the path: lfCraterEjecta): the secondaries are nodes of their own, with their own boxes.
-export const ejectaReach = q => { if (!((q?.ejecta || 0) > 0)) return 0; const {front, back} = landformSides(q), W = Math.max(front, back), pk = landformPeak(q), share = pk > 0 ? 1 - pk : 1; return W * Math.max(0, 2.6 * share - 1); };
+// The stroke's own stamp reaches only its ejecta and buckling (2.6 peak distances from the path: lfCraterEjecta): the secondaries are nodes of their own, with their own boxes.
+export const ejectaReach = q => { if (!((q?.ejecta || 0) > 0) && !bucklingOn(q)) return 0; const {front, back} = landformSides(q), W = Math.max(front, back), pk = landformPeak(q), share = pk > 0 ? 1 - pk : 1; return W * Math.max(0, 2.6 * share - 1); };
 export const impactReach = q => { if (!impactOn(q)) return 0; const {front, back} = landformSides(q), W = Math.max(front, back), pk = landformPeak(q), share = pk > 0 ? 1 - pk : 1; return W * Math.max(0, 5.2 * share + .25 - 1); };
 
 // P17: a landform lays talus cones where it raises ground and Gullies cut its faces (the cones' chutes are the gullies' widest valleys).

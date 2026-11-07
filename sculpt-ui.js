@@ -41,7 +41,7 @@ export function groupToolControls(fields,buildRow){
  ['','Cross-section',['lean','facing']],
  ['','Variation',['wander','widthVary','heightVary','varySize','varyFoot','varyMiddle']],
  ['gullies','Gullies',['gullies','gullySize','talus']],
- ['','Impact',['ejecta','secondaries']],
+ ['','Impact',['ejecta','buckling','secondaries']],
  ['','Variability',['faceVariation']],
  ['fingers','Shore lobes',['fingers','fingerSize']],
  ['','Steps',['stepReference','terraces','ledge','terraceJitter','breakup','layerPx','layerRiser','layerVary','layerCircle','lavaSpread','lavaCircleVary']],

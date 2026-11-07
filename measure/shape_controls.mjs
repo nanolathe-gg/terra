@@ -43,11 +43,13 @@ const CONTROLS = {
   varyMiddle: {base: {wander: 40, widthVary: 40, heightVary: 12, varyMiddle: 0}, set: {varyMiddle: 200}},
   surf: {base: {elevation: -55, combine: 1}, set: {surf: 100}},   // P27: a water stroke's beach profile (Surf from 0 up)
   // lfcrater: the Ground reference (the hill's 71 units over the plain as an offset from the ground), a signed section (a knot below 0, flattened: a moat
-  // round the hill), and the impact features. Either impact feature makes the path an impact track, so each is read with the other barely on.
+  // round the hill), and the impact features. Any impact feature makes the path an impact track, so Ejecta and Secondaries are each read with the other barely on.
   heightRefGround: {base: {elevation: 170}, set: {heightReference: 2, elevation: 71}, under: [['landform', [[560, YC - 400], [560, YC + 400]], {card: {diameter: 900, elevation: 150, combine: 0, wander: 0, widthVary: 0, heightVary: 0, curve: {form: 'lfHill'}}}]]},
   curveSigned: {base: {combine: 2}, set: {combine: 2, curve: {form: 'lfHill', knots: [[0, 0], [.15, -.15], [.3, 0], [.58, .45], [.82, .86], [1, 1]]}}},
   ejecta: {base: {secondaries: 1}, set: {ejecta: 100}},
   secondaries: {base: {ejecta: 5}, set: {secondaries: 6}},
+  // lfimpact2: Buckling, on a crater that digs (Ground, below 0) and is big enough to buckle (a 280 px rim radius: all of it), with no other impact row on.
+  buckling: {base: {diameter: 900, heightReference: 2, elevation: -20, combine: 2, curve: {form: 'lfCrater'}}, set: {buckling: 100}},
   // lfcrystal: the faceted structure (Facet shape) and each shape's rows, with facets on and that shape chosen; the size and coverage on prisms.
   // Spur variation: the spurs' width and height along them, read with six spurs on.
   crestVary: {base: {spurCount: 6, spurLength: 160}, set: {crestVary: 100}},
