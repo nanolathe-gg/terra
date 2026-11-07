@@ -696,6 +696,29 @@ fn lfCraterSpread(c: f32, sn: f32) -> f32 {
   if (u.ejDz > 0.0) { w = w * sm(0.6 * u.ejDz, 1.4 * u.ejDz, down); }
   return w;
 }
+// Big impacts buckle the ground round them. Retail Moon's big craters (650-750 px rims; docs/IMPACT_RETAIL.md, measure/crater_rings.py): past the rim the
+// outer flank is broken into 6-7 blocks of uplifted ground, 22-37 deg of the ring each, centred 1.2-1.4 rim radii out and standing .19-.54 of the depth over
+// the smooth flank, a second crest on 11-18% of the azimuth, and nothing in the heights past 2 rim radii; craters under about 260 px carry lumps at their own,
+// lower scale. Here: rings of raised blocks BK_WAVE rim radii apart from just outside the rim, wandering along the ring, each ring broken into sections that
+// stand to different heights, highest by the rim and gone by 1.72 rim radii. The ejecta's height and spread carry it (none in the forbidden zone, more
+// downrange); the rim radius rp scales it from none under BK_R0 px to all of it from BK_R1 px. In the shape's frame (lr: the cell's ray's rim point), so
+// every tile computes the same value.
+const BK_R0 = 48.0;
+const BK_R1 = 280.0;
+const BK_WAVE = 0.3;
+const BK_AMP = 3.0;
+fn lfImpactBuckle(sr: f32, rp: f32, lr: vec2f, w: f32) -> f32 {
+  let size = sm(BK_R0, BK_R1, rp);
+  if (size <= 0.0 || sr < 1.0 || sr > 1.72) { return 0.0; }
+  let a = lr / (0.5 * rp);
+  let ph = (sr - 1.05) / BK_WAVE + 0.3 * vnoise(lr.x / (0.8 * rp), lr.y / (0.8 * rp), u.seed ^ 0x4b17u);
+  let n = floor(ph); let f = ph - n;
+  let arc = sm(-0.1, 0.3, vnoise(a.x + 17.3 * n, a.y - 9.1 * n, u.seed ^ 0x6d2bu));
+  let lift = 0.7 + 0.3 * vnoise(1.9 * a.x - 5.1 * n, 1.9 * a.y + 3.3 * n, u.seed ^ 0x2e95u);
+  let block = sm(0.0, 0.4, f) * (1.0 - sm(0.6, 1.0, f));
+  let env = sm(1.0, 1.1, sr) * (1.0 - sm(1.25, 1.72, sr));
+  return BK_AMP * size * clamp(w, 0.0, 1.6) * env * arc * lift * block;
+}
 // lfcrater: the ejecta beyond a landform's peak (its rim), added to the ground or the shape: a thin continuous blanket that thins as the cube of the distance
 // (McGetchin et al. 1973) to about 1.8 rim radii from the path, and ragged radial tongues that run from the rim a third to most of a rim radius farther, curling
 // as they go (retail Moon's craters: a fringe of short, curly ridges round a crisp rim). The tongues and their lengths are functions of the place on the rim a
@@ -727,7 +750,7 @@ fn lfCraterEjecta(wx: f32, wy: f32, trunk: u32) -> vec2f {
   let along = clamp((sr - 1.0) / (tip - 1.0), 0.0, 1.0);
   let tongue = sm(0.05, 0.6, ray) * sm(0.95, 1.08, sr) * pow(1.0 - along, 0.6) * select(1.0, 0.0, sr >= tip);
   let blanket = sm(0.85, 1.05, sr) * pow(sr, -3.0) * (1.0 - sm(1.5, 1.9, sr));
-  return vec2f(u.ejAmt * w * (0.5 * blanket + tongue) * (0.8 + 0.4 * hum), lip);
+  return vec2f(u.ejAmt * (w * (0.5 * blanket + tongue) * (0.8 + 0.4 * hum) + lfImpactBuckle(sr, rp, lr, w)), lip);
 }
 // lfcrater: a spur off a section that peaks before its path (a crater's rim, u.lfPeak the peak's share of the half width from the foot) carries the section
 // from the foot to that peak, both sides, so it ridges out from the rim at the rim's height instead of carrying the bowl along it.
