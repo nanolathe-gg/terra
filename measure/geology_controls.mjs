@@ -139,7 +139,7 @@ function render(world, dir, query, edit) {
     }
     const res = execFileSync('node', [`${here}repro/render.mjs`, scene, `${dir}/${world}-${n}`, ...hostArgs, ...(query ? ['--query', query] : [])]).toString().trim().split('\n').pop();
     const info = JSON.parse(res);
-    if (info.console.length || info.mismatch) logs.push(`${world}-${n} ${query}: ${JSON.stringify(info.console)} mismatch ${info.mismatch}`);
+    if (info.console.length) logs.push(`${world}-${n} ${query}: ${JSON.stringify(info.console)}`);
   }
 }
 const base = new Set();

@@ -705,14 +705,14 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
 }
 
 // ---- the fields object ----
-// opts: the createRegionalFields options (worldSize, worldGrid, baseHeight, keys, maskKeys, nodes), plus device() (the GPU device, or null
+// opts: the createRegionalFields options (worldSize, worldGrid, baseHeight, maskKeys, nodes), plus device() (the GPU device, or null
 // until the renderer exists), context() (the host context for prepareNode).
 // A failed pass is never silent: it reaches the console and, through the handler the editor installs, its error line.
 let onFailure = null;
 export function setFailureHandler(fn) { onFailure = fn; }
 const fail = err => { console.error(err); onFailure?.(err); };
 export function createGpuFields(opts) {
-  const {worldSize, worldGrid, baseHeight, keys, maskKeys, nodes, device, context} = opts;   // opts.forceRing (page parameter pageRing=N): a ring chosen by hand, for checking the ring rule against the whole-map engine
+  const {worldSize, worldGrid, baseHeight, maskKeys, nodes, device, context} = opts;   // opts.forceRing (page parameter pageRing=N): a ring chosen by hand, for checking the ring rule against the whole-map engine
   const spacing = (worldSize - 1) / (worldGrid - 1), cells = worldGrid * worldGrid, listeners = new Set();
   const clip = r => ({x0: clamp(r.x0, 0, worldGrid - 1), y0: clamp(r.y0, 0, worldGrid - 1), x1: clamp(r.x1, 0, worldGrid - 1), y1: clamp(r.y1, 0, worldGrid - 1)});
   const worldRect = r => ({x: r.x0 * spacing, y: r.y0 * spacing, width: (r.x1 - r.x0) * spacing, height: (r.y1 - r.y0) * spacing});
@@ -851,7 +851,6 @@ export function createGpuFields(opts) {
     buffers: () => planes ? [...FIELD_KEYS_FLOAT.map(k => planes[k].buffer), ...planes.masks.map(a => a.buffer)] : [],
     read, readCells, sample, cell, changed, ready: () => whenReady(), pending: () => (queued !== null || starting !== null || landing > 0 || copyDirty || !valid),
     readAsync: async (request, o) => { await whenReady(); return read(request, o); },
-    replayDetail: () => Object.fromEntries(keys.map(k => [k, 0])),
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     stats, active: () => true,
     planes: () => planes, engine: () => engine,
@@ -875,7 +874,7 @@ export function createGpuFields(opts) {
 // (an LRU by bytes); a CPU copy exists only for resident pages, and a coarse lattice of authored heights (every COARSE-th cell, filled in the background,
 // view first) answers everything else.
 export function createPagedFields(opts) {
-  const {worldSize, worldGrid, baseHeight, keys, maskKeys, nodes, device, context} = opts;
+  const {worldSize, worldGrid, baseHeight, maskKeys, nodes, device, context} = opts;
   const CORE = opts.core ?? 512, APRON = opts.apron ?? 128, COARSE = 8, SHIFT = Math.log2(CORE);
   const spacing = (worldSize - 1) / (worldGrid - 1), np = Math.ceil(worldGrid / CORE), gesture = opts.gesture || (() => false);
   const foregroundPending = opts.foregroundPending || (() => false);
@@ -1296,7 +1295,6 @@ export function createPagedFields(opts) {
     changed, refit: () => { const before = RING; check(); if (RING !== before) changed(); }, ready: () => Promise.resolve(), pending: () => false,
     readAsync: async (request, o) => readRect(toCells(request), o),
     readRect: (rect, o) => readRect(clip(rect), o),
-    replayDetail: () => Object.fromEntries(keys.map(k => [k, 0])),
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }, subscribeSubmit(fn) { submitListeners.add(fn); return () => submitListeners.delete(fn); },
     stats, active: () => true,
     planes: () => null, engine: () => engine, gpuBuffers: () => null,

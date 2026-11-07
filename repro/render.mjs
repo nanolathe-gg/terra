@@ -50,7 +50,7 @@ async function renderHeadless() {
   let tiles = 0; for (let i = 0; i < big.length; i += 4) if (big[i] !== pixels[i] || big[i + 1] !== pixels[i + 1] || big[i + 2] !== pixels[i + 2]) tiles++;
   if (tiles > TILE_PX) { console.error(`render.mjs: ${sceneFile}: ${tiles} pixels change with the tile size`); process.exitCode = 1; }
   const weather = time ? (time.paged ? 'Weathered edges · GPU time pass in pages' : `Weathered edges · GPU time pass ${Math.round(time.milliseconds)} ms`) : 'Weathering off · authored surface';
-  console.log(JSON.stringify({nodes: s.nodes.length, ms: Date.now() - t0, weather, mismatch: Math.max(...Object.values(s.fields.replayDetail())), tiles, console: s.errors.slice(0, 8), host: 'node'}));
+  console.log(JSON.stringify({nodes: s.nodes.length, ms: Date.now() - t0, weather, tiles, console: s.errors.slice(0, 8), host: 'node'}));
   if (s.errors.length) process.exitCode = 1;
   s.dispose();
 }
@@ -119,7 +119,7 @@ async function renderInChrome() {
     // took its lattice's height from its width, so rows past that were one row repeated; every render reads this now. Triangles landing a hair apart leave a few single pixels.
     const tiles = await ev(`(async () => { const c = document.getElementById('terrain').getContext('2d'); let px = 0; for (const y of [0, 512]) for (const x of [0, 512]) { const b = await sculptCanvas.debugBake({x: ${OX} + x, y: ${OY} + y, width: 512, height: 512}, 1), o = new OffscreenCanvas(512, 512).getContext('2d'); o.drawImage(b, 0, 0); const A = c.getImageData(x, y, 512, 512).data, B = o.getImageData(0, 0, 512, 512).data; for (let i = 0; i < A.length; i += 4) if (A[i] !== B[i] || A[i + 1] !== B[i + 1] || A[i + 2] !== B[i + 2]) px++; } return px; })()`);
     if (tiles > TILE_PX) { console.error(`render.mjs: ${sceneFile}: ${tiles} pixels change with the tile size`); process.exitCode = 1; }
-    console.log(JSON.stringify({nodes: count, ms: Date.now() - t0, weather: await ev(`document.getElementById('weather-state').textContent`), mismatch: await ev('sculptDebug.replayAll()'), tiles, console: logs.slice(0, 8), host: 'chrome'}));
+    console.log(JSON.stringify({nodes: count, ms: Date.now() - t0, weather: await ev(`document.getElementById('weather-state').textContent`), tiles, console: logs.slice(0, 8), host: 'chrome'}));
     ws.close();
   } finally { browser.kill(); }
 }
