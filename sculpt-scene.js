@@ -45,7 +45,7 @@ export const LANDFORM_TOOLS={
   crater:{diameter:360,lean:100,heightReference:2,elevation:-20,combine:2,cracks:30,wander:20,widthVary:10,heightVary:2,varySize:95,varyFoot:100,varyMiddle:100,ejecta:0,secondaries:3,curve:{form:'lfCrater',knots:FORMS.lfCrater().knots}},
   // lfcrystal: Crystals (the palette's Faceted forms) is a landform broken into prisms by its Facet shape: a click is a cluster round the point, a drag
   // rows along the path. The section is the old cluster's falloff (each prism stood 1 - .45 x its distance share lower toward the rim), the rise its Height.
-  crystal:{diameter:200,elevation:40,lean:100,combine:0,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:200,varyFoot:100,varyMiddle:100,iceFacets:60,facetForm:2,facetSurface:1,iceFacetSize:36,
+  crystal:{diameter:200,elevation:40,lean:100,combine:0,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:200,varyFoot:100,varyMiddle:100,iceFacets:100,facetForm:2,facetSurface:1,iceFacetSize:32,
     crystalSides:5,crystalTop:80,crystalVariation:50,crystalAlign:0,crystalTiers:100,bergJitter:20,bergBreak:0,bergRough:0,curve:{form:'lfCrystal',knots:FORMS.lfCrystal().knots,back:FORMS.lfCrystal().knots}}
 };
 // lfcrater: a crater with no rim in its heights (retail Red and Crystal: rim/depth -.12..0), a .06 lip for the art and a wide bowl.
