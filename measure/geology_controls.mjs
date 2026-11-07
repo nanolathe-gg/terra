@@ -32,7 +32,7 @@ const FAMILY = /^(rockOrder|rockFrom|bed(Spacing|Vary|Dip|DipDir|Ledge|Height|Pu
 const SHORES = /^(shoal\w*|shelf\w*|shallowDepth|deepDepth|waterSoft|crispShore|stepSoftPx|deepEdge|bed(Lit|Tint|Flat|Dots|DotCell|Relief|Contrast|Bright)|crackedStep|flatBank|bankPx|bankRock|beachWidth|apron|sandCrown|shoreEdge|bandWater|fingers|finger[A-Z]\w*|shoreLayers|layer(Px|Riser|Ledge|Rough|Style|Vary|Circle|Crease)|lava(Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*|water(Shore|Deep|Bed))$/;
 const SHORE_CLASS = k => /^(shoal(Stairs|ShoreSoft)|crispShore|shoreEdge|shore)$/.test(k) ? 'edge' : /^(beachWidth|apron|sandCrown)$/.test(k) ? 'beach' : /^(flatBank|bankRock|layerCrease)$/.test(k) ? 'bank'
   : /^(bankPx|bankWidth|beachFlatness|fingers|finger[A-Z]\w*|shoreLayers|layer[A-Z]\w*|lava(Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*)$/.test(k) ? 'shore' : 'shallows';
-const IMPACTS = /^(moon\w*|crater\w*|pock\w*|crystalCrater\w*|rim(Sectors|Unequal|Gaps|GapWidth|Height)|worms|wrinkles|slopeMarks)$/;
+const IMPACTS = /^(moon\w*|pock\w*|crystalCrater\w*|worms|wrinkles|slopeMarks)$/;
 const IMPACT_CLASS = k => /^(worms|wrinkles|slopeMarks|moon(Ribs|RibDepth|RibDark|Cups|CupSize|CupDepth))$/.test(k) ? 'slope' : /^moonFold/.test(k) ? 'fold' : 'impact';
 const CLASS = k => bodies ? BODY_CLASS(k) : impacts ? IMPACT_CLASS(k) : shores ? SHORE_CLASS(k) : fractures ? (/^(crack|ribTilt)/.test(k) ? 'slope' : 'face') : /^(ring|mineral)/.test(k) ? 'halo' : /^(layer|shoreLayers|lava)/.test(k) ? 'bank' : 'raised';
 // Card units of the stroke options (sculpt-scene.js SHAPE_FIELDS' last scale): a stroke that carries its own value is moved with the world's.
