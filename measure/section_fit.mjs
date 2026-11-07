@@ -46,7 +46,7 @@ export function err(f, g, amount = 80, n = 400) {
   return {rms: Math.sqrt(s / c), max: mx};
 }
 let seed = 7; const R = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-const KEYS = ['al', 'ah', 'ph', 'k', 'cr', 'P'], LO = {al: 0, ah: 0, ph: .05, k: -1, cr: 0, P: 1.2}, HI = {al: .5, ah: .5, ph: .98, k: 1, cr: 1, P: 5};
+const LO = {al: 0, ah: 0, ph: .05, k: -1, cr: 0, P: 1.2}, HI = {al: .5, ah: .5, ph: .98, k: 1, cr: 1, P: 5};
 function search(cost, free, iters = 30000, restarts = 4) {
   let best = null;
   for (let r = 0; r < restarts; r++) {

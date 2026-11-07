@@ -67,7 +67,7 @@ def snow(code):
 
 def shores(code):
     """Floes, shelf and pressure ridges on the shore sections."""
-    floes, band, ridges, widths = [], np.zeros((2, 40)), [], []
+    floes, band, ridges = [], np.zeros((2, 40)), []
     shelf_heights = []
     ridge_px, ridge_area = 0, 0
     for art in sorted((ROOT / 'shores').glob('*.art.png')):
@@ -227,7 +227,7 @@ def blocks(scenes):
                 b = int(((facing + 22.5) % 360) // 45)
                 shade.setdefault(b, []).append((window(y - 4, y + 4, x - 4, x + 4).reshape(-1, 3).mean(axis=0), g))
     names = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE']
-    az, lu, wt = [], [], []
+    az, lu = [], []
     for b, v in shade.items():
         for rgb, g in v:
             az.append(b * 45.0)

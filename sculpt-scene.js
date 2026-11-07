@@ -14,7 +14,6 @@ const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 export const LANDFORM_DEFAULTS={"diameter":300,"amount":70,"roughness":0,"softness":50,"cracks":40,"faceVariation":0,"lean":100,"facing":3,"terraces":0,"elevation":70,"combine":0,"wander":90,"widthVary":35,"heightVary":3,"varySize":140,"varyFoot":115,"varyMiddle":145,"routeSmooth":0,"crestTaper":0,"fingers":0,"shoreLayers":0,"shorePlates":0,"curve":{"form":"lfPlateau","knots":[[0,0],[0.08,0.006],[0.19,0.035],[0.27,0.15],[0.37,0.65],[0.45,0.96],[0.5,1],[1,1]],"back":[[0.0,0],[0.096,0.006],[0.22799999999999998,0.035],[0.324,0.15],[0.444,0.65],[0.54,0.96],[0.6,1],[1,1]]}};
 // The palette's landform presets over LANDFORM_DEFAULTS (Plateau is the defaults themselves): numbers for Landform's own controls, each the fit of the
 // retired tool's default stroke that re-authored the fixtures. Elevation is a rise above the map plain, or with Height reference: Sea level, above the sea.
-const smoothKnots=n=>Array.from({length:n+1},(_,i)=>{const t=i/n;return [Math.round(1000*t)/1000,Math.round(1000*t*t*(3-2*t))/1000];});
 // The valleys cut to a floor below the plain (Cut to) along one curve: V and U differ only in the curve, the terraced one is the V with the Steps control.
 const valley=(form,more={}) => ({diameter:240,lean:100,combine:1,elevation:-20,cracks:0,wander:20,widthVary:20,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,curve:{form,knots:FORMS[form]().knots},...more});
 const hillKnots=() => [[0,0],[.25,.08],[.5,.4],[.75,.8],[.9,.95],[1,1]];

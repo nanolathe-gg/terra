@@ -149,11 +149,6 @@ export function landformReach(q, scale = 1, widthMul = 1, stamp = false) {
 export const IMPACT_TAN = Math.tan(12 * Math.PI / 180);
 export const impactOn = q => (q?.ejecta || 0) > 0 || Math.round(q?.secondaries || 0) >= 1;
 const pathLength = path => { let L = 0; for (let k = 1; k < path.length; k++) L += Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y); return L; };
-const pointAlong = (path, d) => {
-  let k = 1, acc = 0;
-  for (; k < path.length; k++) { const l = Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y); if (acc + l >= d || k === path.length - 1) { const f = l > 0 ? clamp((d - acc) / l, 0, 1) : 0; return {k, p: {x: path[k - 1].x + (path[k].x - path[k - 1].x) * f, y: path[k - 1].y + (path[k].y - path[k - 1].y) * f}}; } acc += l; }
-  return {k: 1, p: {...path[0]}};
-};
 // The impact a drawn path describes: the downrange unit vector (0, 0 for a click), the drag length and the angle from the horizontal (degrees).
 export function impactSetup(q, path) {
   const D = 2 * (q.radius || 1), L = path.length > 1 ? pathLength(path) : 0, a = path[0], b = path[path.length - 1], cl = Math.hypot(b.x - a.x, b.y - a.y);

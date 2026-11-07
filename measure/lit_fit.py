@@ -38,8 +38,6 @@ SPACE = {
     'cone': (0.0, 4.0, 0.3, '+'), 'seamVary': (0.0, 1.0, 0.25, '+'), 'seamGap': (0.05, 0.95, 0.1, '+'), 'veinWidth': (0.6, 6.0, 1.25, 'x'), 'veinSpacing': (12.0, 160.0, 1.25, 'x'),
     'veinShare': (0.05, 0.95, 0.1, '+'),
 }
-OFF_IF_ZERO = {'cell': ['tilt', 'tone', 'seamWidth', 'seamDepth', 'warp', 'cone', 'seamVary', 'seamGap'], 'veinShare': ['veinWidth', 'veinSpacing']}
-
 
 def stats(a):
     L = a @ LUMA

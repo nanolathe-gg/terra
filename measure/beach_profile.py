@@ -9,7 +9,7 @@ this is the profile the units walk on. Only a table is worth committing; the map
 import json, sys
 from pathlib import Path
 import numpy as np
-from scipy.ndimage import distance_transform_edt, zoom, map_coordinates
+from scipy.ndimage import distance_transform_edt, zoom
 
 UP = 4          # sub-cell resolution of the distance field
 BINS = np.arange(-6, 12.01, 0.5)

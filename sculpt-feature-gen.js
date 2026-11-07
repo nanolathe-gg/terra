@@ -49,8 +49,6 @@ export const IDX = {
   WHITE: 255,
   KEY: 9,
 };
-const G = IDX.GREEN, GR = IDX.GRAY;
-const LUMA_GREEN = [12, 18, 26, 33, 41, 46, 56, 63, 72, 82, 96];
 
 // ---- sprites -------------------------------------------------------------------------------------------------
 const newSprite = (w, h, ax, ay) => ({ w, h, ax, ay, idx: new Uint8Array(w * h), a: new Uint8Array(w * h) });
@@ -66,7 +64,6 @@ function cropSprite(s, pad = 0) {
   for (let y = 0; y < o.h; y++) for (let x = 0; x < o.w; x++) { const k = (y + y0) * s.w + x + x0; o.idx[y * o.w + x] = s.idx[k]; o.a[y * o.w + x] = s.a[k]; }
   return o;
 }
-const cloneSprite = s => ({ ...s, idx: s.idx.slice(), a: s.a.slice() });
 // distance (4-neighbor steps) from each drawn pixel to the nearest undrawn one; 0 for undrawn
 function edgeDist(w, h, mask) {
   const d = new Int16Array(w * h).fill(9999), q = [];
@@ -104,8 +101,6 @@ function lightOf(ctx = {}) {
   lx /= n; ly /= n;
   return { x: lx, y: ly, v, ambient: clamp(ctx.ambient ?? 1, 0.3, 1.6), shadowSide: lx < 0 ? 1 : -1 };
 }
-// The view's world-up direction: a face turned to the sky in TA's view (sky light falls on it).
-const UP_VIEW = [0, -0.4472, 0.8944];
 
 // ---- color: RGB ramps, the world's light and the game palette -------------------------------------------------------------
 // Generators that shade in RGB (rocks, trees, shrubs, plants) take their colors as ramps: '#rrggbb' stops, darkest first, evenly
@@ -212,16 +207,7 @@ function makeShadow(body, o, r) {
   const out = cropSprite(sh);
   return out;
 }
-// Rock shadow (retail: a large soft dark patch to the right and below, wider than tall): the silhouette offset and grown a little.
-function offsetShadow(body, dx, dy, grow, colors, r) {
-  const pad = Math.ceil(Math.abs(dx)) + 6, w = body.w + pad * 2, h = body.h + pad * 2, sh = newSprite(w, h, body.ax + pad, body.ay + pad);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    let hit = 0;
-    for (let g = -grow; g <= grow; g++) for (let f = -grow; f <= grow; f++) if (at(body, x - pad - Math.round(dx) + f, y - pad - Math.round(dy) + g)) hit++;
-    if (hit > (grow ? 2 : 0) || (hit > 0 && r() < 0.5)) { sh.a[y * w + x] = 1; sh.idx[y * w + x] = weighted(r, colors); }
-  }
-  return cropSprite(sh);
-}
+
 const TREE_SHADOW_COLORS = [[245, 41], [95, 40], [92, 6], [93, 7], [94, 6]];   // neutral, so any world's ground shows through (retail Green's, less its 6% dark greens)
 const ROCK_SHADOW_COLORS = [[47, 78], [95, 20], [245, 2]];
 
@@ -395,7 +381,6 @@ function tendrilFrame(P, seed, ctx, burnt = false) {
   return { body: quantize(c, ctx, 5, mix32(seed, 32)), R, W: Math.round(T.W), H: R.h };
 }
 
-const BURNT_TABLE = [[245, 1.5], [63, 1.5], [79, 1], [47, 12.5], [46, 6.7], [45, 6.8], [95, 14.7], [94, 9.1], [62, 6], [61, 4], [172, 3], [173, 2.5], [175, 1], [60, 2], [93, 9.3], [92, 3.5], [59, 2], [91, 3], [90, 2.2], [89, 1.2], [88, 0.6], [87, 0.4], [57, 0.6], [55, 0.4], [44, 1], [43, 0.5]];
 // ---- burnt trees (skeletons) ------------------------------------------------------------------------------------
 const BURNT_DEFAULTS = { species: 'broadleaf', height: 53, width: 0.62, forks: 3, ash: 0.5, energy: [50, 50] };
 const CONIFER_DEAD = [[245, 1.5], [63, 1], [47, 13], [175, 1.5], [46, 12], [62, 5], [45, 10], [94, 4], [61, 1.5], [172, 2], [173, 2], [44, 3], [93, 11], [43, 1.5], [92, 3], [91, 2.5], [89, 2], [88, 1.5]];   // dark to light

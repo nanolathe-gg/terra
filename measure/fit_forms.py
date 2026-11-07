@@ -55,7 +55,6 @@ def features(h, plain, water):
     lab, n = ndimage.label(mask)
     edt = (ndimage.distance_transform_edt(np.pad(mask, 1, mode='edge'))[1:-1, 1:-1] - .5).clip(0) * CELL
     for i, sl in enumerate(ndimage.find_objects(lab), 1):
-        r0, r1, c0, c1 = sl[0].start, sl[0].stop, sl[1].start, sl[1].stop
         m = lab[sl] == i
         zz, dd = z[sl][m], edt[sl][m]
         if zz.size < 6:

@@ -8,12 +8,11 @@ thickness along the slope in px and in height units. Boundary curves between
 classes give the warp: how far one visible band edge wanders in TA height.
 """
 import sys
-from pathlib import Path
 
 import numpy as np
-from scipy.ndimage import label, map_coordinates
+from scipy.ndimage import label
 
-from desert_common import CLASS_NAMES, LUMA, classify, load, raised_forms, unique_forms, world_view
+from desert_common import CLASS_NAMES, classify, load, raised_forms, unique_forms, world_view
 
 
 def form_instances(h, idx, forms):

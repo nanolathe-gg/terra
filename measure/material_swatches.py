@@ -71,14 +71,12 @@ def main():
             n = 512 // foot
             raw = np.fromfile(out / f'raw{foot}' / f'{name}.rgba', np.uint8).reshape(n, n, 4)[..., :3].astype(float)
             gen[foot] = snap(lut, raw)
-        sheets = []
         rows = {'prepared': img, 'model': gen[1]}
         numbers[name] = {'prepared': stats(img), 'model': stats(gen[1]),
                          'modelNoPalette': stats(np.fromfile(out / 'raw1' / f'{name}.rgba', np.uint8).reshape(512, 512, 4)[..., :3].astype(float)),
                          'model-quarter': stats(np.kron(gen[4], np.ones((4, 4, 1)))[:512, :512]),
                          'quarterNoPalette': stats(np.kron(np.fromfile(out / 'raw4' / f'{name}.rgba', np.uint8).reshape(128, 128, 4)[..., :3].astype(float), np.ones((4, 4, 1))))}
         # sheet: 1x and 2x of a 128 crop pair (prepared | model), then numbers
-        W = 4 * 128 + 4 * 128 + 30
         sheet = Image.new('RGB', (2 * 256 + 2 * 256 + 3 * 8, 256 + 8 + 128 + 8 + 20 * 9), (20, 20, 20))
         crop = lambda a, s: Image.fromarray(a[40:40 + s, 40:40 + s].astype(np.uint8))
         sheet.paste(crop(img, 256), (8, 8)); sheet.paste(crop(gen[1], 256), (8 + 256 + 8, 8))

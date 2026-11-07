@@ -61,7 +61,6 @@ def vein_mask(a):
 def lit_numbers(a):
     """a: H x W x 3 float image. The structure numbers above."""
     L = a @ LUMA
-    sd = float(L.std())
     ang, coh = tensor(L, 1.0)
     sang, scoh = tensor(L, 4.0)
     shear = int(np.clip(round(-np.tan(np.radians(sang if sang < 90 else sang - 180))), -4, 4)) if scoh > 0.02 else 0

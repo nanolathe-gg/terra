@@ -21,7 +21,6 @@ export const PATHS = {
 const length = p => { let s = 0; for (let i = 1; i < p.length; i++) s += Math.hypot(p[i].x - p[i - 1].x, p[i].y - p[i - 1].y); return s; };
 const near = (line, p) => { let best = Infinity; for (let i = 0; i + 1 < line.length; i++) { const a = line[i], b = line[i + 1], dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy, t = l2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0; best = Math.min(best, Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t)); } return best; };
 const median = a => { const s = a.filter(v => v !== null).sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null; };
-const pct = (a, f) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(f * s.length))]; };
 // The course at 2 px, smoothed over .35 of a width (river_retail.py smooths its 16-px axis the same way).
 function course(p) {
   const d = [p[0]]; let carry = 0;
