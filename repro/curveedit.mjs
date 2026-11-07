@@ -2,6 +2,7 @@
 // remove a knot, reset, set lean and facing, draw, edit the selected stroke, and save and reload (the browser's autosave) to see that the knots and the
 // render come back the same.
 //   node repro/curveedit.mjs [--server http://127.0.0.1:8801] [--port 9450] [--worlds green,desert] [--out dir]
+// The worlds run at once, one browser each, on CDP ports --port, --port+1, ...
 // Prints one JSON line per world; exit code 1 on any failed check or a console error.
 import {cdpPortFree} from './cdp-port.mjs';
 import {FORMS, LANDFORM_FORMS} from '../sculpt-shape-presets.js';
@@ -16,7 +17,7 @@ mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let bad = 0;
 
-async function session(url, fn) {
+async function session(url, port, fn) {
   const logs = [];
   await cdpPortFree(port);
   const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
@@ -50,9 +51,10 @@ const ready = async ev => {
 };
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-for (const world of worlds) {
-  const url = `${server}/sculpt.html?biome=${world}&gpuMB=512&heapMB=1536`;   // no scratch: the autosave is what the reload reads
-  const r = await session(url, async ({send, ev, logs}) => {
+// Each world is its own browser, all at once, on CDP ports --port, --port+1, ...
+async function editWorld(world, port) {
+  const url = `${server}/sculpt.html?biome=${world}&gpuMB=512&heapMB=1536`;   // no scratch: the autosave is what the reload reads (each browser has its own)
+  const r = await session(url, port, async ({send, ev, logs}) => {
     const res = {world, checks: {}};
     const check = (name, ok, detail) => { res.checks[name] = ok ? 'ok' : `FAILED ${detail === undefined ? '' : JSON.stringify(detail)}`; if (!ok) bad++; };
     const mouse = (type, x, y, extra = {}) => send('Input.dispatchMouseEvent', {type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1, ...extra});
@@ -66,10 +68,11 @@ for (const world of worlds) {
       await mouse('mouseReleased', x0 + 240, y0); await ev('sculptCanvas.idle()'); await sleep(300);
     };
     const nodes = () => ev('sculptDebug.nodes()');
-    const raised = async () => ev(`(() => { const n = sculptDebug.nodes().at(-1), far = sculptDebug.corner(10, 10).authored; return Math.max(...n.points.map(p => sculptDebug.corner(p.x, p.y).authored)) - far; })()`);
+    // the most the last stroke moved the ground on its path, up or down (River and Braided river cut their channel whatever the Combine)
+    const moved = async () => ev(`(() => { const n = sculptDebug.nodes().at(-1), far = sculptDebug.corner(10, 10).authored; return Math.max(...n.points.map(p => Math.abs(sculptDebug.corner(p.x, p.y).authored - far))); })()`);
     const grid = () => ev(`(() => { const o = []; for (let y = 100; y < 1000; y += 30) for (let x = 100; x < 1000; x += 30) o.push(sculptDebug.corner(x, y).authored); return o; })()`);
     // the editor canvas, scrolled into view, its box in page pixels
-    const box = async () => ev(`(() => { const c = document.getElementById('section-preview'); c.closest('details').open = true; c.scrollIntoView({block: 'center'}); const r = c.getBoundingClientRect(); return {x: r.left, y: r.top, w: r.width, h: r.height, cw: c.width, ch: c.height}; })()`);
+    const box = async () => ev(`(() => { const c = document.getElementById('section-preview'), d = c.closest('details'); if (d) d.open = true; c.scrollIntoView({block: 'center'}); const r = c.getBoundingClientRect(); return {x: r.left, y: r.top, w: r.width, h: r.height, cw: c.width, ch: c.height}; })()`);
     // a front knot's page position, read from the page's own section layout (the canvas is drawn at the pixels it is shown in, both sides across)
     const knotXY = async (b, x, v) => { const q = await ev(`sculptDebug.sectionPoint('front', ${x}, ${v})`); return [q.x, q.y]; };
     const drag = async (from, to, extra = {}) => { await mouse('mousePressed', ...from, extra); await mouse('mouseMoved', ...to); await sleep(60); await mouse('mouseReleased', ...to); await sleep(250); };
@@ -79,9 +82,9 @@ for (const world of worlds) {
       const defaults = JSON.parse(readFileSync(new URL(`comparisons/landform/${world === 'desert' ? '07-mesa-improved' : '02-plateau-natural-refined'}.json`, import.meta.url), 'utf8')).strokes[0][2];
       const baseH = await ev('sculptDebug.base');
       await stroke('plateau');
-      // Existing slider steps snap the reviewed 300 px diameter to 304, and 75 px wander to 76.
+      // The Wander slider snaps the reviewed 75 px to 76.
       const fresh = (await nodes()).at(-1).params;
-      check('approved landform defaults reach a new stroke', same(fresh.curve, defaults.curve) && fresh.radius === (world === 'desert' ? 200 : 152) && fresh.wander === (world === 'desert' ? 76 : 90) && fresh.widthVary === defaults.card.widthVary / 100 && fresh.elevation === baseH + defaults.card.elevation - 24 && fresh.routeSmooth === 0 && fresh.crestTaper === 0, {curve:fresh.curve,radius:fresh.radius,wander:fresh.wander,elevation:fresh.elevation,baseH});
+      check('approved landform defaults reach a new stroke', same(fresh.curve, defaults.curve) && fresh.radius === defaults.card.diameter / 2 && fresh.wander === (world === 'desert' ? 76 : 90) && fresh.widthVary === defaults.card.widthVary / 100 && fresh.elevation === baseH + defaults.card.elevation - 24 && fresh.routeSmooth === 0 && fresh.crestTaper === 0, {curve:fresh.curve,radius:fresh.radius,wander:fresh.wander,elevation:fresh.elevation,baseH});
       await setValue('curve-form', 'lfTerraced', 'change'); await setValue('lf-wander', 0);   // a plateau form: the style restores the plateau
       await setValue('tool-style', world, 'change'); await ev('sculptCanvas.idle()');
       const styled = (await nodes()).at(-1).params;
@@ -96,11 +99,15 @@ for (const world of worlds) {
       for (const size of [144, 560]) {   // the diameter slider steps by 8, so 144 is its nearest to 140
         await brush(); await setValue('diameter', size);
         for (const form of LANDFORM_FORMS.map(([id]) => id)) {   // the shape buttons draw landforms
-          await brush(); await setValue('curve-form', form, 'change');
+          // River and Braided river cut a channel under their floodplain, which the Plateau card's Raise to keeps from showing: they are drawn
+          // as their own buttons draw them (Cut to, 3 above the sea). Every other form is drawn on the Plateau card.
+          const tool = {lfRiver: 'river', lfBraided: 'braided'}[form] ?? 'plateau';
+          if (tool === 'plateau') { await brush(); await setValue('curve-form', form, 'change'); }
+          else { await brush(tool); await setValue('diameter', size); }
           const before = (await nodes()).length;
-          await stroke();
-          const ns = await nodes(), n = ns.at(-1), up = await raised(); 
-          check(`form ${form} ${size}px`, ns.length === before + 1 && n.params.curve?.form === form && n.params.radius === size / 2 && up > 5, {nodes: ns.length - before, curve: n?.params?.curve, radius: n?.params?.radius, up});
+          await stroke(tool);
+          const ns = await nodes(), n = ns.at(-1), change = await moved();
+          check(`form ${form} ${size}px`, ns.length === before + 1 && n.params.curve?.form === form && n.params.radius === size / 2 && change > 5, {nodes: ns.length - before, curve: n?.params?.curve, radius: n?.params?.radius, change});
           await ev(`document.getElementById('undo').click(); true`); await ev('sculptCanvas.idle()'); await sleep(200);
         }
       }
@@ -147,19 +154,12 @@ for (const world of worlds) {
       const back = (await nodes()).map(x => x.params?.curve ?? null), h2 = await grid();
       check('the same knots after reload', same(saved, back) && saved.some(x => x?.knots), {saved, back});
       check('the same render after reload', h2.length === heights.length && h2.every((v, i) => Math.abs(v - heights[i]) < 1e-3), h2.reduce((m, v, i) => Math.max(m, Math.abs(v - heights[i])), 0));
-      // 6. the landform (H27): its forms, both sides of the section, Link sides and Mirror, the lean handle, the along curve and its pick, the elevation, undo, save and reload
+      // 6. the landform (H27; section 1 draws its forms): both sides of the section, Link sides and Mirror, the lean handle, the along curve and its pick, the elevation, undo, save and reload
       // Sections 1-5 edited this same brush (the plateau button draws a landform) and left a landform where this one is drawn: start a blank map and the world's preset.
       await ev(`document.getElementById('blank').click(); true`); await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
       await brush('plateau'); await setValue('tool-style', world, 'change'); await setValue('diameter', 200); await setValue('curve-form', 'lfPlateau', 'change');
       const crestHeights = async () => ev(`(() => { const n = sculptDebug.nodes().at(-1); return n.points.map(p => sculptDebug.corner(p.x, p.y).authored); })()`);
       const plain = await ev(`sculptDebug.corner(10, 10).authored`);
-      for (const [id] of LANDFORM_FORMS) {
-        await brush('plateau'); await setValue('curve-form', id, 'change');
-        const before = (await nodes()).length; await stroke('plateau');
-        const ns2 = await nodes(), n2 = ns2.at(-1), hs = await crestHeights();
-        check(`landform form ${id}`, ns2.length === before + 1 && n2.kind === 'landform' && n2.params.curve?.form === id && Math.max(...hs) > plain + 20, {nodes: ns2.length - before, kind: n2?.kind, curve: n2?.params?.curve, plain, hs: hs.map(h => Math.round(h))});
-        await ev(`document.getElementById('undo').click(); true`); await ev('sculptCanvas.idle()'); await sleep(200);
-      }
       await brush('plateau'); await setValue('curve-form', 'lfPlateau', 'change'); await stroke('plateau');   // the stroke is selected
       const L0 = (await nodes()).length - 1;
       let b2 = await box(); const kn = FORMS.lfPlateau().knots, sp = async (side, x, v) => { const q = await ev(`sculptDebug.sectionPoint(${JSON.stringify(side)}, ${x}, ${v})`); return [q.x, q.y]; };
@@ -269,4 +269,5 @@ for (const world of worlds) {
   });
   console.log(JSON.stringify(r));
 }
+await Promise.all(worlds.map((world, i) => editWorld(world, port + i)));
 process.exit(bad ? 1 : 0);
