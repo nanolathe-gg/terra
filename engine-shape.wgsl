@@ -700,9 +700,11 @@ fn lfCraterSpread(c: f32, sn: f32) -> f32 {
 // lower scale. Here: rings of raised blocks BK_WAVE rim radii apart from just outside the rim, wandering along the ring, each ring broken into sections that
 // stand to different heights, highest by the rim and gone by 1.72 rim radii. Its own height (u.bkAmt, the Buckling row) and the impact's spread carry it
 // (none in the forbidden zone, more downrange); the rim radius rp scales it from none under BK_R0 px to all of it from BK_R1 px. In the shape's frame (lr:
-// the cell's ray's rim point), so every tile computes the same value.
-const BK_R0 = 48.0;
-const BK_R1 = 280.0;
+// the cell's ray's rim point), so every tile computes the same value. lfimpact2 (the owner: "should allow a bit more"): 48 -> 32 and 280 -> 160 px, so a
+// crater of retail's medium class (rim 172-248 px across, median 4.5 blocks at .46 of the depth) buckles: at Diameter 360 (a 220 px rim) the Moon
+// preset draws 5 blocks (2 before), on a flat fixture.
+const BK_R0 = 32.0;
+const BK_R1 = 160.0;
 const BK_WAVE = 0.3;
 const BK_AMP = 3.0;
 fn lfImpactBuckle(sr: f32, rp: f32, lr: vec2f, w: f32) -> f32 {
