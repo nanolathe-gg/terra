@@ -37,10 +37,19 @@ step() {   # step <name> <command...>: run it, log it, time it
   printf '%-12s %-6s %4ss  %s\n' "$name" "$result" $(( $(date +%s) - t0 )) "$out/$name.log"
 }
 
-# The base's renders and gate list, made once per commit.
+# The base's renders and gate list, made once per commit. `done` lists the renders; macOS deletes files under /private/tmp that have not
+# changed for three days, so a base missing any of them (or the gate list) is set aside and made again.
 base=$(git -C "$repo" merge-base HEAD main); short=$(git -C "$repo" rev-parse --short "$base")
 baseline=$R/baseline/$base
-if [ ! -f "$baseline/done" ]; then
+whole() {
+  [ -s "$baseline/done" ] && [ -f "$baseline/gate.txt" ] || return 1
+  while read -r f; do [ -f "$baseline/out/$f" ] || return 1; done < "$baseline/done"
+}
+if [ -d "$baseline" ] && ! whole; then
+  echo "baseline: $baseline is incomplete; set aside as $baseline.stale.$$"
+  mv "$baseline" "$baseline.stale.$$" || exit 1
+fi
+if [ ! -d "$baseline" ]; then
   echo "baseline: rendering the scenes of $short (once; kept in $baseline)"
   mkdir -p "$R/baseline"
   build=$(mktemp -d "$R/baseline/.build.XXXXXX")
@@ -48,8 +57,8 @@ if [ ! -f "$baseline/done" ]; then
   git -C "$repo" archive "$base" | tar -x -C "$build/src" -f -
   if sh "$build/src/repro/all.sh" "$build/out" > "$build/all.log" 2>&1; then
     (cd "$build/src" && sh repro/gate.sh > "$build/gate.txt" 2>&1)
-    touch "$build/done"
-    mv "$build" "$baseline" 2>/dev/null || [ -f "$baseline/done" ] || { echo "check.sh: cannot keep the baseline in $baseline" >&2; exit 1; }
+    (cd "$build/out" && ls */ours.png */ours-heights.json) > "$build/done"
+    [ -d "$baseline" ] || mv "$build" "$baseline" || { echo "check.sh: cannot keep the baseline in $baseline" >&2; exit 1; }   # another run may have made it first
   else echo "check.sh: the base's scenes did not render: $build/all.log" >&2; exit 1
   fi
 fi
