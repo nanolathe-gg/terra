@@ -311,6 +311,11 @@ them at a no-op default.
 
 ### B1. Ice and Crystal
 
+*Retired November 6 (lfland, docs/LANDFORM_RETIREMENT.md):* the Crystals brush is a
+landform preset with Facets (stepped columns in Crystal, an iceberg prism in Ice,
+scattered prisms elsewhere); its form, size, count, lean, smooth share and berg tilt
+options went with the crystal kind.
+
 *Done (Codex, merged 2026-10-28, 25e64434d):*
 - opt-in per-stroke shore plates (`shorePlates` and five size options;
   Ice Scream uses them);
@@ -787,6 +792,11 @@ examples are from Codex's review; C0 will confirm or extend them):
 
 Each is a new kind or a shape option, depends only on its own cells,
 replays exactly by region, and is off by default.
+
+*Retired November 6 (lfland, docs/LANDFORM_RETIREMENT.md):* the Crater tool is a
+landform preset; a landform's spurs and crest taper stay, and a signed section's spurs
+leave from its peak (a crater's rim). The crater's rim sectors, rim gaps, rim height,
+crest irregularity and crest variation went with the crater kind.
 
 *Stage 1 is done (merged 2026-10-28, 1c23b37c5):*
 - spurs on hill, mountain and crater strokes;

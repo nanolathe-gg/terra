@@ -36,8 +36,8 @@ the retail crops stay outside git.
 
    Each stroke is `[kind, points, options]`; `options.card` overrides brush
    card values in card units (diameter, amount, roughness, softness, cracks
-   and the shape options such as elevation, combine, craterlets or
-   crystalSize), starting from the world's defaults (a landform starts as the
+   and the shape options such as elevation, combine, ejecta or
+   iceFacetSize), starting from the world's defaults (a landform starts as the
    Plateau button's preset, so pin every setting the scene depends on).
    Plateaus, ridges, ramps and water are landforms; `options.curve` carries
    a landform's section. `query`
@@ -91,12 +91,12 @@ with `paintChannel` 1 rock, 2 snow or ice, 3 wet ground, 4 moss, 5 denser scatte
 6 sparser scatter, 7 erase all masks; a landform paints its own footprint with
 `maskChannel` (0 off, 1..6 as above) and `maskAmount` (percent).
 
-The line-feature demos (card C4) are `ridge-moon` (a lopsided ring with rim
-sectors, an open crescent with a rim gap, a crater with radiating spurs and a
-tapering, jagged crescent ridge with spurs), `ridge-red` (branching rugged
-mountain ridges) and `ridge-lava` (low winding hill ridges and a radiating
-lump); their options are Spurs, Crest irregularity, Crest width and height
-variation, Crest taper, Rim sectors and Rim gaps.
+The line-feature demos (card C4) are `ridge-moon` (Crater-button craters, one
+with radiating spurs, and a tapering crescent ridge with spurs), `ridge-red`
+(branching rugged mountain ridges) and `ridge-lava` (low winding hill ridges
+and a radiating lump); their options are Spurs and Crest taper. (The crater's
+rim sectors, rim gaps and crest variation were retired with the Crater tool on
+November 6, docs/LANDFORM_RETIREMENT.md.)
 
 Local style (card C5 stage 2): `paintChannel` 8/9 relief stronger/weaker, 10/11
 cracks more/fewer, 12/13 banding more/less, 14/15 face rock more/less (Strength
@@ -117,14 +117,15 @@ renders the world's own preset exactly; green-1, green-3, ice-2 and desert-2 opt
 
 Ice's shore (card E5): the Water button's preset in Ice turns on frost-crystal shore plates (plate
 material 2: needles in parallel runs, straight seams, thinning toward deep water; the
-floe shelf of plate material 0 was dropped with the JS shape engine). The berg form of the
-Crystals brush (`crystalForm: 2`, with `bergFace`, `bergJitter`, `bergBreak`, `bergRough`,
-`bergTilt`, `bergTiltDir`, `bergFlat` and `crystalAlign`) builds ice-2's bergs and
-ice-3's box; `variant=bergs` gives the bergs their blue ice.
+floe shelf of plate material 0 was dropped with the JS shape engine). ice-2's bergs and ice-3's box
+are landforms with Facets (Facet shape Prisms, one prism a click, Surface Rock, Face roughness,
+Corner cuts and Outline jitter; ice-2's flat top tilts with its section below Level tops 100), as
+the Crystals button draws them in Ice; `variant=bergs` gives the bergs their blue ice.
 
 Ice blocks, frost lines and facets (card G6): the Ice world's raised ground is lit by its blurred height and
 snow-capped, its faces carry smooth fibres down the slope and its foot a hatched apron (`iceSoft`, `iceSnow`,
 `iceFall`, `iceApron`; ice-3 is the window; the variants `snow`, `crystal` and `bergs` set them to 0). The frost
-band carries fine blue hairlines (`iceFrost`). A raised landform takes an optional **Angular facets** share
-(`iceFacets`, 0 off, with `iceFacetSize` px; not with shore features): part of it is tiled into tilted planes fitted to its own
+band carries fine blue hairlines (`iceFrost`). A landform takes optional **Facets** (`iceFacets`, 0 off, with
+`iceFacetSize` px, `facetForm` angular facets, stepped columns or prisms, `crystalStep` and `facetSurface`; not with shore
+features): at Facet shape Angular facets and Surface Rock part of it is tiled into tilted planes fitted to its own
 surface, partly buried, in its own material. `demo/ice-facets.json` is the ice-1 ridge with facets 70, size 44.
