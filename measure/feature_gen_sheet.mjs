@@ -5,7 +5,7 @@ import {mkdirSync, writeFileSync, readFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {encodePNG, decodePNG} from './feature_gen_png.mjs';
 import {pathToFileURL} from 'node:url';
-import {generateFeature, generateVariants, pickVariant, paintDeposit, paintVent, drawFeature, toRGBA, rng, CONTROLS} from '../sculpt-feature-gen.js';
+import {generateFeature, generateVariants, pickVariant, paintDeposit, paintVent, drawFeature, toRGBA, rng} from '../sculpt-feature-gen.js';
 
 const [out, groundPath, tablePath, r1Path, r2Before, r2After, burnBefore, burnAfter] = process.argv.slice(2);
 const palette = JSON.parse(readFileSync(new URL('../materials/palette.json', import.meta.url))).indexed;
@@ -165,7 +165,6 @@ const alive = tile('burn-alive', t0, 100, 96, 38, 86);
 
 const table = tablePath && existsSync(tablePath) ? JSON.parse(readFileSync(tablePath, 'utf8')) : null;
 if (table) table.rows.push(...extraRows);
-const esc = s => String(s);
 const cell = it => `<figure><div class="p1" style="width:${it.im.w}px"><img src="img/${it.im.name}" width="${it.im.w}" height="${it.im.h}"></div><div class="p3" style="width:${it.im.w * 3}px"><img src="img/${it.im.name}" width="${it.im.w * 3}" height="${it.im.h * 3}"></div><figcaption>${it.cap}</figcaption></figure>`;
 function gapRows(b, a) {
   const bb = JSON.parse(readFileSync(burnBefore, 'utf8')), ba = JSON.parse(readFileSync(burnAfter, 'utf8'));

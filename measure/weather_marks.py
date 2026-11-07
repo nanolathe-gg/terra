@@ -13,7 +13,6 @@ Debris: grey pixels (g <= r+2 and g <= b+2, luma > 35) outside the rock region b
 """
 import json
 import sys
-from pathlib import Path
 
 import numpy as np
 from PIL import Image

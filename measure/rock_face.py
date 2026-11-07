@@ -22,7 +22,6 @@ Columns:
   period    first autocorrelation peak of the row-mean profile, px (beds)
 """
 import sys
-from pathlib import Path
 
 import numpy as np
 from PIL import Image
@@ -52,7 +51,6 @@ def stripe_ratio(L, deg):
 
 def thin_lines(L):
     # Dark ridge response: black top-hat minus the local median, then orientation by the Hessian.
-    s = ndi.gaussian_filter(L, 1.2)
     hxx = ndi.gaussian_filter(L, 1.2, order=(0, 2))
     hyy = ndi.gaussian_filter(L, 1.2, order=(2, 0))
     hxy = ndi.gaussian_filter(L, 1.2, order=(1, 1))

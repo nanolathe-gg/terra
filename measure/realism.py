@@ -340,7 +340,6 @@ def _binned_fit(x, y, lo, hi):
 
 
 # Geomorphon forms by (number of lower directions, number of higher directions), from r.geomorphon's table.
-FORMS = ['flat', 'peak', 'ridge', 'shoulder', 'spur', 'slope', 'hollow', 'footslope', 'valley', 'pit']
 _T = ['FL FL FL FS FS VL VL VL PT', 'FL FL FS FS FS VL VL VL', 'FL SH SL SL HL HL VL', 'SH SH SL SL SL HL',
       'SH SH SP SL SL', 'RI RI SP SP', 'RI RI RI', 'RI RI', 'PK']
 _CODE = {'FL': 0, 'PK': 1, 'RI': 2, 'SH': 3, 'SP': 4, 'SL': 5, 'HL': 6, 'FS': 7, 'VL': 8, 'PT': 9}

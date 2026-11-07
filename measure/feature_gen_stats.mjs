@@ -4,7 +4,7 @@
 import {mkdirSync, writeFileSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {encodePNG} from './feature_gen_png.mjs';
-import {generateFeature, toRGBA, DEFAULTS} from '../sculpt-feature-gen.js';
+import {generateFeature, toRGBA} from '../sculpt-feature-gen.js';
 const args = process.argv.slice(2);
 const out = args[0], nIdx = args.indexOf('--n'), N = nIdx > 0 ? Number(args[nIdx + 1]) : 12;
 const palette = JSON.parse(readFileSync(new URL('../materials/palette.json', import.meta.url))).indexed;

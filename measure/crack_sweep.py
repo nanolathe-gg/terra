@@ -47,7 +47,7 @@ def run(out_dir, world, configs, scene_list=SCENES):
     results = {}
     for name, knobs in configs:
         acc = cl.Acc()
-        textures, levels, data = [], [], []
+        levels, data = [], []
         for s in scenes(world, name, knobs, scene_list):
             stem = batch / s['name']
             rgb, slope, valid = cl.ours(str(stem) + '.png', str(stem) + '.heights.json')

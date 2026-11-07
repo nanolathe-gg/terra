@@ -22,18 +22,6 @@ fn grainPixel(pixel: vec2f) -> vec2f {
 #endif
 }
 
-// Material textures are read at one texel per pixel step: GLSL's
-// texture(t, pixel / D) had implicit derivatives of exactly 1 / D per
-// pixel. Explicit gradients select the same level and filter, and are legal
-// in non-uniform control flow, where WGSL's textureSample is not.
-// H7b: a drawn pixel covers materialFoot final pixels (1 at final), so the gradients pick the coarser level of a quarter draw.
-fn pixelSample(t: texture_2d<f32>, s: sampler, pixel: vec2f, scale: vec2f) -> vec4f {
-    return textureSampleGrad(t, s, pixel / scale, vec2f(u.materialFoot / scale.x, 0.0), vec2f(0.0, u.materialFoot / scale.y));
-}
-fn pixelSampleLayer(t: texture_2d_array<f32>, s: sampler, pixel: vec2f, scale: vec2f, layer: i32) -> vec4f {
-    return textureSampleGrad(t, s, pixel / scale, layer, vec2f(u.materialFoot / scale.x, 0.0), vec2f(0.0, u.materialFoot / scale.y));
-}
-
 // Move a texture to a new base colour, keeping its grain.
 fn based(c: vec3f, mean: vec3f, base: vec4f) -> vec3f { return select(c, saturate(c - mean + base.rgb), base.a > 0.5); }
 // Ground pattern: its grain scaled about its mean, then moved to the base.

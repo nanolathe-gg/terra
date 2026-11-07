@@ -3,7 +3,6 @@ export const MM_ROWS = 63;
 // The first placement row of the draw's uniform table (engine-frag.wgsl MM_PLACE, engine-common.wgsl materialTable): ten rows after it.
 export const PLACEMENT_ROW = 156;
 // The rows after them: a world's ground-cover table (engine-frag.wgsl MM_COVER), 4 + 5 * 7 of them, the plants' row and the four flower palette rows. A table without `groundCover` gives zeros: the feature is off.
-export const COVER_ROW = PLACEMENT_ROW + 10;
 export const COVER_ROWS = 44;
 // Card P31: how far past the pixels it covers a plant's scatter reads: a shrub's candidate (cell 16, jitter .85) up to 23 px away, the mask's height taps 8 px past that, and 15 px of apron.
 export const PLANT_REACH = 46;
