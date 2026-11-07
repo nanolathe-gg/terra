@@ -62,7 +62,10 @@ const NODE_FIELDS = [
   // lfcrater: where a signed section peaks (its share of the half width from the foot), for spurs rooted on that peak; 0 elsewhere.
   ...['lfPeak'].map(k => [k, 'f']),
   // lfcrystal: a landform's faceted structure (Facet shape, the share of sites with an element, its polygon's sides, how square it turns to the path, corner cuts).
-  ...['lfcForm'].map(k => [k, 'u']), ...['lfcShare', 'lfcSides', 'lfcAlign', 'lfcBreak'].map(k => [k, 'f'])];
+  ...['lfcForm'].map(k => [k, 'u']), ...['lfcShare', 'lfcSides', 'lfcAlign', 'lfcBreak'].map(k => [k, 'f']),
+  // The seed table of a landform's columns and prisms (lfcSeedTable): where its rows start in MW, its seeds, its path-and-level blocks and width levels, the
+  // cells whose seeds the site pass fills in, and the prisms' lattice spacing and how far their seeds stray along and across the path.
+  ...['lfcTab', 'lfcSites', 'lfcBlocks', 'lfcLevels'].map(k => [k, 'u']), ...['lfcWx0', 'lfcWy0', 'lfcWx1', 'lfcWy1'].map(k => [k, 'i']), ...['lfcSpace', 'lfcJs', 'lfcJc'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -254,7 +257,7 @@ export function prepareNode(n, geom, c) {
     // P28: a river's trunk segments carry the path's curvature times the channel width at their two ends (s2.y, s2.z) and how silted the path is (s2.w: 1 the river,
     // less for an oxbow, by its age), which the section's channel reads (engine-shape.wgsl riverChannel).
     const river = isRiver(q), kw = river ? riverCurvature(path, riverWidth(q)) : null, silt = pathNo === 0 ? 1 : 1 - .9 * (q.river?.ages?.[pathNo - 1] ?? .5);
-    for (let k = 1; k < path.length; k++) segs.push({px: path[k - 1].x, py: path[k - 1].y, ex: path[k].x, ey: path[k].y, f0: [cum[k - 1], cum[k] - cum[k - 1]], f1: [total, side], nx: (k === 1 ? 1 : 0) | (k === path.length - 1 ? 2 : 0), ny: river ? kw[k - 1] : 0, ...(river ? {w2: kw[k], w3: silt} : {})});
+    for (let k = 1; k < path.length; k++) segs.push({px: path[k - 1].x, py: path[k - 1].y, ex: path[k].x, ey: path[k].y, f0: [cum[k - 1], cum[k] - cum[k - 1]], f1: [total, side], nx: (k === 1 ? 1 : 0) | (k === path.length - 1 ? 2 : 0), ny: river ? kw[k - 1] : 0, ...(river ? {w2: kw[k], w3: silt} : {}), path: pathNo});
     // Spurs (the ridge's own, spurPieces): each piece draws the landform's section scaled by its width and height multipliers, closed at both ends, and takes the crest at
     // its root's place along the path. Its back side follows its own direction the way the trunk's does.
     if (Math.round(q.spurCount) >= 1) {
@@ -299,9 +302,15 @@ export function prepareNode(n, geom, c) {
   // a raised one takes its Facet shape (mode 2).
   const facetMode = n.satellite || kind !== 'landform' || !(q.iceFacets > 0) || landformShore(q) ? 0 : landformDigs(q) ? 1 : 2;
   // lfcrystal: Facet shape (1 stepped columns, 2 prisms) breaks the landform's envelope into elements on the same pass; prisms stand past the footprint by up to their own width.
-  const lfc = facetMode === 2 ? clamp(Math.round(q.facetForm || 0), 0, 2) : 0, lfcL = lfc ? lfcWidth(q) * frameScale : 0;
+  const lfc = facetMode === 2 ? clamp(Math.round(q.facetForm || 0), 0, 2) : 0, seeds = lfc && region ? lfcSeedTable(segs, lfc, lfcWidth(q) * frameScale, q, extent, spacing) : null, lfcL = seeds ? seeds.L : 0;
   if (lfc === 2 && region) main.region = region = expand(region, Math.ceil(.9 * lfcL / spacing) + 2, grid);
   if ((shoreShape || facetMode) && region) { const co = coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facetMode, lfcL); if (co) { main.coast = co; Object.assign(main.u, co.u); main.extra.push(...co.extra); } }
+  // The seed table (lfCrystalSites): its rows in MW, its seeds after the coast planes in the scratch.
+  if (seeds && main.coast) {
+    Object.assign(main.coast, {siteFloats: seeds.sites * 12, lfcRows: Math.max(1, Math.ceil(seeds.sites / 256)), lfcMargin: seeds.margin});
+    Object.assign(main.u, {lfcTab: main.extra.length, lfcSites: seeds.sites, lfcBlocks: seeds.blocks, lfcLevels: seeds.levels, lfcSpace: seeds.space, lfcJs: seeds.js, lfcJc: seeds.jc});
+    main.extra.push(...seeds.rows);
+  }
   if (lfc) Object.assign(main.u, {cTop: clamp(q.crystalTop ?? 0, 0, .95), lfcForm: lfc, lfcShare: clamp(q.iceFacets, 0, 1), lfcSides: clamp(Math.round(q.crystalSides ?? 6), 3, 12), lfcAlign: clamp(q.crystalAlign ?? 0, 0, 1), lfcBreak: clamp(Math.round(q.bergBreak ?? 0), 0, 8),
     cgSize: lfcL, cgFacet: clamp(q.crystalFacet ?? 0, 0, 1), cgSizeVar: clamp(q.crystalSizeVar ?? 0, 0, 1), cgSmooth: 1 - clamp(q.iceFacets, 0, 1), cgTiers: clamp(q.crystalTiers ?? 0, 0, 1), cgStep: Math.max(0, q.crystalStep ?? 0),
     cgVar: clamp(q.crystalVariation ?? 0, 0, 1), bgRough: Math.max(0, q.bergRough ?? 0), bgJit: clamp(q.bergJitter ?? 0, 0, 1)});
@@ -390,8 +399,39 @@ function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0
   };
 }
 
-// lfcrystal: the width of a faceted structure's elements (Facet width, px in the shape's own frame).
+// The width of a landform's columns and prisms (Facet width, px in the shape's own frame).
 export const lfcWidth = q => clamp(q.iceFacetSize, 4, 1200);
+// The most seeds one stroke's table holds (12 floats each): past it the columns or prisms are laid out wider, so a huge stroke of tiny columns stays in memory.
+const LFC_SEEDS = 1 << 20, SZL = [1, .55, .3];
+// Prisms: their lattice is this many Facet widths apart, and each seed strays up to .3 of it (.5 at Variation 100) along and across the path, so the nearest
+// neighbour lies about .7 of a spacing away (.6 at Variation 100) and a prism, kept to half that, stands about Facet width wide.
+const PRISM_SPACE = 1.45;
+// The seed table of a landform's columns or prisms (engine-shape.wgsl lfCrystalSites): for every path and width level, the lattice of seeds over the path's
+// own coordinates, from before its start to past its end by the shape's reach (s) and as far across (c, a box's corners included), with three seeds to spare
+// round every edge. Rows: one per segment (its path, -1 for a spur piece), one per path and level (first seed, i0, ni, j0). L: the element width the table is
+// laid out for; space: the prisms' lattice; js, jc: how far a prism's seed strays along and across the path, in spacings (all of it once the shape is a prism
+// wider than one, none while it is about one prism wide: a lone prism stays on its click).
+function lfcSeedTable(segs, lfc, L0, q, extent, spacing) {
+  const paths = [];
+  segs.forEach((sg, k) => { if (sg.path !== undefined && !paths[sg.path]) paths[sg.path] = {total: sg.f1[0]}; });
+  const levels = lfc === 1 && clamp(q.crystalSizeVar ?? 0, 0, 1) > 0 ? 3 : 1, sd = landformSides(q), half = Math.max(sd.front, sd.back);
+  const layout = L => {
+    const cMax = 1.45 * (extent + L + 2 * spacing), rows = [], space = PRISM_SPACE * L;
+    let base = 0;
+    for (let p = 0; p < paths.length; p++) for (let lv = 0; lv < 3; lv++) {
+      if (lv >= levels || !paths[p]) { rows.push([base, 0, 0, 0]); continue; }
+      const along = lfc === 2 ? space : L * SZL[lv], across = lfc === 2 ? .8660254 * space : along, total = paths[p].total;
+      const i0 = Math.floor(-cMax / along) - 3, ni = Math.ceil((total + cMax) / along) + 4 - i0, jh = Math.ceil(cMax / across) + 3;
+      rows.push([base, i0, ni, -jh]); base += ni * (2 * jh + 1);
+    }
+    return {rows, sites: base, space};
+  };
+  let L = L0, t = layout(L);
+  if (t.sites > LFC_SEEDS) { L = L0 * Math.sqrt(t.sites / LFC_SEEDS) * 1.02; t = layout(L); }
+  const J = .6 + .4 * clamp(q.crystalVariation ?? 0, 0, 1), total = Math.max(0, ...paths.filter(Boolean).map(p => p.total));
+  return {L, sites: t.sites, blocks: paths.length * 3, levels, space: t.space, rows: [...segs.map(sg => [sg.path ?? -1, 0, 0, 0]), ...t.rows],
+    js: J * clamp((half + .5 * total - .6 * L) / (.4 * L), 0, 1), jc: J * clamp((half - .6 * L) / (.4 * L), 0, 1), margin: Math.ceil((lfc === 2 ? 5 : 2.6) * L / spacing) + 4};   // a column reads seeds 2.2 widths away; a prism's size reads its neighbours' too
+}
 const expand = (r, m, grid) => ({x0: Math.max(0, r.x0 - m), y0: Math.max(0, r.y0 - m), x1: Math.min(grid - 1, r.x1 + m), y1: Math.min(grid - 1, r.y1 + m)});
 const intersect = (a, b) => { const r = {x0: Math.max(a.x0, b.x0), y0: Math.max(a.y0, b.y0), x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1)}; return r.x0 > r.x1 || r.y0 > r.y1 ? null : r; };
 
@@ -424,7 +464,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
     return out;
   };
-  const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampFissure', 'smoothCopy', 'blurH', 'blurV', 'ground', 'init', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'packPlane', 'lfCrystalApply'];
+  const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampFissure', 'smoothCopy', 'blurH', 'blurV', 'ground', 'init', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'packPlane', 'lfCrystalSites', 'lfCrystalRoom', 'lfCrystalApply'];
   const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse'] : [])]);
   const cells = pages ? 0 : grid * grid, buf = (size, usage, label) => device.createBuffer({size: Math.max(16, size), usage, label});
   const ST = GPUBufferUsage.STORAGE, CD = GPUBufferUsage.COPY_DST, CS = GPUBufferUsage.COPY_SRC;
@@ -497,7 +537,15 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       if (!wide) return;
       add('coastInit', wide, node);
       emitBody(p, {...node, coPutW: 1}, wide, ex, noise);
-      if (c.facet) { add('facetSnap', wide, node); const fb = intersect(wide, p.region); if (fb) add(c.lfc ? 'lfCrystalApply' : 'facetApply', fb, node); return; }
+      if (c.facet) {
+        add('facetSnap', wide, node);
+        if (c.lfc) {
+          const seeds = {x0: 0, y0: 0, x1: 255, y1: c.lfcRows - 1};
+          add('lfCrystalSites', seeds, {...node, lfcWx0: wide.x0 - c.lfcMargin, lfcWy0: wide.y0 - c.lfcMargin, lfcWx1: wide.x1 + c.lfcMargin, lfcWy1: wide.y1 + c.lfcMargin});
+          if (node.lfcForm === 2) add('lfCrystalRoom', seeds, node);
+        }
+        const fb = intersect(wide, p.region); if (fb) add(c.lfc ? 'lfCrystalApply' : 'facetApply', fb, node); return;
+      }
       const field = (moved = 1) => {
         const N = Math.max(1, Math.ceil(Math.log2(c.maxCells + 1)));
         add('coastSeed', wide, {...node, coSrc: 0, coMoved: moved});
