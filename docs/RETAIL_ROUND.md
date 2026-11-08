@@ -66,8 +66,14 @@ before the color.
    rows of the World panel.
 3. **Look.** Try World rows with `--query`, a few at a time, guided by the
    furthest metrics. The look's levers are:
-   - light: `ambient`, `lightCap`, `shadeDepth`;
+   - light: `ambient`, `lightCap`, `shadeDepth`, and `creaseShade` (gully
+     and valley floors shaded whatever their facing: Gullies on a round hill
+     cut radial spokes, which a world that keeps little directional shading
+     shows only with it);
    - ground detail: the `relief*` rows and `plainRelief`;
+   - low ground and water: `lowTint`, `lowReach` and `lowGrain` (a mud color
+     and smoother grain from the sea up to the reach, and in the water; the
+     color itself is `?lowColor=rrggbb` in a `--query`);
    - faces: `microRock`, `slopeTexture`, the `rock*` rows and `cliff*`;
    - cracks and bands;
    - water;
@@ -76,7 +82,12 @@ before the color.
      from their cards, which pin most of them, and the rest from the world's
      defaults (`sculpt.py` `WORLD_KNOBS`, which a stroke's card overrides);
      a scene stroke's tool must be one the editor draws (a section form such
-     as Mesa goes in the card's curve);
+     as Mesa goes in the card's curve). To try one, render copies of the
+     scenes with it on their cards (`REPRO_SCENES` for `repro/all.sh`, then
+     `stats.py` and `retail_gap.py` as `retail.sh` runs them). A round or
+     oval landform with a broad flat top (bergs, mesas, isles) is a Plateau
+     on a click or a short path, its shoulder softened in the section's
+     curve; ragged shoreline steps are Layer edge jag (`layerJag`);
    - the world's colors: a `--query` cannot set these. Change them in
      `sculpt.py` `WORLD_KNOBS`/`WORLD_VARIANTS` colors and rerun.
 
