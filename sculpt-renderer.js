@@ -3,7 +3,7 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
-import {materialRows,tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
+import {materialRows,tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,rockPreset,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {columnRows} from './sculpt-column.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
@@ -255,6 +255,13 @@ export class TerrainRenderer {
     this.materialData = JSON.parse(modelTable);
     // The water's grain is two more generated materials after the table's own, named by the config's water block (shared when the two are one).
     for (const name of [this.config.water.deep, this.config.water.shallow]) if (!this.materialData.order.includes(name)) this.materialData.order.push(name);
+    // A borrowed beach (sculpt-scene.js borrowBeach names the lender's table): its beach material, generated as one more layer after the world's own,
+    // so every other layer keeps its place and its noise.
+    if (this.config.beachTable && !this.materialData.order.includes('beach')) {
+      const lender = await this.groundTable(this.config.beachTable);
+      this.materialData.measured.beach = lender.measured.beach; this.materialData.model.beach = lender.model.beach;
+      this.materialData.order.push('beach');
+    }
     // The startup generation: the materials and the palette lookup (GPU) are started first and the noise (CPU) is made while they build.
     this.textures = {};
     const generation = performance.now();
@@ -288,10 +295,12 @@ export class TerrainRenderer {
     // Mean colour of each base material, so a world can move it to a new base colour while keeping the texture's grain.
     this.means.slope = this.materialData.measured[this.materialData.order[0]].meanRGB.map(v => v / 255);
     this.means.rock = this.materialData.measured[this.materialData.order[1]].meanRGB.map(v => v / 255);
-    // The transition body is generated layer 5 and the transition (ring, body, contours) needs the flag; the beach is layer 6, the ring 7.
+    // The transition body is generated layer 5 and the transition (ring, body, contours) needs the flag; the ring is layer 7. The beach is the
+    // table's `beach` layer (6 in a world's own table, the last when borrowed).
     this.transitionBody = this.layers.has('body');
     if (this.layers.has('beach')) this.means.beach = this.materialData.measured.beach.meanRGB.map(v => v / 255);
     this.i('uBeach', this.layers.has('beach'));
+    this.i('uBeachLayer', this.materialData.order.indexOf('beach'));
     this.f('uBeachHeight',this.config.material?.beachHeight??6);
     const mid=this.config.water?.midRGB, midDepth=this.config.material?.midDepth;
     this.set('uWaterMid', mid && midDepth ? [...mid.map(v => v / 255), midDepth] : [0, 0, 0, 0]);
@@ -442,7 +451,7 @@ export class TerrainRenderer {
   groundSource() {
     return this.config.groundPatterns?.[this.variant.get('groundPattern')] || (this.ownGround ??= {groundTable: this.config.materialTable});
   }
-  // A world's table by URL: this world's own is already loaded.
+  // A world's table by URL (a borrowed ground pattern or beach): this world's own is already loaded.
   async groundTable(url) {
     if (url === this.config.materialTable) return this.materialData;
     const response = await fetch(url);
@@ -1186,9 +1195,9 @@ export class TerrainRenderer {
     set('uStoneRound', this.config.material?.stoneRound ?? 0);
     set('uStoneSort', this.config.material?.stoneSort ?? 0.6);
     set('uStoneSlab', this.config.material?.stoneSlab ?? 0.05);
-    // Card P10: the rock model's preset (numbers in the material's `rock`); no `rock`, no model.
+    // Card P10: the rock model's numbers: the Rock type's, or the world's own (its material's `rock`); none, no blocks.
     {
-      const rock = this.config.material?.rock || {};
+      const rock = rockPreset(this.config.material, this.variant);
       const rv = (key, fallback) => Number.isFinite(Number(rock[key])) ? Number(rock[key]) : fallback;
       set('uRockSize', rv('size', 0) * number('rockScale', 1)); set('uRockAspect', rv('aspect', 1)); set('uRockJitter', rv('jitter', 0.9));
       set('uRockOpen', rv('open', 0.5)); set('uRockBedOpen', rv('bedOpen', 0.2)); set('uRockTerr', rv('terr', 0));

@@ -1,7 +1,8 @@
 // The World panel's rows and what moving one does, without the DOM. The page (sculpt.js buildKnobs, setKnob, buildWorldPanel) and the headless
 // host (repro/headless.mjs, which measure/world_controls.mjs sweeps under Node) apply a world knob and pick a world color with the same code, and
 // read the facts the panel enables a row by (worldPanelValues, which sculpt-control-schema.js worldControlRequirement reads) from one function.
-import {columnHasCapBed} from './sculpt-column.js';
+import {columnHasCapBed,columnRows} from './sculpt-column.js';
+import {ROCK_TYPES,rockFacts} from './sculpt-material-model.js';
 
 // Surface knobs: each writes the page address and the renderer's variant,
 // then the renderer re-reads its uniforms and re-bakes its fields.
@@ -42,8 +43,8 @@ export const KNOBS = [
     ['bedPunch','Beds differ in strength',0,1,.05,0]]],
   ['Gullies & ribs', [['gullyDepth','Gully depth (height; 0 none)',0,16,.5,0],['gullyWidth','Gully width (px)',4,40,1,14],
     ['rockStain','Stain',0,3,.05,0],['ribTilt','Rib tilt (height per px)',0,1,.02,0]]],
-  // Card P10: the rock model's blocks (the rock type is the world's preset; Size and Age are its two rows).
-  ['Rock face: blocks', [['rockScale','Block size (share of the rock type\'s)',.4,3,.05,1],['rockAge','Age (rounds edges, opens joints, wears chips)',0,1,.05,.5],['rockOpen','Open joints (joint depth and crevice darkness, share of the rock type\'s)',0,2,.05,1]]],
+  // Card P10: the rock model's blocks: the Rock type (the world's own or a named type, sculpt-material-model.js ROCK_TYPES), then its size, age and joints.
+  ['Rock face: blocks', [['rockType','Rock type',0,ROCK_TYPES.length,1,0],['rockScale','Block size (share of the rock type\'s)',.4,3,.05,1],['rockAge','Age (rounds edges, opens joints, wears chips)',0,1,.05,.5],['rockOpen','Open joints (joint depth and crevice darkness, share of the rock type\'s)',0,2,.05,1]]],
   // G2: rock faces follow the slope; every default is the earlier look.
   ['Structure orientation', [['cliffFollow','Beds on the contours, joints down the fall line (0 fixed screen directions)',0,1,1,0],['cliffReach','Fall line smoothing radius (px)',6,60,1,20],['cliffWide','Wide fall line radius, level ground under rock (px)',20,160,2,56],['cliffFlat','Slope under which structure fades into broken rock',0,.3,.005,.04],['cliffRise','Bed riser height (units; 0 the bed\'s own)',0,40,1,0],['cliffBed','Beds follow the smoothed ground (0 the grid\'s own bumps)',0,1,.05,.5],['cliffStagger','Joints offset from bed to bed (share of spacing)',0,.8,.05,0],['cliffDomain','Joint lattice patch size (px)',30,240,5,90]]],
   // Water detail: the shallow-to-deep step, the shallow bed and the waterline (cards E11, G1).
@@ -71,12 +72,12 @@ const UNDULATION={undulation:'amplitude',undulationScale:'wavelength',undulation
 const SHAPE_KNOBS=new Set(['frostGaps','frostGapReach','frostGapSize','frostGapDepth','talusAngle','coastRamp','faceSteep']);
 // A world knob's change. The value goes into the page's settings (its address, which the shape context and a scene's ground node read) and
 // the renderer's settings, whose uniforms it re-reads; the answer says what else the change needs, for the host to carry out on its own
-// fields: `reload` (the ground textures are chosen when the renderer starts, so nothing else is set), `evaluate` (the shape again from that
+// fields: `reload` (the ground textures and a borrowed beach are chosen when the renderer starts, so nothing else is set), `evaluate` (the shape again from that
 // node: the undulation rows edit the ground node in `nodes`, or put one first when Undulation height turns on), `checkpoint` (an undo step for
 // that edit) and `weather` (the Time pass again; alone, for the deposit supply, which changes the generated deposit field, and the rain).
 export function applyKnob({key,value,settings,renderer,nodes,seed}) {
   settings.set(key,value);
-  if (key==='ground' || key==='groundPattern') return {reload:true};
+  if (key==='ground' || key==='groundPattern' || key==='beachFrom') return {reload:true};
   renderer.variant.set(key,value); renderer.applyKnobs();
   if (Object.hasOwn(UNDULATION,key)) {
     const i=nodes.findIndex(n => n.kind==='ground');
@@ -121,7 +122,8 @@ export function waterTones(config,colors) {
 // `weathering`: Weathering is on and the world runs a Time pass; `materialWeathering`: the Material weathering slider (0 to 100).
 export function slopeReplaced({config,renderer,weathering,materialWeathering}) { const own=renderer.variant; return Boolean(renderer.transitionBody&&config.material?.groundFringe===true&&weathering&&own.get('transition')==='mineral'&&materialWeathering>=100); }
 // What worldControlRequirement may read: the renderer's settings, a stroke's water choices counted as the switch they turn on, and the facts of the world's material that no slider sets.
+// The column facts read the active column (config.column: the map's own from the Rock column panel, else the world's) and its variant row.
 export function worldPanelValues(facts) {
   const {config,renderer,nodes,colors}=facts,layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks(nodes);
-  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
+  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:columnRows(config.column,config.variant).starts.length?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0,...rockFacts(config.material?.rock||{})};
 }

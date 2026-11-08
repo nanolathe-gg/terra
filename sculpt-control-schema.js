@@ -1,7 +1,8 @@
 import {strokeKnots,sampleKnots,landformSteps,landformShore,landformMakesWater,landformDigs} from './sculpt-shape-presets.js';
 import {isRiver} from './sculpt-river.js';
+import {ROCK_TYPES,rockFacts} from './sculpt-material-model.js';
 // Presentation names and applicability belong to features, never to worlds.
-export const WORLD_CHOICES={deepEdge:[[0,'Ramp'],[1,'Hard step']],cliffFollow:[[0,'Fixed directions'],[1,'Follow terrain']],paletteMix:[[0,'Nearest color'],[1,'Mix color pairs']]};
+export const WORLD_CHOICES={rockType:[[0,'The world\'s own'],...ROCK_TYPES.map(({name},i)=>[i+1,name])],deepEdge:[[0,'Ramp'],[1,'Hard step']],cliffFollow:[[0,'Fixed directions'],[1,'Follow terrain']],paletteMix:[[0,'Nearest color'],[1,'Mix color pairs']]};
 // Facets: each Facet shape's own rows (0 angular facets, 1 stepped columns, 2 prisms); Step height serves angular facets and columns, Level tops columns and prisms.
 const FACET_SHAPE_KEYS=[[],['crystalFacet','crystalSizeVar'],['crystalSides','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']];
 export const LANDFORM_FACET_KEYS=['crystalStep','crystalTiers',...FACET_SHAPE_KEYS.flat()];
@@ -70,10 +71,13 @@ const RAMP_IDLE='The ramp is drawn only where the step is off: choose Ramp in Ha
 // palette dither the hard step's shallows take.
 const LIT_REPLACED='A Shallow water or Deep water color replaces the lit bed: clear it in Colors to use this setting.';
 const CRACKED_BED='Give a water stroke the Cracked bed look (Shallow water look) to use this setting.';
+const NO_COLUMN='Add a rock column in the Rock column panel to use this setting.';
 // Dependencies describe pipeline features, never the active world. Search still
 // finds an inactive setting and explains what must be enabled to use it.
 export function worldControlRequirement(key,v){
- const n=k=>Number(v[k]??0),joints=()=>n('rockJoint')*n('rockOpen'),needs=(parent,label)=>worldControlRequirement(parent,v)||(n(parent)<=0?`Enable ${label} to use this setting.`:'');   // a parent that is itself idle names its own reason first
+ const n=k=>Number(v[k]??0),joints=()=>rock.rockJoint*n('rockOpen'),needs=(parent,label)=>worldControlRequirement(parent,v)||(n(parent)<=0?`Enable ${label} to use this setting.`:'');   // a parent that is itself idle names its own reason first
+ // What the rock cuts: a Rock type's own numbers, or with 0 the world's (worldPanelValues passes rockCells, rockJoint and rockCurtains of its table's rock).
+ const type=ROCK_TYPES[Math.round(n('rockType'))-1],rock=type?rockFacts(type.rock):{rockCells:n('rockCells'),rockJoint:n('rockJoint'),rockCurtains:n('rockCurtains'),rockLichen:n('rockLichen')};
  // Every world has a ground-cover table (sculpt.py DEFAULT_GROUND_COVER): Vegetation cover above 0 turns it on.
  const cover=n('vegetationCover')>0;
  if(['plantRelief','flowerDensity'].includes(key)&&!cover)return 'Raise Vegetation cover to use this setting.';
@@ -83,15 +87,21 @@ export function worldControlRequirement(key,v){
  if(['plantRelief','flowerDensity'].includes(key))return '';
  if(['undulationScale','undulationCover','undulationArt'].includes(key))return needs('undulation','Undulation height');
  if((['bedHeight','bedVary','bedPunch'].includes(key)||key==='bedSpacing'&&n('cliffRise')<=0)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';   // with a Riser height a column's ledge scales by bed thickness over this spacing
- if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';
+ // Strata, the foot band and the cap color the beds of a rock column: the world's own, or one the map adds (the Rock column panel; worldPanelValues passes the active one).
+ if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return NO_COLUMN;
  if(key==='bedDipDir')return worldControlRequirement('bedDip',v)||(n('bedDip')===0?'Set Bed tilt above or below zero to choose its direction.':'');
+ // The rock type cuts its blocks, joint lines and stains in ordered rock, and its blocks on the hills where the world's preset sets hill blocks; its lichen
+ // grows with Age on any rock face the vegetation tint reaches (engine-frag.wgsl), ordered or not.
+ const lichen=rock.rockLichen>0&&n('rockMoss')>0,hills=n('hillBlocks')>0&&rock.rockCells>0;
+ if(key==='rockType')return n('rockOrder')>0||n('rockMoss')>0||n('hillBlocks')>0?'':'Enable ordered Rock structure, or raise Vegetation tint in rock for the rock types\' lichen, to use this setting.';
+ if(['rockScale','rockAge','rockOpen'].includes(key)&&n('rockOrder')<=0&&(hills||key==='rockAge'&&lichen))return '';
  if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','grooveSpacing','grooveAngle','grooveRun','bedPunch','gullyDepth','gullyWidth','rockStain','ribTilt','rockScale','rockAge','rockOpen'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
  // The lines' places are cut by joints and gullies, and the ribs between gullies stand on the same lines; their length matters only to a cut.
- if(['grooveSpacing','grooveAngle'].includes(key))return joints()>0||n('gullyDepth')>0||n('ribTilt')>0?'':'Set Open joints, Gully depth or Rib tilt above zero (and use a rock type with joint lines) to use this setting.';
- if(key==='grooveRun')return joints()>0||n('gullyDepth')>0?'':'Set Open joints or Gully depth above zero (and use a rock type with joint lines) to use this setting.';
- if(['rockScale','rockAge'].includes(key)&&n('rockCells')<=0)return 'This rock type has no blocks; Size and Age shape them.';
- if(key==='rockOpen'&&n('rockCells')<=0&&n('rockJoint')<=0)return 'This rock type has no blocks and no joint lines to open.';
- if(key==='cliffStagger')return n('rockOrder')<=0?'Enable ordered Rock structure to use this setting.':n('cliffFollow')<=0?'Choose Follow terrain in Structure orientation to use this setting.':(joints()>0?'':'This rock type has no open joint lines; raise Open joints or choose a rock type with joint lines.');
+ if(['grooveSpacing','grooveAngle'].includes(key))return joints()>0||n('gullyDepth')>0||n('ribTilt')>0?'':'Set Open joints, Gully depth or Rib tilt above zero (and choose a Rock type with joint lines) to use this setting.';
+ if(key==='grooveRun')return joints()>0||n('gullyDepth')>0?'':'Set Open joints or Gully depth above zero (and choose a Rock type with joint lines) to use this setting.';
+ if(['rockScale','rockAge'].includes(key)&&rock.rockCells<=0&&!(key==='rockAge'&&lichen))return 'Choose a Rock type with blocks to use this setting.';
+ if(key==='rockOpen'&&rock.rockCells<=0&&rock.rockJoint<=0)return 'Choose a Rock type with blocks or joint lines to use this setting.';
+ if(key==='cliffStagger')return n('rockOrder')<=0?'Enable ordered Rock structure to use this setting.':n('cliffFollow')<=0?'Choose Follow terrain in Structure orientation to use this setting.':(joints()>0?'':rock.rockJoint<=0?'Choose a Rock type with joint lines to use this setting.':'Raise Open joints above zero to use this setting.');
  if(key==='sandBandSpacing')return needs('sandBanding','Streaks on sand and ramps');
  if(key==='bedDotCell')return needs('bedDots','Bed speckles');
  if(key==='pockSize')return needs('pockmark','Surface pits');
@@ -101,7 +111,7 @@ export function worldControlRequirement(key,v){
  if(['lavaPillow','lavaChip','lavaVeins','lavaCalm'].includes(key))return needs('lavaCrust','Pillow crust strength');
  if(['frostGapReach','frostGapSize','frostGapDepth'].includes(key))return needs('frostGaps','Shore pockets');
  if(key==='gullyWidth')return needs('gullyDepth','Gully depth');
- if(key==='rockStain'&&n('gullyDepth')<=0&&n('rockCurtains')<=0)return 'Enable Gully depth or use a rock type with ledge stains to use this setting.';
+ if(key==='rockStain'&&n('gullyDepth')<=0&&rock.rockCurtains<=0)return 'Enable Gully depth or choose a Rock type with ledge stains to use this setting.';
  // Beds and joints draw only in ordered rock, and the bed profile only where a ledge or lip gives it relief.
  if(['rockFrom','cliffFollow','cliffReach','cliffWide','cliffFlat','cliffRise','cliffBed','cliffStagger','cliffDomain'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
  if(['cliffReach','cliffWide','cliffFlat','cliffBed','cliffDomain'].includes(key)&&n('cliffFollow')<=0)return 'Choose Follow terrain in Structure orientation to use this setting.';
@@ -111,7 +121,7 @@ export function worldControlRequirement(key,v){
  // Colour beds and the bands on them need the strata switch, and the band and cap rows a rock column to bed.
  if(['strataContrast','strataGrain'].includes(key))return needs('strata','Strength (painted beds) in Strata');
  // Cap color holds level ground to one bed only in a section of two beds where one fills over 88 percent of the cycle (worldPanelValues passes capBed in).
- if(['baseBand','desertCapFlat'].includes(key)){const r=n('column')<=0?'This world has no rock column.':needs('strata','Strength (painted beds) in Strata');return r||(key==='desertCapFlat'&&n('capBed')<=0?'The rock column has no cap bed: a section of two beds where one fills over 88 percent of the cycle. Edit the column to add one.':'');}
+ if(['baseBand','desertCapFlat'].includes(key)){const r=n('column')<=0?NO_COLUMN:needs('strata','Strength (painted beds) in Strata');return r||(key==='desertCapFlat'&&n('capBed')<=0?'The rock column has no cap bed: a section of two beds where one fills over 88 percent of the cycle. Add or edit one in the Rock column panel to use this setting.':'');}
  if(['baseBandLow','baseBandHigh','baseBandWander','baseBandGaps'].includes(key))return needs('baseBand','Gray band strength');
  // Shine: a lobe needs its material's gloss, a grain its roughness; the shared rows need some material shining.
  // The slope group's weight is the larger of the faces' moss share (microRock) and the slope cover scaled by Sampled slope texture (a sandy slope scales it by its own sand instead).
@@ -149,7 +159,7 @@ export function worldControlRequirement(key,v){
  if(key==='shoalBump')return n('waterColored')>0?LIT_REPLACED:needs('bedLit',LIT_BED)||needs('deepEdge',HARD_STEP);
  if(key==='shoalBumpPx')return needs('shoalBump','Lit bumps in the bed');
  if(/^ring[A-Z]/.test(key)&&n('ringLayer')<=0)return 'This world draws no mineral fringe.';
- if(key==='beachWidth'&&n('beachLayer')<=0)return 'This world has no beach layer.';
+ if(key==='beachWidth'&&n('beachLayer')<=0)return 'This world has no beach of its own. Choose another world\'s Beach in Colors & base pattern to use this setting.';
  if(key==='groundTiles'&&n('groundTiled')<=0)return 'This world\'s ground is one texture, not tiles. Choose another world\'s Ground pattern to use this setting.';
  if(key==='ringShiftDir'||key==='ringScatter')return needs('ringShift','Offset between copies');
  if(key==='ringPatchSize')return needs('ringPatch','Reach variation');
@@ -169,7 +179,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'crackSeverity','crackSpacing','rockOrder','rockFrom','bedSpacing','bedLedge','rockOpen',
  'banding','sandBanding','strata','strataContrast',
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
- 'baseBand','desertCapFlat','rockMoss','rockStain','rockDetail','faceRelief','gullyDepth','grooveSpacing','rockScale','cliffFollow',
+ 'baseBand','desertCapFlat','rockMoss','rockStain','rockDetail','faceRelief','gullyDepth','grooveSpacing','rockType','rockScale','cliffFollow',
  'shelfWander','bedFlat','bedDots','crackedStep','shoalBump','shoalGrain',
  'ringContrast','ringCount','ringSize','ringShift','ringTone',
  'lavaCrust','lavaPillow','lavaVeins','layerCrease','pockmark',

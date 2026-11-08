@@ -25,7 +25,7 @@ try{
   const key=async name=>{await send('Input.dispatchKeyEvent',{type:'keyDown',key:name});await send('Input.dispatchKeyEvent',{type:'keyUp',key:name});};
   const nodes=()=>ev('sculptDebug.nodes()');
   await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
-  await send('Page.navigate',{url:`${server}/sculpt.html?biome=green&mapX=4&mapY=4&scratch=workspace-test&gpuMB=512&heapMB=1536`});await ready();
+  await send('Page.navigate',{url:`${server}/sculpt.html?biome=green&mapX=4&mapY=4&scratch=workspace-test&gpuMB=512&heapMB=1536&undulation=0`});await ready();
   report.desktop=await ev(`({map:document.getElementById('viewport').getBoundingClientRect().toJSON(),dock:document.getElementById('curve-dock').clientHeight,curves:[...document.querySelectorAll('.curve-pane canvas')].map(c=>[c.clientWidth,c.clientHeight]),tools:document.querySelectorAll('.tool-palette button').length})`);
   assert.equal(report.desktop.tools,21);assert.equal(report.desktop.dock,167);assert(report.desktop.curves.every(c=>c[1]<=104&&c[0]>450));
   for(const tool of ['plateau','hill','mountain','ramp','deep','shallow','valleyV','valleyU','valleyT','river','braided']){await click(`[data-tool="${tool}"]`);assert.equal(await ev('sculptDebug.state().tool'),tool);assert.equal(await ev('document.getElementById("section-preview-control").hidden'),false);}

@@ -1,5 +1,6 @@
 import {worldControlRequirement,WORLD_PRIMARY_CONTROLS} from './sculpt-control-schema.js';
 import {mountWorkspace} from './sculpt-workspace.js';
+import {COLUMN_BEDS,COLUMN_SECTIONS,COLUMN_SLOTS,FIRST_SECTION} from './sculpt-column.js';
 // Presentation helpers; terrain state and history stay in sculpt.js.
 const $=id=>document.getElementById(id);
 export function mountEditorUI(){
@@ -97,30 +98,49 @@ export function mountWorldControlIndex(root,values=()=>({})){
 export function mountColumnPanel(read,change,commit,reset){
  const panel=$('column-panel'),body=panel.querySelector('.column-body'),note=panel.querySelector(':scope > [role="status"]'),restore=panel.querySelector(':scope > button');
  const at=(column,path)=>path.reduce((v,k)=>v[k],column);
+ const state=()=>{const {edited}=read();restore.disabled=!edited;note.textContent=edited?'Map column edited.':'Using the world column unchanged.';};
  function field(parent,label,path,{min,max,step='any',choices,color=false}={}){
   const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement(choices?'select':'input');input.dataset.columnPath=path.join('.');input.setAttribute('aria-label',label);
   const value=at(read().column,path);if(choices){input.replaceChildren(...choices.map(([v,text])=>new Option(text,v)));input.value=value;}
   else{input.type=color?'color':'number';input.required=true;input.value=color?'#'+value.map(v=>Math.round(v).toString(16).padStart(2,'0')).join(''):value;input.step=step;if(min!==undefined)input.min=min;if(max!==undefined)input.max=max;}
   input.oninput=()=>{input.setCustomValidity('');if(!input.checkValidity()){note.textContent='Enter a value within the displayed limits.';return;}const column=structuredClone(read().column),target=at(column,path.slice(0,-1));target[path.at(-1)]=color?[1,3,5].map(i=>parseInt(input.value.slice(i,i+2),16)):choices?input.value:Number(input.value);if(choices&&typeof value==='number')target[path.at(-1)]=Number(input.value);
-   try{change(column);restore.disabled=!read().edited;note.textContent=read().edited?'Map column edited.':'Using the world column unchanged.';}catch(err){input.setCustomValidity(err.message);note.textContent=err.message;}
+   try{change(column);state();}catch(err){input.setCustomValidity(err.message);note.textContent=err.message;}
   };
   input.onchange=()=>{commit();if(!input.checkValidity())sync();};wrap.append(input);parent.append(wrap);return input;
  }
+ // A section or bed added or removed: the edited copy is one change and one undo step, and the panel is drawn again for the new rows.
+ function reshape(edit){const column=structuredClone(read().column||{});edit(column);try{change(column);commit();}catch(err){note.textContent=err.message;return;}sync();}
+ function button(parent,text,label,onclick,disabled=false){const b=document.createElement('button');b.type='button';b.textContent=text;if(label)b.setAttribute('aria-label',label);b.disabled=disabled;b.onclick=onclick;parent.append(b);return b;}
  function sync(){
-  const {column,variant,edited}=read();panel.hidden=!column;body.replaceChildren();if(!column)return;const row=column.variants?.[variant]||{},prefix=key=>row[key]?['variants',variant,key]:[key];
-  note.textContent=edited?'Map column edited.':'Using the world column unchanged.';restore.disabled=!edited;
+  const {column,variant}=read();body.replaceChildren();state();
+  // The sections the active row draws: a variant's own row, else the column's (a world or map without any has no column, and adds one here).
+  const row=column?.variants?.[variant]||{},prefix=key=>row[key]?['variants',variant,key]:[key],path=prefix('sections');
+  const sections=row.sections||column?.sections||[],beds=sections.reduce((n,s)=>n+s.beds.length,0),slots=column?.colors?.length||COLUMN_SLOTS;
+  const edit=fn=>()=>reshape(c=>{const parent=at(c,path.slice(0,-1));parent[path.at(-1)]??=[];fn(parent[path.at(-1)]);});
   if(variant){const p=document.createElement('p');p.className='small';p.textContent=`Column row: ${$('variant-select').selectedOptions[0]?.textContent||variant}`;body.append(p);}
-  for(const [s,section] of (row.sections||column.sections||[]).entries()){
-   const group=document.createElement('div');group.className='column-section';const heading=document.createElement('h4');heading.textContent=`Section ${s+1}`;group.append(heading);field(group,'Starts at height',[...prefix('sections'),s,'start']);
-   const table=document.createElement('table');table.innerHTML='<thead><tr><th>Thickness</th><th>Hardness</th><th>Material</th></tr></thead>';const tbody=document.createElement('tbody');table.append(tbody);group.append(table);
-   for(const [b] of section.beds.entries()){const tr=document.createElement('tr');for(const [i,label,options] of [[0,'thickness',{min:.001}],[1,'hardness',{min:0,max:1}],[2,'material',{choices:Array.from({length:column.colors?.length||5},(_,i)=>[i,`Slot ${i+1}`])}]]){const td=document.createElement('td');const input=field(td,`Section ${s+1}, bed ${b+1} ${label}`,[...prefix('sections'),s,'beds',b,i],options);input.parentNode.firstChild.textContent='';tr.append(td);}tbody.append(tr);}body.append(group);
+  if(!sections.length){
+   const p=document.createElement('p');p.className='small';p.textContent='This map has no rock column. Strata, the Foot color band and Cap color paint its beds: add one to use them.';body.append(p);
+   button(body,'Add a rock column','',edit(list=>list.push(structuredClone(FIRST_SECTION))));
   }
-  const bands=row.bands||column.bands;if(bands){const group=document.createElement('div');group.className='column-options';const h=document.createElement('h4');h.textContent='Contour bands';body.append(h,group);field(group,'Height step',[...prefix('bands'),0],{min:.001});field(group,'Line strength',[...prefix('bands'),1],{min:0,max:1});}
+  for(const [s,section] of sections.entries()){
+   const group=document.createElement('div');group.className='column-section';const heading=document.createElement('h4');heading.textContent=`Section ${s+1}`;group.append(heading);
+   button(heading,'Remove',`Remove section ${s+1}`,edit(list=>list.splice(s,1)));
+   field(group,'Starts at height',[...path,s,'start']);
+   const table=document.createElement('table');table.innerHTML='<thead><tr><th>Thickness</th><th>Hardness</th><th>Material</th><th><span class="sr-only">Remove</span></th></tr></thead>';const tbody=document.createElement('tbody');table.append(tbody);group.append(table);
+   for(const [b] of section.beds.entries()){const tr=document.createElement('tr');for(const [i,label,options] of [[0,'thickness',{min:.001}],[1,'hardness',{min:0,max:1}],[2,'material',{choices:Array.from({length:slots},(_,i)=>[i,`Slot ${i+1}`])}]]){const td=document.createElement('td');const input=field(td,`Section ${s+1}, bed ${b+1} ${label}`,[...path,s,'beds',b,i],options);input.parentNode.firstChild.textContent='';tr.append(td);}
+    const td=document.createElement('td');button(td,'\u00d7',`Remove section ${s+1}, bed ${b+1}`,edit(list=>list[s].beds.splice(b,1)),section.beds.length<2);tr.append(td);tbody.append(tr);}
+   // A new bed repeats the section's last one; the uniforms hold COLUMN_BEDS in all.
+   button(group,'Add bed',`Add a bed to section ${s+1}`,edit(list=>list[s].beds.push([...section.beds.at(-1)])),beds>=COLUMN_BEDS);
+   body.append(group);
+  }
+  // A new section starts 16 units above the last and repeats its beds, as many as the uniforms have room for.
+  if(sections.length)button(body,'Add section','',edit(list=>list.push({start:sections.at(-1).start+16,beds:structuredClone(sections.at(-1).beds.slice(0,COLUMN_BEDS-beds))})),sections.length>=COLUMN_SECTIONS||beds>=COLUMN_BEDS);
+  const bands=row.bands||column?.bands;if(bands){const group=document.createElement('div');group.className='column-options';const h=document.createElement('h4');h.textContent='Contour bands';body.append(h,group);field(group,'Height step',[...prefix('bands'),0],{min:.001});field(group,'Line strength',[...prefix('bands'),1],{min:0,max:1});}
   const options=document.createElement('div');options.className='column-options';body.append(options);
-  if(column.origin!==undefined)field(options,'Count height from',['origin'],{choices:[['plain','Dry plain'],['sea','Sea level']]});
-  if(column.wander?.value!==undefined)field(options,'Bed wander',['wander','value']);
-  column.wander?.terrain?.forEach((_,i)=>field(options,['Broad wander','Medium wander','Fine wander'][i],['wander','terrain',i]));
-  if(column.colors){const colors=document.createElement('details');colors.className='feature-group';colors.open=true;colors.innerHTML='<summary>Material slot colors</summary>';const fields=document.createElement('div');fields.className='column-options';colors.append(fields);column.colors.forEach((_,i)=>field(fields,`Slot ${i+1}`,['colors',i],{color:true}));body.append(colors);}
+  if(column?.origin!==undefined)field(options,'Count height from',['origin'],{choices:[['plain','Dry plain'],['sea','Sea level']]});
+  if(column?.wander?.value!==undefined)field(options,'Bed wander',['wander','value']);
+  column?.wander?.terrain?.forEach((_,i)=>field(options,['Broad wander','Medium wander','Fine wander'][i],['wander','terrain',i]));
+  if(column?.colors){const colors=document.createElement('details');colors.className='feature-group';colors.open=true;colors.innerHTML='<summary>Material slot colors</summary>';const fields=document.createElement('div');fields.className='column-options';colors.append(fields);column.colors.forEach((_,i)=>field(fields,`Slot ${i+1}`,['colors',i],{color:true}));body.append(colors);}
  }
  restore.onclick=()=>{reset();sync();};sync();return sync;
 }
