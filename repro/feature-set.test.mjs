@@ -12,14 +12,14 @@ const green = {features: table('green').features}, bare = {};
 test('every world has deposits and vents; trees, shrubs, rocks and scars come from the world table', () => {
   assert.deepEqual(worldKinds(green), ['deposit', 'vent', 'tree', 'shrub', 'rock', 'scar']);
   assert.deepEqual(worldKinds(bare), ['deposit', 'vent']);
-  const kinds = {red: ['tree', 'rock', 'scar'], moon: ['rock'], archipelago: ['tree', 'shrub'], desert: ['rock'], lava: ['rock', 'scar'], ice: ['rock'], crystal: ['rock'], zhon: []};
+  const kinds = {red: ['tree', 'rock', 'scar'], moon: ['rock'], archipelago: ['tree', 'shrub', 'scar'], desert: ['rock'], lava: ['rock', 'scar'], ice: ['rock'], crystal: ['rock'], zhon: ['tree', 'shrub', 'rock', 'scar']};
   for (const [world, own] of Object.entries(kinds)) assert.deepEqual(worldKinds({features: table(world).features}), ['deposit', 'vent', ...own], world);
 });
 
 test("a world's deposit and vent look reaches the painter; footprints take any size", () => {
   const red = {features: table('red').features}, lava = {features: table('lava').features};
-  assert.equal(variants('deposit', defaultSet(red), red)[0].params.halo, 0.9);
-  assert.equal(variants('vent', defaultSet(lava), lava)[0].params.rim, 0.55);
+  assert.equal(variants('deposit', defaultSet(red), red)[0].params.halo, red.features.deposit.params.halo);
+  assert.equal(variants('vent', defaultSet(lava), lava)[0].params.rim, lava.features.vent.params.rim);
   assert.equal(variants('deposit', defaultSet(green), green)[0].params.halo, undefined);   // Green's look is the painter's default
   assert.deepEqual(variants('tree', defaultSet(red), red)[0].footprint, [2, 2]);
   const spire = variants('rock', defaultSet(lava), lava).find(v => v.params.tall === 1);
