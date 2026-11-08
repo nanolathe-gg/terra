@@ -74,13 +74,8 @@ const CRACKED_BED='Give a water stroke the Cracked bed look (Shallow water look)
 // finds an inactive setting and explains what must be enabled to use it.
 export function worldControlRequirement(key,v){
  const n=k=>Number(v[k]??0),joints=()=>n('rockJoint')*n('rockOpen'),needs=(parent,label)=>worldControlRequirement(parent,v)||(n(parent)<=0?`Enable ${label} to use this setting.`:'');   // a parent that is itself idle names its own reason first
- if(['vegetationCover','plantRelief','flowerDensity'].includes(key)){
-  if(!n('groundCover'))return 'This world has no ground-cover material.';
-  if(key==='vegetationCover')return '';
-  if(Number(v.vegetationCover??1)<=0)return 'Raise Vegetation cover to use this setting.';
-  if(key==='flowerDensity')return n('flowers')?'':'This ground-cover material has no flowers.';
-  if(!n('plants'))return 'This ground-cover material has no plant relief.';
- }
+ // Every world has a ground-cover table (sculpt.py DEFAULT_GROUND_COVER): Vegetation cover above 0 turns it on (worldPanelValues' groundCover).
+ if(['plantRelief','flowerDensity'].includes(key))return n('groundCover')>0?'':'Raise Vegetation cover to use this setting.';
  if(['undulationScale','undulationCover'].includes(key))return needs('undulation','Undulation height');
  if((['bedHeight','bedVary','bedPunch'].includes(key)||key==='bedSpacing'&&n('cliffRise')<=0)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';   // with a Riser height a column's ledge scales by bed thickness over this spacing
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';

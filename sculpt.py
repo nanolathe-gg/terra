@@ -205,7 +205,8 @@ KNOB_DEFAULTS.update(hillBlocks=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, outcrop=0, rillDepth=0, rillSpacing=8)
-KNOB_DEFAULTS.update(vegetationCover=1, plantRelief=1, flowerDensity=1)
+# Card P30: Vegetation cover 0 is off (every world has a ground-cover table: GROUND_COVER, DEFAULT_GROUND_COVER); modern Green sets 1.
+KNOB_DEFAULTS.update(vegetationCover=0, plantRelief=1, flowerDensity=1)
 KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
 # H8: a world's engine preset. Every world runs the Time pass (erosion 1). The eight worlds that
 # had no rain erosion take the pass with rain off and the envelope of the droplet worker's own budget (the worker's .35 of the pass's
@@ -631,6 +632,36 @@ WORLD_KNOBS = {
 # default, so nothing changes unless a variant is chosen (World panel, or
 # `variant=<id>` in the page's address). Every knob must be in KNOB_DEFAULTS.
 OPEN = [-9, -8, 9, 10]   # a ground-cover window with no limit
+# Ground cover (card P30): seven classes placed by moisture, soil and sun, colouring the grass (engine-frag.wgsl groundCover). The table also
+# replaces the slope-only ramp: the slope texture's share is the table's thin soil. Windows are [from, full, full until, gone by]; OPEN is no limit.
+# Moisture 0 is dry ground and 1 is a channel: wetness (the Time pass's map: the 5th percentile is 0, the median .0-.2, the 90th .4-.7, the 99th
+# .8-.9 on green-modern-1..3) runs from `wet[0]` (above the dry half) to `wet[1]` (near its 95th percentile). `color` is the plant colour the
+# Colors panel's Vegetation row starts from (turf's); a pick moves every class but bare soil (`bare`) by the change from it (sculpt-material-model.js).
+# Modern Green's table, measured on green-modern-1..3: `ground` is the grass colour the class colours were measured against.
+GROUND_COVER = dict(
+    # Card P31: plants in the bake's loose scatter, by class: tufts on turf and dry grass, clumps on meadow and rush, cushions on moss, shrubs on scrub
+    # (the numbers are height scales and the shrub density; where they grow follows the classes, so Lushness; tuft size follows looseSize).
+    plants=dict(tuft=4, shrub=2, shrubs=1.5,
+                # Card P31: flowers, 1-2 px dots in one-species clumps on meadow and scrub, in sun, more on lush ground (the draw's groundCover). Density is the
+                # chance of a dot per 2 x 2 px at the best of its ground; the palette is rgb and a weight (white and yellow common, violet and red rare).
+                flowers=dict(density=.15, palette=[[236, 232, 214, 4], [255, 214, 64, 3], [170, 120, 215, 1], [225, 80, 60, 1]])),
+    wet=[.25, .9], dry=.4, patch=22, ground=[55, 93, 27], color=[55, 95, 27],
+    soil=dict(slope=[.6, 1.6], convex=.5, deposit=.3),
+    moisture=dict(perSwath=.5, swathRef=.35, shade=.28),
+    classes=[
+        dict(name='bare soil', bare=True, rgb=[105, 90, 38], grain=.12, strength=.015, lush=-1, moisture=OPEN, soil=OPEN, light=OPEN),
+        dict(name='dry grass', rgb=[114, 109, 64], grain=.10, strength=.65, lush=0, moisture=[-1, 0, .2, .42], soil=[.05, .3, 9, 10], light=[1, 1.35, 9, 10]),
+        dict(name='turf', rgb=[55, 95, 27], grain=.07, strength=1, lush=-1, moisture=[-.1, .12, .72, .92], soil=[.08, .3, 9, 10], light=OPEN),
+        dict(name='meadow', rgb=[38, 91, 15], grain=.05, strength=1.1, lush=1, moisture=[.5, .7, .92, 1.01], soil=[.4, .75, 9, 10], light=[.55, .9, 9, 10]),
+        dict(name='scrub', rgb=[28, 74, 9], grain=.06, strength=1.15, lush=2, moisture=[.55, .75, .9, .99], soil=[.5, .85, 9, 10], light=OPEN),
+        dict(name='moss', rgb=[42, 84, 29], grain=.03, strength=.8, lush=0, moisture=[.12, .4, 9, 10], soil=[-9, -8, .6, 1.4], light=[-9, -8, .6, .95]),
+        dict(name='wet rush', rgb=[38, 80, 32], grain=.10, strength=1, lush=1, moisture=[.9, .99, 9, 10], soil=[.45, .75, 9, 10], light=OPEN),
+    ])
+# Every other world's table (Vegetation cover 0 there: off until an artist raises it): modern Green's classes and plants, with no `ground` of
+# its own (the classes are measured against the world's own ground colour) and bare soil in that ground colour, so thin cover fades into the
+# world's own ground.
+DEFAULT_GROUND_COVER = {**{k: v for k, v in GROUND_COVER.items() if k != 'ground'},
+                        'classes': [{k: v for k, v in c.items() if not (c.get('bare') and k == 'rgb')} for c in GROUND_COVER['classes']]}
 WORLD_VARIANTS = {
     'green': {
         # Evad River Delta and the Barrier Reef: rounded hills with soft
@@ -658,38 +689,17 @@ WORLD_VARIANTS = {
         # (Realism check on green-modern-1..3: 8.41 of 15 statistics in range against 7.82 without, 24 gate failures against 25; 30 gives 8.53, 60 gives 8.76,
         # but from 30 the cones read as hard dark rays on hills that are soft in retail). Card P32: terracettes on steep grass (Joined
         # wrinkles on a grass world).
-        # Ground cover (card P30): seven classes placed by moisture, soil and sun, colouring the grass (engine-frag.wgsl groundCover). The table also replaces the slope-only
-        # ramp: the slope texture's share is the table's thin soil. Windows are [from, full, full until, gone by]; OPEN is no limit. Moisture 0 is
-        # dry ground and 1 is a channel: wetness (the Time pass's map: the 5th percentile is 0, the median .0-.2, the 90th .4-.7, the
-        # 99th .8-.9 on green-modern-1..3) runs from `wet[0]` (above the dry half) to `wet[1]` (near its 95th percentile).
+        # Ground cover (card P30): GROUND_COVER above, with Vegetation cover 1.
         # Card P27: Surf .1 on its water strokes (a wet line and a 1-px foam lace on lakes, no beach) and a sand colour for the beaches
         # higher Surf builds.
-        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockAge=.5, cavity=1.0, shineRock=.36),
+        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockAge=.5, cavity=1.0, shineRock=.36),
                        # Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the hills' feet and in gullies,
                        # median 5 px (readable at 1x; Green's retail grit is 3-4); stoneSort .7 sorts it by the process (talus coarsens outward).
                        material=dict(stoneSort=.7, groundPool=2048,
                        # Card P10: the rock model (a granite-like preset, calm: Size 22 px; Age is the rockAge row, default .5), the numbers of one rock type.
                        rock=dict(size=22, aspect=1.6, jitter=.9, open=.5, bedOpen=.15, terr=0, vary=.25, crev=1.2, crevW=1.0,
                                  chip=.12, chipSize=4, grit=.3, joint=0, seam=1.6, curtain=.6, lichen=1.5),
-                       groundCover=dict(
-                           # Card P31: plants in the bake's loose scatter, by class: tufts on turf and dry grass, clumps on meadow and rush, cushions on moss, shrubs on scrub
-                           # (the numbers are height scales and the shrub density; where they grow follows the classes, so Lushness; tuft size follows looseSize).
-                           plants=dict(tuft=4, shrub=2, shrubs=1.5,
-                                       # Card P31: flowers, 1-2 px dots in one-species clumps on meadow and scrub, in sun, more on lush ground (the draw's groundCover). Density is the
-                                       # chance of a dot per 2 x 2 px at the best of its ground; the palette is rgb and a weight (white and yellow common, violet and red rare).
-                                       flowers=dict(density=.15, palette=[[236, 232, 214, 4], [255, 214, 64, 3], [170, 120, 215, 1], [225, 80, 60, 1]])),
-                           wet=[.25, .9], dry=.4, patch=22, ground=[55, 93, 27],
-                           soil=dict(slope=[.6, 1.6], convex=.5, deposit=.3),
-                           moisture=dict(perSwath=.5, swathRef=.35, shade=.28),
-                           classes=[
-                               dict(name='bare soil', rgb=[105, 90, 38], grain=.12, strength=.015, lush=-1, moisture=OPEN, soil=OPEN, light=OPEN),
-                               dict(name='dry grass', rgb=[114, 109, 64], grain=.10, strength=.65, lush=0, moisture=[-1, 0, .2, .42], soil=[.05, .3, 9, 10], light=[1, 1.35, 9, 10]),
-                               dict(name='turf', rgb=[55, 95, 27], grain=.07, strength=1, lush=-1, moisture=[-.1, .12, .72, .92], soil=[.08, .3, 9, 10], light=OPEN),
-                               dict(name='meadow', rgb=[38, 91, 15], grain=.05, strength=1.1, lush=1, moisture=[.5, .7, .92, 1.01], soil=[.4, .75, 9, 10], light=[.55, .9, 9, 10]),
-                               dict(name='scrub', rgb=[28, 74, 9], grain=.06, strength=1.15, lush=2, moisture=[.55, .75, .9, .99], soil=[.5, .85, 9, 10], light=OPEN),
-                               dict(name='moss', rgb=[42, 84, 29], grain=.03, strength=.8, lush=0, moisture=[.12, .4, 9, 10], soil=[-9, -8, .6, 1.4], light=[-9, -8, .6, .95]),
-                               dict(name='wet rush', rgb=[38, 80, 32], grain=.10, strength=1, lush=1, moisture=[.9, .99, 9, 10], soil=[.45, .75, 9, 10], light=OPEN),
-                           ]))),
+                       groundCover=GROUND_COVER)),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
@@ -842,7 +852,7 @@ def biome_config(biome):
     world.pop('export', None)   # the page's world catalogue (EXPORT_DEFAULTS), not the page's config
     config = {'biome': BIOME_NAMES[biome], 'biomeId': biome, 'size': 1024, 'grid': 512, 'seaLevel': 0, 'baseHeight': world.pop('baseHeight', 24),
               'materialTable': MATERIAL_TABLES[biome], 'layers': table['order'],   # the materials the table makes: which optional stages (body, beach, ring) the world has
-              'material': table['material'], 'water': table['water'], **world}
+              'material': {'groundCover': copy.deepcopy(DEFAULT_GROUND_COVER), **table['material']}, 'water': table['water'], **world}
     if 'river' in table:
         config['river'] = table['river']   # the river variant's material and water numbers (WORLD_VARIANTS)
     if 'features' in table:

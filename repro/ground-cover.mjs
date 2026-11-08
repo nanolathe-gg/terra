@@ -44,9 +44,16 @@ try{
   await ev(`window.__exportBlob=null;const originalCreate=URL.createObjectURL;URL.createObjectURL=b=>{window.__exportBlob=b;return originalCreate(b);}`);
   await click('#world-export');const exported=await ev('__exportBlob.text().then(JSON.parse)');report.export=exported;assert.equal(exported.world.colors.flower1,colors[0]);assert.equal(Number(exported.world.knobs.flowerDensity),3);
   await send('Page.navigate',{url:url('')});await ready();await click('#tab-world');
-  assert.equal(await ev(`document.querySelectorAll('#world-colors input[type=color][aria-label^=Flower]').length`),0);
-  for(const k of keys)assert.equal(await ev(`document.getElementById('knob-${k}').disabled`),true);
-  report.unsupported='original Green has no flower swatches and explains disabled vegetation controls';
+  // Every world has a ground-cover table, off at Vegetation cover 0: its color rows show, Vegetation cover is free, and the rows it gates say to raise it.
+  assert.equal(await ev(`document.querySelectorAll('#world-colors input[type=color][aria-label^=Flower]').length`),4);
+  assert.equal(await ev(`document.querySelectorAll('#world-colors input[type=color][aria-label^=Vegetation]').length`),1);
+  // (The world's knobs carry across its variants, so the 1.5 set on Modern is here too: 0 is set to check the off state.)
+  assert.equal(await ev(`document.getElementById('knob-vegetationCover').disabled`),false);await knob('vegetationCover',0);
+  for(const k of keys.slice(1))assert.match(await ev(`document.getElementById('knob-${k}').closest('[data-knob]').querySelector('.control-requirement').textContent`),/Raise Vegetation cover/);
+  assert.equal(await ev(`sculptCanvas.renderer.placementTable(sculptCanvas.renderer.variant)[166][0]`),0,'off: the cover rows are 0');
+  await knob('vegetationCover',1);assert.equal(await ev(`sculptCanvas.renderer.placementTable(sculptCanvas.renderer.variant)[166][0]`),1);
+  for(const k of keys.slice(1))assert.equal(await ev(`document.getElementById('knob-${k}').disabled`),false);
+  report.everyWorld='original Green shows the vegetation and flower colors; Vegetation cover 0 turns the cover off and raising it turns it on';
   await ev(`(()=>{const data=${JSON.stringify(exported)},dt=new DataTransfer();data.world.name='Cover round trip';dt.items.add(new File([JSON.stringify(data)],'cover.world.json',{type:'application/json'}));const e=document.getElementById('world-file');e.files=dt.files;e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   await sleep(1000);await ready();await click('#tab-world');
   report.importVariant=await ev(`document.getElementById('variant-select').value`);

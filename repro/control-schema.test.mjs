@@ -58,18 +58,12 @@ test('labels and group names name no world',()=>{
  for(const [key,,label] of SHAPE_FIELDS)assert.ok(!named.test(label),`${key}: ${label}`);
 });
 
-test('vegetation dependencies follow material capabilities and keep flowers independent of relief',async()=>{
+test('every world can turn vegetation on, and flowers stay independent of relief',async()=>{
  const {worldControlRequirement:requirement}=await import('../sculpt-control-schema.js');
- const supported={groundCover:1,plants:1,flowers:1};
- for(const key of ['vegetationCover','plantRelief','flowerDensity']){
-  assert.match(requirement(key,{}),/no ground-cover material/);
-  assert.equal(requirement(key,supported),'');
- }
- for(const key of ['plantRelief','flowerDensity'])assert.match(requirement(key,{...supported,vegetationCover:0}),/Vegetation cover/);
- assert.equal(requirement('vegetationCover',{...supported,vegetationCover:0}),'');
- assert.match(requirement('plantRelief',{groundCover:1}),/no plant relief/);
- assert.equal(requirement('flowerDensity',{...supported,plantRelief:0}),'');
- assert.match(requirement('flowerDensity',{...supported,flowers:0}),/no flowers/);
+ // groundCover is the switch (worldPanelValues: Vegetation cover above 0); every world has a table, so Vegetation cover itself is never idle.
+ for(const v of [{},{groundCover:0},{groundCover:1}])assert.equal(requirement('vegetationCover',v),'');
+ for(const key of ['plantRelief','flowerDensity']){assert.match(requirement(key,{groundCover:0}),/Raise Vegetation cover/);assert.equal(requirement(key,{groundCover:1}),'');}
+ assert.equal(requirement('flowerDensity',{groundCover:1,plantRelief:0}),'');
 });
 
 test('world dependencies explain bypasses without biome gates',async()=>{

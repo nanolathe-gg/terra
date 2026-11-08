@@ -1424,7 +1424,8 @@ new ResizeObserver(resize).observe($('viewport'));
 // this browser (localStorage) and exportable as JSON.
 const WORLD_STORE='nanolathe-map-editor-worlds';
 // Card P12b: the light's two colors ride with the world's colors; white (off) is the grey light. Help for each row is shown under it.
-const LIGHT_COLOR_HELP={sun:'The direct light and the glints it mirrors. A warm sun lights slopes that face it.',sky:'The ambient light that fills the shade. A cool sky keeps shaded ground and the lee of hills blue.'};
+const LIGHT_COLOR_HELP={sun:'The direct light and the glints it mirrors. A warm sun lights slopes that face it.',sky:'The ambient light that fills the shade. A cool sky keeps shaded ground and the lee of hills blue.',
+  vegetation:'The plants of the ground cover (Vegetation cover above 0): every kind moves by the change from this color, so lush and dry ground keep their difference. Bare ground keeps the world\'s own.'};
 let worlds={},worldId=null;
 function loadWorlds() { try { worlds=JSON.parse(localStorage.getItem(WORLD_STORE)||'{}')||{}; } catch (_) { worlds={}; } }
 function saveWorlds() { try { localStorage.setItem(WORLD_STORE,JSON.stringify(worlds)); } catch (_) {} }
@@ -1447,6 +1448,7 @@ function editColumn(value){
 }
 function commitColumn(){if(!columnEditing)return;columnEditing=false;checkpoint();queueWeather();}
 function defaultColor(key) {
+  if(key==='vegetation')return (config.material?.groundCover?.color||[128,128,128]).map(v=>v/255);
   const flower=/^flower([1-4])$/.exec(key);if(flower)return (config.material?.groundCover?.plants?.flowers?.palette?.[Number(flower[1])-1]?.slice(0,3)||[255,255,255]).map(v=>v/255);
   const m=renderer.means,w=config.water||{},mat=config.material||{};
   const rgb=v => v&&v.map(x => x/255);

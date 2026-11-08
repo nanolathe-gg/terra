@@ -2,6 +2,7 @@
 // host (repro/headless.mjs, which measure/world_controls.mjs sweeps under Node) apply a world knob and pick a world color with the same code, and
 // read the facts the panel enables a row by (worldPanelValues, which sculpt-control-schema.js worldControlRequirement reads) from one function.
 import {columnHasCapBed} from './sculpt-column.js';
+import {groundCoverOn} from './sculpt-material-model.js';
 
 // Surface knobs: each writes the page address and the renderer's variant,
 // then the renderer re-reads its uniforms and re-bakes its fields.
@@ -10,7 +11,7 @@ export const KNOBS = [
   ['Ground detail', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Ground bumps',0,3,.05,1.2],['lumpRelief','Painted ground bumps',0,8,.1,4],['reliefOctaves','Octaves',1,6,1,5],['worms','Wormy relief on slopes',0,1,.05,0]]],
   ['Lighting', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13],['shadeDepth','Directional shading kept',0,1,.05,1],['sunTilt','Light from the south',-1,1,.05,1],['ambient','Ambient light',0,.8,.02,.42]]],
-  ['Vegetation & flowers', [['vegetationCover','Vegetation cover',0,2,.05,1],['lushness','Lushness',-1,1,.05,0],['wetSwath','Moisture',0,1,.05,0],['plantRelief','Vegetation relief',0,2,.05,1],['flowerDensity','Flower density',0,4,.05,1]]],
+  ['Vegetation & flowers', [['vegetationCover','Vegetation cover (0 off)',0,2,.05,1],['lushness','Lushness',-1,1,.05,0],['wetSwath','Moisture',0,1,.05,0],['plantRelief','Vegetation relief',0,2,.05,1],['flowerDensity','Flower density',0,4,.05,1]]],
   ['Material coverage', [['hillLight','Slope-cover brightness',.6,1.6,.01,1],['ringFade','Fringe fade length',0,2,.05,0],['faceFill','Fill light on shaded faces',0,.5,.02,0],['rockCrown','Bare rock to the crown',0,1,.05,0],['sandCrown','Painted sand to the crown (sand bars)',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['slopeMarks','Dark slope marks',0,1,.05,0],['wrinkles','Joined slope wrinkles',0,1,.05,0]]],
   ['Shine', [['shineStretch','Grain streak length (x its width)',1,8,.25,1],['shineWhite','Highlight whiteness (0 material hue, 1 white)',0,1,.05,.35]]],
   ['Shine: ground', [['shineGround','Gloss (highlight strength)',0,2,.05,0],['shineGroundSharp','Sharpness (lobe exponent)',2,200,2,24],['shineGroundRough','Roughness (grain slope)',0,2,.05,0],['shineGroundScale','Grain width (px)',1,24,.5,6]]],
@@ -90,10 +91,11 @@ export function applyKnob({key,value,settings,renderer,nodes,seed}) {
 }
 
 // The Colors panel's rows, [key, label].
-export const COLOR_KEYS=[['ground','Ground'],['slope','Slope cover'],['rock','Rock'],['sand','Sand'],['beach','Beach'],['shallow','Shallow water'],['deep','Deep water'],['crystal','Crystal'],...Array.from({length:4},(_,i)=>['flower'+(i+1),'Flower '+(i+1)]),['sun','Sun color'],['sky','Sky color'],['strata1','Strata 1'],['strata2','Strata 2'],['strata3','Strata 3'],['strata4','Strata 4'],['strata5','Strata 5']];
-// The rows this world shows: a flower's only where its ground cover has that flower, Beach only with a beach layer, the strata only on a
+export const COLOR_KEYS=[['ground','Ground'],['slope','Slope cover'],['rock','Rock'],['sand','Sand'],['beach','Beach'],['shallow','Shallow water'],['deep','Deep water'],['crystal','Crystal'],['vegetation','Vegetation'],...Array.from({length:4},(_,i)=>['flower'+(i+1),'Flower '+(i+1)]),['sun','Sun color'],['sky','Sky color'],['strata1','Strata 1'],['strata2','Strata 2'],['strata3','Strata 3'],['strata4','Strata 4'],['strata5','Strata 5']];
+// The rows this world shows: Vegetation and a flower's where the world's ground-cover table has them (every world's has; they act once
+// Vegetation cover is above 0), Beach only with a beach layer, the strata only on a
 // world without a rock column whose address turns Strata on.
-export const colorRows=(config,settings) => COLOR_KEYS.filter(([key]) => !(key.startsWith('flower')&&!config.material?.groundCover?.plants?.flowers?.palette?.[Number(key.slice(6))-1])
+export const colorRows=(config,settings) => COLOR_KEYS.filter(([key]) => !(key.startsWith('flower')&&!config.material?.groundCover?.plants?.flowers?.palette?.[Number(key.slice(6))-1]) && !(key==='vegetation'&&!config.material?.groundCover?.color)
   && !(key==='beach'&&!config.layers.includes('beach')) && !(key.startsWith('strata')&&(config.column?.colors||!(Number(settings.get('strata'))>0))));
 // A world's own base colors after a row is picked (a hex) or cleared (null): a color the server sets is then explicitly off (null, the
 // texture's own color), any other is dropped.
@@ -122,6 +124,6 @@ export function slopeReplaced({config,renderer,weathering,materialWeathering}) {
 // What worldControlRequirement may read: the renderer's settings, a stroke's water choices counted as the switch they turn on, and the facts of the world's material that no slider sets.
 export function worldPanelValues(facts) {
   const {config,renderer,nodes,colors}=facts,layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks(nodes);
-  const cover=config.material?.groundCover,plants=cover?.plants;
-  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0,groundCover:cover?1:0,plants:plants&&(plants.tuft>0||plants.shrub>0)?1:0,flowers:plants?.flowers?.density>0&&plants.flowers.palette?.some(c=>c[3]>0)?1:0};
+  const cover=config.material?.groundCover;
+  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0,groundCover:groundCoverOn(cover,renderer.variant)?1:0};
 }

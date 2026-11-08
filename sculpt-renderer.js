@@ -3,7 +3,7 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
-import {materialRows,tablePlacementRows,groundCoverRows,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
+import {materialRows,tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {columnRows} from './sculpt-column.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
@@ -698,7 +698,7 @@ export class TerrainRenderer {
   // (Green's); every other table leaves them to the knobs, as the world's placement always was.
   placementTable(variant) {
     const rows = this.materialData?.placement ? tablePlacementRows(this.materialData, variant) : this.placementRows(variant);
-    return [...Array.from({length: PLACEMENT_ROW}, () => [0, 0, 0, 0]), ...rows, ...groundCoverRows(this.config.material?.groundCover,variant,this.colorOverrides)];
+    return [...Array.from({length: PLACEMENT_ROW}, () => [0, 0, 0, 0]), ...rows, ...groundCoverRows(this.config.material?.groundCover,variant,this.colorOverrides||{},this.colorOverrides?.ground||this.means?.ground)];
   }
 
   // H4 round 2: one generated layer at one level as RGBA bytes (a check of the pass against the images it replaced; not used by the draw).
@@ -928,7 +928,7 @@ export class TerrainRenderer {
       return [knob('', 0), knob('Sharp', 24), knob('Rough', 0), knob('Scale', 6)];
     });
     // With no slope cover and faces of one material the slope group has no share, so its gloss does not wake the pass (worldControlRequirement says the same).
-    const slopeShare = (!this.config.material?.groundCover && Number(variant.get('slopeTexture') ?? 0.3) > 0) || Number(variant.get('microRock') ?? 1) > 0 || Boolean(this.config.material?.slopeSand);
+    const slopeShare = (!groundCoverOn(this.config.material?.groundCover, variant) && Number(variant.get('slopeTexture') ?? 0.3) > 0) || Number(variant.get('microRock') ?? 1) > 0 || Boolean(this.config.material?.slopeSand);
     this.i('uShineOn', shine.some((m, i) => (i !== 1 || slopeShare) && (m[0] > 0 || m[2] > 0)));
     this.f('uShineStretch', variant.has('shineStretch') ? Number(variant.get('shineStretch')) : 1);
     this.f('uShineWhite', variant.has('shineWhite') ? Number(variant.get('shineWhite')) : 0.35);
@@ -1182,7 +1182,7 @@ export class TerrainRenderer {
     set('uWorms', number('worms', 0));
     set('uLooseSupply', preview ? 0 : number('looseSupply', 0));
     set('uLooseSize', number('looseSize', 6));
-    set('uPlantsOn', !preview && this.config.material?.groundCover?.plants ? 1 : 0);
+    set('uPlantsOn', !preview && groundCoverOn(this.config.material?.groundCover, this.variant) && this.config.material.groundCover.plants ? 1 : 0);
     set('uStoneRound', this.config.material?.stoneRound ?? 0);
     set('uStoneSort', this.config.material?.stoneSort ?? 0.6);
     set('uStoneSlab', this.config.material?.stoneSlab ?? 0.05);
