@@ -268,6 +268,7 @@ struct Uniforms {
     moonCups: f32,        // lit pits, 2-3 px wide and 4-6 px tall, many on shaded steep faces and few on lit ground (0: none; the pockmark dots are separate)
     moonCupSize: f32,     // pit spacing across the glint axis, px (the cell is 1.5 times that along it)
     moonCupDepth: f32,    // pit depth in height units: how steep its walls shade
+    cupStretch: f32,      // cups drawn out along the glint axis into strokes this many times their length and narrower, each turned a little its own way (1: the pits, as before)
     moonRibs: f32,        // stringy light and dark strokes down steep faces, shaded by the sun (0: none)
     moonRibDepth: f32,    // stroke steepness: the gradient the strokes add (1: about 0.8 at their steepest)
     moonRibDark: f32,     // how much darker the strokes' mean is on faces turned from the sun (0: the face's own shade)

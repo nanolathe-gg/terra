@@ -657,6 +657,42 @@ fn moonCups(pixel: vec2f, size: f32, density: f32, depth: f32) -> vec3f {
     }
     return vec3f(grad, cavity);
 }
+// Round 3 (Moon): the same cups drawn out into strokes. Retail's dark faces carry strokes 1-2 px wide and 5-12 px long where ours
+// are dotted pits: each cup's length grows by stretch (and by up to .3 either way per cup) and its width shrinks by the root of
+// it, and its long axis turns up to 20 degrees either way from the glint axis per cup. The axis stays the glint axis's, not the
+// fall line's: retail moon-1's pits lean with it on the walls of both facings (the G8 measure), and strokes down the fall line
+// lay across a wall that faces east or west. The lattice is the cups', so the strokes keep their spacing, and the neighbours two
+// cells out are read, as a stroke reaches past the next cell.
+fn cupStrokes(pixel: vec2f, size: f32, density: f32, depth: f32, stretch: f32) -> vec3f {
+    let q = vec2f(dot(pixel, SHINE_ACROSS) / size, dot(pixel, SHINE_ALONG) / (size * 1.5));
+    let c = vec2i(floor(q));
+    var grad = vec2f(0.0);
+    var cavity = 0.0;
+    for (var j = -2; j <= 2; j++) {
+        for (var i = -2; i <= 2; i++) {
+            let k = c + vec2i(i, j);
+            let r = markHash(k + vec2i(4001, 17));
+            if (r.x >= density) { continue; }
+            let centre = vec2f(k) + 0.15 + 0.7 * r.yz;
+            let off = (q.x - centre.x) * size * SHINE_ACROSS + (q.y - centre.y) * size * 1.5 * SHINE_ALONG;
+            let turn = (fract(r.w * 13.7) - 0.5) * 0.7;
+            let along = cos(turn) * SHINE_ALONG + sin(turn) * SHINE_ACROSS;
+            let across = vec2f(-along.y, along.x);
+            let ax = mix(1.3, 2.0, r.w) / sqrt(stretch);
+            let ay = mix(2.8, 4.2, fract(r.w * 7.3)) * stretch * mix(0.7, 1.3, fract(r.w * 3.1));
+            let d = vec2f(dot(off, across) / ax, dot(off, along) / ay);
+            let s = dot(d, d);
+            if (s >= 2.6) { continue; }
+            let x = clamp((s - 1.6) / 1.0, 0.0, 1.0);
+            let w = 1.0 - x * x * (3.0 - 2.0 * x);
+            let dw = -6.0 * x * (1.0 - x);
+            let slope = exp(-s) * ((2.0 - s) * w + (s - 1.0) * dw);
+            grad += depth * slope * 2.0 * (d.x * across / ax + d.y * along / ay);
+            cavity = max(cavity, 1.0 - smoothstep(0.2, 1.0, s));
+        }
+    }
+    return vec3f(grad, cavity);
+}
 
 // G8 (Moon): the stringy relief of the shaded flank. Retail's steep walls are crossed by thin light
 // and dark strokes, 1-2 px wide and 5-12 px long, leaning with the glint axis whichever way the wall
@@ -2149,7 +2185,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let clump = 0.6 + 0.8 * (0.5 + 0.5 * wrinkleNoise(pixel / 38.0 + 5.0));
         let keep = min(u.moonCups * mix(0.04, 1.0, smoothstep(0.1, 0.55, turned)) * steep * clump * landform, 1.0);
         if (keep > 0.0) {
-            let cups = moonCups(pixel, u.moonCupSize, keep, u.moonCupDepth);
+            var cups: vec3f;
+            if (u.cupStretch > 1.0) {
+                cups = cupStrokes(pixel, u.moonCupSize, keep, u.moonCupDepth, u.cupStretch);
+            } else {
+                cups = moonCups(pixel, u.moonCupSize, keep, u.moonCupDepth);
+            }
             let before = max(0.0, dot(normal, u.light));
             let after = max(0.0, dot(normalize(vec3f(-(g + cups.xy), 1.0)), u.light));
             color *= clamp((u.ambient + 0.95 * after * markSeen) / (u.ambient + 0.95 * before * markSeen), 0.2, 1.3) * (1.0 - 0.7 * cups.z);

@@ -106,7 +106,7 @@ export function worldControlRequirement(key,v){
  if(key==='sandBandSpacing')return needs('sandBanding','Streaks on sand and ramps');
  if(key==='bedDotCell')return needs('bedDots','Bed speckles');
  if(key==='pockSize')return needs('pockmark','Surface pits');
- if(/^moonCup/.test(key)&&key!=='moonCups')return needs('moonCups','Slope cups');
+ if((/^moonCup/.test(key)&&key!=='moonCups')||key==='cupStretch')return needs('moonCups','Slope cups');
  if(/^moonRib/.test(key)&&key!=='moonRibs')return needs('moonRibs','Slope ribs');
  if(key==='moonFoldSpacing')return needs('moonFolds','Contour folds');
  if(['lavaPillow','lavaChip','lavaVeins','lavaCalm'].includes(key))return needs('lavaCrust','Pillow crust strength');

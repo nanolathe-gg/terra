@@ -152,6 +152,8 @@ KNOB_DEFAULTS.update(shineGate=0, shineHeadroom=0)
 KNOB_DEFAULTS.update(pockmark=0, pockSize=5)
 # G8, Moon: lit cups (0: none; the pockmark dots above are separate). Size is the spacing across the glint axis in px, depth the wall steepness.
 KNOB_DEFAULTS.update(moonCups=0, moonCupSize=5.5, moonCupDepth=1.4)
+# Round 3: cups drawn out into strokes along the glint axis, this many times their length (1: the pits).
+KNOB_DEFAULTS.update(cupStretch=1)
 # G8, Moon: stringy light and dark strokes down steep faces (0: none), their steepness and the darkening of faces turned from the sun.
 KNOB_DEFAULTS.update(moonRibs=0, moonRibDepth=1, moonRibDark=0)
 # G8, Moon: thin dark folds that follow the form across lit and moderate slopes (0: none), and the height between their contours.
