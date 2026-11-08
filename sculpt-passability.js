@@ -26,8 +26,8 @@ export function movementObstacles(config,data={}) {
   });
 }
 
-export function terrainLattice({heights,width,height,sea,obstacles=[],lava=false,edges=true}) {
-  if(heights.length!==width*height)throw new Error('Passability needs the complete exported height grid.');
+export function terrainLattice({heights,width,height,sea,obstacles=[],lava=false,edges=true,originX=0,originZ=0,mapWidth=width,mapHeight=height}) {
+  if(heights.length!==width*height)throw new Error('Passability needs every corner in the sampled region.');
   const low=new Uint8Array(heights.length),high=new Uint8Array(heights.length),blocked=new Uint8Array(heights.length);
   for(let z=0;z<height;z++)for(let x=0;x<width;x++){
     const i=z*width+x,e=Math.min(x+1,width-1),s=Math.min(z+1,height-1),a=heights[i],b=heights[z*width+e],c=heights[s*width+x],d=heights[s*width+e];
@@ -36,9 +36,9 @@ export function terrainLattice({heights,width,height,sea,obstacles=[],lava=false
   }
   // The exported TNT's height-dependent north/south void strips and right columns.
   if(edges)for(let x=0;x<width;x++){
-    for(let z=0;z<height&&z*16-(heights[z*width+x]>>1)<0;z++)blocked[z*width+x]=2;
-    for(let z=height-1;z>0&&z*16-(heights[z*width+x]>>1)>height*16-128;z--)blocked[(z-1)*width+x]=2;
-    if(x>=width-2)for(let z=0;z<height;z++)blocked[z*width+x]=2;
+    if(originZ===0)for(let z=0;z<height&&z*16-(heights[z*width+x]>>1)<0;z++)blocked[z*width+x]=2;
+    if(originZ+height===mapHeight)for(let z=height-1;z>0&&(originZ+z)*16-(heights[z*width+x]>>1)>mapHeight*16-128;z--)blocked[(z-1)*width+x]=2;
+    if(originX+x>=mapWidth-2)for(let z=0;z<height;z++)blocked[z*width+x]=2;
   }
   for(const r of obstacles)for(let z=Math.max(0,r.z);z<Math.min(height,r.z+r.height);z++)for(let x=Math.max(0,r.x);x<Math.min(width,r.x+r.width);x++)blocked[z*width+x]=1;
   return {heights,width,height,sea,low,high,blocked};
@@ -75,6 +75,41 @@ export function familyCoverage(t,family) {
   const out=new Uint8Array(counts.length);
   for(let i=0;i<out.length;i++)out[i]=counts[i]===family.profiles.length?2:counts[i]?1:0;
   return out;
+}
+const footprintApron=Math.max(...MOVEMENT_FAMILIES.flatMap(f=>f.profiles.map(p=>Math.ceil(p.size/2))));
+export function createPassability({width,height,sea,obstacles=[],lava=false}) {
+  const n=width*height;
+  return {width,height,sea,obstacles,lava,heights:new Uint8Array(n),sampled:new Uint8Array(n),have:new Uint8Array(n),low:new Uint8Array(n),high:new Uint8Array(n),blocked:new Uint8Array(n),coverage:MOVEMENT_FAMILIES.map(()=>new Uint8Array(n)),cells:0};
+}
+// A height tile is read once. Reclassify only the cells it can complete, with
+// a CPU apron of already sampled export bytes; unknown corners never imply
+// passable or blocked terrain. This avoids weathering nine GPU pages per tile.
+export function updatePassability(t,tile) {
+  const {width:w,height:h}=t,a=footprintApron;
+  for(let z=0;z<tile.height;z++){const to=(tile.z+z)*w+tile.x;t.heights.set(tile.heights.subarray(z*tile.width,(z+1)*tile.width),to);t.sampled.fill(1,to,to+tile.width);}
+  const x0=Math.max(0,tile.x-a),z0=Math.max(0,Math.min(tile.z-a,tile.z+tile.height===h?h-8-a+1:h)),x1=Math.min(w,tile.x+tile.width+a),z1=Math.min(h,tile.z+tile.height+a);
+  const ox=Math.max(0,x0-a),ex=Math.min(w,x1+a),top=Math.max(0,z0-a),bottom=Math.min(h,z1+a);
+  // A void strip scans from the physical map edge, up to eight height-byte
+  // cells away. Include that edge when a footprint can enter its strip.
+  const oz=top<8?0:top,ez=bottom>=h-8?h:bottom,rw=ex-ox,rh=ez-oz,heights=new Uint8Array(rw*rh),stride=rw+1,unknown=new Uint32Array(stride*(rh+1));
+  for(let z=0;z<rh;z++){
+    heights.set(t.heights.subarray((oz+z)*w+ox,(oz+z)*w+ex),z*rw);let row=0;
+    for(let x=0;x<rw;x++){row+=1-t.sampled[(oz+z)*w+ox+x];unknown[(z+1)*stride+x+1]=unknown[z*stride+x+1]+row;}
+  }
+  const lattice=terrainLattice({heights,width:rw,height:rh,sea:t.sea,obstacles:t.obstacles.map(r=>({...r,x:r.x-ox,z:r.z-oz})),lava:t.lava,originX:ox,originZ:oz,mapWidth:w,mapHeight:h}),coverage=MOVEMENT_FAMILIES.map(f=>familyCoverage(lattice,f));
+  const missing=(x0,z0,x1,z1)=>unknown[(z1-oz)*stride+x1-ox]-unknown[(z0-oz)*stride+x1-ox]-unknown[(z1-oz)*stride+x0-ox]+unknown[(z0-oz)*stride+x0-ox];
+  // Hover tests a ready center's whole footprint against these neighbor cells.
+  for(let z=oz;z<ez-Number(ez<h);z++)for(let x=ox;x<ex-Number(ex<w);x++){
+    const east=Math.min(w-1,x+1),south=Math.min(h-1,z+1),i=z*w+x,j=(z-oz)*rw+x-ox;
+    if(t.sampled[i]&&t.sampled[z*w+east]&&t.sampled[south*w+x]&&t.sampled[south*w+east])for(const key of ['low','high','blocked'])t[key][i]=lattice[key][j];
+  }
+  for(let z=z0;z<z1;z++)for(let x=x0;x<x1;x++){
+    const i=z*w+x;if(t.have[i])continue;
+    const left=Math.max(0,x-a),right=Math.min(w,x+a+1),top=Math.max(0,z-a),bottom=Math.min(h,z+a+1),north=top<8?0:top,south=z+a-1>=h-8?h:bottom;
+    if(missing(left,north,right,south))continue;
+    const j=(z-oz)*rw+x-ox;coverage.forEach((c,k)=>t.coverage[k][i]=c[j]);t.have[i]=1;t.cells++;
+  }
+  return {x:x0*16,width:(x1-x0)*16};
 }
 export function overviewClass(coverage,i) {
   // These are overlapping access types: the legend names the color's primary

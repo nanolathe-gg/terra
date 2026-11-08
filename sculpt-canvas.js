@@ -1,7 +1,7 @@
 import {createPreviewFields} from './sculpt-preview.js';
 import {selectionGeometry,hitSelection,drawSelection} from './sculpt-selection.js';
 import {TerrainRenderer} from './sculpt-renderer.js';
-import {drawMapBounds,sampleField,cellHeights} from './sculpt-map.js';
+import {drawMapBounds,sampleField,cellHeights,cellHeightTiles} from './sculpt-map.js';
 import {mountMapExport} from './sculpt-export.js';
 import {mountMapFeatures} from './sculpt-features.js';
 import {mountPassability} from './sculpt-passability-view.js';
@@ -254,7 +254,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     try {
       // Presentation never waits for terrain generation. This path only copies
       // retained images while a chunk's fields, GPU work or snapshot are pending.
-      if(drawing){if(paintedView!==viewEpoch)presentView();rerun=true;return;}
+      if(drawing){if(paintedView!==viewEpoch)presentView();else if(passability?.active)overlays();rerun=true;return;}
       presentView();
       drawing=rendering=true;
       const key=JSON.stringify(drawOptions?.()??api.drawOptions?.()??{});if(optionsKey&&optionsKey!==key)clear();optionsKey=key;
@@ -467,6 +467,15 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     await idle();
     return cellHeights(map,async req=>{const r=await(api.readAsync?api.readAsync(req,signal):api.read(req));checkHeap(r);return r;},{signal,step:async()=>{metrics();await tick();}});
   }
+  async function* sampleHeightTiles(signal){
+    let v=state();
+    const priority=t=>{const r={x:t.x*16,y:t.z*16,width:t.width*16,height:t.height*16};return(intersects(r,v)?0:map.width+map.height)+Math.hypot(r.x+r.width/2-v.x-v.width/2,r.y+r.height/2-v.y-v.height/2);};
+    // Regional reads await only their own canonical pages. Do not wait for
+    // canvas.idle(): useful access colors can precede the remaining art bakes.
+    for await(const tile of cellHeightTiles(map,async req=>{const r=await(api.readAsync?api.readAsync(req,signal):api.read(req));checkHeap(r);return r;},{signal,priority})){
+      yield tile;metrics();await tick();v=state();
+    }
+  }
   // paint(context, rect) draws on each chunk of export art before it is encoded: the map's painted deposits and vents.
   async function exportChunks(accept,signal,paint=null){
     await idle();const size=chunkSize(),total=Math.ceil(map.width/size)*Math.ceil(map.height/size);let index=0;
@@ -491,7 +500,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   features=await mountMapFeatures({config,canvas:overlay,exportCorners,bakeArt,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();schedule();},schedule,enabled:()=>api.ready()&&!busy,
     light:()=>renderer.worldSun,lightColors:()=>({sun:renderer.colorOverrides?.sun||null,sky:renderer.colorOverrides?.sky||null,ambient:renderer.variant?.has('ambient')?Number(renderer.variant.get('ambient')):.42}),groundColor:()=>renderer.means?.ground,deselectShapes:()=>{if(api.selection()>=0)api.select?.(-1);}});api.registerFeatures?.(features);
   metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks,bakeArt},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??epoch,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
-  passability=mountPassability({config,sampleHeights,revision:()=>api.revision?.()??epoch,ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!interacting()&&!busy&&!features.busy,mapData:api.mapData,schedule,checkMemory:bytes=>api.checkMemory?.(bytes)});
+  passability=mountPassability({config,sampleHeightTiles,revision:()=>api.revision?.()??epoch,ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!interacting()&&!busy&&!features.busy,mapData:api.mapData,schedule,checkMemory:bytes=>api.checkMemory?.(bytes)});
   // H12: the least the terrain budget must hold besides the fields: the canvases, the bake lattice reserve and one 32 px chunk with the materials.
   // H13: what the paged fields must leave free: the canvas, one canonical chunk's whole working set (every mask layer the world has) and its copy.
   // It was a 32 px chunk's, so the fields took the rest of the budget and the first 512 px bake could not be allocated beside them.
