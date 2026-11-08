@@ -422,7 +422,7 @@ WORLD_KNOBS = {
                    # H19: the lit relief on a wall in Desert's strata reads as black scribbles at 1; .3 to .5 read as rock on repro/walls/desert.json.
                    faceRelief=.4,
                    strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
-                   sand=0, undulation=8, undulationScale=48, undulationCover=1, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0,
+                   sand=0, undulation=8, undulationScale=48, undulationCover=1, undulationArt=0, looseSupply=.3, looseSize=14, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0,
                    # Card E3: tall mountains keep their strata and gain lit ledges (beds the strata's
                    # 6 height units thick, level on the height so they ring each butte), long
                    # joints, and black shadow sides: retail's buttes are dark on the side turned
