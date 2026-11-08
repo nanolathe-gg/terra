@@ -444,7 +444,7 @@ WORLD_KNOBS = {
     # foot with no cracks, so crackSeverity, worms and wrinkles are 0 (they were .35, .4 and
     # .8: the Moon variant 'cracked' restores that look) and the pits are drawn by pockmark.
     'moon': dict(looseSupply=.1, looseSize=3.5, crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4,
-                 worms=0, undulation=4, plainRelief=.6, banding=0, crackDark=.6,
+                 worms=0, undulation=6, plainRelief=.6, banding=0, crackDark=.6,
                  sunTilt=0, faceFill=0, ambient=.25,
                  # H19: at 1 the lit relief on a shaded wall reads as hard plates, at .5 as rock (repro/walls/moon.json).
                  faceRelief=.5,
@@ -461,7 +461,7 @@ WORLD_KNOBS = {
                  moonCups=1, moonCupSize=6.5,
                  # G8: steep faces turned from the sun are near black and stringy (strokes 1-2 px wide, 5-12 px
                  # long, leaning with the glint axis): relief the sun shades, with a little less light overall.
-                 moonRibs=1, moonRibDepth=.9, moonRibDark=.15,
+                 moonRibs=1, moonRibDepth=.9, moonRibDark=.4,
                  # G8: lit slopes carry thin dark folds that follow the form (contours of the sculpted
                  # height, warped); .55 of the amount that read as a contour map.
                  moonFolds=.55,
