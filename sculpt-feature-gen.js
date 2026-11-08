@@ -664,7 +664,7 @@ function shadowSprite(R, ax, ay, colors, r) {
 // hues through the mid and light tones at the ramp's lightness, `grain` the fine dither of a rendered sprite. Retail Green's ramp and
 // mottles are measured from its ten rocks (luma octiles; cream 30% and rose 22% of the light pixels).
 export const ROCK_GREEN = ['#0f0f0f', '#2b2b2b', '#4b4b4b', '#5b5b5b', '#787878', '#949494', '#c3c3c3', '#f4f4f4'];
-const ROCK_DEFAULTS = { form: 'cone', round: 0, parts: 6, plate: 0, plateTone: 0, shadowLen: 0.7, shadowColor: '#000000', cells: '2x2', size: 1, angular: 0.5, shade: 0.6, tall: 0, pieces: 1, pits: 0, grain: 0.6, lump: 0.6, colors: ROCK_GREEN, mottle: [['#c3c39b', 0.3], ['#d7a3b3', 0.26]], metal: null, energy: null, flat: 0 };   // flat: 0 a boulder .. 1 a low slab (Moon's)   // energy: a [lo, hi] range for a rock that is an energy source (Lava's nodes; tracks the footprint's area); shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
+const ROCK_DEFAULTS = { form: 'cone', round: 0, parts: 6, plate: 0, plateTone: 0, plateCell: 9, plateRough: 0.14, plateHatch: 0, plateGamma: 1, plateTilt: 0.5, plateCrack: 1.6, plateColors: null, topTilt: 1.1, shadowLen: 0.7, shadowColor: '#000000', cells: '2x2', size: 1, angular: 0.5, shade: 0.6, tall: 0, pieces: 1, pits: 0, grain: 0.6, lump: 0.6, colors: ROCK_GREEN, mottle: [['#c3c39b', 0.3], ['#d7a3b3', 0.26]], metal: null, energy: null, flat: 0 };   // flat: 0 a boulder .. 1 a low slab (Moon's)   // energy: a [lo, hi] range for a rock that is an energy source (Lava's nodes; tracks the footprint's area); shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
 export const cellsOf = c => { const m = /^(\d+)x(\d+)$/.exec(String(c || '')); return m ? [clamp(+m[1], 1, 16), clamp(+m[2], 1, 16)] : [2, 2]; };
 const smoothstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 function rockSolid(P, r) {
@@ -695,11 +695,11 @@ function rockSolid(P, r) {
     b.amp = lump * Math.min(b.a, b.rz);
     if (form === 'columns') {          // a cluster of tall prisms (flat-topped, lit facets), the tallest at the middle
       b.amp = 0; b.cols = [];
-      const n = Math.round(clamp(P.parts, 2, 14));
+      const n = Math.round(clamp(P.parts, 2, 48));
       for (let i = 0; i < n; i++) {
         const rr = i === 0 ? 0 : (form === 'columns' && round ? 0.45 + 0.4 * r() : Math.sqrt(r()) * 0.85), th = r() * TAU, m = 4 + Math.round(2 * r()), rot0 = r() * TAU;
         const rad = b.a * (0.11 + 0.1 * r()) * clamp(Math.sqrt(18 / n), 1, 1.7) * (1 - 0.3 * rr), hh = b.hgt * (i === 0 ? 1 : (1 - 0.8 * rr * rr) * (0.45 + 0.55 * r()));
-        b.cols.push({ e: b.a * rr * Math.cos(th), s: b.b * rr * Math.sin(th), rad, hh, m, ap: Math.cos(Math.PI / m), tx: (r() - 0.5) * 1.1, ty: (r() - 0.5) * 1.1, dirs: Array.from({ length: m }, (_, k) => [Math.cos(rot0 + k * TAU / m), Math.sin(rot0 + k * TAU / m)]) });
+        b.cols.push({ e: b.a * rr * Math.cos(th), s: b.b * rr * Math.sin(th), rad, hh, m, ap: Math.cos(Math.PI / m), tx: (r() - 0.5) * (P.topTilt ?? 1.1), ty: (r() - 0.5) * (P.topTilt ?? 1.1), dirs: Array.from({ length: m }, (_, k) => [Math.cos(rot0 + k * TAU / m), Math.sin(rot0 + k * TAU / m)]) });
       }
     } else if (form === 'shards') {    // angular pyramids and tilted slabs with flat planar faces, scattered across the footprint
       b.amp = 0; b.shards = [];
@@ -752,17 +752,18 @@ function rockSolid(P, r) {
   // each body's bounding sphere: a far body costs one distance (a safe lower bound for the march), not its whole shape
   for (const b of bodies) { b.bc = b.hgt * 0.5; b.br = Math.hypot(Math.max(b.a, b.b) * 1.35, b.hgt * 0.62) + b.amp * 0.3 + 2; }
   // the plate's cracked cells: the nearest of a jittered grid's points owns the cell, which tilts a little; the border between two cells is a groove
+  const plateTop = 3.6 + 0.4 * P.plateTilt * P.plateCell + 0.4 * P.plateHatch;
   const plateF = (b, E, S, U) => {
-    const qe = E - b.e, qs = S - b.s, th = Math.atan2(qs, qe), rho = Math.hypot(qe / b.ra, qs / b.rb) / (1 + 0.14 * (vnoise(th * 2 + 5, 0.5, b.ps) - 0.5) + 0.07 * (vnoise(th * 6, 1.5, b.ps + 1) - 0.5));
+    const qe = E - b.e, qs = S - b.s, th = Math.atan2(qs, qe), rho = Math.hypot(qe / b.ra, qs / b.rb) / (1 + P.plateRough * (vnoise(th * 2 + 5, 0.5, b.ps) - 0.5) + P.plateRough * 0.5 * (vnoise(th * 6, 1.5, b.ps + 1) - 0.5) + P.plateRough * 0.5 * (vnoise(th * 13, 2.5, b.ps + 2) - 0.5));
     const dOut = (rho - 1) * Math.min(b.ra, b.rb) * 0.8;
-    if (dOut > 3 || U > 5) return Math.max(dOut, U - 5);
-    const C = 9, cx = Math.floor(E / C), cy = Math.floor(S / C);
+    if (dOut > 3 || U > plateTop + 1) return Math.max(dOut, U - plateTop);   // the highest the plate can stand: above it only a bound, never a surface
+    const C = P.plateCell, cx = Math.floor(E / C), cy = Math.floor(S / C);
     let d1 = 1e9, d2 = 1e9, px = 0, py = 0, id = 0;
     for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
       const gx = cx + i, gy = cy + j, jx = (gx + 0.15 + 0.7 * hash2(gx, gy, b.ps + 3)) * C, jy = (gy + 0.15 + 0.7 * hash2(gx, gy, b.ps + 4)) * C, d = Math.hypot(E - jx, S - jy);
       if (d < d1) { d2 = d1; d1 = d; px = jx; py = jy; id = hash2(gx, gy, b.ps + 5); } else if (d < d2) d2 = d;
     }
-    const gr = clamp(1 - (d2 - d1) / 1.6, 0, 1), top = 2.4 + (id - 0.5) * 1.6 + (hash2(Math.round(px), Math.round(py), b.ps + 6) - 0.5) * 0.5 * (E - px) - (id - 0.5) * 0.4 * (S - py) - gr * 1.6 - 1.2 * smoothstep(0.82, 1, rho);
+    const gr = clamp(1 - (d2 - d1) / (P.plateCrack ?? 1.6), 0, 1), top = 2.4 + (id - 0.5) * 1.6 + (hash2(Math.round(px), Math.round(py), b.ps + 6) - 0.5) * P.plateTilt * (E - px) - (id - 0.5) * P.plateTilt * 0.8 * (S - py) - gr * 1.6 - 1.2 * smoothstep(0.82, 1, rho) + P.plateHatch * 0.35 * Math.sin((E * Math.cos(id * 25) + S * Math.sin(id * 25)) * 1.7 + id * 40);
     return Math.max(dOut, U - top, -U);
   };
   const F = (E, S, U) => {
@@ -776,7 +777,7 @@ function rockSolid(P, r) {
   };
   const isPlate = (E, S, U) => { let p = Infinity, o = Infinity; for (const b of bodies) { if (b.ra) p = Math.min(p, plateF(b, E, S, U)); o = Math.min(o, bodyF(b, E, S, U)); } return p <= o + 0.05; };
   const ext = bodies.reduce((o, b) => ({ e0: Math.min(o.e0, b.e - (b.ra || b.a) * 1.25), e1: Math.max(o.e1, b.e + (b.ra || b.a) * 1.25), s0: Math.min(o.s0, b.s - (b.rb || b.b) * 1.25), s1: Math.max(o.s1, b.s + (b.rb || b.b) * 1.25), u: Math.max(o.u, b.hgt * 1.15) }), { e0: 0, e1: 0, s0: 0, s1: 0, u: 0 });
-  return { F, W, D, hgt, ext, bodies, isPlate: plate > 0 ? isPlate : null };
+  return { F, W, D, hgt, ext, bodies, plateTop, isPlate: plate > 0 ? isPlate : null };
 }
 function rockFrame(P, seed, ctx) {
   const L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 9)), sun = worldSun(L);
@@ -790,11 +791,11 @@ function rockFrame(P, seed, ctx) {
     const p = R.px[k]; if (!p) continue;
     const n = p.n, direct = Math.max(0, n[0] * sun[0] + n[1] * sun[1] + n[2] * sun[2]) * p.vis, sky = Math.max(0, n[2]);   // sky light falls on what faces up
     let t = 0.5 * direct + 0.5 * sky - 0.12 * smoothstep(0.5, 0, p.U / Math.max(1, Sd.hgt) * 4);    // a darker foot where the rock meets the ground
-    if (Sd.isPlate && p.U < 6 && Sd.isPlate(p.E, p.S, p.U)) plateAt[k] = 1;                              // the plate, lifted toward the light end of the ramp below
+    if (Sd.isPlate && p.U < Sd.plateTop + 1 && Sd.isPlate(p.E, p.S, p.U)) { plateAt[k] = 1; t = 0.5 * Math.max(0, n[0] * sun[0] + n[1] * sun[1] + n[2] * sun[2]) * (p.vis > 0.5 ? 1 : 0.35) + 0.5 * sky; }                              // the plate, lifted toward the light end of the ramp below
     const dd = ((k % w + 0.5 - mid[0]) * away[0] + (((k / w) | 0) + 0.5 - mid[1]) * away[1]) / span;
-    t -= P.shade * 0.3 * Math.max(0, dd - 0.05);                                       // the far side falls off harder with the shading control
-    if (dist[k] <= 1) t -= 0.05 + 0.1 * smoothstep(-0.2, 0.4, dd);                     // a soft dark rim, darkest on the shade side
-    t += (hash2(k % w, (k / w) | 0, seed) - 0.5) * 0.03;                                  // breaks the ties of flat faces, which would rank in scan lines
+    if (!plateAt[k]) t -= P.shade * 0.3 * Math.max(0, dd - 0.05);                                       // the far side falls off harder with the shading control
+    if (dist[k] <= 1 && !plateAt[k]) t -= 0.05 + 0.1 * smoothstep(-0.2, 0.4, dd);                     // a soft dark rim, darkest on the shade side
+    t += (hash2(k % w, (k / w) | 0, seed) - 0.5) * (plateAt[k] ? 0.004 : 0.03);                                  // breaks the ties of flat faces, which would rank in scan lines
     tone[k] = t; lit[k] = direct; hasPx.push(k);
   }
   // pits: small dark dents with a lit far rim
@@ -811,15 +812,16 @@ function rockFrame(P, seed, ctx) {
   // rank of tone -> ramp position; Shading bends the ramp (0.6 is retail Green's); the shade side never takes a highlight
   const ranked = hasPx.slice().sort((a, b) => tone[a] - tone[b] || a - b), N = ranked.length, gamma = Math.pow(2.4, (P.shade - 0.6) * 2.5);
   const s2 = (r() * 1e6) | 0, mot = (P.mottle || []).map(([hex, share], i) => ({ rgb: rampOf([recolorHex(hex, P.recolor)])[0], share, seed: s2 + 11 * i + 3 })), ramp = recolorStops(P.colors, P.recolor);
+  const plateRamp = P.plateColors ? recolorStops(P.plateColors, P.recolor) : null, plateRank = new Float32Array(w * h), plateList = ranked.filter(k => plateAt[k]); { const ts = plateList.map(k => tone[k]).sort((x, y) => x - y), lo = ts[Math.floor(ts.length * 0.08)] ?? 0, hi = ts[Math.floor(ts.length * 0.97)] ?? 1; plateList.forEach(k => { plateRank[k] = Math.round(Math.pow(clamp((tone[k] - lo) / Math.max(0.05, hi - lo), 0, 1), P.plateGamma) * 6) / 6; }); }   // seven flat tones by light, not by rank: slabs, not speckle
   const c = newCanvas(w, h, 0, 0);
   ranked.forEach((k, i) => {
     const x = k % w, y = (k / w) | 0, dd = ((x + 0.5 - mid[0]) * away[0] + (y + 0.5 - mid[1]) * away[1]) / span;
     let u = Math.pow((i + 0.5) / N, gamma);
     u = Math.min(u, lerp(1, 0.6, smoothstep(0.2, 0.45, dd)));
-    if (plateAt[k]) u = P.plateTone >= 0 ? lerp(u, 0.95, clamp(P.plateTone, 0, 1)) : lerp(u, 0.04, clamp(-P.plateTone, 0, 1));
-    let col = rampAt(ramp, u);
+    if (plateAt[k]) { const up = plateRank[k]; u = P.plateTone >= 0 ? lerp(u, lerp(0.4, 0.98, up), clamp(P.plateTone, 0, 1)) : lerp(u, 0.04, clamp(-P.plateTone, 0, 1)); }
+    let col = plateAt[k] && plateRamp ? rampAt(plateRamp, plateRank[k]) : rampAt(ramp, u);
     // second hues: each claims the areas where its own soft noise is highest, by its share, in the mid and light tones
-    const on = smoothstep(0.22, 0.42, u) * (1 - smoothstep(0.95, 1, u));
+    const on = plateAt[k] && plateRamp ? 0 : smoothstep(0.22, 0.42, u) * (1 - smoothstep(0.95, 1, u));
     if (on > 0) {
       let best = null;
       // retail's are a per-pixel speckle (a noisy texture, rendered), leaning a little toward soft patches
