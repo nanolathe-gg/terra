@@ -51,13 +51,24 @@ export function sampleField(r,x,y) {
   const gx=clamp(x/step-ox,0,w-1),gy=clamp(y/step-oy,0,h-1),ix=Math.floor(gx),iy=Math.floor(gy),jx=Math.min(ix+1,w-1),jy=Math.min(iy+1,h-1),fx=gx-ix,fy=gy-iy;
   return (a[iy*w+ix]*(1-fx)+a[iy*w+jx]*fx)*(1-fy)+(a[jy*w+ix]*(1-fx)+a[jy*w+jx]*fx)*fy;
 }
+// Stream the same export corners a render tile (512 px) at a time. A caller
+// may reprioritize unread tiles as the camera moves.
+export async function* cellHeightTiles(map,read,{signal,priority=()=>0}={}) {
+  const tiles=[];
+  for(let z=0;z<map.heightCells;z+=32)for(let x=0;x<map.widthCells;x+=32)tiles.push({x,z,width:Math.min(32,map.widthCells-x),height:Math.min(32,map.heightCells-z)});
+  while(tiles.length){
+    signal?.throwIfAborted();tiles.sort((a,b)=>priority(a)-priority(b));const {x,z,width,height}=tiles.shift();
+    const r=await read({x:x*16,y:z*16,width:(width-1)*16,height:(height-1)*16});signal?.throwIfAborted();
+    const heights=new Uint8Array(width*height);let clipped=0;
+    for(let yy=0;yy<height;yy++)for(let xx=0;xx<width;xx++){const h=sampleField(r,(x+xx)*16,(z+yy)*16);if(h<0||h>255)clipped++;heights[yy*width+xx]=Math.round(Math.max(0,Math.min(255,h)));}
+    yield {heights,x,z,width,height,clipped};
+  }
+}
 export async function cellHeights(map,read,{signal,step=async () => {}}={}) {
   const heights=new Uint8Array(map.widthCells*map.heightCells);let clipped=0;
-  for(let z=0;z<map.heightCells;z+=32)for(let x=0;x<map.widthCells;x+=32){
-    signal?.throwIfAborted();const nx=Math.min(32,map.widthCells-x),nz=Math.min(32,map.heightCells-z),req={x:x*16,y:z*16,width:(nx-1)*16,height:(nz-1)*16};
-    const r=await read(req);
-    for(let yy=0;yy<nz;yy++)for(let xx=0;xx<nx;xx++){const h=sampleField(r,(x+xx)*16,(z+yy)*16);if(h<0||h>255)clipped++;heights[(z+yy)*map.widthCells+x+xx]=Math.round(Math.max(0,Math.min(255,h)));}
-    await step();
+  for await(const tile of cellHeightTiles(map,read,{signal})){
+    for(let yy=0;yy<tile.height;yy++)heights.set(tile.heights.subarray(yy*tile.width,(yy+1)*tile.width),(tile.z+yy)*map.widthCells+tile.x);
+    clipped+=tile.clipped;await step();
   }
   return {heights,clipped};
 }

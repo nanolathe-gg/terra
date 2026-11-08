@@ -27,13 +27,27 @@ try{
  if(sketch){await ev(`sculptDebug.loadSketch(${readFileSync(sketch,'utf8')})`);await until('!document.getElementById("map-export").disabled','load recipe');}
  await click('#fit');await ev('sculptCanvas.idle()');
  const before=await ev('JSON.stringify(sculptDebug.sketch())'),art=await ev('document.getElementById("terrain").toDataURL()');
- await click('#view-passability');await until('sculptCanvas.passability.stats().ready','analyze');await ev('sculptCanvas.idle()');
+ await click('#view-passability');await until('sculptCanvas.passability.stats().tiles>0&&!sculptCanvas.passability.stats().ready','first height tile');
+ const partial=await ev('sculptCanvas.passability.stats()');assert(partial.tiles<partial.totalTiles);
+ const pendingCell=await ev('(()=>{for(let z=0;z<264;z+=32)for(let x=0;x<258;x+=32)if(!sculptCanvas.passability.at(x,z))return{x,z};})()');assert(pendingCell,'unread cells remain unknown');
+ await ev(`sculptCanvas.passability.inspect(${pendingCell.x*16},${pendingCell.z*16})`);assert.match(await ev('document.getElementById("passability-readout").textContent'),/waiting for heights/);
+ await capture('partial.png');
+ await until('sculptCanvas.passability.stats().ready','analyze');await ev('sculptCanvas.idle()');
  assert.equal(await ev('document.getElementById("view-rendered").getAttribute("aria-pressed")'),'false');
  const settledState=await ev('document.getElementById("passability-state").textContent');await click('#view-passability');
  assert.equal(await ev('document.getElementById("passability-state").textContent'),settledState,'clicking the active view keeps the completed status');
  assert.equal(await ev('JSON.stringify(sculptDebug.sketch())'),before,'a diagnostic view does not change the map recipe');
  assert.ok(await ev('document.getElementById("terrain").toDataURL()')===art,'the diagnostic is an overlay; terrain art is unchanged');
- const report={analysis:await ev('sculptCanvas.passability.stats()')};
+ const report={partial,analysis:await ev('sculptCanvas.passability.stats()')};
+ const streamedOverlay=await ev('document.getElementById("overlay").toDataURL()');
+ await ev('document.getElementById("passability-family").dispatchEvent(new Event("change"))');await ev('sculptCanvas.idle()');
+ assert.equal(await ev('document.getElementById("overlay").toDataURL()'),streamedOverlay,'incremental columns match a complete overlay raster');report.overlayRaster='incremental and full rasters match exactly';
+ report.fullGridComparison=await ev(`(async()=>{
+  const {MOVEMENT_FAMILIES,terrainLattice,familyCoverage,movementObstacles}=await import('./sculpt-passability.js'),sampled=await sculptCanvas.sampleHeights(),config=sculptCanvas.renderer.config,map=config.map,data=sculptRegion.mapData();
+  const t=terrainLattice({heights:sampled.heights,width:map.widthCells,height:map.heightCells,sea:config.seaLevel,obstacles:movementObstacles(config,data),lava:Boolean(data.settings?.lava)}),coverage=MOVEMENT_FAMILIES.map(f=>familyCoverage(t,f));let mismatches=0;
+  for(let z=0;z<t.height;z++)for(let x=0;x<t.width;x++){const i=z*t.width+x,a=sculptCanvas.passability.at(x,z);if(!a||a.low!==t.low[i]||a.high!==t.high[i]||MOVEMENT_FAMILIES.some((f,k)=>a.coverage[f.id]!==coverage[k][i]))mismatches++;}
+  return {cells:sampled.heights.length,mismatches};
+ })()`);assert.equal(report.fullGridComparison.mismatches,0,'streaming matches complete export classification');
  if(sketch){
   report.westGap=await ev('sculptCanvas.passability.at(43,111)');assert.equal(report.westGap.coverage.vehicles,0);assert.equal(report.westGap.coverage.kbots,0);assert(report.westGap.coverage.hover>0);
   report.southeastClimbingCells=await ev('(()=>{let count=0;for(let z=138;z<163;z++)for(let x=146;x<183;x++){const a=sculptCanvas.passability.at(x,z);if(!a.coverage.vehicles&&a.coverage.kbots)count++;}return count;})()');assert(report.southeastClimbingCells>0);
@@ -46,7 +60,9 @@ try{
  }
  // Changes, including map-only feature undo, invalidate and rebuild the access masks.
  const r0=await ev('sculptCanvas.passability.stats().revision');
+ await click('#view-rendered');await click('#view-passability');await until('sculptCanvas.passability.stats().tiles>0&&!sculptCanvas.passability.stats().ready','restart partial stream');
  assert.equal(await ev('sculptCanvas.features.addFeature("rock",40,40)'),true);
+ assert.equal(await ev('sculptCanvas.passability.at(40,40)'),null,'an edited revision cannot expose the old partial stream');
  await until(`sculptCanvas.passability.stats().ready&&sculptCanvas.passability.stats().revision!==${r0}`,'feature update');
  assert.equal((await ev('sculptCanvas.passability.at(40,40)')).coverage.vehicles,0);
  const r1=await ev('sculptCanvas.passability.stats().revision');await click('#undo');

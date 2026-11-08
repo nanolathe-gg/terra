@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MOVEMENT_FAMILIES,terrainLattice,profileMask,familyCoverage,cellBlockReason,movementObstacles} from '../sculpt-passability.js';
+import {MOVEMENT_FAMILIES,terrainLattice,profileMask,familyCoverage,cellBlockReason,movementObstacles,createPassability,updatePassability,inspectMovement} from '../sculpt-passability.js';
+import {mapGeometry,cellHeights,cellHeightTiles} from '../sculpt-map.js';
 const terrain=(width=12,height=12,base=99,extra={})=>terrainLattice({width,height,sea:75,heights:new Uint8Array(width*height).fill(base),edges:false,...extra});
 const p={size:2,slope:15,depth:12,waterSlope:255,minDepth:-10000};
 
@@ -40,4 +41,40 @@ test('only blocking generated features contribute their complete variant footpri
   const config={features:{tree:{count:1,types:[{share:1,params:{cells:'2x2'}}]},rock:{count:1,types:[{share:1,params:{cells:'3x2'}}]}}};
   const features=['tree','rock','shrub','deposit','vent','scar'].map((kind,i)=>({kind,v:0,x:i*3,z:4}));
   assert.deepEqual(movementObstacles(config,{features}),[{x:0,z:4,width:2,height:2},{x:3,z:4,width:3,height:2}]);
+});
+
+const sampleRead=map=>async({x,y,width,height})=>{
+  const w=width/16+1,h=height/16+1;
+  return {gridWidth:w,gridHeight:h,gridOrigin:[x,y],gridSpacing:16,fields:{h:Float32Array.from({length:w*h},(_,i)=>{
+    const xx=x/16+i%w,zz=y/16+Math.floor(i/w);
+    return 74+xx*.23+zz*.15+(xx>=31&&xx<=34?25:0)+(zz>=30&&zz<=33?20:0)+(xx===map.widthCells-1?180:0);
+  })}};
+};
+test('streamed tiles match complete masks across seams, features, water and exported map edges',async()=>{
+  const obstacles=[{x:30,z:31,width:4,height:3},{x:64,z:60,width:2,height:5}];
+  for(const map of [mapGeometry(3,2),{widthCells:70,heightCells:67}])for(const base of [null,0,99,255])for(const lava of [false,true]){
+    const read=async req=>{const r=await sampleRead(map)(req);if(base!==null)r.fields.h.fill(base);return r;},sampled=await cellHeights(map,read);
+    const full=terrainLattice({...sampled,width:map.widthCells,height:map.heightCells,sea:90,obstacles,lava}),expected=MOVEMENT_FAMILIES.map(f=>familyCoverage(full,f));
+    for(const order of [1,-1]){
+      const local=createPassability({width:full.width,height:full.height,sea:full.sea,obstacles,lava});
+      for await(const tile of cellHeightTiles(map,read,{priority:t=>order*(t.x+t.z)})){
+        updatePassability(local,tile);
+        for(let z=0;z<local.height;z++)for(let x=0;x<local.width;x++){
+          const i=z*local.width+x;if(!local.have[i])continue;
+          for(const key of ['low','high','blocked'])assert.equal(local[key][i],full[key][i],`${key} at ${x},${z}`);
+          local.coverage.forEach((a,k)=>assert.equal(a[i],expected[k][i],`${MOVEMENT_FAMILIES[k].id} at ${x},${z}`));
+          if(x%32===0&&z%32===0)for(const f of MOVEMENT_FAMILIES)assert.deepEqual(inspectMovement(local,f,x,z),inspectMovement(full,f,x,z),'ready hover footprints use exact neighbor cells');
+        }
+      }
+      assert.equal(local.cells,map.widthCells*map.heightCells);assert.deepEqual(local.heights,sampled.heights);
+    }
+  }
+});
+test('height tiles yield before the next read, honor cancellation and retain export rounding and clipping',async()=>{
+  const map=mapGeometry(2,1),controller=new AbortController();let reads=0;
+  const read=async req=>{reads++;const r=await sampleRead(map)(req);r.fields.h.fill(99.5);r.fields.h[0]=-2;r.fields.h[r.fields.h.length-1]=260;return r;};
+  const stream=cellHeightTiles(map,read,{signal:controller.signal,priority:t=>-t.x}),first=await stream.next();
+  assert.equal(reads,1);assert.equal(first.value.x,64);assert.equal(first.value.heights[0],0);assert.equal(first.value.heights.at(-1),255);
+  controller.abort();await assert.rejects(stream.next(),{name:'AbortError'});assert.equal(reads,1);
+  const exported=await cellHeights(map,read);assert.equal(exported.clipped,12);assert.equal(exported.heights[0],0);assert.equal(exported.heights.at(-1),255);
 });
