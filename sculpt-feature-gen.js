@@ -236,8 +236,13 @@ function makeShadow(body, o, r) {
   return out;
 }
 
-const TREE_SHADOW_COLORS = [[245, 41], [95, 40], [92, 6], [93, 7], [94, 6]];   // neutral, so any world's ground shows through (retail Green's, less its 6% dark greens)
-const ROCK_SHADOW_COLORS = [[47, 78], [95, 20], [245, 2]];
+// Retail's shadow frames are solid black (Green's a very dark gray, Ice's a dark blue) and the game draws them translucent
+// (shadtrans): `shadowColor` is that color, `shadowLen` scales how far the sun throws them (1 = the tree's own height).
+const shadowColors = (P, ctx) => {
+  const [r, g, b] = [1, 3, 5].map(i => parseInt((P.shadowColor || '#000000').slice(i, i + 2), 16)), pal = ctx.palette || [], best = pal.reduce((m, c, i) => { const d = (c[0] - r) ** 2 + (c[1] - g) ** 2 + (c[2] - b) ** 2; return d < m[0] ? [d, i] : m; }, [1e9, 0]);
+  return [[best[1], 1]];
+};
+const TREE_SHADOW_COLORS = [[0, 1]];
 
 // ---- trees -----------------------------------------------------------------------------------------------------
 const TREE_DEFAULTS = {
@@ -253,7 +258,8 @@ const TREE_DEFAULTS = {
   trunk: ['#120e0b', '#231f13', '#3b3323', '#534333'],
   flecks: null,          // [[color, share], ...]: second hues among the sunlit leaves (Green's yellow-green, its conifers' grey-olive)
   energy: [250, 250],    // gameplay range (retail: 250 for every tree)
-  shadow: 0.72,          // the cover of the shadow's stipple (retail Green's trees 0.74 shadow pixels per body pixel, Archipelago's 0.53)
+  shadowLen: 0.65,       // how far the sun throws the shadow, 1 = the sun's own (retail Green's trees 0.65; shadow area follows)
+  shadowColor: '#000000', // the shadow's color, drawn translucent by the game (retail: black; Ice a dark blue)
 };
 // Retail Green's ramps, measured from Tree1-3 and Tree4-7 (chromatic pixels by luma octile; the gaps are the neutral fifth).
 const LEAF = {
@@ -267,7 +273,7 @@ const LEAF = {
 function treeSolid(P, r) {
   const conifer = P.species === 'conifer', Hs = P.height, W = Hs * P.width, a = W / 2, b = a * 0.92;
   const trunkVis = conifer ? 3 : 2, Hc = Hs - trunkVis - 2, c = Math.sqrt(Math.max(9, (Hc / 2) ** 2 - (CE * b) ** 2)) / SE, Uc = (Hc / 2 + trunkVis) / SE;
-  const U0 = Uc - c, Utop = Uc + c, branches = [], clusters = clamp(P.clusters ?? 0, 0, 1), crown = clamp(P.crown, 0, 1), dens = clamp(P.density, 0, 1), taper = clamp(P.taper, 0, 1), peaks = clamp(P.peaks, 0, 1);
+  const U0 = Uc - c, Utop = Uc + c, branches = [], bends = [], frondSets = [], fronds = clamp(P.fronds ?? 0, 0, 1), clusters = clamp(P.clusters ?? 0, 0, 1), crown = clamp(P.crown, 0, 1), dens = clamp(P.density, 0, 1), taper = clamp(P.taper, 0, 1), peaks = clamp(P.peaks, 0, 1);
   const s1 = (r() * 1e6) | 0, s2 = (r() * 1e6) | 0, s3 = (r() * 1e6) | 0;
   const narrow = U => 1 - taper * 0.62 * smoothstep(Uc - c * 0.5, Utop, U);              // the crown narrows toward the top
   let envelope, crownF;
@@ -288,8 +294,19 @@ function treeSolid(P, r) {
     // clusters (Archipelago's trees): the leaves gather in K clusters at the ends of branches, open between them
     for (let i = 0; i < K; i++) {
       let d; do { const u = 0.15 + 0.85 * r(), ph = r() * TAU, sq = Math.sqrt(1 - u * u); d = [sq * Math.cos(ph), sq * Math.sin(ph), u]; } while (d[1] * SE + d[2] * CE < -0.1);
-      const cen = [a * d[0] * 0.78, b * d[1] * 0.78, Uc + c * d[2] * 0.45 - c * 0.25], m = 6 + Math.round(4 * r());
+      const ext = fronds > 0 ? 1.1 : 0.78, cen = [a * d[0] * ext, b * d[1] * ext, Uc + c * d[2] * 0.45 - c * 0.25], m = 6 + Math.round(4 * r());
       branches.push(cen);
+      bends.push([(r() - 0.5) * a * 0.5, (r() - 0.5) * b * 0.5, (r() - 0.2) * c * 0.3]);
+      if (fronds > 0) {   // a palm's crown: thin blades that arch out from the branch end and droop
+        const nf = 6 + Math.round(3 * r()), Lf = a * (0.3 + 0.22 * r()) * (0.8 + 0.4 * fronds), blades = [];
+        for (let j = 0; j < nf; j++) {
+          const th = (j + r() * 0.8) / nf * TAU, dx = Math.cos(th), dy = Math.sin(th) * 0.9, l = Lf * (0.75 + 0.5 * r()), up = 0.04 + 0.1 * r(), droop = 0.25 + 0.3 * r(), th2 = th + (r() - 0.5) * 0.5;
+          const p0 = [cen[0], cen[1], cen[2]], p1 = [cen[0] + dx * l * 0.55, cen[1] + dy * l * 0.55, cen[2] + l * up], p2 = [p1[0] + Math.cos(th2) * l * 0.45, p1[1] + Math.sin(th2) * 0.9 * l * 0.45, p1[2] - l * droop];
+          blades.push([p0, p1, p2, 2 + 1 * r()]);
+        }
+        frondSets.push({ cen, reach: Lf * 1.5 + 3, blades });
+        continue;
+      }
       for (let j = 0; j < m; j++) lobes.push([cen[0] + (r() - 0.5) * a * 0.42, cen[1] + (r() - 0.5) * b * 0.42, cen[2] + (r() - 0.5) * c * 0.3, a * (0.11 + 0.08 * r()), 1]);
     }
     for (let i = 0; K === 0 && i < nL * 6 && lobes.length < nL; i++) {
@@ -307,30 +324,41 @@ function treeSolid(P, r) {
       const n = narrow(U);
       let f = core ? (Math.hypot(E / (core[0] * n), S / (core[1] * n), (U - Uc) / core[2]) - 1) * Math.min(core[0], core[2]) * 0.9 : 1e9;
       for (const [x, y, z, rad, st] of lobes) { const dz = (U - z) / st; f = smin(f, Math.hypot(E - x, S - y, dz) - rad, 2.2); }
+      if (frondSets.length) {
+        let g = 1e9;
+        for (const fs of frondSets) {
+          const bd = Math.hypot(E - fs.cen[0], S - fs.cen[1], U - fs.cen[2]) - fs.reach; if (bd > 3) { g = Math.min(g, bd); continue; }
+          for (const [p0, p1, p2, rad] of fs.blades) g = Math.min(g, capsule(E, S, U, p0, p1, rad, rad * 0.8), capsule(E, S, U, p1, p2, rad * 0.8, rad * 0.3));
+        }
+        return g + 0.5 * (vnoise3(E / 1.4, S / 1.4, U / 1.5, s2) - 0.5);
+      }
       return f + (0.8 + 0.9 * crown) * (vnoise3(E / 1.4, S / 1.4, U / 1.5, s2) - 0.5) * 2 + 2.4 * crown * (vnoise3(E / 3.6, S / 3.6, U / 4, s2 + 9) - 0.5) * 2 + (1 - dens) * 5 * Math.max(0, vnoise3(E / 1.9, S / 1.9, U / 2.1, s3) - 0.6);
     };
   }
-  const rt = conifer ? 1.6 : 2.4, trunkTop = U0 + c * (conifer ? 0.5 : clusters > 0 ? 0.08 : 0.35), jx = (r() - 0.5) * 1.5;
+  const rt = conifer ? 1.6 : fronds > 0 ? 1.7 : 2.4, trunkTop = U0 + c * (conifer ? 0.5 : clusters > 0 ? 0.08 : 0.35), jx = (r() - 0.5) * 1.5;
   const capsule = (E, S, U, A, B, r0, r1) => { const ab = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], ap = [E - A[0], S - A[1], U - A[2]], t = clamp((ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / (ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2 || 1), 0, 1); return Math.hypot(ap[0] - ab[0] * t, ap[1] - ab[1] * t, ap[2] - ab[2] * t) - lerp(r0, r1, t); };
   const fork = [jx, 0, trunkTop];
   const trunkF = (E, S, U) => {
     const t = clamp(U / trunkTop, 0, 1);
     let f = Math.max(Math.hypot(E - jx * t, S) - rt * (1.15 - 0.4 * t) - (U < 3 ? (3 - U) * 0.45 : 0), -U, U - trunkTop);
-    for (const cen of branches) f = Math.min(f, capsule(E, S, U, fork, cen, rt * 0.62, rt * 0.3));   // the branches out to the leaf clusters
+    branches.forEach((cen, i) => {
+      if (fronds > 0) { const bd = bends[i], mid = [(fork[0] + cen[0]) / 2 + bd[0], (fork[1] + cen[1]) / 2 + bd[1], (fork[2] + cen[2]) / 2 + bd[2]]; f = Math.min(f, capsule(E, S, U, fork, mid, rt * 0.6, rt * 0.42), capsule(E, S, U, mid, cen, rt * 0.42, rt * 0.25)); }
+      else f = Math.min(f, capsule(E, S, U, fork, cen, rt * 0.62, rt * 0.3));
+    });   // the branches out to the leaf clusters
     return f;
   };
   const F = (E, S, U) => Math.max(Math.min(crownF(E, S, U), trunkF(E, S, U)), -U);
-  return { F, crownF, trunkF, envelope, a, b, c, Uc, U0, Utop, W, conifer, ext: { e0: -a * 1.35, e1: a * 1.35, s0: -b * 1.35, s1: b * 1.35, u: Utop + c * 0.4 * peaks + 3 } };
+  return { F, crownF, trunkF, envelope, fronds: frondSets.length > 0, a, b, c, Uc, U0, Utop, W, conifer, ext: { e0: -a * 1.35, e1: a * 1.35, s0: -b * 1.35, s1: b * 1.35, u: Utop + c * 0.4 * peaks + 3 } };
 }
 function treeFrame(P, seed, ctx) {
   const L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 77)), sun = worldSun(L), T = treeSolid(P, r), look = LEAF[T.conifer ? 'conifer' : 'broadleaf'];
-  const R = renderSolid({ F: T.F, eMin: T.ext.e0, eMax: T.ext.e1, sMin: T.ext.s0, sMax: T.ext.s1, uMax: T.ext.u, sun, shadowSun: flatSun(sun) });
+  const R = renderSolid({ F: T.F, eMin: T.ext.e0, eMax: T.ext.e1, sMin: T.ext.s0, sMax: T.ext.s1, uMax: T.ext.u, sun, shadowSun: flatSun(sun, P.shadowLen) });
   const { w, h } = R, info = [];
   for (let k = 0; k < w * h; k++) {
     const p = R.px[k]; if (!p) continue;
     const trunk = T.trunkF(p.E, p.S, p.U) < T.crownF(p.E, p.S, p.U) + 0.3, n = p.n;
     const direct = Math.max(0, n[0] * sun[0] + n[1] * sun[1] + n[2] * sun[2]) * p.vis, sky = Math.max(0, n[2]);
-    const depth = Math.max(0, -T.envelope(p.E, p.S, p.U)), ao = 1 - smoothstep(0.08 * T.a, 0.45 * T.a, depth);
+    const depth = Math.max(0, -T.envelope(p.E, p.S, p.U)), ao = T.fronds ? 1 : 1 - smoothstep(0.08 * T.a, 0.45 * T.a, depth);
     let t = (0.6 * direct + 0.25 * sky + 0.15) * lerp(0.3, 1, ao) * lerp(0.6, 1, smoothstep(T.U0, T.U0 + T.c * 0.7, p.U));
     t += (rn() + rn() - 1) * (T.conifer ? 0.18 : 0.32);                               // leaf by leaf: retail's crowns vary pixel to pixel
     info.push({ k, t, ao, direct, trunk, j: hash2(k % w, (k / w) | 0, seed) });
@@ -396,7 +424,7 @@ function tendrilSolid(P, r) {
 }
 function tendrilFrame(P, seed, ctx, burnt = false) {
   const L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 77)), sun = worldSun(L), T = tendrilSolid(P, r);
-  const R = renderSolid({ F: T.F, eMin: T.ext.e0, eMax: T.ext.e1, sMin: T.ext.s0, sMax: T.ext.s1, uMax: T.ext.u, sun, shadowSun: flatSun(sun) }), view = [0, SE, CE], list = [];
+  const R = renderSolid({ F: T.F, eMin: T.ext.e0, eMax: T.ext.e1, sMin: T.ext.s0, sMax: T.ext.s1, uMax: T.ext.u, sun, shadowSun: flatSun(sun, P.shadowLen) }), view = [0, SE, CE], list = [];
   for (let k = 0; k < R.w * R.h; k++) {
     const p = R.px[k]; if (!p) continue;
     const n = p.n, nl = n[0] * sun[0] + n[1] * sun[1] + n[2] * sun[2], direct = Math.max(0, nl) * p.vis;
@@ -580,7 +608,7 @@ const smin = (a, b, k) => { const h = clamp(0.5 + 0.5 * (b - a) / k, 0, 1); retu
 const worldSun = L => { const [x, y, z] = L.v; return [x, CE * y + SE * z, -SE * y + CE * z]; };
 // The sun that lays shadows on the ground: TA draws heights at half scale, so shadows are shorter than the true sun casts
 // (0.4 of it: retail's tree shadows reach about as far as the tree is tall on screen).
-const flatSun = s => { const m = Math.hypot(s[0] * 0.4, s[1] * 0.4, s[2]) || 1; return [s[0] * 0.4 / m, s[1] * 0.4 / m, s[2] / m]; };
+const flatSun = (s, len = 1) => { const k = 0.4 * len, m = Math.hypot(s[0] * k, s[1] * k, s[2]) || 1; return [s[0] * k / m, s[1] * k / m, s[2] / m]; };
 // S: {F, eMin, eMax, sMin, sMax, uMax, sun [E,S,U]}. Returns the picture's pixels with their surface point, normal and sun visibility,
 // and the shadow on the ground as a soft mask; both in sprite coordinates with the world origin at (ox, oy).
 function renderSolid(S) {
@@ -608,18 +636,22 @@ function renderSolid(S) {
   sun = S.shadowSun || S.sun;
   const reach = sun[2] > 0.05 ? S.uMax / sun[2] : 0, sE0 = Math.min(S.eMin, S.eMin - sun[0] * reach), sE1 = Math.max(S.eMax, S.eMax - sun[0] * reach), sS0 = Math.min(S.sMin, S.sMin - sun[1] * reach), sS1 = Math.max(S.sMax, S.sMax - sun[1] * reach);
   const sox = Math.ceil(-sE0) + pad, soy = Math.ceil(-CE * sS0) + pad, sw = Math.ceil(sE1 - sE0) + pad * 2 + 1, sh = Math.ceil(CE * (sS1 - sS0)) + pad * 2 + 1, shadow = new Float32Array(sw * sh);
-  // on a 2 px grid (the shadow is a stipple), each cell's cover shared by its four pixels
-  if (sun[2] > 0.05) for (let py = 0; py < sh; py += 2) for (let px = 0; px < sw; px += 2) {
-    const E = px + 1 - sox, Sn = (py + 1 - soy) / CE, c = 1 - sunVis(E, Sn, 0.3, 12);
-    for (let dy = 0; dy < 2 && py + dy < sh; dy++) for (let dx = 0; dx < 2 && px + dx < sw; dx++) shadow[(py + dy) * sw + px + dx] = c;
+  // one cell per pixel: retail's shadows are solid silhouettes with crisp edges (drawn translucent by the game)
+  if (sun[2] > 0.05) for (let py = 0; py < sh; py++) for (let px = 0; px < sw; px++) {
+    const E = px + 0.5 - sox, Sn = (py + 0.5 - soy) / CE;
+    shadow[py * sw + px] = 1 - sunVis(E, Sn, 0.3, 12);
   }
   return { w, h, ox, oy, px: out, shadow: { w: sw, h: sh, ox: sox, oy: soy, cover: shadow } };
 }
-// The ground shadow as a sprite: solid where the sun is blocked, stippled in the penumbra; the body's anchor (ax, ay) in the
-// shadow's own pixels so both place alike.
-function shadowSprite(R, ax, ay, colors, r, most = 1) {   // most: the stipple's cover at the shadow's core (retail's tree shadows are an open dither)
+// The ground shadow as a sprite: a solid silhouette where the sun is blocked, its edge a one-pixel dither (retail's shadow frames
+// are solid black, soft only by the game's translucency); the body's anchor (ax, ay) in the shadow's own pixels so both place alike.
+const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+function shadowSprite(R, ax, ay, colors, r) {
   const s = R.shadow, sp = newSprite(s.w, s.h, ax - R.ox + s.ox, ay - R.oy + s.oy);
-  for (let k = 0; k < s.w * s.h; k++) { const c = s.cover[k]; if (r() < clamp((c - 0.25) / 0.35, 0, 1) * most) { sp.a[k] = 1; sp.idx[k] = weighted(r, colors); } }
+  for (let k = 0; k < s.w * s.h; k++) {
+    const c = s.cover[k], t = (BAYER4[(k % s.w & 3) + 4 * (((k / s.w) | 0) & 3)] + 0.5) / 16;
+    if (c >= 0.5 || (c > 0.12 && (c - 0.12) / 0.38 > t)) { sp.a[k] = 1; sp.idx[k] = weighted(r, colors); }
+  }
   return cropSprite(sp);
 }
 
@@ -632,11 +664,11 @@ function shadowSprite(R, ax, ay, colors, r, most = 1) {   // most: the stipple's
 // hues through the mid and light tones at the ramp's lightness, `grain` the fine dither of a rendered sprite. Retail Green's ramp and
 // mottles are measured from its ten rocks (luma octiles; cream 30% and rose 22% of the light pixels).
 export const ROCK_GREEN = ['#0f0f0f', '#2b2b2b', '#4b4b4b', '#5b5b5b', '#787878', '#949494', '#c3c3c3', '#f4f4f4'];
-const ROCK_DEFAULTS = { shadow: 0.66, cells: '2x2', size: 1, angular: 0.5, shade: 0.6, tall: 0, pieces: 1, pits: 0, grain: 0.6, lump: 0.6, colors: ROCK_GREEN, mottle: [['#c3c39b', 0.3], ['#d7a3b3', 0.26]], metal: null, energy: null, flat: 0 };   // flat: 0 a boulder .. 1 a low slab (Moon's)   // energy: a [lo, hi] range for a rock that is an energy source (Lava's nodes; tracks the footprint's area); shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
+const ROCK_DEFAULTS = { form: 'cone', round: 0, parts: 6, plate: 0, plateTone: 0, shadowLen: 0.7, shadowColor: '#000000', cells: '2x2', size: 1, angular: 0.5, shade: 0.6, tall: 0, pieces: 1, pits: 0, grain: 0.6, lump: 0.6, colors: ROCK_GREEN, mottle: [['#c3c39b', 0.3], ['#d7a3b3', 0.26]], metal: null, energy: null, flat: 0 };   // flat: 0 a boulder .. 1 a low slab (Moon's)   // energy: a [lo, hi] range for a rock that is an energy source (Lava's nodes; tracks the footprint's area); shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
 export const cellsOf = c => { const m = /^(\d+)x(\d+)$/.exec(String(c || '')); return m ? [clamp(+m[1], 1, 16), clamp(+m[2], 1, 16)] : [2, 2]; };
 const smoothstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 function rockSolid(P, r) {
-  const [fw, fh] = cellsOf(P.cells), tall = clamp(P.tall, 0, 1), lump = clamp(P.lump, 0, 1), ang = clamp(P.angular, 0, 1);
+  const [fw, fh] = cellsOf(P.cells), form = P.form || 'cone', round = P.round > 0, plate = clamp(P.plate || 0, 0, 1), tall = clamp(P.tall, 0, 1), lump = clamp(P.lump, 0, 1), ang = clamp(P.angular, 0, 1);
   // the footprint's width and depth, and the height (screen rise is about half of it)
   let W, D;
   if (fw === 1 && fh === 1) { W = lerp(8, 21, clamp(P.size, 0, 1.4) / 1.4); D = W * (0.72 + 0.15 * r()); }
@@ -661,11 +693,52 @@ function rockSolid(P, r) {
     }
     b.k = lerp(1.2, 0.25, ang);
     b.amp = lump * Math.min(b.a, b.rz);
+    if (form === 'columns') {          // a cluster of tall prisms (flat-topped, lit facets), the tallest at the middle
+      b.amp = 0; b.cols = [];
+      const n = Math.round(clamp(P.parts, 2, 14));
+      for (let i = 0; i < n; i++) {
+        const rr = i === 0 ? 0 : (form === 'columns' && round ? 0.45 + 0.4 * r() : Math.sqrt(r()) * 0.85), th = r() * TAU, m = 4 + Math.round(2 * r()), rot0 = r() * TAU;
+        const rad = b.a * (0.11 + 0.1 * r()) * clamp(Math.sqrt(18 / n), 1, 1.7) * (1 - 0.3 * rr), hh = b.hgt * (i === 0 ? 1 : (1 - 0.8 * rr * rr) * (0.45 + 0.55 * r()));
+        b.cols.push({ e: b.a * rr * Math.cos(th), s: b.b * rr * Math.sin(th), rad, hh, m, ap: Math.cos(Math.PI / m), tx: (r() - 0.5) * 1.1, ty: (r() - 0.5) * 1.1, dirs: Array.from({ length: m }, (_, k) => [Math.cos(rot0 + k * TAU / m), Math.sin(rot0 + k * TAU / m)]) });
+      }
+    } else if (form === 'shards') {    // angular pyramids and tilted slabs with flat planar faces, scattered across the footprint
+      b.amp = 0; b.shards = [];
+      const n = Math.round(clamp(P.parts, 2, 14));
+      for (let i = 0; i < n; i++) {
+        const big = i === 0 ? 1 : Math.pow(r(), 1.6) * 0.75 + 0.12, rr = i === 0 ? 0 : 0.2 + 0.8 * Math.sqrt(r()), th = r() * TAU, slab = i > 0 && r() < 0.35;
+        const w = b.a * (0.1 + 0.3 * big) * (slab ? 0.9 : 0.8), hh = b.hgt * (0.45 + 0.6 * big) * (slab ? 0.6 : 1), rot = r() * TAU, tilt = (r() - 0.5) * (slab ? 1.4 : 0.9);
+        b.shards.push({ e: b.a * rr * Math.cos(th), s: b.b * rr * Math.sin(th), z: slab ? w * 0.5 + hh * 0.2 : hh * 0.12, w, hh, slab, co: Math.cos(rot), si: Math.sin(rot), ct: Math.cos(tilt), st: Math.sin(tilt), asp: 0.45 + 0.4 * r() });
+      }
+    }
+    if (plate > 0) {                   // a flat plate of cracked cells at the foot, each cell tilted a little to catch the light
+      b.ra = b.a * (1.1 + 0.55 * plate); b.rb = b.b * (1.1 + 0.55 * plate); b.ps = (r() * 1e6) | 0;
+    }
   }
   const bodyF = (b, E, S, U) => {
     const de = E - b.e, ds = S - b.s, qe = de * b.co - ds * b.si, qs = de * b.si + ds * b.co, qu = U;
     const p = b.p, hz = Math.pow(Math.pow(Math.abs(qe / b.a), p) + Math.pow(Math.abs(qs / b.b), p), 1 / p), vz = Math.abs((qu - b.zc) / b.rz);
     let f = (Math.pow(Math.pow(hz, p) + Math.pow(vz, p), 1 / p) - 1) * Math.min(b.a, b.b, b.rz) * 0.85;
+    if (b.cols) {
+      f = Infinity;
+      for (const c of b.cols) {
+        const dx = qe - c.e, dy = qs - c.s, ap = c.rad * (1 - 0.12 * clamp(qu / c.hh, 0, 1)) * c.ap;
+        if (round) { const rho = Math.hypot(dx, dy), q = Math.max(0, qu - (c.hh - c.rad)); f = Math.min(f, Math.max(Math.hypot(Math.max(0, rho - c.rad * 0.0), q) - c.rad * (1 - 0.1 * clamp(qu / c.hh, 0, 1)) * 1, -qu)); continue; }
+        let d = -Infinity; for (const [cx, cy] of c.dirs) { const v = dx * cx + dy * cy - ap; if (v > d) d = v; }
+        f = Math.min(f, Math.max(d, qu - c.hh + c.tx * dx + c.ty * dy, -qu));
+      }
+      return f;
+    }
+    if (b.shards) {
+      f = Infinity;
+      for (const sh of b.shards) {
+        const px = qe - sh.e, py = qs - sh.s, pz = qu - sh.z, x1 = px * sh.co + py * sh.si, y1 = -px * sh.si + py * sh.co, lx = x1 * sh.ct - pz * sh.st, lz = x1 * sh.st + pz * sh.ct, ly = y1;
+        let d;
+        if (sh.slab) d = Math.max(Math.abs(lx) - sh.w, Math.abs(ly) - sh.w * sh.asp, Math.abs(lz) - sh.w * 0.16);
+        else { const wy = sh.w * (0.7 + 0.3 * sh.asp), n1 = Math.hypot(sh.hh, sh.w), n2 = Math.hypot(sh.hh, wy); d = Math.max((Math.abs(lx) * sh.hh + lz * sh.w - sh.w * sh.hh) / n1, (Math.abs(ly) * sh.hh + lz * wy - wy * sh.hh) / n2, -lz); }
+        f = Math.min(f, d);
+      }
+      return f;
+    }
     if (b.planes.length) f = Math.max(f, softMax(b.planes.map(q => q[0] * qe + q[1] * qs + q[2] * qu - q[3]), b.k));
     if (tall > 0) {     // a spire: a cone with vertical ridges, standing on a low mound
       const rho = Math.hypot(qe, qs * b.a / b.b), tU = clamp(qu / b.hgt, 0, 1), R = b.a * Math.pow(1 - tU, 0.9) * (0.62 + 0.38 * (1 - tU)), th = Math.atan2(qs, qe);
@@ -678,18 +751,37 @@ function rockSolid(P, r) {
   };
   // each body's bounding sphere: a far body costs one distance (a safe lower bound for the march), not its whole shape
   for (const b of bodies) { b.bc = b.hgt * 0.5; b.br = Math.hypot(Math.max(b.a, b.b) * 1.35, b.hgt * 0.62) + b.amp * 0.3 + 2; }
+  // the plate's cracked cells: the nearest of a jittered grid's points owns the cell, which tilts a little; the border between two cells is a groove
+  const plateF = (b, E, S, U) => {
+    const qe = E - b.e, qs = S - b.s, th = Math.atan2(qs, qe), rho = Math.hypot(qe / b.ra, qs / b.rb) / (1 + 0.14 * (vnoise(th * 2 + 5, 0.5, b.ps) - 0.5) + 0.07 * (vnoise(th * 6, 1.5, b.ps + 1) - 0.5));
+    const dOut = (rho - 1) * Math.min(b.ra, b.rb) * 0.8;
+    if (dOut > 3 || U > 5) return Math.max(dOut, U - 5);
+    const C = 9, cx = Math.floor(E / C), cy = Math.floor(S / C);
+    let d1 = 1e9, d2 = 1e9, px = 0, py = 0, id = 0;
+    for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+      const gx = cx + i, gy = cy + j, jx = (gx + 0.15 + 0.7 * hash2(gx, gy, b.ps + 3)) * C, jy = (gy + 0.15 + 0.7 * hash2(gx, gy, b.ps + 4)) * C, d = Math.hypot(E - jx, S - jy);
+      if (d < d1) { d2 = d1; d1 = d; px = jx; py = jy; id = hash2(gx, gy, b.ps + 5); } else if (d < d2) d2 = d;
+    }
+    const gr = clamp(1 - (d2 - d1) / 1.6, 0, 1), top = 2.4 + (id - 0.5) * 1.6 + (hash2(Math.round(px), Math.round(py), b.ps + 6) - 0.5) * 0.5 * (E - px) - (id - 0.5) * 0.4 * (S - py) - gr * 1.6 - 1.2 * smoothstep(0.82, 1, rho);
+    return Math.max(dOut, U - top, -U);
+  };
   const F = (E, S, U) => {
     let f = Infinity;
-    for (const b of bodies) { const bound = Math.hypot(E - b.e, S - b.s, U - b.bc) - b.br; if (bound >= f) continue; f = bound > 4 ? Math.min(f, bound) : Math.min(f, bodyF(b, E, S, U)); }
+    for (const b of bodies) {
+      const bound = Math.hypot(E - b.e, S - b.s, U - b.bc) - b.br; if (bound >= f && !b.ra) continue;
+      if (b.ra) { const pb = Math.hypot(E - b.e, S - b.s, U - 1) - Math.max(b.ra, b.rb) * 1.2; f = Math.min(f, pb > 4 ? pb : plateF(b, E, S, U)); if (bound >= f) continue; }
+      f = bound > 4 ? Math.min(f, bound) : Math.min(f, bodyF(b, E, S, U));
+    }
     return Math.max(f, -U);
   };
-  const ext = bodies.reduce((o, b) => ({ e0: Math.min(o.e0, b.e - b.a * 1.25), e1: Math.max(o.e1, b.e + b.a * 1.25), s0: Math.min(o.s0, b.s - b.b * 1.25), s1: Math.max(o.s1, b.s + b.b * 1.25), u: Math.max(o.u, b.hgt * 1.15) }), { e0: 0, e1: 0, s0: 0, s1: 0, u: 0 });
-  return { F, W, D, hgt, ext, bodies };
+  const isPlate = (E, S, U) => { let p = Infinity, o = Infinity; for (const b of bodies) { if (b.ra) p = Math.min(p, plateF(b, E, S, U)); o = Math.min(o, bodyF(b, E, S, U)); } return p <= o + 0.05; };
+  const ext = bodies.reduce((o, b) => ({ e0: Math.min(o.e0, b.e - (b.ra || b.a) * 1.25), e1: Math.max(o.e1, b.e + (b.ra || b.a) * 1.25), s0: Math.min(o.s0, b.s - (b.rb || b.b) * 1.25), s1: Math.max(o.s1, b.s + (b.rb || b.b) * 1.25), u: Math.max(o.u, b.hgt * 1.15) }), { e0: 0, e1: 0, s0: 0, s1: 0, u: 0 });
+  return { F, W, D, hgt, ext, bodies, isPlate: plate > 0 ? isPlate : null };
 }
 function rockFrame(P, seed, ctx) {
   const L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 9)), sun = worldSun(L);
-  const Sd = rockSolid(P, r), R = renderSolid({ F: Sd.F, eMin: Sd.ext.e0, eMax: Sd.ext.e1, sMin: Sd.ext.s0, sMax: Sd.ext.s1, uMax: Sd.ext.u, sun, shadowSun: flatSun(sun) });
-  const { w, h } = R, tone = new Float32Array(w * h), lit = new Float32Array(w * h), hasPx = [], mask = new Uint8Array(w * h);
+  const Sd = rockSolid(P, r), R = renderSolid({ F: Sd.F, eMin: Sd.ext.e0, eMax: Sd.ext.e1, sMin: Sd.ext.s0, sMax: Sd.ext.s1, uMax: Sd.ext.u, sun, shadowSun: flatSun(sun, P.shadowLen) });
+  const { w, h } = R, plateAt = new Uint8Array(w * h), tone = new Float32Array(w * h), lit = new Float32Array(w * h), hasPx = [], mask = new Uint8Array(w * h);
   for (let k = 0; k < w * h; k++) if (R.px[k]) mask[k] = 1;
   const dist = edgeDist(w, h, mask);
   // the shade side, as a direction across the picture (for the Shading control and the no-highlight rule)
@@ -698,9 +790,11 @@ function rockFrame(P, seed, ctx) {
     const p = R.px[k]; if (!p) continue;
     const n = p.n, direct = Math.max(0, n[0] * sun[0] + n[1] * sun[1] + n[2] * sun[2]) * p.vis, sky = Math.max(0, n[2]);   // sky light falls on what faces up
     let t = 0.5 * direct + 0.5 * sky - 0.12 * smoothstep(0.5, 0, p.U / Math.max(1, Sd.hgt) * 4);    // a darker foot where the rock meets the ground
+    if (Sd.isPlate && p.U < 6 && Sd.isPlate(p.E, p.S, p.U)) plateAt[k] = 1;                              // the plate, lifted toward the light end of the ramp below
     const dd = ((k % w + 0.5 - mid[0]) * away[0] + (((k / w) | 0) + 0.5 - mid[1]) * away[1]) / span;
     t -= P.shade * 0.3 * Math.max(0, dd - 0.05);                                       // the far side falls off harder with the shading control
     if (dist[k] <= 1) t -= 0.05 + 0.1 * smoothstep(-0.2, 0.4, dd);                     // a soft dark rim, darkest on the shade side
+    t += (hash2(k % w, (k / w) | 0, seed) - 0.5) * 0.03;                                  // breaks the ties of flat faces, which would rank in scan lines
     tone[k] = t; lit[k] = direct; hasPx.push(k);
   }
   // pits: small dark dents with a lit far rim
@@ -722,6 +816,7 @@ function rockFrame(P, seed, ctx) {
     const x = k % w, y = (k / w) | 0, dd = ((x + 0.5 - mid[0]) * away[0] + (y + 0.5 - mid[1]) * away[1]) / span;
     let u = Math.pow((i + 0.5) / N, gamma);
     u = Math.min(u, lerp(1, 0.6, smoothstep(0.2, 0.45, dd)));
+    if (plateAt[k]) u = P.plateTone >= 0 ? lerp(u, 0.95, clamp(P.plateTone, 0, 1)) : lerp(u, 0.04, clamp(-P.plateTone, 0, 1));
     let col = rampAt(ramp, u);
     // second hues: each claims the areas where its own soft noise is highest, by its share, in the mid and light tones
     const on = smoothstep(0.22, 0.42, u) * (1 - smoothstep(0.95, 1, u));
@@ -823,11 +918,11 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     const conifer = P.species === 'conifer', tendril = P.species === 'tendril';
     const T = tendril ? tendrilFrame(P, seed, ctx) : treeFrame(P, seed, ctx);
     body = cropSprite(T.body);
-    shadow = tintSprite(shadowSprite(T.R, T.body.ax, T.body.ay, TREE_SHADOW_COLORS, rng(mix32(seed, 41)), clamp(P.shadow, 0, 1)), ctx, 0);   // the solid's own shadow, from the map's sun
+    shadow = tintSprite(makeShadow(body, { side: L.shadowSide, shx: 0.55 * P.shadowLen, up: 0.6 * P.shadowLen, colors: shadowColors(P, ctx), soften: 0, grow: 0.15 }, rng(mix32(seed, 41))), ctx, 0);   // the crown's silhouette thrown along the ground: leaf gaps and branches show in it, as in retail's frames   // the solid's own shadow, from the map's sun
     footprint = cellsOf(P.cells || '1x1');
     const bp = { species: P.species, height: Math.round(P.height * (conifer ? 0.88 : 0.78)), width: conifer ? 0.5 : 0.62, forks: 3, ash: 0.5 };
     if (!ctx.bodyOnly) {   // the view draws only body and shadow
-      if (tendril) { const B = tendrilFrame(P, seed, ctx, true); burnt = { body: cropSprite(B.body), shadow: tintSprite(shadowSprite(B.R, B.body.ax, B.body.ay, TREE_SHADOW_COLORS, rng(mix32(seed, 42)), 0.72), ctx, 0), gameplay: { energy: 25, metal: 0, blocking: true, reclaimable: true, flamable: false } }; }
+      if (tendril) { const B = tendrilFrame(P, seed, ctx, true); burnt = { body: cropSprite(B.body), shadow: tintSprite(shadowSprite(B.R, B.body.ax, B.body.ay, shadowColors(P, ctx), rng(mix32(seed, 42))), ctx, 0), gameplay: { energy: 25, metal: 0, blocking: true, reclaimable: true, flamable: false } }; }
       else burnt = generateFeature('burnt', bp, mix32(seed, 6), ctx);
       burn = treeBurn(body, burnt.body, seed, conifer);
     }
@@ -836,7 +931,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
   } else if (kind === 'burnt') {
     const B = burntFrame(P, seed, ctx);
     body = tintSprite(B.body, ctx, ctx.tint?.up ?? 0.7);
-    shadow = tintSprite(makeShadow(body, { side: L.shadowSide, shx: 0.55, up: 0.6, colors: TREE_SHADOW_COLORS, soften: 0, grow: 0.15 }, rng(mix32(seed, 42))), ctx, 0);
+    shadow = tintSprite(makeShadow(body, { side: L.shadowSide, shx: 0.55, up: 0.6, colors: shadowColors(P, ctx), soften: 0, grow: 0.15 }, rng(mix32(seed, 42))), ctx, 0);
     gameplay = { energy: pickValue(P.energy, undefined, rr), metal: 0, blocking: true, reclaimable: true, flamable: false };
   } else if (kind === 'shrub') {
     body = tintSprite(shrubFrame(P, seed, ctx).body, ctx, ctx.tint?.up ?? 0.7);
@@ -847,7 +942,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     body = cropSprite(R.body);
     const [fw, fh] = cellsOf(P.cells);
     footprint = [fw, fh];
-    shadow = tintSprite(shadowSprite(R.R, R.body.ax, R.body.ay, ROCK_SHADOW_COLORS, rng(mix32(seed, 43)), clamp(P.shadow, 0, 1)), ctx, 0);   // the solid's own shadow on level ground, from the map's sun
+    shadow = tintSprite(shadowSprite(R.R, R.body.ax, R.body.ay, shadowColors(P, ctx), rng(mix32(seed, 43))), ctx, 0);   // the solid's own shadow on level ground, from the map's sun
     const cellsN = fw * fh, metalDefault = Math.round((7.6 * cellsN + 22.5) / 25) * 25;
     gameplay = { energy: P.energy ? pickValue(P.energy, clamp(cellsN / 36, 0, 1), rr) : 0, metal: P.metal ?? Math.max(25, Math.min(100, metalDefault)), metalLinear: Math.round(7.6 * cellsN + 22.5), hp: 2000, blocking: true, reclaimable: true };
   } else if (kind === 'scar') {
