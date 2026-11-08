@@ -503,7 +503,8 @@ WORLD_KNOBS = {
     # Bank lines measured on the section-built retail maps (measure/lava_*):
     # ground-spaced dark lines from slope 0.15 up; ground-coloured faces;
     # rim, outline and lip at the coast. Worms gave way to the lines.
-    'lava': dict(undulation=5, undulationCover=1, undulationScale=40, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
+    # Retail round 2: the plain's game heights undulate 12 high over 96 px (shape), but its art does not (retail's plain is an even mottle).
+    'lava': dict(undulation=12, undulationCover=1, undulationScale=96, undulationArt=0, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
                  beachWidth=0, waterSoft=0, bankRock=0, banding=0,
                  worms=0, shoreEdge=1, slopeTexture=0,
                  # Card E4: retail's bank is 6-9 flat layers stepping down to the lava, 12-16 px a
