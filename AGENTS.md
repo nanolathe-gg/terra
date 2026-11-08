@@ -114,7 +114,7 @@ all, for a release.
 | --- | --- | --- | --- |
 | quick | `repro/check.sh quick [--worlds green,lava]` | unit tests, world names, regional replay, every scene against the base | 30 s (70 s once after main moves) |
 | land | `repro/check.sh land --server <yours> --port <cdp> [--worlds ...]` | quick, then smoke with `--page8`, features, the passability view and the shape repeat check | 2.5 min |
-| full | `repro/check.sh full --server <yours> --port <cdp> [--worlds ...]` | land, then the curve editor, export bytes, the three control sweeps and the realism report | 18 min |
+| full | `repro/check.sh full --server <yours> --port <cdp> [--worlds ...]` | land, then the curve editor, the workspace and ground-cover checks, export bytes, the three control sweeps and the realism report | 19 min |
 
 A tier passes when every check in it exits 0. Scenes: untouched scenes
 match the base byte for byte, and changed ones are judged on the retail
