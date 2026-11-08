@@ -204,6 +204,8 @@ struct Uniforms {
     faceGrit: f32,        // fine grit, height units
     faceGrass: f32,       // how strongly grass takes the ledges, 0..1
     faceWear: f32,        // weathering: how far the blocks' edges round off and their partings open (0..1)
+    faceLayers: f32,      // the layers' steps under grass (soil-covered terraces), 0: none
+    faceTerrace: f32,     // the soil's fine terraces, height units apart
     faceShade: f32,       // how dark the rock face's own shadows and creases go (0: the sky still fills them; 1: black)
     faceRock: f32,        // rock's share of a steep face (the rest grass, in clumps and on ledges); a stroke's Local vegetation scales it
     faceCrease: f32,      // crease depth (fine creases along the contours, the face's grain), height units
@@ -482,8 +484,9 @@ fn poolScale(m: f32) -> f32 { let k = u.pool / 512.0; return max(1.0, round(m * 
 // ground's height there without relief (h: the beds follow it, so they lie along the contours) and the broad gradient's direction (fall).
 // steep (0..1) is how cliff-like the face is: a cliff weathers into flutes, a gentler face keeps its ledges.
 // It returns relief (height units, lit by the draw through the projection, appearance only), ledge (0..1: a bed's top, where grass holds),
-// cavity (0..1: crease, joint and under-ledge floors, which lie in shade) and tone (-1..1, a chunk's own shade).
-struct RockFace { relief: f32, ledge: f32, cavity: f32, tone: f32 }
+// cavity (0..1: crease, joint and under-ledge floors, which lie in shade), tone (-1..1, a chunk's own shade) and layer (the layers' steps
+// and the face's broad bulges alone, rounded as soil softens them: the terraces under grass).
+struct RockFace { relief: f32, ledge: f32, cavity: f32, tone: f32, layer: f32 }
 // Where the face lies: from slope rockFaceFrom, full 0.4 steeper, and wherever rock is painted; a smooth route keeps none.
 fn rockFaceGate(slope: f32, paintRock: f32, route: f32) -> f32 {
     return max(smoothstep(u.rockFaceFrom, u.rockFaceFrom + 0.4, slope), smoothstep(0.1, 0.6, paintRock)) * (1.0 - route);
@@ -512,9 +515,13 @@ fn faceWaves(q: vec2f, dir: vec2f, n: f32) -> f32 {
 // One bed's block at rx (screen px across the joints): its body (how far it stands out of the face, height units: the bed's hardness,
 // which drifts along the bed over faceRun px, and the block's own offset), the body of the block across the nearer joint, px to that
 // joint and the place across the block (0..1). Each bed has its own joint spacing and offset, so joints stagger from bed to bed.
+// One bed's own body: how far its hardness stands it out of the face (height units), drifting along it over faceRun px.
+fn rockBedBody(k: f32, s: vec2f, steep: f32) -> f32 {
+    let hard = clamp(cellHash(vec2f(k, 17.0)).x + 0.35 * poolNoise(s, max(u.faceRun, 8.0), k * 7.31 + 5.0), 0.0, 1.0);
+    return u.faceLedge * max(u.faceBed, 0.5) * 0.35 * (hard - 0.5) * (1.0 - 0.6 * steep);
+}
 fn rockBlockAt(k: f32, rx: f32, s: vec2f, steep: f32) -> vec4f {
     let bh = cellHash(vec2f(k, 17.0));
-    let hard = clamp(bh.x + 0.35 * poolNoise(s, max(u.faceRun, 8.0), k * 7.31 + 5.0), 0.0, 1.0);
     let js = max(u.faceBlockSize, 4.0) * mix(0.6, 1.4, bh.y);
     // Joints wander a few px and break: rx is bent by noise, so a joint is never a ruled line.
     let jx = (rx + bh.y * 977.0 + poolNoise(s, 9.0, k * 3.1 + 7.0) * 2.5 + poolNoise(s, 3.5, k * 5.7 + 9.0) * 0.8) / js;
@@ -527,7 +534,7 @@ fn rockBlockAt(k: f32, rx: f32, s: vec2f, steep: f32) -> vec4f {
     else if (ju > jr) { bid = jc + 1.0; lo = jr; hi = (cellHash(vec2f(jc + 2.0, k + 41.0)).x - 0.5) * 0.4 + 2.0; }
     let toLo = (ju - lo) * js; let toHi = (hi - ju) * js;
     let other = select(bid + 1.0, bid - 1.0, toLo < toHi);              // the block across the nearer joint
-    let bedBody = u.faceLedge * max(u.faceBed, 0.5) * 0.35 * (hard - 0.5) * (1.0 - 0.6 * steep);
+    let bedBody = rockBedBody(k, s, steep);
     let body = bedBody + u.faceBlock * (cellHash(vec2f(bid, k + 67.0)).x - 0.5) * 1.4;
     var otherBody = bedBody + u.faceBlock * (cellHash(vec2f(other, k + 67.0)).x - 0.5) * 1.4;
     // About half the joints never opened: the two blocks are one there (no step, no crevice: the distance reads far).
@@ -572,7 +579,18 @@ fn rockFaceAt(s: vec2f, h: f32, fall: vec2f, steep: f32, bedPx: f32) -> RockFace
     let r1 = 1.0 - abs(valueNoise(vec2f(r.x / gw, r.y / (gw * 5.0)) + vec2f(0.0, 13.0)));
     let runnel = (r1 * r1 - 0.45) * (0.5 + 0.5 * poolNoise(s, 40.0, 61.0));
     let grit = cellHash(poolPixel(s) + 13.0).x - 0.5;
-    o.relief = top - (1.0 + 2.0 * u.faceWear) * crevice + u.faceCrease * pits + u.faceScratch * (1.0 + 1.5 * steep) * runnel + u.faceGrit * grit;
+    // The face's broad form: bulges and alcoves 30-70 px across (they light and shade as wholes, rock or soil over it).
+    let mass = (poolNoise(s, 70.0, 201.0) * 0.6 + poolNoise(s, 30.0, 203.0) * 0.4) * bed * 0.6 * u.faceBlock / 3.0;
+    o.relief = top - (1.0 + 2.0 * u.faceWear) * crevice + u.faceCrease * pits + u.faceScratch * (1.0 + 1.5 * steep) * runnel + u.faceGrit * grit + mass;
+    // Under soil: the layers' own steps, rounded wider (soil fills the partings and softens the lips), and the broad form.
+    let bedHere = rockBedBody(k, s, steep);
+    let bedAcross = rockBedBody(select(k + 1.0, k - 1.0, t < 0.5), s, steep);
+    // Fine terraces in the soil (faceTerrace height units apart, wavering along the contours): a short riser and a long tread, so a
+    // gentle slope reads as stacked dark wavy lines, as retail's grassed hills do.
+    let ct = h / max(u.faceTerrace, 0.3) + poolNoise(s, 23.0, 41.0) * 0.45 + poolNoise(s, 9.0, 43.0) * 0.2;
+    let tt = fract(ct);
+    let terrace = (smoothstep(0.0, 0.3, tt) - tt) * max(u.faceTerrace, 0.3);
+    o.layer = mix(min(bedHere, bedAcross), bedHere, smoothstep(0.0, 2.0 + 3.0 * wearPx, dv)) + mass + terrace;
     // A ledge: a bed's top where it stands proud of the bed above (a shelf grass can hold).
     let aboveBody = rockBlockAt(k + 1.0, r.x, s, steep).x;
     o.ledge = smoothstep(0.65, 0.92, t) * smoothstep(0.2, 1.2, here.x - aboveBody) * smoothstep(0.0, wearPx, here.z);

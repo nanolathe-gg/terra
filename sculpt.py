@@ -217,7 +217,7 @@ KNOB_DEFAULTS.update(hillBlocks=0)
 KNOB_DEFAULTS.update(rockType=0)
 # The rock face (engine-common.wgsl rockFaceAt): one model for every rock face, drawn in the art's own pixels. rockFace 0: none.
 KNOB_DEFAULTS.update(rockFace=0, rockFaceFrom=.6, faceRock=.9, faceBed=5.5, faceLedge=2.2, faceRun=90, faceLean=28, faceScratch=2.5, faceScratchSize=7,
-                     faceBlock=3, faceBlockSize=11, faceCrease=2.5, faceCreaseSize=6, faceGrit=0, faceGrass=.8, faceWear=.35, faceShade=.85)
+                     faceBlock=3, faceBlockSize=11, faceCrease=2.5, faceCreaseSize=6, faceGrit=0, faceGrass=.8, faceWear=.35, faceShade=.85, faceLayers=0, faceTerrace=1.2)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, outcrop=0, rillDepth=0, rillSpacing=8)
@@ -248,7 +248,7 @@ WORLD_KNOBS = {
     # crackDark also darkens band lines, so the band row's line strength (materials/green.json) keeps their darkness.
     # Card P16: the Scree slider's talus chips (3-5 px, a few % of the cliff feet's ground) as Supply and Size.
     # Retail round 2: shores drop to the sea more abruptly (retail's shore band 32-45 px; base 51-72). Modern keeps 1.
-    'green': dict(coastRamp=.75, looseSupply=.08, looseSize=3.5, banding=.3, crackDark=.4, wetSwath=.35,   # Moisture (a panel row, card P30); the Time pass's wet swaths and modern Green's ground cover read it
+    'green': dict(coastRamp=.75, looseSupply=.08, looseSize=3.5, banding=0, crackDark=.4, wetSwath=.35,   # Moisture (a panel row, card P30); the Time pass's wet swaths and modern Green's ground cover read it
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
@@ -266,6 +266,9 @@ WORLD_KNOBS = {
                   # The rock face (green dive, 2026-11-08): every face steep enough is rock, drawn in screen pixels (rockFaceAt); retail's faces
                   # are layered, crumpled and scratched rock from black creases to light grey facets, grass in clumps and on the ledges.
                   rockFace=2, rockOrder=0,
+                  # The layers run on under the grass as soil-covered terraces 1.2 units apart (retail's hills: dense wavy dark lines ~8 px apart
+                  # on slopes .1-.2); they replace the contour bands (banding .3 -> 0).
+                  faceLayers=1,
                   rockFrom=1.6, bedSpacing=5, bedHeight=1, bedVary=.9,
                   bedLedge=.4, grooveAngle=-20,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
@@ -711,7 +714,7 @@ WORLD_VARIANTS = {
         # Thin dark lines per pixel in green-1 / green-3: retail .0559 / .0449,
         # smooth variant .0445 / .0425, this .0547 / .0504.
         'evad': dict(label='Evad River: broken slopes',
-                     knobs=dict(banding=.05, faceStreak=0, faceDark=.3, crackSeverity=.45, crackBlocks=.3, crackDark=.3,
+                     knobs=dict(banding=0, faceLayers=.2, faceStreak=0, faceDark=.3, crackSeverity=.45, crackBlocks=.3, crackDark=.3,
                                 # Green dive (owner: cracks too thick, dark lines not thin relief): retail's hill cracks are few, long and thin, with a
                                 # light lip: fewer minor cracks, no hairlines, majors 80 px apart, .8 px wide and fewer, closer to plates than to rills
                                 # (the fall-line rills read as grey streaks), lighter floors, almost no band dashes (banding .35 -> .05).

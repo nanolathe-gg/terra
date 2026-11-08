@@ -1566,9 +1566,10 @@ fn sandMaterialAt(scatter: vec2f) -> vec3f {
 
 // The rock face's relief at a screen offset `off` (px) from the pixel: the ground there is the broad face's (hb at the pixel), carried
 // through TA's projection (a screen row is rowStretch ground rows; a column step moves the ground's height by gx and its row by gx / 2).
-fn faceHeightAt(pixel: vec2f, off: vec2f, hb: f32, broad: vec2f, rowStretch: f32, fall: vec2f, steep: f32, bedPx: f32) -> f32 {
+fn faceHeightAt(pixel: vec2f, off: vec2f, hb: f32, broad: vec2f, rowStretch: f32, fall: vec2f, steep: f32, bedPx: f32) -> vec2f {
     let dy = (off.y + 0.5 * broad.x * off.x) / rowStretch;
-    return rockFaceAt(pixel + off, hb + broad.x * off.x + broad.y * dy, fall, steep, bedPx).relief;
+    let f = rockFaceAt(pixel + off, hb + broad.x * off.x + broad.y * dy, fall, steep, bedPx);
+    return vec2f(f.relief, f.layer);
 }
 
 @fragment
@@ -1663,12 +1664,14 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var faceRock = 0.0;
     var faceSun = 1.0;
     var faceOcc = 0.0;
-    var rockFace = RockFace(0.0, 0.0, 0.0, 0.0);
+    var rockFace = RockFace(0.0, 0.0, 0.0, 0.0, 0.0);
     if (u.rockFace > 0.0 && h > u.sea + 1.0) {
         // A shape set bare (Local vegetation below 0: thin soil) bares rock on gentler slopes too: at -100 its rock starts at half the slope.
         let bare = clamp(1.0 - place.vegetation, 0.0, 1.0);
         faceGate = rockFaceGate(slope / (1.0 - 0.5 * bare), painted.x, route);
-        if (faceGate > 0.0) {
+        // The layers run on under the grass of gentler slopes as soil-covered terraces (Layers under grass).
+        let layerGate = smoothstep(0.06, 0.25, slope) * u.faceLayers * (1.0 - route);
+        if (max(faceGate, layerGate) > 0.0) {
             let hb = baseHeight(p);
             let fall = select(vec2f(0.0, -1.0), broad / max(slope, 1e-5), slope > 1e-4);
             let rowStretch = max(1.0 - 0.5 * broad.y, 0.2);   // screen rows per ground row at the broad slope
@@ -1677,31 +1680,36 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             let dhs = vec2f(broad.x + broad.y * 0.5 * broad.x / rowStretch, broad.y / rowStretch);
             let bedPx = max(u.faceBed, 0.5) / max(length(dhs), 0.05);
             rockFace = rockFaceAt(pixel, hb, fall, steep, bedPx);
-            let h0 = rockFace.relief;
-            let hx = faceHeightAt(pixel, vec2f(1.0, 0.0), hb, broad, rowStretch, fall, steep, bedPx);
-            let hy = faceHeightAt(pixel, vec2f(0.0, 1.0), hb, broad, rowStretch, fall, steep, bedPx);
+            let c0 = vec2f(rockFace.relief, rockFace.layer);
+            let cx = faceHeightAt(pixel, vec2f(1.0, 0.0), hb, broad, rowStretch, fall, steep, bedPx);
+            let cy = faceHeightAt(pixel, vec2f(0.0, 1.0), hb, broad, rowStretch, fall, steep, bedPx);
             // d(screen)/d(world) = [[1, 0], [-gx/2, 1 - gy/2]]: the relief's slope on the ground is its transpose times the screen slope.
-            let dsFull = vec2f(hx - h0, hy - h0) * u.rockFace;
+            let dsFull = vec2f(cx.x - c0.x, cy.x - c0.x) * u.rockFace;
             let dwFull = vec2f(dsFull.x - 0.5 * broad.x * dsFull.y, rowStretch * dsFull.y);
             // Rock's share of the face rises with the slope to faceRock a slope of 1.3 past rockFaceFrom, times 1 less the stroke's Local
-            // vegetation (+40: 60% of it, +100: none, -70: 1.7 times); painted rock is rock.
+            // vegetation (+40: 60% of it, +100: none, -70: 1.7 times); painted rock is rock, its edge feathered by the same field.
             let rise = mix(smoothstep(u.rockFaceFrom, u.rockFaceFrom + 1.3, slope), smoothstep(0.5 * u.rockFaceFrom, 0.5 * u.rockFaceFrom + 0.5, slope), bare);
             var share = u.faceRock * rise * (2.0 - clamp(place.vegetation, 0.0, 2.0));
-            share = max(clamp(share, 0.0, 1.0), smoothstep(0.3, 0.8, painted.x) * 0.9);
-            // Grass's footing: the relief's flat tops (its own slope small), the beds' ledges, and strips along the contours.
+            share = max(clamp(share, 0.0, 1.0), smoothstep(0.15, 0.95, painted.x) * 0.9);
+            // Grass's footing: the relief's flat tops (its own slope small), the beds' ledges, strips along the contours and its recesses;
+            // rock stands out where the relief does.
             let flatTop = 1.0 - smoothstep(0.25, 1.0, length(dwFull));
             let stripCells = poolCells(13.0);
             let strip = smoothstep(0.1, 0.7, faceWaves(poolPos(pixel) * (stripCells / u.pool) + vec2f(5.0, 9.0), fall, stripCells));
-            let footing = u.faceGrass * (0.55 * rockFace.ledge + 0.3 * flatTop + 0.3 * strip);
+            let footing = u.faceGrass * (0.55 * rockFace.ledge + 0.3 * flatTop + 0.3 * strip) - 0.25 * clamp(rockFace.relief / 3.0, -1.0, 1.0);
             let field = 0.5 + 0.5 * clamp((poolNoise(pixel, 22.0, 37.0) * 0.6 + poolNoise(pixel, 6.0, 59.0) * 0.4) / 0.6, -1.0, 1.0) * 0.7 + footing - 0.15 * u.faceGrass;
-            faceRock = smoothstep(field - 0.03, field + 0.03, share);
-            // The relief: full on the rock, a third under the grass (the face's form shows through its cover).
-            let k = u.rockFace * faceGate * mix(0.35, 1.0, faceRock);
-            let dw = dwFull / u.rockFace * k;
+            faceRock = smoothstep(field - 0.03, field + 0.03, share) * step(1e-4, faceGate);
+            // The micro surface: the rock's relief where rock shows, the soil-covered layers under the grass.
+            let wRock = faceRock * faceGate;
+            let wSoil = max(layerGate, 0.5 * faceGate) * (1.0 - wRock);
+            let k = u.rockFace;
+            let s0 = c0.x * wRock + c0.y * wSoil;
+            let ds = vec2f(cx.x * wRock + cx.y * wSoil - s0, cy.x * wRock + cy.y * wSoil - s0) * k;
+            let dw = vec2f(ds.x - 0.5 * broad.x * ds.y, rowStretch * ds.y);
             let nn = normal.xy / max(normal.z, 0.05);
             normal = normalize(vec3f(nn - dw, 1.0));
             // The sun's shadows: march toward the sun over the ground (the ray rises tan(elevation) a ground px, the broad face gd), and
-            // compare the relief there with the ray's height above the face.
+            // compare the surface there with the ray's height above the face.
             let lxy = length(u.light.xy);
             if (u.full != 0 && lxy > 1e-3) {
                 let dirW = u.light.xy / lxy;
@@ -1713,17 +1721,17 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                     var steps = array<f32, 4>(1.2, 2.6, 4.5, 7.5);
                     for (var i = 0; i < 4; i++) {
                         let d = steps[i];
-                        let hk = rockFaceAt(pixel + o * d, hb + gd * d, fall, steep, bedPx).relief;
-                        blocked = max(blocked, smoothstep(0.0, 0.8, (hk - h0) * k - clearance * d));
+                        let f = rockFaceAt(pixel + o * d, hb + gd * d, fall, steep, bedPx);
+                        blocked = max(blocked, smoothstep(0.0, 0.8, ((f.relief * wRock + f.layer * wSoil) - s0) * k - clearance * d));
                     }
                     faceSun = 1.0 - blocked;
                 }
-                // The sky: how far the relief round the pixel rises above it (4 taps 2.5 px out).
+                // The sky: how far the surface round the pixel rises above it (4 taps 2.5 px out).
                 var rim = 0.0;
                 var taps = array<vec2f, 4>(vec2f(2.5, 0.0), vec2f(-2.5, 0.0), vec2f(0.0, 2.5), vec2f(0.0, -2.5));
                 for (var i = 0; i < 4; i++) {
-                    let off = taps[i];
-                    rim += max(faceHeightAt(pixel, off, hb, broad, rowStretch, fall, steep, bedPx) - h0, 0.0) * k;
+                    let c = faceHeightAt(pixel, taps[i], hb, broad, rowStretch, fall, steep, bedPx);
+                    rim += max(c.x * wRock + c.y * wSoil - s0, 0.0) * k;
                 }
                 faceOcc = clamp(rim / (4.0 * 2.5) * (1.6 + 4.0 * u.faceShade), 0.0, 0.85 + 0.15 * u.faceShade);
             }
@@ -1742,7 +1750,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (u.cavity > 0.0) { cav = mix(u.cavity * cavityDepth(p, h), u.cavity * faceCavity, faceRelief); }
     }
     // The rock face's creases and hollows see less sky, and its own shadows (Shadow depth) little: deep in a crevice both are blocked.
-    cav = max(cav, faceGate * max(faceOcc, u.faceShade * (1.0 - faceSun)));
+    cav = max(cav, max(faceOcc, u.faceShade * (1.0 - faceSun) * faceGate));
     var shading = lighting * ao * shadow;
     var lightTint = vec3f(1.0);
     // Open lit level ground keeps its brightness under any light colour (the tint is divided by its luma), so a colour changes hue and the

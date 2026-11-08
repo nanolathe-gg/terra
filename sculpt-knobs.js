@@ -48,7 +48,7 @@ export const KNOBS = [
     ['faceLean','Joint and runnel lean from the screen\'s north-south (deg)',-45,45,1,28],['faceWear','Weathering: rounded edges, open joints',0,1,.05,.35],
     ['faceCrease','Pitting',0,6,.1,2.5],['faceCreaseSize','Pit size (px)',3,24,1,6],['faceScratch','Runnels: water grooves down the face',0,6,.1,2.5],
     ['faceScratchSize','Runnel spacing (px)',3,20,.5,7],['faceShade','Shadow depth: own shadows and crevices toward black',0,1,.05,.85],['faceGrit','Grit',0,2,.05,0],
-    ['faceGrass','Grass on ledges and flat tops',0,1,.05,.8]]],
+    ['faceGrass','Grass on ledges and flat tops',0,1,.05,.8],['faceLayers','Layers under grass (soil-covered terraces)',0,2,.05,0],['faceTerrace','Terrace spacing (height)',.4,6,.1,1.2]]],
   ['Rock face', [['rockMoss','Vegetation tint in rock',0,1,.05,1],['rockDetail','Rock tile blotch contrast (1 as drawn, 0 flat)',0,1,.05,1],['faceRelief','Rock relief lit on walls that face the viewer (0: world-space look)',0,1,.05,1],['shineOutside','Rock glints kept outside painted rock',0,1,.05,1],
     ['bedPunch','Beds differ in strength',0,1,.05,0]]],
   ['Gullies & ribs', [['gullyDepth','Gully depth (height; 0 none)',0,16,.5,0],['gullyWidth','Gully width (px)',4,40,1,14],
