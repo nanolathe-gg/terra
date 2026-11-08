@@ -1,0 +1,13 @@
+{"biome": "green", "source": {"map": "the pass", "x": 1152, "y": 304},
+ "ground": true, "query": "",
+ "strokes": [
+  ["landform", [[410, -60], [440, 250], [470, 420]], {"card": {"diameter": 150, "elevation": 207, "wander": 35, "heightVary": 30, "terraces": 6, "cracks": 60}}],
+  ["landform", [[440, 380], [400, 520]], {"card": {"diameter": 220, "elevation": 267, "wander": 35, "heightVary": 30, "terraces": 6, "cracks": 60}}],
+  ["landform", [[380, 520], [450, 700], [470, 920]], {"card": {"diameter": 400, "elevation": 245, "wander": 35, "heightVary": 30, "terraces": 6, "cracks": 60}}],
+  ["landform", [[400, 570], [440, 720], [450, 900]], {"card": {"diameter": 270, "elevation": 315, "wander": 35, "heightVary": 30, "terraces": 6, "cracks": 60}}],
+  ["landform", [[720, 40], [850, 200], [880, 420]], {"card": {"diameter": 420, "elevation": 240, "wander": 35, "heightVary": 30, "terraces": 6, "cracks": 60}}],
+  ["landform", [[780, 100], [880, 260], [880, 420]], {"card": {"diameter": 230, "elevation": 290, "wander": 35, "heightVary": 30, "terraces": 6, "cracks": 60}}],
+  ["landform", [[860, 470], [860, 1080]], {"card": {"diameter": 170, "elevation": 245, "wander": 35, "heightVary": 30, "terraces": 6, "cracks": 60}}],
+  ["landform", [[190, 110], [110, 300], [40, 440]], {"card": {"diameter": 170, "elevation": 250, "wander": 35, "heightVary": 30, "terraces": 6, "cracks": 60}}],
+  ["landform", [[120, 650], [60, 850], [30, 1050]], {"card": {"diameter": 190, "elevation": 285, "wander": 35, "heightVary": 30, "terraces": 6, "cracks": 60}}]
+ ]}
