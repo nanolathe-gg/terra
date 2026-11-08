@@ -711,7 +711,11 @@ WORLD_VARIANTS = {
         # Thin dark lines per pixel in green-1 / green-3: retail .0559 / .0449,
         # smooth variant .0445 / .0425, this .0547 / .0504.
         'evad': dict(label='Evad River: broken slopes',
-                     knobs=dict(banding=.35, faceStreak=0, faceDark=.3, crackSeverity=.45, crackBlocks=.3, crackDark=.55,
+                     knobs=dict(banding=.05, faceStreak=0, faceDark=.3, crackSeverity=.45, crackBlocks=.3, crackDark=.3,
+                                # Green dive (owner: cracks too thick, dark lines not thin relief): retail's hill cracks are few, long and thin, with a
+                                # light lip: fewer minor cracks, no hairlines, majors 80 px apart, .8 px wide and fewer, closer to plates than to rills
+                                # (the fall-line rills read as grey streaks), lighter floors, almost no band dashes (banding .35 -> .05).
+                                crackMinor=.2, crackHairline=0, crackSpacing=80, crackWidth=.8, crackMajor=.5, crackNetwork=.8,
                                 reliefAmount=.5, microRock=.7)),
         # Modern Green (card P24, decision 25): where the realistic look accumulates. It is judged on green-1..3 for
         # palette, scale and readability at 1x, and by eye for realism: drainage that branches, rock that breaks along
