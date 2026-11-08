@@ -60,10 +60,10 @@ test('labels and group names name no world',()=>{
 
 test('every world can turn vegetation on, and flowers stay independent of relief',async()=>{
  const {worldControlRequirement:requirement}=await import('../sculpt-control-schema.js');
- // groundCover is the switch (worldPanelValues: Vegetation cover above 0); every world has a table, so Vegetation cover itself is never idle.
- for(const v of [{},{groundCover:0},{groundCover:1}])assert.equal(requirement('vegetationCover',v),'');
- for(const key of ['plantRelief','flowerDensity']){assert.match(requirement(key,{groundCover:0}),/Raise Vegetation cover/);assert.equal(requirement(key,{groundCover:1}),'');}
- assert.equal(requirement('flowerDensity',{groundCover:1,plantRelief:0}),'');
+ // Vegetation cover above 0 is the switch; every world has a table, so Vegetation cover itself is never idle.
+ for(const v of [{},{vegetationCover:0},{vegetationCover:1}])assert.equal(requirement('vegetationCover',v),'');
+ for(const key of ['plantRelief','flowerDensity']){assert.match(requirement(key,{vegetationCover:0}),/Raise Vegetation cover/);assert.equal(requirement(key,{vegetationCover:1}),'');}
+ assert.equal(requirement('flowerDensity',{vegetationCover:1,plantRelief:0}),'');
 });
 
 test('world dependencies explain bypasses without biome gates',async()=>{
@@ -210,8 +210,8 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('groundTiles',{groundTiled:0}),/Ground pattern/);
  shows('groundTiles',{groundTiled:1});
  assert.match(requirement('slopeTexture',{slopeSand:1}),/sand/);
- assert.match(requirement('slopeTexture',{groundCover:1}),/ground-cover table decides its slope cover/);
- shows('slopeTexture',{groundCover:0});
+ assert.match(requirement('slopeTexture',{vegetationCover:1}),/ground cover decides the slope cover/);
+ shows('slopeTexture',{vegetationCover:0});
  shows('slopeTexture',{slopeSand:0});
  assert.match(requirement('dither',{paletteMix:1}),/Nearest color/);
  shows('dither',{paletteMix:0});

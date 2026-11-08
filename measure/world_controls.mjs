@@ -406,7 +406,7 @@ try {
     // The light's colors (P12b): a warm sun and a cool sky, picked through the panel's own rows on the world's first scene. White (off) is the grey light.
     await host.scene(fixtures[0][1], fixtures[0][2]);
     // Vegetation and the flowers color the ground cover, which is on only where Vegetation cover is above 0 (every world has a table; most start with it off).
-    const coverOn = Number((await host.panelValues()).groundCover) > 0;
+    const coverOn = Number((await host.panelValues()).vegetationCover) > 0;
     for (const [label, hex, key] of [['Sun color', '#ffc880', 'sunColor'], ['Sky color', '#80a0ff', 'skyColor'], ['Vegetation', '#b8732a', 'vegetation'], ...[1,2,3,4].map(i=>['Flower '+i,'#30b0ff','flower'+i])]) {
       if((key.startsWith('flower')||key==='vegetation')&&(ONLY&&!ONLY.includes(key)||!coverOn||!await host.hasColorRow(label)))continue;
       const m = await host.colorPair(label, hex);

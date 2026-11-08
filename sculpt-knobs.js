@@ -2,7 +2,6 @@
 // host (repro/headless.mjs, which measure/world_controls.mjs sweeps under Node) apply a world knob and pick a world color with the same code, and
 // read the facts the panel enables a row by (worldPanelValues, which sculpt-control-schema.js worldControlRequirement reads) from one function.
 import {columnHasCapBed} from './sculpt-column.js';
-import {groundCoverOn} from './sculpt-material-model.js';
 
 // Surface knobs: each writes the page address and the renderer's variant,
 // then the renderer re-reads its uniforms and re-bakes its fields.
@@ -124,6 +123,5 @@ export function slopeReplaced({config,renderer,weathering,materialWeathering}) {
 // What worldControlRequirement may read: the renderer's settings, a stroke's water choices counted as the switch they turn on, and the facts of the world's material that no slider sets.
 export function worldPanelValues(facts) {
   const {config,renderer,nodes,colors}=facts,layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks(nodes);
-  const cover=config.material?.groundCover;
-  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0,groundCover:groundCoverOn(cover,renderer.variant)?1:0};
+  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:config.column?.sections?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
 }
