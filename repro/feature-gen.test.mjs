@@ -55,3 +55,26 @@ test('a recolor to the world color changes no byte; another color changes the sp
     assert.equal(sig(a.body), sig(b.body), kind); assert.notEqual(sig(a.body), sig(c.body), kind);
   }
 });
+
+// Round 11: shadows are solid silhouettes; the column, shard, plate and frond forms are generic options.
+const fillOf = s => { let n = 0, rows = 0, run = 0; for (let y = 0; y < s.h; y++) { let a = -1, b = -1, c = 0; for (let x = 0; x < s.w; x++) if (s.a[y * s.w + x]) { if (a < 0) a = x; b = x; c++; } if (a >= 0) { run += b - a + 1; n += c; rows++; } } return n / run; };
+test('shadows are solid dark silhouettes in one color, not a stipple', () => {
+  for (const [kind, params] of [['tree', {}], ['rock', {cells: '4x4', tall: 1}]]) {
+    const f = generateFeature(kind, params, 11, {palette}), s = f.shadow;
+    assert.ok(fillOf(s) > 0.75, `${kind} shadow fill ${fillOf(s)}`);
+    const colors = new Set(); for (let k = 0; k < s.w * s.h; k++) if (s.a[k]) colors.add(s.idx[k]);
+    assert.equal(colors.size, 1); assert.equal(f.shadowBlend, 0.5);
+  }
+  const ice = generateFeature('rock', {cells: '3x3', shadowColor: '#000f47'}, 3, {palette}).shadow;
+  assert.deepEqual(palette[ice.idx[ice.a.indexOf(1)]], [0, 15, 71]);
+});
+test('column clusters, shards, plates and fronds: deterministic and different from their defaults', () => {
+  const cases = [['rock', {cells: '6x5', tall: 1, form: 'columns', parts: 10, plate: 0.6, plateTone: 0.8, lump: 0}], ['rock', {cells: '4x4', tall: 0.2, form: 'shards', parts: 8, lump: 0}],
+    ['rock', {cells: '3x3', tall: 0.5, form: 'columns', round: 1, parts: 3, plate: 0.4, plateTone: -0.6}], ['tree', {clusters: 1, fronds: 1}]];
+  for (const [kind, params] of cases) {
+    const a = generateFeature(kind, params, 5, {palette, bodyOnly: true}), b = generateFeature(kind, params, 5, {palette, bodyOnly: true}), base = generateFeature(kind, {...params, form: undefined, plate: 0, fronds: 0}, 5, {palette, bodyOnly: true});
+    assert.equal(sig(a.body), sig(b.body)); assert.notEqual(sig(a.body), sig(base.body)); assert.ok(a.shadow.w > 0);
+  }
+  const plated = generateFeature('rock', {cells: '6x5', tall: 1, form: 'columns', plate: 0.8}, 5, {palette}).body, bare = generateFeature('rock', {cells: '6x5', tall: 1, form: 'columns'}, 5, {palette}).body;
+  assert.ok(plated.w > bare.w, 'the plate widens the sprite');
+});
