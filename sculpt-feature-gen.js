@@ -632,7 +632,7 @@ function shadowSprite(R, ax, ay, colors, r, most = 1) {   // most: the stipple's
 // hues through the mid and light tones at the ramp's lightness, `grain` the fine dither of a rendered sprite. Retail Green's ramp and
 // mottles are measured from its ten rocks (luma octiles; cream 30% and rose 22% of the light pixels).
 export const ROCK_GREEN = ['#0f0f0f', '#2b2b2b', '#4b4b4b', '#5b5b5b', '#787878', '#949494', '#c3c3c3', '#f4f4f4'];
-const ROCK_DEFAULTS = { shadow: 0.66, cells: '2x2', size: 1, angular: 0.5, shade: 0.6, tall: 0, pieces: 1, pits: 0, grain: 0.6, lump: 0.6, colors: ROCK_GREEN, mottle: [['#c3c39b', 0.3], ['#d7a3b3', 0.26]], metal: null, energy: null };   // energy: a [lo, hi] range for a rock that is an energy source (Lava's nodes; tracks the footprint's area); shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
+const ROCK_DEFAULTS = { shadow: 0.66, cells: '2x2', size: 1, angular: 0.5, shade: 0.6, tall: 0, pieces: 1, pits: 0, grain: 0.6, lump: 0.6, colors: ROCK_GREEN, mottle: [['#c3c39b', 0.3], ['#d7a3b3', 0.26]], metal: null, energy: null, flat: 0 };   // flat: 0 a boulder .. 1 a low slab (Moon's)   // energy: a [lo, hi] range for a rock that is an energy source (Lava's nodes; tracks the footprint's area); shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
 export const cellsOf = c => { const m = /^(\d+)x(\d+)$/.exec(String(c || '')); return m ? [clamp(+m[1], 1, 16), clamp(+m[2], 1, 16)] : [2, 2]; };
 const smoothstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 function rockSolid(P, r) {
@@ -641,7 +641,7 @@ function rockSolid(P, r) {
   let W, D;
   if (fw === 1 && fh === 1) { W = lerp(8, 21, clamp(P.size, 0, 1.4) / 1.4); D = W * (0.72 + 0.15 * r()); }
   else { W = fw * 16 * (0.86 + 0.12 * r()) * P.size; D = fh * 16 * (0.7 + 0.12 * r()) * P.size; }
-  const hgt = W * (0.34 + 0.34 * r() + 2.1 * tall * tall);   // retail spires stand about 2.5 times their width (Lava, Crystal)
+  const hgt = W * (0.34 + 0.34 * r() + 2.1 * tall * tall) * (1 - 0.55 * clamp(P.flat ?? 0, 0, 1));   // retail spires stand about 2.5 times their width (Lava, Crystal)
   const bodies = [{ e: 0, s: 0, a: W / 2, b: D / 2, hgt }];
   for (let i = 1; i < Math.round(clamp(P.pieces, 1, 8)); i++) {
     const sc = 0.3 + 0.32 * r(), th = r() * TAU;
