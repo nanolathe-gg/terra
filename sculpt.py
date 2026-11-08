@@ -487,7 +487,7 @@ WORLD_KNOBS = {
     # Bank lines measured on the section-built retail maps (measure/lava_*):
     # ground-spaced dark lines from slope 0.15 up; ground-coloured faces;
     # rim, outline and lip at the coast. Worms gave way to the lines.
-    'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
+    'lava': dict(undulation=12, undulationCover=1, undulationScale=96, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
                  beachWidth=0, waterSoft=0, bankRock=0, banding=0,
                  worms=0, shoreEdge=1, slopeTexture=0,
                  # Card E4: retail's bank is 6-9 flat layers stepping down to the lava, 12-16 px a
