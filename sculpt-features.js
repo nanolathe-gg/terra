@@ -775,11 +775,14 @@ export async function mountMapFeatures(api) {
       if (p.kind==='vent') { def(n,[['description','Thermal Vent'],['footprintx',1],['footprintz',1],['height',0],['seqname',transparent()],['animating',1],['geothermal',1],['indestructible',1],['blocking',0]]); continue; }
       const f=await full(p.kind,v.params,v.seed),g=f.gameplay,[fw,fz]=v.footprint;
       if (p.kind==='tree') {
-        const dead=await smudge(),burn=f.burn.map(s => frameOf(s,2));   // 96 frames of 2 ticks: the 192-tick burn (spec section 4)
+        const dead=await smudge(),burn=f.burn?.map(s => frameOf(s,2));   // 96 frames of 2 ticks: the 192-tick burn (spec section 4); a dead tree (species dead) neither burns nor leaves a burnt successor
+        if (!f.burn) def(n,[['description','Dead Tree'],['footprintx',fw],['footprintz',fz],['height',40],['seqname',seq(`${b}t${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}t${i}s`,[frameOf(f.shadow)])],['energy',g.energy],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['flamable',0],['reclaimable',1],['blocking',1]]);
+        else {
         def(n,[['description','Tree'],['footprintx',fw],['footprintz',fz],['height',40],['seqname',seq(`${b}t${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}t${i}s`,[frameOf(f.shadow)])],['seqnameburn',seq(`${b}t${i}b`,burn)],
           ['energy',g.energy],['featureburnt',`${n}B`],['featuredead',dead],['featurereclamate',dead],['sparktime',5],['spreadchance',g.spreadChance],['burnweapon','TreeBurn'],['animtrans',0],['shadtrans',1],['flamable',1],['reclaimable',1],['blocking',1]]);
         def(`${n}B`,[['description','Burnt Tree'],['footprintx',fw],['footprintz',fz],['height',40],['seqname',seq(`${b}t${i}x`,[frameOf(f.burnt.body)])],['seqnameshad',seq(`${b}t${i}xs`,[frameOf(f.burnt.shadow)])],
           ['energy',f.burnt.gameplay.energy],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['flamable',0],['reclaimable',1],['blocking',1]]);
+        }
       } else if (p.kind==='shrub') {
         const dead=await smudge();   // retail shrubs burn to nothing and die to a smudge
         def(n,[['description','Shrub'],['footprintx',1],['footprintz',1],['height',4],['seqname',seq(`${b}h${i}`,[frameOf(f.body)])],['seqnameburn',seq(`${b}h${i}b`,f.burn.map(s => frameOf(s,2)))],

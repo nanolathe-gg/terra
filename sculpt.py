@@ -423,11 +423,11 @@ WORLD_KNOBS = {
     # the level (retail W/SW faces 0.99-1.00 of level luma; a 1.13 cap gave
     # 1.07-1.14), so no highlight above level.
     # Its beds are all alike (columnContrast 0): they stand one ledge high, and the Time pass reads no hardness.
-    'desert': dict(lightCap=1, paletteMix=1, strata=1, strataContrast=1, columnContrast=0, banding=.4,
+    'desert': dict(lightCap=1.25, sunTilt=.5, paletteMix=1, strata=1, strataContrast=1, columnContrast=0, banding=.4,
                    # H19: the lit relief on a wall in Desert's strata reads as black scribbles at 1; .3 to .5 read as rock on repro/walls/desert.json.
                    faceRelief=.4,
                    strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
-                   sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0,
+                   sand=0, undulation=8, undulationScale=48, undulationCover=1, undulationArt=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0,
                    # Card E3: tall mountains keep their strata and gain lit ledges (beds the strata's
                    # 6 height units thick, level on the height so they ring each butte), long
                    # joints, and black shadow sides: retail's buttes are dark on the side turned
@@ -444,7 +444,7 @@ WORLD_KNOBS = {
                    # this as variation (sculpt.js TOOL_PRESETS).
                    baseBand=1,
                    # G4: level ground in the pale cap zone is one sheet, as in retail (cap orange 10-12% against ours' 22%).
-                   desertCapFlat=1),
+                   desertCapFlat=0),
     # Moon slopes were too dark and smeared (retail mean luminance .773 vs
     # ours .708; dark share 19.8% vs 33%): fewer, lighter worm troughs.
     # Lit from due west: brightness regressed on the height gradient puts
