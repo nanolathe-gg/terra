@@ -1043,8 +1043,10 @@ function getGround(g, x, y) { const k = (clamp(y, 0, g.h - 1) * g.w + clamp(x, 0
 // 1), reach (how far the halo spreads, 1), rimDark (the halo's inner pixels, 0.78 of its tone), and for look 'blades' the ore as a core with
 // long tapered blades: blades (count), bladeLen and bladeWidth (px at 127 metal), fan (0 parallel blades .. 1 radial star), angle (degrees
 // of the first blade, 0 east, 90 down the screen), core (radius px). crust (radius px, 0: none) cracks the ground round the stone into
-// dark-edged plates, crustTone their lightness against the ground.
-export const DEPOSIT_DEFAULTS = { metal: 127, haloRough: 5, haloScale: 5, style: 'retail', look: 'auto', halo: 0.82, haloSat: 1.1, stoneScale: 1, reach: 1, rimDark: 0.78, blades: 7, bladeLen: 20, bladeWidth: 5, fan: 1, angle: -50, core: 7, crust: 0, crustTone: 0.8 };
+// dark-edged plates, crustTone their lightness against the ground. round (0..1, 0) smooths the stones: more polygon corners, a steadier
+// radius, shorter arms and a less ragged rim, as retail's rounded chunks. underwater draws the deposit as retail's AquaOre: a blue, roundish,
+// mottled blob of palette blues (area by metal), the look a deposit has where the sea covers it; it ignores the ground and the halo options.
+export const DEPOSIT_DEFAULTS = { metal: 127, haloRough: 5, haloScale: 5, style: 'retail', look: 'auto', halo: 0.82, haloSat: 1.1, stoneScale: 1, reach: 1, rimDark: 0.78, blades: 7, bladeLen: 20, bladeWidth: 5, fan: 1, angle: -50, core: 7, crust: 0, crustTone: 0.8, round: 0, underwater: false };
 const STONE_CLASSES = [
   { w: 0.29, ramp: [[216, 3], [224, 3], [145, 4], [114, 5], [130, 2]] },        // pale: lilac-white, pink-lilac, pale blue
   { w: 0.22, ramp: [[115, 8], [131, 3], [147, 3], [217, 3], [148, 3], [87, 3]] }, // light and mid
@@ -1064,8 +1066,10 @@ export function stonePixelsFor(metal) {
 export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const P = { ...DEPOSIT_DEFAULTS, ...params };
   if (P.style === 'pebbles') return paintDepositPebbles(ground, cx, cy, P, seed, ctx);
+  if (P.underwater) return paintDepositAqua(ground, cx, cy, P, seed, ctx);
   const palette = ctx.palette, q = paletteSearch(palette), lit = groundLight(ctx);
   const r = rng(seed), rn = rng(mix32(seed, 2));
+  const rd = clamp(P.round, 0, 1);
   const mt = clamp((P.metal - 86) / (223 - 86), 0, 1);
   const look = P.look === 'auto' ? (P.metal >= 160 ? 'cluster' : 'plates') : P.look;
   const total = stonePixelsFor(P.metal) * P.stoneScale * (0.95 + 0.1 * r()) * (look === 'cluster' ? 0.66 : 1);
@@ -1076,7 +1080,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const chunkId = new Int8Array(bw * bh).fill(-1);
   const polyMask = (px, py, rad, nv, aspect, rot) => {
     const V = [];
-    for (let i = 0; i < nv; i++) { const a = (i + (r() - 0.5) * 0.6) / nv * TAU, rr = rad * (0.55 + r() * 0.6); V.push([Math.cos(a) * rr * aspect, Math.sin(a) * rr]); }
+    for (let i = 0; i < nv; i++) { const a = (i + (r() - 0.5) * 0.6) / nv * TAU, rr = rad * (0.55 + r() * 0.6 + (rd ? rd * (0.3 - 0.4 * r()) : 0)); V.push([Math.cos(a) * rr * aspect, Math.sin(a) * rr]); }
     const c = Math.cos(rot), sn = Math.sin(rot), pts = [];
     const P2 = V.map(([u, v]) => [u * c - v * sn, u * sn + v * c]);
     for (let y = Math.floor(py - rad * 2.2); y <= Math.ceil(py + rad * 2.2); y++) for (let x = Math.floor(px - rad * 2.2); x <= Math.ceil(px + rad * 2.2); x++) {
@@ -1086,7 +1090,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     }
     return pts;
   };
-  const sized = (px, py, area, nv, aspect, rot) => { let rad = Math.sqrt(area / Math.PI / 0.85), pts = polyMask(px, py, rad, nv, aspect, rot); for (let it = 0; it < 3; it++) { rad *= Math.sqrt(area / Math.max(pts.length, 1)); pts = polyMask(px, py, rad, nv, aspect, rot); } return pts; };
+  const sized = (px, py, area, nv0, aspect, rot) => { const nv = nv0 + Math.round(rd * 3); let rad = Math.sqrt(area / Math.PI / 0.85), pts = polyMask(px, py, rad, nv, aspect, rot); for (let it = 0; it < 3; it++) { rad *= Math.sqrt(area / Math.max(pts.length, 1)); pts = polyMask(px, py, rad, nv, aspect, rot); } return pts; };
   const union = lists => { const seen = new Set(), out = []; for (const l of lists) for (const p of l) { const k = p[1] * 4096 + p[0]; if (!seen.has(k)) { seen.add(k); out.push(p); } } return out; };
   const chunks = [], layout = [[0, 0]];
   const rDom = Math.sqrt(areas[0] / Math.PI / 0.85);
@@ -1116,7 +1120,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
       pts = union(parts);
       const arms = [];                                    // 8-12 short thin arms off the cluster rim
       const edge = pts.filter(([x, y]) => !pts.some(([u, v]) => u === x + 1 && v === y) || !pts.some(([u, v]) => u === x - 1 && v === y));
-      const nArm = 10 + Math.floor(r() * 5);
+      const nArm = Math.round((10 + Math.floor(r() * 5)) * (1 - 0.7 * rd));
       for (let j = 0; j < nArm && edge.length; j++) {
         const [sx, sy] = edge[(r() * edge.length) | 0]; let a = Math.atan2(sy - py, sx - px) + (r() - 0.5) * 0.9; const len = 4 + Math.floor(r() * 6);
         for (let t = 1; t <= len; t++) { a += (r() - 0.5) * 0.5; arms.push([Math.round(sx + Math.cos(a) * t), Math.round(sy + Math.sin(a) * t)]); if (r() < 0.2) arms.push([Math.round(sx + Math.cos(a) * t), Math.round(sy + Math.sin(a) * t) + 1]); }
@@ -1128,7 +1132,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     const ang = Math.atan2(layout[ci][1], layout[ci][0]); px += Math.cos(ang) * 2.5; py += Math.sin(ang) * 2.5;
     }
     { const set = new Set(pts.map(p => p[1] * 4096 + p[0])), out = [];
-      for (const p of pts) { const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => set.has((p[1] + dy) * 4096 + p[0] + dx)).length; if (nb === 4 || r() > 0.14) out.push(p); }   // interior pixels are always stone: moss belongs only around the plates
+      for (const p of pts) { const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => set.has((p[1] + dy) * 4096 + p[0] + dx)).length; if (nb === 4 || r() > 0.14 * (1 - 0.7 * rd)) out.push(p); }   // interior pixels are always stone: moss belongs only around the plates
       for (const p of pts) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const k = (p[1] + dy) * 4096 + p[0] + dx; if (!set.has(k) && r() < 0.03) { set.add(k); out.push([p[0] + dx, p[1] + dy]); } }
       { const have = new Set(out.map(p => p[1] * 4096 + p[0]));   // close one-pixel notches so no moss or grass sits inside a plate
         for (let pass = 0; pass < 2; pass++) { const add = [];

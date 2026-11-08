@@ -2006,7 +2006,7 @@
   "scar": {"count": 6, "types": [
    {"share": 0.687, "params": {"type": "stain"}, "vary": {"size": [0.6, 1.2]}},
    {"share": 0.313, "params": {"type": "speckle", "density": 0.9}, "vary": {"size": [0.2, 0.5]}}]},
-  "deposit": {"params": {"reach": 1}, "vary": {"reach": [0.8, 1.4], "haloRough": [4, 10]}}
+  "deposit": {"params": {"reach": 1, "round": 0.7}, "vary": {"reach": [0.8, 1.4], "haloRough": [4, 10]}}
  },
  "world": {
   "defaults": {
