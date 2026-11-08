@@ -73,7 +73,9 @@ const NODE_FIELDS = [
   // cells whose seeds the site pass fills in, and the prisms' lattice spacing and how far their seeds stray along and across the path.
   ...['lfcTab', 'lfcSites', 'lfcBlocks', 'lfcLevels'].map(k => [k, 'u']), ...['lfcWx0', 'lfcWy0', 'lfcWx1', 'lfcWy1'].map(k => [k, 'i']), ...['lfcSpace', 'lfcJs', 'lfcJc'].map(k => [k, 'f']),
   // Undulation in the art: init keeps plane u (artKeep, the second evaluation) and artLevel's share of the undulation the art shows (gArt).
-  ...['artKeep'].map(k => [k, 'u']), ...['gArt'].map(k => [k, 'f'])];
+  ...['artKeep'].map(k => [k, 'u']), ...['gArt'].map(k => [k, 'f']),
+  // Coast ramp: the share of a water-making section's dry fall the coast keeps (1: as drawn).
+  ...['lfCoast'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -347,6 +349,8 @@ export function prepareNode(n, geom, c) {
       // P17 Talus: cones below the Gullies' chutes, as long as the reach (world px) at the repose of the world's talusAngle; only where Gullies cut and the stroke raises.
       talusReach: talusOn(q) ? clamp(q.talus, 0, 400) : 0, talusTan: c.repose ?? .84, lfPeak: Math.round(q.spurCount) >= 1 && landformSigned(q) ? landformPeak(q) : 0,
       lfGround: Math.round(q.heightReference || 0) === 2 ? 1 : 0, lfSigned: landformSigned(q) ? 1 : 0,
+      // Coast ramp: a stroke whose crest stands under the sea (a fixed or sea-level height) makes a coast; others keep their sections as drawn.
+      lfCoast: Math.round(q.heightReference || 0) !== 2 && landformElevation(q, c.sea) < c.sea ? clamp(c.coastRamp ?? 1, 0, 1) : 1,
       // lfcrater: an impact's groove (its first segment the landing): the along curve's value at the end, which the groove's width is scaled by; 0: no groove.
       grooveEnd: grooved ? impactEnd(q) : 0});
     if (impact) Object.assign(main.u, impactUniforms(q, sd, impact, c));

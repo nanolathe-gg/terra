@@ -1103,6 +1103,14 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   // Shared shore features seed the actual sea crossings inside this shape, including cuts and joined paths.
   if (u.coPutW != 0u) { Sc[4u * cells + i] = pick.y; }
   var value = pick.x;
+  // Coast ramp below 1 (the host sets it on a stroke whose crest is under the sea): the dry part of the section keeps only the last lfCoast of its fall to
+  // the waterline (the drop as a share of base - sea), easing off the plain and meeting the water in a bank 1 / lfCoast times as steep; under water it is
+  // as drawn.
+  if (u.lfCoast < 1.0 && base > u.sea && value > u.sea && value < base) {
+    let keep = max(u.lfCoast, 0.02);
+    let fx = clamp(((base - value) / (base - u.sea) - (1.0 - keep)) / keep, 0.0, 1.0);
+    value = base - fx * fx * (2.0 - fx) * (base - u.sea);
+  }
   if (u.gully > 0.0 && value > base) { value = landformGullies(value, pick.y, pk, psh, wx, wy, lx, ly, base, nA, nB, nC, x, y, i, cells); }
   if (talus > 0.0) { value = max(value, base + talus); }
   if (u.combine == 0u) { value = max(base, value); } else if (u.combine == 1u) { value = min(base, value); }

@@ -13,6 +13,8 @@ test('a knob goes into the address and the renderer, and says what else it needs
   assert.deepEqual(applyKnob({key: 'undulationScale', value: '160', settings, renderer: r, nodes, seed: 2701}), {evaluate: 0, checkpoint: true, weather: true});
   assert.equal(nodes[0].wavelength, 160);
   assert.deepEqual(applyKnob({key: 'frostGaps', value: '1', settings, renderer: r, nodes, seed: 2701}), {evaluate: 0, weather: true});
+  // Coast ramp reshapes every water-making landform: the shape runs again from the first node.
+  assert.deepEqual(applyKnob({key: 'coastRamp', value: '.3', settings, renderer: r, nodes, seed: 2701}), {evaluate: 0, weather: true});
   assert.deepEqual(applyKnob({key: 'sand', value: '1', settings, renderer: r, nodes, seed: 2701}), {weather: true});
   // The ground textures are chosen when the renderer starts: the address changes, the renderer does not.
   const applied = r.applied;

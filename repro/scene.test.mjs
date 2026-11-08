@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {sceneNodes, pageSettings, surfaceSliders, drawOptions, sliderRange, SURFACE_SLIDER_IDS, DEFAULT_SEED, strokeKind, savedToolCard, toolDefaults} from '../sculpt-scene.js';
+import {sceneNodes, pageSettings, shapeContext, surfaceSliders, drawOptions, sliderRange, SURFACE_SLIDER_IDS, DEFAULT_SEED, strokeKind, savedToolCard, toolDefaults} from '../sculpt-scene.js';
 import {landformTool} from '../sculpt-shape-presets.js';
 
 const root = new URL('..', import.meta.url).pathname;
@@ -22,6 +22,10 @@ test('a scene is the ground undulation, then one node per stroke with its seed',
   assert.equal(strokeKind('crater'), 'landform');
   assert.equal(sceneNodes(config, [['crater', [[0, 0]], {}]], {ground: false})[0].params.heightReference, 2);
   assert.deepEqual(sceneNodes(config, [['hill', [[1, 2]], {}]]), sceneNodes(config, [['hill', [[1, 2]], {}]]), 'the same strokes give the same nodes');
+  // The shape context's coast ramp: the world's, the address's, or (a world without one) the sections as drawn.
+  assert.equal(shapeContext({config, settings: pageSettings(config), seed: 1}).coastRamp, 1);
+  assert.equal(shapeContext({config, settings: pageSettings(config, 'coastRamp=.25'), seed: 1}).coastRamp, .25);
+  assert.equal(shapeContext({config: {...config, defaults: {...config.defaults, coastRamp: .5}}, settings: pageSettings({defaults: {}}), seed: 1}).coastRamp, .5);
   // The ground node carries Undulation in the art: all of it unless the page says less.
   assert.equal(nodes[0].art, 1);
   assert.equal(sceneNodes(config, [], {settings: pageSettings(config, 'undulationArt=0')})[0].art, 0);

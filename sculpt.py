@@ -59,7 +59,7 @@ KNOB_DEFAULTS = dict(
     fingers=0,
     # Coast pass (card E4): fingers on the joined coast and a landform's shoreline steps cut as heights
     # (layerPx px a step, riser 0 shares the bank's rise out; the count, flat share and irregularity are the landform's Steps).
-    layerPx=12, layerRiser=0, shoreEdge=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
+    layerPx=12, layerRiser=0, shoreEdge=0, coastRamp=1, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25, paletteMix=0, microRock=1,
     # Form (repro round): ledges on steep faces, darker faces, jagged bands.
     faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
