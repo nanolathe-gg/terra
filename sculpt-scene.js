@@ -83,7 +83,7 @@ export const TOOL_PRESETS={
     curve:{form:'lfCrystal',knots:[[0,0],[.04,1],[.55,1],[1,.62]],back:[[0,0],[.28,0],[1,.62]]}},mountain:{wander:6},deep:{wander:24,widthVary:25,shorePlates:1},shallow:{wander:6,shorePlates:1}},
   // Lava banks rise ~22-24 units over 40-60 px, steep at the lava then
   // flattening (retail coasts, measure/lava_*): wide, concave dry banks, as shoreline steps and lobes.
-  lava:{mountain:{wander:6},deep:{diameter:264,wander:40,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70},shallow:{diameter:264,wander:6,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70}},
+  lava:{mountain:{wander:6},deep:{diameter:264,wander:40,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70,layerJag:6},shallow:{diameter:264,wander:6,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70,layerJag:6}},
   zhon:{crater:{wander:32,heightVary:3},hill:{wander:20,widthVary:15,heightVary:7},deep:{diameter:240,wander:48,widthVary:40},shallow:{diameter:240,wander:6}},
   archipelago:{crater:{wander:34,heightVary:4},deep:{diameter:256,wander:52,widthVary:40},shallow:{diameter:248,wander:6}}
 };
