@@ -115,10 +115,27 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('cliffReach',{rockOrder:1,cliffFollow:0}),/Follow terrain/);
  shows('cliffReach',{rockOrder:1,cliffFollow:1});
  assert.match(requirement('rockScale',{rockOrder:0}),/Rock structure/);
- assert.match(requirement('rockAge',{rockOrder:1,rockCells:0}),/no blocks/);
+ assert.match(requirement('rockAge',{rockOrder:1,rockCells:0}),/Choose a Rock type with blocks/);
+ // Rock type (card P10): a named type's own numbers decide what it cuts, whatever the world's own (the facts worldPanelValues passes) say
+ assert.match(requirement('rockType',{rockOrder:0,rockMoss:0}),/Rock structure, or raise Vegetation tint in rock/);
+ shows('rockType',{rockOrder:1});
+ shows('rockType',{rockOrder:0,rockMoss:1});   // its lichen grows on any rock face
+ shows('rockAge',{rockOrder:0,rockMoss:1,rockType:1});   // and with Age
+ assert.match(requirement('rockAge',{rockOrder:0,rockMoss:0,rockType:1}),/Rock structure/);
+ assert.match(requirement('rockScale',{rockOrder:0,rockMoss:1,rockType:1}),/Rock structure/);
+ shows('rockScale',{rockOrder:0,hillBlocks:.5,rockType:1});   // blocks on the hills (a world preset's hillBlocks)
+ shows('rockAge',{rockOrder:1,rockCells:0,rockLichen:1,rockMoss:1});
+ shows('rockAge',{rockOrder:1,rockCells:0,rockType:1});   // Granite cuts blocks
+ shows('rockScale',{rockOrder:1,rockCells:0,rockType:3});
+ shows('rockScale',{rockOrder:1,rockCells:1,rockType:0});   // 0: the world's own, here with blocks
+ assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,rockJoint:2,rockOpen:1,rockType:1}),/Choose a Rock type with joint lines/);   // Granite cuts none
+ shows('cliffStagger',{rockOrder:1,cliffFollow:1,rockJoint:0,rockOpen:1,rockType:3});   // Basalt does
+ assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,rockOpen:0,rockType:3}),/Raise Open joints/);
+ shows('grooveRun',{rockOrder:1,rockJoint:0,rockOpen:1,gullyDepth:0,rockType:2});   // Sandstone's joint lines
+ shows('rockStain',{rockOrder:1,gullyDepth:0,rockCurtains:0,rockType:1});   // Granite's ledge stains
  // Stain (card P10) darkens gully floors and the rock type's ledge curtains: it needs ordered rock and one of the two
  assert.match(requirement('rockStain',{rockOrder:0,gullyDepth:4}),/Rock structure/);
- assert.match(requirement('rockStain',{rockOrder:1,gullyDepth:0,rockCurtains:0}),/Gully depth or use a rock type with ledge stains/);
+ assert.match(requirement('rockStain',{rockOrder:1,gullyDepth:0,rockCurtains:0}),/Gully depth or choose a Rock type with ledge stains/);
  shows('rockStain',{rockOrder:1,gullyDepth:4,rockCurtains:0});
  shows('rockStain',{rockOrder:1,gullyDepth:0,rockCurtains:1});
  shows('rockScale',{rockOrder:1,rockCells:1});
@@ -128,7 +145,9 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('cliffRise',{rockOrder:1,rockJoint:2,rockOpen:1,cliffFollow:1,cliffStagger:.5}),/Ledges above zero/,'the rise is relief only');
  shows('bedSpacing',{rockOrder:1,bedLedge:.5});
  // strata: bands and caps need a column and the strata switch
- assert.match(requirement('baseBand',{column:0,strata:1}),/no rock column/);
+ // a world without a column of its own: the reason names the panel that adds one
+ for(const key of ['strata','strataContrast','strataGrain','baseBand','desertCapFlat'])assert.match(requirement(key,{column:0,strata:1}),/Add a rock column in the Rock column panel/,key);
+ assert.match(requirement('desertCapFlat',{column:1,strata:1,capBed:0}),/Rock column panel/);
  assert.match(requirement('baseBand',{column:1,strata:0}),/Strata/);
  shows('baseBand',{column:1,strata:.5});
  assert.match(requirement('desertCapFlat',{column:1,strata:.5,capBed:0}),/no cap bed/);   // Green's column has eight beds in one section, so its caps hold nothing
@@ -207,7 +226,7 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('ringContrast',{ringLayer:0}),/no mineral fringe/);
  shows('ringContrast',{ringLayer:1});
  assert.match(requirement('ringShiftDir',{ringLayer:1,ringShift:0}),/Offset between copies/);
- assert.match(requirement('beachWidth',{beachLayer:0}),/no beach/);
+ assert.match(requirement('beachWidth',{beachLayer:0}),/no beach of its own. Choose another world's Beach in Colors & base pattern/);
  shows('beachWidth',{beachLayer:1});
  assert.match(requirement('groundTiles',{groundTiled:0}),/Ground pattern/);
  shows('groundTiles',{groundTiled:1});

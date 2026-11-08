@@ -77,7 +77,7 @@ export const TOOL_PRESETS={
   // Crystal's Crystals draw a column mound (its old brush: Height 140, 480 wide, Irregularity 40): stepped columns over the mound's (1 - r^2)^1.2 dome, the
   // edge noise as wander. Ice's draw an iceberg a click (retail ice-2, ice-3): one rough slab 240 px wide whose flat top tilts down to the north (the front and
   // back knots a plane through the center, Level tops 0), its corners cut, lit as the world's own slope (Surface Rock); a drag scatters a field of them.
-  crystal:{crater:{curve:{form:'lfCrater',knots:CRATER_BOWL},iceFacets:100,iceFacetSize:16,crystalStep:1,facetSurface:1},crystal:{diameter:480,elevation:140,wander:68,varySize:170,facetForm:1,iceFacets:65,iceFacetSize:32,crystalStep:14,crystalTiers:100,crystalFacet:70,crystalSizeVar:70,
+  crystal:{crater:{curve:{form:'lfCrater',knots:CRATER_BOWL},iceFacets:100,iceFacetSize:16,crystalStep:1,facetSurface:1},crystal:{diameter:480,elevation:140,wander:68,varySize:170,facetForm:1,iceFacets:65,iceFacetSize:24,crystalStep:9,crystalTiers:100,crystalFacet:70,crystalSizeVar:70,
     curve:{form:'lfCrystal',knots:[[0.0,0.0],[0.1,0.136],[0.2,0.293],[0.3,0.446],[0.4,0.585],[0.5,0.708],[0.6,0.811],[0.7,0.893],[0.8,0.952],[0.9,0.988],[1.0,1.0]],back:[[0.0,0.0],[0.1,0.136],[0.2,0.293],[0.3,0.446],[0.4,0.585],[0.5,0.708],[0.6,0.811],[0.7,0.893],[0.8,0.952],[0.9,0.988],[1.0,1.0]]}},mountain:{wander:6},deep:{wander:24,widthVary:25},shallow:{wander:6}},
   ice:{crystal:{diameter:260,elevation:60,iceFacets:100,iceFacetSize:240,crystalSides:6,crystalTop:50,crystalVariation:0,crystalTiers:0,bergJitter:45,bergBreak:3,bergRough:8,facetSurface:0,lean:100,facing:3,
     curve:{form:'lfCrystal',knots:[[0,0],[.04,1],[.55,1],[1,.62]],back:[[0,0],[.28,0],[1,.62]]}},mountain:{wander:6},deep:{wander:24,widthVary:25,shorePlates:1},shallow:{wander:6,shorePlates:1}},
@@ -260,6 +260,16 @@ export const groundDefaults=settings => ({amplitude:settings.has('undulation')?N
 // The brush seed a page opens with (sculpt.html's Seed box): a scripted scene's strokes take their seeds from it.
 export const DEFAULT_SEED=2701;
 // A page's settings: its address over the world's own defaults (boot() in sculpt.js does this to its address once the config is in).
+// A world with no beach of its own may take another world's (Colors & base pattern, Beach: the setting beachFrom names a world of config.beachSources,
+// sculpt.py world_configs): the lender's beach layer (the renderer generates it after the world's own, from the table this names) and its beach
+// width, height and color, so every reader of config.layers and config.material (the panel's facts and rows, the chunk margins, the renderer)
+// sees a beach. The page's boot and the headless host call this once the settings hold the world's defaults.
+export function borrowBeach(config,settings) {
+  const lender=config.beachSources?.[settings.get('beachFrom')];
+  if (!lender || config.layers.includes('beach')) return config;
+  config.layers=[...config.layers,'beach']; config.material={...config.material,...lender.material}; config.beachTable=lender.table;
+  return config;
+}
 export function addDefaults(settings,defaults={}) { for (const [key,value] of Object.entries(defaults||{})) if (!settings.has(key)) settings.set(key,value); return settings; }
 export const pageSettings=(config,search='') => addDefaults(new URLSearchParams(search),config.defaults);
 // A world setting the page's address may override (a knob trial in a render's query), else the world's value.

@@ -30,7 +30,7 @@ BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Arc
 # plus its own overrides below, so each world has a value for every setting;
 # a knob missing here is reported in the page's console.
 KNOB_DEFAULTS = dict(
-    groundTiles=16, groundPattern='', groundContrast=1, undulation=10, undulationScale=200, undulationCover=.45,
+    groundTiles=16, groundPattern='', beachFrom='', groundContrast=1, undulation=10, undulationScale=200, undulationCover=.45,
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
     flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1, sunTilt=1, ambient=.42, slopeMarks=0, wrinkles=0, sandCrown=0,
@@ -202,6 +202,9 @@ KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # H4 item 4 (engine 1): rock blocks cut from the column's beds by joints (engine-bake.wgsl blockField); blocks 0 is none.
 # H4b (engine 1): blocks on hill rock, outside the structured face (0: none).
 KNOB_DEFAULTS.update(hillBlocks=0)
+# Card P10: the rock model's numbers (World panel, Rock type): 0 the world's own (its table's material.rock), else a named type
+# (sculpt-material-model.js ROCK_TYPES, Granite first).
+KNOB_DEFAULTS.update(rockType=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, outcrop=0, rillDepth=0, rillSpacing=8)
@@ -484,7 +487,8 @@ WORLD_KNOBS = {
     # and hills set in sand get sandy feet.
     # Painted sand keeps a raised bar sand to its crown (the river sections'
     # sand bars rise ~100 units from the bed with no rock).
-    'zhon': dict(crackSeverity=.4, crackMajor=.6, rockCrown=1, apron=0, sandBanding=1,
+    # Undulation 10 -> 1.5: retail's savannah is level (50-57% of dry cells under slope .03; ours 11-22%).
+    'zhon': dict(undulation=1.5, crackSeverity=.4, crackMajor=.6, rockCrown=1, apron=0, sandBanding=1,
                  beachWidth=.6, banding=.3, crackDark=.45, sandCrown=1),
     # Lava: one dark, low-chroma brown ground with no cracks, sand or
     # boulders on the level; striated dark cliffs; a molten sea with no
@@ -699,14 +703,11 @@ WORLD_VARIANTS = {
         # Ground cover (card P30): GROUND_COVER above, with Vegetation cover 1.
         # Card P27: Surf .1 on its water strokes (a wet line and a 1-px foam lace on lakes, no beach) and a sand colour for the beaches
         # higher Surf builds.
-        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, undulation=0, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockAge=.5, cavity=1.0, shineRock=.36),
+        # Card P10: the rock model is Rock type 1, Granite (sculpt-material-model.js ROCK_TYPES: calm blocks of 22 px; Age is the rockAge row, .5).
+        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, undulation=0, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockType=1, rockAge=.5, cavity=1.0, shineRock=.36),
                        # Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the hills' feet and in gullies,
                        # median 5 px (readable at 1x; Green's retail grit is 3-4); stoneSort .7 sorts it by the process (talus coarsens outward).
-                       material=dict(stoneSort=.7, groundPool=2048,
-                       # Card P10: the rock model (a granite-like preset, calm: Size 22 px; Age is the rockAge row, default .5), the numbers of one rock type.
-                       rock=dict(size=22, aspect=1.6, jitter=.9, open=.5, bedOpen=.15, terr=0, vary=.25, crev=1.2, crevW=1.0,
-                                 chip=.12, chipSize=4, grit=.3, joint=0, seam=1.6, curtain=.6, lichen=1.5),
-                       groundCover=GROUND_COVER)),
+                       material=dict(stoneSort=.7, groundPool=2048, groundCover=GROUND_COVER)),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
@@ -804,8 +805,6 @@ def apply_variant(config, biome, variant):
         return None
     out = copy.deepcopy(config)
     out['defaults'].update({k: str(x) for k, x in v.get('knobs', {}).items()})
-    if v.get('material', {}).get('rock'):
-        out['defaults'].update({k: str(x) for k, x in rock_flags(v['material']['rock']).items()})
     # A variant's own knobs beat the world's engine preset (modern Green's rockAge over Green's).
     out['engineDefaults'] = {k: x for k, x in out.get('engineDefaults', {}).items() if k not in v.get('knobs', {})}
     if v.get('river'):
@@ -829,18 +828,11 @@ SOURCES.update({table: HERE / table for table in MATERIAL_TABLES.values()})
 SOURCES['materials/palette.json'] = HERE / 'materials' / 'palette.json'
 
 
-def rock_flags(rock):
-    """What the rock preset cuts, for the panel's reasons: rockCells (it cuts blocks: Size and Age need it) and rockJoint (its joint
-    lines' depth, units; Open joints needs it or the blocks' crevices)."""
-    return dict(rockCells=int(rock.get('size', 0) > 0), rockJoint=rock.get('joint', 2), rockCurtains=int(rock.get('curtain', 0) > 0))
-
-
 def world_knobs(biome, config):
     """Set the page's knob defaults: KNOB_DEFAULTS, the world's water depths,
     then its WORLD_KNOBS entry."""
     knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
-    knobs.update(rock_flags(config['material'].get('rock', {})))
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
     config['engineDefaults'] = {k: str(v) for k, v in ENGINE_KNOBS.get(biome, {}).items()}
     config['knobs'] = sorted(knobs)
@@ -881,9 +873,18 @@ def world_configs(biomes):
     # A table world with no tile data (a quilted plain generated as a layer) has no pattern to lend; every other world does.
     patterns = {b: {'name': BIOME_NAMES[b], 'groundTable': configs[b]['materialTable']} for b in biomes
                 if 'ground' in json.loads((HERE / configs[b]['materialTable']).read_text())}
+    # Any world without a beach may take another's (World panel, Beach; sculpt-scene.js borrowBeach): the lender's table makes the layer, and its
+    # material's beach numbers come with it.
+    beaches = {}
+    for b in biomes:
+        if 'beach' in configs[b]['layers']:
+            material = json.loads((HERE / configs[b]['materialTable']).read_text())['material']
+            beaches[b] = {'name': BIOME_NAMES[b], 'table': configs[b]['materialTable'],
+                          'material': {k: material[k] for k in ('beachWidth', 'beachHeight', 'beachRGB') if k in material}}
     for config in configs.values():
         config['biomes'] = {b: BIOME_NAMES[b] for b in biomes}
         config['groundPatterns'] = patterns
+        config['beachSources'] = beaches
         config['variants'] = {k: v['label'] for k, v in WORLD_VARIANTS.get(config['biomeId'], {}).items()}
     return configs, {'worlds': {b: export_defaults(b) for b in biomes}}
 

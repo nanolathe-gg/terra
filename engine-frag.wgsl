@@ -795,7 +795,7 @@ fn iceFrostLines(pixel: vec2f, keep: f32) -> f32 {
 
 // The beach (Zhon, the one world with the beach layer): sand where the bake found water within reach (beachField), sand bars painted to their crown
 // (the baked alpha, negative) and the beach's own colour. Beach sand is a shore material, so every read of the baked beach comes through here.
-fn beachColour(pixel: vec2f) -> vec3f { return based(genColor(6, pixel), u.beachTexMean, u.beachBase); }
+fn beachColour(pixel: vec2f) -> vec3f { return based(genColor(max(u.beachLayer, 0), pixel), u.beachTexMean, u.beachBase); }
 fn beachMean() -> vec3f { return select(u.beachTexMean, u.beachBase.rgb, u.beachBase.a > 0.5); }
 // The beach's cover at p, its inland edge ragged by speck (0.5: smooth); the sand bars' own cover, before sandCrown scales it.
 fn beachSand(p: vec2f, speck: f32) -> f32 { return smoothstep(0.25, 0.75, beachField(p) + (speck - 0.5) * 0.5); }

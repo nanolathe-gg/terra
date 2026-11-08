@@ -111,6 +111,7 @@ struct Uniforms {
     waterLayer: i32,       // H14e: the generated layers that are the deep and the shallow water's grain (the table's water materials)
     shallowLayer: i32,
     groundLayer: i32,      // H14b: the generated layer that is the plain's quilted image, or -1 (the plain is the sampled image or the tiles)
+    beachLayer: i32,       // the generated layer that is the beach sand (the world's own, or one borrowed from another world's table), or -1
     groundTiles: i32,
     tileShift: f32,        // the export's TNT tile grid starts this many screen rows down: floor(base height / 2), the TA projection's offset (sculpt-chunk-renderer.js requiredRegion)
     sandGrain: f32,
