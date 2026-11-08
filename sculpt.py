@@ -697,8 +697,7 @@ WORLD_VARIANTS = {
         # domains, snow-white lumps standing on the raised ground, soft relief, no glint.
         'crystal': dict(label='Crystal mountains: straight strokes',
                         knobs=dict(iceCrystal=1, iceCrest=.3, iceSoft=0, iceSnow=0, iceFall=0, iceApron=0, shineRock=0, shineRockRough=0, shineHeadroom=0, shineStretch=1, shineWhite=.35)),
-        # Snow and slate (the mountains before card E6): white snow cover and dark slate interleaved,
-        # carved cracks, no sheen.
+        # Snow and slate (the mountains before card E6): carved cracks, no sheen.
         'snow': dict(label='Snow and slate: cracked mountains',
                      knobs=dict(iceSoft=0, iceSnow=0, iceFall=0, iceApron=0, crackSeverity=.2, shadeBlue=0, reliefAmount=.5, reliefScale=28, reliefLumps=.7,
                                 lightCap=1.13, ambient=.42, shineWhite=.35, shineStretch=1, shineHeadroom=0,

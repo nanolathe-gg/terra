@@ -70,11 +70,12 @@ test('every world can turn vegetation on, and flowers stay independent of relief
 
 test('world dependencies explain bypasses without biome gates',async()=>{
  const {worldControlRequirement:requirement}=await import('../sculpt-control-schema.js');
- // The column's tilt moves its beds (their strata colours and hardness), so it needs a column; its direction needs a tilt.
- for(const key of ['bedDip','bedDipDir'])assert.match(requirement(key,{column:0,bedDip:1}),/Add a rock column in the Rock column panel/,key);
- assert.equal(requirement('bedDip',{column:1}),'');
- assert.match(requirement('bedDipDir',{column:1,bedDip:0}),/Set Bed tilt/);
- assert.equal(requirement('bedDipDir',{column:1,bedDip:.5}),'');
+ // The column's tilt moves its beds, which the draw shows as the strata colours: it needs a column and Strata; its direction needs a tilt.
+ for(const key of ['bedDip','bedDipDir'])assert.match(requirement(key,{column:0,bedDip:1,strata:1}),/Add a rock column in the Rock column panel/,key);
+ for(const key of ['bedDip','bedDipDir'])assert.match(requirement(key,{column:1,bedDip:1,strata:0}),/Strength \(painted beds\) in Strata/,key);
+ assert.equal(requirement('bedDip',{column:1,strata:1}),'');
+ assert.match(requirement('bedDipDir',{column:1,strata:1,bedDip:0}),/Set Bed tilt/);
+ assert.equal(requirement('bedDipDir',{column:1,strata:1,bedDip:.5}),'');
  assert.match(requirement('undulationCover',{undulation:0}),/Undulation height/);
  assert.equal(requirement('undulationCover',{undulation:8}),'');
  assert.match(requirement('undulationArt',{undulation:0}),/Undulation height/);

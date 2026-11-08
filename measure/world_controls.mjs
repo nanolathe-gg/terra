@@ -280,6 +280,9 @@ try {
     WATER([[60, 960], [460, 960]], {diameter: 200, shorePlates: 1, plateMaterial: 2}), WATER([[560, 960], [960, 960]], {diameter: 200}, {waterDeep: 1, waterBed: 3}),
     // a partial Denser scatter over the ridge's flank: at full strength the paint is its own source, so only here does From cliff feet choose where stones lie
     ['paint', [[240, 220], [760, 220]], {card: {diameter: 460, amount: 35, paintChannel: 5}}],
+    // a broad Cracks more down the ridge's south flank: at a crack depth of 0 the cracks are only where it is painted, and the network's turn from
+    // rills to plates acts on the major cracks (Block size apart), which the small patch below barely holds
+    ['paint', [[240, 330], [760, 330]], {card: {diameter: 200, amount: 100, paintChannel: 10}}],
     ...[1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].map((c, i) => ['paint', [[110 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250], [170 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250]], {card: {diameter: 120, amount: 100, paintChannel: c}}])];
   // The water picks: six water strokes, each with one combination of a stroke's edge and bed choices (hard, lit, faded, cracked, and the pairs the water rows' gates read),
   // for the rows a stroke's own choice keeps alive where the world's setting leaves them idle.

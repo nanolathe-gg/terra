@@ -87,8 +87,9 @@ export function worldControlRequirement(key,v){
  if(key==='lowReach')return n('lowTint')>0||Number(v.lowGrain??1)<1?'':'Raise Tint or lower Grain kept in Low ground to use this setting.';
  // Strata, the foot band and the cap color the beds of a rock column: the world's own, or one the map adds (the Rock column panel; worldPanelValues passes the active one).
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return NO_COLUMN;
- // The tilt moves the rock column's beds (their strata colours and the hardness erosion reads), so it needs a column.
- if(['bedDip','bedDipDir'].includes(key)&&n('column')<=0)return NO_COLUMN;
+ // The tilt moves the rock column's beds; the draw shows them as the strata colours (the hardness the Time pass reads moves only when the pass
+ // runs again), so it needs a column and the strata switch.
+ if(['bedDip','bedDipDir'].includes(key)){const r=n('column')<=0?NO_COLUMN:needs('strata','Strength (painted beds) in Strata');if(r)return r;}
  if(key==='bedDipDir')return n('bedDip')===0?'Set Bed tilt above or below zero to choose its direction.':'';
  if(key==='sandBandSpacing')return needs('sandBanding','Streaks on sand and ramps');
  if(key==='bedDotCell')return needs('bedDots','Bed speckles');
@@ -136,8 +137,6 @@ export function worldControlRequirement(key,v){
  if(key==='shoalShoreSoft')return needs('crispShore','Crisp waterline');
  if(key==='shoalStairs')return needs('crispShore','Crisp waterline')||(n('shoalShoreSoft')>0?'Waterline blur replaces the stairs. Set it to 0 to use this setting.':'');
  if(key==='crackedStep')return needs('deepEdge',HARD_STEP)||(n('crackedBed')>0?'':CRACKED_BED);
- // With no crack depth the cracks are drawn only where Cracks more is painted, and there the network's turn from rills to plates hardly shows.
- if(key==='crackNetwork')return needs('crackSeverity','Frost (crack depth)');
  if(key==='shoalBump')return n('waterColored')>0?LIT_REPLACED:needs('bedLit',LIT_BED)||needs('deepEdge',HARD_STEP);
  if(key==='shoalBumpPx')return needs('shoalBump','Lit bumps in the bed');
  if(/^ring[A-Z]/.test(key)&&n('ringLayer')<=0)return 'This world draws no mineral fringe.';
