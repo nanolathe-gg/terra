@@ -113,14 +113,14 @@ export function worldControlRequirement(key,v){
  // The slope group's weight is the larger of the faces' moss share (microRock) and the slope cover scaled by Sampled slope texture (a sandy slope scales it by its own sand instead).
  // With neither it has no share, and its gloss does not wake the pass (uShineOn, sculpt-renderer.js).
  const noSlopeShare=(n('slopeTexture')<=0||cover)&&n('slopeSand')<=0&&Number(v.microRock??1)<=0;
- if(noSlopeShare&&/^shineSlope(Sharp|Scale|Rough)?$/.test(key))return 'This world\'s faces are one material and Sampled slope texture is 0, so the slope cover has no share to shine. Raise Sampled slope texture to use this setting.';
+ if(noSlopeShare&&/^shineSlope(Sharp|Scale|Rough)?$/.test(key))return 'The faces are one material and Sampled slope texture is 0, so the slope cover has no share to shine. Raise Sampled slope texture or Moss and rock interleaved on faces to use this setting.';
  const shine=['Ground','Slope','Rock','Sand','Crystal'].filter(m=>m!=='Slope'||!noSlopeShare),shiny=shine.some(m=>n('shine'+m)>0),rough=shine.some(m=>n('shine'+m+'Rough')>0);
  const lobe=/^shine(Ground|Slope|Rock|Sand|Crystal)(Sharp|Scale)$/.exec(key);
  if(lobe)return needs('shine'+lobe[1]+(lobe[2]==='Sharp'?'':'Rough'),(lobe[2]==='Sharp'?'Gloss':'Roughness')+' in Shine: '+({Ground:'ground',Slope:'slope cover',Rock:'rock',Sand:'sand',Crystal:'crystal'})[lobe[1]]);
  if(['shineWhite','shineHeadroom'].includes(key))return shiny?'':'Set a Gloss above zero in one of the Shine groups to use this setting.';
  if(key==='shineStretch')return rough?'':'Set a Roughness above zero in one of the Shine groups to use this setting.';
  if(['shineGate','shineOutside','shineSlopeGate'].includes(key))return shiny||rough?'':'Set a Gloss or Roughness above zero in one of the Shine groups to use this setting.';
- if(['faceEdge','gullyRock','iceSlate'].includes(key)&&Number(v.microRock??1)<=0)return 'This world\'s faces are one material, not rock and moss interleaved, so there is nothing for this setting to place.';
+ if(['faceEdge','gullyRock','iceSlate'].includes(key)&&Number(v.microRock??1)<=0)return 'The faces are one material, not moss and rock interleaved, so there is nothing for this setting to place. Raise Moss and rock interleaved on faces to use this setting.';
  // A world with a beach keeps the Sand brush for its bars, so the sand these rows draw comes only from the weathering's supply.
  if(['wind','ripple','rippleHeight','sandDust','sandGrain','sandGrass','sandLight'].includes(key)&&n('beachLayer')>0)return needs('sand','Weathering supply in Sand');
  // Water wets the ground only where the Time pass has rain; the worlds that run it with rain off have no wetness map to read.
