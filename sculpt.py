@@ -110,6 +110,10 @@ KNOB_DEFAULTS.update(crystalFacet=0, crystalSizeVar=0, crystalShallow=0, crystal
 # G7 (Crystal): the thin web the draw lays over a crystal skin (a landform's angular Facets with Surface Crystal; 0: none).
 KNOB_DEFAULTS.update(crystalCraterWeb=0, crystalCraterWebPx=14, crystalCraterWobble=0,
                      crystalCraterGap=0, crystalCraterTone=0, crystalCraterLight=1)
+# Round 3 (Desert): the share of loose stones drawn as knolls, low rings of ground round a hollow (0: all stones).
+KNOB_DEFAULTS.update(looseKnoll=0)
+# Round 3 (Crystal): a bold web of long dark gouges across raised crystal formations (0: none).
+KNOB_DEFAULTS.update(gougeWeb=0)
 # G7 (Crystal): finer shore slabs and fainter seams (the defaults are the earlier output).
 KNOB_DEFAULTS.update(crystalShoreSeam=.5, crystalSeamEnd=.74, crystalShallowInk=.55)
 # H20b (Crystal): the share of shore slabs that break into a fine mesh inside their own outline (0: the earlier output).
@@ -152,6 +156,8 @@ KNOB_DEFAULTS.update(shineGate=0, shineHeadroom=0)
 KNOB_DEFAULTS.update(pockmark=0, pockSize=5)
 # G8, Moon: lit cups (0: none; the pockmark dots above are separate). Size is the spacing across the glint axis in px, depth the wall steepness.
 KNOB_DEFAULTS.update(moonCups=0, moonCupSize=5.5, moonCupDepth=1.4)
+# Round 3: cups drawn out into strokes along the glint axis, this many times their length (1: the pits).
+KNOB_DEFAULTS.update(cupStretch=1)
 # G8, Moon: stringy light and dark strokes down steep faces (0: none), their steepness and the darkening of faces turned from the sun.
 KNOB_DEFAULTS.update(moonRibs=0, moonRibDepth=1, moonRibDark=0)
 # G8, Moon: thin dark folds that follow the form across lit and moderate slopes (0: none), and the height between their contours.

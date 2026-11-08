@@ -21,7 +21,7 @@ export const KNOBS = [
   ['Shine: rock', [['shineRock','Gloss (highlight strength)',0,2,.05,0],['shineRockSharp','Sharpness (lobe exponent)',2,200,2,24],['shineRockRough','Roughness (grain slope)',0,2,.05,0],['shineRockScale','Grain width (px)',1,24,.5,6]]],
   ['Shine: sand', [['shineSand','Gloss (highlight strength)',0,2,.05,0],['shineSandSharp','Sharpness (lobe exponent)',2,200,2,24],['shineSandRough','Roughness (grain slope)',0,2,.05,0],['shineSandScale','Grain width (px)',1,24,.5,6]]],
   ['Shine: crystal', [['shineCrystal','Gloss (highlight strength)',0,2,.05,0],['shineCrystalSharp','Sharpness (lobe exponent)',2,200,2,24],['shineCrystalRough','Roughness (grain slope)',0,2,.05,0],['shineCrystalScale','Grain width (px)',1,24,.5,6]]],
-  ['Loose stone', [['looseSupply','Supply',0,1,.05,0],['looseSize','Size (median, px)',2,24,1,6]]],
+  ['Loose stone', [['looseSupply','Supply',0,1,.05,0],['looseSize','Size (median, px)',2,24,1,6],['looseKnoll','Knolls (share of stones that are ground rings around a hollow)',0,1,.05,0]]],
   ['Sand', [['sand','Deposit supply',0,2,.05,0],
     ['wind','Ripple direction (degrees)',0,360,5,20],['sandDust','Dusting tint',0,1,.05,.5],['sandGrass','Vegetation through sand',0,1,.05,.6],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
     ['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4]]],
@@ -60,8 +60,8 @@ export const KNOBS = [
   ['Shine: gate and headroom', [['shineGate','Roughness only on raised ground and slopes',0,1,.05,0],['shineHeadroom','Dim the body between glints (near-white surface)',0,1,.05,0]]],
   ['Surface pits', [['pockmark','Dark pits on raised ground and slopes',0,1,.05,0],['pockSize','Pit spacing (px)',3,12,.5,5]]],
   // Card G8: cups, ribs and folds on steep faces.
-  ['Cups, ribs & folds', [['moonCups','Slope cups',0,1,.05,0],['moonCupSize','Cup spacing (px)',3,12,.5,5.5],['moonCupDepth','Cup depth (wall steepness)',.4,3,.1,1.4],['moonRibs','Slope ribs',0,1,.05,0],['moonRibDepth','Stroke steepness',.2,3,.1,1],['moonRibDark','Darker where turned from the sun',0,.9,.05,0],['moonFolds','Contour folds',0,1,.05,0],['moonFoldSpacing','Fold spacing (height units)',.3,3,.1,.9]]],
-  ['Mineral faces', [['iceSlate','Slate faces',0,1,.05,0],['mineralDetail','Rock art contrast',0,2,.05,1],['iceCrystal','Straight face fibres',0,1,.05,0],['iceCrest','Cap lumps',0,1,.05,0]]],
+  ['Cups, ribs & folds', [['moonCups','Slope cups',0,1,.05,0],['moonCupSize','Cup spacing (px)',3,12,.5,5.5],['moonCupDepth','Cup depth (wall steepness)',.4,3,.1,1.4],['cupStretch','Cup stretch into strokes (1: pits)',1,3,.1,1],['moonRibs','Slope ribs',0,1,.05,0],['moonRibDepth','Stroke steepness',.2,3,.1,1],['moonRibDark','Darker where turned from the sun',0,.9,.05,0],['moonFolds','Contour folds',0,1,.05,0],['moonFoldSpacing','Fold spacing (height units)',.3,3,.1,.9]]],
+  ['Mineral faces', [['iceSlate','Slate faces',0,1,.05,0],['mineralDetail','Rock art contrast',0,2,.05,1],['iceCrystal','Straight face fibres',0,1,.05,0],['gougeWeb','Gouges across crystal formations',0,1,.05,0],['iceCrest','Cap lumps',0,1,.05,0]]],
   // Card G6: rounded light, caps and face finish on raised ground.
   ['Cap & face finish', [['iceSoft','Rounded lighting',0,1,.05,0],['iceSnow','Snow on level caps',0,1,.05,0],['iceFall','Slope fibres',0,1,.05,0],['iceApron','Hatched foot apron',0,1,.05,0]]],
   ['Needle lines', [['iceFrost','Needle hairlines',0,1,.05,0]]],

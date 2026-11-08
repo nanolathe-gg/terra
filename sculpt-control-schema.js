@@ -106,7 +106,7 @@ export function worldControlRequirement(key,v){
  if(key==='sandBandSpacing')return needs('sandBanding','Streaks on sand and ramps');
  if(key==='bedDotCell')return needs('bedDots','Bed speckles');
  if(key==='pockSize')return needs('pockmark','Surface pits');
- if(/^moonCup/.test(key)&&key!=='moonCups')return needs('moonCups','Slope cups');
+ if((/^moonCup/.test(key)&&key!=='moonCups')||key==='cupStretch')return needs('moonCups','Slope cups');
  if(/^moonRib/.test(key)&&key!=='moonRibs')return needs('moonRibs','Slope ribs');
  if(key==='moonFoldSpacing')return needs('moonFolds','Contour folds');
  if(['lavaPillow','lavaChip','lavaVeins','lavaCalm'].includes(key))return needs('lavaCrust','Pillow crust strength');
@@ -176,7 +176,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'flatShadow','flatOcclusion','sunTilt','ambient','shadeDepth','lightCap','creaseShade',
  'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','erosionRain','wetSwath','lushness','slopeMarks','wrinkles',
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
- 'looseSupply','looseSize','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
+ 'looseSupply','looseSize','looseKnoll','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing','rockOrder','rockFrom','bedSpacing','bedLedge','rockOpen',
  'banding','sandBanding','strata','strataContrast',
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
@@ -184,5 +184,5 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'shelfWander','bedFlat','bedDots','crackedStep','shoalBump','shoalGrain',
  'ringContrast','ringCount','ringSize','ringShift','ringTone',
  'lavaCrust','lavaPillow','lavaVeins','layerCrease','pockmark',
- 'moonCups','moonRibs','moonFolds','iceSlate','mineralDetail','iceCrystal','iceCrest','iceSoft','iceSnow','iceFall','iceApron','iceFrost','frostGaps'
+ 'moonCups','moonRibs','moonFolds','iceSlate','mineralDetail','iceCrystal','gougeWeb','iceCrest','iceSoft','iceSnow','iceFall','iceApron','iceFrost','frostGaps'
 ]);

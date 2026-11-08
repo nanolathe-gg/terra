@@ -1044,6 +1044,7 @@ export class TerrainRenderer {
     this.f('uMoonCups', variant.has('moonCups') ? Number(variant.get('moonCups')) : 0);
     this.f('uMoonCupSize', variant.has('moonCupSize') ? Number(variant.get('moonCupSize')) : 5.5);
     this.f('uMoonCupDepth', variant.has('moonCupDepth') ? Number(variant.get('moonCupDepth')) : 1.4);
+    this.f('uCupStretch', variant.has('cupStretch') ? Number(variant.get('cupStretch')) : 1);
     this.f('uMoonRibs', variant.has('moonRibs') ? Number(variant.get('moonRibs')) : 0);
     this.f('uMoonRibDepth', variant.has('moonRibDepth') ? Number(variant.get('moonRibDepth')) : 1);
     this.f('uMoonRibDark', variant.has('moonRibDark') ? Number(variant.get('moonRibDark')) : 0);
@@ -1079,6 +1080,8 @@ export class TerrainRenderer {
     this.f('uLowTint', variant.has('lowTint') ? Number(variant.get('lowTint')) : 0);
     this.f('uLowReach', variant.has('lowReach') ? Number(variant.get('lowReach')) : 6);
     this.f('uLowGrain', variant.has('lowGrain') ? Number(variant.get('lowGrain')) : 1);
+    this.f('uLooseKnoll', variant.has('looseKnoll') ? Number(variant.get('looseKnoll')) : 0);
+    this.f('uGougeWeb', variant.has('gougeWeb') ? Number(variant.get('gougeWeb')) : 0);
     this.f('uCreaseShade', variant.has('creaseShade') ? Number(variant.get('creaseShade')) : 0);
     this.fieldsDirty = true;
   }

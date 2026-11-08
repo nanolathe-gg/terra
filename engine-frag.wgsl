@@ -657,6 +657,42 @@ fn moonCups(pixel: vec2f, size: f32, density: f32, depth: f32) -> vec3f {
     }
     return vec3f(grad, cavity);
 }
+// Round 3 (Moon): the same cups drawn out into strokes. Retail's dark faces carry strokes 1-2 px wide and 5-12 px long where ours
+// are dotted pits: each cup's length grows by stretch (and by up to .3 either way per cup) and its width shrinks by the root of
+// it, and its long axis turns up to 20 degrees either way from the glint axis per cup. The axis stays the glint axis's, not the
+// fall line's: retail moon-1's pits lean with it on the walls of both facings (the G8 measure), and strokes down the fall line
+// lay across a wall that faces east or west. The lattice is the cups', so the strokes keep their spacing, and the neighbours two
+// cells out are read, as a stroke reaches past the next cell.
+fn cupStrokes(pixel: vec2f, size: f32, density: f32, depth: f32, stretch: f32) -> vec3f {
+    let q = vec2f(dot(pixel, SHINE_ACROSS) / size, dot(pixel, SHINE_ALONG) / (size * 1.5));
+    let c = vec2i(floor(q));
+    var grad = vec2f(0.0);
+    var cavity = 0.0;
+    for (var j = -2; j <= 2; j++) {
+        for (var i = -2; i <= 2; i++) {
+            let k = c + vec2i(i, j);
+            let r = markHash(k + vec2i(4001, 17));
+            if (r.x >= density) { continue; }
+            let centre = vec2f(k) + 0.15 + 0.7 * r.yz;
+            let off = (q.x - centre.x) * size * SHINE_ACROSS + (q.y - centre.y) * size * 1.5 * SHINE_ALONG;
+            let turn = (fract(r.w * 13.7) - 0.5) * 0.7;
+            let along = cos(turn) * SHINE_ALONG + sin(turn) * SHINE_ACROSS;
+            let across = vec2f(-along.y, along.x);
+            let ax = mix(1.3, 2.0, r.w) / sqrt(stretch);
+            let ay = mix(2.8, 4.2, fract(r.w * 7.3)) * stretch * mix(0.7, 1.3, fract(r.w * 3.1));
+            let d = vec2f(dot(off, across) / ax, dot(off, along) / ay);
+            let s = dot(d, d);
+            if (s >= 2.6) { continue; }
+            let x = clamp((s - 1.6) / 1.0, 0.0, 1.0);
+            let w = 1.0 - x * x * (3.0 - 2.0 * x);
+            let dw = -6.0 * x * (1.0 - x);
+            let slope = exp(-s) * ((2.0 - s) * w + (s - 1.0) * dw);
+            grad += depth * slope * 2.0 * (d.x * across / ax + d.y * along / ay);
+            cavity = max(cavity, 1.0 - smoothstep(0.2, 1.0, s));
+        }
+    }
+    return vec3f(grad, cavity);
+}
 
 // G8 (Moon): the stringy relief of the shaded flank. Retail's steep walls are crossed by thin light
 // and dark strokes, 1-2 px wide and 5-12 px long, leaning with the glint axis whichever way the wall
@@ -910,6 +946,21 @@ fn craterWeb(p: vec2f) -> vec2f {
     let width = 0.6 + 1.0 * fract(w * 3.7 + 0.2);
     let line = (1.0 - smoothstep(width * 0.5, width * 0.5 + 0.6, edge)) * drawn;
     return vec2f(line, 1.0 + u.crystalCraterTone * (m.id.x - 0.5));
+}
+
+// Round 3 (Crystal): long dark gouges across raised crystal. Retail's crystal mounds are crossed by a bold black web over their
+// facets, lines 2-4 px wide that run on from seam to seam round cells 30-60 px across, wandering, a few seams left out, where ours
+// are only the facets' thin outlines (crystal-1: thin dark line density .0086 against ours .0054). Voronoi seams of GOUGE_PX
+// cells, the lookup bent by the world noise as the crater web's is, each seam one width and drawn or not; returns 0..1.
+const GOUGE_PX = 42.0;
+fn gougeWeb(p: vec2f) -> f32 {
+    let warp = (terrainNoise(p * 0.12).rg - 0.5) * 14.0 + (terrainNoise(p * 0.5).ba - 0.5) * 4.0;
+    let m = markCells((p + warp) / GOUGE_PX, vec2i(61, 7), 0.9, 0.0);
+    let edge = (m.d2 - m.d1) * 0.5 * GOUGE_PX;
+    let w = fract((m.id.z + m.id2.z) * 5.17);
+    let drawn = smoothstep(0.2, 0.28, w);
+    let width = 1.4 + 2.0 * fract(w * 3.7 + 0.2);
+    return (1.0 - smoothstep(width * 0.5, width * 0.5 + 0.7, edge)) * drawn;
 }
 
 // H23: how much of the sun-facing crack wall's light the rock takes, the same on every world.
@@ -2006,6 +2057,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 faces = mix(faces, vec3f(0.0), u.crystalCraterWeb * web.x * craterBand * mix(0.6, 1.0, smoothstep(0.1, 0.45, slope)) * mix(1.0, 0.6, smoothstep(0.95, 1.1, s)));
             }
         }
+        if (u.gougeWeb > 0.0) {
+            // Round 3: the bold gouges cross the raised formation, not a crater's skin or the shore's slabs.
+            faces = mix(faces, vec3f(0.0), u.gougeWeb * gougeWeb(p) * smoothstep(u.base + 3.0, u.base + 12.0, h) * (1.0 - craterBand));
+        }
         material = mix(material, faces, smoothstep(0.05, 0.3, crystalMask));
     } else {
         // A dark apron round a crystal formation, fading over ~16 px.
@@ -2149,7 +2204,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let clump = 0.6 + 0.8 * (0.5 + 0.5 * wrinkleNoise(pixel / 38.0 + 5.0));
         let keep = min(u.moonCups * mix(0.04, 1.0, smoothstep(0.1, 0.55, turned)) * steep * clump * landform, 1.0);
         if (keep > 0.0) {
-            let cups = moonCups(pixel, u.moonCupSize, keep, u.moonCupDepth);
+            var cups: vec3f;
+            if (u.cupStretch > 1.0) {
+                cups = cupStrokes(pixel, u.moonCupSize, keep, u.moonCupDepth, u.cupStretch);
+            } else {
+                cups = moonCups(pixel, u.moonCupSize, keep, u.moonCupDepth);
+            }
             let before = max(0.0, dot(normal, u.light));
             let after = max(0.0, dot(normalize(vec3f(-(g + cups.xy), 1.0)), u.light));
             color *= clamp((u.ambient + 0.95 * after * markSeen) / (u.ambient + 0.95 * before * markSeen), 0.2, 1.3) * (1.0 - 0.7 * cups.z);

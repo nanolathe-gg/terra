@@ -268,6 +268,7 @@ struct Uniforms {
     moonCups: f32,        // lit pits, 2-3 px wide and 4-6 px tall, many on shaded steep faces and few on lit ground (0: none; the pockmark dots are separate)
     moonCupSize: f32,     // pit spacing across the glint axis, px (the cell is 1.5 times that along it)
     moonCupDepth: f32,    // pit depth in height units: how steep its walls shade
+    cupStretch: f32,      // cups drawn out along the glint axis into strokes this many times their length and narrower, each turned a little its own way (1: the pits, as before)
     moonRibs: f32,        // stringy light and dark strokes down steep faces, shaded by the sun (0: none)
     moonRibDepth: f32,    // stroke steepness: the gradient the strokes add (1: about 0.8 at their steepest)
     moonRibDark: f32,     // how much darker the strokes' mean is on faces turned from the sun (0: the face's own shade)
@@ -305,6 +306,8 @@ struct Uniforms {
     lowReach: f32,        // height above the sea where low ground ends (its ragged edge fades over the upper half)
     lowGrain: f32,        // 0..1: the share of its grain the low ground's pattern and the water's art and mottle keep (1: as drawn)
     lowColor: vec3f,      // the low ground's color (Colors: Low ground)
+    looseKnoll: f32,      // 0..1: the share of loose stones drawn as knolls, a low pale ring of ground round a hollow (0: all stones, as before)
+    gougeWeb: f32,        // 0..1: a bold web of long dark gouges across raised crystal, round cells about 42 px (0: none)
     creaseShade: f32,     // 0..1: how much light a crease (a gully or valley floor, the authored height below its rings 6 and 12 px out) loses, whatever its facing (0: none)
     // G2 (rock faces follow the slope). Every default is the earlier look.
     cliffFollow: f32,     // beds follow the contours and joints, gullies and facets the fall line of the ground round them (0: fixed screen directions, as before)
