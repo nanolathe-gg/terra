@@ -243,6 +243,9 @@ WORLD_KNOBS = {
                   # The rock face (green dive, 2026-11-08): every face steep enough is rock, drawn in screen pixels (rockFaceAt); retail's faces
                   # are layered, crumpled and scratched rock from black creases to light grey facets, grass in clumps and on the ledges.
                   rockFace=2,
+                  # Rock from slope .3 (.6): retail Green's rock share is ~.3 from slope .4 up (measured on retail's heights: .23 .31 .32 .29 at
+                  # .4-1.0 against our .16 .19 .22 .22; at .3, .18 .25 .33 .29).
+                  rockFaceFrom=.3,
                   # The layers run on under the grass as soil-covered terraces 1.2 units apart (retail's hills: dense wavy dark lines ~8 px apart
                   # on slopes .1-.2); they replace the contour bands (banding .3 -> 0).
                   faceLayers=1,
