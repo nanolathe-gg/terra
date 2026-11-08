@@ -1525,7 +1525,7 @@
    {"share": 0.2, "params": {"cells": "5x4", "form": "shards", "parts": 8, "shade": 0.05, "lump": 0, "grain": 0.25, "shadowLen": 1.3, "shadowColor": "#000f47", "colors": ["#6f8393", "#96adc0", "#b2cee4", "#c8e6ff", "#dcf4ff", "#eef9ff", "#fbfeff", "#ffffff"], "mottle": [["#c7dfe7", 0.1]], "metal": 0, "reclaimable": false, "tall": 0.2}, "vary": {"parts": [5, 12], "size": [1.0, 1.3]}},
    {"share": 0.15, "params": {"cells": "3x4", "form": "shards", "parts": 8, "shade": 0.05, "lump": 0, "grain": 0.25, "shadowLen": 1.3, "shadowColor": "#000f47", "colors": ["#6f8393", "#96adc0", "#b2cee4", "#c8e6ff", "#dcf4ff", "#eef9ff", "#fbfeff", "#ffffff"], "mottle": [["#c7dfe7", 0.1]], "metal": 0, "reclaimable": false, "tall": 0.2}, "vary": {"parts": [5, 12], "size": [1.0, 1.3]}},
    {"share": 0.15, "params": {"cells": "3x3", "form": "shards", "parts": 8, "shade": 0.05, "lump": 0, "grain": 0.25, "shadowLen": 1.3, "shadowColor": "#000f47", "colors": ["#6f8393", "#96adc0", "#b2cee4", "#c8e6ff", "#dcf4ff", "#eef9ff", "#fbfeff", "#ffffff"], "mottle": [["#c7dfe7", 0.1]], "metal": 0, "reclaimable": false, "tall": 0.2}, "vary": {"parts": [5, 12], "size": [1.0, 1.3]}}]},
-  "deposit": {"params": {"look": "blades", "blades": 5, "bladeLen": 20, "bladeWidth": 14, "fan": 1, "core": 11, "halo": 0.28, "haloSat": 4, "reach": 1.5, "rimDark": 0.8}},
+  "deposit": {"params": {"look": "blades", "blades": 5, "bladeLen": 20, "bladeWidth": 14, "fan": 1, "core": 11, "halo": 0.28, "haloSat": 4, "reach": 1.5, "rimDark": 0.8}, "vary": {"reach": [1.12, 2.25], "haloRough": [4, 10]}},
   "vent": {"params": {"size": 1.7, "thick": 1.6, "rim": 0.5, "rimSat": 2.5, "spread": 6}}
  },
  "world": {

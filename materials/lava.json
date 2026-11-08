@@ -1214,7 +1214,7 @@
    {"share": 0.08, "params": {"cells": "3x3", "lump": 0.45, "grain": 0.7, "colors": ["#050403", "#1e1510", "#2c2018", "#34281c", "#3a2e20", "#40342a", "#4a3e30", "#5a4c3a"], "mottle": [["#4a4a34", 0.1]]}, "vary": {"size": [1.0, 1.2]}}]},
   "scar": {"count": 3, "types": [
    {"share": 1, "params": {"type": "smudge"}, "vary": {"size": [0.5, 1.2]}}]},
-  "deposit": {"params": {"halo": 0.22, "haloSat": 1.2, "stoneScale": 0.85, "reach": 0.75, "rimDark": 0.5}},
+  "deposit": {"params": {"halo": 0.22, "haloSat": 1.2, "stoneScale": 0.85, "reach": 0.75, "rimDark": 0.5}, "vary": {"reach": [0.56, 1.12], "haloRough": [4, 10]}},
   "vent": {"params": {"look": "pit", "hole": 8, "ring": 34, "cell": 10, "lumps": 1, "lumpTone": 0.7, "rim": 0.55}}
  },
  "world": {

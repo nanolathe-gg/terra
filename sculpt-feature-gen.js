@@ -1042,7 +1042,7 @@ function getGround(g, x, y) { const k = (clamp(y, 0, g.h - 1) * g.w + clamp(x, 0
 // long tapered blades: blades (count), bladeLen and bladeWidth (px at 127 metal), fan (0 parallel blades .. 1 radial star), angle (degrees
 // of the first blade, 0 east, 90 down the screen), core (radius px). crust (radius px, 0: none) cracks the ground round the stone into
 // dark-edged plates, crustTone their lightness against the ground.
-export const DEPOSIT_DEFAULTS = { metal: 127, style: 'retail', look: 'auto', halo: 0.82, haloSat: 1.1, stoneScale: 1, reach: 1, rimDark: 0.78, blades: 7, bladeLen: 20, bladeWidth: 5, fan: 1, angle: -50, core: 7, crust: 0, crustTone: 0.8 };
+export const DEPOSIT_DEFAULTS = { metal: 127, haloRough: 5, haloScale: 5, style: 'retail', look: 'auto', halo: 0.82, haloSat: 1.1, stoneScale: 1, reach: 1, rimDark: 0.78, blades: 7, bladeLen: 20, bladeWidth: 5, fan: 1, angle: -50, core: 7, crust: 0, crustTone: 0.8 };
 const STONE_CLASSES = [
   { w: 0.29, ramp: [[216, 3], [224, 3], [145, 4], [114, 5], [130, 2]] },        // pale: lilac-white, pink-lilac, pale blue
   { w: 0.22, ramp: [[115, 8], [131, 3], [147, 3], [217, 3], [148, 3], [87, 3]] }, // light and mid
@@ -1156,7 +1156,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     if (chunkId[y * bw + x] >= 0) { dmap[y * bw + x] = 0; continue; }
     const X = x + ox, Y = y + oy; let d = 99;
     for (const p of stonePts) { const dd = Math.abs(p[0] - X) + Math.abs(p[1] - Y); if (dd < 40) { const e = Math.hypot(p[0] - X, p[1] - Y); if (e < d) d = e; } }
-    rawD[y * bw + x] = d; dmap[y * bw + x] = d + (fbm(X / 5, Y / 5, s1, 2) - 0.5) * 5;
+    rawD[y * bw + x] = d; dmap[y * bw + x] = d + (fbm(X / P.haloScale, Y / P.haloScale, s1, 2) - 0.5) * P.haloRough;   // haloRough: how ragged the patch's outline is (px)
   }
   const T = 4.6 * P.reach;   // a tight 3-6 px speckled rim that merges between neighbors (retail: median 2.8-3.6 px from a chunk, 90% within 6-8)
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {

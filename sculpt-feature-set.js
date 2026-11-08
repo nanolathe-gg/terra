@@ -46,8 +46,9 @@ export function worldKinds(config) {
 // Deposits and vents are the same on every world but their look: a world's table may set their painter's params (the halo's tone).
 function kindData(kind, config) {
   if (!GROUND_KINDS.includes(kind)) return config?.features?.[kind];
-  const look = config?.features?.[kind]?.params;
-  return look ? {...COMMON[kind], types: COMMON[kind].types.map(t => ({...t, params: {...t.params, ...look}}))} : COMMON[kind];
+  const own = config?.features?.[kind], look = own?.params;
+  // a table may also give the painter's variation (`vary`, ranges for params such as reach) and its own types (a world's second look)
+  return look || own?.types ? {...COMMON[kind], types: (own.types || COMMON[kind].types).map(t => ({...t, params: {...look, ...t.params}, vary: {...own.vary, ...t.vary}}))} : COMMON[kind];
 }
 
 export function defaultSet(config) {
