@@ -702,6 +702,16 @@ function rockSolid(P, r) {
         const rad = b.a * (0.11 + 0.1 * r()) * clamp(Math.sqrt(18 / n), 1, 1.7) * (1 - 0.3 * rr) * (P.colWidth ?? 1), hh = b.hgt * (i === 0 ? 1 : (1 - 0.8 * rr * rr) * (0.45 + 0.55 * r()));
         b.cols.push({ e: b.a * rr * Math.cos(th), s: b.b * rr * Math.sin(th), rad, hh, m, ap: Math.cos(Math.PI / m), tx: (r() - 0.5) * (P.topTilt ?? 1.1), ty: (r() - 0.5) * (P.topTilt ?? 1.1), dirs: Array.from({ length: m }, (_, k) => [Math.cos(rot0 + k * TAU / m), Math.sin(rot0 + k * TAU / m)]) });
       }
+    } else if (form === 'blocks') {    // ruins: squared stone blocks, a run of wall stacked two or three high and the rest fallen about it
+      b.amp = 0; b.blocks = []; b.hgt = 6 + 5 * (P.tall ?? 0);
+      const n = Math.round(clamp(P.parts, 2, 48)), nw = Math.round(n * clamp(P.wall ?? 0.4, 0, 1)), wa = r() * Math.PI, wc = Math.cos(wa), ws = Math.sin(wa), wl = b.a * (0.9 + 0.5 * r()), wo = (r() - 0.5) * b.b * 0.8;
+      for (let i = 0; i < n; i++) {
+        const wallBlock = i < nw, ww = 2 + 2.2 * r(), dd = 1.6 + 1.5 * r(), hh = 1.5 + 2 * r();
+        let e, sv, rot, z0 = 0;
+        if (wallBlock) { const t = (i / Math.max(1, nw - 1)) * 2 - 1, row = i % 3; e = wc * t * wl - ws * (wo + (r() - 0.5) * 1.2); sv = ws * t * wl + wc * (wo + (r() - 0.5) * 1.2); rot = wa + (r() - 0.5) * 0.12; z0 = row === 2 && r() < 0.6 ? hh * 1.6 : 0; if (row === 1) z0 = hh * 2 * (r() < 0.7 ? 1 : 0); }
+        else { const rho = Math.pow(r(), 0.7) * 0.95, th = r() * TAU; e = b.a * rho * Math.cos(th); sv = b.b * rho * Math.sin(th); rot = r() * TAU; z0 = r() < 0.25 ? hh * 1.5 : 0; }
+        b.blocks.push({ e, s: sv, z: z0 + hh, w: ww, d: dd, h: hh, co: Math.cos(rot), si: Math.sin(rot) });
+      }
     } else if (form === 'shards') {    // angular pyramids and tilted slabs with flat planar faces, scattered across the footprint
       b.amp = 0; b.shards = [];
       const n = Math.round(clamp(P.parts, 2, 14));
@@ -726,6 +736,14 @@ function rockSolid(P, r) {
         if (round) { const rho = Math.hypot(dx, dy), q = Math.max(0, qu - (c.hh - c.rad)), bump = P.colRough > 0 ? P.colRough * c.rad * (0.3 * (vnoise3(qe / 3, qs / 3, qu / 3, b.s1 + 21) - 0.5) + 0.12 * Math.sin(qu * 0.8 + c.e)): 0; f = Math.min(f, Math.max(Math.hypot(Math.max(0, rho - c.rad * 0.0), q) - c.rad * (1 - 0.1 * clamp(qu / c.hh, 0, 1)) * 1 + bump, -qu)); continue; }
         let d = -Infinity; for (const [cx, cy] of c.dirs) { const v = dx * cx + dy * cy - ap; if (v > d) d = v; }
         f = Math.min(f, Math.max(d, qu - c.hh + c.tx * dx + c.ty * dy, -qu));
+      }
+      return f;
+    }
+    if (b.blocks) {
+      f = Infinity;
+      for (const k of b.blocks) {
+        const px = qe - k.e, py = qs - k.s, x1 = Math.abs(px * k.co + py * k.si) - k.w, y1 = Math.abs(-px * k.si + py * k.co) - k.d, z1 = Math.abs(qu - k.z) - k.h;
+        f = Math.min(f, Math.hypot(Math.max(x1, 0), Math.max(y1, 0), Math.max(z1, 0)) + Math.min(Math.max(x1, y1, z1), 0) - 0.35);
       }
       return f;
     }
