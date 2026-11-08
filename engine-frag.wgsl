@@ -1631,6 +1631,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             let wRock = max(faceRock * faceGate, place.exposed * (1.0 - faceGate));
             let wSoil = max(layerGate, 0.5 * faceGate) * (1.0 - wRock);
             let k = u.rockFace;
+            let soilShare = wSoil / max(wSoil + wRock, 1e-4);
             let s0 = c0.x * wRock + c0.y * wSoil;
             let ds = vec2f(cx.x * wRock + cx.y * wSoil - s0, cy.x * wRock + cy.y * wSoil - s0) * k;
             let dw = vec2f(ds.x - 0.5 * broad.x * ds.y, rowStretch * ds.y);
@@ -1652,7 +1653,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                         let f = rockFaceAt(pixel + o * d, hb + gd * d, fall, steep, bedPx);
                         blocked = max(blocked, smoothstep(0.0, 0.8, ((f.relief * wRock + f.layer * wSoil) - s0) * k - clearance * d));
                     }
-                    faceSun = 1.0 - blocked;
+                    // Soil is rounded and grass-covered: its steps cast soft, partial shadows, not the rock's hard black ones.
+                    faceSun = 1.0 - blocked * (1.0 - 0.6 * soilShare);
                 }
                 // The sky: how far the surface round the pixel rises above it (4 taps 2.5 px out).
                 var rim = 0.0;
@@ -1661,7 +1663,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                     let c = faceHeightAt(pixel, taps[i], hb, broad, rowStretch, fall, steep, bedPx);
                     rim += max(c.x * wRock + c.y * wSoil - s0, 0.0) * k;
                 }
-                faceOcc = clamp(rim / (4.0 * 2.5) * (1.6 + 4.0 * u.faceShade), 0.0, 0.85 + 0.15 * u.faceShade);
+                faceOcc = clamp(rim / (4.0 * 2.5) * (1.6 + 4.0 * u.faceShade), 0.0, 0.85 + 0.15 * u.faceShade) * (1.0 - 0.6 * soilShare);
             }
         }
     }
