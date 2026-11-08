@@ -234,7 +234,8 @@ WORLD_KNOBS = {
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so the band row's line strength (materials/green.json) keeps their darkness.
     # Card P16: the Scree slider's talus chips (3-5 px, a few % of the cliff feet's ground) as Supply and Size.
-    'green': dict(looseSupply=.08, looseSize=3.5, banding=.3, crackDark=.4, wetSwath=.35,   # Moisture (a panel row, card P30); the Time pass's wet swaths and modern Green's ground cover read it
+    # Retail round 2: shores drop to the sea more abruptly (retail's shore band 32-45 px; base 51-72). Modern keeps 1.
+    'green': dict(coastRamp=.75, looseSupply=.08, looseSize=3.5, banding=.3, crackDark=.4, wetSwath=.35,   # Moisture (a panel row, card P30); the Time pass's wet swaths and modern Green's ground cover read it
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
@@ -708,7 +709,7 @@ WORLD_VARIANTS = {
         # Card P27: Surf .1 on its water strokes (a wet line and a 1-px foam lace on lakes, no beach) and a sand colour for the beaches
         # higher Surf builds.
         # Card P10: the rock model is Rock type 1, Granite (sculpt-material-model.js ROCK_TYPES: calm blocks of 22 px; Age is the rockAge row, .5).
-        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, undulation=0, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockType=1, rockAge=.5, cavity=1.0, shineRock=.36),
+        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, undulation=0, coastRamp=1, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockType=1, rockAge=.5, cavity=1.0, shineRock=.36),
                        # Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the hills' feet and in gullies,
                        # median 5 px (readable at 1x; Green's retail grit is 3-4); stoneSort .7 sorts it by the process (talus coarsens outward).
                        material=dict(stoneSort=.7, groundPool=2048, groundCover=GROUND_COVER)),
