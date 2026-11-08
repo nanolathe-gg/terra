@@ -538,7 +538,7 @@ fn rockFaceAt(s: vec2f, h: f32, fall: vec2f, steep: f32, bedPx: f32) -> RockFace
     // gentle slope reads as stacked dark wavy lines, as retail's grassed hills do.
     let ct = h / max(u.faceTerrace, 0.3) + poolNoise(s, 23.0, 41.0) * 0.45 + poolNoise(s, 9.0, 43.0) * 0.2;
     let tt = fract(ct);
-    let terrace = (smoothstep(0.0, 0.3, tt) - tt) * max(u.faceTerrace, 0.3);
+    let terrace = (smoothstep(0.0, 0.3, tt) - tt) * max(u.faceTerrace, 0.3) * min(u.faceLayers, 1.0);   // none while Layers under grass is 0
     o.layer = mix(min(bedHere, bedAcross), bedHere, smoothstep(0.0, 2.0 + 3.0 * wearPx, dv)) + mass + terrace;
     // A ledge: a bed's top where it stands proud of the bed above (a shelf grass can hold).
     let aboveBody = rockBlockAt(k + 1.0, r.x, s, steep).x;
