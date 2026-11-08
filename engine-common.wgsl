@@ -538,7 +538,7 @@ fn rockFaceAt(s: vec2f, h: f32, fall: vec2f, steep: f32, bedPx: f32) -> RockFace
     // of their spacing high, so a gentle slope carries a fine waver, not the ink contour lines full-height risers drew at Depth 2.
     let ct = h / max(u.faceTerrace, 0.3) + poolNoise(s, 23.0, 41.0) * 0.45 + poolNoise(s, 9.0, 43.0) * 0.2;
     let tt = fract(ct);
-    let terrace = (smoothstep(0.0, 0.3, tt) - tt) * max(u.faceTerrace, 0.3) * min(u.faceLayers, 1.0);   // none while Layers under grass is 0
+    let terrace = (smoothstep(0.0, 0.3, tt) - tt) * max(u.faceTerrace, 0.3) * 0.25 * min(u.faceLayers, 1.0);   // none while Layers under grass is 0
     o.layer = mix(min(bedHere, bedAcross), bedHere, smoothstep(0.0, 2.0 + 3.0 * wearPx, dv)) + mass + terrace;
     // A ledge: a bed's top where it stands proud of the bed above (a shelf grass can hold).
     let aboveBody = rockBlockAt(k + 1.0, r.x, s, steep).x;
@@ -840,8 +840,16 @@ fn bakedFields(p: vec2f) -> vec4f {
     let centre = (u.chunkFieldScale - 1.0) * 0.5;
     return textureSampleLevel(fieldsTex, linearClamp, (((q + 0.5 * u.chunkFieldScale) - u.chunkFieldsOrigin) - centre) / u.chunkFieldScale / u.chunkFieldsSize, 0.0);
 }
+// The texel nearest p: what a field's code is there, unblended with its neighbours'.
+fn bakedFieldsNearest(p: vec2f) -> vec4f {
+    let q = clamp(p, vec2f(0.0), vec2f(u.size - 1.0));
+    let centre = (u.chunkFieldScale - 1.0) * 0.5;
+    let t = (((q + 0.5 * u.chunkFieldScale) - u.chunkFieldsOrigin) - centre) / u.chunkFieldScale;
+    return textureSampleLevel(fieldsTex, linearClamp, (floor(t) + 0.5) / u.chunkFieldsSize, 0.0);
+}
 #else
 fn bakedFields(p: vec2f) -> vec4f { return textureSampleLevel(fieldsTex, linearClamp, (p + 0.5) / u.size, 0.0); }
+fn bakedFieldsNearest(p: vec2f) -> vec4f { return textureSampleLevel(fieldsTex, linearClamp, (floor(p + 0.5) + 0.5) / u.size, 0.0); }
 #endif
 // Green: route protection 0..1, beach as negative, or 2 + crystal cover.
 fn routeProtection(p: vec2f) -> f32 { let g = bakedFields(p).g; return select(max(g, 0.0), 1.0, g > 1.5); }

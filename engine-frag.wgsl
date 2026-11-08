@@ -1897,7 +1897,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let coverOrCrack = bakedFields(p).b;
         // A crack wall facing the sun.
         if (coverOrCrack > 1.0) { material *= 1.0 + CRACK_LIT * (coverOrCrack - 1.0); }
-        else { material = mix(material, rock * 1.08, max(coverOrCrack, 0.0)); }
+        else {
+            // The filtered code blends a lit crack wall (above 1) or a dark line (below 0) with its neighbours into the cover's range: only
+            // a texel that holds cover is rock, or every crack wall drew a rock-coloured outline on the grass.
+            let held = bakedFieldsNearest(p).b;
+            material = mix(material, rock * 1.08, select(max(coverOrCrack, 0.0), 0.0, held > 1.0 || held < 0.0));
+        }
         // A crack's floor is in shadow: darken what is there, so a crack in
         // grass stays green-black and one in rock grey-black. The walls are
         // lit by the carved geometry.
