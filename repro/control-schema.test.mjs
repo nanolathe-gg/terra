@@ -128,7 +128,9 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('cliffRise',{rockOrder:1,rockJoint:2,rockOpen:1,cliffFollow:1,cliffStagger:.5}),/Ledges above zero/,'the rise is relief only');
  shows('bedSpacing',{rockOrder:1,bedLedge:.5});
  // strata: bands and caps need a column and the strata switch
- assert.match(requirement('baseBand',{column:0,strata:1}),/no rock column/);
+ // a world without a column of its own: the reason names the panel that adds one
+ for(const key of ['strata','strataContrast','strataGrain','baseBand','desertCapFlat'])assert.match(requirement(key,{column:0,strata:1}),/Add a rock column in the Rock column panel/,key);
+ assert.match(requirement('desertCapFlat',{column:1,strata:1,capBed:0}),/Rock column panel/);
  assert.match(requirement('baseBand',{column:1,strata:0}),/Strata/);
  shows('baseBand',{column:1,strata:.5});
  assert.match(requirement('desertCapFlat',{column:1,strata:.5,capBed:0}),/no cap bed/);   // Green's column has eight beds in one section, so its caps hold nothing

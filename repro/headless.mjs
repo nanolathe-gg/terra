@@ -283,11 +283,22 @@ export async function scene(s, list, {ground = true} = {}) { s.play(list, {groun
 export async function pickColor(s, key, hex) {
   const {pickWorldColor} = await import('../sculpt-knobs.js');
   s.ownColors = pickWorldColor(s.config, s.ownColors, key, hex);
-  s.renderer.setColors(s.engine.rendererColors(s.engine.worldHexColors(s.config, s.settings, s.ownColors)));
+  s.renderer.setColors(s.engine.rendererColors(s.engine.worldHexColors(s.config, s.settings, s.ownColors), s.columnOverride?.colors));
+}
+// The map's own rock column (sculpt.js editColumn and restoreColumn, the Rock column panel's edit; null puts the world's back): checked as the
+// page checks it, then the config the renderer and the Time pass read, the column's uniforms and slot colors, and the Time pass again.
+export async function column(s, value) {
+  const {copyColumn} = await import('../sculpt-column.js');
+  s.worldColumn ??= {column: s.config.column};
+  s.columnOverride = copyColumn(value);
+  s.config.column = s.columnOverride || s.worldColumn.column;
+  s.renderer.applyKnobs();
+  s.renderer.setColors(s.engine.rendererColors(s.engine.worldHexColors(s.config, s.settings, s.ownColors), s.columnOverride?.colors));
+  await weather(s);
 }
 // What the World panel enables a row by (sculpt-knobs.js worldPanelValues), with Weathering on as the page opens.
 export async function panelValues(s) {
   const {worldPanelValues} = await import('../sculpt-knobs.js');
-  const colors = s.engine.rendererColors(s.engine.worldHexColors(s.config, s.settings, s.ownColors));
+  const colors = s.engine.rendererColors(s.engine.worldHexColors(s.config, s.settings, s.ownColors), s.columnOverride?.colors);
   return worldPanelValues({config: s.config, renderer: s.renderer, nodes: s.nodes, colors, weathering: s.renderer.variantNumber('erosion', 0) > 0, materialWeathering: s.sliders['material-weathering']});
 }

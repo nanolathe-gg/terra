@@ -3,7 +3,7 @@ import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
-import {copyColumn} from './sculpt-column.js';
+import {copyColumn,sameColumn} from './sculpt-column.js';
 import {KNOBS,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
@@ -1162,7 +1162,7 @@ let keepSaved=false;   // set while the saved copy failed to load: leaving the p
 addEventListener('pagehide',() => { if (!stroke && !moving && !loading && !keepSaved) saveWorking(); });
 function loadSketch(s,carry=false) {
   if (!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==6 || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n)) throw new Error('Load a map stroke graph with the same canvas and grid size.');
-  const next=deserializeNodes(carry?carryNodes(s.nodes):s.nodes),column=copyColumn(s.column,defaultColumn);
+  const next=deserializeNodes(carry?carryNodes(s.nodes):s.nodes),column=copyColumn(s.column);
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
   if (Object.hasOwn(HELP,s.tool)) tool=s.tool;
@@ -1211,7 +1211,7 @@ async function loadSketchFile(s,commit=true) {
       served=servedConfig?.biomeId===biome;
       variant=served && typeof s.variant==='string' && servedConfig.variants?.[s.variant]?s.variant:'';
       if(s.variant && variant!==s.variant)throw new Error('The saved column variant is unavailable.');
-      if(served)copyColumn(s.column,servedConfig.column);
+      copyColumn(s.column);
     } catch (err) { error(err.message); return false; }
     if (!served) { error(`The saved terrain belongs to the ${biome} world, which this server does not have. The current terrain was left as it was.`); return false; }
     const token=Math.random().toString(36).slice(2)+Date.now().toString(36);
@@ -1442,8 +1442,8 @@ function restoreColumn(column){
   cancelWeather();refined=refinedBase=null;dropGpuWeather();clearRendererWeather();renderer.applyKnobs();renderer.setColors(worldColors());syncWorldControls();markViewChanged();
 }
 function editColumn(value){
-  const column=copyColumn(value,defaultColumn),next=JSON.stringify(column)===JSON.stringify(defaultColumn)?null:column;
-  if(JSON.stringify(next)===JSON.stringify(columnOverride))return;
+  const column=copyColumn(value),next=sameColumn(column,defaultColumn)?null:column;
+  if(sameColumn(next,columnOverride))return;
   restoreColumn(next);columnEditing=true;schedule();queueWeather();persistLater();
 }
 function commitColumn(){if(!columnEditing)return;columnEditing=false;checkpoint();queueWeather();}

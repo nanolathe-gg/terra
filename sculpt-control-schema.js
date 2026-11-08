@@ -70,6 +70,7 @@ const RAMP_IDLE='The ramp is drawn only where the step is off: choose Ramp in Ha
 // palette dither the hard step's shallows take.
 const LIT_REPLACED='A Shallow water or Deep water color replaces the lit bed: clear it in Colors to use this setting.';
 const CRACKED_BED='Give a water stroke the Cracked bed look (Shallow water look) to use this setting.';
+const NO_COLUMN='Add a rock column in the Rock column panel to use this setting.';
 // Dependencies describe pipeline features, never the active world. Search still
 // finds an inactive setting and explains what must be enabled to use it.
 export function worldControlRequirement(key,v){
@@ -83,7 +84,8 @@ export function worldControlRequirement(key,v){
  if(['plantRelief','flowerDensity'].includes(key))return '';
  if(['undulationScale','undulationCover'].includes(key))return needs('undulation','Undulation height');
  if((['bedHeight','bedVary','bedPunch'].includes(key)||key==='bedSpacing'&&n('cliffRise')<=0)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';   // with a Riser height a column's ledge scales by bed thickness over this spacing
- if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';
+ // Strata, the foot band and the cap color the beds of a rock column: the world's own, or one the map adds (the Rock column panel; worldPanelValues passes the active one).
+ if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return NO_COLUMN;
  if(key==='bedDipDir')return worldControlRequirement('bedDip',v)||(n('bedDip')===0?'Set Bed tilt above or below zero to choose its direction.':'');
  if(['bedSpacing','bedHeight','bedVary','bedDip','bedDipDir','bedLedge','grooveSpacing','grooveAngle','grooveRun','bedPunch','gullyDepth','gullyWidth','rockStain','ribTilt','rockScale','rockAge','rockOpen'].includes(key)&&n('rockOrder')<=0)return 'Enable ordered Rock structure to use this setting.';
  // The lines' places are cut by joints and gullies, and the ribs between gullies stand on the same lines; their length matters only to a cut.
@@ -111,7 +113,7 @@ export function worldControlRequirement(key,v){
  // Colour beds and the bands on them need the strata switch, and the band and cap rows a rock column to bed.
  if(['strataContrast','strataGrain'].includes(key))return needs('strata','Strength (painted beds) in Strata');
  // Cap color holds level ground to one bed only in a section of two beds where one fills over 88 percent of the cycle (worldPanelValues passes capBed in).
- if(['baseBand','desertCapFlat'].includes(key)){const r=n('column')<=0?'This world has no rock column.':needs('strata','Strength (painted beds) in Strata');return r||(key==='desertCapFlat'&&n('capBed')<=0?'The rock column has no cap bed: a section of two beds where one fills over 88 percent of the cycle. Edit the column to add one.':'');}
+ if(['baseBand','desertCapFlat'].includes(key)){const r=n('column')<=0?NO_COLUMN:needs('strata','Strength (painted beds) in Strata');return r||(key==='desertCapFlat'&&n('capBed')<=0?'The rock column has no cap bed: a section of two beds where one fills over 88 percent of the cycle. Add or edit one in the Rock column panel to use this setting.':'');}
  if(['baseBandLow','baseBandHigh','baseBandWander','baseBandGaps'].includes(key))return needs('baseBand','Gray band strength');
  // Shine: a lobe needs its material's gloss, a grain its roughness; the shared rows need some material shining.
  // The slope group's weight is the larger of the faces' moss share (microRock) and the slope cover scaled by Sampled slope texture (a sandy slope scales it by its own sand instead).
