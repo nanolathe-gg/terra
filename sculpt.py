@@ -323,6 +323,8 @@ WORLD_KNOBS = {
     # (retail's plain is lighter, less dotted).
     'red': dict(undulation=2.5, undulationScale=80, undulationCover=.6, groundContrast=.7, crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
                 reliefAmount=.2, slopeTexture=0, microRock=0,
+                # Retail round 2: raised landform faces steeper (retail's rims and mesa walls are crisper than 1).
+                faceSteep=1.75,
                 crackSpacing=28, rockOrder=1, bedLedge=0,
                 grooveSpacing=30, grooveAngle=-10, grooveRun=160,
                 # G2: joints run down the fall line of the ground they are cut in (grooveAngle is the lean from it), and painted
