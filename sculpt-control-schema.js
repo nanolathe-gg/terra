@@ -86,7 +86,7 @@ export function worldControlRequirement(key,v){
  if(key==='flowerDensity'&&n('slopeReplaced')>0)return 'The sediment transition replaces the ground\'s color at 100 percent Material weathering, so no flower shows. Lower Material weathering to use this setting.';
  if(['plantRelief','flowerDensity'].includes(key))return '';
  if(['undulationScale','undulationCover','undulationArt'].includes(key))return needs('undulation','Undulation height');
- if(key==='lowReach')return needs('lowTint','Tint in Low ground');
+ if(key==='lowReach')return n('lowTint')>0||Number(v.lowGrain??1)<1?'':'Raise Tint or lower Grain kept in Low ground to use this setting.';
  if((['bedHeight','bedVary','bedPunch'].includes(key)||key==='bedSpacing'&&n('cliffRise')<=0)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';   // with a Riser height a column's ledge scales by bed thickness over this spacing
  // Strata, the foot band and the cap color the beds of a rock column: the world's own, or one the map adds (the Rock column panel; worldPanelValues passes the active one).
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return NO_COLUMN;
@@ -171,7 +171,7 @@ export function worldControlRequirement(key,v){
 // explicitly (and through search), without filling the default inspector.
 export const WORLD_PRIMARY_CONTROLS=new Set([
  'vegetationCover','plantRelief','flowerDensity',
- 'groundTiles','groundContrast','undulation','undulationScale','undulationCover','undulationArt','coastRamp','faceSteep','lowTint','lowReach',
+ 'groundTiles','groundContrast','undulation','undulationScale','undulationCover','undulationArt','coastRamp','faceSteep','lowTint','lowReach','lowGrain',
  'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
  'flatShadow','flatOcclusion','sunTilt','ambient','shadeDepth','lightCap',
  'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','erosionRain','wetSwath','lushness','slopeMarks','wrinkles',

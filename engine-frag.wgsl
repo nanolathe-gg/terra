@@ -1644,11 +1644,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Low ground: the ground from the sea up to lowReach above it takes the low color (its grain kept), by the authored
     // height (the relief's grit would speckle the edge); the edge is ragged by 20-px noise and fades over the upper half of the reach.
     // Under the sea it is all low ground: the lit bed takes it from here and the shallow water's art below.
+    // Its grain (Grain kept below 1): the ground pattern about its mean, and in the water the art and the depth mottle, so mud reads smooth.
     var lowShare = 0.0;
-    if (u.lowTint > 0.0) {
+    var lowGrain = 1.0;
+    if (u.lowTint > 0.0 || u.lowGrain < 1.0) {
         let above = baseHeight(p) - u.sea + (terrainNoise(p * 0.05 + vec2f(19.0, 47.0)).g - 0.5) * 0.6 * u.lowReach;
-        lowShare = u.lowTint * (1.0 - smoothstep(0.5 * u.lowReach, u.lowReach, above));
-        grass = mix(grass, lowTinted(grass, select(u.groundTexMean, u.groundBase.rgb, u.groundBase.a > 0.5)), lowShare);
+        let low = 1.0 - smoothstep(0.5 * u.lowReach, u.lowReach, above);
+        let groundMean = select(u.groundTexMean, u.groundBase.rgb, u.groundBase.a > 0.5);
+        if (u.lowGrain < 1.0) { lowGrain = mix(1.0, u.lowGrain, low); grass = groundMean + (grass - groundMean) * lowGrain; }
+        lowShare = u.lowTint * low;
+        if (lowShare > 0.0) { grass = mix(grass, lowTinted(grass, groundMean), lowShare); }
     }
     let grass0 = grass;
     // The model's slope grass costs noise taps, so the slope and face blocks share one read.
@@ -2187,7 +2192,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             }
             colorDepth = mix(depth, sum / 8.0, 0.75);
         }
-        colorDepth += ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, depth);
+        var mottle = ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, depth);
+        if (u.lowGrain < 1.0) { mottle *= lowGrain; }
+        colorDepth += mottle;
         // Optional contour rings in the water colour, every 6 depth units.
         if (u.bandWater > 0.0) { colorDepth = mix(colorDepth, (floor(colorDepth / 6.0) + 0.5) * 6.0, u.bandWater * 0.7); }
         // A deep or shallow stroke's water choices (card E1), painted into the
@@ -2206,14 +2213,17 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
         var deep = smoothstep(u.shallowDepth, u.deepDepth, colorDepth);
         if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, depth, crackedBed); }
-        let grain = genColor(u.waterLayer, pixel) - u.waterMean;
+        var grain = genColor(u.waterLayer, pixel) - u.waterMean;
+        if (u.lowGrain < 1.0) { grain *= lowGrain; }
         var water = mix(select(u.shallowColor, u.shallowBase.rgb, u.shallowBase.a > 0.5), select(u.deepColor, u.deepBase.rgb, u.deepBase.a > 0.5), deep) + grain * mix(2.3, 0.95, deep);
         // Low ground: the shallows take the low colour, and the depth's ramp carries it into the deep water's.
         if (lowShare > 0.0) { water = mix(water, lowTinted(water, select(u.shallowColor, u.shallowBase.rgb, u.shallowBase.a > 0.5)), lowShare * (1.0 - deep)); }
         if (u.shallowBase.a < 0.5 && u.deepBase.a < 0.5) {
             var shallow = genColor(u.shallowLayer, pixel);
+            if (u.lowGrain < 1.0) { shallow = u.shallowMean + (shallow - u.shallowMean) * lowGrain; }
             if (lowShare > 0.0) { shallow = mix(shallow, lowTinted(shallow, u.shallowMean), lowShare); }
-            let deepWater = genColor(u.waterLayer, pixel);
+            var deepWater = genColor(u.waterLayer, pixel);
+            if (u.lowGrain < 1.0) { deepWater = u.waterMean + grain; }
             // The lit bed: the ground under the water, lit by the same sun and
             // tinted, replaces the shallow art's noise (retail draws its shallows
             // as the lit terrain through a blue tint).

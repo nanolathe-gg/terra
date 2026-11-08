@@ -303,6 +303,7 @@ struct Uniforms {
     // Low ground (Zhon's mud lowland): the ground from the sea up to lowReach above it, and the shallows, take lowColor (0: none, as before).
     lowTint: f32,         // 0..1: how far the low ground's color moves to lowColor (its grain stays)
     lowReach: f32,        // height above the sea where low ground ends (its ragged edge fades over the upper half)
+    lowGrain: f32,        // 0..1: the share of its grain the low ground's pattern and the water's art and mottle keep (1: as drawn)
     lowColor: vec3f,      // the low ground's color (Colors: Low ground)
     // G2 (rock faces follow the slope). Every default is the earlier look.
     cliffFollow: f32,     // beds follow the contours and joints, gullies and facets the fall line of the ground round them (0: fixed screen directions, as before)
