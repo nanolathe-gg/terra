@@ -231,7 +231,7 @@ WORLD_KNOBS = {
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so the band row's line strength (materials/green.json) keeps their darkness.
     # Card P16: the Scree slider's talus chips (3-5 px, a few % of the cliff feet's ground) as Supply and Size.
-    'green': dict(looseSupply=.08, looseSize=3.5, banding=.5, crackDark=.4, wetSwath=.35,   # Moisture (a panel row, card P30); the Time pass's wet swaths and modern Green's ground cover read it
+    'green': dict(looseSupply=.08, looseSize=3.5, banding=.3, crackDark=.4, wetSwath=.35,   # Moisture (a panel row, card P30); the Time pass's wet swaths and modern Green's ground cover read it
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
@@ -260,7 +260,9 @@ WORLD_KNOBS = {
                   # was 3.84 / 3.16 in green-1 / green-3 against retail's 1.74 / 1.61;
                   # no undulation gives 2.85 / 2.69 (the rest is the tiles and hill feet).
                   # The undulation knobs and Level-ground lumps still work.
-                  undulation=0, plainRelief=0,
+                  # Retail round 1: a fine, partial undulation (3 at 48 px over 40% of the land) gives the plain retail's gentle .08-.15 slopes
+                  # (green-1 shape .38 -> .33) without broad light blotches (viewed at 1x).
+                  undulation=3, undulationScale=48, undulationCover=.4, plainRelief=0,
                   # E9 (Green rock faces): retail's big face is carved (leaning gullies and ribs, so stripes of it
                   # light or shade as a whole), layered in long ledges that bend with it,
                   # and crumpled into angular facets that glint; grass keeps to its edges. Measured on green-2's
