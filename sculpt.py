@@ -368,6 +368,8 @@ WORLD_KNOBS = {
     # fade over 30-40 px); a stroke may set a hard step, which sits at the midpoint, depth 18 (20 before H24).
     'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.3, flatBank=1,
                         undulation=0, shadeDepth=.3,
+                        # Retail round 2: shores drop to the sea in 0-16 px (base 58-66), as retail's do.
+                        coastRamp=.25,
                         # Hills and the mineral ring (card E1): mound pixels averaged (90, 80, 65)
                         # against retail's (102, 92, 76) in windows 2 and 3, with 15% of them under
                         # luma 45 (retail 5-6%). Hill cover x1.25 and a third of the directional
