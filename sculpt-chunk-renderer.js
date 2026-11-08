@@ -262,7 +262,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const names=['flow','deposit','talus','sand'],wearNames=['wear','wet','hard','slope'],fallNames=['fx','fy','channel','ridge'];
     const plane=(names2,k)=>Array.isArray(weather)?weather[k]:weather?.[names2[k]];
     const wp=[0,1,2,3].map(k=>plane(names,k)),wearP=[0,1,2,3].map(k=>weather?.[wearNames[k]]),fallP=[0,1,2,3].map(k=>weather?.[fallNames[k]]);
-    const fr=fields.r,fc=fields.c,fv=fields.v,fx=fields.x,fh=fields.h,exportArt=request.exportArt,sea=this.config.seaLevel;
+    const fr=fields.r,fc=fields.c,fv=fields.v,fx=fields.x,fh=fields.h,fu=fields.u,exportArt=request.exportArt,sea=this.config.seaLevel;
     const gridPlanes=[]; // [plane, byte offset of the layer, channel]
     for(let k=0;k<4;k++){if(wp[k])gridPlanes.push([wp[k],0,k]);if(wearP[k])gridPlanes.push([wearP[k],pixels*8,k]);if(fallP[k])gridPlanes.push([fallP[k],pixels*12,k]);}
     const lastRow=h-1,lastCol=w-1;
@@ -270,7 +270,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       const row=Math.min(y,lastRow)*w;
       for(let x=0;x<gw;x++) {
         const src=row+Math.min(x,lastCol),dst=y*gw+x,d4=dst*4;
-        height[dst]=(exportArt?clamp(fh[src],0,255):fh[src])-sea;
+        const art=fu?fh[src]-fu[src]:fh[src];   // the art's height: less the undulation it does not show (engine-feed.wgsl feedMain)
+        height[dst]=(exportArt?clamp(art,0,255):art)-sea;
         routes[d4]=toByte(fr?.[src]);routes[d4+1]=toByte(fc?.[src]);routes[d4+2]=Math.round((clamp(fv?.[src]??0,-1,1)*.5+.5)*255);routes[d4+3]=toByte(fx?.[src]);
         for(let k=0;k<planes.length;k++){const pk=planes[k];if(!pk)continue;const v=pk[src]??0;masks[(k>>2)*pixels*4+d4+(k&3)]=v;if(v!==0)painted[k]=1;}
         if(material)for(let k=0;k<4;k++)grid[pixels*4+d4+k]=toByte(material[src*4+k]);

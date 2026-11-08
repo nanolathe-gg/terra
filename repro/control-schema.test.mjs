@@ -74,6 +74,8 @@ test('world dependencies explain bypasses without biome gates',async()=>{
  assert.equal(requirement('bedVary',{column:0,rockOrder:1,bedLedge:.5}),'');
  assert.match(requirement('undulationCover',{undulation:0}),/Undulation height/);
  assert.equal(requirement('undulationCover',{undulation:8}),'');
+ assert.match(requirement('undulationArt',{undulation:0}),/Undulation height/);
+ assert.equal(requirement('undulationArt',{undulation:8}),'');
  assert.match(requirement('grooveSpacing',{rockOrder:0,gullyDepth:1}),/Rock structure/);
  assert.match(requirement('grooveRun',{rockOrder:1,rockJoint:0,rockOpen:1,gullyDepth:0}),/Open joints or Gully depth/);
  assert.equal(requirement('grooveRun',{rockOrder:1,rockJoint:2,rockOpen:1}),'');

@@ -7,7 +7,7 @@ import {ROCK_TYPES,rockFacts} from './sculpt-material-model.js';
 // Surface knobs: each writes the page address and the renderer's variant,
 // then the renderer re-reads its uniforms and re-bakes its fields.
 export const KNOBS = [
-  ['Ground', [['groundTiles','Unique ground tiles',1,16,1,16],['groundContrast','Pattern contrast',0,2,.05,1],['undulation','Undulation height',0,16,.5,10],['undulationScale','Undulation size (px)',48,400,8,200],['undulationCover','Undulating share of land',0,1,.05,.45]]],
+  ['Ground', [['groundTiles','Unique ground tiles',1,16,1,16],['groundContrast','Pattern contrast',0,2,.05,1],['undulation','Undulation height',0,16,.5,10],['undulationScale','Undulation size (px)',48,400,8,200],['undulationCover','Undulating share of land',0,1,.05,.45],['undulationArt','Undulation in the art',0,1,.05,1],['faceSteep','Landform face steepness',1,4,.1,1]]],
   ['Ground detail', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Ground bumps',0,3,.05,1.2],['lumpRelief','Painted ground bumps',0,8,.1,4],['reliefOctaves','Octaves',1,6,1,5],['worms','Wormy relief on slopes',0,1,.05,0]]],
   ['Lighting', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13],['shadeDepth','Directional shading kept',0,1,.05,1],['sunTilt','Light from the south',-1,1,.05,1],['ambient','Ambient light',0,.8,.02,.42]]],
@@ -32,7 +32,7 @@ export const KNOBS = [
     ['grooveSpacing','Joint and gully spacing (px)',12,120,2,36],['grooveAngle','Joint and gully lean from north-south (deg)',-60,60,1,0],['grooveRun','Joint and gully length (px)',30,400,10,120]]],
   ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSoftness','Riser share',.05,1,.05,.35],['bandWater','Rings in water color',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
   ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataContrast','Color strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1]]],
-  ['Water', [['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Color depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline (shore to shallow)',0,1,.05,1],['deepEdge','Hard shallow-to-deep step (0 ramp)',0,1,1,0],['bedLit','Lit bed under shallow water (0 noise water)',0,1,.05,0],['bedTint','Bed tint strength',0,1,.05,.85],['bedBright','Tinted bed brightness',.5,1.5,.02,1],['bedContrast','Bed light carried through the tint',0,1.5,.05,1],['bedRelief','Bed lumps (lit relief under shallows)',0,3,.05,0],['shoreEdge','Waterline rim and lip',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
+  ['Water', [['coastRamp','Coast ramp (share of the drawn slope kept)',.05,1,.05,1],['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Color depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline (shore to shallow)',0,1,.05,1],['deepEdge','Hard shallow-to-deep step (0 ramp)',0,1,1,0],['bedLit','Lit bed under shallow water (0 noise water)',0,1,.05,0],['bedTint','Bed tint strength',0,1,.05,.85],['bedBright','Tinted bed brightness',.5,1.5,.02,1],['bedContrast','Bed light carried through the tint',0,1.5,.05,1],['bedRelief','Bed lumps (lit relief under shallows)',0,3,.05,0],['shoreEdge','Waterline rim and lip',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
   // Card E8: the gray band at the foot of the raised ground (strata color 5); its heights are above the plain.
   ['Foot color band', [['baseBand','Gray band strength',0,1,.05,0],['baseBandLow','Window from (height)',0,12,.5,4],['baseBandHigh','Window to (height)',1,16,.5,6.5],['baseBandWander','Window drift (height)',0,4,.25,1],['baseBandGaps','Share missing',0,.9,.05,.45]]],
@@ -67,9 +67,9 @@ export const KNOBS = [
 ];
 
 // The ground node's field each undulation row sets.
-const UNDULATION={undulation:'amplitude',undulationScale:'wavelength',undulationCover:'coverage'};
+const UNDULATION={undulation:'amplitude',undulationScale:'wavelength',undulationCover:'coverage',undulationArt:'art'};
 // World settings the shape reads (sculpt-scene.js shapeContext: the frost gaps and the talus slope), so the shape runs again from the first node.
-const SHAPE_KNOBS=new Set(['frostGaps','frostGapReach','frostGapSize','frostGapDepth','talusAngle']);
+const SHAPE_KNOBS=new Set(['frostGaps','frostGapReach','frostGapSize','frostGapDepth','talusAngle','coastRamp','faceSteep']);
 // A world knob's change. The value goes into the page's settings (its address, which the shape context and a scene's ground node read) and
 // the renderer's settings, whose uniforms it re-reads; the answer says what else the change needs, for the host to carry out on its own
 // fields: `reload` (the ground textures and a borrowed beach are chosen when the renderer starts, so nothing else is set), `evaluate` (the shape again from that
@@ -82,7 +82,7 @@ export function applyKnob({key,value,settings,renderer,nodes,seed}) {
   if (Object.hasOwn(UNDULATION,key)) {
     const i=nodes.findIndex(n => n.kind==='ground');
     if (i>=0) { nodes[i][UNDULATION[key]]=Number(value); return {evaluate:i,checkpoint:true,weather:true}; }
-    if (key==='undulation' && Number(value)>0) { nodes.unshift({kind:'ground',amplitude:Number(value),wavelength:160,seed:seed^0x9e37}); return {evaluate:0,checkpoint:true,weather:true}; }
+    if (key==='undulation' && Number(value)>0) { nodes.unshift({kind:'ground',amplitude:Number(value),wavelength:160,art:settings.has('undulationArt')?Number(settings.get('undulationArt')):1,seed:seed^0x9e37}); return {evaluate:0,checkpoint:true,weather:true}; }
     return {};
   }
   if (SHAPE_KNOBS.has(key)) return {evaluate:0,weather:true};

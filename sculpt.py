@@ -30,7 +30,7 @@ BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Arc
 # plus its own overrides below, so each world has a value for every setting;
 # a knob missing here is reported in the page's console.
 KNOB_DEFAULTS = dict(
-    groundTiles=16, groundPattern='', beachFrom='', groundContrast=1, undulation=10, undulationScale=200, undulationCover=.45,
+    groundTiles=16, groundPattern='', beachFrom='', groundContrast=1, undulation=10, undulationScale=200, undulationCover=.45, undulationArt=1, faceSteep=1,
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
     flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1, sunTilt=1, ambient=.42, slopeMarks=0, wrinkles=0, sandCrown=0,
@@ -59,7 +59,7 @@ KNOB_DEFAULTS = dict(
     fingers=0,
     # Coast pass (card E4): fingers on the joined coast and a landform's shoreline steps cut as heights
     # (layerPx px a step, riser 0 shares the bank's rise out; the count, flat share and irregularity are the landform's Steps).
-    layerPx=12, layerRiser=0, shoreEdge=0, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
+    layerPx=12, layerRiser=0, shoreEdge=0, coastRamp=1, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
     dither=2, landDither=.25, paletteMix=0, microRock=1,
     # Form (repro round): ledges on steep faces, darker faces, jagged bands.
     faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,

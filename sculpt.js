@@ -1235,7 +1235,7 @@ function serializeNodes() {
 function deserializeNodes(list) {
   return list.filter(n=>n&&NODE_NAMES[n.kind]).map(n=>{
     validatePaths(n);
-    return {kind:n.kind,hidden:Boolean(n.hidden),amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,seed:n.seed,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:Array.isArray(n.frame)&&n.frame.length===6&&n.frame.every(Number.isFinite)?n.frame.slice():undefined};
+    return {kind:n.kind,hidden:Boolean(n.hidden),amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,art:n.art,seed:n.seed,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:Array.isArray(n.frame)&&n.frame.length===6&&n.frame.every(Number.isFinite)?n.frame.slice():undefined};
   });
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
@@ -1717,9 +1717,9 @@ window.sculptDebug = {curve:() => currentCurve(),along:() => currentAlong(),plac
 window.sculptDebug.pagedShapeCompare=async rect => {
   const eng=await createShapeEngine({device:renderer.device,grid:worldGrid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT});
   const out=await eng.run(nodes.slice(),shapeContext(),rect||null),G=rect?rect.x1-rect.x0+1:worldGrid;
-  const a={h:out.floats[0],p:out.floats[1],r:out.floats[2],c:out.floats[3],v:out.floats[4],x:out.floats[5],masks:out.masks};
+  const a={h:out.floats[0],p:out.floats[1],r:out.floats[2],c:out.floats[3],v:out.floats[4],x:out.floats[5],u:out.floats[6],masks:out.masks};
   const rp=await regionalFields.readRect(rect||{x0:0,y0:0,x1:G-1,y1:G-1},{weather:false});
-  const b={h:rp.fields.h,p:rp.fields.p,r:rp.fields.r,c:rp.fields.c,v:rp.fields.v,x:rp.fields.x,masks:MASK_KEYS.map(k => rp.fields[k])};
+  const b={h:rp.fields.h,p:rp.fields.p,r:rp.fields.r,c:rp.fields.c,v:rp.fields.v,x:rp.fields.x,u:rp.fields.u,masks:MASK_KEYS.map(k => rp.fields[k])};
   eng.destroy();
   const cmp=comparePlanes(a,b,G,MASK_KEYS);
   return {planes:Object.fromEntries(Object.entries(cmp.planes).filter(([k,v]) => (v.max||0)>0)),clusterCount:cmp.clusterCount,clusters:cmp.clusters.slice(0,4),allPlanes:Object.keys(cmp.planes).length};
