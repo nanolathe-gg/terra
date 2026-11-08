@@ -72,11 +72,19 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 
-# The world's dry base in the editor. Only Archipelago and Zhon differ from 24
-# (sculpt.py's WORLD baseHeight; card C3 says to use these, not crop.json).
-WORLD_BASE = {'green': 24, 'red': 24, 'archipelago': 8, 'moon': 24, 'zhon': 8,
-              'lava': 24, 'desert': 24, 'crystal': 24, 'ice': 24}
 WORLD_ORDER = ['green', 'red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice']
+
+
+def world_base(world):
+    """The world's dry base in the editor: materials/<world>.json world.baseHeight, as sculpt.py reads it (24 where unset;
+    card C3 says to use it, not crop.json)."""
+    try:
+        return float(json.loads((Path(__file__).resolve().parent.parent / 'materials' / f'{world}.json').read_text())['world']['baseHeight'])
+    except (OSError, KeyError, TypeError, ValueError):
+        return 24.0
+
+
+WORLD_BASE = {w: world_base(w) for w in WORLD_ORDER}
 ZHON_SEA = 59.0  # the sea of the Zhon section crops (crop.json of zhon-1..3)
 SAMPLE = 1024
 SLOPE_BINS = [0.0, .03, .08, .15, .3, .5, 1.0, 2.0, np.inf]
@@ -411,7 +419,7 @@ def read_repro(d):
     oh = np.asarray(data['heights'], np.float64).reshape(g, g) - float(data.get('sea', 0.0))
     target = max(2, round(opic.shape[0] / 16))
     oh = resample_heights(oh, target)
-    oplain = float(data.get('base', WORLD_BASE.get(d.name.rsplit('-', 1)[0], 24)))
+    oplain = float(data.get('base', WORLD_BASE.get(d.name.split('-', 1)[0], 24)))   # a variant's windows (green-modern-1) sit on their world's base
     ometrics, ohist = picture_metrics(opic)
     ometrics.update(height_metrics(oh, opic.shape[0] / target, oplain))
     return rmetrics, rhist, ometrics, ohist
