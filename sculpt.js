@@ -7,7 +7,7 @@ import {copyColumn,sameColumn} from './sculpt-column.js';
 import {KNOBS,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
-import {strokeKind,savedToolCard,TOOL_PRESETS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
+import {strokeKind,savedToolCard,TOOL_PRESETS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,borrowBeach,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
   shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,regionalCheck,repeatCheck,pagedTime} from './sculpt-scene.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER,lfcWidth} from './sculpt-gpu-fields.js';
 
@@ -1498,6 +1498,15 @@ function buildWorldPanel() {
   const patterns=config.groundPatterns||{},patternRow=document.createElement('div'); patternRow.className='control';
   patternRow.innerHTML=`<label for="ground-pattern">Ground pattern</label><select id="ground-pattern" style="width:100%"><option value="">This world's own</option>${Object.entries(patterns).filter(([id]) => id!==config.biomeId).map(([id,p]) => `<option value="${id}">${p.name}</option>`).join('')}</select><p class="small">Another world's ground grain, moved to this world's Ground color. Contrast is under Ground below.</p>`;
   rows.prepend(patternRow);
+  // Beach: a world without a beach of its own may take another world's sand (sculpt-scene.js borrowBeach); choosing reloads the page, as Ground pattern does.
+  const beaches=Object.entries(config.beachSources||{}).filter(([id]) => id!==config.biomeId);
+  if (beaches.length && (!config.layers.includes('beach') || config.beachTable)) {
+    const beachRow=document.createElement('div'); beachRow.className='control';
+    beachRow.innerHTML=`<label for="beach-from">Beach</label><select id="beach-from" style="width:100%"><option value="">None</option>${beaches.map(([id,b]) => `<option value="${id}">${b.name}</option>`).join('')}</select><p class="small">Another world's beach sand along this world's shores. Beach width under Water sets its reach, and the Beach color below its color.</p>`;
+    patternRow.after(beachRow);
+    $('beach-from').value=config.beachSources[experiment.get('beachFrom')]?experiment.get('beachFrom'):'';
+    $('beach-from').onchange=() => setKnob('beachFrom',$('beach-from').value);
+  }
   $('ground-pattern').value=patterns[experiment.get('groundPattern')]?experiment.get('groundPattern'):'';
   $('ground-pattern').onchange=() => {
     // Keep this world's ground color when only the grain changes.
@@ -1657,6 +1666,7 @@ async function boot() {
     config.defaults={...config.defaults,...(worlds[worldId]?.knobs||{})};
     if (worldId!==config.biomeId) document.querySelector('.canvas-caption h2').textContent=worlds[worldId].name+' terrain';
     addDefaults(experiment,config.defaults);
+    borrowBeach(config,experiment);   // a beach another world lends (Beach, below Ground pattern): before the renderer and the panel read the world's layers
     buildShapeOptions();
     for (const kind of Object.keys(HELP)) toolSettings[kind]=toolDefaults(kind);
     showTool(toolSettings[tool]);

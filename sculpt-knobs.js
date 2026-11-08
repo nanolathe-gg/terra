@@ -72,12 +72,12 @@ const UNDULATION={undulation:'amplitude',undulationScale:'wavelength',undulation
 const SHAPE_KNOBS=new Set(['frostGaps','frostGapReach','frostGapSize','frostGapDepth','talusAngle']);
 // A world knob's change. The value goes into the page's settings (its address, which the shape context and a scene's ground node read) and
 // the renderer's settings, whose uniforms it re-reads; the answer says what else the change needs, for the host to carry out on its own
-// fields: `reload` (the ground textures are chosen when the renderer starts, so nothing else is set), `evaluate` (the shape again from that
+// fields: `reload` (the ground textures and a borrowed beach are chosen when the renderer starts, so nothing else is set), `evaluate` (the shape again from that
 // node: the undulation rows edit the ground node in `nodes`, or put one first when Undulation height turns on), `checkpoint` (an undo step for
 // that edit) and `weather` (the Time pass again; alone, for the deposit supply, which changes the generated deposit field, and the rain).
 export function applyKnob({key,value,settings,renderer,nodes,seed}) {
   settings.set(key,value);
-  if (key==='ground' || key==='groundPattern') return {reload:true};
+  if (key==='ground' || key==='groundPattern' || key==='beachFrom') return {reload:true};
   renderer.variant.set(key,value); renderer.applyKnobs();
   if (Object.hasOwn(UNDULATION,key)) {
     const i=nodes.findIndex(n => n.kind==='ground');

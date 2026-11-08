@@ -4,7 +4,7 @@
 // pixels change at all. A direction (`wind`, `*Dir`) moves a half turn, because the two ends of a full turn are one value. Each control is put
 // back after its pair, and at the end of a world the first fixture is drawn again and must match its first capture, so no row leaks into the next.
 //   node measure/world_controls.mjs [--find key,key] [--out DIR] [--worlds green,lava] [--variant modern] [--only key,key] [--set key=v,key=v] [--jobs 3] [--configs DIR]
-//        [--column FILE]
+//        [--query 'key=v&key=v'] [--column FILE]
 //        [--chrome --audit-port <yours> --assets DIR --port <cdp> | --chrome --server <a running audit host> --port <cdp>]
 // The sweep runs under Node on Dawn by default (repro/headless.mjs, from this checkout's files; --configs DIR for sculpt.py --dump-configs output):
 // a world is a page load in the page's own modules, a knob goes in through sculpt-knobs.js applyKnob as the page's setKnob does, a capture is one
@@ -22,8 +22,9 @@
 // Sand over the first) and is not on `ALLOWED` below. A row the panel disables with a reason is swept twice: with its parents set (state "gated"), which proves it comes back, and as it
 // stands on every fixture while its reason holds (state "hidden"), which proves the reason true: it fails if the row moves HIDDEN_PX pixels or more,
 // since a wrong gate hides a live control and nothing else would show it. The water rows are read once more under a Shallow water color, which no scene picks.
-// --set puts values in before the sweep, to probe a row under a gate. --column FILE gives every page load the rock column in FILE (a `column` block,
-// as the Rock column panel saves one with the map; Node only), for the rows a column turns on.
+// --set puts values in before the sweep, to probe a row under a gate. --query adds page parameters to every page load, for a setting that reloads the
+// page (Ground pattern, Beach). --column FILE gives every page load the rock column in FILE (a `column` block, as the Rock column panel saves one with
+// the map; Node only), for the rows a column turns on.
 import {cdpPortFree} from '../repro/cdp-port.mjs';
 import {worldControlRequirement, shapeControlAvailable, LANDFORM_FACET_KEYS} from '../sculpt-control-schema.js';
 import {spawn} from 'node:child_process';
@@ -40,7 +41,7 @@ const VARIANT = opt('--variant', '');
 const FIND = opt('--find', '') ? opt('--find', '').split(',') : null;
 const ONLY = opt('--only', '') ? opt('--only', '').split(',') : null;
 const SET = Object.fromEntries((opt('--set', '') || '').split(',').filter(Boolean).map(s => s.split('=')).map(([k, v]) => [k, Number(v)]));
-const COLUMN = opt('--column', '') ? JSON.parse(readFileSync(resolve(opt('--column', '')), 'utf8')) : null;
+const QUERY = opt('--query', ''), COLUMN = opt('--column', '') ? JSON.parse(readFileSync(resolve(opt('--column', '')), 'utf8')) : null;
 if (CHROME && COLUMN) { console.error('world_controls.mjs: --column runs under Node only.'); process.exit(2); }
 // Rows that read 0 and are kept on purpose. A reason a reader can check, or the row is a finding, not an entry.
 const ALLOWED = {};
@@ -83,7 +84,7 @@ if (CHROME && !server) {
 }
 if (JOBS > 1 && !CHILD && WORLDS.length > 1) {
   // A pool of browsers, one child per world, the dearest worlds first; rows are merged into the same file and the same exit code.
-  const pass = []; for (const f of ['--only', '--set', '--variant']) if (opt(f, '')) pass.push(f, opt(f, ''));
+  const pass = []; for (const f of ['--only', '--set', '--variant', '--query']) if (opt(f, '')) pass.push(f, opt(f, ''));
   if (COLUMN) pass.push('--column', resolve(opt('--column', '')));
   const cost = {green: 3, zhon: 2, red: 2}, order = [...WORLDS].sort((a, b) => (cost[b] || 1) - (cost[a] || 1)), queue = [...order], codes = [], tries = {};
   const slots = Array.from({length: Math.min(JOBS, WORLDS.length)}, (_, k) => new Promise(async done => {
@@ -115,7 +116,7 @@ for (const w of WORLDS) for (const n of [1, 2, 3]) {
 }
 // The stroke kinds whose tool defaults the state reads.
 const KINDS = Object.fromEntries(Object.keys(KIND_AT).map(k => [k, 1]));
-const pageQuery = (world, query) => { if(VARIANT){const params=new URLSearchParams(query);params.set('variant',VARIANT);query=params.toString();} return `biome=${world}&mapX=4&mapY=4&scratch=wc${Date.now()}&audit=1&gpuMB=512&heapMB=2048${query ? '&' + query : ''}`; };
+const pageQuery = (world, query) => { if(VARIANT||QUERY){const params=new URLSearchParams(query);if(VARIANT)params.set('variant',VARIANT);for(const [k,v] of new URLSearchParams(QUERY))params.set(k,v);query=params.toString();} return `biome=${world}&mapX=4&mapY=4&scratch=wc${Date.now()}&audit=1&gpuMB=512&heapMB=2048${query ? '&' + query : ''}`; };
 // The two numbers of a pair: the most any pixel channel moves, and how many pixels move at all (RGBA captures, alpha left out).
 const diff = (a, b) => { let max = 0, n = 0; for (let i = 0; i < a.length; i += 4) { const d = Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2])); if (d) { n++; if (d > max) max = d; } } return {max, px: n}; };
 // The host the sweep drives, the same calls on either: the page in headless Chrome on the audit host (terraformAudit; the captures stay in the

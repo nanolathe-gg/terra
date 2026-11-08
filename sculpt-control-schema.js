@@ -159,7 +159,7 @@ export function worldControlRequirement(key,v){
  if(key==='shoalBump')return n('waterColored')>0?LIT_REPLACED:needs('bedLit',LIT_BED)||needs('deepEdge',HARD_STEP);
  if(key==='shoalBumpPx')return needs('shoalBump','Lit bumps in the bed');
  if(/^ring[A-Z]/.test(key)&&n('ringLayer')<=0)return 'This world draws no mineral fringe.';
- if(key==='beachWidth'&&n('beachLayer')<=0)return 'This world has no beach layer.';
+ if(key==='beachWidth'&&n('beachLayer')<=0)return 'This world has no beach of its own. Choose another world\'s Beach in Colors & base pattern to use this setting.';
  if(key==='groundTiles'&&n('groundTiled')<=0)return 'This world\'s ground is one texture, not tiles. Choose another world\'s Ground pattern to use this setting.';
  if(key==='ringShiftDir'||key==='ringScatter')return needs('ringShift','Offset between copies');
  if(key==='ringPatchSize')return needs('ringPatch','Reach variation');

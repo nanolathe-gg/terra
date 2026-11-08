@@ -110,6 +110,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const {minH, maxH} = engine.heightRange(config);
   config.presetDefaults = {...config.defaults};
   engine.addDefaults(settings, config.defaults);
+  engine.borrowBeach(config, settings);   // sculpt.js boot: a beach another world lends (Colors & base pattern, Beach)
   const worldSize = config.worldSize ?? config.size, worldGrid = config.worldGrid ?? config.grid, spacing = (worldSize - 1) / (worldGrid - 1);
   // sculpt-canvas.js mountMapCanvas: the chunk renderer over the map, with the page's colors.
   config.maskKeys = engine.MASK_KEYS; config.gpuBudgetBytes = 128 * MB;

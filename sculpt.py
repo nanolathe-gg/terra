@@ -30,7 +30,7 @@ BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Arc
 # plus its own overrides below, so each world has a value for every setting;
 # a knob missing here is reported in the page's console.
 KNOB_DEFAULTS = dict(
-    groundTiles=16, groundPattern='', groundContrast=1, undulation=10, undulationScale=200, undulationCover=.45,
+    groundTiles=16, groundPattern='', beachFrom='', groundContrast=1, undulation=10, undulationScale=200, undulationCover=.45,
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
     flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1, sunTilt=1, ambient=.42, slopeMarks=0, wrinkles=0, sandCrown=0,
@@ -865,9 +865,18 @@ def world_configs(biomes):
     # A table world with no tile data (a quilted plain generated as a layer) has no pattern to lend; every other world does.
     patterns = {b: {'name': BIOME_NAMES[b], 'groundTable': configs[b]['materialTable']} for b in biomes
                 if 'ground' in json.loads((HERE / configs[b]['materialTable']).read_text())}
+    # Any world without a beach may take another's (World panel, Beach; sculpt-scene.js borrowBeach): the lender's table makes the layer, and its
+    # material's beach numbers come with it.
+    beaches = {}
+    for b in biomes:
+        if 'beach' in configs[b]['layers']:
+            material = json.loads((HERE / configs[b]['materialTable']).read_text())['material']
+            beaches[b] = {'name': BIOME_NAMES[b], 'table': configs[b]['materialTable'],
+                          'material': {k: material[k] for k in ('beachWidth', 'beachHeight', 'beachRGB') if k in material}}
     for config in configs.values():
         config['biomes'] = {b: BIOME_NAMES[b] for b in biomes}
         config['groundPatterns'] = patterns
+        config['beachSources'] = beaches
         config['variants'] = {k: v['label'] for k, v in WORLD_VARIANTS.get(config['biomeId'], {}).items()}
     return configs, {'worlds': {b: export_defaults(b) for b in biomes}}
 

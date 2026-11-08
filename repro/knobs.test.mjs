@@ -18,6 +18,9 @@ test('a knob goes into the address and the renderer, and says what else it needs
   const applied = r.applied;
   assert.deepEqual(applyKnob({key: 'groundPattern', value: 'lava', settings, renderer: r, nodes, seed: 2701}), {reload: true});
   assert.equal(settings.get('groundPattern'), 'lava'); assert.equal(r.variant.has('groundPattern'), false); assert.equal(r.applied, applied);
+  // So is a borrowed beach (sculpt-scene.js borrowBeach, before the renderer starts).
+  assert.deepEqual(applyKnob({key: 'beachFrom', value: 'zhon', settings, renderer: r, nodes, seed: 2701}), {reload: true});
+  assert.equal(settings.get('beachFrom'), 'zhon'); assert.equal(r.variant.has('beachFrom'), false); assert.equal(r.applied, applied);
 });
 
 test('Undulation height puts a ground node first on a map without one, and only when it turns on', () => {

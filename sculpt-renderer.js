@@ -255,6 +255,13 @@ export class TerrainRenderer {
     this.materialData = JSON.parse(modelTable);
     // The water's grain is two more generated materials after the table's own, named by the config's water block (shared when the two are one).
     for (const name of [this.config.water.deep, this.config.water.shallow]) if (!this.materialData.order.includes(name)) this.materialData.order.push(name);
+    // A borrowed beach (sculpt-scene.js borrowBeach names the lender's table): its beach material, generated as one more layer after the world's own,
+    // so every other layer keeps its place and its noise.
+    if (this.config.beachTable && !this.materialData.order.includes('beach')) {
+      const lender = await this.groundTable(this.config.beachTable);
+      this.materialData.measured.beach = lender.measured.beach; this.materialData.model.beach = lender.model.beach;
+      this.materialData.order.push('beach');
+    }
     // The startup generation: the materials and the palette lookup (GPU) are started first and the noise (CPU) is made while they build.
     this.textures = {};
     const generation = performance.now();
@@ -288,10 +295,12 @@ export class TerrainRenderer {
     // Mean colour of each base material, so a world can move it to a new base colour while keeping the texture's grain.
     this.means.slope = this.materialData.measured[this.materialData.order[0]].meanRGB.map(v => v / 255);
     this.means.rock = this.materialData.measured[this.materialData.order[1]].meanRGB.map(v => v / 255);
-    // The transition body is generated layer 5 and the transition (ring, body, contours) needs the flag; the beach is layer 6, the ring 7.
+    // The transition body is generated layer 5 and the transition (ring, body, contours) needs the flag; the ring is layer 7. The beach is the
+    // table's `beach` layer (6 in a world's own table, the last when borrowed).
     this.transitionBody = this.layers.has('body');
     if (this.layers.has('beach')) this.means.beach = this.materialData.measured.beach.meanRGB.map(v => v / 255);
     this.i('uBeach', this.layers.has('beach'));
+    this.i('uBeachLayer', this.materialData.order.indexOf('beach'));
     this.f('uBeachHeight',this.config.material?.beachHeight??6);
     const mid=this.config.water?.midRGB, midDepth=this.config.material?.midDepth;
     this.set('uWaterMid', mid && midDepth ? [...mid.map(v => v / 255), midDepth] : [0, 0, 0, 0]);
@@ -442,7 +451,7 @@ export class TerrainRenderer {
   groundSource() {
     return this.config.groundPatterns?.[this.variant.get('groundPattern')] || (this.ownGround ??= {groundTable: this.config.materialTable});
   }
-  // A world's table by URL: this world's own is already loaded.
+  // A world's table by URL (a borrowed ground pattern or beach): this world's own is already loaded.
   async groundTable(url) {
     if (url === this.config.materialTable) return this.materialData;
     const response = await fetch(url);
