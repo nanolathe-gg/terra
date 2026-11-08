@@ -490,7 +490,7 @@ WORLD_KNOBS = {
     # Bank lines measured on the section-built retail maps (measure/lava_*):
     # ground-spaced dark lines from slope 0.15 up; ground-coloured faces;
     # rim, outline and lip at the coast. Worms gave way to the lines.
-    'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
+    'lava': dict(undulation=5, undulationCover=1, undulationScale=40, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
                  beachWidth=0, waterSoft=0, bankRock=0, banding=0,
                  worms=0, shoreEdge=1, slopeTexture=0,
                  # Card E4: retail's bank is 6-9 flat layers stepping down to the lava, 12-16 px a
@@ -510,13 +510,13 @@ WORLD_KNOBS = {
                  # each riser wanders on its own), with a dark crease at every step foot whichever way it faces;
                  # fingers are small, flat tongues (their size is a per-stroke option);
                  # hills and banks are shiny rough rock, the plain stays matte (shine gated by slope).
-                 layerVary=.8, layerCrease=.7, fingerSize=.65,
+                 layerVary=.8, layerCrease=1, fingerSize=.65,
                  # G5: retail's layers wander, loop and pinch (contour layers: 1.2 layers of two-dimensional wander, width spread .7),
                  # its circles differ in size and spacing, and its step lines fade and break along their length.
                  lavaSpread=.7, lavaCircleVary=1,
                  # G5: hill rock as retail's crust, pillows and chips with creases and hanging veins, the fall-line relief it
                  # replaces, treads tilted toward the crown, and the tall hills' far sides near black.
-                 lavaCrust=1, lavaPillow=40, lavaChip=5.5, lavaVeins=.8, lavaCalm=1, lavaDusk=.8,
+                 lavaCrust=1, lavaPillow=40, lavaChip=5.5, lavaVeins=.4, lavaCalm=1, lavaDusk=.3, faceFill=.35, flatOcclusion=0,
                  shineSlopeGate=.7, shineWhite=.3, shineStretch=3,
                  shineGround=.15, shineGroundSharp=24, shineGroundRough=.6, shineGroundScale=8,
                  shineRock=.2, shineRockSharp=60, shineRockRough=.7, shineRockScale=8),
