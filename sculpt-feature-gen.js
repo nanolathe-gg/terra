@@ -664,7 +664,8 @@ function shadowSprite(R, ax, ay, colors, r) {
 // hues through the mid and light tones at the ramp's lightness, `grain` the fine dither of a rendered sprite. Retail Green's ramp and
 // mottles are measured from its ten rocks (luma octiles; cream 30% and rose 22% of the light pixels).
 export const ROCK_GREEN = ['#0f0f0f', '#2b2b2b', '#4b4b4b', '#5b5b5b', '#787878', '#949494', '#c3c3c3', '#f4f4f4'];
-const ROCK_DEFAULTS = { form: 'cone', round: 0, parts: 6, plate: 0, plateTone: 0, plateCell: 9, plateRough: 0.14, plateHatch: 0, plateGamma: 1, plateTilt: 0.5, plateCrack: 1.6, plateColors: null, topTilt: 1.1, shadowLen: 0.7, shadowColor: '#000000', cells: '2x2', size: 1, angular: 0.5, shade: 0.6, tall: 0, pieces: 1, pits: 0, grain: 0.6, lump: 0.6, colors: ROCK_GREEN, mottle: [['#c3c39b', 0.3], ['#d7a3b3', 0.26]], metal: null, energy: null, flat: 0 };   // flat: 0 a boulder .. 1 a low slab (Moon's)   // energy: a [lo, hi] range for a rock that is an energy source (Lava's nodes; tracks the footprint's area); shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
+const ROCK_DEFAULTS = { form: 'cone', round: 0, parts: 6, plate: 0, plateTone: 0, plateCell: 9, plateRough: 0.14, plateHatch: 0, colRough: 0, colWidth: 1, capColors: null, capSize: 3.5,   // a gem on each round column's top: its radius in pixels
+    plateGamma: 1, plateTilt: 0.5, plateCrack: 1.6, plateColors: null, topTilt: 1.1, shadowLen: 0.7, shadowColor: '#000000', cells: '2x2', size: 1, angular: 0.5, shade: 0.6, tall: 0, pieces: 1, pits: 0, grain: 0.6, lump: 0.6, colors: ROCK_GREEN, mottle: [['#c3c39b', 0.3], ['#d7a3b3', 0.26]], metal: null, energy: null, flat: 0 };   // flat: 0 a boulder .. 1 a low slab (Moon's)   // energy: a [lo, hi] range for a rock that is an energy source (Lava's nodes; tracks the footprint's area); shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
 export const cellsOf = c => { const m = /^(\d+)x(\d+)$/.exec(String(c || '')); return m ? [clamp(+m[1], 1, 16), clamp(+m[2], 1, 16)] : [2, 2]; };
 const smoothstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 function rockSolid(P, r) {
@@ -698,7 +699,7 @@ function rockSolid(P, r) {
       const n = Math.round(clamp(P.parts, 2, 48));
       for (let i = 0; i < n; i++) {
         const rr = i === 0 ? 0 : (form === 'columns' && round ? 0.45 + 0.4 * r() : Math.sqrt(r()) * 0.85), th = r() * TAU, m = 4 + Math.round(2 * r()), rot0 = r() * TAU;
-        const rad = b.a * (0.11 + 0.1 * r()) * clamp(Math.sqrt(18 / n), 1, 1.7) * (1 - 0.3 * rr), hh = b.hgt * (i === 0 ? 1 : (1 - 0.8 * rr * rr) * (0.45 + 0.55 * r()));
+        const rad = b.a * (0.11 + 0.1 * r()) * clamp(Math.sqrt(18 / n), 1, 1.7) * (1 - 0.3 * rr) * (P.colWidth ?? 1), hh = b.hgt * (i === 0 ? 1 : (1 - 0.8 * rr * rr) * (0.45 + 0.55 * r()));
         b.cols.push({ e: b.a * rr * Math.cos(th), s: b.b * rr * Math.sin(th), rad, hh, m, ap: Math.cos(Math.PI / m), tx: (r() - 0.5) * (P.topTilt ?? 1.1), ty: (r() - 0.5) * (P.topTilt ?? 1.1), dirs: Array.from({ length: m }, (_, k) => [Math.cos(rot0 + k * TAU / m), Math.sin(rot0 + k * TAU / m)]) });
       }
     } else if (form === 'shards') {    // angular pyramids and tilted slabs with flat planar faces, scattered across the footprint
@@ -722,7 +723,7 @@ function rockSolid(P, r) {
       f = Infinity;
       for (const c of b.cols) {
         const dx = qe - c.e, dy = qs - c.s, ap = c.rad * (1 - 0.12 * clamp(qu / c.hh, 0, 1)) * c.ap;
-        if (round) { const rho = Math.hypot(dx, dy), q = Math.max(0, qu - (c.hh - c.rad)); f = Math.min(f, Math.max(Math.hypot(Math.max(0, rho - c.rad * 0.0), q) - c.rad * (1 - 0.1 * clamp(qu / c.hh, 0, 1)) * 1, -qu)); continue; }
+        if (round) { const rho = Math.hypot(dx, dy), q = Math.max(0, qu - (c.hh - c.rad)), bump = P.colRough > 0 ? P.colRough * c.rad * (0.3 * (vnoise3(qe / 3, qs / 3, qu / 3, b.s1 + 21) - 0.5) + 0.12 * Math.sin(qu * 0.8 + c.e)): 0; f = Math.min(f, Math.max(Math.hypot(Math.max(0, rho - c.rad * 0.0), q) - c.rad * (1 - 0.1 * clamp(qu / c.hh, 0, 1)) * 1 + bump, -qu)); continue; }
         let d = -Infinity; for (const [cx, cy] of c.dirs) { const v = dx * cx + dy * cy - ap; if (v > d) d = v; }
         f = Math.min(f, Math.max(d, qu - c.hh + c.tx * dx + c.ty * dy, -qu));
       }
@@ -784,7 +785,16 @@ function rockFrame(P, seed, ctx) {
   const Sd = rockSolid(P, r), R = renderSolid({ F: Sd.F, eMin: Sd.ext.e0, eMax: Sd.ext.e1, sMin: Sd.ext.s0, sMax: Sd.ext.s1, uMax: Sd.ext.u, sun, shadowSun: flatSun(sun, P.shadowLen) });
   const { w, h } = R, plateAt = new Uint8Array(w * h), tone = new Float32Array(w * h), lit = new Float32Array(w * h), hasPx = [], mask = new Uint8Array(w * h);
   for (let k = 0; k < w * h; k++) if (R.px[k]) mask[k] = 1;
-  const dist = edgeDist(w, h, mask);
+  {   // a thin tip can graze the march and leave a few stray pixels above it: drop any speck of fewer than 8 pixels
+    const seen = new Uint8Array(w * h);
+    for (let k0 = 0; k0 < w * h; k0++) {
+      if (!mask[k0] || seen[k0]) continue;
+      const comp = [k0]; seen[k0] = 1;
+      for (let i = 0; i < comp.length; i++) { const k = comp[i], x = k % w, y = (k / w) | 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= w || Y >= h) continue; const q = Y * w + X; if (mask[q] && !seen[q]) { seen[q] = 1; comp.push(q); } } }
+      if (comp.length < 8 && comp.length < 0.01 * w * h) for (const k of comp) { mask[k] = 0; R.px[k] = null; }
+    }
+  }
+  const dist = edgeDist(w, h, mask), capRamp = P.capColors ? recolorStops(P.capColors, P.recolor) : null, capAt = new Uint8Array(w * h);
   // the shade side, as a direction across the picture (for the Shading control and the no-highlight rule)
   const away = [-L.x, -L.y], span = (Sd.ext.e1 - Sd.ext.e0) * 0.35 + (CE * (Sd.ext.s1 - Sd.ext.s0) + SE * Sd.ext.u) * 0.35, mid = [R.ox, R.oy - SE * Sd.hgt * 0.4];
   for (let k = 0; k < w * h; k++) {
@@ -792,6 +802,7 @@ function rockFrame(P, seed, ctx) {
     const n = p.n, direct = Math.max(0, n[0] * sun[0] + n[1] * sun[1] + n[2] * sun[2]) * p.vis, sky = Math.max(0, n[2]);   // sky light falls on what faces up
     let t = 0.5 * direct + 0.5 * sky - 0.12 * smoothstep(0.5, 0, p.U / Math.max(1, Sd.hgt) * 4);    // a darker foot where the rock meets the ground
     if (Sd.isPlate && p.U < Sd.plateTop + 1 && Sd.isPlate(p.E, p.S, p.U)) { plateAt[k] = 1; t = 0.5 * Math.max(0, n[0] * sun[0] + n[1] * sun[1] + n[2] * sun[2]) * (p.vis > 0.5 ? 1 : 0.35) + 0.5 * sky; }                              // the plate, lifted toward the light end of the ramp below
+    if (capRamp) for (const b of Sd.bodies) { const de = p.E - b.e, ds = p.S - b.s, qe = de * b.co - ds * b.si, qs = de * b.si + ds * b.co; for (const c of b.cols || []) if (Math.hypot(qe - c.e, qs - c.s) <= Math.min(c.rad * 0.8, P.capSize) && p.U > c.hh - P.capSize * 0.4 && n[2] > 0.3) capAt[k] = 1; }
     const dd = ((k % w + 0.5 - mid[0]) * away[0] + (((k / w) | 0) + 0.5 - mid[1]) * away[1]) / span;
     if (!plateAt[k]) t -= P.shade * 0.3 * Math.max(0, dd - 0.05);                                       // the far side falls off harder with the shading control
     if (dist[k] <= 1 && !plateAt[k]) t -= 0.05 + 0.1 * smoothstep(-0.2, 0.4, dd);                     // a soft dark rim, darkest on the shade side
@@ -829,6 +840,7 @@ function rockFrame(P, seed, ctx) {
       for (const m of mot) { if (v >= acc && v < acc + m.share) best = m; acc += m.share; }
       if (best) { const f = lumaRGB(col) / Math.max(1, lumaRGB(best.rgb)); col = col.map((c0, j) => lerp(c0, best.rgb[j] * f, on)); }
     }
+    if (capAt[k]) col = rampAt(capRamp, clamp(0.25 + 0.75 * lit[k] + (hash2(x, y, s2 + 5) - 0.5) * 0.35, 0, 1));
     paintRGB(c, x, y, col, lit[k]);
   });
   const fu = 0.18 + 0.2 * r(), ax = Math.round(R.ox + (r() - 0.5) * 3), ay = Math.round(lerp(R.oy - SE * Sd.hgt - CE * Sd.D * 0.5 + fu * (CE * Sd.D + SE * Sd.hgt), R.oy, smoothstep(0, 0.6, P.tall)));
