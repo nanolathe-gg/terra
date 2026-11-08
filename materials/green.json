@@ -2009,6 +2009,7 @@
   "deposit": {"params": {"reach": 1}, "vary": {"reach": [0.8, 1.4], "haloRough": [4, 10]}}
  },
  "world": {
+  "baseHeight": 9,
   "colors": {"rock": "#505050"},
   "defaults": {
    "surface": "slopes",
