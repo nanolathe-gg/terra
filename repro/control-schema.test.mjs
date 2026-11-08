@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {shapeControlAvailable as available,controlLabel,PARKED_WORLD_CONTROLS} from '../sculpt-control-schema.js';
+import {shapeControlAvailable as available,controlLabel} from '../sculpt-control-schema.js';
 import {prepareNode} from '../sculpt-gpu-fields.js';
 
 test('a landform takes facets unless its coast pass is on',()=>{
@@ -50,7 +50,6 @@ test('erase all masks includes all eight local style planes',()=>{
  assert.ok(writes.every(w=>w[1]===0));
 });
 test('the parked control is only crevice',()=>{
- assert.deepEqual([...PARKED_WORLD_CONTROLS],['crevice']);
  assert.equal(controlLabel('moonCups','Moon cups'),'Slope cups');
  assert.equal(controlLabel('iceSoft','Ice lighting'),'Rounded lighting');
 });

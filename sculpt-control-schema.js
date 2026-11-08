@@ -1,11 +1,6 @@
 import {strokeKnots,sampleKnots,landformSteps,landformShore,landformMakesWater,landformDigs} from './sculpt-shape-presets.js';
 import {isRiver} from './sculpt-river.js';
 // Presentation names and applicability belong to features, never to worlds.
-// Historical persistence keys are compatibility identifiers for existing v4-v6
-// recipes, not world-gated algorithms. All presentation uses feature names.
-// Experiment 4 left this off: it darkens broad faces instead of making useful
-// crevices. Preserve recipes, but require fresh visual evidence before exposure.
-export const PARKED_WORLD_CONTROLS=new Set(['crevice']);
 export const WORLD_GROUP_NAMES={
  'Light':'Lighting','Relief':'Ground detail','Faces':'Material coverage','Desert foot band':'Foot color band','Desert caps':'Cap color',
  'Shallow water, round 2':'Water detail','Shallow water, round 3':'Water detail',

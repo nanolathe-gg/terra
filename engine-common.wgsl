@@ -107,7 +107,6 @@ struct Uniforms {
     slopeMarks: f32,    // Moon: density of crisp dark marks on slopes (0: none)
     sandCrown: f32,     // painted sand stays sand to the crown, no rock (Zhon sand bars)
     footRim: f32,
-    crevice: f32,
     faceDark: f32,        // darkening of slopes turned from the sun, most in hollows (0: none)
     flatBank: f32,        // low dry banks lit as level ground, no wet band (0: off)
     dither: f32,

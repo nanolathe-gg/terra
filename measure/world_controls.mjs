@@ -23,7 +23,7 @@
 // since a wrong gate hides a live control and nothing else would show it. The water rows are read once more under a Shallow water color, which no scene picks.
 // --set puts values in before the sweep, to probe a row under a gate.
 import {cdpPortFree} from '../repro/cdp-port.mjs';
-import {worldControlRequirement, shapeControlAvailable, PARKED_WORLD_CONTROLS, LANDFORM_FACET_KEYS} from '../sculpt-control-schema.js';
+import {worldControlRequirement, shapeControlAvailable, LANDFORM_FACET_KEYS} from '../sculpt-control-schema.js';
 import {spawn} from 'node:child_process';
 import {mkdirSync, writeFileSync, readFileSync, existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -226,7 +226,7 @@ async function nodeHost() {
     async state() {
       // sculpt.js buildKnobs: a row for each knob that is not parked; the panel disables it by worldControlRequirement on these values.
       const values = await headless.panelValues(s);
-      const panel = KNOBS.flatMap(([, list]) => list).filter(([key]) => !PARKED_WORLD_CONTROLS.has(key)).map(([key]) => { const reason = worldControlRequirement(key, values) || ''; return {key, off: Boolean(reason), reason}; });
+      const panel = KNOBS.flatMap(([, list]) => list).map(([key]) => { const reason = worldControlRequirement(key, values) || ''; return {key, off: Boolean(reason), reason}; });
       return {values, panel, variant: Object.fromEntries(s.renderer.variant), knobs: KNOBS, fields: SHAPE_FIELDS, defaults: Object.fromEntries(Object.keys(KINDS).map(k => [k, toolDefaults(s.config, k)])), nodes: s.nodes.map(n => n.kind)};
     },
     panelValues: () => headless.panelValues(s),
@@ -296,7 +296,7 @@ try {
     await host.load(world, fixtures[0][3] || '');
     const st = await setUp(); let base = st.variant;
     const values = st.values, panelRow = Object.fromEntries(st.panel.map(r => [r.key, r])), all = st.knobs.flatMap(([group, list]) => list.map(f => ({group, key: f[0], lo: f[2], hi: f[3]})));
-    const live = all.filter(k => !PARKED_WORLD_CONTROLS.has(k.key) && (!ONLY || ONLY.includes(k.key)));
+    const live = all.filter(k => !ONLY || ONLY.includes(k.key));
     // The parents that clear a reason: try each knob at 1, then at its midpoint, greedily, until the row is enabled (the reason is the tool's own oracle).
     // The parents that clear a row's reason: every knob that clears it alone (an "any of" row has several), else the chain that does, one knob at a time (the reason is the tool's own oracle).
     const gatesFor = key => {

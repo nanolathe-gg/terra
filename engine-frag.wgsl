@@ -1772,10 +1772,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let brightGrass = saturate(based(grassImage(pixel), u.groundTexMean, u.groundBase) * vec3f(1.15, 1.35, 1.05));
         material = mix(material, brightGrass, rim * u.footRim * (1.0 - route));
         exposed = max(exposed * (1.0 - face), rockMask * face);
-        // Thin dark crevices in the relief's hollows, also across mid slopes
-        // where the face material has not taken over.
-        let hollow = smoothstep(0.25, 0.9, -top) * smoothstep(u.faceSlope.x * 0.4, u.faceSlope.x, faceSlope);
-        material *= 1.0 - u.crevice * hollow * (1.0 - route);
     }
     // H4 round 2, rockMoss: moss and grass flecks on exposed rock, a dash of 2 px to small clumps. Retail's face carries them in its
     // crevices and on the tops of its ledges and blocks (green share of the face 12%, ours 2%). The chance of a fleck grows with the
