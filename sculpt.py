@@ -313,7 +313,10 @@ WORLD_KNOBS = {
     # Red's plain is level, as Green's is (card E1): the share of a retail window's 16-px cells at its most common height is .36 / .52 /
     # .20 in red-1..3 (Green's .35 / .20 / .44); the default undulation (10) gave .21 / .21 / .18, none gives .67 / .52 / .26. The plain's
     # lumps (plainRelief) keep its soft mottle. A level plain also repeats its tiles (card tilepool).
-    'red': dict(undulation=0, crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
+    # Retail round 1: retail's plain rolls gently (slope .03-.08 share .34 / .07 / .16 in red-1..3, ours .05 / .25 / .04 with none), so a faint
+    # undulation (2.5 over 80-px lumps on 60% of the land) replaces the level plain, and the ground pattern is softened to .7 contrast
+    # (retail's plain is lighter, less dotted).
+    'red': dict(undulation=2.5, undulationScale=80, undulationCover=.6, groundContrast=.7, crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
                 reliefAmount=.2, slopeTexture=0, microRock=0,
                 crackSpacing=28, rockOrder=1, bedLedge=0,
                 grooveSpacing=30, grooveAngle=-10, grooveRun=160,
