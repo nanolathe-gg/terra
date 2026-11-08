@@ -18,6 +18,9 @@ test('a knob goes into the address and the renderer, and says what else it needs
   const applied = r.applied;
   assert.deepEqual(applyKnob({key: 'groundPattern', value: 'lava', settings, renderer: r, nodes, seed: 2701}), {reload: true});
   assert.equal(settings.get('groundPattern'), 'lava'); assert.equal(r.variant.has('groundPattern'), false); assert.equal(r.applied, applied);
+  // So is a borrowed beach (sculpt-scene.js borrowBeach, before the renderer starts).
+  assert.deepEqual(applyKnob({key: 'beachFrom', value: 'zhon', settings, renderer: r, nodes, seed: 2701}), {reload: true});
+  assert.equal(settings.get('beachFrom'), 'zhon'); assert.equal(r.variant.has('beachFrom'), false); assert.equal(r.applied, applied);
 });
 
 test('Undulation height puts a ground node first on a map without one, and only when it turns on', () => {
@@ -53,4 +56,31 @@ test("a stroke's water choices count as the world switches they turn on", () => 
   const v = worldPanelValues({config: {layers: ['ring'], water: {}}, renderer: r, nodes, colors: {shallow: [1, 0, 0]}, weathering: true, materialWeathering: 0});
   assert.equal(v.deepEdge, 1); assert.equal(v.rampWater, 1); assert.equal(v.bedLit, 1); assert.equal(v.crackedBed, 1);
   assert.equal(v.waterColored, 1); assert.equal(v.waterTones, 2); assert.equal(v.ringLayer, 1); assert.equal(v.beachLayer, 0);
+});
+
+test('the column facts follow the active column: the map\'s own, its variant row, or none', () => {
+  const facts = column => worldPanelValues({config: {layers: [], water: {}, column, variant: 'triad'}, renderer: renderer(), nodes: [], colors: {}, weathering: false, materialWeathering: 0});
+  assert.equal(facts(undefined).column, 0, 'a world without a column');
+  assert.equal(facts({bands: [3.7, 1]}).column, 0, 'contour bands alone are no column');
+  assert.equal(facts({bands: [3.7, 1], sections: [{start: 0, beds: [[5, .8, 0], [7, .3, 1]]}]}).column, 1, 'a column the map added');
+  assert.equal(facts({sections: []}).column, 0, 'every section removed');
+  // A variant's row replaces the sections: emptied there, the world's own no longer draw.
+  const rows = {sections: [{start: 0, beds: [[.3, .5, 0], [5.7, .5, 1]]}], variants: {triad: {sections: []}}};
+  assert.equal(facts(rows).column, 0); assert.equal(facts(rows).capBed, 0);
+  rows.variants.triad.sections = [{start: 0, beds: [[.3, .5, 0], [5.7, .5, 1]]}];
+  assert.equal(facts(rows).column, 1); assert.equal(facts(rows).capBed, 1);
+});
+
+test('the rock facts are the world\'s own, and a Rock type draws with its own numbers', async () => {
+  const {ROCK_TYPES, rockPreset} = await import('../sculpt-material-model.js');
+  const facts = rock => worldPanelValues({config: {layers: [], water: {}, material: {rock}}, renderer: renderer(), nodes: [], colors: {}, weathering: false, materialWeathering: 0});
+  assert.deepEqual([facts(undefined).rockCells, facts(undefined).rockJoint, facts(undefined).rockCurtains], [0, 2, 0], 'no rock: no blocks, the model\'s joint lines');
+  assert.deepEqual([facts({joint: 3}).rockCells, facts({joint: 3}).rockJoint], [0, 3]);
+  assert.equal(facts({size: 4.6, joint: 0}).rockCells, 1);
+  const own = {size: 4.6}, at = t => rockPreset({rock: own}, new Map([['rockType', String(t)]]));
+  assert.equal(at(0), own); assert.equal(rockPreset({}, new Map()).size, undefined);
+  assert.equal(at(1), ROCK_TYPES[0].rock); assert.equal(at(1).size, 22, 'Granite is modern Green\'s');
+  assert.equal(at(ROCK_TYPES.length), ROCK_TYPES.at(-1).rock); assert.equal(at(ROCK_TYPES.length + 1), own, 'an unknown type is the world\'s own');
+  assert.equal(KNOBS.flatMap(([, l]) => l).find(k => k[0] === 'rockType')[3], ROCK_TYPES.length, 'the row offers every type');
+  assert.ok(ROCK_TYPES.some(t => t.rock.joint > 0) && ROCK_TYPES.some(t => t.rock.curtain > 0) && ROCK_TYPES.every(t => t.rock.size > 0));
 });

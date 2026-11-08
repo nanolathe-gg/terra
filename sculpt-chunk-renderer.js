@@ -2,7 +2,7 @@
 // belong to this renderer once; callers own the LRU of copied output images.
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {columnRows} from './sculpt-column.js';
-import {PLANT_REACH,groundCoverOn} from './sculpt-material-model.js';
+import {PLANT_REACH,groundCoverOn,rockPreset} from './sculpt-material-model.js';
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
 
 const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','riverBed','fu','fv','s1','s2','s3'];
@@ -105,7 +105,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const beds=(Math.abs(n('bedSpacing',12))*Math.max(1,(slope+Math.abs(n('bedDip',0)))**(1-n('bedHeight',0)))*1.8*Math.abs(n('bedLedge',.5))+(n('bedLedge',.5)>0?3.6*Math.max(1,n('bedLedge',.5)):0))*Math.abs(n('rockOrder',0));
     const bands=columnRows(this.config.column,this.config.variant).bands[0]*Math.max(Math.abs(n('banding',0))*4,.8);
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
-    const gullyRise=Math.abs(n('ribTilt',0))*Math.max(n('grooveSpacing',8),8),rock=this.config.material?.rock||{};
+    const gullyRise=Math.abs(n('ribTilt',0))*Math.max(n('grooveSpacing',8),8),rock=rockPreset(this.config.material,this.variant);
     const facetRise=rock.size>0?2*(Math.abs(rock.crev??2)+1.8*Math.abs(rock.vary??.5)+1.7*Math.abs(rock.chip??.25)+Math.abs(rock.grit??.35)):0;   // the rock model's cells: crevice, tilt and step, chips and grit (engine-bake.wgsl rockModel), doubled for the margin
     const extra=gullyRise+facetRise+relief+blocks+beds+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(n('looseSize',6))+Math.abs(n('rippleHeight',1.4));
     const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4);

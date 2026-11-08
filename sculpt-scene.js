@@ -260,6 +260,16 @@ export const groundDefaults=settings => ({amplitude:settings.has('undulation')?N
 // The brush seed a page opens with (sculpt.html's Seed box): a scripted scene's strokes take their seeds from it.
 export const DEFAULT_SEED=2701;
 // A page's settings: its address over the world's own defaults (boot() in sculpt.js does this to its address once the config is in).
+// A world with no beach of its own may take another world's (Colors & base pattern, Beach: the setting beachFrom names a world of config.beachSources,
+// sculpt.py world_configs): the lender's beach layer (the renderer generates it after the world's own, from the table this names) and its beach
+// width, height and color, so every reader of config.layers and config.material (the panel's facts and rows, the chunk margins, the renderer)
+// sees a beach. The page's boot and the headless host call this once the settings hold the world's defaults.
+export function borrowBeach(config,settings) {
+  const lender=config.beachSources?.[settings.get('beachFrom')];
+  if (!lender || config.layers.includes('beach')) return config;
+  config.layers=[...config.layers,'beach']; config.material={...config.material,...lender.material}; config.beachTable=lender.table;
+  return config;
+}
 export function addDefaults(settings,defaults={}) { for (const [key,value] of Object.entries(defaults||{})) if (!settings.has(key)) settings.set(key,value); return settings; }
 export const pageSettings=(config,search='') => addDefaults(new URLSearchParams(search),config.defaults);
 // A world setting the page's address may override (a knob trial in a render's query), else the world's value.
