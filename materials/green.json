@@ -1988,10 +1988,12 @@
   "shallow": "shallow"
  },
  "features": {
-  "note": "The kinds sculpt-feature-gen.js draws for this world, as tuned for Green (prototype/fgen, approved November 6). A type's share is its retail use share on the Green maps (measure/feature_tables/green_gameplay.json on prototype/faudit): broadleaf Tree1-3 43,227 of 65,018 tree uses, conifers Tree4-7 the rest; the sparse Shrub3 34,188 of 41,323 shrub uses; rocks by footprint 474, 276, 118, 113 and 87 of 1,068; rock stains 1,179 and smudges 538 of the scars. Each type's vary ranges are the retail sizes (spec sections 5, 6). Gameplay: every tree 250 energy; rock metal 25 for the smallest footprint to 100 for 3x3 and larger.",
+  "note": "The kinds sculpt-feature-gen.js draws for this world, as tuned for Green (prototype/fgen, approved November 6). A type's share is its retail use share on the Green maps (measure/feature_tables/green_gameplay.json on prototype/faudit): broadleaf Tree1-3 43,227 of 65,018 tree uses, conifers Tree4-7 the rest; the sparse Shrub3 34,188 of 41,323 shrub uses; rocks by footprint 474, 276, 118, 113 and 87 of 1,068; rock stains 1,179 and smudges 538 of the scars. Each type's vary ranges are the retail sizes (spec sections 5, 6). Gameplay: every tree 250 energy; rock metal 25 for the smallest footprint to 100 for 3x3 and larger. Round 12: Tree1-6Dead (2,220 uses) are the dead types, 50 energy, neither burning nor leaving a successor.",
   "tree": {"count": 7, "taper": 0.5, "peaks": 0.5, "energy": [250, 250], "types": [
-   {"share": 0.665, "params": {"species": "broadleaf"}, "vary": {"height": [66, 71], "width": [0.68, 0.73]}},
-   {"share": 0.335, "params": {"species": "conifer"}, "vary": {"height": [57, 64], "width": [0.44, 0.62]}}]},
+   {"share": 0.64, "params": {"species": "broadleaf"}, "vary": {"height": [66, 71], "width": [0.68, 0.73]}},
+   {"share": 0.327, "params": {"species": "conifer"}, "vary": {"height": [57, 64], "width": [0.44, 0.62]}},
+   {"share": 0.02, "params": {"species": "dead", "energy": [50, 50], "ash": 0.1}, "vary": {"height": [50, 60], "width": [0.5, 0.62]}},
+   {"share": 0.013, "params": {"species": "deadConifer", "energy": [50, 50]}, "vary": {"height": [56, 64], "width": [0.4, 0.55]}}]},
   "shrub": {"count": 3, "types": [
    {"share": 0.827, "params": {"density": 0.12, "width": 33, "height": 26}},
    {"share": 0.173, "params": {"density": 0.6, "width": 27, "height": 20}}]},
@@ -2003,7 +2005,7 @@
    {"share": 0.081, "params": {"cells": "4x3"}}]},
   "scar": {"count": 6, "types": [
    {"share": 0.687, "params": {"type": "stain"}, "vary": {"size": [0.6, 1.2]}},
-   {"share": 0.313, "params": {"type": "smudge"}}]}
+   {"share": 0.313, "params": {"type": "speckle", "density": 0.9}, "vary": {"size": [0.2, 0.5]}}]}
  },
  "world": {
   "defaults": {

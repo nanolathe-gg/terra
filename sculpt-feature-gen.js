@@ -871,6 +871,17 @@ function scarFrame(P, seed, ctx) {
     }
     return { body: cropSprite(peb, 0), shadow: cropSprite(ell, 0), anchorBody: [ax, ay] };
   }
+  if (P.type === 'speckle') {   // burnt dust (retail Archipelago's FrondScar, Green's black Smudge): near-black pixels in clumps of one to three, thick at the middle and thinning to a ragged edge
+    const W = Math.round(lerp(14, 50, clamp((P.size - 0.3) / 1, 0, 1))), H = Math.round(W * (0.7 + 0.25 * r()));
+    const w = W + 6, h = H + 6, ax = Math.round(w / 2), ay = Math.round(h / 2), sp = newSprite(w, h, ax, ay), s1 = (r() * 1e6) | 0;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const dx = (x - ax) / (W / 2), dy = (y - ay) / (H / 2), rr = Math.hypot(dx, dy) * (1 + 0.5 * (fbm(x / 3.5, y / 3.5, s1) - 0.5) * 2);
+      if (rr > 1) continue;
+      const dens = clamp(Math.pow(1 - rr, 0.7) * (0.25 + 1.2 * P.density) + 0.03, 0, 0.98);
+      if (rn() < dens) { const c = weighted(rn, [[245, 5], [94, 3], [93, 2], [92, 1]]); put(sp, x, y, c); if (rn() < 0.3) put(sp, x + (rn() < 0.5 ? 1 : -1), y, c); }
+    }
+    return { body: cropSprite(sp, 0), translucent: false };
+  }
   const W = Math.round(lerp(17, 27, clamp(P.size / 1.3, 0, 1))), H = Math.round(W * (0.7 + 0.1 * r()));
   const w = W + 4, h = H + 4, ax = Math.round(w / 2), ay = Math.round(h / 2);
   const sp = newSprite(w, h, ax, ay), s1 = (r() * 1e6) | 0, s2 = (r() * 1e6) | 0;
@@ -904,7 +915,7 @@ export const DEFAULTS = { tree: TREE_DEFAULTS, burnt: BURNT_DEFAULTS, shrub: SHR
 // The generators' parameters per kind (a world's table sets them per type; the panel exposes taper, peaks, shade, angular, the
 // kind colors and the gameplay ranges): [key, min, max, default, what it changes].
 export const CONTROLS = {
-  tree: [['species', 'broadleaf|conifer|tendril', null, 'broadleaf', 'leafy crown, tiered cone, or ground tendrils from a bulb'], ['height', 50, 110, 68, 'size in px'], ['width', 0.42, 1.05, 0.72, 'width over height'],
+  tree: [['species', 'broadleaf|conifer|tendril|dead|deadConifer', null, 'broadleaf', 'leafy crown, tiered cone, ground tendrils from a bulb, or a standing dead tree'], ['height', 50, 110, 68, 'size in px'], ['width', 0.42, 1.05, 0.72, 'width over height'],
     ['crown', 0, 1, 0.6, 'smooth to lobed and ragged'], ['density', 0, 1, 0.45, 'holey to solid'], ['taper', 0, 1, 0.5, 'round top to narrowing upward'], ['peaks', 0, 1, 0.5, 'smooth top to peaks'],
     ['clusters', 0, 1, 0, 'one crown to leaf clusters on visible branches'], ['arms', 3, 12, 7, 'tendrils (tendril)'], ['curl', 0, 1, 0.6, 'tendril kinks (tendril)'], ['cells', '1x1|2x2', null, '1x1', 'footprint'],
     ['colors', 'ramp', null, 'Green', 'leaf ramp, darkest first'], ['gap', 'ramp', null, 'Green', 'ramp of the gaps between leaves'], ['flecks', '[[color, share]]', null, 'Green', 'second hues on sunlit leaves'],
@@ -915,7 +926,7 @@ export const CONTROLS = {
   rock: [['cells', 'WxD', null, '2x2', 'footprint, sets the pixel size and the metal'], ['size', 0.7, 1.15, 1, 'scale inside the footprint'], ['shade', 0, 1, 0.6, 'soft to strong shading away from the sun'],
     ['angular', 0, 1, 0.5, 'round boulder to sharp facets'], ['tall', 0, 1, 0, 'boulder to spire'], ['pieces', 1, 8, 1, 'stones in the feature'], ['pits', 0, 1, 0, 'pocked surface'], ['lump', 0, 1, 0.6, 'uneven outline and surface'],
     ['grain', 0, 1, 0.6, 'fine dither'], ['colors', 'ramp', null, 'Green', 'rock ramp'], ['mottle', '[[color, share]]', null, 'Green', 'second hues in the mid and light tones'], ['recolor', '{from, to}', null, 'none', 'the artist color']],
-  scar: [['type', 'smudge|stain', null, 'smudge', 'scorch blot or rock stain'], ['size', 0.3, 1.3, 1, 'size'], ['density', 0, 1, 0.55, 'stipple density']],
+  scar: [['type', 'smudge|stain|speckle', null, 'smudge', 'scorch blot, rock stain or burnt dust'], ['size', 0.3, 1.3, 1, 'size'], ['density', 0, 1, 0.55, 'stipple density']],
   deposit: [['metal', 86, 223, 127, 'metal value; sets the stone area'], ['halo', 0.4, 1.4, 0.82, 'the halo\'s lightness against the ground'], ['haloSat', 0.5, 1.5, 1.1, 'the halo\'s hue against the ground\'s']],
   vent: [['size', 0.6, 1.6, 1, 'crack length and thickness'], ['forks', 2, 4, 3, 'how often the crack forks'], ['rim', 0.4, 1.2, 0.72, 'the rim\'s lightness against the ground']],
 };
@@ -928,6 +939,10 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
   const rr = rng(mix32(seed, 0xBEEF));
   let body, shadow = null, bodyBlend = 1, burn = null, burnt = null, gameplay = {}, footprint = [1, 1];
   const L = lightOf(ctx);
+  if (kind === 'tree' && (P.species === 'dead' || P.species === 'deadConifer')) {   // a standing dead tree (retail Green's Tree1-6Dead): the bare successor's drawing as a tree of its own, which neither burns nor leaves a successor
+    const B = generateFeature('burnt', { species: P.species === 'deadConifer' ? 'conifer' : 'broadleaf', height: P.height, width: P.width, forks: P.forks ?? 3, ash: P.ash ?? 0.15, shadowLen: P.shadowLen, shadowColor: P.shadowColor, trunk: P.trunk }, seed, ctx);
+    return { ...B, kind: 'tree', name: `Tree_${(seed >>> 0).toString(36)}`, params: P, burn: null, burnt: null, gameplay: { ...B.gameplay, energy: pickValue(P.energy, undefined, rr) } };
+  }
   if (kind === 'tree') {
     const conifer = P.species === 'conifer', tendril = P.species === 'tendril';
     const T = tendril ? tendrilFrame(P, seed, ctx) : treeFrame(P, seed, ctx);
