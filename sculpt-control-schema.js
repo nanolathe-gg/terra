@@ -81,7 +81,7 @@ export function worldControlRequirement(key,v){
  // flowers are dots in that color; the plants' relief is baked into the height and still shows.
  if(key==='flowerDensity'&&n('slopeReplaced')>0)return 'The sediment transition replaces the ground\'s color at 100 percent Material weathering, so no flower shows. Lower Material weathering to use this setting.';
  if(['plantRelief','flowerDensity'].includes(key))return '';
- if(['undulationScale','undulationCover'].includes(key))return needs('undulation','Undulation height');
+ if(['undulationScale','undulationCover','undulationArt'].includes(key))return needs('undulation','Undulation height');
  if((['bedHeight','bedVary','bedPunch'].includes(key)||key==='bedSpacing'&&n('cliffRise')<=0)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';   // with a Riser height a column's ledge scales by bed thickness over this spacing
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';
  if(key==='bedDipDir')return worldControlRequirement('bedDip',v)||(n('bedDip')===0?'Set Bed tilt above or below zero to choose its direction.':'');

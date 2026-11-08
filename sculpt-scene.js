@@ -255,7 +255,8 @@ export function strokeParams(s) { return {...Object.fromEntries(['shorePlates','
 // other key is a stroke option.
 export const strokeCard=(config,d) => ({radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,softness:d.softness/100,cracks:d.cracks/100,
   ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),curve:d.curve,along:d.along});
-export const groundDefaults=settings => ({amplitude:settings.has('undulation')?Number(settings.get('undulation')):10,wavelength:settings.has('undulationScale')?Number(settings.get('undulationScale')):200,coverage:settings.has('undulationCover')?Number(settings.get('undulationCover')):.45});
+export const groundDefaults=settings => ({amplitude:settings.has('undulation')?Number(settings.get('undulation')):10,wavelength:settings.has('undulationScale')?Number(settings.get('undulationScale')):200,coverage:settings.has('undulationCover')?Number(settings.get('undulationCover')):.45,
+  art:settings.has('undulationArt')?Number(settings.get('undulationArt')):1});   // the share of the undulation the art shows (lit and painted); the game heights keep all of it
 
 // The brush seed a page opens with (sculpt.html's Seed box): a scripted scene's strokes take their seeds from it.
 export const DEFAULT_SEED=2701;
@@ -370,13 +371,13 @@ export function bilinearCells(x,y,spacing,grid,cell) {
   return (cell(ix,iy)*(1-fx)+cell(jx,iy)*fx)*(1-fy)+(cell(ix,jy)*(1-fx)+cell(jx,jy)*fx)*fy;
 }
 
-// The planes a map's fields hold: the six authored planes, then the masks.
-export const FIELD_KEYS=['h','p','r','c','v','x',...MASK_KEYS];
+// The planes a map's fields hold: the seven authored planes (u: the part of h the art does not show), then the masks.
+export const FIELD_KEYS=['h','p','r','c','v','x','u',...MASK_KEYS];
 // The shape's repeat check (sculpt.js shapeCompare; repro/shapecheck.mjs): every plane of the whole map, evaluated again, must be the same.
 // `settle` resolves once the fields' evaluation is done.
 export async function repeatCheck({fields,grid,settle}) {
-  const copy=f => ({h:f.h.slice(),p:f.p.slice(),r:f.r.slice(),c:f.c.slice(),v:f.v.slice(),x:f.x.slice(),masks:MASK_KEYS.map((k,j) => (f.masks?f.masks[j]:f[k]).slice())});
-  const all={x0:0,y0:0,x1:grid-1,y1:grid-1},grab=r => ({h:r.fields.h,p:r.fields.p,r:r.fields.r,c:r.fields.c,v:r.fields.v,x:r.fields.x,masks:MASK_KEYS.map(k => r.fields[k])});
+  const copy=f => ({h:f.h.slice(),p:f.p.slice(),r:f.r.slice(),c:f.c.slice(),v:f.v.slice(),x:f.x.slice(),u:f.u.slice(),masks:MASK_KEYS.map((k,j) => (f.masks?f.masks[j]:f[k]).slice())});
+  const all={x0:0,y0:0,x1:grid-1,y1:grid-1},grab=r => ({h:r.fields.h,p:r.fields.p,r:r.fields.r,c:r.fields.c,v:r.fields.v,x:r.fields.x,u:r.fields.u,masks:MASK_KEYS.map(k => r.fields[k])});
   await settle(); const a=copy(grab(fields.readCells(all)));
   fields.changed(); await settle(); const b=copy(grab(fields.readCells(all)));
   return {grid,repeat:comparePlanes(a,b,grid,MASK_KEYS)};
@@ -395,7 +396,7 @@ export async function regionalCheck({fields,device,nodes,context,config,grid,spa
     const middle=Math.floor(G/2);
     for (const [y0,y1] of [[0,middle-1],[middle,G-1]]) for (const [x0,x1] of [[0,middle-1],[middle,G-1]]) {
       const rect={x0,y0,x1,y1},W=x1-x0+1,out=await engine.run(nodes.slice(),ctx,rect),rp=await fields.readRect(rect,{weather:false});
-      const expected={h:out.floats[0],p:out.floats[1],r:out.floats[2],c:out.floats[3],v:out.floats[4],x:out.floats[5]};
+      const expected={h:out.floats[0],p:out.floats[1],r:out.floats[2],c:out.floats[3],v:out.floats[4],x:out.floats[5],u:out.floats[6]};
       for (const key of FIELD_KEYS) {
         const j=MASK_KEYS.indexOf(key),want=j>=0?out.masks[j]:expected[key],got=rp.fields[key],p=planes[key];
         for (let i=0;i<W*W;i++) {

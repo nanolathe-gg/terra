@@ -25,7 +25,20 @@ test('Undulation height puts a ground node first on a map without one, and only 
   assert.deepEqual(applyKnob({key: 'undulation', value: '0', settings, renderer: r, nodes, seed: 2701}), {});
   assert.equal(nodes.length, 1);
   assert.deepEqual(applyKnob({key: 'undulation', value: '6', settings, renderer: r, nodes, seed: 2701}), {evaluate: 0, checkpoint: true, weather: true});
-  assert.deepEqual(nodes[0], {kind: 'ground', amplitude: 6, wavelength: 160, seed: 2701 ^ 0x9e37});
+  assert.deepEqual(nodes[0], {kind: 'ground', amplitude: 6, wavelength: 160, art: 1, seed: 2701 ^ 0x9e37});
+  // A new ground node takes the page's Undulation in the art.
+  const kept = new URLSearchParams('undulationArt=.25'), more = [];
+  applyKnob({key: 'undulation', value: '4', settings: kept, renderer: r, nodes: more, seed: 2701});
+  assert.equal(more[0].art, .25);
+});
+
+test('Undulation in the art edits the ground node', () => {
+  const settings = new URLSearchParams(), r = renderer(), nodes = [{kind: 'ground', amplitude: 8, wavelength: 48, coverage: 1, seed: 1}];
+  assert.deepEqual(applyKnob({key: 'undulationArt', value: '0', settings, renderer: r, nodes, seed: 2701}), {evaluate: 0, checkpoint: true, weather: true});
+  assert.equal(nodes[0].art, 0);
+  assert.equal(settings.get('undulationArt'), '0');
+  // No ground node, no undulation: nothing to evaluate.
+  assert.deepEqual(applyKnob({key: 'undulationArt', value: '.5', settings, renderer: r, nodes: [], seed: 2701}), {});
 });
 
 test('every knob row has a label, a range and a default', () => {

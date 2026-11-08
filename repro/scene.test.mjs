@@ -22,6 +22,9 @@ test('a scene is the ground undulation, then one node per stroke with its seed',
   assert.equal(strokeKind('crater'), 'landform');
   assert.equal(sceneNodes(config, [['crater', [[0, 0]], {}]], {ground: false})[0].params.heightReference, 2);
   assert.deepEqual(sceneNodes(config, [['hill', [[1, 2]], {}]]), sceneNodes(config, [['hill', [[1, 2]], {}]]), 'the same strokes give the same nodes');
+  // The ground node carries Undulation in the art: all of it unless the page says less.
+  assert.equal(nodes[0].art, 1);
+  assert.equal(sceneNodes(config, [], {settings: pageSettings(config, 'undulationArt=0')})[0].art, 0);
 });
 
 test('the page keeps only the kinds it draws', () => {
