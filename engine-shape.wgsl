@@ -1108,11 +1108,13 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   var value = pick.x;
   // Coast ramp below 1 (the host sets it on a stroke whose crest is under the sea): the dry part of the section keeps only the last lfCoast of its fall to
   // the waterline (the drop as a share of base - sea), easing off the plain and meeting the water in a bank 1 / lfCoast times as steep; under water it is
-  // as drawn.
+  // as drawn. From 1 to .75 the reshaped ramp blends in, so the row moves the coast by degrees from the drawn section.
   if (u.lfCoast < 1.0 && base > u.sea && value > u.sea && value < base) {
     let keep = max(u.lfCoast, 0.02);
     let fx = clamp(((base - value) / (base - u.sea) - (1.0 - keep)) / keep, 0.0, 1.0);
-    value = base - fx * fx * (2.0 - fx) * (base - u.sea);
+    let ramp = base - fx * fx * (2.0 - fx) * (base - u.sea);
+    let blend = min(1.0, (1.0 - keep) / 0.25);
+    value = select(mix(value, ramp, blend), ramp, blend >= 1.0);
   }
   if (u.gully > 0.0 && value > base) { value = landformGullies(value, pick.y, pk, psh, wx, wy, lx, ly, base, nA, nB, nC, x, y, i, cells); }
   if (talus > 0.0) { value = max(value, base + talus); }
