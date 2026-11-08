@@ -91,23 +91,18 @@ try {
   const loaded = await ev(`(async()=>{const s=sculptRegion.sketch();s.mapData={...s.mapData,features:[{name:'Tree1',x:5,z:5},...s.mapData.features]};sculptRegion.loadSketch(s);await sculptCanvas.idle();return {n:sculptCanvas.features.serialize().features.length,status:document.getElementById('status').textContent};})()`);
   assert.equal(loaded.n, 4); assert.match(loaded.status, /1 saved feature does not fit this world or map and was left out/); report.unfit = loaded.status;
   report.select = 'select, drag, metal, re-roll, Shift-add, Delete, refused overlap';
-  // A world with only some generated kinds says which it lacks (Moon: rocks, no plants or scars); they place and fill.
-  await send('Page.navigate', {url: `${server}/sculpt.html?biome=moon&mapX=4&mapY=4&scratch=features-test-moon&gpuMB=512&heapMB=1536`}); await ready();
-  await press('#feature-tool');
-  assert.equal(await ev('document.getElementById("feature-kind-note").textContent'), 'No generated trees, shrubs or scars for this world yet.');
-  assert.deepEqual(await ev('[...document.getElementById("feature-kind").options].filter(o=>!o.disabled).map(o=>o.value)'), ['deposit', 'vent', 'rock']);
-  assert.equal(await ev('document.querySelector("[data-feature-mode=fill]").disabled'), false);
-  assert.equal(await ev('sculptCanvas.features.addFeature("rock",20,20)'), true); assert.equal(await ev('sculptCanvas.features.addFeature("tree",30,30)'), false);
-  await settled(); await shot('moon-rock.png');
-  report.moon = 'rocks, deposits and vents; the panel says what it lacks';
-  // A world without a generated set (Zhon) says so; deposits and vents still place.
-  await send('Page.navigate', {url: `${server}/sculpt.html?biome=zhon&mapX=4&mapY=4&scratch=features-test-zhon&gpuMB=512&heapMB=1536`}); await ready();
-  await press('#feature-tool');
-  assert.equal(await ev('document.getElementById("feature-kind-note").textContent'), 'No generated trees, shrubs, rocks or scars for this world yet.');
-  assert.deepEqual(await ev('[...document.getElementById("feature-kind").options].filter(o=>!o.disabled).map(o=>o.value)'), ['deposit', 'vent']);
-  assert.equal(await ev('document.querySelector("[data-feature-mode=fill]").disabled'), true);
-  assert.equal(await ev('sculptCanvas.features.addFeature("vent",20,20)'), true); assert.equal(await ev('sculptCanvas.features.addFeature("tree",30,30)'), false);
-  report.zhon = 'deposits and vents only, the panel says why';
+  // Every world places every kind: a kind its table lacks is Green's (sculpt.py biome_config), lit by the world's own sun. Moon has rocks of its
+  // own and Green's trees, shrubs and scars; Zhon has no table and takes all four.
+  for (const world of ['moon', 'zhon']) {
+    await send('Page.navigate', {url: `${server}/sculpt.html?biome=${world}&mapX=4&mapY=4&scratch=features-test-${world}&gpuMB=512&heapMB=1536`}); await ready();
+    await press('#feature-tool');
+    assert.equal(await ev('document.getElementById("feature-kind-note").textContent'), '');
+    assert.deepEqual(await ev('[...document.getElementById("feature-kind").options].filter(o=>!o.disabled).map(o=>o.value).sort()'), ['deposit', 'rock', 'scar', 'shrub', 'tree', 'vent']);
+    assert.equal(await ev('document.querySelector("[data-feature-mode=fill]").disabled'), false);
+    assert.equal(await ev('sculptCanvas.features.addFeature("rock",20,20)'), true); assert.equal(await ev('sculptCanvas.features.addFeature("tree",30,30)'), true);
+    await settled(); await shot(`${world}-rock-tree.png`);
+  }
+  report.everyWorld = 'Moon and Zhon place every kind (a kind a world lacks is Green\'s)';
   assert.deepEqual(errors, []);
   console.log(JSON.stringify(report, null, 1));
 } finally { ws?.close(); browser.kill(); }

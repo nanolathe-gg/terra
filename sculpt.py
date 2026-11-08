@@ -845,6 +845,9 @@ def export_defaults(biome):
     return json.loads((HERE / MATERIAL_TABLES[biome]).read_text())['world']['export']
 
 
+FEATURE_KINDS = ('tree', 'shrub', 'rock', 'scar')   # sculpt-feature-set.js KINDS that come from a world's table
+
+
 def biome_config(biome):
     """One world's page configuration, built from its table."""
     table = json.loads((HERE / MATERIAL_TABLES[biome]).read_text())
@@ -855,8 +858,10 @@ def biome_config(biome):
               'material': {'groundCover': copy.deepcopy(DEFAULT_GROUND_COVER), **table['material']}, 'water': table['water'], **world}
     if 'river' in table:
         config['river'] = table['river']   # the river variant's material and water numbers (WORLD_VARIANTS)
-    if 'features' in table:
-        config['features'] = table['features']   # the generated feature kinds the world has (trees, shrubs, rocks, scars); every world has deposits and vents
+    # The generated feature kinds (trees, shrubs, rocks, scars; every world has deposits and vents): the world's own, and Green's for a kind it
+    # has none of, so any world can place any kind (lit by its own sun; Green's is the one table measured from retail for all four).
+    green = json.loads((HERE / MATERIAL_TABLES['green']).read_text())['features']
+    config['features'] = {**{k: v for k, v in green.items() if k in FEATURE_KINDS}, **table.get('features', {})}
     return world_knobs(biome, config)
 
 
