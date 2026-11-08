@@ -1,30 +1,7 @@
 import {strokeKnots,sampleKnots,landformSteps,landformShore,landformMakesWater,landformDigs} from './sculpt-shape-presets.js';
 import {isRiver} from './sculpt-river.js';
 // Presentation names and applicability belong to features, never to worlds.
-export const WORLD_GROUP_NAMES={
- 'Light':'Lighting','Relief':'Ground detail','Faces':'Material coverage','Desert foot band':'Foot color band','Desert caps':'Cap color',
- 'Shallow water, round 2':'Water detail','Shallow water, round 3':'Water detail',
- 'Fringe lines (Archipelago)':'Contour fringe','Fringe copies (Archipelago)':'Contour fringe',
- 'Lava hill rock':'Pillow crust','Lava banks':'Terrace creases','Pockmarks (Moon)':'Surface pits',
- 'Moon surface':'Cups, ribs & folds','Ice mountains':'Mineral faces','Ice blocks and mesas':'Cap & face finish',
- 'Ice frost lines':'Needle lines','Ice frost band':'Shore pockets',
- 'Rock face: follows the slope':'Structure orientation','Rock face: gullies and ribs':'Gullies & ribs','Rock face: facets':'Microfacets'
-};
 export const WORLD_CHOICES={deepEdge:[[0,'Ramp'],[1,'Hard step']],cliffFollow:[[0,'Fixed directions'],[1,'Follow terrain']],paletteMix:[[0,'Nearest color'],[1,'Mix color pairs']]};
-const LABELS={plainRelief:'Ground bumps',lumpRelief:'Painted ground bumps',rockOrder:'Rock structure',rockStain:'Stain',sunTilt:'Light from the south',ambient:'Ambient light',sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:'Vegetation through sand',hillLight:'Slope-cover brightness',ringFade:'Fringe fade length',slopeMarks:'Dark slope marks',wrinkles:'Joined slope wrinkles',
- desertCapFlat:'Uniform cap color',rockMoss:'Vegetation tint in rock',wetSwath:'Moisture',lushness:'Lushness',shoreEdge:'Waterline rim and lip',
- bedDots:'Bed speckles',crackedStep:'Cracked-bed transition depth',shoalGrain:'Grain through water tint',shoalShoreSoft:'Waterline blur (px)',
- lavaCrust:'Pillow crust strength',lavaCalm:'Replace fine relief with crust',lavaDusk:'Shade away from light',
- moonCups:'Slope cups',moonRibs:'Slope ribs',moonFolds:'Contour folds',
- iceSlate:'Slate faces',iceCrystal:'Straight face fibres',iceCrest:'Cap lumps',iceSoft:'Rounded lighting',iceSnow:'Snow on level caps',iceFall:'Slope fibres',iceApron:'Hatched foot apron',iceFrost:'Needle hairlines',
- crystalSides:'Polygon sides',crystalTop:'Flat top share',
- crystalTiers:'Level tops',crystalAlign:'Align to the path',crystalStep:'Step height',crystalFacet:'Top tilt',crystalSizeVar:'Size mix',facetForm:'Facet shape',bergJitter:'Outline jitter',bergBreak:'Corner cuts',bergRough:'Face roughness',
- crystalShoreSeam:'Slab seam weight',plateVary:'Slab variety',
- iceFacets:'Facets',iceFacetSize:'Facet width (px)',lavaSpread:'Layer width spread',lavaCircleVary:'Circular bite variation',
- fissureNetwork:'Cut layout',plateMaterial:'Shore structure',fingers:'Shore lobes',fingerSize:'Lobe size',
- styleVegetation:'Local vegetation',
-};
-export function controlLabel(key,label){return LABELS[key]||label.replace(/ \((?:Archipelago|Moon|Lava|Red|Green|Ice|Crystal)(?:[^)]*)\)/g,'').replace(/\bice\b/gi,'surface');}
 // Facets: each Facet shape's own rows (0 angular facets, 1 stepped columns, 2 prisms); Step height serves angular facets and columns, Level tops columns and prisms.
 const FACET_SHAPE_KEYS=[[],['crystalFacet','crystalSizeVar'],['crystalSides','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']];
 export const LANDFORM_FACET_KEYS=['crystalStep','crystalTiers',...FACET_SHAPE_KEYS.flat()];

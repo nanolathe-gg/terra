@@ -5,7 +5,7 @@ import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountC
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn} from './sculpt-column.js';
 import {KNOBS,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
-import {controlLabel,shapeControlAvailable,WORLD_CHOICES,WORLD_GROUP_NAMES} from './sculpt-control-schema.js';
+import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
 import {strokeKind,savedToolCard,TOOL_PRESETS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
   shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,regionalCheck,repeatCheck,pagedTime} from './sculpt-scene.js';
@@ -80,7 +80,6 @@ function buildShapeOptions() {
   // Each option row is built for its feature group (sculpt-ui.js groupToolControls). The section and along-path
   // editors are the page's own (#section-preview-control, in the curve dock).
   syncToolGroups=groupToolControls(SHAPE_FIELDS,([key,id,label,,lo,hi,step,,help,choices]) => {
-    label=controlLabel(key,label);
     if(key==='fissureNetwork')choices=[[0,'Path cut'],[1,'Fracture network']];
     if(key==='plateMaterial')choices=[[1,'Polygonal slabs'],[2,'Needle band']];
     const wrap=controlRow({id,label:`${label} <output id="${id}-value"${choices?' hidden':''}></output>`,range:`min="${lo}" max="${hi}" step="${step}"`,choices,select:' style="width:100%"',help});
@@ -1550,9 +1549,8 @@ function buildKnobs() {
   if (missing.length) console.warn('Knobs without a world default:', missing.join(', '));
   const groups=new Map();
   for (const [title, knobs] of KNOBS) {
-    const name=WORLD_GROUP_NAMES[title]||title;
-    if(!groups.has(name)){if(title==='Palette'){const box=group(name);box.dataset.group=name;groups.set(name,{block:box});}else groups.set(name,worldGroup(name));}
-    const {block:box,search}=groups.get(name);
+    if(!groups.has(title)){if(title==='Palette'){const box=group(title);box.dataset.group=title;groups.set(title,{block:box});}else groups.set(title,worldGroup(title));}
+    const {block:box,search}=groups.get(title);
     if (title === 'Cracks') {
       const wrap = document.createElement('div'); wrap.className = 'control';
       wrap.innerHTML = `<label for="crack-style">Style</label><select id="crack-style" style="width:100%"><option value="">Choose a style…</option>${Object.keys(CRACK_STYLES).map(k => `<option>${k}</option>`).join('')}</select><p class="small">How much each shape cracks is its own Cracks slider (Shape panel).</p>`;
@@ -1565,8 +1563,7 @@ function buildKnobs() {
       });
       box.append(wrap);
     }
-    for (const [key, oldLabel, min, max, step, value] of knobs) {
-      const label=controlLabel(key,oldLabel);
+    for (const [key, label, min, max, step, value] of knobs) {
       const id = 'knob-' + key, current = params.has(key) ? Number(params.get(key)) : value, choices = WORLD_CHOICES[key];
       const wrap = controlRow({id,label:`${label} <output${choices?' hidden':''}>${current}</output>`,range:`min="${min}" max="${max}" step="${step}" value="${current}"`,choices});
       wrap.dataset.knob=key;if(search)wrap.dataset.searchGroup=search;

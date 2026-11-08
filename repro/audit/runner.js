@@ -67,10 +67,10 @@ function worldGates(group,key){
  if(group==='Strata')x.strata=.8;
  if(group==='Contour bands')x.banding=.7;
  if(group.includes('Shine'))for(const mat of ['Ground','Slope','Rock','Sand','Crystal']){x['shine'+mat]=.8;x['shine'+mat+'Rough']=.4;}
- if(group==='Rock face: gullies and ribs')x.gullyDepth=6;
+ if(group==='Gullies & ribs')x.gullyDepth=6;
  if(group==='Rock face: blocks')x.rockScale=1.5;
- if(group==='Rock face: follows the slope')x.cliffFollow=1;
- if(group==='Pockmarks (Moon)')x.pockmark=.7;
+ if(group==='Structure orientation')x.cliffFollow=1;
+ if(group==='Surface pits')x.pockmark=.7;
  if(/^moonCup/.test(key))x.moonCups=.7;
  if(/^moonRib/.test(key))x.moonRibs=.7;
  if(/^moonFold/.test(key))x.moonFolds=.7;

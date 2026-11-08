@@ -1,4 +1,4 @@
-import {controlLabel,worldControlRequirement,WORLD_PRIMARY_CONTROLS} from './sculpt-control-schema.js';
+import {worldControlRequirement,WORLD_PRIMARY_CONTROLS} from './sculpt-control-schema.js';
 import {mountWorkspace} from './sculpt-workspace.js';
 // Presentation helpers; terrain state and history stay in sculpt.js.
 const $=id=>document.getElementById(id);
@@ -65,7 +65,7 @@ export function groupToolControls(fields,buildRow){
  }
  const basics=document.querySelector('#brush-panel > .brush-basics');wire(basics,['tool-style','diameter','amount','roughness','softness'].map(id=>$(id).closest('.control')));
  for(const [key,label,keys] of definitions){const present=fields.filter(f=>keys.includes(f[0]));if(!present.length)continue;present.forEach(f=>claimed.add(f[0]));make(label,present.map(buildRow),key?present.find(f=>f[0]===key)[1]:null);}
- for(const field of fields){const [key,id,label,,lo]=field;if(claimed.has(key))continue;make(controlLabel(key,label).replace(/ \(.*$/,''),[buildRow(field)],lo<=0?id:null);}
+ for(const field of fields){const [key,id,label,,lo]=field;if(claimed.has(key))continue;make(label.replace(/ \(.*$/,''),[buildRow(field)],lo<=0?id:null);}
  // The generated groups go ahead of Cracks, the one group the page declares in #shape-options.
  root.prepend(...created);
  wire($('cracks-control').closest('details'),[$('cracks-control')],$('cracks'));

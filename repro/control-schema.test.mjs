@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {shapeControlAvailable as available,controlLabel} from '../sculpt-control-schema.js';
+import {shapeControlAvailable as available} from '../sculpt-control-schema.js';
+import {KNOBS} from '../sculpt-knobs.js';
+import {SHAPE_FIELDS} from '../sculpt-scene.js';
 import {prepareNode} from '../sculpt-gpu-fields.js';
 
 test('a landform takes facets unless its coast pass is on',()=>{
@@ -49,9 +51,11 @@ test('erase all masks includes all eight local style planes',()=>{
  assert.deepEqual(writes.map(w=>w[0]),Array.from({length:18},(_,i)=>i));
  assert.ok(writes.every(w=>w[1]===0));
 });
-test('the parked control is only crevice',()=>{
- assert.equal(controlLabel('moonCups','Moon cups'),'Slope cups');
- assert.equal(controlLabel('iceSoft','Ice lighting'),'Rounded lighting');
+test('labels and group names name no world',()=>{
+ // Labels and group names describe features, never worlds (AGENTS.md rule 7): the tables hold the names the panel shows.
+ const named=/\b(Archipelago|Moon|Lava|Red|Green|Ice|Crystal|Desert|Zhon)\b/;
+ for(const [group,list] of KNOBS){assert.ok(!named.test(group),group);for(const [key,label] of list)assert.ok(!named.test(label),`${key}: ${label}`);}
+ for(const [key,,label] of SHAPE_FIELDS)assert.ok(!named.test(label),`${key}: ${label}`);
 });
 
 test('vegetation dependencies follow material capabilities and keep flowers independent of relief',async()=>{
