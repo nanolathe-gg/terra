@@ -1571,7 +1571,7 @@ fn bake(p: vec2f) -> vec4f {
     }
 
     // On the rock face the screen-space face (rockFaceAt) draws the fine detail: the ribs keep only their broadest octave there (the face's
-    // ravines), and the scatter's cracks and blocks give way below.
+    // ravines), and a cliff (slope 1.3 to 2.2) none: its flutes are the face's own, and the scatter's cracks and blocks give way below.
     var faceBake = 0.0;
     if (u.rockFace > 0.0 && h > u.sea + 1.0) { faceBake = rockFaceGate(slope, paintRock, route); }
     var acc = vec3f(0.0);
@@ -1604,7 +1604,7 @@ fn bake(p: vec2f) -> vec4f {
         let lumpCells = round(1.7 * cells);
         let lump = wrapNoise(q * (lumpCells / cells) + 3.1, lumpCells);
         e.x = mix(e.x, lump, u.reliefLumps);
-        acc += vec3f(e.x, e.yz * frequency) * amplitude * select(1.0, 1.0 - faceBake, k >= 1);
+        acc += vec3f(e.x, e.yz * frequency) * amplitude * select(1.0 - faceBake * smoothstep(1.3, 2.2, slope), 1.0 - faceBake, k >= 1);
         if (k == 0) { firstOctave = e.x; }
         total += amplitude;
         amplitude *= u.reliefGain;

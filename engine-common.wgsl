@@ -203,7 +203,6 @@ struct Uniforms {
     faceBlockSize: f32,   // px between joints along a bed
     faceGrit: f32,        // fine grit, height units
     faceGrass: f32,       // how strongly grass takes the ledges, 0..1
-    faceContrast: f32,    // the rock face's light: 1 the ground's; above, its shade goes deeper and its lit facets brighter
     faceRock: f32,        // rock's share of a steep face (the rest grass, in clumps and on ledges); a stroke's Local vegetation scales it
     faceCrease: f32,      // crease depth (fine creases along the contours, the face's grain), height units
     faceCreaseSize: f32,  // crease spacing, px
@@ -479,6 +478,7 @@ fn poolScale(m: f32) -> f32 { let k = u.pool / 512.0; return max(1.0, round(m * 
 // Rock face (any world). TA's camera draws the art in screen pixels, and a face turned to the viewer spreads one world pixel over
 // several screen rows, so the face's detail is drawn where the art is: rockFaceAt takes the screen pixel s (the art's own pixel), the
 // ground's height there without relief (h: the beds follow it, so they lie along the contours) and the broad gradient's direction (fall).
+// steep (0..1) is how cliff-like the face is: a cliff weathers into flutes, a gentler face keeps its ledges.
 // It returns relief (height units, lit by the draw through the projection, appearance only), ledge (0..1: a bed's top, where grass holds),
 // cavity (0..1: crease, joint and under-ledge floors, which lie in shade) and tone (-1..1, a chunk's own shade).
 struct RockFace { relief: f32, ledge: f32, cavity: f32, tone: f32 }
@@ -507,7 +507,7 @@ fn faceWaves(q: vec2f, dir: vec2f, n: f32) -> f32 {
     }
     return sum / weight;
 }
-fn rockFaceAt(s: vec2f, h: f32, fall: vec2f) -> RockFace {
+fn rockFaceAt(s: vec2f, h: f32, fall: vec2f, steep: f32) -> RockFace {
     var o: RockFace;
     let sp = poolPos(s);
     let along = vec2f(-fall.y, fall.x);
@@ -524,7 +524,8 @@ fn rockFaceAt(s: vec2f, h: f32, fall: vec2f) -> RockFace {
     let rise = 1.0 - (1.0 - x) * (1.0 - x);         // a steep foot rounding into the lip
     // A ledge runs for a while along its bed, then fades into the face: coherent strips, naturally broken.
     let run = smoothstep(-0.15, 0.45, poolNoise(s, max(u.faceRun, 8.0), k * 7.31 + 5.0));
-    let stair = (rise - t) * u.faceLedge * run;
+    // A cliff (steep 1) weathers into flutes rather than ledges: its beds show only faintly and its grooves take over (below).
+    let stair = (rise - t) * u.faceLedge * run * (1.0 - 0.8 * steep);
     o.ledge = smoothstep(0.85, 1.0, x) * run * smoothstep(1.0, 0.92, t);
     // Crumple: short creases along the contours, crossing a little (oriented wave kernels at two scales, folded so each zero crossing is
     // a sharp V); they run out and start again, so they never close into cells.
@@ -580,13 +581,13 @@ fn rockFaceAt(s: vec2f, h: f32, fall: vec2f) -> RockFace {
     let open = step(0.4, jh.y);
     let joint = (1.0 - smoothstep(0.0, 1.0, abs(r.x - jx))) * open * smoothstep(0.1, 0.35, t);
     // Scratches: ridges down the face, lean faceLean, of varying depth.
-    let ws = max(u.faceScratchSize, 1.5);
+    let ws = max(u.faceScratchSize, 1.5) * (1.0 + 0.6 * steep);
     let sq = vec2f(r.x / ws, r.y / (ws * 6.0));
     let r1 = 1.0 - abs(valueNoise(sq + vec2f(0.0, 13.0)));
     let deep = 0.5 + 0.5 * poolNoise(s, 40.0, 61.0);
     let scratch = (r1 * r1 - 0.5) * deep;
     let grit = cellHash(poolPixel(s) + 13.0).x - 0.5;
-    o.relief = stair * bed + u.faceCrease * chunk + u.faceBlock * (2.0 * mass - joint) + u.faceScratch * scratch + u.faceGrit * grit;
+    o.relief = stair * bed + u.faceCrease * chunk + u.faceBlock * (2.0 * mass - joint) + u.faceScratch * (1.0 + 1.5 * steep) * scratch + u.faceGrit * grit;
     o.cavity = clamp(max(max(crease * clamp(u.faceCrease * 0.15, 0.0, 0.9), joint * clamp(u.faceBlock * 0.5, 0.0, 1.0)),
                          smoothstep(0.1, 0.0, t) * run * u.faceLedge), 0.0, 1.0);
     o.tone = tilt.y;

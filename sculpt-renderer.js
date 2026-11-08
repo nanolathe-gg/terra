@@ -1169,8 +1169,9 @@ export class TerrainRenderer {
     set('uReliefPatchy', number('reliefPatchy', 1));
     set('uReliefJitter', number('reliefJitter', 0.8));
     set('uFaceStreak', number('faceStreak', 0));
-    for (const [key, fallback] of [['rockFace', 0], ['rockFaceFrom', 0.6], ['faceBed', 12], ['faceLedge', 1], ['faceRun', 90], ['faceLean', 15], ['faceScratch', 2],
-      ['faceScratchSize', 6], ['faceBlock', 1.5], ['faceBlockSize', 18], ['faceGrit', 0], ['faceGrass', 0.6], ['faceRock', 0.9], ['faceContrast', 2], ['faceCrease', 2.5], ['faceCreaseSize', 10]]) set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
+    for (const [key, fallback] of [['rockFace', 0], ['rockFaceFrom', 0.6], ['faceBed', 8], ['faceLedge', 1.5], ['faceRun', 90], ['faceLean', 15], ['faceScratch', 2.5],
+      ['faceScratchSize', 7], ['faceBlock', 2.5], ['faceBlockSize', 18], ['faceGrit', 0], ['faceGrass', 0.6], ['faceRock', 0.9], ['faceCrease', 2.5], ['faceCreaseSize', 12]])
+      set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
     set('uFaceStreakFrom', number('faceStreakFrom', 0.3));
     set('uGentleRelief', number('gentleRelief', 0.6));
     set('uSand', number('sand', 0));
