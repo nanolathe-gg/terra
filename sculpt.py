@@ -238,7 +238,8 @@ WORLD_KNOBS = {
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so the band row's line strength (materials/green.json) keeps their darkness.
     # Card P16: the Scree slider's talus chips (3-5 px, a few % of the cliff feet's ground) as Supply and Size.
-    'green': dict(looseSupply=.08, looseSize=3.5, banding=.3, crackDark=.4, wetSwath=.35,   # Moisture (a panel row, card P30); the Time pass's wet swaths and modern Green's ground cover read it
+    # Retail round 2: shores drop to the sea more abruptly (retail's shore band 32-45 px; base 51-72). Modern keeps 1.
+    'green': dict(coastRamp=.75, looseSupply=.08, looseSize=3.5, banding=.3, crackDark=.4, wetSwath=.35,   # Moisture (a panel row, card P30); the Time pass's wet swaths and modern Green's ground cover read it
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
@@ -327,6 +328,8 @@ WORLD_KNOBS = {
     # (retail's plain is lighter, less dotted).
     'red': dict(undulation=2.5, undulationScale=80, undulationCover=.6, groundContrast=.7, crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
                 reliefAmount=.2, slopeTexture=0, microRock=0,
+                # Retail round 2: raised landform faces steeper (retail's rims and mesa walls are crisper than 1).
+                faceSteep=1.75,
                 crackSpacing=28, rockOrder=1, bedLedge=0,
                 grooveSpacing=30, grooveAngle=-10, grooveRun=160,
                 # G2: joints run down the fall line of the ground they are cut in (grooveAngle is the lean from it), and painted
@@ -372,6 +375,8 @@ WORLD_KNOBS = {
     # fade over 30-40 px); a stroke may set a hard step, which sits at the midpoint, depth 18 (20 before H24).
     'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.3, flatBank=1,
                         undulation=0, shadeDepth=.3,
+                        # Retail round 2: shores drop to the sea in 0-16 px (base 58-66), as retail's do.
+                        coastRamp=.25,
                         # Hills and the mineral ring (card E1): mound pixels averaged (90, 80, 65)
                         # against retail's (102, 92, 76) in windows 2 and 3, with 15% of them under
                         # luma 45 (retail 5-6%). Hill cover x1.25 and a third of the directional
@@ -422,11 +427,11 @@ WORLD_KNOBS = {
     # the level (retail W/SW faces 0.99-1.00 of level luma; a 1.13 cap gave
     # 1.07-1.14), so no highlight above level.
     # Its beds are all alike (columnContrast 0): they stand one ledge high, and the Time pass reads no hardness.
-    'desert': dict(lightCap=1, paletteMix=1, strata=1, strataContrast=1, columnContrast=0, banding=.4,
+    'desert': dict(lightCap=1.25, sunTilt=.5, paletteMix=1, strata=1, strataContrast=1, columnContrast=0, banding=.4,
                    # H19: the lit relief on a wall in Desert's strata reads as black scribbles at 1; .3 to .5 read as rock on repro/walls/desert.json.
                    faceRelief=.4,
                    strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
-                   sand=0, undulation=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0,
+                   sand=0, undulation=8, undulationScale=48, undulationCover=1, undulationArt=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0,
                    # Card E3: tall mountains keep their strata and gain lit ledges (beds the strata's
                    # 6 height units thick, level on the height so they ring each butte), long
                    # joints, and black shadow sides: retail's buttes are dark on the side turned
@@ -443,7 +448,7 @@ WORLD_KNOBS = {
                    # this as variation (sculpt.js TOOL_PRESETS).
                    baseBand=1,
                    # G4: level ground in the pale cap zone is one sheet, as in retail (cap orange 10-12% against ours' 22%).
-                   desertCapFlat=1),
+                   desertCapFlat=0),
     # Moon slopes were too dark and smeared (retail mean luminance .773 vs
     # ours .708; dark share 19.8% vs 33%): fewer, lighter worm troughs.
     # Lit from due west: brightness regressed on the height gradient puts
@@ -502,7 +507,8 @@ WORLD_KNOBS = {
     # Bank lines measured on the section-built retail maps (measure/lava_*):
     # ground-spaced dark lines from slope 0.15 up; ground-coloured faces;
     # rim, outline and lip at the coast. Worms gave way to the lines.
-    'lava': dict(undulation=5, undulationCover=1, undulationScale=40, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
+    # Retail round 2: the plain's game heights undulate 12 high over 96 px (shape), but its art does not (retail's plain is an even mottle).
+    'lava': dict(undulation=12, undulationCover=1, undulationScale=96, undulationArt=0, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
                  beachWidth=0, waterSoft=0, bankRock=0, banding=0,
                  worms=0, shoreEdge=1, slopeTexture=0,
                  # Card E4: retail's bank is 6-9 flat layers stepping down to the lava, 12-16 px a
@@ -708,7 +714,7 @@ WORLD_VARIANTS = {
         # Card P27: Surf .1 on its water strokes (a wet line and a 1-px foam lace on lakes, no beach) and a sand colour for the beaches
         # higher Surf builds.
         # Card P10: the rock model is Rock type 1, Granite (sculpt-material-model.js ROCK_TYPES: calm blocks of 22 px; Age is the rockAge row, .5).
-        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, undulation=0, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockType=1, rockAge=.5, cavity=1.0, shineRock=.36),
+        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, undulation=0, coastRamp=1, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockType=1, rockAge=.5, cavity=1.0, shineRock=.36),
                        # Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the hills' feet and in gullies,
                        # median 5 px (readable at 1x; Green's retail grit is 3-4); stoneSort .7 sorts it by the process (talus coarsens outward).
                        material=dict(stoneSort=.7, groundPool=2048, groundCover=GROUND_COVER)),
