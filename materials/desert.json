@@ -1454,7 +1454,8 @@
    {"share": 0.25, "params": {"cells": "3x3", "lump": 0.3, "pits": 0.6, "grain": 0.5, "colors": ["#000000", "#18181d", "#32353b", "#494950", "#5c5c5f", "#656e75", "#837876", "#a09684"], "mottle": [["#53778b", 0.15], ["#abab83", 0.12]]}, "vary": {"pieces": [1, 4]}},
    {"share": 0.15, "params": {"cells": "2x2", "lump": 0.3, "pits": 0.6, "grain": 0.5, "colors": ["#000000", "#18181d", "#32353b", "#494950", "#5c5c5f", "#656e75", "#837876", "#a09684"], "mottle": [["#53778b", 0.15], ["#abab83", 0.12]]}, "vary": {"pieces": [1, 4]}},
    {"share": 0.1, "params": {"cells": "4x4", "lump": 0.3, "pits": 0.6, "grain": 0.5, "colors": ["#000000", "#18181d", "#32353b", "#494950", "#5c5c5f", "#656e75", "#837876", "#a09684"], "mottle": [["#53778b", 0.15], ["#abab83", 0.12]]}, "vary": {"pieces": [1, 4]}}]},
-  "deposit": {"params": {"look": "blades", "blades": 6, "bladeLen": 40, "bladeWidth": 3, "fan": 0, "angle": -50, "core": 3, "halo": 0.35, "haloSat": 2, "reach": 1.2, "rimDark": 0.5, "stoneScale": 1}}
+  "deposit": {"params": {"look": "blades", "blades": 6, "bladeLen": 40, "bladeWidth": 3, "fan": 0, "angle": -50, "core": 3, "halo": 0.35, "haloSat": 2, "reach": 1.2, "rimDark": 0.5, "stoneScale": 1}},
+  "vent": {"params": {"size": 1.8, "thick": 1.2, "rim": 0.4, "rimSat": 2.2, "spread": 3}}
  },
  "world": {
   "defaults": {

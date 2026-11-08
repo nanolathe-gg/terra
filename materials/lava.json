@@ -1209,7 +1209,7 @@
   "scar": {"count": 3, "types": [
    {"share": 1, "params": {"type": "stain"}, "vary": {"size": [0.8, 1.3]}}]},
   "deposit": {"params": {"halo": 0.22, "haloSat": 1.2, "stoneScale": 0.85, "reach": 0.75, "rimDark": 0.5}},
-  "vent": {"params": {"rim": 0.55}}
+  "vent": {"params": {"look": "pit", "hole": 8, "ring": 34, "cell": 10, "lumps": 1, "lumpTone": 0.7, "rim": 0.55}}
  },
  "world": {
   "defaults": {

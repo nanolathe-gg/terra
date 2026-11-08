@@ -1462,7 +1462,8 @@
    {"share": 0.08, "params": {"cells": "1x1", "colors": ["#351513", "#501d0f", "#60231b", "#5c3025", "#653526", "#6f333b", "#71482f", "#835c31"], "mottle": [["#7b3b47", 0.32], ["#836f23", 0.22]], "grain": 0.9, "lump": 0.75}}]},
   "scar": {"count": 3, "types": [
    {"share": 1, "params": {"type": "stain"}, "vary": {"size": [0.6, 1.2]}}]},
-  "deposit": {"params": {"look": "blades", "blades": 6, "bladeLen": 22, "bladeWidth": 6, "fan": 1, "core": 7, "halo": 0.6, "haloSat": 1.5, "reach": 1.2, "rimDark": 0.8}}
+  "deposit": {"params": {"look": "blades", "blades": 6, "bladeLen": 22, "bladeWidth": 6, "fan": 1, "core": 7, "halo": 0.6, "haloSat": 1.5, "reach": 1.2, "rimDark": 0.8}},
+  "vent": {"params": {"size": 1.4, "thick": 0.8, "rim": 0.45, "rimSat": 1.6}}
  },
  "world": {
   "defaults": {

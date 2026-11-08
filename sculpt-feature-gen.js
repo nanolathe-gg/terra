@@ -1108,11 +1108,15 @@ function paintDepositPebbles(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
 }
 
 
-export const VENT_DEFAULTS = { size: 1, forks: 3, rim: 0.72 };   // rim: the lightness of the ground round the crack, scaled
+// rim: the lightness of the ground round the crack, scaled; rimSat how much richer its hue is; spread how far the rim reaches (px; 2: Green's
+// thin scorch); thick the crack's width, scaled. look 'pit' draws a dark hole in a ring of lumps (lumps: bubbles, Lava's) or cracked
+// plates (Crystal's) instead of a crack: hole and ring (radius px), cell (px of one lump or plate), lumpTone (their lightness against the ground).
+export const VENT_DEFAULTS = { size: 1, forks: 3, rim: 0.72, rimSat: 1.15, spread: 2, thick: 1, look: 'crack', hole: 6, ring: 22, cell: 9, lumps: 1, lumpTone: 0.6 };
 export function paintVent(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const P = { ...VENT_DEFAULTS, ...params }, palette = ctx.palette, q = paletteSearch(palette), lit = groundLight(ctx);
   const r = rng(seed), rn = rng(mix32(seed, 4));
   const bw = 96, bh = 96, ox = Math.round(cx) - 48, oy = Math.round(cy) - 48;
+  if (P.look === 'pit') return paintVentPit(ground, cx, cy, P, seed, ctx, { bw, bh, ox, oy });
   const core = new Uint8Array(bw * bh);   // 1 = crack, thickness irrelevant after drawing
   function stamp(x, y, t) {
     const rad = Math.max(0.4, t / 2);
@@ -1132,8 +1136,8 @@ export function paintVent(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     if (depth < 2 && len > 8) crack(x, y, ang + (r() - 0.5) * 1.0, len * 0.5, Math.max(1, th * 0.6), depth + 1);
   }
   const a0 = r() * TAU, len = 17 * P.size;
-  crack(cx, cy, a0, len * (1.0 + 0.3 * r()), 3 * Math.sqrt(P.size) + 0.6, 0);
-  crack(cx, cy, a0 + Math.PI + (r() - 0.5) * 0.6, len * (0.8 + 0.3 * r()), 3 * Math.sqrt(P.size), 0);
+  crack(cx, cy, a0, len * (1.0 + 0.3 * r()), (3 * Math.sqrt(P.size) + 0.6) * P.thick, 0);
+  crack(cx, cy, a0 + Math.PI + (r() - 0.5) * 0.6, len * (0.8 + 0.3 * r()), 3 * Math.sqrt(P.size) * P.thick, 0);
   // edges: tint ring one and a feathered ring two
   const gm = [0, 0, 0];
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
@@ -1143,13 +1147,45 @@ export function paintVent(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
       continue;
     }
     let d1 = 99;
-    for (let dy = -2; dy <= 2 && d1 > 1; dy++) for (let dx = -2; dx <= 2; dx++) { const bx = x + dx, by = y + dy; if (bx >= 0 && by >= 0 && bx < bw && by < bh && core[by * bw + bx]) { d1 = Math.min(d1, Math.max(Math.abs(dx), Math.abs(dy))); } }
-    if (d1 > 2) continue;
-    const pr = d1 === 1 ? 0.72 : 0.3;
+    const sp = Math.max(2, Math.round(P.spread));
+    for (let dy = -sp; dy <= sp && d1 > 1; dy++) for (let dx = -sp; dx <= sp; dx++) { const bx = x + dx, by = y + dy; if (bx >= 0 && by >= 0 && bx < bw && by < bh && core[by * bw + bx]) { d1 = Math.min(d1, Math.max(Math.abs(dx), Math.abs(dy))); } }
+    if (d1 > sp) continue;
+    const pr = d1 === 1 ? 0.72 : sp === 2 ? 0.3 : 0.62 * (sp + 1 - d1) / sp;
     if (rn() > pr) continue;
     const base = getGround(ground, X, Y);
-    const h = haloOf(base, P.rim * (d1 === 1 ? 0.9 : 1), 1.15, 0.85 + 0.3 * rn());   // the scorched rim: the ground under it, darker
+    const h = haloOf(base, P.rim * (d1 === 1 ? 0.9 : 1), P.rimSat, 0.85 + 0.3 * rn());   // the scorched rim: the ground under it, darker
     setGround(ground, X, Y, palette[q(h[0], h[1], h[2])]);
+  }
+  return { cx, cy, rect: [ox, oy, bw, bh], gameplay: { geothermal: true, indestructible: true, footprint: [1, 1] } };
+}
+
+// A vent as a pit (Lava's and Crystal's): a dark hole with a ring round it of lit bubbles with dark outlines, or of plates split by cracks,
+// each a seeded cell of the ring; the ring's rim is ragged and thins to the ground.
+function paintVentPit(ground, cx, cy, P, seed, ctx, { bw, bh, ox, oy }) {
+  const palette = ctx.palette, q = paletteSearch(palette), L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 4)), s1 = (r() * 1e6) | 0;
+  const R = P.ring * P.size, hole = P.hole * P.size, cell = Math.max(4, P.cell * Math.sqrt(P.size)), bubble = P.lumps > 0.5;
+  const seedAt = (i, j) => [(i + 0.1 + 0.8 * hash2(i, j, s1)) * cell, (j + 0.1 + 0.8 * hash2(i, j, s1 + 1)) * cell];
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+    const X = x + ox, Y = y + oy, dx = X - cx, dy = Y - cy, rr = Math.hypot(dx, dy * 1.05), th = Math.atan2(dy, dx);
+    const edge = R * (0.78 + 0.5 * (fbm(Math.cos(th) * 2.2 + 5, Math.sin(th) * 2.2 + 5, s1 + 3, 3) - 0.5) + 0.12), hl = hole * (0.75 + 0.5 * vnoise(Math.cos(th) * 2.5 + 9, Math.sin(th) * 2.5 + 9, s1 + 4));
+    if (rr > edge) continue;
+    const base = getGround(ground, X, Y);
+    let tone;
+    if (rr < hl) tone = 0.1 + 0.1 * rn();
+    else {
+      const u = X + 4096, v = Y + 4096, i0 = Math.floor(u / cell), j0 = Math.floor(v / cell); let d1 = 1e9, d2 = 1e9, sx = 0, sy = 0, id = 0;
+      for (let j = j0 - 1; j <= j0 + 1; j++) for (let i = i0 - 1; i <= i0 + 1; i++) { const [px, py] = seedAt(i, j), d = Math.hypot(u - px, v - py); if (d < d1) { d2 = d1; d1 = d; sx = px; sy = py; id = i * 7919 + j; } else if (d < d2) d2 = d; }
+      if (bubble) {
+        const br = cell * 0.62;
+        if (d1 > br) tone = 0.32 * (0.8 + 0.4 * rn());
+        else if (d1 > br - 1.3) tone = 0.2;
+        else { const n = [(u - sx) / br, (v - sy) / br], facing = -(n[0] * L.x + n[1] * L.y); tone = P.lumpTone * (1 + 0.4 * facing * 1.3) * (0.82 + 0.3 * hash2(id, 3, s1)) * (0.92 + 0.16 * rn()); }
+      } else tone = d2 - d1 < 0.8 + 0.4 * rn() ? 0.14 : P.lumpTone * (0.75 + 0.5 * hash2(id, 5, s1)) * (0.9 + 0.2 * rn());
+      tone *= 1 - 0.35 * smoothstep(0.55, 1, rr / edge);   // the ring grades to the ground at its rim
+      if (rr > edge - 2.5 && rn() > (edge - rr) / 2.5) continue;
+    }
+    const rgb = base.map(c => c * tone);
+    setGround(ground, X, Y, palette[q(rgb[0], rgb[1], rgb[2])]);
   }
   return { cx, cy, rect: [ox, oy, bw, bh], gameplay: { geothermal: true, indestructible: true, footprint: [1, 1] } };
 }
