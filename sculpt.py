@@ -366,7 +366,7 @@ WORLD_KNOBS = {
                         # shading give (103, 92, 76) and 7% dark. The ring is the curved 'Nested
                         # rings' texture, narrower (spread .35), lighter (.7, variation .5) and
                         # fading over a longer reach.
-                        hillLight=1.25, ringFade=1,
+                        hillLight=1, ringFade=1,
                         # Retail round 1: hills are smooth gray-green with soft shading, not mottled moss and rock.
                         microRock=.2,
                         bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1,
