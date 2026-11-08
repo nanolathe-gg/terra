@@ -123,7 +123,7 @@ export function worldControlRequirement(key,v){
  // A world with a beach keeps the Sand brush for its bars, so the sand these rows draw comes only from the weathering's supply.
  if(['wind','ripple','rippleHeight','sandDust','sandGrain','sandGrass','sandLight'].includes(key)&&n('beachLayer')>0)return needs('sand','Weathering supply in Sand');
  // Water wets the ground only where the Time pass has rain; the worlds that run it with rain off have no wetness map to read.
- if(key==='wetSwath'&&n('erosionRain')<=0)return 'This world\'s weathering has no rain, so no ground is wet. Moisture has nothing to move.';
+ if(key==='wetSwath'&&n('erosionRain')<=0)return 'With no rain no ground is wet, so Moisture has nothing to move. Raise Rain to use this setting.';
  if(key==='slopeTexture'&&n('groundCover')>0)return 'This world\'s ground-cover table decides its slope cover.';
  if(key==='slopeTexture'&&n('slopeSand')>0)return 'The slopes of this world are sand, which has no texture to scale.';
  // The sediment transition is built from the ground and replaces the slope cover's color outright at 100 percent Material weathering (worldPanelValues passes slopeReplaced); the texture then scales only the slope's share of the shine.
@@ -158,7 +158,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'groundTiles','groundContrast','undulation','undulationScale','undulationCover',
  'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
  'flatShadow','flatOcclusion','sunTilt','ambient','shadeDepth','lightCap',
- 'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','wetSwath','lushness','slopeMarks','wrinkles',
+ 'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','erosionRain','wetSwath','lushness','slopeMarks','wrinkles',
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
  'looseSupply','looseSize','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing','rockOrder','rockFrom','bedSpacing','bedLedge','rockOpen',

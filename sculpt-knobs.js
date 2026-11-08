@@ -11,7 +11,7 @@ export const KNOBS = [
   ['Ground detail', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Ground bumps',0,3,.05,1.2],['lumpRelief','Painted ground bumps',0,8,.1,4],['reliefOctaves','Octaves',1,6,1,5],['worms','Wormy relief on slopes',0,1,.05,0]]],
   ['Lighting', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13],['shadeDepth','Directional shading kept',0,1,.05,1],['sunTilt','Light from the south',-1,1,.05,1],['ambient','Ambient light',0,.8,.02,.42]]],
-  ['Vegetation & flowers', [['vegetationCover','Vegetation cover (0 off)',0,2,.05,1],['lushness','Lushness',-1,1,.05,0],['wetSwath','Moisture',0,1,.05,0],['plantRelief','Vegetation relief',0,2,.05,1],['flowerDensity','Flower density',0,4,.05,1]]],
+  ['Vegetation & flowers', [['vegetationCover','Vegetation cover (0 off)',0,2,.05,1],['lushness','Lushness',-1,1,.05,0],['erosionRain','Rain (wets channels and hollows, and wears the ground)',0,2,.05,1],['wetSwath','Moisture',0,1,.05,0],['plantRelief','Vegetation relief',0,2,.05,1],['flowerDensity','Flower density',0,4,.05,1]]],
   ['Material coverage', [['hillLight','Slope-cover brightness',.6,1.6,.01,1],['ringFade','Fringe fade length',0,2,.05,0],['faceFill','Fill light on shaded faces',0,.5,.02,0],['rockCrown','Bare rock to the crown',0,1,.05,0],['sandCrown','Painted sand to the crown (sand bars)',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['slopeMarks','Dark slope marks',0,1,.05,0],['wrinkles','Joined slope wrinkles',0,1,.05,0]]],
   ['Shine', [['shineStretch','Grain streak length (x its width)',1,8,.25,1],['shineWhite','Highlight whiteness (0 material hue, 1 white)',0,1,.05,.35]]],
   ['Shine: ground', [['shineGround','Gloss (highlight strength)',0,2,.05,0],['shineGroundSharp','Sharpness (lobe exponent)',2,200,2,24],['shineGroundRough','Roughness (grain slope)',0,2,.05,0],['shineGroundScale','Grain width (px)',1,24,.5,6]]],
@@ -74,7 +74,7 @@ const SHAPE_KNOBS=new Set(['frostGaps','frostGapReach','frostGapSize','frostGapD
 // the renderer's settings, whose uniforms it re-reads; the answer says what else the change needs, for the host to carry out on its own
 // fields: `reload` (the ground textures are chosen when the renderer starts, so nothing else is set), `evaluate` (the shape again from that
 // node: the undulation rows edit the ground node in `nodes`, or put one first when Undulation height turns on), `checkpoint` (an undo step for
-// that edit) and `weather` (the Time pass again; alone, for the deposit supply, which changes the generated deposit field).
+// that edit) and `weather` (the Time pass again; alone, for the deposit supply, which changes the generated deposit field, and the rain).
 export function applyKnob({key,value,settings,renderer,nodes,seed}) {
   settings.set(key,value);
   if (key==='ground' || key==='groundPattern') return {reload:true};
@@ -86,7 +86,7 @@ export function applyKnob({key,value,settings,renderer,nodes,seed}) {
     return {};
   }
   if (SHAPE_KNOBS.has(key)) return {evaluate:0,weather:true};
-  if (key==='sand') return {weather:true};
+  if (key==='sand' || key==='erosionRain') return {weather:true};
   return {};
 }
 
