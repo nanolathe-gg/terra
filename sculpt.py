@@ -367,6 +367,8 @@ WORLD_KNOBS = {
                         # rings' texture, narrower (spread .35), lighter (.7, variation .5) and
                         # fading over a longer reach.
                         hillLight=1.25, ringFade=1,
+                        # Retail round 1: hills are smooth gray-green with soft shading, not mottled moss and rock.
+                        microRock=.2,
                         bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1,
                         # E11 (round 7 report: "weird black/dark lines around the hills" and "more
                         # noticeable circle features in the red fringe"): the dark lines were the
