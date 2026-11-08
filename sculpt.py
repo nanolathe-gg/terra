@@ -231,7 +231,7 @@ WORLD_KNOBS = {
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so the band row's line strength (materials/green.json) keeps their darkness.
     # Card P16: the Scree slider's talus chips (3-5 px, a few % of the cliff feet's ground) as Supply and Size.
-    'green': dict(looseSupply=.08, looseSize=3.5, banding=.5, crackDark=.4, wetSwath=.35,   # Moisture (a panel row, card P30); the Time pass's wet swaths and modern Green's ground cover read it
+    'green': dict(looseSupply=.08, looseSize=3.5, banding=.3, crackDark=.4, wetSwath=.35,   # Moisture (a panel row, card P30); the Time pass's wet swaths and modern Green's ground cover read it
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map; slopes turned from the sun are too light.
@@ -260,7 +260,9 @@ WORLD_KNOBS = {
                   # was 3.84 / 3.16 in green-1 / green-3 against retail's 1.74 / 1.61;
                   # no undulation gives 2.85 / 2.69 (the rest is the tiles and hill feet).
                   # The undulation knobs and Level-ground lumps still work.
-                  undulation=0, plainRelief=0,
+                  # Retail round 1: a fine, partial undulation (3 at 48 px over 40% of the land) gives the plain retail's gentle .08-.15 slopes
+                  # (green-1 shape .38 -> .33) without broad light blotches (viewed at 1x).
+                  undulation=3, undulationScale=48, undulationCover=.4, plainRelief=0,
                   # E9 (Green rock faces): retail's big face is carved (leaning gullies and ribs, so stripes of it
                   # light or shade as a whole), layered in long ledges that bend with it,
                   # and crumpled into angular facets that glint; grass keeps to its edges. Measured on green-2's
@@ -313,7 +315,10 @@ WORLD_KNOBS = {
     # Red's plain is level, as Green's is (card E1): the share of a retail window's 16-px cells at its most common height is .36 / .52 /
     # .20 in red-1..3 (Green's .35 / .20 / .44); the default undulation (10) gave .21 / .21 / .18, none gives .67 / .52 / .26. The plain's
     # lumps (plainRelief) keep its soft mottle. A level plain also repeats its tiles (card tilepool).
-    'red': dict(undulation=0, crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
+    # Retail round 1: retail's plain rolls gently (slope .03-.08 share .34 / .07 / .16 in red-1..3, ours .05 / .25 / .04 with none), so a faint
+    # undulation (2.5 over 80-px lumps on 60% of the land) replaces the level plain, and the ground pattern is softened to .7 contrast
+    # (retail's plain is lighter, less dotted).
+    'red': dict(undulation=2.5, undulationScale=80, undulationCover=.6, groundContrast=.7, crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
                 reliefAmount=.2, slopeTexture=0, microRock=0,
                 crackSpacing=28, rockOrder=1, bedLedge=0,
                 grooveSpacing=30, grooveAngle=-10, grooveRun=160,
@@ -366,7 +371,9 @@ WORLD_KNOBS = {
                         # shading give (103, 92, 76) and 7% dark. The ring is the curved 'Nested
                         # rings' texture, narrower (spread .35), lighter (.7, variation .5) and
                         # fading over a longer reach.
-                        hillLight=1.25, ringFade=1,
+                        hillLight=1, ringFade=1,
+                        # Retail round 1: hills are smooth gray-green with soft shading, not mottled moss and rock.
+                        microRock=.2,
                         bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1,
                         # E11 (round 7 report: "weird black/dark lines around the hills" and "more
                         # noticeable circle features in the red fringe"): the dark lines were the
@@ -444,7 +451,7 @@ WORLD_KNOBS = {
     # foot with no cracks, so crackSeverity, worms and wrinkles are 0 (they were .35, .4 and
     # .8: the Moon variant 'cracked' restores that look) and the pits are drawn by pockmark.
     'moon': dict(looseSupply=.1, looseSize=3.5, crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4,
-                 worms=0, undulation=4, plainRelief=.6, banding=0, crackDark=.6,
+                 worms=0, undulation=6, plainRelief=.6, banding=0, crackDark=.6,
                  sunTilt=0, faceFill=0, ambient=.25,
                  # H19: at 1 the lit relief on a shaded wall reads as hard plates, at .5 as rock (repro/walls/moon.json).
                  faceRelief=.5,
@@ -461,7 +468,7 @@ WORLD_KNOBS = {
                  moonCups=1, moonCupSize=6.5,
                  # G8: steep faces turned from the sun are near black and stringy (strokes 1-2 px wide, 5-12 px
                  # long, leaning with the glint axis): relief the sun shades, with a little less light overall.
-                 moonRibs=1, moonRibDepth=.9, moonRibDark=.15,
+                 moonRibs=1, moonRibDepth=.9, moonRibDark=.4,
                  # G8: lit slopes carry thin dark folds that follow the form (contours of the sculpted
                  # height, warped); .55 of the amount that read as a contour map.
                  moonFolds=.55,
@@ -692,7 +699,7 @@ WORLD_VARIANTS = {
         # Ground cover (card P30): GROUND_COVER above, with Vegetation cover 1.
         # Card P27: Surf .1 on its water strokes (a wet line and a 1-px foam lace on lakes, no beach) and a sand colour for the beaches
         # higher Surf builds.
-        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockAge=.5, cavity=1.0, shineRock=.36),
+        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, undulation=0, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockAge=.5, cavity=1.0, shineRock=.36),
                        # Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the hills' feet and in gullies,
                        # median 5 px (readable at 1x; Green's retail grit is 3-4); stoneSort .7 sorts it by the process (talus coarsens outward).
                        material=dict(stoneSort=.7, groundPool=2048,
