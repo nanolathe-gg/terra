@@ -118,7 +118,7 @@ export function waterTones(config,colors) {
 }
 // engine-frag.wgsl's sediment transition: at full Material weathering its color (built from the ground, before the slope cover is mixed in) replaces the slope cover's outright.
 // `weathering`: Weathering is on and the world runs a Time pass; `materialWeathering`: the Material weathering slider (0 to 100).
-export function slopeReplaced({config,renderer,weathering,materialWeathering}) { const own=renderer.variant; return Boolean(renderer.transitionBody&&config.material?.groundFringe===true&&weathering&&own.get('deposits')!=='off'&&own.get('transition')==='mineral'&&own.get('margins')!=='slope'&&materialWeathering>=100); }
+export function slopeReplaced({config,renderer,weathering,materialWeathering}) { const own=renderer.variant; return Boolean(renderer.transitionBody&&config.material?.groundFringe===true&&weathering&&own.get('transition')==='mineral'&&materialWeathering>=100); }
 // What worldControlRequirement may read: the renderer's settings, a stroke's water choices counted as the switch they turn on, and the facts of the world's material that no slider sets.
 export function worldPanelValues(facts) {
   const {config,renderer,nodes,colors}=facts,layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks(nodes);

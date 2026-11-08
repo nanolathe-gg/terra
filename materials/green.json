@@ -2007,13 +2007,10 @@
  },
  "world": {
   "defaults": {
-   "coverage": "form",
-   "lighting": "front",
    "surface": "slopes",
    "transition": "soil",
    "material": "varied",
-   "scree": "70",
-   "shade": "separate"
+   "scree": "70"
   },
   "column": {
    "sections": [

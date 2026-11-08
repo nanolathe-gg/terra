@@ -2051,13 +2051,10 @@
  "world": {
   "baseHeight": 8,
   "defaults": {
-   "coverage": "form",
-   "lighting": "front",
    "surface": "structured",
    "transition": "mineral",
    "material": "single",
-   "scree": "0",
-   "shade": "separate"
+   "scree": "0"
   },
   "column": {
    "bands": [3.7, 0.68]

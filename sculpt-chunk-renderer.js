@@ -211,7 +211,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.chunkViewport=[(rasterOrigin[0]-region.screenOrigin[0])/rasterScale,(rasterOrigin[1]-region.screenOrigin[1])/rasterScale,rasterSize/rasterScale,rasterSize/rasterScale];   // clip space stays in world units; the viewport is what scales
     this.bakeWindow=[region.fieldsX,region.fieldsY,this.bakeWidth*fieldScale,this.bakeHeight*fieldScale];this.f('uChunkFieldsOrigin',[region.fieldsX,region.fieldsY]);this.f('uChunkFieldsSize',[fw,fh]);
     this.f('uChunkGridSize',[gw,gh]);this.f('uChunkGridCount',[gridWidth,gridHeight]);
-    this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScreenSize',[world_width,world_height]);this.f('uChunkScale',rasterScale);this.f('uChunkFieldScale',fieldScale);   // Shared shader coordinates stay in world pixels at every display scale.
+    this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScale',rasterScale);this.f('uChunkFieldScale',fieldScale);   // Shared shader coordinates stay in world pixels at every display scale.
     // Keep native material variance before nonlinear coverage and palette mapping.
     // Averaging these inputs first changes the mean rendered color at lower resolutions.
     this.f('uMaterialFoot',this.variant.has('materialFoot')?Math.max(1,Number(this.variant.get('materialFoot'))):1);

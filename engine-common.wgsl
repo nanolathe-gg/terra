@@ -20,11 +20,7 @@ struct Uniforms {
     pool: f32,             // card tilepool: level ground repeats every pool px (a multiple of 512), so its 32-px tiles come from (pool / 32)^2
     materialWeathering: f32,
     materialReady: i32,
-    rockyCoasts: i32,
     detail: f32,
-    layered: i32,
-    terraced: i32,
-    coastalDetail: i32,
     light: vec3f,
     // Draw (sculpt-frag.wgsl).
     shallowColor: vec3f,
@@ -35,14 +31,10 @@ struct Uniforms {
     full: i32,
     clay: i32,
     slopeMaterial: i32,
-    soilCover: i32,
     mineralMargins: i32,
     rockLayers: i32,
     quantize: i32,
-    shapeCoverage: i32,
-    ledgeCoverage: i32,
     diagnosticView: i32,   // GLSL uDiagnostic (diagnostic is a WGSL keyword)
-    separateLight: i32,
     faceFill: f32,
     slopeProfile: vec4f,
     elevatedCover: vec3f,
@@ -90,16 +82,12 @@ struct Uniforms {
     strataColors: array<vec4f, 5>,   // rgb of the column's material slots; uniform arrays take a 16-byte stride
     paletteMix: i32,
     transitionDetail: f32,
-    rockStart: f32,
-    rockFull: f32,
     wetBand: f32,
     shallowDepth: f32,
     deepDepth: f32,
     mineralDetail: f32,
     microRock: f32,
     faceSlope: vec2f,
-    rockShare: vec2f,
-    faceScore: vec4f,
     mossFromGround: f32,
     lightCap: f32,
     shadeDepth: f32,      // share of the directional shading kept (1: all)
@@ -381,7 +369,6 @@ struct Uniforms {
     chunkFieldsOrigin: vec2f, // integer world pixel at baked texel (0,0)
     chunkFieldsSize: vec2f,
     chunkScreenOrigin: vec2f, // preview screen pixels; export adds floor(base/2)
-    chunkScreenSize: vec2f,
     chunkRasterOrigin: vec2f,
     chunkRasterSize: f32,
     chunkScale: f32,          // World pixels per raster texel.
@@ -790,7 +777,7 @@ fn surfaceHeight(p: vec2f) -> f32 {
     // worker. A graded route cannot acquire extra clefts or rubble afterward.
     if (rough < 0.001) { return h; }
     let debris = materialChipHeight(p) * rough;
-    if (u.coastalDetail != 0 && abs(h - u.sea) < 6.0) {
+    if (abs(h - u.sea) < 6.0) {
         // Break only the waterline into small shared geometric irregularities.
         // The designed shallow-route bed (-7) and broad flats stay untouched.
         let shoreNoise = terrainNoise(p);
@@ -811,16 +798,6 @@ fn surfaceHeight(p: vec2f) -> f32 {
     // The same displaced surface supplies projection, normals and occlusion.
     // Broad form is authored by the brush; detail stays small relative to it.
     let gain = smoothstep(0.10, 0.72, slope) * smoothstep(-12.0, 14.0, h);
-    if (u.layered != 0) {
-        let cliff = smoothstep(0.8, 1.8, slope) * smoothstep(0.0, 18.0, h) * rough;
-        // A bounded irregular face displacement and interrupted short ledges
-        // challenge the smooth extrusion; protected broad flats stay level.
-        let warp = vec2f(n.g, terrainNoise(p + vec2f(191.0, 317.0)).g) - 0.5;
-        h = mix(h, baseHeight(p + warp * select(24.0, 16.0, u.terraced != 0)), cliff);
-        let phase = h / 18.0 + (n.r - 0.5) * 2.0 + (n.g - 0.5) * 0.8;
-        let f = fract(phase);
-        h += (smoothstep(0.20, 0.80, f) - f) * select(12.6, 16.5, u.terraced != 0) * cliff;
-    }
     let facets = 2.0 + 14.0 * smoothstep(0.9, 2.6, slope);
     let detail = (n.g - 0.5) * 6.0 + (n.b - 0.5) * facets;
     return h + detail * gain * u.detail * rough + debris;

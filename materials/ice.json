@@ -1529,13 +1529,10 @@
  },
  "world": {
   "defaults": {
-   "coverage": "form",
-   "lighting": "front",
    "surface": "slopes",
    "transition": "soil",
    "material": "single",
-   "scree": "0",
-   "shade": "separate"
+   "scree": "0"
   },
   "export": {
    "planet": "Ice",

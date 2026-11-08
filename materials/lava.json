@@ -1213,13 +1213,10 @@
  },
  "world": {
   "defaults": {
-   "coverage": "form",
-   "lighting": "front",
    "surface": "slopes",
    "transition": "soil",
    "material": "single",
    "scree": "0",
-   "shade": "separate",
    "faceSlope": "1.4,2.2",
    "rockShare": "0.1,0.8"
   },

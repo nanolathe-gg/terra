@@ -1607,7 +1607,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Open lit level ground keeps its brightness under any light colour (the tint is divided by its luma), so a colour changes hue and the
     // light-to-shade balance and never the exposure; white on both is exactly 1.
     let flatTintLuma = 1.0 + dot((u.ambient * (u.skyColor - 1.0) + 0.95 * u.light.z * (u.sunColor - 1.0)) / flatLight, vec3f(0.2126, 0.7152, 0.0722));
-    if (u.separateLight != 0) {
+    {
         // Cast shadows attenuate the direct sun. The ambient term already
         // receives local occlusion, so shadowing it again buries dark faces.
         let direct = max(0.0, dot(normal, u.light));
@@ -1624,10 +1624,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let sunShare = 0.95 * direct * castShadow * (1.0 - 0.45 * cav);
         shading = min((skyShare + sunShare) / flatLight, u.lightCap) * occluded;
         // The share of the light that is sky takes the sky's colour and the share that is sun the sun's; white on both is exactly 1.
-        lightTint = 1.0 + (skyShare * (u.skyColor - 1.0) + sunShare * (u.sunColor - 1.0)) / max(skyShare + sunShare, 0.0001);
-    } else {
-        let skyShare = u.ambient;
-        let sunShare = 0.95 * max(0.0, dot(normal, u.light)) * shadow;
         lightTint = 1.0 + (skyShare * (u.skyColor - 1.0) + sunShare * (u.sunColor - 1.0)) / max(skyShare + sunShare, 0.0001);
     }
     lightTint /= max(flatTintLuma, 0.05);
@@ -2179,7 +2175,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             }
             colorDepth = mix(depth, sum / 8.0, 0.75);
         }
-        if (u.coastalDetail != 0) { colorDepth += ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, depth); }
+        colorDepth += ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, depth);
         // Optional contour rings in the water colour, every 6 depth units.
         if (u.bandWater > 0.0) { colorDepth = mix(colorDepth, (floor(colorDepth / 6.0) + 0.5) * 6.0, u.bandWater * 0.7); }
         // A deep or shallow stroke's water choices (card E1), painted into the
