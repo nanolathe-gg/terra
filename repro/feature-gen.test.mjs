@@ -117,3 +117,15 @@ test('halo roughness changes the deposit outline', () => {
   const a = mk(), b = mk(); paintDeposit(a, 50, 50, {metal: 150, haloRough: 5}, 3, {palette}); paintDeposit(b, 50, 50, {metal: 150, haloRough: 12}, 3, {palette});
   assert.notDeepEqual(a.rgba, b.rgba);
 });
+
+test('an underwater deposit is an opaque blue blob whose area follows metal, and the same seed paints the same bytes', () => {
+  const W = 128, ground = () => { const g = {w: W, h: W, rgba: new Uint8ClampedArray(W * W * 4)}; for (let i = 0; i < W * W; i++) g.rgba.set([70, 110, 40, 0], i * 4); return g; };
+  const area = (metal, seed = 5) => {
+    const g = ground(), info = paintDeposit(g, 64, 64, {metal, underwater: true}, seed, {palette}); let n = 0, blue = 0;
+    for (let i = 0; i < W * W; i++) if (g.rgba[i * 4 + 3] === 255) { n++; if (g.rgba[i * 4 + 2] > g.rgba[i * 4] + 40) blue++; }
+    assert.equal(info.look, 'aqua'); assert.ok(blue > n * 0.9, 'mostly blue'); return {n, g};
+  };
+  const a = area(116), b = area(250), again = area(116);
+  assert.ok(a.n > 800 && a.n < 1500, 'area at metal 116: ' + a.n); assert.ok(b.n > a.n * 1.3, 'more metal, more area');
+  assert.deepEqual(a.g.rgba, again.g.rgba);
+});

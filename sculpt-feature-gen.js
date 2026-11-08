@@ -1190,6 +1190,42 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   }
   return { cx, cy, metal: P.metal, look, chunks: 4, stonePx: stonePts.length, dominant: areas[0] / total, rect: [ox, oy, bw, bh], gameplay: { metal: P.metal, indestructible: true, footprint: [3, 3] } };
 }
+// Retail's AquaOre (metal under water): a roundish blob of palette blues, 12-19 colors: a bright saturated rim (23,71,231 and 35,59,203),
+// a mid-blue body (51,75,215) flecked with lighter blues and a few teal and dark specks. Its area follows metal (GreenAquaOre1-3: 116 -> 1084,
+// 187 -> 1216, 250 -> 1867 px). Painted over the ground as opaque palette pixels, so it is the stamp itself.
+const AQUA_AREA = [[86, 950], [116, 1084], [187, 1216], [250, 1867]];
+function paintDepositAqua(ground, cx, cy, P, seed, ctx) {
+  const palette = ctx.palette, r = rng(seed), rn = rng(mix32(seed, 2));
+  const m = clamp(P.metal, AQUA_AREA[0][0], 250);
+  let i = 0; while (i < 2 && m > AQUA_AREA[i + 1][0]) i++;
+  const area = lerp(AQUA_AREA[i][1], AQUA_AREA[i + 1][1], (m - AQUA_AREA[i][0]) / (AQUA_AREA[i + 1][0] - AQUA_AREA[i][0])) * P.stoneScale * (0.94 + 0.12 * r());
+  const aspect = 1 + 0.35 * r(), rot = r() * TAU, c = Math.cos(rot), sn = Math.sin(rot), s1 = (r() * 1e6) | 0, bw = 120, bh = 120, ox = Math.round(cx) - 60, oy = Math.round(cy) - 60;
+  const shape = (R) => {
+    const a = R * Math.sqrt(aspect), b = R / Math.sqrt(aspect), pts = [];
+    for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+      const X = x + ox - cx, Y = y + oy - cy, u = (X * c + Y * sn) / a, v = (-X * sn + Y * c) / b, d = Math.hypot(u, v);
+      const edge = 1 + (fbm((x + ox) / 11, (y + oy) / 11, s1, 2) - 0.5) * 0.5 + (vnoise((x + ox) / 4, (y + oy) / 4, s1 + 3) - 0.5) * 0.12;
+      if (d < edge) pts.push([x + ox, y + oy, (edge - d) * Math.min(a, b)]);
+    }
+    return pts;
+  };
+  let R = Math.sqrt(area / Math.PI), pts = shape(R);
+  for (let it = 0; it < 3; it++) { R *= Math.sqrt(area / Math.max(pts.length, 1)); pts = shape(R); }
+  const [O, B, M, L, D, LL, K, G1, G2, DD, W, H] = [104, 227, 105, 103, 106, 102, 226, 134, 135, 228, 101, 133];
+  for (const [X, Y, depth] of pts) {
+    const t = fbm(X / 3.2, Y / 3.2, s1 + 11, 2), streak = vnoise((X + Y) / 5, (X - Y) / 2, s1 + 17), q = rn();
+    let col;
+    if (depth < 1.6 + 1.2 * rn()) col = q < 0.5 ? B : q < 0.78 ? M : q < 0.9 ? O : q < 0.96 ? D : L;   // the rim
+    else if (streak > 0.72 && q < 0.55) col = q < 0.28 ? G1 : q < 0.42 ? G2 : H;                        // teal streaks
+    else if (depth < 4.5 && q < 0.3) col = q < 0.18 ? B : M;
+    else if (t > 0.58 && q < 0.5) col = q < 0.2 ? L : q < 0.36 ? LL : K;                                // lighter flecks in patches
+    else if (q > 0.985) col = W;
+    else if (q > 0.95) col = q > 0.97 ? D : DD;
+    else col = q < 0.12 ? M : q < 0.2 ? L : O;
+    setGround(ground, X, Y, palette[col]);
+  }
+  return { cx, cy, metal: P.metal, look: 'aqua', chunks: 1, stonePx: pts.length, dominant: 1, rect: [ox, oy, bw, bh], gameplay: { metal: P.metal, indestructible: true, footprint: [3, 3] } };
+}
 // Round 1's round-pebble deposit, kept as an artist option (style 'pebbles').
 
 function paintDepositPebbles(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
