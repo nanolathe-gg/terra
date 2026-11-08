@@ -18,8 +18,8 @@ test('every world has deposits and vents; trees, shrubs, rocks and scars come fr
 
 test("a world's deposit and vent look reaches the painter; footprints take any size", () => {
   const red = {features: table('red').features}, lava = {features: table('lava').features};
-  assert.equal(variants('deposit', defaultSet(red), red)[0].params.halo, 0.9);
-  assert.equal(variants('vent', defaultSet(lava), lava)[0].params.rim, 0.55);
+  assert.equal(variants('deposit', defaultSet(red), red)[0].params.halo, red.features.deposit.params.halo);
+  assert.equal(variants('vent', defaultSet(lava), lava)[0].params.rim, lava.features.vent.params.rim);
   assert.equal(variants('deposit', defaultSet(green), green)[0].params.halo, undefined);   // Green's look is the painter's default
   assert.deepEqual(variants('tree', defaultSet(red), red)[0].footprint, [2, 2]);
   const spire = variants('rock', defaultSet(lava), lava).find(v => v.params.tall === 1);
