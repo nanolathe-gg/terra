@@ -273,7 +273,7 @@ WORLD_KNOBS = {
                   # in a hard step: colour by depth is flat to ~30 and gone by ~44 in
                   # both windows (retail depth 32-40: R 53, 40-48: R 39, the 16-px height
                   # grid upsampled), so the step sits at 40 (H24: the midpoint, 42) and nothing fades.
-                  bedLit=1, bedTint=1, bedContrast=.45, bedRelief=1, deepEdge=1,
+                  bedLit=1, bedTint=1, bedContrast=.45, bedRelief=.6, deepEdge=1,
                   # Ground (card E1): retail's plain is flat (dry heights 9 +- 1) with lit
                   # lumps only in patches, which the Paint brush's Ground lumps makes. On
                   # level pixels (24 px from other heights) the s.d. of 15-px-blurred luma
@@ -299,12 +299,14 @@ WORLD_KNOBS = {
                   # 140 px; the bed is lit by its own relief (green-3's blur was the shelf's slope
                   # shading the pale bed over 100+ px) and carries crisp mid-scale lumps (luma s.d.
                   # after a 5-px blur 2.8-3.9 -> 5.6, retail 5.6 / 7.5 in green-1 / green-3).
-                  shelfWander=24, bedFlat=1,
+                  # Green dive: the bed is lit by its own slope too (bedFlat .4; 1 lit only its lumps), so shelves turned to the sun read lighter,
+                  # with gentler lumps and bumps (bedRelief 1 -> .6, shoalBump 1.8 -> 1): retail's shallows are smooth with fine specks.
+                  shelfWander=24, bedFlat=.4,
                   # G1 (round 8 review: "reads as noise while retail reads as lit bumpy terrain"): the
                   # palette dither's white noise went; lit bumps of 5 px take
                   # its place. After a 9-px blur the bed's lit / dark shares and clump sizes are
                   # retail's (green-1 .19 / .22 and 8.6 / 13.7 px against .20 / .20 and 9.1 / 14.4).
-                  shoalBump=1.8, shoalBumpPx=5,
+                  shoalBump=1, shoalBumpPx=5,
                   # G1: the shallow-to-deep outline is notched by up to 5 px (retail's runs 3-8 px).
                   shoalRag=5,
                   # G1: the hard waterline steps in 1-3 px runs (retail's), up to 2 px off the depth contour.
