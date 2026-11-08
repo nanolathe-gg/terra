@@ -948,6 +948,21 @@ fn craterWeb(p: vec2f) -> vec2f {
     return vec2f(line, 1.0 + u.crystalCraterTone * (m.id.x - 0.5));
 }
 
+// Round 3 (Crystal): long dark gouges across raised crystal. Retail's crystal mounds are crossed by a bold black web over their
+// facets, lines 2-4 px wide that run on from seam to seam round cells 30-60 px across, wandering, a few seams left out, where ours
+// are only the facets' thin outlines (crystal-1: thin dark line density .0086 against ours .0054). Voronoi seams of GOUGE_PX
+// cells, the lookup bent by the world noise as the crater web's is, each seam one width and drawn or not; returns 0..1.
+const GOUGE_PX = 42.0;
+fn gougeWeb(p: vec2f) -> f32 {
+    let warp = (terrainNoise(p * 0.12).rg - 0.5) * 14.0 + (terrainNoise(p * 0.5).ba - 0.5) * 4.0;
+    let m = markCells((p + warp) / GOUGE_PX, vec2i(61, 7), 0.9, 0.0);
+    let edge = (m.d2 - m.d1) * 0.5 * GOUGE_PX;
+    let w = fract((m.id.z + m.id2.z) * 5.17);
+    let drawn = smoothstep(0.2, 0.28, w);
+    let width = 1.4 + 2.0 * fract(w * 3.7 + 0.2);
+    return (1.0 - smoothstep(width * 0.5, width * 0.5 + 0.7, edge)) * drawn;
+}
+
 // H23: how much of the sun-facing crack wall's light the rock takes, the same on every world.
 const CRACK_LIT = 0.35;
 
@@ -2041,6 +2056,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 // Lines run fainter on the lit wall, darker in shade.
                 faces = mix(faces, vec3f(0.0), u.crystalCraterWeb * web.x * craterBand * mix(0.6, 1.0, smoothstep(0.1, 0.45, slope)) * mix(1.0, 0.6, smoothstep(0.95, 1.1, s)));
             }
+        }
+        if (u.gougeWeb > 0.0) {
+            // Round 3: the bold gouges cross the raised formation, not a crater's skin or the shore's slabs.
+            faces = mix(faces, vec3f(0.0), u.gougeWeb * gougeWeb(p) * smoothstep(u.base + 3.0, u.base + 12.0, h) * (1.0 - craterBand));
         }
         material = mix(material, faces, smoothstep(0.05, 0.3, crystalMask));
     } else {

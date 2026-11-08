@@ -61,7 +61,7 @@ export const KNOBS = [
   ['Surface pits', [['pockmark','Dark pits on raised ground and slopes',0,1,.05,0],['pockSize','Pit spacing (px)',3,12,.5,5]]],
   // Card G8: cups, ribs and folds on steep faces.
   ['Cups, ribs & folds', [['moonCups','Slope cups',0,1,.05,0],['moonCupSize','Cup spacing (px)',3,12,.5,5.5],['moonCupDepth','Cup depth (wall steepness)',.4,3,.1,1.4],['cupStretch','Cup stretch into strokes (1: pits)',1,3,.1,1],['moonRibs','Slope ribs',0,1,.05,0],['moonRibDepth','Stroke steepness',.2,3,.1,1],['moonRibDark','Darker where turned from the sun',0,.9,.05,0],['moonFolds','Contour folds',0,1,.05,0],['moonFoldSpacing','Fold spacing (height units)',.3,3,.1,.9]]],
-  ['Mineral faces', [['iceSlate','Slate faces',0,1,.05,0],['mineralDetail','Rock art contrast',0,2,.05,1],['iceCrystal','Straight face fibres',0,1,.05,0],['iceCrest','Cap lumps',0,1,.05,0]]],
+  ['Mineral faces', [['iceSlate','Slate faces',0,1,.05,0],['mineralDetail','Rock art contrast',0,2,.05,1],['iceCrystal','Straight face fibres',0,1,.05,0],['gougeWeb','Gouges across crystal formations',0,1,.05,0],['iceCrest','Cap lumps',0,1,.05,0]]],
   // Card G6: rounded light, caps and face finish on raised ground.
   ['Cap & face finish', [['iceSoft','Rounded lighting',0,1,.05,0],['iceSnow','Snow on level caps',0,1,.05,0],['iceFall','Slope fibres',0,1,.05,0],['iceApron','Hatched foot apron',0,1,.05,0]]],
   ['Needle lines', [['iceFrost','Needle hairlines',0,1,.05,0]]],
