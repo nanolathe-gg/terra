@@ -1665,7 +1665,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var faceOcc = 0.0;
     var rockFace = RockFace(0.0, 0.0, 0.0, 0.0);
     if (u.rockFace > 0.0 && h > u.sea + 1.0) {
-        faceGate = rockFaceGate(slope, painted.x, route);
+        // A shape set bare (Local vegetation below 0: thin soil) bares rock on gentler slopes too: at -100 its rock starts at half the slope.
+        let bare = clamp(1.0 - place.vegetation, 0.0, 1.0);
+        faceGate = rockFaceGate(slope / (1.0 - 0.5 * bare), painted.x, route);
         if (faceGate > 0.0) {
             let hb = baseHeight(p);
             let fall = select(vec2f(0.0, -1.0), broad / max(slope, 1e-5), slope > 1e-4);
@@ -1680,7 +1682,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             let dwFull = vec2f(dsFull.x - 0.5 * broad.x * dsFull.y, rowStretch * dsFull.y);
             // Rock's share of the face rises with the slope to faceRock a slope of 1.3 past rockFaceFrom, times 1 less the stroke's Local
             // vegetation (+40: 60% of it, +100: none, -70: 1.7 times); painted rock is rock.
-            let rise = smoothstep(u.rockFaceFrom, u.rockFaceFrom + 1.3, slope);
+            let rise = mix(smoothstep(u.rockFaceFrom, u.rockFaceFrom + 1.3, slope), smoothstep(0.5 * u.rockFaceFrom, 0.5 * u.rockFaceFrom + 0.5, slope), bare);
             var share = u.faceRock * rise * (2.0 - clamp(place.vegetation, 0.0, 2.0));
             share = max(clamp(share, 0.0, 1.0), smoothstep(0.3, 0.8, painted.x) * 0.9);
             // Grass's footing: the relief's flat tops (its own slope small), the beds' ledges, and strips along the contours.

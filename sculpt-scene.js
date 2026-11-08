@@ -20,7 +20,7 @@ const hillKnots=() => [[0,0],[.25,.08],[.5,.4],[.75,.8],[.9,.95],[1,1]];
 export const LANDFORM_TOOLS={
   plateau:{},
   // A hill is low and wide (240 px, rises 36), the same on both sides (lean 100), with a rounded top and shoulders (the section reaches .95 of the rise at .9 of the way up, and climbs at most .4 of it per quarter) and a smooth outline: its steepest 16 px cell steps 16 units or less against 25 at the 99th percentile of retail Green hills (measure/hill_band.py), so units cross it, and it stays off the rock slope score. Gullies 0 keeps modern Green's gully ribs off it (the other worlds have none).
-  hill:{diameter:240,elevation:36,lean:100,cracks:20,gullies:0,wander:10,widthVary:10,heightVary:6,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfHill',knots:hillKnots(),back:hillKnots()}},
+  hill:{diameter:240,elevation:36,lean:100,cracks:20,gullies:0,styleVegetation:60,wander:10,widthVary:10,heightVary:6,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfHill',knots:hillKnots(),back:hillKnots()}},
   // Peaked ridge: high (150 over the plain), a steep rock face all round (cells over 24 units on 16 px, steeper than retail Green's hills), a chain of five
   // summits with shallow saddles along the path, and divides with scree below them (Gullies, Talus). A hill is its opposite: low, round, walkable.
   mountain:{diameter:200,elevation:160,lean:100,cracks:60,wander:8,widthVary:0,heightVary:10,varySize:80,varyFoot:100,varyMiddle:100,gullies:40,gullySize:50,talus:60,styleVegetation:-70,
