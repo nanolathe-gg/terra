@@ -55,16 +55,8 @@ export const LANDFORM_TOOLS={
 };
 // lfcrater: a crater with no rim in its heights (retail Red and Crystal: rim/depth -.12..0), a .06 lip for the art and a wide bowl.
 export const CRATER_BOWL=[[0,0],[.25,-.02],[.4,-.06],[.5,.04],[.6,.3],[.72,.58],[.83,.82],[.93,.97],[1,1]];
-// The retired stroke kinds (November 6): Crater and Crystals draw landforms. An old save's strokes of these kinds load without them, said once (AGENTS.md
-// rule 7: no migrations), as an old save's retail features are (sculpt-features.js).
-export const RETIRED_KINDS=['crater','crystal'];
-export function retiredStrokeNote(list) {
-  const n=(Array.isArray(list)?list:[]).filter(s => RETIRED_KINDS.includes(s?.kind)).length;
-  return n?`This map’s ${n} old crater and crystal ${n===1?'stroke was':'strokes were'} left out: the Crater and Crystals buttons now draw landforms.`:'';
-}
-// A save's brush card for a palette button counts only if this editor made it: every setting it holds is one the button's card has today (or its
-// curves and preset). A card from an older editor, such as the retired Crater and Crystals tools' or one holding a removed option, starts from the
-// button's preset instead; otherwise its old settings would outvote the preset's (AGENTS.md rule 7: an old save loads without a removed option).
+// A save's brush card for a palette button counts only if every setting it holds is one the button's card has today (or its curves and preset);
+// a card holding a removed option starts from the button's preset instead (AGENTS.md rule 7: a save loads without a removed option).
 export function savedToolCard(config,entry,card) {
   if (!card || typeof card!=='object') return null;
   // A card still on a world's preset was never edited (every edit marks it custom), so it is that preset as this editor has it: a preset's change

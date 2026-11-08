@@ -550,17 +550,17 @@ export async function mountMapFeatures(api) {
     const plain=p => { const out={kind:p.kind,v:p.v,x:p.x,z:p.z}; if (deposit(p)) out.metal=p.metal; return out; };
     return {features:placements.map(plain).sort(ordered),featureSet:structuredClone(set),starts:starts.map(p => ({...p})),fill:{...fill,generated:placements.filter(p => generated.has(key(p))).map(plain).sort(ordered)}};
   }
-  // An old save's retail placements (named, with no kind) load without them; anything that no longer fits is left out. Either is said once.
+  // A saved feature that does not fit this world or map is left out, said once.
   function load(data={}) {
-    const nextSet=normalizeSet(data.featureSet,config),nextStarts=(data.starts===undefined?defaults():data.starts),nextFill=fillOptions(data.fill?.kind==='foliage'?{...data.fill,kind:'shrub'}:data.fill||{});
+    const nextSet=normalizeSet(data.featureSet,config),nextStarts=(data.starts===undefined?defaults():data.starts),nextFill=fillOptions(data.fill||{});
     if (!Array.isArray(data.features??[]) || !Array.isArray(nextStarts) || nextStarts.length<1 || nextStarts.length>10) throw new Error('Map placements need a feature list and 1–10 starts.');
     const bases=nextStarts.map(p => ({x:p?.x,z:p?.z}));
     if (bases.some((p,i) => !validStart(p) || bases.some((q,j) => j<i && p.x===q.x && p.z===q.z))) throw new Error('Every start must be a distinct pixel position inside the play area.');
     set=nextSet;
-    const next=[]; let retail=0,unfit=0;
+    const next=[]; let unfit=0;
     for (const raw of data.features||[]) {
       const p=normalizePlacement(raw);
-      if (!p) { if (typeof raw?.name==='string') retail++; else unfit++; continue; }
+      if (!p) { unfit++; continue; }
       if (!kinds.includes(p.kind)) { unfit++; continue; }
       const list=variantList(p.kind); if (p.v>=list.length) p.v=p.v%list.length;
       if (!inBounds(p) || next.some(q => overlaps(p,q))) { unfit++; continue; }
@@ -572,8 +572,7 @@ export async function mountMapFeatures(api) {
     placements=next; starts=bases; fill=nextFill; generated=new Set(next.filter(p => scatter(p) && recorded.has(key(p))).map(key));
     selection=new Set(); selectedStart=Math.min(Math.max(0,selectedStart),starts.length-1); hover=null;
     if (placeVariant>=(variantList(placeKind)?.length??0)) placeVariant=-1;
-    if (retail || unfit) status([retail?`This map’s ${retail} retail ${retail===1?'feature was':'features were'} left out: each map now generates its own features.`:'',unfit?`${unfit} saved ${unfit===1?'feature does':'features do'} not fit this world or map and ${unfit===1?'was':'were'} left out.`:''].filter(Boolean).join(' '));
-    if (retail || unfit) doc.dispatchEvent(new CustomEvent('terraform-status',{detail:message}));
+    if (unfit) { status(`${unfit} saved ${unfit===1?'feature does':'features do'} not fit this world or map and ${unfit===1?'was':'were'} left out.`); doc.dispatchEvent(new CustomEvent('terraform-status',{detail:message})); }
     prune(); refreshSelection(); update(); doc.dispatchEvent(new Event('terraform-feature-mode'));
   }
 
