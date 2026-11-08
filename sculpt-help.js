@@ -5,11 +5,8 @@ const controlHelp={
   'knob-vegetationCover':'Scales vegetation against bare soil, including the density of shrubs. Lushness and Moisture still determine which kinds of vegetation grow.',
   'knob-plantRelief':'Scales the height of grass tufts, moss cushions and shrubs in the art. One uses the material preset; zero removes their relief without removing flowers.',
   'knob-flowerDensity':'Scales flower coverage where the ground supports it. One uses the material preset; zero removes flowers. Set flower colors in Colors & base pattern.',
-  'knob-rockOrder':'Blends scattered rock marks into ordered beds, joints and cracks. Set it above zero to use the rock structure settings.',
-  'knob-rockStain':'Darkens gully floors and stains below rock ledges. Ledge stains need a supporting rock material.',
   'knob-sunTilt':'Moves the light north or south of due west. Zero is west; positive values move it south.',
   'knob-ambient':'Sets the share of light that reaches faces pointing away from the sun.',
-  'knob-rockMoss':'Keeps vegetation color in rock, including moss and, on supporting materials, lichen on faces exposed to sun and sky.',
   'knob-lushness':'Changes how much vegetation the ground supports. On materials with flowers, richer ground can grow more flower patches.',
 };
 

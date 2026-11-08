@@ -1797,20 +1797,6 @@
   "route": {
    "from": 0.45,
    "to": 0.9
-  },
-  "face": {
-   "slopeFrom": 0.35,
-   "slopeTo": 0.9,
-   "edgeNoise": 0.8,
-   "shareFrom": 0.2,
-   "shareTo": 1.0,
-   "roughness": 0.2,
-   "lumpTop": 2.0,
-   "fineNoise": 0.5,
-   "broadNoise": 0.3,
-   "gully": 0.5,
-   "order": 1,
-   "paintedRock": 1
   }
  },
  "ground": {
@@ -1949,7 +1935,6 @@
   ],
   "materialWeathering": 0.0,
   "stoneSort": 0.5,
-  "rock": {"size": 4.6, "aspect": 2.6, "jitter": 0.9, "open": 0.6, "bedOpen": 0.8, "terr": 0, "vary": 0.15, "crev": 1.2, "crevW": 1.1, "chip": 0.45, "chipSize": 3.5, "grit": 0.1, "joint": 0, "seam": 1.6},
   "depositSpread": 0.65
  },
  "water": {

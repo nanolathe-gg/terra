@@ -82,22 +82,3 @@ export function groundCoverRows(cover, overrides = null, colors = {}, ground = [
   (cover.plants?.flowers?.palette ?? []).slice(0, 4).forEach((k, i) => { rows[40 + i] = [...(colors['flower'+(i+1)] ?? rgb(k.slice(0,3))), k[3]]; });
   return rows;
 }
-
-// Card P10: the rock model's named types (the World panel's Rock type). 0 is the world's own (its table's `material.rock`: Green's small facets,
-// Painted Desert's and Red's deeper joint lines; most worlds have none, so no blocks); each type is only numbers for the model's uniforms
-// (engine-bake.wgsl rockModel), and a number a type leaves out takes the model's default. Granite is modern Green's (card P10: calm blocks of 22 px,
-// open crevices, ledge stains and lichen, no joint lines). Sandstone: long slabs that part along the beds, cut by joint lines, with varnish
-// curtains under each ledge. Basalt: small, regular columns taller than wide, tightly jointed and chipped, with deep joint lines.
-export const ROCK_TYPES = [
-  {name: 'Granite', rock: {size: 22, aspect: 1.6, jitter: .9, open: .5, bedOpen: .15, terr: 0, vary: .25, crev: 1.2, crevW: 1.0, chip: .12, chipSize: 4, grit: .3, joint: 0, seam: 1.6, curtain: .6, lichen: 1.5}},
-  {name: 'Sandstone', rock: {size: 30, aspect: 3, jitter: .6, open: .35, bedOpen: .7, terr: .3, vary: .2, crev: 1, crevW: 1.3, chip: .05, chipSize: 6, grit: .45, joint: 1.5, seam: 1.2, curtain: 1, lichen: .3}},
-  {name: 'Basalt', rock: {size: 12, aspect: .5, jitter: .35, open: .8, bedOpen: .05, terr: 0, vary: .45, crev: 1.6, crevW: .9, chip: .25, chipSize: 3, grit: .2, joint: 2, seam: 2, curtain: .2, lichen: .6}},
-];
-// The rock numbers a world draws with: its Rock type's, or with 0 its own table's (`material`; none: the model's defaults, no blocks).
-export function rockPreset(material, variant) {
-  const t = Math.round(Number(variant?.get?.('rockType')) || 0);
-  return ROCK_TYPES[t - 1]?.rock || material?.rock || {};
-}
-// What a rock's numbers cut, for the World panel's reasons: blocks (rockCells: Block size and Age shape them), joint lines (rockJoint, their depth:
-// the model's 2 where the numbers set none; Open joints scales it), ledge stains (rockCurtains: Stain darkens them) and lichen (rockLichen: it grows with Age).
-export const rockFacts = rock => ({rockCells: rock.size > 0 ? 1 : 0, rockJoint: rock.joint ?? 2, rockCurtains: rock.curtain > 0 ? 1 : 0, rockLichen: rock.lichen > 0 ? 1 : 0});

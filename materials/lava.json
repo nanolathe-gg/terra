@@ -1222,9 +1222,7 @@
    "surface": "slopes",
    "transition": "soil",
    "material": "single",
-   "scree": "0",
-   "faceSlope": "1.4,2.2",
-   "rockShare": "0.1,0.8"
+   "scree": "0"
   },
   "column": {
    "bands": [7, 1]
