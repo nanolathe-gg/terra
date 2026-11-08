@@ -803,14 +803,16 @@ function rockFrame(P, seed, ctx) {
   const Sd = rockSolid(P, r), R = renderSolid({ F: Sd.F, eMin: Sd.ext.e0, eMax: Sd.ext.e1, sMin: Sd.ext.s0, sMax: Sd.ext.s1, uMax: Sd.ext.u, sun, shadowSun: flatSun(sun, P.shadowLen) });
   const { w, h } = R, plateAt = new Uint8Array(w * h), tone = new Float32Array(w * h), lit = new Float32Array(w * h), hasPx = [], mask = new Uint8Array(w * h);
   for (let k = 0; k < w * h; k++) if (R.px[k]) mask[k] = 1;
-  {   // a thin tip can graze the march and leave a few stray pixels above it: drop any speck of fewer than 8 pixels
-    const seen = new Uint8Array(w * h);
+  {   // a thin tip can graze the march and leave stray pixels above it: drop any detached piece under 8 pixels or 2.5% of the biggest piece
+    const seen = new Uint8Array(w * h), comps = [];
     for (let k0 = 0; k0 < w * h; k0++) {
       if (!mask[k0] || seen[k0]) continue;
       const comp = [k0]; seen[k0] = 1;
       for (let i = 0; i < comp.length; i++) { const k = comp[i], x = k % w, y = (k / w) | 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= w || Y >= h) continue; const q = Y * w + X; if (mask[q] && !seen[q]) { seen[q] = 1; comp.push(q); } } }
-      if (comp.length < 8 && comp.length < 0.01 * w * h) for (const k of comp) { mask[k] = 0; R.px[k] = null; }
+      comps.push(comp);
     }
+    const biggest = comps.reduce((m, c) => Math.max(m, c.length), 0);
+    for (const comp of comps) if (comp.length < Math.max(8, 0.025 * biggest) && comp.length < biggest) for (const k of comp) { mask[k] = 0; R.px[k] = null; }
   }
   const dist = edgeDist(w, h, mask), capRamp = P.capColors ? recolorStops(P.capColors, P.recolor) : null, capAt = new Uint8Array(w * h);
   // the shade side, as a direction across the picture (for the Shading control and the no-highlight rule)
