@@ -1598,7 +1598,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         faceGate = rockFaceGate(slope / (1.0 - 0.5 * bare), painted.x, route);
         // The layers run on under the grass of gentler slopes as soil-covered terraces (Layers under grass).
         let layerGate = smoothstep(0.06, 0.25, slope) * u.faceLayers * (1.0 - route);
-        if (max(faceGate, layerGate) > 0.0) {
+        // The face is evaluated wherever it may show: a face, the soil's layers, or rock the placement bares on gentle ground.
+        if (max(max(faceGate, layerGate), place.exposed) > 0.0) {
             let hb = baseHeight(p);
             let fall = select(vec2f(0.0, -1.0), broad / max(slope, 1e-5), slope > 1e-4);
             let rowStretch = max(1.0 - 0.5 * broad.y, 0.2);   // screen rows per ground row at the broad slope
@@ -1627,7 +1628,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             let field = 0.5 + 0.5 * clamp((poolNoise(pixel, 22.0, 37.0) * 0.6 + poolNoise(pixel, 6.0, 59.0) * 0.4) / 0.6, -1.0, 1.0) * 0.7 + footing - 0.15 * u.faceGrass;
             faceRock = smoothstep(field - 0.03, field + 0.03, share) * step(1e-4, faceGate);
             // The micro surface: the rock's relief where rock shows, the soil-covered layers under the grass.
-            let wRock = faceRock * faceGate;
+            let wRock = max(faceRock * faceGate, place.exposed * (1.0 - faceGate));
             let wSoil = max(layerGate, 0.5 * faceGate) * (1.0 - wRock);
             let k = u.rockFace;
             let s0 = c0.x * wRock + c0.y * wSoil;
@@ -1777,15 +1778,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     }
     // Card P30: a world with a ground-cover table colours its grass by class (the slope-only ramp above still gates the slope texture).
     if (cvr(0u).x > 0.5) { grass = groundCover(p, slope, broad, place.top, timeMaps, place.vegetation, grass, (1.0 - route) * step(u.sea + 1.0, h)); }
-    // Small mineral interiors supply pixel structure; the whole crown/face/
-    // foot comes from this surface. Some native microshading remains baked.
-    var rock = based(rockSource(pixel), u.rockTexMean, u.rockBase);
-    // The rock face's colour: even (its relief's light makes the pattern), a chunk's tone a little lighter or darker, its crevices and the
-    // shade under its ledges dark.
-    if (faceGate > 0.0) {
-        let flat = select(u.rockMean, u.rockBase.rgb, u.rockBase.a > 0.5);
-        rock = mix(rock, flat * (1.0 + u.faceTone * rockFace.tone + u.faceStrata * rockFace.bedTone) * (1.0 - 0.6 * u.faceWet * rockFace.wet), faceGate);
-    }
+    // The one rock's colour, wherever rock shows (a face, a bare top, a crown): even (its relief's light makes the pattern), each block a
+    // little lighter or darker (Color variation), each layer its own tint (Layer tint), its runnels and open partings wet (Wet streaks).
+    let rockFlat = select(u.rockMean, u.rockBase.rgb, u.rockBase.a > 0.5);
+    var rock = rockFlat * (1.0 + u.faceTone * rockFace.tone + u.faceStrata * rockFace.bedTone) * (1.0 - 0.6 * u.faceWet * rockFace.wet);
     // H3 item 4: one placement function (landPlace); its thresholds are rows of materials/green.json.
     var exposed = place.exposed;
     exposed = mix(exposed, faceRock, faceGate);   // on the rock face the face's share decides
