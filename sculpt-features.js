@@ -787,7 +787,7 @@ export async function mountMapFeatures(api) {
       } else if (p.kind==='rock') {
         const dead=await stain();
         def(n,[['description','Rock'],['footprintx',fw],['footprintz',fz],['height',v.params.tall>0.4?60:rockHeight(v.footprint)],['seqname',seq(`${b}r${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}r${i}s`,[frameOf(f.shadow)])],
-          ['metal',g.metal],['damage',2000],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['reclaimable',v.params.reclaimable===false?0:1],['blocking',1]]);
+          ['metal',g.metal],...(g.energy?[['energy',g.energy]]:[]),['damage',2000],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['reclaimable',v.params.reclaimable===false?0:1],['blocking',1]]);
       } else if (p.kind==='scar') {
         const smudgeType=v.params.type!=='stain';
         def(n,[['description',smudgeType?'Scorch Mark':'Rock Stain'],['footprintx',1],['footprintz',1],['height',0],['seqname',seq(`${b}c${i}`,[frameOf(f.body)])],...(f.shadow?[['seqnameshad',seq(`${b}c${i}s`,[frameOf(f.shadow)])]]:[]),

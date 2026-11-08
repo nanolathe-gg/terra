@@ -632,7 +632,7 @@ function shadowSprite(R, ax, ay, colors, r, most = 1) {   // most: the stipple's
 // hues through the mid and light tones at the ramp's lightness, `grain` the fine dither of a rendered sprite. Retail Green's ramp and
 // mottles are measured from its ten rocks (luma octiles; cream 30% and rose 22% of the light pixels).
 export const ROCK_GREEN = ['#0f0f0f', '#2b2b2b', '#4b4b4b', '#5b5b5b', '#787878', '#949494', '#c3c3c3', '#f4f4f4'];
-const ROCK_DEFAULTS = { shadow: 0.66, cells: '2x2', size: 1, angular: 0.5, shade: 0.6, tall: 0, pieces: 1, pits: 0, grain: 0.6, lump: 0.6, colors: ROCK_GREEN, mottle: [['#c3c39b', 0.3], ['#d7a3b3', 0.26]], metal: null };   // shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
+const ROCK_DEFAULTS = { shadow: 0.66, cells: '2x2', size: 1, angular: 0.5, shade: 0.6, tall: 0, pieces: 1, pits: 0, grain: 0.6, lump: 0.6, colors: ROCK_GREEN, mottle: [['#c3c39b', 0.3], ['#d7a3b3', 0.26]], metal: null, energy: null };   // energy: a [lo, hi] range for a rock that is an energy source (Lava's nodes; tracks the footprint's area); shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
 export const cellsOf = c => { const m = /^(\d+)x(\d+)$/.exec(String(c || '')); return m ? [clamp(+m[1], 1, 16), clamp(+m[2], 1, 16)] : [2, 2]; };
 const smoothstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 function rockSolid(P, r) {
@@ -849,7 +849,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     footprint = [fw, fh];
     shadow = tintSprite(shadowSprite(R.R, R.body.ax, R.body.ay, ROCK_SHADOW_COLORS, rng(mix32(seed, 43)), clamp(P.shadow, 0, 1)), ctx, 0);   // the solid's own shadow on level ground, from the map's sun
     const cellsN = fw * fh, metalDefault = Math.round((7.6 * cellsN + 22.5) / 25) * 25;
-    gameplay = { energy: 0, metal: P.metal ?? Math.max(25, Math.min(100, metalDefault)), metalLinear: Math.round(7.6 * cellsN + 22.5), hp: 2000, blocking: true, reclaimable: true };
+    gameplay = { energy: P.energy ? pickValue(P.energy, clamp(cellsN / 36, 0, 1), rr) : 0, metal: P.metal ?? Math.max(25, Math.min(100, metalDefault)), metalLinear: Math.round(7.6 * cellsN + 22.5), hp: 2000, blocking: true, reclaimable: true };
   } else if (kind === 'scar') {
     const S = scarFrame(P, seed, ctx);
     body = tintSprite(S.body, ctx, ctx.tint?.up ?? 0.7); shadow = tintSprite(S.shadow || null, ctx, 0);

@@ -124,7 +124,7 @@ function retailItem(f, i) {
 const set = defaultSet(config);
 function oursGroup(v) {
   if (v.kind !== 'rock') return v.kind;
-  return v.params.reclaimable === false ? 'spire' : v.params.energy > 0 ? 'node' : 'rock';
+  return v.params.reclaimable === false ? 'spire' : (Array.isArray(v.params.energy) ? v.params.energy[1] : v.params.energy) > 0 ? 'node' : 'rock';
 }
 const oursBy = {};
 for (const kind of Object.keys(set)) for (const v of variants(kind, set, config)) (oursBy[oursGroup(v)] ||= []).push(v);
