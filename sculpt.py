@@ -217,7 +217,7 @@ KNOB_DEFAULTS.update(hillBlocks=0)
 KNOB_DEFAULTS.update(rockType=0)
 # The rock face (engine-common.wgsl rockFaceAt): one model for every rock face, drawn in the art's own pixels. rockFace 0: none.
 KNOB_DEFAULTS.update(rockFace=0, rockFaceFrom=.6, faceRock=.9, faceBed=5.5, faceLedge=2.2, faceRun=90, faceLean=28, faceScratch=2.5, faceScratchSize=7,
-                     faceBlock=3, faceBlockSize=11, faceCrease=2.5, faceCreaseSize=6, faceGrit=0, faceGrass=.8, faceWear=.35, faceShade=.85, faceLayers=0, faceTerrace=1.2)
+                     faceBlock=3, faceBlockSize=11, faceCrease=2.5, faceCreaseSize=6, faceGrit=0, faceGrass=.8, faceWear=.35, faceShade=.85, faceLayers=0, faceTerrace=1.2, faceMass=1, faceTone=.12, faceStrata=0, faceWet=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, outcrop=0, rillDepth=0, rillSpacing=8)

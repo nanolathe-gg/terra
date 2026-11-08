@@ -1664,8 +1664,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var faceRock = 0.0;
     var faceSun = 1.0;
     var faceOcc = 0.0;
-    var rockFace = RockFace(0.0, 0.0, 0.0, 0.0, 0.0);
-    if (u.rockFace > 0.0 && h > u.sea + 1.0) {
+    var rockFace = RockFace(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    // The rock face is the one rock: always on; Depth (rockFace) only scales its relief, so at 0 it is the same rock, flat.
+    if (h > u.sea + 1.0) {
         // A shape set bare (Local vegetation below 0: thin soil) bares rock on gentler slopes too: at -100 its rock starts at half the slope.
         let bare = clamp(1.0 - place.vegetation, 0.0, 1.0);
         faceGate = rockFaceGate(slope / (1.0 - 0.5 * bare), painted.x, route);
@@ -1684,7 +1685,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             let cx = faceHeightAt(pixel, vec2f(1.0, 0.0), hb, broad, rowStretch, fall, steep, bedPx);
             let cy = faceHeightAt(pixel, vec2f(0.0, 1.0), hb, broad, rowStretch, fall, steep, bedPx);
             // d(screen)/d(world) = [[1, 0], [-gx/2, 1 - gy/2]]: the relief's slope on the ground is its transpose times the screen slope.
-            let dsFull = vec2f(cx.x - c0.x, cy.x - c0.x) * u.rockFace;
+            let dsFull = vec2f(cx.x - c0.x, cy.x - c0.x) * 2.0;   // the relief's own slope (at the default depth): where grass finds a footing does not move with Depth
             let dwFull = vec2f(dsFull.x - 0.5 * broad.x * dsFull.y, rowStretch * dsFull.y);
             // Rock's share of the face rises with the slope to faceRock a slope of 1.3 past rockFaceFrom, times 1 less the stroke's Local
             // vegetation (+40: 60% of it, +100: none, -70: 1.7 times); painted rock is rock, its edge feathered by the same field.
@@ -1882,7 +1883,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // shade under its ledges dark.
     if (faceGate > 0.0) {
         let flat = select(u.rockMean, u.rockBase.rgb, u.rockBase.a > 0.5);
-        rock = mix(rock, flat * (1.0 + 0.12 * rockFace.tone), faceGate);
+        rock = mix(rock, flat * (1.0 + u.faceTone * rockFace.tone + u.faceStrata * rockFace.bedTone) * (1.0 - 0.6 * u.faceWet * rockFace.wet), faceGate);
     }
     // H3 item 4: one placement function (landPlace); its thresholds are rows of materials/green.json.
     var exposed = place.exposed;

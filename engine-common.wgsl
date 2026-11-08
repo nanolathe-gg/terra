@@ -205,6 +205,10 @@ struct Uniforms {
     faceGrass: f32,       // how strongly grass takes the ledges, 0..1
     faceWear: f32,        // weathering: how far the blocks' edges round off and their partings open (0..1)
     faceLayers: f32,      // the layers' steps under grass (soil-covered terraces), 0: none
+    faceMass: f32,        // the face's broad form: bulges and alcoves 30-70 px (0: none)
+    faceTone: f32,        // colour variation from block to block
+    faceStrata: f32,      // layer tint: each layer a little lighter or darker than the next
+    faceWet: f32,         // wet streaks: the runnels and open partings darker
     faceTerrace: f32,     // the soil's fine terraces, height units apart
     faceShade: f32,       // how dark the rock face's own shadows and creases go (0: the sky still fills them; 1: black)
     faceRock: f32,        // rock's share of a steep face (the rest grass, in clumps and on ledges); a stroke's Local vegetation scales it
@@ -485,8 +489,9 @@ fn poolScale(m: f32) -> f32 { let k = u.pool / 512.0; return max(1.0, round(m * 
 // steep (0..1) is how cliff-like the face is: a cliff weathers into flutes, a gentler face keeps its ledges.
 // It returns relief (height units, lit by the draw through the projection, appearance only), ledge (0..1: a bed's top, where grass holds),
 // cavity (0..1: crease, joint and under-ledge floors, which lie in shade), tone (-1..1, a chunk's own shade) and layer (the layers' steps
-// and the face's broad bulges alone, rounded as soil softens them: the terraces under grass).
-struct RockFace { relief: f32, ledge: f32, cavity: f32, tone: f32, layer: f32 }
+// and the face's broad bulges alone, rounded as soil softens them: the terraces under grass), bedTone (-1..1, the layer's own tint) and
+// wet (0..1: where water runs and stays, the runnels' floors and the open partings).
+struct RockFace { relief: f32, ledge: f32, cavity: f32, tone: f32, layer: f32, bedTone: f32, wet: f32 }
 // Where the face lies: from slope rockFaceFrom, full 0.4 steeper, and wherever rock is painted; a smooth route keeps none.
 fn rockFaceGate(slope: f32, paintRock: f32, route: f32) -> f32 {
     return max(smoothstep(u.rockFaceFrom, u.rockFaceFrom + 0.4, slope), smoothstep(0.1, 0.6, paintRock)) * (1.0 - route);
@@ -580,7 +585,7 @@ fn rockFaceAt(s: vec2f, h: f32, fall: vec2f, steep: f32, bedPx: f32) -> RockFace
     let runnel = (r1 * r1 - 0.45) * (0.5 + 0.5 * poolNoise(s, 40.0, 61.0));
     let grit = cellHash(poolPixel(s) + 13.0).x - 0.5;
     // The face's broad form: bulges and alcoves 30-70 px across (they light and shade as wholes, rock or soil over it).
-    let mass = (poolNoise(s, 70.0, 201.0) * 0.6 + poolNoise(s, 30.0, 203.0) * 0.4) * bed * 0.6 * u.faceBlock / 3.0;
+    let mass = (poolNoise(s, 70.0, 201.0) * 0.6 + poolNoise(s, 30.0, 203.0) * 0.4) * bed * 0.6 * u.faceMass;
     o.relief = top - (1.0 + 2.0 * u.faceWear) * crevice + u.faceCrease * pits + u.faceScratch * (1.0 + 1.5 * steep) * runnel + u.faceGrit * grit + mass;
     // Under soil: the layers' own steps, rounded wider (soil fills the partings and softens the lips), and the broad form.
     let bedHere = rockBedBody(k, s, steep);
@@ -596,6 +601,8 @@ fn rockFaceAt(s: vec2f, h: f32, fall: vec2f, steep: f32, bedPx: f32) -> RockFace
     o.ledge = smoothstep(0.65, 0.92, t) * smoothstep(0.2, 1.2, here.x - aboveBody) * smoothstep(0.0, wearPx, here.z);
     o.cavity = clamp(crevice, 0.0, 1.0);
     o.tone = tilt.x;
+    o.bedTone = cellHash(vec2f(k, 113.0)).x * 2.0 - 1.0;
+    o.wet = clamp(max(crevice * 0.8, smoothstep(0.75, 0.98, r1) * (0.5 + 0.5 * poolNoise(s, 40.0, 61.0))), 0.0, 1.0);
     return o;
 }
 

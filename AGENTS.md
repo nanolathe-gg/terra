@@ -70,9 +70,15 @@ page and an older card disagree, this page wins.
      (`repro/site.test.mjs` checks the build).
    - Layout lives in `sculpt.html`: each element sits at its final place,
      and no script moves, reorders or renames page elements at load.
-9. **Few controls, and each one earns its place.**
-   - Reuse or extend an existing control before adding one. A new control
-     replaces or simplifies something; it does not sit beside it.
+9. **A control for everything an artist would shape, and each one earns its place.**
+   - Artists set a world's look by hand (shape, structure, layering,
+     variation, roughness, broad and fine detail, weathering, color,
+     vegetation, wetness, shine), and their settings become the world's
+     defaults. Reuse or extend an existing control before adding one; a new
+     control does not duplicate one that sits beside it.
+   - Every control is continuous: its low end is a value of the same model,
+     not a switch. Moving it to 0, or a small step above 0, changes the
+     picture a little, never into a different render path.
    - Every kept control must visibly matter at 1x. Across the range an
      artist would use, it moves at least 5% of its class
      (`measure/impact.py`, `measure/shape_controls.mjs`,
