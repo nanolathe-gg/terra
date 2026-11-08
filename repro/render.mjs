@@ -26,6 +26,14 @@ const TILE_PX = 16;   // the most pixels of a window the tile size may move
 const clayOn = flag('--clay');
 const OX = Number(opt('--offset', 0)), OY = OX, seaArg = opt('--sea', '');
 const [sceneFile, out] = args;
+// A stroke option (Steps, Gullies, Spurs...) is not a page setting: the scene's strokes take theirs from their cards and the world's defaults, so in a
+// --query it would change nothing, without a word. Say so instead.
+{
+  const [{SHAPE_FIELDS, LANDFORM_KEYS, SECTION_KEYS}, {KNOBS}] = await Promise.all([import('../sculpt-scene.js'), import('../sculpt-knobs.js')]);
+  const rows = new Set(KNOBS.flatMap(([, list]) => list.map(k => k[0]))), stroke = new Set([...SHAPE_FIELDS.map(f => f[0]), ...LANDFORM_KEYS, ...SECTION_KEYS]);
+  const wrong = [...new URLSearchParams(extraQuery).keys()].filter(k => stroke.has(k) && !rows.has(k));
+  if (wrong.length) { console.error(`render.mjs: --query ${wrong.join(', ')}: a stroke option, which a page setting does not reach. Set it in the scene's stroke cards, or as the world's default in sculpt.py WORLD_KNOBS.`); process.exit(2); }
+}
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
 mkdirSync(out, {recursive: true});
 const search = `biome=${scene.biome}&mapX=${MAPX}&mapY=${MAPY}&scratch=1&gpuMB=512&heapMB=1536${seaArg !== '' ? '&sea=' + seaArg : ''}${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;

@@ -71,6 +71,12 @@ before the color.
    - faces: `microRock`, `slopeTexture`, the `rock*` rows and `cliff*`;
    - cracks and bands;
    - water;
+   - stroke options (Steps, Gullies, Spurs, a section's curve): a `--query`
+     cannot set these either, and says so. A scene's strokes take theirs
+     from their cards, which pin most of them, and the rest from the world's
+     defaults (`sculpt.py` `WORLD_KNOBS`, which a stroke's card overrides);
+     a scene stroke's tool must be one the editor draws (a section form such
+     as Mesa goes in the card's curve);
    - the world's colors: a `--query` cannot set these. Change them in
      `sculpt.py` `WORLD_KNOBS`/`WORLD_VARIANTS` colors and rerun.
 
