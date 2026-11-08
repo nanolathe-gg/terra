@@ -438,7 +438,7 @@ function tendrilFrame(P, seed, ctx, burnt = false) {
 
 // ---- burnt trees (skeletons) ------------------------------------------------------------------------------------
 const BURNT_DEFAULTS = { species: 'broadleaf', height: 53, width: 0.62, forks: 3, ash: 0.5, energy: [50, 50] };
-const CONIFER_DEAD = [[245, 1.5], [63, 1], [47, 13], [175, 1.5], [46, 12], [62, 5], [45, 10], [94, 4], [61, 1.5], [172, 2], [173, 2], [44, 3], [93, 11], [43, 1.5], [92, 3], [91, 2.5], [89, 2], [88, 1.5]];   // dark to light
+const CONIFER_DEAD = [[245, 1.5], [63, 1], [47, 13], [175, 1.5], [46, 12], [62, 5], [45, 10], [94, 4], [61, 1.5], [172, 2], [173, 2], [44, 3], [93, 11], [43, 1.5], [92, 3], [91, 2.5]];   // dark to light; no pixel lighter than 91 (luma 75): a burnt tree takes none of the lightest greys
 // A sparse, narrow, tapering needle skeleton (spec 15 B3): dark trunk, short twigs, needle tufts, gaps; near-black greens and grays.
 function burntConiferFrame(P, seed) {
   const r = rng(seed), rn = rng(mix32(seed, 5));
@@ -475,7 +475,7 @@ function burntConiferFrame(P, seed) {
   }
   return { body: cropSprite(sp, 0) };
 }
-const BROAD_DEAD = [[245, 3], [127, 2], [95, 24], [47, 13], [62, 8], [94, 14], [61, 4], [45, 2.5], [43, 2], [93, 6], [60, 2.5], [92, 2.5], [90, 1], [89, 1], [71, 1], [72, 1], [67, 0.6]];
+const BROAD_DEAD = [[245, 3], [127, 2], [95, 24], [47, 13], [62, 8], [94, 14], [61, 4], [45, 2.5], [43, 2], [93, 6], [60, 2.5], [92, 2.5], [71, 1], [72, 1]];   // no pixel lighter than luma 80: a burnt tree takes none of the lightest greys
 // Spec 16.3: a heavy gnarled dead trunk (flared base, 8-13 px, widest 10-17 px where 2-4 limbs fork at 20-60 degrees), short
 // segments, 1 px twigs, 10-12 tips mostly in the top third; grays and near-black, warm browns at the base, lit on the left.
 function burntFrame(P, seed, ctx) {
@@ -534,7 +534,7 @@ function burntFrame(P, seed, ctx) {
     let v = 0.4 * vnoise(x / 2.2, y / 2.2, s1 + 21) + 0.6 * rn() + 0.17 * lit + (dist[k] <= 1 ? -0.05 : 0.04);
     let c = byQuantile(BROAD_DEAD, v);
     if (base && rn() < 0.38) c = weighted(rn, [[62, 4], [61, 3], [60, 2], [71, 1.5], [72, 1.5]]);
-    if (rn() < P.ash * 0.006) c = pick(rn, [89, 90, 88]);
+    if (rn() < P.ash * 0.006) c = pick(rn, [92, 91, 90]);
     put(sp, x, y, c);
   }
   return { body: cropSprite(sp, 0) };
