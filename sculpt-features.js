@@ -188,7 +188,9 @@ export async function mountMapFeatures(api) {
     return rgba;
   }
   const patchRect=o => { const x=Math.max(0,o.ox),y=Math.max(0,o.oy),x1=Math.min(map.width,o.ox+PATCH),y1=Math.min(map.height,o.oy+PATCH); return x1>x && y1>y?{x,y,width:x1-x,height:y1-y}:null; };
-  const paintParams=p => p.kind==='deposit'?{...variantOf(p).params,metal:p.metal}:variantOf(p).params;
+  // A deposit whose footprint centre cell lies under the sea (its four corner bytes' mean below the sea level) is drawn as under water.
+  const underwater=p => { const c=[corner(p.x+1,p.z+1),corner(p.x+2,p.z+1),corner(p.x+1,p.z+2),corner(p.x+2,p.z+2)]; return c.every(v => v>=0) && (c[0]+c[1]+c[2]+c[3])/4<config.seaLevel; };
+  const paintParams=p => p.kind==='deposit'?{...variantOf(p).params,metal:p.metal,...(underwater(p)?{underwater:true}:{})}:variantOf(p).params;
   const paint=(p,rgba,sun=light()) => { const v=variantOf(p); return work({type:'paint',kind:p.kind,params:paintParams(p),seed:v.seed,light:sun,w:PATCH,h:PATCH,cx:PATCH/2,cy:PATCH/2,rgba},[rgba.buffer]).then(r => r.rgba); };
   function stampFor(p) {
     const pk=key(p);

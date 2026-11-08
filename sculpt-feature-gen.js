@@ -257,6 +257,7 @@ const TREE_DEFAULTS = {
   gap: null,             // the ramp of the dark gaps between leaves (branches and shade seen through the crown)
   trunk: ['#120e0b', '#231f13', '#3b3323', '#534333'],
   flecks: null,          // [[color, share], ...]: second hues among the sunlit leaves (Green's yellow-green, its conifers' grey-olive)
+  lights: null,          // [[color, share], ...]: the very lightest leaf pixels, drawn as given (not dimmed to the ramp) on the most sunlit leaves; share of the leaves, the lightest color on the very top (retail Green's broadleaf: 51,191,43 and 31,159,103 brights)
   energy: [250, 250],    // gameplay range (retail: 250 for every tree)
   shadowLen: 0.65,       // how far the sun throws the shadow, 1 = the sun's own (retail Green's trees 0.65; shadow area follows)
   shadowColor: '#000000', // the shadow's color, drawn translucent by the game (retail: black; Ice a dark blue)
@@ -368,12 +369,16 @@ function treeFrame(P, seed, ctx) {
   const gapScore = q => (1 - q.ao) + 0.7 * (1 - q.t) + 0.55 * q.j, byGap = leaves.slice().sort((p, q) => gapScore(q) - gapScore(p) || p.k - q.k), nGap = Math.round(byGap.length * gapShare), gapSet = new Set(byGap.slice(0, nGap).map(q => q.k));
   const colors = recolorStops(P.colors || look.colors, P.recolor), gap = P.gap || look.gap, flecks = (P.flecks || look.flecks).map(([hex, share]) => [rampOf([recolorHex(hex, P.recolor)])[0], share]);
   const c = newCanvas(w, h, R.ox, R.oy);
-  const paintRank = (list, ramp, fl) => list.sort((p, q) => p.t - q.t || p.k - q.k).forEach((q, i) => {
+  const lights = (P.lights || []).map(([hex, share]) => [rampOf([recolorHex(hex, P.recolor)])[0], share]).sort((a, b) => lumaRGB(b[0]) - lumaRGB(a[0]));   // lightest first
+  const paintRank = (list, ramp, fl, hi) => list.sort((p, q) => p.t - q.t || p.k - q.k).forEach((q, i) => {
     let u = (i + 0.5) / list.length, col = rampAt(ramp, u);
-    if (fl && u > 0.84 && q.direct > 0.45) { let acc = 0; const v = rn(); for (const [rgb, share] of fl) { if (v >= acc && v < acc + share) { const f = lumaRGB(col) / Math.max(1, lumaRGB(rgb)); col = rgb.map(x => x * Math.min(1.25, f)); break; } acc += share; } }
+    let lit = null;
+    if (hi) { const top = 1 - u + (rn() - 0.5) * 0.012; let acc = 0; for (const [rgb, share] of hi) { acc += share; if (top < acc) { lit = rgb; break; } } }
+    if (lit) col = lit;
+    else if (fl && u > 0.84 && q.direct > 0.45) { let acc = 0; const v = rn(); for (const [rgb, share] of fl) { if (v >= acc && v < acc + share) { const f = lumaRGB(col) / Math.max(1, lumaRGB(rgb)); col = rgb.map(x => x * Math.min(1.25, f)); break; } acc += share; } }
     paintRGB(c, q.k % w, (q.k / w) | 0, col, q.direct);
   });
-  paintRank(leaves.filter(q => !gapSet.has(q.k)), colors, flecks);
+  paintRank(leaves.filter(q => !gapSet.has(q.k)), colors, flecks, lights);
   paintRank(leaves.filter(q => gapSet.has(q.k)), gap, null);
   paintRank(info.filter(q => q.trunk), P.trunk, null);
   const body = quantize(c, ctx, 6, mix32(seed, 31));
@@ -438,7 +443,7 @@ function tendrilFrame(P, seed, ctx, burnt = false) {
 
 // ---- burnt trees (skeletons) ------------------------------------------------------------------------------------
 const BURNT_DEFAULTS = { species: 'broadleaf', height: 53, width: 0.62, forks: 3, ash: 0.5, energy: [50, 50] };
-const CONIFER_DEAD = [[245, 1.5], [63, 1], [47, 13], [175, 1.5], [46, 12], [62, 5], [45, 10], [94, 4], [61, 1.5], [172, 2], [173, 2], [44, 3], [93, 11], [43, 1.5], [92, 3], [91, 2.5], [89, 2], [88, 1.5]];   // dark to light
+const CONIFER_DEAD = [[245, 1.5], [63, 1], [47, 13], [175, 1.5], [46, 12], [62, 5], [45, 10], [94, 4], [61, 1.5], [172, 2], [173, 2], [44, 3], [93, 11], [43, 1.5], [92, 3], [91, 2.5]];   // dark to light; no pixel lighter than 91 (luma 75): a burnt tree takes none of the lightest greys
 // A sparse, narrow, tapering needle skeleton (spec 15 B3): dark trunk, short twigs, needle tufts, gaps; near-black greens and grays.
 function burntConiferFrame(P, seed) {
   const r = rng(seed), rn = rng(mix32(seed, 5));
@@ -475,7 +480,7 @@ function burntConiferFrame(P, seed) {
   }
   return { body: cropSprite(sp, 0) };
 }
-const BROAD_DEAD = [[245, 3], [127, 2], [95, 24], [47, 13], [62, 8], [94, 14], [61, 4], [45, 2.5], [43, 2], [93, 6], [60, 2.5], [92, 2.5], [90, 1], [89, 1], [71, 1], [72, 1], [67, 0.6]];
+const BROAD_DEAD = [[245, 3], [127, 2], [95, 24], [47, 13], [62, 8], [94, 14], [61, 4], [45, 2.5], [43, 2], [93, 6], [60, 2.5], [92, 2.5], [71, 1], [72, 1]];   // no pixel lighter than luma 80: a burnt tree takes none of the lightest greys
 // Spec 16.3: a heavy gnarled dead trunk (flared base, 8-13 px, widest 10-17 px where 2-4 limbs fork at 20-60 degrees), short
 // segments, 1 px twigs, 10-12 tips mostly in the top third; grays and near-black, warm browns at the base, lit on the left.
 function burntFrame(P, seed, ctx) {
@@ -534,7 +539,7 @@ function burntFrame(P, seed, ctx) {
     let v = 0.4 * vnoise(x / 2.2, y / 2.2, s1 + 21) + 0.6 * rn() + 0.17 * lit + (dist[k] <= 1 ? -0.05 : 0.04);
     let c = byQuantile(BROAD_DEAD, v);
     if (base && rn() < 0.38) c = weighted(rn, [[62, 4], [61, 3], [60, 2], [71, 1.5], [72, 1.5]]);
-    if (rn() < P.ash * 0.006) c = pick(rn, [89, 90, 88]);
+    if (rn() < P.ash * 0.006) c = pick(rn, [92, 91, 90]);
     put(sp, x, y, c);
   }
   return { body: cropSprite(sp, 0) };
@@ -1043,8 +1048,10 @@ function getGround(g, x, y) { const k = (clamp(y, 0, g.h - 1) * g.w + clamp(x, 0
 // 1), reach (how far the halo spreads, 1), rimDark (the halo's inner pixels, 0.78 of its tone), and for look 'blades' the ore as a core with
 // long tapered blades: blades (count), bladeLen and bladeWidth (px at 127 metal), fan (0 parallel blades .. 1 radial star), angle (degrees
 // of the first blade, 0 east, 90 down the screen), core (radius px). crust (radius px, 0: none) cracks the ground round the stone into
-// dark-edged plates, crustTone their lightness against the ground.
-export const DEPOSIT_DEFAULTS = { metal: 127, haloRough: 5, haloScale: 5, style: 'retail', look: 'auto', halo: 0.82, haloSat: 1.1, stoneScale: 1, reach: 1, rimDark: 0.78, blades: 7, bladeLen: 20, bladeWidth: 5, fan: 1, angle: -50, core: 7, crust: 0, crustTone: 0.8 };
+// dark-edged plates, crustTone their lightness against the ground. round (0..1, 0) smooths the stones: more polygon corners, a steadier
+// radius, shorter arms and a less ragged rim, as retail's rounded chunks. underwater draws the deposit as retail's AquaOre: a blue, roundish,
+// mottled blob of palette blues (area by metal), the look a deposit has where the sea covers it; it ignores the ground and the halo options.
+export const DEPOSIT_DEFAULTS = { metal: 127, haloRough: 5, haloScale: 5, style: 'retail', look: 'auto', halo: 0.82, haloSat: 1.1, stoneScale: 1, reach: 1, rimDark: 0.78, blades: 7, bladeLen: 20, bladeWidth: 5, fan: 1, angle: -50, core: 7, crust: 0, crustTone: 0.8, round: 0, underwater: false };
 const STONE_CLASSES = [
   { w: 0.29, ramp: [[216, 3], [224, 3], [145, 4], [114, 5], [130, 2]] },        // pale: lilac-white, pink-lilac, pale blue
   { w: 0.22, ramp: [[115, 8], [131, 3], [147, 3], [217, 3], [148, 3], [87, 3]] }, // light and mid
@@ -1064,8 +1071,10 @@ export function stonePixelsFor(metal) {
 export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const P = { ...DEPOSIT_DEFAULTS, ...params };
   if (P.style === 'pebbles') return paintDepositPebbles(ground, cx, cy, P, seed, ctx);
+  if (P.underwater) return paintDepositAqua(ground, cx, cy, P, seed, ctx);
   const palette = ctx.palette, q = paletteSearch(palette), lit = groundLight(ctx);
   const r = rng(seed), rn = rng(mix32(seed, 2));
+  const rd = clamp(P.round, 0, 1);
   const mt = clamp((P.metal - 86) / (223 - 86), 0, 1);
   const look = P.look === 'auto' ? (P.metal >= 160 ? 'cluster' : 'plates') : P.look;
   const total = stonePixelsFor(P.metal) * P.stoneScale * (0.95 + 0.1 * r()) * (look === 'cluster' ? 0.66 : 1);
@@ -1076,7 +1085,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const chunkId = new Int8Array(bw * bh).fill(-1);
   const polyMask = (px, py, rad, nv, aspect, rot) => {
     const V = [];
-    for (let i = 0; i < nv; i++) { const a = (i + (r() - 0.5) * 0.6) / nv * TAU, rr = rad * (0.55 + r() * 0.6); V.push([Math.cos(a) * rr * aspect, Math.sin(a) * rr]); }
+    for (let i = 0; i < nv; i++) { const a = (i + (r() - 0.5) * 0.6) / nv * TAU, rr = rad * (0.55 + r() * 0.6 + (rd ? rd * (0.3 - 0.4 * r()) : 0)); V.push([Math.cos(a) * rr * aspect, Math.sin(a) * rr]); }
     const c = Math.cos(rot), sn = Math.sin(rot), pts = [];
     const P2 = V.map(([u, v]) => [u * c - v * sn, u * sn + v * c]);
     for (let y = Math.floor(py - rad * 2.2); y <= Math.ceil(py + rad * 2.2); y++) for (let x = Math.floor(px - rad * 2.2); x <= Math.ceil(px + rad * 2.2); x++) {
@@ -1086,7 +1095,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     }
     return pts;
   };
-  const sized = (px, py, area, nv, aspect, rot) => { let rad = Math.sqrt(area / Math.PI / 0.85), pts = polyMask(px, py, rad, nv, aspect, rot); for (let it = 0; it < 3; it++) { rad *= Math.sqrt(area / Math.max(pts.length, 1)); pts = polyMask(px, py, rad, nv, aspect, rot); } return pts; };
+  const sized = (px, py, area, nv0, aspect, rot) => { const nv = nv0 + Math.round(rd * 3); let rad = Math.sqrt(area / Math.PI / 0.85), pts = polyMask(px, py, rad, nv, aspect, rot); for (let it = 0; it < 3; it++) { rad *= Math.sqrt(area / Math.max(pts.length, 1)); pts = polyMask(px, py, rad, nv, aspect, rot); } return pts; };
   const union = lists => { const seen = new Set(), out = []; for (const l of lists) for (const p of l) { const k = p[1] * 4096 + p[0]; if (!seen.has(k)) { seen.add(k); out.push(p); } } return out; };
   const chunks = [], layout = [[0, 0]];
   const rDom = Math.sqrt(areas[0] / Math.PI / 0.85);
@@ -1116,7 +1125,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
       pts = union(parts);
       const arms = [];                                    // 8-12 short thin arms off the cluster rim
       const edge = pts.filter(([x, y]) => !pts.some(([u, v]) => u === x + 1 && v === y) || !pts.some(([u, v]) => u === x - 1 && v === y));
-      const nArm = 10 + Math.floor(r() * 5);
+      const nArm = Math.round((10 + Math.floor(r() * 5)) * (1 - 0.7 * rd));
       for (let j = 0; j < nArm && edge.length; j++) {
         const [sx, sy] = edge[(r() * edge.length) | 0]; let a = Math.atan2(sy - py, sx - px) + (r() - 0.5) * 0.9; const len = 4 + Math.floor(r() * 6);
         for (let t = 1; t <= len; t++) { a += (r() - 0.5) * 0.5; arms.push([Math.round(sx + Math.cos(a) * t), Math.round(sy + Math.sin(a) * t)]); if (r() < 0.2) arms.push([Math.round(sx + Math.cos(a) * t), Math.round(sy + Math.sin(a) * t) + 1]); }
@@ -1128,7 +1137,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     const ang = Math.atan2(layout[ci][1], layout[ci][0]); px += Math.cos(ang) * 2.5; py += Math.sin(ang) * 2.5;
     }
     { const set = new Set(pts.map(p => p[1] * 4096 + p[0])), out = [];
-      for (const p of pts) { const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => set.has((p[1] + dy) * 4096 + p[0] + dx)).length; if (nb === 4 || r() > 0.14) out.push(p); }   // interior pixels are always stone: moss belongs only around the plates
+      for (const p of pts) { const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => set.has((p[1] + dy) * 4096 + p[0] + dx)).length; if (nb === 4 || r() > 0.14 * (1 - 0.7 * rd)) out.push(p); }   // interior pixels are always stone: moss belongs only around the plates
       for (const p of pts) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const k = (p[1] + dy) * 4096 + p[0] + dx; if (!set.has(k) && r() < 0.03) { set.add(k); out.push([p[0] + dx, p[1] + dy]); } }
       { const have = new Set(out.map(p => p[1] * 4096 + p[0]));   // close one-pixel notches so no moss or grass sits inside a plate
         for (let pass = 0; pass < 2; pass++) { const add = [];
@@ -1185,6 +1194,42 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     }
   }
   return { cx, cy, metal: P.metal, look, chunks: 4, stonePx: stonePts.length, dominant: areas[0] / total, rect: [ox, oy, bw, bh], gameplay: { metal: P.metal, indestructible: true, footprint: [3, 3] } };
+}
+// Retail's AquaOre (metal under water): a roundish blob of palette blues, 12-19 colors: a bright saturated rim (23,71,231 and 35,59,203),
+// a mid-blue body (51,75,215) flecked with lighter blues and a few teal and dark specks. Its area follows metal (GreenAquaOre1-3: 116 -> 1084,
+// 187 -> 1216, 250 -> 1867 px). Painted over the ground as opaque palette pixels, so it is the stamp itself.
+const AQUA_AREA = [[86, 950], [116, 1084], [187, 1216], [250, 1867]];
+function paintDepositAqua(ground, cx, cy, P, seed, ctx) {
+  const palette = ctx.palette, r = rng(seed), rn = rng(mix32(seed, 2));
+  const m = clamp(P.metal, AQUA_AREA[0][0], 250);
+  let i = 0; while (i < 2 && m > AQUA_AREA[i + 1][0]) i++;
+  const area = lerp(AQUA_AREA[i][1], AQUA_AREA[i + 1][1], (m - AQUA_AREA[i][0]) / (AQUA_AREA[i + 1][0] - AQUA_AREA[i][0])) * P.stoneScale * (0.94 + 0.12 * r());
+  const aspect = 1 + 0.35 * r(), rot = r() * TAU, c = Math.cos(rot), sn = Math.sin(rot), s1 = (r() * 1e6) | 0, bw = 120, bh = 120, ox = Math.round(cx) - 60, oy = Math.round(cy) - 60;
+  const shape = (R) => {
+    const a = R * Math.sqrt(aspect), b = R / Math.sqrt(aspect), pts = [];
+    for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+      const X = x + ox - cx, Y = y + oy - cy, u = (X * c + Y * sn) / a, v = (-X * sn + Y * c) / b, d = Math.hypot(u, v);
+      const edge = 1 + (fbm((x + ox) / 11, (y + oy) / 11, s1, 2) - 0.5) * 0.5 + (vnoise((x + ox) / 4, (y + oy) / 4, s1 + 3) - 0.5) * 0.12;
+      if (d < edge) pts.push([x + ox, y + oy, (edge - d) * Math.min(a, b)]);
+    }
+    return pts;
+  };
+  let R = Math.sqrt(area / Math.PI), pts = shape(R);
+  for (let it = 0; it < 3; it++) { R *= Math.sqrt(area / Math.max(pts.length, 1)); pts = shape(R); }
+  const [O, B, M, L, D, LL, K, G1, G2, DD, W, H] = [104, 227, 105, 103, 106, 102, 226, 134, 135, 228, 101, 133];
+  for (const [X, Y, depth] of pts) {
+    const t = fbm(X / 3.2, Y / 3.2, s1 + 11, 2), streak = vnoise((X + Y) / 5, (X - Y) / 2, s1 + 17), q = rn();
+    let col;
+    if (depth < 1.6 + 1.2 * rn()) col = q < 0.5 ? B : q < 0.78 ? M : q < 0.9 ? O : q < 0.96 ? D : L;   // the rim
+    else if (streak > 0.72 && q < 0.55) col = q < 0.28 ? G1 : q < 0.42 ? G2 : H;                        // teal streaks
+    else if (depth < 4.5 && q < 0.3) col = q < 0.18 ? B : M;
+    else if (t > 0.58 && q < 0.5) col = q < 0.2 ? L : q < 0.36 ? LL : K;                                // lighter flecks in patches
+    else if (q > 0.985) col = W;
+    else if (q > 0.95) col = q > 0.97 ? D : DD;
+    else col = q < 0.12 ? M : q < 0.2 ? L : O;
+    setGround(ground, X, Y, palette[col]);
+  }
+  return { cx, cy, metal: P.metal, look: 'aqua', chunks: 1, stonePx: pts.length, dominant: 1, rect: [ox, oy, bw, bh], gameplay: { metal: P.metal, indestructible: true, footprint: [3, 3] } };
 }
 // Round 1's round-pebble deposit, kept as an artist option (style 'pebbles').
 
