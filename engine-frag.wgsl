@@ -10,8 +10,6 @@
 @group(1) @binding(18) var paletteTex: texture_2d<f32>;
 // H4: the land materials of materials/green.json, made at startup (engine-materials.wgsl): a layer per material, a mip level per footprint.
 @group(1) @binding(19) var generatedTex: texture_2d_array<f32>;
-// H19: the rock's height gradient (xy) and cavity (z), made with the materials (engine-materials.wgsl makeRelief).
-@group(1) @binding(20) var reliefTex: texture_2d<f32>;
 
 // Above 1x a texel is one drawn pixel, not one world pixel: the pattern comes out smaller and keeps its grain and dither.
 fn grainPixel(pixel: vec2f) -> vec2f {
@@ -249,13 +247,6 @@ fn genColor(layer: i32, world: vec2f) -> vec3f {
     let mask = vec2i((512 >> u32(level)) - 1);
     return textureLoad(generatedTex, vec2i(floor(pixel / f32(1 << u32(level)))) & mask, layer, level).rgb;
 }
-// The rock's relief at a drawn pixel, at the footprint's level as genColor reads the colours, so a quarter draw matches the final one.
-fn rockRelief(world: vec2f) -> vec3f {
-    let pixel = grainPixel(world);
-    let level = clamp(i32(log2(max(u.materialFoot, 1.0)) + 0.5), 0, 6);
-    let mask = vec2i((512 >> u32(level)) - 1);
-    return textureLoad(reliefTex, vec2i(floor(pixel / f32(1 << u32(level)))) & mask, level).xyz;
-}
 // The plain keeps its 16 tiles, now built at startup from materials/green.json's `ground` data (sculpt-renderer.js), not an image file.
 // H7b: at a footprint above 1 the plain's tiles are averaged over the final pixels the drawn one covers (2 x 2 at quarter), as the mip does
 // for the generated materials; at final (the study included) the branch is not taken and the lookup is the one it was.
@@ -268,13 +259,10 @@ fn groundSource(pixel: vec2f) -> vec3f {
 #endif
     return groundTile(pixel);
 }
-fn grassImage(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
 fn slopeGrassSource(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
 // The rocks keep their images until H3b: the model's noise has the rocks' grain and histogram but not their facets, and the
 // Lab histogram of the rock face is worse with it (.057/.076/.083 against .049/.067/.079 by class).
 fn rockSource(pixel: vec2f) -> vec3f { return genColor(1, pixel); }
-fn weatheredSource(pixel: vec2f) -> vec3f { return genColor(2, pixel + vec2f(73.0, 17.0)); }
-fn fracturedSource(pixel: vec2f) -> vec3f { return genColor(3, pixel); }
 
 // H3 item 4. Where rock shows, and how much of a face is rock: the one function that decides Green's
 // land placement. Its numbers are rows of materials/green.json after the five materials (MM_PLACE):
@@ -284,20 +272,16 @@ fn fracturedSource(pixel: vec2f) -> vec3f { return genColor(3, pixel); }
 //   row 3  x: soil slope gate, y: soil height gate, z,w: soil height fade
 //   row 4  x,y: low-bank source heights above the plain (rock needs land this high up-slope)
 //   row 5  x,y: slope at which a smooth route stops holding rock off (start, full); z,w: with z above 0, rock only on slopes from z to w
-//   row 6  x,y: face slope start and full, z: face edge noise
-//   row 7  x,y: rock share at the face start and at its steepest
-//   row 8  face score: x: surface roughness, y: lump top, z: fine noise, w: broad noise
-//   row 9  x: gully rock, y: structured-rock order, z: painted-rock face
+// (A steep face is the rock face's, engine-common.wgsl rockFaceAt: the draw mixes its rock share over this placement where it lies.)
 // Override planes (planes 14-17 of the masks; a signed value v multiplies its control by 1 + v, and 0 changes nothing):
 // exposure scales where rock shows, vegetation scales the grass and moss that is left, deposits scale sand and scree
 // (read outside, through Place.deposits); the erosion plane is read on the CPU side by the GPU pass.
 const MM_PLACE = 156u;
 fn pr(i: u32) -> vec4f { return matRow(MM_PLACE + i); }
-struct Place { exposed: f32, lowBank: f32, face: f32, rockMask: f32, top: f32, faceSlope: f32, deposits: f32, vegetation: f32 }
-fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, weather: vec2f, route: f32, painted: vec4f) -> Place {
+struct Place { exposed: f32, lowBank: f32, top: f32, deposits: f32, vegetation: f32 }
+fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, weather: vec2f, route: f32) -> Place {
     var out: Place;
     let r0 = pr(0u); let r1 = pr(1u); let r2 = pr(2u); let r3 = pr(3u); let r4 = pr(4u); let r5 = pr(5u);
-    let r6 = pr(6u); let r7 = pr(7u); let r8 = pr(8u); let r9 = pr(9u);
     var exposure = 0.0;
     var vegetation = u.lushness;   // card P30: the world-wide baseline of the painted override
     out.deposits = 1.0;
@@ -351,41 +335,10 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
     exposed = clamp(exposed * (1.0 - 0.4 * clamp(vegetation, -1.0, 1.0)), 0.0, 1.0);
     out.exposed = exposed;
     out.lowBank = lowBank;
-    // The face: lump-scale rock and moss on a slope; rock on steep flanks and in hollows, moss on tops.
+    // How far the surface stands above the mean of a ring 3 px out (a lump's top, 1; a hollow, -1): the ground cover's soil reads it.
     let around = 0.25 * (surfaceHeight(p - vec2f(3.0, 0.0)) + surfaceHeight(p + vec2f(3.0, 0.0))
                        + surfaceHeight(p - vec2f(0.0, 3.0)) + surfaceHeight(p + vec2f(0.0, 3.0)));
-    let top = clamp((h - around) / 1.5, -1.0, 1.0);
-    let edgeNoise = terrainNoise(p * 1.5 + vec2f(53.0, 11.0));
-    let faceSlope = slope * (1.0 + (edgeNoise.r - 0.5) * r6.z);
-    // Ice slate (iceSlate): every face from the first gentle slope up is all rock, with no snow lumps in it.
-    var face = max(smoothstep(r6.x, r6.y, faceSlope), smoothstep(0.12, 0.3, faceSlope) * u.iceSlate) * (1.0 - route) * (1.0 - sandBar);
-    var share = mix(mix(r7.x, r7.y, smoothstep(r6.y, r6.y * 1.8, slope)), 1.0, u.iceSlate);
-    var lowGate = lowBank;
-    if (u.styleOn != 0) {
-        let f = styleEdge(p, textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).r, wideSlope(p));
-        share = select(share * (1.0 + f), mix(share, 1.0, f), f > 0.0);
-    }
-    if (u.paintOn != 0) {
-        face = max(face, painted.x * (1.0 - sandBar));
-        share = mix(share, 0.92, painted.x);
-        lowGate = max(lowBank, painted.x);
-    }
-    let fine = terrainNoise(p * 3.0 + vec2f(19.0, 7.0));
-    let wide = 0.25 * (surfaceHeight(p - vec2f(7.0, 0.0)) + surfaceHeight(p + vec2f(7.0, 0.0))
-                     + surfaceHeight(p - vec2f(0.0, 7.0)) + surfaceHeight(p + vec2f(0.0, 7.0)));
-    let gully = smoothstep(0.3, 2.0, wide - h);
-    let topTerm = r8.y * top * (1.0 - r9.y * painted.x);
-    let faceScore = r8.x * length(g) / max(slope, 0.25) - topTerm + r9.x * gully + (fine.g - 0.5) * r8.z + (n.r - 0.5) * r8.w;
-    let threshold = mix(1.4, -0.9, share);
-    var rockMask = mix(smoothstep(threshold - 0.12, threshold + 0.12, faceScore) * lowGate, lowGate, u.iceFall * u.iceSlate);
-    // Inside painted rock the face is rock; moss stays at its edges and on the ledges below.
-    if (u.paintOn != 0) { rockMask = max(rockMask, smoothstep(0.5, 0.9, painted.x) * r9.z); }
-    rockMask = 1.0 - clamp((1.0 - clamp(rockMask * (1.0 + exposure), 0.0, 1.0)) * (1.0 + vegetation), 0.0, 1.0);
-    rockMask = clamp(rockMask * (1.0 - 0.4 * clamp(vegetation, -1.0, 1.0)), 0.0, 1.0);   // H5: the same 40% as the exposed rock above
-    out.face = face;
-    out.rockMask = rockMask;
-    out.top = top;
-    out.faceSlope = faceSlope;
+    out.top = clamp((h - around) / 1.5, -1.0, 1.0);
     return out;
 }
 
@@ -991,15 +944,15 @@ fn shineNoise(q: vec2f) -> vec2f {
 // height gradient, normal its normal; the weights come from coverage the
 // material code already settled (rock: exposed; slope cover: the face blend
 // and the sampled slope cover; sand and crystal from their baked fields).
-fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, exposed: f32, faceCover: f32,
-             slopeCover: f32, crystalMask: f32, sunSeen: f32, landform: f32, faceRelief: f32, faceRock: f32) -> vec4f {
+fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, exposed: f32,
+             slopeCover: f32, crystalMask: f32, sunSeen: f32, landform: f32, faceRock: f32) -> vec4f {
     var sand = smoothstep(0.35, 0.95, bakedFields(p).a);
     if (u.beach != 0) { sand = max(sand, beachSand(p, 0.5)); }   // beach sand is lit as sand
     // Crystal tops only: the risers between columns stay dark and take the
     // surrounding material's lobe (the world's own note: faces are dark at every facing).
     let crystal = smoothstep(0.05, 0.3, crystalMask) * (1.0 - smoothstep(1.2, 2.5, length(g)));
     let rock = clamp(exposed, 0.0, 1.0) * (1.0 - sand);
-    let slope = clamp(max(faceCover, slopeCover), 0.0, 1.0) * clamp(1.0 - sand - rock, 0.0, 1.0);
+    let slope = clamp(slopeCover, 0.0, 1.0) * clamp(1.0 - sand - rock, 0.0, 1.0);
     let ground = max(1.0 - sand - rock - slope, 0.0);
     let rest = 1.0 - crystal;
     var weight = array<f32, 5>(ground * rest, slope * rest, rock * rest, sand * rest, crystal);
@@ -1029,14 +982,6 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     }
     var grained = normalize(vec3f(-micro, 1.0));
     // The rock face's relief is its own grain: its gloss follows the lit normal, with no second grain over it.
-    if (faceRelief > 0.001) {
-        // The grain above is a top-down normal, which would cancel the relief's tilt on a wall: tilt the wall's own normal instead.
-        let axis = select(vec3f(0.0, 0.0, 1.0), vec3f(0.0, 1.0, 0.0), abs(normal.z) > 0.95);
-        let tangent = normalize(cross(axis, normal));
-        let q = vec2f(dot(pixel, SHINE_ACROSS) / scale, dot(pixel, SHINE_ALONG) / (scale * max(u.shineStretch, 1.0)));
-        let grain = shineNoise(q) * rough;
-        grained = normalize(mix(grained, normalize(normal + tangent * grain.x + cross(normal, tangent) * grain.y), faceRelief));
-    }
     grained = normalize(mix(grained, normal, faceRock));
     // The grain tilts the facets under the diffuse light too.
     let litBefore = max(0.0, dot(normal, u.light));
@@ -1413,8 +1358,7 @@ fn joinSedimentTransition(material: vec3f, pixel: vec2f, rock: vec3f, exposed: f
     if (u.transitionDetail > 0.0) {
         let uv = grainPixel(pixel) / 512.0;
         let faceLow = textureSampleLevel(generatedTex, linearRepeat, uv, 0, 3.0).rgb;
-        var rockLow = textureSampleLevel(generatedTex, linearRepeat, uv, 1, 3.0).rgb;
-        rockLow = saturate(u.rockMean + (rockLow - u.rockMean) * u.mineralDetail);
+        let rockLow = textureSampleLevel(generatedTex, linearRepeat, uv, 1, 3.0).rgb;
         let low = mix(transitionLow, mix(faceLow, rockLow, exposed), transitionCore);
         let facePower = (1.0 - exposed) * (1.0 - exposed) + exposed * exposed;
         let power = transitionPower * (1.0 - transitionCore) * (1.0 - transitionCore) + facePower * transitionCore * transitionCore;
@@ -1634,25 +1578,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let around = 0.25 * (surfaceHeight(p - vec2f(3.0, 0.0)) + surfaceHeight(p + vec2f(3.0, 0.0)) + surfaceHeight(p - vec2f(0.0, 3.0)) + surfaceHeight(p + vec2f(0.0, 3.0)));
         painted = paintCoverage(p, wideSlope(p), clamp((around - h) / 1.5, -1.0, 1.0));
     }
-    // H19: TA's camera is fixed and oblique, so a wall that faces the viewer spreads one world pixel over several screen pixels (a screen
-    // row is 1 - broad.y / 2 world rows: above 1), and everything baked in world space smears down it. Only a wall facing the viewer
-    // stretches (broad.y < 0 there; one facing away compresses and keeps the world-space look). Where the rock stands on such a wall,
-    // its relief is lit in screen pixels instead: the atlas's gradient on the broad face's normal, its cavity for the top-down one.
-    let place = landPlace(p, h, g, broad, slope, n, weather, route, painted);
-    let faceRelief = smoothstep(1.5, 3.0, 1.0 - 0.5 * broad.y)
-                   * clamp(max(place.exposed, place.face * place.rockMask * u.microRock), 0.0, 1.0) * u.faceRelief;
-    var faceCavity = 0.0;
-    if (faceRelief > 0.001) {
-        let relief = rockRelief(pixel);
-        let formNormal = normalize(vec3f(-broad, 1.0));
-        // Heightfield normals have n.z > 0, so this frame is continuous at every facing.
-        let a = 1.0 / (1.0 + formNormal.z);
-        let b = -formNormal.x * formNormal.y * a;
-        let tangent = vec3f(1.0 - formNormal.x * formNormal.x * a, b, -formNormal.x);
-        let bitangent = vec3f(b, 1.0 - formNormal.y * formNormal.y * a, -formNormal.y);
-        normal = normalize(mix(normal, formNormal, faceRelief) - (relief.x * tangent + relief.y * bitangent) * faceRelief);
-        faceCavity = relief.z;
-    }
+    let place = landPlace(p, h, g, broad, slope, n, weather, route);
     // The rock face (rockFaceAt) in the art's own pixels: its relief's slope across a screen pixel, carried back through TA's projection
     // (screen y = world y - height / 2) to the ground's slope, bends the lit normal; grass holds on its ledges and, in clumps, where the
     // face is broken enough to give it a footing.
@@ -1739,7 +1665,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var cav = 0.0;
     if (u.full != 0) {
         if (u.closeShadow > 0.0) { closeVis = closeVisibility(p, max(h, u.sea)); }
-        if (u.cavity > 0.0) { cav = mix(u.cavity * cavityDepth(p, h), u.cavity * faceCavity, faceRelief); }
+        if (u.cavity > 0.0) { cav = u.cavity * cavityDepth(p, h); }
     }
     // The rock face's creases and hollows see less sky, and its own shadows (Shadow depth) little: deep in a crevice both are blocked.
     cav = max(cav, faceGate * max(faceOcc, u.faceShade * (1.0 - faceSun)));
@@ -1802,19 +1728,17 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         lowShare = u.lowTint * low;
         if (lowShare > 0.0) { grass = mix(grass, lowTinted(grass, groundMean), lowShare); }
     }
-    let grass0 = grass;
     // The model's slope grass costs noise taps, so the slope and face blocks share one read.
     // Level ground (slope under the cover ramp's start, no painted rock) never mixes it in, so it skips the taps.
     var slopeBased = vec3f(0.0);
-    // A world with a ground-cover table has no slope ramp and no Sampled slope texture: the table decides its slope cover (groundCover below).
-    // It reads the slope texture only where a consumer can be: the faces' moss, and the rock that shows (a face, wear's outcrops from slope .3).
+    // A world with a ground-cover table has no slope ramp and no Sampled slope texture: the table decides its slope cover (groundCover below),
+    // so it reads the slope texture only for the mineral margins.
     let tabled = cvr(0u).x > 0.5;
-    let slopeTexWanted = select(slope > u.slopeProfile.x, place.face > 0.0 || place.exposed > 0.0 || (u.outcrop > 0.0 && slope > 0.3), tabled);
-    if (slopeTexWanted || u.paintOn != 0 || u.mineralMargins != 0) { slopeBased = based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase); }
+    let slopeTexWanted = slope > u.slopeProfile.x && !tabled;
+    if (slopeTexWanted || u.mineralMargins != 0) { slopeBased = based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase); }
     // The level ground before any slope cover, for crystal tops (crystalGrain).
     let levelGround = grass;
     var slopeShare = 0.0;
-    var faceCover = 0.0;   // share of the face that is moss, not rock (the shine's slope cover)
     if (u.slopeMaterial != 0) {
         // Small native slope interiors retain moss ribs and scattered stone.
         // This is an appearance material, not recovered albedo or geometry.
@@ -1846,30 +1770,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (cvr(0u).x > 0.5) { grass = groundCover(p, slope, broad, place.top, timeMaps, place.vegetation, grass, (1.0 - route) * step(u.sea + 1.0, h)); }
     // Small mineral interiors supply pixel structure; the whole crown/face/
     // foot comes from this surface. Some native microshading remains baked.
-    var rock = rockSource(pixel);
-    rock = saturate(u.rockMean + (rock - u.rockMean) * u.mineralDetail);
-    if (u.rockLayers != 0 && h > 18.0) {
-        // Broad material regions vary actual native mineral structure. No
-        // repeated whole cliff, colour-only variants or fresh pixel noise.
-        let formation = terrainNoise(poolPos(p) * poolScale(0.35) + vec2f(43.0, 87.0)).r;
-        let moss = terrainNoise(poolPos(p) * poolScale(0.70) + vec2f(173.0, 91.0)).g + weather.g * 0.30;
-        let fractured = fracturedSource(pixel);
-        let weathered = weatheredSource(pixel);
-        rock = mix(rock, fractured, smoothstep(0.43, 0.57, formation));
-        rock = mix(rock, weathered, smoothstep(0.40, 0.62, moss));
-        // E9: the weathered and fractured tiles carry green blotches (14% and 5.5% of their pixels)
-        // that read as moss scattered over the face; retail's face holds grass at its edges. Clamp
-        // the green to the larger of red and blue so the tile keeps its structure and loses its moss.
-        // H4 round 2: clamped to 85% (the .15 of Green's old rockMoss); the moss on rock is the rockMoss rule below, which places it by form.
-        rock.g = mix(min(rock.g, max(rock.r, rock.b)), rock.g, 0.15);
-    }
-    rock = based(rock, u.rockTexMean, u.rockBase);
-    // E9: the rock tile's own blotches and cell outlines read as soft cobble over the lit form;
-    // below 1 the tile's contrast around the rock's mean colour is scaled down so the carved relief carries the face.
-    if (u.rockDetail < 1.0) {
-        let rockFlat = select(u.rockMean, u.rockBase.rgb, u.rockBase.a > 0.5);
-        rock = rockFlat + (rock - rockFlat) * u.rockDetail;
-    }
+    var rock = based(rockSource(pixel), u.rockTexMean, u.rockBase);
     // The rock face's colour: even (its relief's light makes the pattern), a chunk's tone a little lighter or darker, its crevices and the
     // shade under its ledges dark.
     if (faceGate > 0.0) {
@@ -1878,8 +1779,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     }
     // H3 item 4: one placement function (landPlace); its thresholds are rows of materials/green.json.
     var exposed = place.exposed;
-    // H5 3a: wear bares steep grass in grey outcrops (the bake draws their cracks by the same rule).
-    exposed = max(exposed, outcropAt(p, slope, timeMaps.wear, timeMaps.hard) * (1.0 - route) * place.deposits);
     exposed = mix(exposed, faceRock, faceGate);   // on the rock face the face's share decides
     let lowBank = place.lowBank;
     let sandBar = sandBarAt(p);
@@ -1911,83 +1810,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         material = mix(material, beachColour(pixel), beach * (1.0 - exposed * 0.7));
     }
     material = joinSedimentTransition(material, pixel, rock, exposed, materialWeather);
-    if (u.microRock > 0.0) {
-        // TA-style faces: moss and rock interleave at lump scale. The broad
-        // slope sets how much of the face is rock; the detailed surface
-        // decides where: rock on steep flanks and in hollows, moss on tops.
-        let top = place.top;
-        let faceSlope = place.faceSlope;
-        let face = place.face;
-        var rockMask = place.rockMask;
-        // On the rock face the face decides: rock but for its ledges' grass (no per-pixel moss).
-        rockMask = mix(rockMask, faceRock, faceGate);
-        let moss = mix(slopeBased, grass0, u.mossFromGround);
-        let faceMaterial = mix(moss, rock, rockMask);
-        material = mix(material, faceMaterial, face * u.microRock);
-        faceCover = face * u.microRock * (1.0 - rockMask);
-        // Steep faces turned from the sun are much darker in retail than
-        // ours (12 Green maps, slope >= 0.55 facing away: median luma 42,
-        // range 26-48; ours 49-61). Lit faces (65) and gentler slopes turned
-        // away (59) already match, so only steep shaded faces darken, most
-        // in the relief's hollows.
-        if (u.faceDark > 0.0) {
-            let turned = 1.0 - smoothstep(0.3, 0.6, dot(normalize(vec3f(-broad, 1.0)), u.light));
-            material *= 1.0 - u.faceDark * turned * smoothstep(0.4, 0.65, slope) * (1.0 - route)
-                            * (0.6 + 0.4 * smoothstep(-0.3, 0.7, -top));
-        }
-        // A light, crisp grass rim where rough ground meets the level plain.
-        let rim = smoothstep(u.faceSlope.x * 0.35, u.faceSlope.x * 0.6, faceSlope)
-                * (1.0 - smoothstep(u.faceSlope.x * 0.7, u.faceSlope.x * 1.05, faceSlope));
-        let brightGrass = saturate(based(grassImage(pixel), u.groundTexMean, u.groundBase) * vec3f(1.15, 1.35, 1.05));
-        material = mix(material, brightGrass, rim * u.footRim * (1.0 - route));
-        exposed = max(exposed * (1.0 - face), rockMask * face);
-    }
-    // H4 round 2, rockMoss: moss and grass flecks on exposed rock, a dash of 2 px to small clumps. Retail's face carries them in its
-    // crevices and on the tops of its ledges and blocks (green share of the face 12%, ours 2%). The chance of a fleck grows with the
-    // crevice (H1's cavity depth) and the lump top, is clumped by a 5-px noise, and is drawn from a per-pixel hash against it, so a
-    // fleck is whole pixels. The colour is the slope grass of the table, brightened toward the plain's grass. The vegetation
-    // override plane (1 + v) scales it, as it scales H3's other grass and moss.
-    if (u.rockMoss > 0.0 && exposed > 0.02) {
-        let crevice = smoothstep(0.15, 0.7, cav / max(u.cavity, 0.001));
-        let ledge = smoothstep(0.1, 0.7, place.top);
-        let clump = poolNoise(p, 5.0, 91.0) * 0.5 + 0.5;
-        // Card P30: with a ground-cover table the flecks are the table's moss class, in its colour and where its moisture and light windows are
-        // open (the table's own placement, so they follow Lushness, the wet swaths and the sun as the moss on the ground does); without one they
-        // keep the old rule, the vegetation plane and the wetness (H5 3a: moss grows where water runs).
-        let wetMoss = (0.25 + 1.6 * timeMaps.wet);
-        var want = u.rockMoss * place.vegetation * wetMoss * (0.08 + 0.6 * crevice + 0.5 * ledge) * (0.4 + 1.2 * clump);
-        var mossColour = saturate(slopeBased * vec3f(1.0, 1.25, 0.95));
-        if (cvr(0u).x > 0.5) {
-            let cs = coverSite(broad, timeMaps);
-            let moss = cvr(4u + 5u * 5u);
-            let mossSpot = (0.08 + 0.6 * crevice + 0.5 * ledge) * (0.4 + 1.2 * clump);
-            want = u.rockMoss * place.vegetation * (0.3 + 1.5 * coverWin(cs.x, cvr(4u + 5u * 5u + 2u)) * coverWin(cs.y, cvr(4u + 5u * 5u + 4u))) * mossSpot;
-            let ratio = slopeBased / max(cvr(3u).rgb, vec3f(0.01));
-            mossColour = saturate(moss.rgb * clamp(dot(ratio, vec3f(0.299, 0.587, 0.114)), 0.7, 1.3));
-        }
-        // A wall's flecks are drawn in screen pixels, or each dash would be stretched into a streak down it.
-        // Card tilepool: the dashes repeat with the pool, as the rest of level ground does.
-        let pw = poolPixel(p); let sw = poolPixel(pixel);
-        let ticket = mix(cellHash(vec2f(floor(pw.x * 0.5), pw.y) + 311.0).x, cellHash(vec2f(floor(sw.x * 0.5), sw.y) + 311.0).x, faceRelief);
-        let fleck = step(ticket, want) * exposed * (1.0 - faceGate);   // 2 px wide, 1 px tall: the dashes of retail's flecks (the rock face grows its own grass)
-        material = mix(material, mossColour, fleck);
-        // Card P10, lichen: rosettes of 1 to 4 px radius on the faces that look at the sun and at the sky (the lit normal, relief included), off the
-        // crevices. The rock type's cover (its `lichen`) grows with Age and is scaled by this row, as the flecks are; a wall's rosettes are drawn
-        // in screen pixels like its flecks.
-        let lichen = u.rockMoss * u.rockLichen * (0.4 + 0.6 * clamp(u.rockAge, 0.0, 1.0)) * clamp(place.vegetation, 0.0, 2.0);
-        if (lichen > 0.0) {
-            let lq = select(p, pixel, faceRelief > 0.5);
-            let rosette = markCells(poolPos(lq) / 8.0, vec2i(433, 71), 1.0, u.pool / 8.0);
-            let lit = smoothstep(0.25, 0.65, dot(normal, u.light)) * smoothstep(0.35, 0.75, normal.z);
-            let radius = (0.6 + 3.4 * rosette.id.x) * sqrt(min(lichen, 1.5)) * (1.0 + 0.3 * (cellHash(poolPixel(lq) + 5.0).x - 0.5));
-            let onRosette = step(rosette.id.y, lichen * 1.2) * step(rosette.d1 * 8.0, radius) * lit * (1.0 - crevice) * exposed;
-            var tint = vec3f(150.0, 158.0, 120.0) / 255.0;   // grey-green
-            if (rosette.id.z > 0.4) { tint = vec3f(196.0, 192.0, 168.0) / 255.0; }   // pale crust
-            if (rosette.id.z > 0.7) { tint = vec3f(178.0, 176.0, 72.0) / 255.0; }   // yellow-green
-            if (rosette.id.z > 0.95) { tint = vec3f(206.0, 118.0, 38.0) / 255.0; }   // orange
-            material = mix(material, tint, 0.85 * onRosette);
-        }
-    }
     if (u.rockCrown > 0.0) {
         // Some worlds' raised ground is bare rock to its crown (Zhon's
         // domes), not only where it is steep.
@@ -2029,11 +1851,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)); }
     }
     // Painted masks (card C5), after the world's own beds and before sand,
-    // which covers them. Rock went through the face treatment above; where a
-    // world has none (microRock 0) it is the plain rock material.
+    // which covers them. Painted rock is the rock face where the face is drawn (faceGate), and the plain rock material elsewhere.
     if (u.paintOn != 0) {
-        let faceHandled = select(0.0, 1.0, u.microRock > 0.0);
-        material = mix(material, rock, painted.x * (1.0 - faceHandled));
+        material = mix(material, rock, painted.x * (1.0 - faceGate));
         material = mix(material, snowMaterial(pixel), painted.y);
         material = mix(material, mossMaterial(pixel), painted.w);
         exposed = max(exposed, painted.x);
@@ -2067,7 +1887,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     }
     // Baked boulders take rock material, lit by the same surface.
     {
-        let coverOrCrack = bakedFields(p).b * (1.0 - faceRelief);
+        let coverOrCrack = bakedFields(p).b;
         // A crack wall facing the sun.
         if (coverOrCrack > 1.0) { material *= 1.0 + CRACK_LIT * (coverOrCrack - 1.0); }
         else { material = mix(material, rock * 1.08, max(coverOrCrack, 0.0)); }
@@ -2265,7 +2085,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let turned = 1.0 - clamp(shading, 0.0, 1.0);
     if (u.shineOn != 0) {
         let sunSeen = markSeen * (1.0 - flatBank) * closeVis;
-        var shine = shineTerm(pixel, p, gLit, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen, landform, faceRelief, faceGate);
+        var shine = shineTerm(pixel, p, gLit, normal, material, exposed, slopeShare, crystalMask, sunSeen, landform, faceGate);
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
         if (u.shineSlopeGate > 0.0) { shine = shineSlopeGated(shine, slope); }

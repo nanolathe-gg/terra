@@ -1,6 +1,6 @@
 // Cards H3 and H14: materials/<world>.json as the rows engine-materials.wgsl reads (see its header for the layout).
 export const MM_ROWS = 63;
-// The first placement row of the draw's uniform table (engine-frag.wgsl MM_PLACE, engine-common.wgsl materialTable): ten rows after it.
+// The first placement row of the draw's uniform table (engine-frag.wgsl MM_PLACE, engine-common.wgsl materialTable): six rows after it.
 export const PLACEMENT_ROW = 156;
 // The rows after them: a world's ground-cover table (engine-frag.wgsl MM_COVER), 4 + 5 * 7 of them, the plants' row and the four flower palette rows. A table without `groundCover` gives zeros: the feature is off.
 export const COVER_ROWS = 44;
@@ -36,22 +36,11 @@ function litRows(lit) {
     [x('seamWidth'), x('seamDepth'), x('veinWidth'), x('veinSpacing')], [rgb[0], rgb[1], rgb[2], x('veinShare')], [x('warp'), x('cone'), x('seamVary'), x('seamGap')],
     [x('cellVary'), x('streakBand'), x('skew'), x('strokeCore')], [x('strokeSize'), x('strokeShare'), x('strokeRadius'), x('strokeDepth')]];
 }
-// A table with a `placement` block (Green's) gives the draw's ten placement rows; the shared artist controls override them, never the
-// measured material statistics. Without overrides this remains the original table.
-export function tablePlacementRows(table, overrides = null) {
-  const q = table.placement, r = q.rock, s = q.soil, f = q.face;
-  const rows = [[r.slope, r.formSlope, r.convexity, r.convexityRange], [r.noiseG, r.noiseR, r.weather, r.tap], [r.start, r.full, 0, 0],
-    [s.slopeGate, s.heightGate, s.fadeFrom, s.fadeTo], [q.lowBank.from, q.lowBank.to, 0, 0], [q.route.from, q.route.to, 0, 0],
-    [f.slopeFrom, f.slopeTo, f.edgeNoise, 0], [f.shareFrom, f.shareTo, 0, 0], [f.roughness, f.lumpTop, f.fineNoise, f.broadNoise],
-    [f.gully, f.order, f.paintedRock, 0]];
-  const scalar=(key,row,col)=>{const value=Number(overrides?.get(key));if(overrides?.has(key)&&Number.isFinite(value))rows[row][col]=value;};
-  scalar('faceEdge',6,2);scalar('gullyRock',9,0);scalar('rockOrder',9,1);
-  for(const [key,row] of [['faceSlope',6],['rockShare',7],['faceScore',8]]){
-    if(!overrides?.has(key))continue;
-    const values=String(overrides.get(key)).split(',').map(Number),count=key==='faceScore'?4:2;
-    if(values.length===count&&values.every(Number.isFinite))values.forEach((v,i)=>rows[row][i]=v);
-  }
-  return rows;
+// A table with a `placement` block (Green's) gives the draw's six placement rows: where rock shows off the rock face (engine-frag.wgsl landPlace).
+export function tablePlacementRows(table) {
+  const q = table.placement, r = q.rock, s = q.soil;
+  return [[r.slope, r.formSlope, r.convexity, r.convexityRange], [r.noiseG, r.noiseR, r.weather, r.tap], [r.start, r.full, 0, 0],
+    [s.slopeGate, s.heightGate, s.fadeFrom, s.fadeTo], [q.lowBank.from, q.lowBank.to, 0, 0], [q.route.from, q.route.to, 0, 0]];
 }
 
 // Card P30: a world's ground cover is on where its table has Vegetation cover above 0 (every world has a table; sculpt.py DEFAULT_GROUND_COVER).
