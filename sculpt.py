@@ -484,7 +484,8 @@ WORLD_KNOBS = {
     # and hills set in sand get sandy feet.
     # Painted sand keeps a raised bar sand to its crown (the river sections'
     # sand bars rise ~100 units from the bed with no rock).
-    'zhon': dict(crackSeverity=.4, crackMajor=.6, rockCrown=1, apron=0, sandBanding=1,
+    # Undulation 10 -> 1.5: retail's savannah is level (50-57% of dry cells under slope .03; ours 11-22%).
+    'zhon': dict(undulation=1.5, crackSeverity=.4, crackMajor=.6, rockCrown=1, apron=0, sandBanding=1,
                  beachWidth=.6, banding=.3, crackDark=.45, sandCrown=1),
     # Lava: one dark, low-chroma brown ground with no cracks, sand or
     # boulders on the level; striated dark cliffs; a molten sea with no
