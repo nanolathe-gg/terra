@@ -38,7 +38,8 @@ test('landform step details follow the active reference and count',async()=>{
     assert.equal(available('layerPx','landform',p),reference!==0);
     assert.equal(available('layerCircle','landform',p),reference===2);
     assert.equal(available('lavaSpread','landform',p),reference===1);
-    for(const key of ['ledge','terraceJitter','layerPx','layerCircle','lavaSpread','breakup'])assert.equal(available(key,'landform',{...p,terraces:0}),false);
+    assert.equal(available('layerJag','landform',p),reference!==0);
+    for(const key of ['ledge','terraceJitter','layerPx','layerCircle','lavaSpread','layerJag','breakup'])assert.equal(available(key,'landform',{...p,terraces:0}),false);
   }
 });
 

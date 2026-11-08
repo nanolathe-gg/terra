@@ -128,7 +128,9 @@ export const COAST_KEYS=['shoreLayers','layerPx','layerRiser','layerLedge','laye
   // E10: finger size; layer width variation; the circles of scalloped layers.
   'fingerSize','layerVary','layerCircle',
   // G5 (Lava): the layers' two-dimensional wander and extra width spread; the circles' variety; the lobes' tread tilt (the hill-lobe option rides this list, as E10's).
-  'lavaSpread','lavaCircleVary'];
+  'lavaSpread','lavaCircleVary',
+  // L2 (Lava): each layer's edge jag.
+  'layerJag'];
 // [key, element id, label, kinds, slider min, max, step, slider units per value, help, drop-down choices]
 export const SHAPE_FIELDS=[
   ['faceVariation','face-variation','Face width variation',['erase'],0,150,5,100,'How much the edge face widens and narrows along the outline (on a carried cross-section, every width of it).'],
@@ -224,6 +226,8 @@ export const SHAPE_FIELDS=[
   ['bergRough','berg-rough','Face roughness',['landform'],0,30,1,1,'Prisms: fractal roughness added to the height, from 40 px lumps to 4 px grain.'],
   // G5 (Lava): contour layers wander in two dimensions and vary in width, as retail lava-1's bank.
   ['lavaCircleVary','lava-circle-vary','Circular bite variation',['landform'],0,100,5,100,'Circular layers: how much the bites differ from one another, in radius (a few large among many small), in the spacing of their rings, and in how many sites keep one, so they gather in clusters with bare stretches, as retail lava-2\'s do. 0: the even circles.'],
+  // L2 (Lava): retail's layer edges are jagged, each on its own, where their wander is smooth and shared.
+  ['layerJag','layer-jag','Layer edge jag (px)',['landform'],0,12,1,1,'Shoreline steps: how far each step\'s edge zigzags, in runs of about 8 px, so the risers read ragged as retail lava\'s banks do; the waterline itself stays. 0: the edges wander smoothly.'],
   ['lavaSpread','lava-spread','Layer width spread',['landform'],0,200,5,100,'Contour layers: extra spread in layer width along the shore, on top of Layer width variation (100 is about 2.7 times between the narrowest and the widest). 0: none.'],
 ];
 export const E7_KEYS=['crystalFacet','crystalSizeVar'];

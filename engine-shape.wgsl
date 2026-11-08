@@ -1505,6 +1505,23 @@ fn coastSites(@builtin(global_invocation_id) g: vec3u) {
   if (sd < -0.5 * r || sd > 0.8 * r) { return; }
   Sc[at] = wx; Sc[at + 1u] = wy; Sc[at + 2u] = r; Sc[at + 3u] = sc;
 }
+// L2: Layer edge jag. Before the layers, the land's distance from the coast zigzags by up to coJag px in runs of about 8 px (position-only noise in
+// the shape's frame), so each riser, wherever it lies, is ragged on its own; the waterline itself stays (the jag grows in over 2 jags from it). Run only
+// when the stroke's jag is above 0, so the layers' own arithmetic is untouched without it.
+@compute @workgroup_size(8, 8)
+fn coastJag(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); let i = cIdx(x, y);
+  if (!(Sc[CRR * cells + i] > u.sea)) { return; }
+  let d = Sc[CDD * cells + i];
+  if (d >= u.coLReach) { return; }
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  var lx = wx; var ly = wy;
+  if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
+  let jag = u.coJag * (0.75 * vnoise(lx / 8.0, ly / 8.0, u.seed ^ 0x6b5u) + 0.25 * vnoise(lx / 5.0, ly / 5.0, u.seed ^ 0x1e7u));
+  Sc[CDD * cells + i] = max(0.0, d + jag * sm(0.0, 2.0 * u.coJag, d));
+}
 // The land's height as a staircase in the distance from the coast (or, scalloped, from the nearest bite's edge), the layers' edges wandering with
 // position-only noise in the shape's frame. Layer k tops out at sea + foot + riser k; the last riser meets the plain. Weights (varied risers) are the
 // node's mask-write records after its own writes: x the riser's height weight, y the height below it (both in risers).

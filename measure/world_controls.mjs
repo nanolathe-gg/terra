@@ -69,7 +69,7 @@ const PLATEAU = (pts, rise, card = {}) => ['landform', pts, {card: {heightRefere
 const RIDGE = (pts, rise, card = {}) => ['landform', pts, {card: {heightReference: 1, elevation: 24 + rise, lean: 100, wander: 8, widthVary: 0, ...card}, curve: {form: 'lfMountain'}}];
 const WATER = (pts, card = {}, picks = {}) => ['landform', pts, {card: {heightReference: 1, elevation: -55, combine: 1, cracks: 0, wander: 30, widthVary: 30, varySize: 210, ...card}, curve: {form: 'lfShore'}, ...picks}];
 // The panel hides these until their switch is above 0 (updateControls in sculpt.js).
-const GATE = {gullySize: 'gullies', talus: 'gullies', layerPx: 'shoreLayers', layerRiser: 'shoreLayers', layerLedge: 'shoreLayers', layerRough: 'shoreLayers', layerStyle: 'shoreLayers', layerVary: 'shoreLayers', layerCircle: 'shoreLayers', iceFacetSize: 'iceFacets', facetForm: 'iceFacets', facetSurface: 'iceFacets', fingerSize: 'fingers',
+const GATE = {gullySize: 'gullies', talus: 'gullies', layerPx: 'shoreLayers', layerRiser: 'shoreLayers', layerLedge: 'shoreLayers', layerRough: 'shoreLayers', layerStyle: 'shoreLayers', layerVary: 'shoreLayers', layerJag: 'shoreLayers', layerCircle: 'shoreLayers', iceFacetSize: 'iceFacets', facetForm: 'iceFacets', facetSurface: 'iceFacets', fingerSize: 'fingers',
   spurLength: 'spurCount', spurSpread: 'spurCount', spurWidth: 'spurCount', spurTaper: 'spurCount', spurHeight: 'spurCount', spurForks: 'spurCount', spurBulb: 'spurCount', crestVary: 'spurCount', fissureBranchLen: 'fissureBranches', fissureBranchSpread: 'fissureBranches', lavaSpread: 'shoreLayers', lavaCircleVary: 'shoreLayers'};
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const rows = [], logs = [], t0 = Date.now();

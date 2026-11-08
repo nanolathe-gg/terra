@@ -135,7 +135,7 @@ KNOB_DEFAULTS.update(crackedStep=0, bedDots=0, bedDotCell=14)
 KNOB_DEFAULTS.update(ringContrast=0, ringCount=7, ringSize=1, stepSoftPx=1)
 # E10 (Lava): finger size; layer width variation (0 even layers) and the circle size in px of circular
 # layers. Every default is the earlier output.
-KNOB_DEFAULTS.update(fingerSize=1, layerVary=0, layerCircle=26)
+KNOB_DEFAULTS.update(fingerSize=1, layerVary=0, layerCircle=26, layerJag=0)
 # E10 (Lava): a hill built of stacked round lobes (0 lobes: the plain hill) cut into this many equal steps.
 # E10 (Lava), shader knobs: a dark crease at the foot of each bank step, and the slope from which the shine applies.
 KNOB_DEFAULTS.update(layerCrease=0, shineSlopeGate=0)

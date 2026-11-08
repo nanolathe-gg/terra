@@ -58,7 +58,7 @@ const NODE_FIELDS = [
     'crackAmt', 'rotX', 'rotY', 'inv0', 'inv1', 'inv2', 'inv3', 'inv4', 'inv5', 
     'gAmp', 'gWave', 'gCover', 'fHw', 'fKf', 'fJag', 'fAmp', 'fCell', 'fCrack', 'fNet', 'fDark', 'cTop', 'sFlat', 'sJit', 'coFar', 'coLimit', 'coFReach', 'coFAmt', 'cfSize', 'coW', 'coLedge', 'coIrr', 'coVary', 'coSpread', 'coMeander', 'coRc', 'coCV', 'coLReach', 'coRiser', 'coRs',
     'sBreak', 'elev', 'lfRiver', 'lfBraid', 'lfFront', 'lfBack', 'lfWander', 'lfWidth', 'lfHeight', 'lfSize', 'lfFoot', 'lfMid', 'lfTaper', 'lfRoute', 'gully', 'gullySize', 'talusReach', 'talusTan',
-    'coSurf'].map(k => [k, 'f']), ...['coBeach'].map(k => [k, 'u']),
+    'coSurf', 'coJag'].map(k => [k, 'f']), ...['coBeach'].map(k => [k, 'u']),
   // lfcrater: a landform's Ground height reference (its elevation an offset from the ground under each cell) and a signed section (a knot below 0).
   ...['lfGround', 'lfSigned'].map(k => [k, 'u']),
   // lfcrater: the ejecta (height at the rim, the rim's distance from the path on each side) and the impact's spread (downrange, asymmetry, forbidden zones, wings).
@@ -375,7 +375,7 @@ const coastLayerReach = q => {
   const n = Math.max(1, Math.round(q.shoreLayers)), W = Math.max(4, q.layerPx), style = Math.round(q.layerStyle);
   if (style === 1) { const cv = clamp(q.lavaCircleVary || 0, 0, 1); return n * W * (1 + .45 * cv) + 2.8 * Math.max(8, q.layerCircle) * (1 + .07 * cv) + 2 * W; }
   const spread = clamp(q.lavaSpread || 0, 0, 2), vary = clamp(q.layerVary, 0, 1), wide = Math.max(1 + .6 * vary, Math.exp(.5 * (vary + spread)));
-  return (n + 1 + LAYER_MEANDER) * W * wide + 2 * W;
+  return (n + 1 + LAYER_MEANDER) * W * wide + 2 * W + clamp(q.layerJag || 0, 0, 12);
 };
 // The shared coast pass of a shape with shore features, or null when it has none: the coast box (the footprint grown by the reach and 12 cells), the cells the pass reads
 // beyond that box (readR: the blur of the fingers' normals), its uniforms, the layers' riser weights (after the node's own mask writes in MW) and the
@@ -419,7 +419,7 @@ function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0
       cfSize: q.fingerSize ?? 1,
       coN: n, coW: W, coLedge: clamp(q.layerLedge, .4, .95), coIrr: clamp(q.layerRough, 0, 1), coVary: vary, coSpread: clamp(q.lavaSpread || 0, 0, 2), coMeander: LAYER_MEANDER,
       coLReach: lReach, coRiser: q.layerRiser > 0 ? q.layerRiser : 0, coScal: scal ? 1 : 0, coRc: Rc, coCV: cv, coRs: 1.4 * Rc + cv * .1 * Rc + n * W * (1 + .45 * cv) + spacing,
-      coBeach: beach ? 1 : 0, coSurf: beach ? clamp(q.surf, 0, 1) : 0,
+      coBeach: beach ? 1 : 0, coSurf: beach ? clamp(q.surf, 0, 1) : 0, coJag: layers ? clamp(q.layerJag || 0, 0, 12) : 0,
       coSI0: sites.i0, coSJ0: sites.j0, coSNI: sites.ni, coSNJ: sites.nj, coBx0: box.x0, coBy0: box.y0, coBx1: box.x1, coBy1: box.y1,
     },
   };
@@ -490,7 +490,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
     return out;
   };
-  const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampFissure', 'smoothCopy', 'blurH', 'blurV', 'ground', 'init', 'artHold', 'artLevel', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'packPlane', 'lfCrystalSites', 'lfCrystalRoom', 'lfCrystalApply'];
+  const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampFissure', 'smoothCopy', 'blurH', 'blurV', 'ground', 'init', 'artHold', 'artLevel', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastJag', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'packPlane', 'lfCrystalSites', 'lfCrystalRoom', 'lfCrystalApply'];
   const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse'] : [])]);
   const cells = pages ? 0 : grid * grid, buf = (size, usage, label) => device.createBuffer({size: Math.max(16, size), usage, label});
   const ST = GPUBufferUsage.STORAGE, CD = GPUBufferUsage.COPY_DST, CS = GPUBufferUsage.COPY_SRC;
@@ -589,6 +589,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       if (c.layers) {
         field();
         if (c.scal) add('coastSites', {x0: 0, y0: 0, x1: c.sites.ni - 1, y1: c.sites.nj - 1}, node);
+        if (c.u.coJag > 0) add('coastJag', wide, node);   // L2: the layers' edge jag, on their distance field
         add('coastLayers', wide, node);
       }
       // Shore plates run after the coast pass on the heights it left, with every crossing of the sea the footprint touches (not only the ones this node moved).

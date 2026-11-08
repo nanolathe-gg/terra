@@ -13,7 +13,7 @@ export function shapeControlAvailable(key,kind,p){
   const shore=Number(p.stepReference)>0,circular=Number(p.stepReference)===2,on=Number(p.terraces)>0;
   if(['ledge','terraceJitter'].includes(key))return on;
   if(key==='breakup')return on&&!shore;
-  if(['layerPx','layerRiser','layerVary'].includes(key))return on&&shore;
+  if(['layerPx','layerRiser','layerVary','layerJag'].includes(key))return on&&shore;
   if(key==='lavaSpread')return on&&shore&&!circular;
   // Surf works a shore, which only a stroke that makes water has.
   if(key==='surf')return landformMakesWater(p);
