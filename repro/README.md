@@ -81,6 +81,15 @@ the retail crops stay outside git.
    when another world's scene moves). `land` and `full` add the Chrome
    checks and the sweeps (AGENTS.md "Checks").
 
+6. Compare a world with retail: `repro/retail.sh <world> [--query
+   'key=v&key=v'] [--base <an earlier run>]` renders only that world's
+   windows (`all.sh` with `REPRO_SCENES`), measures them with `stats.py`,
+   and prints one shape and one look score per window (`retail_gap.py`:
+   the gap to the window's own retail crop in units of the world's retail
+   family band). `retail_knobs.mjs <world>` lists the World rows a query can
+   set, and `retail_sources.py` the retail maps and map editor sections on
+   this machine. docs/RETAIL_ROUND.md is the round these serve.
+
 `demo/` holds scenes for tools that have no retail crop (the cross-section
 control, card C1): `profile-plateau`, `-escarpment`, `-hill-mountain`,
 `-terraced-dome`, `-lake` (and `-lake-red`, `-lake-terraced`, `-shallow`), `-desert-apron` and `-lip`. They are

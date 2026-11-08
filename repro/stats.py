@@ -517,7 +517,7 @@ def main(argv=None):
     t0 = time.time()
     for world in wanted:
         tw = time.time()
-        fam = family_window(world, args.retail_root, args.samples, args.seed)
+        fam = family_window(world.split('-')[0], args.retail_root, args.samples, args.seed)   # a variant's windows (green-modern) are judged on their world's family
         if not fam:
             raise SystemExit(f'{world}: no family windows')
         if len(fam) < 20:

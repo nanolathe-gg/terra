@@ -134,5 +134,6 @@ the page, with the same pixels.
 | the section editor | `node repro/curveedit.mjs --server <yours> --port <cdp>` | exit 0 |
 | modern Green | `python measure/realism.py --scenes <out>/scenes/green-modern-1 <out>/scenes/green-modern-2 <out>/scenes/green-modern-3` | the report gives, before and after, the mean count of statistics in the real range (of 15) and how many windows pass each of the six gates (closed basins, fabric, hilltop roundness, Hack's exponent, hollow and valley shares), and says which moved and why; a slope p90 above 1.62 is the owner's call |
 | the drag or bake path | `node repro/perf.mjs` (Chrome), alternating runs of the two builds | your report gives both builds' numbers |
+| a world's look (its rows, colors, presets or tables) | `repro/retail.sh <world>`, before and after (docs/RETAIL_ROUND.md) | your report gives each window's shape and look scores before and after |
 
 Use American English in all user-visible text.
