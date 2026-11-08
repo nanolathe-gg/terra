@@ -330,7 +330,8 @@ fn blurV(@builtin(global_invocation_id) g: vec3u) {
 #endif
 }
 
-// The ground node: broad undulation of dry ground (groundHeight). groundLifted: a dry height h at cell (x, y) with protection pp, undulated.
+// The ground node: broad undulation of dry ground (groundHeight). groundLifted: the same lift of a dry height h at cell (x, y) with protection pp, for
+// artLevel (the pass keeps its own arithmetic, so its bytes stay as they were).
 fn groundLifted(h: f32, pp: f32, x: i32, y: i32) -> f32 {
   let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
   let wave = u.gWave; let s = u.seed;
@@ -352,7 +353,14 @@ fn ground(@builtin(global_invocation_id) g: vec3u) {
 #endif
   let h = F[PH * cells + i];
   if (h <= u.sea + 1.0) { return; }
-  F[PH * cells + i] = groundLifted(h, F[PP * cells + i], x, y);
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  let wave = u.gWave; let s = u.seed;
+  let v = 0.6 * vnoise(wx / wave, wy / wave, s ^ 0x51a3u) + 0.3 * vnoise(wx * 2.1 / wave, wy * 2.1 / wave, s ^ 0x2b7du)
+        + 0.1 * vnoise(wx * 4.3 / wave, wy * 4.3 / wave, s ^ 0x6c11u);
+  let threshold = (0.5 - u.gCover) * 1.2;
+  let blotch = sm(threshold - 0.15, threshold + 0.15, vnoise(wx / (wave * 3.2), wy / (wave * 3.2), s ^ 0x7f4bu));
+  let next = h + u.gAmp * v * blotch * (1.0 - F[PP * cells + i]) * sm(u.sea + 1.0, u.sea + 8.0, h);
+  F[PH * cells + i] = clamp(max(next, min(h, u.sea + 1.5)), u.minH, u.maxH);
 }
 
 // Back to the empty map over the rectangle: dry base height, nothing else.
