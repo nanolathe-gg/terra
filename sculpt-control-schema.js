@@ -157,6 +157,8 @@ export function worldControlRequirement(key,v){
  if(key==='shoalShoreSoft')return needs('crispShore','Crisp waterline');
  if(key==='shoalStairs')return needs('crispShore','Crisp waterline')||(n('shoalShoreSoft')>0?'Waterline blur replaces the stairs. Set it to 0 to use this setting.':'');
  if(key==='crackedStep')return needs('deepEdge',HARD_STEP)||(n('crackedBed')>0?'':CRACKED_BED);
+ // With no crack depth the cracks are drawn only where Cracks more is painted, and there the network's turn from rills to plates hardly shows.
+ if(key==='crackNetwork')return needs('crackSeverity','Frost (crack depth)');
  if(key==='shoalBump')return n('waterColored')>0?LIT_REPLACED:needs('bedLit',LIT_BED)||needs('deepEdge',HARD_STEP);
  if(key==='shoalBumpPx')return needs('shoalBump','Lit bumps in the bed');
  if(/^ring[A-Z]/.test(key)&&n('ringLayer')<=0)return 'This world draws no mineral fringe.';
