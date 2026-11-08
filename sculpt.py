@@ -313,7 +313,10 @@ WORLD_KNOBS = {
     # Red's plain is level, as Green's is (card E1): the share of a retail window's 16-px cells at its most common height is .36 / .52 /
     # .20 in red-1..3 (Green's .35 / .20 / .44); the default undulation (10) gave .21 / .21 / .18, none gives .67 / .52 / .26. The plain's
     # lumps (plainRelief) keep its soft mottle. A level plain also repeats its tiles (card tilepool).
-    'red': dict(undulation=0, crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
+    # Retail round 1: retail's plain rolls gently (slope .03-.08 share .34 / .07 / .16 in red-1..3, ours .05 / .25 / .04 with none), so a faint
+    # undulation (2.5 over 80-px lumps on 60% of the land) replaces the level plain, and the ground pattern is softened to .7 contrast
+    # (retail's plain is lighter, less dotted).
+    'red': dict(undulation=2.5, undulationScale=80, undulationCover=.6, groundContrast=.7, crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
                 reliefAmount=.2, slopeTexture=0, microRock=0,
                 crackSpacing=28, rockOrder=1, bedLedge=0,
                 grooveSpacing=30, grooveAngle=-10, grooveRun=160,
@@ -446,7 +449,7 @@ WORLD_KNOBS = {
     # foot with no cracks, so crackSeverity, worms and wrinkles are 0 (they were .35, .4 and
     # .8: the Moon variant 'cracked' restores that look) and the pits are drawn by pockmark.
     'moon': dict(looseSupply=.1, looseSize=3.5, crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4,
-                 worms=0, undulation=4, plainRelief=.6, banding=0, crackDark=.6,
+                 worms=0, undulation=6, plainRelief=.6, banding=0, crackDark=.6,
                  sunTilt=0, faceFill=0, ambient=.25,
                  # H19: at 1 the lit relief on a shaded wall reads as hard plates, at .5 as rock (repro/walls/moon.json).
                  faceRelief=.5,
@@ -463,7 +466,7 @@ WORLD_KNOBS = {
                  moonCups=1, moonCupSize=6.5,
                  # G8: steep faces turned from the sun are near black and stringy (strokes 1-2 px wide, 5-12 px
                  # long, leaning with the glint axis): relief the sun shades, with a little less light overall.
-                 moonRibs=1, moonRibDepth=.9, moonRibDark=.15,
+                 moonRibs=1, moonRibDepth=.9, moonRibDark=.4,
                  # G8: lit slopes carry thin dark folds that follow the form (contours of the sculpted
                  # height, warped); .55 of the amount that read as a contour map.
                  moonFolds=.55,
@@ -489,7 +492,7 @@ WORLD_KNOBS = {
     # Bank lines measured on the section-built retail maps (measure/lava_*):
     # ground-spaced dark lines from slope 0.15 up; ground-coloured faces;
     # rim, outline and lip at the coast. Worms gave way to the lines.
-    'lava': dict(undulation=4, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
+    'lava': dict(undulation=5, undulationCover=1, undulationScale=40, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
                  beachWidth=0, waterSoft=0, bankRock=0, banding=0,
                  worms=0, shoreEdge=1, slopeTexture=0,
                  # Card E4: retail's bank is 6-9 flat layers stepping down to the lava, 12-16 px a
@@ -509,13 +512,13 @@ WORLD_KNOBS = {
                  # each riser wanders on its own), with a dark crease at every step foot whichever way it faces;
                  # fingers are small, flat tongues (their size is a per-stroke option);
                  # hills and banks are shiny rough rock, the plain stays matte (shine gated by slope).
-                 layerVary=.8, layerCrease=.7, fingerSize=.65,
+                 layerVary=.8, layerCrease=1, fingerSize=.65,
                  # G5: retail's layers wander, loop and pinch (contour layers: 1.2 layers of two-dimensional wander, width spread .7),
                  # its circles differ in size and spacing, and its step lines fade and break along their length.
                  lavaSpread=.7, lavaCircleVary=1,
                  # G5: hill rock as retail's crust, pillows and chips with creases and hanging veins, the fall-line relief it
                  # replaces, treads tilted toward the crown, and the tall hills' far sides near black.
-                 lavaCrust=1, lavaPillow=40, lavaChip=5.5, lavaVeins=.8, lavaCalm=1, lavaDusk=.8,
+                 lavaCrust=1, lavaPillow=40, lavaChip=5.5, lavaVeins=.4, lavaCalm=1, lavaDusk=.3, faceFill=.35, flatOcclusion=0,
                  shineSlopeGate=.7, shineWhite=.3, shineStretch=3,
                  shineGround=.15, shineGroundSharp=24, shineGroundRough=.6, shineGroundScale=8,
                  shineRock=.2, shineRockSharp=60, shineRockRough=.7, shineRockScale=8),

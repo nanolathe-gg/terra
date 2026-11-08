@@ -253,6 +253,7 @@ const TREE_DEFAULTS = {
   trunk: ['#120e0b', '#231f13', '#3b3323', '#534333'],
   flecks: null,          // [[color, share], ...]: second hues among the sunlit leaves (Green's yellow-green, its conifers' grey-olive)
   energy: [250, 250],    // gameplay range (retail: 250 for every tree)
+  shadow: 0.72,          // the cover of the shadow's stipple (retail Green's trees 0.74 shadow pixels per body pixel, Archipelago's 0.53)
 };
 // Retail Green's ramps, measured from Tree1-3 and Tree4-7 (chromatic pixels by luma octile; the gaps are the neutral fifth).
 const LEAF = {
@@ -550,7 +551,7 @@ function shrubFrame(P, seed, ctx) {
       const under = !has(x, y + 1), upper = !has(x, y - 1);
       // ramp position: the underside dark, the lit top light (toward the sun's side a little lighter), speckled leaf by leaf
       const side = clamp(-((x - cx) * L.x + (y - cy) * L.y) / (W / 2), -1, 1) * 0.08;
-      let u = under ? 0.04 + 0.4 * rn() : upper ? 0.6 + 0.4 * rn() : 0.3 + 0.48 * rn();
+      let u = under ? (dd > 0.5 || rn() < 0.4 ? 0.04 + 0.4 * rn() : 0.55 + 0.45 * rn()) : upper ? 0.6 + 0.4 * rn() : 0.3 + 0.48 * rn();   // a sparse shrub's leaves are dark or bright, mostly bright (retail Shrub3: 3 of 8 dark)
       u = clamp(u + side, 0, 1);
       let col = rampAt(colors, u);
       if (u > 0.35 && fl.length) { let acc = 0; const v = rn(); for (const [rgb, share] of fl) { if (v >= acc && v < acc + share) { const f = lumaRGB(col) / Math.max(1, lumaRGB(rgb)); col = rgb.map(q => q * Math.min(1.2, f)); break; } acc += share; } }
@@ -626,12 +627,12 @@ function shadowSprite(R, ax, ay, colors, r, most = 1) {   // most: the stipple's
 // One generator for every world's rocks (round 9, compared with retail Green, Red, Desert, Lava, Ice and Moon): a body, or a few
 // (`pieces`, Desert's boulders), each a buried ellipsoid made blocky by `angular` (its tangent planes, their edges rounded: a softly
 // faceted block; 1 is Ice's sharp shards), uneven by `lump`, drawn up into a spire by `tall` (Lava, Crystal), pocked by `pits`
-// (Desert). Lit by the map's sun with sky light from above and shadowed by itself; colored by rank of tone along the world's ramp
+// (Desert); `shadow` is the cover of the shadow's stipple (retail Green's rocks 0.66 shadow pixels per body pixel, Red's 0.26, Moon's almost none). Lit by the map's sun with sky light from above and shadowed by itself; colored by rank of tone along the world's ramp
 // (`colors`, darkest first) so a rock keeps retail's share of highlight under any sun, `mottle` [[color, share], ...] soft second
 // hues through the mid and light tones at the ramp's lightness, `grain` the fine dither of a rendered sprite. Retail Green's ramp and
 // mottles are measured from its ten rocks (luma octiles; cream 30% and rose 22% of the light pixels).
 export const ROCK_GREEN = ['#0f0f0f', '#2b2b2b', '#4b4b4b', '#5b5b5b', '#787878', '#949494', '#c3c3c3', '#f4f4f4'];
-const ROCK_DEFAULTS = { cells: '2x2', size: 1, angular: 0.5, shade: 0.6, tall: 0, pieces: 1, pits: 0, grain: 0.6, lump: 0.6, colors: ROCK_GREEN, mottle: [['#c3c39b', 0.3], ['#d7a3b3', 0.26]], metal: null };   // shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
+const ROCK_DEFAULTS = { shadow: 0.66, cells: '2x2', size: 1, angular: 0.5, shade: 0.6, tall: 0, pieces: 1, pits: 0, grain: 0.6, lump: 0.6, colors: ROCK_GREEN, mottle: [['#c3c39b', 0.3], ['#d7a3b3', 0.26]], metal: null, energy: null, flat: 0 };   // flat: 0 a boulder .. 1 a low slab (Moon's)   // energy: a [lo, hi] range for a rock that is an energy source (Lava's nodes; tracks the footprint's area); shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
 export const cellsOf = c => { const m = /^(\d+)x(\d+)$/.exec(String(c || '')); return m ? [clamp(+m[1], 1, 16), clamp(+m[2], 1, 16)] : [2, 2]; };
 const smoothstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 function rockSolid(P, r) {
@@ -640,7 +641,7 @@ function rockSolid(P, r) {
   let W, D;
   if (fw === 1 && fh === 1) { W = lerp(8, 21, clamp(P.size, 0, 1.4) / 1.4); D = W * (0.72 + 0.15 * r()); }
   else { W = fw * 16 * (0.86 + 0.12 * r()) * P.size; D = fh * 16 * (0.7 + 0.12 * r()) * P.size; }
-  const hgt = W * (0.34 + 0.34 * r() + 2.1 * tall * tall);   // retail spires stand about 2.5 times their width (Lava, Crystal)
+  const hgt = W * (0.34 + 0.34 * r() + 2.1 * tall * tall) * (1 - 0.55 * clamp(P.flat ?? 0, 0, 1));   // retail spires stand about 2.5 times their width (Lava, Crystal)
   const bodies = [{ e: 0, s: 0, a: W / 2, b: D / 2, hgt }];
   for (let i = 1; i < Math.round(clamp(P.pieces, 1, 8)); i++) {
     const sc = 0.3 + 0.32 * r(), th = r() * TAU;
@@ -687,7 +688,7 @@ function rockSolid(P, r) {
 }
 function rockFrame(P, seed, ctx) {
   const L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 9)), sun = worldSun(L);
-  const Sd = rockSolid(P, r), R = renderSolid({ F: Sd.F, eMin: Sd.ext.e0, eMax: Sd.ext.e1, sMin: Sd.ext.s0, sMax: Sd.ext.s1, uMax: Sd.ext.u, sun });
+  const Sd = rockSolid(P, r), R = renderSolid({ F: Sd.F, eMin: Sd.ext.e0, eMax: Sd.ext.e1, sMin: Sd.ext.s0, sMax: Sd.ext.s1, uMax: Sd.ext.u, sun, shadowSun: flatSun(sun) });
   const { w, h } = R, tone = new Float32Array(w * h), lit = new Float32Array(w * h), hasPx = [], mask = new Uint8Array(w * h);
   for (let k = 0; k < w * h; k++) if (R.px[k]) mask[k] = 1;
   const dist = edgeDist(w, h, mask);
@@ -822,7 +823,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     const conifer = P.species === 'conifer', tendril = P.species === 'tendril';
     const T = tendril ? tendrilFrame(P, seed, ctx) : treeFrame(P, seed, ctx);
     body = cropSprite(T.body);
-    shadow = tintSprite(shadowSprite(T.R, T.body.ax, T.body.ay, TREE_SHADOW_COLORS, rng(mix32(seed, 41)), 0.72), ctx, 0);   // the solid's own shadow, from the map's sun
+    shadow = tintSprite(shadowSprite(T.R, T.body.ax, T.body.ay, TREE_SHADOW_COLORS, rng(mix32(seed, 41)), clamp(P.shadow, 0, 1)), ctx, 0);   // the solid's own shadow, from the map's sun
     footprint = cellsOf(P.cells || '1x1');
     const bp = { species: P.species, height: Math.round(P.height * (conifer ? 0.88 : 0.78)), width: conifer ? 0.5 : 0.62, forks: 3, ash: 0.5 };
     if (!ctx.bodyOnly) {   // the view draws only body and shadow
@@ -846,9 +847,9 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     body = cropSprite(R.body);
     const [fw, fh] = cellsOf(P.cells);
     footprint = [fw, fh];
-    shadow = tintSprite(shadowSprite(R.R, R.body.ax, R.body.ay, ROCK_SHADOW_COLORS, rng(mix32(seed, 43))), ctx, 0);   // the solid's own shadow on level ground, from the map's sun
+    shadow = tintSprite(shadowSprite(R.R, R.body.ax, R.body.ay, ROCK_SHADOW_COLORS, rng(mix32(seed, 43)), clamp(P.shadow, 0, 1)), ctx, 0);   // the solid's own shadow on level ground, from the map's sun
     const cellsN = fw * fh, metalDefault = Math.round((7.6 * cellsN + 22.5) / 25) * 25;
-    gameplay = { energy: 0, metal: P.metal ?? Math.max(25, Math.min(100, metalDefault)), metalLinear: Math.round(7.6 * cellsN + 22.5), hp: 2000, blocking: true, reclaimable: true };
+    gameplay = { energy: P.energy ? pickValue(P.energy, clamp(cellsN / 36, 0, 1), rr) : 0, metal: P.metal ?? Math.max(25, Math.min(100, metalDefault)), metalLinear: Math.round(7.6 * cellsN + 22.5), hp: 2000, blocking: true, reclaimable: true };
   } else if (kind === 'scar') {
     const S = scarFrame(P, seed, ctx);
     body = tintSprite(S.body, ctx, ctx.tint?.up ?? 0.7); shadow = tintSprite(S.shadow || null, ctx, 0);
@@ -893,7 +894,13 @@ function getGround(g, x, y) { const k = (clamp(y, 0, g.h - 1) * g.w + clamp(x, 0
 
 // halo: the lightness of the ground under the halo, scaled (retail, measured round the deposits of each world: Green 0.86, Red 0.9,
 // Desert 0.7, Moon 0.62, Crystal 1, Archipelago lighter than its sand); haloSat how much richer its hue is than the ground's.
-export const DEPOSIT_DEFAULTS = { metal: 127, style: 'retail', look: 'auto', halo: 0.82, haloSat: 1.1 };   // style 'retail' (angular plates) or 'pebbles' (round-1 round pebbles, an artist option); look 'auto' | 'cluster' | 'plates'
+// style 'retail' (angular plates) or 'pebbles' (round-1 round pebbles, an artist option); look 'auto' | 'cluster' | 'plates' | 'blades'.
+// A world's table may reshape the painter (features.deposit.params), each a number against Green's own look: stoneScale (the stone's area,
+// 1), reach (how far the halo spreads, 1), rimDark (the halo's inner pixels, 0.78 of its tone), and for look 'blades' the ore as a core with
+// long tapered blades: blades (count), bladeLen and bladeWidth (px at 127 metal), fan (0 parallel blades .. 1 radial star), angle (degrees
+// of the first blade, 0 east, 90 down the screen), core (radius px). crust (radius px, 0: none) cracks the ground round the stone into
+// dark-edged plates, crustTone their lightness against the ground.
+export const DEPOSIT_DEFAULTS = { metal: 127, style: 'retail', look: 'auto', halo: 0.82, haloSat: 1.1, stoneScale: 1, reach: 1, rimDark: 0.78, blades: 7, bladeLen: 20, bladeWidth: 5, fan: 1, angle: -50, core: 7, crust: 0, crustTone: 0.8 };
 const STONE_CLASSES = [
   { w: 0.29, ramp: [[216, 3], [224, 3], [145, 4], [114, 5], [130, 2]] },        // pale: lilac-white, pink-lilac, pale blue
   { w: 0.22, ramp: [[115, 8], [131, 3], [147, 3], [217, 3], [148, 3], [87, 3]] }, // light and mid
@@ -917,7 +924,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const r = rng(seed), rn = rng(mix32(seed, 2));
   const mt = clamp((P.metal - 86) / (223 - 86), 0, 1);
   const look = P.look === 'auto' ? (P.metal >= 160 ? 'cluster' : 'plates') : P.look;
-  const total = stonePixelsFor(P.metal) * (0.95 + 0.1 * r()) * (look === 'cluster' ? 0.66 : 1);
+  const total = stonePixelsFor(P.metal) * P.stoneScale * (0.95 + 0.1 * r()) * (look === 'cluster' ? 0.66 : 1);
   const dom = look === 'cluster' ? clamp(lerp(0.66, 0.86, mt) + (r() - 0.5) * 0.05, 0.62, 0.88) : clamp(0.54 + (r() - 0.5) * 0.06, 0.5, 0.6);
   const small = [0, 0, 0].map(() => 0.5 + r()), ss = small.reduce((a, b) => a + b, 0);
   const areas = [total * dom, ...small.map(v => Math.max(15, total * (1 - dom) * v / ss))];
@@ -940,11 +947,25 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const chunks = [], layout = [[0, 0]];
   const rDom = Math.sqrt(areas[0] / Math.PI / 0.85);
   for (let i = 0; i < 3; i++) { const a = r() * TAU + i * 2.1, d = rDom * (look === 'cluster' ? 0.95 : 0.7) + 7 + r() * 6; layout.push([Math.cos(a) * d, Math.sin(a) * d * 0.9]); }
-  for (let ci = 0; ci < 4; ci++) {
+  for (let ci = 0; ci < (look === 'blades' ? 1 : 4); ci++) {
     let px = cx + layout[ci][0], py = cy + layout[ci][1];
     let pts;
     for (let attempt = 0; attempt < 9; attempt++) {
-    if (ci === 0 && look === 'cluster') {                // ragged cluster of 2-4 touching facets (solidity about 0.6)
+    if (look === 'blades') {                              // a core and long tapered blades: a star (fan 1) or parallel slashes (fan 0)
+      const sc = Math.sqrt(stonePixelsFor(P.metal) / stonePixelsFor(127)), fan = clamp(P.fan, 0, 1), n = Math.max(0, Math.round(P.blades * (0.8 + 0.4 * r())));
+      const core = sized(px, py, Math.PI * (P.core * sc) ** 2 * 0.85, 5 + Math.floor(r() * 2), 1 + 0.3 * r(), r() * TAU), parts = [core];
+      const a0 = P.angle * Math.PI / 180, nx = -Math.sin(a0), ny = Math.cos(a0);
+      for (let j = 0; j < n; j++) {
+        const a = a0 + (j + 0.6 * r()) / n * TAU * fan + (r() - 0.5) * 0.3 * (1 - fan), len = Math.min(52, P.bladeLen * sc * (0.55 + 0.9 * r())), w0 = P.bladeWidth * sc * (0.6 + 0.7 * r());
+        const par = fan < 0.5, off = (1 - fan) * (j - (n - 1) / 2) * (w0 + 3.5), slide = (1 - fan) * (r() - 0.5) * len * 0.5, bx0 = px + nx * off + Math.cos(a0) * (slide - (par ? len / 2 : 0)), by0 = py + ny * off + Math.sin(a0) * (slide - (par ? len / 2 : 0)), line = [];
+        for (let t = 0; t <= len; t += 0.5) {
+          const f = t / len, hw = Math.max(0.5, w0 * (par ? Math.sin(Math.PI * f) ** 0.7 : (1 - f) ** 0.9) * (0.8 + 0.4 * vnoise(f * 6 + j, 3, seed + j)) / 2), X = bx0 + Math.cos(a) * t, Y = by0 + Math.sin(a) * t;
+          for (let u = -Math.ceil(hw); u <= Math.ceil(hw); u++) if (Math.abs(u) <= hw + 0.25) line.push([Math.round(X - Math.sin(a) * u), Math.round(Y + Math.cos(a) * u)]);
+        }
+        parts.push(line);
+      }
+      pts = union(parts);
+    } else if (ci === 0 && look === 'cluster') {                // ragged cluster of 2-4 touching facets (solidity about 0.6)
       const k = 4 + (r() < 0.5 ? 1 : 0), per = areas[0] / (k * 0.6), rad = Math.sqrt(per / Math.PI), parts = [];
       let ang = r() * TAU;
       for (let j = 0; j < k; j++) { ang += 1.3 + r() * 1.2; const d = rad * (1.25 + 0.8 * r()); parts.push(sized(px + Math.cos(ang) * d, py + Math.sin(ang) * d, per, 4 + Math.floor(r() * 2), 1 + r() * 0.5, r() * TAU)); }
@@ -995,14 +1016,29 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     for (const p of stonePts) { const dd = Math.abs(p[0] - X) + Math.abs(p[1] - Y); if (dd < 40) { const e = Math.hypot(p[0] - X, p[1] - Y); if (e < d) d = e; } }
     rawD[y * bw + x] = d; dmap[y * bw + x] = d + (fbm(X / 5, Y / 5, s1, 2) - 0.5) * 5;
   }
-  const T = 4.6;   // a tight 3-6 px speckled rim that merges between neighbors (retail: median 2.8-3.6 px from a chunk, 90% within 6-8)
+  const T = 4.6 * P.reach;   // a tight 3-6 px speckled rim that merges between neighbors (retail: median 2.8-3.6 px from a chunk, 90% within 6-8)
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
     const k = y * bw + x; if (chunkId[k] >= 0) continue;
     const d = dmap[k], near = rawD[k] <= 2.3; if (d > T + 1 && !near) continue;
     const pr = near || d <= 2.6 ? 1 : clamp((T + 1.4 - d) / 3.6, 0, 1) * 0.93;   // no grass ever shows inside or against a plate
     if (rn() > pr) continue;
-    const X = x + ox, Y = y + oy, h = haloOf(getGround(ground, X, Y), P.halo, P.haloSat, (rawD[k] <= 1.5 ? 0.78 : 1) * (0.72 + 0.5 * rn() * rn() + 0.12 * rn()));   // speckled, as retail's moss
+    const X = x + ox, Y = y + oy, h = haloOf(getGround(ground, X, Y), P.halo, P.haloSat, (rawD[k] <= 1.5 ? P.rimDark : 1) * (0.72 + 0.5 * rn() * rn() + 0.12 * rn()));   // speckled, as retail's moss
     setGround(ground, X, Y, palette[q(h[0], h[1], h[2])]);
+  }
+  if (P.crust > 0) {   // cracked crust: the ground round the stone broken into plates, each its own tone, edged by dark cracks (Crystal's)
+    const Rc = P.crust * Math.sqrt(stonePixelsFor(P.metal) / stonePixelsFor(127)) ** 0.5, cell = Math.max(6, Rc / 2.4), s2 = (r() * 1e6) | 0;
+    const seedAt = (i, j) => [(i + 0.12 + 0.76 * hash2(i, j, s2)) * cell, (j + 0.12 + 0.76 * hash2(i, j, s2 + 1)) * cell];
+    for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+      const X = x + ox, Y = y + oy, k = y * bw + x; if (chunkId[k] >= 0) continue;
+      const rr = Math.hypot(X - cx, (Y - cy) * 1.1), edge = Rc * (0.82 + 0.36 * (fbm(X / 9, Y / 9, s2 + 5, 2) - 0.5) * 2 * 0.5 + 0.1); if (rr > edge) continue;
+      const u = X + 4096, v = Y + 4096, ci0 = Math.floor(u / cell), cj0 = Math.floor(v / cell); let d1 = 1e9, d2 = 1e9, id = 0;
+      for (let j = cj0 - 1; j <= cj0 + 1; j++) for (let i = ci0 - 1; i <= ci0 + 1; i++) { const [sx, sy] = seedAt(i, j), d = Math.hypot(u - sx, v - sy); if (d < d1) { d2 = d1; d1 = d; id = i * 7919 + j; } else if (d < d2) d2 = d; }
+      if (rn() > clamp((edge - rr) / 3, 0, 1)) continue;
+      const base = getGround(ground, X, Y), crack = d2 - d1 < 0.7 + 0.5 * rn(), streak = vnoise((u - v) / 3, (u + v) / 14, s2 + 9) - 0.5;
+      const tone = crack ? 0.2 : P.crustTone * (0.8 + 0.4 * hash2(id, 1, s2)) * (0.92 + 0.16 * rn() + 0.3 * streak);
+      const cl = base.map(c => c * tone);
+      setGround(ground, X, Y, palette[q(cl[0], cl[1], cl[2])]);
+    }
   }
   return { cx, cy, metal: P.metal, look, chunks: 4, stonePx: stonePts.length, dominant: areas[0] / total, rect: [ox, oy, bw, bh], gameplay: { metal: P.metal, indestructible: true, footprint: [3, 3] } };
 }
@@ -1073,11 +1109,15 @@ function paintDepositPebbles(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
 }
 
 
-export const VENT_DEFAULTS = { size: 1, forks: 3, rim: 0.72 };   // rim: the lightness of the ground round the crack, scaled
+// rim: the lightness of the ground round the crack, scaled; rimSat how much richer its hue is; spread how far the rim reaches (px; 2: Green's
+// thin scorch); thick the crack's width, scaled. look 'pit' draws a dark hole in a ring of lumps (lumps: bubbles, Lava's) or cracked
+// plates (Crystal's) instead of a crack: hole and ring (radius px), cell (px of one lump or plate), lumpTone (their lightness against the ground).
+export const VENT_DEFAULTS = { size: 1, forks: 3, rim: 0.72, rimSat: 1.15, spread: 2, thick: 1, look: 'crack', hole: 6, ring: 22, cell: 9, lumps: 1, lumpTone: 0.6 };
 export function paintVent(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const P = { ...VENT_DEFAULTS, ...params }, palette = ctx.palette, q = paletteSearch(palette), lit = groundLight(ctx);
   const r = rng(seed), rn = rng(mix32(seed, 4));
   const bw = 96, bh = 96, ox = Math.round(cx) - 48, oy = Math.round(cy) - 48;
+  if (P.look === 'pit') return paintVentPit(ground, cx, cy, P, seed, ctx, { bw, bh, ox, oy });
   const core = new Uint8Array(bw * bh);   // 1 = crack, thickness irrelevant after drawing
   function stamp(x, y, t) {
     const rad = Math.max(0.4, t / 2);
@@ -1097,8 +1137,8 @@ export function paintVent(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     if (depth < 2 && len > 8) crack(x, y, ang + (r() - 0.5) * 1.0, len * 0.5, Math.max(1, th * 0.6), depth + 1);
   }
   const a0 = r() * TAU, len = 17 * P.size;
-  crack(cx, cy, a0, len * (1.0 + 0.3 * r()), 3 * Math.sqrt(P.size) + 0.6, 0);
-  crack(cx, cy, a0 + Math.PI + (r() - 0.5) * 0.6, len * (0.8 + 0.3 * r()), 3 * Math.sqrt(P.size), 0);
+  crack(cx, cy, a0, len * (1.0 + 0.3 * r()), (3 * Math.sqrt(P.size) + 0.6) * P.thick, 0);
+  crack(cx, cy, a0 + Math.PI + (r() - 0.5) * 0.6, len * (0.8 + 0.3 * r()), 3 * Math.sqrt(P.size) * P.thick, 0);
   // edges: tint ring one and a feathered ring two
   const gm = [0, 0, 0];
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
@@ -1108,13 +1148,45 @@ export function paintVent(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
       continue;
     }
     let d1 = 99;
-    for (let dy = -2; dy <= 2 && d1 > 1; dy++) for (let dx = -2; dx <= 2; dx++) { const bx = x + dx, by = y + dy; if (bx >= 0 && by >= 0 && bx < bw && by < bh && core[by * bw + bx]) { d1 = Math.min(d1, Math.max(Math.abs(dx), Math.abs(dy))); } }
-    if (d1 > 2) continue;
-    const pr = d1 === 1 ? 0.72 : 0.3;
+    const sp = Math.max(2, Math.round(P.spread));
+    for (let dy = -sp; dy <= sp && d1 > 1; dy++) for (let dx = -sp; dx <= sp; dx++) { const bx = x + dx, by = y + dy; if (bx >= 0 && by >= 0 && bx < bw && by < bh && core[by * bw + bx]) { d1 = Math.min(d1, Math.max(Math.abs(dx), Math.abs(dy))); } }
+    if (d1 > sp) continue;
+    const pr = d1 === 1 ? 0.72 : sp === 2 ? 0.3 : 0.62 * (sp + 1 - d1) / sp;
     if (rn() > pr) continue;
     const base = getGround(ground, X, Y);
-    const h = haloOf(base, P.rim * (d1 === 1 ? 0.9 : 1), 1.15, 0.85 + 0.3 * rn());   // the scorched rim: the ground under it, darker
+    const h = haloOf(base, P.rim * (d1 === 1 ? 0.9 : 1), P.rimSat, 0.85 + 0.3 * rn());   // the scorched rim: the ground under it, darker
     setGround(ground, X, Y, palette[q(h[0], h[1], h[2])]);
+  }
+  return { cx, cy, rect: [ox, oy, bw, bh], gameplay: { geothermal: true, indestructible: true, footprint: [1, 1] } };
+}
+
+// A vent as a pit (Lava's and Crystal's): a dark hole with a ring round it of lit bubbles with dark outlines, or of plates split by cracks,
+// each a seeded cell of the ring; the ring's rim is ragged and thins to the ground.
+function paintVentPit(ground, cx, cy, P, seed, ctx, { bw, bh, ox, oy }) {
+  const palette = ctx.palette, q = paletteSearch(palette), L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 4)), s1 = (r() * 1e6) | 0;
+  const R = P.ring * P.size, hole = P.hole * P.size, cell = Math.max(4, P.cell * Math.sqrt(P.size)), bubble = P.lumps > 0.5;
+  const seedAt = (i, j) => [(i + 0.1 + 0.8 * hash2(i, j, s1)) * cell, (j + 0.1 + 0.8 * hash2(i, j, s1 + 1)) * cell];
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+    const X = x + ox, Y = y + oy, dx = X - cx, dy = Y - cy, rr = Math.hypot(dx, dy * 1.05), th = Math.atan2(dy, dx);
+    const edge = R * (0.78 + 0.5 * (fbm(Math.cos(th) * 2.2 + 5, Math.sin(th) * 2.2 + 5, s1 + 3, 3) - 0.5) + 0.12), hl = hole * (0.75 + 0.5 * vnoise(Math.cos(th) * 2.5 + 9, Math.sin(th) * 2.5 + 9, s1 + 4));
+    if (rr > edge) continue;
+    const base = getGround(ground, X, Y);
+    let tone;
+    if (rr < hl) tone = 0.1 + 0.1 * rn();
+    else {
+      const u = X + 4096, v = Y + 4096, i0 = Math.floor(u / cell), j0 = Math.floor(v / cell); let d1 = 1e9, d2 = 1e9, sx = 0, sy = 0, id = 0;
+      for (let j = j0 - 1; j <= j0 + 1; j++) for (let i = i0 - 1; i <= i0 + 1; i++) { const [px, py] = seedAt(i, j), d = Math.hypot(u - px, v - py); if (d < d1) { d2 = d1; d1 = d; sx = px; sy = py; id = i * 7919 + j; } else if (d < d2) d2 = d; }
+      if (bubble) {
+        const br = cell * 0.62;
+        if (d1 > br) tone = 0.32 * (0.8 + 0.4 * rn());
+        else if (d1 > br - 1.3) tone = 0.2;
+        else { const n = [(u - sx) / br, (v - sy) / br], facing = -(n[0] * L.x + n[1] * L.y); tone = P.lumpTone * (1 + 0.4 * facing * 1.3) * (0.82 + 0.3 * hash2(id, 3, s1)) * (0.92 + 0.16 * rn()); }
+      } else tone = d2 - d1 < 0.8 + 0.4 * rn() ? 0.14 : P.lumpTone * (0.75 + 0.5 * hash2(id, 5, s1)) * (0.9 + 0.2 * rn());
+      tone *= 1 - 0.35 * smoothstep(0.55, 1, rr / edge);   // the ring grades to the ground at its rim
+      if (rr > edge - 2.5 && rn() > (edge - rr) / 2.5) continue;
+    }
+    const rgb = base.map(c => c * tone);
+    setGround(ground, X, Y, palette[q(rgb[0], rgb[1], rgb[2])]);
   }
   return { cx, cy, rect: [ox, oy, bw, bh], gameplay: { geothermal: true, indestructible: true, footprint: [1, 1] } };
 }
