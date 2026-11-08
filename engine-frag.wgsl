@@ -992,7 +992,7 @@ fn shineNoise(q: vec2f) -> vec2f {
 // material code already settled (rock: exposed; slope cover: the face blend
 // and the sampled slope cover; sand and crystal from their baked fields).
 fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, exposed: f32, faceCover: f32,
-             slopeCover: f32, crystalMask: f32, sunSeen: f32, landform: f32, faceRelief: f32) -> vec4f {
+             slopeCover: f32, crystalMask: f32, sunSeen: f32, landform: f32, faceRelief: f32, faceRock: f32) -> vec4f {
     var sand = smoothstep(0.35, 0.95, bakedFields(p).a);
     if (u.beach != 0) { sand = max(sand, beachSand(p, 0.5)); }   // beach sand is lit as sand
     // Crystal tops only: the risers between columns stay dark and take the
@@ -1028,6 +1028,7 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
         micro = g + rough * shineNoise(q);
     }
     var grained = normalize(vec3f(-micro, 1.0));
+    // The rock face's relief is its own grain: its gloss follows the lit normal, with no second grain over it.
     if (faceRelief > 0.001) {
         // The grain above is a top-down normal, which would cancel the relief's tilt on a wall: tilt the wall's own normal instead.
         let axis = select(vec3f(0.0, 0.0, 1.0), vec3f(0.0, 1.0, 0.0), abs(normal.z) > 0.95);
@@ -1036,6 +1037,7 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
         let grain = shineNoise(q) * rough;
         grained = normalize(mix(grained, normalize(normal + tangent * grain.x + cross(normal, tangent) * grain.y), faceRelief));
     }
+    grained = normalize(mix(grained, normal, faceRock));
     // The grain tilts the facets under the diffuse light too.
     let litBefore = max(0.0, dot(normal, u.light));
     let litAfter = max(0.0, dot(grained, u.light));
@@ -1644,6 +1646,42 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         normal = normalize(mix(normal, formNormal, faceRelief) - (relief.x * tangent + relief.y * bitangent) * faceRelief);
         faceCavity = relief.z;
     }
+    // The rock face (rockFaceAt) in the art's own pixels: its relief's slope across a screen pixel, carried back through TA's projection
+    // (screen y = world y - height / 2) to the ground's slope, bends the lit normal; grass holds on its ledges and, in clumps, where the
+    // face is broken enough to give it a footing.
+    var faceGate = 0.0;
+    var faceRock = 0.0;
+    var faceMicro = 0.0;   // the sun the face's own relief adds or takes (n.l with it less without)
+    var rockFace = RockFace(0.0, 0.0, 0.0, 0.0);
+    if (u.rockFace > 0.0 && h > u.sea + 1.0) {
+        faceGate = rockFaceGate(slope, painted.x, route);
+        if (faceGate > 0.0) {
+            let hb = baseHeight(p);
+            let fall = select(vec2f(0.0, -1.0), broad / max(slope, 1e-5), slope > 1e-4);
+            // One screen pixel right or down is this much ground (the projection's inverse at the broad slope).
+            let rowStretch = max(1.0 - 0.5 * broad.y, 0.2);
+            let dyx = 0.5 * broad.x / rowStretch;
+            rockFace = rockFaceAt(pixel, hb, fall);
+            let hx = rockFaceAt(pixel + vec2f(1.0, 0.0), hb + broad.x + broad.y * dyx, fall).relief;
+            let hy = rockFaceAt(pixel + vec2f(0.0, 1.0), hb + broad.y / rowStretch, fall).relief;
+            // Rock's share of the face rises with the slope to faceRock a slope of 1.3 past rockFaceFrom, scaled by the stroke's Local
+            // vegetation as the rest of the rock is; painted rock is rock. Grass takes the rest in clumps, ledges first.
+            let rise = smoothstep(u.rockFaceFrom, u.rockFaceFrom + 1.3, slope);
+            var share = 1.0 - (1.0 - u.faceRock * rise) * clamp(place.vegetation, 0.0, 2.0);
+            share = max(clamp(share, 0.0, 1.0), smoothstep(0.3, 0.8, painted.x) * 0.9);
+            let field = 0.5 + 0.5 * clamp((poolNoise(pixel, 18.0, 37.0) * 0.5 + poolNoise(pixel, 7.0, 59.0) * 0.32 + poolNoise(pixel, 3.0, 83.0) * 0.18) / 0.55, -1.0, 1.0)
+                      + u.faceGrass * 0.6 * rockFace.ledge;
+            faceRock = smoothstep(field - 0.04, field + 0.04, share);
+            // The bump: full on the rock, a third on the grass between (the face's form shows through its cover).
+            let ds = vec2f(hx - rockFace.relief, hy - rockFace.relief) * u.rockFace * faceGate * mix(0.35, 1.0, faceRock);
+            // d(screen)/d(world) = [[1, 0], [-gx/2, 1 - gy/2]]: the relief's slope on the ground is its transpose times the screen slope.
+            let dw = vec2f(ds.x - 0.5 * broad.x * ds.y, rowStretch * ds.y);
+            let nn = normal.xy / max(normal.z, 0.05);
+            let before = max(0.0, dot(normal, u.light));
+            normal = normalize(vec3f(nn - dw, 1.0));
+            faceMicro = max(0.0, dot(normal, u.light)) - before;
+        }
+    }
     let flatLight = u.ambient + 0.95 * u.light.z;
     var lighting = (u.ambient + 0.95 * max(0.0, dot(normal, u.light))) / flatLight;
     lighting = min(lighting, u.lightCap);
@@ -1681,6 +1719,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         lightTint = 1.0 + (skyShare * (u.skyColor - 1.0) + sunShare * (u.sunColor - 1.0)) / max(skyShare + sunShare, 0.0001);
     }
     lightTint /= max(flatTintLuma, 0.05);
+    // The rock face's light (retail Green's faces run from black in their creases to light grey on their lit facets): the light its own
+    // relief adds or takes is scaled up on the face's rock, past the ground's cap; the face's broad light is left as it is.
+    if (faceGate > 0.0 && u.faceContrast != 1.0) {
+        shading = max(shading + (u.faceContrast - 1.0) * 0.95 * faceMicro / flatLight * faceGate * faceRock, 0.0);
+    }
     // Retail Lava faces stay close to the ground's tone whichever way they
     // look (luma regressed on the height gradient: ~8 per unit slope east to
     // west against our 20; measured on four maps), so its world keeps only
@@ -1783,10 +1826,18 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let rockFlat = select(u.rockMean, u.rockBase.rgb, u.rockBase.a > 0.5);
         rock = rockFlat + (rock - rockFlat) * u.rockDetail;
     }
+    // The rock face's colour: even (its relief's light makes the pattern), a chunk's tone a little lighter or darker, its crevices and the
+    // shade under its ledges dark.
+    if (faceGate > 0.0) {
+        let flat = select(u.rockMean, u.rockBase.rgb, u.rockBase.a > 0.5);
+        rock = mix(rock, flat * (1.0 + 0.12 * rockFace.tone), faceGate);
+        rock *= 1.0 - 0.95 * rockFace.cavity * faceGate;
+    }
     // H3 item 4: one placement function (landPlace); its thresholds are rows of materials/green.json.
     var exposed = place.exposed;
     // H5 3a: wear bares steep grass in grey outcrops (the bake draws their cracks by the same rule).
     exposed = max(exposed, outcropAt(p, slope, timeMaps.wear, timeMaps.hard) * (1.0 - route) * place.deposits);
+    exposed = mix(exposed, faceRock, faceGate);   // on the rock face the face's share decides
     let lowBank = place.lowBank;
     let sandBar = sandBarAt(p);
     var nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
@@ -1825,6 +1876,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let faceSlope = place.faceSlope;
         let face = place.face;
         var rockMask = place.rockMask;
+        // On the rock face the face decides: rock but for its ledges' grass (no per-pixel moss).
+        rockMask = mix(rockMask, faceRock, faceGate);
         let moss = mix(slopeBased, grass0, u.mossFromGround);
         let faceMaterial = mix(moss, rock, rockMask);
         material = mix(material, faceMaterial, face * u.microRock);
@@ -1873,7 +1926,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Card tilepool: the dashes repeat with the pool, as the rest of level ground does.
         let pw = poolPixel(p); let sw = poolPixel(pixel);
         let ticket = mix(cellHash(vec2f(floor(pw.x * 0.5), pw.y) + 311.0).x, cellHash(vec2f(floor(sw.x * 0.5), sw.y) + 311.0).x, faceRelief);
-        let fleck = step(ticket, want) * exposed;   // 2 px wide, 1 px tall: the dashes of retail's flecks
+        let fleck = step(ticket, want) * exposed * (1.0 - faceGate);   // 2 px wide, 1 px tall: the dashes of retail's flecks (the rock face grows its own grass)
         material = mix(material, mossColour, fleck);
         // Card P10, lichen: rosettes of 1 to 4 px radius on the faces that look at the sun and at the sky (the lit normal, relief included), off the
         // crevices. The rock type's cover (its `lichen`) grows with Age and is scaled by this row, as the flecks are; a wall's rosettes are drawn
@@ -2169,7 +2222,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let turned = 1.0 - clamp(shading, 0.0, 1.0);
     if (u.shineOn != 0) {
         let sunSeen = markSeen * (1.0 - flatBank) * closeVis;
-        var shine = shineTerm(pixel, p, gLit, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen, landform, faceRelief);
+        var shine = shineTerm(pixel, p, gLit, normal, material, exposed, faceCover, slopeShare, crystalMask, sunSeen, landform, faceRelief, faceGate);
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
         if (u.shineSlopeGate > 0.0) { shine = shineSlopeGated(shine, slope); }

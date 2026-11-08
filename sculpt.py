@@ -215,6 +215,9 @@ KNOB_DEFAULTS.update(hillBlocks=0)
 # Card P10: the rock model's numbers (World panel, Rock type): 0 the world's own (its table's material.rock), else a named type
 # (sculpt-material-model.js ROCK_TYPES, Granite first).
 KNOB_DEFAULTS.update(rockType=0)
+# The rock face (engine-common.wgsl rockFaceAt): one model for every rock face, drawn in the art's own pixels. rockFace 0: none.
+KNOB_DEFAULTS.update(rockFace=0, rockFaceFrom=.6, faceRock=.9, faceBed=12, faceLedge=1, faceRun=90, faceLean=15, faceScratch=2, faceScratchSize=6,
+                     faceBlock=1.5, faceBlockSize=18, faceCrease=2.5, faceCreaseSize=10, faceGrit=0, faceGrass=.6, faceContrast=2)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, outcrop=0, rillDepth=0, rillSpacing=8)
@@ -233,7 +236,7 @@ KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1,
 LIGHT_PASS = dict(erosion=1, erosionRain=0, erosionEnvelope=.12)
 ENGINE_KNOBS = {
     'green': dict(rockAge=.1, gullyDepth=4,
-                  rockMoss=.4, hillBlocks=.5,
+                  rockMoss=.4, hillBlocks=0,
                   terraceBreak=0, terraceCalm=0, outcrop=0),
     **{world: LIGHT_PASS for world in ('red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice')},
 }
@@ -260,7 +263,10 @@ WORLD_KNOBS = {
                   # ours .47/.13 before), cracks as lit relief rather than ink. Beds and joints
                   # only on painted rock (rockFrom 1.6): the hills of green-1 and green-3 carry
                   # sparse patches and keep their own relief.
-                  rockOrder=1, rockFrom=1.6, bedSpacing=5, bedHeight=1, bedVary=.9,
+                  # The rock face (green dive, 2026-11-08): every face steep enough is rock, drawn in screen pixels (rockFaceAt); retail's faces
+                  # are layered, crumpled and scratched rock from black creases to light grey facets, grass in clumps and on the ledges.
+                  rockFace=1, rockOrder=0,
+                  rockFrom=1.6, bedSpacing=5, bedHeight=1, bedVary=.9,
                   bedLedge=.4, grooveAngle=-20,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
@@ -287,7 +293,7 @@ WORLD_KNOBS = {
                   rockMoss=.15, rockDetail=.5,
                   gullyDepth=8, grooveRun=90, rockStain=1.2, ribTilt=.2,
                   bedPunch=1,
-                  shineRock=.32, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
+                  shineRock=.12, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
                   # "blurry parts"): the step is a true threshold that wanders ~24 depth units over
                   # 140 px; the bed is lit by its own relief (green-3's blur was the shelf's slope

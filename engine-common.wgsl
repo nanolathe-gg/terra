@@ -189,6 +189,24 @@ struct Uniforms {
     grooveRun: f32,       // typical length of an unbroken joint or gully, world px
     bedHeight: f32,       // 0 beds spaced along the ground (px), 1 by height units (as the strata colours)
     rockFrom: f32,        // slope where beds and joints start on steep ground (painted rock always counts)
+    // Rock face: the one model of every rock face (rockFaceAt): beds along the contours with a ledge at each top, joints that cut them
+    // into tilted blocks, scratches down the face and grit, all relief, so the sun lights them on any face.
+    rockFace: f32,        // strength, 0: none
+    rockFaceFrom: f32,    // slope where the face's relief starts (full 0.4 steeper)
+    faceBed: f32,         // bed thickness, height units
+    faceLedge: f32,       // ledge step, 0..1 of the bed
+    faceRun: f32,         // typical unbroken ledge length, px
+    faceLean: f32,        // scratches and joints lean from the screen's north-south, degrees
+    faceScratch: f32,     // scratch depth, height units
+    faceScratchSize: f32, // scratch spacing, px
+    faceBlock: f32,       // joint depth and block tilt, height units
+    faceBlockSize: f32,   // px between joints along a bed
+    faceGrit: f32,        // fine grit, height units
+    faceGrass: f32,       // how strongly grass takes the ledges, 0..1
+    faceContrast: f32,    // the rock face's light: 1 the ground's; above, its shade goes deeper and its lit facets brighter
+    faceRock: f32,        // rock's share of a steep face (the rest grass, in clumps and on ledges); a stroke's Local vegetation scales it
+    faceCrease: f32,      // crease depth (fine creases along the contours, the face's grain), height units
+    faceCreaseSize: f32,  // crease spacing, px
     // Water looks (card E1). Defaults reproduce the earlier water exactly.
     bedLit: f32,          // shallow water drawn as the lit bed under it, tinted (0: the noise water; 1: all bed)
     bedTint: f32,         // how far the tint replaces the bed's own colour (0: bed only; 1: the tint, lit by the bed)
@@ -457,6 +475,123 @@ fn wrapNoise(q: vec2f, n: f32) -> f32 {
 fn poolNoise(p: vec2f, s: f32, o: f32) -> f32 { let n = poolCells(s); return wrapNoise(poolPos(p) * (n / u.pool) + o, n); }
 // A terrainNoise(p * m) frequency rounded so that the 512-px noise texture repeats with the pool.
 fn poolScale(m: f32) -> f32 { let k = u.pool / 512.0; return max(1.0, round(m * k)) / k; }
+
+// Rock face (any world). TA's camera draws the art in screen pixels, and a face turned to the viewer spreads one world pixel over
+// several screen rows, so the face's detail is drawn where the art is: rockFaceAt takes the screen pixel s (the art's own pixel), the
+// ground's height there without relief (h: the beds follow it, so they lie along the contours) and the broad gradient's direction (fall).
+// It returns relief (height units, lit by the draw through the projection, appearance only), ledge (0..1: a bed's top, where grass holds),
+// cavity (0..1: crease, joint and under-ledge floors, which lie in shade) and tone (-1..1, a chunk's own shade).
+struct RockFace { relief: f32, ledge: f32, cavity: f32, tone: f32 }
+// Where the face lies: from slope rockFaceFrom, full 0.4 steeper, and wherever rock is painted; a smooth route keeps none.
+fn rockFaceGate(slope: f32, paintRock: f32, route: f32) -> f32 {
+    return max(smoothstep(u.rockFaceFrom, u.rockFaceFrom + 0.4, slope), smoothstep(0.1, 0.6, paintRock)) * (1.0 - route);
+}
+// Band-limited waves whose crests run across dir (jittered kernels on a lattice of n cells a period, q in cells), -1..1: the
+// relief bake's gullies() without its gradient.
+fn faceWaves(q: vec2f, dir: vec2f, n: f32) -> f32 {
+    let cell = floor(q);
+    let local = fract(q);
+    var sum = 0.0;
+    var weight = 0.0;
+    for (var j = -2; j <= 1; j++) {
+        for (var i = -2; i <= 1; i++) {
+            let o = vec2f(f32(i), f32(j));
+            let c = poolWrap(cell - o, n);
+            let jitter = cellHash(c);
+            let point = local + o - jitter * 0.5;
+            let w = exp(-dot(point, point) * 2.0);
+            let extra = cellHash(c + 91.7);
+            sum += cos(dot(point, dir) * 6.2831853 * (0.6 + 0.9 * extra.x) + extra.y * 6.2831853) * w;
+            weight += w;
+        }
+    }
+    return sum / weight;
+}
+fn rockFaceAt(s: vec2f, h: f32, fall: vec2f) -> RockFace {
+    var o: RockFace;
+    let sp = poolPos(s);
+    let along = vec2f(-fall.y, fall.x);
+    let a = radians(u.faceLean);
+    let r = vec2f(sp.x * cos(a) + sp.y * sin(a), -sp.x * sin(a) + sp.y * cos(a));   // turned by the lean: x across the scratches
+    // Beds: height in bed units, warped so a bed wanders, pinches and swells along its run.
+    let bed = max(u.faceBed, 0.5);
+    let c = h / bed + poolNoise(s, 90.0, 3.0) * 0.8 + poolNoise(s, 31.0, 11.0) * 0.3;
+    let k = floor(c);
+    let t = c - k;                                  // 0 at the bed's foot, 1 at its top
+    let bh = cellHash(vec2f(k, 17.0));
+    let tread = mix(0.25, 0.6, bh.x);               // the bed's ledge share
+    let x = clamp(t / (1.0 - tread), 0.0, 1.0);
+    let rise = 1.0 - (1.0 - x) * (1.0 - x);         // a steep foot rounding into the lip
+    // A ledge runs for a while along its bed, then fades into the face: coherent strips, naturally broken.
+    let run = smoothstep(-0.15, 0.45, poolNoise(s, max(u.faceRun, 8.0), k * 7.31 + 5.0));
+    let stair = (rise - t) * u.faceLedge * run;
+    o.ledge = smoothstep(0.85, 1.0, x) * run * smoothstep(1.0, 0.92, t);
+    // Crumple: short creases along the contours, crossing a little (oriented wave kernels at two scales, folded so each zero crossing is
+    // a sharp V); they run out and start again, so they never close into cells.
+    var crumple = 0.0;
+    var crease = 0.0;
+    var wl = max(u.faceCreaseSize, 3.0);
+    var amp = 1.0;
+    for (var oc = 0; oc < 2; oc++) {
+        let cells = poolCells(wl);
+        let qq = sp * (cells / u.pool) + vec2f(f32(oc) * 13.7, f32(oc) * 7.9);
+        let d = normalize(fall + along * (0.35 * (f32(oc) * 2.0 - 1.0)));
+        let lumpCells = round(1.7 * cells);
+        let wv = mix(faceWaves(qq, d, cells), wrapNoise(qq * (lumpCells / cells) + 3.1, lumpCells), 0.4);
+        let fold = abs(wv);
+        crumple += (fold - 0.5) * amp;               // V floors at the crossings, broad shoulders between
+        crease = max(crease, (1.0 - smoothstep(0.0, 0.12, fold)) * amp);
+        wl *= 0.5;
+        amp *= 0.6;
+    }
+    // Masses: lumps of the face, 10 to 30 px, so it reads as one broken chunk of rock and not a combed sheet.
+    let mass = poolNoise(s, 23.0, 101.0) * 0.6 + poolNoise(s, 11.0, 103.0) * 0.4;
+    // Facets: the crumple's planes. Cells of a jittered lattice (screen px) measured with a metric stretched along the contours; each
+    // cell a plane tilted its own way, so the face breaks into small angular facets that catch the light differently; about half the
+    // edges between them are open creases.
+    let gs = max(u.faceCreaseSize, 3.0) * 0.6;
+    let nc = poolCells(gs);
+    let q = sp / gs;
+    let g = floor(q);
+    var best = 1e9; var second = 1e9; var id = g; var id2 = g; var pt = q;
+    for (var j = -2; j <= 2; j++) {
+        for (var i = -2; i <= 2; i++) {
+            let cc = g + vec2f(f32(i), f32(j));
+            let point = cc + 0.1 + 0.8 * cellHash(poolWrap(cc, nc) + 7.0);
+            let v = point - q;
+            let dv = vec2f(dot(v, along) * 0.55, dot(v, fall));
+            let dd = dot(dv, dv);
+            if (dd < best) { second = best; id2 = id; best = dd; id = cc; pt = point; } else if (dd < second) { second = dd; id2 = cc; }
+        }
+    }
+    let edge = (sqrt(second) - sqrt(best)) * gs;
+    let tilt = (cellHash(poolWrap(id, nc) + 29.0) - 0.5) * 2.0;
+    let fw = (q - pt) * gs;
+    let facet = (tilt.x * dot(fw, along) * 0.5 + tilt.y * dot(fw, fall)) / gs;
+    let openEdge = step(0.6, cellHash(poolWrap(id, nc) + poolWrap(id2, nc) * 1.37 + 3.0).x);
+    let facetCrease = (1.0 - smoothstep(0.0, 0.7, edge)) * openEdge;
+    crease = max(crease, facetCrease);
+    let chunk = 0.45 * crumple + facet - 0.8 * facetCrease;
+    // Joints: near-vertical cracks (the lean) that part each bed at its own places; some open, the rest tight.
+    let js = max(u.faceBlockSize, 4.0);
+    let jc = floor((r.x + bh.y * js) / js);
+    let jh = cellHash(vec2f(jc, k + 41.0));
+    let jx = (jc + 0.2 + 0.6 * jh.x) * js - bh.y * js;
+    let open = step(0.4, jh.y);
+    let joint = (1.0 - smoothstep(0.0, 1.0, abs(r.x - jx))) * open * smoothstep(0.1, 0.35, t);
+    // Scratches: ridges down the face, lean faceLean, of varying depth.
+    let ws = max(u.faceScratchSize, 1.5);
+    let sq = vec2f(r.x / ws, r.y / (ws * 6.0));
+    let r1 = 1.0 - abs(valueNoise(sq + vec2f(0.0, 13.0)));
+    let deep = 0.5 + 0.5 * poolNoise(s, 40.0, 61.0);
+    let scratch = (r1 * r1 - 0.5) * deep;
+    let grit = cellHash(poolPixel(s) + 13.0).x - 0.5;
+    o.relief = stair * bed + u.faceCrease * chunk + u.faceBlock * (2.0 * mass - joint) + u.faceScratch * scratch + u.faceGrit * grit;
+    o.cavity = clamp(max(max(crease * clamp(u.faceCrease * 0.15, 0.0, 0.9), joint * clamp(u.faceBlock * 0.5, 0.0, 1.0)),
+                         smoothstep(0.1, 0.0, t) * run * u.faceLedge), 0.0, 1.0);
+    o.tone = tilt.y;
+    return o;
+}
 
 // H2 rock column: the bed coordinate, in height units, at world point p for a
 // rock surface at height z. The bake (bedRelief) and the erosion pass (erosion.wgsl) both

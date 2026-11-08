@@ -1570,6 +1570,10 @@ fn bake(p: vec2f) -> vec4f {
         fall = normalize(mix(fall, mix(a, fall, own), have) + vec2f(1e-5));
     }
 
+    // On the rock face the screen-space face (rockFaceAt) draws the fine detail: the ribs keep only their broadest octave there (the face's
+    // ravines), and the scatter's cracks and blocks give way below.
+    var faceBake = 0.0;
+    if (u.rockFace > 0.0 && h > u.sea + 1.0) { faceBake = rockFaceGate(slope, paintRock, route); }
     var acc = vec3f(0.0);
     var amplitude = 1.0;
     var cells = poolCells(u.reliefScale);   // the first octave's lattice cells a pool period (card tilepool)
@@ -1600,7 +1604,7 @@ fn bake(p: vec2f) -> vec4f {
         let lumpCells = round(1.7 * cells);
         let lump = wrapNoise(q * (lumpCells / cells) + 3.1, lumpCells);
         e.x = mix(e.x, lump, u.reliefLumps);
-        acc += vec3f(e.x, e.yz * frequency) * amplitude;
+        acc += vec3f(e.x, e.yz * frequency) * amplitude * select(1.0, 1.0 - faceBake, k >= 1);
         if (k == 0) { firstOctave = e.x; }
         total += amplitude;
         amplitude *= u.reliefGain;
@@ -1717,6 +1721,9 @@ fn bake(p: vec2f) -> vec4f {
         crackAt.y *= 1.0 - 0.5 * order * steep;
     }
     height = height * (1.0 - 0.75 * broken) + crackAt.w - crackAt.x;
+    // The rock face (rockFaceAt) takes the place of the scatter's ribs, cracks and blocks wherever the ground is steep enough for it.
+    // The scatter's cracks and blocks give way to the face (its ribs' fine octaves already did, above).
+    if (faceBake > 0.0) { height -= faceBake * (1.0 - buried) * (crackAt.w - crackAt.x); }
     // G5 (Lava): the crust replaces most of the fall-line relief on hills and adds its own, with the dark of its creases. Its height is relief too, so a stroke's Style: relief strength scales it.
     var crustDark = 0.0;
     if (u.lavaCrust > 0.0) {
