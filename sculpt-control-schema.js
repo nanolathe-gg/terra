@@ -173,7 +173,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'vegetationCover','plantRelief','flowerDensity',
  'groundTiles','groundContrast','undulation','undulationScale','undulationCover','undulationArt','coastRamp','faceSteep','lowTint','lowReach','lowGrain',
  'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
- 'flatShadow','flatOcclusion','sunTilt','ambient','shadeDepth','lightCap',
+ 'flatShadow','flatOcclusion','sunTilt','ambient','shadeDepth','lightCap','creaseShade',
  'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','erosionRain','wetSwath','lushness','slopeMarks','wrinkles',
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
  'looseSupply','looseSize','sand','sandGrain','sandLight','ripple','rippleHeight','wind',

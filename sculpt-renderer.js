@@ -1079,6 +1079,7 @@ export class TerrainRenderer {
     this.f('uLowTint', variant.has('lowTint') ? Number(variant.get('lowTint')) : 0);
     this.f('uLowReach', variant.has('lowReach') ? Number(variant.get('lowReach')) : 6);
     this.f('uLowGrain', variant.has('lowGrain') ? Number(variant.get('lowGrain')) : 1);
+    this.f('uCreaseShade', variant.has('creaseShade') ? Number(variant.get('creaseShade')) : 0);
     this.fieldsDirty = true;
   }
 

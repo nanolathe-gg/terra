@@ -17,6 +17,8 @@ test('a knob goes into the address and the renderer, and says what else it needs
   assert.deepEqual(applyKnob({key: 'coastRamp', value: '.3', settings, renderer: r, nodes, seed: 2701}), {evaluate: 0, weather: true});
   assert.deepEqual(applyKnob({key: 'faceSteep', value: '2', settings, renderer: r, nodes, seed: 2701}), {evaluate: 0, weather: true});
   assert.deepEqual(applyKnob({key: 'sand', value: '1', settings, renderer: r, nodes, seed: 2701}), {weather: true});
+  // The draw's rows (Low ground, Shade in creases) only re-read the renderer's uniforms.
+  for (const key of ['lowTint', 'lowGrain', 'creaseShade']) assert.deepEqual(applyKnob({key, value: '.5', settings, renderer: r, nodes, seed: 2701}), {});
   // The ground textures are chosen when the renderer starts: the address changes, the renderer does not.
   const applied = r.applied;
   assert.deepEqual(applyKnob({key: 'groundPattern', value: 'lava', settings, renderer: r, nodes, seed: 2701}), {reload: true});

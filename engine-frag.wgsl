@@ -1635,6 +1635,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // west against our 20; measured on four maps), so its world keeps only
     // part of the directional shading.
     if (u.shadeDepth < 1.0) { shading = mix(1.0, shading, u.shadeDepth); lightTint = mix(vec3f(1.0), lightTint, u.shadeDepth); }
+    // S4 (Archipelago's domes): a crease, where the authored height lies below its rings 6 and 12 px out (a gully's floor, a valley's), loses light
+    // whatever its facing, after the directional shading is scaled, so gullies read on a world that keeps little of it. A plane or a crest gives 0.
+    if (u.creaseShade > 0.0 && h > u.sea) {
+        let hb = baseHeight(p);
+        let r6 = 0.25 * (baseHeight(p + vec2f(6.0, 0.0)) + baseHeight(p - vec2f(6.0, 0.0)) + baseHeight(p + vec2f(0.0, 6.0)) + baseHeight(p - vec2f(0.0, 6.0)));
+        let r12 = 0.25 * (baseHeight(p + vec2f(8.5, 8.5)) + baseHeight(p - vec2f(8.5, 8.5)) + baseHeight(p + vec2f(8.5, -8.5)) + baseHeight(p - vec2f(8.5, -8.5)));
+        let crease = 0.6 * (r6 - hb) / 6.0 + 0.4 * (r12 - hb) / 12.0;
+        shading *= 1.0 - 0.6 * u.creaseShade * smoothstep(0.04, 0.4, crease);
+    }
     // G5 (Lava): rock turned from the sun, or in a cast shadow, goes darker than the diffuse term alone gives (retail's far sides are near black).
     // Retail's small hills keep nearly the plain's tone on their far sides; the dark masses are the tall hills', so it grows with height.
     // Only faces turned from the sun take it (n.l from .5 down to .1), so a flank that faces the light is not darkened by its occlusion.
