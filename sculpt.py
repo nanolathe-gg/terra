@@ -110,6 +110,8 @@ KNOB_DEFAULTS.update(crystalFacet=0, crystalSizeVar=0, crystalShallow=0, crystal
 # G7 (Crystal): the thin web the draw lays over a crystal skin (a landform's angular Facets with Surface Crystal; 0: none).
 KNOB_DEFAULTS.update(crystalCraterWeb=0, crystalCraterWebPx=14, crystalCraterWobble=0,
                      crystalCraterGap=0, crystalCraterTone=0, crystalCraterLight=1)
+# Round 3 (Desert): the share of loose stones drawn as knolls, low rings of ground round a hollow (0: all stones).
+KNOB_DEFAULTS.update(looseKnoll=0)
 # Round 3 (Crystal): a bold web of long dark gouges across raised crystal formations (0: none).
 KNOB_DEFAULTS.update(gougeWeb=0)
 # G7 (Crystal): finer shore slabs and fainter seams (the defaults are the earlier output).
