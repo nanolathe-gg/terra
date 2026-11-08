@@ -64,6 +64,8 @@ test('every world can turn vegetation on, and flowers stay independent of relief
  for(const v of [{},{vegetationCover:0},{vegetationCover:1}])assert.equal(requirement('vegetationCover',v),'');
  for(const key of ['plantRelief','flowerDensity']){assert.match(requirement(key,{vegetationCover:0}),/Raise Vegetation cover/);assert.equal(requirement(key,{vegetationCover:1}),'');}
  assert.equal(requirement('flowerDensity',{vegetationCover:1,plantRelief:0}),'');
+ // Flowers are dots in the ground's color, which the sediment transition replaces at 100 percent Material weathering; the plants' relief still shows.
+ assert.match(requirement('flowerDensity',{vegetationCover:1,slopeReplaced:1}),/Lower Material weathering/);assert.equal(requirement('plantRelief',{vegetationCover:1,slopeReplaced:1}),'');
 });
 
 test('world dependencies explain bypasses without biome gates',async()=>{

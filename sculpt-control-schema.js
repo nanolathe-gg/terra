@@ -76,7 +76,11 @@ export function worldControlRequirement(key,v){
  const n=k=>Number(v[k]??0),joints=()=>n('rockJoint')*n('rockOpen'),needs=(parent,label)=>worldControlRequirement(parent,v)||(n(parent)<=0?`Enable ${label} to use this setting.`:'');   // a parent that is itself idle names its own reason first
  // Every world has a ground-cover table (sculpt.py DEFAULT_GROUND_COVER): Vegetation cover above 0 turns it on.
  const cover=n('vegetationCover')>0;
- if(['plantRelief','flowerDensity'].includes(key))return cover?'':'Raise Vegetation cover to use this setting.';
+ if(['plantRelief','flowerDensity'].includes(key)&&!cover)return 'Raise Vegetation cover to use this setting.';
+ // The sediment transition, at 100 percent Material weathering, replaces the ground's color outright (worldPanelValues' slopeReplaced), and the
+ // flowers are dots in that color; the plants' relief is baked into the height and still shows.
+ if(key==='flowerDensity'&&n('slopeReplaced')>0)return 'The sediment transition replaces the ground\'s color at 100 percent Material weathering, so no flower shows. Lower Material weathering to use this setting.';
+ if(['plantRelief','flowerDensity'].includes(key))return '';
  if(['undulationScale','undulationCover'].includes(key))return needs('undulation','Undulation height');
  if((['bedHeight','bedVary','bedPunch'].includes(key)||key==='bedSpacing'&&n('cliffRise')<=0)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';   // with a Riser height a column's ledge scales by bed thickness over this spacing
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';
