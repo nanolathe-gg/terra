@@ -46,8 +46,9 @@ export function worldKinds(config) {
 // Deposits and vents are the same on every world but their look: a world's table may set their painter's params (the halo's tone).
 function kindData(kind, config) {
   if (!GROUND_KINDS.includes(kind)) return config?.features?.[kind];
-  const look = config?.features?.[kind]?.params;
-  return look ? {...COMMON[kind], types: COMMON[kind].types.map(t => ({...t, params: {...t.params, ...look}}))} : COMMON[kind];
+  const own = config?.features?.[kind], look = own?.params;
+  // a table may also give the painter's variation (`vary`, ranges for params such as reach) and its own types (a world's second look)
+  return look || own?.types ? {...COMMON[kind], types: (own.types || COMMON[kind].types).map(t => ({...t, params: {...look, ...t.params}, vary: {...own.vary, ...t.vary}}))} : COMMON[kind];
 }
 
 export function defaultSet(config) {
@@ -104,7 +105,7 @@ export function variants(kind, set, config) {
       const value = lo + (hi - lo) * unit(seed, 101 + draw++);
       params[key] = Number.isInteger(lo) && Number.isInteger(hi) ? Math.round(value) : Math.round(value * 100) / 100;
     }
-    if (kind === 'tree') Object.assign(params, {taper: entry.taper, peaks: entry.peaks, energy: [...entry.energy]});
+    if (kind === 'tree') Object.assign(params, {taper: entry.taper, peaks: entry.peaks}, type.params.energy ? {} : {energy: [...entry.energy]});   // a type with its own energy (a dead tree's 50) keeps it
     if (kind === 'rock') params.angular = entry.angular;
     const ref = data.color ?? FALLBACK[kind]?.color;
     if (entry.color && ref && entry.color !== ref) params.recolor = {from: ref, to: entry.color};
@@ -128,7 +129,7 @@ export function pickVariant(list, u) {
 
 // Words for a variant in the panel: its type ("broadleaf", "2x2", "rock stain").
 export function typeLabel(kind, params) {
-  if (kind === 'tree') return params.species === 'conifer' ? 'conifer' : params.species === 'tendril' ? 'tendril plant' : params.clusters > 0 ? 'clustered' : 'broadleaf';
+  if (kind === 'tree') return params.species === 'dead' || params.species === 'deadConifer' ? 'dead' : params.species === 'conifer' ? 'conifer' : params.species === 'tendril' ? 'tendril plant' : params.clusters > 0 ? 'clustered' : 'broadleaf';
   if (kind === 'shrub') return params.density < 0.3 ? 'sparse' : 'dense';
   if (kind === 'rock') return (params.tall > 0.4 ? 'spire ' : '') + (params.cells || '2x2').replace('x', '×');
   if (kind === 'scar') return params.type === 'stain' ? 'rock stain' : 'smudge';

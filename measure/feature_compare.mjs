@@ -1,5 +1,5 @@
 // Retail features beside our generated ones, per world, as one PNG per group (deposit, vent, tree, shrub, rock, spire, node, scar).
-//   node measure/feature_compare.mjs <world> [--out DIR] [--top 12] [--seed N]
+//   node measure/feature_compare.mjs <world> [--out DIR] [--top 12] [--seed N] [--names REGEX]
 // DIR defaults to $R/features-round/<world> (R=/private/tmp/nanolathe-map-editor); the PNGs, index.html and numbers.json go there and
 // never into git: the retail sprites come from $R/features/<world>/catalog.json and are read only to draw the sheet and to measure it.
 // Each PNG has RETAIL (orange band: the sprites most used on the world's retail maps) and OURS (blue band: the variants of the world's
@@ -16,9 +16,10 @@ import {defaultSet, variants} from '../sculpt-feature-set.js';
 const R = process.env.R || '/private/tmp/nanolathe-map-editor';
 const root = new URL('..', import.meta.url).pathname;
 const args = process.argv.slice(2);
-const world = args.find(a => !a.startsWith('--') && args[args.indexOf(a) - 1] !== '--out' && args[args.indexOf(a) - 1] !== '--top' && args[args.indexOf(a) - 1] !== '--seed');
+const world = args.find(a => !a.startsWith('--') && args[args.indexOf(a) - 1] !== '--out' && args[args.indexOf(a) - 1] !== '--top' && args[args.indexOf(a) - 1] !== '--seed' && args[args.indexOf(a) - 1] !== '--names');
 const opt = (name, d) => { const i = args.indexOf('--' + name); return i >= 0 ? args[i + 1] : d; };
 if (!world) { console.error('usage: node measure/feature_compare.mjs <world> [--out DIR] [--top 12]'); process.exit(2); }
+const NAMES = opt('names') ? new RegExp(opt('names'), 'i') : null;   // only the retail sprites whose name matches (e.g. --names Dead)
 const out = opt('out', join(R, 'features-round', world)), TOP = +opt('top', 12), MAXW = 1400;
 mkdirSync(out, {recursive: true});
 
@@ -193,7 +194,7 @@ function aggregate(items) {
 const numbers = {world, light, ground: gmean, groups: {}};
 const sheets = [];
 for (const g of GROUPS) {
-  const rl = (retailBy[g]?.list || []).sort((a, b) => b.uses - a.uses).slice(0, TOP), ov = oursBy[g] || [];
+  const rl = (retailBy[g]?.list || []).filter(f => !NAMES || NAMES.test(f.name)).sort((a, b) => b.uses - a.uses).slice(0, TOP), ov = oursBy[g] || [];
   if (!rl.length && !ov.length) continue;
   const retailItems = rl.map(retailItem).filter(Boolean), deposits = rl.filter(f => f.kind === 'deposit');
   const oursItems = ov.map((v, i) => oursItem(v, i, deposits));

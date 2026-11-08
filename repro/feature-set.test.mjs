@@ -39,7 +39,7 @@ test('variants keep their looks when the count grows, and placement keeps retail
   for (const kind of worldKinds(green)) {
     const set = defaultSet(green), small = variants(kind, set, green), large = variants(kind, {...set, [kind]: {...set[kind], count: MAX_VARIANTS}}, green);
     assert.deepEqual(large.slice(0, small.length), small.map(v => ({...v, weight: large[v.index].weight})), kind);
-    const types = new Set(green.features[kind]?.types.map((t, i) => i) || [0]);
+    const types = new Set(green.features[kind]?.types?.map((t, i) => i) || [0]);
     for (const t of types) if (large.length >= types.size) assert.ok(large.some(v => v.type === t), `${kind}: every type has a variant`);
     // A weighted pick over many cells reproduces each type's share.
     const counts = new Map(), n = 20000;
@@ -64,7 +64,8 @@ test('the view draws the same body and shadow as the export, without burn frames
     const full = generateFeature(kind, v.params, v.seed, {light: {x: -0.62, y: -0.03}, palette}), view = generateFeature(kind, v.params, v.seed, {light: {x: -0.62, y: -0.03}, bodyOnly: true, palette});
     for (const part of ['body', 'shadow']) assert.deepEqual(view[part] && [...view[part].idx, ...view[part].a, view[part].ax, view[part].ay], full[part] && [...full[part].idx, ...full[part].a, full[part].ax, full[part].ay], `${kind} ${part}`);
     assert.deepEqual(view.gameplay, full.gameplay);
-    if (kind === 'tree') assert.ok(full.burn && !view.burn && !view.burnt);
+    if (kind === 'tree' && !String(v.params.species).startsWith('dead')) assert.ok(full.burn && !view.burn && !view.burnt);
+    if (String(v.params.species).startsWith('dead')) assert.ok(!full.burn && !full.burnt);   // a dead tree neither burns nor leaves a successor
   }
 });
 
