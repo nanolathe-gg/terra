@@ -76,6 +76,7 @@ const NO_COLUMN='Add a rock column in the Rock column panel to use this setting.
 // finds an inactive setting and explains what must be enabled to use it.
 export function worldControlRequirement(key,v){
  const n=k=>Number(v[k]??0),joints=()=>rock.rockJoint*n('rockOpen'),needs=(parent,label)=>worldControlRequirement(parent,v)||(n(parent)<=0?`Enable ${label} to use this setting.`:'');   // a parent that is itself idle names its own reason first
+ if(['faceRock','rockFaceFrom','faceCreaseSize','faceCrease','faceBlock','faceBlockSize','faceBed','faceLedge','faceRun','faceScratch','faceScratchSize','faceLean','faceGrit','faceGrass'].includes(key))return n('rockFace')>0?'':'Raise Rock relief: Depth to use this setting.';
  // What the rock cuts: a Rock type's own numbers, or with 0 the world's (worldPanelValues passes rockCells, rockJoint and rockCurtains of its table's rock).
  const type=ROCK_TYPES[Math.round(n('rockType'))-1],rock=type?rockFacts(type.rock):{rockCells:n('rockCells'),rockJoint:n('rockJoint'),rockCurtains:n('rockCurtains'),rockLichen:n('rockLichen')};
  // Every world has a ground-cover table (sculpt.py DEFAULT_GROUND_COVER): Vegetation cover above 0 turns it on.
@@ -173,6 +174,7 @@ export function worldControlRequirement(key,v){
 // explicitly (and through search), without filling the default inspector.
 export const WORLD_PRIMARY_CONTROLS=new Set([
  'vegetationCover','plantRelief','flowerDensity',
+ 'rockFace','faceRock','rockFaceFrom','faceCreaseSize','faceCrease','faceBlock','faceBlockSize','faceBed','faceLedge','faceRun','faceScratch','faceScratchSize','faceLean','faceGrit','faceGrass',
  'groundTiles','groundContrast','undulation','undulationScale','undulationCover','undulationArt','coastRamp','faceSteep','lowTint','lowReach','lowGrain',
  'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
  'flatShadow','flatOcclusion','sunTilt','ambient','shadeDepth','lightCap','creaseShade',
