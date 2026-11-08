@@ -838,6 +838,9 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
   }
   var q = lfShare(cc, ee, cap, s1.w, wm);
   if (spur && u.lfPeak > 0.0 && s1.x == 0.0) { q = lfCraterSpurShare(cc, ee, wm); }   // an impact's landing (s1.x 1) draws the whole section
+  // Face steepness above 1 (the host sets it on a raised section): the section's rise share through a gain round its middle, so the face between foot
+  // and top is lfFace times as steep there, and the foot and the top flatter and wider.
+  if (u.lfFace > 1.0 && q > 0.0 && q < 1.0) { let ga = pow(q, u.lfFace); q = ga / (ga + pow(1.0 - q, u.lfFace)); }
   let along = clamp(curveRaw(u.alongBase, select(share, 1.0, !spur && s1.z < 1.0)), 0.0, 1.2);   // a click (no length) reads its along curve at the end
   let lfB = select(u.baseH, base, u.lfGround != 0u); let lfE = select(u.elev, base + u.elev, u.lfGround != 0u);
   let crest = lfB + (lfE - lfB) * along * hm;   // the plain is the map's base height (with Height reference Ground, the cell's own ground); a spur piece rises hm of the way from it   // the plain is the map's base height (with Height reference Ground, the cell's own ground); a spur piece rises hm of the way from it

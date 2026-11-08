@@ -77,7 +77,9 @@ const NODE_FIELDS = [
   // Undulation in the art: init keeps plane u (artKeep, the second evaluation) and artLevel's share of the undulation the art shows (gArt).
   ...['artKeep'].map(k => [k, 'u']), ...['gArt'].map(k => [k, 'f']),
   // Coast ramp: the share of a water-making section's dry fall the coast keeps (1: as drawn).
-  ...['lfCoast'].map(k => [k, 'f'])];
+  ...['lfCoast'].map(k => [k, 'f']),
+  // Face steepness: the gain on a raised section's rise share (1: as drawn).
+  ...['lfFace'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -353,6 +355,8 @@ export function prepareNode(n, geom, c) {
       lfGround: Math.round(q.heightReference || 0) === 2 ? 1 : 0, lfSigned: landformSigned(q) ? 1 : 0,
       // Coast ramp: a stroke whose crest stands under the sea (a fixed or sea-level height) makes a coast; others keep their sections as drawn.
       lfCoast: Math.round(q.heightReference || 0) !== 2 && landformElevation(q, c.sea) < c.sea ? clamp(c.coastRamp ?? 1, 0, 1) : 1,
+      // Face steepness: a raised section (Raise to, above the plain or its ground; not a crater's signed section or a river's valley).
+      lfFace: Math.round(q.combine || 0) === 0 && !landformSigned(q) && !isRiver(q) && (Math.round(q.heightReference || 0) === 2 ? q.elevation > 0 : landformElevation(q, c.sea) > c.baseHeight) ? clamp(c.faceSteep ?? 1, 1, 4) : 1,
       // lfcrater: an impact's groove (its first segment the landing): the along curve's value at the end, which the groove's width is scaled by; 0: no groove.
       grooveEnd: grooved ? impactEnd(q) : 0});
     if (impact) Object.assign(main.u, impactUniforms(q, sd, impact, c));

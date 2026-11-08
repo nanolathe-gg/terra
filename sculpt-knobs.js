@@ -6,7 +6,7 @@ import {columnHasCapBed} from './sculpt-column.js';
 // Surface knobs: each writes the page address and the renderer's variant,
 // then the renderer re-reads its uniforms and re-bakes its fields.
 export const KNOBS = [
-  ['Ground', [['groundTiles','Unique ground tiles',1,16,1,16],['groundContrast','Pattern contrast',0,2,.05,1],['undulation','Undulation height',0,16,.5,10],['undulationScale','Undulation size (px)',48,400,8,200],['undulationCover','Undulating share of land',0,1,.05,.45],['undulationArt','Undulation in the art',0,1,.05,1]]],
+  ['Ground', [['groundTiles','Unique ground tiles',1,16,1,16],['groundContrast','Pattern contrast',0,2,.05,1],['undulation','Undulation height',0,16,.5,10],['undulationScale','Undulation size (px)',48,400,8,200],['undulationCover','Undulating share of land',0,1,.05,.45],['undulationArt','Undulation in the art',0,1,.05,1],['faceSteep','Landform face steepness',1,4,.1,1]]],
   ['Ground detail', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Ground bumps',0,3,.05,1.2],['lumpRelief','Painted ground bumps',0,8,.1,4],['reliefOctaves','Octaves',1,6,1,5],['worms','Wormy relief on slopes',0,1,.05,0]]],
   ['Lighting', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13],['shadeDepth','Directional shading kept',0,1,.05,1],['sunTilt','Light from the south',-1,1,.05,1],['ambient','Ambient light',0,.8,.02,.42]]],
@@ -68,7 +68,7 @@ export const KNOBS = [
 // The ground node's field each undulation row sets.
 const UNDULATION={undulation:'amplitude',undulationScale:'wavelength',undulationCover:'coverage',undulationArt:'art'};
 // World settings the shape reads (sculpt-scene.js shapeContext: the frost gaps and the talus slope), so the shape runs again from the first node.
-const SHAPE_KNOBS=new Set(['frostGaps','frostGapReach','frostGapSize','frostGapDepth','talusAngle','coastRamp']);
+const SHAPE_KNOBS=new Set(['frostGaps','frostGapReach','frostGapSize','frostGapDepth','talusAngle','coastRamp','faceSteep']);
 // A world knob's change. The value goes into the page's settings (its address, which the shape context and a scene's ground node read) and
 // the renderer's settings, whose uniforms it re-reads; the answer says what else the change needs, for the host to carry out on its own
 // fields: `reload` (the ground textures are chosen when the renderer starts, so nothing else is set), `evaluate` (the shape again from that

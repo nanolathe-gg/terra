@@ -25,6 +25,8 @@ test('a scene is the ground undulation, then one node per stroke with its seed',
   // The shape context's coast ramp: the world's, the address's, or (a world without one) the sections as drawn.
   assert.equal(shapeContext({config, settings: pageSettings(config), seed: 1}).coastRamp, 1);
   assert.equal(shapeContext({config, settings: pageSettings(config, 'coastRamp=.25'), seed: 1}).coastRamp, .25);
+  assert.equal(shapeContext({config, settings: pageSettings(config), seed: 1}).faceSteep, 1);
+  assert.equal(shapeContext({config, settings: pageSettings(config, 'faceSteep=2'), seed: 1}).faceSteep, 2);
   assert.equal(shapeContext({config: {...config, defaults: {...config.defaults, coastRamp: .5}}, settings: pageSettings({defaults: {}}), seed: 1}).coastRamp, .5);
   // The ground node carries Undulation in the art: all of it unless the page says less.
   assert.equal(nodes[0].art, 1);

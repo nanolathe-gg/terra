@@ -290,12 +290,13 @@ export const migrateRiver=(config,node) => applyRiver(node,{w:config.map?.width?
 
 // What the page runs a scene with besides its nodes, so the headless runner runs it the same way.
 // The shape engine's context (sculpt-gpu-fields.js): each node's options over the world's, the brush seed, the talus slope, the sea and
-// base, the height range the fields clamp to (heightRange), the frost gaps and the coast ramp (world settings the address may override; a world
-// without a coast ramp keeps its sections as drawn).
+// base, the height range the fields clamp to (heightRange), the frost gaps, the coast ramp and the face steepness (world settings the address may
+// override; a world without the last two keeps its sections as drawn).
 export const heightRange=config => ({minH:config.seaLevel-90,maxH:config.seaLevel+300});
 export const shapeContext=({config,settings,seed,talusAngle=40,minH,maxH}) => ({params:n => ({...shapeDefaults(config),...n.params}),seed,repose:Math.tan(talusAngle*Math.PI/180),sea:config.seaLevel,baseHeight:config.baseHeight,minH,maxH,
   frost:{gapSize:worldSetting(config,settings,'frostGapSize'),gapDepth:worldSetting(config,settings,'frostGapDepth'),gaps:worldSetting(config,settings,'frostGaps'),gapReach:worldSetting(config,settings,'frostGapReach')},
-  coastRamp:settings.has('coastRamp')||Number.isFinite(Number(config?.defaults?.coastRamp))?worldSetting(config,settings,'coastRamp'):1});
+  coastRamp:settings.has('coastRamp')||Number.isFinite(Number(config?.defaults?.coastRamp))?worldSetting(config,settings,'coastRamp'):1,
+  faceSteep:settings.has('faceSteep')||Number.isFinite(Number(config?.defaults?.faceSteep))?worldSetting(config,settings,'faceSteep'):1});
 // The Time pass's knobs (sculpt-erosion.js runGpu), from the renderer's settings: the engine's, the world's, then the address.
 export const timeKnobs=renderer => ({age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
   envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)});
