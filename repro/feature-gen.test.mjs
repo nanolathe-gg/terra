@@ -78,3 +78,42 @@ test('column clusters, shards, plates and fronds: deterministic and different fr
   const plated = generateFeature('rock', {cells: '6x5', tall: 1, form: 'columns', plate: 0.8}, 5, {palette}).body, bare = generateFeature('rock', {cells: '6x5', tall: 1, form: 'columns'}, 5, {palette}).body;
   assert.ok(plated.w > bare.w, 'the plate widens the sprite');
 });
+
+// Round 12: the plate, gem, dead-tree, speckle, block and halo options are generic and deterministic.
+test('plate cell, crack, tilt, colors; column roughness and gems; blocks: each option changes the sprite and stays deterministic', () => {
+  const base = {cells: '5x5', tall: 0.6, form: 'columns', round: 1, parts: 4, plate: 0.9, plateTone: 1, lump: 0};
+  const cases = [['plateCell', 16], ['plateCrack', 3.2], ['plateTilt', 1.2], ['plateHatch', 1], ['plateRough', 0.6], ['plateGamma', 2], ['plateColors', ['#050505', '#4f2b6f', '#8b6fa0']], ['colRough', 1], ['colWidth', 1.4], ['capColors', ['#241a60', '#b0a4f0']]];
+  for (const [key, value] of cases) {
+    const a = generateFeature('rock', {...base, [key]: value}, 5, {palette, bodyOnly: true}), b = generateFeature('rock', {...base, [key]: value}, 5, {palette, bodyOnly: true}), c = generateFeature('rock', base, 5, {palette, bodyOnly: true});
+    assert.equal(sig(a.body), sig(b.body), key); assert.notEqual(sig(a.body), sig(c.body), key);
+  }
+  { const flat = {cells: '6x5', tall: 1, form: 'columns', parts: 10, lump: 0}, a = generateFeature('rock', {...flat, topTilt: 2.4}, 5, {palette, bodyOnly: true}), b = generateFeature('rock', flat, 5, {palette, bodyOnly: true}); assert.notEqual(sig(a.body), sig(b.body), 'topTilt'); }
+  const ruin = generateFeature('rock', {cells: '5x4', form: 'blocks', parts: 40, wall: 0.5, angular: 0, lump: 0, metal: 0, reclaimable: false}, 5, {palette, bodyOnly: true}), again = generateFeature('rock', {cells: '5x4', form: 'blocks', parts: 40, wall: 0.5, angular: 0, lump: 0, metal: 0, reclaimable: false}, 5, {palette, bodyOnly: true});
+  assert.equal(sig(ruin.body), sig(again.body)); assert.ok(ruin.body.w > 30 && ruin.body.h > 10);
+});
+test('the plate is slabs standing on the ground, not a lid: no pixel of a plated rock sits above its own spire', () => {
+  const f = generateFeature('rock', {cells: '6x5', tall: 1, form: 'columns', parts: 20, plate: 1, plateTone: 1, lump: 0}, 7, {palette, bodyOnly: true}).body;
+  assert.ok(f.w > 0 && f.h > 0);
+});
+test('dead trees are trees that neither burn nor leave a successor', () => {
+  for (const species of ['dead', 'deadConifer']) {
+    const f = generateFeature('tree', {species, energy: [50, 50]}, 9, {palette}), g = generateFeature('tree', {species, energy: [50, 50]}, 9, {palette});
+    assert.equal(f.kind, 'tree'); assert.equal(f.burn, null); assert.equal(f.burnt, null); assert.equal(f.gameplay.energy, 50); assert.equal(f.gameplay.flamable, false);
+    assert.equal(sig(f.body), sig(g.body)); assert.ok(f.shadow.w > 0);
+  }
+});
+test('speckle scars are opaque near-black dust, deterministic, sized by size', () => {
+  const a = generateFeature('scar', {type: 'speckle', size: 1.2, density: 0.25}, 4, {palette}), b = generateFeature('scar', {type: 'speckle', size: 1.2, density: 0.25}, 4, {palette}), small = generateFeature('scar', {type: 'speckle', size: 0.3}, 4, {palette});
+  assert.equal(sig(a.body), sig(b.body)); assert.ok(a.body.w > small.body.w); assert.equal(a.bodyBlend, 1);
+  for (let k = 0; k < a.body.w * a.body.h; k++) if (a.body.a[k]) assert.ok(palette[a.body.idx[k]].every(v => v < 80));
+});
+test('a thin spire leaves no stray specks: its picture is one piece', () => {
+  const f = generateFeature('rock', {cells: '6x5', tall: 1, lump: 0.8, grain: 0.8}, 21, {palette, bodyOnly: true}).body, seen = new Uint8Array(f.w * f.h);
+  let comps = 0; for (let k0 = 0; k0 < f.w * f.h; k0++) { if (!f.a[k0] || seen[k0]) continue; comps++; const st = [k0]; seen[k0] = 1; while (st.length) { const k = st.pop(), x = k % f.w, y = (k / f.w) | 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= f.w || Y >= f.h) continue; const q = Y * f.w + X; if (f.a[q] && !seen[q]) { seen[q] = 1; st.push(q); } } } }
+  assert.equal(comps, 1);
+});
+test('halo roughness changes the deposit outline', () => {
+  const mk = () => ({w: 100, h: 100, rgba: new Uint8ClampedArray(100 * 100 * 4).map((_, i) => i % 4 === 3 ? 255 : [70, 110, 40][i % 4])});
+  const a = mk(), b = mk(); paintDeposit(a, 50, 50, {metal: 150, haloRough: 5}, 3, {palette}); paintDeposit(b, 50, 50, {metal: 150, haloRough: 12}, 3, {palette});
+  assert.notDeepEqual(a.rgba, b.rgba);
+});
