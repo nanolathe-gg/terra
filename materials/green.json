@@ -2010,7 +2010,7 @@
  },
  "world": {
   "baseHeight": 9,
-  "colors": {"rock": "#6a6a6a"},
+  "colors": {"rock": "#747474"},
   "defaults": {
    "surface": "slopes",
    "transition": "soil",

@@ -43,11 +43,12 @@ export const KNOBS = [
   // Card E9: rock faces; every default is the earlier look.
   // The rock face (engine-common.wgsl rockFaceAt): one rock for every face steep enough, relief in the art's own pixels lit by the sun and the sky.
   ['Rock relief', [['rockFace','Depth (0: none)',0,4,.1,0],['faceRock','Amount: rock\'s share of a steep face (a shape\'s Local vegetation scales it)',0,1,.05,.9],
-    ['rockFaceFrom','Starts at slope',.2,2,.05,.6],['faceCreaseSize','Grain size (px)',4,28,1,12],['faceCrease','Crumple: creases and small facets',0,6,.1,2.5],
-    ['faceBlock','Blocks: joints and tilted masses',0,6,.1,2.5],['faceBlockSize','Block size (px)',6,48,1,18],['faceBed','Layer thickness (height)',2,30,.5,8],
-    ['faceLedge','Ledges at the layers\' tops',0,3,.05,1.5],['faceRun','Ledge run before it breaks (px)',20,300,5,90],['faceScratch','Grooves: weathering down the face',0,6,.1,2.5],
-    ['faceScratchSize','Groove spacing (px)',3,20,.5,7],['faceLean','Groove lean from the screen\'s north-south (deg)',-45,45,1,15],['faceGrit','Grit',0,2,.05,0],
-    ['faceGrass','Grass on ledges and flat tops',0,1,.05,.6]]],
+    ['rockFaceFrom','Starts at slope',.2,2,.05,.6],['faceBed','Layer thickness (height)',2,30,.5,5.5],['faceLedge','Layer hardness: hard layers stand out as ledges',0,4,.05,2.2],
+    ['faceRun','Hardness drift along a layer (px)',20,300,5,90],['faceBlock','Blocks: offsets and tilts',0,6,.1,3],['faceBlockSize','Joint spacing (px)',4,48,1,11],
+    ['faceLean','Joint and runnel lean from the screen\'s north-south (deg)',-45,45,1,28],['faceWear','Weathering: rounded edges, open joints',0,1,.05,.35],
+    ['faceCrease','Pitting',0,6,.1,2.5],['faceCreaseSize','Pit size (px)',3,24,1,6],['faceScratch','Runnels: water grooves down the face',0,6,.1,2.5],
+    ['faceScratchSize','Runnel spacing (px)',3,20,.5,7],['faceShade','Shadow depth: own shadows and crevices toward black',0,1,.05,.85],['faceGrit','Grit',0,2,.05,0],
+    ['faceGrass','Grass on ledges and flat tops',0,1,.05,.8]]],
   ['Rock face', [['rockMoss','Vegetation tint in rock',0,1,.05,1],['rockDetail','Rock tile blotch contrast (1 as drawn, 0 flat)',0,1,.05,1],['faceRelief','Rock relief lit on walls that face the viewer (0: world-space look)',0,1,.05,1],['shineOutside','Rock glints kept outside painted rock',0,1,.05,1],
     ['bedPunch','Beds differ in strength',0,1,.05,0]]],
   ['Gullies & ribs', [['gullyDepth','Gully depth (height; 0 none)',0,16,.5,0],['gullyWidth','Gully width (px)',4,40,1,14],

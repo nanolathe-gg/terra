@@ -1566,9 +1566,9 @@ fn sandMaterialAt(scatter: vec2f) -> vec3f {
 
 // The rock face's relief at a screen offset `off` (px) from the pixel: the ground there is the broad face's (hb at the pixel), carried
 // through TA's projection (a screen row is rowStretch ground rows; a column step moves the ground's height by gx and its row by gx / 2).
-fn faceHeightAt(pixel: vec2f, off: vec2f, hb: f32, broad: vec2f, rowStretch: f32, fall: vec2f, steep: f32) -> f32 {
+fn faceHeightAt(pixel: vec2f, off: vec2f, hb: f32, broad: vec2f, rowStretch: f32, fall: vec2f, steep: f32, bedPx: f32) -> f32 {
     let dy = (off.y + 0.5 * broad.x * off.x) / rowStretch;
-    return rockFaceAt(pixel + off, hb + broad.x * off.x + broad.y * dy, fall, steep).relief;
+    return rockFaceAt(pixel + off, hb + broad.x * off.x + broad.y * dy, fall, steep, bedPx).relief;
 }
 
 @fragment
@@ -1673,10 +1673,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             let fall = select(vec2f(0.0, -1.0), broad / max(slope, 1e-5), slope > 1e-4);
             let rowStretch = max(1.0 - 0.5 * broad.y, 0.2);   // screen rows per ground row at the broad slope
             let steep = smoothstep(1.3, 2.2, slope);
-            rockFace = rockFaceAt(pixel, hb, fall, steep);
+            // A bed's span on screen: its thickness over the ground's slope across a screen pixel (the projection's inverse).
+            let dhs = vec2f(broad.x + broad.y * 0.5 * broad.x / rowStretch, broad.y / rowStretch);
+            let bedPx = max(u.faceBed, 0.5) / max(length(dhs), 0.05);
+            rockFace = rockFaceAt(pixel, hb, fall, steep, bedPx);
             let h0 = rockFace.relief;
-            let hx = faceHeightAt(pixel, vec2f(1.0, 0.0), hb, broad, rowStretch, fall, steep);
-            let hy = faceHeightAt(pixel, vec2f(0.0, 1.0), hb, broad, rowStretch, fall, steep);
+            let hx = faceHeightAt(pixel, vec2f(1.0, 0.0), hb, broad, rowStretch, fall, steep, bedPx);
+            let hy = faceHeightAt(pixel, vec2f(0.0, 1.0), hb, broad, rowStretch, fall, steep, bedPx);
             // d(screen)/d(world) = [[1, 0], [-gx/2, 1 - gy/2]]: the relief's slope on the ground is its transpose times the screen slope.
             let dsFull = vec2f(hx - h0, hy - h0) * u.rockFace;
             let dwFull = vec2f(dsFull.x - 0.5 * broad.x * dsFull.y, rowStretch * dsFull.y);
@@ -1710,7 +1713,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                     var steps = array<f32, 4>(1.2, 2.6, 4.5, 7.5);
                     for (var i = 0; i < 4; i++) {
                         let d = steps[i];
-                        let hk = rockFaceAt(pixel + o * d, hb + gd * d, fall, steep).relief;
+                        let hk = rockFaceAt(pixel + o * d, hb + gd * d, fall, steep, bedPx).relief;
                         blocked = max(blocked, smoothstep(0.0, 0.8, (hk - h0) * k - clearance * d));
                     }
                     faceSun = 1.0 - blocked;
@@ -1720,9 +1723,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 var taps = array<vec2f, 4>(vec2f(2.5, 0.0), vec2f(-2.5, 0.0), vec2f(0.0, 2.5), vec2f(0.0, -2.5));
                 for (var i = 0; i < 4; i++) {
                     let off = taps[i];
-                    rim += max(faceHeightAt(pixel, off, hb, broad, rowStretch, fall, steep) - h0, 0.0) * k;
+                    rim += max(faceHeightAt(pixel, off, hb, broad, rowStretch, fall, steep, bedPx) - h0, 0.0) * k;
                 }
-                faceOcc = clamp(rim / (4.0 * 2.5) * 1.6, 0.0, 0.85);
+                faceOcc = clamp(rim / (4.0 * 2.5) * (1.6 + 4.0 * u.faceShade), 0.0, 0.85 + 0.15 * u.faceShade);
             }
         }
     }
@@ -1738,7 +1741,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (u.closeShadow > 0.0) { closeVis = closeVisibility(p, max(h, u.sea)); }
         if (u.cavity > 0.0) { cav = mix(u.cavity * cavityDepth(p, h), u.cavity * faceCavity, faceRelief); }
     }
-    cav = max(cav, faceOcc * faceGate);   // the rock face's creases and hollows see less sky
+    // The rock face's creases and hollows see less sky, and its own shadows (Shadow depth) little: deep in a crevice both are blocked.
+    cav = max(cav, faceGate * max(faceOcc, u.faceShade * (1.0 - faceSun)));
     var shading = lighting * ao * shadow;
     var lightTint = vec3f(1.0);
     // Open lit level ground keeps its brightness under any light colour (the tint is divided by its luma), so a colour changes hue and the

@@ -216,8 +216,8 @@ KNOB_DEFAULTS.update(hillBlocks=0)
 # (sculpt-material-model.js ROCK_TYPES, Granite first).
 KNOB_DEFAULTS.update(rockType=0)
 # The rock face (engine-common.wgsl rockFaceAt): one model for every rock face, drawn in the art's own pixels. rockFace 0: none.
-KNOB_DEFAULTS.update(rockFace=0, rockFaceFrom=.6, faceRock=.9, faceBed=8, faceLedge=1.5, faceRun=90, faceLean=15, faceScratch=2.5, faceScratchSize=7,
-                     faceBlock=2.5, faceBlockSize=18, faceCrease=2.5, faceCreaseSize=12, faceGrit=0, faceGrass=.6)
+KNOB_DEFAULTS.update(rockFace=0, rockFaceFrom=.6, faceRock=.9, faceBed=5.5, faceLedge=2.2, faceRun=90, faceLean=28, faceScratch=2.5, faceScratchSize=7,
+                     faceBlock=3, faceBlockSize=11, faceCrease=2.5, faceCreaseSize=6, faceGrit=0, faceGrass=.8, faceWear=.35, faceShade=.85)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, outcrop=0, rillDepth=0, rillSpacing=8)
@@ -293,7 +293,7 @@ WORLD_KNOBS = {
                   rockMoss=.15, rockDetail=.5,
                   gullyDepth=8, grooveRun=90, rockStain=1.2, ribTilt=.2,
                   bedPunch=1,
-                  shineRock=.12, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
+                  shineRock=.15, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
                   # "blurry parts"): the step is a true threshold that wanders ~24 depth units over
                   # 140 px; the bed is lit by its own relief (green-3's blur was the shelf's slope
