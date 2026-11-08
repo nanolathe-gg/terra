@@ -170,7 +170,7 @@ export function worldControlRequirement(key,v){
 // explicitly (and through search), without filling the default inspector.
 export const WORLD_PRIMARY_CONTROLS=new Set([
  'vegetationCover','plantRelief','flowerDensity',
- 'groundTiles','groundContrast','undulation','undulationScale','undulationCover',
+ 'groundTiles','groundContrast','undulation','undulationScale','undulationCover','undulationArt','coastRamp','faceSteep',
  'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
  'flatShadow','flatOcclusion','sunTilt','ambient','shadeDepth','lightCap',
  'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','erosionRain','wetSwath','lushness','slopeMarks','wrinkles',
