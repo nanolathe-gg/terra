@@ -534,8 +534,8 @@ fn rockFaceAt(s: vec2f, h: f32, fall: vec2f, steep: f32, bedPx: f32) -> RockFace
     // Under soil: the layers' own steps, rounded wider (soil fills the partings and softens the lips), and the broad form.
     let bedHere = rockBedBody(k, s, steep);
     let bedAcross = rockBedBody(select(k + 1.0, k - 1.0, t < 0.5), s, steep);
-    // Fine terraces in the soil (faceTerrace height units apart, wavering along the contours): a short riser and a long tread, so a
-    // gentle slope reads as stacked dark wavy lines, as retail's grassed hills do.
+    // Fine terraces in the soil (faceTerrace height units apart, wavering along the contours): a short riser and a long tread, a quarter
+    // of their spacing high, so a gentle slope carries a fine waver, not the ink contour lines full-height risers drew at Depth 2.
     let ct = h / max(u.faceTerrace, 0.3) + poolNoise(s, 23.0, 41.0) * 0.45 + poolNoise(s, 9.0, 43.0) * 0.2;
     let tt = fract(ct);
     let terrace = (smoothstep(0.0, 0.3, tt) - tt) * max(u.faceTerrace, 0.3) * min(u.faceLayers, 1.0);   // none while Layers under grass is 0
