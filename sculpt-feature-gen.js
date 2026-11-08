@@ -257,6 +257,7 @@ const TREE_DEFAULTS = {
   gap: null,             // the ramp of the dark gaps between leaves (branches and shade seen through the crown)
   trunk: ['#120e0b', '#231f13', '#3b3323', '#534333'],
   flecks: null,          // [[color, share], ...]: second hues among the sunlit leaves (Green's yellow-green, its conifers' grey-olive)
+  lights: null,          // [[color, share], ...]: the very lightest leaf pixels, drawn as given (not dimmed to the ramp) on the most sunlit leaves; share of the leaves, the lightest color on the very top (retail Green's broadleaf: 51,191,43 and 31,159,103 brights)
   energy: [250, 250],    // gameplay range (retail: 250 for every tree)
   shadowLen: 0.65,       // how far the sun throws the shadow, 1 = the sun's own (retail Green's trees 0.65; shadow area follows)
   shadowColor: '#000000', // the shadow's color, drawn translucent by the game (retail: black; Ice a dark blue)
@@ -368,12 +369,16 @@ function treeFrame(P, seed, ctx) {
   const gapScore = q => (1 - q.ao) + 0.7 * (1 - q.t) + 0.55 * q.j, byGap = leaves.slice().sort((p, q) => gapScore(q) - gapScore(p) || p.k - q.k), nGap = Math.round(byGap.length * gapShare), gapSet = new Set(byGap.slice(0, nGap).map(q => q.k));
   const colors = recolorStops(P.colors || look.colors, P.recolor), gap = P.gap || look.gap, flecks = (P.flecks || look.flecks).map(([hex, share]) => [rampOf([recolorHex(hex, P.recolor)])[0], share]);
   const c = newCanvas(w, h, R.ox, R.oy);
-  const paintRank = (list, ramp, fl) => list.sort((p, q) => p.t - q.t || p.k - q.k).forEach((q, i) => {
+  const lights = (P.lights || []).map(([hex, share]) => [rampOf([recolorHex(hex, P.recolor)])[0], share]).sort((a, b) => lumaRGB(b[0]) - lumaRGB(a[0]));   // lightest first
+  const paintRank = (list, ramp, fl, hi) => list.sort((p, q) => p.t - q.t || p.k - q.k).forEach((q, i) => {
     let u = (i + 0.5) / list.length, col = rampAt(ramp, u);
-    if (fl && u > 0.84 && q.direct > 0.45) { let acc = 0; const v = rn(); for (const [rgb, share] of fl) { if (v >= acc && v < acc + share) { const f = lumaRGB(col) / Math.max(1, lumaRGB(rgb)); col = rgb.map(x => x * Math.min(1.25, f)); break; } acc += share; } }
+    let lit = null;
+    if (hi) { const top = 1 - u + (rn() - 0.5) * 0.012; let acc = 0; for (const [rgb, share] of hi) { acc += share; if (top < acc) { lit = rgb; break; } } }
+    if (lit) col = lit;
+    else if (fl && u > 0.84 && q.direct > 0.45) { let acc = 0; const v = rn(); for (const [rgb, share] of fl) { if (v >= acc && v < acc + share) { const f = lumaRGB(col) / Math.max(1, lumaRGB(rgb)); col = rgb.map(x => x * Math.min(1.25, f)); break; } acc += share; } }
     paintRGB(c, q.k % w, (q.k / w) | 0, col, q.direct);
   });
-  paintRank(leaves.filter(q => !gapSet.has(q.k)), colors, flecks);
+  paintRank(leaves.filter(q => !gapSet.has(q.k)), colors, flecks, lights);
   paintRank(leaves.filter(q => gapSet.has(q.k)), gap, null);
   paintRank(info.filter(q => q.trunk), P.trunk, null);
   const body = quantize(c, ctx, 6, mix32(seed, 31));
