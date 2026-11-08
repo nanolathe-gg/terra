@@ -9,7 +9,8 @@
 #   other world that moves fails the run (compare.py --worlds; --worlds none: no scene may move). Without it the moved scenes are listed, for
 #   the retail sheet (<out>/scenes/sheet.png).
 # land: quick, then the checks in Chrome (smoke with --page8, features, the passability view) and the shape repeat check.
-# full: land, then the slow sweeps: the curve editor, export bytes, the three control sweeps and the realism report on modern Green.
+# full: land, then the slow sweeps: the curve editor, the workspace and ground-cover checks, export bytes, the three control sweeps and the
+# realism report on modern Green.
 # The interaction check (perf.mjs) compares two builds and is run by hand. Every check runs even when an earlier one fails; exit 1 if any failed.
 # Output goes to --out (default $R/check/<worktree>), never into the checkout. Logs: <out>/<check>.log.
 here=$(cd "$(dirname "$0")" && pwd); repo=$(cd "$here/.." && pwd)
@@ -88,6 +89,8 @@ if [ "$tier" != quick ]; then
 fi
 if [ "$tier" = full ]; then
   step curveedit node "$repo/repro/curveedit.mjs" --server "$server" --port "$port" --out "$out/curveedit"
+  step workspace node "$repo/repro/workspace.mjs" --server "$server" --port "$port" --out "$out/workspace"
+  step groundcover node "$repo/repro/ground-cover.mjs" --server "$server" --port "$port" --out "$out/ground-cover"
   step exportbytes node "$repo/repro/export-bytes.mjs" --out "$out/export-bytes"
   step worldctl node "$repo/measure/world_controls.mjs" --out "$out/world-controls"
   step shapectl node "$repo/measure/shape_controls.mjs" --out "$out/shape-controls"
