@@ -106,9 +106,9 @@ November 6, docs/LANDFORM_RETIREMENT.md.)
 
 Local style (card C5 stage 2): `paintChannel` 8/9 relief stronger/weaker, 10/11
 cracks more/fewer, 12/13 banding more/less, 14/15 face rock more/less (Strength
-is how far); a landform sets the same about its own footprint with `styleRelief`,
-`styleCracks`, `styleBanding` and `styleFace` (percent, -100..100, 0 none).
-`demo/masks-style.json` shows each on a Green hill and a plateau pair.
+is how far). A landform keeps one of them for its own footprint, Local vegetation
+(`styleVegetation`, percent, -100..100, 0 none). `demo/masks-style.json` shows the
+paint channels on a Green hill and a plateau pair.
 
 The fissure demos (card C4 stage 2) are `fissure-desert` (jagged cuts with
 branches across a mesa's cap and face), `fissure-ice` (one branching crevasse
