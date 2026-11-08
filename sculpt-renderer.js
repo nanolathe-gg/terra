@@ -3,7 +3,7 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
-import {materialRows,tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
+import {materialRows,tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,rockPreset,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {columnRows} from './sculpt-column.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
@@ -1186,9 +1186,9 @@ export class TerrainRenderer {
     set('uStoneRound', this.config.material?.stoneRound ?? 0);
     set('uStoneSort', this.config.material?.stoneSort ?? 0.6);
     set('uStoneSlab', this.config.material?.stoneSlab ?? 0.05);
-    // Card P10: the rock model's preset (numbers in the material's `rock`); no `rock`, no model.
+    // Card P10: the rock model's numbers: the Rock type's, or the world's own (its material's `rock`); none, no blocks.
     {
-      const rock = this.config.material?.rock || {};
+      const rock = rockPreset(this.config.material, this.variant);
       const rv = (key, fallback) => Number.isFinite(Number(rock[key])) ? Number(rock[key]) : fallback;
       set('uRockSize', rv('size', 0) * number('rockScale', 1)); set('uRockAspect', rv('aspect', 1)); set('uRockJitter', rv('jitter', 0.9));
       set('uRockOpen', rv('open', 0.5)); set('uRockBedOpen', rv('bedOpen', 0.2)); set('uRockTerr', rv('terr', 0));

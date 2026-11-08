@@ -115,10 +115,27 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('cliffReach',{rockOrder:1,cliffFollow:0}),/Follow terrain/);
  shows('cliffReach',{rockOrder:1,cliffFollow:1});
  assert.match(requirement('rockScale',{rockOrder:0}),/Rock structure/);
- assert.match(requirement('rockAge',{rockOrder:1,rockCells:0}),/no blocks/);
+ assert.match(requirement('rockAge',{rockOrder:1,rockCells:0}),/Choose a Rock type with blocks/);
+ // Rock type (card P10): a named type's own numbers decide what it cuts, whatever the world's own (the facts worldPanelValues passes) say
+ assert.match(requirement('rockType',{rockOrder:0,rockMoss:0}),/Rock structure, or raise Vegetation tint in rock/);
+ shows('rockType',{rockOrder:1});
+ shows('rockType',{rockOrder:0,rockMoss:1});   // its lichen grows on any rock face
+ shows('rockAge',{rockOrder:0,rockMoss:1,rockType:1});   // and with Age
+ assert.match(requirement('rockAge',{rockOrder:0,rockMoss:0,rockType:1}),/Rock structure/);
+ assert.match(requirement('rockScale',{rockOrder:0,rockMoss:1,rockType:1}),/Rock structure/);
+ shows('rockScale',{rockOrder:0,hillBlocks:.5,rockType:1});   // blocks on the hills (a world preset's hillBlocks)
+ shows('rockAge',{rockOrder:1,rockCells:0,rockLichen:1,rockMoss:1});
+ shows('rockAge',{rockOrder:1,rockCells:0,rockType:1});   // Granite cuts blocks
+ shows('rockScale',{rockOrder:1,rockCells:0,rockType:3});
+ shows('rockScale',{rockOrder:1,rockCells:1,rockType:0});   // 0: the world's own, here with blocks
+ assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,rockJoint:2,rockOpen:1,rockType:1}),/Choose a Rock type with joint lines/);   // Granite cuts none
+ shows('cliffStagger',{rockOrder:1,cliffFollow:1,rockJoint:0,rockOpen:1,rockType:3});   // Basalt does
+ assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,rockOpen:0,rockType:3}),/Raise Open joints/);
+ shows('grooveRun',{rockOrder:1,rockJoint:0,rockOpen:1,gullyDepth:0,rockType:2});   // Sandstone's joint lines
+ shows('rockStain',{rockOrder:1,gullyDepth:0,rockCurtains:0,rockType:1});   // Granite's ledge stains
  // Stain (card P10) darkens gully floors and the rock type's ledge curtains: it needs ordered rock and one of the two
  assert.match(requirement('rockStain',{rockOrder:0,gullyDepth:4}),/Rock structure/);
- assert.match(requirement('rockStain',{rockOrder:1,gullyDepth:0,rockCurtains:0}),/Gully depth or use a rock type with ledge stains/);
+ assert.match(requirement('rockStain',{rockOrder:1,gullyDepth:0,rockCurtains:0}),/Gully depth or choose a Rock type with ledge stains/);
  shows('rockStain',{rockOrder:1,gullyDepth:4,rockCurtains:0});
  shows('rockStain',{rockOrder:1,gullyDepth:0,rockCurtains:1});
  shows('rockScale',{rockOrder:1,rockCells:1});
