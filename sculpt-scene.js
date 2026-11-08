@@ -4,7 +4,7 @@
 // (sculpt.py world_configs) and, where the page's address may override them, the page's settings (pageSettings).
 import {FACING_CHOICES,FORMS} from './sculpt-shape-presets.js';
 import {applyRiver,isRiver} from './sculpt-river.js';
-import {createShapeEngine,readBuffer,comparePlanes} from './sculpt-gpu-fields.js';
+import {createShapeEngine,readBuffer,comparePlanes,DRAWN_KINDS} from './sculpt-gpu-fields.js';
 import {computeDrainage,latticeWidth,DRAIN_STEP} from './sculpt-drainage.js';
 import {erosionOf} from './sculpt-erosion.js';
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
@@ -77,7 +77,7 @@ export const TOOL_PRESETS={
   // Crystal's Crystals draw a column mound (its old brush: Height 140, 480 wide, Irregularity 40): stepped columns over the mound's (1 - r^2)^1.2 dome, the
   // edge noise as wander. Ice's draw an iceberg a click (retail ice-2, ice-3): one rough slab 240 px wide whose flat top tilts down to the north (the front and
   // back knots a plane through the center, Level tops 0), its corners cut, lit as the world's own slope (Surface Rock); a drag scatters a field of them.
-  crystal:{crater:{curve:{form:'lfCrater',knots:CRATER_BOWL},iceFacets:100,iceFacetSize:16,crystalStep:1,facetSurface:1},crystal:{diameter:480,elevation:140,wander:68,varySize:170,facetForm:1,iceFacets:65,iceFacetSize:32,crystalStep:14,crystalTiers:100,crystalFacet:70,crystalSizeVar:70,
+  crystal:{crater:{curve:{form:'lfCrater',knots:CRATER_BOWL},iceFacets:100,iceFacetSize:16,crystalStep:1,facetSurface:1},crystal:{diameter:480,elevation:140,wander:68,varySize:170,facetForm:1,iceFacets:65,iceFacetSize:24,crystalStep:9,crystalTiers:100,crystalFacet:70,crystalSizeVar:70,
     curve:{form:'lfCrystal',knots:[[0.0,0.0],[0.1,0.136],[0.2,0.293],[0.3,0.446],[0.4,0.585],[0.5,0.708],[0.6,0.811],[0.7,0.893],[0.8,0.952],[0.9,0.988],[1.0,1.0]],back:[[0.0,0.0],[0.1,0.136],[0.2,0.293],[0.3,0.446],[0.4,0.585],[0.5,0.708],[0.6,0.811],[0.7,0.893],[0.8,0.952],[0.9,0.988],[1.0,1.0]]}},mountain:{wander:6},deep:{wander:24,widthVary:25},shallow:{wander:6}},
   ice:{crystal:{diameter:260,elevation:60,iceFacets:100,iceFacetSize:240,crystalSides:6,crystalTop:50,crystalVariation:0,crystalTiers:0,bergJitter:45,bergBreak:3,bergRough:8,facetSurface:0,lean:100,facing:3,
     curve:{form:'lfCrystal',knots:[[0,0],[.04,1],[.55,1],[1,.62]],back:[[0,0],[.28,0],[1,.62]]}},mountain:{wander:6},deep:{wander:24,widthVary:25,shorePlates:1},shallow:{wander:6,shorePlates:1}},
@@ -255,11 +255,22 @@ export function strokeParams(s) { return {...Object.fromEntries(['shorePlates','
 // other key is a stroke option.
 export const strokeCard=(config,d) => ({radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,softness:d.softness/100,cracks:d.cracks/100,
   ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),curve:d.curve,along:d.along});
-export const groundDefaults=settings => ({amplitude:settings.has('undulation')?Number(settings.get('undulation')):10,wavelength:settings.has('undulationScale')?Number(settings.get('undulationScale')):200,coverage:settings.has('undulationCover')?Number(settings.get('undulationCover')):.45});
+export const groundDefaults=settings => ({amplitude:settings.has('undulation')?Number(settings.get('undulation')):10,wavelength:settings.has('undulationScale')?Number(settings.get('undulationScale')):200,coverage:settings.has('undulationCover')?Number(settings.get('undulationCover')):.45,
+  art:settings.has('undulationArt')?Number(settings.get('undulationArt')):1});   // the share of the undulation the art shows (lit and painted); the game heights keep all of it
 
 // The brush seed a page opens with (sculpt.html's Seed box): a scripted scene's strokes take their seeds from it.
 export const DEFAULT_SEED=2701;
 // A page's settings: its address over the world's own defaults (boot() in sculpt.js does this to its address once the config is in).
+// A world with no beach of its own may take another world's (Colors & base pattern, Beach: the setting beachFrom names a world of config.beachSources,
+// sculpt.py world_configs): the lender's beach layer (the renderer generates it after the world's own, from the table this names) and its beach
+// width, height and color, so every reader of config.layers and config.material (the panel's facts and rows, the chunk margins, the renderer)
+// sees a beach. The page's boot and the headless host call this once the settings hold the world's defaults.
+export function borrowBeach(config,settings) {
+  const lender=config.beachSources?.[settings.get('beachFrom')];
+  if (!lender || config.layers.includes('beach')) return config;
+  config.layers=[...config.layers,'beach']; config.material={...config.material,...lender.material}; config.beachTable=lender.table;
+  return config;
+}
 export function addDefaults(settings,defaults={}) { for (const [key,value] of Object.entries(defaults||{})) if (!settings.has(key)) settings.set(key,value); return settings; }
 export const pageSettings=(config,search='') => addDefaults(new URLSearchParams(search),config.defaults);
 // A world setting the page's address may override (a knob trial in a render's query), else the world's value.
@@ -272,7 +283,10 @@ export function sceneNodes(config,list,{ground=true,seed=DEFAULT_SEED,settings=p
   const out=[];
   if (ground) { const g=groundDefaults(settings); if (g.amplitude>0) out.push({kind:'ground',...g,seed:seed^0x9e37}); }
   list.forEach(([entry,points,options={}],i) => {
-    const kind=strokeKind(entry),{card:override,...rest}=options,d={...toolDefaults(config,entry),...override},pts=points.map(([x,y]) => ({x,y}));
+    const kind=strokeKind(entry);
+    // A stroke the passes would not draw is an error, not an empty stroke: a section form (mesa, cliff, lfPlateau) is a landform's curve, not a tool.
+    if (!DRAWN_KINDS.includes(kind)) throw new Error(`scene stroke ${i}: "${entry}" is not a tool the editor draws (a tool: ${Object.keys(LANDFORM_TOOLS).join(', ')}, or ${DRAWN_KINDS.filter(k => k!=='landform').join(', ')}; a section form goes in the card's curve)`);
+    const {card:override,...rest}=options,d={...toolDefaults(config,entry),...override},pts=points.map(([x,y]) => ({x,y}));
     const card={...strokeCard(config,d),seed:(seed+i*7919)>>>0};
     const probe={...card,...rest};
     const node={kind,points:pts,params:strokeParams(probe),seed:probe.seed};
@@ -286,10 +300,13 @@ export const migrateRiver=(config,node) => applyRiver(node,{w:config.map?.width?
 
 // What the page runs a scene with besides its nodes, so the headless runner runs it the same way.
 // The shape engine's context (sculpt-gpu-fields.js): each node's options over the world's, the brush seed, the talus slope, the sea and
-// base, the height range the fields clamp to (heightRange) and the frost gaps (world settings the address may override).
+// base, the height range the fields clamp to (heightRange), the frost gaps, the coast ramp and the face steepness (world settings the address may
+// override; a world without the last two keeps its sections as drawn).
 export const heightRange=config => ({minH:config.seaLevel-90,maxH:config.seaLevel+300});
 export const shapeContext=({config,settings,seed,talusAngle=40,minH,maxH}) => ({params:n => ({...shapeDefaults(config),...n.params}),seed,repose:Math.tan(talusAngle*Math.PI/180),sea:config.seaLevel,baseHeight:config.baseHeight,minH,maxH,
-  frost:{gapSize:worldSetting(config,settings,'frostGapSize'),gapDepth:worldSetting(config,settings,'frostGapDepth'),gaps:worldSetting(config,settings,'frostGaps'),gapReach:worldSetting(config,settings,'frostGapReach')}});
+  frost:{gapSize:worldSetting(config,settings,'frostGapSize'),gapDepth:worldSetting(config,settings,'frostGapDepth'),gaps:worldSetting(config,settings,'frostGaps'),gapReach:worldSetting(config,settings,'frostGapReach')},
+  coastRamp:settings.has('coastRamp')||Number.isFinite(Number(config?.defaults?.coastRamp))?worldSetting(config,settings,'coastRamp'):1,
+  faceSteep:settings.has('faceSteep')||Number.isFinite(Number(config?.defaults?.faceSteep))?worldSetting(config,settings,'faceSteep'):1});
 // The Time pass's knobs (sculpt-erosion.js runGpu), from the renderer's settings: the engine's, the world's, then the address.
 export const timeKnobs=renderer => ({age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
   envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)});
@@ -370,13 +387,13 @@ export function bilinearCells(x,y,spacing,grid,cell) {
   return (cell(ix,iy)*(1-fx)+cell(jx,iy)*fx)*(1-fy)+(cell(ix,jy)*(1-fx)+cell(jx,jy)*fx)*fy;
 }
 
-// The planes a map's fields hold: the six authored planes, then the masks.
-export const FIELD_KEYS=['h','p','r','c','v','x',...MASK_KEYS];
+// The planes a map's fields hold: the seven authored planes (u: the part of h the art does not show), then the masks.
+export const FIELD_KEYS=['h','p','r','c','v','x','u',...MASK_KEYS];
 // The shape's repeat check (sculpt.js shapeCompare; repro/shapecheck.mjs): every plane of the whole map, evaluated again, must be the same.
 // `settle` resolves once the fields' evaluation is done.
 export async function repeatCheck({fields,grid,settle}) {
-  const copy=f => ({h:f.h.slice(),p:f.p.slice(),r:f.r.slice(),c:f.c.slice(),v:f.v.slice(),x:f.x.slice(),masks:MASK_KEYS.map((k,j) => (f.masks?f.masks[j]:f[k]).slice())});
-  const all={x0:0,y0:0,x1:grid-1,y1:grid-1},grab=r => ({h:r.fields.h,p:r.fields.p,r:r.fields.r,c:r.fields.c,v:r.fields.v,x:r.fields.x,masks:MASK_KEYS.map(k => r.fields[k])});
+  const copy=f => ({h:f.h.slice(),p:f.p.slice(),r:f.r.slice(),c:f.c.slice(),v:f.v.slice(),x:f.x.slice(),u:f.u.slice(),masks:MASK_KEYS.map((k,j) => (f.masks?f.masks[j]:f[k]).slice())});
+  const all={x0:0,y0:0,x1:grid-1,y1:grid-1},grab=r => ({h:r.fields.h,p:r.fields.p,r:r.fields.r,c:r.fields.c,v:r.fields.v,x:r.fields.x,u:r.fields.u,masks:MASK_KEYS.map(k => r.fields[k])});
   await settle(); const a=copy(grab(fields.readCells(all)));
   fields.changed(); await settle(); const b=copy(grab(fields.readCells(all)));
   return {grid,repeat:comparePlanes(a,b,grid,MASK_KEYS)};
@@ -395,7 +412,7 @@ export async function regionalCheck({fields,device,nodes,context,config,grid,spa
     const middle=Math.floor(G/2);
     for (const [y0,y1] of [[0,middle-1],[middle,G-1]]) for (const [x0,x1] of [[0,middle-1],[middle,G-1]]) {
       const rect={x0,y0,x1,y1},W=x1-x0+1,out=await engine.run(nodes.slice(),ctx,rect),rp=await fields.readRect(rect,{weather:false});
-      const expected={h:out.floats[0],p:out.floats[1],r:out.floats[2],c:out.floats[3],v:out.floats[4],x:out.floats[5]};
+      const expected={h:out.floats[0],p:out.floats[1],r:out.floats[2],c:out.floats[3],v:out.floats[4],x:out.floats[5],u:out.floats[6]};
       for (const key of FIELD_KEYS) {
         const j=MASK_KEYS.indexOf(key),want=j>=0?out.masks[j]:expected[key],got=rp.fields[key],p=planes[key];
         for (let i=0;i<W*W;i++) {

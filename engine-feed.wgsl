@@ -8,7 +8,7 @@
 //   Chunk bake         feedMain                                            one chunk's height, route, weather/material and mask textures
 //                                                                          (sculpt-chunk-renderer.js upload, in f32), and the painted flags
 //
-// Planes: F holds h p r c v x as six f32 planes of grid * grid; Mk holds the 25 int8 mask planes, 7 words a cell (engine-shape.wgsl).
+// Planes: F holds h p r c v x u as seven f32 planes of grid * grid; Mk holds the 25 int8 mask planes, 7 words a cell (engine-shape.wgsl).
 // Every pass is one thread per output element and no thread reads what another writes in the same dispatch (atomics aside, and those
 // only gather flags), so the results do not depend on thread order.
 
@@ -166,6 +166,7 @@ fn feedMain(@builtin(global_invocation_id) id: vec3u, @builtin(local_invocation_
             let base = W[i]; let refined = W[fu.cells + i];
             h = h + (refined - base) * (1.0 - sm(0.0, 10.0, abs(h - base))) * (1.0 - r);
         }
+        h = h - F[6u * fu.cells + i];   // the art's height: less the undulation it does not show (engine-shape.wgsl artLevel); the game's keeps it
         if ((fu.mode & 4u) != 0u) { h = clamp(h, 0.0, 255.0); }
         let xy = vec2i(i32(id.x), i32(id.y));
         textureStore(outHeight, xy, vec4f(h - fu.sea, 0.0, 0.0, 0.0));
@@ -239,7 +240,7 @@ fn gatherShape(@builtin(global_invocation_id) id: vec3u) {
     let a = gatherAt(id);
     if (a.z == 0) { return; }
     let si = u32(a.x); let di = u32(a.y); let sc = gu.spw * gu.sph; let dc = gu.dw * gu.dh;
-    for (var p = 0u; p < 6u; p++) { gdF[p * dc + di] = gsF[p * sc + si]; }
+    for (var p = 0u; p < 7u; p++) { gdF[p * dc + di] = gsF[p * sc + si]; }
     for (var w = 0u; w < 7u; w++) { gdMk[di * 7u + w] = gsMk[si * 7u + w]; }
 }
 

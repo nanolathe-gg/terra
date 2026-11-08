@@ -2682,6 +2682,22 @@
    "shallow": "riverShallow"
   }
  },
+ "features": {
+  "note": "Zhon has no retail planet and so no retail features: a plausible savannah from the generic kinds (this is by eye, not measured). Flat-crowned acacia-like broadleaf trees, sparse (density 0.25, 52-60 px, wide), dry-grass clumps in straw tones, sandstone rocks of Green's footprint mix, and rock stains; deposits and vents take Green's look. Colors follow Zhon's own ground (olive-brown) and slope (tan).",
+  "tree": {"count": 5, "color": "#7f7c2e", "taper": 0.1, "peaks": 0.2, "energy": [150, 250], "types": [
+   {"share": 1, "params": {"species": "broadleaf", "colors": ["#1a1c08", "#2a2a0e", "#3d3d14", "#52501c", "#686624", "#7f7c2e", "#95923c", "#aaa650"], "density": 0.25, "crown": 0.8, "flecks": [["#a8a448", 0.2]]}, "vary": {"height": [52, 60], "width": [0.95, 1.15]}}]},
+  "shrub": {"count": 4, "color": "#b8a25e", "types": [
+   {"share": 0.8, "params": {"density": 0.2, "width": 34, "height": 22, "colors": ["#3b2f14", "#52421c", "#6b5828", "#86703a", "#a08a4c", "#b8a25e", "#cdb872", "#dfcf8e"], "flecks": [["#6f8a2e", 0.12]]}},
+   {"share": 0.2, "params": {"density": 0.5, "width": 28, "height": 18, "colors": ["#3b2f14", "#52421c", "#6b5828", "#86703a", "#a08a4c", "#b8a25e", "#cdb872", "#dfcf8e"]}}]},
+  "rock": {"count": 8, "color": "#a58b6c", "angular": 0.4, "shade": 0.6, "metal": [25, 100], "types": [
+   {"share": 0.44, "params": {"cells": "1x1", "colors": ["#1c1510", "#3a2b20", "#574333", "#725a46", "#8c7258", "#a58b6c", "#bfa585", "#d8c4a4"], "mottle": [["#c9a27a", 0.2]], "lump": 0.6, "grain": 0.6}},
+   {"share": 0.26, "params": {"cells": "2x2", "colors": ["#1c1510", "#3a2b20", "#574333", "#725a46", "#8c7258", "#a58b6c", "#bfa585", "#d8c4a4"], "mottle": [["#c9a27a", 0.2]], "lump": 0.6, "grain": 0.6}},
+   {"share": 0.11, "params": {"cells": "3x3", "colors": ["#1c1510", "#3a2b20", "#574333", "#725a46", "#8c7258", "#a58b6c", "#bfa585", "#d8c4a4"], "mottle": [["#c9a27a", 0.2]], "lump": 0.6, "grain": 0.6}},
+   {"share": 0.11, "params": {"cells": "3x2", "colors": ["#1c1510", "#3a2b20", "#574333", "#725a46", "#8c7258", "#a58b6c", "#bfa585", "#d8c4a4"], "mottle": [["#c9a27a", 0.2]], "lump": 0.6, "grain": 0.6}},
+   {"share": 0.08, "params": {"cells": "4x3", "colors": ["#1c1510", "#3a2b20", "#574333", "#725a46", "#8c7258", "#a58b6c", "#bfa585", "#d8c4a4"], "mottle": [["#c9a27a", 0.2]], "lump": 0.6, "grain": 0.6}}]},
+  "scar": {"count": 3, "types": [
+   {"share": 1, "params": {"type": "stain"}, "vary": {"size": [0.6, 1.2]}}]}
+ },
  "world": {
   "baseHeight": 8,
   "defaults": {

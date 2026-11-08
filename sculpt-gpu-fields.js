@@ -13,8 +13,12 @@ import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, l
 // The CPU copy is refreshed asynchronously: changed() starts a GPU evaluation of the dirty rectangle and a readback of just that
 // rectangle; read() waits (readAsync/ready) so a bake never sees a half-written copy and the frame never waits.
 
-const FIELD_KEYS_FLOAT = ['h', 'p', 'r', 'c', 'v', 'x'];
+// u: the part of h the art does not show (the undulation a ground node with Undulation in the art below 1 leaves out; engine-shape.wgsl artLevel).
+const FIELD_KEYS_FLOAT = ['h', 'p', 'r', 'c', 'v', 'x', 'u'];
+const PLANES = FIELD_KEYS_FLOAT.length;
 const KIND = {paint: 0, erase: 1, sand: 9, grass: 10, smooth: 11, fissure: 14, landform: 16};
+// The stroke kinds the passes draw (a node of any other kind draws nothing).
+export const DRAWN_KINDS = Object.keys(KIND);
 // Mirrors NOISE_FIELDS in sculpt.js: [wavelength, weight, salt] twice, in the order the shader indexes them.
 const NOISE = [
   [[95, .7, 0x1863], [37, .3, 0x32a7]], [[95, .7, 0x73c1], [37, .3, 0x9e15]], [[64, .65, 0x5b39], [23, .35, 0x2ac9]],
@@ -69,7 +73,13 @@ const NODE_FIELDS = [
   ...['lfcForm'].map(k => [k, 'u']), ...['lfcShare', 'lfcSides', 'lfcAlign', 'lfcBreak'].map(k => [k, 'f']),
   // The seed table of a landform's columns and prisms (lfcSeedTable): where its rows start in MW, its seeds, its path-and-level blocks and width levels, the
   // cells whose seeds the site pass fills in, and the prisms' lattice spacing and how far their seeds stray along and across the path.
-  ...['lfcTab', 'lfcSites', 'lfcBlocks', 'lfcLevels'].map(k => [k, 'u']), ...['lfcWx0', 'lfcWy0', 'lfcWx1', 'lfcWy1'].map(k => [k, 'i']), ...['lfcSpace', 'lfcJs', 'lfcJc'].map(k => [k, 'f'])];
+  ...['lfcTab', 'lfcSites', 'lfcBlocks', 'lfcLevels'].map(k => [k, 'u']), ...['lfcWx0', 'lfcWy0', 'lfcWx1', 'lfcWy1'].map(k => [k, 'i']), ...['lfcSpace', 'lfcJs', 'lfcJc'].map(k => [k, 'f']),
+  // Undulation in the art: init keeps plane u (artKeep, the second evaluation) and artLevel's share of the undulation the art shows (gArt).
+  ...['artKeep'].map(k => [k, 'u']), ...['gArt'].map(k => [k, 'f']),
+  // Coast ramp: the share of a water-making section's dry fall the coast keeps (1: as drawn).
+  ...['lfCoast'].map(k => [k, 'f']),
+  // Face steepness: the gain on a raised section's rise share (1: as drawn).
+  ...['lfFace'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -211,7 +221,7 @@ export const smoothRadius = (radius, {spacing, refSpacing = spacing}) => Math.ma
 export function prepareNode(n, geom, c) {
   if (n.hidden || (n.kind !== 'ground' && (!(n.kind in KIND) || !n.points?.length))) return {skip: true};
   const {grid, spacing} = geom;
-  if (n.kind === 'ground') return {op: 'ground', seed: (n.seed ?? 1) >>> 0, amp: n.amplitude ?? 8, wave: n.wavelength ?? 160, cover: n.coverage ?? .5};
+  if (n.kind === 'ground') return {op: 'ground', seed: (n.seed ?? 1) >>> 0, amp: n.amplitude ?? 8, wave: n.wavelength ?? 160, cover: n.coverage ?? .5, art: clamp(n.art ?? 1, 0, 1)};
   const kind = n.kind, q = kind === 'landform' ? landformSteps(c.params(n)) : c.params(n), kcode = KIND[kind];
   const frame = isIdentity(n.frame) ? null : n.frame, inv = frame ? invert(frame) : null, turn = frame ? Math.atan2(frame[1], frame[0]) : 0;
   const seed = ((n.seed ?? c.seed) >>> 0), allPoints = n.points, paths = shapePaths(n), radius = q.radius;
@@ -343,6 +353,10 @@ export function prepareNode(n, geom, c) {
       // P17 Talus: cones below the Gullies' chutes, as long as the reach (world px) at the repose of the world's talusAngle; only where Gullies cut and the stroke raises.
       talusReach: talusOn(q) ? clamp(q.talus, 0, 400) : 0, talusTan: c.repose ?? .84, lfPeak: Math.round(q.spurCount) >= 1 && landformSigned(q) ? landformPeak(q) : 0,
       lfGround: Math.round(q.heightReference || 0) === 2 ? 1 : 0, lfSigned: landformSigned(q) ? 1 : 0,
+      // Coast ramp: a stroke whose crest stands under the sea (a fixed or sea-level height) makes a coast; others keep their sections as drawn.
+      lfCoast: Math.round(q.heightReference || 0) !== 2 && landformElevation(q, c.sea) < c.sea ? clamp(c.coastRamp ?? 1, 0, 1) : 1,
+      // Face steepness: a raised section (Raise to, above the plain or its ground; not a crater's signed section or a river's valley).
+      lfFace: Math.round(q.combine || 0) === 0 && !landformSigned(q) && !isRiver(q) && (Math.round(q.heightReference || 0) === 2 ? q.elevation > 0 : landformElevation(q, c.sea) > c.baseHeight) ? clamp(c.faceSteep ?? 1, 1, 4) : 1,
       // lfcrater: an impact's groove (its first segment the landing): the along curve's value at the end, which the groove's width is scaled by; 0: no groove.
       grooveEnd: grooved ? impactEnd(q) : 0});
     if (impact) Object.assign(main.u, impactUniforms(q, sd, impact, c));
@@ -476,11 +490,11 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
     return out;
   };
-  const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampFissure', 'smoothCopy', 'blurH', 'blurV', 'ground', 'init', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'packPlane', 'lfCrystalSites', 'lfCrystalRoom', 'lfCrystalApply'];
+  const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampFissure', 'smoothCopy', 'blurH', 'blurV', 'ground', 'init', 'artHold', 'artLevel', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'packPlane', 'lfCrystalSites', 'lfCrystalRoom', 'lfCrystalApply'];
   const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse'] : [])]);
   const cells = pages ? 0 : grid * grid, buf = (size, usage, label) => device.createBuffer({size: Math.max(16, size), usage, label});
   const ST = GPUBufferUsage.STORAGE, CD = GPUBufferUsage.COPY_DST, CS = GPUBufferUsage.COPY_SRC;
-  const F = buf(6 * cells * 4, ST | CD | CS, 'shape planes'), Mk = buf(7 * cells * 4, ST | CD | CS, 'shape masks');
+  const F = buf(PLANES * cells * 4, ST | CD | CS, 'shape planes'), Mk = buf(7 * cells * 4, ST | CD | CS, 'shape masks');
   let Nz = null, Sc = null, dummy = null, queue = Promise.resolve(), peak = 0, last = {};
   // H10: the scratch planes are three (the hill's blur), or CO_PLANES plus the circular bites when the node list has a coast pass.
   const CO_PLANES = 14, scFloats = (n, sites) => sites < 0 ? 3 * n : CO_PLANES * n + sites;
@@ -490,7 +504,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
   let pageScratch = null;
   const bytes = () => F.size + Mk.size + (Nz?.size || 0) + (Sc?.size || 0) + (pageScratch?.size || 0);
   function makeTarget(ox, oy, pw, ph) {
-    const F2 = buf(6 * pw * ph * 4, ST | CD | CS, 'page planes'), Mk2 = buf(pw * ph * 28, ST | CD | CS, 'page masks');
+    const F2 = buf(PLANES * pw * ph * 4, ST | CD | CS, 'page planes'), Mk2 = buf(pw * ph * 28, ST | CD | CS, 'page masks');
     return {F: F2, Mk: Mk2, ox, oy, pw, ph, bytes: F2.size + Mk2.size, destroy() { F2.destroy(); Mk2.destroy(); }};
   }
 
@@ -528,7 +542,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     else scratch(scFloats(cells, coastSites));
     for (const p of prepared) {
       if (p.skip) continue;
-      if (p.op === 'ground') { ops.push({ground: true, u: {seed: p.seed, gAmp: p.amp, gWave: p.wave, gCover: p.cover}}); continue; }
+      if (p.op === 'ground') { ops.push({ground: true, art: p.amp !== 0 ? p.art : 1, u: {seed: p.seed, gAmp: p.amp, gWave: p.wave, gCover: p.cover}}); continue; }
       if (!p.region) continue;
       const node = {...p.u, nseg: p.segs.length, kind: p.kind, segBase: segCount, mwBase: mwCount, nwrites: p.writes.length};
       for (const s of p.segs) {
@@ -615,14 +629,23 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
         if (q?.coast) { const hit = intersect(need, q.coast.box); if (hit) { const e = expandIn(hit, q.coast.readR); need = {x0: Math.min(need.x0, e.x0), y0: Math.min(need.y0, e.y0), x1: Math.max(need.x1, e.x1), y1: Math.max(need.y1, e.y1)}; } }
         if (q?.smoothR && q.region) { const hit = intersect(need, q.region); if (hit) { const e = expandIn(hit, q.smoothR); need = {x0: Math.min(need.x0, e.x0), y0: Math.min(need.y0, e.y0), x1: Math.max(need.x1, e.x1), y1: Math.max(need.y1, e.y1)}; } }
       }
-      add('init', ops.length ? need : R);
+      // Undulation in the art below 1: the list without its ground node first, its height held in plane u, then the whole list, and artLevel over what init
+      // covered (every plane is as exact there as h).
+      const span = ops.length ? need : R, level = ops.find(op => op.ground && op.art < 1);
+      if (level) {
+        add('init', span);
+        ops.forEach((op, j) => { if (!op.ground) emitOp(op, rects[j], exMain, !target); });
+        add('artHold', span);
+      }
+      add('init', span, level ? {artKeep: 1} : {});
+      ops.forEach((op, j) => {
+        emitOp(op, rects[j], exMain, !target);
+      });
+      if (level) add('artLevel', span, {...level.u, gArt: level.art});
     }
-    ops.forEach((op, j) => {
-      emitOp(op, rects[j], exMain, !target);
-    });
     }
     // Pack the rectangle for readback.
-    const rw0 = P ? P.x1 - P.x0 + 1 : 0, rh0 = P ? P.y1 - P.y0 + 1 : 0, rc = rw0 * rh0, q4 = Math.ceil(rc / 4), outWords = plane === null ? 6 * rc + 25 * q4 : rc;
+    const rw0 = P ? P.x1 - P.x0 + 1 : 0, rh0 = P ? P.y1 - P.y0 + 1 : 0, rc = rw0 * rh0, q4 = Math.ceil(rc / 4), outWords = plane === null ? PLANES * rc + 25 * q4 : rc;
     if (readback) add(plane === null ? 'pack' : 'packPlane', P, plane === null ? {} : {bsrc: plane});
     const ub = buf(passes.length * NODE_BYTES, GPUBufferUsage.UNIFORM | CD, 'shape uniforms'), udata = new ArrayBuffer(passes.length * NODE_BYTES), dv = new DataView(udata);
     passes.forEach((pass, k) => {
@@ -666,7 +689,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       const raw = stage.getMappedRange().slice(0); stage.unmap(); stage.destroy();
       last = {passes: passes.length, segments: segCount, ms: performance.now() - t0, prepareMs: tSubmit - t0, gpuMs: tGpu - tSubmit, readbackMs: performance.now() - tGpu, cells: rc};
       if (plane !== null) return {rect: P, width: rw0, height: rh0, plane: new Float32Array(raw)};
-      return {rect: P, width: rw0, height: rh0, floats: FIELD_KEYS_FLOAT.map((_, k) => new Float32Array(raw, k * rc * 4, rc)), masks: Array.from({length: 25}, (_, m) => new Int8Array(raw, (6 * rc + m * q4) * 4, rc))};
+      return {rect: P, width: rw0, height: rh0, floats: FIELD_KEYS_FLOAT.map((_, k) => new Float32Array(raw, k * rc * 4, rc)), masks: Array.from({length: 25}, (_, m) => new Int8Array(raw, (PLANES * rc + m * q4) * 4, rc))};
     })();
     peak = Math.max(peak, bytes() + sd.byteLength + passes.length * NODE_BYTES + (readback ? 2 * outWords * 4 : 0));
     done.then(() => {
@@ -679,7 +702,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
   // Copy a readback rectangle into row-major CPU planes of the given row stride (the planes are `grid` wide).
   function copyOut(out, planes) {
     const {rect, width, height} = out;
-    for (let k = 0; k < 6; k++) { const dst = planes[FIELD_KEYS_FLOAT[k]]; for (let y = 0; y < height; y++) dst.set(out.floats[k].subarray(y * width, (y + 1) * width), (rect.y0 + y) * grid + rect.x0); }
+    for (let k = 0; k < PLANES; k++) { const dst = planes[FIELD_KEYS_FLOAT[k]]; for (let y = 0; y < height; y++) dst.set(out.floats[k].subarray(y * width, (y + 1) * width), (rect.y0 + y) * grid + rect.x0); }
     for (let m = 0; m < 25; m++) { const dst = planes.masks[m]; for (let y = 0; y < height; y++) dst.set(out.masks[m].subarray(y * width, (y + 1) * width), (rect.y0 + y) * grid + rect.x0); }
   }
   // H5b: the authored height at every `step`-th cell of a rectangle of a target (the overview's coarse lattice), read back: (w x h) floats, w = (x1 - x0) / step + 1.
@@ -729,7 +752,7 @@ export function createGpuFields(opts) {
   const joinRect = (a, b) => !a || !b ? null : {x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1)};
   const joinWorld = (a, b) => !a || !b ? null : (() => { const x0 = Math.min(a.x, b.x), y0 = Math.min(a.y, b.y); return {x: x0, y: y0, width: Math.max(a.x + a.width, b.x + b.width) - x0, height: Math.max(a.y + a.height, b.y + b.height) - y0}; })();
   const joinEvent = (a, b) => !a ? b : !b ? a : {revision: Math.max(a.revision, b.revision), rect: joinWorld(a.rect, b.rect)};
-  const allocate = () => { planes ??= {h: new Float32Array(cells), p: new Float32Array(cells), r: new Float32Array(cells), c: new Float32Array(cells), v: new Float32Array(cells), x: new Float32Array(cells), masks: maskKeys.map(() => new Int8Array(cells))}; };
+  const allocate = () => { planes ??= {...Object.fromEntries(FIELD_KEYS_FLOAT.map(k => [k, new Float32Array(cells)])), masks: maskKeys.map(() => new Int8Array(cells))}; };
   const getEngine = () => enginePromise ??= (async () => {
     let d = device();
     for (let i = 0; !d && i < 600; i++) { await new Promise(r => setTimeout(r, 50)); d = device(); }   // the renderer is created after the fields
@@ -823,7 +846,7 @@ export function createGpuFields(opts) {
     for (const k of FIELD_KEYS_FLOAT) fields[k] = cut(planes[k], Float32Array);
     maskKeys.forEach((k, j) => { fields[k] = cut(planes.masks[j], Int8Array); });
     return {fields, maskPlanes: maskKeys.map(k => fields[k]), gridWidth: w, gridHeight: h, gridSpacing: spacing, gridOrigin: [rect.x0 * spacing, rect.y0 * spacing], worldSize, worldGrid, revision,
-      bytes: w * h * (24 + maskKeys.length), rect: worldRect(rect)};
+      bytes: w * h * (4 * PLANES + maskKeys.length), rect: worldRect(rect)};
   }
   function readCells(request, o) {
     if (!planes || !valid) throw new Error('nanolathe: the GPU shape fields are not ready; await ready() or readAsync() first');
@@ -842,9 +865,9 @@ export function createGpuFields(opts) {
     return (cell(ix, iy, key) * (1 - fx) + cell(jx, iy, key) * fx) * (1 - fy) + (cell(ix, jy, key) * (1 - fx) + cell(jx, jy, key) * fx) * fy;
   };
   const stats = () => {
-    const g = engine?.stats() || {}, cpu = planes ? cells * (24 + maskKeys.length) : 0;
+    const g = engine?.stats() || {}, cpu = planes ? cells * (4 * PLANES + maskKeys.length) : 0;
     return {revision, residentBytes: cpu, cacheBytes: cpu, cacheEntries: planes ? 1 : 0, lastWorkingBytes: 0, peakBytes: cpu, budget: cpu, hits: 0, misses: 0, replays: 0, evictions: 0,
-      chunkCells: worldGrid, worldSize, worldGrid, gridSpacing: spacing, bytesPerCell: 24 + maskKeys.length, workspaceBytesPerCell: 0, maxWorkingCells: 0, pointSamples: 0,
+      chunkCells: worldGrid, worldSize, worldGrid, gridSpacing: spacing, bytesPerCell: 4 * PLANES + maskKeys.length, workspaceBytesPerCell: 0, maxWorkingCells: 0, pointSamples: 0,
       connectionTiles: 0, connectionCells: 0, gpuShape: {...g, cpuCopyBytes: cpu, pending: outstanding + (queued ? 1 : 0) + landing, runLog: runLog.slice(-120), lastEval, error: error?.message || null}};
   };
   return {
@@ -880,7 +903,8 @@ export function createPagedFields(opts) {
   const foregroundPending = opts.foregroundPending || (() => false);
   // H6c: the ring is 4 cells (the hill's blur) plus the longest chain of overlapping smooth radii among the nodes, bucketed to RINGS; it follows the node list.
   const RINGS = [4, 16, 32, 64, 128, 192, 320];
-  let RING = 4, SIDE = CORE + 2 * RING, SHAPE_BYTES = SIDE * SIDE * 52;
+  const PAGE_CELL = 4 * PLANES + 28;   // a shape page's bytes a cell: the float planes and the packed masks
+  let RING = 4, SIDE = CORE + 2 * RING, SHAPE_BYTES = SIDE * SIDE * PAGE_CELL;
   const WEATHER_BYTES = CORE * CORE * 20, CPU_PAGES = 16;
   // Page caps: 9 shape pages and 24 weather pages when the GPU budget allows; fewer (never under the 6 a chunk's feed gathers at once) when it does not.
   let SHAPE_PAGES = 9, WEATHER_PAGES = 24;
@@ -958,10 +982,10 @@ export function createPagedFields(opts) {
   // H12: the budget the pages may use: the GPU budget less what the renderer needs at least (materials and one chunk), or null when no budget is given.
   // The resident set of a ring is the 2 x 3 pages a chunk's feed gathers at once (shape and weather, with the material field), the feed's staging set and the
   // shape engine's scratch (about 16 MB and 44 bytes a cell of a page's side); a ring is allowed when that set fits.
-  const STAGING_BYTES = 700 * 850 * 88, FEED_PAGES = 6, PAGE_FIELD = CORE * CORE * 36;
+  const STAGING_BYTES = 700 * 850 * (4 * PLANES + 64), FEED_PAGES = 6, PAGE_FIELD = CORE * CORE * 36;
   const engineEstimate = ring => 16e6 + (CORE + 2 * ring) ** 2 * 44;
   const available = () => { const b = opts.budget?.(); return b ? b.total - b.minimum : Infinity; };
-  const residentSet = ring => FEED_PAGES * (CORE + 2 * ring) ** 2 * 52 + FEED_PAGES * PAGE_FIELD + STAGING_BYTES + engineEstimate(ring);
+  const residentSet = ring => FEED_PAGES * (CORE + 2 * ring) ** 2 * PAGE_CELL + FEED_PAGES * PAGE_FIELD + STAGING_BYTES + engineEstimate(ring);
   function fitCaps() {
     const room = 0.92 * available() - STAGING_BYTES - engineEstimate(RING);
     SHAPE_PAGES = clamp(Math.floor(0.8 * room / SHAPE_BYTES), FEED_PAGES, 9);
@@ -981,7 +1005,7 @@ export function createPagedFields(opts) {
       ringClamped = true;
     } else ringClamped = false;
     if (ring !== RING) {
-      RING = ring; SIDE = CORE + 2 * RING; SHAPE_BYTES = SIDE * SIDE * 52; ringChanges++;
+      RING = ring; SIDE = CORE + 2 * RING; SHAPE_BYTES = SIDE * SIDE * PAGE_CELL; ringChanges++;
       for (const pg of pagesMap.values()) dropShape(pg);
       scratchT?.destroy(); scratchT = null;
     }
@@ -1197,8 +1221,8 @@ export function createPagedFields(opts) {
   }
   function makeSet(cells, label) {
     const d = device(), S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, mk = (n, l) => d.createBuffer({label: label + ' ' + l, size: Math.max(16, n), usage: S});
-    const set = {cells, F: mk(cells * 24, 'planes'), Mk: mk(cells * 28, 'masks'), W: mk(cells * 8, 'height'), M: [0, 1, 2].map(k => mk(cells * 4, 'map ' + k)), Fd: mk(cells * 16, 'material field')};
-    set.bytes = cells * 88; set.destroy = () => { set.F.destroy(); set.Mk.destroy(); set.W.destroy(); set.M.forEach(b => b.destroy()); set.Fd.destroy(); };
+    const set = {cells, F: mk(cells * 4 * PLANES, 'planes'), Mk: mk(cells * 28, 'masks'), W: mk(cells * 8, 'height'), M: [0, 1, 2].map(k => mk(cells * 4, 'map ' + k)), Fd: mk(cells * 16, 'material field')};
+    set.bytes = cells * (4 * PLANES + 64); set.destroy = () => { set.F.destroy(); set.Mk.destroy(); set.W.destroy(); set.M.forEach(b => b.destroy()); set.Fd.destroy(); };
     return set;
   }
   // The staging set the chunk bake reads, reused (grown, never shrunk): the queue is in order, so a later gather runs after an earlier bake's feed pass.
@@ -1213,7 +1237,7 @@ export function createPagedFields(opts) {
     FIELD_KEYS_FLOAT.forEach((k, p) => { fields[k] = planes.slice(p * n, (p + 1) * n); });
     if (hBlend) fields.h = hBlend;
     maskKeys.forEach((k, m) => { const out = new Int8Array(n); for (let i = 0; i < n; i++) { const word = masks[i * 7 + (m >> 2)]; out[i] = (word << (24 - (m & 3) * 8)) >> 24; } fields[k] = out; });
-    return {fields, maskPlanes: maskKeys.map(k => fields[k]), gridWidth: w, gridHeight: h, gridSpacing: spacing, gridOrigin: [rect.x0 * spacing, rect.y0 * spacing], worldSize, worldGrid, revision, bytes: n * (24 + maskKeys.length), rect: worldRect(rect)};
+    return {fields, maskPlanes: maskKeys.map(k => fields[k]), gridWidth: w, gridHeight: h, gridSpacing: spacing, gridOrigin: [rect.x0 * spacing, rect.y0 * spacing], worldSize, worldGrid, revision, bytes: n * (4 * PLANES + maskKeys.length), rect: worldRect(rect)};
   };
   async function readRect(rect, {weather = true} = {}) {
     const wantWeather = weather && Boolean(time), lease = await prepareRect(rect, wantWeather);
@@ -1221,7 +1245,7 @@ export function createPagedFields(opts) {
       const passes = await feedPasses(device()), gw = rect.x1 - rect.x0 + 1, gh = rect.y1 - rect.y0 + 1, n = gw * gh, set = makeSet(n, 'read'), d = device();
       const enc = d.createCommandEncoder({label: 'read rect'}), tmp = encodeGather(enc, passes, rect, set, wantWeather);
       const stage = (b, bytes) => { const s = d.createBuffer({label: 'read stage', size: Math.max(16, bytes), usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST}); enc.copyBufferToBuffer(b, 0, s, 0, bytes); return s; };
-      const sF = stage(set.F, n * 24), sM = stage(set.Mk, n * 28), sW = wantWeather ? stage(set.W, n * 8) : null;
+      const sF = stage(set.F, n * 4 * PLANES), sM = stage(set.Mk, n * 28), sW = wantWeather ? stage(set.W, n * 8) : null;
       d.queue.submit([enc.finish()]); lease.release();
       await Promise.all([sF, sM, sW].filter(Boolean).map(b => b.mapAsync(GPUMapMode.READ)));
       const planes = new Float32Array(sF.getMappedRange().slice(0)), masks = new Uint32Array(sM.getMappedRange().slice(0)), wt = sW ? new Float32Array(sW.getMappedRange().slice(0)) : null;
@@ -1281,7 +1305,7 @@ export function createPagedFields(opts) {
   const stats = () => {
     const g = engine?.stats() || {}, resident = [...pagesMap.values()].filter(p => p.target).length, weathers = [...pagesMap.values()].filter(p => p.weather).length;
     return {revision, residentBytes: cpuBytes() + coarse.byteLength, cacheBytes: cpuBytes(), cacheEntries: resident, lastWorkingBytes: 0, peakBytes: cpuBytes(), budget: shapeBudget() + weatherBudget(), hits: 0, misses: 0, replays: 0, evictions: 0,
-      chunkCells: CORE, worldSize, worldGrid, gridSpacing: spacing, bytesPerCell: 52, workspaceBytesPerCell: 0, maxWorkingCells: 0, pointSamples: 0, connectionTiles: 0, connectionCells: 0,
+      chunkCells: CORE, worldSize, worldGrid, gridSpacing: spacing, bytesPerCell: PAGE_CELL, workspaceBytesPerCell: 0, maxWorkingCells: 0, pointSamples: 0, connectionTiles: 0, connectionCells: 0,
       gpuShape: {...g, gpuBytes: gpuBytes(), paged: true, core: CORE, ring: RING, ringChanges, apron: APRON, shapePages: resident, weatherPages: weathers, pagesTotal: np * np, shapeBytes: shapeBytes(), weatherBytes: weatherBytes(), stagingBytes: stagingBytes(), cpuCopyBytes: cpuBytes(),
         coarse: {points: coarse.length, filled: coarseFilled, done: coarseDone, queued: coarseQueue.size, fullAt: coarseFullAt}, weatherRuns, weatherMsTotal, error: (error || firstError)?.message || null}};
   };

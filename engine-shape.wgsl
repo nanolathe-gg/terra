@@ -7,7 +7,7 @@
 // does the path preparation in JS (simplify, corner rounding, frames, boxes) and passes the capsule list, so the segments are
 // bit-identical to the JS engine's. The marker below is replaced by the host with the uniform struct it fills.
 //
-// Planes: F holds h p r c v x as six f32 planes. Mk holds the 25 mask planes as int8, packed per cell (7 words a cell) so one thread
+// Planes: F holds h p r c v x u as seven f32 planes (u: the part of h the art does not show, see artLevel). Mk holds the 25 mask planes as int8, packed per cell (7 words a cell) so one thread
 // owns every byte it writes. Nz is the node's noise tables (7 fields), Sc three scratch planes (weights, tmp, joined).
 /*NODE_STRUCT*/
 
@@ -20,7 +20,7 @@
 @group(0) @binding(6) var<storage, read> MW: array<vec4f>;
 @group(0) @binding(7) var<storage, read_write> Out: array<u32>;
 
-const PH = 0u; const PP = 1u; const PR = 2u; const PC = 3u; const PV = 4u; const PX = 5u;
+const PH = 0u; const PP = 1u; const PR = 2u; const PC = 3u; const PV = 4u; const PX = 5u; const PU = 6u;
 
 // (wavelength 1, weight 1, wavelength 2, weight 2) and (salt 1, salt 2) of NOISE_FIELDS: x y detail coastX coastY coastWidth shelf.
 var<private> NZ: array<vec4f, 7> = array<vec4f, 7>(
@@ -330,7 +330,18 @@ fn blurV(@builtin(global_invocation_id) g: vec3u) {
 #endif
 }
 
-// The ground node: broad undulation of dry ground (groundHeight).
+// The ground node: broad undulation of dry ground (groundHeight). groundLifted: the same lift of a dry height h at cell (x, y) with protection pp, for
+// artLevel (the pass keeps its own arithmetic, so its bytes stay as they were).
+fn groundLifted(h: f32, pp: f32, x: i32, y: i32) -> f32 {
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  let wave = u.gWave; let s = u.seed;
+  let v = 0.6 * vnoise(wx / wave, wy / wave, s ^ 0x51a3u) + 0.3 * vnoise(wx * 2.1 / wave, wy * 2.1 / wave, s ^ 0x2b7du)
+        + 0.1 * vnoise(wx * 4.3 / wave, wy * 4.3 / wave, s ^ 0x6c11u);
+  let threshold = (0.5 - u.gCover) * 1.2;
+  let blotch = sm(threshold - 0.15, threshold + 0.15, vnoise(wx / (wave * 3.2), wy / (wave * 3.2), s ^ 0x7f4bu));
+  let next = h + u.gAmp * v * blotch * (1.0 - pp) * sm(u.sea + 1.0, u.sea + 8.0, h);
+  return clamp(max(next, min(h, u.sea + 1.5)), u.minH, u.maxH);
+}
 @compute @workgroup_size(8, 8)
 fn ground(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
@@ -364,10 +375,45 @@ fn init(@builtin(global_invocation_id) g: vec3u) {
 #endif
   F[PH * cells + i] = u.baseH;
   for (var p = 1u; p < 6u; p++) { F[p * cells + i] = 0.0; }
+  if (u.artKeep == 0u) { F[PU * cells + i] = 0.0; }   // (the second evaluation of a level-art run keeps the first one's height there)
   for (var w = 0u; w < 7u; w++) { Mk[i * 7u + w] = 0u; }
 }
 
-// Pack the rectangle for readback: six f32 planes, then 25 int8 mask planes, each plane contiguous and row-major in the rectangle.
+// Undulation in the art below 1: the host evaluates the node list twice, first without the ground node (artHold keeps that height in plane u), then
+// whole; artLevel leaves in u the share of the ground's undulation the art does not show: (1 - gArt) times what the undulation adds to the height, where
+// that is the ground node's own lift (the plain, a ground-relative shape). Where a later node changed it (a section's crest, a cut, a shoreline that moved
+// with the ground, steps along it), the art keeps the game's height, fading over ART_KEEP height units, so the art's waterline is the game's. The draw
+// subtracts u; the game heights keep h.
+const ART_KEEP = 2.0;
+@compute @workgroup_size(8, 8)
+fn artHold(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let cells = pcells(); let i = lidx(x, y);
+#else
+  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
+#endif
+  F[PU * cells + i] = F[PH * cells + i];
+}
+@compute @workgroup_size(8, 8)
+fn artLevel(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let cells = pcells(); let i = lidx(x, y);
+#else
+  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
+#endif
+  let d = F[PH * cells + i] - F[PU * cells + i];
+  let lift = select(0.0, groundLifted(u.baseH, 0.0, x, y) - u.baseH, u.baseH > u.sea + 1.0);   // the ground node's own lift (it runs first, on the base height)
+  let h = F[PH * cells + i];
+  let part = (1.0 - clamp(u.gArt, 0.0, 1.0)) * (1.0 - sm(0.0, ART_KEEP, abs(d - lift))) * d;
+  // No cell changes sides of the sea in the art: its waterline is the game's, cell for cell.
+  F[PU * cells + i] = select(max(part, h - u.sea), min(part, max(h - u.sea - 0.25, 0.0)), h > u.sea);
+}
+
+// Pack the rectangle for readback: seven f32 planes, then 25 int8 mask planes, each plane contiguous and row-major in the rectangle.
 // Thread j writes one word: an f32, or four consecutive cells of one mask plane.
 @compute @workgroup_size(256)
 fn pack(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) ng: vec3u) {
@@ -379,7 +425,7 @@ fn pack(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) ng: ve
 #else
   let n = u.grid; let cells = n * n;
 #endif
-  if (j < 6u * rc) {
+  if (j < 7u * rc) {
     let pl = j / rc; let k = j % rc;
     let cx = u32(u.rx0) + k % w; let cy = u32(u.ry0) + k / w;
 #ifdef PAGES
@@ -389,7 +435,7 @@ fn pack(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) ng: ve
 #endif
     return;
   }
-  let m = j - 6u * rc;
+  let m = j - 7u * rc;
   if (m >= 25u * q) { return; }
   let mp = m / q; let qq = m % q;
   var word = 0u;
@@ -792,6 +838,9 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
   }
   var q = lfShare(cc, ee, cap, s1.w, wm);
   if (spur && u.lfPeak > 0.0 && s1.x == 0.0) { q = lfCraterSpurShare(cc, ee, wm); }   // an impact's landing (s1.x 1) draws the whole section
+  // Face steepness above 1 (the host sets it on a raised section): the section's rise share through a gain round its middle, so the face between foot
+  // and top is lfFace times as steep there, and the foot and the top flatter and wider.
+  if (u.lfFace > 1.0 && q > 0.0 && q < 1.0) { let ga = pow(q, u.lfFace); q = ga / (ga + pow(1.0 - q, u.lfFace)); }
   let along = clamp(curveRaw(u.alongBase, select(share, 1.0, !spur && s1.z < 1.0)), 0.0, 1.2);   // a click (no length) reads its along curve at the end
   let lfB = select(u.baseH, base, u.lfGround != 0u); let lfE = select(u.elev, base + u.elev, u.lfGround != 0u);
   let crest = lfB + (lfE - lfB) * along * hm;   // the plain is the map's base height (with Height reference Ground, the cell's own ground); a spur piece rises hm of the way from it   // the plain is the map's base height (with Height reference Ground, the cell's own ground); a spur piece rises hm of the way from it
@@ -1057,6 +1106,16 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   // Shared shore features seed the actual sea crossings inside this shape, including cuts and joined paths.
   if (u.coPutW != 0u) { Sc[4u * cells + i] = pick.y; }
   var value = pick.x;
+  // Coast ramp below 1 (the host sets it on a stroke whose crest is under the sea): the dry part of the section keeps only the last lfCoast of its fall to
+  // the waterline (the drop as a share of base - sea), easing off the plain and meeting the water in a bank 1 / lfCoast times as steep; under water it is
+  // as drawn. From 1 to .75 the reshaped ramp blends in, so the row moves the coast by degrees from the drawn section.
+  if (u.lfCoast < 1.0 && base > u.sea && value > u.sea && value < base) {
+    let keep = max(u.lfCoast, 0.02);
+    let fx = clamp(((base - value) / (base - u.sea) - (1.0 - keep)) / keep, 0.0, 1.0);
+    let ramp = base - fx * fx * (2.0 - fx) * (base - u.sea);
+    let blend = min(1.0, (1.0 - keep) / 0.25);
+    value = select(mix(value, ramp, blend), ramp, blend >= 1.0);
+  }
   if (u.gully > 0.0 && value > base) { value = landformGullies(value, pick.y, pk, psh, wx, wy, lx, ly, base, nA, nB, nC, x, y, i, cells); }
   if (talus > 0.0) { value = max(value, base + talus); }
   if (u.combine == 0u) { value = max(base, value); } else if (u.combine == 1u) { value = min(base, value); }

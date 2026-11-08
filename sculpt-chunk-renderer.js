@@ -2,7 +2,7 @@
 // belong to this renderer once; callers own the LRU of copied output images.
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {columnRows} from './sculpt-column.js';
-import {PLANT_REACH,groundCoverOn} from './sculpt-material-model.js';
+import {PLANT_REACH,groundCoverOn,rockPreset} from './sculpt-material-model.js';
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
 
 const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','riverBed','fu','fv','s1','s2','s3'];
@@ -105,7 +105,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const beds=(Math.abs(n('bedSpacing',12))*Math.max(1,(slope+Math.abs(n('bedDip',0)))**(1-n('bedHeight',0)))*1.8*Math.abs(n('bedLedge',.5))+(n('bedLedge',.5)>0?3.6*Math.max(1,n('bedLedge',.5)):0))*Math.abs(n('rockOrder',0));
     const bands=columnRows(this.config.column,this.config.variant).bands[0]*Math.max(Math.abs(n('banding',0))*4,.8);
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
-    const gullyRise=Math.abs(n('ribTilt',0))*Math.max(n('grooveSpacing',8),8),rock=this.config.material?.rock||{};
+    const gullyRise=Math.abs(n('ribTilt',0))*Math.max(n('grooveSpacing',8),8),rock=rockPreset(this.config.material,this.variant);
     const facetRise=rock.size>0?2*(Math.abs(rock.crev??2)+1.8*Math.abs(rock.vary??.5)+1.7*Math.abs(rock.chip??.25)+Math.abs(rock.grit??.35)):0;   // the rock model's cells: crevice, tilt and step, chips and grit (engine-bake.wgsl rockModel), doubled for the margin
     const extra=gullyRise+facetRise+relief+blocks+beds+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(n('looseSize',6))+Math.abs(n('rippleHeight',1.4));
     const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4);
@@ -262,7 +262,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const names=['flow','deposit','talus','sand'],wearNames=['wear','wet','hard','slope'],fallNames=['fx','fy','channel','ridge'];
     const plane=(names2,k)=>Array.isArray(weather)?weather[k]:weather?.[names2[k]];
     const wp=[0,1,2,3].map(k=>plane(names,k)),wearP=[0,1,2,3].map(k=>weather?.[wearNames[k]]),fallP=[0,1,2,3].map(k=>weather?.[fallNames[k]]);
-    const fr=fields.r,fc=fields.c,fv=fields.v,fx=fields.x,fh=fields.h,exportArt=request.exportArt,sea=this.config.seaLevel;
+    const fr=fields.r,fc=fields.c,fv=fields.v,fx=fields.x,fh=fields.h,fu=fields.u,exportArt=request.exportArt,sea=this.config.seaLevel;
     const gridPlanes=[]; // [plane, byte offset of the layer, channel]
     for(let k=0;k<4;k++){if(wp[k])gridPlanes.push([wp[k],0,k]);if(wearP[k])gridPlanes.push([wearP[k],pixels*8,k]);if(fallP[k])gridPlanes.push([fallP[k],pixels*12,k]);}
     const lastRow=h-1,lastCol=w-1;
@@ -270,7 +270,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       const row=Math.min(y,lastRow)*w;
       for(let x=0;x<gw;x++) {
         const src=row+Math.min(x,lastCol),dst=y*gw+x,d4=dst*4;
-        height[dst]=(exportArt?clamp(fh[src],0,255):fh[src])-sea;
+        const art=fu?fh[src]-fu[src]:fh[src];   // the art's height: less the undulation it does not show (engine-feed.wgsl feedMain)
+        height[dst]=(exportArt?clamp(art,0,255):art)-sea;
         routes[d4]=toByte(fr?.[src]);routes[d4+1]=toByte(fc?.[src]);routes[d4+2]=Math.round((clamp(fv?.[src]??0,-1,1)*.5+.5)*255);routes[d4+3]=toByte(fx?.[src]);
         for(let k=0;k<planes.length;k++){const pk=planes[k];if(!pk)continue;const v=pk[src]??0;masks[(k>>2)*pixels*4+d4+(k&3)]=v;if(v!==0)painted[k]=1;}
         if(material)for(let k=0;k<4;k++)grid[pixels*4+d4+k]=toByte(material[src*4+k]);

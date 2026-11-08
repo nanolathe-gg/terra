@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {sceneNodes, pageSettings, surfaceSliders, drawOptions, sliderRange, SURFACE_SLIDER_IDS, DEFAULT_SEED, strokeKind, savedToolCard, toolDefaults} from '../sculpt-scene.js';
+import {sceneNodes, borrowBeach, pageSettings, shapeContext, surfaceSliders, drawOptions, sliderRange, SURFACE_SLIDER_IDS, DEFAULT_SEED, strokeKind, savedToolCard, toolDefaults} from '../sculpt-scene.js';
 import {landformTool} from '../sculpt-shape-presets.js';
 
 const root = new URL('..', import.meta.url).pathname;
@@ -22,6 +22,21 @@ test('a scene is the ground undulation, then one node per stroke with its seed',
   assert.equal(strokeKind('crater'), 'landform');
   assert.equal(sceneNodes(config, [['crater', [[0, 0]], {}]], {ground: false})[0].params.heightReference, 2);
   assert.deepEqual(sceneNodes(config, [['hill', [[1, 2]], {}]]), sceneNodes(config, [['hill', [[1, 2]], {}]]), 'the same strokes give the same nodes');
+  // The shape context's coast ramp: the world's, the address's, or (a world without one) the sections as drawn.
+  assert.equal(shapeContext({config, settings: pageSettings(config), seed: 1}).coastRamp, 1);
+  assert.equal(shapeContext({config, settings: pageSettings(config, 'coastRamp=.25'), seed: 1}).coastRamp, .25);
+  assert.equal(shapeContext({config, settings: pageSettings(config), seed: 1}).faceSteep, 1);
+  assert.equal(shapeContext({config, settings: pageSettings(config, 'faceSteep=2'), seed: 1}).faceSteep, 2);
+  assert.equal(shapeContext({config: {...config, defaults: {...config.defaults, coastRamp: .5}}, settings: pageSettings({defaults: {}}), seed: 1}).coastRamp, .5);
+  // The ground node carries Undulation in the art: all of it unless the page says less.
+  assert.equal(nodes[0].art, 1);
+  assert.equal(sceneNodes(config, [], {settings: pageSettings(config, 'undulationArt=0')})[0].art, 0);
+});
+
+test('a scene stroke whose tool the editor does not draw is an error, not an empty stroke', () => {
+  // A section form (Mesa, Cliff, lfPlateau) is a landform's curve: as a tool it made a node no pass draws, and the stroke silently drew nothing.
+  for (const entry of ['mesa', 'cliff', 'lfPlateau', 'iceberg']) assert.throws(() => sceneNodes(config, [[entry, [[0, 0], [10, 10]], {}]], {ground: false}), new RegExp(`"${entry}" is not a tool`));
+  assert.deepEqual(sceneNodes(config, [['plateau', [[0, 0]], {}], ['erase', [[0, 0]], {}], ['sand', [[0, 0]], {}]], {ground: false}).map(n => n.kind), ['landform', 'erase', 'sand']);
 });
 
 test('the page keeps only the kinds it draws', () => {
@@ -83,4 +98,25 @@ test('the surface sliders open where the browser puts them, and their ranges are
   assert.equal(s.relief, 110, 'surfaceRelief 1.12 snaps to the relief slider\'s step of 5');
   assert.equal(s['ring-spread'], 30, 'the address sets a ring slider');
   assert.equal(drawOptions(s).detail, 1.1);
+});
+
+test('a world without a beach borrows another world\'s: its layer, its numbers, and the facts and rows that read them', async () => {
+  const {worldPanelValues, colorRows} = await import('../sculpt-knobs.js');
+  const lender = {name: 'Zhon', table: 'materials/zhon.json', material: {beachWidth: 178, beachHeight: 6, beachRGB: [200, 180, 140]}};
+  const world = () => ({layers: ['slopeGrass', 'rock'], material: {wetBand: 9}, water: {}, beachSources: {zhon: lender}});
+  const facts = c => worldPanelValues({config: c, renderer: {variant: new Map(), groundTiled: false}, nodes: [], colors: {}, weathering: false, materialWeathering: 0});
+  const none = borrowBeach(world(), new URLSearchParams(''));
+  assert.deepEqual(none.layers, ['slopeGrass', 'rock']); assert.equal(none.beachTable, undefined); assert.equal(facts(none).beachLayer, 0);
+  assert.equal(borrowBeach(world(), new URLSearchParams('beachFrom=nowhere')).beachTable, undefined, 'an unknown lender lends nothing');
+  const borrowed = borrowBeach(world(), new URLSearchParams('beachFrom=zhon'));
+  assert.deepEqual(borrowed.layers, ['slopeGrass', 'rock', 'beach'], 'the beach is generated after the world\'s own layers');
+  assert.equal(borrowed.beachTable, 'materials/zhon.json');
+  assert.deepEqual(borrowed.material, {wetBand: 9, beachWidth: 178, beachHeight: 6, beachRGB: [200, 180, 140]});
+  assert.equal(facts(borrowed).beachLayer, 1);
+  assert.ok(colorRows(borrowed, new URLSearchParams()).some(([k]) => k === 'beach'), 'and the Beach color row');
+  const own = {...world(), layers: ['slopeGrass', 'beach'], material: {beachWidth: 120}};
+  assert.equal(borrowBeach(own, new URLSearchParams('beachFrom=zhon')).material.beachWidth, 120, 'a world\'s own beach stays its own');
+  // Every world that lacks a beach is offered the ones whose tables make one.
+  const tables = ['green', 'moon', 'desert', 'zhon', 'lava', 'ice', 'red', 'crystal', 'archipelago'].map(w => JSON.parse(readFileSync(`${root}materials/${w}.json`, 'utf8')));
+  assert.ok(tables.some(t => t.order.includes('beach') && t.measured.beach && t.model.beach), 'a table lends its beach material');
 });
