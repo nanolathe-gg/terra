@@ -17,6 +17,8 @@ import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, l
 const FIELD_KEYS_FLOAT = ['h', 'p', 'r', 'c', 'v', 'x', 'u'];
 const PLANES = FIELD_KEYS_FLOAT.length;
 const KIND = {paint: 0, erase: 1, sand: 9, grass: 10, smooth: 11, fissure: 14, landform: 16};
+// The stroke kinds the passes draw (a node of any other kind draws nothing).
+export const DRAWN_KINDS = Object.keys(KIND);
 // Mirrors NOISE_FIELDS in sculpt.js: [wavelength, weight, salt] twice, in the order the shader indexes them.
 const NOISE = [
   [[95, .7, 0x1863], [37, .3, 0x32a7]], [[95, .7, 0x73c1], [37, .3, 0x9e15]], [[64, .65, 0x5b39], [23, .35, 0x2ac9]],

@@ -4,7 +4,7 @@
 // (sculpt.py world_configs) and, where the page's address may override them, the page's settings (pageSettings).
 import {FACING_CHOICES,FORMS} from './sculpt-shape-presets.js';
 import {applyRiver,isRiver} from './sculpt-river.js';
-import {createShapeEngine,readBuffer,comparePlanes} from './sculpt-gpu-fields.js';
+import {createShapeEngine,readBuffer,comparePlanes,DRAWN_KINDS} from './sculpt-gpu-fields.js';
 import {computeDrainage,latticeWidth,DRAIN_STEP} from './sculpt-drainage.js';
 import {erosionOf} from './sculpt-erosion.js';
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
@@ -273,7 +273,10 @@ export function sceneNodes(config,list,{ground=true,seed=DEFAULT_SEED,settings=p
   const out=[];
   if (ground) { const g=groundDefaults(settings); if (g.amplitude>0) out.push({kind:'ground',...g,seed:seed^0x9e37}); }
   list.forEach(([entry,points,options={}],i) => {
-    const kind=strokeKind(entry),{card:override,...rest}=options,d={...toolDefaults(config,entry),...override},pts=points.map(([x,y]) => ({x,y}));
+    const kind=strokeKind(entry);
+    // A stroke the passes would not draw is an error, not an empty stroke: a section form (mesa, cliff, lfPlateau) is a landform's curve, not a tool.
+    if (!DRAWN_KINDS.includes(kind)) throw new Error(`scene stroke ${i}: "${entry}" is not a tool the editor draws (a tool: ${Object.keys(LANDFORM_TOOLS).join(', ')}, or ${DRAWN_KINDS.filter(k => k!=='landform').join(', ')}; a section form goes in the card's curve)`);
+    const {card:override,...rest}=options,d={...toolDefaults(config,entry),...override},pts=points.map(([x,y]) => ({x,y}));
     const card={...strokeCard(config,d),seed:(seed+i*7919)>>>0};
     const probe={...card,...rest};
     const node={kind,points:pts,params:strokeParams(probe),seed:probe.seed};

@@ -31,6 +31,12 @@ test('a scene is the ground undulation, then one node per stroke with its seed',
   assert.equal(sceneNodes(config, [], {settings: pageSettings(config, 'undulationArt=0')})[0].art, 0);
 });
 
+test('a scene stroke whose tool the editor does not draw is an error, not an empty stroke', () => {
+  // A section form (Mesa, Cliff, lfPlateau) is a landform's curve: as a tool it made a node no pass draws, and the stroke silently drew nothing.
+  for (const entry of ['mesa', 'cliff', 'lfPlateau', 'iceberg']) assert.throws(() => sceneNodes(config, [[entry, [[0, 0], [10, 10]], {}]], {ground: false}), new RegExp(`"${entry}" is not a tool`));
+  assert.deepEqual(sceneNodes(config, [['plateau', [[0, 0]], {}], ['erase', [[0, 0]], {}], ['sand', [[0, 0]], {}]], {ground: false}).map(n => n.kind), ['landform', 'erase', 'sand']);
+});
+
 test('the page keeps only the kinds it draws', () => {
   // sculpt.js deserializeNodes keeps a saved node only if NODE_NAMES names its kind: the Crater and Crystals buttons draw landforms.
   const page = readFileSync(`${root}sculpt.js`, 'utf8'), names = page.match(/const NODE_NAMES=\{([^}]*)\}/)[1];
