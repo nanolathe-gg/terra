@@ -253,6 +253,7 @@ const TREE_DEFAULTS = {
   trunk: ['#120e0b', '#231f13', '#3b3323', '#534333'],
   flecks: null,          // [[color, share], ...]: second hues among the sunlit leaves (Green's yellow-green, its conifers' grey-olive)
   energy: [250, 250],    // gameplay range (retail: 250 for every tree)
+  shadow: 0.72,          // the cover of the shadow's stipple (retail Green's trees 0.74 shadow pixels per body pixel, Archipelago's 0.53)
 };
 // Retail Green's ramps, measured from Tree1-3 and Tree4-7 (chromatic pixels by luma octile; the gaps are the neutral fifth).
 const LEAF = {
@@ -822,7 +823,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     const conifer = P.species === 'conifer', tendril = P.species === 'tendril';
     const T = tendril ? tendrilFrame(P, seed, ctx) : treeFrame(P, seed, ctx);
     body = cropSprite(T.body);
-    shadow = tintSprite(shadowSprite(T.R, T.body.ax, T.body.ay, TREE_SHADOW_COLORS, rng(mix32(seed, 41)), 0.72), ctx, 0);   // the solid's own shadow, from the map's sun
+    shadow = tintSprite(shadowSprite(T.R, T.body.ax, T.body.ay, TREE_SHADOW_COLORS, rng(mix32(seed, 41)), clamp(P.shadow, 0, 1)), ctx, 0);   // the solid's own shadow, from the map's sun
     footprint = cellsOf(P.cells || '1x1');
     const bp = { species: P.species, height: Math.round(P.height * (conifer ? 0.88 : 0.78)), width: conifer ? 0.5 : 0.62, forks: 3, ash: 0.5 };
     if (!ctx.bodyOnly) {   // the view draws only body and shadow
