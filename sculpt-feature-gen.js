@@ -893,7 +893,13 @@ function getGround(g, x, y) { const k = (clamp(y, 0, g.h - 1) * g.w + clamp(x, 0
 
 // halo: the lightness of the ground under the halo, scaled (retail, measured round the deposits of each world: Green 0.86, Red 0.9,
 // Desert 0.7, Moon 0.62, Crystal 1, Archipelago lighter than its sand); haloSat how much richer its hue is than the ground's.
-export const DEPOSIT_DEFAULTS = { metal: 127, style: 'retail', look: 'auto', halo: 0.82, haloSat: 1.1 };   // style 'retail' (angular plates) or 'pebbles' (round-1 round pebbles, an artist option); look 'auto' | 'cluster' | 'plates'
+// style 'retail' (angular plates) or 'pebbles' (round-1 round pebbles, an artist option); look 'auto' | 'cluster' | 'plates' | 'blades'.
+// A world's table may reshape the painter (features.deposit.params), each a number against Green's own look: stoneScale (the stone's area,
+// 1), reach (how far the halo spreads, 1), rimDark (the halo's inner pixels, 0.78 of its tone), and for look 'blades' the ore as a core with
+// long tapered blades: blades (count), bladeLen and bladeWidth (px at 127 metal), fan (0 parallel blades .. 1 radial star), angle (degrees
+// of the first blade, 0 east, 90 down the screen), core (radius px). crust (radius px, 0: none) cracks the ground round the stone into
+// dark-edged plates, crustTone their lightness against the ground.
+export const DEPOSIT_DEFAULTS = { metal: 127, style: 'retail', look: 'auto', halo: 0.82, haloSat: 1.1, stoneScale: 1, reach: 1, rimDark: 0.78, blades: 7, bladeLen: 20, bladeWidth: 5, fan: 1, angle: -50, core: 7, crust: 0, crustTone: 0.8 };
 const STONE_CLASSES = [
   { w: 0.29, ramp: [[216, 3], [224, 3], [145, 4], [114, 5], [130, 2]] },        // pale: lilac-white, pink-lilac, pale blue
   { w: 0.22, ramp: [[115, 8], [131, 3], [147, 3], [217, 3], [148, 3], [87, 3]] }, // light and mid
@@ -917,7 +923,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const r = rng(seed), rn = rng(mix32(seed, 2));
   const mt = clamp((P.metal - 86) / (223 - 86), 0, 1);
   const look = P.look === 'auto' ? (P.metal >= 160 ? 'cluster' : 'plates') : P.look;
-  const total = stonePixelsFor(P.metal) * (0.95 + 0.1 * r()) * (look === 'cluster' ? 0.66 : 1);
+  const total = stonePixelsFor(P.metal) * P.stoneScale * (0.95 + 0.1 * r()) * (look === 'cluster' ? 0.66 : 1);
   const dom = look === 'cluster' ? clamp(lerp(0.66, 0.86, mt) + (r() - 0.5) * 0.05, 0.62, 0.88) : clamp(0.54 + (r() - 0.5) * 0.06, 0.5, 0.6);
   const small = [0, 0, 0].map(() => 0.5 + r()), ss = small.reduce((a, b) => a + b, 0);
   const areas = [total * dom, ...small.map(v => Math.max(15, total * (1 - dom) * v / ss))];
@@ -940,11 +946,25 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const chunks = [], layout = [[0, 0]];
   const rDom = Math.sqrt(areas[0] / Math.PI / 0.85);
   for (let i = 0; i < 3; i++) { const a = r() * TAU + i * 2.1, d = rDom * (look === 'cluster' ? 0.95 : 0.7) + 7 + r() * 6; layout.push([Math.cos(a) * d, Math.sin(a) * d * 0.9]); }
-  for (let ci = 0; ci < 4; ci++) {
+  for (let ci = 0; ci < (look === 'blades' ? 1 : 4); ci++) {
     let px = cx + layout[ci][0], py = cy + layout[ci][1];
     let pts;
     for (let attempt = 0; attempt < 9; attempt++) {
-    if (ci === 0 && look === 'cluster') {                // ragged cluster of 2-4 touching facets (solidity about 0.6)
+    if (look === 'blades') {                              // a core and long tapered blades: a star (fan 1) or parallel slashes (fan 0)
+      const sc = Math.sqrt(stonePixelsFor(P.metal) / stonePixelsFor(127)), fan = clamp(P.fan, 0, 1), n = Math.max(0, Math.round(P.blades * (0.8 + 0.4 * r())));
+      const core = sized(px, py, Math.PI * (P.core * sc) ** 2 * 0.85, 5 + Math.floor(r() * 2), 1 + 0.3 * r(), r() * TAU), parts = [core];
+      const a0 = P.angle * Math.PI / 180, nx = -Math.sin(a0), ny = Math.cos(a0);
+      for (let j = 0; j < n; j++) {
+        const a = a0 + (j + 0.6 * r()) / n * TAU * fan + (r() - 0.5) * 0.3 * (1 - fan), len = Math.min(52, P.bladeLen * sc * (0.55 + 0.9 * r())), w0 = P.bladeWidth * sc * (0.6 + 0.7 * r());
+        const par = fan < 0.5, off = (1 - fan) * (j - (n - 1) / 2) * (w0 + 3.5), slide = (1 - fan) * (r() - 0.5) * len * 0.5, bx0 = px + nx * off + Math.cos(a0) * (slide - (par ? len / 2 : 0)), by0 = py + ny * off + Math.sin(a0) * (slide - (par ? len / 2 : 0)), line = [];
+        for (let t = 0; t <= len; t += 0.5) {
+          const f = t / len, hw = Math.max(0.5, w0 * (par ? Math.sin(Math.PI * f) ** 0.7 : (1 - f) ** 0.9) * (0.8 + 0.4 * vnoise(f * 6 + j, 3, seed + j)) / 2), X = bx0 + Math.cos(a) * t, Y = by0 + Math.sin(a) * t;
+          for (let u = -Math.ceil(hw); u <= Math.ceil(hw); u++) if (Math.abs(u) <= hw + 0.25) line.push([Math.round(X - Math.sin(a) * u), Math.round(Y + Math.cos(a) * u)]);
+        }
+        parts.push(line);
+      }
+      pts = union(parts);
+    } else if (ci === 0 && look === 'cluster') {                // ragged cluster of 2-4 touching facets (solidity about 0.6)
       const k = 4 + (r() < 0.5 ? 1 : 0), per = areas[0] / (k * 0.6), rad = Math.sqrt(per / Math.PI), parts = [];
       let ang = r() * TAU;
       for (let j = 0; j < k; j++) { ang += 1.3 + r() * 1.2; const d = rad * (1.25 + 0.8 * r()); parts.push(sized(px + Math.cos(ang) * d, py + Math.sin(ang) * d, per, 4 + Math.floor(r() * 2), 1 + r() * 0.5, r() * TAU)); }
@@ -995,14 +1015,29 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     for (const p of stonePts) { const dd = Math.abs(p[0] - X) + Math.abs(p[1] - Y); if (dd < 40) { const e = Math.hypot(p[0] - X, p[1] - Y); if (e < d) d = e; } }
     rawD[y * bw + x] = d; dmap[y * bw + x] = d + (fbm(X / 5, Y / 5, s1, 2) - 0.5) * 5;
   }
-  const T = 4.6;   // a tight 3-6 px speckled rim that merges between neighbors (retail: median 2.8-3.6 px from a chunk, 90% within 6-8)
+  const T = 4.6 * P.reach;   // a tight 3-6 px speckled rim that merges between neighbors (retail: median 2.8-3.6 px from a chunk, 90% within 6-8)
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
     const k = y * bw + x; if (chunkId[k] >= 0) continue;
     const d = dmap[k], near = rawD[k] <= 2.3; if (d > T + 1 && !near) continue;
     const pr = near || d <= 2.6 ? 1 : clamp((T + 1.4 - d) / 3.6, 0, 1) * 0.93;   // no grass ever shows inside or against a plate
     if (rn() > pr) continue;
-    const X = x + ox, Y = y + oy, h = haloOf(getGround(ground, X, Y), P.halo, P.haloSat, (rawD[k] <= 1.5 ? 0.78 : 1) * (0.72 + 0.5 * rn() * rn() + 0.12 * rn()));   // speckled, as retail's moss
+    const X = x + ox, Y = y + oy, h = haloOf(getGround(ground, X, Y), P.halo, P.haloSat, (rawD[k] <= 1.5 ? P.rimDark : 1) * (0.72 + 0.5 * rn() * rn() + 0.12 * rn()));   // speckled, as retail's moss
     setGround(ground, X, Y, palette[q(h[0], h[1], h[2])]);
+  }
+  if (P.crust > 0) {   // cracked crust: the ground round the stone broken into plates, each its own tone, edged by dark cracks (Crystal's)
+    const Rc = P.crust * Math.sqrt(stonePixelsFor(P.metal) / stonePixelsFor(127)) ** 0.5, cell = Math.max(6, Rc / 2.4), s2 = (r() * 1e6) | 0;
+    const seedAt = (i, j) => [(i + 0.12 + 0.76 * hash2(i, j, s2)) * cell, (j + 0.12 + 0.76 * hash2(i, j, s2 + 1)) * cell];
+    for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+      const X = x + ox, Y = y + oy, k = y * bw + x; if (chunkId[k] >= 0) continue;
+      const rr = Math.hypot(X - cx, (Y - cy) * 1.1), edge = Rc * (0.82 + 0.36 * (fbm(X / 9, Y / 9, s2 + 5, 2) - 0.5) * 2 * 0.5 + 0.1); if (rr > edge) continue;
+      const u = X + 4096, v = Y + 4096, ci0 = Math.floor(u / cell), cj0 = Math.floor(v / cell); let d1 = 1e9, d2 = 1e9, id = 0;
+      for (let j = cj0 - 1; j <= cj0 + 1; j++) for (let i = ci0 - 1; i <= ci0 + 1; i++) { const [sx, sy] = seedAt(i, j), d = Math.hypot(u - sx, v - sy); if (d < d1) { d2 = d1; d1 = d; id = i * 7919 + j; } else if (d < d2) d2 = d; }
+      if (rn() > clamp((edge - rr) / 3, 0, 1)) continue;
+      const base = getGround(ground, X, Y), crack = d2 - d1 < 0.7 + 0.5 * rn(), streak = vnoise((u - v) / 3, (u + v) / 14, s2 + 9) - 0.5;
+      const tone = crack ? 0.2 : P.crustTone * (0.8 + 0.4 * hash2(id, 1, s2)) * (0.92 + 0.16 * rn() + 0.3 * streak);
+      const cl = base.map(c => c * tone);
+      setGround(ground, X, Y, palette[q(cl[0], cl[1], cl[2])]);
+    }
   }
   return { cx, cy, metal: P.metal, look, chunks: 4, stonePx: stonePts.length, dominant: areas[0] / total, rect: [ox, oy, bw, bh], gameplay: { metal: P.metal, indestructible: true, footprint: [3, 3] } };
 }

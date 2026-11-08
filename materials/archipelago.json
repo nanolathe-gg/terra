@@ -2046,7 +2046,7 @@
   "shrub": {"count": 6, "color": "#968f5d", "types": [
    {"share": 0.5, "params": {"density": 0.42, "width": 46, "height": 36, "energy": [75, 75], "colors": ["#635451", "#696a4a", "#777757", "#777757", "#847c49", "#968f5d", "#ad9a3f", "#aebf58"], "flecks": [["#b3973f", 0.38], ["#cbaf53", 0.24], ["#83d35b", 0.1]]}},
    {"share": 0.5, "params": {"density": 0.42, "width": 42, "height": 38, "energy": [75, 75], "colors": ["#5d5d47", "#6a6e4e", "#777757", "#777757", "#7f7e4e", "#999362", "#91af43", "#86d55e"], "flecks": [["#83d35b", 0.4], ["#67bf3f", 0.2], ["#b3973f", 0.14]]}}]},
-  "deposit": {"params": {"halo": 1.25, "haloSat": 0.85}}
+  "deposit": {"params": {"look": "blades", "blades": 4, "bladeLen": 20, "bladeWidth": 6, "fan": 0, "angle": 50, "core": 4, "halo": 1.12, "haloSat": 0.9, "reach": 1.6, "rimDark": 1}}
  },
  "world": {
   "baseHeight": 8,

@@ -1174,7 +1174,7 @@
    {"share": 0.13, "params": {"cells": "3x3", "lump": 0.7, "grain": 0.4, "colors": ["#121314", "#3a3937", "#5b5b59", "#747472", "#8e8e88", "#a3a39f", "#bebaad", "#dad6cb"], "mottle": [["#c3c39b", 0.12]]}},
    {"share": 0.07, "params": {"cells": "3x1", "lump": 0.7, "grain": 0.4, "colors": ["#121314", "#3a3937", "#5b5b59", "#747472", "#8e8e88", "#a3a39f", "#bebaad", "#dad6cb"], "mottle": [["#c3c39b", 0.12]]}},
    {"share": 0.05, "params": {"cells": "3x2", "lump": 0.7, "grain": 0.4, "colors": ["#121314", "#3a3937", "#5b5b59", "#747472", "#8e8e88", "#a3a39f", "#bebaad", "#dad6cb"], "mottle": [["#c3c39b", 0.12]]}}]},
-  "deposit": {"params": {"halo": 0.62, "haloSat": 1}}
+  "deposit": {"params": {"look": "blades", "blades": 5, "bladeLen": 15, "bladeWidth": 12, "fan": 1, "core": 11, "halo": 0.42, "haloSat": 1, "reach": 1.1, "rimDark": 0.3}}
  },
  "world": {
   "defaults": {

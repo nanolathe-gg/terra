@@ -5,7 +5,7 @@
 // Each PNG has RETAIL (orange band: the sprites most used on the world's retail maps) and OURS (blue band: the variants of the world's
 // own table, lit by the world's sun as the page does) on the world's ground colour, at 1x and then 2x. Numbers under the pictures:
 // size, drawn pixels, luma octile cut points, mean hue and saturation of the coloured pixels, outline share (boundary pixels per
-// pixel); retail rows are weighted by uses in the group mean. A world with no retail folder (Zhon) gets ours only.
+// pixel; AquaOre deposits, drawn blue for under water, are left out unless --aqua); retail rows are weighted by uses in the group mean. A world with no retail folder (Zhon) gets ours only.
 import {mkdirSync, writeFileSync, readFileSync, existsSync} from 'node:fs';
 import {join, basename} from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -34,7 +34,8 @@ const sun0 = [-0.72, 0.38 * tilt, 0.82], sm = Math.hypot(...sun0), sun = sun0.ma
 const light = {x: +sun[0].toFixed(3), y: +(0.8944 * sun[1] - 0.4472 * sun[2]).toFixed(3), z: +(0.4472 * sun[1] + 0.8944 * sun[2]).toFixed(3)};
 const palette = JSON.parse(readFileSync(join(root, 'materials/palette.json'))).indexed;
 const ctx = {palette, light, bodyOnly: true};
-const gmean = table.measured?.ground?.meanRGB || table.material?.groundRGB || [90, 90, 90], gsd = table.measured?.ground?.lumaSd ?? 10;
+const gm0 = table.measured?.ground || table.measured?.quilt || table.measured?.slopeGrass || {};   // the plain's own picture, else its quilt, else the cover
+const gmean = gm0.meanRGB || table.material?.groundRGB || [90, 90, 90], gsd = gm0.lumaSd ?? 10;
 
 // ---- small image tools ----
 const canvas = (w, h, fill) => { const c = {w, h, rgba: new Uint8ClampedArray(w * h * 4)}; for (let i = 0; i < w * h; i++) c.rgba.set([...fill, 255], i * 4); return c; };
@@ -107,7 +108,9 @@ function groupOf(f) {
 const retailBy = {};
 for (const f of catalog) {
   if (!f.sprite) continue;
-  const g = groupOf(f); (retailBy[g] ||= {total: 0, list: []}).total += f.uses; retailBy[g].list.push(f);
+  const g = groupOf(f);
+  if (g === 'deposit' && /aqua/i.test(f.name) && !args.includes('--aqua')) continue;   // metal under water: its own blue sprite, not a ground paint
+  (retailBy[g] ||= {total: 0, list: []}).total += f.uses; retailBy[g].list.push(f);
 }
 const totalUses = catalog.reduce((a, f) => a + f.uses, 0);
 function retailItem(f, i) {
@@ -147,7 +150,7 @@ function strip(items, title, band, seed) {
     row.items.push({it, e, cw, x: row.w}); row.w += cw;
   }
   if (row.items.length) rows.push(row);
-  const W = Math.max(60, ...rows.map(r => r.w)), heights = rows.map(r => Math.max(...r.items.map(c => c.e.a)) + Math.max(...r.items.map(c => c.e.b)) + 14);
+  const W = Math.max(title.length * 8 + 8, ...rows.map(r => r.w)), heights = rows.map(r => Math.max(...r.items.map(c => c.e.a)) + Math.max(...r.items.map(c => c.e.b)) + 14);
   const H = 12 + heights.reduce((a, b) => a + b, 0) + 2;
   const c = groundCanvas(W, H, seed);
   for (let y = 0; y < 12; y++) for (let x = 0; x < W; x++) c.rgba.set([...band, 255], (y * W + x) * 4);
