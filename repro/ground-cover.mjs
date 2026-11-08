@@ -33,7 +33,7 @@ try{
   for(const k of keys.slice(1))assert.equal(await ev(`document.getElementById('knob-${k}').disabled`),true);
   await knob('vegetationCover',1.5);await knob('plantRelief',0);assert.equal(await ev(`document.getElementById('knob-flowerDensity').disabled`),false);
   await knob('plantRelief',1.5);await knob('flowerDensity',3);
-  const table=()=>ev(`sculptCanvas.renderer.placementTable(sculptCanvas.renderer.variant).slice(205,210)`);
+  const table=()=>ev(`sculptCanvas.renderer.placementTable(sculptCanvas.renderer.variant).slice(201,206)`);
   const before=await table();
   const colors=['#30b0ff','#ff50e0','#20ffee','#ff6020'];
   for(let i=0;i<4;i++)await ev(`(()=>{const p=document.querySelector('input[aria-label="Flower ${i+1} base color"]');p.value='${colors[i]}';p.dispatchEvent(new Event('input',{bubbles:true}));})()`);
@@ -50,8 +50,8 @@ try{
   // (The world's knobs carry across its variants, so the 1.5 set on Modern is here too: 0 is set to check the off state.)
   assert.equal(await ev(`document.getElementById('knob-vegetationCover').disabled`),false);await knob('vegetationCover',0);
   for(const k of keys.slice(1))assert.match(await ev(`document.getElementById('knob-${k}').closest('[data-knob]').querySelector('.control-requirement').textContent`),/Raise Vegetation cover/);
-  assert.equal(await ev(`sculptCanvas.renderer.placementTable(sculptCanvas.renderer.variant)[166][0]`),0,'off: the cover rows are 0');
-  await knob('vegetationCover',1);assert.equal(await ev(`sculptCanvas.renderer.placementTable(sculptCanvas.renderer.variant)[166][0]`),1);
+  assert.equal(await ev(`sculptCanvas.renderer.placementTable(sculptCanvas.renderer.variant)[162][0]`),0,'off: the cover rows are 0');
+  await knob('vegetationCover',1);assert.equal(await ev(`sculptCanvas.renderer.placementTable(sculptCanvas.renderer.variant)[162][0]`),1);
   for(const k of keys.slice(1))assert.equal(await ev(`document.getElementById('knob-${k}').disabled`),false);
   report.everyWorld='original Green shows the vegetation and flower colors; Vegetation cover 0 turns the cover off and raising it turns it on';
   await ev(`(()=>{const data=${JSON.stringify(exported)},dt=new DataTransfer();data.world.name='Cover round trip';dt.items.add(new File([JSON.stringify(data)],'cover.world.json',{type:'application/json'}));const e=document.getElementById('world-file');e.files=dt.files;e.dispatchEvent(new Event('change',{bubbles:true}));})()`);

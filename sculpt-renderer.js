@@ -3,7 +3,7 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
-import {materialRows,tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,rockPreset,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
+import {materialRows,tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {columnRows} from './sculpt-column.js';
 import {LOW_GROUND_RGB} from './sculpt-knobs.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
@@ -225,7 +225,7 @@ export class TerrainRenderer {
     // (binding 19, read with textureLoad); no land image remains. Binding numbers are the shared draw's, with 2-13 left out.
     this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: [
       texture(0, F), sampler(1, F),
-      texture(18, F), texture(19, F, 'float', '2d-array'), texture(20, F)]});
+      texture(18, F), texture(19, F, 'float', '2d-array')]});
     // GL drew with LESS against a cleared depth of 1; the vertex shader maps
     // GL's clip depth onto WebGPU's 0..1 range.
     // The bake's group 1: the fields texture, and the loose-stone mask lattice (looseMain fills it, the bake reads it).
@@ -281,7 +281,6 @@ export class TerrainRenderer {
       if (!variant.has(key)) variant.set(key, value);
     this.variant = variant;
     const slopeMaterial = ['slopes', 'structured'].includes(variant.get('surface'));
-    const rockLayers = variant.get('material') === 'varied';
     this.means = {};
     // The materials the table makes, by name: which optional stages the world has.
     this.layers = new Set(this.materialData.order);
@@ -312,7 +311,6 @@ export class TerrainRenderer {
     this.f('uDetail', this.config.material?.surfaceRelief ?? 1.0);
     this.i('uSlopeMaterial', slopeMaterial);
     this.i('uMineralMargins', variant.get('transition') === 'mineral');
-    this.i('uRockLayers', rockLayers);
     this.applyKnobs();
     this.i('uDiagnosticView', ['diffuse','occlusion','shadow','exposure','shading','material','cracks'].indexOf(variant.get('view')) + 1);
     this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
@@ -435,7 +433,7 @@ export class TerrainRenderer {
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
     // Painted masks (card C5), signed bytes so an unpainted
     // cell is exactly 0.0: layer 0 rock, snow or ice, wet ground, moss;
-    // layer 1 scatter density, relief, cracks, banding; layer 2 face rock share,
+    // layer 1 scatter density, relief, cracks, banding; layer 2 a spare plane (the old face rock share),
     // then the water choices (shore edge, shallow-to-deep edge, bed; card E1);
     // layer 3 ground lumps (the rest is spare). Plane k of the page is layer
     // k >> 2, channel k & 3. Fresh textures are zero.
@@ -618,7 +616,7 @@ export class TerrainRenderer {
   }
 
   // Painted masks (card C5): fourteen signed-byte planes (rock, snow or ice, wet
-  // ground, moss, scatter density, relief, cracks, banding, face rock share;
+  // ground, moss, scatter density, relief, cracks, banding, a spare plane (the old face rock share);
   // then, card E1, shore edge, shallow-to-deep edge, water bed, ground lumps and cracked bed),
   // interleaved into maskTexture's layers. Nothing is uploaded while nothing
   // has ever been painted; paintOn, scatterOn, styleOn, waterOn and lumpOn tell
@@ -690,26 +688,24 @@ export class TerrainRenderer {
   materialBindGroup() {
     return this.bindGroups.materials ??= this.device.createBindGroup({label: 'materials', layout: this.materialLayout, entries: [
       {binding: 0, resource: this.textures.grass.view}, {binding: 1, resource: this.textures.grass.sampler},
-      {binding: 18, resource: this.textures.palette.view}, {binding: 19, resource: this.generated.view}, {binding: 20, resource: this.relief.createView()}]});
+      {binding: 18, resource: this.textures.palette.view}, {binding: 19, resource: this.generated.view}]});
   }
 
-  // The ten placement rows of a world whose table has no `placement` block (engine-frag.wgsl landPlace reads them), from the knobs the
-  // shared draw's placement read. Green's rows are materials/green.json's.
+  // The six placement rows of a world whose table has no `placement` block (engine-frag.wgsl landPlace reads them), from the world's
+  // material and its transition. Green's rows are materials/green.json's.
   placementRows(variant) {
-    const material = this.config.material || {}, num = (k, d) => variant.has(k) ? Number(variant.get(k)) : d, list = (k, d) => (variant.get(k) || d).split(',').map(Number);
+    const material = this.config.material || {};
     const soil = variant.get('transition') === 'soil', mineral = variant.get('transition') === 'mineral';
     const threshold = material.rockSlope ?? 1.145, feather = material.rockFeather ?? 0.43;
     // The slope score: slope, noise, wear (with its tap) on the first row; the soil's slope, noise and wear on the second.
     const r0 = [0.55, 0.45, 0.28, 5], r1 = [soil ? 0.80 : 0.25, soil ? 0.70 : 0, 0.55, 10];
-    const face = list('faceSlope', '0.35,0.9'), share = list('rockShare', '0.2,1.0'), score = list('faceScore', '0.2,2.0,0.5,0.3');
     return [r0, r1, [threshold - feather * 0.5, threshold + feather * 0.5, 0, 0],
-      [0.2, soil ? 18 : 1e9, 18, 28], material.rockyCoasts ? [-1e4, -1e3, 0, 0] : [12, 36, 0, 0], [0.45, 0.9, mineral ? 0.45 : 0, mineral ? 1.4 : 0],
-      [face[0], face[1], num('faceEdge', 0.8), 0], [share[0], share[1], 0, 0], score, [num('gullyRock', 0.5), num('rockOrder', 0), 0, 0]];
+      [0.2, soil ? 18 : 1e9, 18, 28], material.rockyCoasts ? [-1e4, -1e3, 0, 0] : [12, 36, 0, 0], [0.45, 0.9, mineral ? 0.45 : 0, mineral ? 1.4 : 0]];
   }
-  // The draw's uniform table: only the ten placement rows are read, at PLACEMENT_ROW. A table with a `placement` block gives them
-  // (Green's); every other table leaves them to the knobs, as the world's placement always was.
+  // The draw's uniform table: only the six placement rows are read, at PLACEMENT_ROW. A table with a `placement` block gives them
+  // (Green's); every other table leaves them to the world's material, as the world's placement always was.
   placementTable(variant) {
-    const rows = this.materialData?.placement ? tablePlacementRows(this.materialData, variant) : this.placementRows(variant);
+    const rows = this.materialData?.placement ? tablePlacementRows(this.materialData) : this.placementRows(variant);
     return [...Array.from({length: PLACEMENT_ROW}, () => [0, 0, 0, 0]), ...rows, ...groundCoverRows(this.config.material?.groundCover,variant,this.colorOverrides||{},this.colorOverrides?.ground||this.means?.ground)];
   }
 
@@ -742,15 +738,11 @@ export class TerrainRenderer {
       if (errors.length) throw new Error('nanolathe: engine-materials.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
       this.materialPipeline = await device.createComputePipelineAsync({label: 'materials', layout: 'auto', compute: {module, entryPoint: 'makeMaterial'}});
       this.ditherPipeline = await device.createComputePipelineAsync({label: 'material dither', layout: 'auto', compute: {module, entryPoint: 'makeDither'}});
-      this.reliefPipeline = await device.createComputePipelineAsync({label: 'material relief', layout: 'auto', compute: {module, entryPoint: 'makeRelief'}});
     }
     if (!this.generated) {
       const texture = device.createTexture({label: 'generated materials', size: [size, size, layers], format: 'rgba8unorm', mipLevelCount: levels,
         usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
       this.generated = {texture, view: texture.createView({dimension: '2d-array'})};
-      // H19: the rock's height gradient (engine-materials.wgsl makeRelief), one layer with the colours' levels.
-      this.relief = device.createTexture({label: 'rock relief', size: [size, size], format: 'rgba16float', mipLevelCount: levels,
-        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING});
     }
     const rows = Float32Array.from(materialRows(this.materialData).flat());
     const table = device.createBuffer({size: rows.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
@@ -771,14 +763,6 @@ export class TerrainRenderer {
       const n = Math.ceil(size / 2 ** level / 8);
       pass.dispatchWorkgroups(n, n, layers);
       pass.end();
-      const relief = encoder.beginComputePass({label: 'material relief level ' + level});
-      relief.setPipeline(this.reliefPipeline);
-      relief.setBindGroup(0, device.createBindGroup({layout: this.reliefPipeline.getBindGroupLayout(0), entries: [
-        {binding: 0, resource: {buffer: table}}, {binding: 2, resource: {buffer: buffer}},
-        {binding: 4, resource: this.relief.createView({baseMipLevel: level, mipLevelCount: 1})},
-        {binding: 5, resource: this.relief.createView({baseMipLevel: level ? level - 1 : 1, mipLevelCount: 1})}]}));
-      relief.dispatchWorkgroups(n, n);
-      relief.end();
       if (level === 0) {
         // A dithered material's level 0 (engine-materials.wgsl makeDither): dot diffusion, one dispatch per class of the 8 x 8 matrix, in
         // order; each pass gathers the errors the lower classes left in ditherErr. The levels above box-mean it.
@@ -923,10 +907,7 @@ export class TerrainRenderer {
     // Placement is live state too: refreshing only scalar uniforms left these
     // controls frozen at startup in the generated materials.
     this.set('uMaterialTable', this.placementTable(variant));
-    this.f('uMineralDetail', variant.has('mineralDetail') ? Number(variant.get('mineralDetail')) : 1);
     this.f('uMaterialFoot', variant.has('materialFoot') ? Math.max(1, Number(variant.get('materialFoot'))) : 1);   // H3: ?materialFoot=4 trials a quarter-resolution draw
-    this.f('uMicroRock', variant.has('microRock') ? Number(variant.get('microRock')) : 1.0);
-    this.set('uFaceSlope', (variant.get('faceSlope') || '0.35,0.9').split(',').map(Number));
     this.f('uMossFromGround', variant.has('moss') ? Number(variant.get('moss')) : 0.0);
     this.f('uLightCap', variant.has('lightCap') ? Number(variant.get('lightCap')) : 1.13);
     this.f('uShadeDepth', variant.has('shadeDepth') ? Number(variant.get('shadeDepth')) : 1.0);
@@ -939,8 +920,8 @@ export class TerrainRenderer {
       const knob = (suffix, fallback) => variant.has(`shine${m}${suffix}`) ? Number(variant.get(`shine${m}${suffix}`)) : fallback;
       return [knob('', 0), knob('Sharp', 24), knob('Rough', 0), knob('Scale', 6)];
     });
-    // With no slope cover and faces of one material the slope group has no share, so its gloss does not wake the pass (worldControlRequirement says the same).
-    const slopeShare = (!groundCoverOn(this.config.material?.groundCover, variant) && Number(variant.get('slopeTexture') ?? 0.3) > 0) || Number(variant.get('microRock') ?? 1) > 0 || Boolean(this.config.material?.slopeSand);
+    // With no slope cover the slope group has no share, so its gloss does not wake the pass (worldControlRequirement says the same).
+    const slopeShare = (!groundCoverOn(this.config.material?.groundCover, variant) && Number(variant.get('slopeTexture') ?? 0.3) > 0) || Boolean(this.config.material?.slopeSand);
     this.i('uShineOn', shine.some((m, i) => (i !== 1 || slopeShare) && (m[0] > 0 || m[2] > 0)));
     this.f('uShineStretch', variant.has('shineStretch') ? Number(variant.get('shineStretch')) : 1);
     this.f('uShineWhite', variant.has('shineWhite') ? Number(variant.get('shineWhite')) : 0.35);
@@ -980,8 +961,6 @@ export class TerrainRenderer {
     this.f('uRingSize', variant.has('ringSize') ? Number(variant.get('ringSize')) : 1);
     this.f('uBedFlat', variant.has('bedFlat') ? Number(variant.get('bedFlat')) : 0);
     this.f('uSandCrown', variant.has('sandCrown') ? Number(variant.get('sandCrown')) : 0);
-    this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
-    this.f('uFaceDark', variant.has('faceDark') ? Number(variant.get('faceDark')) : 0.0);
     this.f('uFlatBank', variant.has('flatBank') ? Number(variant.get('flatBank')) : 0.0);
     this.f('uDither', variant.has('dither') ? Number(variant.get('dither')) : 2.0);
     this.f('uFlatShadow', variant.has('flatShadow') ? Number(variant.get('flatShadow')) : 0.0);
@@ -1031,10 +1010,7 @@ export class TerrainRenderer {
     // Card G4 (Painted Desert); 0 is every world as it was.
     this.f('uDesertCapFlat', variant.has('desertCapFlat') ? Number(variant.get('desertCapFlat')) : 0);
     // E9 (Green rock faces).
-    this.f('uRockMoss', variant.has('rockMoss') ? Number(variant.get('rockMoss')) : 1);
     this.f('uShineOutside', variant.has('shineOutside') ? Number(variant.get('shineOutside')) : 1);
-    this.f('uFaceRelief', variant.has('faceRelief') ? Number(variant.get('faceRelief')) : 1);
-    this.f('uRockDetail', variant.has('rockDetail') ? Number(variant.get('rockDetail')) : 1);
     // E6: shine roughness gate and headroom (0: the earlier shine exactly).
     this.f('uShineGate', variant.has('shineGate') ? Number(variant.get('shineGate')) : 0);
     this.f('uShineHeadroom', variant.has('shineHeadroom') ? Number(variant.get('shineHeadroom')) : 0);
@@ -1050,7 +1026,6 @@ export class TerrainRenderer {
     this.f('uMoonRibDark', variant.has('moonRibDark') ? Number(variant.get('moonRibDark')) : 0);
     this.f('uMoonFolds', variant.has('moonFolds') ? Number(variant.get('moonFolds')) : 0);
     this.f('uMoonFoldSpacing', variant.has('moonFoldSpacing') ? Number(variant.get('moonFoldSpacing')) : .9);
-    this.f('uIceSlate', variant.has('iceSlate') ? Number(variant.get('iceSlate')) : 0);
     this.f('uIceCrystal', variant.has('iceCrystal') ? Number(variant.get('iceCrystal')) : 0);
     this.f('uIceCrest', variant.has('iceCrest') ? Number(variant.get('iceCrest')) : 0);
     // G3: the fringe's offset copies (ringShift 0: the earlier concentric lines).
@@ -1091,14 +1066,13 @@ export class TerrainRenderer {
   // H5: a shader that pastes the common source under EROSION, as erosion.wgsl does.
   preprocessShader(source) { return preprocess(source, this.commonSource, new Set(['EROSION'])); }
 
-  // H2, H16 rock column. The world's table (config.column, from materials/<world>.json; sculpt-column.js). No sections: no column, the
-  // hash beds as before. Erosion reads the same uniforms, so the bake and the pass share one column.
+  // H2, H16 rock column. The world's table (config.column, from materials/<world>.json; sculpt-column.js). No sections: no column.
+  // Erosion reads the same uniforms, so the draw and the pass share one column.
   setColumn() {
     const column = this.config.column, v = this.variant;
     const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
     const {beds, starts, bands} = columnRows(column, this.config.variant);
     // Refinement can run before any relief bake; its column offset must not depend on the last displayed view.
-    this.set('uBedSpacing', number('bedSpacing', 12));
     this.set('uBedDip', number('bedDip', 0));
     this.set('uBedDipDir', number('bedDipDir', 90));
     this.i('uColumnSectionCount', starts.length);
@@ -1157,7 +1131,7 @@ export class TerrainRenderer {
     set('uGrid', this.grid); set('uSize', this.size); set('uBase', this.config.baseHeight - this.config.seaLevel); set('uSea', 0); set('uPool', groundPool(this.config.material));
     {
       set('uWeatherMaps', this.weatherMaps ? 1 : 0);
-      for (const [key, fallback] of [['terraceBreak', 0], ['terraceCalm', 0], ['wetSwath', 0], ['lushness', 0], ['outcrop', 0], ['rillDepth', 0], ['rillSpacing', 8]])
+      for (const [key, fallback] of [['terraceBreak', 0], ['terraceCalm', 0], ['wetSwath', 0], ['lushness', 0], ['rillDepth', 0], ['rillSpacing', 8]])
         set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
     }
     set('uReliefScale', number('reliefScale', 28));
@@ -1187,15 +1161,6 @@ export class TerrainRenderer {
     set('uCrackHairline', number('crackHairline', 0.6));
     set('uCrackBlocks', number('crackBlocks', 0.6));
     set('uCrackMajor', number('crackMajor', 0.8));
-    // Rock structure (card E3); 0 is the scattered rock every world had.
-    set('uRockOrder', number('rockOrder', 0));
-    set('uBedVary', number('bedVary', 0.5));
-    set('uBedLedge', number('bedLedge', 0.5));
-    set('uGrooveSpacing', number('grooveSpacing', 36));
-    set('uGrooveAngle', number('grooveAngle', 0));
-    set('uGrooveRun', number('grooveRun', 120));
-    set('uBedHeight', number('bedHeight', 0));
-    set('uRockFrom', number('rockFrom', 0.6));
     if (this.sun) this.v('uSun', this.sun);
     set('uCracksOn', preview && v.get('previewCracks') !== '1' ? 0 : 1);
     set('uWindAngle', number('wind', 20));
@@ -1210,19 +1175,6 @@ export class TerrainRenderer {
     set('uStoneRound', this.config.material?.stoneRound ?? 0);
     set('uStoneSort', this.config.material?.stoneSort ?? 0.6);
     set('uStoneSlab', this.config.material?.stoneSlab ?? 0.05);
-    // Card P10: the rock model's numbers: the Rock type's, or the world's own (its material's `rock`); none, no blocks.
-    {
-      const rock = rockPreset(this.config.material, this.variant);
-      const rv = (key, fallback) => Number.isFinite(Number(rock[key])) ? Number(rock[key]) : fallback;
-      set('uRockSize', rv('size', 0) * number('rockScale', 1)); set('uRockAspect', rv('aspect', 1)); set('uRockJitter', rv('jitter', 0.9));
-      set('uRockOpen', rv('open', 0.5)); set('uRockBedOpen', rv('bedOpen', 0.2)); set('uRockTerr', rv('terr', 0));
-      set('uRockVary', rv('vary', 0.5)); set('uRockCrev', rv('crev', 2)); set('uRockCrevW', rv('crevW', 1.1));
-      set('uRockChip', rv('chip', 0.25)); set('uRockChipSize', rv('chipSize', 5)); set('uRockGrit', rv('grit', 0.35));
-      set('uRockAge', number('rockAge', 0.5));
-      set('uRockCurtain', rv('curtain', 0)); set('uRockLichen', rv('lichen', 0));
-      // Open joints scales the preset's two openings: the joint lines' depth and the cell creases' darkness.
-      set('uJointDepth', rv('joint', 2) * number('rockOpen', 1)); set('uBlockSeam', rv('seam', 0.5) * number('rockOpen', 1));
-    }
     set('uStoneMoss', this.config.material?.stoneMoss ?? 0.35);
     set('uBandSoftness', number('bandSoftness', 0.35));
     set('uBandJag', number('bandJag', 0));
@@ -1232,24 +1184,6 @@ export class TerrainRenderer {
     set('uSandBanding', number('sandBanding', 0));
     set('uSandBandSpacing', number('sandBandSpacing', 2));
     set('uReliefOctaves', preview ? Math.min(3, number('reliefOctaves', 5)) : number('reliefOctaves', 5));
-    // E9 (Green rock faces).
-    set('uGullyDepth', number('gullyDepth', 0));
-    set('uGullyWidth', number('gullyWidth', 14));
-    set('uRockStain', number('rockStain', 0));
-    set('uRibTilt', number('ribTilt', 0));
-    set('uBedPunch', number('bedPunch', 0));
-    // G2 (rock faces follow the slope).
-    set('uCliffFollow', number('cliffFollow', 0));
-    set('uCliffReach', number('cliffReach', 20));
-    set('uCliffWide', number('cliffWide', 56));
-    set('uCliffFlat', number('cliffFlat', .04));
-    set('uCliffRise', number('cliffRise', 0));
-    set('uCliffBed', number('cliffBed', .5));
-    set('uCliffStagger', number('cliffStagger', 0));
-    set('uCliffDomain', number('cliffDomain', 90));
-    {
-      set('uHillBlocks', number('hillBlocks', 0));
-    }
     this.setColumn();
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});

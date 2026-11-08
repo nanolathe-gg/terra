@@ -2,7 +2,6 @@
 // host (repro/headless.mjs, which measure/world_controls.mjs sweeps under Node) apply a world knob and pick a world color with the same code, and
 // read the facts the panel enables a row by (worldPanelValues, which sculpt-control-schema.js worldControlRequirement reads) from one function.
 import {columnHasCapBed,columnRows} from './sculpt-column.js';
-import {ROCK_TYPES,rockFacts} from './sculpt-material-model.js';
 
 // Surface knobs: each writes the page address and the renderer's variant,
 // then the renderer re-reads its uniforms and re-bakes its fields.
@@ -14,11 +13,11 @@ export const KNOBS = [
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Ground bumps',0,3,.05,1.2],['lumpRelief','Painted ground bumps',0,8,.1,4],['reliefOctaves','Octaves',1,6,1,5],['worms','Wormy relief on slopes',0,1,.05,0]]],
   ['Lighting', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13],['shadeDepth','Directional shading kept',0,1,.05,1],['sunTilt','Light from the south',-1,1,.05,1],['ambient','Ambient light',0,.8,.02,.42],['creaseShade','Shade in creases (gully and valley floors, any facing)',0,1,.05,0]]],
   ['Vegetation & flowers', [['vegetationCover','Vegetation cover (0 off)',0,2,.05,1],['lushness','Lushness',-1,1,.05,0],['erosionRain','Rain (wets channels and hollows, and wears the ground)',0,2,.05,1],['wetSwath','Moisture',0,1,.05,0],['plantRelief','Vegetation relief',0,2,.05,1],['flowerDensity','Flower density',0,4,.05,1]]],
-  ['Material coverage', [['microRock','Moss and rock interleaved on faces (0: one material)',0,1,.05,1],['hillLight','Slope-cover brightness',.6,1.6,.01,1],['ringFade','Fringe fade length',0,2,.05,0],['faceFill','Fill light on shaded faces',0,.5,.02,0],['rockCrown','Bare rock to the crown',0,1,.05,0],['sandCrown','Painted sand to the crown (sand bars)',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['faceEdge','Edge breakup',0,2,.05,.8],['gullyRock','Rock in gullies',0,2,.05,.5],['moss','Moss from ground',0,1,.05,0],['slopeMarks','Dark slope marks',0,1,.05,0],['wrinkles','Joined slope wrinkles',0,1,.05,0]]],
+  ['Material coverage', [['hillLight','Slope-cover brightness',.6,1.6,.01,1],['ringFade','Fringe fade length',0,2,.05,0],['faceFill','Fill light on shaded faces',0,.5,.02,0],['rockCrown','Bare rock to the crown',0,1,.05,0],['sandCrown','Painted sand to the crown (sand bars)',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['moss','Moss from ground',0,1,.05,0],['slopeMarks','Dark slope marks',0,1,.05,0],['wrinkles','Joined slope wrinkles',0,1,.05,0]]],
   ['Shine', [['shineStretch','Grain streak length (x its width)',1,8,.25,1],['shineWhite','Highlight whiteness (0 material hue, 1 white)',0,1,.05,.35]]],
   ['Shine: ground', [['shineGround','Gloss (highlight strength)',0,2,.05,0],['shineGroundSharp','Sharpness (lobe exponent)',2,200,2,24],['shineGroundRough','Roughness (grain slope)',0,2,.05,0],['shineGroundScale','Grain width (px)',1,24,.5,6]]],
   ['Shine: slope cover', [['shineSlope','Gloss (highlight strength)',0,2,.05,0],['shineSlopeSharp','Sharpness (lobe exponent)',2,200,2,24],['shineSlopeRough','Roughness (grain slope)',0,2,.05,0],['shineSlopeScale','Grain width (px)',1,24,.5,6]]],
-  ['Shine: rock', [['shineRock','Gloss (highlight strength)',0,2,.05,0],['shineRockSharp','Sharpness (lobe exponent)',2,200,2,24],['shineRockRough','Roughness (grain slope)',0,2,.05,0],['shineRockScale','Grain width (px)',1,24,.5,6]]],
+  ['Shine: rock', [['shineRock','Gloss (highlight strength)',0,2,.05,0],['shineRockSharp','Sharpness (lobe exponent)',2,200,2,24],['shineRockRough','Roughness (grain slope)',0,2,.05,0],['shineRockScale','Grain width (px)',1,24,.5,6],['shineOutside','Rock glints kept outside painted rock',0,1,.05,1]]],
   ['Shine: sand', [['shineSand','Gloss (highlight strength)',0,2,.05,0],['shineSandSharp','Sharpness (lobe exponent)',2,200,2,24],['shineSandRough','Roughness (grain slope)',0,2,.05,0],['shineSandScale','Grain width (px)',1,24,.5,6]]],
   ['Shine: crystal', [['shineCrystal','Gloss (highlight strength)',0,2,.05,0],['shineCrystalSharp','Sharpness (lobe exponent)',2,200,2,24],['shineCrystalRough','Roughness (grain slope)',0,2,.05,0],['shineCrystalScale','Grain width (px)',1,24,.5,6]]],
   ['Loose stone', [['looseSupply','Supply',0,1,.05,0],['looseSize','Size (median, px)',2,24,1,6],['looseKnoll','Knolls (share of stones that are ground rings around a hollow)',0,1,.05,0]]],
@@ -29,11 +28,10 @@ export const KNOBS = [
     ['crackMajor','Major cracks',0,1,.05,.8],['crackMinor','Minor cracks',0,1,.05,.75],['crackHairline','Hairline crazing',0,1,.05,.6],['crackBlocks','Facets (block relief)',0,1.5,.05,.6],
     ['crackWidth','Width (px)',.5,2.5,.1,1],['crackNetwork','Majors: rills to plates',0,1,.05,.35],
     ['crackDark','Floor darkness',0,1,.05,.75]]],
-  ['Rock structure', [['rockOrder','Rock structure',0,1,.05,0],['rockFrom','Beds and joints from slope (painted rock always)',.3,2,.05,.6],['bedSpacing','Bed thickness (px along the ground, or height units)',3,80,1,12],['bedHeight','Beds spaced by height (0 px along the ground)',0,1,.05,0],['bedVary','Bed thickness variation',0,1,.05,.5],
-    ['bedDip','Bed tilt (height per px; 2 north: level rows)',-4,4,.05,0],['bedDipDir','Bed tilt toward (deg, 0 east, 90 south)',0,360,5,90],['bedLedge','Ledges (step strength; above 1 taller lips and notches)',0,2,.05,.5],
-    ['grooveSpacing','Joint and gully spacing (px)',12,120,2,36],['grooveAngle','Joint and gully lean from north-south (deg)',-60,60,1,0],['grooveRun','Joint and gully length (px)',30,400,10,120]]],
   ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSoftness','Riser share',.05,1,.05,.35],['bandWater','Rings in water color',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
-  ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataContrast','Color strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1]]],
+  // The rock column's beds (their colours and hardness) tilt by Bed tilt toward its direction.
+  ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataContrast','Color strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1],
+    ['bedDip','Bed tilt (height per px; 2 north: level rows)',-4,4,.05,0],['bedDipDir','Bed tilt toward (deg, 0 east, 90 south)',0,360,5,90]]],
   ['Water', [['coastRamp','Coast ramp (share of the drawn slope kept)',.05,1,.05,1],['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Color depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline (shore to shallow)',0,1,.05,1],['deepEdge','Hard shallow-to-deep step (0 ramp)',0,1,1,0],['bedLit','Lit bed under shallow water (0 noise water)',0,1,.05,0],['bedTint','Bed tint strength',0,1,.05,.85],['bedBright','Tinted bed brightness',.5,1.5,.02,1],['bedContrast','Bed light carried through the tint',0,1.5,.05,1],['bedRelief','Bed lumps (lit relief under shallows)',0,3,.05,0],['shoreEdge','Waterline rim and lip',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
   // Card E8: the gray band at the foot of the raised ground (strata color 5); its heights are above the plain.
@@ -42,7 +40,7 @@ export const KNOBS = [
   ['Cap color', [['desertCapFlat','Uniform cap color',0,1,.05,0]]],
   // Card E9: rock faces; every default is the earlier look.
   // The rock face (engine-common.wgsl rockFaceAt): one rock for every face steep enough, relief in the art's own pixels lit by the sun and the sky.
-  ['Rock relief', [['rockFace','Depth (0: flat)',0,4,.1,0],['faceRock','Amount: rock\'s share of a steep face (a shape\'s Local vegetation scales it)',0,1,.05,.9],
+  ['Rock relief', [['rockFace','Depth (0: flat)',0,4,.1,2],['faceRock','Amount: rock\'s share of a steep face (a shape\'s Local vegetation scales it)',0,1,.05,.9],
     ['rockFaceFrom','Starts at slope',.2,2,.05,.6],['faceBed','Layer thickness (height)',2,30,.5,5.5],['faceLedge','Layer hardness: hard layers stand out as ledges',0,4,.05,2.2],
     ['faceRun','Hardness drift along a layer (px)',20,300,5,90],['faceBlock','Blocks: offsets and tilts',0,6,.1,3],['faceBlockSize','Joint spacing (px)',4,48,1,11],
     ['faceLean','Joint and runnel lean from the screen\'s north-south (deg)',-45,45,1,28],['faceWear','Weathering: rounded edges, open joints',0,1,.05,.35],
@@ -51,14 +49,6 @@ export const KNOBS = [
     ['faceGrass','Grass on ledges and flat tops',0,1,.05,.8],['faceLayers','Layers under grass (soil-covered terraces)',0,2,.05,0],['faceTerrace','Terrace spacing (height)',.4,6,.1,1.2],
     ['faceMass','Broad form: bulges and alcoves',0,3,.05,1],['faceTone','Color variation from block to block',0,.5,.01,.12],['faceStrata','Layer tint: layers lighter and darker',0,.5,.01,0],
     ['faceWet','Wet streaks: runnels and partings darker',0,1,.05,0]]],
-  ['Rock face', [['rockMoss','Vegetation tint in rock',0,1,.05,1],['rockDetail','Rock tile blotch contrast (1 as drawn, 0 flat)',0,1,.05,1],['faceRelief','Rock relief lit on walls that face the viewer (0: world-space look)',0,1,.05,1],['shineOutside','Rock glints kept outside painted rock',0,1,.05,1],
-    ['bedPunch','Beds differ in strength',0,1,.05,0]]],
-  ['Gullies & ribs', [['gullyDepth','Gully depth (height; 0 none)',0,16,.5,0],['gullyWidth','Gully width (px)',4,40,1,14],
-    ['rockStain','Stain',0,3,.05,0],['ribTilt','Rib tilt (height per px)',0,1,.02,0]]],
-  // Card P10: the rock model's blocks: the Rock type (the world's own or a named type, sculpt-material-model.js ROCK_TYPES), then its size, age and joints.
-  ['Rock face: blocks', [['rockType','Rock type',0,ROCK_TYPES.length,1,0],['rockScale','Block size (share of the rock type\'s)',.4,3,.05,1],['rockAge','Age (rounds edges, opens joints, wears chips)',0,1,.05,.5],['rockOpen','Open joints (joint depth and crevice darkness, share of the rock type\'s)',0,2,.05,1]]],
-  // G2: rock faces follow the slope; every default is the earlier look.
-  ['Structure orientation', [['cliffFollow','Beds on the contours, joints down the fall line (0 fixed screen directions)',0,1,1,0],['cliffReach','Fall line smoothing radius (px)',6,60,1,20],['cliffWide','Wide fall line radius, level ground under rock (px)',20,160,2,56],['cliffFlat','Slope under which structure fades into broken rock',0,.3,.005,.04],['cliffRise','Bed riser height (units; 0 the bed\'s own)',0,40,1,0],['cliffBed','Beds follow the smoothed ground (0 the grid\'s own bumps)',0,1,.05,.5],['cliffStagger','Joints offset from bed to bed (share of spacing)',0,.8,.05,0],['cliffDomain','Joint lattice patch size (px)',30,240,5,90]]],
   // Water detail: the shallow-to-deep step, the shallow bed and the waterline (cards E11, G1).
   ['Water detail', [['stepSoftPx','Threshold edge softness (px)',1,40,1,1],['shelfWander','Shelf wander (depth units)',0,40,1,0],['bedFlat','Bed lit by its own relief only',0,1,.05,0],['bedDots','Bed speckles',0,1,.02,0],['bedDotCell','Dot spacing (px)',6,40,1,14],['crackedStep','Cracked-bed transition depth',0,60,1,0],['shoalBump','Lit bumps in the bed (slope)',0,6,.1,0],['shoalBumpPx','Bump size (px)',2,16,.5,6],['shoalGrain','Grain through water tint',0,1,.05,0],['shoalRag','Shallow-to-deep notches (px)',0,16,.5,0],['shoalStairs','Hard waterline stairs (px)',0,6,.1,0],['shoalShoreSoft','Waterline blur (px)',0,12,.5,0]]],
   // Contour fringe: lines along the mineral fringe and offset copies of it (cards E11, G3).
@@ -71,7 +61,7 @@ export const KNOBS = [
   ['Surface pits', [['pockmark','Dark pits on raised ground and slopes',0,1,.05,0],['pockSize','Pit spacing (px)',3,12,.5,5]]],
   // Card G8: cups, ribs and folds on steep faces.
   ['Cups, ribs & folds', [['moonCups','Slope cups',0,1,.05,0],['moonCupSize','Cup spacing (px)',3,12,.5,5.5],['moonCupDepth','Cup depth (wall steepness)',.4,3,.1,1.4],['cupStretch','Cup stretch into strokes (1: pits)',1,3,.1,1],['moonRibs','Slope ribs',0,1,.05,0],['moonRibDepth','Stroke steepness',.2,3,.1,1],['moonRibDark','Darker where turned from the sun',0,.9,.05,0],['moonFolds','Contour folds',0,1,.05,0],['moonFoldSpacing','Fold spacing (height units)',.3,3,.1,.9]]],
-  ['Mineral faces', [['iceSlate','Slate faces',0,1,.05,0],['mineralDetail','Rock art contrast',0,2,.05,1],['iceCrystal','Straight face fibres',0,1,.05,0],['gougeWeb','Gouges across crystal formations',0,1,.05,0],['iceCrest','Cap lumps',0,1,.05,0]]],
+  ['Mineral faces', [['iceCrystal','Straight face fibres',0,1,.05,0],['gougeWeb','Gouges across crystal formations',0,1,.05,0],['iceCrest','Cap lumps',0,1,.05,0]]],
   // Card G6: rounded light, caps and face finish on raised ground.
   ['Cap & face finish', [['iceSoft','Rounded lighting',0,1,.05,0],['iceSnow','Snow on level caps',0,1,.05,0],['iceFall','Slope fibres',0,1,.05,0],['iceApron','Hatched foot apron',0,1,.05,0]]],
   ['Needle lines', [['iceFrost','Needle hairlines',0,1,.05,0]]],
@@ -139,5 +129,5 @@ export function slopeReplaced({config,renderer,weathering,materialWeathering}) {
 // The column facts read the active column (config.column: the map's own from the Rock column panel, else the world's) and its variant row.
 export function worldPanelValues(facts) {
   const {config,renderer,nodes,colors}=facts,layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks(nodes);
-  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:columnRows(config.column,config.variant).starts.length?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0,...rockFacts(config.material?.rock||{})};
+  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:columnRows(config.column,config.variant).starts.length?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
 }

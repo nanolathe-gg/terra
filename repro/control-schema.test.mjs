@@ -70,8 +70,12 @@ test('every world can turn vegetation on, and flowers stay independent of relief
 
 test('world dependencies explain bypasses without biome gates',async()=>{
  const {worldControlRequirement:requirement}=await import('../sculpt-control-schema.js');
- assert.match(requirement('bedVary',{column:1,rockOrder:1}),/authored bed profile/);
- assert.equal(requirement('bedVary',{column:0,rockOrder:1,bedLedge:.5}),'');
+ // The column's tilt moves its beds, which the draw shows as the strata colours: it needs a column and Strata; its direction needs a tilt.
+ for(const key of ['bedDip','bedDipDir'])assert.match(requirement(key,{column:0,bedDip:1,strata:1}),/Add a rock column in the Rock column panel/,key);
+ for(const key of ['bedDip','bedDipDir'])assert.match(requirement(key,{column:1,bedDip:1,strata:0}),/Strength \(painted beds\) in Strata/,key);
+ assert.equal(requirement('bedDip',{column:1,strata:1}),'');
+ assert.match(requirement('bedDipDir',{column:1,strata:1,bedDip:0}),/Set Bed tilt/);
+ assert.equal(requirement('bedDipDir',{column:1,strata:1,bedDip:.5}),'');
  assert.match(requirement('undulationCover',{undulation:0}),/Undulation height/);
  assert.equal(requirement('undulationCover',{undulation:8}),'');
  assert.match(requirement('undulationArt',{undulation:0}),/Undulation height/);
@@ -82,16 +86,6 @@ test('world dependencies explain bypasses without biome gates',async()=>{
  assert.equal(requirement('lowReach',{lowTint:0,lowGrain:.5}),'');
  assert.equal(requirement('lowTint',{}),'');
  assert.equal(requirement('lowGrain',{}),'');
- assert.match(requirement('grooveSpacing',{rockOrder:0,gullyDepth:1}),/Rock structure/);
- assert.match(requirement('grooveRun',{rockOrder:1,rockJoint:0,rockOpen:1,gullyDepth:0}),/Open joints or Gully depth/);
- assert.equal(requirement('grooveRun',{rockOrder:1,rockJoint:2,rockOpen:1}),'');
- assert.equal(requirement('grooveRun',{rockOrder:1,rockJoint:0,rockOpen:1,gullyDepth:4}),'');   // Green cuts gullies and no joints
- assert.match(requirement('grooveSpacing',{rockOrder:1,rockJoint:0,rockOpen:1,gullyDepth:0,ribTilt:0}),/Open joints, Gully depth or Rib tilt/);
- assert.equal(requirement('grooveSpacing',{rockOrder:1,rockJoint:0,rockOpen:1,gullyDepth:0,ribTilt:.2}),'');   // ribs stand between the lines
- assert.match(requirement('grooveRun',{rockOrder:1,rockJoint:0,rockOpen:1,gullyDepth:0,ribTilt:.2}),/Open joints or Gully depth/);   // a rib cuts nothing
- assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:0,rockJoint:2,rockOpen:1}),/Follow terrain/);
- assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,rockJoint:0,rockOpen:1}),/joint lines/);
- assert.equal(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,rockJoint:2,rockOpen:1}),'');
  assert.equal(requirement('looseSize',{looseSupply:0}),'','painted scatter still uses size when the world Supply is zero');
  assert.equal(requirement('bandSoftness',{banding:0}),'','painted banding still uses the riser share when the world strength is zero');
 });
@@ -113,45 +107,10 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('shineWhite',{shineRockRough:1}),/Gloss/);
  shows('shineWhite',{shineCrystal:.2});
  assert.match(requirement('shineStretch',{shineGround:1}),/Roughness/);
- shows('shineStretch',{shineSlopeRough:.2});
+ shows('shineStretch',{shineSlopeRough:.2,slopeTexture:.3});
  assert.match(requirement('shineGate',{}),/Gloss or Roughness/);
- shows('shineGate',{shineSlopeRough:.2});
+ shows('shineGate',{shineSlopeRough:.2,slopeTexture:.3});
  shows('shineGate',{shineGround:.2});
- // ordered rock: the follow-the-slope family, the facets and the bed profile
- assert.match(requirement('rockFrom',{rockOrder:0}),/Rock structure/);
- shows('rockFrom',{rockOrder:1});
- assert.match(requirement('cliffReach',{rockOrder:1,cliffFollow:0}),/Follow terrain/);
- shows('cliffReach',{rockOrder:1,cliffFollow:1});
- assert.match(requirement('rockScale',{rockOrder:0}),/Rock structure/);
- assert.match(requirement('rockAge',{rockOrder:1,rockCells:0}),/Choose a Rock type with blocks/);
- // Rock type (card P10): a named type's own numbers decide what it cuts, whatever the world's own (the facts worldPanelValues passes) say
- assert.match(requirement('rockType',{rockOrder:0,rockMoss:0}),/Rock structure, or raise Vegetation tint in rock/);
- shows('rockType',{rockOrder:1});
- shows('rockType',{rockOrder:0,rockMoss:1});   // its lichen grows on any rock face
- shows('rockAge',{rockOrder:0,rockMoss:1,rockType:1});   // and with Age
- assert.match(requirement('rockAge',{rockOrder:0,rockMoss:0,rockType:1}),/Rock structure/);
- assert.match(requirement('rockScale',{rockOrder:0,rockMoss:1,rockType:1}),/Rock structure/);
- shows('rockScale',{rockOrder:0,hillBlocks:.5,rockType:1});   // blocks on the hills (a world preset's hillBlocks)
- shows('rockAge',{rockOrder:1,rockCells:0,rockLichen:1,rockMoss:1});
- shows('rockAge',{rockOrder:1,rockCells:0,rockType:1});   // Granite cuts blocks
- shows('rockScale',{rockOrder:1,rockCells:0,rockType:3});
- shows('rockScale',{rockOrder:1,rockCells:1,rockType:0});   // 0: the world's own, here with blocks
- assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,rockJoint:2,rockOpen:1,rockType:1}),/Choose a Rock type with joint lines/);   // Granite cuts none
- shows('cliffStagger',{rockOrder:1,cliffFollow:1,rockJoint:0,rockOpen:1,rockType:3});   // Basalt does
- assert.match(requirement('cliffStagger',{rockOrder:1,cliffFollow:1,rockOpen:0,rockType:3}),/Raise Open joints/);
- shows('grooveRun',{rockOrder:1,rockJoint:0,rockOpen:1,gullyDepth:0,rockType:2});   // Sandstone's joint lines
- shows('rockStain',{rockOrder:1,gullyDepth:0,rockCurtains:0,rockType:1});   // Granite's ledge stains
- // Stain (card P10) darkens gully floors and the rock type's ledge curtains: it needs ordered rock and one of the two
- assert.match(requirement('rockStain',{rockOrder:0,gullyDepth:4}),/Rock structure/);
- assert.match(requirement('rockStain',{rockOrder:1,gullyDepth:0,rockCurtains:0}),/Gully depth or choose a Rock type with ledge stains/);
- shows('rockStain',{rockOrder:1,gullyDepth:4,rockCurtains:0});
- shows('rockStain',{rockOrder:1,gullyDepth:0,rockCurtains:1});
- shows('rockScale',{rockOrder:1,rockCells:1});
- assert.match(requirement('cliffRise',{rockOrder:1,bedLedge:0}),/Ledges above zero/);
- assert.match(requirement('bedSpacing',{rockOrder:1,bedLedge:0}),/Ledges above zero/);
- shows('bedSpacing',{rockOrder:1,rockJoint:2,rockOpen:1,cliffFollow:1,cliffStagger:.5});   // a joint's stagger is keyed on its bed
- assert.match(requirement('cliffRise',{rockOrder:1,rockJoint:2,rockOpen:1,cliffFollow:1,cliffStagger:.5}),/Ledges above zero/,'the rise is relief only');
- shows('bedSpacing',{rockOrder:1,bedLedge:.5});
  // strata: bands and caps need a column and the strata switch
  // a world without a column of its own: the reason names the panel that adds one
  for(const key of ['strata','strataContrast','strataGrain','baseBand','desertCapFlat'])assert.match(requirement(key,{column:0,strata:1}),/Add a rock column in the Rock column panel/,key);
@@ -163,12 +122,7 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('baseBandGaps',{column:1,strata:1,baseBand:0}),/Gray band/);
  shows('baseBandGaps',{column:1,strata:1,baseBand:.5});
  assert.match(requirement('baseBandGaps',{column:1,strata:0,baseBand:.5}),/Strata/);
- assert.match(requirement('bedSpacing',{column:1,rockOrder:1,bedLedge:1}),/authored bed profile/);
- shows('bedSpacing',{column:1,rockOrder:1,bedLedge:1,cliffRise:8});   // a column's ledge scales by thickness over spacing once it has a rise
  assert.equal(requirement('lavaDusk',{lavaCrust:0}),'','the dusk darkens any rock turned from the sun, crust or none');
- assert.match(requirement('faceEdge',{microRock:0}),/one material/);
- shows('gullyRock',{microRock:.7});
- shows('iceSlate',{});   // the world table's default is interleaved
  assert.match(requirement('ripple',{beachLayer:1,sand:0}),/Weathering supply/);
  shows('ripple',{beachLayer:1,sand:.5});
  shows('ripple',{beachLayer:0,sand:0});   // the Sand brush feeds it where there is no beach
@@ -198,14 +152,14 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('slopeTexture',{slopeReplaced:1}),/Material weathering/);
  shows('slopeTexture',{slopeReplaced:1,shineSlope:.5});
  shows('slopeTexture',{slopeReplaced:0});
- for(const k of ['shineSlope','shineSlopeRough','shineSlopeSharp','shineSlopeScale'])assert.match(requirement(k,{shineSlope:1,shineSlopeRough:1,slopeTexture:0,microRock:0}),/Sampled slope texture/);
- assert.equal(requirement('shineSlopeGate',{shineSlope:1,slopeTexture:0,microRock:0}),requirement('shineSlopeGate',{}),'a slope group with no share is not a material shining');
- shows('shineSlopeGate',{shineSlope:1,slopeTexture:.3,microRock:0});
- shows('shineSlopeSharp',{shineSlope:1,slopeTexture:.3,microRock:0});
- shows('shineSlopeSharp',{shineSlope:1,slopeTexture:0,microRock:1});
- shows('shineSlopeScale',{shineSlopeRough:1,slopeTexture:0,slopeSand:1,microRock:0});
+ for(const k of ['shineSlope','shineSlopeRough','shineSlopeSharp','shineSlopeScale'])assert.match(requirement(k,{shineSlope:1,shineSlopeRough:1,slopeTexture:0}),/Sampled slope texture/);
+ for(const k of ['shineSlope','shineSlopeSharp'])assert.match(requirement(k,{shineSlope:1,slopeTexture:.3,vegetationCover:1}),/ground cover decides the slope cover/);
+ assert.equal(requirement('shineSlopeGate',{shineSlope:1,slopeTexture:0}),requirement('shineSlopeGate',{}),'a slope group with no share is not a material shining');
+ shows('shineSlopeGate',{shineSlope:1,slopeTexture:.3});
+ shows('shineSlopeSharp',{shineSlope:1,slopeTexture:.3});
+ shows('shineSlopeScale',{shineSlopeRough:1,slopeTexture:0,slopeSand:1});
  assert.match(requirement('shineRockSharp',{shineRock:0}),/Gloss/);
- shows('shineRockSharp',{shineRock:1,slopeTexture:0,microRock:0});
+ shows('shineRockSharp',{shineRock:1,slopeTexture:0});
  // one water colour, or a third that follows the depth: the step shows only where something draws its deep share
  assert.match(requirement('deepEdge',{waterTones:1}),/one colour/);
  assert.match(requirement('deepEdge',{waterTones:3}),/third colour/);

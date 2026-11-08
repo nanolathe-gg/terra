@@ -32,7 +32,6 @@ struct Uniforms {
     clay: i32,
     slopeMaterial: i32,
     mineralMargins: i32,
-    rockLayers: i32,
     quantize: i32,
     diagnosticView: i32,   // GLSL uDiagnostic (diagnostic is a WGSL keyword)
     faceFill: f32,
@@ -85,17 +84,12 @@ struct Uniforms {
     wetBand: f32,
     shallowDepth: f32,
     deepDepth: f32,
-    mineralDetail: f32,
-    microRock: f32,
-    faceSlope: vec2f,
     mossFromGround: f32,
     lightCap: f32,
     shadeDepth: f32,      // share of the directional shading kept (1: all)
     ambient: f32,       // unlit share of the light (0.42; Moon lower: no sky)
     slopeMarks: f32,    // Moon: density of crisp dark marks on slopes (0: none)
     sandCrown: f32,     // painted sand stays sand to the crown, no rock (Zhon sand bars)
-    footRim: f32,
-    faceDark: f32,        // darkening of slopes turned from the sun, most in hollows (0: none)
     flatBank: f32,        // low dry banks lit as level ground, no wet band (0: off)
     dither: f32,
     sandLight: f32,
@@ -176,19 +170,9 @@ struct Uniforms {
     // Per material (ground, slope cover, rock, sand, crystal): x gloss, y sharpness
     // (Blinn exponent), z roughness (normal slope amplitude), w roughness scale, px.
     shine: array<vec4f, 5>,
-    // Rock structure (card E3: Green, Red, Painted Desert). All 0 is today's scattered rock.
-    rockOrder: f32,       // 0 scattered relief, blocks and cracks; 1 coherent beds and joints with the scatter held back
-    bedSpacing: f32,      // bed thickness, height units
-    bedVary: f32,         // how much beds differ in thickness (0 even, 1 very)
+    // The rock column's tilt (columnOffset): the column's beds, and the strata colours and hardness they give, tilt by bedDip toward bedDipDir.
     bedDip: f32,          // bed tilt, height units per px
     bedDipDir: f32,       // direction the beds tilt down toward, degrees (0 east, 90 south)
-    bedLedge: f32,        // how far each bed steps (0 the smooth face, 1 flat treads and short risers)
-    jointDepth: f32,      // joint depth, height units
-    grooveSpacing: f32,   // distance between joint lines, and between gully lines, world px
-    grooveAngle: f32,     // their lean from the screen's north-south, degrees
-    grooveRun: f32,       // typical length of an unbroken joint or gully, world px
-    bedHeight: f32,       // 0 beds spaced along the ground (px), 1 by height units (as the strata colours)
-    rockFrom: f32,        // slope where beds and joints start on steep ground (painted rock always counts)
     // Rock face: the one model of every rock face (rockFaceAt): beds along the contours with a ledge at each top, joints that cut them
     // into tilted blocks, scratches down the face and grit, all relief, so the sun lights them on any face.
     rockFace: f32,        // strength, 0: none
@@ -253,16 +237,8 @@ struct Uniforms {
     baseBandGaps: f32,     // share of the band's length that is missing
     // G4 (Painted Desert)
     desertCapFlat: f32,    // how far level ground in a cap zone (share over .9) stays the cool bed (0: the beds as before)
-    // E9 (Green rock faces). Every default reproduces the earlier output exactly.
-    rockMoss: f32,        // how much of the rock art's own green (fractured and weathered tiles) is kept (1: all, as before; 0: none)
+    // E9 (Green rock faces).
     shineOutside: f32,    // share of the rock's glints kept outside painted rock (1: everywhere, as the shine model gives them)
-    faceRelief: f32,      // share of the rock relief lit on a wall that faces the viewer (0: the world-space look; engine-frag.wgsl)
-    rockDetail: f32,      // contrast of the rock tile's own blotches around the rock's mean colour (1: as drawn; 0: flat)
-    gullyDepth: f32,      // gullies down the face: depth, height units (0: none)
-    gullyWidth: f32,      // gully width across, world px
-    rockStain: f32,       // Stain: how dark the water's marks are (0: lit like the rest): a deep gully's floor, as occlusion following its depth, and the rock type's ledge curtains
-    ribTilt: f32,         // ribs between gullies are planes tilted up to this, height units per px (0: level)
-    bedPunch: f32,        // beds differ in strength, so a few ledges stand out (0: all alike)
     // E11: shallow water round 2 (Green, Red) and Archipelago's fringe. Every default is the earlier look.
     shelfWander: f32,     // Green, Red: how far broad noise moves the step's depth, in depth units (0: the step follows the shore)
     crackedStep: f32,     // Red: depth of the shallow-to-deep step under a cracked-bed stroke (0: the world's own step)
@@ -300,7 +276,6 @@ struct Uniforms {
     moonFolds: f32,       // thin dark lines that follow the form across lit and moderate slopes (0: none)
     moonFoldSpacing: f32, // height units between the folds' first set of contours
     // E6 (Ice mountains).
-    iceSlate: f32,        // mountain faces are all rock from gentle slopes up, one monotone material (0: the rock and snow interleave, as before)
     iceCrystal: f32,      // crystal mountains: dark straight strokes in domains across the rock faces (0: none, as before)
     iceCrest: f32,        // crystal mountains: share of the raised ground under snow-white lumps (0: none)
     // G3 (Archipelago rings): the fringe as stacked, offset copies of the hill's outline. Every default is the earlier look.
@@ -334,38 +309,25 @@ struct Uniforms {
     looseKnoll: f32,      // 0..1: the share of loose stones drawn as knolls, a low pale ring of ground round a hollow (0: all stones, as before)
     gougeWeb: f32,        // 0..1: a bold web of long dark gouges across raised crystal, round cells about 42 px (0: none)
     creaseShade: f32,     // 0..1: how much light a crease (a gully or valley floor, the authored height below its rings 6 and 12 px out) loses, whatever its facing (0: none)
-    // G2 (rock faces follow the slope). Every default is the earlier look.
-    cliffFollow: f32,     // beds follow the contours and joints, gullies and facets the fall line of the ground round them (0: fixed screen directions, as before)
-    cliffReach: f32,      // radius of the height smoothing that gives the local fall line, world px
-    cliffWide: f32,       // radius of the larger smoothing that gives it where the ground under the rock is level, world px
-    cliffFlat: f32,       // slope (height per px) at the wide scale under which the beds and joints fade into plain broken rock
-    cliffRise: f32,       // height of a bed's riser, height units, when beds are spaced in px (0: the bed's own height, as before)
-    cliffBed: f32,        // how far the beds follow the smoothed ground (cliffReach) instead of the grid's own bumps (0: the grid's heights; 1: the smoothed ones)
-    cliffStagger: f32,    // each bed's joints sit at their own offset, up to this share of the joint spacing either way (0: one lattice for every bed, as before)
-    cliffDomain: f32,     // size of the patches that each keep their own lattice of joints, gullies and facets, world px
     // H1 (lit relief, Green). Both run only in a full draw; every default is the earlier look.
     closeShadow: f32,     // how much a ledge 1-6 px toward the sun darkens the direct light on the ground behind it, 0..1 (0: only the far taps)
     cavity: f32,          // how much a crevice or crack floor (surface below the mean of a ring 1-3 px out) loses of its ambient light, 0..1 (its direct light loses .45 of that; 0: off)
     // H2, H16 (the rock column of a world's table, `column` in materials/<world>.json). Every default is the earlier look.
     columnSectionCount: i32,   // sections of the column (0: the world has no column; each bed's thickness and strength come from a hash)
-    columnContrast: f32,  // how much harder the hard beds are: their ledges stand taller, and erosion wears them 1 / (1 + 15 * this) as fast (0: all beds alike)
+    columnContrast: f32,  // how much harder the hard beds are: erosion wears them 1 / (1 + 15 * this) as fast (0: all beds alike)
     columnOrigin: f32,    // the height the coordinate counts from (the plain's, or 0)
     columnBeds: array<vec4f, 32>,       // per bed: x thickness (height units), y hardness 0..1, z material slot, w unused
     columnSections: array<vec4f, 8>,    // per section, from low to high: x the coordinate it starts at, y its first bed, z its bed count, w its period
     columnWander: f32,    // the wander the coordinate takes from value noise: its amplitude, height units
     columnTerrain: vec4f, // the wander it takes from three octaves of the terrain noise (height units): xyz their amplitudes (not in the Time pass)
-    materialTable: array<vec4f, 210>,   // Green (H3 materialModel): four materials of 39 rows then ten placement rows, from materials/green.json (material-model.wgsl); then the 44 rows of a world's ground-cover table (card P30, its plants' row 39 and flower palette rows 40 to 43, card P31; zeros: none)
+    materialTable: array<vec4f, 206>,   // Green (H3 materialModel): four materials of 39 rows then six placement rows, from materials/green.json (material-model.wgsl); then the 44 rows of a world's ground-cover table (card P30, its plants' row 39 and flower palette rows 40 to 43, card P31; zeros: none)
     materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
-    // Green (H4 item 4), rock blocks: the bake's joints cut each column bed into blocks (engine-bake.wgsl blockField).
-    blockSeam: f32,       // darkness of the crevice along bed boundaries and joints (also carved a share of a unit deep)
     weatherMaps: f32,     // H5: 1 when gridTex layers 2 and 3 hold the Time pass's maps (engine-weather.wgsl)
     // H5 item 3a, Green's retail marks (0: off). They read the Time pass's maps, so age, rain and hardness contrast move them.
     terraceBreak: f32,    // how far the terrace lines' phase wanders (band spacings), more where the ground is wet
     terraceCalm: f32,     // 0..1: terrace lines faded on gentle slopes (the small dashes retail does not have)
     wetSwath: f32,        // darkness of the soft swaths water leaves on grass along its flow; with a ground-cover table it is also Moisture (card P30)
     lushness: f32,        // card P30: -1..1, the world-wide baseline of the painted Vegetation override (0: none); a ground-cover table reads it as succession
-    outcrop: f32,         // grey rock shown where wear has bared steep grass
-    // (the fall-line cracks in outcrops, moss by wetness and the grey specks are fixed at retail's rates, ROCK_CRACK and SPECKS in engine-bake and the wetness term in engine-frag: H5 found their controls under 5% of any class)
     // H5 item 3b, beyond retail (0: off for Green).
     rillDepth: f32,       // height units a rill is cut, along the flow
     rillSpacing: f32,     // px between rills
@@ -378,24 +340,6 @@ struct Uniforms {
     stoneSlab: f32,       // world material data: share of flat slabs
     plantsOn: f32,        // card P31: 1 when the world's ground-cover table has plants (its last row) and this bake is a full one: the plant families of looseStones, which share the loose mask
     stoneMoss: f32,       // world material data: share of stones with a mossy cap
-    // H4b (Green): rock blocks on the hills' rock, outside the structured face (0: none).
-    hillBlocks: f32,      // 0..1: how much of the hill rock (slope .5 and over, off the structured face) is cut into small pieces
-    // Card P10: the one rock model (rockModel in engine-bake), world material data (`rock` in the material). rockSize 0: the world has none.
-    rockSize: f32,        // px: joint-cell spacing across the beds (the preset's Size)
-    rockAspect: f32,      // cell length along the beds against across them
-    rockJitter: f32,      // 0 hexagons .. 1 irregular cells
-    rockOpen: f32,        // share of joints that are open crevices (the rest are tight steps)
-    rockBedOpen: f32,     // share of bed partings that are open
-    rockTerr: f32,        // how far each block is flattened toward its own level (basalt organ pipes)
-    rockVary: f32,        // per-block tilt and step
-    rockCrev: f32,        // height units an open parting is cut
-    rockCrevW: f32,       // px, half width of a crevice
-    rockChip: f32,        // share of small angular chips
-    rockChipSize: f32,    // px
-    rockGrit: f32,        // per-pixel height grit, units
-    rockAge: f32,         // 0..1: rounds open edges, opens more partings, wears chips
-    rockCurtain: f32,     // share of a ledge's stain curtains the rock type draws (0: none; the Stain row's tone scales them)
-    rockLichen: f32,      // lichen cover the rock type grows on faces turned to the sun and sky (0: none; Age and the Vegetation tint row scale it)
 #ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
@@ -607,11 +551,9 @@ fn rockFaceAt(s: vec2f, h: f32, fall: vec2f, steep: f32, bedPx: f32) -> RockFace
 }
 
 // H2 rock column: the bed coordinate, in height units, at world point p for a
-// rock surface at height z. The bake (bedRelief) and the erosion pass (erosion.wgsl) both
-// call it with the surface height of the grid they hold, so a ledge erosion leaves
-// stands where the bake draws one: it depends only on (p, z), not on the smoothed
-// ground cliffFollow gives the hash beds. columnOffset is the part that depends on p alone (the erosion pass caches it). The tilt (bedDip)
-// and the broad wander are the hash beds' own.
+// rock surface at height z. The draw (the strata colours) and the erosion and weather passes (a bed's hardness) read it
+// with the surface height they hold, so it depends only on (p, z). columnOffset is the part that depends on p alone (the
+// erosion pass caches it): the tilt (bedDip toward bedDipDir) and the broad wander.
 fn columnOffset(p: vec2f) -> f32 {
     let a = radians(u.bedDipDir);
     var offset = u.bedDip * dot(p, vec2f(cos(a), sin(a)));
@@ -790,15 +732,8 @@ fn timeMapsAt(p: vec2f) -> TimeMaps {
     let a = timeMap2(uv); let b = timeMap3(uv); let w = weatherAt(uv);
     return TimeMaps(a.x, a.y, a.z, a.w, b.xy * 2.0 - 1.0, b.z, b.w, w.r, w.b, w.g);
 }
-// Where wear has bared steep grass: clumps of 10-20 px on slopes, by how much rock the water took. Bake and draw share it,
-// so the cracks lie where the grey shows.
-fn outcropAt(p: vec2f, slope: f32, wear: f32, hard: f32) -> f32 {
-    if (u.outcrop <= 0.0) { return 0.0; }
-    let clumps = smoothstep(0.22, 0.5, valueNoise(p / 17.0 + 7.0) * 0.5 + 0.5 + 0.15 * valueNoise(p / 5.0 + 3.0));
-    return u.outcrop * smoothstep(0.02, 0.22, wear) * smoothstep(0.30, 0.55, slope) * (1.0 - smoothstep(0.9, 1.4, slope)) * smoothstep(0.35, 0.7, hard) * clumps;
-}
 
-const MM_COVER = 166u;
+const MM_COVER = 162u;
 fn cvr(i: u32) -> vec4f { return u.materialTable[MM_COVER + i]; }
 fn coverWin(v: f32, w: vec4f) -> f32 { return smoothstep(w.x, w.y, v) * (1.0 - smoothstep(w.z, w.w, v)); }
 // The two site values every class reads, moisture and light, at a point: wetness (with the wet swaths' control as its bias, and the sun's shade) and the

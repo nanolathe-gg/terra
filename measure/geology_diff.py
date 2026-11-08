@@ -28,7 +28,7 @@ Classes, read on the base render's heights (the sea is subtracted; the dry base 
   impact    H21: dry relief at least 1.5 either side of the plain (includes crater bowls, unlike raised)
   fold      H21: dry gentle slopes .025–.60, moonFolds' support
   These masks use the existing height-grid projection approximation; a below-5% row is not proof of dead code.
-  wall      H19: ground faceRelief's gate is above .5 on (1 - broad.y / 2 at least 2.25, engine-frag.wgsl), at the screen rows it is drawn on (a row
+  wall      H19: ground that faces the viewer steeply (1 - broad.y / 2 at least 2.25: a screen row spans that many world rows), at the screen rows it is drawn on (a row
             less g / 2), which are many more than its world rows. A retail window holds almost none, so each root holds <world>-1 alone, the
             world's repro/walls scene
 """

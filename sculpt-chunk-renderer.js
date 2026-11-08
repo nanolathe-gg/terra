@@ -2,7 +2,7 @@
 // belong to this renderer once; callers own the LRU of copied output images.
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {columnRows} from './sculpt-column.js';
-import {PLANT_REACH,groundCoverOn,rockPreset} from './sculpt-material-model.js';
+import {PLANT_REACH,groundCoverOn} from './sculpt-material-model.js';
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
 
 const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','riverBed','fu','fv','s1','s2','s3'];
@@ -86,11 +86,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     // P16: the largest class drawn has radius min(16, 3.3 x the median); a stone reaches 1.6 radii from its candidate (1.41 of a class radius at most) and a larger stone that suppresses it a little further, and the mask reads 14 px up the slope plus its gradient (5).
     const stones=3.6*Math.min(16,3.3*n('looseSize',6))+24;
     const beach=Math.max(this.config.layers.includes('beach')?(this.config.material?.beachWidth??120)*n('beachWidth',.6):0,n('apron',0))*1.35*1.15;
-    // G2: the rock frame reads heights on rings of cliffReach and cliffWide px, and the joints take the frame at their
-    // patch's seed, up to 1.41 patches (cliffDomain) from the pixel (the nearest seed of a jittered lattice is within 1.13
-    // cells, and the warp moves the pixel by up to .28): cliffFollow only.
-    const cliff=n('cliffFollow',0)>0?1.45*Math.max(n('cliffDomain',90),24)+Math.max(n('cliffWide',56),n('cliffReach',20)*1.5,4)+2:0;
-    const bake=Math.max(19,stones,beach,cliff,groundCoverOn(this.config.material?.groundCover,this.variant)&&this.config.material.groundCover.plants?PLANT_REACH:0);
+    const bake=Math.max(19,stones,beach,groundCoverOn(this.config.material?.groundCover,this.variant)&&this.config.material.groundCover.plants?PLANT_REACH:0);
     // G3: the fringe's copies read the material field up to ringShift px from the pixel, and a few px more for each copy's gradient.
     const direct=Math.max(61,48*Math.max(.65,1.6*n('ringSpread',.65)),Math.abs(n('waterSoft',32)),41*Math.abs(n('ringVariation',.7)/.75),n('ringShift',0)>0?Math.abs(n('ringShift',0))+4:0);
     // A projection apron includes appearance displacement too. These are
@@ -98,16 +94,12 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     // visits at most +/-4 cells (point delta <4.9 cells per axis), and signed
     // style masks can multiply relief by four. This keeps a tall painted face
     // from disappearing merely because it started south of the output chunk.
-    const span=heightBounds[1]-heightBounds[0],slope=span*Math.SQRT2/10;
     const relief=Math.abs(n('reliefAmount',.5)*n('reliefScale',28))*Math.max(2.5,.25*n('gentleRelief',.6))*Math.max(1,Math.abs(n('gentleRelief',.6)))*Math.max(1,1+.65*n('reliefPatchy',1))*4;
     const severity=Math.max(n('crackSeverity',.6),.6),major=n('crackSpacing',40),minor=major/3.2;
     const blocks=(.5*(1+3*severity)+1.225*major+.5*(.6+1.6*severity)+4.41*minor)*Math.max(n('crackBlocks',.6),.6);
-    const beds=(Math.abs(n('bedSpacing',12))*Math.max(1,(slope+Math.abs(n('bedDip',0)))**(1-n('bedHeight',0)))*1.8*Math.abs(n('bedLedge',.5))+(n('bedLedge',.5)>0?3.6*Math.max(1,n('bedLedge',.5)):0))*Math.abs(n('rockOrder',0));
     const bands=columnRows(this.config.column,this.config.variant).bands[0]*Math.max(Math.abs(n('banding',0))*4,.8);
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
-    const gullyRise=Math.abs(n('ribTilt',0))*Math.max(n('grooveSpacing',8),8),rock=rockPreset(this.config.material,this.variant);
-    const facetRise=rock.size>0?2*(Math.abs(rock.crev??2)+1.8*Math.abs(rock.vary??.5)+1.7*Math.abs(rock.chip??.25)+Math.abs(rock.grit??.35)):0;   // the rock model's cells: crevice, tilt and step, chips and grit (engine-bake.wgsl rockModel), doubled for the margin
-    const extra=gullyRise+facetRise+relief+blocks+beds+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(n('looseSize',6))+Math.abs(n('rippleHeight',1.4));
+    const extra=relief+blocks+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(n('looseSize',6))+Math.abs(n('rippleHeight',1.4));
     const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4);
     return {draw,bake,direct,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};
   }

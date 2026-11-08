@@ -38,15 +38,14 @@ KNOB_DEFAULTS = dict(
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
     flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1, sunTilt=1, ambient=.42, slopeMarks=0, wrinkles=0, sandCrown=0,
-    faceVariation=.8, lean=0, facing=0, faceFill=.18, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0,
+    faceVariation=.8, lean=0, facing=0, faceFill=.18, slopeTexture=.3, moss=0,
     looseSupply=0, looseSize=6,
     sand=0, wind=20, sandDust=.5, sandGrass=.6,
     sandLight=.25, sandGrain=.8, ripple=7, rippleHeight=1.4,
     crackSeverity=.6, crackSpacing=40, crackMajor=.8, crackMinor=.75, crackHairline=.6,
     crackBlocks=.6, crackWidth=1, crackNetwork=.35, crackDark=.75,
-    # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it, and the cracks of ordered rock are lit relief, not ink.
-    rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5,
-    grooveSpacing=36, grooveAngle=0, grooveRun=120, bedHeight=0, rockFrom=.6,
+    # The rock column's tilt (its beds, their strata colours and hardness): height per px toward bedDipDir degrees.
+    bedDip=0, bedDipDir=90,
     worms=0, rockCrown=0, apron=0,
     # A landform's Facets (sculpt-scene.js SHAPE_FIELDS): Step height in units (5 is the angular facets' earlier fixed step), the prisms' sides, flat top share and
     # variation, Level tops, Align to the path, outline jitter, corner cuts and face roughness in units.
@@ -64,9 +63,9 @@ KNOB_DEFAULTS = dict(
     # Coast pass (card E4): fingers on the joined coast and a landform's shoreline steps cut as heights
     # (layerPx px a step, riser 0 shares the bank's rise out; the count, flat share and irregularity are the landform's Steps).
     layerPx=12, layerRiser=0, shoreEdge=0, coastRamp=1, beachWidth=.6, shallowDepth=24, deepDepth=60, waterSoft=32, crispShore=1, bankRock=.25,
-    dither=2, landDither=.25, paletteMix=0, microRock=1,
-    # Form (repro round): ledges on steep faces, darker faces, jagged bands.
-    faceStreak=0, faceStreakFrom=.3, faceDark=0, bandJag=0, bandFade=.75,
+    dither=2, landDither=.25, paletteMix=0,
+    # Form (repro round): ledges on steep faces, jagged bands.
+    faceStreak=0, faceStreakFrom=.3, bandJag=0, bandFade=.75,
     # Dry banks below the plain lit as level ground, with no bands or wet band (Archipelago's beaches).
     flatBank=0,
     # Cross-section (card C1): the terraces on a landform's section (sculpt-shape-presets.js).
@@ -123,11 +122,8 @@ KNOB_DEFAULTS.update(plateVary=0)
 KNOB_DEFAULTS.update(baseBand=0, baseBandLow=4, baseBandHigh=6.5, baseBandWander=1, baseBandGaps=.45)
 # G4 (Painted Desert): level ground in the pale cap zone kept as one sheet of the cool bed (strength).
 KNOB_DEFAULTS.update(desertCapFlat=0)
-# E9 (Green rock faces): every default is the earlier look; Green's own values are in WORLD_KNOBS.
-KNOB_DEFAULTS.update(rockMoss=1, rockDetail=1, shineOutside=1, faceRelief=1,
-                     gullyDepth=0, gullyWidth=14, rockStain=0, ribTilt=0,
-                     bedPunch=0,
-                     rockScale=1, rockAge=.5, rockOpen=1)
+# E9 (Green rock faces): the share of the rock's glints kept outside painted rock.
+KNOB_DEFAULTS.update(shineOutside=1)
 # E11 (shallow water round 2): every default is the earlier look. shelfWander (depth units) moves
 # the hard step's depth with broad noise so the band's width and outline vary along the shore;
 # bedFlat lights the lit bed by its own relief only (no slope shading across the shelf).
@@ -163,8 +159,8 @@ KNOB_DEFAULTS.update(moonRibs=0, moonRibDepth=1, moonRibDark=0)
 # G8, Moon: thin dark folds that follow the form across lit and moderate slopes (0: none), and the height between their contours.
 KNOB_DEFAULTS.update(moonFolds=0, moonFoldSpacing=.9)
 # G8, Moon: how far a hill's whole outline strays in lobes, as a share of its radius (a shape option; 0: the smooth outline).
-# E6, Ice mountains: monotone slate faces (0: rock and snow interleaved) and the rock art's contrast (1: as drawn).
-KNOB_DEFAULTS.update(iceSlate=0, mineralDetail=1, iceCrystal=0, iceCrest=0)
+# E6, Ice crystal mountains: straight strokes over the rock faces and snow-white lumps on the raised ground (0: none).
+KNOB_DEFAULTS.update(iceCrystal=0, iceCrest=0)
 # G6, Ice blocks and mesas (retail ice-3, Polar Range): rounded light, snow on the flat tops, fibres down the faces, a hatched apron (0: none of them).
 KNOB_DEFAULTS.update(iceSoft=0, iceSnow=0, iceFall=0, iceApron=0)
 # G6, Ice frost band: fine hairlines in the band (0: none).
@@ -199,28 +195,17 @@ KNOB_DEFAULTS.update(ringShift=0, ringShiftDir=315, ringScatter=.5, ringWobble=3
 KNOB_DEFAULTS.update(ringFill=0, ringPatch=0, ringPatchSize=120)
 # G3: ringTone 1 draws the copies' lines in retail's rose, paler outward (0: the earlier crimson).
 KNOB_DEFAULTS.update(ringTone=0)
-# G2 (rock faces follow the slope): 0 keeps the fixed screen directions of every world; 1 runs beds along the
-# contours of the ground and joints, gullies and facets down its fall line. The reaches are the
-# height smoothing radii (px) of the local and of the wide fall line, cliffFlat the wide slope under which
-# the structure fades into plain broken rock, cliffDomain the patch size of the joint lattice.
-KNOB_DEFAULTS.update(cliffFollow=0, cliffReach=20, cliffWide=56, cliffFlat=.04, cliffRise=0, cliffBed=.5, cliffStagger=0, cliffDomain=90)
 # H1 (lit relief): shade the ground behind a 1-6 px ledge, and darken crevices and crack floors (0: off).
 KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # H2, H16 (rock column): a world with a `column` block in its table reads each bed's thickness and hardness from it (sections of
-# beds that repeat upward, materials/<world>.json) in place of the hash; columnContrast scales how much harder the hard beds are (ledge height and,
-# with erosion 1, wear). The GPU Time pass uses erosionAge iterations, erosionRain times the base rain, talusAngle the repose of loose debris (degrees).
-# H4 item 4 (engine 1): rock blocks cut from the column's beds by joints (engine-bake.wgsl blockField); blocks 0 is none.
-# H4b (engine 1): blocks on hill rock, outside the structured face (0: none).
-KNOB_DEFAULTS.update(hillBlocks=0)
-# Card P10: the rock model's numbers (World panel, Rock type): 0 the world's own (its table's material.rock), else a named type
-# (sculpt-material-model.js ROCK_TYPES, Granite first).
-KNOB_DEFAULTS.update(rockType=0)
-# The rock face (engine-common.wgsl rockFaceAt): one model for every rock face, drawn in the art's own pixels. rockFace 0: none.
-KNOB_DEFAULTS.update(rockFace=0, rockFaceFrom=.6, faceRock=.9, faceBed=5.5, faceLedge=2.2, faceRun=90, faceLean=28, faceScratch=2.5, faceScratchSize=7,
+# beds that repeat upward, materials/<world>.json); columnContrast scales how much harder the hard beds are (with erosion 1, their wear).
+# The GPU Time pass uses erosionAge iterations, erosionRain times the base rain, talusAngle the repose of loose debris (degrees).
+# The rock face (engine-common.wgsl rockFaceAt): one model for every rock face of every world, drawn in the art's own pixels. Depth (rockFace) only scales its relief: 0 is the same rock, flat.
+KNOB_DEFAULTS.update(rockFace=2, rockFaceFrom=.6, faceRock=.9, faceBed=5.5, faceLedge=2.2, faceRun=90, faceLean=28, faceScratch=2.5, faceScratchSize=7,
                      faceBlock=3, faceBlockSize=11, faceCrease=2.5, faceCreaseSize=6, faceGrit=0, faceGrass=.8, faceWear=.35, faceShade=.85, faceLayers=0, faceTerrace=1.2, faceMass=1, faceTone=.12, faceStrata=0, faceWet=0)
-# H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
+# H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing; `sand` and ripple already exist).
-KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, outcrop=0, rillDepth=0, rillSpacing=8)
+KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, rillDepth=0, rillSpacing=8)
 # Card P30: Vegetation cover 0 is off (every world has a ground-cover table: GROUND_COVER, DEFAULT_GROUND_COVER); modern Green sets 1.
 KNOB_DEFAULTS.update(vegetationCover=0, plantRelief=1, flowerDensity=1)
 KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
@@ -228,16 +213,12 @@ KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1,
 # had no rain erosion take the pass with rain off and the envelope of the droplet worker's own budget (the worker's .35 of the pass's
 # BUDGET 3, sculpt-erosion.js): its maps are made, its height moves no further than the worker's did.
 # H4: the knobs Green's engine (engine 1) sets over WORLD_KNOBS. engine 0 keeps WORLD_KNOBS alone, so it draws as merge-h3 does.
-# Blocks replace most of the facets and Green's long joints on the face (the blocks have their own joints), and the gullies
-# are eased so the courses and joints read; measured on green-2's face in NOTES.md (H4).
 # H17: terraceBreak 1.4 -> 0. Its phase wander broke green-2's slope into a dense blotchy mass; at 0 the band lines follow
 # the contours as retail's flowing lines do (viewed at 1x; green-1 and green-3 do not change). banding .8 -> .5 (WORLD_KNOBS)
 # lightens and thins those lines toward retail's soft dashes.
 LIGHT_PASS = dict(erosion=1, erosionRain=0, erosionEnvelope=.12)
 ENGINE_KNOBS = {
-    'green': dict(rockAge=.1, gullyDepth=4,
-                  rockMoss=.4, hillBlocks=0,
-                  terraceBreak=0, terraceCalm=0, outcrop=0),
+    'green': dict(terraceBreak=0, terraceCalm=0),
     **{world: LIGHT_PASS for world in ('red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice')},
 }
 # Per-world overrides of KNOB_DEFAULTS (authored presets; shallowDepth and
@@ -251,26 +232,18 @@ WORLD_KNOBS = {
     'green': dict(coastRamp=.75, looseSupply=.08, looseSize=3.5, banding=0, crackDark=.4, wetSwath=.35,   # Moisture (a panel row, card P30); the Time pass's wet swaths and modern Green's ground cover read it
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
-                  # any retail map; slopes turned from the sun are too light.
-                  faceStreak=1, faceDark=.35,
+                  # any retail map.
+                  faceStreak=1,
                   # Great Divide's terraces are short dashes stacked like
                   # scales, not long smooth lines (thin dark lines per
                   # pixel 0.124 against retail's 0.235; bandJag 1 gives 0.158).
                   bandJag=1,
-                  # Card E3 (retail green-2's big rock face): coherent level beds cut
-                  # by long joints leaning ~20 degrees (row period 8-12 px whatever the
-                  # slope; thin-line direction shares vertical/horizontal .29/.27 against
-                  # ours .47/.13 before), cracks as lit relief rather than ink. Beds and joints
-                  # only on painted rock (rockFrom 1.6): the hills of green-1 and green-3 carry
-                  # sparse patches and keep their own relief.
                   # The rock face (green dive, 2026-11-08): every face steep enough is rock, drawn in screen pixels (rockFaceAt); retail's faces
                   # are layered, crumpled and scratched rock from black creases to light grey facets, grass in clumps and on the ledges.
-                  rockFace=2, rockOrder=0,
+                  rockFace=2,
                   # The layers run on under the grass as soil-covered terraces 1.2 units apart (retail's hills: dense wavy dark lines ~8 px apart
                   # on slopes .1-.2); they replace the contour bands (banding .3 -> 0).
                   faceLayers=1,
-                  rockFrom=1.6, bedSpacing=5, bedHeight=1, bedVary=.9,
-                  bedLedge=.4, grooveAngle=-20,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
                   # in a hard step: colour by depth is flat to ~30 and gone by ~44 in
@@ -286,16 +259,7 @@ WORLD_KNOBS = {
                   # Retail round 1: a fine, partial undulation (3 at 48 px over 40% of the land) gives the plain retail's gentle .08-.15 slopes
                   # (green-1 shape .38 -> .33) without broad light blotches (viewed at 1x).
                   undulation=3, undulationScale=48, undulationCover=.4, plainRelief=0,
-                  # E9 (Green rock faces): retail's big face is carved (leaning gullies and ribs, so stripes of it
-                  # light or shade as a whole), layered in long ledges that bend with it,
-                  # and crumpled into angular facets that glint; grass keeps to its edges. Measured on green-2's
-                  # face (measure/rock_face.py): luma s.d. 19.8 -> 26.3 (retail 27.2), share over luma 90
-                  # .040 -> .071 (.074), blurred-luma s.d. 7.5 -> 10.5 (10.8). Every knob's default is the
-                  # earlier look: rockMoss 1, rockDetail 1, gullyDepth 0, ribTilt 0,
-                  # bedPunch 0, facetTilt 0, shineOutside 1 and bedLedge .55.
-                  rockMoss=.15, rockDetail=.5,
-                  gullyDepth=8, grooveRun=90, rockStain=1.2, ribTilt=.2,
-                  bedPunch=1,
+                  # E9 (Green rock faces): the rock glints, mostly on painted rock (shineOutside .3).
                   shineRock=.15, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
                   # "blurry parts"): the step is a true threshold that wanders ~24 depth units over
@@ -314,29 +278,13 @@ WORLD_KNOBS = {
                   shoalRag=5,
                   # G1: the hard waterline steps in 1-3 px runs (retail's), up to 2 px off the depth contour.
                   shoalStairs=2,
-                  # G2: the owner's round 8 note on the rock face: beds and joints follow the hillside they are cut in, not the
-                  # screen. Beds are the contours of the ground (smoothed over 40 px, 30% of the way from the grid's own
-                  # heights), 6.5 height units apart (bedSpacing, was 28 against a tilt of 2 that made rows level on the screen:
-                  # 7-13 px on a face of slope .5-1), their ledges 16 high (cliffRise); joints, gullies and
-                  # facets run down the fall line. bedDip is 0 now, and the beds follow the ribs and gullies at 1 (was 2.5) because a bed is a quarter as
-                  # thick, so the ribs would fold it fourfold.
-                  cliffFollow=1, cliffReach=40, cliffBed=.3, cliffRise=8,
-                  # G2: the vertical bands break up: each bed's joints at their own offset (up to .35 of a spacing).
-                  cliffStagger=.35,
-                  # H1 (lit relief): ledges shade the ground 1-6 px behind them and crevices lose ambient light, so the
-                  # beds are lower than G2's (cliffRise 16 -> 8, bedLedge .6 -> .4, the ledge lip 3 -> 2): taller ledges now shade
-                  # the whole face. green-2 face (x 20-880, y 650-870) mean luma / s.d. / share under 30 / p90 gradient:
-                  # retail 45.8 / 27.2 / .245 / 17.6, G2 46.9 / 23.3 / .143 / 14.8, here 44.7 / 26.4 / .247 / 17.6.
+                  # H1 (lit relief): ledges shade the ground 1-6 px behind them and crevices lose ambient light.
                   closeShadow=.8, cavity=.6,
-                  # H2 (rock column): its `column` table (materials/green.json) has eight beds repeating every 47 height units (a hash
-                  # bed averaged 5): thin hard beds that stand as ledges between thicker soft ones, so the hard ones read as lines and the
-                  # soft ones as the space between.
+                  # H2 (rock column): its `column` table (materials/green.json) has eight beds repeating every 47 height units: thin hard
+                  # beds between thicker soft ones, which the Time pass wears at their own rates.
                   # H2 (erosion): the GPU shallow-water Time pass.
                   erosion=1, ),
-    # Card E3 (red-3): slope cracks lighter and finer than the ink web: lit relief
-    # grooves (ordered rock) .5 px wide on 28-px blocks at depth .3, and thin long
-    # joints (30 px apart, 3 deep) in place of the scattered chunks; no beds (retail
-    # Red's faces show none).
+    # Card E3 (red-3): slope cracks lighter and finer than the ink web: .5 px wide on 28-px blocks at depth .3.
     # Red's plain is level, as Green's is (card E1): the share of a retail window's 16-px cells at its most common height is .36 / .52 /
     # .20 in red-1..3 (Green's .35 / .20 / .44); the default undulation (10) gave .21 / .21 / .18, none gives .67 / .52 / .26. The plain's
     # lumps (plainRelief) keep its soft mottle. A level plain also repeats its tiles (card tilepool).
@@ -344,14 +292,10 @@ WORLD_KNOBS = {
     # undulation (2.5 over 80-px lumps on 60% of the land) replaces the level plain, and the ground pattern is softened to .7 contrast
     # (retail's plain is lighter, less dotted).
     'red': dict(undulation=2.5, undulationScale=80, undulationCover=.6, groundContrast=.7, crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
-                reliefAmount=.2, slopeTexture=0, microRock=0,
+                reliefAmount=.2, slopeTexture=0,
                 # Retail round 2: raised landform faces steeper (retail's rims and mesa walls are crisper than 1).
                 faceSteep=1.75,
-                crackSpacing=28, rockOrder=1, bedLedge=0,
-                grooveSpacing=30, grooveAngle=-10, grooveRun=160,
-                # G2: joints run down the fall line of the ground they are cut in (grooveAngle is the lean from it), and painted
-                # rock on level ground fades into plain broken rock. Red has no beds.
-                cliffFollow=1, cliffReach=40,
+                crackSpacing=28,
                 # Red's shallows (card E1) are lit terrain too, tinted purple and ending in a
                 # hard stop: red-2's lake is the plain ground tinted lilac (mode 2, the
                 # default); a stroke may set the cracked bed (red-3's shelf, mode 1).
@@ -401,8 +345,6 @@ WORLD_KNOBS = {
                         # rings' texture, narrower (spread .35), lighter (.7, variation .5) and
                         # fading over a longer reach.
                         hillLight=1, ringFade=1,
-                        # Retail round 1: hills are smooth gray-green with soft shading, not mottled moss and rock.
-                        microRock=.2,
                         bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1,
                         # E11 (round 7 report: "weird black/dark lines around the hills" and "more
                         # noticeable circle features in the red fringe"): the dark lines were the
@@ -445,21 +387,12 @@ WORLD_KNOBS = {
     # 1.07-1.14), so no highlight above level.
     # Its beds are all alike (columnContrast 0): they stand one ledge high, and the Time pass reads no hardness.
     'desert': dict(lightCap=1.25, sunTilt=.5, paletteMix=1, strata=1, strataContrast=1, columnContrast=0, banding=.4,
-                   # H19: the lit relief on a wall in Desert's strata reads as black scribbles at 1; .3 to .5 read as rock on repro/walls/desert.json.
-                   faceRelief=.4,
                    strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
-                   sand=0, undulation=14, undulationScale=48, undulationCover=1, undulationArt=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2, gullyRock=0,
-                   # Card E3: tall mountains keep their strata and gain lit ledges (beds the strata's
-                   # 6 height units thick, level on the height so they ring each butte), long
-                   # joints, and black shadow sides: retail's buttes are dark on the side turned
+                   sand=0, undulation=14, undulationScale=48, undulationCover=1, undulationArt=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2,
+                   # Card E3: black shadow sides: retail's buttes are dark on the side turned
                    # from the sun, where ours shaded to a soft grey. No fill light and little
-                   # ambient (faceFill 0, ambient .3) darken those faces; faceDark would not, as
-                   # the strata colours replace the face material.
-                   rockOrder=1, rockFrom=.45, bedHeight=1, bedSpacing=6, bedDip=0, bedVary=.4, bedLedge=1,
-                   grooveSpacing=30, faceFill=0, ambient=.3,
-                   # G2: joints run down the fall line (its beds are height contours already, kept on the grid's own heights
-                   # so the lit ledges stay with the strata colours: cliffBed 0).
-                   cliffFollow=1, cliffReach=40, cliffBed=0,
+                   # ambient (faceFill 0, ambient .3) darken those faces.
+                   faceFill=0, ambient=.3,
                    # E8: retail's aprons and mesa feet are ragged (cells 16 px wide, edges 10-20 px off a smooth
                    # lobe) and bumpy (heights vary 7-12 across an apron whose mean rise is ~8). The ridge presets carry
                    # this as variation (sculpt.js TOOL_PRESETS).
@@ -482,8 +415,6 @@ WORLD_KNOBS = {
     'moon': dict(looseSupply=.1, looseSize=3.5, crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4,
                  worms=0, undulation=6, plainRelief=.6, banding=0, crackDark=.6,
                  sunTilt=0, faceFill=0, ambient=.25,
-                 # H19: at 1 the lit relief on a shaded wall reads as hard plates, at .5 as rock (repro/walls/moon.json).
-                 faceRelief=.5,
                  # Card B3: the isolated marks (slopeMarks .4) read as specks and, lined up
                  # on a narrow wall, as a toothed lip; retail's slopes are crazed with
                  # connected wrinkles and pits, so the joined wrinkles replace them.
@@ -642,12 +573,11 @@ WORLD_KNOBS = {
                 # the grey the 13-unit wet band gives it. Plate material 0 keeps B1's floes.
                 plateMaterial=2, plateWaterPx=140, plateLandPx=220, plateSize=44, plateGap=5, plateHeight=4, frostWet=1,
                 # Card E6: retail's common ice mountain (Etorrep Glacier, Polar Range) is one monotone,
-                # very rough, shiny slate-blue ice lit strongly: every face is the rock art (contrast
-                # .55) from the first slope to the crest, with a fine grain 2.5 px wide (stretch 2)
+                # very rough, shiny slate-blue ice lit strongly: a fine grain 2.5 px wide (stretch 2)
                 # that glints, no cracks, little lumpy relief, the shade kept blue and a lower ambient so
-                # the light and shade read strongly. Earlier look (snow and slate interleaved, cracks):
-                # the Ice variant 'snow'; retail's other type (ice-1) is the variant 'crystal'.
-                iceSlate=1, mineralDetail=.3, shadeBlue=.25, reliefAmount=.22, reliefScale=14, reliefLumps=.3,
+                # the light and shade read strongly. Earlier look (cracks): the Ice variant 'snow';
+                # retail's other type (ice-1) is the variant 'crystal'.
+                shadeBlue=.25, reliefAmount=.22, reliefScale=14, reliefLumps=.3,
                 lightCap=1.25, ambient=.3, shineWhite=1, shineStretch=2,
                 shineRock=.22, shineRockSharp=50, shineRockRough=.5, shineRockScale=2.5,
                 # Card E6, frost band against retail ice-1 (x330-430, 32-132 px inland): luma s.d. 52
@@ -656,8 +586,8 @@ WORLD_KNOBS = {
                 frostNeedles=.8, frostGaps=.1, frostGapReach=.7, frostGapSize=7,
                 # Card G6: retail's blocks (ice-3, Polar Range) are soft, snow-capped slate: the light reads the
                 # height blurred over ~13 px so crests are rounded and there are no hard creases, the flat top is
-                # snow, the faces are smooth slate crossed by fine fibres down the slope (rock art contrast .3,
-                # no glint dashes), and dark hatched drifts spill past the foot into the snow.
+                # snow, the faces are smooth slate crossed by fine fibres down the slope (no glint dashes), and dark
+                # hatched drifts spill past the foot into the snow.
                 iceSoft=.85, iceSnow=1, iceFall=1, iceApron=1,
                 # Card G6: the frost band's fine lines (retail: crisp dark-blue hairlines 3-5 px apart in parallel runs).
                 iceFrost=.7),
@@ -714,12 +644,12 @@ WORLD_VARIANTS = {
         # Thin dark lines per pixel in green-1 / green-3: retail .0559 / .0449,
         # smooth variant .0445 / .0425, this .0547 / .0504.
         'evad': dict(label='Evad River: broken slopes',
-                     knobs=dict(banding=0, faceLayers=.2, faceStreak=0, faceDark=.3, crackSeverity=.45, crackBlocks=.3, crackDark=.3,
+                     knobs=dict(banding=0, faceLayers=.2, faceStreak=0, crackSeverity=.45, crackBlocks=.3, crackDark=.3,
                                 # Green dive (owner: cracks too thick, dark lines not thin relief): retail's hill cracks are few, long and thin, with a
                                 # light lip: fewer minor cracks, no hairlines, majors 80 px apart, .8 px wide and fewer, closer to plates than to rills
                                 # (the fall-line rills read as grey streaks), lighter floors, almost no band dashes (banding .35 -> .05).
                                 crackMinor=.2, crackHairline=0, crackSpacing=80, crackWidth=.8, crackMajor=.5, crackNetwork=.8,
-                                reliefAmount=.5, microRock=.7)),
+                                reliefAmount=.5)),
         # Modern Green (card P24, decision 25): where the realistic look accumulates. It is judged on green-1..3 for
         # palette, scale and readability at 1x, and by eye for realism: drainage that branches, rock that breaks along
         # its beds and joints, debris where gravity and water leave it, light that agrees from any sun. It starts as a
@@ -735,8 +665,7 @@ WORLD_VARIANTS = {
         # Ground cover (card P30): GROUND_COVER above, with Vegetation cover 1.
         # Card P27: Surf .1 on its water strokes (a wet line and a 1-px foam lace on lakes, no beach) and a sand colour for the beaches
         # higher Surf builds.
-        # Card P10: the rock model is Rock type 1, Granite (sculpt-material-model.js ROCK_TYPES: calm blocks of 22 px; Age is the rockAge row, .5).
-        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, undulation=0, coastRamp=1, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockType=1, rockAge=.5, cavity=1.0, shineRock=.36),
+        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, undulation=0, coastRamp=1, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, cavity=1.0, shineRock=.36),
                        # Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the hills' feet and in gullies,
                        # median 5 px (readable at 1x; Green's retail grit is 3-4); stoneSort .7 sorts it by the process (talus coarsens outward).
                        material=dict(stoneSort=.7, groundPool=2048, groundCover=GROUND_COVER)),
@@ -755,26 +684,25 @@ WORLD_VARIANTS = {
         # Crystals stroke (form 0): without them its shaded side goes near black (H22).
         'bergs': dict(label='Icy Bergs: blue blocks',
                       colors=dict(crystal='#8ea6ee', ground='#9db5fa', slope='#a5bef9', rock='#9ab2f4'),
-                      # No slope cover, face rock or exposed rock: their dark slate and granite
+                      # No slope cover or exposed rock: their dark slate and granite
                       # read as teal specks on a bright berg, where retail's faces are one
                       # rough blue-white grain (ground pattern contrast 2 gave it; card G6 lowered it to 1.3 and the
                       # relief to .35 / .4: the owner found ice-2 too rough, and its 3x3 high-pass was 17.5 against retail's 11.7, now 13).
                       # A short wet band keeps the waterline from a dark fringe.
                       material=dict(slopeStart=3.0, slopeFull=4.0, wetBand=2.0, rockSlope=9.0),
-                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=1.3, microRock=0,
+                      knobs=dict(crystalFace=2.2, crystalTone=.92, crystalGrain=.4, crackSeverity=0, shadeBlue=.9, lightCap=1.4, ambient=.32, groundContrast=1.3,
                                  # Card G6: the world's soft slate block look is not the berg's.
                                  iceSoft=0, iceSnow=0, iceFall=0, iceApron=0,
-                                 # Card E6: the world's monotone mountains (slate faces, glints, soft relief) are not the berg's look.
-                                 iceSlate=0, mineralDetail=1, reliefAmount=.35, reliefScale=28, reliefLumps=.4, shineWhite=.35, shineStretch=1, shineHeadroom=0,
+                                 # Card E6: the world's monotone mountains (glints, soft relief) are not the berg's look.
+                                 reliefAmount=.35, reliefScale=28, reliefLumps=.4, shineWhite=.35, shineStretch=1, shineHeadroom=0,
                                  shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
         # Crystal mountains (card E6, retail ice-1): slate ruled with straight dark strokes in
         # domains, snow-white lumps standing on the raised ground, soft relief, no glint.
         'crystal': dict(label='Crystal mountains: straight strokes',
-                        knobs=dict(iceCrystal=1, iceCrest=.3, iceSoft=0, iceSnow=0, iceFall=0, iceApron=0, mineralDetail=.55, shineRock=0, shineRockRough=0, shineHeadroom=0, shineStretch=1, shineWhite=.35)),
-        # Snow and slate (the mountains before card E6): white snow cover and dark slate interleaved,
-        # carved cracks, no sheen.
+                        knobs=dict(iceCrystal=1, iceCrest=.3, iceSoft=0, iceSnow=0, iceFall=0, iceApron=0, shineRock=0, shineRockRough=0, shineHeadroom=0, shineStretch=1, shineWhite=.35)),
+        # Snow and slate (the mountains before card E6): carved cracks, no sheen.
         'snow': dict(label='Snow and slate: cracked mountains',
-                     knobs=dict(iceSlate=0, mineralDetail=1, iceSoft=0, iceSnow=0, iceFall=0, iceApron=0, crackSeverity=.2, shadeBlue=0, reliefAmount=.5, reliefScale=28, reliefLumps=.7,
+                     knobs=dict(iceSoft=0, iceSnow=0, iceFall=0, iceApron=0, crackSeverity=.2, shadeBlue=0, reliefAmount=.5, reliefScale=28, reliefLumps=.7,
                                 lightCap=1.13, ambient=.42, shineWhite=.35, shineStretch=1, shineHeadroom=0,
                                 shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
         # Polar Range and Etorrep Glacier (dark steel-blue shaded faces on white
@@ -812,7 +740,7 @@ WORLD_VARIANTS = {
         # shaded flanks and long dark cracks, beside Painted Desert's broad
         # orange and cream mesas (repro window desert-2).
         'triad': dict(label='Desert Triad: gray buttes',
-                      knobs=dict(bedSpacing=4, faceDark=.4, banding=.9, crackSeverity=.5, crackMajor=.7,
+                      knobs=dict(banding=.9, crackSeverity=.5, crackMajor=.7,
                                  crackMinor=.15, crackBlocks=.15,
                                  # Card E8: retail's shaded flanks go black (desert-2's buttes: 1.0% of the window
                                  # under luma 25, 2.3% under 40; ours bottomed at 42 with ambient .3, 0% and
@@ -837,7 +765,7 @@ def apply_variant(config, biome, variant):
         return None
     out = copy.deepcopy(config)
     out['defaults'].update({k: str(x) for k, x in v.get('knobs', {}).items()})
-    # A variant's own knobs beat the world's engine preset (modern Green's rockAge over Green's).
+    # A variant's own knobs beat the world's engine preset.
     out['engineDefaults'] = {k: x for k, x in out.get('engineDefaults', {}).items() if k not in v.get('knobs', {})}
     if v.get('river'):
         # Swap in the world's river water (its material and water numbers, which name the river's two water materials).

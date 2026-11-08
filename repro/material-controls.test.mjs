@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {tablePlacementRows,groundCoverRows,groundCoverOn,recolorRGB,COVER_ROWS} from '../sculpt-material-model.js';
 const table=JSON.parse(fs.readFileSync(new URL('../materials/green.json',import.meta.url)));
-test('live placement defaults preserve the accepted material table exactly',()=>{
- const original=tablePlacementRows(table),live=tablePlacementRows(table,new URLSearchParams({faceEdge:'.8',gullyRock:'.5',rockOrder:'1'}));
- assert.deepEqual(live,original);
+test('the placement rows are the table\'s own: where rock shows off the rock face, six rows',()=>{
+ const q=table.placement,rows=tablePlacementRows(table);
+ assert.equal(rows.length,6);
+ assert.deepEqual(rows[0],[q.rock.slope,q.rock.formSlope,q.rock.convexity,q.rock.convexityRange]);
+ assert.deepEqual(rows[5],[q.route.from,q.route.to,0,0]);
+ assert.equal(q.face,undefined,'the face blend went with the rock face: the table has no face rows');
 });
 
 const cover={wet:[.25,.9],dry:.4,soil:{slope:[.6,1.6],convex:.5,deposit:.3},patch:22,moisture:{perSwath:.5,swathRef:.35,shade:.28},ground:[55,93,27],
@@ -48,11 +51,4 @@ test('flower colors retain species weights and coexist with density changes',()=
  assert.deepEqual(live[41],[.1,.2,.3,3]);assert.equal(live[39][3],.3);
  assert.deepEqual(live[40],[236/255,232/255,214/255,4]);
  assert.deepEqual(groundCoverRows(cover)[41],[1,214/255,64/255,3]);
-});
-test('placement edits change only intended table cells, including valid zero',()=>{
- const old=tablePlacementRows(table),live=tablePlacementRows(table,new URLSearchParams({faceEdge:'0',gullyRock:'1.5',rockOrder:'.4'})),base=0;
- assert.equal(live[base+6][2],0);assert.equal(live[base+9][0],1.5);assert.equal(live[base+9][1],.4);
- const changed=[];for(let r=0;r<old.length;r++)for(let c=0;c<4;c++)if(old[r][c]!==live[r][c])changed.push([r,c]);
- assert.deepEqual(changed,[[base+6,2],[base+9,0],[base+9,1]]);
- assert.deepEqual(tablePlacementRows(table,new URLSearchParams({faceEdge:'bad',faceSlope:'bad,1',faceScore:'1,2'})),old);
 });

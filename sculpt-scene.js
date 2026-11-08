@@ -106,8 +106,9 @@ export const CRATER_KEYS=['ejecta','buckling','secondaries','secondaryDistance']
 export const LANDFORM_KEYS=['stepReference','heightReference','elevation','combine','routeSmooth','wander','widthVary','heightVary','gullies','gullySize','talus','surf','varySize','varyFoot','varyMiddle'];
 // Painted masks (card C5): nine signed-byte planes per cell, where 0 changes
 // nothing: rock, snow or ice, wet ground and moss (0..127 of full), scatter
-// density, and four local style settings (stage 2: relief strength, cracks,
-// banding and face rock share, each -127..127 about the world's own value).
+// density, and three local style settings (stage 2: relief strength, cracks
+// and banding, each -127..127 about the world's own value); plane 8 (the face
+// rock share of the old face blend; choices 14 and 15) is no longer written.
 // 'paint' is the brush; a landform writes only its Local vegetation
 // (plane 16) into its own footprint.
 // Card E1 adds five more: the water choices of a deep or shallow stroke (plane 9,
@@ -123,7 +124,7 @@ export const LUMP_CHOICES=[[16,'Ground lumps'],[17,'Smoother ground']];
 // H3 override planes 14-17 (a signed value v multiplies the control it names by 1 + v; 0 changes nothing): erosion rate (H2's pass),
 // loose deposits (sand and scree), vegetation (grass and moss cover), rock exposure. Paint choices 18-25 write them.
 export const OVERRIDE_CHOICES=[[18,'Relaxation: more'],[19,'Relaxation: less'],[20,'Deposits: more'],[21,'Deposits: less'],[22,'Vegetation: more'],[23,'Vegetation: less'],[24,'Rock exposure: more'],[25,'Rock exposure: less']];
-export const STYLE_CHOICES=[...OVERRIDE_CHOICES,[8,'Relief stronger'],[9,'Relief weaker'],[10,'Cracks more'],[11,'Cracks fewer'],[12,'Banding more'],[13,'Banding less'],[14,'Face: more rock'],[15,'Face: less rock']];
+export const STYLE_CHOICES=[...OVERRIDE_CHOICES,[8,'Relief stronger'],[9,'Relief weaker'],[10,'Cracks more'],[11,'Cracks fewer'],[12,'Banding more'],[13,'Banding less']];
 export const COAST_KEYS=['shoreLayers','layerPx','layerRiser','layerLedge','layerRough','layerStyle',
   // E10: finger size; layer width variation; the circles of scalloped layers.
   'fingerSize','layerVary','layerCircle',

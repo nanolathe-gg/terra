@@ -8,7 +8,7 @@
 // with --chrome, which needs --server (your own sculpt.py server; there is no default).
 // --family impacts (H21): crater/rim/skin and regolith controls. Shape cards and top-level options win over query defaults;
 // only matching stroke kinds count. --scenes DIR supplies probe scenes (missing files fall back to repro/scenes).
-// --family fractures (H17): the crack, joint, gully, facet and block knobs. Each scene's own value is read as the page reads it (the query, then
+// --family fractures (H17): the crack knobs. Each scene's own value is read as the page reads it (the query, then
 // Green's engine preset, then the scene's variant, then the world's table, then the default), a scene where a knob already sits at its target is shown as `=`
 // and left out of the verdict, and the class is the slope blocks of measure/geology_diff.py (cracks and crack tone: slope at least .10; the structured face:
 // at least .50), not the raised class. A seeded base in DIR/base is reused (copy a main render of the 27 scenes there to skip the 27 renders).
@@ -26,16 +26,16 @@ const py = process.env.PYTHON || '/Users/daniel/src/terraform/.venv/bin/python';
 const here = new URL('..', import.meta.url).pathname;
 const sceneRoot = opt('--scenes', `${here}repro/scenes`);
 const scenePath = (world, n) => existsSync(`${sceneRoot}/${world}-${n}.json`) ? `${sceneRoot}/${world}-${n}.json` : `${here}repro/scenes/${world}-${n}.json`;
-// The geology families: bed*, band*, strata*, ring*, layer*, the lava layer controls, the cap and foot bands, the column, and the rock structure
-// they share a coordinate with (cliff*, joint*). The water-bed knobs (bedLit, bedTint, ...) are Water's, not geology.
-const FAMILY = /^(rockOrder|rockFrom|bed(Spacing|Vary|Dip|DipDir|Ledge|Height|Punch)|banding|band[A-Z]\w*|sandBanding|sandBandSpacing|strata\w*|ring\w*|layer\w*|shoreLayers|lava(Spread|CircleVary)|baseBand\w*|desertCapFlat|cliff\w*|joint\w*|column\w*|mineralDetail)$/;
+// The geology families: the column's tilt (bedDip*), band*, strata*, ring*, layer*, the lava layer controls, the cap and foot bands and the column.
+// The water-bed knobs (bedLit, bedTint, ...) are Water's, not geology.
+const FAMILY = /^(bed(Dip|DipDir)|banding|band[A-Z]\w*|sandBanding|sandBandSpacing|strata\w*|ring\w*|layer\w*|shoreLayers|lava(Spread|CircleVary)|baseBand\w*|desertCapFlat|column\w*)$/;
 // The class each family acts on (measure/geology_diff.py).
 const SHORES = /^(shoal\w*|shelf\w*|shallowDepth|deepDepth|waterSoft|crispShore|stepSoftPx|deepEdge|bed(Lit|Tint|Flat|Dots|DotCell|Relief|Contrast|Bright)|crackedStep|flatBank|bankRock|beachWidth|apron|sandCrown|shoreEdge|bandWater|fingers|finger[A-Z]\w*|shoreLayers|layer(Px|Riser|Ledge|Rough|Style|Vary|Circle|Crease)|lava(Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*|water(Deep|Bed))$/;
 const SHORE_CLASS = k => /^(shoal(Stairs|ShoreSoft)|crispShore|shoreEdge|shore)$/.test(k) ? 'edge' : /^(beachWidth|apron|sandCrown)$/.test(k) ? 'beach' : /^(flatBank|bankRock|layerCrease)$/.test(k) ? 'bank'
   : /^(fingers|finger[A-Z]\w*|shoreLayers|layer[A-Z]\w*|lava(Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*)$/.test(k) ? 'shore' : 'shallows';
 const IMPACTS = /^(moon\w*|pock\w*|crystalCrater\w*|worms|wrinkles|slopeMarks)$/;
 const IMPACT_CLASS = k => /^(worms|wrinkles|slopeMarks|moon(Ribs|RibDepth|RibDark|Cups|CupSize|CupDepth))$/.test(k) ? 'slope' : /^moonFold/.test(k) ? 'fold' : 'impact';
-const CLASS = k => bodies ? BODY_CLASS(k) : impacts ? IMPACT_CLASS(k) : shores ? SHORE_CLASS(k) : fractures ? (/^(crack|ribTilt)/.test(k) ? 'slope' : 'face') : /^(ring|mineral)/.test(k) ? 'halo' : /^(layer|shoreLayers|lava)/.test(k) ? 'bank' : 'raised';
+const CLASS = k => bodies ? BODY_CLASS(k) : impacts ? IMPACT_CLASS(k) : shores ? SHORE_CLASS(k) : fractures ? (/^crack/.test(k) ? 'slope' : 'face') : /^ring/.test(k) ? 'halo' : /^(layer|shoreLayers|lava)/.test(k) ? 'bank' : 'raised';
 // Card units of the stroke options (sculpt-scene.js SHAPE_FIELDS' last scale): a stroke that carries its own value is moved with the world's.
 const CARD_SCALE = {fingers: 100, fingerSize: 100, shorePlates: 1, plateWaterPx: 1, plateLandPx: 1, plateSize: 1, plateGap: 10, plateHeight: 10, plateMaterial: 1,
   crystalShoreSeam: 100, waterDeep: 1, waterBed: 1, shoreLayers: 1, layerPx: 1, layerCircle: 1, layerStyle: 1, layerRiser: 10, layerLedge: 100, layerRough: 100, layerVary: 100, layerJag: 1, lavaSpread: 100, lavaCircleVary: 100};
@@ -47,7 +47,7 @@ const impactFields = Object.fromEntries([...readFileSync(`${here}sculpt-scene.js
 const impactStroke = (knob, st) => impactFields[knob].kinds.includes(st[0]);
 for (const [k, f] of Object.entries(impactFields)) CARD_SCALE[k] = f.scale;
 const family = opt('--family', 'geology');
-const FRACTURES = /^(crack(Severity|Spacing|Major|Minor|Hairline|Blocks|Width|Network|Dark)|groove(Spacing|Angle|Run)|gully(Depth|Width|Shade)|ribTilt|rock(Scale|Age)|rockOpen|hillBlocks)$/;
+const FRACTURES = /^crack(Severity|Spacing|Major|Minor|Hairline|Blocks|Width|Network|Dark)$/;
 const BODIES = /^(crystal[A-Z]\w*|ice[A-Z]\w*|frost[A-Z]\w*|lava(Calm|Chip|Crust|Dusk|Pillow|Veins))$/;
 const BODY_CLASS = k => /^crystalCrater/.test(k) ? 'crater' : /^crystalShallow/.test(k) ? 'shallows' : /^(crystalShore|crystalSeam|frost|iceFrost)/.test(k) ? 'shore' : 'raised';
 // The stroke kinds that carry each shape option (sculpt-scene.js SHAPE_FIELDS), and the scale of the card's unit.

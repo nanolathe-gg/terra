@@ -1,6 +1,6 @@
 // Cards H3 and H14: materials/<world>.json as the rows engine-materials.wgsl reads (see its header for the layout).
 export const MM_ROWS = 63;
-// The first placement row of the draw's uniform table (engine-frag.wgsl MM_PLACE, engine-common.wgsl materialTable): ten rows after it.
+// The first placement row of the draw's uniform table (engine-frag.wgsl MM_PLACE, engine-common.wgsl materialTable): six rows after it.
 export const PLACEMENT_ROW = 156;
 // The rows after them: a world's ground-cover table (engine-frag.wgsl MM_COVER), 4 + 5 * 7 of them, the plants' row and the four flower palette rows. A table without `groundCover` gives zeros: the feature is off.
 export const COVER_ROWS = 44;
@@ -36,22 +36,11 @@ function litRows(lit) {
     [x('seamWidth'), x('seamDepth'), x('veinWidth'), x('veinSpacing')], [rgb[0], rgb[1], rgb[2], x('veinShare')], [x('warp'), x('cone'), x('seamVary'), x('seamGap')],
     [x('cellVary'), x('streakBand'), x('skew'), x('strokeCore')], [x('strokeSize'), x('strokeShare'), x('strokeRadius'), x('strokeDepth')]];
 }
-// A table with a `placement` block (Green's) gives the draw's ten placement rows; the shared artist controls override them, never the
-// measured material statistics. Without overrides this remains the original table.
-export function tablePlacementRows(table, overrides = null) {
-  const q = table.placement, r = q.rock, s = q.soil, f = q.face;
-  const rows = [[r.slope, r.formSlope, r.convexity, r.convexityRange], [r.noiseG, r.noiseR, r.weather, r.tap], [r.start, r.full, 0, 0],
-    [s.slopeGate, s.heightGate, s.fadeFrom, s.fadeTo], [q.lowBank.from, q.lowBank.to, 0, 0], [q.route.from, q.route.to, 0, 0],
-    [f.slopeFrom, f.slopeTo, f.edgeNoise, 0], [f.shareFrom, f.shareTo, 0, 0], [f.roughness, f.lumpTop, f.fineNoise, f.broadNoise],
-    [f.gully, f.order, f.paintedRock, 0]];
-  const scalar=(key,row,col)=>{const value=Number(overrides?.get(key));if(overrides?.has(key)&&Number.isFinite(value))rows[row][col]=value;};
-  scalar('faceEdge',6,2);scalar('gullyRock',9,0);scalar('rockOrder',9,1);
-  for(const [key,row] of [['faceSlope',6],['rockShare',7],['faceScore',8]]){
-    if(!overrides?.has(key))continue;
-    const values=String(overrides.get(key)).split(',').map(Number),count=key==='faceScore'?4:2;
-    if(values.length===count&&values.every(Number.isFinite))values.forEach((v,i)=>rows[row][i]=v);
-  }
-  return rows;
+// A table with a `placement` block (Green's) gives the draw's six placement rows: where rock shows off the rock face (engine-frag.wgsl landPlace).
+export function tablePlacementRows(table) {
+  const q = table.placement, r = q.rock, s = q.soil;
+  return [[r.slope, r.formSlope, r.convexity, r.convexityRange], [r.noiseG, r.noiseR, r.weather, r.tap], [r.start, r.full, 0, 0],
+    [s.slopeGate, s.heightGate, s.fadeFrom, s.fadeTo], [q.lowBank.from, q.lowBank.to, 0, 0], [q.route.from, q.route.to, 0, 0]];
 }
 
 // Card P30: a world's ground cover is on where its table has Vegetation cover above 0 (every world has a table; sculpt.py DEFAULT_GROUND_COVER).
@@ -93,22 +82,3 @@ export function groundCoverRows(cover, overrides = null, colors = {}, ground = [
   (cover.plants?.flowers?.palette ?? []).slice(0, 4).forEach((k, i) => { rows[40 + i] = [...(colors['flower'+(i+1)] ?? rgb(k.slice(0,3))), k[3]]; });
   return rows;
 }
-
-// Card P10: the rock model's named types (the World panel's Rock type). 0 is the world's own (its table's `material.rock`: Green's small facets,
-// Painted Desert's and Red's deeper joint lines; most worlds have none, so no blocks); each type is only numbers for the model's uniforms
-// (engine-bake.wgsl rockModel), and a number a type leaves out takes the model's default. Granite is modern Green's (card P10: calm blocks of 22 px,
-// open crevices, ledge stains and lichen, no joint lines). Sandstone: long slabs that part along the beds, cut by joint lines, with varnish
-// curtains under each ledge. Basalt: small, regular columns taller than wide, tightly jointed and chipped, with deep joint lines.
-export const ROCK_TYPES = [
-  {name: 'Granite', rock: {size: 22, aspect: 1.6, jitter: .9, open: .5, bedOpen: .15, terr: 0, vary: .25, crev: 1.2, crevW: 1.0, chip: .12, chipSize: 4, grit: .3, joint: 0, seam: 1.6, curtain: .6, lichen: 1.5}},
-  {name: 'Sandstone', rock: {size: 30, aspect: 3, jitter: .6, open: .35, bedOpen: .7, terr: .3, vary: .2, crev: 1, crevW: 1.3, chip: .05, chipSize: 6, grit: .45, joint: 1.5, seam: 1.2, curtain: 1, lichen: .3}},
-  {name: 'Basalt', rock: {size: 12, aspect: .5, jitter: .35, open: .8, bedOpen: .05, terr: 0, vary: .45, crev: 1.6, crevW: .9, chip: .25, chipSize: 3, grit: .2, joint: 2, seam: 2, curtain: .2, lichen: .6}},
-];
-// The rock numbers a world draws with: its Rock type's, or with 0 its own table's (`material`; none: the model's defaults, no blocks).
-export function rockPreset(material, variant) {
-  const t = Math.round(Number(variant?.get?.('rockType')) || 0);
-  return ROCK_TYPES[t - 1]?.rock || material?.rock || {};
-}
-// What a rock's numbers cut, for the World panel's reasons: blocks (rockCells: Block size and Age shape them), joint lines (rockJoint, their depth:
-// the model's 2 where the numbers set none; Open joints scales it), ledge stains (rockCurtains: Stain darkens them) and lichen (rockLichen: it grows with Age).
-export const rockFacts = rock => ({rockCells: rock.size > 0 ? 1 : 0, rockJoint: rock.joint ?? 2, rockCurtains: rock.curtain > 0 ? 1 : 0, rockLichen: rock.lichen > 0 ? 1 : 0});
