@@ -227,9 +227,11 @@ WORLD_KNOBS = {
     # Crack darkness calibrated on retail (measure/crack_lines.py, strong
     # and long line densities on slopes): Green's lines were ~2.5x retail's.
     # crackDark also darkens band lines, so the band row's line strength (materials/green.json) keeps their darkness.
+    # Green dive: the rock face now takes the cracks on its slopes, and what is left reads as pale lips with no floor at .4 (.3 on Evad
+    # River); retail's are dark slashes with a grey lip, so Green and Evad River are back at the default .75.
     # Card P16: the Scree slider's talus chips (3-5 px, a few % of the cliff feet's ground) as Supply and Size.
     # Retail round 2: shores drop to the sea more abruptly (retail's shore band 32-45 px; base 51-72). Modern keeps 1.
-    'green': dict(coastRamp=.75, looseSupply=.08, looseSize=3.5, banding=0, crackDark=.4, wetSwath=.35,   # Moisture (a panel row, card P30); the Time pass's wet swaths and modern Green's ground cover read it
+    'green': dict(coastRamp=.75, looseSupply=.08, looseSize=3.5, banding=0, crackDark=.75, wetSwath=.35,   # Moisture (a panel row, card P30); the Time pass's wet swaths and modern Green's ground cover read it
                   # Repro round (3 windows, 12-map census, measure by slope
                   # and facing): faces keep fall-line ribs much more than
                   # any retail map.
@@ -644,7 +646,7 @@ WORLD_VARIANTS = {
         # Thin dark lines per pixel in green-1 / green-3: retail .0559 / .0449,
         # smooth variant .0445 / .0425, this .0547 / .0504.
         'evad': dict(label='Evad River: broken slopes',
-                     knobs=dict(banding=0, faceLayers=.2, faceStreak=0, crackSeverity=.45, crackBlocks=.3, crackDark=.3,
+                     knobs=dict(banding=0, faceLayers=.2, faceStreak=0, crackSeverity=.45, crackBlocks=.3, crackDark=.75,
                                 # Green dive (owner: cracks too thick, dark lines not thin relief): retail's hill cracks are few, long and thin, with a
                                 # light lip: fewer minor cracks, no hairlines, majors 80 px apart, .8 px wide and fewer, closer to plates than to rills
                                 # (the fall-line rills read as grey streaks), lighter floors, almost no band dashes (banding .35 -> .05).
