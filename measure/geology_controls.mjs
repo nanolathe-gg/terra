@@ -15,6 +15,7 @@
 // Writes DIR/geology-controls.json and prints one row per (world, knob). Python is $PYTHON (default the main checkout's venv). Exit 1 on a console error.
 import {execFileSync} from 'node:child_process';
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {KNOBS} from '../sculpt-knobs.js';
 const args = process.argv.slice(2), opt = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
 const chrome = args.includes('--chrome'), server = opt('--server', ''), port = opt('--port', '9685'), out = opt('--out', 'geology-controls');
 if (chrome && !server) { console.error('geology_controls.mjs: --chrome needs --server http://127.0.0.1:<port> of your own sculpt.py server (there is no default server).'); process.exit(2); }
@@ -117,6 +118,7 @@ for (const s of fractures ? [] : CARD_ONLY) if ((!only.length || only.includes(s
 if (args.includes('--list')) { for (const s of states) console.log(s.world.padEnd(12), s.knob.padEnd(16), String(s.from).padStart(20), '->', s.to, s.cls); console.log(states.length, 'states'); process.exit(0); }   // --list: the states, no renders
 mkdirSync(out, {recursive: true});
 const logs = [];
+const WORLD_ROWS = new Set(KNOBS.flatMap(([, list]) => list.map(k => k[0])));
 // One world's three scenes into dir, with the query and, optionally, an edit of every stroke card that carries the key.
 function render(world, dir, query, edit) {
   for (const n of [1, 2, 3]) {
@@ -149,7 +151,8 @@ for (const s of states) {
   const id = `${s.world}.${s.knob}`;
   const scale = s.card ? 1 : bodies ? BODY_SCALE[s.knob] : CARD_SCALE[s.knob];
   if (s.card) render(s.world, `${out}/${id}`, '', {knob: s.knob, value: s.to});
-  else render(s.world, `${out}/${id}`, `${s.knob}=${encodeURIComponent(s.to)}`, scale ? {knob: s.knob, value: Number(s.to) * scale} : null);
+  // A stroke option that is not also a World row is never a page setting: render.mjs refuses it in --query, so only its cards carry it.
+  else render(s.world, `${out}/${id}`, scale && !WORLD_ROWS.has(s.knob) ? '' : `${s.knob}=${encodeURIComponent(s.to)}`, scale ? {knob: s.knob, value: Number(s.to) * scale} : null);
   const r = JSON.parse(execFileSync(py, [`${here}measure/geology_diff.py`, `${out}/base`, `${out}/${id}`, s.world, s.cls]).toString());
   const row = {...s, ...r, acts: Math.max(...r.class_changed.map((x, i) => s.applies && !s.applies[i] ? 0 : x ?? 0)) >= .05};
   rows.push(row);
