@@ -22,18 +22,6 @@ fn grainPixel(pixel: vec2f) -> vec2f {
 #endif
 }
 
-// Material textures are read at one texel per pixel step: GLSL's
-// texture(t, pixel / D) had implicit derivatives of exactly 1 / D per
-// pixel. Explicit gradients select the same level and filter, and are legal
-// in non-uniform control flow, where WGSL's textureSample is not.
-// H7b: a drawn pixel covers materialFoot final pixels (1 at final), so the gradients pick the coarser level of a quarter draw.
-fn pixelSample(t: texture_2d<f32>, s: sampler, pixel: vec2f, scale: vec2f) -> vec4f {
-    return textureSampleGrad(t, s, pixel / scale, vec2f(u.materialFoot / scale.x, 0.0), vec2f(0.0, u.materialFoot / scale.y));
-}
-fn pixelSampleLayer(t: texture_2d_array<f32>, s: sampler, pixel: vec2f, scale: vec2f, layer: i32) -> vec4f {
-    return textureSampleGrad(t, s, pixel / scale, layer, vec2f(u.materialFoot / scale.x, 0.0), vec2f(0.0, u.materialFoot / scale.y));
-}
-
 // Move a texture to a new base colour, keeping its grain.
 fn based(c: vec3f, mean: vec3f, base: vec4f) -> vec3f { return select(c, saturate(c - mean + base.rgb), base.a > 0.5); }
 // Ground pattern: its grain scaled about its mean, then moved to the base.
@@ -1619,7 +1607,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Open lit level ground keeps its brightness under any light colour (the tint is divided by its luma), so a colour changes hue and the
     // light-to-shade balance and never the exposure; white on both is exactly 1.
     let flatTintLuma = 1.0 + dot((u.ambient * (u.skyColor - 1.0) + 0.95 * u.light.z * (u.sunColor - 1.0)) / flatLight, vec3f(0.2126, 0.7152, 0.0722));
-    if (u.separateLight != 0) {
+    {
         // Cast shadows attenuate the direct sun. The ambient term already
         // receives local occlusion, so shadowing it again buries dark faces.
         let direct = max(0.0, dot(normal, u.light));
@@ -1636,10 +1624,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let sunShare = 0.95 * direct * castShadow * (1.0 - 0.45 * cav);
         shading = min((skyShare + sunShare) / flatLight, u.lightCap) * occluded;
         // The share of the light that is sky takes the sky's colour and the share that is sun the sun's; white on both is exactly 1.
-        lightTint = 1.0 + (skyShare * (u.skyColor - 1.0) + sunShare * (u.sunColor - 1.0)) / max(skyShare + sunShare, 0.0001);
-    } else {
-        let skyShare = u.ambient;
-        let sunShare = 0.95 * max(0.0, dot(normal, u.light)) * shadow;
         lightTint = 1.0 + (skyShare * (u.skyColor - 1.0) + sunShare * (u.sunColor - 1.0)) / max(skyShare + sunShare, 0.0001);
     }
     lightTint /= max(flatTintLuma, 0.05);
@@ -1784,10 +1768,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let brightGrass = saturate(based(grassImage(pixel), u.groundTexMean, u.groundBase) * vec3f(1.15, 1.35, 1.05));
         material = mix(material, brightGrass, rim * u.footRim * (1.0 - route));
         exposed = max(exposed * (1.0 - face), rockMask * face);
-        // Thin dark crevices in the relief's hollows, also across mid slopes
-        // where the face material has not taken over.
-        let hollow = smoothstep(0.25, 0.9, -top) * smoothstep(u.faceSlope.x * 0.4, u.faceSlope.x, faceSlope);
-        material *= 1.0 - u.crevice * hollow * (1.0 - route);
     }
     // H4 round 2, rockMoss: moss and grass flecks on exposed rock, a dash of 2 px to small clumps. Retail's face carries them in its
     // crevices and on the tops of its ledges and blocks (green share of the face 12%, ours 2%). The chance of a fleck grows with the
@@ -1891,8 +1871,19 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let sand = bakedFields(p).a * place.deposits;
         if (sand > 0.0) {
             // Weathered rock and its grains (sandMaterialAt): a biome's sand follows its own rock.
-            let weathered = sandWeathered();
-            let sandMaterial = sandMaterialAt(scatter);
+            var weathered = sandWeathered();
+            var sandMaterial = sandMaterialAt(scatter);
+            // riverfix: where a braided river's bed lies (mask plane 19) the sand is its gravel and silt instead, the world's river-bed colour (or its rock's,
+            // darkened) with the sand's grain and a mottle of pebble-sized flecks; the pebbles themselves are the loose-stone scatter the bed paints denser.
+            let bed = max(textureSampleLevel(masksTex, linearClamp, maskUv(p), 4, 0.0).a, 0.0);
+            if (bed > 0.0) {
+                let tone = select(u.rockTexMean * vec3f(0.78, 0.74, 0.68), u.riverBed.rgb, u.riverBed.a > 0.5);
+                let fleck = valueNoise(pixel / 1.4 + 7.0) * 0.5 + valueNoise(pixel / 2.9 + 41.0) * 0.3 + valueNoise(pixel / 9.0 + 3.0) * 0.2;
+                let gravel = saturate(tone * (1.0 + 0.22 * fleck));
+                let on = min(bed * 8.0, 1.0);   // any bed at all: its edges keep the sand cover's own scatter, not a blend toward the world's sand
+                weathered = mix(weathered, tone, on);
+                sandMaterial = mix(sandMaterial, gravel, on);
+            }
             // Three stages, so sand thins into the ground over tens of
             // pixels: fines tint what is there, then grains appear between
             // grass blades (a per-pixel threshold against fine noise), then
@@ -2184,7 +2175,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             }
             colorDepth = mix(depth, sum / 8.0, 0.75);
         }
-        if (u.coastalDetail != 0) { colorDepth += ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, depth); }
+        colorDepth += ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, depth);
         // Optional contour rings in the water colour, every 6 depth units.
         if (u.bandWater > 0.0) { colorDepth = mix(colorDepth, (floor(colorDepth / 6.0) + 0.5) * 6.0, u.bandWater * 0.7); }
         // A deep or shallow stroke's water choices (card E1), painted into the

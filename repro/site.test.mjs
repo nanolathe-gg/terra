@@ -46,3 +46,7 @@ test('the page and its modules fetch by relative paths', () => {
     assert.ok(!/(?:src|href)="\//.test(text), `${file} links an absolute path`);
   }
 });
+
+test('the diagnostic view ships its reference classifier and presentation module', () => {
+  for (const name of ['sculpt-passability.js', 'sculpt-passability-view.js']) assert.ok(existsSync(join(folder, name)), name);
+});

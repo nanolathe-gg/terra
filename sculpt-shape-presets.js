@@ -31,11 +31,8 @@ export const sampleKnots = knots => { const f = knotCurve(knots); return Array.f
 // ---- forms: short functions of softness that return knots ----
 const at = (f, xs) => xs.map(x => [x, f(x)]);
 const even = n => Array.from({length: n + 1}, (_, i) => i / n);
-const ridge = m => t => t <= 0 ? 0 : (1 - (1 - t) ** 2) ** m;
 const SMOOTH = at(sm, even(48));
 export const FORMS = {
-  // A crater's spurs: (1 - (1 - t)^2)^m, m 3.5 at softness .5 and 5.9 at 0, dense near the foot where the power law bends.
-  mountain: s => ({knots: at(ridge(3.5 * 2 ** ((.5 - s) * 1.5)), even(48))}),
   // Reset ground and the cover brushes: a smoothstep over the face.
   plateau: () => ({knots: SMOOTH}),
   // Desert's mesa: a concave apron (a share of the face), then a smoothstep face to the flat cap.
@@ -51,6 +48,11 @@ export const FORMS = {
   lfTerraced: () => ({knots: [[0, 0], [.08, 0], [.2, .3], [.34, .3], [.46, .62], [.6, .62], [.72, 1], [1, 1]]}),
   // The reviewed shore (landform-shores retail windows): a smoothstep over the outer 90% of the half width, level at the path.
   lfShore: () => ({knots: [...even(24).map(x => [Math.round(900 * x) / 1000, Math.round(1000 * sm(x)) / 1000]), [1, 1]]}),
+  // Shallow water's shelf: a level bed over the inner 45% of the half width, so water drawn shallow is shallow enough to wade across its width (retail
+  // fords are level beds 7-11 deep: docs/PASSABILITY.md), and a bank that eases in (distance share ^ 1.4) over the outer 55%. At the default 200 px, a
+  // ford over a deep bed keeps five 16 px cells at most 12 deep, and a pool flattened 31 units into Green's plain keeps every dry cell within a vehicle's
+  // slope of 15 (14.7 at worst on an ideal lattice; repro/knots.test.mjs). The shore's smoothstep reached its depth only at the path.
+  lfShelf: () => ({knots: [...even(8).map(x => [Math.round(550 * x) / 1000, Math.round(1000 * x ** 1.4) / 1000]), [1, 1]]}),
   // The valleys (cut-to landforms: the ground falls from the foot, 0, to the floor on the path, 1). V: the rise above the floor is linear in the distance (a river's
   // walls stand at one slope); U: the rise is the distance squared (a glacier's trough: a flat floor and steep upper walls). A terraced valley is the V with steps.
   lfValleyV: () => ({knots: [[0, 0], [1, 1]]}),
@@ -62,14 +64,21 @@ export const FORMS = {
   lfBraided: () => ({knots: [[0, 0], [.15, .06], [.3, .3], [.42, .75], [.5, 1], [1, 1]]}),
   // A ramp's travel strip: a level center, rounded shoulders.
   lfRamp: () => ({knots: [[0, 0], [.2, .1], [.45, .7], [.6, 1], [1, 1]]}),
+  // lfcrater: a crater, a signed section dug into the ground it lands on (Height reference Ground, Flatten to): the outer flank rises from the foot to a rim
+  // .42 of the depth above the ground at .4 of the half width (1.1 rim radii, the foot at 1.8), the wall falls past the ground at .53 to the floor, flat from .93.
+  // Measured from retail Moon's 80-120 px craters (16-px heights: rim .32-.43 of the depth, flank down by 1.4-1.8 rim radii); Red's and Crystal's carry no rim.
+  lfCrater: () => ({knots: [[0, 0], [.12, -.06], [.26, -.16], [.36, -.36], [.4, -.42], [.46, -.3], [.53, -.06], [.7, .4], [.84, .8], [.93, .97], [1, 1]]}),
+  // A crystal cluster: shards stand nearly as high from the foot in as at the center (the old cluster's falloff, each shard 1 - .45 x its distance share lower toward the rim).
+  lfCrystal: () => ({knots: [[0, 0], [.03, .55], [1, 1]]}),
 };
 // A landform's presets: its own four, and main's mesa and cliff where they fit.
-export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff'], ['lfShore', 'Shore'], ['lfRamp', 'Ramp'], ['lfValleyV', 'Valley V'], ['lfValleyU', 'Valley U'], ['lfRiver', 'River'], ['lfBraided', 'Braided river']];
-// The palette entry a landform's section form belongs to (the Tool preset menu restyles a selected landform as that entry); a shore is deep water when it cuts.
-export const landformTool = p => ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow', lfValleyU: 'valleyU', lfRiver: 'river', lfBraided: 'braided',
+export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff'], ['lfShore', 'Shore'], ['lfShelf', 'Shelf'], ['lfRamp', 'Ramp'], ['lfValleyV', 'Valley V'], ['lfValleyU', 'Valley U'], ['lfRiver', 'River'], ['lfBraided', 'Braided river'], ['lfCrater', 'Crater'], ['lfCrystal', 'Crystal cluster']];
+// The palette entry a landform belongs to (the brush title, the Tool preset menu's restyle and Draw new): the button whose preset draws its section form, and
+// nothing else (Facets, impact features or Height reference never change it: a faceted hill is a Hill); a shore is deep water when it cuts.
+export const landformTool = p => ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow', lfShelf: 'shallow', lfValleyU: 'valleyU', lfRiver: 'river', lfBraided: 'braided', lfCrater: 'crater', lfCrystal: 'crystal',
   lfValleyV: Math.round(p?.terraces || 0) > 0 ? 'valleyT' : 'valleyV'})[p?.curve?.form] ?? 'plateau';
 // The form a kind draws by default (only a landform's section is edited).
-export const defaultForm = kind => kind === 'spurs' ? 'mountain' : kind === 'landform' ? 'lfPlateau' : 'plateau';
+export const defaultForm = kind => kind === 'landform' ? 'lfPlateau' : 'plateau';
 
 // Lean and facing. Lean is the back's length over the face's: the slope toward the lean side runs `ratio` times the length of the other (0: the kind's own,
 // which for Reset ground and the cover brushes is 1.7: the face widened .7 * .32 north^2 on the side toward north).
@@ -106,7 +115,7 @@ export function strokeKnots(kind, q) {
 // The front table (and the back one where the shape needs a second curve) of a stroke, with the uniforms its curve adds, or null for a kind with no
 // cross-section. lip: the table leaves 0..1 (a land lip above 1, a water lip below 0), which the shader then keeps instead of clamping.
 export function strokeCurve(kind, q) {
-  if (!['paint', 'erase', 'sand', 'grass', 'smooth', 'spurs', 'landform'].includes(kind)) return null;
+  if (!['paint', 'erase', 'sand', 'grass', 'smooth', 'landform'].includes(kind)) return null;
   const k = strokeKnots(kind, q), out = {front: sampleKnots(k.knots), u: {}};
   // A landform always has a back: the front's own until the sides are unlinked.
   const back = kind === 'landform' ? k.back ?? k.knots : k.back;
@@ -127,11 +136,68 @@ export function landformBackSide(lean, turn, dx, dy) {
   return lean.side || ((dy * bx - dx * by) < 0 ? -1 : 1);
 }
 // H27: the most a cell can stand from a landform's path and still be on it (world px; `scale` is the frame's), over the widest side grown by the width
-// variation at its largest weight, the wander, and the spurs. The segment boxes and nodeBounds both use it.
-export function landformReach(q, scale = 1, widthMul = 1) {
+// variation at its largest weight, the wander, and the spurs. The segment boxes (stamp: the ejecta, not the secondaries, which are nodes of their own) and nodeBounds (all of it) both use it.
+export function landformReach(q, scale = 1, widthMul = 1, stamp = false) {
   const {front, back} = landformSides(q), weight = Math.max(q.varyFoot ?? 1, q.varyMiddle ?? 1);
-  return Math.max(front, back) * widthMul * Math.exp(1.35 * (q.widthVary || 0) * weight) + (isRiver(q) ? 0 : (q.wander || 0) * scale * weight) + 2 + (talusOn(q) ? clamp(q.talus, 0, 400) : 0);
+  return Math.max(front, back) * widthMul * Math.exp(1.35 * (q.widthVary || 0) * weight) + (isRiver(q) ? 0 : (q.wander || 0) * scale * weight) + 2 + (talusOn(q) ? clamp(q.talus, 0, 400) : 0) + (stamp ? ejectaReach(q) : impactReach(q)) * widthMul;
 }
+
+// ---- lfcrater: the impact features (Ejecta, Buckling, Secondaries) and the impact the drawn path describes ----
+// Ejecta and secondaries are landform features: any landform throws them (a crater's bowl, a mound's foot). A stroke that throws them reads its path as the
+// projectile's: the direction from the path's start to its end is downrange, and the drag's length L against the diameter D sets the impact angle,
+// tan(angle) = tan(12 deg) D / L. A click is a vertical impact; a drag of a fifth of the diameter is 47 deg, where the ejecta begin to gather downrange
+// (Herrick and Forsberg-Taylor 2003, the Moon: asymmetric below about 45 deg); two fifths is 28 deg, where an uprange forbidden zone opens (theirs:
+// about 25 deg); a drag as long as the diameter is 12 deg, where the ejecta take a butterfly pattern (theirs: fly-wing below about 10 deg; Gault and
+// Wedekind 1978: craters round above about 20 deg, forbidden zone and butterfly at grazing angles). The path's end is where the projectile came to rest:
+// the shape lands there whole, as a click of it (impactPoint), and the ejecta, secondaries and spurs spread round it; the drawn path before it is the
+// approach, a groove of the same section that the along curve scales (impactEnd).
+export const IMPACT_TAN = Math.tan(12 * Math.PI / 180);
+// lfimpact2: Buckling, the ground raised in broken rings beyond the rim, is an impact feature of a landform that digs into the ground it lands on (a crater's
+// bowl); the panel shows its row there only (sculpt-control-schema.js), and the engine draws it there only.
+export const bucklingOn = q => (q?.buckling || 0) > 0 && landformDigs(q);
+export const impactOn = q => (q?.ejecta || 0) > 0 || Math.round(q?.secondaries || 0) >= 1 || bucklingOn(q);
+const pathLength = path => { let L = 0; for (let k = 1; k < path.length; k++) L += Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y); return L; };
+// The impact a drawn path describes: the downrange unit vector (0, 0 for a click), the drag length and the angle from the horizontal (degrees).
+export function impactSetup(q, path) {
+  const D = 2 * (q.radius || 1), L = path.length > 1 ? pathLength(path) : 0, a = path[0], b = path[path.length - 1], cl = Math.hypot(b.x - a.x, b.y - a.y);
+  if (L < .5 || cl < .5) return {dx: 0, dy: 0, L: 0, D, angle: 90};
+  return {dx: (b.x - a.x) / cl, dy: (b.y - a.y) / cl, L, D, angle: Math.atan(IMPACT_TAN * D / L) * 180 / Math.PI};
+}
+// Where the impact lands: the drawn path's end.
+export const impactPoint = path => path[path.length - 1];
+// The approach before the impact is the drawn path swept as a groove whose width follows its depth: at each place the shape scaled by the along curve's value
+// there over its value at the end (this, at least .05), so every place along it is the impact's own shape at that scale. The Crater preset's along curve,
+// rising from the drag's start to its end, cuts a scar that deepens and widens into the crater; an edited curve reshapes it.
+export const impactEnd = q => Math.max(readTable(sampleKnots(alongKnots(q)), 1), .05);
+const sstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+// How the ejecta and the secondaries spread round the impact at angle (degrees), as weights of the azimuth from downrange: the downrange share of the
+// blanket (asym), the uprange forbidden zone's half angle (fz, radians), the butterfly's cross-range wings (wing) and its downrange gap (dz, radians).
+export function impactSpread(angle) {
+  return {asym: sstep(45, 25, angle), fz: Math.PI / 3 * sstep(28, 10, angle), wing: sstep(14, 6, angle), dz: Math.PI / 4 * sstep(11, 4, angle)};
+}
+// The weight at azimuth phi (radians from downrange); the shader's lfCraterSpread is the same arithmetic.
+export function impactWeight(sp, phi) {
+  const c = Math.cos(phi), up = Math.PI - Math.abs(Math.atan2(Math.sin(phi), c)), down = Math.abs(Math.atan2(Math.sin(phi), c));
+  const base = (1 + .85 * sp.asym * c) * (1 - sp.wing) + sp.wing * Math.pow(Math.abs(Math.sin(phi)), 1.5);
+  return base * (sp.fz > 0 ? sstep(.6 * sp.fz, 1.4 * sp.fz, up) : 1) * (sp.dz > 0 ? sstep(.6 * sp.dz, 1.4 * sp.dz, down) : 1);
+}
+// Where a section stands highest: its share of the half width from the foot (0) to the path (1), on the side the shape rises (a crater's rim, below 0
+// for a cut; a mound's path). Ejecta start there, or at the foot of a section that peaks on its path.
+export function landformPeak(q) {
+  const knots = strokeKnots('landform', q).knots, up = Math.round(q.heightReference || 0) === 2 ? Math.sign(q.elevation || 0) || 1 : 1;
+  const sign = Math.round(q.combine || 0) === 1 || (Math.round(q.heightReference || 0) === 2 && q.elevation < 0) ? -1 : up;
+  const tab = sampleKnots(knots); let best = -Infinity, at = 1;
+  for (let j = 1; j <= CV_N + 1; j++) { const v = sign * tab[j]; if (v > best + 1e-6) { best = v; at = (j - 1) / CV_N; } }
+  return at >= .9 ? 0 : at;
+}
+// lfimpact2: the secondaries fall from this many rim radii out (Secondaries' distance) to twice as far; 1.6 before the row.
+export const secondaryNear = q => clamp(q?.secondaryDistance ?? 1.6, .8, 4);
+// How far past the footprint the impact features reach (px): the secondaries and their chains (3.25 x Secondaries' distance peak distances from the path: 5.2 at
+// 1.6, past the farthest chain's 3.12; a quarter of the width for their own size) and the ejecta's ragged edge (2.6).
+// The stroke's own stamp reaches only its ejecta and buckling (2.6 peak distances from the path: lfCraterEjecta): the secondaries are nodes of their own, with their own boxes.
+export const ejectaReach = q => { if (!((q?.ejecta || 0) > 0) && !bucklingOn(q)) return 0; const {front, back} = landformSides(q), W = Math.max(front, back), pk = landformPeak(q), share = pk > 0 ? 1 - pk : 1; return W * Math.max(0, 2.6 * share - 1); };
+export const impactReach = q => { if (!impactOn(q)) return 0; const {front, back} = landformSides(q), W = Math.max(front, back), pk = landformPeak(q), share = pk > 0 ? 1 - pk : 1; return W * Math.max(0, Math.max(2.6, 3.25 * secondaryNear(q)) * share + .25 - 1); };
+
 // P17: a landform lays talus cones where it raises ground and Gullies cut its faces (the cones' chutes are the gullies' widest valleys).
 export const talusOn = q => (q.talus || 0) > 0 && (q.gullies || 0) > 0 && !(q.combine > 0);
 // The along-the-path knots a landform carries (the elevation's share along the path, 0 to 1.2), flat at 1 until edited.
@@ -158,6 +224,14 @@ export function sectionPreview(kind, q, n = 160) {
 // Resolve the authored height only at evaluation/preview time, so the same
 // sea-relative stroke follows the map's sea level without rewriting its recipe.
 export const landformElevation = (q, sea) => q.elevation + (Math.round(q.heightReference || 0) === 1 ? sea : 0);
+// lfcrater: Height reference Ground (2) makes the elevation an offset from the ground under each cell, so a shape follows the ground it lands on (a crater
+// on a slope, a levee beside a channel); its "plain" is that ground, 0.
+export const landformGround = q => Math.round(q?.heightReference || 0) === 2;
+// A landform that digs into the ground it lands on (Ground, below 0): its Facets are angular facets fitted to its own surface, up and down.
+export const landformDigs = q => landformGround(q) && Number(q?.elevation) < 0;
+// A signed section: a knot below 0 reaches past the ground, away from the elevation (a rim beside a bowl, a levee beside a channel, a moat round a mound).
+// Those cells are part of the shape (engine-shape.wgsl lfCraterCover); they show where Combine keeps them (Flatten to; Raise to keeps a rim, Cut to a moat).
+export const landformSigned = q => { const k = strokeKnots('landform', q); return k.knots.some(p => p[1] < 0) || (k.back ?? []).some(p => p[1] < 0); };
 
 // One authored step count/ledge/variation set; choose the coordinate system.
 // Resolve to the existing shared profile or coastline pass, never both.

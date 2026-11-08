@@ -19,8 +19,6 @@
 @group(0) @binding(5) var<storage, read> Seg: array<vec4f>;
 @group(0) @binding(6) var<storage, read> MW: array<vec4f>;
 @group(0) @binding(7) var<storage, read_write> Out: array<u32>;
-// H6c: point reads (the prefix height a node reads at its points), one f32 each, written by pointRead and read by stampN (PT: PR is the routes plane).
-@group(0) @binding(8) var<storage, read_write> PT: array<f32>;
 
 const PH = 0u; const PP = 1u; const PR = 2u; const PC = 3u; const PV = 4u; const PX = 5u;
 
@@ -49,8 +47,6 @@ fn noiseValue(f: u32, s: u32, x: f32, y: f32) -> f32 {
   let w = NZ[f]; let k = NS[f];
   return w.y * vnoise(x / w.x, y / w.x, s ^ k.x) + w.w * vnoise(x / w.z, y / w.z, s ^ k.y);
 }
-
-fn gcells() -> u32 { return u.grid * u.grid; }
 
 #ifdef PAGES
 // H5b: the planes may be a page: a pw x ph block of the map whose first cell is (ox, oy) in the world lattice (a whole map: ox = oy = 0, pw = ph = grid, so
@@ -186,8 +182,6 @@ fn terraced(c: f32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
   let intact = sm(bar - 0.12, bar + 0.12, ticket + 0.12);
   return mix(c, terrace(g, u.sSteps, nzF(3u, x, y, i, cells), nzF(4u, x, y, i, cells), nzF(0u, x, y, i, cells)) + (c - g), intact);
 }
-// The height lumps: the stroke's height wanders by rough times its two noise fields (nCW, nDet) at the host's weights hgtA and hgtB.
-fn lumps(nCW: f32, nDet: f32) -> f32 { return 1.0 + u.rough * (u.hgtA * nCW + u.hgtB * nDet); }
 // How far a cell lies toward the side the stroke leans (0..1: the cosine between the stroke's bearing and the direction from the stroke to the cell, never
 // below 0). The lean side is a map bearing (bearX, bearY) or, with leanSide, the left (+1) or right (-1) of the drawn direction (none on a point).
 fn leanToward(ddx: f32, ddy: f32, sx: f32, sy: f32, span2: f32) -> f32 {
@@ -207,65 +201,12 @@ fn shapeMasks(i: u32, f: f32) {
     maskSet(i, pl, i32(floor(b + (mw.y - b) * k + 0.5)));
   }
 }
-// H9 ridge piece: the height multiplier at t along a piece (h0 -> h1), then the jagged crest (ridgeRise in sculpt.js).
-fn craterLobe(R: f32, rough: f32, seed: u32, lx: f32, ly: f32) -> f32 {
-  let sc = max(R * 0.55, 8.0);
-  return 1.0 + rough * (0.38 * vnoise(lx / (R * 0.95), ly / (R * 0.95), seed ^ 0x4a7u) + 0.22 * vnoise(lx / sc, ly / sc, seed ^ 0x1c3u) + 0.1 * vnoise(lx / (sc * 0.6), ly / (sc * 0.6), seed ^ 0x2d9u));
-}
-fn ridgeRise(h0: f32, h1: f32, jag: f32, t: f32, lx: f32, ly: f32, wx: f32, wy: f32) -> f32 {
-  var h = h0 + (h1 - h0) * t;
-  // A crater's spurs fade out toward the bowl: none start inside the rim (u.hole: the crater's centre, radius, roughness and seed).
-  if (u.hole != 0u) { let rr = sqrt((wx - u.hx) * (wx - u.hx) + (wy - u.hy) * (wy - u.hy)) / (u.hR * craterLobe(u.hR, u.hRough, u.hSeed, lx, ly)); h = h * sm(0.92, 1.2, rr); }
-  if (jag > 0.0) {
-    let R = u.radius;
-    let n = 0.6 * vnoise(lx / (R * 0.28), ly / (R * 0.28), u.seed ^ 0x6b1u) + 0.4 * vnoise(lx / (R * 0.11), ly / (R * 0.11), u.seed ^ 0x1d7u);
-    h = h * (1.0 - jag * 0.6 * (0.5 - 0.5 * n));
-  }
-  return h;
-}
-// H9 crater rim sectors and gaps (rimSetup/rimFactors in sculpt.js): the sectors' [angle, height, width, angle relative to the first] and the gaps' angles
-// are in MW after the node's mask writes; returns (height factor, width factor) at the angle `ang` round the ring.
-fn rimFactors(ang: f32) -> vec2f {
-  let tau = 6.283185307179586; let n = u.nSect; let base = u.mwBase + u.nwrites;
-  var h = 1.0; var w = 1.0;
-  if (n > 1u) {
-    let a0 = MW[base].x;
-    let d = ((ang - a0) % tau + tau) % tau;
-    var i = 0u; while (i < n - 1u && MW[base + i + 1u].w <= d) { i = i + 1u; }
-    let j = (i + 1u) % n;
-    var nextRel = tau; if (i < n - 1u) { nextRel = MW[base + i + 1u].w; }
-    let span = nextRel - MW[base + i].w; let t = sm(0.0, 1.0, (d - MW[base + i].w) / max(span, 1e-6));
-    h = MW[base + i].y + (MW[base + j].y - MW[base + i].y) * t; w = MW[base + i].z + (MW[base + j].z - MW[base + i].z) * t;
-  }
-  for (var g = 0u; g < u.nGap; g++) {
-    let ga = MW[base + n + g].x;
-    let dist = abs((((ang - ga + 3.141592653589793) % tau) + tau) % tau - 3.141592653589793);
-    h = h * (0.08 + 0.92 * sm(0.5 * u.gapHw, u.gapHw, dist));
-  }
-  return vec2f(h, w);
-}
 fn nzF(f: u32, x: i32, y: i32, i: u32, cells: u32) -> f32 {
 #ifdef PAGES
   return nzCell(f, x, y, i, cells);
 #else
   return Nz[f * cells + i];
 #endif
-}
-
-// H9 outline displacement of a crater's spurs: baseVary (Desert's ragged feet) and moonLobes (Moon's folded outline) are one function with two
-// parameter sets (u.ol*). It returns the shift of r in radius units; the caller divides by width. Window: smoothstep(olLo, olHi, r).
-fn outlineShift(r: f32, lx: f32, ly: f32) -> f32 {
-  if (u.olAmp <= 0.0) { return 0.0; }
-  let win = sm(u.olLo, u.olHi, r);
-  var n = u.olW0 * vnoise(lx / u.olL0, ly / u.olL0, u.seed ^ u.olS0) + u.olW1 * vnoise(lx / u.olL1, ly / u.olL1, u.seed ^ u.olS1);
-  if (u.olW2 > 0.0) { n = n + u.olW2 * vnoise(lx / u.olL2, ly / u.olL2, u.seed ^ u.olS2); }
-  return u.olAmp * win * n;
-}
-// baseBump: lumps on the apron and lower face of a crater's spurs (Desert's foot bumps).
-fn baseBump(lx: f32, ly: f32, w: f32) -> f32 {
-  if (u.bpAmp <= 0.0) { return 0.0; }
-  return u.bpAmp * sm(0.03, 0.12, w) * (1.0 - sm(0.12, 0.3, w))
-    * (0.55 * vnoise(lx / 30.0, ly / 30.0, u.seed ^ 0x4c91u) + 0.3 * vnoise(lx / 13.0, ly / 13.0, u.seed ^ 0x1a77u) + 0.25 * vnoise(lx / 6.5, ly / 6.5, u.seed ^ 0x63d9u));
 }
 
 @compute @workgroup_size(8, 8)
@@ -280,9 +221,9 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
   let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
   var lx = wx; var ly = wy;
   if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
+  // Paint (kind 0) and erase (1): the coast noise fields.
   let kind = u.kind;
-  let coastal = kind == 0u || kind == 1u;
-  let fxF = select(0u, 3u, coastal); let fyF = select(1u, 4u, coastal);
+  let fxF = 3u; let fyF = 4u;
 #ifdef PAGES
   let nzx = nzCell(fxF, x, y, i, cells); let nzy = nzCell(fyF, x, y, i, cells);
   let nCW = nzCell(5u, x, y, i, cells); let nDet = nzCell(2u, x, y, i, cells);
@@ -305,42 +246,29 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     var ex = nzx; var ey = nzy;
     if (span2 > 0.0) { ex = nzx - sampleN(fxF, cx, cy); ey = nzy - sampleN(fyF, cx, cy); }
     else { ex = nzx - s2.x; ey = nzy - s2.y; }
-    // A ridge piece scales the outline wobble by its mean width (dab(): amp * pc.mean).
-    var ampK = u.amp; if (u.ridge != 0u) { ampK = u.amp * (s1.x + s1.y) * 0.5; }
-    let dx = wx - cx + ampK * (u.rotX * ex - u.rotY * ey);
-    let dy = wy - cy + ampK * (u.rotY * ex + u.rotX * ey);
+    let dx = wx - cx + u.amp * (u.rotX * ex - u.rotY * ey);
+    let dy = wy - cy + u.amp * (u.rotY * ex + u.rotX * ey);
     var width = 1.0;
     if (u.wK != 0.0) { width = clamp(1.0 + u.rough * u.wK * nCW, u.wLo, u.wHi); }
-    var reach = radius * width;
-    if (u.ridge != 0u) { reach = reach * (s1.x + (s1.y - s1.x) * t); }
-    // Lean: the slope toward the lean side runs leanK of its length longer (shorter below 0): a spur's reach stretches, a brush's shoulder widens.
+    let reach = radius * width;
+    // Lean: the slope toward the lean side runs leanK of its length longer (shorter below 0): the brush's shoulder widens.
     var leaned = 1.0;
     if (u.leanK != 0.0) { let ln = leanToward(wx - cx, wy - cy, sx, sy, span2); leaned = 1.0 + u.leanK * ln * ln; }
-    if (kind >= 2u) { reach = reach * leaned; }
-    var r = sqrt(dx * dx + dy * dy) / reach;
-    if (u.olAmp > 0.0) { r = r - outlineShift(r, lx, ly) / width; }
+    let r = sqrt(dx * dx + dy * dy) / reach;
     if (r >= 1.0) { continue; }
-    // The curve's raw value c: a lip is c above 1, split off after the loop (w = clamp(c), the rest lifts the value).
-    var c = 0.0;
-    if (kind == 0u || kind == 1u) {
-      // Plateau-like edge: a broad-scale face-width variation, the north foreshortening term, then the shoulder.
-      let broad = vnoise(lx / (radius * 1.3), ly / (radius * 1.3), u.seed ^ 0x5f1u);
-      let shoulder0 = clamp(0.56 + u.rough * (nDet + 0.30 * nCW) + u.faceVar * 0.22 * broad, 0.18, 0.88);
-      let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - 0.32 * (leaned - 1.0), 0.12, 0.90);
-      c = curveAt(u.curveBase, (1.0 - r) / (1.0 - shoulder));
-    } else {
-      c = curveAt(u.curveBase, 1.0 - r);
-    }
+    // The curve's value c. Plateau-like edge: a broad-scale face-width variation, the north foreshortening term, then the shoulder.
+    let broad = vnoise(lx / (radius * 1.3), ly / (radius * 1.3), u.seed ^ 0x5f1u);
+    let shoulder0 = clamp(0.56 + u.rough * (nDet + 0.30 * nCW) + u.faceVar * 0.22 * broad, 0.18, 0.88);
+    let shoulder = clamp(shoulder0 - (u.softness - 0.5) * 0.6 - 0.32 * (leaned - 1.0), 0.12, 0.90);
+    var c = curveAt(u.curveBase, (1.0 - r) / (1.0 - shoulder));
     c = terraced(c, x, y, i, cells);
-    if (u.ridge != 0u) { c = c * ridgeRise(s1.z, s1.w, s2.w, t, lx, ly, wx, wy); }
-    if (kind == 4u) { c = keepLip(c * lumps(nCW, nDet)); }
     if (c <= best || c == 0.0) { continue; }
     best = c; bc = c; visited = true;
   }
   if (!visited) { return; }
-  let w = clamp(bc, 0.0, 1.0); let ex = bc - w;
+  let w = clamp(bc, 0.0, 1.0);
   let base = F[PH * cells + i];
-  var value = base; var lift = 0.0;
+  var value = base;
   let pbase = F[PP * cells + i];
   if (kind == 0u) {
     let f = w * u.amountPct;
@@ -348,7 +276,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
       let mw = MW[u.mwBase + m]; let pl = u32(mw.x); let b = f32(maskGet(i, pl));
       maskSet(i, pl, i32(floor(b + (mw.y - b) * f * mw.z + 0.5)));
     }
-  } else if (kind == 1u) {
+  } else {
     value = base + (u.baseH - base) * w;
     F[PC * cells + i] = F[PC * cells + i] * (1.0 - w);
     F[PV * cells + i] = F[PV * cells + i] * (1.0 - w);
@@ -357,11 +285,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
       let mw = MW[u.mwBase + m]; let pl = u32(mw.x); let b = f32(maskGet(i, pl));
       maskSet(i, pl, i32(floor(b + (mw.y - b) * w * mw.z + 0.5)));
     }
-  } else {
-    value = base + u.amount * w + baseBump(lx, ly, w);
-    lift = u.amount * ex;
   }
-  value = value + lift;
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
   // Routes open where the height changed; protection follows the kind (a cover brush leaves it alone).
   if (kind != 0u && w > 0.0) { F[PR * cells + i] = F[PR * cells + i] * (1.0 - w); }
@@ -578,7 +502,8 @@ fn stampN(@builtin(global_invocation_id) g: vec3u) {
 // segment nearest it (the first on a tie, as stampRamp), finds how far up the section it stands (q: 0 at the feet, 1 at the crest, a lip above), and reads the
 // crest's height at its place along the path from the along table. The cell's value is base + (crest - base) * q, `base` being the height the strokes before
 // it left, and combine keeps max(base, value) (raise to), min (cut to) or value (flatten to). Every read is the cell's own height and its position, so a
-// regional replay of a window finds what the whole map did. A spur piece (s1.z < 0, its root's place along the trunk -1 - s1.z) is a candidate of its own.
+// regional replay of a window finds what the whole map did. A spur piece (s1.z < 0, its root's place along the trunk -1 - s1.z) is a candidate of its own, and so is
+// an impact's landing (s1.x 1: the whole section at the path's end, the node's first segment; u.grooveEnd), which the trunk, the approach's groove, meets.
 // Segment layout: s0 = a, b; s1 = (length before, length, the path's length | -1 - place, the back side: +1 left of the way drawn, -1 right);
 // s2 = a trunk's end flags (1 start, 2 end: the section closes round it) | a spur piece's (width, width, height, height) at its ends.
 fn lfFractal(x: f32, y: f32, salt: u32) -> f32 {
@@ -649,24 +574,190 @@ fn riverChannel(fl: f32, qq: f32, c: f32, e: f32, kw: f32, silt: f32, wx: f32, w
   }
   return vec2f(min(fp, h), sand);
 }
-// P28 braided belt: three threads of water that wander across the path (each a seeded noise offset along it, up to 1.2 widths either way) and so cross, merge and split,
-// with gravel bars a little above the sea between them, in a belt about five widths either side of the path. Each thread is a width across at its core (32 px
-// at the narrowest width, the least a river is orthogonally connected on the 16-px height grid). fl is the valley floor the belt lies on.
-fn braidedBelt(fl: f32, c: f32, e: f32, sAlong: f32, wx: f32, wy: f32) -> f32 {
-  let W = u.lfRiver; let B = 4.8 * W;
+// Braided bed (the riverfix card): a mostly dry bed of gravel bars a little above the sea, with thin threads of water that split and rejoin round them.
+// The bars are the cells of a staggered, jittered lattice stretched along the path (BR_LEN widths by BR_ACROSS, in (along, across) px, so they follow the
+// bends), measured with a distance that counts BR_HEAD times over upstream of a bar's site and BR_TAIL times downstream: each bar is a teardrop, a blunt head
+// upstream and a long tapering tail (the path is drawn from upstream to down, as a river's migration reads it). The lookup is bent by smooth noise in two
+// octaves, so the edges between bars curve. Each bar has an age, from its seed and how far its site lies from the bare braid plain (a band about a line that
+// wanders across the bed): young bars are the bed, low (1.4 to 2 above the sea), and its share is the second result (stampLandform lays it as the cover
+// plane's sand, the bed plane's gravel and the scatter's pebbles); old bars rise to the valley floor without it, so the ground pass grows grass on them.
+// Threads run on the edges between bars where at least one is young, with bed along every thread, so water never touches grass. A thread is as wide as the
+// active tracts (two bands wandering across the bed, BR_WET wide) are strong there, 3 to 12 px, varied by its edge's seed and along its length, and tapers
+// out with them; on an edge steeper than about 25 degrees to the flow it fades too, so threads split and rejoin in shallow Y's, no cross link is square to
+// the flow and none ends square. Threads are cut 2 to 3 units under the sea, which the per-pixel draw shows as water from a 2-px field (one under 3 px wide
+// breaks into dashes on that lattice, one under 2.5 units deep at the waterline's jitter); an edge too narrow to hold water is a dry scar. Everything is a
+// function of the cell's place along and across the path and the stroke's seed, so a regional replay draws the same bed. fl is the valley floor the bed lies
+// on; the bed reaches 1.8 widths either side of the path, and past an end it runs straight on to its round rim.
+const BR_LEN = 5.6;      // a bar's lattice length along the path, in widths
+const BR_ACROSS = 1.4;   // and across it
+const BR_HEAD = 1.5;     // the distance upstream of a bar's site counts this much (a blunt head)...
+const BR_TAIL = 0.75;    // ...and downstream this much (a long tail)
+// The bed's artistic numbers, in one place: how wet it is and how pebbly. Its colour is world data (materials/<world>.json water.riverBedRGB; a world with
+// none takes its rock's, darkened), drawn by engine-frag.wgsl where the bed plane says.
+const BR_WET = 1.5;      // how wide the two active tracts reach (in widths, times 1.2 to 3.4 either side of their lines): the bed's wet share follows it
+const BR_PEBBLES = 0.7;  // the bed's pebbles: its share written as painted denser scatter (mask plane 4), so the loose-stone scatter lays stones on it
+fn braidSite(cx: i32, cy: i32) -> vec2f {
+  return vec2f(f32(cx) + 0.5 * f32(cy & 1) + 0.5 + 0.38 * hashi(cx, cy, u.seed ^ 0xb1u), f32(cy) + 0.5 + 0.3 * hashi(cx, cy, u.seed ^ 0xb2u));
+}
+// The squared teardrop distance from q to a site, in lattice units.
+fn braidDist(q: vec2f, site: vec2f) -> f32 {
+  let dx = (q.x - site.x) * select(BR_TAIL, BR_HEAD, q.x < site.x); let dy = q.y - site.y;
+  return dx * dx + dy * dy;
+}
+// Its gradient in px (the path's along and across), for the distance from the edge between two bars.
+fn braidGrad(q: vec2f, site: vec2f, d: f32, LX: f32, LY: f32) -> vec2f {
+  let k = select(BR_TAIL, BR_HEAD, q.x < site.x);
+  return vec2f(k * k * (q.x - site.x) / LX, (q.y - site.y) / LY) / max(d, 1e-6);
+}
+// A bar's age (0 young, 1 old): its seed, and how far its site stands from the bare braid plain.
+fn braidAge(cell: vec2i, site: vec2f, LX: f32, LY: f32, W: f32) -> f32 {
+  let mid = 2.2 * W * vnoise(site.x * LX / (9.0 * W), 0.37, u.seed ^ 0x95u);
+  let plain = 1.0 - sm(2.5 * W, 4.6 * W, abs(site.y * LY - 0.5 * mid));
+  return clamp(0.62 * (0.5 + 0.5 * hashi(cell.x, cell.y, u.seed ^ 0xb6u)) + 0.6 * (1.0 - plain), 0.0, 1.0);
+}
+fn braidedBelt(fl: f32, c: f32, e: f32, sAlong: f32, wx: f32, wy: f32) -> vec2f {
+  let W = u.lfRiver; let B = 1.8 * W;
   let d = sqrt(c * c + e * e);
-  if (d > B + 6.0) { return fl; }
+  if (d > B + 6.0) { return vec2f(fl, 0.0); }
   let sea = u.sea;
-  let cc = select(-1.0, 1.0, c >= 0.0) * d;
-  var w = 0.0;
-  for (var j = 0; j < 3; j++) {
-    let o = (f32(j) - 1.0) * 2.4 * W + 1.2 * W * vnoise(sAlong / (7.0 * W) + f32(j) * 5.1, 0.37 * f32(j) + 0.11, u.seed ^ 0x95u);
-    w = max(w, 1.0 - sm(0.5 * W, 0.85 * W, abs(cc - o)));
+  let cc = c;
+  let LX = BR_LEN * W; let LY = BR_ACROSS * W;
+  // The active tracts, where the water runs: bands about 1.5 widths (times BR_WET) either side of two lines that wander across the path, one 2.2 widths over
+  // about 9 widths along, the other 3 widths over about 13 (and a little weaker), so the threads gather, part and meet again.
+  let mid = 2.2 * W * vnoise(sAlong / (9.0 * W), 0.37, u.seed ^ 0x95u);
+  let mid2 = 3.0 * W * vnoise(sAlong / (13.0 * W) + 4.3, 0.71, u.seed ^ 0x9au);
+  let tract = max(1.0 - sm(1.2 * W * BR_WET, 3.4 * W * BR_WET, abs(cc - mid)), 0.8 * (1.0 - sm(0.8 * W * BR_WET, 2.6 * W * BR_WET, abs(cc - mid2))));
+  let q0 = vec2f(sAlong / LX, cc / LY);
+  let q = q0 + vec2f(0.12 * vnoise(q0.x * 1.7 + 3.1, q0.y * 1.3, u.seed ^ 0xb7u),
+                     0.32 * vnoise(q0.x * 1.6, q0.y * 0.8 + 7.7, u.seed ^ 0xb8u) + 0.1 * vnoise(q0.x * 4.1 + 1.9, q0.y * 1.7, u.seed ^ 0xb9u));
+  let iy0 = i32(floor(q.y));
+  var d1 = 1.0e9; var d2 = 1.0e9; var a = vec2f(0.0); var b = vec2f(0.0); var ia = vec2i(0); var ib = vec2i(0);
+  for (var jy = -1; jy <= 1; jy++) {
+    let cy = iy0 + jy;
+    let ix0 = i32(floor(q.x - 0.5 * f32(cy & 1)));
+    for (var jx = -1; jx <= 1; jx++) {
+      let cx = ix0 + jx;
+      let site = braidSite(cx, cy);
+      let dd = braidDist(q, site);
+      if (dd < d1) { d2 = d1; b = a; ib = ia; d1 = dd; a = site; ia = vec2i(cx, cy); }
+      else if (dd < d2) { d2 = dd; b = site; ib = vec2i(cx, cy); }
+    }
   }
-  let edge = sm(B - 6.0, B + 6.0, d + 3.0 * vnoise(wx / 14.0, wy / 14.0, u.seed ^ 0x94u));
-  let bar = sea + 1.8 + 0.5 * vnoise(wx / 5.0, wy / 5.0, u.seed ^ 0x98u);
-  let bed = bar - w * (bar - (sea - 0.18 * W));
-  return min(fl, mix(bed, fl, edge));
+  // The distance in px from the edge between the two bars: the difference of their distances over its gradient.
+  let r1 = sqrt(d1); let r2 = sqrt(d2);
+  let gf = braidGrad(q, b, r2, LX, LY) - braidGrad(q, a, r1, LX, LY);
+  let edgePx = (r2 - r1) / max(length(gf), 1e-6);
+  let along = abs(gf.x) / max(length(gf), 1e-6);   // the sine of the edge's angle to the flow
+  let ageA = braidAge(ia, a, LX, LY, W); let ageB = braidAge(ib, b, LX, LY, W);
+  // The edge's seed (its width): the two bars' ids in either order.
+  let first = ia.x < ib.x || (ia.x == ib.x && ia.y < ib.y);
+  let lo = select(ib, ia, first); let hi = select(ia, ib, first);
+  let hw = 0.5 + 0.5 * hashi(lo.x * 7919 + hi.x, lo.y * 104729 + hi.y, u.seed ^ 0xb4u);
+  // A thread runs on an edge with bed on at least one side (sand lines it, so it never touches grass); it is as wide as the tract is strong there and tapers
+  // out with it, and on an edge steeper than about 25 degrees to the flow, so it fades rather than ending square. The edge's seed varies its width only.
+  let width = mix(3.0, 6.0, hw) * (0.5 + 1.5 * tract) * (0.8 + 0.25 * vnoise(wx / 23.0, wy / 23.0, u.seed ^ 0xb5u))
+            * sm(0.1, 0.35, tract) * (1.0 - sm(0.42, 0.62, along)) * (1.0 - sm(0.4, 0.5, min(ageA, ageB)));
+  let wet = width > 2.0;
+  // The bar: its rise from the edge over 45% of a bar's width, to a height its age gives.
+  let rise = sm(0.0, 0.45 * LY, edgePx);
+  let barTop = sea + 1.4 + 0.25 * vnoise(wx / 5.0, wy / 5.0, u.seed ^ 0x98u) + rise * mix(0.5, 3.4, ageA * ageA);
+  var h = barTop;
+  var sand = 1.0 - sm(0.35, 0.7, ageA);   // the bed's share: young bars
+  if (wet) {
+    let f = 1.0 - sm(0.5 * width - 1.0, 0.5 * width + 1.0, edgePx);
+    h = mix(barTop, sea - (2.0 + 1.0 * tract), f);
+    sand = max(sand, 1.0 - sm(0.5 * width + 3.0, 0.5 * width + 8.0, edgePx));   // bed along every thread, so water never touches grass
+  } else {
+    let f = 1.0 - sm(0.5 * width - 1.0, 0.5 * width + 2.0, edgePx);
+    h = mix(barTop, sea + 1.3, f);   // a dry channel scar, above the waterline's relief
+  }
+  let rim = sm(B - 6.0, B + 6.0, d + 3.0 * vnoise(wx / 14.0, wy / 14.0, u.seed ^ 0x94u));
+  return vec2f(min(fl, mix(h, fl, rim)), sand * (1.0 - rim));
+}
+// A signed section (a knot below 0, u.lfSigned): the part of the section beyond the ground (a rim or levee beside a cut, a moat round a raise) is part of the
+// landform, so a cell counts as covered by how far inside the foot it stands (0 at the foot, 1 at the path), not by the section's value, which is below 0
+// there. A section that stays within 0..1 keeps its value as its coverage. The widths are lfShare's.
+fn lfCraterCover(q: f32, c: f32, e: f32, cap: bool, side: f32, wm: f32) -> f32 {
+  if (u.lfSigned == 0u) { return clamp(q, 0.0, 1.0); }
+  let back = c * side; let r = sqrt(c * c + e * e);
+  let fw = max(u.lfFront * wm, 0.5); let bw = max(u.lfBack * wm, 0.5);
+  var w = select(fw, bw, back > 0.0);
+  if (cap && e > 0.0) { w = mix(fw, bw, 0.5 + 0.5 * back / max(r, 1e-5)); }
+  return max(clamp(q, 0.0, 1.0), clamp(1.0 - r / w, 0.0, 1.0));
+}
+// lfcrater: the impact's spread at azimuth phi from downrange (c, sn: its cosine and sine), as impactWeight in sculpt-shape-presets.js: the blanket gathers
+// downrange (ejAsym), an uprange forbidden zone opens (ejFz, half angle), and a grazing impact throws to the sides (ejWing) with a downrange gap (ejDz).
+fn lfCraterSpread(c: f32, sn: f32) -> f32 {
+  let down = abs(atan2(sn, c)); let up = 3.14159265 - down;
+  var w = (1.0 + 0.85 * u.ejAsym * c) * (1.0 - u.ejWing) + u.ejWing * pow(abs(sn), 1.5);
+  if (u.ejFz > 0.0) { w = w * sm(0.6 * u.ejFz, 1.4 * u.ejFz, up); }
+  if (u.ejDz > 0.0) { w = w * sm(0.6 * u.ejDz, 1.4 * u.ejDz, down); }
+  return w;
+}
+// Big impacts buckle the ground round them. Retail Moon's big craters (650-750 px rims; docs/IMPACT_RETAIL.md, measure/crater_rings.py): past the rim the
+// outer flank is broken into 6-7 blocks of uplifted ground, 22-37 deg of the ring each, centred 1.2-1.4 rim radii out and standing .19-.54 of the depth over
+// the smooth flank, a second crest on 11-18% of the azimuth, and nothing in the heights past 2 rim radii; craters under about 260 px carry lumps at their own,
+// lower scale. Here: rings of raised blocks BK_WAVE rim radii apart from just outside the rim, wandering along the ring, each ring broken into sections that
+// stand to different heights, highest by the rim and gone by 1.72 rim radii. Its own height (u.bkAmt, the Buckling row) and the impact's spread carry it
+// (none in the forbidden zone, more downrange); the rim radius rp scales it from none under BK_R0 px to all of it from BK_R1 px. In the shape's frame (lr:
+// the cell's ray's rim point), so every tile computes the same value. lfimpact2 (the owner: "should allow a bit more"): 48 -> 32 and 280 -> 160 px, so a
+// crater of retail's medium class (rim 172-248 px across, median 4.5 blocks at .46 of the depth) buckles: at Diameter 360 (a 220 px rim) the Moon
+// preset draws 5 blocks (2 before), on a flat fixture.
+const BK_R0 = 32.0;
+const BK_R1 = 160.0;
+const BK_WAVE = 0.3;
+const BK_AMP = 3.0;
+fn lfImpactBuckle(sr: f32, rp: f32, lr: vec2f, w: f32) -> f32 {
+  let size = sm(BK_R0, BK_R1, rp);
+  if (size <= 0.0 || sr < 1.0 || sr > 1.72) { return 0.0; }
+  let a = lr / (0.5 * rp);
+  let ph = (sr - 1.05) / BK_WAVE + 0.3 * vnoise(lr.x / (0.8 * rp), lr.y / (0.8 * rp), u.seed ^ 0x4b17u);
+  let n = floor(ph); let f = ph - n;
+  let arc = sm(-0.1, 0.3, vnoise(a.x + 17.3 * n, a.y - 9.1 * n, u.seed ^ 0x6d2bu));
+  let lift = 0.7 + 0.3 * vnoise(1.9 * a.x - 5.1 * n, 1.9 * a.y + 3.3 * n, u.seed ^ 0x2e95u);
+  let block = sm(0.0, 0.4, f) * (1.0 - sm(0.6, 1.0, f));
+  let env = sm(1.0, 1.1, sr) * (1.0 - sm(1.25, 1.72, sr));
+  return BK_AMP * size * clamp(w, 0.0, 1.6) * env * arc * lift * block;
+}
+// lfcrater: the ejecta beyond a landform's peak (its rim), added to the ground or the shape: a thin continuous blanket that thins as the cube of the distance
+// (McGetchin et al. 1973) to about 1.8 rim radii from the path, and ragged radial tongues that run from the rim a third to most of a rim radius farther, curling
+// as they go (retail Moon's craters: a fringe of short, curly ridges round a crisp rim). The tongues and their lengths are functions of the place on the rim a
+// cell's ray leaves from (in the shape's frame), so they run outward and every tile computes the same value. Tongues sit at least 8 px apart, so they read at 1x.
+fn lfCraterEjecta(wx: f32, wy: f32, trunk: u32) -> vec2f {
+  let s0 = Seg[(u.segBase + trunk) * 4u]; let s1 = Seg[(u.segBase + trunk) * 4u + 1u];
+  let a = s0.xy; let d = s0.zw - s0.xy; let p = vec2f(wx, wy);
+  let t = clamp(dot(p - a, d) / max(dot(d, d), 1e-8), 0.0, 1.0);
+  let o = p - (a + d * t); let r = length(o);
+  if (r < 1e-3) { return vec2f(0.0, 1.0); }
+  let rh = o / r;
+  let rp = select(u.ejPeakF, u.ejPeakB, (o.x * d.y - o.y * d.x) * s1.w > 0.0);
+  if (rp <= 0.0) { return vec2f(0.0, 1.0); }
+  let sr = r / rp;
+  var w = 1.0;
+  if (u.imX != 0.0 || u.imY != 0.0) { w = lfCraterSpread(rh.x * u.imX + rh.y * u.imY, u.imX * rh.y - u.imY * rh.x); }
+  // An oblique impact lowers its rim where it throws little ejecta (Herrick and Forsberg-Taylor 2003: the uprange rim first, then the downrange one).
+  let lip = select(1.0, mix(1.0, 0.4 + 0.6 * clamp(w, 0.0, 1.0), sm(0.0, 0.3, u.ejFz + u.ejDz)), u.ejAmt > 0.0);
+  if (sr < 0.8 || sr > 2.6 || w <= 0.0) { return vec2f(0.0, lip); }
+  let lt = max(8.0, 0.2 * rp);
+  let wig = 0.6 * lt * vnoise(r / 15.0, f32(trunk) * 7.3 + 0.37 * dot(rh, vec2f(13.1, 7.7)), u.seed ^ 0x2c61u);
+  let rim = a + d * t + rh * rp + vec2f(-rh.y, rh.x) * wig;
+  var lr = rim; var lp = p;
+  if (u.framed != 0u) { lr = vec2f(u.inv0 * rim.x + u.inv2 * rim.y + u.inv4, u.inv1 * rim.x + u.inv3 * rim.y + u.inv5); lp = vec2f(u.inv0 * wx + u.inv2 * wy + u.inv4, u.inv1 * wx + u.inv3 * wy + u.inv5); }
+  let ray = vnoise(lr.x / lt, lr.y / lt, u.seed ^ 0x3a71u);
+  let len = vnoise(lr.x / (0.6 * lt), lr.y / (0.6 * lt), u.seed ^ 0x5e13u);
+  let hum = vnoise(lp.x / 7.0, lp.y / 7.0, u.seed ^ 0x1f37u);
+  let tip = 1.0 + (0.35 + 0.3 * (len + 1.0)) * (0.75 + 0.25 * min(w, 1.8));
+  let along = clamp((sr - 1.0) / (tip - 1.0), 0.0, 1.0);
+  let tongue = sm(0.05, 0.6, ray) * sm(0.95, 1.08, sr) * pow(1.0 - along, 0.6) * select(1.0, 0.0, sr >= tip);
+  let blanket = sm(0.85, 1.05, sr) * pow(sr, -3.0) * (1.0 - sm(1.5, 1.9, sr));
+  return vec2f(u.ejAmt * (w * (0.5 * blanket + tongue) * (0.8 + 0.4 * hum)) + u.bkAmt * lfImpactBuckle(sr, rp, lr, w), lip);
+}
+// lfcrater: a spur off a section that peaks before its path (a crater's rim, u.lfPeak the peak's share of the half width from the foot) carries the section
+// from the foot to that peak, both sides, so it ridges out from the rim at the rim's height instead of carrying the bowl along it.
+fn lfCraterSpurShare(c: f32, e: f32, wm: f32) -> f32 {
+  let r = sqrt(c * c + e * e); let w = max(u.lfFront * wm, 0.5);
+  if (r >= w) { return 0.0; }
+  return curveAt(u.curveBase, u.lfPeak * (1.0 - r / w));
 }
 // One segment's candidate at a cell: (the value before combine, q clamped to 0..1).
 // trunkShare: the cell's place along the path (0 to 1), for a trunk segment; a spur piece carries its root's.
@@ -684,7 +775,9 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
   let share = select(trunkShare, -1.0 - s1.z, spur);
   // The existing crest taper narrows and lowers the trunk; its along curve remains independently editable.
   let taper = select(u.lfTaper * (1.0 - sm(0.0, 0.4, min(share, 1.0 - share))), 0.0, spur || s1.z < 1.0);
-  let wm0 = select(1.0 - 0.62 * taper, mix(s2.x, s2.y, tt), spur);
+  var wm0 = select(1.0 - 0.62 * taper, mix(s2.x, s2.y, tt), spur);
+  // lfcrater: an impact's groove (the trunk before its landing) is as wide, at each place, as the along curve is high there over its end: the shape at that scale.
+  if (u.grooveEnd != 0.0 && !spur) { wm0 = wm0 * clamp(clamp(curveRaw(u.alongBase, share), 0.0, 1.2) / u.grooveEnd, 0.0, 2.0); }
   let hm = select(1.0 - 0.7 * taper, mix(s2.z, s2.w, tt), spur);
   var cc = c; var ee = e; var wm = wm0;
   if (u.lfWander > 0.0 || u.lfWidth > 0.0) {
@@ -697,18 +790,20 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
     cc = c * moved; ee = e * moved;
     wm = wm0 * exp(1.35 * u.lfWidth * wt * nB);
   }
-  let q = lfShare(cc, ee, cap, s1.w, wm);
-  let along = clamp(curveRaw(u.alongBase, share), 0.0, 1.2);
-  let crest = u.baseH + (u.elev - u.baseH) * along * hm;   // the plain is the map's base height; a spur piece rises hm of the way from it
+  var q = lfShare(cc, ee, cap, s1.w, wm);
+  if (spur && u.lfPeak > 0.0 && s1.x == 0.0) { q = lfCraterSpurShare(cc, ee, wm); }   // an impact's landing (s1.x 1) draws the whole section
+  let along = clamp(curveRaw(u.alongBase, select(share, 1.0, !spur && s1.z < 1.0)), 0.0, 1.2);   // a click (no length) reads its along curve at the end
+  let lfB = select(u.baseH, base, u.lfGround != 0u); let lfE = select(u.elev, base + u.elev, u.lfGround != 0u);
+  let crest = lfB + (lfE - lfB) * along * hm;   // the plain is the map's base height (with Height reference Ground, the cell's own ground); a spur piece rises hm of the way from it   // the plain is the map's base height (with Height reference Ground, the cell's own ground); a spur piece rises hm of the way from it
   let qt = terraced(q, x, y, i, cells);
   var value = base + (crest - base) * qt;
   var bar = 0.0;
   if (u.lfRiver > 0.0 && !spur) {
-    if (u.lfBraid > 0.0) { value = braidedBelt(value, c, e, share * s1.z, wx, wy); }
+    if (u.lfBraid > 0.0) { let bb = braidedBelt(value, c, e, share * s1.z + select(-e, e, share > 0.5), wx, wy); value = bb.x; bar = bb.y; }
     else { let ch = riverChannel(value, q, c, e, mix(s2.y, s2.z, tt), s2.w, wx, wy); value = ch.x; bar = ch.y; }
   }
   if (u.lfHeight > 0.0) { value = value + u.lfHeight * lfWeight(q) * nC * sm(0.0, 0.15, q); }
-  return vec3f(value, clamp(q, 0.0, 1.0), bar);
+  return vec3f(value, lfCraterCover(q, cc, ee, cap, s1.w, wm), bar);
 }
 // ---- P1 gullies: a slope-aligned stripe filter (ported from the research lab's gully filter, docs/research/lab/lib.wgsl on the research branch) ----
 // The four nearest jittered cells of a 1/f lattice, smoothstep weights, (cos, sin) of the phase across `dir` summed and normalised: stripes whose crests
@@ -823,8 +918,6 @@ fn lfRun(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, nA: f32, nB: f32, tr
   if (cap && ee > 0.0) { foot = mix(fw, bw, 0.5 + 0.5 * back / max(r, 1e-5)); }
   return vec3f(foot - r, foot, select(0.0, 1.0, back > 0.0));
 }
-// The cone profile: 0 at the apex, 1 at the toe, steeper than the mean near the apex and gentler near the toe (slopes 1.31 and 0.69 of the mean).
-fn coneProfile(t: f32) -> f32 { let v = clamp(t, 0.0, 1.0); return (1.15 * v - 0.275 * v * v) / 0.875; }
 // The height of the talus above the ground at a cell, or 0 (the caller takes the higher of this and the face). Each chute (a valley of the Gullies' widest
 // stripes, which run on straight below the foot) lays a cone whose slope is the repose (talusAngle) and whose length is the reach, with a low apron between the
 // cones, and nothing on a face whose section is nowhere steeper than the repose; inside the footprint the cone climbs the face at the repose until the face rises through it.
@@ -832,7 +925,7 @@ fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32,
   let s0 = Seg[(u.segBase + trunk) * 4u]; let s1 = Seg[(u.segBase + trunk) * 4u + 1u]; let s2 = Seg[(u.segBase + trunk) * 4u + 2u];
   let ro = lfRun(s0, s1, s2, wx, wy, nA, nB, share);
   if (ro.x <= -u.talusReach) { return 0.0; }
-  let relief = u.elev - base;
+  let relief = select(u.elev, base + u.elev, u.lfGround != 0u) - base;   // with Height reference Ground the crest stands elev over this cell's ground
   if (relief <= 0.0) { return 0.0; }
   // The steepest the stroke's section gets (its curve table, on this side, over the relief and the run), against the repose.
   let table = select(u.curveBase, u.backBase, ro.z > 0.5);
@@ -887,6 +980,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   }
   var nearest = 3.0e38; var trunk = 0xffffffffu;
   var pick = vec3f(base, 0.0, 0.0); var seen = false; var pk = 0u; var psh = 0.0;
+  var land = vec3f(base, 0.0, 0.0);
   var tShare = 0.0;
   for (var k = 0u; k < u.nseg; k++) {
     let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
@@ -901,6 +995,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
     }
     let cand = lfEval(s0, s1, s2, wx, wy, base, nA, nB, nC, 0.0, x, y, i, cells);
     if (cand.y <= 0.0) { continue; }
+    if (k == 0u && u.grooveEnd != 0.0) { land = cand; continue; }   // an impact's landing meets the groove below
     var better = !seen;
     if (seen) {
       if (u.combine == 0u) { better = cand.x > pick.x; } else if (u.combine == 1u) { better = cand.x < pick.x; } else { better = abs(cand.x - base) > abs(pick.x - base); }
@@ -931,7 +1026,15 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
       sw += w; ss += w * clamp((s1.x + t * s1.y) / max(s1.z, 1e-4), 0.0, 1.0);
     }
     tShare = ss / sw;
-    let cand = lfEval(Seg[(u.segBase + trunk) * 4u], Seg[(u.segBase + trunk) * 4u + 1u], Seg[(u.segBase + trunk) * 4u + 2u], wx, wy, base, nA, nB, nC, ss / sw, x, y, i, cells);
+    var cand = lfEval(Seg[(u.segBase + trunk) * 4u], Seg[(u.segBase + trunk) * 4u + 1u], Seg[(u.segBase + trunk) * 4u + 2u], wx, wy, base, nA, nB, nC, ss / sw, x, y, i, cells);
+    // An impact's landing and its groove are one shape: where both cover the cell, the deeper of their cuts below the ground and the higher of their rises above
+    // it, added (the groove's floor breaches the rim, the bowl stays whole, a raised shape keeps the higher); either alone stands. Each is level with the
+    // ground at its foot, so the two meet with no step.
+    if (land.y > 0.0) {
+      if (cand.y <= 0.0) { cand = land; }
+      else { let rc = cand.x - base; let rl = land.x - base; cand = vec3f(base + min(min(rc, 0.0), min(rl, 0.0)) + max(max(rc, 0.0), max(rl, 0.0)), max(cand.y, land.y), cand.z); }
+      land = vec3f(base, 0.0, 0.0);
+    }
     if (cand.y > 0.0) {
       var better = !seen;
       if (seen) {
@@ -940,11 +1043,15 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
       if (better) { pick = cand; seen = true; pk = trunk; psh = ss / sw; }
     }
   }
+  if (land.y > 0.0 && !seen) { pick = land; seen = true; }   // a landing no groove segment reaches (its box is the trunk's own; kept for safety)
   // P17: the talus cones, where Gullies cut the faces (the chutes are theirs) and the stroke raises. Beyond the footprint the cone is all there is.
   var talus = 0.0;
   if (u.talusReach > 0.0 && u.gully > 0.0 && u.combine == 0u && trunk != 0xffffffffu) { talus = landformTalus(wx, wy, lx, ly, x, y, trunk, tShare, nA, nB, base, select(0.0, pick.x - base, seen)); }
+  var ej = 0.0; var lipK = 1.0;
+  if ((u.ejAmt > 0.0 || u.bkAmt > 0.0) && trunk != 0xffffffffu) { let ev = lfCraterEjecta(wx, wy, select(trunk, 0u, u.grooveEnd != 0.0)); ej = ev.x; lipK = ev.y; }   // an impact's round its landing
   if (!seen) {
     if (talus > 0.0) { F[PH * cells + i] = clamp(base + talus, u.minH, u.maxH); }
+    if (ej > 0.0) { F[PH * cells + i] = clamp(F[PH * cells + i] + ej, u.minH, u.maxH); }
     return;
   }
   // Shared shore features seed the actual sea crossings inside this shape, including cuts and joined paths.
@@ -954,8 +1061,15 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   if (talus > 0.0) { value = max(value, base + talus); }
   if (u.combine == 0u) { value = max(base, value); } else if (u.combine == 1u) { value = min(base, value); }
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
+  if (ej > 0.0 || lipK < 1.0) { F[PH * cells + i] = clamp(select(value, base + (value - base) * lipK, value > base) + ej, u.minH, u.maxH); }
   // P28 point bar: its sand goes to the cover plane, as a Sand brush's does, and draws through the painted-sand path.
   if (pick.z > 0.0) { let vb = F[PV * cells + i]; F[PV * cells + i] = vb + (1.0 - vb) * pick.z; }
+  // The braided bed (riverfix): its share also marks the bed plane (mask 19), where the draw lays the world's river-bed gravel over the sand, and BR_PEBBLES of
+  // it the scatter density (mask 4, as painted denser scatter), so the loose-stone scatter lays pebbles there; each keeps the larger of what was there and the bed's.
+  if (u.lfBraid > 0.0 && pick.z > 0.0) {
+    maskSet(i, 19u, max(maskGet(i, 19u), i32(round(127.0 * clamp(pick.z, 0.0, 1.0)))));
+    maskSet(i, 4u, max(maskGet(i, 4u), i32(round(127.0 * BR_PEBBLES * clamp(pick.z, 0.0, 1.0)))));
+  }
   // The influence: how much of the section the cell stands in, where the stroke moved the height (a unit or more is all of it). Masks, routes, protection and
   // cracks follow as a plateau's do.
   let inf = pick.y * clamp(abs(value - base), 0.0, 1.0);
@@ -968,23 +1082,6 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   if (u.crackAmt > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], min(1.0, inf * 1.6) * u.crackAmt); }
 }
 
-#ifdef PAGES
-// The prefix height at the world point (qx, qy), bilinear as sample() of sculpt.js, from the window the host just evaluated (a target whose cells include the
-// 2 x 2 stencil); the value goes to PT[preIdx] for the node that reads it.
-@compute @workgroup_size(1)
-fn pointRead() {
-  let top = f32(u.grid - 1u);
-  let gx = clamp(u.qx / u.spacing, 0.0, top); let gy = clamp(u.qy / u.spacing, 0.0, top);
-  let ix = i32(floor(gx)); let iy = i32(floor(gy));
-  let jx = min(ix + 1, i32(u.grid) - 1); let jy = min(iy + 1, i32(u.grid) - 1);
-  let fx = gx - f32(ix); let fy = gy - f32(iy);
-  let c = pcells();
-  let a = F[PH * c + lidx(ix, iy)]; let b = F[PH * c + lidx(jx, iy)];
-  let d = F[PH * c + lidx(ix, jy)]; let e = F[PH * c + lidx(jx, jy)];
-  PT[u.preIdx] = (a * (1.0 - fx) + b * fx) * (1.0 - fy) + (d * (1.0 - fx) + e * fx) * fy;
-}
-#endif
-
 // H6c smooth: the prefix height of the cells the box blur will read, copied to scratch plane 0 (blurH and blurV then run on it with blurR = the node's radius).
 @compute @workgroup_size(8, 8)
 fn smoothCopy(@builtin(global_invocation_id) g: vec3u) {
@@ -996,88 +1093,6 @@ fn smoothCopy(@builtin(global_invocation_id) g: vec3u) {
   let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
 #endif
   Sc[i] = F[PH * cells + i];
-}
-
-@compute @workgroup_size(8, 8)
-fn stampCrater(@builtin(global_invocation_id) g: vec3u) {
-  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
-  if (x > u.rx1 || y > u.ry1) { return; }
-#ifdef PAGES
-  let n = u.grid; let cells = pcells(); let i = lidx(x, y);
-  let nDet = nzCell(2u, x, y, i, cells);
-#else
-  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
-  let nDet = Nz[2u * cells + i];
-#endif
-  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
-  var lx = wx; var ly = wy;
-  if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
-  let radius = u.radius; let rough = u.rough; let soft = u.softness; let amount = u.amount; let seed = u.seed;
-  let base = F[PH * cells + i];
-  let baseline = PT[u.preIdx];
-  let sc = max(radius * 0.55, 8.0);
-  let n0 = vnoise(lx / (radius * 0.95), ly / (radius * 0.95), seed ^ 0x4a7u);
-  let n1 = vnoise(lx / sc, ly / sc, seed ^ 0x1c3u);
-  let n2 = vnoise(lx / (sc * 0.6), ly / (sc * 0.6), seed ^ 0x2d9u);
-  let lobe = 1.0 + rough * (0.38 * n0 + 0.22 * n1 + 0.1 * n2);
-  var best = 0.0; var bestValue = base; var visited = false;
-  for (var k = 0u; k < u.nseg; k++) {
-    let s0 = Seg[(u.segBase + k) * 4u];
-    let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
-    if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
-    let px = s0.x; let py = s0.y; let sx = s0.z - px; let sy = s0.w - py; let span2 = sx * sx + sy * sy;
-    var t = 0.0;
-    if (span2 > 0.0) { t = clamp(((wx - px) * sx + (wy - py) * sy) / span2, 0.0, 1.0); }
-    let cx = px + sx * t; let cy = py + sy * t;
-    let dx = wx - cx - u.cOffX * radius * 0.32 * rough; let dy = wy - cy - u.cOffY * radius * 0.32 * rough;
-    let rr = sqrt((wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)) / (radius * lobe);
-    let rb = sqrt(dx * dx + dy * dy) / (radius * lobe);
-    if (rr >= 1.9) { continue; }
-    let influence = 1.0 - rr / 1.9;
-    if (influence <= best) { continue; }
-    best = influence; visited = true;
-    let floorEdge = 0.25 + 0.45 * (1.0 - soft);
-    let rimNoise = vnoise(lx / (sc * 0.8), ly / (sc * 0.8), seed ^ 0x3e1u);
-    var rimHeight = amount * u.rimH * clamp(1.1 * (rimNoise * 0.5 + 0.5) + 0.5 * n0 * rough - 0.15 * rough, 0.0, 1.5);
-    let rimWidth0 = (0.16 + 0.2 * soft) * (1.0 + 0.35 * n2);
-    var rimWidth = rimWidth0; var outerK = 2.4;
-    if (u.nSect > 1u || u.nGap > 0u) { let rf = rimFactors(atan2(wy - cy, wx - cx) - atan2(u.rotY, u.rotX)); rimHeight = rimHeight * rf.x; rimWidth = rimWidth * rf.y; outerK = 1.4; }
-    var bowl = 0.0;
-    if (rb < 1.0) { bowl = 1.0 - sm(floorEdge, 1.0, rb); }
-    let apronReach = 1.0 - sm(1.15 + 0.35 * n1, 1.85, rr);
-    var rim = 0.0;
-    if (rr < 1.0) { let q = (rr - 1.0) / rimWidth; rim = exp(-(q * q)); }
-    else { let q = (rr - 1.0) / (rimWidth0 * outerK); rim = exp(-(q * q)) * apronReach; }
-    var lumpGate = 0.0;
-    if (rr < 1.3) { lumpGate = 1.0; }
-    let lumps = rough * (6.0 * n2 + 3.0 * n1 + 2.0 * nDet) * lumpGate;
-    var ejecta = 0.0;
-    if (u.ejecta > 0.0 && rr > 0.8) {
-      let e1 = vnoise(lx / (sc * 0.32), ly / (sc * 0.32), seed ^ 0x6e7u);
-      let e2 = vnoise(lx / (sc * 0.14), ly / (sc * 0.14), seed ^ 0x1b5u);
-      let reach = 1.25 + 0.45 * (n0 * 0.5 + 0.5);
-      ejecta = u.ejecta * amount * 0.16 * sm(-0.05, 0.45, e1 * 0.7 + e2 * 0.3) * (1.0 - sm(1.0, reach + 0.25, rr)) * sm(0.8, 1.0, rr) * (0.6 + 0.4 * e2);
-    }
-    let floorH = max(baseline - amount, min(baseline, u.sea + 4.0));
-    let tgt = baseline + rimHeight * rim - (baseline - floorH) * bowl + lumps * (0.4 + 0.6 * bowl);
-    let blend = sm(0.0, 0.15, 1.0 - rr);
-    var value = base + rimHeight * rim + lumps * 0.3 * apronReach;
-    if (rr < 1.0) {
-      var extra = 0.0;
-      if (rr >= 0.85) { extra = (rimHeight * rim + lumps * 0.4) * (1.0 - blend); }
-      value = base + (tgt - base) * blend + extra;
-    }
-    value = value + ejecta;
-    bestValue = clamp(select(value, max(value, u.sea + 1.5), base > u.sea + 1.0), u.minH, u.maxH);
-  }
-  if (!visited) { return; }
-  if (u.coPutW != 0u) { Sc[4u * cells + i] = best; }   // H10: the footprint the crater facets are limited to
-  F[PH * cells + i] = bestValue;
-  if (u.nwrites > 0u) { shapeMasks(i, best); }
-  let sw = sm(0.0, 0.3, best);
-  F[PP * cells + i] = F[PP * cells + i] * (1.0 - sw);
-  F[PR * cells + i] = F[PR * cells + i] * (1.0 - sw);
-  if (u.crackAmt > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], min(1.0, best * 1.6) * u.crackAmt); }
 }
 
 // H6c fissure: fissureCell() of sculpt.js over the pieces the host lists (a = s0.xy, b = s0.zw; width multipliers r0 r1 in s1.xy, depth multipliers h0 h1 in s1.zw).
@@ -1155,41 +1170,6 @@ fn stampFissure(@builtin(global_invocation_id) g: vec3u) {
     let mw = MW[u.mwBase + m]; let pl = u32(mw.x); let b = f32(maskGet(i, pl));
     maskSet(i, pl, i32(floor(b + (mw.y - b) * (sw * u.fDark) * mw.z + 0.5)));
   }
-}
-
-// H6c crystals (the pyramid form): stampCrystals(). A crystal is a segment of the host's list: centre in s0.xy, R and height in s0.zw, lean in s1.xy, its side count and
-// where its edges start (vec4 nx, ny, d per edge, after the node's mask writes) in s1.zw. Each crystal's square box limits the cells it reaches.
-@compute @workgroup_size(8, 8)
-fn stampCrystal(@builtin(global_invocation_id) g: vec3u) {
-  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
-  if (x > u.rx1 || y > u.ry1) { return; }
-#ifdef PAGES
-  let cells = pcells(); let i = lidx(x, y);
-#else
-  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
-#endif
-  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
-  var best = 0.0;
-  for (var k = 0u; k < u.nseg; k++) {
-    let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u];
-    let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
-    if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
-    let qx = wx - s0.x; let qy = wy - s0.y;
-    var m = 3.0e38;
-    let sides = u32(s1.z); let at = u.mwBase + u.nwrites + u32(s1.w);
-    for (var e = 0u; e < sides; e++) {
-      let ed = MW[at + e];
-      let rise = ed.z - (s1.x * ed.x + s1.y * ed.y);
-      m = min(m, (ed.z - (qx * ed.x + qy * ed.y)) / max(rise, ed.z * 0.2));
-    }
-    if (m <= 0.0) { continue; }
-    let h = min(s0.w, s0.w / (1.0 - u.cTop) * m);
-    if (h > best) { best = h; }
-  }
-  if (best <= 0.0) { return; }
-  F[PH * cells + i] = clamp(F[PH * cells + i] + best, u.minH, u.maxH);
-  F[PP * cells + i] = 1.0;
-  F[PX * cells + i] = max(F[PX * cells + i], sm(0.2, 1.5, best));
 }
 
 // ---- H10: the coast pass (Lava's shore layers and fingers) ----
@@ -1685,27 +1665,6 @@ fn cgRnd(i: i32, j: i32, a: u32) -> f32 {
   x = x ^ (x >> 15u); x = x * 2246822519u; x = x ^ (x >> 13u);
   return f32(x) / 4294967296.0;
 }
-fn cgMound(x: f32, y: f32) -> f32 {
-  var d = 3.0e38;
-  for (var k = 0u; k < u.nseg; k++) {
-    let s0 = Seg[(u.segBase + k) * 4u];
-    let a = s0.xy; let dd = s0.zw - s0.xy; let l2 = dot(dd, dd);
-    var t = 0.0;
-    if (l2 > 0.0) { t = clamp(dot(vec2f(x, y) - a, dd) / l2, 0.0, 1.0); }
-    d = min(d, length(vec2f(x, y) - a - dd * t));
-  }
-  let edge = u.radius * (1.0 + u.rough * 0.35 * vnoise(x / (u.radius * 0.7), y / (u.radius * 0.7), u.seed ^ 0x2c1u));
-  let r = d / edge;
-  if (r >= 1.0) { return 0.0; }
-  return u.amount * pow(1.0 - r * r, 1.2);
-}
-fn cgLevel(x: f32, y: f32, m: f32) -> i32 {
-  if (!(u.cgSizeVar > 0.0)) { return 0; }
-  let f = 0.5 + 0.32 * vnoise(x / 64.0, y / 64.0, u.seed ^ 0x51au) + 0.18 * vnoise(x / 27.0, y / 27.0, u.seed ^ 0x2e7u) + 0.3 * (m / u.amount - 0.5);
-  if (f > 1.17 - 0.4 * u.cgSizeVar) { return 2; }
-  if (f > 0.84 - 0.3 * u.cgSizeVar) { return 1; }
-  return 0;
-}
 // The jittered point of cell (i, j) of size L in the shape's frame (hash salts 1 + o and 2 + o, jit of a cell around its centre), and a point of the frame in the world.
 fn cgPoint(i: i32, j: i32, L: f32, jit: f32, o: u32) -> vec2f {
   return vec2f((f32(i) + 0.5 + (cgRnd(i, j, 1u + o) - 0.5) * jit) * L, (f32(j) + 0.5 + (cgRnd(i, j, 2u + o) - 0.5) * jit) * L);
@@ -1718,119 +1677,13 @@ fn cgWorld(l: vec2f) -> vec2f {
   return vec2f(a * l.x + c * l.y + e, b * l.x + d * l.y + f);
 }
 
-@compute @workgroup_size(8, 8)
-fn stampColumns(@builtin(global_invocation_id) g: vec3u) {
-  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
-  if (x > u.rx1 || y > u.ry1) { return; }
-#ifdef PAGES
-  let cells = pcells(); let i = lidx(x, y);
-#else
-  let cells = u.grid * u.grid; let i = u32(y) * u.grid + u32(x);
-#endif
-  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
-  var lx = wx; var ly = wy;
-  if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
-  let levels = select(1, 3, u.cgSizeVar > 0.0);
-  var d1 = 3.0e38; var d2 = 3.0e38; var bl = -1; var bi = 0; var bj = 0;
-  // The nearest column centre of any width in use here.
-  for (var lv = 0; lv < levels; lv++) {
-    let Ll = u.cgSize * SZL[lv]; let ci = i32(floor(lx / Ll)); let cj = i32(floor(ly / Ll));
-    for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
-      let cl = cgPoint(ii, j, u.cgSize * SZL[lv], 0.9, u32(lv) * 16u); let cw = cgWorld(cl);
-      if (levels > 1 && cgLevel(cw.x, cw.y, cgMound(cw.x, cw.y)) != lv) { continue; }
-      let d = length(vec2f(lx, ly) - cl);
-      if (d < d1) { d2 = d1; d1 = d; bl = lv; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
-    } }
-  }
-  if (bl < 0) {
-    // No width in use is near: the widest columns, whatever they asked for.
-    let ci = i32(floor(lx / u.cgSize)); let cj = i32(floor(ly / u.cgSize));
-    for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
-      let d = length(vec2f(lx, ly) - cgPoint(ii, j, u.cgSize, 0.9, 0u));
-      if (d < d1) { d2 = d1; d1 = d; bl = 0; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
-    } }
-  }
-  let o = u32(bl) * 16u;
-  let cl = cgPoint(bi, bj, u.cgSize * SZL[bl], 0.9, o); let cw = cgWorld(cl);
-  let m = cgMound(cw.x, cw.y);
-  if (m <= 1.0) { return; }
-  let base = F[PH * cells + i];
-  // A bare column is the mound's own smooth hill: no flat top, no crystal mark, no protection.
-  if (u.cgSmooth > 0.0 && cgRnd(bi, bj, 12u + o) < u.cgSmooth * SZB[bl]) {
-    let hill = cgMound(wx, wy);
-    if (hill > 0.5) { F[PH * cells + i] = clamp(base + hill, u.minH, u.maxH); }
-    return;
-  }
-  let e = 2.0;
-  let gx = (cgMound(cw.x + e, cw.y) - cgMound(cw.x - e, cw.y)) / (2.0 * e); let gy = (cgMound(cw.x, cw.y + e) - cgMound(cw.x, cw.y - e)) / (2.0 * e);
-  var step = 0.0;
-  if (!(cgRnd(bi, bj, 3u + o) < 0.4)) { step = (cgRnd(bi, bj, 4u + o) - 0.35) * 2.0 * u.cgStep * (0.5 + u.cgVar) * SZS[bl]; }
-  let shade = 0.8 + 0.2 * cgRnd(bi, bj, 5u + o);
-  let incline = gx * (wx - cw.x) + gy * (wy - cw.y);
-  var top = m + step;
-  if (u.cgTiers > 0.0) { top = top + incline * (1.0 - clamp(u.cgTiers, 0.0, 1.0)); } else { top = top + incline; }
-  if (u.cgFacet > 0.0) {
-    let fa = u.cgFacet;
-    let h0 = cgRnd(bi, bj, 6u + o) * 6.2831853; let h1 = h0 + 3.1415927 * (0.5 + cgRnd(bi, bj, 7u + o));
-    let m0 = fa * (0.2 + 0.8 * cgRnd(bi, bj, 8u + o)); var m1 = 0.0;
-    if (!(cgRnd(bi, bj, 9u + o) < 0.3)) { m1 = fa * (0.2 + 0.8 * cgRnd(bi, bj, 10u + o)); }
-    let ox = lx - cl.x; let oy = ly - cl.y;
-    let pa = cos(h0) * m0 * ox + sin(h0) * m0 * oy; let pb = cos(h1) * m1 * ox + sin(h1) * m1 * oy;
-    if (cgRnd(bi, bj, 11u + o) < 0.5) { top = top + min(pa, pb); } else { top = top + max(pa, pb); }
-  }
-  let h = max(0.0, top);
-  if (h <= 0.5) { return; }
-  F[PH * cells + i] = clamp(base + h, u.minH, u.maxH); F[PP * cells + i] = 1.0;
-  F[PX * cells + i] = select(shade, 0.5, d2 - d1 < max(1.2, u.spacing * 0.6));
-}
-
-// Bergs: per block the lowest of its face planes and broken-corner planes, each outline waving along its face, a tilted top and roughness; the highest block wins.
-// Seg k: (x, y, R, height), (index, faces, planes, first plane in the extra table), box.
-@compute @workgroup_size(8, 8)
-fn stampBerg(@builtin(global_invocation_id) g: vec3u) {
-  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
-  if (x > u.rx1 || y > u.ry1) { return; }
-#ifdef PAGES
-  let cells = pcells(); let i = lidx(x, y);
-#else
-  let cells = u.grid * u.grid; let i = u32(y) * u.grid + u32(x);
-#endif
-  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
-  var best = 0.0;
-  for (var k = 0u; k < u.nseg; k++) {
-    let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u];
-    let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
-    if (x < bx.x || x > bx.z || y < bx.y || y > bx.w) { continue; }
-    let qx = wx - s0.x; let qy = wy - s0.y; let R = s0.z; let height = s0.w;
-    let reach = R * 1.55; let wave = R * (0.02 + 0.12 * u.bgJit);
-    var m = (reach - length(vec2f(qx, qy))) * u.bgFace;
-    if (m <= 0.0) { continue; }
-    let idx = i32(s1.x); let nf = u32(s1.y); let np = u32(s1.z); let at = u.mwBase + u.nwrites + u32(s1.w);
-    for (var e = 0u; e < np; e++) {
-      let p = MW[at + e];
-      var salt = u.seed ^ (0x6a1u + e * 977u);
-      if (e >= nf) { salt = u.seed ^ (0x9b3u + (e - nf) * 1301u); }
-      let along = -qx * p.y + qy * p.x; let d = p.z + wave * vnoise(along / (R * 0.45), f32(idx) * 7.3, salt);
-      m = min(m, (d - (qx * p.x + qy * p.y)) * p.w);
-      if (m <= 0.0) { break; }
-    }
-    if (m <= 0.0) { continue; }
-    var h = min(m, height - u.bgTilt * max(0.0, R * u.bgFlat - (qx * u.bgTx + qy * u.bgTy)));
-    if (h <= 0.0) { continue; }
-    if (u.bgRough > 0.0) {
-      let f = vnoise(wx / 40.0, wy / 40.0, u.seed ^ 0x2a1u) * 0.3 + vnoise(wx / 17.0, wy / 17.0, u.seed ^ 0x4c7u) * 0.3 + vnoise(wx / 8.0, wy / 8.0, u.seed ^ 0x6e3u) * 0.28 + vnoise(wx / 4.0, wy / 4.0, u.seed ^ 0x8f9u) * 0.18;
-      h = h + u.bgRough * f * sm(0.0, 4.0, h);
-    }
-    if (h > best) { best = h; }
-  }
-  if (best <= 0.0) { return; }
-  F[PH * cells + i] = clamp(F[PH * cells + i] + best, u.minH, u.maxH);
-}
-
-// ---- H10: crater and mountain facets, a pass over the node's own result ----
-// facetSnap copies the node's result to plane R; facetApply then re-tiles the cells the node touched (footprint plane W > 0) with Voronoi facets, each the plane through the
-// result at the facet's seed (height and slope over 3 cells, read from R inside the footprint and from the prefix B elsewhere). Every read is of R, B or W, which no
-// thread of the pass writes, so a repeat run is identical. Reads clamp to the node's box (the host grows it by the seeds' reach).
+// ---- H10: a landform's Facets, a pass over the node's own result ----
+// facetSnap copies the node's result to plane R; facetApply then re-tiles the cells the node touched (footprint plane W > 0) with Voronoi facets (Facet shape:
+// angular facets), each the plane through the result at the facet's seed (height and slope over 3 cells, read from R inside the footprint and from the prefix B
+// elsewhere). Every read is of R, B or W, which no thread of the pass writes, so a repeat run is identical. Reads clamp to the node's box (the host grows it by
+// the seeds' reach). fcMode 1 is a landform that digs into the ground it lands on: the planes are fitted to its surface up and down and replace it by the Facets
+// share (fcStrength); fcMode 2 a raised one: a share of tilted, steeper planes stand out of it. Step height (fcStep) steps each facet off its neighbours.
+// Surface Crystal (fcSurface) marks them as one crystal skin (the crystal field's 0.74, whose thin web the draw adds); Rock leaves the shape's own ground.
 @compute @workgroup_size(8, 8)
 fn facetSnap(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
@@ -1842,22 +1695,22 @@ fn fcAt(gx: i32, gy: i32, cells: u32) -> f32 {
   let j = cIdx(clamp(gx, max(u.coBx0, 0), min(u.coBx1, i32(u.grid) - 1)), clamp(gy, max(u.coBy0, 0), min(u.coBy1, i32(u.grid) - 1)));
   return select(Sc[CB * cells + j], Sc[CRR * cells + j], Sc[CW * cells + j] > 0.0);
 }
-struct FcSeed { l: vec2f, w: vec2f, h: f32, dx: f32, dy: f32, step: f32, shade: f32, steep: f32, on: bool }
+struct FcSeed { l: vec2f, w: vec2f, h: f32, dx: f32, dy: f32, step: f32, steep: f32, on: bool }
 fn fcSeed(i: i32, j: i32, cells: u32) -> FcSeed {
-  let L = u.fcL; let crater = u.fcMode == 1u;
-  let jit = select(1.0, 0.9, crater);
+  let L = u.fcL; let dig = u.fcMode == 1u;
+  let jit = select(1.0, 0.9, dig);
   let l = cgPoint(i, j, L, jit, 0u); let w = cgWorld(l);
   let gx = i32(floor(w.x / u.spacing + 0.5)); let gy = i32(floor(w.y / u.spacing + 0.5)); let e3 = 3;
   var s: FcSeed; s.l = l; s.w = w;
   s.h = fcAt(gx, gy, cells);
   s.dx = (fcAt(gx + e3, gy, cells) - fcAt(gx - e3, gy, cells)) / (2.0 * 3.0 * u.spacing);
   s.dy = (fcAt(gx, gy + e3, cells) - fcAt(gx, gy - e3, cells)) / (2.0 * 3.0 * u.spacing);
-  s.step = 0.0; s.shade = 0.0; s.steep = 1.0; s.on = true;
-  if (crater) { s.step = (cgRnd(i, j, 3u) - 0.5) * 2.0 * u.fcStep; s.shade = 0.7 + 0.17 * cgRnd(i, j, 5u); }
+  s.step = 0.0; s.steep = 1.0; s.on = true;
+  if (dig) { s.step = (cgRnd(i, j, 3u) - 0.5) * 2.0 * u.fcStep; }
   else {
     s.on = cgRnd(i, j, 4u) < u.fcShare;
     s.dx = s.dx + (cgRnd(i, j, 6u) - 0.5) * 0.7; s.dy = s.dy + (cgRnd(i, j, 7u) - 0.5) * 0.7;
-    s.steep = 1.1 + 0.3 * cgRnd(i, j, 5u); s.step = (cgRnd(i, j, 3u) - 0.2) * 10.0;
+    s.steep = 1.1 + 0.3 * cgRnd(i, j, 5u); s.step = (cgRnd(i, j, 3u) - 0.2) * 2.0 * u.fcStep;
   }
   return s;
 }
@@ -1868,30 +1721,331 @@ fn facetApply(@builtin(global_invocation_id) g: vec3u) {
   let cells = cCells(); let i = cIdx(x, y);
   if (!(Sc[CW * cells + i] > 0.0)) { return; }
   let snap = Sc[CRR * cells + i]; let base = Sc[CB * cells + i]; let relief = snap - base;
-  let crater = u.fcMode == 1u;
-  if (crater) { if (abs(relief) < 0.6) { return; } } else { if (relief < 2.0) { return; } }
+  let dig = u.fcMode == 1u;
+  if (dig) { if (abs(relief) < 0.6) { return; } } else { if (relief < 2.0) { return; } }
   let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
   var lx = wx; var ly = wy;
   if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
   let L = u.fcL; let ci = i32(floor(lx / L)); let cj = i32(floor(ly / L));
   var d1 = 3.0e38; var d2 = 3.0e38; var bi = 0; var bj = 0;
   for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
-    let d = length(vec2f(lx, ly) - cgPoint(ii, j, L, select(1.0, 0.9, crater), 0u));
+    let d = length(vec2f(lx, ly) - cgPoint(ii, j, L, select(1.0, 0.9, dig), 0u));
     if (d < d1) { d2 = d1; d1 = d; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
   } }
   let s = fcSeed(bi, bj, cells);
-  if (crater) {
+  if (dig) {
     let facet = s.h + s.dx * (wx - s.w.x) + s.dy * (wy - s.w.y) + s.step * sm(0.0, 4.0, abs(relief));
-    let value = snap + (facet - snap) * u.fcStrength;
-    F[PH * cells + i] = clamp(select(value, max(value, u.sea + 1.5), base > u.sea + 1.0), u.minH, u.maxH);
-    if (abs(relief) >= 2.0) {
-      F[PP * cells + i] = 1.0;
-      if (u.fcSkin != 0u) { F[PX * cells + i] = 0.74; } else { F[PX * cells + i] = select(s.shade, 0.5, d2 - d1 < max(1.2, u.spacing * 0.6)); }
-    }
+    F[PH * cells + i] = clamp(snap + (facet - snap) * u.fcStrength, u.minH, u.maxH);
+    if (abs(relief) >= 2.0 && u.fcSurface != 0u) { F[PP * cells + i] = 1.0; F[PX * cells + i] = 0.74; }
     return;
   }
   if (!s.on) { return; }
   let plane = s.h + (s.dx * (wx - s.w.x) + s.dy * (wy - s.w.y)) * s.steep + s.step * sm(0.0, 10.0, relief);
   let value = max(plane, base); let fade = sm(2.0, 10.0, relief);
   F[PH * cells + i] = clamp(snap + (value - snap) * fade, u.minH, u.maxH);
+  if (u.fcSurface != 0u) { F[PP * cells + i] = 1.0; F[PX * cells + i] = 0.74; }
+}
+
+// ---- Facets: stepped columns and prisms (Facet shape 1 and 2), a pass over the landform's own result ----
+// The curves give the envelope (the landform the stamp just drew, snapped to plane R by facetSnap; the prefix is B, the footprint W). This pass breaks it into
+// geometric elements whose seeds lie on a lattice in the path's own coordinates (s along the trunk, c across it, + left of the way drawn), so a click is a
+// cluster round the point and a drag a ridge along the path; each element is laid out in its own segment's frame, so it keeps its shape round a bend. Every
+// element stands as high as the envelope at its seed, so the section, the along curve and the variation shape the cluster or ridge.
+// lfCrystalSites runs first, once per seed: where the seed lies on the map (a walk along the path), and what the elements need there (the envelope and its
+// slope for a column; the section's rise, its slope across the prism and the prism's room for a prism), into a table after the coast planes (Sc from
+// CNPL x cells, 12 floats a seed). lfCrystalApply then reads only that table and R, B and W, so a repeat run is identical. The table's layout is in MW after the
+// node's other rows (lfcTab): a row per segment (its path, -1 for a spur piece) and a row per path and level (the seeds' first index, i0, ni, j0; nj = 1 - 2 j0).
+
+// The cell's place in the path's coordinates (s, c) and the trunk segment it is nearest (a free end runs on past its last segment).
+fn lfCrystalCoord(p: vec2f) -> vec3f {
+  var best = 3.0e38; var sc = vec3f(0.0);
+  for (var k = 0u; k < u.nseg; k++) {
+    let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u];
+    if (s1.z < 0.0) { continue; }
+    let flags = u32(Seg[(u.segBase + k) * 4u + 2u].x);
+    let d = s0.zw - s0.xy; let len = max(length(d), 1e-4); let ax = d / len;
+    let t = clamp(dot(p - s0.xy, ax), select(0.0, -1.0e9, (flags & 1u) != 0u), select(len, 1.0e9, (flags & 2u) != 0u));
+    let q = p - s0.xy - ax * t; let d2 = dot(q, q);
+    if (d2 < best) { best = d2; sc = vec3f(s1.x + t, q.x * ax.y - q.y * ax.x, f32(k)); }
+  }
+  return sc;
+}
+// The world point at (s, c) of the path the trunk segment k0 belongs to (w), the way the segment holding s runs (ax), and that segment (k): found walking
+// along the path's own segments only.
+struct LfcPoint { w: vec2f, ax: vec2f, k: u32 }
+fn lfCrystalPoint(sc: vec2f, k0: u32) -> LfcPoint {
+  var k = k0;
+  for (var n = 0u; n < u.nseg; n++) {
+    let s1 = Seg[(u.segBase + k) * 4u + 1u]; let flags = u32(Seg[(u.segBase + k) * 4u + 2u].x);
+    if (sc.x >= s1.x || (flags & 1u) != 0u || k == 0u) { break; }
+    k = k - 1u;
+  }
+  for (var n = 0u; n < u.nseg; n++) {
+    let s1 = Seg[(u.segBase + k) * 4u + 1u]; let flags = u32(Seg[(u.segBase + k) * 4u + 2u].x);
+    if (sc.x < s1.x + s1.y || (flags & 2u) != 0u || k + 1u >= u.nseg) { break; }
+    k = k + 1u;
+  }
+  let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u];
+  let d = s0.zw - s0.xy; let ax = d / max(length(d), 1e-4);
+  var r: LfcPoint; r.w = s0.xy + ax * (sc.x - s1.x) + vec2f(ax.y, -ax.x) * sc.y; r.ax = ax; r.k = k;
+  return r;
+}
+// A world offset q in a segment's frame (along, across), as (s, c) run.
+fn lfCrystalLocal(q: vec2f, ax: vec2f) -> vec2f { return vec2f(dot(q, ax), q.x * ax.y - q.y * ax.x); }
+// The envelope at a world point, as (its height, its height over the prefix): R inside the footprint, the prefix elsewhere (fcAt's clamped read).
+fn lfCrystalEnv(w: vec2f, cells: u32) -> vec2f {
+  let gx = i32(floor(w.x / u.spacing + 0.5)); let gy = i32(floor(w.y / u.spacing + 0.5));
+  let j = cIdx(clamp(gx, max(u.coBx0, 0), min(u.coBx1, i32(u.grid) - 1)), clamp(gy, max(u.coBy0, 0), min(u.coBy1, i32(u.grid) - 1)));
+  let b = Sc[CB * cells + j];
+  let h = select(b, Sc[CRR * cells + j], Sc[CW * cells + j] > 0.0);
+  return vec2f(h, h - b);
+}
+// The landform's own section at a world point on trunk segment k over the ground `base` (lfEval: the curves, the along curve, the variation, the terraces):
+// (the height, the coverage). The terraces read their noise at the seed's cell `at`, which lies in the node's footprint whenever the element stands.
+fn lfcSection(w: vec2f, k: u32, base: f32, at: vec2f, cells: u32) -> vec2f {
+  let s0 = Seg[(u.segBase + k) * 4u]; let s1 = Seg[(u.segBase + k) * 4u + 1u]; let s2 = Seg[(u.segBase + k) * 4u + 2u];
+  let d = s0.zw - s0.xy; let ax = d / max(length(d), 1e-4);
+  var lx = w.x; var ly = w.y;
+  if (u.framed != 0u) { lx = u.inv0 * w.x + u.inv2 * w.y + u.inv4; ly = u.inv1 * w.x + u.inv3 * w.y + u.inv5; }
+  var nA = 0.0; var nB = 0.0; var nC = 0.0;
+  let sz = max(u.lfSize, 8.0);
+  if (u.lfWander > 0.0) { nA = 0.7 * noiseValue(3u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz) + 0.3 * noiseValue(2u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); }
+  if (u.lfWidth > 0.0) { nB = noiseValue(5u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); }
+  if (u.lfHeight > 0.0) { nC = lfFractal(lx / sz + 37.1, ly / sz - 19.7, 0x5c9u); }
+  let x = clamp(i32(floor(at.x / u.spacing + 0.5)), 0, i32(u.grid) - 1); let y = clamp(i32(floor(at.y / u.spacing + 0.5)), 0, i32(u.grid) - 1);
+#ifdef PAGES
+  let i = 0u;   // the terraces' noise is evaluated directly on a page (nzF reads no table)
+#else
+  let i = u32(y) * u.grid + u32(x);
+#endif
+  let share = clamp((s1.x + dot(w - s0.xy, ax)) / max(s1.z, 1e-4), 0.0, 1.0);
+  return lfEval(s0, s1, s2, w.x, w.y, base, nA, nB, nC, share, x, y, i, cells).xy;
+}
+// The column width a seed takes (0, 1 or 2 of SZL) where Size mix mixes three: smaller in patches and where the envelope stands highest.
+fn lfCrystalLevel(w: vec2f, share: f32) -> i32 {
+  if (!(u.cgSizeVar > 0.0)) { return 0; }
+  let f = 0.5 + 0.32 * vnoise(w.x / 64.0, w.y / 64.0, u.seed ^ 0x51au) + 0.18 * vnoise(w.x / 27.0, w.y / 27.0, u.seed ^ 0x2e7u) + 0.3 * (share - 0.5);
+  if (f > 1.17 - 0.4 * u.cgSizeVar) { return 2; }
+  if (f > 0.84 - 0.3 * u.cgSizeVar) { return 1; }
+  return 0;
+}
+// The envelope's rise over the plain, for the size mix's "highest" (the stroke's elevation over the map's base height).
+fn lfCrystalRise() -> f32 { return max(abs(u.elev - u.baseH), 1.0); }
+// How a cell's new height combines with the prefix, as the stroke's Combine does.
+fn lfCrystalCombine(b: f32, v: f32) -> f32 {
+  if (u.combine == 0u) { return max(b, v); }
+  if (u.combine == 1u) { return min(b, v); }
+  return v;
+}
+
+// ---- the seed table ----
+fn lfcRow(r: u32) -> vec4f { return MW[u.mwBase + u.nwrites + u.lfcTab + r]; }
+// The path a trunk segment belongs to (-1: a spur piece).
+fn lfcPath(k: u32) -> i32 { return i32(lfcRow(k).x); }
+// The index of seed (i, j) of path p at level lv in the table, or -1 outside it.
+fn lfcIndex(p: i32, lv: u32, i: i32, j: i32) -> i32 {
+  if (p < 0) { return -1; }
+  let b = lfcRow(u.nseg + u32(p) * 3u + lv); let i0 = i32(b.y); let ni = i32(b.z); let j0 = i32(b.w);
+  if (i < i0 || i >= i0 + ni || j < j0 || j > -j0) { return -1; }
+  return i32(b.x) + (j - j0) * ni + (i - i0);
+}
+fn lfcAt(n: i32, w: u32, cells: u32) -> vec4f { let a = CNPL * cells + u32(n) * 12u + w * 4u; return vec4f(Sc[a], Sc[a + 1u], Sc[a + 2u], Sc[a + 3u]); }
+fn lfcPut(n: u32, w: u32, v: vec4f, cells: u32) { let a = CNPL * cells + n * 12u + w * 4u; Sc[a] = v.x; Sc[a + 1u] = v.y; Sc[a + 2u] = v.z; Sc[a + 3u] = v.w; }
+// A prism seed's place in the path's coordinates: a hexagonal lattice of the spacing lfcSpace (rows along the path), each seed moved by up to lfcJs of a
+// spacing along the path and lfcJc across it (less where the shape has no room: a lone prism stays on its click), so no rows show.
+fn lfcPrismSeed(i: i32, j: i32) -> vec2f {
+  let S = u.lfcSpace;
+  return vec2f((f32(i) + 0.5 * f32(j & 1) + u.lfcJs * (cgRnd(i, j, 22u) - 0.5)) * S, (f32(j) * 0.8660254 + u.lfcJc * (cgRnd(i, j, 23u) - 0.5)) * S);
+}
+// A prism's own radius: its share of Facet width (Variation spreads it); 0 where the Facets share leaves no prism.
+fn lfcPrismSize(i: i32, j: i32) -> f32 {
+  if (cgRnd(i, j, 21u) >= u.lfcShare) { return 0.0; }
+  return 0.5 * u.cgSize * (1.0 + u.cgVar * (cgRnd(i, j, 24u) - 0.5) * 1.2);
+}
+// The seed table entry thread t fills: its path, level, and lattice place (i, j); the level is -1 past the table.
+fn lfcSeedOf(t: u32) -> vec4i {
+  for (var r = 0u; r < u.lfcBlocks; r++) {
+    let b = lfcRow(u.nseg + r);
+    if (f32(t) >= b.x && f32(t) < b.x + b.z * (1.0 - 2.0 * b.w)) { let local = i32(t) - i32(b.x); let ni = i32(b.z); return vec4i(i32(r / 3u), i32(r % 3u), i32(b.y) + local % ni, i32(b.w) + local / ni); }
+  }
+  return vec4i(0, -1, 0, 0);
+}
+
+// One thread per seed of the table (256 a row of the dispatch): which path and level it is, where it lies, and what its element needs. A seed far from the
+// cells this evaluation covers (lfcW*, grown by the reach of a seed) keeps only its place; nothing there reads the rest.
+@compute @workgroup_size(8, 8)
+fn lfCrystalSites(@builtin(global_invocation_id) g: vec3u) {
+  let t = g.y * 256u + g.x;
+  if (g.x >= 256u || t >= u.lfcSites) { return; }
+  let cells = cCells(); let at = lfcSeedOf(t);
+  if (at.y < 0) { return; }
+  let p = at.x; let lv = u32(at.y); let i = at.z; let j = at.w;
+  var k0 = 0u;
+  for (var k = 0u; k < u.nseg; k++) { if (lfcPath(k) == p) { k0 = k; break; } }
+  let prism = u.lfcForm == 2u;
+  var sc = cgPoint(i, j, u.cgSize * SZL[lv], 0.9, lv * 16u);
+  if (prism) { sc = lfcPrismSeed(i, j); }
+  let pt = lfCrystalPoint(sc, k0);
+  lfcPut(t, 0u, vec4f(pt.w, pt.ax), cells);
+  let gx = i32(floor(pt.w.x / u.spacing + 0.5)); let gy = i32(floor(pt.w.y / u.spacing + 0.5));
+  if (gx < u.lfcWx0 || gx > u.lfcWx1 || gy < u.lfcWy0 || gy > u.lfcWy1) { lfcPut(t, 1u, vec4f(0.0), cells); lfcPut(t, 2u, vec4f(0.0), cells); return; }
+  if (!prism) {
+    // A column: the envelope at its seed and its slope over three cells, and whether the seed takes this level's width.
+    let env = lfCrystalEnv(pt.w, cells);
+    let e = 3.0 * u.spacing;
+    let sx = (lfCrystalEnv(pt.w + vec2f(e, 0.0), cells).x - lfCrystalEnv(pt.w - vec2f(e, 0.0), cells).x) / (2.0 * e);
+    let sy = (lfCrystalEnv(pt.w + vec2f(0.0, e), cells).x - lfCrystalEnv(pt.w - vec2f(0.0, e), cells).x) / (2.0 * e);
+    let fits = u.lfcLevels <= 1u || lfCrystalLevel(pt.w, env.y / lfCrystalRise()) == i32(lv);
+    lfcPut(t, 1u, vec4f(env, sx, sy), cells); lfcPut(t, 2u, vec4f(select(0.0, 1.0, fits), 0.0, 0.0, 0.0), cells);
+    return;
+  }
+  // A prism: its rise over a cell's ground b is A + B b (the section is linear in the ground it lands on), and its top's slope across the prism (the section's
+  // over half its radius each way: Level tops below 100 tilt the top as that plane). Its own size waits for lfCrystalRoom (word 2: final radius, own size).
+  let R = lfcPrismSize(i, j);
+  let v0 = lfcSection(pt.w, pt.k, 0.0, pt.w, cells); let v1 = lfcSection(pt.w, pt.k, 1.0, pt.w, cells);
+  let a = max(0.5 * R, u.spacing);
+  let tx = (lfcSection(pt.w + vec2f(a, 0.0), pt.k, 0.0, pt.w, cells).x - lfcSection(pt.w - vec2f(a, 0.0), pt.k, 0.0, pt.w, cells).x) / (2.0 * a);
+  let ty = (lfcSection(pt.w + vec2f(0.0, a), pt.k, 0.0, pt.w, cells).x - lfcSection(pt.w - vec2f(0.0, a), pt.k, 0.0, pt.w, cells).x) / (2.0 * a);
+  lfcPut(t, 1u, vec4f(v0.x, v1.x - v0.x - 1.0, tx, ty), cells); lfcPut(t, 2u, vec4f(0.0, select(0.0, R, v0.y > 0.0), 0.0, 0.0), cells);
+}
+// Prisms, after lfCrystalSites: each prism's radius, no more than half the way to the nearest prism that also stands (on the shape, in the Facets share; less
+// the reach of its jittered outline), so neighbours never merge and a lone prism keeps its full size.
+@compute @workgroup_size(8, 8)
+fn lfCrystalRoom(@builtin(global_invocation_id) g: vec3u) {
+  let t = g.y * 256u + g.x;
+  if (g.x >= 256u || t >= u.lfcSites) { return; }
+  let cells = cCells(); let at = lfcSeedOf(t);
+  if (at.y < 0) { return; }
+  let own = lfcAt(i32(t), 2u, cells).y;
+  if (own <= 0.0) { return; }
+  let w = lfcAt(i32(t), 0u, cells).xy;
+  var near = 3.0e38;
+  for (var dj = -1; dj <= 1; dj++) { for (var di = -2; di <= 2; di++) {
+    if (di == 0 && dj == 0) { continue; }
+    let n = lfcIndex(at.x, 0u, at.z + di, at.w + dj);
+    if (n < 0 || lfcAt(n, 2u, cells).y <= 0.0) { continue; }
+    near = min(near, length(lfcAt(n, 0u, cells).xy - w));
+  } }
+  let a = CNPL * cells + t * 12u + 8u;
+  Sc[a] = min(own, 0.5 * near / (1.0 + 0.3 * u.bgJit));
+}
+
+// Stepped columns: the envelope tiled with Voronoi columns (up to three widths); each top is the envelope at its seed, stepped up or down from its
+// neighbours, level (Level tops 100) or following the envelope's slope, tilted into one or two planes by Top tilt; the uncovered share stays the envelope.
+fn lfCrystalColumns(x: i32, y: i32, i: u32, cells: u32) {
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
+  let pc = lfCrystalCoord(vec2f(wx, wy)); let path = lfcPath(u32(pc.z)); let lx = pc.x; let ly = pc.y;
+  let levels = i32(u.lfcLevels);
+  var d1 = 3.0e38; var d2 = 3.0e38; var bl = -1; var bn = -1; var bi = 0; var bj = 0;
+  for (var lv = 0; lv < levels; lv++) {
+    let Ll = u.cgSize * SZL[lv]; let ci = i32(floor(lx / Ll)); let cj = i32(floor(ly / Ll));
+    for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
+      let n = lfcIndex(path, u32(lv), ii, j);
+      if (n < 0) { continue; }
+      if (levels > 1 && lfcAt(n, 2u, cells).x == 0.0) { continue; }
+      let d = length(vec2f(wx, wy) - lfcAt(n, 0u, cells).xy);
+      if (d < d1) { d2 = d1; d1 = d; bl = lv; bn = n; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
+    } }
+  }
+  if (bl < 0) {
+    // No width in use is near: the widest columns, whatever they asked for.
+    let ci = i32(floor(lx / u.cgSize)); let cj = i32(floor(ly / u.cgSize));
+    for (var j = cj - 1; j <= cj + 1; j++) { for (var ii = ci - 1; ii <= ci + 1; ii++) {
+      let n = lfcIndex(path, 0u, ii, j);
+      if (n < 0) { continue; }
+      let d = length(vec2f(wx, wy) - lfcAt(n, 0u, cells).xy);
+      if (d < d1) { d2 = d1; d1 = d; bl = 0; bn = n; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
+    } }
+  }
+  if (bn < 0) { return; }
+  let o = u32(bl) * 16u;
+  let cp = lfcAt(bn, 0u, cells); let cw = cp.xy; let env = lfcAt(bn, 1u, cells);
+  if (env.y <= 1.0) { return; }
+  // The uncovered share (1 - Facets, the widest columns most) keeps the envelope's own smooth surface.
+  if (cgRnd(bi, bj, 12u + o) < u.cgSmooth * SZB[bl]) { return; }
+  var step = 0.0;
+  if (!(cgRnd(bi, bj, 3u + o) < 0.4)) { step = (cgRnd(bi, bj, 4u + o) - 0.35) * 2.0 * u.cgStep * SZS[bl]; }
+  let shade = 0.8 + 0.2 * cgRnd(bi, bj, 5u + o);
+  var top = env.x + step + (env.z * (wx - cw.x) + env.w * (wy - cw.y)) * (1.0 - clamp(u.cgTiers, 0.0, 1.0));
+  if (u.cgFacet > 0.0) {
+    let fa = u.cgFacet;
+    let h0 = cgRnd(bi, bj, 6u + o) * 6.2831853; let h1 = h0 + 3.1415927 * (0.5 + cgRnd(bi, bj, 7u + o));
+    let m0 = fa * (0.2 + 0.8 * cgRnd(bi, bj, 8u + o)); var m1 = 0.0;
+    if (!(cgRnd(bi, bj, 9u + o) < 0.3)) { m1 = fa * (0.2 + 0.8 * cgRnd(bi, bj, 10u + o)); }
+    let ol = lfCrystalLocal(vec2f(wx, wy) - cw, cp.zw); let ox = ol.x; let oy = ol.y;
+    let pa = cos(h0) * m0 * ox + sin(h0) * m0 * oy; let pb = cos(h1) * m1 * ox + sin(h1) * m1 * oy;
+    if (cgRnd(bi, bj, 11u + o) < 0.5) { top = top + min(pa, pb); } else { top = top + max(pa, pb); }
+  }
+  let base = Sc[CB * cells + i];
+  let value = lfCrystalCombine(base, top);
+  if (abs(value - base) <= 0.5) { F[PH * cells + i] = base; return; }
+  F[PH * cells + i] = clamp(value, u.minH, u.maxH);
+  // Surface Crystal: each column is crystal, shaded by its own brightness, with a dark seam to its neighbours; Rock keeps the shape's own ground.
+  if (u.fcSurface == 0u) { return; }
+  F[PP * cells + i] = 1.0; F[PX * cells + i] = select(shade, 0.5, d2 - d1 < max(1.2, u.spacing * 0.6));
+}
+
+// Prisms: scattered over the envelope (lfcPrismSeed), a Facets share of the seeds carries a polygonal prism (Polygon sides, turned square to the path by Align,
+// its outline jittered and its corners cut), as high as the envelope at its seed; its faces climb from its outline to a flat top (Flat top share) that is
+// level or, with Level tops below 100, tilted as the envelope's slope across the prism. Between prisms the ground is the prefix. Face roughness roughens the
+// faces; Surface Crystal marks each prism as clean crystal (the crystal field), Rock leaves it the shape's own ground, lit with the world's slope relief and
+// light (ice blocks).
+fn lfCrystalPrisms(x: i32, y: i32, i: u32, cells: u32) {
+  let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing; let here = vec2f(wx, wy);
+  let pc = lfCrystalCoord(here); let path = lfcPath(u32(pc.z));
+  let rowH = 0.8660254 * u.lfcSpace; let cj = i32(round(pc.y / rowH));
+  let base = Sc[CB * cells + i];
+  let tilt = 1.0 - clamp(u.cgTiers, 0.0, 1.0);
+  var best = 0.0;
+  for (var j = cj - 2; j <= cj + 2; j++) {
+    let ci = i32(round(pc.x / u.lfcSpace - 0.5 * f32(j & 1)));
+    for (var ii = ci - 2; ii <= ci + 2; ii++) {
+      let n = lfcIndex(path, 0u, ii, j);
+      if (n < 0) { continue; }
+      let R = lfcAt(n, 2u, cells).x;
+      if (R <= 0.0) { continue; }
+      let sp = lfcAt(n, 0u, cells); let q = lfCrystalLocal(here - sp.xy, sp.zw);
+      if (dot(q, q) > 2.6 * R * R) { continue; }
+      let sec = lfcAt(n, 1u, cells);
+      let H = (sec.x + sec.y * base) * (1.0 + u.cgVar * (cgRnd(ii, j, 25u) - 0.5));
+      if (H <= 3.0) { continue; }   // lower than 3 units a prism does not read as one, only as its crystal mark
+      let ns = u32(clamp(round(u.lfcSides + u.cgVar * (cgRnd(ii, j, 26u) - 0.5) * 2.4), 3.0, 12.0));
+      let rot = (1.0 - clamp(u.lfcAlign, 0.0, 1.0)) * cgRnd(ii, j, 27u) * 6.2831853;
+      let inr = R * cos(3.1415927 / f32(ns));
+      var m = 1.0e9;
+      for (var e = 0u; e < ns; e++) {
+        let a = rot + (f32(e) + u.bgJit * (cgRnd(ii, j, 40u + e) - 0.5) * 0.7) * 6.2831853 / f32(ns);
+        let d = inr * (1.0 + u.bgJit * (cgRnd(ii, j, 60u + e) - 0.5) * 0.6);
+        m = min(m, (d - dot(q, vec2f(cos(a), sin(a)))) / inr);
+      }
+      for (var e = 0u; e < u32(u.lfcBreak); e++) {
+        let a = cgRnd(ii, j, 100u + e) * 6.2831853;
+        m = min(m, (R * (0.55 + 0.35 * cgRnd(ii, j, 120u + e)) - dot(q, vec2f(cos(a), sin(a)))) / inr);
+      }
+      if (m <= 0.0) { continue; }
+      // The top: the seed's height, tilted below Level tops 100 as the plane of the envelope's slope across the prism; the faces climb to it over the outer
+      // (1 - Flat top share) of the prism.
+      let top = H + tilt * dot(sec.zw, here - sp.xy);
+      let h = top * min(m / max(1.0 - u.cTop, 0.05), 1.0);
+      if (h <= 0.0) { continue; }
+      best = max(best, h);
+    }
+  }
+  if (best <= 0.0) { F[PH * cells + i] = base; return; }
+  if (u.bgRough > 0.0) {
+    let f = vnoise(wx / 40.0, wy / 40.0, u.seed ^ 0x2a1u) * 0.3 + vnoise(wx / 17.0, wy / 17.0, u.seed ^ 0x4c7u) * 0.3 + vnoise(wx / 8.0, wy / 8.0, u.seed ^ 0x6e3u) * 0.28 + vnoise(wx / 4.0, wy / 4.0, u.seed ^ 0x8f9u) * 0.18;
+    best = best + u.bgRough * f * sm(0.0, 4.0, best);
+  }
+  F[PH * cells + i] = clamp(lfCrystalCombine(base, base + best), u.minH, u.maxH);
+  if (u.fcSurface == 0u) { return; }
+  F[PP * cells + i] = 1.0;
+  F[PX * cells + i] = max(F[PX * cells + i], sm(0.2, 1.5, best));
+}
+
+@compute @workgroup_size(8, 8)
+fn lfCrystalApply(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  let cells = cCells(); let i = cIdx(x, y);
+  if (u.lfcForm == 1u) { lfCrystalColumns(x, y, i, cells); } else { lfCrystalPrisms(x, y, i, cells); }
 }

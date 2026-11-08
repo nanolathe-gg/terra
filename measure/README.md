@@ -22,6 +22,8 @@ stay outside Git.
 | `lit_lab.py` | Tries lit numbers on one prepared image: image beside the engine's swatch at 1x, 2x and the quarter level, with the numbers |
 | `lit_fit.py` | Pattern search for a lit material's numbers on swatches rendered in one Chrome session (`material_fit.py --lit` runs it) |
 | `material_swatches.py` | Each prepared image beside the engine's generated layer, at 1x, 2x and quarter resolution, with the numbers |
+| `river_retail.py` | Retail TA rivers from their 16-px heights: width, sinuosity and offset from the chord over 4 and 8 widths, bend wavelength and amplitude (the table is in its header) |
+| `river_band.mjs` | The same numbers on the River preset's stroke-time migration (`sculpt-river.js`), on a straight line, a gentle curve and an S, per Wander |
 
 Renders with heights come from `capture/capture.mjs` scenes that set
 `"heights": true`. Pass `ours <label> <stem>...` (stems without `.png`),
@@ -44,3 +46,10 @@ Painted Desert (a repro/all.sh output directory: retail.png, heights.npy, crop.j
 | Script | Measures |
 | --- | --- |
 | `desert_hue.py` | Colour (mean RGB, hue, R/G, luma s.d., orange and grey shares) by the height of the ground each pixel shows, in classes plain, apron, bands, cap and the flattest 40% of pixels, retail beside ours (card G4) |
+
+Retail maps, read in place from `~/TotalAnnihilation` (numbers only, nothing written):
+
+| Tool | Measures |
+| --- | --- |
+| `tntstats` | Each TNT's size, tile slots and distinct 32x32 tiles |
+| `shallowdepth` | Water depth under the shallow (light) and deep blue of named TNTs, per map and pooled by depth band (docs/PASSABILITY.md) |

@@ -1,34 +1,10 @@
-import {strokeKnots,sampleKnots,landformSteps,landformShore,landformMakesWater} from './sculpt-shape-presets.js';
+import {strokeKnots,sampleKnots,landformSteps,landformShore,landformMakesWater,landformDigs} from './sculpt-shape-presets.js';
+import {isRiver} from './sculpt-river.js';
 // Presentation names and applicability belong to features, never to worlds.
-// Historical persistence keys are compatibility identifiers for existing v4-v6
-// recipes, not world-gated algorithms. All presentation uses feature names.
-// Experiment 4 left this off: it darkens broad faces instead of making useful
-// crevices. Preserve recipes, but require fresh visual evidence before exposure.
-export const PARKED_WORLD_CONTROLS=new Set(['crevice']);
-export const WORLD_GROUP_NAMES={
- 'Light':'Lighting','Relief':'Ground detail','Faces':'Material coverage','Desert foot band':'Foot color band','Desert caps':'Cap color',
- 'Shallow water, round 2':'Water detail','Shallow water, round 3':'Water detail',
- 'Fringe lines (Archipelago)':'Contour fringe','Fringe copies (Archipelago)':'Contour fringe',
- 'Lava hill rock':'Pillow crust','Lava banks':'Terrace creases','Pockmarks (Moon)':'Surface pits',
- 'Moon surface':'Cups, ribs & folds','Ice mountains':'Mineral faces','Ice blocks and mesas':'Cap & face finish',
- 'Ice frost lines':'Needle lines','Ice frost band':'Shore pockets',
- 'Rock face: follows the slope':'Structure orientation','Rock face: gullies and ribs':'Gullies & ribs','Rock face: facets':'Microfacets'
-};
 export const WORLD_CHOICES={deepEdge:[[0,'Ramp'],[1,'Hard step']],cliffFollow:[[0,'Fixed directions'],[1,'Follow terrain']],paletteMix:[[0,'Nearest color'],[1,'Mix color pairs']]};
-const LABELS={plainRelief:'Ground bumps',lumpRelief:'Painted ground bumps',rockOrder:'Rock structure',rockStain:'Stain',sunTilt:'Light from the south',ambient:'Ambient light',sand:'Deposit supply',wind:'Ripple direction (degrees)',sandGrass:'Vegetation through sand',hillLight:'Slope-cover brightness',ringFade:'Fringe fade length',slopeMarks:'Dark slope marks',wrinkles:'Joined slope wrinkles',
- desertCapFlat:'Uniform cap color',rockMoss:'Vegetation tint in rock',wetSwath:'Moisture',lushness:'Lushness',shoreEdge:'Waterline rim and lip',
- bedDots:'Bed speckles',crackedStep:'Cracked-bed transition depth',shoalGrain:'Grain through water tint',shoalShoreSoft:'Waterline blur (px)',
- lavaCrust:'Pillow crust strength',lavaCalm:'Replace fine relief with crust',lavaDusk:'Shade away from light',
- moonCups:'Slope cups',moonRibs:'Slope ribs',moonFolds:'Contour folds',
- iceSlate:'Slate faces',iceCrystal:'Straight face fibres',iceCrest:'Cap lumps',iceSoft:'Rounded lighting',iceSnow:'Snow on level caps',iceFall:'Slope fibres',iceApron:'Hatched foot apron',iceFrost:'Needle hairlines',
- crystalForm:'Form',crystalSize:'Element width (px)',crystalCount:'Elements per cluster',crystalSides:'Polygon sides',crystalTop:'Flat top share',crystalLean:'Apex lean',
- crystalTiers:'Stepped column tops',crystalAlign:'Align blocks to shape',bergFace:'Face steepness',bergJitter:'Outline jitter',bergBreak:'Corner cuts',bergRough:'Face roughness',bergTilt:'Top tilt',bergFlat:'Level top share',bergTiltDir:'Tilt direction (degrees)',
- craterFacets:'Bowl facets',crystalCraterPx:'Facet width (px)',crystalCraterStep:'Facet step height',crystalCraterSkin:'Fine seam shading',crystalShoreSeam:'Slab seam weight',plateVary:'Slab variety',
- iceFacets:'Angular facets',iceFacetSize:'Facet width (px)',lavaSpread:'Layer width spread',lavaCircleVary:'Circular bite variation',
- fissureNetwork:'Cut layout',plateMaterial:'Shore structure',fingers:'Shore lobes',fingerSize:'Lobe size',
- styleVegetation:'Local vegetation',
-};
-export function controlLabel(key,label){return LABELS[key]||label.replace(/ \((?:Archipelago|Moon|Lava|Red|Green|Ice|Crystal)(?:[^)]*)\)/g,'').replace(/\bice\b/gi,'surface');}
+// Facets: each Facet shape's own rows (0 angular facets, 1 stepped columns, 2 prisms); Step height serves angular facets and columns, Level tops columns and prisms.
+const FACET_SHAPE_KEYS=[[],['crystalFacet','crystalSizeVar'],['crystalSides','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']];
+export const LANDFORM_FACET_KEYS=['crystalStep','crystalTiers',...FACET_SHAPE_KEYS.flat()];
 export function shapeControlAvailable(key,kind,p){
  // A landform has its own width (the diameter), softness-free presets and variation (card H27).
  if(kind==='landform'&&['softness','faceVariation'].includes(key))return false;
@@ -45,9 +21,17 @@ export function shapeControlAvailable(key,kind,p){
   // Talus rests on ground the stroke raises, so it works with the plain Raise choice only.
   if(key==='talus')return Math.round(Number(p.combine||0))===0;
   if(['layerCircle','lavaCircleVary'].includes(key))return on&&circular;
+  // A river's path is its channel, carried by its migration; an impact would read that path as its track (lfcrater).
+  if(['ejecta','secondaries'].includes(key))return !isRiver(p);
+  // lfimpact2: the ground buckles beyond the rim of a shape that digs into the ground it lands on (the engine's bucklingOn); its help says so.
+  if(key==='buckling')return !isRiver(p)&&landformDigs(p);
+  // Secondaries' distance places the secondaries: it shows once there is one (its help says so).
+  if(key==='secondaryDistance')return !isRiver(p)&&Math.round(Number(p.secondaries)||0)>=1;
+  // Spur variation acts on spurs: it shows once Spurs is on (its help says so).
+  if(key==='crestVary')return Math.round(Number(p.spurCount)||0)>=1;
  }
 
- const form=Math.round(p.crystalForm||0),plates=p.shorePlates>0,slab=p.plateMaterial<2;
+ const plates=p.shorePlates>0,slab=p.plateMaterial<2;
  // The face wanders on the shoulder of Reset ground and the cover brushes.
  if(key==='faceVariation')return ['erase','paint','sand','grass'].includes(kind);
  // p.world is what worldControlRequirement reads.
@@ -62,17 +46,15 @@ export function shapeControlAvailable(key,kind,p){
   const front=sampleKnots(k.knots),back=sampleKnots(k.back);return front.some((v,i)=>v!==back[i]);
  }
  if(key==='facing')return p.lean>0;
- if(kind==='crystal'){
-  if(['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth'].includes(key))return form===1;
-  if(['crystalCount','crystalSides','crystalVariation'].includes(key))return form!==1;
-  if(['crystalTop','crystalLean'].includes(key))return form===0;
-  if(['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergFlat','bergTiltDir'].includes(key))return form===2&&(!['bergFlat','bergTiltDir'].includes(key)||p.bergTilt>0);
- }
  if(['plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','plateVary'].includes(key))return plates&&(key==='frostNeedles'?!slab:key==='crystalShoreSeam'||key==='plateVary'?slab:true);
- if(['crystalCraterPx','crystalCraterStep','crystalCraterSkin'].includes(key))return p.craterFacets>0;
  // A landform's coast pass and its facets are one pass over its result; shore features take it.
- if(kind==='landform'&&['iceFacets','iceFacetSize'].includes(key)&&landformShore(landformSteps(p)))return false;
- if(key==='iceFacetSize')return p.iceFacets>0;
+ if(kind==='landform'&&['iceFacets','iceFacetSize','facetForm','facetSurface',...LANDFORM_FACET_KEYS].includes(key)&&landformShore(landformSteps(p)))return false;
+ if(['iceFacetSize','facetSurface'].includes(key))return p.iceFacets>0;
+ // A landform that digs takes angular facets (fitted to its own surface up and down), so it has no shape to choose.
+ const dig=landformDigs(p),fs=dig?0:Math.round(Number(p.facetForm)||0);
+ if(key==='facetForm')return p.iceFacets>0&&!dig;
+ // Each shape's own rows show once facets are on and that shape is chosen.
+ if(kind==='landform'&&LANDFORM_FACET_KEYS.includes(key))return p.iceFacets>0&&(key==='crystalStep'?fs<=1:key==='crystalTiers'?fs>=1:FACET_SHAPE_KEYS[fs].includes(key));
  return true;
 }
 
@@ -92,13 +74,13 @@ const CRACKED_BED='Give a water stroke the Cracked bed look (Shallow water look)
 // finds an inactive setting and explains what must be enabled to use it.
 export function worldControlRequirement(key,v){
  const n=k=>Number(v[k]??0),joints=()=>n('rockJoint')*n('rockOpen'),needs=(parent,label)=>worldControlRequirement(parent,v)||(n(parent)<=0?`Enable ${label} to use this setting.`:'');   // a parent that is itself idle names its own reason first
- if(['vegetationCover','plantRelief','flowerDensity'].includes(key)){
-  if(!n('groundCover'))return 'This world has no ground-cover material.';
-  if(key==='vegetationCover')return '';
-  if(Number(v.vegetationCover??1)<=0)return 'Raise Vegetation cover to use this setting.';
-  if(key==='flowerDensity')return n('flowers')?'':'This ground-cover material has no flowers.';
-  if(!n('plants'))return 'This ground-cover material has no plant relief.';
- }
+ // Every world has a ground-cover table (sculpt.py DEFAULT_GROUND_COVER): Vegetation cover above 0 turns it on.
+ const cover=n('vegetationCover')>0;
+ if(['plantRelief','flowerDensity'].includes(key)&&!cover)return 'Raise Vegetation cover to use this setting.';
+ // The sediment transition, at 100 percent Material weathering, replaces the ground's color outright (worldPanelValues' slopeReplaced), and the
+ // flowers are dots in that color; the plants' relief is baked into the height and still shows.
+ if(key==='flowerDensity'&&n('slopeReplaced')>0)return 'The sediment transition replaces the ground\'s color at 100 percent Material weathering, so no flower shows. Lower Material weathering to use this setting.';
+ if(['plantRelief','flowerDensity'].includes(key))return '';
  if(['undulationScale','undulationCover'].includes(key))return needs('undulation','Undulation height');
  if((['bedHeight','bedVary','bedPunch'].includes(key)||key==='bedSpacing'&&n('cliffRise')<=0)&&n('column')>0)return 'The authored bed profile supplies this value. Random bed controls do not apply.';   // with a Riser height a column's ledge scales by bed thickness over this spacing
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return 'This world has no rock column.';
@@ -134,20 +116,20 @@ export function worldControlRequirement(key,v){
  // Shine: a lobe needs its material's gloss, a grain its roughness; the shared rows need some material shining.
  // The slope group's weight is the larger of the faces' moss share (microRock) and the slope cover scaled by Sampled slope texture (a sandy slope scales it by its own sand instead).
  // With neither it has no share, and its gloss does not wake the pass (uShineOn, sculpt-renderer.js).
- const noSlopeShare=(n('slopeTexture')<=0||n('groundCover')>0)&&n('slopeSand')<=0&&Number(v.microRock??1)<=0;
- if(noSlopeShare&&/^shineSlope(Sharp|Scale|Rough)?$/.test(key))return 'This world\'s faces are one material and Sampled slope texture is 0, so the slope cover has no share to shine. Raise Sampled slope texture to use this setting.';
+ const noSlopeShare=(n('slopeTexture')<=0||cover)&&n('slopeSand')<=0&&Number(v.microRock??1)<=0;
+ if(noSlopeShare&&/^shineSlope(Sharp|Scale|Rough)?$/.test(key))return 'The faces are one material and Sampled slope texture is 0, so the slope cover has no share to shine. Raise Sampled slope texture or Moss and rock interleaved on faces to use this setting.';
  const shine=['Ground','Slope','Rock','Sand','Crystal'].filter(m=>m!=='Slope'||!noSlopeShare),shiny=shine.some(m=>n('shine'+m)>0),rough=shine.some(m=>n('shine'+m+'Rough')>0);
  const lobe=/^shine(Ground|Slope|Rock|Sand|Crystal)(Sharp|Scale)$/.exec(key);
  if(lobe)return needs('shine'+lobe[1]+(lobe[2]==='Sharp'?'':'Rough'),(lobe[2]==='Sharp'?'Gloss':'Roughness')+' in Shine: '+({Ground:'ground',Slope:'slope cover',Rock:'rock',Sand:'sand',Crystal:'crystal'})[lobe[1]]);
  if(['shineWhite','shineHeadroom'].includes(key))return shiny?'':'Set a Gloss above zero in one of the Shine groups to use this setting.';
  if(key==='shineStretch')return rough?'':'Set a Roughness above zero in one of the Shine groups to use this setting.';
  if(['shineGate','shineOutside','shineSlopeGate'].includes(key))return shiny||rough?'':'Set a Gloss or Roughness above zero in one of the Shine groups to use this setting.';
- if(['faceEdge','gullyRock','iceSlate'].includes(key)&&Number(v.microRock??1)<=0)return 'This world\'s faces are one material, not rock and moss interleaved, so there is nothing for this setting to place.';
+ if(['faceEdge','gullyRock','iceSlate'].includes(key)&&Number(v.microRock??1)<=0)return 'The faces are one material, not moss and rock interleaved, so there is nothing for this setting to place. Raise Moss and rock interleaved on faces to use this setting.';
  // A world with a beach keeps the Sand brush for its bars, so the sand these rows draw comes only from the weathering's supply.
  if(['wind','ripple','rippleHeight','sandDust','sandGrain','sandGrass','sandLight'].includes(key)&&n('beachLayer')>0)return needs('sand','Weathering supply in Sand');
  // Water wets the ground only where the Time pass has rain; the worlds that run it with rain off have no wetness map to read.
- if(key==='wetSwath'&&n('erosionRain')<=0)return 'This world\'s weathering has no rain, so no ground is wet. Moisture has nothing to move.';
- if(key==='slopeTexture'&&n('groundCover')>0)return 'This world\'s ground-cover table decides its slope cover.';
+ if(key==='wetSwath'&&n('erosionRain')<=0)return 'With no rain no ground is wet, so Moisture has nothing to move. Raise Rain to use this setting.';
+ if(key==='slopeTexture'&&cover)return 'The ground cover decides the slope cover while Vegetation cover is above 0.';
  if(key==='slopeTexture'&&n('slopeSand')>0)return 'The slopes of this world are sand, which has no texture to scale.';
  // The sediment transition is built from the ground and replaces the slope cover's color outright at 100 percent Material weathering (worldPanelValues passes slopeReplaced); the texture then scales only the slope's share of the shine.
  if(key==='slopeTexture'&&n('slopeReplaced')>0&&!shiny&&!rough)return 'The sediment transition replaces the slope color at 100 percent Material weathering, so this scales only the slope\'s gloss. Lower Material weathering, or set a Gloss or Roughness above zero in one of the Shine groups, to use this setting.';
@@ -181,7 +163,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'groundTiles','groundContrast','undulation','undulationScale','undulationCover',
  'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
  'flatShadow','flatOcclusion','sunTilt','ambient','shadeDepth','lightCap',
- 'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','wetSwath','lushness','slopeMarks','wrinkles',
+ 'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','erosionRain','wetSwath','lushness','slopeMarks','wrinkles',
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
  'looseSupply','looseSize','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing','rockOrder','rockFrom','bedSpacing','bedLedge','rockOpen',

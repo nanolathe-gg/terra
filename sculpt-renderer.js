@@ -3,7 +3,7 @@
 // sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
 // world-resolution fields bake, a compute pass).
 
-import {materialRows,tablePlacementRows,groundCoverRows,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
+import {materialRows,tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {columnRows} from './sculpt-column.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
@@ -299,19 +299,13 @@ export class TerrainRenderer {
     this.f('uSize', this.size);
     this.f('uBase', this.config.baseHeight - this.config.seaLevel);
     this.f('uSea', 0);
-    this.f('uDetail', variant.get('relief') === 'base' ? 0.0 : (this.config.material?.surfaceRelief ?? 1.0));
-    this.i('uRockyCoasts', Boolean(this.config.material?.rockyCoasts));
+    this.f('uDetail', this.config.material?.surfaceRelief ?? 1.0);
     this.i('uSlopeMaterial', slopeMaterial);
-    this.i('uSoilCover', variant.get('transition') === 'soil');
-    this.i('uMineralMargins', variant.get('transition') === 'mineral' && variant.get('margins') !== 'slope');
+    this.i('uMineralMargins', variant.get('transition') === 'mineral');
     this.i('uRockLayers', rockLayers);
     this.applyKnobs();
     this.i('uDiagnosticView', ['diffuse','occlusion','shadow','exposure','shading','material','cracks'].indexOf(variant.get('view')) + 1);
-    this.i('uSeparateLight', variant.get('shade') === 'separate');
     this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
-    this.i('uCoastalDetail', variant.get('shore') !== 'smooth');
-    this.i('uLayered', ['layers', 'terraces'].includes(variant.get('geology')));
-    this.i('uTerraced', variant.get('geology') === 'terraces');
     const material = this.config.material || {};
     this.set('uSlopeProfile', [material.slopeStart ?? .10,
       material.slopeFull ?? .55, material.slopeFloor ?? 8.0, material.slopeDry ?? 24.0]);
@@ -326,16 +320,13 @@ export class TerrainRenderer {
     // The blending algorithm does not choose a biome's material colour.
     this.set('uFringeSignal', material.fringeSignal || [-.299, -.587, -.114, 1]);
     this.set('uFringeRange', material.fringeRange || [.08, .28]);
-    const threshold = material.rockSlope ?? 1.145, feather = material.rockFeather ?? 0.43;
-    this.f('uRockStart', threshold - feather * 0.5);
-    this.f('uRockFull', threshold + feather * 0.5);
     this.f('uWetBand', material.wetBand ?? 13);
     // E6: mineralDetail scales the rock art's contrast about its mean (1: as drawn).
     const rockMean = material.hillRockMeanRGB || [85, 84, 79];
     this.v('uRockMean', rockMean.map(v => v / 255));
-    this.i('uShapeCoverage', variant.get('coverage') === 'form');
-    this.i('uLedgeCoverage', variant.get('coverage') === 'ledge');
     this.v('uShallowColor', (this.config.water?.shallowRGB || [60, 115, 163]).map(v => v / 255));
+    const bed = this.config.water?.riverBedRGB;   // riverfix: a braided bed's gravel, world data (absent: the draw darkens the world's rock)
+    this.set('uRiverBed', bed ? [...bed.map(v => v / 255), 1] : [0, 0, 0, 0]);
     this.v('uDeepColor', (this.config.water?.deepRGB || [16, 57, 133]).map(v => v / 255));
     this.v('uWaterMean', this.materialData.measured[this.config.water.deep].meanRGB.map(v => v / 255));
     this.i('uWaterLayer', this.materialData.order.indexOf(this.config.water.deep));
@@ -694,13 +685,12 @@ export class TerrainRenderer {
   // shared draw's placement read. Green's rows are materials/green.json's.
   placementRows(variant) {
     const material = this.config.material || {}, num = (k, d) => variant.has(k) ? Number(variant.get(k)) : d, list = (k, d) => (variant.get(k) || d).split(',').map(Number);
-    const mode = variant.get('coverage'), soil = variant.get('transition') === 'soil', mineral = variant.get('transition') === 'mineral' && variant.get('margins') !== 'slope';
+    const soil = variant.get('transition') === 'soil', mineral = variant.get('transition') === 'mineral';
     const threshold = material.rockSlope ?? 1.145, feather = material.rockFeather ?? 0.43;
-    let r0 = [1, 0, 0, 5], r1 = [0.55, 0, 0.55, 10], third = 0.30;   // the plain slope score: slope, noise, wear, and a third noise term
-    if (mode === 'form') { r0 = [0.55, 0.45, 0.28, 5]; r1 = [soil ? 0.80 : 0.25, soil ? 0.70 : 0, 0.55, 10]; third = 0; }
-    if (mode === 'ledge') { r0 = [0.15, 0.85, 0.15, 3]; r1 = [0.15, 0, 0.55, 4]; third = 0; }
+    // The slope score: slope, noise, wear (with its tap) on the first row; the soil's slope, noise and wear on the second.
+    const r0 = [0.55, 0.45, 0.28, 5], r1 = [soil ? 0.80 : 0.25, soil ? 0.70 : 0, 0.55, 10];
     const face = list('faceSlope', '0.35,0.9'), share = list('rockShare', '0.2,1.0'), score = list('faceScore', '0.2,2.0,0.5,0.3');
-    return [r0, r1, [threshold - feather * 0.5, threshold + feather * 0.5, third, 0],
+    return [r0, r1, [threshold - feather * 0.5, threshold + feather * 0.5, 0, 0],
       [0.2, soil ? 18 : 1e9, 18, 28], material.rockyCoasts ? [-1e4, -1e3, 0, 0] : [12, 36, 0, 0], [0.45, 0.9, mineral ? 0.45 : 0, mineral ? 1.4 : 0],
       [face[0], face[1], num('faceEdge', 0.8), 0], [share[0], share[1], 0, 0], score, [num('gullyRock', 0.5), num('rockOrder', 0), 0, 0]];
   }
@@ -708,7 +698,7 @@ export class TerrainRenderer {
   // (Green's); every other table leaves them to the knobs, as the world's placement always was.
   placementTable(variant) {
     const rows = this.materialData?.placement ? tablePlacementRows(this.materialData, variant) : this.placementRows(variant);
-    return [...Array.from({length: PLACEMENT_ROW}, () => [0, 0, 0, 0]), ...rows, ...groundCoverRows(this.config.material?.groundCover,variant,this.colorOverrides)];
+    return [...Array.from({length: PLACEMENT_ROW}, () => [0, 0, 0, 0]), ...rows, ...groundCoverRows(this.config.material?.groundCover,variant,this.colorOverrides||{},this.colorOverrides?.ground||this.means?.ground)];
   }
 
   // H4 round 2: one generated layer at one level as RGBA bytes (a check of the pass against the images it replaced; not used by the draw).
@@ -839,7 +829,7 @@ export class TerrainRenderer {
     const full = quality === 'full';
     this.i('uFull', full);
     this.i('uClay', clay);
-    const weatherAmount=this.variant.get('deposits')==='off'?0:materialWeathering;
+    const weatherAmount=materialWeathering;
     this.f('uMaterialWeathering', weatherAmount);
     this.f('uTransitionDetail', transitionDetail);
     this.i('uMaterialReady', this.materialReady);
@@ -856,11 +846,10 @@ export class TerrainRenderer {
     this.f('uCrystalFace', this.variant.has('crystalFace') ? Number(this.variant.get('crystalFace')) : 1);
     this.f('uCrystalInk', Number(this.variant.get('crystalInk')) || 0);
     this.f('uCrystalTone', this.variant.has('crystalTone') ? Number(this.variant.get('crystalTone')) : 1);
-    const front = this.variant.get('lighting') === 'front';
     // sunTilt scales the light's north-south component (1: as before; Moon 0,
     // lit from due west as every retail Lunar map measures).
     const tilt = this.variant.has('sunTilt') ? Number(this.variant.get('sunTilt')) : 1;
-    let sun = [light === 'alternate' ? 0.72 : -0.72, (front ? 0.38 : -0.38) * tilt, 0.82];
+    let sun = [light === 'alternate' ? 0.72 : -0.72, 0.38 * tilt, 0.82];
     this.worldSun = sun.map(v => v / Math.hypot(...sun));   // the map's own sun, as exports draw it (sculpt-features.js lights the features by it)
     // Review sun (card H1): the page's ?sun=<azimuth>,<elevation> turns the light, for looking at the relief from other
     // suns (ink keeps its shade, geometry does not). Azimuth is degrees added to the world's own sun direction on the
@@ -922,12 +911,10 @@ export class TerrainRenderer {
     // Placement is live state too: refreshing only scalar uniforms left these
     // controls frozen at startup in the generated materials.
     this.set('uMaterialTable', this.placementTable(variant));
-    this.f('uMineralDetail', (variant.get('grain') === 'strong' ? 2.4 : 1.0) * (variant.has('mineralDetail') ? Number(variant.get('mineralDetail')) : 1));
+    this.f('uMineralDetail', variant.has('mineralDetail') ? Number(variant.get('mineralDetail')) : 1);
     this.f('uMaterialFoot', variant.has('materialFoot') ? Math.max(1, Number(variant.get('materialFoot'))) : 1);   // H3: ?materialFoot=4 trials a quarter-resolution draw
     this.f('uMicroRock', variant.has('microRock') ? Number(variant.get('microRock')) : 1.0);
     this.set('uFaceSlope', (variant.get('faceSlope') || '0.35,0.9').split(',').map(Number));
-    this.set('uRockShare', (variant.get('rockShare') || '0.2,1.0').split(',').map(Number));
-    this.set('uFaceScore', (variant.get('faceScore') || '0.2,2.0,0.5,0.3').split(',').map(Number));
     this.f('uMossFromGround', variant.has('moss') ? Number(variant.get('moss')) : 0.0);
     this.f('uLightCap', variant.has('lightCap') ? Number(variant.get('lightCap')) : 1.13);
     this.f('uShadeDepth', variant.has('shadeDepth') ? Number(variant.get('shadeDepth')) : 1.0);
@@ -941,7 +928,7 @@ export class TerrainRenderer {
       return [knob('', 0), knob('Sharp', 24), knob('Rough', 0), knob('Scale', 6)];
     });
     // With no slope cover and faces of one material the slope group has no share, so its gloss does not wake the pass (worldControlRequirement says the same).
-    const slopeShare = (!this.config.material?.groundCover && Number(variant.get('slopeTexture') ?? 0.3) > 0) || Number(variant.get('microRock') ?? 1) > 0 || Boolean(this.config.material?.slopeSand);
+    const slopeShare = (!groundCoverOn(this.config.material?.groundCover, variant) && Number(variant.get('slopeTexture') ?? 0.3) > 0) || Number(variant.get('microRock') ?? 1) > 0 || Boolean(this.config.material?.slopeSand);
     this.i('uShineOn', shine.some((m, i) => (i !== 1 || slopeShare) && (m[0] > 0 || m[2] > 0)));
     this.f('uShineStretch', variant.has('shineStretch') ? Number(variant.get('shineStretch')) : 1);
     this.f('uShineWhite', variant.has('shineWhite') ? Number(variant.get('shineWhite')) : 0.35);
@@ -982,7 +969,6 @@ export class TerrainRenderer {
     this.f('uBedFlat', variant.has('bedFlat') ? Number(variant.get('bedFlat')) : 0);
     this.f('uSandCrown', variant.has('sandCrown') ? Number(variant.get('sandCrown')) : 0);
     this.f('uFootRim', variant.has('rim') ? Number(variant.get('rim')) : 0.0);
-    this.f('uCrevice', variant.has('crevice') ? Number(variant.get('crevice')) : 0.0);
     this.f('uFaceDark', variant.has('faceDark') ? Number(variant.get('faceDark')) : 0.0);
     this.f('uFlatBank', variant.has('flatBank') ? Number(variant.get('flatBank')) : 0.0);
     this.f('uDither', variant.has('dither') ? Number(variant.get('dither')) : 2.0);
@@ -1196,7 +1182,7 @@ export class TerrainRenderer {
     set('uWorms', number('worms', 0));
     set('uLooseSupply', preview ? 0 : number('looseSupply', 0));
     set('uLooseSize', number('looseSize', 6));
-    set('uPlantsOn', !preview && this.config.material?.groundCover?.plants ? 1 : 0);
+    set('uPlantsOn', !preview && groundCoverOn(this.config.material?.groundCover, this.variant) && this.config.material.groundCover.plants ? 1 : 0);
     set('uStoneRound', this.config.material?.stoneRound ?? 0);
     set('uStoneSort', this.config.material?.stoneSort ?? 0.6);
     set('uStoneSlab', this.config.material?.stoneSlab ?? 0.05);

@@ -42,6 +42,33 @@ const CONTROLS = {
   varyFoot: {base: {wander: 40, widthVary: 40, heightVary: 12, varyFoot: 0}, set: {varyFoot: 200}},
   varyMiddle: {base: {wander: 40, widthVary: 40, heightVary: 12, varyMiddle: 0}, set: {varyMiddle: 200}},
   surf: {base: {elevation: -55, combine: 1}, set: {surf: 100}},   // P27: a water stroke's beach profile (Surf from 0 up)
+  // lfcrater: the Ground reference (the hill's 71 units over the plain as an offset from the ground), a signed section (a knot below 0, flattened: a moat
+  // round the hill), and the impact features. Any impact feature makes the path an impact track, so Ejecta and Secondaries are each read with the other barely on.
+  heightRefGround: {base: {elevation: 170}, set: {heightReference: 2, elevation: 71}, under: [['landform', [[560, YC - 400], [560, YC + 400]], {card: {diameter: 900, elevation: 150, combine: 0, wander: 0, widthVary: 0, heightVary: 0, curve: {form: 'lfHill'}}}]]},
+  curveSigned: {base: {combine: 2}, set: {combine: 2, curve: {form: 'lfHill', knots: [[0, 0], [.15, -.15], [.3, 0], [.58, .45], [.82, .86], [1, 1]]}}},
+  ejecta: {base: {secondaries: 1}, set: {ejecta: 100}},
+  secondaries: {base: {ejecta: 5}, set: {secondaries: 6}},
+  // lfimpact2: Buckling, on a crater that digs (Ground, below 0) and is big enough to buckle (a 280 px rim radius: all of it), with no other impact row on.
+  buckling: {base: {diameter: 900, heightReference: 2, elevation: -20, combine: 2, curve: {form: 'lfCrater'}}, set: {buckling: 100}},
+  // lfimpact2: Secondaries' distance, its default (1 rim radius) to 3, with six secondaries.
+  secondaryDistance: {base: {secondaries: 6, secondaryDistance: 10}, set: {secondaryDistance: 30}},
+  // lfcrystal: the faceted structure (Facet shape) and each shape's rows, with facets on and that shape chosen; the size and coverage on prisms.
+  // Spur variation: the spurs' width and height along them, read with six spurs on.
+  crestVary: {base: {spurCount: 6, spurLength: 160}, set: {crestVary: 100}},
+  facetForm: {base: {iceFacets: 65}, set: {facetForm: 1}},
+  crystalStep: {base: {iceFacets: 65, facetForm: 1, crystalStep: 0}, set: {crystalStep: 32}},
+  crystalTiers: {base: {iceFacets: 65, facetForm: 1, crystalTiers: 0}, set: {crystalTiers: 100}},
+  crystalFacet: {base: {iceFacets: 65, facetForm: 1, crystalFacet: 0}, set: {crystalFacet: 100}},
+  crystalSizeVar: {base: {iceFacets: 65, facetForm: 1, crystalSizeVar: 0}, set: {crystalSizeVar: 100}},
+  iceFacets: {base: {iceFacets: 20, facetForm: 2}, set: {iceFacets: 90}},
+  iceFacetSize: {base: {iceFacets: 60, facetForm: 2, iceFacetSize: 24}, set: {iceFacetSize: 96}},
+  crystalSides: {base: {iceFacets: 60, facetForm: 2, crystalSides: 3}, set: {crystalSides: 8}},
+  crystalTop: {base: {iceFacets: 60, facetForm: 2, crystalTop: 0}, set: {crystalTop: 90}},
+  crystalVariation: {base: {iceFacets: 60, facetForm: 2, crystalVariation: 0}, set: {crystalVariation: 100}},
+  crystalAlign: {base: {iceFacets: 60, facetForm: 2, crystalAlign: 0}, set: {crystalAlign: 100}},
+  bergJitter: {base: {iceFacets: 60, facetForm: 2, bergJitter: 0}, set: {bergJitter: 100}},
+  bergBreak: {base: {iceFacets: 60, facetForm: 2, bergBreak: 0}, set: {bergBreak: 6}},
+  bergRough: {base: {iceFacets: 60, facetForm: 2, bergRough: 0}, set: {bergRough: 20}},
 };
 // The panel's own test: the control is shown to this kind (sculpt.js SHAPE_FIELDS kinds, all landform here, then shapeControlAvailable).
 const shown = (key, kind, card) => kind === 'landform' && shapeControlAvailable(key, kind, {faceVariation: 80, ...card, lean: card.lean / 100, terraces: card.terraces || 0, ledge: .6, terraceJitter: .35});
@@ -54,10 +81,11 @@ async function sweep(heights) {
   for (const [name, d] of Object.entries(KINDS)) for (const [variant, face] of [['open', {}]]) {
     if (only.length && !only.includes(name)) continue;
     const kind = d.kind || name, card = {...CARD, ...(d.extra || {}), ...face}, cache = new Map();
-    const at = c => { const k = JSON.stringify(c); if (!cache.has(k)) cache.set(k, heights(kind, c)); return cache.get(k); };
+    // `under`: strokes played first (a row whose control reads the ground under the stroke).
+    const at = (c, under = []) => { const k = JSON.stringify([c, under]); if (!cache.has(k)) cache.set(k, heights(kind, c, under)); return cache.get(k); };
     for (const [key, c] of Object.entries(CONTROLS)) {
       const base = {...card, ...c.base}, show = shown(key, kind, base);
-      rows.push({kind: name, variant, control: key, shown: show, moved: moved(await at(base), await at({...base, ...c.set}))});
+      rows.push({kind: name, variant, control: key, shown: show, moved: moved(await at(base, c.under), await at({...base, ...c.set}, c.under))});
     }
   }
 }
@@ -68,8 +96,8 @@ if (!inChrome) {
   await headless.openHost({server, configs: opt('--configs', '')});
   const s = await headless.openScene({biome: 'green', strokes: []}, page);
   try {
-    await sweep(async (kind, card) => {
-      s.play([[kind, path, {card}]], {ground: false}); await s.fields.ready();
+    await sweep(async (kind, card, under = []) => {
+      s.play([...under, [kind, path, {card}]], {ground: false}); await s.fields.ready();
       const o = []; for (let y = 0; y < H; y += STEP) for (let x = 0; x < W; x += STEP) o.push(s.fields.sample(x, y + Y0)); return o;
     });
     logs.push(...s.errors);
@@ -88,8 +116,8 @@ try {
   const ready = async () => { for (let i = 0; i < 480; i++) { await sleep(120); if (await ev('!!window.sculptCanvas&&!document.getElementById("map-export").disabled')) return true; } throw new Error('never ready ' + logs.join('|')); };
   await send('Runtime.enable'); await send('Page.enable');
   await send('Page.navigate', {url: `${server}/sculpt.html?${page}`}); await ready();
-  await sweep(async (kind, card) => {
-    await ev(`sculptDebug.scene(${JSON.stringify([[kind, path, {card}]])},{ground:false})`); await ready(); await ev('sculptCanvas.idle()');
+  await sweep(async (kind, card, under = []) => {
+    await ev(`sculptDebug.scene(${JSON.stringify([...under, [kind, path, {card}]])},{ground:false})`); await ready(); await ev('sculptCanvas.idle()');
     return ev(`(() => { const o = []; for (let y = 0; y < ${H}; y += ${STEP}) for (let x = 0; x < ${W}; x += ${STEP}) o.push(sculptDebug.corner(x, y + ${Y0}).authored); return o; })()`);
   });
   ws.close();

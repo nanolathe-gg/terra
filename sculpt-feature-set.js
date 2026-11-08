@@ -1,7 +1,7 @@
 // The map's generated feature set (owner, November 5-6 2026): per kind, how many variants, a seed and the few settings an artist
 // sets on purpose. A save keeps this recipe and the placements, never pixels; sculpt-feature-gen.js draws each variant from it.
 // Every world has metal deposits and geothermal vents (painted into the ground, carried in game by an invisible feature); trees,
-// shrubs, rocks and scars come from the world's `features` table (materials/<world>.json), so a world without one has none of them.
+// shrubs, rocks and scars come from the world's `features` table (materials/<world>.json), or Green's for a kind it has none of (sculpt.py biome_config).
 // Plain module, no DOM: the page (sculpt-features.js) and the tests (repro/feature-set.test.mjs) share it.
 
 export const KINDS = ['deposit', 'vent', 'tree', 'shrub', 'rock', 'scar'];

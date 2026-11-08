@@ -11,14 +11,14 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
 
 
 HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-workspace.js', 'sculpt-workspace.css', 'sculpt-help.js', 'sculpt-help-examples.js', 'sculpt-control-schema.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-paths.js', 'sculpt-river.js', 'sculpt-renderer.js', 'sculpt-webgpu.js', 'sculpt-vert.wgsl',
     'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-palette.wgsl', 'engine-weather.wgsl',
-    'engine-erosion.wgsl', 'engine-drainage.wgsl', 'sculpt-drainage.js', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-gates.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-export-worker.js', 'sculpt-features.js', 'sculpt-feature-set.js', 'sculpt-feature-gen.js', 'sculpt-feature-fire.js', 'sculpt-feature-worker.js', 'sculpt-canvas.js', 'sculpt-share.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js', 'sculpt-scene.js', 'sculpt-knobs.js',)}
+    'engine-erosion.wgsl', 'engine-drainage.wgsl', 'sculpt-drainage.js', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-gates.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-export-worker.js', 'sculpt-features.js', 'sculpt-feature-set.js', 'sculpt-feature-gen.js', 'sculpt-feature-fire.js', 'sculpt-feature-worker.js', 'sculpt-canvas.js', 'sculpt-passability.js', 'sculpt-passability-view.js', 'sculpt-share.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js', 'sculpt-scene.js', 'sculpt-knobs.js',)}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -34,7 +34,7 @@ KNOB_DEFAULTS = dict(
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
     flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1, sunTilt=1, ambient=.42, slopeMarks=0, wrinkles=0, sandCrown=0,
-    faceVariation=.8, lean=0, facing=0, faceFill=.18, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0, crevice=0,
+    faceVariation=.8, lean=0, facing=0, faceFill=.18, slopeTexture=.3, faceEdge=.8, gullyRock=.5, moss=0,
     looseSupply=0, looseSize=6,
     sand=0, wind=20, sandDust=.5, sandGrass=.6,
     sandLight=.25, sandGrain=.8, ripple=7, rippleHeight=1.4,
@@ -43,11 +43,11 @@ KNOB_DEFAULTS = dict(
     # Rock structure (card E3): rockOrder 0 is the scattered rock; the rest only matter above it, and the cracks of ordered rock are lit relief, not ink.
     rockOrder=0, bedSpacing=12, bedVary=.5, bedDip=0, bedDipDir=90, bedLedge=.5,
     grooveSpacing=36, grooveAngle=0, grooveRun=120, bedHeight=0, rockFrom=.6,
-    craterlets=3, craterEjecta=0, worms=0, rockCrown=0, apron=0,
-    crystalForm=0, crystalStep=16, crystalSides=6, crystalSize=24, crystalCount=10, crystalTop=.2, crystalLean=.25,
-    crystalVariation=.5, crystalTiers=0,
-    # Berg form (card E5; only read when a Crystals stroke sets crystalForm 2): faces in units per px, jitter, broken corners, roughness in units, top tilt in units per px and its direction in degrees.
-    crystalAlign=0, bergFace=.9, bergJitter=.5, bergBreak=3, bergRough=6, bergTilt=.1, bergTiltDir=90, bergFlat=.25,
+    worms=0, rockCrown=0, apron=0,
+    # A landform's Facets (sculpt-scene.js SHAPE_FIELDS): Step height in units (5 is the angular facets' earlier fixed step), the prisms' sides, flat top share and
+    # variation, Level tops, Align to the path, outline jitter, corner cuts and face roughness in units.
+    crystalStep=5, crystalSides=6, crystalTop=.2, crystalVariation=.5, crystalTiers=0,
+    crystalAlign=0, bergJitter=.5, bergBreak=3, bergRough=6,
     shorePlates=0, plateWaterPx=64, plateLandPx=96, plateSize=28, plateGap=2, plateHeight=3, plateMaterial=1,
     crystalGrain=0, crystalFace=1, crystalInk=0, crystalTone=1, crystalSeam=0,
     # Ice (card E5): shade keeps its blue (0 grey, as every world was).
@@ -70,6 +70,10 @@ KNOB_DEFAULTS = dict(
     # Landform (card H27): the crest's height (fixed or sea-relative) and how it combines (0 raise to, 1 cut to, 2 flatten to); the variation along and
     # across the path (wander px, width as a share, height in units, the wavelength px, and the weights at the foot and from the middle up of the section).
     heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, talus=0, surf=0, varySize=140, varyFoot=1, varyMiddle=1,
+    # lfcrater: a landform's impact features (sculpt-scene.js CRATER_KEYS), off by default: ejecta round it and secondaries beyond them;
+    # lfimpact2: and the ground buckled beyond the rim of a landform that digs; the secondaries fall from secondaryDistance rim radii (or, on a shape that
+    # peaks on its path, foot radii) out to twice that, 1.6 as before the row; the Crater preset sets 1 (sculpt-scene.js LANDFORM_TOOLS.crater).
+    ejecta=0, buckling=0, secondaries=0, secondaryDistance=1.6,
     # Painted masks (card C5): the Paint brush's first choice.
     paintChannel=1,
     # Water looks (card E1). The two stroke options are 0 (the world's own),
@@ -77,13 +81,10 @@ KNOB_DEFAULTS = dict(
     # shallow to deep colour, and level ground with no painted lumps beyond
     # plainRelief's.
     waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=0, deepEdge=0, lumpRelief=4,
-    # Line features (card C4): everything off by default; spur and rim details only matter once spurs, sectors or gaps are set.
-    spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestJag=0, crestVary=0, crestTaper=0,
-    rimSectors=0, rimUnequal=.6, rimGaps=0, rimGapWidth=70,
+    # Line features (card C4): everything off by default; spur details only matter once spurs are set.
+    spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestVary=0, crestTaper=0,
     # Local vegetation (card C5 stage 2): change about the world's own cover, 0 none.
     styleVegetation=0,
-    # Crater rim height as a share of its depth (card C4); .34 is the rim every crater had.
-    rimHeight=.34,
     # Placed fissures (card C4 stage 2): only the Fissure tool reads them.
     fissureWidth=5, fissureJag=.5, fissureBranches=3, fissureBranchLen=90, fissureBranchSpread=.5, fissureTaper=.6,
     fissureNetwork=0, fissureCell=70, fissureCrack=.4, fissureDark=.6,
@@ -101,16 +102,14 @@ KNOB_DEFAULTS.update(shineStretch=1, shineWhite=.35)
 for _m in SHINE_MATERIALS:
     KNOB_DEFAULTS.update({f'shine{_m}': 0, f'shine{_m}Sharp': 24, f'shine{_m}Rough': 0, f'shine{_m}Scale': 6})
 # E7 (Crystal): every knob's default is the earlier output.
-KNOB_DEFAULTS.update(crystalFacet=0, crystalSizeVar=0, crystalSmooth=0, craterFacets=0, crystalShallow=0, crystalShallowPx=10)
-# G7 (Crystal): craters with smaller, softer facets (0: the earlier output).
-KNOB_DEFAULTS.update(crystalCraterPx=0, crystalCraterStep=3, crystalCraterSkin=0, crystalCraterWeb=0, crystalCraterWebPx=14, crystalCraterWobble=0,
+KNOB_DEFAULTS.update(crystalFacet=0, crystalSizeVar=0, crystalShallow=0, crystalShallowPx=10)
+# G7 (Crystal): the thin web the draw lays over a crystal skin (a landform's angular Facets with Surface Crystal; 0: none).
+KNOB_DEFAULTS.update(crystalCraterWeb=0, crystalCraterWebPx=14, crystalCraterWobble=0,
                      crystalCraterGap=0, crystalCraterTone=0, crystalCraterLight=1)
 # G7 (Crystal): finer shore slabs and fainter seams (the defaults are the earlier output).
 KNOB_DEFAULTS.update(crystalShoreSeam=.5, crystalSeamEnd=.74, crystalShallowInk=.55)
 # H20b (Crystal): the share of shore slabs that break into a fine mesh inside their own outline (0: the earlier output).
 KNOB_DEFAULTS.update(plateVary=0)
-# E8 (Painted Desert): ragged feet (outline shift, px) and bumpy aprons (height units); 0 is every world as it was.
-KNOB_DEFAULTS.update(baseVary=0, baseBump=0)
 # E8: the grey band at the foot of the raised ground (strength; its height window above the plain, how far the window
 # drifts, and the share of its length that is missing).
 KNOB_DEFAULTS.update(baseBand=0, baseBandLow=4, baseBandHigh=6.5, baseBandWander=1, baseBandGaps=.45)
@@ -154,7 +153,6 @@ KNOB_DEFAULTS.update(moonRibs=0, moonRibDepth=1, moonRibDark=0)
 # G8, Moon: thin dark folds that follow the form across lit and moderate slopes (0: none), and the height between their contours.
 KNOB_DEFAULTS.update(moonFolds=0, moonFoldSpacing=.9)
 # G8, Moon: how far a hill's whole outline strays in lobes, as a share of its radius (a shape option; 0: the smooth outline).
-KNOB_DEFAULTS.update(moonLobes=0)
 # E6, Ice mountains: monotone slate faces (0: rock and snow interleaved) and the rock art's contrast (1: as drawn).
 KNOB_DEFAULTS.update(iceSlate=0, mineralDetail=1, iceCrystal=0, iceCrest=0)
 # G6, Ice blocks and mesas (retail ice-3, Polar Range): rounded light, snow on the flat tops, fibres down the faces, a hatched apron (0: none of them).
@@ -163,6 +161,8 @@ KNOB_DEFAULTS.update(iceSoft=0, iceSnow=0, iceFall=0, iceApron=0)
 KNOB_DEFAULTS.update(iceFrost=0)
 # G6, Ice: angular facets on hills and mountains (share of the mountain broken into facets; facet width in px). Off by default everywhere.
 KNOB_DEFAULTS.update(iceFacets=0, iceFacetSize=36)
+# A landform's Facet shape (0 angular facets, 1 stepped columns, 2 prisms) and Surface (0 rock: the shape's own ground; 1 crystal).
+KNOB_DEFAULTS.update(facetForm=0, facetSurface=0)
 # G1 (shallow water round 3): shoalBump is the slope of the lit bumps the shallow bed carries
 # (0: none, the earlier bed), shoalBumpPx their size in screen px.
 KNOB_DEFAULTS.update(shoalBump=0, shoalBumpPx=6)
@@ -205,7 +205,8 @@ KNOB_DEFAULTS.update(hillBlocks=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath, outcrop);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, outcrop=0, rillDepth=0, rillSpacing=8)
-KNOB_DEFAULTS.update(vegetationCover=1, plantRelief=1, flowerDensity=1)
+# Card P30: Vegetation cover 0 is off (every world has a ground-cover table: GROUND_COVER, DEFAULT_GROUND_COVER); modern Green sets 1.
+KNOB_DEFAULTS.update(vegetationCover=0, plantRelief=1, flowerDensity=1)
 KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
 # H8: a world's engine preset. Every world runs the Time pass (erosion 1). The eight worlds that
 # had no rain erosion take the pass with rain off and the envelope of the droplet worker's own budget (the worker's .35 of the pass's
@@ -425,8 +426,8 @@ WORLD_KNOBS = {
                    cliffFollow=1, cliffReach=40, cliffBed=0,
                    # E8: retail's aprons and mesa feet are ragged (cells 16 px wide, edges 10-20 px off a smooth
                    # lobe) and bumpy (heights vary 7-12 across an apron whose mean rise is ~8). The ridge presets carry
-                   # this as variation (sculpt.js TOOL_PRESETS); the knobs still shape a crater's spurs.
-                   baseVary=36, baseBump=3.5, baseBand=1,
+                   # this as variation (sculpt.js TOOL_PRESETS).
+                   baseBand=1,
                    # G4: level ground in the pale cap zone is one sheet, as in retail (cap orange 10-12% against ours' 22%).
                    desertCapFlat=1),
     # Moon slopes were too dark and smeared (retail mean luminance .773 vs
@@ -442,7 +443,7 @@ WORLD_KNOBS = {
     # Card E6: retail's hills and crater walls are one rough, pitted surface from crest to
     # foot with no cracks, so crackSeverity, worms and wrinkles are 0 (they were .35, .4 and
     # .8: the Moon variant 'cracked' restores that look) and the pits are drawn by pockmark.
-    'moon': dict(looseSupply=.1, looseSize=3.5, crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4, craterlets=6, craterEjecta=.7,
+    'moon': dict(looseSupply=.1, looseSize=3.5, crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4,
                  worms=0, undulation=4, plainRelief=.6, banding=0, crackDark=.6,
                  sunTilt=0, faceFill=0, ambient=.25,
                  # H19: at 1 the lit relief on a shaded wall reads as hard plates, at .5 as rock (repro/walls/moon.json).
@@ -465,8 +466,7 @@ WORLD_KNOBS = {
                  # height, warped); .55 of the amount that read as a contour map.
                  moonFolds=.55,
                  # G8: retail's hills and walls fold: lumpy, lobed outlines. The ridge presets carry them as
-                 # variation (sculpt.js TOOL_PRESETS); the knob still folds a crater's spurs.
-                 moonLobes=.5,
+                 # variation (sculpt.js TOOL_PRESETS).
                  # E6: pits about 4 x 6 px every 7.5 px on every raised or sloped surface, and a
                  # faint sheen with a fine round grain there (the plain keeps its own grain).
                  pockmark=0, pockSize=7.5, shineGate=1, shineWhite=1, shineStretch=3,
@@ -533,7 +533,7 @@ WORLD_KNOBS = {
     # tops stepped ~16 units (measure/crystal_geometry.py).
     'crystal': dict(paletteMix=1, undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1,
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
-                    crystalForm=1, crystalSize=32, crystalStep=16, crystalVariation=.35, crystalTiers=1,
+                    crystalStep=16, crystalVariation=.35, crystalTiers=1,
                     crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.16, crystalSeam=1,
                     plateMaterial=1, plateWaterPx=90, plateLandPx=48, plateSize=28,
                     # Shine (card E2): retail Crystal is much shinier. Silver-lilac streaks run along
@@ -552,10 +552,6 @@ WORLD_KNOBS = {
                     crystalFacet=.7,
                     # E7: three column widths mixed over a mound, the small ones at the crest.
                     crystalSizeVar=.7,
-                    # E7: some columns stay smooth hill between the crystals.
-                    crystalSmooth=.35,
-                    # E7: craters tiled with crystal facets.
-                    craterFacets=1,
                     # E7: shallow water carries a mosaic of small crystal cells; the shore slabs
                     # shrink from 20 to 14 px (retail's band is a fine mesh, plates 12-80 px).
                     crystalShallow=1, crystalShallowPx=8,
@@ -564,7 +560,6 @@ WORLD_KNOBS = {
                     # 1-unit step, one skin mark, the web drawn by the shader, and the sun's light and shade
                     # pushed 1.6 times harder on the wall. H21: the west wall read too dark and busy;
                     # ordinary contrast and a fainter web keep the planes visible (crystal-1).
-                    crystalCraterPx=16, crystalCraterStep=1, crystalCraterSkin=1,
                     crystalCraterWeb=.35, crystalCraterWebPx=18, crystalCraterWobble=4, crystalCraterGap=.25,
                     crystalCraterTone=.12, crystalCraterLight=1,
                     # G7/H20b: the shore slabs draw at 28 px, under thinner seams (.56, ending at .68).
@@ -597,8 +592,7 @@ WORLD_KNOBS = {
     # Its Crystals brush makes ice blocks: four-sided, flat-topped (top ~0.45
     # of the base), sides ~0.7 units/px, no lean (measure/ice_features.py).
     'ice': dict(undulation=4, plainRelief=.6, crackSeverity=0, crackMajor=.4, crackMinor=.3, crackHairline=.2,
-                crackBlocks=.2, beachWidth=0, bankRock=0, crystalForm=0, crystalSides=4, crystalTop=.45,
-                crystalSize=220, crystalCount=1, crystalLean=0, crystalVariation=.2,
+                crackBlocks=.2, beachWidth=0, bankRock=0, crystalSides=4, crystalTop=.45, crystalVariation=.2,
                 # Shore (card E5): frost crystals are the Ice shore. Retail's band is
                 # mostly plain white ice with sparse fine straight lines (windows ice-1
                 # and Ice Scream), broken by blue gaps that grow more frequent toward
@@ -638,6 +632,36 @@ WORLD_KNOBS = {
 # default, so nothing changes unless a variant is chosen (World panel, or
 # `variant=<id>` in the page's address). Every knob must be in KNOB_DEFAULTS.
 OPEN = [-9, -8, 9, 10]   # a ground-cover window with no limit
+# Ground cover (card P30): seven classes placed by moisture, soil and sun, colouring the grass (engine-frag.wgsl groundCover). The table also
+# replaces the slope-only ramp: the slope texture's share is the table's thin soil. Windows are [from, full, full until, gone by]; OPEN is no limit.
+# Moisture 0 is dry ground and 1 is a channel: wetness (the Time pass's map: the 5th percentile is 0, the median .0-.2, the 90th .4-.7, the 99th
+# .8-.9 on green-modern-1..3) runs from `wet[0]` (above the dry half) to `wet[1]` (near its 95th percentile). `color` is the plant colour the
+# Colors panel's Vegetation row starts from (turf's); a pick moves every class but bare soil (`bare`) by the change from it (sculpt-material-model.js).
+# Modern Green's table, measured on green-modern-1..3: `ground` is the grass colour the class colours were measured against.
+GROUND_COVER = dict(
+    # Card P31: plants in the bake's loose scatter, by class: tufts on turf and dry grass, clumps on meadow and rush, cushions on moss, shrubs on scrub
+    # (the numbers are height scales and the shrub density; where they grow follows the classes, so Lushness; tuft size follows looseSize).
+    plants=dict(tuft=4, shrub=2, shrubs=1.5,
+                # Card P31: flowers, 1-2 px dots in one-species clumps on meadow and scrub, in sun, more on lush ground (the draw's groundCover). Density is the
+                # chance of a dot per 2 x 2 px at the best of its ground; the palette is rgb and a weight (white and yellow common, violet and red rare).
+                flowers=dict(density=.15, palette=[[236, 232, 214, 4], [255, 214, 64, 3], [170, 120, 215, 1], [225, 80, 60, 1]])),
+    wet=[.25, .9], dry=.4, patch=22, ground=[55, 93, 27], color=[55, 95, 27],
+    soil=dict(slope=[.6, 1.6], convex=.5, deposit=.3),
+    moisture=dict(perSwath=.5, swathRef=.35, shade=.28),
+    classes=[
+        dict(name='bare soil', bare=True, rgb=[105, 90, 38], grain=.12, strength=.015, lush=-1, moisture=OPEN, soil=OPEN, light=OPEN),
+        dict(name='dry grass', rgb=[114, 109, 64], grain=.10, strength=.65, lush=0, moisture=[-1, 0, .2, .42], soil=[.05, .3, 9, 10], light=[1, 1.35, 9, 10]),
+        dict(name='turf', rgb=[55, 95, 27], grain=.07, strength=1, lush=-1, moisture=[-.1, .12, .72, .92], soil=[.08, .3, 9, 10], light=OPEN),
+        dict(name='meadow', rgb=[38, 91, 15], grain=.05, strength=1.1, lush=1, moisture=[.5, .7, .92, 1.01], soil=[.4, .75, 9, 10], light=[.55, .9, 9, 10]),
+        dict(name='scrub', rgb=[28, 74, 9], grain=.06, strength=1.15, lush=2, moisture=[.55, .75, .9, .99], soil=[.5, .85, 9, 10], light=OPEN),
+        dict(name='moss', rgb=[42, 84, 29], grain=.03, strength=.8, lush=0, moisture=[.12, .4, 9, 10], soil=[-9, -8, .6, 1.4], light=[-9, -8, .6, .95]),
+        dict(name='wet rush', rgb=[38, 80, 32], grain=.10, strength=1, lush=1, moisture=[.9, .99, 9, 10], soil=[.45, .75, 9, 10], light=OPEN),
+    ])
+# Every other world's table (Vegetation cover 0 there: off until an artist raises it): modern Green's classes and plants, with no `ground` of
+# its own (the classes are measured against the world's own ground colour) and bare soil in that ground colour, so thin cover fades into the
+# world's own ground.
+DEFAULT_GROUND_COVER = {**{k: v for k, v in GROUND_COVER.items() if k != 'ground'},
+                        'classes': [{k: v for k, v in c.items() if not (c.get('bare') and k == 'rgb')} for c in GROUND_COVER['classes']]}
 WORLD_VARIANTS = {
     'green': {
         # Evad River Delta and the Barrier Reef: rounded hills with soft
@@ -665,38 +689,17 @@ WORLD_VARIANTS = {
         # (Realism check on green-modern-1..3: 8.41 of 15 statistics in range against 7.82 without, 24 gate failures against 25; 30 gives 8.53, 60 gives 8.76,
         # but from 30 the cones read as hard dark rays on hills that are soft in retail). Card P32: terracettes on steep grass (Joined
         # wrinkles on a grass world).
-        # Ground cover (card P30): seven classes placed by moisture, soil and sun, colouring the grass (engine-frag.wgsl groundCover). The table also replaces the slope-only
-        # ramp: the slope texture's share is the table's thin soil. Windows are [from, full, full until, gone by]; OPEN is no limit. Moisture 0 is
-        # dry ground and 1 is a channel: wetness (the Time pass's map: the 5th percentile is 0, the median .0-.2, the 90th .4-.7, the
-        # 99th .8-.9 on green-modern-1..3) runs from `wet[0]` (above the dry half) to `wet[1]` (near its 95th percentile).
+        # Ground cover (card P30): GROUND_COVER above, with Vegetation cover 1.
         # Card P27: Surf .1 on its water strokes (a wet line and a 1-px foam lace on lakes, no beach) and a sand colour for the beaches
         # higher Surf builds.
-        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockAge=.5, cavity=1.0, shineRock=.36),
+        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, rockAge=.5, cavity=1.0, shineRock=.36),
                        # Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the hills' feet and in gullies,
                        # median 5 px (readable at 1x; Green's retail grit is 3-4); stoneSort .7 sorts it by the process (talus coarsens outward).
                        material=dict(stoneSort=.7, groundPool=2048,
                        # Card P10: the rock model (a granite-like preset, calm: Size 22 px; Age is the rockAge row, default .5), the numbers of one rock type.
                        rock=dict(size=22, aspect=1.6, jitter=.9, open=.5, bedOpen=.15, terr=0, vary=.25, crev=1.2, crevW=1.0,
                                  chip=.12, chipSize=4, grit=.3, joint=0, seam=1.6, curtain=.6, lichen=1.5),
-                       groundCover=dict(
-                           # Card P31: plants in the bake's loose scatter, by class: tufts on turf and dry grass, clumps on meadow and rush, cushions on moss, shrubs on scrub
-                           # (the numbers are height scales and the shrub density; where they grow follows the classes, so Lushness; tuft size follows looseSize).
-                           plants=dict(tuft=4, shrub=2, shrubs=1.5,
-                                       # Card P31: flowers, 1-2 px dots in one-species clumps on meadow and scrub, in sun, more on lush ground (the draw's groundCover). Density is the
-                                       # chance of a dot per 2 x 2 px at the best of its ground; the palette is rgb and a weight (white and yellow common, violet and red rare).
-                                       flowers=dict(density=.15, palette=[[236, 232, 214, 4], [255, 214, 64, 3], [170, 120, 215, 1], [225, 80, 60, 1]])),
-                           wet=[.25, .9], dry=.4, patch=22, ground=[55, 93, 27],
-                           soil=dict(slope=[.6, 1.6], convex=.5, deposit=.3),
-                           moisture=dict(perSwath=.5, swathRef=.35, shade=.28),
-                           classes=[
-                               dict(name='bare soil', rgb=[105, 90, 38], grain=.12, strength=.015, lush=-1, moisture=OPEN, soil=OPEN, light=OPEN),
-                               dict(name='dry grass', rgb=[114, 109, 64], grain=.10, strength=.65, lush=0, moisture=[-1, 0, .2, .42], soil=[.05, .3, 9, 10], light=[1, 1.35, 9, 10]),
-                               dict(name='turf', rgb=[55, 95, 27], grain=.07, strength=1, lush=-1, moisture=[-.1, .12, .72, .92], soil=[.08, .3, 9, 10], light=OPEN),
-                               dict(name='meadow', rgb=[38, 91, 15], grain=.05, strength=1.1, lush=1, moisture=[.5, .7, .92, 1.01], soil=[.4, .75, 9, 10], light=[.55, .9, 9, 10]),
-                               dict(name='scrub', rgb=[28, 74, 9], grain=.06, strength=1.15, lush=2, moisture=[.55, .75, .9, .99], soil=[.5, .85, 9, 10], light=OPEN),
-                               dict(name='moss', rgb=[42, 84, 29], grain=.03, strength=.8, lush=0, moisture=[.12, .4, 9, 10], soil=[-9, -8, .6, 1.4], light=[-9, -8, .6, .95]),
-                               dict(name='wet rush', rgb=[38, 80, 32], grain=.10, strength=1, lush=1, moisture=[.9, .99, 9, 10], soil=[.45, .75, 9, 10], light=OPEN),
-                           ]))),
+                       groundCover=GROUND_COVER)),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
@@ -742,11 +745,11 @@ WORLD_VARIANTS = {
     'moon': {
         # Pitted (card E6): one pitted surface from crest to foot, dots 4 x 6 px at one density over all raised
         # ground, a trace of sheen, no cracks. The default's lit cups (G8) replace it.
-        'pitted': dict(label='Pitted: E6 dots on all raised ground', knobs=dict(pockmark=1, moonCups=0, moonRibs=0, moonFolds=0, moonLobes=0, banding=.3)),
+        'pitted': dict(label='Pitted: E6 dots on all raised ground', knobs=dict(pockmark=1, moonCups=0, moonRibs=0, moonFolds=0, banding=.3)),
         # Cracked slopes (the look before card E6): smooth hill tops, wormy and crazed sides,
         # carved cracks, no pits and no sheen.
         'cracked': dict(label='Cracked slopes: smooth tops',
-                        knobs=dict(crackSeverity=.35, worms=.4, wrinkles=.8, pockmark=0, moonCups=0, moonRibs=0, moonFolds=0, moonLobes=0, banding=.3, shineGate=0, shineWhite=.35, shineStretch=1,
+                        knobs=dict(crackSeverity=.35, worms=.4, wrinkles=.8, pockmark=0, moonCups=0, moonRibs=0, moonFolds=0, banding=.3, shineGate=0, shineWhite=.35, shineStretch=1,
                                    shineGround=0, shineGroundSharp=24, shineGroundRough=0, shineGroundScale=6,
                                    shineSlope=0, shineSlopeSharp=24, shineSlopeRough=0, shineSlopeScale=6,
                                    shineRock=0, shineRockSharp=24, shineRockRough=0, shineRockScale=6)),
@@ -842,6 +845,9 @@ def export_defaults(biome):
     return json.loads((HERE / MATERIAL_TABLES[biome]).read_text())['world']['export']
 
 
+FEATURE_KINDS = ('tree', 'shrub', 'rock', 'scar')   # sculpt-feature-set.js KINDS that come from a world's table
+
+
 def biome_config(biome):
     """One world's page configuration, built from its table."""
     table = json.loads((HERE / MATERIAL_TABLES[biome]).read_text())
@@ -849,11 +855,13 @@ def biome_config(biome):
     world.pop('export', None)   # the page's world catalogue (EXPORT_DEFAULTS), not the page's config
     config = {'biome': BIOME_NAMES[biome], 'biomeId': biome, 'size': 1024, 'grid': 512, 'seaLevel': 0, 'baseHeight': world.pop('baseHeight', 24),
               'materialTable': MATERIAL_TABLES[biome], 'layers': table['order'],   # the materials the table makes: which optional stages (body, beach, ring) the world has
-              'material': table['material'], 'water': table['water'], **world}
+              'material': {'groundCover': copy.deepcopy(DEFAULT_GROUND_COVER), **table['material']}, 'water': table['water'], **world}
     if 'river' in table:
         config['river'] = table['river']   # the river variant's material and water numbers (WORLD_VARIANTS)
-    if 'features' in table:
-        config['features'] = table['features']   # the generated feature kinds the world has (trees, shrubs, rocks, scars); every world has deposits and vents
+    # The generated feature kinds (trees, shrubs, rocks, scars; every world has deposits and vents): the world's own, and Green's for a kind it
+    # has none of, so any world can place any kind (lit by its own sun; Green's is the one table measured from retail for all four).
+    green = json.loads((HERE / MATERIAL_TABLES['green']).read_text())['features']
+    config['features'] = {**{k: v for k, v in green.items() if k in FEATURE_KINDS}, **table.get('features', {})}
     return world_knobs(biome, config)
 
 

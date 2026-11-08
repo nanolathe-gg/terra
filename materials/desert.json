@@ -1458,13 +1458,10 @@
  },
  "world": {
   "defaults": {
-   "coverage": "form",
-   "lighting": "front",
    "surface": "structured",
    "transition": "mineral",
    "material": "single",
-   "scree": "0",
-   "shade": "separate"
+   "scree": "0"
   },
   "column": {
    "colors": [[189, 140, 108], [190, 198, 185], [150, 144, 128], [175, 111, 90], [118, 115, 112]],

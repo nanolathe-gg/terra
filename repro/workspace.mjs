@@ -8,7 +8,7 @@ import {cdpPortFree} from './cdp-port.mjs';
 const args=process.argv.slice(2),opt=(k,d)=>args.includes(k)?args[args.indexOf(k)+1]:d;
 const server=opt('--server','http://127.0.0.1:8921'),port=Number(opt('--port',9927)),out=opt('--out','/tmp/artist-ui');
 await cdpPortFree(port);mkdirSync(out,{recursive:true});
-const browser=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless=new','--enable-gpu','--use-angle=metal',`--remote-debugging-port=${port}`,`--user-data-dir=${join(out,'profile')}`,'--window-size=1440,900','--no-first-run','about:blank'],{stdio:'ignore'});
+const browser=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless=new','--enable-gpu','--use-angle=metal',`--remote-debugging-port=${port}`,`--user-data-dir=${join(out,'profile-'+Date.now())}`,'--window-size=1440,900','--no-first-run','about:blank'],{stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));let ws;
 try{
   for(let i=0;i<100&&!ws;i++){try{const tab=(await(await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(t=>t.type==='page');if(tab)ws=new WebSocket(tab.webSocketDebuggerUrl);}catch{}if(!ws)await sleep(150);}
@@ -50,7 +50,7 @@ try{
   await doubleClick(scrub);await send('Input.insertText',{text:'360'});await key('Enter');await ready();report.tab='Tab commits and advances focus';
   const fp=await point(scrub);await mouse('mousePressed',fp);await mouse('mouseMoved',{x:fp.x+20,y:fp.y},{button:'left',buttons:1});const coarse=await ev('Number(document.getElementById("diameter").value)');await mouse('mouseMoved',{x:fp.x+25,y:fp.y},{button:'left',buttons:1,modifiers:8});const fine=await ev('Number(document.getElementById("diameter").value)');assert(fine>=coarse&&fine-coarse<=8);await mouse('mouseReleased',{x:fp.x+25,y:fp.y});await ready();await doubleClick(scrub);await send('Input.insertText',{text:'360'});await key('Enter');await ready();report.fineDrag={coarse,fine};
   // Keyboard slider adjustment must not also nudge the selected shape.
-  const beforeKey=(await nodes()).at(-1);await ev(`document.querySelector('${scrub}').focus()`);await key('ArrowRight');await ready();const afterKey=(await nodes()).at(-1);assert.equal(afterKey.params.radius,184);assert.deepEqual(afterKey.points,beforeKey.points);assert.deepEqual(afterKey.frame,beforeKey.frame);
+  const beforeKey=(await nodes()).at(-1);await ev(`document.querySelector('${scrub}').focus()`);await key('ArrowRight');await ready();const afterKey=(await nodes()).at(-1);assert.equal(afterKey.params.radius,(360+Number(await ev('document.getElementById("diameter").step')))/2);assert.deepEqual(afterKey.points,beforeKey.points);assert.deepEqual(afterKey.frame,beforeKey.frame);
   const curveBefore=JSON.stringify((await nodes()).at(-1).params.curve),cp=await ev(`sculptDebug.sectionPoint('front',.63,.72)`);await mouse('mousePressed',cp);await mouse('mouseReleased',cp);await ready();assert.notEqual(JSON.stringify((await nodes()).at(-1).params.curve),curveBefore);report.section='mouse edit saved';
   // Inspection drags move the section marker continuously without editing terrain.
   const beforeInspect=await nodes(),startInspect=await ev('sculptDebug.alongPoint(.2,.3)'),endInspect=await ev('sculptDebug.alongPoint(.8,.3)');

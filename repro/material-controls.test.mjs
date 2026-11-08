@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {tablePlacementRows,groundCoverRows,COVER_ROWS} from '../sculpt-material-model.js';
+import {tablePlacementRows,groundCoverRows,groundCoverOn,recolorRGB,COVER_ROWS} from '../sculpt-material-model.js';
 const table=JSON.parse(fs.readFileSync(new URL('../materials/green.json',import.meta.url)));
 test('live placement defaults preserve the accepted material table exactly',()=>{
  const original=tablePlacementRows(table),live=tablePlacementRows(table,new URLSearchParams({faceEdge:'.8',gullyRock:'.5',rockOrder:'1'}));
@@ -17,14 +17,31 @@ test('neutral vegetation controls preserve material values and ignore invalid nu
  assert.deepEqual(groundCoverRows(cover,new URLSearchParams({vegetationCover:'bad',plantRelief:'Infinity'})),original);
  assert.deepEqual(groundCoverRows(null,neutral,{flower1:[1,0,1]}),Array.from({length:COVER_ROWS},()=>[0,0,0,0]));
 });
-test('vegetation controls change only their material rows, including zero',()=>{
- const snapshot=structuredClone(cover),original=groundCoverRows(cover),live=groundCoverRows(cover,new URLSearchParams({vegetationCover:0,plantRelief:.5,flowerDensity:3}));
+test('vegetation controls change only their material rows, and Vegetation cover 0 turns the cover off',()=>{
+ const snapshot=structuredClone(cover),original=groundCoverRows(cover),live=groundCoverRows(cover,new URLSearchParams({vegetationCover:.5,plantRelief:.5,flowerDensity:3}));
  assert.equal(live[5][0],original[5][0],'bare soil stays present');
- for(let i=1;i<7;i++)assert.equal(live[5+5*i][0],0);
- assert.deepEqual(live[39],[2,1,0,.15*3]);
+ for(let i=1;i<7;i++)assert.equal(live[5+5*i][0],original[5+5*i][0]*.5);
+ assert.deepEqual(live[39],[2,1,.75,.15*3]);
  const changed=live.flatMap((r,i)=>r.some((v,j)=>v!==original[i][j])?[i]:[]);
  assert.deepEqual(changed,[10,15,20,25,30,35,39]);
  assert.deepEqual(cover,snapshot,'editing a world must not modify its material preset');
+ const off=new URLSearchParams({vegetationCover:0});
+ assert.equal(groundCoverOn(cover,off),false);assert.equal(groundCoverOn(null,new URLSearchParams()),false);assert.equal(groundCoverOn(cover,new URLSearchParams()),true);
+ assert.deepEqual(groundCoverRows(cover,off),Array.from({length:COVER_ROWS},()=>[0,0,0,0]),'off is the same rows as no table');
+});
+test('a table with no ground of its own reads the world\'s, and its bare soil is that ground',()=>{
+ const {ground,...rest}=cover,own=structuredClone(rest);delete own.classes[0].rgb;own.classes[0].bare=true;
+ const rows=groundCoverRows(own,null,{},[.2,.3,.4]);
+ assert.deepEqual(rows[3],[.2,.3,.4,0]);assert.deepEqual(rows[4],[.2,.3,.4,.1]);assert.deepEqual(rows[9],[...cover.classes[1].rgb.map(v=>v/255),.1]);
+});
+test('the Vegetation color moves every class but bare soil, keeping their steps',()=>{
+ const own={...structuredClone(cover),color:[55,95,27]};own.classes[0].bare=true;
+ const base=groundCoverRows(own),pick=[.7,.25,.1],rows=groundCoverRows(own,null,{vegetation:pick});
+ assert.deepEqual(rows[4],base[4],'bare soil keeps its colour');
+ for(let i=1;i<7;i++)assert.deepEqual(rows[4+5*i].slice(0,3),recolorRGB(base[4+5*i].slice(0,3),[55/255,95/255,27/255],pick));
+ // The table's own colour goes to the pick; no pick leaves every row as it is.
+ recolorRGB([55/255,95/255,27/255],[55/255,95/255,27/255],pick).forEach((v,i)=>assert.ok(Math.abs(v-pick[i])<1e-9));
+ assert.deepEqual(groundCoverRows(own,null,{}),base);
 });
 test('flower colors retain species weights and coexist with density changes',()=>{
  const live=groundCoverRows(cover,new URLSearchParams({flowerDensity:2}),{flower2:[.1,.2,.3]});

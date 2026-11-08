@@ -1,6 +1,8 @@
 // Smoke run: for each world, open the default editor (/sculpt with no map size, the 4x4 map), paint one stroke with every brush,
 // undo it, and export. With --page8 it also opens one 8x8 map per world in --worlds8 (default green; which pages), paints one stroke and undoes it.
 //   node repro/smoke.mjs [--server http://127.0.0.1:8801] [--port 9450] [--worlds green,lava] [--out dir] [--page8 [--worlds8 green,lava,ice]] [--no-export] [--shore]
+//        [--jobs 3]
+// --jobs runs that many browsers at once (default 3), on CDP ports --port, --port+1, ...: each world is its own browser either way.
 // Prints one JSON line per world: the brushes that added a node and came back on undo, the export result and the console. The export runs in
 // the page (export/ built for WebAssembly, in a worker), so this works on sculpt.py and on a static build alike; it must pass its self-check.
 // Exit code 1 if any brush failed to add or undo a node, the console is not clean, or an export other than Zhon's (which cannot export, by design) fails.
@@ -13,11 +15,12 @@ const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? 
 const flag = name => { const i = args.indexOf(name); if (i >= 0) args.splice(i, 1); return i >= 0; };
 const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450)), out = opt('--out', 'smoke-out');
 const worlds = opt('--worlds', 'green,red,archipelago,moon,zhon,lava,desert,crystal,ice').split(','), worlds8 = opt('--worlds8', 'green').split(','), page8 = flag('--page8'), noExport = flag('--no-export'), shore = flag('--shore');
+const jobs = Math.max(1, Number(opt('--jobs', 3)));
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const TOOLS = ['plateau', 'hill', 'mountain', 'ramp', 'deep', 'shallow', 'valleyV', 'valleyU', 'valleyT', 'river', 'braided', 'smooth', 'crater', 'fissure', 'erase', 'crystal', 'sand', 'grass', 'paint'];   // the first eleven draw landforms
+const TOOLS = ['plateau', 'hill', 'mountain', 'ramp', 'deep', 'shallow', 'valleyV', 'valleyU', 'valleyT', 'river', 'braided', 'smooth', 'crater', 'fissure', 'erase', 'crystal', 'sand', 'grass', 'paint'];   // the first eleven and Crater draw landforms
 
-async function session(url, fn) {
+async function session(url, port, fn) {
   const logs = [];
   await cdpPortFree(port);
   const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
@@ -64,9 +67,9 @@ const strokeAt = async (send, ev, tool) => {
 };
 
 let bad = 0;
-for (const world of worlds) {
+async function smokeWorld(world, port) {
   const url = `${server}/sculpt.html?biome=${world}&scratch=smoke-${world}-${Date.now()}&gpuMB=512&heapMB=1536`;
-  const result = await session(url, async ({send, ev, logs}) => {
+  const result = await session(url, port, async ({send, ev, logs}) => {
     const r = {world, brushes: {}, export: null};
     try {
       await ready(ev, world !== 'zhon');
@@ -103,9 +106,9 @@ for (const world of worlds) {
   });
   console.log(JSON.stringify(result));
 }
-if (page8) for (const world of worlds8) {
+async function smokePage8(world, port) {
   const url = `${server}/sculpt.html?biome=${world}&mapX=8&mapY=8&scratch=smoke-8-${world}-${Date.now()}&gpuMB=512&heapMB=1536`;
-  const r = await session(url, async ({send, ev, logs}) => {
+  const r = await session(url, port, async ({send, ev, logs}) => {
     const r = {page8: true, world};
     try {
       await ready(ev, world !== 'zhon'); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
@@ -123,5 +126,13 @@ if (page8) for (const world of worlds8) {
   });
   console.log(JSON.stringify(r));
 }
+// Each world is its own browser; `jobs` of them run at once, each on its own CDP port.
+const queue = [...worlds.map(w => [smokeWorld, w]), ...(page8 ? worlds8.map(w => [smokePage8, w]) : [])];
+await Promise.all(Array.from({length: Math.min(jobs, queue.length)}, async (_, j) => {
+  for (let next; (next = queue.shift());) {
+    const [run, world] = next;
+    try { await run(world, port + j); } catch (err) { console.log(JSON.stringify({world, error: err.message})); bad++; }
+  }
+}));
 writeFileSync(`${out}/done.txt`, bad ? 'FAILURES ' + bad : 'ok');
 process.exit(bad ? 1 : 0);

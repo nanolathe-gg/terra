@@ -36,8 +36,8 @@ the retail crops stay outside git.
 
    Each stroke is `[kind, points, options]`; `options.card` overrides brush
    card values in card units (diameter, amount, roughness, softness, cracks
-   and the shape options such as elevation, combine, craterlets or
-   crystalSize), starting from the world's defaults (a landform starts as the
+   and the shape options such as elevation, combine, ejecta or
+   iceFacetSize), starting from the world's defaults (a landform starts as the
    Plateau button's preset, so pin every setting the scene depends on).
    Plateaus, ridges, ramps and water are landforms; `options.curve` carries
    a landform's section. `query`
@@ -74,6 +74,22 @@ the retail crops stay outside git.
    reliefs, to check the strokes follow the retail layout before judging
    materials.
 
+5. Check a change: `repro/check.sh quick` renders every scene (`all.sh`,
+   four at a time) and compares it with the renders of the commit the
+   branch grew from, which it makes once and keeps in `$R/baseline/`
+   (`compare.py`: the scenes that changed, and with `--worlds` a failure
+   when another world's scene moves). `land` and `full` add the Chrome
+   checks and the sweeps (AGENTS.md "Checks").
+
+6. Compare a world with retail: `repro/retail.sh <world> [--query
+   'key=v&key=v'] [--base <an earlier run>]` renders only that world's
+   windows (`all.sh` with `REPRO_SCENES`), measures them with `stats.py`,
+   and prints one shape and one look score per window (`retail_gap.py`:
+   the gap to the window's own retail crop in units of the world's retail
+   family band). `retail_knobs.mjs <world>` lists the World rows a query can
+   set, and `retail_sources.py` the retail maps and map editor sections on
+   this machine. docs/RETAIL_ROUND.md is the round these serve.
+
 `demo/` holds scenes for tools that have no retail crop (the cross-section
 control, card C1): `profile-plateau`, `-escarpment`, `-hill-mountain`,
 `-terraced-dome`, `-lake` (and `-lake-red`, `-lake-terraced`, `-shallow`), `-desert-apron` and `-lip`. They are
@@ -82,27 +98,26 @@ set the new shape options in `options.card` in the units of their sliders
 (`faceCurve` -100..100, shares as percent, widths in px).
 
 `demo/masks-*.json` (card C5, painted masks): `masks-green` (rock patches on a hill,
-moss, a wet band by a lake), `masks-desert` (a rocky mesa through the plateau's
-Paint inside option, next to a plain one), `masks-ice` (snow and rock paint, and a
-mountain painted snow through its own footprint) and `masks-moon` (a boulder field
-painted denser on the left; the World sliders stay at 0, since denser paint supplies
-its own stones). A paint stroke is `["paint", points, {"card": {"paintChannel": n, ...}}]`
-with `paintChannel` 1 rock, 2 snow or ice, 3 wet ground, 4 moss, 5 denser scatter,
-6 sparser scatter, 7 erase all masks; a landform paints its own footprint with
-`maskChannel` (0 off, 1..6 as above) and `maskAmount` (percent).
+moss, a wet band by a lake), `masks-ice` (snow and rock paint) and `masks-moon` (a
+boulder field painted denser on the left; the World sliders stay at 0, since denser
+paint supplies its own stones). `masks-desert` (two mesas and a hill) is the
+landform-only companion. A paint stroke is
+`["paint", points, {"card": {"paintChannel": n, ...}}]` with `paintChannel` 1 rock,
+2 snow or ice, 3 wet ground, 4 moss, 5 denser scatter and 6 sparser scatter; 7
+erases all masks and style.
 
-The line-feature demos (card C4) are `ridge-moon` (a lopsided ring with rim
-sectors, an open crescent with a rim gap, a crater with radiating spurs and a
-tapering, jagged crescent ridge with spurs), `ridge-red` (branching rugged
-mountain ridges) and `ridge-lava` (low winding hill ridges and a radiating
-lump); their options are Spurs, Crest irregularity, Crest width and height
-variation, Crest taper, Rim sectors and Rim gaps.
+The line-feature demos (card C4) are `ridge-moon` (Crater-button craters, one
+with radiating spurs, and a tapering crescent ridge with spurs), `ridge-red`
+(branching rugged mountain ridges) and `ridge-lava` (low winding hill ridges
+and a radiating lump); their options are Spurs and Crest taper. (The crater's
+rim sectors, rim gaps and crest variation were retired with the Crater tool on
+November 6, docs/LANDFORM_RETIREMENT.md.)
 
 Local style (card C5 stage 2): `paintChannel` 8/9 relief stronger/weaker, 10/11
 cracks more/fewer, 12/13 banding more/less, 14/15 face rock more/less (Strength
-is how far); a landform sets the same about its own footprint with `styleRelief`,
-`styleCracks`, `styleBanding` and `styleFace` (percent, -100..100, 0 none).
-`demo/masks-style.json` shows each on a Green hill and a plateau pair.
+is how far). A landform keeps one of them for its own footprint, Local vegetation
+(`styleVegetation`, percent, -100..100, 0 none). `demo/masks-style.json` shows the
+paint channels on a Green hill and a plateau pair.
 
 The fissure demos (card C4 stage 2) are `fissure-desert` (jagged cuts with
 branches across a mesa's cap and face), `fissure-ice` (one branching crevasse
@@ -117,14 +132,15 @@ renders the world's own preset exactly; green-1, green-3, ice-2 and desert-2 opt
 
 Ice's shore (card E5): the Water button's preset in Ice turns on frost-crystal shore plates (plate
 material 2: needles in parallel runs, straight seams, thinning toward deep water; the
-floe shelf of plate material 0 was dropped with the JS shape engine). The berg form of the
-Crystals brush (`crystalForm: 2`, with `bergFace`, `bergJitter`, `bergBreak`, `bergRough`,
-`bergTilt`, `bergTiltDir`, `bergFlat` and `crystalAlign`) builds ice-2's bergs and
-ice-3's box; `variant=bergs` gives the bergs their blue ice.
+floe shelf of plate material 0 was dropped with the JS shape engine). ice-2's bergs and ice-3's box
+are landforms with Facets (Facet shape Prisms, one prism a click, Surface Rock, Face roughness,
+Corner cuts and Outline jitter; ice-2's flat top tilts with its section below Level tops 100), as
+the Crystals button draws them in Ice; `variant=bergs` gives the bergs their blue ice.
 
 Ice blocks, frost lines and facets (card G6): the Ice world's raised ground is lit by its blurred height and
 snow-capped, its faces carry smooth fibres down the slope and its foot a hatched apron (`iceSoft`, `iceSnow`,
 `iceFall`, `iceApron`; ice-3 is the window; the variants `snow`, `crystal` and `bergs` set them to 0). The frost
-band carries fine blue hairlines (`iceFrost`). A raised landform takes an optional **Angular facets** share
-(`iceFacets`, 0 off, with `iceFacetSize` px; not with shore features): part of it is tiled into tilted planes fitted to its own
+band carries fine blue hairlines (`iceFrost`). A landform takes optional **Facets** (`iceFacets`, 0 off, with
+`iceFacetSize` px, `facetForm` angular facets, stepped columns or prisms, `crystalStep` and `facetSurface`; not with shore
+features): at Facet shape Angular facets and Surface Rock part of it is tiled into tilted planes fitted to its own
 surface, partly buried, in its own material. `demo/ice-facets.json` is the ice-1 ridge with facets 70, size 44.

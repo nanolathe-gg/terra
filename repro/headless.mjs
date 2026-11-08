@@ -122,7 +122,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   let nodes = [];
   const context = () => engine.shapeContext({config, settings, seed, talusAngle: renderer.variantNumber('talusAngle', 40), minH, maxH});
   const gpuMB = Math.min(4096, Math.max(128, Number(settings.get('gpuMB')) || 512));
-  const common = {worldSize, worldGrid, baseHeight: config.baseHeight, keys: engine.FIELD_KEYS, maskKeys: engine.MASK_KEYS, nodes: () => nodes, device: () => renderer.device, context, gesture: () => false};
+  const common = {worldSize, worldGrid, baseHeight: config.baseHeight, maskKeys: engine.MASK_KEYS, nodes: () => nodes, device: () => renderer.device, context, gesture: () => false};
   const paged = worldGrid > 1168 || settings.get('gpuPages') === 'force';
   const fields = paged
     ? fieldsModule.createPagedFields({...common, budget: () => engine.pagedBudget({gpuMB, renderer, chunk: Math.min(512, renderer.chunkSize()), maskCount: engine.MASK_KEYS.length, view}), foregroundPending: () => false, apron: Number(settings.get('timeApron') || 128), forceRing: Number(settings.get('pageRing') || 0)})

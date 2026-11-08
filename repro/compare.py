@@ -20,7 +20,7 @@ ap.add_argument('before'); ap.add_argument('after')
 ap.add_argument('--worlds', default='', help='worlds the change may touch')
 args = ap.parse_args()
 allowed = {w for w in args.worlds.split(',') if w}
-stray = []
+stray, changed, seen = [], [], 0
 for d in sorted(Path(args.after).iterdir()):
     a, b = Path(args.before) / d.name / 'ours.png', d / 'ours.png'
     if not (a.exists() and b.exists()):
@@ -28,13 +28,17 @@ for d in sorted(Path(args.after).iterdir()):
     x = np.asarray(Image.open(a).convert('RGB'), np.int16)
     y = np.asarray(Image.open(b).convert('RGB'), np.int16)
     diff = np.abs(x - y)
+    seen += 1
+    if diff.any():
+        changed.append(d.name)
     mad, moved = float(diff.mean()), float((diff.max(-1) > 8).mean())
     world = d.name.rsplit('-', 1)[0]
-    flag = ''
+    flag = '' if diff.any() else '  identical'
     if allowed and world not in allowed and diff.any():
         flag = '  <- outside --worlds'
         stray.append(d.name)
     print(f'{d.name:16s} mean |diff| {mad:6.2f}   moved {moved:6.1%}{flag}')
+print(f'{len(changed)} of {seen} scenes changed' + (': ' + ' '.join(changed) if changed else ''))
 if stray:
     print('changed outside the allowed worlds:', ' '.join(stray))
     sys.exit(1)

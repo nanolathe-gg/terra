@@ -299,7 +299,7 @@ def ours(png, heights_json):
     """(rgb, slope, valid) for one editor render."""
     rgb = np.asarray(Image.open(png).convert('RGB'))
     d = json.load(open(heights_json))
-    grid, size, base, sea = d['grid'], d['size'], d['base'], d['sea']
+    grid, base, sea = d['grid'], d['base'], d['sea']
     h = np.array(d['heights'], np.float32).reshape(grid, grid)
     k = grid // 64
     cells = h.reshape(64, k, 64, k).mean(axis=(1, 3))

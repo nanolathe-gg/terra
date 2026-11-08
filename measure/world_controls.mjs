@@ -23,7 +23,7 @@
 // since a wrong gate hides a live control and nothing else would show it. The water rows are read once more under a Shallow water color, which no scene picks.
 // --set puts values in before the sweep, to probe a row under a gate.
 import {cdpPortFree} from '../repro/cdp-port.mjs';
-import {worldControlRequirement, shapeControlAvailable, PARKED_WORLD_CONTROLS} from '../sculpt-control-schema.js';
+import {worldControlRequirement, shapeControlAvailable, LANDFORM_FACET_KEYS} from '../sculpt-control-schema.js';
 import {spawn} from 'node:child_process';
 import {mkdirSync, writeFileSync, readFileSync, existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -57,14 +57,15 @@ if (args.includes('--recheck')) {
 }
 const SURFACE = [['relief', 0, 160], ['transition-detail', 0, 100], ['mineral-ring', 0, 100], ['ring-spread', 0, 100], ['ring-variation', 0, 100], ['material-weathering', 0, 100], ['deposit-spread', 0, 100]];
 // The stroke kinds that carry SHAPE_FIELDS rows, drawn one each on a grid of the 1024 px window.
-const KIND_AT = {crater: [630, 500], crystal: [880, 500], fissure: [130, 830], erase: [380, 830], paint: [630, 830], landform: [880, 830]};
+// The Crater and Crystals buttons draw landforms, so the retired crater and crystal kinds have no rows here (BUTTONS_AT keeps a stroke of each button).
+const KIND_AT = {fissure: [130, 830], erase: [380, 830], paint: [630, 830], landform: [880, 830]};
 // The retired tools' strokes as the landforms the shape buttons draw (sea-relative, about as tall above this map's plain as the old fixtures' Rise).
 const PLATEAU = (pts, rise, card = {}) => ['landform', pts, {card: {heightReference: 1, elevation: 24 + rise, wander: 40, widthVary: 30, ...card}}];
 const RIDGE = (pts, rise, card = {}) => ['landform', pts, {card: {heightReference: 1, elevation: 24 + rise, lean: 100, wander: 8, widthVary: 0, ...card}, curve: {form: 'lfMountain'}}];
 const WATER = (pts, card = {}, picks = {}) => ['landform', pts, {card: {heightReference: 1, elevation: -55, combine: 1, cracks: 0, wander: 30, widthVary: 30, varySize: 210, ...card}, curve: {form: 'lfShore'}, ...picks}];
 // The panel hides these until their switch is above 0 (updateControls in sculpt.js).
-const GATE = {gullySize: 'gullies', talus: 'gullies', layerPx: 'shoreLayers', layerRiser: 'shoreLayers', layerLedge: 'shoreLayers', layerRough: 'shoreLayers', layerStyle: 'shoreLayers', layerVary: 'shoreLayers', layerCircle: 'shoreLayers', iceFacetSize: 'iceFacets', fingerSize: 'fingers',
-  spurLength: 'spurCount', spurSpread: 'spurCount', spurWidth: 'spurCount', spurTaper: 'spurCount', spurHeight: 'spurCount', spurForks: 'spurCount', spurBulb: 'spurCount', rimUnequal: 'rimSectors', rimGapWidth: 'rimGaps', fissureBranchLen: 'fissureBranches', fissureBranchSpread: 'fissureBranches', lavaSpread: 'shoreLayers', lavaCircleVary: 'shoreLayers'};
+const GATE = {gullySize: 'gullies', talus: 'gullies', layerPx: 'shoreLayers', layerRiser: 'shoreLayers', layerLedge: 'shoreLayers', layerRough: 'shoreLayers', layerStyle: 'shoreLayers', layerVary: 'shoreLayers', layerCircle: 'shoreLayers', iceFacetSize: 'iceFacets', facetForm: 'iceFacets', facetSurface: 'iceFacets', fingerSize: 'fingers',
+  spurLength: 'spurCount', spurSpread: 'spurCount', spurWidth: 'spurCount', spurTaper: 'spurCount', spurHeight: 'spurCount', spurForks: 'spurCount', spurBulb: 'spurCount', crestVary: 'spurCount', fissureBranchLen: 'fissureBranches', fissureBranchSpread: 'fissureBranches', lavaSpread: 'shoreLayers', lavaCircleVary: 'shoreLayers'};
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const rows = [], logs = [], t0 = Date.now();
 mkdirSync(out, {recursive: true});
@@ -225,7 +226,7 @@ async function nodeHost() {
     async state() {
       // sculpt.js buildKnobs: a row for each knob that is not parked; the panel disables it by worldControlRequirement on these values.
       const values = await headless.panelValues(s);
-      const panel = KNOBS.flatMap(([, list]) => list).filter(([key]) => !PARKED_WORLD_CONTROLS.has(key)).map(([key]) => { const reason = worldControlRequirement(key, values) || ''; return {key, off: Boolean(reason), reason}; });
+      const panel = KNOBS.flatMap(([, list]) => list).map(([key]) => { const reason = worldControlRequirement(key, values) || ''; return {key, off: Boolean(reason), reason}; });
       return {values, panel, variant: Object.fromEntries(s.renderer.variant), knobs: KNOBS, fields: SHAPE_FIELDS, defaults: Object.fromEntries(Object.keys(KINDS).map(k => [k, toolDefaults(s.config, k)])), nodes: s.nodes.map(n => n.kind)};
     },
     panelValues: () => headless.panelValues(s),
@@ -281,7 +282,10 @@ try {
     [560, 960, {waterBed: 3, waterDeep: 1}, {diameter: 200, shorePlates: 1, plateMaterial: 1}]]
     .map(([x, y, picks, card]) => WATER([[x, y], [x + 400, y]], {diameter: 150, ...card}, picks));
   // The stroke fixture: one stroke of each kind carrying a shape option, shifted by `variant` so a second one differs in size and amount. The third is as wide as a world's own plateau.
-  const strokeFixture = variant => Object.entries(KIND_AT).map(([kind, [x, y]]) => [kind, [[x - 70, y], [x + 70, y + (variant ? 30 : 0)]], {card: {diameter: [180, 260, 560][variant], amount: variant ? 100 : 70, roughness: variant ? 55 : 35}}]);
+  // The Crater and Crystals buttons draw landforms now: one stroke of each stays where the retired crater and crystal kinds stood, after the rows' own strokes
+  // (a row is read on the first stroke of its kind), so the fixtures keep what they held round the landform's row.
+  const BUTTONS_AT = {crater: [630, 500], crystal: [880, 500]};
+  const strokeFixture = variant => [...Object.entries(KIND_AT), ...Object.entries(BUTTONS_AT)].map(([kind, [x, y]]) => [kind, [[x - 70, y], [x + 70, y + (variant ? 30 : 0)]], {card: {diameter: [180, 260, 560][variant], amount: variant ? 100 : 70, roughness: variant ? 55 : 35}}]);
   // Two Sand strokes over the first stroke fixture's rows, for the options that scale what lies on the ground (Style: deposits).
   const sandOver = () => [170, 500, 830].map(y => ['sand', [[60, y], [950, y]], {card: {diameter: 300, amount: 100}}]);
   const fmt = r => `${r.world.padEnd(12)}${r.type.padEnd(8)}${(r.stroke ? r.stroke + ':' : '') + r.key}`.padEnd(40) + `${String(r.max).padStart(4)}${String(r.px).padStart(9)}  ${r.fixture}${r.state === 'gated' ? ' gated ' + JSON.stringify(r.gates) : ''}${r.zero && !r.allowed ? '  !' : ''}${r.hides ? '  ! hidden: ' + r.reason : ''}`;
@@ -292,7 +296,7 @@ try {
     await host.load(world, fixtures[0][3] || '');
     const st = await setUp(); let base = st.variant;
     const values = st.values, panelRow = Object.fromEntries(st.panel.map(r => [r.key, r])), all = st.knobs.flatMap(([group, list]) => list.map(f => ({group, key: f[0], lo: f[2], hi: f[3]})));
-    const live = all.filter(k => !PARKED_WORLD_CONTROLS.has(k.key) && (!ONLY || ONLY.includes(k.key)));
+    const live = all.filter(k => !ONLY || ONLY.includes(k.key));
     // The parents that clear a reason: try each knob at 1, then at its midpoint, greedily, until the row is enabled (the reason is the tool's own oracle).
     // The parents that clear a row's reason: every knob that clears it alone (an "any of" row has several), else the chain that does, one knob at a time (the reason is the tool's own oracle).
     const gatesFor = key => {
@@ -401,8 +405,10 @@ try {
     stage('picked color', ts); ts = Date.now();
     // The light's colors (P12b): a warm sun and a cool sky, picked through the panel's own rows on the world's first scene. White (off) is the grey light.
     await host.scene(fixtures[0][1], fixtures[0][2]);
-    for (const [label, hex, key] of [['Sun color', '#ffc880', 'sunColor'], ['Sky color', '#80a0ff', 'skyColor'], ...[1,2,3,4].map(i=>['Flower '+i,'#30b0ff','flower'+i])]) {
-      if(key.startsWith('flower')&&(ONLY&&!ONLY.includes(key)||!await host.hasColorRow(label)))continue;
+    // Vegetation and the flowers color the ground cover, which is on only where Vegetation cover is above 0 (every world has a table; most start with it off).
+    const coverOn = Number((await host.panelValues()).vegetationCover) > 0;
+    for (const [label, hex, key] of [['Sun color', '#ffc880', 'sunColor'], ['Sky color', '#80a0ff', 'skyColor'], ['Vegetation', '#b8732a', 'vegetation'], ...[1,2,3,4].map(i=>['Flower '+i,'#30b0ff','flower'+i])]) {
+      if((key.startsWith('flower')||key==='vegetation')&&(ONLY&&!ONLY.includes(key)||!coverOn||!await host.hasColorRow(label)))continue;
       const m = await host.colorPair(label, hex);
       add({world, type: 'knob', key, group: 'Colors', fixture: fixtures[0][0] + ' + ' + hex, lo: 'off', hi: hex, state: 'color', ...m, zero: m.max === 0, allowed: false});
     }
@@ -418,23 +424,23 @@ try {
     await host.scene(strokeFixture(0), true);
     const nodeKinds = await host.kinds();   // a ground node leads only where the world's undulation is on
     const ctxFor = (key, kind) => {
-      const p = {craterlets: 0, shorePlates: 0, fingers: 0, shoreLayers: 0, spurCount: 0, crestJag: 0, crestVary: 0, crestTaper: 0, craterFacets: 0, iceFacets: 0, crystalCount: 8, crystalSize: 110, crystalForm: 0};
+      const p = {shorePlates: 0, fingers: 0, shoreLayers: 0, spurCount: 0, crestTaper: 0, iceFacets: 0};
       if (['terraces', 'ledge', 'terraceJitter', 'breakup'].includes(key)) p.terraces = 4;
       if (['ledge', 'terraceJitter'].includes(key)) p.ledge = .55;
       if (key.startsWith('spur') || key.startsWith('crest')) p.spurCount = 4;
-      if (key.startsWith('rim')) Object.assign(p, {rimSectors: 4, rimUnequal: .7, rimGaps: 2});
       if (key.startsWith('fissureBranch')) p.fissureBranches = 3;
       if (key === 'fissureCell') p.fissureNetwork = 1;
       if (key.startsWith('plate') || key === 'shorePlates' || key.startsWith('frost') || key.startsWith('crystalShore')) Object.assign(p, {shorePlates: 1, plateMaterial: key.startsWith('frost') ? 2 : 1, plateWaterPx: 100, plateLandPx: 120, plateSize: 40, plateGap: 5, plateHeight: 7});
       if (key.startsWith('finger')) Object.assign(p, {fingers: 1, fingerSize: 1});
       if (key.startsWith('layer') || key.startsWith('lava') || key === 'shoreLayers') Object.assign(p, {shoreLayers: 5, layerPx: 22, layerRiser: 4, layerLedge: .7, layerRough: .5, layerVary: .4, layerStyle: key.includes('Circle') || key === 'layerCircle' || key === 'lavaCircleVary' ? 1 : 0});
-      if (['crystalTiers', 'crystalStep', 'crystalFacet', 'crystalSizeVar', 'crystalSmooth'].includes(key)) Object.assign(p, {crystalForm: 1, crystalSize: 32});
-      if (key.startsWith('berg') || key === 'crystalAlign') Object.assign(p, {crystalForm: 2, crystalSize: 200, crystalCount: 3, bergTilt: .3});
-      if (key.startsWith('crystalCrater') || key === 'craterFacets') p.craterFacets = .7;
       if (key === 'iceFacetSize' || key === 'iceFacets') p.iceFacets = .7;
+      // A landform's Facets rows, with facets on and the shape that shows them (Step height and Level tops on columns, Surface on prisms).
+      if (kind === 'landform' && (key === 'facetForm' || key === 'facetSurface' || LANDFORM_FACET_KEYS.includes(key))) Object.assign(p, {iceFacets: .7, facetForm: ['crystalTiers', 'crystalStep', 'crystalFacet', 'crystalSizeVar'].includes(key) ? 1 : 2, iceFacetSize: 40});
       if (key === 'facing') p.lean = 3;
       if (key === 'gullySize' || key === 'talus') p.gullies = 1;
       if (key === 'waterDeep') p.waterBed = 1;   // a stroke's edge choice shows where its own Lit bed draws the deep share
+      if (key === 'buckling') Object.assign(p, {heightReference: 2, elevation: -20, combine: 2});   // lfimpact2: the ground buckles round a shape that digs
+      if (key === 'secondaryDistance') p.secondaries = 12;   // lfimpact2: it places the secondaries (all of them, as Secondaries is read)
       if(kind==='landform'&&(key.startsWith('layer')||key.startsWith('lava')))Object.assign(p,{stepReference:key==='layerCircle'||key==='lavaCircleVary'?2:1,terraces:5,ledge:.7,terraceJitter:.5});
       return p;
     };
@@ -443,10 +449,8 @@ try {
       const ui = {...st.defaults[kind], world: values}; for (const [k, v] of Object.entries(ctx)) ui[k] = v * (scales[k] ?? 1);
       const net = kind === 'fissure' && Number(ui.fissureNetwork) >= .5;
       if (kind === 'fissure' && (net ? ['fissureBranches', 'fissureBranchLen', 'fissureBranchSpread', 'fissureTaper'].includes(key) : key === 'fissureCell')) return false;
-      if (kind === 'crystal' && ['crystalAlign', 'bergFace', 'bergJitter', 'bergBreak', 'bergRough', 'bergTilt', 'bergTiltDir', 'bergFlat'].includes(key) && Number(ui.crystalForm) < 2) return false;
       if (key === 'frostNeedles' && Number(ui.plateMaterial) < 2) return false;
       if (GATE[key] && !(kind==='landform'&&GATE[key]==='shoreLayers') && !(Number(ui[GATE[key]]) > 0)) return false;
-      if (kind === 'crater' && ['crestJag', 'crestVary'].includes(key) && !(Number(ui.spurCount) > 0)) return false;   // on a crater the crest options only shape its spurs
       if (kind!=='landform' && key === 'layerCircle' && Number(ui.layerStyle) !== 1) return false;
       // The shared applicability rule receives engine units, just as updateControls does.
       return shapeControlAvailable(key, kind, {...ui, ...Object.fromEntries(Object.entries(scales).map(([k, scale]) => [k, ui[k] / scale]))});
@@ -456,6 +460,8 @@ try {
       // Shore controls need a sea crossing: the ordinary raised landform fixture has none.
       if(kind==='landform'&&key==='stepReference')return {elevation:-55,combine:1,heightVary:0,terraces:6,ledge:.8};
       if(kind==='landform'&&key==='heightReference')return {elevation:110,heightReference:0};
+      // lfimpact2: the secondaries' distance on a shape that digs (small pits, where a raised fixture's lie under its own flank near the rim).
+      if(kind==='landform'&&key==='secondaryDistance')return {heightReference:2,elevation:-20,combine:2};
       if(kind==='landform'&&(key.startsWith('finger')||key.startsWith('layer')||key.startsWith('lava')||key.startsWith('plate')||key==='shorePlates'||key.startsWith('frost')||key.startsWith('crystalShore')||key.startsWith('water')||key==='surf'))return {elevation:-55,combine:1,heightVary:0};
       return {};
     };

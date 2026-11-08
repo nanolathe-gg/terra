@@ -31,14 +31,8 @@ LAYER = {}          # a material's first layer, whose noise salt the engine used
 
 def lattice_variance(cell_x, cell_y):
     """Variance of smoothstep value noise on a lattice of uniform hashes, scaled to -1..1 (cells of 2+ px, so no pixel aligns with a node)."""
-    rng = np.random.default_rng(1)
-    g = rng.random((258, 258)) * 2 - 1
-    f = (np.arange(4096) + .5) / 64.0 % 1.0
-    w = f * f * (3 - 2 * f)
     # separable bilinear with the smoothstep weights: sample variance over a full cell grid
     n = 64
-    ww = np.array([(1 - w[:n]), w[:n]])
-    tot = 0.0
     xs = np.linspace(0, 1, n, endpoint=False) + .5 / n
     wx = xs * xs * (3 - 2 * xs)
     v = ((1 - wx) ** 2 + wx ** 2).mean()

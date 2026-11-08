@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {shapeControlAvailable as available,controlLabel,PARKED_WORLD_CONTROLS} from '../sculpt-control-schema.js';
+import {shapeControlAvailable as available} from '../sculpt-control-schema.js';
+import {KNOBS} from '../sculpt-knobs.js';
+import {SHAPE_FIELDS} from '../sculpt-scene.js';
 import {prepareNode} from '../sculpt-gpu-fields.js';
 
-test('a landform takes angular facets unless its coast pass is on',()=>{
+test('a landform takes facets unless its coast pass is on',()=>{
  assert.equal(available('iceFacetSize','landform',{iceFacets:1}),true);
  assert.equal(available('iceFacetSize','landform',{iceFacets:0}),false);
  assert.equal(available('iceFacets','landform',{iceFacets:1,fingers:1}),false);
@@ -11,11 +13,32 @@ test('a landform takes angular facets unless its coast pass is on',()=>{
  assert.equal(available('iceFacets','landform',{stepReference:0,terraces:4}),true);
 });
 test('faceted forms and shoreline materials keep their own dependent controls',()=>{
- assert.equal(available('crystalTiers','crystal',{crystalForm:0}),false);
- assert.equal(available('crystalTiers','crystal',{crystalForm:1}),true);
- assert.equal(available('crystalCount','crystal',{crystalForm:1}),false);
- assert.equal(available('bergTiltDir','crystal',{crystalForm:2,bergTilt:0}),false);
- assert.equal(available('bergTiltDir','crystal',{crystalForm:2,bergTilt:.2}),true);
+ // lfcrystal: a landform's Facet shape and each shape's rows show once facets are on, by the shape (never by the world or the stroke's palette entry).
+ assert.equal(available('facetForm','landform',{iceFacets:0}),false);
+ assert.equal(available('facetForm','landform',{iceFacets:.6}),true);
+ assert.equal(available('crystalStep','landform',{iceFacets:.6,facetForm:1}),true);
+ assert.equal(available('crystalStep','landform',{iceFacets:.6,facetForm:2}),false);
+ assert.equal(available('crystalTop','landform',{iceFacets:.6,facetForm:2}),true);
+ assert.equal(available('crystalTop','landform',{iceFacets:0,facetForm:2}),false);
+ assert.equal(available('crystalTiers','landform',{iceFacets:.6,facetForm:0}),false);
+ assert.equal(available('crystalTiers','landform',{iceFacets:.6,facetForm:2}),true);
+ assert.equal(available('bergRough','landform',{iceFacets:.6,facetForm:2,stepReference:1,terraces:4}),false);
+ // One Facets feature: Surface and width for every shape, Step height for angular facets and columns, and a landform that digs takes angular facets.
+ assert.equal(available('facetSurface','landform',{iceFacets:.6,facetForm:0}),true);
+ assert.equal(available('facetSurface','landform',{iceFacets:0}),false);
+ assert.equal(available('crystalStep','landform',{iceFacets:.6,facetForm:0}),true);
+ const dig={iceFacets:1,heightReference:2,elevation:-18};
+ assert.equal(available('facetForm','landform',{...dig,facetForm:2}),false);
+ assert.equal(available('crystalStep','landform',{...dig,facetForm:2}),true);
+ assert.equal(available('crystalTop','landform',{...dig,facetForm:2}),false);
+ assert.equal(available('facetForm','landform',{iceFacets:1,heightReference:2,elevation:12}),true);
+ // lfimpact2: Buckling shows on a landform that digs, as the engine draws it there only.
+ assert.equal(available('buckling','landform',dig),true);
+ assert.equal(available('buckling','landform',{heightReference:2,elevation:12}),false);
+ assert.equal(available('buckling','landform',{heightReference:0,elevation:-18}),false);
+ // Secondaries' distance shows once there is a secondary.
+ assert.equal(available('secondaryDistance','landform',{secondaries:0}),false);
+ assert.equal(available('secondaryDistance','landform',{secondaries:1}),true);
  assert.equal(available('frostNeedles','landform',{shorePlates:1,plateMaterial:1}),false);
  assert.equal(available('frostNeedles','landform',{shorePlates:1,plateMaterial:2}),true);
  assert.equal(available('crystalShoreSeam','landform',{shorePlates:1,plateMaterial:2}),false);
@@ -28,24 +51,21 @@ test('erase all masks includes all eight local style planes',()=>{
  assert.deepEqual(writes.map(w=>w[0]),Array.from({length:18},(_,i)=>i));
  assert.ok(writes.every(w=>w[1]===0));
 });
-test('the parked control is only crevice',()=>{
- assert.deepEqual([...PARKED_WORLD_CONTROLS],['crevice']);
- assert.equal(controlLabel('moonCups','Moon cups'),'Slope cups');
- assert.equal(controlLabel('iceSoft','Ice lighting'),'Rounded lighting');
+test('labels and group names name no world',()=>{
+ // Labels and group names describe features, never worlds (AGENTS.md rule 7): the tables hold the names the panel shows.
+ const named=/\b(Archipelago|Moon|Lava|Red|Green|Ice|Crystal|Desert|Zhon)\b/;
+ for(const [group,list] of KNOBS){assert.ok(!named.test(group),group);for(const [key,label] of list)assert.ok(!named.test(label),`${key}: ${label}`);}
+ for(const [key,,label] of SHAPE_FIELDS)assert.ok(!named.test(label),`${key}: ${label}`);
 });
 
-test('vegetation dependencies follow material capabilities and keep flowers independent of relief',async()=>{
+test('every world can turn vegetation on, and flowers stay independent of relief',async()=>{
  const {worldControlRequirement:requirement}=await import('../sculpt-control-schema.js');
- const supported={groundCover:1,plants:1,flowers:1};
- for(const key of ['vegetationCover','plantRelief','flowerDensity']){
-  assert.match(requirement(key,{}),/no ground-cover material/);
-  assert.equal(requirement(key,supported),'');
- }
- for(const key of ['plantRelief','flowerDensity'])assert.match(requirement(key,{...supported,vegetationCover:0}),/Vegetation cover/);
- assert.equal(requirement('vegetationCover',{...supported,vegetationCover:0}),'');
- assert.match(requirement('plantRelief',{groundCover:1}),/no plant relief/);
- assert.equal(requirement('flowerDensity',{...supported,plantRelief:0}),'');
- assert.match(requirement('flowerDensity',{...supported,flowers:0}),/no flowers/);
+ // Vegetation cover above 0 is the switch; every world has a table, so Vegetation cover itself is never idle.
+ for(const v of [{},{vegetationCover:0},{vegetationCover:1}])assert.equal(requirement('vegetationCover',v),'');
+ for(const key of ['plantRelief','flowerDensity']){assert.match(requirement(key,{vegetationCover:0}),/Raise Vegetation cover/);assert.equal(requirement(key,{vegetationCover:1}),'');}
+ assert.equal(requirement('flowerDensity',{vegetationCover:1,plantRelief:0}),'');
+ // Flowers are dots in the ground's color, which the sediment transition replaces at 100 percent Material weathering; the plants' relief still shows.
+ assert.match(requirement('flowerDensity',{vegetationCover:1,slopeReplaced:1}),/Lower Material weathering/);assert.equal(requirement('plantRelief',{vegetationCover:1,slopeReplaced:1}),'');
 });
 
 test('world dependencies explain bypasses without biome gates',async()=>{
@@ -192,8 +212,8 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('groundTiles',{groundTiled:0}),/Ground pattern/);
  shows('groundTiles',{groundTiled:1});
  assert.match(requirement('slopeTexture',{slopeSand:1}),/sand/);
- assert.match(requirement('slopeTexture',{groundCover:1}),/ground-cover table decides its slope cover/);
- shows('slopeTexture',{groundCover:0});
+ assert.match(requirement('slopeTexture',{vegetationCover:1}),/ground cover decides the slope cover/);
+ shows('slopeTexture',{vegetationCover:0});
  shows('slopeTexture',{slopeSand:0});
  assert.match(requirement('dither',{paletteMix:1}),/Nearest color/);
  shows('dither',{paletteMix:0});

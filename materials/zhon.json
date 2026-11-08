@@ -2685,13 +2685,10 @@
  "world": {
   "baseHeight": 8,
   "defaults": {
-   "coverage": "form",
-   "lighting": "front",
    "surface": "slopes",
    "transition": "soil",
    "material": "single",
-   "scree": "0",
-   "shade": "separate"
+   "scree": "0"
   },
   "colors": {
    "rock": "#3d5174"

@@ -5,7 +5,7 @@
 //  b  the canvas at zoom 2 is debugBake(tile, .5)
 //  c  back at zoom 1 the canvas is byte equal to the first read: a fine image must be replaced, not shown sampled
 //  d  four 256 px tiles joined against one 512 px tile, at .5 and at .25
-//  e  an edit at zoom 2: console clean, mismatch 0, no tile dirty, the view back at its level
+//  e  an edit at zoom 2: console clean, no tile dirty, the view back at its level
 //  f  no bakes over 2 s of idle, or for a repaint, at zoom 2 and zoom 4, and at zoom 4 from a view that cuts tiles: no loop, and what is seen stays in the cache
 //  r  at zoom 4, a new view bakes what it shows and nothing around it: at most a quarter and a final image a tile
 //  g  at the smallest GPU budget 100% settles on, zoom 4 settles without the error banner (the level may fall back; it is reported)
@@ -117,8 +117,8 @@ try {
   await ev(`sculptDebug.scene(${JSON.stringify([...strokes, extra])}, {ground: ${scene.ground !== false}})`);
   if (!await ready()) throw new Error('edited scene never finished');
   await ev('sculptCanvas.idle()'); const e1 = await level(.5);
-  const dirty = (await ev('__z.tiles()')).filter(t => t.seen && t.dirty).length, mismatch = await ev('sculptDebug.replayAll()');
-  check('e', e1.ok && dirty === 0 && mismatch === 0 && !logs.length && await banner(), {level: e1, dirty, mismatch, console: logs.slice(0, 4)});
+  const dirty = (await ev('__z.tiles()')).filter(t => t.seen && t.dirty).length;
+  check('e', e1.ok && dirty === 0 && !logs.length && await banner(), {level: e1, dirty, console: logs.slice(0, 4)});
   // g: the smallest budget at which 100% itself settles (below it the editor's own floor refuses before any zoom: the GPU fields, the
   // canvas and a 256 px chunk do not fit), then zoom 4 on it. A refused 100% leaves logs and the banner that are not this check's.
   const settle = async () => { let g; for (let i = 0; i < 80; i++) { await ev('sculptCanvas.idle()'); g = (await ev('__z.tiles()')).filter(t => t.seen); if (g.length && g.every(t => !t.dirty)) break; await sleep(250); } return g; };

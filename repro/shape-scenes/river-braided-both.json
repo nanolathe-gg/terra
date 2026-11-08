@@ -1,0 +1,7 @@
+{"biome": "green",
+ "source": {"note": "riverfix: a River (the preset: 48 px, Wander 80) and a Braided river (the preset: 40 px) side by side on modern Green's 4x4 map, for the regional replay and the render-twice check. The braided bed's threads and bars and the river's band both read the stroke's place along and across its path."},
+ "ground": true, "query": "variant=modern",
+ "strokes": [
+  ["river", [[60,260],[300,300],[560,240],[820,290],[1000,250]], {"seed": 11}],
+  ["braided", [[0,720],[260,700],[520,760],[780,690],[1020,730]], {"seed": 5}]
+ ]}

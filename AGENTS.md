@@ -105,21 +105,35 @@ page and an older card disagree, this page wins.
 
 ## Checks
 
-Run the checks your change touches while you work, and all of them before
-landing. The checks that only need the engine run it under Node on Dawn by
-default, with no server and no browser; `--chrome --server <yours>` runs
-them in the page, with the same pixels. The checks of the UI run in Chrome.
+`repro/check.sh` runs the checks in three tiers and prints one line per
+check with its time and log. Run `quick` while you work and `land` before
+landing, with the checks below that your change touches; `full` runs them
+all, for a release.
 
-| Check | Command | Passes when |
+| Tier | Command | Runs | Time |
+| --- | --- | --- | --- |
+| quick | `repro/check.sh quick [--worlds green,lava]` | unit tests, world names, regional replay, every scene against the base | 30 s (70 s once after main moves) |
+| land | `repro/check.sh land --server <yours> --port <cdp> [--worlds ...]` | quick, then smoke with `--page8`, features, the passability view and the shape repeat check | 2.5 min |
+| full | `repro/check.sh full --server <yours> --port <cdp> [--worlds ...]` | land, then the curve editor, the workspace and ground-cover checks, export bytes, the three control sweeps and the realism report | 19 min |
+
+A tier passes when every check in it exits 0. Scenes: untouched scenes
+match the base byte for byte, and changed ones are judged on the retail
+sheets. The base is the commit your branch grew from (`git merge-base HEAD
+main`); its renders are made once and kept in `$R/baseline/<commit>`.
+`--worlds` names the worlds your change may move (`none`: no scene may
+move; a variant's scenes go by their own name, such as `green-modern`). The
+world-name list may not grow. The Chrome checks use your server
+and CDP ports `<cdp>` to `<cdp>+2`. The engine checks run under Node on
+Dawn, with no server and no browser; `--chrome --server <yours>` runs one in
+the page, with the same pixels.
+
+| When your change touches | Also run | Passes when |
 | --- | --- | --- |
-| Scenes | `repro/all.sh` (Node), then `repro/compare.py` (BACKLOG ground rule 3) | untouched scenes match byte for byte; changed ones are judged on the retail sheets |
-| Regional replay | `node repro/regional.mjs` (Node) | no mismatch |
-| Brushes, undo, export | `node repro/smoke.mjs` (Chrome), and `--page8` for large maps | exit 0 |
-| Features | `node repro/features.mjs` (Chrome) | exit 0, for any change to features, their selection or their export |
-| Unit tests | `node --test repro/*.test.mjs` | all pass |
-| World names | `sh repro/gate.sh` | exit 0, and the list is no longer |
-| Controls | `node measure/world_controls.mjs` and `measure/shape_controls.mjs` (Node) | for any control added, moved or removed |
-| Realism | `repro/all.sh`, then `python measure/realism.py --scenes <out>/green-modern-1 <out>/green-modern-2 <out>/green-modern-3` | for any change that moves modern Green: the report gives, before and after, the mean count of statistics in the real range (of 15) and how many windows pass each of the six gates (closed basins, fabric, hilltop roundness, Hack's exponent, hollow and valley shares), and says which moved and why; a slope p90 above 1.62 is the owner's call |
-| Interaction | `node repro/perf.mjs` (Chrome), alternating runs of the two builds | for anything on the drag or bake path |
+| a control (added, moved or removed) | `node measure/world_controls.mjs --worlds <yours>`, `measure/shape_controls.mjs`, `measure/geology_controls.mjs --only <worlds>` | the control moves at least 5% of its class (rule 9) |
+| the exporter or the art it is sent | `node repro/export-bytes.mjs` | exit 0 |
+| the section editor | `node repro/curveedit.mjs --server <yours> --port <cdp>` | exit 0 |
+| modern Green | `python measure/realism.py --scenes <out>/scenes/green-modern-1 <out>/scenes/green-modern-2 <out>/scenes/green-modern-3` | the report gives, before and after, the mean count of statistics in the real range (of 15) and how many windows pass each of the six gates (closed basins, fabric, hilltop roundness, Hack's exponent, hollow and valley shares), and says which moved and why; a slope p90 above 1.62 is the owner's call |
+| the drag or bake path | `node repro/perf.mjs` (Chrome), alternating runs of the two builds | your report gives both builds' numbers |
+| a world's look (its rows, colors, presets or tables) | `repro/retail.sh <world>`, before and after (docs/RETAIL_ROUND.md) | your report gives each window's shape and look scores before and after |
 
 Use American English in all user-visible text.

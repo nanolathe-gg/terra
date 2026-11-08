@@ -1178,13 +1178,10 @@
  },
  "world": {
   "defaults": {
-   "coverage": "form",
-   "lighting": "front",
    "surface": "slopes",
    "transition": "soil",
    "material": "single",
-   "scree": "40",
-   "shade": "separate"
+   "scree": "40"
   },
   "column": {
    "bands": [3.7, 0.63]

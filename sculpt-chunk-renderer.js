@@ -2,10 +2,10 @@
 // belong to this renderer once; callers own the LRU of copied output images.
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {columnRows} from './sculpt-column.js';
-import {PLANT_REACH} from './sculpt-material-model.js';
+import {PLANT_REACH,groundCoverOn} from './sculpt-material-model.js';
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
 
-const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','free19','fu','fv','s1','s2','s3'];
+const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','riverBed','fu','fv','s1','s2','s3'];
 const MB=1024*1024, pow2=n=>2**Math.ceil(Math.log2(Math.max(1,n)));
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const mipBytes=(w,h,layers,levels,bytes)=>{let total=0;for(let i=0;i<levels;i++)total+=Math.max(1,w>>i)*Math.max(1,h>>i)*layers*bytes;return total;};
@@ -90,7 +90,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     // patch's seed, up to 1.41 patches (cliffDomain) from the pixel (the nearest seed of a jittered lattice is within 1.13
     // cells, and the warp moves the pixel by up to .28): cliffFollow only.
     const cliff=n('cliffFollow',0)>0?1.45*Math.max(n('cliffDomain',90),24)+Math.max(n('cliffWide',56),n('cliffReach',20)*1.5,4)+2:0;
-    const bake=Math.max(19,stones,beach,cliff,this.config.material?.groundCover?.plants?PLANT_REACH:0);
+    const bake=Math.max(19,stones,beach,cliff,groundCoverOn(this.config.material?.groundCover,this.variant)&&this.config.material.groundCover.plants?PLANT_REACH:0);
     // G3: the fringe's copies read the material field up to ringShift px from the pixel, and a few px more for each copy's gradient.
     const direct=Math.max(61,48*Math.max(.65,1.6*n('ringSpread',.65)),Math.abs(n('waterSoft',32)),41*Math.abs(n('ringVariation',.7)/.75),n('ringShift',0)>0?Math.abs(n('ringShift',0))+4:0);
     // A projection apron includes appearance displacement too. These are
@@ -211,7 +211,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.chunkViewport=[(rasterOrigin[0]-region.screenOrigin[0])/rasterScale,(rasterOrigin[1]-region.screenOrigin[1])/rasterScale,rasterSize/rasterScale,rasterSize/rasterScale];   // clip space stays in world units; the viewport is what scales
     this.bakeWindow=[region.fieldsX,region.fieldsY,this.bakeWidth*fieldScale,this.bakeHeight*fieldScale];this.f('uChunkFieldsOrigin',[region.fieldsX,region.fieldsY]);this.f('uChunkFieldsSize',[fw,fh]);
     this.f('uChunkGridSize',[gw,gh]);this.f('uChunkGridCount',[gridWidth,gridHeight]);
-    this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScreenSize',[world_width,world_height]);this.f('uChunkScale',rasterScale);this.f('uChunkFieldScale',fieldScale);   // Shared shader coordinates stay in world pixels at every display scale.
+    this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScale',rasterScale);this.f('uChunkFieldScale',fieldScale);   // Shared shader coordinates stay in world pixels at every display scale.
     // Keep native material variance before nonlinear coverage and palette mapping.
     // Averaging these inputs first changes the mean rendered color at lower resolutions.
     this.f('uMaterialFoot',this.variant.has('materialFoot')?Math.max(1,Number(this.variant.get('materialFoot'))):1);

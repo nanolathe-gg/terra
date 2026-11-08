@@ -1,4 +1,4 @@
-import {controlLabel,worldControlRequirement,WORLD_PRIMARY_CONTROLS} from './sculpt-control-schema.js';
+import {worldControlRequirement,WORLD_PRIMARY_CONTROLS} from './sculpt-control-schema.js';
 import {mountWorkspace} from './sculpt-workspace.js';
 // Presentation helpers; terrain state and history stay in sculpt.js.
 const $=id=>document.getElementById(id);
@@ -41,20 +41,17 @@ export function groupToolControls(fields,buildRow){
  ['','Cross-section',['lean','facing']],
  ['','Variation',['wander','widthVary','heightVary','varySize','varyFoot','varyMiddle']],
  ['gullies','Gullies',['gullies','gullySize','talus']],
+ ['','Impact',['ejecta','buckling','secondaries','secondaryDistance']],
  ['','Variability',['faceVariation']],
  ['fingers','Shore lobes',['fingers','fingerSize']],
  ['','Steps',['stepReference','terraces','ledge','terraceJitter','breakup','layerPx','layerRiser','layerVary','layerCircle','lavaSpread','lavaCircleVary']],
- ['spurCount','Spurs',['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb']],
- ['rimSectors','Rim sectors',['rimSectors','rimUnequal']],['rimGaps','Rim gaps',['rimGaps','rimGapWidth']],
+ ['spurCount','Spurs',['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb','crestVary']],
  ['fissureBranches','Branches',['fissureBranches','fissureBranchLen','fissureBranchSpread']],['fissureNetwork','Fracture network',['fissureNetwork','fissureCell']],
  ['shorePlates','Shore plates',['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','plateVary']],
- [null,'Faceted form',['crystalForm','crystalSides','crystalSize','crystalCount','crystalTop','crystalLean','crystalVariation']],
- [null,'Column structure',['crystalTiers','crystalStep','crystalFacet','crystalSizeVar','crystalSmooth']],
- [null,'Planar block',['crystalAlign','bergFace','bergJitter','bergBreak','bergRough','bergTilt','bergTiltDir','bergFlat']],
  [null,'Water appearance',['waterDeep','waterBed']],
  [null,'Surf',['surf']],
- [null,'Crest variation',['crestJag','crestVary','crestTaper']],
- ['craterFacets','Bowl facets',['craterFacets','crystalCraterPx','crystalCraterStep','crystalCraterSkin']],['iceFacets','Angular facets',['iceFacets','iceFacetSize']]
+ [null,'Crest variation',['crestTaper']],
+ ['iceFacets','Facets',['iceFacets','facetForm','facetSurface','iceFacetSize','crystalStep','crystalTiers','crystalFacet','crystalSizeVar','crystalSides','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']]
  ];
  function wire(d,controls,master=null){
   const memory=new Map(),box=master?d.querySelector(':scope > summary > input'):undefined;
@@ -68,7 +65,7 @@ export function groupToolControls(fields,buildRow){
  }
  const basics=document.querySelector('#brush-panel > .brush-basics');wire(basics,['tool-style','diameter','amount','roughness','softness'].map(id=>$(id).closest('.control')));
  for(const [key,label,keys] of definitions){const present=fields.filter(f=>keys.includes(f[0]));if(!present.length)continue;present.forEach(f=>claimed.add(f[0]));make(label,present.map(buildRow),key?present.find(f=>f[0]===key)[1]:null);}
- for(const field of fields){const [key,id,label,,lo]=field;if(claimed.has(key))continue;make(controlLabel(key,label).replace(/ \(.*$/,''),[buildRow(field)],lo<=0&&!['crystalForm','bergTiltDir'].includes(key)?id:null);}
+ for(const field of fields){const [key,id,label,,lo]=field;if(claimed.has(key))continue;make(label.replace(/ \(.*$/,''),[buildRow(field)],lo<=0?id:null);}
  // The generated groups go ahead of Cracks, the one group the page declares in #shape-options.
  root.prepend(...created);
  wire($('cracks-control').closest('details'),[$('cracks-control')],$('cracks'));
