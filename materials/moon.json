@@ -1168,13 +1168,14 @@
  },
  "features": {
   "note": "Round 9, the shared generators in Moon's colors (ramp measured from MoonRock01-11 by luma octile). Shares from retail uses (features/moon/catalog.json), metal 25-75. Retail's deposits sit in a darker grey halo.",
-  "rock": {"count": 8, "color": "#a3a39f", "angular": 0.4, "shade": 0.6, "metal": [25, 75], "types": [
-   {"share": 0.55, "params": {"cells": "1x1", "lump": 0.7, "grain": 0.4, "colors": ["#121314", "#3a3937", "#5b5b59", "#747472", "#8e8e88", "#a3a39f", "#bebaad", "#dad6cb"], "mottle": [["#c3c39b", 0.12]]}},
-   {"share": 0.2, "params": {"cells": "4x4", "lump": 0.7, "grain": 0.4, "colors": ["#121314", "#3a3937", "#5b5b59", "#747472", "#8e8e88", "#a3a39f", "#bebaad", "#dad6cb"], "mottle": [["#c3c39b", 0.12]]}},
-   {"share": 0.13, "params": {"cells": "3x3", "lump": 0.7, "grain": 0.4, "colors": ["#121314", "#3a3937", "#5b5b59", "#747472", "#8e8e88", "#a3a39f", "#bebaad", "#dad6cb"], "mottle": [["#c3c39b", 0.12]]}},
-   {"share": 0.07, "params": {"cells": "3x1", "lump": 0.7, "grain": 0.4, "colors": ["#121314", "#3a3937", "#5b5b59", "#747472", "#8e8e88", "#a3a39f", "#bebaad", "#dad6cb"], "mottle": [["#c3c39b", 0.12]]}},
-   {"share": 0.05, "params": {"cells": "3x2", "lump": 0.7, "grain": 0.4, "colors": ["#121314", "#3a3937", "#5b5b59", "#747472", "#8e8e88", "#a3a39f", "#bebaad", "#dad6cb"], "mottle": [["#c3c39b", 0.12]]}}]},
-  "deposit": {"params": {"halo": 0.62, "haloSat": 1}}
+  "rock": {"count": 12, "color": "#a3a39f", "angular": 0.4, "shade": 0.55, "metal": [25, 75], "types": [
+   {"share": 0.45, "params": {"lump": 0.8, "grain": 0.9, "angular": 0.3, "flat": 0.5, "shadow": 0.05, "colors": ["#121314", "#3a3937", "#5b5b59", "#747472", "#8e8e88", "#a3a39f", "#bebaad", "#dad6cb"], "mottle": [["#c3c39b", 0.12]], "cells": "1x1"}, "vary": {"size": [0.1, 0.5]}},
+   {"share": 0.22, "params": {"lump": 0.8, "grain": 0.9, "angular": 0.3, "flat": 0.5, "shadow": 0.05, "colors": ["#121314", "#3a3937", "#5b5b59", "#747472", "#8e8e88", "#a3a39f", "#bebaad", "#dad6cb"], "mottle": [["#c3c39b", 0.12]], "cells": "1x1"}, "vary": {"size": [0.5, 0.9]}},
+   {"share": 0.08, "params": {"lump": 0.8, "grain": 0.9, "angular": 0.3, "flat": 0.5, "shadow": 0.05, "colors": ["#121314", "#3a3937", "#5b5b59", "#747472", "#8e8e88", "#a3a39f", "#bebaad", "#dad6cb"], "mottle": [["#c3c39b", 0.12]], "cells": "3x1"}, "vary": {"size": [0.9, 1.1]}},
+   {"share": 0.07, "params": {"lump": 0.8, "grain": 0.9, "angular": 0.3, "flat": 0.5, "shadow": 0.05, "colors": ["#121314", "#3a3937", "#5b5b59", "#747472", "#8e8e88", "#a3a39f", "#bebaad", "#dad6cb"], "mottle": [["#c3c39b", 0.12]], "cells": "3x2"}},
+   {"share": 0.1, "params": {"lump": 0.8, "grain": 0.9, "angular": 0.3, "flat": 0.5, "shadow": 0.05, "colors": ["#121314", "#3a3937", "#5b5b59", "#747472", "#8e8e88", "#a3a39f", "#bebaad", "#dad6cb"], "mottle": [["#c3c39b", 0.12]], "cells": "3x3"}, "vary": {"size": [0.9, 1.1]}},
+   {"share": 0.08, "params": {"lump": 0.8, "grain": 0.9, "angular": 0.3, "flat": 0.5, "shadow": 0.05, "colors": ["#121314", "#3a3937", "#5b5b59", "#747472", "#8e8e88", "#a3a39f", "#bebaad", "#dad6cb"], "mottle": [["#c3c39b", 0.12]], "cells": "4x4"}, "vary": {"size": [0.9, 1.15]}}]},
+  "deposit": {"params": {"look": "blades", "blades": 5, "bladeLen": 15, "bladeWidth": 12, "fan": 1, "core": 11, "halo": 0.42, "haloSat": 1, "reach": 1.1, "rimDark": 0.3}}
  },
  "world": {
   "defaults": {
