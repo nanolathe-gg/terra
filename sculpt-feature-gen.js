@@ -550,7 +550,7 @@ function shrubFrame(P, seed, ctx) {
       const under = !has(x, y + 1), upper = !has(x, y - 1);
       // ramp position: the underside dark, the lit top light (toward the sun's side a little lighter), speckled leaf by leaf
       const side = clamp(-((x - cx) * L.x + (y - cy) * L.y) / (W / 2), -1, 1) * 0.08;
-      let u = under ? 0.04 + 0.4 * rn() : upper ? 0.6 + 0.4 * rn() : 0.3 + 0.48 * rn();
+      let u = under ? (dd > 0.5 || rn() < 0.4 ? 0.04 + 0.4 * rn() : 0.55 + 0.45 * rn()) : upper ? 0.6 + 0.4 * rn() : 0.3 + 0.48 * rn();   // a sparse shrub's leaves are dark or bright, mostly bright (retail Shrub3: 3 of 8 dark)
       u = clamp(u + side, 0, 1);
       let col = rampAt(colors, u);
       if (u > 0.35 && fl.length) { let acc = 0; const v = rn(); for (const [rgb, share] of fl) { if (v >= acc && v < acc + share) { const f = lumaRGB(col) / Math.max(1, lumaRGB(rgb)); col = rgb.map(q => q * Math.min(1.2, f)); break; } acc += share; } }
@@ -626,12 +626,12 @@ function shadowSprite(R, ax, ay, colors, r, most = 1) {   // most: the stipple's
 // One generator for every world's rocks (round 9, compared with retail Green, Red, Desert, Lava, Ice and Moon): a body, or a few
 // (`pieces`, Desert's boulders), each a buried ellipsoid made blocky by `angular` (its tangent planes, their edges rounded: a softly
 // faceted block; 1 is Ice's sharp shards), uneven by `lump`, drawn up into a spire by `tall` (Lava, Crystal), pocked by `pits`
-// (Desert). Lit by the map's sun with sky light from above and shadowed by itself; colored by rank of tone along the world's ramp
+// (Desert); `shadow` is the cover of the shadow's stipple (retail Green's rocks 0.66 shadow pixels per body pixel, Red's 0.26, Moon's almost none). Lit by the map's sun with sky light from above and shadowed by itself; colored by rank of tone along the world's ramp
 // (`colors`, darkest first) so a rock keeps retail's share of highlight under any sun, `mottle` [[color, share], ...] soft second
 // hues through the mid and light tones at the ramp's lightness, `grain` the fine dither of a rendered sprite. Retail Green's ramp and
 // mottles are measured from its ten rocks (luma octiles; cream 30% and rose 22% of the light pixels).
 export const ROCK_GREEN = ['#0f0f0f', '#2b2b2b', '#4b4b4b', '#5b5b5b', '#787878', '#949494', '#c3c3c3', '#f4f4f4'];
-const ROCK_DEFAULTS = { cells: '2x2', size: 1, angular: 0.5, shade: 0.6, tall: 0, pieces: 1, pits: 0, grain: 0.6, lump: 0.6, colors: ROCK_GREEN, mottle: [['#c3c39b', 0.3], ['#d7a3b3', 0.26]], metal: null };   // shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
+const ROCK_DEFAULTS = { shadow: 0.66, cells: '2x2', size: 1, angular: 0.5, shade: 0.6, tall: 0, pieces: 1, pits: 0, grain: 0.6, lump: 0.6, colors: ROCK_GREEN, mottle: [['#c3c39b', 0.3], ['#d7a3b3', 0.26]], metal: null };   // shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
 export const cellsOf = c => { const m = /^(\d+)x(\d+)$/.exec(String(c || '')); return m ? [clamp(+m[1], 1, 16), clamp(+m[2], 1, 16)] : [2, 2]; };
 const smoothstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 function rockSolid(P, r) {
@@ -687,7 +687,7 @@ function rockSolid(P, r) {
 }
 function rockFrame(P, seed, ctx) {
   const L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 9)), sun = worldSun(L);
-  const Sd = rockSolid(P, r), R = renderSolid({ F: Sd.F, eMin: Sd.ext.e0, eMax: Sd.ext.e1, sMin: Sd.ext.s0, sMax: Sd.ext.s1, uMax: Sd.ext.u, sun });
+  const Sd = rockSolid(P, r), R = renderSolid({ F: Sd.F, eMin: Sd.ext.e0, eMax: Sd.ext.e1, sMin: Sd.ext.s0, sMax: Sd.ext.s1, uMax: Sd.ext.u, sun, shadowSun: flatSun(sun) });
   const { w, h } = R, tone = new Float32Array(w * h), lit = new Float32Array(w * h), hasPx = [], mask = new Uint8Array(w * h);
   for (let k = 0; k < w * h; k++) if (R.px[k]) mask[k] = 1;
   const dist = edgeDist(w, h, mask);
@@ -846,7 +846,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     body = cropSprite(R.body);
     const [fw, fh] = cellsOf(P.cells);
     footprint = [fw, fh];
-    shadow = tintSprite(shadowSprite(R.R, R.body.ax, R.body.ay, ROCK_SHADOW_COLORS, rng(mix32(seed, 43))), ctx, 0);   // the solid's own shadow on level ground, from the map's sun
+    shadow = tintSprite(shadowSprite(R.R, R.body.ax, R.body.ay, ROCK_SHADOW_COLORS, rng(mix32(seed, 43)), clamp(P.shadow, 0, 1)), ctx, 0);   // the solid's own shadow on level ground, from the map's sun
     const cellsN = fw * fh, metalDefault = Math.round((7.6 * cellsN + 22.5) / 25) * 25;
     gameplay = { energy: 0, metal: P.metal ?? Math.max(25, Math.min(100, metalDefault)), metalLinear: Math.round(7.6 * cellsN + 22.5), hp: 2000, blocking: true, reclaimable: true };
   } else if (kind === 'scar') {

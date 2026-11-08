@@ -170,6 +170,7 @@ function strip(items, title, band, seed) {
         if (q.it.shadow) drawSprite(c, q.it.shadow, px, py, q.it.blend ?? 0.5);
         drawSprite(c, q.it.body, px, py, q.it.bodyBlend ?? 1);
         q.it.stat = statsOf(q.it.body);
+        if (q.it.stat && q.it.shadow) { const sh = statsOf(q.it.shadow); q.it.stat.shadow = sh ? Math.round(100 * sh.area / q.it.stat.area) : 0; }   // shadow pixels per 100 body pixels
       }
       text(c, q.x + 3, y0 + heights[ri] - 8, q.it.label, [255, 255, 255]);
     }
@@ -187,7 +188,7 @@ function aggregate(items) {
   const f = k => Math.round(mean(rows.map(r => r.stat[k]), w));
   const hues = rows.filter(r => r.stat.hue !== null);
   let hue = null; if (hues.length) { let cs = 0, sn = 0; hues.forEach(r => { const wi = r.uses ?? 1, a = r.stat.hue * Math.PI / 180; cs += wi * Math.cos(a); sn += wi * Math.sin(a); }); hue = Math.round(((Math.atan2(sn, cs) * 180 / Math.PI) + 360) % 360); }
-  return {w: f('w'), h: f('h'), area: f('area'), octile: [0, 1, 2, 3, 4, 5, 6].map(i => Math.round(mean(rows.map(r => r.stat.octile[i]), w))), hue, sat: f('sat'), edge: f('edge')};
+  return {w: f('w'), h: f('h'), area: f('area'), octile: [0, 1, 2, 3, 4, 5, 6].map(i => Math.round(mean(rows.map(r => r.stat.octile[i]), w))), hue, sat: f('sat'), edge: f('edge'), shadow: rows.some(r => r.stat.shadow !== undefined) ? Math.round(mean(rows.map(r => r.stat.shadow ?? 0), w)) : undefined};
 }
 const numbers = {world, light, ground: gmean, groups: {}};
 const sheets = [];
@@ -211,13 +212,13 @@ for (const g of GROUPS) {
   const strow = it => ({n: it.label, name: it.name, uses: it.uses ?? null, meta: it.meta, ...(it.stat || {})});
   numbers.groups[g] = {share, retail: retailItems.map(strow), retailMean: aggregate(retailItems), ours: oursItems.map(strow), oursMean: aggregate(oursItems)};
   sheets.push(file);
-  const m = numbers.groups[g], fmt = a => a ? `${a.w}x${a.h} area ${a.area} luma ${a.octile.join('/')} hue ${a.hue ?? '-'} sat ${a.sat} edge ${a.edge}%` : '-';
+  const m = numbers.groups[g], fmt = a => a ? `${a.w}x${a.h} area ${a.area} luma ${a.octile.join('/')} hue ${a.hue ?? '-'} sat ${a.sat} edge ${a.edge}%${a.shadow !== undefined ? ' shadow ' + a.shadow + '%' : ''}` : '-';
   console.log(`${g.padEnd(8)} retail ${String(share).padStart(2)}% of uses | retail ${fmt(m.retailMean)}\n${' '.repeat(9)}${' '.repeat(22)}| ours   ${fmt(m.oursMean)}`);
 }
 writeFileSync(join(out, 'numbers.json'), JSON.stringify(numbers, null, 1));
-const tr = r => `<tr><td>${r.n}</td><td>${r.name}</td><td>${r.uses ?? ''}</td><td>${r.meta ?? ''}</td><td>${r.w ?? ''}x${r.h ?? ''}</td><td>${r.area ?? ''}</td><td>${r.octile?.join(' / ') ?? ''}</td><td>${r.hue ?? '-'}</td><td>${r.sat ?? ''}</td><td>${r.edge ?? ''}</td></tr>`;
+const tr = r => `<tr><td>${r.n}</td><td>${r.name}</td><td>${r.uses ?? ''}</td><td>${r.meta ?? ''}</td><td>${r.w ?? ''}x${r.h ?? ''}</td><td>${r.area ?? ''}</td><td>${r.octile?.join(' / ') ?? ''}</td><td>${r.hue ?? '-'}</td><td>${r.sat ?? ''}</td><td>${r.edge ?? ''}</td><td>${r.shadow ?? ''}</td></tr>`;
 const meanRow = (t, a) => a ? tr({n: '', name: `<b>${t}</b>`, ...a}) : '';
 writeFileSync(join(out, 'index.html'), `<!doctype html><meta charset=utf-8><title>${world} features: retail vs ours</title><style>body{background:#181818;color:#ddd;font:13px sans-serif;margin:12px}table{border-collapse:collapse;margin:6px 0 24px}td,th{border:1px solid #444;padding:2px 6px;text-align:right}td:nth-child(2){text-align:left}img{image-rendering:pixelated;max-width:100%}</style>
 <h1>${world}: retail (orange) vs ours (blue); light ${JSON.stringify(light)}</h1>
-${sheets.map(f => { const g = f.replace('.png', ''), m = numbers.groups[g]; return `<h2>${g} (retail ${m.share}% of uses)</h2><img src="${f}"><table><tr><th>#</th><th>name</th><th>uses</th><th>meta</th><th>size</th><th>px</th><th>luma octile cuts</th><th>hue</th><th>sat%</th><th>edge%</th></tr>${m.retail.map(tr).join('')}${meanRow('retail mean (uses-weighted)', m.retailMean)}${m.ours.map(tr).join('')}${meanRow('ours mean', m.oursMean)}</table>`; }).join('\n')}`);
+${sheets.map(f => { const g = f.replace('.png', ''), m = numbers.groups[g]; return `<h2>${g} (retail ${m.share}% of uses)</h2><img src="${f}"><table><tr><th>#</th><th>name</th><th>uses</th><th>meta</th><th>size</th><th>px</th><th>luma octile cuts</th><th>hue</th><th>sat%</th><th>edge%</th><th>shadow%</th></tr>${m.retail.map(tr).join('')}${meanRow('retail mean (uses-weighted)', m.retailMean)}${m.ours.map(tr).join('')}${meanRow('ours mean', m.oursMean)}</table>`; }).join('\n')}`);
 console.log(`wrote ${sheets.length} sheets to ${out}`);
