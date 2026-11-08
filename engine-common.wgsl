@@ -300,6 +300,10 @@ struct Uniforms {
     shoalStairs: f32,     // the hard waterline's stairs: runs of 1-3 px moving it up to this many px, whatever the bank's slope (0: as before)
     shoalGrain: f32,      // Red: the ground tile's own colour grain shows through the tint, this share of it (0: the tint replaces it, as before)
     shoalShoreSoft: f32,  // Archipelago: the waterline the world draws (a stroke's Hard and Faded stay) is a dithered blend this many px wide (0: a clean line)
+    // Low ground (Zhon's mud lowland): the ground from the sea up to lowReach above it, and the shallows, take lowColor (0: none, as before).
+    lowTint: f32,         // 0..1: how far the low ground's color moves to lowColor (its grain stays)
+    lowReach: f32,        // height above the sea where low ground ends (its ragged edge fades over the upper half)
+    lowColor: vec3f,      // the low ground's color (Colors: Low ground)
     // G2 (rock faces follow the slope). Every default is the earlier look.
     cliffFollow: f32,     // beds follow the contours and joints, gullies and facets the fall line of the ground round them (0: fixed screen directions, as before)
     cliffReach: f32,      // radius of the height smoothing that gives the local fall line, world px

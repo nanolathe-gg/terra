@@ -60,6 +60,9 @@ test('the Colors panel shows the rows a world has, and a cleared row the server 
   const labels = colorRows(config, new URLSearchParams()).map(([, l]) => l);
   assert.ok(labels.includes('Flower 1') && !labels.includes('Flower 2') && !labels.includes('Beach') && !labels.includes('Strata 1'));
   assert.ok(colorRows({...config, layers: ['beach']}, new URLSearchParams('strata=1')).some(([k]) => k === 'beach' || k === 'strata1'));
+  // Low ground's color shows while its Tint is above 0.
+  assert.ok(!labels.includes('Low ground'));
+  assert.ok(colorRows(config, new URLSearchParams('lowTint=.5')).some(([k, l]) => k === 'low' && l === 'Low ground'));
   assert.deepEqual(pickWorldColor(config, {ground: '#101010'}, 'shallow', '#c03030'), {ground: '#101010', shallow: '#c03030'});
   assert.deepEqual(pickWorldColor(config, {sun: '#ffc880'}, 'sun', null), {sun: null});
   assert.deepEqual(pickWorldColor(config, {shallow: '#c03030'}, 'shallow', null), {});

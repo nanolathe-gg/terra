@@ -4,7 +4,7 @@ import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn} from './sculpt-column.js';
-import {KNOBS,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
+import {KNOBS,LOW_GROUND_RGB,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
 import {strokeKind,savedToolCard,TOOL_PRESETS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,borrowBeach,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
@@ -1425,6 +1425,7 @@ new ResizeObserver(resize).observe($('viewport'));
 const WORLD_STORE='nanolathe-map-editor-worlds';
 // Card P12b: the light's two colors ride with the world's colors; white (off) is the grey light. Help for each row is shown under it.
 const LIGHT_COLOR_HELP={sun:'The direct light and the glints it mirrors. A warm sun lights slopes that face it.',sky:'The ambient light that fills the shade. A cool sky keeps shaded ground and the lee of hills blue.',
+  low:'The color of the ground from the sea up to Reach above it (Low ground in World), and of the shallows: Tint moves them toward it, keeping their grain.',
   vegetation:'The plants of the ground cover (Vegetation cover above 0): every kind moves by the change from this color, so lush and dry ground keep their difference. Bare ground keeps the world\'s own.'};
 let worlds={},worldId=null;
 function loadWorlds() { try { worlds=JSON.parse(localStorage.getItem(WORLD_STORE)||'{}')||{}; } catch (_) { worlds={}; } }
@@ -1454,7 +1455,7 @@ function defaultColor(key) {
   const rgb=v => v&&v.map(x => x/255);
   const strata=(config.column?.colors||[[146,74,58],[188,122,96],[140,124,138],[198,182,158],[166,98,76]]).map(rgb);
   return {ground:m.ground,slope:m.slope,rock:m.rock,sand:m.rock&&m.rock.map(v => v+(1-v)*.3),beach:rgb(mat.beachRGB),shallow:rgb(w.shallowRGB),deep:rgb(w.deepRGB),
-    crystal:(config.material?.crystalRGB||[110,150,225]).map(v => v/255),sun:[1,1,1],sky:[1,1,1],strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
+    crystal:(config.material?.crystalRGB||[110,150,225]).map(v => v/255),low:rgb(LOW_GROUND_RGB),sun:[1,1,1],sky:[1,1,1],strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
 }
 function goToWorld(base,id,extra) {
   if (!stroke && !moving && !loading) saveWorking();   // the working map goes with the artist to the new world
@@ -1594,7 +1595,7 @@ function worldPanelValues() { return worldPanelValuesOf(panelFacts()); }
 function setKnob(key, value) {
   const url = new URL(location.href); url.searchParams.set(key, value); window.history.replaceState(null, '', url);
   const next = applyKnob({key, value, settings: experiment, renderer, nodes, seed});
-  if (config) { activeWorld().knobs[key] = String(value); saveWorlds(); if (key==='strata') buildWorldPanel(); }
+  if (config) { activeWorld().knobs[key] = String(value); saveWorlds(); if (key==='strata'||key==='lowTint') buildWorldPanel(); }
   if (next.reload) { location.reload(); return; }
   syncWorldControls(); markViewChanged(); schedule();
   if (!next.weather) return;

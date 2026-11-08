@@ -31,6 +31,8 @@ BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Arc
 # a knob missing here is reported in the page's console.
 KNOB_DEFAULTS = dict(
     groundTiles=16, groundPattern='', beachFrom='', groundContrast=1, undulation=10, undulationScale=200, undulationCover=.45, undulationArt=1, faceSteep=1,
+    # Low ground: its tint (0: none) and its reach above the sea (the Colors panel's Low ground is its color).
+    lowTint=0, lowReach=6,
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
     flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1, sunTilt=1, ambient=.42, slopeMarks=0, wrinkles=0, sandCrown=0,

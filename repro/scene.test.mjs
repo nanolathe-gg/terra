@@ -120,3 +120,10 @@ test('a world without a beach borrows another world\'s: its layer, its numbers, 
   const tables = ['green', 'moon', 'desert', 'zhon', 'lava', 'ice', 'red', 'crystal', 'archipelago'].map(w => JSON.parse(readFileSync(`${root}materials/${w}.json`, 'utf8')));
   assert.ok(tables.some(t => t.order.includes('beach') && t.measured.beach && t.model.beach), 'a table lends its beach material');
 });
+
+test('the address may try the light\'s and the low ground\'s colors without changing the world', async () => {
+  const {worldHexColors, rendererColors} = await import('../sculpt-scene.js');
+  const colors = worldHexColors({colors: {ground: '#102030'}}, new URLSearchParams('lowColor=5c322a&sunColor=%23ffd9a8&skyColor=nothex'));
+  assert.deepEqual(colors, {ground: '#102030', low: '#5c322a', sun: '#ffd9a8'});
+  assert.deepEqual(rendererColors(colors).low.map(v => Math.round(v * 255)), [92, 50, 42]);
+});

@@ -5,6 +5,7 @@
 
 import {materialRows,tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,rockPreset,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {columnRows} from './sculpt-column.js';
+import {LOW_GROUND_RGB} from './sculpt-knobs.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
 import {extractGates, gateValues, gateKey} from './sculpt-gates.js';
@@ -469,6 +470,8 @@ export class TerrainRenderer {
     // The light's colours (card P12b): white is the grey light every world had.
     this.v('uSunColor', colors.sun || [1, 1, 1]);
     this.v('uSkyColor', colors.sky || [1, 1, 1]);
+    // Low ground's color: the world's pick, else a dark red-brown mud (retail Zhon's lowland).
+    this.v('uLowColor', colors.low || LOW_GROUND_RGB.map(v => v / 255));
     // The column's slot colours: the world's, else a painted-desert set.
     const strataDefaults = this.config.column?.colors || [[146, 74, 58], [188, 122, 96], [140, 124, 138], [198, 182, 158], [166, 98, 76]];
     const strata = strataDefaults.map((c, i) => colors['strata' + (i + 1)] || c.map(v => v / 255));
@@ -1072,6 +1075,9 @@ export class TerrainRenderer {
     this.f('uShoalStairs', variant.has('shoalStairs') ? Number(variant.get('shoalStairs')) : 0);
     this.f('uShoalGrain', variant.has('shoalGrain') ? Number(variant.get('shoalGrain')) : 0);
     this.f('uShoalShoreSoft', variant.has('shoalShoreSoft') ? Number(variant.get('shoalShoreSoft')) : 0);
+    // Low ground: its tint and reach (0: none, as before); its color is set with the others (setColors).
+    this.f('uLowTint', variant.has('lowTint') ? Number(variant.get('lowTint')) : 0);
+    this.f('uLowReach', variant.has('lowReach') ? Number(variant.get('lowReach')) : 6);
     this.fieldsDirty = true;
   }
 

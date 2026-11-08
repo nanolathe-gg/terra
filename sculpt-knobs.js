@@ -8,6 +8,8 @@ import {ROCK_TYPES,rockFacts} from './sculpt-material-model.js';
 // then the renderer re-reads its uniforms and re-bakes its fields.
 export const KNOBS = [
   ['Ground', [['groundTiles','Unique ground tiles',1,16,1,16],['groundContrast','Pattern contrast',0,2,.05,1],['undulation','Undulation height',0,16,.5,10],['undulationScale','Undulation size (px)',48,400,8,200],['undulationCover','Undulating share of land',0,1,.05,.45],['undulationArt','Undulation in the art',0,1,.05,1],['faceSteep','Landform face steepness',1,4,.1,1]]],
+  // Low ground: the ground from the sea up to Reach above it, and the shallows, take the Colors panel's Low ground color.
+  ['Low ground', [['lowTint','Tint (Colors: Low ground)',0,1,.05,0],['lowReach','Reach (height above the sea)',.5,40,.5,6]]],
   ['Ground detail', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Ground bumps',0,3,.05,1.2],['lumpRelief','Painted ground bumps',0,8,.1,4],['reliefOctaves','Octaves',1,6,1,5],['worms','Wormy relief on slopes',0,1,.05,0]]],
   ['Lighting', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13],['shadeDepth','Directional shading kept',0,1,.05,1],['sunTilt','Light from the south',-1,1,.05,1],['ambient','Ambient light',0,.8,.02,.42]]],
@@ -90,13 +92,15 @@ export function applyKnob({key,value,settings,renderer,nodes,seed}) {
   return {};
 }
 
+// Low ground's color where a world picks none (Colors: Low ground): a dark red-brown mud, as retail Zhon's lowland.
+export const LOW_GROUND_RGB=[80,52,42];
 // The Colors panel's rows, [key, label].
-export const COLOR_KEYS=[['ground','Ground'],['slope','Slope cover'],['rock','Rock'],['sand','Sand'],['beach','Beach'],['shallow','Shallow water'],['deep','Deep water'],['crystal','Crystal'],['vegetation','Vegetation'],...Array.from({length:4},(_,i)=>['flower'+(i+1),'Flower '+(i+1)]),['sun','Sun color'],['sky','Sky color'],['strata1','Strata 1'],['strata2','Strata 2'],['strata3','Strata 3'],['strata4','Strata 4'],['strata5','Strata 5']];
+export const COLOR_KEYS=[['ground','Ground'],['slope','Slope cover'],['rock','Rock'],['sand','Sand'],['beach','Beach'],['shallow','Shallow water'],['deep','Deep water'],['low','Low ground'],['crystal','Crystal'],['vegetation','Vegetation'],...Array.from({length:4},(_,i)=>['flower'+(i+1),'Flower '+(i+1)]),['sun','Sun color'],['sky','Sky color'],['strata1','Strata 1'],['strata2','Strata 2'],['strata3','Strata 3'],['strata4','Strata 4'],['strata5','Strata 5']];
 // The rows this world shows: Vegetation and a flower's where the world's ground-cover table has them (every world's has; they act once
 // Vegetation cover is above 0), Beach only with a beach layer, the strata only on a
-// world without a rock column whose address turns Strata on.
+// world without a rock column whose address turns Strata on, Low ground only while its Tint is above 0.
 export const colorRows=(config,settings) => COLOR_KEYS.filter(([key]) => !(key.startsWith('flower')&&!config.material?.groundCover?.plants?.flowers?.palette?.[Number(key.slice(6))-1]) && !(key==='vegetation'&&!config.material?.groundCover?.color)
-  && !(key==='beach'&&!config.layers.includes('beach')) && !(key.startsWith('strata')&&(config.column?.colors||!(Number(settings.get('strata'))>0))));
+  && !(key==='beach'&&!config.layers.includes('beach')) && !(key==='low'&&!(Number(settings.get('lowTint'))>0)) && !(key.startsWith('strata')&&(config.column?.colors||!(Number(settings.get('strata'))>0))));
 // A world's own base colors after a row is picked (a hex) or cleared (null): a color the server sets is then explicitly off (null, the
 // texture's own color), any other is dropped.
 export function pickWorldColor(config,own,key,hex) {

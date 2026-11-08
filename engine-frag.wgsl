@@ -35,6 +35,9 @@ fn groundBased(c: vec3f) -> vec3f {
     }
     return based(u.groundTexMean + (c - u.groundTexMean) * u.groundContrast, u.groundTexMean, u.groundBase);
 }
+// Low ground: a colour moved to the low colour, its difference from its material's mean kept as grain (as based() moves a texture),
+// so the palette still mixes the grain's hues where a single tone would land on one entry.
+fn lowTinted(c: vec3f, mean: vec3f) -> vec3f { return saturate(c - mean + u.lowColor); }
 // Strata: coloured bands by height on raised ground (painted desert), the colours of the column's beds (slot -> strataColors).
 fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.strataColors[clamp(i, 0, 4)].rgb; }
 // The colour of the column's section s at coordinate c. A bed meets the next one over edge, a share of the cycle: a boundary inside a
@@ -1638,6 +1641,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.lavaDusk > 0.0 && shading < 1.0) { shading = pow(max(shading, 0.0), 1.0 + u.lavaDusk * smoothstep(u.base + 20.0, u.base + 60.0, baseHeight(p)) * (1.0 - smoothstep(0.1, 0.5, dot(normal, u.light)))); }
     let timeMaps = timeMapsAt(p);
     var grass = groundBased(groundSource(pixel));
+    // Low ground: the ground from the sea up to lowReach above it takes the low color (its grain kept), by the authored
+    // height (the relief's grit would speckle the edge); the edge is ragged by 20-px noise and fades over the upper half of the reach.
+    // Under the sea it is all low ground: the lit bed takes it from here and the shallow water's art below.
+    var lowShare = 0.0;
+    if (u.lowTint > 0.0) {
+        let above = baseHeight(p) - u.sea + (terrainNoise(p * 0.05 + vec2f(19.0, 47.0)).g - 0.5) * 0.6 * u.lowReach;
+        lowShare = u.lowTint * (1.0 - smoothstep(0.5 * u.lowReach, u.lowReach, above));
+        grass = mix(grass, lowTinted(grass, select(u.groundTexMean, u.groundBase.rgb, u.groundBase.a > 0.5)), lowShare);
+    }
     let grass0 = grass;
     // The model's slope grass costs noise taps, so the slope and face blocks share one read.
     // Level ground (slope under the cover ramp's start, no painted rock) never mixes it in, so it skips the taps.
@@ -2196,8 +2208,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, depth, crackedBed); }
         let grain = genColor(u.waterLayer, pixel) - u.waterMean;
         var water = mix(select(u.shallowColor, u.shallowBase.rgb, u.shallowBase.a > 0.5), select(u.deepColor, u.deepBase.rgb, u.deepBase.a > 0.5), deep) + grain * mix(2.3, 0.95, deep);
+        // Low ground: the shallows take the low colour, and the depth's ramp carries it into the deep water's.
+        if (lowShare > 0.0) { water = mix(water, lowTinted(water, select(u.shallowColor, u.shallowBase.rgb, u.shallowBase.a > 0.5)), lowShare * (1.0 - deep)); }
         if (u.shallowBase.a < 0.5 && u.deepBase.a < 0.5) {
             var shallow = genColor(u.shallowLayer, pixel);
+            if (lowShare > 0.0) { shallow = mix(shallow, lowTinted(shallow, u.shallowMean), lowShare); }
             let deepWater = genColor(u.waterLayer, pixel);
             // The lit bed: the ground under the water, lit by the same sun and
             // tinted, replaces the shallow art's noise (retail draws its shallows
@@ -2226,7 +2241,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             if (u.waterMid.a > 0.0) {
                 let toMid = smoothstep(u.shallowDepth, u.waterMid.a, colorDepth);
                 let toDeep = smoothstep(u.waterMid.a, u.deepDepth, colorDepth);
-                let mid = u.waterMid.rgb + (deepWater - u.waterMean) * 0.9;
+                var mid = u.waterMid.rgb + (deepWater - u.waterMean) * 0.9;
+                if (lowShare > 0.0) { mid = mix(mid, lowTinted(mid, u.waterMid.rgb), lowShare); }
                 water = mix(mix(shallow, mid, toMid), deepWater, toDeep);
             }
         }
