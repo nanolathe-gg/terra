@@ -1664,10 +1664,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             rockFace = rockFaceAt(pixel, hb, fall);
             let hx = rockFaceAt(pixel + vec2f(1.0, 0.0), hb + broad.x + broad.y * dyx, fall).relief;
             let hy = rockFaceAt(pixel + vec2f(0.0, 1.0), hb + broad.y / rowStretch, fall).relief;
-            // Rock's share of the face rises with the slope to faceRock a slope of 1.3 past rockFaceFrom, scaled by the stroke's Local
-            // vegetation as the rest of the rock is; painted rock is rock. Grass takes the rest in clumps, ledges first.
+            // Rock's share of the face rises with the slope to faceRock a slope of 1.3 past rockFaceFrom, times 1 less the stroke's Local
+            // vegetation (+40: 60% of it, +100: none, -70: 1.7 times); painted rock is rock. Grass takes the rest in clumps, ledges first.
             let rise = smoothstep(u.rockFaceFrom, u.rockFaceFrom + 1.3, slope);
-            var share = 1.0 - (1.0 - u.faceRock * rise) * clamp(place.vegetation, 0.0, 2.0);
+            var share = u.faceRock * rise * (2.0 - clamp(place.vegetation, 0.0, 2.0));
             share = max(clamp(share, 0.0, 1.0), smoothstep(0.3, 0.8, painted.x) * 0.9);
             let field = 0.5 + 0.5 * clamp((poolNoise(pixel, 18.0, 37.0) * 0.5 + poolNoise(pixel, 7.0, 59.0) * 0.32 + poolNoise(pixel, 3.0, 83.0) * 0.18) / 0.55, -1.0, 1.0)
                       + u.faceGrass * 0.6 * rockFace.ledge;
