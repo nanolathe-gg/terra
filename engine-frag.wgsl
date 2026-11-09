@@ -902,7 +902,7 @@ fn surfaceLinear(c:vec3f)->vec3f{return select(c/12.92,pow((max(c,vec3f(0))+.055
 fn surfaceSRGB(c:vec3f)->vec3f{return select(c*12.92,1.055*pow(max(c,vec3f(0)),vec3f(1.0/2.4))-.055,c>vec3f(.0031308));}
 fn surfaceFresnel(f0:f32,cosine:f32)->f32{return f0+(1.0-f0)*pow(1.0-clamp(cosine,0.0,1.0),5.0);}
 fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, exposed: f32,
-             slopeCover: f32, crystalMask: f32, sunSeen: f32, landform: f32, damp: f32) -> vec4f {
+             slopeCover: f32, crystalMask: f32, sunSeen: f32, landform: f32, damp: f32, mineralPatch: f32) -> vec4f {
     var sand = smoothstep(0.35, 0.95, bakedFields(p).a);
     if (u.beach != 0) { sand = max(sand, beachSand(p, 0.5)); }   // beach sand is lit as sand
     // Crystal tops only: the risers between columns stay dark and take the
@@ -924,6 +924,8 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
         rough += weight[i] * m.z;
         scale += weight[i] * m.z * m.w;
     }
+    rough *= 1.0-mineralPatch*rock*.45;
+    focus *= 1.0+max(0.0,mineralPatch)*rock*1.6;
     // Sharpness follows the gloss that uses it, grain scale the roughness.
     focus = max(focus / max(gloss, 1e-4), 1.0);
     scale = max(scale / max(rough, 1e-4), 1.0);
@@ -1657,7 +1659,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let weights=pow(abs(normal),vec3f(4));let tri=weights/max(dot(weights,vec3f(1)),.001);
     let mineral=genColor(1,hit.yz)*tri.x+genColor(1,hit.xz+vec2f(173,41))*tri.y+genColor(1,hit.xy+vec2f(53,119))*tri.z;
     let grain=clamp(mineral/max(u.rockMean,vec3f(.01)),vec3f(.5),vec3f(1.6));
+    let clasts=voxelClasts(hit);
+    let mineralPatch=u.faceMineral*((voxelNoise(hit/max(1.0,u.faceGritSize))-.5)*1.7+clasts.x*clasts.y*clamp(u.faceClast,0.0,1.0));
     var rock=rockFlat*mix(vec3f(1),grain,.3+u.faceTone)* (1.0+u.faceTone*rockTone+u.faceStrata*(hard*2.0-1.0))*(1.0-.6*u.faceWet*rockWet);
+    // Different minerals share the rock's chosen hue while varying albedo
+    // and polish together. Embedded clasts read the same field as the solid.
+    rock*=1.0+mineralPatch*.65;
     // H3 item 4: one placement function (landPlace); its thresholds are rows of materials/green.json.
     rock=mix(rock,rock*.42,u.runoffStain*clamp(accumulated.x,0.0,1.0));
     var exposed = place.exposed;
@@ -1705,7 +1712,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // share varies per cycle), and B's share ramps toward the next section when both use the same pair. Beds colour all
         // raised ground, level tops included (retail mesa caps take their band's colour); edges are hard (~3 px); bed edges
         // wander ~1-1.5 units at 5-25 px and meander broadly.
-        let hr = columnCoord(p, h);
+        let hr = columnCoord(p, h)+voxelFold(hit);
         let zone = columnSectionAt(hr);
         // Card G4: retail's pale caps are one sheet of the cool bed. The cap pixels (height 56 and up on slopes under .35 per px)
         // are 9.6-12% orange in retail and 22% in ours, hue 64-77 against 42: the beds' fine warp and the spread of a section's
@@ -1979,7 +1986,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.shineOn != 0 || u.paintOn != 0) {
         let sunSeen = markSeen * (1.0 - flatBank) * closeVis * faceSun;
         let damp=max(u.faceWet*exposed*rockWet,painted.z*.85);
-        var shine = shineTerm(pixel, p, g, normal, material, exposed, slopeShare, crystalMask, sunSeen, landform, damp);
+        var shine = shineTerm(pixel, p, g, normal, material, exposed, slopeShare, crystalMask, sunSeen, landform, damp, mineralPatch);
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
         if (u.shineSlopeGate > 0.0) { shine = shineSlopeGated(shine, slope); }

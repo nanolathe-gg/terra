@@ -154,3 +154,34 @@ mass-conserving fluid simulation inside every voxel, falling rigid bodies, or
 cumulative erosion through geological time. Gameplay heights are unchanged;
 these controls shape the rendered surface. Large terrain changes still belong
 in the landform and Time controls.
+
+## Fractures, folds and embedded fragments
+
+The geological picker also offers **Folded gneiss**, **Flaky schist**,
+**Rounded conglomerate**, and **Angular breccia**. These are editable artistic
+starting points, using the same density, material and weathering pipeline as
+sandstone, shale, granite, basalt and limestone. Colors remain as chosen.
+
+Joint tilt cuts oblique fractures independently of bedding tilt. Block size
+variation gives broader masses a larger vertical scale and varies the local
+joint spacing. Fold amplitude bends the shared bed coordinates; the existing
+Layer variation length and Bed tilt direction set its wavelength and direction.
+Hardness, lamination relief, fracture blocks and layer tint follow that same
+fold. Broken layer edges remove patches near weak beds and joint margins.
+
+Embedded fragment relief and size put clasts into the solid. Rounded blocks
+also controls whether these inclusions are rounded or angular. Mineral contrast
+uses the same 3D inclusions plus fine grain to vary rock brightness and polish
+together; Grit size controls the fine mineral scale even with grit relief off.
+All geometry remains subject to Surface relief and local relief paint.
+
+Loose stone now exposes the existing Rounded fragments and Flat fragments
+population shares. The presets use these to give shale/schist flatter scree,
+more rounded granite/conglomerate rubble, and angular breccia fragments.
+They are separate from the embedded inclusions: one shapes material still in
+the rock, the other shapes the existing loose-stone population on the ground.
+
+Every new structure/mineral amount defaults to zero for the world's existing
+look. New and revised geological presets turn them on. Inactive controls name
+the parent needed, including mineral grain without displacement, folding
+without a net bedding tilt, and embedded fragments without broad blocks.

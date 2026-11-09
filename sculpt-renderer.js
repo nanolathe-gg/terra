@@ -1121,7 +1121,7 @@ export class TerrainRenderer {
     set('uFaceStreak', number('faceStreak', 0));
     for (const [key, fallback] of [['rockFace', 0], ['rockFaceFrom', 0.6], ['faceBed', 5.5], ['faceLedge', 2.2], ['faceRun', 90], ['faceLean', 28], ['faceScratch', 2.5],
       ['faceScratchSize', 7], ['faceBlock', 3], ['faceBlockSize', 11], ['faceGrit', 0], ['faceGrass', 0.8], ['faceRock', 0.9], ['faceCrease', 2.5], ['faceCreaseSize', 6],
-      ['faceShade', 0.85], ['faceWear', 0.35], ['faceLayers', 0], ['faceMass', 1], ['faceTone', 0.12], ['faceStrata', 0], ['faceWet', 0], ['runoff',0],['runoffScale',24],['runoffConcentration',.65],['runoffCut',2],['runoffStain',.5],['debrisAmount',0],['debrisReach',56],['debrisDepth',4], ['faceStretch', 1], ['faceBlockHeight', 1], ['faceRound', 0], ['faceJoint', 0.35], ['faceExtrude', 0], ['faceLamina', 0], ['faceLaminaSize', 3], ['faceScratchLength', 50], ['faceScratchAngle', 0], ['faceGritSize', 1.3]])
+      ['faceShade', 0.85], ['faceWear', 0.35], ['faceLayers', 0], ['faceMass', 1], ['faceTone', 0.12], ['faceStrata', 0], ['faceWet', 0], ['runoff',0],['runoffScale',24],['runoffConcentration',.65],['runoffCut',2],['runoffStain',.5],['debrisAmount',0],['debrisReach',56],['debrisDepth',4], ['faceJointTilt',0],['faceScaleVary',0],['faceFold',0],['faceSpall',0],['faceClast',0],['faceClastSize',12],['faceMineral',0], ['faceStretch', 1], ['faceBlockHeight', 1], ['faceRound', 0], ['faceJoint', 0.35], ['faceExtrude', 0], ['faceLamina', 0], ['faceLaminaSize', 3], ['faceScratchLength', 50], ['faceScratchAngle', 0], ['faceGritSize', 1.3]])
       set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
     set('uFaceStreakFrom', number('faceStreakFrom', 0.3));
     set('uGentleRelief', number('gentleRelief', 0.6));
@@ -1148,9 +1148,9 @@ export class TerrainRenderer {
     set('uLooseSupply', preview ? 0 : number('looseSupply', 0));
     set('uLooseSize', number('looseSize', 6));
     set('uPlantsOn', !preview && groundCoverOn(this.config.material?.groundCover, this.variant) && this.config.material.groundCover.plants ? 1 : 0);
-    set('uStoneRound', this.config.material?.stoneRound ?? 0);
+    set('uStoneRound', number('stoneRound',this.config.material?.stoneRound ?? 0));
     set('uStoneSort', number('stoneSort',this.config.material?.stoneSort ?? 0.6));
-    set('uStoneSlab', this.config.material?.stoneSlab ?? 0.05);
+    set('uStoneSlab', number('stoneSlab',this.config.material?.stoneSlab ?? 0.05));
     set('uStoneMoss', this.config.material?.stoneMoss ?? 0.35);
     set('uBandSoftness', number('bandSoftness', 0.35));
     set('uBandJag', number('bandJag', 0));

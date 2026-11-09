@@ -75,19 +75,26 @@ const NO_COLUMN='Add a rock column in the Rock column panel to use this setting.
 // finds an inactive setting and explains what must be enabled to use it.
 export function worldControlRequirement(key,v){
  const n=k=>Number(v[k]??0),needs=(parent,label)=>worldControlRequirement(parent,v)||(n(parent)<=0?`Enable ${label} to use this setting.`:'');   // a parent that is itself idle names its own reason first
+ if(key==='faceClastSize')return needs('faceClast','Embedded fragment relief');
+ if(key==='faceClast')return n('rockFace')>0||n('faceMineral')>0?'':'Raise Rock relief: Depth or Mineral contrast to use embedded fragments.';
+ if(key==='faceGritSize')return n('faceGrit')*n('rockFace')>0||n('faceMineral')>0?'':'Raise Grit relief or Mineral contrast to use Grit size.';
+ if(key==='faceRound')return n('rockFace')*n('faceBlock')>0||(n('faceClast')>0&&Math.max(n('rockFace'),n('faceMineral'))>0)?'':'Raise Block offsets and tilts with Rock relief: Depth, or enable embedded fragments, to round the rock.';
+ if(['faceJointTilt','faceScaleVary','faceSpall'].includes(key))return needs('rockFace','Rock relief: Depth');
  if(key==='runoffCut')return needs('runoff','Runoff exposure')||needs('rockFace','Rock relief: Depth');
  if(['runoffScale','runoffConcentration','runoffStain'].includes(key))return needs('runoff','Runoff exposure');
  if(['debrisReach','debrisDepth'].includes(key))return needs('debrisAmount','Cliff debris accumulation');
- if(key==='stoneSort')return Math.max(n('looseSupply'),n('debrisAmount'),n('stonePaint'))>0?'':'Raise loose-stone Supply or Cliff debris accumulation, or paint Denser scatter, to sort stones.';
+ if(key==='stoneRound'&&n('stoneSlab')>=1)return 'Reduce Flat fragments below 100% to round the remaining fragments.';
+ if(['stoneSort','stoneRound','stoneSlab'].includes(key))return Math.max(n('looseSupply'),n('debrisAmount'),n('stonePaint'))>0?'':'Raise loose-stone Supply or Cliff debris accumulation, or paint Denser scatter, to shape the stones.';
  // Rows that shape the rock's relief do nothing while it is flat (Depth 0); amount, placement, grass and colour act at any depth.
- if(['faceLaminaSize','faceGritSize','faceScratchLength','faceScratchAngle','faceRound'].includes(key)){
-  const parent={faceLaminaSize:'faceLamina',faceGritSize:'faceGrit',faceScratchLength:'faceScratch',faceScratchAngle:'faceScratch',faceRound:'faceBlock'}[key];
-  const label={faceLamina:'Fine layer relief',faceGrit:'Grit',faceScratch:'Scratches and water grooves',faceBlock:'Block offsets and tilts'}[parent];
+ if(['faceLaminaSize','faceScratchLength','faceScratchAngle'].includes(key)){
+  const parent={faceLaminaSize:'faceLamina',faceScratchLength:'faceScratch',faceScratchAngle:'faceScratch'}[key];
+  const label={faceLamina:'Fine layer relief',faceScratch:'Scratches and water grooves'}[parent];
   return needs(parent,label);
  }
  if(['faceStretch','faceBlockHeight','faceJoint','faceExtrude','faceLamina'].includes(key))return needs('rockFace','Rock relief: Depth');
  if(['faceCreaseSize','faceCrease','faceBlock','faceLedge','faceScratch','faceScratchSize','faceGrit','faceWear','faceShade','faceLayers','faceMass'].includes(key))return n('rockFace')>0?'':'Raise Rock relief: Depth to use this setting.';
  if(['faceBlockSize','faceLean'].includes(key))return n('rockFace')>0||n('faceTone')>0?'':'Raise Rock relief: Depth or Color variation to use this setting.';
+ if(key==='faceRun'&&n('faceFold')>0)return '';
  if(['faceBed','faceRun'].includes(key))return n('rockFace')>0||(n('column')>0&&(n('faceStrata')>0||n('faceWet')>0))?'':'Raise Rock relief: Depth, Layer tint, or Wetness to use this setting.';
  // Every world has a ground-cover table (sculpt.py DEFAULT_GROUND_COVER): Vegetation cover above 0 turns it on.
  const cover=n('vegetationCover')>0;
@@ -102,7 +109,7 @@ export function worldControlRequirement(key,v){
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return NO_COLUMN;
  // Tilt deforms the voxel rock and its mineral coordinates as well as the column's colored beds.
  if(['bedDip','bedDipDir'].includes(key)&&Math.max(n('rockFace'),n('faceTone'),n('faceStrata'),n('faceWet'))<=0){const r=n('column')<=0?NO_COLUMN:needs('strata','Strength (painted beds) in Strata');if(r)return r;}
- if(key==='bedDipDir')return n('bedDip')===0?'Set Bed tilt above or below zero to choose its direction.':'';
+ if(key==='bedDipDir')return n('bedDip')===0&&n('faceFold')<=0?'Set Bed tilt above or below zero, or raise Fold amplitude, to choose its direction.':'';
  if(key==='sandBandSpacing')return needs('sandBanding','Streaks on sand and ramps');
  if(key==='bedDotCell')return needs('bedDots','Bed speckles');
  if(key==='pockSize')return needs('pockmark','Surface pits');
@@ -163,7 +170,8 @@ export function worldControlRequirement(key,v){
 // Primary controls describe a visible feature. Fine tuning remains available
 // explicitly (and through search), without filling the default inspector.
 export const WORLD_PRIMARY_CONTROLS=new Set([
- 'runoff','runoffScale','runoffConcentration','runoffCut','runoffStain','debrisAmount','debrisReach','debrisDepth','stoneSort',
+ 'faceJointTilt','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
+ 'runoff','runoffScale','runoffConcentration','runoffCut','runoffStain','debrisAmount','debrisReach','debrisDepth','stoneSort','stoneRound','stoneSlab',
  'vegetationCover','plantRelief','flowerDensity',
  'bedDip','bedDipDir','faceStretch','faceBlockHeight','faceRound','faceJoint','faceExtrude','faceLamina','faceLaminaSize','faceScratchLength','faceScratchAngle','faceGritSize',
  'rockFace','faceRock','rockFaceFrom','faceCreaseSize','faceCrease','faceBlock','faceBlockSize','faceBed','faceLedge','faceRun','faceScratch','faceScratchSize','faceLean','faceGrit','faceGrass','faceWear','faceShade','faceLayers','faceMass','faceTone','faceStrata','faceWet',

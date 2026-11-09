@@ -206,6 +206,13 @@ struct Uniforms {
     debrisReach: f32,
     debrisDepth: f32,
     rockWeatherGrid: vec4f, // origin in art pixels, texture dimensions; 4px cells
+    faceJointTilt: f32,
+    faceScaleVary: f32,
+    faceFold: f32,
+    faceSpall: f32,
+    faceClast: f32,
+    faceClastSize: f32,
+    faceMineral: f32,
     faceStretch: f32, // Block length / width
     faceBlockHeight: f32, // Block height / layer height
     faceRound: f32, // Rounded blocks

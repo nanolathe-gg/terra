@@ -11,7 +11,7 @@ test('geological presets are valid editable controls and column beds',()=>{
  }
 });
 test('rock recipes reject invalid controls and ignore removed options',()=>{
- for(const value of [[],1,'x',{faceRound:NaN},{faceJoint:-1},{faceRound:'0.5'},{faceStretch:0}])assert.throws(()=>copyRockSettings(value));
+ for(const value of [[],1,'x',{faceRound:NaN},{faceJoint:-1},{faceRound:'0.5'},{faceStretch:0},{faceClastSize:0},{faceMineral:2},{stoneSlab:2}])assert.throws(()=>copyRockSettings(value));
  assert.deepEqual(copyRockSettings({removedOption:1,faceRound:.5}),{faceRound:.5});
  assert.equal(copyRockSettings(undefined),null);
 });
@@ -24,4 +24,19 @@ test('weathering controls explain inactive parents and allow painted sorting',as
  assert.ok(reason('debrisDepth',{debrisAmount:0}));
  assert.equal(reason('stoneSort',{stonePaint:1}),'');
  assert.equal(reason('sandLight',{beachLayer:1,sand:0,debrisAmount:1}),'');
+});
+
+test('new rock controls and static preset picker stay connected',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const {worldControlRequirement:reason}=await import('../sculpt-control-schema.js');
+ const html=readFileSync(new URL('../sculpt.html',import.meta.url),'utf8');
+ for(const key of Object.keys(ROCK_PRESETS))assert.ok(html.includes(`value="${key}"`));
+ assert.ok(reason('faceClastSize',{faceClast:0,rockFace:2}));
+ assert.ok(reason('faceClastSize',{faceClast:1,rockFace:0}));
+ assert.equal(reason('faceClastSize',{faceClast:1,rockFace:2}),'');
+ assert.ok(reason('stoneRound',{stoneSlab:1,debrisAmount:1}));
+ assert.equal(reason('stoneSlab',{stonePaint:1}),'');
+ assert.equal(reason('bedDipDir',{rockFace:2,bedDip:0,faceFold:5}),'');
+ assert.equal(reason('faceRound',{rockFace:0,faceClast:1,faceMineral:1}),'');
+ assert.equal(reason('faceGritSize',{rockFace:0,faceGrit:0,faceMineral:1}),'');
 });
