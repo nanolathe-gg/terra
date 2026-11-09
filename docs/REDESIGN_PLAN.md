@@ -31,29 +31,36 @@ waits for and has to find; and build the judge first.**
    Plateau, tile independence, export in the page. Nothing found in this
    review justifies a new renderer, a new representation, a new language or
    a new simulation (section 4.2 lists what was considered and why not).
-2. **The picture's gaps are upstream of the renderer**, in this order: the
-   form of ridge-like landforms (today's Mountain is an even-width loaf
-   with a comb of gullies; section 3.8b), broad light (retail's sun is at
-   20-40° with long dark shadows, ours near 45° with weak ones; section
-   3.1), rock tone and placement, and the kind of relief below 64 px,
-   which differs from world to world (section 3.8c). The project's own
-   record agrees: five renderers scored the same, and five rock rewrites
-   did not move Green's score (section 3.6).
+2. **The picture's gaps are upstream of the renderer.** By eye, in this
+   order: the form of ridge-like landforms (today's Mountain is an
+   even-width loaf with a comb of gullies; section 3.8b); rock tone and
+   placement (measured on Green: steep ground darkens half as much as
+   retail's; section 3.1b); and the kind of relief below 64 px, which
+   differs from world to world (section 3.8c). Light is not among them:
+   measured with one fit on both, our shading is as strong as retail's on
+   Green and stronger elsewhere. The project's own record agrees: the builds of the 2026-11-08
+   renderer comparison landed the same share of statistics inside retail's
+   band, and five rock rewrites left Green's look score at .21-.23
+   (section 3.6).
 3. **The voxel solid stays, on faces, as art.** The owner's observation
    was tested and holds: sideways displacement is what makes a cliff read
    as broken rock, and no height-field shading reproduces it. Its price is
-   64-87% of every window, mostly in building it. About a third of that
-   can go without changing a pixel; the rest is the cost of the look
-   (sections 3.4, 3.4b; R8).
+   64-87% of every window, mostly in building it. A thin-shell build
+   takes 13-23% off a cliff window with the solid unchanged; skipping the
+   wear passes at today's weak settings takes another 15-18% and cannot be
+   seen, but it moves pixels and so needs the owner's look. The rest is
+   the cost of the look (sections 3.4, 3.4b; R8).
 4. **Responsiveness comes from structure, not from micro-optimizing.**
-   Materials and palette are 10 ms of a 345-1,181 ms window. Splitting
-   geometry from color makes every color, shine, cover and light control
-   a live one; giving every control the preview level that strokes have,
-   and never compiling a pipeline on the critical path, covers the rest
-   (R5, R6, R7).
+   Materials and palette are about 10 ms of a 345-1,181 ms window.
+   Keeping the baked surface and the geometry of visible tiles, and
+   rerunning only color, makes the color, shine, light-strength and
+   palette controls live ones (which further rows qualify is for a
+   measured stage map to say); giving every control the preview level
+   that strokes have, and never compiling a pipeline on the critical
+   path, covers the rest (R5, R6, R7).
 5. **The control surface is the largest usability problem.** 234 World
-   rows over twelve screens, 45 of them another world's, 110 moving under
-   5% of the picture, rock missing from the landform it defines. The fix
+   rows over twelve screens, 45 of them another world's, 110 changing
+   under 5% of a capture, rock missing from the landform it defines. The fix
    is one short set of dials in the brief's own nouns, at three scopes:
    world, landform, spot (R9).
 6. **Two defects to fix whatever else is decided:** a shared map does not
@@ -70,7 +77,10 @@ waits for and has to find; and build the judge first.**
   real. Form is a research track with a judge, not a solved design (R3).
 - **One model that slides from 1997 to modern on a single dial.** Light and
   placement do reduce to numbers. Relief does not: retail's kinds of
-  structure are different things on different worlds (R4).
+  structure are different things on different worlds (R4). The prototype
+  that showed this also showed the other side of it: a relief control
+  that misses retail can make a world nobody has seen, and the owner
+  wants those.
 - **A cheap solid.** See point 3.
 - **The ceiling.** Inside the 1997 format, "hyper-real" means 242 colors,
   32 px tiles and painted light. How far past that Nanolathe goes is the
@@ -81,15 +91,15 @@ order):
 
 | Card | Change | Size | Main effect |
 | --- | --- | --- | --- |
-| R0 | Four benches: retail look, shape, latency, task cost | M | A judge that editing a scene cannot game |
+| R0 | Four benches (retail look, shape, latency, task cost) and a new-worlds sheet | M | A judge that editing a scene cannot game |
 | R1 | Height-image op | S | Enables R0; import from other tools |
-| R2 | Light and placement as fitted numbers; cached shadow and occlusion planes | M | Closes the "broad light" gap; shadows of any length |
+| R2 | Light and placement as fitted numbers, with the light fit as a tripwire | S-M | Red, Lava and Moon's over-strong shading and Green's light rock brought to retail's numbers |
 | R3 | Skeleton structure in Mountain and Hill | L, research | Form: spurs branch, valleys join |
-| R4 | Relief kinds, one world at a time, under three rules | M per world | "Recognizably TA" below 64 px |
-| R5 | Stage caches; every control owns a stage | L | Color, shine, cover and light controls at about 10 ms a megapixel |
+| R4 | Relief kinds, under three rules: for retail worlds on the bench, and for new worlds by eye | M per world | "Recognizably TA" below 64 px; new looks such as cell and crackle ground |
+| R5 | Stage caches; every control owns a stage | L | Color, shine, light-strength and palette controls at about 10 ms a megapixel |
 | R6 | Scheduler: batch tiles, no readback, cancel between stages | M | Lower latency on every path |
 | R7 | Preview level for every control; generic pipeline; preview raster | S | No 0.9 s stalls; all rows preview live |
-| R8 | The solid: thin shell, wear where it shows, march fix | M-L | About a third off a cliff window, losslessly |
+| R8 | The solid: thin shell, wear where it shows, march fix | M-L | 13-23% off a cliff window with the solid unchanged; about a third with the wear change |
 | R8b | Erosion per landform | S | Up to 0.4-0.9 s off each edit |
 | R9 | Controls: honest panel, then dials at three scopes, then blend and variations | M | From 234 rows to about 60 on the surface |
 | R10 | A tile budget; pooled level ground; stamps | M | Larger maps export without merging |
@@ -109,7 +119,7 @@ do not exist yet.
 | Feedback is fast, refinement is progressive | Latency budgets per kind of interaction (below), measured by `repro/perf.mjs` | Partly: stroke drags only |
 | Hyper-real look; erosion may be approximated | A modern benchmark judged by eye on fixed sheets; `measure/realism.py` as a tripwire only | Tripwire only |
 | Recognizably Total Annihilation | A retail benchmark: retail's own heights rendered by the engine beside retail's art, on sections never used for tuning | No (needs card R1) |
-| Many biomes and planets | A world built from controls alone, with no code change, reviewed by the owner | No |
+| Many biomes and planets, including ones that follow no real planet | Invented worlds built from controls alone, with no code change, on a sheet the owner reviews (R0) | No |
 | Large flat areas, a 2.5D RTS | Passability and buildable-area views; plains unmoved by any refinement | Yes (`repro/passability.mjs`) |
 | Export loads and plays | `repro/export-bytes.mjs`; a tile budget per map size | Partly: no tile budget |
 
@@ -119,7 +129,7 @@ recorded so far comes from one Apple M3 Pro):
 | Interaction | Budget (p95) | Today |
 | --- | --- | --- |
 | Stroke drag: pointer to picture | 50 ms at preview level | 73-75 ms **[measured, docs/VOXEL_REVIEW.md]** |
-| Color, finish or light slider drag | 33 ms, full quality | 0.6 s to a first change, 0.9-1.1 s settled **[measured, section 3.5]**: every cached image re-bakes at final level |
+| Color, finish or light slider drag | 50 ms, full quality at 1440p | 0.6 s to a first change, 0.9-1.1 s settled **[measured, section 3.5]**: every cached image re-bakes at final level |
 | Any other World slider drag | 100 ms at preview level | the same, and 5-8 s where the row re-runs the shape or weathering **[measured, section 3.5]**; no preview level exists |
 | Release to final visible art, 4x4 map | 1.0 s | 1.4-1.9 s **[measured, docs/*_REVIEW.md]** |
 | First picture after load | 1.0 s | 1.7-2.2 s to final **[measured, docs/VOXEL_REVIEW.md]** |
@@ -154,9 +164,8 @@ held-out ones (six worlds, six each). Sheets: `out/sheets/*_1x.png`
 **What this says.**
 - **The retail sun is low and its shadows are long, but facing contrast is
   weak.** A single Lambert sun fits only with a large sky share and shadows
-  that also remove sky light. Our sun sits near 45° with far shadows capped
-  at 32% darkening (`engine-frag.wgsl:57-70`, `sculpt-renderer.js:830-843`)
-  **[read]**. That is the "broad light" gap of section 3.2 in numbers.
+  that also remove sky light. Section 3.1b runs the same fit on our renders:
+  ours is not weaker.
 - **There is no regular height step.** The contour-like lines are irregular
   (only a weak 8-10 px rhythm on camera-facing slopes). "Posterized heights"
   is not the recipe; irregular ledges are.
@@ -191,6 +200,46 @@ the same one the shape prototypes found (section 3.8): **structure between
 the pixel and the landform**. Section 3.8c tests one term for it.
 
 
+### 3.1b The same light fit on our renders
+
+The first draft of this plan (commit `d932c710`) read our hills as flatter
+than retail's and
+blamed a sun that sits near 45° with far shadows capped at 32% darkening
+(`engine-frag.wgsl:57-70`, `sculpt-renderer.js:830-843`). That compared a
+measurement of retail with constants read from our shader. So the fit of
+section 3.1 was run, unchanged, on both images of each baseline window:
+retail's crop with retail's heights, and our render with our heights
+reduced to 16 px cells (`~/terraform-assets/agent-rd-look/ours-fit/`,
+`fit.py`, `table.txt`).
+
+| Per-world median, retail / ours **[measured]** | Green (7 windows) | Red (3) | Lava (3) | Moon (3) |
+| --- | --- | --- | --- | --- |
+| Directional gain: luminance per unit slope toward the sun | .074 / .074 | .054 / .089 | .030 / .040 | .163 / .304 |
+| Ours over retail, per window | 0.89 | 1.52 | 1.31 | 1.65 |
+| Darkening of steep ground whatever it faces | -.091 / -.049 | -.086 / -.084 | -.067 / -.091 | -.306 / -.278 |
+| Cast shadow: shadowed over lit luminance on like ground | .76 / .71 | .85 / .76 | .89 / .67 | .83 / .68 |
+| Sun elevation from shadows | 30° / 45° | 30° / 30° | 30° / 40° | 20° / 20° |
+| Light the heights explain at 64 px | .79 / .77 | .63 / .74 | .87 / .67 | .93 / .98 |
+
+**What this says.**
+- **Our broad light is not weaker than retail's.** Directional shading is
+  equal on Green and a third to two-thirds *stronger* on Red, Lava and
+  Moon, and our cast shadows are darker than retail's on every world. The
+  first draft's "broad light" gap is withdrawn.
+- **The one place ours is weaker is steep ground on Green**: retail darkens
+  it about twice as much whatever it faces, on seven windows of seven.
+  That is the dark, patchy rock of section 3.2 seen as a number, and it is
+  the same complaint the project has recorded since 2026-10-28.
+- **Three Green windows (4, 5, 6) do have a lower gain than retail**; they
+  are the cliff and plateau windows whose traced shapes differ most.
+- **Confounds:** our scenes are hand-traced, so shapes differ (Lava's p90
+  slope is .79 against retail's .42); our rock is a different tone, and
+  tone that follows slope feeds both numbers; retail's light is not one
+  direction on Red and Lava-1.
+
+This is why the retail bench (R0) feeds retail's own heights to the engine:
+it removes the shape confound, and the same fit becomes a tripwire there.
+
 ### 3.2 Where today's output differs from retail
 
 **[by eye]**, from each world's retail windows beside the baseline renders of
@@ -206,20 +255,26 @@ retail section sheets at 1x.
   1. *Form.* Our landforms read as a section swept along a path: bands of
      even width that follow the outline, stacked like cut-outs (Green 4,
      Green 6). Retail's are lumpy and irregular at 50-200 px.
-  2. *Broad light.* Retail shades a whole hill (its far side is darker for
-     hundreds of pixels). Ours has busy fine detail and little broad
-     shading, so hills look flat (Green 1, Green 2).
-  3. *Rock tone and placement.* Ours is light gray and covers whole bands;
-     retail's is charcoal and patchy (Green 6). This has been reported at
-     least four times since 2026-10-28 (section 3.6).
+  2. *Rock tone and placement.* Ours is light gray and covers whole bands;
+     retail's is charcoal and patchy (Green 6). Measured on Green as steep
+     ground darkening half as much as retail's (section 3.1b). This has
+     been reported at least four times since 2026-10-28 (section 3.6).
+  3. *Calm against busy.* Retail's hills carry a few marks on a quiet
+     surface, so their broad shading reads at a glance. Ours carry fine
+     detail everywhere (Green 1, Green 2). The shading itself is as strong
+     as retail's or stronger (section 3.1b); what differs is how much
+     competes with it.
 - **Closest worlds:** Lava and Red. **Furthest:** Green cliffs, Moon (retail
   has soft, smeared shadow streaks; ours has hard shapes and black
   speckles) and Desert (retail's banded mounds and blobby ground).
 
 None of these three is a property of the render primitive. That agrees with
-the project's own record: the five renderers compared on 2026-11-08 had
-identical retail statistics, and Green's look score stayed at .21-.23 through
-five rock rewrites **[measured, section 3.6]**.
+the project's own record: the builds compared on 2026-11-08 landed the
+same share of statistics inside retail's band (Green 77.8%, Moon 61.1%,
+Desert 68.1% for mesh, rays, cached surface and voxels alike, though single
+statistics moved) **[measured, `~/terraform-assets/render-compare/*-retail.log`]**,
+and Green's look score stayed at .21-.23 through five rock rewrites
+**[measured, section 3.6]**.
 
 ### 3.3 The pipeline today
 
@@ -395,9 +450,12 @@ is rejected.
 
 **What this means.**
 - **There is no trick that makes the solid cheap and leaves every pixel
-  alone.** Losslessly, skipping invisible wear and building a thin shell
-  together remove roughly a third of a cliff window **[inferred from the
-  stage times: 682 + 243 ms of build and wear become about 478 + 0]**.
+  alone.** The thin shell is the only lossless saving (13-23%). Skipping
+  the wear passes cannot be seen at the shipped settings but changes
+  52-73% of cliff pixels by more than 8/255, so every rock scene's fixture
+  moves and the owner must look. Both together remove roughly a third of a
+  cliff window **[inferred from the stage times: 682 + 243 ms of build and
+  wear become about 478 + 0]**.
 - **IMPLICIT is the simpler machine** (no bricks, no readback, no piece
   splitting, a third of the memory) and the faster one at 1x, but it
   changes the rock's grain, needs Weathering restated inside the rock
@@ -436,7 +494,7 @@ says why. The Export pane is short.
 | World rows under "Rock & cliffs" | 86 |
 | World rows disabled on Green | 62 |
 | World rows that belong to other worlds' looks, shown on Green | 45 (22 in the default view) |
-| World rows that change under 5% / under 1% of Green's captures across their range | 110 / 37 |
+| World rows that change under 5% / under 1% of Green's captures across their range (a share of the whole capture, not rule 9's share of a class; the class sweep passed) | 110 / 37 |
 | World rows with a parent control | 97, up to three levels deep |
 | World rows with no hover help of their own | 227 of 234 |
 | Matches for "rock" in the World search | 90 |
@@ -458,6 +516,13 @@ settled, in seconds].** Hill stroke 2.1 / 2.7. Elevation on a stroke
 2.3 / 2.9. Ambient light 0.6 / 1.1. Rock relief depth 0.6 / 0.9. A rock
 starting point 0.4 / 1.4. Landform face steepness (re-runs the shape)
 5.0 / 5.2. Rain (re-runs weathering) 8.4 / 8.7.
+
+**The last two fit no measured stage.** The shape pass is about 25 ms and
+the whole-map Time pass 0.4-0.9 s (section 3.4); 8.4 s is close to the 8 s
+the canvas will hold a weathered bake for the Time pass to land
+(`sculpt-canvas.js:262-265`). Undiagnosed here; it may be a hold that
+expires where it should be released, which would be a small fix worth
+seconds on every such row.
 
 **The ten problems, ranked** (evidence in the audit's sections 1-5):
 
@@ -496,7 +561,7 @@ commits (2026-10-26 to 2026-11-09) **[measured]**.
 
 | Tried | Result | Reference |
 | --- | --- | --- |
-| Five renderers on the same scenes (mesh, cached 2 px and 1 px surface, height-field rays, voxels) | Rays 10-20% faster than mesh, voxels 3.0-4.7x slower; retail statistics identical for all five; drag about 60 updates/s for all | `~/terraform-assets/render-compare/` |
+| Five renderers on the same scenes (mesh, cached 2 px and 1 px surface, height-field rays, voxels) | Rays 10-20% faster than mesh, voxels 3.0-4.7x slower; the same share of statistics inside retail's band for every build; drag about 60 updates/s for all | `~/terraform-assets/render-compare/` |
 | Triplanar shading on height-field rays | 118 ms against 515-808 ms for voxels; Green look gap worse, .212 to .260 | commit `fc03d837` |
 | Pixel rills, channels, scarp retreat, slumps, talus fans, column walk (cards P2-P17) | Each rejected or held: "no world improves", "scarps read as cracks", "sea urchin" | docs/TERRAIN_ENGINE.md:841-863 |
 | Horizon sweeps for shadows (P11) | Cost what the removed taps saved; closed | docs/TERRAIN_ENGINE.md:847 |
@@ -667,6 +732,12 @@ and projection. At zero amplitude it is exactly the plain model
   pixels moved) because the relief gate bled a cell into the plain
   **[measured]**.
 
+**The owner's reading of the Lava sheet (2026-11-09):** it does not match
+retail "but looks really neat"; these are sci-fi worlds that need not follow
+Earth or any planet we know, and controls like this may let artists make
+new worlds. So the term failed as a retail match and passed as a look. It
+is kept, as a relief kind of its own (R4).
+
 **Conclusion.** Retail's sub-cell structure differs in kind from world to
 world: facets on Red, lobes and flow lines on Lava, streaks on Moon, rock
 slivers on Green. One term does not cover them, and no single number runs
@@ -757,7 +828,6 @@ A Shape     strokes -> authored height and masks                lattice, about 2
   |           a landform = path + section + structure (R3)
   |           height images (R1)
 B Time      per-landform refinement (R4, R8b)                   lattice
-  |           sun-shadow and sky-occlusion planes (R2)
   |           game heights are read here, at 16 px
 C Surface   1 px relief, loose ground, structure under 64 px    world tiles (R5)
   |           (R4)
@@ -770,8 +840,9 @@ Outputs     32 px tiles and a tile budget (R10); 16 px heights; features; .ufo
 
 | An artist changes | First stage rerun | Feedback |
 | --- | --- | --- |
-| A color, shine, cover amount, light strength, palette | F | every frame, full quality |
-| Sun height or turn | B planes, then E | preview while dragging |
+| A color, shine, light strength, palette | F | live, full quality at 1440p |
+| Where rock or cover appears | F, D or C, as the stage map measures | live, or preview while dragging |
+| Sun height or turn | E | preview while dragging |
 | Rock structure (layers, joints, relief) | D | preview while dragging |
 | Surface relief, stones, cracks | C | preview while dragging |
 | Erosion, structure under 64 px | B or C | preview while dragging |
@@ -804,11 +875,12 @@ days, L a week or more with review rounds.
 
 #### R0. The benchmarks (M; first)
 
-**Change.** Build the four checks from section 2 that do not exist, and make
+**Change.** Build the checks from section 2 that do not exist, and make
 them the bar for every later card.
 
 **Why.** Scores have not tracked the picture: Green's look score stayed at
-.21-.23 through five rock rewrites, five renderers scored the same, two
+.21-.23 through five rock rewrites, the renderer builds of 2026-11-08 could
+not be told apart by it, two
 overnight gains were gamed, and seven blind rounds ended near chance
 (section 3.6). The three windows per world also mix two things: how well a
 scene's author traced retail's layout with strokes, and how the engine
@@ -818,8 +890,13 @@ looks. Green 4's shape score of .59 is a statement about tracing.
 1. **Retail look bench** (`repro/retail-bench.mjs`, after R1).
    - Input: the retail section pairs under
      `$R/catalogs/sections/worlds/sections/<world>/<kind>/` (art at 1 px,
-     heights at one byte per 16 px cell; about 690 pairs for six worlds, and
-     `$R/catalogs/sections-crystal`, `-ice`, `-zhon` for three more).
+     heights at one byte per 16 px cell; about 690 pairs for six worlds).
+     `$R/catalogs/sections-crystal`, `-ice` and `-zhon` exist and were not
+     opened in this review; Desert has no sections and keeps its windows.
+   - Each section needs its plain and its sea level: take the sea from the
+     world's measured water threshold (section 3.1's model found one per
+     world at .92-.97 accuracy) and the plain as the section's modal
+     height.
    - A committed list of section *names* (names are not retail pixels) splits
      each world into a tuning half and a held-out half, fixed by a hash of
      the name.
@@ -834,8 +911,11 @@ looks. Green 4's shape score of .59 is a statement about tracing.
      tripwire: a card that moves a statistic out of the retail band must say
      why.
    - This isolates the look (light, materials, the detail the engine adds
-     under the 16 px cells) from stroke tracing, and it cannot be gamed by
-     editing a scene.
+     under the 16 px cells) from stroke tracing, and editing a scene cannot
+     game it.
+   - What it leaves out: anything a stroke writes besides height (crack
+     lines, a landform's local vegetation, paint). The bench judges the
+     world-level look and refinement; the windows remain for the rest.
 2. **Shape bench** (`repro/shape-bench.mjs`).
    - The four guides of section 3.8, as committed scene files using only
      Landform strokes at defaults.
@@ -850,6 +930,11 @@ looks. Green 4's shape score of .59 is a statement about tracing.
    fail per row, on a named reference machine.
 4. **Task-cost bench** (`repro/tasks.mjs`): the six scripted tasks of
    section 3.5; it prints clicks, drags and rows scrolled.
+5. **New-worlds sheet.** Three or four invented worlds kept as world files
+   (numbers only, no code), each rendered on the four guides and one flat
+   scene. It is the test of "many biomes and planets": a relief kind or a
+   control that makes one of these striking has earned its place even if
+   it matches nothing retail. The owner's eye is the only score.
 
 **Interactivity.** None directly; (3) makes regressions visible.
 **Quality.** None directly; (1) and (2) make progress visible.
@@ -895,67 +980,59 @@ finds no mismatch on a scene that uses the op.
 **Risks.** Bicubic interpolation of 16 px samples is smooth; that is the
 point (the engine's refinement must add the rest).
 
-#### R2. Light and placement as numbers, fitted on the retail bench (M)
+#### R2. Light and placement as fitted numbers (S-M)
 
-**Change.** Give the light model the terms the retail fit needs, make them
-world numbers and Light dials, and compute the two wide-reach light terms
-once per edit instead of per tile. Then set each retail world's numbers on
-R0's bench.
+**Change.** Make the light fit of section 3.1 a standing tripwire on the
+retail bench, name the light terms as world numbers and Light dials, and
+set each retail world's numbers until its fit matches retail's.
 
-**Why.** Section 3.1: retail's sun is low (20-40°) with long, dark shadows
-and weak facing contrast; ours sits near 45° with far shadows capped at 32%
-darkening and reach 204 px. That is the flat-looking hill of section 3.2.
-Rock tone and placement are numbers too: Green's rock is patchy at every
-slope, Red's and Lava's rises with slope along a measured curve.
+**Why.** Section 3.1b. Our light is not too weak, as this plan first
+assumed; on Red, Lava and Moon it is a third to two-thirds too strong, with
+cast shadows darker than retail's. On Green, steep ground darkens half as
+much as retail's, which is rock tone and placement. These are numbers, and
+nothing measures them today: `repro/stats.py` has luma and edge statistics
+but no fit of light against heights.
 
 **Design.**
-- **Terms** (all continuous, all in the world's file; names are the Light
-  dials of R9):
+- **The tripwire.** Port `ours-fit/fit.py` into the retail bench: per
+  section, directional gain, the steep-ground term and shadowed-over-lit,
+  for retail and for ours, with the ratio. On the bench both use retail's
+  heights, so the shape confound of section 3.1b is gone.
+- **Terms** (all continuous, all in the world's file; they are the Light
+  dials of R9, and most exist as uniforms today under engine names):
 
-  | Term | Meaning | Retail fit | Modern setting |
-  | --- | --- | --- | --- |
-  | Sun height | elevation of the sun | 20-35° by world | 35-45° |
-  | Sun turn | azimuth; the TA convention fixes it near west | within 20° of west | same |
-  | Sky share | part of the light that comes from the whole sky | .3 to .95 | .3 to .5, tinted by the sky color |
-  | Shadow darkness | how much a cast shadow removes, set apart from facing contrast | .5 | .7-.8, sun light only |
-  | Shadow softness | penumbra width; grows with distance from the caster | under 1 px | 2-4 px at 100 px |
-  | Steep darkening | darkening of steep ground whatever it faces | .04 to .5 by world | near 0 (occlusion does it) |
-  | Sky occlusion | darkening of hollows and cliff feet | 0 | .5 |
+  | Term | Meaning | Where retail's fit points |
+  | --- | --- | --- |
+  | Sun height | elevation of the sun | 20-30° by world; ours fits 45° on Green and 40° on Lava |
+  | Sun turn | azimuth; the TA convention fixes it near west | within 20° of west |
+  | Light contrast | how much a slope's facing changes its brightness | down by a third to two-fifths on Red, Lava and Moon |
+  | Shadow darkness | how much a cast shadow removes, set apart from contrast | lighter: retail's shadowed ground keeps .83-.89 of its light on Red, Lava and Moon, ours .67-.76 |
+  | Steep darkening | darkening of steep ground whatever it faces | about double on Green |
+  | Sky share | part of the light that comes from the whole sky | .3 to .95 by world in the prototype's fit |
 
-  Retail's shadows also remove sky light, which is not physical. That is
-  one more number (*Shadow takes sky*, 1 for retail, 0 for modern), not a
-  second path.
-- **A sun-shadow plane, cached at stage B** (R5). The sun's direction is
-  fixed for a map, so the height of the shadow volume above every lattice
-  cell is one max-plus sweep along that direction (log-step passes on the
-  lattice, apron = the longest shadow: 255 units at 30° is 440 px). A pixel
-  is in shadow when it lies under the plane; the margin over distance gives
-  the penumbra. This replaces the per-pixel far-shadow taps, has no reach
-  limit, and is recomputed only when the shape changes. The 2026-11-04
-  horizon trial (P11) swept nine directions for occlusion and broke even;
-  this is one direction, cached.
-- **A sky-occlusion plane**, same stage, from the lattice at 4 px (eight
-  directions, once per edit). Fine cavity stays with the solid or the
-  relief.
 - **Placement tables**: rock share against slope and height as a short
-  curve per world, measured on the tuning half of the sections; grain
-  amplitude and hue speckle per world; the count of palette colors a world
-  may use.
+  curve per world, measured on the tuning half of the sections (Green:
+  patches at every slope; Red and Lava: rising to 36% and 65% on steep
+  ground); rock's tone; grain amplitude and hue speckle per world.
 - **A per-map series**: Moon's bright and dark ground, Red's two tones. A
   map picks one of a world's named series (numbers in the world's file).
 - **Procedure**: fit on the tuning half, judge on the held-out sheets of
   R0, one world at a time, Green first; the owner marks the sheets.
+- **Not proposed after all:** cached sun-shadow and sky-occlusion planes.
+  The first draft wanted them for longer, darker shadows; the measurement
+  says ours are already longer-reaching and darker than needed, and the
+  draw is 8-20% of a window, so there is little to save.
 
-**Interactivity.** The two planes move the widest-reach light work out of
-the per-tile draw; with R5, Light dials are stage F and preview live.
-**Quality.** The largest single step toward retail that needs no new
-structure **[by eye, from the prototype's gentle-ground sheets]**; the
-modern setting gets soft, sky-tinted shadows of any length.
-**Accepted when** the owner's blind score on the retail bench improves for
-each world against the starting sheet, and no scene's plain changes.
-**Risks.** A lower sun lengthens shadows across routes and start areas; the
-shadow darkness dial is the remedy. The second light direction seen in some
-sections (125-150°) is unexplained; if it is real, Sun turn covers it.
+**Interactivity.** With R5, the Light dials are stage F and preview live.
+**Quality.** A calibration, not a new model. It should bring Red, Lava and
+Moon's shading down to retail's and Green's rock down to its tone; by
+itself it will not make any world read as retail (section 3.1's verdict).
+**Accepted when** each world's three fit ratios on the bench are within
+about 15% of 1, and the owner's blind score does not fall.
+**Risks.** Hand-traced windows will keep disagreeing with the bench where
+shapes differ; the bench is the reference. The second light direction seen
+in some sections (125-150°) is unexplained; if it is real, Sun turn covers
+it.
 
 #### R3. Structure in ridge-like landforms (L; a research card judged on the shape bench)
 
@@ -1000,7 +1077,7 @@ reference).
 - **What must change from the prototype before it lands**: the crest must
   wander and round (the drawn path becomes the crest's corridor, not its
   line); Spur spacing and Branching must be continuous (rule 9); facets
-  must break up (R4's structure term on top); recursion one level deeper
+  must break up (R4's fall-line detail on top); recursion one level deeper
   where the landform is wide enough.
 - **Handles**: show the summits and the first-order spurs (about 35 on a
   600 px ridge) as draggable points when the landform is selected;
@@ -1026,9 +1103,9 @@ that trace retail windows with Mountain strokes will move.
 #### R4. Relief kinds, one world at a time, on the bench (M per world)
 
 **Change.** Keep the engine's library of generic relief kinds; do not chase
-one unifying term. On each world's turn, find on the retail bench which
-kind of structure is missing, and add or retune that kind under three
-rules.
+one unifying term. A kind earns its place in one of two ways: it closes a
+gap on the retail bench for a retail world, or it makes a look the owner
+wants for a new one. Each kind follows three rules.
 
 **Why.** Section 3.8c: one term failed on Lava and Moon and was the wrong
 tool for Green. Section 3.1: below 64 px the heights do not explain the
@@ -1054,6 +1131,18 @@ where every previous round worked without a judge (section 3.6).
   | Lava | rounded lit lobes with dark outlines; long sinuous flow lines | the existing lobe and layer terms, judged on the bench; a streak-line term |
   | Moon | sweeping contour-parallel streaks; crater-rim rubble | a strong irregular ledge or streak-line term at 4-6 px spacing with its own line output (the prototype's weak ledges had no measurable effect) |
 
+- **Cells, the first kind kept for its own sake.** The prototype's term
+  (`agent-rd-structure/structure.py`) with five controls: Amount, Size,
+  Crease (cracked cones, round lumps, crisp-rimmed bowls), Irregularity
+  (the warp) and Cells-to-flutes. It gives crackle webs, plated and
+  hummocked ground and fluted slopes that no retail world has. Port it
+  with the fixes its report lists: blend two fields, not two orientations;
+  anchor Size so the pattern does not swim under the slider; gate on
+  lattice relief so plains stay flat (Lava's did not).
+- **Looks that follow no planet are in scope.** The retail bench judges
+  the nine retail presets. Every other world is judged by the owner's eye
+  on the new-worlds sheet of R0, and "it matches nothing on Earth" is not
+  a defect there.
 - **For the modern look**, organized detail comes from R3's skeleton with
   the pointwise fall-line filter on top (`agent-rd-shape-point/model.py`),
   as its own kind. Its blend from free to aligned must be a blend of two
@@ -1091,7 +1180,7 @@ light strengths, cover amounts) change nothing about geometry.
 | A. Lattice | authored fields and masks (as today) | about 2 px, whole map or pages | stroke edits, shape controls |
 | B. Time | eroded height and maps (as today) | lattice | A; Time controls |
 | C. Surface | the relief bake's four channels; the 4 px runoff and loose-stone fields | world-aligned 256-texel tiles in an atlas | B within the tile's input window; surface controls |
-| D. Solid | voxel bricks, only where R8 says they are needed | per surface tile | C; rock-structure controls |
+| D. Solid | voxel bricks, transient as today; not cached | per piece | C; rock-structure controls |
 | E. Geometry buffer | per output pixel: hit height, normal, sun shadow, sky occlusion, cavity, rain exposure | screen tiles | C, D; sun direction |
 | F. Color | materials, light composition, palette: the bitmap that is cached today | screen tiles | E; color, finish, light-strength and palette controls |
 
@@ -1115,23 +1204,30 @@ light strengths, cover amounts) change nothing about geometry.
   the earliest stage whose cache changes, writes `stage-map.json`, and
   fails when a control's declared stage is later than the measured one.
   `canvas.clear()` takes a stage.
-- **Order of work, by measured value** (section 3.4's breakdown):
-  1. *Split E from F, and the stage map with `clear(stage)`.* Materials and
-     palette are 9-11 ms of a 345-1,181 ms window; everything else in the
-     draw and all of the solid is geometry. After the split a color, finish,
-     placement or light-strength control reruns only F. Pixels must stay
-     byte-identical.
-  2. *C as an atlas.* The bake is 48-85 ms a window, so removing its
-     overdraw is worth 5-15% of a window, most on flat scenes. Byte-identical
-     again. Do it after R8, when it is a larger share of what remains.
-  3. *D is not cached.* With E kept, nothing rereads the solid until
+- **Order of work** (section 3.4's breakdown gives the values):
+  1. *C as an atlas, kept for visible tiles.* The color pass reads the
+     baked surface and the fed lattice textures, and both are discarded
+     per tile today, so they must be kept before a color-only rerun is
+     possible. A tile's bake window overlaps its neighbors' about eight
+     times over (about 4 MiB a tile as it stands), so keeping it means the
+     atlas (0.5 MiB a tile). By itself this removes the bake's overdraw:
+     48-85 ms a window, 5-15%. Pixels must stay byte-identical.
+  2. *Split E from F.* Materials and palette are 9-11 ms of a
+     345-1,181 ms window; everything else in the draw and all of the solid
+     is geometry. Byte-identical again.
+  3. *The stage map and `clear(stage)`.*
+  4. *D is not cached.* With E kept, nothing rereads the solid until
      geometry changes; it stays transient.
 
-**Interactivity.** A color, shine, cover or light control costs about 10 ms
-per megapixel of view instead of 345-1,181 ms **[measured stage times]**:
-inside the 33 ms budget at 1440p, and at preview level at 4K. Rock-structure
-controls (86 World rows) still rebuild the solid for visible tiles; R8 is
-what makes those fast.
+**Interactivity.** With C and E kept, a control whose first stage is F
+costs the color pass: 9-11 ms per megapixel instead of 345-1,181 ms a
+window **[measured stage times; the rerun itself is not built]**. That is
+about 35-40 ms for a 1440p view, inside the 50 ms budget, and preview
+level at 4K. **Which rows are stage F is for the stage map to measure.**
+Colors, shine, light strengths and the palette are; rock exposure is
+probably not (it gates the solid), and vegetation cover only partly
+(plants are baked as relief). Rock-structure controls (86 World rows)
+still rebuild the solid for visible tiles; R8 trims that.
 **Quality.** None by itself (steps 1 and 2 must be byte-identical). It makes
 tuning a look by hand, the owner's chosen method, far faster.
 **Accepted when** all scenes are byte-identical after steps 1 and 2; the
@@ -1140,7 +1236,7 @@ memory at 1440p stays under the 512 MiB default.
 **Risks.** Memory: the atlas, the geometry buffer and the bitmaps together
 approach the default budget at 4K, so eviction order matters (E first, then
 C). Byte-identity across the atlas seam needs the same texel addressing as
-today's window; step 1 exists to prove that before anything else moves.
+today's window; step 1 proves that before anything else moves.
 
 #### R6. The scheduler: several tiles at once, no readback, cancel between stages (M)
 
@@ -1232,7 +1328,10 @@ solid stays transient, built from the surface, for art.
 2. **Wear only where it shows.** Run the wear passes on bricks that hold
    the surface, and make their count follow the Weathering value (zero
    passes at zero, by a strength that fades in, so the control stays
-   continuous). Saving at today's defaults: 13-23% of a window.
+   continuous). Saving at today's defaults: 15-18% of a window. The
+   picture does not visibly change, but 52-73% of cliff pixels do by more
+   than 8/255, so every rock scene's fixture moves: this step lands with
+   the owner's eye on its sheet, not as a silent optimization.
 3. **A thin shell (BAND), compacted.** Section 3.4b: lossless on the
    solid, 13-23% of a cliff window, nothing at the preview level. Port the
    prototype (`RD_BAND` on `rd/voxel`), store only the kept bricks (about
@@ -1274,8 +1373,11 @@ Until R4 replaces what it is for, run it only on the landforms an edit
 touched, and drop the unread drainage pass. In the grid prototype each
 landform with its skirt was an independent domain, because level plain is
 fixed base level (section 3.8); whether the engine's own pass has that
-property is the first thing to check (it already dispatches over active
-tiles only).
+property is the first thing to check. The pass already dispatches over
+active tiles only, so part of this saving may exist; measure before
+building. **First, diagnose the 5 s and 8.4 s waits of section 3.5**: they
+are larger than any stage measured and may be a hold, which would be worth
+more than this card.
 **Accepted when** release-to-final falls by the measured Time cost on a
 map where one landform of ten is edited, and the report states the largest
 height difference from the whole-map pass (the goal is none beyond
@@ -1288,7 +1390,8 @@ three scopes: set it for the world, shift it for a landform, paint it for a
 spot. Every existing row stays reachable behind the dial that drives it.
 
 **Why.** Section 3.5: 234 World rows over 12 screens, 45 of them another
-world's, 110 moving under 5% of the picture; rock is not on the landform;
+world's, 110 changing under 5% of a capture (a tripwire; rule 9's class
+sweep passes); rock is not on the landform;
 one idea lives in up to nine places. The brief names the dials itself: rock
 geology, soil, sand, vegetation, erosion, gravel and boulders. The engine's
 own design already said "at most five main controls a panel" and "paint to
@@ -1466,9 +1569,9 @@ owner looking at a sheet or a number, not at a score table.
 | Section 6 deletions | S | Everything after is easier with 21 dead branches gone; byte-identical |
 | R11 the map carries its world; export ignores view options | S | A correctness bug in sharing, and R0's scenes need it |
 | R1 height-image op | S | R0 needs it |
-| R0 the four benches | M | Nothing that changes a look lands before its judge exists |
+| R0 the benches and the new-worlds sheet | M | Nothing that changes a look lands before its judge exists |
 | R7 preview level for every control; generic pipeline | S | Makes every later tuning session faster |
-| R8 steps 1 and 2 (closed-gate bricks, march fix, wear where it shows) | S | 13-23% of every window for a few lines |
+| R8 step 1 (closed-gate bricks, march fix); step 2 (wear where it shows) once the owner has seen its sheet | S | Step 2 is 15-18% of every window for a few lines, but it moves every rock fixture |
 
 Gate: the owner has marked a starting retail sheet per world and a starting
 shape sheet; the latency table prints.
@@ -1481,9 +1584,9 @@ Gate: every row of section 2's latency table passes on the reference
 machine at 1440p.
 
 **Track B: the picture.** One world at a time, Green first, each judged on
-the retail bench and by eye. R2 (light and placement as numbers; the two
-light planes) -> R4 (structure under 64 px) -> R3 (structure in ridge-like
-landforms), then the same numbers for the next world.
+the retail bench and by eye. R2 (light and placement as fitted numbers) ->
+R4 (relief kinds) -> R3 (structure in ridge-like landforms), then the same
+for the next world.
 Gate per world: the owner's blind score on held-out sections moves toward
 50%, and the world's modern preset is approved on the shape bench.
 R2's shader changes and R5's split both rewrite `fragmentMain`: land R5
@@ -1615,7 +1718,7 @@ release cycle are removed).
   blind sheets), and by the owner's eye. The windows remain as scenes."
 - **Rule 12**, add: "Export does not depend on view options. A map carries
   its world."
-- **Checks table**, add the four benches of R0 and the stage-map check.
+- **Checks table**, add the benches of R0 and the stage-map check.
 
 ## Appendix A. Evidence index
 
@@ -1627,6 +1730,7 @@ Everything below is outside the repository. Folders under
 | `agent-rd-pipeline/REPORT.md` | The pipeline audit: data model, a stage-by-stage table, the interactive path, aprons, sizes, dead code; file and line throughout |
 | `agent-rd-history/REPORT.md` | What was tried, tables A-M, with a reference for every row |
 | `agent-rd-research/REPORT.md` | Literature and tools, each item tagged opened or search-only |
+| `agent-rd-output/REPORT.md` | The export contract and what the Nanolathe engine could accept beyond it; file and line throughout |
 | `agent-rd-controls/` | `controls.csv` (452 rows), `controls-summary.json`, about 90 screenshots in `shots/`, task logs, the fresh Green control sweep in `world-controls/` |
 | `agent-rd-look/` | `REPORT.md`, `scripts/model.py` (the look model), measurements `m*.json`, held-out sheets in `out/sheets/`, modern and sweep sheets in `out/modern/` |
 | `agent-rd-shared/` | `guides.py` (the four guides and the plain shade); `engine-base/` (today's presets on the same paths, and the comparison sheets) |
@@ -1640,10 +1744,11 @@ Worktrees left in place: `../terraform-wt-rd-voxel` (branch `rd/voxel`, the
 ablation switches and timing tools) and `../terraform-wt-rd-controls`
 (branch `rd/controls`, nothing committed). Neither is merged or pushed.
 
-The sub-agents' reports for the controls audit, the export audit, the three
-shape prototypes and the voxel ablation came back as text and are not on
-disk; their numbers are in sections 3.4, 3.5, 3.7 and 3.8, and their code
-and data are in the folders above.
+Every folder holds a `REPORT.md` (the voxel folder also `REPORT-2.md`, the
+thin-shell and brickless follow-up). The shape and structure reports give
+each model precisely enough to port; the code beside them is the
+reference. `agent-rd-output/REPORT.md` is the export and engine audit
+behind section 3.7 and appendix B.
 
 ## Appendix B. The output format, with references
 
