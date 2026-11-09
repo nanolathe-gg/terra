@@ -77,3 +77,9 @@ export function copyColumn(value) {
 // Whether two columns are the same table, whatever the order of their keys (a map's copy against the world's own; no column is null).
 const canonical = v => Array.isArray(v) ? v.map(canonical) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, canonical(v[k])])) : v;
 export const sameColumn = (a, b) => JSON.stringify(canonical(a ?? null)) === JSON.stringify(canonical(b ?? null));
+
+// Worlds without an authored layer palette start from their own rock, not
+// another biome's colors. The existing slot editors remain the authority.
+export function columnColors(column,rock=[.5,.5,.5]) {
+ return column?.colors || [.82,1.15,.65,1.32,.95].map(gain=>rock.map(v=>Math.round(Math.min(255,Math.max(0,v*255*gain)))));
+}

@@ -3,7 +3,7 @@ import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt
 import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
-import {copyColumn,sameColumn} from './sculpt-column.js';
+import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
 import {ROCK_PRESETS,ROCK_KEYS,copyRockSettings,rockPresetFor} from './sculpt-rock-presets.js';
 import {KNOBS,LOW_GROUND_RGB,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
@@ -1440,7 +1440,7 @@ const hexColor=c => '#'+c.map(v => Math.round(clamp(v,0,1)*255).toString(16).pad
 // world's own choices; null means explicitly off (the texture's own color).
 function mergedColors() { return worldHexColors(config,experiment,activeWorld().colors||{}); }
 function worldColors() { return rendererColors(mergedColors(),columnOverride?.colors); }
-function columnForEdit(){const column=structuredClone(config.column);if(column?.colors){const colors=worldColors();column.colors=column.colors.map((c,i)=>colors['strata'+(i+1)]?.map(v=>v*255)||c);}return column;}
+function columnForEdit(){const column=structuredClone(config.column);if(column){const colors=worldColors();column.colors=Array.from({length:5},(_,i)=>(colors['strata'+(i+1)]||defaultColor('strata'+(i+1))).map(v=>v*255));}return column;}
 function restoreColumn(column){
   columnOverride=column;config.column=column||defaultColumn;columnEditing=false;
   cancelWeather();refined=refinedBase=null;dropGpuWeather();clearRendererWeather();renderer.applyKnobs();renderer.setColors(worldColors());syncWorldControls();markViewChanged();
@@ -1456,7 +1456,7 @@ function defaultColor(key) {
   const flower=/^flower([1-4])$/.exec(key);if(flower)return (config.material?.groundCover?.plants?.flowers?.palette?.[Number(flower[1])-1]?.slice(0,3)||[255,255,255]).map(v=>v/255);
   const m=renderer.means,w=config.water||{},mat=config.material||{};
   const rgb=v => v&&v.map(x => x/255);
-  const strata=(config.column?.colors||[[146,74,58],[188,122,96],[140,124,138],[198,182,158],[166,98,76]]).map(rgb);
+  const strata=columnColors(config.column,renderer.means.rock).map(rgb);
   return {ground:m.ground,slope:m.slope,rock:m.rock,sand:m.rock&&m.rock.map(v => v+(1-v)*.3),beach:rgb(mat.beachRGB),shallow:rgb(w.shallowRGB),deep:rgb(w.deepRGB),
     crystal:(config.material?.crystalRGB||[110,150,225]).map(v => v/255),low:rgb(LOW_GROUND_RGB),sun:[1,1,1],sky:[1,1,1],strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
 }

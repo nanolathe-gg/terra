@@ -7,7 +7,7 @@ test('geological presets are valid editable controls and column beds',()=>{
   assert.deepEqual(copyRockSettings(p.knobs),p.knobs);
   assert.equal(rockPresetFor(p.knobs,copyColumn({sections:p.sections})),key);
   assert.equal(rockPresetFor({...p.knobs,faceJoint:p.knobs.faceJoint+.1},{sections:p.sections}),'');
-  assert.equal(Object.keys(p.knobs).length,ROCK_KEYS.length);
+  assert.ok(Object.keys(p.knobs).every(k=>ROCK_KEYS.includes(k)));
  }
 });
 test('rock recipes reject invalid controls and ignore removed options',()=>{
@@ -39,4 +39,13 @@ test('new rock controls and static preset picker stay connected',async()=>{
  assert.equal(reason('bedDipDir',{rockFace:2,bedDip:0,faceFold:5}),'');
  assert.equal(reason('faceRound',{rockFace:0,faceClast:1,faceMineral:1}),'');
  assert.equal(reason('faceGritSize',{rockFace:0,faceGrit:0,faceMineral:1}),'');
+});
+
+test('layer colors and repetition use the map recipe and existing column palette',async()=>{
+ const {worldControlRequirement:reason}=await import('../sculpt-control-schema.js');
+ for(const key of ['strata','strataContrast','strataGrain','faceBedVary','bedCycleVary','faceBreak'])assert.ok(ROCK_KEYS.includes(key));
+ assert.ok(reason('faceBreak',{rockFace:0}));
+ assert.ok(reason('faceBedVary',{column:0,rockFace:2}));
+ assert.equal(reason('faceBedVary',{column:1,rockFace:0,strata:1}),'');
+ assert.deepEqual(copyRockSettings({strata:.8,strataContrast:.7,strataGrain:.4}),{strata:.8,strataContrast:.7,strataGrain:.4});
 });

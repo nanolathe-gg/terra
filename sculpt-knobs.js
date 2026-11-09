@@ -30,7 +30,7 @@ export const KNOBS = [
     ['crackDark','Floor darkness',0,1,.05,.75]]],
   ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSoftness','Riser share',.05,1,.05,.35],['bandWater','Rings in water color',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
   // The rock column's beds (their colours and hardness) tilt by Bed tilt toward its direction.
-  ['Strata', [['strata','Strength (painted beds)',0,1,.05,0],['strataContrast','Color strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1],
+  ['Strata', [['strata','Layer color coverage (0.5 rock, 1 whole outcrop)',0,1,.05,0],['strataContrast','Color strength',0,1,.05,.6],['strataGrain','Bed grain',0,1,.05,1],
     ['bedDip','Bed tilt (height per px; 2 north: level rows)',-4,4,.05,0],['bedDipDir','Bed tilt toward (deg, 0 east, 90 south)',0,360,5,90]]],
   ['Water', [['coastRamp','Coast ramp (share of the drawn slope kept)',.05,1,.05,1],['beachWidth','Beach width (worlds with beaches)',0,2,.05,.6],['apron','Sand apron round raised rock (px)',0,120,2,0],['shallowDepth','Shallow until depth',0,60,1,24],['deepDepth','Deep from depth',10,100,1,60],['waterSoft','Color depth averaging (px)',0,64,2,32],['crispShore','Crisp waterline (shore to shallow)',0,1,.05,1],['deepEdge','Hard shallow-to-deep step (0 ramp)',0,1,1,0],['bedLit','Lit bed under shallow water (0 noise water)',0,1,.05,0],['bedTint','Bed tint strength',0,1,.05,.85],['bedBright','Tinted bed brightness',.5,1.5,.02,1],['bedContrast','Bed light carried through the tint',0,1.5,.05,1],['bedRelief','Bed lumps (lit relief under shallows)',0,3,.05,0],['shoreEdge','Waterline rim and lip',0,1,.05,0],['bankRock','Rock on low banks',0,1,.05,.25]]],
   ['Palette', [['paletteMix','Mix palette pairs (0 nearest, 1 pairs)',0,1,1,0],['dither','Dither (water)',0,4,.1,2],['landDither','Land dither share',0,1,.05,.25]]],
@@ -46,9 +46,9 @@ export const KNOBS = [
   ['Rock blocks', [['faceBlock','Block offsets and tilts',0,6,.1,3],['faceBlockSize','Joint spacing (px)',4,48,1,11],
     ['faceStretch','Block length / width',.25,4,.05,1],['faceBlockHeight','Block height / layer height',.25,6,.05,1],
     ['faceJointTilt','Joint tilt from vertical (deg)',-65,65,1,0],['faceScaleVary','Block size variation',0,1,.05,0],
-    ['faceRound','Rounded blocks',0,1,.05,0],['faceJoint','Joint depth',0,3,.05,.35],
+    ['faceBreak','Block release',0,1,.05,0],['faceRound','Rounded blocks',0,1,.05,0],['faceJoint','Joint depth',0,3,.05,.35],
     ['faceLean','Joint orientation from north-south (deg)',-45,45,1,28]]],
-  ['Rock layers', [['faceBed','Layer thickness (height)',2,30,.5,5.5],['faceLedge','Hard-layer ledges',0,4,.05,2.2],
+  ['Rock layers', [['bedCycleVary','Variation between repeated beds',0,1,.05,0],['faceBedVary','Layer waviness',0,3,.05,1],['faceBed','Layer thickness (height)',2,30,.5,5.5],['faceLedge','Hard-layer ledges',0,4,.05,2.2],
     ['faceRun','Layer variation length (px)',20,300,5,90],['faceFold','Fold amplitude (height)',0,48,1,0],['faceSpall','Broken layer edges',0,4,.1,0],['faceLamina','Fine layer relief',0,3,.05,0],
     ['faceLaminaSize','Fine layer spacing (height)',2,12,.5,3],['faceLayers','Soil-covered terraces',0,2,.05,0],
     ['faceGrass','Grass on ledges and flat tops',0,1,.05,.8]]],
@@ -111,10 +111,10 @@ export const LOW_GROUND_RGB=[80,52,42];
 // The Colors panel's rows, [key, label].
 export const COLOR_KEYS=[['ground','Ground'],['slope','Slope cover'],['rock','Rock'],['sand','Sand'],['beach','Beach'],['shallow','Shallow water'],['deep','Deep water'],['low','Low ground'],['crystal','Crystal'],['vegetation','Vegetation'],...Array.from({length:4},(_,i)=>['flower'+(i+1),'Flower '+(i+1)]),['sun','Sun color'],['sky','Sky color'],['strata1','Strata 1'],['strata2','Strata 2'],['strata3','Strata 3'],['strata4','Strata 4'],['strata5','Strata 5']];
 // The rows this world shows: Vegetation and a flower's where the world's ground-cover table has them (every world's has; they act once
-// Vegetation cover is above 0), Beach only with a beach layer, the strata only on a
-// world without a rock column whose address turns Strata on, Low ground only while its Tint is above 0.
+// Vegetation cover is above 0), Beach only with a beach layer, Low ground only
+// while its Tint is above 0. Layer colors live in the existing Rock column.
 export const colorRows=(config,settings) => COLOR_KEYS.filter(([key]) => !(key.startsWith('flower')&&!config.material?.groundCover?.plants?.flowers?.palette?.[Number(key.slice(6))-1]) && !(key==='vegetation'&&!config.material?.groundCover?.color)
-  && !(key==='beach'&&!config.layers.includes('beach')) && !(key==='low'&&!(Number(settings.get('lowTint'))>0)) && !(key.startsWith('strata')&&(config.column?.colors||!(Number(settings.get('strata'))>0))));
+  && !(key==='beach'&&!config.layers.includes('beach')) && !(key==='low'&&!(Number(settings.get('lowTint'))>0)) && !key.startsWith('strata'));
 // A world's own base colors after a row is picked (a hex) or cleared (null): a color the server sets is then explicitly off (null, the
 // texture's own color), any other is dropped.
 export function pickWorldColor(config,own,key,hex) {
@@ -143,5 +143,5 @@ export function slopeReplaced({config,renderer,weathering,materialWeathering}) {
 // The column facts read the active column (config.column: the map's own from the Rock column panel, else the world's) and its variant row.
 export function worldPanelValues(facts) {
   const {config,renderer,nodes,colors}=facts,layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks(nodes);
-  return {...own,stonePaint:nodes.some(n=>n.kind==='paint'&&[5,6].includes(n.params?.paintChannel))?1:0,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:columnRows(config.column,config.variant).starts.length?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
+  return {...own,stonePaint:nodes.some(n=>n.kind==='paint'&&[5,6].includes(n.params?.paintChannel))?1:0,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:columnRows(config.column,config.variant).starts.length?1:0,repeatBeds:Math.max(0,...columnRows(config.column,config.variant).starts.map(s=>s[2])),capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
 }

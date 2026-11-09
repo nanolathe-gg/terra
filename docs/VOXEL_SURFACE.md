@@ -185,3 +185,38 @@ Every new structure/mineral amount defaults to zero for the world's existing
 look. New and revised geological presets turn them on. Inactive controls name
 the parent needed, including mineral grain without displacement, folding
 without a net bedding tilt, and embedded fragments without broad blocks.
+
+## Shared beds, layer colors and released blocks
+
+Rock column's existing five material slots supply the colors of the voxel
+beds on every world. Set **Layer color coverage** in Strata: 0.5 colors exposed
+rock, and the range up to 1 extends that coverage onto the rest of the outcrop.
+**Color strength** and **Bed grain** control the resulting finish. A world
+without a layer palette starts with tones of its own rock color. Slot colors
+are edited only in Rock column; these settings travel with the map recipe and
+its existing history.
+
+**Layer waviness** varies the bed surface across the face. **Variation between
+repeated beds** changes the relative thicknesses within each repetition while
+keeping its total length. The existing per-bed thickness, Layer thickness,
+folds and dip feed a shared coordinate used for both voxel hardness and color.
+Fine laminations follow that deformation too. Gameplay heights retain their
+existing shape/Time column sampling.
+
+**Block release** recesses selected broad joint-bounded blocks, weighted by
+bed hardness. The GPU source cache uses those same beds and block identities
+when gathering debris from higher terrain. More released material increases
+the local supply. Bed thickness, hardness and joint spacing influence the
+size of fallen fragments, and their palette is a mixture of the source beds'
+colors. Loose-stone Size and Size sorting remain artistic controls over that
+population. Layer color coverage and Color strength also control how strongly
+the source palette appears in debris and fines.
+
+The source field uses two additional rgba32float textures, for six total:
+96 bytes per 4-art-pixel cell, included in the existing chunk budget. A
+104-pixel apron covers source reach and downhill transport dependencies.
+There is no editor readback or persistent voxel state. Source gathering is a
+bounded approximation, not individually tracked detached stones or conserved
+rock mass. `repro/geology-provenance.mjs` checks color/geometry separation,
+upstream bed colors in lower deposits, control continuity, partition equality
+and unchanged gameplay heights. See `GEOLOGY_PROVENANCE_REVIEW.md` for results.

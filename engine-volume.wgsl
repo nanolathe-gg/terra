@@ -13,72 +13,6 @@ struct VolumeSettings {
 @group(2) @binding(4) var vg:texture_2d<f32>;
 @group(2) @binding(5) var<storage,read> vb:array<vec4i>;
 
-fn voxelHash(p:vec3f)->f32 {
-    let i=vec3i(floor(p));
-    var n=(bitcast<u32>(i.x)*374761393u) ^ (bitcast<u32>(i.y)*668265263u) ^ (bitcast<u32>(i.z)*2246822519u);
-    n=(n^(n>>13u))*1274126177u;return f32(n^(n>>16u))/4294967295.0;
-}
-fn voxelRandom(p:vec3f)->vec3f{return vec3f(voxelHash(p),voxelHash(p+vec3f(71,17,39)),voxelHash(p+vec3f(13,97,7)));}
-fn voxelNoise(p:vec3f)->f32 {
-    let i=floor(p);let f=fract(p);let a=f*f*(3.0-2.0*f);
-    return mix(mix(mix(voxelHash(i),voxelHash(i+vec3f(1,0,0)),a.x),mix(voxelHash(i+vec3f(0,1,0)),voxelHash(i+vec3f(1,1,0)),a.x),a.y),mix(mix(voxelHash(i+vec3f(0,0,1)),voxelHash(i+vec3f(1,0,1)),a.x),mix(voxelHash(i+vec3f(0,1,1)),voxelHash(i+vec3f(1,1,1)),a.x),a.y),a.z);
-}
-// Folding is one coherent deformation shared by bed hardness, laminations,
-// fracture blocks and material. The existing layer length and dip direction
-// set its wavelength and orientation; no separate stack of color stripes.
-fn voxelFold(p:vec3f)->f32 {
-    if(u.faceFold==0.0){return 0.0;}
-    let size=max(20.0,u.faceRun);let a=radians(u.bedDipDir);
-    let phase=dot(p.xy,vec2f(cos(a),sin(a)))/size*6.2831853;
-    let wander=(voxelNoise(vec3f(p.xy/(size*1.6),.7))-.5)*2.4;
-    return sin(phase+wander)*u.faceFold;
-}
-fn voxelRockSpace(p:vec3f)->vec3f {
-    let a=radians(u.faceLean);let x=p.x*cos(a)+p.y*sin(a);let y=-p.x*sin(a)+p.y*cos(a);
-    return vec3f(x,y,p.z+columnOffset(p.xy)+voxelFold(p));
-}
-struct VoxelRock {face:f32,edge:f32,tone:f32}
-fn voxelBlocks(r:vec3f,size:f32)->VoxelRock {
-    let tilted=vec3f(r.x-r.z*tan(radians(u.faceJointTilt)),r.y,r.z);
-    let warp=vec3f(voxelNoise(r/37.0),voxelNoise((r+53.0)/43.0),voxelNoise((r-21.0)/47.0))-0.5;
-    let axes=vec3f(size*u.faceStretch,size,max(2.0,u.faceBed*1.5)*u.faceBlockHeight*mix(1.0,size/max(4.0,u.faceBlockSize),u.faceScaleVary));
-    // Bounded displacement varies spacing without multiplying absolute world
-    // coordinates: the same rock scale remains useful far from the origin.
-    let variation=(voxelNoise(tilted/(size*3.7))-.5)*size*u.faceScaleVary*2.5;
-    let q=(tilted+warp*size*mix(.28,.12,u.faceScaleVary)+vec3f(variation,-variation*.7,variation*.5))/axes;
-    let base=floor(q);var d1=1e8;var d2=1e8;var v1=vec3f(0);var v2=vec3f(0);var nearest=vec3f(0);
-    for(var z=-1;z<=1;z++){for(var y=-1;y<=1;y++){for(var x=-1;x<=1;x++){
-        let c=base+vec3f(f32(x),f32(y),f32(z));let v=c+.12+voxelRandom(c)*.76-q;let d=dot(v,v);
-        if(d<d1){d2=d1;v2=v1;d1=d;v1=v;nearest=c;}else if(d<d2){d2=d;v2=v;}
-    }}}
-    let tilt=voxelRandom(nearest+vec3f(11,31,73))-.5;
-    let plane=dot(v1,tilt)*1.15+(voxelHash(nearest+vec3f(37,5,61))-.5)*.45;
-    let rounded=(.65-sqrt(d1))*1.7+(voxelHash(nearest+vec3f(37,5,61))-.5)*.25;
-    return VoxelRock(mix(plane,rounded,u.faceRound),(d2-d1)/max(2.0*length(v2-v1),.001)*min(axes.x,min(axes.y,axes.z)),voxelHash(nearest)*2.0-1.0);
-}
-// Eight jittered inclusions: round pebbles through angular broken clasts.
-// One field supplies both relief and mineral changes at the same 3D position.
-fn voxelClasts(p:vec3f)->vec2f {
-    if(u.faceClast<=0.0){return vec2f(0);}
-    let q=p/max(3.0,u.faceClastSize);let b=floor(q-.5);var best=0.0;var tone=0.0;
-    for(var z=0;z<=1;z++){for(var y=0;y<=1;y++){for(var x=0;x<=1;x++){
-        let cell=b+vec3f(f32(x),f32(y),f32(z));let random=voxelRandom(cell+vec3f(39,7,91));
-        let v=q-(cell+.5+(random-.5)*.6);let radius=.12+.45*pow(random.z,1.4);
-        let metric=mix(max(abs(v.x),max(abs(v.y),abs(v.z)))*1.25,length(v),u.faceRound)/radius;
-        let cap=1.0-smoothstep(.35,1.1,metric);
-        if(cap>best){best=cap;tone=random.x*2.0-1.0;}
-    }}}
-    return vec2f(best,tone);
-}
-// Unequal, deformed beds use the same hardness for rock shape and wear.
-fn voxelHardness(p:vec3f)->f32 {
-    let r=voxelRockSpace(p);
-    let fold=(voxelNoise(r/vec3f(max(8.0,u.faceRun),max(8.0,u.faceRun),140.0))-.5)*2.2;
-    if(u.columnSectionCount==0){return .55;}
-    // The editor's Rock column supplies the beds, hardness, and section changes.
-    // Layer thickness scales that same column instead of introducing another stack.
-    return columnAt((columnCoord(p.xy,p.z)+voxelFold(p))*5.5/max(2.0,u.faceBed)+fold*u.faceBed*.2).hardness;
-}
 // The existing Surface relief slider and local relief paint scale the entire
 // surface, including displacement and weathering of the volumetric rock.
 fn voxelRelief(p:vec2f,slope:f32)->f32 {
@@ -207,7 +141,7 @@ fn voxelDensity(p:vec3f)->f32 {
     let faces=u.faceBlock*(c.face*.65+broad.face*1.05);
     let mass=course*u.faceMass*2.2;
     // Fine laminations follow the same deformed column as the larger beds.
-    let phase=fract((columnCoord(p.xy,p.z)+voxelFold(p))/u.faceLaminaSize);
+    let phase=fract(voxelColumnCoord(p)/u.faceLaminaSize);
     let lamina=(smoothstep(.02,.2,phase)*(1.0-smoothstep(.72,.98,phase))-.5)*u.faceLamina*2.5;
     let bed=(.55-voxelHardness(p))*u.faceLedge*2.4;
     let pits=(abs(voxelNoise(r/max(2.0,u.faceCreaseSize))-.5)-.25)*u.faceCrease*2.5;
@@ -224,8 +158,9 @@ fn voxelDensity(p:vec3f)->f32 {
     let spall=u.faceSpall*smoothstep(.32,.7,chip)*(1.0-hard*.7)*(1.0+1.8*exp(-c.edge/2.0))*3.0;
     let clasts=voxelClasts(p);
     let inclusion=u.faceClast*(clasts.x-.12)*min(4.0,u.faceClastSize*.22);
+    let release=voxelRelease(broad,hard)*min(24.0,u.faceBlockSize*.8);
     let runoff=u.runoffCut*rockWeatherAt(p.xy).x*(1.25-.75*voxelHardness(p));
-    let structure=(faces+mass+pits+grit-spall+inclusion-u.faceJoint*joint*3.0-runnel-runoff+bed+u.faceExtrude*6.0*(.65+.35*c.tone))*face+soil*(bed*3.0+mass*1.5)+lamina*(face+soil*3.0);
+    let structure=(faces+mass+pits+grit-spall-release+inclusion-u.faceJoint*joint*3.0-runnel-runoff+bed+u.faceExtrude*6.0*(.65+.35*c.tone))*face+soil*(bed*3.0+mass*1.5)+lamina*(face+soil*3.0);
     let offset=32.0*tanh(u.rockFace*.5*voxelRelief(p.xy,slope)*structure/32.0)*heightGate;
     let q=p-n*offset;let moved=voxelAuthored(q.xy);
     return (q.z-moved.x)*min(max(moved.w,.015),n.z);

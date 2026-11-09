@@ -209,6 +209,9 @@ struct Uniforms {
     faceJointTilt: f32,
     faceScaleVary: f32,
     faceFold: f32,
+    faceBedVary: f32,
+    bedCycleVary: f32,
+    faceBreak: f32,
     faceSpall: f32,
     faceClast: f32,
     faceClastSize: f32,
@@ -494,7 +497,7 @@ fn columnSectionAt(c: f32) -> i32 {
 // Section s at coordinate c. A two-bed section's second bed has a share of the cycle (the period stays the section's): where the next
 // section has the same two slots the share runs toward the next one's between their starts, and retail Painted Desert's beds vary from
 // cycle to cycle (measured on the retail map), so a hash of the cycle scales it by .55 to 1.45.
-fn columnBedIn(c: f32, s: i32) -> ColumnBed {
+fn columnBedIn(c: f32, s: i32, variation: f32) -> ColumnBed {
     let sec = u.columnSections[s];
     let first = i32(sec.y);
     let n = i32(sec.z);
@@ -517,12 +520,20 @@ fn columnBedIn(c: f32, s: i32) -> ColumnBed {
         }
         bed.widest = max(share, 1.0 - share);
         bed.widestSlot = u.columnBeds[first + select(0, 1, share > 0.5)].z;
-        second = period * clamp(share * (0.55 + 0.9 * columnCycleHash(cycle + 0.37)), 0.03, 0.97);
+        second = period * clamp(share * (0.55 + 0.9 * columnCycleHash(cycle + 0.37) + (variation-1.0)*(0.9*columnCycleHash(cycle+.37)-.45)), 0.03, 0.97);
+    }
+    // More than two beds vary independently, normalized back to the authored
+    // repeat length. Thickness, order and material slots stay the same table.
+    var variedTotal=period;
+    if(n>2&&variation>0.0){
+        variedTotal=0.0;
+        for(var i=0;i<n;i++){variedTotal+=u.columnBeds[first+i].x*(1.0+variation*(columnCycleHash(cycle*17.0+f32(i)*3.7)-.5)*1.6);}
     }
     var lo = 0.0;
     for (var i = 0; i < n; i++) {
         var t = u.columnBeds[first + i].x;
         if (n == 2) { t = select(period - second, second, i == 1); }
+        if(n>2&&variation>0.0){t*= (1.0+variation*(columnCycleHash(cycle*17.0+f32(i)*3.7)-.5)*1.6)*period/variedTotal;}
         if (r < lo + t || i == n - 1) {
             bed.index = cycle * f32(n) + f32(i);
             bed.hardness = u.columnBeds[first + i].y;
@@ -536,7 +547,7 @@ fn columnBedIn(c: f32, s: i32) -> ColumnBed {
     }
     return bed;
 }
-fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c)); }
+fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), select(0.0,1.0,u.columnSections[columnSectionAt(c)].z==2.0)); }
 #ifndef EROSION
 @group(0) @binding(1) var heightTex: texture_2d<f32>;   // r32float, read with textureLoad
 @group(0) @binding(2) var noiseTex: texture_2d<f32>;
@@ -555,6 +566,7 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c)); }
 // The world fields (height, routes, fields, grid inputs) are
 // clamped and linearly filtered; noise repeats.
 @group(0) @binding(10) var rockWeatherTex: texture_2d<f32>;
+@group(0) @binding(11) var rockSourceTex: texture_2d<f32>;
 @group(0) @binding(7) var linearClamp: sampler;
 @group(0) @binding(8) var linearRepeat: sampler;
 // Painted masks (card C5), grid resolution, signed bytes so unpainted is 0.0.
@@ -818,11 +830,114 @@ fn surfaceGradient(p: vec2f) -> vec2f {
 #ifndef EROSION
 // One field feeds geometry, scatter and PBR. Global coordinates preserve the
 // interpolation order across regional chunks and different voxel budgets.
+fn rockFieldAt(t:texture_2d<f32>,p:vec2f)->vec4f {
+    let q=p/4.0-.5;let i=vec2i(floor(q))-vec2i(round(u.rockWeatherGrid.xy/4.0));let f=fract(q);
+    let last=vec2i(textureDimensions(t))-1;let a=clamp(i,vec2i(0),last);let b=clamp(i+1,vec2i(0),last);
+    return mix(mix(textureLoad(t,a,0),textureLoad(t,vec2i(b.x,a.y),0),f.x),mix(textureLoad(t,vec2i(a.x,b.y),0),textureLoad(t,b,0),f.x),f.y);
+}
 fn rockWeatherAt(p:vec2f)->vec4f {
     if(u.runoff<=0.0&&u.debrisAmount<=0.0){return vec4f(0);}
-    let q=p/4.0-.5;let i=vec2i(floor(q))-vec2i(round(u.rockWeatherGrid.xy/4.0));let f=fract(q);
-    let last=vec2i(textureDimensions(rockWeatherTex))-1;let a=clamp(i,vec2i(0),last);let b=clamp(i+1,vec2i(0),last);
-    return mix(mix(textureLoad(rockWeatherTex,a,0),textureLoad(rockWeatherTex,vec2i(b.x,a.y),0),f.x),mix(textureLoad(rockWeatherTex,vec2i(a.x,b.y),0),textureLoad(rockWeatherTex,b,0),f.x),f.y);
+    return rockFieldAt(rockWeatherTex,p);
 }
-
+fn rockSourceAt(p:vec2f)->vec4f {
+    if(u.debrisAmount<=0.0){return vec4f(0,0,0,1);}
+    return rockFieldAt(rockSourceTex,p);
+}
+fn voxelHash(p:vec3f)->f32 {
+    let i=vec3i(floor(p));
+    var n=(bitcast<u32>(i.x)*374761393u) ^ (bitcast<u32>(i.y)*668265263u) ^ (bitcast<u32>(i.z)*2246822519u);
+    n=(n^(n>>13u))*1274126177u;return f32(n^(n>>16u))/4294967295.0;
+}
+fn voxelRandom(p:vec3f)->vec3f{return vec3f(voxelHash(p),voxelHash(p+vec3f(71,17,39)),voxelHash(p+vec3f(13,97,7)));}
+fn voxelNoise(p:vec3f)->f32 {
+    let i=floor(p);let f=fract(p);let a=f*f*(3.0-2.0*f);
+    return mix(mix(mix(voxelHash(i),voxelHash(i+vec3f(1,0,0)),a.x),mix(voxelHash(i+vec3f(0,1,0)),voxelHash(i+vec3f(1,1,0)),a.x),a.y),mix(mix(voxelHash(i+vec3f(0,0,1)),voxelHash(i+vec3f(1,0,1)),a.x),mix(voxelHash(i+vec3f(0,1,1)),voxelHash(i+vec3f(1,1,1)),a.x),a.y),a.z);
+}
+// Folding is one coherent deformation shared by bed hardness, laminations,
+// fracture blocks and material. The existing layer length and dip direction
+// set its wavelength and orientation; no separate stack of color stripes.
+fn voxelFold(p:vec3f)->f32 {
+    if(u.faceFold==0.0){return 0.0;}
+    let size=max(20.0,u.faceRun);let a=radians(u.bedDipDir);
+    let phase=dot(p.xy,vec2f(cos(a),sin(a)))/size*6.2831853;
+    let wander=(voxelNoise(vec3f(p.xy/(size*1.6),.7))-.5)*2.4;
+    return sin(phase+wander)*u.faceFold;
+}
+fn voxelRockSpace(p:vec3f)->vec3f {
+    let a=radians(u.faceLean);let x=p.x*cos(a)+p.y*sin(a);let y=-p.x*sin(a)+p.y*cos(a);
+    return vec3f(x,y,p.z+columnOffset(p.xy)+voxelFold(p));
+}
+struct VoxelRock {face:f32,edge:f32,tone:f32}
+fn voxelBlocks(r:vec3f,size:f32)->VoxelRock {
+    let tilted=vec3f(r.x-r.z*tan(radians(u.faceJointTilt)),r.y,r.z);
+    let warp=vec3f(voxelNoise(r/37.0),voxelNoise((r+53.0)/43.0),voxelNoise((r-21.0)/47.0))-0.5;
+    let axes=vec3f(size*u.faceStretch,size,max(2.0,u.faceBed*1.5)*u.faceBlockHeight*mix(1.0,size/max(4.0,u.faceBlockSize),u.faceScaleVary));
+    // Bounded displacement varies spacing without multiplying absolute world
+    // coordinates: the same rock scale remains useful far from the origin.
+    let variation=(voxelNoise(tilted/(size*3.7))-.5)*size*u.faceScaleVary*2.5;
+    let q=(tilted+warp*size*mix(.28,.12,u.faceScaleVary)+vec3f(variation,-variation*.7,variation*.5))/axes;
+    let base=floor(q);var d1=1e8;var d2=1e8;var v1=vec3f(0);var v2=vec3f(0);var nearest=vec3f(0);
+    for(var z=-1;z<=1;z++){for(var y=-1;y<=1;y++){for(var x=-1;x<=1;x++){
+        let c=base+vec3f(f32(x),f32(y),f32(z));let v=c+.12+voxelRandom(c)*.76-q;let d=dot(v,v);
+        if(d<d1){d2=d1;v2=v1;d1=d;v1=v;nearest=c;}else if(d<d2){d2=d;v2=v;}
+    }}}
+    let tilt=voxelRandom(nearest+vec3f(11,31,73))-.5;
+    let plane=dot(v1,tilt)*1.15+(voxelHash(nearest+vec3f(37,5,61))-.5)*.45;
+    let rounded=(.65-sqrt(d1))*1.7+(voxelHash(nearest+vec3f(37,5,61))-.5)*.25;
+    return VoxelRock(mix(plane,rounded,u.faceRound),(d2-d1)/max(2.0*length(v2-v1),.001)*min(axes.x,min(axes.y,axes.z)),voxelHash(nearest)*2.0-1.0);
+}
+// Individual blocks retreat along their joints. Bed hardness and the block's
+// own stable identity select broad scars, rather than another noise coating.
+fn voxelRelease(block:VoxelRock,hard:f32)->f32 {
+    let selected=smoothstep(-.35,.65,block.tone);
+    return u.faceBreak*selected*smoothstep(.15,1.7,block.edge)*(.35+.65*(1.0-hard));
+}
+// Eight jittered inclusions: round pebbles through angular broken clasts.
+// One field supplies both relief and mineral changes at the same 3D position.
+fn voxelClasts(p:vec3f)->vec2f {
+    if(u.faceClast<=0.0){return vec2f(0);}
+    let q=p/max(3.0,u.faceClastSize);let b=floor(q-.5);var best=0.0;var tone=0.0;
+    for(var z=0;z<=1;z++){for(var y=0;y<=1;y++){for(var x=0;x<=1;x++){
+        let cell=b+vec3f(f32(x),f32(y),f32(z));let random=voxelRandom(cell+vec3f(39,7,91));
+        let v=q-(cell+.5+(random-.5)*.6);let radius=.12+.45*pow(random.z,1.4);
+        let metric=mix(max(abs(v.x),max(abs(v.y),abs(v.z)))*1.25,length(v),u.faceRound)/radius;
+        let cap=1.0-smoothstep(.35,1.1,metric);
+        if(cap>best){best=cap;tone=random.x*2.0-1.0;}
+    }}}
+    return vec2f(best,tone);
+}
+// Unequal, deformed beds use the same hardness for rock shape and wear.
+fn voxelColumnCoord(p:vec3f)->f32 {
+    let r=voxelRockSpace(p);
+    let drift=(voxelNoise(r/vec3f(max(8.0,u.faceRun),max(8.0,u.faceRun),140.0))-.5)*2.2;
+    return (columnCoord(p.xy,p.z)+voxelFold(p))*(5.5/max(2.0,u.faceBed))+drift*u.faceBed*.2*u.faceBedVary;
+}
+fn voxelBed(p:vec3f)->ColumnBed {
+    let c=voxelColumnCoord(p);
+    return columnBedIn(c,columnSectionAt(c),u.bedCycleVary);
+}
+fn voxelHardness(p:vec3f)->f32 {
+    if(u.columnSectionCount==0){return .55;}
+    return voxelBed(p).hardness;
+}
+// Strata: coloured bands by height on raised ground (painted desert), the colours of the column's beds (slot -> strataColors).
+fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.strataColors[clamp(i, 0, 4)].rgb; }
+// The colour of the column's section s at coordinate c. A bed meets the next one over edge, a share of the cycle: a boundary inside a
+// cycle is softened on both sides, the cycle's top (topFade) inside its top bed. hold (0..1) holds ground that is nearly all one bed
+// (the widest bed's share of the cycle over .88) to that bed's colour: retail's pale caps are one sheet of the cool bed (card G4).
+fn columnColour(c: f32, s: i32, edge: f32, topFade: bool, hold: f32) -> vec3f {
+    let bed = columnBedIn(c, s, u.bedCycleVary);
+    let w = edge * bed.period;
+    let r = bed.through * bed.thick;
+    var rgb = strataSlot(bed.slot);
+    if (bed.j > 0 && r < w) {
+        rgb = mix(strataSlot(u.columnBeds[bed.first + bed.j - 1].z), rgb, smoothstep(-w, w, r));
+    } else if (bed.j < bed.n - 1 && bed.thick - r < w) {
+        rgb = mix(rgb, strataSlot(u.columnBeds[bed.first + bed.j + 1].z), smoothstep(-w, w, r - bed.thick));
+    }
+    if (topFade && bed.j == bed.n - 1 && bed.thick - r < w) {
+        rgb = mix(rgb, strataSlot(u.columnBeds[bed.first].z), smoothstep(bed.thick - w, bed.thick, r));
+    }
+    return mix(rgb, strataSlot(bed.widestSlot), hold * smoothstep(0.88, 0.94, bed.widest));
+}
 #endif

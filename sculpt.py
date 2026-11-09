@@ -208,7 +208,7 @@ KNOB_DEFAULTS.update(rockFace=2, rockFaceFrom=.6, faceRock=.9, faceBed=5.5, face
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, rillDepth=0, rillSpacing=8)
 # Voxel block proportions, laminations and directional scratches; neutral values preserve the existing solid.
 KNOB_DEFAULTS.update(runoff=0, runoffScale=24, runoffConcentration=.65, runoffCut=2, runoffStain=.5, debrisAmount=0, debrisReach=56, debrisDepth=4, stoneSort=.6, stoneRound=0, stoneSlab=.05)
-KNOB_DEFAULTS.update(faceJointTilt=0, faceScaleVary=0, faceFold=0, faceSpall=0, faceClast=0, faceClastSize=12, faceMineral=0)
+KNOB_DEFAULTS.update(bedCycleVary=0, faceBedVary=1, faceBreak=0, faceJointTilt=0, faceScaleVary=0, faceFold=0, faceSpall=0, faceClast=0, faceClastSize=12, faceMineral=0)
 KNOB_DEFAULTS.update(faceStretch=1, faceBlockHeight=1, faceRound=0, faceJoint=0.35, faceExtrude=0, faceLamina=0, faceLaminaSize=3, faceScratchLength=50, faceScratchAngle=0, faceGritSize=1.3)
 # Card P30: Vegetation cover 0 is off (every world has a ground-cover table: GROUND_COVER, DEFAULT_GROUND_COVER); modern Green sets 1.
 KNOB_DEFAULTS.update(vegetationCover=0, plantRelief=1, flowerDensity=1)
@@ -781,7 +781,7 @@ def apply_variant(config, biome, variant):
     out['colors'] = {**config.get('colors', {}), **v.get('colors', {})}
     if v.get('material'):
         out['material'] = {**out.get('material', {}), **v['material']}
-        for key in ('stoneSort', 'stoneRound', 'stoneSlab'):
+        for key in ('stoneSort', 'stoneRound', 'stoneSlab', 'bedCycleVary', 'faceBedVary'):
             if key in v['material'] and key not in v.get('knobs', {}):
                 out['defaults'][key] = str(v['material'][key])
     out.update(copy.deepcopy(v.get('config', {})))
@@ -800,7 +800,7 @@ SOURCES['materials/palette.json'] = HERE / 'materials' / 'palette.json'
 def world_knobs(biome, config):
     """Set the page's knob defaults: KNOB_DEFAULTS, the world's water depths,
     then its WORLD_KNOBS entry."""
-    knobs = {**KNOB_DEFAULTS, **{key: config['material'].get(key, default) for key, default in [('stoneSort', .6), ('stoneRound', 0), ('stoneSlab', .05)]}, 'shallowDepth': config['material'].get('shallowDepth', 2),
+    knobs = {**KNOB_DEFAULTS, **{key: config['material'].get(key, default) for key, default in [('stoneSort', .6), ('stoneRound', 0), ('stoneSlab', .05), ('bedCycleVary', 0), ('faceBedVary', 1)]}, 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
     config['engineDefaults'] = {k: str(v) for k, v in ENGINE_KNOBS.get(biome, {}).items()}

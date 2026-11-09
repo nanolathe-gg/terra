@@ -37,26 +37,6 @@ fn groundBased(c: vec3f) -> vec3f {
 // Low ground: a colour moved to the low colour, its difference from its material's mean kept as grain (as based() moves a texture),
 // so the palette still mixes the grain's hues where a single tone would land on one entry.
 fn lowTinted(c: vec3f, mean: vec3f) -> vec3f { return saturate(c - mean + u.lowColor); }
-// Strata: coloured bands by height on raised ground (painted desert), the colours of the column's beds (slot -> strataColors).
-fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.strataColors[clamp(i, 0, 4)].rgb; }
-// The colour of the column's section s at coordinate c. A bed meets the next one over edge, a share of the cycle: a boundary inside a
-// cycle is softened on both sides, the cycle's top (topFade) inside its top bed. hold (0..1) holds ground that is nearly all one bed
-// (the widest bed's share of the cycle over .88) to that bed's colour: retail's pale caps are one sheet of the cool bed (card G4).
-fn columnColour(c: f32, s: i32, edge: f32, topFade: bool, hold: f32) -> vec3f {
-    let bed = columnBedIn(c, s);
-    let w = edge * bed.period;
-    let r = bed.through * bed.thick;
-    var rgb = strataSlot(bed.slot);
-    if (bed.j > 0 && r < w) {
-        rgb = mix(strataSlot(u.columnBeds[bed.first + bed.j - 1].z), rgb, smoothstep(-w, w, r));
-    } else if (bed.j < bed.n - 1 && bed.thick - r < w) {
-        rgb = mix(rgb, strataSlot(u.columnBeds[bed.first + bed.j + 1].z), smoothstep(-w, w, r - bed.thick));
-    }
-    if (topFade && bed.j == bed.n - 1 && bed.thick - r < w) {
-        rgb = mix(rgb, strataSlot(u.columnBeds[bed.first].z), smoothstep(bed.thick - w, bed.thick, r));
-    }
-    return mix(rgb, strataSlot(bed.widestSlot), hold * smoothstep(0.88, 0.94, bed.widest));
-}
 // Card E8 (Painted Desert): the grey band at the foot of retail's raised ground. Retail's
 // neutral grey (mean (118,115,112)) sits in a thin height window on the first rise of the
 // raised ground (world height 9-12 on a plain of 2-3; ribbons median 9 px wide on gently
@@ -1712,7 +1692,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // share varies per cycle), and B's share ramps toward the next section when both use the same pair. Beds colour all
         // raised ground, level tops included (retail mesa caps take their band's colour); edges are hard (~3 px); bed edges
         // wander ~1-1.5 units at 5-25 px and meander broadly.
-        let hr = columnCoord(p, h)+voxelFold(hit);
+        let hr = voxelColumnCoord(hit);
         let zone = columnSectionAt(hr);
         // Card G4: retail's pale caps are one sheet of the cool bed. The cap pixels (height 56 and up on slopes under .35 per px)
         // are 9.6-12% orange in retail and 22% in ours, hue 64-77 against 42: the beds' fine warp and the spread of a section's
@@ -1735,14 +1715,17 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // The ground's grain survives in the beds as brightness, scaled by
         // Bed grain (retail desert bands are smooth colour).
         let bedColour = saturate(bed * mix(1.0, clamp(lum / meanLum, 0.82, 1.12), u.strataGrain));
-        let onRaised = smoothstep(u.columnSections[0].x, u.columnSections[0].x + 1.5, hr) * (1.0 - route);
-        material = mix(material, bedColour, max(u.strata * u.strataContrast * onRaised, u.strata * painted.x));
+        let onRaised = smoothstep(u.columnSections[0].x, u.columnSections[0].x+1.5, columnCoord(p,h)) * (1.0-route);
+        let bedCoverage=clamp(u.strata*2.0,0.0,1.0)*mix(exposed,1.0,smoothstep(.5,1.0,u.strata));
+        material = mix(material, bedColour, max(bedCoverage * u.strataContrast * onRaised, u.strata * painted.x));
         if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)); }
     }
     // The source's mineral fines bury grass between stones. Coarse fragments
     // retain rock albedo; fine material inherits this world's existing sand.
     let depositCover=clamp(accumulated.y*.9,0.0,1.0);
-    let fineColor=mix(rock,sandWeathered(),accumulated.z*.65);
+    let source=rockSourceAt(p);
+    let sourceColor=mix(rock,source.rgb*mix(1.0,clamp(dot(grain,vec3f(.3333)),.82,1.12),u.strataGrain),clamp(u.strata*2.0,0.0,1.0)*u.strataContrast);
+    let fineColor=mix(sourceColor,mix(sandWeathered(),sourceColor*.9,clamp(u.strata*2.0,0.0,1.0)*u.strataContrast),accumulated.z*.65);
     material=mix(material,fineColor,depositCover);
     exposed=max(exposed,depositCover*(1.0-accumulated.z*.45));
     // Painted masks (card C5), after the world's own beds and before sand,

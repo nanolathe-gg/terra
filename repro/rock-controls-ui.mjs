@@ -38,10 +38,24 @@ try{
   await click('#undo');await ready();assert.deepEqual(await snapshot(),original);
   await click('#redo');await ready();assert.deepEqual(await snapshot(),sand);assert.equal(await capture(),sandArt);report.presetUndo='one undo and redo restore settings, column and pixels';
   await set('knob-faceRound',.6);assert.equal(await ev('document.getElementById("rock-preset").value'),'');await click('#undo');await ready();assert.deepEqual(await snapshot(),sand);report.sliderUndo='one undo restores the slider and named preset';
-  for(const [key,value] of Object.entries({faceJointTilt:37,faceScaleVary:.9,faceFold:16,faceSpall:2.2,faceClast:2,faceMineral:.8,stoneRound:.65,stoneSlab:.6,runoff:1.2,runoffScale:48,runoffConcentration:.4,runoffCut:5,runoffStain:.8,debrisAmount:1.5,debrisReach:92,debrisDepth:8,stoneSort:.2})){
+  for(const [key,value] of Object.entries({bedCycleVary:.9,faceBreak:.8,faceBedVary:2.5,strata:.8,strataContrast:.95,strataGrain:.3,faceJointTilt:37,faceScaleVary:.9,faceFold:16,faceSpall:2.2,faceClast:2,faceMineral:.8,stoneRound:.65,stoneSlab:.6,runoff:1.2,runoffScale:48,runoffConcentration:.4,runoffCut:5,runoffStain:.8,debrisAmount:1.5,debrisReach:92,debrisDepth:8,stoneSort:.2})){
     await set('knob-'+key,value);assert.equal((await snapshot()).rock[key],value);await click('#undo');await ready();assert.deepEqual(await snapshot(),sand);
   }
   report.weatheringUndo='all tested structure, mineral, transport and fragment controls restore in one undo';
+  // Existing Rock column slot colors, bed thickness and material assignment
+  // edit the same recipe as voxel layers; palette edits must undo exactly.
+  await set('knob-strata',.5);await set('knob-strataContrast',.8);
+  const layerSettings=await snapshot(),layerArt=await capture();
+  const columnEdit=async(path,value)=>{await ev(`(()=>{const e=document.querySelector('[data-column-path="'+${JSON.stringify(path)}+'"]');e.value=${JSON.stringify(String(value))};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`);await ready();};
+  await columnEdit('colors.0','#a46c48');assert.notEqual(await capture(),layerArt);await click('#undo');await ready();assert.deepEqual(await snapshot(),layerSettings);assert.equal(await capture(),layerArt);
+  await columnEdit('sections.0.beds.0.0',13);assert.notEqual(await capture(),layerArt);await click('#undo');await ready();assert.deepEqual(await snapshot(),layerSettings);
+  await columnEdit('sections.0.beds.0.2',2);assert.notEqual(await capture(),layerArt);await click('#undo');await ready();assert.deepEqual(await snapshot(),layerSettings);
+  await columnEdit('colors.0','#a46c48');await columnEdit('colors.1','#c4bda8');await columnEdit('colors.2','#74675e');
+  const colored=await snapshot(),coloredArt=await capture(),coloredRecipe=await ev('sculptDebug.sketch()');
+  writeFileSync(join(out,'layered-rock-demo.json'),JSON.stringify(coloredRecipe,null,2));
+  await set('knob-strata',0);await columnEdit('colors.0','#304080');await ev(`sculptDebug.loadSketch(${JSON.stringify(coloredRecipe)});true`);await ready();assert.deepEqual(await snapshot(),colored);assert.equal(await capture(),coloredArt);
+  report.layerPalette='slot color, bed thickness and slot assignment undo exactly; layer coverage and palette survive save/load';
+  await ev(`sculptDebug.loadSketch(${JSON.stringify({...await ev('sculptDebug.sketch()'),rock:sand.rock,column:sand.column})});true`);await ready();
   const saved=await ev('sculptDebug.sketch()');writeFileSync(join(out,'rock-controls-demo.json'),JSON.stringify(saved,null,2));
   await set('rock-preset','granite');const graniteArt=await capture();assert.notEqual(graniteArt,sandArt);
   await ev(`sculptDebug.loadSketch(${JSON.stringify(saved)}); true`);await ready();assert.deepEqual(await snapshot(),sand);assert.equal(await capture(),sandArt);report.recipe='save/load restores identical rock pixels';

@@ -79,7 +79,8 @@ export function worldControlRequirement(key,v){
  if(key==='faceClast')return n('rockFace')>0||n('faceMineral')>0?'':'Raise Rock relief: Depth or Mineral contrast to use embedded fragments.';
  if(key==='faceGritSize')return n('faceGrit')*n('rockFace')>0||n('faceMineral')>0?'':'Raise Grit relief or Mineral contrast to use Grit size.';
  if(key==='faceRound')return n('rockFace')*n('faceBlock')>0||(n('faceClast')>0&&Math.max(n('rockFace'),n('faceMineral'))>0)?'':'Raise Block offsets and tilts with Rock relief: Depth, or enable embedded fragments, to round the rock.';
- if(['faceJointTilt','faceScaleVary','faceSpall'].includes(key))return needs('rockFace','Rock relief: Depth');
+ if(['faceBreak','faceJointTilt','faceScaleVary','faceStretch','faceBlockHeight'].includes(key))return n('rockFace')>0||(n('debrisAmount')>0&&(key==='faceBreak'||n('faceBreak')>0))?'':'Raise Rock relief: Depth or enable cliff debris with Block release.';
+ if(['faceSpall'].includes(key))return needs('rockFace','Rock relief: Depth');
  if(key==='runoffCut')return needs('runoff','Runoff exposure')||needs('rockFace','Rock relief: Depth');
  if(['runoffScale','runoffConcentration','runoffStain'].includes(key))return needs('runoff','Runoff exposure');
  if(['debrisReach','debrisDepth'].includes(key))return needs('debrisAmount','Cliff debris accumulation');
@@ -91,11 +92,13 @@ export function worldControlRequirement(key,v){
   const label={faceLamina:'Fine layer relief',faceScratch:'Scratches and water grooves'}[parent];
   return needs(parent,label);
  }
- if(['faceStretch','faceBlockHeight','faceJoint','faceExtrude','faceLamina'].includes(key))return needs('rockFace','Rock relief: Depth');
+ if(['faceJoint','faceExtrude','faceLamina'].includes(key))return needs('rockFace','Rock relief: Depth');
  if(['faceCreaseSize','faceCrease','faceBlock','faceLedge','faceScratch','faceScratchSize','faceGrit','faceWear','faceShade','faceLayers','faceMass'].includes(key))return n('rockFace')>0?'':'Raise Rock relief: Depth to use this setting.';
- if(['faceBlockSize','faceLean'].includes(key))return n('rockFace')>0||n('faceTone')>0?'':'Raise Rock relief: Depth or Color variation to use this setting.';
+ if(['faceBlockSize','faceLean'].includes(key))return n('rockFace')>0||n('faceTone')>0||(n('debrisAmount')>0&&(key==='faceBlockSize'||n('faceBreak')>0))?'':'Raise Rock relief: Depth or Color variation to use this setting.';
+ if(key==='bedCycleVary'&&n('repeatBeds')<2&&v.repeatBeds!==undefined)return 'Add at least two beds to a Rock column section to vary their repetition.';
+ if(['faceBedVary','bedCycleVary'].includes(key))return n('column')<=0?NO_COLUMN:(Math.max(n('rockFace'),n('strata'),n('faceStrata'),n('faceWet'),n('debrisAmount'))>0?'':'Raise rock relief or layer color coverage to vary the beds.');
  if(key==='faceRun'&&n('faceFold')>0)return '';
- if(['faceBed','faceRun'].includes(key))return n('rockFace')>0||(n('column')>0&&(n('faceStrata')>0||n('faceWet')>0))?'':'Raise Rock relief: Depth, Layer tint, or Wetness to use this setting.';
+ if(['faceBed','faceRun'].includes(key))return n('debrisAmount')>0||n('strata')>0||n('rockFace')>0||(n('column')>0&&(n('faceStrata')>0||n('faceWet')>0))?'':'Raise Rock relief: Depth, Layer tint, or Wetness to use this setting.';
  // Every world has a ground-cover table (sculpt.py DEFAULT_GROUND_COVER): Vegetation cover above 0 turns it on.
  const cover=n('vegetationCover')>0;
  if(['plantRelief','flowerDensity'].includes(key)&&!cover)return 'Raise Vegetation cover to use this setting.';
@@ -108,7 +111,7 @@ export function worldControlRequirement(key,v){
  // Strata, the foot band and the cap color the beds of a rock column: the world's own, or one the map adds (the Rock column panel; worldPanelValues passes the active one).
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return NO_COLUMN;
  // Tilt deforms the voxel rock and its mineral coordinates as well as the column's colored beds.
- if(['bedDip','bedDipDir'].includes(key)&&Math.max(n('rockFace'),n('faceTone'),n('faceStrata'),n('faceWet'))<=0){const r=n('column')<=0?NO_COLUMN:needs('strata','Strength (painted beds) in Strata');if(r)return r;}
+ if(['bedDip','bedDipDir'].includes(key)&&Math.max(n('rockFace'),n('faceTone'),n('faceStrata'),n('faceWet'),n('debrisAmount'))<=0){const r=n('column')<=0?NO_COLUMN:needs('strata','Layer color coverage in Strata');if(r)return r;}
  if(key==='bedDipDir')return n('bedDip')===0&&n('faceFold')<=0?'Set Bed tilt above or below zero, or raise Fold amplitude, to choose its direction.':'';
  if(key==='sandBandSpacing')return needs('sandBanding','Streaks on sand and ramps');
  if(key==='bedDotCell')return needs('bedDots','Bed speckles');
@@ -119,9 +122,9 @@ export function worldControlRequirement(key,v){
  if(['lavaPillow','lavaChip','lavaVeins','lavaCalm'].includes(key))return needs('lavaCrust','Pillow crust strength');
  if(['frostGapReach','frostGapSize','frostGapDepth'].includes(key))return needs('frostGaps','Shore pockets');
  // Colour beds and the bands on them need the strata switch, and the band and cap rows a rock column to bed.
- if(['strataContrast','strataGrain'].includes(key))return needs('strata','Strength (painted beds) in Strata');
+ if(['strataContrast','strataGrain'].includes(key))return needs('strata','Layer color coverage in Strata');
  // Cap color holds level ground to one bed only in a section of two beds where one fills over 88 percent of the cycle (worldPanelValues passes capBed in).
- if(['baseBand','desertCapFlat'].includes(key)){const r=n('column')<=0?NO_COLUMN:needs('strata','Strength (painted beds) in Strata');return r||(key==='desertCapFlat'&&n('capBed')<=0?'The rock column has no cap bed: a section of two beds where one fills over 88 percent of the cycle. Add or edit one in the Rock column panel to use this setting.':'');}
+ if(['baseBand','desertCapFlat'].includes(key)){const r=n('column')<=0?NO_COLUMN:needs('strata','Layer color coverage in Strata');return r||(key==='desertCapFlat'&&n('capBed')<=0?'The rock column has no cap bed: a section of two beds where one fills over 88 percent of the cycle. Add or edit one in the Rock column panel to use this setting.':'');}
  if(['baseBandLow','baseBandHigh','baseBandWander','baseBandGaps'].includes(key))return needs('baseBand','Gray band strength');
  // Shine: a lobe needs its material's gloss, a grain its roughness; the shared rows need some material shining.
  // The slope group's weight is the slope cover scaled by Sampled slope texture (a sandy slope scales it by its own sand instead). With none it
@@ -170,7 +173,7 @@ export function worldControlRequirement(key,v){
 // Primary controls describe a visible feature. Fine tuning remains available
 // explicitly (and through search), without filling the default inspector.
 export const WORLD_PRIMARY_CONTROLS=new Set([
- 'faceJointTilt','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
+ 'faceBreak','faceBedVary','bedCycleVary','faceJointTilt','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
  'runoff','runoffScale','runoffConcentration','runoffCut','runoffStain','debrisAmount','debrisReach','debrisDepth','stoneSort','stoneRound','stoneSlab',
  'vegetationCover','plantRelief','flowerDensity',
  'bedDip','bedDipDir','faceStretch','faceBlockHeight','faceRound','faceJoint','faceExtrude','faceLamina','faceLaminaSize','faceScratchLength','faceScratchAngle','faceGritSize',
