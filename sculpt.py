@@ -246,8 +246,8 @@ WORLD_KNOBS = {
                   # Rock from slope .3 (.6): retail Green's rock share is ~.3 from slope .4 up (measured on retail's heights: .23 .31 .32 .29 at
                   # .4-1.0 against our .16 .19 .22 .22; at .3, .18 .25 .33 .29).
                   rockFaceFrom=.3,
-                  # The layers run on under the grass as soil-covered terraces 1.2 units apart (retail's hills: dense wavy dark lines ~8 px apart
-                  # on slopes .1-.2); they replace the contour bands (banding .3 -> 0).
+                  # The layers run on under the grass as soil-covered steps, with fine low terraces 1.2 units apart (retail's grassed slopes
+                  # carry soft wavy striations, not ink lines); they replace the contour bands (banding .3 -> 0).
                   faceLayers=1,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
@@ -652,7 +652,8 @@ WORLD_VARIANTS = {
                      knobs=dict(banding=0, faceLayers=.2, faceStreak=0, crackSeverity=.45, crackBlocks=.3, crackDark=.75,
                                 # Green dive (owner: cracks too thick, dark lines not thin relief): retail's hill cracks are few, long and thin, with a
                                 # light lip: fewer minor cracks, no hairlines, majors 80 px apart, .8 px wide and fewer, closer to plates than to rills
-                                # (the fall-line rills read as grey streaks), lighter floors, almost no band dashes (banding .35 -> .05).
+                                # (the fall-line rills read as grey streaks), almost no band dashes (banding .35 -> .05); floors at the default .75
+                                # (at .3 the cracks drew as pale squiggles once the rock face took the slopes).
                                 crackMinor=.2, crackHairline=0, crackSpacing=80, crackWidth=.8, crackMajor=.5, crackNetwork=.8,
                                 reliefAmount=.5)),
         # Modern Green (card P24, decision 25): where the realistic look accumulates. It is judged on green-1..3 for
