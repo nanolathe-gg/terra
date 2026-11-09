@@ -81,6 +81,7 @@ step unit node --test "$repo"/repro/*.test.mjs
 step gate gate
 step scenes scenes
 step regional regional
+step voxels node "$repo/repro/voxel.mjs"
 if [ "$tier" != quick ]; then
   step smoke node "$repo/repro/smoke.mjs" --server "$server" --port "$port" --out "$out/smoke" --page8
   step features node "$repo/repro/features.mjs" --server "$server" --port "$port" --out "$out/features"

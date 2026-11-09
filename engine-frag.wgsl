@@ -1,6 +1,7 @@
 // WGSL port of the former sculpt.frag. See sculpt-common.wgsl for naming:
 // uniform uFoo is u.foo; sampler uFoo is fooTex with fooSamp.
 /*COMMON*/
+/*VOLUME*/
 
 // Material textures, as the GLSL texture units held them. A renderer may
 // bind one texture to several of these (an absent slope material reads the
@@ -77,7 +78,7 @@ fn visibility(p: vec2f, h: f32) -> f32 {
     let toward = normalize(u.light.xy);
     let elevation = u.light.z / length(u.light.xy);
     var shadow = 0.0;
-    for (var i = 1; i <= 12; i++) {
+    for (var i = 4; i <= 12; i++) {
         if (u.full == 0 && i > 5) { break; }
         let d = f32(i * i) * 1.4 + 2.0;
         let q = p + toward * d;
@@ -93,44 +94,11 @@ fn occlusion(p: vec2f, h: f32) -> f32 {
     for (var i = 0; i < 8; i++) {
         if (u.full == 0 && i >= 4) { break; }
         let angle = f32(i) * 2.399963;
-        let d = 8.0 + f32(i % 3) * 14.0;
+        let d = 32.0 + f32(i % 3) * 14.0;
         let q = p + vec2f(cos(angle), sin(angle)) * d;
         result += clamp((surfaceHeight(q) - h) / d - 0.12, 0.0, 1.0);
     }
     return 1.0 - result * select(0.09, 0.045, u.full != 0);
-}
-
-// H1 close shadow: a ledge 1-6 px toward the sun shades the ground behind it. The far taps in visibility() start
-// 3.4 px out, so a 1-3 px ledge never reached them. The edge is soft by how far the blocker clears the ray (the
-// penumbra widens with the distance the shadow has travelled). Returns the share of the direct light that stays.
-fn closeVisibility(p: vec2f, h: f32) -> f32 {
-    let toward = normalize(u.light.xy);
-    let elevation = u.light.z / length(u.light.xy);
-    var taps = array<f32, 6>(1.0, 1.5, 2.0, 3.0, 4.0, 6.0);
-    var shadow = 0.0;
-    for (var i = 0; i < 6; i++) {
-        let d = taps[i];
-        let q = p + toward * d;
-        if (q.x < 0.0 || q.y < 0.0 || q.x >= u.size || q.y >= u.size) { continue; }
-        let clear = surfaceHeight(q) - h - d * elevation;
-        let soft = 0.25 + 0.2 * d;
-        shadow = max(shadow, smoothstep(-soft, soft, clear));
-    }
-    return 1.0 - u.closeShadow * shadow;
-}
-
-const CAVITY_RING_WEIGHT = array<f32, 3>(0.5, 0.3, 0.2);
-const CAVITY_CONVEX = 0.15;   // how much a convex edge brightens against how much a concave floor darkens
-// P12 cavity: how far the surface lies below (+) or above (-) its rings at 1, 2 and 4 px, read as a slope. Each ring is the mean of four
-// taps (a cross at 1 and 4 px, a diagonal at 2 px, so the three scales also differ in direction), weighted .5, .3 and .2 and divided by its
-// reach: a pit, a crack floor or the foot of a riser reads concave (up to 1), a lip or the shoulder of a ridge convex (down to
-// -CAVITY_CONVEX). A plane, whatever its tilt, gives 0. Twelve taps (the full 8-tap rings, 24 taps, gave the same look at +12% of the terrain pass).
-fn cavityDepth(p: vec2f, h: f32) -> f32 {
-    let m1 = 0.25 * (surfaceHeight(p + vec2f(1.0, 0.0)) + surfaceHeight(p - vec2f(1.0, 0.0)) + surfaceHeight(p + vec2f(0.0, 1.0)) + surfaceHeight(p - vec2f(0.0, 1.0)));
-    let m2 = 0.25 * (surfaceHeight(p + vec2f(2.0, 2.0)) + surfaceHeight(p - vec2f(2.0, 2.0)) + surfaceHeight(p + vec2f(2.0, -2.0)) + surfaceHeight(p - vec2f(2.0, -2.0)));
-    let m4 = 0.25 * (surfaceHeight(p + vec2f(4.0, 0.0)) + surfaceHeight(p - vec2f(4.0, 0.0)) + surfaceHeight(p + vec2f(0.0, 4.0)) + surfaceHeight(p - vec2f(0.0, 4.0)));
-    let k = CAVITY_RING_WEIGHT[0] * (m1 - h) / 1.2 + CAVITY_RING_WEIGHT[1] * (m2 - h) / 3.4 + CAVITY_RING_WEIGHT[2] * (m4 - h) / 4.8;
-    return smoothstep(0.08, 0.8, k) - CAVITY_CONVEX * smoothstep(0.08, 0.8, -k);
 }
 
 // Pattern mixes (card P9): retail art shows colours the palette lacks as pixel
@@ -720,21 +688,6 @@ fn iceHatch(pixel: vec2f) -> f32 {
     return stroke * step(0.3, id.x) * step(0.35, rs.z) * step(0.45, fract(run));
 }
 
-// Ice blocks and mesas (card G6). Retail's blocks (ice-3, Polar Range) are soft: crests are
-// rounded and faces shade smoothly with no hard creases, so the light reads the height blurred
-// over ~13 px (six samples a side: three offsets across each difference, so a plane's edge
-// becomes a ramp instead of a line). Returns the blurred height's gradient.
-fn iceSoftGradient(p: vec2f) -> vec2f {
-    const R = 6.5;
-    var d = vec2f(0.0);
-    for (var k = -1; k <= 1; k++) {
-        let o = f32(k) * R * 0.6;
-        d.x += baseHeight(p + vec2f(R, o)) - baseHeight(p + vec2f(-R, o));
-        d.y += baseHeight(p + vec2f(o, R)) - baseHeight(p + vec2f(o, -R));
-    }
-    return d / (6.0 * R);
-}
-
 // Smooth fibres down the faces of raised ice (card G6). Retail's ice-3 faces carry no grain: they
 // are one dark slate crossed by fine strokes running down the slope, 1-2 px wide and 10-25 px long,
 // leaning ~20 degrees (the window's structure tensor on the three faces: stroke directions 109-142
@@ -919,9 +872,9 @@ fn gougeWeb(p: vec2f) -> f32 {
 // H23: how much of the sun-facing crack wall's light the rock takes, the same on every world.
 const CRACK_LIT = 0.35;
 
-// Shine and roughness (card E2). Nanolathe look, not a retail claim: a
-// Blinn lobe over a micro-roughened surface normal, per material, added to
-// the lit colour (so it passes the highlight cap) before the palette stage.
+// Per-material dielectric reflection over a micro-roughened surface normal.
+// GGX reflection is combined with the artistic diffuse light in linear RGB,
+// then passes through the highlight cap and TA palette mapping.
 // The camera looks along the projection's null direction (screenY = y - 0.5 h,
 // so the viewer sits south and above: (0, 0.5, 1) normalised); the lobe peaks
 // on a facet tilted about 21 degrees toward the sun's side, not on level
@@ -944,8 +897,11 @@ fn shineNoise(q: vec2f) -> vec2f {
 // height gradient, normal its normal; the weights come from coverage the
 // material code already settled (rock: exposed; slope cover: the face blend
 // and the sampled slope cover; sand and crystal from their baked fields).
+fn surfaceLinear(c:vec3f)->vec3f{return select(c/12.92,pow((max(c,vec3f(0))+.055)/1.055,vec3f(2.4)),c>vec3f(.04045));}
+fn surfaceSRGB(c:vec3f)->vec3f{return select(c*12.92,1.055*pow(max(c,vec3f(0)),vec3f(1.0/2.4))-.055,c>vec3f(.0031308));}
+fn surfaceFresnel(f0:f32,cosine:f32)->f32{return f0+(1.0-f0)*pow(1.0-clamp(cosine,0.0,1.0),5.0);}
 fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, exposed: f32,
-             slopeCover: f32, crystalMask: f32, sunSeen: f32, landform: f32, faceRock: f32) -> vec4f {
+             slopeCover: f32, crystalMask: f32, sunSeen: f32, landform: f32, damp: f32) -> vec4f {
     var sand = smoothstep(0.35, 0.95, bakedFields(p).a);
     if (u.beach != 0) { sand = max(sand, beachSand(p, 0.5)); }   // beach sand is lit as sand
     // Crystal tops only: the risers between columns stay dark and take the
@@ -975,35 +931,30 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     let reach = mix(1.0, landform, u.shineGate);
     rough *= reach;
     gloss *= reach;
-    var micro = g;
-    if (rough > 0.0) {
-        let q = vec2f(dot(pixel, SHINE_ACROSS) / scale, dot(pixel, SHINE_ALONG) / (scale * max(u.shineStretch, 1.0)));
-        micro = g + rough * shineNoise(q);
-    }
-    var grained = normalize(vec3f(-micro, 1.0));
-    // The rock face's relief is its own grain: its gloss follows the lit normal, with no second grain over it.
-    grained = normalize(mix(grained, normal, faceRock));
-    // The grain tilts the facets under the diffuse light too.
-    let litBefore = max(0.0, dot(normal, u.light));
-    let litAfter = max(0.0, dot(grained, u.light));
-    let lit = clamp((u.ambient + 0.95 * litAfter) / (u.ambient + 0.95 * litBefore), 0.5, 1.6);
-    var glint = vec3f(0.0);
-    var dim = 1.0;
-    if (gloss > 0.0) {
-        let halfway = normalize(u.light + SHINE_VIEW);
-        let lobe = pow(max(dot(grained, halfway), 0.0), focus) * smoothstep(0.0, 0.15, dot(grained, u.light));
-        // Seams and crack floors are gaps in shadow, not surface: no glint on black.
-        let top = max(material.r, max(material.g, material.b));
-        let body = smoothstep(0.04, 0.22, top);
-        let tint = mix(material / max(top, 0.05), vec3f(1.0), u.shineWhite);
-        glint = tint * (gloss * lobe * sunSeen * body);
-        // Card E6, shine on near-white ice: adding light to a body already near white only clips, so
-        // the glint has nothing to stand against and the surface reads rough, not shiny. The headroom
-        // takes light off the body wherever the lobe is low and leaves it at the lobe's peak, so a
-        // glint is a bright fleck over a body a little duller than the plain's.
-        if (u.shineHeadroom > 0.0) { dim = 1.0 - u.shineHeadroom * clamp(gloss, 0.0, 1.0) * (1.0 - clamp(lobe, 0.0, 1.0)) * body; }
-    }
-    return vec4f(glint, lit * dim);
+    let q=vec2f(dot(pixel,SHINE_ACROSS)/scale,dot(pixel,SHINE_ALONG)/(scale*max(u.shineStretch,1.0)));
+    let grain=shineNoise(q)*rough;
+    let axis=select(vec3f(0,0,1),vec3f(1,0,0),abs(normal.z)>.9);
+    let tangent=normalize(cross(normal,axis));let bitangent=cross(normal,tangent);
+    let grained=normalize(normal+tangent*grain.x+bitangent*grain.y);
+    let litBefore=max(0.0,dot(normal,u.light));let nl=max(0.0,dot(grained,u.light));
+    let lit=clamp((u.ambient+.95*nl)/(u.ambient+.95*litBefore),.5,1.6);
+    // GGX / correlated Smith / Schlick. Sharpness is the artist's polish
+    // control; micro-roughness adds grain without changing the actual solid.
+    let perceptual=mix(pow(2.0/(focus+2.0),.25),.12,damp*.94);
+    let alpha=max(.015,perceptual*perceptual);let a2=alpha*alpha;
+    let halfway=normalize(u.light+SHINE_VIEW);let nv=max(.001,dot(grained,SHINE_VIEW));let nh=max(0.0,dot(grained,halfway));
+    let denominator=nh*nh*(a2-1.0)+1.0;let distribution=a2/(3.14159265*denominator*denominator);
+    let visibility=.5/max(nl*sqrt(nv*nv*(1.0-a2)+a2)+nv*sqrt(nl*nl*(1.0-a2)+a2),.00001);
+    let f0=mix(.16*gloss*gloss,.0204,damp);
+    let strength=max(clamp(gloss*4.0,0.0,1.0),damp);
+    let fresnel=surfaceFresnel(f0,dot(SHINE_VIEW,halfway))*strength;
+    let top=max(material.r,max(material.g,material.b));let body=smoothstep(.04,.22,top);
+    let tint=surfaceLinear(mix(material/max(top,.05),vec3f(1),u.shineWhite));
+    let reflected=reflect(-SHINE_VIEW,grained);
+    let sky=mix(vec3f(.06,.05,.04),vec3f(.25,.28,.31),smoothstep(-.2,.8,reflected.z))*surfaceLinear(u.skyColor);
+    let glint=(distribution*visibility*fresnel*nl*sunSeen*2.67*surfaceLinear(u.sunColor)+sky*surfaceFresnel(f0,nv)*strength*(1.0-.55*perceptual))*tint*body;
+    let headroom=1.0-u.shineHeadroom*clamp(gloss,0.0,1.0)*(1.0-clamp(distribution*nl,0.0,1.0))*body;
+    return vec4f(glint,lit*headroom*(1.0-fresnel));
 }
 
 // H24: how far the crease at the bank steps breaks into dashes of varying darkness along each line, the same on every world.
@@ -1508,14 +1459,6 @@ fn sandMaterialAt(scatter: vec2f) -> vec3f {
     return mix(weathered, fragment, u.sandGrain);
 }
 
-// The rock face's relief at a screen offset `off` (px) from the pixel: the ground there is the broad face's (hb at the pixel), carried
-// through TA's projection (a screen row is rowStretch ground rows; a column step moves the ground's height by gx and its row by gx / 2).
-fn faceHeightAt(pixel: vec2f, off: vec2f, hb: f32, broad: vec2f, rowStretch: f32, fall: vec2f, steep: f32, bedPx: f32) -> vec2f {
-    let dy = (off.y + 0.5 * broad.x * off.x) / rowStretch;
-    let f = rockFaceAt(pixel + off, hb + broad.x * off.x + broad.y * dy, fall, steep, bedPx);
-    return vec2f(f.relief, f.layer);
-}
-
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // GLSL's gl_FragCoord (origin bottom left; the canvas is u.size high).
@@ -1527,7 +1470,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
 #endif
     // Card tilepool: the interpolated world position is held to 1/64 px. Past 8,192 px (a 16x16 map's far side) f32 rounding moved it
     // by about 1e-3 px against the same ground a pool period nearer the origin, enough to flip palette pixels and make its tiles unique.
-    let p = round(v.world * 64.0) / 64.0;
+    let hit=voxelHit(vec2f(fragCoord.x,u.size-fragCoord.y));
+    let p=round(hit.xy*64.0)/64.0;
     // TA's fixed camera permits a native-pixel material grain. World-XY
     // sampling stretches that grain over projected south-facing slopes.
     // Geometry and broad material decisions still use world coordinates.
@@ -1549,19 +1493,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let scatter = pixel * 1.37 + vec2f(terrainNoise(p * 2.0).r, terrainNoise(p * 2.0 + 9.0).g) * 40.0;
     let scatterDx = dpdx(scatter);
     let scatterDy = dpdy(scatter);
-    let h = surfaceHeight(p);
-    let g = surfaceGradient(p);
+    let h=hit.z;
+    let g=surfaceGradient(p);
     let broad = broadGradient(p);
     // Card G6: raised ice is lit by its blurred height (the gradient g keeps the relief for everything else).
     var iceMesa = 0.0;
-    var gSoft = g;
     if (u.iceSoft > 0.0 || u.iceSnow > 0.0 || u.iceApron > 0.0 || u.iceFall > 0.0) {
         iceMesa = smoothstep(u.base + 1.5, u.base + 8.0, baseHeight(p));
-        gSoft = iceSoftGradient(p);
     }
-    var gLit = g;
-    if (u.iceSoft > 0.0) { gLit = mix(g, gSoft, u.iceSoft * iceMesa); }
-    var normal = normalize(vec3f(-gLit, 1.0));
+    var normal=voxelNormal(hit);
+    let authored=voxelAuthored(p);let gSoft=-authored.yz/max(authored.w,.015);
     let n = terrainNoise(p);
     let sediments = select(vec4f(0.0), materialFieldAt((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid), u.materialReady != 0);
     let fringeVariation = u.ringVariation / 0.75;
@@ -1580,107 +1521,35 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         painted = paintCoverage(p, wideSlope(p), clamp((around - h) / 1.5, -1.0, 1.0));
     }
     let place = landPlace(p, h, g, broad, slope, n, weather, route);
-    // The rock face (rockFaceAt) in the art's own pixels: its relief's slope across a screen pixel, carried back through TA's projection
-    // (screen y = world y - height / 2) to the ground's slope, bends the lit normal; grass holds on its ledges and, in clumps, where the
-    // face is broken enough to give it a footing.
-    // The rock face (rockFaceAt) is relief in the art's own pixels, lit as relief: its slope bends the normal, its own heights cast the
-    // sun's shadows (faceSun) and hide the sky from its creases and hollows (faceOcc). Grass takes hold where the relief gives it a
-    // footing: flat, upward tops, ledges, and strips along the contours that spread from them.
-    var faceGate = 0.0;
-    var faceRock = 0.0;
-    var faceSun = 1.0;
-    var faceOcc = 0.0;
-    var rockFace = RockFace(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-    // The rock face is the one rock: always on; Depth (rockFace) only scales its relief, so at 0 it is the same rock, flat.
-    if (h > u.sea + 1.0) {
-        // A shape set bare (Local vegetation below 0: thin soil) bares rock on gentler slopes too: at -100 its rock starts at half the slope.
-        let bare = clamp(1.0 - place.vegetation, 0.0, 1.0);
-        faceGate = rockFaceGate(slope / (1.0 - 0.5 * bare), painted.x, route);
-        // The layers run on under the grass of gentler slopes as soil-covered terraces (Layers under grass).
-        let layerGate = smoothstep(0.06, 0.25, slope) * u.faceLayers * (1.0 - route);
-        // The face is evaluated wherever it may show: a face, the soil's layers, or rock the placement bares on gentle ground.
-        if (max(max(faceGate, layerGate), place.exposed) > 0.0) {
-            let hb = baseHeight(p);
-            let fall = select(vec2f(0.0, -1.0), broad / max(slope, 1e-5), slope > 1e-4);
-            let rowStretch = max(1.0 - 0.5 * broad.y, 0.2);   // screen rows per ground row at the broad slope
-            let steep = smoothstep(1.3, 2.2, slope);
-            // A bed's span on screen: its thickness over the ground's slope across a screen pixel (the projection's inverse).
-            let dhs = vec2f(broad.x + broad.y * 0.5 * broad.x / rowStretch, broad.y / rowStretch);
-            let bedPx = max(u.faceBed, 0.5) / max(length(dhs), 0.05);
-            rockFace = rockFaceAt(pixel, hb, fall, steep, bedPx);
-            let c0 = vec2f(rockFace.relief, rockFace.layer);
-            let cx = faceHeightAt(pixel, vec2f(1.0, 0.0), hb, broad, rowStretch, fall, steep, bedPx);
-            let cy = faceHeightAt(pixel, vec2f(0.0, 1.0), hb, broad, rowStretch, fall, steep, bedPx);
-            // d(screen)/d(world) = [[1, 0], [-gx/2, 1 - gy/2]]: the relief's slope on the ground is its transpose times the screen slope.
-            let dsFull = vec2f(cx.x - c0.x, cy.x - c0.x) * 2.0;   // the relief's own slope (at the default depth): where grass finds a footing does not move with Depth
-            let dwFull = vec2f(dsFull.x - 0.5 * broad.x * dsFull.y, rowStretch * dsFull.y);
-            // Rock's share of the face rises with the slope to faceRock a slope of 1.3 past rockFaceFrom, times 1 less the stroke's Local
-            // vegetation (+40: 60% of it, +100: none, -70: 1.7 times); painted rock is rock, its edge feathered by the same field.
-            let rise = mix(smoothstep(u.rockFaceFrom, u.rockFaceFrom + 1.3, slope), smoothstep(0.5 * u.rockFaceFrom, 0.5 * u.rockFaceFrom + 0.5, slope), bare);
-            var share = u.faceRock * rise * (2.0 - clamp(place.vegetation, 0.0, 2.0));
-            share = max(clamp(share, 0.0, 1.0), smoothstep(0.15, 0.95, painted.x) * 0.9);
-            // Grass's footing: the relief's flat tops (its own slope small), the beds' ledges, strips along the contours and its recesses;
-            // rock stands out where the relief does.
-            let flatTop = 1.0 - smoothstep(0.25, 1.0, length(dwFull));
-            let stripCells = poolCells(13.0);
-            let strip = smoothstep(0.1, 0.7, faceWaves(poolPos(pixel) * (stripCells / u.pool) + vec2f(5.0, 9.0), fall, stripCells));
-            let footing = u.faceGrass * (0.55 * rockFace.ledge + 0.3 * flatTop + 0.3 * strip) - 0.25 * clamp(rockFace.relief / 3.0, -1.0, 1.0);
-            let field = 0.5 + 0.5 * clamp((poolNoise(pixel, 22.0, 37.0) * 0.6 + poolNoise(pixel, 6.0, 59.0) * 0.4) / 0.6, -1.0, 1.0) * 0.7 + footing - 0.15 * u.faceGrass;
-            faceRock = smoothstep(field - 0.03, field + 0.03, share) * step(1e-4, faceGate);
-            // The micro surface: the rock's relief where rock shows, the soil-covered layers under the grass.
-            let wRock = max(faceRock * faceGate, place.exposed * (1.0 - faceGate));
-            let wSoil = max(layerGate, 0.5 * faceGate) * (1.0 - wRock);
-            let k = u.rockFace;
-            let soilShare = wSoil / max(wSoil + wRock, 1e-4);
-            let s0 = c0.x * wRock + c0.y * wSoil;
-            let ds = vec2f(cx.x * wRock + cx.y * wSoil - s0, cy.x * wRock + cy.y * wSoil - s0) * k;
-            let dw = vec2f(ds.x - 0.5 * broad.x * ds.y, rowStretch * ds.y);
-            let nn = normal.xy / max(normal.z, 0.05);
-            normal = normalize(vec3f(nn - dw, 1.0));
-            // The sun's shadows: march toward the sun over the ground (the ray rises tan(elevation) a ground px, the broad face gd), and
-            // compare the surface there with the ray's height above the face.
-            let lxy = length(u.light.xy);
-            if (u.full != 0 && lxy > 1e-3) {
-                let dirW = u.light.xy / lxy;
-                let gd = dot(broad, dirW);
-                let clearance = u.light.z / lxy - gd;
-                if (clearance > 0.0) {
-                    let o = vec2f(dirW.x, dirW.y - 0.5 * gd);
-                    var blocked = 0.0;
-                    var steps = array<f32, 4>(1.2, 2.6, 4.5, 7.5);
-                    for (var i = 0; i < 4; i++) {
-                        let d = steps[i];
-                        let f = rockFaceAt(pixel + o * d, hb + gd * d, fall, steep, bedPx);
-                        blocked = max(blocked, smoothstep(0.0, 0.8, ((f.relief * wRock + f.layer * wSoil) - s0) * k - clearance * d));
-                    }
-                    // Soil is rounded and grass-covered: its steps cast soft, partial shadows, not the rock's hard black ones.
-                    faceSun = 1.0 - blocked * (1.0 - 0.6 * soilShare);
-                }
-                // The sky: how far the surface round the pixel rises above it (4 taps 2.5 px out).
-                var rim = 0.0;
-                var taps = array<vec2f, 4>(vec2f(2.5, 0.0), vec2f(-2.5, 0.0), vec2f(0.0, 2.5), vec2f(0.0, -2.5));
-                for (var i = 0; i < 4; i++) {
-                    let c = faceHeightAt(pixel, taps[i], hb, broad, rowStretch, fall, steep, bedPx);
-                    rim += max(c.x * wRock + c.y * wSoil - s0, 0.0) * k;
-                }
-                faceOcc = clamp(rim / (4.0 * 2.5) * (1.6 + 4.0 * u.faceShade), 0.0, 0.85 + 0.15 * u.faceShade) * (1.0 - 0.6 * soilShare);
-            }
-        }
-    }
+    let bare=clamp(1.0-place.vegetation,0.0,1.0);
+    let faceGate=rockFaceGate(slope/(1.0-.5*bare),painted.x,route)*smoothstep(u.sea,u.sea+1.0,h);
+    let rain=voxelRain(hit,normal);
+    let footing=u.faceGrass*rain*smoothstep(.6,.95,normal.z);
+    let solidSlope=length(normal.xy)/max(normal.z,.1);
+    let rockSlope=max(slope,solidSlope*.7*smoothstep(.12,.5,slope));
+    let rise=mix(smoothstep(u.rockFaceFrom,u.rockFaceFrom+1.3,rockSlope),smoothstep(.5*u.rockFaceFrom,.5*u.rockFaceFrom+.5,rockSlope),bare);
+    let share=max(clamp(u.faceRock*rise*(2.0-clamp(place.vegetation,0.0,2.0)),0.0,1.0),smoothstep(.15,.95,painted.x)*.9);
+    let patches=voxelNoise(hit/vec3f(13,13,8));
+    // Coverage is patchy soil on rain-exposed ledges, rather than a gray/green
+    // mixture over the whole wall. The threshold follows actual 3D footing.
+    let soilEdge=.32+(patches-.5)*.8+footing*.95;
+    let faceRock=smoothstep(soilEdge-.08,soilEdge+.08,share);
+    let localSun=voxelShadow(hit,normal);let localSky=voxelOcclusion(hit,normal);
+    let faceLight=u.faceShade*faceGate*clamp(u.rockFace*.5,0.0,1.0);
+    let faceSun=mix(1.0,localSun,faceLight);
+    let faceOcc=(1.0-localSky)*faceLight;
+    let hard=voxelHardness(hit);
+    let rockTone=voxelNoise(voxelRockSpace(hit)/max(4.0,u.faceBlockSize))*2.0-1.0;
+    let rockWet=clamp(.15+.5*rain+.3*faceOcc+.2*(1.0-hard),0.0,1.0);
     let flatLight = u.ambient + 0.95 * u.light.z;
     var lighting = (u.ambient + 0.95 * max(0.0, dot(normal, u.light))) / flatLight;
     lighting = min(lighting, u.lightCap);
     let ao = occlusion(p, h);
     let shadow = visibility(p, max(h, u.sea));
-    // H1: ledge shadow and crevices at the scale of a pixel, from the same surface. Full draws only (a drag keeps today's taps).
-    var closeVis = 1.0;
-    var cav = 0.0;
-    if (u.full != 0) {
-        if (u.closeShadow > 0.0) { closeVis = closeVisibility(p, max(h, u.sea)); }
-        if (u.cavity > 0.0) { cav = u.cavity * cavityDepth(p, h); }
-    }
-    // The rock face's creases and hollows see less sky, and its own shadows (Shadow depth) little: deep in a crevice both are blocked.
-    cav = max(cav, max(faceOcc, u.faceShade * (1.0 - faceSun) * faceGate));
+    // Nearby shadows and cavities read the displaced solid. Comparing its
+    // cut faces against the old height surface falsely buried them in shadow.
+    let closeVis=mix(1.0,localSun,u.closeShadow);
+    let cav=clamp(max(voxelCavity(hit,normal)*(u.cavity+2.0*faceLight),faceOcc)+(1.0-localSky)*(.3+faceLight),-.15,.92);
     var shading = lighting * ao * shadow;
     var lightTint = vec3f(1.0);
     // Open lit level ground keeps its brightness under any light colour (the tint is divided by its luma), so a colour changes hue and the
@@ -1783,7 +1652,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // The one rock's colour, wherever rock shows (a face, a bare top, a crown): even (its relief's light makes the pattern), each block a
     // little lighter or darker (Color variation), each layer its own tint (Layer tint), its runnels and open partings wet (Wet streaks).
     let rockFlat = select(u.rockMean, u.rockBase.rgb, u.rockBase.a > 0.5);
-    var rock = rockFlat * (1.0 + u.faceTone * rockFace.tone + u.faceStrata * rockFace.bedTone) * (1.0 - 0.6 * u.faceWet * rockFace.wet);
+    let weights=pow(abs(normal),vec3f(4));let tri=weights/max(dot(weights,vec3f(1)),.001);
+    let mineral=genColor(1,hit.yz)*tri.x+genColor(1,hit.xz+vec2f(173,41))*tri.y+genColor(1,hit.xy+vec2f(53,119))*tri.z;
+    let grain=clamp(mineral/max(u.rockMean,vec3f(.01)),vec3f(.5),vec3f(1.6));
+    var rock=rockFlat*mix(vec3f(1),grain,.3+u.faceTone)* (1.0+u.faceTone*rockTone+u.faceStrata*(hard*2.0-1.0))*(1.0-.6*u.faceWet*rockWet);
     // H3 item 4: one placement function (landPlace); its thresholds are rows of materials/green.json.
     var exposed = place.exposed;
     exposed = mix(exposed, faceRock, faceGate);   // on the rock face the face's share decides
@@ -2095,15 +1967,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), shared by shine and the surface marks.
     let markSeen = 1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope));
     let turned = 1.0 - clamp(shading, 0.0, 1.0);
-    if (u.shineOn != 0) {
-        let sunSeen = markSeen * (1.0 - flatBank) * closeVis;
-        var shine = shineTerm(pixel, p, gLit, normal, material, exposed, slopeShare, crystalMask, sunSeen, landform, faceGate);
+    if (u.shineOn != 0 || u.paintOn != 0) {
+        let sunSeen = markSeen * (1.0 - flatBank) * closeVis * faceSun;
+        let damp=max(u.faceWet*exposed*rockWet,painted.z*.85);
+        var shine = shineTerm(pixel, p, g, normal, material, exposed, slopeShare, crystalMask, sunSeen, landform, damp);
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
         if (u.shineSlopeGate > 0.0) { shine = shineSlopeGated(shine, slope); }
         if (u.iceFall > 0.0) { shine = vec4f(shine.xyz * (1.0 - 0.75 * u.iceFall * iceFace), shine.w); }
         // A glint is the sun mirrored: it takes the sun's colour, not the sky's.
-        color = color * shine.w + shine.xyz * u.sunColor;
+        color = surfaceSRGB(surfaceLinear(color)*shine.w+shine.xyz);
     }
     if (u.layerCrease > 0.0) { color *= 1.0 - u.layerCrease * layerCreaseTerm(p); }
     if (u.pockmark > 0.0 && h > u.sea + 1.0 && landform > 0.0) {

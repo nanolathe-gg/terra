@@ -347,8 +347,6 @@ struct Uniforms {
     chunkFieldsOrigin: vec2f, // integer world pixel at baked texel (0,0)
     chunkFieldsSize: vec2f,
     chunkScreenOrigin: vec2f, // preview screen pixels; export adds floor(base/2)
-    chunkRasterOrigin: vec2f,
-    chunkRasterSize: f32,
     chunkScale: f32,          // World pixels per raster texel.
     chunkFieldScale: f32,     // Relief bake spacing, independent of color sampling.
 #endif
@@ -426,122 +424,8 @@ fn poolNoise(p: vec2f, s: f32, o: f32) -> f32 { let n = poolCells(s); return wra
 // A terrainNoise(p * m) frequency rounded so that the 512-px noise texture repeats with the pool.
 fn poolScale(m: f32) -> f32 { let k = u.pool / 512.0; return max(1.0, round(m * k)) / k; }
 
-// Rock face (any world). TA's camera draws the art in screen pixels, and a face turned to the viewer spreads one world pixel over
-// several screen rows, so the face's detail is drawn where the art is: rockFaceAt takes the screen pixel s (the art's own pixel), the
-// ground's height there without relief (h: the beds follow it, so they lie along the contours) and the broad gradient's direction (fall).
-// steep (0..1) is how cliff-like the face is: a cliff weathers into flutes, a gentler face keeps its ledges.
-// It returns relief (height units, lit by the draw through the projection, appearance only), ledge (0..1: a bed's top, where grass holds),
-// cavity (0..1: crease, joint and under-ledge floors, which lie in shade), tone (-1..1, a chunk's own shade) and layer (the layers' steps
-// and the face's broad bulges alone, rounded as soil softens them: the terraces under grass), bedTone (-1..1, the layer's own tint) and
-// wet (0..1: where water runs and stays, the runnels' floors and the open partings).
-struct RockFace { relief: f32, ledge: f32, cavity: f32, tone: f32, layer: f32, bedTone: f32, wet: f32 }
-// Where the face lies: from slope rockFaceFrom, full 0.4 steeper, and wherever rock is painted; a smooth route keeps none.
-fn rockFaceGate(slope: f32, paintRock: f32, route: f32) -> f32 {
-    return max(smoothstep(u.rockFaceFrom, u.rockFaceFrom + 0.4, slope), smoothstep(0.1, 0.6, paintRock)) * (1.0 - route);
-}
-// Band-limited waves whose crests run across dir (jittered kernels on a lattice of n cells a period, q in cells), -1..1: the
-// relief bake's gullies() without its gradient.
-fn faceWaves(q: vec2f, dir: vec2f, n: f32) -> f32 {
-    let cell = floor(q);
-    let local = fract(q);
-    var sum = 0.0;
-    var weight = 0.0;
-    for (var j = -2; j <= 1; j++) {
-        for (var i = -2; i <= 1; i++) {
-            let o = vec2f(f32(i), f32(j));
-            let c = poolWrap(cell - o, n);
-            let jitter = cellHash(c);
-            let point = local + o - jitter * 0.5;
-            let w = exp(-dot(point, point) * 2.0);
-            let extra = cellHash(c + 91.7);
-            sum += cos(dot(point, dir) * 6.2831853 * (0.6 + 0.9 * extra.x) + extra.y * 6.2831853) * w;
-            weight += w;
-        }
-    }
-    return sum / weight;
-}
-// One bed's block at rx (screen px across the joints): its body (how far it stands out of the face, height units: the bed's hardness,
-// which drifts along the bed over faceRun px, and the block's own offset), the body of the block across the nearer joint, px to that
-// joint and the place across the block (0..1). Each bed has its own joint spacing and offset, so joints stagger from bed to bed.
-// One bed's own body: how far its hardness stands it out of the face (height units), drifting along it over faceRun px.
-fn rockBedBody(k: f32, s: vec2f, steep: f32) -> f32 {
-    let hard = clamp(cellHash(vec2f(k, 17.0)).x + 0.35 * poolNoise(s, max(u.faceRun, 8.0), k * 7.31 + 5.0), 0.0, 1.0);
-    return u.faceLedge * max(u.faceBed, 0.5) * 0.35 * (hard - 0.5) * (1.0 - 0.6 * steep);
-}
-fn rockBlockAt(k: f32, rx: f32, s: vec2f, steep: f32) -> vec4f {
-    let bh = cellHash(vec2f(k, 17.0));
-    let js = max(u.faceBlockSize, 4.0) * mix(0.6, 1.4, bh.y);
-    // Joints wander a few px and break: rx is bent by noise, so a joint is never a ruled line.
-    let jx = (rx + bh.y * 977.0 + poolNoise(s, 9.0, k * 3.1 + 7.0) * 2.5 + poolNoise(s, 3.5, k * 5.7 + 9.0) * 0.8) / js;
-    let jc = floor(jx);
-    let ju = jx - jc;
-    let jl = (cellHash(vec2f(jc, k + 41.0)).x - 0.5) * 0.4;           // this cell's joint, jittered
-    let jr = (cellHash(vec2f(jc + 1.0, k + 41.0)).x - 0.5) * 0.4 + 1.0;
-    var bid = jc; var lo = jl; var hi = jr;
-    if (ju < jl) { bid = jc - 1.0; hi = jl; lo = (cellHash(vec2f(jc - 1.0, k + 41.0)).x - 0.5) * 0.4 - 1.0; }
-    else if (ju > jr) { bid = jc + 1.0; lo = jr; hi = (cellHash(vec2f(jc + 2.0, k + 41.0)).x - 0.5) * 0.4 + 2.0; }
-    let toLo = (ju - lo) * js; let toHi = (hi - ju) * js;
-    let other = select(bid + 1.0, bid - 1.0, toLo < toHi);              // the block across the nearer joint
-    let bedBody = rockBedBody(k, s, steep);
-    let body = bedBody + u.faceBlock * (cellHash(vec2f(bid, k + 67.0)).x - 0.5) * 1.4;
-    var otherBody = bedBody + u.faceBlock * (cellHash(vec2f(other, k + 67.0)).x - 0.5) * 1.4;
-    // About half the joints never opened: the two blocks are one there (no step, no crevice: the distance reads far).
-    let cut = step(0.45, cellHash(vec2f(min(bid, other), k + 53.0)).x);
-    otherBody = mix(body, otherBody, cut);
-    return vec4f(body, otherBody, mix(1e3, min(toLo, toHi), cut), (ju - lo) / max(hi - lo, 0.01));
-}
-// The rock face as weathered blocks. Beds lie along the contours (h); joints cut each bed into blocks, leaning faceLean from the screen's
-// north-south. A block stands out by its bed's hardness and its own offset and is tilted a little; where it meets a lower neighbour its
-// edge rounds down to it (faceWear: wider rounding, open crevices), so a step reads as a lit lip over a shaded face. Weathering pits the
-// blocks (faceCrease at faceCreaseSize) and water carves runnels down the face (faceScratch at faceScratchSize, deeper on cliffs).
-// bedPx: screen px a bed spans here (its thickness over the ground's screen slope).
-fn rockFaceAt(s: vec2f, h: f32, fall: vec2f, steep: f32, bedPx: f32) -> RockFace {
-    var o: RockFace;
-    let sp = poolPos(s);
-    let a = radians(u.faceLean);
-    let r = vec2f(sp.x * cos(a) + sp.y * sin(a), -sp.x * sin(a) + sp.y * cos(a));
-    let bed = max(u.faceBed, 0.5);
-    // The partings wander and are ragged at a few px, so a bed's edge breaks like rock, not a ruled course.
-    let c = h / bed + poolNoise(s, 90.0, 3.0) * 0.6 + poolNoise(s, 31.0, 11.0) * 0.2 + poolNoise(s, 4.0, 17.0) * 0.08;
-    let k = floor(c);
-    let t = c - k;                                  // 0 at the bed's foot, 1 at its top
-    let here = rockBlockAt(k, r.x, s, steep);
-    let across = select(rockBlockAt(k + 1.0, r.x, s, steep), rockBlockAt(k - 1.0, r.x, s, steep), t < 0.5);
-    let tilt = (cellHash(vec2f(floor(r.x / max(u.faceBlockSize, 4.0)), k + 83.0)) - 0.5) * 2.0;
-    let body = here.x + u.faceBlock * (0.6 * tilt.x * (here.w - 0.5) + 0.5 * tilt.y * (t - 0.5));
-    // Rounded edges: toward a lower neighbour the block eases down to its level over wearPx.
-    let wearPx = 0.8 + 3.0 * u.faceWear;
-    let dv = min(t, 1.0 - t) * bedPx;
-    var top = mix(min(body, here.y), body, smoothstep(0.0, wearPx, here.z));
-    top = mix(min(top, across.x), top, smoothstep(0.0, wearPx, dv));
-    // Crevices along the partings: every bed parting, and the joints that have opened.
-    let openJ = mix(0.3, 1.0, step(0.35, cellHash(vec2f(floor((r.x + 0.5) / max(u.faceBlockSize, 4.0)), k + 91.0)).x));
-    let cw = 0.6 + 1.2 * u.faceWear;
-    // A bed parting opens as far as its strength (some partings are hair-thin, some gape) and fades in and out along its run.
-    let parting = cellHash(vec2f(select(k + 1.0, k, t < 0.5), 29.0)).x * smoothstep(-0.3, 0.4, poolNoise(s, 35.0, k * 2.3 + 1.0));
-    let crevice = max((1.0 - smoothstep(0.0, cw, here.z)) * openJ, (1.0 - smoothstep(0.0, cw, dv)) * parting);
-    // Weathered surface: pits at two scales; runnels down the face.
-    let ws = max(u.faceCreaseSize, 3.0);
-    let pits = (abs(poolNoise(s, ws, 113.0)) - 0.5) * 0.7 + (abs(poolNoise(s, ws * 0.45, 127.0)) - 0.5) * 0.4;
-    let gw = max(u.faceScratchSize, 1.5) * (1.0 + 0.6 * steep);
-    let r1 = 1.0 - abs(valueNoise(vec2f(r.x / gw, r.y / (gw * 5.0)) + vec2f(0.0, 13.0)));
-    let runnel = (r1 * r1 - 0.45) * (0.5 + 0.5 * poolNoise(s, 40.0, 61.0));
-    let grit = cellHash(poolPixel(s) + 13.0).x - 0.5;
-    // The face's broad form: bulges and alcoves 30-70 px across (they light and shade as wholes, rock or soil over it).
-    let mass = (poolNoise(s, 70.0, 201.0) * 0.6 + poolNoise(s, 30.0, 203.0) * 0.4) * bed * 0.6 * u.faceMass;
-    o.relief = top - (1.0 + 2.0 * u.faceWear) * crevice + u.faceCrease * pits + u.faceScratch * (1.0 + 1.5 * steep) * runnel + u.faceGrit * grit + mass;
-    // Under soil: the layers' own steps, rounded wider (soil fills the partings and softens the lips), and the broad form.
-    let bedHere = rockBedBody(k, s, steep);
-    let bedAcross = rockBedBody(select(k + 1.0, k - 1.0, t < 0.5), s, steep);
-    o.layer = mix(min(bedHere, bedAcross), bedHere, smoothstep(0.0, 2.0 + 3.0 * wearPx, dv)) + mass;
-    // A ledge: a bed's top where it stands proud of the bed above (a shelf grass can hold).
-    let aboveBody = rockBlockAt(k + 1.0, r.x, s, steep).x;
-    o.ledge = smoothstep(0.65, 0.92, t) * smoothstep(0.2, 1.2, here.x - aboveBody) * smoothstep(0.0, wearPx, here.z);
-    o.cavity = clamp(crevice, 0.0, 1.0);
-    o.tone = tilt.x;
-    o.bedTone = cellHash(vec2f(k, 113.0)).x * 2.0 - 1.0;
-    o.wet = clamp(max(crevice * 0.8, smoothstep(0.75, 0.98, r1) * (0.5 + 0.5 * poolNoise(s, 40.0, 61.0))), 0.0, 1.0);
-    return o;
+fn rockFaceGate(slope:f32,paintRock:f32,route:f32)->f32 {
+    return max(smoothstep(u.rockFaceFrom,u.rockFaceFrom+.4,slope),smoothstep(.1,.6,paintRock))*(1.0-route);
 }
 
 // H2 rock column: the bed coordinate, in height units, at world point p for a
@@ -770,8 +654,6 @@ fn coverAt(slope: f32, broad: vec2f, top: f32, tm: TimeMaps, vegetation: f32) ->
 #ifndef BAKE
 struct VertexOut {
     @builtin(position) position: vec4f,
-    @location(0) world: vec2f,
-    @location(1) height: f32,
 }
 #endif
 

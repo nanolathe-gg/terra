@@ -138,7 +138,6 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(stale?.())throw new DOMException('The view changed under a queued bake.','AbortError');
     const readWeather=exportArt||weatheredView&&!authoredPreview;
     const options=drawOptions?.()??api.drawOptions?.()??{},request={...rect,exportArt,worldSize:config.worldSize??config.size,worldGrid:fit?512:(config.worldGrid??config.grid)};
-    if(fit)options.meshScale=scale;
     // H6b: with the GPU fields on, the chunk's textures are made from the fields' buffers; no CPU read, no upload, no height patch kept.
     const feed=fit?await previewFields.feed():await api.gpuFeedSource?.(signal,() => renderer.requiredRegion(request,options),{weather:readWeather});   // H5b: a paged map prepares the pages under the chunk's lattice
     if(feed)try{

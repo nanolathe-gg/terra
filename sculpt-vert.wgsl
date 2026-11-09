@@ -1,37 +1,6 @@
-// WGSL port of the former sculpt.vert.
 /*COMMON*/
-@vertex
-fn vertexMain(@location(0) aPosition: vec2f) -> VertexOut {
-    let p = round(aPosition * (u.size - 1.0) * 64.0) / 64.0;   // card tilepool: exact for the final mesh's even pixels at any map size
-    let height = surfaceHeight(p);
-    // Orthographic oblique view, with explicit depth ordering at folded faces.
-    let visible = max(u.sea, height);
-    let screenY = p.y - (visible - u.base) * 0.5;
-    // The GLSL depth ran over clip -1..1; WebGPU's clip depth is 0..1, so
-    // map it as GL's depth range does: (z + 1) / 2.
-    let depth = -(p.y + visible * 2.0) / (u.size + 700.0);
-    var o: VertexOut;
-#ifdef CHUNK
-    // Keep the whole-map arithmetic where a world fits the default device
-    // limit. Larger worlds use fixed raster frames, independent of the chunk
-    // and its budget; world/noise positions always remain global.
-    if (u.size <= u.chunkRasterSize) {
-        o.position = vec4f(p.x / u.size * 2.0 - 1.0,
-                           1.0 - screenY / u.size * 2.0,
-                           (depth + 1.0) * 0.5, 1.0);
-    } else {
-        let rasterP = p - u.chunkRasterOrigin;
-        let rasterY = screenY - u.chunkRasterOrigin.y;
-        o.position = vec4f(rasterP.x / u.chunkRasterSize * 2.0 - 1.0,
-                           1.0 - rasterY / u.chunkRasterSize * 2.0,
-                           (depth + 1.0) * 0.5, 1.0);
-    }
-#else
-    o.position = vec4f(p.x / u.size * 2.0 - 1.0,
-                       1.0 - screenY / u.size * 2.0,
-                       (depth + 1.0) * 0.5, 1.0);
-#endif
-    o.world = p;
-    o.height = height;
-    return o;
+// The terrain surface is intersected in the voxel volume for each output pixel.
+@vertex fn vertexMain(@builtin(vertex_index) i:u32)->VertexOut {
+    let p=vec2f(f32((i<<1u)&2u),f32(i&2u));var out:VertexOut;
+    out.position=vec4f(p*2.0-1.0,0,1);return out;
 }

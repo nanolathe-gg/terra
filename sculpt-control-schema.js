@@ -76,7 +76,9 @@ const NO_COLUMN='Add a rock column in the Rock column panel to use this setting.
 export function worldControlRequirement(key,v){
  const n=k=>Number(v[k]??0),needs=(parent,label)=>worldControlRequirement(parent,v)||(n(parent)<=0?`Enable ${label} to use this setting.`:'');   // a parent that is itself idle names its own reason first
  // Rows that shape the rock's relief do nothing while it is flat (Depth 0); amount, placement, grass and colour act at any depth.
- if(['faceCreaseSize','faceCrease','faceBlock','faceBlockSize','faceBed','faceLedge','faceRun','faceScratch','faceScratchSize','faceLean','faceGrit','faceWear','faceShade','faceLayers','faceMass'].includes(key))return n('rockFace')>0?'':'Raise Rock relief: Depth to use this setting.';
+ if(['faceCreaseSize','faceCrease','faceBlock','faceLedge','faceScratch','faceScratchSize','faceGrit','faceWear','faceShade','faceLayers','faceMass'].includes(key))return n('rockFace')>0?'':'Raise Rock relief: Depth to use this setting.';
+ if(['faceBlockSize','faceLean'].includes(key))return n('rockFace')>0||n('faceTone')>0?'':'Raise Rock relief: Depth or Color variation to use this setting.';
+ if(['faceBed','faceRun'].includes(key))return n('rockFace')>0||(n('column')>0&&(n('faceStrata')>0||n('faceWet')>0))?'':'Raise Rock relief: Depth, Layer tint, or Wetness to use this setting.';
  // Every world has a ground-cover table (sculpt.py DEFAULT_GROUND_COVER): Vegetation cover above 0 turns it on.
  const cover=n('vegetationCover')>0;
  if(['plantRelief','flowerDensity'].includes(key)&&!cover)return 'Raise Vegetation cover to use this setting.';
@@ -88,9 +90,8 @@ export function worldControlRequirement(key,v){
  if(key==='lowReach')return n('lowTint')>0||Number(v.lowGrain??1)<1?'':'Raise Tint or lower Grain kept in Low ground to use this setting.';
  // Strata, the foot band and the cap color the beds of a rock column: the world's own, or one the map adds (the Rock column panel; worldPanelValues passes the active one).
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return NO_COLUMN;
- // The tilt moves the rock column's beds; the draw shows them as the strata colours (the hardness the Time pass reads moves only when the pass
- // runs again), so it needs a column and the strata switch.
- if(['bedDip','bedDipDir'].includes(key)){const r=n('column')<=0?NO_COLUMN:needs('strata','Strength (painted beds) in Strata');if(r)return r;}
+ // Tilt deforms the voxel rock and its mineral coordinates as well as the column's colored beds.
+ if(['bedDip','bedDipDir'].includes(key)&&Math.max(n('rockFace'),n('faceTone'),n('faceStrata'),n('faceWet'))<=0){const r=n('column')<=0?NO_COLUMN:needs('strata','Strength (painted beds) in Strata');if(r)return r;}
  if(key==='bedDipDir')return n('bedDip')===0?'Set Bed tilt above or below zero to choose its direction.':'';
  if(key==='sandBandSpacing')return needs('sandBanding','Streaks on sand and ramps');
  if(key==='bedDotCell')return needs('bedDots','Bed speckles');

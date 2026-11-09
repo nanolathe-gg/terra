@@ -15,11 +15,11 @@ export const KNOBS = [
   ['Vegetation & flowers', [['vegetationCover','Vegetation cover (0 off)',0,2,.05,1],['lushness','Lushness',-1,1,.05,0],['erosionRain','Rain (wets channels and hollows, and wears the ground)',0,2,.05,1],['wetSwath','Moisture',0,1,.05,0],['plantRelief','Vegetation relief',0,2,.05,1],['flowerDensity','Flower density',0,4,.05,1]]],
   ['Material coverage', [['hillLight','Slope-cover brightness',.6,1.6,.01,1],['ringFade','Fringe fade length',0,2,.05,0],['faceFill','Fill light on shaded faces',0,.5,.02,0],['rockCrown','Bare rock to the crown',0,1,.05,0],['sandCrown','Painted sand to the crown (sand bars)',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['moss','Moss from ground',0,1,.05,0],['slopeMarks','Dark slope marks',0,1,.05,0],['wrinkles','Joined slope wrinkles',0,1,.05,0]]],
   ['Shine', [['shineStretch','Grain streak length (x its width)',1,8,.25,1],['shineWhite','Highlight whiteness (0 material hue, 1 white)',0,1,.05,.35]]],
-  ['Shine: ground', [['shineGround','Gloss (highlight strength)',0,2,.05,0],['shineGroundSharp','Sharpness (lobe exponent)',2,200,2,24],['shineGroundRough','Roughness (grain slope)',0,2,.05,0],['shineGroundScale','Grain width (px)',1,24,.5,6]]],
-  ['Shine: slope cover', [['shineSlope','Gloss (highlight strength)',0,2,.05,0],['shineSlopeSharp','Sharpness (lobe exponent)',2,200,2,24],['shineSlopeRough','Roughness (grain slope)',0,2,.05,0],['shineSlopeScale','Grain width (px)',1,24,.5,6]]],
-  ['Shine: rock', [['shineRock','Gloss (highlight strength)',0,2,.05,0],['shineRockSharp','Sharpness (lobe exponent)',2,200,2,24],['shineRockRough','Roughness (grain slope)',0,2,.05,0],['shineRockScale','Grain width (px)',1,24,.5,6],['shineOutside','Rock glints kept outside painted rock',0,1,.05,1]]],
-  ['Shine: sand', [['shineSand','Gloss (highlight strength)',0,2,.05,0],['shineSandSharp','Sharpness (lobe exponent)',2,200,2,24],['shineSandRough','Roughness (grain slope)',0,2,.05,0],['shineSandScale','Grain width (px)',1,24,.5,6]]],
-  ['Shine: crystal', [['shineCrystal','Gloss (highlight strength)',0,2,.05,0],['shineCrystalSharp','Sharpness (lobe exponent)',2,200,2,24],['shineCrystalRough','Roughness (grain slope)',0,2,.05,0],['shineCrystalScale','Grain width (px)',1,24,.5,6]]],
+  ['Shine: ground', [['shineGround','Gloss (highlight strength)',0,2,.05,0],['shineGroundSharp','Reflection sharpness (polish)',2,200,2,24],['shineGroundRough','Micro roughness (grain slope)',0,2,.05,0],['shineGroundScale','Grain width (px)',1,24,.5,6]]],
+  ['Shine: slope cover', [['shineSlope','Gloss (highlight strength)',0,2,.05,0],['shineSlopeSharp','Reflection sharpness (polish)',2,200,2,24],['shineSlopeRough','Micro roughness (grain slope)',0,2,.05,0],['shineSlopeScale','Grain width (px)',1,24,.5,6]]],
+  ['Shine: rock', [['shineRock','Gloss (highlight strength)',0,2,.05,0],['shineRockSharp','Reflection sharpness (polish)',2,200,2,24],['shineRockRough','Micro roughness (grain slope)',0,2,.05,0],['shineRockScale','Grain width (px)',1,24,.5,6],['shineOutside','Rock glints kept outside painted rock',0,1,.05,1]]],
+  ['Shine: sand', [['shineSand','Gloss (highlight strength)',0,2,.05,0],['shineSandSharp','Reflection sharpness (polish)',2,200,2,24],['shineSandRough','Micro roughness (grain slope)',0,2,.05,0],['shineSandScale','Grain width (px)',1,24,.5,6]]],
+  ['Shine: crystal', [['shineCrystal','Gloss (highlight strength)',0,2,.05,0],['shineCrystalSharp','Reflection sharpness (polish)',2,200,2,24],['shineCrystalRough','Micro roughness (grain slope)',0,2,.05,0],['shineCrystalScale','Grain width (px)',1,24,.5,6]]],
   ['Loose stone', [['looseSupply','Supply',0,1,.05,0],['looseSize','Size (median, px)',2,24,1,6],['looseKnoll','Knolls (share of stones that are ground rings around a hollow)',0,1,.05,0]]],
   ['Sand', [['sand','Deposit supply',0,2,.05,0],
     ['wind','Ripple direction (degrees)',0,360,5,20],['sandDust','Dusting tint',0,1,.05,.5],['sandGrass','Vegetation through sand',0,1,.05,.6],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
@@ -39,7 +39,7 @@ export const KNOBS = [
   // Card G4: the pale cap kept as one sheet.
   ['Cap color', [['desertCapFlat','Uniform cap color',0,1,.05,0]]],
   // Card E9: rock faces; every default is the earlier look.
-  // The rock face (engine-common.wgsl rockFaceAt): one rock for every face steep enough, relief in the art's own pixels lit by the sun and the sky.
+  // The voxel solid (engine-volume.wgsl): one rock for every face steep enough, relief in the art's own pixels lit by the sun and the sky.
   ['Rock relief', [['rockFace','Depth (0: flat)',0,4,.1,2],['faceRock','Amount: rock\'s share of a steep face (a shape\'s Local vegetation scales it)',0,1,.05,.9],
     ['rockFaceFrom','Starts at slope',.2,2,.05,.6],['faceBed','Layer thickness (height)',2,30,.5,5.5],['faceLedge','Layer hardness: hard layers stand out as ledges',0,4,.05,2.2],
     ['faceRun','Hardness drift along a layer (px)',20,300,5,90],['faceBlock','Blocks: offsets and tilts',0,6,.1,3],['faceBlockSize','Joint spacing (px)',4,48,1,11],
@@ -48,7 +48,7 @@ export const KNOBS = [
     ['faceScratchSize','Runnel spacing (px)',3,20,.5,7],['faceShade','Shadow depth: own shadows and crevices toward black',0,1,.05,.85],['faceGrit','Grit',0,2,.05,0],
     ['faceGrass','Grass on ledges and flat tops',0,1,.05,.8],['faceLayers','Layers under grass (soil-covered terraces)',0,2,.05,0],
     ['faceMass','Broad form: bulges and alcoves',0,3,.05,1],['faceTone','Color variation from block to block',0,.5,.01,.12],['faceStrata','Layer tint: layers lighter and darker',0,.5,.01,0],
-    ['faceWet','Wet streaks: runnels and partings darker',0,1,.05,0]]],
+    ['faceWet','Wetness: darker rock and smoother reflections',0,1,.05,0]]],
   // Water detail: the shallow-to-deep step, the shallow bed and the waterline (cards E11, G1).
   ['Water detail', [['stepSoftPx','Threshold edge softness (px)',1,40,1,1],['shelfWander','Shelf wander (depth units)',0,40,1,0],['bedFlat','Bed lit by its own relief only',0,1,.05,0],['bedDots','Bed speckles',0,1,.02,0],['bedDotCell','Dot spacing (px)',6,40,1,14],['crackedStep','Cracked-bed transition depth',0,60,1,0],['shoalBump','Lit bumps in the bed (slope)',0,6,.1,0],['shoalBumpPx','Bump size (px)',2,16,.5,6],['shoalGrain','Grain through water tint',0,1,.05,0],['shoalRag','Shallow-to-deep notches (px)',0,16,.5,0],['shoalStairs','Hard waterline stairs (px)',0,6,.1,0],['shoalShoreSoft','Waterline blur (px)',0,12,.5,0]]],
   // Contour fringe: lines along the mineral fringe and offset copies of it (cards E11, G3).

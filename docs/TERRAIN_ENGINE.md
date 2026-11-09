@@ -5,6 +5,15 @@ Agreed with the owner on 2026-10-28, and updated on 2026-10-29. It refines
 §6 (the target pipeline). Those sections remain the target. This page says
 what changes now, and in what order.
 
+## Voxel surface integration (2026-11-08)
+
+The owner requested the accepted voxel study be integrated into the editor,
+with Green first. [Voxel terrain in the editor](VOXEL_SURFACE.md) describes
+the shared render path, the existing authoring interface, memory bounds,
+and the distinction between 3D art and TA gameplay heights.
+[Integration review](VOXEL_REVIEW.md) records the measurements and remaining
+visual differences.
+
 ## Decisions (owner, 2026-10-28)
 
 1. **Output.** TA is the only output for now. Later the engine may become a

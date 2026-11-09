@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-workspace.js', 'sculpt-workspace.css', 'sculpt-help.js', 'sculpt-help-examples.js', 'sculpt-control-schema.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-paths.js', 'sculpt-river.js', 'sculpt-renderer.js', 'sculpt-webgpu.js', 'sculpt-vert.wgsl',
-    'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-palette.wgsl', 'engine-weather.wgsl',
+    'sculpt-volume.js', 'engine-volume.wgsl', 'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-palette.wgsl', 'engine-weather.wgsl',
     'engine-erosion.wgsl', 'engine-drainage.wgsl', 'sculpt-drainage.js', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-gates.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-export-worker.js', 'sculpt-features.js', 'sculpt-feature-set.js', 'sculpt-feature-gen.js', 'sculpt-feature-fire.js', 'sculpt-feature-worker.js', 'sculpt-canvas.js', 'sculpt-passability.js', 'sculpt-passability-view.js', 'sculpt-share.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js', 'sculpt-scene.js', 'sculpt-knobs.js',)}
 
 
@@ -200,7 +200,7 @@ KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # H2, H16 (rock column): a world with a `column` block in its table reads each bed's thickness and hardness from it (sections of
 # beds that repeat upward, materials/<world>.json); columnContrast scales how much harder the hard beds are (with erosion 1, their wear).
 # The GPU Time pass uses erosionAge iterations, erosionRain times the base rain, talusAngle the repose of loose debris (degrees).
-# The rock face (engine-common.wgsl rockFaceAt): one model for every rock face of every world, drawn in the art's own pixels. Depth (rockFace) only scales its relief: 0 is the same rock, flat.
+# The voxel rock solid (engine-volume.wgsl): one model for every world. Depth continuously scales its displacement.
 KNOB_DEFAULTS.update(rockFace=2, rockFaceFrom=.6, faceRock=.9, faceBed=5.5, faceLedge=2.2, faceRun=90, faceLean=28, faceScratch=2.5, faceScratchSize=7,
                      faceBlock=3, faceBlockSize=11, faceCrease=2.5, faceCreaseSize=6, faceGrit=0, faceGrass=.8, faceWear=.35, faceShade=.85, faceLayers=0, faceMass=1, faceTone=.12, faceStrata=0, faceWet=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath);
@@ -240,15 +240,11 @@ WORLD_KNOBS = {
                   # scales, not long smooth lines (thin dark lines per
                   # pixel 0.124 against retail's 0.235; bandJag 1 gives 0.158).
                   bandJag=1,
-                  # The rock face (green dive, 2026-11-08): every face steep enough is rock, drawn in screen pixels (rockFaceAt); retail's faces
-                  # are layered, crumpled and scratched rock from black creases to light grey facets, grass in clumps and on the ledges.
-                  rockFace=2,
-                  # Rock from slope .3 (.6): retail Green's rock share is ~.3 from slope .4 up (measured on retail's heights: .23 .31 .32 .29 at
-                  # .4-1.0 against our .16 .19 .22 .22; at .3, .18 .25 .33 .29).
-                  rockFaceFrom=.3,
-                  # The layers run on under the grass as soil-covered steps (retail's grassed slopes carry soft wavy striations, not ink
-                  # lines); they replace the contour bands (banding .3 -> 0).
-                  faceLayers=1,
+                  # Voxel Green: fine blocks and shallow, broken horizontal beds.
+                  # Macro relief remains an authored input; small cliff detail lives in 3D.
+                  rockFace=2, rockFaceFrom=.2, faceBed=2.5, faceBlockSize=7,
+                  faceMass=2.6, faceGrass=.4, faceLayers=1, reliefAmount=.25,
+                  faceScratch=1, faceCrease=1, faceLedge=1.2, faceWear=.15, faceShade=.65, faceGrit=.5,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
                   # in a hard step: colour by depth is flat to ~30 and gone by ~44 in
@@ -264,8 +260,8 @@ WORLD_KNOBS = {
                   # Retail round 1: a fine, partial undulation (3 at 48 px over 40% of the land) gives the plain retail's gentle .08-.15 slopes
                   # (green-1 shape .38 -> .33) without broad light blotches (viewed at 1x).
                   undulation=3, undulationScale=48, undulationCover=.4, plainRelief=0,
-                  # E9 (Green rock faces): the rock glints, mostly on painted rock (shineOutside .3).
-                  shineRock=.15, shineRockSharp=14, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=.3,
+                  # Dry dielectric rock: broad reflections, with the actual solid casting shadows.
+                  shineRock=.35, shineRockSharp=2, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=1,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
                   # "blurry parts"): the step is a true threshold that wanders ~24 depth units over
                   # 140 px; the bed is lit by its own relief (green-3's blur was the shelf's slope

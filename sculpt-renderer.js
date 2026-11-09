@@ -8,6 +8,7 @@ import {columnRows} from './sculpt-column.js';
 import {LOW_GROUND_RGB} from './sculpt-knobs.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
+import {VoxelSurface} from './sculpt-volume.js';
 import {extractGates, gateValues, gateKey} from './sculpt-gates.js';
 
 // Layers of the masks texture array (4 planes each): the plane count divided by 4. Planes 0-17 are in use, 18-24 are unused (see MASK_KEYS in sculpt.js).
@@ -164,13 +165,13 @@ export class TerrainRenderer {
     // A plain unorm canvas stores the shader's values as they are, as the
     // WebGL canvas did (no sRGB encoding); opaque, as WebGL's alpha: false.
     this.context.configure({device, format: this.format, alphaMode: 'opaque',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC});
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST});
 
     // The engine's shaders (engine-frag / engine-bake / engine-common) draw every world.
     // Every world's materials are numbers: the config names its table (config.materialTable).
     const tableUrl = this.config.materialTable;
     this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json'];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch(name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
@@ -181,6 +182,7 @@ export class TerrainRenderer {
     this.paletteColours = JSON.parse(extra[3]).colours;
     this.materialsSource = extra[0];
     this.commonSource = common;
+    this.volumeSource = extra[4];
     const defines = this.chunked ? new Set(['CHUNK']) : new Set();
     this.layout = uniformLayout(preprocess(common, '', defines));
     this.uniformData = new ArrayBuffer(this.layout.size);
@@ -198,7 +200,7 @@ export class TerrainRenderer {
       return module;
     };
     // P6: the draw's and the bake's uniform gates are override bools (sculpt-gates.js); the pipelines are built per set of values, see specialized().
-    const fragGates = extractGates(preprocess(frag, common, defines), this.layout.fields);
+    const fragGates = extractGates(preprocess(frag.replace('/*VOLUME*/',this.volumeSource), common, new Set([...defines,'VOLUME_RENDER'])), this.layout.fields);
     const bakeGates = extractGates(preprocess(bake, common, new Set([...defines, 'BAKE'])), this.layout.fields);
     const [vertModule, fragModule, bakeModule] = await Promise.all([
       compile('sculpt-vert.wgsl', preprocess(vert, common, defines)),
@@ -226,8 +228,6 @@ export class TerrainRenderer {
     this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: [
       texture(0, F), sampler(1, F),
       texture(18, F), texture(19, F, 'float', '2d-array')]});
-    // GL drew with LESS against a cleared depth of 1; the vertex shader maps
-    // GL's clip depth onto WebGPU's 0..1 range.
     // The bake's group 1: the fields texture, and the loose-stone mask lattice (looseMain fills it, the bake reads it).
     const fieldsLayout = device.createBindGroupLayout({label: 'fields out', entries: [
       {binding: 0, visibility: GPUShaderStage.COMPUTE, storageTexture: {access: 'write-only', format: 'rgba16float'}},
@@ -235,7 +235,8 @@ export class TerrainRenderer {
     const bakeLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, fieldsLayout]});
     this.fieldsLayout = fieldsLayout;
     this.bakePipelineLayout = bakeLayout;
-    this.drawPipelineLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, this.materialLayout]});
+    this.voxel = await VoxelSurface.create(this,this.volumeSource,preprocess);
+    this.drawPipelineLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, this.materialLayout,this.voxel.drawLayout]});
     const mipModule = device.createShaderModule({label: 'mip levels', code: MIP_SHADER});
     this.mipPipeline = device.createRenderPipeline({label: 'mip levels', layout: 'auto',
       vertex: {module: mipModule, entryPoint: 'fullScreen'},
@@ -270,7 +271,6 @@ export class TerrainRenderer {
     this.textures.noise = this.noiseTexture();
     this.textures.palette = (await gpu)[1];
     this.generationMs = performance.now() - generation;
-    this.meshes = [this.mesh(192), this.mesh(512)];
     this.worldTextures(this.grid);
     this.device.queue.writeTexture({texture: this.heightTexture}, this.textureHeights(this.height), {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
     this.setRoutes(new Float32Array(this.grid * this.grid));
@@ -529,8 +529,8 @@ export class TerrainRenderer {
       const compute = entryPoint => ({module: bakeModule, entryPoint, constants: pick(bake)});
       this.specBuilding.set(key, Promise.all([
         device.createRenderPipelineAsync({label: 'terrain', layout: this.drawPipelineLayout,
-          vertex: {module: vertModule, entryPoint: 'vertexMain', buffers: [{arrayStride: 8, attributes: [{shaderLocation: 0, offset: 0, format: 'float32x2'}]}]},
-          fragment, primitive: {topology: 'triangle-list', cullMode: 'none'}, depthStencil: {format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less'}}),
+          vertex: {module: vertModule, entryPoint: 'vertexMain'},
+          fragment, primitive: {topology: 'triangle-list', cullMode: 'none'}}),
         device.createComputePipelineAsync({label: 'relief bake', layout: this.bakePipelineLayout, compute: compute('bakeMain')}),
         device.createComputePipelineAsync({label: 'loose mask', layout: this.bakePipelineLayout, compute: compute('looseMain')})]).then(([draw, bake, loose]) => {
         if (this.specCache.size >= 24) this.specCache.delete(this.specCache.keys().next().value);
@@ -544,7 +544,7 @@ export class TerrainRenderer {
   async withPipelines(work) {
     for (let attempt = 0; ; attempt++) {
       this.specUsed = [];
-      try { return work(); }
+      try { return await work(); }
       catch (error) {
         if (!(error instanceof SpecializationMiss) || attempt >= 4) throw error;
         await this.specialize(error.state);
@@ -556,27 +556,6 @@ export class TerrainRenderer {
     if (!this.uniformsDirty) return;
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
     this.uniformsDirty = false;
-  }
-
-  mesh(resolution) {
-    const points = new Float32Array((resolution + 1) ** 2 * 2);
-    let k = 0;
-    for (let y = 0; y <= resolution; y++) for (let x = 0; x <= resolution; x++) {
-      points[k++] = x / resolution;
-      points[k++] = y / resolution;
-    }
-    const index = new Uint32Array(resolution * resolution * 6);
-    k = 0;
-    for (let y = 0; y < resolution; y++) for (let x = 0; x < resolution; x++) {
-      const a = y * (resolution + 1) + x, b = a + resolution + 1;
-      index.set([a, b, a + 1, a + 1, b, b + 1], k); k += 6;
-    }
-    const buffer = (data, usage) => {
-      const b = this.device.createBuffer({size: data.byteLength, usage: usage | GPUBufferUsage.COPY_DST});
-      this.device.queue.writeBuffer(b, 0, data);
-      return b;
-    };
-    return {vertices: buffer(points, GPUBufferUsage.VERTEX), indices: buffer(index, GPUBufferUsage.INDEX), count: index.length};
   }
 
   // Materials were authored at sea 0. Give every shader that same datum while
@@ -820,7 +799,7 @@ export class TerrainRenderer {
     };
   }
 
-  draw({quality = 'preview', clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
+  async draw({quality = 'preview', clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
     const start = performance.now(), device = this.device;
     const full = quality === 'full';
     this.i('uFull', full);
@@ -870,35 +849,28 @@ export class TerrainRenderer {
       if (this.fieldsDirty || (full && this.bakedQuality !== 'full')) this.bakeFields(full ? 'full' : 'preview', encoder);
       // Looked up after the bake, which sets some of the gates' uniforms.
       drawPipeline = this.drawPipeline;
+      this.specCheck();
     } catch (error) { [this.fieldsDirty, this.bakedQuality] = baked; throw error; }
-    if (this.depthTexture?.width !== this.canvas.width || this.depthTexture?.height !== this.canvas.height) {
-      this.depthTexture?.destroy();
-      this.depthTexture = device.createTexture({label: 'depth', size: [this.canvas.width, this.canvas.height], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT});
-      this.depthView = this.depthTexture.createView();
+    this.flushUniforms();device.queue.submit([encoder.finish()]);
+    if(!this.voxelColor||this.voxelColor.width!==this.canvas.width||this.voxelColor.height!==this.canvas.height){
+      if(this.voxelColor){if(this.release)this.release(this.voxelColor);else this.voxelColor.destroy();}
+      this.voxelColor=device.createTexture({label:'voxel terrain color',size:[this.canvas.width,this.canvas.height],format:this.format,usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
+      this.track?.(this.voxelColor,'voxel terrain color',this.canvas.width*this.canvas.height*4,'working');
     }
-    // Rows above the drawn surface (raised ground is drawn north) take the
-    // world's ground colour rather than a fixed green.
-    const clear = this.means.ground || [0.19, 0.28, 0.14];
-    const timer = this.timer();
-    const pass = encoder.beginRenderPass({label: 'terrain',
-      colorAttachments: [{view: this.context.getCurrentTexture().createView(), clearValue: {r: clear[0], g: clear[1], b: clear[2], a: 1}, loadOp: 'clear', storeOp: 'store'}],
-      depthStencilAttachment: {view: this.depthView, depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'discard'},
-      timestampWrites: timer?.timestampWrites});
-    pass.setPipeline(drawPipeline);
-    if (this.chunkViewport) pass.setViewport(...this.chunkViewport, 0, 1);
-    pass.setBindGroup(0, this.commonBindGroup('draw'));
-    pass.setBindGroup(1, this.materialBindGroup());
-    const mesh = this.meshes[full ? 1 : 0];
-    pass.setVertexBuffer(0, mesh.vertices);
-    pass.setIndexBuffer(mesh.indices, 'uint32');
-    pass.drawIndexed(mesh.count);
-    pass.end();
-    timer?.encode(encoder);
-    try { this.specCheck(); } catch (error) { timer?.release(); [this.fieldsDirty, this.bakedQuality] = baked; throw error; }
-    this.flushUniforms();
-    device.queue.submit([encoder.finish()]);
-    this.gpuResult = timer?.result().then(ms => { if (ms !== null) this.lastGPU = ms; return ms; });
-    return {milliseconds: performance.now() - start, gpuMilliseconds: this.lastGPU};
+    const clear=this.means.ground||[.19,.28,.14],timers=[];
+    await this.voxel.render((commands,volume,rect,first)=>{
+      const timer=this.timer();if(timer)timers.push(timer);
+      const pass=commands.beginRenderPass({label:'voxel terrain',colorAttachments:[{view:this.voxelColor.createView(),clearValue:{r:clear[0],g:clear[1],b:clear[2],a:1},loadOp:first?'clear':'load',storeOp:'store'}],
+        timestampWrites:timer?.timestampWrites});
+      pass.setPipeline(drawPipeline);pass.setScissorRect(...rect.map(Math.round));
+      pass.setBindGroup(0,this.commonBindGroup('draw'));pass.setBindGroup(1,this.materialBindGroup());pass.setBindGroup(2,volume);pass.draw(3);pass.end();timer?.encode(commands);
+    });
+    // Keep intermediate pieces in a persistent texture: a canvas presentation
+    // image expires at the next browser frame while allocation readback yields.
+    const present=device.createCommandEncoder({label:'present voxel terrain'});
+    present.copyTextureToTexture({texture:this.voxelColor},{texture:this.context.getCurrentTexture()},[this.canvas.width,this.canvas.height]);device.queue.submit([present.finish()]);
+    this.gpuResult=Promise.all(timers.map(t=>t.result())).then(values=>{const ms=values.reduce((a,b)=>a+(b??0),0);this.lastGPU=ms;return ms;});
+    return {milliseconds:performance.now()-start,gpuMilliseconds:this.lastGPU};
   }
 
   // Surface knobs read from the variant; callable again after a change.
@@ -922,7 +894,7 @@ export class TerrainRenderer {
     });
     // With no slope cover the slope group has no share, so its gloss does not wake the pass (worldControlRequirement says the same).
     const slopeShare = (!groundCoverOn(this.config.material?.groundCover, variant) && Number(variant.get('slopeTexture') ?? 0.3) > 0) || Boolean(this.config.material?.slopeSand);
-    this.i('uShineOn', shine.some((m, i) => (i !== 1 || slopeShare) && (m[0] > 0 || m[2] > 0)));
+    this.i('uShineOn', Number(variant.get('faceWet')??0)>0 || shine.some((m, i) => (i !== 1 || slopeShare) && (m[0] > 0 || m[2] > 0)));
     this.f('uShineStretch', variant.has('shineStretch') ? Number(variant.get('shineStretch')) : 1);
     this.f('uShineWhite', variant.has('shineWhite') ? Number(variant.get('shineWhite')) : 0.35);
     this.set('uShine', shine);
@@ -1105,8 +1077,9 @@ export class TerrainRenderer {
     const ox = Math.floor((x0 - margin) / 4), oy = Math.floor((y0 - margin) / 4);
     const nx = Math.ceil((w + 2 * margin) / 4) + 2, ny = Math.ceil((h + 2 * margin) / 4) + 2;
     if (nx * ny * 32 > this.looseBuffer.size) {
-      this.looseBuffer.destroy();
+      if(this.release)this.release(this.looseBuffer);else this.looseBuffer.destroy();
       this.looseBuffer = this.device.createBuffer({label: 'loose mask', size: nx * ny * 32, usage: GPUBufferUsage.STORAGE});
+      this.track?.(this.looseBuffer,'loose mask',this.looseBuffer.size,'loose');
       this.fieldsOut = this.makeFieldsOut();
     }
     this.v('uLooseGrid', [ox, oy, nx, ny]);

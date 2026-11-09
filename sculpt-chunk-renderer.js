@@ -19,11 +19,11 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     catch(error) { self.dispose(); throw error; }
   }
   constructor(canvas,config) {
-    // Never let the whole-map initializer allocate a world-sized field or mesh.
+    // Never let the whole-map initializer allocate a world-sized field.
     // All material and uniform setup still follows the existing renderer.
     canvas.width=1;canvas.height=1;
     super(canvas,{...config,size:1,grid:1});
-    this.sourceConfig=config;this.chunked=true;this.resources=new Map();this.meshCache=new Map();this.meshHits=0;
+    this.sourceConfig=config;this.chunked=true;this.resources=new Map();
     this.budgetBytes=config.gpuBudgetBytes??(config.gpuBudgetMB??512)*MB;this.reservedBytes=config.gpuReservedBytes??0;
     this.peakBytes=0;this.peakBudgetedBytes=0;this.peakCPUBytes=0;this.evictions=0;
     this._busy=false;this.disposed=false;this.outputBytes=0;this.cpuWorkingBytes=0;
@@ -34,15 +34,12 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     for(const [key,bytes] of [['heightTexture',4],['routeTexture',4],['gridTexture',8],['maskTexture',this.maskLayers*4],['fieldsTexture',8]])
       this.track(this[key],key,bytes,'working');
     this.track(this.uniformBuffer,'uniforms',this.layout.size,'shared');
+    this.track(this.looseBuffer,'loose mask',this.looseBuffer.size,'loose');
     this.height=null;
     this.fixedBytes=[...this.resources.values()].filter(r=>r.kind==='materials'||r.kind==='shared').reduce((n,r)=>n+r.bytes,0);
     this.limit=this.device.limits.maxTextureDimension2D;
     this.setColors();this.recommendedChunkSize=this.chunkSize();
   }
-  // The initializer asks for two whole-world meshes; defer both until a region
-  // supplies its bounds. A chunk always uses the same global lattice, even if
-  // a lower memory budget changes the output chunk size.
-  mesh(resolution) { return {resolution}; }
   timer() { return null; }
   track(resource,label,bytes,kind) {
     if(resource)this.resources.set(resource,{label,bytes,kind});
@@ -60,12 +57,12 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   stats() {
     const byKind={};for(const r of this.resources.values())byKind[r.kind]=(byKind[r.kind]??0)+r.bytes;
     return {residentBytes:this.residentBytes,peakBytes:this.peakBytes,budgetBytes:this.budgetBytes,outputBytes:this.outputBytes,
-      retainedBytes:this.fixedBytes,workingBytes:(byKind.working??0)+(byKind.mesh??0)+this.outputBytes,
+      retainedBytes:this.fixedBytes,workingBytes:(byKind.working??0)+(byKind.loose??0)+this.outputBytes,
       reservedBytes:this.reservedBytes,budgetedBytes:this.residentBytes+this.reservedBytes,peakBudgetedBytes:this.peakBudgetedBytes,
       cpuRetainedBytes:this.cpuRetainedBytes,cpuWorkingBytes:this.cpuWorkingBytes,cpuUploadBytes:this.cpuUploadBytes??0,cpuPeakBytes:this.peakCPUBytes,
       textureBytes:this.outputBytes+[...this.resources].filter(([r])=>'format' in r).reduce((n,[,v])=>n+v.bytes,0),
       bufferBytes:[...this.resources].filter(([r])=>!('format' in r)).reduce((n,[,v])=>n+v.bytes,0),
-      resources:this.resources.size,meshCacheEntries:this.meshCache.size,meshHits:this.meshHits,byKind,busy:this.busy,evictions:this.evictions,recommendedChunkSize:this.recommendedChunkSize,
+      resources:this.resources.size,byKind,voxel:this.voxel?.stats,busy:this.busy,evictions:this.evictions,recommendedChunkSize:this.recommendedChunkSize,
       limits:{maxTextureDimension2D:this.device?.limits.maxTextureDimension2D,maxBufferSize:this.device?.limits.maxBufferSize,
         maxSampledTexturesPerShaderStage:this.device?.limits.maxSampledTexturesPerShaderStage,maxTextureArrayLayers:this.device?.limits.maxTextureArrayLayers},
       maskPlaneCount:this.maskPlaneCount,maskLayers:this.maskLayers,uploadBytes:this.uploadBytes??0};
@@ -82,7 +79,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   reaches(quality='full',heightBounds=this.config.heightBounds??[-90,300]) {
     const n=(k,f)=>this.number(k,f),full=quality==='full';
     // H1: the close shadow march (6 px) and the cavity rings (4 px) plus the gradient's 1.4 sit inside the far taps' reach.
-    const shadow=(full?12:5)**2*1.4+2,draw=Math.max(shadow,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?4+1.4:0,n('crystalShallow',0)>0?48:0);   // H20: the shallow mosaic's fringe taps the crystal field 48 px out
+    const shadow=(full?12:5)**2*1.4+2,draw=Math.max(shadow,128,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?4+1.4:0,n('crystalShallow',0)>0?48:0);   // H20: the shallow mosaic's fringe taps the crystal field 48 px out
     // P16: the largest class drawn has radius min(16, 3.3 x the median); a stone reaches 1.6 radii from its candidate (1.41 of a class radius at most) and a larger stone that suppresses it a little further, and the mask reads 14 px up the slope plus its gradient (5).
     const stones=3.6*Math.min(16,3.3*n('looseSize',6))+24;
     const beach=Math.max(this.config.layers.includes('beach')?(this.config.material?.beachWidth??120)*n('beachWidth',.6):0,n('apron',0))*1.35*1.15;
@@ -110,15 +107,10 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     if(![x,y,width,height].every(Number.isInteger)||width<1||height<1)throw new Error('nanolathe: chunk bounds must be integer pixels');
     const shift=request.exportArt?Math.floor(this.config.baseHeight/2):0;
     const reach=this.reaches(options.quality??'full',request.heightBounds);
-    const nominal=(options.quality==='preview'?1023/192:1023/512)*(options.meshScale??1);
-    // Card tilepool: a final mesh's vertices stand on world pixels a power of two apart (2 px at 1x), so the relief the vertices carry into the
-    // projection repeats with the world's pool and a level plain's tiles repeat exactly; a step of (size - 1) / 512 drifted against it.
-    const step=options.quality==='preview'?(size-1)/Math.ceil((size-1)/nominal):2**Math.round(Math.log2(nominal));
-    const resolution=Math.ceil((size-1)/step);
-    const col0=clamp(Math.floor(x/step)-1,0,resolution),col1=clamp(Math.ceil((x+width)/step)+1,0,resolution);
-    const row0=clamp(Math.floor((y+shift+reach.projection[0])/step)-1,0,resolution),row1=clamp(Math.ceil((y+shift+height+reach.projection[1])/step)+1,0,resolution);
-    const fieldsX=clamp(Math.floor(col0*step-reach.draw)-1,0,size-1),fieldsY=clamp(Math.floor(row0*step-reach.draw)-1,0,size-1);
-    const fieldsEndX=clamp(Math.ceil(col1*step+reach.draw)+1,0,size-1),fieldsEndY=clamp(Math.ceil(row1*step+reach.draw)+1,0,size-1);
+    // The voxel lattice is global; projection and shading aprons determine
+    // which native height/material inputs a screen rectangle needs.
+    const fieldsX=clamp(Math.floor(x-reach.draw)-1,0,size-1),fieldsY=clamp(Math.floor(y+shift+reach.projection[0]-reach.draw)-1,0,size-1);
+    const fieldsEndX=clamp(Math.ceil(x+width+reach.draw)+1,0,size-1),fieldsEndY=clamp(Math.ceil(y+shift+height+reach.projection[1]+reach.draw)+1,0,size-1);
     const input=Math.max(reach.bake,reach.direct-reach.draw,5);
     // One extra grid sample covers linear filtering, including weatherAt's
     // deliberately corner-based (rather than texel-centred) UVs.
@@ -127,26 +119,31 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     return {x:gx0*spacing,y:gy0*spacing,width:(gx1-gx0)*spacing,height:(gy1-gy0)*spacing,
       gridOrigin:[gx0*spacing,gy0*spacing],gridWidth:gx1-gx0+1,gridHeight:gy1-gy0+1,gridSpacing:spacing,worldSize:size,worldGrid:grid,
       fieldsX,fieldsY,fieldsWidth:fieldsEndX-fieldsX+1,fieldsHeight:fieldsEndY-fieldsY+1,
-      screenOrigin:[x,y+shift],mesh:{col0,col1,row0,row1,resolution,step,span:size-1},reach};
+      screenOrigin:[x,y+shift],reach};
   }
   // Relief and cached output use scale s. Color is evaluated at up to four
   // native samples per output pixel, then filtered after shading and palette mapping.
-  estimate(region,width,height,maskPlaneCount=this.maskPlaneCount,scale=1,includeCache=true) {
+  estimate(region,width,height,maskPlaneCount=this.maskPlaneCount,scale=1) {
     // input per texel: height 4 + routes 4 + weather/material 4 layers x 4 (as allocate() makes them), then 4 a mask layer.
     const fieldScale=fieldLevel(scale),field=pow2(Math.ceil(region.fieldsWidth/fieldScale))*pow2(Math.ceil(region.fieldsHeight/fieldScale))*8;
     const maskLayers=Math.max(1,Math.ceil(maskPlaneCount/4)),input=pow2(region.gridWidth)*pow2(region.gridHeight)*(24+maskLayers*4);
-    const m=region.mesh,cols=m.col1-m.col0,rows=m.row1-m.row0;
-    const meshKey=Object.values(m).join(','),otherMeshes=[...this.meshCache].reduce((n,[k,v])=>n+(k===meshKey?0:v.bytes),0);
     const rasterScale=scale<1?scale:Math.max(1,scale/2);
-    const mesh=(cols+1)*(rows+1)*8+Math.max(4,cols*rows*24)+(includeCache?otherMeshes:0),output=Math.ceil(width/rasterScale)*Math.ceil(height/rasterScale)*8+Math.ceil(width/scale)*Math.ceil(height/scale)*4;
-    return {field,input,mesh,output,maskPlaneCount,maskLayers,workingBytes:field+input+mesh+output,
-      retainedBytes:this.fixedBytes,reservedBytes:this.reservedBytes,gpuBytes:this.fixedBytes+this.reservedBytes+field+input+mesh+output,
-      cpuRetainedBytes:this.cpuRetainedBytes,cpuUploadBytes:Math.max(input,mesh),cpuPeakBytes:this.cpuRetainedBytes+Math.max(input,mesh)};
+    // Presentation, persistent color, and the copied output image.
+    const output=Math.ceil(width/rasterScale)*Math.ceil(height/rasterScale)*8+Math.ceil(width/scale)*Math.ceil(height/scale)*4;
+    // The loose-stone / plant mask survives chunk reuse. Include its current
+    // allocation and the largest next allocation before reserving voxel memory.
+    const margin=Math.max(Math.ceil(3.6*Math.min(16,3.3*this.number('looseSize',6)))+4,PLANT_REACH);
+    const loose=Math.max(this.looseBuffer?.size??16,(Math.ceil((region.fieldsWidth+2*fieldScale+2*margin)/4)+2)*(Math.ceil((region.fieldsHeight+2*fieldScale+2*margin)/4)+2)*32);
+    const voxel=Math.min(64*MB,this.budgetBytes*.35);
+    return {field,input,output,loose,maskPlaneCount,maskLayers,voxel,workingBytes:field+input+output+loose+voxel,
+      retainedBytes:this.fixedBytes,reservedBytes:this.reservedBytes,gpuBytes:this.fixedBytes+this.reservedBytes+field+input+output+loose+voxel,
+      cpuRetainedBytes:this.cpuRetainedBytes,cpuUploadBytes:input,cpuPeakBytes:this.cpuRetainedBytes+input};
   }
+
   chunkSize(maximum=this.config.chunkSize??512,options={}) {
     let size=Math.floor(maximum/32)*32;
     while(size>=32) {
-      const region=this.requiredRegion({x:Math.floor(this.size/2),y:Math.floor(this.size/2),width:size,height:size},options),e=this.estimate(region,size,size,this.maskPlaneCount,1,false);
+      const region=this.requiredRegion({x:Math.floor(this.size/2),y:Math.floor(this.size/2),width:size,height:size},options),e=this.estimate(region,size,size,this.maskPlaneCount,1);
       if(Math.max(pow2(region.fieldsWidth),pow2(region.fieldsHeight),pow2(region.gridWidth),pow2(region.gridHeight),size)<=this.limit&&
         e.gpuBytes<=this.budgetBytes)return size;
       size=Math.floor(size/64)*32;
@@ -166,20 +163,19 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     return this.track(this.device.createTexture({label,size:[width,height,layers],format,usage}),label,width*height*layers*bytes,kind);
   }
   allocate(region,gridWidth,gridHeight,world_width,world_height,fed=false,scale=1) {
+    this.voxel.clear();
     const rasterScale=scale<1?scale:Math.max(1,scale/2),width=Math.ceil(world_width/rasterScale),height=Math.ceil(world_height/rasterScale);   // Color raster; the cached image below still uses `scale`.
     const fieldScale=fieldLevel(scale),fw=pow2(Math.ceil(region.fieldsWidth/fieldScale)),fh=pow2(Math.ceil(region.fieldsHeight/fieldScale)),gw=pow2(gridWidth),gh=pow2(gridHeight);
     let e=this.estimate({...region,gridWidth,gridHeight},world_width,world_height,this.maskPlaneCount,scale);
-    // Cached meshes are expendable; they must never make an otherwise valid bake fail its budget.
-    while(e.gpuBytes>this.budgetBytes&&this.meshCache.size){const [key,old]=this.meshCache.entries().next().value;this.release(old.mesh.vertices);this.release(old.mesh.indices);this.meshCache.delete(key);e=this.estimate({...region,gridWidth,gridHeight},world_width,world_height,this.maskPlaneCount,scale);}
     const required=e.gpuBytes;
     if(Math.max(fw,fh,gw,gh,width,height)>this.limit||required>this.budgetBytes){
       // H13: the parts of the estimate, so a refusal says which one crossed the budget (reserved is the canvas, the paged fields and the image cache).
-      const mb=n=>Math.ceil(n/MB),parts=`fixed ${mb(e.retainedBytes)}, reserved ${mb(e.reservedBytes)}, field ${mb(e.field)}, input ${mb(e.input)}, mesh ${mb(e.mesh)}, output ${mb(e.output)} of ${mb(this.budgetBytes)}`;
+      const mb=n=>Math.ceil(n/MB),parts=`fixed ${mb(e.retainedBytes)}, reserved ${mb(e.reservedBytes)}, field ${mb(e.field)}, input ${mb(e.input)}, loose ${mb(e.loose)}, voxels ${mb(e.voxel)}, output ${mb(e.output)} of ${mb(this.budgetBytes)}`;
       throw new Error(`nanolathe: chunk needs ${mb(required)} MB of GPU memory (${parts}); use chunks of ${this.chunkSize()} px or smaller`);
     }
     const allocationKey=[fw,fh,gw,gh,width,height,Math.ceil(world_width/scale),Math.ceil(world_height/scale),this.maskLayers,fed].join(',');
     const reuse=this.allocationKey===allocationKey&&Boolean(this.heightTexture);
-    if(!reuse){this.evict(true);this.allocationKey=allocationKey;}
+    if(!reuse){this.evict();this.allocationKey=allocationKey;}
     const T=GPUTextureUsage,read=T.TEXTURE_BINDING|T.COPY_DST|(fed?T.STORAGE_BINDING:0);   // H6b: the feed pass writes these four
     if(!reuse){
     this.heightTexture=this.texture('chunk height',gw,gh,1,'r32float',4,read);
@@ -191,41 +187,19 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.fieldsOut=this.makeFieldsOut();
     this.canvas.width=width;this.canvas.height=height;this.outputBytes=width*height*4+Math.ceil(world_width/scale)*Math.ceil(world_height/scale)*4;
     this.outputCanvas??=new OffscreenCanvas(width,height);this.outputCanvas.width=Math.ceil(world_width/scale);this.outputCanvas.height=Math.ceil(world_height/scale);
-    this.depthTexture=this.texture('chunk depth',width,height,1,'depth32float',4,T.RENDER_ATTACHMENT);this.depthView=this.depthTexture.createView();
     }
     // The texture is padded for reuse, but only this region and one filtering
     // guard texel can be sampled. Avoid shading the unused power-of-two tail.
     this.bakeWidth=Math.min(fw,Math.ceil(region.fieldsWidth/fieldScale)+1);
     this.bakeHeight=Math.min(fh,Math.ceil(region.fieldsHeight/fieldScale)+1);
-    const L=this.limit*Math.min(1,rasterScale),rasterSize=world_width>L?this.size:Math.min(this.size,L),span=rasterSize/2;
-    const rasterOrigin=this.size<=L?[0,0]:region.screenOrigin.map(v=>Math.floor(v/span)*span);
-    this.f('uChunkRasterOrigin',rasterOrigin);this.f('uChunkRasterSize',rasterSize);
-    this.chunkViewport=[(rasterOrigin[0]-region.screenOrigin[0])/rasterScale,(rasterOrigin[1]-region.screenOrigin[1])/rasterScale,rasterSize/rasterScale,rasterSize/rasterScale];   // clip space stays in world units; the viewport is what scales
     this.bakeWindow=[region.fieldsX,region.fieldsY,this.bakeWidth*fieldScale,this.bakeHeight*fieldScale];this.f('uChunkFieldsOrigin',[region.fieldsX,region.fieldsY]);this.f('uChunkFieldsSize',[fw,fh]);
     this.f('uChunkGridSize',[gw,gh]);this.f('uChunkGridCount',[gridWidth,gridHeight]);
     this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScale',rasterScale);this.f('uChunkFieldScale',fieldScale);   // Shared shader coordinates stay in world pixels at every display scale.
     // Keep native material variance before nonlinear coverage and palette mapping.
     // Averaging these inputs first changes the mean rendered color at lower resolutions.
     this.f('uMaterialFoot',this.variant.has('materialFoot')?Math.max(1,Number(this.variant.get('materialFoot'))):1);
-    const meshKey=Object.values(region.mesh).join(',');
-    let mesh=this.meshCache.get(meshKey);
-    if(mesh){this.meshHits++;this.meshCache.delete(meshKey);this.meshCache.set(meshKey,mesh);}
-    else{
-      while(this.meshCache.size>=4){const [key,old]=this.meshCache.entries().next().value;this.release(old.mesh.vertices);this.release(old.mesh.indices);this.meshCache.delete(key);}
-      const value=this.regionMesh(region.mesh);mesh={mesh:value,bytes:value.vertices.size+value.indices.size};this.meshCache.set(meshKey,mesh);
-    }
-    this.meshes=[mesh.mesh,mesh.mesh];this.meshKey=meshKey;
     if(!reuse)this.bindGroups={};this.fieldsDirty=true;
     this.recordMemory();return {gw,gh,fw,fh};
-  }
-  regionMesh({col0,col1,row0,row1,step,span}) {
-    const cols=col1-col0,rows=row1-row0,points=new Float32Array((cols+1)*(rows+1)*2),indices=new Uint32Array(cols*rows*6);
-    let at=0;for(let y=row0;y<=row1;y++)for(let x=col0;x<=col1;x++){points[at++]=Math.min(x*step,span)/span;points[at++]=Math.min(y*step,span)/span;}
-    at=0;for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const a=y*(cols+1)+x,b=a+cols+1;indices.set([a,b,a+1,a+1,b,b+1],at);at+=6;}
-    this.cpuWorkingBytes=points.byteLength+indices.byteLength;this.cpuUploadBytes=this.cpuWorkingBytes;this.recordMemory();
-    const buffer=(data,usage)=>{if(data.byteLength>this.device.limits.maxBufferSize)throw new Error('nanolathe: chunk mesh exceeds the device buffer limit');const b=this.track(this.device.createBuffer({label:'chunk mesh',size:Math.max(4,data.byteLength),usage:usage|GPUBufferUsage.COPY_DST}),'chunk mesh',Math.max(4,data.byteLength),'mesh');if(data.byteLength)this.device.queue.writeBuffer(b,0,data);return b;};
-    const mesh={vertices:buffer(points,GPUBufferUsage.VERTEX),indices:buffer(indices,GPUBufferUsage.INDEX),count:indices.length};
-    this.cpuWorkingBytes=0;return mesh;
   }
   maskPlanes(request) {
     const supplied=request.maskPlanes??request.masks;
@@ -367,7 +341,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       this.recommendedChunkSize=this.chunkSize();
       const dimensions=this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale);
       if(feed)await this.feedFromGpu(request,region,dimensions,feed,passes);else this.upload(request,region,dimensions,planes);
-      this.activeRegion=region;
+      this.activeRegion=region;this.voxelScale=scale;
       const result=await this.withPipelines(()=>super.draw({...options,quality:options.quality??'full',exact:options.exact||Boolean(request.exportArt)}));
       // A WebGPU presentation image expires at the next browser frame. Copy
       // synchronously before waiting for the queue, so the returned pixels live.
@@ -381,11 +355,11 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       return {...result,canvas:this.outputCanvas,x:request.x,y:request.y,width:request.width,height:request.height,scale,outWidth:Math.ceil(request.width/scale),outHeight:Math.ceil(request.height/scale),exportArt:Boolean(request.exportArt),outputBytes:Math.ceil(request.width/scale)*Math.ceil(request.height/scale)*4,region,stats:{...this.stats(),busy:false}};
     } finally { this._busy=false;this.cpuWorkingBytes=0; }
   }
-  evict(keepMeshes=false) {
-    for(const [resource,entry] of [...this.resources])if(entry.kind==='working'||(!keepMeshes&&entry.kind==='mesh'))this.release(resource);
-    if(!keepMeshes)this.meshCache.clear();
-    for(const key of ['heightTexture','routeTexture','gridTexture','maskTexture','fieldsTexture','depthTexture'])this[key]=null;
-    this.bindGroups={};this.meshes=[];this.canvas.width=1;this.canvas.height=1;if(this.outputCanvas){this.outputCanvas.width=1;this.outputCanvas.height=1;}this.outputBytes=8;this.evictions++;
+  evict() {
+    this.voxel?.clear();
+    for(const [resource,entry] of [...this.resources])if(entry.kind==='working')this.release(resource);
+    for(const key of ['heightTexture','routeTexture','gridTexture','maskTexture','fieldsTexture','voxelColor'])this[key]=null;
+    this.bindGroups={};this.canvas.width=1;this.canvas.height=1;if(this.outputCanvas){this.outputCanvas.width=1;this.outputCanvas.height=1;}this.outputBytes=8;this.evictions++;
   }
   dispose() {
     if(this.disposed)return;this.disposed=true;for(const resource of [...this.resources.keys()])this.release(resource);this.feedDummy?.destroy();

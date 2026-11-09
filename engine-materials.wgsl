@@ -304,7 +304,9 @@ fn mmRelief(base: u32, id: u32, pixel: vec2f) -> MaterialRelief {
     }
     let light = vec3f(cos(a.y) * 0.70711, sin(a.y) * 0.70711, 0.70711);
     let n3 = normalize(vec3f(-a.x * g, 1.0));
-    z += 4.0 * (dot(n3, light) - 0.70711);
+    // Rock is a volumetric surface: this texture supplies mineral color only.
+    // Its fixed light would be a second, incorrectly oriented sun on cliffs.
+    if (id != 1u) { z += 4.0 * (dot(n3, light) - 0.70711); }
     z += r0.x * (mmHash(ip, salt) * 2.0 - 1.0);
     let f = matRow(base + 45u);
     if (f.x > 0.0) { z -= mmStrokes(at, f, c.z, e.w, salt); }
