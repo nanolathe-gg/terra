@@ -1,8 +1,16 @@
 # Terraform redesign plan
 
-Proposal of 2026-11-09, written against main `7d90fda9`. It is on branch
-`plan/redesign` and is not landed. [AGENTS.md](../AGENTS.md) still governs
-until the owner changes it; section 8 lists the rules this plan would amend.
+Proposal of 2026-11-09, written against main `7d90fda9`, originally on
+`plan/redesign`. Owner decisions recorded on 2026-11-09 on
+`plan/redesign-decisions`; neither branch is landed. Section 7 records the
+owner's answers and takes precedence over earlier recommendations in this
+proposal. [AGENTS.md](../AGENTS.md) governs repository work, subject to the
+owner's explicit instructions; section 8 lists proposed rule amendments.
+
+This revision records product decisions and their direct consequences for
+the cards. It does not approve every technical design, estimate, or finding
+in the original proposal. The adversarial review's technical concerns still
+need resolution before affected cards become implementation contracts.
 
 The owner's brief for this review: an artist-driven, hyper-realistic,
 parametric terrain tool with a fixed camera; near-real-time feedback with
@@ -13,13 +21,14 @@ easy to use; everything open to question.
 
 - Every claim is tagged **[measured]** (a number, and where it came from),
   **[read]** (in the code or a document, with the file), **[by eye]** or
-  **[inferred]**.
+  **[inferred]**. Product requirements agreed by the owner are tagged
+  **[owner decision]**; they are not performance measurements.
 - Evidence that cannot be committed (anything showing retail art, and the
   throwaway prototypes) lives outside the repository under
   `~/terraform-assets/agent-rd-*/`. Each folder is named where it is used,
   and appendix A indexes them.
 - Section 1 is the verdict. Section 4 is the design, as hand-off cards.
-  Section 7 answers "what am I not asking?".
+  Section 7 records the owner's decisions and the remaining validation work.
 
 ## 1. Verdict
 
@@ -65,9 +74,10 @@ waits for and has to find; and build the judge first.**
    world, landform, spot (R9).
 6. **Two defects to fix whatever else is decided:** a shared map does not
    carry its world's settings, and export follows the view's options (R11).
-7. **The judge comes first.** Retail's own heights through the engine,
-   beside retail's art, on held-out sections, marked blind by the owner
-   (R0, R1). Without it the next round will go the way of the last five.
+7. **The owner judges the look.** Prepare visual comparisons, including
+   retail's heights through the engine beside retail's art (R0, R1).
+   LLM visual review comes first; the owner has final say. Pixel statistics
+   support the review and do not decide artistic acceptance.
 
 **What this review could not deliver, said plainly.**
 - **A recipe for natural-looking mountains.** Four approaches were
@@ -83,15 +93,16 @@ waits for and has to find; and build the judge first.**
   wants those.
 - **A cheap solid.** See point 3.
 - **The ceiling.** Inside the 1997 format, "hyper-real" means 242 colors,
-  32 px tiles and painted light. How far past that Nanolathe goes is the
-  owner's decision and it bounds everything here (section 7, question 4).
+  32 px tiles and painted light. Standard TA export is the current target;
+  Nanolathe extensions, including true color, are deferred (section 7,
+  decision 4).
 
 **The cards at a glance** (section 4.3 has each in full; section 5 the
 order):
 
 | Card | Change | Size | Main effect |
 | --- | --- | --- | --- |
-| R0 | Four benches (retail look, shape, latency, task cost) and a new-worlds sheet | M | A judge that editing a scene cannot game |
+| R0 | Four benches (retail look, shape, latency, task cost) and a new-worlds sheet | M | Visual evidence for LLM review and the owner's final judgment |
 | R1 | Height-image op | S | Enables R0; import from other tools |
 | R2 | Light and placement as fitted numbers, with the light fit as a tripwire | S-M | Red, Lava and Moon's over-strong shading and Green's light rock brought to retail's numbers |
 | R3 | Skeleton structure in Mountain and Hill | L, research | Form: spurs branch, valleys join |
@@ -102,36 +113,47 @@ order):
 | R8 | The solid: thin shell, wear where it shows, march fix | M-L | 13-23% off a cliff window with the solid unchanged; about a third with the wear change |
 | R8b | Erosion per landform | S | Up to 0.4-0.9 s off each edit |
 | R9 | Controls: honest panel, then dials at three scopes, then blend and variations | M | From 234 rows to about 60 on the surface |
-| R10 | A tile budget; pooled level ground; stamps | M | Larger maps export without merging |
+| R10 | First-class tile accounting and reusable level ground; stamps deferred | M | Measure tile pressure on the 16x16 target and reduce merging |
 | R11 | The map carries its world; export ignores view options | S | Sharing works |
 | R12 | Budgets for controls, uniforms and shader lines | S | The panel and the shader stop growing |
 
 ## 2. Goals, and the test each one gets
 
-A goal without a test is how the project spent five rock rewrites without
-moving its retail score (section 3.6). Each goal below names the check that
-says whether a change served it. Section 4, card R0, builds the checks that
-do not exist yet.
+Each goal needs evidence that says whether a change served it. Visual
+quality is judged first through LLM visual comparisons and finally by the
+owner; pixel statistics are supporting diagnostics. Correctness and
+performance retain their measured checks. Section 4, card R0, builds the
+checks that do not exist yet.
 
 | Goal (from the brief) | Test | Exists today? |
 | --- | --- | --- |
-| Artists control the terrain; easy to use | Task costs on the live page: clicks, drags and rows scrolled for six standard tasks (section 3.5); the count of controls visible before "Advanced" | No |
+| Artists control the terrain; easy to use | Six standard tasks (section 3.5), including finger input on iPad; visible-control count and task costs | No |
 | Feedback is fast, refinement is progressive | Latency budgets per kind of interaction (below), measured by `repro/perf.mjs` | Partly: stroke drags only |
 | Hyper-real look; erosion may be approximated | A modern benchmark judged by eye on fixed sheets; `measure/realism.py` as a tripwire only | Tripwire only |
-| Recognizably Total Annihilation | A retail benchmark: retail's own heights rendered by the engine beside retail's art, on sections never used for tuning | No (needs card R1) |
+| Recognizably Total Annihilation | LLM visual comparisons followed by owner judgment on retail-reference sheets; statistics are secondary | Existing windows; expanded bench needs R1 |
 | Many biomes and planets, including ones that follow no real planet | Invented worlds built from controls alone, with no code change, on a sheet the owner reviews (R0) | No |
 | Large flat areas, a 2.5D RTS | Passability and buildable-area views; plains unmoved by any refinement | Yes (`repro/passability.mjs`) |
-| Export loads and plays | `repro/export-bytes.mjs`; a tile budget per map size | Partly: no tile budget |
+| Export loads and plays | `repro/export-bytes.mjs`; first-class tile accounting, with 16x16 as the interactive target | Partly: no tile budget |
 
-**Proposed latency budgets** (the owner sets the hardware floor; every number
-recorded so far comes from one Apple M3 Pro):
+**Target devices and workload [owner decision].** The owner's MacBook Pro
+and 11-inch iPad Air (M3, 2025), using fingers on the iPad. Apple Pencil
+support is deferred. Optimize interactive editing for 16x16 maps; this is
+not a new map-size or export limit. Windows testing can follow through user
+feedback; the owner has no Windows test machine.
+
+**Proposed latency budgets.** Every number recorded so far comes from one
+Apple M3 Pro. These are candidate targets, not demonstrated support on the
+iPad or the 16x16 workload. Record browser/OS, viewport, device pixel ratio,
+and actual render resolution for each device. The 1440p rows below describe
+the desktop benchmark; choose and measure the iPad's render resolution on
+the device while preserving the same final export quality.
 
 | Interaction | Budget (p95) | Today |
 | --- | --- | --- |
 | Stroke drag: pointer to picture | 50 ms at preview level | 73-75 ms **[measured, docs/VOXEL_REVIEW.md]** |
 | Color, finish or light slider drag | 50 ms, full quality at 1440p | 0.6 s to a first change, 0.9-1.1 s settled **[measured, section 3.5]**: every cached image re-bakes at final level |
 | Any other World slider drag | 100 ms at preview level | the same, and 5-8 s where the row re-runs the shape or weathering **[measured, section 3.5]**; no preview level exists |
-| Release to final visible art, 4x4 map | 1.0 s | 1.4-1.9 s **[measured, docs/*_REVIEW.md]** |
+| Release to final visible art, 16x16 map | 1.0 s (proposed) | 16x16 not measured here; 4x4 was 1.4-1.9 s **[measured, docs/*_REVIEW.md]** |
 | First picture after load | 1.0 s | 1.7-2.2 s to final **[measured, docs/VOXEL_REVIEW.md]** |
 | Export | no budget; progress and cancel | 3.7 s for 4x4 **[measured, docs/VOXEL_REVIEW.md]** |
 
@@ -590,10 +612,10 @@ voxel work).
 are only numbers; no save compatibility before release; one Landform tool;
 hills and mountains differ by default; judge by eye, one biome at a time.
 
-**A conflict to settle:** AGENTS.md rule 10 reads retail-first ("judge a
-visual change against retail, across all of a world's windows"), while the
-owner's rule of 2026-11-08 is hand-tuning with controls over chasing a
-retail match. Section 4, cards R0 and R2, propose how both hold.
+**Owner clarification (2026-11-09).** Retail matching remains a goal, and
+invented worlds remain in scope. LLM visual comparisons precede the owner's
+final judgment; pixel statistics carry less weight. Existing required
+checks still run, but a numeric look score does not override the owner.
 
 ### 3.7 What the output format allows
 
@@ -875,8 +897,9 @@ days, L a week or more with review rounds.
 
 #### R0. The benchmarks (M; first)
 
-**Change.** Build the checks from section 2 that do not exist, and make
-them the bar for every later card.
+**Change.** Build the checks from section 2 that do not exist. Visual
+sheets support LLM review and the owner's final artistic judgment;
+correctness and performance checks retain their explicit pass criteria.
 
 **Why.** Scores have not tracked the picture: Green's look score stayed at
 .21-.23 through five rock rewrites, the renderer builds of 2026-11-08 could
@@ -903,16 +926,17 @@ looks. Green 4's shape score of .59 is a statement about tracing.
    - For each held-out section: load its heights with the height-image op
      (R1), render with the world's look and no strokes, write
      `ours.png` beside a copy of `retail.png` under `$R/bench/<commit>/`.
-   - Output: one contact sheet per world at 1x, pairs in random left/right
-     order with the key in a separate file, for the owner to mark "which is
-     retail". The number reported is how often the owner (or a blind
-     reviewer) is right. 50% is the goal.
+   - Output: one contact sheet per world at 1x showing the retail reference
+     and before/after renders with consistent framing. An LLM first reviews
+     the visible differences and remaining gaps; the owner has final say.
+     Randomized comparisons can assist review, but identification accuracy
+     is not an acceptance gate and 50% is not a product target.
    - The existing `repro/stats.py` statistics run on the same pairs as a
      tripwire: a card that moves a statistic out of the retail band must say
      why.
-   - This isolates the look (light, materials, the detail the engine adds
-     under the 16 px cells) from stroke tracing, and editing a scene cannot
-     game it.
+   - This separates the look from stroke tracing. Dataset independence,
+     coordinate registration, and coverage still need validation; the bench
+     does not make an artistic judgment infallible.
    - What it leaves out: anything a stroke writes besides height (crack
      lines, a landform's local vegetation, paint). The bench judges the
      world-level look and refinement; the windows remain for the rest.
@@ -932,18 +956,21 @@ looks. Green 4's shape score of .59 is a statement about tracing.
    section 3.5; it prints clicks, drags and rows scrolled.
 5. **New-worlds sheet.** Three or four invented worlds kept as world files
    (numbers only, no code), each rendered on the four guides and one flat
-   scene. It is the test of "many biomes and planets": a relief kind or a
-   control that makes one of these striking has earned its place even if
+   scene. These are internal evaluation fixtures, not a starter-map or
+   example-library deliverable. It is the test of "many biomes and planets":
+   a relief kind or a control that makes one of these striking has earned
+   its place even if
    it matches nothing retail. The owner's eye is the only score.
 
 **Interactivity.** None directly; (3) makes regressions visible.
 **Quality.** None directly; (1) and (2) make progress visible.
-**Accepted when** each bench runs from `repro/check.sh full`, and the owner
-has marked one retail sheet per world as the starting score.
+**Accepted when** each bench runs from `repro/check.sh full`, LLM visual
+reviews are available, and the owner has reviewed the starting retail and
+shape sheets. Numerical summaries are diagnostics, not artistic sign-off.
 **Risks.** Heights at 16 px under-determine the art, so `ours` will never
 match pixel for pixel; the bench asks "could this be a retail section?", not
-"is it this section?". Blind marking costs the owner minutes per round; keep
-sheets to 12 pairs.
+"is it this section?". Keep each review sheet manageable (about 12
+comparisons), without treating that count as statistical proof.
 
 #### R1. A height-image op (S)
 
@@ -1017,7 +1044,8 @@ but no fit of light against heights.
 - **A per-map series**: Moon's bright and dark ground, Red's two tones. A
   map picks one of a world's named series (numbers in the world's file).
 - **Procedure**: fit on the tuning half, judge on the held-out sheets of
-  R0, one world at a time, Green first; the owner marks the sheets.
+  R0, one world at a time, Green first; LLMs compare the images before the
+  owner gives the final visual judgment.
 - **Not proposed after all:** cached sun-shadow and sky-occlusion planes.
   The first draft wanted them for longer, darker shadows; the measurement
   says ours are already longer-reaching and darker than needed, and the
@@ -1027,8 +1055,10 @@ but no fit of light against heights.
 **Quality.** A calibration, not a new model. It should bring Red, Lava and
 Moon's shading down to retail's and Green's rock down to its tone; by
 itself it will not make any world read as retail (section 3.1's verdict).
-**Accepted when** each world's three fit ratios on the bench are within
-about 15% of 1, and the owner's blind score does not fall.
+**Accepted when** LLM visual comparison is complete and the owner accepts
+the world's look against retail. Report the three fit ratios and explain
+disagreements; the earlier proposed 15% band is a diagnostic, not a veto on
+the owner's artistic judgment.
 **Risks.** Hand-traced windows will keep disagreeing with the bench where
 shapes differ; the bench is the reference. The second light direction seen
 in some sections (125-150°) is unexplained; if it is real, Sun turn covers
@@ -1155,12 +1185,12 @@ where every previous round worked without a judge (section 3.6).
   trades away the drawn shape.
 
 **Interactivity.** Stage C: preview while dragging. **Quality.** This and
-R2 are what move the retail score.
-**Accepted when**, per world, the owner's blind score on held-out sections
-improves over R2 alone, and the flat-ground and tile checks pass.
-**Risks.** This is tuning by eye against 1997 art, the work that has
-consumed the project so far. The difference now is a judge that cannot be
-gamed and one world in flight at a time.
+R2 aim to improve the visible look.
+**Accepted when** an LLM has compared the images, the owner accepts the
+retail improvement or the intended invented-world look, and the flat-ground
+and tile checks pass. Pixel statistics support that review.
+**Risks.** Tuning can still overfit the review examples. Keep one world in
+flight at a time and preserve broader visual comparisons.
 
 #### R5. Stage caches, and every control owns a stage (L)
 
@@ -1399,6 +1429,12 @@ override" (docs/TERRAIN_ENGINE.md, Usability); it was not built.
 
 **Design.**
 
+**Device requirement [owner decision].** The core editing workflow must
+work with fingers on the 11-inch M3 iPad Air as well as on the MacBook Pro.
+Review the panel, curves, canvas gestures, and passability overlay on the
+actual tablet. Essential actions cannot depend solely on hover or keyboard
+modifiers. Apple Pencil behavior is not part of this milestone.
+
 *Step 9a: make today's panel honest and navigable (no new concept).*
 - **Show only what this world draws.** A group whose parent is zero and
   whose feature the world's file does not use is not listed; it is offered
@@ -1464,13 +1500,16 @@ override" (docs/TERRAIN_ENGINE.md, Usability); it was not built.
 live. **Quality.** Indirect: an artist can reach a look the engine already
 supports.
 **Accepted when** the task-cost bench shows (b) and (d) with no scrolling
-past more than 20 rows; a first-time user completes the six tasks unaided;
-the World tab's surface is under 60 controls; the 5% sweep passes for every
-dial at both ends, on each world's own scenes.
+past more than 20 rows; the owner can complete the core tasks on the MacBook
+Pro and with fingers on the iPad; the World tab's surface is under 60
+controls; and the 5% sweep passes for every dial at both ends, on each
+world's own scenes. First-time-user observations follow the initial UI
+revamp and retail-biome improvements; they do not block those improvements.
 **Risks.** A dial hides which row did the work; the pin and "drives 6
 settings" text are the remedy. Dial curves need an owner per world: ship one
-generic set and let worlds override. Step 9b should follow a session with
-real map makers (section 7, question 9), not precede it.
+generic set and let worlds override. The owner plans to show individuals
+the editor after the initial UI revamp and retail-biome improvements
+(section 7, decision 9); use their feedback to refine later UI work.
 
 #### R10. A tile budget, and detail that repeats by design (M)
 
@@ -1492,16 +1531,16 @@ of atlas (section 3.7).
   (retail-like at 16, richer at 256). Terms that vary slowly (undulation
   shading, wetness) are quantized to a few levels on level ground so equal
   inputs give equal tiles. Slopes keep unique detail.
-- **Stamps** (section 7, question 7): a group of strokes placed more than
-  once at 32 px-aligned offsets, with its noise in its own frame, renders
-  the same tiles each time. This is how retail's largest maps stay near 5%.
-  First measure it: one landform placed ten times, distinct tiles against
-  ten different landforms.
-- **Optional, with Nanolathe (question 4):** export a 2x art sheet for the
-  engine's detail view in place of its patch-match guess.
+- **Deferred:** reusable stamp libraries, starter maps, and example
+  collections. Artists start from a blank map for now (section 7,
+  decision 7); tile accounting and reuse must not depend on these features.
+- **Deferred with Nanolathe:** 2x art sheets and true-color extensions.
+  Standard TA export is the current output contract (decision 4).
 
-**Interactivity.** Neutral. **Quality.** Keeps full-size maps exact instead
-of merged; a 2x sheet would be the first step past the 1997 format.
+**Interactivity.** Tile-pressure feedback belongs in the current editing
+and export workflow. **Quality.** The aim is to reduce lossy merging on
+16x16 maps while retaining the intended look; measure that result rather
+than assuming any reuse scheme guarantees it.
 **Accepted when** a 16x16 Green map with 20% of its area as landforms
 exports under 30,000 distinct tiles with no merge, and level ground shows
 no visible repeat at 1x or at Fit **[by eye]**.
@@ -1530,7 +1569,10 @@ recipient's look.
 
 **Accepted when** a share link opened in a clean browser profile renders
 the same bytes as the author's page, on a map with ten non-default World
-rows and two changed colors.
+rows and two changed colors, using the same engine build on the same
+machine. This checks complete source state, not cross-GPU or future-build
+export identity. The `.ufo` exported on one machine is authoritative for
+play; the recipe remains editable source (section 7, decisions 3 and 8).
 
 
 #### R12. Budgets and the order of rewrites (S; a rule, not code)
@@ -1558,9 +1600,18 @@ without a test that could tell them apart (section 3.6).
 
 ## 5. Order of work
 
-Three tracks. Within a track the order matters; the tracks touch different
-files and can run side by side once step 0 is in. Each step ends with the
-owner looking at a sheet or a number, not at a score table.
+Three tracks, coordinated where they share files and interfaces. Keep
+small commits grouped into bounded review milestones. LLM visual
+comparisons precede the owner's final judgment on look changes; performance
+and correctness retain measured checks. The technical sequencing below is
+still a proposal pending the adversarial review's corrections.
+
+**Current scope [owner decision].** Improve the UI, responsiveness, and
+retail-biome artwork for 16x16 editing on the MacBook Pro and finger-operated
+M3 iPad Air. Tile accounting is a first-class constraint: establish its
+16x16 baseline with the other benches and surface it early, rather than
+waiting for blend, variations, or stamps. Symmetry, fairness tools, starter
+content, Metal, Urban, and extended output formats are deferred.
 
 **Step 0: the ground to stand on (about a week).**
 
@@ -1573,29 +1624,36 @@ owner looking at a sheet or a number, not at a score table.
 | R7 preview level for every control; generic pipeline | S | Makes every later tuning session faster |
 | R8 step 1 (closed-gate bricks, march fix); step 2 (wear where it shows) once the owner has seen its sheet | S | Step 2 is 15-18% of every window for a few lines, but it moves every rock fixture |
 
-Gate: the owner has marked a starting retail sheet per world and a starting
-shape sheet; the latency table prints.
+Gate: LLM visual comparisons and the owner's starting retail and shape
+reviews are recorded; the latency table and 16x16 tile baseline print.
+Keep desktop measurements distinct from the iPad results.
 
 **Track A: speed.** R5 step 1 (split geometry from color; the stage map)
 -> R8 step 3 (the thin shell) -> R6 (scheduler) -> R8b (erosion per
 landform) -> R5 step 2 (surface atlas) -> R8 step 4 (the owner's call on a
 brickless solid).
-Gate: every row of section 2's latency table passes on the reference
-machine at 1440p.
+Gate: assess section 2's candidate latency budgets on the 16x16 workload,
+with desktop results at 1440p and separately documented iPad conditions.
+Actual iPad testing is required before claiming support.
 
 **Track B: the picture.** One world at a time, Green first, each judged on
 the retail bench and by eye. R2 (light and placement as fitted numbers) ->
 R4 (relief kinds) -> R3 (structure in ridge-like landforms), then the same
 for the next world.
-Gate per world: the owner's blind score on held-out sections moves toward
-50%, and the world's modern preset is approved on the shape bench.
+Gate per world: LLM visual comparisons are complete, and the owner accepts
+the retail look and the intended modern look on the relevant sheets.
+Pixel statistics do not override that judgment.
 R2's shader changes and R5's split both rewrite `fragmentMain`: land R5
 step 1 first if both are ready, since it must be byte-identical.
 
-**Track C: the artist.** R9a (the honest, navigable panel) -> a session
-with outside map makers (section 7, question 9) -> R9b (dials at three
-scopes) -> R9c (blend, variations) -> R10 (tile budget, stamps).
-Gate: the task-cost bench, and a first-time user finishing the six tasks.
+**Track C: the artist.** Begin the UI revamp with R9a and validate finger
+editing on iPad. Coordinate the initial UI and retail-biome improvements
+before the owner shows individuals the editor (section 7, decision 9).
+R9b and R9c remain proposals to refine through that work and subsequent
+feedback. R10 tile accounting begins early alongside these tracks; stamps
+and starter content are not prerequisites or current deliverables.
+Gate: the task-cost bench and owner review on both target devices; record
+first-time-user observations once the owner begins showing the editor.
 
 R12's budgets apply throughout.
 
@@ -1621,78 +1679,81 @@ drive it (expected: a large share of the 237 World rows become reachable
 only through "Advanced", and those that no preset or artist moves in a
 release cycle are removed).
 
-## 7. What you are not asking, and the trade-offs
+## 7. Owner decisions and remaining validation
 
-### Questions worth an answer before more engine work
+### Owner decisions (2026-11-09)
 
-1. **What says "this looks like retail", and who signs it?** Today it is the
-   owner's eye on agent-made sheets, after scores failed three ways
-   (section 3.6). R0 proposes a blind sheet and a count. Without something
-   like it, every later card is judged by whoever built it.
-2. **Which machines must run this?** Every recorded number is from one Apple
-   M3 Pro. WebGPU is the only path. The default GPU budget is 512 MiB. A
-   hardware floor (for example: an integrated GPU from 2020 at 1080p)
-   decides whether the solid, the caches of R5 and 4K views are affordable.
-3. **Is the published `.ufo` the only thing two players share?** Art and
-   heights are deterministic per machine, not across GPUs. Nanolathe's lobby
-   hash covers the height map **[read, research/formats/tnt.md:237-239]**, so
-   two people who each export the same share link may get maps that do not
-   match in multiplayer. The deploy plan already makes the published
-   archive the unit; say so in the Export pane, or make export heights
-   bit-exact everywhere (integer math on the 16 px lattice).
-4. **How far may Nanolathe go beyond the 1997 format?** Inside it,
-   "hyper-real" means 242 colors, 32 px tiles and painted light. The
-   cheapest step past it is a map-supplied 2x tile sheet; next, a
-   true-color sidecar for the Enhanced renderer (section 3.7). The answer
-   sets the ceiling for everything in this plan, and whether "modern" worlds
-   are worth tuning in full color.
-5. **Should what blocks a unit look like it blocks?** Rock faces, boulders
-   and gullies are art; movement reads one height byte per 16 px. A cliff
-   can look sheer and be drivable, or the reverse. The Passability view
-   shows the truth, but nothing warns. A lint that flags cells where the
-   art's material says "cliff" and the cell is passable to vehicles (and the
-   reverse) would catch it at the source.
-6. **Do multiplayer maps need symmetry and fairness tools?** A stroke recipe
-   makes mirrored or rotated copies nearly free (replay a group through a
-   transform, with its own seed or the same). TA's fixed sun and oblique view
-   mean mirrored cliffs will not look mirrored, which is fine for play.
-   Start distances, choke points and metal balance are a few graph
-   measurements on the passability grid; Nanolathe's map generator already
-   has fairness logic to borrow.
-7. **Do artists start from nothing?** Cavedog assembled maps from sections.
-   A group of strokes saved as a stamp, with seed variations shown as a
-   strip to choose from, is the same workflow and the fastest way to a full
-   map. The original plan had the variations strip (PLAN_TERRAIN_EDITOR
-   section 9); it was never built.
-8. **What happens to an artist's map when the engine changes?** Saves are
-   recipes, so every look change redraws every map. Before release that is
-   policy. After it, the site's versioned build folders (`b/<version>/`)
-   make a cheap answer possible: a map opens in the build that made it, and
-   upgrading is a button with a before/after. Decide before the first
-   outside user.
-9. **Who are the artists, and when do they touch it?** Every judgment so far
-   is the owner's or an agent's. Three TA map makers doing the six tasks of
-   section 3.5 for an hour would reorder this plan more reliably than any
-   audit.
-10. **Is Metal in scope?** Its sections are man-made structures whose art
-    ignores the height shift (section 3.1). It is a tile-and-structure
-    generator, a different product from terrain. The same goes for the
-    Urban world of the expansion.
-11. **Should the tile budget be a first-class constraint?** Our maps use
-    83-90% unique tiles; retail's use 5-10%. Past about 15x15 units the
-    export degrades, and at the cap Nanolathe holds over a gigabyte of
-    atlas. A hyper-real map of full size needs detail that repeats by
-    design (R10), or an engine change (question 4).
-12. **What is committed when the repository goes public?** Tables measured
-    from retail are policy. Worth one more look before publishing: the 16
-    ground tiles stored as palette indices (do they come from a model, or
-    are any of them close copies?), and every color ramp "measured from
-    retail by luma octile".
-13. **Is this pace reviewable?** 1,929 commits in 14 days, a 666 KB backlog,
-    documents that the next agent is told may be stale. R12's budgets are
-    one guard. Another is fewer, larger cards with the owner's eye on a
-    sheet at the end of each, which is how the work that stuck (the Landform
-    tool, crystals, generated features) was done.
+All thirteen answers below are **[owner decision]**, recorded after the
+adversarial review. They settle product scope; they do not constitute
+approval of every proposed mechanism or estimate in sections 3-6.
+
+1. **Visual authority.** The owner judges the look and has final say. LLM
+   visual comparisons precede that review; pixel statistics matter less.
+   Retail resemblance and the quality of invented worlds are visual
+   judgments, not decisions made by an aggregate score.
+2. **Devices and interaction.** Target the owner's MacBook Pro and an
+   11-inch iPad Air with M3 (2025). Finger input is the iPad requirement;
+   Apple Pencil support can wait. The owner has no Windows machine, so
+   Windows validation will depend on later user feedback. Existing timings
+   were recorded on an M3 Pro; actual tablet measurements are still needed.
+3. **Authoritative map.** The `.ufo` exported on one machine is the file
+   distributed for play. Its height map is fixed; players use that same
+   exported map rather than independently regenerating it. Save files and
+   share links are editable source containing world information, artist
+   paths, settings, and related data. They do not guarantee identical
+   exports across machines or future implementations.
+4. **Output scope.** Standard TA export for now. Possible Nanolathe
+   improvements, including true color, are deferred.
+5. **Gameplay readability.** What blocks units should look blocked whenever
+   possible. Artists use the passability overlay to confirm and adjust
+   terrain while building maps. A new automatic mismatch lint is not a
+   current requirement.
+6. **Fairness.** Symmetry and fairness tools are out of scope for now.
+   Focus on generated artwork quality; artists can address balance if they
+   care about it.
+7. **Starting point.** Artists start with a blank map. Starter presets,
+   examples, and reusable content libraries can be added later. Existing
+   Landform and material presets remain part of the authoring controls;
+   this decision does not remove them. Internal benchmark scenes are not
+   starter content.
+8. **Compatibility.** The exported `.ufo` is the enduring game contract.
+   Terraform and Nanolathe implementations and editable-source behavior can
+   change. A saved artist path may render differently after an algorithm
+   update; that is acceptable for now. Do not add a promise of historical
+   recipe rendering, old-build hosting, or upgrade comparison UI.
+9. **Outside users.** The owner will show individuals the editor as soon as
+   practical, after the initial UI revamp and retail-biome improvements.
+   Their observations will inform subsequent work; outside-user testing
+   is not a prerequisite to making those initial improvements.
+10. **World scope.** Metal and Urban are deferred. Get the core terrain
+    editor working well before expanding scope.
+11. **Tile budget and map size.** Tile budget is first-class. Optimize
+    interactive editing for **16x16 maps**. This selects a benchmark and
+    authoring target, not a new limit on map creation or export. Include
+    tile accounting in early measurements and the editing/export workflow.
+12. **Public assets.** Palettes may be committed publicly. Other artwork
+    must be newly generated by the project; do not commit retail artwork
+    files or encode copies of retail artwork as data. Retail references
+    used for evaluation remain outside the repository. No additional
+    exception for retail-derived artwork is authorized here.
+13. **Reviewable work.** Use small commits grouped into bounded milestones,
+    limit concurrent changes to the same visual stage, and retain evidence
+    sheets and decision records. A larger commit is not itself a better
+    review unit. The proposed R12 numerical ceilings still need review.
+
+### Remaining validation, not unanswered product choices
+
+- Record browser/OS versions, viewport, device pixel ratio, and render
+  resolution when testing the MacBook Pro and iPad. Benchmark the 16x16
+  workload and test the core tools and passability overlay with fingers.
+  The iPadOS version was not supplied; capture it during device testing.
+- Reconcile the technical concerns from the adversarial review before
+  handing off the affected cards: benchmark independence and registration;
+  cache precision, dependencies, and lifetimes; end-to-end latency;
+  approximate versus exact solid optimizations; erosion-domain boundaries;
+  dial precedence; and tile reuse/seam behavior.
+- Keep R11's complete-source-state checks separate from future-version or
+  cross-GPU reproducibility. The latter is not the source-file contract.
 
 ### Trade-offs that will not go away
 
@@ -1702,11 +1763,11 @@ release cycle are removed).
 | **Global processes against tile independence.** Drainage is global; tiles must not be | Vector structure is global and tiny; raster work is local to a landform. Rivers across plains stay explicit strokes |
 | **A preview that is fast against a preview that is true.** A coarse preview can teach the artist the wrong picture | Previews are the same model at a coarser grid (principle 5), with a check that the generic and final pipelines agree (R7) |
 | **A true 3D solid against a height field.** | See R8 |
-| **Hyper-real against 256 colors.** Dither hides banding and multiplies unique tiles | The palette step stays; detail that repeats by design keeps tiles down (R10); full color waits on question 4 |
+| **Hyper-real against 256 colors.** Dither hides banding and multiplies unique tiles | Standard TA export and the palette stay; tile budget is first-class; full color is deferred |
 | **Power against a short panel.** Rule 9 wants a control for everything an artist would shape | Few controls on the surface, every number one click away, and both tiers held to the 5% rule (R9) |
 | **One engine for every world against looks that are not terrain.** Crystal, Ice and Metal keep pulling world-named terms into the shader | A trait becomes a generic term any world can turn up from zero, or it stays out (principle 3) |
 | **Matching 1997 against looking natural.** Retail's marks follow no fall line; natural terrain's do | No single number runs between them (section 3.8c). A world's retail preset and its modern preset are two settings of the same relief kinds, and R9c's blend moves between them |
-| **Art detail against game truth.** Sixteen-pixel heights cannot carry what the art shows | A lint, not a fix (question 5); large features must live in the shape |
+| **Art detail against game truth.** Sixteen-pixel heights cannot carry what the art shows | Large blocking features belong in the shape; artists confirm and adjust with the passability overlay |
 
 ## 8. Rules this plan would amend
 
@@ -1714,10 +1775,13 @@ release cycle are removed).
   Advanced. Every control declares the stage it first affects, and the
   stage map is checked."
 - **Rule 10**, replace "three windows per world" as the bar with: "A look is
-  judged on the retail bench (retail's own heights, held-out sections,
-  blind sheets), and by the owner's eye. The windows remain as scenes."
+  judged through LLM visual comparisons followed by the owner's final
+  judgment. Retail-reference sheets and existing windows provide evidence;
+  pixel statistics are secondary to the visual judgment."
 - **Rule 12**, add: "Export does not depend on view options. A map carries
-  its world."
+  its world. Same-build, same-machine determinism remains a check; editable
+  source does not promise the same export across GPUs or future builds.
+  The exported `.ufo` is the game contract."
 - **Checks table**, add the benches of R0 and the stage-map check.
 
 ## Appendix A. Evidence index
