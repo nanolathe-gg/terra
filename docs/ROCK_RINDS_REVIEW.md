@@ -134,6 +134,18 @@ valleys **17**; maximum slope p90 is **0.742**. The **23 existing gate failures*
 are unchanged because this work does not change the height model. No retail
 images, reference-derived assets, or new dependencies are committed.
 
+## Curve-editor verification
+
+The old Green curve run had two failures also reproduced on main: a shallow
+braided channel could not meet the generic five-unit cut threshold, and the
+crest assertion sampled the centerline of a wandering/uneven landform.
+The check now fixes its seed, bounds the channel assertion by the available
+cut depth, and uses a centered, even analytical fixture for crest editing.
+The preceding form checks still exercise the natural world defaults. The
+height edit now checks both the selected node parameter and rendered height.
+No production height behavior changed. Full Green and Desert runs each pass
+**77 checks with 0 console errors**, including the previous two assertions.
+
 ## Performance and landing
 
 Alternating Chrome runs use the same authored Green cliff and active surface

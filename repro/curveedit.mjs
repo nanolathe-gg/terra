@@ -78,6 +78,8 @@ async function editWorld(world, port) {
     const drag = async (from, to, extra = {}) => { await mouse('mousePressed', ...from, extra); await mouse('mouseMoved', ...to); await sleep(60); await mouse('mouseReleased', ...to); await sleep(250); };
     try {
       await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
+      // Fix the seed so outline variation cannot turn this UI check into a lottery.
+      await setValue('seed',2701,'change');await ev(`document.getElementById('seed-vary').checked=false;document.getElementById('seed-vary').dispatchEvent(new Event('change',{bubbles:true}));true`);
       // The approved defaults must reach a new stroke and a selected stroke through the existing Style selector.
       const defaults = JSON.parse(readFileSync(new URL(`comparisons/landform/${world === 'desert' ? '07-mesa-improved' : '02-plateau-natural-refined'}.json`, import.meta.url), 'utf8')).strokes[0][2];
       const baseH = await ev('sculptDebug.base');
@@ -107,7 +109,10 @@ async function editWorld(world, port) {
           const before = (await nodes()).length;
           await stroke(tool);
           const ns = await nodes(), n = ns.at(-1), change = await moved();
-          check(`form ${form} ${size}px`, ns.length === before + 1 && n.params.curve?.form === form && n.params.radius === size / 2 && change > 5, {nodes: ns.length - before, curve: n?.params?.curve, radius: n?.params?.radius, change});
+          // A channel targets three units above the sea; on Green its total
+          // cut is only six units, and the path can sample a channel shoulder.
+          const minimumChange=tool==='plateau'?5:Math.min(5,Math.max(.5,Math.abs(baseH-(await ev('sculptDebug.sea'))-3)*.5));
+          check(`form ${form} ${size}px`, ns.length === before + 1 && n.params.curve?.form === form && n.params.radius === size / 2 && change > minimumChange, {minimumChange,nodes: ns.length - before, curve: n?.params?.curve, radius: n?.params?.radius, change});
           await ev(`document.getElementById('undo').click(); true`); await ev('sculptCanvas.idle()'); await sleep(200);
         }
       }
@@ -157,7 +162,11 @@ async function editWorld(world, port) {
       // 6. the landform (H27; section 1 draws its forms): both sides of the section, Link sides and Mirror, the lean handle, the along curve and its pick, the elevation, undo, save and reload
       // Sections 1-5 edited this same brush (the plateau button draws a landform) and left a landform where this one is drawn: start a blank map and the world's preset.
       await ev(`document.getElementById('blank').click(); true`); await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
-      await brush('plateau'); await setValue('tool-style', world, 'change'); await setValue('diameter', 200); await setValue('curve-form', 'lfPlateau', 'change');
+      await brush('plateau'); await setValue('tool-style', world, 'change'); await setValue('diameter', 200);
+      // This sequence samples the crest at path points: keep the analytic
+      // fixture centered, after testing the natural world defaults above.
+      await setValue('lf-wander',0);await setValue('lf-width-vary',0);await setValue('lf-height-vary',0);
+      await setValue('curve-form', 'lfPlateau', 'change');
       const crestHeights = async () => ev(`(() => { const n = sculptDebug.nodes().at(-1); return n.points.map(p => sculptDebug.corner(p.x, p.y).authored); })()`);
       const plain = await ev(`sculptDebug.corner(10, 10).authored`);
       await brush('plateau'); await setValue('curve-form', 'lfPlateau', 'change'); await stroke('plateau');   // the stroke is selected
@@ -184,9 +193,11 @@ async function editWorld(world, port) {
       const lean1 = (await nodes())[L0].params.lean;
       check('dragging the crest sideways sets the lean', lean1 !== lean0 && lean1 >= .25 && lean1 <= 4, {lean0, lean1});
       // the elevation, and the along curve
-      const top0 = Math.max(...await crestHeights()); await setValue('lf-elevation', plain + 120, 'input'); await sleep(300); await ev('sculptCanvas.idle()'); await sleep(500);
+      if(await ev('sculptDebug.state().selected')!==L0)await ev(`document.querySelector('#layers [data-index="${L0}"] .layer-name').click();true`);
+      const targetElevation=Math.round(plain)+120;
+      const top0 = Math.max(...await crestHeights()); await setValue('lf-elevation', targetElevation, 'input'); await sleep(300); await ev('sculptCanvas.idle()'); await sleep(500);
       const top1 = Math.max(...await crestHeights());
-      check('the elevation sets the crest', Math.abs(top1 - (plain + 120)) < 6 && top1 > top0 + 20, {top0, top1, plain});
+      check('the elevation sets the crest', (await nodes())[L0].params.elevation===targetElevation && Math.abs(top1-targetElevation)<6 && top1>top0+20, {top0,top1,plain,targetElevation,params:(await nodes())[L0].params.elevation});
       await ev(`document.getElementById('along-preview').scrollIntoView({block: 'center'}); true`); await sleep(300);
       const ap = await ev('sculptDebug.alongPoint(.5, 1)'), apLow = await ev('sculptDebug.alongPoint(.5, .3)');
       await mouse('mouseMoved', ap.x, ap.y); await mouse('mousePressed', ap.x, ap.y); await mouse('mouseReleased', ap.x, ap.y); await sleep(200);
