@@ -49,3 +49,17 @@ test('layer colors and repetition use the map recipe and existing column palette
  assert.equal(reason('faceBedVary',{column:1,rockFace:0,strata:1}),'');
  assert.deepEqual(copyRockSettings({strata:.8,strataContrast:.7,strataGrain:.4}),{strata:.8,strataContrast:.7,strataGrain:.4});
 });
+
+
+test('fracture and crust controls use cut sources and visible finish parents',async()=>{
+ const {worldControlRequirement:reason}=await import('../sculpt-control-schema.js');
+ for(const key of ['faceFresh','faceRind','faceRindDepth','faceRindTone','faceRindWarmth','faceRindRough'])assert.ok(ROCK_KEYS.includes(key));
+ assert.ok(reason('faceFresh',{rockFace:2,faceBreak:0,faceSpall:0,faceJoint:0}));
+ assert.equal(reason('faceFresh',{rockFace:2,faceBreak:.4}),'');
+ assert.ok(reason('faceRindTone',{rockFace:2,faceRind:0}));
+ assert.ok(reason('faceRindRough',{rockFace:2,faceRind:1,shineRock:0,shineRockRough:0,faceWet:0}));
+ assert.equal(reason('faceRindRough',{rockFace:2,faceRind:1,faceWet:.3}),'');
+ assert.equal(reason('faceRindDepth',{rockFace:2,faceRind:1,faceJoint:.5}),'');
+ assert.throws(()=>copyRockSettings({faceRindDepth:21}));
+ assert.throws(()=>copyRockSettings({faceRindTone:-1}));
+});

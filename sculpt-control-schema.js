@@ -75,9 +75,14 @@ const NO_COLUMN='Add a rock column in the Rock column panel to use this setting.
 // finds an inactive setting and explains what must be enabled to use it.
 export function worldControlRequirement(key,v){
  const n=k=>Number(v[k]??0),needs=(parent,label)=>worldControlRequirement(parent,v)||(n(parent)<=0?`Enable ${label} to use this setting.`:'');   // a parent that is itself idle names its own reason first
+ const fractures=Math.max(n('faceBreak'),n('faceSpall'),n('faceJoint'));
+ if(key==='faceRind')return needs('rockFace','Rock relief: Depth');
+ if(key==='faceFresh')return needs('rockFace','Rock relief: Depth')||(fractures>0?'':'Raise Block release, Broken layer edges, or Joint depth to expose fresh rock.');
+ if(key==='faceRindDepth')return needs('rockFace','Rock relief: Depth')||(Math.max(n('faceFresh'),n('faceRind'))>0&&fractures>0?'':'Enable fresh fractures or a weathered crust, with Block release, Broken layer edges, or Joint depth.');
+ if(['faceRindTone','faceRindWarmth','faceRindRough'].includes(key)){const parent=needs('faceRind','Weathered crust coverage');return parent||(key==='faceRindRough'&&Math.max(n('shineRock'),n('shineRockRough'),n('faceWet'))<=0?'Raise rock Gloss, Micro roughness, or Wetness to see the crust finish.':'');}
  if(key==='faceClastSize')return needs('faceClast','Embedded fragment relief');
  if(key==='faceClast')return n('rockFace')>0||n('faceMineral')>0?'':'Raise Rock relief: Depth or Mineral contrast to use embedded fragments.';
- if(key==='faceGritSize')return n('faceGrit')*n('rockFace')>0||n('faceMineral')>0?'':'Raise Grit relief or Mineral contrast to use Grit size.';
+ if(key==='faceGritSize')return n('faceGrit')*n('rockFace')>0||n('faceMineral')>0||(n('faceRind')*n('rockFace')>0&&(n('faceRindRough')>0||n('shineRockRough')>0)&&Math.max(n('shineRock'),n('shineRockRough'),n('faceWet'))>0)?'':'Raise Grit relief, Mineral contrast, or a lit weathered crust to use Grit size.';
  if(key==='faceRound')return n('rockFace')*n('faceBlock')>0||(n('faceClast')>0&&Math.max(n('rockFace'),n('faceMineral'))>0)?'':'Raise Block offsets and tilts with Rock relief: Depth, or enable embedded fragments, to round the rock.';
  if(['faceBreak','faceJointTilt','faceScaleVary','faceStretch','faceBlockHeight'].includes(key))return n('rockFace')>0||(n('debrisAmount')>0&&(key==='faceBreak'||n('faceBreak')>0))?'':'Raise Rock relief: Depth or enable cliff debris with Block release.';
  if(['faceSpall'].includes(key))return needs('rockFace','Rock relief: Depth');
@@ -173,7 +178,7 @@ export function worldControlRequirement(key,v){
 // Primary controls describe a visible feature. Fine tuning remains available
 // explicitly (and through search), without filling the default inspector.
 export const WORLD_PRIMARY_CONTROLS=new Set([
- 'faceBreak','faceBedVary','bedCycleVary','faceJointTilt','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
+ 'faceFresh','faceRind','faceRindDepth','faceRindTone','faceRindWarmth','faceRindRough','faceBreak','faceBedVary','bedCycleVary','faceJointTilt','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
  'runoff','runoffScale','runoffConcentration','runoffCut','runoffStain','debrisAmount','debrisReach','debrisDepth','stoneSort','stoneRound','stoneSlab',
  'vegetationCover','plantRelief','flowerDensity',
  'bedDip','bedDipDir','faceStretch','faceBlockHeight','faceRound','faceJoint','faceExtrude','faceLamina','faceLaminaSize','faceScratchLength','faceScratchAngle','faceGritSize',

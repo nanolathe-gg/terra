@@ -208,6 +208,7 @@ KNOB_DEFAULTS.update(rockFace=2, rockFaceFrom=.6, faceRock=.9, faceBed=5.5, face
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, rillDepth=0, rillSpacing=8)
 # Voxel block proportions, laminations and directional scratches; neutral values preserve the existing solid.
 KNOB_DEFAULTS.update(runoff=0, runoffScale=24, runoffConcentration=.65, runoffCut=2, runoffStain=.5, debrisAmount=0, debrisReach=56, debrisDepth=4, stoneSort=.6, stoneRound=0, stoneSlab=.05)
+KNOB_DEFAULTS.update(faceFresh=0, faceRind=0, faceRindDepth=6, faceRindTone=-.22, faceRindWarmth=.35, faceRindRough=.65)
 KNOB_DEFAULTS.update(bedCycleVary=0, faceBedVary=1, faceBreak=0, faceJointTilt=0, faceScaleVary=0, faceFold=0, faceSpall=0, faceClast=0, faceClastSize=12, faceMineral=0)
 KNOB_DEFAULTS.update(faceStretch=1, faceBlockHeight=1, faceRound=0, faceJoint=0.35, faceExtrude=0, faceLamina=0, faceLaminaSize=3, faceScratchLength=50, faceScratchAngle=0, faceGritSize=1.3)
 # Card P30: Vegetation cover 0 is off (every world has a ground-cover table: GROUND_COVER, DEFAULT_GROUND_COVER); modern Green sets 1.

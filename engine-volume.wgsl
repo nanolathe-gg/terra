@@ -53,6 +53,29 @@ fn voxelGradient(p:vec3f)->vec3f {
 fn voxelNormal(p:vec3f)->vec3f {
     let g=voxelGradient(p);return select(vec3f(0,0,1),normalize(g),dot(g,g)>1e-12);
 }
+fn voxelRockHeight(p:vec3f,painted:f32)->f32 {
+    // Only authored cuts enable rock below the plain. Testing the baked
+    // microrelief here would turn ordinary ground grain into rocky banks.
+    let raised=smoothstep(u.base+1.0,u.base+8.0,p.z);
+    if(raised==1.0){return raised;}
+    let cut=1.0-smoothstep(u.base-.5,u.base,baseHeight(p.xy));
+    return max(raised,
+        max(cut,smoothstep(.1,.6,painted))*smoothstep(u.sea,u.sea+1.0,p.z));
+}
+// Material age inferred from the same local cuts as the solid. This is an
+// artistic rind-depth model, not a persisted geological age simulation.
+fn voxelSkin(p:vec3f,slope:f32,painted:f32,rain:f32)->vec2f {
+    if(max(u.faceFresh,u.faceRind)<=0.0||u.rockFace<=0.0){return vec2f(0);}
+    let skinGate=rockFaceGate(slope,painted,routeProtection(p.xy))*voxelRockHeight(p,painted)*clamp(voxelRelief(p.xy,slope)*u.rockFace*.5,0.0,1.0);
+    if(skinGate<=0.0){return vec2f(0);}
+    let r=voxelRockSpace(p);let hard=voxelHardness(p);
+    let c=voxelBlocks(r,max(4.0,u.faceBlockSize));let broad=voxelBlocks(r,max(24.0,u.faceBlockSize*2.5));
+    let removed=(voxelSpall(r,c,hard)+voxelRelease(broad,hard)*min(24.0,u.faceBlockSize*.8)+u.faceJoint*voxelJoint(c,broad)*3.0)*u.rockFace*.5*voxelRelief(p.xy,slope);
+    let depth=u.faceRindDepth*(.75+.5*voxelNoise(r/max(12.0,u.faceBlockSize*1.7)));
+    let fresh=smoothstep(depth*.35+.2,depth*1.25+.8,removed);
+    let mature=mix(.65,1.0,clamp(rain,0.0,1.0));
+    return vec2f(fresh*u.faceFresh,(1.0-fresh)*u.faceRind*mature)*skinGate;
+}
 #ifdef VOLUME_COMPUTE
 @group(3) @binding(0) var cacheOut:texture_storage_2d<rgba32float,write>;
 @group(3) @binding(1) var guideOut:texture_storage_2d<rgba32float,write>;
@@ -113,15 +136,6 @@ fn voxelPaintRock(p:vec2f)->f32 {
     if(u.paintOn==0){return 0.0;}
     return max(0.0,textureSampleLevel(masksTex,linearClamp,maskUv(p),0,0.0).r);
 }
-fn voxelRockHeight(p:vec3f,painted:f32)->f32 {
-    // Only authored cuts enable rock below the plain. Testing the baked
-    // microrelief here would turn ordinary ground grain into rocky banks.
-    let raised=smoothstep(u.base+1.0,u.base+8.0,p.z);
-    if(raised==1.0){return raised;}
-    let cut=1.0-smoothstep(u.base-.5,u.base,baseHeight(p.xy));
-    return max(raised,
-        max(cut,smoothstep(.1,.6,painted))*smoothstep(u.sea,u.sea+1.0,p.z));
-}
 fn voxelDensity(p:vec3f)->f32 {
     let source=voxelAuthored(p.xy);let guide=voxelGuide(p.xy);let nz=sqrt(max(.000225,1.0-dot(guide.xy,guide.xy)));let n=normalize(vec3f(guide.xy,nz));
     let d=(p.z-source.x)*min(max(source.w,.015),n.z);
@@ -135,8 +149,7 @@ fn voxelDensity(p:vec3f)->f32 {
     if(max(face,soil)*heightGate<.001){return d;}
     let r=voxelRockSpace(p);
     let c=voxelBlocks(r,max(4.0,u.faceBlockSize));let broad=voxelBlocks(r,max(24.0,u.faceBlockSize*2.5));
-    let width=.65+u.faceWear*1.2;
-    let joint=(1.0-smoothstep(width*.25,width,c.edge))*.35+(1.0-smoothstep(width*.15,width*.85,broad.edge))*1.15;
+    let joint=voxelJoint(c,broad);
     let course=voxelNoise(r/vec3f(max(14.0,u.faceRun*.3),max(14.0,u.faceRun*.3),max(3.0,u.faceBed*.6)))-.5;
     let faces=u.faceBlock*(c.face*.65+broad.face*1.05);
     let mass=course*u.faceMass*2.2;
@@ -154,8 +167,7 @@ fn voxelDensity(p:vec3f)->f32 {
     // Chips remove corners and patches along weaker partings. This exposes
     // broad intact faces instead of adding the same fine noise everywhere.
     let hard=voxelHardness(p);
-    let chip=voxelNoise(r/vec3f(max(5.0,u.faceBlockSize*.65),max(5.0,u.faceBlockSize*.65),max(3.0,u.faceBed*.8))+vec3f(19,53,7));
-    let spall=u.faceSpall*smoothstep(.32,.7,chip)*(1.0-hard*.7)*(1.0+1.8*exp(-c.edge/2.0))*3.0;
+    let spall=voxelSpall(r,c,hard);
     let clasts=voxelClasts(p);
     let inclusion=u.faceClast*(clasts.x-.12)*min(4.0,u.faceClastSize*.22);
     let release=voxelRelease(broad,hard)*min(24.0,u.faceBlockSize*.8);

@@ -62,6 +62,9 @@ export const KNOBS = [
     ['runoffConcentration','Channel concentration',0,1,.05,.65],['runoffCut','Channel incision',0,8,.1,2],['runoffStain','Mineral staining',0,1,.05,.5]]],
   ['Rock debris', [['debrisAmount','Cliff debris accumulation',0,2,.05,0],['debrisReach','Rockfall reach (px)',8,96,2,56],['debrisDepth','Accumulated bed thickness',0,12,.25,4]]],
   ['Rock surface', [['faceShade','Shadow and crevice depth',0,1,.05,.85],['faceTone','Color variation between blocks',0,.5,.01,.12],
+    ['faceFresh','Fresh fracture contrast',0,1,.05,0],['faceRind','Weathered crust coverage',0,1,.05,0],
+    ['faceRindDepth','Weathering penetration (art units)',0,20,.25,6],['faceRindTone','Crust lightness (dark to bleached)',-.65,.65,.05,-.22],
+    ['faceRindWarmth','Crust oxidation',0,1,.05,.35],['faceRindRough','Crust finish (0 polished, 1 rough)',0,1,.05,.65],
     ['faceMineral','Mineral contrast',0,1,.05,0],['faceStrata','Layer tint: lighter and darker',0,.5,.01,0],['faceWet','Wetness: darker rock, smoother reflections',0,1,.05,0]]],
   // Water detail: the shallow-to-deep step, the shallow bed and the waterline (cards E11, G1).
   ['Water detail', [['stepSoftPx','Threshold edge softness (px)',1,40,1,1],['shelfWander','Shelf wander (depth units)',0,40,1,0],['bedFlat','Bed lit by its own relief only',0,1,.05,0],['bedDots','Bed speckles',0,1,.02,0],['bedDotCell','Dot spacing (px)',6,40,1,14],['crackedStep','Cracked-bed transition depth',0,60,1,0],['shoalBump','Lit bumps in the bed (slope)',0,6,.1,0],['shoalBumpPx','Bump size (px)',2,16,.5,6],['shoalGrain','Grain through water tint',0,1,.05,0],['shoalRag','Shallow-to-deep notches (px)',0,16,.5,0],['shoalStairs','Hard waterline stairs (px)',0,6,.1,0],['shoalShoreSoft','Waterline blur (px)',0,12,.5,0]]],

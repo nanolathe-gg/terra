@@ -220,3 +220,27 @@ bounded approximation, not individually tracked detached stones or conserved
 rock mass. `repro/geology-provenance.mjs` checks color/geometry separation,
 upstream bed colors in lower deposits, control continuity, partition equality
 and unchanged gameplay heights. See `GEOLOGY_PROVENANCE_REVIEW.md` for results.
+
+## Fresh fracture interiors and weathered crusts
+
+In **World → Rock & cliffs → Rock surface**, Fresh fracture contrast reveals
+mineral grain inside the same block release, joint cuts and spalled edges
+that shape the solid. Weathered crust coverage retains an altered outer
+finish where those cuts do not penetrate it. Weathering penetration sets
+how deeply that alteration reaches; the existing fracture controls decide
+where it is removed. At zero fracture depth, Fresh fracture contrast has
+no effect and explains which cut amount is needed.
+
+Crust lightness ranges from dark coating to bleached material. Crust
+oxidation warms the artist's underlying rock or bed colors. Crust finish
+ranges from polished to rough, using the existing GGX reflection model and
+Grit size. The existing rock Gloss and Wetness remain the controls for the
+underlying reflection and water film. All six settings are saved and undone
+with the existing rock recipe; geological starting points set ordinary
+values, preserving the selected palette and world's ground.
+
+This is a surface appearance model driven by the 3D geological cuts. It does
+not add a physical shell or simulate elapsed weathering time, and it leaves
+Clay, density and gameplay heights unchanged. Loose fragments still use
+source-bed colors and sizes without tracking individual rind histories.
+See `ROCK_RINDS_REVIEW.md` for control, continuity, retail and timing results.

@@ -216,6 +216,12 @@ struct Uniforms {
     faceClast: f32,
     faceClastSize: f32,
     faceMineral: f32,
+    faceFresh: f32,
+    faceRind: f32,
+    faceRindDepth: f32,
+    faceRindTone: f32,
+    faceRindWarmth: f32,
+    faceRindRough: f32,
     faceStretch: f32, // Block length / width
     faceBlockHeight: f32, // Block height / layer height
     faceRound: f32, // Rounded blocks
@@ -891,6 +897,15 @@ fn voxelBlocks(r:vec3f,size:f32)->VoxelRock {
 fn voxelRelease(block:VoxelRock,hard:f32)->f32 {
     let selected=smoothstep(-.35,.65,block.tone);
     return u.faceBreak*selected*smoothstep(.15,1.7,block.edge)*(.35+.65*(1.0-hard));
+}
+// The same cuts supply density and the depth exposed through the outer rind.
+fn voxelJoint(c:VoxelRock,broad:VoxelRock)->f32 {
+    let width=.65+u.faceWear*1.2;
+    return (1.0-smoothstep(width*.25,width,c.edge))*.35+(1.0-smoothstep(width*.15,width*.85,broad.edge))*1.15;
+}
+fn voxelSpall(r:vec3f,c:VoxelRock,hard:f32)->f32 {
+    let chip=voxelNoise(r/vec3f(max(5.0,u.faceBlockSize*.65),max(5.0,u.faceBlockSize*.65),max(3.0,u.faceBed*.8))+vec3f(19,53,7));
+    return u.faceSpall*smoothstep(.32,.7,chip)*(1.0-hard*.7)*(1.0+1.8*exp(-c.edge/2.0))*3.0;
 }
 // Eight jittered inclusions: round pebbles through angular broken clasts.
 // One field supplies both relief and mineral changes at the same 3D position.
