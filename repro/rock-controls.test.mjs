@@ -63,3 +63,17 @@ test('fracture and crust controls use cut sources and visible finish parents',as
  assert.throws(()=>copyRockSettings({faceRindDepth:21}));
  assert.throws(()=>copyRockSettings({faceRindTone:-1}));
 });
+
+
+test('fracture hierarchy and clustering have effective parents and saved ranges',async()=>{
+ const {worldControlRequirement:reason}=await import('../sculpt-control-schema.js');
+ for(const key of ['faceJointWidth','faceSecondary','faceContinuity','faceDetailPatch'])assert.ok(ROCK_KEYS.includes(key));
+ for(const key of ['faceJointWidth','faceSecondary','faceContinuity']){
+  assert.ok(reason(key,{rockFace:2,faceJoint:0}));
+  assert.equal(reason(key,{rockFace:2,faceJoint:1}),'');
+ }
+ assert.ok(reason('faceDetailPatch',{rockFace:2,faceCrease:0,faceGrit:0,faceScratch:0}));
+ assert.equal(reason('faceDetailPatch',{rockFace:2,faceCrease:.5}),'');
+ assert.throws(()=>copyRockSettings({faceContinuity:2}));
+ assert.throws(()=>copyRockSettings({faceJointWidth:4}));
+});

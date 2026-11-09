@@ -226,6 +226,10 @@ struct Uniforms {
     faceBlockHeight: f32, // Block height / layer height
     faceRound: f32, // Rounded blocks
     faceJoint: f32, // Joint depth
+    faceJointWidth: f32,
+    faceSecondary: f32,
+    faceContinuity: f32,
+    faceDetailPatch: f32,
     faceExtrude: f32, // Extrusion bias: inset to projecting
     faceLamina: f32, // Fine layer relief
     faceLaminaSize: f32, // Fine layer spacing (height)
@@ -899,9 +903,25 @@ fn voxelRelease(block:VoxelRock,hard:f32)->f32 {
     return u.faceBreak*selected*smoothstep(.15,1.7,block.edge)*(.35+.65*(1.0-hard));
 }
 // The same cuts supply density and the depth exposed through the outer rind.
-fn voxelJoint(c:VoxelRock,broad:VoxelRock)->f32 {
-    let width=.65+u.faceWear*1.2;
-    return (1.0-smoothstep(width*.25,width,c.edge))*.35+(1.0-smoothstep(width*.15,width*.85,broad.edge))*1.15;
+fn voxelJoint(r:vec3f,c:VoxelRock,broad:VoxelRock)->f32 {
+    let width=(.65+u.faceWear*1.2)*u.faceJointWidth;
+    // Coherent interruptions taper both depth and opening; they do not select
+    // a different topology at zero. Fine joints subdivide the larger blocks.
+    let size=max(8.0,u.faceBlockSize);
+    var primary=1.0;var secondary=1.0;
+    if(u.faceContinuity<1.0){
+        primary=mix(smoothstep(.24,.64,voxelNoise(r/vec3f(size*2.1,size*2.1,size*1.1)+17.0)),1.0,u.faceContinuity);
+        secondary=mix(smoothstep(.3,.66,voxelNoise(r/vec3f(size*.9,size*.9,size*.65)-29.0)),1.0,u.faceContinuity);
+    }
+    return (1.0-smoothstep(width*.25,width,c.edge))*u.faceSecondary*secondary
+        +(1.0-smoothstep(width*.15,width*.85,broad.edge))*1.15*primary;
+}
+fn voxelDetail(r:vec3f)->f32 {
+    if(u.faceDetailPatch<=0.0){return 1.0;}
+    // Leave intact faces between damaged patches; the existing pitting,
+    // grooves and grit retain their own amplitudes and physical scales.
+    let cluster=smoothstep(.28,.65,voxelNoise(r/max(12.0,u.faceBlockSize*1.3)+vec3f(67,11,43)));
+    return mix(1.0,cluster*1.6,u.faceDetailPatch);
 }
 fn voxelSpall(r:vec3f,c:VoxelRock,hard:f32)->f32 {
     let chip=voxelNoise(r/vec3f(max(5.0,u.faceBlockSize*.65),max(5.0,u.faceBlockSize*.65),max(3.0,u.faceBed*.8))+vec3f(19,53,7));

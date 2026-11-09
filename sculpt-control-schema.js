@@ -75,6 +75,8 @@ const NO_COLUMN='Add a rock column in the Rock column panel to use this setting.
 // finds an inactive setting and explains what must be enabled to use it.
 export function worldControlRequirement(key,v){
  const n=k=>Number(v[k]??0),needs=(parent,label)=>worldControlRequirement(parent,v)||(n(parent)<=0?`Enable ${label} to use this setting.`:'');   // a parent that is itself idle names its own reason first
+ if(['faceJointWidth','faceSecondary','faceContinuity'].includes(key))return needs('faceJoint','Joint depth');
+ if(key==='faceDetailPatch')return needs('rockFace','Rock relief: Depth')||(Math.max(n('faceCrease'),n('faceGrit'),n('faceScratch'))>0?'':'Raise Pitting, Grit relief, or Scratches and water grooves to cluster fine detail.');
  const fractures=Math.max(n('faceBreak'),n('faceSpall'),n('faceJoint'));
  if(key==='faceRind')return needs('rockFace','Rock relief: Depth');
  if(key==='faceFresh')return needs('rockFace','Rock relief: Depth')||(fractures>0?'':'Raise Block release, Broken layer edges, or Joint depth to expose fresh rock.');
@@ -178,7 +180,7 @@ export function worldControlRequirement(key,v){
 // Primary controls describe a visible feature. Fine tuning remains available
 // explicitly (and through search), without filling the default inspector.
 export const WORLD_PRIMARY_CONTROLS=new Set([
- 'faceFresh','faceRind','faceRindDepth','faceRindTone','faceRindWarmth','faceRindRough','faceBreak','faceBedVary','bedCycleVary','faceJointTilt','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
+ 'faceJointWidth','faceSecondary','faceContinuity','faceDetailPatch','faceFresh','faceRind','faceRindDepth','faceRindTone','faceRindWarmth','faceRindRough','faceBreak','faceBedVary','bedCycleVary','faceJointTilt','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
  'runoff','runoffScale','runoffConcentration','runoffCut','runoffStain','debrisAmount','debrisReach','debrisDepth','stoneSort','stoneRound','stoneSlab',
  'vegetationCover','plantRelief','flowerDensity',
  'bedDip','bedDipDir','faceStretch','faceBlockHeight','faceRound','faceJoint','faceExtrude','faceLamina','faceLaminaSize','faceScratchLength','faceScratchAngle','faceGritSize',

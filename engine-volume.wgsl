@@ -70,7 +70,7 @@ fn voxelSkin(p:vec3f,slope:f32,painted:f32,rain:f32)->vec2f {
     if(skinGate<=0.0){return vec2f(0);}
     let r=voxelRockSpace(p);let hard=voxelHardness(p);
     let c=voxelBlocks(r,max(4.0,u.faceBlockSize));let broad=voxelBlocks(r,max(24.0,u.faceBlockSize*2.5));
-    let removed=(voxelSpall(r,c,hard)+voxelRelease(broad,hard)*min(24.0,u.faceBlockSize*.8)+u.faceJoint*voxelJoint(c,broad)*3.0)*u.rockFace*.5*voxelRelief(p.xy,slope);
+    let removed=(voxelSpall(r,c,hard)+voxelRelease(broad,hard)*min(24.0,u.faceBlockSize*.8)+u.faceJoint*voxelJoint(r,c,broad)*3.0)*u.rockFace*.5*voxelRelief(p.xy,slope);
     let depth=u.faceRindDepth*(.75+.5*voxelNoise(r/max(12.0,u.faceBlockSize*1.7)));
     let fresh=smoothstep(depth*.35+.2,depth*1.25+.8,removed);
     let mature=mix(.65,1.0,clamp(rain,0.0,1.0));
@@ -149,7 +149,7 @@ fn voxelDensity(p:vec3f)->f32 {
     if(max(face,soil)*heightGate<.001){return d;}
     let r=voxelRockSpace(p);
     let c=voxelBlocks(r,max(4.0,u.faceBlockSize));let broad=voxelBlocks(r,max(24.0,u.faceBlockSize*2.5));
-    let joint=voxelJoint(c,broad);
+    let joint=voxelJoint(r,c,broad);
     let course=voxelNoise(r/vec3f(max(14.0,u.faceRun*.3),max(14.0,u.faceRun*.3),max(3.0,u.faceBed*.6)))-.5;
     let faces=u.faceBlock*(c.face*.65+broad.face*1.05);
     let mass=course*u.faceMass*2.2;
@@ -157,6 +157,7 @@ fn voxelDensity(p:vec3f)->f32 {
     let phase=fract(voxelColumnCoord(p)/u.faceLaminaSize);
     let lamina=(smoothstep(.02,.2,phase)*(1.0-smoothstep(.72,.98,phase))-.5)*u.faceLamina*2.5;
     let bed=(.55-voxelHardness(p))*u.faceLedge*2.4;
+    let detail=voxelDetail(r);
     let pits=(abs(voxelNoise(r/max(2.0,u.faceCreaseSize))-.5)-.25)*u.faceCrease*2.5;
     let angle=radians(u.faceScratchAngle);
     let scratched=vec3f(r.x*cos(angle)-r.z*sin(angle),r.y,r.x*sin(angle)+r.z*cos(angle));
@@ -172,7 +173,7 @@ fn voxelDensity(p:vec3f)->f32 {
     let inclusion=u.faceClast*(clasts.x-.12)*min(4.0,u.faceClastSize*.22);
     let release=voxelRelease(broad,hard)*min(24.0,u.faceBlockSize*.8);
     let runoff=u.runoffCut*rockWeatherAt(p.xy).x*(1.25-.75*voxelHardness(p));
-    let structure=(faces+mass+pits+grit-spall-release+inclusion-u.faceJoint*joint*3.0-runnel-runoff+bed+u.faceExtrude*6.0*(.65+.35*c.tone))*face+soil*(bed*3.0+mass*1.5)+lamina*(face+soil*3.0);
+    let structure=(faces+mass+pits*detail+grit*detail-spall-release+inclusion-u.faceJoint*joint*3.0-runnel*detail-runoff+bed+u.faceExtrude*6.0*(.65+.35*c.tone))*face+soil*(bed*3.0+mass*1.5)+lamina*(face+soil*3.0);
     let offset=32.0*tanh(u.rockFace*.5*voxelRelief(p.xy,slope)*structure/32.0)*heightGate;
     let q=p-n*offset;let moved=voxelAuthored(q.xy);
     return (q.z-moved.x)*min(max(moved.w,.015),n.z);
