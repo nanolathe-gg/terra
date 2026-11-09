@@ -46,7 +46,7 @@ export const KNOBS = [
     ['faceLean','Joint and runnel lean from the screen\'s north-south (deg)',-45,45,1,28],['faceWear','Weathering: rounded edges, open joints',0,1,.05,.35],
     ['faceCrease','Pitting',0,6,.1,2.5],['faceCreaseSize','Pit size (px)',3,24,1,6],['faceScratch','Runnels: water grooves down the face',0,6,.1,2.5],
     ['faceScratchSize','Runnel spacing (px)',3,20,.5,7],['faceShade','Shadow depth: own shadows and crevices toward black',0,1,.05,.85],['faceGrit','Grit',0,2,.05,0],
-    ['faceGrass','Grass on ledges and flat tops',0,1,.05,.8],['faceLayers','Layers under grass (soil-covered terraces)',0,2,.05,0],['faceTerrace','Terrace spacing (height)',.4,6,.1,1.2],
+    ['faceGrass','Grass on ledges and flat tops',0,1,.05,.8],['faceLayers','Layers under grass (soil-covered terraces)',0,2,.05,0],
     ['faceMass','Broad form: bulges and alcoves',0,3,.05,1],['faceTone','Color variation from block to block',0,.5,.01,.12],['faceStrata','Layer tint: layers lighter and darker',0,.5,.01,0],
     ['faceWet','Wet streaks: runnels and partings darker',0,1,.05,0]]],
   // Water detail: the shallow-to-deep step, the shallow bed and the waterline (cards E11, G1).

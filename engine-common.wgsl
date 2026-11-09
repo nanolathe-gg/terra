@@ -193,7 +193,6 @@ struct Uniforms {
     faceTone: f32,        // colour variation from block to block
     faceStrata: f32,      // layer tint: each layer a little lighter or darker than the next
     faceWet: f32,         // wet streaks: the runnels and open partings darker
-    faceTerrace: f32,     // the soil's fine terraces, height units apart
     faceShade: f32,       // how dark the rock face's own shadows and creases go (0: the sky still fills them; 1: black)
     faceRock: f32,        // rock's share of a steep face (the rest grass, in clumps and on ledges); a stroke's Local vegetation scales it
     faceCrease: f32,      // crease depth (fine creases along the contours, the face's grain), height units
@@ -534,12 +533,7 @@ fn rockFaceAt(s: vec2f, h: f32, fall: vec2f, steep: f32, bedPx: f32) -> RockFace
     // Under soil: the layers' own steps, rounded wider (soil fills the partings and softens the lips), and the broad form.
     let bedHere = rockBedBody(k, s, steep);
     let bedAcross = rockBedBody(select(k + 1.0, k - 1.0, t < 0.5), s, steep);
-    // Fine terraces in the soil (faceTerrace height units apart, wavering along the contours): a short riser and a long tread, a quarter
-    // of their spacing high, so a gentle slope carries a fine waver, not the ink contour lines full-height risers drew at Depth 2.
-    let ct = h / max(u.faceTerrace, 0.3) + poolNoise(s, 23.0, 41.0) * 0.45 + poolNoise(s, 9.0, 43.0) * 0.2;
-    let tt = fract(ct);
-    let terrace = (smoothstep(0.0, 0.3, tt) - tt) * max(u.faceTerrace, 0.3) * 0.25 * min(u.faceLayers, 1.0);   // none while Layers under grass is 0
-    o.layer = mix(min(bedHere, bedAcross), bedHere, smoothstep(0.0, 2.0 + 3.0 * wearPx, dv)) + mass + terrace;
+    o.layer = mix(min(bedHere, bedAcross), bedHere, smoothstep(0.0, 2.0 + 3.0 * wearPx, dv)) + mass;
     // A ledge: a bed's top where it stands proud of the bed above (a shelf grass can hold).
     let aboveBody = rockBlockAt(k + 1.0, r.x, s, steep).x;
     o.ledge = smoothstep(0.65, 0.92, t) * smoothstep(0.2, 1.2, here.x - aboveBody) * smoothstep(0.0, wearPx, here.z);

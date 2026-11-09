@@ -202,7 +202,7 @@ KNOB_DEFAULTS.update(closeShadow=0, cavity=0)
 # The GPU Time pass uses erosionAge iterations, erosionRain times the base rain, talusAngle the repose of loose debris (degrees).
 # The rock face (engine-common.wgsl rockFaceAt): one model for every rock face of every world, drawn in the art's own pixels. Depth (rockFace) only scales its relief: 0 is the same rock, flat.
 KNOB_DEFAULTS.update(rockFace=2, rockFaceFrom=.6, faceRock=.9, faceBed=5.5, faceLedge=2.2, faceRun=90, faceLean=28, faceScratch=2.5, faceScratchSize=7,
-                     faceBlock=3, faceBlockSize=11, faceCrease=2.5, faceCreaseSize=6, faceGrit=0, faceGrass=.8, faceWear=.35, faceShade=.85, faceLayers=0, faceTerrace=1.2, faceMass=1, faceTone=.12, faceStrata=0, faceWet=0)
+                     faceBlock=3, faceBlockSize=11, faceCrease=2.5, faceCreaseSize=6, faceGrit=0, faceGrass=.8, faceWear=.35, faceShade=.85, faceLayers=0, faceMass=1, faceTone=.12, faceStrata=0, faceWet=0)
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, rillDepth=0, rillSpacing=8)
@@ -246,8 +246,8 @@ WORLD_KNOBS = {
                   # Rock from slope .3 (.6): retail Green's rock share is ~.3 from slope .4 up (measured on retail's heights: .23 .31 .32 .29 at
                   # .4-1.0 against our .16 .19 .22 .22; at .3, .18 .25 .33 .29).
                   rockFaceFrom=.3,
-                  # The layers run on under the grass as soil-covered steps, with fine low terraces 1.2 units apart (retail's grassed slopes
-                  # carry soft wavy striations, not ink lines); they replace the contour bands (banding .3 -> 0).
+                  # The layers run on under the grass as soil-covered steps (retail's grassed slopes carry soft wavy striations, not ink
+                  # lines); they replace the contour bands (banding .3 -> 0).
                   faceLayers=1,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
