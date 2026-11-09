@@ -1,7 +1,7 @@
 # Voxel rock controls review
 
 Branch `rock-controls`, based on main `13d74571`. The editor is served for
-review at `http://127.0.0.1:8904/sculpt`. This change is not landed on main.
+review at `http://127.0.0.1:8904/sculpt`. Landing approved after the combined landing checks on November 9, 2026.
 
 ## Artist workflow
 

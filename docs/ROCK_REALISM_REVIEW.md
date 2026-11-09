@@ -1,7 +1,7 @@
 # Rock realism pass
 
 Branch `rock-realism`, based on `rock-weathering` at `f6365e5c` (main base
-`13d74571`). Preview: `http://127.0.0.1:8908/sculpt`. Not landed on main.
+`13d74571`). Preview: `http://127.0.0.1:8908/sculpt`. Landing approved after the combined landing checks on November 9, 2026.
 Artifacts and measurement logs: `/private/tmp/terraform-rock-realism`.
 
 ## Reference comparison by eye
@@ -126,3 +126,12 @@ remain closed basins **17**, fabric **15**, hilltop roundness **8**, Hack expone
 **5**, hollows **17**, valleys **17**. The 23 existing failures remain, and
 maximum slope p90 stays **0.742**. Surface detailing does not fix those height-
 model limitations. No retail art or reference-derived assets are committed.
+
+## Landing verification
+
+Current main (`13d74571`) was merged into this branch before the landing
+checks. `repro/check.sh land --server http://127.0.0.1:8908 --port 9835
+--worlds green,green-modern` passed every check: unit, gate, all 34 scenes,
+regional replay, voxels, smoke including page8, features, passability, and
+shape repetition. Art comparisons retain the pixel counts recorded above.
+Logs: `/private/tmp/terraform-rock-realism/land`.

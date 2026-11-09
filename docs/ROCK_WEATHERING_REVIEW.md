@@ -1,7 +1,7 @@
 # Rock weathering review
 
 Branch `rock-weathering`, extending `rock-controls` at `fd93442e` (main base
-`13d74571`). Preview: `http://127.0.0.1:8906/sculpt`. Not landed on main.
+`13d74571`). Preview: `http://127.0.0.1:8906/sculpt`. Landing approved after the combined landing checks on November 9, 2026.
 
 ## Result by eye
 
