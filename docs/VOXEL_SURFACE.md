@@ -87,3 +87,33 @@ unit movement. Large traversability changes belong in the shape controls.
 The local rain and lighting probes are bounded approximations. Green is
 the first tuned profile; the other worlds use the same renderer and keep
 their existing data pending their own visual tuning.
+
+## Geological rock controls
+
+In **World → Rock & cliffs**, Geological starting point offers Layered
+sandstone, Thin shale, Rounded granite, Jointed basalt, and Pitted limestone.
+Each writes the same editable controls and Rock column bed thickness/hardness;
+it keeps the chosen colors. These are artistic starting points, not mineral
+simulation modes. One Undo restores the whole change.
+
+Shape broad structure first with Joint spacing, Block length / width, Block
+height / layer height, Rounded blocks, and Joint depth. Extrusion bias pushes
+the structure outward or recesses it. Weathering rounds the solid independently
+of how deeply the joints cut. Layer thickness and Hard-layer ledges shape the
+coarse bedding; Fine layer relief and spacing add smaller laminations following
+the column's deformation. Short grooves read as scratches; long grooves read
+as water runnels. Their tilt and spacing are independent. Grit size sets the
+scale of the final density detail. All of these deform the sampled 3D solid,
+including steep faces.
+
+Rock finish now sits in that same section: color variation, layer tint,
+wetness, gloss, reflection sharpness, and micro roughness. Rock and bed colors
+remain in the existing Colors and Rock column editors. A geological preset
+changes geometry and finish but does not replace the world's ground texture.
+
+Rock settings are numbers in the existing map recipe, autosave, share payload,
+world knobs, and history. Each slider gesture is undoable. Preset names are
+never sent to the renderer. Old recipes without a rock block retain the current
+world settings; removed fields are ignored. Invalid values reject the load
+before changing the map. Fine layer spacing, scratch direction/length, block
+roundness and grit size explain which parent amount must be raised first.

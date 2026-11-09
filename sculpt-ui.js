@@ -75,7 +75,7 @@ export function groupToolControls(fields,buildRow){
 }
 
 // One level of open sections keeps related controls together for scrolling.
-const worldSection=name=>/Light|Shine/.test(name)?'Lighting':/Ground|Vegetation|Material coverage/.test(name)?'Ground & vegetation':/Water|Shore|Needle|Contour fringe|Terrace creases/.test(name)?'Water & shores':/Rock|Strata|Cracks|Contour bands|Microfacets/.test(name)?'Rock & cliffs':'Materials & texture';
+const worldSection=name=>name==='Shine: rock'?'Rock & cliffs':/Light|Shine/.test(name)?'Lighting':/Ground|Vegetation|Material coverage/.test(name)?'Ground & vegetation':/Water|Shore|Needle|Contour fringe|Terrace creases/.test(name)?'Water & shores':/Rock|Strata|Cracks|Contour bands|Microfacets/.test(name)?'Rock & cliffs':'Materials & texture';
 // A World group: a titled block created in its section. Its rows carry `search` as data-search-group.
 export function worldGroup(name){
  const block=document.createElement('div'),heading=document.createElement('h3');block.className='world-subsection';heading.textContent=name;block.append(heading);

@@ -30,14 +30,17 @@ fn voxelRockSpace(p:vec3f)->vec3f {
 struct VoxelRock {face:f32,edge:f32,tone:f32}
 fn voxelBlocks(r:vec3f,size:f32)->VoxelRock {
     let warp=vec3f(voxelNoise(r/37.0),voxelNoise((r+53.0)/43.0),voxelNoise((r-21.0)/47.0))-0.5;
-    let q=(r+warp*size*.28)/vec3f(size,size,max(2.0,u.faceBed*1.5));
+    let axes=vec3f(size*u.faceStretch,size,max(2.0,u.faceBed*1.5)*u.faceBlockHeight);
+    let q=(r+warp*size*.28)/axes;
     let base=floor(q);var d1=1e8;var d2=1e8;var v1=vec3f(0);var v2=vec3f(0);var nearest=vec3f(0);
     for(var z=-1;z<=1;z++){for(var y=-1;y<=1;y++){for(var x=-1;x<=1;x++){
         let c=base+vec3f(f32(x),f32(y),f32(z));let v=c+.12+voxelRandom(c)*.76-q;let d=dot(v,v);
         if(d<d1){d2=d1;v2=v1;d1=d;v1=v;nearest=c;}else if(d<d2){d2=d;v2=v;}
     }}}
     let tilt=voxelRandom(nearest+vec3f(11,31,73))-.5;
-    return VoxelRock(dot(v1,tilt)*1.15+(voxelHash(nearest+vec3f(37,5,61))-.5)*.45,(d2-d1)/max(2.0*length(v2-v1),.001)*min(size,max(2.0,u.faceBed*1.5)),voxelHash(nearest)*2.0-1.0);
+    let plane=dot(v1,tilt)*1.15+(voxelHash(nearest+vec3f(37,5,61))-.5)*.45;
+    let rounded=(.65-sqrt(d1))*1.7+(voxelHash(nearest+vec3f(37,5,61))-.5)*.25;
+    return VoxelRock(mix(plane,rounded,u.faceRound),(d2-d1)/max(2.0*length(v2-v1),.001)*min(axes.x,min(axes.y,axes.z)),voxelHash(nearest)*2.0-1.0);
 }
 // Unequal, deformed beds use the same hardness for rock shape and wear.
 fn voxelHardness(p:vec3f)->f32 {
@@ -175,13 +178,18 @@ fn voxelDensity(p:vec3f)->f32 {
     let course=voxelNoise(r/vec3f(max(14.0,u.faceRun*.3),max(14.0,u.faceRun*.3),max(3.0,u.faceBed*.6)))-.5;
     let faces=u.faceBlock*(c.face*.65+broad.face*1.05);
     let mass=course*u.faceMass*2.2;
+    // Fine laminations follow the same deformed column as the larger beds.
+    let phase=fract(columnCoord(p.xy,p.z)/u.faceLaminaSize);
+    let lamina=(smoothstep(.02,.2,phase)*(1.0-smoothstep(.72,.98,phase))-.5)*u.faceLamina*2.5;
     let bed=(.55-voxelHardness(p))*u.faceLedge*2.4;
     let pits=(abs(voxelNoise(r/max(2.0,u.faceCreaseSize))-.5)-.25)*u.faceCrease*2.5;
-    let runnel=pow(1.0-abs(voxelNoise(r/vec3f(max(2.0,u.faceScratchSize),max(2.0,u.faceScratchSize),50.0))*2.0-1.0),4.0)*u.faceScratch*.5;
-    let grit=(voxelNoise(p/1.3)-.5)*u.faceGrit*4.0;
+    let angle=radians(u.faceScratchAngle);
+    let scratched=vec3f(r.x*cos(angle)-r.z*sin(angle),r.y,r.x*sin(angle)+r.z*cos(angle));
+    let runnel=pow(1.0-abs(voxelNoise(scratched/vec3f(max(2.0,u.faceScratchSize),max(2.0,u.faceScratchSize),u.faceScratchLength))*2.0-1.0),4.0)*u.faceScratch*.5;
+    let grit=(voxelNoise(p/u.faceGritSize)-.5)*u.faceGrit*4.0;
     // Soil-covered beds have their own rounded terraces, including on
     // slopes that also expose rock; an activation mask alone hid this control.
-    let structure=(faces+mass+pits+grit-u.faceWear*joint*3.0-runnel+bed)*face+soil*(bed*3.0+mass*1.5);
+    let structure=(faces+mass+pits+grit-u.faceJoint*joint*3.0-runnel+bed+u.faceExtrude*6.0*(.65+.35*c.tone))*face+soil*(bed*3.0+mass*1.5)+lamina*(face+soil*3.0);
     let offset=32.0*tanh(u.rockFace*.5*voxelRelief(p.xy,slope)*structure/32.0)*heightGate;
     let q=p-n*offset;let moved=voxelAuthored(q.xy);
     return (q.z-moved.x)*min(max(moved.w,.015),n.z);

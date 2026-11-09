@@ -76,6 +76,12 @@ const NO_COLUMN='Add a rock column in the Rock column panel to use this setting.
 export function worldControlRequirement(key,v){
  const n=k=>Number(v[k]??0),needs=(parent,label)=>worldControlRequirement(parent,v)||(n(parent)<=0?`Enable ${label} to use this setting.`:'');   // a parent that is itself idle names its own reason first
  // Rows that shape the rock's relief do nothing while it is flat (Depth 0); amount, placement, grass and colour act at any depth.
+ if(['faceLaminaSize','faceGritSize','faceScratchLength','faceScratchAngle','faceRound'].includes(key)){
+  const parent={faceLaminaSize:'faceLamina',faceGritSize:'faceGrit',faceScratchLength:'faceScratch',faceScratchAngle:'faceScratch',faceRound:'faceBlock'}[key];
+  const label={faceLamina:'Fine layer relief',faceGrit:'Grit',faceScratch:'Scratches and water grooves',faceBlock:'Block offsets and tilts'}[parent];
+  return needs(parent,label);
+ }
+ if(['faceStretch','faceBlockHeight','faceJoint','faceExtrude','faceLamina'].includes(key))return needs('rockFace','Rock relief: Depth');
  if(['faceCreaseSize','faceCrease','faceBlock','faceLedge','faceScratch','faceScratchSize','faceGrit','faceWear','faceShade','faceLayers','faceMass'].includes(key))return n('rockFace')>0?'':'Raise Rock relief: Depth to use this setting.';
  if(['faceBlockSize','faceLean'].includes(key))return n('rockFace')>0||n('faceTone')>0?'':'Raise Rock relief: Depth or Color variation to use this setting.';
  if(['faceBed','faceRun'].includes(key))return n('rockFace')>0||(n('column')>0&&(n('faceStrata')>0||n('faceWet')>0))?'':'Raise Rock relief: Depth, Layer tint, or Wetness to use this setting.';
@@ -153,11 +159,13 @@ export function worldControlRequirement(key,v){
 // explicitly (and through search), without filling the default inspector.
 export const WORLD_PRIMARY_CONTROLS=new Set([
  'vegetationCover','plantRelief','flowerDensity',
+ 'bedDip','bedDipDir','faceStretch','faceBlockHeight','faceRound','faceJoint','faceExtrude','faceLamina','faceLaminaSize','faceScratchLength','faceScratchAngle','faceGritSize',
  'rockFace','faceRock','rockFaceFrom','faceCreaseSize','faceCrease','faceBlock','faceBlockSize','faceBed','faceLedge','faceRun','faceScratch','faceScratchSize','faceLean','faceGrit','faceGrass','faceWear','faceShade','faceLayers','faceMass','faceTone','faceStrata','faceWet',
  'groundTiles','groundContrast','undulation','undulationScale','undulationCover','undulationArt','coastRamp','faceSteep','lowTint','lowReach','lowGrain',
  'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
  'flatShadow','flatOcclusion','sunTilt','ambient','shadeDepth','lightCap','creaseShade',
  'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','erosionRain','wetSwath','lushness','slopeMarks','wrinkles',
+ 'shineRockSharp','shineRockRough','shineRockScale',
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
  'looseSupply','looseSize','looseKnoll','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing',

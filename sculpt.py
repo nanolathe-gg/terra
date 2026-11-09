@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-workspace.js', 'sculpt-workspace.css', 'sculpt-help.js', 'sculpt-help-examples.js', 'sculpt-control-schema.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-paths.js', 'sculpt-river.js', 'sculpt-renderer.js', 'sculpt-webgpu.js', 'sculpt-vert.wgsl',
-    'sculpt-volume.js', 'engine-volume.wgsl', 'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-palette.wgsl', 'engine-weather.wgsl',
+    'sculpt-volume.js', 'sculpt-rock-presets.js', 'engine-volume.wgsl', 'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-palette.wgsl', 'engine-weather.wgsl',
     'engine-erosion.wgsl', 'engine-drainage.wgsl', 'sculpt-drainage.js', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-gates.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-export-worker.js', 'sculpt-features.js', 'sculpt-feature-set.js', 'sculpt-feature-gen.js', 'sculpt-feature-fire.js', 'sculpt-feature-worker.js', 'sculpt-canvas.js', 'sculpt-passability.js', 'sculpt-passability-view.js', 'sculpt-share.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js', 'sculpt-scene.js', 'sculpt-knobs.js',)}
 
 
@@ -206,6 +206,8 @@ KNOB_DEFAULTS.update(rockFace=2, rockFaceFrom=.6, faceRock=.9, faceBed=5.5, face
 # H5 (Green's engine): the Time pass's marks. 3a is retail's (terraceBreak, terraceCalm, wetSwath);
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, rillDepth=0, rillSpacing=8)
+# Voxel block proportions, laminations and directional scratches; neutral values preserve the existing solid.
+KNOB_DEFAULTS.update(faceStretch=1, faceBlockHeight=1, faceRound=0, faceJoint=0.35, faceExtrude=0, faceLamina=0, faceLaminaSize=3, faceScratchLength=50, faceScratchAngle=0, faceGritSize=1.3)
 # Card P30: Vegetation cover 0 is off (every world has a ground-cover table: GROUND_COVER, DEFAULT_GROUND_COVER); modern Green sets 1.
 KNOB_DEFAULTS.update(vegetationCover=0, plantRelief=1, flowerDensity=1)
 KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
@@ -244,7 +246,7 @@ WORLD_KNOBS = {
                   # Macro relief remains an authored input; small cliff detail lives in 3D.
                   rockFace=2, rockFaceFrom=.2, faceBed=2.5, faceBlockSize=7,
                   faceMass=2.6, faceGrass=.4, faceLayers=1, reliefAmount=.25,
-                  faceScratch=1, faceCrease=1, faceLedge=1.2, faceWear=.15, faceShade=.65, faceGrit=.5,
+                  faceScratch=1, faceCrease=1, faceLedge=1.2, faceWear=.15, faceJoint=.15, faceShade=.65, faceGrit=.5,
                   # Water (card E1). Retail Green's shallows are the lit bed under a
                   # blue tint (mean (73,110,240), luma s.d. 11 against deep 1.5) and end
                   # in a hard step: colour by depth is flat to ~30 and gone by ~44 in

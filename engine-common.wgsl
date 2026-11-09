@@ -197,6 +197,16 @@ struct Uniforms {
     faceRock: f32,        // rock's share of a steep face (the rest grass, in clumps and on ledges); a stroke's Local vegetation scales it
     faceCrease: f32,      // crease depth (fine creases along the contours, the face's grain), height units
     faceCreaseSize: f32,  // crease spacing, px
+    faceStretch: f32, // Block length / width
+    faceBlockHeight: f32, // Block height / layer height
+    faceRound: f32, // Rounded blocks
+    faceJoint: f32, // Joint depth
+    faceExtrude: f32, // Extrusion bias: inset to projecting
+    faceLamina: f32, // Fine layer relief
+    faceLaminaSize: f32, // Fine layer spacing (height)
+    faceScratchLength: f32, // Groove length (px)
+    faceScratchAngle: f32, // Groove tilt from vertical (deg)
+    faceGritSize: f32, // Grit size (px)
     // Water looks (card E1). Defaults reproduce the earlier water exactly.
     bedLit: f32,          // shallow water drawn as the lit bed under it, tinted (0: the noise water; 1: all bed)
     bedTint: f32,         // how far the tint replaces the bed's own colour (0: bed only; 1: the tint, lit by the bed)

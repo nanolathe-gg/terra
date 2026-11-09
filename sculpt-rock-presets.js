@@ -1,0 +1,32 @@
+// Geological starting points are ordinary artist settings and Rock column beds.
+// No preset name reaches the renderer; the edited numbers are the saved result.
+import {KNOBS} from './sculpt-knobs.js';
+const base={rockFace:2,faceRock:1,rockFaceFrom:.2,faceBed:5.5,faceLedge:2,faceRun:120,faceBlock:3,faceBlockSize:18,faceLean:0,faceWear:.25,faceCrease:.5,faceCreaseSize:6,faceScratch:.6,faceScratchSize:6,faceShade:.7,faceGrit:.15,faceGrass:.25,faceLayers:.3,faceMass:1,faceTone:.12,faceStrata:.08,faceWet:0,
+ faceStretch:1,faceBlockHeight:1,faceRound:0,faceJoint:.5,faceExtrude:0,faceLamina:0,faceLaminaSize:3,faceScratchLength:50,faceScratchAngle:0,faceGritSize:1.3,
+ bedDip:0,bedDipDir:90,shineRock:.25,shineRockSharp:12,shineRockRough:.25,shineRockScale:3};
+const preset=(label,knobs,beds)=>({label,knobs:{...base,...knobs},sections:[{start:0,beds}]});
+export const ROCK_PRESETS={
+ sandstone:preset('Layered sandstone',{faceStretch:2.4,faceBlockHeight:.8,faceBlock:2,faceBed:6,faceLedge:3,faceJoint:.65,faceExtrude:.3,faceLamina:1.2,faceLaminaSize:3.5,faceWear:.3,faceScratch:1.2,faceStrata:.18},[[7,.85,0],[3,.28,1],[4,.65,2]]),
+ shale:preset('Thin shale',{faceStretch:3.2,faceBlockHeight:.4,faceBlockSize:24,faceBed:3,faceLedge:3.2,faceJoint:.9,faceLamina:1.5,faceLaminaSize:2.5,faceExtrude:.2,faceWear:.1,faceScratch:.3,faceStrata:.22,shineRock:.18},[[2,.85,0],[1,.2,1],[3,.7,2],[1,.3,1]]),
+ granite:preset('Rounded granite',{faceBlockSize:30,faceBlockHeight:4,faceRound:.85,faceBlock:4,faceBed:7,faceLedge:0,faceJoint:1.1,faceWear:.65,faceExtrude:.15,faceLayers:0,faceMass:1.8,faceCrease:.35,faceGrit:.6,faceGritSize:2,faceScratch:.2,faceStrata:0,shineRock:.4,shineRockSharp:34,shineRockRough:.5},[[12,.8,0]]),
+ basalt:preset('Jointed basalt',{faceBlockSize:14,faceBlockHeight:5,faceBed:7,faceBlock:3.5,faceLedge:.2,faceJoint:1.3,faceWear:.12,faceExtrude:.1,faceLayers:0,faceScratch:1.6,faceScratchLength:120,faceCrease:.2,faceGrit:.3,faceStrata:0,shineRock:.3,shineRockSharp:28},[[12,.9,0]]),
+ limestone:preset('Pitted limestone',{faceBlockSize:24,faceBlockHeight:1.8,faceRound:.55,faceBed:7,faceLedge:1.7,faceJoint:.8,faceWear:.8,faceCrease:3.5,faceCreaseSize:10,faceGrit:.25,faceScratch:1.8,faceScratchLength:90,faceLamina:.3,faceWet:.2,shineRock:.15,shineRockSharp:8},[[8,.75,0],[3,.4,1]])
+};
+export const ROCK_KEYS=Object.keys(base);
+const ranges=new Map(KNOBS.flatMap(([,rows])=>rows.map(([key,,lo,hi])=>[key,[lo,hi]])));
+// Validate the entire recipe before changing the open scene. Unknown, removed
+// fields are ignored, like the editor's other saved controls.
+export function copyRockSettings(value){
+ if(value==null)return null;
+ if(typeof value!=='object'||Array.isArray(value))throw Error('Invalid rock settings.');
+ const result={};
+ for(const key of ROCK_KEYS)if(Object.hasOwn(value,key)){
+  const n=value[key],[lo,hi]=ranges.get(key);
+  if(typeof n!=='number'||!Number.isFinite(n)||n<lo||n>hi)throw Error(`Invalid rock setting: ${key}.`);
+  result[key]=n;
+ }
+ return result;
+}
+export function rockPresetFor(values,column){
+ return Object.entries(ROCK_PRESETS).find(([,p])=>ROCK_KEYS.every(k=>Math.abs(Number(values[k])-p.knobs[k])<1e-6)&&JSON.stringify(column?.sections)===JSON.stringify(p.sections))?.[0]||'';
+}

@@ -98,12 +98,17 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   await openHost();
   const engine = await import('../sculpt-scene.js'), fieldsModule = await import('../sculpt-gpu-fields.js');
   const {configureMap} = await import('../sculpt-map.js'), {TerrainRenderer} = await import('../sculpt-renderer.js');
-  globalThis.location = {search: '?' + search};
+  const {copyRockSettings} = await import('../sculpt-rock-presets.js');
+  const {copyColumn} = await import('../sculpt-column.js');
   const settings = new URLSearchParams(search);
+  for (const [key,value] of Object.entries(copyRockSettings(scene.rock) || {})) if (!settings.has(key)) settings.set(key,value);
+  globalThis.location = {search: '?' + settings};
   const services = await json('services.json');
   const config = await json(`config/${encodeURIComponent(settings.get('biome') || services.defaultWorld)}${settings.get('variant') ? '--' + encodeURIComponent(settings.get('variant')) : ''}.json`);
   if (config.biomeId !== scene.biome) throw new Error(`asked for world ${scene.biome}, got ${config.biomeId}`);
   config.services = services;
+  const worldColumn = {column: config.column}, columnOverride = copyColumn(scene.column);
+  if (columnOverride) config.column = columnOverride;
   const catalog = await json('config/catalog.json');
   config.exportCatalog = catalog; config.defaultSeaLevel = catalog.worlds[config.biomeId]?.defaultSeaLevel;
   configureMap(config, settings);
@@ -118,7 +123,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   renderer.onerror = message => errors.push(message);   // WebGPU validation and device errors arrive after the call that caused them
   fieldsModule.setFailureHandler(error => errors.push('shape fields: ' + (error?.message ?? String(error))));   // a failed shape run leaves the base height
   const ownColors = config.baseColors || config.colors || {};   // sculpt.js activeWorld: a world opens with its base colors as its own
-  renderer.setColors(engine.rendererColors(engine.worldHexColors(config, settings, ownColors)));
+  renderer.setColors(engine.rendererColors(engine.worldHexColors(config, settings, ownColors), columnOverride?.colors));
   const seed = engine.DEFAULT_SEED, refinementSeed = seed;
   let nodes = [];
   const context = () => engine.shapeContext({config, settings, seed, talusAngle: renderer.variantNumber('talusAngle', 40), minH, maxH});
@@ -134,7 +139,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   play(strokes, {ground: scene.ground !== false});
   if (paged) await fields.startCoarse();   // bootMap: a paged map's coarse lattice fills from the start
   const sliders = engine.surfaceSliders(config, settings);
-  scene_ = {config, settings, renderer, canvas, fields, nodes, errors, play, context, engine, fieldsModule, worldSize, worldGrid, spacing, minH, maxH, seed, refinementSeed, sliders, paged, ownColors,
+  scene_ = {config, settings, renderer, canvas, fields, nodes, errors, play, context, engine, fieldsModule, worldSize, worldGrid, spacing, minH, maxH, seed, refinementSeed, sliders, paged, ownColors, worldColumn, columnOverride,
     material: engine.materialKnobs(sliders, refinementSeed, renderer.variant.get('transition')), drawOptions: options => engine.drawOptions(sliders, options),
     dispose() { fields.destroy?.(); scene_.time?.drainage?.retire?.(); renderer.dispose(); }};
   return scene_;
