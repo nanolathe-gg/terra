@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-workspace.js', 'sculpt-workspace.css', 'sculpt-help.js', 'sculpt-help-examples.js', 'sculpt-control-schema.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-paths.js', 'sculpt-river.js', 'sculpt-renderer.js', 'sculpt-webgpu.js', 'sculpt-vert.wgsl',
-    'sculpt-volume.js', 'sculpt-rock-presets.js', 'engine-volume.wgsl', 'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-palette.wgsl', 'engine-weather.wgsl',
+    'sculpt-rock-weather.js', 'engine-rock-weather.wgsl', 'sculpt-volume.js', 'sculpt-rock-presets.js', 'engine-volume.wgsl', 'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-palette.wgsl', 'engine-weather.wgsl',
     'engine-erosion.wgsl', 'engine-drainage.wgsl', 'sculpt-drainage.js', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-gates.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-export-worker.js', 'sculpt-features.js', 'sculpt-feature-set.js', 'sculpt-feature-gen.js', 'sculpt-feature-fire.js', 'sculpt-feature-worker.js', 'sculpt-canvas.js', 'sculpt-passability.js', 'sculpt-passability-view.js', 'sculpt-share.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js', 'sculpt-scene.js', 'sculpt-knobs.js',)}
 
 
@@ -207,6 +207,7 @@ KNOB_DEFAULTS.update(rockFace=2, rockFaceFrom=.6, faceRock=.9, faceBed=5.5, face
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, rillDepth=0, rillSpacing=8)
 # Voxel block proportions, laminations and directional scratches; neutral values preserve the existing solid.
+KNOB_DEFAULTS.update(runoff=0, runoffScale=24, runoffConcentration=.65, runoffCut=2, runoffStain=.5, debrisAmount=0, debrisReach=56, debrisDepth=4, stoneSort=.6)
 KNOB_DEFAULTS.update(faceStretch=1, faceBlockHeight=1, faceRound=0, faceJoint=0.35, faceExtrude=0, faceLamina=0, faceLaminaSize=3, faceScratchLength=50, faceScratchAngle=0, faceGritSize=1.3)
 # Card P30: Vegetation cover 0 is off (every world has a ground-cover table: GROUND_COVER, DEFAULT_GROUND_COVER); modern Green sets 1.
 KNOB_DEFAULTS.update(vegetationCover=0, plantRelief=1, flowerDensity=1)
@@ -779,6 +780,8 @@ def apply_variant(config, biome, variant):
     out['colors'] = {**config.get('colors', {}), **v.get('colors', {})}
     if v.get('material'):
         out['material'] = {**out.get('material', {}), **v['material']}
+        if 'stoneSort' in v['material'] and 'stoneSort' not in v.get('knobs', {}):
+            out['defaults']['stoneSort'] = str(v['material']['stoneSort'])
     out.update(copy.deepcopy(v.get('config', {})))
     out['variant'] = variant
     return out
@@ -795,7 +798,7 @@ SOURCES['materials/palette.json'] = HERE / 'materials' / 'palette.json'
 def world_knobs(biome, config):
     """Set the page's knob defaults: KNOB_DEFAULTS, the world's water depths,
     then its WORLD_KNOBS entry."""
-    knobs = {**KNOB_DEFAULTS, 'shallowDepth': config['material'].get('shallowDepth', 2),
+    knobs = {**KNOB_DEFAULTS, 'stoneSort': config['material'].get('stoneSort', .6), 'shallowDepth': config['material'].get('shallowDepth', 2),
              'deepDepth': config['material'].get('deepDepth', 42), **WORLD_KNOBS.get(biome, {})}
     config['defaults'].update({k: str(v) for k, v in knobs.items()})
     config['engineDefaults'] = {k: str(v) for k, v in ENGINE_KNOBS.get(biome, {}).items()}

@@ -75,6 +75,10 @@ const NO_COLUMN='Add a rock column in the Rock column panel to use this setting.
 // finds an inactive setting and explains what must be enabled to use it.
 export function worldControlRequirement(key,v){
  const n=k=>Number(v[k]??0),needs=(parent,label)=>worldControlRequirement(parent,v)||(n(parent)<=0?`Enable ${label} to use this setting.`:'');   // a parent that is itself idle names its own reason first
+ if(key==='runoffCut')return needs('runoff','Runoff exposure')||needs('rockFace','Rock relief: Depth');
+ if(['runoffScale','runoffConcentration','runoffStain'].includes(key))return needs('runoff','Runoff exposure');
+ if(['debrisReach','debrisDepth'].includes(key))return needs('debrisAmount','Cliff debris accumulation');
+ if(key==='stoneSort')return Math.max(n('looseSupply'),n('debrisAmount'),n('stonePaint'))>0?'':'Raise loose-stone Supply or Cliff debris accumulation, or paint Denser scatter, to sort stones.';
  // Rows that shape the rock's relief do nothing while it is flat (Depth 0); amount, placement, grass and colour act at any depth.
  if(['faceLaminaSize','faceGritSize','faceScratchLength','faceScratchAngle','faceRound'].includes(key)){
   const parent={faceLaminaSize:'faceLamina',faceGritSize:'faceGrit',faceScratchLength:'faceScratch',faceScratchAngle:'faceScratch',faceRound:'faceBlock'}[key];
@@ -124,6 +128,7 @@ export function worldControlRequirement(key,v){
  if(key==='shineStretch')return rough?'':'Set a Roughness above zero in one of the Shine groups to use this setting.';
  if(['shineGate','shineOutside','shineSlopeGate'].includes(key))return shiny||rough?'':'Set a Gloss or Roughness above zero in one of the Shine groups to use this setting.';
  // A world with a beach keeps the Sand brush for its bars, so the sand these rows draw comes only from the weathering's supply.
+ if(key==='sandLight'&&n('debrisAmount')>0)return '';
  if(['wind','ripple','rippleHeight','sandDust','sandGrain','sandGrass','sandLight'].includes(key)&&n('beachLayer')>0)return needs('sand','Weathering supply in Sand');
  // Water wets the ground only where the Time pass has rain; the worlds that run it with rain off have no wetness map to read.
  if(key==='wetSwath'&&n('erosionRain')<=0)return 'With no rain no ground is wet, so Moisture has nothing to move. Raise Rain to use this setting.';
@@ -158,6 +163,7 @@ export function worldControlRequirement(key,v){
 // Primary controls describe a visible feature. Fine tuning remains available
 // explicitly (and through search), without filling the default inspector.
 export const WORLD_PRIMARY_CONTROLS=new Set([
+ 'runoff','runoffScale','runoffConcentration','runoffCut','runoffStain','debrisAmount','debrisReach','debrisDepth','stoneSort',
  'vegetationCover','plantRelief','flowerDensity',
  'bedDip','bedDipDir','faceStretch','faceBlockHeight','faceRound','faceJoint','faceExtrude','faceLamina','faceLaminaSize','faceScratchLength','faceScratchAngle','faceGritSize',
  'rockFace','faceRock','rockFaceFrom','faceCreaseSize','faceCrease','faceBlock','faceBlockSize','faceBed','faceLedge','faceRun','faceScratch','faceScratchSize','faceLean','faceGrit','faceGrass','faceWear','faceShade','faceLayers','faceMass','faceTone','faceStrata','faceWet',

@@ -15,3 +15,13 @@ test('rock recipes reject invalid controls and ignore removed options',()=>{
  assert.deepEqual(copyRockSettings({removedOption:1,faceRound:.5}),{faceRound:.5});
  assert.equal(copyRockSettings(undefined),null);
 });
+
+// Gating follows every live source, including artist-painted stones.
+test('weathering controls explain inactive parents and allow painted sorting',async()=>{
+ const {worldControlRequirement:reason}=await import('../sculpt-control-schema.js');
+ assert.ok(reason('runoffCut',{runoff:1,rockFace:0}));
+ assert.equal(reason('runoffCut',{runoff:1,rockFace:2}),'');
+ assert.ok(reason('debrisDepth',{debrisAmount:0}));
+ assert.equal(reason('stoneSort',{stonePaint:1}),'');
+ assert.equal(reason('sandLight',{beachLayer:1,sand:0,debrisAmount:1}),'');
+});

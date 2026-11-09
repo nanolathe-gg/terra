@@ -117,3 +117,40 @@ never sent to the renderer. Old recipes without a rock block retain the current
 world settings; removed fields are ignored. Invalid values reject the load
 before changing the map. Fine layer spacing, scratch direction/length, block
 roundness and grit size explain which parent amount must be raised first.
+
+## Runoff and rockfall accumulation
+
+**World → Rock & cliffs** now includes Rock runoff and Rock debris. Geological
+starting points enable them; a world's existing defaults leave both amounts at
+zero until an artist chooses its weathered look.
+
+- Runoff exposure sets the strength of surface water weathering. Catchment
+  variation size controls the scale of irregularities that gather water;
+  Channel concentration changes broad wet ribbons into narrow threads.
+  Channel incision cuts the voxel surface, with softer column beds wearing
+  more. Mineral staining darkens those same paths. Existing Wetness, Gloss,
+  Reflection sharpness and Micro roughness control their finish.
+- Cliff debris accumulation supplies material from nearby higher ground.
+  Rockfall reach spreads the apron, and Accumulated bed thickness raises its
+  surface. Existing loose-stone Size controls the fragments; Size sorting
+  separates coarse blocks from the fine material farther from the source.
+  Fine material inherits the world's sand/rock colors and Weathered lightness.
+- Deposits more/less paints the whole accumulation; Denser/Sparser scatter
+  controls its loose stones. Protected routes and submerged ground reject it.
+  Rockfall adds nothing to a flat surface with no higher source.
+
+The engine computes a shared field entirely on the GPU, on a globally aligned
+4-art-pixel lattice with 16 downhill transport steps. The water field feeds
+incision, staining, wetness and additional fine deposition at sheltered feet.
+A bounded higher-ground gather estimates rockfall supply and travel distance.
+Surface slope limits deposits on walls; concavity favors pockets. Existing
+loose-stone geometry supplies fragments, and the accumulated bed is baked into
+the surface before voxel construction. There is no CPU simulation or readback
+in the editor. Field memory is included in the chunk budget, with sufficient
+input apron for identical results across chunk boundaries.
+
+This is local surface transport coupled to the 3D rock solid. It is not a
+mass-conserving fluid simulation inside every voxel, falling rigid bodies, or
+cumulative erosion through geological time. Gameplay heights are unchanged;
+these controls shape the rendered surface. Large terrain changes still belong
+in the landform and Time controls.

@@ -1541,7 +1541,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let faceOcc=(1.0-localSky)*faceLight;
     let hard=voxelHardness(hit);
     let rockTone=voxelNoise(voxelRockSpace(hit)/max(4.0,u.faceBlockSize))*2.0-1.0;
-    let rockWet=clamp(.15+.5*rain+.3*faceOcc+.2*(1.0-hard),0.0,1.0);
+    let accumulated=rockWeatherAt(p);
+    let rockWet=clamp(.15+.5*rain+.3*faceOcc+.2*(1.0-hard)+accumulated.w*.8,0.0,1.0);
     let flatLight = u.ambient + 0.95 * u.light.z;
     var lighting = (u.ambient + 0.95 * max(0.0, dot(normal, u.light))) / flatLight;
     lighting = min(lighting, u.lightCap);
@@ -1658,6 +1659,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let grain=clamp(mineral/max(u.rockMean,vec3f(.01)),vec3f(.5),vec3f(1.6));
     var rock=rockFlat*mix(vec3f(1),grain,.3+u.faceTone)* (1.0+u.faceTone*rockTone+u.faceStrata*(hard*2.0-1.0))*(1.0-.6*u.faceWet*rockWet);
     // H3 item 4: one placement function (landPlace); its thresholds are rows of materials/green.json.
+    rock=mix(rock,rock*.42,u.runoffStain*clamp(accumulated.x,0.0,1.0));
     var exposed = place.exposed;
     exposed = mix(exposed, faceRock, faceGate);   // on the rock face the face's share decides
     let lowBank = place.lowBank;
@@ -1730,6 +1732,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         material = mix(material, bedColour, max(u.strata * u.strataContrast * onRaised, u.strata * painted.x));
         if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)); }
     }
+    // The source's mineral fines bury grass between stones. Coarse fragments
+    // retain rock albedo; fine material inherits this world's existing sand.
+    let depositCover=clamp(accumulated.y*.9,0.0,1.0);
+    let fineColor=mix(rock,sandWeathered(),accumulated.z*.65);
+    material=mix(material,fineColor,depositCover);
+    exposed=max(exposed,depositCover*(1.0-accumulated.z*.45));
     // Painted masks (card C5), after the world's own beds and before sand,
     // which covers them. Painted rock is the rock face where the face is drawn (faceGate), and the plain rock material elsewhere.
     if (u.paintOn != 0) {

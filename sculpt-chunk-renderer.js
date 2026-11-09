@@ -1,3 +1,4 @@
+import {rockWeatherBytes} from './sculpt-rock-weather.js';
 // Card D: a bounded working set for the existing terrain shader. Materials
 // belong to this renderer once; callers own the LRU of copied output images.
 import {TerrainRenderer} from './sculpt-renderer.js';
@@ -83,7 +84,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     // P16: the largest class drawn has radius min(16, 3.3 x the median); a stone reaches 1.6 radii from its candidate (1.41 of a class radius at most) and a larger stone that suppresses it a little further, and the mask reads 14 px up the slope plus its gradient (5).
     const stones=3.6*Math.min(16,3.3*n('looseSize',6))+24;
     const beach=Math.max(this.config.layers.includes('beach')?(this.config.material?.beachWidth??120)*n('beachWidth',.6):0,n('apron',0))*1.35*1.15;
-    const bake=Math.max(19,stones,beach,groundCoverOn(this.config.material?.groundCover,this.variant)&&this.config.material.groundCover.plants?PLANT_REACH:0);
+    const bake=Math.max(19,stones,beach,n('runoff',0)>0||n('debrisAmount',0)>0?180:0,groundCoverOn(this.config.material?.groundCover,this.variant)&&this.config.material.groundCover.plants?PLANT_REACH:0);
     // G3: the fringe's copies read the material field up to ringShift px from the pixel, and a few px more for each copy's gradient.
     const direct=Math.max(61,48*Math.max(.65,1.6*n('ringSpread',.65)),Math.abs(n('waterSoft',32)),41*Math.abs(n('ringVariation',.7)/.75),n('ringShift',0)>0?Math.abs(n('ringShift',0))+4:0);
     // A projection apron includes appearance displacement too. These are
@@ -96,7 +97,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const blocks=(.5*(1+3*severity)+1.225*major+.5*(.6+1.6*severity)+4.41*minor)*Math.max(n('crackBlocks',.6),.6);
     const bands=columnRows(this.config.column,this.config.variant).bands[0]*Math.max(Math.abs(n('banding',0))*4,.8);
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
-    const extra=relief+blocks+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(n('looseSize',6))+Math.abs(n('rippleHeight',1.4));
+    const extra=relief+blocks+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(n('looseSize',6))+Math.abs(n('rippleHeight',1.4))+(n('debrisAmount',0)>0?1.5*n('debrisDepth',4):0);
     const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4);
     return {draw,bake,direct,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};
   }
@@ -134,9 +135,10 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     // allocation and the largest next allocation before reserving voxel memory.
     const margin=Math.max(Math.ceil(3.6*Math.min(16,3.3*this.number('looseSize',6)))+4,PLANT_REACH);
     const loose=Math.max(this.looseBuffer?.size??16,(Math.ceil((region.fieldsWidth+2*fieldScale+2*margin)/4)+2)*(Math.ceil((region.fieldsHeight+2*fieldScale+2*margin)/4)+2)*32);
+    const rockWeather=this.number('runoff',0)>0||this.number('debrisAmount',0)>0?rockWeatherBytes(region.fieldsWidth+2*fieldScale,region.fieldsHeight+2*fieldScale):0;
     const voxel=Math.min(64*MB,this.budgetBytes*.35);
-    return {field,input,output,loose,maskPlaneCount,maskLayers,voxel,workingBytes:field+input+output+loose+voxel,
-      retainedBytes:this.fixedBytes,reservedBytes:this.reservedBytes,gpuBytes:this.fixedBytes+this.reservedBytes+field+input+output+loose+voxel,
+    return {field,input,output,loose,rockWeather,maskPlaneCount,maskLayers,voxel,workingBytes:field+input+output+loose+voxel+rockWeather,
+      retainedBytes:this.fixedBytes,reservedBytes:this.reservedBytes,gpuBytes:this.fixedBytes+this.reservedBytes+field+input+output+loose+voxel+rockWeather,
       cpuRetainedBytes:this.cpuRetainedBytes,cpuUploadBytes:input,cpuPeakBytes:this.cpuRetainedBytes+input};
   }
 
@@ -170,7 +172,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const required=e.gpuBytes;
     if(Math.max(fw,fh,gw,gh,width,height)>this.limit||required>this.budgetBytes){
       // H13: the parts of the estimate, so a refusal says which one crossed the budget (reserved is the canvas, the paged fields and the image cache).
-      const mb=n=>Math.ceil(n/MB),parts=`fixed ${mb(e.retainedBytes)}, reserved ${mb(e.reservedBytes)}, field ${mb(e.field)}, input ${mb(e.input)}, loose ${mb(e.loose)}, voxels ${mb(e.voxel)}, output ${mb(e.output)} of ${mb(this.budgetBytes)}`;
+      const mb=n=>Math.ceil(n/MB),parts=`fixed ${mb(e.retainedBytes)}, reserved ${mb(e.reservedBytes)}, field ${mb(e.field)}, input ${mb(e.input)}, loose ${mb(e.loose)}, rock weather ${mb(e.rockWeather)}, voxels ${mb(e.voxel)}, output ${mb(e.output)} of ${mb(this.budgetBytes)}`;
       throw new Error(`nanolathe: chunk needs ${mb(required)} MB of GPU memory (${parts}); use chunks of ${this.chunkSize()} px or smaller`);
     }
     const allocationKey=[fw,fh,gw,gh,width,height,Math.ceil(world_width/scale),Math.ceil(world_height/scale),this.maskLayers,fed].join(',');
@@ -356,7 +358,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     } finally { this._busy=false;this.cpuWorkingBytes=0; }
   }
   evict() {
-    this.voxel?.clear();
+    this.voxel?.clear();this.rockWeather?.clear();
     for(const [resource,entry] of [...this.resources])if(entry.kind==='working')this.release(resource);
     for(const key of ['heightTexture','routeTexture','gridTexture','maskTexture','fieldsTexture','voxelColor'])this[key]=null;
     this.bindGroups={};this.canvas.width=1;this.canvas.height=1;if(this.outputCanvas){this.outputCanvas.width=1;this.outputCanvas.height=1;}this.outputBytes=8;this.evictions++;

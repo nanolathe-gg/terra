@@ -20,7 +20,7 @@ export const KNOBS = [
   ['Shine: rock', [['shineRock','Gloss (highlight strength)',0,2,.05,0],['shineRockSharp','Reflection sharpness (polish)',2,200,2,24],['shineRockRough','Micro roughness (grain slope)',0,2,.05,0],['shineRockScale','Grain width (px)',1,24,.5,6],['shineOutside','Rock glints kept outside painted rock',0,1,.05,1]]],
   ['Shine: sand', [['shineSand','Gloss (highlight strength)',0,2,.05,0],['shineSandSharp','Reflection sharpness (polish)',2,200,2,24],['shineSandRough','Micro roughness (grain slope)',0,2,.05,0],['shineSandScale','Grain width (px)',1,24,.5,6]]],
   ['Shine: crystal', [['shineCrystal','Gloss (highlight strength)',0,2,.05,0],['shineCrystalSharp','Reflection sharpness (polish)',2,200,2,24],['shineCrystalRough','Micro roughness (grain slope)',0,2,.05,0],['shineCrystalScale','Grain width (px)',1,24,.5,6]]],
-  ['Loose stone', [['looseSupply','Supply',0,1,.05,0],['looseSize','Size (median, px)',2,24,1,6],['looseKnoll','Knolls (share of stones that are ground rings around a hollow)',0,1,.05,0]]],
+  ['Loose stone', [['looseSupply','Supply',0,1,.05,0],['looseSize','Size (median, px)',2,24,1,6],['stoneSort','Size sorting',0,1,.05,.6],['looseKnoll','Knolls (share of stones that are ground rings around a hollow)',0,1,.05,0]]],
   ['Sand', [['sand','Deposit supply',0,2,.05,0],
     ['wind','Ripple direction (degrees)',0,360,5,20],['sandDust','Dusting tint',0,1,.05,.5],['sandGrass','Vegetation through sand',0,1,.05,.6],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
     ['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4]]],
@@ -56,6 +56,9 @@ export const KNOBS = [
     ['faceScratch','Scratches and water grooves',0,6,.1,2.5],['faceScratchSize','Groove spacing (px)',3,20,.5,7],
     ['faceScratchLength','Groove length (px)',4,160,2,50],['faceScratchAngle','Groove tilt from vertical (deg)',-90,90,5,0],
     ['faceGrit','Grit relief',0,2,.05,0],['faceGritSize','Grit size (px)',1,6,.1,1.3]]],
+  ['Rock runoff', [['runoff','Runoff exposure',0,2,.05,0],['runoffScale','Catchment variation size (px)',8,80,2,24],
+    ['runoffConcentration','Channel concentration',0,1,.05,.65],['runoffCut','Channel incision',0,8,.1,2],['runoffStain','Mineral staining',0,1,.05,.5]]],
+  ['Rock debris', [['debrisAmount','Cliff debris accumulation',0,2,.05,0],['debrisReach','Rockfall reach (px)',8,96,2,56],['debrisDepth','Accumulated bed thickness',0,12,.25,4]]],
   ['Rock surface', [['faceShade','Shadow and crevice depth',0,1,.05,.85],['faceTone','Color variation between blocks',0,.5,.01,.12],
     ['faceStrata','Layer tint: lighter and darker',0,.5,.01,0],['faceWet','Wetness: darker rock, smoother reflections',0,1,.05,0]]],
   // Water detail: the shallow-to-deep step, the shallow bed and the waterline (cards E11, G1).
@@ -138,5 +141,5 @@ export function slopeReplaced({config,renderer,weathering,materialWeathering}) {
 // The column facts read the active column (config.column: the map's own from the Rock column panel, else the world's) and its variant row.
 export function worldPanelValues(facts) {
   const {config,renderer,nodes,colors}=facts,layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks(nodes);
-  return {...own,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:columnRows(config.column,config.variant).starts.length?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
+  return {...own,stonePaint:nodes.some(n=>n.kind==='paint'&&[5,6].includes(n.params?.paintChannel))?1:0,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),bedLit:Math.max(Number(own.bedLit)||0,picks.bedLit),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,crackedBed:picks.crackedBed,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:columnRows(config.column,config.variant).starts.length?1:0,capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
 }

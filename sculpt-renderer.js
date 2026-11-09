@@ -8,6 +8,7 @@ import {columnRows} from './sculpt-column.js';
 import {LOW_GROUND_RGB} from './sculpt-knobs.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
+import {RockWeather} from './sculpt-rock-weather.js';
 import {VoxelSurface} from './sculpt-volume.js';
 import {extractGates, gateValues, gateKey} from './sculpt-gates.js';
 
@@ -221,7 +222,7 @@ export class TerrainRenderer {
     this.commonLayout = device.createBindGroupLayout({label: 'world fields', entries: [
       {binding: 0, visibility: both, buffer: {type: 'uniform'}},
       texture(1, both, 'unfilterable-float'), texture(2, both), texture(4, both, 'float', '2d-array'), texture(6, both),
-      sampler(7, both), sampler(8, both), texture(9, both, 'float', '2d-array')]});
+      sampler(7, both), sampler(8, both), texture(9, both, 'float', '2d-array'),texture(10,both,'unfilterable-float')]});
     const F = GPUShaderStage.FRAGMENT;
     // The engine draw (H4) binds only what Green reads: the plain's tiles, the water images, the palette and the generated materials
     // (binding 19, read with textureLoad); no land image remains. Binding numbers are the shared draw's, with 2-13 left out.
@@ -235,6 +236,7 @@ export class TerrainRenderer {
     const bakeLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, fieldsLayout]});
     this.fieldsLayout = fieldsLayout;
     this.bakePipelineLayout = bakeLayout;
+    this.rockWeather = await RockWeather.create(this,preprocess);
     this.voxel = await VoxelSurface.create(this,this.volumeSource,preprocess);
     this.drawPipelineLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, this.materialLayout,this.voxel.drawLayout]});
     const mipModule = device.createShaderModule({label: 'mip levels', code: MIP_SHADER});
@@ -658,9 +660,10 @@ export class TerrainRenderer {
       {binding: 0, resource: {buffer: this.uniformBuffer}},
       ...[this.heightTexture, this.textures.noise.texture].map((t, i) => ({binding: i + 1, resource: t.createView()})),
       {binding: 4, resource: this.gridTexture.createView({dimension: '2d-array'})},
-      {binding: 6, resource: (kind === 'bake' ? this.routeTexture : this.fieldsTexture).createView()},
+      {binding: 6, resource: (kind === 'bake'||kind==='rock-weather' ? this.routeTexture : this.fieldsTexture).createView()},
       {binding: 7, resource: this.linearClamp}, {binding: 8, resource: this.linearRepeat},
-      {binding: 9, resource: this.maskTexture.createView({dimension: '2d-array'})}]});
+      {binding: 9, resource: this.maskTexture.createView({dimension: '2d-array'})},
+      {binding:10,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.final??this.rockWeather.empty)).createView()}]});
   }
 
   // Group 1: the plain's tiles, the waters, the palette and the generated materials.
@@ -1069,7 +1072,7 @@ export class TerrainRenderer {
   // A fed chunk's painted flags are written into the uniform buffer by the GPU (ChunkTerrainRenderer.flagPass), so the CPU copy of uScatterOn
   // is stale there: the pass runs, and looseMain's own test of u.scatterOn leaves every cell empty where nothing is painted.
   encodeLooseMask(encoder) {
-    const supply = this.uniformValue('uLooseSupply'), painted = this.gpuFlags || this.uniformValue('uScatterOn'), plants = this.uniformValue('uPlantsOn') > 0;
+    const supply = Math.max(this.uniformValue('uLooseSupply'),this.uniformValue('uDebrisAmount')), painted = this.gpuFlags || this.uniformValue('uScatterOn'), plants = this.uniformValue('uPlantsOn') > 0;
     if (!(supply > 0) && !painted && !plants) return;
     const [x0, y0, w, h] = this.bakeWindow ?? [0, 0, this.bakeWidth ?? this.size, this.bakeHeight ?? this.size];
     // Card P31: a plant's candidate lies up to 23 px (a shrub's cell and jitter) from the pixels it covers, the mask reads heights 8 px past its cell, and the apron adds 15.
@@ -1118,7 +1121,7 @@ export class TerrainRenderer {
     set('uFaceStreak', number('faceStreak', 0));
     for (const [key, fallback] of [['rockFace', 0], ['rockFaceFrom', 0.6], ['faceBed', 5.5], ['faceLedge', 2.2], ['faceRun', 90], ['faceLean', 28], ['faceScratch', 2.5],
       ['faceScratchSize', 7], ['faceBlock', 3], ['faceBlockSize', 11], ['faceGrit', 0], ['faceGrass', 0.8], ['faceRock', 0.9], ['faceCrease', 2.5], ['faceCreaseSize', 6],
-      ['faceShade', 0.85], ['faceWear', 0.35], ['faceLayers', 0], ['faceMass', 1], ['faceTone', 0.12], ['faceStrata', 0], ['faceWet', 0], ['faceStretch', 1], ['faceBlockHeight', 1], ['faceRound', 0], ['faceJoint', 0.35], ['faceExtrude', 0], ['faceLamina', 0], ['faceLaminaSize', 3], ['faceScratchLength', 50], ['faceScratchAngle', 0], ['faceGritSize', 1.3]])
+      ['faceShade', 0.85], ['faceWear', 0.35], ['faceLayers', 0], ['faceMass', 1], ['faceTone', 0.12], ['faceStrata', 0], ['faceWet', 0], ['runoff',0],['runoffScale',24],['runoffConcentration',.65],['runoffCut',2],['runoffStain',.5],['debrisAmount',0],['debrisReach',56],['debrisDepth',4], ['faceStretch', 1], ['faceBlockHeight', 1], ['faceRound', 0], ['faceJoint', 0.35], ['faceExtrude', 0], ['faceLamina', 0], ['faceLaminaSize', 3], ['faceScratchLength', 50], ['faceScratchAngle', 0], ['faceGritSize', 1.3]])
       set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
     set('uFaceStreakFrom', number('faceStreakFrom', 0.3));
     set('uGentleRelief', number('gentleRelief', 0.6));
@@ -1146,7 +1149,7 @@ export class TerrainRenderer {
     set('uLooseSize', number('looseSize', 6));
     set('uPlantsOn', !preview && groundCoverOn(this.config.material?.groundCover, this.variant) && this.config.material.groundCover.plants ? 1 : 0);
     set('uStoneRound', this.config.material?.stoneRound ?? 0);
-    set('uStoneSort', this.config.material?.stoneSort ?? 0.6);
+    set('uStoneSort', number('stoneSort',this.config.material?.stoneSort ?? 0.6));
     set('uStoneSlab', this.config.material?.stoneSlab ?? 0.05);
     set('uStoneMoss', this.config.material?.stoneMoss ?? 0.35);
     set('uBandSoftness', number('bandSoftness', 0.35));
@@ -1160,6 +1163,7 @@ export class TerrainRenderer {
     this.setColumn();
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});
+    this.rockWeather.encode(encoder);
     this.encodeLooseMask(encoder);
     const pass = encoder.beginComputePass({label: 'relief bake', timestampWrites: timer?.timestampWrites});
     pass.setPipeline(this.bakePipeline);

@@ -197,6 +197,15 @@ struct Uniforms {
     faceRock: f32,        // rock's share of a steep face (the rest grass, in clumps and on ledges); a stroke's Local vegetation scales it
     faceCrease: f32,      // crease depth (fine creases along the contours, the face's grain), height units
     faceCreaseSize: f32,  // crease spacing, px
+    runoff: f32,
+    runoffScale: f32,
+    runoffConcentration: f32,
+    runoffCut: f32,
+    runoffStain: f32,
+    debrisAmount: f32,
+    debrisReach: f32,
+    debrisDepth: f32,
+    rockWeatherGrid: vec4f, // origin in art pixels, texture dimensions; 4px cells
     faceStretch: f32, // Block length / width
     faceBlockHeight: f32, // Block height / layer height
     faceRound: f32, // Rounded blocks
@@ -538,6 +547,7 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c)); }
 #endif
 // The world fields (height, routes, fields, grid inputs) are
 // clamped and linearly filtered; noise repeats.
+@group(0) @binding(10) var rockWeatherTex: texture_2d<f32>;
 @group(0) @binding(7) var linearClamp: sampler;
 @group(0) @binding(8) var linearRepeat: sampler;
 // Painted masks (card C5), grid resolution, signed bytes so unpainted is 0.0.
@@ -796,4 +806,16 @@ fn surfaceGradient(p: vec2f) -> vec2f {
     return vec2f(surfaceHeight(p + vec2f(e, 0.0)) - surfaceHeight(p - vec2f(e, 0.0)),
                  surfaceHeight(p + vec2f(0.0, e)) - surfaceHeight(p - vec2f(0.0, e))) / (2.0 * e);
 }
+#endif
+
+#ifndef EROSION
+// One field feeds geometry, scatter and PBR. Global coordinates preserve the
+// interpolation order across regional chunks and different voxel budgets.
+fn rockWeatherAt(p:vec2f)->vec4f {
+    if(u.runoff<=0.0&&u.debrisAmount<=0.0){return vec4f(0);}
+    let q=p/4.0-.5;let i=vec2i(floor(q))-vec2i(round(u.rockWeatherGrid.xy/4.0));let f=fract(q);
+    let last=vec2i(textureDimensions(rockWeatherTex))-1;let a=clamp(i,vec2i(0),last);let b=clamp(i+1,vec2i(0),last);
+    return mix(mix(textureLoad(rockWeatherTex,a,0),textureLoad(rockWeatherTex,vec2i(b.x,a.y),0),f.x),mix(textureLoad(rockWeatherTex,vec2i(a.x,b.y),0),textureLoad(rockWeatherTex,b,0),f.x),f.y);
+}
+
 #endif

@@ -95,9 +95,10 @@ fn lsMaskCompute(c: vec2f) -> vec4f {
     let none = vec4f(0.0);
     var paint = 0.0;
     if (u.scatterOn != 0) { paint = scatterAt(c); }
-    if (u.looseSupply <= 0.0 && paint <= 0.0) { return none; }
+    if (u.looseSupply <= 0.0 && paint <= 0.0 && u.debrisAmount<=0.0) { return none; }
     let h0 = baseHeight(c);
     if (routeProtection(c) > 0.05 || h0 < u.sea + 1.0) { return none; }
+    let accumulated=rockWeatherAt(c);
     let tm = timeMapsAt(c);
     let deposit = tm.deposit;
     // The slope as broadGradient's units (the height difference over 10 px), from forward differences over 5 px: three height reads, not five.
@@ -124,8 +125,9 @@ fn lsMaskCompute(c: vec2f) -> vec4f {
     let size = u.looseSize * mix(1.0, mix(0.3 + 0.7 * travelled, 1.0 - 0.7 * travelled, carried), sort);
     let sigma = mix(2.0, 0.7, sort);
     let fines = clamp(0.15 + 0.45 * (1.0 - smoothstep(0.2, 0.8, slope)) + 0.2 * carried, 0.0, 0.85);
-    let share = supply * LS_BASE * source;
-    return vec4f(min(share, 0.98), size, fines, 0.35 * sort * talus * smoothstep(0.5, 1.0, travelled) * supply * LS_BASE);
+    let debris=accumulated.y*clamp(1.0+min(paint,0.0),0.0,1.0);
+    let share = supply * LS_BASE * source+debris*.7;
+    return vec4f(min(share, 0.98), size*mix(1.0,mix(1.5,.4,accumulated.z),clamp(accumulated.y*sort,0.0,1.0)),mix(fines,accumulated.z,clamp(accumulated.y,0.0,1.0)), 0.35 * sort * (talus*supply*LS_BASE+debris*.35) * smoothstep(0.5, 1.0, travelled));
 }
 
 // Card P31: where plants grow, at c: the covers of the ground-cover classes that grow them (coverAt, the draw's own site maps and windows) as shares of
@@ -189,9 +191,9 @@ fn lsShare(k: i32, pop: vec4f) -> f32 {
 // the nearest class to a median is under half an octave from it), the runout blocks adding up to .35 of the supply, a deposits override
 // doubling it, painted scatter up to 8x.
 fn lsBound(k: i32) -> f32 {
-    if (u.scatterOn != 0) { return 1.0; }
+    if (u.scatterOn != 0 || u.debrisAmount>0.0) { return 1.0; }
     let x = log2(2.0 * lsR(k));
-    let off = max(0.0, max(log2(0.3 * u.looseSize) - x, x - log2(u.looseSize)));
+    let off = max(0.0, max(log2(0.3 * u.looseSize) - x, x - log2(u.looseSize*select(1.0,1.5,u.debrisAmount>0.0))));
     let spread = mix(2.0, 0.7, u.stoneSort);
     let runout = x - log2(2.2 * u.looseSize);
     let reach = exp(-0.5 * off * off / (spread * spread)) + 0.35 * u.stoneSort * exp(-2.0 * runout * runout);
@@ -424,7 +426,7 @@ fn plantsAt(p: vec2f) -> vec3f {
 
 // The scatter at p: (stone height, rock cover, contact shade of the fines beside a stone, plant height).
 fn looseStones(p: vec2f) -> LsOut {
-    let stones = u.looseSupply > 0.0 || u.scatterOn != 0;
+    let stones = u.looseSupply > 0.0 || u.scatterOn != 0 || u.debrisAmount>0.0;
     if (!stones && u.plantsOn < 0.5) { return LsOut(vec3f(0.0), vec3f(0.0)); }
     var best = 0.0; var cover = 0.0; var edge = 1e9; var edgeFines = 0.0; var bestR = 1.0;
     for (var k = 0; k < LS_K; k++) {
@@ -433,7 +435,7 @@ fn looseStones(p: vec2f) -> LsOut {
         // A class the mask cannot give a stone to is skipped: the median runs from .3 to 1 of Size, the runout blocks lie at 2.2 times it, and a
         // class more than a spread away from both holds under 4% of a population.
         let x = log2(2.0 * R);
-        let off = max(0.0, max(log2(0.3 * u.looseSize) - x, x - log2(u.looseSize)));
+        let off = max(0.0, max(log2(0.3 * u.looseSize) - x, x - log2(u.looseSize*select(1.0,1.5,u.debrisAmount>0.0))));
         let spread = mix(2.0, 0.7, u.stoneSort);
         let runout = x - log2(2.2 * u.looseSize);
         let reach = max(exp(-0.5 * off * off / (spread * spread)), 0.35 * u.stoneSort * exp(-2.0 * runout * runout));
@@ -860,11 +862,11 @@ fn sandRipples(p: vec2f, lambda: f32) -> vec3f {
     let w = vec2f(cos(a), sin(a));
     let perp = vec2f(-w.y, w.x);
     var tail = 0.0; var scour = 0.0; var fade = 0.0;
-    if (u.looseSupply > 0.0 || u.scatterOn != 0) {
+    if (u.looseSupply > 0.0 || u.scatterOn != 0 || u.debrisAmount>0.0) {
         for (var k = 0; k < 3; k++) {
             let R = lsR(k);
             let x = log2(2.0 * R);
-            let off = max(0.0, max(log2(0.3 * u.looseSize) - x, x - log2(u.looseSize)));
+            let off = max(0.0, max(log2(0.3 * u.looseSize) - x, x - log2(u.looseSize*select(1.0,1.5,u.debrisAmount>0.0))));
             let spread = mix(2.0, 0.7, u.stoneSort);
             let runout = x - log2(2.2 * u.looseSize);
             // A class holding under a fifth of the population's stones casts too few shadows to be worth the search.
@@ -1285,7 +1287,7 @@ fn bake(p: vec2f) -> vec4f {
     let scatter = looseStones(p);
     let loose = scatter.s;
     var rock = vec2f(loose.x, loose.y);
-    height += rock.x;
+    height += rock.x+rockWeatherAt(p).y*u.debrisDepth;
     if (scatter.plant.x > 0.0) { height += max(scatter.plant.x * (1.0 - buried) - rock.x, 0.0); }
     rock.y *= 1.0 - buried;
     // Blue holds crack darkness (negative), rock cover (0..1), or a lit

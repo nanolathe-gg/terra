@@ -189,7 +189,8 @@ fn voxelDensity(p:vec3f)->f32 {
     let grit=(voxelNoise(p/u.faceGritSize)-.5)*u.faceGrit*4.0;
     // Soil-covered beds have their own rounded terraces, including on
     // slopes that also expose rock; an activation mask alone hid this control.
-    let structure=(faces+mass+pits+grit-u.faceJoint*joint*3.0-runnel+bed+u.faceExtrude*6.0*(.65+.35*c.tone))*face+soil*(bed*3.0+mass*1.5)+lamina*(face+soil*3.0);
+    let runoff=u.runoffCut*rockWeatherAt(p.xy).x*(1.25-.75*voxelHardness(p));
+    let structure=(faces+mass+pits+grit-u.faceJoint*joint*3.0-runnel-runoff+bed+u.faceExtrude*6.0*(.65+.35*c.tone))*face+soil*(bed*3.0+mass*1.5)+lamina*(face+soil*3.0);
     let offset=32.0*tanh(u.rockFace*.5*voxelRelief(p.xy,slope)*structure/32.0)*heightGate;
     let q=p-n*offset;let moved=voxelAuthored(q.xy);
     return (q.z-moved.x)*min(max(moved.w,.015),n.z);

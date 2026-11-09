@@ -38,6 +38,10 @@ try{
   await click('#undo');await ready();assert.deepEqual(await snapshot(),original);
   await click('#redo');await ready();assert.deepEqual(await snapshot(),sand);assert.equal(await capture(),sandArt);report.presetUndo='one undo and redo restore settings, column and pixels';
   await set('knob-faceRound',.6);assert.equal(await ev('document.getElementById("rock-preset").value'),'');await click('#undo');await ready();assert.deepEqual(await snapshot(),sand);report.sliderUndo='one undo restores the slider and named preset';
+  for(const [key,value] of Object.entries({runoff:1.2,runoffScale:48,runoffConcentration:.4,runoffCut:5,runoffStain:.8,debrisAmount:1.5,debrisReach:92,debrisDepth:8,stoneSort:.2})){
+    await set('knob-'+key,value);assert.equal((await snapshot()).rock[key],value);await click('#undo');await ready();assert.deepEqual(await snapshot(),sand);
+  }
+  report.weatheringUndo='all nine transport/sorting controls restore in one undo';
   const saved=await ev('sculptDebug.sketch()');writeFileSync(join(out,'rock-controls-demo.json'),JSON.stringify(saved,null,2));
   await set('rock-preset','granite');const graniteArt=await capture();assert.notEqual(graniteArt,sandArt);
   await ev(`sculptDebug.loadSketch(${JSON.stringify(saved)}); true`);await ready();assert.deepEqual(await snapshot(),sand);assert.equal(await capture(),sandArt);report.recipe='save/load restores identical rock pixels';
@@ -45,6 +49,9 @@ try{
   await ev(`(()=>{const s=sculptDebug.sketch();s.rock.faceRound=2;try{sculptDebug.loadSketch(s);return false;}catch{return true;}})()`).then(ok=>assert(ok));assert.deepEqual(await snapshot(),sand);report.invalid='invalid rock recipe leaves the map intact';
   for(const key of ['shale','basalt','limestone']){await set('rock-preset',key);assert.equal(await ev('document.getElementById("rock-preset").value'),key);}
   await set('knob-faceLamina',0);assert.equal(await ev('document.getElementById("knob-faceLaminaSize").disabled'),true);await set('knob-faceLamina',1);assert.equal(await ev('document.getElementById("knob-faceLaminaSize").disabled'),false);report.dependency='fine layer spacing explains its inactive parent';
+  await set('knob-runoff',0);assert.equal(await ev('document.getElementById("knob-runoffCut").disabled'),true);
+  await set('knob-debrisAmount',0);assert.equal(await ev('document.getElementById("knob-debrisReach").disabled'),true);
+  report.weatheringDependencies='runoff and debris children explain inactive parents';
   await set('rock-preset','sandstone');await click('#tab-world');await ev(`(()=>{const e=document.querySelector('[data-group="Rock & cliffs"]');e.open=true;document.getElementById('rock-preset').scrollIntoView({block:'center'});sculptCanvas.zoom(1);document.getElementById('viewport').scrollTo(0,200);return true;})()`);await ready();await sleep(300);
   const shot=await send('Page.captureScreenshot',{format:'png'});writeFileSync(join(out,'editor.png'),Buffer.from(shot.result.data,'base64'));
   assert.deepEqual(errors,[]);writeFileSync(join(out,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));
