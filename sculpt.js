@@ -263,7 +263,7 @@ function updateControls() {
 }
 
 function canExport() {
-  return ready && !loading && !stroke && !moving && !mapFeatures?.busy && (!$('weather').checked || weatherState==='ready');
+  return ready && !loading && !stroke && !moving && !mapFeatures?.busy && (!weatherOn() || weatherState==='ready');
 }
 
 const IDENTITY=[1,0,0,1,0,0];

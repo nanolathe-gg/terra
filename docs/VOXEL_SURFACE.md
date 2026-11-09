@@ -244,3 +244,23 @@ not add a physical shell or simulate elapsed weathering time, and it leaves
 Clay, density and gameplay heights unchanged. Loose fragments still use
 source-bed colors and sizes without tracking individual rind histories.
 See `ROCK_RINDS_REVIEW.md` for control, continuity, retail and timing results.
+
+## Fracture hierarchy and submerged rock
+
+Rock blocks exposes Joint opening width, Secondary fracture depth and
+Fracture continuity. These shape the existing fine/broad joint fields, while
+Fine detail clustering groups the existing pitting, grit and grooves into
+damaged areas separated by intact faces. The controls belong to the normal
+rock recipe, geological presets and editor history.
+
+Voxel rock, wear, layer colors and crusts continue below the waterline.
+Natural rocky banks retain their relief. Use Rock paint when a gentle shelf
+should stay exposed rock rather than sediment. The existing Lit bed, Bed tint
+strength, Tinted bed brightness, Bed light carried through the tint and
+shallow/deep depth controls govern visibility. Picking water colors preserves
+bed lighting. Water appearance settings do not select a different geometry
+or camera path. The volume allocator accounts for the vertical underwater
+ray so deep beds remain independent of chunk size.
+
+[Fracture/coast review](FRACTURE_COAST_REVIEW.md) records the authored reference
+comparison, control measurements, performance and remaining approximations.

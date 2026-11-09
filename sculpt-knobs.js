@@ -132,7 +132,7 @@ export function strokeWaterPicks(nodes) {
   const water=nodes.filter(n=>n.kind==='landform'),picked=(key,...choices)=>water.some(n=>choices.includes(Math.round(n.params?.[key]||0)))?1:0;
   return {deepEdge:picked('waterDeep',1),fadedEdge:picked('waterDeep',2),bedLit:picked('waterBed',1,3),crackedBed:picked('waterBed',3)};
 }
-// A Shallow water or Deep water base color picked in the Colors panel (`colors`: the renderer's, sculpt-scene.js rendererColors): the water is then two flat tones, whatever the world's own (engine-frag.wgsl skips the lit bed and the third colour).
+// Chosen water colors replace the palette tints, retaining the lit bed. They use two depth tones rather than the optional third tone.
 export const waterColored=colors => Boolean(colors.shallow||colors.deep);
 // How many tones the world's water has: 1 where shallow and deep are one colour, 3 where a third colour follows the depth, else 2; a picked base color makes it 2.
 export function waterTones(config,colors) {

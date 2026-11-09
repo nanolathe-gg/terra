@@ -1162,24 +1162,22 @@ fn shoalBumpLight(p: vec2f) -> f32 {
     return min((u.ambient + 0.95 * max(0.0, dot(normal, u.light))) / flatLight, u.lightCap);
 }
 
-// H24: how much of a cracked bed's light and cracks carry through its tint, the same on every world.
-const CRACKED_CONTRAST = 0.45;
 // Shallow water as the bed under it (card E1): the ground colour already lit at
 // this pixel, moved toward the water's own hue. The tint keeps the bed's light
 // (its brightness against flat ground), so lumps, shade and grain carry through;
 // bedTint is how much of the bed's own colour the tint replaces.
-fn litBed(bed: vec3f, cracked: bool) -> vec3f {
+fn litBed(bed: vec3f, rockShare: f32) -> vec3f {
     const luma = vec3f(0.299, 0.587, 0.114);
     let level = max(dot(groundBased(u.groundTexMean), luma), 0.02);
     // Shade stays paler under water than on land (retail's shaded bank beds show
     // as soft darker blue, never as black rims), so the dark side carries less.
-    // A cracked bed (E11) is rock-like ground: its cracks keep their depth, both sides, at CRACKED_CONTRAST.
-    let ratio = clamp(dot(bed, luma) / level, select(0.25, 0.1, cracked), 2.0);
-    var contrast = u.bedContrast;
-    var darkSide = 0.6;
-    if (cracked) { contrast = CRACKED_CONTRAST; darkSide = 1.0; }
+    // Rock retains crevice contrast. The artist's contrast control applies to
+    // all beds, including a painted cracked bed and a submerged voxel cliff.
+    let ratio = clamp(dot(bed, luma) / level, mix(.25,.06,rockShare), 2.0);
+    let contrast = u.bedContrast;
+    let darkSide = mix(.6,1.0,rockShare);
     let light = pow(ratio, select(contrast * darkSide, contrast, ratio >= 1.0));
-    let tint = u.shallowMean * light * u.bedBright;
+    let tint = select(u.shallowMean,u.shallowBase.rgb,u.shallowBase.a>.5) * light * u.bedBright;
     return saturate(mix(bed, tint, u.bedTint));
 }
 // Ice frost band (card E5): the frost stroke marks every cell of its band with a
@@ -1519,9 +1517,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     }
     let place = landPlace(p, h, g, broad, slope, n, weather, route);
     let bare=clamp(1.0-place.vegetation,0.0,1.0);
-    let faceGate=rockFaceGate(slope/(1.0-.5*bare),painted.x,route)*smoothstep(u.sea,u.sea+1.0,h);
+    let faceGate=rockFaceGate(slope/(1.0-.5*bare),painted.x,route);
     let rain=voxelRain(hit,normal);
-    let footing=u.faceGrass*rain*smoothstep(.6,.95,normal.z);
+    let footing=u.faceGrass*rain*smoothstep(.6,.95,normal.z)*smoothstep(u.sea,u.sea+2.0,h);
     let solidSlope=length(normal.xy)/max(normal.z,.1);
     let rockSlope=max(slope,solidSlope*.7*smoothstep(.12,.5,slope));
     let rise=mix(smoothstep(u.rockFaceFrom,u.rockFaceFrom+1.3,rockSlope),smoothstep(.5*u.rockFaceFrom,.5*u.rockFaceFrom+.5,rockSlope),bare);
@@ -1730,7 +1728,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // The ground's grain survives in the beds as brightness, scaled by
         // Bed grain (retail desert bands are smooth colour).
         let bedColour = saturate(bed * mix(1.0, clamp(lum / meanLum, 0.82, 1.12), u.strataGrain));
-        let onRaised = smoothstep(u.columnSections[0].x, u.columnSections[0].x+1.5, columnCoord(p,h)) * (1.0-route);
+        let onRaised = max(smoothstep(u.columnSections[0].x, u.columnSections[0].x+1.5, columnCoord(p,h)),faceGate*exposed) * (1.0-route);
         let bedCoverage=clamp(u.strata*2.0,0.0,1.0)*mix(exposed,1.0,smoothstep(.5,1.0,u.strata));
         material = mix(material, bedColour, max(bedCoverage * u.strataContrast * onRaised, u.strata * painted.x));
         if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)); }
@@ -2100,21 +2098,22 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, depth, crackedBed); }
         var grain = genColor(u.waterLayer, pixel) - u.waterMean;
         if (u.lowGrain < 1.0) { grain *= lowGrain; }
-        var water = mix(select(u.shallowColor, u.shallowBase.rgb, u.shallowBase.a > 0.5), select(u.deepColor, u.deepBase.rgb, u.deepBase.a > 0.5), deep) + grain * mix(2.3, 0.95, deep);
-        // Low ground: the shallows take the low colour, and the depth's ramp carries it into the deep water's.
-        if (lowShare > 0.0) { water = mix(water, lowTinted(water, select(u.shallowColor, u.shallowBase.rgb, u.shallowBase.a > 0.5)), lowShare * (1.0 - deep)); }
-        if (u.shallowBase.a < 0.5 && u.deepBase.a < 0.5) {
-            var shallow = genColor(u.shallowLayer, pixel);
-            if (u.lowGrain < 1.0) { shallow = u.shallowMean + (shallow - u.shallowMean) * lowGrain; }
-            if (lowShare > 0.0) { shallow = mix(shallow, lowTinted(shallow, u.shallowMean), lowShare); }
-            var deepWater = genColor(u.waterLayer, pixel);
-            if (u.lowGrain < 1.0) { deepWater = u.waterMean + grain; }
+        // Colors choose the water's tint, never replace the bed-light model.
+        var water=vec3f(0);
+        {
+            let shallowLevel=select(u.shallowMean,u.shallowBase.rgb,u.shallowBase.a>.5);
+            var shallow = select(genColor(u.shallowLayer,pixel),u.shallowBase.rgb+grain*2.3,u.shallowBase.a>.5);
+            if (u.lowGrain < 1.0) { shallow = shallowLevel + (shallow - shallowLevel) * lowGrain; }
+            if (lowShare > 0.0) { shallow = mix(shallow, lowTinted(shallow, shallowLevel), lowShare); }
+            var deepWater = select(genColor(u.waterLayer,pixel),u.deepBase.rgb+grain*.95,u.deepBase.a>.5);
+            if (u.lowGrain < 1.0) { deepWater = select(u.waterMean,u.deepBase.rgb,u.deepBase.a>.5) + grain; }
             // The lit bed: the ground under the water, lit by the same sun and
             // tinted, replaces the shallow art's noise (retail draws its shallows
             // as the lit terrain through a blue tint).
-            // The bed is the level ground under the sun and shade at this pixel: the slope
-            // and rock materials of its banks are not drawn through the water.
-            // A cracked bed keeps its drawn material, cracks and all.
+            // Shallows see the same shaded voxel rock, beds and crusts as the
+            // exposed coast. Soft ground keeps the existing lit-bed material.
+            let rockBedShare=clamp(exposed*faceGate,0.0,1.0);
+            let detailedBed=max(rockBedShare,select(0.0,1.0,crackedBed));
             // E11 bedFlat: light the bed by its own relief only. A shelf's slope toward the deep
             // would otherwise shade the pale bed darker over a hundred px and read as blur.
             var bedShade = shading;
@@ -2122,18 +2121,22 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 let own = normalize(vec3f(-(g - broad), 1.0));
                 bedShade = mix(shading, min((u.ambient + 0.95 * max(0.0, dot(own, u.light))) / flatLight, u.lightCap), u.bedFlat);
             }
-            if (bedLit > 0.0) { shallow = mix(shallow, litBed(select(levelGround * bedShade, color / (max(shading, 0.05) * max(lightTint, vec3f(0.02))) * bedShade, crackedBed), crackedBed), bedLit); }
+            if (bedLit > 0.0) {
+                let groundBed=select(levelGround*bedShade,color/(max(shading,.05)*max(lightTint,vec3f(.02)))*bedShade,crackedBed);
+                let bed=mix(groundBed,color/max(lightTint,vec3f(.02)),rockBedShare);
+                shallow=mix(shallow,litBed(bed,detailedBed),bedLit);
+            }
             // The bumps' light moves red and green more than blue, so a shaded lump goes toward deep blue
             // and a lit one toward pale blue, where a plain multiply lands between the palette's blues (teal).
             // Only hard-step water takes them: Archipelago's lakes and channels stay smooth, as retail's.
-            if (u.shoalBump > 0.0 && bedLit > 0.0 && edgeHard > 0.0) { shallow *= 1.0 + (shoalBumpLight(p) - 1.0) * vec3f(1.0, 1.0, 0.4) * bedLit; }
+            if (u.shoalBump > 0.0 && bedLit > 0.0 && edgeHard > 0.0) { shallow *= 1.0 + (shoalBumpLight(p) - 1.0) * vec3f(1.0, 1.0, 0.4) * bedLit * (1.0-rockBedShare); }
             // G1: retail's lilac lake keeps salmon and pink pixels of the ground under it; the tint alone replaces them.
-            if (u.shoalGrain > 0.0 && bedLit > 0.0) { shallow += u.shoalGrain * (levelGround - groundBased(u.groundTexMean)) * bedShade * bedLit; }
+            if (u.shoalGrain > 0.0 && bedLit > 0.0) { shallow += u.shoalGrain * (levelGround - groundBased(u.groundTexMean)) * bedShade * bedLit * (1.0-rockBedShare); }
             if (u.bedDots > 0.0 && bedLit > 0.0) { shallow *= 1.0 - u.bedDots * bedDotField(pixel) * vec3f(1.0, 1.0, 0.55) * bedLit; }
             water = mix(shallow, deepWater, deep);
             // Some worlds' water passes through a third colour; a straight
             // blend of the two textures lands on colours the art never uses.
-            if (u.waterMid.a > 0.0) {
+            if (u.waterMid.a > 0.0 && u.shallowBase.a < .5 && u.deepBase.a < .5) {
                 let toMid = smoothstep(u.shallowDepth, u.waterMid.a, colorDepth);
                 let toDeep = smoothstep(u.waterMid.a, u.deepDepth, colorDepth);
                 var mid = u.waterMid.rgb + (deepWater - u.waterMean) * 0.9;

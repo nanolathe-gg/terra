@@ -59,8 +59,7 @@ fn voxelRockHeight(p:vec3f,painted:f32)->f32 {
     let raised=smoothstep(u.base+1.0,u.base+8.0,p.z);
     if(raised==1.0){return raised;}
     let cut=1.0-smoothstep(u.base-.5,u.base,baseHeight(p.xy));
-    return max(raised,
-        max(cut,smoothstep(.1,.6,painted))*smoothstep(u.sea,u.sea+1.0,p.z));
+    return max(raised,max(cut,smoothstep(.1,.6,painted)));
 }
 // Material age inferred from the same local cuts as the solid. This is an
 // artistic rind-depth model, not a persisted geological age simulation.
@@ -125,8 +124,14 @@ fn voxelClassify(@builtin(global_invocation_id) id:vec3u){
     // output rectangle, plus the full shadow, normal, and four-pass wear reach.
     // A tall scene therefore does not allocate all the unrelated rock behind it.
     let y=vs.origin.y+f32(id.y*8u)*vs.step;let guard=64.0+18.0*vs.step;
-    let bottom=max(max(vs.low,low)-apron,u.base+2.0*(y-vs.screenY.y)-guard);
-    let top=min(min(vs.high,high)+apron,u.base+2.0*(y+8.0*vs.step-vs.screenY.x)+guard);
+    // Below the water plane the ray is vertical in XY. Keep that interval as
+    // well as the slanted dry ray; otherwise deep rock can vanish at tile edges.
+    let waterY=y+(u.base-u.sea)*.5;
+    let submergedView=low<u.sea&&waterY+8.0*vs.step>=vs.screenY.x-guard*.5&&waterY<=vs.screenY.y+guard*.5;
+    let projectedBottom=u.base+2.0*(y-vs.screenY.y)-guard;
+    let projectedTop=u.base+2.0*(y+8.0*vs.step-vs.screenY.x)+guard;
+    let bottom=max(max(vs.low,low)-apron,select(projectedBottom,min(projectedBottom,vs.low-apron),submergedView));
+    let top=min(min(vs.high,high)+apron,select(projectedTop,max(projectedTop,u.sea+guard),submergedView));
     let first=i32(floor(bottom/(vs.step*8.0)));let last=i32(ceil(top/(vs.step*8.0)));
     let count=u32(max(0,last-first));let start=atomicAdd(&countOut.bricks,count);
     columnsOut[id.y*vs.columnsX+id.x]=vec4i(first,i32(count),i32(start),0);
@@ -218,7 +223,7 @@ fn voxelHit(screen:vec2f)->vec3f {
         let d=voxelField(voxelRayPoint(screen,z,underwater));if(d<=0.0){break;}
         previous=z;z-=clamp(d*.45,.24*vs.step,8.0*vs.step);
         // Water projects at its level. The same solid supplies its seabed.
-        if(u.waterOn!=0&&!underwater&&previous>=u.sea&&z<u.sea){z=u.sea;previous=z;underwater=true;}
+        if(!underwater&&previous>=u.sea&&z<u.sea){z=u.sea;previous=z;underwater=true;}
         if(z<vs.low-40.0){break;}
     }
     // Reconstruct every sample from the screen ray: incremental XY stepping

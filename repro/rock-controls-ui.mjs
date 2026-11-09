@@ -2,7 +2,7 @@
 // node repro/rock-controls-ui.mjs --server http://127.0.0.1:8904 --port 9815 --out /private/tmp/terraform-rock-controls/ui
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
-import {mkdirSync,writeFileSync} from 'node:fs';
+import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {cdpPortFree} from './cdp-port.mjs';
 const args=process.argv.slice(2),opt=(k,d)=>args.includes(k)?args[args.indexOf(k)+1]:d;
@@ -74,5 +74,25 @@ try{
   await ev(`sculptDebug.scene([['mountain',[[340,560],[610,460]],{card:{diameter:500,elevation:280,roughness:20,softness:20,styleVegetation:0}}]],{ground:true}); true`);await ready();
   const mountain=await ev('sculptDebug.sketch()');writeFileSync(join(out,'gneiss-mountain-demo.json'),JSON.stringify(mountain,null,2));
   const mountainArt=await capture();await set('rock-preset','conglomerate');await ev(`sculptDebug.loadSketch(${JSON.stringify(mountain)}); true`);await ready();assert.equal(await capture(),mountainArt);report.newTypeRecipe='folded mountain recipe reloads to identical pixels';
+  // A single authored rock face continues through the coast, in the normal
+  // editor recipe. Chosen water tints retain the same lighting controls.
+  const coast=JSON.parse(readFileSync(new URL('./fixtures/fracture-coast.json',import.meta.url)));
+  await send('Page.navigate',{url:server+'/sculpt.html?'+coast.query});await ready();
+  assert.equal(await ev('document.getElementById("weather-state").textContent'),'Weathering off · authored surface');
+  await ev(`sculptDebug.scene(${JSON.stringify(coast.strokes)},{ground:true});true`);await ready();
+  await ev(`sculptDebug.loadSketch({...sculptDebug.sketch(),rock:${JSON.stringify(coast.rock)}});true`);await ready();
+  const coastCapture=()=>ev(`(async()=>{const b=await sculptCanvas.debugBake({x:384,y:500,width:512,height:512}),c=document.createElement('canvas');c.width=c.height=512;c.getContext('2d').drawImage(b,0,0);return c.toDataURL();})()`);
+  const coastArt=await coastCapture(),coastSave=await ev('sculptDebug.sketch()');writeFileSync(join(out,'red-coast-demo.json'),JSON.stringify(coastSave,null,2));
+  await click('#tab-world');
+  const pickWater=async(label,color)=>{await ev(`(()=>{const row=[...document.querySelectorAll('#world-colors .color-row')].find(r=>r.firstElementChild.textContent===${JSON.stringify(label)});const pick=row.querySelector('input[type=color]');pick.value=${JSON.stringify(color)};pick.dispatchEvent(new Event('input',{bubbles:true}));pick.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);await ready();};
+  await pickWater('Shallow water','#528799');await pickWater('Deep water','#102938');const coloredCoast=await coastCapture();assert.notEqual(coloredCoast,coastArt);
+  for(const k of ['bedLit','bedTint','bedBright','bedContrast'])assert.equal(await ev(`document.getElementById('knob-${k}').disabled`),false,k+' remains enabled with picked colors');
+  await set('knob-bedTint',0);assert.notEqual(await coastCapture(),coloredCoast);await set('knob-bedTint',.95);assert.equal(await coastCapture(),coloredCoast);
+  // Water colors and existing bed settings belong to the world, not the map's
+  // rock recipe. Restore the two overrides explicitly before testing that recipe.
+  await ev(`(()=>{for(const label of ['Shallow water','Deep water']){const row=[...document.querySelectorAll('#world-colors .color-row')].find(r=>r.firstElementChild.textContent===label);const box=row.querySelector('input[type=checkbox]');box.checked=false;box.dispatchEvent(new Event('change',{bubbles:true}));}return true;})()`);await ready();
+  await ev(`sculptDebug.loadSketch(${JSON.stringify(coastSave)});true`);await ready();assert.equal(await coastCapture(),coastArt);
+  await sleep(900);await send('Page.reload',{ignoreCache:true});await ready();assert.equal(await coastCapture(),coastArt);
+  report.coast='coastal fracture recipe reloads exactly; chosen water colors keep bed controls live; restoring tint restores exact pixels; zero erosion keeps export ready';
   assert.deepEqual(errors,[]);writeFileSync(join(out,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));
 }finally{ws?.close();browser.kill();}
