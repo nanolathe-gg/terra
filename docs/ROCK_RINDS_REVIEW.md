@@ -1,7 +1,7 @@
 # Fresh fractures and weathered rock crusts
 
 Worktree branch `rock-rinds`, based on the layer/debris pass `7c2a6fa4`.
-The combined work is intended for main after landing checks. Preview:
+The combined layer/debris and fracture/crust work passed the landing tier. Preview:
 `http://127.0.0.1:8912/sculpt`. Measurement artifacts are in
 `/private/tmp/terraform-rock-rinds`.
 
@@ -168,4 +168,24 @@ The material mask adds no voxel buffers or textures. It evaluates the existing
 fracture functions at visible rock hits; the zero-amount default skips that
 work. Existing chunk memory accounting and partition invariance still apply.
 
-The final landing tier will be recorded after merging current main into this branch.
+Current main (`296f68eb`) was merged into the branch before the final check
+(already up to date). The `land` tier passes on implementation/test commit
+`ff67068a`, using the task's server 8912 and CDP port 9855:
+
+| Check | Result | Time |
+| --- | --- | ---: |
+| Unit/static-site generation | 166 passed | 18 s |
+| World-name gate | Passed | <1 s |
+| Scene regression | 34 compared; only the five expected earlier changes | 46 s |
+| Regional replay | Passed | 10 s |
+| Voxels | Passed | 4 s |
+| Cross-world tools/export smoke, including page8 | Passed | 127 s |
+| Features | Passed | 27 s |
+| Passability | 68,112 cells; 0 mismatches; edit/undo passed | 181 s |
+| Shape repeat | All 34 scenes identical across two GPU runs | 25 s |
+
+Logs are in `/private/tmp/terraform-rock-rinds/land`. The independent control,
+curve-editor, UI, export, retail, realism and alternating performance results
+above cover the additional checks touched by this work. The older Desert
+columnContrast weakness and height-realism gaps remain documented, not counted
+as resolved. The final documentation-only commit records these results.

@@ -6,6 +6,14 @@ landing tier, and fast-forwarded to local main at that commit. This iteration
 is separate work for review. Preview: `http://127.0.0.1:8910/sculpt`.
 Artifacts: `/private/tmp/terraform-geology-provenance`.
 
+## Landing follow-up
+
+This work is included in the combined `rock-rinds` landing. The subsequent
+[fresh-fracture/crust review](ROCK_RINDS_REVIEW.md) records the final passing
+landing tier and the separate correction to the two curve-test fixtures
+reported below. Green and Desert now each pass all 77 curve checks. The
+measurements below retain this pass's original baseline and scope.
+
 ## Artist workflow
 
 The existing Rock column is now the common source for voxel hardness, layer
