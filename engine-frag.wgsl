@@ -246,7 +246,7 @@ fn rockSource(pixel: vec2f) -> vec3f { return genColor(1, pixel); }
 // (read outside, through Place.deposits); the erosion plane is read on the CPU side by the GPU pass.
 const MM_PLACE = 156u;
 fn pr(i: u32) -> vec4f { return matRow(MM_PLACE + i); }
-struct Place { exposed: f32, lowBank: f32, top: f32, deposits: f32, vegetation: f32 }
+struct Place { exposed: f32, lowBank: f32, top: f32, deposits: f32, vegetation: f32, exposure: f32 }
 fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, weather: vec2f, route: f32) -> Place {
     var out: Place;
     let r0 = pr(0u); let r1 = pr(1u); let r2 = pr(2u); let r3 = pr(3u); let r4 = pr(4u); let r5 = pr(5u);
@@ -302,6 +302,7 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
     // H5: the vegetation override also scales how much rock shows: +1 lets grass and moss take 40% of it back, -1 bares 40% more.
     exposed = clamp(exposed * (1.0 - 0.4 * clamp(vegetation, -1.0, 1.0)), 0.0, 1.0);
     out.exposed = exposed;
+    out.exposure = 1.0 + exposure;
     out.lowBank = lowBank;
     // How far the surface stands above the mean of a ring 3 px out (a lump's top, 1; a hollow, -1): the ground cover's soil reads it.
     let around = 0.25 * (surfaceHeight(p - vec2f(3.0, 0.0)) + surfaceHeight(p + vec2f(3.0, 0.0))
@@ -1528,14 +1529,14 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let solidSlope=length(normal.xy)/max(normal.z,.1);
     let rockSlope=max(slope,solidSlope*.7*smoothstep(.12,.5,slope));
     let rise=mix(smoothstep(u.rockFaceFrom,u.rockFaceFrom+1.3,rockSlope),smoothstep(.5*u.rockFaceFrom,.5*u.rockFaceFrom+.5,rockSlope),bare);
-    let share=max(clamp(u.faceRock*rise*(2.0-clamp(place.vegetation,0.0,2.0)),0.0,1.0),smoothstep(.15,.95,painted.x)*.9);
+    let share=max(clamp(u.faceRock*rise*place.exposure*(2.0-clamp(place.vegetation,0.0,2.0)),0.0,1.0),smoothstep(.15,.95,painted.x)*.9);
     let patches=voxelNoise(hit/vec3f(13,13,8));
     // Coverage is patchy soil on rain-exposed ledges, rather than a gray/green
     // mixture over the whole wall. The threshold follows actual 3D footing.
     let soilEdge=.32+(patches-.5)*.8+footing*.95;
     let faceRock=smoothstep(soilEdge-.08,soilEdge+.08,share);
     let localSun=voxelShadow(hit,normal);let localSky=voxelOcclusion(hit,normal);
-    let faceLight=u.faceShade*faceGate*clamp(u.rockFace*.5,0.0,1.0);
+    let faceLight=u.faceShade*faceGate*clamp(u.rockFace*.5*voxelRelief(p,slope),0.0,1.0);
     let faceSun=mix(1.0,localSun,faceLight);
     let faceOcc=(1.0-localSky)*faceLight;
     let hard=voxelHardness(hit);

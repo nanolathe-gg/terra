@@ -48,6 +48,13 @@ fn voxelHardness(p:vec3f)->f32 {
     // Layer thickness scales that same column instead of introducing another stack.
     return columnAt(columnCoord(p.xy,p.z)*5.5/max(2.0,u.faceBed)+fold*u.faceBed*.2).hardness;
 }
+// The existing Surface relief slider and local relief paint scale the entire
+// surface, including displacement and weathering of the volumetric rock.
+fn voxelRelief(p:vec2f,slope:f32)->f32 {
+    if(u.styleOn==0){return u.detail;}
+    let local=textureSampleLevel(masksTex,linearClamp,maskUv(p),1,0.0).g;
+    return u.detail*styleScale(styleEdge(p,local,slope));
+}
 fn voxelAuthored(p:vec2f)->vec4f {
     let q=p/vs.step-.5;let i=vec2i(floor(q))-vec2i(round(vs.origin/vs.step));let f=fract(q);let last=vec2i(i32(vs.width),i32(vs.height))-1;
     let a=clamp(i,vec2i(0),last);let b=clamp(i+1,vec2i(0),last);
@@ -141,16 +148,26 @@ fn voxelPaintRock(p:vec2f)->f32 {
     if(u.paintOn==0){return 0.0;}
     return max(0.0,textureSampleLevel(masksTex,linearClamp,maskUv(p),0,0.0).r);
 }
+fn voxelRockHeight(p:vec3f,painted:f32)->f32 {
+    // Only authored cuts enable rock below the plain. Testing the baked
+    // microrelief here would turn ordinary ground grain into rocky banks.
+    let raised=smoothstep(u.base+1.0,u.base+8.0,p.z);
+    if(raised==1.0){return raised;}
+    let cut=1.0-smoothstep(u.base-.5,u.base,baseHeight(p.xy));
+    return max(raised,
+        max(cut,smoothstep(.1,.6,painted))*smoothstep(u.sea,u.sea+1.0,p.z));
+}
 fn voxelDensity(p:vec3f)->f32 {
     let source=voxelAuthored(p.xy);let guide=voxelGuide(p.xy);let nz=sqrt(max(.000225,1.0-dot(guide.xy,guide.xy)));let n=normalize(vec3f(guide.xy,nz));
     let d=(p.z-source.x)*min(max(source.w,.015),n.z);
+    if(abs(d)>40.0||u.rockFace<=0.0){return d;}
     let slope=length(n.xy)/max(n.z,.015);let route=routeProtection(p.xy);
     let painted=voxelPaintRock(p.xy);
     let face=rockFaceGate(slope,painted,route);
-    let heightGate=max(smoothstep(u.base+1.0,u.base+8.0,p.z),smoothstep(.1,.6,painted)*smoothstep(u.sea,u.sea+1.0,p.z));
     let soil=u.faceLayers*smoothstep(.08,.6,slope)*smoothstep(.5,.9,n.z)*(1.0-route);
-    let gate=max(face,soil)*heightGate;
-    if(abs(d)>40.0||gate<.001||u.rockFace<=0.0){return d;}
+    if(max(face,soil)<.001){return d;}
+    let heightGate=voxelRockHeight(p,painted);
+    if(max(face,soil)*heightGate<.001){return d;}
     let r=voxelRockSpace(p);
     let c=voxelBlocks(r,max(4.0,u.faceBlockSize));let broad=voxelBlocks(r,max(24.0,u.faceBlockSize*2.5));
     let width=.65+u.faceWear*1.2;
@@ -165,7 +182,7 @@ fn voxelDensity(p:vec3f)->f32 {
     // Soil-covered beds have their own rounded terraces, including on
     // slopes that also expose rock; an activation mask alone hid this control.
     let structure=(faces+mass+pits+grit-u.faceWear*joint*3.0-runnel+bed)*face+soil*(bed*3.0+mass*1.5);
-    let offset=32.0*tanh(u.rockFace*.5*structure/32.0)*heightGate;
+    let offset=32.0*tanh(u.rockFace*.5*voxelRelief(p.xy,slope)*structure/32.0)*heightGate;
     let q=p-n*offset;let moved=voxelAuthored(q.xy);
     return (q.z-moved.x)*min(max(moved.w,.015),n.z);
 }
@@ -181,13 +198,15 @@ fn voxelWear(p:vec3i)->f32 {
     let d=voxelCell(p);if(abs(d)>6.0*vs.step){return d;}
     let q=(vec3f(p)+.5)*vs.step;let g=voxelGuide(q.xy);let nz=sqrt(max(.000225,1.0-dot(g.xy,g.xy)));
     let painted=voxelPaintRock(q.xy);
-    let heightGate=max(smoothstep(u.base+1.0,u.base+8.0,q.z),smoothstep(.1,.6,painted)*smoothstep(u.sea,u.sea+1.0,q.z));
+    let heightGate=voxelRockHeight(q,painted);
     let exposure=max(1.0-smoothstep(.75,.98,nz),painted)*(1.0-routeProtection(q.xy))*heightGate;
     let sum=voxelCell(p+vec3i(1,0,0))+voxelCell(p-vec3i(1,0,0))+voxelCell(p+vec3i(0,1,0))+voxelCell(p-vec3i(0,1,0))+voxelCell(p+vec3i(0,0,1))+voxelCell(p-vec3i(0,0,1));
     let gradient=length(vec3f(voxelCell(p+vec3i(1,0,0))-voxelCell(p-vec3i(1,0,0)),voxelCell(p+vec3i(0,1,0))-voxelCell(p-vec3i(0,1,0)),voxelCell(p+vec3i(0,0,1))-voxelCell(p-vec3i(0,0,1))))/(2.0*vs.step);
     // The six-neighbor diffusion coefficient stays below 1/6 at every
     // exposed control value; erosion depth and rounding remain independent.
-    let depth=u.rockFace*.5;
+    // Keep four wear passes within the allocated 40-pixel surface apron,
+    // even when a local relief stroke amplifies the global setting.
+    let depth=min(2.0,u.rockFace*.5*voxelRelief(q.xy,length(g.xy)/nz));
     return d+u.faceWear*exposure*(.8*depth*(1.0-voxelHardness(q))*gradient+(sum-6.0*d)*.12*clamp(depth,0.0,1.0));
 }
 @compute @workgroup_size(4,8,8)

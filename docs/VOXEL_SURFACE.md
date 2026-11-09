@@ -54,6 +54,12 @@ The ordinary regional replay, scene, editor, and export checks still run.
 
 ## Existing controls
 
+- **Surface relief and relief paint:** scale both the baked detail and the
+  voxel displacement/wear. Zero is the smooth limit of the same solid.
+- **Rock exposure paint:** changes natural cliff coverage as well as the
+  older slope placement. Explicit Rock paint still supplies its own coverage.
+- **Cut banks:** dry terrain below the surrounding plain receives the same
+  voxel rock structure as raised cliffs. Flat ground keeps its base texture.
 - **Rock face:** Depth, Layer thickness, Layer hardness, Layer run,
   Block relief/size, joint direction, pits, runnels, broad mass, and Grit
   shape the density. Weathering rounds and erodes the solid. The Rock
