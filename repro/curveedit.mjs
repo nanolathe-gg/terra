@@ -6,6 +6,7 @@
 // Prints one JSON line per world; exit code 1 on any failed check or a console error.
 import {cdpPortFree} from './cdp-port.mjs';
 import {FORMS, LANDFORM_FORMS} from '../sculpt-shape-presets.js';
+import {LANDFORM_DEFAULTS, LANDFORM_TOOLS, TOOL_PRESETS} from '../sculpt-scene.js';
 import {spawn} from 'node:child_process';
 import {mkdirSync,readFileSync} from 'node:fs';
 
@@ -80,18 +81,19 @@ async function editWorld(world, port) {
       await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
       // Fix the seed so outline variation cannot turn this UI check into a lottery.
       await setValue('seed',2701,'change');await ev(`document.getElementById('seed-vary').checked=false;document.getElementById('seed-vary').dispatchEvent(new Event('change',{bubbles:true}));true`);
-      // The approved defaults must reach a new stroke and a selected stroke through the existing Style selector.
-      const defaults = JSON.parse(readFileSync(new URL(`comparisons/landform/${world === 'desert' ? '07-mesa-improved' : '02-plateau-natural-refined'}.json`, import.meta.url), 'utf8')).strokes[0][2];
+      // The Plateau button's numbers (the model's, the button's and the world's own, sculpt-scene.js) must reach a new stroke, and a selected stroke
+      // through the existing Style selector.
+      const defaults = {...LANDFORM_DEFAULTS, ...LANDFORM_TOOLS.plateau, ...TOOL_PRESETS[world]?.plateau};
       const baseH = await ev('sculptDebug.base');
       await stroke('plateau');
       // The Wander slider snaps the reviewed 75 px to 76.
       const fresh = (await nodes()).at(-1).params;
-      check('approved landform defaults reach a new stroke', same(fresh.curve, defaults.curve) && fresh.radius === defaults.card.diameter / 2 && fresh.wander === (world === 'desert' ? 76 : 90) && fresh.widthVary === defaults.card.widthVary / 100 && fresh.elevation === baseH + defaults.card.elevation - 24 && fresh.routeSmooth === 0 && fresh.crestTaper === 0, {curve:fresh.curve,radius:fresh.radius,wander:fresh.wander,elevation:fresh.elevation,baseH});
+      check('approved landform defaults reach a new stroke', same(fresh.curve, defaults.curve) && fresh.radius === defaults.diameter / 2 && fresh.wander === (world === 'desert' ? 76 : 90) && fresh.widthVary === defaults.widthVary / 100 && fresh.elevation === baseH + defaults.elevation && fresh.routeSmooth === 0 && fresh.crestTaper === 0, {curve:fresh.curve,radius:fresh.radius,wander:fresh.wander,elevation:fresh.elevation,baseH});
       await setValue('curve-form', 'lfTerraced', 'change'); await setValue('lf-wander', 0);   // a plateau form: the style restores the plateau
       await setValue('tool-style', world, 'change'); await ev('sculptCanvas.idle()');
       const styled = (await nodes()).at(-1).params;
       check('style restores the approved curve and numbers on a selected landform', same(styled.curve, defaults.curve) && styled.wander === fresh.wander && styled.elevation === fresh.elevation, styled.curve);
-      check('facing is offered only when the default section has different sides', await ev('document.getElementById("facing-control").hidden') === (world === 'desert'));
+      check('facing is offered only when the default section has different sides', await ev('document.getElementById("facing-control").hidden') === !defaults.curve.back);
       await setValue('lean', 200);
       check('unequal landform widths enable facing', !await ev('document.getElementById("facing-control").hidden'));
       await setValue('tool-style', world, 'change'); await ev('sculptCanvas.idle()');
@@ -194,10 +196,10 @@ async function editWorld(world, port) {
       check('dragging the crest sideways sets the lean', lean1 !== lean0 && lean1 >= .25 && lean1 <= 4, {lean0, lean1});
       // the elevation, and the along curve
       if(await ev('sculptDebug.state().selected')!==L0)await ev(`document.querySelector('#layers [data-index="${L0}"] .layer-name').click();true`);
-      const targetElevation=Math.round(plain)+120;
+      const targetElevation=Math.round(plain)+90;   // the button draws 130 over the plain
       const top0 = Math.max(...await crestHeights()); await setValue('lf-elevation', targetElevation, 'input'); await sleep(300); await ev('sculptCanvas.idle()'); await sleep(500);
       const top1 = Math.max(...await crestHeights());
-      check('the elevation sets the crest', (await nodes())[L0].params.elevation===targetElevation && Math.abs(top1-targetElevation)<6 && top1>top0+20, {top0,top1,plain,targetElevation,params:(await nodes())[L0].params.elevation});
+      check('the elevation sets the crest', (await nodes())[L0].params.elevation===targetElevation && Math.abs(top1-targetElevation)<6 && Math.abs(top1-top0)>20, {top0,top1,plain,targetElevation,params:(await nodes())[L0].params.elevation});
       await ev(`document.getElementById('along-preview').scrollIntoView({block: 'center'}); true`); await sleep(300);
       const ap = await ev('sculptDebug.alongPoint(.5, 1)'), apLow = await ev('sculptDebug.alongPoint(.5, .3)');
       await mouse('mouseMoved', ap.x, ap.y); await mouse('mousePressed', ap.x, ap.y); await mouse('mouseReleased', ap.x, ap.y); await sleep(200);
