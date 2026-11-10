@@ -1147,7 +1147,9 @@ fn talusFan(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32, shar
   let apexIn = ro.y * tq;                                   // how far inside the foot the ravine opens
   let len = apexIn + u.talusReach;                          // from the apex to the toe
   let s = apexIn - ro.x;                                    // from the apex, outward
-  let top = 0.225 * relief * strength;
+  // The fan's height comes in with the reach (a short reach is a low fan, 0 is none), and is all there once the reach is a good part of the way from
+  // the ravine's opening to the foot.
+  let top = 0.225 * relief * strength * tanh(u.talusReach / (0.35 * apexIn + 12.0));
   // Across the wall the fans stand on a continuous apron (0.4 of their height), and the share does not change along a fall line: every line then falls
   // outward all the way, so no hollow is shut in between two fans and the wall (a share that widened outward left 155 such cells on the test cliff).
   let across = 0.4 + 0.6 * pow(max(gv, 1e-3), 1.6);
@@ -1250,7 +1252,9 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   if (land.y > 0.0 && !seen) { pick = land; seen = true; }   // a landing no groove segment reaches (its box is the trunk's own; kept for safety)
   // P17: the talus cones, where Gullies cut the faces (the chutes are theirs) and the stroke raises. Beyond the footprint the cone is all there is.
   var talus = 0.0;
-  if (u.talusReach > 0.0 && u.gully > 0.0 && u.combine == 0u && trunk != 0xffffffffu) { talus = landformTalus(wx, wy, lx, ly, x, y, trunk, tShare, nA, nB, base, select(0.0, pick.x - base, seen)); }
+  if (u.talusReach > 0.0 && u.gully > 0.0 && u.combine == 0u && trunk != 0xffffffffu) { talus = landformTalus(wx, wy, lx, ly, x, y, trunk, tShare, nA, nB, base, select(0.0, pick.x - base, seen));
+    // Talus stays off a route an earlier stroke laid (a ramp drawn before the plateau had scree across its foot).
+    talus *= 1.0 - clamp(F[PR * cells + i], 0.0, 1.0); }
   var ej = 0.0; var lipK = 1.0;
   if ((u.ejAmt > 0.0 || u.bkAmt > 0.0) && trunk != 0xffffffffu) { let ev = lfCraterEjecta(wx, wy, select(trunk, 0u, u.grooveEnd != 0.0)); ej = ev.x; lipK = ev.y; }   // an impact's round its landing
   if (!seen) {
