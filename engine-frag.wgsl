@@ -55,7 +55,6 @@ fn visibility(p: vec2f, h: f32) -> f32 {
     let elevation = u.light.z / length(u.light.xy);
     var shadow = 0.0;
     for (var i = 4; i <= 12; i++) {
-        if (u.full == 0 && i > 5) { break; }
         let d = f32(i * i) * 1.4 + 2.0;
         let q = p + toward * d;
         if (q.x < 0.0 || q.y < 0.0 || q.x >= u.size || q.y >= u.size) { continue; }
@@ -68,13 +67,12 @@ fn visibility(p: vec2f, h: f32) -> f32 {
 fn occlusion(p: vec2f, h: f32) -> f32 {
     var result = 0.0;
     for (var i = 0; i < 8; i++) {
-        if (u.full == 0 && i >= 4) { break; }
         let angle = f32(i) * 2.399963;
         let d = 32.0 + f32(i % 3) * 14.0;
         let q = p + vec2f(cos(angle), sin(angle)) * d;
         result += clamp((surfaceHeight(q) - h) / d - 0.12, 0.0, 1.0);
     }
-    return 1.0 - result * select(0.09, 0.045, u.full != 0);
+    return 1.0 - result * 0.045;
 }
 
 // Pattern mixes (card P9): retail art shows colours the palette lacks as pixel
@@ -105,7 +103,6 @@ fn uphillSoil(p: vec2f, uphill: vec2f, h: f32, reach: f32) -> f32 {
     var distances = array<f32, 4>(5.0, 14.0, 30.0, 56.0);
     var support = 0.0;
     for (var i = 0; i < 4; i++) {
-        if (u.full == 0 && i > 1) { break; }
         let d = distances[i];
         let q = p + uphill * d;
         let gentle = 1.0 - smoothstep(0.50, 0.95, length(broadGradient(q)));

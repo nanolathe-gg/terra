@@ -655,10 +655,8 @@ export class TerrainRenderer {
     };
   }
 
-  async draw({quality = 'preview', clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
+  async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
     const start = performance.now(), device = this.device;
-    const full = quality === 'full';
-    this.i('uFull', full);
     this.i('uClay', clay);
     const weatherAmount=materialWeathering;
     this.f('uMaterialWeathering', weatherAmount);
@@ -698,15 +696,14 @@ export class TerrainRenderer {
     if (this.sunKey !== sunKey) { this.sunKey = sunKey; this.sun = sun.map(v => v / length); this.fieldsDirty = true; }
     const encoder = device.createCommandEncoder({label: 'terrain'});
     // P6: a SpecializationMiss abandons this encoder, its bake included, so the fields go back to unbaked and the retry bakes again.
-    const baked = [this.fieldsDirty, this.bakedQuality];
+    const dirty = this.fieldsDirty;
     let drawPipeline;
     try {
-      // Painting bakes a cheap preview; the first full draw after it re-bakes.
-      if (this.fieldsDirty || (full && this.bakedQuality !== 'full')) this.bakeFields(full ? 'full' : 'preview', encoder);
+      if (dirty) this.bakeFields(encoder);
       // Looked up after the bake, which sets some of the gates' uniforms.
       drawPipeline = this.drawPipeline;
       this.specCheck();
-    } catch (error) { [this.fieldsDirty, this.bakedQuality] = baked; throw error; }
+    } catch (error) { this.fieldsDirty = dirty; throw error; }
     this.flushUniforms();device.queue.submit([encoder.finish()]);
     if(!this.voxelColor||this.voxelColor.width!==this.canvas.width||this.voxelColor.height!==this.canvas.height){
       if(this.voxelColor)this.release(this.voxelColor);
@@ -952,8 +949,7 @@ export class TerrainRenderer {
     return field.kind === 'i' ? this.uniformView.getInt32(field.offset, true) : this.uniformView.getFloat32(field.offset, true);
   }
 
-  bakeFields(quality = 'full', encoder = null, timer = null) {
-    const preview = quality !== 'full';
+  bakeFields(encoder = null, timer = null) {
     const v = this.variant;
     const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
     const set = (name, value) => this.set(name, Number(value));
@@ -991,16 +987,15 @@ export class TerrainRenderer {
     set('uCrackBlocks', number('crackBlocks', 0.6));
     set('uCrackMajor', number('crackMajor', 0.8));
     if (this.sun) this.v('uSun', this.sun);
-    set('uCracksOn', preview && v.get('previewCracks') !== '1' ? 0 : 1);
     set('uWindAngle', number('wind', 20));
     set('uRipple', number('ripple', 7));
     set('uRippleHeight', number('rippleHeight', 1.4));
     set('uBanding', number('banding', 0));
     set('uApron', number('apron', 0));
     set('uWorms', number('worms', 0));
-    set('uLooseSupply', preview ? 0 : number('looseSupply', 0));
+    set('uLooseSupply', number('looseSupply', 0));
     set('uLooseSize', number('looseSize', 6));
-    set('uPlantsOn', !preview && groundCoverOn(this.config.material?.groundCover, this.variant) && this.config.material.groundCover.plants ? 1 : 0);
+    set('uPlantsOn', groundCoverOn(this.config.material?.groundCover, this.variant) && this.config.material.groundCover.plants ? 1 : 0);
     set('uStoneRound', number('stoneRound',this.config.material?.stoneRound ?? 0));
     set('uStoneSort', number('stoneSort',this.config.material?.stoneSort ?? 0.6));
     set('uStoneSlab', number('stoneSlab',this.config.material?.stoneSlab ?? 0.05));
@@ -1012,7 +1007,7 @@ export class TerrainRenderer {
     set('uHasBeach', this.layers.has('beach'));
     set('uSandBanding', number('sandBanding', 0));
     set('uSandBandSpacing', number('sandBandSpacing', 2));
-    set('uReliefOctaves', preview ? Math.min(3, number('reliefOctaves', 5)) : number('reliefOctaves', 5));
+    set('uReliefOctaves', number('reliefOctaves', 5));
     this.setColumn();
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});
@@ -1030,25 +1025,24 @@ export class TerrainRenderer {
       this.device.queue.submit([encoder.finish()]);
     }
     this.fieldsDirty = false;
-    this.bakedQuality = quality;
   }
 
   // Milliseconds from submitting one bake to the GPU finishing it, with
   // the GPU idle before; lastBakeGPU holds the pass's own GPU time.
-  async timeBake(quality = 'full') {
+  async timeBake() {
     await this.device.queue.onSubmittedWorkDone();
-    const timer = this.timer(), start = performance.now(), baked = [this.fieldsDirty, this.bakedQuality];
+    const timer = this.timer(), start = performance.now(), dirty = this.fieldsDirty;
     // Each retry bakes again; if the last attempt still misses, its encoder is never submitted, so the fields go back to unbaked and the timer's slot is freed.
     try {
       await this.withPipelines(() => {
         const encoder = this.device.createCommandEncoder({label: 'relief bake'});
-        this.bakeFields(quality, encoder, timer);
+        this.bakeFields(encoder, timer);
         timer?.encode(encoder);
         this.specCheck();
         this.flushUniforms();
         this.device.queue.submit([encoder.finish()]);
       });
-    } catch (error) { timer?.release(); [this.fieldsDirty, this.bakedQuality] = baked; throw error; }
+    } catch (error) { timer?.release(); this.fieldsDirty = dirty; throw error; }
     await this.device.queue.onSubmittedWorkDone();
     const ms = performance.now() - start;
     if (timer) this.lastBakeGPU = await timer.result();
@@ -1058,8 +1052,7 @@ export class TerrainRenderer {
   // The same for one draw (options as draw()); the fields are baked first,
   // so this times the terrain pass alone. Returns {ms, gpuMs}.
   async timeDraw(options = {}) {
-    const full = options.quality === 'full';
-    if (this.fieldsDirty || (full && this.bakedQuality !== 'full')) await this.withPipelines(() => this.bakeFields(full ? 'full' : 'preview'));
+    if (this.fieldsDirty) await this.withPipelines(() => this.bakeFields());
     await this.device.queue.onSubmittedWorkDone();
     const start = performance.now();
     await this.withPipelines(() => this.draw(options));

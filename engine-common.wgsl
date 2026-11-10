@@ -28,7 +28,6 @@ struct Uniforms {
     deepColor: vec3f,
     waterMean: vec3f,
     rockMean: vec3f,
-    full: i32,
     clay: i32,
     slopeMaterial: i32,
     mineralMargins: i32,
@@ -126,7 +125,6 @@ struct Uniforms {
     crackSeverity: f32,   // crack depth
     crackWidth: f32,      // crack core width, world px
     crackNetwork: f32,    // 0: rills down the slope; 1: polygonal plates
-    cracksOn: i32,        // the full bake computes cracks; previews skip them
     plainRelief: f32,     // faint lit lumps on level ground (appearance only)
     crackSpacing: f32,    // major crack block size, world px
     windAngle: f32,       // direction the wind blows toward, degrees (0 = east)
@@ -343,7 +341,7 @@ struct Uniforms {
     looseKnoll: f32,      // 0..1: the share of loose stones drawn as knolls, a low pale ring of ground round a hollow (0: all stones, as before)
     gougeWeb: f32,        // 0..1: a bold web of long dark gouges across raised crystal, round cells about 42 px (0: none)
     creaseShade: f32,     // 0..1: how much light a crease (a gully or valley floor, the authored height below its rings 6 and 12 px out) loses, whatever its facing (0: none)
-    // H1 (lit relief, Green). Both run only in a full draw; every default is the earlier look.
+    // H1 (lit relief, Green). Every default is the earlier look.
     closeShadow: f32,     // how much a ledge 1-6 px toward the sun darkens the direct light on the ground behind it, 0..1 (0: only the far taps)
     cavity: f32,          // how much a crevice or crack floor (surface below the mean of a ring 1-3 px out) loses of its ambient light, 0..1 (its direct light loses .45 of that; 0: off)
     // H2, H16 (the rock column of a world's table, `column` in materials/<world>.json). Every default is the earlier look.
@@ -372,7 +370,7 @@ struct Uniforms {
     stoneRound: f32,      // world material data: 0 angular chips .. 1 rounded stones
     stoneSort: f32,       // world material data: 0 a mixed power-law gravel, 1 one size class sorted by the process (talus coarsens outward, fans and channels fine downslope)
     stoneSlab: f32,       // world material data: share of flat slabs
-    plantsOn: f32,        // card P31: 1 when the world's ground-cover table has plants (its last row) and this bake is a full one: the plant families of looseStones, which share the loose mask
+    plantsOn: f32,        // card P31: 1 when the world's ground-cover table has plants (its last row): the plant families of looseStones, which share the loose mask
     stoneMoss: f32,       // world material data: share of stones with a mossy cap
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index

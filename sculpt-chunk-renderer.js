@@ -71,10 +71,10 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   // The shaders bound all neighbourhoods. Bake relief noise is a
   // function of the queried point, not walks through adjacent baked pixels.
   // Only height/mask/weather support extends the bake's field input apron.
-  reaches(quality='full',heightBounds=this.config.heightBounds??[-90,300]) {
-    const n=(k,f)=>this.number(k,f),full=quality==='full';
+  reaches(heightBounds=this.config.heightBounds??[-90,300]) {
+    const n=(k,f)=>this.number(k,f);
     // H1: the close shadow march (6 px) and the cavity rings (4 px) plus the gradient's 1.4 sit inside the far taps' reach.
-    const shadow=(full?12:5)**2*1.4+2,draw=Math.max(shadow,128,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?4+1.4:0,n('crystalShallow',0)>0?48:0);   // H20: the shallow mosaic's fringe taps the crystal field 48 px out
+    const shadow=12**2*1.4+2,draw=Math.max(shadow,128,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?4+1.4:0,n('crystalShallow',0)>0?48:0);   // H20: the shallow mosaic's fringe taps the crystal field 48 px out
     // P16: the largest class drawn has radius min(16, 3.3 x the median); a stone reaches 1.6 radii from its candidate (1.41 of a class radius at most) and a larger stone that suppresses it a little further, and the mask reads 14 px up the slope plus its gradient (5).
     const stones=3.6*Math.min(16,3.3*n('looseSize',6))+24;
     const beach=Math.max(this.config.layers.includes('beach')?(this.config.material?.beachWidth??120)*n('beachWidth',.6):0,n('apron',0))*1.35*1.15;
@@ -95,13 +95,13 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4);
     return {draw,bake,direct,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};
   }
-  requiredRegion(request,options={}) {
+  requiredRegion(request) {
     const size=request.worldSize??this.config.worldSize??this.size,grid=request.worldGrid??this.config.worldGrid??this.grid,spacing=(size-1)/(grid-1);
     if(!(size>1&&grid>1))throw new Error('nanolathe: invalid chunk world lattice');
     const {x,y,width,height}=request;
     if(![x,y,width,height].every(Number.isInteger)||width<1||height<1)throw new Error('nanolathe: chunk bounds must be integer pixels');
     const shift=request.exportArt?Math.floor(this.config.baseHeight/2):0;
-    const reach=this.reaches(options.quality??'full',request.heightBounds);
+    const reach=this.reaches(request.heightBounds);
     // The voxel lattice is global; projection and shading aprons determine
     // which native height/material inputs a screen rectangle needs.
     const fieldsX=clamp(Math.floor(x-reach.draw)-1,0,size-1),fieldsY=clamp(Math.floor(y+shift+reach.projection[0]-reach.draw)-1,0,size-1);
@@ -136,10 +136,10 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       cpuRetainedBytes:this.cpuRetainedBytes,cpuUploadBytes:input,cpuPeakBytes:this.cpuRetainedBytes+input};
   }
 
-  chunkSize(maximum=this.config.chunkSize??512,options={}) {
+  chunkSize(maximum=this.config.chunkSize??512) {
     let size=Math.floor(maximum/32)*32;
     while(size>=32) {
-      const region=this.requiredRegion({x:Math.floor(this.size/2),y:Math.floor(this.size/2),width:size,height:size},options),e=this.estimate(region,size,size,this.maskPlaneCount,1);
+      const region=this.requiredRegion({x:Math.floor(this.size/2),y:Math.floor(this.size/2),width:size,height:size}),e=this.estimate(region,size,size,this.maskPlaneCount,1);
       if(Math.max(pow2(region.fieldsWidth),pow2(region.fieldsHeight),pow2(region.gridWidth),pow2(region.gridHeight),size)<=this.limit&&
         e.gpuBytes<=this.budgetBytes)return size;
       size=Math.floor(size/64)*32;
@@ -331,14 +331,14 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       await this.previousChunk;
       const passes=feed?await feedPasses(this.device):null;   // nothing awaits between here and the feed pass's submit: the buffers it reads stay current
       this.size=request.worldSize??this.size;this.grid=request.worldGrid??this.grid;
-      const region=this.requiredRegion(request,options),w=request.gridWidth??region.gridWidth,h=request.gridHeight??region.gridHeight;
+      const region=this.requiredRegion(request),w=request.gridWidth??region.gridWidth,h=request.gridHeight??region.gridHeight;
       request={...request,gridWidth:w,gridHeight:h,gridOrigin:request.gridOrigin??region.gridOrigin};
       const planes=feed?new Array(feed.maskCount).fill(null):this.maskPlanes(request);this.maskPlaneCount=planes.length;this.maskLayers=Math.max(1,Math.ceil(planes.length/4));
       this.recommendedChunkSize=this.chunkSize();
       const dimensions=this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale);
       if(feed)await this.feedFromGpu(request,region,dimensions,feed,passes);else this.upload(request,region,dimensions,planes);
       this.activeRegion=region;this.voxelScale=scale;
-      const result=await this.withPipelines(()=>super.draw({...options,quality:options.quality??'full',exact:options.exact||Boolean(request.exportArt)}));
+      const result=await this.withPipelines(()=>super.draw({...options,exact:options.exact||Boolean(request.exportArt)}));
       // A WebGPU presentation image expires at the next browser frame. Copy
       // synchronously before waiting for the queue, so the returned pixels live.
       const copy=this.outputCanvas.getContext('2d');copy.imageSmoothingEnabled=true;copy.imageSmoothingQuality='high';

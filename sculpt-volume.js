@@ -58,8 +58,7 @@ export class VoxelSurface {
   async render(draw){
     const r=this.renderer,region=r.activeRegion,scale=r.uniformView.getFloat32(r.layout.fields.get('chunkScale').offset,true);
     const origin=region.screenOrigin,width=r.canvas.width*scale,height=r.canvas.height*scale;
-    const full=r.uniformView.getInt32(r.layout.fields.get('full').offset,true)!==0;
-    const step=2**Math.max(full?0:1,Math.floor(Math.log2(r.voxelScale)));
+    const step=2**Math.max(0,Math.floor(Math.log2(r.voxelScale)));
     const h=r.config.heightBounds??[-90,300],extra=Math.max(64,region.reach.projection[1]*2+r.config.baseHeight-h[1]);
     const low=h[0]-extra-r.config.seaLevel,high=h[1]+extra-r.config.seaLevel;
     this.stats.pieces=this.stats.bricks=this.stats.peakBytes=0;const start=performance.now();

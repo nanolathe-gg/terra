@@ -581,7 +581,7 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
     let minorShare = max(max(u.crackMinor, 0.75 * boost), frost);
     let hairShare = max(max(u.crackHairline, 0.6 * boost), frost);
     let blockShare = max(u.crackBlocks, 0.6 * boost);
-    if (u.cracksOn == 0 || mask <= 0.0 || severity <= 0.0 || h < u.sea + 1.0) { return vec4f(0.0); }
+    if (mask <= 0.0 || severity <= 0.0 || h < u.sea + 1.0) { return vec4f(0.0); }
     let start = mix(0.95, 0.10, CRACK_REACH);
     // Rocky ground takes the whole hierarchy; gentle ground only majors.
     let rocky = smoothstep(start, start * 1.9, slope);
@@ -1241,8 +1241,7 @@ fn bake(p: vec2f) -> vec4f {
     if (crackedBed) { crackAt = cracks(p, fall, max(faceSlope, BED_CRACK_SLOPE), max(crackMask, 0.9), u.sea + 5.0, max(style.y, 0.0)); }
     // Where rock is broken into blocks, the blocks replace part of the
     // fall-line ribs, so faces read as fractured rock rather than combed.
-    var broken = 0.0;
-    if (u.cracksOn == 1) { broken = smoothstep(0.0, 0.5, crackMask) * max(u.crackBlocks, 0.6 * max(style.y, 0.0)) * smoothstep(0.5, 1.2, faceSlope) * (1.0 - route); }
+    let broken = smoothstep(0.0, 0.5, crackMask) * max(u.crackBlocks, 0.6 * max(style.y, 0.0)) * smoothstep(0.5, 1.2, faceSlope) * (1.0 - route);
     height = height * (1.0 - 0.75 * broken) + crackAt.w - crackAt.x;
     // The rock face (rockFaceAt) takes the place of the scatter's ribs, cracks and blocks wherever the ground is steep enough for it.
     // The scatter's cracks and blocks give way to the face (its ribs' fine octaves already did, above).
