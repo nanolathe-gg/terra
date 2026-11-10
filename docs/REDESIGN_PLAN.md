@@ -2194,7 +2194,7 @@ Tried and not landed:
   scenes move **[measured]**, because a scene's landform stroke starts as
   the plateau and takes its preset for every key the card leaves out
   **[read, `toolDefaults`, `sculpt-scene.js:248`]**. It is a default look for every
-  world: it waits for the owner, and those scenes would be pinned first.
+  world: it waits for the owner, and those scenes would be pinned first. (Landed the next day; see below.)
 - *Scree as fans below the gully mouths.* One try: on a ridge it drew a
   fringe of spikes **[by eye]**. It needs broad cones, and a mask for
   loose ground so that the rock skin leaves scree smooth.
@@ -2219,14 +2219,64 @@ Found and not fixed:
   per cell, and debris flow that drops its load as fans (Jain, Benes and
   Cordonnier 2024). Ideas only.
 
-**Next [proposed by Claude].** The owner looks at the sheet and says
-whether the notched rim and the varied gullies are the right direction.
-Then, one at a time: loose ground as a mask, with scree in broad fans; the
-plateau preset's default; and a way for Time to cut by discharge. Two
-candidates for row 1 still wait: Codex's (a new support field for beds,
-shared by the heights and the solid) and a cheaper one of Claude's (the
-landform's steps read the same column as the skin, so that a ledge is a
-step).
+**Day of 2026-11-10: bays replace the rim notches, and the plateau's
+default [landed on local main by Claude; reviewed by Claude with an
+advisor model; the owner has not seen the bays].** The owner, shown the
+night's sheet: the notched rim and varied gullies are the right direction
+("Yes"), and plateaus get gullies and scree by default with the scenes
+pinned ("Yes").
+
+- *The notches the owner approved are gone, replaced by bays.* Raising
+  Gullies on a default plateau showed parallel grooves in level ground
+  round any dimple in its top (Ice, Moon) **[by eye]**. The cause: the
+  notch term looked ahead along the fall line with the looking cell's own
+  outline noise, so a bulge of the outline read as a drop that was not
+  there **[read, then confirmed by switching the term off]**. Now, in
+  bays one wavelength apart, the whole face is read farther out along the
+  fall line, so the wall stands back by up to 0.45 wavelength and keeps
+  its own section; buttresses between stay on the drawn line. A bay has
+  one depth down its fall line and only a side steeper than the repose
+  has bays. To go back to notches, revert `8664f993` and `d6f622ba`.
+- *Measured, the sandstone tile at Gullies 60 against Gullies 0:* 44 of
+  587 level plateau cells move by more than 2 units; flat cells 501 to
+  448 (the notches: 449); cells vehicles can use on the top 556 to 502
+  (the notches: 531); the ramp's 99 corridor cells keep every byte.
+  Gullies 0 is byte-identical; Gullies 5 moves no level cell by more than
+  2 units.
+- *Modern Green (its mountains have gullies):* statistics in the real
+  range 7.94 to 7.94 of 15; gate failures 21 to 22. The first version of
+  the bays made closed basins (28 failures); the two limits above came
+  from that report.
+- *The Plateau button's preset is Gullies 50, Gully size 50, Talus reach
+  25.* A scene or fixture that names the bare kind, `"landform"`, does
+  not take it: it gets the model's defaults and the world's plateau
+  numbers, so the 34 scenes and the fixtures drawn inside the checks keep
+  what they were (0 of the 31 scenes outside modern Green move). **Other
+  agents: a scene's `"landform"` is no longer what the button draws; name
+  `"plateau"` for that.** No check scene shows the new default; the hover
+  preview does.
+- *Scree and KBots* **[measured over the exported height cells: can
+  KBots reach the top of a default plateau, 70 units, with no ramp]**. On
+  one outline in six worlds, Talus reach 60 and 80 opened five walls that
+  were closed, and 25 and 40 opened none. At the preset, over five worlds
+  and four outlines, KBots reach the top on 8 of 20 walls, all of them
+  walls they already climbed without gullies (11 of 20); vehicles on
+  none. So the default has little scree. Whether scree that KBots can
+  climb is wanted is the owner's call.
+- *Drag* (map16, alternating builds): frames 16.7 ms at the median and
+  the 95th percentile on both; shape passes 0.91 to 0.96 ms each for a
+  plateau, 1.07 to 1.08 for a mountain.
+
+**Next [proposed by Claude].** Scree that reads as scree: the talus marks
+its own ground through the fields paint already uses (relief weaker,
+plane 5; denser stones, plane 4), so the rock detail leaves it and stones
+gather on it; the cone's height capped against the wall, so Talus reach
+can be raised without opening the wall; more of it below a bay's mouth.
+Then the stone lattice (the rows of dashes), and a way for Time to cut by
+discharge. Two candidates for row 1 still wait: Codex's (a new support
+field for beds, shared by the heights and the solid) and a cheaper one of
+Claude's (the landform's steps read the same column as the skin, so that
+a ledge is a step).
 
 **Scale: none fixed; a working one may be used [owner decision,
 2026-11-10].** Codex proposes 4 art pixels to a meter

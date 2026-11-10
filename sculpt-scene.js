@@ -18,9 +18,10 @@ export const LANDFORM_DEFAULTS={"diameter":300,"amount":70,"roughness":0,"softne
 const valley=(form,more={}) => ({diameter:240,lean:100,combine:1,elevation:-20,cracks:0,wander:20,widthVary:20,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,curve:{form,knots:FORMS[form]().knots},...more});
 const hillKnots=() => [[0,0],[.25,.08],[.5,.4],[.75,.8],[.9,.95],[1,1]];
 export const LANDFORM_TOOLS={
-  // A plateau's wall is cut by gullies and stands back in bays (Gullies 50), with a little scree at the foot (Talus reach 25). More scree than that lets
-  // KBots up the wall: at Talus reach 40 and over, a wall 70 units high that kept them off opened in six of seven worlds; at 25 none of 20 walls did
-  // (five worlds, four outlines), and vehicles were kept off every one. A scene's bare "landform" does not take these (toolDefaults).
+  // A plateau's wall is cut by gullies and stands back in bays (Gullies 50), with a little scree at the foot (Talus reach 25). Much more scree lets
+  // KBots up the wall: on one outline in six worlds, a wall 70 units high that kept them off opened in five at Talus reach 60 and 80 and in none at 25
+  // and 40; at 25, over five worlds and four outlines, no wall opened that was closed without gullies, and vehicles were kept off all 20. A scene's
+  // bare "landform" does not take these (toolDefaults).
   plateau:{gullies:50,gullySize:50,talus:25},
   // A hill is low and wide (240 px, rises 36), the same on both sides (lean 100), with a rounded top and shoulders (the section reaches .95 of the rise at .9 of the way up, and climbs at most .4 of it per quarter) and a smooth outline: its steepest 16 px cell steps 16 units or less against 25 at the 99th percentile of retail Green hills (measure/hill_band.py), so units cross it, and it stays off the rock slope score. Gullies 0 keeps modern Green's gully ribs off it (the other worlds have none).
   hill:{diameter:240,elevation:36,lean:100,cracks:20,gullies:0,styleVegetation:60,wander:10,widthVary:10,heightVary:6,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfHill',knots:hillKnots(),back:hillKnots()}},
