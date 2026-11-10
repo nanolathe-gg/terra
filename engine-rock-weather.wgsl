@@ -87,10 +87,39 @@ fn rockDeposit(@builtin(global_invocation_id) id:vec3u){
     }
     let shelf=1.0-smoothstep(.45,1.0,slope);
     let pocket=clamp(.65+(baseHeight(p+vec2f(8,0))+baseHeight(p-vec2f(8,0))+baseHeight(p+vec2f(0,8))+baseHeight(p-vec2f(0,8))-4.0*h)*.04,.35,1.4);
-    let debris=clamp(u.debrisAmount*(catchment*3.5+mass*.22)*(1.0+.5*clamp(runoff,0.0,1.0)*shelf)*shelf*pocket*depositsAt(p)*dry*route,0.0,1.5);
-    let fines=clamp(.08+.75*(travel/max(mass,.001))+.35*clamp(runoff,0.0,1.0)*shelf,0.0,1.0);
+    // The foot zone. The envelopes above need the ground to rise steeply all the way from the point, so they end where a debris slope does, and
+    // the plain beyond was one tone to the slope's toe. Debris also lies out from the toe of rising ground, thinning to nothing at Rockfall
+    // reach. Eight ways out, six steps each: the toe is where the ground has risen 6 units, read between two steps so it changes evenly as the
+    // point moves, and it counts by how high the ground goes on within the reach (12 units barely, 30 wholly: a wall or a hill, not a hummock).
+    // Only gentle ground is a foot (a slope under .15 a px wholly, none over .45). The far edge is ragged: tongues and gaps, not a contour.
+    var foot=0.0;var footMass=0.0;
+    if(u.debrisAmount>0.0){
+        let reach=u.debrisReach*(.7+.3*valueNoise(p/64.0+vec2f(19,83)));let stride=reach/6.0;   // .4 to 1 of Rockfall reach
+        for(var j=0;j<8;j++){
+            let dir=normalize(vec2f(FLOW_DIRS[j]));var before=0.0;var way=-1.0;var top=0.0;
+            for(var k=1;k<=6;k++){
+                let rise=baseHeight(p+dir*stride*f32(k))-h;top=max(top,rise);
+                if(way<0.0&&rise>=6.0){way=stride*(f32(k)-1.0+clamp((6.0-before)/max(rise-before,.001),0.0,1.0));}
+                before=rise;
+            }
+            let near=select(0.0,max(0.0,1.0-way/reach)*smoothstep(12.0,30.0,top),way>=0.0);
+            if(near>0.0){
+                // The foot's debris is the rock that stands over it: the beds at the reach's end, weighed lightly beside a rockfall's own.
+                let q=p+dir*reach;let bed=flowAt(sourceBeds,vec2i(floor((q-u.rockWeatherGrid.xy)/FLOW_STEP)));
+                let size=clamp(sqrt(max(1.0,u.faceBlockSize*bed.w))*.09*mix(.65,1.3,bed.x),.35,2.4);
+                provenance+=vec4f(u.strataColors[clamp(i32(bed.z+.5),0,4)].rgb,size)*near*.05;footMass+=near*.05;
+            }
+            foot=max(foot,near);
+        }
+        let ragged=.5+.3*valueNoise(p/22.0+vec2f(53,7))+.2*valueNoise(p/7.0+vec2f(3,41));   // 0 to 1
+        foot=(.5+.5*foot)*smoothstep(ragged*.55,ragged*.55+.45,foot)*(1.0-smoothstep(.15,.45,slope));
+    }
+    let apron=.7*foot;
+    let debris=clamp(u.debrisAmount*((catchment*3.5+mass*.22)*(1.0+.5*clamp(runoff,0.0,1.0)*shelf)+apron)*shelf*pocket*depositsAt(p)*dry*route,0.0,1.5);
+    // Fines: further from the source is finer, and the foot zone's outer part is the finest (wash), its inner part mixed.
+    let fines=clamp(mix(.08+.75*(travel/max(mass,.001)),.9-.5*foot,apron/max(apron+catchment*3.5+mass*.22,.001))+.35*clamp(runoff,0.0,1.0)*shelf,0.0,1.0);
     textureStore(flowOut,vec2i(id.xy),vec4f(channel,debris,fines,clamp(runoff,0.0,1.0)*dry*route));
-    textureStore(sourceOut,vec2i(id.xy),select(vec4f(0,0,0,1),provenance/max(mass,.0001),mass>.0001));
+    textureStore(sourceOut,vec2i(id.xy),select(vec4f(0,0,0,1),provenance/max(mass+footMass,.0001),mass+footMass>.0001));
     // Bare rock at a rim (rimRockAt): on level dry ground (a slope under .08 a px wholly, none over .25: a hill's side has no rim), how near the
     // nearest drop is. Eight ways out, six steps each to the reach: the way to the drop is where the ground has fallen 8 units, read between two
     // steps so it changes evenly as the point moves. It counts when the fall there is a cliff's (.9 to 1.6 units a px: no hill is that steep, and
