@@ -68,6 +68,7 @@ const LS_RMAX = 16.0;        // class 0's nominal radius, px
 const LS_BASE = 0.50;        // the cover a Supply of 1 gives where the source is full (one candidate per cell caps it near half)
 const LS_HEIGHT = 0.8;       // a stone's height as a share of its radius
 const LS_CONTACT = 0.35;     // darkness of the fines in contact with a stone
+const LS_WAYS = array<vec2f, 8>(vec2f(1.0, 0.0), vec2f(0.70710678, 0.70710678), vec2f(0.0, 1.0), vec2f(-0.70710678, 0.70710678), vec2f(-1.0, 0.0), vec2f(-0.70710678, -0.70710678), vec2f(0.0, -1.0), vec2f(0.70710678, -0.70710678));
 
 struct LsOut { s: vec3f, plant: vec3f }   // looseStones: (stone height, rock cover, contact shade), (plant height, light tone, dark tone)
 struct LsCand { c: vec2f, r: f32, ok: bool, h0: u32, fines: f32 }
@@ -82,8 +83,8 @@ fn lsHash(c: vec2i, salt: u32) -> u32 { return lsPcg(bitcast<u32>(c.x) ^ lsPcg(b
 fn lsU(h: u32) -> f32 { return f32(h >> 8u) / 16777216.0; }
 fn lsR(k: i32) -> f32 { return LS_RMAX * exp2(-f32(k)); }
 
-// Where stones are, how big and how buried, at p, from the engine's own masks: the Time pass's talus, flow, channel and deposit
-// (weatherAt, timeMapsAt), the slope and the cliff above (baseHeight), the painted scatter (scatterAt) and the deposits override.
+// Where stones are, how big and how buried, at p, from the engine's own masks: rock weather's debris (rockWeatherAt),
+// the Time pass's channel and deposit (timeMapsAt), the slope and the cliff above (baseHeight), the painted scatter (scatterAt) and the deposits override.
 //  - Sources: loose ground on slopes, talus aprons and the foot of a cliff, gravel where water left a deposit or runs hard.
 //  - Sorting: along the way stones travel (a gentler slope is further out) rockfall coarsens, a fan or channel fines.
 //  - Beyond the talus toe a second, coarser population lies: the runout blocks.
@@ -100,10 +101,11 @@ fn lsMaskCompute(c: vec2f) -> vec4f {
     // The slope as broadGradient's units (the height difference over 10 px), from forward differences over 5 px: three height reads, not five.
     let g = 2.0 * vec2f(baseHeight(c + vec2f(5.0, 0.0)) - h0, baseHeight(c + vec2f(0.0, 5.0)) - h0);
     let slope = length(g);
-    let talus = smoothstep(0.02, 0.25, tm.talus);
-    // The cliff above: the Time pass's slope map 14 px up the fall line (a smoothstep of the slope, so .9 and 1.6 of the 10-px gradient are .0107 and .032 of it).
-    let cliffAbove = smoothstep(0.0107, 0.032, timeMap2((c - tm.fall * 14.0) / (u.size - 1.0)).w);
-    let foot = max(talus, cliffAbove * (1.0 - smoothstep(0.5, 1.0, slope)));
+    // The foot of a cliff: gentle ground with a rise of 2 to 5 units within 14 px, any of eight ways. The heights say it; the Time pass's talus map
+    // and its slope map up the fall line said it before. How far debris lies out from a foot is rock weather's (Rockfall reach, rockDeposit).
+    var rise = 0.0;
+    for (var j = 0; j < 8; j++) { rise = max(rise, baseHeight(c + LS_WAYS[j] * 14.0) - h0); }
+    let foot = smoothstep(2.0, 5.0, rise) * (1.0 - smoothstep(0.5, 1.0, slope));
     let loose = smoothstep(0.10, 0.5, slope) * (1.0 - smoothstep(1.6, 2.6, slope));
     let channel = smoothstep(0.03, 0.22, tm.channel);
     let fan = smoothstep(0.05, 0.3, deposit) * (1.0 - smoothstep(0.2, 0.6, tm.slope));
@@ -124,7 +126,7 @@ fn lsMaskCompute(c: vec2f) -> vec4f {
     let fines = clamp(0.15 + 0.45 * (1.0 - smoothstep(0.2, 0.8, slope)) + 0.2 * carried, 0.0, 0.85);
     let debris=accumulated.y*clamp(1.0+min(paint,0.0),0.0,1.0);
     let share = supply * LS_BASE * source+debris*.7;
-    return vec4f(min(share, 0.98), size*mix(1.0,mix(1.5,.4,accumulated.z),clamp(accumulated.y*sort,0.0,1.0)),mix(fines,accumulated.z,clamp(accumulated.y,0.0,1.0)), 0.35 * sort * (talus*supply*LS_BASE+debris*.35) * smoothstep(0.5, 1.0, travelled));
+    return vec4f(min(share, 0.98), size*mix(1.0,mix(1.5,.4,accumulated.z),clamp(accumulated.y*sort,0.0,1.0)),mix(fines,accumulated.z,clamp(accumulated.y,0.0,1.0)), 0.35 * sort * (foot*supply*LS_BASE+debris*.35) * smoothstep(0.5, 1.0, travelled));
 }
 
 // Card P31: where plants grow, at c: the covers of the ground-cover classes that grow them (coverAt, the draw's own site maps and windows) as shares of

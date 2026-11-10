@@ -75,7 +75,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const n=(k,f)=>this.number(k,f);
     // H1: the close shadow march (6 px) and the cavity rings (4 px) plus the gradient's 1.4 sit inside the far taps' reach.
     const shadow=12**2*1.4+2,draw=Math.max(shadow,128,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?4+1.4:0,n('crystalShallow',0)>0?48:0);   // H20: the shallow mosaic's fringe taps the crystal field 48 px out
-    // P16: the largest class drawn has radius min(16, 3.3 x the median); a stone reaches 1.6 radii from its candidate (1.41 of a class radius at most) and a larger stone that suppresses it a little further, and the mask reads 14 px up the slope plus its gradient (5).
+    // P16: the largest class drawn has radius min(16, 3.3 x the median); a stone reaches 1.6 radii from its candidate (1.41 of a class radius at most) and a larger stone that suppresses it a little further, and the mask reads the heights 14 px out for a cliff's foot plus its gradient (5).
     const stones=3.6*Math.min(16,3.3*n('looseSize',6))+24;
     const beach=Math.max(this.config.layers.includes('beach')?(this.config.material?.beachWidth??120)*n('beachWidth',.6):0,n('apron',0))*1.35*1.15;
     const bake=Math.max(19,stones,beach,n('runoff',0)>0||n('debrisAmount',0)>0||n('rimReach',0)>0?180:0,groundCoverOn(this.config.material?.groundCover,this.variant)&&this.config.material.groundCover.plants?PLANT_REACH:0);
