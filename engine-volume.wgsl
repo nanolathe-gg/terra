@@ -119,7 +119,8 @@ fn voxelClassify(@builtin(global_invocation_id) id:vec3u){
     if(low<vs.low||high>vs.high){atomicAdd(&countOut.invalid,1u);}
     let center=vs.origin+(vec2f(id.xy)*8.0+4.0)*vs.step;
     let painted=voxelPaintRock(center);
-    let apron=max(6.0*vs.step,40.0*max(smoothstep(.1,.45,steep),smoothstep(.0,.1,painted)));
+    // A rim's bare rock has half a face's relief, so half its reach above and below.
+    let apron=max(max(6.0*vs.step,40.0*max(smoothstep(.1,.45,steep),smoothstep(.0,.1,painted))),20.0*smoothstep(.0,.1,rimRockAt(center)));
     // Keep only the part of this surface column that can project into the
     // output rectangle, plus the full shadow, normal, and four-pass wear reach.
     // A tall scene therefore does not allocate all the unrelated rock behind it.
@@ -146,11 +147,11 @@ fn voxelDensity(p:vec3f)->f32 {
     let d=(p.z-source.x)*min(max(source.w,.015),n.z);
     if(abs(d)>40.0||u.rockFace<=0.0){return d;}
     let slope=length(n.xy)/max(n.z,.015);let route=routeProtection(p.xy);
-    let painted=voxelPaintRock(p.xy);
-    let face=rockFaceGate(slope,painted,route);
+    let painted=voxelPaintRock(p.xy);let rim=rimRockAt(p.xy);
+    let face=max(rockFaceGate(slope,painted,route),rimRelief(rim,route));
     let soil=u.faceLayers*smoothstep(.08,.6,slope)*smoothstep(.5,.9,n.z)*(1.0-route);
     if(max(face,soil)<.001){return d;}
-    let heightGate=voxelRockHeight(p,painted);
+    let heightGate=voxelRockHeight(p,max(painted,rim));
     if(max(face,soil)*heightGate<.001){return d;}
     let r=voxelRockSpace(p);
     let c=voxelBlocks(r,max(4.0,u.faceBlockSize));let broad=voxelBlocks(r,max(24.0,u.faceBlockSize*2.5));
@@ -194,7 +195,7 @@ fn voxelBuild(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) l
 fn voxelWear(p:vec3i)->f32 {
     let d=voxelCell(p);if(abs(d)>6.0*vs.step){return d;}
     let q=(vec3f(p)+.5)*vs.step;let g=voxelGuide(q.xy);let nz=sqrt(max(.000225,1.0-dot(g.xy,g.xy)));
-    let painted=voxelPaintRock(q.xy);
+    let painted=max(voxelPaintRock(q.xy),.5*rimRockAt(q.xy));
     let heightGate=voxelRockHeight(q,painted);
     let exposure=max(1.0-smoothstep(.75,.98,nz),painted)*(1.0-routeProtection(q.xy))*heightGate;
     let sum=voxelCell(p+vec3i(1,0,0))+voxelCell(p-vec3i(1,0,0))+voxelCell(p+vec3i(0,1,0))+voxelCell(p-vec3i(0,1,0))+voxelCell(p+vec3i(0,0,1))+voxelCell(p-vec3i(0,0,1));

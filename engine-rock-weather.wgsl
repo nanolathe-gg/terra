@@ -7,6 +7,7 @@
 @group(1) @binding(2) var flowOut:texture_storage_2d<rgba32float,write>;
 @group(1) @binding(3) var sourceBeds:texture_2d<f32>;
 @group(1) @binding(4) var sourceOut:texture_storage_2d<rgba32float,write>;
+@group(1) @binding(5) var rimOut:texture_storage_2d<r32float,write>;
 const FLOW_STEP=4.0;
 const FLOW_DIRS=array<vec2i,8>(vec2i(1,0),vec2i(1,1),vec2i(0,1),vec2i(-1,1),vec2i(-1,0),vec2i(-1,-1),vec2i(0,-1),vec2i(1,-1));
 fn flowAt(t:texture_2d<f32>,i:vec2i)->vec4f{return textureLoad(t,clamp(i,vec2i(0),vec2i(textureDimensions(t))-1),0);}
@@ -90,4 +91,26 @@ fn rockDeposit(@builtin(global_invocation_id) id:vec3u){
     let fines=clamp(.08+.75*(travel/max(mass,.001))+.35*clamp(runoff,0.0,1.0)*shelf,0.0,1.0);
     textureStore(flowOut,vec2i(id.xy),vec4f(channel,debris,fines,clamp(runoff,0.0,1.0)*dry*route));
     textureStore(sourceOut,vec2i(id.xy),select(vec4f(0,0,0,1),provenance/max(mass,.0001),mass>.0001));
+    // Bare rock at a rim (rimRockAt): on level dry ground (a slope under .08 a px wholly, none over .25: a hill's side has no rim), how near the
+    // nearest drop is. Eight ways out, six steps each to the reach: the way to the drop is where the ground has fallen 8 units, read between two
+    // steps so it changes evenly as the point moves. It counts when the fall there is a cliff's (.9 to 1.6 units a px: no hill is that steep, and
+    // a debris slope rests at .84) and lands on dry ground: a bank into water keeps its cover, as a world's shore is its own matter. The reach
+    // itself swells and thins along the rim.
+    var rim=0.0;
+    if(u.rimReach>0.0){
+        let reach=u.rimReach*(.6+.6*valueNoise(p/56.0+vec2f(71,23)));let stride=reach/6.0;
+        for(var j=0;j<8;j++){
+            let dir=normalize(vec2f(FLOW_DIRS[j]));var before=0.0;
+            for(var k=1;k<=6;k++){
+                let fall=h-baseHeight(p+dir*stride*f32(k));
+                if(fall>=8.0){
+                    let way=stride*(f32(k)-1.0+clamp((8.0-before)/max(fall-before,.001),0.0,1.0));
+                    rim=max(rim,max(0.0,1.0-way/reach)*smoothstep(.9,1.6,(fall-before)/stride)*smoothstep(u.sea+1.0,u.sea+3.0,h-fall));break;
+                }
+                before=fall;
+            }
+        }
+        rim=pow(rim,.45)*(1.0-smoothstep(.08,.25,slope))*dry*route;   // bare for the first part of the way in, then thinning
+    }
+    textureStore(rimOut,vec2i(id.xy),vec4f(rim,0,0,0));
 }

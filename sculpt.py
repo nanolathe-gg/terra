@@ -211,7 +211,7 @@ KNOB_DEFAULTS.update(rockFace=2, rockFaceFrom=.6, faceRock=.9, faceBed=5.5, face
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, rillDepth=0, rillSpacing=8)
 # Voxel block proportions, laminations and directional scratches; neutral values preserve the existing solid.
-KNOB_DEFAULTS.update(runoff=0, runoffScale=24, runoffConcentration=.65, runoffCut=2, runoffStain=.5, debrisAmount=0, debrisReach=56, debrisDepth=4, stoneSort=.6, stoneRound=0, stoneSlab=.05)
+KNOB_DEFAULTS.update(runoff=0, runoffScale=24, runoffConcentration=.65, runoffCut=2, runoffStain=.5, debrisAmount=0, debrisReach=56, debrisDepth=4, rimReach=0, stoneSort=.6, stoneRound=0, stoneSlab=.05)
 KNOB_DEFAULTS.update(faceJointWidth=1, faceSecondary=.35, faceContinuity=1, faceDetailPatch=0)
 KNOB_DEFAULTS.update(faceFresh=0, faceRind=0, faceRindDepth=6, faceRindTone=-.22, faceRindWarmth=.35, faceRindRough=.65)
 KNOB_DEFAULTS.update(bedCycleVary=0, faceBedVary=1, faceBreak=0, faceJointTilt=0, faceScaleVary=0, faceFold=0, faceSpall=0, faceClast=0, faceClastSize=12, faceMineral=0)
@@ -677,10 +677,12 @@ WORLD_VARIANTS = {
         # Ground cover (card P30): GROUND_COVER above, with Vegetation cover 1.
         # Card P27: Surf .1 on its water strokes (a wet line and a 1-px foam lace on lakes, no beach) and a sand colour for the beaches
         # higher Surf builds.
-        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, coastRamp=1, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, cavity=1.0, shineRock=.36),
+        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, coastRamp=1, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, cavity=1.0, shineRock=.36, rimReach=60),
                        # Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the hills' feet and in gullies,
                        # median 5 px (readable at 1x; Green's retail grit is 3-4); stoneSort .7 sorts it by the process (talus coarsens outward).
                        material=dict(stoneSort=.7, groundPool=2048, groundCover=GROUND_COVER),
+                       # Bare rock at rims 60 px (round 3 of the comparison loop): the turf stops 20 to 45 px short of a cliff's edge, on a ragged line,
+                       # and the granite shows; the heights do not move.
                        # Its rock is the Rounded granite recipe, beds and all (the owner, 2026-11-10): massive rock in rounded blocks 34 px wide, with
                        # no strata. The recipe's numbers win over the variant's where both set one: Shine rock .4 for .36 and loose stone 7 px for 5.
                        rock=dict(recipe='granite', beds=True)),
@@ -767,7 +769,8 @@ WORLD_VARIANTS = {
         # Modern Desert: where its realistic look accumulates, as modern Green's does. So far it is Desert with the Layered sandstone recipe's
         # numbers for its rock (the owner, 2026-11-10), over Desert's own beds and their colors: the recipe's three thin beds, 14 units to the
         # cycle, painted a plateau's level top in patches of all three.
-        'modern': dict(label='Modern: realistic look (in progress)', rock=dict(recipe='sandstone', beds=False)),
+        # Bare rock at rims 60 px, as modern Green: the level top's cover gives way to rock before the cliff.
+        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict(rimReach=60), rock=dict(recipe='sandstone', beds=False)),
     },
 }
 for _world, _variants in WORLD_VARIANTS.items():

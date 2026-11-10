@@ -41,7 +41,7 @@ export const KNOBS = [
   // Card E9: rock faces; every default is the earlier look.
   // The voxel solid (engine-volume.wgsl): one rock for every face steep enough, relief in the art's own pixels lit by the sun and the sky.
   ['Rock relief', [['rockFace','Depth',0,4,.1,2],['faceRock',"Rock share of steep faces",0,1,.05,.9],
-    ['rockFaceFrom','Starts at slope',.2,2,.05,.6],['faceExtrude','Extrusion bias: inset to projecting',-1,1,.05,0],
+    ['rockFaceFrom','Starts at slope',.2,2,.05,.6],['rimReach','Bare rock at rims (px)',0,80,2,0],['faceExtrude','Extrusion bias: inset to projecting',-1,1,.05,0],
     ['faceMass','Broad bulges and alcoves',0,3,.05,1]]],
   ['Rock blocks', [['faceBlock','Block offsets and tilts',0,6,.1,3],['faceBlockSize','Joint spacing (px)',4,48,1,11],
     ['faceStretch','Block length / width',.25,4,.05,1],['faceBlockHeight','Block height / layer height',.25,6,.05,1],

@@ -1490,6 +1490,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let around = 0.25 * (surfaceHeight(p - vec2f(3.0, 0.0)) + surfaceHeight(p + vec2f(3.0, 0.0)) + surfaceHeight(p - vec2f(0.0, 3.0)) + surfaceHeight(p + vec2f(0.0, 3.0)));
         painted = paintCoverage(p, wideSlope(p), clamp((around - h) / 1.5, -1.0, 1.0));
     }
+    painted.x = max(painted.x, rimRockAt(p));   // bare rock at a rim is painted rock (engine-common.wgsl rimRockAt)
     let place = landPlace(p, h, g, broad, slope, n, weather, route);
     let bare=clamp(1.0-place.vegetation,0.0,1.0);
     let faceGate=rockFaceGate(slope/(1.0-.5*bare),painted.x,route);

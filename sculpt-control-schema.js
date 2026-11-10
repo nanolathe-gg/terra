@@ -83,7 +83,7 @@ export function worldControlRequirement(key,v){
  if(key==='faceGritSize')return n('faceGrit')*n('rockFace')>0||n('faceMineral')>0||(n('faceRind')*n('rockFace')>0&&(n('faceRindRough')>0||n('shineRockRough')>0)&&Math.max(n('shineRock'),n('shineRockRough'),n('faceWet'))>0)?'':'Raise Grit relief, Mineral contrast, or a lit weathered crust to use Grit size.';
  if(key==='faceRound')return n('rockFace')*n('faceBlock')>0||(n('faceClast')>0&&Math.max(n('rockFace'),n('faceMineral'))>0)?'':'Raise Block offsets and tilts with Rock relief: Depth, or enable embedded fragments, to round the rock.';
  if(['faceBreak','faceJointTilt','faceScaleVary','faceStretch','faceBlockHeight'].includes(key))return n('rockFace')>0||(n('debrisAmount')>0&&(key==='faceBreak'||n('faceBreak')>0))?'':'Raise Rock relief: Depth or enable cliff debris with Block release.';
- if(['faceSpall'].includes(key))return needs('rockFace','Rock relief: Depth');
+ if(['faceSpall','rimReach'].includes(key))return needs('rockFace','Rock relief: Depth');
  if(key==='runoffCut')return needs('runoff','Runoff exposure')||needs('rockFace','Rock relief: Depth');
  if(['runoffScale','runoffConcentration','runoffStain'].includes(key))return needs('runoff','Runoff exposure');
  if(['debrisReach','debrisDepth'].includes(key))return needs('debrisAmount','Cliff debris accumulation');
@@ -179,7 +179,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'runoff','runoffScale','runoffConcentration','runoffCut','runoffStain','debrisAmount','debrisReach','debrisDepth','stoneSort','stoneRound','stoneSlab',
  'vegetationCover','plantRelief','flowerDensity',
  'bedDip','bedDipDir','faceStretch','faceBlockHeight','faceRound','faceJoint','faceExtrude','faceLamina','faceLaminaSize','faceScratchLength','faceScratchAngle','faceGritSize',
- 'rockFace','faceRock','rockFaceFrom','faceCreaseSize','faceCrease','faceBlock','faceBlockSize','faceBed','faceLedge','faceRun','faceScratch','faceScratchSize','faceLean','faceGrit','faceGrass','faceWear','faceShade','faceLayers','faceMass','faceTone','faceStrata','faceWet',
+ 'rockFace','faceRock','rockFaceFrom','rimReach','faceCreaseSize','faceCrease','faceBlock','faceBlockSize','faceBed','faceLedge','faceRun','faceScratch','faceScratchSize','faceLean','faceGrit','faceGrass','faceWear','faceShade','faceLayers','faceMass','faceTone','faceStrata','faceWet',
  'groundTiles','groundContrast','undulation','undulationScale','undulationCover','undulationArt','coastRamp','faceSteep','lowTint','lowReach','lowGrain',
  'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
  'flatShadow','flatOcclusion','sunTilt','ambient','shadeDepth','lightCap','creaseShade',

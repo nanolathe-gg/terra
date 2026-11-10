@@ -204,6 +204,7 @@ struct Uniforms {
     debrisAmount: f32,
     debrisReach: f32,
     debrisDepth: f32,
+    rimReach: f32,        // bare rock at rims: how far in from a drop the soil thins, px (0 none)
     rockWeatherGrid: vec4f, // origin in art pixels, texture dimensions; 4px cells
     faceJointTilt: f32,
     faceScaleVary: f32,
@@ -574,6 +575,7 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), sel
 // clamped and linearly filtered; noise repeats.
 @group(0) @binding(10) var rockWeatherTex: texture_2d<f32>;
 @group(0) @binding(11) var rockSourceTex: texture_2d<f32>;
+@group(0) @binding(12) var rockRimTex: texture_2d<f32>;
 @group(0) @binding(7) var linearClamp: sampler;
 @group(0) @binding(8) var linearRepeat: sampler;
 // Painted masks (card C5), grid resolution, signed bytes so unpainted is 0.0.
@@ -817,6 +819,15 @@ fn rockWeatherAt(p:vec2f)->vec4f {
     if(u.runoff<=0.0&&u.debrisAmount<=0.0){return vec4f(0);}
     return rockFieldAt(rockWeatherTex,p);
 }
+// Bare rock at a rim. Soil is thin at the edge of a drop: within Bare rock at rims' reach the ground counts as painted rock, wholly at the edge and
+// less inward (engine-rock-weather.wgsl rockDeposit measures the way to the drop), so the rock skin shows through in its own joints and beds: bare
+// at the edge, then patches, then only low slabs under the ground cover. It is the painted-rock path and no other (the colors, the wear and the
+// light treat it as paint), except that the solid gives it half a face's relief (rimRelief): level ground stays low.
+fn rimRockAt(p:vec2f)->f32 {
+    if(u.rimReach<=0.0){return 0.0;}
+    return rockFieldAt(rockRimTex,p).x;
+}
+fn rimRelief(rim:f32,route:f32)->f32 { return .5*smoothstep(.1,.6,rim)*(1.0-route); }
 fn rockSourceAt(p:vec2f)->vec4f {
     if(u.debrisAmount<=0.0){return vec4f(0,0,0,1);}
     return rockFieldAt(rockSourceTex,p);
