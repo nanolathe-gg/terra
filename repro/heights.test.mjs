@@ -1,11 +1,13 @@
-// The height image (a node of kind 'heights': sculpt-gpu-fields.js heightsFields, engine-shape.wgsl `heights`): what a node may hold, and, under
-// Node on Dawn (repro/headless.mjs), that a map holding only an image of bytes exports those bytes at every 16 px corner, that pages and the whole
-// map agree on it, and that the preview lattice draws the same surface. Every image here is synthetic (repro/heights-fixture.mjs).
+// The height image (a node of kind 'heights': sculpt-gpu-fields.js heightsFields, engine-shape.wgsl `heights`): what a save may hold, that the
+// page's own save, load and undo copies keep it byte for byte, and, under Node on Dawn (repro/headless.mjs), that a map holding only an image of
+// bytes exports those bytes at every 16 px corner, that pages and the whole map agree on it, and that the preview lattice draws the same surface.
+// Every image here is synthetic (repro/heights-fixture.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {heightsFields, heightsBounds, HEIGHTS_LIMIT, HEIGHTS_REACH} from '../sculpt-gpu-fields.js';
 import {sceneNodes, heightsNode} from '../sculpt-scene.js';
+import {clonePaths, validatePaths} from '../sculpt-paths.js';
 import {cellHeights, mapGeometry} from '../sculpt-map.js';
 import {encodeSamples, decodeSamples, bumps, hashBytes, fixtureScene, sceneText} from './heights-fixture.mjs';
 
@@ -185,3 +187,51 @@ test('the preview lattice draws the same surface, from an image of the largest s
   } finally { target.destroy(); engine.destroy(); device.destroy(); }
 });
 
+// ---- the page ----
+// The page's own functions for a save, a load and an undo step (sculpt.js is the page's script and does not load under Node, so they are taken
+// from its text and run here over a node list).
+function pageNodeFunctions() {
+  const page = readFileSync(`${root}sculpt.js`, 'utf8');
+  const take = name => { const at = page.indexOf(`\nfunction ${name}(`), line = page.indexOf('\n', at + 1); assert.ok(at >= 0, name); return page.slice(at, page[line - 1] === '}' ? line : page.indexOf('\n}', at) + 2); };
+  const names = page.match(/const NODE_NAMES=\{[^}]*\};/)[0];
+  return new Function('clonePaths', 'validatePaths', 'heightsNode', `let nodes=[]; ${names} ${['cloneNodes', 'serializeNodes', 'deserializeNodes', 'checkedHeights'].map(take).join('\n')}
+    return {cloneNodes, serializeNodes, deserializeNodes, set: list => { nodes = list; }, get: () => nodes};`)(clonePaths, validatePaths, heightsNode);
+}
+
+test('a height image survives the page\'s save, load and undo byte for byte', () => {
+  const page = pageNodeFunctions();
+  const eight = bumps(64, 64, 70, [[20, 18, 90, 7], [44, 40, 140, 10]]), sixteen = bumps(9, 7, 21000, [[4, 3, 30000, 2]], 65535);
+  page.set(sceneNodes(config, [['hill', [[100, 100], [300, 120]], {}], ['heights', [], {image: encodeSamples(eight), width: 64, height: 64, x: 320, y: 208}],
+    ['heights', [], {image: encodeSamples(sixteen, 16), bits: 16, width: 9, height: 7, cell: 40, x: 12.5, y: -8, scale: 1 / 256, offset: 3, mode: 'flatten'}]]));
+  const drawn = page.get(), saved = JSON.stringify(page.serializeNodes());
+  // Load: the nodes of the saved text, saved again, are the same text for each image, and the same samples.
+  page.set(page.deserializeNodes(JSON.parse(saved)));
+  const loaded = page.get(), again = JSON.stringify(page.serializeNodes());
+  for (const i of [2, 3]) assert.equal(JSON.stringify(JSON.parse(again)[i]), JSON.stringify(JSON.parse(saved)[i]));
+  page.set(page.deserializeNodes(JSON.parse(again)));
+  assert.equal(JSON.stringify(page.serializeNodes()), again);   // and from then on the whole list is
+  assert.deepEqual([...decodeSamples(loaded[2].image)], eight);
+  assert.deepEqual([...decodeSamples(loaded[3].image, 16)], sixteen);
+  assert.deepEqual(loaded[3], {...drawn[3]});
+  // Undo and redo: a history entry is cloneNodes() of the list, and a step back or forward is cloneNodes() of the entry.
+  page.set(loaded);
+  const entry = page.cloneNodes();
+  page.set(loaded.filter(n => n.kind !== 'heights'));                // an edit: the images deleted
+  const later = page.cloneNodes();
+  page.set(page.cloneNodes(entry));                                  // undo
+  assert.equal(JSON.stringify(page.serializeNodes()), again);
+  assert.equal(page.get()[2].image, loaded[2].image);
+  page.set(page.cloneNodes(later)); assert.deepEqual(page.get().map(n => n.kind), ['ground', 'landform']);   // redo
+  page.set(page.cloneNodes(entry)); assert.equal(JSON.stringify(page.serializeNodes()), again);              // and undo again
+});
+
+test('a save with an image the engine cannot draw is refused when it loads', () => {
+  const page = pageNodeFunctions(), good = {kind: 'heights', ...small()};
+  assert.equal(page.deserializeNodes([{kind: 'ground', amplitude: 8}, good]).length, 2);
+  assert.throws(() => page.deserializeNodes([{kind: 'ground', amplitude: 8}, {...good, width: 1283, height: 1288, image: ''}]), /^Error: Height image \(stroke 2\) has 1283 x 1288 samples, over the limit of 1282 x 1288\.$/);
+  assert.throws(() => page.deserializeNodes([{...good, image: good.image.slice(4)}]), /^Error: Height image \(stroke 1\) needs 6 x 5 samples of 8 bits as base64: 30 bytes, 40 characters\.$/);
+  // loadSketch makes the new node list before it changes anything, and a load into another world checks the images before it leaves this one.
+  const text = readFileSync(`${root}sculpt.js`, 'utf8'), load = text.slice(text.indexOf('\nfunction loadSketch('), text.indexOf('\n}', text.indexOf('\nfunction loadSketch(')));
+  assert.match(load.split('\n')[3], /^  const next=deserializeNodes\(/);
+  assert.match(text, /copyColumn\(s\.column\);copyRockSettings\(s\.rock\);s\.nodes\.forEach\(checkedHeights\);\n    \} catch \(err\) \{ error\(err\.message\); return false; \}/);
+});
