@@ -2346,7 +2346,7 @@ rules for the loop:
 What that changed **[measured unless marked]**:
 
 - *Level ground is flat in the heights by default* (`5ff7acf3`).
-  Undulation height is 0 in every world (it was 3 to 14 in seven of
+  Undulation height is 0 in every world (it was 1.5 to 14 in eight of
   nine), and the Plateau button's top has no Height variation. The plain
   is 100% level cells in all nine worlds (Desert was 5%, Lava 9%, Green
   66%). The art loses the soft mottle the undulation lit, on 3 to 13% of
@@ -2355,20 +2355,36 @@ What that changed **[measured unless marked]**:
   undulation; if the mottle is missed, that is a control to propose.
 - *The Plateau button* (`394af087`): 800 px across and 130 high. Its
   wall is the outer 105 px of each side: a debris slope to 0.36 of the
-  rise at the repose, a caprock cliff and a rounded brow. Over nine
+  rise at the repose, a caprock cliff and a rounded brow, the same on
+  both sides (the old plateau's back was a fifth wider; on this section
+  that took the level top from 57-66% of the footprint to 53-64% on a
+  click). Over nine
   worlds and three outlines the level top is 57 to 66% of the footprint
   on a click and 66 to 77% on a drag, 48 to 68% of the footprint seats a
   level 64 px pad, and no vehicle or KBot reaches the top of any of the
   27 walls (a way up is a ramp, drawn). Gully size went from 50 to 20: it
   is a share of the half width, so on a wide plateau 50 set 180 px
   between gullies, whose ridges stood 40 units over the top. Desert's
-  plateau keeps its strata and outline and takes this size and section.
+  plateau keeps its strata and outline and takes this size and section:
+  that replaces the 400 px mesa the owner accepted in the landform
+  review (its top was 21% of its footprint and KBots climbed it), so it
+  is the owner's call to confirm.
 - *Rock recipes in the modern variants* (`01fdcc95`). A variant names a
   recipe and the page lays its numbers over the world's when the file
   loads, so they live in one place. Modern Green is Rounded granite, beds
   and all: statistics in the real range 7.88 to 8.47 of 15, gate failures
-  25 to 21 (hilltop roundness passes 5 to 9 of 17 windows). Desert gets a
-  `modern` variant with Layered sandstone's numbers over its own beds.
+  25 to 21 (hilltop roundness passes 5 to 9 of 17 windows). The recipe
+  sets 49 of Green's rock numbers, not only its blocks: rock on every
+  steep face (.9 to 1), runoff (0 to .65) and cliff debris (0 to 1.1)
+  among them. On green-modern-1..3 that moves 6 to 13% of the height
+  cells by 1.3 units on average (9 at most); cells too steep for vehicles
+  go from 1.6, 4.4 and 1.9% of the land to 1.8, 4.5 and 2.0%; the water
+  cells are the same. **[by eye]** The hills show larger pale outcrops and
+  more loose stone round their feet; the coast stays grass to water. The
+  page and Node render green-modern-1 to the same bytes, and the Rock
+  recipe list shows Rounded granite. Desert gets a `modern` variant (a new
+  entry in its list) with Layered sandstone's 52 numbers over its own
+  beds. Both are the owner's to judge on the sheets before they land.
 - *Known, not fixed.* A gully's ridge still stands over a plateau's top
   (13 to 38 cells, up to 30 units): the gullies cut and raise about the
   drawn surface alike, where a real one only cuts. On Desert a level top
@@ -2385,7 +2401,7 @@ stayed 100% level in the heights in all ten fixtures **[measured]**.
 | Reference | What it has | What we draw now | Gap |
 | --- | --- | --- | --- |
 | Top-down escarpment; `surface3`; `sand5`; `prowess1` | Rock that fades into flat ground: bedrock pavement and slabs at the rim, rubble and boulders thinning away from the foot | A level top and plain of one tone up to a hard line at the cliff; a few stones at the foot | No rim or foot zone. **The pick**, because it is the owner's own rule: rough near the edge, flat and believable beyond |
-| `sand5`; `rocktools` (2nd panel) | Sand drifted against rock and pooled in hollows, with ripples | Nothing: Sand supply 1.3 and 2 with the Time pass on drew no drift (the Sand brush was not tried) | Sand that gathers by itself in the lee and the hollows |
+| `sand5`; `rocktools` (2nd panel) | Sand drifted against rock and pooled in hollows, with ripples | No drift readable at 1x: Sand supply 1.3 and 2 moved 0.7% and 1.0% of the pixels **[measured]**. Not settled: the control needs the Time pass, and in this harness Erosion 1 and 0 gave the same bytes, so the pass may not have run; the Sand brush was not tried | To establish first; then sand that gathers by itself in the lee and the hollows |
 | `sand5` | Tilted beds standing as hogbacks | Bed tilt .4 paints stripes across a level top | Level ground takes the bed's color at its height: stripes when tilted, patches of two beds at some heights. A level top needs one cover |
 | `prowess1`; `sandstone` | Clean cliff bands with a debris slope under each; readable beds and joints | A wall whose rock reads as busy speckle at 1x; one debris slope | Rock detail too fine and too contrasty for 1x; cliff and slope do not repeat up a wall |
 | `rocky` | A boulder field: piled angular blocks 20 to 60 px | Breccia with Supply 1 at 16 px: a handful of stones | Stones do not pile or cover |
