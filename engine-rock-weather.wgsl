@@ -90,19 +90,20 @@ fn rockDeposit(@builtin(global_invocation_id) id:vec3u){
     // The foot zone. The envelopes above need the ground to rise steeply all the way from the point, so they end where a debris slope does, and
     // the plain beyond was one tone to the slope's toe. Debris also lies out from the toe of rising ground, thinning to nothing at Rockfall
     // reach. Eight ways out, six steps each: the toe is where the ground has risen 6 units, read between two steps so it changes evenly as the
-    // point moves, and it counts by how high the ground goes on within the reach (12 units barely, 30 wholly: a wall or a hill, not a hummock).
+    // point moves, and it counts by how high the ground goes on within the reach (12 units barely, 30 wholly: not a hummock) and by how steep
+    // its steepest step is (.6 units a px barely, .9 wholly: a wall, a mountain or a debris slope, which rests at .84; a hill has no foot).
     // Only gentle ground is a foot (a slope under .15 a px wholly, none over .45). The far edge is ragged: tongues and gaps, not a contour.
     var foot=0.0;var footMass=0.0;
     if(u.debrisAmount>0.0){
         let reach=u.debrisReach*(.7+.3*valueNoise(p/64.0+vec2f(19,83)));let stride=reach/6.0;   // .4 to 1 of Rockfall reach
         for(var j=0;j<8;j++){
-            let dir=normalize(vec2f(FLOW_DIRS[j]));var before=0.0;var way=-1.0;var top=0.0;
+            let dir=normalize(vec2f(FLOW_DIRS[j]));var before=0.0;var way=-1.0;var top=0.0;var steep=0.0;
             for(var k=1;k<=6;k++){
-                let rise=baseHeight(p+dir*stride*f32(k))-h;top=max(top,rise);
+                let rise=baseHeight(p+dir*stride*f32(k))-h;top=max(top,rise);steep=max(steep,(rise-before)/stride);
                 if(way<0.0&&rise>=6.0){way=stride*(f32(k)-1.0+clamp((6.0-before)/max(rise-before,.001),0.0,1.0));}
                 before=rise;
             }
-            let near=select(0.0,max(0.0,1.0-way/reach)*smoothstep(12.0,30.0,top),way>=0.0);
+            let near=select(0.0,max(0.0,1.0-way/reach)*smoothstep(12.0,30.0,top)*smoothstep(.6,.9,steep),way>=0.0);
             if(near>0.0){
                 // The foot's debris is the rock that stands over it: the beds at the reach's end, weighed lightly beside a rockfall's own.
                 let q=p+dir*reach;let bed=flowAt(sourceBeds,vec2i(floor((q-u.rockWeatherGrid.xy)/FLOW_STEP)));
