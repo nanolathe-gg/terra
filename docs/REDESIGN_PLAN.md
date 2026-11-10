@@ -2324,13 +2324,78 @@ KBots off a wall.
   Gullies' stripes have phase jumps (their forks); the bays read the same
   stripes and may step there.
 
-**Next [proposed by Claude].** Round 3 of the loop on the same fixture.
-What stands out now **[by eye]**: the plateau top and the plain are
-featureless where the reference is rough rock, slabs and boulders; the
-ravines do not branch or join; and with a recipe on, bed lines break into
-pixel steps. The owner's open decisions: bays or notches; a rock recipe
-for each world; whether the Plateau button should draw larger and on a
-sloping section.
+**The owner's decisions for round 3 [2026-11-10].** Bays, not notches
+("Yes let's keep bays": over 12 walls the two let the same units up; the
+notches read as a comb of slits into the level top). "Granite on green and
+sandstone on desert sounds reasonable", as the rock of the modern variants.
+The Plateau button draws larger and on a sloping section ("Sure"). And two
+rules for the loop:
+
+- *Flat ground to build on.* "This is for an RTS game that needs
+  significant flat space (no default should have level ground undulation
+  or noise that goes into the heightmap for example, artwork is fine). We
+  can have some additional rough rock, slabs, boulders, etc near the edges
+  but the majority of the plateau or area around the plateau/mountain/etc
+  should be flat to allow for building. We need a middle ground here
+  between hyper-realism and gameplay and importantly the transition from
+  realism to flatter ground should be believable."
+- *All the references.* "Let's not lose sight of the other reference
+  images as they have interesting rock texture and sand features we should
+  also be striving for." Each round looks at all eight pictures.
+
+What that changed **[measured unless marked]**:
+
+- *Level ground is flat in the heights by default* (`5ff7acf3`).
+  Undulation height is 0 in every world (it was 3 to 14 in seven of
+  nine), and the Plateau button's top has no Height variation. The plain
+  is 100% level cells in all nine worlds (Desert was 5%, Lava 9%, Green
+  66%). The art loses the soft mottle the undulation lit, on 3 to 13% of
+  pixels **[by eye: no world loses its look]**. The retail scenes pin
+  their old values, so 0 of 34 check scenes move. There is no art-only
+  undulation; if the mottle is missed, that is a control to propose.
+- *The Plateau button* (`394af087`): 800 px across and 130 high. Its
+  wall is the outer 105 px of each side: a debris slope to 0.36 of the
+  rise at the repose, a caprock cliff and a rounded brow. Over nine
+  worlds and three outlines the level top is 57 to 66% of the footprint
+  on a click and 66 to 77% on a drag, 48 to 68% of the footprint seats a
+  level 64 px pad, and no vehicle or KBot reaches the top of any of the
+  27 walls (a way up is a ramp, drawn). Gully size went from 50 to 20: it
+  is a share of the half width, so on a wide plateau 50 set 180 px
+  between gullies, whose ridges stood 40 units over the top. Desert's
+  plateau keeps its strata and outline and takes this size and section.
+- *Rock recipes in the modern variants* (`01fdcc95`). A variant names a
+  recipe and the page lays its numbers over the world's when the file
+  loads, so they live in one place. Modern Green is Rounded granite, beds
+  and all: statistics in the real range 7.88 to 8.47 of 15, gate failures
+  25 to 21 (hilltop roundness passes 5 to 9 of 17 windows). Desert gets a
+  `modern` variant with Layered sandstone's numbers over its own beds.
+- *Known, not fixed.* A gully's ridge still stands over a plateau's top
+  (13 to 38 cells, up to 30 units): the gullies cut and raise about the
+  drawn surface alike, where a real one only cuts. On Desert a level top
+  takes the color of the bed at its height, so at some heights it is
+  patches of two beds (Elevation 100: gray with salmon blots), and the
+  sandstone recipe's own thin beds do that at the button's 130.
+  Archipelago's plateau wall shows no bare rock.
+
+**Round 3: the gap list over all eight pictures [by eye, Claude,
+2026-11-10; fixtures are the Plateau and Mountain buttons and a gullied
+hill, in the nearest recipe and existing World controls].** Level ground
+stayed 100% level in the heights in all ten fixtures **[measured]**.
+
+| Reference | What it has | What we draw now | Gap |
+| --- | --- | --- | --- |
+| Top-down escarpment; `surface3`; `sand5`; `prowess1` | Rock that fades into flat ground: bedrock pavement and slabs at the rim, rubble and boulders thinning away from the foot | A level top and plain of one tone up to a hard line at the cliff; a few stones at the foot | No rim or foot zone. **The pick**, because it is the owner's own rule: rough near the edge, flat and believable beyond |
+| `sand5`; `rocktools` (2nd panel) | Sand drifted against rock and pooled in hollows, with ripples | Nothing: Sand supply 1.3 and 2 with the Time pass on drew no drift (the Sand brush was not tried) | Sand that gathers by itself in the lee and the hollows |
+| `sand5` | Tilted beds standing as hogbacks | Bed tilt .4 paints stripes across a level top | Level ground takes the bed's color at its height: stripes when tilted, patches of two beds at some heights. A level top needs one cover |
+| `prowess1`; `sandstone` | Clean cliff bands with a debris slope under each; readable beds and joints | A wall whose rock reads as busy speckle at 1x; one debris slope | Rock detail too fine and too contrasty for 1x; cliff and slope do not repeat up a wall |
+| `rocky` | A boulder field: piled angular blocks 20 to 60 px | Breccia with Supply 1 at 16 px: a handful of stones | Stones do not pile or cover |
+| `surface1` | Rills that branch and join down a slope | On a round hill at Gullies 100 the rills run out from the top like spokes | No branching on a cone |
+| `rocktools` (1st, 4th, 5th panels) | Plates, folded swirls, spalled crust | Not judged: Moon's, Lava's and Red's faces are near black, so no recipe reads there | Fixtures to redo on Desert and modern Green; those worlds' face light is its own question |
+
+**Next [proposed by Claude].** Build the rim and foot zone: art only on
+level ground (the heights stay flat), from existing controls where they
+reach (loose stone, rock debris, cracks) before any new one. Then the
+level top's cover, since the two meet at the rim.
 
 **Scale: none fixed; a working one may be used [owner decision,
 2026-11-10].** Codex proposes 4 art pixels to a meter
