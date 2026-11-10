@@ -930,9 +930,11 @@ fn gullyStripes(p: vec2f, dir: vec2f, f: f32, seed: u32) -> vec2f {
 // round crests, V-cut floors, as water cuts them; the research brief's realism check, calibrated on 1 m lidar, put 10 of 15 statistics in the real
 // range with it against 8 of 15 for the sharp-crested fold +1, which would suit badland or alpine worlds) and adds its own gradient to the steering,
 // so the next octave branches. wave0: the first wavelength (px); depth: depth per wavelength per unit slope, halved each octave; minWave: no octave
-// finer than this.
-fn gullies(p: vec2f, h0: f32, steer: vec2f, slope0: f32, wave0: f32, depth: f32, minWave: f32, seed: u32) -> f32 {
-  if (slope0 <= 0.0 || length(steer) < 1e-6) { return h0; }
+// finer than this. head: how much steeper the ground just downhill falls than this cell does (0 on an even face): above a face's brow the widest
+// octave cuts its valleys on into the level ground by it, floors only, so gullies head back into a rim as notches and the ground between them
+// keeps its height.
+fn gullies(p: vec2f, h0: f32, steer: vec2f, slope0: f32, head: f32, wave0: f32, depth: f32, minWave: f32, seed: u32) -> f32 {
+  if ((slope0 <= 0.0 && head <= 0.0) || length(steer) < 1e-6) { return h0; }
   var h = h0; var g = normalize(steer) * max(slope0, 1e-3);
   var f = 1.0 / wave0; var dk = depth;
   for (var k = 0; k < 8; k++) {
@@ -942,6 +944,7 @@ fn gullies(p: vec2f, h0: f32, steer: vec2f, slope0: f32, wave0: f32, depth: f32,
     let cs = gullyStripes(p, dir, f, seed + u32(k) * 0x3c6ef35fu);
     let a = dk * (1.0 / f) * min(slope0, 1.6);
     h -= a * (0.5 - abs(cs.y));
+    if (head > 0.0 && k == 0) { let n = max(0.5 - abs(cs.y), 0.0); h -= dk * (1.0 / f) * min(head, 1.6) * 2.0 * n * n; }   // n * n: the notch's sides leave the level ground without a crease
     g += a * sign(cs.y) * cs.x * 6.2831853 * f * perp;
     f *= 2.0; dk *= 0.5;
   }
@@ -987,9 +990,16 @@ fn landformGullies(value: f32, q: f32, pk: u32, share: f32, wx: f32, wy: f32, lx
   // The pattern runs in the shape's frame, whose px are fs world px: the slope and the finest wavelength go into frame px with it.
   let fs = select(1.0, 1.0 / max(length(vec2f(u.inv0, u.inv1)), 1e-6), u.framed != 0u);
   let wv = u.gullySize; let sd = normalize(steer);
-  let warp = 0.35 * wv * vnoise(lx / (1.5 * wv), ly / (1.5 * wv), u.seed ^ 0x7f4au);
-  let deep = 1.0 + 0.35 * vnoise(lx / (2.0 * wv), ly / (2.0 * wv), u.seed ^ 0x2b91u);
-  return gullies(vec2f(lx, ly) + vec2f(-sd.y, sd.x) * warp, value, steer, slope * keep * fs, wv, u.gully * deep, max(8.0, 3.0 * u.spacing) / fs, u.seed ^ 0x6a1u);
+  let warp = 0.5 * wv * vnoise(lx / (2.2 * wv), ly / (2.2 * wv), u.seed ^ 0x7f4au);
+  // Real gullies are not a comb: over stretches three wavelengths long the depth runs from a fifth to nearly twice, so a wall has quiet buttresses
+  // and deeply cut bays.
+  let deep = clamp(1.0 + 0.85 * vnoise(lx / (3.0 * wv), ly / (3.0 * wv), u.seed ^ 0x2b91u), 0.2, 1.85);
+  // The fall over the next 0.3 wavelength downhill, less this cell's own slope: what lies ahead of a brow.
+  let reach = 0.3 * wv * fs;
+  let dn = fall * select(1.0, -1.0, down > up + 1e-3);
+  let far = lfEval(s0, s1, s2, wx + dn.x * reach, wy + dn.y * reach, base, nA, nB, nC, share, x, y, i, cells).x;
+  let head = max(max(value - far, 0.0) / reach - slope, 0.0);
+  return gullies(vec2f(lx, ly) + vec2f(-sd.y, sd.x) * warp, value, steer, slope * keep * fs, head * keep * fs, wv, u.gully * deep, max(8.0, 3.0 * u.spacing) / fs, u.seed ^ 0x6a1u);
 }
 // ---- P17 talus cones: the loose slope that rests against the foot of a landform's face, below each of its gully chutes ----
 // How far inside (positive) or beyond (negative) the foot of the stroke's footprint a cell stands, and the foot's run from the path (the side the cell is on),
