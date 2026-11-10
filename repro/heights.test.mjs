@@ -4,12 +4,14 @@
 // Every image here is synthetic (repro/heights-fixture.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {heightsFields, heightsBounds, HEIGHTS_LIMIT, HEIGHTS_REACH} from '../sculpt-gpu-fields.js';
 import {sceneNodes, heightsNode} from '../sculpt-scene.js';
 import {clonePaths, validatePaths} from '../sculpt-paths.js';
 import {cellHeights, mapGeometry} from '../sculpt-map.js';
 import {encodeSamples, decodeSamples, bumps, hashBytes, fixtureScene, sceneText} from './heights-fixture.mjs';
+import {DAWN_DEFAULT} from './headless.mjs';
 
 const root = new URL('..', import.meta.url).pathname;
 const config = {biomeId: 'green', baseHeight: 84, seaLevel: 75, size: 2336, worldSize: 2336, map: {width: 2080, height: 2176}, defaults: {undulation: 10, undulationScale: 200, undulationCover: .45}};
@@ -53,6 +55,9 @@ test('the scene of the regional check is the fixture\'s formulas', () => {
 });
 
 // ---- on the GPU (Dawn's Node binding, as the render checks) ----
+// These four run wherever the binding is installed (repro/check.sh quick, which needs it for its other steps too) and are skipped, by name, where it
+// is not (the site's build runs the unit tests on a machine with no GPU).
+const gpu = {skip: existsSync(join(process.env.TERRAFORM_WEBGPU || DAWN_DEFAULT, 'webgpu', 'index.js')) ? false : 'needs Dawn\'s Node binding (TERRAFORM_WEBGPU, repro/headless.mjs)'};
 const open = async (strokes, query = '', map = '4x4') => {
   const headless = await import('./headless.mjs'), [mapX, mapY] = map.split('x');
   return headless.openScene({biome: 'green', ground: false, strokes}, `biome=green&mapX=${mapX}&mapY=${mapY}&scratch=1&gpuMB=512&heapMB=1536${query}`);
@@ -69,7 +74,7 @@ async function pagesIdle(s) {
 // hashed bytes along the last row and column.
 function hardBytes(width, height) {
   const out = bumps(width, height, 70, [[20, 18, 90, 7], [44, 40, 140, 10], [width - 12, height - 20, 110, 9], [80, 100, -60, 12]]), noise = hashBytes(width, height), mid = height >> 1;
-  for (let j = mid; j < Math.min(height, mid + 20); j++) for (let i = 8; i < 40; i++) out[j * width + i] = noise[j * width + i];
+  for (let j = mid; j < Math.min(height, mid + 20); j++) for (let i = 8; i < Math.min(width, 40); i++) out[j * width + i] = noise[j * width + i];
   out[30 * width + 60] = 255; out[31 * width + 60] = 0;
   for (let j = 0; j < 12; j++) for (let i = width - 10; i < width; i++) out[j * width + i] = i < width - 5 ? 0 : 200;
   for (let i = 0; i < width; i++) out[(height - 1) * width + i] = noise[i];
@@ -77,16 +82,17 @@ function hardBytes(width, height) {
   return out;
 }
 
-test('a map holding only a height image of bytes exports those bytes at every corner', async () => {
-  // The whole map's height bytes: sample (i, j) at pixel (16 i, 16 j), the corner the export reads, on the whole-map engine and in pages.
-  const {widthCells: w, heightCells: h} = mapGeometry(4, 4), bytes = hardBytes(w, h);
-  for (const query of ['', '&gpuPages=force']) {
-    const s = await open([['heights', [], {image: encodeSamples(bytes), width: w, height: h}]], query);
+test('a map holding only a height image of bytes exports those bytes at every corner', gpu, async () => {
+  // The whole map's height bytes: sample (i, j) at pixel (16 i, 16 j), the corner the export reads. On the whole-map engine and in pages, and on the
+  // smallest map, whose lattice is the coarsest (2.0025 px a cell against 2.0009).
+  for (const [map, query] of [['4x4', ''], ['4x4', '&gpuPages=force'], ['1x1', '']]) {
+    const {widthCells: w, heightCells: h} = mapGeometry(...map.split('x').map(Number)), bytes = hardBytes(w, h);
+    const s = await open([['heights', [], {image: encodeSamples(bytes), width: w, height: h}]], query, map);
     try {
       const got = await exported(s);
       assert.equal(got.length, w * h);
       let wrong = 0; for (let k = 0; k < w * h; k++) if (got[k] !== bytes[k]) wrong++;
-      assert.equal(wrong, 0, `${wrong} of ${w * h} corners differ${query && ' in pages'}`);
+      assert.equal(wrong, 0, `${wrong} of ${w * h} corners differ on ${map}${query && ' in pages'}`);
       assert.deepEqual([...got.subarray((h - 1) * w)], bytes.slice((h - 1) * w));   // the last row
       assert.deepEqual(Array.from({length: h}, (_, j) => got[j * w + w - 1]), Array.from({length: h}, (_, j) => bytes[j * w + w - 1]));   // the last column
       if (s.paged) await pagesIdle(s);
@@ -95,7 +101,7 @@ test('a map holding only a height image of bytes exports those bytes at every co
   }
 });
 
-test('an image placed on the 16 px grid exports its bytes where it lies, in every mode that sets the ground to it', async () => {
+test('an image placed on the 16 px grid exports its bytes where it lies, in every mode that sets the ground to it', gpu, async () => {
   const w = 64, h = 48, bytes = hardBytes(w, h), at = {x: 320, y: 208}, image = encodeSamples(bytes);
   const s = await open([['heights', [], {image, width: w, height: h, ...at}]]);
   try {
@@ -126,7 +132,7 @@ test('an image placed on the 16 px grid exports its bytes where it lies, in ever
   } finally { s.dispose(); }
 });
 
-test('pages and the whole map agree on a scene of height images', async () => {
+test('pages and the whole map agree on a scene of height images', gpu, async () => {
   const headless = await import('./headless.mjs'), scene = fixtureScene();
   const s = await headless.openScene(scene, 'biome=green&scratch=1&mapX=4&mapY=4&gpuPages=force&gpuMB=512&heapMB=1536');
   try {
@@ -163,12 +169,12 @@ function surface(values, f, px, py) {
   return v;
 }
 
-test('the preview lattice draws the same surface, from an image of the largest size', async () => {
+test('the preview lattice draws the same surface, from an image of the largest size', gpu, async () => {
   // sculpt-preview.js: the paged shader over one 512 x 512 target for the whole map, here a 40 x 40 map's (20,800 px: about 40.7 px a cell).
   const headless = await import('./headless.mjs'); await headless.openHost();
   const fieldsModule = await import('../sculpt-gpu-fields.js'), adapter = await navigator.gpu.requestAdapter(), device = await adapter.requestDevice();
   const {width, height} = HEIGHTS_LIMIT, size = Math.max(mapGeometry(40, 40).width, mapGeometry(40, 40).height) + 160, grid = 512, spacing = (size - 1) / (grid - 1), baseHeight = 84;
-  const samples = bumps(width, height, 60, Array.from({length: 60}, (_, k) => [(k * 397) % width, (k * 811) % height, 40 + (k * 53) % 150, 8 + (k * 7) % 40]));
+  const samples = Uint8Array.from({length: width * height}, (_, k) => { const i = k % width, j = (k - i) / width; return Math.round(127 + 60 * Math.sin(.021 * i + .013 * j) + 50 * Math.cos(.037 * j - .008 * i) + 12 * Math.sin(.31 * i) * Math.sin(.27 * j)); });
   const node = heightsNode({image: encodeSamples(samples), width, height, x: 16, y: 32}), nodes = [node], ctx = {seed: 1, params: n => n.params, sea: 75, baseHeight};
   const engine = await fieldsModule.createShapeEngine({device, grid, spacing, refSpacing: 2, baseHeight, sea: 75, minH: -15, maxH: 375, pages: true}), target = engine.makeTarget(0, 0, grid, grid);
   try {
