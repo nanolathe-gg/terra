@@ -2031,27 +2031,82 @@ first rounds].**
   between them. A row holds a reference, our render of it in clay at 1x
   under a low sun, a status (absent, present but wrong, present), the one
   mechanism that would make it, the controls that mechanism gives the
-  artist, and the owner's yes or no. The rows themselves are not listed
-  here: ledger v0 is being made (`CODEX_HANDOFF_LEDGER.md` in
-  `$R/claude-handoff-2026-11-09/`) and its rows join this section when it
-  returns.
+  artist, and the owner's yes or no. Ledger v0 is below.
 - *A round* is one row, one mechanism and one sheet. Shape is judged
   before material and material before color. The judge is the owner's eye;
   a second agent that did not make the change lists located differences.
   No score stands in for either.
-- *Stop rule*: five rounds the owner has reviewed, or two in a row the
-  owner finds no closer; then report what the engine cannot express.
+- *Stop rule, for each row*: five rounds the owner has reviewed, or two in
+  a row the owner finds no closer. The row is then marked as stopped, with
+  what the engine could not express and the sheet that shows it, and the
+  work moves to another row. A stopped row is not deleted and may be
+  reopened by a later mechanism.
 - *Research* runs beside it: for each row, how other terrain tools and
   published methods make that form, with sources. Ideas only; no code,
   graph, texture or asset is copied.
 - *Controls* come from the rows: each mechanism brings its own, a rock
   type or a world is a set of numbers for them (rule 9), and an invented
   world is those numbers taken outside what Earth allows.
-- *Not yet settled*: how many art pixels make a meter (needed before
-  photographs or elevation data can serve as references); references
-  drawn in our own view, since the seven pictures look across at cliffs
-  and ours looks down; and rows for soft ground, which the seven pictures
-  do not show and which is most of a map.
+- *Not yet settled*: how many art pixels make a meter (below); how far
+  geology may move the cliff an artist drew (below); references drawn in
+  our own view, since the seven pictures look across at cliffs and ours
+  looks down; and references for soft ground, which the seven pictures do
+  not show and which is most of a map.
+
+**Ledger v0 [Codex, 2026-11-09 and 10; `$R/agent-realism/ledger/`].**
+Rendered at `e4b66fc0` with normal budgets, on round 1's tile and
+`repro/fixtures/fracture-coast.json`, in clay under an 18 degree sun. The
+status is a second agent's reading **[by eye]** of those two scenes, not
+the owner's judgment, and "present" means visible there, not accepted.
+The owner's column is blank for every row.
+
+| Row | Form | Status in the two scenes |
+| --- | --- | --- |
+| 1 | Beds that stand out as ledges which end, split and step out, and do not ring the landform's outline | present but wrong: short lips with shadows, but the band follows the mound's edge |
+| 2 | An overhang, and the shadow under it | present but wrong: a small lip only |
+| 3 | Cracks at more than one size that cut a face into blocks | present (the fracture hierarchy of `7d096380`) |
+| 4 | Blocks that have come away and lie below the face they left | absent |
+| 5 | A loose slope at the foot of a cliff: one angle, coarser lower down | present but wrong: an apron of even ribs |
+| 6 | Sand or fines that fill the lows and bury the foot of the rock | present but wrong |
+| 7 | Separate stones a few pixels across, of mixed sizes, each with its own shadow | present |
+| 8 | Gullies cut down a slope that join downhill | absent |
+| 9 | Ripples or drifts in loose sand that turn with the ground and do not keep one spacing | present but wrong: one spacing |
+| 10 | Quiet smooth surfaces between the busy ones | present in clay; in color the grain covers it |
+| 11 | Level ground with relief of its own with grain at zero | present but wrong: repeated lobes; round 1's flat ground was that scene's setting |
+| 12 | Soil or plant cover that breaks at rock and thins on slopes | present but wrong; one fixture |
+| 13 | A shore: wet edge, beach, shallow shelf | present but wrong; one fixture with no beach painted |
+| 14 | Forms of 16 to 128 px that the rock decides: buttresses, alcoves and benches in the cliff line itself | candidate row added by Claude; unjudged |
+| 15 | Rock away from the steep band: outcrops and pavement on gentle ground, rock through thin cover | candidate row added by Claude; unjudged |
+
+**Where the rock sits today [read, `engine-volume.wgsl`, `voxelDensity`].**
+The solid is the authored surface sampled at a point moved along its
+normal by an offset of at most 32 px (`32 * tanh(...)`), and the structure
+inside that offset is multiplied by a gate that opens with the authored
+slope or with painted rock (`rockFaceGate`). So the rock is a skin on the
+stroke's surface, and the stroke decides where the cliff is. The exported
+heights are sampled from the weathered lattice and not from the solid
+(appendix B), so a ledge that moves a cliff line by more than about one
+16 px cell must be in the heights (rule 11). Codex's proposal for row 1
+(a support field for beds, in the column and fracture coordinates) does
+not yet say whether it lives in the skin or in the heights; its research
+found control names in other tools and no published method for beds that
+end. A settings-only step comes first (`CODEX_HANDOFF_STEP0.md` in
+`$R/claude-handoff-2026-11-09/`): the skin's depth measured, the skin and
+the heights each pushed with today's controls, rock painted off the rim.
+
+**Scale: proposed, not adopted.** Codex proposes 4 art pixels to a meter
+from the sizes of the game's models (an ARM Commander 41.5 units tall, a
+Kbot Lab on 6 by 6 cells) **[measured by Codex from the stock unit files;
+the choice of 4 is its inference]**. A height unit is half a pixel, so at
+that scale the whole 255-unit range is 32 m and the relief of the two
+retail sections measured in this review (45 and 76 units) is under 6 m and
+under 10 m **[arithmetic]**. Whether terrain should read at the units'
+scale or as larger country in miniature is the owner's to say. Until then
+a reference is chosen and reduced by the size of its features in pixels.
+
+**Open question for the owner.** May the geology move the cliff line an
+artist drew, and by how much, with level building ground and ramps held
+fixed?
 
 Three tracks, coordinated where they share files and interfaces. Keep
 small commits grouped into bounded review milestones. LLM visual
@@ -2328,14 +2383,19 @@ approval of every proposed mechanism or estimate in sections 3-6.
     2 px lattice and 200 rounds. The tile went from .558 s to 3.318 s
     **[measured, Codex: M3 Pro, warmed, one 1,024 px tile]**, and no new
     shelf, slab or debris form appeared **[by eye, a second agent]**. So
-    for the rock, voxel and draw stages, finer sampling alone did not add
-    forms. Shape and Time at larger budgets are untested.
+    for the rock, voxel and draw stages, raised budgets with no new
+    mechanism did not add forms. (The budgets are coupled to the physical
+    response, Codex notes, so this was not a pure test of precision.)
+    Shape and Time at larger budgets are untested.
   - No height byte moved in round 1. That follows from holding Shape and
     Time fixed, and says nothing about a bake that changes them.
   - The ribs at the foot have a period of 6.5 to 7.4 px in both builds
     **[measured, Claude: strongest Fourier peak in three 96 px windows of
     the two clay renders]**, so they do not come from the flow lattice
-    that round 1 halved. Their source is not yet found.
+    that round 1 halved. They are the sand ripples (`sandRipples` in
+    `engine-bake.wgsl`, the scene's `ripple` at 7): setting `ripple` to 0
+    removes 98.9 to 100 percent of the power in the 5 to 10 px band in
+    those windows **[measured, Codex, ledger v0]**.
 
 ### Remaining validation, not unanswered product choices
 
