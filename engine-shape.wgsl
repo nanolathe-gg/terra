@@ -1056,7 +1056,21 @@ fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32,
   if (along < 0.0) { let t = 1.0 - clamp(out / L, 0.0, 1.0); return Hc * t * t; }
   let line = Hc + 2.0 * Hc / L * along;
   let cut = u.gully * u.gullySize;
-  return line * (1.0 - sm(cut, 2.0 * cut, face - line));
+  // The cone is over once the section has risen through its line. A section that then levels off (a plateau) would meet the still rising line a second time
+  // farther in and be buried under it (Talus reach 80 with Gullies raised 320 of a plateau's 587 level cells by up to 85 units), so the cone ends before
+  // that second meeting. A section that keeps rising (a ridge) has none and is as it was.
+  let t0 = max(tf, 0.0);
+  var t2 = 2.0; var above = false; var pt = t0; var pd = curveAt(table, t0) * relief - Hc;
+  for (var j = 1u; j <= 16u; j++) {
+    let t = f32(j) / 16.0;
+    if (t2 < 2.0 || t <= pt) { continue; }
+    let d = curveAt(table, t) * relief - (Hc + 2.0 * Hc / L * (t - t0) * ro.y);
+    if (d >= 0.0) { above = true; }
+    else if (above) { t2 = mix(pt, t, clamp(pd / max(pd - d, 1e-4), 0.0, 1.0)); }
+    pt = t; pd = d;
+  }
+  let ended = sm(t2 - 0.0625, t2, ro.x / max(ro.y, 1.0));
+  return line * (1.0 - sm(cut, 2.0 * cut, face - line)) * (1.0 - ended);
 }
 
 @compute @workgroup_size(8, 8)
