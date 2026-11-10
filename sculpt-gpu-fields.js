@@ -19,6 +19,55 @@ const PLANES = FIELD_KEYS_FLOAT.length;
 const KIND = {paint: 0, erase: 1, sand: 9, grass: 10, smooth: 11, fissure: 14, landform: 16};
 // The stroke kinds the passes draw (a node of any other kind draws nothing).
 export const DRAWN_KINDS = Object.keys(KIND);
+
+// ---- the height image: a node of kind 'heights' ----
+// It writes an image of height samples into the authored height plane (engine-shape.wgsl `heights`). Like the ground node it has no path and no
+// brush card, so its values are the node's own fields (`params` is a stroke's brush card, which the panel edits):
+//   image          the samples as base64 (standard alphabet, padded, no spaces), row by row from sample (0, 0): one byte a sample (bits 8), or
+//                  two, low byte first (bits 16)
+//   width, height  the samples across and down: at most 1282 x 1288, a 40 x 40 map's height bytes
+//   x, y, cell     where it lies: sample (i, j) sits at world pixel (x + i * cell, y + j * cell). With cell 16 and x, y multiples of 16 that is the
+//                  cell corner the export samples for height byte (i, j) (sculpt-map.js cellHeightTiles), so an image of bytes exports the same bytes
+//   scale, offset  a sample's height is sample * scale + offset
+//   mode           how it meets the ground under it, as a landform's Combine does: 'raise' keeps the higher, 'cut' the lower, 'flatten' sets the
+//                  ground to the image and eases back into the ground across the margin, 'replace' sets it with no easing
+// Between samples the surface is a bicubic one through every sample (hmWeights in the shader). It covers the samples and a margin of HEIGHTS_REACH
+// cells round them (the bicubic's reach), where the edge samples repeat; outside that the node writes nothing. A cell reads the image at its own
+// position and no other cell, so the node needs no read apron and no page ring.
+export const HEIGHTS_LIMIT = {width: 1282, height: 1288};
+export const HEIGHTS_MODES = ['raise', 'cut', 'flatten', 'replace'];   // the index is the shader's u.combine (0..2 as a landform's)
+export const HEIGHTS_REACH = 2;
+// The node's fields, checked, in one order (the save's) and with the defaults filled in. A node the engine cannot draw as written is an error, which
+// a load reports before it changes the map (sculpt.js deserializeNodes).
+export function heightsFields(n, name = 'The height image') {
+  const bad = why => { throw new Error(`${name} ${why}.`); };
+  const {image, bits = 8, width, height, cell = 16, x = 0, y = 0, scale = 1, offset = 0, mode = 'replace'} = n || {};
+  if (bits !== 8 && bits !== 16) bad('must have 8 or 16 bits a sample');
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) bad('needs a whole number of samples across and down');
+  if (width > HEIGHTS_LIMIT.width || height > HEIGHTS_LIMIT.height) bad(`has ${width} x ${height} samples, over the limit of ${HEIGHTS_LIMIT.width} x ${HEIGHTS_LIMIT.height}`);
+  if (![cell, x, y, scale, offset].every(Number.isFinite) || cell < 1 || cell > 1024) bad('needs finite numbers for cell (1 to 1024 px), x, y, scale and offset');
+  if (!HEIGHTS_MODES.includes(mode)) bad(`has the mode ${JSON.stringify(mode)}; the modes are ${HEIGHTS_MODES.join(', ')}`);
+  const bytes = width * height * bits / 8, chars = 4 * Math.ceil(bytes / 3), padding = (3 - bytes % 3) % 3;
+  if (typeof image !== 'string' || image.length !== chars || /^[A-Za-z0-9+/]*(=*)$/.exec(image)?.[1].length !== padding)
+    bad(`needs ${width} x ${height} samples of ${bits} bits as base64: ${bytes} bytes, ${chars} characters`);
+  return {image, bits, width, height, cell, x, y, scale, offset, mode};
+}
+// A node's checked fields and the heights of its samples (sample * scale + offset, as f32): checked and decoded once for a node object, and again
+// only if a field has changed since (the engine prepares every node on every run).
+const HEIGHTS_KEYS = ['image', 'bits', 'width', 'height', 'cell', 'x', 'y', 'scale', 'offset', 'mode'];
+const heightsDecoded = new WeakMap();
+export function heightsImage(n) {
+  const have = heightsDecoded.get(n);
+  if (have && HEIGHTS_KEYS.every(k => have.raw[k] === n[k])) return have;
+  const f = heightsFields(n), text = atob(f.image), count = f.width * f.height, values = new Float32Array(count);
+  if (f.bits === 8) for (let i = 0; i < count; i++) values[i] = text.charCodeAt(i) * f.scale + f.offset;
+  else for (let i = 0; i < count; i++) values[i] = (text.charCodeAt(2 * i) | text.charCodeAt(2 * i + 1) << 8) * f.scale + f.offset;
+  const made = {raw: Object.fromEntries(HEIGHTS_KEYS.map(k => [k, n[k]])), fields: f, values};
+  heightsDecoded.set(n, made);
+  return made;
+}
+// The world rectangle (px) a height image covers: its samples and the margin round them.
+export const heightsBounds = f => ({x0: f.x - HEIGHTS_REACH * f.cell, y0: f.y - HEIGHTS_REACH * f.cell, x1: f.x + (f.width - 1 + HEIGHTS_REACH) * f.cell, y1: f.y + (f.height - 1 + HEIGHTS_REACH) * f.cell});
 // Mirrors NOISE_FIELDS in sculpt.js: [wavelength, weight, salt] twice, in the order the shader indexes them.
 const NOISE = [
   [[95, .7, 0x1863], [37, .3, 0x32a7]], [[95, .7, 0x73c1], [37, .3, 0x9e15]], [[64, .65, 0x5b39], [23, .35, 0x2ac9]],
@@ -79,7 +128,10 @@ const NODE_FIELDS = [
   // Coast ramp: the share of a water-making section's dry fall the coast keeps (1: as drawn).
   ...['lfCoast'].map(k => [k, 'f']),
   // Face steepness: the gain on a raised section's rise share (1: as drawn).
-  ...['lfFace'].map(k => [k, 'f'])];
+  ...['lfFace'].map(k => [k, 'f']),
+  // A height image (the `heights` pass): its size in samples, the window of them this pass holds in MW from mwBase (its first sample and its width), and where
+  // sample (0, 0) lies and how far apart samples are, in world px. u.combine is its mode.
+  ...['hmW', 'hmH', 'hmCw'].map(k => [k, 'u']), ...['hmCx', 'hmCy'].map(k => [k, 'i']), ...['hmX', 'hmY', 'hmCell'].map(k => [k, 'f'])];
 const NODE_BYTES = Math.ceil(NODE_FIELDS.length * 4 / 256) * 256;
 const nodeStruct = () => `struct Node {\n${NODE_FIELDS.map(([k, t]) => `  ${k}: ${{f: 'f32', u: 'u32', i: 'i32'}[t]},`).join('\n')}\n}\n`;
 
@@ -212,6 +264,12 @@ function secondaryNodes(n, q, imp, seed, geom, c) {
   }
   return out;
 }
+// A height image's pass: the cells its rectangle covers (the shader tests each cell's own position against the same rectangle) and its samples' heights.
+function prepareHeights(n, {grid, spacing}) {
+  const {fields: f, values} = heightsImage(n), b = heightsBounds(f);
+  const region = intersect({x0: Math.floor(b.x0 / spacing), y0: Math.floor(b.y0 / spacing), x1: Math.ceil(b.x1 / spacing), y1: Math.ceil(b.y1 / spacing)}, {x0: 0, y0: 0, x1: grid - 1, y1: grid - 1});
+  return {op: 'heights', region, values, fields: f, u: {combine: HEIGHTS_MODES.indexOf(f.mode), hmW: f.width, hmH: f.height, hmX: f.x, hmY: f.y, hmCell: f.cell}};
+}
 // ---- node preparation ----
 // What the passes draw: every kind in KIND with at least one point (and the ground node). prepareNode returns {skip:true} for any other node,
 // which draws nothing, and for a node that writes nothing, else {op:'ground'|'stamp', ...}. `c` is the host's context (see shapeContext in sculpt.js).
@@ -219,6 +277,7 @@ function secondaryNodes(n, q, imp, seed, geom, c) {
 // The smooth brush's box blur radius in cells: sculpt.js's clamp(round(radius / (7 spacing)), 1, 24) at the final grid, scaled to this level's spacing.
 export const smoothRadius = (radius, {spacing, refSpacing = spacing}) => Math.max(1, Math.round(clamp(Math.round(radius / (refSpacing * 7)), 1, 24) * refSpacing / spacing));
 export function prepareNode(n, geom, c) {
+  if (n.kind === 'heights' && !n.hidden) return prepareHeights(n, geom);
   if (n.hidden || (n.kind !== 'ground' && (!(n.kind in KIND) || !n.points?.length))) return {skip: true};
   const {grid, spacing} = geom;
   if (n.kind === 'ground') return {op: 'ground', seed: (n.seed ?? 1) >>> 0, amp: n.amplitude ?? 8, wave: n.wavelength ?? 160, cover: n.coverage ?? .5, art: clamp(n.art ?? 1, 0, 1)};
@@ -490,7 +549,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
     return out;
   };
-  const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampFissure', 'smoothCopy', 'blurH', 'blurV', 'ground', 'init', 'artHold', 'artLevel', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastJag', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'packPlane', 'lfCrystalSites', 'lfCrystalRoom', 'lfCrystalApply'];
+  const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampFissure', 'smoothCopy', 'blurH', 'blurV', 'ground', 'heights', 'init', 'artHold', 'artLevel', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastJag', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'packPlane', 'lfCrystalSites', 'lfCrystalRoom', 'lfCrystalApply'];
   const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse'] : [])]);
   const cells = pages ? 0 : grid * grid, buf = (size, usage, label) => device.createBuffer({size: Math.max(16, size), usage, label});
   const ST = GPUBufferUsage.STORAGE, CD = GPUBufferUsage.COPY_DST, CS = GPUBufferUsage.COPY_SRC;
@@ -529,7 +588,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     dummy ??= buf(16, ST, 'shape unused');
     const expandIn = (r, m) => intersect({x0: r.x0 - m, y0: r.y0 - m, x1: r.x1 + m, y1: r.y1 + m}, whole);
     const geom = {grid, spacing, refSpacing};
-    const passes = [], segData = [], mwData = [], ops = [];
+    const passes = [], segData = [], mwData = [], mwBlocks = [], ops = [];
     let segCount = 0, mwCount = 0;
     const base = {grid, spacing, baseH: baseHeight, sea, minH, maxH, blurR: Math.max(1, Math.round(2 * refSpacing / spacing)), ox: target ? target.ox : 0, oy: target ? target.oy : 0, pw: target ? target.pw : grid, ph: target ? target.ph : grid, direct: target ? 1 : 0};
     const add = (entry, region, extra = {}) => passes.push({entry, region, u: {...base, rx0: region.x0, ry0: region.y0, rx1: region.x1, ry1: region.y1, ...extra}});
@@ -543,6 +602,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     for (const p of prepared) {
       if (p.skip) continue;
       if (p.op === 'ground') { ops.push({ground: true, art: p.amp !== 0 ? p.art : 1, u: {seed: p.seed, gAmp: p.amp, gWave: p.wave, gCover: p.cover}}); continue; }
+      if (p.op === 'heights') { if (p.region) ops.push({heights: p}); continue; }
       if (!p.region) continue;
       const node = {...p.u, nseg: p.segs.length, kind: p.kind, segBase: segCount, mwBase: mwCount, nwrites: p.writes.length};
       for (const s of p.segs) {
@@ -598,8 +658,27 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       if (c.beach) { add('coastBeach', wide, {...node, coSrc: field()}); }
     };
     // Phase 2: the passes of one node over the rectangle R (the evaluation's, or a window's), `ex` growing a rectangle inside what exists.
+    // A height image over R: the pass takes only the samples its cells read, as a block of MW after every node's rows (one f32 a sample, four to a row).
+    // A cell reads the four samples round its place in each axis, clamped to the image; the window keeps one more each side, since the shader finds that
+    // place in f32. The window is cut out by whole samples, so what a cell reads does not depend on the window: a page and the whole map agree.
+    const emitHeights = (op, R) => {
+      const p = op.heights, f = p.fields, body = intersect(R, p.region);
+      if (!body) return;
+      const key = `${body.x0},${body.y0},${body.x1},${body.y1}`;
+      if (op.key !== key) {
+        const first = (cell, origin, n) => clamp(Math.floor((cell * spacing - origin) / f.cell) - 2, 0, n - 1), last = (cell, origin, n) => clamp(Math.floor((cell * spacing - origin) / f.cell) + 3, 0, n - 1);
+        const i0 = first(body.x0, f.x, f.width), i1 = last(body.x1, f.x, f.width), j0 = first(body.y0, f.y, f.height), j1 = last(body.y1, f.y, f.height), cw = i1 - i0 + 1, ch = j1 - j0 + 1;
+        const data = new Float32Array(Math.ceil(cw * ch / 4) * 4);
+        for (let j = 0; j < ch; j++) data.set(p.values.subarray((j0 + j) * f.width + i0, (j0 + j) * f.width + i0 + cw), j * cw);
+        mwBlocks.push({row: mwCount, data});
+        op.key = key; op.u = {...p.u, mwBase: mwCount, hmCx: i0, hmCy: j0, hmCw: cw};
+        mwCount += data.length / 4;
+      }
+      add('heights', body, op.u);
+    };
     const emitOp = (op, R, ex, noise) => {
       if (op.ground) { add('ground', R, op.u); return; }
+      if (op.heights) { emitHeights(op, R); return; }
       const p = op.p, node = op.node;
       if (p.coast) { emitCoast(p, node, R, ex, noise); return; }
       emitBody(p, node, R, ex, noise);
@@ -665,7 +744,8 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     }
     const SegB = buf(sd.byteLength, ST | CD, 'shape segments'), MWB = buf(Math.max(16, mwCount * 16), ST | CD, 'shape mask writes');
     device.queue.writeBuffer(SegB, 0, sd);
-    if (mwCount) device.queue.writeBuffer(MWB, 0, new Float32Array(mwData));
+    if (mwData.length) device.queue.writeBuffer(MWB, 0, new Float32Array(mwData));
+    for (const b of mwBlocks) device.queue.writeBuffer(MWB, b.row * 16, b.data);   // the height images' windows, after every node's rows
     const OutB = buf(readback ? outWords * 4 : 16, ST | CS, 'shape out');
     const group = device.createBindGroup({layout, entries: [
       {binding: 0, resource: {buffer: ub, size: NODE_BYTES}}, {binding: 1, resource: {buffer: TF}}, {binding: 2, resource: {buffer: TMk}}, {binding: 3, resource: {buffer: (target ? null : Nz) ?? dummy}},
@@ -692,7 +772,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
       if (plane !== null) return {rect: P, width: rw0, height: rh0, plane: new Float32Array(raw)};
       return {rect: P, width: rw0, height: rh0, floats: FIELD_KEYS_FLOAT.map((_, k) => new Float32Array(raw, k * rc * 4, rc)), masks: Array.from({length: 25}, (_, m) => new Int8Array(raw, (PLANES * rc + m * q4) * 4, rc))};
     })();
-    peak = Math.max(peak, bytes() + sd.byteLength + passes.length * NODE_BYTES + (readback ? 2 * outWords * 4 : 0));
+    peak = Math.max(peak, bytes() + sd.byteLength + mwBlocks.reduce((sum, b) => sum + b.data.byteLength, 0) + passes.length * NODE_BYTES + (readback ? 2 * outWords * 4 : 0));
     done.then(() => {
       ub.destroy(); SegB.destroy(); MWB.destroy(); OutB.destroy();
       if (release && !target && Nz === nz) { nz.destroy(); sc.destroy(); Nz = Sc = null; }
