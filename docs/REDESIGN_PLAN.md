@@ -2047,10 +2047,11 @@ first rounds].**
 - *Controls* come from the rows: each mechanism brings its own, a rock
   type or a world is a set of numbers for them (rule 9), and an invented
   world is those numbers taken outside what Earth allows.
-- *Not yet settled*: references drawn in our own view, since the seven
-  pictures look across at cliffs and ours looks down; and references for
-  soft ground, which the seven pictures do not show and which is most of a
-  map. The scale and the drawn cliff line are answered below.
+- *Not yet settled*: more references in our own view, since the first
+  seven pictures look across at cliffs and ours looks down (an eighth,
+  seen from above, is recorded below); and references for soft ground,
+  which none of them shows and which is most of a map. The scale and the
+  drawn cliff line are answered below.
 
 **Ledger v0 [Codex, 2026-11-09 and 10; `$R/agent-realism/ledger/`].**
 Rendered at `e4b66fc0` with normal budgets, on round 1's tile and
@@ -2077,21 +2078,90 @@ The owner's column is blank for every row.
 | 14 | Forms of 16 to 128 px that the rock decides: buttresses, alcoves and benches in the cliff line itself | candidate row added by Claude; unjudged |
 | 15 | Rock away from the steep band: outcrops and pavement on gentle ground, rock through thin cover | candidate row added by Claude; unjudged |
 
-**Where the rock sits today [read, `engine-volume.wgsl`, `voxelDensity`].**
-The solid is the authored surface sampled at a point moved along its
-normal by an offset of at most 32 px (`32 * tanh(...)`), and the structure
-inside that offset is multiplied by a gate that opens with the authored
-slope or with painted rock (`rockFaceGate`). So the rock is a skin on the
-stroke's surface, and the stroke decides where the cliff is. The exported
+**Where the rock sits today [read, `engine-volume.wgsl`, `voxelDensity`;
+measured by Codex in step 0].** The solid is the authored surface sampled
+at a point moved along its normal, and the structure inside that offset is
+multiplied by a gate that opens with the authored slope or with painted
+rock (`rockFaceGate`). So the rock is a skin on the stroke's surface, and
+the stroke decides where the cliff is. Along the rim of step 0's base
+scene the solid sits a median 3.6 px from the authored surface, 11.1 px at
+the 95th percentile and 16.3 px at the most, and mostly inward: the
+farthest it steps out is 6.6 px. With bed thickness and block size at four
+times the preset and `rockFace` doubled, which is past the sliders, those
+figures are 6.9, 14.5 and 21.1 px, and 10.5 px outward. The exported
 heights are sampled from the weathered lattice and not from the solid
 (appendix B), so a ledge that moves a cliff line by more than about one
-16 px cell must be in the heights (rule 11). Codex's proposal for row 1
-(a support field for beds, in the column and fracture coordinates) does
-not yet say whether it lives in the skin or in the heights; its research
-found control names in other tools and no published method for beds that
-end. A settings-only step comes first (`CODEX_HANDOFF_STEP0.md` in
-`$R/claude-handoff-2026-11-09/`): the skin's depth measured, the skin and
-the heights each pushed with today's controls, rock painted off the rim.
+16 px cell must be in the heights (rule 11).
+
+**Step 0: what today's settings reach [Codex, 2026-11-10,
+`$R/agent-realism/step0/`; Claude's review and probe,
+`$R/claude-handoff-2026-11-09/gullies-probe/`].** No engine code. Round
+1's tile with natural ground on and `ripple` at .5, and a second fixture
+with a shore and plant cover, in clay and through the palette at 1x.
+
+- *The skin at larger sizes* **[by eye, second agent]**: fewer and larger
+  slab faces, and the band still follows the stroke's outline.
+- *Time* **[measured, Codex]**: age 800, four times the default, with rain
+  at the top of its range moves no height byte by more than 7 units and
+  draws no joining gullies. Time already wears soft beds faster than hard
+  ones (`columnContrast`, `engine-weather.wgsl:90`) **[read]**. With round
+  1, larger budgets have now been tried in every stage with no new
+  mechanism, and none added a form.
+- *The heights* **[measured by Claude from the saved height bytes; the
+  plateau is the 587 cells within 2 units of its top, 501 of them flat]**:
+
+  | Landform settings | Height bytes moved (most) | Plateau cells moved by more than 2 units | Flat plateau cells |
+  | --- | --- | --- | --- |
+  | 4 steps, step variation 70, breakup 80 | 384 (20) | 0 | 500 |
+  | the same steps, wander 35 px, width variation 25%, age 800 ("restrained") | 1,173 (58) | 57 | 477 |
+  | wander 80 px, width variation 60% | 1,489 (86) | 134 | 364 |
+  | Gullies 60, Gully size 50 | 572 (28) | 0 | 501 |
+  | Gullies 100, Gully size 80 | 680 (71) | 0 | 501 |
+  | Talus reach 80 alone | 0 | 0 | 501 |
+  | Gullies 60, Gully size 50, Talus reach 80 | 999 (85) | 320 | 107 |
+
+  Codex's report says the restrained settings keep the plateau; it tested
+  a 160 px window in the middle. Its sheets did not try Gullies, Gully size
+  or Talus reach (`sculpt-scene.js:157-159`); the last four rows are
+  Claude's probe.
+- **[by eye, Claude; the owner has not judged these]** Steps and the
+  restrained settings leave the front wall the same picture as the base: a
+  band of chips along the rim, and no bench one can point to. Wander at
+  80 px breaks the outline into round lobes and islands, each ringed by its
+  own ledges. Gullies cuts the wall across into spurs and V-gullies and
+  leaves the top alone, and on a taller cliff the spurs read better. Talus
+  reach moves no height without Gullies, and with them it carves up the
+  plateau top: a defect, or a control that only suits a ridge.
+- *Steps and beds do not meet* **[read, `engine-shape.wgsl:157-183`]**: a
+  landform's steps are terraces at even fractions of its height, moved and
+  broken by noise, and they do not read the rock column. The skin's beds
+  do (`voxelBed`, `engine-common.wgsl:918`). So a ledge in the art is not
+  a step in the heights.
+- *Rock paint* **[by eye, Claude]**: on gentle ground it digs a pit down
+  to the water and raises no outcrop; on the plateau top it changes the
+  color only.
+- *Defects in the base scene's clay* **[by eye, Claude; image pixels of
+  `tile-base`]**: rows of 2 px dashes on some faces (x840-920, y370-450),
+  pinholes through the solid to the water, a star of straight creases
+  where the ramp meets the ground (x700-740, y560-600) and straight-edged
+  scarps at the foot (x220-440, y650).
+
+**An eighth reference, seen from above [owner, 2026-11-10].**
+`$R/references/topdown-escarpment.jpg`: "another hyper-realistic render,
+from a mostly top down view." It is the first reference in our own view.
+By Claude's eye its cliff is cut across, by spurs and by gullies that
+branch and join, with debris fans at their mouths, boulders below and
+smooth fines in the lows; bedding shows only faintly. For this picture
+that puts rows 8 and 14, then 4 and 5, ahead of row 1.
+
+**Next [proposed by Claude].** `CODEX_HANDOFF_ROUND2.md` in
+`$R/claude-handoff-2026-11-09/`: the Gullies controls and the cliff's
+height on one sheet against the top-down reference; the cause of the
+Talus reach defect, and a fix on a prototype branch; then one mechanism
+proposed from the located differences. Two candidates for row 1 wait
+behind it: Codex's (a new support field for beds, shared by the heights
+and the solid) and a cheaper one of Claude's (the landform's steps read
+the same column as the skin, so that a ledge is a step).
 
 **Scale: none fixed; a working one may be used [owner decision,
 2026-11-10].** Codex proposes 4 art pixels to a meter
