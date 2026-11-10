@@ -95,7 +95,10 @@ export class VoxelSurface {
       const reads=this.inputs();const encoder=this.device.createCommandEncoder({label:'voxel solid and terrain draw'});
       const groups=[Math.min(count,128),Math.ceil(count/128)];
       this.encode('voxelBuild',encoder,groups,reads,{5:{buffer:this.density[0]}});
-      for(let i=0;i<4;i++)this.encode('voxelWeather',encoder,groups,{...reads,2:{buffer:this.density[i%2]}},{5:{buffer:this.density[1-i%2]}});
+      // Four rounds of wear, which leave the solid in buffer A again. With Weathering (rounded edges) or the rock's Depth at 0 a round changes no
+      // voxel (voxelWear adds faceWear times a term scaled by the depth), so none is run: the same solid, a fifth of the passes.
+      const wear=this.renderer.uniformValue('uFaceWear')>0&&this.renderer.uniformValue('uRockFace')>0?4:0;
+      for(let i=0;i<wear;i++)this.encode('voxelWeather',encoder,groups,{...reads,2:{buffer:this.density[i%2]}},{5:{buffer:this.density[1-i%2]}});
       const bind=this.device.createBindGroup({layout:this.drawLayout,entries:[0,1,2,3,4].map(binding=>({binding,resource:reads[binding]}))});
       draw(encoder,bind,[(rect.x-origin[0])/scale,(rect.y-origin[1])/scale,rect.width/scale,rect.height/scale],first);first=false;
       this.device.queue.submit([encoder.finish()]);this.stats.pieces++;this.stats.bricks+=count;
