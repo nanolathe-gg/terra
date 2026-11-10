@@ -22,6 +22,14 @@ found wrong. Wrong statements are corrected where they stood, and each
 affected card says what must be shown before it becomes an implementation
 contract.
 
+A later revision of the same night records the owner's decision to work on
+realistic terrain first and to stop tuning toward retail until later
+(section 7, "Latest answers"). Section 5 opens with it, and the goals table
+of section 2 is changed to match. Sections 1, 3 and 4 were written before
+that decision. Their retail measurements stand as measurements. The cards
+that tune a world toward retail (R0 item 1, R2 and R4) are parked, not
+deleted: the retail scenes, boards and scripts are kept for the return.
+
 The owner's brief for this review: an artist-driven, hyper-realistic,
 parametric terrain tool with a fixed camera; near-real-time feedback with
 iterative refinement; able to mimic the retail worlds and to go beyond them;
@@ -166,8 +174,8 @@ checks that do not exist yet.
 | --- | --- | --- |
 | Artists control the terrain; easy to use | Six standard tasks (section 3.5), including finger input on iPad; visible-control count and task costs | No |
 | Feedback is fast, refinement is progressive | Latency budgets per kind of interaction (below), measured by `repro/perf.mjs` | Partly: stroke drags only |
-| Hyper-real look; erosion may be approximated | The owner's eye on unpaired boards against the seven reference pictures: `~/src/geoform/references/gaea-prowess1.webp`, `~/src/geoform/references/gaea-rocktools.webp`, `~/src/geoform/references/gaea-rocky.webp`, `~/src/geoform/references/gaea-sand5.webp`, `~/src/geoform/references/gaea-sandstone.webp`, `~/src/geoform/references/gaea-surface1.webp`, and `~/src/geoform/references/gaea-surface3.webp`; `measure/realism.py` remains a tripwire only **[owner decision, 2026-11-09 night]** | Tripwire exists; reference boards are the visual test |
-| Recognizably Total Annihilation | LLM visual comparisons followed by owner judgment on retail-reference sheets; statistics are secondary | Existing windows; expanded bench needs R1 |
+| Hyper-real look; erosion may be approximated | The owner's eye on unpaired boards against the seven reference pictures: `~/src/geoform/references/gaea-prowess1.webp`, `~/src/geoform/references/gaea-rocktools.webp`, `~/src/geoform/references/gaea-rocky.webp`, `~/src/geoform/references/gaea-sand5.webp`, `~/src/geoform/references/gaea-sandstone.webp`, `~/src/geoform/references/gaea-surface1.webp`, and `~/src/geoform/references/gaea-surface3.webp`; `measure/realism.py` remains a tripwire only **[owner decision, 2026-11-09 night]**. This goal is now the main line: one form at a time on the ledger of section 5, its shape judged first in clay under a low sun **[owner decision on the priority, 2026-11-09 late night; the ledger is the method proposed for it]** | Tripwire exists; reference boards exist (`$R/agent-judge/references/`); ledger v0 handed off |
+| Recognizably Total Annihilation | Not tuned toward for now **[owner decision, 2026-11-09 late night]**: "we'll circle back later once we have more realism and proper controls for each feature that created it." Until then the game's frame is what holds: the fixed view, 1x, the palette and the height cells (rules 11 and 12). A final test is proposed, not yet the owner's: an artist makes a retail world from the controls alone, on a sheet the owner reviews | The retail scenes, the boards (`$R/agent-judge/`) and `repro/retail.sh` are kept for the return |
 | Many biomes and planets, including ones that follow no real planet | Invented worlds built from controls alone, with no code change, on a sheet the owner reviews (R0) | No |
 | Large flat areas, a 2.5D RTS | Passability and buildable-area views; plains unmoved by any refinement | Yes (`repro/passability.mjs`) |
 | Export loads and plays | `repro/export-bytes.mjs`; first-class tile accounting, with 16x16 as the interactive target | Partly: no tile budget |
@@ -1989,15 +1997,61 @@ public; it does not block any other card.
 
 ## 5. Order of work
 
-**Picture first [owner decision, 2026-11-09 night].** First mimic the
-retail worlds, then pursue the hyper-real look with artist knobs for real
-and alien worlds. Track A (speed) and Track C (the artist, including the
-iPad) wait; this priority supersedes the earlier sequencing below. R0
-item 1's paired sheets remain useful for broad light and material placement
-only, not for matching individual shapes or pixel detail: retail heights
-explain .60 to .97 of brightness at 64 px and only .19 to .73 at 16 px
-**[measured, section 3.1]**. Judge the biome's design language and detail on
-unpaired boards, with the owner's eye as acceptance.
+**Realism first [owner decision, 2026-11-09 late night].** "Let's focus
+significant work on realistic high quality terrain generation and not focus
+on matching retail, then we'll circle back later once we have more realism
+and proper controls for each feature that created it." This replaces the
+order recorded earlier the same night (retail first, then the hyper-real
+look). Track B below is the main line. Track A (speed) and Track C (the
+artist, including the iPad) still wait. Work that tunes a world toward
+retail is parked: nothing retail is deleted, and no change is turned down
+because it moves a retail score.
+
+**Why [evidence, section 7 "Latest answers"].** The retail work had no
+signal to steer by: the owner could not order six past builds against
+retail, no computed judge passed its tests, and the old look distance fell
+over a night of rounds in which the owner saw no improvement. The work the
+owner did see move the picture was the voxel solid and the rock built in
+it.
+
+**The main line: a ledger of forms [method proposed by Claude; the owner's
+decision is the direction, not this method, which is unproven until its
+first rounds].**
+- *The frame does not move*: the fixed view, 1x, the palette, one height
+  byte per 16 px cell, level ground to build on and ramps to climb, the
+  exported `.ufo`, fast editing with a slower bake the artist starts
+  **[owner decision, 2026-11-09 night: "a bake pass that takes minutes or
+  longer" is acceptable "as long as general editing is fast and the artist
+  can choose when to spend that bake time"]**. Every sheet goes through the
+  palette stage, so the format is tested on every round.
+- *The ledger* has one row for each form real terrain has and ours may
+  lack, in the words of the owner's "Look" requirements
+  (`~/src/geoform/REQUIREMENTS.md`): a ledge that ends and splits, a loose
+  slope at a cliff's foot, separate stones, a gully, and the soft ground
+  between them. A row holds a reference, our render of it in clay at 1x
+  under a low sun, a status (absent, present but wrong, present), the one
+  mechanism that would make it, the controls that mechanism gives the
+  artist, and the owner's yes or no. The rows themselves are not listed
+  here: ledger v0 is being made (`CODEX_HANDOFF_LEDGER.md` in
+  `$R/claude-handoff-2026-11-09/`) and its rows join this section when it
+  returns.
+- *A round* is one row, one mechanism and one sheet. Shape is judged
+  before material and material before color. The judge is the owner's eye;
+  a second agent that did not make the change lists located differences.
+  No score stands in for either.
+- *Stop rule*: five rounds the owner has reviewed, or two in a row the
+  owner finds no closer; then report what the engine cannot express.
+- *Research* runs beside it: for each row, how other terrain tools and
+  published methods make that form, with sources. Ideas only; no code,
+  graph, texture or asset is copied.
+- *Controls* come from the rows: each mechanism brings its own, a rock
+  type or a world is a set of numbers for them (rule 9), and an invented
+  world is those numbers taken outside what Earth allows.
+- *Not yet settled*: how many art pixels make a meter (needed before
+  photographs or elevation data can serve as references); references
+  drawn in our own view, since the seven pictures look across at cliffs
+  and ours looks down; and rows for soft ground, which the seven pictures
+  do not show and which is most of a map.
 
 Three tracks, coordinated where they share files and interfaces. Keep
 small commits grouped into bounded review milestones. LLM visual
@@ -2005,9 +2059,10 @@ comparisons precede the owner's final judgment on look changes; performance
 and correctness retain measured checks. The technical sequencing below is
 still a proposal pending the adversarial review's corrections.
 
-**Current scope [owner decision].** Improve the UI, responsiveness, and
-retail-biome artwork for 16x16 editing on the MacBook Pro and finger-operated
-M3 iPad Air. Tile accounting is a first-class constraint: establish its
+**Current scope [owner decision, as changed by the later answers of section
+7].** Realistic terrain and rock, with a control for each feature that
+makes it. The UI, responsiveness, the iPad and retail-biome artwork wait;
+16x16 on the MacBook Pro remains the size to edit at. Tile accounting is a first-class constraint: establish its
 16x16 baseline with the other benches and surface it early, rather than
 waiting for blend, variations, or stamps. Symmetry, fairness tools, starter
 content, Metal, Urban, and extended output formats are deferred.
@@ -2035,12 +2090,12 @@ hold several separate changes.)
 | R11 the map carries its world; export ignores view options | S | A correctness bug in sharing, and R0's scenes need it; after the two branches that share its files |
 | The iPad's first run of today's editor (section 2) | S, the owner's hands | Every tablet decision depends on what it finds |
 | R1 height-image op | S | R0 needs it |
-| R0 the benches and the new-worlds sheet | M | Nothing that changes a look lands before its judge exists |
+| R0 the shape bench and the new-worlds sheet; its retail look bench (item 1) is parked | M | A look change is judged on the ledger's sheets (the main line, above) |
 | R7 preview level for every control; generic pipeline | S | Makes every later tuning session faster |
 | R8 step 1 (closed-gate bricks, march fix); step 2 (wear where it shows) once the owner has seen its sheet | S | Step 2 is 15-18% of every window for a few lines, but it moves every rock fixture |
 
-Gate: LLM visual comparisons and the owner's starting retail and shape
-reviews are recorded; the latency table and 16x16 tile baseline print.
+Gate: ledger v0 is in front of the owner; the latency table and 16x16 tile
+baseline print.
 Keep desktop measurements distinct from the iPad results.
 
 **Track A: speed.** The first 16x16 latency measurements are in section 2;
@@ -2053,20 +2108,17 @@ Gate: assess section 2's candidate latency budgets on the 16x16 workload,
 with desktop results at 1440p and separately documented iPad conditions.
 Actual iPad testing is required before claiming support.
 
-**Track B: the picture.** One world at a time, Green first, each judged on
-the retail bench and by eye. Form comes before fine relief (rule 10: fix
-the shape before the color), so R3's trial starts first and runs beside
-the rest: a time-boxed comparison on the committed shape fixtures of the
-skeleton, a ridge-and-divide graph (after Génevaux et al. 2013) and
-today's forms, with the Plateau preset kept as it is. Before R3 promises
-handles, it states what happens when a path point is added, removed or
-reversed, when a seed changes after a spur was moved by hand, and when
-strokes overlap. R2 (light and placement, after its controlled pairs) is
-small and separate and proceeds per world. R4 (relief kinds) follows the
-form work, then the same for the next world.
-Gate per world: LLM visual comparisons are complete, and the owner accepts
-the retail look and the intended modern look on the relevant sheets.
-Pixel statistics do not override that judgment.
+**Track B: the picture (the main line).** One form at a time on the
+ledger above, each judged in clay first and by the owner's eye. Shape
+still comes before color (rule 10). R3 (structure in ridge-like landforms)
+is not a retail card: it becomes a candidate for the ledger's rows about
+large forms, and before it promises handles it still states what happens
+when a path point is added, removed or reversed, when a seed changes after
+a spur was moved by hand, and when strokes overlap. R2 (light and placement
+fitted to retail) and R4 (relief kinds on the retail bench) are parked
+until the return to retail.
+Gate per row: the owner's yes on its sheet. Pixel statistics do not
+override that judgment.
 R2's shader changes and R5's split both rewrite `fragmentMain`: land R5's
 split first if both are ready. The tracks are not independent: they share
 the shaders, the control schema, the save state and the fixtures, so one
@@ -2236,6 +2288,55 @@ approval of every proposed mechanism or estimate in sections 3-6.
   against these pictures is the visual test; terrain statistics remain
   tripwires. The pictures and boards stay outside the repository.
 
+### Latest answers (2026-11-09, late night)
+
+- **Realism first; retail later [owner decision].** "Of all the things
+  I've tried lately the only thing moving the needle in the right
+  direction feels like adopting voxels and working on 3d rock types and
+  textures, adding in things like real 3d cracks and gullies, erosion,
+  debris, etc. It's not perfect but it feels like it is getting us closer
+  to realistic rock and terrain." And, asked whether retail stops being
+  what the engine is tuned against: "Yes, let's focus significant work on
+  realistic high quality terrain generation and not focus on matching
+  retail, then we'll circle back later once we have more realism and
+  proper controls for each feature that created it." This supersedes the
+  order in "The picture comes first" above and parks "Judge the biome, not
+  an individual section".
+- **The six builds could not be ordered [owner judgment].** On six blinded
+  past builds of Desert beside retail: "I've looked at them all and I'm
+  honestly not sure how to rank them. They are all a good bit off in
+  different ways." And: "painted desert is kind of a unique map. It would
+  be far better to use green planet, red planet, lava, etc."
+- **No computed judge passed [measured, Codex, `$R/agent-judge/REPORT.md`].**
+  The old look score, extended to unpaired sets, met the floor and ceiling
+  test in 40 of 44 cells and a texture-statistics candidate in 31 of 44;
+  every cell the new one passed, the old one passed too, so the tests
+  could not tell them apart. No scene of Green or Lava was unchanged
+  across the six builds. The old paired look distance fell from `24d1ef70`
+  to `f01cddfb` (Desert .437 to .404, Lava .136 to .117; lower is closer),
+  the night of rounds after which the owner saw no improvement.
+- **What the first realism sheets show [`$R/agent-realism/`].** Both were
+  rendered at `27bebfb8`, before the fracture hierarchy (`7d096380`,
+  `ff5e25b3`) joined main.
+  - In clay under a 12 to 18 degree sun the cliff's ledges are lit
+    geometry **[by eye, a second agent]**. They ring the mound's outline
+    and do not end, split or overhang; the cliff's foot is even ribs, not
+    sand, scree and separate stones **[by eye, the same]**.
+  - Round 1 raised the rock lattice (4 px to 2), runoff rounds (16 to 32),
+    voxel spacing (1 px to .5), wear rounds (4 to 8), near-shadow steps
+    (48 to 96) and sampling (two a side). Shape and Time stayed at their
+    2 px lattice and 200 rounds. The tile went from .558 s to 3.318 s
+    **[measured, Codex: M3 Pro, warmed, one 1,024 px tile]**, and no new
+    shelf, slab or debris form appeared **[by eye, a second agent]**. So
+    for the rock, voxel and draw stages, finer sampling alone did not add
+    forms. Shape and Time at larger budgets are untested.
+  - No height byte moved in round 1. That follows from holding Shape and
+    Time fixed, and says nothing about a bake that changes them.
+  - The ribs at the foot have a period of 6.5 to 7.4 px in both builds
+    **[measured, Claude: strongest Fourier peak in three 96 px windows of
+    the two clay renders]**, so they do not come from the flow lattice
+    that round 1 halved. Their source is not yet found.
+
 ### Remaining validation, not unanswered product choices
 
 - Record browser/OS versions, viewport, device pixel ratio, and render
@@ -2281,15 +2382,19 @@ approval of every proposed mechanism or estimate in sections 3-6.
 - **Rule 9**, add: "A panel shows at most about ten controls before
   Advanced. Every control declares the stage it first affects, and the
   stage map is checked."
-- **Rule 10**, replace "three windows per world" as the bar with: "A look is
-  judged through LLM visual comparisons followed by the owner's final
-  judgment. Retail-reference sheets and existing windows provide evidence;
-  pixel statistics are secondary to the visual judgment."
+- **Rule 10**, change its head and first two points to say that real
+  terrain is the standard for now and retail is returned to later, in the
+  owner's words of 2026-11-09 late night (section 7). Its points on shape
+  before color, on tables measured from retail, on retail never being read
+  at run time and on generated art staying procedural are kept as they
+  are. The wording is drafted on branch `docs/rule-10-realism-first` and
+  is the owner's to adopt.
 - **Rule 12**, add: "Export does not depend on view options. A map carries
   its world. Same-build, same-machine determinism remains a check; editable
   source does not promise the same export across GPUs or future builds.
   The exported `.ufo` is the game contract."
-- **Checks table**: unchanged. The benches of R0 and the stage-map tool are
+- **Checks table**: the `repro/retail.sh` row is parked with rule 10 (the
+  script stays); nothing is added in its place. The benches of R0 and the stage-map tool are
   scripts a card runs when it needs them; the owner's steer is fewer tests,
   not more (section 7, later answers).
 
@@ -2312,6 +2417,9 @@ Everything below is outside the repository. Folders under
 | `agent-rd-shape-skeleton/` | Skeleton: `core.py` (height formula), `grow.py` (grammar), `skel-*-triple.png`, `sweep-*.png`, `eval.txt` |
 | `agent-rd-structure/` | The structure term on retail sections (section 3.8c) |
 | `agent-rd-voxel/` | Ablation images in `img/`, timings in `time/` and `time2/`, `img/metrics.json` |
+| `agent-judge/` | `REPORT.md`; six past builds' renders kept in `builds/`; frozen tuning and review sets (`SPLIT.md`); unpaired boards by kind of ground (`today/`); the six-build boards (`ranking/`); the judge trial (`trial/`); the seven reference pictures reduced and put through the palette (`references/`) |
+| `agent-realism/` | `step1-green/` (the budget table and the six-panel sheet), `round1/` (raised budgets on one tile, with its prototype patch) |
+| `claude-handoff-2026-11-09/` | The hand-off files between Claude and Codex, among them `CODEX_HANDOFF_REALISM.md` and `CODEX_HANDOFF_LEDGER.md` |
 
 Worktrees left in place: `../terraform-wt-rd-voxel` (branch `rd/voxel`, the
 ablation switches and timing tools) and `../terraform-wt-rd-controls`
