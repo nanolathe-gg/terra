@@ -9,8 +9,16 @@ owner's explicit instructions; section 8 lists proposed rule amendments.
 
 This revision records product decisions and their direct consequences for
 the cards. It does not approve every technical design, estimate, or finding
-in the original proposal. The adversarial review's technical concerns still
-need resolution before affected cards become implementation contracts.
+in the original proposal.
+
+A second revision of the same day folds in the adversarial review (Codex;
+its hand-off is `docs/REDESIGN_CLAUDE_HANDOFF.md` on
+`prototype/redesign-foundations`). Seven of its thirteen points (1, 2, 3,
+5, 10, 11 and 12) were checked against the code and the evidence files and
+hold; the other six are design judgments this revision accepts; none was
+found wrong. Wrong statements are corrected where they stood, and each
+affected card says what must be shown before it becomes an implementation
+contract.
 
 The owner's brief for this review: an artist-driven, hyper-realistic,
 parametric terrain tool with a fixed camera; near-real-time feedback with
@@ -55,10 +63,14 @@ waits for and has to find; and build the judge first.**
    was tested and holds: sideways displacement is what makes a cliff read
    as broken rock, and no height-field shading reproduces it. Its price is
    64-87% of every window, mostly in building it. A thin-shell build
-   takes 13-23% off a cliff window with the solid unchanged; skipping the
-   wear passes at today's weak settings takes another 15-18% and cannot be
-   seen, but it moves pixels and so needs the owner's look. The rest is
-   the cost of the look (sections 3.4, 3.4b; R8).
+   takes 13-23% off a cliff window with nothing visible by eye (it is not
+   byte-identical: section 3.4b); skipping the wear passes at today's weak
+   settings takes another 15-18% and cannot be seen, but it moves pixels
+   and so needs the owner's look. The rest is the cost of the builds
+   tested, not a proven floor: the solid is kept because it works and
+   replacing it is out of scope now, and the question reopens if a
+   controlled comparison (same light, same materials) or the device
+   budgets say so (sections 3.4, 3.4b; R8).
 4. **Responsiveness comes from structure, not from micro-optimizing.**
    Materials and palette are about 10 ms of a 345-1,181 ms window.
    Keeping the baked surface and the geometry of visible tiles, and
@@ -110,7 +122,7 @@ order):
 | R5 | Stage caches; every control owns a stage | L | Color, shine, light-strength and palette controls at about 10 ms a megapixel |
 | R6 | Scheduler: batch tiles, no readback, cancel between stages | M | Lower latency on every path |
 | R7 | Preview level for every control; generic pipeline; preview raster | S | No 0.9 s stalls; all rows preview live |
-| R8 | The solid: thin shell, wear where it shows, march fix | M-L | 13-23% off a cliff window with the solid unchanged; about a third with the wear change |
+| R8 | The solid: thin shell, wear where it shows, march fix | M-L | 13-23% off a cliff window with nothing visible by eye; about a third with the wear change (inferred, to be measured together) |
 | R8b | Erosion per landform | S | Up to 0.4-0.9 s off each edit |
 | R9 | Controls: honest panel, then dials at three scopes, then blend and variations | M | From 234 rows to about 60 on the surface |
 | R10 | First-class tile accounting and reusable level ground; stamps deferred | M | Measure tile pressure on the 16x16 target and reduce merging |
@@ -155,7 +167,7 @@ the device while preserving the same final export quality.
 | Any other World slider drag | 100 ms at preview level | the same, and 5-8 s where the row re-runs the shape or weathering **[measured, section 3.5]**; no preview level exists |
 | Release to final visible art, 16x16 map | 1.0 s (proposed) | 16x16 not measured here; 4x4 was 1.4-1.9 s **[measured, docs/*_REVIEW.md]** |
 | First picture after load | 1.0 s | 1.7-2.2 s to final **[measured, docs/VOXEL_REVIEW.md]** |
-| Export | no budget; progress and cancel | 3.7 s for 4x4 **[measured, docs/VOXEL_REVIEW.md]** |
+| Export | no budget; progress and cancel | 3.7 s for 4x4 **[measured, docs/VOXEL_REVIEW.md]**; 16x16: 43-217 s for the export phase under Node and Dawn, one run each (Moon 43-70 s, Lava 103-127 s, Green 202-217 s) **[measured, docs/REDESIGN_TILE_BASELINE.md]** |
 
 ## 3. Findings
 
@@ -249,7 +261,9 @@ reduced to 16 px cells (`~/terraform-assets/agent-rd-look/ours-fit/`,
   Moon, and our cast shadows are darker than retail's on every world. The
   first draft's "broad light" gap is withdrawn.
 - **The one place ours is weaker is steep ground on Green**: retail darkens
-  it about twice as much whatever it faces, on seven windows of seven.
+  it about twice as much whatever it faces, on six windows of seven (the
+  first draft said seven; on Green 7 the sign reverses, +.004 against our
+  -.091, and retail's own fit there is poor: R² .11, azimuth +95°).
   That is the dark, patchy rock of section 3.2 seen as a number, and it is
   the same complaint the project has recorded since 2026-10-28.
 - **Three Green windows (4, 5, 6) do have a lower gain than retail**; they
@@ -258,6 +272,17 @@ reduced to 16 px cells (`~/terraform-assets/agent-rd-look/ours-fit/`,
   slope is .79 against retail's .42); our rock is a different tone, and
   tone that follows slope feeds both numbers; retail's light is not one
   direction on Red and Lava-1.
+- **What the fit cannot say.** Luminance against slope mixes light,
+  material tone, material placement and occlusion. The fit shows where the
+  pictures differ; it does not say which term to change (R2).
+- **Registration is not settled.** The fitting helper places height sample
+  `i` at the cell's center, `16i + 7.5` px
+  (`agent-rd-look/scripts/lib.py:37`). The format and our exporter place
+  it at the cell's corner, `16i` **[read, nanolathe
+  research/formats/tnt.md:101; sculpt-map.js:45-49]**. The effect of that
+  half cell on the fitted numbers is not measured: a quick shift test on
+  144 sections could not separate the two (R² .222 either way). The bench
+  of R0 must state and test its convention before a fit is quoted again.
 
 This is why the retail bench (R0) feeds retail's own heights to the engine:
 it removes the shape confound, and the same fit becomes a tripwire there.
@@ -472,7 +497,12 @@ is rejected.
 
 **What this means.**
 - **There is no trick that makes the solid cheap and leaves every pixel
-  alone.** The thin shell is the only lossless saving (13-23%). Skipping
+  alone.** The thin shell is the only saving that cannot be seen (13-23%):
+  identical by eye at 1x on four scenes, with 0.02-6.8% of cliff pixels
+  moved by more than 8/255, and 0.11% once main's march aliasing is fixed
+  **[measured, agent-rd-voxel/REPORT-2.md]**. It is not byte-identical
+  (the first draft said "lossless"), so its fixtures move and the owner
+  looks. Skipping
   the wear passes cannot be seen at the shipped settings but changes
   52-73% of cliff pixels by more than 8/255, so every rock scene's fixture
   moves and the owner must look. Both together remove roughly a third of a
@@ -631,10 +661,26 @@ From a read of `export/` and of the Nanolathe engine at `~/src/nanolathe`
 - **Nanolathe's Enhanced renderer already draws water**: ripples, foam, a
   damp band, reflections, from heights and sea level, with no map data. It
   expects the painted shore to agree with `height < sea` **[read]**.
-- **Tile uniqueness is the real limit on detail.** Our worlds measure 83-90%
-  unique tiles (Green 4x4: 3,668 of 4,420; Red 16x16: 60,072 of 66,820)
-  against retail's 5-10% **[measured, docs/VOXEL_TOOLS_REVIEW.md]**. Lossy
-  merging starts near 15x15 units. In Nanolathe a 65,536-tile map costs
+- **Tile uniqueness is a real limit on detail, and it binds later than the
+  first draft said.** Nine complete 16x16 exports, none merged
+  **[measured, docs/REDESIGN_TILE_BASELINE.md on
+  `prototype/redesign-foundations`]**:
+
+  | Distinct tiles of 66,820 slots | Green | Lava | Moon |
+  | --- | --- | --- | --- |
+  | No strokes | 39,252 | 1,021 | 37,214 |
+  | Six landforms | 40,590 | 4,530 | 38,714 |
+  | 25 strokes on a grid | 57,373 | 47,700 | 62,137 |
+
+  That is 59-93% unique wherever the ground is textured, against retail's
+  5-10%; earlier counts were Green 4x4 at 3,668 of 4,420 and Red 16x16 at
+  60,072 of 66,820 **[measured, docs/VOXEL_TOOLS_REVIEW.md]**. A map of
+  n x n units has (16n+1) x (16n+4) slots: 58,804 at 15x15, which cannot
+  reach the cap of 65,536, and 66,820 at 16x16, which reaches it only above
+  98% unique. At today's shares merging starts at about 17x17 (75,348
+  slots) **[calculated from sculpt-map.js]**. The first draft's "merging
+  starts near 15x15" was wrong. The nearest of the nine is dense Moon,
+  3,399 tiles under the cap. In Nanolathe a 65,536-tile map costs
   about 303 MB of atlas plus about 1.14 GB for its 2x detail atlas
   **[inferred from the documented cell sizes]**.
 - **The palette step is already good.** The draw quantizes with Knoll
@@ -788,8 +834,10 @@ their details.
   archived GameSpy article.
 - **Pointwise erosion filter:** Rune Skovbo Johansen, "Fast and Gorgeous
   Erosion Filter" (blog.runevision.com, 2026-03-30). Every point is computed
-  in isolation, so it chunks trivially. Its reference code is MPL-2.0; an MIT
-  repository needs its own implementation from the description.
+  in isolation, so it chunks trivially. Its reference code is MPL-2.0.
+  AGENTS.md allows no new dependencies and the project keeps its own code
+  MIT, so the plan assumes our own implementation from the description;
+  that is a project choice, not a legal bar.
 - **Interactive stream-power erosion:** Schott et al. 2023, "Large-scale
   Terrain Authoring through Interactive Erosion Simulation" (ACM TOG 42(5));
   artists paint uplift. Exact flow routing on a GPU in O(log n) passes: Jain
@@ -921,8 +969,18 @@ looks. Green 4's shape score of .59 is a statement about tracing.
      world at .92-.97 accuracy) and the plain as the section's modal
      height.
    - A committed list of section *names* (names are not retail pixels) splits
-     each world into a tuning half and a held-out half, fixed by a hash of
-     the name.
+     each world into a tuning set and a review set. **Split by group, not by
+     name.** The prototype split by sorted name within a kind, its author
+     changed the method after seeing three held-out renders
+     (`agent-rd-look/REPORT.md`, disclosure), and two pairs of sections
+     with identical art and heights sit on both sides of that split: lava
+     `flats/low-lava` and `isle/l-isle-lava`; moon `flat/lunarflgr256x`
+     and `flat/lunarflat256x` **[measured: decoded-pixel hashes]**. So the
+     prototype's 36 sheets are development data, not a held-out result. For
+     the bench: hash art and heights, group identical and overlapping
+     sections (and sections cut from one map, where that can be told),
+     split by group, and freeze a review set that nobody tunes on. Anything
+     a builder has looked at while tuning moves to the tuning set.
    - For each held-out section: load its heights with the height-image op
      (R1), render with the world's look and no strokes, write
      `ours.png` beside a copy of `retail.png` under `$R/bench/<commit>/`.
@@ -1350,7 +1408,8 @@ solid stays transient, built from the surface, for art.
 
 **Design, in order of cost.**
 1. **Free now** (each measured in section 3.4): skip brick allocation
-   where every gate is closed (lossless, about six lines in
+   where every gate is closed (3-15 pixels change, identical by eye;
+   about six lines in
    `voxelClassify`); fix the march aliasing with a one-voxel step near the
    surface, paid for by skipping empty space above each column's top (the
    pair costs the same as today; it changes green-2's rock band, so judge it
@@ -1362,8 +1421,12 @@ solid stays transient, built from the surface, for art.
    picture does not visibly change, but 52-73% of cliff pixels do by more
    than 8/255, so every rock scene's fixture moves: this step lands with
    the owner's eye on its sheet, not as a silent optimization.
-3. **A thin shell (BAND), compacted.** Section 3.4b: lossless on the
-   solid, 13-23% of a cliff window, nothing at the preview level. Port the
+3. **A thin shell (BAND), compacted.** Section 3.4b: identical by eye on
+   four scenes and not byte-identical (0.02-6.8% of cliff pixels move by
+   more than 8/255; 0.11% once the march is fixed), 13-23% of a cliff
+   window, nothing at the preview level. Its 27 probes of the field are
+   not a proven bound for every thin feature and setting, so it is judged
+   on sheets across the rock controls' ranges, not only at defaults. Port the
    prototype (`RD_BAND` on `rd/voxel`), store only the kept bricks (about
    20 MiB less on a cliff tile **[estimated]**), and try 4-voxel bricks,
    which were not timed.
@@ -1516,9 +1579,11 @@ the editor after the initial UI revamp and retail-biome improvements
 **Change.** Treat distinct tiles as a budget the artist can see, and make
 level ground reuse tiles the way retail's does.
 
-**Why.** Our maps use 83-90% unique tiles against retail's 5-10%; export
-degrades past about 15x15 units; at the cap Nanolathe holds over a gigabyte
-of atlas (section 3.7).
+**Why.** Our maps use 59-93% unique tiles against retail's 5-10%. At the
+16x16 target nothing merges today, but a dense Moon map sits 3,399 tiles
+under the cap, a level Green or Moon map spends 37,000-39,000 tiles on
+ground alone, merging starts at about 17x17, and at the cap Nanolathe
+holds over a gigabyte of atlas (section 3.7).
 
 **Design.**
 - **Show the number.** The status bar and the Export pane show the map's
@@ -1659,20 +1724,30 @@ R12's budgets apply throughout.
 
 ## 6. What to delete
 
-Each is dead or duplicated today **[read, audit section 10]**. Deleting them
-is one card (S), with every scene byte-identical.
+The first draft called all of these one deletion card. They are not: only
+the first table is dead code **[read, audit section 10]**.
+
+**Dead today: one card (S), every scene byte-identical** (branch
+`s0/dead-paths`).
 
 | Delete | Why |
 | --- | --- |
 | The non-chunked renderer path: `TerrainRenderer.create`, every `#else` of the 21 `CHUNK` tests, `sample`/`pick` on the renderer | No caller |
 | The 'preview' draw quality | No editor or check requests it; R7 replaces the idea with a real level |
-| The drainage plane and its nine entry points | Read by nothing; if R3 or R4 needs flow, it is rebuilt for that reader |
-| Mask planes 8, 9 and 20-24 | Unused, yet copied to the CPU and into a 7-layer texture per chunk |
-| The CPU twin of the Time blend (`sculpt-scene.js:383`) | A CPU copy of GPU work (rule 7); read export heights from the GPU result |
-| One of the two shader preprocessors | Two rule sets for the same job |
-| Amount, Roughness and Softness on landform cards; the shift-drag Amount gesture | Not read by the landform pass |
-| `isRiver` / `isBraided` tests on the form's name | Engine behavior keyed on a name; make it numbers (river span, belt) on any landform |
+| The duplicated `MASK_KEYS` constant | One definition, imported |
 | Stale names: `terrain-sculpt-v3.json`, `sculpt-common.wgsl` in messages, the JS-engine header of `engine-shape.wgsl` | Mislead the next reader |
+
+**Not dead: each its own change, with its callers, its replacement and its
+check.**
+
+| Change | What it needs first |
+| --- | --- |
+| The CPU twin of the Time blend (`sculpt-scene.js:379-390`) | It is live: the export's corner heights and the page's height sample read it (`weatheredHeights`, `sculpt-map.js`). Replacing it needs a GPU readback that returns the same height bytes on every scene, then the removal |
+| The drainage plane and its nine entry points | The audit found no reader; confirm, then remove with the buffer layouts it changes. If R3 or R4 needs flow, it is rebuilt for that reader |
+| Mask planes 8, 9 and 20-24 | Believed unused, yet copied to the CPU and into a 7-layer texture per chunk: a layout change, checked on every scene |
+| One of the two shader preprocessors | Two rule sets for the same job; a refactor with the shader checks |
+| Amount, Roughness and Softness on landform cards; the shift-drag Amount gesture | Not read by the landform pass; a control removal, with the control sweeps |
+| `isRiver` / `isBraided` tests on the form's name | Behavior keyed on a name becomes numbers (river span, belt) on any landform: a behavior change, judged on its scenes |
 
 After R9: every control the 5% sweep finds dead once the surface controls
 drive it (expected: a large share of the 237 World rows become reachable
