@@ -2524,9 +2524,8 @@ added: Cliff debris accumulation and Rockfall reach set it.
   scenes change 1.9 to 2.6% of their pixels, and their heights are the
   same bytes, so the realism report cannot move. Load and release times
   are unchanged on modern Green and on Green's own preset (two alternating
-  pairs each, before the hill gate below). Land tier passes;
-  `rock-controls-ui` and `export-bytes` passed before the hill gate and
-  were not run again.
+  pairs each, before the hill gate below). Land tier,
+  `rock-controls-ui` and `export-bytes` pass with the gate in.
 - *A hill has no foot.* The owner's hills carry little to no bare rock
   (2026-11-05). The foot counts only below a rise whose steepest step is
   .6 to .9 units a px or more: a wall, a mountain or a debris slope. On
