@@ -26,12 +26,12 @@ export class VoxelSurface {
     self.drawLayout=d.createBindGroupLayout({entries:[0,1,2,3,4].map(input)});
     self.uniform=d.createBuffer({label:'voxel region settings',size:48,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
     self.readback=d.createBuffer({label:'voxel allocation count readback',size:16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
-    renderer.track?.(self.uniform,'voxel settings',48,'shared');renderer.track?.(self.readback,'voxel count readback',16,'shared');
+    renderer.track(self.uniform,'voxel settings',48,'shared');renderer.track(self.readback,'voxel count readback',16,'shared');
     return self;
   }
   constructor(renderer){this.renderer=renderer;this.device=renderer.device;this.owned=[];this.stats={pieces:0,bricks:0,peakBytes:0,allocationMs:0};}
-  clear(){for(const r of this.owned){if(this.renderer.release)this.renderer.release(r);else r.destroy();}this.owned=[];}
-  own(resource,label,bytes){this.owned.push(resource);this.renderer.track?.(resource,label,bytes,'working');return resource;}
+  clear(){for(const r of this.owned)this.renderer.release(r);this.owned=[];}
+  own(resource,label,bytes){this.owned.push(resource);this.renderer.track(resource,label,bytes,'working');return resource;}
   buffer(label,size,usage=STORAGE()){return this.own(this.device.createBuffer({label,size:Math.max(16,size),usage}),label,Math.max(16,size));}
   texture(label,width,height){return this.own(this.device.createTexture({label,size:[width,height],format:'rgba32float',usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.TEXTURE_BINDING}),label,width*height*16);}
   settings(s,capacity=s.capacity){
@@ -56,18 +56,18 @@ export class VoxelSurface {
     return {origin:[x0,y0],step,width,height,columnsX,columnsY,capacity,low,high,screenLow:rect.y,screenHigh:rect.y+rect.height};
   }
   async render(draw){
-    const r=this.renderer,region=r.activeRegion,scale=r.chunked?r.uniformView.getFloat32(r.layout.fields.get('chunkScale').offset,true):1;
-    const origin=region?.screenOrigin??[0,0],width=r.canvas.width*scale,height=r.canvas.height*scale;
+    const r=this.renderer,region=r.activeRegion,scale=r.uniformView.getFloat32(r.layout.fields.get('chunkScale').offset,true);
+    const origin=region.screenOrigin,width=r.canvas.width*scale,height=r.canvas.height*scale;
     const full=r.uniformView.getInt32(r.layout.fields.get('full').offset,true)!==0;
-    const step=2**Math.max(full?0:1,Math.floor(Math.log2(r.voxelScale??scale)));
-    const h=r.config.heightBounds??[-90,300],extra=Math.max(64,(region?.reach.projection[1]??((h[1]-r.config.baseHeight)/2))*2+r.config.baseHeight-h[1]);
+    const step=2**Math.max(full?0:1,Math.floor(Math.log2(r.voxelScale)));
+    const h=r.config.heightBounds??[-90,300],extra=Math.max(64,region.reach.projection[1]*2+r.config.baseHeight-h[1]);
     const low=h[0]-extra-r.config.seaLevel,high=h[1]+extra-r.config.seaLevel;
     this.stats.pieces=this.stats.bricks=this.stats.peakBytes=0;const start=performance.now();
     let first=true;
     const piece=async rect=>{
       this.clear();
       const s=this.bounds(rect,step,low,high),n=s.columnsX*s.columnsY;
-      const available=(r.budgetBytes??512*1048576)-(r.reservedBytes??0)-(r.residentBytes??0);
+      const available=r.budgetBytes-r.reservedBytes-r.residentBytes;
       const metadata=s.width*s.height*32+n*16+s.capacity*16+16;
       const split=async()=>{
         this.clear();if(Math.min(rect.width,rect.height)<=8*scale&&Math.max(rect.width,rect.height)<=8*scale)throw Error('The voxel surface exceeds the terrain memory budget: '+JSON.stringify({rect,s,available,metadata,resident:r.residentBytes,reserved:r.reservedBytes}));

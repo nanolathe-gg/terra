@@ -20,23 +20,17 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     catch(error) { self.dispose(); throw error; }
   }
   constructor(canvas,config) {
-    // Never let the whole-map initializer allocate a world-sized field.
-    // All material and uniform setup still follows the existing renderer.
     canvas.width=1;canvas.height=1;
-    super(canvas,{...config,size:1,grid:1});
-    this.sourceConfig=config;this.chunked=true;this.resources=new Map();
+    super(canvas,config);
+    this.resources=new Map();
     this.budgetBytes=config.gpuBudgetBytes??(config.gpuBudgetMB??512)*MB;this.reservedBytes=config.gpuReservedBytes??0;
     this.peakBytes=0;this.peakBudgetedBytes=0;this.peakCPUBytes=0;this.evictions=0;
     this._busy=false;this.disposed=false;this.outputBytes=0;this.cpuWorkingBytes=0;
   }
   async initialize() {
     await super.initialize();
-    this.config=this.sourceConfig;this.size=this.config.worldSize??this.config.size;this.grid=this.config.worldGrid??this.config.grid;
-    for(const [key,bytes] of [['heightTexture',4],['routeTexture',4],['gridTexture',8],['maskTexture',this.maskLayers*4],['fieldsTexture',8]])
-      this.track(this[key],key,bytes,'working');
     this.track(this.uniformBuffer,'uniforms',this.layout.size,'shared');
     this.track(this.looseBuffer,'loose mask',this.looseBuffer.size,'loose');
-    this.height=null;
     this.fixedBytes=[...this.resources.values()].filter(r=>r.kind==='materials'||r.kind==='shared').reduce((n,r)=>n+r.bytes,0);
     this.limit=this.device.limits.maxTextureDimension2D;
     this.setColors();this.recommendedChunkSize=this.chunkSize();
@@ -48,7 +42,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   }
   release(resource) { if(!resource)return;resource.destroy();this.resources.delete(resource); }
   get residentBytes() { let n=this.outputBytes;for(const r of this.resources.values())n+=r.bytes;return n; }
-  get cpuRetainedBytes() { return (this.uniformData?.byteLength??0)+(this.height?.byteLength??0)+(this.maskBytes?.byteLength??0); }
+  get cpuRetainedBytes() { return this.uniformData?.byteLength??0; }
   recordMemory() {
     this.peakBytes=Math.max(this.peakBytes,this.residentBytes);
     this.peakBudgetedBytes=Math.max(this.peakBudgetedBytes,this.residentBytes+this.reservedBytes);
@@ -181,7 +175,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const T=GPUTextureUsage,read=T.TEXTURE_BINDING|T.COPY_DST|(fed?T.STORAGE_BINDING:0);   // H6b: the feed pass writes these four
     if(!reuse){
     this.heightTexture=this.texture('chunk height',gw,gh,1,'r32float',4,read);
-    this.routeTexture=this.texture('chunk routes',gw,gh,1,'rgba8unorm',4,read);
+    this.routeTexture=this.texture('chunk routes',gw,gh,1,'rgba8unorm',4,read);   // r route protection, g the shapes' crack amount, b painted cover signed about one half (above: sand, below: the world's ground), a crystal cells
     this.gridTexture=this.texture('chunk weather and material',gw,gh,4,'rgba8unorm',4,read);   // H5: layers 2 and 3 hold Green's Time maps
     if(this.maskLayers>this.device.limits.maxTextureArrayLayers)throw new Error('nanolathe: mask planes exceed the device texture array limit');
     this.maskTexture=this.texture('chunk masks',gw,gh,this.maskLayers,'rgba8snorm',4,read);
@@ -366,6 +360,6 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   dispose() {
     if(this.disposed)return;this.disposed=true;for(const resource of [...this.resources.keys()])this.release(resource);this.feedDummy?.destroy();
     this.context?.unconfigure();this.device?.destroy();if(this.outputCanvas){this.outputCanvas.width=0;this.outputCanvas.height=0;}
-    this.outputBytes=0;this.fixedBytes=0;this.cpuWorkingBytes=0;this.uniformData=null;this.uniformView=null;this.height=null;this.maskBytes=null;
+    this.outputBytes=0;this.fixedBytes=0;this.cpuWorkingBytes=0;this.uniformData=null;this.uniformView=null;
   }
 }

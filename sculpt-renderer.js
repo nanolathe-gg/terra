@@ -103,13 +103,9 @@ const GENERATED_SIZE = 512, GENERATED_LEVELS = 7;
 
 class SpecializationMiss extends Error { constructor(state) { super('nanolathe: pipelines for these gates are not built yet'); this.state = state; } }
 
+// The engine's materials, uniforms and passes. ChunkTerrainRenderer (sculpt-chunk-renderer.js) is the renderer that is constructed: it adds
+// the per-chunk textures, the memory accounting and renderChunk.
 export class TerrainRenderer {
-  static async create(canvas, config) {
-    const self = new TerrainRenderer(canvas, config);
-    await self.initialize();
-    return self;
-  }
-
   static async createChunked(canvas, config) {
     const {ChunkTerrainRenderer} = await import('./sculpt-chunk-renderer.js');
     return ChunkTerrainRenderer.create(canvas, config);
@@ -121,11 +117,10 @@ export class TerrainRenderer {
     this.config = config;
     this.context = canvas.getContext('webgpu');
     if (!this.context) throw new Error(NO_WEBGPU + ' The page could not get a WebGPU canvas.');
-    this.grid = config.grid;
-    this.size = config.size;
+    this.size = config.worldSize ?? config.size;
+    this.grid = config.worldGrid ?? config.grid;
     this.maskPlaneCount = config.maskKeys?.length ?? MASK_PLANE_COUNT;
     this.maskLayers = Math.max(1, Math.ceil(this.maskPlaneCount / 4));
-    this.height = new Float32Array(this.grid * this.grid).fill(config.baseHeight);
     this.timers = [];
     this.lastGPU = null;
     this.lastBakeGPU = null;
@@ -234,12 +229,10 @@ export class TerrainRenderer {
     // The world fields: clamped and linear; noise repeats.
     this.linearClamp = this.sampler({magFilter: 'linear', minFilter: 'linear'});
     this.linearRepeat = this.sampler({magFilter: 'linear', minFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat'});
-    // The fields are baked once per height change: r relief height, g route
-    // protection or (negative) beach, b crack/line code, a sand.
-    this.fieldsTexture = device.createTexture({label: 'fields', size: [this.size, this.size], format: 'rgba16float',
-      usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
+    // The fields a chunk's bake writes (r relief height, g route protection or (negative) beach, b crack/line code, a sand) and the
+    // grid-resolution inputs are textures of the chunk (ChunkTerrainRenderer.allocate); the loose-stone mask's buffer outlives the chunks.
     this.looseBuffer = device.createBuffer({label: 'loose mask', size: 16, usage: GPUBufferUsage.STORAGE});
-    this.fieldsOut = this.makeFieldsOut();
+    this.bindGroups = {};
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
     this.materialData = JSON.parse(modelTable);
@@ -259,9 +252,6 @@ export class TerrainRenderer {
     this.textures.noise = this.noiseTexture();
     this.textures.palette = (await gpu)[1];
     this.generationMs = performance.now() - generation;
-    this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture: this.heightTexture}, this.textureHeights(this.height), {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
-    this.setRoutes(new Float32Array(this.grid * this.grid));
     const variant = new URLSearchParams(location.search);
     // H4: the engine's own knob values go in first, over the world's, under the page's query.
     for (const [key, value] of Object.entries(this.config.engineDefaults || {})) if (!variant.has(key)) variant.set(key, value);
@@ -327,8 +317,6 @@ export class TerrainRenderer {
     this.v('uWaterMean', this.materialData.measured[this.config.water.deep].meanRGB.map(v => v / 255));
     this.i('uWaterLayer', this.materialData.order.indexOf(this.config.water.deep));
     this.i('uShallowLayer', this.materialData.order.indexOf(this.config.water.shallow));
-    this.setWeather();
-    this.setMaterialField();
   }
 
   sampler(descriptor) {
@@ -403,34 +391,6 @@ export class TerrainRenderer {
       pass.end();
     }
     this.device.queue.submit([encoder.finish()]);
-  }
-
-  // The grid-resolution inputs: authored height, routes (protection, crack
-  // amount, painted sand and ground cover), weathering and material fields.
-  worldTextures(grid) {
-    if (this.worldGrid === grid) return;
-    for (const t of [this.heightTexture, this.routeTexture, this.gridTexture, this.maskTexture]) t?.destroy();
-    const make = (label, format) => this.device.createTexture({label, size: [grid, grid], format,
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
-    this.heightTexture = make('height', 'r32float');
-    this.routeTexture = make('routes', 'rgba8unorm');
-    // Layer 0: the weathering worker's flow, deposit, talus and sand; layer 1:
-    // the material field (one texture binding for both, see initialize). H5: layers 2 and 3 hold
-    // the Time pass's maps (wear, wetness, hardness, slope; fall line, channel, ridge), Green's engine only.
-    this.gridTexture = this.device.createTexture({label: 'weather and material field', size: [grid, grid, 4], format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
-    // Painted masks (card C5), signed bytes so an unpainted
-    // cell is exactly 0.0: layer 0 rock, snow or ice, wet ground, moss;
-    // layer 1 scatter density, relief, cracks, banding; layer 2 a spare plane (the old face rock share),
-    // then the water choices (shore edge, shallow-to-deep edge, bed; card E1);
-    // layer 3 ground lumps (the rest is spare). Plane k of the page is layer
-    // k >> 2, channel k & 3. Fresh textures are zero.
-    this.maskTexture = this.device.createTexture({label: 'masks', size: [grid, grid, this.maskLayers], format: 'rgba8snorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
-    this.maskAllocatedLayers = this.maskLayers;
-    this.worldGrid = grid;
-    this.bindGroups = {};
-    this.maskUploaded = false;
   }
 
   // Base colours chosen for a world: {ground, slope, rock, sand, beach,
@@ -544,100 +504,6 @@ export class TerrainRenderer {
     if (!this.uniformsDirty) return;
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
     this.uniformsDirty = false;
-  }
-
-  // Materials were authored at sea 0. Give every shader that same datum while
-  // keeping editable/picking heights absolute. Sea-0 uploads remain untouched,
-  // including shader source/compilation, so existing worlds keep their pixels.
-  textureHeights(height) {
-    return this.config.seaLevel===0 ? height : height.map(h => h-this.config.seaLevel);
-  }
-
-  setWeather(flow, deposit, talus, sand) {
-    this.fieldsDirty = true; this.weatherMaps = false;
-    const bytes = new Uint8Array(this.grid * this.grid * 4);
-    if (flow && deposit) for (let i = 0; i < flow.length; i++) {
-      bytes[i * 4] = Math.min(255, Math.max(0, Math.round(flow[i] * 255)));
-      bytes[i * 4 + 1] = Math.min(255, Math.max(0, Math.round(deposit[i] * 255)));
-      bytes[i * 4 + 2] = Math.min(255, Math.max(0, Math.round((talus?.[i] || 0) * 255)));
-      bytes[i * 4 + 3] = Math.min(255, Math.max(0, Math.round((sand?.[i] || 0) * 255)));
-    }
-    this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture: this.gridTexture, origin: [0, 0, 0]}, bytes, {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
-  }
-
-  setRoutes(routes, crackLines, cover, crystal, masks) {
-    // Red: route protection; green: the shapes' crack amount; blue: painted
-    // cover, signed about one half (above: sand, below: the world's ground);
-    // alpha: crystal cells.
-    this.fieldsDirty = true;
-    const bytes = new Uint8Array(routes.length * 4);
-    for (let i = 0; i < routes.length; i++) {
-      const c = cover?.[i] || 0;
-      bytes[i * 4] = Math.round(routes[i] * 255); bytes[i * 4 + 1] = Math.round((crackLines?.[i] || 0) * 255);
-      bytes[i * 4 + 2] = Math.round((Math.max(-1, Math.min(1, c)) * 0.5 + 0.5) * 255); bytes[i * 4 + 3] = Math.round((crystal?.[i] || 0) * 255);
-    }
-    this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture: this.routeTexture}, bytes, {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
-    if (masks) this.setMasks(masks);
-  }
-
-  // Painted masks (card C5): fourteen signed-byte planes (rock, snow or ice, wet
-  // ground, moss, scatter density, relief, cracks, banding, a spare plane (the old face rock share);
-  // then, card E1, shore edge, shallow-to-deep edge, water bed, ground lumps and cracked bed),
-  // interleaved into maskTexture's layers. Nothing is uploaded while nothing
-  // has ever been painted; paintOn, scatterOn, styleOn, waterOn and lumpOn tell
-  // the shaders whether to read the texture at all. The water and lump planes
-  // have their own flags, so a stroke that sets only those leaves every other
-  // read of the texture, and the render it feeds, as it was.
-  setMasks(planes) {
-    const n = this.grid * this.grid;
-    this.maskPlaneCount = planes.length;
-    this.maskLayers = Math.max(1, Math.ceil(planes.length / 4));
-    if (this.maskLayers > this.device.limits.maxTextureArrayLayers) throw new Error('nanolathe: mask planes exceed the device texture array limit');
-    this.worldTextures(this.grid);
-    if (this.maskAllocatedLayers !== this.maskLayers) {
-      this.maskTexture.destroy();
-      this.maskTexture = this.device.createTexture({label: 'masks', size: [this.grid, this.grid, this.maskLayers], format: 'rgba8snorm',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
-      this.maskAllocatedLayers = this.maskLayers;
-      this.maskUploaded = true;
-      this.bindGroups = {};
-    }
-    // Four cells a read: this runs every frame a shape is dragged, and scanning
-    // five unpainted planes byte by byte cost 2 ms.
-    const painted = planes.map(a => {
-      if (!a) return 0;
-      if (a.length !== n) throw new Error('nanolathe: invalid mask plane dimensions');
-      if (!a.buffer || a.byteOffset % 4) return a.some(Boolean) ? 1 : 0;
-      const words = new Int32Array(a.buffer, a.byteOffset, n >> 2);
-      for (let i = 0; i < words.length; i++) if (words[i]) return 1;
-      for (let i = n & ~3; i < n; i++) if (a[i]) return 1;
-      return 0;
-    });
-    const any = painted.some(Boolean) ? 1 : 0;
-    if (!any && !this.maskUploaded) return;
-    this.fieldsDirty = true;
-    if (this.maskBytes?.length !== n * this.maskLayers * 4) this.maskBytes = new Int8Array(n * this.maskLayers * 4);
-    const bytes = this.maskBytes;
-    bytes.fill(0);
-    planes.forEach((a, k) => { if (!a) return; const at = (k >> 2) * n * 4 + (k & 3); for (let i = 0; i < n; i++) bytes[at + i * 4] = a[i]; });
-    this.device.queue.writeTexture({texture: this.maskTexture}, bytes, {bytesPerRow: this.grid * 4, rowsPerImage: this.grid}, [this.grid, this.grid, this.maskLayers]);
-    this.maskUploaded = Boolean(any);
-    this.i('uPaintOn', painted.slice(0, 9).some(Boolean) ? 1 : 0);
-    this.i('uScatterOn', painted[4] || 0);
-    this.i('uStyleOn', painted.slice(5, 9).some(Boolean) ? 1 : 0);
-    this.i('uOverrideOn', painted.slice(14, 18).some(Boolean) ? 1 : 0);   // H3: planes 14-17 (erosion, deposits, vegetation, exposure)
-    this.i('uWaterOn', painted.slice(9, 12).some(Boolean) || painted[13] ? 1 : 0);
-    this.i('uLumpOn', painted[12] || 0);
-  }
-
-  setMaterialField(field) {
-    const bytes=new Uint8Array(this.grid*this.grid*4);
-    if (field) for(let i=0;i<field.length;i++) bytes[i]=Math.round(Math.max(0,Math.min(1,field[i]))*255);
-    this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture:this.gridTexture,origin:[0,0,1]},bytes,{bytesPerRow:this.grid*4},[this.grid,this.grid]);
-    this.materialReady=Boolean(field);
   }
 
   // Group 0 with the fields (draw) or the routes (bake) at binding 6.
@@ -843,9 +709,9 @@ export class TerrainRenderer {
     } catch (error) { [this.fieldsDirty, this.bakedQuality] = baked; throw error; }
     this.flushUniforms();device.queue.submit([encoder.finish()]);
     if(!this.voxelColor||this.voxelColor.width!==this.canvas.width||this.voxelColor.height!==this.canvas.height){
-      if(this.voxelColor){if(this.release)this.release(this.voxelColor);else this.voxelColor.destroy();}
+      if(this.voxelColor)this.release(this.voxelColor);
       this.voxelColor=device.createTexture({label:'voxel terrain color',size:[this.canvas.width,this.canvas.height],format:this.format,usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
-      this.track?.(this.voxelColor,'voxel terrain color',this.canvas.width*this.canvas.height*4,'working');
+      this.track(this.voxelColor,'voxel terrain color',this.canvas.width*this.canvas.height*4,'working');
     }
     const clear=this.means.ground||[.19,.28,.14],timers=[];
     await this.voxel.render((commands,volume,rect,first)=>{
@@ -1061,15 +927,15 @@ export class TerrainRenderer {
   encodeLooseMask(encoder) {
     const supply = Math.max(this.uniformValue('uLooseSupply'),this.uniformValue('uDebrisAmount')), painted = this.gpuFlags || this.uniformValue('uScatterOn'), plants = this.uniformValue('uPlantsOn') > 0;
     if (!(supply > 0) && !painted && !plants) return;
-    const [x0, y0, w, h] = this.bakeWindow ?? [0, 0, this.bakeWidth ?? this.size, this.bakeHeight ?? this.size];
+    const [x0, y0, w, h] = this.bakeWindow;
     // Card P31: a plant's candidate lies up to 23 px (a shrub's cell and jitter) from the pixels it covers, the mask reads heights 8 px past its cell, and the apron adds 15.
     const margin = Math.max(Math.ceil(3.6 * Math.min(16, 3.3 * this.uniformValue('uLooseSize'))) + 4, plants ? PLANT_REACH : 0);
     const ox = Math.floor((x0 - margin) / 4), oy = Math.floor((y0 - margin) / 4);
     const nx = Math.ceil((w + 2 * margin) / 4) + 2, ny = Math.ceil((h + 2 * margin) / 4) + 2;
     if (nx * ny * 32 > this.looseBuffer.size) {
-      if(this.release)this.release(this.looseBuffer);else this.looseBuffer.destroy();
+      this.release(this.looseBuffer);
       this.looseBuffer = this.device.createBuffer({label: 'loose mask', size: nx * ny * 32, usage: GPUBufferUsage.STORAGE});
-      this.track?.(this.looseBuffer,'loose mask',this.looseBuffer.size,'loose');
+      this.track(this.looseBuffer,'loose mask',this.looseBuffer.size,'loose');
       this.fieldsOut = this.makeFieldsOut();
     }
     this.v('uLooseGrid', [ox, oy, nx, ny]);
@@ -1156,7 +1022,7 @@ export class TerrainRenderer {
     pass.setPipeline(this.bakePipeline);
     pass.setBindGroup(0, this.commonBindGroup('bake'));
     pass.setBindGroup(1, this.fieldsOut);
-    pass.dispatchWorkgroups(Math.ceil((this.bakeWidth ?? this.size) / 8), Math.ceil((this.bakeHeight ?? this.size) / 8));
+    pass.dispatchWorkgroups(Math.ceil(this.bakeWidth / 8), Math.ceil(this.bakeHeight / 8));
     pass.end();
     if (own) {
       timer?.encode(encoder);
@@ -1200,32 +1066,5 @@ export class TerrainRenderer {
     await this.device.queue.onSubmittedWorkDone();
     const ms = performance.now() - start;
     return {ms, gpuMs: (await this.gpuResult) ?? null};
-  }
-
-  sample(x, y) {
-    const gx = Math.max(0, Math.min(this.grid - 1, x / (this.size - 1) * (this.grid - 1)));
-    const gy = Math.max(0, Math.min(this.grid - 1, y / (this.size - 1) * (this.grid - 1)));
-    const ix = Math.floor(gx), iy = Math.floor(gy), jx = Math.min(ix + 1, this.grid - 1), jy = Math.min(iy + 1, this.grid - 1);
-    const fx = gx - ix, fy = gy - iy;
-    return (this.height[iy * this.grid + ix] * (1 - fx) + this.height[iy * this.grid + jx] * fx) * (1 - fy)
-      + (this.height[jy * this.grid + ix] * (1 - fx) + this.height[jy * this.grid + jx] * fx) * fy;
-  }
-
-  pick(x, y) {
-    const wx = x / this.canvas.width * this.size;
-    const sy = y / this.canvas.height * this.size;
-    // Trace from the near side to pick visible geometry even at steep folds.
-    // Fine displacement is below brush precision; the editable field owns picks.
-    let previousY = sy + 170;
-    let previous = previousY - (Math.max(this.config.seaLevel, this.sample(wx, previousY)) - this.config.baseHeight) * 0.5 - sy;
-    for (let wy = previousY - 2; wy >= sy - 80; wy -= 2) {
-      const value = wy - (Math.max(this.config.seaLevel, this.sample(wx, wy)) - this.config.baseHeight) * 0.5 - sy;
-      if (value <= 0 && previous >= 0) {
-        const t = previous / Math.max(1e-6, previous - value);
-        return [Math.max(0, Math.min(this.size - 1, wx)), Math.max(0, Math.min(this.size - 1, previousY - t * 2))];
-      }
-      previous = value; previousY = wy;
-    }
-    return [Math.max(0, Math.min(this.size - 1, wx)), Math.max(0, Math.min(this.size - 1, sy))];
   }
 }
