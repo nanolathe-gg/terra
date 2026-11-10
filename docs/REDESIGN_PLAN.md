@@ -2104,9 +2104,12 @@ with a shore and plant cover, in clay and through the palette at 1x.
 - *Time* **[measured, Codex]**: age 800, four times the default, with rain
   at the top of its range moves no height byte by more than 7 units and
   draws no joining gullies. Time already wears soft beds faster than hard
-  ones (`columnContrast`, `engine-weather.wgsl:90`) **[read]**. With round
-  1, larger budgets have now been tried in every stage with no new
-  mechanism, and none added a form.
+  ones (`columnContrast`, `engine-common.wgsl:354`,
+  `engine-erosion.wgsl:57`) **[read]**. So far, then: round 1 raised the
+  rock lattice, runoff rounds, voxel spacing, wear rounds, shadow steps
+  and sampling, step 0 raised Time's age and rain, and neither added a
+  form. Still untested: Shape's 2 px lattice, Time's own lattice and the
+  16 px spacing of its drainage.
 - *The heights* **[measured by Claude from the saved height bytes; the
   plateau is the 587 cells within 2 units of its top, 501 of them flat]**:
 
@@ -2117,6 +2120,7 @@ with a shore and plant cover, in clay and through the palette at 1x.
   | wander 80 px, width variation 60% | 1,489 (86) | 134 | 364 |
   | Gullies 60, Gully size 50 | 572 (28) | 0 | 501 |
   | Gullies 100, Gully size 80 | 680 (71) | 0 | 501 |
+  | Gullies 60, Gully size 50, plateau and ramp raised from 170 to 230 (against the same scene without Gullies) | 629 (33) | 0 of 562 | 481 of 481 |
   | Talus reach 80 alone | 0 | 0 | 501 |
   | Gullies 60, Gully size 50, Talus reach 80 | 999 (85) | 320 | 107 |
 
@@ -2128,23 +2132,29 @@ with a shore and plant cover, in clay and through the palette at 1x.
   restrained settings leave the front wall the same picture as the base: a
   band of chips along the rim, and no bench one can point to. Wander at
   80 px breaks the outline into round lobes and islands, each ringed by its
-  own ledges. Gullies cuts the wall across into spurs and V-gullies and
-  leaves the top alone, and on a taller cliff the spurs read better. Talus
-  reach moves no height without Gullies, and with them it carves up the
-  plateau top: a defect, or a control that only suits a ridge.
-- *Steps and beds do not meet* **[read, `engine-shape.wgsl:157-183`]**: a
-  landform's steps are terraces at even fractions of its height, moved and
-  broken by noise, and they do not read the rock column. The skin's beds
-  do (`voxelBed`, `engine-common.wgsl:918`). So a ledge in the art is not
-  a step in the heights.
+  own ledges. Gullies cuts the front wall across into spurs and V-gullies
+  and leaves the top alone, and with the top at 230 the spurs run longer.
+  Next to the reference they are too regular: evenly spaced, parallel and
+  of one length, with nothing at their mouths, and they show on the front
+  wall only. The ramp was not measured in this probe. Talus reach moves no
+  height without Gullies, and with them it carves up the plateau top: a
+  defect, or a control that only suits a ridge.
+- *Steps and beds do not meet* **[read, `engine-shape.wgsl:157-183`]**: in
+  Profile mode, the one step 0 used, a landform's steps are terraces at
+  even fractions of its height, moved and broken by noise, and they do not
+  read the rock column. The skin's beds do (`voxelBed`,
+  `engine-common.wgsl:918`). So a ledge in the art is not a step in the
+  heights. The two Shoreline modes (`stepReference`, with a layer width in
+  pixels and a riser height) were not read or rendered.
 - *Rock paint* **[by eye, Claude]**: on gentle ground it digs a pit down
   to the water and raises no outcrop; on the plateau top it changes the
   color only.
 - *Defects in the base scene's clay* **[by eye, Claude; image pixels of
   `tile-base`]**: rows of 2 px dashes on some faces (x840-920, y370-450),
-  pinholes through the solid to the water, a star of straight creases
-  where the ramp meets the ground (x700-740, y560-600) and straight-edged
-  scarps at the foot (x220-440, y650).
+  a star of straight creases where the ramp meets the ground (x700-740,
+  y560-600) and straight-edged scarps at the foot (x220-440, y650). In
+  other panels, pinholes through the solid to the water (`tile-steps`
+  x190, y575; `tile-all4` x625, y890).
 
 **An eighth reference, seen from above [owner, 2026-11-10].**
 `$R/references/topdown-escarpment.jpg`: "another hyper-realistic render,
