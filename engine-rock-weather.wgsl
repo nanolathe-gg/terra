@@ -7,7 +7,7 @@
 @group(1) @binding(2) var flowOut:texture_storage_2d<rgba32float,write>;
 @group(1) @binding(3) var sourceBeds:texture_2d<f32>;
 @group(1) @binding(4) var sourceOut:texture_storage_2d<rgba32float,write>;
-@group(1) @binding(5) var rimOut:texture_storage_2d<r32float,write>;
+@group(1) @binding(5) var rimOut:texture_storage_2d<rgba32float,write>;
 const FLOW_STEP=4.0;
 const FLOW_DIRS=array<vec2i,8>(vec2i(1,0),vec2i(1,1),vec2i(0,1),vec2i(-1,1),vec2i(-1,0),vec2i(-1,-1),vec2i(0,-1),vec2i(1,-1));
 fn flowAt(t:texture_2d<f32>,i:vec2i)->vec4f{return textureLoad(t,clamp(i,vec2i(0),vec2i(textureDimensions(t))-1),0);}

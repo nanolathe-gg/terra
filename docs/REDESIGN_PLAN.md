@@ -2416,8 +2416,8 @@ as low slabs under the ground cover.
 
 - *One system.* The rock weather pass, which already looks up from each
   cell for the cliff that sheds debris onto it, now also looks down for
-  the drop (`engine-rock-weather.wgsl` `rockDeposit`; one float a 4 px
-  cell). The result enters the painted-rock gate (`rimRockAt`), so the
+  the drop (`engine-rock-weather.wgsl` `rockDeposit`; it writes into a
+  texture the pass has finished with, so it takes no memory). The result enters the painted-rock gate (`rimRockAt`), so the
   rock is the voxel solid's own, in the world's recipe, with its joints,
   beds, wear and colors; there is no second rock model. The solid gives a
   rim half a face's relief, so level ground stays low.
@@ -2438,6 +2438,11 @@ as low slabs under the ground cover.
   modern Desert. **[by eye]** Green's turf stops 20 to 45 px short of the
   edge on a ragged line and granite shows; Desert shows salmon and cream
   slabs round its rim.
+- *Other shapes* **[by eye, one fixture in each modern world]**: a ramp
+  up the plateau stays clean; a shallow valley, a crater and a valley
+  full of water get no rim; a steep dry canyon cut into the top gets a
+  band of slabs on both sides, and no pits. A far paint stroke changes no
+  pixel of a rim **[measured]**.
 - *Not done.* The foot. Cliff debris reaches the plain but fades within
   about 32 px on Green and barely shows on Desert, and three systems lay
   it (see the weathering note below): which one carries the foot zone is
