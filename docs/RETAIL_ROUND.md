@@ -1,5 +1,9 @@
 # Retail round: one world per card, closer to retail
 
+**Parked on 2026-11-09 (AGENTS.md rule 10).** The owner put realistic
+terrain first and will return to retail later. Start no retail round until
+then. This page, the scenes and `repro/retail.sh` are kept for that return.
+
 A round of cards, one per world, each run by a small agent that tries
 settings against the world's retail windows, keeps what brings all of them
 closer, and proposes the tool or control changes it could not make with

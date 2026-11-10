@@ -89,12 +89,20 @@ page and an older card disagree, this page wins.
    - Presets are only numbers for existing controls.
    - A control the panel disables says why (`worldControlRequirement`,
      `shapeControlAvailable`).
-10. **Retail is the gold standard.** A world's look and its quality targets
-    come from retail crops: three windows per world, from different maps
-    (`repro/scenes/<world>-1..3.json`, crops in `$R/repro-r7`).
-    - Judge a visual change against retail, across all of a world's
-      windows, not against the last render. It may move the output when it
-      keeps or improves the match.
+10. **Real terrain is the standard for now; retail comes back later.** The
+    owner's decision of 2026-11-09: "let's focus significant work on
+    realistic high quality terrain generation and not focus on matching
+    retail, then we'll circle back later once we have more realism and
+    proper controls for each feature that created it."
+    - Judge a visual change by eye against real terrain and the owner's
+      reference pictures, not against the last render. The owner has the
+      final say on a look. The reference pictures are other people's art
+      and stay outside the repository.
+    - Do not tune a world toward retail crops, and do not turn a change
+      down because it moves a retail score.
+    - Nothing retail is deleted. The retail windows
+      (`repro/scenes/<world>-1..3.json`, crops in `$R/repro-r7`),
+      `repro/retail.sh` and the comparison sheets are kept for the return.
     - Fix the shape before the colour.
     - Tables measured from retail art may be committed. Retail pixels,
       sprites and maps are never read at run time.
@@ -123,8 +131,8 @@ all, for a release.
 | full | `repro/check.sh full --server <yours> --port <cdp> [--worlds ...]` | land, then the curve editor, the workspace and ground-cover checks, export bytes, the three control sweeps and the realism report | 19 min |
 
 A tier passes when every check in it exits 0. Scenes: untouched scenes
-match the base byte for byte, and changed ones are judged on the retail
-sheets. The base is the commit your branch grew from (`git merge-base HEAD
+match the base byte for byte, and changed ones are judged by eye on the
+sheet the check writes (rule 10). The base is the commit your branch grew from (`git merge-base HEAD
 main`); its renders are made once and kept in `$R/baseline/<commit>`.
 `--worlds` names the worlds your change may move (`none`: no scene may
 move; a variant's scenes go by their own name, such as `green-modern`). The
@@ -140,6 +148,9 @@ the page, with the same pixels.
 | the section editor | `node repro/curveedit.mjs --server <yours> --port <cdp>` | exit 0 |
 | modern Green | `python measure/realism.py --scenes <out>/scenes/green-modern-1 <out>/scenes/green-modern-2 <out>/scenes/green-modern-3` | the report gives, before and after, the mean count of statistics in the real range (of 15) and how many windows pass each of the six gates (closed basins, fabric, hilltop roundness, Hack's exponent, hollow and valley shares), and says which moved and why; a slope p90 above 1.62 is the owner's call |
 | the drag or bake path | `node repro/perf.mjs` (Chrome), alternating runs of the two builds | your report gives both builds' numbers |
-| a world's look (its rows, colors, presets or tables) | `repro/retail.sh <world>`, before and after (docs/RETAIL_ROUND.md) | your report gives each window's shape and look scores before and after |
+
+`repro/retail.sh` (docs/RETAIL_ROUND.md) is parked with rule 10. Keep the
+script; do not gate a change on its scores until the owner returns to
+retail.
 
 Use American English in all user-visible text.
