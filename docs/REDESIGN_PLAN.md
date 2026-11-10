@@ -122,9 +122,9 @@ been shown:
 | Goal | Confidence | Shown | Not shown | Cheapest test |
 | --- | --- | --- | --- | --- |
 | Usable, artist-friendly | Medium | The problems are measured (234 World rows over 12 screens; a shared map loses its world) and the fixes are ordinary work (R9a, R11) | No artist has used it; the tablet has never opened it; dials (R9b) are a proposal | The iPad's first run of today's editor; one R9a slice in the owner's hands |
-| Fast | Medium on the desktop; unknown at 16x16 and on the tablet | The 5 s and 8.4 s slider waits are a scheduling defect, not a cost of the look (section 3.5); stroke drags preview in 73-75 ms | The color-only redraw is unbuilt (35-40 ms is inferred); nothing is measured on a 16x16 map, which has 12.5 times the cells of the 2,336 px map every figure comes from; a cliff edit stays 0.3-1.2 s a window at final quality after every proposed saving | One latency and memory run on a 16x16 map; R5 step 0 |
+| Fast | Medium on the desktop; first 16x16 runs measured, tablet unknown | Rain first weathered pixels fell from 6.24-6.36 s to 1.64-2.46 s; two 16x16 runs give pointer p95 76.3-78.5 ms and release-to-final 2.223-2.260 s **[measured, sections 2 and 3.5]** | The 50 ms drag and 1 s release budgets are unmet; Face steepness sometimes adds a pass; held-slider preview and color-only redraw remain unbuilt | Repeat at the target 1440p workload; R5 step 0; the iPad first run |
 | Hyper-real | High for cliff faces and ground detail; low for the form of mountains and hills | Cliffs, by the owner's eye, and why they work (sideways displacement) | No approach tested gave mountains a viewer would take for real; the format's 242 colors and 32 px tiles stay | R3's time-boxed trial on the shape fixtures |
-| Matches retail | Low to medium | Light is close already (equal on Green; 1.3-1.65x strong elsewhere, a tuning matter) | No demonstrated route to "could be a retail section": five rock rewrites did not move it, a relief term helped Red and failed Lava and Moon, three world folders are unopened, and the prototype sheets are development data from a Python model, not the engine | One world's retail heights through the engine (after R1), judged by the owner |
+| Matches retail | Low to medium | Light is close already (equal on Green; 1.3-1.65x strong elsewhere, a tuning matter) | No demonstrated route to "could be a retail section": five rock rewrites did not move it, a relief term helped Red and failed Lava and Moon, three world folders are unopened, and the prototype sheets are development data from a Python model, not the engine | Two retail sections' heights through the engine now exist as pairs for the owner's eye (`~/terraform-assets/agent-s0-heights/demo/`, with Lava corrected to sea 23 in `~/terraform-assets/agent-codex-handoff/lava-l030-sea23/`); a whole world on R0's bench is next |
 | New and alien worlds | Medium | Every world already runs from data on one engine, and controls are continuous | The Lava look the owner liked came from the Python look model, not the engine; no invented world has yet been built in the editor from controls alone | Port the "Cells" relief kind (R4) and build one invented world |
 
 If the form trial and the retail test both fail, what the plan still
@@ -180,18 +180,19 @@ feedback; the owner has no Windows test machine.
 
 **Proposed latency budgets.** Every number recorded so far comes from one
 Apple M3 Pro. These are candidate targets, not demonstrated support on the
-iPad or the 16x16 workload. Record browser/OS, viewport, device pixel ratio,
+iPad; the first 16x16 desktop measurements below do not meet every
+budget. Record browser/OS, viewport, device pixel ratio,
 and actual render resolution for each device. The 1440p rows below describe
 the desktop benchmark; choose and measure the iPad's render resolution on
 the device while preserving the same final export quality.
 
 | Interaction | Budget (p95) | Today |
 | --- | --- | --- |
-| Stroke drag: pointer to picture | 50 ms at preview level | 73-75 ms **[measured, docs/VOXEL_REVIEW.md]** |
+| Stroke drag: pointer to picture | 50 ms at preview level | 16x16 p95 78.5 / 76.3 ms **[measured, two runs below]** |
 | Color, finish or light slider drag | 50 ms, full quality at 1440p | 0.6 s to a first change, 0.9-1.1 s settled **[measured, section 3.5]**: every cached image re-bakes at final level |
-| Any other World slider drag | 100 ms at preview level | the same, and 5-8 s where the row re-runs the shape or weathering **[measured, section 3.5]**; no preview level exists |
-| Release to final visible art, 16x16 map | 1.0 s (proposed) | 16x16 not measured here; 4x4 was 1.4-1.9 s **[measured, docs/*_REVIEW.md]** |
-| First picture after load | 1.0 s | 1.7-2.2 s to final **[measured, docs/VOXEL_REVIEW.md]** |
+| Any other World slider drag | 100 ms at preview level | Rain first weathered pixels 1.64-2.46 s, Face steepness 1.79-2.63 s after the one-Time-pass fix **[measured, section 3.5]**; World slider preview remains unfinished |
+| Release to final visible art, 16x16 map | 1.0 s (proposed) | 2.223 / 2.260 s **[measured, two runs below]** |
+| First picture after load | 1.0 s | 16x16: first paint 14.3 / 15.0 ms after applying the scene in an open editor, final visible art 2.884 / 2.780 s **[measured, below; first paint is not final art]** |
 | Export | no budget; progress and cancel | 3.7 s for 4x4 **[measured, docs/VOXEL_REVIEW.md]**; 16x16: 43-217 s for the export phase under Node and Dawn, one run each (Moon 43-70 s, Lava 103-127 s, Green 202-217 s) **[measured, docs/REDESIGN_TILE_BASELINE.md]**. Sixteen times the 4x4 figure would be about 59 s, so Moon is in line and Green is three to four times over; the harness differs from the 4x4 run's |
 
 **How a budget is measured.** One number per interaction lets a build pass
@@ -201,11 +202,48 @@ current preview over the whole view, and release to final art. Each is
 taken cold and warm, during a continuous drag and across rapid reversals,
 as a p95 over enough interactions to mean something (not a median of
 five), with the device, OS, browser, viewport, device pixel ratio and
-render resolution written beside it. Nothing in this plan was measured on
-a 16x16 map or on the iPad: every figure in section 3 comes from 1,024 px
-windows and 4x4 maps on one M3 Pro. The first latency run on a 16x16 map
-is therefore a finding, not a check, and whole-map costs (the Time pass,
-export, memory) may reorder section 5.
+render resolution written beside it. The two 16x16 runs below are a first
+finding, not a new check or a full budget acceptance trial. The iPad is
+still unmeasured; section 3's earlier figures use 1,024 px windows and
+4x4 maps. Time, export and memory costs may still reorder section 5.
+
+**First 16x16 latency and memory, 2026-11-09 [measured].** Local main
+`61119aba`, `repro/perf.mjs map16`, `repro/scenes/green-2.json`, no export,
+two sequential runs. Apple M3 Pro, 18 GiB unified memory, macOS 26.6.2,
+headless Chrome 157.0.8103.39 with Metal. Chrome window 1600 x 1200;
+viewport 1600 x 1113 at device pixel ratio 1 (captured separately with the
+same launch settings); the measured terrain view is 1208 x 841 art pixels
+at 1x. Budgets: GPU 512 MiB, heap 1536 MiB. No other terrain benchmark
+was active; ordinary desktop applications remained open, so background
+GPU use was not isolated. Evidence:
+`~/terraform-assets/agent-codex-handoff/perf16/`.
+
+| Metric | Run 1 | Run 2 |
+| --- | ---: | ---: |
+| Editor boot wait (ms) | 295 | 447 |
+| First picture after scene application (ms) | 14.3 | 15.0 |
+| Harness weather-ready marker (ms) | 13.4 | 14.1 |
+| Last load Time pass completed after scene application (ms) | 2037.6 | 1912.4 |
+| Final visible art after scene application (ms) | 2884.4 | 2779.9 |
+| Stroke pointer latency p50 (ms) | 65.9 | 30.6 |
+| Stroke pointer latency p95 (ms) | 78.5 | 76.3 |
+| Release to final visible art (ms) | 2223.3 | 2260.1 |
+| Load Time passes, summed wall time (4 passes; ms) | 1364.4 | 1378.4 |
+| Release Time passes, summed wall time (4 passes; ms) | 1350.5 | 1367.6 |
+| Peak reported GPU bytes | 342483744 | 342549280 |
+| Peak reported JS heap bytes | 52582686 | 55614994 |
+
+All 70 pointer moves were measured in each run; no visible tile lacked a
+final bake after load or release, and both consoles were empty. The large
+p50 spread is retained, not averaged away. On this paged map the early
+weather marker says "ready on demand": it is not the completion of the
+weather passes **[read, `repro/perf.mjs` and `sculpt.js`]**. The four load
+passes took at most 368.5 / 368.6 ms each, and the four release passes at
+most 353.4 / 357.9 ms each **[measured]**. These are view-driven page
+passes, not one whole-map pass. GPU bytes are the editor's sampled
+allocation accounting, and heap bytes are sampled `usedJSHeapSize`, not
+process RSS or a hardware allocation peak **[read, `sculpt-canvas.js`]**.
+The 50 ms p95 drag and 1 s release budgets are not met **[measured]**.
 
 **The iPad before any iPad design.** Open today's editor on the tablet and
 record whether it starts, the adapter's limits, the first-picture time and
@@ -323,16 +361,23 @@ reduced to 16 px cells (`~/terraform-assets/agent-rd-look/ours-fit/`,
 - **What the fit cannot say.** Luminance against slope mixes light,
   material tone, material placement and occlusion. The fit shows where the
   pictures differ; it does not say which term to change (R2).
-- **Registration is not settled.** The fitting helper places height sample
-  `i` at the cell's center, `16i + 7.5` px
-  (`agent-rd-look/scripts/lib.py:37`). The format and our exporter place
-  it at the cell's corner, `16i` **[read, nanolathe
-  research/formats/tnt.md:101; sculpt-map.js:45-49]**. The effect of that
-  half cell on the fitted numbers is not measured: a quick shift test on
-  144 sections had no power to separate the two (on Green's 71 sections
-  the median R² was .222 at both offsets, and the best offsets piled up
-  at the ends of the search range). The bench
-  of R0 must state and test its convention before a fit is quoted again.
+- **Registration: corners, and the fitting helpers are half a cell off.**
+  The fitting helper places height sample `i` at the cell's center,
+  `16i + 7.5` px (`agent-rd-look/scripts/lib.py:37`), and so does
+  `repro/retail_crop.py:30-32`. The format and our exporter place it at
+  the cell's corner, `16i` **[read, nanolathe
+  research/formats/tnt.md:101; sculpt-map.js:45-49]**. The height-image
+  card measured it along x, where the oblique view does not move the art:
+  retail art sits over its bytes at a shift of about 0 px, not 7.5, on
+  Moon (8 of 8 sections; mean R² .807 at the corner against .743 at the
+  center) and on Red (6 of 6 fitted). Green's coast sections are mixed (4
+  of 8) and Lava's isles gave no peak **[measured by that card, not
+  re-run here: `~/terraform-assets/agent-s0-heights/registration/`; 4 px
+  steps, about ±4 px by its own calibration; vertical not measured]**.
+  What the half cell does to this section's fitted numbers is still not
+  measured (a shift test on 144 sections had no power: on Green's 71 the
+  median R² was .222 at both offsets). Follow-up, before a fit is quoted
+  again: move both helpers to corners and refit.
 
 This is why the retail bench (R0) feeds retail's own heights to the engine:
 it removes the shape confound, and the same fit becomes a tripwire there.
@@ -637,8 +682,36 @@ not re-run here]**:
   30 ms, but every input clears the whole cache twice and restarts at the
   center tile at final quality, so the rest of the view waits for release:
   whole view 640 ms after the first input.
-The fix is on that branch: only the latest value's pass runs, and slider
-drags draw at the interaction level.
+
+**Landed locally, 2026-11-09.** Only the one-Time-pass fix (`cc71df74`,
+integration `61119aba`) landed. A pass in flight finishes; only the newest
+waiting request may submit next **[read]**. Two alternating main/fix pairs,
+each with cold and warm drags through eight values, on the M3 Pro and
+Chrome 157 (1440 x 900, device pixel ratio 1, 1048 x 628 terrain view at
+1x, Green's default 2336 px map with one Hill; no concurrent terrain
+benchmark observed, ordinary desktop apps open), gave:
+
+| Row | Before: first weathered pixels / passes | After: first weathered pixels / passes |
+| --- | --- | --- |
+| Rain | 6.244-6.362 s / 8 | 1.640-2.460 s / 2-3 |
+| Face steepness | 1.758-1.876 s / 2 | 1.791-2.626 s / 2-3 |
+
+**[Measured]** Rain's queue is shorter; Face steepness is slower in three
+of four paired drags, by 0.702-0.834 s, when it runs a third pass. The fix
+does not finish slider responsiveness. The 18 final-state cases (drags,
+scripted values, keys, a click and paged maps) match the pre-fix reference
+pixels, levels, export gate and undo counts. The land tier passed, with
+0 of 34 scenes changed. General `perf.mjs map4` in two alternating pairs:
+pointer p50 68.5 / 64.8 ms before, 61.1 / 61.7 ms after; release-to-final
+1.666 / 1.745 s before, 1.658 / 1.639 s after **[measured]**. Evidence:
+`~/terraform-assets/agent-codex-handoff/sliders/` and `perf-slider/`.
+
+**Unfinished.** `10477351` (held-slider preview) did not land. It postpones
+Rain's Time pass until release, so the held Rain preview contains old
+weather **[read]**; its earlier agent also reported no tile baked during
+short paged Rain/Face drags **[measured by that agent, not rerun here]**.
+Next: make held previews show current input, including paged maps, and
+avoid the extra Face steepness pass before proposing that commit again.
 
 **The ten problems, ranked** (evidence in the audit's sections 1-5):
 
@@ -1142,6 +1215,55 @@ finds no mismatch on a scene that uses the op.
 **Risks.** Bicubic interpolation of 16 px samples is smooth; that is the
 point (the engine's refinement must add the rest).
 
+**Built (2026-11-09, `s0/height-image`, on local main).** It differs from
+the design above in four ways:
+
+- The fields are the node's own, not under `params`: in `sculpt.js`,
+  `params` means a brush card, which the panel would write into.
+- The surface is a Catmull-Rom cubic made straight within 5/32 of a cell
+  of each sample (`HM_COLLAR`). The fields' lattice is about 2.0009 px, so
+  no lattice cell sits on a 16 px corner and the export reads a corner as
+  a mix of four cells; with the collar 0 of 17,680 export corners differ
+  from the image's bytes, with the plain cubic 641 do **[measured by the
+  card, Node on Dawn]**.
+- The node also writes a two-cell margin past its outer samples, where the
+  edge samples repeat (without it the last row and column cannot export
+  exactly). `flatten` eases back into the ground across that margin and
+  `replace` does not; over the samples they are the same.
+- One added field, `bits` (8 or 16).
+
+Acceptance is met with no Time pass: two retail sections give back 1,024
+of 1,024 bytes each, and `repro/regional.mjs` finds no mismatch on
+`repro/shape-scenes/heights-bumps.json`. With the Time pass on, 149 bytes
+of the Green section move by up to 3 and 95 of the Lava section by up to
+4 **[measured by the card]**: R0 must say whether its renders run with it.
+
+**Landing verification [measured].** The 8x8 paged image gives 0 bad
+corners out of 4,096 before and after undo through the export's own read
+path; its debug samples also match in this run. Export self-check passes,
+console empty. The land tier reports 0 of 34 scenes changed; native and
+WebAssembly exports match for Green 4x4, Lava 8x8 and Red 16x16. Two
+alternating main/branch `perf.mjs map4` pairs (M3 Pro, Chrome 157, ordinary
+desktop apps open, no concurrent terrain benchmark observed): pointer p50
+68.5 / 68.7 ms before and 66.3 / 66.1 ms after; release-to-final
+1.641 / 1.675 s before and 1.678 / 1.685 s after. No meaningful slowdown
+was observed in these pairs. Evidence: `~/terraform-assets/agent-codex-handoff/`.
+
+The Lava `l030` pair was rerendered with sea 23, plain 47, and cropped at
+(256, 280), as `demo/prepare.py --pairs` does **[measured]**. It is in
+`~/terraform-assets/agent-codex-handoff/lava-l030-sea23/pair.png` (retail
+left, generated right), awaiting the owner's judgment; no look score is
+assigned here.
+
+Not built, each a proposal:
+
+- The import entry. The kind is reachable from scene files and the debug
+  console only; nothing in the panel makes, moves or scales one.
+- A plain set apart from the sea in `repro/render.mjs` (a world's plain is
+  its sea plus a fixed step), which R0's bench needs.
+- Storage for an image too large for a share link: an incompressible or
+  16-bit image of the largest size passes the Worker's 1 MiB.
+
 #### R2. Light and placement as fitted numbers (S-M)
 
 **Change.** Make the light fit of section 3.1 a standing tripwire on the
@@ -1592,10 +1714,13 @@ fixed base level (section 3.8); whether the engine's own pass has that
 property is the first thing to check. The pass already dispatches over
 active tiles only, so part of this saving may exist; measure before
 building. The 5 s and 8.4 s waits of section 3.5 were one pass per input event, not
-this pass's own cost; with that fixed, what remains is one pass of about
-0.8 s per settled edit on a 2,336 px map. What it costs on a 16x16 map,
-with 12.5 times the cells, is not measured and decides how much this card
-matters.
+this pass's own cost. With requests coalesced, the final requested pass
+still costs about 0.8 s on a 2,336 px map, and a drag can run 2-3 passes
+(section 3.5). What it costs on a 16x16 map,
+with 12.5 times the cells, is now measured for the view in section 2:
+four paged passes sum to 1.350 / 1.368 s after release, with final visible
+art at 2.223 / 2.260 s **[measured]**. This is not a whole-map Time pass;
+measure the edit's affected pages before estimating this card's saving.
 **Accepted when** release-to-final falls by the measured Time cost on a
 map where one landform of ten is edited, and the report states the largest
 height difference from the whole-map pass (the goal is none beyond
@@ -1877,9 +2002,12 @@ M3 iPad Air. Tile accounting is a first-class constraint: establish its
 waiting for blend, variations, or stamps. Symmetry, fairness tools, starter
 content, Metal, Urban, and extended output formats are deferred.
 
-**In flight on 2026-11-09.** `s0/dead-paths`, `s0/slider-response` and
-`s0/height-image` (the first-wave cards, each on its own branch), and on
-`prototype/redesign-foundations` the shape fixtures and sheets
+**Landed on local main, 2026-11-09 evening (not pushed).** The dead-code
+table of section 6 (`s0/dead-paths`), R1 (`s0/height-image`, `1a68158d`),
+and the one-Time-pass part of `s0/slider-response` (`cc71df74`, integrated
+as `61119aba`). The held-slider preview remains unfinished (section 3.5).
+
+**In flight.** On `prototype/redesign-foundations`, the shape fixtures and sheets
 (`repro/shape-bench.mjs`), the 16x16 tile baseline
 (`measure/tile-baseline.mjs`) and a design study for R9a. The four shape
 fixtures there use their own paths, so the prototype sheets of section 3.8
@@ -1893,7 +2021,7 @@ hold several separate changes.)
 | Card | Size | Why first |
 | --- | --- | --- |
 | Section 6's dead-code table only | S | Everything after is easier with 21 dead branches gone; byte-identical |
-| The slider waits of 5.0 s and 8.4 s (diagnosed: one Time pass per input event, section 3.5): run only the latest, and preview during slider drags | S | The largest measured wait in the editor |
+| Slider response (section 3.5): one-Time-pass fix landed; current held previews and the extra Face steepness pass remain | S | Rain improved; other slider waits remain measured |
 | R11 the map carries its world; export ignores view options | S | A correctness bug in sharing, and R0's scenes need it; after the two branches that share its files |
 | The iPad's first run of today's editor (section 2) | S, the owner's hands | Every tablet decision depends on what it finds |
 | R1 height-image op | S | R0 needs it |
@@ -1905,9 +2033,9 @@ Gate: LLM visual comparisons and the owner's starting retail and shape
 reviews are recorded; the latency table and 16x16 tile baseline print.
 Keep desktop measurements distinct from the iPad results.
 
-**Track A: speed.** The latency bench on a 16x16 map (its result may
-reorder this track) -> R5 step 0 (the one-edit cache experiment) -> R5
-step 1 (the surface kept, as an atlas) -> R5 steps 2 and 3 (split geometry
+**Track A: speed.** The first 16x16 latency measurements are in section 2;
+confirm them on the target display workload -> R5 step 0 (the one-edit
+cache experiment) -> R5 step 1 (the surface kept, as an atlas) -> R5 steps 2 and 3 (split geometry
 from color; the stage map) -> R8's units one at a time -> R6 (scheduler)
 -> R8b (erosion per landform, once shown equal) -> R8 step 4 (the owner's
 call on a brickless solid).
@@ -1950,8 +2078,12 @@ R12's budgets apply throughout.
 The first draft called all of these one deletion card. They are not: only
 the first table is dead code **[read, audit section 10]**.
 
-**Dead today: one card (S), every scene byte-identical** (branch
-`s0/dead-paths`).
+**Dead code: one card (S), landed on local main 2026-11-09** (branch
+`s0/dead-paths`: 101 lines added, 375 removed). 0 of 34 scenes changed;
+three exported maps have the same `.ufo` and PNG hashes as the build
+before; four alternating runs of `repro/perf.mjs` show no difference
+beyond the run-to-run spread on a shared GPU (stroke-drag pointer latency
+p50 67 and 73 ms before, 71 and 73 ms after) **[measured]**.
 
 | Delete | Why |
 | --- | --- |
@@ -1959,6 +2091,15 @@ the first table is dead code **[read, audit section 10]**.
 | The 'preview' draw quality | No editor or check requests it; R7 replaces the idea with a real level |
 | The duplicated `MASK_KEYS` constant | One definition, imported |
 | Stale names: `terrain-sculpt-v3.json`, `sculpt-common.wgsl` in messages, the JS-engine header of `engine-shape.wgsl` | Mislead the next reader |
+
+Three removals went a step past "no caller": each was reachable from the
+debug console only (the 'preview' quality; `sculptDebug.bakeMs()` before
+the first chunk, which now throws; the 1x1 placeholder textures). Left
+undecided by that card: the pass timers (a side branch,
+`s0/dead-paths-no-timers`, removes them and would take
+`repro/perf.mjs:122-123` with it), merging `TerrainRenderer` into
+`ChunkTerrainRenderer` now that only one is constructed, and two `quality`
+arguments the renderer no longer reads (`sculpt-canvas.js:151,162`).
 
 **Not dead: each its own change, with its callers, its replacement and its
 check.**
@@ -2070,9 +2211,10 @@ approval of every proposed mechanism or estimate in sections 3-6.
   cross-GPU reproducibility. The latter is not the source-file contract.
 - Run today's editor on the iPad before designing for it (section 2), and
   arrange an HTTPS address for the tablet to reach.
-- Measure latency, memory and export time on a 16x16 map. Export took
-  43-217 s headless at that size against 3.7 s at 4x4; whether the artist
-  needs progress, cancel or a faster path there is undecided.
+- Extend the first 16x16 latency and memory runs (section 2) to the target
+  1440p workload and the iPad. Export took 43-217 s headless at that size
+  against 3.7 s at 4x4; whether the artist needs progress, cancel or a
+  faster path there is undecided.
 - Tile reuse beyond pooled ground waits for copy and paste of paths
   (decision 7). Until then, watch the count: with stamps deferred and the tile
   budget is first-class (R10): dense Moon is 3,399 tiles under the cap.
