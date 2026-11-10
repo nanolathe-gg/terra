@@ -2047,11 +2047,10 @@ first rounds].**
 - *Controls* come from the rows: each mechanism brings its own, a rock
   type or a world is a set of numbers for them (rule 9), and an invented
   world is those numbers taken outside what Earth allows.
-- *Not yet settled*: how many art pixels make a meter (below); how far
-  geology may move the cliff an artist drew (below); references drawn in
-  our own view, since the seven pictures look across at cliffs and ours
-  looks down; and references for soft ground, which the seven pictures do
-  not show and which is most of a map.
+- *Not yet settled*: references drawn in our own view, since the seven
+  pictures look across at cliffs and ours looks down; and references for
+  soft ground, which the seven pictures do not show and which is most of a
+  map. The scale and the drawn cliff line are answered below.
 
 **Ledger v0 [Codex, 2026-11-09 and 10; `$R/agent-realism/ledger/`].**
 Rendered at `e4b66fc0` with normal budgets, on round 1's tile and
@@ -2094,19 +2093,28 @@ end. A settings-only step comes first (`CODEX_HANDOFF_STEP0.md` in
 `$R/claude-handoff-2026-11-09/`): the skin's depth measured, the skin and
 the heights each pushed with today's controls, rock painted off the rim.
 
-**Scale: proposed, not adopted.** Codex proposes 4 art pixels to a meter
+**Scale: none fixed; a working one may be used [owner decision,
+2026-11-10].** Codex proposes 4 art pixels to a meter
 from the sizes of the game's models (an ARM Commander 41.5 units tall, a
 Kbot Lab on 6 by 6 cells) **[measured by Codex from the stock unit files;
 the choice of 4 is its inference]**. A height unit is half a pixel, so at
 that scale the whole 255-unit range is 32 m and the relief of the two
 retail sections measured in this review (45 and 76 units) is under 6 m and
-under 10 m **[arithmetic]**. Whether terrain should read at the units'
-scale or as larger country in miniature is the owner's to say. Until then
-a reference is chosen and reduced by the size of its features in pixels.
+under 10 m **[arithmetic]**, while the owner's reference pictures read as
+larger country. Asked, the owner accepted choosing and reducing a
+reference by the size of its features in pixels, and added: "if a scale
+can help feel free to use it and we can tweak if needed." So a card may
+state a working scale where it helps; none is a rule.
 
-**Open question for the owner.** May the geology move the cliff line an
-artist drew, and by how much, with level building ground and ramps held
-fixed?
+**Geology moves the drawn line [owner decision, 2026-11-10].** Asked
+whether the geology may move the cliff line an artist drew: "Yes, and it
+should because we are drawing parametric curves and real terrain has
+natural variation." The question was put with a recommendation that the
+yes answers: within a band the artist sets, with level building ground
+and ramps held fixed. How wide that band is by default, and how the fast
+editor shows the moved line before a bake, are for the row 1 proposal to
+say. Because the line moves, row 1 cannot live in the skin alone: what
+moves a cliff must reach the heights (rule 11).
 
 Three tracks, coordinated where they share files and interfaces. Keep
 small commits grouped into bounded review milestones. LLM visual
@@ -2397,6 +2405,17 @@ approval of every proposed mechanism or estimate in sections 3-6.
     removes 98.9 to 100 percent of the power in the 5 to 10 px band in
     those windows **[measured, Codex, ledger v0]**.
 
+### Answers of 2026-11-10
+
+- **Rule 10 adopted [owner decision].** "Yes land it." `AGENTS.md` rule
+  10 now puts real terrain first and parks retail tuning.
+- **Geology moves the drawn line [owner decision].** "Yes, and it should
+  because we are drawing parametric curves and real terrain has natural
+  variation." (Section 5 has the question as it was put.)
+- **No fixed scale [owner decision].** References are chosen by the size
+  of their features in pixels; "if a scale can help feel free to use it
+  and we can tweak if needed."
+
 ### Remaining validation, not unanswered product choices
 
 - Record browser/OS versions, viewport, device pixel ratio, and render
@@ -2447,14 +2466,13 @@ approval of every proposed mechanism or estimate in sections 3-6.
   owner's words of 2026-11-09 late night (section 7). Its points on shape
   before color, on tables measured from retail, on retail never being read
   at run time and on generated art staying procedural are kept as they
-  are. The wording is drafted on branch `docs/rule-10-realism-first` and
-  is the owner's to adopt.
+  are. **Adopted on 2026-11-10**: this is `AGENTS.md` as it now stands.
 - **Rule 12**, add: "Export does not depend on view options. A map carries
   its world. Same-build, same-machine determinism remains a check; editable
   source does not promise the same export across GPUs or future builds.
   The exported `.ufo` is the game contract."
 - **Checks table**: the `repro/retail.sh` row is parked with rule 10 (the
-  script stays); nothing is added in its place. The benches of R0 and the stage-map tool are
+  script stays); nothing is added in its place. **Adopted on 2026-11-10.** The benches of R0 and the stage-map tool are
   scripts a card runs when it needs them; the owner's steer is fewer tests,
   not more (section 7, later answers).
 
