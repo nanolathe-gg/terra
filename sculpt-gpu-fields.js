@@ -26,8 +26,9 @@ export const DRAWN_KINDS = Object.keys(KIND);
 //   image          the samples as base64 (standard alphabet, padded, no spaces), row by row from sample (0, 0): one byte a sample (bits 8), or
 //                  two, low byte first (bits 16)
 //   width, height  the samples across and down: at most 1282 x 1288, a 40 x 40 map's height bytes
-//   x, y, cell     where it lies: sample (i, j) sits at world pixel (x + i * cell, y + j * cell). With cell 16 and x, y multiples of 16 that is the
-//                  cell corner the export samples for height byte (i, j) (sculpt-map.js cellHeightTiles), so an image of bytes exports the same bytes
+//   x, y, cell     where it lies: sample (i, j) sits at world pixel (x + i * cell, y + j * cell). The export samples height byte (a, b) at pixel
+//                  (16 a, 16 b), a cell's corner (sculpt-map.js cellHeightTiles): with cell 16 and x, y multiples of 16, sample (i, j) is byte
+//                  (x / 16 + i, y / 16 + j), and an image of bytes exports the same bytes (with no Time pass, and inside the height range)
 //   scale, offset  a sample's height is sample * scale + offset
 //   mode           how it meets the ground under it, as a landform's Combine does: 'raise' keeps the higher, 'cut' the lower, 'flatten' sets the
 //                  ground to the image and eases back into the ground across the margin, 'replace' sets it with no easing
