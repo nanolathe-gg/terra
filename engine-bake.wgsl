@@ -1,9 +1,9 @@
 // WGSL port of the former relief-bake.frag, as a compute pass (measured a
 // little faster than a full-screen render pass). The renderer builds this
-// module with BAKE defined. See sculpt-common.wgsl for naming: uniform uFoo is u.foo.
+// module with BAKE defined. See engine-common.wgsl for naming: uniform uFoo is u.foo.
 /*COMMON*/
-// Fall-line relief, baked once per height change at one texel per world
-// pixel. Authored appearance detail: it is lit, never exported as height.
+// Fall-line relief, baked for each chunk at one texel per fieldScale() world
+// pixels. Authored appearance detail: it is lit, never exported as height.
 //
 // Each octave sums oriented cosine kernels from jittered cell points. The
 // kernels' wavefronts run down the local fall line, so the sum forms ribs
@@ -50,11 +50,7 @@ fn gullies(q: vec2f, dir: vec2f, n: f32) -> vec3f {
 // them. Stones read f at their centre, so a stone is wholly in or out.
 const SCATTER_BASE = 0.80;
 fn scatterAt(p: vec2f) -> f32 {
-#ifdef CHUNK
     return textureSampleLevel(masksTex, linearClamp, maskUv(p), 1, 0.0).r;
-#else
-    return textureSampleLevel(masksTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 1, 0.0).r;
-#endif
 }
 fn scatterDensity(f: f32, world: f32, base: f32) -> f32 {
     return select(world * (1.0 + f), max(world * exp2(3.0 * f), f * base), f > 0.0);
@@ -585,7 +581,7 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
     let minorShare = max(max(u.crackMinor, 0.75 * boost), frost);
     let hairShare = max(max(u.crackHairline, 0.6 * boost), frost);
     let blockShare = max(u.crackBlocks, 0.6 * boost);
-    if (u.cracksOn == 0 || mask <= 0.0 || severity <= 0.0 || h < u.sea + 1.0) { return vec4f(0.0); }
+    if (mask <= 0.0 || severity <= 0.0 || h < u.sea + 1.0) { return vec4f(0.0); }
     let start = mix(0.95, 0.10, CRACK_REACH);
     // Rocky ground takes the whole hierarchy; gentle ground only majors.
     let rocky = smoothstep(start, start * 1.9, slope);
@@ -783,7 +779,7 @@ fn sandStreaks(p: vec2f, h: f32, slope: f32, fall: vec2f, strength: f32) -> vec2
     return vec2f(line, dot(-fall, normalize(u.sun.xy + 1e-6)));
 }
 
-// Sandiness from the weathering worker's transport (wind and water): 0
+// Sandiness from the Time pass's transport (wind and water): 0
 // none, small values a dusting, 1 deep sand. Thin sand lies in hollows
 // first while ribs and lumps of the relief poke through it; deep sand
 // covers both. Steep faces shed it.
@@ -821,11 +817,7 @@ fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
 
 // The painted-cover texture (Sand, Ground cover and Paint strokes) at world point p.
 fn paintAt(p: vec2f) -> vec4f {
-#ifdef CHUNK
     return textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0);
-#else
-    return textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0);
-#endif
 }
 
 // Painted sand seen through a blur: (the share of a ring of taps 9 to 20 px out that lies inside the painted sand, which feathers the
@@ -989,15 +981,9 @@ fn lavaCrust(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
 @compute @workgroup_size(8, 8)
 fn bakeMain(@builtin(global_invocation_id) id: vec3u) {
     if (any(id.xy >= textureDimensions(fieldsOut))) { return; }
-    // Texel (x, y) of the fields is world pixel (x, y), as in GLSL.
-#ifdef CHUNK
-    // Convert the global integer texel once, just as the whole-map bake does;
-    // every hash/noise call receives that same world position.
     // H7b: texel (x, y) is the bake at origin + (x, y) * scale + (scale - 1) / 2, the centre of the block of final pixels it stands for.
+    // The world position is formed once, here; every hash and noise call receives it.
     textureStore(fieldsOut, id.xy, bake(vec2f(id.xy) * u.chunkFieldScale + u.chunkFieldsOrigin + (u.chunkFieldScale - 1.0) * 0.5));
-#else
-    textureStore(fieldsOut, id.xy, bake(vec2f(id.xy)));
-#endif
 }
 
 
@@ -1065,11 +1051,7 @@ fn bake(p: vec2f) -> vec4f {
     var paintFall = vec2f(0.0, 1.0);
     if (u.paintOn != 0) {
         paintFall = normalize(vec2f(valueNoise(p / 60.0 + 3.0), valueNoise(p / 60.0 + 9.0)) + vec2f(1e-3));
-#ifdef CHUNK
         let raw = textureSampleLevel(masksTex, linearClamp, maskUv(p), 0, 0.0);
-#else
-        let raw = textureSampleLevel(masksTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0, 0.0);
-#endif
         let cover = paintEdge(p, raw, wideSlope(p), 0.0);
         paintRock = cover.x;
         faceSlope = max(slope, 0.8 * max(paintRock, 0.5 * cover.w));
@@ -1088,18 +1070,10 @@ fn bake(p: vec2f) -> vec4f {
     // cracks, bands or sand, as on a graded route.
     // The crystal channel also carries a column's brightness (0.8-1.0) and
     // its edges (0.5); the shader reads it raw from the fields.
-#ifdef CHUNK
     let crystalRaw = textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0).a;
-#else
-    let crystalRaw = textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0).a;
-#endif
     let crystalCell = smoothstep(0.15, 0.6, crystalRaw);
     let route = max(routeProtection(p) * (1.0 - smoothstep(0.45, 0.9, length(broadGradient(p)))), crystalCell);
-#ifdef CHUNK
     let crackShape = max(textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0).g, 0.6 * paintRock);
-#else
-    let crackShape = max(textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0).g, 0.6 * paintRock);
-#endif
     // Painted cracks: fewer scales the shape's mask down, more raises it to at least the painted amount.
     let crackMask = select(crackShape * (1.0 + style.y), max(crackShape, style.y), style.y > 0.0);
     // Retail level ground is not dead flat in the art: faint embossed lumps
@@ -1265,8 +1239,7 @@ fn bake(p: vec2f) -> vec4f {
     if (crackedBed) { crackAt = cracks(p, fall, max(faceSlope, BED_CRACK_SLOPE), max(crackMask, 0.9), u.sea + 5.0, max(style.y, 0.0)); }
     // Where rock is broken into blocks, the blocks replace part of the
     // fall-line ribs, so faces read as fractured rock rather than combed.
-    var broken = 0.0;
-    if (u.cracksOn == 1) { broken = smoothstep(0.0, 0.5, crackMask) * max(u.crackBlocks, 0.6 * max(style.y, 0.0)) * smoothstep(0.5, 1.2, faceSlope) * (1.0 - route); }
+    let broken = smoothstep(0.0, 0.5, crackMask) * max(u.crackBlocks, 0.6 * max(style.y, 0.0)) * smoothstep(0.5, 1.2, faceSlope) * (1.0 - route);
     height = height * (1.0 - 0.75 * broken) + crackAt.w - crackAt.x;
     // The rock face (rockFaceAt) takes the place of the scatter's ribs, cracks and blocks wherever the ground is steep enough for it.
     // The scatter's cracks and blocks give way to the face (its ribs' fine octaves already did, above).

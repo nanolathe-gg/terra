@@ -179,7 +179,7 @@ async function feedFor(s, request, options) {
   return {...fields.gpuBuffers(), maskCount: engine.MASK_KEYS.length, weather: time?.weather ?? null, maps: time?.maps ?? null, field: time?.field ?? null, get invalidRect() { return undefined; }, release: () => {}};
 }
 
-// The picture of a window, in tiles of `tile` px as the canvas bakes them (sculpt-canvas.js bake: fed, full quality, at 1x): RGBA bytes, opaque.
+// The picture of a window, in tiles of `tile` px as the canvas bakes them (sculpt-canvas.js bake: fed, at 1x): RGBA bytes, opaque.
 // exportArt bakes the export's art as sculpt-canvas.js exportChunks does (bake with exportArt: weathered, completed before it returns).
 export async function renderWindow(s, {x = 0, y = 0, width = 1024, height = 1024, tile = 256, options = s.drawOptions(), exportArt = false} = {}) {
   const {renderer, canvas, config} = s, device = renderer.device, out = new Uint8Array(width * height * 4), reads = [];
@@ -187,7 +187,7 @@ export async function renderWindow(s, {x = 0, y = 0, width = 1024, height = 1024
     const w = Math.min(tile, width - tx), h = Math.min(tile, height - ty);
     const request = {x: x + tx, y: y + ty, width: w, height: h, exportArt, worldSize: config.worldSize ?? config.size, worldGrid: config.worldGrid ?? config.grid};
     const feed = await feedFor(s, request, options);
-    try { await renderer.renderChunk(request, {...options, quality: 'full', feed, scale: 1, deferCompletion: !exportArt}); } finally { feed.release?.(); }
+    try { await renderer.renderChunk(request, {...options, feed, scale: 1, deferCompletion: !exportArt}); } finally { feed.release?.(); }
     const row = Math.ceil(w * 4 / 256) * 256, buffer = device.createBuffer({label: 'headless readback', size: row * h, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ});
     const encoder = device.createCommandEncoder({label: 'headless readback'});
     encoder.copyTextureToBuffer({texture: canvas.gpu.texture}, {buffer, bytesPerRow: row}, [w, h]);
