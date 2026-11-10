@@ -2267,13 +2267,25 @@ pinned ("Yes").
   the 95th percentile on both; shape passes 0.91 to 0.96 ms each for a
   plateau, 1.07 to 1.08 for a mountain.
 
-**Next [proposed by Claude].** Scree that reads as scree: the talus marks
-its own ground through the fields paint already uses (relief weaker,
-plane 5; denser stones, plane 4), so the rock detail leaves it and stones
-gather on it; the cone's height capped against the wall, so Talus reach
-can be raised without opening the wall; more of it below a bay's mouth.
-Then the stone lattice (the rows of dashes), and a way for Time to cut by
-discharge. Two candidates for row 1 still wait: Codex's (a new support
+- *Scree marks its own ground* (`03b1d44f`). A talus cone was drawn as
+  rock: the skin covered it with the face's beds, blocks and ring lines.
+  Where the talus lies over a cell the landform pass now writes the two
+  planes a Paint stroke writes: relief toward weaker (plane 5) and
+  scatter toward denser (plane 4). No new mask or control, and paint over
+  the landform still has the last word. Height bytes are identical with
+  and without **[measured]**, so passability and the realism report do
+  not move; 0 of 34 check scenes change, because none uses Talus reach;
+  the mountain's drag is 1.09 ms a shape pass on both builds. **[by eye,
+  Claude]** The apron is smooth loose ground with scattered stones and
+  the rock stands above it as ribs; narrow scree chutes between ribs
+  have crisp edges in places.
+
+**Next [proposed by Claude].** The owner looks at the two sheets (bays;
+scree) and says keep or go back. Then: the cone's height capped against
+the wall, so Talus reach can be raised without opening the wall to
+KBots, if the owner wants walls closed; more scree below a bay's mouth
+(fans); the stone lattice (the rows of dashes); and a way for Time to
+cut by discharge. Two candidates for row 1 still wait: Codex's (a new support
 field for beds, shared by the heights and the solid) and a cheaper one of
 Claude's (the landform's steps read the same column as the skin, so that
 a ledge is a step).
