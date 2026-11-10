@@ -1064,7 +1064,7 @@ fn lfRun(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, nA: f32, nB: f32, tr
 // The height of the talus above the ground at a cell, or 0 (the caller takes the higher of this and the face). Each chute (a valley of the Gullies' widest
 // stripes, which run on straight below the foot) lays a cone whose slope is the repose (talusAngle) and whose length is the reach, with a low apron between the
 // cones, and nothing on a face whose section is nowhere steeper than the repose; inside the footprint the cone climbs the face at the repose until the face rises through it.
-fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32, share: f32, nA: f32, nB: f32, base: f32, face: f32) -> f32 {
+fn talusApron(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32, share: f32, nA: f32, nB: f32, base: f32, face: f32) -> f32 {
   let s0 = Seg[(u.segBase + trunk) * 4u]; let s1 = Seg[(u.segBase + trunk) * 4u + 1u]; let s2 = Seg[(u.segBase + trunk) * 4u + 2u];
   let ro = lfRun(s0, s1, s2, wx, wy, nA, nB, share);
   if (ro.x <= -u.talusReach) { return 0.0; }
@@ -1111,6 +1111,53 @@ fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32,
   }
   let ended = sm(t2 - 0.0625, t2, ro.x / max(ro.y, 1.0));
   return line * (1.0 - sm(cut, 2.0 * cut, face - line)) * (1.0 - ended);
+}
+// The fans. Debris comes down the ravines whatever the section's slope, so the wall lays an apron of fans from where its ravines open (the section at 0.15
+// of the relief, where the Gullies' cut begins) to a toe the reach beyond the foot: lobes about a wavelength across on one apron, bigger where the
+// Gullies cut deeper; as high at the apex as the skirt it lies on and half as much again. Up the ravine it fills the floor to that level. The
+// lobes are read at the foot in line with the cell, so each runs straight out from the wall.
+fn talusFan(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32, share: f32, nA: f32, nB: f32, base: f32) -> f32 {
+  let s0 = Seg[(u.segBase + trunk) * 4u]; let s1 = Seg[(u.segBase + trunk) * 4u + 1u]; let s2 = Seg[(u.segBase + trunk) * 4u + 2u];
+  // How far inside the foot the cell stands: by the outline as drawn (with its wander) at the wall and inside it, and by the plain distance from the path
+  // once 40 px beyond that. Far out the wander's shift folds the distance into islands with square corners, which a fan would copy as steps.
+  let rw = lfRun(s0, s1, s2, wx, wy, nA, nB, share);
+  let rp = lfRun(s0, s1, s2, wx, wy, 0.0, 0.0, share);
+  let ro = vec3f(mix(rw.x, rp.x, sm(0.0, 40.0, -rp.x)), rw.y, rw.z);
+  if (ro.x <= -u.talusReach) { return 0.0; }
+  let relief = select(u.elev, base + u.elev, u.lfGround != 0u) - base;
+  if (relief <= 0.0) { return 0.0; }
+  let fall = landformFall(vec2f(wx, wy), x, y);
+  if (all(fall == vec2f(0.0))) { return 0.0; }
+  let table = select(u.curveBase, u.backBase, ro.z > 0.5);
+  var tq = 1.0; var pv = curveAt(table, 0.0);
+  for (var j = 0u; j < 16u; j++) {
+    let v = curveAt(table, f32(j + 1u) / 16.0);
+    if (v >= 0.15) { tq = (f32(j) + clamp((0.15 - pv) / max(v - pv, 1e-4), 0.0, 1.0)) / 16.0; break; }
+    pv = v;
+  }
+  var fo = fall;
+  if (u.framed != 0u) { fo = vec2f(u.inv0 * fall.x + u.inv2 * fall.y, u.inv1 * fall.x + u.inv3 * fall.y); }
+  let wv = u.gullySize;
+  let fp = vec2f(lx, ly) + fo * ro.x;
+  // The lobes are a smooth field along the foot, a wavelength across, and not the Gullies' stripes: those fork where their phase jumps, which is a
+  // branch in a gully and would be a step in a fan.
+  let fdeep = clamp(1.0 + 0.85 * vnoise(fp.x / (3.0 * wv), fp.y / (3.0 * wv), u.seed ^ 0x2b91u), 0.2, 1.85);
+  let gv = sm(0.0, 1.0, 0.5 + 0.5 * clamp(1.4 * vnoise(fp.x / wv, fp.y / wv, u.seed ^ 0x3d17u), -1.0, 1.0));
+  let strength = min(u.gully * fdeep / 0.3, 1.2);          // deeper gullies, a bigger fan; some stretches have next to none
+  let apexIn = ro.y * tq;                                   // how far inside the foot the ravine opens
+  let len = apexIn + u.talusReach;                          // from the apex to the toe
+  let s = apexIn - ro.x;                                    // from the apex, outward
+  let top = 0.225 * relief * strength;
+  // Across the wall the fans stand on a continuous apron (0.4 of their height), and the share does not change along a fall line: every line then falls
+  // outward all the way, so no hollow is shut in between two fans and the wall (a share that widened outward left 155 such cells on the test cliff).
+  let across = 0.4 + 0.6 * pow(max(gv, 1e-3), 1.6);
+  if (s >= 0.0) { return top * pow(1.0 - clamp(s / len, 0.0, 1.0), 1.5) * across; }
+  // Up the ravine the debris lies a little higher, never lower: a fan that thinned out inward stood as a bank along the foot with a hollow behind it.
+  // So a ravine's floor and a bay's are filled to the fan's level until the face rises through it.
+  return top * across * (1.0 + 0.3 * min(-s / len, 1.0));
+}
+fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32, share: f32, nA: f32, nB: f32, base: f32, face: f32) -> f32 {
+  return max(talusApron(wx, wy, lx, ly, x, y, trunk, share, nA, nB, base, face), talusFan(wx, wy, lx, ly, x, y, trunk, share, nA, nB, base));
 }
 
 @compute @workgroup_size(8, 8)
@@ -1225,7 +1272,8 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
     value = select(mix(value, ramp, blend), ramp, blend >= 1.0);
   }
   if (u.gully > 0.0 && value > base) { value = landformGullies(value, pick.y, pk, psh, wx, wy, lx, ly, base, nA, nB, nC, x, y, i, cells); }
-  if (talus > 0.0) { talusGround(i, sm(0.0, 8.0, base + talus - value)); value = max(value, base + talus); }
+  var scree = 0.0;   // how far the talus covers the cell: loose ground takes no cracks
+  if (talus > 0.0) { scree = sm(0.0, 8.0, base + talus - value); talusGround(i, scree); value = max(value, base + talus); }
   if (u.combine == 0u) { value = max(base, value); } else if (u.combine == 1u) { value = min(base, value); }
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
   if (ej > 0.0 || lipK < 1.0) { F[PH * cells + i] = clamp(select(value, base + (value - base) * lipK, value > base) + ej, u.minH, u.maxH); }
@@ -1246,7 +1294,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   F[PP * cells + i] = max(max(F[PP * cells + i] * (1.0 - inf), sm(0.65, 0.95, inf)), u.lfRoute * sm(0.55, 0.92, pick.y));
   if (inf <= 0.0) { return; }
   if (u.nwrites > 0u) { shapeMasks(i, inf); }
-  if (u.crackAmt > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], min(1.0, inf * 1.6) * u.crackAmt); }
+  if (u.crackAmt > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], min(1.0, inf * 1.6) * u.crackAmt * (1.0 - scree)); }
 }
 
 // H6c smooth: the prefix height of the cells the box blur will read, copied to scratch plane 0 (blurH and blurV then run on it with blurR = the node's radius).
