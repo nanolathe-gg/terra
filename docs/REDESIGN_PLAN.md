@@ -168,7 +168,7 @@ the device while preserving the same final export quality.
 | Any other World slider drag | 100 ms at preview level | the same, and 5-8 s where the row re-runs the shape or weathering **[measured, section 3.5]**; no preview level exists |
 | Release to final visible art, 16x16 map | 1.0 s (proposed) | 16x16 not measured here; 4x4 was 1.4-1.9 s **[measured, docs/*_REVIEW.md]** |
 | First picture after load | 1.0 s | 1.7-2.2 s to final **[measured, docs/VOXEL_REVIEW.md]** |
-| Export | no budget; progress and cancel | 3.7 s for 4x4 **[measured, docs/VOXEL_REVIEW.md]**; 16x16: 43-217 s for the export phase under Node and Dawn, one run each (Moon 43-70 s, Lava 103-127 s, Green 202-217 s) **[measured, docs/REDESIGN_TILE_BASELINE.md]** |
+| Export | no budget; progress and cancel | 3.7 s for 4x4 **[measured, docs/VOXEL_REVIEW.md]**; 16x16: 43-217 s for the export phase under Node and Dawn, one run each (Moon 43-70 s, Lava 103-127 s, Green 202-217 s) **[measured, docs/REDESIGN_TILE_BASELINE.md]**. Sixteen times the 4x4 figure would be about 59 s, so Moon is in line and Green is three to four times over; the harness differs from the 4x4 run's |
 
 **How a budget is measured.** One number per interaction lets a build pass
 by updating one small tile while the rest of the view is stale. Each row
@@ -200,8 +200,10 @@ A throwaway model (`~/terraform-assets/agent-rd-look/`, report and
 upsample, place materials by height and slope, light with sun, sky and cast
 shadow, project obliquely, add fine detail in screen space, snap to the
 palette. It was tuned on half of each world's sections and judged on 36
-held-out ones (six worlds, six each). Sheets: `out/sheets/*_1x.png`
-(retail | model).
+others (six worlds, six each). Those 36 are development data, not a clean
+held-out set: the method was changed after three of them were viewed, and
+two are byte-identical to tuning sections (card R0 has the detail).
+Sheets: `out/sheets/*_1x.png` (retail | model).
 
 **Measured from the art-and-heights pairs (tuning half):**
 
@@ -303,7 +305,9 @@ reduced to 16 px cells (`~/terraform-assets/agent-rd-look/ours-fit/`,
   it at the cell's corner, `16i` **[read, nanolathe
   research/formats/tnt.md:101; sculpt-map.js:45-49]**. The effect of that
   half cell on the fitted numbers is not measured: a quick shift test on
-  144 sections could not separate the two (R² .222 either way). The bench
+  144 sections had no power to separate the two (on Green's 71 sections
+  the median R² was .222 at both offsets, and the best offsets piled up
+  at the ends of the search range). The bench
   of R0 must state and test its convention before a fit is quoted again.
 
 This is why the retail bench (R0) feeds retail's own heights to the engine:
@@ -694,13 +698,15 @@ From a read of `export/` and of the Nanolathe engine at `~/src/nanolathe`
   | Six landforms | 40,590 | 4,530 | 38,714 |
   | 25 strokes on a grid | 57,373 | 47,700 | 62,137 |
 
-  That is 59-93% unique wherever the ground is textured, against retail's
-  5-10%; earlier counts were Green 4x4 at 3,668 of 4,420 and Red 16x16 at
+  That is 59-93% unique on Green and Moon and on every dense layout
+  (71-93%), against retail's 5-10%; Lava's plain ground repeats, and its
+  light layouts (1.5-6.8%) are inside retail's range; earlier counts were Green 4x4 at 3,668 of 4,420 and Red 16x16 at
   60,072 of 66,820 **[measured, docs/VOXEL_TOOLS_REVIEW.md]**. A map of
   n x n units has (16n+1) x (16n+4) slots: 58,804 at 15x15, which cannot
   reach the cap of 65,536, and 66,820 at 16x16, which reaches it only above
-  98% unique. At today's shares merging starts at about 17x17 (75,348
-  slots) **[calculated from sculpt-map.js]**. The first draft's "merging
+  98% unique. At the dense layouts' shares, Moon (93%) would merge at
+  17x17 (75,348 slots) and Green (86%) at 18x18 **[calculated from
+  sculpt-map.js and the table]**. The first draft's "merging
   starts near 15x15" was wrong. The nearest of the nine is dense Moon,
   3,399 tiles under the cap. In Nanolathe a 65,536-tile map costs
   about 303 MB of atlas plus about 1.14 GB for its 2x detail atlas
@@ -796,7 +802,7 @@ Sections 3.1 and 3.8 both end at "structure between the pixel and the
 landform". The tempting design is one pointwise term for it, with a single
 number running from free (retail's marks follow no fall line) to organized
 down the slope (natural gullies). A prototype tested exactly that on the
-look model and the same held-out sections
+look model and the same 36 sections
 (`~/terraform-assets/agent-rd-structure/`: `structure.py`; sheets in
 `out/sheets/` as retail | plain look | with structure; sweeps in
 `out/sweep/`). The term is octaves of Voronoi or stripe cells, 12-24 px at
@@ -1003,7 +1009,7 @@ looks. Green 4's shape score of .59 is a statement about tracing.
      sections (and sections cut from one map, where that can be told),
      split by group, and freeze a review set that nobody tunes on. Anything
      a builder has looked at while tuning moves to the tuning set.
-   - For each held-out section: load its heights with the height-image op
+   - For each review-set section: load its heights with the height-image op
      (R1), render with the world's look and no strokes, write
      `ours.png` beside a copy of `retail.png` under `$R/bench/<commit>/`.
    - Output: one contact sheet per world at 1x showing the retail reference
@@ -1133,7 +1139,7 @@ but no fit of light against heights.
   ground); rock's tone; grain amplitude and hue speckle per world.
 - **A per-map series**: Moon's bright and dark ground, Red's two tones. A
   map picks one of a world's named series (numbers in the world's file).
-- **Procedure**: fit on the tuning half, judge on the held-out sheets of
+- **Procedure**: fit on the tuning set, judge on the review-set sheets of
   R0, one world at a time, Green first; LLMs compare the images before the
   owner gives the final visual judgment.
 - **Before a fitted number becomes a shader change.** The fit mixes light,
@@ -1674,11 +1680,13 @@ the editor after the initial UI revamp and retail-biome improvements
 **Change.** Treat distinct tiles as a budget the artist can see, and make
 level ground reuse tiles the way retail's does.
 
-**Why.** Our maps use 59-93% unique tiles against retail's 5-10%. At the
-16x16 target nothing merges today, but a dense Moon map sits 3,399 tiles
-under the cap, a level Green or Moon map spends 37,000-39,000 tiles on
-ground alone, merging starts at about 17x17, and at the cap Nanolathe
-holds over a gigabyte of atlas (section 3.7).
+**Why.** Green and Moon maps, and dense maps on any world, use 59-93%
+unique tiles against retail's 5-10% (Lava's plain ground already repeats).
+At the 16x16 target nothing merges today, but a dense Moon map sits 3,399
+tiles under the cap, a Green or Moon map with no strokes spends
+37,000-39,000 tiles on ground alone, a dense Moon map would merge at
+17x17, and at the cap Nanolathe holds over a gigabyte of atlas
+(section 3.7).
 
 **Design.**
 - **Show the number (first, and by itself).** The status bar and the Export
