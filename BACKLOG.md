@@ -140,7 +140,7 @@ branches and the projection fix below, so re-render before judging.
    without `--server` is an error (`world_controls.mjs --chrome` takes
    `--audit-port` for the audit host it starts). The checks of the UI
    (`smoke.mjs`, `features.mjs`, `workspace.mjs`, `perf.mjs`, `zoom.mjs`,
-   `curveedit.mjs`, `share.mjs`, `ui-previews.mjs`, `drainage.mjs`) run
+   `curveedit.mjs`, `share.mjs`, `ui-previews.mjs`) run
    in Chrome.
 
    `compare.py` must exit 0. Look at `review-<n>/<world>.png` (retail |

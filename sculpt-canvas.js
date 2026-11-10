@@ -48,7 +48,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   let lastFrame=0,frameTimes=[],strokeTimes=[],resizePending=false;
   const coarse=new OffscreenCanvas(VIEW_CANVASES.overview,VIEW_CANVASES.overview),cg=coarse.getContext('2d');
   const panel=document.createElement('section'); panel.className='section files';
-  panel.innerHTML=`<h3>Memory budgets</h3><label class="control" style="display:block">Terrain GPU budget (MiB)<input data-gpu type="number" min="128" max="4096" step="128" value="${gpuBudget/MB}"></label><label class="control" style="display:block">Page heap budget (MiB)<input data-heap type="number" min="128" max="8192" step="128" value="${heapBudget/MB}"></label><p class="small" data-memory></p><p class="small" data-drainage></p>`;
+  panel.innerHTML=`<h3>Memory budgets</h3><label class="control" style="display:block">Terrain GPU budget (MiB)<input data-gpu type="number" min="128" max="4096" step="128" value="${gpuBudget/MB}"></label><label class="control" style="display:block">Page heap budget (MiB)<input data-heap type="number" min="128" max="8192" step="128" value="${heapBudget/MB}"></label><p class="small" data-memory></p>`;
   $('graphics-host').append(panel);
   $('minimap-host').innerHTML=`<canvas data-nav width="${VIEW_CANVASES.minimap}" height="${VIEW_CANVASES.minimap}" tabindex="0" aria-label="Minimap: drag to pan, or use arrow keys"></canvas>`;
   const find=s=>document.querySelector(s),navigatorCanvas=find('[data-nav]'),ng=navigatorCanvas.getContext('2d');

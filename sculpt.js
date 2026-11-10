@@ -733,9 +733,8 @@ function destroyGpuWeather(w) { if (w.destroyed) return; w.destroyed=true; retir
 function leaseGpuWeather(w) { w.leases=(w.leases||0)+1; let given=false; return () => { if (given) return; given=true; w.leases--; if (w.retired && w.leases<=0) destroyGpuWeather(w); }; }
 function retireGpuWeather(w) { w.retired=true; if (w.leases>0) retiredWeather.add(w); else destroyGpuWeather(w); }
 // What the Time pass holds only while it runs: its own working memory and the results it is replacing. It takes no budget check of its own, so a bake that overlaps it is not asked to make room for it.
-let drainageTransient=0;   // P21: the plane's working buffers while it is computed (a lattice cell: 48 bytes), and the stored plane (8 bytes a cell) is counted below
-const gpuTransientBytes=() => [...retiredWeather].reduce((n,w) => n+w.bytes,0)+gpuPassBytes+drainageTransient;
-const gpuBytes=() => (regionalFields?.stats?.().gpuShape?.gpuBytes||0)+(gpuWeather?.bytes||0)+(drainage?.destroyed===false?drainage.bytes:0)+gpuTransientBytes();
+const gpuTransientBytes=() => [...retiredWeather].reduce((n,w) => n+w.bytes,0)+gpuPassBytes;
+const gpuBytes=() => (regionalFields?.stats?.().gpuShape?.gpuBytes||0)+(gpuWeather?.bytes||0)+gpuTransientBytes();
 function dropGpuWeather() { if (gpuWeather) { retireGpuWeather(gpuWeather); gpuWeather=null; } }
 async function gpuWeatherCpu(withMaps) {
   const w=gpuWeather; if (!w) return;
@@ -759,44 +758,7 @@ async function gpuWeatherCpu(withMaps) {
 // H5b: the Time pass in pages: the knobs the pass reads (all of them in the key, so a change drops every page's weather), and the runner a page's window goes through.
 function configurePagedTime(fields=regionalFields) {
   if (!weatherOn()) return fields.setTime(null);
-  return fields.setTime(pagedTime({config,renderer,size,spacing,material:materialKnobs(),drainage:drainagePlane}));
-}
-// P21: the drainage plane. One exact drainage area for the whole map on a 16-px lattice (sculpt-drainage.js), computed in the Time stage from the authored
-// height once an edit settles, stored on the GPU, and handed to the Time pass (engine-weather.wgsl drainageAt). It is out of date from the moment the fields
-// change until the plane for the new revision is computed; the Memory budgets panel says so.
-let drainage=null, drainageBusy=false;
-const fieldsRevision=() => regionalFields?.stats?.().revision??0;
-const drainagePlane=() => drainage&&!drainage.destroyed?drainage:null;
-function showDrainage() {
-  const el=document.querySelector('[data-drainage]'); if (!el) return;
-  const d=drainage;
-  el.textContent=!d?(weatherOn()?'Drainage plane: not computed yet.':'Drainage plane: computed with Weathering on.')
-    :d.revision!==fieldsRevision()?'Drainage plane: out of date; recomputed after the edit settles.'
-    :`Drainage plane: ${d.width} × ${d.width} cells of 16 px, ${(d.bytes/1048576).toFixed(1)} MiB, ${Math.round(d.milliseconds)} ms.`;
-}
-async function drainageSource() {
-  if (regionalFields.paged) {
-    if (!pagedCoarseStarted) { pagedCoarseStarted=true; regionalFields.startCoarse().catch(() => {}); }
-    await regionalFields.coarseSettled();
-    const c=regionalFields.coarseLattice(); return c&&{revision:c.revision,input:{heights:c.heights,width:c.width}};
-  }
-  await regionalFields.gpuReady(); if (regionalFields.gpuPending()) return null;
-  const b=regionalFields.gpuBuffers(); return b&&{revision:fieldsRevision(),input:{planes:b.planes,grid:b.grid}};
-}
-async function queueDrainage() {
-  if (drainageBusy) return;
-  if (!weatherOn()||!regionalFields?.active?.()||stroke||moving||(drainage&&drainage.revision===fieldsRevision())) { showDrainage(); return; }
-  drainageBusy=true;
-  try {
-    const {computeDrainage}=await import('./sculpt-drainage.js');
-    for (let tries=0;tries<8&&!stroke&&!moving&&!(drainage&&drainage.revision===fieldsRevision());tries++) {
-      const source=await drainageSource(); if (!source) continue;
-      const cells=(source.input.width??Math.floor((source.input.grid-1)/8)+1)**2; drainageTransient=cells*48;
-      let plane; try { plane=await computeDrainage(renderer.device,{...source.input,sea:config.seaLevel}); } finally { drainageTransient=0; }
-      plane.revision=source.revision; const old=drainage; drainage=plane; old?.retire(); showDrainage();
-    }
-  } catch (err) { console.error(err); }
-  finally { drainageBusy=false; showDrainage(); }
+  return fields.setTime(pagedTime({config,renderer,size,spacing,material:materialKnobs()}));
 }
 function queuePagedWeather() {
   if (stroke||moving) return;
@@ -1028,7 +990,6 @@ function cancelWeather() {
 function queueWeather() {
   controlsEditing=false;
   flushEval();
-  queueDrainage();
   if (pagedOn()) { queuePagedWeather(); return; }
   // H6b: a fed Time pass needs the GPU planes current, not the CPU copy; the copy a gesture left out is read in the background from here.
   if (feedWeatherOk() && regionalFields?.gpuReady) { regionalFields.settle(); if (regionalFields.gpuPending()) { regionalFields.gpuReady().then(queueWeather,err => failWeather('the shape pass failed: '+err.message,err)); return; } }
@@ -1063,7 +1024,6 @@ async function runFedWeather(job) {
     if (!b || job!==weatherJob) return;
     gpuPassBytes=grid*grid*120+Math.ceil(grid/8)**2*12;
     const request={planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,...timeKnobs(renderer)};
-    request.drainage=drainagePlane();
     const pass=erosion.runGpu(request),flight=pass.then(() => {},() => {}).then(() => { if (timePass===flight) timePass=null; });   // cleared when the pass ends, failed or not, before a waiting request looks
     timePass=flight;
     const result=await pass,material=materialKnobs();
@@ -1655,7 +1615,6 @@ async function bootMap() {
   });
   addGroundNode();
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
-  regionalFields.subscribeSubmit?.(showDrainage);
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); renderer.setColors(worldColors());$('export').textContent='Export view PNG';
   buildKnobs(); buildWorldPanel();
@@ -1729,24 +1688,6 @@ function gpuRegionalCheck() {
   return regionalCheck({fields:regionalFields,device:renderer.device,nodes,context:shapeContext(),config,grid:worldGrid,spacing,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
     startCoarse:() => { if (!pagedCoarseStarted) { pagedCoarseStarted=true; regionalFields.startCoarse().catch(() => {}); } }});
 }
-// P21: the drainage plane's checks. drainageRun gives a lattice of heights to the GPU passes and reads the plane back; drainageLive waits for the live map's plane to be
-// current and reads it back with the heights it came from (repro/drainage.mjs compares both with a CPU reference). The stored plane is also what status() reports.
-window.drainageRun=async ({heights,width,sea=-1e30}) => {
-  const {computeDrainage}=await import('./sculpt-drainage.js'),h=Float32Array.from(heights),plane=await computeDrainage(renderer.device,{heights:h,width,sea});
-  const raw=new Uint32Array(await readBuffer(renderer.device,plane.buffer,0,plane.bytes)),area=new Uint32Array(plane.cells),recv=new Uint32Array(plane.cells);
-  for (let i=0;i<plane.cells;i++) { area[i]=raw[2*i]; recv[i]=raw[2*i+1]; }
-  const out={area:[...area],recv:[...recv],passes:plane.passes,fillPasses:plane.fillPasses,flatPasses:plane.flatPasses,milliseconds:plane.milliseconds,bytes:plane.bytes}; plane.retire(); return out;
-};
-window.drainageLive=async () => {
-  const {DRAIN_STEP}=await import('./sculpt-drainage.js');
-  for (let i=0;i<400&&!(drainage&&drainage.revision===fieldsRevision()&&!drainageBusy);i++) { queueDrainage(); await new Promise(r => setTimeout(r,100)); }
-  const d=drainage; if (!d||d.revision!==fieldsRevision()) return {error:'no current plane',weatherOn:weatherOn()};
-  const raw=new Uint32Array(await readBuffer(renderer.device,d.buffer,0,d.bytes)),b64=a => { let t='';for (let i=0;i<a.byteLength;i+=8192)t+=String.fromCharCode(...new Uint8Array(a.buffer,a.byteOffset+i,Math.min(8192,a.byteLength-i)));return btoa(t); };
-  let heights;
-  if (regionalFields.paged) heights=new Float32Array(regionalFields.coarseLattice().heights);
-  else { const G=worldGrid,h=new Float32Array(await readBuffer(renderer.device,regionalFields.gpuBuffers().planes,0,G*G*4));heights=new Float32Array(d.cells);for (let j=0;j<d.width;j++) for (let i=0;i<d.width;i++) heights[j*d.width+i]=h[j*DRAIN_STEP*G+i*DRAIN_STEP]; }
-  return {width:d.width,cells:d.cells,sea:config.seaLevel,passes:d.passes,fillPasses:d.fillPasses,flatPasses:d.flatPasses,milliseconds:d.milliseconds,bytes:d.bytes,transientBytes:d.transientBytes,paged:Boolean(regionalFields.paged),heights:b64(heights),plane:b64(raw)};
-};
 window.sculptDebug = {curve:() => currentCurve(),along:() => currentAlong(),place:() => lfPlace,sectionPoint:(side,x,v) => { const cv=$('section-preview'),r=cv.getBoundingClientRect(),L=sectionLayout(curveContext()); return {x:r.left+sideX(L,side,x)*r.width/cv.width,y:r.top+L.yv(v)*r.height/cv.height}; },leanPoint:() => { const cv=$('section-preview'),r=cv.getBoundingClientRect(),L=sectionLayout(curveContext()); return {x:r.left+L.xc*r.width/cv.width,y:r.top+L.yv(0)*r.height/cv.height}; },alongPoint:(t,v) => { const cv=$('along-preview'),r=cv.getBoundingClientRect(),L=alongLayout(curveContext()); return {x:r.left+L.X(t)*r.width/cv.width,y:r.top+L.yv(v)*r.height/cv.height}; },pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shape:() => ({fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:gpuRegionalCheck,state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get specStats() { return renderer.specStats && {...renderer.specStats, cached: renderer.specCache.size, key: renderer.specKey().key}; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level), get startupParts() { return renderer.startupParts; },
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene,

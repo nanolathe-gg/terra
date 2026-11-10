@@ -50,7 +50,7 @@ export class GpuErosion {
     const module = device.createShaderModule({label: 'engine-weather', code: source});
     const info = await module.getCompilationInfo(), errors = info.messages.filter(m => m.type === 'error');
     if (errors.length) throw new Error('nanolathe: engine-weather.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
-    const layout = device.createBindGroupLayout({label: 'engine-weather', entries: [buffer('uniform', 0), ...[1, 2, 3, 4].map(b => buffer('read-only-storage', b)), ...[5, 6, 7].map(b => buffer('storage', b)), buffer('read-only-storage', 8)]});   // 8: the drainage plane
+    const layout = device.createBindGroupLayout({label: 'engine-weather', entries: [buffer('uniform', 0), ...[1, 2, 3, 4].map(b => buffer('read-only-storage', b)), ...[5, 6, 7].map(b => buffer('storage', b))]});
     const pipeline = await device.createComputePipelineAsync({label: 'mapsMain', layout: device.createPipelineLayout({bindGroupLayouts: [this.layout0, layout]}), compute: {module, entryPoint: 'mapsMain'}});
     return this.maps = {layout, pipeline};
   }
@@ -63,8 +63,6 @@ export class GpuErosion {
   async runGpu(request) {
     await this.ready;
     window.erodeRuns = (window.erodeRuns || 0) + 1;
-    const releaseDrainage = request.drainage?.lease?.() ?? (() => {});   // P21: the plane is held until this pass's work is submitted
-    try {
     const feed = await feedPasses(this.device), mp = await this.mapsPipeline();
     const {device} = this, {grid, size, seaLevel} = request, n = grid * grid, spacing = request.spacing ?? (size - 1) / (grid - 1);   // H5b: a window of a larger map passes the map's spacing and its own origin
     const age = Math.max(1, Math.round(request.age)), rain = BASE_RAIN * request.rain, started = performance.now();
@@ -117,20 +115,17 @@ export class GpuErosion {
     output.setPipeline(feed.pipes.refinedMain); for (const [g, bg] of feed.groups('refinedMain', res)) output.setBindGroup(g, bg); output.dispatchWorkgroups(groups, groups);
     output.end();
     const mapParams = make('erosion map params', 64, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
-    const plane = request.drainage, noPlane = plane ? null : make('no drainage plane', 16);
     device.queue.writeBuffer(mapParams, 0, new Float32Array([grid, spacing, .36 / (age * BASE_RAIN), request.sand ?? 0, request.wetReach ?? 3, request.talusFull ?? 2.5, request.wearFull ?? 6, request.flowK ?? 4,
-      request.ox ?? 0, request.oy ?? 0, plane ? plane.width : 0, plane ? plane.step : 1, 0, 0, 0, 0]));
-    const mapGroup = device.createBindGroup({layout: mp.layout, entries: [{buffer: mapParams}, {buffer: s1}, {buffer: acc}, {buffer: fixedBuffer}, {buffer: weather, offset: 0, size: n * 4}, ...maps.map(buffer => ({buffer})), {buffer: plane ? plane.buffer : noPlane}].map((resource, binding) => ({binding, resource}))});
+      request.ox ?? 0, request.oy ?? 0, 0, 0, 0, 0, 0, 0]));
+    const mapGroup = device.createBindGroup({layout: mp.layout, entries: [{buffer: mapParams}, {buffer: s1}, {buffer: acc}, {buffer: fixedBuffer}, {buffer: weather, offset: 0, size: n * 4}, ...maps.map(buffer => ({buffer}))].map((resource, binding) => ({binding, resource}))});
     const second = encoder.beginComputePass({label: 'erosion maps'});
     second.setPipeline(mp.pipeline); second.setBindGroup(0, group0); second.setBindGroup(1, mapGroup); second.dispatchWorkgroups(groups, groups); second.end();
     const tSubmit = performance.now();
     device.queue.submit([encoder.finish()]);
-    releaseDrainage();
     await device.queue.onSubmittedWorkDone();
     const gpu = performance.now() - tSubmit;
-    [...state, fluxA, fluxB, vel, acc, fixedBuffer, paramBuffer, tileFlag, tileList, tileCount, tileArgs, mapParams, uniform, ...(noPlane ? [noPlane] : [])].forEach(b => b.destroy());
+    [...state, fluxA, fluxB, vel, acc, fixedBuffer, paramBuffer, tileFlag, tileList, tileCount, tileArgs, mapParams, uniform].forEach(b => b.destroy());
     return {weather, maps, grid, bytes: n * 8 + n * 12, milliseconds: performance.now() - started, parts: {gpu, tiles: null, gpuFed: true}};
-    } finally { releaseDrainage(); }
   }
 
   // The material field (engine-weather.wgsl mf*): arrival, soil, softened source and source a cell, as a GPU buffer of vec4f that the chunk feed

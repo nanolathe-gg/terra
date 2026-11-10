@@ -22,9 +22,7 @@ struct MP {
     flowK: f32,       // flow units at which the saturating flow map reaches one half
     ox: f32,          // the window's first column and row of the world lattice (a page's window of a larger map; 0 for a whole map)
     oy: f32,
-    drainWidth: f32,  // the drainage plane's side in lattice cells; 0 when the pass is given none
-    drainStep: f32,   // world cells per lattice cell
-    pad0: f32, pad1: f32, pad2: f32, pad3: f32,
+    pad0: f32, pad1: f32, pad2: f32, pad3: f32, pad4: f32, pad5: f32,
 }
 
 @group(1) @binding(0) var<uniform> mp: MP;
@@ -35,18 +33,9 @@ struct MP {
 @group(1) @binding(5) var<storage, read_write> layer0: array<u32>;
 @group(1) @binding(6) var<storage, read_write> layer2: array<u32>;
 @group(1) @binding(7) var<storage, read_write> layer3: array<u32>;
-@group(1) @binding(8) var<storage, read> drainage: array<vec2u>;      // P21: the whole map's drainage plane (area in lattice cells, receiver), or one dummy cell
 
 fn at(x: i32, y: i32) -> u32 { let n = i32(mp.grid); return u32(clamp(y, 0, n - 1) * n + clamp(x, 0, n - 1)); }
 fn ground(i: u32) -> f32 { let s = state[i]; return s.x + s.y; }
-// P21: the exact drainage area, in lattice cells, of the plane cell nearest sample (x, y) of this window; 0 when the pass has no plane. The channel map and the
-// consumers to come (fans, rills, stream power) read the whole map's catchments through this: the pass itself sees only its window and apron.
-fn drainageAt(x: i32, y: i32) -> f32 {
-    if (mp.drainWidth < 1.0) { return 0.0; }
-    let w = i32(mp.drainWidth); let s = i32(mp.drainStep);
-    let cx = clamp((i32(mp.ox) + x + s / 2) / s, 0, w - 1); let cy = clamp((i32(mp.oy) + y + s / 2) / s, 0, w - 1);
-    return f32(drainage[u32(cy * w + cx)].x);
-}
 fn flowAt(i: u32) -> f32 { let f = totals[i].x * mp.flowScale; return f / (f + mp.flowK); }
 
 @compute @workgroup_size(8, 8)

@@ -2474,8 +2474,8 @@ system. Four run in a stack, each on the output of the one before:
   and ribs, Runoff's cut and the solid's grooves. Edges are rounded by the
   Time pass in the heights and by Weathering (rounded edges) in the
   voxels. Sand comes from the Time pass, the Sand brush and the beach.
-- *Dead weight.* A drainage plane is computed whenever the Time pass runs
-  and nothing reads it (`engine-weather.wgsl:44` has no caller). The
+- *Dead weight.* A drainage plane was computed whenever the Time pass ran
+  and nothing read it (`drainageAt` had no caller). The
   material field lives behind a hidden panel and is on in Archipelago
   only. The solid runs its four wear passes when wear is 0. Erosion, its
   age and the talus angle have no row in the panel.
@@ -2483,12 +2483,13 @@ system. Four run in a stack, each on the output of the one before:
   the unread drainage plane, the hidden panel, the four wear passes and
   the three sources of foot debris. The lists of channels and of sand are
   the second agent's reading, not rechecked.
-- **Proposed, not done:** remove the drainage plane; skip the wear passes
-  at 0; give the cliff's foot one owner (rock weather's debris, since it
-  feeds the solid and the stones, with Shape's talus kept for the heights
-  units walk on) and take the Time pass's talus stones out; say on the
-  Weathering box that it changes heights. Each is a look or a cost for
-  the owner to weigh.
+- **Done, at the owner's word ("Yes", 2026-11-10):** the drainage plane is
+  removed (the last commit holding it is `4e5a9455`; the regional check
+  now compares the pages' coarse lattice with the whole map's heights
+  directly), and the solid runs no wear rounds when wear or rock depth is
+  0 (the same bytes). **Agreed and in hand:** rock weather owns the cliff's
+  foot in the art, Shape's talus keeps the heights, and the Time pass's
+  talus no longer places stones.
 
 **Next [proposed by Claude].** The level top's cover (one cover on a level
 top, so tilted or thin beds do not paint it), then the foot once it has

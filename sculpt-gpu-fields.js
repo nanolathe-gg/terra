@@ -1418,7 +1418,7 @@ export function createPagedFields(opts) {
     },
     setTime, timeOn: () => Boolean(time),
     setFocus: r => { focus = r; },
-    // P21: the authored heights at every COARSE-th cell once all of them are current (null while pages are queued), and a promise for the moment they are.
+    // The authored heights at every COARSE-th cell once all of them are current (null while pages are queued), and a promise for the moment they are.
     coarseLattice: () => coarseComplete() ? {heights: coarse, width: coarseW, step: COARSE, revision} : null,
     coarseSettled: () => coarseComplete() ? Promise.resolve() : new Promise(resolve => coarseWaiters.push(resolve)),
     startCoarse: () => getEngine().then(() => { coarseStart = performance.now(); for (let py = 0; py < np; py++) for (let px = 0; px < np; px++) coarseAdd(page(px, py), null); }),

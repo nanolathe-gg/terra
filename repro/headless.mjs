@@ -141,31 +141,27 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const sliders = engine.surfaceSliders(config, settings);
   scene_ = {config, settings, renderer, canvas, fields, nodes, errors, play, context, engine, fieldsModule, worldSize, worldGrid, spacing, minH, maxH, seed, refinementSeed, sliders, paged, ownColors, worldColumn, columnOverride,
     material: engine.materialKnobs(sliders, refinementSeed, renderer.variant.get('transition')), drawOptions: options => engine.drawOptions(sliders, options),
-    dispose() { fields.destroy?.(); scene_.time?.drainage?.retire?.(); renderer.dispose(); }};
+    dispose() { fields.destroy?.(); renderer.dispose(); }};
   return scene_;
 }
 
-// The Time pass over the scene's fields, as runFedWeather runs it (a whole map), or the paged Time runner (pagedTime) for a paged map. The
-// drainage plane handed to the pass is the one for these fields.
+// The Time pass over the scene's fields, as runFedWeather runs it (a whole map), or the paged Time runner (pagedTime) for a paged map.
 export async function weather(s) {
   const {renderer, fields, config, engine, worldGrid: grid, worldSize: size, spacing} = s;
   // A pass again replaces the last one's results (sculpt.js dropGpuWeather): nothing reads them once this returns.
-  if (s.time) { s.time.drainage?.retire?.(); if (!s.time.paged) { s.time.weather.destroy(); s.time.maps.forEach(m => m.destroy()); s.time.field?.destroy(); } s.time = null; }
+  if (s.time) { if (!s.time.paged) { s.time.weather.destroy(); s.time.maps.forEach(m => m.destroy()); s.time.field?.destroy(); } s.time = null; }
   if (!(renderer.variantNumber('erosion', 0) > 0)) return s.time = null;
   s.material = engine.materialKnobs(s.sliders, s.refinementSeed, renderer.variant.get('transition'));   // as runFedWeather reads them, when the pass runs
-  const {computeDrainage} = await import('../sculpt-drainage.js');
   if (s.paged) {
     await fields.coarseSettled();
-    const c = fields.coarseLattice(), plane = await computeDrainage(renderer.device, {heights: c.heights, width: c.width, sea: config.seaLevel});
-    fields.setTime(engine.pagedTime({config, renderer, size, spacing, material: s.material, drainage: () => plane}));
-    return s.time = {paged: true, drainage: plane};
+    fields.setTime(engine.pagedTime({config, renderer, size, spacing, material: s.material}));
+    return s.time = {paged: true};
   }
   await fields.gpuReady(); await fields.gpuQuiet();
   const b = fields.gpuBuffers(), {erosionOf} = await import('../sculpt-erosion.js'), erosion = await erosionOf(renderer);
-  const drainage = await computeDrainage(renderer.device, {planes: b.planes, grid, sea: config.seaLevel});
-  const result = await erosion.runGpu({planes: b.planes, masks: b.masks, rateMask: engine.MASK_KEYS.indexOf('ovErosion'), grid, size, seaLevel: config.seaLevel, ...engine.timeKnobs(renderer), drainage});
+  const result = await erosion.runGpu({planes: b.planes, masks: b.masks, rateMask: engine.MASK_KEYS.indexOf('ovErosion'), grid, size, seaLevel: config.seaLevel, ...engine.timeKnobs(renderer)});
   if (s.material) result.field = await erosion.materialField(engine.materialRequest(config, s.material, {heightBuffer: result.weather, heightOffset: grid * grid, grid, size}));
-  return s.time = {weather: result.weather, maps: result.maps, field: result.field ?? null, drainage, milliseconds: result.milliseconds};
+  return s.time = {weather: result.weather, maps: result.maps, field: result.field ?? null, milliseconds: result.milliseconds};
 }
 
 // What a bake reads (sculpt.js gpuFeedSource): the fields' buffers and the Time pass's, or a paged map's pages under the chunk's lattice.

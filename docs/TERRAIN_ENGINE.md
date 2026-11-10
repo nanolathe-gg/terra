@@ -331,23 +331,14 @@ sea level, and heat (lava). Each material says how it responds:
 Water runs on the GPU as a compute pass. A coarse pass covers the whole map
 for drainage, then fine tiles with aprons add the detail.
 
-**The drainage plane (P21, decision 26)** is that coarse pass: one exact
-drainage area for the whole map, on a 16-px lattice (`DRAIN_STEP` = 8 cells,
-TA's own height cell), from the authored height. Each cell's steepest-descent
-neighbour is its receiver; the receivers form a forest; one gather pass builds
-its Euler tour and ceil(log2 2N) pointer-jumping passes turn the tour into
-subtree sums, in u32 (`engine-drainage.wgsl`, `sculpt-drainage.js`). The plane
-(area, receiver) is stored on the GPU after an edit settles and read by the
-Time pass's maps pass (`drainageAt`). It is stale from the edit until the new
-plane is computed. Outlets are cells at or under sea level and cells on the
-lattice's edge. Before the receivers, two relaxations to their one fixed point
-(atomic min, repeated until a pass changes nothing, so the order of threads
-cannot matter) route flow across flats and out of pits: F, the filled height
-(the lowest climb from a cell to an outlet), and D, the steps from a cell to a
-way out through neighbors of the same F. A receiver is the steepest descent on
-F, or across a flat or a filled depression the same-F neighbor with the least
-D. The reference (`repro/drainage-reference.mjs`) computes the same F by
-priority flood and D by breadth first search.
+**The drainage plane (P21, decision 26)** was that coarse pass: one exact
+drainage area for the whole map on a 16-px lattice, stored on the GPU and
+handed to the Time pass. Nothing ever read it, and it was removed on
+2026-11-10 at the owner's word (the weathering audit, docs/REDESIGN_PLAN.md).
+Its code, CPU reference and checks are in the history: the last commit that
+holds them is `4e5a9455` (`engine-drainage.wgsl`, `sculpt-drainage.js`,
+`repro/drainage*.mjs`). A feature that needs whole-map drainage (rills and
+valleys that branch and join across tiles) starts from there.
 
 **Agents write data maps:** flow, wear, deposit, talus, wetness, snow, soil
 depth and exposure. The existing workers (droplet weathering, sand, flow)
