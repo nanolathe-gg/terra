@@ -1,10 +1,12 @@
 # Terraform redesign plan
 
-Proposal of 2026-11-09, written against main `7d90fda9`, originally on
-`plan/redesign`. Owner decisions recorded on 2026-11-09 on
-`plan/redesign-decisions`; neither branch is landed. Section 7 records the
-owner's answers and takes precedence over earlier recommendations in this
-proposal. [AGENTS.md](../AGENTS.md) governs repository work, subject to the
+Proposal of 2026-11-09, written against main `7d90fda9`. It is kept on main
+as a working document so that every agent edits one copy (branch
+`plan/redesign` is where it was written; `plan/redesign-decisions` is
+merged into it and retired). Being on main does not make a card approved:
+a card is a contract once what it says must be shown has been shown and
+the owner agrees. Section 7 records the owner's answers and takes
+precedence over earlier recommendations in this proposal. [AGENTS.md](../AGENTS.md) governs repository work, subject to the
 owner's explicit instructions; section 8 lists proposed rule amendments.
 
 This revision records product decisions and their direct consequences for
@@ -108,6 +110,28 @@ waits for and has to find; and build the judge first.**
   32 px tiles and painted light. Standard TA export is the current target;
   Nanolathe extensions, including true color, are deferred (section 7,
   decision 4).
+
+**How confident this plan is, goal by goal.** Asked directly by the owner
+on 2026-11-09: would carrying out this plan give a usable, fast,
+artist-friendly editor with hyper-real output that matches retail and
+makes new worlds? Not with high confidence as one sentence. After the
+review most cards are experiments with a stated test, so the confidence
+is in finding out cheaply, not yet in the outcome. Rated only on what has
+been shown:
+
+| Goal | Confidence | Shown | Not shown | Cheapest test |
+| --- | --- | --- | --- | --- |
+| Usable, artist-friendly | Medium | The problems are measured (234 World rows over 12 screens; a shared map loses its world) and the fixes are ordinary work (R9a, R11) | No artist has used it; the tablet has never opened it; dials (R9b) are a proposal | The iPad's first run of today's editor; one R9a slice in the owner's hands |
+| Fast | Medium on the desktop; unknown at 16x16 and on the tablet | The 5 s and 8.4 s slider waits are a scheduling defect, not a cost of the look (section 3.5); stroke drags preview in 73-75 ms | The color-only redraw is unbuilt (35-40 ms is inferred); nothing is measured on a 16x16 map, which has 12.5 times the cells of the 2,336 px map every figure comes from; a cliff edit stays 0.3-1.2 s a window at final quality after every proposed saving | One latency and memory run on a 16x16 map; R5 step 0 |
+| Hyper-real | High for cliff faces and ground detail; low for the form of mountains and hills | Cliffs, by the owner's eye, and why they work (sideways displacement) | No approach tested gave mountains a viewer would take for real; the format's 242 colors and 32 px tiles stay | R3's time-boxed trial on the shape fixtures |
+| Matches retail | Low to medium | Light is close already (equal on Green; 1.3-1.65x strong elsewhere, a tuning matter) | No demonstrated route to "could be a retail section": five rock rewrites did not move it, a relief term helped Red and failed Lava and Moon, three world folders are unopened, and the prototype sheets are development data from a Python model, not the engine | One world's retail heights through the engine (after R1), judged by the owner |
+| New and alien worlds | Medium | Every world already runs from data on one engine, and controls are continuous | The Lava look the owner liked came from the Python look model, not the engine; no invented world has yet been built in the editor from controls alone | Port the "Cells" relief kind (R4) and build one invented world |
+
+If the form trial and the retail test both fail, what the plan still
+delivers is a responsive editor with an honest panel, maps that carry
+their look, good cliffs and standard export, whose mountains look like
+today's and whose retail worlds are in the family rather than
+indistinguishable. That is worth building; it is not the whole brief.
 
 **The cards at a glance** (section 4.3 has each in full; section 5 the
 order):
@@ -595,12 +619,26 @@ settled, in seconds].** Hill stroke 2.1 / 2.7. Elevation on a stroke
 starting point 0.4 / 1.4. Landform face steepness (re-runs the shape)
 5.0 / 5.2. Rain (re-runs weathering) 8.4 / 8.7.
 
-**The last two fit no measured stage.** The shape pass is about 25 ms and
-the whole-map Time pass 0.4-0.9 s (section 3.4); 8.4 s is close to the 8 s
-the canvas will hold a weathered bake for the Time pass to land
-(`sculpt-canvas.js:262-265`). Undiagnosed here; it may be a hold that
-expires where it should be released, which would be a small fix worth
-seconds on every such row.
+**The last two fit no measured stage**: the shape pass is about 25 ms and
+the whole-map Time pass 0.4-0.9 s (section 3.4). **Diagnosed on
+2026-11-09** on branch `s0/slider-response` **[measured by that card's
+agent, with timelines; `~/terraform-assets/agent-s0-sliders/diagnosis.txt`;
+not re-run here]**:
+- *One whole-map Time pass per input event.* Every `input` event of a drag
+  on such a row submits its own pass (`setKnob` -> `queueWeather`), a
+  submitted pass cannot be stopped, and they run one after another at
+  0.76-0.86 s each. Eight events gave eight passes and a first painted tile
+  at 6.3 s; a longer drag painted nothing for more than 15 s. Each pass
+  holds about 156 MiB until it ends.
+- *The canvas hold works as written.* It releases when the weather lands;
+  its 8 s cap only bounds how long the first defect hides the map.
+- *No interaction level for a World slider.* On rows that run no pass
+  (ambient light, rock relief depth) the first tile repaints in about
+  30 ms, but every input clears the whole cache twice and restarts at the
+  center tile at final quality, so the rest of the view waits for release:
+  whole view 640 ms after the first input.
+The fix is on that branch: only the latest value's pass runs, and slider
+drags draw at the interaction level.
 
 **The ten problems, ranked** (evidence in the audit's sections 1-5):
 
@@ -1060,7 +1098,8 @@ looks. Green 4's shape score of .59 is a statement about tracing.
 
 **Interactivity.** None directly; (3) makes regressions visible.
 **Quality.** None directly; (1) and (2) make progress visible.
-**Accepted when** each bench runs from `repro/check.sh full`, LLM visual
+**Accepted when** each bench runs as a script on demand (none is added to
+the check tiers: section 7, later answers), LLM visual
 reviews are available, and the owner has reviewed the starting retail and
 shape sheets. Numerical summaries are diagnostics, not artistic sign-off.
 **Risks.** Heights at 16 px under-determine the art, so `ours` will never
@@ -1552,9 +1591,11 @@ landform with its skirt was an independent domain, because level plain is
 fixed base level (section 3.8); whether the engine's own pass has that
 property is the first thing to check. The pass already dispatches over
 active tiles only, so part of this saving may exist; measure before
-building. **First, diagnose the 5 s and 8.4 s waits of section 3.5**: they
-are larger than any stage measured and may be a hold, which would be worth
-more than this card.
+building. The 5 s and 8.4 s waits of section 3.5 were one pass per input event, not
+this pass's own cost; with that fixed, what remains is one pass of about
+0.8 s per settled edit on a 2,336 px map. What it costs on a 16x16 map,
+with 12.5 times the cells, is not measured and decides how much this card
+matters.
 **Accepted when** release-to-final falls by the measured Time cost on a
 map where one landform of ten is edited, and the report states the largest
 height difference from the whole-map pass (the goal is none beyond
@@ -1722,7 +1763,8 @@ the pool, a target the owner has not yet agreed: a 16x16 Green map with a
 fifth of its area as landforms under 30,000 distinct tiles (a Green map
 with no strokes is 39,252 today, so this means changing level ground
 itself), with no visible repeat at 1x or at Fit **[by eye]**. With stamps
-deferred (decision 7), the pool is the only reuse mechanism in scope.
+deferred (decision 7), the pool is the only reuse mechanism in scope now;
+copy and paste of paths aligned to the tile grid is the later second one.
 **Risks.** Visible repetition on plains; the pool size is the dial for it.
 
 #### R11. The map carries its world; export ignores view options (S)
@@ -1851,7 +1893,7 @@ hold several separate changes.)
 | Card | Size | Why first |
 | --- | --- | --- |
 | Section 6's dead-code table only | S | Everything after is easier with 21 dead branches gone; byte-identical |
-| The slider waits of 5.0 s and 8.4 s: diagnose with timestamps, then preview during slider drags | S | The largest measured wait in the editor, and unexplained |
+| The slider waits of 5.0 s and 8.4 s (diagnosed: one Time pass per input event, section 3.5): run only the latest, and preview during slider drags | S | The largest measured wait in the editor |
 | R11 the map carries its world; export ignores view options | S | A correctness bug in sharing, and R0's scenes need it; after the two branches that share its files |
 | The iPad's first run of today's editor (section 2) | S, the owner's hands | Every tablet decision depends on what it finds |
 | R1 height-image op | S | R0 needs it |
@@ -1962,9 +2004,9 @@ approval of every proposed mechanism or estimate in sections 3-6.
    improvements, including true color, are deferred.
 5. **Gameplay readability.** What blocks units should look blocked whenever
    possible. Artists use the passability overlay to confirm and adjust
-   terrain while building maps. (The recorder added that a new automatic
-   mismatch lint is not a current requirement; the owner's answer neither
-   asked for one nor ruled it out.)
+   terrain while building maps. No mismatch lint: "we don't need a
+   mismatch lint. We already have too many tests" (owner, later the same
+   day).
 6. **Fairness.** Symmetry and fairness tools are out of scope for now.
    Focus on generated artwork quality; artists can address balance if they
    care about it.
@@ -1972,7 +2014,10 @@ approval of every proposed mechanism or estimate in sections 3-6.
    examples, and reusable content libraries can be added later. Existing
    Landform and material presets remain part of the authoring controls;
    this decision does not remove them. Internal benchmark scenes are not
-   starter content.
+   starter content. Stamps, when their time comes, are copy and paste of
+   paths, with the copy aligned to the tile grid so that its output uses
+   the same tiles as the original; not a focus now (owner, later the same
+   day).
 8. **Compatibility.** The exported `.ufo` is the enduring game contract.
    Terraform and Nanolathe implementations and editable-source behavior can
    change. A saved artist path may render differently after an algorithm
@@ -1998,6 +2043,18 @@ approval of every proposed mechanism or estimate in sections 3-6.
     sheets and decision records. A larger commit is not itself a better
     review unit. The proposed R12 numerical ceilings still need review.
 
+### Later answers (2026-11-09, evening)
+
+- **No new gates.** "We already have too many tests." Benches and
+  measuring tools in this plan are scripts run on demand by the card that
+  needs them. Nothing here adds a check to `repro/check.sh`, and a card
+  that can retire a check should say so.
+- **One plan.** This document, edited from `plan/redesign` and kept on
+  main, is the copy every agent works from.
+- **Land soon.** Reviewed work that passes its checks lands on main
+  promptly, so branches stop drifting apart. Pushing main remains the
+  owner's step.
+
 ### Remaining validation, not unanswered product choices
 
 - Record browser/OS versions, viewport, device pixel ratio, and render
@@ -2016,7 +2073,8 @@ approval of every proposed mechanism or estimate in sections 3-6.
 - Measure latency, memory and export time on a 16x16 map. Export took
   43-217 s headless at that size against 3.7 s at 4x4; whether the artist
   needs progress, cancel or a faster path there is undecided.
-- Decide what reuses tiles now that stamps are deferred and the tile
+- Tile reuse beyond pooled ground waits for copy and paste of paths
+  (decision 7). Until then, watch the count: with stamps deferred and the tile
   budget is first-class (R10): dense Moon is 3,399 tiles under the cap.
 - Run the provenance audit (R13) before the repository is public.
 - Keep LLM review honest (R0): a separate reviewer, fixed framing, located
@@ -2049,7 +2107,9 @@ approval of every proposed mechanism or estimate in sections 3-6.
   its world. Same-build, same-machine determinism remains a check; editable
   source does not promise the same export across GPUs or future builds.
   The exported `.ufo` is the game contract."
-- **Checks table**, add the benches of R0 and the stage-map check.
+- **Checks table**: unchanged. The benches of R0 and the stage-map tool are
+  scripts a card runs when it needs them; the owner's steer is fewer tests,
+  not more (section 7, later answers).
 
 ## Appendix A. Evidence index
 
