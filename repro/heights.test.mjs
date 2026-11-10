@@ -134,7 +134,9 @@ test('an image placed on the 16 px grid exports its bytes where it lies, in ever
 
 test('pages and the whole map agree on a scene of height images', gpu, async () => {
   const headless = await import('./headless.mjs'), scene = fixtureScene();
-  const s = await headless.openScene(scene, 'biome=green&scratch=1&mapX=4&mapY=4&gpuPages=force&gpuMB=512&heapMB=1536');
+  // Undulation 3: the fixture was drawn on Green's undulating plain (the world's default until 2026-11-10); its cut and raise images move cells on
+  // every side of the lines only against a ground that is not level.
+  const s = await headless.openScene(scene, 'biome=green&scratch=1&mapX=4&mapY=4&gpuPages=force&gpuMB=512&heapMB=1536&undulation=3');
   try {
     const result = await s.engine.regionalCheck({fields: s.fields, device: s.renderer.device, nodes: s.nodes, context: s.context(), config: s.config, grid: s.worldGrid, spacing: s.spacing, minH: s.minH, maxH: s.maxH});
     assert.equal(result.mismatches, 0, JSON.stringify(Object.entries(result.planes).filter(([, p]) => p.mismatches)));

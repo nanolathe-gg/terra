@@ -30,7 +30,11 @@ BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Arc
 # plus its own overrides below, so each world has a value for every setting;
 # a knob missing here is reported in the page's console.
 KNOB_DEFAULTS = dict(
-    groundTiles=16, groundPattern='', beachFrom='', groundContrast=1, undulation=10, undulationScale=200, undulationCover=.45, undulationArt=1, faceSteep=1,
+    # Level ground is flat in the game's height map by default (the owner, 2026-11-10: an RTS needs flat ground to build on; relief on level ground is
+    # for the art). Undulation height is 0 in every world: raised, it goes into the heights. Each world keeps its own Undulation size and cover for an
+    # artist who raises it, and the retail windows (repro/scenes) pin the height they were matched with: green 3, red 2.5, desert 14, moon 6, zhon 1.5,
+    # lava 12, crystal 4, ice 4.
+    groundTiles=16, groundPattern='', beachFrom='', groundContrast=1, undulation=0, undulationScale=200, undulationCover=.45, undulationArt=1, faceSteep=1,
     # Low ground: its tint (0: none) and its reach above the sea (the Colors panel's Low ground is its color).
     lowTint=0, lowReach=6, lowGrain=1,
     # S4: shade in creases (0: none).
@@ -265,7 +269,7 @@ WORLD_KNOBS = {
                   # The undulation knobs and Level-ground lumps still work.
                   # Retail round 1: a fine, partial undulation (3 at 48 px over 40% of the land) gives the plain retail's gentle .08-.15 slopes
                   # (green-1 shape .38 -> .33) without broad light blotches (viewed at 1x).
-                  undulation=3, undulationScale=48, undulationCover=.4, plainRelief=0,
+                  undulationScale=48, undulationCover=.4, plainRelief=0,
                   # Dry dielectric rock: broad reflections, with the actual solid casting shadows.
                   shineRock=.35, shineRockSharp=2, shineRockRough=.18, shineRockScale=5, shineWhite=1, shineOutside=1,
                   # E11 (round 7 report: "too smooth", "matches the shoreline too closely",
@@ -298,7 +302,7 @@ WORLD_KNOBS = {
     # Retail round 1: retail's plain rolls gently (slope .03-.08 share .34 / .07 / .16 in red-1..3, ours .05 / .25 / .04 with none), so a faint
     # undulation (2.5 over 80-px lumps on 60% of the land) replaces the level plain, and the ground pattern is softened to .7 contrast
     # (retail's plain is lighter, less dotted).
-    'red': dict(undulation=2.5, undulationScale=80, undulationCover=.6, groundContrast=.7, crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
+    'red': dict(undulationScale=80, undulationCover=.6, groundContrast=.7, crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
                 reliefAmount=.2, slopeTexture=0,
                 # Retail round 2: raised landform faces steeper (retail's rims and mesa walls are crisper than 1).
                 faceSteep=1.75,
@@ -342,7 +346,7 @@ WORLD_KNOBS = {
     # edge is a fade by default (retail's halo round an island and its reef bars
     # fade over 30-40 px); a stroke may set a hard step, which sits at the midpoint, depth 18 (20 before H24).
     'archipelago': dict(crackSeverity=.4, crackMajor=.6, banding=.5, crackDark=.3, flatBank=1,
-                        undulation=0, shadeDepth=.3,
+                        shadeDepth=.3,
                         # Retail round 2: shores drop to the sea in 0-16 px (base 58-66), as retail's do.
                         coastRamp=.25,
                         # Hills and the mineral ring (card E1): mound pixels averaged (90, 80, 65)
@@ -395,7 +399,7 @@ WORLD_KNOBS = {
     # Its beds are all alike (columnContrast 0): they stand one ledge high, and the Time pass reads no hardness.
     'desert': dict(lightCap=1.25, sunTilt=.5, paletteMix=1, strata=1, strataContrast=1, columnContrast=0, banding=.4,
                    strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
-                   sand=0, undulation=14, undulationScale=48, undulationCover=1, undulationArt=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2,
+                   sand=0, undulationScale=48, undulationCover=1, undulationArt=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2,
                    # Card E3: black shadow sides: retail's buttes are dark on the side turned
                    # from the sun, where ours shaded to a soft grey. No fill light and little
                    # ambient (faceFill 0, ambient .3) darken those faces.
@@ -420,7 +424,7 @@ WORLD_KNOBS = {
     # foot with no cracks, so crackSeverity, worms and wrinkles are 0 (they were .35, .4 and
     # .8: the Moon variant 'cracked' restores that look) and the pits are drawn by pockmark.
     'moon': dict(looseSupply=.1, looseSize=3.5, crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4,
-                 worms=0, undulation=6, plainRelief=.6, banding=0, crackDark=.6,
+                 worms=0, plainRelief=.6, banding=0, crackDark=.6,
                  sunTilt=0, faceFill=0, ambient=.25,
                  # Card B3: the isolated marks (slopeMarks .4) read as specks and, lined up
                  # on a narrow wall, as a toothed lip; retail's slopes are crazed with
@@ -452,7 +456,7 @@ WORLD_KNOBS = {
     # Painted sand keeps a raised bar sand to its crown (the river sections'
     # sand bars rise ~100 units from the bed with no rock).
     # Undulation 10 -> 1.5: retail's savannah is level (50-57% of dry cells under slope .03; ours 11-22%).
-    'zhon': dict(undulation=1.5, crackSeverity=.4, crackMajor=.6, rockCrown=1, apron=0, sandBanding=1,
+    'zhon': dict(crackSeverity=.4, crackMajor=.6, rockCrown=1, apron=0, sandBanding=1,
                  beachWidth=.6, banding=.3, crackDark=.45, sandCrown=1,
                  lowGrain=.4, lowReach=4),
     # Lava: one dark, low-chroma brown ground with no cracks, sand or
@@ -464,7 +468,7 @@ WORLD_KNOBS = {
     # ground-spaced dark lines from slope 0.15 up; ground-coloured faces;
     # rim, outline and lip at the coast. Worms gave way to the lines.
     # Retail round 2: the plain's game heights undulate 12 high over 96 px (shape), but its art does not (retail's plain is an even mottle).
-    'lava': dict(undulation=12, undulationCover=1, undulationScale=96, undulationArt=0, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
+    'lava': dict(undulationCover=1, undulationScale=96, undulationArt=0, plainRelief=.6, crackSeverity=.4, crackNetwork=0, crackHairline=0, crackBlocks=.3,
                  beachWidth=0, waterSoft=0, bankRock=0, banding=0,
                  worms=0, shoreEdge=1, slopeTexture=0,
                  # Card E4: retail's bank is 6-9 flat layers stepping down to the lava, 12-16 px a
@@ -508,7 +512,7 @@ WORLD_KNOBS = {
     # crystal_geometry.py), so the block size sits at the knob's 16-px floor.
     # Its Crystals brush makes column mounds: Voronoi columns with ~15 px
     # tops stepped ~16 units (measure/crystal_geometry.py).
-    'crystal': dict(gougeWeb=.6, paletteMix=1, undulation=4, plainRelief=.6, crackSeverity=.7, crackNetwork=1,
+    'crystal': dict(gougeWeb=.6, paletteMix=1, plainRelief=.6, crackSeverity=.7, crackNetwork=1,
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
                     crystalStep=16, crystalVariation=.35, crystalTiers=1,
                     crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.16, crystalSeam=1,
@@ -568,7 +572,7 @@ WORLD_KNOBS = {
     # sections).
     # Its Crystals brush makes ice blocks: four-sided, flat-topped (top ~0.45
     # of the base), sides ~0.7 units/px, no lean (measure/ice_features.py).
-    'ice': dict(undulation=4, plainRelief=.6, crackSeverity=0, crackMajor=.4, crackMinor=.3, crackHairline=.2,
+    'ice': dict(plainRelief=.6, crackSeverity=0, crackMajor=.4, crackMinor=.3, crackHairline=.2,
                 crackBlocks=.2, beachWidth=0, bankRock=0, crystalSides=4, crystalTop=.45, crystalVariation=.2,
                 # Shore (card E5): frost crystals are the Ice shore. Retail's band is
                 # mostly plain white ice with sparse fine straight lines (windows ice-1
@@ -673,7 +677,7 @@ WORLD_VARIANTS = {
         # Ground cover (card P30): GROUND_COVER above, with Vegetation cover 1.
         # Card P27: Surf .1 on its water strokes (a wet line and a 1-px foam lace on lakes, no beach) and a sand colour for the beaches
         # higher Surf builds.
-        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, undulation=0, coastRamp=1, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, cavity=1.0, shineRock=.36),
+        'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, coastRamp=1, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, cavity=1.0, shineRock=.36),
                        # Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the hills' feet and in gullies,
                        # median 5 px (readable at 1x; Green's retail grit is 3-4); stoneSort .7 sorts it by the process (talus coarsens outward).
                        material=dict(stoneSort=.7, groundPool=2048, groundCover=GROUND_COVER)),

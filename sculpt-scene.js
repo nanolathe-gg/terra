@@ -22,7 +22,8 @@ export const LANDFORM_TOOLS={
   // because on a plateau this small, with this much Wander, 60 and over makes a lumpy apron; it is not there to keep KBots off (the owner: KBots climb
   // scree by its slope like any ground). At these numbers, over five worlds and four outlines, vehicles are kept off all 20 walls and KBots reach the
   // top on 9 (11 with no gullies at all). A scene's bare "landform" does not take these (toolDefaults).
-  plateau:{gullies:50,gullySize:50,talus:25},
+  // Its top is level in the game's heights (Height variation 0): a plateau is ground to build on.
+  plateau:{gullies:50,gullySize:50,talus:25,heightVary:0},
   // A hill is low and wide (240 px, rises 36), the same on both sides (lean 100), with a rounded top and shoulders (the section reaches .95 of the rise at .9 of the way up, and climbs at most .4 of it per quarter) and a smooth outline: its steepest 16 px cell steps 16 units or less against 25 at the 99th percentile of retail Green hills (measure/hill_band.py), so units cross it, and it stays off the rock slope score. Gullies 0 keeps modern Green's gully ribs off it (the other worlds have none).
   hill:{diameter:240,elevation:36,lean:100,cracks:20,gullies:0,styleVegetation:60,wander:10,widthVary:10,heightVary:6,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfHill',knots:hillKnots(),back:hillKnots()}},
   // Peaked ridge: high (150 over the plain), a steep rock face all round (cells over 24 units on 16 px, steeper than retail Green's hills), a chain of five
@@ -75,7 +76,7 @@ export const TOOL_PRESETS={
   green:{crater:{wander:34,heightVary:4}},
   red:{crater:{wander:38,heightVary:4,curve:{form:'lfCrater',knots:CRATER_BOWL}},hill:{wander:34,widthVary:30,heightVary:10},mountain:{wander:8},deep:{diameter:176,wander:34,widthVary:35},shallow:{wander:4}},
   // The reviewed mesa; ragged feet and foot bumps on the ridges (the retired baseVary and baseBump, as wander and height variation).
-  desert:{plateau:{"diameter":400,"amount":70,"roughness":0,"softness":50,"cracks":10,"faceVariation":0,"lean":100,"facing":3,"terraces":6,"elevation":90,"combine":0,"wander":75,"widthVary":30,"heightVary":1,"varySize":210,"varyFoot":100,"varyMiddle":150,"ledge":55,"terraceJitter":40,"breakup":30,"curve":{"form":"mesa","knots":[[0,0],[0.13299999999999998,0.088],[0.2667,0.25],[0.364,0.367],[0.48299999999999993,0.625],[0.5914999999999999,0.883],[0.7,1],[1,1]]}},crater:{wander:32,heightVary:3,cracks:10},hill:{wander:46,widthVary:25,heightVary:10,cracks:10},mountain:{wander:24,cracks:10},deep:{wander:34,widthVary:35}},
+  desert:{plateau:{"diameter":400,"amount":70,"roughness":0,"softness":50,"cracks":10,"faceVariation":0,"lean":100,"facing":3,"terraces":6,"elevation":90,"combine":0,"wander":75,"widthVary":30,"heightVary":0,"varySize":210,"varyFoot":100,"varyMiddle":150,"ledge":55,"terraceJitter":40,"breakup":30,"curve":{"form":"mesa","knots":[[0,0],[0.13299999999999998,0.088],[0.2667,0.25],[0.364,0.367],[0.48299999999999993,0.625],[0.5914999999999999,0.883],[0.7,1],[1,1]]}},crater:{wander:32,heightVary:3,cracks:10},hill:{wander:46,widthVary:25,heightVary:10,cracks:10},mountain:{wander:24,cracks:10},deep:{wander:34,widthVary:35}},
   // Lobed hill outlines (the retired moonLobes): wander in lobes about 60 px long, from foot to crest.
   moon:{crater:{wander:38,heightVary:4,secondaries:6,ejecta:70,buckling:70},hill:{wander:42,widthVary:30,heightVary:9,varySize:60,varyMiddle:150},mountain:{wander:24,widthVary:5},deep:{wander:34,widthVary:35}},
   // Crystal's Crystals draw a column mound (its old brush: Height 140, 480 wide, Irregularity 40): stepped columns over the mound's (1 - r^2)^1.2 dome, the
@@ -266,7 +267,7 @@ export function strokeParams(s) { return {...Object.fromEntries(['shorePlates','
 // other key is a stroke option.
 export const strokeCard=(config,d) => ({radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,softness:d.softness/100,cracks:d.cracks/100,
   ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),curve:d.curve,along:d.along});
-export const groundDefaults=settings => ({amplitude:settings.has('undulation')?Number(settings.get('undulation')):10,wavelength:settings.has('undulationScale')?Number(settings.get('undulationScale')):200,coverage:settings.has('undulationCover')?Number(settings.get('undulationCover')):.45,
+export const groundDefaults=settings => ({amplitude:settings.has('undulation')?Number(settings.get('undulation')):0,wavelength:settings.has('undulationScale')?Number(settings.get('undulationScale')):200,coverage:settings.has('undulationCover')?Number(settings.get('undulationCover')):.45,
   art:settings.has('undulationArt')?Number(settings.get('undulationArt')):1});   // the share of the undulation the art shows (lit and painted); the game heights keep all of it
 
 // The brush seed a page opens with (sculpt.html's Seed box): a scripted scene's strokes take their seeds from it.
