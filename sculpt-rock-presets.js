@@ -31,6 +31,15 @@ export function copyRockSettings(value){
  }
  return result;
 }
+// A world or a variant may name a recipe as its rock (config.rock = {recipe, beds}; sculpt.py WORLD_VARIANTS): when its file loads, the recipe's
+// numbers become the world's own, under a saved world and the page's address, and with `beds` its beds replace the column's, as the Rock recipe
+// list does. The numbers stay in this file; a world with no `rock` is as its file says.
+export function applyWorldRock(config){
+ const p=ROCK_PRESETS[config.rock?.recipe];if(!p)return config;
+ for(const[key,value]of Object.entries(p.knobs)){config.defaults[key]=String(value);delete config.engineDefaults?.[key];}
+ if(config.rock.beds)config.column={...config.column,sections:structuredClone(p.sections),variants:{}};
+ return config;
+}
 export function rockPresetFor(values,column){
  return Object.entries(ROCK_PRESETS).find(([,p])=>Object.keys(p.knobs).every(k=>Math.abs(Number(values[k])-p.knobs[k])<1e-6)&&JSON.stringify(column?.sections)===JSON.stringify(p.sections))?.[0]||'';
 }

@@ -6,6 +6,7 @@ import {execFileSync} from 'node:child_process';
 import {mkdtempSync, readFileSync, readdirSync, existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {ROCK_PRESETS, applyWorldRock, rockPresetFor} from '../sculpt-rock-presets.js';
 
 const root = new URL('..', import.meta.url).pathname;
 const out = mkdtempSync(join(tmpdir(), 'site-'));
@@ -23,7 +24,19 @@ test('every world and variant has a config file, and the services are declared',
     const config = JSON.parse(read(`config/${world}.json`));
     assert.equal(config.biomeId, world);
     assert.ok(existsSync(join(folder, config.materialTable)), `${world}: table ${config.materialTable} is in the build`);
-    for (const variant of Object.keys(config.variants)) assert.equal(JSON.parse(read(`config/${world}--${variant}.json`)).variant, variant);
+    for (const variant of Object.keys(config.variants)) {
+      const file = JSON.parse(read(`config/${world}--${variant}.json`));
+      assert.equal(file.variant, variant);
+      // A variant that names a rock recipe names one the page has, and the page lays its numbers (and, where asked, its beds) over the world's.
+      if (file.rock) {
+        const recipe = ROCK_PRESETS[file.rock.recipe], beds = file.column?.sections;
+        assert.ok(recipe, `${world}/${variant}: recipe ${file.rock.recipe}`);
+        applyWorldRock(file);
+        for (const [key, value] of Object.entries(recipe.knobs)) assert.equal(Number(file.defaults[key]), value, `${world}/${variant}: ${key}`);
+        assert.deepEqual(file.column?.sections, file.rock.beds ? recipe.sections : beds);
+        assert.equal(rockPresetFor(file.defaults, file.column), file.rock.beds ? file.rock.recipe : '');
+      }
+    }
   }
   assert.ok(JSON.parse(read('config/catalog.json')).worlds.green);
   assert.equal(services.maps.available, true);

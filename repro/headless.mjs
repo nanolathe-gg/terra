@@ -98,13 +98,13 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   await openHost();
   const engine = await import('../sculpt-scene.js'), fieldsModule = await import('../sculpt-gpu-fields.js');
   const {configureMap} = await import('../sculpt-map.js'), {TerrainRenderer} = await import('../sculpt-renderer.js');
-  const {copyRockSettings} = await import('../sculpt-rock-presets.js');
+  const {copyRockSettings, applyWorldRock} = await import('../sculpt-rock-presets.js');
   const {copyColumn} = await import('../sculpt-column.js');
   const settings = new URLSearchParams(search);
   for (const [key,value] of Object.entries(copyRockSettings(scene.rock) || {})) if (!settings.has(key)) settings.set(key,value);
   globalThis.location = {search: '?' + settings};
   const services = await json('services.json');
-  const config = await json(`config/${encodeURIComponent(settings.get('biome') || services.defaultWorld)}${settings.get('variant') ? '--' + encodeURIComponent(settings.get('variant')) : ''}.json`);
+  const config = applyWorldRock(await json(`config/${encodeURIComponent(settings.get('biome') || services.defaultWorld)}${settings.get('variant') ? '--' + encodeURIComponent(settings.get('variant')) : ''}.json`));
   if (config.biomeId !== scene.biome) throw new Error(`asked for world ${scene.biome}, got ${config.biomeId}`);
   config.services = services;
   const worldColumn = {column: config.column}, columnOverride = copyColumn(scene.column);

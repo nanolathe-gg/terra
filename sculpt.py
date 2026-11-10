@@ -680,7 +680,10 @@ WORLD_VARIANTS = {
         'modern': dict(label='Modern: realistic look (in progress)', colors=dict(sand='#f0d69a', sun='#ffc880', sky='#80a0ff'), knobs=dict(vegetationCover=1, coastRamp=1, gullies=.4, wrinkles=1, surf=.1, looseSupply=.7, looseSize=5, cavity=1.0, shineRock=.36),
                        # Card P16: loose stone where gravity and water leave it: Supply .7 puts a stony apron round the hills' feet and in gullies,
                        # median 5 px (readable at 1x; Green's retail grit is 3-4); stoneSort .7 sorts it by the process (talus coarsens outward).
-                       material=dict(stoneSort=.7, groundPool=2048, groundCover=GROUND_COVER)),
+                       material=dict(stoneSort=.7, groundPool=2048, groundCover=GROUND_COVER),
+                       # Its rock is the Rounded granite recipe, beds and all (the owner, 2026-11-10): massive rock in rounded blocks 34 px wide, with
+                       # no strata. The recipe's numbers win over the variant's where both set one: Shine rock .4 for .36 and loose stone 7 px for 5.
+                       rock=dict(recipe='granite', beds=True)),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
@@ -761,6 +764,10 @@ WORLD_VARIANTS = {
     # Its beds are the `triad` row of the column block in materials/desert.json. Card E8: retail's grey buttes carry
     # rust-pink lines (slot 4, (175,111,90), the nearest slot to the measured (149,88,86)) 15 units apart (median over the
     # lit flanks above 60, 14 px) and ~4.4 units wide, not 4 apart.
+        # Modern Desert: where its realistic look accumulates, as modern Green's does. So far it is Desert with the Layered sandstone recipe's
+        # numbers for its rock (the owner, 2026-11-10), over Desert's own beds and their colors: the recipe's three thin beds, 14 units to the
+        # cycle, painted a plateau's level top in patches of all three.
+        'modern': dict(label='Modern: realistic look (in progress)', rock=dict(recipe='sandstone', beds=False)),
     },
 }
 for _world, _variants in WORLD_VARIANTS.items():
@@ -791,6 +798,8 @@ def apply_variant(config, biome, variant):
             if key in v['material'] and key not in v.get('knobs', {}):
                 out['defaults'][key] = str(v['material'][key])
     out.update(copy.deepcopy(v.get('config', {})))
+    if v.get('rock'):
+        out['rock'] = dict(v['rock'])   # a rock recipe by name: the page lays its numbers over the world's (sculpt-rock-presets.js applyWorldRock)
     out['variant'] = variant
     return out
 
