@@ -2164,14 +2164,63 @@ branch and join, with debris fans at their mouths, boulders below and
 smooth fines in the lows; bedding shows only faintly. For this picture
 that puts rows 8 and 14, then 4 and 5, ahead of row 1.
 
-**Next [proposed by Claude].** `CODEX_HANDOFF_ROUND2.md` in
-`$R/claude-handoff-2026-11-09/`: the Gullies controls and the cliff's
-height on one sheet against the top-down reference; the cause of the
-Talus reach defect, and a fix on a prototype branch; then one mechanism
-proposed from the located differences. Two candidates for row 1 wait
-behind it: Codex's (a new support field for beds, shared by the heights
-and the solid) and a cheaper one of Claude's (the landform's steps read
-the same column as the skin, so that a ledge is a step).
+**Night of 2026-11-10 [Claude; the owner has judged none of it].** The
+owner, going to bed: "keep autonomously improving the quality of the
+terrain". `CODEX_HANDOFF_ROUND2.md` was taken over and not run by Codex.
+Private files are in `$R/agent-night/`; the before and after sheet is
+`$R/claude-handoff-2026-11-09/night-before-after.png`.
+
+Landed on local main, each after the land tier:
+
+- `8e97e409` *Talus reach no longer buries a plateau's top* **[measured]**.
+  The cone's line rises inward and met a level top a second time; the cone
+  now ends before that. Talus reach 20, 80 and 200 change none of the 587
+  level cells, and the mountain preset keeps every height byte.
+- `a7d4e800` *Gullies vary along a wall and head back into its rim*
+  **[measured]**. Depth runs from 0.2 to 1.85 of the setting along a wall,
+  and the widest gullies cut notches into the level ground above a brow.
+  At Gullies 60 the notches move 33 of 582 level cells by more than 2
+  units and flat cells go from 486 to 448. Three of 34 scenes move (modern
+  Green); the realism report and the drag numbers are in the commit.
+- `81c30738` the hover previews, regenerated.
+
+Tried and not landed:
+
+- *Gullies and scree as the plateau preset's default.* 27 of 34 check
+  scenes move **[measured]**, because a scene's landform stroke starts as
+  the plateau and takes its preset for every key the card leaves out
+  **[read, `toolDefaults`, `sculpt-scene.js:248`]**. It is a default look for every
+  world: it waits for the owner, and those scenes would be pinned first.
+- *Scree as fans below the gully mouths.* One try: on a ridge it drew a
+  fringe of spikes **[by eye]**. It needs broad cones, and a mask for
+  loose ground so that the rock skin leaves scree smooth.
+
+Found and not fixed:
+
+- *Time cannot cut deeper by running longer* **[read and measured]**. Its
+  rate is divided by the age (`sculpt-erosion.js:121`), so the age refines
+  the same total; `erosionEnvelope=24` with age 800 and rain 2 moved the
+  same 567 height bytes (most 7) as the default envelope.
+- *The rows of 2 px dashes are loose stones* **[measured by switching
+  rock terms off one at a time]**. They go with `debrisAmount=0` and with
+  nothing else. Debris raises the stone share to as much as .98
+  (`lsMaskCompute`, `engine-bake.wgsl`), where the smallest size packs in
+  rows.
+- *Research* (`$R/claude-handoff-2026-11-09/research-terrain-tools.md`, a
+  sub-agent's reading; it lists what it could not open). TerraForge3D
+  (MIT) has droplet erosion and nothing for these gaps. The idea worth a
+  round: stream-power incision with one randomly chosen lower neighbor
+  per cell, and debris flow that drops its load as fans (Jain, Benes and
+  Cordonnier 2024). Ideas only.
+
+**Next [proposed by Claude].** The owner looks at the sheet and says
+whether the notched rim and the varied gullies are the right direction.
+Then, one at a time: loose ground as a mask, with scree in broad fans; the
+plateau preset's default; and a way for Time to cut by discharge. Two
+candidates for row 1 still wait: Codex's (a new support field for beds,
+shared by the heights and the solid) and a cheaper one of Claude's (the
+landform's steps read the same column as the skin, so that a ledge is a
+step).
 
 **Scale: none fixed; a working one may be used [owner decision,
 2026-11-10].** Codex proposes 4 art pixels to a meter
