@@ -1048,16 +1048,23 @@ function queueWeather() {
 // (engine-weather.wgsl mf*) and joins the chunk feed in gridTexture layer 1; a change of any of these drops the weather like a change of the pass's own knobs.
 const materialKnobs=() => materialKnobsIn(surfaceValues(),refinementSeed,renderer.variant.get('transition'));
 // H6b: the Time pass on the fields' GPU buffers; see gpuFeedSource. Nothing comes back to the CPU here.
+// One pass at a time. A submitted pass cannot be stopped: the GPU runs it to its end (about 0.8 s on a 4x4 map) and it keeps its 120 B a cell
+// until then. So a request made while one runs waits for it, and of the requests waiting only the newest still wanted submits the next. When
+// each request submitted its own at once, a slider dragged through eight values queued eight passes ahead of the one that mattered.
+let timePass=null;
 async function runFedWeather(job) {
   try {
     const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer);
+    while (timePass) { await timePass; if (job!==weatherJob) return; }
     await regionalFields.gpuQuiet();   // the shape runs' own scratch (whole-map noise: peak 259 MB) is gone before the pass allocates its 120 B a cell
     const b=regionalFields.gpuBuffers();
     if (!b || job!==weatherJob) return;
     gpuPassBytes=grid*grid*120+Math.ceil(grid/8)**2*12;
     const request={planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,...timeKnobs(renderer)};
     request.drainage=drainagePlane();
-    const result=await erosion.runGpu(request),material=materialKnobs();
+    const pass=erosion.runGpu(request),flight=pass.then(() => {},() => {}).then(() => { if (timePass===flight) timePass=null; });   // cleared when the pass ends, failed or not, before a waiting request looks
+    timePass=flight;
+    const result=await pass,material=materialKnobs();
     if (material && job===weatherJob && !stroke) result.field=await erosion.materialField(materialRequest(config,material,{heightBuffer:result.weather,heightOffset:grid*grid,grid,size}));
     gpuPassBytes=0;
     if (job!==weatherJob || stroke) { retireGpuWeather(result); return; }
