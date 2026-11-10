@@ -5,8 +5,8 @@ import {TerrainRenderer} from './sculpt-renderer.js';
 import {columnRows} from './sculpt-column.js';
 import {PLANT_REACH,groundCoverOn} from './sculpt-material-model.js';
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
+import {MASK_KEYS} from './sculpt-scene.js';
 
-const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','riverBed','fu','fv','s1','s2','s3'];
 const MB=1024*1024, pow2=n=>2**Math.ceil(Math.log2(Math.max(1,n)));
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const mipBytes=(w,h,layers,levels,bytes)=>{let total=0;for(let i=0;i<levels;i++)total+=Math.max(1,w>>i)*Math.max(1,h>>i)*layers*bytes;return total;};
