@@ -157,7 +157,7 @@ feature.
     always works on a map, `/sculpt` opens a default map, and the test
     scenes render as a window on a map. One stroke path, one draw path.
 
-22. **Retail is the gold standard.** *"remember the retail shots are the gold
+22. **Retail is the gold standard.** (Parked on 2026-11-09: the owner put realistic terrain first and will return to retail later. AGENTS.md rule 10 is the current rule.) *"remember the retail shots are the gold
     standard, and if our noise or other things change before/after but don't
     substantially move us away from retail then it's fine. We still have some
     refinement to do to perfectly match retail. You have freedom to make some
