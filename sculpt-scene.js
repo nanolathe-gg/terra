@@ -18,12 +18,15 @@ export const LANDFORM_DEFAULTS={"diameter":300,"amount":70,"roughness":0,"softne
 const valley=(form,more={}) => ({diameter:240,lean:100,combine:1,elevation:-20,cracks:0,wander:20,widthVary:20,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,curve:{form,knots:FORMS[form]().knots},...more});
 const hillKnots=() => [[0,0],[.25,.08],[.5,.4],[.75,.8],[.9,.95],[1,1]];
 export const LANDFORM_TOOLS={
-  // A plateau's wall is cut by gullies and stands back in bays (Gullies 50), with a low apron of fans at its foot (Talus reach 25). The reach is short
-  // because on a plateau this small, with this much Wander, 60 and over makes a lumpy apron; it is not there to keep KBots off (the owner: KBots climb
-  // scree by its slope like any ground). At these numbers, over five worlds and four outlines, vehicles are kept off all 20 walls and KBots reach the
-  // top on 9 (11 with no gullies at all). A scene's bare "landform" does not take these (toolDefaults).
-  // Its top is level in the game's heights (Height variation 0): a plateau is ground to build on.
-  plateau:{gullies:50,gullySize:50,talus:25,heightVary:0},
+  // A plateau is high ground to build on (the owner's rule: most of it level): 800 px across and 130 over the plain, with a top that is level in the
+  // game's heights (Height variation 0). Its wall takes the outer 105 px of each side (0.2625 of the half width), so the level top is 57 to 66% of the
+  // footprint on a click and 66 to 77% on a drag (nine worlds, three outlines), and 48 to 68% of the footprint seats a level 64 px pad. The section is a
+  // mesa's: a debris slope to 0.36 of the rise, at most 0.87 height units a px (the repose is 0.84), then a caprock cliff (70 units in 18 px, steeper
+  // than any unit climbs) and a rounded brow. No vehicle or KBot reaches the top of any of those 27 walls: a way up is a ramp, drawn. Gullies 60 cut
+  // the wall and set the cliff back in bays; Gully size 20 is a share of the half width (80 px between the widest), not of the wall: at 50 the ridges
+  // between gullies stood 40 units over the top and the bays ate it. Talus reach 40 lays fans at the foot. A world's own plateau keeps its strata and
+  // outline and takes this size and section. A scene's bare "landform" does not take these (toolDefaults); repro/heights-fixture.mjs's plateau does.
+  plateau:{diameter:800,elevation:130,gullies:60,gullySize:20,talus:40,heightVary:0,curve:{form:'lfPlateau',knots:[[0,0],[.02,.01],[.08,.12],[.17,.36],[.215,.9],[.235,.975],[.2625,1],[1,1]]}},
   // A hill is low and wide (240 px, rises 36), the same on both sides (lean 100), with a rounded top and shoulders (the section reaches .95 of the rise at .9 of the way up, and climbs at most .4 of it per quarter) and a smooth outline: its steepest 16 px cell steps 16 units or less against 25 at the 99th percentile of retail Green hills (measure/hill_band.py), so units cross it, and it stays off the rock slope score. Gullies 0 keeps modern Green's gully ribs off it (the other worlds have none).
   hill:{diameter:240,elevation:36,lean:100,cracks:20,gullies:0,styleVegetation:60,wander:10,widthVary:10,heightVary:6,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfHill',knots:hillKnots(),back:hillKnots()}},
   // Peaked ridge: high (150 over the plain), a steep rock face all round (cells over 24 units on 16 px, steeper than retail Green's hills), a chain of five
@@ -76,7 +79,7 @@ export const TOOL_PRESETS={
   green:{crater:{wander:34,heightVary:4}},
   red:{crater:{wander:38,heightVary:4,curve:{form:'lfCrater',knots:CRATER_BOWL}},hill:{wander:34,widthVary:30,heightVary:10},mountain:{wander:8},deep:{diameter:176,wander:34,widthVary:35},shallow:{wander:4}},
   // The reviewed mesa; ragged feet and foot bumps on the ridges (the retired baseVary and baseBump, as wander and height variation).
-  desert:{plateau:{"diameter":400,"amount":70,"roughness":0,"softness":50,"cracks":10,"faceVariation":0,"lean":100,"facing":3,"terraces":6,"elevation":90,"combine":0,"wander":75,"widthVary":30,"heightVary":0,"varySize":210,"varyFoot":100,"varyMiddle":150,"ledge":55,"terraceJitter":40,"breakup":30,"curve":{"form":"mesa","knots":[[0,0],[0.13299999999999998,0.088],[0.2667,0.25],[0.364,0.367],[0.48299999999999993,0.625],[0.5914999999999999,0.883],[0.7,1],[1,1]]}},crater:{wander:32,heightVary:3,cracks:10},hill:{wander:46,widthVary:25,heightVary:10,cracks:10},mountain:{wander:24,cracks:10},deep:{wander:34,widthVary:35}},
+  desert:{plateau:{"amount":70,"roughness":0,"softness":50,"cracks":10,"faceVariation":0,"lean":100,"facing":3,"terraces":6,"combine":0,"wander":75,"widthVary":30,"heightVary":0,"varySize":210,"varyFoot":100,"varyMiddle":150,"ledge":55,"terraceJitter":40,"breakup":30},crater:{wander:32,heightVary:3,cracks:10},hill:{wander:46,widthVary:25,heightVary:10,cracks:10},mountain:{wander:24,cracks:10},deep:{wander:34,widthVary:35}},
   // Lobed hill outlines (the retired moonLobes): wander in lobes about 60 px long, from foot to crest.
   moon:{crater:{wander:38,heightVary:4,secondaries:6,ejecta:70,buckling:70},hill:{wander:42,widthVary:30,heightVary:9,varySize:60,varyMiddle:150},mountain:{wander:24,widthVary:5},deep:{wander:34,widthVary:35}},
   // Crystal's Crystals draw a column mound (its old brush: Height 140, 480 wide, Irregularity 40): stepped columns over the mound's (1 - r^2)^1.2 dome, the
