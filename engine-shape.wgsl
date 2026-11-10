@@ -988,11 +988,23 @@ fn landformGullies(value: f32, q: f32, pk: u32, share: f32, wx: f32, wy: f32, lx
   let gp = vec2f(lx, ly) + vec2f(-sd.y, sd.x) * warp;
   // Gullies head back into their wall: in bays one wavelength apart (two of the widest gullies to a bay) the whole face stands farther in, and on the
   // buttresses between it stands where it was drawn, so each bay keeps the face's own section. A bay is wider than deep (at most 0.45 wavelength
-  // back), deepest where the gullies are, and its neighbours differ; some stretches have none. The face is read at a place farther out along the
-  // fall line, with that place's own wander and width (this cell's would move the outline with the look).
-  let bay = 1.0 - abs(gullyStripes(gp, sd, 0.5 / wv, u.seed ^ 0x3d17u).y);
-  let each = max(1.0 + 0.9 * vnoise(lx / (1.7 * wv), ly / (1.7 * wv), u.seed ^ 0x51c3u), 0.0);
-  let back = wv * fs * min(u.gully * deep * each, 0.45) * sm(0.0, 1.0, bay) * (1.0 - u.lfRoute);
+  // back), deepest where the gullies are, and its neighbours differ; some stretches have none. Its depth is read at the foot in line with the cell
+  // (lfRun), so a bay is one depth all the way down its fall line: a depth that changed on the way down could leave a hollow on the face. The face is
+  // read at a place farther out along the fall line, with that place's own wander and width (this cell's would move the outline with the look).
+  let ro = lfRun(s0, s1, s2, wx, wy, nA, nB, share);
+  let fp = vec2f(lx, ly) + out * ro.x;
+  // Bays are a cliff's: a side whose section is nowhere steeper than the repose (a hill's long back) has none, by the gate the talus uses. Setting such
+  // a slope's foot back only uncovered the hollows of the ground under it (closed basins at the foot of modern Green's hills).
+  let relief = select(u.elev, base + u.elev, u.lfGround != 0u) - base;
+  let table = select(u.curveBase, u.backBase, ro.z > 0.5);
+  var rise = 0.0; var pv = curveAt(table, 0.0);
+  for (var j = 0u; j < 16u; j++) { let v = curveAt(table, f32(j + 1u) / 16.0); rise = max(rise, abs(v - pv) * 16.0 * abs(relief) / max(ro.y, 1.0)); pv = v; }
+  let cliff = sm(u.talusTan, 1.6 * u.talusTan, rise);
+  let fwarp = 0.5 * wv * vnoise(fp.x / (2.2 * wv), fp.y / (2.2 * wv), u.seed ^ 0x7f4au);
+  let fdeep = clamp(1.0 + 0.85 * vnoise(fp.x / (3.0 * wv), fp.y / (3.0 * wv), u.seed ^ 0x2b91u), 0.2, 1.85);
+  let bay = 1.0 - abs(gullyStripes(fp + vec2f(-sd.y, sd.x) * fwarp, sd, 0.5 / wv, u.seed ^ 0x3d17u).y);
+  let each = max(1.0 + 0.9 * vnoise(fp.x / (1.7 * wv), fp.y / (1.7 * wv), u.seed ^ 0x51c3u), 0.0);
+  let back = wv * fs * min(u.gully * fdeep * each, 0.45) * sm(0.0, 1.0, bay) * (1.0 - u.lfRoute) * cliff;
   let fw = p + fall * back; var fl = fw;
   if (u.framed != 0u) { fl = vec2f(u.inv0 * fw.x + u.inv2 * fw.y + u.inv4, u.inv1 * fw.x + u.inv3 * fw.y + u.inv5); }
   let fz = 210.0 / max(u.lfSize, 8.0); var fA = nA; var fB = nB;
