@@ -32,7 +32,8 @@ export class RockWeather {
     const pass=(name,terrain,flow,out,sourceIn=this.empty,sourceOut=this.owned[4],rim=this.owned[5])=>{const p=encoder.beginComputePass({label:name});p.setPipeline(this.pipelines[name]);p.setBindGroup(0,r.commonBindGroup('rock-weather'));p.setBindGroup(1,d.createBindGroup({layout:this.layout,entries:[terrain,flow,out,sourceIn,sourceOut,rim].map((t,binding)=>({binding,resource:t.createView()}))}));p.dispatchWorkgroups(Math.ceil(width/8),Math.ceil(height/8));p.end();};
     const [terrain,a,b,final,source,provenance]=this.owned;
     pass('rockTerrain',this.empty,this.empty,terrain);pass('rockRain',terrain,this.empty,a);
-    for(let i=0;i<ROUNDS;i++)pass('rockFlow',terrain,i%2?b:a,i%2?a:b);
+    // The flow rounds carry runoff alone; with Runoff exposure at 0 every reader multiplies their result by 0, so they are not run.
+    if(r.uniformValue('uRunoff')>0)for(let i=0;i<ROUNDS;i++)pass('rockFlow',terrain,i%2?b:a,i%2?a:b);
     pass('rockDeposit',terrain,a,final,source,provenance,b);
   }
 }
