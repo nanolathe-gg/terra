@@ -1,4 +1,4 @@
-// WGSL port of the former sculpt.frag. See sculpt-common.wgsl for naming:
+// WGSL port of the former sculpt.frag. See engine-common.wgsl for naming:
 // uniform uFoo is u.foo; sampler uFoo is fooTex with fooSamp.
 /*COMMON*/
 /*VOLUME*/
@@ -1008,7 +1008,7 @@ fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32, cracked: bool) -> f32 {
 // E11: contour lines in Archipelago's red fringe. Retail's fringe is a stack of thin wavy
 // lines 2-4 px apart that follow the hill's outline (a hill's border, not a texture laid on
 // the screen). The mineral field's own falloff is the outline's distance measure: the
-// weathering worker's source falls off about exponentially from the hill, so lines at equal
+// Time pass's source falls off about exponentially from the hill, so lines at equal
 // steps of its logarithm are equally spaced in px, whatever the hill's shape. Pixel width
 // comes from the field's gradient. field: the material field's source (.b); returns the
 // line colour and its weight.

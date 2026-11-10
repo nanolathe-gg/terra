@@ -1,7 +1,7 @@
 // One displaced surface, shared by every terrain brush. Prototype renderer
-// on WebGPU (no WebGL fallback). Shaders: sculpt-common.wgsl (shared),
-// sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
-// world-resolution fields bake, a compute pass).
+// on WebGPU (no WebGL fallback). Shaders: engine-common.wgsl (shared),
+// sculpt-vert.wgsl and engine-frag.wgsl (the draw), engine-bake.wgsl (the
+// fields bake of a chunk, a compute pass).
 
 import {materialRows,tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {columnRows,columnColors} from './sculpt-column.js';
@@ -12,7 +12,7 @@ import {RockWeather} from './sculpt-rock-weather.js';
 import {VoxelSurface} from './sculpt-volume.js';
 import {extractGates, gateValues, gateKey} from './sculpt-gates.js';
 
-// Layers of the masks texture array (4 planes each): the plane count divided by 4. Planes 0-17 are in use, 18-24 are unused (see MASK_KEYS in sculpt.js).
+// The mask planes when the config names none: as many as MASK_KEYS (sculpt-scene.js, which says what each holds). The masks texture array has a layer per 4 planes.
 const MASK_PLANE_COUNT = 25;
 
 // sRGB 0..255 to OKLab (Ottosson 2020), as engine-palette.wgsl does on the GPU: the palette's colours are converted once here.
@@ -60,12 +60,12 @@ function preprocess(source, common, defines) {
 }
 
 // Byte layout of the shaders' one uniform block (struct Uniforms in
-// sculpt-common.wgsl), by WGSL's uniform alignment rules. Arrays take a
+// engine-common.wgsl), by WGSL's uniform alignment rules. Arrays take a
 // 16-byte element stride, so array<vec4f, N> is the only array form used.
 const FIELD_TYPES = {f32: [4, 4, 'f'], i32: [4, 4, 'i'], vec2f: [8, 8, 'f'], vec3f: [16, 12, 'f'], vec4f: [16, 16, 'f']};
 function uniformLayout(source) {
   const body = source.match(/struct Uniforms\s*\{([\s\S]*?)\n\}/)?.[1];
-  if (!body) throw new Error('nanolathe: sculpt-common.wgsl has no struct Uniforms');
+  if (!body) throw new Error('nanolathe: engine-common.wgsl has no struct Uniforms');
   const fields = new Map();
   let offset = 0;
   for (const raw of body.split('\n')) {
@@ -73,7 +73,7 @@ function uniformLayout(source) {
     if (!line) continue;
     const m = line.match(/^(\w+)\s*:\s*(?:array<(\w+),\s*(\d+)>|(\w+))\s*,?$/);
     const type = m && FIELD_TYPES[m[2] || m[4]];
-    if (!type) throw new Error(`nanolathe: unsupported uniform field "${line}" in sculpt-common.wgsl`);
+    if (!type) throw new Error(`nanolathe: unsupported uniform field "${line}" in engine-common.wgsl`);
     const array = Boolean(m[2]), count = array ? Number(m[3]) : 1;
     const align = array ? 16 : type[0], size = array ? 16 * count : type[1];
     offset = Math.ceil(offset / align) * align;
@@ -431,7 +431,7 @@ export class TerrainRenderer {
   // element vectors. Unknown names throw: WebGL ignored them silently.
   set(name, value) {
     const field = /^u[A-Z]/.test(name) && this.uniform.get(name[1].toLowerCase() + name.slice(2));
-    if (!field) throw new Error(`nanolathe: no uniform ${name} in sculpt-common.wgsl`);
+    if (!field) throw new Error(`nanolathe: no uniform ${name} in engine-common.wgsl`);
     const elements = field.stride ? value : [typeof value === 'object' ? value : [value]];
     if (elements.length > field.count) throw new Error(`nanolathe: too many elements for uniform ${name}`);
     elements.forEach((element, e) => {
@@ -911,7 +911,7 @@ export class TerrainRenderer {
     this.set('uBandLine', bands[1]);
   }
 
-  // Encodes the bake into the given encoder, or submits it on its own.
+  // The bake's group 1 for the chunk's fields texture and the loose-stone mask.
   makeFieldsOut() {
     return this.device.createBindGroup({label: 'fields out', layout: this.fieldsLayout,
       entries: [{binding: 0, resource: this.fieldsTexture.createView()}, {binding: 1, resource: {buffer: this.looseBuffer}}]});
@@ -949,6 +949,7 @@ export class TerrainRenderer {
     return field.kind === 'i' ? this.uniformView.getInt32(field.offset, true) : this.uniformView.getFloat32(field.offset, true);
   }
 
+  // Encodes the bake into the given encoder, or submits it on its own.
   bakeFields(encoder = null, timer = null) {
     const v = this.variant;
     const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };

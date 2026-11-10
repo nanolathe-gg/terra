@@ -1,9 +1,9 @@
 // WGSL port of the former relief-bake.frag, as a compute pass (measured a
 // little faster than a full-screen render pass). The renderer builds this
-// module with BAKE defined. See sculpt-common.wgsl for naming: uniform uFoo is u.foo.
+// module with BAKE defined. See engine-common.wgsl for naming: uniform uFoo is u.foo.
 /*COMMON*/
-// Fall-line relief, baked once per height change at one texel per world
-// pixel. Authored appearance detail: it is lit, never exported as height.
+// Fall-line relief, baked for each chunk at one texel per fieldScale() world
+// pixels. Authored appearance detail: it is lit, never exported as height.
 //
 // Each octave sums oriented cosine kernels from jittered cell points. The
 // kernels' wavefronts run down the local fall line, so the sum forms ribs
@@ -779,7 +779,7 @@ fn sandStreaks(p: vec2f, h: f32, slope: f32, fall: vec2f, strength: f32) -> vec2
     return vec2f(line, dot(-fall, normalize(u.sun.xy + 1e-6)));
 }
 
-// Sandiness from the weathering worker's transport (wind and water): 0
+// Sandiness from the Time pass's transport (wind and water): 0
 // none, small values a dusting, 1 deep sand. Thin sand lies in hollows
 // first while ribs and lumps of the relief poke through it; deep sand
 // covers both. Steep faces shed it.
@@ -981,10 +981,8 @@ fn lavaCrust(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
 @compute @workgroup_size(8, 8)
 fn bakeMain(@builtin(global_invocation_id) id: vec3u) {
     if (any(id.xy >= textureDimensions(fieldsOut))) { return; }
-    // Texel (x, y) of the fields is world pixel (x, y), as in GLSL.
-    // Convert the global integer texel once, just as the whole-map bake does;
-    // every hash/noise call receives that same world position.
     // H7b: texel (x, y) is the bake at origin + (x, y) * scale + (scale - 1) / 2, the centre of the block of final pixels it stands for.
+    // The world position is formed once, here; every hash and noise call receives it.
     textureStore(fieldsOut, id.xy, bake(vec2f(id.xy) * u.chunkFieldScale + u.chunkFieldsOrigin + (u.chunkFieldScale - 1.0) * 0.5));
 }
 

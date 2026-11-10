@@ -1,7 +1,8 @@
 // Authored terrain appearance experiment. No recovered retail rendering claim.
 //
 // WGSL port of the former sculpt-common.glsl, shared by the draw
-// (sculpt-vert.wgsl, sculpt-frag.wgsl) and the bake (relief-bake.wgsl).
+// (sculpt-vert.wgsl, engine-frag.wgsl), the bake (engine-bake.wgsl) and the
+// modules that paste it at their COMMON mark (rock runoff, the voxel solid, the Time pass).
 // Naming follows the GLSL so a GLSL diff ports line by line:
 //  - uniform uFooBar is the field u.fooBar of the one uniform block below
 //    (bool uniforms are i32: 0 or 1; the one rename is uDiagnostic, which
@@ -9,7 +10,7 @@
 //  - sampler uFoo is the texture fooTex, with fooSamp where it is filtered.
 // The renderer (sculpt-renderer.js) reads this struct to lay out its
 // uniform buffer, so a new uniform needs only a field here.
-// The renderer understands #ifdef BAKE / #ifndef BAKE / #else / #endif.
+// The renderer understands #ifdef NAME / #ifndef NAME / #else / #endif; a module is built with BAKE, EROSION, VOLUME_COMPUTE or VOLUME_RENDER, or none.
 
 struct Uniforms {
     // Shared by the draw and the bake.
@@ -22,7 +23,7 @@ struct Uniforms {
     materialReady: i32,
     detail: f32,
     light: vec3f,
-    // Draw (sculpt-frag.wgsl).
+    // Draw (engine-frag.wgsl).
     shallowColor: vec3f,
     riverBed: vec4f,       // riverfix: the braided bed's gravel colour (materials/<world>.json water.riverBedRGB), a = 1 when the world gives one
     deepColor: vec3f,
@@ -108,7 +109,7 @@ struct Uniforms {
     groundTiles: i32,
     tileShift: f32,        // the export's TNT tile grid starts this many screen rows down: floor(base height / 2), the TA projection's offset (sculpt-chunk-renderer.js requiredRegion)
     sandGrain: f32,
-    // Bake (relief-bake.wgsl).
+    // Bake (engine-bake.wgsl).
     reliefScale: f32,     // wavelength of the first octave, world px
     reliefAmount: f32,    // height per unit slope per wavelength
     reliefBranch: f32,    // how strongly octaves follow earlier gullies
@@ -554,8 +555,8 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), sel
 @group(0) @binding(1) var heightTex: texture_2d<f32>;   // r32float, read with textureLoad
 @group(0) @binding(2) var noiseTex: texture_2d<f32>;
 // Grid-resolution inputs in one array texture (a fragment stage may sample 16
-// textures): layer 0 the weathering worker's flow, deposit, talus, sand; layer
-// 1 the material field. Read through weatherAt and materialFieldAt.
+// textures): layer 0 the Time pass's flow, deposit, talus, sand; layer
+// 1 the material field; layers 2 and 3 its maps. Read through weatherAt, materialFieldAt, timeMap2 and timeMap3.
 @group(0) @binding(4) var gridTex: texture_2d_array<f32>;
 #ifdef BAKE
 @group(0) @binding(6) var routesTex: texture_2d<f32>;
@@ -687,11 +688,11 @@ struct VertexOut {
 }
 #endif
 
-// GLSL mod(): x - y * floor(x / y). WGSL's % truncates instead.
-// World pixels per bake texel: 1 for the whole-map bake, the chunk's field scale otherwise (card P31 fades plants by it).
+// World pixels per bake texel: the chunk's field scale (card P31 fades plants by it).
 fn fieldScale() -> f32 {
     return max(u.chunkFieldScale, 1e-3);
 }
+// GLSL mod(): x - y * floor(x / y). WGSL's % truncates instead.
 fn glslMod(x: vec2f, y: f32) -> vec2f { return x - y * floor(x / y); }
 
 fn baseHeight(p: vec2f) -> f32 {
