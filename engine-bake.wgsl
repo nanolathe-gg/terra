@@ -50,11 +50,7 @@ fn gullies(q: vec2f, dir: vec2f, n: f32) -> vec3f {
 // them. Stones read f at their centre, so a stone is wholly in or out.
 const SCATTER_BASE = 0.80;
 fn scatterAt(p: vec2f) -> f32 {
-#ifdef CHUNK
     return textureSampleLevel(masksTex, linearClamp, maskUv(p), 1, 0.0).r;
-#else
-    return textureSampleLevel(masksTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 1, 0.0).r;
-#endif
 }
 fn scatterDensity(f: f32, world: f32, base: f32) -> f32 {
     return select(world * (1.0 + f), max(world * exp2(3.0 * f), f * base), f > 0.0);
@@ -821,11 +817,7 @@ fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
 
 // The painted-cover texture (Sand, Ground cover and Paint strokes) at world point p.
 fn paintAt(p: vec2f) -> vec4f {
-#ifdef CHUNK
     return textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0);
-#else
-    return textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0);
-#endif
 }
 
 // Painted sand seen through a blur: (the share of a ring of taps 9 to 20 px out that lies inside the painted sand, which feathers the
@@ -990,14 +982,10 @@ fn lavaCrust(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
 fn bakeMain(@builtin(global_invocation_id) id: vec3u) {
     if (any(id.xy >= textureDimensions(fieldsOut))) { return; }
     // Texel (x, y) of the fields is world pixel (x, y), as in GLSL.
-#ifdef CHUNK
     // Convert the global integer texel once, just as the whole-map bake does;
     // every hash/noise call receives that same world position.
     // H7b: texel (x, y) is the bake at origin + (x, y) * scale + (scale - 1) / 2, the centre of the block of final pixels it stands for.
     textureStore(fieldsOut, id.xy, bake(vec2f(id.xy) * u.chunkFieldScale + u.chunkFieldsOrigin + (u.chunkFieldScale - 1.0) * 0.5));
-#else
-    textureStore(fieldsOut, id.xy, bake(vec2f(id.xy)));
-#endif
 }
 
 
@@ -1065,11 +1053,7 @@ fn bake(p: vec2f) -> vec4f {
     var paintFall = vec2f(0.0, 1.0);
     if (u.paintOn != 0) {
         paintFall = normalize(vec2f(valueNoise(p / 60.0 + 3.0), valueNoise(p / 60.0 + 9.0)) + vec2f(1e-3));
-#ifdef CHUNK
         let raw = textureSampleLevel(masksTex, linearClamp, maskUv(p), 0, 0.0);
-#else
-        let raw = textureSampleLevel(masksTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0, 0.0);
-#endif
         let cover = paintEdge(p, raw, wideSlope(p), 0.0);
         paintRock = cover.x;
         faceSlope = max(slope, 0.8 * max(paintRock, 0.5 * cover.w));
@@ -1088,18 +1072,10 @@ fn bake(p: vec2f) -> vec4f {
     // cracks, bands or sand, as on a graded route.
     // The crystal channel also carries a column's brightness (0.8-1.0) and
     // its edges (0.5); the shader reads it raw from the fields.
-#ifdef CHUNK
     let crystalRaw = textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0).a;
-#else
-    let crystalRaw = textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0).a;
-#endif
     let crystalCell = smoothstep(0.15, 0.6, crystalRaw);
     let route = max(routeProtection(p) * (1.0 - smoothstep(0.45, 0.9, length(broadGradient(p)))), crystalCell);
-#ifdef CHUNK
     let crackShape = max(textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0).g, 0.6 * paintRock);
-#else
-    let crackShape = max(textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0).g, 0.6 * paintRock);
-#endif
     // Painted cracks: fewer scales the shape's mask down, more raises it to at least the painted amount.
     let crackMask = select(crackShape * (1.0 + style.y), max(crackShape, style.y), style.y > 0.0);
     // Retail level ground is not dead flat in the art: faint embossed lumps

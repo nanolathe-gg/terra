@@ -50,24 +50,11 @@ function preprocess(source, common, defines) {
   const out = [], keep = [];
   for (const line of source.replace('/*COMMON*/', common).split('\n')) {
     const m = line.match(/^\s*#(ifdef|ifndef|else|endif)\b\s*(\w*)/);
-    if (!m) {
-      if (keep.every(k => k.enabled)) out.push(line);
-      // CHUNK alternatives disappear completely from the whole-map source.
-      // Its shader text stays identical, including the old BAKE blank lines:
-      // even an unused branch can otherwise change float compilation.
-      else if (!keep.some(k => k.name === 'CHUNK' && !k.enabled)) out.push('');
-      continue;
-    }
-    let chunk = false;
-    if (m[1] === 'ifdef' || m[1] === 'ifndef') {
-      chunk = m[2] === 'CHUNK';
-      keep.push({name: m[2], enabled: (m[1] === 'ifdef') === defines.has(m[2])});
-    } else {
-      chunk = keep.at(-1)?.name === 'CHUNK';
-      if (m[1] === 'else') keep.at(-1).enabled = !keep.at(-1).enabled;
-      else keep.pop();
-    }
-    if (!chunk && !keep.some(k => k.name === 'CHUNK' && !k.enabled)) out.push('');
+    if (!m) { out.push(keep.every(Boolean) ? line : ''); continue; }
+    if (m[1] === 'ifdef' || m[1] === 'ifndef') keep.push((m[1] === 'ifdef') === defines.has(m[2]));
+    else if (m[1] === 'else') keep.push(!keep.pop());
+    else keep.pop();
+    out.push('');
   }
   return out.join('\n');
 }
@@ -184,8 +171,7 @@ export class TerrainRenderer {
     this.materialsSource = extra[0];
     this.commonSource = common;
     this.volumeSource = extra[4];
-    const defines = this.chunked ? new Set(['CHUNK']) : new Set();
-    this.layout = uniformLayout(preprocess(common, '', defines));
+    this.layout = uniformLayout(preprocess(common, '', new Set()));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
     this.uniformBuffer = device.createBuffer({size: this.layout.size, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
@@ -201,10 +187,10 @@ export class TerrainRenderer {
       return module;
     };
     // P6: the draw's and the bake's uniform gates are override bools (sculpt-gates.js); the pipelines are built per set of values, see specialized().
-    const fragGates = extractGates(preprocess(frag.replace('/*VOLUME*/',this.volumeSource), common, new Set([...defines,'VOLUME_RENDER'])), this.layout.fields);
-    const bakeGates = extractGates(preprocess(bake, common, new Set([...defines, 'BAKE'])), this.layout.fields);
+    const fragGates = extractGates(preprocess(frag.replace('/*VOLUME*/',this.volumeSource), common, new Set(['VOLUME_RENDER'])), this.layout.fields);
+    const bakeGates = extractGates(preprocess(bake, common, new Set(['BAKE'])), this.layout.fields);
     const [vertModule, fragModule, bakeModule] = await Promise.all([
-      compile('sculpt-vert.wgsl', preprocess(vert, common, defines)),
+      compile('sculpt-vert.wgsl', preprocess(vert, common, new Set())),
       compile('engine-frag.wgsl', fragGates.source),
       compile('engine-bake.wgsl', bakeGates.source)]);
     this.specParts = {vertModule, fragModule, bakeModule, frag: fragGates.gates, bake: bakeGates.gates, keyOrder: [...new Set([...fragGates.gates.keys(), ...bakeGates.gates.keys()])]};
