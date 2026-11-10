@@ -123,11 +123,12 @@ order):
 | R6 | Scheduler: batch tiles, no readback, cancel between stages | M | Lower latency on every path |
 | R7 | Preview level for every control; generic pipeline; preview raster | S | No 0.9 s stalls; all rows preview live |
 | R8 | The solid: thin shell, wear where it shows, march fix | M-L | 13-23% off a cliff window with nothing visible by eye; about a third with the wear change (inferred, to be measured together) |
-| R8b | Erosion per landform | S | Up to 0.4-0.9 s off each edit |
+| R8b | Erosion per landform | M until its result is shown equal to the whole-map pass | Up to 0.4-0.9 s off each edit |
 | R9 | Controls: honest panel, then dials at three scopes, then blend and variations | M | From 234 rows to about 60 on the surface |
 | R10 | First-class tile accounting and reusable level ground; stamps deferred | M | Measure tile pressure on the 16x16 target and reduce merging |
 | R11 | The map carries its world; export ignores view options | S | Sharing works |
-| R12 | Budgets for controls, uniforms and shader lines | S | The panel and the shader stop growing |
+| R12 | Budgets for memory, latency and visible controls; shader size as a review signal | S | The panel stops growing; one look change at a time |
+| R13 | Provenance audit of committed art data, before the repository is public | S | Nothing retail-derived is published by accident |
 
 ## 2. Goals, and the test each one gets
 
@@ -168,6 +169,27 @@ the device while preserving the same final export quality.
 | Release to final visible art, 16x16 map | 1.0 s (proposed) | 16x16 not measured here; 4x4 was 1.4-1.9 s **[measured, docs/*_REVIEW.md]** |
 | First picture after load | 1.0 s | 1.7-2.2 s to final **[measured, docs/VOXEL_REVIEW.md]** |
 | Export | no budget; progress and cancel | 3.7 s for 4x4 **[measured, docs/VOXEL_REVIEW.md]**; 16x16: 43-217 s for the export phase under Node and Dawn, one run each (Moon 43-70 s, Lava 103-127 s, Green 202-217 s) **[measured, docs/REDESIGN_TILE_BASELINE.md]** |
+
+**How a budget is measured.** One number per interaction lets a build pass
+by updating one small tile while the rest of the view is stale. Each row
+above is reported as three: input to the first changed pixels, input to a
+current preview over the whole view, and release to final art. Each is
+taken cold and warm, during a continuous drag and across rapid reversals,
+as a p95 over enough interactions to mean something (not a median of
+five), with the device, OS, browser, viewport, device pixel ratio and
+render resolution written beside it. Nothing in this plan was measured on
+a 16x16 map or on the iPad: every figure in section 3 comes from 1,024 px
+windows and 4x4 maps on one M3 Pro. The first latency run on a 16x16 map
+is therefore a finding, not a check, and whole-map costs (the Time pass,
+export, memory) may reorder section 5.
+
+**The iPad before any iPad design.** Open today's editor on the tablet and
+record whether it starts, the adapter's limits, the first-picture time and
+what a finger can and cannot do. Two things to arrange first: WebGPU is
+only offered to pages in a secure context, so a development server reached
+over the local network by plain HTTP will not get it (the tablet needs an
+HTTPS address); and Safari is believed to ship WebGPU from iPadOS 26, which
+is not verified here.
 
 ## 3. Findings
 
@@ -989,6 +1011,16 @@ looks. Green 4's shape score of .59 is a statement about tracing.
      the visible differences and remaining gaps; the owner has final say.
      Randomized comparisons can assist review, but identification accuracy
      is not an acceptance gate and 50% is not a product target.
+   - **How the LLM review is run.** Agent judging has failed here before:
+     seven blind rounds ended near chance, an overnight score was gamed
+     (section 3.6), and in this review a by-eye call that "our broad light
+     is too weak" was overturned by the fit (section 3.1b). So: the
+     reviewer is not the agent that made the change and is not told which
+     render is the newer; every sheet has the same framing (retail
+     reference, before, after, at 1x); the review lists located
+     differences ("rock on the north face is lighter than the reference")
+     and not a verdict or a score; and a claim about light or tone is
+     checked with a controlled render or the fit before anyone acts on it.
    - The existing `repro/stats.py` statistics run on the same pairs as a
      tripwire: a card that moves a statistic out of the retail band must say
      why.
@@ -1104,6 +1136,13 @@ but no fit of light against heights.
 - **Procedure**: fit on the tuning half, judge on the held-out sheets of
   R0, one world at a time, Green first; LLMs compare the images before the
   owner gives the final visual judgment.
+- **Before a fitted number becomes a shader change.** The fit mixes light,
+  tone, placement and occlusion (section 3.1b), so first render three
+  controlled pairs on retail's heights with the registration settled:
+  light only (one neutral material), rock tone only, and material placement
+  only. A term is changed when its own pair shows the difference. The six
+  rows of the table above are diagnostics; none becomes a control unless
+  it passes rule 9 as something an artist would set on purpose.
 - **Not proposed after all:** cached sun-shadow and sky-occlusion planes.
   The first draft wanted them for longer, darker shadows; the measurement
   says ours are already longer-reaching and darker than needed, and the
@@ -1269,7 +1308,7 @@ light strengths, cover amounts) change nothing about geometry.
 | B. Time | eroded height and maps (as today) | lattice | A; Time controls |
 | C. Surface | the relief bake's four channels; the 4 px runoff and loose-stone fields | world-aligned 256-texel tiles in an atlas | B within the tile's input window; surface controls |
 | D. Solid | voxel bricks, transient as today; not cached | per piece | C; rock-structure controls |
-| E. Geometry buffer | per output pixel: hit height, normal, sun shadow, sky occlusion, cavity, rain exposure | screen tiles | C, D; sun direction |
+| E. Geometry buffer | per output pixel: hit height, normal, sun shadow, sky occlusion, cavity, rain exposure | screen tiles | C, D; sun direction, whose shadow probes read the solid, so a sun edit also rebuilds D for the visible tiles |
 | F. Color | materials, light composition, palette: the bitmap that is cached today | screen tiles | E; color, finish, light-strength and palette controls |
 
 - **Surface atlas (C).** One `rgba16float` texture, 4,096 x 4,096 by
@@ -1284,6 +1323,12 @@ light strengths, cover amounts) change nothing about geometry.
   3,840 x 2,160, 133 MiB. Kept for visible tiles only; evicted first.
   The light terms are stored unweighted, so shadow strength, occlusion
   strength and sky fill are stage F controls.
+  **This record is a proposal, not a contract.** Quantized normals and
+  8-bit terms can cross a palette threshold, so byte-identical output is
+  not established for it. And the color pass reads more than these fields
+  today: surface and broad gradients, the authored volume, weather, masks
+  and material fields (the review's reading of `engine-frag.wgsl`, near
+  line 1493; not re-checked here). Step 0 below settles both.
 - **Color (F).** The material and light parts of today's `fragmentMain`
   with the ray march and the four probes removed; it reads E. This is the
   pass a color slider reruns.
@@ -1292,7 +1337,18 @@ light strengths, cover amounts) change nothing about geometry.
   the earliest stage whose cache changes, writes `stage-map.json`, and
   fails when a control's declared stage is later than the measured one.
   `canvas.clear()` takes a stage.
-- **Order of work** (section 3.4's breakdown gives the values):
+- **Order of work** (section 3.4's breakdown gives the values; section 5
+  follows this order):
+  0. *One experiment before the design is fixed.* List every input the
+     color pass reads and how long each lives. Keep them at full precision
+     for the visible tiles, rerun the color pass alone for one warm color
+     edit, and compare the bytes with a full rebuild, on default scenes and
+     with the optional features turned on. Report memory and the three
+     latency numbers of section 2. Declare dependencies conservatively
+     (when unsure, the earlier stage) and tighten them only against that
+     full-rebuild comparison; moving controls on a set of scenes cannot
+     prove a stage map complete, because a dependency can sleep until
+     another feature wakes it. Only then choose the record and the atlas.
   1. *C as an atlas, kept for visible tiles.* The color pass reads the
      baked surface and the fed lattice textures, and both are discarded
      per tile today, so they must be kept before a color-only rerun is
@@ -1305,20 +1361,24 @@ light strengths, cover amounts) change nothing about geometry.
      is geometry. Byte-identical again.
   3. *The stage map and `clear(stage)`.*
   4. *D is not cached.* With E kept, nothing rereads the solid until
-     geometry changes; it stays transient.
+     geometry changes or the sun moves; it stays transient, and a sun edit
+     pays for it.
 
 **Interactivity.** With C and E kept, a control whose first stage is F
 costs the color pass: 9-11 ms per megapixel instead of 345-1,181 ms a
-window **[measured stage times; the rerun itself is not built]**. That is
-about 35-40 ms for a 1440p view, inside the 50 ms budget, and preview
-level at 4K. **Which rows are stage F is for the stage map to measure.**
+window **[measured stage times; the rerun itself is not built]**. That
+would be about 35-40 ms for a 1440p view **[inferred from an isolated
+pass: it leaves out cache reads and writes, scheduling and presentation,
+which step 0 measures]**. **Which rows are stage F is for the stage map to measure.**
 Colors, shine, light strengths and the palette are; rock exposure is
 probably not (it gates the solid), and vegetation cover only partly
 (plants are baked as relief). Rock-structure controls (86 World rows)
 still rebuild the solid for visible tiles; R8 trims that.
 **Quality.** None by itself (steps 1 and 2 must be byte-identical). It makes
 tuning a look by hand, the owner's chosen method, far faster.
-**Accepted when** all scenes are byte-identical after steps 1 and 2; the
+**Accepted when** step 0's color-only rerun matches a full rebuild byte
+for byte, or its differences are shown and accepted; all scenes are
+byte-identical after steps 1 and 2; the
 latency bench meets the two slider budgets; `repro/stage-map.mjs` passes;
 memory at 1440p stays under the 512 MiB default.
 **Risks.** Memory: the atlas, the geometry buffer and the bitmaps together
@@ -1341,18 +1401,24 @@ today's window; step 1 proves that before anything else moves.
   never waits (`sculpt-volume.js:89-94`).
 - **Cancel between stages**, not only between chunks
   (`sculpt-canvas.js:137-150`).
+- **Bound stale work.** Batching raises throughput and can make the first
+  changed tile later. Submit at most one frame's work ahead per stage, and
+  drop queued work that a newer input has replaced.
 - **Measure the main thread before moving to a worker.** The Go prototype
   cut nearby-tile p95 from 274-280 ms to 36-41 ms with a dedicated GPU
-  worker (section 3.6), which suggests main-thread work dominates. Add
-  long-task counts to the latency bench. If tasks over 16 ms remain after
+  worker (section 3.6), which suggests main-thread work dominates. The
+  Long Tasks API reports only tasks over 50 ms, so the latency bench
+  records frame intervals during a drag as well as long-task counts. If
+  frames over 16 ms that trace to main-thread work remain after
   R5 and R6, move the engine into a worker with an `OffscreenCanvas` (the
   scene builder in `sculpt-scene.js` is already free of the DOM); if not,
   do not.
 
 **Interactivity.** Lower latency on every path; fewer wasted renders while
 dragging. **Quality.** None.
-**Accepted when** pixels are unchanged and the latency bench improves on
-release-to-final and on nearby-tile p95 by a stated number.
+**Accepted when** pixels are unchanged, input to first changed pixels
+does not get worse, and the latency bench improves on release-to-final and
+on nearby-tile p95 by a stated number.
 **Risks.** The pool makes memory use fixed rather than exact; the tracked
 peak must still be reported honestly.
 
@@ -1406,6 +1472,17 @@ save) is not proposed: the game reads one height byte per 16 px, the camera
 never sees under an overhang, and it would break the recipe model. The
 solid stays transient, built from the surface, for art.
 
+**Four review units, not one.** March correctness (the aliasing fix),
+allocation that skips closed gates, the thin shell, and the wear change
+are separate commits with separate sheets. The first two are expected to
+be exact or within a few pixels; the shell and the wear change are
+approximations that the owner accepts by eye. The wear proposal (wear on
+the bricks that hold the surface, with a pass count that follows
+Weathering) is a different experiment from the one measured (all wear
+skipped), so its saving and its continuity are measured again. Savings
+measured one at a time do not add; the combined build is timed before any
+total is quoted.
+
 **Design, in order of cost.**
 1. **Free now** (each measured in section 3.4): skip brick allocation
    where every gate is closed (3-15 pixels change, identical by eye;
@@ -1442,8 +1519,9 @@ solid stays transient, built from the surface, for art.
    it replaces the brick path outright (rule 7: one path); if not, it is
    closed.
 
-**Interactivity.** Steps 1-3 together take roughly a third off a cliff
-window (1,131 ms to about 700 on green-4 **[inferred from stage times]**),
+**Interactivity.** Steps 1-3 together may take roughly a third off a cliff
+window (1,131 ms to about 700 on green-4 **[inferred from stage times
+measured one at a time; not measured together]**),
 and so off release-to-final and export where cliffs are in view. They do
 not make the solid cheap: after them it is still most of a window. What
 keeps the artist from paying for it is R5 (it is rebuilt only when
@@ -1458,7 +1536,7 @@ time falls by the measured figure.
 made: broken-rock faces cost about three times a height-field draw, and
 that price can be trimmed, not removed.
 
-#### R8b. Erosion once per edit: make it visible or make it cheap (S)
+#### R8b. Erosion once per edit: make it visible or make it cheap (M until shown equal)
 
 **Change.** The whole-map Time pass costs 416-875 ms after every settled
 edit and its controls move 0.7-1.9% of their class on Green (section 3.3).
@@ -1474,7 +1552,12 @@ more than this card.
 **Accepted when** release-to-final falls by the measured Time cost on a
 map where one landform of ten is edited, and the report states the largest
 height difference from the whole-map pass (the goal is none beyond
-rounding).
+rounding) on each of these: overlapping landforms, a later cut through an
+earlier rise, a landform at a shore, and deposits that cross from one
+landform's skirt into another's. One isolated landform passing is not
+enough: strokes compose in order and material moves across boundaries. If
+the results differ, recompute the connected region an edit can reach
+instead of one landform, or leave the pass whole.
 
 #### R9. The control model: world, landform, spot (M, in three steps)
 
@@ -1520,7 +1603,13 @@ modifiers. Apple Pencil behavior is not part of this milestone.
 - **After a stroke, stay on its card.** Transform controls go to a row of
   handles on the canvas, not above the settings.
 
-*Step 9b: dials.*
+*Step 9b: dials.* A proposal to pilot, not a contract. Before any of it is
+built, write down: which wins when two dials drive one row; how a pin, a
+world value, a landform offset and paint combine, and in what order; what
+a painted or per-landform value does to a row that is global by nature
+(one that sets topology for the whole map); what the panel shows when a
+pin makes a dial do nothing; and how all of it is saved. Then pilot three
+or four dials in one section.
 - A **dial** is a 0-100 control with an artist's name. It is data, not
   engine code: `dials: {erosion: {gullies: [[0,0],[100,60]], talus: ...}}`
   in the world's file maps the dial's value to each row it drives by a
@@ -1550,14 +1639,20 @@ modifiers. Apple Pencil behavior is not part of this milestone.
   same thing at section scope, and may carry colors.
 
 *Step 9c: explore by looking.*
-- **Blend between two worlds or two presets.** Because every control is
-  continuous and a preset is only numbers, any two presets interpolate.
+- **Blend between two worlds or two presets.** Numbers interpolate; seeds,
+  material choices, categories and rock columns of different structure do
+  not. Blending is offered between presets of the same structure (a
+  world's retail and modern presets), with the rule for each kind of field
+  stated: numbers linearly, colors in OKLab, everything else taken from
+  the nearer end.
   One slider, "toward ...", gives the 1997-to-modern dial for a world (its
   retail preset against its modern one) and a quick way to find a look
   between two others.
 - **A variations strip**: the selected landform at six seeds, or six values
   of one dial, rendered at the preview level into the dock; click to keep.
-  Cheap once R5's stages exist.
+  Six seeds are six geometry rebuilds, which R5 does not make cheap; six
+  values of a color or finish dial are. Measure the strip before offering
+  the seed form.
 
 **Interactivity.** Fewer rows to find; with R5 and R7 every dial previews
 live. **Quality.** Indirect: an artist can reach a look the engine already
@@ -1586,9 +1681,13 @@ ground alone, merging starts at about 17x17, and at the cap Nanolathe
 holds over a gigabyte of atlas (section 3.7).
 
 **Design.**
-- **Show the number.** The status bar and the Export pane show the map's
-  estimated distinct tiles (counted on rendered tiles, scaled to the map)
-  against two lines: retail's practice (about 11,500) and the cap (65,536).
+- **Show the number (first, and by itself).** The status bar and the Export
+  pane show the map's distinct tiles against two lines: retail's practice
+  (about 11,500) and the cap (65,536). Scaling up a count from the tiles on
+  screen can be badly wrong, because the artist looks at the part being
+  edited; the number shown is a whole-map count, exact after an export or
+  a background pass and labeled as an estimate until then.
+  `measure/tile-baseline.mjs` is the reference.
 - **Level ground from a pool.** Extend today's 1,024 px ground repeat: on
   cells the lattice marks level, every per-pixel term (grain, dither phase,
   speckle, flowers, small stones) is periodic in 32 px and chosen from a
@@ -1596,6 +1695,10 @@ holds over a gigabyte of atlas (section 3.7).
   (retail-like at 16, richer at 256). Terms that vary slowly (undulation
   shading, wetness) are quantized to a few levels on level ground so equal
   inputs give equal tiles. Slopes keep unique detail.
+  Not shown yet: that variants chosen per tile meet at their edges, and
+  that light, weather and shadow from nearby landforms do not make tiles
+  of one variant differ. Test both before the pool is promised to cut the
+  count.
 - **Deferred:** reusable stamp libraries, starter maps, and example
   collections. Artists start from a blank map for now (section 7,
   decision 7); tile accounting and reuse must not depend on these features.
@@ -1606,9 +1709,12 @@ holds over a gigabyte of atlas (section 3.7).
 and export workflow. **Quality.** The aim is to reduce lossy merging on
 16x16 maps while retaining the intended look; measure that result rather
 than assuming any reuse scheme guarantees it.
-**Accepted when** a 16x16 Green map with 20% of its area as landforms
-exports under 30,000 distinct tiles with no merge, and level ground shows
-no visible repeat at 1x or at Fit **[by eye]**.
+**Accepted when** the count is shown and matches an export exactly. For
+the pool, a target the owner has not yet agreed: a 16x16 Green map with a
+fifth of its area as landforms under 30,000 distinct tiles (a Green map
+with no strokes is 39,252 today, so this means changing level ground
+itself), with no visible repeat at 1x or at Fit **[by eye]**. With stamps
+deferred (decision 7), the pool is the only reuse mechanism in scope.
 **Risks.** Visible repetition on plains; the pool size is the dial for it.
 
 #### R11. The map carries its world; export ignores view options (S)
@@ -1630,20 +1736,37 @@ recipient's look.
 - Move the Python tables (`KNOB_DEFAULTS`, `WORLD_KNOBS`, `ENGINE_KNOBS`,
   `LIGHT_PASS` in `sculpt.py`) into the materials files, so a world has one
   home.
-- `exportChunks` passes fixed draw options.
+- `exportChunks` passes fixed draw options, and the palette switch is
+  forced as well: it is read from `renderer.variant`, not from the draw
+  options (`sculpt-renderer.js:821`).
+- The working copy already has a `world` key holding the world's id as a
+  string (`sculpt.js:1122`); the new block needs its own name or a
+  deliberate change of that key.
+- Differences are stored against defaults that are identified (a hash of
+  the world's file), or the block holds the resolved values; a save must
+  not change meaning when a world's file changes under it without saying
+  so.
+- Three changes, three commits: what a map owns (save, load, share, undo);
+  export's independence from the view; one home for the defaults.
+- This card edits `sketch()` and `setKnob` in `sculpt.js`, which
+  `s0/slider-response` and `s0/height-image` also touch: it starts after
+  those are reviewed.
 
 **Accepted when** a share link opened in a clean browser profile renders
 the same bytes as the author's page, on a map with ten non-default World
 rows and two changed colors, using the same engine build on the same
-machine. This checks complete source state, not cross-GPU or future-build
+machine; the same holds in a profile that already has a different saved
+world of the same name; undo and redo restore World rows; and the exported
+bytes are equal with Clay on or off, the palette view on or off, and a
+light view selected. This checks complete source state, not cross-GPU or future-build
 export identity. The `.ufo` exported on one machine is authoritative for
 play; the recipe remains editable source (section 7, decisions 3 and 8).
 
 
 #### R12. Budgets and the order of rewrites (S; a rule, not code)
 
-**Change.** Three ceilings, checked by `repro/gate.sh`, and one rule about
-sequence.
+**Change.** Budgets for what the product must hold to, review signals for
+code size, and one rule about sequence.
 
 **Why.** Dead controls regrow after each audit; the shaders, uniforms and
 knobs "did not get simpler" when the engine replaced engine 0 one for one
@@ -1651,10 +1774,14 @@ knobs "did not get simpler" when the engine replaced engine 0 one for one
 without a test that could tell them apart (section 3.6).
 
 **Design.**
-- **Ceilings**, set at today's counts and lowered as R9 and section 6 land:
-  controls on the surface (per panel and total), uniforms (323), shader
-  lines (8,579). A card may raise one only by lowering it as much elsewhere
-  in the same card, or with the owner's word.
+- **Hard budgets**: memory, the latency rows of section 2, device limits
+  (both target devices), and controls on the surface (per panel and
+  total). A card may exceed one only with the owner's word.
+- **Review signals, not gates**: shader lines (8,579 today) and uniforms
+  (323). Each card reports how it moved them. A line ceiling would reward
+  dense code over clear code, so a rise is a question for the reviewer,
+  not a failure (the owner did not approve numerical code-size ceilings:
+  decision 13).
 - **One look change at a time per stage**, each judged on R0's sheets
   before the next starts.
 - **A proposal for a new render primitive or a new simulation** must first
@@ -1662,6 +1789,28 @@ without a test that could tell them apart (section 3.6).
   cannot reach. The five-renderer comparison of 2026-11-08 measured speed
   and statistics that could not tell the builds apart; it never showed the
   two candidates with the same light and materials.
+
+#### R13. Provenance audit before the repository is public (S)
+
+**Change.** Check every committed table and image that came from looking at
+retail art, and record for each how it was made.
+
+**Why.** Decision 12: palettes may be public; everything else must be newly
+generated. Two things committed today were flagged in the first draft and
+have not been checked: the 16 ground tiles stored as palette indices (do
+they come from a model, or is any a close copy of a retail tile?), and the
+color ramps described as "measured from retail by luma octile". A palette
+index image is still an image.
+
+**Design.** For each item: its generator and inputs, whether it can be
+regenerated from code alone, and a nearest-match search against the retail
+sections for anything stored as pixels. An item that is a close copy is
+replaced by a generated one. Statistics measured from retail (means,
+ranges, curves) stay, as rule 10 allows.
+
+**Accepted when** the list is complete, each item names its generator, and
+the owner has seen any near match. This blocks making the repository
+public; it does not block any other card.
 
 ## 5. Order of work
 
@@ -1678,12 +1827,25 @@ M3 iPad Air. Tile accounting is a first-class constraint: establish its
 waiting for blend, variations, or stamps. Symmetry, fairness tools, starter
 content, Metal, Urban, and extended output formats are deferred.
 
-**Step 0: the ground to stand on (about a week).**
+**In flight on 2026-11-09.** `s0/dead-paths`, `s0/slider-response` and
+`s0/height-image` (the first-wave cards, each on its own branch), and on
+`prototype/redesign-foundations` the shape fixtures and sheets
+(`repro/shape-bench.mjs`), the 16x16 tile baseline
+(`measure/tile-baseline.mjs`) and a design study for R9a. The four shape
+fixtures there use their own paths, so the prototype sheets of section 3.8
+are not directly comparable with them: R3's trial reruns on the committed
+fixtures.
+
+**Step 0: the ground to stand on.** (No duration is claimed: the first
+draft's "about a week" did not survive the review; R11, R0 and R7 each
+hold several separate changes.)
 
 | Card | Size | Why first |
 | --- | --- | --- |
-| Section 6 deletions | S | Everything after is easier with 21 dead branches gone; byte-identical |
-| R11 the map carries its world; export ignores view options | S | A correctness bug in sharing, and R0's scenes need it |
+| Section 6's dead-code table only | S | Everything after is easier with 21 dead branches gone; byte-identical |
+| The slider waits of 5.0 s and 8.4 s: diagnose with timestamps, then preview during slider drags | S | The largest measured wait in the editor, and unexplained |
+| R11 the map carries its world; export ignores view options | S | A correctness bug in sharing, and R0's scenes need it; after the two branches that share its files |
+| The iPad's first run of today's editor (section 2) | S, the owner's hands | Every tablet decision depends on what it finds |
 | R1 height-image op | S | R0 needs it |
 | R0 the benches and the new-worlds sheet | M | Nothing that changes a look lands before its judge exists |
 | R7 preview level for every control; generic pipeline | S | Makes every later tuning session faster |
@@ -1693,23 +1855,34 @@ Gate: LLM visual comparisons and the owner's starting retail and shape
 reviews are recorded; the latency table and 16x16 tile baseline print.
 Keep desktop measurements distinct from the iPad results.
 
-**Track A: speed.** R5 step 1 (split geometry from color; the stage map)
--> R8 step 3 (the thin shell) -> R6 (scheduler) -> R8b (erosion per
-landform) -> R5 step 2 (surface atlas) -> R8 step 4 (the owner's call on a
-brickless solid).
+**Track A: speed.** The latency bench on a 16x16 map (its result may
+reorder this track) -> R5 step 0 (the one-edit cache experiment) -> R5
+step 1 (the surface kept, as an atlas) -> R5 steps 2 and 3 (split geometry
+from color; the stage map) -> R8's units one at a time -> R6 (scheduler)
+-> R8b (erosion per landform, once shown equal) -> R8 step 4 (the owner's
+call on a brickless solid).
 Gate: assess section 2's candidate latency budgets on the 16x16 workload,
 with desktop results at 1440p and separately documented iPad conditions.
 Actual iPad testing is required before claiming support.
 
 **Track B: the picture.** One world at a time, Green first, each judged on
-the retail bench and by eye. R2 (light and placement as fitted numbers) ->
-R4 (relief kinds) -> R3 (structure in ridge-like landforms), then the same
-for the next world.
+the retail bench and by eye. Form comes before fine relief (rule 10: fix
+the shape before the color), so R3's trial starts first and runs beside
+the rest: a time-boxed comparison on the committed shape fixtures of the
+skeleton, a ridge-and-divide graph (after Génevaux et al. 2013) and
+today's forms, with the Plateau preset kept as it is. Before R3 promises
+handles, it states what happens when a path point is added, removed or
+reversed, when a seed changes after a spur was moved by hand, and when
+strokes overlap. R2 (light and placement, after its controlled pairs) is
+small and separate and proceeds per world. R4 (relief kinds) follows the
+form work, then the same for the next world.
 Gate per world: LLM visual comparisons are complete, and the owner accepts
 the retail look and the intended modern look on the relevant sheets.
 Pixel statistics do not override that judgment.
-R2's shader changes and R5's split both rewrite `fragmentMain`: land R5
-step 1 first if both are ready, since it must be byte-identical.
+R2's shader changes and R5's split both rewrite `fragmentMain`: land R5's
+split first if both are ready. The tracks are not independent: they share
+the shaders, the control schema, the save state and the fixtures, so one
+integrator orders their landings.
 
 **Track C: the artist.** Begin the UI revamp with R9a and validate finger
 editing on iPad. Coordinate the initial UI and retail-biome improvements
@@ -1781,8 +1954,9 @@ approval of every proposed mechanism or estimate in sections 3-6.
    improvements, including true color, are deferred.
 5. **Gameplay readability.** What blocks units should look blocked whenever
    possible. Artists use the passability overlay to confirm and adjust
-   terrain while building maps. A new automatic mismatch lint is not a
-   current requirement.
+   terrain while building maps. (The recorder added that a new automatic
+   mismatch lint is not a current requirement; the owner's answer neither
+   asked for one nor ruled it out.)
 6. **Fairness.** Symmetry and fairness tools are out of scope for now.
    Focus on generated artwork quality; artists can address balance if they
    care about it.
@@ -1829,6 +2003,16 @@ approval of every proposed mechanism or estimate in sections 3-6.
   dial precedence; and tile reuse/seam behavior.
 - Keep R11's complete-source-state checks separate from future-version or
   cross-GPU reproducibility. The latter is not the source-file contract.
+- Run today's editor on the iPad before designing for it (section 2), and
+  arrange an HTTPS address for the tablet to reach.
+- Measure latency, memory and export time on a 16x16 map. Export took
+  43-217 s headless at that size against 3.7 s at 4x4; whether the artist
+  needs progress, cancel or a faster path there is undecided.
+- Decide what reuses tiles now that stamps are deferred and the tile
+  budget is first-class (R10): dense Moon is 3,399 tiles under the cap.
+- Run the provenance audit (R13) before the repository is public.
+- Keep LLM review honest (R0): a separate reviewer, fixed framing, located
+  differences, and a controlled check behind any claim about light or tone.
 
 ### Trade-offs that will not go away
 
