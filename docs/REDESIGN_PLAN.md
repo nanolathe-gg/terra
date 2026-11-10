@@ -166,7 +166,7 @@ checks that do not exist yet.
 | --- | --- | --- |
 | Artists control the terrain; easy to use | Six standard tasks (section 3.5), including finger input on iPad; visible-control count and task costs | No |
 | Feedback is fast, refinement is progressive | Latency budgets per kind of interaction (below), measured by `repro/perf.mjs` | Partly: stroke drags only |
-| Hyper-real look; erosion may be approximated | A modern benchmark judged by eye on fixed sheets; `measure/realism.py` as a tripwire only | Tripwire only |
+| Hyper-real look; erosion may be approximated | The owner's eye on unpaired boards against the seven reference pictures: `~/src/geoform/references/gaea-prowess1.webp`, `~/src/geoform/references/gaea-rocktools.webp`, `~/src/geoform/references/gaea-rocky.webp`, `~/src/geoform/references/gaea-sand5.webp`, `~/src/geoform/references/gaea-sandstone.webp`, `~/src/geoform/references/gaea-surface1.webp`, and `~/src/geoform/references/gaea-surface3.webp`; `measure/realism.py` remains a tripwire only **[owner decision, 2026-11-09 night]** | Tripwire exists; reference boards are the visual test |
 | Recognizably Total Annihilation | LLM visual comparisons followed by owner judgment on retail-reference sheets; statistics are secondary | Existing windows; expanded bench needs R1 |
 | Many biomes and planets, including ones that follow no real planet | Invented worlds built from controls alone, with no code change, on a sheet the owner reviews (R0) | No |
 | Large flat areas, a 2.5D RTS | Passability and buildable-area views; plains unmoved by any refinement | Yes (`repro/passability.mjs`) |
@@ -1989,6 +1989,16 @@ public; it does not block any other card.
 
 ## 5. Order of work
 
+**Picture first [owner decision, 2026-11-09 night].** First mimic the
+retail worlds, then pursue the hyper-real look with artist knobs for real
+and alien worlds. Track A (speed) and Track C (the artist, including the
+iPad) wait; this priority supersedes the earlier sequencing below. R0
+item 1's paired sheets remain useful for broad light and material placement
+only, not for matching individual shapes or pixel detail: retail heights
+explain .60 to .97 of brightness at 64 px and only .19 to .73 at 16 px
+**[measured, section 3.1]**. Judge the biome's design language and detail on
+unpaired boards, with the owner's eye as acceptance.
+
 Three tracks, coordinated where they share files and interfaces. Keep
 small commits grouped into bounded review milestones. LLM visual
 comparisons precede the owner's final judgment on look changes; performance
@@ -2195,6 +2205,36 @@ approval of every proposed mechanism or estimate in sections 3-6.
 - **Land soon.** Reviewed work that passes its checks lands on main
   promptly, so branches stop drifting apart. Pushing main remains the
   owner's step.
+
+### Later answers (2026-11-09, night)
+
+- **The picture comes first [owner decision].** "I really want to focus
+  on two things: 1. Mimic retail worlds 2. Hyper realistic output with
+  artist knobs to create amazing real and alien worlds. Everything else
+  is secondary. If our output is not good then speed doesn't matter.
+  Device support doesn't matter."
+- **The iPad waits [owner decision].** "The iPad isn't going to move the
+  needle and we can add support later."
+- **Judge the biome, not an individual section [owner decision].** "The
+  retail heightmaps images are extremely low resolution and don't match
+  the height information exactly that was used in the original 3d software
+  to make the retail terrain. I don't think we can rely on it. It feels
+  like a fool's errand to try and recreate them individually. It might be
+  better to build a system that can judge how close our output looks to
+  the sections for that biome as a whole, so not judging individual pixels
+  or individual terrain shapes, but the design language, pixel detail,
+  etc. I just don't know how to do that."
+- **Hyper-real references [owner decision].** The owner supplied seven
+  pictures, "some quite close, but you get the idea":
+  `~/src/geoform/references/gaea-prowess1.webp`,
+  `~/src/geoform/references/gaea-rocktools.webp`,
+  `~/src/geoform/references/gaea-rocky.webp`,
+  `~/src/geoform/references/gaea-sand5.webp`,
+  `~/src/geoform/references/gaea-sandstone.webp`,
+  `~/src/geoform/references/gaea-surface1.webp`, and
+  `~/src/geoform/references/gaea-surface3.webp`. The owner's eye on boards
+  against these pictures is the visual test; terrain statistics remain
+  tripwires. The pictures and boards stay outside the repository.
 
 ### Remaining validation, not unanswered product choices
 
