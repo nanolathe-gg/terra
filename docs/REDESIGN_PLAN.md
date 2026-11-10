@@ -2401,17 +2401,93 @@ stayed 100% level in the heights in all ten fixtures **[measured]**.
 | Reference | What it has | What we draw now | Gap |
 | --- | --- | --- | --- |
 | Top-down escarpment; `surface3`; `sand5`; `prowess1` | Rock that fades into flat ground: bedrock pavement and slabs at the rim, rubble and boulders thinning away from the foot | A level top and plain of one tone up to a hard line at the cliff; a few stones at the foot | No rim or foot zone. **The pick**, because it is the owner's own rule: rough near the edge, flat and believable beyond |
-| `sand5`; `rocktools` (2nd panel) | Sand drifted against rock and pooled in hollows, with ripples | No drift readable at 1x: Sand supply 1.3 and 2 moved 0.7% and 1.0% of the pixels **[measured]**. Not settled: the control needs the Time pass, and in this harness Erosion 1 and 0 gave the same bytes, so the pass may not have run; the Sand brush was not tried | To establish first; then sand that gathers by itself in the lee and the hollows |
+| `sand5`; `rocktools` (2nd panel) | Sand drifted against rock and pooled in hollows, with ripples | No drift readable at 1x: with the Time pass on (Desert's engine preset already sets Erosion 1, which is why 1 and 0 in the address gave the same bytes), Sand supply 1.3 and 2 moved 0.7% and 1.0% of the pixels **[measured]**. The Sand brush was not tried | Sand that gathers by itself in the lee and the hollows |
 | `sand5` | Tilted beds standing as hogbacks | Bed tilt .4 paints stripes across a level top | Level ground takes the bed's color at its height: stripes when tilted, patches of two beds at some heights. A level top needs one cover |
 | `prowess1`; `sandstone` | Clean cliff bands with a debris slope under each; readable beds and joints | A wall whose rock reads as busy speckle at 1x; one debris slope | Rock detail too fine and too contrasty for 1x; cliff and slope do not repeat up a wall |
 | `rocky` | A boulder field: piled angular blocks 20 to 60 px | Breccia with Supply 1 at 16 px: a handful of stones | Stones do not pile or cover |
 | `surface1` | Rills that branch and join down a slope | On a round hill at Gullies 100 the rills run out from the top like spokes | No branching on a cone |
 | `rocktools` (1st, 4th, 5th panels) | Plates, folded swirls, spalled crust | Not judged: Moon's, Lava's and Red's faces are near black, so no recipe reads there | Fixtures to redo on Desert and modern Green; those worlds' face light is its own question |
 
-**Next [proposed by Claude].** Build the rim and foot zone: art only on
-level ground (the heights stay flat), from existing controls where they
-reach (loose stone, rock debris, cracks) before any new one. Then the
-level top's cover, since the two meet at the rim.
+**Round 3, built: bare rock at rims [Claude, 2026-11-10; the owner: "keep
+going with your pick"].** Soil is thin at the edge of a drop. A new World
+control, Bare rock at rims (px) in Rock relief, bares level ground within
+its reach of a cliff's edge: wholly at the edge, then in patches, then only
+as low slabs under the ground cover.
+
+- *One system.* The rock weather pass, which already looks up from each
+  cell for the cliff that sheds debris onto it, now also looks down for
+  the drop (`engine-rock-weather.wgsl` `rockDeposit`; one float a 4 px
+  cell). The result enters the painted-rock gate (`rimRockAt`), so the
+  rock is the voxel solid's own, in the world's recipe, with its joints,
+  beds, wear and colors; there is no second rock model. The solid gives a
+  rim half a face's relief, so level ground stays low.
+- *Where it acts.* On ground level to within .08 units a px (none over
+  .25), above a fall of 8 units that is a cliff's (.9 to 1.6 units a px)
+  and lands dry. A first version also bared hill shoulders and a stretch
+  of Green's coast; with these limits green-modern-1..3 move 0.06 to
+  0.25% of their pixels.
+- *Measured, the Plateau button on modern Green and Desert:* no height
+  byte moves at reach 40, 60 or 80. Of the level top's pixels within
+  64 px of the wall, 10 and 13% change at reach 40, 15 and 19% at 60,
+  20 and 24% at 80; the plain changes 0.25% or less. Regional replay: no
+  mismatch. Speed, same scene on both builds, second run of each: load
+  2,045 against 2,079 ms, release 1,896 against 1,898 ms, drag frames
+  16.7 ms on both. One plateau adds 19 distinct 32 px tiles of 1,075 on
+  Desert.
+- *Defaults.* 0 in every world's own preset; 60 in modern Green and
+  modern Desert. **[by eye]** Green's turf stops 20 to 45 px short of the
+  edge on a ragged line and granite shows; Desert shows salmon and cream
+  slabs round its rim.
+- *Not done.* The foot. Cliff debris reaches the plain but fades within
+  about 32 px on Green and barely shows on Desert, and three systems lay
+  it (see the weathering note below): which one carries the foot zone is
+  the owner's call. A drop into water has no rim. Found on the way, not
+  from this change: modern Green renders 6 pixels differently at 128 px
+  and 256 px tiles.
+
+**Weathering: what runs today [read, Claude with a second agent,
+2026-11-10; the owner asked whether one system does it].** It is not one
+system. Four run in a stack, each on the output of the one before:
+
+| | Where its controls are | What it works on | Reaches the game's heights |
+| --- | --- | --- | --- |
+| Shape: a landform's Gullies and Talus reach | the tool's own panel | the 2D height field | yes |
+| The Time pass: water erosion and slumping | the Weathering box in the top bar; Rain and Sand supply in the World panel | the 2D height field | yes |
+| Rock weather: runoff and cliff debris | World, Rock runoff and Rock debris | a 2D lattice of 4 px cells, read from the heights | no, art |
+| The voxel solid: blocks, beds, spall, wear, crust | World, the other Rock groups | voxels on the surface | no, art |
+
+- The Weathering box switches the Time pass alone. The World panel's rock
+  controls are the last two rows, and only the last is voxels. They are
+  not copies of the Time pass: the solid sits on the height the Time pass
+  left, and rock weather reads its flow.
+- *The same job in more than one place.* Debris at a cliff's foot comes
+  from Shape's talus (heights), from the Time pass's talus map (stones
+  placed from it, `engine-bake.wgsl` `lsMaskCompute`) and from rock
+  weather's debris (`engine-rock-weather.wgsl` `rockDeposit`), each with
+  its own repose rule. Channels
+  down a face come from Shape's gullies, the Time pass, the bake's rills
+  and ribs, Runoff's cut and the solid's grooves. Edges are rounded by the
+  Time pass in the heights and by Weathering (rounded edges) in the
+  voxels. Sand comes from the Time pass, the Sand brush and the beach.
+- *Dead weight.* A drainage plane is computed whenever the Time pass runs
+  and nothing reads it (`engine-weather.wgsl:44` has no caller). The
+  material field lives behind a hidden panel and is on in Archipelago
+  only. The solid runs its four wear passes when wear is 0. Erosion, its
+  age and the talus angle have no row in the panel.
+- *How sure.* Claude checked in the code: what the Weathering box gates,
+  the unread drainage plane, the hidden panel, the four wear passes and
+  the three sources of foot debris. The lists of channels and of sand are
+  the second agent's reading, not rechecked.
+- **Proposed, not done:** remove the drainage plane; skip the wear passes
+  at 0; give the cliff's foot one owner (rock weather's debris, since it
+  feeds the solid and the stones, with Shape's talus kept for the heights
+  units walk on) and take the Time pass's talus stones out; say on the
+  Weathering box that it changes heights. Each is a look or a cost for
+  the owner to weigh.
+
+**Next [proposed by Claude].** The level top's cover (one cover on a level
+top, so tilted or thin beds do not paint it), then the foot once it has
+one owner.
 
 **Scale: none fixed; a working one may be used [owner decision,
 2026-11-10].** Codex proposes 4 art pixels to a meter
