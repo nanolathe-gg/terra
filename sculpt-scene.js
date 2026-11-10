@@ -12,13 +12,16 @@ const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 // borrowed independently of the canvas materials and then edited per tool.
 // Approved starting shapes use ordinary controls and editable knots. Preset elevation is a rise above the map plain; toolDefaults resolves the absolute height.
 export const LANDFORM_DEFAULTS={"diameter":300,"amount":70,"roughness":0,"softness":50,"cracks":40,"faceVariation":0,"lean":100,"facing":3,"terraces":0,"elevation":70,"combine":0,"wander":90,"widthVary":35,"heightVary":3,"varySize":140,"varyFoot":115,"varyMiddle":145,"routeSmooth":0,"crestTaper":0,"fingers":0,"shoreLayers":0,"shorePlates":0,"curve":{"form":"lfPlateau","knots":[[0,0],[0.08,0.006],[0.19,0.035],[0.27,0.15],[0.37,0.65],[0.45,0.96],[0.5,1],[1,1]],"back":[[0.0,0],[0.096,0.006],[0.22799999999999998,0.035],[0.324,0.15],[0.444,0.65],[0.54,0.96],[0.6,1],[1,1]]}};
-// The palette's landform presets over LANDFORM_DEFAULTS (Plateau is the defaults themselves): numbers for Landform's own controls, each the fit of the
+// The palette's landform presets over LANDFORM_DEFAULTS: numbers for Landform's own controls, each the fit of the
 // retired tool's default stroke that re-authored the fixtures. Elevation is a rise above the map plain, or with Height reference: Sea level, above the sea.
 // The valleys cut to a floor below the plain (Cut to) along one curve: V and U differ only in the curve, the terraced one is the V with the Steps control.
 const valley=(form,more={}) => ({diameter:240,lean:100,combine:1,elevation:-20,cracks:0,wander:20,widthVary:20,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,curve:{form,knots:FORMS[form]().knots},...more});
 const hillKnots=() => [[0,0],[.25,.08],[.5,.4],[.75,.8],[.9,.95],[1,1]];
 export const LANDFORM_TOOLS={
-  plateau:{},
+  // A plateau's wall is cut by gullies and stands back in bays (Gullies 50), with a little scree at the foot (Talus reach 25). More scree than that lets
+  // KBots up the wall: at Talus reach 40 and over, a wall 70 units high that kept them off opened in six of seven worlds; at 25 none of 20 walls did
+  // (five worlds, four outlines), and vehicles were kept off every one. A scene's bare "landform" does not take these (toolDefaults).
+  plateau:{gullies:50,gullySize:50,talus:25},
   // A hill is low and wide (240 px, rises 36), the same on both sides (lean 100), with a rounded top and shoulders (the section reaches .95 of the rise at .9 of the way up, and climbs at most .4 of it per quarter) and a smooth outline: its steepest 16 px cell steps 16 units or less against 25 at the 99th percentile of retail Green hills (measure/hill_band.py), so units cross it, and it stays off the rock slope score. Gullies 0 keeps modern Green's gully ribs off it (the other worlds have none).
   hill:{diameter:240,elevation:36,lean:100,cracks:20,gullies:0,styleVegetation:60,wander:10,widthVary:10,heightVary:6,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfHill',knots:hillKnots(),back:hillKnots()}},
   // Peaked ridge: high (150 over the plain), a steep rock face all round (cells over 24 units on 16 px, steeper than retail Green's hills), a chain of five
@@ -244,10 +247,12 @@ export const shapeDefaults=config => Object.fromEntries(SHAPE_FIELDS.map(([key])
 // Cover brushes share the plateau outline and write a field, not heights; the
 // mask brush (card C5) is one of them.
 export const isCover=kind => kind==='sand' || kind==='grass' || kind==='paint';
-// A palette entry's starting settings in a world (a landform kind starts as the plateau). A sea-level preset keeps its elevation above the sea.
+// A palette entry's starting settings in a world. A sea-level preset keeps its elevation above the sea. A scene or fixture that names the bare kind,
+// "landform", gets the model's own defaults with the world's plateau numbers and not the Plateau button's look (its gullies and scree), so the fixtures
+// keep what they were drawn as when a button's preset changes; to draw what the button draws, a scene names "plateau".
 export function toolDefaults(config,entry,preset=config?.biomeId||'green') {
   const shape=entry==='landform'?'plateau':entry,kind=strokeKind(shape);
-  const starting={...(kind==='landform'?{...LANDFORM_DEFAULTS,...LANDFORM_TOOLS[shape]}:{}),...TOOL_PRESETS[preset]?.[shape]},sea=Math.round(starting.heightReference||0)>=1;   // a sea-level or ground preset keeps its own offset
+  const starting={...(kind==='landform'?{...LANDFORM_DEFAULTS,...(entry==='landform'?{}:LANDFORM_TOOLS[shape])}:{}),...TOOL_PRESETS[preset]?.[shape]},sea=Math.round(starting.heightReference||0)>=1;   // a sea-level or ground preset keeps its own offset
   return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(config,key)*scale),lo,hi)])),cracks:0,diameter:200,amount:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,softness:50,preset,...starting,
     elevation:sea?Math.round(starting.elevation):clamp(Math.round((config?.baseHeight??24)+(starting.elevation??70)),-80,300)};
 }
