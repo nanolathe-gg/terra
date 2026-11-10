@@ -2280,15 +2280,52 @@ pinned ("Yes").
   the rock stands above it as ribs; narrow scree chutes between ribs
   have crisp edges in places.
 
-**Next [proposed by Claude].** The owner looks at the two sheets (bays;
-scree) and says keep or go back. Then: the cone's height capped against
-the wall, so Talus reach can be raised without opening the wall to
-KBots, if the owner wants walls closed; more scree below a bay's mouth
-(fans); the stone lattice (the rows of dashes); and a way for Time to
-cut by discharge. Two candidates for row 1 still wait: Codex's (a new support
-field for beds, shared by the heights and the solid) and a cheaper one of
-Claude's (the landform's steps read the same column as the skin, so that
-a ledge is a step).
+**The comparison loop [owner's direction, 2026-11-10].** "We should do a
+visual comparison with our reference images to determine what is the most
+impactful missing feature for that hyper realistic look and work on that
+next, then do it again." Also: "Bays vs notches not sure yet, kbots can
+climb scree based on slope like normal." So scree is not tuned to keep
+KBots off a wall.
+
+- *Round 1: scale, profile and rock recipe, no engine change* **[by eye,
+  Claude, on a like-for-like fixture: a 760 px, 165 unit cliff with a bent
+  outline]**. With Desert's sloping plateau section (`mesa`) the engine
+  already gives a broad wall of ravines and spurs with long shadows, and
+  with the rock detail off the form is clean. Three defaults hide that:
+  the Plateau button's size (300 px, 70 units); its sheer section
+  (`lfPlateau`: Green and Moon stay a thin wall at 160 units); and the
+  engine-default rock (11 px blocks, heavy pitting; Green 7 px), which
+  reads as pebbles, where the engine's own recipes (granite, sandstone,
+  gneiss) read far closer to the reference. A straight test path made
+  every ravine parallel; a bent one does not. The ravine mechanism
+  proposed earlier was dropped. Which recipe each world takes and what
+  the Plateau button draws are looks, for the owner.
+- *Round 2: the cliff's foot.* The reference's lower third is fans and
+  boulders; ours was a bare skirt, because the talus apron needs a face
+  steeper than the repose. Landed: a wide landform keeps its fall line to
+  the foot (`4f980260`: gullies and talus stopped 320 px from the path,
+  where a weight fell under a fixed threshold; 1 of 34 scenes moves,
+  green-modern-2; modern Green's statistics in the real range 7.94 to
+  7.88, gate failures 22 to 25, all in that scene, where the hill's long
+  back now carries the rills it was set to have); and ravines lay an
+  apron of fans below a wall whatever its slope (`d96dbf06`: from where
+  the ravines open to a toe the reach beyond the foot, smooth lobes a
+  wavelength across; on the fixture 1,162 of 17,680 height bytes rise, by
+  34 units at most; closed-basin cells 3,257 to 3,272). Drag: frames 16.7
+  ms on both builds; a mountain's shape pass 1.08 to 1.11 ms.
+- *Known, not fixed.* On a small plateau with strong Wander, Talus reach
+  60 and over makes a lumpy apron, so the Plateau default stays at 25.
+  The fan's outer edge shows as a line where the stones stop. The
+  Gullies' stripes have phase jumps (their forks); the bays read the same
+  stripes and may step there.
+
+**Next [proposed by Claude].** Round 3 of the loop on the same fixture.
+What stands out now **[by eye]**: the plateau top and the plain are
+featureless where the reference is rough rock, slabs and boulders; the
+ravines do not branch or join; and with a recipe on, bed lines break into
+pixel steps. The owner's open decisions: bays or notches; a rock recipe
+for each world; whether the Plateau button should draw larger and on a
+sloping section.
 
 **Scale: none fixed; a working one may be used [owner decision,
 2026-11-10].** Codex proposes 4 art pixels to a meter
