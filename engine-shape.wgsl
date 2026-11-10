@@ -968,7 +968,9 @@ fn landformFall(p: vec2f, x: i32, y: i32) -> vec2f {
     if (dn < 1e-3) { continue; }
     let w = exp(-dn / 28.0); acc += w; away += w * o / dn;
   }
-  if (acc <= 0.0 || length(away) < 1e-5) { return vec2f(0.0); }
+  // The test is against the weights' own sum: they fall to 1e-5 some 320 px from the path, and an absolute floor there left the lower slope and the foot
+  // of a wide landform with no fall line (no gullies, no talus). Only directions that cancel (a cell midway between two stretches) give none.
+  if (acc <= 0.0 || length(away) < 1e-5 * acc) { return vec2f(0.0); }
   return normalize(away);
 }
 // A landform's gullies at a cell it raises: steered by the stroke's own fall line, at the slope of the picked segment's own section across that line, faded
