@@ -2487,13 +2487,83 @@ system. Four run in a stack, each on the output of the one before:
   removed (the last commit holding it is `4e5a9455`; the regional check
   now compares the pages' coarse lattice with the whole map's heights
   directly), and the solid runs no wear rounds when wear or rock depth is
-  0 (the same bytes). **Agreed and in hand:** rock weather owns the cliff's
-  foot in the art, Shape's talus keeps the heights, and the Time pass's
-  talus no longer places stones.
+  0 (the same bytes). Rock weather also runs no flow rounds when Runoff
+  exposure is 0 (the same bytes).
+- **Done, at the owner's word ("That's fine, let's do it", 2026-11-10):**
+  one system lays debris at a cliff's foot in the art. Shape's talus keeps
+  the heights; cliff debris is rock weather's; the Time pass's talus no
+  longer places stones. The stone mask finds a foot from the heights
+  (gentle ground with a rise of 2 to 5 units within 14 px), with no pass,
+  texture or margin added: 13 of 34 scenes change, 0.05 to 0.68% of their
+  pixels **[measured]**, the same picture by eye. A first try put the
+  measure in rock weather's pass and failed the voxel check (105 MB of
+  96), and a second reached out to Rockfall reach from the stone pass and
+  failed it too (98 MB: a bake margin over about 92 px doubles the
+  check's input texture, which is sized in powers of two).
+- *Left for the owner.* After this nothing reads the Time pass's talus
+  map; it is still computed and packed. With rock weather on, the bake
+  margin is 180 px, and at the editor's 256 px chunks that takes the field
+  input's grid from 512 to 1024 on a side (four times the memory): a
+  margin of about 170 px, or a finer size than powers of two, would save
+  it. Not changed.
 
-**Next [proposed by Claude].** The level top's cover (one cover on a level
-top, so tilted or thin beds do not paint it), then the foot once it has
-one owner.
+**Round 3, built: the foot zone [Claude, 2026-11-10].** Cliff debris now
+also lies out from the toe of rising ground, on gentle ground, thinning to
+nothing at Rockfall reach with a ragged far edge, in the color and block
+size of the beds standing over it (`engine-rock-weather.wgsl`
+`rockDeposit`). Before, debris ended where the debris slope did, and
+Cliff debris 2 with reach 96 did not reach the plain. No control is
+added: Cliff debris accumulation and Rockfall reach set it.
+
+- *Measured.* A Plateau on modern Green and on modern Desert: 6.2% and
+  4.8% of a 1216 x 1024 window's pixels change, all within the reach of
+  the wall; exported heights are the same bytes. Modern Green's three
+  scenes change 3.1 to 5.4% of their pixels. Load and release times are
+  unchanged on modern Green and on Green's own preset (two alternating
+  pairs each). Land tier, `rock-controls-ui` and `export-bytes` pass.
+- *By eye.* A skirt of the wall's own rock with blocks at its foot on
+  Green; fainter on Desert, where debris and sand are near in tone. The
+  owner has not judged it.
+- *Not done.* The blocks are the stone scatter's (see boulders, below).
+  The control sweeps were not run.
+
+**Round 4: what the engine still lacks, in order [by eye unless marked,
+Claude, 2026-11-10; the owner asked for this].** Twelve fixtures on the
+branch with the rim and foot zones in, all on modern Desert or modern
+Green (round 3's Moon, Lava and Red fixtures lit their faces near black):
+a Plateau with a Mountain and a gullied Hill, in nine recipes and with
+existing controls only. Judged at 1x and at half scale against all eight
+pictures. Ordered by how much of the picture each one spoils, the shape
+before the color, and the owner's two rules.
+
+| | What is missing | Which pictures | What ours does | Heights or art |
+| --- | --- | --- | --- | --- |
+| 1 | Rock faces with a hierarchy: planes and ledges 30 to 150 px across first, fine detail under them, one color family per rock | all seven rock pictures | a face breaks up every 5 to 15 px at full contrast, in many hues at once (pink, cream, gray, mint on one Desert wall); no plane is larger than a block | art |
+| 1a | A defect inside 1: a checkerboard and comb pattern 2 px across on steep faces, in the relief itself | none (it is ours) | 1.7 to 8.7% of clay pixels in eleven fixtures **[measured: a 2 x 2 alternating difference over 60 of 255]**; the same on main | art |
+| 2 | Beds that run along a wall: a hard bed stands as a cliff, a soft one lies back as a slope, and the pair repeats, traceable for the wall's whole length | `prowess1`, `sand5`, `sandstone`, `surface3` | beds are a fine texture; gullies down the fall line cut the wall into equal fins, and no ledge runs more than one fin | both: a bench 16 px or wider belongs in the heights |
+| 3 | Level ground with a surface: tone and cover that change over 50 to 300 px (damp basins, dust, pavement, wash lines, stones thinning), the heights left flat | the top-down plain, `sand5`'s floor, `prowess1`'s foreground | Desert's plain is one tone of 1 px speckle; a level top is one flat tone, or with the shale and sandstone recipes blobs of two or three bed colors | art only (the owner's rule) |
+| 4 | Sand that drifts: smooth sheets pooling in hollows and at a wall's foot, burying ledges, with ripples that vary | `sand5`, `rocktools` (second panel) | Sand supply 2 changes 0.86% of pixels **[measured]** unless the Time pass's rain is on (off in the presets), and then lays thin streaks; the Sand brush paints a hard-edged patch of even ripples; Desert's sand is darker than its ground | art; rain moves the heights |
+| 5 | Boulders: blocks 20 to 60 px with lit faces, piled and of every size down to gravel | `rocky`, `prowess1`, `sand5` | the largest stone class has a 16 px radius; stones are dark flat blobs set apart, and on Desert not the color of the wall they fell from | art |
+| 6 | Rills that branch: a tree of channels on a soft slope, joining downhill | `surface1` | gullies and runoff grooves run side by side down the fall line and do not join | both |
+| 7 | A wall that varies along its length: massive buttresses, deep alcoves and plain stretches | the top-down picture, `sandstone` | one gully rhythm all the way round; bays exist but every stretch between them is alike | heights |
+| 8 | Folded and swirled beds | `rocktools` (fourth panel) | beds are flat or evenly tilted | art |
+
+- *Known defects, not ranked above.* Gully ridges stand up to 30 units
+  over a plateau's level top (the gully size is a share of the landform,
+  not of the wall). Archipelago's wall shows no bare rock. A drop into
+  water has no rim. Modern Green renders 6 pixels differently at 128 px
+  and 256 px tiles.
+- *The owner's call, not ranked.* Every reference is lit low and raking,
+  with long cast shadows and dark ravines, and much of their depth is
+  that. Ours are lit from higher with short shadows.
+- *How sure.* Rows 1a and the sand number are measured; the rest is by
+  eye from one fixture path in each recipe, so a row may be partly
+  settings (as round 2's gap was). The order of 1 and 3 is arguable: 1 is
+  first because seven of the eight pictures are rock and it is what reads
+  worst at 1x; 3 covers the most ground on a real map.
+
+**Next [proposed by Claude].** Row 1a, then row 1, on Desert sandstone and
+Green granite together.
 
 **Scale: none fixed; a working one may be used [owner decision,
 2026-11-10].** Codex proposes 4 art pixels to a meter
