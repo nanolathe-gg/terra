@@ -2310,9 +2310,14 @@ KBots off a wall.
   back now carries the rills it was set to have); and ravines lay an
   apron of fans below a wall whatever its slope (`d96dbf06`: from where
   the ravines open to a toe the reach beyond the foot, smooth lobes a
-  wavelength across; on the fixture 1,162 of 17,680 height bytes rise, by
-  34 units at most; closed-basin cells 3,257 to 3,272). Drag: frames 16.7
-  ms on both builds; a mountain's shape pass 1.08 to 1.11 ms.
+  wavelength across; on the fixture 1,147 of 17,680 height bytes rise, by
+  33 units at most; closed-basin cells 3,257 to 3,268). The fan's height
+  comes in with the reach, and talus stays off a route an earlier stroke
+  laid (`1513a649`; a ramp drawn first had scree across its foot). Regional
+  replay finds no mismatch on three scenes with fans. At the Plateau
+  preset, over five worlds and four outlines, vehicles are kept off all 20
+  walls and KBots reach the top on 9. Drag: frames 16.7 ms on both builds;
+  a mountain's shape pass 1.08 to 1.11 ms.
 - *Known, not fixed.* On a small plateau with strong Wander, Talus reach
   60 and over makes a lumpy apron, so the Plateau default stays at 25.
   The fan's outer edge shows as a line where the stones stop. The
