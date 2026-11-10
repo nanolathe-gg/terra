@@ -1,7 +1,8 @@
 // Authored terrain appearance experiment. No recovered retail rendering claim.
 //
 // WGSL port of the former sculpt-common.glsl, shared by the draw
-// (sculpt-vert.wgsl, sculpt-frag.wgsl) and the bake (relief-bake.wgsl).
+// (sculpt-vert.wgsl, engine-frag.wgsl), the bake (engine-bake.wgsl) and the
+// modules that paste it at their COMMON mark (rock runoff, the voxel solid, the Time pass).
 // Naming follows the GLSL so a GLSL diff ports line by line:
 //  - uniform uFooBar is the field u.fooBar of the one uniform block below
 //    (bool uniforms are i32: 0 or 1; the one rename is uDiagnostic, which
@@ -9,7 +10,7 @@
 //  - sampler uFoo is the texture fooTex, with fooSamp where it is filtered.
 // The renderer (sculpt-renderer.js) reads this struct to lay out its
 // uniform buffer, so a new uniform needs only a field here.
-// The renderer understands #ifdef BAKE / #ifndef BAKE / #else / #endif.
+// The renderer understands #ifdef NAME / #ifndef NAME / #else / #endif; a module is built with BAKE, EROSION, VOLUME_COMPUTE or VOLUME_RENDER, or none.
 
 struct Uniforms {
     // Shared by the draw and the bake.
@@ -22,13 +23,12 @@ struct Uniforms {
     materialReady: i32,
     detail: f32,
     light: vec3f,
-    // Draw (sculpt-frag.wgsl).
+    // Draw (engine-frag.wgsl).
     shallowColor: vec3f,
     riverBed: vec4f,       // riverfix: the braided bed's gravel colour (materials/<world>.json water.riverBedRGB), a = 1 when the world gives one
     deepColor: vec3f,
     waterMean: vec3f,
     rockMean: vec3f,
-    full: i32,
     clay: i32,
     slopeMaterial: i32,
     mineralMargins: i32,
@@ -109,7 +109,7 @@ struct Uniforms {
     groundTiles: i32,
     tileShift: f32,        // the export's TNT tile grid starts this many screen rows down: floor(base height / 2), the TA projection's offset (sculpt-chunk-renderer.js requiredRegion)
     sandGrain: f32,
-    // Bake (relief-bake.wgsl).
+    // Bake (engine-bake.wgsl).
     reliefScale: f32,     // wavelength of the first octave, world px
     reliefAmount: f32,    // height per unit slope per wavelength
     reliefBranch: f32,    // how strongly octaves follow earlier gullies
@@ -126,7 +126,6 @@ struct Uniforms {
     crackSeverity: f32,   // crack depth
     crackWidth: f32,      // crack core width, world px
     crackNetwork: f32,    // 0: rills down the slope; 1: polygonal plates
-    cracksOn: i32,        // the full bake computes cracks; previews skip them
     plainRelief: f32,     // faint lit lumps on level ground (appearance only)
     crackSpacing: f32,    // major crack block size, world px
     windAngle: f32,       // direction the wind blows toward, degrees (0 = east)
@@ -347,7 +346,7 @@ struct Uniforms {
     looseKnoll: f32,      // 0..1: the share of loose stones drawn as knolls, a low pale ring of ground round a hollow (0: all stones, as before)
     gougeWeb: f32,        // 0..1: a bold web of long dark gouges across raised crystal, round cells about 42 px (0: none)
     creaseShade: f32,     // 0..1: how much light a crease (a gully or valley floor, the authored height below its rings 6 and 12 px out) loses, whatever its facing (0: none)
-    // H1 (lit relief, Green). Both run only in a full draw; every default is the earlier look.
+    // H1 (lit relief, Green). Every default is the earlier look.
     closeShadow: f32,     // how much a ledge 1-6 px toward the sun darkens the direct light on the ground behind it, 0..1 (0: only the far taps)
     cavity: f32,          // how much a crevice or crack floor (surface below the mean of a ring 1-3 px out) loses of its ambient light, 0..1 (its direct light loses .45 of that; 0: off)
     // H2, H16 (the rock column of a world's table, `column` in materials/<world>.json). Every default is the earlier look.
@@ -376,9 +375,8 @@ struct Uniforms {
     stoneRound: f32,      // world material data: 0 angular chips .. 1 rounded stones
     stoneSort: f32,       // world material data: 0 a mixed power-law gravel, 1 one size class sorted by the process (talus coarsens outward, fans and channels fine downslope)
     stoneSlab: f32,       // world material data: share of flat slabs
-    plantsOn: f32,        // card P31: 1 when the world's ground-cover table has plants (its last row) and this bake is a full one: the plant families of looseStones, which share the loose mask
+    plantsOn: f32,        // card P31: 1 when the world's ground-cover table has plants (its last row): the plant families of looseStones, which share the loose mask
     stoneMoss: f32,       // world material data: share of stones with a mossy cap
-#ifdef CHUNK
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
     chunkGridSize: vec2f,     // padded regional texture dimensions
@@ -388,7 +386,6 @@ struct Uniforms {
     chunkScreenOrigin: vec2f, // preview screen pixels; export adds floor(base/2)
     chunkScale: f32,          // World pixels per raster texel.
     chunkFieldScale: f32,     // Relief bake spacing, independent of color sampling.
-#endif
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -562,8 +559,8 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), sel
 @group(0) @binding(1) var heightTex: texture_2d<f32>;   // r32float, read with textureLoad
 @group(0) @binding(2) var noiseTex: texture_2d<f32>;
 // Grid-resolution inputs in one array texture (a fragment stage may sample 16
-// textures): layer 0 the weathering worker's flow, deposit, talus, sand; layer
-// 1 the material field. Read through weatherAt and materialFieldAt.
+// textures): layer 0 the Time pass's flow, deposit, talus, sand; layer
+// 1 the material field; layers 2 and 3 its maps. Read through weatherAt, materialFieldAt, timeMap2 and timeMap3.
 @group(0) @binding(4) var gridTex: texture_2d_array<f32>;
 #ifdef BAKE
 @group(0) @binding(6) var routesTex: texture_2d<f32>;
@@ -594,12 +591,8 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), sel
 // Painted style factor for f in -1..1 (card C5): 1 at 0 (exactly), 0 at -1,
 // 4 at +1 (two doublings).
 fn styleScale(f: f32) -> f32 { return select(1.0 + f, exp2(2.0 * f), f > 0.0); }
-#ifdef CHUNK
 fn regionalUv(uv: vec2f) -> vec2f { return (uv * u.grid - u.chunkGridOrigin) / u.chunkGridSize; }
 fn maskUv(p: vec2f) -> vec2f { return regionalUv((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid); }
-#else
-fn maskUv(p: vec2f) -> vec2f { return (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid; }
-#endif
 
 // Slope averaged over about 14 px: the relief a painted edge follows changes
 // over tens of pixels, not at the 5 px the shading's slope does.
@@ -635,17 +628,10 @@ fn styleEdge(p: vec2f, f: f32, slope: f32) -> f32 {
     return f * smoothstep(0.30, 0.60, abs(f) + (steep * 0.25 + lobes * 0.4 + grain * 0.6) * held);
 }
 
-#ifdef CHUNK
 fn weatherAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, regionalUv(uv), 0, 0.0); }
 fn timeMap2(uv: vec2f) -> vec4f { if (u.weatherMaps < 0.5) { return vec4f(0.0); } return textureSampleLevel(gridTex, linearClamp, regionalUv(uv), 2, 0.0); }
 fn timeMap3(uv: vec2f) -> vec4f { if (u.weatherMaps < 0.5) { return vec4f(0.5, 0.5, 0.0, 0.0); } return textureSampleLevel(gridTex, linearClamp, regionalUv(uv), 3, 0.0); }
 fn materialFieldAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, regionalUv(uv), 1, 0.0); }
-#else
-fn weatherAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, uv, 0, 0.0); }
-fn timeMap2(uv: vec2f) -> vec4f { if (u.weatherMaps < 0.5) { return vec4f(0.0); } return textureSampleLevel(gridTex, linearClamp, uv, 2, 0.0); }
-fn timeMap3(uv: vec2f) -> vec4f { if (u.weatherMaps < 0.5) { return vec4f(0.5, 0.5, 0.0, 0.0); } return textureSampleLevel(gridTex, linearClamp, uv, 3, 0.0); }
-fn materialFieldAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, uv, 1, 0.0); }
-#endif
 
 // H5 override plane 17's deposits multiplier (planes 14-17: erosion, deposits, vegetation, exposure) at p: scales sand, stones and talus. 1 where nothing overrides.
 fn depositsAt(p: vec2f) -> f32 {
@@ -706,28 +692,19 @@ struct VertexOut {
 }
 #endif
 
-// GLSL mod(): x - y * floor(x / y). WGSL's % truncates instead.
-// World pixels per bake texel: 1 for the whole-map bake, the chunk's field scale otherwise (card P31 fades plants by it).
+// World pixels per bake texel: the chunk's field scale (card P31 fades plants by it).
 fn fieldScale() -> f32 {
-#ifdef CHUNK
     return max(u.chunkFieldScale, 1e-3);
-#else
-    return 1.0;
-#endif
 }
+// GLSL mod(): x - y * floor(x / y). WGSL's % truncates instead.
 fn glslMod(x: vec2f, y: f32) -> vec2f { return x - y * floor(x / y); }
 
 fn baseHeight(p: vec2f) -> f32 {
     let q = clamp(p / (u.size - 1.0), vec2f(0.0), vec2f(1.0)) * (u.grid - 1.0);
-#ifdef CHUNK
     let globalA = vec2i(floor(q));
     let globalB = min(globalA + 1, vec2i(i32(u.grid) - 1));
     let a = clamp(globalA - vec2i(u.chunkGridOrigin), vec2i(0), vec2i(u.chunkGridCount) - 1);
     let b = clamp(globalB - vec2i(u.chunkGridOrigin), vec2i(0), vec2i(u.chunkGridCount) - 1);
-#else
-    let a = vec2i(floor(q));
-    let b = min(a + 1, vec2i(i32(u.grid) - 1));
-#endif
     let f = fract(q);
     return mix(mix(textureLoad(heightTex, a, 0).r,
                    textureLoad(heightTex, vec2i(b.x, a.y), 0).r, f.x),
@@ -750,14 +727,9 @@ fn terrainNoise(p: vec2f) -> vec4f {
 
 #ifdef BAKE
 fn routeProtection(p: vec2f) -> f32 {
-#ifdef CHUNK
     return textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0).r;
-#else
-    return textureSampleLevel(routesTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0.0).r;
-#endif
 }
 #else
-#ifdef CHUNK
 // H7b: fields texel j holds the bake at world position origin + j * scale + (scale - 1) / 2 (the centre of the scale x scale block it stands
 // for); at scale 1 every term below is x * 1, x / 1 or x - 0, so the lookup is the one it replaced.
 fn bakedFields(p: vec2f) -> vec4f {
@@ -772,10 +744,6 @@ fn bakedFieldsNearest(p: vec2f) -> vec4f {
     let t = (((q + 0.5 * u.chunkFieldScale) - u.chunkFieldsOrigin) - centre) / u.chunkFieldScale;
     return textureSampleLevel(fieldsTex, linearClamp, (floor(t) + 0.5) / u.chunkFieldsSize, 0.0);
 }
-#else
-fn bakedFields(p: vec2f) -> vec4f { return textureSampleLevel(fieldsTex, linearClamp, (p + 0.5) / u.size, 0.0); }
-fn bakedFieldsNearest(p: vec2f) -> vec4f { return textureSampleLevel(fieldsTex, linearClamp, (floor(p + 0.5) + 0.5) / u.size, 0.0); }
-#endif
 // Green: route protection 0..1, beach as negative, or 2 + crystal cover.
 fn routeProtection(p: vec2f) -> f32 { let g = bakedFields(p).g; return select(max(g, 0.0), 1.0, g > 1.5); }
 fn beachField(p: vec2f) -> f32 { return max(-bakedFields(p).g, 0.0); }

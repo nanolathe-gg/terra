@@ -1,4 +1,4 @@
-// WGSL port of the former sculpt.frag. See sculpt-common.wgsl for naming:
+// WGSL port of the former sculpt.frag. See engine-common.wgsl for naming:
 // uniform uFoo is u.foo; sampler uFoo is fooTex with fooSamp.
 /*COMMON*/
 /*VOLUME*/
@@ -14,11 +14,7 @@
 
 // Above 1x a texel is one drawn pixel, not one world pixel: the pattern comes out smaller and keeps its grain and dither.
 fn grainPixel(pixel: vec2f) -> vec2f {
-#ifdef CHUNK
     return pixel / min(u.chunkScale, 1.0);
-#else
-    return pixel;
-#endif
 }
 
 // Move a texture to a new base colour, keeping its grain.
@@ -59,7 +55,6 @@ fn visibility(p: vec2f, h: f32) -> f32 {
     let elevation = u.light.z / length(u.light.xy);
     var shadow = 0.0;
     for (var i = 4; i <= 12; i++) {
-        if (u.full == 0 && i > 5) { break; }
         let d = f32(i * i) * 1.4 + 2.0;
         let q = p + toward * d;
         if (q.x < 0.0 || q.y < 0.0 || q.x >= u.size || q.y >= u.size) { continue; }
@@ -72,13 +67,12 @@ fn visibility(p: vec2f, h: f32) -> f32 {
 fn occlusion(p: vec2f, h: f32) -> f32 {
     var result = 0.0;
     for (var i = 0; i < 8; i++) {
-        if (u.full == 0 && i >= 4) { break; }
         let angle = f32(i) * 2.399963;
         let d = 32.0 + f32(i % 3) * 14.0;
         let q = p + vec2f(cos(angle), sin(angle)) * d;
         result += clamp((surfaceHeight(q) - h) / d - 0.12, 0.0, 1.0);
     }
-    return 1.0 - result * select(0.09, 0.045, u.full != 0);
+    return 1.0 - result * 0.045;
 }
 
 // Pattern mixes (card P9): retail art shows colours the palette lacks as pixel
@@ -89,14 +83,12 @@ fn occlusion(p: vec2f, h: f32) -> f32 {
 fn palettePattern(rgb: vec3f, threshold: f32) -> vec3f {
     let c = vec3i(clamp(floor(rgb * 31.0 + 0.5), vec3f(0.0), vec3f(31.0)));
     let at = vec2i(c.r + 32 * c.b, c.g);
-#ifdef CHUNK
     // Subpixel palette patterns converge to their mixture when zoomed out.
     if(u.chunkScale>1.0){
         var sum = vec3f(0.0);
         for (var k = 0; k < 8; k++) { sum += textureLoad(paletteTex, at + vec2i(0, 32 + 32 * k), 0).rgb; }
         return sum * 0.125;
     }
-#endif
     let k = min(i32(threshold * 8.0), 7);
     return textureLoad(paletteTex, at + vec2i(0, 32 + 32 * k), 0).rgb;
 }
@@ -111,7 +103,6 @@ fn uphillSoil(p: vec2f, uphill: vec2f, h: f32, reach: f32) -> f32 {
     var distances = array<f32, 4>(5.0, 14.0, 30.0, 56.0);
     var support = 0.0;
     for (var i = 0; i < 4; i++) {
-        if (u.full == 0 && i > 1) { break; }
         let d = distances[i];
         let q = p + uphill * d;
         let gentle = 1.0 - smoothstep(0.50, 0.95, length(broadGradient(q)));
@@ -200,11 +191,9 @@ fn genColor(layer: i32, world: vec2f) -> vec3f {
 // for the generated materials; at final (the study included) the branch is not taken and the lookup is the one it was.
 fn groundSource(pixel: vec2f) -> vec3f {
     if (u.groundMode == 0) { return genColor(u.groundLayer, pixel); }   // a world whose plain is one quilted image takes the generated layer its table's `quilt` material makes; the 16-tile plain stays in groundTile
-#ifdef CHUNK
     if (u.materialFoot > 1.5) {
         return 0.25 * (groundTile(pixel + vec2f(-0.5, -0.5)) + groundTile(pixel + vec2f(0.5, -0.5)) + groundTile(pixel + vec2f(-0.5, 0.5)) + groundTile(pixel + vec2f(0.5, 0.5)));
     }
-#endif
     return groundTile(pixel);
 }
 fn slopeGrassSource(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
@@ -323,11 +312,7 @@ fn coverZ(p: vec2f, scale: f32) -> f32 {
 fn flowersAt(p: vec2f, cover: array<f32, 7>, total: f32, light: f32, vegetation: f32, gate: f32) -> vec4f {
     let dens = cvr(39u).w;
     if (dens <= 0.0 || gate <= 0.0) { return vec4f(0.0); }
-#ifdef CHUNK
     let fade = 1.0 - smoothstep(1.0, 2.0, u.chunkScale);
-#else
-    let fade = 1.0;
-#endif
     let px = poolPixel(p);
     let blk = floor(px * 0.5);
     let hb = poolCellHash(blk, u.pool * 0.5, 0x83u);   // card tilepool: by the block's Latin index (the same dots in every row and column of a repeat)
@@ -738,11 +723,7 @@ fn sandBarAt(p: vec2f) -> f32 {
 // slope cover (moss), its lightest ground or beach (snow), its ground darkened
 // as the shoreline band darkens it (wet).
 fn paintCoverage(p: vec2f, slope: f32, hollow: f32) -> vec4f {
-#ifdef CHUNK
     let raw = textureSampleLevel(masksTex, linearClamp, maskUv(p), 0, 0.0);
-#else
-    let raw = textureSampleLevel(masksTex, linearClamp, (p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid, 0, 0.0);
-#endif
     return paintEdge(p, raw, slope, hollow);
 }
 // The lightest of the world's ground and beach materials, grain damped (snow
@@ -1027,7 +1008,7 @@ fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32, cracked: bool) -> f32 {
 // E11: contour lines in Archipelago's red fringe. Retail's fringe is a stack of thin wavy
 // lines 2-4 px apart that follow the hill's outline (a hill's border, not a texture laid on
 // the screen). The mineral field's own falloff is the outline's distance measure: the
-// weathering worker's source falls off about exponentially from the hill, so lines at equal
+// Time pass's source falls off about exponentially from the hill, so lines at equal
 // steps of its logarithm are equally spaced in px, whatever the hill's shape. Pixel width
 // comes from the field's gradient. field: the material field's source (.b); returns the
 // line colour and its weight.
@@ -1457,12 +1438,8 @@ fn sandMaterialAt(scatter: vec2f) -> vec3f {
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // GLSL's gl_FragCoord (origin bottom left; the canvas is u.size high).
-#ifdef CHUNK
     // H7b: an output texel covers chunkScale final pixels, so its screen position is scaled back (x * 1 at final).
     let fragCoord = vec2f(v.position.x * u.chunkScale + u.chunkScreenOrigin.x, u.size - (v.position.y * u.chunkScale + u.chunkScreenOrigin.y));
-#else
-    let fragCoord = vec2f(v.position.x, u.size - v.position.y);
-#endif
     // Card tilepool: the interpolated world position is held to 1/64 px. Past 8,192 px (a 16x16 map's far side) f32 rounding moved it
     // by about 1e-3 px against the same ground a pool period nearer the origin, enough to flip palette pixels and make its tiles unique.
     let hit=voxelHit(vec2f(fragCoord.x,u.size-fragCoord.y));
@@ -1471,7 +1448,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // sampling stretches that grain over projected south-facing slopes.
     // Geometry and broad material decisions still use world coordinates.
     var pixel = vec2f(fragCoord.x, u.size - fragCoord.y);
-#ifdef CHUNK
     // Stable, stratified native-pixel sampling: retain the material distribution
     // without locking every preview texel to one phase of a repeating grain.
     if (u.chunkScale > 1.0) {
@@ -1481,7 +1457,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let phase = vec2f(f32(h & 65535u), f32(h >> 16u)) / 65536.0;
         pixel = vec2f(cell) * u.chunkScale + floor(phase * u.chunkScale) + 0.5;
     }
-#endif
     // Sand grains read the rock at a noise-scattered coordinate; GLSL took
     // that lookup's level from implicit derivatives. WGSL allows derivatives
     // only in uniform control flow, so they are taken here, before any branch.
@@ -2217,10 +2192,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // threshold pattern, so edits change only local pixels and level
         // ground keeps a repeating pattern. Strength is in palette-LUT steps.
         var fc = floor(fragCoord);
-#ifdef CHUNK
         if (u.chunkScale > 1.0) { fc = floor(vec2f(pixel.x, u.size - pixel.y)); }
         if (u.chunkScale < 1.0) { fc = floor(fragCoord / u.chunkScale); }
-#endif
         // Card tilepool: the threshold repeats with the pool, as level ground does, so it does not make every tile of a plain differ.
         let ign = fract(52.9829189 * fract(dot(poolWrap(fc, u.pool), vec2f(0.06711056, 0.00583715))));
         // Smooth water gradients need dither; noisy ground grain does not.

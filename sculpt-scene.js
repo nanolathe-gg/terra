@@ -4,7 +4,7 @@
 // (sculpt.py world_configs) and, where the page's address may override them, the page's settings (pageSettings).
 import {FACING_CHOICES,FORMS} from './sculpt-shape-presets.js';
 import {applyRiver,isRiver} from './sculpt-river.js';
-import {createShapeEngine,readBuffer,comparePlanes,DRAWN_KINDS} from './sculpt-gpu-fields.js';
+import {createShapeEngine,readBuffer,comparePlanes,DRAWN_KINDS,heightsFields} from './sculpt-gpu-fields.js';
 import {computeDrainage,latticeWidth,DRAIN_STEP} from './sculpt-drainage.js';
 import {erosionOf} from './sculpt-erosion.js';
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
@@ -280,15 +280,19 @@ export function addDefaults(settings,defaults={}) { for (const [key,value] of Ob
 export const pageSettings=(config,search='') => addDefaults(new URLSearchParams(search),config.defaults);
 // A world setting the page's address may override (a knob trial in a render's query), else the world's value.
 export const worldSetting=(config,settings,key) => settings.has(key)?Number(settings.get(key)):worldDefault(config,key);
+// A height image's node (sculpt-gpu-fields.js heightsFields: the samples and where they lie), as a scene, a save and the undo history hold it: its
+// fields checked and in one order, so a node saved and loaded again is the same text. `name` starts the error for a node that cannot be drawn.
+export const heightsNode=(n,name) => ({kind:'heights',hidden:Boolean(n?.hidden),...heightsFields(n,name)});
 // Capture tools rebuild a map from strokes: [kind, [[x,y],...], options], each starting from the brush card's defaults for this world.
 // options.card overrides card values (diameter, amount, roughness ... in card units); any other key is a stroke option. Stroke i takes
 // the seed + i * 7919; the ground undulation (unless ground is false) comes first, from the page's settings. A river is migrated as a
-// drawn one is, over the map.
+// drawn one is, over the map. A height image is ['heights', [], {image, bits, width, height, cell, x, y, scale, offset, mode}]: it has no path.
 export function sceneNodes(config,list,{ground=true,seed=DEFAULT_SEED,settings=pageSettings(config)}={}) {
   const out=[];
   if (ground) { const g=groundDefaults(settings); if (g.amplitude>0) out.push({kind:'ground',...g,seed:seed^0x9e37}); }
   list.forEach(([entry,points,options={}],i) => {
     const kind=strokeKind(entry);
+    if (kind==='heights') { out.push(heightsNode(options,`scene stroke ${i}: the height image`)); return; }
     // A stroke the passes would not draw is an error, not an empty stroke: a section form (mesa, cliff, lfPlateau) is a landform's curve, not a tool.
     if (!DRAWN_KINDS.includes(kind)) throw new Error(`scene stroke ${i}: "${entry}" is not a tool the editor draws (a tool: ${Object.keys(LANDFORM_TOOLS).join(', ')}, or ${DRAWN_KINDS.filter(k => k!=='landform').join(', ')}; a section form goes in the card's curve)`);
     const {card:override,...rest}=options,d={...toolDefaults(config,entry),...override},pts=points.map(([x,y]) => ({x,y}));

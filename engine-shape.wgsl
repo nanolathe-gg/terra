@@ -363,6 +363,60 @@ fn ground(@builtin(global_invocation_id) g: vec3u) {
   F[PH * cells + i] = clamp(max(next, min(h, u.sea + 1.5)), u.minH, u.maxH);
 }
 
+// ---- A height image (a node of kind 'heights'; sculpt-gpu-fields.js heightsFields) ----
+// Sample (i, j) of the image sits at world pixel (hmX + i * hmCell, hmY + j * hmCell). A cell reads the image at its own world position and nothing
+// else, so the value is a function of position alone: a page, the whole map and a rectangle of either agree, and no cell needs a neighbor.
+// The host holds this pass's window of samples in MW from u.mwBase: hmCw samples a row, the first of them sample (hmCx, hmCy). An index past the
+// image's edge reads the edge sample.
+fn hmSample(i: i32, j: i32) -> f32 {
+  let k = u32(clamp(j, 0, i32(u.hmH) - 1) - u.hmCy) * u.hmCw + u32(clamp(i, 0, i32(u.hmW) - 1) - u.hmCx);
+  return MW[u.mwBase + (k >> 2u)][k & 3u];
+}
+// The weights of the four samples round a place t (0..1) between the second and the third: a cubic through both with the slopes a Catmull-Rom spline
+// has there (half the difference of the samples either side), except that within HM_COLLAR of a sample the surface is the straight line of that slope.
+// The lattice of the fields is about 2 px and the export reads a 16 px corner as the bilinear mix of the four lattice cells round it; those cells all
+// lie in a sample's collar (2.5 px at 16 px a sample), where the surface is linear in x and in y, so the mix is the sample itself. A plain Catmull-Rom
+// curves there, and the mix misses a steep sample's byte by 1.
+const HM_COLLAR = 0.15625;
+const HM_REACH = 2.0;   // the cells past the image's outer samples that the surface covers (HEIGHTS_REACH in sculpt-gpu-fields.js)
+fn hmWeights(t: f32) -> vec4f {
+  if (t <= HM_COLLAR) { return vec4f(-0.5 * t, 1.0, 0.5 * t, 0.0); }
+  if (t >= 1.0 - HM_COLLAR) { let s = t - 1.0; return vec4f(0.0, -0.5 * s, 1.0, 0.5 * s); }
+  let span = 1.0 - 2.0 * HM_COLLAR; let q = (t - HM_COLLAR) / span; let q2 = q * q; let q3 = q2 * q;
+  return (2.0 * q3 - 3.0 * q2 + 1.0) * vec4f(-0.5 * HM_COLLAR, 1.0, 0.5 * HM_COLLAR, 0.0) + (q3 - 2.0 * q2 + q) * span * vec4f(-0.5, 0.0, 0.5, 0.0)
+       + (3.0 * q2 - 2.0 * q3) * vec4f(0.0, 0.5 * HM_COLLAR, 1.0, -0.5 * HM_COLLAR) + (q3 - q2) * span * vec4f(0.0, -0.5, 0.0, 0.5);
+}
+fn hmRow(i: i32, j: i32, w: vec4f) -> f32 { return w.x * hmSample(i - 1, j) + w.y * hmSample(i, j) + w.z * hmSample(i + 1, j) + w.w * hmSample(i + 2, j); }
+// u.combine: 0 raise (the higher of the ground and the image), 1 cut (the lower), 2 flatten (the image, easing back into the ground across the margin
+// round the samples, as a landform's section meets the ground at its foot), 3 replace (the image, margin and all).
+@compute @workgroup_size(8, 8)
+fn heights(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let cells = pcells(); let i = lidx(x, y);
+#else
+  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
+#endif
+  // The cell's place in the image, in samples, and how far that is outside the samples.
+  let su = (f32(x) * u.spacing - u.hmX) / u.hmCell; let sv = (f32(y) * u.spacing - u.hmY) / u.hmCell;
+  let ex = max(max(-su, su - f32(u.hmW - 1u)), 0.0); let ey = max(max(-sv, sv - f32(u.hmH - 1u)), 0.0);
+  if (ex > HM_REACH || ey > HM_REACH) { return; }
+  let fu = floor(su); let fv = floor(sv); let si = i32(fu); let sj = i32(fv);
+  let wx = hmWeights(su - fu); let wy = hmWeights(sv - fv);
+  let v = wy.x * hmRow(si, sj - 1, wx) + wy.y * hmRow(si, sj, wx) + wy.z * hmRow(si, sj + 1, wx) + wy.w * hmRow(si, sj + 2, wx);
+  let base = F[PH * cells + i];
+  var value = v;
+  if (u.combine == 0u) { value = max(base, v); }
+  else if (u.combine == 1u) { value = min(base, v); }
+  else if (u.combine == 2u) {
+    // All of the image over the samples and their collars, none of it at the margin's edge.
+    let keep = (1.0 - sm(HM_COLLAR, HM_REACH, ex)) * (1.0 - sm(HM_COLLAR, HM_REACH, ey));
+    if (keep < 1.0) { value = base + (v - base) * keep; }
+  }
+  F[PH * cells + i] = clamp(value, u.minH, u.maxH);
+}
+
 // Back to the empty map over the rectangle: dry base height, nothing else.
 @compute @workgroup_size(8, 8)
 fn init(@builtin(global_invocation_id) g: vec3u) {

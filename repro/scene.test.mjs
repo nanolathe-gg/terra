@@ -42,7 +42,7 @@ test('a scene stroke whose tool the editor does not draw is an error, not an emp
 test('the page keeps only the kinds it draws', () => {
   // sculpt.js deserializeNodes keeps a saved node only if NODE_NAMES names its kind: the Crater and Crystals buttons draw landforms.
   const page = readFileSync(`${root}sculpt.js`, 'utf8'), names = page.match(/const NODE_NAMES=\{([^}]*)\}/)[1];
-  assert.deepEqual([...names.matchAll(/(\w+):/g)].map(m => m[1]).sort(), ['erase', 'fissure', 'grass', 'ground', 'landform', 'paint', 'sand', 'smooth']);
+  assert.deepEqual([...names.matchAll(/(\w+):/g)].map(m => m[1]).sort(), ['erase', 'fissure', 'grass', 'ground', 'heights', 'landform', 'paint', 'sand', 'smooth']);
 });
 
 test('a save\'s brush card counts only if this editor made it', () => {

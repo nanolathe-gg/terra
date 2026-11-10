@@ -1,7 +1,7 @@
 // One displaced surface, shared by every terrain brush. Prototype renderer
-// on WebGPU (no WebGL fallback). Shaders: sculpt-common.wgsl (shared),
-// sculpt-vert.wgsl and sculpt-frag.wgsl (the draw), relief-bake.wgsl (the
-// world-resolution fields bake, a compute pass).
+// on WebGPU (no WebGL fallback). Shaders: engine-common.wgsl (shared),
+// sculpt-vert.wgsl and engine-frag.wgsl (the draw), engine-bake.wgsl (the
+// fields bake of a chunk, a compute pass).
 
 import {materialRows,tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {columnRows,columnColors} from './sculpt-column.js';
@@ -12,7 +12,7 @@ import {RockWeather} from './sculpt-rock-weather.js';
 import {VoxelSurface} from './sculpt-volume.js';
 import {extractGates, gateValues, gateKey} from './sculpt-gates.js';
 
-// Layers of the masks texture array (4 planes each): the plane count divided by 4. Planes 0-17 are in use, 18-24 are unused (see MASK_KEYS in sculpt.js).
+// The mask planes when the config names none: as many as MASK_KEYS (sculpt-scene.js, which says what each holds). The masks texture array has a layer per 4 planes.
 const MASK_PLANE_COUNT = 25;
 
 // sRGB 0..255 to OKLab (Ottosson 2020), as engine-palette.wgsl does on the GPU: the palette's colours are converted once here.
@@ -50,35 +50,22 @@ function preprocess(source, common, defines) {
   const out = [], keep = [];
   for (const line of source.replace('/*COMMON*/', common).split('\n')) {
     const m = line.match(/^\s*#(ifdef|ifndef|else|endif)\b\s*(\w*)/);
-    if (!m) {
-      if (keep.every(k => k.enabled)) out.push(line);
-      // CHUNK alternatives disappear completely from the whole-map source.
-      // Its shader text stays identical, including the old BAKE blank lines:
-      // even an unused branch can otherwise change float compilation.
-      else if (!keep.some(k => k.name === 'CHUNK' && !k.enabled)) out.push('');
-      continue;
-    }
-    let chunk = false;
-    if (m[1] === 'ifdef' || m[1] === 'ifndef') {
-      chunk = m[2] === 'CHUNK';
-      keep.push({name: m[2], enabled: (m[1] === 'ifdef') === defines.has(m[2])});
-    } else {
-      chunk = keep.at(-1)?.name === 'CHUNK';
-      if (m[1] === 'else') keep.at(-1).enabled = !keep.at(-1).enabled;
-      else keep.pop();
-    }
-    if (!chunk && !keep.some(k => k.name === 'CHUNK' && !k.enabled)) out.push('');
+    if (!m) { out.push(keep.every(Boolean) ? line : ''); continue; }
+    if (m[1] === 'ifdef' || m[1] === 'ifndef') keep.push((m[1] === 'ifdef') === defines.has(m[2]));
+    else if (m[1] === 'else') keep.push(!keep.pop());
+    else keep.pop();
+    out.push('');
   }
   return out.join('\n');
 }
 
 // Byte layout of the shaders' one uniform block (struct Uniforms in
-// sculpt-common.wgsl), by WGSL's uniform alignment rules. Arrays take a
+// engine-common.wgsl), by WGSL's uniform alignment rules. Arrays take a
 // 16-byte element stride, so array<vec4f, N> is the only array form used.
 const FIELD_TYPES = {f32: [4, 4, 'f'], i32: [4, 4, 'i'], vec2f: [8, 8, 'f'], vec3f: [16, 12, 'f'], vec4f: [16, 16, 'f']};
 function uniformLayout(source) {
   const body = source.match(/struct Uniforms\s*\{([\s\S]*?)\n\}/)?.[1];
-  if (!body) throw new Error('nanolathe: sculpt-common.wgsl has no struct Uniforms');
+  if (!body) throw new Error('nanolathe: engine-common.wgsl has no struct Uniforms');
   const fields = new Map();
   let offset = 0;
   for (const raw of body.split('\n')) {
@@ -86,7 +73,7 @@ function uniformLayout(source) {
     if (!line) continue;
     const m = line.match(/^(\w+)\s*:\s*(?:array<(\w+),\s*(\d+)>|(\w+))\s*,?$/);
     const type = m && FIELD_TYPES[m[2] || m[4]];
-    if (!type) throw new Error(`nanolathe: unsupported uniform field "${line}" in sculpt-common.wgsl`);
+    if (!type) throw new Error(`nanolathe: unsupported uniform field "${line}" in engine-common.wgsl`);
     const array = Boolean(m[2]), count = array ? Number(m[3]) : 1;
     const align = array ? 16 : type[0], size = array ? 16 * count : type[1];
     offset = Math.ceil(offset / align) * align;
@@ -116,13 +103,9 @@ const GENERATED_SIZE = 512, GENERATED_LEVELS = 7;
 
 class SpecializationMiss extends Error { constructor(state) { super('nanolathe: pipelines for these gates are not built yet'); this.state = state; } }
 
+// The engine's materials, uniforms and passes. ChunkTerrainRenderer (sculpt-chunk-renderer.js) is the renderer that is constructed: it adds
+// the per-chunk textures, the memory accounting and renderChunk.
 export class TerrainRenderer {
-  static async create(canvas, config) {
-    const self = new TerrainRenderer(canvas, config);
-    await self.initialize();
-    return self;
-  }
-
   static async createChunked(canvas, config) {
     const {ChunkTerrainRenderer} = await import('./sculpt-chunk-renderer.js');
     return ChunkTerrainRenderer.create(canvas, config);
@@ -134,11 +117,10 @@ export class TerrainRenderer {
     this.config = config;
     this.context = canvas.getContext('webgpu');
     if (!this.context) throw new Error(NO_WEBGPU + ' The page could not get a WebGPU canvas.');
-    this.grid = config.grid;
-    this.size = config.size;
+    this.size = config.worldSize ?? config.size;
+    this.grid = config.worldGrid ?? config.grid;
     this.maskPlaneCount = config.maskKeys?.length ?? MASK_PLANE_COUNT;
     this.maskLayers = Math.max(1, Math.ceil(this.maskPlaneCount / 4));
-    this.height = new Float32Array(this.grid * this.grid).fill(config.baseHeight);
     this.timers = [];
     this.lastGPU = null;
     this.lastBakeGPU = null;
@@ -184,8 +166,7 @@ export class TerrainRenderer {
     this.materialsSource = extra[0];
     this.commonSource = common;
     this.volumeSource = extra[4];
-    const defines = this.chunked ? new Set(['CHUNK']) : new Set();
-    this.layout = uniformLayout(preprocess(common, '', defines));
+    this.layout = uniformLayout(preprocess(common, '', new Set()));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
     this.uniformBuffer = device.createBuffer({size: this.layout.size, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
@@ -201,10 +182,10 @@ export class TerrainRenderer {
       return module;
     };
     // P6: the draw's and the bake's uniform gates are override bools (sculpt-gates.js); the pipelines are built per set of values, see specialized().
-    const fragGates = extractGates(preprocess(frag.replace('/*VOLUME*/',this.volumeSource), common, new Set([...defines,'VOLUME_RENDER'])), this.layout.fields);
-    const bakeGates = extractGates(preprocess(bake, common, new Set([...defines, 'BAKE'])), this.layout.fields);
+    const fragGates = extractGates(preprocess(frag.replace('/*VOLUME*/',this.volumeSource), common, new Set(['VOLUME_RENDER'])), this.layout.fields);
+    const bakeGates = extractGates(preprocess(bake, common, new Set(['BAKE'])), this.layout.fields);
     const [vertModule, fragModule, bakeModule] = await Promise.all([
-      compile('sculpt-vert.wgsl', preprocess(vert, common, defines)),
+      compile('sculpt-vert.wgsl', preprocess(vert, common, new Set())),
       compile('engine-frag.wgsl', fragGates.source),
       compile('engine-bake.wgsl', bakeGates.source)]);
     this.specParts = {vertModule, fragModule, bakeModule, frag: fragGates.gates, bake: bakeGates.gates, keyOrder: [...new Set([...fragGates.gates.keys(), ...bakeGates.gates.keys()])]};
@@ -248,12 +229,10 @@ export class TerrainRenderer {
     // The world fields: clamped and linear; noise repeats.
     this.linearClamp = this.sampler({magFilter: 'linear', minFilter: 'linear'});
     this.linearRepeat = this.sampler({magFilter: 'linear', minFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat'});
-    // The fields are baked once per height change: r relief height, g route
-    // protection or (negative) beach, b crack/line code, a sand.
-    this.fieldsTexture = device.createTexture({label: 'fields', size: [this.size, this.size], format: 'rgba16float',
-      usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
+    // The fields a chunk's bake writes (r relief height, g route protection or (negative) beach, b crack/line code, a sand) and the
+    // grid-resolution inputs are textures of the chunk (ChunkTerrainRenderer.allocate); the loose-stone mask's buffer outlives the chunks.
     this.looseBuffer = device.createBuffer({label: 'loose mask', size: 16, usage: GPUBufferUsage.STORAGE});
-    this.fieldsOut = this.makeFieldsOut();
+    this.bindGroups = {};
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
     this.materialData = JSON.parse(modelTable);
@@ -273,9 +252,6 @@ export class TerrainRenderer {
     this.textures.noise = this.noiseTexture();
     this.textures.palette = (await gpu)[1];
     this.generationMs = performance.now() - generation;
-    this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture: this.heightTexture}, this.textureHeights(this.height), {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
-    this.setRoutes(new Float32Array(this.grid * this.grid));
     const variant = new URLSearchParams(location.search);
     // H4: the engine's own knob values go in first, over the world's, under the page's query.
     for (const [key, value] of Object.entries(this.config.engineDefaults || {})) if (!variant.has(key)) variant.set(key, value);
@@ -341,8 +317,6 @@ export class TerrainRenderer {
     this.v('uWaterMean', this.materialData.measured[this.config.water.deep].meanRGB.map(v => v / 255));
     this.i('uWaterLayer', this.materialData.order.indexOf(this.config.water.deep));
     this.i('uShallowLayer', this.materialData.order.indexOf(this.config.water.shallow));
-    this.setWeather();
-    this.setMaterialField();
   }
 
   sampler(descriptor) {
@@ -419,34 +393,6 @@ export class TerrainRenderer {
     this.device.queue.submit([encoder.finish()]);
   }
 
-  // The grid-resolution inputs: authored height, routes (protection, crack
-  // amount, painted sand and ground cover), weathering and material fields.
-  worldTextures(grid) {
-    if (this.worldGrid === grid) return;
-    for (const t of [this.heightTexture, this.routeTexture, this.gridTexture, this.maskTexture]) t?.destroy();
-    const make = (label, format) => this.device.createTexture({label, size: [grid, grid], format,
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
-    this.heightTexture = make('height', 'r32float');
-    this.routeTexture = make('routes', 'rgba8unorm');
-    // Layer 0: the weathering worker's flow, deposit, talus and sand; layer 1:
-    // the material field (one texture binding for both, see initialize). H5: layers 2 and 3 hold
-    // the Time pass's maps (wear, wetness, hardness, slope; fall line, channel, ridge), Green's engine only.
-    this.gridTexture = this.device.createTexture({label: 'weather and material field', size: [grid, grid, 4], format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
-    // Painted masks (card C5), signed bytes so an unpainted
-    // cell is exactly 0.0: layer 0 rock, snow or ice, wet ground, moss;
-    // layer 1 scatter density, relief, cracks, banding; layer 2 a spare plane (the old face rock share),
-    // then the water choices (shore edge, shallow-to-deep edge, bed; card E1);
-    // layer 3 ground lumps (the rest is spare). Plane k of the page is layer
-    // k >> 2, channel k & 3. Fresh textures are zero.
-    this.maskTexture = this.device.createTexture({label: 'masks', size: [grid, grid, this.maskLayers], format: 'rgba8snorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
-    this.maskAllocatedLayers = this.maskLayers;
-    this.worldGrid = grid;
-    this.bindGroups = {};
-    this.maskUploaded = false;
-  }
-
   // Base colours chosen for a world: {ground, slope, rock, sand, beach,
   // shallow, deep} as [r,g,b] 0..1, or absent to keep the world's own.
   groundSource() {
@@ -485,7 +431,7 @@ export class TerrainRenderer {
   // element vectors. Unknown names throw: WebGL ignored them silently.
   set(name, value) {
     const field = /^u[A-Z]/.test(name) && this.uniform.get(name[1].toLowerCase() + name.slice(2));
-    if (!field) throw new Error(`nanolathe: no uniform ${name} in sculpt-common.wgsl`);
+    if (!field) throw new Error(`nanolathe: no uniform ${name} in engine-common.wgsl`);
     const elements = field.stride ? value : [typeof value === 'object' ? value : [value]];
     if (elements.length > field.count) throw new Error(`nanolathe: too many elements for uniform ${name}`);
     elements.forEach((element, e) => {
@@ -558,100 +504,6 @@ export class TerrainRenderer {
     if (!this.uniformsDirty) return;
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
     this.uniformsDirty = false;
-  }
-
-  // Materials were authored at sea 0. Give every shader that same datum while
-  // keeping editable/picking heights absolute. Sea-0 uploads remain untouched,
-  // including shader source/compilation, so existing worlds keep their pixels.
-  textureHeights(height) {
-    return this.config.seaLevel===0 ? height : height.map(h => h-this.config.seaLevel);
-  }
-
-  setWeather(flow, deposit, talus, sand) {
-    this.fieldsDirty = true; this.weatherMaps = false;
-    const bytes = new Uint8Array(this.grid * this.grid * 4);
-    if (flow && deposit) for (let i = 0; i < flow.length; i++) {
-      bytes[i * 4] = Math.min(255, Math.max(0, Math.round(flow[i] * 255)));
-      bytes[i * 4 + 1] = Math.min(255, Math.max(0, Math.round(deposit[i] * 255)));
-      bytes[i * 4 + 2] = Math.min(255, Math.max(0, Math.round((talus?.[i] || 0) * 255)));
-      bytes[i * 4 + 3] = Math.min(255, Math.max(0, Math.round((sand?.[i] || 0) * 255)));
-    }
-    this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture: this.gridTexture, origin: [0, 0, 0]}, bytes, {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
-  }
-
-  setRoutes(routes, crackLines, cover, crystal, masks) {
-    // Red: route protection; green: the shapes' crack amount; blue: painted
-    // cover, signed about one half (above: sand, below: the world's ground);
-    // alpha: crystal cells.
-    this.fieldsDirty = true;
-    const bytes = new Uint8Array(routes.length * 4);
-    for (let i = 0; i < routes.length; i++) {
-      const c = cover?.[i] || 0;
-      bytes[i * 4] = Math.round(routes[i] * 255); bytes[i * 4 + 1] = Math.round((crackLines?.[i] || 0) * 255);
-      bytes[i * 4 + 2] = Math.round((Math.max(-1, Math.min(1, c)) * 0.5 + 0.5) * 255); bytes[i * 4 + 3] = Math.round((crystal?.[i] || 0) * 255);
-    }
-    this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture: this.routeTexture}, bytes, {bytesPerRow: this.grid * 4}, [this.grid, this.grid]);
-    if (masks) this.setMasks(masks);
-  }
-
-  // Painted masks (card C5): fourteen signed-byte planes (rock, snow or ice, wet
-  // ground, moss, scatter density, relief, cracks, banding, a spare plane (the old face rock share);
-  // then, card E1, shore edge, shallow-to-deep edge, water bed, ground lumps and cracked bed),
-  // interleaved into maskTexture's layers. Nothing is uploaded while nothing
-  // has ever been painted; paintOn, scatterOn, styleOn, waterOn and lumpOn tell
-  // the shaders whether to read the texture at all. The water and lump planes
-  // have their own flags, so a stroke that sets only those leaves every other
-  // read of the texture, and the render it feeds, as it was.
-  setMasks(planes) {
-    const n = this.grid * this.grid;
-    this.maskPlaneCount = planes.length;
-    this.maskLayers = Math.max(1, Math.ceil(planes.length / 4));
-    if (this.maskLayers > this.device.limits.maxTextureArrayLayers) throw new Error('nanolathe: mask planes exceed the device texture array limit');
-    this.worldTextures(this.grid);
-    if (this.maskAllocatedLayers !== this.maskLayers) {
-      this.maskTexture.destroy();
-      this.maskTexture = this.device.createTexture({label: 'masks', size: [this.grid, this.grid, this.maskLayers], format: 'rgba8snorm',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
-      this.maskAllocatedLayers = this.maskLayers;
-      this.maskUploaded = true;
-      this.bindGroups = {};
-    }
-    // Four cells a read: this runs every frame a shape is dragged, and scanning
-    // five unpainted planes byte by byte cost 2 ms.
-    const painted = planes.map(a => {
-      if (!a) return 0;
-      if (a.length !== n) throw new Error('nanolathe: invalid mask plane dimensions');
-      if (!a.buffer || a.byteOffset % 4) return a.some(Boolean) ? 1 : 0;
-      const words = new Int32Array(a.buffer, a.byteOffset, n >> 2);
-      for (let i = 0; i < words.length; i++) if (words[i]) return 1;
-      for (let i = n & ~3; i < n; i++) if (a[i]) return 1;
-      return 0;
-    });
-    const any = painted.some(Boolean) ? 1 : 0;
-    if (!any && !this.maskUploaded) return;
-    this.fieldsDirty = true;
-    if (this.maskBytes?.length !== n * this.maskLayers * 4) this.maskBytes = new Int8Array(n * this.maskLayers * 4);
-    const bytes = this.maskBytes;
-    bytes.fill(0);
-    planes.forEach((a, k) => { if (!a) return; const at = (k >> 2) * n * 4 + (k & 3); for (let i = 0; i < n; i++) bytes[at + i * 4] = a[i]; });
-    this.device.queue.writeTexture({texture: this.maskTexture}, bytes, {bytesPerRow: this.grid * 4, rowsPerImage: this.grid}, [this.grid, this.grid, this.maskLayers]);
-    this.maskUploaded = Boolean(any);
-    this.i('uPaintOn', painted.slice(0, 9).some(Boolean) ? 1 : 0);
-    this.i('uScatterOn', painted[4] || 0);
-    this.i('uStyleOn', painted.slice(5, 9).some(Boolean) ? 1 : 0);
-    this.i('uOverrideOn', painted.slice(14, 18).some(Boolean) ? 1 : 0);   // H3: planes 14-17 (erosion, deposits, vegetation, exposure)
-    this.i('uWaterOn', painted.slice(9, 12).some(Boolean) || painted[13] ? 1 : 0);
-    this.i('uLumpOn', painted[12] || 0);
-  }
-
-  setMaterialField(field) {
-    const bytes=new Uint8Array(this.grid*this.grid*4);
-    if (field) for(let i=0;i<field.length;i++) bytes[i]=Math.round(Math.max(0,Math.min(1,field[i]))*255);
-    this.worldTextures(this.grid);
-    this.device.queue.writeTexture({texture:this.gridTexture,origin:[0,0,1]},bytes,{bytesPerRow:this.grid*4},[this.grid,this.grid]);
-    this.materialReady=Boolean(field);
   }
 
   // Group 0 with the fields (draw) or the routes (bake) at binding 6.
@@ -803,10 +655,8 @@ export class TerrainRenderer {
     };
   }
 
-  async draw({quality = 'preview', clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
+  async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
     const start = performance.now(), device = this.device;
-    const full = quality === 'full';
-    this.i('uFull', full);
     this.i('uClay', clay);
     const weatherAmount=materialWeathering;
     this.f('uMaterialWeathering', weatherAmount);
@@ -846,20 +696,19 @@ export class TerrainRenderer {
     if (this.sunKey !== sunKey) { this.sunKey = sunKey; this.sun = sun.map(v => v / length); this.fieldsDirty = true; }
     const encoder = device.createCommandEncoder({label: 'terrain'});
     // P6: a SpecializationMiss abandons this encoder, its bake included, so the fields go back to unbaked and the retry bakes again.
-    const baked = [this.fieldsDirty, this.bakedQuality];
+    const dirty = this.fieldsDirty;
     let drawPipeline;
     try {
-      // Painting bakes a cheap preview; the first full draw after it re-bakes.
-      if (this.fieldsDirty || (full && this.bakedQuality !== 'full')) this.bakeFields(full ? 'full' : 'preview', encoder);
+      if (dirty) this.bakeFields(encoder);
       // Looked up after the bake, which sets some of the gates' uniforms.
       drawPipeline = this.drawPipeline;
       this.specCheck();
-    } catch (error) { [this.fieldsDirty, this.bakedQuality] = baked; throw error; }
+    } catch (error) { this.fieldsDirty = dirty; throw error; }
     this.flushUniforms();device.queue.submit([encoder.finish()]);
     if(!this.voxelColor||this.voxelColor.width!==this.canvas.width||this.voxelColor.height!==this.canvas.height){
-      if(this.voxelColor){if(this.release)this.release(this.voxelColor);else this.voxelColor.destroy();}
+      if(this.voxelColor)this.release(this.voxelColor);
       this.voxelColor=device.createTexture({label:'voxel terrain color',size:[this.canvas.width,this.canvas.height],format:this.format,usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
-      this.track?.(this.voxelColor,'voxel terrain color',this.canvas.width*this.canvas.height*4,'working');
+      this.track(this.voxelColor,'voxel terrain color',this.canvas.width*this.canvas.height*4,'working');
     }
     const clear=this.means.ground||[.19,.28,.14],timers=[];
     await this.voxel.render((commands,volume,rect,first)=>{
@@ -1062,7 +911,7 @@ export class TerrainRenderer {
     this.set('uBandLine', bands[1]);
   }
 
-  // Encodes the bake into the given encoder, or submits it on its own.
+  // The bake's group 1 for the chunk's fields texture and the loose-stone mask.
   makeFieldsOut() {
     return this.device.createBindGroup({label: 'fields out', layout: this.fieldsLayout,
       entries: [{binding: 0, resource: this.fieldsTexture.createView()}, {binding: 1, resource: {buffer: this.looseBuffer}}]});
@@ -1075,15 +924,15 @@ export class TerrainRenderer {
   encodeLooseMask(encoder) {
     const supply = Math.max(this.uniformValue('uLooseSupply'),this.uniformValue('uDebrisAmount')), painted = this.gpuFlags || this.uniformValue('uScatterOn'), plants = this.uniformValue('uPlantsOn') > 0;
     if (!(supply > 0) && !painted && !plants) return;
-    const [x0, y0, w, h] = this.bakeWindow ?? [0, 0, this.bakeWidth ?? this.size, this.bakeHeight ?? this.size];
+    const [x0, y0, w, h] = this.bakeWindow;
     // Card P31: a plant's candidate lies up to 23 px (a shrub's cell and jitter) from the pixels it covers, the mask reads heights 8 px past its cell, and the apron adds 15.
     const margin = Math.max(Math.ceil(3.6 * Math.min(16, 3.3 * this.uniformValue('uLooseSize'))) + 4, plants ? PLANT_REACH : 0);
     const ox = Math.floor((x0 - margin) / 4), oy = Math.floor((y0 - margin) / 4);
     const nx = Math.ceil((w + 2 * margin) / 4) + 2, ny = Math.ceil((h + 2 * margin) / 4) + 2;
     if (nx * ny * 32 > this.looseBuffer.size) {
-      if(this.release)this.release(this.looseBuffer);else this.looseBuffer.destroy();
+      this.release(this.looseBuffer);
       this.looseBuffer = this.device.createBuffer({label: 'loose mask', size: nx * ny * 32, usage: GPUBufferUsage.STORAGE});
-      this.track?.(this.looseBuffer,'loose mask',this.looseBuffer.size,'loose');
+      this.track(this.looseBuffer,'loose mask',this.looseBuffer.size,'loose');
       this.fieldsOut = this.makeFieldsOut();
     }
     this.v('uLooseGrid', [ox, oy, nx, ny]);
@@ -1100,8 +949,8 @@ export class TerrainRenderer {
     return field.kind === 'i' ? this.uniformView.getInt32(field.offset, true) : this.uniformView.getFloat32(field.offset, true);
   }
 
-  bakeFields(quality = 'full', encoder = null, timer = null) {
-    const preview = quality !== 'full';
+  // Encodes the bake into the given encoder, or submits it on its own.
+  bakeFields(encoder = null, timer = null) {
     const v = this.variant;
     const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
     const set = (name, value) => this.set(name, Number(value));
@@ -1139,16 +988,15 @@ export class TerrainRenderer {
     set('uCrackBlocks', number('crackBlocks', 0.6));
     set('uCrackMajor', number('crackMajor', 0.8));
     if (this.sun) this.v('uSun', this.sun);
-    set('uCracksOn', preview && v.get('previewCracks') !== '1' ? 0 : 1);
     set('uWindAngle', number('wind', 20));
     set('uRipple', number('ripple', 7));
     set('uRippleHeight', number('rippleHeight', 1.4));
     set('uBanding', number('banding', 0));
     set('uApron', number('apron', 0));
     set('uWorms', number('worms', 0));
-    set('uLooseSupply', preview ? 0 : number('looseSupply', 0));
+    set('uLooseSupply', number('looseSupply', 0));
     set('uLooseSize', number('looseSize', 6));
-    set('uPlantsOn', !preview && groundCoverOn(this.config.material?.groundCover, this.variant) && this.config.material.groundCover.plants ? 1 : 0);
+    set('uPlantsOn', groundCoverOn(this.config.material?.groundCover, this.variant) && this.config.material.groundCover.plants ? 1 : 0);
     set('uStoneRound', number('stoneRound',this.config.material?.stoneRound ?? 0));
     set('uStoneSort', number('stoneSort',this.config.material?.stoneSort ?? 0.6));
     set('uStoneSlab', number('stoneSlab',this.config.material?.stoneSlab ?? 0.05));
@@ -1160,7 +1008,7 @@ export class TerrainRenderer {
     set('uHasBeach', this.layers.has('beach'));
     set('uSandBanding', number('sandBanding', 0));
     set('uSandBandSpacing', number('sandBandSpacing', 2));
-    set('uReliefOctaves', preview ? Math.min(3, number('reliefOctaves', 5)) : number('reliefOctaves', 5));
+    set('uReliefOctaves', number('reliefOctaves', 5));
     this.setColumn();
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});
@@ -1170,7 +1018,7 @@ export class TerrainRenderer {
     pass.setPipeline(this.bakePipeline);
     pass.setBindGroup(0, this.commonBindGroup('bake'));
     pass.setBindGroup(1, this.fieldsOut);
-    pass.dispatchWorkgroups(Math.ceil((this.bakeWidth ?? this.size) / 8), Math.ceil((this.bakeHeight ?? this.size) / 8));
+    pass.dispatchWorkgroups(Math.ceil(this.bakeWidth / 8), Math.ceil(this.bakeHeight / 8));
     pass.end();
     if (own) {
       timer?.encode(encoder);
@@ -1178,25 +1026,24 @@ export class TerrainRenderer {
       this.device.queue.submit([encoder.finish()]);
     }
     this.fieldsDirty = false;
-    this.bakedQuality = quality;
   }
 
   // Milliseconds from submitting one bake to the GPU finishing it, with
   // the GPU idle before; lastBakeGPU holds the pass's own GPU time.
-  async timeBake(quality = 'full') {
+  async timeBake() {
     await this.device.queue.onSubmittedWorkDone();
-    const timer = this.timer(), start = performance.now(), baked = [this.fieldsDirty, this.bakedQuality];
+    const timer = this.timer(), start = performance.now(), dirty = this.fieldsDirty;
     // Each retry bakes again; if the last attempt still misses, its encoder is never submitted, so the fields go back to unbaked and the timer's slot is freed.
     try {
       await this.withPipelines(() => {
         const encoder = this.device.createCommandEncoder({label: 'relief bake'});
-        this.bakeFields(quality, encoder, timer);
+        this.bakeFields(encoder, timer);
         timer?.encode(encoder);
         this.specCheck();
         this.flushUniforms();
         this.device.queue.submit([encoder.finish()]);
       });
-    } catch (error) { timer?.release(); [this.fieldsDirty, this.bakedQuality] = baked; throw error; }
+    } catch (error) { timer?.release(); this.fieldsDirty = dirty; throw error; }
     await this.device.queue.onSubmittedWorkDone();
     const ms = performance.now() - start;
     if (timer) this.lastBakeGPU = await timer.result();
@@ -1206,40 +1053,12 @@ export class TerrainRenderer {
   // The same for one draw (options as draw()); the fields are baked first,
   // so this times the terrain pass alone. Returns {ms, gpuMs}.
   async timeDraw(options = {}) {
-    const full = options.quality === 'full';
-    if (this.fieldsDirty || (full && this.bakedQuality !== 'full')) await this.withPipelines(() => this.bakeFields(full ? 'full' : 'preview'));
+    if (this.fieldsDirty) await this.withPipelines(() => this.bakeFields());
     await this.device.queue.onSubmittedWorkDone();
     const start = performance.now();
     await this.withPipelines(() => this.draw(options));
     await this.device.queue.onSubmittedWorkDone();
     const ms = performance.now() - start;
     return {ms, gpuMs: (await this.gpuResult) ?? null};
-  }
-
-  sample(x, y) {
-    const gx = Math.max(0, Math.min(this.grid - 1, x / (this.size - 1) * (this.grid - 1)));
-    const gy = Math.max(0, Math.min(this.grid - 1, y / (this.size - 1) * (this.grid - 1)));
-    const ix = Math.floor(gx), iy = Math.floor(gy), jx = Math.min(ix + 1, this.grid - 1), jy = Math.min(iy + 1, this.grid - 1);
-    const fx = gx - ix, fy = gy - iy;
-    return (this.height[iy * this.grid + ix] * (1 - fx) + this.height[iy * this.grid + jx] * fx) * (1 - fy)
-      + (this.height[jy * this.grid + ix] * (1 - fx) + this.height[jy * this.grid + jx] * fx) * fy;
-  }
-
-  pick(x, y) {
-    const wx = x / this.canvas.width * this.size;
-    const sy = y / this.canvas.height * this.size;
-    // Trace from the near side to pick visible geometry even at steep folds.
-    // Fine displacement is below brush precision; the editable field owns picks.
-    let previousY = sy + 170;
-    let previous = previousY - (Math.max(this.config.seaLevel, this.sample(wx, previousY)) - this.config.baseHeight) * 0.5 - sy;
-    for (let wy = previousY - 2; wy >= sy - 80; wy -= 2) {
-      const value = wy - (Math.max(this.config.seaLevel, this.sample(wx, wy)) - this.config.baseHeight) * 0.5 - sy;
-      if (value <= 0 && previous >= 0) {
-        const t = previous / Math.max(1e-6, previous - value);
-        return [Math.max(0, Math.min(this.size - 1, wx)), Math.max(0, Math.min(this.size - 1, previousY - t * 2))];
-      }
-      previous = value; previousY = wy;
-    }
-    return [Math.max(0, Math.min(this.size - 1, wx)), Math.max(0, Math.min(this.size - 1, sy))];
   }
 }
