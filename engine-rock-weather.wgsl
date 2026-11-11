@@ -142,5 +142,30 @@ fn rockDeposit(@builtin(global_invocation_id) id:vec3u){
         }
         rim=pow(rim,.45)*(1.0-smoothstep(.08,.25,slope))*dry*route;   // bare for the first part of the way in, then thinning
     }
-    textureStore(rimOut,vec2i(id.xy),vec4f(rim,0,0,0));
+    // Rock at a shore (shoreRockAt): how near the waterline is, from either side. Eight ways out, six steps each to the reach: the way to the
+    // waterline is where the ground crosses sea level, read between two steps so it changes evenly as the point moves. On land the reach is
+    // Rock at shores, on the bed Rock shelf under water; each swells and thins along the shore, and the rock ends raggedly, in tongues and
+    // gaps, where the reach does. A route keeps its cover on land, and water whose stroke is set to Soft bank (an inland lake) has none.
+    var shore=0.0;var bank=0.0;
+    let under=h<u.sea;let span=select(u.shoreRock,u.shoreShelf,under);
+    if(span>0.0){
+        let reach=span*(.85+.15*valueNoise(p/72.0+vec2f(31,57)));let stride=reach/6.0;   // .7 to 1 of the control
+        for(var j=0;j<8;j++){
+            let dir=normalize(vec2f(FLOW_DIRS[j]));var before=h-u.sea;
+            for(var k=1;k<=6;k++){
+                let level=baseHeight(p+dir*stride*f32(k))-u.sea;
+                if((level<0.0)!=under){
+                    // The water's own choice, read a little way into the water it belongs to: a stroke set to Soft bank has no shore rock.
+                    let way=stride*(f32(k)-1.0+clamp(before/(before-level),0.0,1.0));
+                    let soft=textureSampleLevel(masksTex,linearClamp,maskUv(p+dir*max(0.0,way+select(8.0,-8.0,under))),2,0.0).g;
+                    let lake=smoothstep(.25,.75,soft);shore=max(shore,(1.0-way/reach)*(1.0-lake));bank=max(bank,(1.0-way/reach)*lake);break;
+                }
+                before=level;
+            }
+        }
+        let ragged=.5+.3*valueNoise(p/22.0+vec2f(53,7))+.2*valueNoise(p/7.0+vec2f(3,41));   // 0 to 1
+        shore=smoothstep(ragged*.25,ragged*.25+.15,shore)*select(route,1.0,under);   // whole for about three quarters of the reach
+    }
+    // A soft bank (softBankAt): within the same reach of a Soft bank stroke's water the ground is soil, not a rock face, however steep.
+    textureStore(rimOut,vec2i(id.xy),vec4f(rim,shore,smoothstep(0.0,.3,bank),0));
 }

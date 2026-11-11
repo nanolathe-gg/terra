@@ -20,7 +20,7 @@ export class RockWeather {
   clear(){for(const t of this.owned)this.renderer.release(t);this.owned=[];this.final=null;this.source=null;this.rim=null;this.key='';this.renderer.bindGroups={};}
   encode(encoder){
     const r=this.renderer,d=r.device;
-    if(r.uniformValue('uRunoff')<=0&&r.uniformValue('uDebrisAmount')<=0&&r.uniformValue('uRimReach')<=0){if(this.final)this.clear();r.v('uRockWeatherGrid',[0,0,1,1]);return;}
+    if(r.uniformValue('uRunoff')<=0&&r.uniformValue('uDebrisAmount')<=0&&r.uniformValue('uRimReach')<=0&&r.uniformValue('uShoreRock')<=0&&r.uniformValue('uShoreShelf')<=0){if(this.final)this.clear();r.v('uRockWeatherGrid',[0,0,1,1]);return;}
     const [x,y,w,h]=r.bakeWindow;
     const ox=Math.floor((x-HALO)/STEP)*STEP,oy=Math.floor((y-HALO)/STEP)*STEP;
     const width=Math.ceil((x+w+HALO-ox)/STEP)+1,height=Math.ceil((y+h+HALO-oy)/STEP)+1,key=[width,height].join(',');

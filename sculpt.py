@@ -87,7 +87,7 @@ KNOB_DEFAULTS = dict(
     # 1 or 2 (the bed also 3); the world knobs default to the earlier noise water, a ramp from
     # shallow to deep colour, and level ground with no painted lumps beyond
     # plainRelief's.
-    waterDeep=0, waterBed=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=0, deepEdge=0, lumpRelief=4,
+    waterDeep=0, waterBed=0, waterShore=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=0, deepEdge=0, lumpRelief=4,
     # Line features (card C4): everything off by default; spur details only matter once spurs are set.
     spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestVary=0, crestTaper=0,
     # Local vegetation (card C5 stage 2): change about the world's own cover, 0 none.
@@ -211,7 +211,7 @@ KNOB_DEFAULTS.update(rockFace=2, rockFaceFrom=.6, faceRock=.9, faceBed=5.5, face
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, rillDepth=0, rillSpacing=8)
 # Voxel block proportions, laminations and directional scratches; neutral values preserve the existing solid.
-KNOB_DEFAULTS.update(runoff=0, runoffScale=24, runoffConcentration=.65, runoffCut=2, runoffStain=.5, debrisAmount=0, debrisReach=56, debrisDepth=4, rimReach=0, stoneSort=.6, stoneRound=0, stoneSlab=.05)
+KNOB_DEFAULTS.update(runoff=0, runoffScale=24, runoffConcentration=.65, runoffCut=2, runoffStain=.5, debrisAmount=0, debrisReach=56, debrisDepth=4, rimReach=0, shoreRock=0, shoreShelf=0, stoneSort=.6, stoneRound=0, stoneSlab=.05)
 KNOB_DEFAULTS.update(faceJointWidth=1, faceSecondary=.35, faceContinuity=1, faceDetailPatch=0)
 # Whole blocks: each block wholly rock or wholly air, so the faces between blocks are the rock's skin (0: today's draped face).
 KNOB_DEFAULTS.update(faceWhole=0, faceWholeLarge=0, faceRegular=0)
@@ -308,7 +308,11 @@ WORLD_KNOBS = {
     # Retail round 1: retail's plain rolls gently (slope .03-.08 share .34 / .07 / .16 in red-1..3, ours .05 / .25 / .04 with none), so a faint
     # undulation (2.5 over 80-px lumps on 60% of the land) replaces the level plain, and the ground pattern is softened to .7 contrast
     # (retail's plain is lighter, less dotted).
-    'red': dict(undulationScale=80, undulationCover=.6, groundContrast=.7, crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
+    # Rock at shores (the owner, 2026-11-10: Red's cracked rock platforms running into the shallows "should just be the red planet look on
+    # coasts without the need for manual fissures", and "Classic red should adopt it, but make sure it has the inner lake look vs the outer
+    # cracks look"): the ground within 96 px of a waterline is Red's rock (WORLD_ROCK), on land and on the bed. Red's Shallow tool starts at
+    # Soft bank (sculpt-scene.js), so a lake keeps its soft banks and the Deep tool's open water gets the platform.
+    'red': dict(shoreRock=96, shoreShelf=96, undulationScale=80, undulationCover=.6, groundContrast=.7, crackSeverity=.3, crackDark=.35, crackWidth=.5, banding=.3,
                 reliefAmount=.2, slopeTexture=0,
                 # Retail round 2: raised landform faces steeper (retail's rims and mesa walls are crisper than 1).
                 faceSteep=1.75,
@@ -821,6 +825,13 @@ SOURCES.update({table: HERE / table for table in MATERIAL_TABLES.values()})
 SOURCES['materials/palette.json'] = HERE / 'materials' / 'palette.json'
 
 
+# A world's rock recipe by name, as a variant's `rock` is (apply_variant): the page lays the recipe's numbers over the world's own rock
+# numbers (sculpt-rock-presets.js applyWorldRock). `beds` False keeps the world's own beds and their colors.
+# Red: Jointed siltstone, a pavement of polygonal blocks cut by deep open joints. Red's earlier rock numbers dug ragged trenches where
+# level ground was rock at a face's full relief (painted rock, and now rock at shores).
+WORLD_ROCK = {'red': dict(recipe='siltstone', beds=False)}
+
+
 def world_knobs(biome, config):
     """Set the page's knob defaults: KNOB_DEFAULTS, the world's water depths,
     then its WORLD_KNOBS entry."""
@@ -855,6 +866,8 @@ def biome_config(biome):
     green = json.loads((HERE / MATERIAL_TABLES['green']).read_text())['features']
     config['features'] = {**{k: v for k, v in green.items() if k in FEATURE_KINDS}, **table.get('features', {})}
     config['featureCatalog'] = feature_catalog()
+    if biome in WORLD_ROCK:
+        config['rock'] = dict(WORLD_ROCK[biome])
     return world_knobs(biome, config)
 
 

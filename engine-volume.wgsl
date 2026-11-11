@@ -166,8 +166,10 @@ fn voxelClassify(@builtin(global_invocation_id) id:vec3u){
     for(var z=0u;z<count;z++){if(start+z<vs.capacity){bricksOut[start+z]=vec4i(vec2i(id.xy),first+i32(z),i32(start+z));}}
 }
 fn voxelPaintRock(p:vec2f)->f32 {
-    if(u.paintOn==0){return 0.0;}
-    return max(0.0,textureSampleLevel(masksTex,linearClamp,maskUv(p),0,0.0).r);
+    // Rock at a shore is painted rock to the solid (engine-common.wgsl shoreRockAt).
+    let shore=shoreRockAt(p);
+    if(u.paintOn==0){return shore;}
+    return max(shore,max(0.0,textureSampleLevel(masksTex,linearClamp,maskUv(p),0,0.0).r));
 }
 const VOXEL_RING=array<vec2f,8>(vec2f(1.0,0.0),vec2f(0.70710678,0.70710678),vec2f(0.0,1.0),vec2f(-0.70710678,0.70710678),vec2f(-1.0,0.0),vec2f(-0.70710678,-0.70710678),vec2f(0.0,-1.0),vec2f(0.70710678,-0.70710678));
 // Whole blocks. A block is rock when its middle lies under the authored surface and air when it lies over it: one answer for the whole block
@@ -192,7 +194,7 @@ fn voxelDensity(p:vec3f)->f32 {
     if((abs(d)>40.0&&!whole)||u.rockFace<=0.0){return d;}
     let slope=length(n.xy)/max(n.z,.015);let route=routeProtection(p.xy);
     let painted=voxelPaintRock(p.xy);let rim=rimRockAt(p.xy);
-    let face=max(rockFaceGate(slope,painted,route),rimRelief(rim,route));
+    let face=max(rockFaceGate(slope,painted,route),rimRelief(rim,route))*(1.0-softBankAt(p.xy));
     let soil=u.faceLayers*smoothstep(.08,.6,slope)*smoothstep(.5,.9,n.z)*(1.0-route);
     if(max(face,soil)<.001){return d;}
     let heightGate=voxelRockHeight(p,max(painted,rim));
@@ -235,7 +237,7 @@ fn voxelDensity(p:vec3f)->f32 {
     var behind=source.x;var before=source.x;
     for(var k=0;k<8;k++){let h=voxelAuthored(p.xy+VOXEL_RING[k]*12.0).x;behind=max(behind,h);before=min(before,h);}
     let between=(1.0-smoothstep(behind,behind+4.0,p.z))*smoothstep(before-4.0,before,p.z);
-    let rock=max(rockFaceGate((behind-before)/24.0,painted,route),rimRelief(rim,route));
+    let rock=max(rockFaceGate((behind-before)/24.0,painted,route),rimRelief(rim,route))*(1.0-softBankAt(p.xy));
     // A guard: the blocks keep inside the bricks voxelClassify reserves for this column, its surface's range (guide.zw) and an apron that grows
     // with the slope to 40 units, less 8 for the shadow, normal and wear taps.
     let apron=40.0*smoothstep(.1,.45,length(guide.xy));
