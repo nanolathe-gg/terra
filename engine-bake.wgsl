@@ -1130,7 +1130,7 @@ fn bake(p: vec2f) -> vec4f {
     // On the rock face the screen-space face (rockFaceAt) draws the fine detail: the ribs keep only their broadest octave there (the face's
     // ravines), and a cliff (slope 1.3 to 2.2) none: its flutes are the face's own, and the scatter's cracks and blocks give way below.
     var faceBake = 0.0;
-    if (h > u.sea + 1.0) { faceBake = rockFaceGate(slope, max(paintRock, rimRockAt(p)), route); }
+    if (h > u.sea + 1.0) { faceBake = rockFaceGate(slope, max(paintRock, max(rimRockAt(p), shoreRockAt(p))), route); }
     var acc = vec3f(0.0);
     var amplitude = 1.0;
     var cells = poolCells(u.reliefScale);   // the first octave's lattice cells a pool period (card tilepool)

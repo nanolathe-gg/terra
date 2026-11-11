@@ -236,6 +236,8 @@ struct Uniforms {
     sandLee: f32, // Wind drifts: sand in the lee of rises
     groundPatch: f32, // Ground patches: tone variation on level ground
     groundPatchSize: f32, // Patch size (px)
+    shoreRock: f32,       // rock at shores: how far inland from the waterline the ground is bare rock, px (0 none)
+    shoreShelf: f32,      // rock at shores: how far out under the water the bed is the same rock, px (0 none)
     faceExtrude: f32, // Extrusion bias: inset to projecting
     faceLamina: f32, // Fine layer relief
     faceLaminaSize: f32, // Fine layer spacing (height)
@@ -834,6 +836,14 @@ fn rimRockAt(p:vec2f)->f32 {
     return rockFieldAt(rockRimTex,p).x;
 }
 fn rimRelief(rim:f32,route:f32)->f32 { return .5*smoothstep(.1,.6,rim)*(1.0-route); }
+// Rock at a shore. Within Rock at shores' reach of the waterline the ground counts as painted rock, on land (shoreRock) and on the bed under the
+// water (shoreShelf): one platform that the waterline crosses, so the rock's own joints, blocks and beds run from the shore into the shallows
+// and the same solid, lit the same, is seen through the water. engine-rock-weather.wgsl rockDeposit measures the way to the waterline. It is
+// the painted-rock path and no other, at a face's full relief (a rim's has half): a shore platform is cut by its joints.
+fn shoreRockAt(p:vec2f)->f32 {
+    if(u.shoreRock<=0.0&&u.shoreShelf<=0.0){return 0.0;}
+    return rockFieldAt(rockRimTex,p).y;
+}
 fn rockSourceAt(p:vec2f)->vec4f {
     if(u.debrisAmount<=0.0){return vec4f(0,0,0,1);}
     return rockFieldAt(rockSourceTex,p);

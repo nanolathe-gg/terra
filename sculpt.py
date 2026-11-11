@@ -211,7 +211,7 @@ KNOB_DEFAULTS.update(rockFace=2, rockFaceFrom=.6, faceRock=.9, faceBed=5.5, face
 # 3b is beyond retail and stays 0 for Green (rillDepth, rillSpacing; `sand` and ripple already exist).
 KNOB_DEFAULTS.update(terraceBreak=0, terraceCalm=0, wetSwath=0, lushness=0, rillDepth=0, rillSpacing=8)
 # Voxel block proportions, laminations and directional scratches; neutral values preserve the existing solid.
-KNOB_DEFAULTS.update(runoff=0, runoffScale=24, runoffConcentration=.65, runoffCut=2, runoffStain=.5, debrisAmount=0, debrisReach=56, debrisDepth=4, rimReach=0, stoneSort=.6, stoneRound=0, stoneSlab=.05)
+KNOB_DEFAULTS.update(runoff=0, runoffScale=24, runoffConcentration=.65, runoffCut=2, runoffStain=.5, debrisAmount=0, debrisReach=56, debrisDepth=4, rimReach=0, shoreRock=0, shoreShelf=0, stoneSort=.6, stoneRound=0, stoneSlab=.05)
 KNOB_DEFAULTS.update(faceJointWidth=1, faceSecondary=.35, faceContinuity=1, faceDetailPatch=0)
 # Whole blocks: each block wholly rock or wholly air, so the faces between blocks are the rock's skin (0: today's draped face).
 KNOB_DEFAULTS.update(faceWhole=0, faceWholeLarge=0, faceRegular=0)

@@ -166,8 +166,10 @@ fn voxelClassify(@builtin(global_invocation_id) id:vec3u){
     for(var z=0u;z<count;z++){if(start+z<vs.capacity){bricksOut[start+z]=vec4i(vec2i(id.xy),first+i32(z),i32(start+z));}}
 }
 fn voxelPaintRock(p:vec2f)->f32 {
-    if(u.paintOn==0){return 0.0;}
-    return max(0.0,textureSampleLevel(masksTex,linearClamp,maskUv(p),0,0.0).r);
+    // Rock at a shore is painted rock to the solid (engine-common.wgsl shoreRockAt).
+    let shore=shoreRockAt(p);
+    if(u.paintOn==0){return shore;}
+    return max(shore,max(0.0,textureSampleLevel(masksTex,linearClamp,maskUv(p),0,0.0).r));
 }
 const VOXEL_RING=array<vec2f,8>(vec2f(1.0,0.0),vec2f(0.70710678,0.70710678),vec2f(0.0,1.0),vec2f(-0.70710678,0.70710678),vec2f(-1.0,0.0),vec2f(-0.70710678,-0.70710678),vec2f(0.0,-1.0),vec2f(0.70710678,-0.70710678));
 // Whole blocks. A block is rock when its middle lies under the authored surface and air when it lies over it: one answer for the whole block
