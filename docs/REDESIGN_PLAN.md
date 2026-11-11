@@ -2994,8 +2994,8 @@ bumps, the bed dots and the bed grain.
   waterline, foam, the Shore option, Rock at shores. `crackedStep` went
   because only the cracked bed read it.
 
-**Overnight run, item 3: material edges [Claude, 2026-11-11].** Branch
-`realism/soil-edges`, not landed: the owner asked to see it first. Rows
+**Overnight run, item 3: material edges [Claude, 2026-11-11; landed on
+the owner's "material edges with frayed edges look good, land it"].** Rows
 3 and 6 of round 4, and the owner's concern that sand at cliff feet
 greens over.
 
@@ -3017,12 +3017,26 @@ greens over.
   22.4% of the stock Mountain; exported heights identical **[measured]**.
 - *Open.* (1) The Mountain's apron may now be too continuous a tan band
   (by eye). (2) Both new controls' whole-picture shares are under 5% on
-  the check windows. (3) The land tier, export bytes and the realism
-  report have not run on this branch.
+  the check windows. (3) The realism report was not rerun: the three
+  modern Green scenes' heights are identical to main's.
+- *Frayed edges* **[the owner: "some additional variability or pixel
+  fray would be good so it seems less floaty above the grass"]**. With
+  Bare soil above 0 the line between cover and rock is jittered per art
+  pixel, on the ground and on faces; the earth seam is laid per pixel
+  and comes and goes along an edge (53 and 17 px); sandy debris' hold
+  against regrowth is jittered per pixel. Mesa 6.1%, stock Plateau 3.7%,
+  sand kept alone 7.2% and 10.2% **[measured]**. Bare soil at 0.05 moves
+  0.8% of the wet fixture: no step.
+- *Checks at landing* (with item 4, on main `d508f29a`): land tier,
+  only the three modern Green scenes move (7.9%, 15.7%, 8.0%), heights
+  identical; export bytes same on all three maps; the features check
+  fails, on main itself too (see item 4). Sweeps over every world: Bare
+  soil 0.1% to 2.3% of the whole check picture, under 5% everywhere.
 - Page (private): https://claude.ai/artifact/DMV5TKvvA37ufvmT2qz81g
 
 **Overnight run, item 4: wetness [Claude, 2026-11-11; the owner: "keep
-going with wetness and light"].** Branch `realism/wetness`, not landed.
+going with wetness and light", then "Wet ground: land it"].** Landed
+with item 3.
 
 - *Wet ground* (world control, Vegetation group, 0 to 1, default 0 in
   every world). Where water lies the ground is wet: the first 2.6 units
@@ -3043,7 +3057,12 @@ going with wetness and light"].** Branch `realism/wetness`, not landed.
   (`wetBand`, a 17% tone up to 13 units above the water on Green) still
   draws under it; the two could be one. (3) Rock's own Wetness is a rock
   recipe's number; one Wetness for ground and rock would be simpler.
-  (4) The land tier and export bytes have not run on this branch.
+  (4) Sweeps over every world: 0.0% to 4.3% of the whole check picture
+  (Red 4.3%, Green and Zhon 2.0%), under 5% everywhere; at 0.05 it moves
+  1.3% of the wet fixture, at 1 8.3%. (5) `repro/features.mjs` fails at
+  its line 147 (a feature recipe's width variation after the Home key)
+  on main `d508f29a` too, three runs, with the code that passed it
+  earlier the same day: not from this work, cause not found.
 - Page (private): https://claude.ai/artifact/V3kFA7sJ7im78yfCTv2AKP
 
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
