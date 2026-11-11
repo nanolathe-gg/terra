@@ -3229,6 +3229,76 @@ owner's rules (level ground flat in the heights; flats that tile).
   palette entries. Retail scenes are a few strokes each, so shape
   differences there are mostly the strokes and are not counted.
 
+**Round 5, the owner's rulings and the first landing [owner decisions,
+2026-11-11; landed on local main the same day].** On the ten rows: 1 "Add a
+control and have it update the shadows"; 2 "a biome defining multiple rock
+presets, and a stroke chooses a preset", edits to a preset reach every
+stroke that uses it, and "an easy way to copy recipes"; 3 every preset "can
+have its own colors, shape, style, vegetation"; 4 prototypes welcome but
+"tileable and within the 65K tile limit", after the rest; 5 "if it's cheap
+enough and the result looks good"; 6 "Fix it, make sure it's
+configurable"; 7 "a whole sand system", lower priority; 8 "Fix it"; 9 and
+10 not now. Claude orchestrates Opus agents, reviews and lands.
+
+- *Sun height (row 1) [landed].* `sunHeight`, Lighting, 20 to 75 degrees.
+  Each world's default is the height its fixed light had (45.2, Desert
+  47.8, Moon 48.7), so the uniforms are the same to the bit. Exports and the
+  generated features read it; `?sun=` keeps only its azimuth. The cast
+  shadow's march goes on past its twelfth sample (203.6 px) while a sample
+  tests under 240 units above the pixel, reading the authored height, in
+  steps 6 units apart; only the height grid's apron grows, and at a
+  world's own sun there are no new samples. A cast shadow takes the whole
+  direct sun (it took 32% of it, a constant with no reason given), so at
+  25 degrees shadowed grass reads luma 31-34 against 74 in the open (was
+  58-62) **[measured by the agent on the north-south ridge fixture]**.
+  Below 20 degrees the grid a chunk needs passes the 128 MB budget, and
+  relief more than 200-240 units above the ground it shades has its shadow
+  cut short.
+- *Why pictures depended on the apron [found and fixed].* The voxel rays
+  started at the relief allowance (`vs.high + 40`), which every relief
+  term moves, and the march can step past thin rock, so another start
+  found another face. They now start from the authored maximum plus 104.
+  One-time re-roll: green-2 7.9%, green-5 1.0%, green-4 0.8%, the rest
+  0.3% or less; the same rock by eye **[measured by the agent; green-2
+  looked at by Claude]**. This closes the open item of the last landing:
+  a term that only moves the allowance now moves no pixel.
+- *The palette lookup [landed].* Slots 0-9 and 246-254 of the game's
+  palette are Windows' static colours; the lookup drew with four of them
+  and the 30 retail windows use none (slot 255, white, they do, and it
+  stays). Moon moves 8.0-9.8%, Archipelago 0.9-2.0%, the rest under 1%
+  **[measured]**; the Moon plain's tone is unchanged by eye.
+- *Tall landforms near black (row 8) [not an engine defect; proposals
+  only].* One shading term at a time on a 244-unit mesa **[measured by
+  the agent, palette off]**: no single term is the cause. Lava's rock is
+  near black before any light (luma 24-26). Moon's faces turned from the
+  sun get its ambient of .25 and no fill. Desert's maroon wall came from
+  the round-5 fixture's own one-bed column: with Desert's own column the
+  wall is tan (luma 69.5), though its darkest fifth sits on the palette
+  subset's floor of 31, which has no dark maroon. Red is readable. Open
+  for the owner: Moon faceFill .35 (moves 4.6% of moon-1), five dark
+  maroons added to Desert's palette entries (0.16% of desert-1), and fill
+  light keyed on the light that reaches a face (a sun-facing face inside
+  a cast shadow gets neither sun nor fill today).
+- *Branching drainage (row 5) [tried, not landed].* Branch
+  `realism/drainage`, one prototype commit: a Branching option beside
+  Gully size. Real Y junctions read in a heights-only map but leave pits
+  and seams where fall lines converge (domes, bends); the seamless version
+  only crowds gullies together. On a rock wall the block relief hides
+  either. With rock relief at 0 the same wall reads as smooth spurs and
+  shadowed ravines, so drainage is worth a second look once a stroke can
+  pick a smooth preset.
+- *Checks at this landing.* On the merged tip: the land tier passes
+  (CDP 9771; 34 of 34 scenes move: moon 8.1-9.8%, green-2 8.1%, green-4
+  7.2%, crystal-2 4.7%, archipelago 1.0-2.1%, the rest 1.6% or less);
+  `repro/export-bytes.mjs` exit 0, the same bytes on the three maps
+  (green-4 2,325 tiles, lava-8 14,498, red-16 50,102; the agent's counts
+  at 25 degrees with Cast shadow on level ground 1: 2,400, 14,963 and
+  50,593). `repro/perf.mjs` map4 on green-modern-3, alternating main and
+  the tip with other agents on the GPU (load average 6 to 10, so only the
+  calmest pair is worth reading): load to final 1820 ms main, 1744 tip;
+  release to final 1310 and 1430; drag latency p50 36 and 28 ms **[measured
+  under load; a quiet run is owed]**. Hover previews regenerated.
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
