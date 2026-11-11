@@ -38,6 +38,8 @@ export function shapeControlAvailable(key,kind,p){
  const world=p.world||{};
  // A stroke's edge choice moves the step only where the step's deep share is drawn; its own Lit bed draws it.
  if(key==='waterDeep'&&!deepShows(world,[1,3].includes(Math.round(p.waterBed||0))))return false;
+ // A stroke's Soft bank takes the world's shore rock away, so it shows once the world has some.
+ if(key==='waterShore')return Number(world.shoreRock)>0||Number(world.shoreShelf)>0;
  // A side to lean toward means something once the two sides differ: a Lean other than 1, or different front and back sections.
  if(key==='facing'&&kind==='landform'){
   if(p.lean>0&&p.lean!==1)return true;

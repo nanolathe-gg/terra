@@ -194,7 +194,7 @@ fn voxelDensity(p:vec3f)->f32 {
     if((abs(d)>40.0&&!whole)||u.rockFace<=0.0){return d;}
     let slope=length(n.xy)/max(n.z,.015);let route=routeProtection(p.xy);
     let painted=voxelPaintRock(p.xy);let rim=rimRockAt(p.xy);
-    let face=max(rockFaceGate(slope,painted,route),rimRelief(rim,route));
+    let face=max(rockFaceGate(slope,painted,route),rimRelief(rim,route))*(1.0-softBankAt(p.xy));
     let soil=u.faceLayers*smoothstep(.08,.6,slope)*smoothstep(.5,.9,n.z)*(1.0-route);
     if(max(face,soil)<.001){return d;}
     let heightGate=voxelRockHeight(p,max(painted,rim));
@@ -237,7 +237,7 @@ fn voxelDensity(p:vec3f)->f32 {
     var behind=source.x;var before=source.x;
     for(var k=0;k<8;k++){let h=voxelAuthored(p.xy+VOXEL_RING[k]*12.0).x;behind=max(behind,h);before=min(before,h);}
     let between=(1.0-smoothstep(behind,behind+4.0,p.z))*smoothstep(before-4.0,before,p.z);
-    let rock=max(rockFaceGate((behind-before)/24.0,painted,route),rimRelief(rim,route));
+    let rock=max(rockFaceGate((behind-before)/24.0,painted,route),rimRelief(rim,route))*(1.0-softBankAt(p.xy));
     // A guard: the blocks keep inside the bricks voxelClassify reserves for this column, its surface's range (guide.zw) and an apron that grows
     // with the slope to 40 units, less 8 for the shadow, normal and wear taps.
     let apron=40.0*smoothstep(.1,.45,length(guide.xy));

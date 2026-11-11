@@ -844,6 +844,12 @@ fn shoreRockAt(p:vec2f)->f32 {
     if(u.shoreRock<=0.0&&u.shoreShelf<=0.0){return 0.0;}
     return rockFieldAt(rockRimTex,p).y;
 }
+// A soft bank. Round water whose stroke is set to Soft bank (an inland lake) the ground within the same reach is soil, not a rock face,
+// however steep: 1 at the water, fading to 0 at the reach. It takes the face gate away wherever a slope's rock is decided.
+fn softBankAt(p:vec2f)->f32 {
+    if(u.shoreRock<=0.0&&u.shoreShelf<=0.0){return 0.0;}
+    return rockFieldAt(rockRimTex,p).z;
+}
 fn rockSourceAt(p:vec2f)->vec4f {
     if(u.debrisAmount<=0.0){return vec4f(0,0,0,1);}
     return rockFieldAt(rockSourceTex,p);

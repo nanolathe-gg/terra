@@ -1519,7 +1519,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     painted.x = max(painted.x, max(rimRockAt(p), shoreRockAt(p)));   // bare rock at a rim or a shore is painted rock (engine-common.wgsl rimRockAt, shoreRockAt)
     let place = landPlace(p, h, g, broad, slope, n, weather, route);
     let bare=clamp(1.0-place.vegetation,0.0,1.0);
-    let faceGate=rockFaceGate(slope/(1.0-.5*bare),painted.x,route);
+    let faceGate=rockFaceGate(slope/(1.0-.5*bare),painted.x,route)*(1.0-softBankAt(p));
     let rain=voxelRain(hit,normal);
     let footing=u.faceGrass*rain*smoothstep(.6,.95,normal.z)*smoothstep(u.sea,u.sea+2.0,h);
     let solidSlope=length(normal.xy)/max(normal.z,.1);
