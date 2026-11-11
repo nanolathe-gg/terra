@@ -2752,6 +2752,16 @@ branch, not landed].**
   repeated what the debris's pale fines already show. The patch is kept
   outside the repository. A colored stain on the rock face itself would
   show more and needs a color control.
+- *Checked after [measured].* Heights are byte-identical with Ground
+  patches at 1 and with Wind drifts at 1.5 (four fixtures). Modern
+  Desert's bare plain is itself only 97.0% equal to itself one pool
+  period over, and 96.7% with patches: the patches repeat as the ground
+  does, and Desert's tile count doubles because its ground did not fully
+  repeat to begin with. Pooled patches still move 30.6% of a modern Green
+  scene. Wind drifts across tile sizes 256, 128 and 64: 2 clay and 3 color
+  pixels differ, and 3 and 3 with sand on and no drifts, so the drifts add
+  none. Not rerun since the last five code commits: hover previews, export
+  bytes, draw time; no export has counted tiles with patches on.
 - *Checks.* `repro/check.sh land` passes on the branch with all of this:
   the three modern Green scenes move (21.5, 50.0, 23.6%), and
   archipelago-3, crystal-2 and desert-1 differ from main in a few pixels
