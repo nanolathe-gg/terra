@@ -82,6 +82,8 @@ fn lsPcg(v: u32) -> u32 {
 fn lsHash(c: vec2i, salt: u32) -> u32 { return lsPcg(bitcast<u32>(c.x) ^ lsPcg(bitcast<u32>(c.y) + salt)); }
 fn lsU(h: u32) -> f32 { return f32(h >> 8u) / 16777216.0; }
 fn lsR(k: i32) -> f32 { return LS_RMAX * exp2(-f32(k)); }
+// The largest class: 0, or with Boulders on one above it (class -1: a 32 px radius), which only the blocks' population reaches.
+fn lsKMin() -> i32 { return select(0, -1, u.boulders > 0.0); }
 
 // Where stones are, how big and how buried, at p, from the engine's own masks: rock weather's debris (rockWeatherAt),
 // the Time pass's channel and deposit (timeMapsAt), the slope and the cliff above (baseHeight), the painted scatter (scatterAt) and the deposits override.
@@ -92,7 +94,7 @@ fn lsMaskCompute(c: vec2f) -> vec4f {
     let none = vec4f(0.0);
     var paint = 0.0;
     if (u.scatterOn != 0) { paint = scatterAt(c); }
-    if (u.looseSupply <= 0.0 && paint <= 0.0 && u.debrisAmount<=0.0) { return none; }
+    if (u.looseSupply <= 0.0 && paint <= 0.0 && u.debrisAmount<=0.0 && u.boulders <= 0.0) { return none; }
     let h0 = baseHeight(c);
     if (routeProtection(c) > 0.05 || h0 < u.sea + 1.0) { return none; }
     let accumulated=rockWeatherAt(c);
@@ -126,7 +128,17 @@ fn lsMaskCompute(c: vec2f) -> vec4f {
     let fines = clamp(0.15 + 0.45 * (1.0 - smoothstep(0.2, 0.8, slope)) + 0.2 * carried, 0.0, 0.85);
     let debris=accumulated.y*clamp(1.0+min(paint,0.0),0.0,1.0);
     let share = supply * LS_BASE * source+debris*.7;
-    return vec4f(min(share, 0.98), size*mix(1.0,mix(1.5,.4,accumulated.z),clamp(accumulated.y*sort,0.0,1.0)),mix(fines,accumulated.z,clamp(accumulated.y,0.0,1.0)), 0.35 * sort * (foot*supply*LS_BASE+debris*.35) * smoothstep(0.5, 1.0, travelled));
+    // Boulders: blocks that came off a wall and lie under it, on its apron and out past the toe: ground no steeper than the apron's lower half, with
+    // a wall above it (a rise of 18 to 40 units within 40 px, or 26 to 57 within 80, any of eight ways), or where rock weather laid its debris.
+    // They join the runout blocks' population, whose median Boulders also raises (lsMask).
+    var fallen = 0.0;
+    if (u.boulders > 0.0) {
+        var far = 0.0;
+        for (var j = 0; j < 8; j++) { far = max(far, max(baseHeight(c + LS_WAYS[j] * 40.0) - h0, 0.7 * (baseHeight(c + LS_WAYS[j] * 80.0) - h0))); }
+        let under = smoothstep(18.0, 40.0, far) * (1.0 - smoothstep(3.0, 6.0, slope));
+        fallen = u.boulders * 0.9 * max(under, clamp(accumulated.y, 0.0, 1.0)) * depositsAt(c) * clamp(1.0 + min(paint, 0.0), 0.0, 1.0);
+    }
+    return vec4f(min(share, 0.98), size*mix(1.0,mix(1.5,.4,accumulated.z),clamp(accumulated.y*sort,0.0,1.0)),mix(fines,accumulated.z,clamp(accumulated.y,0.0,1.0)), 0.35 * sort * (foot*supply*LS_BASE+debris*.35) * smoothstep(0.5, 1.0, travelled) + fallen);
 }
 
 // Card P31: where plants grow, at c: the covers of the ground-cover classes that grow them (coverAt, the draw's own site maps and windows) as shares of
@@ -160,6 +172,8 @@ fn lsMask(c: vec2f) -> LsMask {
     var m: LsMask;
     m.a = vec4f(v.x, v.y, mix(2.0, 0.7, u.stoneSort), v.z);
     m.b = vec4f(v.w, u.looseSize * 2.2, 0.5, v.z);
+    // Boulders: the blocks' median grows toward 34 px and their sizes spread wider, from gravel to blocks 60 px and more.
+    if (u.boulders > 0.0) { m.b = vec4f(v.w, mix(u.looseSize * 2.2, 34.0, u.boulders), 0.5 + 0.4 * u.boulders, v.z); }
     return m;
 }
 
@@ -178,7 +192,7 @@ fn lsShare(k: i32, pop: vec4f) -> f32 {
     if (pop.x <= 0.0) { return 0.0; }
     let ls = log2(max(pop.y, 0.5));
     var wsum = 0.0; var wk = 0.0;
-    for (var j = 0; j < LS_K; j++) {
+    for (var j = lsKMin(); j < LS_K; j++) {
         let z = (log2(2.0 * lsR(j)) - ls) / max(pop.z, 0.15);
         let e = exp(-0.5 * z * z);
         wsum += e; if (j == k) { wk = e; }
@@ -190,7 +204,7 @@ fn lsShare(k: i32, pop: vec4f) -> f32 {
 // the nearest class to a median is under half an octave from it), the runout blocks adding up to .35 of the supply, a deposits override
 // doubling it, painted scatter up to 8x.
 fn lsBound(k: i32) -> f32 {
-    if (u.scatterOn != 0 || u.debrisAmount>0.0) { return 1.0; }
+    if (u.scatterOn != 0 || u.debrisAmount>0.0 || u.boulders > 0.0) { return 1.0; }
     let x = log2(2.0 * lsR(k));
     let off = max(0.0, max(log2(0.3 * u.looseSize) - x, x - log2(u.looseSize*select(1.0,1.5,u.debrisAmount>0.0))));
     let spread = mix(2.0, 0.7, u.stoneSort);
@@ -232,7 +246,7 @@ fn lsCand0(k: i32, cc: vec2i) -> LsCand { return lsAdmit(k, lsGeo(k, cc)); }
 
 // True where an accepted stone of the next larger class overlaps candidate o of class k.
 fn lsSuppressed(k: i32, o: LsCand) -> bool {
-    if (k == 0) { return false; }
+    if (k == lsKMin()) { return false; }
     let j = k - 1;
     let b = vec2i(floor(o.c / (3.2 * lsR(j)) - 0.5));
     for (var jj = 0; jj <= 1; jj++) {
@@ -259,6 +273,26 @@ fn lsStone(q0: vec2f, st: LsCand) -> vec2f {
         d = length(max(qq, vec2f(0.0))) + min(max(qq.x, qq.y), 0.0) - 0.25;
         let tilt = 0.25 * (vec2f(lsU(h4 * 7u + 1u), lsU(h4 * 13u + 5u)) - 0.5);
         h = select(0.0, (0.42 + dot(q, tilt)) * smoothstep(0.0, 0.18, -d), d < 0.0);
+    } else if (u.boulders > 0.0 && st.r >= 7.0 && !round) {
+        // A block: five to seven uneven, steep sides under a top that is one tilted plane with a corner broken off it, so the sun lights the top, one
+        // or two sides and the break differently.
+        let N = 5 + i32(lsU(h4) * 3.0);
+        var dd = -1e9; var side = 1e9;
+        for (var i = 0; i < N; i++) {
+            let hi = lsPcg(st.h0 + u32(i) * 0x27d4eb2du);
+            let th = (f32(i) + 0.9 * (lsU(hi) - 0.5)) * TAU / f32(N);
+            let nn = vec2f(cos(th), sin(th) / asp);
+            let len = length(nn);
+            let nrm = nn / len;
+            let off = (0.62 + 0.38 * lsU(lsPcg(hi))) / len;
+            dd = max(dd, dot(q, nrm) - off);
+            side = min(side, off - dot(q, nrm));
+        }
+        let ta = lsU(h2 * 3u + 7u) * TAU; let ba = ta + 1.7 + 2.9 * lsU(h3 * 5u + 3u);
+        let top = 0.78 + 0.28 * dot(q, vec2f(cos(ta), sin(ta)));
+        let broken = 1.0 - (0.6 + 0.5 * lsU(h1 * 9u + 1u)) * (dot(q, vec2f(cos(ba), sin(ba))) + 0.15);
+        d = dd;
+        h = clamp(min(min(top, broken), side * 3.0), 0.0, 1.0);
     } else if (round || st.r < 1.3) {
         let n = 2.0 + 1.5 * lsU(h4);
         let e = vec2f(abs(q.x), abs(q.y) / asp);
@@ -286,7 +320,8 @@ fn lsStone(q0: vec2f, st: LsCand) -> vec2f {
         h = min(1.0, max(roof, 0.0) * (1.25 + 0.5 * lsU(h1 * 9u + 1u)));
     }
     // Partly buried: the fines round the stone cut it below its top; the outline shrinks with the burial.
-    let bury = clamp(0.12 + 0.55 * st.fines + 0.2 * (lsU(h2 * 11u + 3u) - 0.5), 0.0, 0.85);
+    var bury = clamp(0.12 + 0.55 * st.fines + 0.2 * (lsU(h2 * 11u + 3u) - 0.5), 0.0, 0.85);
+    if (u.boulders > 0.0 && st.r >= 7.0) { bury *= 0.4; }   // a block stands on the ground more than in it
     let hv = max(0.0, h - bury) / (1.0 - bury);
     let dv = select(d + 0.6 * bury, 0.6 * (bury - h), d < 0.0);
     return vec2f(hv, dv * st.r);
@@ -425,10 +460,10 @@ fn plantsAt(p: vec2f) -> vec3f {
 
 // The scatter at p: (stone height, rock cover, contact shade of the fines beside a stone, plant height).
 fn looseStones(p: vec2f) -> LsOut {
-    let stones = u.looseSupply > 0.0 || u.scatterOn != 0 || u.debrisAmount>0.0;
+    let stones = u.looseSupply > 0.0 || u.scatterOn != 0 || u.debrisAmount>0.0 || u.boulders > 0.0;
     if (!stones && u.plantsOn < 0.5) { return LsOut(vec3f(0.0), vec3f(0.0)); }
     var best = 0.0; var cover = 0.0; var edge = 1e9; var edgeFines = 0.0; var bestR = 1.0;
-    for (var k = 0; k < LS_K; k++) {
+    for (var k = lsKMin(); k < LS_K; k++) {
         let R = lsR(k);
         if (R < 0.45 || !stones) { break; }
         // A class the mask cannot give a stone to is skipped: the median runs from .3 to 1 of Size, the runout blocks lie at 2.2 times it, and a
@@ -438,7 +473,7 @@ fn looseStones(p: vec2f) -> LsOut {
         let spread = mix(2.0, 0.7, u.stoneSort);
         let runout = x - log2(2.2 * u.looseSize);
         let reach = max(exp(-0.5 * off * off / (spread * spread)), 0.35 * u.stoneSort * exp(-2.0 * runout * runout));
-        if (reach < 0.04) { continue; }
+        if (reach < 0.04 && !(u.boulders > 0.0 && k <= 2)) { continue; }   // the blocks' population holds the three largest classes
         let cell = 3.2 * R;
         let b = vec2i(floor(p / cell - 0.5));
         for (var j = 0; j <= 1; j++) {

@@ -923,11 +923,12 @@ export class TerrainRenderer {
   // A fed chunk's painted flags are written into the uniform buffer by the GPU (ChunkTerrainRenderer.flagPass), so the CPU copy of uScatterOn
   // is stale there: the pass runs, and looseMain's own test of u.scatterOn leaves every cell empty where nothing is painted.
   encodeLooseMask(encoder) {
-    const supply = Math.max(this.uniformValue('uLooseSupply'),this.uniformValue('uDebrisAmount')), painted = this.gpuFlags || this.uniformValue('uScatterOn'), plants = this.uniformValue('uPlantsOn') > 0;
+    const supply = Math.max(this.uniformValue('uLooseSupply'),this.uniformValue('uDebrisAmount'),this.uniformValue('uBoulders')), painted = this.gpuFlags || this.uniformValue('uScatterOn'), plants = this.uniformValue('uPlantsOn') > 0;
     if (!(supply > 0) && !painted && !plants) return;
     const [x0, y0, w, h] = this.bakeWindow;
     // Card P31: a plant's candidate lies up to 23 px (a shrub's cell and jitter) from the pixels it covers, the mask reads heights 8 px past its cell, and the apron adds 15.
-    const margin = Math.max(Math.ceil(3.6 * Math.min(16, 3.3 * this.uniformValue('uLooseSize'))) + 4, plants ? PLANT_REACH : 0);
+    // Boulders: the largest class has a 32 px radius.
+    const margin = Math.max(Math.ceil(3.6 * (this.uniformValue('uBoulders') > 0 ? 32 : Math.min(16, 3.3 * this.uniformValue('uLooseSize')))) + 4, plants ? PLANT_REACH : 0);
     const ox = Math.floor((x0 - margin) / 4), oy = Math.floor((y0 - margin) / 4);
     const nx = Math.ceil((w + 2 * margin) / 4) + 2, ny = Math.ceil((h + 2 * margin) / 4) + 2;
     if (nx * ny * 32 > this.looseBuffer.size) {
@@ -996,6 +997,7 @@ export class TerrainRenderer {
     set('uApron', number('apron', 0));
     set('uWorms', number('worms', 0));
     set('uLooseSupply', number('looseSupply', 0));
+    set('uBoulders', number('boulders', 0));
     set('uLooseSize', number('looseSize', 6));
     set('uPlantsOn', groundCoverOn(this.config.material?.groundCover, this.variant) && this.config.material.groundCover.plants ? 1 : 0);
     set('uStoneRound', number('stoneRound',this.config.material?.stoneRound ?? 0));

@@ -99,7 +99,7 @@ export function worldControlRequirement(key,v){
  if(['runoffScale','runoffConcentration','runoffStain'].includes(key))return needs('runoff','Runoff exposure');
  if(['debrisReach','debrisDepth'].includes(key))return needs('debrisAmount','Cliff debris accumulation');
  if(key==='stoneRound'&&n('stoneSlab')>=1)return 'Reduce Flat fragments below 100% to round the remaining fragments.';
- if(['stoneSort','stoneRound','stoneSlab'].includes(key))return Math.max(n('looseSupply'),n('debrisAmount'),n('stonePaint'))>0?'':'Raise loose-stone Supply or Cliff debris accumulation, or paint Denser scatter, to shape the stones.';
+ if(['stoneSort','stoneRound','stoneSlab'].includes(key))return Math.max(n('looseSupply'),n('debrisAmount'),n('stonePaint'),n('boulders'))>0?'':'Raise loose-stone Supply, Boulders or Cliff debris accumulation, or paint Denser scatter, to shape the stones.';
  // Rows that shape the rock's relief do nothing while it is flat (Depth 0); amount, placement, grass and colour act at any depth.
  if(['faceLaminaSize','faceScratchLength','faceScratchAngle'].includes(key)){
   const parent={faceLaminaSize:'faceLamina',faceScratchLength:'faceScratch',faceScratchAngle:'faceScratch'}[key];
@@ -197,7 +197,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','erosionRain','wetSwath','lushness','slopeMarks','wrinkles',
  'shineRockSharp','shineRockRough','shineRockScale',
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
- 'looseSupply','looseSize','looseKnoll','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
+ 'looseSupply','looseSize','boulders','looseKnoll','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing',
  'banding','sandBanding','strata','strataContrast',
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
