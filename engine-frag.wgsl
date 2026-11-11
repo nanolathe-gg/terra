@@ -1779,7 +1779,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if(u.debrisAmount>0.0){
         lying=rockWeatherAt(debrisLie(p));
         if(lying.y>0.0){
-            let regrown=debrisRegrown(lying.y,p,clamp(lying.w*1.6,0.0,1.0),place.vegetation);
+            // Fines hold their ground: where the debris is sand and grit, plants need it thinner before they take it, so a cliff's foot keeps its sand.
+            let regrown=debrisRegrown(lying.y*(1.0+2.0*lying.z),p,clamp(lying.w*1.6,0.0,1.0),place.vegetation);
             depositCover=clamp(lying.y*.9+.45,0.0,1.0)*(1.0-regrown.x);
             if(regrown.y>0.0){material=mix(material,mossMaterial(pixel)*.85,regrown.y*.6);}
         }
