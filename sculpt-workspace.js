@@ -42,13 +42,22 @@ function attachScrub(row){
   const disabled=()=>source.matches(':disabled');
   const sync=()=>{const lo=Number(source.min),hi=Number(source.max),v=Number(source.value),title=label.cloneNode(true);title.querySelector('output')?.remove();const name=title.textContent.trim();scrub.setAttribute('aria-label',name);input.setAttribute('aria-label',name);scrub.style.setProperty('--fill',`${100*(v-lo)/(hi-lo||1)}%`);scrub.setAttribute('aria-valuemin',lo);scrub.setAttribute('aria-valuemax',hi);scrub.setAttribute('aria-valuenow',v);scrub.setAttribute('aria-valuetext',label.querySelector('output')?.textContent||String(v));scrub.setAttribute('aria-disabled',String(disabled()));scrub.tabIndex=disabled()?-1:0;input.min=source.min;input.max=source.max;input.step=source.step;input.disabled=disabled();if(disabled()&&editing)finish(true);};
   // A no-op must not emit input: the renderer pauses weathering until change.
-  const apply=v=>{if(disabled())return false;const before=source.value,step=Number(source.step)||1,lo=Number(source.min),hi=Number(source.max);source.value=String(Math.max(lo,Math.min(hi,lo+Math.round((v-lo)/step)*step)));if(source.value===before)return false;source.dispatchEvent(new Event('input',{bubbles:true}));sync();return true;};
+  const apply=v=>{if(disabled())return false;const before=source.value,wasUnset=source.dataset.unset==='true',step=Number(source.step)||1,lo=Number(source.min),hi=Number(source.max);source.value=String(Math.max(lo,Math.min(hi,lo+Math.round((v-lo)/step)*step)));if(source.value===before&&!wasUnset)return false;if(wasUnset)source.dataset.unset='false';source.dispatchEvent(new Event('input',{bubbles:true}));sync();return true;};
   const commit=()=>source.dispatchEvent(new Event('change',{bubbles:true}));
   const flushClick=()=>{const value=clickValue;cancelClick();if(value!==null&&apply(value))commit();};
   // Finish a pending click before another control or shape can change context.
   const nextPointer=e=>{if(scrub.contains(e.target))cancelClick();else flushClick();};
-  const type=()=>{cancelClick();if(disabled())return;editing=true;scrub.removeAttribute('role');input.hidden=false;input.value=source.value;input.focus();input.select();};
-  const finish=(cancel,focus=false)=>{if(!editing)return;editing=false;if(!cancel&&!disabled()&&input.value.trim()&&Number.isFinite(input.valueAsNumber)&&apply(input.valueAsNumber))commit();input.hidden=true;scrub.setAttribute('role','slider');if(focus)scrub.focus({preventScroll:true});};
+  const type=()=>{cancelClick();if(disabled())return;editing=true;scrub.removeAttribute('role');input.hidden=false;input.value=source.dataset.unset==='true'?'':source.value;input.placeholder=source.dataset.unsetLabel||'';input.focus();input.select();};
+  const finish=(cancel,focus=false)=>{if(!editing)return;editing=false;
+    if(!cancel&&!disabled()){
+      // Optional recipe values share this same slider: clearing typed entry
+      // restores the inherited value; choosing zero is an explicit override.
+      if(!input.value.trim()&&source.dataset.allowEmpty==='true'){
+        if(source.dataset.unset!=='true'){source.dataset.unset='true';commit();}
+      }else if(input.value.trim()&&Number.isFinite(input.valueAsNumber)&&apply(input.valueAsNumber))commit();
+    }
+    input.hidden=true;scrub.setAttribute('role','slider');if(focus)scrub.focus({preventScroll:true});
+  };
   scrub.addEventListener('pointerdown',e=>{if(e.target===input||disabled()||e.button!==0)return;cancelClick();e.preventDefault();pointer={id:e.pointerId,x:e.clientX,raw:Number(source.value),moved:false,changed:false};scrub.setPointerCapture(e.pointerId);scrub.focus({preventScroll:true});});
   scrub.addEventListener('pointermove',e=>{if(pointer?.id!==e.pointerId)return;const dx=e.clientX-pointer.x;if(!pointer.moved&&Math.abs(dx)<4)return;pointer.moved=true;pointer.x=e.clientX;const lo=Number(source.min),hi=Number(source.max);pointer.raw=Math.max(lo,Math.min(hi,pointer.raw+dx*(hi-lo)/240*(e.shiftKey?.1:1)));pointer.changed=apply(pointer.raw)||pointer.changed;});
   // Cancellation finishes the last visible value, just like a native range.

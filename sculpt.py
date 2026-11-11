@@ -76,7 +76,7 @@ KNOB_DEFAULTS = dict(
     terraces=0, ledge=.6, terraceJitter=.35, breakup=0,
     # Landform (card H27): the crest's height (fixed or sea-relative) and how it combines (0 raise to, 1 cut to, 2 flatten to); the variation along and
     # across the path (wander px, width as a share, height in units, the wavelength px, and the weights at the foot and from the middle up of the section).
-    heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, talus=0, surf=0, varySize=140, varyFoot=1, varyMiddle=1,
+    heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, talus=0, surf=0, varySize=140, varyFoot=1, varyMiddle=1, wallVary=0, beds=0, bedSoft=.6,
     # lfcrater: a landform's impact features (sculpt-scene.js CRATER_KEYS), off by default: ejecta round it and secondaries beyond them;
     # lfimpact2: and the ground buckled beyond the rim of a landform that digs; the secondaries fall from secondaryDistance rim radii (or, on a shape that
     # peaks on its path, foot radii) out to twice that, 1.6 as before the row; the Crater preset sets 1 (sculpt-scene.js LANDFORM_TOOLS.crater).
@@ -115,6 +115,8 @@ KNOB_DEFAULTS.update(crystalCraterWeb=0, crystalCraterWebPx=14, crystalCraterWob
                      crystalCraterGap=0, crystalCraterTone=0, crystalCraterLight=1)
 # Round 3 (Desert): the share of loose stones drawn as knolls, low rings of ground round a hollow (0: all stones).
 KNOB_DEFAULTS.update(looseKnoll=0)
+# Boulders: blocks fallen from a wall and lying under it (0: none).
+KNOB_DEFAULTS.update(boulders=0)
 # Round 3 (Crystal): a bold web of long dark gouges across raised crystal formations (0: none).
 KNOB_DEFAULTS.update(gougeWeb=0)
 # G7 (Crystal): finer shore slabs and fainter seams (the defaults are the earlier output).
@@ -833,9 +835,29 @@ def biome_config(biome):
     # has none of, so any world can place any kind (lit by its own sun; Green's is the one table measured from retail for all four).
     green = json.loads((HERE / MATERIAL_TABLES['green']).read_text())['features']
     config['features'] = {**{k: v for k, v in green.items() if k in FEATURE_KINDS}, **table.get('features', {})}
+    config['featureCatalog'] = feature_catalog()
     if biome in WORLD_ROCK:
         config['rock'] = dict(WORLD_ROCK[biome])
     return world_knobs(biome, config)
+
+
+def feature_catalog():
+    """All recipes, available on every world; no renderer branches on their source."""
+    out = []
+    for world, path in MATERIAL_TABLES.items():
+        for kind, data in json.loads((HERE / path).read_text()).get('features', {}).items():
+            if kind not in FEATURE_KINDS and kind not in ('deposit', 'vent'):
+                continue
+            types = data.get('types') or [{'share': 1, 'params': data.get('params', {}), 'vary': data.get('vary', {})}]
+            for index, shape in enumerate(types):
+                recipe = {**data, 'count': min(4, data.get('count', 4)), 'types': [{**shape, 'share': 1, 'params': {**data.get('params', {}), **shape.get('params', {})}}]}
+                params = recipe['types'][0]['params']
+                form = params.get('species') or params.get('type') or ('spire' if params.get('tall', 0) > .4 else kind)
+                form = {'deadConifer': 'dead conifer'}.get(form, form)
+                cells = f" ({params['cells'].replace('x', '×')})" if params.get('cells') else ''
+                name = f"{BIOME_NAMES[world]} · {form} {index + 1}{cells}"
+                out.append({'id': f'{world}-{kind}-{index}', 'kind': kind, 'name': name, 'data': recipe})
+    return out
 
 
 def world_configs(biomes):

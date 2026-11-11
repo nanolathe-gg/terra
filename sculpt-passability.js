@@ -21,7 +21,7 @@ export function movementObstacles(config,data={}) {
   const set=normalizeSet(data.featureSet,config),lists=new Map();
   return (data.features||[]).filter(p=>p.kind==='tree'||p.kind==='rock').flatMap(p=>{
     if(!lists.has(p.kind))lists.set(p.kind,variants(p.kind,set,config));
-    const list=lists.get(p.kind),v=list[((p.v||0)%list.length+list.length)%list.length];
+    const list=lists.get(p.kind),v=list.find(v=>v.index===(p.v||0));
     return v?[{x:p.x,z:p.z,width:v.footprint[0],height:v.footprint[1]}]:[];
   });
 }

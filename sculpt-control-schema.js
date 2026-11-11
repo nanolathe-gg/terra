@@ -20,6 +20,11 @@ export function shapeControlAvailable(key,kind,p){
   if(['gullies','gullySize'].includes(key))return Math.round(Number(p.combine||0))!==1;
   // Talus rests on ground the stroke raises, so it works with the plain Raise choice only.
   if(key==='talus')return Math.round(Number(p.combine||0))===0;
+  // Hard beds stand in ground the stroke raises (the plain Raise choice), and their strength shows once there is a bed.
+  if(key==='beds')return Math.round(Number(p.combine||0))===0;
+  if(key==='bedSoft')return Math.round(Number(p.combine||0))===0&&Math.round(Number(p.beds)||0)>=1;
+  // Variation along the wall works on the Wander, the Gullies and the Hard beds: it shows once one of them is on. A river's path is its channel.
+  if(key==='wallVary')return !isRiver(p)&&(Number(p.wander)>0||Number(p.gullies)>0||Math.round(Number(p.beds)||0)>=1);
   if(['layerCircle','lavaCircleVary'].includes(key))return on&&circular;
   // A river's path is its channel, carried by its migration; an impact would read that path as its track (lfcrater).
   if(['ejecta','secondaries'].includes(key))return !isRiver(p);
@@ -87,7 +92,7 @@ export function worldControlRequirement(key,v){
  if(['runoffScale','runoffConcentration','runoffStain'].includes(key))return needs('runoff','Runoff exposure');
  if(['debrisReach','debrisDepth'].includes(key))return needs('debrisAmount','Cliff debris accumulation');
  if(key==='stoneRound'&&n('stoneSlab')>=1)return 'Reduce Flat fragments below 100% to round the remaining fragments.';
- if(['stoneSort','stoneRound','stoneSlab'].includes(key))return Math.max(n('looseSupply'),n('debrisAmount'),n('stonePaint'))>0?'':'Raise loose-stone Supply or Cliff debris accumulation, or paint Denser scatter, to shape the stones.';
+ if(['stoneSort','stoneRound','stoneSlab'].includes(key))return Math.max(n('looseSupply'),n('debrisAmount'),n('stonePaint'),n('boulders'))>0?'':'Raise loose-stone Supply, Boulders or Cliff debris accumulation, or paint Denser scatter, to shape the stones.';
  // Rows that shape the rock's relief do nothing while it is flat (Depth 0); amount, placement, grass and colour act at any depth.
  if(['faceLaminaSize','faceScratchLength','faceScratchAngle'].includes(key)){
   const parent={faceLaminaSize:'faceLamina',faceScratchLength:'faceScratch',faceScratchAngle:'faceScratch'}[key];
@@ -178,7 +183,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','erosionRain','wetSwath','lushness','slopeMarks','wrinkles',
  'shineRockSharp','shineRockRough','shineRockScale',
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
- 'looseSupply','looseSize','looseKnoll','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
+ 'looseSupply','looseSize','boulders','looseKnoll','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing',
  'banding','sandBanding','strata','strataContrast',
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',

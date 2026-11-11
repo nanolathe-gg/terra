@@ -2882,6 +2882,71 @@ same, so they are coherent and realistic."
   land pipeline's shaded color, water is absorption by depth. Rule 7
   allows no switch, so it removes options and moves every water world.
 
+**Overnight run, item 1: walls [Claude, 2026-11-10 to 11; the owner:
+"let's do 1, 2, 3, 4, 5 in order, one at a time. Autonomous overnight
+run"].** Branch `realism/wall-variety`, not landed. Rows 2 and 7 of
+round 4.
+
+- *What the comb was* **[measured by switching things off on the 760 px
+  mesa fixture]**. With Gullies 0 the fins are still there; with Wander 0
+  the wall is a plain ramp. The row of like fins is the outline's Wander,
+  one wavelength of noise, more than the Gullies. The erosion pass at age
+  0 changes little.
+- *Variation along the wall* (stroke option, Variation group, default 0).
+  Long waves under the outline's teeth, teeth that come and go, gully
+  depth from none to 2.4 times, a longer sideways warp. At 0 the bytes
+  are main's. At 100: 59.6% of the fixture's picture, 2,838 of 17,680
+  height cells by a mean of 10.2 units; the stock Plateau 35.0% and 1,546
+  cells **[measured]**. The bays keep their even rhythm: every way of
+  varying them moved 220 to 300 pixels with the option at 0.
+- *Hard beds* and *Soft beds lie back* (own group, default off). A
+  staircase on the lift after the Gullies, as a share of the section's
+  own crest; heights only. Hard beds 3: 46.3% of the fixture's picture,
+  1,555 cells by a mean of 6.7; 2 of the 1,605 cells at the top's level
+  move, by at most 3 units; the stock Plateau with 2 beds 15.9% and 914
+  cells; the stock Mountain with 4 beds 27.6% and 483 **[measured]**.
+- *By eye.* Beds read clearly on a sloping section in Green's own rock:
+  rock bands with grass on the benches. On the stock Plateau's sheer
+  face they are faint, and on the Mountain, where the whole wall is
+  rock, almost nothing shows: a bench needs a second material to read,
+  which is item 3. The erosion pass wears the benches (a flat bench of
+  139 units came out at 151 to 154 with the pass on **[measured]**).
+- *Tried and dropped.* Marking the soft beds as loose ground (the talus
+  mark): plane 5 is the vegetation plane pushed negative, so it removed
+  the grass that makes a bench read.
+- *Open.* (1) Steps and Hard beds sit side by side: the owner rules
+  whether both stay (the page has the pair). (2) No button preset uses
+  either option yet; a preset change is the owner's. (3) Bays do not
+  vary. (4) Beds on a cut (a canyon wall) are not built. (5) The level
+  of a band follows the crest, so it tilts where the crest tapers.
+- Page (private): https://claude.ai/artifact/878Vv6rGcfQ8vkdESsUJSU
+
+**Overnight run, item 2: boulders [Claude, 2026-11-11; the owner: "Walls
+and boulders look good, land all of it"].** Row 5 of round 4.
+
+- *Boulders under walls* (world control, Loose stone, 0 to 1, default 0
+  in every world). The runout blocks' population gains a supply on ground
+  under a wall (a rise of 18 to 40 units within 40 px, or 26 to 57 within
+  80) and where rock weather laid debris; its median grows toward 34 px;
+  one more size class (a 32 px radius); a large angular fragment is a
+  block with a tilted top and a broken corner, standing on the ground.
+  Art only: exported heights are identical **[measured, four fixtures]**.
+- *Measured.* At 1: 5.5% of the mesa fixture's picture (4.2% at 0.5),
+  4.8% of the stock Plateau, 6.9% of the Desert mesa. On the stock
+  Mountain on modern Green: 1.67% at 0.05, 9.02% at 0.25, 16.32% at 0.5,
+  19.61% at 1. `measure/world_controls.mjs`: 2.4% of green-1's whole
+  picture and 2.2% of desert-1's; those windows have little ground under
+  walls, and the share of that class alone is not computed.
+- *Fixed before landing.* The first build changed every large fragment's
+  shape as soon as the control left 0 (11.75% of the Mountain's picture
+  at 0.05). Fragments now turn into blocks one by one, all of them from
+  0.5 up.
+- *Open.* (1) No world adopts it yet: the modern Green adoption is a
+  commit on `realism/soil-edges`, the owner's call. (2) A recipe with
+  rounded fragments gives few angular blocks. (3) Blocks take one rock
+  color; no fresh break face.
+- Page (private): https://claude.ai/artifact/LMov1KXL2dBW49fqd4K1pH
+
 **Stage 2, one bed model [built on `realism/one-bed`, 2026-11-10; not landed].**
 The owner agreed to remove the noise water, the cracked bed, the lit bed
 bumps, the bed dots and the bed grain.
