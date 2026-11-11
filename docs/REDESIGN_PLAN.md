@@ -3122,15 +3122,20 @@ landed].**
   on the maroon entries. Only numbers of Red's recipe (Jointed
   siltstone) change: Color variation between blocks .12 to .5, crust
   lightness .2 to .35, crust oxidation .15 to .3, wetness .2 to 0, joint
-  opening width 3 to 1.5, joint depth 3 to 2, shadow and crevice depth
-  .7 to .55. After: (82,45,38) hue 9, median 51.5 at the shore;
-  (89,48,41) hue 10, median 61 on the mesa. Moves red-1 9.5%, red-2
-  8.0%, red-3 22.3% on top of the bed change; no other world. Open, by
-  eye: red-2's terraces are a little fainter (the crevice shade), lit
-  faces carry a few olive-yellow pixels, and the rock within a few
-  units of the water is still bluer than the rest (the waterline's
-  blend). Tried and not used: Mix palette pairs (rock hue 5, but it
-  flattens the ground), more land dither (no gain).
+  opening width 3 to 1.5, joint depth 3 to 2. (Shadow and crevice depth
+  went to .55 with them at first and came back to .7: alone it changes
+  0.8 to 2.8% of Red's pixels and none of these measures.) After:
+  (81,44,38) hue 9, median 51.5 at the shore; (88,48,40) hue 10, median
+  61 on the mesa. Moves red-1 9.3%, red-2 7.4%, red-3 21.0% on top of
+  the bed change; no other world. On red-2, the owner-approved lakes:
+  4.4% of the lake's interior pixels move (rock on the lumps' flanks; no
+  change by eye), and the terrace rings round the lake keep 11.2% dark
+  pixels (luma under 40) against 12.5%, which no single number of the
+  recipe accounts for. Open, by eye: lit faces carry a few olive-yellow
+  pixels, Color variation sits at its slider's maximum, and the rock
+  within a few units of the water is still bluer than the rest (the
+  waterline's blend). Tried and not used: Mix palette pairs (rock hue 5,
+  but it flattens the ground), more land dither (no gain).
 - *Green's bed lumps* (`realism/green-bed-lumps`). Under 1% of the
   shallows before (rule 9). Only Green's numbers change: `bedFlat` .4 to
   1 (the bed's own light is not scaled by the world's directional share
@@ -3140,27 +3145,39 @@ landed].**
   `measure/world_controls.mjs` on green-1: Bed lumps 19,543 px, Bed lit
   by its own relief 34,170, Bed light 71,703. Moves green-7 9.9%,
   green-modern-1 4.4%, green-modern-3 4.3%, green-3 3.5%, green-1 3.5%.
-  Not tuned: Archipelago's lumps, still under 5%.
+  Open: teal palette pixels in the shallows grow (green-3 0.6% to 1.0%
+  of the water, green-modern-3 2.1% to 3.3%, green-modern-1 2.5% to
+  5.1%). Not tuned: Archipelago's lumps, still under 5%.
 - *Open: the relief allowance counts Bed lumps.* The chunk renderer's
   projection apron (`reaches()`) adds 1.6 x `bedRelief`, though lumps
   lie under the water plane, and the pictures are sensitive to the
   apron: with Green's lumps at 2, dry Green scenes re-roll pixels on
   steep faces (green-2 10.0%, mean luma 62.867 to 62.869, no change by
-  eye; green-5 1.3%, green-4 1.0%, green-6 0.4%). Dropping the term
-  would re-roll every world once and free the control from dry ground;
-  why a picture depends on the apron at all is not found. Proposed, not
-  done.
-- *Checks on the stacked tip `74c43a09`* (2026-11-11). Land tier passes
-  (unit, gate, scenes, regional, voxels, smoke, features, passability,
-  shape repeat; own server, CDP port 9731); 28 of 34 scenes differ from
-  main `6c58fb9f`, heights identical in all. Export bytes: exit 0, same
-  on all three maps (green-4 2,325 tiles, lava-8 14,498, red-16 50,099
-  against 50,166 on main). The export's times in that run (red-16 535 s)
-  say nothing: another agent's three control sweeps held the GPU. Not
-  run: `repro/perf.mjs` (no drag or bake code changed; Green's larger
-  apron is not timed), the hover previews (`repro/ui-previews.mjs`;
-  owed before landing, the bed's light changed), `measure/realism.py`
-  (heights identical), the geology sweep.
+  eye; green-5 1.3%, green-4 1.0%, green-6 0.4%). No value is free:
+  green-2 moves 6.7% at .8, 8.2% at 1, 9.5% at 1.5. This is the coupling
+  removed for Boulders. The owner's choice: lumps at 2 with the re-roll;
+  drop the term from the allowance (every world re-rolls once, and the
+  control never touches dry ground again); or leave Green's lumps at .6.
+  Why a picture depends on the apron at all is not found.
+- *Checks* (2026-11-11). The land tier (unit, gate, scenes, regional,
+  voxels, smoke, features, passability, shape repeat; own server, CDP
+  port 9731) and export bytes (exit 0, same on all three maps: green-4
+  2,325 tiles, lava-8 14,498, red-16 50,099 against 50,166 on main)
+  passed on the three items stacked, one step before the crevice shade
+  came back to .7 and the previews were regenerated; the quick tier
+  passes on the final tip. 28 of 34 scenes differ from main `6c58fb9f`,
+  heights identical in all. No item was checked alone: landing a subset
+  needs its own run, and the previews hold only for all three together.
+- *Perf, owed before landing.* `engine-frag.wgsl` runs on every chunk
+  paint and Green's apron grew. Measured once (`repro/perf.mjs map4`,
+  green-modern-3, alternating builds, a warm-up discarded) while another
+  agent's three control sweeps held the GPU, so only the comparison
+  holds: load to final 15.6, 17.7, 14.8 s on main and 18.5, 15.1, 14.0 s
+  on the tip; drag latency p50 423, 654, 402 ms against 481, 596, 428.
+  No difference beyond the spread, at about seven times the morning's
+  absolute numbers on both builds. The export's times in that state
+  (red-16 535 s) say nothing either. Rerun both on a quiet machine.
+- Not run: `measure/realism.py` (heights identical), the geology sweep.
 - Page (private): https://claude.ai/artifact/6rEmDd2kPD3MAnYNwHjiZG
 
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
