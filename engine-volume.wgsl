@@ -120,7 +120,7 @@ fn voxelGuideBlocks(@builtin(global_invocation_id) id:vec3u){
 @compute @workgroup_size(8,8)
 fn voxelGuideBuild(@builtin(global_invocation_id) id:vec3u){
     if(id.x>=vs.width||id.y>=vs.height){return;}
-    let at=vec2i(id.xy);let original=textureLoad(vh,at,0);var n=original.yz;var score=1.0-original.w;var low=original.x;var high=original.x;
+    let at=vec2i(id.xy);let original=textureLoad(vh,at,0);var n=original.yz;var score=1.0-original.w;var low=original.x;var high=original.x;var far=0.0;
     for(var y=-4;y<=4;y++){for(var x=-4;x<=4;x++){
         let off=vec2i(round(vec2f(f32(x),f32(y))*4.0/vs.step));if(length(vec2f(off))*vs.step>16.0){continue;}
         let h=textureLoad(vh,clamp(at+off,vec2i(0),vec2i(i32(vs.width),i32(vs.height))-1),0).x;low=min(low,h);high=max(high,h);
@@ -131,8 +131,10 @@ fn voxelGuideBuild(@builtin(global_invocation_id) id:vec3u){
         let b=home+vec2i(x,y);if(any(b<vec2i(0))||any(b>=blocks)){continue;}
         let d=length((vec2f(b)+.5)*size-(vec2f(at)+.5)*vs.step);if(d>16.0){continue;}   // to the block's middle
         let a=textureLoad(vk,b,0);let q=(1.0-a.z)/(1.0+d*d*.035);
-        if(a.z<.5&&q>score){n=a.xy;score=q;}
-    }}textureStore(guideOut,at,vec4f(n,low,high));
+        if(a.z<.5&&q>score){n=a.xy;score=q;far=d;}
+    }}
+    // A face's hold on the ground around it fades with distance, from 2 px to nothing at 16. Ending at 16 px in one step, it drew its own outline there.
+    textureStore(guideOut,at,vec4f(mix(n,original.yz,smoothstep(2.0,16.0,far)),low,high));
 }
 @compute @workgroup_size(8,8)
 fn voxelClassify(@builtin(global_invocation_id) id:vec3u){
