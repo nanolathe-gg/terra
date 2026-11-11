@@ -2586,23 +2586,28 @@ of 4 px, so neighbors read disjoint candidates and picked different
 faces, and every steep face carried a 4 px lattice of dots. A pass now
 reduces 4 px blocks on the global lattice to their steepest normal and
 every voxel searches the same blocks (`engine-volume.wgsl`
-`voxelGuideBlocks`, `voxelGuideBuild`).
+`voxelGuideBlocks`, `voxelGuideBuild`). A face's hold on the ground
+around it also fades from 2 px to nothing at 16 px: ending in one step,
+it drew rings round small steep spots once the lattice no longer hid it.
 
 - *How it was found* **[measured]**. No single rock term makes it (each
-  set to 0 in turn on breccia: 2.76 to 3.44% against 3.44%); it grows with
-  Rock relief depth; searching every cell within 16 px removes it.
+  set to 0 in turn on breccia: 2.76 to 3.44% against 3.44%, and 4.31% with
+  wear at 0, which smooths it); it grows with Rock relief depth; searching every cell within 16 px removes it.
 - *Measured.* The checker share equals that reference search's on four
-  fixtures (2.46% against 2.45, 7.78 against 7.94, 2.55 against 2.47,
-  2.95 against 2.91; before 3.44, 9.21, 3.38, 3.38), and by eye the
-  lattice is gone and the forms match it. Pixel for pixel it is not the
+  fixtures before the fade (2.46% against 2.45, 7.78 against 7.94, 2.55
+  against 2.47, 2.95 against 2.91; main 3.44, 9.21, 3.38, 3.38) and is
+  2.39, 8.15, 2.35 and 3.22 with it; by eye the lattice is gone and the
+  forms match the reference, with softer brows. Pixel for pixel it is not the
   reference (about 40% of clay pixels differ, 3 to 8% by more than 24).
   33 of 34 scenes change, heights the same bytes in all; the voxel check
-  holds 0 pixels between budgets with 0.8% more bricks and 85.7 MB
+  holds 0 pixels between budgets with 1.6% fewer bricks and 84.6 MB
   against 85.1 of 96; load and release times are unchanged on modern
-  Green and on Green's own preset (two alternating pairs). Land tier
-  passes.
+  Green and on Green's own preset (two alternating pairs, before the
+  fade). Land tier and `export-bytes` pass.
 - *Not done.* The comb and the staircase remain with the reference search
-  too: another cause, not yet found. The share is a rough measure: it
+  too: another cause, not yet found. On Ice a few small soft marks remain
+  where the rings were. Voxel steps of 2 and 4 px (the previews) run
+  without error but were not looked at. The share is a rough measure: it
   also counts sharp real edges, so it fell by a quarter while the picture
   changed much more. On the branch `realism/checker`; the owner has not
   judged it.
