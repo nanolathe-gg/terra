@@ -169,10 +169,27 @@ fn voxelPaintRock(p:vec2f)->f32 {
     if(u.paintOn==0){return 0.0;}
     return max(0.0,textureSampleLevel(masksTex,linearClamp,maskUv(p),0,0.0).r);
 }
+const VOXEL_RING=array<vec2f,8>(vec2f(1.0,0.0),vec2f(0.70710678,0.70710678),vec2f(0.0,1.0),vec2f(-0.70710678,0.70710678),vec2f(-1.0,0.0),vec2f(-0.70710678,-0.70710678),vec2f(0.0,-1.0),vec2f(0.70710678,-0.70710678));
+// Whole blocks. A block is rock when its middle lies under the authored surface and air when it lies over it: one answer for the whole block
+// (graded while the middle is within 4 units of the surface), so the faces between a rock block and an air block become the rock's skin.
+// The surface is read at the middle, or 40 px toward it for a longer block, which the cached surface around a piece covers (sculpt-volume.js).
+fn voxelBlockIn(p:vec3f,cell:vec3f,size:f32)->f32 {
+    let m=voxelBlockMiddle(cell,size);let d=m.xy-p.xy;
+    return clamp((m.z-voxelAuthored(p.xy+d*min(1.0,40.0/max(length(d),.001))).x)/4.0,-1.0,1.0);
+}
+// x: -1 inside a whole rock block to 1 inside a whole air block, y: how whole the block is (0 to 1). The amount is the share of blocks that are
+// whole: each block has its own place in the control's travel and becomes whole over a quarter of it. The two nearest blocks meet over 2 px.
+fn voxelWhole(p:vec3f,r:vec3f,edge:f32,size:f32,amount:f32)->vec2f {
+    let pair=voxelBlockPair(r,size);
+    let a=clamp((amount-voxelHash(pair.near+vec3f(5,23,47))*.75)*4.0,0.0,1.0);let b=clamp((amount-voxelHash(pair.next+vec3f(5,23,47))*.75)*4.0,0.0,1.0);
+    let here=vec2f(voxelBlockIn(p,pair.near,size)*a,a);let there=vec2f(voxelBlockIn(p,pair.next,size)*b,b);
+    return here+(there-here)*.5*(1.0-smoothstep(0.0,2.0,edge));
+}
 fn voxelDensity(p:vec3f)->f32 {
     let source=voxelAuthored(p.xy);let guide=voxelGuide(p.xy);let nz=sqrt(max(.000225,1.0-dot(guide.xy,guide.xy)));let n=normalize(vec3f(guide.xy,nz));
     let d=(p.z-source.x)*min(max(source.w,.015),n.z);
-    if(abs(d)>40.0||u.rockFace<=0.0){return d;}
+    let whole=u.faceWhole>0.0||u.faceWholeLarge>0.0;
+    if((abs(d)>40.0&&!whole)||u.rockFace<=0.0){return d;}
     let slope=length(n.xy)/max(n.z,.015);let route=routeProtection(p.xy);
     let painted=voxelPaintRock(p.xy);let rim=rimRockAt(p.xy);
     let face=max(rockFaceGate(slope,painted,route),rimRelief(rim,route));
@@ -209,7 +226,25 @@ fn voxelDensity(p:vec3f)->f32 {
     let structure=(faces+mass+pits*detail+grit*detail-spall-release+inclusion-u.faceJoint*joint*3.0-runnel*detail-runoff+bed+u.faceExtrude*6.0*(.65+.35*c.tone))*face+soil*(bed*3.0+mass*1.5)+lamina*(face+soil*3.0);
     let offset=32.0*tanh(u.rockFace*.5*voxelRelief(p.xy,slope)*structure/32.0)*heightGate;
     let q=p-n*offset;let moved=voxelAuthored(q.xy);
-    return (q.z-moved.x)*min(max(moved.w,.015),n.z);
+    let draped=(q.z-moved.x)*min(max(moved.w,.015),n.z);
+    if(!whole){return draped;}
+    var blocks=vec2f(0);
+    if(u.faceWhole>0.0){blocks+=voxelWhole(p,r,c.edge,max(4.0,u.faceBlockSize),u.faceWhole);}
+    if(u.faceWholeLarge>0.0){blocks+=voxelWhole(p,r,broad.edge,max(24.0,u.faceBlockSize*2.5),u.faceWholeLarge);}
+    // Where the blocks may stand is cut from smooth things only (the authored surface around the voxel), never from the guide: a cut that
+    // followed the guide's per-voxel normal was a comb of one-pixel lines. behind and before are the highest and lowest surface 12 px around.
+    // Rock does not stand above the land behind a face, and the ground before it is not dug out: the blocks live between the two, with 4 units'
+    // grace, and where the two differ enough to be a rock face by the same gate as the draped rock (its slope read across those 24 px).
+    var behind=source.x;var before=source.x;
+    for(var k=0;k<8;k++){let h=voxelAuthored(p.xy+VOXEL_RING[k]*12.0).x;behind=max(behind,h);before=min(before,h);}
+    let between=(1.0-smoothstep(behind,behind+4.0,p.z))*smoothstep(before-4.0,before,p.z);
+    let rock=max(rockFaceGate((behind-before)/24.0,painted,route),rimRelief(rim,route));
+    // A guard: the blocks keep inside the bricks voxelClassify reserves for this column, its surface's range (guide.zw) and an apron that grows
+    // with the slope to 40 units, less 8 for the shadow, normal and wear taps.
+    let apron=40.0*smoothstep(.1,.45,length(guide.xy));
+    let room=smoothstep(8.0,16.0,apron)*(1.0-smoothstep(guide.w+apron-16.0,guide.w+apron-8.0,p.z))*smoothstep(guide.z-apron+8.0,guide.z-apron+16.0,p.z);
+    let share=.8*rock*heightGate*room*between;
+    return draped*(1.0-share*min(blocks.y,1.0))+8.0*blocks.x*share;
 }
 @compute @workgroup_size(4,8,8)
 fn voxelBuild(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) local:vec3u){

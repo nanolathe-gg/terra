@@ -77,3 +77,15 @@ test('fracture hierarchy and clustering have effective parents and saved ranges'
  assert.throws(()=>copyRockSettings({faceContinuity:2}));
  assert.throws(()=>copyRockSettings({faceJointWidth:4}));
 });
+
+test('whole blocks and block regularity are saved rock settings with effective parents',async()=>{
+ const {worldControlRequirement:reason}=await import('../sculpt-control-schema.js');
+ for(const key of ['faceWhole','faceWholeLarge','faceRegular']){
+  assert.ok(ROCK_KEYS.includes(key));
+  assert.ok(reason(key,{rockFace:0,faceTone:0}));
+  assert.equal(reason(key,{rockFace:2}),'');
+  assert.throws(()=>copyRockSettings({[key]:1.5}));
+ }
+ assert.equal(reason('faceRegular',{rockFace:0,faceTone:.2}),'');   // it moves the blocks' colors too, as Joint spacing does
+ for(const preset of Object.values(ROCK_PRESETS))for(const key of ['faceWhole','faceWholeLarge','faceRegular'])assert.ok(preset.knobs[key]>=0&&preset.knobs[key]<=1);
+});

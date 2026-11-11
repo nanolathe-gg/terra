@@ -230,6 +230,9 @@ struct Uniforms {
     faceSecondary: f32,
     faceContinuity: f32,
     faceDetailPatch: f32,
+    faceWhole: f32, // Whole blocks
+    faceWholeLarge: f32, // Whole large blocks
+    faceRegular: f32, // Block regularity
     faceExtrude: f32, // Extrusion bias: inset to projecting
     faceLamina: f32, // Fine layer relief
     faceLaminaSize: f32, // Fine layer spacing (height)
@@ -857,17 +860,47 @@ fn voxelRockSpace(p:vec3f)->vec3f {
     return vec3f(x,y,p.z+columnOffset(p.xy)+voxelFold(p));
 }
 struct VoxelRock {face:f32,edge:f32,tone:f32}
-fn voxelBlocks(r:vec3f,size:f32)->VoxelRock {
+fn voxelBlockAxes(size:f32)->vec3f{return vec3f(size*u.faceStretch,size,max(2.0,u.faceBed*1.5)*u.faceBlockHeight*mix(1.0,size/max(4.0,u.faceBlockSize),u.faceScaleVary));}
+// A point of rock space in the lattice of blocks: a grid of the blocks' axes, tilted with the joints and bent by noise.
+// Block regularity straightens the bends and (voxelBlockSeed) draws the blocks' middles onto the grid: 0 scattered, 1 a grid of boxes.
+fn voxelLattice(r:vec3f,size:f32)->vec3f {
     let tilted=vec3f(r.x-r.z*tan(radians(u.faceJointTilt)),r.y,r.z);
     let warp=vec3f(voxelNoise(r/37.0),voxelNoise((r+53.0)/43.0),voxelNoise((r-21.0)/47.0))-0.5;
-    let axes=vec3f(size*u.faceStretch,size,max(2.0,u.faceBed*1.5)*u.faceBlockHeight*mix(1.0,size/max(4.0,u.faceBlockSize),u.faceScaleVary));
     // Bounded displacement varies spacing without multiplying absolute world
     // coordinates: the same rock scale remains useful far from the origin.
     let variation=(voxelNoise(tilted/(size*3.7))-.5)*size*u.faceScaleVary*2.5;
-    let q=(tilted+warp*size*mix(.28,.12,u.faceScaleVary)+vec3f(variation,-variation*.7,variation*.5))/axes;
+    return (tilted+warp*size*mix(.28,.12,u.faceScaleVary)*(1.0-u.faceRegular)+vec3f(variation,-variation*.7,variation*.5))/voxelBlockAxes(size);
+}
+fn voxelBlockSeed(cell:vec3f)->vec3f{return cell+(.12+.38*u.faceRegular)+voxelRandom(cell)*(.76*(1.0-u.faceRegular));}
+// The cells of the two blocks nearest a point (voxelBlocks finds the same two), for a question asked of a whole block: voxelBlockMiddle.
+struct VoxelBlockPair {near:vec3f,next:vec3f}
+fn voxelBlockPair(r:vec3f,size:f32)->VoxelBlockPair {
+    let q=voxelLattice(r,size);let base=floor(q);var d1=1e8;var d2=1e8;var near=vec3f(0);var next=vec3f(0);
+    for(var z=-1;z<=1;z++){for(var y=-1;y<=1;y++){for(var x=-1;x<=1;x++){
+        let c=base+vec3f(f32(x),f32(y),f32(z));let v=voxelBlockSeed(c)-q;let d=dot(v,v);
+        if(d<d1){d2=d1;next=near;d1=d;near=c;}else if(d<d2){d2=d;next=c;}
+    }}}
+    return VoxelBlockPair(near,next);
+}
+// A block's middle in the world, from its cell alone, so that every voxel of a block agrees on it. The lattice is bent by noise read at the
+// voxel; reading that noise at the middle instead, twice over, lands within a fraction of a block of the true middle.
+fn voxelBlockMiddle(cell:vec3f,size:f32)->vec3f {
+    let home=voxelBlockSeed(cell)*voxelBlockAxes(size);
+    let lean=tan(radians(u.faceJointTilt));var t=home;
+    for(var i=0;i<2;i++){
+        let r=vec3f(t.x+t.z*lean,t.y,t.z);
+        let warp=vec3f(voxelNoise(r/37.0),voxelNoise((r+53.0)/43.0),voxelNoise((r-21.0)/47.0))-0.5;
+        let variation=(voxelNoise(t/(size*3.7))-.5)*size*u.faceScaleVary*2.5;
+        t=home-warp*size*mix(.28,.12,u.faceScaleVary)*(1.0-u.faceRegular)-vec3f(variation,-variation*.7,variation*.5);
+    }
+    let a=radians(u.faceLean);let x=t.x+t.z*lean;let xy=vec2f(x*cos(a)-t.y*sin(a),x*sin(a)+t.y*cos(a));
+    return vec3f(xy,t.z-columnOffset(xy)-voxelFold(vec3f(xy,0)));
+}
+fn voxelBlocks(r:vec3f,size:f32)->VoxelRock {
+    let axes=voxelBlockAxes(size);let q=voxelLattice(r,size);
     let base=floor(q);var d1=1e8;var d2=1e8;var v1=vec3f(0);var v2=vec3f(0);var nearest=vec3f(0);
     for(var z=-1;z<=1;z++){for(var y=-1;y<=1;y++){for(var x=-1;x<=1;x++){
-        let c=base+vec3f(f32(x),f32(y),f32(z));let v=c+.12+voxelRandom(c)*.76-q;let d=dot(v,v);
+        let c=base+vec3f(f32(x),f32(y),f32(z));let v=voxelBlockSeed(c)-q;let d=dot(v,v);
         if(d<d1){d2=d1;v2=v1;d1=d;v1=v;nearest=c;}else if(d<d2){d2=d;v2=v;}
     }}}
     let tilt=voxelRandom(nearest+vec3f(11,31,73))-.5;

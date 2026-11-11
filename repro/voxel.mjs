@@ -18,6 +18,18 @@ try{
  assert.ok(s.renderer.stats().peakBudgetedBytes<=256*1048576,'tracked resources exceed the largest budget');
  assert.ok(s.renderer.stats().budgetedBytes<=96*1048576,'final resources exceed the current budget');
  assert.ok(s.renderer.stats().byKind.loose>=s.renderer.looseBuffer.size,'the resized stone and vegetation mask must count toward the budget');
+ // Whole blocks, small and large together: the solid must not depend on how the window was split, must fit the budget, a first small step
+ // of the amount must change the picture a little, and none must be the solid it was.
+ await knob(s,'faceWhole',1);await knob(s,'faceWholeLarge',1);
+ s.renderer.setBudgetMB(256);const wholeA=await renderWindow(s,rect),wholeWide={...s.renderer.stats().voxel};
+ s.renderer.setBudgetMB(96);const wholeB=await renderWindow(s,rect),wholeTight={...s.renderer.stats().voxel};
+ const wholePartition=different(wholeA,wholeB);assert.equal(wholePartition.pixels,0,JSON.stringify({wholePartition,wholeWide,wholeTight}));
+ assert.ok(s.renderer.stats().budgetedBytes<=96*1048576,'whole blocks exceed the current budget');
+ const whole=different(b,wholeB);assert.ok(whole.pixels>rect.width*rect.height*.05,'whole blocks must visibly shape clay');
+ await knob(s,'faceWholeLarge',0);await knob(s,'faceWhole',.02);const few=await renderWindow(s,rect);
+ const wholeStep=few.reduce((sum,v,i)=>sum+Math.abs(v-b[i]),0)/few.length;
+ assert.ok(wholeStep>0&&wholeStep<.5,'a small amount of whole blocks must change the picture a little: '+wholeStep);
+ await knob(s,'faceWhole',0);assert.deepEqual(await renderWindow(s,rect),b,'no whole blocks must be the solid it was');
  await knob(s,'rockFace',0);const flat=await renderWindow(s,rect),relief=different(b,flat);
  assert.ok(relief.pixels>rect.width*rect.height*.05,'rock depth must visibly shape clay');
  await knob(s,'rockFace',.0001);const nearZero=await renderWindow(s,rect);
@@ -25,7 +37,7 @@ try{
  assert.ok(continuity<.1,'zero depth must be the continuous limit of the same solid');
  assert.deepEqual(await windowHeights(s,{samples:64,step:8}),h,'art voxels must preserve exported gameplay heights');
  assert.deepEqual(s.errors,[]);
- console.log(JSON.stringify({repeatPixels:0,partition,relief,continuity,wide,tight,gameplayHeightChanges:0,memory:s.renderer.stats().budgetedBytes}));
+ console.log(JSON.stringify({repeatPixels:0,partition,relief,continuity,wide,tight,whole,wholePartition,wholeStep,wholeWide,wholeTight,gameplayHeightChanges:0,memory:s.renderer.stats().budgetedBytes}));
 }finally{s.dispose();}
 
 // Painted rock on a level plain must acquire actual relief, not just a color.
