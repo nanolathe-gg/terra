@@ -1762,7 +1762,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             // The filtered code blends a lit crack wall (above 1) or a dark line (below 0) with its neighbours into the cover's range: only
             // a texel that holds cover is rock, or every crack wall drew a rock-coloured outline on the grass.
             let held = bakedFieldsNearest(p).b;
-            material = mix(material, rock * 1.08, select(max(coverOrCrack, 0.0), 0.0, held > 1.0 || held < 0.0));
+            // A stone lying in a cliff's debris has the color of the bed it fell from, as the debris around it has (sourceColor: the
+            // beds' colors as far as the faces show them, Strata's coverage and strength); a stone elsewhere is the world's rock.
+            material = mix(material, mix(rock, sourceColor, clamp(accumulated.y * 2.0, 0.0, 1.0)) * 1.08, select(max(coverOrCrack, 0.0), 0.0, held > 1.0 || held < 0.0));
         }
         // A crack's floor is in shadow: darken what is there, so a crack in
         // grass stays green-black and one in rock grey-black. The walls are
