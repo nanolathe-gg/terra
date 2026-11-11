@@ -2762,6 +2762,16 @@ branch, not landed].**
   pixels differ, and 3 and 3 with sand on and no drifts, so the drifts add
   none. Not rerun since the last five code commits: hover previews, export
   bytes, draw time; no export has counted tiles with patches on.
+- *Before landing [measured, 2026-11-10; the owner: "All of these look
+  great. Land it and restart on 8801"].* `repro/check.sh land`, export
+  bytes and the rock panel check pass; four hover previews regenerate
+  changed. `repro/perf.mjs map16`, branch against main, two runs each
+  after a warm-up: modern Green (whole blocks at 0.85) final on load 2314
+  and 2247 ms against 2250 and 2178, 42.7 and 40.8 chunk paints a second
+  while dragging against 47.1 and 47.2, final after release 1790 and 1940
+  ms against 1666 and 1641; classic Green 2763 and 2732 against 2760 and
+  2765, 54.4 and 54.3 against 56.0 and 55.6, 2418 and 2400 against 2332
+  and 2360.
 - *Checks.* `repro/check.sh land` passes on the branch with all of this:
   the three modern Green scenes move (21.5, 50.0, 23.6%), and
   archipelago-3, crystal-2 and desert-1 differ from main in a few pixels
