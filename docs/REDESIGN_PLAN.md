@@ -2882,6 +2882,41 @@ same, so they are coherent and realistic."
   land pipeline's shaded color, water is absorption by depth. Rule 7
   allows no switch, so it removes options and moves every water world.
 
+**Stage 2, one bed model [built on `realism/one-bed`, 2026-11-10; not landed].**
+The owner agreed to remove the noise water, the cracked bed, the lit bed
+bumps, the bed dots and the bed grain.
+
+- *Built.* The bed under water is always the lit bed: `bedLit`, the stroke
+  option Shallow water look (`waterBed`, mask planes 11 and 13, the bake's
+  cracked-bed crack cut), `crackedStep`, `shoalBump`, `shoalBumpPx`,
+  `bedDots`, `bedDotCell` and `shoalGrain` are gone from the shader,
+  uniforms, knobs, schema, scene fields, UI, gpu planes, `sculpt.py`, scene
+  JSON and tests. `bedRelief` is the one control for the bed's lumps: three
+  scales (9, 19, 41 px), added after the silt burial, defaulting to 1 for every
+  world (Red 2.2, Green 1.5, Archipelago 2). Under a hard step the tint
+  deepens toward the deep colour with depth (a constant, 30% at the step).
+- *Found.* Lumps never reached Red's lake interior: `surfaceHeight` returned
+  the bare height below -12, so the solid the sun lights had no relief there.
+  The draw now reads the baked relief at any depth. The tint and the step
+  read the authored bed depth, so art lumps do not move the water's colour.
+- *Soft ground [measured by looking].* The land pipeline's colour below the
+  sea is the world's cover: grass and moss on Green and modern Green, with
+  grey rock flecks; sand with a dark grey mottle on Archipelago. Using it
+  would put grass under lakes, so the soft bed stays the world's bare ground
+  (`levelGround`) under the pipeline's own shading (sun, cavity, cast shadow),
+  and the voxel rock keeps the pipeline's colour (`rockBedShare`). No change.
+- *Measured.* Heights of all 34 scenes byte-identical to the base. Scenes
+  moved (of the quick tier): see the commit messages; the largest are
+  crystal-2 24.5%, red-3 22.3%, red-2 15.1%, zhon 10 to 14%. Land tier
+  passes. Tiles: green-4 2,325 (2,325 before), lava-8 14,498 (14,442), red-16
+  50,166 (50,094). Bed lumps over 5% of the shallows class: Red passes (2.2 to
+  1 moves 12.8, 8.3, 2.7%; 2.2 to 0 moves 38.3, 23.8, 12.4%); Green and
+  Archipelago stay under (under 1%): their bed light is damped by
+  `bedContrast` .45 and `shadeDepth` .3.
+- *Left alone.* The step and its outline, `bedFlat`, the tint controls, the
+  waterline, foam, the Shore option, Rock at shores. `crackedStep` went
+  because only the cracked bed read it.
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
