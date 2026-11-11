@@ -2704,7 +2704,15 @@ Claude on branch `realism/whole-blocks`, not landed].**
   0.6 with 0.45, gneiss 0.5 small and 0.5 large with 0.3, breccia 1. Shale,
   schist and conglomerate stay at 0: slabs 2 to 3 units thick read as
   texture, not planes.
-- *Open.* Voxel steps 2 and 4 not looked at. Fine relief (pits, grit,
+- *Checked after the build [measured].* The realism report on
+  green-modern-1 to 3 is the same before and after (heights identical).
+  With Whole blocks at 1, Block regularity 0 to 0.55 moves 43.7% of a
+  granite fixture's clay pixels. `repro/zoom.mjs` on green-modern-2 fails
+  its d4 check on main too (26 pixels over a limit of 16; 30 on the
+  branch). The first `repro/perf.mjs` run against a fresh server measures
+  nothing on either build. On a modern Green hill at 0.85 grass still
+  covers the mound, which is lumpier with darker pockets [by eye].
+- *Open.* A zoomed-out view (voxel steps 2 and 4) not looked at. Fine relief (pits, grit,
   joints) does not show on a block's faces, only color does. Small and
   large together leave the draped face where the two disagree. Faint
   banding on some slanted faces at 3x. On a hill the blocks make a tor,
