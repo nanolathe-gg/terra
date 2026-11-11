@@ -2855,6 +2855,25 @@ same, so they are coherent and realistic."
 - *Limits.* The reach stops at 96 px (bake margin 180); the rock is whole
   for about 60 px each side. Debris on Red takes the world's sand color and
   reads olive; the recipe sheds none.
+- *The owner's answers [2026-11-10] and what followed.* "Land it, but we
+  need controls for the landform tool to select between e.g. rough open
+  shores and inland lakes"; "Classic red should adopt it, but make sure it
+  has the inner lake look vs the outer cracks look"; "we should have one
+  bed model with proper lighting in all biomes, we just need to figure out
+  how to represent the red planet lake bed". Built: a water stroke's Shore
+  choice (World default or Soft bank; Soft bank also keeps that water's
+  banks soil, not rock face); Red itself takes the recipe and the two
+  controls at 96, its Shallow tool starts at Soft bank, and the modern Red
+  variant is gone. Before landing [measured]: land tier passes with red-1,
+  red-2 and red-3 moved 11.2, 10.0 and 27.1%; export bytes pass, the
+  red-16 map at 50,094 distinct tiles (49,406 before) and 84.8 s to
+  export (67.5); hover previews regenerate unchanged. Draw time on red-3
+  (`repro/perf.mjs map16`, one clean pair, the other runs disturbed):
+  2360 ms to the final picture on load against 1530, 31.2 chunk paints a
+  second while dragging against 56.9 (39.7 on a second run), 2109 ms after
+  release against 1220: Red now runs rock weather and a recipe's relief,
+  as modern Green does. Not run: the stroke option's sweep row, the
+  zoomed-out view, a budget-split case in `repro/voxel.mjs`.
 - *Stage 2, one bed model [proposed by Claude, not built].* Soft ground
   under water still uses its own formula, and noise water, the cracked
   bed, bed bumps, dots, grain and notches are separate cases. Today only
