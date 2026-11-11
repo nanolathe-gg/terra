@@ -2605,7 +2605,13 @@ it drew rings round small steep spots once the lattice no longer hid it.
   Green and on Green's own preset (two alternating pairs, before the
   fade). Land tier and `export-bytes` pass.
 - *Not done.* The comb and the staircase remain with the reference search
-  too: another cause, not yet found. On Ice a few small soft marks remain
+  too: another cause, not yet found. Tried on schist and breccia, one
+  render each **[by eye and the share]**: reading the guide between cells
+  changes nothing (8.15% both); a graded close shadow changes nothing;
+  Shadow and crevice depth 0 removes some dark specks (6.60%); a solid
+  built on the heights without the baked ground grain is 3.61%, so much
+  of what the share counts on Green is that grain carried into the
+  solid. On Ice a few small soft marks remain
   where the rings were. Voxel steps of 2 and 4 px (the previews) run
   without error but were not looked at. The share is a rough measure: it
   also counts sharp real edges, so it fell by a quarter while the picture
