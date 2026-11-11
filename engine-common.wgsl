@@ -234,6 +234,8 @@ struct Uniforms {
     faceWholeLarge: f32, // Whole large blocks
     faceRegular: f32, // Block regularity
     sandLee: f32, // Wind drifts: sand in the lee of rises
+    groundPatch: f32, // Ground patches: tone variation on level ground
+    groundPatchSize: f32, // Patch size (px)
     faceExtrude: f32, // Extrusion bias: inset to projecting
     faceLamina: f32, // Fine layer relief
     faceLaminaSize: f32, // Fine layer spacing (height)

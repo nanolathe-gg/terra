@@ -1709,6 +1709,21 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         material = mix(material, bedColour, max(bedCoverage * u.strataContrast * onRaised, u.strata * painted.x));
         if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)); }
     }
+    // Ground patches: level ground is not one tone. One gray field (two sizes of noise) is read through a ramp of five flat steps: damp ground
+    // up to a fifth darker, plain ground as it is, dusty ground paler toward the world's weathered sand. The steps' edges are frayed over some
+    // 30 px by noise that repeats with the ground's pool, and each tone is mottled a little by the same kind of noise, so a patch has no
+    // outline. Flat steps and pooled noise, not a gradient, so the plain's tiles stay few (rule 11's 65,536). Color only; the heights stay flat.
+    if (u.groundPatch > 0.0) {
+        let level = (1.0 - smoothstep(0.05, 0.22, slope)) * (1.0 - exposed) * (1.0 - route) * smoothstep(u.sea + 1.0, u.sea + 3.0, h);
+        if (level > 0.0) {
+            let size = max(40.0, u.groundPatchSize);
+            let field = 0.7 * valueNoise(p / size + vec2f(31.0, 7.0)) + 0.3 * valueNoise(p / (size * 0.41) + vec2f(5.0, 53.0))
+                + 0.16 * poolNoise(p, 24.0, 9.0) + 0.12 * poolNoise(p, 7.0, 4.0) + 0.1 * poolNoise(p, 2.0, 6.0);
+            let damp = 0.5 * (step(field, -0.2) + step(field, -0.45)); let dust = 0.5 * (step(0.2, field) + step(0.45, field));
+            let tone = material * (1.0 - 0.2 * damp) * (1.0 + 0.05 * poolNoise(p, 40.0, 2.0));
+            material = mix(material, mix(tone, mix(tone, sandWeathered(), 0.3) * 1.06, dust), u.groundPatch * level);
+        }
+    }
     material=rockSkinColor(material,grain,skin*exposed);
     // The source's mineral fines bury grass between stones. Coarse fragments
     // retain rock albedo; fine material inherits this world's existing sand.
