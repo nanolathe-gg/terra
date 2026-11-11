@@ -662,7 +662,9 @@ export class TerrainRenderer {
   sunVector(light = 'original') {
     const tilt = this.variant.has('sunTilt') ? Number(this.variant.get('sunTilt')) : 1;
     const x = light === 'alternate' ? 0.72 : -0.72, y = 0.38 * tilt;
-    const height = this.variant.has('sunHeight') ? Math.min(89, Math.max(1, Number(this.variant.get('sunHeight')))) : null;
+    // Held to the control's range (20 to 75): a lower sun's shadows need a height grid apron (sculpt-chunk-renderer.js reaches) that pushes even
+    // a 32 px chunk past a 128 MB budget at 15 degrees.
+    const height = this.variant.has('sunHeight') ? Math.min(75, Math.max(20, Number(this.variant.get('sunHeight')))) : null;
     return [x, y, height === null ? 0.82 : Math.hypot(x, y) * Math.tan(height * Math.PI / 180)];
   }
 

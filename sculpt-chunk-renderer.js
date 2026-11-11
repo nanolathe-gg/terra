@@ -75,9 +75,9 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const n=(k,f)=>this.number(k,f);
     // H1: the close shadow march (6 px) and the cavity rings (4 px) plus the gradient's 1.4 sit inside the far taps' reach.
     // The shadow march (engine-frag.wgsl visibility) reads the surface out to its twelfth sample (12^2 x 1.4 + 2 px) and, as the sun goes down,
-    // the authored height further out, 1.4 i^2 + 2 px, while a sample tests a height under 240 above the pixel: those far samples need only
-    // the height grid (`far`, which widens the grid apron, not the fields'). At every world's own sun there are none: far is the twelfth.
-    const sun=this.sunVector(),rise=sun[2]/Math.hypot(sun[0],sun[1]);let far=12;while(far<40&&((far+1)**2*1.4+2)*rise<240+1e-3)far++;
+    // the authored height from 238.6 px on while a sample tests a height under 240 above the pixel: those far samples need only the height
+    // grid (`far` widens the grid's apron, not the fields'). At every world's own sun there are none, and far is the twelfth sample's reach.
+    const sun=this.sunVector(),rise=sun[2]/Math.hypot(sun[0],sun[1]),far=238.6*rise<240+1e-3?240/rise:12**2*1.4+2;
     const shadow=12**2*1.4+2,draw=Math.max(shadow,128,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?4+1.4:0,n('crystalShallow',0)>0?48:0);   // H20: the shallow mosaic's fringe taps the crystal field 48 px out
     // P16: the largest class drawn has radius min(16, 3.3 x the median); a stone reaches 1.6 radii from its candidate (1.41 of a class radius at most) and a larger stone that suppresses it a little further, and the mask reads the heights 14 px out for a cliff's foot plus its gradient (5).
     const stones=n('boulders',0)>0?3.6*32+90:3.6*Math.min(16,3.3*n('looseSize',6))+24;   // Boulders: a 32 px class, and the mask looks for the wall 80 px out
@@ -98,7 +98,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
     const extra=relief+blocks+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(n('looseSize',6))+Math.abs(n('rippleHeight',1.4))+(n('debrisAmount',0)>0?1.5*n('debrisDepth',4):0);
     const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4);
-    return {draw,bake,direct,far:far**2*1.4+2,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};
+    return {draw,bake,direct,far,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};
   }
   requiredRegion(request) {
     const size=request.worldSize??this.config.worldSize??this.size,grid=request.worldGrid??this.config.worldGrid??this.grid,spacing=(size-1)/(grid-1);

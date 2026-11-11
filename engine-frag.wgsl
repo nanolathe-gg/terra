@@ -61,13 +61,15 @@ fn visibility(p: vec2f, h: f32) -> f32 {
         let blocker = surfaceHeight(q) - h - d * elevation;
         shadow = max(shadow, smoothstep(-2.0, 4.0, blocker));
     }
-    // A lower sun casts longer shadows. The march goes on at the same spacing while a sample tests a height under 240 above the pixel (a
-    // wall's shadow is its height over the tangent of the sun's height), reading the authored height there: the relief's few units do not
-    // move a shadow cast from that far. Each of these samples fades in as the height it tests falls from 240 to 200, so the shadow grows
-    // smoothly as Sun height goes down. At each world's own sun the first tests above 240 (Green's 240.3), and the march is the one it was.
+    // A lower sun casts longer shadows (a wall's is its height over the tangent of the sun's height). Past the twelfth sample the march goes
+    // on from 238.6 px (where a thirteenth would be) in steps that test 6 units higher each (the smoothstep's width, so a ragged crest leaves
+    // no gaps in its shadow), while a sample tests a height under 240 above the pixel, reading the authored height there: the relief's few
+    // units do not move a shadow cast from that far. Each fades in as the height it tests falls from 240 to 200, so the shadow grows
+    // smoothly as Sun height goes down. At every world's own sun the first tests above 240 (Green's 240.3): the march is the one it was.
     // The chunk renderer's grid apron covers these samples (sculpt-chunk-renderer.js reaches, `far`).
-    for (var i = 13; i <= 40; i++) {
-        let d = f32(i * i) * 1.4 + 2.0;
+    let farStep = 6.0 / elevation;
+    for (var k = 0; k < 40; k++) {
+        let d = 238.6 + f32(k) * farStep;
         let fade = clamp((240.0 - d * elevation) / 40.0, 0.0, 1.0);
         if (fade <= 0.0) { break; }
         let q = p + toward * d;
