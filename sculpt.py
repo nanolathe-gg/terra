@@ -117,6 +117,8 @@ KNOB_DEFAULTS.update(crystalCraterWeb=0, crystalCraterWebPx=14, crystalCraterWob
 KNOB_DEFAULTS.update(looseKnoll=0)
 # Boulders: blocks fallen from a wall and lying under it (0: none).
 KNOB_DEFAULTS.update(boulders=0)
+# Soil where the plant cover thins against rock (0: grass meets rock, and off the faces the two blend).
+KNOB_DEFAULTS.update(soilRim=0)
 # Round 3 (Crystal): a bold web of long dark gouges across raised crystal formations (0: none).
 KNOB_DEFAULTS.update(gougeWeb=0)
 # G7 (Crystal): finer shore slabs and fainter seams (the defaults are the earlier output).

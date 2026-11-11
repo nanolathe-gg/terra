@@ -998,6 +998,7 @@ export class TerrainRenderer {
     set('uWorms', number('worms', 0));
     set('uLooseSupply', number('looseSupply', 0));
     set('uBoulders', number('boulders', 0));
+    set('uSoilRim', number('soilRim', 0));
     set('uLooseSize', number('looseSize', 6));
     set('uPlantsOn', groundCoverOn(this.config.material?.groundCover, this.variant) && this.config.material.groundCover.plants ? 1 : 0);
     set('uStoneRound', number('stoneRound',this.config.material?.stoneRound ?? 0));

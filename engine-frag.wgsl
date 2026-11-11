@@ -1663,6 +1663,20 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // H3 item 4: one placement function (landPlace); its thresholds are rows of materials/green.json.
     rock=mix(rock,rock*.42,u.runoffStain*clamp(accumulated.x,0.0,1.0));
     var exposed = place.exposed;
+    // Soil where the cover thins (u.soilRim). Off the faces the rock's share stops being a blend of grass and rock: rock shows where the share
+    // beats a threshold that the rock's own patches and a 4 px grain move, so its edge is a ragged line. Just under that threshold, and just
+    // under a face's soil edge, the cover is too thin for plants: a band of bare soil, which tufts break up toward the grass.
+    var soil = 0.0;
+    if (u.soilRim > 0.0) {
+        let line = 0.5 + (patches - 0.5) * 0.4 + (voxelNoise(hit / vec3f(4.0, 4.0, 3.0)) - 0.5) * 0.2;
+        let bared = smoothstep(line - 0.08, line + 0.08, place.exposed);
+        let rimGround = smoothstep(line - 0.4, line - 0.1, place.exposed) * smoothstep(0.05, 0.2, place.exposed) * (1.0 - bared);
+        let rimFace = smoothstep(soilEdge - 0.45, soilEdge - 0.1, share) * smoothstep(0.05, 0.2, share) * (1.0 - faceRock);
+        exposed = mix(exposed, bared, u.soilRim);
+        let thin = u.soilRim * mix(rimGround, rimFace, faceGate) * (1.0 - route) * smoothstep(u.sea + 1.0, u.sea + 3.0, h);
+        let tuft = terrainNoise(p * 5.0 + vec2f(13.0, 47.0)).r;
+        soil = smoothstep(tuft * 0.7 - 0.1, tuft * 0.7 + 0.15, thin);
+    }
     exposed = mix(exposed, faceRock, faceGate);   // on the rock face the face's share decides
     let lowBank = place.lowBank;
     let sandBar = sandBarAt(p);
@@ -1683,6 +1697,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (surfX < 900.0) { nearWater = max(nearWater, surfWet(surfX, surfQ, p, surfE)); }
     }
     var material = mix(grass, rock, exposed);
+    if (soil > 0.0) {
+        // Bare soil is the world's weathered rock, darker and browner, with a grain of its own.
+        let earth = sandWeathered() * vec3f(0.58, 0.5, 0.42) * (0.82 + 0.36 * terrainNoise(p * 3.0 + vec2f(7.0, 83.0)).g);
+        material = mix(mix(grass, earth, soil), rock, exposed);
+    }
     if (u.beach != 0 && h > u.sea - 1.0) {
         // Beach sand within reach of the water (baked), or failing that a low band above the waterline; its inland edge is ragged and breaks into grains.
         let speck = terrainNoise(p * 6.0 + vec2f(61.0, 3.0)).b;
