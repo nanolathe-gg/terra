@@ -2820,6 +2820,49 @@ on waterfall and flow grow into various areas."
   (rock weather routes runoff only 64 px); the same edge for sand and for
   rock meeting grass, which still fade as before.
 
+**Rock at shores [built on `realism/shore-rock`, 2026-11-10; not landed].**
+The owner, of Red's cracked rock platforms running into shallow water:
+"this should just be the red planet look on coasts without the need for
+manual fissures, so we should make sure the world controls allow this. I
+really want one model for shores and shallow water, using voxels, lit the
+same, so they are coherent and realistic."
+
+- *What was already there [measured by rendering].* The solid supplies the
+  seabed (the ray drops straight down at the waterline), rock under water
+  shows its real shaded color through the tint, and the recipe's Joint
+  depth, Joint opening width and Secondary joints cut level painted rock
+  and carry on under water. The Fissure tool's network layout and the
+  per-stroke Cracked bed look also give the picture, by hand.
+- *What was missing.* Rock on a level shore without painting. Built: two
+  world controls, Rock at shores (px inland) and Rock shelf under water
+  (px out), a field in rock weather's rim texture that counts as painted
+  rock on both sides of the waterline; a tenth recipe, Jointed siltstone (a
+  tessellated pavement); and a modern Red variant that uses both.
+- *Measured.* 0 of 34 scenes change with the controls at 0; quick tier
+  passes. Modern against classic Red on a 512 px test shore: 26.0% of
+  pixels, heights byte-identical, 0 pixels differ across tile sizes 128,
+  256, 512. Sweep, pixels changed of 1,048,576: Rock at shores 56,178
+  (red-1), 10,628 (archipelago-1), 85,113 (green-1); Rock shelf 14,005,
+  116,642, 45,071: whole-picture shares, not rule 9's class share. Not
+  run: the land tier, export bytes and tile count, hover previews, draw
+  time, a budget-split case in `repro/voxel.mjs`, the zoomed-out view.
+- *By eye.* Blocks 40 to 50 px with dark open joints from the shore under
+  the shallows. Red's rock is darker than its ground, so the platform reads
+  darker than the retail look. Modern Red's cliffs take the recipe too and
+  come out darker and rougher. Red's own rock numbers at a face's full
+  relief dig ragged trenches on level ground (painted rock on classic Red
+  has the same fault).
+- *Limits.* The reach stops at 96 px (bake margin 180); the rock is whole
+  for about 60 px each side. Debris on Red takes the world's sand color and
+  reads olive; the recipe sheds none.
+- *Stage 2, one bed model [proposed by Claude, not built].* Soft ground
+  under water still uses its own formula, and noise water, the cracked
+  bed, bed bumps, dots, grain and notches are separate cases. Today only
+  Archipelago and Red light the bed at all (`bedLit` 1); every other
+  world's shallows are flat noise art. One model: the bed is always the
+  land pipeline's shaded color, water is absorption by depth. Rule 7
+  allows no switch, so it removes options and moves every water world.
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
