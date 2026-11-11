@@ -994,10 +994,11 @@ fn gullyWarpVaried(even: f32, x: f32, y: f32, wv: f32) -> f32 { return even + u.
 // and the upper 0.4 the hard bed, which takes up the rest and stands that much steeper. It runs after the Gullies, so a band keeps its level round
 // every spur and up every ravine, as a bed does. The bands' levels wave by a quarter of a pair along the wall, and each band thins out over some
 // stretches (more of them with Variation along the wall), so a ledge ends and the next steps out. Only the difference from the straight ramp is added:
-// at strength 0 nothing moves, nor does the foot, nor the section's own level top (q from 0.92 up), whatever the Gullies cut into it.
+// at strength 0 nothing moves, nor does the section's own level top (q from 0.92 up), whatever the Gullies cut into it. The bands fade out over the
+// section's foot (q under 0.25, as the Gullies do): on that gentle apron a hard bed is a thin ribbon of rock winding round the toe.
 fn hardBeds(value: f32, base: f32, own: f32, q: f32, lx: f32, ly: f32) -> f32 {
   let lift = (own - base) / max(q, 0.05);
-  let free = 1.0 - sm(0.92, 1.0, q);
+  let free = (1.0 - sm(0.92, 1.0, q)) * sm(0.0, 0.25, q);
   if (lift < 8.0 || free <= 0.0) { return value; }
   let g = clamp((value - base) / lift, 0.0, 1.0);
   let wave = 0.25 * (0.6 * vnoise(lx / 190.0, ly / 190.0, u.seed ^ 0x91b3u) + 0.4 * vnoise(lx / 61.0, ly / 61.0, u.seed ^ 0x4c7du));
