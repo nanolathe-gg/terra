@@ -960,6 +960,8 @@ export class TerrainRenderer {
     const table = this.uniform.get('rock'), m = table.members.get(member), at = table.offset + slot * table.stride + m.offset;
     return m.kind === 'i' ? this.uniformView.getInt32(at, true) : this.uniformView.getFloat32(at, true);
   }
+  // The largest of slot 0's number `own` (a knob's value) and the other slots' own settings of it: a reach over the rocks in use.
+  rockMax(key, own) { return Math.max(own, ...[...this.rocks.values()].map(r => Number(r.knobs?.[key])).filter(Number.isFinite)); }
   // Slots 1-15 as copies of slot 0 (the world's rock, as applyKnobs, bakeFields and setColumn set it) under their own numbers; the pool of every
   // slot's rock column; and the maxima the passes that gather from other points read (debrisAny, runoffAny, debrisReachMax).
   writeRocks() {
@@ -1004,12 +1006,12 @@ export class TerrainRenderer {
   // A fed chunk's painted flags are written into the uniform buffer by the GPU (ChunkTerrainRenderer.flagPass), so the CPU copy of uScatterOn
   // is stale there: the pass runs, and looseMain's own test of u.scatterOn leaves every cell empty where nothing is painted.
   encodeLooseMask(encoder) {
-    const supply = Math.max(this.uniformValue('uLooseSupply'),this.uniformValue('uDebrisAmount'),this.uniformValue('uBoulders')), painted = this.gpuFlags || this.uniformValue('uScatterOn'), plants = this.uniformValue('uPlantsOn') > 0;
+    const supply = Math.max(this.uniformValue('uLooseSupply'),this.uniformValue('uDebrisAny'),this.uniformValue('uBoulders')), painted = this.gpuFlags || this.uniformValue('uScatterOn'), plants = this.uniformValue('uPlantsOn') > 0;
     if (!(supply > 0) && !painted && !plants) return;
     const [x0, y0, w, h] = this.bakeWindow;
     // Card P31: a plant's candidate lies up to 23 px (a shrub's cell and jitter) from the pixels it covers, the mask reads heights 8 px past its cell, and the apron adds 15.
     // Boulders: the largest class has a 32 px radius.
-    const margin = Math.max(Math.ceil(3.6 * (this.uniformValue('uBoulders') > 0 ? 32 : Math.min(16, 3.3 * this.uniformValue('uLooseSize')))) + 4, plants ? PLANT_REACH : 0);
+    const margin = Math.max(Math.ceil(3.6 * (this.uniformValue('uBoulders') > 0 ? 32 : Math.min(16, 3.3 * Math.max(...this.rockSlots().map(k => this.rockValue(k, 'looseSize')))))) + 4, plants ? PLANT_REACH : 0);
     const ox = Math.floor((x0 - margin) / 4), oy = Math.floor((y0 - margin) / 4);
     const nx = Math.ceil((w + 2 * margin) / 4) + 2, ny = Math.ceil((h + 2 * margin) / 4) + 2;
     if (nx * ny * 32 > this.looseBuffer.size) {

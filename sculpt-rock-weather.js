@@ -27,7 +27,7 @@ export class RockWeather {
   clear(){for(const t of this.owned)this.renderer.release(t);this.owned=[];this.final=null;this.source=null;this.rim=null;this.key='';this.renderer.bindGroups={};}
   encode(encoder){
     const r=this.renderer,d=r.device;
-    if(r.uniformValue('uRunoff')<=0&&r.uniformValue('uDebrisAmount')<=0&&r.uniformValue('uRimReach')<=0&&r.uniformValue('uShoreRock')<=0&&r.uniformValue('uShoreShelf')<=0){if(this.final)this.clear();r.v('uRockWeatherGrid',[0,0,1,1]);return;}
+    if(r.uniformValue('uRunoffAny')<=0&&r.uniformValue('uDebrisAny')<=0&&r.uniformValue('uRimReach')<=0&&r.uniformValue('uShoreRock')<=0&&r.uniformValue('uShoreShelf')<=0){if(this.final)this.clear();r.v('uRockWeatherGrid',[0,0,1,1]);return;}
     const pipelines=r.rockPasses(this.pipelinesBy);   // this rockMask's passes, or a specialization miss that builds them
     const [x,y,w,h]=r.bakeWindow;
     const ox=Math.floor((x-HALO)/STEP)*STEP,oy=Math.floor((y-HALO)/STEP)*STEP;
@@ -41,7 +41,7 @@ export class RockWeather {
     const [terrain,a,b,final,source,provenance]=this.owned;
     pass('rockTerrain',this.empty,this.empty,terrain);pass('rockRain',terrain,this.empty,a);
     // The flow rounds carry runoff alone; with Runoff exposure at 0 every reader multiplies their result by 0, so they are not run.
-    if(r.uniformValue('uRunoff')>0)for(let i=0;i<ROUNDS;i++)pass('rockFlow',terrain,i%2?b:a,i%2?a:b);
+    if(r.uniformValue('uRunoffAny')>0)for(let i=0;i<ROUNDS;i++)pass('rockFlow',terrain,i%2?b:a,i%2?a:b);
     pass('rockDeposit',terrain,a,final,source,provenance,b);
   }
 }

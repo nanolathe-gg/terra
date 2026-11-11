@@ -72,13 +72,13 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   // function of the queried point, not walks through adjacent baked pixels.
   // Only height/mask/weather support extends the bake's field input apron.
   reaches(heightBounds=this.config.heightBounds??[-90,300]) {
-    const n=(k,f)=>this.number(k,f);
+    const n=(k,f)=>this.number(k,f),rock=(k,f)=>this.rockMax(k,n(k,f));   // rock: a recipe number's largest over the rocks in use
     // H1: the close shadow march (6 px) and the cavity rings (4 px) plus the gradient's 1.4 sit inside the far taps' reach.
     const shadow=12**2*1.4+2,draw=Math.max(shadow,128,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?4+1.4:0,n('crystalShallow',0)>0?48:0);   // H20: the shallow mosaic's fringe taps the crystal field 48 px out
     // P16: the largest class drawn has radius min(16, 3.3 x the median); a stone reaches 1.6 radii from its candidate (1.41 of a class radius at most) and a larger stone that suppresses it a little further, and the mask reads the heights 14 px out for a cliff's foot plus its gradient (5).
-    const stones=n('boulders',0)>0?3.6*32+90:3.6*Math.min(16,3.3*n('looseSize',6))+24;   // Boulders: a 32 px class, and the mask looks for the wall 80 px out
+    const stones=n('boulders',0)>0?3.6*32+90:3.6*Math.min(16,3.3*rock('looseSize',6))+24;   // Boulders: a 32 px class, and the mask looks for the wall 80 px out
     const beach=Math.max(this.config.layers.includes('beach')?(this.config.material?.beachWidth??120)*n('beachWidth',.6):0,n('apron',0))*1.35*1.15;
-    const bake=Math.max(19,stones,beach,n('runoff',0)>0||n('debrisAmount',0)>0||n('rimReach',0)>0||n('shoreRock',0)>0||n('shoreShelf',0)>0?180:0,groundCoverOn(this.config.material?.groundCover,this.variant)&&this.config.material.groundCover.plants?PLANT_REACH:0);
+    const bake=Math.max(19,stones,beach,rock('runoff',0)>0||rock('debrisAmount',0)>0||n('rimReach',0)>0||n('shoreRock',0)>0||n('shoreShelf',0)>0?180:0,groundCoverOn(this.config.material?.groundCover,this.variant)&&this.config.material.groundCover.plants?PLANT_REACH:0);
     // G3: the fringe's copies read the material field up to ringShift px from the pixel, and a few px more for each copy's gradient.
     const direct=Math.max(61,48*Math.max(.65,1.6*n('ringSpread',.65)),Math.abs(n('waterSoft',32)),41*Math.abs(n('ringVariation',.7)/.75),n('ringShift',0)>0?Math.abs(n('ringShift',0))+4:0);
     // A projection apron includes appearance displacement too. These are
@@ -92,7 +92,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const bands=columnRows(this.config.column,this.config.variant).bands[0]*Math.max(Math.abs(n('banding',0))*4,.8);
     // The bed's lumps (bedRelief) stay under the water plane, but the pictures are sensitive to this reach (Green's hills shade differently by about one unit of it), so it keeps counting them.
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
-    const extra=relief+blocks+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(n('looseSize',6))+Math.abs(n('rippleHeight',1.4))+(n('debrisAmount',0)>0?1.5*n('debrisDepth',4):0);
+    const extra=relief+blocks+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(rock('looseSize',6))+Math.abs(n('rippleHeight',1.4))+(rock('debrisAmount',0)>0?1.5*rock('debrisDepth',4):0);
     const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4);
     return {draw,bake,direct,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};
   }
@@ -128,9 +128,9 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const output=Math.ceil(width/rasterScale)*Math.ceil(height/rasterScale)*8+Math.ceil(width/scale)*Math.ceil(height/scale)*4;
     // The loose-stone / plant mask survives chunk reuse. Include its current
     // allocation and the largest next allocation before reserving voxel memory.
-    const margin=Math.max(Math.ceil(3.6*(this.number('boulders',0)>0?32:Math.min(16,3.3*this.number('looseSize',6))))+4,PLANT_REACH);
+    const margin=Math.max(Math.ceil(3.6*(this.number('boulders',0)>0?32:Math.min(16,3.3*this.rockMax('looseSize',this.number('looseSize',6)))))+4,PLANT_REACH);
     const loose=Math.max(this.looseBuffer?.size??16,(Math.ceil((region.fieldsWidth+2*fieldScale+2*margin)/4)+2)*(Math.ceil((region.fieldsHeight+2*fieldScale+2*margin)/4)+2)*32);
-    const rockWeather=this.number('runoff',0)>0||this.number('debrisAmount',0)>0||this.number('rimReach',0)>0||this.number('shoreRock',0)>0||this.number('shoreShelf',0)>0?rockWeatherBytes(region.fieldsWidth+2*fieldScale,region.fieldsHeight+2*fieldScale):0;
+    const rockWeather=this.rockMax('runoff',this.number('runoff',0))>0||this.rockMax('debrisAmount',this.number('debrisAmount',0))>0||this.number('rimReach',0)>0||this.number('shoreRock',0)>0||this.number('shoreShelf',0)>0?rockWeatherBytes(region.fieldsWidth+2*fieldScale,region.fieldsHeight+2*fieldScale):0;
     const voxel=Math.min(64*MB,this.budgetBytes*.35);
     return {field,input,output,loose,rockWeather,maskPlaneCount,maskLayers,voxel,workingBytes:field+input+output+loose+voxel+rockWeather,
       retainedBytes:this.fixedBytes,reservedBytes:this.reservedBytes,gpuBytes:this.fixedBytes+this.reservedBytes+field+input+output+loose+voxel+rockWeather,
