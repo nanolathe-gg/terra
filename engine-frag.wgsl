@@ -867,7 +867,7 @@ fn surfaceFresnel(f0:f32,cosine:f32)->f32{return f0+(1.0-f0)*pow(1.0-clamp(cosin
 fn rockSkinColor(color:vec3f,grain:vec3f,skin:vec2f)->vec3f {
     if(max(skin.x,skin.y)<=0.0){return color;}
     let fresh=color*(vec3f(1)+skin.x*(vec3f(.32)+(grain-1.0)*.65));
-    let crust=color*exp2(u.faceRindTone*1.6)*mix(vec3f(1),vec3f(1.3,.82,.49),u.faceRindWarmth);
+    let crust=color*exp2(u.rock[rs & rockMask].faceRindTone*1.6)*mix(vec3f(1),vec3f(1.3,.82,.49),u.rock[rs & rockMask].faceRindWarmth);
     return saturate(mix(fresh,crust,skin.y));
 }
 fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, exposed: f32,
@@ -887,7 +887,7 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     var rough = 0.0;
     var scale = 0.0;
     for (var i = 0; i < 5; i++) {
-        let m = u.shine[i];
+        let m = select(u.shine[i], u.rock[rs & rockMask].shineRock, i == 2);   // the rock row is the recipe's
         gloss += weight[i] * m.x;
         focus += weight[i] * m.x * m.y;
         rough += weight[i] * m.z;
@@ -901,9 +901,9 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     // Crust finish is independent of the fresh interior's existing rock gloss.
     // Wet films smooth its extra grain; the GGX water response below still wins.
     let rind=skin.y*rock;
-    focus*=mix(1.0,mix(3.5,.12,u.faceRindRough),rind)*(1.0+skin.x*rock*.8);
-    rough=mix(rough,rough*.3+.35*u.faceRindRough*(1.0-damp*.85),rind);
-    scale=mix(scale,max(1.0,u.faceGritSize),rind);
+    focus*=mix(1.0,mix(3.5,.12,u.rock[rs & rockMask].faceRindRough),rind)*(1.0+skin.x*rock*.8);
+    rough=mix(rough,rough*.3+.35*u.rock[rs & rockMask].faceRindRough*(1.0-damp*.85),rind);
+    scale=mix(scale,max(1.0,u.rock[rs & rockMask].faceGritSize),rind);
     // Card E6: the sheen and its grain only sit on raised ground and slopes (Moon's plain keeps its own
     // grain); shineGate 0 is every world's earlier shine.
     let reach = mix(1.0, landform, u.shineGate);
@@ -1489,22 +1489,22 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let bare=clamp(1.0-place.vegetation,0.0,1.0);
     let faceGate=rockFaceGate(slope/(1.0-.5*bare),painted.x,route)*(1.0-softBankAt(p));
     let rain=voxelRain(hit,normal);
-    let footing=u.faceGrass*rain*smoothstep(.6,.95,normal.z)*smoothstep(u.sea,u.sea+2.0,h);
+    let footing=u.rock[rs & rockMask].faceGrass*rain*smoothstep(.6,.95,normal.z)*smoothstep(u.sea,u.sea+2.0,h);
     let solidSlope=length(normal.xy)/max(normal.z,.1);
     let rockSlope=max(slope,solidSlope*.7*smoothstep(.12,.5,slope));
-    let rise=mix(smoothstep(u.rockFaceFrom,u.rockFaceFrom+1.3,rockSlope),smoothstep(.5*u.rockFaceFrom,.5*u.rockFaceFrom+.5,rockSlope),bare);
-    let share=max(clamp(u.faceRock*rise*place.exposure*(2.0-clamp(place.vegetation,0.0,2.0)),0.0,1.0),smoothstep(.15,.95,painted.x)*.9);
+    let rise=mix(smoothstep(u.rock[rs & rockMask].rockFaceFrom,u.rock[rs & rockMask].rockFaceFrom+1.3,rockSlope),smoothstep(.5*u.rock[rs & rockMask].rockFaceFrom,.5*u.rock[rs & rockMask].rockFaceFrom+.5,rockSlope),bare);
+    let share=max(clamp(u.rock[rs & rockMask].faceRock*rise*place.exposure*(2.0-clamp(place.vegetation,0.0,2.0)),0.0,1.0),smoothstep(.15,.95,painted.x)*.9);
     let patches=voxelNoise(hit/vec3f(13,13,8));
     // Coverage is patchy soil on rain-exposed ledges, rather than a gray/green
     // mixture over the whole wall. The threshold follows actual 3D footing.
     let soilEdge=.32+(patches-.5)*.8+footing*.95;
     let faceRock=smoothstep(soilEdge-.08,soilEdge+.08,share);
     let localSun=voxelShadow(hit,normal);let localSky=voxelOcclusion(hit,normal);
-    let faceLight=u.faceShade*faceGate*clamp(u.rockFace*.5*voxelRelief(p,slope),0.0,1.0);
+    let faceLight=u.rock[rs & rockMask].faceShade*faceGate*clamp(u.rock[rs & rockMask].rockFace*.5*voxelRelief(p,slope),0.0,1.0);
     let faceSun=mix(1.0,localSun,faceLight);
     let faceOcc=(1.0-localSky)*faceLight;
     let hard=voxelHardness(hit);
-    let rockTone=voxelNoise(voxelRockSpace(hit)/max(4.0,u.faceBlockSize))*2.0-1.0;
+    let rockTone=voxelNoise(voxelRockSpace(hit)/max(4.0,u.rock[rs & rockMask].faceBlockSize))*2.0-1.0;
     let accumulated=rockWeatherAt(p);
     let skin=voxelSkin(hit,slope,painted.x,rain);
     let rockWet=clamp(.15+.5*rain+.3*faceOcc+.2*(1.0-hard)+accumulated.w*.8,0.0,1.0);
@@ -1623,13 +1623,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let mineral=genColor(1,hit.yz)*tri.x+genColor(1,hit.xz+vec2f(173,41))*tri.y+genColor(1,hit.xy+vec2f(53,119))*tri.z;
     let grain=clamp(mineral/max(u.rockMean,vec3f(.01)),vec3f(.5),vec3f(1.6));
     let clasts=voxelClasts(hit);
-    let mineralPatch=u.faceMineral*((voxelNoise(hit/max(1.0,u.faceGritSize))-.5)*1.7+clasts.x*clasts.y*clamp(u.faceClast,0.0,1.0));
-    var rock=rockFlat*mix(vec3f(1),grain,.3+u.faceTone)* (1.0+u.faceTone*rockTone+u.faceStrata*(hard*2.0-1.0))*(1.0-.6*u.faceWet*rockWet);
+    let mineralPatch=u.rock[rs & rockMask].faceMineral*((voxelNoise(hit/max(1.0,u.rock[rs & rockMask].faceGritSize))-.5)*1.7+clasts.x*clasts.y*clamp(u.rock[rs & rockMask].faceClast,0.0,1.0));
+    var rock=rockFlat*mix(vec3f(1),grain,.3+u.rock[rs & rockMask].faceTone)* (1.0+u.rock[rs & rockMask].faceTone*rockTone+u.rock[rs & rockMask].faceStrata*(hard*2.0-1.0))*(1.0-.6*u.rock[rs & rockMask].faceWet*rockWet);
     // Different minerals share the rock's chosen hue while varying albedo
     // and polish together. Embedded clasts read the same field as the solid.
     rock*=1.0+mineralPatch*.65;
     // H3 item 4: one placement function (landPlace); its thresholds are rows of materials/green.json.
-    rock=mix(rock,rock*.42,u.runoffStain*clamp(accumulated.x,0.0,1.0));
+    rock=mix(rock,rock*.42,u.rock[rs & rockMask].runoffStain*clamp(accumulated.x,0.0,1.0));
     var exposed = place.exposed;
     // Soil where the cover thins (u.soilRim). Off the faces the rock's share stops being a blend of grass and rock: rock shows where the share
     // beats a threshold that the rock's own patches and a 4 px grain move, so its edge is a ragged line. Just under that threshold, and just
@@ -1696,7 +1696,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         material = mix(material, rock, crown);
         exposed = max(exposed, crown);
     }
-    if (u.strata > 0.0 && u.columnSectionCount > 0) {
+    if (u.rock[rs & rockMask].strata > 0.0 && u.columnSectionCount > 0) {
         // Beds by height, measured on retail Painted Desert: the column's sections (a start above the plain, a pair of beds as
         // colour slots with B's share of each period). Within a section A and B alternate every period, quasi-periodically (B's
         // share varies per cycle), and B's share ramps toward the next section when both use the same pair. Beds colour all
@@ -1724,10 +1724,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let meanLum = max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);
         // The ground's grain survives in the beds as brightness, scaled by
         // Bed grain (retail desert bands are smooth colour).
-        let bedColour = saturate(bed * mix(1.0, clamp(lum / meanLum, 0.82, 1.12), u.strataGrain));
+        let bedColour = saturate(bed * mix(1.0, clamp(lum / meanLum, 0.82, 1.12), u.rock[rs & rockMask].strataGrain));
         let onRaised = max(smoothstep(u.columnSections[0].x, u.columnSections[0].x+1.5, columnCoord(p,h)),faceGate*exposed) * (1.0-route);
-        let bedCoverage=clamp(u.strata*2.0,0.0,1.0)*mix(exposed,1.0,smoothstep(.5,1.0,u.strata));
-        material = mix(material, bedColour, max(bedCoverage * u.strataContrast * onRaised, u.strata * painted.x));
+        let bedCoverage=clamp(u.rock[rs & rockMask].strata*2.0,0.0,1.0)*mix(exposed,1.0,smoothstep(.5,1.0,u.rock[rs & rockMask].strata));
+        material = mix(material, bedColour, max(bedCoverage * u.rock[rs & rockMask].strataContrast * onRaised, u.rock[rs & rockMask].strata * painted.x));
         if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)); }
     }
     // Ground patches: level ground is not one tone. One gray field (two sizes of noise, sizes rounded to divide the pool) is read through a ramp of five flat steps: damp ground
@@ -1752,7 +1752,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // The debris's edge is ragged and partly grown over (debrisLie, debrisRegrown). What is left covers the ground as gravel does, not as a haze:
     // at least .45 of it where the debris is thinnest.
     var lying=accumulated;var depositCover=0.0;
-    if(u.debrisAmount>0.0){
+    if(u.rock[rs & rockMask].debrisAmount>0.0){
         lying=rockWeatherAt(debrisLie(p));
         if(lying.y>0.0){
             // Fines hold their ground: where the debris is sand and grit, plants need it thinner before they take it, so a cliff's foot keeps its sand.
@@ -1765,8 +1765,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
     }
     let source=rockSourceAt(p);
-    let sourceColor=mix(rock,source.rgb*mix(1.0,clamp(dot(grain,vec3f(.3333)),.82,1.12),u.strataGrain),clamp(u.strata*2.0,0.0,1.0)*u.strataContrast);
-    let fineColor=mix(sourceColor,mix(sandWeathered(),sourceColor*.9,clamp(u.strata*2.0,0.0,1.0)*u.strataContrast),lying.z*.65);
+    let sourceColor=mix(rock,source.rgb*mix(1.0,clamp(dot(grain,vec3f(.3333)),.82,1.12),u.rock[rs & rockMask].strataGrain),clamp(u.rock[rs & rockMask].strata*2.0,0.0,1.0)*u.rock[rs & rockMask].strataContrast);
+    let fineColor=mix(sourceColor,mix(sandWeathered(),sourceColor*.9,clamp(u.rock[rs & rockMask].strata*2.0,0.0,1.0)*u.rock[rs & rockMask].strataContrast),lying.z*.65);
     material=mix(material,fineColor,depositCover);
     exposed=max(exposed,depositCover*(1.0-lying.z*.45));
     // Painted masks (card C5), after the world's own beds and before sand,
@@ -2033,7 +2033,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let turned = 1.0 - clamp(shading, 0.0, 1.0);
     if (u.shineOn != 0 || u.paintOn != 0) {
         let sunSeen = markSeen * (1.0 - flatBank) * closeVis * faceSun;
-        let damp=max(max(u.faceWet*exposed*rockWet,painted.z*.85),wetFilm*.8);
+        let damp=max(max(u.rock[rs & rockMask].faceWet*exposed*rockWet,painted.z*.85),wetFilm*.8);
         var shine = shineTerm(pixel, p, g, normal, material, exposed, slopeShare, crystalMask, sunSeen, landform, damp, mineralPatch, skin*(1.0-depositCover));
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }

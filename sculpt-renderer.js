@@ -62,22 +62,44 @@ function preprocess(source, common, defines) {
 // Byte layout of the shaders' one uniform block (struct Uniforms in
 // engine-common.wgsl), by WGSL's uniform alignment rules. Arrays take a
 // 16-byte element stride, so array<vec4f, N> is the only array form used.
+// The one other struct is Rock, a rock recipe (array<Rock, N>): the members of slot 0 are also fields by their own names, so the world's own
+// rock is set as every other uniform is (uFaceJoint).
 const FIELD_TYPES = {f32: [4, 4, 'f'], i32: [4, 4, 'i'], vec2f: [8, 8, 'f'], vec3f: [16, 12, 'f'], vec4f: [16, 16, 'f']};
+function structFields(source, name) {
+  const body = source.match(new RegExp(`struct ${name}\\s*\\{([\\s\\S]*?)\\n\\}`))?.[1];
+  if (!body) throw new Error(`nanolathe: engine-common.wgsl has no struct ${name}`);
+  return body.split('\n').map(raw => raw.replace(/\/\/.*$/, '').trim()).filter(Boolean).map(line => {
+    const m = line.match(/^(\w+)\s*:\s*(?:array<(\w+),\s*(\d+)>|(\w+))\s*,?$/);
+    if (!m) throw new Error(`nanolathe: unsupported uniform field "${line}" in engine-common.wgsl`);
+    return {line, name: m[1], type: m[2] || m[4], array: Boolean(m[2]), count: m[2] ? Number(m[3]) : 1};
+  });
+}
 function uniformLayout(source) {
-  const body = source.match(/struct Uniforms\s*\{([\s\S]*?)\n\}/)?.[1];
-  if (!body) throw new Error('nanolathe: engine-common.wgsl has no struct Uniforms');
+  const rock = new Map();
+  let rockSize = 0;
+  for (const f of structFields(source, 'Rock')) {
+    const type = FIELD_TYPES[f.type];
+    if (!type || f.array) throw new Error(`nanolathe: unsupported Rock field "${f.line}" in engine-common.wgsl`);
+    rockSize = Math.ceil(rockSize / type[0]) * type[0];
+    rock.set(f.name, {offset: rockSize, kind: type[2], width: type[1] / 4});
+    rockSize += type[1];
+  }
+  if (rockSize % 16) throw new Error('nanolathe: struct Rock must be a multiple of 16 bytes (a uniform array stride)');
   const fields = new Map();
   let offset = 0;
-  for (const raw of body.split('\n')) {
-    const line = raw.replace(/\/\/.*$/, '').trim();
-    if (!line) continue;
-    const m = line.match(/^(\w+)\s*:\s*(?:array<(\w+),\s*(\d+)>|(\w+))\s*,?$/);
-    const type = m && FIELD_TYPES[m[2] || m[4]];
-    if (!type) throw new Error(`nanolathe: unsupported uniform field "${line}" in engine-common.wgsl`);
-    const array = Boolean(m[2]), count = array ? Number(m[3]) : 1;
-    const align = array ? 16 : type[0], size = array ? 16 * count : type[1];
+  for (const f of structFields(source, 'Uniforms')) {
+    if (f.type === 'Rock') {
+      offset = Math.ceil(offset / 16) * 16;
+      fields.set(f.name, {offset, kind: 'struct', count: f.count, stride: rockSize, members: rock});
+      for (const [name, m] of rock) fields.set(name, {offset: offset + m.offset, kind: m.kind, width: m.width, count: 1, stride: 0});
+      offset += rockSize * f.count;
+      continue;
+    }
+    const type = FIELD_TYPES[f.type];
+    if (!type) throw new Error(`nanolathe: unsupported uniform field "${f.line}" in engine-common.wgsl`);
+    const align = f.array ? 16 : type[0], size = f.array ? 16 * f.count : type[1];
     offset = Math.ceil(offset / align) * align;
-    fields.set(m[1], {offset, kind: type[2], width: type[1] / 4, count, stride: array ? 16 : 0});
+    fields.set(f.name, {offset, kind: type[2], width: type[1] / 4, count: f.count, stride: f.array ? 16 : 0});
     offset += size;
   }
   return {fields, size: Math.ceil(offset / 16) * 16};
@@ -452,9 +474,11 @@ export class TerrainRenderer {
   // callers (renderChunk, timeBake, timeDraw) build it and run again. The check at the end of draw() catches a gate that changed between the
   // bake's encode and the draw's: both run with the uniform buffer as it is at submit.
   specKey() {
-    const parts = this.specParts, values = {...gateValues(parts.frag, this.uniformView), ...gateValues(parts.bake, this.uniformView)};
+    const parts = this.specParts, slots = this.rockSlots(), values = {...gateValues(parts.frag, this.uniformView, slots), ...gateValues(parts.bake, this.uniformView, slots)};
     return {key: gateKey(values, parts.keyOrder), values};
   }
+  // The rock slots in use (struct Rock in engine-common.wgsl): slot 0, the world's own rock.
+  rockSlots() { return [0]; }
   specialized(kind) {
     const state = this.specKey(), entry = this.specCache.get(state.key);
     if (!entry) throw new SpecializationMiss(state);
@@ -751,7 +775,9 @@ export class TerrainRenderer {
     this.i('uShineOn', Number(variant.get('faceWet')??0)>0 || Number(variant.get('wetGround')??0)>0 || shine.some((m, i) => (i !== 1 || slopeShare) && (m[0] > 0 || m[2] > 0)));
     this.f('uShineStretch', variant.has('shineStretch') ? Number(variant.get('shineStretch')) : 1);
     this.f('uShineWhite', variant.has('shineWhite') ? Number(variant.get('shineWhite')) : 0.35);
-    this.set('uShine', shine);
+    // The rock's row is its recipe's (Rock.shineRock: slot 0's here); row 2 of the table is unused.
+    this.set('uShine', shine.map((m, i) => i === 2 ? [0, 0, 0, 0] : m));
+    this.set('uShineRock', shine[2]);
     // E10 (Lava): crease at the foot of each bank step; shine only from this slope up (0: off).
     this.f('uLayerCrease', variant.has('layerCrease') ? Number(variant.get('layerCrease')) : 0);
     this.f('uShineSlopeGate', variant.has('shineSlopeGate') ? Number(variant.get('shineSlopeGate')) : 0);

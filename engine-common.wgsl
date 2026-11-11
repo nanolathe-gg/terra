@@ -12,6 +12,88 @@
 // uniform buffer, so a new uniform needs only a field here.
 // The renderer understands #ifdef NAME / #ifndef NAME / #else / #endif; a module is built with BAKE, EROSION, VOLUME_COMPUTE or VOLUME_RENDER, or none.
 
+// A rock recipe: every number that shapes, colours and weathers one rock (sculpt-rock-presets.js ROCK_KEYS). The uniforms hold a
+// table of them (Uniforms.rock); slot 0 is the world's own rock, its flat numbers as every address names them. A point reads the slot
+// of the rock it belongs to (rs).
+struct Rock {
+    shineRock: vec4f,     // the rock row of the shine table: x gloss, y sharpness, z roughness, w roughness scale (px)
+    strata: f32,          // Strata: how much of the rock and the raised ground takes the column's bed colours
+    strataContrast: f32,
+    strataGrain: f32,
+    // The rock column's tilt (columnOffset): the column's beds, and the strata colours and hardness they give, tilt by bedDip toward bedDipDir.
+    bedDip: f32,          // bed tilt, height units per px
+    bedDipDir: f32,       // direction the beds tilt down toward, degrees (0 east, 90 south)
+    // Rock face: the one model of every rock face (rockFaceAt): beds along the contours with a ledge at each top, joints that cut them
+    // into tilted blocks, scratches down the face and grit, all relief, so the sun lights them on any face.
+    rockFace: f32,        // strength, 0: none
+    rockFaceFrom: f32,    // slope where the face's relief starts (full 0.4 steeper)
+    faceBed: f32,         // bed thickness, height units
+    faceLedge: f32,       // ledge step, 0..1 of the bed
+    faceRun: f32,         // typical unbroken ledge length, px
+    faceLean: f32,        // scratches and joints lean from the screen's north-south, degrees
+    faceScratch: f32,     // scratch depth, height units
+    faceScratchSize: f32, // scratch spacing, px
+    faceBlock: f32,       // joint depth and block tilt, height units
+    faceBlockSize: f32,   // px between joints along a bed
+    faceGrit: f32,        // fine grit, height units
+    faceGrass: f32,       // how strongly grass takes the ledges, 0..1
+    faceWear: f32,        // weathering: how far the blocks' edges round off and their partings open (0..1)
+    faceLayers: f32,      // the layers' steps under grass (soil-covered terraces), 0: none
+    faceMass: f32,        // the face's broad form: bulges and alcoves 30-70 px (0: none)
+    faceTone: f32,        // colour variation from block to block
+    faceStrata: f32,      // layer tint: each layer a little lighter or darker than the next
+    faceWet: f32,         // wet streaks: the runnels and open partings darker
+    faceShade: f32,       // how dark the rock face's own shadows and creases go (0: the sky still fills them; 1: black)
+    faceRock: f32,        // rock's share of a steep face (the rest grass, in clumps and on ledges); a stroke's Local vegetation scales it
+    faceCrease: f32,      // crease depth (fine creases along the contours, the face's grain), height units
+    faceCreaseSize: f32,  // crease spacing, px
+    runoff: f32,
+    runoffScale: f32,
+    runoffConcentration: f32,
+    runoffCut: f32,
+    runoffStain: f32,
+    debrisAmount: f32,
+    debrisReach: f32,
+    debrisDepth: f32,
+    faceJointTilt: f32,
+    faceScaleVary: f32,
+    faceFold: f32,
+    faceBedVary: f32,
+    bedCycleVary: f32,
+    faceBreak: f32,
+    faceSpall: f32,
+    faceClast: f32,
+    faceClastSize: f32,
+    faceMineral: f32,
+    faceFresh: f32,
+    faceRind: f32,
+    faceRindDepth: f32,
+    faceRindTone: f32,
+    faceRindWarmth: f32,
+    faceRindRough: f32,
+    faceStretch: f32, // Block length / width
+    faceBlockHeight: f32, // Block height / layer height
+    faceRound: f32, // Rounded blocks
+    faceJoint: f32, // Joint depth
+    faceJointWidth: f32,
+    faceSecondary: f32,
+    faceContinuity: f32,
+    faceDetailPatch: f32,
+    faceWhole: f32, // Whole blocks
+    faceWholeLarge: f32, // Whole large blocks
+    faceRegular: f32, // Block regularity
+    faceExtrude: f32, // Extrusion bias: inset to projecting
+    faceLamina: f32, // Fine layer relief
+    faceLaminaSize: f32, // Fine layer spacing (height)
+    faceScratchLength: f32, // Groove length (px)
+    faceScratchAngle: f32, // Groove tilt from vertical (deg)
+    faceGritSize: f32, // Grit size (px)
+    looseSize: f32,       // px: the median stone diameter
+    stoneRound: f32,      // world material data: 0 angular chips .. 1 rounded stones
+    stoneSort: f32,       // world material data: 0 a mixed power-law gravel, 1 one size class sorted by the process (talus coarsens outward, fans and channels fine downslope)
+    stoneSlab: f32,       // world material data: share of flat slabs
+}
+
 struct Uniforms {
     // Shared by the draw and the bake.
     grid: f32,
@@ -75,9 +157,6 @@ struct Uniforms {
     sandGrass: f32,
     bandWater: f32,
     rockCrown: f32,
-    strata: f32,
-    strataContrast: f32,
-    strataGrain: f32,
     strataColors: array<vec4f, 5>,   // rgb of the column's material slots; uniform arrays take a 16-byte stride
     paletteMix: i32,
     transitionDetail: f32,
@@ -167,83 +246,16 @@ struct Uniforms {
     shineStretch: f32,    // micro-normal grain length along its axis, times its width (1: round)
     shineWhite: f32,      // highlight colour: 0 the material's own hue at full brightness, 1 white
     // Per material (ground, slope cover, rock, sand, crystal): x gloss, y sharpness
-    // (Blinn exponent), z roughness (normal slope amplitude), w roughness scale, px.
+    // (Blinn exponent), z roughness (normal slope amplitude), w roughness scale, px. The rock's row is its recipe's (Rock.shineRock); row 2 is unused.
     shine: array<vec4f, 5>,
-    // The rock column's tilt (columnOffset): the column's beds, and the strata colours and hardness they give, tilt by bedDip toward bedDipDir.
-    bedDip: f32,          // bed tilt, height units per px
-    bedDipDir: f32,       // direction the beds tilt down toward, degrees (0 east, 90 south)
-    // Rock face: the one model of every rock face (rockFaceAt): beds along the contours with a ledge at each top, joints that cut them
-    // into tilted blocks, scratches down the face and grit, all relief, so the sun lights them on any face.
-    rockFace: f32,        // strength, 0: none
-    rockFaceFrom: f32,    // slope where the face's relief starts (full 0.4 steeper)
-    faceBed: f32,         // bed thickness, height units
-    faceLedge: f32,       // ledge step, 0..1 of the bed
-    faceRun: f32,         // typical unbroken ledge length, px
-    faceLean: f32,        // scratches and joints lean from the screen's north-south, degrees
-    faceScratch: f32,     // scratch depth, height units
-    faceScratchSize: f32, // scratch spacing, px
-    faceBlock: f32,       // joint depth and block tilt, height units
-    faceBlockSize: f32,   // px between joints along a bed
-    faceGrit: f32,        // fine grit, height units
-    faceGrass: f32,       // how strongly grass takes the ledges, 0..1
-    faceWear: f32,        // weathering: how far the blocks' edges round off and their partings open (0..1)
-    faceLayers: f32,      // the layers' steps under grass (soil-covered terraces), 0: none
-    faceMass: f32,        // the face's broad form: bulges and alcoves 30-70 px (0: none)
-    faceTone: f32,        // colour variation from block to block
-    faceStrata: f32,      // layer tint: each layer a little lighter or darker than the next
-    faceWet: f32,         // wet streaks: the runnels and open partings darker
-    faceShade: f32,       // how dark the rock face's own shadows and creases go (0: the sky still fills them; 1: black)
-    faceRock: f32,        // rock's share of a steep face (the rest grass, in clumps and on ledges); a stroke's Local vegetation scales it
-    faceCrease: f32,      // crease depth (fine creases along the contours, the face's grain), height units
-    faceCreaseSize: f32,  // crease spacing, px
-    runoff: f32,
-    runoffScale: f32,
-    runoffConcentration: f32,
-    runoffCut: f32,
-    runoffStain: f32,
-    debrisAmount: f32,
-    debrisReach: f32,
-    debrisDepth: f32,
+    rock: array<Rock, 16>,   // the rock recipes by slot (struct Rock); slot 0 is the world's own rock
     rimReach: f32,        // bare rock at rims: how far in from a drop the soil thins, px (0 none)
     rockWeatherGrid: vec4f, // origin in art pixels, texture dimensions; 4px cells
-    faceJointTilt: f32,
-    faceScaleVary: f32,
-    faceFold: f32,
-    faceBedVary: f32,
-    bedCycleVary: f32,
-    faceBreak: f32,
-    faceSpall: f32,
-    faceClast: f32,
-    faceClastSize: f32,
-    faceMineral: f32,
-    faceFresh: f32,
-    faceRind: f32,
-    faceRindDepth: f32,
-    faceRindTone: f32,
-    faceRindWarmth: f32,
-    faceRindRough: f32,
-    faceStretch: f32, // Block length / width
-    faceBlockHeight: f32, // Block height / layer height
-    faceRound: f32, // Rounded blocks
-    faceJoint: f32, // Joint depth
-    faceJointWidth: f32,
-    faceSecondary: f32,
-    faceContinuity: f32,
-    faceDetailPatch: f32,
-    faceWhole: f32, // Whole blocks
-    faceWholeLarge: f32, // Whole large blocks
-    faceRegular: f32, // Block regularity
     sandLee: f32, // Wind drifts: sand in the lee of rises
     groundPatch: f32, // Ground patches: tone variation on level ground
     groundPatchSize: f32, // Patch size (px)
     shoreRock: f32,       // rock at shores: how far inland from the waterline the ground is bare rock, px (0 none)
     shoreShelf: f32,      // rock at shores: how far out under the water the bed is the same rock, px (0 none)
-    faceExtrude: f32, // Extrusion bias: inset to projecting
-    faceLamina: f32, // Fine layer relief
-    faceLaminaSize: f32, // Fine layer spacing (height)
-    faceScratchLength: f32, // Groove length (px)
-    faceScratchAngle: f32, // Groove tilt from vertical (deg)
-    faceGritSize: f32, // Grit size (px)
     // Water looks (card E1). Defaults reproduce the earlier water exactly.
     bedTint: f32,         // how far the tint replaces the bed's own colour (0: bed only; 1: the tint, lit by the bed)
     bedRelief: f32,       // bed lumps (bake): faint embossed relief under shallow water, 0: none
@@ -375,11 +387,7 @@ struct Uniforms {
     rillSpacing: f32,     // px between rills
     // Card P16: the one loose-material scatter (looseStones in engine-bake). Supply 0 draws none.
     looseSupply: f32,     // 0..1: ground share the stones cover where their source is full (1 is about half the ground)
-    looseSize: f32,       // px: the median stone diameter
     looseGrid: vec4f,     // the loose-stone mask lattice: first cell (x, y) and cell counts (z, w), cells of 4 world px (looseMain)
-    stoneRound: f32,      // world material data: 0 angular chips .. 1 rounded stones
-    stoneSort: f32,       // world material data: 0 a mixed power-law gravel, 1 one size class sorted by the process (talus coarsens outward, fans and channels fine downslope)
-    stoneSlab: f32,       // world material data: share of flat slabs
     plantsOn: f32,        // card P31: 1 when the world's ground-cover table has plants (its last row): the plant families of looseStones, which share the loose mask
     stoneMoss: f32,       // world material data: share of stones with a mossy cap
     // Card D: bounded regional fields, with every position on the world lattice.
@@ -394,6 +402,12 @@ struct Uniforms {
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
+// The rock slot of the point being evaluated; 0, the world's own rock, until a pass sets it. Every read is u.rock[rs & rockMask].
+var<private> rs: u32 = 0u;
+// The slots a pipeline can read: 0 while the world's own rock is the only one in use, 15 otherwise (sculpt-gates.js gateValues). At 0 every
+// read is slot 0's at a fixed offset, the code a single uniform's read compiles to: read through rs alone, the draw moved 1 to 2 palette
+// pixels of 34 scenes. Modules built without the renderer's constants read every slot.
+override rockMask: u32 = 15u;
 
 fn cellHash(c: vec2f) -> vec2f {
     let q = vec2f(dot(c, vec2f(127.1, 311.7)), dot(c, vec2f(269.5, 183.3)));
@@ -466,7 +480,7 @@ fn poolNoise(p: vec2f, s: f32, o: f32) -> f32 { let n = poolCells(s); return wra
 fn poolScale(m: f32) -> f32 { let k = u.pool / 512.0; return max(1.0, round(m * k)) / k; }
 
 fn rockFaceGate(slope:f32,paintRock:f32,route:f32)->f32 {
-    return max(smoothstep(u.rockFaceFrom,u.rockFaceFrom+.4,slope),smoothstep(.1,.6,paintRock))*(1.0-route);
+    return max(smoothstep(u.rock[rs & rockMask].rockFaceFrom,u.rock[rs & rockMask].rockFaceFrom+.4,slope),smoothstep(.1,.6,paintRock))*(1.0-route);
 }
 
 // H2 rock column: the bed coordinate, in height units, at world point p for a
@@ -474,8 +488,8 @@ fn rockFaceGate(slope:f32,paintRock:f32,route:f32)->f32 {
 // with the surface height they hold, so it depends only on (p, z). columnOffset is the part that depends on p alone (the
 // erosion pass caches it): the tilt (bedDip toward bedDipDir) and the broad wander.
 fn columnOffset(p: vec2f) -> f32 {
-    let a = radians(u.bedDipDir);
-    var offset = u.bedDip * dot(p, vec2f(cos(a), sin(a)));
+    let a = radians(u.rock[rs & rockMask].bedDipDir);
+    var offset = u.rock[rs & rockMask].bedDip * dot(p, vec2f(cos(a), sin(a)));
     let S = u.columnWander;
     if (S != 0.0) { offset += valueNoise(p / 110.0 + 3.1) * S * 0.8 + valueNoise(p / 34.0 + 8.2) * S * 0.3 + valueNoise(p / 9.0 + 2.7) * S * 0.1; }
 #ifndef EROSION
@@ -822,7 +836,7 @@ fn rockFieldAt(t:texture_2d<f32>,p:vec2f)->vec4f {
     return mix(mix(textureLoad(t,a,0),textureLoad(t,vec2i(b.x,a.y),0),f.x),mix(textureLoad(t,vec2i(a.x,b.y),0),textureLoad(t,b,0),f.x),f.y);
 }
 fn rockWeatherAt(p:vec2f)->vec4f {
-    if(u.runoff<=0.0&&u.debrisAmount<=0.0){return vec4f(0);}
+    if(u.rock[rs & rockMask].runoff<=0.0&&u.rock[rs & rockMask].debrisAmount<=0.0){return vec4f(0);}
     return rockFieldAt(rockWeatherTex,p);
 }
 // Bare rock at a rim. Soil is thin at the edge of a drop: within Bare rock at rims' reach the ground counts as painted rock, wholly at the edge and
@@ -849,7 +863,7 @@ fn softBankAt(p:vec2f)->f32 {
     return rockFieldAt(rockRimTex,p).z;
 }
 fn rockSourceAt(p:vec2f)->vec4f {
-    if(u.debrisAmount<=0.0){return vec4f(0,0,0,1);}
+    if(u.rock[rs & rockMask].debrisAmount<=0.0){return vec4f(0,0,0,1);}
     return rockFieldAt(rockSourceTex,p);
 }
 fn voxelHash(p:vec3f)->f32 {
@@ -866,29 +880,29 @@ fn voxelNoise(p:vec3f)->f32 {
 // fracture blocks and material. The existing layer length and dip direction
 // set its wavelength and orientation; no separate stack of color stripes.
 fn voxelFold(p:vec3f)->f32 {
-    if(u.faceFold==0.0){return 0.0;}
-    let size=max(20.0,u.faceRun);let a=radians(u.bedDipDir);
+    if(u.rock[rs & rockMask].faceFold==0.0){return 0.0;}
+    let size=max(20.0,u.rock[rs & rockMask].faceRun);let a=radians(u.rock[rs & rockMask].bedDipDir);
     let phase=dot(p.xy,vec2f(cos(a),sin(a)))/size*6.2831853;
     let wander=(voxelNoise(vec3f(p.xy/(size*1.6),.7))-.5)*2.4;
-    return sin(phase+wander)*u.faceFold;
+    return sin(phase+wander)*u.rock[rs & rockMask].faceFold;
 }
 fn voxelRockSpace(p:vec3f)->vec3f {
-    let a=radians(u.faceLean);let x=p.x*cos(a)+p.y*sin(a);let y=-p.x*sin(a)+p.y*cos(a);
+    let a=radians(u.rock[rs & rockMask].faceLean);let x=p.x*cos(a)+p.y*sin(a);let y=-p.x*sin(a)+p.y*cos(a);
     return vec3f(x,y,p.z+columnOffset(p.xy)+voxelFold(p));
 }
 struct VoxelRock {face:f32,edge:f32,tone:f32}
-fn voxelBlockAxes(size:f32)->vec3f{return vec3f(size*u.faceStretch,size,max(2.0,u.faceBed*1.5)*u.faceBlockHeight*mix(1.0,size/max(4.0,u.faceBlockSize),u.faceScaleVary));}
+fn voxelBlockAxes(size:f32)->vec3f{return vec3f(size*u.rock[rs & rockMask].faceStretch,size,max(2.0,u.rock[rs & rockMask].faceBed*1.5)*u.rock[rs & rockMask].faceBlockHeight*mix(1.0,size/max(4.0,u.rock[rs & rockMask].faceBlockSize),u.rock[rs & rockMask].faceScaleVary));}
 // A point of rock space in the lattice of blocks: a grid of the blocks' axes, tilted with the joints and bent by noise.
 // Block regularity straightens the bends and (voxelBlockSeed) draws the blocks' middles onto the grid: 0 scattered, 1 a grid of boxes.
 fn voxelLattice(r:vec3f,size:f32)->vec3f {
-    let tilted=vec3f(r.x-r.z*tan(radians(u.faceJointTilt)),r.y,r.z);
+    let tilted=vec3f(r.x-r.z*tan(radians(u.rock[rs & rockMask].faceJointTilt)),r.y,r.z);
     let warp=vec3f(voxelNoise(r/37.0),voxelNoise((r+53.0)/43.0),voxelNoise((r-21.0)/47.0))-0.5;
     // Bounded displacement varies spacing without multiplying absolute world
     // coordinates: the same rock scale remains useful far from the origin.
-    let variation=(voxelNoise(tilted/(size*3.7))-.5)*size*u.faceScaleVary*2.5;
-    return (tilted+warp*size*mix(.28,.12,u.faceScaleVary)*(1.0-u.faceRegular)+vec3f(variation,-variation*.7,variation*.5))/voxelBlockAxes(size);
+    let variation=(voxelNoise(tilted/(size*3.7))-.5)*size*u.rock[rs & rockMask].faceScaleVary*2.5;
+    return (tilted+warp*size*mix(.28,.12,u.rock[rs & rockMask].faceScaleVary)*(1.0-u.rock[rs & rockMask].faceRegular)+vec3f(variation,-variation*.7,variation*.5))/voxelBlockAxes(size);
 }
-fn voxelBlockSeed(cell:vec3f)->vec3f{return cell+(.12+.38*u.faceRegular)+voxelRandom(cell)*(.76*(1.0-u.faceRegular));}
+fn voxelBlockSeed(cell:vec3f)->vec3f{return cell+(.12+.38*u.rock[rs & rockMask].faceRegular)+voxelRandom(cell)*(.76*(1.0-u.rock[rs & rockMask].faceRegular));}
 // The cells of the two blocks nearest a point (voxelBlocks finds the same two), for a question asked of a whole block: voxelBlockMiddle.
 struct VoxelBlockPair {near:vec3f,next:vec3f}
 fn voxelBlockPair(r:vec3f,size:f32)->VoxelBlockPair {
@@ -903,14 +917,14 @@ fn voxelBlockPair(r:vec3f,size:f32)->VoxelBlockPair {
 // voxel; reading that noise at the middle instead, twice over, lands within a fraction of a block of the true middle.
 fn voxelBlockMiddle(cell:vec3f,size:f32)->vec3f {
     let home=voxelBlockSeed(cell)*voxelBlockAxes(size);
-    let lean=tan(radians(u.faceJointTilt));var t=home;
+    let lean=tan(radians(u.rock[rs & rockMask].faceJointTilt));var t=home;
     for(var i=0;i<2;i++){
         let r=vec3f(t.x+t.z*lean,t.y,t.z);
         let warp=vec3f(voxelNoise(r/37.0),voxelNoise((r+53.0)/43.0),voxelNoise((r-21.0)/47.0))-0.5;
-        let variation=(voxelNoise(t/(size*3.7))-.5)*size*u.faceScaleVary*2.5;
-        t=home-warp*size*mix(.28,.12,u.faceScaleVary)*(1.0-u.faceRegular)-vec3f(variation,-variation*.7,variation*.5);
+        let variation=(voxelNoise(t/(size*3.7))-.5)*size*u.rock[rs & rockMask].faceScaleVary*2.5;
+        t=home-warp*size*mix(.28,.12,u.rock[rs & rockMask].faceScaleVary)*(1.0-u.rock[rs & rockMask].faceRegular)-vec3f(variation,-variation*.7,variation*.5);
     }
-    let a=radians(u.faceLean);let x=t.x+t.z*lean;let xy=vec2f(x*cos(a)-t.y*sin(a),x*sin(a)+t.y*cos(a));
+    let a=radians(u.rock[rs & rockMask].faceLean);let x=t.x+t.z*lean;let xy=vec2f(x*cos(a)-t.y*sin(a),x*sin(a)+t.y*cos(a));
     return vec3f(xy,t.z-columnOffset(xy)-voxelFold(vec3f(xy,0)));
 }
 fn voxelBlocks(r:vec3f,size:f32)->VoxelRock {
@@ -923,48 +937,48 @@ fn voxelBlocks(r:vec3f,size:f32)->VoxelRock {
     let tilt=voxelRandom(nearest+vec3f(11,31,73))-.5;
     let plane=dot(v1,tilt)*1.15+(voxelHash(nearest+vec3f(37,5,61))-.5)*.45;
     let rounded=(.65-sqrt(d1))*1.7+(voxelHash(nearest+vec3f(37,5,61))-.5)*.25;
-    return VoxelRock(mix(plane,rounded,u.faceRound),(d2-d1)/max(2.0*length(v2-v1),.001)*min(axes.x,min(axes.y,axes.z)),voxelHash(nearest)*2.0-1.0);
+    return VoxelRock(mix(plane,rounded,u.rock[rs & rockMask].faceRound),(d2-d1)/max(2.0*length(v2-v1),.001)*min(axes.x,min(axes.y,axes.z)),voxelHash(nearest)*2.0-1.0);
 }
 // Individual blocks retreat along their joints. Bed hardness and the block's
 // own stable identity select broad scars, rather than another noise coating.
 fn voxelRelease(block:VoxelRock,hard:f32)->f32 {
     let selected=smoothstep(-.35,.65,block.tone);
-    return u.faceBreak*selected*smoothstep(.15,1.7,block.edge)*(.35+.65*(1.0-hard));
+    return u.rock[rs & rockMask].faceBreak*selected*smoothstep(.15,1.7,block.edge)*(.35+.65*(1.0-hard));
 }
 // The same cuts supply density and the depth exposed through the outer rind.
 fn voxelJoint(r:vec3f,c:VoxelRock,broad:VoxelRock)->f32 {
-    let width=(.65+u.faceWear*1.2)*u.faceJointWidth;
+    let width=(.65+u.rock[rs & rockMask].faceWear*1.2)*u.rock[rs & rockMask].faceJointWidth;
     // Coherent interruptions taper both depth and opening; they do not select
     // a different topology at zero. Fine joints subdivide the larger blocks.
-    let size=max(8.0,u.faceBlockSize);
+    let size=max(8.0,u.rock[rs & rockMask].faceBlockSize);
     var primary=1.0;var secondary=1.0;
-    if(u.faceContinuity<1.0){
-        primary=mix(smoothstep(.24,.64,voxelNoise(r/vec3f(size*2.1,size*2.1,size*1.1)+17.0)),1.0,u.faceContinuity);
-        secondary=mix(smoothstep(.3,.66,voxelNoise(r/vec3f(size*.9,size*.9,size*.65)-29.0)),1.0,u.faceContinuity);
+    if(u.rock[rs & rockMask].faceContinuity<1.0){
+        primary=mix(smoothstep(.24,.64,voxelNoise(r/vec3f(size*2.1,size*2.1,size*1.1)+17.0)),1.0,u.rock[rs & rockMask].faceContinuity);
+        secondary=mix(smoothstep(.3,.66,voxelNoise(r/vec3f(size*.9,size*.9,size*.65)-29.0)),1.0,u.rock[rs & rockMask].faceContinuity);
     }
-    return (1.0-smoothstep(width*.25,width,c.edge))*u.faceSecondary*secondary
+    return (1.0-smoothstep(width*.25,width,c.edge))*u.rock[rs & rockMask].faceSecondary*secondary
         +(1.0-smoothstep(width*.15,width*.85,broad.edge))*1.15*primary;
 }
 fn voxelDetail(r:vec3f)->f32 {
-    if(u.faceDetailPatch<=0.0){return 1.0;}
+    if(u.rock[rs & rockMask].faceDetailPatch<=0.0){return 1.0;}
     // Leave intact faces between damaged patches; the existing pitting,
     // grooves and grit retain their own amplitudes and physical scales.
-    let cluster=smoothstep(.28,.65,voxelNoise(r/max(12.0,u.faceBlockSize*1.3)+vec3f(67,11,43)));
-    return mix(1.0,cluster*1.6,u.faceDetailPatch);
+    let cluster=smoothstep(.28,.65,voxelNoise(r/max(12.0,u.rock[rs & rockMask].faceBlockSize*1.3)+vec3f(67,11,43)));
+    return mix(1.0,cluster*1.6,u.rock[rs & rockMask].faceDetailPatch);
 }
 fn voxelSpall(r:vec3f,c:VoxelRock,hard:f32)->f32 {
-    let chip=voxelNoise(r/vec3f(max(5.0,u.faceBlockSize*.65),max(5.0,u.faceBlockSize*.65),max(3.0,u.faceBed*.8))+vec3f(19,53,7));
-    return u.faceSpall*smoothstep(.32,.7,chip)*(1.0-hard*.7)*(1.0+1.8*exp(-c.edge/2.0))*3.0;
+    let chip=voxelNoise(r/vec3f(max(5.0,u.rock[rs & rockMask].faceBlockSize*.65),max(5.0,u.rock[rs & rockMask].faceBlockSize*.65),max(3.0,u.rock[rs & rockMask].faceBed*.8))+vec3f(19,53,7));
+    return u.rock[rs & rockMask].faceSpall*smoothstep(.32,.7,chip)*(1.0-hard*.7)*(1.0+1.8*exp(-c.edge/2.0))*3.0;
 }
 // Eight jittered inclusions: round pebbles through angular broken clasts.
 // One field supplies both relief and mineral changes at the same 3D position.
 fn voxelClasts(p:vec3f)->vec2f {
-    if(u.faceClast<=0.0){return vec2f(0);}
-    let q=p/max(3.0,u.faceClastSize);let b=floor(q-.5);var best=0.0;var tone=0.0;
+    if(u.rock[rs & rockMask].faceClast<=0.0){return vec2f(0);}
+    let q=p/max(3.0,u.rock[rs & rockMask].faceClastSize);let b=floor(q-.5);var best=0.0;var tone=0.0;
     for(var z=0;z<=1;z++){for(var y=0;y<=1;y++){for(var x=0;x<=1;x++){
         let cell=b+vec3f(f32(x),f32(y),f32(z));let random=voxelRandom(cell+vec3f(39,7,91));
         let v=q-(cell+.5+(random-.5)*.6);let radius=.12+.45*pow(random.z,1.4);
-        let metric=mix(max(abs(v.x),max(abs(v.y),abs(v.z)))*1.25,length(v),u.faceRound)/radius;
+        let metric=mix(max(abs(v.x),max(abs(v.y),abs(v.z)))*1.25,length(v),u.rock[rs & rockMask].faceRound)/radius;
         let cap=1.0-smoothstep(.35,1.1,metric);
         if(cap>best){best=cap;tone=random.x*2.0-1.0;}
     }}}
@@ -973,12 +987,12 @@ fn voxelClasts(p:vec3f)->vec2f {
 // Unequal, deformed beds use the same hardness for rock shape and wear.
 fn voxelColumnCoord(p:vec3f)->f32 {
     let r=voxelRockSpace(p);
-    let drift=(voxelNoise(r/vec3f(max(8.0,u.faceRun),max(8.0,u.faceRun),140.0))-.5)*2.2;
-    return (columnCoord(p.xy,p.z)+voxelFold(p))*(5.5/max(2.0,u.faceBed))+drift*u.faceBed*.2*u.faceBedVary;
+    let drift=(voxelNoise(r/vec3f(max(8.0,u.rock[rs & rockMask].faceRun),max(8.0,u.rock[rs & rockMask].faceRun),140.0))-.5)*2.2;
+    return (columnCoord(p.xy,p.z)+voxelFold(p))*(5.5/max(2.0,u.rock[rs & rockMask].faceBed))+drift*u.rock[rs & rockMask].faceBed*.2*u.rock[rs & rockMask].faceBedVary;
 }
 fn voxelBed(p:vec3f)->ColumnBed {
     let c=voxelColumnCoord(p);
-    return columnBedIn(c,columnSectionAt(c),u.bedCycleVary);
+    return columnBedIn(c,columnSectionAt(c),u.rock[rs & rockMask].bedCycleVary);
 }
 fn voxelHardness(p:vec3f)->f32 {
     if(u.columnSectionCount==0){return .55;}
@@ -990,7 +1004,7 @@ fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.strataColors[cla
 // cycle is softened on both sides, the cycle's top (topFade) inside its top bed. hold (0..1) holds ground that is nearly all one bed
 // (the widest bed's share of the cycle over .88) to that bed's colour: retail's pale caps are one sheet of the cool bed (card G4).
 fn columnColour(c: f32, s: i32, edge: f32, topFade: bool, hold: f32) -> vec3f {
-    let bed = columnBedIn(c, s, u.bedCycleVary);
+    let bed = columnBedIn(c, s, u.rock[rs & rockMask].bedCycleVary);
     let w = edge * bed.period;
     let r = bed.through * bed.thick;
     var rgb = strataSlot(bed.slot);
