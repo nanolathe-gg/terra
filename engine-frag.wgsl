@@ -1667,17 +1667,25 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // beats a threshold that the rock's own patches and a 4 px grain move, so its edge is a ragged line. Just under that threshold, and just
     // under a face's soil edge, the cover is too thin for plants: a band of bare soil, which tufts break up toward the grass.
     var soil = 0.0;
+    var faceShare = faceRock;
     if (u.soilRim > 0.0) {
-        let line = 0.5 + (patches - 0.5) * 0.4 + (voxelNoise(hit / vec3f(4.0, 4.0, 3.0)) - 0.5) * 0.2;
-        let bared = smoothstep(line - 0.08, line + 0.08, place.exposed);
+        // The edges fray by the art pixel, so cover and rock interleave where they meet instead of one lying over the other: single pixels of
+        // grass stand in the bare ground and single pixels of earth in the grass. Along an edge the seam of earth comes and goes (53 and 17 px).
+        let fray = shelfHash(floor(grainPixel(pixel)) + 37.0) - 0.5;
+        let comes = smoothstep(0.25, 0.7, 0.5 + 0.5 * (0.6 * valueNoise(p / 53.0 + vec2f(3.0, 91.0)) + 0.4 * valueNoise(p / 17.0 + vec2f(57.0, 21.0))));
+        let line = 0.5 + (patches - 0.5) * 0.4 + (voxelNoise(hit / vec3f(4.0, 4.0, 3.0)) - 0.5) * 0.2 + fray * 0.22;
+        let bared = smoothstep(line - 0.05, line + 0.05, place.exposed);
         let rimGround = smoothstep(line - 0.4, line - 0.1, place.exposed) * smoothstep(0.05, 0.2, place.exposed) * (1.0 - bared);
-        let rimFace = smoothstep(soilEdge - 0.45, soilEdge - 0.1, share) * smoothstep(0.05, 0.2, share) * (1.0 - faceRock);
+        let frayedFace = smoothstep(soilEdge + fray * 0.3 - 0.05, soilEdge + fray * 0.3 + 0.05, share);
+        faceShare = mix(faceRock, frayedFace, u.soilRim);
+        let rimFace = smoothstep(soilEdge - 0.45, soilEdge - 0.1, share) * smoothstep(0.05, 0.2, share) * (1.0 - faceShare);
         exposed = mix(exposed, bared, u.soilRim);
-        let thin = u.soilRim * mix(rimGround, rimFace, faceGate) * (1.0 - route) * smoothstep(u.sea + 1.0, u.sea + 3.0, h);
+        let thin = u.soilRim * mix(rimGround, rimFace, faceGate) * (1.0 - route) * smoothstep(u.sea + 1.0, u.sea + 3.0, h) * (0.2 + 1.1 * comes);
         let tuft = terrainNoise(p * 5.0 + vec2f(13.0, 47.0)).r;
-        soil = smoothstep(tuft * 0.7 - 0.1, tuft * 0.7 + 0.15, thin);
+        let need = 0.4 * tuft + 0.45 * (fray + 0.5);
+        soil = smoothstep(need - 0.04, need + 0.04, thin);
     }
-    exposed = mix(exposed, faceRock, faceGate);   // on the rock face the face's share decides
+    exposed = mix(exposed, faceShare, faceGate);   // on the rock face the face's share decides
     let lowBank = place.lowBank;
     let sandBar = sandBarAt(p);
     var nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
@@ -1780,7 +1788,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         lying=rockWeatherAt(debrisLie(p));
         if(lying.y>0.0){
             // Fines hold their ground: where the debris is sand and grit, plants need it thinner before they take it, so a cliff's foot keeps its sand.
-            let regrown=debrisRegrown(lying.y*(1.0+2.0*lying.z),p,clamp(lying.w*1.6,0.0,1.0),place.vegetation);
+            // Sandy debris holds against regrowth (up to three times as long), and its edge frays by the art pixel: grains lie out in the grass
+            // and blades stand in the sand, so the sand does not end at a line over the grass.
+            let grains=lying.z*1.2*(shelfHash(floor(grainPixel(pixel))+23.0)-.5)*smoothstep(0.0,.08,lying.y);
+            let regrown=debrisRegrown(max(lying.y*(1.0+2.0*lying.z)+grains,0.0),p,clamp(lying.w*1.6,0.0,1.0),place.vegetation);
             depositCover=clamp(lying.y*.9+.45,0.0,1.0)*(1.0-regrown.x);
             if(regrown.y>0.0){material=mix(material,mossMaterial(pixel)*.85,regrown.y*.6);}
         }
