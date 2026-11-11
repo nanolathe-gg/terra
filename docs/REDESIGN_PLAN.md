@@ -2893,7 +2893,8 @@ bumps, the bed dots and the bed grain.
   uniforms, knobs, schema, scene fields, UI, gpu planes, `sculpt.py`, scene
   JSON and tests. `bedRelief` is the one control for the bed's lumps: three
   scales (9, 19, 41 px), added after the silt burial, defaulting to 1 for every
-  world (Red 2.2, Green 1.5, Archipelago 2). Under a hard step the tint
+  world (Red 2.2, Green .6, Archipelago 2). The chunk renderer's relief
+  reach still counts it: dropping it moved Green's dry pictures. Under a hard step the tint
   deepens toward the deep colour with depth (a constant, 30% at the step).
 - *Found.* Lumps never reached Red's lake interior: `surfaceHeight` returned
   the bare height below -12, so the solid the sun lights had no relief there.
