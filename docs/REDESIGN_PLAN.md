@@ -2882,6 +2882,45 @@ same, so they are coherent and realistic."
   land pipeline's shaded color, water is absorption by depth. Rule 7
   allows no switch, so it removes options and moves every water world.
 
+**Overnight run, item 1: walls [Claude, 2026-11-10 to 11; the owner:
+"let's do 1, 2, 3, 4, 5 in order, one at a time. Autonomous overnight
+run"].** Branch `realism/wall-variety`, not landed. Rows 2 and 7 of
+round 4.
+
+- *What the comb was* **[measured by switching things off on the 760 px
+  mesa fixture]**. With Gullies 0 the fins are still there; with Wander 0
+  the wall is a plain ramp. The row of like fins is the outline's Wander,
+  one wavelength of noise, more than the Gullies. The erosion pass at age
+  0 changes little.
+- *Variation along the wall* (stroke option, Variation group, default 0).
+  Long waves under the outline's teeth, teeth that come and go, gully
+  depth from none to 2.4 times, a longer sideways warp. At 0 the bytes
+  are main's. At 100: 59.6% of the fixture's picture, 2,838 of 17,680
+  height cells by a mean of 10.2 units; the stock Plateau 35.0% and 1,546
+  cells **[measured]**. The bays keep their even rhythm: every way of
+  varying them moved 220 to 300 pixels with the option at 0.
+- *Hard beds* and *Soft beds lie back* (own group, default off). A
+  staircase on the lift after the Gullies, as a share of the section's
+  own crest; heights only. Hard beds 3: 46.3% of the fixture's picture,
+  1,555 cells by a mean of 6.7; 2 of the 1,605 cells at the top's level
+  move, by at most 3 units; the stock Plateau with 2 beds 15.9% and 914
+  cells; the stock Mountain with 4 beds 27.6% and 483 **[measured]**.
+- *By eye.* Beds read clearly on a sloping section in Green's own rock:
+  rock bands with grass on the benches. On the stock Plateau's sheer
+  face they are faint, and on the Mountain, where the whole wall is
+  rock, almost nothing shows: a bench needs a second material to read,
+  which is item 3. The erosion pass wears the benches (a flat bench of
+  139 units came out at 151 to 154 with the pass on **[measured]**).
+- *Tried and dropped.* Marking the soft beds as loose ground (the talus
+  mark): plane 5 is the vegetation plane pushed negative, so it removed
+  the grass that makes a bench read.
+- *Open.* (1) Steps and Hard beds sit side by side: the owner rules
+  whether both stay (the page has the pair). (2) No button preset uses
+  either option yet; a preset change is the owner's. (3) Bays do not
+  vary. (4) Beds on a cut (a canyon wall) are not built. (5) The level
+  of a band follows the crest, so it tilts where the crest tapers.
+- Page (private): https://claude.ai/artifact/878Vv6rGcfQ8vkdESsUJSU
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
