@@ -2800,7 +2800,12 @@ on waterfall and flow grow into various areas."
   and the clay render byte-identical; tile sizes 128, 256 and 512 give 0
   differing pixels (main: 1). On that fixture runoff reaches 24% of the
   debris's pixels (16% of the thin debris), so most of the unevenness is
-  the patterns, not the water. `repro/check.sh land` and export bytes
+  the patterns, not the water. Debris covers less than it did: 11.5% of
+  that fixture's picture as haze, 9.2% now (thin debris 14.2% to 10.5%);
+  moss is mixed into 3.2% of the picture. Barren worlds with the same
+  recipe, by eye: Moon (14.4% of pixels change) and Lava (15.3%) read as a
+  ragged edge with no stray tint; Desert (6.8%) is too dark to judge.
+  `repro/check.sh land` and export bytes
   pass; the hover previews regenerate unchanged. Draw time on modern
   Green (`repro/perf.mjs map16`, runs noisy that night): the cleanest pair
   2285 ms against main's 2276 to the final picture on load, 43.8 against

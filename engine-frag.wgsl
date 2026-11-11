@@ -1441,8 +1441,8 @@ fn debrisLie(p: vec2f) -> vec2f {
 // debris is thinner than the growth needs it to be. The need differs by stretch of the apron (some of it old and overgrown, some fresh and
 // bare to its edge), by clump (5 to 11 px tussocks) and by tuft (single pixels), and it is higher where runoff leaves the debris damp (wet:
 // rock weather's runoff there), so growth follows the water down from a face. Vegetation scales it: a lusher place takes more back. The need
-// spreads over 0 to 1, so at the default vegetation debris keeps about the share of the ground its thickness gave it as a haze: the same
-// amount, in patches. Damp regrowth is moss, the rest the ground's own cover.
+// spreads over 0 to 1, so at the default vegetation debris keeps most of the cover its thickness gave it as a haze, in patches (measured on
+// a granite mesa: 11.5% of the picture as haze, 9.2% now). Damp regrowth is part moss (2 to 3% of that picture), the rest the ground's own cover.
 fn debrisRegrown(deposit: f32, p: vec2f, wet: f32, vegetation: f32) -> vec2f {
     let stretch = 0.5 + 0.5 * (0.6 * valueNoise(p / 83.0 + vec2f(7.0, 61.0)) + 0.4 * valueNoise(p / 31.0 + vec2f(43.0, 5.0)));
     let clump = 0.5 + 0.5 * (0.55 * valueNoise(p / 11.0 + vec2f(29.0, 3.0)) + 0.45 * valueNoise(p / 4.7 + vec2f(61.0, 17.0)));
