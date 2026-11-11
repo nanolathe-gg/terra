@@ -2719,6 +2719,44 @@ Claude on branch `realism/whole-blocks`, not landed].**
   against the owner's hills design, so hills want a lower amount than
   cliffs (no control for that yet).
 
+**World Creator's five, adopted [owner decision, 2026-11-10: "Also yes we
+should adopt those from world creator"; built by Claude on the same
+branch, not landed].**
+
+- *Rock blocks: detail and bevel.* A whole block's faces now carry the
+  blocks' offsets and tilts, pits, grit and grooves at half strength, up
+  to 1 px, so two rock blocks side by side meet at a visible step. The
+  existing Weathering control bevels whole blocks (0 to 1 moves 26.1% of a
+  granite fixture's clay pixels). No new control.
+- *Debris colored by its source.* A stone in a cliff's debris takes the
+  bed's color as the debris around it does (6.2% of a modern Desert
+  fixture's pixels). No new control.
+- *Sand by wind shelter.* New control Wind drifts (Sand, default 0): sand
+  in the lee of rises along the wind, a share of the supply. 0 to 1.5
+  moves 9.9 and 10.1% of pixels on a Green and a Desert cliff fixture, but
+  only 0.4% on green-1 and 3.9% on desert-1, which have few rises: it
+  needs cliffs to matter.
+- *Pattern field for level ground.* New controls Ground patches and Patch
+  size (Ground, default 0): one gray field read through a five-step ramp,
+  damp to dusty. Color only. The owner, the same day: "for Nanolathe/TA we
+  need tileable flats, so random variation should be optional or work
+  with the tile engine somehow", so the field repeats with the ground's
+  pool. Distinct 32 px tiles of 4,096 on a bare 2048 px plain: classic
+  Green 1,019 without, 1,024 with (4,090 before it was pooled); modern
+  Desert 839 and 1,650. The cost is a pattern that repeats every pool
+  period [by eye, at overview]. The field is noise only; it does not yet
+  follow wetness, hollows or cliffs, and its colors are derived, with no
+  color control.
+- *Pigment carried by runoff: tried, not committed.* Wash carried with the
+  flow and dropped where the slope eases changed 2% of pixels and
+  repeated what the debris's pale fines already show. The patch is kept
+  outside the repository. A colored stain on the rock face itself would
+  show more and needs a color control.
+- *Checks.* `repro/check.sh land` passes on the branch with all of this:
+  the three modern Green scenes move (21.5, 50.0, 23.6%), and
+  archipelago-3, crystal-2 and desert-1 differ from main in a few pixels
+  with every new control at 0 (count not taken for the first two).
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
