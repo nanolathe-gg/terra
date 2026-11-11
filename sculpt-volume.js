@@ -3,7 +3,8 @@
 const STORAGE=()=>GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST;
 const ENTRIES={
   voxelPrepare:[[0],[0]],
-  voxelGuideBuild:[[0,3],[1]],
+  voxelGuideBlocks:[[0,3],[6]],
+  voxelGuideBuild:[[0,3,6],[1]],
   voxelClassify:[[0,4],[2,3,4]],
   voxelBuild:[[0,1,3,4,5],[5]],
   voxelWeather:[[0,1,2,3,4,5],[5]],
@@ -15,8 +16,8 @@ export class VoxelSurface {
     const module=d.createShaderModule({label:'voxel solid',code});
     const errors=(await module.getCompilationInfo()).messages.filter(m=>m.type==='error');
     if(errors.length)throw Error(errors.map(m=>`${m.lineNum}: ${m.message}`).join('\n'));
-    const input=b=>b===0?{binding:b,visibility:GPUShaderStage.COMPUTE|GPUShaderStage.FRAGMENT,buffer:{type:'uniform'}}:[3,4].includes(b)?{binding:b,visibility:GPUShaderStage.COMPUTE|GPUShaderStage.FRAGMENT,texture:{sampleType:'unfilterable-float'}}:{binding:b,visibility:GPUShaderStage.COMPUTE|GPUShaderStage.FRAGMENT,buffer:{type:'read-only-storage'}};
-    const output=b=>b<2?{binding:b,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:'write-only',format:'rgba32float'}}:{binding:b,visibility:GPUShaderStage.COMPUTE,buffer:{type:'storage'}};
+    const input=b=>b===0?{binding:b,visibility:GPUShaderStage.COMPUTE|GPUShaderStage.FRAGMENT,buffer:{type:'uniform'}}:[3,4,6].includes(b)?{binding:b,visibility:GPUShaderStage.COMPUTE|GPUShaderStage.FRAGMENT,texture:{sampleType:'unfilterable-float'}}:{binding:b,visibility:GPUShaderStage.COMPUTE|GPUShaderStage.FRAGMENT,buffer:{type:'read-only-storage'}};
+    const output=b=>b<2||b===6?{binding:b,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:'write-only',format:'rgba32float'}}:{binding:b,visibility:GPUShaderStage.COMPUTE,buffer:{type:'storage'}};
     const empty=d.createBindGroupLayout({entries:[]});self.passes={};
     for(const [entryPoint,[reads,writes]]of Object.entries(ENTRIES)){
       const a=d.createBindGroupLayout({entries:reads.map(input)}),b=d.createBindGroupLayout({entries:writes.map(output)});
@@ -67,7 +68,9 @@ export class VoxelSurface {
       this.clear();
       const s=this.bounds(rect,step,low,high),n=s.columnsX*s.columnsY;
       const available=r.budgetBytes-r.reservedBytes-r.residentBytes;
-      const metadata=s.width*s.height*32+n*16+s.capacity*16+16;
+      // The guide's blocks are 4 px on a side (engine-volume.wgsl voxelGuideBlocks).
+      const blockCells=Math.max(1,Math.round(4/step)),blocksX=Math.ceil(s.width/blockCells),blocksY=Math.ceil(s.height/blockCells);
+      const metadata=s.width*s.height*32+blocksX*blocksY*16+n*16+s.capacity*16+16;
       const split=async()=>{
         this.clear();if(Math.min(rect.width,rect.height)<=8*scale&&Math.max(rect.width,rect.height)<=8*scale)throw Error('The voxel surface exceeds the terrain memory budget: '+JSON.stringify({rect,s,available,metadata,resident:r.residentBytes,reserved:r.reservedBytes}));
         const horizontal=rect.width>=rect.height,key=horizontal?'width':'height',axis=horizontal?'x':'y';
@@ -75,14 +78,15 @@ export class VoxelSurface {
         await piece({...rect,[key]:a});await piece({...rect,[axis]:rect[axis]+a,[key]:rect[key]-a});
       };
       if(metadata>available*.6||s.capacity*16>this.device.limits.maxStorageBufferBindingSize){await split();return;}
-      this.height=this.texture('voxel authored surface',s.width,s.height);this.guide=this.texture('voxel cliff guides',s.width,s.height);
+      this.height=this.texture('voxel authored surface',s.width,s.height);this.guide=this.texture('voxel cliff guides',s.width,s.height);this.blocks=this.texture('voxel guide blocks',blocksX,blocksY);
       this.columns=this.buffer('voxel column ranges',n*16);this.bricks=this.buffer('voxel brick positions',s.capacity*16);
       this.counter=this.buffer('voxel brick count',16,STORAGE()|GPUBufferUsage.COPY_SRC);
       this.device.queue.writeBuffer(this.counter,0,new Uint32Array(4));this.settings(s);
-      const input={0:{buffer:this.uniform},3:this.height.createView(),4:this.guide.createView()};
-      const output={0:this.height.createView(),1:this.guide.createView(),2:{buffer:this.columns},3:{buffer:this.bricks},4:{buffer:this.counter}};
+      const input={0:{buffer:this.uniform},3:this.height.createView(),4:this.guide.createView(),6:this.blocks.createView()};
+      const output={0:this.height.createView(),1:this.guide.createView(),2:{buffer:this.columns},3:{buffer:this.bricks},4:{buffer:this.counter},6:this.blocks.createView()};
       const countEncoder=this.device.createCommandEncoder({label:'voxel surface allocation'});
       this.encode('voxelPrepare',countEncoder,[Math.ceil(s.width/8),Math.ceil(s.height/8)],input,output);
+      this.encode('voxelGuideBlocks',countEncoder,[Math.ceil(blocksX/8),Math.ceil(blocksY/8)],input,output);
       this.encode('voxelGuideBuild',countEncoder,[Math.ceil(s.width/8),Math.ceil(s.height/8)],input,output);
       this.encode('voxelClassify',countEncoder,[Math.ceil(s.columnsX/8),Math.ceil(s.columnsY/8)],input,output);
       countEncoder.copyBufferToBuffer(this.counter,0,this.readback,0,16);this.device.queue.submit([countEncoder.finish()]);

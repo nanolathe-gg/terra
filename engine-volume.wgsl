@@ -83,6 +83,8 @@ fn voxelSkin(p:vec3f,slope:f32,painted:f32,rain:f32)->vec2f {
 struct VolumeCount {bricks:atomic<u32>,invalid:atomic<u32>,padding:vec2u}
 @group(3) @binding(4) var<storage,read_write> countOut:VolumeCount;
 @group(3) @binding(5) var<storage,read_write> densityOut:array<u32>;
+@group(3) @binding(6) var blockOut:texture_storage_2d<rgba32float,write>;
+@group(2) @binding(6) var vk:texture_2d<f32>;
 fn voxelSourceHeight(p:vec2f)->f32 {
     let h=surfaceHeight(p);
     if(u.iceSoft<=0.0){return h;}
@@ -98,16 +100,39 @@ fn voxelPrepare(@builtin(global_invocation_id) id:vec3u){
     let g=vec2f(voxelSourceHeight(p+vec2f(e,0))-voxelSourceHeight(p-vec2f(e,0)),voxelSourceHeight(p+vec2f(0,e))-voxelSourceHeight(p-vec2f(0,e)))/(2.0*e);
     textureStore(cacheOut,vec2i(id.xy),vec4f(h,normalize(vec3f(-g,1))));
 }
+// The guide gives each voxel the direction its rock is displaced along: its own surface normal, or that of a steeper face within 16 px,
+// so a cliff's foot and brow move with the cliff. Blocks of 4 px on the global lattice are reduced first to their steepest normal, and
+// every voxel then searches the same blocks. Searching the surface itself at each voxel's own position plus multiples of 4 px, as before,
+// gave neighbors disjoint candidates: they picked different faces, and the solid carried a 4 px lattice of dots on every steep face.
+// The surface's range (low, high: what voxelClassify allocates bricks from) is still read at those multiples of 4 px, so a column's bricks
+// are the ones it had.
+fn voxelBlockCells()->i32{return max(1,i32(round(4.0/vs.step)));}
+@compute @workgroup_size(8,8)
+fn voxelGuideBlocks(@builtin(global_invocation_id) id:vec3u){
+    let cells=voxelBlockCells();let last=vec2i(i32(vs.width),i32(vs.height))-1;
+    if(any(vec2i(id.xy)*cells>last)){return;}
+    var n=vec2f(0);var steep=2.0;
+    for(var y=0;y<cells;y++){for(var x=0;x<cells;x++){
+        let a=textureLoad(vh,min(vec2i(id.xy)*cells+vec2i(x,y),last),0);
+        if(a.w<steep){steep=a.w;n=a.yz;}
+    }}textureStore(blockOut,vec2i(id.xy),vec4f(n,steep,0));
+}
 @compute @workgroup_size(8,8)
 fn voxelGuideBuild(@builtin(global_invocation_id) id:vec3u){
     if(id.x>=vs.width||id.y>=vs.height){return;}
-    let at=vec2i(id.xy);let original=textureLoad(vh,at,0);var n=original.yzw;var score=1.0-n.z;var low=original.x;var high=original.x;
+    let at=vec2i(id.xy);let original=textureLoad(vh,at,0);var n=original.yz;var score=1.0-original.w;var low=original.x;var high=original.x;
     for(var y=-4;y<=4;y++){for(var x=-4;x<=4;x++){
-        let off=vec2i(round(vec2f(f32(x),f32(y))*4.0/vs.step));let d=length(vec2f(off))*vs.step;if(d>16.0){continue;}
-        let a=textureLoad(vh,clamp(at+off,vec2i(0),vec2i(i32(vs.width),i32(vs.height))-1),0);
-        low=min(low,a.x);high=max(high,a.x);let q=(1.0-a.w)/(1.0+d*d*.035);
-        if(a.w<.5&&q>score){n=a.yzw;score=q;}
-    }}textureStore(guideOut,at,vec4f(n.xy,low,high));
+        let off=vec2i(round(vec2f(f32(x),f32(y))*4.0/vs.step));if(length(vec2f(off))*vs.step>16.0){continue;}
+        let h=textureLoad(vh,clamp(at+off,vec2i(0),vec2i(i32(vs.width),i32(vs.height))-1),0).x;low=min(low,h);high=max(high,h);
+    }}
+    let cells=voxelBlockCells();let size=f32(cells)*vs.step;let blocks=vec2i(textureDimensions(vk));let home=at/cells;
+    let reach=i32(ceil(16.0/size))+1;
+    for(var y=-reach;y<=reach;y++){for(var x=-reach;x<=reach;x++){
+        let b=home+vec2i(x,y);if(any(b<vec2i(0))||any(b>=blocks)){continue;}
+        let d=length((vec2f(b)+.5)*size-(vec2f(at)+.5)*vs.step);if(d>16.0){continue;}   // to the block's middle
+        let a=textureLoad(vk,b,0);let q=(1.0-a.z)/(1.0+d*d*.035);
+        if(a.z<.5&&q>score){n=a.xy;score=q;}
+    }}textureStore(guideOut,at,vec4f(n,low,high));
 }
 @compute @workgroup_size(8,8)
 fn voxelClassify(@builtin(global_invocation_id) id:vec3u){
