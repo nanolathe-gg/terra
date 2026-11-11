@@ -989,6 +989,27 @@ fn wallBroad(x: f32, y: f32, wv: f32) -> f32 { return vnoise(x / (7.0 * wv), y /
 // longer, larger one, so their spacing runs from about half to one and a half times the Gully size along one wall.
 fn gullyDeepVaried(even: f32, x: f32, y: f32, wv: f32) -> f32 { return even * mix(1.0, clamp(1.0 + 1.6 * wallBroad(x, y, wv), 0.0, 2.4), u.lfVary); }
 fn gullyWarpVaried(even: f32, x: f32, y: f32, wv: f32) -> f32 { return even + u.lfVary * 1.6 * wv * vnoise(x / (5.0 * wv), y / (5.0 * wv), u.seed ^ 0x1d4fu); }
+// Hard beds: a raised face stands in cliff bands with gentler slopes between them. The cell's lift over the ground, as a share of the section's own
+// crest there, goes through a staircase of bedN equal pairs: the lower 0.6 of a pair is the soft bed, which keeps a tenth of its slope at full strength,
+// and the upper 0.4 the hard bed, which takes up the rest and stands that much steeper. It runs after the Gullies, so a band keeps its level round
+// every spur and up every ravine, as a bed does. The bands' levels wave by a quarter of a pair along the wall, and each band thins out over some
+// stretches (more of them with Variation along the wall), so a ledge ends and the next steps out. Only the difference from the straight ramp is added:
+// at strength 0 nothing moves, nor does the foot, nor the section's own level top (q from 0.92 up), whatever the Gullies cut into it.
+fn hardBeds(value: f32, base: f32, own: f32, q: f32, lx: f32, ly: f32) -> f32 {
+  let lift = (own - base) / max(q, 0.05);
+  let free = 1.0 - sm(0.92, 1.0, q);
+  if (lift < 8.0 || free <= 0.0) { return value; }
+  let g = clamp((value - base) / lift, 0.0, 1.0);
+  let wave = 0.25 * (0.6 * vnoise(lx / 190.0, ly / 190.0, u.seed ^ 0x91b3u) + 0.4 * vnoise(lx / 61.0, ly / 61.0, u.seed ^ 0x4c7du));
+  let at = clamp(g * u.bedN + wave * 4.0 * g * (1.0 - g), 0.0, u.bedN);
+  let k = min(floor(at), u.bedN - 1.0); let t = at - k;
+  let x = (t - 0.6) / 0.4;
+  let stair = select(0.06 + 0.94 * mix(x, sm(0.0, 1.0, x), 0.5), 0.1 * t, t < 0.6);
+  let ticket = 0.5 + 0.5 * (0.7 * vnoise(lx / 150.0 + k * 7.3, ly / 150.0 - k * 3.1, u.seed ^ 0x77a1u) + 0.3 * vnoise(lx / 47.0 + k * 1.7, ly / 47.0, u.seed ^ 0x1e35u));
+  let bar = 0.1 + 0.35 * u.lfVary;
+  let intact = sm(bar - 0.25, bar + 0.25, ticket);
+  return value + lift * (stair - t) / u.bedN * u.bedSoft * intact * free;
+}
 // A landform's gullies at a cell it raises: steered by the stroke's own fall line, at the slope of the picked segment's own section across that line, faded
 // over the foot (q 0 to 0.25) and off a smooth route. The pattern lives in the shape's frame, so it moves with the shape and every tile and page computes
 // the same value.
@@ -1294,6 +1315,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
     value = select(mix(value, ramp, blend), ramp, blend >= 1.0);
   }
   if (u.gully > 0.0 && value > base) { value = landformGullies(value, pick.y, pk, psh, wx, wy, lx, ly, base, nA, nB, nC, x, y, i, cells); }
+  if (u.bedN >= 1.0 && u.bedSoft > 0.0 && u.combine == 0u && value > base) { value = hardBeds(value, base, pick.x, pick.y, lx, ly); }
   var scree = 0.0;   // how far the talus covers the cell: loose ground takes no cracks
   if (talus > 0.0) { scree = sm(0.0, 8.0, base + talus - value); talusGround(i, scree); value = max(value, base + talus); }
   if (u.combine == 0u) { value = max(base, value); } else if (u.combine == 1u) { value = min(base, value); }

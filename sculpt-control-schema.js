@@ -20,8 +20,11 @@ export function shapeControlAvailable(key,kind,p){
   if(['gullies','gullySize'].includes(key))return Math.round(Number(p.combine||0))!==1;
   // Talus rests on ground the stroke raises, so it works with the plain Raise choice only.
   if(key==='talus')return Math.round(Number(p.combine||0))===0;
-  // Variation along the wall works on the Wander and the Gullies: it shows once one of them is on. A river's path is its channel.
-  if(key==='wallVary')return !isRiver(p)&&(Number(p.wander)>0||Number(p.gullies)>0);
+  // Hard beds stand in ground the stroke raises (the plain Raise choice), and their strength shows once there is a bed.
+  if(key==='beds')return Math.round(Number(p.combine||0))===0;
+  if(key==='bedSoft')return Math.round(Number(p.combine||0))===0&&Math.round(Number(p.beds)||0)>=1;
+  // Variation along the wall works on the Wander, the Gullies and the Hard beds: it shows once one of them is on. A river's path is its channel.
+  if(key==='wallVary')return !isRiver(p)&&(Number(p.wander)>0||Number(p.gullies)>0||Math.round(Number(p.beds)||0)>=1);
   if(['layerCircle','lavaCircleVary'].includes(key))return on&&circular;
   // A river's path is its channel, carried by its migration; an impact would read that path as its track (lfcrater).
   if(['ejecta','secondaries'].includes(key))return !isRiver(p);
