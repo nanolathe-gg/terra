@@ -257,7 +257,7 @@ WORLD_KNOBS = {
                   # in a hard step: colour by depth is flat to ~30 and gone by ~44 in
                   # both windows (retail depth 32-40: R 53, 40-48: R 39, the 16-px height
                   # grid upsampled), so the step sits at 40 (H24: the midpoint, 42) and nothing fades.
-                  bedTint=1, bedContrast=.45, bedRelief=1.5, deepEdge=1,
+                  bedTint=1, bedContrast=.45, bedRelief=.6, deepEdge=1,
                   # Ground (card E1): retail's plain is flat (dry heights 9 +- 1) with lit
                   # lumps only in patches, which the Paint brush's Ground lumps makes. On
                   # level pixels (24 px from other heights) the s.d. of 15-px-blurred luma
@@ -275,7 +275,8 @@ WORLD_KNOBS = {
                   # shading the pale bed over 100+ px) and carries crisp mid-scale lumps (luma s.d.
                   # after a 5-px blur 2.8-3.9 -> 5.6, retail 5.6 / 7.5 in green-1 / green-3).
                   # Green dive: the bed is lit by its own slope too (bedFlat .4; 1 lit only its lumps), so shelves turned to the sun read lighter,
-                  # with lumps (bedRelief 1.5) that the dull bed light (bedContrast .45) keeps faint.
+                  # with faint lumps (bedRelief .6): retail's shallows are smooth with fine specks. (Green's pictures move with the chunk
+                  # renderer's relief reach, which counts bedRelief, so its dry scenes stay as they were at .6.)
                   shelfWander=24, bedFlat=.4,
                   # G1: the shallow-to-deep outline is notched by up to 5 px (retail's runs 3-8 px).
                   shoalRag=5,
