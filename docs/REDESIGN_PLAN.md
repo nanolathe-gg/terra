@@ -2618,8 +2618,53 @@ it drew rings round small steep spots once the lattice no longer hid it.
   changed much more. On the branch `realism/checker`; the owner has not
   judged it.
 
-**Next [proposed by Claude].** The comb and staircase, then row 1, on
-Desert sandstone and Green granite together.
+**Row 1a closed; the comb is row 1 [Claude, 2026-11-10].** One-pixel
+lines at least 6 px long are 20 to 40 times commoner running down the
+screen than across it (0.13% against 0.003% of clay pixels on breccia)
+**[measured]**. They are real structure: a vertical joint, or the side of
+a very narrow block, projects to a vertical line on screen whichever way
+the wall faces. Averaging the lighting normal over three rays across a
+pixel changed nothing (0.131 to 0.128%) at three times the draw time. So
+the comb is blocks and joints too fine to read, which is row 1.
+
+**Row 1, first experiments [Claude, 2026-11-10; clay, granite on modern
+Green, 512 px windows].**
+
+- *Numbers alone do not give planes.* With every fine term off (creases,
+  grit, scratches, lamination, spall, breaks, runoff cut), the wall is a
+  smooth drape with crack lines: the blocks are 34 and 85 px across and
+  their offsets 2 to 4 units, so no block stands as a form. Three times
+  the offsets (out of the control's range, set in the shader for the
+  test) changes little. Under the solid, the authored wall is one slope
+  with ribs down the fall line.
+- *A prototype that does: whole blocks.* A block is rock when its middle
+  lies under the authored surface and air when over it; the solid's skin
+  is then the flat faces between a rock block and an air block. It costs
+  two more reads of the surface per voxel and no further block search.
+  By eye it gives lit planes 30 to 120 px across. With the blocks'
+  middles scattered less (box-like blocks) granite stacks into jointed
+  blocks, and Desert's low wide blocks stack into ledges along the beds,
+  which is row 2 as well. Rough still: stripes on some facets, large
+  blocks reach past the solid's brick apron, and at blend 0 it is not
+  yet today's bytes.
+- *Not built.* The prototype is kept outside the repository and was
+  shown to the owner as a toggle page. It needs the owner's eye, and a
+  decision on controls: an amount and a block regularity, as new controls
+  or carried by Block offsets and tilts.
+
+**World Creator, read at the owner's request [a subagent's reading,
+2026-11-10, not rechecked].** Its documentation names the same piece
+("Rock Blocks" with Planarity and Bevel, "Fracture" with Joint Spacing
+and Secondary Joints, a "Detail Equalizer"). For the other rows it
+offers: one grayscale pattern field per surface mapped through a color
+ramp (row 3); pigment carried downhill by runoff and dropped where
+slopes flatten (rows 3 and 6); sand as a separate body laid by a
+wind-shelter mask (row 4); debris colored by its source (row 5). Its
+product page's hero picture is kept as a ninth reference, outside the
+repository.
+
+**Next [proposed by Claude].** Whole blocks built properly, if the owner
+wants the look; then the fine terms scaled down on a block's face.
 
 **Scale: none fixed; a working one may be used [owner decision,
 2026-11-10].** Codex proposes 4 art pixels to a meter
