@@ -2663,8 +2663,57 @@ wind-shelter mask (row 4); debris colored by its source (row 5). Its
 product page's hero picture is kept as a ninth reference, outside the
 repository.
 
-**Next [proposed by Claude].** Whole blocks built properly, if the owner
-wants the look; then the fine terms scaled down on a block's face.
+**Whole blocks, built [owner decision, 2026-11-10: "I love the whole
+block look, and each example is useful. Adopt it and drive it from new
+controls for the amount, size, variation, orientation, etc."; built by
+Claude on branch `realism/whole-blocks`, not landed].**
+
+- *The model.* A block is rock when its middle lies under the authored
+  surface and air when it lies over it, one answer for the whole block
+  (`engine-common.wgsl` `voxelBlockMiddle`, `engine-volume.wgsl`
+  `voxelBlockIn`, `voxelWhole`); the faces between a rock block and an air
+  block are the rock's skin.
+- *Controls (Rock blocks).* Whole blocks and Whole large blocks, each the
+  share of blocks that are whole (0 to 1), and Block regularity (0
+  scattered as before, 1 a grid). Size, proportions, tilt, orientation and
+  size variation stay with the six controls that already set them for the
+  same lattice; the owner's list named new controls for these, and this is
+  the one place the build departs from it (rule 9: a new control does not
+  duplicate one beside it). The owner can overrule.
+- *What failed first [by eye].* Moving the surface per block along the
+  guide's normal (a continuous standoff) gave a comb of vertical lines:
+  27 px of travel multiplies the guide's per-voxel noise. Any cut that
+  followed the guide did the same. So where blocks may stand is cut from
+  the authored surface 12 px around the voxel: not above the land behind
+  a face, not below the ground before it.
+- *Limits kept.* Blocks stay inside the bricks already reserved (measured:
+  49,919 bricks on green-4 with or without them). A block's middle is read
+  at most 40 px from a voxel, so a large block is trimmed and is less whole
+  than a small one [by eye]. A block's top is level with the land behind
+  it: no rock stands on a plateau.
+- *Measured.* At 0, 33 of 34 scenes byte-identical and one pixel in
+  desert-1 (compiler rounding). Share of the raised class moved from 0 to
+  1, per world's three scenes: Whole blocks 19.2/20.2/17.7% (Green),
+  4.3/9.6/8.2% (Desert), 8.3/30.3/0% (Red); Whole large blocks
+  27.2/19.3/32.7, 5.4/11.7/9.4, 18.6/49.8/0; Block regularity 2.9/6.7/3.0,
+  5.3/7.6/7.2, 2.2/11.4/0. Modern Green with the granite recipe at 0.85:
+  final picture 2462 and 2410 ms against 2270 and 2274 on main, 41 chunk
+  paints a second while dragging against 45.
+- *Recipes [proposed by Claude; the owner decides].* Sandstone 0.8 with
+  regularity 0.55, granite 0.85 with 0.15, basalt 1 with 0.7, limestone
+  0.6 with 0.45, gneiss 0.5 small and 0.5 large with 0.3, breccia 1. Shale,
+  schist and conglomerate stay at 0: slabs 2 to 3 units thick read as
+  texture, not planes.
+- *Open.* Voxel steps 2 and 4 not looked at. Fine relief (pits, grit,
+  joints) does not show on a block's faces, only color does. Small and
+  large together leave the draped face where the two disagree. Faint
+  banding on some slanted faces at 3x. On a hill the blocks make a tor,
+  against the owner's hills design, so hills want a lower amount than
+  cliffs (no control for that yet).
+
+**Next [proposed by Claude].** Fine relief on a block's faces; a longer
+reach for large blocks if the owner wants them more whole (costs memory);
+then rows 2 to 8.
 
 **Scale: none fixed; a working one may be used [owner decision,
 2026-11-10].** Codex proposes 4 art pixels to a meter
