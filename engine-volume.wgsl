@@ -5,6 +5,7 @@ struct VolumeSettings {
     origin:vec2f, step:f32, columnsX:u32,
     columnsY:u32, width:u32, height:u32, capacity:u32,
     low:f32, high:f32, screenY:vec2f,
+    top:f32,   // where every ray starts (sculpt-volume.js render)
 }
 @group(2) @binding(0) var<uniform> vs:VolumeSettings;
 @group(2) @binding(1) var<storage,read> vc:array<vec4i>;
@@ -287,7 +288,7 @@ fn voxelRayPoint(screen:vec2f,z:f32,underwater:bool)->vec3f {
     return vec3f(screen.x,screen.y+(select(z,u.sea,underwater)-u.base)*.5,z);
 }
 fn voxelHit(screen:vec2f)->vec3f {
-    var z=vs.high+40.0;var previous=z;var underwater=false;
+    var z=vs.top;var previous=z;var underwater=false;
     for(var i=0;i<4096;i++){
         let d=voxelField(voxelRayPoint(screen,z,underwater));if(d<=0.0){break;}
         previous=z;z-=clamp(d*.45,.24*vs.step,8.0*vs.step);

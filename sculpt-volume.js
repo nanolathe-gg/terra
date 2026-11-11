@@ -25,9 +25,9 @@ export class VoxelSurface {
       self.passes[entryPoint]={pipeline:await d.createComputePipelineAsync({label:entryPoint,layout,compute:{module,entryPoint}}),reads,writes,a,b};
     }
     self.drawLayout=d.createBindGroupLayout({entries:[0,1,2,3,4].map(input)});
-    self.uniform=d.createBuffer({label:'voxel region settings',size:48,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+    self.uniform=d.createBuffer({label:'voxel region settings',size:64,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
     self.readback=d.createBuffer({label:'voxel allocation count readback',size:16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
-    renderer.track(self.uniform,'voxel settings',48,'shared');renderer.track(self.readback,'voxel count readback',16,'shared');
+    renderer.track(self.uniform,'voxel settings',64,'shared');renderer.track(self.readback,'voxel count readback',16,'shared');
     return self;
   }
   constructor(renderer){this.renderer=renderer;this.device=renderer.device;this.owned=[];this.stats={pieces:0,bricks:0,peakBytes:0,allocationMs:0};}
@@ -36,8 +36,8 @@ export class VoxelSurface {
   buffer(label,size,usage=STORAGE()){return this.own(this.device.createBuffer({label,size:Math.max(16,size),usage}),label,Math.max(16,size));}
   texture(label,width,height){return this.own(this.device.createTexture({label,size:[width,height],format:'rgba32float',usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.TEXTURE_BINDING}),label,width*height*16);}
   settings(s,capacity=s.capacity){
-    const data=new ArrayBuffer(48),f=new Float32Array(data),u=new Uint32Array(data);
-    f.set([...s.origin,s.step],0);u.set([s.columnsX,s.columnsY,s.width,s.height,capacity],3);f.set([s.low,s.high,s.screenLow,s.screenHigh],8);
+    const data=new ArrayBuffer(64),f=new Float32Array(data),u=new Uint32Array(data);
+    f.set([...s.origin,s.step],0);u.set([s.columnsX,s.columnsY,s.width,s.height,capacity],3);f.set([s.low,s.high,s.screenLow,s.screenHigh,s.top],8);
     this.device.queue.writeBuffer(this.uniform,0,data);
   }
   inputs(){return {0:{buffer:this.uniform},1:{buffer:this.columns},2:{buffer:this.density[0]},3:this.height.createView(),4:this.guide.createView(),5:{buffer:this.bricks}};}
@@ -47,14 +47,14 @@ export class VoxelSurface {
     const pass=encoder.beginComputePass({label:name});pass.setPipeline(p.pipeline);pass.setBindGroup(0,this.renderer.commonBindGroup('draw'));
     pass.setBindGroup(2,group(p.a,p.reads,reads));pass.setBindGroup(3,group(p.b,p.writes,writes));pass.dispatchWorkgroups(...groups);pass.end();
   }
-  bounds(rect,step,low,high){
+  bounds(rect,step,low,high,top){
     const r=this.renderer,base=r.config.baseHeight-r.config.seaLevel,unit=8*step,halo=72+6*step;
     const x0=Math.floor((rect.x-halo)/unit)*unit,x1=Math.ceil((rect.x+rect.width+halo)/unit)*unit;
-    const y0=Math.floor((rect.y+(low-40-base)*.5-halo)/unit)*unit,y1=Math.ceil((rect.y+rect.height+(high+40-base)*.5+halo)/unit)*unit;
+    const y0=Math.floor((rect.y+(low-40-base)*.5-halo)/unit)*unit,y1=Math.ceil((rect.y+rect.height+(Math.max(high+40,top)-base)*.5+halo)/unit)*unit;
     const width=Math.round((x1-x0)/step),height=Math.round((y1-y0)/step),columnsX=width/8,columnsY=height/8;
     const apron=Math.max(40,6*step);
     const capacity=columnsX*columnsY*(Math.ceil((high+apron)/unit)-Math.floor((low-apron)/unit)+1);
-    return {origin:[x0,y0],step,width,height,columnsX,columnsY,capacity,low,high,screenLow:rect.y,screenHigh:rect.y+rect.height};
+    return {origin:[x0,y0],step,width,height,columnsX,columnsY,capacity,low,high,top,screenLow:rect.y,screenHigh:rect.y+rect.height};
   }
   async render(draw){
     const r=this.renderer,region=r.activeRegion,scale=r.uniformView.getFloat32(r.layout.fields.get('chunkScale').offset,true);
@@ -62,11 +62,15 @@ export class VoxelSurface {
     const step=2**Math.max(0,Math.floor(Math.log2(r.voxelScale)));
     const h=r.config.heightBounds??[-90,300],extra=Math.max(64,region.reach.projection[1]*2+r.config.baseHeight-h[1]);
     const low=h[0]-extra-r.config.seaLevel,high=h[1]+extra-r.config.seaLevel;
+    // The rays start from one height, the authored maximum with 64 units for the relief and the 40 the bricks reach above it: not from the
+    // relief allowance's (high), which every relief term moves. The march can step past thin rock, so a ray from another start finds
+    // another face, and a term that only moved the allowance re-rolled a tenth of a picture's steep faces (green-2 10%, Bed lumps .6 to 2).
+    const top=h[1]+104;
     this.stats.pieces=this.stats.bricks=this.stats.peakBytes=0;const start=performance.now();
     let first=true;
     const piece=async rect=>{
       this.clear();
-      const s=this.bounds(rect,step,low,high),n=s.columnsX*s.columnsY;
+      const s=this.bounds(rect,step,low,high,top),n=s.columnsX*s.columnsY;
       const available=r.budgetBytes-r.reservedBytes-r.residentBytes;
       // The guide's blocks are 4 px on a side (engine-volume.wgsl voxelGuideBlocks).
       const blockCells=Math.max(1,Math.round(4/step)),blocksX=Math.ceil(s.width/blockCells),blocksY=Math.ceil(s.height/blockCells);
