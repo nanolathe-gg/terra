@@ -2947,6 +2947,53 @@ and boulders look good, land all of it"].** Row 5 of round 4.
   color; no fresh break face.
 - Page (private): https://claude.ai/artifact/LMov1KXL2dBW49fqd4K1pH
 
+**Stage 2, one bed model [built on `realism/one-bed` by a Sonnet agent, 2026-11-10 to 11; landed 2026-11-11 on the owner's "One bed model: land it"].**
+Reviewed by Claude from its own renders (page, private:
+https://claude.ai/artifact/9mbveQn7284r2KrfnmR64J). Known defects the
+owner saw before landing, still open: Crystal's shallows get a hard
+jagged step with dark outlines; Zhon gets dark halos round its islands;
+red-3's rock under water is much darker than the pale shelf outside it;
+`bedRelief` moves under 5% of the shallows on Green and Archipelago
+(rule 9); the depth tint switches on whole at any hard step above 0.
+After merging main `1583c995`: land tier passes but for the save
+Worker's timing test under load (passes alone, 183 of 183); 31 of 34
+scenes differ, 23 of them by 0.1% or more, heights identical; export bytes same on all three maps, red-16
+at 50,166 tiles and about 100 s against 78 s on main (one run each).
+The owner agreed to remove the noise water, the cracked bed, the lit bed
+bumps, the bed dots and the bed grain.
+
+- *Built.* The bed under water is always the lit bed: `bedLit`, the stroke
+  option Shallow water look (`waterBed`, mask planes 11 and 13, the bake's
+  cracked-bed crack cut), `crackedStep`, `shoalBump`, `shoalBumpPx`,
+  `bedDots`, `bedDotCell` and `shoalGrain` are gone from the shader,
+  uniforms, knobs, schema, scene fields, UI, gpu planes, `sculpt.py`, scene
+  JSON and tests. `bedRelief` is the one control for the bed's lumps: three
+  scales (9, 19, 41 px), added after the silt burial, defaulting to 1 for every
+  world (Red 2.2, Green .6, Archipelago 2). The chunk renderer's relief
+  reach still counts it: dropping it moved Green's dry pictures. Under a hard step the tint
+  deepens toward the deep colour with depth (a constant, 30% at the step).
+- *Found.* Lumps never reached Red's lake interior: `surfaceHeight` returned
+  the bare height below -12, so the solid the sun lights had no relief there.
+  The draw now reads the baked relief at any depth. The tint and the step
+  read the authored bed depth, so art lumps do not move the water's colour.
+- *Soft ground [measured by looking].* The land pipeline's colour below the
+  sea is the world's cover: grass and moss on Green and modern Green, with
+  grey rock flecks; sand with a dark grey mottle on Archipelago. Using it
+  would put grass under lakes, so the soft bed stays the world's bare ground
+  (`levelGround`) under the pipeline's own shading (sun, cavity, cast shadow),
+  and the voxel rock keeps the pipeline's colour (`rockBedShare`). No change.
+- *Measured.* Heights of all 34 scenes byte-identical to the base. Scenes
+  moved (of the quick tier): see the commit messages; the largest are
+  crystal-2 24.5%, red-3 22.3%, red-2 15.1%, zhon 10 to 14%. Land tier
+  passes. Tiles: green-4 2,325 (2,325 before), lava-8 14,498 (14,442), red-16
+  50,166 (50,094). Bed lumps over 5% of the shallows class: Red passes (2.2 to
+  1 moves 12.8, 8.3, 2.7%; 2.2 to 0 moves 38.3, 23.8, 12.4%); Green and
+  Archipelago stay under (under 1%): their bed light is damped by
+  `bedContrast` .45 and `shadeDepth` .3.
+- *Left alone.* The step and its outline, `bedFlat`, the tint controls, the
+  waterline, foam, the Shore option, Rock at shores. `crackedStep` went
+  because only the cracked bed read it.
+
 **Overnight run, item 3: material edges [Claude, 2026-11-11].** Branch
 `realism/soil-edges`, not landed: the owner asked to see it first. Rows
 3 and 6 of round 4, and the owner's concern that sand at cliff feet

@@ -778,9 +778,6 @@ export class TerrainRenderer {
     this.f('uCrystalShallowInk', variant.has('crystalShallowInk') ? Number(variant.get('crystalShallowInk')) : 0.55);
     // E11: shallow water round 2; every default is the earlier look.
     this.f('uShelfWander', variant.has('shelfWander') ? Number(variant.get('shelfWander')) : 0);
-    this.f('uCrackedStep', variant.has('crackedStep') ? Number(variant.get('crackedStep')) : 0);
-    this.f('uBedDots', variant.has('bedDots') ? Number(variant.get('bedDots')) : 0);
-    this.f('uBedDotCell', variant.has('bedDotCell') ? Number(variant.get('bedDotCell')) : 14);
     this.f('uStepSoftPx', variant.has('stepSoftPx') ? Number(variant.get('stepSoftPx')) : 1);
     this.f('uRingContrast', variant.has('ringContrast') ? Number(variant.get('ringContrast')) : 0);
     this.f('uRingCount', variant.has('ringCount') ? Number(variant.get('ringCount')) : 7);
@@ -819,7 +816,6 @@ export class TerrainRenderer {
     this.f('uShallowDepth', variant.has('shallowDepth') ? Number(variant.get('shallowDepth')) : this.config.material?.shallowDepth ?? 2);
     this.f('uDeepDepth', variant.has('deepDepth') ? Number(variant.get('deepDepth')) : this.config.material?.deepDepth ?? 42);
     // Water looks (card E1): every default is the earlier water.
-    this.f('uBedLit', variant.has('bedLit') ? Number(variant.get('bedLit')) : 0);
     this.f('uBedTint', variant.has('bedTint') ? Number(variant.get('bedTint')) : 0.85);
     this.v('uShallowMean', (this.config.water?.shallowMeanRGB || this.config.water?.shallowRGB || [60, 115, 163]).map(v => v / 255));
     this.f('uBedBright', variant.has('bedBright') ? Number(variant.get('bedBright')) : 1);
@@ -871,11 +867,8 @@ export class TerrainRenderer {
     this.f('uIceApron', variant.has('iceApron') ? Number(variant.get('iceApron')) : 0);
     this.f('uIceFrost', variant.has('iceFrost') ? Number(variant.get('iceFrost')) : 0);
     // G1: shallow water round 3; every default is the earlier look.
-    this.f('uShoalBump', variant.has('shoalBump') ? Number(variant.get('shoalBump')) : 0);
-    this.f('uShoalBumpPx', variant.has('shoalBumpPx') ? Number(variant.get('shoalBumpPx')) : 6);
     this.f('uShoalRag', variant.has('shoalRag') ? Number(variant.get('shoalRag')) : 0);
     this.f('uShoalStairs', variant.has('shoalStairs') ? Number(variant.get('shoalStairs')) : 0);
-    this.f('uShoalGrain', variant.has('shoalGrain') ? Number(variant.get('shoalGrain')) : 0);
     this.f('uShoalShoreSoft', variant.has('shoalShoreSoft') ? Number(variant.get('shoalShoreSoft')) : 0);
     // Low ground: its tint and reach (0: none, as before); its color is set with the others (setColors).
     this.f('uLowTint', variant.has('lowTint') ? Number(variant.get('lowTint')) : 0);

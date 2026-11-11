@@ -262,7 +262,7 @@ async function editWorld(world, port) {
       const noLayerHeights = await grid(), changed = shoreHeights.filter((h,i)=>Math.abs(h-noLayerHeights[i])>1).length;
       check('shore layers change actual landform heights', changed > 5, {changed});
       await ev(`document.querySelector('#layers [data-index="0"] .layer-name').click(); true`);
-      await setValue('sec-terraces', 5); await setValue('water-deep', 2, 'change'); await setValue('water-bed', 3, 'change'); await ready(ev);
+      await setValue('sec-terraces', 5); await setValue('water-deep', 2, 'change'); await ready(ev);
       check('one shared step count and flat share replace shore duplicates', await ev(`['shore-layers','layer-ledge','layer-rough','layer-style'].every(id=>!document.getElementById(id+'-control'))&&!document.getElementById('sec-terraces-control').hidden&&!document.getElementById('sec-ledge-control').hidden`));
       await setValue('lf-step-reference',0);await ready(ev);
       check('profile mode keeps the shared count and hides shore-only settings', (await nodes())[0].params.terraces===5 && await ev(`document.getElementById('layer-px-control').hidden&&!document.getElementById('sec-breakup-control').hidden&&document.getElementById('sec-terraces').max==='8'`));

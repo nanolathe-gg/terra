@@ -71,11 +71,11 @@ test('the Colors panel shows the rows a world has, and a cleared row the server 
 });
 
 test("a stroke's water choices count as the world switches they turn on", () => {
-  const nodes = [{kind: 'ground'}, {kind: 'landform', params: {waterDeep: 2, waterBed: 3}}];
-  assert.deepEqual(strokeWaterPicks(nodes), {deepEdge: 0, fadedEdge: 1, bedLit: 1, crackedBed: 1});
+  const nodes = [{kind: 'ground'}, {kind: 'landform', params: {waterDeep: 2}}];
+  assert.deepEqual(strokeWaterPicks(nodes), {deepEdge: 0, fadedEdge: 1});
   const r = renderer(); r.variant.set('deepEdge', '1');
   const v = worldPanelValues({config: {layers: ['ring'], water: {}}, renderer: r, nodes, colors: {shallow: [1, 0, 0]}, weathering: true, materialWeathering: 0});
-  assert.equal(v.deepEdge, 1); assert.equal(v.rampWater, 1); assert.equal(v.bedLit, 1); assert.equal(v.crackedBed, 1);
+  assert.equal(v.deepEdge, 1); assert.equal(v.rampWater, 1);
   assert.equal(v.waterColored, 1); assert.equal(v.waterTones, 2); assert.equal(v.ringLayer, 1); assert.equal(v.beachLayer, 0);
 });
 

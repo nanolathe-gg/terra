@@ -123,7 +123,6 @@
           "cracks": 0,
           "terraces": 0,
           "styleVegetation": 0,
-          "waterBed": 0,
           "curve": {
             "form": "lfPlateau",
             "knots": [
@@ -187,7 +186,7 @@
       }
     ]
   ],
-  "query": "biome=red&mapX=4&mapY=4&sea=100&erosion=0&bedLit=1&bedContrast=.6&bedTint=.95&bedBright=1.35&deepEdge=0&shallowDepth=16&deepDepth=55&waterSoft=0&faceFill=.2",
+  "query": "biome=red&mapX=4&mapY=4&sea=100&erosion=0&bedContrast=.6&bedTint=.95&bedBright=1.35&deepEdge=0&shallowDepth=16&deepDepth=55&waterSoft=0&faceFill=.2",
   "window": {
     "x": 128,
     "y": 180,

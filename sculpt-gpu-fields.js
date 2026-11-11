@@ -79,19 +79,18 @@ const MASK_WRITES = [null, [[0, 127], [1, 0], [3, 0]], [[1, 127], [0, 0], [3, 0]
   [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0], [7, 0], [8, 0], [9, 0], [10, 0], [11, 0], [12, 0], [13, 0], [14, 0], [15, 0], [16, 0], [17, 0]],
   [[5, 127]], [[5, -127]], [[6, 127]], [[6, -127]], [[7, 127]], [[7, -127]], [], [], [[12, 127]], [[12, -127]],
   [[14, 127]], [[14, -127]], [[15, 127]], [[15, -127]], [[16, 127]], [[16, -127]], [[17, 127]], [[17, -127]]];
-// A stroke's water choices, as [key, plane]. Plane 9 is a stroke's Soft bank (waterShore 1): no shore rock round its water (engine-rock-weather.wgsl).
-const WATER_PLANES = [['waterDeep', 10], ['waterBed', 11]];
+// A stroke's water edge choice, as [key, plane]. Plane 9 is a stroke's Soft bank (waterShore 1): no shore rock round its water (engine-rock-weather.wgsl).
+const WATER_PLANES = [['waterDeep', 10]];
 // H9: maskSetup() of sculpt.js for a landform: its Local vegetation (plane 16) and a landform stroke's
-// edge and bed flags (written at full strength, `flat`). Each entry is [plane, target, gain, flat].
+// edge flag (written at full strength, `flat`). Each entry is [plane, target, gain, flat].
 function shapeMaskWrites(kind, q, sat) {
   if (kind !== 'landform' || sat) return [];
   const out = [], vegetation = clamp(q.styleVegetation || 0, -1, 1);
   if (Math.abs(vegetation) >= .005) out.push([16, Math.round(127 * vegetation), 1, 0]);
   WATER_PLANES.forEach(([k, plane]) => {
     const c = Math.round(q[k] || 0);
-    if (c < 1 || c > (k === 'waterBed' ? 3 : 2)) return;
+    if (c < 1 || c > 2) return;
     out.push([plane, c === 2 ? -127 : 127, 1, 1]);
-    if (k === 'waterBed') out.push([13, c === 3 ? 127 : 0, 1, 1]);
   });
   if (Math.round(q.waterShore || 0) === 1 && landformMakesWater(q)) out.push([9, 127, 1, 1]);
   // P27: Surf, 0..1 into plane 18, at full strength inside the footprint of a stroke that makes water.

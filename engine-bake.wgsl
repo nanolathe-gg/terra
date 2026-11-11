@@ -605,8 +605,6 @@ const CRACK_JAGGED = 0.6;
 const CRACK_REACH = 0.6;
 // H23: the elongation of the crack cells along the fall line, the same on every world.
 const CRACK_LENGTH = 2.0;
-// H24: the slope a shallow cracked bed's cracks are cut for (the land's rocky faces are cut from about 1), the same on every world.
-const BED_CRACK_SLOPE = 1.0;
 
 // Returns (carved depth, dark, lit, block relief).
 // boost (0..1, card C5 painted cracks "more") raises the world's severity and
@@ -1150,11 +1148,13 @@ fn bake(p: vec2f) -> vec4f {
         plain += (poolNoise(p, 8.0, 17.0) * 0.6 + poolNoise(p, 14.0, 53.0) * 0.4) * lumpAdd * 1.6
                * (1.0 - smoothstep(0.1, 0.4, slope));
     }
-    // The bed under shallow water carries its own faint lumps, lit with the
-    // rest (card E1); the relief clamp below keeps it under the water plane.
+    // The bed under shallow water carries its own lumps, lit with the rest by the same sun; the relief
+    // clamp below keeps it under the water plane. Three scales (about 9, 19 and 41 px) so the bed reads as
+    // lumpy ground through the tint, not as fine grain. Appearance only; exported heights stay level.
+    var bedLumps = 0.0;
     if (u.bedRelief > 0.0 && h <= u.sea + 1.0) {
-        plain = (poolNoise(p, 11.0, 71.0) * 0.55 + poolNoise(p, 23.0, 5.0) * 0.45) * u.bedRelief * 1.6
-              * (1.0 - smoothstep(0.1, 0.4, slope));
+        bedLumps = (poolNoise(p, 9.0, 71.0) * 0.3 + poolNoise(p, 19.0, 5.0) * 0.4 + poolNoise(p, 41.0, 23.0) * 0.3) * u.bedRelief * 3.2
+                 * (1.0 - smoothstep(0.1, 0.4, slope));
     }
     // Level crests and graded routes stay smooth; relief grows with slope.
     // Gentle slopes carry low lumps too, so ground turned from the sun is
@@ -1281,14 +1281,10 @@ fn bake(p: vec2f) -> vec4f {
     // Sand buries relief beneath it.
     height *= 1.0 - 0.8 * buried;
     height += drift;
+    // The bed's lumps lie on the sand the bed holds: silt does not smooth them away (the lake's bed is lumpy ground through the tint).
+    height += bedLumps;
     // Cracks, carved into the relief; sand fills them.
-    // A cracked shallow bed (card E1, Red's first shallow mode): a stroke that
-    // sets it carves the crack network into the bed under its shallows, as if
-    // the bed were rocky ground, so the lit bed shows retail's cracked terrain.
-    var crackedBed = false;
-    if (u.waterOn != 0 && h <= u.sea + 1.0) { crackedBed = textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).g > 0.5; }
     var crackAt = cracks(p, fall, faceSlope, crackMask * (1.0 - route), h, max(style.y, 0.0)) * (1.0 - buried);
-    if (crackedBed) { crackAt = cracks(p, fall, max(faceSlope, BED_CRACK_SLOPE), max(crackMask, 0.9), u.sea + 5.0, max(style.y, 0.0)); }
     // Where rock is broken into blocks, the blocks replace part of the
     // fall-line ribs, so faces read as fractured rock rather than combed.
     let broken = smoothstep(0.0, 0.5, crackMask) * max(u.crackBlocks, 0.6 * max(style.y, 0.0)) * smoothstep(0.5, 1.2, faceSlope) * (1.0 - route);
