@@ -1426,6 +1426,32 @@ fn sandCoverAt(sand: f32, p: vec2f, regrowth: f32) -> f32 {
     let regrow = smoothstep(0.62, 0.80, patchy + (1.0 - sand) * 0.22 + thin * 0.42 + (tuft - 0.5) * (0.3 + 0.7 * thin)) * u.sandGrass * regrowth;
     return cover * (1.0 - regrow);
 }
+// Where a cliff's debris lies, to the eye, and how much of it the ground has taken back. Debris used to fade into the ground as an even
+// haze, its edge a contour of the deposit's thickness (rock weather keeps that in 4 px cells). Two things break the contour up, both per pixel.
+// debrisLie moves the point the deposit is read at: by stretch of the apron (up to 14 px over tens of px: tongues run out and bays cut in), by
+// clump (up to 6 px: patches of gravel lie loose past the edge, clumps of the ground stand inside it) and by a pixel or two. The stones and
+// the debris's relief stay where rock weather put them; only what colors the ground moves.
+fn debrisLie(p: vec2f) -> vec2f {
+    let far = vec2f(valueNoise(p / 47.0 + vec2f(7.0, 61.0)), valueNoise(p / 47.0 + vec2f(83.0, 19.0))) * 14.0;
+    let near = vec2f(valueNoise(p / 9.0 + vec2f(29.0, 3.0)), valueNoise(p / 9.0 + vec2f(5.0, 71.0))) * 6.0;
+    let speck = (terrainNoise(p * 5.0 + vec2f(13.0, 47.0)).rg - 0.5) * 4.0;
+    return p + far + near + speck;
+}
+// debrisRegrown is the share of the debris the ground has taken back (x), and how much of that is moss (y). The ground grows back where the
+// debris is thinner than the growth needs it to be. The need differs by stretch of the apron (some of it old and overgrown, some fresh and
+// bare to its edge), by clump (5 to 11 px tussocks) and by tuft (single pixels), and it is higher where runoff leaves the debris damp (wet:
+// rock weather's runoff there), so growth follows the water down from a face. Vegetation scales it: a lusher place takes more back. The need
+// spreads over 0 to 1, so at the default vegetation debris keeps about the share of the ground its thickness gave it as a haze: the same
+// amount, in patches. Damp regrowth is moss, the rest the ground's own cover.
+fn debrisRegrown(deposit: f32, p: vec2f, wet: f32, vegetation: f32) -> vec2f {
+    let stretch = 0.5 + 0.5 * (0.6 * valueNoise(p / 83.0 + vec2f(7.0, 61.0)) + 0.4 * valueNoise(p / 31.0 + vec2f(43.0, 5.0)));
+    let clump = 0.5 + 0.5 * (0.55 * valueNoise(p / 11.0 + vec2f(29.0, 3.0)) + 0.45 * valueNoise(p / 4.7 + vec2f(61.0, 17.0)));
+    let tuft = terrainNoise(p * 5.0 + vec2f(13.0, 47.0)).r;
+    let lush = clamp(vegetation, 0.0, 2.0);
+    let need = clamp(((0.45 * stretch + 0.35 * clump + 0.2 * tuft) - 0.5) * 2.2 + 0.5, 0.03, 1.0) * lush + 0.45 * wet * min(lush, 1.0);
+    let grown = 1.0 - smoothstep(need - 0.06, need + 0.06, deposit * 0.9);
+    return vec2f(grown, grown * smoothstep(0.25, 0.7, wet) * min(lush, 1.0) * smoothstep(0.02, 0.1, deposit));
+}
 fn sandMaterialAt(scatter: vec2f) -> vec3f {
     let rockLevel = u.rockTexMean;
     let weathered = sandWeathered();
@@ -1728,12 +1754,22 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     material=rockSkinColor(material,grain,skin*exposed);
     // The source's mineral fines bury grass between stones. Coarse fragments
     // retain rock albedo; fine material inherits this world's existing sand.
-    let depositCover=clamp(accumulated.y*.9,0.0,1.0);
+    // The debris's edge is ragged and partly grown over (debrisLie, debrisRegrown). What is left covers the ground as gravel does, not as a haze:
+    // at least .45 of it where the debris is thinnest.
+    var lying=accumulated;var depositCover=0.0;
+    if(u.debrisAmount>0.0){
+        lying=rockWeatherAt(debrisLie(p));
+        if(lying.y>0.0){
+            let regrown=debrisRegrown(lying.y,p,clamp(lying.w*1.6,0.0,1.0),place.vegetation);
+            depositCover=clamp(lying.y*.9+.45,0.0,1.0)*(1.0-regrown.x);
+            if(regrown.y>0.0){material=mix(material,mossMaterial(pixel)*.85,regrown.y*.6);}
+        }
+    }
     let source=rockSourceAt(p);
     let sourceColor=mix(rock,source.rgb*mix(1.0,clamp(dot(grain,vec3f(.3333)),.82,1.12),u.strataGrain),clamp(u.strata*2.0,0.0,1.0)*u.strataContrast);
-    let fineColor=mix(sourceColor,mix(sandWeathered(),sourceColor*.9,clamp(u.strata*2.0,0.0,1.0)*u.strataContrast),accumulated.z*.65);
+    let fineColor=mix(sourceColor,mix(sandWeathered(),sourceColor*.9,clamp(u.strata*2.0,0.0,1.0)*u.strataContrast),lying.z*.65);
     material=mix(material,fineColor,depositCover);
-    exposed=max(exposed,depositCover*(1.0-accumulated.z*.45));
+    exposed=max(exposed,depositCover*(1.0-lying.z*.45));
     // Painted masks (card C5), after the world's own beds and before sand,
     // which covers them. Painted rock is the rock face where the face is drawn (faceGate), and the plain rock material elsewhere.
     if (u.paintOn != 0) {
