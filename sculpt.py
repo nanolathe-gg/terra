@@ -442,7 +442,10 @@ WORLD_KNOBS = {
     # Undulation 10 -> 1.5: retail's savannah is level (50-57% of dry cells under slope .03; ours 11-22%).
     'zhon': dict(crackSeverity=.4, crackMajor=.6, rockCrown=1, apron=0, sandBanding=1,
                  beachWidth=.6, banding=.3, crackDark=.45, sandCrown=1,
-                 lowGrain=.4, lowReach=4),
+                 lowGrain=.4, lowReach=4,
+                 # The bed is lit by its own relief (bedFlat .8): the islands' submerged feet took the land's whole shade and ringed every
+                 # island in dark water.
+                 bedFlat=.8),
     # Lava: one dark, low-chroma brown ground with no cracks, sand or
     # boulders on the level; striated dark cliffs; a molten sea with no
     # colour-by-depth ramp, so no depth averaging (authored from the
@@ -537,7 +540,10 @@ WORLD_KNOBS = {
                     # beside larger plates, small cells among the big ones on crystal-1's mound).
                     plateVary=.5,
                     # G7: the shallow mosaic's cells 8 px (were 10) under fainter seams (.45, were .55).
-                    crystalShallowInk=.45),
+                    crystalShallowInk=.45,
+                    # The bed is lit by its own relief (bedFlat .8): the submerged slabs' drop to the deep took the land's whole shade and
+                    # outlined the shelf in black.
+                    bedFlat=.8),
     # Crystal's shore slabs (card C2): a deep, shallow or offset stroke with Shore
     # plates on takes this preset: rock-slab material, 20-px slabs, a band 90 px
     # into the water and 48 px onto land (retail: plates 12-80 px, bands 40-140 px,
