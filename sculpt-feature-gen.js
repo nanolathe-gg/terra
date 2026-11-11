@@ -1,4 +1,4 @@
-// Procedural map features for Green: trees, burning and burnt trees, shrubs, rocks, scars, metal deposits, vents.
+// Procedural map features: trees, burning and burnt trees, shrubs, rocks, scars, metal deposits, vents.
 // Plain ES module, no dependencies, same bytes in Node and in the browser. Everything is built in the game's
 // 256-color index space (the indices below are the game palette's; `palette` is only needed to turn indices
 // into RGBA or to fit deposits and vents to a ground picture). Built from the written spec only. The burn sequences (fire)
@@ -193,12 +193,28 @@ function quantize(c, ctx, grain = 0, seed = 1) {
   }
   return s;
 }
+// Two independently chosen surface colors, in continuous, seeded camouflage patches.
+// Apply before world lighting and palette quantization; never paint over wood or shadows.
+function patternCanvas(c, P, seed, reference, eligible = null) {
+  const amount = clamp(P.accentAmount ?? 0, 0, 1), scale = clamp(P.patternScale ?? 8, 2, 24);
+  if (amount === 0) return; // exact zero weight; avoids sampling invisible patches
+  const accent = rampOf([P.accentColor || '#b8c277'])[0], refLuma = Math.max(1, lumaRGB(rampOf([reference])[0]));
+  for (let k = 0; k < c.a.length; k++) {
+    if (!c.a[k] || eligible && !eligible.has(k)) continue;
+    const x = k % c.w - c.ax, y = Math.floor(k / c.w) - c.ay;
+    const n = 0.7 * vnoise(x / scale, y / scale, mix32(seed, 301)) + 0.3 * vnoise(x * 2 / scale, y * 2 / scale, mix32(seed, 302));
+    const blend = smoothstep(n - 0.15, n + 0.15, lerp(-0.15, 1.15, amount));
+    const rgb = c.rgb.subarray(k * 3, k * 3 + 3), shade = lumaRGB(rgb) / refLuma;
+    for (let j = 0; j < 3; j++) rgb[j] = lerp(rgb[j], accent[j] * shade, blend);
+  }
+}
+
 // A palette sprite lit by the world's colors (sprites drawn as indices: burnt trees, scars, shadows, deposit stone); `lit` the
 // direct sun term for every pixel (0: shade and shadows, which take the sky's color). Unchanged when the light is white.
-function tintSprite(s, ctx, lit) {
-  if (!s || !tintOf(ctx)) return s;
+function tintSprite(s, ctx, lit, recolor = null) {
+  if (!s || !tintOf(ctx) && (!recolor || recolor.to === recolor.from)) return s;
   const c = newCanvas(s.w, s.h, s.ax, s.ay), P = ctx.palette;
-  for (let k = 0; k < s.w * s.h; k++) if (s.a[k]) { c.rgb.set(P[s.idx[k]], k * 3); c.lit[k] = lit; c.a[k] = 1; }
+  for (let k = 0; k < s.w * s.h; k++) if (s.a[k]) { c.rgb.set(recolor ? rampOf([recolorHex(hexOf(P[s.idx[k]]), recolor)])[0] : P[s.idx[k]], k * 3); c.lit[k] = lit; c.a[k] = 1; }
   return quantize(c, ctx);
 }
 
@@ -273,7 +289,7 @@ const LEAF = {
 // lobes as on a real tree. Colors by rank of tone along the leaf ramp (retail's share of each tone under any sun).
 function treeSolid(P, r) {
   const conifer = P.species === 'conifer', Hs = P.height, W = Hs * P.width, a = W / 2, b = a * 0.92;
-  const trunkVis = conifer ? 3 : 2, Hc = Hs - trunkVis - 2, c = Math.sqrt(Math.max(9, (Hc / 2) ** 2 - (CE * b) ** 2)) / SE, Uc = (Hc / 2 + trunkVis) / SE;
+  const trunkVis = (conifer ? 3 : 2) + Hs * clamp(P.canopyLift ?? 0, 0, 0.65), Hc = Hs - trunkVis - 2, c = Math.sqrt(Math.max(9, (Hc / 2) ** 2 - (CE * b) ** 2)) / SE, Uc = (Hc / 2 + trunkVis) / SE;
   const U0 = Uc - c, Utop = Uc + c, branches = [], bends = [], frondSets = [], fronds = clamp(P.fronds ?? 0, 0, 1), clusters = clamp(P.clusters ?? 0, 0, 1), crown = clamp(P.crown, 0, 1), dens = clamp(P.density, 0, 1), taper = clamp(P.taper, 0, 1), peaks = clamp(P.peaks, 0, 1);
   const s1 = (r() * 1e6) | 0, s2 = (r() * 1e6) | 0, s3 = (r() * 1e6) | 0;
   const narrow = U => 1 - taper * 0.62 * smoothstep(Uc - c * 0.5, Utop, U);              // the crown narrows toward the top
@@ -381,6 +397,7 @@ function treeFrame(P, seed, ctx) {
   paintRank(leaves.filter(q => !gapSet.has(q.k)), colors, flecks, lights);
   paintRank(leaves.filter(q => gapSet.has(q.k)), gap, null);
   paintRank(info.filter(q => q.trunk), P.trunk, null);
+  patternCanvas(c, P, seed, P.recolor?.to || colors[Math.floor(colors.length * 0.65)], new Set(leaves.map(q => q.k)));
   const body = quantize(c, ctx, 6, mix32(seed, 31));
   return { body, R, H: Math.round(P.height), W: Math.round(T.W) };
 }
@@ -397,7 +414,7 @@ function byQuantile(table, v) { // table of [value, weight], ordered; v in 0..1 
 const TENDRIL_GOLD = ['#441000', '#671400', '#6b2709', '#684f1e', '#745b22', '#91772e', '#b39453', '#d1b979'];
 const CHAR_RAMP = ['#0c0c0c', '#0e0f13', '#17130f', '#18140f', '#1f1f1f', '#1f1f1f', '#282727', '#343434'];   // retail MarsPlant..Crisp by luma octile
 function tendrilSolid(P, r) {
-  const arms = Math.round(clamp(P.arms ?? 7, 3, 12)), reach = P.reach ?? P.height * 1.2, thick = P.thick ?? 1.6, curl = clamp(P.curl ?? 0.6, 0, 1);
+  const arms = Math.round(clamp(P.arms ?? 7, 1, 16)), reach = P.reach ?? P.height * 1.2, thick = P.thick ?? 1.6, curl = clamp(P.curl ?? 0.6, 0, 1);
   const segs = [], bulbs = [];
   for (let i = 0; i < 2 + Math.floor(r() * 2); i++) bulbs.push([(r() - 0.5) * 7, (r() - 0.5) * 6, 3.6 + r() * 1.4, 3.8 + r() * 1.8]);
   for (let i = 0; i < arms; i++) {
@@ -425,7 +442,14 @@ function tendrilSolid(P, r) {
     }
     return Math.max(f, -U);
   };
-  return { F, ext: { e0: e0 - thick - 2, e1: e1 + thick + 2, s0: s0 - thick - 2, s1: s1 + thick + 2, u: 10 }, W: e1 - e0 };
+  // A single arm need not surround the bulbs. Include their whole volume in the
+  // render bounds, plus the thickest segment at the new artist-controlled sizes.
+  const ext = {e0:e0-thick-2,e1:e1+thick+2,s0:s0-thick-2,s1:s1+thick+2,u:Math.max(10,thick+4)};
+  for (const [x,y,z,rad] of bulbs) {
+    ext.e0=Math.min(ext.e0,x-rad-1);ext.e1=Math.max(ext.e1,x+rad+1);
+    ext.s0=Math.min(ext.s0,y-rad-1);ext.s1=Math.max(ext.s1,y+rad+1);ext.u=Math.max(ext.u,z+rad+1);
+  }
+  return { F, ext, W: e1 - e0 };
 }
 function tendrilFrame(P, seed, ctx, burnt = false) {
   const L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 77)), sun = worldSun(L), T = tendrilSolid(P, r);
@@ -438,6 +462,7 @@ function tendrilFrame(P, seed, ctx, burnt = false) {
   }
   const c = newCanvas(R.w, R.h, R.ox, R.oy), ramp = burnt ? CHAR_RAMP : recolorStops(P.colors || TENDRIL_GOLD, P.recolor);
   list.sort((p, q) => p.t - q.t || p.k - q.k).forEach((q, i) => paintRGB(c, q.k % R.w, (q.k / R.w) | 0, rampAt(ramp, (i + 0.5) / list.length), q.direct));
+  if (!burnt) patternCanvas(c, P, seed, P.recolor?.to || ramp[Math.floor(ramp.length * 0.65)]);
   return { body: quantize(c, ctx, 5, mix32(seed, 32)), R, W: Math.round(T.W), H: R.h };
 }
 
@@ -591,6 +616,7 @@ function shrubFrame(P, seed, ctx) {
       paintRGB(c, x, y, col, upper ? 0.8 : under ? 0.15 : 0.5);
     }
   }
+  patternCanvas(c, P, seed, P.recolor?.to || colors[Math.floor(colors.length * 0.65)]);
   return { body: cropSprite(quantize(c, ctx, 4, mix32(seed, 8)), 0) };
 }
 
@@ -673,13 +699,21 @@ const ROCK_DEFAULTS = { form: 'cone', round: 0, parts: 6, plate: 0, plateTone: 0
     plateGamma: 1, plateTilt: 0.5, plateCrack: 1.6, plateColors: null, topTilt: 1.1, shadowLen: 0.7, shadowColor: '#000000', cells: '2x2', size: 1, angular: 0.5, shade: 0.6, tall: 0, pieces: 1, pits: 0, grain: 0.6, lump: 0.6, colors: ROCK_GREEN, mottle: [['#c3c39b', 0.3], ['#d7a3b3', 0.26]], metal: null, energy: null, flat: 0 };   // flat: 0 a boulder .. 1 a low slab (Moon's)   // energy: a [lo, hi] range for a rock that is an energy source (Lava's nodes; tracks the footprint's area); shade: 0 soft .. 1 strong shading away from the sun (retail Green 0.6)
 export const cellsOf = c => { const m = /^(\d+)x(\d+)$/.exec(String(c || '')); return m ? [clamp(+m[1], 1, 16), clamp(+m[2], 1, 16)] : [2, 2]; };
 const smoothstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
-function rockSolid(P, r) {
+function rockSolid(P, r, seed) {
   const [fw, fh] = cellsOf(P.cells), form = P.form || 'cone', round = P.round > 0, plate = clamp(P.plate || 0, 0, 1), tall = clamp(P.tall, 0, 1), lump = clamp(P.lump, 0, 1), ang = clamp(P.angular, 0, 1);
   // the footprint's width and depth, and the height (screen rise is about half of it)
   let W, D;
   if (fw === 1 && fh === 1) { W = lerp(8, 21, clamp(P.size, 0, 1.4) / 1.4); D = W * (0.72 + 0.15 * r()); }
   else { W = fw * 16 * (0.86 + 0.12 * r()) * P.size; D = fh * 16 * (0.7 + 0.12 * r()) * P.size; }
-  const hgt = W * (0.34 + 0.34 * r() + 2.1 * tall * tall) * (1 - 0.55 * clamp(P.flat ?? 0, 0, 1));   // retail spires stand about 2.5 times their width (Lava, Crystal)
+  let hgt = W * (0.34 + 0.34 * r() + 2.1 * tall * tall) * (1 - 0.55 * clamp(P.flat ?? 0, 0, 1));   // retail spires stand about 2.5 times their width (Lava, Crystal)
+  // Separate seeded dimension streams replace the preset's size spread only
+  // when authored. Width edits cannot change height or the gameplay footprint.
+  const nominalWidth = fw===1&&fh===1 ? lerp(8,21,clamp(P.size,0,1.4)/1.4) : fw*16*0.92*P.size;
+  if (P.heightVariation !== undefined) hgt = nominalWidth*(0.51+2.1*tall*tall)*(1-0.55*clamp(P.flat??0,0,1))*(1+P.heightVariation*(2*rng(mix32(seed,811))()-1));
+  if (P.widthVariation !== undefined) {
+    const scale=1+P.widthVariation*(2*rng(mix32(seed,812))()-1);
+    W=nominalWidth*scale;D=(fw===1&&fh===1?nominalWidth*0.795:fh*16*0.76*P.size)*scale;
+  }
   const bodies = [{ e: 0, s: 0, a: W / 2, b: D / 2, hgt }];
   for (let i = 1; i < Math.round(clamp(P.pieces, 1, 8)); i++) {
     const sc = 0.3 + 0.32 * r(), th = r() * TAU;
@@ -805,7 +839,7 @@ function rockSolid(P, r) {
 }
 function rockFrame(P, seed, ctx) {
   const L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 9)), sun = worldSun(L);
-  const Sd = rockSolid(P, r), R = renderSolid({ F: Sd.F, eMin: Sd.ext.e0, eMax: Sd.ext.e1, sMin: Sd.ext.s0, sMax: Sd.ext.s1, uMax: Sd.ext.u, sun, shadowSun: flatSun(sun, P.shadowLen) });
+  const Sd = rockSolid(P, r, seed), R = renderSolid({ F: Sd.F, eMin: Sd.ext.e0, eMax: Sd.ext.e1, sMin: Sd.ext.s0, sMax: Sd.ext.s1, uMax: Sd.ext.u, sun, shadowSun: flatSun(sun, P.shadowLen) });
   const { w, h } = R, plateAt = new Uint8Array(w * h), tone = new Float32Array(w * h), lit = new Float32Array(w * h), hasPx = [], mask = new Uint8Array(w * h);
   for (let k = 0; k < w * h; k++) if (R.px[k]) mask[k] = 1;
   {   // a thin tip can graze the march and leave stray pixels above it: drop any detached piece under 8 pixels or 2.5% of the biggest piece
@@ -870,6 +904,7 @@ function rockFrame(P, seed, ctx) {
   });
   const fu = 0.18 + 0.2 * r(), ax = Math.round(R.ox + (r() - 0.5) * 3), ay = Math.round(lerp(R.oy - SE * Sd.hgt - CE * Sd.D * 0.5 + fu * (CE * Sd.D + SE * Sd.hgt), R.oy, smoothstep(0, 0.6, P.tall)));
   c.ax = ax; c.ay = ay;
+  patternCanvas(c, P, seed, P.recolor?.to || ramp[Math.floor(ramp.length * 0.65)]);
   const body = quantize(c, ctx, P.grain * 20, s2);
   return { body, R, W: Math.round(Sd.W), H: h };
 }
@@ -942,7 +977,7 @@ export const DEFAULTS = { tree: TREE_DEFAULTS, burnt: BURNT_DEFAULTS, shrub: SHR
 export const CONTROLS = {
   tree: [['species', 'broadleaf|conifer|tendril|dead|deadConifer', null, 'broadleaf', 'leafy crown, tiered cone, ground tendrils from a bulb, or a standing dead tree'], ['height', 50, 110, 68, 'size in px'], ['width', 0.42, 1.05, 0.72, 'width over height'],
     ['crown', 0, 1, 0.6, 'smooth to lobed and ragged'], ['density', 0, 1, 0.45, 'holey to solid'], ['taper', 0, 1, 0.5, 'round top to narrowing upward'], ['peaks', 0, 1, 0.5, 'smooth top to peaks'],
-    ['clusters', 0, 1, 0, 'one crown to leaf clusters on visible branches'], ['arms', 3, 12, 7, 'tendrils (tendril)'], ['curl', 0, 1, 0.6, 'tendril kinks (tendril)'], ['cells', '1x1|2x2', null, '1x1', 'footprint'],
+    ['canopyStyle', 'round|clustered|palm', null, 'recipe', 'full crown, separate leaf clusters, or arching fronds'], ['canopyLift', 0, 0.65, 0, 'exposed trunk below the crown'], ['clusters', 0, 1, 0, 'one crown to leaf clusters on visible branches'], ['arms', 1, 16, 7, 'tendrils (tendril)'], ['curl', 0, 1, 0.6, 'tendril kinks (tendril)'], ['reach', 12, 100, 50, 'tendril length in px'], ['thick', 0.6, 5, 1.6, 'tendril base radius in px; the panel shows diameter'], ['cells', '1x1|2x2', null, '1x1', 'footprint'],
     ['colors', 'ramp', null, 'Green', 'leaf ramp, darkest first'], ['gap', 'ramp', null, 'Green', 'ramp of the gaps between leaves'], ['flecks', '[[color, share]]', null, 'Green', 'second hues on sunlit leaves'],
     ['recolor', '{from, to}', null, 'none', 'the artist color'], ['energy', '[lo,hi]', null, '[250,250]', 'gameplay energy range; tracks height inside the range']],
   burnt: [['height', 50, 66, 58, 'size in px'], ['width', 0.4, 0.75, 0.55, 'width over height'], ['forks', 2, 5, 3, 'branch forks off the trunk'], ['ash', 0, 1, 0.5, 'amount of pale ash pixels']],
@@ -961,11 +996,16 @@ const NAMES = { tree: 'Tree', burnt: 'TreeDead', shrub: 'Shrub', rock: 'Rock', s
 // Body, shadow and gameplay do not depend on it: each draws from its own seeded stream.
 export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
   const P = { ...DEFAULTS[kind], ...params };
+  if (kind === 'tree' && P.species === 'broadleaf' && P.canopyStyle) {
+    P.clusters = P.canopyStyle === 'round' ? 0 : 0.75;
+    P.fronds = P.canopyStyle === 'palm' ? 0.8 : 0;
+  }
+  if (P.trunkColor && P.trunk?.length) P.trunk = recolorStops(P.trunk, {from: P.trunk[Math.floor(P.trunk.length / 2)], to: P.trunkColor});
   const rr = rng(mix32(seed, 0xBEEF));
   let body, shadow = null, bodyBlend = 1, burn = null, burnt = null, gameplay = {}, footprint = [1, 1];
   const L = lightOf(ctx);
   if (kind === 'tree' && (P.species === 'dead' || P.species === 'deadConifer')) {   // a standing dead tree (retail Green's Tree1-6Dead): the bare successor's drawing as a tree of its own, which neither burns nor leaves a successor
-    const B = generateFeature('burnt', { species: P.species === 'deadConifer' ? 'conifer' : 'broadleaf', height: P.height, width: P.width, forks: P.forks ?? 3, ash: P.ash ?? 0.15, shadowLen: P.shadowLen, shadowColor: P.shadowColor, trunk: P.trunk }, seed, ctx);
+    const B = generateFeature('burnt', { species: P.species === 'deadConifer' ? 'conifer' : 'broadleaf', height: P.height, width: P.width, forks: P.forks ?? 3, ash: P.ash ?? 0.15, shadowLen: P.shadowLen, shadowColor: P.shadowColor, trunk: P.trunk, trunkColor: P.trunkColor }, seed, ctx);
     return { ...B, kind: 'tree', name: `Tree_${(seed >>> 0).toString(36)}`, params: P, burn: null, burnt: null, gameplay: { ...B.gameplay, energy: pickValue(P.energy, undefined, rr) } };
   }
   if (kind === 'tree') {
@@ -984,7 +1024,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     gameplay = { energy: pickValue(P.energy, sizeFrac, rr), metal: 0, blocking: true, reclaimable: true, flamable: true, burnTicks: 192, spreadChance: conifer ? 30 : 90 };
   } else if (kind === 'burnt') {
     const B = burntFrame(P, seed, ctx);
-    body = tintSprite(B.body, ctx, ctx.tint?.up ?? 0.7);
+    body = tintSprite(B.body, ctx, ctx.tint?.up ?? 0.7, P.trunkColor ? {from: '#3b3323', to: P.trunkColor} : null);
     shadow = tintSprite(makeShadow(body, { side: L.shadowSide, shx: 0.55, up: 0.6, colors: shadowColors(P, ctx), soften: 0, grow: 0.15 }, rng(mix32(seed, 42))), ctx, 0);
     gameplay = { energy: pickValue(P.energy, undefined, rr), metal: 0, blocking: true, reclaimable: true, flamable: false };
   } else if (kind === 'shrub') {

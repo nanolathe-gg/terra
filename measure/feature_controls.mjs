@@ -63,7 +63,7 @@ function changed(a, b) {
 const set = defaultSet(config), rows = [];
 if (out) mkdirSync(out, {recursive: true});
 for (const [kind, key, lo, hi, applies, edit = t => ({[key]: t})] of CONTROLS) {
-  const list = variants(kind, {...set, [kind]: {...set[kind], count: 16}}, config).filter(applies);
+  const list = variants(kind, {...set, [kind]: {...set[kind], recipes: set[kind].recipes.map(r => ({...r,count:16}))}}, config).filter(applies);
   let cls = 0, moved = 0, fcls = 0, fmoved = 0, px = 0, pxMoved = 0; const purpose = {lo: 0, hi: 0, step: 0};
   const sheet = out ? {w: W * 2 * list.length, h: H, rgba: new Uint8ClampedArray(W * 2 * list.length * H * 4)} : null;
   list.forEach((v, i) => {
