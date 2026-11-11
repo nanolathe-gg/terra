@@ -162,7 +162,12 @@ export class TerrainRenderer {
     }));
     const modelTable = extra[1];
     this.paletteSource = extra[2];
-    this.paletteColours = JSON.parse(extra[3]).colours;
+    const palette = JSON.parse(extra[3]);
+    this.paletteColours = palette.colours;
+    // Slots 0-9 and 246-254 of the game's palette are Windows' static system colours, which its map art does not draw with (255, white,
+    // it does: snow and surf). A colour that only those slots hold stays out of the lookup unless a world's table picks it by entry.
+    const art = new Set(palette.indexed.filter((_, i) => i >= 10 && (i < 246 || i === 255)).map(String));
+    this.paletteArt = palette.colours.map((_, i) => i).filter(i => art.has(String(palette.colours[i])));
     this.materialsSource = extra[0];
     this.commonSource = common;
     this.volumeSource = extra[4];
@@ -349,10 +354,10 @@ export class TerrainRenderer {
     return {texture, view: texture.createView(), sampler: this.sampler({minFilter: 'linear', magFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat'})};
   }
 
-  // The palette lookup (engine-palette.wgsl): the table's colours, or the ones its `palette.entries` pick, as a 1024 x 288 RGBA8 texture.
+  // The palette lookup (engine-palette.wgsl): the colours map art draws with, or the ones the table's `palette.entries` pick, as a 1024 x 288 RGBA8 texture.
   async paletteTexture() {
     const device = this.device, start = performance.now();
-    const colours = (this.materialData.palette?.entries ?? this.paletteColours.map((_, i) => i)).map(i => this.paletteColours[i]);
+    const colours = (this.materialData.palette?.entries ?? this.paletteArt).map(i => this.paletteColours[i]);
     const rows = new Float32Array(colours.length * 8);
     colours.forEach((c, i) => { rows.set([c[0], c[1], c[2], 0], i * 8); rows.set(oklab(c), i * 8 + 4); });
     const buffer = device.createBuffer({size: rows.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
