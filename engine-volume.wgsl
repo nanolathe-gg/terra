@@ -228,9 +228,6 @@ fn voxelDensity(p:vec3f)->f32 {
     let q=p-n*offset;let moved=voxelAuthored(q.xy);
     let draped=(q.z-moved.x)*min(max(moved.w,.015),n.z);
     if(!whole){return draped;}
-    var blocks=vec2f(0);
-    if(u.faceWhole>0.0){blocks+=voxelWhole(p,r,c.edge,max(4.0,u.faceBlockSize),u.faceWhole);}
-    if(u.faceWholeLarge>0.0){blocks+=voxelWhole(p,r,broad.edge,max(24.0,u.faceBlockSize*2.5),u.faceWholeLarge);}
     // Where the blocks may stand is cut from smooth things only (the authored surface around the voxel), never from the guide: a cut that
     // followed the guide's per-voxel normal was a comb of one-pixel lines. behind and before are the highest and lowest surface 12 px around.
     // Rock does not stand above the land behind a face, and the ground before it is not dug out: the blocks live between the two, with 4 units'
@@ -244,6 +241,10 @@ fn voxelDensity(p:vec3f)->f32 {
     let apron=40.0*smoothstep(.1,.45,length(guide.xy));
     let room=smoothstep(8.0,16.0,apron)*(1.0-smoothstep(guide.w+apron-16.0,guide.w+apron-8.0,p.z))*smoothstep(guide.z-apron+8.0,guide.z-apron+16.0,p.z);
     let share=.8*rock*heightGate*room*between;
+    if(share<=0.0){return draped;}   // most voxels: the search for the blocks is the costly part
+    var blocks=vec2f(0);
+    if(u.faceWhole>0.0){blocks+=voxelWhole(p,r,c.edge,max(4.0,u.faceBlockSize),u.faceWhole);}
+    if(u.faceWholeLarge>0.0){blocks+=voxelWhole(p,r,broad.edge,max(24.0,u.faceBlockSize*2.5),u.faceWholeLarge);}
     return draped*(1.0-share*min(blocks.y,1.0))+8.0*blocks.x*share;
 }
 @compute @workgroup_size(4,8,8)
