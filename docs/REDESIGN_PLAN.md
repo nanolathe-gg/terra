@@ -3030,7 +3030,7 @@ greens over.
 - *Checks at landing* (with item 4, on main `d508f29a`): land tier,
   only the three modern Green scenes move (7.9%, 15.7%, 8.0%), heights
   identical; export bytes same on all three maps; the features check
-  fails, on main itself too (see item 4). Sweeps over every world: Bare
+  passes on a fresh browser port (see item 4). Sweeps over every world: Bare
   soil 0.1% to 2.3% of the whole check picture, under 5% everywhere.
 - Page (private): https://claude.ai/artifact/DMV5TKvvA37ufvmT2qz81g
 
@@ -3059,10 +3059,22 @@ with item 3.
   recipe's number; one Wetness for ground and rock would be simpler.
   (4) Sweeps over every world: 0.0% to 4.3% of the whole check picture
   (Red 4.3%, Green and Zhon 2.0%), under 5% everywhere; at 0.05 it moves
-  1.3% of the wet fixture, at 1 8.3%. (5) `repro/features.mjs` fails at
-  its line 147 (a feature recipe's width variation after the Home key)
-  on main `d508f29a` too, three runs, with the code that passed it
-  earlier the same day: not from this work, cause not found.
+  1.3% of the wet fixture, at 1 8.3%. (5) `repro/features.mjs` failed at
+  its line 147 on this branch and on main `d508f29a` alike while run on
+  CDP port 9681, which `repro/perf.mjs` had used just before; on a fresh
+  port (9711) it passes on the landed main `601c88d5`. Stale browser
+  state on the port, not the code: give each Chrome check a port no
+  other check has used.
+- *Perf at landing* (`repro/perf.mjs map4`, alternating builds, a
+  warm-up discarded). Walls and boulders, green-modern-2, three runs
+  each: load to final 2009, 2182, 2155 ms before and 2107, 2083, 2132
+  after; drag latency p50 28.5, 28.9, 31.6 against 29.4, 35.1, 29.0. The
+  bed, edges and wetness, red-2, two clean runs each (a third was
+  disturbed on both builds): load to final 1219, 1312 before and 1269,
+  1328 after; drag latency p50 24.4, 25.7 against 25.1, 25.9; chunk
+  paints a second 56.4, 52.7 against 55.6, 54.1. No difference beyond
+  the runs' own spread. The red-16 export took about 78 s before the
+  bed and 86 to 102 s after (single runs on a loaded machine).
 - Page (private): https://claude.ai/artifact/V3kFA7sJ7im78yfCTv2AKP
 
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
