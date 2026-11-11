@@ -90,7 +90,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const severity=Math.max(n('crackSeverity',.6),.6),major=n('crackSpacing',40),minor=major/3.2;
     const blocks=(.5*(1+3*severity)+1.225*major+.5*(.6+1.6*severity)+4.41*minor)*Math.max(n('crackBlocks',.6),.6);
     const bands=columnRows(this.config.column,this.config.variant).bands[0]*Math.max(Math.abs(n('banding',0))*4,.8);
-    const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
+    // The bed's lumps (bedRelief) stay under the water plane, so they add nothing to how high the surface can reach.
+    const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4)));
     const extra=relief+blocks+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(n('looseSize',6))+Math.abs(n('rippleHeight',1.4))+(n('debrisAmount',0)>0?1.5*n('debrisDepth',4):0);
     const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4);
     return {draw,bake,direct,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};
