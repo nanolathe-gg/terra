@@ -4,6 +4,7 @@ import argparse
 import copy
 import hashlib
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -26,6 +27,12 @@ BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Arc
                'crystal': 'Crystal', 'ice': 'Ice'}
 
 
+def sun_height(tilt):
+    """Sun height's default for a world with this sunTilt: the height above the horizon, in degrees, of the light every world had before it
+    was a control, (-.72, .38 x sunTilt, .82) (sculpt-renderer.js sunVector)."""
+    return math.atan2(.82, math.hypot(.72, .38 * tilt)) * 180 / math.pi
+
+
 # Every map-wide knob's default (the World panel). A world preset is these
 # plus its own overrides below, so each world has a value for every setting;
 # a knob missing here is reported in the page's console.
@@ -41,7 +48,7 @@ KNOB_DEFAULTS = dict(
     creaseShade=0,
     reliefScale=28, reliefAmount=.5, reliefLumps=.7, reliefBranch=2, reliefWarp=10, reliefPatchy=1,
     reliefJitter=.8, gentleRelief=.6, plainRelief=1.2, reliefOctaves=5,
-    flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1, sunTilt=1, ambient=.42, slopeMarks=0, wrinkles=0, sandCrown=0,
+    flatShadow=0, flatOcclusion=.4, lightCap=1.13, shadeDepth=1, sunTilt=1, sunHeight=sun_height(1), ambient=.42, slopeMarks=0, wrinkles=0, sandCrown=0,
     faceVariation=.8, lean=0, facing=0, faceFill=.18, slopeTexture=.3, moss=0,
     looseSupply=0, looseSize=6,
     sand=0, wind=20, sandDust=.5, sandGrass=.6,
@@ -382,7 +389,7 @@ WORLD_KNOBS = {
     # the level (retail W/SW faces 0.99-1.00 of level luma; a 1.13 cap gave
     # 1.07-1.14), so no highlight above level.
     # Its beds are all alike (columnContrast 0): they stand one ledge high, and the Time pass reads no hardness.
-    'desert': dict(lightCap=1.25, sunTilt=.5, paletteMix=1, strata=1, strataContrast=1, columnContrast=0, banding=.4,
+    'desert': dict(lightCap=1.25, sunTilt=.5, sunHeight=sun_height(.5), paletteMix=1, strata=1, strataContrast=1, columnContrast=0, banding=.4,
                    strataGrain=.25, crackSeverity=0, crackMajor=.2, crackMinor=.1, crackHairline=0, crackBlocks=.1,
                    sand=0, undulationScale=48, undulationCover=1, undulationArt=0, plainRelief=0, flatOcclusion=0, reliefAmount=.15, gentleRelief=.2,
                    # Card E3: black shadow sides: retail's buttes are dark on the side turned
@@ -410,7 +417,7 @@ WORLD_KNOBS = {
     # .8: the Moon variant 'cracked' restores that look) and the pits are drawn by pockmark.
     'moon': dict(looseSupply=.1, looseSize=3.5, crackSeverity=0, crackMajor=.5, crackMinor=.5, crackBlocks=.4,
                  worms=0, plainRelief=.6, banding=0, crackDark=.6,
-                 sunTilt=0, faceFill=0, ambient=.25,
+                 sunTilt=0, sunHeight=sun_height(0), faceFill=0, ambient=.25,
                  # Card B3: the isolated marks (slopeMarks .4) read as specks and, lined up
                  # on a narrow wall, as a toothed lip; retail's slopes are crazed with
                  # connected wrinkles and pits, so the joined wrinkles replace them.

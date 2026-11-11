@@ -10,7 +10,7 @@
 # default /private/tmp/nanolathe-map-editor/repro-r7, the crops every merge
 # since round 7 is judged on), or from the window a scene's "crop" names (a
 # variant's scenes, such as green-modern-1, are judged on their world's windows). REPRO_QUERY adds page parameters to every
-# scene (render.mjs --query), e.g. REPRO_QUERY='sun=90,45'; REPRO_SCENES names the scene files to render (default every scenes/*.json). Writes <out-dir>/<world>/
+# scene (render.mjs --query), e.g. REPRO_QUERY='sun=90&sunHeight=30'; REPRO_SCENES names the scene files to render (default every scenes/*.json). Writes <out-dir>/<world>/
 # pair.png and layout.png, and <out-dir>/sheet.png with every world.
 set -e
 crops=${REPRO_CROPS:-/private/tmp/nanolathe-map-editor/repro-r7}

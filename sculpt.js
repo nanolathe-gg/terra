@@ -1552,7 +1552,8 @@ function buildKnobs() {
     }
     for (const [key, label, min, max, step, value] of knobs) {
       const id = 'knob-' + key, current = params.has(key) ? Number(params.get(key)) : value, choices = WORLD_CHOICES[key];
-      const wrap = controlRow({id,label:`${label} <output${choices?' hidden':''}>${current}</output>`,range:`min="${min}" max="${max}" step="${step}" value="${current}"`,choices});
+      // A value shows at most three decimals (Sun height's defaults are the old light's height, 45.20597821393736 degrees on most worlds).
+      const wrap = controlRow({id,label:`${label} <output${choices?' hidden':''}>${+current.toFixed(3)}</output>`,range:`min="${min}" max="${max}" step="${step}" value="${current}"`,choices});
       wrap.dataset.knob=key;if(search)wrap.dataset.searchGroup=search;
       const input = wrap.querySelector('#'+id), out = wrap.querySelector('output');
       if(choices)input.value=String(current);

@@ -3181,6 +3181,124 @@ restart 8801"].**
 - Not run: `measure/realism.py` (heights identical), the geology sweep.
 - Page (private): https://claude.ai/artifact/6rEmDd2kPD3MAnYNwHjiZG
 
+**Round 5: what is still missing, from both sets of pictures [Claude,
+2026-11-11; the owner: "re-evaluate from our hyper-realistic reference
+images and decide what items in priority order are still missing", and
+"go back to the TA biome reference images and determine if anything in
+them cannot be represented properly in our current engine"].** By eye
+unless marked. The nine hyper-real pictures against 21 fixtures rendered
+from main `010c0579` (the 760 px mesa with every wall option, the
+Mountain button with them, boulders, sand, wet ground, nine recipes with
+whole blocks on modern Green, sandstone on modern Desert). The retail
+windows against the 30 check scenes of the same commit, surveyed by a
+separate agent that was not told what the engine can do, and checked by
+Claude on one pair of each world. Ordered by how much of a picture each
+spoils and in how many pictures, the shape before the color, under the
+owner's rules (level ground flat in the heights; flats that tile).
+
+| | What is missing | Hyper-real pictures | Retail windows | What the engine does today | Kind |
+| --- | --- | --- | --- | --- | --- |
+| 1 | The sun's height as a world's own number, and a shadow that reaches level ground | all nine are lit low and raking, with long shadows and dark ravines | Green's steep faces go to black (pixels under luma 20: 16.0% of green-4 against 3.1%, the agent's measure; 98% of them lie on cells steeper than 0.3, so they are shaded faces, not shadows on the plain **[measured]**); hills are modeled by one broad shade band in six worlds | the sun stands 45 degrees up in every world; only the page's review parameter turns it, and exports ignore that. Tried: 25 degrees on the modern Green wall moves 60.9% of the picture and fills the ravines; behind a ridge at 25 degrees Cast shadow on level ground at 1 moves 4.9% and darkens about 30 px of grass faintly, where the ridge's height calls for about 200 **[measured; the length by eye]**. Unlike the dropped linear-light branch this changes the light's direction, not the shade curve, and at 45 degrees no picture moves | a missing control; the shadow's reach is engine work (a wider apron, so perf and a re-roll) |
+| 2 | Rock by stroke: how much, and which recipe | a map with more than one kind of geology | Red's smooth hills beside a cracked shelf of 15 to 25 px cells; Crystal's 30 to 70 px plates beside a fine mesh; Green's soft domes with small outcrops beside cliffs | one recipe for a world, on every face. Tried on red-1's two hills: Cracks 0, Smooth route 100 and Local vegetation 100 each leave the jointed blocks on the faces (Smooth route clears the top only); Soft bank is for water strokes; the hills go smooth only with rock off for the whole world | missing |
+| 3 | Color: a color family for each recipe, first; then shade that keeps the world's hue, and no stray palette entries | `sandstone`, `sand5`, `rocky`: each rock its own family, bands that follow the beds | shade goes neutral where retail keeps the hue (Ice gray for blue and lilac, Lava olive-black for maroon-black; the agent's measure) | a recipe has beds and no colors, and a world has one picked rock color, so all nine recipes draw the same gray on modern Green; modern Desert's wall is a dither of pink, olive and gray with striped patches (as on 2026-11-10: not a regression); four palette entries retail never uses make 10.1% of moon-1, 1.9% of archipelago-2 and 1.2% of ice-1 **[measured]**; Red's maroon was the palette too (fixed by hand in its recipe) | recipe colors missing; the rest defects |
+| 4 | Level ground with a surface, in the art only and in tiles that repeat | tone and cover changing over 50 to 300 px: dust, wash lines, stones thinning from a wall (round 4, row 3) | Desert's ring stones (20 to 25 in a 256 px square, the agent's count in one crop); Crystal's half-buried slabs; Moon's wrinkles and small craters every 40 to 80 px | a plain is one texture; stones lie near walls only; Wet ground reaches the waterline only | missing |
+| 5 | Drainage that branches and joins | the top-down picture, `surface1`, `rocktools` (third panel) (round 4, row 6) | Archipelago's domes carry 5 to 10 creases from the crest, in the heights | gullies run side by side down the fall line; a dome's contours are ovals (the Archipelago scenes do not use Gullies: not tried) | missing, in the heights |
+| 6 | Fine lines in regular bundles | thin continuous beds (`surface1`, `surface3`, `sandstone`) | contour lines every 5 to 8 px on Green's slopes, Red's bank terraces, Moon's ridges, Desert's 10 to 15 clean bands | lines break into scribbles and stairs; thin-bedded recipes (shale, schist) dissolve into noise at 1x; Desert's bands lie under black joint lines and blotches of bed color | defects in what exists |
+| 7 | Sand as a sheet: drifts and dunes with ripples that vary, ledges buried, a beach | `sand5`, the beach picture (round 4, row 4) | Zhon's smooth sand bars with ripple lines | patches with even ripples; shelter in a wall's lee since round 4 | missing |
+| 8 | Tall landforms on the classic worlds | the pictures' walls are 150 units and more | none are this tall | the 244-unit mesa on classic Desert draws maroon and near black (mean RGB 51,35,31), as round 3 found on Moon, Lava and Red | defect |
+| 9 | Water zones that do not follow depth | the top-down picture's damp basins | Zhon's maroon and olive zones in one river; mottled shoals | one ramp of color by depth through a third color at most. Not tried: Zhon's zones may be that ramp and the strokes (the check scenes run the river variant, and the coast variant has teal deeps); Ice's submerged shelf and Archipelago's halo are depth bands a Shallow stroke gives | perhaps missing; rank after a trial |
+| 10 | Green's shore | the beach picture's clean waterline | a smooth coast | 1.25 to 1.28 times its smoothed length against retail's 1.06 to 1.08, with 39 to 141 detached specks of water against 11 to 24 (the agent's measure). The stepped waterline (2 px) and the scene's undulation are settings taken from retail earlier; not tried at 0 | a setting until tried |
+
+- *Representable today, so not engine work* (a preset or a scene's
+  strokes; retail tuning stays parked, rule 10). Tried: a hill as a soft
+  tone-shaded dome instead of a ring of cracks (green-1 and red-1 with
+  rock and cracks off), though its shade stays shallower than retail's
+  until row 1. Not tried, from knowing the controls: Zhon's teal water
+  and green cover (table colors), Ice's shade hue (data), mountains as
+  sloping massifs (the Mountain tool), Archipelago's fringe as fine arcs,
+  Crystal's mounds as one cracked surface, Lava's lobed hills, Moon's
+  soft shade.
+- *Closed since round 4.* Rows 1 and 1a (a hierarchy of blocks; the
+  lattice), 2 and 7 (beds and variation along a wall), 5 (boulders), and
+  part of 3 and 4 (bare soil, wet ground, sand in a wall's lee). In clay
+  the nine recipes now differ as the pictures' rocks do; the color pass
+  hides it (rows 1 and 3).
+- *How sure.* Rows 1 and 2 were tried here and the palette entries
+  measured. Rows 4, 5, 7 and 9 are "missing" from knowing the engine,
+  not from a failed attempt. The agent's numbers were checked only for the
+  palette entries. Retail scenes are a few strokes each, so shape
+  differences there are mostly the strokes and are not counted.
+
+**Round 5, the owner's rulings and the first landing [owner decisions,
+2026-11-11; landed on local main the same day].** On the ten rows: 1 "Add a
+control and have it update the shadows"; 2 "a biome defining multiple rock
+presets, and a stroke chooses a preset", edits to a preset reach every
+stroke that uses it, and "an easy way to copy recipes"; 3 every preset "can
+have its own colors, shape, style, vegetation"; 4 prototypes welcome but
+"tileable and within the 65K tile limit", after the rest; 5 "if it's cheap
+enough and the result looks good"; 6 "Fix it, make sure it's
+configurable"; 7 "a whole sand system", lower priority; 8 "Fix it"; 9 and
+10 not now. Claude orchestrates Opus agents, reviews and lands.
+
+- *Sun height (row 1) [landed].* `sunHeight`, Lighting, 20 to 75 degrees.
+  Each world's default is the height its fixed light had (45.2, Desert
+  47.8, Moon 48.7), so the uniforms are the same to the bit. Exports and the
+  generated features read it; `?sun=` keeps only its azimuth. The cast
+  shadow's march goes on past its twelfth sample (203.6 px) while a sample
+  tests under 240 units above the pixel, reading the authored height, in
+  steps 6 units apart; only the height grid's apron grows, and at a
+  world's own sun there are no new samples. A cast shadow takes the whole
+  direct sun (it took 32% of it, a constant with no reason given), so at
+  25 degrees shadowed grass reads luma 31-34 against 74 in the open (was
+  58-62) **[measured by the agent on the north-south ridge fixture]**.
+  Below 20 degrees the grid a chunk needs passes the 128 MB budget, and
+  relief more than 200-240 units above the ground it shades has its shadow
+  cut short.
+- *Why pictures depended on the apron [found and fixed].* The voxel rays
+  started at the relief allowance (`vs.high + 40`), which every relief
+  term moves, and the march can step past thin rock, so another start
+  found another face. They now start from the authored maximum plus 104.
+  One-time re-roll: green-2 7.9%, green-5 1.0%, green-4 0.8%, the rest
+  0.3% or less; the same rock by eye **[measured by the agent; green-2
+  looked at by Claude]**. This closes the open item of the last landing:
+  a term that only moves the allowance now moves no pixel.
+- *The palette lookup [landed].* Slots 0-9 and 246-254 of the game's
+  palette are Windows' static colours; the lookup drew with four of them
+  and the 30 retail windows use none (slot 255, white, they do, and it
+  stays). Moon moves 8.0-9.8%, Archipelago 0.9-2.0%, the rest under 1%
+  **[measured]**; the Moon plain's tone is unchanged by eye.
+- *Tall landforms near black (row 8) [not an engine defect; proposals
+  only].* One shading term at a time on a 244-unit mesa **[measured by
+  the agent, palette off]**: no single term is the cause. Lava's rock is
+  near black before any light (luma 24-26). Moon's faces turned from the
+  sun get its ambient of .25 and no fill. Desert's maroon wall came from
+  the round-5 fixture's own one-bed column: with Desert's own column the
+  wall is tan (luma 69.5), though its darkest fifth sits on the palette
+  subset's floor of 31, which has no dark maroon. Red is readable. Open
+  for the owner: Moon faceFill .35 (moves 4.6% of moon-1), five dark
+  maroons added to Desert's palette entries (0.16% of desert-1), and fill
+  light keyed on the light that reaches a face (a sun-facing face inside
+  a cast shadow gets neither sun nor fill today).
+- *Branching drainage (row 5) [tried, not landed].* Branch
+  `realism/drainage`, one prototype commit: a Branching option beside
+  Gully size. Real Y junctions read in a heights-only map but leave pits
+  and seams where fall lines converge (domes, bends); the seamless version
+  only crowds gullies together. On a rock wall the block relief hides
+  either. With rock relief at 0 the same wall reads as smooth spurs and
+  shadowed ravines, so drainage is worth a second look once a stroke can
+  pick a smooth preset.
+- *Checks at this landing.* On the merged tip: the land tier passes
+  (CDP 9771; 34 of 34 scenes move: moon 8.1-9.8%, green-2 8.1%, green-4
+  7.2%, crystal-2 4.7%, archipelago 1.0-2.1%, the rest 1.6% or less);
+  `repro/export-bytes.mjs` exit 0, the same bytes on the three maps
+  (green-4 2,325 tiles, lava-8 14,498, red-16 50,102; the agent's counts
+  at 25 degrees with Cast shadow on level ground 1: 2,400, 14,963 and
+  50,593). `repro/perf.mjs` map4 on green-modern-3, alternating main and
+  the tip with other agents on the GPU (load average 6 to 10, so only the
+  calmest pair is worth reading): load to final 1820 ms main, 1744 tip;
+  release to final 1310 and 1430; drag latency p50 36 and 28 ms **[measured
+  under load; a quiet run is owed]**. Hover previews regenerated.
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.

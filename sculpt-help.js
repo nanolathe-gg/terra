@@ -6,6 +6,7 @@ const controlHelp={
   'knob-plantRelief':'Scales the height of grass tufts, moss cushions and shrubs in the art. One uses the material preset; zero removes their relief without removing flowers.',
   'knob-flowerDensity':'Scales flower coverage where the ground supports it. One uses the material preset; zero removes flowers. Set flower colors in Colors & base pattern.',
   'knob-sunTilt':'Moves the light north or south of due west. Zero is west; positive values move it south.',
+  'knob-sunHeight':'How high the sun stands above the horizon. A low sun lights the faces turned to it, darkens the others and casts long shadows; a wall casts a shadow its height divided by the tangent of this angle. Set Cast shadow on level ground to let the shadows reach level ground.',
   'knob-ambient':'Sets the share of light that reaches faces pointing away from the sun.',
   'knob-lushness':'Changes how much vegetation the ground supports. On materials with flowers, richer ground can grow more flower patches.',
 };

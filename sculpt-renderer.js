@@ -187,7 +187,12 @@ export class TerrainRenderer {
     }));
     const modelTable = extra[1];
     this.paletteSource = extra[2];
-    this.paletteColours = JSON.parse(extra[3]).colours;
+    const palette = JSON.parse(extra[3]);
+    this.paletteColours = palette.colours;
+    // Slots 0-9 and 246-254 of the game's palette are Windows' static system colours, which its map art does not draw with (255, white,
+    // it does: snow and surf). A colour that only those slots hold stays out of the lookup unless a world's table picks it by entry.
+    const art = new Set(palette.indexed.filter((_, i) => i >= 10 && (i < 246 || i === 255)).map(String));
+    this.paletteArt = palette.colours.map((_, i) => i).filter(i => art.has(String(palette.colours[i])));
     this.materialsSource = extra[0];
     this.commonSource = common;
     this.volumeSource = extra[4];
@@ -374,10 +379,10 @@ export class TerrainRenderer {
     return {texture, view: texture.createView(), sampler: this.sampler({minFilter: 'linear', magFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat'})};
   }
 
-  // The palette lookup (engine-palette.wgsl): the table's colours, or the ones its `palette.entries` pick, as a 1024 x 288 RGBA8 texture.
+  // The palette lookup (engine-palette.wgsl): the colours map art draws with, or the ones the table's `palette.entries` pick, as a 1024 x 288 RGBA8 texture.
   async paletteTexture() {
     const device = this.device, start = performance.now();
-    const colours = (this.materialData.palette?.entries ?? this.paletteColours.map((_, i) => i)).map(i => this.paletteColours[i]);
+    const colours = (this.materialData.palette?.entries ?? this.paletteArt).map(i => this.paletteColours[i]);
     const rows = new Float32Array(colours.length * 8);
     colours.forEach((c, i) => { rows.set([c[0], c[1], c[2], 0], i * 8); rows.set(oklab(c), i * 8 + 4); });
     const buffer = device.createBuffer({size: rows.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
@@ -691,6 +696,18 @@ export class TerrainRenderer {
     };
   }
 
+  // The world's sun, not normalized: from the west (the east for the alternate light), sunTilt scaling its north-south component (1: as
+  // before; Moon 0, lit from due west as every retail Lunar map measures), Sun height degrees above the horizon. Each world's Sun height is the
+  // height this light had before it was a control (sculpt.py sun_height): z comes out .82 to within a bit, and the uniforms are the same.
+  sunVector(light = 'original') {
+    const tilt = this.variant.has('sunTilt') ? Number(this.variant.get('sunTilt')) : 1;
+    const x = light === 'alternate' ? 0.72 : -0.72, y = 0.38 * tilt;
+    // Held to the control's range (20 to 75): a lower sun's shadows need a height grid apron (sculpt-chunk-renderer.js reaches) that pushes even
+    // a 32 px chunk past a 128 MB budget at 15 degrees.
+    const height = this.variant.has('sunHeight') ? Math.min(75, Math.max(20, Number(this.variant.get('sunHeight')))) : null;
+    return [x, y, height === null ? 0.82 : Math.hypot(x, y) * Math.tan(height * Math.PI / 180)];
+  }
+
   async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
     const start = performance.now(), device = this.device;
     this.i('uClay', clay);
@@ -711,19 +728,14 @@ export class TerrainRenderer {
     this.f('uCrystalFace', this.variant.has('crystalFace') ? Number(this.variant.get('crystalFace')) : 1);
     this.f('uCrystalInk', Number(this.variant.get('crystalInk')) || 0);
     this.f('uCrystalTone', this.variant.has('crystalTone') ? Number(this.variant.get('crystalTone')) : 1);
-    // sunTilt scales the light's north-south component (1: as before; Moon 0,
-    // lit from due west as every retail Lunar map measures).
-    const tilt = this.variant.has('sunTilt') ? Number(this.variant.get('sunTilt')) : 1;
-    let sun = [light === 'alternate' ? 0.72 : -0.72, 0.38 * tilt, 0.82];
+    let sun = this.sunVector(light);
     this.worldSun = sun.map(v => v / Math.hypot(...sun));   // the map's own sun, as exports draw it (sculpt-features.js lights the features by it)
-    // Review sun (card H1): the page's ?sun=<azimuth>,<elevation> turns the light, for looking at the relief from other
-    // suns (ink keeps its shade, geometry does not). Azimuth is degrees added to the world's own sun direction on the
-    // screen plane (0: unchanged), elevation degrees above the horizon (empty: the world's own). Exports never take it (exact).
-    const review = exact ? null : /^\s*(-?[\d.]*)\s*,\s*(-?[\d.]*)\s*$/.exec(this.variant.get('sun') || '');
+    // Review sun (card H1): the page's ?sun=<azimuth> turns the light about the vertical by that many degrees, for looking at the relief
+    // from other directions (ink keeps its shade, geometry does not); its height stays Sun height's. Exports never take it (exact).
+    const review = exact ? null : /^\s*(-?[\d.]+)\s*$/.exec(this.variant.get('sun') || '');
     if (review) {
-      const turn = Math.atan2(sun[1], sun[0]) + (Number(review[1]) || 0) * Math.PI / 180;
-      const rise = review[2] === '' ? Math.atan2(sun[2], Math.hypot(sun[0], sun[1])) : Number(review[2]) * Math.PI / 180;
-      sun = [Math.cos(turn) * Math.cos(rise), Math.sin(turn) * Math.cos(rise), Math.sin(rise)];
+      const turn = Math.atan2(sun[1], sun[0]) + (Number(review[1]) || 0) * Math.PI / 180, flat = Math.hypot(sun[0], sun[1]);
+      sun = [Math.cos(turn) * flat, Math.sin(turn) * flat, sun[2]];
     }
     const length = Math.hypot(...sun);
     this.v('uLight', sun.map(v => v / length));

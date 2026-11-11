@@ -74,6 +74,10 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   reaches(heightBounds=this.config.heightBounds??[-90,300]) {
     const n=(k,f)=>this.number(k,f),rock=(k,f)=>this.rockMax(k,n(k,f));   // rock: a recipe number's largest over the rocks in use
     // H1: the close shadow march (6 px) and the cavity rings (4 px) plus the gradient's 1.4 sit inside the far taps' reach.
+    // The shadow march (engine-frag.wgsl visibility) reads the surface out to its twelfth sample (12^2 x 1.4 + 2 px) and, as the sun goes down,
+    // the authored height from 238.6 px on while a sample tests a height under 240 above the pixel: those far samples need only the height
+    // grid (`far` widens the grid's apron, not the fields'). At every world's own sun there are none, and far is the twelfth sample's reach.
+    const sun=this.sunVector(),rise=sun[2]/Math.hypot(sun[0],sun[1]),far=238.6*rise<240+1e-3?240/rise:12**2*1.4+2;
     const shadow=12**2*1.4+2,draw=Math.max(shadow,128,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?4+1.4:0,n('crystalShallow',0)>0?48:0);   // H20: the shallow mosaic's fringe taps the crystal field 48 px out
     // P16: the largest class drawn has radius min(16, 3.3 x the median); a stone reaches 1.6 radii from its candidate (1.41 of a class radius at most) and a larger stone that suppresses it a little further, and the mask reads the heights 14 px out for a cliff's foot plus its gradient (5).
     const stones=n('boulders',0)>0?3.6*32+90:3.6*Math.min(16,3.3*rock('looseSize',6))+24;   // Boulders: a 32 px class, and the mask looks for the wall 80 px out
@@ -94,7 +98,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
     const extra=relief+blocks+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(rock('looseSize',6))+Math.abs(n('rippleHeight',1.4))+(rock('debrisAmount',0)>0?1.5*rock('debrisDepth',4):0);
     const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4);
-    return {draw,bake,direct,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};
+    return {draw,bake,direct,far,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};
   }
   requiredRegion(request) {
     const size=request.worldSize??this.config.worldSize??this.size,grid=request.worldGrid??this.config.worldGrid??this.grid,spacing=(size-1)/(grid-1);
@@ -107,7 +111,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     // which native height/material inputs a screen rectangle needs.
     const fieldsX=clamp(Math.floor(x-reach.draw)-1,0,size-1),fieldsY=clamp(Math.floor(y+shift+reach.projection[0]-reach.draw)-1,0,size-1);
     const fieldsEndX=clamp(Math.ceil(x+width+reach.draw)+1,0,size-1),fieldsEndY=clamp(Math.ceil(y+shift+height+reach.projection[1]+reach.draw)+1,0,size-1);
-    const input=Math.max(reach.bake,reach.direct-reach.draw,5);
+    const input=Math.max(reach.bake,reach.direct-reach.draw,reach.far-reach.draw,5);
     // One extra grid sample covers linear filtering, including weatherAt's
     // deliberately corner-based (rather than texel-centred) UVs.
     const gx0=clamp(Math.floor((fieldsX-input)/spacing)-1,0,grid-1),gy0=clamp(Math.floor((fieldsY-input)/spacing)-1,0,grid-1);
