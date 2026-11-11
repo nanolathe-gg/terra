@@ -179,7 +179,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'rockFace','faceRock','rockFaceFrom','rimReach','faceCreaseSize','faceCrease','faceBlock','faceBlockSize','faceBed','faceLedge','faceRun','faceScratch','faceScratchSize','faceLean','faceGrit','faceGrass','faceWear','faceShade','faceLayers','faceMass','faceTone','faceStrata','faceWet',
  'groundTiles','groundContrast','groundPatch','groundPatchSize','undulation','undulationScale','undulationCover','undulationArt','coastRamp','faceSteep','lowTint','lowReach','lowGrain',
  'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
- 'flatShadow','flatOcclusion','sunTilt','ambient','shadeDepth','lightCap','creaseShade',
+ 'flatShadow','flatOcclusion','sunTilt','sunHeight','ambient','shadeDepth','lightCap','creaseShade',
  'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','erosionRain','wetSwath','wetGround','lushness','soilRim','slopeMarks','wrinkles',
  'shineRockSharp','shineRockRough','shineRockScale',
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
