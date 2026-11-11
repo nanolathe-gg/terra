@@ -131,6 +131,8 @@ const NODE_FIELDS = [
   ...['lfCoast'].map(k => [k, 'f']),
   // Face steepness: the gain on a raised section's rise share (1: as drawn).
   ...['lfFace'].map(k => [k, 'f']),
+  // Variation along the wall (0..1: the outline's long waves, the Gullies' plain and deep stretches).
+  ...['lfVary'].map(k => [k, 'f']),
   // A height image (the `heights` pass): its size in samples, the window of them this pass holds in MW from mwBase (its first sample and its width), and where
   // sample (0, 0) lies and how far apart samples are, in world px. u.combine is its mode.
   ...['hmW', 'hmH', 'hmCw'].map(k => [k, 'u']), ...['hmCx', 'hmCy'].map(k => [k, 'i']), ...['hmX', 'hmY', 'hmCell'].map(k => [k, 'f'])];
@@ -412,6 +414,7 @@ export function prepareNode(n, geom, c) {
       // sides are), given in the shape's own frame, where the pattern runs.
       gully: .45 * clamp(q.gullies || 0, 0, 1.5), gullySize: clamp(clamp(q.gullySize ?? .4, .1, 1) * Math.max(sd.front, sd.back), 16, 480) / frameScale,
       // P17 Talus: cones below the Gullies' chutes, as long as the reach (world px) at the repose of the world's talusAngle; only where Gullies cut and the stroke raises.
+      lfVary: isRiver(q) ? 0 : clamp(q.wallVary || 0, 0, 1),
       talusReach: talusOn(q) ? clamp(q.talus, 0, 400) : 0, talusTan: c.repose ?? .84, lfPeak: Math.round(q.spurCount) >= 1 && landformSigned(q) ? landformPeak(q) : 0,
       lfGround: Math.round(q.heightReference || 0) === 2 ? 1 : 0, lfSigned: landformSigned(q) ? 1 : 0,
       // Coast ramp: a stroke whose crest stands under the sea (a fixed or sea-level height) makes a coast; others keep their sections as drawn.

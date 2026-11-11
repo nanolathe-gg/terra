@@ -17,6 +17,7 @@ export const HELP_CONTROLS={
   lean:{key:'lean',values:[60,300],step:5,divisor:100,unit:' : 1'},
   'spur-count':{key:'spurCount',base:{spurLength:180},values:[0,7],step:1,unit:' spurs'},
   'lf-vary-size':{key:'varySize',base:{wander:55,widthVary:70,heightVary:30},values:[40,350],step:10,unit:' px'},
+  'lf-wall-vary':{key:'wallVary',base:{diameter:440,wander:70,varySize:50,gullies:100,gullySize:20,curve:{form:'cliff'}},values:[0,100],step:5,unit:'%'},
 };
 export const HELP_CARD={diameter:300,elevation:200,combine:0,wander:0,widthVary:0,heightVary:0,gullies:0,terraces:0,cracks:0,curve:{form:'lfHill'}};
 export const HELP_PATH=[[430,520],[620,420],[800,510]];

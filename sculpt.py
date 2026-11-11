@@ -76,7 +76,7 @@ KNOB_DEFAULTS = dict(
     terraces=0, ledge=.6, terraceJitter=.35, breakup=0,
     # Landform (card H27): the crest's height (fixed or sea-relative) and how it combines (0 raise to, 1 cut to, 2 flatten to); the variation along and
     # across the path (wander px, width as a share, height in units, the wavelength px, and the weights at the foot and from the middle up of the section).
-    heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, talus=0, surf=0, varySize=140, varyFoot=1, varyMiddle=1,
+    heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, talus=0, surf=0, varySize=140, varyFoot=1, varyMiddle=1, wallVary=0,
     # lfcrater: a landform's impact features (sculpt-scene.js CRATER_KEYS), off by default: ejecta round it and secondaries beyond them;
     # lfimpact2: and the ground buckled beyond the rim of a landform that digs; the secondaries fall from secondaryDistance rim radii (or, on a shape that
     # peaks on its path, foot radii) out to twice that, 1.6 as before the row; the Crater preset sets 1 (sculpt-scene.js LANDFORM_TOOLS.crater).

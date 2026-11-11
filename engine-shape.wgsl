@@ -973,6 +973,22 @@ fn landformFall(p: vec2f, x: i32, y: i32) -> vec2f {
   if (acc <= 0.0 || length(away) < 1e-5 * acc) { return vec2f(0.0); }
   return normalize(away);
 }
+// The outline's wander at a point of the shape's frame, -1..1. `even` is the one wavelength (the Variation size) drawn round the whole shape. Variation along the
+// wall (u.lfVary) blends in waves three times as long, the alcoves and salients a wall's teeth ride on, and lets the teeth come and go over stretches 2.5
+// wavelengths long, so one wall has straight runs and ragged ones. The sum stays within -1..1: the footprint the host reserves for Wander still holds it.
+fn wanderVaried(even: f32, x: f32, y: f32) -> f32 {
+  let sz = max(u.lfSize, 8.0); let zb = 70.0 / sz;
+  let big = 0.7 * noiseValue(3u, u.seed ^ 0x51a7u, x * zb, y * zb) + 0.3 * noiseValue(2u, u.seed ^ 0x51a7u, x * zb, y * zb);
+  let amp = clamp(1.0 + 1.5 * vnoise(x / (2.5 * sz), y / (2.5 * sz), u.seed ^ 0x33c9u), 0.05, 2.2);
+  return mix(even, clamp(0.6 * even * amp + 0.7 * big, -1.0, 1.0), u.lfVary);
+}
+// Variation along the wall for the Gullies: a field seven of the widest gullies across, -1..1.
+fn wallBroad(x: f32, y: f32, wv: f32) -> f32 { return vnoise(x / (7.0 * wv), y / (7.0 * wv), u.seed ^ 0x6e21u); }
+// Variation along the wall for the Gullies. Their depth, a multiple of the drawn depth that already runs from a fifth to nearly twice over stretches three
+// wavelengths long, widens over the longer stretches of wallBroad, from no gullies at all (a plain wall) to 2.4 times; and their sideways warp gains a
+// longer, larger one, so their spacing runs from about half to one and a half times the Gully size along one wall.
+fn gullyDeepVaried(even: f32, x: f32, y: f32, wv: f32) -> f32 { return even * mix(1.0, clamp(1.0 + 1.6 * wallBroad(x, y, wv), 0.0, 2.4), u.lfVary); }
+fn gullyWarpVaried(even: f32, x: f32, y: f32, wv: f32) -> f32 { return even + u.lfVary * 1.6 * wv * vnoise(x / (5.0 * wv), y / (5.0 * wv), u.seed ^ 0x1d4fu); }
 // A landform's gullies at a cell it raises: steered by the stroke's own fall line, at the slope of the picked segment's own section across that line, faded
 // over the foot (q 0 to 0.25) and off a smooth route. The pattern lives in the shape's frame, so it moves with the shape and every tile and page computes
 // the same value.
@@ -991,10 +1007,11 @@ fn landformGullies(value: f32, q: f32, pk: u32, share: f32, wx: f32, wy: f32, lx
   let wv = u.gullySize; let sd = normalize(out);
   // On a long even face one wavelength cuts evenly spaced ribs, a comb; a broad warp across the fall line and a broad change of depth make them wander,
   // crowd, part and differ.
-  let warp = 0.5 * wv * vnoise(lx / (2.2 * wv), ly / (2.2 * wv), u.seed ^ 0x7f4au);
+  var warp = 0.5 * wv * vnoise(lx / (2.2 * wv), ly / (2.2 * wv), u.seed ^ 0x7f4au);
   // Real gullies are not a comb: over stretches three wavelengths long the depth runs from a fifth to nearly twice, so a wall has quiet buttresses
   // and deeply cut bays.
-  let deep = clamp(1.0 + 0.85 * vnoise(lx / (3.0 * wv), ly / (3.0 * wv), u.seed ^ 0x2b91u), 0.2, 1.85);
+  var deep = clamp(1.0 + 0.85 * vnoise(lx / (3.0 * wv), ly / (3.0 * wv), u.seed ^ 0x2b91u), 0.2, 1.85);
+  if (u.lfVary > 0.0) { warp = gullyWarpVaried(warp, lx, ly, wv); deep = gullyDeepVaried(deep, lx, ly, wv); }
   let gp = vec2f(lx, ly) + vec2f(-sd.y, sd.x) * warp;
   // Gullies head back into their wall: in bays one wavelength apart (two of the widest gullies to a bay) the whole face stands farther in, and on the
   // buttresses between it stands where it was drawn, so each bay keeps the face's own section. A bay is wider than deep (at most 0.45 wavelength
@@ -1018,7 +1035,7 @@ fn landformGullies(value: f32, q: f32, pk: u32, share: f32, wx: f32, wy: f32, lx
   let fw = p + fall * back; var fl = fw;
   if (u.framed != 0u) { fl = vec2f(u.inv0 * fw.x + u.inv2 * fw.y + u.inv4, u.inv1 * fw.x + u.inv3 * fw.y + u.inv5); }
   let fz = 210.0 / max(u.lfSize, 8.0); var fA = nA; var fB = nB;
-  if (u.lfWander > 0.0) { fA = 0.7 * noiseValue(3u, u.seed, fl.x * fz, fl.y * fz) + 0.3 * noiseValue(2u, u.seed, fl.x * fz, fl.y * fz); }
+  if (u.lfWander > 0.0) { fA = 0.7 * noiseValue(3u, u.seed, fl.x * fz, fl.y * fz) + 0.3 * noiseValue(2u, u.seed, fl.x * fz, fl.y * fz); if (u.lfVary > 0.0) { fA = wanderVaried(fA, fl.x, fl.y); } }
   if (u.lfWidth > 0.0) { fB = noiseValue(5u, u.seed, fl.x * fz, fl.y * fz); }
   let there = lfEval(s0, s1, s2, fw.x, fw.y, base, fA, fB, nC, share, x, y, i, cells).x;
   let up = lfEval(s0, s1, s2, fw.x - fall.x * hs, fw.y - fall.y * hs, base, fA, fB, nC, share, x, y, i, cells).x;
@@ -1141,7 +1158,8 @@ fn talusFan(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32, shar
   let fp = vec2f(lx, ly) + fo * ro.x;
   // The lobes are a smooth field along the foot, a wavelength across, and not the Gullies' stripes: those fork where their phase jumps, which is a
   // branch in a gully and would be a step in a fan.
-  let fdeep = clamp(1.0 + 0.85 * vnoise(fp.x / (3.0 * wv), fp.y / (3.0 * wv), u.seed ^ 0x2b91u), 0.2, 1.85);
+  var fdeep = clamp(1.0 + 0.85 * vnoise(fp.x / (3.0 * wv), fp.y / (3.0 * wv), u.seed ^ 0x2b91u), 0.2, 1.85);
+  if (u.lfVary > 0.0) { fdeep = gullyDeepVaried(fdeep, fp.x, fp.y, wv); }
   let gv = sm(0.0, 1.0, 0.5 + 0.5 * clamp(1.4 * vnoise(fp.x / wv, fp.y / wv, u.seed ^ 0x3d17u), -1.0, 1.0));
   let strength = min(u.gully * fdeep / 0.3, 1.2);          // deeper gullies, a bigger fan; some stretches have next to none
   let apexIn = ro.y * tq;                                   // how far inside the foot the ravine opens
@@ -1180,7 +1198,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   if (u.lfWander > 0.0 || u.lfWidth > 0.0 || u.lfHeight > 0.0) {
     let sz = max(u.lfSize, 8.0);
     // Broad scallops carry smaller notches on the same outline. The two section weights let the shoulder break up more than the foot, without another control.
-    if (u.lfWander > 0.0) { nA = 0.7 * noiseValue(3u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz) + 0.3 * noiseValue(2u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); }
+    if (u.lfWander > 0.0) { nA = 0.7 * noiseValue(3u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz) + 0.3 * noiseValue(2u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); if (u.lfVary > 0.0) { nA = wanderVaried(nA, lx, ly); } }
     if (u.lfWidth > 0.0) { nB = noiseValue(5u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); }
     if (u.lfHeight > 0.0) { nC = lfFractal(lx / sz + 37.1, ly / sz - 19.7, 0x5c9u); }
   }
@@ -2045,7 +2063,7 @@ fn lfcSection(w: vec2f, k: u32, base: f32, at: vec2f, cells: u32) -> vec2f {
   if (u.framed != 0u) { lx = u.inv0 * w.x + u.inv2 * w.y + u.inv4; ly = u.inv1 * w.x + u.inv3 * w.y + u.inv5; }
   var nA = 0.0; var nB = 0.0; var nC = 0.0;
   let sz = max(u.lfSize, 8.0);
-  if (u.lfWander > 0.0) { nA = 0.7 * noiseValue(3u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz) + 0.3 * noiseValue(2u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); }
+  if (u.lfWander > 0.0) { nA = 0.7 * noiseValue(3u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz) + 0.3 * noiseValue(2u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); if (u.lfVary > 0.0) { nA = wanderVaried(nA, lx, ly); } }
   if (u.lfWidth > 0.0) { nB = noiseValue(5u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); }
   if (u.lfHeight > 0.0) { nC = lfFractal(lx / sz + 37.1, ly / sz - 19.7, 0x5c9u); }
   let x = clamp(i32(floor(at.x / u.spacing + 0.5)), 0, i32(u.grid) - 1); let y = clamp(i32(floor(at.y / u.spacing + 0.5)), 0, i32(u.grid) - 1);

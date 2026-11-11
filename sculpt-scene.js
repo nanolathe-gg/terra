@@ -110,7 +110,7 @@ export const SECTION_KEYS=['terraces','ledge','terraceJitter','breakup'];
 // lfcrater: the impact features any landform can throw (sculpt-shape-presets.js impactOn): ejecta round it and secondaries (small copies of it) beyond them;
 // lfimpact2: and, on a landform that digs, the buckled ground beyond its rim; Secondaries' distance sets how far out the secondaries fall. A stroke with any of them reads its path as the impact's track (direction and angle from the drag). Wired like every shape option (BACKLOG ground rule 4).
 export const CRATER_KEYS=['ejecta','buckling','secondaries','secondaryDistance'];
-export const LANDFORM_KEYS=['stepReference','heightReference','elevation','combine','routeSmooth','wander','widthVary','heightVary','gullies','gullySize','talus','surf','varySize','varyFoot','varyMiddle'];
+export const LANDFORM_KEYS=['stepReference','heightReference','elevation','combine','routeSmooth','wander','widthVary','heightVary','gullies','gullySize','talus','surf','varySize','varyFoot','varyMiddle','wallVary'];
 // Painted masks (card C5): nine signed-byte planes per cell, where 0 changes
 // nothing: rock, snow or ice, wet ground and moss (0..127 of full), scatter
 // density, and three local style settings (stage 2: relief strength, cracks
@@ -172,6 +172,7 @@ export const SHAPE_FIELDS=[
   ['secondaries','lf-secondaries','Secondaries',['landform'],0,12,1,1,'Small copies of the shape thrown beyond the ejecta, some in short chains along a ray; they gather downrange, or to the sides, as the ejecta do. With any impact row on, a drag lands the shape at its end, as Ejecta says.'],
   ['secondaryDistance','lf-secondary-distance','Secondaries\' distance (rim radii)',['landform'],8,40,1,10,'How far out the secondaries fall, in rim radii from the center: from this distance to twice as far, and their chains a little farther. 1 lands the nearest on the rim; retail Moon\'s small craters gather 1 to 2 rim radii out. It shows once Secondaries is 1 or more.'],
   ['varySize','lf-vary-size','Variation size (px)',['landform'],20,400,10,1,'The wavelength of the wander and of the width and height variation.'],
+  ['wallVary','lf-wall-vary','Variation along the wall',['landform'],0,100,5,100,'How much one wall differs from stretch to stretch. 0: the same wander and the same gullies all the way round. Higher: the outline also bends in long waves, three Variation sizes across, with alcoves and salients; its small teeth come and go, so some stretches run straight; the Gullies leave some stretches plain, cut others far deeper, and run closer or wider apart.'],
   ['varyFoot','lf-vary-foot','Variation at the foot',['landform'],0,200,5,100,'How much of the variation acts at the foot of the section (100: all of it, 0: none, 200: twice). It blends into the next one up to the middle of the section.'],
   ['varyMiddle','lf-vary-middle','Variation up the section',['landform'],0,200,5,100,'How much of the variation acts from the middle of the section to its crest. Set the foot to 0 and this to 200 for variation that grows toward the crest.'],
   ['spurCount','spur-count','Spurs',['landform'],0,12,1,1,'Tapering spurs that branch off this ridge, grown from the shape\'s own seed. Each joins its parent at the crest; on a section that dips below the ground and peaks before its path (a crater\'s rim), they leave from that peak.'],
