@@ -748,7 +748,7 @@ export class TerrainRenderer {
     });
     // With no slope cover the slope group has no share, so its gloss does not wake the pass (worldControlRequirement says the same).
     const slopeShare = (!groundCoverOn(this.config.material?.groundCover, variant) && Number(variant.get('slopeTexture') ?? 0.3) > 0) || Boolean(this.config.material?.slopeSand);
-    this.i('uShineOn', Number(variant.get('faceWet')??0)>0 || shine.some((m, i) => (i !== 1 || slopeShare) && (m[0] > 0 || m[2] > 0)));
+    this.i('uShineOn', Number(variant.get('faceWet')??0)>0 || Number(variant.get('wetGround')??0)>0 || shine.some((m, i) => (i !== 1 || slopeShare) && (m[0] > 0 || m[2] > 0)));
     this.f('uShineStretch', variant.has('shineStretch') ? Number(variant.get('shineStretch')) : 1);
     this.f('uShineWhite', variant.has('shineWhite') ? Number(variant.get('shineWhite')) : 0.35);
     this.set('uShine', shine);
@@ -992,6 +992,7 @@ export class TerrainRenderer {
     set('uLooseSupply', number('looseSupply', 0));
     set('uBoulders', number('boulders', 0));
     set('uSoilRim', number('soilRim', 0));
+    set('uWetGround', number('wetGround', 0));
     set('uLooseSize', number('looseSize', 6));
     set('uPlantsOn', groundCoverOn(this.config.material?.groundCover, this.variant) && this.config.material.groundCover.plants ? 1 : 0);
     set('uStoneRound', number('stoneRound',this.config.material?.stoneRound ?? 0));

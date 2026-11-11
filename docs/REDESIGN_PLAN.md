@@ -3021,6 +3021,31 @@ greens over.
   report have not run on this branch.
 - Page (private): https://claude.ai/artifact/DMV5TKvvA37ufvmT2qz81g
 
+**Overnight run, item 4: wetness [Claude, 2026-11-11; the owner: "keep
+going with wetness and light"].** Branch `realism/wetness`, not landed.
+
+- *Wet ground* (world control, Vegetation group, 0 to 1, default 0 in
+  every world). Where water lies the ground is wet: the first 2.6 units
+  above a waterline, hollows and channel floors the Time pass wets, the
+  runoff rock weather traces. A wet patch ends at a ragged drying front.
+  Wet, bare ground loses up to 45% of its brightness and gains
+  saturation, living cover a third of that, and the shine term's water
+  film covers it. Applied after every material layer; art only.
+- *Measured.* At 0 the wet fixture is main's (0 pixels, color and
+  clay), and the quick tier moves 0 of 34 scenes. At 1: 8.3% of the
+  modern Green fixture (mesa, lake, river), 7.8% of the Red fixture, 5.1%
+  classic Green, 3.1% Desert. `measure/world_controls.mjs`: 2.0% of
+  green-1, 4.3% of red-1, 2 pixels of desert-1 (no water, no runoff).
+- *By eye.* Wet rims on river bars and dark seeps down gullies read
+  clearly on modern Green; at a lake's rock shore it is a thin dark
+  line. The film's gloss is hard to see top-down.
+- *Open.* (1) No world adopts it. (2) The world's old damp band
+  (`wetBand`, a 17% tone up to 13 units above the water on Green) still
+  draws under it; the two could be one. (3) Rock's own Wetness is a rock
+  recipe's number; one Wetness for ground and rock would be simpler.
+  (4) The land tier and export bytes have not run on this branch.
+- Page (private): https://claude.ai/artifact/V3kFA7sJ7im78yfCTv2AKP
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
