@@ -84,10 +84,10 @@ KNOB_DEFAULTS = dict(
     # Painted masks (card C5): the Paint brush's first choice.
     paintChannel=1,
     # Water looks (card E1). The two stroke options are 0 (the world's own),
-    # 1 or 2 (the bed also 3); the world knobs default to the earlier noise water, a ramp from
-    # shallow to deep colour, and level ground with no painted lumps beyond
-    # plainRelief's.
-    waterDeep=0, waterBed=0, waterShore=0, bedLit=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=0, deepEdge=0, lumpRelief=4,
+    # 1 or 2; the world knobs default to a ramp from shallow to deep colour, and
+    # level ground with no painted lumps beyond plainRelief's. The bed under
+    # shallow water is always the lit ground.
+    waterDeep=0, waterShore=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=0, deepEdge=0, lumpRelief=4,
     # Line features (card C4): everything off by default; spur details only matter once spurs are set.
     spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestVary=0, crestTaper=0,
     # Local vegetation (card C5 stage 2): change about the world's own cover, 0 none.
@@ -132,9 +132,6 @@ KNOB_DEFAULTS.update(shineOutside=1)
 # the hard step's depth with broad noise so the band's width and outline vary along the shore;
 # bedFlat lights the lit bed by its own relief only (no slope shading across the shelf).
 KNOB_DEFAULTS.update(shelfWander=0, bedFlat=0)
-# E11 Red: crackedStep is the step's depth under a cracked-bed stroke (0: the world's own);
-# bedDots / bedDotCell draw dark dots in the lit bed.
-KNOB_DEFAULTS.update(crackedStep=0, bedDots=0, bedDotCell=14)
 # E11 Archipelago: ringContrast / ringCount / ringSize draw contour lines in the red fringe that
 # follow the hill's outline (contrast 0 = none, lines from the inner to the outer edge, reach
 # against the ring texture's own).
@@ -173,9 +170,6 @@ KNOB_DEFAULTS.update(iceFrost=0)
 KNOB_DEFAULTS.update(iceFacets=0, iceFacetSize=36)
 # A landform's Facet shape (0 angular facets, 1 stepped columns, 2 prisms) and Surface (0 rock: the shape's own ground; 1 crystal).
 KNOB_DEFAULTS.update(facetForm=0, facetSurface=0)
-# G1 (shallow water round 3): shoalBump is the slope of the lit bumps the shallow bed carries
-# (0: none, the earlier bed), shoalBumpPx their size in screen px.
-KNOB_DEFAULTS.update(shoalBump=0, shoalBumpPx=6)
 # G1: shoalRag is how far (px) pixel notches move the shallow-to-deep step, independent of the
 # bed's slope (0: the step's earlier jitter, which a gentle shelf scales to nothing).
 KNOB_DEFAULTS.update(shoalRag=0)
@@ -185,9 +179,6 @@ KNOB_DEFAULTS.update(shoalStairs=0)
 # G1: shoalShoreSoft is the width (px) of the dithered blend at the waterline the world draws (a
 # stroke's own Hard or Faded choice is not touched; 0: a clean hard line).
 KNOB_DEFAULTS.update(shoalShoreSoft=0)
-# G1: shoalGrain lets this share of the ground tile's colour grain (its deviation from the tile's
-# mean, lit as the bed) through the tint (0: the tint replaces it, the earlier bed).
-KNOB_DEFAULTS.update(shoalGrain=0)
 # E6, Ice frost band: melt pockets (share of cells at the coast, and how far inland they reach as a share of the band; .17 and .65 are E5's).
 KNOB_DEFAULTS.update(frostGaps=.17, frostGapReach=.65, frostGapSize=11, frostGapDepth=3)
 # G3 (Archipelago rings): the fringe's lines as offset copies of the hill's outline (ringShift px, 0: the earlier concentric
@@ -266,7 +257,7 @@ WORLD_KNOBS = {
                   # in a hard step: colour by depth is flat to ~30 and gone by ~44 in
                   # both windows (retail depth 32-40: R 53, 40-48: R 39, the 16-px height
                   # grid upsampled), so the step sits at 40 (H24: the midpoint, 42) and nothing fades.
-                  bedLit=1, bedTint=1, bedContrast=.45, bedRelief=.6, deepEdge=1,
+                  bedTint=1, bedContrast=.45, bedRelief=.6, deepEdge=1,
                   # Ground (card E1): retail's plain is flat (dry heights 9 +- 1) with lit
                   # lumps only in patches, which the Paint brush's Ground lumps makes. On
                   # level pixels (24 px from other heights) the s.d. of 15-px-blurred luma
@@ -284,13 +275,8 @@ WORLD_KNOBS = {
                   # shading the pale bed over 100+ px) and carries crisp mid-scale lumps (luma s.d.
                   # after a 5-px blur 2.8-3.9 -> 5.6, retail 5.6 / 7.5 in green-1 / green-3).
                   # Green dive: the bed is lit by its own slope too (bedFlat .4; 1 lit only its lumps), so shelves turned to the sun read lighter,
-                  # with gentler lumps and bumps (bedRelief 1 -> .6, shoalBump 1.8 -> 1): retail's shallows are smooth with fine specks.
+                  # with gentler lumps (bedRelief 1 -> .6): retail's shallows are smooth with fine specks.
                   shelfWander=24, bedFlat=.4,
-                  # G1 (round 8 review: "reads as noise while retail reads as lit bumpy terrain"): the
-                  # palette dither's white noise went; lit bumps of 5 px take
-                  # its place. After a 9-px blur the bed's lit / dark shares and clump sizes are
-                  # retail's (green-1 .19 / .22 and 8.6 / 13.7 px against .20 / .20 and 9.1 / 14.4).
-                  shoalBump=1, shoalBumpPx=5,
                   # G1: the shallow-to-deep outline is notched by up to 5 px (retail's runs 3-8 px).
                   shoalRag=5,
                   # G1: the hard waterline steps in 1-3 px runs (retail's), up to 2 px off the depth contour.
@@ -317,30 +303,17 @@ WORLD_KNOBS = {
                 # Retail round 2: raised landform faces steeper (retail's rims and mesa walls are crisper than 1).
                 faceSteep=1.75,
                 crackSpacing=28,
-                # Red's shallows (card E1) are lit terrain too, tinted purple and ending in a
-                # hard stop: red-2's lake is the plain ground tinted lilac (mode 2, the
-                # default); a stroke may set the cracked bed (red-3's shelf, mode 1).
-                bedLit=1, bedTint=1, bedContrast=.65, bedBright=1.1, bedRelief=1, deepEdge=1,
-                # E11 (round 7 report: "darker dots", "cracks too soft", "edge against the deep
-                # water seems shaded"). Retail's lilac lake has dark dots of 3-4 px every 12-20 px
-                # (dark components >= 3 px average 6.5-11 px, ours 4.3-6.7); the step is a true
-                # threshold. Under a cracked-bed stroke (red-3's shelf) it sits at depth 14, where
-                # retail's lilac share falls from .91 (0-6) / .66 (6-12) to .27 (12-18) / .17;
-                # the lake (red-2) is lilac to its full depth 24 and keeps the world's 22. The
-                # cracked bed is cut as rocky ground and keeps its crevices through the tint
-                # (luma s.d. 14.0 in retail, 16.7 here, 4-5 before).
+                # Red's shallows (card E1) are lit terrain, tinted purple and ending in a
+                # hard stop: red-2's lake is the plain ground tinted lilac; open shores show
+                # the shore rock's joints under the water (Rock shelf).
+                bedTint=1, bedContrast=.65, bedBright=1.1, bedRelief=1, deepEdge=1,
+                # E11 (round 7 report: "edge against the deep water seems shaded"): the step is a true
+                # threshold; the lake (red-2) is lilac to its full depth 24 and keeps the world's 22.
                 shelfWander=6, bedFlat=.6,
-                crackedStep=14, bedDots=.18, bedDotCell=15,
-                # G1: lit bumps of 8 px, and no palette dither (see Green).
-                shoalBump=2, shoalBumpPx=8,
                 # G1 (round 8: "the transition from shallow to deep needs a pixel-ragged edge, right now it is
                 # too smooth"): the step's jitter was the bed's gradient times a constant, nothing on the
                 # shelf's gentle slope; the notches are now px displacements, up to 9 px as retail's teeth.
-                shoalRag=9,
-                # G1: retail's lilac lake keeps pink and salmon pixels of the ground under it; .3 of the tile's
-                # colour grain shows through the tint (.9 reads as glitter; .5 raised the pixel-scale energy
-                # past the lake's before value, .25 kept it).
-                shoalGrain=.3),
+                shoalRag=9),
     # Retail sand runs level to a crisp waterline (hundred isles, canal
     # crossing): flatBank keeps the bank from the shaded lip and the
     # dashed contour lines the 3.7-unit bands drew across it.
@@ -366,7 +339,7 @@ WORLD_KNOBS = {
                         # rings' texture, narrower (spread .35), lighter (.7, variation .5) and
                         # fading over a longer reach.
                         hillLight=1, ringFade=1,
-                        bedLit=1, bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1,
+                        bedTint=1, bedContrast=.8, bedBright=1, bedRelief=1,
                         # E11 (round 7 report: "weird black/dark lines around the hills" and "more
                         # noticeable circle features in the red fringe"): the dark lines were the
                         # first band risers on the hill's foot (banding 0 removes them, crack knobs do
@@ -376,12 +349,6 @@ WORLD_KNOBS = {
                         # outline, not the screen). Reef bars carry retail's dappled texture
                         # (luma s.d. after a 3-px blur 8.4 against ours 3.0 before).
                         stepSoftPx=14, shelfWander=6,
-                        # G1: the reef bars are soft blotches (retail: 8-16 px energy 1.8 against 1.3 at 4-8 px;
-                        # 4.5-px bumps at 3 read as chunky cobbles): faint lit bumps of 9 px, a few dots, and no
-                        # palette dither (3-px-blurred luma s.d. retail 7.6, before 4.7, now 5.8; see Green).
-                        # H18 part 2: a mottle of the bed's brightness printed noisy blotches on the bars where retail's are
-                        # smooth and soft (archipelago-1 alone: 1.6 mean |diff|, 4.2% of blocks); none reads closer there.
-                        bedDots=.1, bedDotCell=9, shoalBump=1.5, shoalBumpPx=9,
                         # G1: a hard step's outline is notched by up to 4 px (its 14-px ramp softens them).
                         shoalRag=4,
                         # G1 (round 8: "the default should still have a small blur on the edge"): the world's own

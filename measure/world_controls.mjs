@@ -48,7 +48,7 @@ const ALLOWED = {};
 // A cancelled term leaves float rounding (a pixel or two), not a control.
 const HIDDEN_PX = 8;
 // The rows a picked water color changes the answer for; no scene picks one, so the sweep does (H25).
-const COLORED_ROWS = new Set(['deepEdge', 'shallowDepth', 'deepDepth', 'waterSoft', 'bandWater', 'bedLit', 'bedTint', 'bedBright', 'bedContrast', 'bedFlat', 'bedDots', 'shoalGrain', 'shoalBump']);
+const COLORED_ROWS = new Set(['deepEdge', 'shallowDepth', 'deepDepth', 'waterSoft', 'bandWater', 'bedTint', 'bedBright', 'bedContrast', 'bedFlat']);
 const reasonFor = r => ALLOWED[(r.stroke ? r.stroke + ':' : '') + r.key] || ALLOWED[r.key] || null;
 const failed = r => (r.zero && !r.allowed) || r.leak || r.hides;
 const named = r => `${r.world} ${r.stroke ? r.stroke + ':' : ''}${r.key}${r.hides ? ' moves while the panel says "' + r.reason + '"' : ''}`;
@@ -272,24 +272,22 @@ try {
   const strokes = world => scenes[fixtureName(world,1)];
   // A fixture is a stroke list. The diagnostic one is runner.js's: a plateau, a ridge, deep water with shore plates, sand and paint.
   const diagnostic = world => [PLATEAU([[270, 300], [550, 300]], 110, {diameter: 400, cracks: 100}), RIDGE([[800, 150], [860, 430]], 130, {diameter: 320, cracks: 100}),
-    WATER([[0, 850], [1024, 850]], {diameter: 600, shorePlates: 1, plateMaterial: world === 'ice' ? 2 : 1}, {waterDeep: 0, waterBed: 0}), ['sand', [[350, 470], [650, 470]], {card: {diameter: 280, amount: 100}}], ['paint', [[350, 100], [500, 270]], {card: {diameter: 220, amount: 100, paintChannel: 1}}]];
+    WATER([[0, 850], [1024, 850]], {diameter: 600, shorePlates: 1, plateMaterial: world === 'ice' ? 2 : 1}, {waterDeep: 0}), ['sand', [[350, 470], [650, 470]], {card: {diameter: 280, amount: 100}}], ['paint', [[350, 100], [500, 270]], {card: {diameter: 220, amount: 100, paintChannel: 1}}]];
   // The painted fixture: a ridge and a plateau with every paint channel laid on them, for the rows a painted or per-stroke path keeps alive at a world value of 0
   // (the stones of Denser scatter, the lines of Style: banding).
   const painted = () => [RIDGE([[300, 220], [700, 220]], 130, {diameter: 420, cracks: 100}), PLATEAU([[300, 760], [700, 760]], 100, {diameter: 420, cracks: 100}),
-    // two water strokes with the choices the panel cannot show on the world: frost-needle shore plates (Melt pockets), and a cracked bed under a hard step
-    WATER([[60, 960], [460, 960]], {diameter: 200, shorePlates: 1, plateMaterial: 2}), WATER([[560, 960], [960, 960]], {diameter: 200}, {waterDeep: 1, waterBed: 3}),
+    // two water strokes with the choices the panel cannot show on the world: frost-needle shore plates (Melt pockets), and a hard step
+    WATER([[60, 960], [460, 960]], {diameter: 200, shorePlates: 1, plateMaterial: 2}), WATER([[560, 960], [960, 960]], {diameter: 200}, {waterDeep: 1}),
     // a partial Denser scatter over the ridge's flank: at full strength the paint is its own source, so only here does From cliff feet choose where stones lie
     ['paint', [[240, 220], [760, 220]], {card: {diameter: 460, amount: 35, paintChannel: 5}}],
     // a broad Cracks more down the ridge's south flank: at a crack depth of 0 the cracks are only where it is painted, and the network's turn from
     // rills to plates acts on the major cracks (Block size apart), which the small patch below barely holds
     ['paint', [[240, 330], [760, 330]], {card: {diameter: 200, amount: 100, paintChannel: 10}}],
     ...[1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].map((c, i) => ['paint', [[110 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250], [170 + (i % 6) * 160, 120 + Math.floor(i / 6) * 250]], {card: {diameter: 120, amount: 100, paintChannel: c}}])];
-  // The water picks: six water strokes, each with one combination of a stroke's edge and bed choices (hard, lit, faded, cracked, and the pairs the water rows' gates read),
-  // for the rows a stroke's own choice keeps alive where the world's setting leaves them idle.
-  // A seventh is a cracked bed under a hard step, edged with slab plates: where the water has a third color and the palette mixes pairs (no dither), the
-  // step's deep share is drawn only by the crystal shallows beside slabs (engine-frag.wgsl crystalShallowWater), so only there does Cracked-bed transition depth show.
-  const waterPicks = () => [[60, 200, {waterDeep: 1}], [60, 480, {waterBed: 1}], [60, 760, {waterDeep: 2}], [560, 200, {waterBed: 1, waterDeep: 2}], [560, 480, {waterBed: 3}], [560, 760, {waterBed: 1, waterDeep: 1}],
-    [560, 960, {waterBed: 3, waterDeep: 1}, {diameter: 200, shorePlates: 1, plateMaterial: 1}]]
+  // The water picks: four water strokes, each with one combination of a stroke's edge choice (hard, faded, none), for the rows a stroke's own choice keeps alive where the
+  // world's setting leaves them idle. The last is a hard step edged with slab plates, where the crystal shallows beside slabs draw the step's deep share.
+  const waterPicks = () => [[60, 200, {waterDeep: 1}], [60, 480, {waterDeep: 0}], [60, 760, {waterDeep: 2}], [560, 200, {waterDeep: 1}],
+    [560, 960, {waterDeep: 1}, {diameter: 200, shorePlates: 1, plateMaterial: 1}]]
     .map(([x, y, picks, card]) => WATER([[x, y], [x + 400, y]], {diameter: 150, ...card}, picks));
   // The stroke fixture: one stroke of each kind carrying a shape option, shifted by `variant` so a second one differs in size and amount. The third is as wide as a world's own plateau.
   // The Crater and Crystals buttons draw landforms now: one stroke of each stays where the retired crater and crystal kinds stood, after the rows' own strokes
@@ -407,7 +405,7 @@ try {
     }
     // A stroke's edge under the color: H24 hid it on a world of one or three tones, where it draws. waterPicks' third stroke is the faded one, and a ground node leads only where the world's undulation is on.
     await host.setBusy(false);   // an edit is refused while the map is busy
-    const third = (await host.kinds()).indexOf('landform') + 2, shown = shapeControlAvailable('waterDeep', 'landform', {waterBed: 0, world: await host.panelValues()});
+    const third = (await host.kinds()).indexOf('landform') + 2, shown = shapeControlAvailable('waterDeep', 'landform', {world: await host.panelValues()});
     const edge = await host.strokePair(third, 'waterDeep', {waterDeep: 0}, 0, [1, 2], 1, {x: 40, y: 670, width: 440, height: 180});
     colored.set('~waterDeep', {world, type: 'shape', stroke: 'landform', key: 'waterDeep', fixture: `${world}-water + color`, state: shown ? 'colored' : 'hidden', reason: shown ? '' : 'hidden under a picked color', hides: !shown && edge.px >= HIDDEN_PX, ...edge});
     await host.pickColor('Shallow water');
@@ -448,7 +446,6 @@ try {
       if (kind === 'landform' && (key === 'facetForm' || key === 'facetSurface' || LANDFORM_FACET_KEYS.includes(key))) Object.assign(p, {iceFacets: .7, facetForm: ['crystalTiers', 'crystalStep', 'crystalFacet', 'crystalSizeVar'].includes(key) ? 1 : 2, iceFacetSize: 40});
       if (key === 'facing') p.lean = 3;
       if (key === 'gullySize' || key === 'talus') p.gullies = 1;
-      if (key === 'waterDeep') p.waterBed = 1;   // a stroke's edge choice shows where its own Lit bed draws the deep share
       if (key === 'buckling') Object.assign(p, {heightReference: 2, elevation: -20, combine: 2});   // lfimpact2: the ground buckles round a shape that digs
       if (key === 'secondaryDistance') p.secondaries = 12;   // lfimpact2: it places the secondaries (all of them, as Secondaries is read)
       if(kind==='landform'&&(key.startsWith('layer')||key.startsWith('lava')))Object.assign(p,{stepReference:key==='layerCircle'||key==='lavaCircleVary'?2:1,terraces:5,ledge:.7,terraceJitter:.5});

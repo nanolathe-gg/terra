@@ -245,11 +245,10 @@ struct Uniforms {
     faceScratchAngle: f32, // Groove tilt from vertical (deg)
     faceGritSize: f32, // Grit size (px)
     // Water looks (card E1). Defaults reproduce the earlier water exactly.
-    bedLit: f32,          // shallow water drawn as the lit bed under it, tinted (0: the noise water; 1: all bed)
     bedTint: f32,         // how far the tint replaces the bed's own colour (0: bed only; 1: the tint, lit by the bed)
     bedRelief: f32,       // bed lumps (bake): faint embossed relief under shallow water, 0: none
     deepEdge: f32,        // shallow-to-deep step: 0 the depth ramp, 1 a hard step with ragged stairs
-    waterOn: i32,         // 1 once any cell carries a painted water edge or bed choice (planes 9-11, 13) or a Surf (plane 18)
+    waterOn: i32,         // 1 once any cell carries a painted water shore or edge choice (planes 9-10) or a Surf (plane 18)
     lumpOn: i32,          // 1 once any cell carries painted ground lumps (plane 12)
     lumpRelief: f32,      // height of a fully painted lump field, in the units of plainRelief
     shallowMean: vec3f,   // mean colour of the shallow water art: the lit bed's tint
@@ -287,9 +286,6 @@ struct Uniforms {
     shineOutside: f32,    // share of the rock's glints kept outside painted rock (1: everywhere, as the shine model gives them)
     // E11: shallow water round 2 (Green, Red) and Archipelago's fringe. Every default is the earlier look.
     shelfWander: f32,     // Green, Red: how far broad noise moves the step's depth, in depth units (0: the step follows the shore)
-    crackedStep: f32,     // Red: depth of the shallow-to-deep step under a cracked-bed stroke (0: the world's own step)
-    bedDots: f32,         // Red: dark dots in the lit bed, as a share of brightness (0: none)
-    bedDotCell: f32,      // px between those dots (one per cell of this size, a share of cells empty)
     stepSoftPx: f32,      // Archipelago's reef bars: the true-threshold step's ramp width in px (1: a one-pixel edge, as Green and Red)
     ringContrast: f32,    // Archipelago: contour lines in the red fringe, following the hill's outline (0: none)
     ringCount: f32,       // how many lines the fringe carries from its inner to its outer edge
@@ -341,11 +337,8 @@ struct Uniforms {
     iceApron: f32,        // dark hatched drifts spilling past the foot of raised ice into the snow (0: none)
     iceFrost: f32,        // Ice frost band: fine dark-blue hairlines in parallel runs, thinning inland (0: none)
     // G1 (shallow water round 3: Green, Red, Archipelago). Every default is the earlier look.
-    shoalBump: f32,       // the shallow bed's lit bumps: slope of the lumps the sun lights (0: none, as before)
-    shoalBumpPx: f32,     // size of those lumps, screen px
     shoalRag: f32,        // the shallow-to-deep step's outline: pixel notches of up to this many px, whatever the bed's slope (0: as before)
     shoalStairs: f32,     // the hard waterline's stairs: runs of 1-3 px moving it up to this many px, whatever the bank's slope (0: as before)
-    shoalGrain: f32,      // Red: the ground tile's own colour grain shows through the tint, this share of it (0: the tint replaces it, as before)
     shoalShoreSoft: f32,  // Archipelago: the waterline the world draws (a stroke's Hard and Faded stay) is a dithered blend this many px wide (0: a clean line)
     // Low ground (Zhon's mud lowland): the ground from the sea up to lowReach above it, and the shallows, take lowColor (0: none, as before).
     lowTint: f32,         // 0..1: how far the low ground's color moves to lowColor (its grain stays)

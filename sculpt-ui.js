@@ -49,7 +49,7 @@ export function groupToolControls(fields,buildRow){
  ['spurCount','Spurs',['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb','crestVary']],
  ['fissureBranches','Branches',['fissureBranches','fissureBranchLen','fissureBranchSpread']],['fissureNetwork','Fracture network',['fissureNetwork','fissureCell']],
  ['shorePlates','Shore plates',['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','plateVary']],
- [null,'Water appearance',['waterDeep','waterBed','waterShore']],
+ [null,'Water appearance',['waterDeep','waterShore']],
  [null,'Surf',['surf']],
  [null,'Crest variation',['crestTaper']],
  ['iceFacets','Facets',['iceFacets','facetForm','facetSurface','iceFacetSize','crystalStep','crystalTiers','crystalFacet','crystalSizeVar','crystalSides','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']]

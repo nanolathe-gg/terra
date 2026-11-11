@@ -242,14 +242,14 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     }
     const q=this.device.queue;q.writeTexture({texture:this.heightTexture},height,{bytesPerRow:gw*4},[gw,gh]);q.writeTexture({texture:this.routeTexture},routes,{bytesPerRow:gw*4},[gw,gh]);
     q.writeTexture({texture:this.gridTexture},grid,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,4]);q.writeTexture({texture:this.maskTexture},masks,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,this.maskLayers]);
-    const flags={paintOn:painted.slice(0,9).some(Boolean),scatterOn:painted[4],styleOn:painted.slice(5,9).some(Boolean),waterOn:painted.slice(9,12).some(Boolean)||painted[13]||painted[18],lumpOn:painted[12],overrideOn:painted.slice(14,18).some(Boolean),...request.maskFlags};
+    const flags={paintOn:painted.slice(0,9).some(Boolean),scatterOn:painted[4],styleOn:painted.slice(5,9).some(Boolean),waterOn:painted.slice(9,11).some(Boolean)||painted[18],lumpOn:painted[12],overrideOn:painted.slice(14,18).some(Boolean),...request.maskFlags};
     for(const k of ChunkTerrainRenderer.FLAGS)this.i('u'+k[0].toUpperCase()+k.slice(1),flags[k]??0);
     this.materialReady=Boolean(material);this.weatherMaps=Boolean(weather?.wear);this.cpuWorkingBytes=0;
   }
   // H7b: the six painted-mask flags (uniforms that gate whole branches) used to come back to the CPU through a mapped read, a full GPU round trip
   // (about 8 ms) between the feed pass and the draw. They are now expanded from the feed pass's word by one more tiny pass and copied into the
   // uniform buffer inside the same submission, so nothing waits. The expansion is the arithmetic the CPU applied to the word:
-  //   paintOn: any of bits 0-8, scatterOn: bit 4, styleOn: any of 5-8, waterOn: any of 9-11, 13 or 18, lumpOn: bit 12, overrideOn: any of 14-17.
+  //   paintOn: any of bits 0-8, scatterOn: bit 4, styleOn: any of 5-8, waterOn: any of 9-10 or 18, lumpOn: bit 12, overrideOn: any of 14-17.
   // While it is in use, flushUniforms writes the CPU copy around those six fields, so the CPU never overwrites the GPU's values.
   static FLAGS=['paintOn','scatterOn','styleOn','waterOn','lumpOn','overrideOn'];
   flagPass() {
@@ -263,7 +263,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
         flags[0] = any_(w, 0u, 9u);
         flags[1] = (w >> 4u) & 1u;
         flags[2] = any_(w, 5u, 9u);
-        flags[3] = max(max(any_(w, 9u, 12u), (w >> 13u) & 1u), (w >> 18u) & 1u);
+        flags[3] = max(any_(w, 9u, 11u), (w >> 18u) & 1u);
         flags[4] = (w >> 12u) & 1u;
         flags[5] = any_(w, 14u, 18u);
       }`});
@@ -312,7 +312,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     else{
       await stage.mapAsync(GPUMapMode.READ);const word=new Uint32Array(stage.getMappedRange().slice(0))[0];stage.unmap();stage.destroy();painted.destroy();uniform.destroy();
       const on=k=>(word>>>k)&1,any=(a,b)=>{for(let k=a;k<b;k++)if(on(k))return 1;return 0;};
-      const flags={paintOn:any(0,9),scatterOn:on(4),styleOn:any(5,9),waterOn:any(9,12)||on(13)||on(18),lumpOn:on(12),overrideOn:any(14,18),...request.maskFlags};
+      const flags={paintOn:any(0,9),scatterOn:on(4),styleOn:any(5,9),waterOn:any(9,11)||on(18),lumpOn:on(12),overrideOn:any(14,18),...request.maskFlags};
       for(const k of ChunkTerrainRenderer.FLAGS)this.i('u'+k[0].toUpperCase()+k.slice(1),flags[k]??0);
     }
     this.materialReady=Boolean(src.field);this.weatherMaps=Boolean(src.maps);   // the material field rides in layer 1 when the Time pass made one

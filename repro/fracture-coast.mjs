@@ -30,7 +30,7 @@ for(const world of worlds){
   const waterMask=mask.map((v,i)=>v&&Math.floor(i/512)>260);
   // Color choices must retain bed lighting, including on submerged rock.
   const colors={...s.renderer.colorOverrides};s.renderer.setColors({...colors,shallow:[.32,.53,.6],deep:[.06,.16,.24]});
-  for(const[key,lo,hi]of [['bedLit',0,1],['bedTint',0,1],['bedContrast',0,1.3],['bedBright',.6,1.5]]){
+  for(const[key,lo,hi]of [['bedTint',0,1],['bedContrast',0,1.3],['bedBright',.6,1.5]]){
    await knob(s,key,lo);const a=await render(false);await knob(s,key,hi);const b=await render(false);r.water[key]=diff(a,b,waterMask);assert.ok(r.water[key].percent>5,key+' with chosen water colors');await knob(s,key,Number(query.get(key)));assert.equal(diff(await render(true),clay).pixels,0,key+' cannot alter the solid');
   }
   png('custom-water',await render(false));s.renderer.setColors(colors);

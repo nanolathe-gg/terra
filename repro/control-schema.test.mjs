@@ -126,27 +126,14 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('ripple',{beachLayer:1,sand:0}),/Weathering supply/);
  shows('ripple',{beachLayer:1,sand:.5});
  shows('ripple',{beachLayer:0,sand:0});   // the Sand brush feeds it where there is no beach
- assert.match(requirement('crackedStep',{deepEdge:0,crackedBed:1}),/Hard shallow-to-deep step/);
- assert.match(requirement('crackedStep',{deepEdge:1,crackedBed:0}),/Cracked bed/);
- shows('crackedStep',{deepEdge:1,crackedBed:1});
  assert.match(requirement('strataContrast',{column:1,strata:0}),/Strata/);
  shows('strataContrast',{column:1,strata:.4});
- // water: the lit bed, the hard step, the threshold step
- assert.match(requirement('bedDots',{bedLit:0}),/Lit bed/);
- shows('bedDots',{bedLit:.5});
+ // water: the hard step, the threshold step
  assert.match(requirement('shelfWander',{deepEdge:0}),/Hard shallow-to-deep step/);
  shows('shelfWander',{deepEdge:1});
- assert.match(requirement('shoalBump',{bedLit:1,deepEdge:0}),/Hard shallow-to-deep step/);
- assert.match(requirement('shoalBump',{bedLit:0,deepEdge:1}),/Lit bed/);
- shows('shoalBump',{bedLit:1,deepEdge:1});
- shows('shoalBumpPx',{bedLit:1,deepEdge:1,shoalBump:2});
- // Chosen water colors retain the same bed lighting and detail controls.
- for(const k of ['bedTint','bedBright','bedContrast','bedFlat','bedDots','shoalGrain'])shows(k,{bedLit:1,waterColored:1});
- shows('shoalBump',{bedLit:1,deepEdge:1,waterColored:1});
- shows('shoalBumpPx',{bedLit:1,deepEdge:1,shoalBump:2,waterColored:1});
- shows('bedLit',{waterColored:1,deepEdge:0,dither:2});
- shows('bedLit',{waterColored:1,deepEdge:1,dither:2,paletteMix:1});
- shows('bedTint',{waterColored:0,bedLit:1});
+ // The bed is always lit: its controls show with chosen water colors too.
+ for(const k of ['bedTint','bedBright','bedContrast','bedFlat','bedRelief'])shows(k,{waterColored:1});
+ shows('bedTint',{waterColored:0});
  // Sampled slope texture: the sediment transition replaces the slope color at full Material weathering; the slope group's lobe rows need a share
  assert.match(requirement('slopeTexture',{slopeReplaced:1}),/Material weathering/);
  shows('slopeTexture',{slopeReplaced:1,shineSlope:.5});
@@ -159,30 +146,22 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('shineSlopeScale',{shineSlopeRough:1,slopeTexture:0,slopeSand:1});
  assert.match(requirement('shineRockSharp',{shineRock:0}),/Gloss/);
  shows('shineRockSharp',{shineRock:1,slopeTexture:0});
- // one water colour, or a third that follows the depth: the step shows only where something draws its deep share
- assert.match(requirement('deepEdge',{waterTones:1}),/one colour/);
- assert.match(requirement('deepEdge',{waterTones:3}),/third colour/);
- for(const lit of [{bedLit:.5},{crystalShallow:1}])shows('deepEdge',{waterTones:1,...lit});
- shows('deepEdge',{waterTones:2});
- assert.match(requirement('shelfWander',{waterTones:1,deepEdge:1}),/one colour/,'a parent that is itself idle names its own reason');
- shows('shelfWander',{waterTones:1,deepEdge:1,bedLit:1});
+ // the bed is always lit, so the step's deep share is drawn whatever the water's tones
+ for(const t of [1,2,3])shows('deepEdge',{waterTones:t});
+ shows('shelfWander',{waterTones:1,deepEdge:1});
  // the ramp: a third colour is cut by the depths whatever the step does; two colours need the step off, or a Faded stroke
  shows('waterSoft',{waterTones:3,rampWater:0});
- assert.match(requirement('waterSoft',{waterTones:1,rampWater:1}),/one colour/);
  assert.match(requirement('bandWater',{waterTones:2,rampWater:0}),/Faded edge/);
  shows('bandWater',{waterTones:2,rampWater:1});
- shows('waterSoft',{waterTones:1,bedLit:1,rampWater:1});
+ shows('waterSoft',{waterTones:1,rampWater:1});
  shows('shallowDepth',{waterTones:3});
  shows('deepDepth',{waterTones:2,rampWater:0,deepEdge:1});   // the hard step sits at their midpoint
- assert.match(requirement('shallowDepth',{waterTones:1}),/one colour/);
- // a stroke's edge choice, on its own Lit bed or the world's
- assert.equal(available('waterDeep','landform',{waterBed:0,world:{waterTones:1}}),false);
- assert.equal(available('waterDeep','landform',{waterBed:1,world:{waterTones:1}}),true);
- assert.equal(available('waterDeep','landform',{waterBed:0,world:{waterTones:3,bedLit:1}}),true);
- assert.equal(available('waterDeep','landform',{waterBed:0,world:{waterTones:2}}),true);
- // under a picked water color Lit bed and Noise water need the hard step, but Cracked bed still draws, so a stroke's bed row stays
- assert.equal(available('waterBed','landform',{waterDeep:2,world:{waterColored:1,waterTones:2}}),true);
- assert.equal(available('waterDeep','landform',{waterBed:0,world:{waterColored:1,waterTones:2}}),true,'a picked color makes two tones, so a stroke\'s edge shows');
+ shows('shallowDepth',{waterTones:1});
+ // a stroke's edge choice: the bed is always lit, so the step's deep share is always drawn
+ assert.equal(available('waterDeep','landform',{world:{waterTones:1}}),true);
+ assert.equal(available('waterDeep','landform',{world:{waterTones:3}}),true);
+ assert.equal(available('waterDeep','landform',{world:{waterTones:2}}),true);
+ assert.equal(available('waterDeep','landform',{world:{waterColored:1,waterTones:2}}),true,'a picked color makes two tones, so a stroke\'s edge shows');
  // facts of the world's material the panel passes in with the settings
  assert.match(requirement('ringContrast',{ringLayer:0}),/no mineral fringe/);
  shows('ringContrast',{ringLayer:1});

@@ -86,7 +86,7 @@ try{
   await click('#tab-world');
   const pickWater=async(label,color)=>{await ev(`(()=>{const row=[...document.querySelectorAll('#world-colors .color-row')].find(r=>r.firstElementChild.textContent===${JSON.stringify(label)});const pick=row.querySelector('input[type=color]');pick.value=${JSON.stringify(color)};pick.dispatchEvent(new Event('input',{bubbles:true}));pick.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);await ready();};
   await pickWater('Shallow water','#528799');await pickWater('Deep water','#102938');const coloredCoast=await coastCapture();assert.notEqual(coloredCoast,coastArt);
-  for(const k of ['bedLit','bedTint','bedBright','bedContrast'])assert.equal(await ev(`document.getElementById('knob-${k}').disabled`),false,k+' remains enabled with picked colors');
+  for(const k of ['bedTint','bedBright','bedContrast'])assert.equal(await ev(`document.getElementById('knob-${k}').disabled`),false,k+' remains enabled with picked colors');
   await set('knob-bedTint',0);assert.notEqual(await coastCapture(),coloredCoast);await set('knob-bedTint',.95);assert.equal(await coastCapture(),coloredCoast);
   // Water colors and existing bed settings belong to the world, not the map's
   // rock recipe. Restore the two overrides explicitly before testing that recipe.

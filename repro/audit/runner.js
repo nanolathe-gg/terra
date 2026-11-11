@@ -57,7 +57,6 @@ function worldFor(group,key){
  if(/^baseBand|^desert|^strata/.test(key))return 'desert';
  if(/^ring|^hillLight$/.test(key)||key==='apron'||key==='beachWidth')return 'archipelago';
  if(group.includes('Shine'))return 'crystal';
- if(/^bedDots|^bedDotCell|^cracked|^shoalGrain/.test(key))return 'red';
  return 'green';
 }
 function worldGates(group,key){
@@ -71,8 +70,6 @@ function worldGates(group,key){
  if(/^moonCup/.test(key))x.moonCups=.7;
  if(/^moonRib/.test(key))x.moonRibs=.7;
  if(/^moonFold/.test(key))x.moonFolds=.7;
- if(/^bedDot/.test(key))x.bedDots=.8;
- if(/^shoalBump/.test(key))x.shoalBump=3;
  if(/^ring/.test(key))Object.assign(x,{ringContrast:.8,ringShift:8,ringPatch:.6});
  return x;
 }
@@ -170,7 +167,7 @@ $('scale').onclick=()=>run('40×40 bounded-window editing',async()=>{
 });
 $('diagnostic').onclick=()=>run('Conditional controls on explicit feature fixtures',async()=>{
  const world=$('world-filter').value,api=await load(world),rows=[];
- const fixture=[['landform',[[270,300],[550,300]],{card:{diameter:400,heightReference:1,elevation:134,cracks:100}}],['landform',[[800,150],[860,430]],{card:{diameter:320,heightReference:1,elevation:154,cracks:100,wander:8,widthVary:0},curve:{form:'lfMountain'}}],['landform',[[0,850],[1024,850]],{card:{diameter:600,heightReference:1,elevation:-55,combine:1,cracks:0,shorePlates:1,plateMaterial:world==='ice'?2:1},curve:{form:'lfShore'},waterDeep:0,waterBed:0}],['sand',[[350,470],[650,470]],{card:{diameter:280,amount:100}}],['paint',[[350,100],[500,270]],{card:{diameter:220,amount:100,paintChannel:1}}]];
+ const fixture=[['landform',[[270,300],[550,300]],{card:{diameter:400,heightReference:1,elevation:134,cracks:100}}],['landform',[[800,150],[860,430]],{card:{diameter:320,heightReference:1,elevation:154,cracks:100,wander:8,widthVary:0},curve:{form:'lfMountain'}}],['landform',[[0,850],[1024,850]],{card:{diameter:600,heightReference:1,elevation:-55,combine:1,cracks:0,shorePlates:1,plateMaterial:world==='ice'?2:1},curve:{form:'lfShore'},waterDeep:0}],['sand',[[350,470],[650,470]],{card:{diameter:280,amount:100}}],['paint',[[350,100],[500,270]],{card:{diameter:220,amount:100,paintChannel:1}}]];
  api.scene(fixture,{ground:true});await api.idle();const original=new Map(api.renderer.variant);
  const keys=world==='desert'?['strataContrast']:world==='zhon'?['beachWidth','apron']:world==='ice'?['frostGaps','frostGapReach','frostGapSize','frostGapDepth','iceFrost']:world==='green'?['bedDip','bedDipDir']:world==='archipelago'?['ringShiftDir','beachWidth','apron']:world==='crystal'?['shineSand','shineSandSharp','shineSandRough','shineSandScale']:['undulationScale','undulationCover','sandCrown','bedDipDir','bandWater','sandBanding','sandBandSpacing','shallowDepth','deepDepth','waterSoft','bankRock','debris','debrisReach','debrisSize','debrisSort','repose','facetCoarse','crackWidth','crackHairline','boulderRound'];
  const tasks=inventory.knobs.flatMap(([group,list])=>list.map(f=>({group,f}))).filter(t=>keys.includes(t.f[0]));
@@ -206,7 +203,7 @@ $('features').onclick=()=>run('Feature placement and metadata sensitivity',async
 });
 $('internal').onclick=()=>run('Preset/internal sensitivity',async()=>{
  const world=$('world-filter').value,api=await load(world),all=await(await fetch('/audit/defaults.json')).json(),known=new Set([...inventory.shapes.map(f=>f[0]),...inventory.knobs.flatMap(([,l])=>l.map(f=>f[0]))]),rows=[];
- const fixture=[['landform',[[280,270],[550,300]],{card:{diameter:420,heightReference:1,elevation:134,cracks:100}}],['landform',[[800,120],[880,400]],{card:{diameter:320,heightReference:1,elevation:174,cracks:100,wander:8,widthVary:0},curve:{form:'lfMountain'}}],['landform',[[0,830],[1000,830]],{card:{diameter:620,heightReference:1,elevation:-55,combine:1,cracks:0,shorePlates:1,plateMaterial:world==='ice'?2:1},curve:{form:'lfShore'},waterBed:0,waterDeep:0}]];
+ const fixture=[['landform',[[280,270],[550,300]],{card:{diameter:420,heightReference:1,elevation:134,cracks:100}}],['landform',[[800,120],[880,400]],{card:{diameter:320,heightReference:1,elevation:174,cracks:100,wander:8,widthVary:0},curve:{form:'lfMountain'}}],['landform',[[0,830],[1000,830]],{card:{diameter:620,heightReference:1,elevation:-55,combine:1,cracks:0,shorePlates:1,plateMaterial:world==='ice'?2:1},curve:{form:'lfShore'},waterDeep:0}]];
  const ranges={columnContrast:[0,2],crystalCraterWebPx:[6,30],crystalCraterLight:[0,2],crystalShallowPx:[4,30],crystalSeamEnd:[.55,.95],crystalFace:[0,2],crystalTone:[0,2],crystalSeam:[0,2],erosionAge:[16,200],erosionRain:[0,1],talusAngle:[25,65],faceStreakFrom:[.1,1.5],rillDepth:[0,4],rillSpacing:[4,24],stoneSize:[2,16],cavity:[0,2],closeShadow:[0,2]};
  const assignment=k=>k.startsWith('crystal')?'crystal':['shadeBlue','frostWet'].includes(k)?'ice':'green';
  const keys=Object.keys(all.defaults).filter(k=>!known.has(k)&&!['groundPattern'].includes(k)&&assignment(k)===world);

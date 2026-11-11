@@ -36,8 +36,6 @@ export function shapeControlAvailable(key,kind,p){
  if(key==='faceVariation')return ['erase','paint','sand','grass'].includes(kind);
  // p.world is what worldControlRequirement reads.
  const world=p.world||{};
- // A stroke's edge choice moves the step only where the step's deep share is drawn; its own Lit bed draws it.
- if(key==='waterDeep'&&!deepShows(world,[1,3].includes(Math.round(p.waterBed||0))))return false;
  // A stroke's Soft bank takes the world's shore rock away, so it shows once the world has some.
  if(key==='waterShore')return Number(world.shoreRock)>0||Number(world.shoreShelf)>0;
  // A side to lean toward means something once the two sides differ: a Lean other than 1, or different front and back sections.
@@ -60,14 +58,9 @@ export function shapeControlAvailable(key,kind,p){
  return true;
 }
 
-// The two water switches a deep or shallow stroke can also turn on for its own footprint (worldPanelValues passes that in).
-const HARD_STEP='Hard shallow-to-deep step, or a water stroke\'s Hard edge',LIT_BED='Lit bed under shallow water, or a water stroke\'s Lit bed';
-// The step's deep share reaches a pixel only where something draws it: two water tones, a lit bed (a world's or a stroke's), a crystal slab's shallows
-// (worldPanelValues passes the facts in). With one colour, or a third that follows the depth, nothing else reads it.
-const deepShows=(v,litStroke=false)=>Number(v.waterTones??2)===2||Number(v.bedLit)>0||litStroke||Number(v.crystalShallow)>0;
-const deepIdle=v=>`This world's water has ${Number(v.waterTones)===3?'a third colour that follows the depth':'one colour'}, so the shallow-to-deep step shows only where a lit bed or crystal shallows draw it. Enable Lit bed under shallow water, or give a water stroke a Lit bed, to use this setting.`;
+// The switch a water stroke can also turn on for its own footprint (worldPanelValues passes that in).
+const HARD_STEP='Hard shallow-to-deep step, or a water stroke\'s Hard edge';
 const RAMP_IDLE='The ramp is drawn only where the step is off: choose Ramp in Hard shallow-to-deep step, or give a water stroke a Faded edge, to use this setting.';
-const CRACKED_BED='Give a water stroke the Cracked bed look (Shallow water look) to use this setting.';
 const NO_COLUMN='Add a rock column in the Rock column panel to use this setting.';
 // Dependencies describe pipeline features, never the active world. Search still
 // finds an inactive setting and explains what must be enabled to use it.
@@ -123,7 +116,6 @@ export function worldControlRequirement(key,v){
  if(['bedDip','bedDipDir'].includes(key)&&Math.max(n('rockFace'),n('faceTone'),n('faceStrata'),n('faceWet'),n('debrisAmount'))<=0){const r=n('column')<=0?NO_COLUMN:needs('strata','Layer color coverage in Strata');if(r)return r;}
  if(key==='bedDipDir')return n('bedDip')===0&&n('faceFold')<=0?'Set Bed tilt above or below zero, or raise Fold amplitude, to choose its direction.':'';
  if(key==='sandBandSpacing')return needs('sandBanding','Streaks on sand and ramps');
- if(key==='bedDotCell')return needs('bedDots','Bed speckles');
  if(key==='pockSize')return needs('pockmark','Surface pits');
  if((/^moonCup/.test(key)&&key!=='moonCups')||key==='cupStretch')return needs('moonCups','Slope cups');
  if(/^moonRib/.test(key)&&key!=='moonRibs')return needs('moonRibs','Slope ribs');
@@ -158,18 +150,12 @@ export function worldControlRequirement(key,v){
  if(key==='slopeTexture'&&n('slopeReplaced')>0&&!shiny&&!rough&&n('shineSlope')<=0&&n('shineSlopeRough')<=0)return 'The sediment transition replaces the slope color at 100 percent Material weathering, so this scales only the slope\'s gloss. Lower Material weathering, or set a Gloss or Roughness above zero in one of the Shine groups, to use this setting.';
  // The palette's ordered dither runs only when colors are not mixed in pairs.
  if(['dither','landDither'].includes(key)&&n('paletteMix')>0)return 'Choose Nearest color in the Palette to use this setting.';
- // The water: the lit bed is the only place the bed's rows draw, the hard step the only place the step's rows do.
- if(['bedTint','bedBright','bedContrast','bedFlat','bedDots','shoalGrain'].includes(key))return needs('bedLit',LIT_BED);
- if(key==='deepEdge')return deepShows(v)?'':deepIdle(v);
- if(['shallowDepth','deepDepth'].includes(key))return Number(v.waterTones)===3||deepShows(v)?'':deepIdle(v);   // a third colour is cut by these depths whatever the step does
- if(['waterSoft','bandWater'].includes(key))return Number(v.waterTones)===3?'':!deepShows(v)?deepIdle(v):n('rampWater')>0?'':RAMP_IDLE;
+ // The water: the hard step is the only place the step's rows draw; the ramp's rows draw only where the step is off.
+ if(['waterSoft','bandWater'].includes(key))return Number(v.waterTones)===3?'':n('rampWater')>0?'':RAMP_IDLE;
  if(['stepSoftPx','shelfWander','shoalRag'].includes(key))return needs('deepEdge',HARD_STEP);
  // The waterline's stairs and blur are drawn only by a crisp waterline, and a blur replaces the stairs (engine-frag.wgsl, the shore's crisp cut).
  if(key==='shoalShoreSoft')return needs('crispShore','Crisp waterline');
  if(key==='shoalStairs')return needs('crispShore','Crisp waterline')||(n('shoalShoreSoft')>0?'Waterline blur replaces the stairs. Set it to 0 to use this setting.':'');
- if(key==='crackedStep')return needs('deepEdge',HARD_STEP)||(n('crackedBed')>0?'':CRACKED_BED);
- if(key==='shoalBump')return needs('bedLit',LIT_BED)||needs('deepEdge',HARD_STEP);
- if(key==='shoalBumpPx')return needs('shoalBump','Lit bumps in the bed');
  if(/^ring[A-Z]/.test(key)&&n('ringLayer')<=0)return 'This world draws no mineral fringe.';
  if(key==='beachWidth'&&n('beachLayer')<=0)return 'This world has no beach of its own. Choose another world\'s Beach in Colors & base pattern to use this setting.';
  if(key==='groundTiles'&&n('groundTiled')<=0)return 'This world\'s ground is one texture, not tiles. Choose another world\'s Ground pattern to use this setting.';
@@ -195,9 +181,9 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'looseSupply','looseSize','looseKnoll','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing',
  'banding','sandBanding','strata','strataContrast',
- 'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedLit','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
+ 'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
  'baseBand','desertCapFlat',
- 'shelfWander','bedFlat','bedDots','crackedStep','shoalBump','shoalGrain',
+ 'shelfWander','bedFlat',
  'ringContrast','ringCount','ringSize','ringShift','ringTone',
  'lavaCrust','lavaPillow','lavaVeins','layerCrease','pockmark',
  'moonCups','moonRibs','moonFolds','iceCrystal','gougeWeb','iceCrest','iceSoft','iceSnow','iceFall','iceApron','iceFrost','frostGaps'

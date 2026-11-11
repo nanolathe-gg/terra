@@ -982,9 +982,8 @@ const SHELF_SCALE = 140.0;
 // jitter is scaled by the bed's own gradient. The step's depth wanders with broad
 // noise (shelfWander units over SHELF_SCALE px), so the band's outline and width
 // vary along the shore instead of following it at a fixed offset.
-fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32, cracked: bool) -> f32 {
-    var at = 0.5 * (u.shallowDepth + u.deepDepth);
-    if (cracked && u.crackedStep > 0.0) { at = u.crackedStep; }
+fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32) -> f32 {
+    let at = 0.5 * (u.shallowDepth + u.deepDepth);
     var depth = depthIn;
     if (u.shoalRag > 0.0) {
         // G1: the outline is notched in pixels, not in depth. Retail's step is a ragged line with notches of 2-8 px
@@ -1109,38 +1108,6 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
         rgb = mix(rgb, lineTone, line * gap * zone * vis * (1.0 - RING_TAPER * t) * u.ringContrast);
     }
     return rgb;
-}
-
-// E11: dark dots in the lit bed. Retail's lilac lake shows small dark dots (3-4 px, one every
-// 12-20 px, blue-purple) that the ground tiles' fine grain does not give (dark components
-// of >= 3 px average 6.5-11 px in retail against 4.3-6.7 in ours). One jittered dot per
-// cell of bedDotCell screen px, a share of cells empty; 0..1 coverage.
-fn bedDotField(pixel: vec2f) -> f32 {
-    let cell = max(u.bedDotCell, 6.0);
-    let c = floor(pixel / cell);
-    let r = vec2f(shelfHash(c + 3.1), shelfHash(c + 91.7));
-    let centre = (c + 0.2 + 0.6 * r) * cell;
-    let radius = 1.5 + 1.0 * shelfHash(c + 47.3);
-    let present = step(0.3, shelfHash(c + 11.9));
-    return present * (1.0 - smoothstep(radius - 0.6, radius + 0.4, length(pixel - centre)));
-}
-
-// G1: the shallow bed's lit bumps. Retail's shallows read as lit, bumpy ground under a tint: lumps
-// with a bright side toward the sun and a shaded side away from it, not noise. The bumps are a
-// height field of three octaves (about 5, 9 and 17 px at shoalBumpPx 6, weighted so each octave
-// gives about the same slope), lit like the ground by the same sun, and returned as the light
-// they change against level ground (1 on a flat). Positions are the world position only.
-fn shoalHeight(p: vec2f) -> f32 {
-    let z = max(u.shoalBumpPx, 2.0) / 6.0;
-    return shelfNoise(p / (5.0 * z) + 11.0) * 0.5 + shelfNoise(p / (9.0 * z) + 47.0) * 0.8 + shelfNoise(p / (17.0 * z) + 83.0) * 1.4;
-}
-fn shoalBumpLight(p: vec2f) -> f32 {
-    const e = 1.0;
-    let slope = u.shoalBump * 0.5 / e * vec2f(shoalHeight(p + vec2f(e, 0.0)) - shoalHeight(p - vec2f(e, 0.0)),
-                                              shoalHeight(p + vec2f(0.0, e)) - shoalHeight(p - vec2f(0.0, e)));
-    let normal = normalize(vec3f(-slope, 1.0));
-    let flatLight = u.ambient + 0.95 * u.light.z;
-    return min((u.ambient + 0.95 * max(0.0, dot(normal, u.light))) / flatLight, u.lightCap);
 }
 
 // Shallow water as the bed under it (card E1): the ground colour already lit at
@@ -2111,39 +2078,28 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Optional contour rings in the water colour, every 6 depth units.
         if (u.bandWater > 0.0) { colorDepth = mix(colorDepth, (floor(colorDepth / 6.0) + 0.5) * 6.0, u.bandWater * 0.7); }
         // A deep or shallow stroke's water choices (card E1), painted into the
-        // masks: +1 hard / lit bed, -1 faded / noise water, 0 the world's own.
+        // masks: +1 hard, -1 faded, 0 the world's own.
         // The plane is bilinear, so a half threshold keeps a stroke's footprint
         // to within a pixel of where it was painted.
         let shoreHard = u.crispShore;
         var edgeHard = u.deepEdge;
-        var bedLit = u.bedLit;
-        var crackedBed = false;
         if (u.waterOn != 0) {
-            crackedBed = textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).g > 0.5;
-            let pick = textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).ba;
-            if (pick.x > 0.5) { edgeHard = 1.0; } else if (pick.x < -0.5) { edgeHard = 0.0; }
-            if (pick.y > 0.5) { bedLit = 1.0; } else if (pick.y < -0.5) { bedLit = 0.0; }
+            let pick = textureSampleLevel(masksTex, linearClamp, maskUv(p), 2, 0.0).b;
+            if (pick > 0.5) { edgeHard = 1.0; } else if (pick < -0.5) { edgeHard = 0.0; }
         }
         var deep = smoothstep(u.shallowDepth, u.deepDepth, colorDepth);
-        if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, depth, crackedBed); }
+        if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, depth); }
         var grain = genColor(u.waterLayer, pixel) - u.waterMean;
         if (u.lowGrain < 1.0) { grain *= lowGrain; }
         // Colors choose the water's tint, never replace the bed-light model.
         var water=vec3f(0);
         {
-            let shallowLevel=select(u.shallowMean,u.shallowBase.rgb,u.shallowBase.a>.5);
-            var shallow = select(genColor(u.shallowLayer,pixel),u.shallowBase.rgb+grain*2.3,u.shallowBase.a>.5);
-            if (u.lowGrain < 1.0) { shallow = shallowLevel + (shallow - shallowLevel) * lowGrain; }
-            if (lowShare > 0.0) { shallow = mix(shallow, lowTinted(shallow, shallowLevel), lowShare); }
             var deepWater = select(genColor(u.waterLayer,pixel),u.deepBase.rgb+grain*.95,u.deepBase.a>.5);
             if (u.lowGrain < 1.0) { deepWater = select(u.waterMean,u.deepBase.rgb,u.deepBase.a>.5) + grain; }
-            // The lit bed: the ground under the water, lit by the same sun and
-            // tinted, replaces the shallow art's noise (retail draws its shallows
-            // as the lit terrain through a blue tint).
-            // Shallows see the same shaded voxel rock, beds and crusts as the
-            // exposed coast. Soft ground keeps the existing lit-bed material.
+            // One bed model: the shallows are the ground under the water, lit by the same sun, seen through
+            // the water's tint (retail draws its shallows as lit terrain through a tint). Shallows see the same
+            // shaded voxel rock, beds and crusts as the exposed coast; soft ground is the level ground.
             let rockBedShare=clamp(exposed*faceGate,0.0,1.0);
-            let detailedBed=max(rockBedShare,select(0.0,1.0,crackedBed));
             // E11 bedFlat: light the bed by its own relief only. A shelf's slope toward the deep
             // would otherwise shade the pale bed darker over a hundred px and read as blur.
             var bedShade = shading;
@@ -2151,18 +2107,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 let own = normalize(vec3f(-(g - broad), 1.0));
                 bedShade = mix(shading, min((u.ambient + 0.95 * max(0.0, dot(own, u.light))) / flatLight, u.lightCap), u.bedFlat);
             }
-            if (bedLit > 0.0) {
-                let groundBed=select(levelGround*bedShade,color/(max(shading,.05)*max(lightTint,vec3f(.02)))*bedShade,crackedBed);
-                let bed=mix(groundBed,color/max(lightTint,vec3f(.02)),rockBedShare);
-                shallow=mix(shallow,litBed(bed,detailedBed),bedLit);
-            }
-            // The bumps' light moves red and green more than blue, so a shaded lump goes toward deep blue
-            // and a lit one toward pale blue, where a plain multiply lands between the palette's blues (teal).
-            // Only hard-step water takes them: Archipelago's lakes and channels stay smooth, as retail's.
-            if (u.shoalBump > 0.0 && bedLit > 0.0 && edgeHard > 0.0) { shallow *= 1.0 + (shoalBumpLight(p) - 1.0) * vec3f(1.0, 1.0, 0.4) * bedLit * (1.0-rockBedShare); }
-            // G1: retail's lilac lake keeps salmon and pink pixels of the ground under it; the tint alone replaces them.
-            if (u.shoalGrain > 0.0 && bedLit > 0.0) { shallow += u.shoalGrain * (levelGround - groundBased(u.groundTexMean)) * bedShade * bedLit * (1.0-rockBedShare); }
-            if (u.bedDots > 0.0 && bedLit > 0.0) { shallow *= 1.0 - u.bedDots * bedDotField(pixel) * vec3f(1.0, 1.0, 0.55) * bedLit; }
+            let bed=mix(levelGround*bedShade,color/max(lightTint,vec3f(.02)),rockBedShare);
+            let shallow=litBed(bed,rockBedShare);
             water = mix(shallow, deepWater, deep);
             // Some worlds' water passes through a third colour; a straight
             // blend of the two textures lands on colours the art never uses.
@@ -2177,7 +2123,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Shared bed elevation makes a painted shallow passage persist even
         // far from shore; there is no fixed-width coastal blue collar.
         var submerged = smoothstep(-0.2, 2.8, depth);
-        shoalWeight = (1.0 - deep) * submerged * bedLit * select(0.0, 1.0, edgeHard > 0.0);
+        shoalWeight = (1.0 - deep) * submerged * select(0.0, 1.0, edgeHard > 0.0);
         if (shoreHard > 0.0) {
             // Retail waterlines are hard edges with small stair-step notches,
             // not soft fades: threshold depth against pixel-block jitter.
