@@ -188,6 +188,7 @@ fn voxelWhole(p:vec3f,r:vec3f,edge:f32,size:f32,amount:f32)->vec2f {
     return here+(there-here)*.5*(1.0-smoothstep(0.0,2.0,edge));
 }
 fn voxelDensity(p:vec3f)->f32 {
+    useRock(p.xy);   // the voxel is its column's rock
     let source=voxelAuthored(p.xy);let guide=voxelGuide(p.xy);let nz=sqrt(max(.000225,1.0-dot(guide.xy,guide.xy)));let n=normalize(vec3f(guide.xy,nz));
     let d=(p.z-source.x)*min(max(source.w,.015),n.z);
     let whole=u.rock[rs & rockMask].faceWhole>0.0||u.rock[rs & rockMask].faceWholeLarge>0.0;
@@ -262,7 +263,7 @@ fn voxelBuild(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) l
 }
 fn voxelWear(p:vec3i)->f32 {
     let d=voxelCell(p);if(abs(d)>6.0*vs.step){return d;}
-    let q=(vec3f(p)+.5)*vs.step;let g=voxelGuide(q.xy);let nz=sqrt(max(.000225,1.0-dot(g.xy,g.xy)));
+    let q=(vec3f(p)+.5)*vs.step;useRock(q.xy);let g=voxelGuide(q.xy);let nz=sqrt(max(.000225,1.0-dot(g.xy,g.xy)));
     let painted=max(voxelPaintRock(q.xy),.5*rimRockAt(q.xy));
     let heightGate=voxelRockHeight(q,painted);
     let exposure=max(1.0-smoothstep(.75,.98,nz),painted)*(1.0-routeProtection(q.xy))*heightGate;

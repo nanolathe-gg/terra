@@ -64,6 +64,8 @@ function preprocess(source, common, defines) {
 // 16-byte element stride, so array<vec4f, N> is the only array form used.
 // The one other struct is Rock, a rock recipe (array<Rock, N>): the members of slot 0 are also fields by their own names, so the world's own
 // rock is set as every other uniform is (uFaceJoint).
+// The rock's shine knobs, in the order of Rock.shineRock's components.
+const SHINE_ROCK = ['shineRock', 'shineRockSharp', 'shineRockRough', 'shineRockScale'];
 const FIELD_TYPES = {f32: [4, 4, 'f'], i32: [4, 4, 'i'], vec2f: [8, 8, 'f'], vec3f: [16, 12, 'f'], vec4f: [16, 16, 'f']};
 function structFields(source, name) {
   const body = source.match(new RegExp(`struct ${name}\\s*\\{([\\s\\S]*?)\\n\\}`))?.[1];
@@ -144,6 +146,7 @@ export class TerrainRenderer {
     this.maskPlaneCount = config.maskKeys?.length ?? MASK_PLANE_COUNT;
     this.maskLayers = Math.max(1, Math.ceil(this.maskPlaneCount / 4));
     this.timers = [];
+    this.rocks = new Map();   // rock recipes in slots 1-15 (setRocks)
     this.lastGPU = null;
     this.lastBakeGPU = null;
     // Set by the page to show WebGPU errors that arrive after a call returns.
@@ -477,8 +480,6 @@ export class TerrainRenderer {
     const parts = this.specParts, slots = this.rockSlots(), values = {...gateValues(parts.frag, this.uniformView, slots), ...gateValues(parts.bake, this.uniformView, slots)};
     return {key: gateKey(values, parts.keyOrder), values};
   }
-  // The rock slots in use (struct Rock in engine-common.wgsl): slot 0, the world's own rock.
-  rockSlots() { return [0]; }
   specialized(kind) {
     const state = this.specKey(), entry = this.specCache.get(state.key);
     if (!entry) throw new SpecializationMiss(state);
@@ -492,7 +493,17 @@ export class TerrainRenderer {
   get drawPipeline() { return this.specialized('draw'); }
   get bakePipeline() { return this.specialized('bake'); }
   get loosePipeline() { return this.specialized('loose'); }
+  // The voxel solid's and rock weather's passes for the rockMask now (engine-common.wgsl), from `built` (mask -> passes); a miss builds them
+  // with the draw's and the bake's pipelines (specialize) and the work runs again.
+  rockPasses(built) {
+    const passes = built?.[this.rockMask()];
+    if (!passes) throw new SpecializationMiss(this.specKey());
+    return passes;
+  }
   async specialize({key, values}) {
+    const rock = performance.now();
+    await Promise.all([this.voxel.build(values.rockMask), this.rockWeather.build(values.rockMask)]);
+    this.specStats.rockMs = (this.specStats.rockMs ?? 0) + performance.now() - rock;
     if (this.specCache.has(key)) return;
     if (!this.specBuilding.has(key)) {
       const {vertModule, fragModule, bakeModule, frag, bake} = this.specParts, device = this.device, start = performance.now();
@@ -903,6 +914,7 @@ export class TerrainRenderer {
     this.f('uLooseKnoll', variant.has('looseKnoll') ? Number(variant.get('looseKnoll')) : 0);
     this.f('uGougeWeb', variant.has('gougeWeb') ? Number(variant.get('gougeWeb')) : 0);
     this.f('uCreaseShade', variant.has('creaseShade') ? Number(variant.get('creaseShade')) : 0);
+    this.writeRocks();
     this.fieldsDirty = true;
   }
 
@@ -920,15 +932,65 @@ export class TerrainRenderer {
     // Refinement can run before any relief bake; its column offset must not depend on the last displayed view.
     this.set('uBedDip', number('bedDip', 0));
     this.set('uBedDipDir', number('bedDipDir', 90));
-    this.i('uColumnSectionCount', starts.length);
     this.set('uColumnContrast', number('columnContrast', 1));
-    this.set('uColumnBeds', beds);
-    this.set('uColumnSections', starts);
     this.set('uColumnWander', column?.wander?.value ?? 0);
     this.set('uColumnTerrain', [...(column?.wander?.terrain || [0, 0, 0]), 0]);
     this.set('uColumnOrigin', column?.origin === 'plain' ? this.config.baseHeight - this.config.seaLevel : 0);
     this.set('uBandSpacing', bands[0]);
     this.set('uBandLine', bands[1]);
+    this.writeRocks();
+  }
+
+  // Rock recipes (struct Rock in engine-common.wgsl) in slots 1 to 15, by slot: {knobs, column}, knobs by their ROCK_KEYS names and column a rock
+  // column block (sculpt-column.js). Slot 0 is the world's own rock: its numbers are the flat settings every address names (this.variant), its
+  // column config.column. A slot takes slot 0's number for any it does not set, and slot 0's column if it has none. The slots given are the
+  // ones in use: their maxima bound the passes that gather (writeRocks), and a second slot builds the pipelines that read any slot (rockMask).
+  setRocks(rocks = new Map()) {
+    const count = this.uniform.get('rock').count;
+    for (const slot of rocks.keys()) if (!Number.isInteger(slot) || slot < 1 || slot >= count) throw new Error(`nanolathe: rock slot ${slot} is not 1 to ${count - 1}`);
+    this.rocks = new Map(rocks);
+    this.applyKnobs();
+    this.setColumn();
+  }
+  rockSlots() { return [0, ...[...this.rocks.keys()].sort((a, b) => a - b)]; }
+  // The pipelines' rockMask (engine-common.wgsl): 0 while slot 0 is the only rock in use, so every read is slot 0's at a fixed offset.
+  rockMask() { return this.rocks.size ? 15 : 0; }
+  // A recipe number of a slot as the uniforms hold it (after writeRocks).
+  rockValue(slot, member) {
+    const table = this.uniform.get('rock'), m = table.members.get(member), at = table.offset + slot * table.stride + m.offset;
+    return m.kind === 'i' ? this.uniformView.getInt32(at, true) : this.uniformView.getFloat32(at, true);
+  }
+  // Slots 1-15 as copies of slot 0 (the world's rock, as applyKnobs, bakeFields and setColumn set it) under their own numbers; the pool of every
+  // slot's rock column; and the maxima the passes that gather from other points read (debrisAny, runoffAny, debrisReachMax).
+  writeRocks() {
+    const table = this.uniform.get('rock'), bytes = new Uint8Array(this.uniformData);
+    const own = columnRows(this.config.column, this.config.variant), beds = [...own.beds], starts = [...own.starts];
+    this.set('uColumnFirst', 0);
+    this.set('uColumnCount', own.starts.length);
+    for (const [slot, rock] of this.rocks) {
+      const at = table.offset + slot * table.stride;
+      bytes.copyWithin(at, table.offset, table.offset + table.stride);
+      for (const [key, value] of Object.entries(rock.knobs || {})) {
+        const shine = SHINE_ROCK.indexOf(key), m = table.members.get(shine >= 0 ? 'shineRock' : key);
+        if (m && m.kind === 'f' && Number.isFinite(Number(value))) this.uniformView.setFloat32(at + m.offset + Math.max(shine, 0) * 4, Number(value), true);
+      }
+      if (rock.column) {
+        const rows = columnRows(rock.column, ''), shift = beds.length;
+        this.uniformView.setInt32(at + table.members.get('columnFirst').offset, starts.length, true);
+        this.uniformView.setInt32(at + table.members.get('columnCount').offset, rows.starts.length, true);
+        beds.push(...rows.beds); starts.push(...rows.starts.map(([start, first, n, period]) => [start, first + shift, n, period]));
+      }
+    }
+    if (beds.length > this.uniform.get('columnBeds').count || starts.length > this.uniform.get('columnSections').count) throw new Error('nanolathe: the rock recipes\' columns are too large for the uniforms');
+    this.set('uColumnBeds', beds);
+    this.set('uColumnSections', starts);
+    const slots = this.rockSlots(), max = key => Math.max(...slots.map(k => this.rockValue(k, key)));
+    this.f('uDebrisAny', max('debrisAmount'));
+    this.f('uRunoffAny', max('runoff'));
+    this.f('uDebrisReachMax', max('debrisReach'));
+    // Shine is drawn where any rock in use has gloss, roughness or wetness (applyKnobs decides it for slot 0 and the other materials).
+    if (slots.some(k => k && (this.rockValue(k, 'faceWet') > 0 || Math.max(...[0, 2].map(c => this.uniformView.getFloat32(table.offset + k * table.stride + table.members.get('shineRock').offset + c * 4, true))) > 0))) this.i('uShineOn', 1);
+    this.uniformsDirty = true;
   }
 
   // The bake's group 1 for the chunk's fields texture and the loose-stone mask.

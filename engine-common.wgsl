@@ -92,6 +92,12 @@ struct Rock {
     stoneRound: f32,      // world material data: 0 angular chips .. 1 rounded stones
     stoneSort: f32,       // world material data: 0 a mixed power-law gravel, 1 one size class sorted by the process (talus coarsens outward, fans and channels fine downslope)
     stoneSlab: f32,       // world material data: share of flat slabs
+    // The recipe's rock column: its sections are columnSections[columnFirst .. columnFirst + columnCount) of the pool (0 sections: no column;
+    // each bed's thickness and strength come from a hash).
+    columnFirst: i32,
+    columnCount: i32,
+    pad0: f32,            // padding: a uniform array's element is a multiple of 16 bytes
+    pad1: f32,
 }
 
 struct Uniforms {
@@ -233,6 +239,7 @@ struct Uniforms {
     crystalTone: f32,     // crystal top brightness (1: as before)
     // Painted masks (card C5).
     paintOn: i32,         // 1 once any cell carries a painted mask; 0 skips every read of masksTex
+    rockIdOn: i32,        // 1 once any cell of the chunk belongs to a rock other than the world's own (mask plane 20); 0: every point is slot 0
     scatterOn: i32,       // 1 once any cell carries a painted scatter density (the bake's stones read it)
     overrideOn: i32,      // 1 once any cell carries an H3 override (planes 14-17: erosion, deposits, vegetation, rock exposure)
     styleOn: i32,         // 1 once any cell carries a painted local style (relief, cracks, banding, face rock share)
@@ -251,6 +258,11 @@ struct Uniforms {
     rock: array<Rock, 16>,   // the rock recipes by slot (struct Rock); slot 0 is the world's own rock
     rimReach: f32,        // bare rock at rims: how far in from a drop the soil thins, px (0 none)
     rockWeatherGrid: vec4f, // origin in art pixels, texture dimensions; 4px cells
+    // Over the rock slots in use (sculpt-renderer.js writeRocks): whether any sheds debris or runs off, and the farthest rockfall reach. The passes
+    // that gather from other points read these, and each source's own numbers from its slot.
+    debrisAny: f32,
+    runoffAny: f32,
+    debrisReachMax: f32,
     sandLee: f32, // Wind drifts: sand in the lee of rises
     groundPatch: f32, // Ground patches: tone variation on level ground
     groundPatchSize: f32, // Patch size (px)
@@ -367,11 +379,11 @@ struct Uniforms {
     closeShadow: f32,     // how much a ledge 1-6 px toward the sun darkens the direct light on the ground behind it, 0..1 (0: only the far taps)
     cavity: f32,          // how much a crevice or crack floor (surface below the mean of a ring 1-3 px out) loses of its ambient light, 0..1 (its direct light loses .45 of that; 0: off)
     // H2, H16 (the rock column of a world's table, `column` in materials/<world>.json). Every default is the earlier look.
-    columnSectionCount: i32,   // sections of the column (0: the world has no column; each bed's thickness and strength come from a hash)
     columnContrast: f32,  // how much harder the hard beds are: erosion wears them 1 / (1 + 15 * this) as fast (0: all beds alike)
     columnOrigin: f32,    // the height the coordinate counts from (the plain's, or 0)
-    columnBeds: array<vec4f, 32>,       // per bed: x thickness (height units), y hardness 0..1, z material slot, w unused
-    columnSections: array<vec4f, 8>,    // per section, from low to high: x the coordinate it starts at, y its first bed, z its bed count, w its period
+    // The rock columns of every recipe in one pool (a recipe's columnFirst and columnCount name its sections; a section names its beds).
+    columnBeds: array<vec4f, 128>,      // per bed: x thickness (height units), y hardness 0..1, z material slot, w unused
+    columnSections: array<vec4f, 32>,   // per section, from low to high: x the coordinate it starts at, y its first bed, z its bed count, w its period
     columnWander: f32,    // the wander the coordinate takes from value noise: its amplitude, height units
     columnTerrain: vec4f, // the wander it takes from three octaves of the terrain noise (height units): xyz their amplitudes (not in the Time pass)
     materialTable: array<vec4f, 206>,   // Green (H3 materialModel): four materials of 39 rows then six placement rows, from materials/green.json (material-model.wgsl); then the 44 rows of a world's ground-cover table (card P30, its plants' row 39 and flower palette rows 40 to 43, card P31; zeros: none)
@@ -515,16 +527,18 @@ fn columnCycleHash(k: f32) -> f32 { return fract(sin(k * 91.7 + 13.1) * 43758.54
 // hashes keyed on it differ from cycle to cycle), hardness 0..1, how far through the bed
 // c lies (0 at its foot, 1 at its top) and its thickness. The column is a list of sections from low to high; each repeats its
 // beds upward from coordinate 0, and the one whose start c has passed (the lowest, below them all) is the one that answers.
+// Section s of the recipe's column (s counts from its lowest).
+fn columnSection(s: i32) -> vec4f { return u.columnSections[u.rock[rs & rockMask].columnFirst + s]; }
 fn columnSectionAt(c: f32) -> i32 {
     var s = 0;
-    for (var i = 1; i < u.columnSectionCount; i++) { if (c >= u.columnSections[i].x) { s = i; } }
+    for (var i = 1; i < u.rock[rs & rockMask].columnCount; i++) { if (c >= columnSection(i).x) { s = i; } }
     return s;
 }
 // Section s at coordinate c. A two-bed section's second bed has a share of the cycle (the period stays the section's): where the next
 // section has the same two slots the share runs toward the next one's between their starts, and retail Painted Desert's beds vary from
 // cycle to cycle (measured on the retail map), so a hash of the cycle scales it by .55 to 1.45.
 fn columnBedIn(c: f32, s: i32, variation: f32) -> ColumnBed {
-    let sec = u.columnSections[s];
+    let sec = columnSection(s);
     let first = i32(sec.y);
     let n = i32(sec.z);
     let period = sec.w;
@@ -537,8 +551,8 @@ fn columnBedIn(c: f32, s: i32, variation: f32) -> ColumnBed {
     var second = 0.0;
     if (n == 2) {
         var share = u.columnBeds[first + 1].x / period;
-        if (s + 1 < u.columnSectionCount) {
-            let nx = u.columnSections[s + 1];
+        if (s + 1 < u.rock[rs & rockMask].columnCount) {
+            let nx = columnSection(s + 1);
             let next = i32(nx.y);
             if (nx.z == 2.0 && u.columnBeds[next].z == u.columnBeds[first].z && u.columnBeds[next + 1].z == u.columnBeds[first + 1].z) {
                 share = mix(share, u.columnBeds[next + 1].x / nx.w, clamp((c - sec.x) / max(nx.x - sec.x, 0.1), 0.0, 1.0));
@@ -573,7 +587,7 @@ fn columnBedIn(c: f32, s: i32, variation: f32) -> ColumnBed {
     }
     return bed;
 }
-fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), select(0.0,1.0,u.columnSections[columnSectionAt(c)].z==2.0)); }
+fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), select(0.0,1.0,columnSection(columnSectionAt(c)).z==2.0)); }
 #ifndef EROSION
 @group(0) @binding(1) var heightTex: texture_2d<f32>;   // r32float, read with textureLoad
 @group(0) @binding(2) var noiseTex: texture_2d<f32>;
@@ -835,8 +849,10 @@ fn rockFieldAt(t:texture_2d<f32>,p:vec2f)->vec4f {
     let last=vec2i(textureDimensions(t))-1;let a=clamp(i,vec2i(0),last);let b=clamp(i+1,vec2i(0),last);
     return mix(mix(textureLoad(t,a,0),textureLoad(t,vec2i(b.x,a.y),0),f.x),mix(textureLoad(t,vec2i(a.x,b.y),0),textureLoad(t,b,0),f.x),f.y);
 }
+// Rock weather is a field gathered from every rock in use: it is read wherever any of them runs off or sheds debris. With one rock (rockMask 0)
+// the tests are that rock's own, so every pass compiles as one rock's did (another uniform in a test moved palette pixels).
 fn rockWeatherAt(p:vec2f)->vec4f {
-    if(u.rock[rs & rockMask].runoff<=0.0&&u.rock[rs & rockMask].debrisAmount<=0.0){return vec4f(0);}
+    if(select(u.runoffAny<=0.0&&u.debrisAny<=0.0,u.rock[rs & rockMask].runoff<=0.0&&u.rock[rs & rockMask].debrisAmount<=0.0,rockMask==0u)){return vec4f(0);}
     return rockFieldAt(rockWeatherTex,p);
 }
 // Bare rock at a rim. Soil is thin at the edge of a drop: within Bare rock at rims' reach the ground counts as painted rock, wholly at the edge and
@@ -863,8 +879,23 @@ fn softBankAt(p:vec2f)->f32 {
     return rockFieldAt(rockRimTex,p).z;
 }
 fn rockSourceAt(p:vec2f)->vec4f {
-    if(u.rock[rs & rockMask].debrisAmount<=0.0){return vec4f(0,0,0,1);}
+    if(select(u.debrisAny<=0.0,u.rock[rs & rockMask].debrisAmount<=0.0,rockMask==0u)){return vec4f(0,0,0,1);}
     return rockFieldAt(rockSourceTex,p);
+}
+// The rock slot of world point p: mask plane 20 (sculpt-scene.js MASK_KEYS 'rock') holds the slot + 1 a stroke claims its cell for, read at
+// the nearest cell (a slot is not blended); 0, unclaimed, is slot 0, the world's own rock. A chunk with no claim reads nothing.
+fn rockSlotAt(p:vec2f)->u32 {
+    if(u.rockIdOn==0){return 0u;}
+    let cell=clamp(vec2i(floor(p/(u.size-1.0)*(u.grid-1.0)+.5-u.chunkGridOrigin)),vec2i(0),vec2i(textureDimensions(masksTex))-1);
+    return u32(clamp(round(textureLoad(masksTex,cell,5,0).r*127.0)-1.0,0.0,15.0));
+}
+// The point being evaluated belongs to the rock at p: every rock number it reads from here on is its slot's.
+fn useRock(p:vec2f) { rs=rockSlotAt(p); }
+// The slot of the debris lying at p: rock weather's strongest source there (rockDeposit), read at the nearest 4-px cell.
+fn debrisSlotAt(p:vec2f)->u32 {
+    if(u.rockIdOn==0){return 0u;}
+    let i=vec2i(floor(p/4.0))-vec2i(round(u.rockWeatherGrid.xy/4.0));
+    return u32(textureLoad(rockRimTex,clamp(i,vec2i(0),vec2i(textureDimensions(rockRimTex))-1),0).w+.5);
 }
 fn voxelHash(p:vec3f)->f32 {
     let i=vec3i(floor(p));
@@ -995,7 +1026,7 @@ fn voxelBed(p:vec3f)->ColumnBed {
     return columnBedIn(c,columnSectionAt(c),u.rock[rs & rockMask].bedCycleVary);
 }
 fn voxelHardness(p:vec3f)->f32 {
-    if(u.columnSectionCount==0){return .55;}
+    if(u.rock[rs & rockMask].columnCount==0){return .55;}
     return voxelBed(p).hardness;
 }
 // Strata: coloured bands by height on raised ground (painted desert), the colours of the column's beds (slot -> strataColors).

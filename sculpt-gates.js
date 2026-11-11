@@ -1,8 +1,8 @@
 // P6: gates. The draw and the bake test many uniforms against a constant (`u.layered != 0`, `u.rillDepth <= 0.0`, `u.columnTerrain.x != 0.0`). A
 // world fixes most of them, so each test becomes a WGSL `override` bool and the pipeline is built with the values it has now, cached by the
 // string of those bools. Every other read of a uniform stays a uniform read: the continuous values do not make a new pipeline.
-// The uniforms the chunk renderer sets for each chunk, or the GPU writes (the six painted flags), are never gates.
-export const PER_CHUNK_UNIFORMS = new Set(['looseGrid', 'paintOn', 'scatterOn', 'styleOn', 'waterOn', 'lumpOn', 'overrideOn']);
+// The uniforms the chunk renderer sets for each chunk, or the GPU writes (the seven painted flags), are never gates.
+export const PER_CHUNK_UNIFORMS = new Set(['looseGrid', 'paintOn', 'scatterOn', 'styleOn', 'waterOn', 'lumpOn', 'overrideOn', 'rockIdOn']);
 const isPerChunk = name => PER_CHUNK_UNIFORMS.has(name) || name.startsWith('chunk');
 
 const COMPARE = {'>': (a, b) => a > b, '<': (a, b) => a < b, '>=': (a, b) => a >= b, '<=': (a, b) => a <= b, '==': (a, b) => a === b, '!=': (a, b) => a !== b};

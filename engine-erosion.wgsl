@@ -52,9 +52,10 @@ fn at(x: i32, y: i32) -> u32 { return u32(y * i32(ep.grid) + x); }
 fn inside(x: i32, y: i32) -> bool { let n = i32(ep.grid); return x >= 0 && y >= 0 && x < n && y < n; }
 fn ground(s: vec4f) -> f32 { return s.x + s.y; }
 
-// Hardness of the rock at the surface of a sample (0 with no column or no contrast: every bed alike).
+// Hardness of the rock at the surface of a sample (0 with no column or no contrast: every bed alike). The Time pass keeps the world's own rock's
+// beds (slot 0: rs is never set here, and its pipelines are built with rockMask 0): a rock preset's own beds do not reach the heights yet.
 fn hardnessOf(rock: f32, offset: f32) -> f32 {
-    if (u.columnSectionCount == 0 || u.columnContrast <= 0.0) { return 0.0; }
+    if (u.rock[rs & rockMask].columnCount == 0 || u.columnContrast <= 0.0) { return 0.0; }
     return columnAt(rock - u.columnOrigin + offset).hardness;
 }
 

@@ -6,6 +6,9 @@
 // Authoring prototype, not retail rules.
 
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
+// The Time pass reads the world's own rock (slot 0) for its beds' hardness: its pipelines read every rock number at slot 0's fixed offset
+// (engine-common.wgsl rockMask). A rock preset's own beds do not reach the heights yet.
+const TIME_ROCK = {rockMask: 0};
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // Constants of the model. Each comment says what it trades; the four knobs a user sees are
@@ -38,7 +41,7 @@ export class GpuErosion {
       const layout = device.createPipelineLayout({bindGroupLayouts: [this.layout0, this.layout1]});
       this.pipelines = {};
       return Promise.all(['offsetMain', 'fluxMain', 'waterMain', 'exchangeMain', 'settleMain', 'carryMain', 'thermalMain'].map(async entry =>
-        { this.pipelines[entry] = await device.createComputePipelineAsync({label: entry, layout, compute: {module, entryPoint: entry}}); }));
+        { this.pipelines[entry] = await device.createComputePipelineAsync({label: entry, layout, compute: {module, entryPoint: entry, constants: TIME_ROCK}}); }));
     });
   }
 
@@ -51,7 +54,7 @@ export class GpuErosion {
     const info = await module.getCompilationInfo(), errors = info.messages.filter(m => m.type === 'error');
     if (errors.length) throw new Error('nanolathe: engine-weather.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
     const layout = device.createBindGroupLayout({label: 'engine-weather', entries: [buffer('uniform', 0), ...[1, 2, 3, 4].map(b => buffer('read-only-storage', b)), ...[5, 6, 7].map(b => buffer('storage', b))]});
-    const pipeline = await device.createComputePipelineAsync({label: 'mapsMain', layout: device.createPipelineLayout({bindGroupLayouts: [this.layout0, layout]}), compute: {module, entryPoint: 'mapsMain'}});
+    const pipeline = await device.createComputePipelineAsync({label: 'mapsMain', layout: device.createPipelineLayout({bindGroupLayouts: [this.layout0, layout]}), compute: {module, entryPoint: 'mapsMain', constants: TIME_ROCK}});
     return this.maps = {layout, pipeline};
   }
 
@@ -140,7 +143,7 @@ export class GpuErosion {
       if (errors.length) throw new Error('nanolathe: engine-weather.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
       const entries = {source: 'mfSourceMain', drops: 'mfDropsMain', counts: 'mfCountsMain', blur: 'mfBlurMain', combine: 'mfCombineMain'};
       this.field = {};
-      await Promise.all(Object.entries(entries).map(async ([k, entryPoint]) => { this.field[k] = await device.createComputePipelineAsync({label: entryPoint, layout: 'auto', compute: {module, entryPoint}}); }));
+      await Promise.all(Object.entries(entries).map(async ([k, entryPoint]) => { this.field[k] = await device.createComputePipelineAsync({label: entryPoint, layout: 'auto', compute: {module, entryPoint, constants: TIME_ROCK}}); }));
     }
     const P = this.field, S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, made = [];
     const make = (bytes, usage = S) => { const b = device.createBuffer({size: Math.max(16, bytes), usage}); made.push(b); return b; };

@@ -18,12 +18,12 @@ export class VoxelSurface {
     if(errors.length)throw Error(errors.map(m=>`${m.lineNum}: ${m.message}`).join('\n'));
     const input=b=>b===0?{binding:b,visibility:GPUShaderStage.COMPUTE|GPUShaderStage.FRAGMENT,buffer:{type:'uniform'}}:[3,4,6].includes(b)?{binding:b,visibility:GPUShaderStage.COMPUTE|GPUShaderStage.FRAGMENT,texture:{sampleType:'unfilterable-float'}}:{binding:b,visibility:GPUShaderStage.COMPUTE|GPUShaderStage.FRAGMENT,buffer:{type:'read-only-storage'}};
     const output=b=>b<2||b===6?{binding:b,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:'write-only',format:'rgba32float'}}:{binding:b,visibility:GPUShaderStage.COMPUTE,buffer:{type:'storage'}};
-    const empty=d.createBindGroupLayout({entries:[]});self.passes={};
+    const empty=d.createBindGroupLayout({entries:[]});self.module=module;self.layouts={};self.built=new Map();
     for(const [entryPoint,[reads,writes]]of Object.entries(ENTRIES)){
       const a=d.createBindGroupLayout({entries:reads.map(input)}),b=d.createBindGroupLayout({entries:writes.map(output)});
-      const layout=d.createPipelineLayout({bindGroupLayouts:[renderer.commonLayout,empty,a,b]});
-      self.passes[entryPoint]={pipeline:await d.createComputePipelineAsync({label:entryPoint,layout,compute:{module,entryPoint}}),reads,writes,a,b};
+      self.layouts[entryPoint]={layout:d.createPipelineLayout({bindGroupLayouts:[renderer.commonLayout,empty,a,b]}),reads,writes,a,b};
     }
+    await self.build(0);
     self.drawLayout=d.createBindGroupLayout({entries:[0,1,2,3,4].map(input)});
     self.uniform=d.createBuffer({label:'voxel region settings',size:48,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
     self.readback=d.createBuffer({label:'voxel allocation count readback',size:16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
@@ -31,6 +31,12 @@ export class VoxelSurface {
     return self;
   }
   constructor(renderer){this.renderer=renderer;this.device=renderer.device;this.owned=[];this.stats={pieces:0,bricks:0,peakBytes:0,allocationMs:0};}
+  // The passes for one rockMask (engine-common.wgsl): 0, slot 0's numbers at fixed offsets, is built at start; 15 when a second rock comes into use.
+  build(mask){
+    if(!this.built.has(mask))this.built.set(mask,Promise.all(Object.entries(this.layouts).map(async([entryPoint,l])=>[entryPoint,{...l,pipeline:await this.device.createComputePipelineAsync({label:entryPoint,layout:l.layout,compute:{module:this.module,entryPoint,constants:{rockMask:mask}}})}]))
+      .then(list=>{this.passesBy??={};this.passesBy[mask]=Object.fromEntries(list);}));
+    return this.built.get(mask);
+  }
   clear(){for(const r of this.owned)this.renderer.release(r);this.owned=[];}
   own(resource,label,bytes){this.owned.push(resource);this.renderer.track(resource,label,bytes,'working');return resource;}
   buffer(label,size,usage=STORAGE()){return this.own(this.device.createBuffer({label,size:Math.max(16,size),usage}),label,Math.max(16,size));}
@@ -42,7 +48,7 @@ export class VoxelSurface {
   }
   inputs(){return {0:{buffer:this.uniform},1:{buffer:this.columns},2:{buffer:this.density[0]},3:this.height.createView(),4:this.guide.createView(),5:{buffer:this.bricks}};}
   encode(name,encoder,groups,reads,writes){
-    const p=this.passes[name];
+    const p=this.passes[name];   // render() picks the rockMask's passes
     const group=(layout,bindings,resources)=>this.device.createBindGroup({layout,entries:bindings.map(binding=>({binding,resource:resources[binding]}))});
     const pass=encoder.beginComputePass({label:name});pass.setPipeline(p.pipeline);pass.setBindGroup(0,this.renderer.commonBindGroup('draw'));
     pass.setBindGroup(2,group(p.a,p.reads,reads));pass.setBindGroup(3,group(p.b,p.writes,writes));pass.dispatchWorkgroups(...groups);pass.end();
@@ -57,6 +63,7 @@ export class VoxelSurface {
     return {origin:[x0,y0],step,width,height,columnsX,columnsY,capacity,low,high,screenLow:rect.y,screenHigh:rect.y+rect.height};
   }
   async render(draw){
+    this.passes=this.renderer.rockPasses(this.passesBy);   // this rockMask's passes, or a specialization miss that builds them
     const r=this.renderer,region=r.activeRegion,scale=r.uniformView.getFloat32(r.layout.fields.get('chunkScale').offset,true);
     const origin=region.screenOrigin,width=r.canvas.width*scale,height=r.canvas.height*scale;
     const step=2**Math.max(0,Math.floor(Math.log2(r.voxelScale)));

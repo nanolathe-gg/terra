@@ -1438,6 +1438,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // by about 1e-3 px against the same ground a pool period nearer the origin, enough to flip palette pixels and make its tiles unique.
     let hit=voxelHit(vec2f(fragCoord.x,u.size-fragCoord.y));
     let p=round(hit.xy*64.0)/64.0;
+    useRock(p);   // the rock this pixel shows: every rock number below is its recipe's
     // TA's fixed camera permits a native-pixel material grain. World-XY
     // sampling stretches that grain over projected south-facing slopes.
     // Geometry and broad material decisions still use world coordinates.
@@ -1696,7 +1697,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         material = mix(material, rock, crown);
         exposed = max(exposed, crown);
     }
-    if (u.rock[rs & rockMask].strata > 0.0 && u.columnSectionCount > 0) {
+    if (u.rock[rs & rockMask].strata > 0.0 && u.rock[rs & rockMask].columnCount > 0) {
         // Beds by height, measured on retail Painted Desert: the column's sections (a start above the plain, a pair of beds as
         // colour slots with B's share of each period). Within a section A and B alternate every period, quasi-periodically (B's
         // share varies per cycle), and B's share ramps toward the next section when both use the same pair. Beds colour all
@@ -1710,13 +1711,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // (Retail keeps one ragged orange patch of 40-150 px per cap. A threshold on noise drew smooth stains or thin veins, so
         // ours draws none.)
         let level = 1.0 - smoothstep(0.05, 0.22, slope);
-        let edge = clamp(1.5 * max(slope, 0.05) / u.columnSections[zone].w, 0.01, 0.2);
+        let edge = clamp(1.5 * max(slope, 0.05) / columnSection(zone).w, 0.01, 0.2);
         let stratum = columnColour(hr, zone, edge, true, u.desertCapFlat * level);
         // Painted rock (card C5) in a world with beds takes the colour its highest ground is painted with (its top section's
         // main bed: Painted Desert's grey buttes), and (card E8) the strata run through the rock itself, so painted rock carries
         // the top section's own beds (its grey with the lines), not one flat colour, wherever it is painted. A painted mesa's
         // rock is mostly gentle: a fixed edge.
-        let topZone = u.columnSectionCount - 1;
+        let topZone = u.rock[rs & rockMask].columnCount - 1;
         var rockBed = vec3f(0.0);
         if (painted.x > 0.0) { rockBed = columnColour(hr, topZone, 0.04, false, 0.0); }
         let bed = mix(stratum, rockBed, painted.x);
@@ -1725,7 +1726,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // The ground's grain survives in the beds as brightness, scaled by
         // Bed grain (retail desert bands are smooth colour).
         let bedColour = saturate(bed * mix(1.0, clamp(lum / meanLum, 0.82, 1.12), u.rock[rs & rockMask].strataGrain));
-        let onRaised = max(smoothstep(u.columnSections[0].x, u.columnSections[0].x+1.5, columnCoord(p,h)),faceGate*exposed) * (1.0-route);
+        let onRaised = max(smoothstep(columnSection(0).x, columnSection(0).x+1.5, columnCoord(p,h)),faceGate*exposed) * (1.0-route);
         let bedCoverage=clamp(u.rock[rs & rockMask].strata*2.0,0.0,1.0)*mix(exposed,1.0,smoothstep(.5,1.0,u.rock[rs & rockMask].strata));
         material = mix(material, bedColour, max(bedCoverage * u.rock[rs & rockMask].strataContrast * onRaised, u.rock[rs & rockMask].strata * painted.x));
         if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)); }
@@ -1752,7 +1753,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // The debris's edge is ragged and partly grown over (debrisLie, debrisRegrown). What is left covers the ground as gravel does, not as a haze:
     // at least .45 of it where the debris is thinnest.
     var lying=accumulated;var depositCover=0.0;
-    if(u.rock[rs & rockMask].debrisAmount>0.0){
+    if(u.debrisAny>0.0){
         lying=rockWeatherAt(debrisLie(p));
         if(lying.y>0.0){
             // Fines hold their ground: where the debris is sand and grit, plants need it thinner before they take it, so a cliff's foot keeps its sand.
@@ -1765,8 +1766,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
     }
     let source=rockSourceAt(p);
-    let sourceColor=mix(rock,source.rgb*mix(1.0,clamp(dot(grain,vec3f(.3333)),.82,1.12),u.rock[rs & rockMask].strataGrain),clamp(u.rock[rs & rockMask].strata*2.0,0.0,1.0)*u.rock[rs & rockMask].strataContrast);
-    let fineColor=mix(sourceColor,mix(sandWeathered(),sourceColor*.9,clamp(u.rock[rs & rockMask].strata*2.0,0.0,1.0)*u.rock[rs & rockMask].strataContrast),lying.z*.65);
+    // The debris is its source's rock (rock weather's strongest source here): its beds' colours as that recipe's Strata gives them.
+    let ds=debrisSlotAt(p);
+    let sourceColor=mix(rock,source.rgb*mix(1.0,clamp(dot(grain,vec3f(.3333)),.82,1.12),u.rock[ds & rockMask].strataGrain),clamp(u.rock[ds & rockMask].strata*2.0,0.0,1.0)*u.rock[ds & rockMask].strataContrast);
+    let fineColor=mix(sourceColor,mix(sandWeathered(),sourceColor*.9,clamp(u.rock[ds & rockMask].strata*2.0,0.0,1.0)*u.rock[ds & rockMask].strataContrast),lying.z*.65);
     material=mix(material,fineColor,depositCover);
     exposed=max(exposed,depositCover*(1.0-lying.z*.45));
     // Painted masks (card C5), after the world's own beds and before sand,
