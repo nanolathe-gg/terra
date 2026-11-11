@@ -28,19 +28,24 @@ function impact(a,b){let cls=0,moved=0;
 }
 if(out)mkdirSync(out,{recursive:true});
 let failures=0;const rows=[];
-for(const [kind,controls] of Object.entries({...FORMS,tree:{...FORMS.tree,trunkColor:[0,1]}}))for(const [key,[lo,hi]] of Object.entries(controls)){
+const controlsByKind={...FORMS,tree:{...FORMS.tree,trunkColor:[0,1],accentColor:[0,1],canopyStyle:['round','clustered'],palmStyle:['round','palm']},shrub:{...FORMS.shrub,accentColor:[0,1]},rock:{...FORMS.rock,accentColor:[0,1]}};
+const cases=Object.entries(controlsByKind).flatMap(([kind,controls])=>Object.entries(controls).map(([key,range])=>[kind,key,range]));
+for(const key of ['accentAmount','accentColor','patternScale'])cases.push(['tree',key,controlsByKind.tree[key],'tendril']);
+for(const [kind,key,[lo,hi],shape] of cases){
  const base=defaultSet(config);let recipe=base[kind].recipes[0];
- if(key==='curl')recipe=makeRecipe(kind,config.featureCatalog.find(p=>p.kind===kind&&p.data.types[0].params.species==='tendril').data);
+ if(shape==='tendril'||['curl','arms','reach','thick','reachVariation','thickVariation'].includes(key))recipe=makeRecipe(kind,config.featureCatalog.find(p=>p.kind===kind&&p.data.types[0].params.species==='tendril').data);
  if(key==='trunkColor')recipe={...recipe,params:{species:'dead'}};
+ if(['canopyStyle','palmStyle','canopyLift','heightVariation','widthVariation'].includes(key)&&kind==='tree')recipe={...recipe,params:{species:'broadleaf'}};
+ if(['accentAmount','accentColor','patternScale'].includes(key))recipe={...recipe,params:{...recipe.params,accentColor:'#c5b276',accentAmount:0.55}};
  const samples=variants(kind,{...base,[kind]:{nextId:1,recipes:[recipe]}},config).filter(v=>!controlRequirement(kind,key,v.params)).slice(0,3);
  let cls=0,moved=0;
  for(const [i,v] of samples.entries()){
- const edit=t=>key==='trunkColor'?{trunkColor:t?'#b19a77':'#3b3323'}:{[key]:t};
+ const edit=t=>key==='trunkColor'?{trunkColor:t?'#b19a77':'#3b3323'}:key==='accentColor'?{accentColor:t?'#c5b276':'#31467d'}:key==='palmStyle'?{canopyStyle:t}:{[key]:t};
  const params=t=>{const set=normalizeSet({...base,[kind]:{nextId:1,recipes:[{...recipe,params:{...recipe.params,...edit(t)}}]}},config);return variants(kind,set,config).find(q=>q.index===v.index).params;};
  const a=picture(kind,params(lo),v.seed),b=picture(kind,params(hi),v.seed),m=impact(a,b);cls+=m.cls;moved+=m.moved;
- if(out&&i===0){const rgba=new Uint8ClampedArray(W*2*H*4);for(let y=0;y<H;y++){rgba.set(a.g.rgba.subarray(y*W*4,(y+1)*W*4),y*W*8);rgba.set(b.g.rgba.subarray(y*W*4,(y+1)*W*4),y*W*8+W*4);}writeFileSync(join(out,`${kind}-${key}.png`),encodePNG(W*2,H,rgba));}
+ if(out&&i===0){const rgba=new Uint8ClampedArray(W*2*H*4);for(let y=0;y<H;y++){rgba.set(a.g.rgba.subarray(y*W*4,(y+1)*W*4),y*W*8);rgba.set(b.g.rgba.subarray(y*W*4,(y+1)*W*4),y*W*8+W*4);}writeFileSync(join(out,`${kind}-${shape?shape+'-':''}${key}.png`),encodePNG(W*2,H,rgba));}
  }
- const share=cls?moved/cls:0,pass=share>=.05;failures+=!pass;rows.push({kind,key,samples:samples.length,cls,share,pass});console.log(`${kind}.${key}: ${(share*100).toFixed(1)}% of ${cls} blocks (${samples.length} variants) ${pass?'ok':'FAIL'}`);
+ const share=cls?moved/cls:0,pass=share>=.05;failures+=!pass;rows.push({kind,key,shape,samples:samples.length,cls,share,pass});console.log(`${kind}${shape?'.'+shape:''}.${key}: ${(share*100).toFixed(1)}% of ${cls} blocks (${samples.length} variants) ${pass?'ok':'FAIL'}`);
 }
 if(out)writeFileSync(join(out,'report.json'),JSON.stringify(rows,null,2));
 process.exitCode=failures?1:0;

@@ -14,23 +14,33 @@ export const MAX_RECIPES = 32;
 // A variant address reserves 16 slots per recipe ID. Array order and variant counts never
 // renumber another recipe's placements, including after a save or world change.
 export const recipeId = index => Math.floor(index / MAX_VARIANTS);
+const VARIATION = {heightVariation:[0,0.6,0], widthVariation:[0,0.6,0]};
+const PATTERN = {accentAmount:[0,1,0], patternScale:[2,24,8]};
 export const FORMS = {
-  tree: {height: [30, 110, 68], width: [0.42, 1.05, 0.72], density: [0, 1, 0.45], crown: [0, 1, 0.6], curl: [0, 1, 0.6]},
-  shrub: {width: [20, 50, 28], height: [14, 40, 19], density: [0, 1, 0.55]},
-  rock: {tall: [0, 1, 0], flat: [0, 1, 0], size: [0.7, 1.15, 1], pits: [0, 1, 0], grain: [0, 1, 0.6]},
+  tree: {...VARIATION, ...PATTERN, canopyLift:[0,0.65,0], arms:[1,16,7], reach:[12,100,50], thick:[0.6,5,1.6], reachVariation:[0,0.6,0], thickVariation:[0,0.6,0], height: [30, 110, 68], width: [0.42, 1.05, 0.72], density: [0, 1, 0.45], crown: [0, 1, 0.6], curl: [0, 1, 0.6]},
+  shrub: {...VARIATION, ...PATTERN, width: [20, 50, 28], height: [14, 40, 19], density: [0, 1, 0.55]},
+  rock: {...VARIATION, ...PATTERN, tall: [0, 1, 0], flat: [0, 1, 0], size: [0.7, 1.15, 1], pits: [0, 1, 0], grain: [0, 1, 0.6]},
   scar: {size: [0.3, 1.3, 1], density: [0, 1, 0.55]},
   vent: {size: [0.6, 1.6, 1]},
 };
 export const SPECIES = ['broadleaf', 'conifer', 'tendril', 'dead', 'deadConifer'];
 export function controlRequirement(kind, key, params) {
   const species = params.species || 'broadleaf';
+  if (['accentColor','patternScale'].includes(key) && !(params.accentAmount > 0)) return 'Increase second color coverage to show the pattern.';
+  if (key === 'patternScale' && params.accentAmount >= 1) return 'Reduce second color coverage below 100% to show patches.';
   if (kind !== 'tree') return '';
+  if (['accentColor','accentAmount','patternScale'].includes(key) && species.startsWith('dead')) return 'Choose a living plant shape.';
+  if (['heightVariation','widthVariation'].includes(key) && species === 'tendril') return 'Use tendril length and thickness variation.';
+  if (key === 'canopyStyle' && species !== 'broadleaf') return 'Choose a broadleaf shape.';
+  if (key === 'canopyLift' && !['broadleaf','conifer'].includes(species)) return 'Choose a leafy tree shape.';
+  const palm = species === 'broadleaf' && (params.canopyStyle === 'palm' || !params.canopyStyle && params.fronds > 0);
+  if (palm && ['taper','peaks','crown','density'].includes(key)) return 'Palm fronds use their own canopy shape.';
   if (['taper', 'peaks', 'crown', 'density', 'clusters'].includes(key) && species !== 'broadleaf' && species !== 'conifer') return 'Choose a leafy tree shape.';
   if (['taper', 'peaks', 'clusters'].includes(key) && species === 'conifer') return 'Choose a broadleaf shape.';
   if (key === 'trunkColor' && species === 'tendril') return 'Tendril plants use the foliage color.';
   if (key === 'width' && species === 'tendril') return 'Tendrils use reach instead of crown width.';
-  if (key === 'height' && species === 'tendril' && params.reach !== undefined) return 'This tendril recipe sets its reach directly.';
-  if (key === 'curl' && species !== 'tendril') return 'Choose a tendril shape.';
+  if (key === 'height' && species === 'tendril') return 'Use tendril length and thickness.';
+  if (['curl','arms','reach','thick','reachVariation','thickVariation'].includes(key) && species !== 'tendril') return 'Choose a tendril shape.';
   if (key === 'color' && species.startsWith('dead')) return 'A dead tree has no foliage.';
   return '';
 }
@@ -98,20 +108,22 @@ export function defaultSet(config) {
 }
 // Only JSON values that the generators use are kept. Unknown/removed options do not
 // survive in saves as hidden behavior; numeric values and work sizes are bounded.
-const EXTRA_NUMBERS = {arms:[3,12],forks:[2,5],ash:[0,1],pieces:[1,8],lump:[0,1],cap:[0,1],shadow:[0,1],shadowLen:[0,2],gapShare:[0,1],shadowColor:null};
+const EXTRA_NUMBERS = {forks:[2,5],ash:[0,1],pieces:[1,8],lump:[0,1],cap:[0,1],shadow:[0,1],shadowLen:[0,2],gapShare:[0,1],shadowColor:null};
 // Catalog params are trusted authored data. Saved recipes must keep those same keys,
 // plus the public form controls. Bounds on dimensions also bound sprite allocation.
 function cleanParams(value, config, kind, overrides = false) {
   const examples = [kindData(kind, config), ...featureCatalog(config, kind).map(p => p.data)].filter(Boolean);
-  const allowed = new Set(['species','cells','trunkColor',...Object.keys(FORMS[kind] || {}), ...Object.keys(EXTRA_NUMBERS)]);
+  const allowed = new Set(['species','canopyStyle','cells','trunkColor','accentColor',...Object.keys(FORMS[kind] || {}), ...Object.keys(EXTRA_NUMBERS)]);
   for (const d of examples) for (const t of d.types || [{params:d.params}]) for (const k of Object.keys(t.params || {})) allowed.add(k);
   const out = {};
   for (const [k, v] of Object.entries(value || {})) {
     if (!allowed.has(k)) continue;
-    if (k === 'trunkColor') { if(hex(v))out[k]=v.toLowerCase();continue; }
+    if (k === 'canopyStyle') { if (['round','clustered','palm'].includes(v)) out[k]=v; continue; }
+    if (k === 'trunkColor' || k === 'accentColor') { if(hex(v))out[k]=v.toLowerCase();continue; }
     if (k === 'species') { if (SPECIES.includes(v)) out[k] = v; continue; }
     if (k === 'cells') { const c = cellsOf(v); if(c) out[k] = c.join('x'); continue; }
-    const safety = {height:[1,256],width:kind==='tree'?[0.05,2]:[0.05,100],size:[0.05,3],reach:kind==='tree'?[1,256]:[0.05,4],thick:[0.1,8],shadowLen:[0,4],pieces:[1,8],arms:[3,12],forks:[2,5]};
+    if (k in (FORMS[kind] || {}) && (typeof v !== 'number' || !Number.isFinite(v))) continue;
+    const safety = {...VARIATION, ...PATTERN, canopyLift:[0,0.65],reachVariation:[0,0.6],thickVariation:[0,0.6],height:[1,256],width:kind==='tree'?[0.05,2]:[0.05,100],size:[0.05,3],reach:kind==='tree'?[1,256]:[0.05,4],thick:[0.1,8],shadowLen:[0,4],pieces:[1,8],arms:[1,16],forks:[2,5]};
     const limits = overrides ? FORMS[kind]?.[k] || EXTRA_NUMBERS[k] || safety[k] : safety[k];
     if (typeof v === 'number' && Number.isFinite(v)) out[k] = limits ? number(v, limits[0], limits[1], limits[2] ?? limits[0]) : number(v, -10000, 10000, 0);
     else if (typeof v === 'boolean' || typeof v === 'string' && v.length <= 64) out[k] = v;
@@ -207,6 +219,28 @@ function recipeVariants(kind, entry) {
     if (kind === 'tree') Object.assign(params, {taper: entry.taper, peaks: entry.peaks}, type.params.energy && JSON.stringify(entry.energy) === JSON.stringify(data.energy ?? FALLBACK.tree.energy) ? {} : {energy: [...entry.energy]});   // a type with its own energy (a dead tree's 50) keeps it
     if (kind === 'rock') params.angular = entry.angular;
     Object.assign(params, entry.params);
+    // Independent streams keep proportions stable when another control/count changes.
+    // Explicit zero replaces a preset's size spread with a fixed dimension.
+    const center = (key, fallback) => entry.params[key] ?? (type.vary?.[key] ? (type.vary[key][0] + type.vary[key][1]) / 2 : type.params[key]) ?? fallback;
+    const varySize = (key, fallback, salt) => {
+      const amount = entry.params[key + 'Variation'];
+      if (amount === undefined) return;
+      params[key] = center(key, fallback) * (1 + amount * (2 * unit(seed, salt) - 1));
+    };
+    if (kind === 'tree' && params.species !== 'tendril') {
+      const baseHeight = center('height', 68), baseWidth = center('width', 0.72);
+      const originalWidth = (params.height ?? 68) * (params.width ?? 0.72);
+      varySize('height', 68, 811);
+      if (entry.params.widthVariation !== undefined || entry.params.heightVariation !== undefined) {
+        const widthScale = 1 + (entry.params.widthVariation ?? 0) * (2 * unit(seed, 812) - 1);
+        const width = entry.params.widthVariation === undefined ? originalWidth : baseHeight * baseWidth * widthScale;
+        params.width = width / (params.height ?? baseHeight);
+      }
+    } else if (kind === 'shrub') {
+      varySize('height', 19, 811); varySize('width', 28, 812);
+    } else if (kind === 'tree') {
+      varySize('reach', (params.height ?? 68) * 1.2, 813); varySize('thick', 1.6, 814);
+    }
     const ref = data.color ?? FALLBACK[kind]?.color;
     if (entry.color && ref && entry.color !== ref) params.recolor = {from: ref, to: entry.color};
     let footprint = cellsOf(params.cells) || [1, 1];

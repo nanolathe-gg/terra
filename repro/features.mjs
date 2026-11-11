@@ -119,6 +119,24 @@ try {
   await press('#feature-tool'); await set('#feature-kind','tree');
   await set('#feature-preset','red-tree-0'); await press('#feature-add-recipe');
   await set('#feature-recipe-name','Blue tendrils'); await set('#feature-tree-color','#325caa'); await set('#feature-form-tree-curl',.8);
+  await set('#feature-form-tree-arms',12); await set('#feature-form-tree-reach',60); await set('#feature-form-tree-thick',6);
+  await set('#feature-form-tree-reachVariation',35); await set('#feature-form-tree-thickVariation',20);
+  assert.equal(await ev('document.getElementById("feature-tree-accent-color").disabled'),true);
+  await set('#feature-form-tree-accentAmount',55); await set('#feature-tree-accent-color','#b8c277'); await set('#feature-form-tree-patternScale',9);
+  assert.equal(await ev('document.getElementById("feature-tree-accent-color").disabled'),false);
+  await settled();
+  const artistParams=await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[1].params');
+  assert.deepEqual(artistParams,{curl:.8,arms:12,reach:60,thick:3,reachVariation:.35,thickVariation:.2,accentAmount:.55,accentColor:'#b8c277',patternScale:9});
+  // Canopy edits use the same undo/save path and expose only relevant controls.
+  await set('#feature-species','broadleaf'); await set('#feature-canopy-style','palm');
+  assert.equal(await ev('document.getElementById("feature-form-tree-crown").disabled'),true);
+  await set('#feature-form-tree-heightVariation',40); await set('#feature-form-tree-widthVariation',25);
+  assert.equal(await ev('document.getElementById("feature-form-tree-heightVariation").value'),'40');
+  await set('#feature-form-tree-widthVariation','');
+  assert.equal(await ev('"widthVariation" in sculptCanvas.features.serialize().featureSet.tree.recipes[1].params'),false);
+  for(let i=0;i<5;i++){await press('#undo');await ready();}
+  await settled();
+  assert.deepEqual(await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[1].params'),artistParams);
   assert.equal(await ev('document.getElementById("feature-form-tree-width").disabled'),true);
   assert.match(await ev('document.getElementById("feature-form-tree-width").title'),/reach/);
   assert.equal(await ev('sculptCanvas.features.addFeature("tree",20,20)'),true);
@@ -129,7 +147,7 @@ try {
   await set('#feature-count',2); const mixed=await ev('sculptCanvas.features.serialize()');
   assert.equal(mixed.features.filter(p=>p.kind==='tree').every(p=>p.v>=16),true);
   await set('#feature-kind','rock'); await set('#feature-preset','lava-rock-0'); await press('#feature-add-recipe');
-  await set('#feature-rock-color','#6977a5'); await set('#feature-form-rock-tall',.6);
+  await set('#feature-rock-color','#6977a5'); await set('#feature-form-rock-tall',.6); await set('#feature-form-rock-heightVariation',25); await set('#feature-form-rock-widthVariation',35);
   assert.equal(await ev('sculptCanvas.features.addFeature("rock",40,30)'),true);
   // A larger footprint edit is atomic: an invalid map keeps its recipes and placements.
   assert.equal(await ev('sculptCanvas.features.changeSet("rock",{params:{cells:"16x16"}})'),true);
@@ -170,7 +188,7 @@ try {
   await send('DOM.setFileInputFiles',{nodeId:fileNode.result.nodeId,files:[worldPath]});await sleep(500);await ready();
   await ev('sculptCanvas.features.load({}),true');
   assert.deepEqual(await ev('sculptCanvas.features.serialize().featureSet'),saved.featureSet);
-  report.recipes='Imported Red tendrils and Lava rocks; independent colors, duplicate, count edits, atomic footprint rejection, reorder/load, fill/undo, world switch, custom-world defaults, world file export/import and archive export passed';
+  report.recipes='Artist canopy, size variation, tendril and camouflage edits undo/save/export correctly. Imported Red tendrils and Lava rocks; independent colors, duplicate, count edits, atomic footprint rejection, reorder/load, fill/undo, world switch, custom-world defaults, world file export/import and archive export passed';
   assert.deepEqual(errors, []);
   console.log(JSON.stringify(report, null, 1));
 } finally { ws?.close(); browser.kill(); }

@@ -19,6 +19,37 @@ changed to broadleaf, conifer, tendril, dead broadleaf or dead conifer. Controls
 that do not apply explain why. Foliage and stone colors are independent per
 recipe; all features use the destination world's light and game palette.
 
+## Artist controls
+
+Recipes now expose more of the procedural shape and material model:
+
+- Trees, shrubs, and rocks have independent height and width variation (0–60% either
+  side of the nominal size). A blank field retains the preset's variation;
+  zero fixes that dimension for each source shape in the recipe. Variation is
+  deterministic across the recipe's variants. Editing height variation preserves
+  the existing width distribution, and vice versa. Adding variants does not
+  redraw earlier ones.
+- Broadleaf canopies can use a full crown, separate leaf clusters, or arching
+  palm fronds. The tree-shape selector also retains conifers and dead trees.
+  Exposed trunk raises the canopy; existing taper, peaks, roughness, density,
+  dimensions, and wood color continue to apply where meaningful.
+- Tendrils expose count (1–16), nominal length (12–100 px), base thickness
+  (1.2–10 px diameter), curl, and independent length/thickness variation.
+  Render bounds include the bulbs even when only one arm grows from them.
+- Trees, tendrils, shrubs, and rocks have an independent second color, its
+  coverage, and patch size (2–24 px). Soft, seeded camouflage patches mix the
+  colors before world lighting and palette quantization. Tree wood retains its
+  separate color. Zero coverage is the same material at zero blend weight.
+  A tiny positive value cannot abruptly replace the surface. Pattern size is
+  disabled, with a reason, when coverage is zero or 100%.
+
+These edits use the existing recipe/undo/save/export flow. The shape controls
+are in **Shape and surface**; the two-color controls sit together below it.
+Variation changes the finite set of recipe variants, rather than introducing
+fresh random geometry for every placement. A mixed preset can still contain
+several nominal source shapes; use an individual catalog preset to author one
+shape family.
+
 ## Persistence and placement
 
 The existing map `featureSet` now stores, per kind, `{nextId, recipes}`. A recipe
@@ -46,7 +77,7 @@ Passability and export resolve the same stable addresses as the preview. Burning
 successors remain attached to their shape. Export successor seeds do not depend
 on which recipe is selected in the panel.
 
-## Validation
+## Initial recipe validation
 
 Measured during implementation:
 
@@ -104,6 +135,41 @@ plants and a blue stone spire on both Green and Moon, retaining their geometry
 and responding to the world's light. Screenshots and measurement sheets remain
 outside the repository under `/private/tmp/nanolathe-map-editor/agent-feature-recipes`.
 
-Further generator parameters remain preset data. Exposing additional controls,
-such as the clustering model, needs its own continuity and visibility checks;
-this change does not redesign those generators.
+The canopy selector exposes the existing cluster and frond shape families.
+Continuous morphing between these families and arbitrary editable color ramps
+remain outside this change; the new material controls provide two independently
+chosen surface colors plus wood color.
+
+
+## Expanded control validation
+
+Measured for the artist-control follow-up:
+
+- The final feature sweep passes all 43 comparisons at 1x, including separate
+  tendril color measurements. The new controls move 51.0–99.0% of their classes;
+  the minimum across all retained controls is 21.0% (rock grain). Rock height and
+  width variation move 81.9% and 90.3%. Tendril coverage, second color, and patch
+  size move 72.2%, 63.6%, and 51.0% respectively.
+- The unit suite passes 183 tests. Added checks cover independent variation,
+  source range centers, stable variant addresses, color/geometry separation,
+  zero coverage, deterministic regeneration, rock footprints, control gating,
+  and identical preview/export sprites and burnt successors.
+- The land tier passed with the plant controls. After adding rock variation, the
+  final quick tier and expanded feature browser check were rerun. The browser
+  checks exercise canopy changes, percentage/diameter input units, clearing an
+  override, undo, camouflage, rock variation, world changes, saves, world files,
+  and archive export. All 34 terrain scenes still match the branch baseline.
+- The three standard export-byte cases pass, with two Wasm exports and the native
+  exporter agreeing on both archive and indexed-image hashes for each map.
+- Shape and geology sweeps exit 0. The geology sweep retains its pre-existing
+  below-threshold terrain rows. The targeted Zhon `rippleHeight` world sweep
+  still exits 1 with six hidden-but-moving cases, matching the previously
+  reproduced baseline failure. The unfiltered world sweep is not claimed as
+  passing and was not repeated for this feature-only change.
+
+By eye: the comparison sheets show distinct full, clustered, and palm canopies,
+more exposed trunks, and variable proportions. The editor screenshots show blue
+and pale-gold patches along enlarged tendrils on both Green and Moon. Feature
+colors retain shading; wood and shadows remain separate from the patch colors.
+Artifacts are outside the repository under
+`/private/tmp/nanolathe-map-editor/agent-feature-recipes/artist-*`.

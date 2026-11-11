@@ -253,13 +253,21 @@ export async function mountMapFeatures(api) {
     $('feature-remove-recipe').disabled=used || set[placeKind].recipes.length<=1;
     $('feature-remove-recipe').title=used?'Remove this recipe’s placed features first.':set[placeKind].recipes.length<=1?'Keep at least one recipe of each kind.':'';
     if(doc.activeElement!==$('feature-recipe-name'))$('feature-recipe-name').value=entry.name;
-    const first=activeList()[0]?.params || {};
+    const firstVariant=activeList()[0], first=firstVariant?.params || {}, source=entry.data.types[firstVariant?.type] || {};
+    const nominal=k => source.vary?.[k] ? (source.vary[k][0]+source.vary[k][1])/2 : source.params?.[k];
     for(const input of paramInputs) {
       const k=input.dataset.param, kind=input.dataset.paramKind;
       const row=input.closest('.control'); row.hidden=kind!==placeKind;
       const reason=controlRequirement(kind,k,first); input.disabled=Boolean(reason); input.title=reason;
       const note=row.querySelector('[data-requirement]'); if(note)note.textContent=reason;
-      if(doc.activeElement!==input)input.value=String((k==='species' ? entry.params.species ?? '' : first[k]) ?? (k==='trunkColor'?(first.trunk?.[Math.floor(first.trunk.length/2)] || '#3b3323'):FORMS[kind]?.[k]?.[2] ?? 'broadleaf'));
+      if(doc.activeElement!==input) {
+        const fallback = k==='trunkColor' ? first.trunk?.[Math.floor(first.trunk.length/2)] || '#3b3323' : k==='accentColor' ? '#b8c277' : FORMS[kind]?.[k]?.[2];
+        const value = ['species','canopyStyle'].includes(k) ? entry.params[k] ?? '' : entry.params[k] ?? (['height','width','reach','thick'].includes(k) ? nominal(k) : undefined) ?? first[k] ?? fallback;
+        const inheritedVariation = k.endsWith('Variation') && entry.params[k] === undefined;
+        input.placeholder = inheritedVariation ? 'Preset' : '';
+        input.value = inheritedVariation ? '' : String(input.dataset.paramScale ? Number(value)*Number(input.dataset.paramScale) : value);
+        if(inheritedVariation && !reason) input.title='Uses the preset’s size variation. Enter 0 to fix this dimension, or clear to restore the preset.';
+      }
     }
   }
   function update() {
@@ -375,7 +383,12 @@ export async function mountMapFeatures(api) {
   $('feature-add-recipe').onclick=() => {const preset=featureCatalog(config,placeKind).find(p => p.id===$('feature-preset').value);if(preset)addRecipe(placeKind,preset);};
   $('feature-duplicate-recipe').onclick=() => addRecipe(placeKind,null,true);
   $('feature-remove-recipe').onclick=removeRecipe;
-  for(const input of paramInputs)input.onchange=() => { const kind=input.dataset.paramKind, k=input.dataset.param, value=input.tagName==='SELECT'||input.type==='color'?input.value:Number(input.value); if(!changeSet(kind,{params:{...activeRecipe(kind).params,[k]:value}}))update(); };
+  for(const input of paramInputs)input.onchange=() => {
+    const kind=input.dataset.paramKind, k=input.dataset.param, params={...activeRecipe(kind).params};
+    if(input.value==='') delete params[k];
+    else params[k]=input.tagName==='SELECT'||input.type==='color'?input.value:Number(input.value)/(Number(input.dataset.paramScale)||1);
+    if(!changeSet(kind,{params}))update();
+  };
   $('feature-count').onchange=event => { if (!changeSet(placeKind,{count:Number(event.target.value)})) update(); };
   $('feature-new-set').onclick=() => { if (!guard()) return; const seed=hash32(activeRecipe().seed,Date.now()>>>0); changeSet(placeKind,{seed},`New variants of ${activeRecipe().name}; its placed features take the new looks.`); };
   for (const input of settingInputs) {
