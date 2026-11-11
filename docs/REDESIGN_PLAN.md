@@ -2921,6 +2921,32 @@ round 4.
   of a band follows the crest, so it tilts where the crest tapers.
 - Page (private): https://claude.ai/artifact/878Vv6rGcfQ8vkdESsUJSU
 
+**Overnight run, item 2: boulders [Claude, 2026-11-11; the owner: "Walls
+and boulders look good, land all of it"].** Row 5 of round 4.
+
+- *Boulders under walls* (world control, Loose stone, 0 to 1, default 0
+  in every world). The runout blocks' population gains a supply on ground
+  under a wall (a rise of 18 to 40 units within 40 px, or 26 to 57 within
+  80) and where rock weather laid debris; its median grows toward 34 px;
+  one more size class (a 32 px radius); a large angular fragment is a
+  block with a tilted top and a broken corner, standing on the ground.
+  Art only: exported heights are identical **[measured, four fixtures]**.
+- *Measured.* At 1: 5.5% of the mesa fixture's picture (4.2% at 0.5),
+  4.8% of the stock Plateau, 6.9% of the Desert mesa. On the stock
+  Mountain on modern Green: 1.67% at 0.05, 9.02% at 0.25, 16.32% at 0.5,
+  19.61% at 1. `measure/world_controls.mjs`: 2.4% of green-1's whole
+  picture and 2.2% of desert-1's; those windows have little ground under
+  walls, and the share of that class alone is not computed.
+- *Fixed before landing.* The first build changed every large fragment's
+  shape as soon as the control left 0 (11.75% of the Mountain's picture
+  at 0.05). Fragments now turn into blocks one by one, all of them from
+  0.5 up.
+- *Open.* (1) No world adopts it yet: the modern Green adoption is a
+  commit on `realism/soil-edges`, the owner's call. (2) A recipe with
+  rounded fragments gives few angular blocks. (3) Blocks take one rock
+  color; no fresh break face.
+- Page (private): https://claude.ai/artifact/LMov1KXL2dBW49fqd4K1pH
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
