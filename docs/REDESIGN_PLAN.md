@@ -2552,7 +2552,7 @@ before the color, and the owner's two rules.
 | | What is missing | Which pictures | What ours does | Heights or art |
 | --- | --- | --- | --- | --- |
 | 1 | Rock faces with a hierarchy: planes and ledges 30 to 150 px across first, fine detail under them, one color family per rock | all seven rock pictures | a face breaks up every 5 to 15 px at full contrast, in many hues at once (pink, cream, gray, mint on one Desert wall); no plane is larger than a block | art |
-| 1a | A defect inside 1: a checkerboard and comb pattern 2 px across on steep faces, in the relief itself | none (it is ours) | 3.05% of clay pixels on modern Desert's Plateau and 3.06% on modern Green's, against 0.55% and 1.35% with Rock relief depth 0 **[measured: a 2 x 2 alternating difference over 60 of 255; Green's stippled ground is the 1.35]**: the solid makes it; the same on main | art |
+| 1a | A defect inside 1: a lattice of dots 4 px apart on steep faces, in the relief itself (first recorded here as 2 px), with a comb of vertical lines and a staircase along diagonal edges | none (it is ours) | the lattice is fixed (below); the comb and staircase remain. Before the fix, 3.05% of clay pixels on modern Desert's Plateau and 3.06% on modern Green's were in a 2 x 2 alternation over 60 of 255, against 0.55% and 1.35% with Rock relief depth 0 **[measured; Green's stippled ground is the 1.35]**; after it 2.23% and 2.72% | art |
 | 2 | Beds that run along a wall: a hard bed stands as a cliff, a soft one lies back as a slope, and the pair repeats, traceable for the wall's whole length | `prowess1`, `sand5`, `sandstone`, `surface3` | at the Plateau's Gullies 60, gullies cut the wall into equal fins and no ledge runs more than one fin; at Gullies 15 beds and stepped ledges do run along the wall (one render), so part of this is the preset; Terraces 10 with Ledge 100 changed little | both: a bench 16 px or wider belongs in the heights |
 | 3 | Level ground with a surface: tone and cover that change over 50 to 300 px (damp basins, dust, pavement, wash lines, stones thinning), the heights left flat | the top-down plain, `sand5`'s floor, `prowess1`'s foreground | Desert's plain is one tone of 1 px speckle and a level top is one flat tone, in both modern variants as they ship (a recipe that also replaces the world's beds paints blobs of bed colors on a top; modern Desert avoids that by keeping its own beds) | art only (the owner's rule) |
 | 4 | Sand that drifts: smooth sheets pooling in hollows and at a wall's foot, burying ledges, with ripples that vary | `sand5`, `rocktools` (second panel) | Sand supply 2 changes 0.86% of pixels **[measured]** unless the Time pass's rain is on (off in the presets), and then lays thin streaks; the Sand brush paints a hard-edged patch of even ripples; Desert's sand is darker than its ground | art; rain moves the heights |
@@ -2578,8 +2578,37 @@ before the color, and the owner's two rules.
   first because seven of the eight pictures are rock and it is what reads
   worst at 1x; 3 covers the most ground on a real map.
 
-**Next [proposed by Claude].** Row 1a, then row 1, on Desert sandstone and
-Green granite together.
+**Round 4, built: row 1a's lattice [Claude, 2026-11-10; the owner: "start
+on the checker defect"].** The voxel guide gives each voxel the direction
+its rock is displaced along: its own normal, or a steeper face's within
+16 px. It searched the surface at the voxel's own position plus multiples
+of 4 px, so neighbors read disjoint candidates and picked different
+faces, and every steep face carried a 4 px lattice of dots. A pass now
+reduces 4 px blocks on the global lattice to their steepest normal and
+every voxel searches the same blocks (`engine-volume.wgsl`
+`voxelGuideBlocks`, `voxelGuideBuild`).
+
+- *How it was found* **[measured]**. No single rock term makes it (each
+  set to 0 in turn on breccia: 2.76 to 3.44% against 3.44%); it grows with
+  Rock relief depth; searching every cell within 16 px removes it.
+- *Measured.* The checker share equals that reference search's on four
+  fixtures (2.46% against 2.45, 7.78 against 7.94, 2.55 against 2.47,
+  2.95 against 2.91; before 3.44, 9.21, 3.38, 3.38), and by eye the
+  lattice is gone and the forms match it. Pixel for pixel it is not the
+  reference (about 40% of clay pixels differ, 3 to 8% by more than 24).
+  33 of 34 scenes change, heights the same bytes in all; the voxel check
+  holds 0 pixels between budgets with 0.8% more bricks and 85.7 MB
+  against 85.1 of 96; load and release times are unchanged on modern
+  Green and on Green's own preset (two alternating pairs). Land tier
+  passes.
+- *Not done.* The comb and the staircase remain with the reference search
+  too: another cause, not yet found. The share is a rough measure: it
+  also counts sharp real edges, so it fell by a quarter while the picture
+  changed much more. On the branch `realism/checker`; the owner has not
+  judged it.
+
+**Next [proposed by Claude].** The comb and staircase, then row 1, on
+Desert sandstone and Green granite together.
 
 **Scale: none fixed; a working one may be used [owner decision,
 2026-11-10].** Codex proposes 4 art pixels to a meter
