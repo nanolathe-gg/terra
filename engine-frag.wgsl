@@ -50,6 +50,8 @@ fn baseBandMask(p: vec2f, hf: f32, slope: f32) -> f32 {
     return u.baseBand * inside * smoothstep(u.baseBandGaps, u.baseBandGaps + 0.12, gap);
 }
 
+// The share of the sun that reaches the point past the relief toward it: 0 in a cast shadow, which takes the whole direct light (it took
+// 32% of it, which left a long shadow at a low sun too faint to read), 1 in the open.
 fn visibility(p: vec2f, h: f32) -> f32 {
     let toward = normalize(u.light.xy);
     let elevation = u.light.z / length(u.light.xy);
@@ -76,7 +78,7 @@ fn visibility(p: vec2f, h: f32) -> f32 {
         if (q.x < 0.0 || q.y < 0.0 || q.x >= u.size || q.y >= u.size) { continue; }
         shadow = max(shadow, fade * smoothstep(-2.0, 4.0, baseHeight(q) - h - d * elevation));
     }
-    return 1.0 - 0.32 * shadow;
+    return 1.0 - shadow;
 }
 
 fn occlusion(p: vec2f, h: f32) -> f32 {
@@ -2044,7 +2046,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         color *= 1.0 - 0.75 * u.iceCrystal * iceHatch(pixel) * smoothstep(0.3, 0.8, exposed);
     }
     // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), shared by shine and the surface marks.
-    let markSeen = 1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope));
+    let markSeen = 1.0 - (1.0 - shadow) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope));
     let turned = 1.0 - clamp(shading, 0.0, 1.0);
     if (u.shineOn != 0 || u.paintOn != 0) {
         let sunSeen = markSeen * (1.0 - flatBank) * closeVis * faceSun;
