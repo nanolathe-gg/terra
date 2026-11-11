@@ -3092,8 +3092,9 @@ main. Do not rebuild it.
 
 **Bed defects, Red's rock, Green's bed lumps [Claude, 2026-11-11; the
 owner: "continue with Crystal and zhon bed defects, red rocks color and
-joints, and then bed lumps on green"; on three stacked branches, NOT
-landed].**
+joints, and then bed lumps on green"; landed together 2026-11-11 on the
+owner's "1. Keep and accept the re-roll 2. This is fine. Land it and
+restart 8801"].**
 
 - *Rock under water is lit as the bed round it* (`realism/bed-defects`).
   Crystal's outline and Zhon's rings were two terms together, found by
@@ -3131,7 +3132,7 @@ landed].**
   4.4% of the lake's interior pixels move (rock on the lumps' flanks; no
   change by eye), and the terrace rings round the lake keep 11.2% dark
   pixels (luma under 40) against 12.5%, which no single number of the
-  recipe accounts for. Open, by eye: lit faces carry a few olive-yellow
+  recipe accounts for (the owner: "This is fine"). Open, by eye: lit faces carry a few olive-yellow
   pixels, Color variation sits at its slider's maximum, and the rock
   within a few units of the water is still bluer than the rest (the
   waterline's blend). Tried and not used: Mix palette pairs (rock hue 5,
@@ -3155,28 +3156,28 @@ landed].**
   steep faces (green-2 10.0%, mean luma 62.867 to 62.869, no change by
   eye; green-5 1.3%, green-4 1.0%, green-6 0.4%). No value is free:
   green-2 moves 6.7% at .8, 8.2% at 1, 9.5% at 1.5. This is the coupling
-  removed for Boulders. The owner's choice: lumps at 2 with the re-roll;
-  drop the term from the allowance (every world re-rolls once, and the
-  control never touches dry ground again); or leave Green's lumps at .6.
-  Why a picture depends on the apron at all is not found.
-- *Checks* (2026-11-11). The land tier (unit, gate, scenes, regional,
-  voxels, smoke, features, passability, shape repeat; own server, CDP
-  port 9731) and export bytes (exit 0, same on all three maps: green-4
-  2,325 tiles, lava-8 14,498, red-16 50,099 against 50,166 on main)
-  passed on the three items stacked, one step before the crevice shade
-  came back to .7 and the previews were regenerated; the quick tier
-  passes on the final tip. 28 of 34 scenes differ from main `6c58fb9f`,
-  heights identical in all. No item was checked alone: landing a subset
-  needs its own run, and the previews hold only for all three together.
-- *Perf, owed before landing.* `engine-frag.wgsl` runs on every chunk
-  paint and Green's apron grew. Measured once (`repro/perf.mjs map4`,
-  green-modern-3, alternating builds, a warm-up discarded) while another
-  agent's three control sweeps held the GPU, so only the comparison
-  holds: load to final 15.6, 17.7, 14.8 s on main and 18.5, 15.1, 14.0 s
-  on the tip; drag latency p50 423, 654, 402 ms against 481, 596, 428.
-  No difference beyond the spread, at about seven times the morning's
-  absolute numbers on both builds. The export's times in that state
-  (red-16 535 s) say nothing either. Rerun both on a quiet machine.
+  removed for Boulders. Offered: lumps at 2 with the re-roll; drop the
+  term from the allowance (every world re-rolls once, and the control
+  never touches dry ground again); or leave Green's lumps at .6. The
+  owner: "Keep and accept the re-roll". Why a picture depends on the
+  apron at all is not found.
+- *Checks at landing* (2026-11-11, final tip, a quiet machine). The
+  land tier passes (unit, gate, scenes, regional, voxels, smoke,
+  features, passability, shape repeat; own server, CDP port 9771); 28 of
+  34 scenes differ from main `6c58fb9f`, heights identical in all.
+  Export bytes: exit 0, same on all three maps (green-4 2,325 tiles in
+  3.1 s, lava-8 14,498 in 20.7 s, red-16 50,099 in 89.3 s; main had
+  50,166 in 86 to 102 s). The three items were checked and landed
+  together, with the previews regenerated for all three.
+- *Perf at landing* (`repro/perf.mjs map4`, green-modern-3, alternating
+  builds, a warm-up discarded, three runs each). Load to final 1564,
+  1576, 1597 ms on main and 1668, 1775, 1623 on the tip (about 7%
+  slower); release to final 1320, 1306, 1315 against 1361, 1357, 1347
+  (3%); drag latency p50 26.1, 26.1, 25.7 against 26.7, 25.8, 26.6;
+  chunk paints a second 53.2, 54.0, 53.4 against 53.3, 53.4, 52.7. The
+  drag is unchanged; a load costs a little more (Green's larger apron
+  and the rock's bed light). An earlier run under another agent's
+  sweeps showed both builds at seven times these numbers and is void.
 - Not run: `measure/realism.py` (heights identical), the geology sweep.
 - Page (private): https://claude.ai/artifact/6rEmDd2kPD3MAnYNwHjiZG
 
