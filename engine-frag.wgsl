@@ -2112,7 +2112,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             }
             let bed=mix(levelGround*bedShade,color/max(lightTint,vec3f(.02)),rockBedShare);
             let shallow=litBed(bed,rockBedShare);
-            water = mix(shallow, deepWater, deep);
+            // Depth absorption under a hard step: the bed's tint deepens toward the deep colour as the water gets deeper, so a
+            // lake reads paler at its rim and darker toward the step, not one flat tone (a ramp already does this by itself).
+            let absorbed = mix(shallow, deepWater, 0.3 * smoothstep(0.0, 0.5 * (u.shallowDepth + u.deepDepth), bedDepth) * select(0.0, 1.0, edgeHard > 0.0));
+            water = mix(absorbed, deepWater, deep);
             // Some worlds' water passes through a third colour; a straight
             // blend of the two textures lands on colours the art never uses.
             if (u.waterMid.a > 0.0 && u.shallowBase.a < .5 && u.deepBase.a < .5) {
