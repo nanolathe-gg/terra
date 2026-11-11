@@ -170,9 +170,10 @@ fn lsCell(c: vec2f) -> u32 {
 fn lsMask(c: vec2f) -> LsMask {
     let v = looseMask[lsCell(c)];
     var m: LsMask;
-    // The cell's stones are its rock's: looseMain keeps its slot in w, 4 times over the runout blocks' supply (which is under 2).
-    let k = u32(v.w * 0.25) & rockMask;
-    let runout = v.w - 4.0 * f32(k);
+    // The cell's stones are its rock's: looseMain keeps its slot in w, 8 times over the runout blocks' supply (under 3.4: painted scatter, Boulders
+    // and a deposits override at their most).
+    let k = u32(v.w * 0.125) & rockMask;
+    let runout = v.w - 8.0 * f32(k);
     m.slot = k;
     m.a = vec4f(v.x, v.y, mix(2.0, 0.7, u.rock[k & rockMask].stoneSort), v.z);
     m.b = vec4f(runout, u.rock[k & rockMask].looseSize * 2.2, 0.5, v.z);
@@ -188,7 +189,7 @@ fn looseMain(@builtin(global_invocation_id) id: vec3u) {
     useRock(c);   // a cell's stones are its own rock's
     let at = 2u * (id.y * u32(u.looseGrid.z) + id.x);
     let m = lsMaskCompute(c);
-    looseMask[at] = vec4f(m.xyz, m.w + 4.0 * f32(rs & rockMask));   // w: the runout supply, and the cell's rock (lsMask)
+    looseMask[at] = vec4f(m.xyz, m.w + 8.0 * f32(rs & rockMask));   // w: the runout supply, and the cell's rock (lsMask)
     looseMask[at + 1u] = plantMask(c);
 }
 
@@ -482,7 +483,7 @@ fn looseStones(p: vec2f) -> LsOut {
         let spread = mix(2.0, 0.7, u.rock[rs & rockMask].stoneSort);
         let runout = x - log2(2.2 * u.rock[rs & rockMask].looseSize);
         let reach = max(exp(-0.5 * off * off / (spread * spread)), 0.35 * u.rock[rs & rockMask].stoneSort * exp(-2.0 * runout * runout));
-        if (reach < 0.04 && !(u.boulders > 0.0 && k <= 2) && u.rockIdOn == 0) { continue; }   // the blocks' population holds the three largest classes; with several rocks in the chunk their sizes differ and none is skipped
+        if (reach < 0.04 && !(u.boulders > 0.0 && k <= 2) && rockMask == 0u) { continue; }   // the blocks' population holds the three largest classes; with several rocks in use their sizes differ and none is skipped (in every chunk alike)
         let cell = 3.2 * R;
         let b = vec2i(floor(p / cell - 0.5));
         for (var j = 0; j <= 1; j++) {
@@ -920,7 +921,7 @@ fn sandRipples(p: vec2f, lambda: f32) -> vec3f {
             let spread = mix(2.0, 0.7, u.rock[rs & rockMask].stoneSort);
             let runout = x - log2(2.2 * u.rock[rs & rockMask].looseSize);
             // A class holding under a fifth of the population's stones casts too few shadows to be worth the search.
-            if (max(exp(-0.5 * off * off / (spread * spread)), 0.35 * u.rock[rs & rockMask].stoneSort * exp(-2.0 * runout * runout)) < 0.2 && u.rockIdOn == 0) { continue; }
+            if (max(exp(-0.5 * off * off / (spread * spread)), 0.35 * u.rock[rs & rockMask].stoneSort * exp(-2.0 * runout * runout)) < 0.2 && rockMask == 0u) { continue; }
             let cell = 3.2 * R;
             let rmax = R * 1.4143;
             // A stone's centre lies up to 5 radii upwind of p and 2.5 radii downwind of it, and 1.6 radii to either side.

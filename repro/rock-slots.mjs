@@ -6,12 +6,14 @@
 //      pixels by a palette step or a few (measured: every value it reads is the same; a bake with the plane's read compiled out, or with the
 //      stones' reads at slot 0, gives one slot's bytes). report.zeroPlane says how many.
 //   2. The plane painted by hand (no stroke writes it yet) with slot 1, a visibly different recipe, east of x = 512 changes the picture there,
-//      and west of it no farther from the line than the farthest a pass gathers from (rockfall reach and the flow's rounds). Twice the same bytes.
+//      and west of it no farther from the line than the farthest a pass gathers from (rockfall reach and the flow's rounds). Twice the same bytes,
+//      and the same picture baked in 512-px tiles as in 256-px ones (render.mjs's 16 px), also with Size sorting at 1, where one rock skips
+//      stone classes.
 // Writes one.png / one-clay.png (one slot), half.png / half-clay.png (the painted half), contact.png (the two side by side round the line)
 // and report.json (the numbers, the pipelines' compile time) into DIR.
 import assert from 'node:assert/strict';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
-import {openHost, openScene, weather, renderWindow, windowHeights} from './headless.mjs';
+import {openHost, openScene, weather, renderWindow, windowHeights, knob} from './headless.mjs';
 import {encodePng} from './png.mjs';
 import {ROCK_PRESETS} from '../sculpt-rock-presets.js';
 
@@ -77,6 +79,9 @@ try {
   const half = await renderWindow(s, color), halfClay = await renderWindow(s, clay);
   same(half, await renderWindow(s, color), 'the painted plane');
   png('half', half); png('half-clay', halfClay);
+  const tiles = (a, b) => difference(a, b).moved;
+  report.tileSize = {painted: tiles(half, await renderWindow(s, {...color, tile: 512}))};
+  assert.ok(report.tileSize.painted <= 16, `${report.tileSize.painted} pixels change with the tile size`);
   const reach = renderer.uniformValue('uDebrisReachMax');
   // The farthest a pass gathers from: rockfall (the largest reach in use, its 4-px cells and their blend) and then the stones that debris lays
   // (the largest class's radius 16 px, up to 1.41 times it, seen 1.6 radii out), or the flow's 16 rounds of 4 px.
@@ -87,6 +92,9 @@ try {
   assert.ok(report.paintedClay.farthestWest <= report.allowedWest, `a relief change ${report.paintedClay.farthestWest} px west of the line`);
   assert.ok(report.painted.farthestWest <= report.allowedWest, `a change ${report.painted.farthestWest} px west of the line, past the ${report.allowedWest} px a pass gathers from`);
 
+  await knob(s, 'stoneSort', 1);
+  report.tileSize.sorted = tiles(await renderWindow(s, color), await renderWindow(s, {...color, tile: 512}));
+  assert.ok(report.tileSize.sorted <= 16, `${report.tileSize.sorted} pixels change with the tile size (Size sorting 1)`);
   // The contact for looking at: 384 px each side of the line, one slot above, the painted half below, colour left and clay right.
   const crop = (pixels, x0, y0, w, h) => { const c = new Uint8Array(w * h * 4); for (let y = 0; y < h; y++) c.set(pixels.subarray(((y0 + y) * W + x0) * 4, ((y0 + y) * W + x0 + w) * 4), y * w * 4); return c; };
   const cw = 512, ch = 512, x0 = SPLIT - cw / 2, y0 = 512, sheet = new Uint8Array(cw * 2 * ch * 2 * 4);
