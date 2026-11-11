@@ -245,7 +245,10 @@ fn voxelDensity(p:vec3f)->f32 {
     var blocks=vec2f(0);
     if(u.faceWhole>0.0){blocks+=voxelWhole(p,r,c.edge,max(4.0,u.faceBlockSize),u.faceWhole);}
     if(u.faceWholeLarge>0.0){blocks+=voxelWhole(p,r,broad.edge,max(24.0,u.faceBlockSize*2.5),u.faceWholeLarge);}
-    return draped*(1.0-share*min(blocks.y,1.0))+8.0*blocks.x*share;
+    // A whole block's faces carry the relief the draped face has: the blocks' own offsets and tilts (so two rock blocks side by side meet at a
+    // step, a visible joint), pits, grit, grooves, chips and fragments, at half strength and up to 1 px, so the planes stay planes. Near a face the blocks' answer changes by about 3 a px.
+    let relief=clamp((faces+(pits+grit-runnel)*detail-spall+inclusion)*u.rockFace*.25*voxelRelief(p.xy,slope),-1.0,1.0);
+    return draped*(1.0-share*min(blocks.y,1.0))+(8.0*blocks.x-3.0*relief*min(blocks.y,1.0))*share;
 }
 @compute @workgroup_size(4,8,8)
 fn voxelBuild(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) local:vec3u){
