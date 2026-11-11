@@ -34,3 +34,39 @@ test('gate values (1 or 0: pipeline constants are numbers) follow the uniform da
  assert.deepEqual(v,{gate_layered_ne_0:1,gate_rillDepth_le_0p0:0});
  assert.equal(gateKey(v,['gate_layered_ne_0','gate_rillDepth_le_0p0']),'10');
 });
+// Rock recipes (engine-common.wgsl struct Rock): a test of a recipe number is a gate on the slots in use.
+const rockFields=new Map([['rock',{offset:64,kind:'struct',count:16,stride:16,members:new Map([['faceClast',{offset:0,kind:'f',width:1}],['columnCount',{offset:4,kind:'i',width:1}]])}]]);
+test('a recipe number tested against a constant is its constant where every slot in use answers alike, else the point\'s own test',()=>{
+ const {source,gates}=extractGates('if(u.rock[rs & rockMask].faceClast<=0.0){}\nif (u.rock[rs & rockMask].columnCount > 0) {}\nlet n = u.rock[rs & rockMask].faceClast * 2.0;\noverride rockMask: u32 = 15u;',rockFields);
+ assert.match(source,/if\(\(gate_rock_faceClast_le_0p0 \|\| \(gate_rock_faceClast_le_0p0_mixed && u\.rock\[rs & rockMask\]\.faceClast<=0\.0\)\)\)\{\}/);
+ assert.match(source,/\(gate_rock_columnCount_gt_0 \|\| \(gate_rock_columnCount_gt_0_mixed && u\.rock\[rs & rockMask\]\.columnCount > 0\)\)/);
+ assert.match(source,/let n = u\.rock\[rs & rockMask\]\.faceClast \* 2\.0;/);
+ const view=new DataView(new ArrayBuffer(64+16*16));
+ view.setFloat32(64,0,true);view.setInt32(68,3,true);view.setFloat32(80,2,true);view.setInt32(84,3,true);   // slot 0: no fragments; slot 1: fragments
+ assert.deepEqual(gateValues(gates,view,[0]),{gate_rock_faceClast_le_0p0:1,gate_rock_faceClast_le_0p0_mixed:0,gate_rock_columnCount_gt_0:1,gate_rock_columnCount_gt_0_mixed:0,rockMask:0});
+ assert.deepEqual(gateValues(gates,view,[0,1]),{gate_rock_faceClast_le_0p0:0,gate_rock_faceClast_le_0p0_mixed:1,gate_rock_columnCount_gt_0:1,gate_rock_columnCount_gt_0_mixed:0,rockMask:15});
+});
+test('with the world\'s own rock alone every rock test of the draw and the bake is a constant, slot 0\'s answer, and every read is slot 0\'s',async()=>{
+ const {readFileSync}=await import('node:fs'),{preprocess,uniformLayout}=await import('../sculpt-renderer.js');
+ const file=name=>readFileSync(new URL(`../${name}`,import.meta.url),'utf8'),common=file('engine-common.wgsl');
+ const layout=uniformLayout(preprocess(common,'',new Set()));
+ const parts=[extractGates(preprocess(file('engine-frag.wgsl').replace('/*VOLUME*/',file('engine-volume.wgsl')),common,new Set(['VOLUME_RENDER'])),layout.fields),extractGates(preprocess(file('engine-bake.wgsl'),common,new Set(['BAKE'])),layout.fields)];
+ const view=new DataView(new ArrayBuffer(layout.size)),table=layout.fields.get('rock');
+ for(const {source,gates} of parts){
+  // Every test of a recipe number against a constant is a gate (only the _mixed branch reads the slot), and every read of the table is masked.
+  assert.equal(source.replace(/_mixed && u\.rock\[rs & rockMask\]\.\w+\s*(>=|<=|==|!=|>|<)\s*-?[\d.]+/g,'').match(/u\.rock\[rs & rockMask\]\.\w+\s*(>=|<=|==|!=|>|<)\s*-?\d/g),null);
+  assert.equal(source.match(/u\.rock\[(?![^\]]*& rockMask\])/g),null);
+  const rock=[...gates.values()].filter(g=>g.stride);
+  assert.ok(rock.length>=5);
+  for(const value of [0,1]){
+   for(const g of rock)g.kind==='i'?view.setInt32(g.offset,value,true):view.setFloat32(g.offset,value,true);
+   const v=gateValues(gates,view,[0]);
+   assert.equal(v.rockMask,0);
+   for(const g of rock){
+    assert.equal(v[g.id+'_mixed'],0,g.id);
+    assert.equal(v[g.id],({'>':value>g.constant,'<':value<g.constant,'>=':value>=g.constant,'<=':value<=g.constant,'==':value===g.constant,'!=':value!==g.constant})[g.op]?1:0,g.id);
+   }
+  }
+  assert.equal(table.stride%16,0);
+ }
+});

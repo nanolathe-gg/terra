@@ -46,7 +46,7 @@ function meanColor({data}) {
 // pasted at /*COMMON*/, and #ifdef / #ifndef / #else / #endif keep or drop
 // lines by the defined names. Dropped lines stay blank, so a compiler
 // message's line number still points into the assembled module.
-function preprocess(source, common, defines) {
+export function preprocess(source, common, defines) {
   const out = [], keep = [];
   for (const line of source.replace('/*COMMON*/', common).split('\n')) {
     const m = line.match(/^\s*#(ifdef|ifndef|else|endif)\b\s*(\w*)/);
@@ -76,7 +76,7 @@ function structFields(source, name) {
     return {line, name: m[1], type: m[2] || m[4], array: Boolean(m[2]), count: m[2] ? Number(m[3]) : 1};
   });
 }
-function uniformLayout(source) {
+export function uniformLayout(source) {
   const rock = new Map();
   let rockSize = 0;
   for (const f of structFields(source, 'Rock')) {
