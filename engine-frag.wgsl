@@ -1114,17 +1114,18 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
 // this pixel, moved toward the water's own hue. The tint keeps the bed's light
 // (its brightness against flat ground), so lumps, shade and grain carry through;
 // bedTint is how much of the bed's own colour the tint replaces.
-fn litBed(bed: vec3f, rockShare: f32) -> vec3f {
+fn litBed(bed: vec3f, rockShare: f32, rockLevel: f32) -> vec3f {
     const luma = vec3f(0.299, 0.587, 0.114);
-    let level = max(dot(groundBased(u.groundTexMean), luma), 0.02);
+    // The light is the bed's brightness against its own material's: the level ground's mean for the soft bed, the rock's own colour
+    // (rockLevel) for rock, so a rock darker than the ground does not count as shade and a submerged platform is as pale as the shelf
+    // round it, with its joints.
+    let level = max(mix(dot(groundBased(u.groundTexMean), luma), rockLevel, rockShare), 0.02);
     // Shade stays paler under water than on land (retail's shaded bank beds show
-    // as soft darker blue, never as black rims), so the dark side carries less.
-    // Rock retains crevice contrast. The artist's contrast control applies to
-    // all beds, including a painted cracked bed and a submerged voxel cliff.
-    let ratio = clamp(dot(bed, luma) / level, mix(.25,.06,rockShare), 2.0);
+    // as soft darker blue, never as black rims), so the dark side carries less,
+    // on rock as on soft ground. The artist's contrast control applies to all beds.
+    let ratio = clamp(dot(bed, luma) / level, 0.25, 2.0);
     let contrast = u.bedContrast;
-    let darkSide = mix(.6,1.0,rockShare);
-    let light = pow(ratio, select(contrast * darkSide, contrast, ratio >= 1.0));
+    let light = pow(ratio, select(contrast * 0.6, contrast, ratio >= 1.0));
     let tint = select(u.shallowMean,u.shallowBase.rgb,u.shallowBase.a>.5) * light * u.bedBright;
     return saturate(mix(bed, tint, u.bedTint));
 }
@@ -2159,12 +2160,18 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             // E11 bedFlat: light the bed by its own relief only. A shelf's slope toward the deep
             // would otherwise shade the pale bed darker over a hundred px and read as blur.
             var bedShade = shading;
+            // The rock under water is lit as the soft bed round it is: bedFlat takes the broad slope, its cast shadow and its occlusion out of the
+            // rock's light too, and the rock keeps its own joints, crevices and close shadows.
+            var rockShade = mix(shading, 1.0, flatBank);
             if (u.bedFlat > 0.0) {
                 let own = normalize(vec3f(-(g - broad), 1.0));
                 bedShade = mix(shading, min((u.ambient + 0.95 * max(0.0, dot(own, u.light))) / flatLight, u.lightCap), u.bedFlat);
-            }
-            let bed=mix(levelGround*bedShade,color/max(lightTint,vec3f(.02)),rockBedShare);
-            let shallow=litBed(bed,rockBedShare);
+                let ownRock = normalize(vec3f(-(-normal.xy / max(normal.z, 0.1) - broad), 1.0));
+                let lit = min((u.ambient * (1.0 - cav) + 0.95 * max(0.0, dot(ownRock, u.light)) * closeVis * faceSun * (1.0 - 0.45 * cav)) / flatLight, u.lightCap);
+                rockShade = mix(rockShade, mix(lit, 1.0, flatBank), u.bedFlat) / max(rockShade, 0.05);
+            } else { rockShade = 1.0; }
+            let bed=mix(levelGround*bedShade,color/max(lightTint,vec3f(.02))*rockShade,rockBedShare);
+            let shallow=litBed(bed,rockBedShare,dot(material,vec3f(0.299,0.587,0.114)));
             // Depth absorption under a hard step: the bed's tint deepens toward the deep colour as the water gets deeper, so a
             // lake reads paler at its rim and darker toward the step, not one flat tone (a ramp already does this by itself).
             let absorbed = mix(shallow, deepWater, 0.3 * smoothstep(0.0, 0.5 * (u.shallowDepth + u.deepDepth), bedDepth) * select(0.0, 1.0, edgeHard > 0.0));
