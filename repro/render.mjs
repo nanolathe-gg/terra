@@ -1,5 +1,5 @@
 // Render a reproduction scene and save its window: under Node on Dawn (repro/headless.mjs, the default), or in headless Chrome (WebGPU) with --chrome.
-//   node render.mjs <scene.json> <out-dir> [--server http://127.0.0.1:<yours>] [--port <cdp>] [--query 'sun=90,45&cavity=.5'] [--clay] [--chrome]
+//   node render.mjs <scene.json> <out-dir> [--server http://127.0.0.1:<yours>] [--port <cdp>] [--query 'sun=90&sunHeight=30&cavity=.5'] [--clay] [--chrome]
 //        [--map 4x4] [--configs DIR]
 // --query appends page parameters after the scene's own (review sun, knob trials); --clay ticks the Clay box.
 // The scene is {"biome": "green", "query": "", "ground": true, "strokes": [[kind, [[x,y],...], options], ...]}

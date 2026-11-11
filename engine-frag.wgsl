@@ -50,6 +50,8 @@ fn baseBandMask(p: vec2f, hf: f32, slope: f32) -> f32 {
     return u.baseBand * inside * smoothstep(u.baseBandGaps, u.baseBandGaps + 0.12, gap);
 }
 
+// The share of the sun that reaches the point past the relief toward it: 0 in a cast shadow, which takes the whole direct light (it took
+// 32% of it, which left a long shadow at a low sun too faint to read), 1 in the open.
 fn visibility(p: vec2f, h: f32) -> f32 {
     let toward = normalize(u.light.xy);
     let elevation = u.light.z / length(u.light.xy);
@@ -61,7 +63,22 @@ fn visibility(p: vec2f, h: f32) -> f32 {
         let blocker = surfaceHeight(q) - h - d * elevation;
         shadow = max(shadow, smoothstep(-2.0, 4.0, blocker));
     }
-    return 1.0 - 0.32 * shadow;
+    // A lower sun casts longer shadows (a wall's is its height over the tangent of the sun's height). Past the twelfth sample the march goes
+    // on from 238.6 px (where a thirteenth would be) in steps that test 6 units higher each (the smoothstep's width, so a ragged crest leaves
+    // no gaps in its shadow), while a sample tests a height under 240 above the pixel, reading the authored height there: the relief's few
+    // units do not move a shadow cast from that far. Each fades in as the height it tests falls from 240 to 200, so the shadow grows
+    // smoothly as Sun height goes down. At every world's own sun the first tests above 240 (Green's 240.3): the march is the one it was.
+    // The chunk renderer's grid apron covers these samples (sculpt-chunk-renderer.js reaches, `far`).
+    let farStep = 6.0 / elevation;
+    for (var k = 0; k < 40; k++) {
+        let d = 238.6 + f32(k) * farStep;
+        let fade = clamp((240.0 - d * elevation) / 40.0, 0.0, 1.0);
+        if (fade <= 0.0) { break; }
+        let q = p + toward * d;
+        if (q.x < 0.0 || q.y < 0.0 || q.x >= u.size || q.y >= u.size) { continue; }
+        shadow = max(shadow, fade * smoothstep(-2.0, 4.0, baseHeight(q) - h - d * elevation));
+    }
+    return 1.0 - shadow;
 }
 
 fn occlusion(p: vec2f, h: f32) -> f32 {
@@ -2029,7 +2046,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         color *= 1.0 - 0.75 * u.iceCrystal * iceHatch(pixel) * smoothstep(0.3, 0.8, exposed);
     }
     // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), shared by shine and the surface marks.
-    let markSeen = 1.0 - clamp((1.0 - shadow) / 0.32, 0.0, 1.0) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope));
+    let markSeen = 1.0 - (1.0 - shadow) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope));
     let turned = 1.0 - clamp(shading, 0.0, 1.0);
     if (u.shineOn != 0 || u.paintOn != 0) {
         let sunSeen = markSeen * (1.0 - flatBank) * closeVis * faceSun;
