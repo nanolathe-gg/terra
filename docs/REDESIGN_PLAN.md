@@ -2947,6 +2947,33 @@ and boulders look good, land all of it"].** Row 5 of round 4.
   color; no fresh break face.
 - Page (private): https://claude.ai/artifact/LMov1KXL2dBW49fqd4K1pH
 
+**Overnight run, item 3: material edges [Claude, 2026-11-11].** Branch
+`realism/soil-edges`, not landed: the owner asked to see it first. Rows
+3 and 6 of round 4, and the owner's concern that sand at cliff feet
+greens over.
+
+- *Bare soil where cover thins* (world control, Vegetation, 0 to 1,
+  default 0). Where grass meets rock the cover ends at a ragged line
+  (two sizes of noise) instead of a blend, and a seam of bare earth
+  shows just outside it, on the ground and off the faces. At 1: 6.0% of
+  the mesa fixture's picture (4.5% at 0.6), 3.8% of the stock Plateau,
+  2.4% of the stock Mountain; `measure/world_controls.mjs` 1.9% of
+  green-1's whole picture **[measured]**. Subtle by eye.
+- *Sandy debris holds.* Debris regrowth reads the debris's sand share:
+  sandy debris resists regrowth up to three times as long. No control.
+  Modern Green's mesa fixture moves 7.0% and its stock Mountain 10.0%;
+  tan pixels on the mesa 3.43% to 4.29% **[measured]**. Classic Green
+  lays no debris, so it should not move: to be confirmed by the land
+  tier.
+- *Modern Green adopts* Bare soil 0.7 and Boulders 0.5, in its own
+  commit. With the sand change: 24.0% of the modern mesa fixture and
+  22.4% of the stock Mountain; exported heights identical **[measured]**.
+- *Open.* (1) The Mountain's apron may now be too continuous a tan band
+  (by eye). (2) Both new controls' whole-picture shares are under 5% on
+  the check windows. (3) The land tier, export bytes and the realism
+  report have not run on this branch.
+- Page (private): https://claude.ai/artifact/DMV5TKvvA37ufvmT2qz81g
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
