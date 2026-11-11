@@ -2058,9 +2058,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var surfWater = 0.0;     // Card P27: how much of this pixel is drawn as water, for the foam below
     if (h < u.sea + 1.0) {
         let depth = max(0.0, u.sea - h);
+        // The tint and the shallow-to-deep step read the authored bed: its lumps (bedRelief) are art, lit by the sun,
+        // and do not move the water's colour. The waterline below reads the drawn surface.
+        let bedDepth = max(0.0, u.sea - baseHeight(p));
         // Sediment mottling varies apparent water colour without changing the
         // authored bed or the level water plane.
-        var colorDepth = depth;
+        var colorDepth = bedDepth;
         if (u.waterSoft > 0.0) {
             // Colour follows depth averaged over a disc: the authored bed
             // stays exact, but deep water fades in over a wider, uneven band.
@@ -2070,9 +2073,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 let o = vec2f(cos(a), sin(a)) * u.waterSoft * (0.6 + 0.4 * f32(k % 2));
                 sum += max(0.0, u.sea - baseHeight(p + o));
             }
-            colorDepth = mix(depth, sum / 8.0, 0.75);
+            colorDepth = mix(bedDepth, sum / 8.0, 0.75);
         }
-        var mottle = ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, depth);
+        var mottle = ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, bedDepth);
         if (u.lowGrain < 1.0) { mottle *= lowGrain; }
         colorDepth += mottle;
         // Optional contour rings in the water colour, every 6 depth units.
@@ -2088,7 +2091,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             if (pick > 0.5) { edgeHard = 1.0; } else if (pick < -0.5) { edgeHard = 0.0; }
         }
         var deep = smoothstep(u.shallowDepth, u.deepDepth, colorDepth);
-        if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, depth); }
+        if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, bedDepth); }
         var grain = genColor(u.waterLayer, pixel) - u.waterMean;
         if (u.lowGrain < 1.0) { grain *= lowGrain; }
         // Colors choose the water's tint, never replace the bed-light model.

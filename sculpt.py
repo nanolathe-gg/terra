@@ -87,7 +87,7 @@ KNOB_DEFAULTS = dict(
     # 1 or 2; the world knobs default to a ramp from shallow to deep colour, and
     # level ground with no painted lumps beyond plainRelief's. The bed under
     # shallow water is always the lit ground.
-    waterDeep=0, waterShore=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=0, deepEdge=0, lumpRelief=4,
+    waterDeep=0, waterShore=0, bedTint=.85, bedBright=1, bedContrast=1, hillLight=1, ringFade=0, bedRelief=1, deepEdge=0, lumpRelief=4,
     # Line features (card C4): everything off by default; spur details only matter once spurs are set.
     spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestVary=0, crestTaper=0,
     # Local vegetation (card C5 stage 2): change about the world's own cover, 0 none.
@@ -306,7 +306,7 @@ WORLD_KNOBS = {
                 # Red's shallows (card E1) are lit terrain, tinted purple and ending in a
                 # hard stop: red-2's lake is the plain ground tinted lilac; open shores show
                 # the shore rock's joints under the water (Rock shelf).
-                bedTint=1, bedContrast=.65, bedBright=1.1, bedRelief=1, deepEdge=1,
+                bedTint=1, bedContrast=.65, bedBright=1.1, bedRelief=2.2, deepEdge=1,
                 # E11 (round 7 report: "edge against the deep water seems shaded"): the step is a true
                 # threshold; the lake (red-2) is lilac to its full depth 24 and keeps the world's 22.
                 shelfWander=6, bedFlat=.6,

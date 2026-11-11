@@ -781,7 +781,9 @@ fn surfaceHeight(p: vec2f) -> f32 {
         let collar = 1.0 - smoothstep(2.0, 6.0, abs(h - u.sea));
         h += ((shoreNoise.g - 0.5) * 4.0 + (shoreNoise.a - 0.5) * 1.7) * collar * rough;
     }
+#ifdef BAKE
     if (h < -12.0) { return h; }
+#endif
     let slope = length(broadGradient(p));
 #ifndef BAKE
     // Baked relief applies at every slope, level ground included: it carries
