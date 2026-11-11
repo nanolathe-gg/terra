@@ -1942,6 +1942,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     }
     // Card P27: the surf's beach is drawn last over the material, so the bake's cracks, chips and stones do not mark it: sand with its own fine
     // grain (colour the world's Sand), the shading eased toward level, then the wet sand to the last uprush and the wrack lines.
+    var surfCover = 0.0; var surfDamp = 0.0;   // the surf's own sand and its wet band, for Wet ground below
     if (surfE > 0.0 && surfX < 900.0 && surfX >= 0.0) {
         let cover = sandCoverAt(surfSand(surfX, surfQ, p, surfE) * (1.0 - smoothstep(0.7, 1.3, slope + 0.2 * valueNoise(p / 5.0 + 17.0) + 0.15 * valueNoise(p / 13.0 + 43.0))) * (1.0 - smoothstep(6.0, 12.0, h - u.sea + 2.5 * valueNoise(p / 8.0 + vec2f(6.6, 2.2)))) * (1.0 - exposed * 0.7), p, smoothstep(surfBerm(surfE) * 0.5, surfBerm(surfE) * 1.6, surfX));
         let cell = floor(grainPixel(pixel));
@@ -1954,6 +1955,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         shading = mix(shading, mix(shading, 1.0, 0.6), cover);
         let wet = surfWet(surfX, surfQ, p, surfE);
         material *= mix(vec3f(1.0), vec3f(0.68, 0.62, 0.52), wet);
+        surfCover = cover; surfDamp = wet;
         let wrackAt = surfBerm(surfE) * 0.78 + 2.5 * valueNoise(surfQ / 40.0 + vec2f(5.0, 5.0));
         let wrack = (1.0 - smoothstep(0.35, 1.0, abs(surfCuspX(surfX, surfQ, surfE) - wrackAt))) * step(shelfHash(cell + 63.0), 0.65)
                   * smoothstep(-0.2, 0.2, valueNoise(surfQ / 25.0 + vec2f(7.0, 3.0))) * cover;
@@ -1963,6 +1965,26 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let nearLine = 1.0 - smoothstep(2.0, 14.0, abs(surfCuspX(surfX, surfQ, surfE) - wrackAt));
         let pebble = step(shelfHash(stoneAt + 91.0), (0.004 + 0.03 * nearLine) * smoothstep(-0.3, 0.4, valueNoise(p / 15.0 + vec2f(3.0, 8.0)))) * cover * (1.0 - wet);
         material = mix(material, rock * (0.75 + 0.5 * shelfHash(stoneAt + 92.0)), pebble * 0.85);
+    }
+    // Wet ground: where water lies or has just been, the ground is wet. That is the first units of height above a waterline (narrower than the
+    // world's damp band, wetBand, which only tones the bank), the hollows and channel floors the Time pass wets, and the runoff rock weather traces
+    // down the faces and over the tops. A wet patch ends at a drying front, ragged at two sizes, not at a fade. Wet, a bare surface (soil, sand,
+    // debris, rock) is darker and more saturated, living cover far less; and it carries a film of water that mirrors the sky and tightens the sun's
+    // highlight (the shine term's damp, below). The surf's own wet sand is already darkened: it takes the film only. It comes after every material
+    // layer, so sand and debris laid over the ground are wetted too. Under the water the bed is the water's to draw.
+    var wetFilm = 0.0;
+    if (u.wetGround > 0.0) {
+        var lies = min(nearWater, 1.0 - smoothstep(0.3, 2.6, h - u.sea)) * (1.0 - flatBank);
+        if (u.weatherMaps > 0.5) { lies = max(lies, smoothstep(0.55, 0.85, timeMaps.wet) * (1.0 - smoothstep(0.3, 0.7, slope))); }
+        lies = max(lies, clamp(accumulated.w * 1.2, 0.0, 1.0));
+        let rag = 0.6 * terrainNoise(p * 1.3 + vec2f(71.0, 9.0)).r + 0.4 * terrainNoise(p * 6.0 + vec2f(5.0, 33.0)).g;
+        let front = 0.2 + 0.45 * rag;
+        let wet = u.wetGround * smoothstep(front - 0.08, front + 0.08, lies) * (1.0 - route) * (1.0 - smoothstep(0.0, 3.0, u.sea - h));
+        let living = place.vegetation * (1.0 - max(max(clamp(exposed, 0.0, 1.0), depositCover), max(smoothstep(0.2, 0.6, bakedFields(p).a * place.deposits), surfCover)));
+        let k = wet * mix(1.0, 0.35, living) * (1.0 - surfDamp);
+        let lum = dot(material, vec3f(0.299, 0.587, 0.114));
+        material = max(vec3f(0.0), lum + (material - lum) * (1.0 + 0.5 * k)) * (1.0 - 0.45 * k);
+        wetFilm = wet * mix(1.0, 0.3, living);
     }
     var color = material * mix(shading, 1.0, flatBank);
     if (u.shadeBlue > 0.0) {
@@ -2012,7 +2034,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let turned = 1.0 - clamp(shading, 0.0, 1.0);
     if (u.shineOn != 0 || u.paintOn != 0) {
         let sunSeen = markSeen * (1.0 - flatBank) * closeVis * faceSun;
-        let damp=max(u.faceWet*exposed*rockWet,painted.z*.85);
+        let damp=max(max(u.faceWet*exposed*rockWet,painted.z*.85),wetFilm*.8);
         var shine = shineTerm(pixel, p, g, normal, material, exposed, slopeShare, crystalMask, sunSeen, landform, damp, mineralPatch, skin*(1.0-depositCover));
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }

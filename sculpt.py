@@ -117,6 +117,8 @@ KNOB_DEFAULTS.update(crystalCraterWeb=0, crystalCraterWebPx=14, crystalCraterWob
 KNOB_DEFAULTS.update(looseKnoll=0)
 # Boulders: blocks fallen from a wall and lying under it (0: none).
 KNOB_DEFAULTS.update(boulders=0)
+# Wet ground (0..1): ground that water wets is darker, more saturated and glossy (0: as before).
+KNOB_DEFAULTS.update(wetGround=0)
 # Round 3 (Crystal): a bold web of long dark gouges across raised crystal formations (0: none).
 KNOB_DEFAULTS.update(gougeWeb=0)
 # G7 (Crystal): finer shore slabs and fainter seams (the defaults are the earlier output).

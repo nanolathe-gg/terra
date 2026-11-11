@@ -352,6 +352,7 @@ struct Uniforms {
     lowReach: f32,        // height above the sea where low ground ends (its ragged edge fades over the upper half)
     lowGrain: f32,        // 0..1: the share of its grain the low ground's pattern and the water's art and mottle keep (1: as drawn)
     lowColor: vec3f,      // the low ground's color (Colors: Low ground)
+    wetGround: f32,       // 0..1: ground that water wets (the band above a waterline, hollows and channels, runoff off rock) is darker, more saturated and glossy (0: as before)
     boulders: f32,        // 0..1: blocks fallen from a wall and lying under it, up to 60 px and more across (0: none; the runout blocks as before)
     looseKnoll: f32,      // 0..1: the share of loose stones drawn as knolls, a low pale ring of ground round a hollow (0: all stones, as before)
     gougeWeb: f32,        // 0..1: a bold web of long dark gouges across raised crystal, round cells about 42 px (0: none)
