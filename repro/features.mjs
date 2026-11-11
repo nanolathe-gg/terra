@@ -31,6 +31,14 @@ try {
   // A map point (pixels, as placements are stored) to the screen, through the editor's own projection of the feature's anchor.
   const screenOf = (kind, x, z) => ev(`(()=>{const f=sculptCanvas.features,i=f.placements.findIndex(p=>p.kind==='${kind}'&&p.x===${x}&&p.z===${z}),a=f.viewPoint(i),v=sculptCanvas.view(),r=document.getElementById('overlay').getBoundingClientRect();return a&&{x:Math.round(r.left+(a.x-v.x)*v.scale),y:Math.round(r.top+(a.y-v.y)*v.scale)};})()`);
   const groundScreen = (mx, mz) => ev(`(()=>{const v=sculptCanvas.view(),r=document.getElementById('overlay').getBoundingClientRect();return {x:Math.round(r.left+(${mx}-v.x)*v.scale),y:Math.round(r.top+(${mz}-v.y)*v.scale)};})()`);
+  const scrubPoint=id=>ev(`(()=>{const s=document.querySelector('.scrub[data-source="${id}"]');s.closest('details')?.setAttribute('open','');s.scrollIntoView({block:'center'});const r=s.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+  const typeScrub=async(id,text)=>{
+    const p=await scrubPoint(id);
+    for(const clickCount of [1,2]){await mouse('mousePressed',p,{clickCount});await mouse('mouseReleased',p,{clickCount});}
+    assert.equal(await ev('document.activeElement.classList.contains("scrub-entry")'),true);
+    if(text===''){await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Backspace',code:'Backspace',windowsVirtualKeyCode:8});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Backspace',code:'Backspace',windowsVirtualKeyCode:8});assert.equal(await ev('document.activeElement.value'),'');}else await send('Input.insertText',{text});
+    await key('Enter');await settled();
+  };
   const placements = () => ev('sculptCanvas.features.serialize().features');
   await send('Runtime.enable'); await send('Page.enable'); await send('Emulation.setDeviceMetricsOverride', {width: 1440, height: 900, deviceScaleFactor: 1, mobile: false});
 
@@ -132,13 +140,33 @@ try {
   assert.equal(await ev('document.getElementById("feature-form-tree-crown").disabled'),true);
   await set('#feature-form-tree-heightVariation',40); await set('#feature-form-tree-widthVariation',25);
   assert.equal(await ev('document.getElementById("feature-form-tree-heightVariation").value'),'40');
-  await set('#feature-form-tree-widthVariation','');
+  await typeScrub('feature-form-tree-widthVariation','');
+  assert.equal(await ev('document.getElementById("feature-form-tree-widthVariation-value").textContent'),'Preset');
+  // Zero is an authored value even when the inherited slider starts at zero.
+  await ev(`document.querySelector('.scrub[data-source="feature-form-tree-widthVariation"]').focus()`);await key('Home');await settled();
+  assert.equal(await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[1].params.widthVariation'),0);
+  await press('#undo');await ready();
   assert.equal(await ev('"widthVariation" in sculptCanvas.features.serialize().featureSet.tree.recipes[1].params'),false);
   for(let i=0;i<5;i++){await press('#undo');await ready();}
   await settled();
   assert.deepEqual(await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[1].params'),artistParams);
   assert.equal(await ev('document.getElementById("feature-form-tree-width").disabled'),true);
   assert.match(await ev('document.getElementById("feature-form-tree-width").title'),/reach/);
+  // Shared slider interaction: drag commits once, double-click types in display
+  // units, keyboard steps, and disabled shapes reject edits.
+  const thickness=await scrubPoint('feature-form-tree-thick');await drag(thickness,{x:thickness.x+32,y:thickness.y});await settled();
+  assert.notEqual(await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[1].params.thick'),3);
+  await press('#undo');await ready();assert.equal(await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[1].params.thick'),3);
+  await typeScrub('feature-form-tree-thick','7.2');
+  assert.equal(await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[1].params.thick'),3.6);
+  await press('#undo');await ready();
+  await ev(`document.querySelector('.scrub[data-source="feature-form-tree-thick"]').focus()`);await key('ArrowRight');await settled();
+  assert.equal(await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[1].params.thick'),3.1);
+  await press('#undo');await ready();
+  assert.equal(await ev(`document.querySelector('.scrub[data-source="feature-form-tree-width"]').getAttribute("aria-disabled")`),'true');
+  await ev(`document.querySelector('.scrub[data-source="feature-form-tree-width"]').focus()`);await key('ArrowRight');
+  assert.deepEqual(await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[1].params'),artistParams);
+  await scrubPoint('feature-form-tree-thick');await shot('panel-feature-sliders.png');
   assert.equal(await ev('sculptCanvas.features.addFeature("tree",20,20)'),true);
   const firstRecipe=await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[1]');
   await press('#feature-duplicate-recipe'); await set('#feature-recipe-name','Gold tendrils'); await set('#feature-tree-color','#bba144');

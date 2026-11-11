@@ -24,7 +24,7 @@ recipe; all features use the destination world's light and game palette.
 Recipes now expose more of the procedural shape and material model:
 
 - Trees, shrubs, and rocks have independent height and width variation (0–60% either
-  side of the nominal size). A blank field retains the preset's variation;
+  side of the nominal size). A slider reading **Preset** retains the preset's variation;
   zero fixes that dimension for each source shape in the recipe. Variation is
   deterministic across the recipe's variants. Editing height variation preserves
   the existing width distribution, and vice versa. Adding variants does not
@@ -45,6 +45,12 @@ Recipes now expose more of the procedural shape and material model:
 
 These edits use the existing recipe/undo/save/export flow. The shape controls
 are in **Shape and surface**; the two-color controls sit together below it.
+Numeric feature settings use the same compact scrub sliders as the rest of the
+editor: drag, Shift-drag for fine adjustments, arrow keys, or double-click/Enter
+to type an exact value. Clearing a typed recipe value restores its preset.
+Zero variation remains an explicit override. Variant count, gameplay values,
+and fill settings also use these sliders; the seed retains its numeric field.
+
 Variation changes the finite set of recipe variants, rather than introducing
 fresh random geometry for every placement. A mixed preset can still contain
 several nominal source shapes; use an individual catalog preset to author one
@@ -173,3 +179,20 @@ and pale-gold patches along enlarged tendrils on both Green and Moon. Feature
 colors retain shading; wood and shadows remain separate from the patch colors.
 Artifacts are outside the repository under
 `/private/tmp/nanolathe-map-editor/agent-feature-recipes/artist-*`.
+
+
+## Shared slider validation
+
+Measured: 46 numeric feature fields now use the existing scrub-slider component.
+The quick tier passes 183 tests with 0 of 34 terrain scenes changed. The feature
+browser regression passes drag, exact typed values, arrow steps, one-edit undo,
+disabled controls, clearing back to a preset, and choosing explicit zero from an
+inherited value, plus the existing save/world/export checks. The workspace
+regression also passes the shared slider's click, fine drag, keyboard, typed
+entry, cancellation, no-op, and disabled-state checks.
+
+By eye: the feature panel's compact bars, value labels, fill colors, and disabled
+states match the editor's other sliders. No generator parameters or ranges were
+changed. Screenshots and logs are in the external `slider-*` artifact folders.
+This UI follow-up has no unfinished work; the earlier unrelated terrain-control
+issue remains as documented above.

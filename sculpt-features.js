@@ -242,6 +242,14 @@ export async function mountMapFeatures(api) {
   $('feature-kind-note').textContent=unavailable.length?`No generated ${unavailable.map(k => PLURALS[k]).join(', ').replace(/, ([^,]*)$/,' or $1')} for this world yet.`:'';
   const settingInputs=[...doc.querySelectorAll('#feature-place [data-setting]')];
   const paramInputs=[...doc.querySelectorAll('#feature-place [data-param]')];
+  const numericInputs=[...doc.querySelectorAll('#map-features-panel input[type=range],#feature-selection-metal')];
+  function showNumericValue(input) {
+    const out=$(input.id+'-value'); if(!out)return;
+    const digits=(input.step.split('.')[1]||'').length;
+    out.textContent=input.dataset.unset==='true' ? input.dataset.unsetLabel||'Preset' : (input.dataset.valuePrefix||'')+Number(input.value).toFixed(digits)+(input.dataset.valueSuffix||'');
+  }
+  for(const input of numericInputs)input.addEventListener('input',()=>{input.dataset.unset='false';showNumericValue(input);});
+
   function updateRecipes(entry) {
     const select=$('feature-recipe');
     select.replaceChildren(...set[placeKind].recipes.map(r => {const o=doc.createElement('option');o.value=r.id;o.textContent=r.name;return o;})); select.value=entry.id;
@@ -264,9 +272,10 @@ export async function mountMapFeatures(api) {
         const fallback = k==='trunkColor' ? first.trunk?.[Math.floor(first.trunk.length/2)] || '#3b3323' : k==='accentColor' ? '#b8c277' : FORMS[kind]?.[k]?.[2];
         const value = ['species','canopyStyle'].includes(k) ? entry.params[k] ?? '' : entry.params[k] ?? (['height','width','reach','thick'].includes(k) ? nominal(k) : undefined) ?? first[k] ?? fallback;
         const inheritedVariation = k.endsWith('Variation') && entry.params[k] === undefined;
-        input.placeholder = inheritedVariation ? 'Preset' : '';
-        input.value = inheritedVariation ? '' : String(input.dataset.paramScale ? Number(value)*Number(input.dataset.paramScale) : value);
-        if(inheritedVariation && !reason) input.title='Uses the preset’s size variation. Enter 0 to fix this dimension, or clear to restore the preset.';
+        if(input.type==='range'){input.dataset.unset=String(inheritedVariation);input.dataset.unsetLabel='Preset';}
+        input.value = String(input.dataset.paramScale ? Number(value)*Number(input.dataset.paramScale) : value);
+        if(inheritedVariation && !reason) input.title='Uses the preset’s size variation. Double-click to type; enter 0 to fix this dimension, or clear to restore the preset.';
+        row.title=input.title;
       }
     }
   }
@@ -288,12 +297,13 @@ export async function mountMapFeatures(api) {
       input.disabled=Boolean(reason); input.title=reason; input.closest('.control')?.setAttribute('title',reason);
       if (value===undefined || doc.activeElement===input) continue;
       input.value=String(end===undefined?value:value[Number(end)]);
-      const out=$(input.id+'-value'); if (out) out.textContent=Number(input.value).toFixed(2);
+      showNumericValue(input);
     }
     const select=$('start-list'); select.replaceChildren(...starts.map((s,i) => { const option=doc.createElement('option'); option.value=i; option.textContent=`${i+1}: (${s.x}, ${s.z})`; return option; }));
     select.value=String(selectedStart); $('start-remove').disabled=starts.length<=1 || selectedStart<0;
     $('fill-kind').value=fill.kind; $('fill-region').value=fill.region;
     for (const [name,input] of fillInputs) if (doc.activeElement!==input) input.value=String(fill[name]);
+    numericInputs.forEach(showNumericValue);
     $('feature-count-line').textContent=`${placements.length} features · ${starts.length} starts`;
     $('feature-state').textContent=message;
     const hints={place:`Click a cell to place a ${LABELS[placeKind].toLowerCase()} (${placeVariant>=0?`variant ${placeVariant%MAX_VARIANTS+1}`:'a random variant'}). Select (V) moves, re-rolls and deletes placed features.`,erase:'Click or drag across feature footprints to erase them.',starts:'Click empty ground to add a start. Drag a marker, or Shift-click ground, to move the selected start.',fill:`${PLURALS[fill.kind]} fill: ${fill.region==='brush'?'drag a brush':fill.region==='lasso'?'draw a closed lasso':'click connected gentle dry ground'}. Space or middle-drag still pans.`};
@@ -362,7 +372,11 @@ export async function mountMapFeatures(api) {
     $('feature-selection-title').textContent=title; $('feature-selection-values').textContent=values;
     $('feature-selection-metal-control').hidden=!deposits.length;
     const metal=$('feature-selection-metal');
-    if (doc.activeElement!==metal) metal.value=deposits.length && deposits.every(p => p.metal===deposits[0].metal)?String(deposits[0].metal):'';
+    if (doc.activeElement!==metal) {
+      const mixed=!deposits.length || !deposits.every(p => p.metal===deposits[0].metal);
+      metal.dataset.unset=String(mixed);metal.dataset.unsetLabel='Mixed';metal.value=String(deposits[0]?.metal??0);
+      showNumericValue(metal);
+    }
     $('feature-reroll').disabled=!list.some(p => variantList(p.kind).filter(v => v.recipe===recipeId(p.v)).length>1);
   }
   function selectionChanged() { refreshSelection(); doc.dispatchEvent(new Event('terraform-feature-mode')); api.schedule(); }
@@ -385,15 +399,15 @@ export async function mountMapFeatures(api) {
   $('feature-remove-recipe').onclick=removeRecipe;
   for(const input of paramInputs)input.onchange=() => {
     const kind=input.dataset.paramKind, k=input.dataset.param, params={...activeRecipe(kind).params};
-    if(input.value==='') delete params[k];
+    if(input.value==='' || input.dataset.unset==='true') delete params[k];
     else params[k]=input.tagName==='SELECT'||input.type==='color'?input.value:Number(input.value)/(Number(input.dataset.paramScale)||1);
     if(!changeSet(kind,{params}))update();
   };
   $('feature-count').onchange=event => { if (!changeSet(placeKind,{count:Number(event.target.value)})) update(); };
   $('feature-new-set').onclick=() => { if (!guard()) return; const seed=hash32(activeRecipe().seed,Date.now()>>>0); changeSet(placeKind,{seed},`New variants of ${activeRecipe().name}; its placed features take the new looks.`); };
   for (const input of settingInputs) {
-    const [kind,name,end]=input.dataset.setting.split('.'),out=$(input.id+'-value');
-    input.addEventListener('input',() => { if (out) out.textContent=Number(input.value).toFixed(2); });
+    const [kind,name,end]=input.dataset.setting.split('.');
+    input.addEventListener('input',() => showNumericValue(input));
     input.addEventListener('change',() => {
       const value=input.type==='color'?input.value:Number(input.value); if (input.type!=='color' && !Number.isFinite(value)) { update(); return; }
       const next=end===undefined?value:Object.assign([...activeRecipe(kind)[name]],{[Number(end)]:value});
