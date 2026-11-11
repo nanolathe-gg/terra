@@ -215,6 +215,8 @@ KNOB_DEFAULTS.update(runoff=0, runoffScale=24, runoffConcentration=.65, runoffCu
 KNOB_DEFAULTS.update(faceJointWidth=1, faceSecondary=.35, faceContinuity=1, faceDetailPatch=0)
 # Whole blocks: each block wholly rock or wholly air, so the faces between blocks are the rock's skin (0: today's draped face).
 KNOB_DEFAULTS.update(faceWhole=0, faceWholeLarge=0, faceRegular=0)
+# Wind drifts: sand laid in the lee of rises along the wind (engine-bake.wgsl sandCover), a share of the Sand supply; 0 none.
+KNOB_DEFAULTS.update(sandLee=0)
 KNOB_DEFAULTS.update(faceFresh=0, faceRind=0, faceRindDepth=6, faceRindTone=-.22, faceRindWarmth=.35, faceRindRough=.65)
 KNOB_DEFAULTS.update(bedCycleVary=0, faceBedVary=1, faceBreak=0, faceJointTilt=0, faceScaleVary=0, faceFold=0, faceSpall=0, faceClast=0, faceClastSize=12, faceMineral=0)
 KNOB_DEFAULTS.update(faceStretch=1, faceBlockHeight=1, faceRound=0, faceJoint=0.35, faceExtrude=0, faceLamina=0, faceLaminaSize=3, faceScratchLength=50, faceScratchAngle=0, faceGritSize=1.3)

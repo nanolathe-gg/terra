@@ -808,6 +808,19 @@ fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
             raw = max(raw, tap.a * (1.0 - smoothstep(0.1, 1.0, r / reach)) * downhill * flatHere);
         }
     }
+    // Wind drifts: sand also settles where a rise upwind shelters level ground, whatever the water did. Eight looks upwind, 12 to 96 px, each
+    // wandering a little to the side so the drift's edge is ragged: the steepest sight line to the ground there is the shelter (a rise of one
+    // in eight shelters a little, one in two wholly), so a drift is deepest against the rise and thins downwind, about six times as long as
+    // the rise is high. A share of the supply, never more sand than the supply gives.
+    if (u.sandLee > 0.0 && flatHere > 0.0) {
+        let a = radians(u.windAngle); let up = -vec2f(cos(a), sin(a)); let hHere = baseHeight(p); var shelter = 0.0;
+        for (var k = 1; k <= 8; k++) {
+            let d = f32(k) * 12.0;
+            let q = p + up * d + vec2f(-up.y, up.x) * valueNoise(p / 31.0 + f32(k) * 1.7) * d * 0.25;
+            shelter = max(shelter, (baseHeight(q) - hHere) / d);
+        }
+        raw = max(raw, min(u.sand, 1.0) * u.sandLee * smoothstep(0.12, 0.5, shelter) * flatHere);
+    }
     let lump = clamp(0.25 + 1.5 * (0.5 + 0.5 * (0.55 * valueNoise(p / 61.0 + 5.0) + 0.3 * valueNoise(p / 23.0 + 29.0) + 0.15 * valueNoise(p / 9.0 + 3.0))), 0.0, 1.4);
     // The lumps thin the sand anywhere but add to it only on flat ground; a flank keeps less of the Time pass's sand than the plain does.
     let field = min(raw * min(lump, 1.0 + 0.4 * flatHere), 1.0) * (1.0 - 0.7 * smoothstep(0.1, 0.45, slope)) * depositsAt(p);

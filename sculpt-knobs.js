@@ -22,7 +22,7 @@ export const KNOBS = [
   ['Shine: crystal', [['shineCrystal','Gloss (highlight strength)',0,2,.05,0],['shineCrystalSharp','Reflection sharpness (polish)',2,200,2,24],['shineCrystalRough','Micro roughness (grain slope)',0,2,.05,0],['shineCrystalScale','Grain width (px)',1,24,.5,6]]],
   ['Loose stone', [['looseSupply','Supply',0,1,.05,0],['looseSize','Size (median, px)',2,24,1,6],['stoneSort','Size sorting',0,1,.05,.6],['stoneRound','Rounded fragments (share)',0,1,.05,0],['stoneSlab','Flat fragments (share)',0,1,.05,.05],['looseKnoll','Knolls (share of stones that are ground rings around a hollow)',0,1,.05,0]]],
   ['Sand', [['sand','Deposit supply',0,2,.05,0],
-    ['wind','Ripple direction (degrees)',0,360,5,20],['sandDust','Dusting tint',0,1,.05,.5],['sandGrass','Vegetation through sand',0,1,.05,.6],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
+    ['sandLee','Wind drifts (sand in the lee of rises)',0,2,.05,0],['wind','Wind toward (degrees; ripples and drifts)',0,360,5,20],['sandDust','Dusting tint',0,1,.05,.5],['sandGrass','Vegetation through sand',0,1,.05,.6],['sandLight','Weathered lightness',0,1,.05,.25],['sandGrain','Rock grain in sand',0,1,.05,.8],
     ['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4]]],
   ['Cracks', [['crackSeverity','Frost (crack depth; above 1 the fine fractures fill in)',0,1.5,.05,.6],['crackSpacing','Block size (px)',16,96,2,40],
     ['crackMajor','Major cracks',0,1,.05,.8],['crackMinor','Minor cracks',0,1,.05,.75],['crackHairline','Hairline crazing',0,1,.05,.6],['crackBlocks','Facets (block relief)',0,1.5,.05,.6],
