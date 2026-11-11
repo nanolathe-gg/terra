@@ -266,6 +266,8 @@ fn lsStone(q0: vec2f, st: LsCand) -> vec2f {
     let q = turn(-ang) * q0 / st.r;
     let round = lsU(h3) < u.stoneRound;
     let slab = lsU(h4) < u.stoneSlab;
+    // Boulders turns the large fragments into blocks one by one: a share of them that grows with the control, all of them from half way up.
+    let block = u.boulders > 0.0 && st.r >= 7.0 && lsU(lsPcg(st.h0 ^ 0x4b1d27c3u)) < 2.0 * u.boulders;
     var h = 0.0; var d = 0.0;
     if (slab) {
         let hb = vec2f(1.0, asp * 0.7);
@@ -273,7 +275,7 @@ fn lsStone(q0: vec2f, st: LsCand) -> vec2f {
         d = length(max(qq, vec2f(0.0))) + min(max(qq.x, qq.y), 0.0) - 0.25;
         let tilt = 0.25 * (vec2f(lsU(h4 * 7u + 1u), lsU(h4 * 13u + 5u)) - 0.5);
         h = select(0.0, (0.42 + dot(q, tilt)) * smoothstep(0.0, 0.18, -d), d < 0.0);
-    } else if (u.boulders > 0.0 && st.r >= 7.0 && !round) {
+    } else if (block && !round) {
         // A block: five to seven uneven, steep sides under a top that is one tilted plane with a corner broken off it, so the sun lights the top, one
         // or two sides and the break differently.
         let N = 5 + i32(lsU(h4) * 3.0);
@@ -321,7 +323,7 @@ fn lsStone(q0: vec2f, st: LsCand) -> vec2f {
     }
     // Partly buried: the fines round the stone cut it below its top; the outline shrinks with the burial.
     var bury = clamp(0.12 + 0.55 * st.fines + 0.2 * (lsU(h2 * 11u + 3u) - 0.5), 0.0, 0.85);
-    if (u.boulders > 0.0 && st.r >= 7.0) { bury *= 0.4; }   // a block stands on the ground more than in it
+    if (block) { bury *= 0.4; }   // a block stands on the ground more than in it
     let hv = max(0.0, h - bury) / (1.0 - bury);
     let dv = select(d + 0.6 * bury, 0.6 * (bury - h), d < 0.0);
     return vec2f(hv, dv * st.r);
