@@ -2777,6 +2777,44 @@ branch, not landed].**
   archipelago-3, crystal-2 and desert-1 differ from main in a few pixels
   with every new control at 0 (count not taken for the first two).
 
+**The debris's edge [built on `realism/debris-growth`, 2026-11-10; not
+landed].** The owner, of a map's cliff foot: "the rock is good, the debris
+is good, but the transition from debris/gravel/sand into grass and moss is
+a little too regular. In nature the grass and moss would unevenly or based
+on waterfall and flow grow into various areas."
+
+- *Cause [measured].* The apron is rock weather's deposit (with Cliff
+  debris at 0 it is gone; Sand at 0 changes nothing). It was mixed into the
+  ground as a linear tint of a field kept in 4 px cells, so its edge was a
+  soft contour of the deposit's thickness.
+- *What changed (`engine-frag.wgsl` `debrisLie`, `debrisRegrown`).* The
+  ground's color reads the deposit at a point moved per pixel (14 px over
+  tens of px, 6 px at 9 px, a pixel or two), and the ground takes the
+  debris back where it is thinner than the growth needs: by stretch of the
+  apron, by clump, by tuft, and more where rock weather's runoff leaves it
+  damp. Damp regrowth is part moss. What is left covers the ground as
+  gravel does. The existing vegetation value scales the growth. No new
+  control. Stones, relief and heights are untouched.
+- *Measured.* 3 of 34 scenes change (green-modern-1/2/3: 6.3, 10.8, 7.7%).
+  A granite mesa fixture on classic Green: 17.6% of pixels, `heights.bin`
+  and the clay render byte-identical; tile sizes 128, 256 and 512 give 0
+  differing pixels (main: 1). On that fixture runoff reaches 24% of the
+  debris's pixels (16% of the thin debris), so most of the unevenness is
+  the patterns, not the water. `repro/check.sh land` and export bytes
+  pass; the hover previews regenerate unchanged. Draw time on modern
+  Green (`repro/perf.mjs map16`, runs noisy that night): the cleanest pair
+  2285 ms against main's 2276 to the final picture on load, 43.8 against
+  44.8 chunk paints a second while dragging, 1808 against 1776 ms after
+  release; two more branch runs 3020 and 2288 ms, 43.5 and 41.6, 1844 and
+  1768; two more main runs 4471 and 2390 ms, 16.2 and 38.1, 2446 and 2582.
+- *By eye.* The haze and its brown fringe are gone; grass clumps stand
+  inside the debris and gravel patches lie outside it. Thin debris is more
+  solid where it remains.
+- *Open [proposed by Claude].* A control for the growth's strength apart
+  from the world's vegetation; growth that follows the water further
+  (rock weather routes runoff only 64 px); the same edge for sand and for
+  rock meeting grass, which still fade as before.
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
