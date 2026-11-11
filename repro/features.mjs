@@ -53,20 +53,20 @@ try {
   list = await placements(); assert.equal(list.length, 4); assert.deepEqual(list.filter(p => p.kind === 'tree').map(p => p.v), [1, 1]); assert.equal(list.filter(p => p.kind === 'rock').length, 1);
   report.place = list.map(p => `${p.kind}${p.v}@${p.x},${p.z}`).join(' ');
   // A set edit keeps placed features; New set draws other looks and one undo brings the old seed back.
-  await set('#feature-kind', 'tree'); const seed = await ev('sculptCanvas.features.serialize().featureSet.tree.seed');
-  await set('#feature-count', 9); assert.equal(await ev('sculptCanvas.features.serialize().featureSet.tree.count'), 9); assert.equal((await placements()).length, 4);
-  await press('#feature-new-set'); assert.notEqual(await ev('sculptCanvas.features.serialize().featureSet.tree.seed'), seed);
-  await press('#undo'); await ready(); assert.equal(await ev('sculptCanvas.features.serialize().featureSet.tree.seed'), seed);
+  await set('#feature-kind', 'tree'); const seed = await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[0].seed');
+  await set('#feature-count', 9); assert.equal(await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[0].count'), 9); assert.equal((await placements()).length, 4);
+  await press('#feature-new-set'); assert.notEqual(await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[0].seed'), seed);
+  await press('#undo'); await ready(); assert.equal(await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[0].seed'), seed);
   await settled(); await shot('panel-trees.png', {x: 1137, y: 50, width: 303, height: 700});
   // The artist colors and rock angularity: an edit is kept in the set, redraws the kind's variants, keeps placements, and undoes.
   const thumb = () => ev('(()=>{const c=document.querySelector("#feature-variants button[data-variant=\\"0\\"] canvas");return c&&c.dataset.drawn?c.toDataURL():"";})()');
-  const leaf0 = await ev('sculptCanvas.features.serialize().featureSet.tree.color'), before = await thumb();
+  const leaf0 = await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[0].color'), before = await thumb();
   await set('#feature-tree-color', '#b8732a'); await settled();
-  assert.equal(await ev('sculptCanvas.features.serialize().featureSet.tree.color'), '#b8732a'); assert.equal((await placements()).length, 4);
+  assert.equal(await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[0].color'), '#b8732a'); assert.equal((await placements()).length, 4);
   const after = await thumb(); assert.ok(before && after && after !== before, 'the leaf color redraws the variants');
-  await press('#undo'); await ready(); assert.equal(await ev('sculptCanvas.features.serialize().featureSet.tree.color'), leaf0);
+  await press('#undo'); await ready(); assert.equal(await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[0].color'), leaf0);
   await set('#feature-kind', 'rock'); await set('#feature-angular', 0.1); await set('#feature-rock-color', '#b07a5a'); await settled();
-  assert.deepEqual(await ev('(({angular,color})=>({angular,color}))(sculptCanvas.features.serialize().featureSet.rock)'), {angular: 0.1, color: '#b07a5a'});
+  assert.deepEqual(await ev('(({angular,color})=>({angular,color}))(sculptCanvas.features.serialize().featureSet.rock.recipes[0])'), {angular: 0.1, color: '#b07a5a'});
   await shot('panel-rocks.png', {x: 1137, y: 50, width: 303, height: 700});
   report.controls = 'leaf color redraws and undoes; rock angularity and color are kept in the set';
   // Select (V): click the deposit, drag it 4 cells right and 2 down, set its metal, re-roll it.
@@ -114,6 +114,63 @@ try {
     await settled(); await shot(`${world}-rock-tree.png`);
   }
   report.everyWorld = 'Moon and Zhon place every kind (a kind a world lacks is Green\'s)';
+  // The shared catalog: import, duplicate, recolor, edit and place independently.
+  await send('Page.navigate', {url: `${server}/sculpt.html?biome=green&mapX=4&mapY=4&gpuMB=512&heapMB=1536`}); await ready();
+  await press('#feature-tool'); await set('#feature-kind','tree');
+  await set('#feature-preset','red-tree-0'); await press('#feature-add-recipe');
+  await set('#feature-recipe-name','Blue tendrils'); await set('#feature-tree-color','#325caa'); await set('#feature-form-tree-curl',.8);
+  assert.equal(await ev('document.getElementById("feature-form-tree-width").disabled'),true);
+  assert.match(await ev('document.getElementById("feature-form-tree-width").title'),/reach/);
+  assert.equal(await ev('sculptCanvas.features.addFeature("tree",20,20)'),true);
+  const firstRecipe=await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[1]');
+  await press('#feature-duplicate-recipe'); await set('#feature-recipe-name','Gold tendrils'); await set('#feature-tree-color','#bba144');
+  assert.equal(await ev('sculptCanvas.features.addFeature("tree",30,20)'),true);
+  assert.deepEqual(await ev('sculptCanvas.features.serialize().featureSet.tree.recipes[1]'),firstRecipe);
+  await set('#feature-count',2); const mixed=await ev('sculptCanvas.features.serialize()');
+  assert.equal(mixed.features.filter(p=>p.kind==='tree').every(p=>p.v>=16),true);
+  await set('#feature-kind','rock'); await set('#feature-preset','lava-rock-0'); await press('#feature-add-recipe');
+  await set('#feature-rock-color','#6977a5'); await set('#feature-form-rock-tall',.6);
+  assert.equal(await ev('sculptCanvas.features.addFeature("rock",40,30)'),true);
+  // A larger footprint edit is atomic: an invalid map keeps its recipes and placements.
+  assert.equal(await ev('sculptCanvas.features.changeSet("rock",{params:{cells:"16x16"}})'),true);
+  assert.equal(await ev('sculptCanvas.features.addFeature("tree",56,30)'),true);
+  const safe=await ev('sculptCanvas.features.serialize()');
+  assert.equal(await ev('sculptCanvas.features.changeSet("tree",{params:{cells:"16x16"}})'),false);
+  assert.deepEqual(await ev('sculptCanvas.features.serialize()'),safe);
+  await press('#undo'); await ready(); // undo the neighboring tree
+  await press('#undo'); await ready(); // undo the large footprint
+  // Fill mixes the map's independent recipes and keeps their stable variant addresses.
+  const filled=await ev('sculptCanvas.features.fillRegion("tree",{type:"brush",points:[{x:1152,z:768}],radius:80},{density:50,margin:0,gap:1,seed:27})');
+  assert.ok(filled.added>0);
+  assert.ok(await ev('sculptCanvas.features.serialize().fill.generated.some(p=>p.v>=16)'));
+  await press('#undo');await ready();
+  assert.equal(await ev('sculptCanvas.features.serialize().fill.generated.length'),0);
+  // Reorder recipes and reload: placed variant addresses still resolve to the same recipes.
+  const beforeReorder=await ev('sculptCanvas.features.serialize()');
+  await ev('(()=>{const s=sculptRegion.sketch();s.mapData.featureSet.tree.recipes.reverse();sculptRegion.loadSketch(s);return true;})()'); await ready();
+  assert.deepEqual(await placements(),beforeReorder.features);
+  await ev('(async()=>{sculptCanvas.zoom(1);const v=document.getElementById("viewport");v.scrollLeft=180;v.scrollTop=100;v.dispatchEvent(new Event("scroll"));await sculptCanvas.idle();return true;})()'); await settled(); await shot('mixed-recipes.png');
+  const saved=await ev('sculptCanvas.features.serialize()');
+  await set('#biome-select','biome:moon'); await sleep(500); await ready();
+  assert.equal(await ev('sculptRegion.sketch().biome'),'moon');
+  assert.deepEqual(await ev('sculptCanvas.features.serialize().featureSet'),saved.featureSet);
+  assert.deepEqual(await placements(),saved.features);
+  await ev('(async()=>{sculptCanvas.zoom(1);const v=document.getElementById("viewport");v.scrollLeft=180;v.scrollTop=100;v.dispatchEvent(new Event("scroll"));await sculptCanvas.idle();return true;})()'); await settled(); await shot('mixed-recipes-moon.png');
+  const pack=await ev(`sculptMap.export('Mixed Recipes').then(r=>({count:r.featureCount,check:r.selfCheck}),e=>({error:e.message}))`);
+  assert.equal(pack.error,undefined);assert.equal(pack.count,saved.features.length);assert.equal(pack.check.archive,true);
+  // Custom worlds capture their recipes; clearing a map uses those defaults.
+  await set('#world-new-name','Recipe test world');await press('#world-new');await sleep(500);await ready();
+  assert.deepEqual(await ev('sculptCanvas.features.serialize().featureSet'),saved.featureSet);
+  await ev('sculptCanvas.features.load({}),true');
+  assert.deepEqual(await ev('sculptCanvas.features.serialize().featureSet'),saved.featureSet);
+  const worldFile=await ev(`(async()=>{const original=URL.createObjectURL;let blob;try{URL.createObjectURL=b=>{blob=b;return original(b);};document.getElementById('world-export').click();return JSON.parse(await blob.text());}finally{URL.createObjectURL=original;}})()`);
+  assert.deepEqual(worldFile.world.featureSet,saved.featureSet);
+  const worldPath=join(out,'mixed.world.json');writeFileSync(worldPath,JSON.stringify(worldFile));
+  const dom=await send('DOM.getDocument'),fileNode=await send('DOM.querySelector',{nodeId:dom.result.root.nodeId,selector:'#world-file'});
+  await send('DOM.setFileInputFiles',{nodeId:fileNode.result.nodeId,files:[worldPath]});await sleep(500);await ready();
+  await ev('sculptCanvas.features.load({}),true');
+  assert.deepEqual(await ev('sculptCanvas.features.serialize().featureSet'),saved.featureSet);
+  report.recipes='Imported Red tendrils and Lava rocks; independent colors, duplicate, count edits, atomic footprint rejection, reorder/load, fill/undo, world switch, custom-world defaults, world file export/import and archive export passed';
   assert.deepEqual(errors, []);
   console.log(JSON.stringify(report, null, 1));
 } finally { ws?.close(); browser.kill(); }

@@ -1,4 +1,4 @@
-// Procedural map features for Green: trees, burning and burnt trees, shrubs, rocks, scars, metal deposits, vents.
+// Procedural map features: trees, burning and burnt trees, shrubs, rocks, scars, metal deposits, vents.
 // Plain ES module, no dependencies, same bytes in Node and in the browser. Everything is built in the game's
 // 256-color index space (the indices below are the game palette's; `palette` is only needed to turn indices
 // into RGBA or to fit deposits and vents to a ground picture). Built from the written spec only. The burn sequences (fire)
@@ -195,10 +195,10 @@ function quantize(c, ctx, grain = 0, seed = 1) {
 }
 // A palette sprite lit by the world's colors (sprites drawn as indices: burnt trees, scars, shadows, deposit stone); `lit` the
 // direct sun term for every pixel (0: shade and shadows, which take the sky's color). Unchanged when the light is white.
-function tintSprite(s, ctx, lit) {
-  if (!s || !tintOf(ctx)) return s;
+function tintSprite(s, ctx, lit, recolor = null) {
+  if (!s || !tintOf(ctx) && (!recolor || recolor.to === recolor.from)) return s;
   const c = newCanvas(s.w, s.h, s.ax, s.ay), P = ctx.palette;
-  for (let k = 0; k < s.w * s.h; k++) if (s.a[k]) { c.rgb.set(P[s.idx[k]], k * 3); c.lit[k] = lit; c.a[k] = 1; }
+  for (let k = 0; k < s.w * s.h; k++) if (s.a[k]) { c.rgb.set(recolor ? rampOf([recolorHex(hexOf(P[s.idx[k]]), recolor)])[0] : P[s.idx[k]], k * 3); c.lit[k] = lit; c.a[k] = 1; }
   return quantize(c, ctx);
 }
 
@@ -961,11 +961,12 @@ const NAMES = { tree: 'Tree', burnt: 'TreeDead', shrub: 'Shrub', rock: 'Rock', s
 // Body, shadow and gameplay do not depend on it: each draws from its own seeded stream.
 export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
   const P = { ...DEFAULTS[kind], ...params };
+  if (P.trunkColor && P.trunk?.length) P.trunk = recolorStops(P.trunk, {from: P.trunk[Math.floor(P.trunk.length / 2)], to: P.trunkColor});
   const rr = rng(mix32(seed, 0xBEEF));
   let body, shadow = null, bodyBlend = 1, burn = null, burnt = null, gameplay = {}, footprint = [1, 1];
   const L = lightOf(ctx);
   if (kind === 'tree' && (P.species === 'dead' || P.species === 'deadConifer')) {   // a standing dead tree (retail Green's Tree1-6Dead): the bare successor's drawing as a tree of its own, which neither burns nor leaves a successor
-    const B = generateFeature('burnt', { species: P.species === 'deadConifer' ? 'conifer' : 'broadleaf', height: P.height, width: P.width, forks: P.forks ?? 3, ash: P.ash ?? 0.15, shadowLen: P.shadowLen, shadowColor: P.shadowColor, trunk: P.trunk }, seed, ctx);
+    const B = generateFeature('burnt', { species: P.species === 'deadConifer' ? 'conifer' : 'broadleaf', height: P.height, width: P.width, forks: P.forks ?? 3, ash: P.ash ?? 0.15, shadowLen: P.shadowLen, shadowColor: P.shadowColor, trunk: P.trunk, trunkColor: P.trunkColor }, seed, ctx);
     return { ...B, kind: 'tree', name: `Tree_${(seed >>> 0).toString(36)}`, params: P, burn: null, burnt: null, gameplay: { ...B.gameplay, energy: pickValue(P.energy, undefined, rr) } };
   }
   if (kind === 'tree') {
@@ -984,7 +985,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     gameplay = { energy: pickValue(P.energy, sizeFrac, rr), metal: 0, blocking: true, reclaimable: true, flamable: true, burnTicks: 192, spreadChance: conifer ? 30 : 90 };
   } else if (kind === 'burnt') {
     const B = burntFrame(P, seed, ctx);
-    body = tintSprite(B.body, ctx, ctx.tint?.up ?? 0.7);
+    body = tintSprite(B.body, ctx, ctx.tint?.up ?? 0.7, P.trunkColor ? {from: '#3b3323', to: P.trunkColor} : null);
     shadow = tintSprite(makeShadow(body, { side: L.shadowSide, shx: 0.55, up: 0.6, colors: shadowColors(P, ctx), soften: 0, grow: 0.15 }, rng(mix32(seed, 42))), ctx, 0);
     gameplay = { energy: pickValue(P.energy, undefined, rr), metal: 0, blocking: true, reclaimable: true, flamable: false };
   } else if (kind === 'shrub') {

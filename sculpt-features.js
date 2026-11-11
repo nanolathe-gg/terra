@@ -1,7 +1,7 @@
 // Generated map features (owner, November 5-6 2026). Each map carries its own feature set: a recipe in the save (sculpt-feature-set.js)
 // from which sculpt-feature-gen.js draws every variant, lit by the map's light. Placements belong to the map, never to its baked terrain
 // art. Deposits and vents are painted into the ground: the view draws them from the export art under them, with the export's painter.
-import {GROUND_KINDS,FILL_KINDS,LABELS,PLURALS,MAX_VARIANTS,worldKinds,defaultSet,normalizeSet,variants as kindVariants,pickVariant,typeLabel,normalizePlacement,hash32} from './sculpt-feature-set.js';
+import {GROUND_KINDS,FILL_KINDS,LABELS,PLURALS,MAX_VARIANTS,worldKinds,normalizeSet,variants as kindVariants,pickVariant,typeLabel,normalizePlacement,hash32,MAX_RECIPES,recipeId,makeRecipe,featureCatalog,FORMS,controlRequirement} from './sculpt-feature-set.js';
 const CELL=16,PATCH=128,DEFAULT_FILL={kind:'tree',region:'brush',density:15,clustering:.5,gap:1,seed:2701,margin:96,radius:128};
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 const key=p => p.kind+'@'+p.x+','+p.z;
@@ -61,7 +61,7 @@ export async function mountMapFeatures(api) {
   if (!map) return {serialize:() => ({features:[],featureSet:{},starts:[],fill:{...DEFAULT_FILL}}),load:nothing,draw:nothing,deactivate:nothing,activate:() => false,clearSelection:nothing,pointerSelect:() => false,hitAt:() => null,fitGround:async () => false,groundChanged:nothing,stats:() => ({imageBytes:0}),get selectionCount(){return 0;},get active(){return false;},get busy(){return false;}};
   const cols=map.playRight/CELL,rows=map.playBottom/CELL,shift=Math.floor(config.baseHeight/2),kinds=worldKinds(config);
   const defaults=() => defaultStarts(map);
-  let set=defaultSet(config),placements=[],starts=defaults(),fill={...DEFAULT_FILL},generated=new Set(),mode='',placeKind='deposit',placeVariant=-1,selectedStart=0,rolls=0;
+  let set=normalizeSet(config.featureSet,config),placements=[],starts=defaults(),fill={...DEFAULT_FILL},generated=new Set(),mode='',placeKind='deposit',placeVariant=-1,selectedStart=0,rolls=0;
   let selection=new Set(),gesture=null,hover=null,space=false,message='';
   const panPointers=new Set(),controls=$('map-features-controls'),buttons=new Map([...doc.querySelectorAll('[data-feature-mode]')].map(b => [b.dataset.featureMode,b]));
   const enabled=() => api.enabled();
@@ -70,9 +70,13 @@ export async function mountMapFeatures(api) {
 
   // ---- the set's variants ----
   // Each set edit makes a new `set`, so a kind's list is kept until the set object changes (draw asks for it per feature, per frame).
-  const lists=new Map(); let listsOf=null;
-  function variantList(kind) { if (listsOf!==set) { lists.clear(); listsOf=set; } let list=lists.get(kind); if (!list) { list=kindVariants(kind,set,config); lists.set(kind,list); } return list; }
-  const variantOf=p => variantList(p.kind)[p.v];
+  const lists=new Map(),addresses=new Map(); let listsOf=null;
+  function variantList(kind) { if (listsOf!==set) { lists.clear(); addresses.clear(); listsOf=set; } let list=lists.get(kind); if (!list) { list=kindVariants(kind,set,config); lists.set(kind,list); addresses.set(kind,new Map(list.map(v => [v.index,v]))); } return list; }
+  const variantOf=p => { variantList(p.kind); return addresses.get(p.kind).get(p.v); };
+  const activeRecipes={};
+  const activeRecipe=(kind=placeKind) => set[kind]?.recipes.find(r => r.id===activeRecipes[kind]) || set[kind]?.recipes[0];
+  const activeList=(kind=placeKind) => variantList(kind).filter(v => v.recipe===activeRecipe(kind)?.id);
+  const depositMetal=() => activeRecipe('deposit')?.metal ?? 127;
   const footprint=p => variantOf(p)?.footprint||[1,1];
   const rectangle=p => { const [fw,fz]=footprint(p); return {x0:p.x*CELL,z0:p.z*CELL,x1:(p.x+fw)*CELL,z1:(p.z+fz)*CELL}; };
   function pointDistance(p,r) { return Math.hypot(Math.max(r.x0-p.x,0,p.x-r.x1),Math.max(r.z0-p.z,0,p.z-r.z1)); }
@@ -91,15 +95,6 @@ export async function mountMapFeatures(api) {
     const kept=list.filter(p => { const drop=generated.has(key(p)) && scatter(p) && nearMargin(p,margin,list,bases); if (drop) { generated.delete(key(p)); selection.delete(p); removed++; } return !drop; });
     return {kept,removed};
   }
-  // A placement's variant after the set changed: its own index while the set still has it, else one of the same footprint, so the
-  // features already placed keep their footprint (null when the kind has none of that size any more).
-  function refit(p,list=variantList(p.kind)) {
-    if (p.v<list.length) return p.v;
-    const [fw,fz]=footprint({...p,v:p.v%list.length}),old=p.oldFootprint;
-    const same=list.filter(v => old?v.footprint[0]===old[0]&&v.footprint[1]===old[1]:v.footprint[0]===fw&&v.footprint[1]===fz);
-    return same.length?same[p.v%same.length].index:null;
-  }
-
   // ---- pixels: a worker draws sprites and paints deposits and vents ----
   let worker=null,jobId=0,workerError='';
   const jobs=new Map();
@@ -154,7 +149,7 @@ export async function mountMapFeatures(api) {
     for (const [k,s] of stamps) if (!live.has(k)) { stamps.delete(k); release(s); }
     for (const p of placements) if (GROUND_KINDS.includes(p.kind)) { const o=exactOrigin(p); if (o) origins.add(o.ox+','+o.oy); }
     for (const [k,g] of grounds) if (!origins.has(k) && !g.pending) grounds.delete(k);
-    for (const kind of GROUND_KINDS) for (const v of variantList(kind)) keep.add('ground|'+kind+'|'+v.seed+'|'+JSON.stringify(kind==='deposit'?{...v.params,metal:set.deposit.metal}:v.params));
+    for (const kind of GROUND_KINDS) for (const v of variantList(kind)) keep.add('ground|'+kind+'|'+v.seed+'|'+JSON.stringify(kind==='deposit'?{...v.params,metal:depositMetal()}:v.params));
     for (const k of thumbs.keys()) if (!keep.has(k)) thumbs.delete(k);
   }
 
@@ -246,6 +241,27 @@ export async function mountMapFeatures(api) {
   for (const option of $('fill-kind').options) option.disabled=!kinds.includes(option.value);
   $('feature-kind-note').textContent=unavailable.length?`No generated ${unavailable.map(k => PLURALS[k]).join(', ').replace(/, ([^,]*)$/,' or $1')} for this world yet.`:'';
   const settingInputs=[...doc.querySelectorAll('#feature-place [data-setting]')];
+  const paramInputs=[...doc.querySelectorAll('#feature-place [data-param]')];
+  function updateRecipes(entry) {
+    const select=$('feature-recipe');
+    select.replaceChildren(...set[placeKind].recipes.map(r => {const o=doc.createElement('option');o.value=r.id;o.textContent=r.name;return o;})); select.value=entry.id;
+    const presets=$('feature-preset');
+    if(presets.dataset.kind!==placeKind) { presets.replaceChildren(...featureCatalog(config,placeKind).map(p => {const o=doc.createElement('option');o.value=p.id;o.textContent=p.name;return o;})); presets.dataset.kind=placeKind; }
+    $('feature-add-recipe').disabled=!presets.options.length || set[placeKind].recipes.length>=MAX_RECIPES;
+    $('feature-duplicate-recipe').disabled=set[placeKind].recipes.length>=MAX_RECIPES;
+    const used=placements.some(p => p.kind===placeKind && recipeId(p.v)===entry.id);
+    $('feature-remove-recipe').disabled=used || set[placeKind].recipes.length<=1;
+    $('feature-remove-recipe').title=used?'Remove this recipe’s placed features first.':set[placeKind].recipes.length<=1?'Keep at least one recipe of each kind.':'';
+    if(doc.activeElement!==$('feature-recipe-name'))$('feature-recipe-name').value=entry.name;
+    const first=activeList()[0]?.params || {};
+    for(const input of paramInputs) {
+      const k=input.dataset.param, kind=input.dataset.paramKind;
+      const row=input.closest('.control'); row.hidden=kind!==placeKind;
+      const reason=controlRequirement(kind,k,first); input.disabled=Boolean(reason); input.title=reason;
+      const note=row.querySelector('[data-requirement]'); if(note)note.textContent=reason;
+      if(doc.activeElement!==input)input.value=String((k==='species' ? entry.params.species ?? '' : first[k]) ?? (k==='trunkColor'?(first.trunk?.[Math.floor(first.trunk.length/2)] || '#3b3323'):FORMS[kind]?.[k]?.[2] ?? 'broadleaf'));
+    }
+  }
   function update() {
     controls.disabled=!enabled();
     for (const [name,button] of buttons) { button.setAttribute('aria-pressed',String(mode===name)); button.disabled=name==='fill' && !FILL_KINDS.some(k => kinds.includes(k)); button.title=button.disabled?'Fill places generated trees, shrubs and rocks; this world has none yet.':''; }
@@ -253,12 +269,15 @@ export async function mountMapFeatures(api) {
     $('feature-starts').hidden=mode!=='starts';
     $('feature-fill').hidden=mode!=='fill'; if (mode==='fill') $('feature-fill').open=true;
     $('feature-kind').value=placeKind;
-    const entry=set[placeKind];
+    const entry=activeRecipe();
+    updateRecipes(entry);
     if (doc.activeElement!==$('feature-count')) $('feature-count').value=String(entry?.count??1);
     $('feature-count').max=String(MAX_VARIANTS);
     for (const row of doc.querySelectorAll('#feature-place [data-kind]')) row.hidden=row.dataset.kind!==placeKind;
     for (const input of settingInputs) {
-      const [kind,name,end]=input.dataset.setting.split('.'),value=set[kind]?.[name];
+      const [kind,name,end]=input.dataset.setting.split('.'),value=activeRecipe(kind)?.[name];
+      const sample=activeList(kind).map(v => v.params),reason=sample.length && sample.every(p => controlRequirement(kind,name,p))?controlRequirement(kind,name,sample[0]):'';
+      input.disabled=Boolean(reason); input.title=reason; input.closest('.control')?.setAttribute('title',reason);
       if (value===undefined || doc.activeElement===input) continue;
       input.value=String(end===undefined?value:value[Number(end)]);
       const out=$(input.id+'-value'); if (out) out.textContent=Number(input.value).toFixed(2);
@@ -269,25 +288,25 @@ export async function mountMapFeatures(api) {
     for (const [name,input] of fillInputs) if (doc.activeElement!==input) input.value=String(fill[name]);
     $('feature-count-line').textContent=`${placements.length} features · ${starts.length} starts`;
     $('feature-state').textContent=message;
-    const hints={place:`Click a cell to place a ${LABELS[placeKind].toLowerCase()} (${placeVariant>=0?`variant ${placeVariant+1}`:'a random variant'}). Select (V) moves, re-rolls and deletes placed features.`,erase:'Click or drag across feature footprints to erase them.',starts:'Click empty ground to add a start. Drag a marker, or Shift-click ground, to move the selected start.',fill:`${PLURALS[fill.kind]} fill: ${fill.region==='brush'?'drag a brush':fill.region==='lasso'?'draw a closed lasso':'click connected gentle dry ground'}. Space or middle-drag still pans.`};
+    const hints={place:`Click a cell to place a ${LABELS[placeKind].toLowerCase()} (${placeVariant>=0?`variant ${placeVariant%MAX_VARIANTS+1}`:'a random variant'}). Select (V) moves, re-rolls and deletes placed features.`,erase:'Click or drag across feature footprints to erase them.',starts:'Click empty ground to add a start. Drag a marker, or Shift-click ground, to move the selected start.',fill:`${PLURALS[fill.kind]} fill: ${fill.region==='brush'?'drag a brush':fill.region==='lasso'?'draw a closed lasso':'click connected gentle dry ground'}. Space or middle-drag still pans.`};
     $('feature-help').textContent=hints[mode]||'Choose a feature tool, or keep sculpting terrain. Space or middle-drag pans in every tool.';
     refreshVariants();
     api.schedule();
   }
   function refreshVariants() {
     if (mode!=='place') return;
-    const host=$('feature-variants'),list=variantList(placeKind),sun=light(),key0=placeKind+JSON.stringify(set[placeKind])+placeVariant+lightKey(sun);
+    const host=$('feature-variants'),list=activeList(),sun=light(),key0=placeKind+JSON.stringify(activeRecipe())+placeVariant+lightKey(sun);
     if (host.dataset.key!==key0 || host.children.length!==list.length+1) {
       host.dataset.key=key0;
-      const random=doc.createElement('button'); random.type='button'; random.textContent='Random'; random.title='Each click picks a variant at random, in retail’s mix'; random.setAttribute('aria-pressed',String(placeVariant<0)); random.onclick=() => { placeVariant=-1; update(); };
+      const random=doc.createElement('button'); random.type='button'; random.textContent='Random'; random.title='Each click picks a variant at random, from this recipe'; random.setAttribute('aria-pressed',String(placeVariant<0)); random.onclick=() => { placeVariant=-1; update(); };
       host.replaceChildren(random,...list.map(v => {
         const b=doc.createElement('button'); b.type='button'; b.dataset.variant=v.index; b.setAttribute('aria-pressed',String(placeVariant===v.index));
-        b.title=`Variant ${v.index+1}${typeLabel(v.kind,v.params)?' · '+typeLabel(v.kind,v.params):''}`; b.setAttribute('aria-label',b.title);
+        b.title=`Variant ${v.localIndex+1}${typeLabel(v.kind,v.params)?' · '+typeLabel(v.kind,v.params):''}`; b.setAttribute('aria-label',b.title);
         const c=doc.createElement('canvas'); c.width=c.height=48; b.append(c); b.onclick=() => { placeVariant=v.index; update(); }; return b;
       }));
     }
     for (const b of host.querySelectorAll('button[data-variant]')) {
-      const v=list[Number(b.dataset.variant)],c=b.querySelector('canvas'); if (!v || c.dataset.drawn) continue;
+      const v=list.find(v => v.index===Number(b.dataset.variant)),c=b.querySelector('canvas'); if (!v || c.dataset.drawn) continue;
       const image=thumbnail(v); if (!image) continue;
       const g=c.getContext('2d'),k=Math.min(1,46/Math.max(image.width,image.height)); g.imageSmoothingEnabled=k<1; g.clearRect(0,0,48,48);
       g.drawImage(image,0,0,image.width,image.height,(48-image.width*k)/2,(48-image.height*k)/2,image.width*k,image.height*k); c.dataset.drawn='1';
@@ -307,7 +326,7 @@ export async function mountMapFeatures(api) {
       }
       return t;
     }
-    const params=v.kind==='deposit'?{...v.params,metal:set.deposit.metal}:v.params,sun=light(),k='ground|'+v.kind+'|'+v.seed+'|'+JSON.stringify(params)+'|'+lightKey(sun);
+    const params=v.kind==='deposit'?{...v.params,metal:depositMetal()}:v.params,sun=light(),k='ground|'+v.kind+'|'+v.seed+'|'+JSON.stringify(params)+'|'+lightKey(sun);
     const t=thumbs.get(k); if (t) return t.ready?t.canvas:null;
     const entry={ready:false}; thumbs.set(k,entry);
     const rgba=flatGround(); for (let i=3;i<rgba.length;i+=4) rgba[i]=255;
@@ -324,7 +343,7 @@ export async function mountMapFeatures(api) {
     let title='',values='';
     if (one) {
       const v=variantOf(one),[fw,fz]=v.footprint,type=typeLabel(one.kind,v.params),e=sprite(v),g=e?.gameplay,cells=`${fw}×${fz} ${fw*fz>1?'cells':'cell'}`;
-      title=`${LABELS[one.kind]} · variant ${one.v+1} of ${variantList(one.kind).length}${type?' · '+type:''}`;
+      title=`${LABELS[one.kind]} · variant ${v.localIndex+1} of ${set[one.kind].recipes.find(r => r.id===v.recipe).count}${type?' · '+type:''}`;
       values={deposit:`${cells} · painted into the ground · metal for extractors on its cells`,vent:`${cells} · painted into the ground · a geothermal plant can stand on it`,
         tree:`${cells} · energy ${g?.energy??'…'} · blocks units · burns to a burnt tree`,shrub:`${cells} · energy ${g?.energy??'…'} · units pass over it · burns`,
         rock:`${cells} · metal ${v.params.metal} · blocks units · reclaimable`,scar:`${cells} · a mark on the ground · no gameplay`}[one.kind];
@@ -336,7 +355,7 @@ export async function mountMapFeatures(api) {
     $('feature-selection-metal-control').hidden=!deposits.length;
     const metal=$('feature-selection-metal');
     if (doc.activeElement!==metal) metal.value=deposits.length && deposits.every(p => p.metal===deposits[0].metal)?String(deposits[0].metal):'';
-    $('feature-reroll').disabled=!list.some(p => variantList(p.kind).length>1);
+    $('feature-reroll').disabled=!list.some(p => variantList(p.kind).filter(v => v.recipe===recipeId(p.v)).length>1);
   }
   function selectionChanged() { refreshSelection(); doc.dispatchEvent(new Event('terraform-feature-mode')); api.schedule(); }
   function changed(text) { status(text); prune(); refreshSelection(); update(); api.change(); doc.dispatchEvent(new Event('terraform-feature-mode')); }
@@ -351,14 +370,20 @@ export async function mountMapFeatures(api) {
 
   for (const [name,button] of buttons) button.onclick=() => activate(name);
   $('feature-kind').onchange=event => { if (!guard()) { update(); return; } placeKind=event.target.value; placeVariant=-1; update(); };
+  $('feature-recipe').onchange=event => {if(!guard())return;activeRecipes[placeKind]=Number(event.target.value);placeVariant=-1;update();};
+  $('feature-recipe-name').onchange=event => {if(!changeSet(placeKind,{name:event.target.value}))update();};
+  $('feature-add-recipe').onclick=() => {const preset=featureCatalog(config,placeKind).find(p => p.id===$('feature-preset').value);if(preset)addRecipe(placeKind,preset);};
+  $('feature-duplicate-recipe').onclick=() => addRecipe(placeKind,null,true);
+  $('feature-remove-recipe').onclick=removeRecipe;
+  for(const input of paramInputs)input.onchange=() => { const kind=input.dataset.paramKind, k=input.dataset.param, value=input.tagName==='SELECT'||input.type==='color'?input.value:Number(input.value); if(!changeSet(kind,{params:{...activeRecipe(kind).params,[k]:value}}))update(); };
   $('feature-count').onchange=event => { if (!changeSet(placeKind,{count:Number(event.target.value)})) update(); };
-  $('feature-new-set').onclick=() => { if (!guard()) return; const seed=hash32(set[placeKind].seed,Date.now()>>>0); changeSet(placeKind,{seed},`New set of ${PLURALS[placeKind]}; placed ${PLURALS[placeKind]} take its looks.`); };
+  $('feature-new-set').onclick=() => { if (!guard()) return; const seed=hash32(activeRecipe().seed,Date.now()>>>0); changeSet(placeKind,{seed},`New variants of ${activeRecipe().name}; its placed features take the new looks.`); };
   for (const input of settingInputs) {
     const [kind,name,end]=input.dataset.setting.split('.'),out=$(input.id+'-value');
     input.addEventListener('input',() => { if (out) out.textContent=Number(input.value).toFixed(2); });
     input.addEventListener('change',() => {
       const value=input.type==='color'?input.value:Number(input.value); if (input.type!=='color' && !Number.isFinite(value)) { update(); return; }
-      const next=end===undefined?value:Object.assign([...set[kind][name]],{[Number(end)]:value});
+      const next=end===undefined?value:Object.assign([...activeRecipe(kind)[name]],{[Number(end)]:value});
       if (!changeSet(kind,{[name]:next})) update();
     });
   }
@@ -373,28 +398,52 @@ export async function mountMapFeatures(api) {
   $('feature-delete').onclick=() => removeSelected();
 
   // ---- edits ----
-  // A set edit re-draws the kind's variants; placed features keep their variant number (or one of the same footprint).
+  // Edit only the active recipe. Validate the whole placement set before committing:
+  // a larger footprint must never silently overlap or delete an authored feature.
+  function commitSet(next, text) {
+    const previous=set, oldPlacements=placements, oldFootprints=placements.map(footprint);
+    set=normalizeSet(next,config);
+    const moved=placements.map((p,i) => {
+      if(variantOf(p)) return {...p};
+      const pool=variantList(p.kind).filter(v => v.recipe===recipeId(p.v));
+      const same=pool.filter(v => v.footprint.every((size,j) => size===oldFootprints[i][j])), choices=same.length?same:pool;
+      return choices.length?{...p,v:choices[p.v%MAX_VARIANTS%choices.length].index}:null;
+    });
+    const resized=moved.filter((p,i) => p && footprint(p).some((size,j) => size!==oldFootprints[i][j]));
+    const mask=resized.some(p => generated.has(key(p)))?terrainMask():null;
+    if(moved.some(p => !p) || resized.some(p => !inBounds(p) || moved.some(q => q!==p && overlaps(p,q))) || resized.some(p => generated.has(key(p)) && (!gentleFootprint(p,mask) || nearMargin(p,fill.margin,moved) || moved.some(q => q!==p && overlaps(p,q,fill.gap))))) {
+      set=previous; status('This recipe would make placed features overlap, leave the map, or violate fill placement rules. Move those features before changing its footprint.'); update(); return false;
+    }
+    placements=moved; selection=new Set(oldPlacements.flatMap((p,i) => selection.has(p)?[moved[i]]:[]));
+    if(!activeList().some(v => v.index===placeVariant))placeVariant=-1;
+    changed(text); return true;
+  }
   function changeSet(kind,edit,text) {
     if (!guard() || !set[kind]) return false;
-    const next=normalizeSet({...set,[kind]:{...set[kind],...edit}},config);
-    if (JSON.stringify(next[kind])===JSON.stringify(set[kind])) return false;
-    const old=new Map(placements.filter(p => p.kind===kind).map(p => [p,footprint(p)]));
-    set=next; const list=variantList(kind); let dropped=0;
-    const kept=[];
-    for (const p of placements) {
-      if (p.kind!==kind) { kept.push(p); continue; }
-      const v=refit({...p,oldFootprint:old.get(p)},list);
-      if (v===null) { dropped++; selection.delete(p); generated.delete(key(p)); continue; }
-      p.v=v; kept.push(p);
-    }
-    placements=kept; if (placeVariant>=list.length) placeVariant=-1;
-    changed(text||(dropped?`Updated ${PLURALS[kind]}; removed ${dropped} that no variant of their size is left for.`:`Updated the ${LABELS[kind].toLowerCase()} set.`)); return true;
+    const current=activeRecipe(kind), next={...set,[kind]:{...set[kind],recipes:set[kind].recipes.map(r => r.id===current.id?{...r,...edit}:r)}};
+    if(JSON.stringify(normalizeSet(next,config))===JSON.stringify(set))return false;
+    return commitSet(next,text || `Updated ${current.name}; its placed features take the new look.`);
+  }
+  function addRecipe(kind, preset, duplicate=false) {
+    if(!guard() || !set[kind] || set[kind].recipes.length>=MAX_RECIPES)return false;
+    const group=set[kind], id=group.nextId;
+    if(id>1000000)return false;
+    const recipe=duplicate?{...structuredClone(activeRecipe(kind)),id,name:activeRecipe(kind).name+' copy'}:makeRecipe(kind,preset.data,id,preset.name);
+    const next={...set,[kind]:{nextId:id+1,recipes:[...group.recipes,recipe]}};
+    if(!commitSet(next,`Added ${recipe.name}.`))return false;
+    activeRecipes[kind]=id; placeVariant=-1; update(); return true;
+  }
+  function removeRecipe() {
+    if(!guard())return false;
+    const entry=activeRecipe(),group=set[placeKind];
+    if(group.recipes.length<=1 || placements.some(p => p.kind===placeKind && recipeId(p.v)===entry.id))return false;
+    return commitSet({...set,[placeKind]:{...group,recipes:group.recipes.filter(r => r.id!==entry.id)}},`Removed ${entry.name}.`);
   }
   function addFeature(kind,x,z,options={}) {
     if (!guard()) return false;
     if (!kinds.includes(kind)) { status(`This world has no generated ${PLURALS[kind]||'features of that kind'} yet.`); return false; }
-    const list=variantList(kind),v=Number.isInteger(options.v)&&options.v>=0&&options.v<list.length?options.v:pickVariant(list,hash32(hash32(x,z),++rolls)/4294967296);
-    const p={kind,v,x,z}; if (kind==='deposit') p.metal=Math.round(clamp(Number.isFinite(options.metal)?options.metal:set.deposit.metal,0,255));
+    const list=activeList(kind),v=Number.isInteger(options.v)&&variantList(kind).some(v => v.index===options.v)?options.v:pickVariant(list,hash32(hash32(x,z),++rolls)/4294967296);
+    const p={kind,v,x,z}; if (kind==='deposit') p.metal=Math.round(clamp(Number.isFinite(options.metal)?options.metal:depositMetal(),0,255));
     if (options.generated && !scatter(p)) { status('Only trees, shrubs and rocks belong to a fill.'); return false; }
     if (!inBounds(p)) { status('The whole feature footprint must fit inside the play area.'); return false; }
     let list2=placements,removed=0;
@@ -403,7 +452,7 @@ export async function mountMapFeatures(api) {
     if (options.generated && (!gentleFootprint(p,terrainMask()) || nearMargin(p,fill.margin) || placements.some(q => overlaps(p,q,fill.gap)))) { status('Fill needs gentle dry ground, a free footprint and the selected margins.'); return false; }
     const kept=new Set(list2.map(key)); for (const k of generated) if (!kept.has(k)) generated.delete(k);
     placements=[...list2,p]; rolls++; if (options.generated) generated.add(key(p));
-    changed(`Placed ${LABELS[kind].toLowerCase()} ${v+1} of ${list.length}${removed?`; cleared ${removed} fill features inside its margin`:''}.`); return true;
+    changed(`Placed ${LABELS[kind].toLowerCase()} ${v%MAX_VARIANTS+1} of ${list.length}${removed?`; cleared ${removed} fill features inside its margin`:''}.`); return true;
   }
   function removeFeature(index,notify=true) {
     if (!guard() || !Number.isInteger(index) || index<0 || index>=placements.length) return false;
@@ -420,7 +469,7 @@ export async function mountMapFeatures(api) {
     if (!guard() || !selection.size) return false;
     let swapped=0;
     for (const p of selection) {
-      const list=variantList(p.kind),[fw,fz]=footprint(p),others=placements.filter(q => q!==p);
+      const list=variantList(p.kind).filter(v => v.recipe===recipeId(p.v)),[fw,fz]=footprint(p),others=placements.filter(q => q!==p);
       let pool=list.filter(v => v.index!==p.v && v.footprint[0]===fw && v.footprint[1]===fz);
       if (!pool.length) pool=list.filter(v => v.index!==p.v && inBounds({...p,v:v.index}) && !others.some(q => overlaps({...p,v:v.index},q)));
       if (!pool.length) continue;
@@ -554,7 +603,7 @@ export async function mountMapFeatures(api) {
   }
   // A saved feature that does not fit this world or map is left out, said once.
   function load(data={}) {
-    const nextSet=normalizeSet(data.featureSet,config),nextStarts=(data.starts===undefined?defaults():data.starts),nextFill=fillOptions(data.fill||{});
+    const nextSet=normalizeSet(data.featureSet ?? config.featureSet,config),nextStarts=(data.starts===undefined?defaults():data.starts),nextFill=fillOptions(data.fill||{});
     if (!Array.isArray(data.features??[]) || !Array.isArray(nextStarts) || nextStarts.length<1 || nextStarts.length>10) throw new Error('Map placements need a feature list and 1–10 starts.');
     const bases=nextStarts.map(p => ({x:p?.x,z:p?.z}));
     if (bases.some((p,i) => !validStart(p) || bases.some((q,j) => j<i && p.x===q.x && p.z===q.z))) throw new Error('Every start must be a distinct pixel position inside the play area.');
@@ -564,7 +613,7 @@ export async function mountMapFeatures(api) {
       const p=normalizePlacement(raw);
       if (!p) { unfit++; continue; }
       if (!kinds.includes(p.kind)) { unfit++; continue; }
-      const list=variantList(p.kind); if (p.v>=list.length) p.v=p.v%list.length;
+      const list=variantList(p.kind); if (!list.some(v => v.index===p.v)) { unfit++; continue; }
       if (!inBounds(p) || next.some(q => overlaps(p,q))) { unfit++; continue; }
       next.push(p);
     }
@@ -573,7 +622,7 @@ export async function mountMapFeatures(api) {
     if (previousGesture && canvas.hasPointerCapture?.(previousGesture.id)) canvas.releasePointerCapture(previousGesture.id);
     placements=next; starts=bases; fill=nextFill; generated=new Set(next.filter(p => scatter(p) && recorded.has(key(p))).map(key));
     selection=new Set(); selectedStart=Math.min(Math.max(0,selectedStart),starts.length-1); hover=null;
-    if (placeVariant>=(variantList(placeKind)?.length??0)) placeVariant=-1;
+    if (!activeList().some(v => v.index===placeVariant)) placeVariant=-1;
     if (unfit) { status(`${unfit} saved ${unfit===1?'feature does':'features do'} not fit this world or map and ${unfit===1?'was':'were'} left out.`); doc.dispatchEvent(new CustomEvent('terraform-status',{detail:message})); }
     prune(); refreshSelection(); update(); doc.dispatchEvent(new Event('terraform-feature-mode'));
   }
@@ -698,8 +747,8 @@ export async function mountMapFeatures(api) {
   // What a click on a ground point places: the chosen variant, or a random one drawn for the cell (the same until something is placed,
   // so the outline under the pointer is the footprint the click makes), centred on the cell.
   function placeAt(p) {
-    const list=variantList(placeKind),cx=Math.floor(p.x/CELL),cz=Math.floor(p.z/CELL),v=placeVariant>=0?placeVariant:pickVariant(list,hash32(hash32(cx,cz),rolls+1)/4294967296);
-    const [fw,fz]=list[v]?.footprint||[1,1]; return {kind:placeKind,v,x:Math.floor(cx-(fw-1)/2),z:Math.floor(cz-(fz-1)/2)};
+    const list=activeList(),cx=Math.floor(p.x/CELL),cz=Math.floor(p.z/CELL),v=placeVariant>=0?placeVariant:pickVariant(list,hash32(hash32(cx,cz),rolls+1)/4294967296);
+    const [fw,fz]=list.find(q => q.index===v)?.footprint||[1,1]; return {kind:placeKind,v,x:Math.floor(cx-(fw-1)/2),z:Math.floor(cz-(fz-1)/2)};
   }
   function draw(ink,view=null) {
     controls.disabled=!enabled(); ink.save(); ink.imageSmoothingEnabled=false;
@@ -764,10 +813,10 @@ export async function mountMapFeatures(api) {
     const def=(n,keys) => defs.push({name:n,keys:[...keys,['filename',b]].map(([k,v]) => [k,String(v)])});
     const seq=(n,frames) => { sequences.push({name:n,frames}); return n; };
     const full=(kind,params,seed) => work({type:'full',kind,params,seed,light:sun});
-    const successors={};
-    const smudge=async () => successors.smudge??=(async () => { const f=await full('scar',{type:'smudge'},hash32(set.scar?.seed??4783,0x5d06e));
+    const successors={},successorSeed=set.scar?.recipes.reduce((a,b) => a.id<b.id?a:b)?.seed??4783;
+    const smudge=async () => successors.smudge??=(async () => { const f=await full('scar',{type:'smudge'},hash32(successorSeed,0x5d06e));
       def(`${P}Smudge`,[['description','Scorch Mark'],['footprintx',1],['footprintz',1],['height',0],['seqname',seq(`${b}sm`,[frameOf(f.body)])],['animtrans',1],['reclaimable',0],['blocking',0],['featuredead',`${P}Smudge`]]); return `${P}Smudge`; })();
-    const stain=async () => successors.stain??=(async () => { const f=await full('scar',{type:'stain',size:1},hash32(set.scar?.seed??4783,0x57a1));
+    const stain=async () => successors.stain??=(async () => { const f=await full('scar',{type:'stain',size:1},hash32(successorSeed,0x57a1));
       def(`${P}Stain`,[['description','Rock Rubble'],['footprintx',1],['footprintz',1],['height',0],['seqname',seq(`${b}st`,[frameOf(f.body)])],...(f.shadow?[['seqnameshad',seq(`${b}sts`,[frameOf(f.shadow)])]]:[]),['shadtrans',1],['damage',20000],['reclaimable',0],['blocking',0],['featuredead',`${P}Stain`]]); return `${P}Stain`; })();
     let voidSeq=null;
     const transparent=() => voidSeq??=seq(`${b}v`,[{width:1,height:1,x:0,y:0,duration:10,pixels:base64(new Uint8Array([9])),opaque:base64(new Uint8Array([0]))}]);
@@ -829,7 +878,7 @@ export async function mountMapFeatures(api) {
   }
 
   status(kinds.length>2?'Features ready.':'This world has generated deposits and vents only.'); update();
-  return {serialize,load,draw,deactivate,activate,addFeature,removeFeature,removeSelected,rerollSelected,setSelectedMetal,moveSelected,changeSet,addStart,moveStart,removeStart,setFill,fillRegion,
+  return {serialize,load,draw,deactivate,activate,addFeature,removeFeature,removeSelected,rerollSelected,setSelectedMetal,moveSelected,changeSet,addRecipe,addStart,moveStart,removeStart,setFill,fillRegion,
     pointerSelect,hitAt,clearSelection,fitGround,exportFeatures,viewPoint:index => placements[index]?viewPoint(placements[index]):null,selected:() => [...selection].map(p => placements.indexOf(p)).sort((a,b) => a-b),select:list => { selection=new Set(list.map(i => placements[i]).filter(Boolean)); selectionChanged(); },groundChanged,settled,
     stats:() => ({imageBytes:[...sprites.values()].reduce((n,e) => n+(e.body?e.body.w*e.body.h*4:0)+(e.shadow?e.shadow.w*e.shadow.h*4:0),0)+[...stamps.values()].filter(s => s.bitmap).length*PATCH*PATCH*4,
       sprites:sprites.size,stamps:stamps.size,grounds:{fitted:[...grounds.values()].filter(g => g.rgba && !g.stale).length,waiting:[...grounds.values()].filter(g => g.stale && !g.failed).length,failed:[...grounds.values()].filter(g => g.failed).length}}),
