@@ -3181,6 +3181,54 @@ restart 8801"].**
 - Not run: `measure/realism.py` (heights identical), the geology sweep.
 - Page (private): https://claude.ai/artifact/6rEmDd2kPD3MAnYNwHjiZG
 
+**Round 5: what is still missing, from both sets of pictures [Claude,
+2026-11-11; the owner: "re-evaluate from our hyper-realistic reference
+images and decide what items in priority order are still missing", and
+"go back to the TA biome reference images and determine if anything in
+them cannot be represented properly in our current engine"].** By eye
+unless marked. The nine hyper-real pictures against 21 fixtures rendered
+from main `010c0579` (the 760 px mesa with every wall option, the
+Mountain button with them, boulders, sand, wet ground, nine recipes with
+whole blocks on modern Green, sandstone on modern Desert). The retail
+windows against the 30 check scenes of the same commit, surveyed by a
+separate agent that was not told what the engine can do, and checked by
+Claude on one pair of each world. Ordered by how much of a picture each
+spoils and in how many pictures, the shape before the color, under the
+owner's rules (level ground flat in the heights; flats that tile).
+
+| | What is missing | Hyper-real pictures | Retail windows | What the engine does today | Kind |
+| --- | --- | --- | --- | --- | --- |
+| 1 | The sun's height and the depth of shade as a world's own numbers | all nine are lit low and raking, with long shadows and dark ravines | Green's rock is charcoal with black east shadows (pixels under luma 20: 16.0% of green-4 against 3.1%); hills are modeled by one broad shade band in six worlds; Moon's shade is a smooth gradient | the sun stands 45 degrees up in every world; only the page's review parameter turns it, and exports ignore that; no preset casts a shadow on level ground. Tried: 25 degrees on the modern Green wall moves 60.9% of the picture and fills the ravines **[measured]** | a missing control, then presets |
+| 2 | Rock by stroke: how much, and which recipe | a map with more than one kind of geology | Red's smooth hills beside a cracked shelf of 15 to 25 px cells; Crystal's 30 to 70 px plates beside a fine mesh; Green's soft domes with small outcrops beside cliffs | one recipe for a world, on every face. Tried: Red's hills come out smooth and tone-shaded only with rock off for the whole world | missing |
+| 3 | Color that survives the palette: a color family for each recipe, shade that keeps the world's hue, no stray entries | `sandstone`, `sand5`, `rocky`: each rock its own family, bands that follow the beds | shade goes neutral where retail keeps the hue (Ice gray for blue and lilac, Lava olive-black for maroon-black) | all nine recipes draw the same gray on modern Green (a recipe has beds and no colors); modern Desert's wall is a dither of pink, olive and gray with striped patches; four palette entries retail never uses make 10.1% of moon-1, 1.9% of archipelago-2 and 1.2% of ice-1 **[measured]**; Red's maroon was this (fixed by hand in its recipe) | part missing, part defect |
+| 4 | Water that varies by more than depth: sediment and flow zones, mottled feathered shallows, a pale halo round a bar | the top-down picture's damp basins | Zhon's maroon and olive flow zones (13.7 to 15.8% of a picture against 1.0 to 1.9%); Archipelago's stippled shoal bars; Ice's submerged shelf (12.1% against 6.5%) and the iceberg's halo | one ramp of color by depth, through a third color at most; a shallow band of even width | missing |
+| 5 | Level ground with a surface, in the art only and in tiles that repeat | tone and cover changing over 50 to 300 px: dust, wash lines, stones thinning from a wall (round 4, row 3) | Desert's ring stones (20 to 25 in a 256 px square, by count in one crop); Crystal's half-buried slabs; Moon's wrinkles and small craters every 40 to 80 px | a plain is one texture; stones lie near walls only; Wet ground reaches the waterline only | missing |
+| 6 | Shore and liquid edges | the beach picture's clean waterline | Green's coast is smooth | Green's shore is 1.25 to 1.28 times its smoothed length against retail's 1.06 to 1.08, with 39 to 141 detached specks of water against 11 to 24 and a dark rim 3 to 8 px inland **[the agent's measure]**; stray pixels at Red's pool; a teal rim on the iceberg | defects |
+| 7 | Drainage that branches and joins | the top-down picture, `surface1`, `rocktools` (third panel) (round 4, row 6) | Archipelago's domes carry 5 to 10 creases from the crest, in the heights | gullies run side by side down the fall line; a dome's contours are ovals (the Archipelago scenes do not use Gullies: not tried) | missing, in the heights |
+| 8 | Fine lines in regular bundles | thin continuous beds (`surface1`, `surface3`, `sandstone`) | contour lines every 5 to 8 px on Green's slopes, Red's bank terraces, Moon's ridges, Desert's 10 to 15 clean bands | lines break into scribbles and stairs; thin-bedded recipes (shale, schist) dissolve into noise at 1x; Desert's bands lie under black joint lines and blotches of bed color | defects in what exists |
+| 9 | Sand as a sheet: drifts and dunes with ripples that vary, ledges buried, a beach | `sand5`, the beach picture (round 4, row 4) | Zhon's smooth sand bars with ripple lines | patches with even ripples; shelter in a wall's lee since round 4 | missing |
+| 10 | Tall landforms on the classic worlds | the pictures' walls are 150 units and more | none are this tall | the 244-unit mesa on classic Desert draws maroon and near black (mean RGB 51,35,31), as round 3 found on Moon, Lava and Red | defect |
+
+- *Representable today, so not engine work* (a preset or a scene's
+  strokes; retail tuning stays parked, rule 10). Tried: a hill as a soft
+  tone-shaded dome instead of a ring of cracks (green-1 and red-1 with
+  rock and cracks off), though its shade stays shallower than retail's
+  until row 1. Not tried, from knowing the controls: Zhon's teal water
+  and green cover (table colors), Ice's shade hue (data), mountains as
+  sloping massifs (the Mountain tool), Archipelago's fringe as fine arcs,
+  Crystal's mounds as one cracked surface, Lava's lobed hills, Moon's
+  soft shade.
+- *Closed since round 4.* Rows 1 and 1a (a hierarchy of blocks; the
+  lattice), 2 and 7 (beds and variation along a wall), 5 (boulders), and
+  part of 3 and 4 (bare soil, wet ground, sand in a wall's lee). In clay
+  the nine recipes now differ as the pictures' rocks do; the color pass
+  hides it (rows 1 and 3).
+- *How sure.* Rows 1, 2 and the palette entries were tried or measured
+  here. Rows 4, 5, 7 and 9 are "missing" from knowing the engine, not
+  from a failed attempt. The agent's numbers were checked only for the
+  palette entries. Retail scenes are a few strokes each, so shape
+  differences there are mostly the strokes and are not counted.
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
