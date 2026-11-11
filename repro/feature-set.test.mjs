@@ -2,12 +2,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {worldKinds, defaultSet, normalizeSet, variants, pickVariant, normalizePlacement, MAX_VARIANTS} from '../sculpt-feature-set.js';
+import {worldKinds, defaultSet, normalizeSet, variants, pickVariant, normalizePlacement, MAX_VARIANTS, makeRecipe, featureCatalog, recipeId} from '../sculpt-feature-set.js';
 import {generateFeature} from '../sculpt-feature-gen.js';
 const palette = JSON.parse(readFileSync(new URL('../materials/palette.json', import.meta.url))).indexed;
 
 const table = world => JSON.parse(readFileSync(new URL(`../materials/${world}.json`, import.meta.url), 'utf8'));
 const green = {features: table('green').features}, bare = {};
+const edit = (set,kind,values) => ({...set,[kind]:{...set[kind],recipes:set[kind].recipes.map((r,i)=>i===0?{...r,...values}:r)}});
+const input = (values,config=green) => Object.entries(values).reduce((set,[kind,v])=>set[kind]?edit(set,kind,v):set,defaultSet(config));
 
 test('every world has deposits and vents; trees, shrubs, rocks and scars come from the world table', () => {
   assert.deepEqual(worldKinds(green), ['deposit', 'vent', 'tree', 'shrub', 'rock', 'scar']);
@@ -27,9 +29,9 @@ test("a world's deposit and vent look reaches the painter; footprints take any s
 });
 
 test('a saved recipe is kept to the world kinds and the settings bounds', () => {
-  const set = normalizeSet({tree: {count: 99, seed: 7, taper: 3, energy: [900, -5]}, rock: {metal: [300, 10], shade: 'x'}, deposit: {metal: 1000}, lava: {count: 2}}, green);
-  assert.equal(set.tree.count, MAX_VARIANTS); assert.equal(set.tree.seed, 7); assert.equal(set.tree.taper, 1); assert.deepEqual(set.tree.energy, [0, 900]);
-  assert.deepEqual(set.rock.metal, [10, 255]); assert.equal(set.rock.shade, defaultSet(green).rock.shade); assert.equal(set.deposit.metal, 255);
+  const set = normalizeSet(input({tree: {count: 99, seed: 7, taper: 3, energy: [900, -5]}, rock: {metal: [300, 10], shade: 'x'}, deposit: {metal: 1000}}), green);
+  assert.equal(set.tree.recipes[0].count, MAX_VARIANTS); assert.equal(set.tree.recipes[0].seed, 7); assert.equal(set.tree.recipes[0].taper, 1); assert.deepEqual(set.tree.recipes[0].energy, [0, 900]);
+  assert.deepEqual(set.rock.recipes[0].metal, [10, 255]); assert.equal(set.rock.recipes[0].shade, defaultSet(green).rock.recipes[0].shade); assert.equal(set.deposit.recipes[0].metal, 255);
   assert.equal(set.lava, undefined);
   assert.deepEqual(normalizeSet(undefined, green), defaultSet(green));
   assert.deepEqual(Object.keys(normalizeSet({tree: {count: 3}}, bare)), ['deposit', 'vent']);
@@ -37,7 +39,7 @@ test('a saved recipe is kept to the world kinds and the settings bounds', () => 
 
 test('variants keep their looks when the count grows, and placement keeps retail use shares', () => {
   for (const kind of worldKinds(green)) {
-    const set = defaultSet(green), small = variants(kind, set, green), large = variants(kind, {...set, [kind]: {...set[kind], count: MAX_VARIANTS}}, green);
+    const set = defaultSet(green), small = variants(kind, set, green), large = variants(kind, {...set, [kind]: {...set[kind], count: MAX_VARIANTS, makeRecipe, featureCatalog, recipeId}}, green);
     assert.deepEqual(large.slice(0, small.length), small.map(v => ({...v, weight: large[v.index].weight})), kind);
     const types = new Set(green.features[kind]?.types?.map((t, i) => i) || [0]);
     for (const t of types) if (large.length >= types.size) assert.ok(large.some(v => v.type === t), `${kind}: every type has a variant`);
@@ -50,9 +52,9 @@ test('variants keep their looks when the count grows, and placement keeps retail
 });
 
 test('a new seed redraws every variant; rock metal follows footprint across the range', () => {
-  const set = defaultSet(green), a = variants('tree', set, green), b = variants('tree', {...set, tree: {...set.tree, seed: 99}}, green);
+  const set = defaultSet(green), a = variants('tree', set, green), b = variants('tree', edit(set,'tree',{seed:99}), green);
   assert.ok(a.every((v, i) => v.seed !== b[i].seed));
-  const rocks = variants('rock', {...set, rock: {...set.rock, count: 5, metal: [20, 120]}}, green);
+  const rocks = variants('rock', edit(set,'rock',{count:5,metal:[20,120]}), green);
   const metal = Object.fromEntries(rocks.map(v => [v.params.cells, v.params.metal]));
   assert.deepEqual(metal, {'1x1': 20, '2x2': 58, '3x3': 120, '3x2': 83, '4x3': 120});
   assert.deepEqual(variants('deposit', set, green)[0].footprint, [3, 3]);
@@ -77,11 +79,11 @@ test('placements: a retail placement (a name, no kind) is not a generated one; d
 });
 
 test('the artist colors and rock angularity: bounds, the world default, and a recolor only once a color moves', () => {
-  const set = normalizeSet({tree: {color: '#ABCDEF'}, shrub: {color: 'red'}, rock: {angular: 3, color: '#123'}}, green), d = defaultSet(green);
-  assert.equal(set.tree.color, '#abcdef'); assert.equal(set.shrub.color, d.shrub.color); assert.equal(set.rock.angular, 1); assert.equal(set.rock.color, d.rock.color);
+  const set = normalizeSet(input({tree: {color: '#ABCDEF'}, shrub: {color: 'red'}, rock: {angular: 3, color: '#123'}}), green), d = defaultSet(green);
+  assert.equal(set.tree.recipes[0].color, '#abcdef'); assert.equal(set.shrub.recipes[0].color, d.shrub.recipes[0].color); assert.equal(set.rock.recipes[0].angular, 1); assert.equal(set.rock.recipes[0].color, d.rock.recipes[0].color);
   for (const kind of ['tree', 'shrub', 'rock']) assert.ok(variants(kind, d, green).every(v => !v.params.recolor), kind);
   const red = {features: table('red').features};
   assert.ok(variants('rock', defaultSet(red), red).every(v => !v.params.recolor && v.params.angular === 0.45));
-  assert.deepEqual(variants('tree', {...d, tree: {...d.tree, color: '#b8732a'}}, green)[0].params.recolor, {from: '#11723c', to: '#b8732a'});
-  assert.equal(variants('rock', {...d, rock: {...d.rock, angular: 0.1}}, green)[0].params.angular, 0.1);
+  assert.deepEqual(variants('tree', edit(d,'tree',{color:'#b8732a'}), green)[0].params.recolor, {from: '#11723c', to: '#b8732a'});
+  assert.equal(variants('rock', edit(d,'rock',{angular:0.1}), green)[0].params.angular, 0.1);
 });

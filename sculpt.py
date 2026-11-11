@@ -869,9 +869,29 @@ def biome_config(biome):
     # has none of, so any world can place any kind (lit by its own sun; Green's is the one table measured from retail for all four).
     green = json.loads((HERE / MATERIAL_TABLES['green']).read_text())['features']
     config['features'] = {**{k: v for k, v in green.items() if k in FEATURE_KINDS}, **table.get('features', {})}
+    config['featureCatalog'] = feature_catalog()
     if biome in WORLD_ROCK:
         config['rock'] = dict(WORLD_ROCK[biome])
     return world_knobs(biome, config)
+
+
+def feature_catalog():
+    """All recipes, available on every world; no renderer branches on their source."""
+    out = []
+    for world, path in MATERIAL_TABLES.items():
+        for kind, data in json.loads((HERE / path).read_text()).get('features', {}).items():
+            if kind not in FEATURE_KINDS and kind not in ('deposit', 'vent'):
+                continue
+            types = data.get('types') or [{'share': 1, 'params': data.get('params', {}), 'vary': data.get('vary', {})}]
+            for index, shape in enumerate(types):
+                recipe = {**data, 'count': min(4, data.get('count', 4)), 'types': [{**shape, 'share': 1, 'params': {**data.get('params', {}), **shape.get('params', {})}}]}
+                params = recipe['types'][0]['params']
+                form = params.get('species') or params.get('type') or ('spire' if params.get('tall', 0) > .4 else kind)
+                form = {'deadConifer': 'dead conifer'}.get(form, form)
+                cells = f" ({params['cells'].replace('x', '×')})" if params.get('cells') else ''
+                name = f"{BIOME_NAMES[world]} · {form} {index + 1}{cells}"
+                out.append({'id': f'{world}-{kind}-{index}', 'kind': kind, 'name': name, 'data': recipe})
+    return out
 
 
 def world_configs(biomes):
