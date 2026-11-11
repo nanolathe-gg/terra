@@ -3077,6 +3077,92 @@ with item 3.
   bed and 86 to 102 s after (single runs on a loaded machine).
 - Page (private): https://claude.ai/artifact/V3kFA7sJ7im78yfCTv2AKP
 
+**Overnight run, item 5: light [Claude, 2026-11-11; tried, dropped on the
+owner's "let's drop the light branch"].** A world control moved the
+shade multiply from the display-encoded colour to linear light, and Red
+adopted it. The premise was wrong: with a power-law encoding, shade
+applied in linear light at matched depth is today's picture exactly, so
+the control only offered a lighter shade curve, which Ambient light and
+Directional shading kept already give. Measured on the Red fixture
+(luma: mean, darkest fifth): main 56.7, 28.7; linear light at ambient
+.42: 59.7, 37.7; at ambient .10: 58.4, 33.4. Every shade strength was
+tuned by eye against the display-space multiply, so all of them lifted
+at once. The branch `realism/light` is deleted; nothing of it is on
+main. Do not rebuild it.
+
+**Bed defects, Red's rock, Green's bed lumps [Claude, 2026-11-11; the
+owner: "continue with Crystal and zhon bed defects, red rocks color and
+joints, and then bed lumps on green"; on three stacked branches, NOT
+landed].**
+
+- *Rock under water is lit as the bed round it* (`realism/bed-defects`).
+  Crystal's outline and Zhon's rings were two terms together, found by
+  single-term prototypes: the soft bed took the land's broad shade (the
+  slope, its cast shadow, its occlusion), and submerged rock kept the
+  land's whole shade besides, measured against the level ground's
+  brightness with a dark side six times deeper than the soft bed's. Now
+  the bed's light is its brightness against its own material's (the
+  rock's own colour for rock), rock and soft ground share one dark side,
+  and `bedFlat` reaches the rock (its joints, crevices and close shadows
+  stay). Crystal and Zhon take `bedFlat` .8. Measured (share of each
+  check picture, heights identical in all 34): engine alone red-3 15.2%,
+  green-modern-3 2.1%, crystal-2 1.9%, zhon-1 1.6%, red-2 0.03%; with
+  the adoption crystal-2 14.0%, zhon-2 9.4%, zhon-1 9.3%, zhon-3 5.9%,
+  crystal-1 4.8%, crystal-3 3.7%. By eye: the outline is gone but for
+  two short lines at the top of crystal-2; the rings are gone but for a
+  thin dark waterline; red-3's platform is as pale as its shelf with
+  fainter joints, as in the owner's picture of a cracked Red shore;
+  Zhon's coast variant keeps its look.
+- *Red's rock* (`realism/red-rock`). Measured on the owner's picture:
+  rock mean RGB (78,43,35) to (85,46,37), hue 10 to 11 degrees, median
+  luma 51 to 58; ours (71,38,40) hue 356 at red-3's shore and (76,39,36)
+  hue 5 on red-1's mesa. Rendered without the palette step the rock is
+  hue 12: the game's palette has no dark orange-brown, retail art mixes
+  maroon and olive pixels for it, and the rock's damped hue grain landed
+  on the maroon entries. Only numbers of Red's recipe (Jointed
+  siltstone) change: Color variation between blocks .12 to .5, crust
+  lightness .2 to .35, crust oxidation .15 to .3, wetness .2 to 0, joint
+  opening width 3 to 1.5, joint depth 3 to 2, shadow and crevice depth
+  .7 to .55. After: (82,45,38) hue 9, median 51.5 at the shore;
+  (89,48,41) hue 10, median 61 on the mesa. Moves red-1 9.5%, red-2
+  8.0%, red-3 22.3% on top of the bed change; no other world. Open, by
+  eye: red-2's terraces are a little fainter (the crevice shade), lit
+  faces carry a few olive-yellow pixels, and the rock within a few
+  units of the water is still bluer than the rest (the waterline's
+  blend). Tried and not used: Mix palette pairs (rock hue 5, but it
+  flattens the ground), more land dither (no gain).
+- *Green's bed lumps* (`realism/green-bed-lumps`). Under 1% of the
+  shallows before (rule 9). Only Green's numbers change: `bedFlat` .4 to
+  1 (the bed's own light is not scaled by the world's directional share
+  of .3), `bedContrast` .45 to .7, `bedRelief` .6 to 2. Measured: Bed
+  lumps 0 to 3 moves 5.8% of green-3's shallows and 8.8% of
+  green-modern-3's (pixels moving more than 8 levels);
+  `measure/world_controls.mjs` on green-1: Bed lumps 19,543 px, Bed lit
+  by its own relief 34,170, Bed light 71,703. Moves green-7 9.9%,
+  green-modern-1 4.4%, green-modern-3 4.3%, green-3 3.5%, green-1 3.5%.
+  Not tuned: Archipelago's lumps, still under 5%.
+- *Open: the relief allowance counts Bed lumps.* The chunk renderer's
+  projection apron (`reaches()`) adds 1.6 x `bedRelief`, though lumps
+  lie under the water plane, and the pictures are sensitive to the
+  apron: with Green's lumps at 2, dry Green scenes re-roll pixels on
+  steep faces (green-2 10.0%, mean luma 62.867 to 62.869, no change by
+  eye; green-5 1.3%, green-4 1.0%, green-6 0.4%). Dropping the term
+  would re-roll every world once and free the control from dry ground;
+  why a picture depends on the apron at all is not found. Proposed, not
+  done.
+- *Checks on the stacked tip `74c43a09`* (2026-11-11). Land tier passes
+  (unit, gate, scenes, regional, voxels, smoke, features, passability,
+  shape repeat; own server, CDP port 9731); 28 of 34 scenes differ from
+  main `6c58fb9f`, heights identical in all. Export bytes: exit 0, same
+  on all three maps (green-4 2,325 tiles, lava-8 14,498, red-16 50,099
+  against 50,166 on main). The export's times in that run (red-16 535 s)
+  say nothing: another agent's three control sweeps held the GPU. Not
+  run: `repro/perf.mjs` (no drag or bake code changed; Green's larger
+  apron is not timed), the hover previews (`repro/ui-previews.mjs`;
+  owed before landing, the bed's light changed), `measure/realism.py`
+  (heights identical), the geology sweep.
+- Page (private): https://claude.ai/artifact/6rEmDd2kPD3MAnYNwHjiZG
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
