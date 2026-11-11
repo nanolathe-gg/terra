@@ -778,6 +778,13 @@ WORLD_VARIANTS = {
         # Bare rock at rims 60 px, as modern Green: the level top's cover gives way to rock before the cliff.
         'modern': dict(label='Modern: realistic look (in progress)', knobs=dict(rimReach=60), rock=dict(recipe='sandstone', beds=False)),
     },
+    'red': {
+        # Modern Red: where its realistic look accumulates, as modern Green's and Desert's do. So far it is Red with the Jointed siltstone
+        # recipe's numbers for its rock, over Red's own beds and colors, and rock at its shores (the owner, 2026-11-10: the cracked rock
+        # platforms that run into the shallows "should just be the red planet look on coasts without the need for manual fissures"): the
+        # ground within reach of a waterline is that rock, on land and on the bed, so its joints run from the shore under the water.
+        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict(shoreRock=96, shoreShelf=96), rock=dict(recipe='siltstone', beds=False)),
+    },
 }
 for _world, _variants in WORLD_VARIANTS.items():
     for _id, _v in _variants.items():
