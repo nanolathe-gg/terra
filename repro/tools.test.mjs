@@ -47,7 +47,7 @@ test('every world\'s toolbar is today\'s shape buttons: ids, labels, icons, colo
   const palette = html.split('class="tool-groups"')[1].split('<template')[0];
   assert.deepEqual([...palette.matchAll(/data-tool="(\w+)"|id="(shape|water)-tools"/g)].map(m => m[1] ?? `[${m[2]}]`), ['move', 'landform', '[shape]', 'fissure', '[water]', 'smooth', 'erase', 'paint', 'sand', 'grass']);
   assert.deepEqual(FIXED_TOOLS.toSorted(), ['erase', 'fissure', 'grass', 'move', 'paint', 'sand', 'smooth']);
-  for (const bad of [{...TODAY[0], id: 'fissure'}, {...TODAY[0], id: 'a b'}, {...TODAY[0], icon: 'star'}, {...TODAY[0], color: 'red'}, {...TODAY[0], group: 'paint'}, {...TODAY[0], shape: 'mesa'}, {...TODAY[0], label: ''}])
+  for (const bad of [{...TODAY[0], id: 'fissure'}, {...TODAY[0], id: 'a b'}, {...TODAY[0], icon: 'star'}, {...TODAY[0], color: 'red'}, {...TODAY[0], group: 'paint'}, {...TODAY[0], shape: 'mesa'}, {...TODAY[0], label: ''}, {...TODAY[0], id: 'map-1'}])
     assert.throws(() => worldTools({tools: [bad]}), undefined, JSON.stringify(bad));
   assert.throws(() => worldTools({tools: [TODAY[0], TODAY[0]]}), /twice/);
   assert.equal(toolShape({id: 'soilHill', shape: 'hill'}), 'hill');

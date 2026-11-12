@@ -37,6 +37,7 @@ export function worldTools(config) {
   if (!Array.isArray(tools)) throw Error('A world\'s tools are a list.');
   return tools.map((t,i) => {
     checkTool(t,`The world's tool ${i+1}`);
+    if (/^map-\d/.test(t.id)) throw Error(`The world's tool ${t.id}: map-1, map-2, ... are a map's own tools' ids.`);
     if (seen.has(t.id)) throw Error(`The world's tool ${t.id} is listed twice.`);
     seen.add(t.id); return {...t,label:t.label.trim()};
   });
