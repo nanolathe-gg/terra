@@ -2699,6 +2699,37 @@
    {"share": 1, "params": {"type": "stain"}, "vary": {"size": [0.6, 1.2]}}]}
  },
  "world": {
+  "shapes": {
+   "plateau": {},
+   "hill": {"wander": 20, "widthVary": 15, "heightVary": 7},
+   "mountain": {},
+   "ramp": {},
+   "valleyV": {},
+   "valleyU": {},
+   "valleyT": {},
+   "crater": {"wander": 32, "heightVary": 3},
+   "crystal": {},
+   "deep": {"diameter": 240, "wander": 48, "widthVary": 40},
+   "shallow": {"diameter": 240, "wander": 6},
+   "river": {},
+   "braided": {},
+   "landform": {}
+  },
+  "tools": [
+   {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
+   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape"},
+   {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
+   {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
+   {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
+   {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
+   {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
+   {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
+   {"id": "crystal", "label": "Faceted forms", "icon": "crystal", "color": "#aaa5ec", "group": "shape"},
+   {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
+   {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
+   {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
+   {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
+  ],
   "baseHeight": 8,
   "defaults": {
    "surface": "slopes",

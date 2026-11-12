@@ -1178,6 +1178,37 @@
   "deposit": {"params": {"look": "blades", "blades": 5, "bladeLen": 15, "bladeWidth": 12, "fan": 1, "core": 11, "halo": 0.42, "haloSat": 1, "reach": 1.1, "rimDark": 0.3}, "vary": {"reach": [0.83, 1.65], "haloRough": [4, 10]}}
  },
  "world": {
+  "shapes": {
+   "plateau": {},
+   "hill": {"wander": 42, "widthVary": 30, "heightVary": 9, "varySize": 60, "varyMiddle": 150},
+   "mountain": {"wander": 24, "widthVary": 5},
+   "ramp": {},
+   "valleyV": {},
+   "valleyU": {},
+   "valleyT": {},
+   "crater": {"wander": 38, "heightVary": 4, "secondaries": 6, "ejecta": 70, "buckling": 70},
+   "crystal": {},
+   "deep": {"wander": 34, "widthVary": 35},
+   "shallow": {},
+   "river": {},
+   "braided": {},
+   "landform": {}
+  },
+  "tools": [
+   {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
+   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape"},
+   {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
+   {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
+   {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
+   {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
+   {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
+   {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
+   {"id": "crystal", "label": "Faceted forms", "icon": "crystal", "color": "#aaa5ec", "group": "shape"},
+   {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
+   {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
+   {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
+   {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
+  ],
   "baseHeight": 52,
   "defaults": {
    "surface": "slopes",

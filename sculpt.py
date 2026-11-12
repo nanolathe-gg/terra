@@ -900,7 +900,11 @@ def world_configs(biomes):
             material = json.loads((HERE / configs[b]['materialTable']).read_text())['material']
             beaches[b] = {'name': BIOME_NAMES[b], 'table': configs[b]['materialTable'],
                           'material': {k: material[k] for k in ('beachWidth', 'beachHeight', 'beachRGB') if k in material}}
+    # Each world's landform shapes (its table's world.shapes: its numbers over sculpt-scene.js LANDFORM_SHAPES, by shape name). Every config holds
+    # every world's, so a tool's Tool preset can take another world's version of its shape; the world's toolbar (world.tools) names its own.
+    shapes = {b: configs[b].pop('shapes', {}) for b in biomes}
     for config in configs.values():
+        config['worldShapes'] = shapes
         config['biomes'] = {b: BIOME_NAMES[b] for b in biomes}
         config['groundPatterns'] = patterns
         config['beachSources'] = beaches
