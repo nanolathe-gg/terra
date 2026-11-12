@@ -1428,15 +1428,15 @@ fn sunChord(p: vec3f, n: vec3f) -> f32 {
     return inside;
 }
 // B4: the filter a rock of `slot` puts on what it shows at thickness t: toward the hue of its absorption colour at full strength (row 6;
-// unchosen, its own colour's), 1 - e^(-k t / 4) of the way for Color deepens with thickness k, so thin edges keep their colour and thick rock
-// goes deep and saturated: the colour's strongest channel passes, the others are taken.
+// unchosen, its own colour's), 1 - e^(-k t / 16) of the way for Color deepens with thickness k (a 36-unit body .89 of the way at 1, .43 at .25),
+// so thin edges keep their colour and thick rock goes deep and saturated: the colour's strongest channel passes, the others are taken.
 // A filter, so it deepens any surface the rock claims (its faces, crystal faces, ice cover) whatever drew it.
 fn absorbFilter(slot: u32, t: f32) -> vec3f {
     let row = u.rock[slot & rockMask].rockColors[6];
     let own = slotRock(slot);
     let a = select(own, row.rgb, row.a > 0.5);
     let toward = a / max(max(a.r, max(a.g, a.b)), 0.02);
-    return mix(vec3f(1.0), toward, 1.0 - exp(-u.rock[slot & rockMask].absorbDepth * t / 4.0));
+    return mix(vec3f(1.0), toward, 1.0 - exp(-u.rock[slot & rockMask].absorbDepth * t / 16.0));
 }
 // Weathered rock and its grains: a biome's sand, from the rock's own mean and the world's Sand row and colour. The deposits and the surf's beach draw it.
 fn sandWeathered() -> vec3f {
