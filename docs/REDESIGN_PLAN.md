@@ -3423,6 +3423,38 @@ configurable"; 7 "a whole sand system", lower priority; 8 "Fix it"; 9 and
   toolbar's shape buttons are therefore built from data, the one exception
   to layout in the markup (AGENTS.md).
 
+- *Thin beds as fine lines (row 6) [landed 2026-11-11; built by an Opus
+  agent, reviewed and checked by Claude].* The owner: "Fix it, make sure
+  it's configurable." The cause was three sizes under what a face can
+  draw: beds thinner than 2 px on their slope, blocks 1.8 units tall
+  (Thin shale) and fine layers closer than the voxel step, each aliasing
+  into rows of dashes. Now a bed whose drawn size, t(1 + 2/slope) height
+  units, is under 4 is gathered with its section's other thin beds
+  (`columnGather`) and their lost ledges are drawn as fine regular layers
+  6 units apart (`voxelFine`); blocks are never under 3.5 units tall; the
+  fine layers run on across whole blocks, cut only by joints; Layer tint
+  shades them. No new control: Fine layer spacing is now true height
+  units, 6 to 16 (it had a dead range under 6), Fine layer relief and
+  Variation between repeated beds do visibly more, and four layered
+  recipes (shale, schist, sandstone, gneiss) have new numbers. A finite
+  rock number outside its control's range now loads at the range's end
+  (`copyRockSettings`), so maps saved with spacing 3 open. *Checks on the
+  tip:* land tier passes; 6 of 34 scenes changed, all classic Green
+  (green-4 2.98%, green-6 0.57%, the rest under 400 pixels; the hill keeps
+  its blocks and contour lines by eye); export bytes and the four rock
+  checks exit 0 (Block height moves 88.6% of the rock class, Fine layer
+  relief 77.0%, Fine layer spacing 75.5%, **measured by the agent**); 22
+  hover previews moved 0 to 4.3% and are regenerated. `repro/perf.mjs`
+  map4, main and tip alternating under load (load average 5 to 13): the
+  agent's tip took 19% longer to the final picture after a stroke on
+  green-modern-3 (1987 and 2129 ms against 1673 and 1798); answering a
+  thick bed before the gathering loop (Claude's commit, renders
+  byte-identical, so the Chrome checks ran one commit early) brought it
+  to 1385 against 1391 in the quietest pair, drag latency p50 26.0 and
+  26.0 **[measured under load]**. *Open:* modern Desert's bands still sit
+  under joint lines and blotches (a smaller gain there, by eye); sandstone
+  and gneiss gain little at 1x.
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
