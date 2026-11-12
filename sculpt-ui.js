@@ -34,7 +34,7 @@ export function mountEditorUI(){
  const syncTools=(active,selected,locked,features)=>{
   for(const b of grouped.querySelectorAll('button')){
    b.disabled=locked;if(b.classList.contains('rail-button'))continue;
-   b.setAttribute('aria-pressed',String(features?b.id==='feature-tool':b.dataset.tool===active));
+   b.setAttribute('aria-pressed',String(features?b.id===(features==='starts'?'starts-tool':'feature-tool'):b.dataset.tool===active));
   }
   // A rail button is lit while the tool in hand is one of its group.
   for(const r of rails)r.classList.toggle('has-current',!features&&Boolean(r.parentElement.querySelector(`[data-tool="${CSS.escape(active||'')}"]`)));

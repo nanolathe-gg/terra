@@ -213,7 +213,7 @@ function updateControls() {
   const picks=JSON.stringify([strokeWaterPicks(nodes),slopeReplaced(panelFacts())]);if(picks!==panelPicks){panelPicks=picks;syncWorldControls();}   // a stroke's water choice, or the transition replacing the slope color, wakes or idles world rows
   const featureActive=Boolean(mapFeatures?.active);
   for (const b of document.querySelectorAll('[data-tool]')) b.setAttribute('aria-pressed',String(!featureActive&&b.dataset.tool===tool));
-  $('feature-tool').setAttribute('aria-pressed',String(featureActive));
+  $('feature-tool').setAttribute('aria-pressed',String(featureActive&&mapFeatures.mode!=='starts'));$('starts-tool').setAttribute('aria-pressed',String(featureActive&&mapFeatures.mode==='starts'));
   $('feature-tool-host').hidden=!featureActive;
   $('brush-panel').hidden=featureActive||(tool==='move'&&!nodes[selected]?.params);
   $('edit-path').setAttribute('aria-pressed',String(pathEditing));
@@ -321,7 +321,7 @@ function updateControls() {
   $('brush-title').textContent=editing?shapeName(selected):tool==='move'?'Select':['landform','fissure'].includes(toolKind(tool))?`New ${toolLabel(tool)||NODE_NAMES[toolKind(tool)]}`:toolLabel(tool)||NODE_NAMES[tool]||tool;
   $('brush-scope').textContent=editing?'Shared settings for every path in this shape.':tool==='move'?'Click a shape to select and edit it.':'Settings for your new shape.';
   syncToolGroups(`${tool}:${selected}`);
-  editorUI.syncTools?.(activeTool,editing?nodes[selected].kind:null,locked,featureActive);
+  editorUI.syncTools?.(activeTool,editing?nodes[selected].kind:null,locked,featureActive&&(mapFeatures.mode==='starts'?'starts':'features'));
   syncToolSave(locked,featureActive);
   if(featureActive)$('tool-help').textContent=mapFeatures.hint||'Place features and starts · Space + drag to pan';
   else if(featureSelection)$('tool-help').textContent='Drag to move the selected features on the cell grid · Shift-click adds or removes · Delete removes · Escape deselects';
@@ -900,7 +900,7 @@ function readRegional(request) {
 }
 function setMapBusy(on) {
   loading=on; $('editor').disabled=on; $('world-editor').disabled=on;
-  for (const id of ['weather','clay','light','feature-tool']) $(id).disabled=on;
+  for (const id of ['weather','clay','light','feature-tool','starts-tool']) $(id).disabled=on;
   for(const input of document.querySelectorAll('#rendering-host input'))input.disabled=on;
   renderLayers();updateControls();
   overlay.style.pointerEvents=on?'none':''; const panel=$('map-features-controls'); if (panel) panel.disabled=on;
@@ -1319,7 +1319,9 @@ document.querySelector('.tool-groups').addEventListener('click',event => {
 for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
 for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
 for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up','up'],['node-down','down'],['node-hide','hide']]) $(id).addEventListener('click',() => nodeAction(kind));
-$('feature-tool').onclick=()=>{if(stroke||moving)return;selected=-1;pathAdding=false;drawMode='select';mapFeatures?.activate('deposit');renderLayers();updateControls();};
+// Features and Starts are two entries on the rail for the one tool (sculpt-features.js): Features opens it to place, Starts in its starts mode.
+const openFeatures=mode=>{if(stroke||moving)return;selected=-1;pathAdding=false;drawMode='select';mapFeatures?.activate(mode);renderLayers();updateControls();};
+$('feature-tool').onclick=()=>openFeatures('deposit');$('starts-tool').onclick=()=>openFeatures('starts');
 function setPathMode(on){if(stroke||moving||loading)return;pathEditing=on;pathPoint=-1;pathAdding=false;drawMode='select';updateControls();schedule();}
 $('edit-path').onclick=()=>setPathMode(!pathEditing);$('transform-mode').onclick=()=>setPathMode(false);
 $('canvas-deselect').onclick=()=>selectNode(-1);

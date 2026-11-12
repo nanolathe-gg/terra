@@ -203,3 +203,16 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 
 @media(max-width:1250px){.app{--inspector-width:290px}.version{display:none}.topbar{gap:6px}.brand{font-size:12px}.topbar button,.topbar select{padding:5px 6px}.top-actions{gap:3px}.share-menu>summary,.top-menu>summary{font-size:10px;padding:5px}.world-title{max-width:120px}footer #levels{display:none}}
 @media(max-width:1050px){.brand{font-size:0;gap:0}.brand-mark{font-size:22px}.topbar{padding:0 7px;gap:5px}.top-actions .divider,.view-tools .divider{display:none}.topbar #undo,.topbar #redo{font-size:0}.topbar #undo:first-letter,.topbar #redo:first-letter{font-size:13px}.world-title{display:none}.mode-switch button{padding:6px 9px}#focus-canvas span{display:none}.status-line{display:none}}
+/* Features and Starts: one tool behind two rail entries. The card's switch sits in its header; kinds are tabs over the list behind them. */
+.feature-head{margin:0 0 6px}.feature-head h3{flex:1;min-width:0;margin:0}
+.feature-head .feature-modes{display:flex;gap:2px;margin:0}.feature-head .feature-modes[hidden]{display:none}.feature-head .feature-modes button{width:auto;height:auto;padding:3px 9px;font-size:10.5px}
+.feature-kinds{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:2px}
+.feature-kinds button{padding:5px 2px;font-size:10.5px}.feature-kinds button[aria-checked=true]{background:#354d40;border-color:#82b597;color:#e4f6e6}
+.feature-style{display:flex;align-items:flex-end;gap:5px;position:relative}.feature-style>.control{flex:1;min-width:0}
+#feature-manage{position:static}#feature-manage>summary{font-size:10.5px;padding:6px 8px;white-space:nowrap}
+#feature-manage .popover{top:100%;left:0;right:0;width:auto;margin-top:4px;padding:10px 12px;display:grid;gap:7px}
+#feature-manage h4{margin:4px 0 0;font-size:10px;font-weight:500;color:#96ada2}#feature-manage .row,#feature-manage .control{margin:0}
+#feature-look:not(:has(> .feature-body > [data-kind]:not([hidden]))){display:none}
+#start-list{font-size:11px;padding:2px}#start-list option{padding:3px 6px}
+.tool-settings .control:has(>.feature-kinds),.tool-settings #feature-starts{display:block}
+#feature-starts>label{display:none}#feature-starts>select{width:100%;margin:0 0 6px}#feature-starts>button{width:100%}
