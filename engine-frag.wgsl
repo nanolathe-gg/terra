@@ -1743,7 +1743,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // The ground's grain survives in the beds as brightness, scaled by
         // Bed grain (retail desert bands are smooth colour).
         let bedColour = saturate(bed * mix(1.0, clamp(lum / meanLum, 0.82, 1.12), u.rock[rs & rockMask].strataGrain));
-        let onRaised = max(smoothstep(columnSection(0).x, columnSection(0).x+1.5, columnCoord(p,h)),faceGate*exposed) * (1.0-route);
+        // Where the beds begin is read from the height alone, without the column's tilt and wander: those are world-space noise, which
+        // carried the first bed's colour onto the plain in patches that do not repeat with the ground's pool (a bare Desert plain drew
+        // 839 distinct tiles in a 2048-px window where its pool holds 210; TA's maps are tiles). The beds themselves still wander.
+        let onRaised = max(smoothstep(columnSection(0).x, columnSection(0).x+1.5, h-u.columnOrigin),faceGate*exposed) * (1.0-route);
         let bedCoverage=clamp(u.rock[rs & rockMask].strata*2.0,0.0,1.0)*mix(exposed,1.0,smoothstep(.5,1.0,u.rock[rs & rockMask].strata));
         material = mix(material, bedColour, max(bedCoverage * u.rock[rs & rockMask].strataContrast * onRaised, u.rock[rs & rockMask].strata * painted.x));
         if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)); }
