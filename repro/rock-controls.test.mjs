@@ -11,7 +11,9 @@ test('geological presets are valid editable controls and column beds',()=>{
  }
 });
 test('rock recipes reject invalid controls and ignore removed options',()=>{
- for(const value of [[],1,'x',{faceRound:NaN},{faceJoint:-1},{faceRound:'0.5'},{faceStretch:0},{faceClastSize:0},{faceMineral:2},{stoneSlab:2}])assert.throws(()=>copyRockSettings(value));
+ for(const value of [[],1,'x',{faceRound:NaN},{faceRound:Infinity},{faceRound:'0.5'},{faceRound:null}])assert.throws(()=>copyRockSettings(value));
+ // A finite number outside its control's range loads at the range's nearer end (an old map still opens).
+ assert.deepEqual(copyRockSettings({faceJoint:-1,faceStretch:0,faceClastSize:0,faceMineral:2,stoneSlab:2}),{faceJoint:0,faceStretch:.25,faceClastSize:3,faceMineral:1,stoneSlab:1});
  assert.deepEqual(copyRockSettings({removedOption:1,faceRound:.5}),{faceRound:.5});
  assert.equal(copyRockSettings(undefined),null);
 });
@@ -60,8 +62,7 @@ test('fracture and crust controls use cut sources and visible finish parents',as
  assert.ok(reason('faceRindRough',{rockFace:2,faceRind:1,shineRock:0,shineRockRough:0,faceWet:0}));
  assert.equal(reason('faceRindRough',{rockFace:2,faceRind:1,faceWet:.3}),'');
  assert.equal(reason('faceRindDepth',{rockFace:2,faceRind:1,faceJoint:.5}),'');
- assert.throws(()=>copyRockSettings({faceRindDepth:21}));
- assert.throws(()=>copyRockSettings({faceRindTone:-1}));
+ assert.deepEqual(copyRockSettings({faceRindDepth:21,faceRindTone:-1}),{faceRindDepth:20,faceRindTone:-.65});
 });
 
 
@@ -74,8 +75,7 @@ test('fracture hierarchy and clustering have effective parents and saved ranges'
  }
  assert.ok(reason('faceDetailPatch',{rockFace:2,faceCrease:0,faceGrit:0,faceScratch:0}));
  assert.equal(reason('faceDetailPatch',{rockFace:2,faceCrease:.5}),'');
- assert.throws(()=>copyRockSettings({faceContinuity:2}));
- assert.throws(()=>copyRockSettings({faceJointWidth:4}));
+ assert.deepEqual(copyRockSettings({faceContinuity:2,faceJointWidth:4}),{faceContinuity:1,faceJointWidth:3});
 });
 
 test('whole blocks and block regularity are saved rock settings with effective parents',async()=>{
@@ -84,8 +84,17 @@ test('whole blocks and block regularity are saved rock settings with effective p
   assert.ok(ROCK_KEYS.includes(key));
   assert.ok(reason(key,{rockFace:0,faceTone:0}));
   assert.equal(reason(key,{rockFace:2}),'');
-  assert.throws(()=>copyRockSettings({[key]:1.5}));
+  assert.deepEqual(copyRockSettings({[key]:1.5}),{[key]:1});
  }
  assert.equal(reason('faceRegular',{rockFace:0,faceTone:.2}),'');   // it moves the blocks' colors too, as Joint spacing does
  for(const preset of Object.values(ROCK_PRESETS))for(const key of ['faceWhole','faceWholeLarge','faceRegular'])assert.ok(preset.knobs[key]>=0&&preset.knobs[key]<=1);
+});
+
+test('a map saved before Fine layer spacing began at 6 opens, its spacing at 6',()=>{
+ assert.deepEqual(copyRockSettings({faceLaminaSize:3}),{faceLaminaSize:6});
+ // The rock and column of a Thin shale wall saved at spacing 3 (round 5's R-shale-w), checked as the page opens a map (sculpt.js loadScene).
+ const rock={faceWhole:.6,faceWholeLarge:0,faceRegular:.6,faceJointWidth:1,faceSecondary:.9,faceContinuity:.9,faceDetailPatch:.6,faceFresh:.55,faceRind:.65,faceRindDepth:6,faceRindTone:-.3,faceRindWarmth:.1,faceRindRough:.7,bedCycleVary:.6,faceBedVary:1,faceBreak:.4,stoneRound:.05,stoneSlab:.85,faceJointTilt:12,faceScaleVary:.55,faceFold:0,faceSpall:.65,faceClast:0,faceClastSize:12,faceMineral:.3,runoff:.65,runoffScale:24,runoffConcentration:.65,runoffCut:2,runoffStain:.35,debrisAmount:1.1,debrisReach:80,debrisDepth:5,looseSize:7,stoneSort:.7,rockFace:2,faceRock:1,rockFaceFrom:.2,faceBed:3,faceLedge:3.2,faceRun:120,faceBlock:3,faceBlockSize:24,faceLean:0,faceWear:.1,faceCrease:.5,faceCreaseSize:6,faceScratch:.3,faceScratchSize:6,faceShade:.7,faceGrit:.15,faceGrass:.25,faceLayers:.3,faceMass:1,faceTone:.12,faceStrata:.22,faceWet:.2,faceStretch:3.2,faceBlockHeight:.4,faceRound:0,faceJoint:.9,faceExtrude:.2,faceLamina:.65,faceLaminaSize:3,faceScratchLength:50,faceScratchAngle:0,faceGritSize:1.3,bedDip:0,bedDipDir:90,shineRock:.18,shineRockSharp:12,shineRockRough:.25,shineRockScale:3};
+ const column={sections:[{start:0,beds:[[2,.85,0],[1,.2,1],[3,.7,2],[1,.3,1]]}],bands:[3.7,.84],wander:{value:5},variants:{}};
+ assert.ok(copyColumn(column));
+ assert.deepEqual(copyRockSettings(rock),{...rock,faceLaminaSize:6});
 });
