@@ -798,6 +798,12 @@ report says which budget cells main already meets.
 
 ### LP0b. The proof in the page (S; the go/no-go; a `prototype/*` branch that does not land)
 
+**Owner timing deferral, 2026-11-12.** The shared GPU was busy. The owner
+authorized continuing the correctness work and the next items without
+timing runs, to measure later when the system is quiet. LP0c and LP0b
+performance gates remain pending; their thresholds are unchanged. The
+LP0b stop for the owner’s look and Go decision still applies.
+
 **Change.** The smallest slice that puts the central claim in Chrome, on
 today's `clear()` and `changeSeq`, with nothing restructured:
 - while `interacting()`, the plan is one coarse block over the visible

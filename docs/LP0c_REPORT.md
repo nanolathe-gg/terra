@@ -1,9 +1,9 @@
 # LP0c: stable view tiles and sampling, 2026-11-12
 
 **Status:** sampling, view-grid and cache-correctness work complete; final
-regression checks are running. The owner deferred timing runs until the
+regression checks passed. The owner deferred timing runs until the
 system is quiet and authorized moving to the next card.
-Work stays on `lp0c/view-tiles`. Nothing landed or was pushed; no LP0b work.
+Work stays on `lp0c/view-tiles`. Nothing landed or was pushed. LP0b proceeds on a separate prototype branch.
 
 **Sampling fault [measured/read].** The stopped count was `green-2`, map16,
 at art pixel (893,750): RGB (47,119,27) in 128 px tiles versus (43,103,19)
@@ -94,7 +94,7 @@ main changed its canonical size four times and emptied 84, 15, 36 and 47
 cached images respectively. LP0c made the same four flips and kept **84→84**
 images every time; display tiles stayed 256 px. These are configuration
 checks under shared GPU load: all latency values from those runs were
-discarded. Final regression checks are being repeated after the race fix.
+discarded. Final regression checks passed after the race fix.
 
 **Scene and realism checks [measured].** The view-grid work adds **0 pixels**
 beyond the sampling fix on all 34 check scenes. Modern Green's three
@@ -109,7 +109,7 @@ sampling exception; the separate exact count above prevents additional
 drift from being hidden by that scope. 205 unit tests, world-name gate,
 regional replay, voxel, nine-world smoke/export, paged map, features,
 passability and shape-repeat checks passed. A temporary Node launcher
-assigned smoke ports 11200–11202, features 11210 and passability 11211;
+assigned smoke ports 11410–11412, features 11420 and passability 11421;
 `repro/check.sh` was not edited.
 
 **Memory and export [measured].** On the large `green-modern-2` map16
