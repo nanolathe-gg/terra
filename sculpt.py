@@ -511,7 +511,8 @@ WORLD_KNOBS = {
     # crystal_geometry.py), so the block size sits at the knob's 16-px floor.
     # Its Crystals brush makes column mounds: Voronoi columns with ~15 px
     # tops stepped ~16 units (measure/crystal_geometry.py).
-    'crystal': dict(gougeWeb=.6, paletteMix=1, plainRelief=.6, crackSeverity=.7, crackNetwork=1,
+    # Thick crystal deepens a little toward its own hue (Color deepens with thickness; the owner's choice of 0.1, 2026-11-12).
+    'crystal': dict(gougeWeb=.6, paletteMix=1, plainRelief=.6, crackSeverity=.7, crackNetwork=1, absorbDepth=.1,
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
                     crystalStep=16, crystalVariation=.35, crystalTiers=1,
                     crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.16, crystalSeam=1,
@@ -574,7 +575,8 @@ WORLD_KNOBS = {
     # sections).
     # Its Crystals brush makes ice blocks: four-sided, flat-topped (top ~0.45
     # of the base), sides ~0.7 units/px, no lean (measure/ice_features.py).
-    'ice': dict(plainRelief=.6, crackSeverity=0, crackMajor=.4, crackMinor=.3, crackHairline=.2,
+    # Thick ice deepens a little toward its own blue (Color deepens with thickness; the owner's choice of 0.2, 2026-11-12); its variants keep it.
+    'ice': dict(plainRelief=.6, crackSeverity=0, crackMajor=.4, crackMinor=.3, crackHairline=.2, absorbDepth=.2,
                 crackBlocks=.2, beachWidth=0, bankRock=0, crystalSides=4, crystalTop=.45, crystalVariation=.2,
                 # Shore (card E5): frost crystals are the Ice shore. Retail's band is
                 # mostly plain white ice with sparse fine straight lines (windows ice-1
