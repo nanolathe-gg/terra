@@ -63,11 +63,11 @@ final quality, one tile at a time, and each new input throws the plan away
 
 **In the page it is as predicted, and worse on a large view [measured,
 LP0].** The first changed tile appears about 30 ms after an input. The whole
-view is current 1 to 2.5 s after it at the median and 6 to 7 s at p95,
-because while a control is held almost no input ever sees a whole current
-view (0 of 1,728 Rain inputs, 144 of 1,728 color inputs). The main thread
-is idle throughout: no long task in any drag, frames every 16.7 ms. The
-wait is the GPU queue.
+view is current 1 to 2.5 s after it at the median and 6 to 7 s at p95.
+While a slider is held almost no input sees a whole current view: 0 of
+1,728 Rain inputs and 144 of 1,728 color inputs, the two controls the
+report counts. The main thread is idle throughout: no long task in any
+drag, frames every 16.7 ms. The wait is the GPU queue.
 
 **The design, in five sentences.**
 1. Every input is answered first by a coarse picture of everything it
@@ -92,13 +92,17 @@ evaluated again, which is not measured here (LP0b measures it, and LP3 step
 
 "Today" is main in Chrome at p95 **[measured, LP0]**: `green-modern-2`,
 1,728 x 1,024, 16x16 map, 512 MiB, the two runs of that cell, unless the
-cell says it pools every fixture. Medians are in section 3.7.
+cell says it pools every fixture. Medians are in section 3.7. The report's
+stroke cell for one fixture does not say whether it includes the resume
+phase, as its pooled stroke row does. "After LP2" is 0.1 to 0.2 s and not
+0.1 because one block is on the GPU at a time: an input may wait out the
+pass in flight before its own (section 4.3).
 
 | Interaction, 16x16 map, cliff view of about 1.8 megapixels | Today, p95 | After LP2 | After LP3 | After LP5 |
 | --- | --- | --- | --- | --- |
-| Stroke drag: input to every changed part of the view current | 7.25 and 7.21 s, in 126 tiles of 128 px; a drag's first inputs wait for the drag to end | 0.1 s (one pass of the whole view: 59 to 110 ms) **[measured under Node, static scene]** | under 0.1 s | |
-| Rock, surface or sun slider: input to whole view current | 6.70 and 6.78 s (the rock row) | 0.1 s at the coarse level | under 0.1 s | |
-| Color, shine or light-strength slider | 7.09 and 7.09 s (colors, scripted input) | 0.1 s at the coarse level | | 0.15 s at final quality **[inferred]** |
+| Stroke drag: input to every changed part of the view current | 7.25 and 7.21 s, in 126 tiles of 128 px; the likely reason is that a drag's first inputs wait for the drag to end **[inferred]** | 0.1 to 0.2 s (one pass of the whole view: 59 to 110 ms **[measured under Node, static scene]**) | 0.1 s | |
+| Rock, surface or sun slider: input to whole view current | 6.70 and 6.78 s (the rock row) | 0.1 to 0.2 s at the coarse level | 0.1 s | |
+| Color, shine or light-strength slider | 7.09 and 7.09 s (colors, scripted input) | 0.1 to 0.2 s at the coarse level | | 0.15 s at final quality **[inferred]** |
 | First gate crossing of a session | first input to changed pixels 78 ms at the median, 2.2 s at p95; 24 pipeline sets compiled (every fixture) | no stall | | |
 | Longest GPU submission that input must wait behind | 0.76 to 0.91 s where a Time pass runs: load, release, resume, Rain (every fixture) | | 0.1 s (LP4) | |
 | Release to final, whole view | 4.82 s after a color drag; a stroke's release 2.2 s at the median and 5.4 s at p95 (every fixture) | within 10% of today | | less (LP6) |
@@ -375,12 +379,14 @@ new build, which the rules ask anyway.
 
 What it establishes:
 
-1. **The first tile is quick; the view is not.** While a control is held
-   almost no input sees the whole view current: 144 of 1,728 color inputs
-   before the sequence ended, and 0 of 1,728 Rain inputs (234 saw any
-   changed pixel). A p95 in the middle column is a drag's first inputs
-   waiting for the drag to end and the view to finish. This is section 1's
-   claim, in the page.
+1. **The first tile is quick; the view is not.** For the two controls the
+   report counts, almost no input sees the whole view current while the
+   control is held: 144 of 1,728 color inputs before the sequence ended,
+   and 0 of 1,728 Rain inputs (234 saw any changed pixel). For strokes and
+   the other rows it gives no count, so main's share there is unknown
+   until LP0b runs main again. That a p95 in the middle column is a drag's
+   first inputs waiting for the drag to end is **[inferred]** from those
+   two. This is section 1's claim, in the page.
 2. **The main thread is not the problem.** No task over 50 ms in any stroke
    or slider drag (two of 55 ms while panning); the frame interval's p95 is
    16.7 to 16.8 ms in every phase (33 in some rock and sun sessions); a
@@ -579,10 +585,9 @@ preview level:
   already makes), not an `ImageBitmap`: one synchronous copy, no await.
 - A block is planned from the view and the budget in effect, never from
   `canonicalSize`, and its image lives outside the tile cache, so a change
-  of tile size (section 3.1) cannot empty it. The tile size itself is
-  settled when the window or the budget changes, never on a knob input:
-  otherwise the stale finals the painter keeps under a preview vanish in
-  the middle of a drag (card LP0c).
+  of tile size (section 3.1) cannot empty it. The view's tile itself must
+  not change on a knob input: otherwise the stale finals the painter keeps
+  under a preview vanish in the middle of a drag (card LP0c).
 - The per-tile quarter path is **removed**, not kept beside this: the
   `want: 2` plans, the cold-tile `authoredPreview` path and the pointer-turn
   logic that served them (`sculpt-canvas.js:274-301`). Rule 7: no flag
@@ -592,7 +597,10 @@ preview level:
 - *Coarse*: at once, for every input and for ground that scrolls into view
   with no image. Newest input wins: one block in flight, and a queued block
   an input has replaced is dropped. During a canvas gesture the block under
-  the pointer goes first.
+  the pointer goes first. An input therefore waits between one and two
+  block times (the pass in flight, then its own), so section 2's 100 ms
+  needs a view pass of about 50 ms, which is LP3's work; LP2's pass of 59
+  to 110 ms gives 0.1 to 0.2 s.
 - *Quarter*: when no input has arrived for about 100 ms and the coarse
   picture is current. Also right at release, while the Time pass runs.
 - *Final*: when no input has arrived for about 250 ms, or on release;
@@ -807,20 +815,28 @@ today's `clear()` and `changeSeq`, with nothing restructured:
 
 **Accepted when** LP0's bench, in two alternating pairs with main, on
 `green-modern-2` and `red-3` at 1,728 x 1,024 and on `map16` and `map4`,
-gives for the stroke **drag** phase and for that row, at both budgets:
-- the share of inputs that see the whole view current **while the control
-  is held** (main: nearly none, section 3.7);
-- input to whole view current, median and p95;
+gives for the stroke **drag** phase and for that row, at both budgets and
+for both builds:
+- input to whole view current: the median, the 90th percentile and p95;
+- the share of inputs that see the whole view current while the control is
+  still held (the report gives main's only for colors, 8%, and Rain, 0%;
+  this run supplies it for the stroke and the rock row);
 - the wait for pages, apart.
 
-The resume phase is reported but not judged: a Time pass is in flight
-there, which is LP4's to fix.
-**Go** when, at the larger budget, at least 90% of a drag's inputs see the
-whole view current while it is held, and their p95 is under 300 ms: three
-times the budget, because the slice has none of LP3's savings. "Three
-times better than main", this card's first test, stays as a floor, but
-main's 6 to 7 s makes it nearly automatic. Otherwise stop and report what
-the page adds that Node did not show.
+The bench sends a stroke as 40 moves and a row as 36 values, 30 ms apart,
+so the last few inputs of a drag cannot be answered before the release.
+That is why the test is a percentile of each input's own wait and not a
+share "while held". The resume phase is reported but not judged: a Time
+pass is in flight there, which is LP4's to fix.
+**Go** when, at the larger budget, nine inputs in ten see the whole view
+current within 300 ms of the input (the 90th percentile; for the stroke,
+apart from the reported wait for pages, as LP2 judges it). 300 ms is three
+times the budget: the slice has none of LP3's savings, and an input may
+wait out one block before its own. "Three times better than main", this
+card's first test, stays as a floor, but main's 6 to 7 s makes it nearly
+automatic. A wait for pages over 100 ms at the median goes to the owner
+with the result: it would make LP3 step 2 part of the first thing to
+land. Otherwise stop and report what the page adds that Node did not show.
 **Risk.** It is a prototype: no dirty model, quarter level and finals as
 today, seams unexamined. Its code is thrown away; its numbers are kept, and
 the bench's two additions are carried to LP2.
@@ -833,36 +849,40 @@ same bytes, and a knob can flip the size in mid-drag and empty the cache.
 Previews leave tiles behind in LP2, but finals stay in tiles until LP6,
 and the final is what the artist waits for between edits.
 
-**Change.** `configureChunks` (`sculpt-canvas.js:92-103`) settles the tile
-size from the budget in effect, not from a 128 MiB trial, and only when the
-window or the budget changes, not on a knob input. Where a 256 px bake
-fits, the view tile is 256 px. No other behavior changes.
+**Change.** The view's tile (`viewChunkSize()`, `sculpt-canvas.js:119`) is
+256 px, a constant: it no longer follows `canonicalSize` down to 128, and
+a knob input neither changes it nor empties the images the view shows.
+Only if a 256 px bake cannot fit the budget in effect does it fall back
+to the largest tile that does. The export's tile (`chunkSize()`,
+`canonicalSize` and its 128 MiB trial) is left exactly as it is.
 
 **Accepted when**
-- every check scene's window is counted for differing pixels between 128,
-  256 and 512 px tiles (`tilesize.mjs` over `repro/scenes/*.json`, run on
-  demand, not a new check) and the report gives the counts: 0 on the three
-  scenes tried;
-- the land tier passes with `--worlds none`, and `node
-  repro/export-bytes.mjs` passes;
+- every check scene's window is counted for differing pixels between 128
+  and 256 px tiles, on `map4` and on `map16` (`tilesize.mjs` over
+  `repro/scenes/*.json`, run on demand, not a new check), and the report
+  gives the counts. What is known today: 0 on three of the 34 scenes, on
+  `map4`, in the view's path;
+- the land tier passes with `--worlds none`;
 - on LP0's bench, `green-modern-2` and `red-3` at 1,728 x 1,024,
   alternating with main: the tile count (35, was 126), whole view current
   and release to final. Expect about half **[inferred from the Node
   ratios]**;
-- a Surface drag no longer changes the `px bake` figure in the panel's
-  memory line.
+- a Surface drag that flips `canonicalSize` (the `px bake` figure in the
+  panel's memory line) no longer empties the view: the count of cached
+  images holds through the drag.
 
-**Risks.** The comment at `sculpt-canvas.js:95-96` says the fixed trial
-exists so that "every selected budget uses the same bake lattice". Find
-what it protected before removing it. If any scene's pixels do depend on
-the tile size, stop and report: the window's size already changes the tile
-on main, so that would be a determinism fault there today. Memory: a
-256 px bake must fit beside the image cache at 512 MiB on the largest
-view; it does on the small view today **[measured, LP0: 20 tiles of
-256 px]**, where only the canvases' bytes differ **[read]**. The export's
-own tile (`chunkSize()`) is `canonicalSize` too, so its size changes with
-this card and its bytes must not: besides `export-bytes`, export one map
-from both builds and compare the files.
+**Risks.** If any scene's pixels do depend on the tile size, stop and
+report: the window's size already changes the tile on main, so that would
+be a determinism fault there today (`repro/render.mjs` tolerates 16 pixels
+between 256 and 512 px tiles, so a few may exist). Memory: a 256 px bake
+must fit beside the image cache at 512 MiB on the largest view; it does on
+the small view today **[measured, LP0: 20 tiles of 256 px]**, where only
+the canvases' bytes differ **[read]**. Not in this card: the export is
+baked in the same shrunken tiles on a large window, which the same
+measurement says costs about twice the time; changing it means changing
+`canonicalSize`, whose comment (`sculpt-canvas.js:95-96`) says the fixed
+trial keeps "the same bake lattice" at every budget. Find what that
+protected, and propose it separately.
 
 ### LP1. The dirty model (M)
 
@@ -931,13 +951,13 @@ loop, and coverage by rectangle).
 **Accepted when**, on LP0's bench with LP0b's two additions (blocks
 credited, the wait for pages apart), alternating with main and judged
 fixture by fixture:
-- at the new default, at least 90% of the inputs of a stroke drag and of a
-  rock slider drag see the whole view current while the control is held
-  (main: nearly none), on `map16` and `map4`. Their p95 meets section 2's
-  100 ms for the rock row, and for the stroke 100 ms plus the reported
-  wait for pages (LP3 step 2 is what removes that wait). At 512 MiB, where
-  the view is four blocks, the same share within 300 ms. If a budget is
-  missed, the report says what the time went to;
+- at the new default, on `map16` and `map4`, input to whole view current
+  is within 200 ms at p95 for a rock slider drag and for a stroke drag
+  (the stroke apart from the reported wait for pages, which LP3 step 2
+  removes). 200 ms is two view passes, the one in flight and the input's
+  own (section 4.3); LP3 brings it to section 2's 100 ms. At 512 MiB,
+  where the view is four blocks, 400 ms. If a figure is missed, the report
+  says what the time went to;
 - no phase compiles a pipeline between an input and its preview, and no
   long task appears in any drag;
 - the three cases `10477351` failed pass: a held Rain slider does not show a
@@ -1097,7 +1117,8 @@ Unchanged from REDESIGN_PLAN's R8, R8b and R6, with this plan's findings:
   tile size beyond the 16 pixels `repro/render.mjs` already allows (0
   pixels between 128, 256 and 512 px on the three scenes of section 3.7);
   the scenes' own tile size is unchanged. The other direction is settled:
-  128 px tiles cost 2.1 to 2.7 times 256 px ones, and LP0c removes them.
+  128 px tiles cost 2.1 to 2.7 times 256 px ones, and LP0c takes them out
+  of the view.
 - No readback at final (R6's fixed pool).
 - The surface atlas (R5 step 1) only if the relief bake still matters after
   the tile size is settled.
@@ -1173,17 +1194,21 @@ The bench confirms the plan's premise in the page (section 3.7): the first
 tile is quick, the whole view takes seconds, and nothing on the main
 thread is in the way. It also found two things this plan had not seen.
 1. *LP0c, a small card of its own, proposed.* On a large window a rocky
-   world is baked in 128 px tiles, for no difference in the picture, at
-   2.1 to 2.7 times the cost. Making the tile hold at 256 px changes no
-   pixel and should about halve the wait for a final view there. It is
-   independent of everything else and could land first.
+   world is baked in 128 px tiles at 2.1 to 2.7 times the cost of 256 px
+   ones, for no difference in the picture on the three scenes tried (of
+   34, on a 4x4 map; the card counts the rest). Holding the view's tile at
+   256 px should about halve the wait for a final view there. It is
+   independent of everything else and could land first. The export is
+   baked in the same small tiles and is left alone for now.
 2. *The Time pass in slices, earlier.* LP4's first step is what stops a
    stroke begun right after a release from stalling (175 ms at the median,
    720 at p95, today). It does not depend on the preview work, so it can
    be built before or beside LP1 instead of after LP3.
 3. *The go/no-go changed.* LP0b's "three times better than main" would
    pass almost by default against 6 to 7 s. It is now: nine inputs in ten
-   see the whole view current while the control is held, within 300 ms.
+   see the whole view current within 300 ms. And LP2's own target is 0.1
+   to 0.2 s, not 0.1: with one block on the GPU at a time an input can
+   wait out the block in flight. LP3 is what reaches 0.1 s.
 
 Also for the owner: the native color chooser cannot be driven by the
 bench, so Colors was measured by setting the picker's value (the owner
