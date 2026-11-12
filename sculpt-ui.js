@@ -53,7 +53,9 @@ export function groupToolControls(fields,buildRow){
  [null,'Water appearance',['waterDeep','waterShore']],
  [null,'Surf',['surf']],
  [null,'Crest variation',['crestTaper']],
- ['iceFacets','Facets',['iceFacets','facetForm','facetSurface','iceFacetSize','crystalStep','crystalTiers','crystalFacet','crystalSizeVar','crystalSides','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']]
+ ['iceFacets','Facets',['iceFacets','facetForm','facetSurface','iceFacetSize','crystalStep','crystalTiers','crystalFacet','crystalSizeVar','crystalSides','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']],
+ // The shape's rock beside its cover (its choices are not an amount: no switch).
+ [null,'Rock',['rockPreset']],['styleVegetation','Local vegetation',['styleVegetation']]
  ];
  function wire(d,controls,master=null){
   const memory=new Map(),box=master?d.querySelector(':scope > summary > input'):undefined;

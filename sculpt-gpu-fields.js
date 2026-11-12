@@ -79,13 +79,22 @@ const MASK_WRITES = [null, [[0, 127], [1, 0], [3, 0]], [[1, 127], [0, 0], [3, 0]
   [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0], [7, 0], [8, 0], [9, 0], [10, 0], [11, 0], [12, 0], [13, 0], [14, 0], [15, 0], [16, 0], [17, 0]],
   [[5, 127]], [[5, -127]], [[6, 127]], [[6, -127]], [[7, 127]], [[7, -127]], [], [], [[12, 127]], [[12, -127]],
   [[14, 127]], [[14, -127]], [[15, 127]], [[15, -127]], [[16, 127]], [[16, -127]], [[17, 127]], [[17, -127]]];
+// Erase clears the painted planes by its weight, and the rock a cell belongs to all or nothing (flat 2: where the weight is a half or more), since
+// a slot cannot be blended.
+const ERASE_WRITES = [...MASK_WRITES[7], [20, 0, 1, 2]];
 // A stroke's water edge choice, as [key, plane]. Plane 9 is a stroke's Soft bank (waterShore 1): no shore rock round its water (engine-rock-weather.wgsl).
 const WATER_PLANES = [['waterDeep', 10]];
 // H9: maskSetup() of sculpt.js for a landform: its Local vegetation (plane 16) and a landform stroke's
 // edge flag (written at full strength, `flat`). Each entry is [plane, target, gain, flat].
+// Rock presets (B2): the rock a landform is made of goes into mask plane 20 as its slot + 1, at full strength wherever the stroke moved the height
+// (`flat`), so the later stroke wins where two overlap; its talus and its shore fingers claim it too (engine-shape.wgsl claimRock). Rock beneath (-1)
+// writes nothing. A satellite (an impact's secondary) claims with its parent.
+export const ROCK_PLANE = 20;
+const rockClaim = q => { const k = Math.round(q.rockPreset ?? -1); return k >= 0 && k < 16 ? [[ROCK_PLANE, k + 1, 1, 1]] : []; };
 function shapeMaskWrites(kind, q, sat) {
-  if (kind !== 'landform' || sat) return [];
-  const out = [], vegetation = clamp(q.styleVegetation || 0, -1, 1);
+  if (kind !== 'landform') return [];
+  if (sat) return rockClaim(q);
+  const out = rockClaim(q), vegetation = clamp(q.styleVegetation || 0, -1, 1);
   if (Math.abs(vegetation) >= .005) out.push([16, Math.round(127 * vegetation), 1, 0]);
   WATER_PLANES.forEach(([k, plane]) => {
     const c = Math.round(q[k] || 0);
@@ -372,7 +381,7 @@ export function prepareNode(n, geom, c) {
     region = !region ? {x0: s.box[0], y0: s.box[1], x1: s.box[2], y1: s.box[3]} : {x0: Math.min(region.x0, s.box[0]), y0: Math.min(region.y0, s.box[1]), x1: Math.max(region.x1, s.box[2]), y1: Math.max(region.y1, s.box[3])};
   }
   // Mask writes: paint's channel, erase's clearing of planes 0..13; each [plane, target, gain, flat].
-  const writes = kind === 'fissure' ? (q.fissureDark > 0 ? [[2, 127]] : []) : kind === 'paint' ? (MASK_WRITES[Math.round(q.paintChannel)] || []) : kind === 'erase' ? MASK_WRITES[7] : shapeMaskWrites(kind, q, n.satellite);
+  const writes = kind === 'fissure' ? (q.fissureDark > 0 ? [[2, 127]] : []) : kind === 'paint' ? (MASK_WRITES[Math.round(q.paintChannel)] || []) : kind === 'erase' ? ERASE_WRITES : shapeMaskWrites(kind, q, n.satellite);
   const main = {op: 'stamp', kind: kcode, segs, region, extra, entry: kcode === 14 ? 'stampFissure' : kcode === 16 ? 'stampLandform' : kcode >= 6 ? 'stampN' : 'stamp', smoothR: kind === 'smooth' ? smoothRadius(radius, geom) : 0, writes: writes.map(([p, t, g = 1, f = 0]) => [p, t, g, f]),
     u: {seed, framed: inv ? 1 : 0,
       radius, amount: q.amount, amountPct: clamp(q.amount / 100, 0, 1), rough: q.rough, softness: q.softness, leanK: lean.k, bearX: lean.bx, bearY: lean.by, leanSide: lean.side, wK: vary.wK, wLo: vary.wLo, wHi: vary.wHi, amp, faceVar: q.faceVariation ?? .8,

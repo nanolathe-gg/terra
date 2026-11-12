@@ -241,5 +241,5 @@ test('a save with an image the engine cannot draw is refused when it loads', () 
   // loadSketch makes the new node list before it changes anything, and a load into another world checks the images before it leaves this one.
   const text = readFileSync(`${root}sculpt.js`, 'utf8'), load = text.slice(text.indexOf('\nfunction loadSketch('), text.indexOf('\n}', text.indexOf('\nfunction loadSketch(')));
   assert.match(load.split('\n')[3], /^  const next=deserializeNodes\(/);
-  assert.match(text, /copyColumn\(s\.column\);copyRockSettings\(s\.rock\);s\.nodes\.forEach\(checkedHeights\);\n    \} catch \(err\) \{ error\(err\.message\); return false; \}/);
+  assert.match(text, /copyColumn\(s\.column\);copyRockSettings\(s\.rock\);copyRocks\(s\.rocks\);s\.nodes\.forEach\(checkedHeights\);\n    \} catch \(err\) \{ error\(err\.message\); return false; \}/);
 });

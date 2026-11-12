@@ -4,7 +4,7 @@ import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
-import {ROCK_PRESETS,ROCK_KEYS,copyRockSettings,rockPresetFor,applyWorldRock} from './sculpt-rock-presets.js';
+import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,deleteRock,rockRecipeText,parseRockRecipe} from './sculpt-rock-presets.js';
 import {KNOBS,LOW_GROUND_RGB,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
@@ -59,6 +59,8 @@ let config, renderer, grid, size, spacing, services;
 // A world's configuration file, by the same relative path on a static host and on sculpt.py: config/<world>.json, or config/<world>--<variant>.json.
 const configUrl=(world,variant)=>`config/${encodeURIComponent(world)}${variant?'--'+encodeURIComponent(variant):''}.json`;
 let defaultColumn, columnOverride=null, columnEditing=false, syncColumnPanel=()=>{};
+// Rock presets (B2): the map's own rocks in slots 1-15 (sculpt-rock-presets.js); slot 0 is the world's rock, its flat settings and column.
+let mapRocks=[], rockUseKey='[]', rockSelected=0;   // rockSelected: the preset the World pane's rock settings edit (0 the world's own)
 let pagedCoarseStarted=false, mapCanvas=null, regionalFields=null, originCellX=0, originCellY=0, worldSize=0, worldGrid=0, regionalWeather=null;
 // Integer origins preserve the canonical multiplication order: (cell + origin)
 // times spacing, rather than an accumulated floating-point world offset.
@@ -77,6 +79,9 @@ const worldDefault=key => worldDefaultIn(config,key);
 const shapeDefaults=() => shapeDefaultsIn(config);
 const nodeShapeParams=n => {const q={...shapeDefaults(),...n.params};return n.kind==='landform'?landformSteps(q):q;};
 const shapeValue=key => { const f=SHAPE_FIELDS.find(f => f[0]===key); return Number($(f[1]).value)/f[7]; };
+// A shape control set from a tool's or a stroke's numbers. A choice its list no longer holds (a rock preset deleted since the tool last used it)
+// shows and reads as the list's first choice, Rock beneath: an empty select would read as 0, the world's rock.
+const setShapeControl=(id,v) => { const e=$(id); e.value=v; if(e.selectedIndex===-1)e.selectedIndex=0; };
 function buildShapeOptions() {
   // Each option row is built for its feature group (sculpt-ui.js groupToolControls). The section and along-path
   // editors are the page's own (#section-preview-control, in the curve dock).
@@ -142,7 +147,7 @@ function stepControlRange(kind,p={}) {
 function showTool(state={},kind=strokeKind(tool)) {
   heightControlRange(state);stepControlRange(kind,state);
   [$('amount').min,$('amount').max]=amountRange(kind).map(String);
-  for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(state[key])) $(id).value=clamp(state[key],lo,hi);
+  for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(state[key])) setShapeControl(id,clamp(state[key],lo,hi));
   $('tool-style').value=Object.hasOwn(TOOL_PRESETS,state.preset)?state.preset:'custom';
 }
 function updateControls() {
@@ -508,7 +513,7 @@ const coastLayerReach=s => {
 // waterline if that is nearer, so each riser is an arc round its bite, concentric with the bite's other
 // risers, meeting a neighbor's arcs at a cusp (the overlap of two discs).
 function markViewChanged(invalidate=true) { revision++; $('export').disabled=true; if (mapCanvas && invalidate) mapCanvas.invalidate(); }
-function markChanged() { markViewChanged(false); error(); }
+function markChanged() { markViewChanged(false); error(); syncRocks(); }
 
 // Shapes are nodes: kind, path, parameters and seed. The map is rebuilt by
 // replaying nodes in order, so relative heights follow the ground beneath
@@ -550,6 +555,23 @@ const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0
 const overlaps=(a,b) => a.x0<=b.x1 && b.x0<=a.x1 && a.y0<=b.y1 && b.y0<=a.y1;
 function evaluate(from=0,rect=null) {
   regionalFields.changed(regionalDirtyRect(from,rect)); markChanged();
+}
+// The renderer's rock table holds the presets strokes choose, and no other (a preset no stroke uses builds no pipeline and moves no pixel).
+function syncRocks() {
+  if (!renderer) return;
+  const used=rocksInUse(nodes,mapRocks),key=JSON.stringify(used);
+  if (key===rockUseKey) return;
+  rockUseKey=key; renderer.setRocks(new Map(used.map(r => [r.slot,r]))); markViewChanged(); schedule();
+}
+// The Rock option's choices: Rock beneath, the world's rock, then the map's presets by name. A stroke whose preset is gone shows Rock beneath.
+function syncRockChoices() {
+  const select=$('lf-rock'),value=select.value;
+  select.replaceChildren(new Option('Rock beneath','-1'),new Option(worldRockName(config),'0'),...mapRocks.map(r => new Option(r.name,String(r.slot))));
+  select.value=[...select.options].some(o => o.value===value)?value:'-1';
+}
+// The map's rock presets replaced (a load, an undo, a preset edited): strokes keep only choices the list holds, and the renderer and the Rock option follow.
+function restoreRocks(rocks) {
+  mapRocks=structuredClone(rocks); nodes=keepStrokeRocks(nodes,mapRocks); syncRockChoices(); syncRocks(); syncRockPanel();
 }
 
 function regionalReadApron(n) {
@@ -905,7 +927,7 @@ function selectNode(i) {
     const [lo,hi]=amountRange(n.kind); $('amount').min=String(lo); $('amount').max=String(hi);
     $('diameter').value=clamp(p.radius*2,16,1200); $('amount').value=clamp(p.amount,lo,hi); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
     $('softness').value=Math.round(p.softness*100); $('cracks').value=Math.round((p.cracks||0)*100);
-    for (const [key,id,,,lo,hi,,scale] of SHAPE_FIELDS) $(id).value=clamp(Math.round((p[key]??worldDefault(key))*scale),lo,hi);
+    for (const [key,id,,,lo,hi,,scale] of SHAPE_FIELDS) setShapeControl(id,clamp(Math.round((p[key]??worldDefault(key))*scale),lo,hi));
   }
   renderLayers(); updateControls(); schedule(false);
   if (n) status(`Selected ${NODE_NAMES[n.kind]||n.kind} #${i+1}. Drag to transform or edit its settings.`);
@@ -968,12 +990,13 @@ function flushEval() {
 }
 function checkpoint(mapOnly=false) {
   flushEval();
-  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); if (history.length>48) history.shift(); historyIndex=history.length-1;
+  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),rocks:structuredClone(mapRocks),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); if (history.length>48) history.shift(); historyIndex=history.length-1;
   renderLayers(); updateControls(); persistLater();
 }
 function moveHistory(delta) {
   const next=historyIndex+delta; if (!ready || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
   if(history[next].rock)setRockSettings(history[next].rock);
+  if(history[next].rocks&&JSON.stringify(history[next].rocks)!==JSON.stringify(mapRocks))restoreRocks(history[next].rocks);
   if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); return; }
   cancelWeather(); nodes=cloneNodes(history[next].nodes); selected=-1;pathAdding=false;drawMode='select';pathPoint=-1;pathIndex=0; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
   if (JSON.stringify(history[next].column)!==JSON.stringify(columnOverride)) { restoreColumn(history[next].column); syncColumnPanel(); }
@@ -1066,6 +1089,7 @@ function scriptedScene(list,{ground=true}={}) {
   cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); 
   nodes=[]; selected=-1;
   for (const node of sceneNodes(config,list,{ground,seed,settings:experiment})) addNode(node);
+  nodes=keepStrokeRocks(nodes,mapRocks);   // a stroke choosing a preset the map's list does not hold keeps the rock beneath (as headless play does)
   regionalFields.changed();
   markChanged(); checkpoint();
   updateControls(); schedule(); queueWeather();
@@ -1075,7 +1099,7 @@ function sketch() {
   applySeedControl();
   rememberTool();
   return {format:'nanolathe-terrain-sculpt',version:6,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,varySeed,refinementSeed,
-    ...(columnOverride?{column:structuredClone(columnOverride)}:{}),rock:rockSettings(),
+    ...(columnOverride?{column:structuredClone(columnOverride)}:{}),rock:rockSettings(),rocks:structuredClone(mapRocks),
     toolSettings,softness:Number($('softness').value),relief:Number($('relief').value),
     mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
@@ -1133,7 +1157,7 @@ let keepSaved=false;   // set while the saved copy failed to load: leaving the p
 addEventListener('pagehide',() => { if (!stroke && !moving && !loading && !keepSaved) saveWorking(); });
 function loadSketch(s,carry=false) {
   if (!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==6 || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n)) throw new Error('Load a map stroke graph with the same canvas and grid size.');
-  const next=deserializeNodes(carry?carryNodes(s.nodes):s.nodes),column=copyColumn(s.column),rock=copyRockSettings(s.rock);
+  const next=deserializeNodes(carry?carryNodes(s.nodes):s.nodes),column=copyColumn(s.column),rock=copyRockSettings(s.rock),rocks=copyRocks(s.rocks);
   if(!carry&&rock)setRockSettings(rock);
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
@@ -1142,13 +1166,13 @@ function loadSketch(s,carry=false) {
   // Carried into another world, the brush cards and the world's sliders stay at that world's defaults.
   if (!carry) for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(savedToolCard(config,kind,s.toolSettings?.[kind])||{})};
   showTool(toolSettings[tool]);
-  if (!carry) for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
+  if (!carry) for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(s[key])) setShapeControl(id,clamp(s[key],lo,hi));
   if (!carry) for (const [key,id,lo,hi] of [['softness','softness',0,100],['relief','relief',0,160],['mineralRing','mineral-ring',0,100],['ringSpread','ring-spread',0,100],['ringVariation','ring-variation',0,100],['materialWeathering','material-weathering',0,100],['depositSpread','deposit-spread',0,100],['transitionDetail','transition-detail',0,100]]) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
   if (typeof s.weather==='boolean') $('weather').checked=s.weather;
   if (typeof s.clay==='boolean') $('clay').checked=s.clay;
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
   restoreColumn(column);syncColumnPanel();
-  nodes=next; selected=-1;pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
+  mapRocks=rocks??worldRocks(config); rockSelected=0; syncRockChoices(); syncRockPanel(); nodes=keepStrokeRocks(next,mapRocks); selected=-1;pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
 }
 // A sketch remembers the world it was drawn in. Loading one in another world
 // reloads the recorded world first, then plays the sketch there. The file is
@@ -1183,7 +1207,7 @@ async function loadSketchFile(s,commit=true) {
       served=servedConfig?.biomeId===biome;
       variant=served && typeof s.variant==='string' && servedConfig.variants?.[s.variant]?s.variant:'';
       if(s.variant && variant!==s.variant)throw new Error('The saved column variant is unavailable.');
-      copyColumn(s.column);copyRockSettings(s.rock);s.nodes.forEach(checkedHeights);
+      copyColumn(s.column);copyRockSettings(s.rock);copyRocks(s.rocks);s.nodes.forEach(checkedHeights);
     } catch (err) { error(err.message); return false; }
     if (!served) { error(`The saved terrain belongs to the ${biome} world, which this server does not have. The current terrain was left as it was.`); return false; }
     const token=Math.random().toString(36).slice(2)+Date.now().toString(36);
@@ -1557,24 +1581,30 @@ function buildKnobs() {
       wrap.dataset.knob=key;if(search)wrap.dataset.searchGroup=search;
       const input = wrap.querySelector('#'+id), out = wrap.querySelector('output');
       if(choices)input.value=String(current);
-      input.addEventListener('input', () => { out.textContent = input.value; setKnob(key, input.value); });
+      input.addEventListener('input', () => { out.textContent = input.value; if (rockSelected>0 && ROCK_KEYS.includes(key)) setPresetKnob(key, Number(input.value)); else setKnob(key, input.value); });
       if(ROCK_KEYS.includes(key))input.addEventListener('change',()=>checkpoint(true));
       box.append(wrap);
     }
   }
   const sync=mountWorldControlIndex(root,worldPanelValues);
-  syncWorldControls=()=>{sync();$('rock-preset').value=rockPresetFor(rockSettings(),config.column);};
+  syncWorldControls=()=>{sync();$('rock-preset').value=rockSelected>0?rockRecipeFor(mapRocks.find(r=>r.slot===rockSelected)):rockPresetFor(rockSettings(),config.column);};
   $('rock-preset').onchange=()=>{
-    const p=ROCK_PRESETS[$('rock-preset').value];if(!p)return;
+    const key=$('rock-preset').value;
+    if(rockSelected>0){if(!key)return;editRocks(setRock(mapRocks,rockSelected,recipeRock(key)));checkpoint(true);syncRockPanel();return;}
+    const p=ROCK_PRESETS[key]||(key==='soil'?{knobs:recipeRock(key).knobs,sections:null}:null);if(!p)return;
     setRockSettings(p.knobs);
-    editColumn({...columnForEdit(),sections:structuredClone(p.sections),variants:{}});
+    if(p.sections)editColumn({...columnForEdit(),sections:structuredClone(p.sections),variants:{}});   // Smooth soil keeps the world's beds
     if(columnEditing)commitColumn();else checkpoint(true);
     syncColumnPanel();syncWorldControls();
   };
+  mountRockPanel();
 }
 // The facts the World panel enables a row by (sculpt-knobs.js worldPanelValues, which worldControlRequirement reads).
 const panelFacts=() => ({config,renderer,nodes,colors:worldColors(),weathering:weatherOn(),materialWeathering:Number($('material-weathering').value)});
-function worldPanelValues() { return worldPanelValuesOf(panelFacts()); }
+function worldPanelValues() {
+  const values=worldPanelValuesOf(panelFacts()),rock=mapRocks.find(r=>r.slot===rockSelected);
+  return rock?{...values,...rock.knobs}:values;   // a selected preset's rows are enabled by its own numbers
+}
 // Rock changes share the editor's history and recipe, including the existing
 // material controls used by the geological starting points.
 function rockSettings(){return Object.fromEntries(ROCK_KEYS.map(k=>[k,Number(renderer.variant.get(k)??config.defaults[k])]));}
@@ -1589,6 +1619,70 @@ function setRockSettings(values){
   window.history.replaceState(null,'',url);saveWorlds();
   if(!changed)return;
   renderer.applyKnobs();syncWorldControls();markViewChanged();persistLater();schedule();
+}
+// ---- Rock presets (B2): the World pane's list. The selected preset's numbers fill the rock rows and its beds the Rock column panel. ----
+const rockNote=text => { $('rock-presets-note').textContent=text; $('rock-presets-note').hidden=!text; };
+// The selected preset as a recipe: a preset of the list, or slot 0 as the world has it now.
+function selectedRock() {
+  return mapRocks.find(r=>r.slot===rockSelected)||worldRock(worldRockName(config),Object.fromEntries(ROCK_KEYS.map(k=>[k,renderer.variant.get(k)??config.defaults[k]])),config.column,config.variant);
+}
+// A new list (an edit of the selected preset, an add or a delete): the renderer follows when a stroke uses a changed preset (syncRocks).
+function editRocks(rocks) { mapRocks=rocks; nodes=keepStrokeRocks(nodes,mapRocks); syncRockChoices(); syncRocks(); persistLater(); }
+// One rock row moved while a preset is selected: that preset's number, not the world's (no address, no saved world).
+function setPresetKnob(key,value) {
+  const rock=mapRocks.find(r=>r.slot===rockSelected); if(!rock)return;
+  editRocks(setRock(mapRocks,rockSelected,{knobs:{...rock.knobs,[key]:value},column:rock.column}));
+  syncWorldControls(); markViewChanged(); schedule();
+}
+// The list, the name, the buttons (each disabled one saying why), the rock rows' values and the Rock column panel, for the selected preset.
+function syncRockPanel() {
+  if(!renderer||!$('knob-rockFace'))return;   // before the World pane is built
+  if(!mapRocks.some(r=>r.slot===rockSelected))rockSelected=0;
+  const list=$('rock-presets'),world=rockSelected===0,full=mapRocks.length>=ROCK_SLOTS-1;
+  list.replaceChildren(new Option(`${worldRockName(config)} (the world's rock)`,'0'),...mapRocks.map(r=>new Option(r.name,String(r.slot))));
+  list.value=String(rockSelected);
+  if(document.activeElement!==$('rock-name'))$('rock-name').value=world?worldRockName(config):mapRocks.find(r=>r.slot===rockSelected).name;
+  $('rock-name').disabled=$('rock-rename').disabled=world;$('rock-delete').disabled=world;$('rock-duplicate').disabled=$('rock-add').disabled=full;
+  rockNote(world?'The world\u2019s own rock keeps its recipe\u2019s name and cannot be deleted: every shape that chooses no other preset is made of it.':full?'This map holds 15 presets besides the world\u2019s rock, the most it can: delete one to add another.':'');
+  const values=world?null:{...Object.fromEntries(ROCK_KEYS.map(k=>[k,Number(renderer.variant.get(k)??config.defaults[k])])),...mapRocks.find(r=>r.slot===rockSelected).knobs};
+  for(const key of ROCK_KEYS){const input=$('knob-'+key);if(!input)continue;const v=values?values[key]:Number(renderer.variant.get(key)??config.defaults[key]);if(!Number.isFinite(v))continue;input.value=v;input.closest('[data-knob]').querySelector('output').textContent=+v.toFixed(3);}
+  syncWorldControls();syncColumnPanel();
+}
+function selectRock(slot) { rockSelected=slot; syncRockPanel(); }
+function mountRockPanel() {
+  $('rock-presets').onchange=()=>selectRock(Number($('rock-presets').value));
+  $('rock-add').onchange=()=>{
+    const key=$('rock-add').value;$('rock-add').value='';if(!key)return;
+    try{const added=addRock(mapRocks,key,worldRockName(config));editRocks(added.rocks);selectRock(added.slot);checkpoint(true);status(`Added the rock preset ${mapRocks.find(r=>r.slot===added.slot).name}.`);}catch(err){rockNote(err.message);}
+  };
+  $('rock-duplicate').onclick=()=>{
+    try{const copy=duplicateRock(mapRocks,rockSelected,selectedRock());editRocks(copy.rocks);selectRock(copy.slot);checkpoint(true);}catch(err){rockNote(err.message);}
+  };
+  const rename=()=>{
+    if(rockSelected===0)return;
+    try{const rocks=renameRock(mapRocks,rockSelected,$('rock-name').value);if(JSON.stringify(rocks)===JSON.stringify(mapRocks))return;editRocks(rocks);syncRockPanel();checkpoint(true);}catch(err){rockNote(err.message);}
+  };
+  $('rock-rename').onclick=rename;$('rock-name').onkeydown=e=>{if(e.key==='Enter')rename();};
+  // Deleting a preset sends its strokes to Rock beneath in the same undo step: the shapes claim again, so the terrain is evaluated.
+  $('rock-delete').onclick=()=>{
+    if(rockSelected===0)return;
+    const name=mapRocks.find(r=>r.slot===rockSelected).name,gone=deleteRock(mapRocks,nodes,rockSelected),moved=nodes.filter((n,i)=>n!==gone.nodes[i]).length;
+    cancelWeather();nodes=gone.nodes;editRocks(gone.rocks);selectRock(0);evaluate(0);checkpoint();queueWeather();
+    status(`Deleted the rock preset ${name}${moved?`; ${moved} shape${moved===1?'':'s'} now keep the rock beneath`:''}.`);
+  };
+  // Copy and Paste a recipe (JSON on the clipboard): its name, numbers and beds, to compare two sets of numbers or move one between maps and worlds.
+  $('rock-copy').onclick=async()=>{
+    try{await navigator.clipboard.writeText(rockRecipeText(selectedRock()));rockNote('');status('Copied the rock recipe to the clipboard.');}catch(err){rockNote('The clipboard could not be written: '+err.message);}
+  };
+  $('rock-paste').onclick=async()=>{
+    try{
+      const recipe=parseRockRecipe(await navigator.clipboard.readText());
+      if(rockSelected===0){setRockSettings(recipe.knobs);if(recipe.column)editColumn({...columnForEdit(),sections:recipe.column.sections,variants:{}});if(columnEditing)commitColumn();else checkpoint(true);syncColumnPanel();}
+      else{editRocks(setRock(mapRocks,rockSelected,recipe));checkpoint(true);}
+      syncRockPanel();rockNote('');status(`Pasted the rock recipe ${recipe.name}.`);
+    }catch(err){rockNote(err.message);}
+  };
+  syncRockPanel();
 }
 // A world row's change: address, world store, panel and renderer settings, then
 // the shape or Time work requested by the shared applyKnob operation.
@@ -1619,7 +1713,13 @@ async function bootMap() {
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); renderer.setColors(worldColors());$('export').textContent='Export view PNG';
   buildKnobs(); buildWorldPanel();
-  syncColumnPanel=mountColumnPanel(()=>({column:columnForEdit(),variant:config.variant,edited:Boolean(columnOverride)}),editColumn,commitColumn,()=>{editColumn(null);commitColumn();});
+  // The Rock column panel edits the selected preset's beds: the world's column for slot 0, a preset's own sections (its copy of the world's
+  // until edited; Restore gives it the world's again).
+  const presetColumn=()=>{const rock=mapRocks.find(r=>r.slot===rockSelected),own=config.column?.variants?.[config.variant]?.sections||config.column?.sections||[];return {column:{sections:structuredClone(rock.column?.sections??own)},variant:'',edited:Boolean(rock.column)};};
+  const editPresetColumn=column=>{const rock=mapRocks.find(r=>r.slot===rockSelected);editRocks(setRock(mapRocks,rockSelected,{knobs:rock.knobs,column:{sections:column.sections??[]}}));};
+  syncColumnPanel=mountColumnPanel(()=>rockSelected>0?presetColumn():({column:columnForEdit(),variant:config.variant,edited:Boolean(columnOverride)}),
+    column=>rockSelected>0?editPresetColumn(column):editColumn(column),()=>rockSelected>0?checkpoint(true):commitColumn(),
+    ()=>{if(rockSelected>0){const rock=mapRocks.find(r=>r.slot===rockSelected);editRocks(setRock(mapRocks,rockSelected,{knobs:rock.knobs,column:null}));checkpoint(true);}else{editColumn(null);commitColumn();}});
   let saved=null; try { if (LOCAL_KEY && !experiment.has('pendingSketch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
   if (saved) {
     try {
@@ -1629,7 +1729,7 @@ async function bootMap() {
   }
   else status('Blank map ready · draw terrain with the existing tools.');
   ready=true; $('editor').disabled=false; $('world-editor').disabled=false;
-  history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
+  history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),rocks:structuredClone(mapRocks),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
   const pending=await takePendingSketch(experiment.get('pendingSketch'));
   if (pending) { try { loadSketch(pending); checkpoint(); status('Loaded the saved map.'); if (experiment.get('shared')) { window.history.replaceState(null,'',(u => (u.searchParams.delete('shared'),u.toString()))(new URL(location.href))); announceShared(); } } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
@@ -1668,7 +1768,7 @@ async function boot() {
     if (worldId!==config.biomeId) document.querySelector('.canvas-caption h2').textContent=worlds[worldId].name+' terrain';
     addDefaults(experiment,config.defaults);
     borrowBeach(config,experiment);   // a beach another world lends (Beach, below Ground pattern): before the renderer and the panel read the world's layers
-    buildShapeOptions();
+    buildShapeOptions(); mapRocks=worldRocks(config); syncRockChoices();
     for (const kind of Object.keys(HELP)) toolSettings[kind]=toolDefaults(kind);
     showTool(toolSettings[tool]);
     // The surface sliders open at the world's material values; the address may set the ring's three (a world's own fringe settings, 0..1).

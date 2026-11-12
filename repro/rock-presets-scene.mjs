@@ -1,0 +1,74 @@
+// Rock presets in a scene (B2), headless: two presets and the world's rock on three strokes of modern Green, one preset edited.
+//   node repro/rock-presets-scene.mjs [--out DIR]
+// A wall on Jointed basalt, a dome on the world's Rounded granite and a hill on Smooth soil (the presets modern Green ships). Editing the basalt
+// preset (Joint depth) changes the picture on the wall and no farther from its rock than a pass gathers from; the same scene gives the same bytes
+// twice, and its export is the same bytes twice. Writes before.png, after.png (and their clay) and report.json into DIR.
+import assert from 'node:assert/strict';
+import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {join} from 'node:path';
+import {openHost, openScene, weather, renderWindow, exportMap} from './headless.mjs';
+import {encodePng} from './png.mjs';
+import {setRock} from '../sculpt-rock-presets.js';
+
+const arg = (k, d) => process.argv.includes(k) ? process.argv[process.argv.indexOf(k) + 1] : d;
+const out = arg('--out', '/private/tmp/terraform-rock-presets-scene'); mkdirSync(out, {recursive: true});
+const W = 1024, rect = {x: 100, y: 100, width: W, height: W, tile: 256}, BASALT = 2;
+const scene = {biome: 'green', ground: true, strokes: [
+  ['plateau', [[260, 420], [760, 360]], {seed: 11, card: {diameter: 480, elevation: 200, rockPreset: BASALT}}],
+  ['mountain', [[960, 760]], {seed: 12, card: {diameter: 300, elevation: 140, rockPreset: 0}}],
+  ['hill', [[380, 900], [620, 930]], {seed: 13, card: {rockPreset: 1}}]]};
+const png = (name, pixels) => writeFileSync(join(out, name), encodePng(W, W, pixels));
+const sha = bytes => createHash('sha256').update(bytes).digest('hex');
+const report = {};
+
+await openHost();
+const s = await openScene(scene, 'biome=green&variant=modern&mapX=4&mapY=4&scratch=1&gpuMB=512&heapMB=1536&sunHeight=25&flatShadow=1');
+try {
+  await weather(s);
+  report.inUse = [...s.renderer.rocks.keys()];
+  assert.deepEqual(report.inUse, [1, BASALT], 'the table holds the presets strokes choose (Pitted limestone, unused, is not in it)');
+  const color = {...rect, options: s.drawOptions({clay: false, light: 'original'})}, clay = {...rect, options: s.drawOptions({clay: true, light: 'original'})};
+  const before = await renderWindow(s, color); png('before.png', before); png('before-clay.png', await renderWindow(s, clay));
+  // The basalt preset's Joint depth, raised: the table changes and the shape is not evaluated again.
+  const basalt = s.rocks.find(r => r.slot === BASALT);
+  s.setRocks(setRock(s.rocks, BASALT, {knobs: {...basalt.knobs, faceJoint: 2.5}, column: basalt.column}));
+  const after = await renderWindow(s, color); png('after.png', after); png('after-clay.png', await renderWindow(s, clay));
+  assert.deepEqual(await renderWindow(s, color), after, 'the same scene gives the same bytes twice');
+  // Where the picture moved, against the cells the basalt claims (mask plane 20 holds slot + 1), with the reach a pass gathers from.
+  const {fields, worldGrid: grid, spacing, renderer, fieldsModule} = s;
+  await fields.gpuReady();
+  const words = new Uint32Array(await fieldsModule.readBuffer(renderer.device, fields.gpuBuffers().masks, 0, grid * grid * 28));
+  const reach = 125, cell = 8, cw = Math.ceil(W / cell), near = new Uint8Array(cw * cw);   // 8-px blocks within reach of a basalt cell
+  let claimed = 0;
+  for (let gy = 0; gy < grid; gy++) for (let gx = 0; gx < grid; gx++) {
+    if ((words[(gy * grid + gx) * 7 + 5] & 255) !== BASALT + 1) continue;
+    claimed++;
+    const x = gx * spacing - rect.x, y = gy * spacing - rect.y;
+    for (let by = Math.max(0, Math.floor((y - reach) / cell)); by <= Math.min(cw - 1, Math.floor((y + reach) / cell)); by++)
+      for (let bx = Math.max(0, Math.floor((x - reach) / cell)); bx <= Math.min(cw - 1, Math.floor((x + reach) / cell)); bx++) near[by * cw + bx] = 1;
+  }
+  let moved = 0, outside = 0;
+  for (let i = 0; i < after.length; i += 4) {
+    if (before[i] === after[i] && before[i + 1] === after[i + 1] && before[i + 2] === after[i + 2]) continue;
+    moved++; const p = i / 4, x = p % W, y = Math.floor(p / W);
+    // The screen is the map seen from the south: a pixel shows ground up to its height / 2 farther south, so it is tested a block's slack wide.
+    if (!near[Math.floor(y / cell) * cw + Math.floor(x / cell)] && !near[Math.min(cw - 1, Math.floor((y + 160) / cell)) * cw + Math.floor(x / cell)]) outside++;
+  }
+  Object.assign(report, {claimedCells: claimed, moved, movedShare: +(moved / (W * W)).toFixed(4), outsideReach: outside});
+  assert.ok(claimed > 1000, 'the wall claims its rock');
+  assert.ok(moved > 2000, 'editing the preset changes the wall');
+  assert.equal(outside, 0, `${outside} pixels moved farther than ${reach} px from the basalt`);
+  // An export of the two-preset map, twice: the same bytes.
+  const {buildWasm} = await import('./export-node.mjs'), wasm = readFileSync(buildWasm(join(out, 'map-export.wasm')));
+  const exports = [];
+  for (const pass of [0, 1]) { const x = await exportMap(s, {name: 'Rock presets', wasm}); exports.push({ufo: sha(x.archive), png: sha(x.indexed)}); }
+  report.exports = exports;
+  assert.deepEqual(exports[0], exports[1], 'the export is the same bytes twice');
+  assert.deepEqual(s.errors, []);
+} finally {
+  writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 2));
+  s.dispose();
+}
+console.log(JSON.stringify(report));
+process.exit(0);

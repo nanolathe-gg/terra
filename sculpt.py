@@ -99,6 +99,8 @@ KNOB_DEFAULTS = dict(
     spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestVary=0, crestTaper=0,
     # Local vegetation (card C5 stage 2): change about the world's own cover, 0 none.
     styleVegetation=0,
+    # Rock presets (B2): the rock a landform is made of; -1, Rock beneath, keeps the rock already there.
+    rockPreset=-1,
     # Placed fissures (card C4 stage 2): only the Fissure tool reads them.
     fissureWidth=5, fissureJag=.5, fissureBranches=3, fissureBranchLen=90, fissureBranchSpread=.5, fissureTaper=.6,
     fissureNetwork=0, fissureCell=70, fissureCrack=.4, fissureDark=.6,
@@ -683,7 +685,9 @@ WORLD_VARIANTS = {
                        # and the granite shows; the heights do not move.
                        # Its rock is the Rounded granite recipe, beds and all (the owner, 2026-11-10): massive rock in rounded blocks 34 px wide, with
                        # no strata. The recipe's numbers win over the variant's where both set one: Shine rock .4 for .36 and loose stone 7 px for 5.
-                       rock=dict(recipe='granite', beds=True)),
+                       # Its rock presets besides Smooth soil (B2): a jointed wall and a pitted limestone, the two recipes besides granite that a temperate
+                       # upland shows (sculpt-rock-presets.js worldRocks); no stroke chooses them unless an artist does.
+                       rock=dict(recipe='granite', beds=True, presets=['basalt', 'limestone'])),
     },
     'ice': {
         # Icy Bergs: periwinkle-white blocks standing in blue water (repro
@@ -768,7 +772,8 @@ WORLD_VARIANTS = {
         # numbers for its rock (the owner, 2026-11-10), over Desert's own beds and their colors: the recipe's three thin beds, 14 units to the
         # cycle, painted a plateau's level top in patches of all three.
         # Bare rock at rims 60 px, as modern Green: the level top's cover gives way to rock before the cliff.
-        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict(rimReach=60), rock=dict(recipe='sandstone', beds=False)),
+        # Its rock presets besides Smooth soil (B2): thin shale and a rounded conglomerate, the beds a sandstone desert interleaves.
+        'modern': dict(label='Modern: realistic look (in progress)', knobs=dict(rimReach=60), rock=dict(recipe='sandstone', beds=False, presets=['shale', 'conglomerate'])),
     },
 }
 for _world, _variants in WORLD_VARIANTS.items():

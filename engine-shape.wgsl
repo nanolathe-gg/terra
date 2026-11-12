@@ -204,6 +204,11 @@ fn shapeMasks(i: u32, f: f32) {
 // Scree is loose ground. Where the talus lies over the cell (k: 0 none .. 1 eight units deep or more) the rock detail goes and stones gather, through the two planes
 // a Paint stroke writes for them (5: relief, toward weaker; 4: scatter, toward denser), so one field says where the rock skin stops and where the stones
 // lie, and paint laid over the landform afterwards still has the last word.
+// Rock presets (B2): the stroke's claim (its write to plane 20, sculpt-gpu-fields.js rockClaim) on the cells it shapes outside its own footprint, its
+// talus and its shore fingers, so they are the stroke's rock.
+fn claimRock(i: u32) {
+  for (var m = 0u; m < u.nwrites; m++) { let mw = MW[u.mwBase + m]; if (u32(mw.x) == 20u) { maskSet(i, 20u, i32(mw.y)); } }
+}
 fn talusGround(i: u32, k: f32) {
   if (k <= 0.0) { return; }
   let r = f32(maskGet(i, 5u)); maskSet(i, 5u, i32(floor(r + (-127.0 - r) * k + 0.5)));
@@ -291,6 +296,7 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     F[PX * cells + i] = F[PX * cells + i] * (1.0 - w);
     for (var m = 0u; m < u.nwrites; m++) {
       let mw = MW[u.mwBase + m]; let pl = u32(mw.x); let b = f32(maskGet(i, pl));
+      if (mw.w == 2.0) { if (w >= 0.5) { maskSet(i, pl, i32(mw.y)); } continue; }   // all or nothing: the rock a cell belongs to (Erase)
       maskSet(i, pl, i32(floor(b + (mw.y - b) * w * mw.z + 0.5)));
     }
   }
@@ -1298,7 +1304,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   var ej = 0.0; var lipK = 1.0;
   if ((u.ejAmt > 0.0 || u.bkAmt > 0.0) && trunk != 0xffffffffu) { let ev = lfCraterEjecta(wx, wy, select(trunk, 0u, u.grooveEnd != 0.0)); ej = ev.x; lipK = ev.y; }   // an impact's round its landing
   if (!seen) {
-    if (talus > 0.0) { F[PH * cells + i] = clamp(base + talus, u.minH, u.maxH); talusGround(i, sm(0.0, 8.0, talus)); }
+    if (talus > 0.0) { F[PH * cells + i] = clamp(base + talus, u.minH, u.maxH); talusGround(i, sm(0.0, 8.0, talus)); claimRock(i); }
     if (ej > 0.0) { F[PH * cells + i] = clamp(F[PH * cells + i] + ej, u.minH, u.maxH); }
     return;
   }
@@ -1318,7 +1324,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   if (u.gully > 0.0 && value > base) { value = landformGullies(value, pick.y, pk, psh, wx, wy, lx, ly, base, nA, nB, nC, x, y, i, cells); }
   if (u.bedN >= 1.0 && u.bedSoft > 0.0 && u.combine == 0u && value > base) { value = hardBeds(value, base, pick.x, pick.y, lx, ly); }
   var scree = 0.0;   // how far the talus covers the cell: loose ground takes no cracks
-  if (talus > 0.0) { scree = sm(0.0, 8.0, base + talus - value); talusGround(i, scree); value = max(value, base + talus); }
+  if (talus > 0.0) { scree = sm(0.0, 8.0, base + talus - value); talusGround(i, scree); value = max(value, base + talus); claimRock(i); }
   if (u.combine == 0u) { value = max(base, value); } else if (u.combine == 1u) { value = min(base, value); }
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
   if (ej > 0.0 || lipK < 1.0) { F[PH * cells + i] = clamp(select(value, base + (value - base) * lipK, value > base) + ej, u.minH, u.maxH); }
@@ -1639,10 +1645,12 @@ fn coastFinger(@builtin(global_invocation_id) g: vec3u) {
   let f = clamp(thumbReach(wx - sd * nm.x, wy - sd * nm.y, nm.x, nm.y, u.coFAmt), -u.coFReach, u.coFReach);
   if (sd < 0.0 && -sd < f) {
     F[PH * cells + i] = clamp(sea + FINGER_LOW, u.minH, u.maxH);
+    claimRock(i);
     Sc[CUU * cells + i] = 1.0;
     Sc[CFF * cells + i] = FINGER_LOW;
   } else if (sd > 0.0 && sd < -f) {
     F[PH * cells + i] = clamp(sea - 0.5 - 2.5 * (1.0 - sd / -f), u.minH, u.maxH);
+    claimRock(i);
   }
 }
 // A tongue is land joined to land. Instead of flooding out from the old dry ground, a raised cell marches back along its normal toward the coast and keeps
