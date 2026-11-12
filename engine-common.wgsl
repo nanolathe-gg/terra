@@ -1050,15 +1050,17 @@ fn voxelBed(p:vec3f)->ColumnBed {
 // (voxelFaceSlope, or the ground's where there is no solid).
 fn columnGather(bed:ColumnBed,slope:f32)->vec2f {
     let scale=max(2.0,u.rock[rs & rockMask].faceBed)/5.5*(1.0+2.0/max(slope,.05));   // drawn height units per column unit (voxelColumnCoord)
+    // A bed thick enough to draw keeps its own hardness: answered first, since most beds are, and the solid asks at every sample.
+    let own=1.0-smoothstep(.5*FACE_FINEST,FACE_FINEST,u.columnBeds[bed.first+bed.j].x*scale);
+    if(own<=0.0){return vec2f(bed.hardness,0.0);}
     var w=0.0;var wh=0.0;var whh=0.0;var lo=bed.hardness;var hi=bed.hardness;
     for(var i=0;i<bed.n;i++){
         let b=u.columnBeds[bed.first+i];let thin=b.x*(1.0-smoothstep(.5*FACE_FINEST,FACE_FINEST,b.x*scale));
         w+=thin;wh+=thin*b.y;whh+=thin*b.y*b.y;
         if(thin>0.0){lo=min(lo,b.y);hi=max(hi,b.y);}
     }
-    let own=1.0-smoothstep(.5*FACE_FINEST,FACE_FINEST,u.columnBeds[bed.first+bed.j].x*scale);
     // Beds of one hardness have nothing to gather: answered by comparison, since the GPU's division need not round the mean exactly.
-    if(w<=0.0||own<=0.0||hi<=lo){return vec2f(bed.hardness,0.0);}
+    if(w<=0.0||hi<=lo){return vec2f(bed.hardness,0.0);}
     let mean=wh/w;
     return vec2f(bed.hardness+(mean-bed.hardness)*own,sqrt(max(whh/w-mean*mean,0.0))*own);
 }
