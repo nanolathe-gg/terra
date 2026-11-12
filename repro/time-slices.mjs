@@ -39,14 +39,22 @@ for(const name of ['green-modern-2','red-3','desert-2','lava-2','ice-2','crystal
    device.createCommandEncoder=function(desc){const e=create(desc),begin=e.beginComputePass.bind(e);e.beginComputePass=function(desc){const p=begin(desc),set=p.setPipeline.bind(p);let pipeline='';p.setPipeline=function(v){pipeline=v.label;return set(v);};for(const method of ['dispatchWorkgroups','dispatchWorkgroupsIndirect']){const run=p[method].bind(p);p[method]=function(...args){if(phase)commands.push([pipeline,method,args.filter(v=>typeof v==='number')]);return run(...args);};}return p;};return e;};
    device.createBuffer=function(desc){const b=createBuffer(desc);if(phase==='cancel'){const item={label:desc.label,destroyed:0},destroy=b.destroy.bind(b);created.push(item);b.destroy=()=>{item.destroyed++;destroy();};}return b;};
    queue.onSubmittedWorkDone=function(){return done().then(()=>{if(phase==='cancel'&&++fences===2)obsolete=true;if(phase==='interleave'&&!interleave){interleave=true;s.renderer.set('uColumnContrast',0);s.renderer.set('uColumnOrigin',500);s.renderer.flushUniforms();const e=create({label:'priority probe'});e.clearBuffer(marker,0,16);queue.submit([e.finish()]);} });};
-   const digest=async r=>{const values=[];for(const [b,bytes] of [[r.weather,G*G*8],...r.maps.map(b=>[b,G*G*4])])values.push(hash(await readBuffer(device,b,0,bytes)));r.weather.destroy();r.maps.forEach(b=>b.destroy());return values;};
+   const digest=async r=>{const values=[];for(const [b,bytes] of [[r.weather,r.grid*r.grid*8],...r.maps.map(b=>[b,r.grid*r.grid*4])])values.push(hash(await readBuffer(device,b,0,bytes)));r.weather.destroy();r.maps.forEach(b=>b.destroy());return values;};
    const make=(age,rain)=>({...s.engine.timeKnobs(s.renderer),planes:T.F,masks:T.Mk,rateMask:s.engine.MASK_KEYS.indexOf('ovErosion'),grid:G,size:s.worldSize,spacing:s.spacing,seaLevel:s.config.seaLevel,ox,oy,age,rain});
    for(const age of [1,200])for(const rain of [0,1]){
     phase='reference';commands=[];const expected=await digest(await old.runGpu(make(age,rain))),order=commands;
     phase='sliced';commands=[];const r=await current.runGpu(make(age,rain)),iterations=r.parts.iterations.slice(),actual=await digest(r);
     assert.deepEqual(commands,order,`${name}: pass order`);assert.deepEqual(actual,expected,`${name}: Time bytes`);assert.equal(iterations.reduce((n,x)=>n+x,0),age);assert(iterations.every(x=>x<=8));
-    results.push({scene:name,grid:G,ox,oy,age,rain,identical:true,dispatches:order.length,iterationBatches:iterations.filter(Boolean)});
+    results.push({scene:name,region:'window',grid:G,ox,oy,age,rain,identical:true,sha256:actual,dispatches:order.length,iterationBatches:iterations.filter(Boolean)});
    }
+   // Also compare the whole-map field the nonpaged editor/exporter reads.
+   const full=s.fields.gpuBuffers();assert(full&&full.grid===s.worldGrid);
+   const whole={...make(200,1),planes:full.planes,masks:full.masks,grid:full.grid,ox:0,oy:0};
+   phase='reference';commands=[];const expectedWhole=await digest(await old.runGpu(whole)),wholeOrder=commands;
+   phase='sliced';commands=[];const wholeResult=await current.runGpu(whole),actualWhole=await digest(wholeResult);
+   assert.deepEqual(commands,wholeOrder,`${name}: whole-map dispatch order`);assert.deepEqual(actualWhole,expectedWhole,`${name}: whole-map Time bytes`);
+   assert.equal(wholeResult.parts.iterations.reduce((n,x)=>n+x,0),200);assert(wholeResult.parts.iterations.every(x=>x<=8));
+   results.push({scene:name,region:'whole',grid:full.grid,ox:0,oy:0,age:200,rain:1,identical:true,sha256:actualWhole,dispatches:wholeOrder.length,iterationBatches:wholeResult.parts.iterations.filter(Boolean)});
    if(name==='green-modern-2'){
     phase=null;const request=make(200,1),expected=await digest(await old.runGpu(request)),saved=s.renderer.uniformData.slice(0);
     queue.writeBuffer(marker,0,new Uint32Array([1,2,3,4]));phase='interleave';interleave=false;const actual=await digest(await current.runGpu(request));phase=null;
