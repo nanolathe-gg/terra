@@ -7,7 +7,8 @@ import {execFileSync} from 'node:child_process';
 import {mkdtempSync, readFileSync, readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {LANDFORM_SHAPES, toolDefaults} from '../sculpt-scene.js';
+import {LANDFORM_SHAPES, toolDefaults, sceneNodes, pageSettings} from '../sculpt-scene.js';
+import {TOOL_ICONS, FIXED_TOOLS, LANDFORM_TOOL, worldTools, toolShape, toolRockSlot, strokeTool, keepStrokeTools, inferStrokeTools} from '../sculpt-tools.js';
 
 const root = new URL('..', import.meta.url).pathname, dir = mkdtempSync(join(tmpdir(), 'tools-test-'));
 execFileSync(process.env.PYTHON || '/Users/daniel/src/terraform/.venv/bin/python', [root + 'sculpt.py', '--dump-configs', dir]);
@@ -29,11 +30,49 @@ test('every world defines every shape, and the starting cards are the old tables
   assert.equal(createHash('sha256').update(JSON.stringify(allDefaults())).digest('hex'), PINNED);
 });
 
+// Main 1f0dcec0's thirteen shape buttons in sculpt.html, in order (Fissure, which sat between Crater and Faceted forms, is a fixed button now).
+const TODAY = [['plateau', 'Plateau', '#e6bb82', 'shape'], ['hill', 'Hill', '#b8d88d', 'shape'], ['mountain', 'Mountain', '#b3bcca', 'shape'], ['ramp', 'Ramp', '#e5cfa5', 'shape'],
+  ['valleyV', 'V valley', '#c7a97e', 'shape'], ['valleyU', 'U valley', '#c7a97e', 'shape'], ['valleyT', 'Terraced valley', '#c7a97e', 'shape'], ['crater', 'Crater', '#d5a18b', 'shape'],
+  ['crystal', 'Faceted forms', '#aaa5ec', 'shape'], ['deep', 'Deep water', '#7cb8e8', 'water'], ['shallow', 'Shallow water', '#87d9da', 'water'], ['river', 'River', '#6fb1e0', 'water'],
+  ['braided', 'Braided river', '#6fb1e0', 'water']].map(([id, label, color, group]) => ({id, label, icon: id, color, group}));
+
 test('every world\'s toolbar is today\'s shape buttons: ids, labels, icons, colors, groups and order', () => {
-  const html = readFileSync(root + 'sculpt.html', 'utf8'), group = name => html.split(`aria-label="${name} tools"`)[1].split('</div></div>')[0], buttons = [];
-  for (const [g, name] of [['shape', 'Shape'], ['water', 'Water']])
-    for (const m of group(name).matchAll(/<button data-tool="(\w+)"[^>]*aria-label="([^"]+)"[^>]*--tool-color:(#[0-9a-f]{6})/g))
-      if (m[1] !== 'fissure') buttons.push({id: m[1], label: m[2], icon: m[1], color: m[3], group: g});
-  assert.equal(buttons.length, 13);
-  for (const [name, config] of Object.entries(configs)) assert.deepEqual(config.tools, buttons, name);
+  for (const [name, config] of Object.entries(configs)) assert.deepEqual(worldTools(config), TODAY, name);
+  // The icon set is sculpt.html's template, and the fixed buttons (the generic Landform among them) are in the markup at their places.
+  const html = readFileSync(root + 'sculpt.html', 'utf8'), template = html.split('<template id="tool-icons">')[1].split('</template>')[0];
+  assert.deepEqual([...template.matchAll(/data-icon="(\w+)"/g)].map(m => m[1]), TOOL_ICONS);
+  const palette = html.split('class="tool-groups"')[1].split('<template')[0];
+  assert.deepEqual([...palette.matchAll(/data-tool="(\w+)"|id="(shape|water)-tools"/g)].map(m => m[1] ?? `[${m[2]}]`), ['move', 'landform', '[shape]', 'fissure', '[water]', 'smooth', 'erase', 'paint', 'sand', 'grass']);
+  assert.deepEqual(FIXED_TOOLS.toSorted(), ['erase', 'fissure', 'grass', 'move', 'paint', 'sand', 'smooth']);
+  for (const bad of [{...TODAY[0], id: 'fissure'}, {...TODAY[0], id: 'a b'}, {...TODAY[0], icon: 'star'}, {...TODAY[0], color: 'red'}, {...TODAY[0], group: 'paint'}, {...TODAY[0], shape: 'mesa'}, {...TODAY[0], label: ''}])
+    assert.throws(() => worldTools({tools: [bad]}), undefined, JSON.stringify(bad));
+  assert.throws(() => worldTools({tools: [TODAY[0], TODAY[0]]}), /twice/);
+  assert.equal(toolShape({id: 'soilHill', shape: 'hill'}), 'hill');
+  assert.equal(toolShape(TODAY[1]), 'hill');
+});
+
+test('a scene names shapes, so a world\'s toolbar cannot move it', () => {
+  const config = configs.green, strokes = [['hill', [[100, 100], [300, 120]], {}], ['deep', [[400, 400], [600, 420]], {}], ['landform', [[500, 100]], {}], ['fissure', [[0, 0]], {}]];
+  const nodes = sceneNodes(config, strokes, {settings: pageSettings(config, 'undulation=3')});
+  assert.deepEqual(nodes.map(n => n.tool), [undefined, 'hill', 'deep', 'landform', undefined], 'a landform stroke names its shape as its tool');
+  const without = {...config, tools: config.tools.filter(t => t.id !== 'hill').map(t => t.id === 'deep' ? {...t, id: 'lake', label: 'Lake'} : t)};
+  assert.deepEqual(sceneNodes(without, strokes, {settings: pageSettings(without, 'undulation=3')}), nodes, 'Hill dropped and Deep water renamed: the same nodes');
+});
+
+test('a stroke shows as its tool, or as the generic landform where the toolbar lacks it; an old stroke takes its tool once', () => {
+  const ids = new Set(['move', 'fissure', 'landform', 'hill', 'deep']), stroke = (tool, form = 'lfHill') => ({kind: 'landform', ...(tool ? {tool} : {}), params: {curve: {form}}});
+  assert.equal(strokeTool(stroke('hill'), ids), 'hill');
+  assert.equal(strokeTool(stroke('crater'), ids), 'landform');
+  assert.equal(strokeTool({kind: 'fissure'}, ids), 'fissure');
+  const kept = keepStrokeTools([stroke('hill'), stroke('crater'), {kind: 'ground'}], ids);
+  assert.deepEqual(kept.map(n => n.tool), ['hill', 'landform', undefined]);
+  assert.deepEqual(kept[1].params, stroke('crater').params, 'its numbers as they were');
+  const old = inferStrokeTools([stroke(null, 'lfHill'), stroke(null, 'lfCrater'), stroke(null, 'lfShore'), stroke('hill', 'lfCrater')], ids);
+  assert.deepEqual(old.map(n => n.tool), ['hill', 'landform', 'landform', 'hill'], 'inferred where the toolbar has the tool; a stroke that names one keeps it');
+  // A tool may name its rock by a preset's key: the map's slot for it, Rock beneath without one, nothing for a tool that names none.
+  const rocks = [{slot: 1, name: 'Smooth soil', key: 'soil'}, {slot: 2, name: 'Jointed basalt'}];
+  assert.equal(toolRockSlot({id: 'soilHill', rock: 'soil'}, rocks), 1);
+  assert.equal(toolRockSlot({id: 'x', rock: 'basalt'}, rocks), -1);
+  assert.equal(toolRockSlot({id: 'x'}, rocks), undefined);
+  assert.equal(LANDFORM_TOOL.shape, 'landform');
 });

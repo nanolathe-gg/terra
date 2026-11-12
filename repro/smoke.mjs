@@ -18,7 +18,7 @@ const worlds = opt('--worlds', 'green,red,archipelago,moon,zhon,lava,desert,crys
 const jobs = Math.max(1, Number(opt('--jobs', 3)));
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const TOOLS = ['plateau', 'hill', 'mountain', 'ramp', 'deep', 'shallow', 'valleyV', 'valleyU', 'valleyT', 'river', 'braided', 'smooth', 'crater', 'fissure', 'erase', 'crystal', 'sand', 'grass', 'paint'];   // the first eleven and Crater draw landforms
+const TOOLS = ['landform', 'plateau', 'hill', 'mountain', 'ramp', 'deep', 'shallow', 'valleyV', 'valleyU', 'valleyT', 'river', 'braided', 'smooth', 'crater', 'fissure', 'erase', 'crystal', 'sand', 'grass', 'paint'];   // the first eleven and Crater draw landforms
 
 async function session(url, port, fn) {
   const logs = [];
