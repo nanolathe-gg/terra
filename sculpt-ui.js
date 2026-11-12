@@ -41,8 +41,8 @@ export function mountEditorUI(){
  };
  mountWorkspace();
  // The side panel: Build (the tool or the selection) or World.
- const tabs=[...document.querySelectorAll('[role="tab"]')];
- function activate(tab){for(const t of tabs){const active=t===tab;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).hidden=!active;}if(tab.id!=='tab-tool')setLarge(false);}
+ const tabs=[...document.querySelectorAll('.mode-switch [role="tab"]')];
+ function activate(tab){for(const t of tabs){const active=t===tab;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).hidden=!active;}app.classList.toggle('world-mode',tab.id==='tab-world');if(tab.id!=='tab-tool')setLarge(false);}
  for(const t of tabs){t.onclick=()=>{if($('inspector-sidebar').hidden)togglePanel('inspector');activate(t);};t.onkeydown=e=>{const i=tabs.indexOf(t);let j;if(e.key==='ArrowRight')j=(i+1)%tabs.length;if(e.key==='ArrowLeft')j=(i+tabs.length-1)%tabs.length;if(e.key==='Home')j=0;if(e.key==='End')j=tabs.length-1;if(j!==undefined){e.preventDefault();activate(tabs[j]);tabs[j].focus();}};}
  // The surfaces: the Map menu, Settings, Export and the Shapes list each open from their own button, in a fixed place. The three menus
  // close when another opens or the pointer goes down elsewhere; the Shapes list stays while you work on the map.
@@ -123,25 +123,71 @@ export function groupToolControls(fields,buildRow){
  };
 }
 
-// One level of open sections keeps related controls together for scrolling.
-const worldSection=name=>['Shine: rock','Loose stone'].includes(name)?'Rock & cliffs':/Light|Shine/.test(name)?'Lighting':/Ground|Vegetation|Material coverage/.test(name)?'Ground & vegetation':/Water|Shore|Needle|Contour fringe|Terrace creases/.test(name)?'Water & shores':/Rock|Strata|Cracks|Contour bands|Microfacets/.test(name)?'Rock & cliffs':'Materials & texture';
-// A World group: a titled block created in its section. Its rows carry `search` as data-search-group.
-export function worldGroup(name){
- const block=document.createElement('div'),heading=document.createElement('h3');block.className='world-subsection';heading.textContent=name;block.append(heading);
- [...$('knobs').children].find(section=>section.dataset.group===worldSection(name)).append(block);
- return {block,search:`${name} ${worldSection(name)}`};
+// Where each World setting sits: "Section/Tab" (a section without tabs ends in "/"). sculpt.html holds one container per home
+// (data-home); a row is created straight into its home, under the name of its group. repro/world-homes.test.mjs holds every key to one home.
+export const WORLD_HOMES={
+ 'Ground/Pattern':'groundTiles groundContrast groundPatch groundPatchSize',
+ 'Ground/Bumps & relief':'reliefScale reliefAmount reliefLumps reliefBranch reliefWarp reliefPatchy reliefJitter gentleRelief plainRelief lumpRelief reliefOctaves worms',
+ 'Ground/Terrain shape':'undulation undulationScale undulationCover undulationArt faceSteep',
+ 'Ground/Slope cover':'hillLight slopeTexture slopeMarks wrinkles',
+ 'Ground/Low ground':'lowTint lowReach lowGrain',
+ 'Vegetation/':'vegetationCover lushness soilRim plantRelief flowerDensity moss',
+ 'Rock types/Colors & recipe':'absorbDepth shadowTint',
+ 'Rock types/Exposure & relief':'rockFace faceRock rockFaceFrom faceExtrude faceMass',
+ 'Rock types/Blocks & joints':'faceWhole faceWholeLarge faceRegular faceBlock faceBlockSize faceStretch faceBlockHeight faceJointTilt faceScaleVary faceBreak faceRound faceJoint faceJointWidth faceSecondary faceContinuity faceLean',
+ 'Rock types/Layers':'strata strataContrast strataGrain bedDip bedDipDir bedCycleVary faceBedVary faceBed faceLedge faceRun faceFold faceSpall faceLamina faceLaminaSize faceLayers faceGrass',
+ 'Rock types/Weathering':'faceWear faceCrease faceCreaseSize faceScratch faceScratchSize faceScratchLength faceScratchAngle faceClast faceClastSize faceDetailPatch faceGrit faceGritSize runoff runoffScale runoffConcentration runoffCut runoffStain',
+ 'Rock types/Surface & crust':'shineRock shineRockSharp shineRockRough shineRockScale faceShade faceTone faceFresh faceRind faceRindDepth faceRindTone faceRindWarmth faceRindRough faceMineral faceStrata faceWet',
+ 'Rock types/Stones & debris':'looseSize stoneSort stoneRound stoneSlab debrisAmount debrisReach debrisDepth',
+ 'Cliffs & stones/Where rock shows':'rockCrown rimReach shoreRock shoreShelf',
+ 'Cliffs & stones/Loose stones':'looseSupply boulders looseKnoll',
+ 'Cliffs & stones/Cracks':'crackSeverity crackSpacing crackMajor crackMinor crackHairline crackBlocks crackWidth crackNetwork crackDark',
+ 'Cliffs & stones/Bands':'banding bandSoftness bandWater sandBanding sandBandSpacing layerCrease baseBand baseBandLow baseBandHigh baseBandWander baseBandGaps desertCapFlat',
+ 'Cliffs & stones/Special surfaces':'iceFrost lavaCrust lavaPillow lavaChip lavaVeins lavaCalm lavaDusk pockmark pockSize moonCups moonCupSize moonCupDepth cupStretch moonRibs moonRibDepth moonRibDark moonFolds moonFoldSpacing iceCrystal gougeWeb iceCrest iceSoft iceSnow iceFall iceApron',
+ 'Sand/':'sandCrown sand sandLee wind sandDust sandGrass sandLight sandGrain ripple rippleHeight',
+ 'Water & shores/Depths & edges':'shallowDepth deepDepth waterSoft crispShore deepEdge stepSoftPx shelfWander shoalRag shoalStairs shoalShoreSoft',
+ 'Water & shores/Shore & beach':'coastRamp beachWidth apron shoreEdge bankRock frostGaps frostGapReach frostGapSize frostGapDepth',
+ 'Water & shores/Water bed':'bedTint bedBright bedContrast bedRelief bedFlat',
+ 'Water & shores/Mineral fringe':'ringFade ringContrast ringCount ringSize ringShift ringShiftDir ringScatter ringWobble ringLobe ringFill ringPatch ringPatchSize ringTone',
+ 'Rain & erosion/':'erosionRain wetSwath wetGround',
+ 'Light & shine/Sun & shade':'faceFill flatShadow flatOcclusion lightCap shadeDepth sunTilt sunHeight ambient creaseShade',
+ 'Light & shine/Shine':'shineOutside shineSlopeGate shineStretch shineWhite shineGround shineGroundSharp shineGroundRough shineGroundScale shineSlope shineSlopeSharp shineSlopeRough shineSlopeScale shineSand shineSandSharp shineSandRough shineSandScale shineCrystal shineCrystalSharp shineCrystalRough shineCrystalScale shineGate shineHeadroom',
+ 'Palette/':'paletteMix dither landDither',
+};
+const homeOf=new Map(Object.entries(WORLD_HOMES).flatMap(([home,keys])=>keys.split(' ').map(key=>[key,home])));
+export const worldHome=key=>homeOf.get(key)||'World/';   // a key without a home still shows, in the World section
+const homeRows=home=>document.querySelector(`#knobs [data-home="${home}"] .world-rows`);
+// A World group: a titled block created in the home of its rows. A group whose rows have different homes gets a block in each.
+// Its rows carry `search` as data-search-group.
+const worldBlocks=new Map();
+export function worldGroup(name,key){
+ const home=worldHome(key),id=home+'|'+name;
+ if(!worldBlocks.has(id)){const block=document.createElement('div'),heading=document.createElement('h3');block.className='world-subsection';heading.textContent=name;block.append(heading);homeRows(home).append(block);worldBlocks.set(id,{block,search:`${name} ${home.replace('/',' ')}`});}
+ return worldBlocks.get(id);
 }
+// The World panel: sections down its side, tabs in the larger ones (static in sculpt.html). A press shows one section and one of its tabs.
+// With a search, every tab that holds a match shows under its own name, and the fixed blocks (colors, pickers, notes) step aside.
 export function mountWorldControlIndex(root,values=()=>({})){
- const search=$('world-control-search'),blocks=[...root.querySelectorAll('.world-subsection')];
- const groups=[...root.children],input=search.querySelector('#world-search'),fine=search.querySelector('#world-fine');let previous=null,lastQuery='';
- const sync=()=>{const query=input.value.trim().toLowerCase(),current=values(),worldRows=[...root.querySelectorAll('[data-knob]')],rows=[...worldRows,...document.querySelectorAll('#rendering-host [data-knob]')];let visible=0;if(query&&!previous)previous=new Map(groups.map(d=>[d,d.open]));
-  for(const row of rows){const reason=worldControlRequirement(row.dataset.knob,current),control=row.querySelector('input[type=range],select');control.disabled=Boolean(reason);row.classList.toggle('control-inactive',Boolean(reason));let note=row.querySelector('.control-requirement');if(!note){note=document.createElement('p');note.className='small control-requirement';row.append(note);}note.textContent=reason;note.hidden=!reason;const group=row.closest('.knobs-group'),text=(row.textContent+' '+row.dataset.searchGroup+' '+group.dataset.group).toLowerCase();if(!root.contains(row))continue;   // the Palette rows live with the rendering switches: disabled with a reason, never filtered
-  row.hidden=query?!text.includes(query):!fine.checked&&!WORLD_PRIMARY_CONTROLS.has(row.dataset.knob);if(!row.hidden)visible++;}
-  for(const block of blocks)block.hidden=![...block.querySelectorAll('[data-knob]')].some(r=>!r.hidden);
-  for(const group of groups){group.hidden=![...group.querySelectorAll('[data-knob]')].some(r=>!r.hidden);if(query&&query!==lastQuery&&!group.hidden)group.open=true;}
-  if(!query&&previous){for(const [d,open] of previous)d.open=open;previous=null;}
-  lastQuery=query;$('world-control-count').textContent=query?`${visible} matching settings`:fine.checked?`${worldRows.length} settings · including fine controls`:`${visible} primary settings · ${worldRows.length} total`;
- };input.addEventListener('input',sync);fine.addEventListener('change',sync);sync();return sync;
+ const search=$('world-control-search'),studio=root.closest('.world-studio'),input=search.querySelector('#world-search'),fine=search.querySelector('#world-fine');
+ const lists=[...studio.querySelectorAll('[role="tablist"]')],panels=[...root.querySelectorAll('.world-tab')],sections=[...root.querySelectorAll('.world-section')];
+ const ALWAYS=new Set(WORLD_HOMES['Palette/'].split(' '));   // the three Palette rows always show, as they did beside the rendering switches
+ const sync=()=>{const query=input.value.trim().toLowerCase(),current=values(),rows=[...root.querySelectorAll('[data-knob]')];let visible=0;
+  for(const row of rows){const key=row.dataset.knob,reason=worldControlRequirement(key,current),control=row.querySelector('input[type=range],select');control.disabled=Boolean(reason);row.classList.toggle('control-inactive',Boolean(reason));let note=row.querySelector('.control-requirement');if(!note){note=document.createElement('p');note.className='small control-requirement';row.append(note);}note.textContent=reason;note.hidden=!reason;
+   const text=(row.textContent+' '+row.dataset.searchGroup).toLowerCase();row.hidden=query?!text.includes(query):!fine.checked&&!WORLD_PRIMARY_CONTROLS.has(key)&&!ALWAYS.has(key);if(!row.hidden)visible++;}
+  for(const block of root.querySelectorAll('.world-subsection'))block.hidden=![...block.querySelectorAll('[data-knob]')].some(r=>!r.hidden);
+  studio.classList.toggle('searching',Boolean(query));
+  // A tab or a section shows when it is the chosen one; in a search, when it holds a match.
+  const chosen=el=>$(el.getAttribute('aria-labelledby'))?.getAttribute('aria-selected')!=='false',matches=el=>[...el.querySelectorAll('[data-knob]')].some(r=>!r.hidden);
+  for(const panel of panels){if(panel.id)panel.hidden=query?!matches(panel):!chosen(panel);panel.classList.toggle('no-match',Boolean(query)&&!matches(panel));}
+  for(const section of sections)section.hidden=query?!matches(section):!chosen(section);
+  $('world-control-count').textContent=query?`${visible} matching settings`:fine.checked?`${rows.length} settings`:`${visible} main settings of ${rows.length}`;
+ };
+ for(const list of lists){const tabs=[...list.querySelectorAll(':scope > [role="tab"]')];
+  const pick=tab=>{for(const t of tabs){const on=t===tab;t.setAttribute('aria-selected',String(on));t.tabIndex=on?0:-1;}sync();};
+  list.addEventListener('click',e=>{const tab=e.target.closest('[role="tab"]');if(tab&&list.contains(tab))pick(tab);});
+  list.addEventListener('keydown',e=>{const k={ArrowDown:1,ArrowRight:1,ArrowUp:-1,ArrowLeft:-1}[e.key];if(!k)return;const at=tabs.indexOf(document.activeElement);if(at<0)return;e.preventDefault();const next=tabs[(at+k+tabs.length)%tabs.length];pick(next);next.focus();});
+ }
+ input.addEventListener('input',sync);fine.addEventListener('change',sync);sync();return sync;
 }
 
 export function mountColumnPanel(read,change,commit,reset){

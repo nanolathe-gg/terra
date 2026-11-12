@@ -12,8 +12,43 @@
 .feature-group{margin-top:6px;background:#1e282b}.feature-group>summary{padding:5px 6px}.feature-body{padding:0 6px 6px}.feature-body .control{margin-top:5px}.control>p.small:not(.control-requirement){display:none}.control-requirement{display:block}
 .tool-settings .control:has(>select){display:grid;grid-template-columns:90px minmax(0,1fr);align-items:center;gap:6px}.tool-settings .control:has(>select)>label{margin:0;font-size:10px}.tool-settings .control>select{padding:4px 5px;font-size:11px}
 #world-editor>.control:has(>select){display:grid;grid-template-columns:48px minmax(0,1fr);align-items:center;gap:6px;margin-top:6px}#world-editor>.control>label{margin:0;font-size:11px}#world-editor>.control>select{padding:4px 6px;font-size:11px}
-#world-control-search{top:-10px;padding:9px 0 7px}#world-control-search>label:first-child{display:none}#world-search{padding:5px 7px;font-size:11px}#world-control-search .fine-controls{font-size:11px;margin:6px 0 0}#world-control-count{font-size:10px}
-#knobs>.world-section{margin:0;padding:0;border-top:1px solid var(--line)}.world-section>summary{padding:7px 0;font-size:12px;font-weight:600;cursor:pointer}.world-section>.control,.world-subsection>.control{margin:5px 0}.world-section[open]{padding-bottom:8px}.world-subsection h3{font-size:10px;font-weight:500;color:#96ada2;margin:10px 0 5px}.world-subsection:first-of-type h3{margin-top:2px}
+/* The World panel: wider than a shape's card, with its sections down the side and tabs in the larger ones (static in sculpt.html). */
+.app.world-mode:not(.inspector-collapsed){--inspector-width:min(520px,42vw)}
+.app.world-mode .inspector-content{padding:0;overflow:hidden;display:flex}
+#pane-world:not([hidden]){flex:1;min-width:0;min-height:0;display:flex}
+#world-editor{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;border:0;margin:0;padding:0}
+#world-control-search{position:static;display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line)}
+#world-control-search>label:first-child{display:none}#world-search{flex:1;min-width:0;padding:5px 7px;font-size:11px}
+#world-control-search .fine-controls{font-size:11px;margin:0;white-space:nowrap}#world-control-count{margin:0;font-size:10px;white-space:nowrap}
+.world-studio{flex:1;min-height:0;display:grid;grid-template-columns:118px minmax(0,1fr)}
+.world-nav{display:flex;flex-direction:column;gap:1px;padding:6px 4px;border-right:1px solid var(--line);overflow-y:auto;scrollbar-width:thin}
+.world-nav [role=tab]{text-align:left;padding:6px 8px;border:0;border-radius:5px;background:none;font-size:11px;color:var(--muted)}
+.world-nav [role=tab]:hover{color:var(--text)}.world-nav [role=tab][aria-selected=true]{background:#2b3a33;color:#e4f6e6;font-weight:600}
+.world-sections{min-width:0;min-height:0;display:flex;flex-direction:column}
+.world-section:not([hidden]){flex:1;min-height:0;display:flex;flex-direction:column}
+.world-tabs{display:flex;flex-wrap:wrap;gap:3px;padding:7px 10px 6px;border-bottom:1px solid var(--line)}
+.world-tabs [role=tab]{padding:3px 8px;font-size:10.5px;border-radius:11px;white-space:nowrap}
+.world-tabs [role=tab][aria-selected=true]{background:#354d40;border-color:#82b597;color:#e4f6e6}
+.world-tab:not([hidden]){flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;padding:8px 10px 14px}
+.world-tab .control{margin:5px 0}.world-where{display:none}.world-fixed h3{font-size:10px;font-weight:500;color:#96ada2;margin:12px 0 5px}.world-note{margin:10px 0 0}
+.world-subsection h3{font-size:10px;font-weight:500;color:#96ada2;margin:10px 0 5px}.world-rows>.world-subsection:first-child h3{margin-top:2px}
+.world-tab:not(:has([data-knob]:not([hidden]),.world-fixed))::after{content:"Only fine settings here. Turn on All to see them.";font-size:11px;color:var(--muted)}
+.world-tab #column-panel{margin:0 0 8px;padding:0;border:0}.world-tab details.panel[hidden]{display:none}
+/* A search lists every tab that holds a match under its name; the section list, the tabs and the fixed blocks step aside. */
+.world-studio.searching{grid-template-columns:minmax(0,1fr)}
+.searching .world-nav,.searching .world-tabs,.searching .world-fixed,.searching .rock-picker,.searching .world-tab.no-match{display:none}
+.searching .world-sections{display:block;overflow-y:auto;scrollbar-width:thin}.searching .world-section:not([hidden]){display:block}
+.searching .world-tab:not([hidden]){overflow:visible;padding-bottom:2px}.searching .world-tab::after{content:none}
+.searching .world-where{display:block;font-size:11px;font-weight:600;color:#c3d7ce;margin:4px 0}
+/* Rock types: the picker stays above the tabs, so the rock type being edited is always in view. */
+.rock-picker{margin:0;padding:8px 10px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px;position:relative}
+.rock-current{display:flex;align-items:center;gap:8px}.rock-current-text{flex:1;min-width:0}.rock-current-text b{font-size:12px}.rock-current-text p{margin:1px 0 0}
+.rock-swatch{flex:none;width:12px;height:12px;border-radius:3px;border:1px solid #0007}#rock-current-swatch{width:26px;height:26px;border-radius:5px}
+.rock-chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px}
+.rock-chip{display:flex;align-items:center;gap:6px;min-width:0;padding:3px 6px;font-size:10.5px;text-align:left;white-space:nowrap;overflow:hidden}
+.rock-chip[aria-checked=true]{background:#354d40;border-color:#82b597;color:#e4f6e6}
+#rock-manage{position:static}#rock-manage>summary{font-size:10.5px;padding:3px 8px}#rock-manage .popover{top:40px;left:10px;right:10px;width:auto;padding:10px 12px;display:grid;gap:7px}
+#rock-manage .row{display:flex;gap:5px;margin:0}#rock-manage .row>*{flex:1;min-width:0}#rock-add{font-size:11px;width:100%}.rock-picker .control-requirement:empty{display:none}
 #tool-style{font-size:11px}.layers-panel{border:0;padding:0;background:none;min-height:200px}#layers{max-height:none}
 .curve-heading{height:25px;display:flex;align-items:center;gap:10px;justify-content:space-between}.curve-heading h2{font-size:11px;white-space:nowrap;color:#d6e4d9}.curve-heading span{font-size:10px;color:#8da59a}.curve-heading select{width:auto!important;max-width:50%;padding:2px 5px;font-size:10px;background:#24352d;border-color:#3b5144}
 .curve-actions{height:25px;display:flex;align-items:center;gap:5px;overflow:hidden;white-space:nowrap}.curve-actions button{padding:2px 6px;font-size:10px;background:#26352e}.curve-actions span{font-size:9px;color:#8da397;margin-left:auto;overflow:hidden;text-overflow:ellipsis}
