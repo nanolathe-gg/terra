@@ -16,7 +16,7 @@ import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,
 import {selectionTransform} from './sculpt-selection.js';
 import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap,keepPrevious,takePrevious,dropPrevious} from './sculpt-share.js';
 import {isRiver,pointsSignature} from './sculpt-river.js';
-import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
+import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
 
@@ -1160,7 +1160,6 @@ function sketch() {
 }
 // The working copy is the sketch plus the world it was edited in and, per stroke, the settings the artist changed by hand
 // (those that differ from that world's defaults for the stroke's tool), so a switch can carry the rest to the new world's defaults.
-const sameParam=(a,b) => JSON.stringify(a)===JSON.stringify(b);
 function nodeDefaults(n,own=mapTools) {
   const id=strokeTool(n,toolIds(own));
   return n.params && (n.kind==='landform' || FIXED_TOOLS.includes(id)) && id!=='move'?strokeParams(strokeCard(toolCard(id,own))):null;
@@ -1168,7 +1167,7 @@ function nodeDefaults(n,own=mapTools) {
 function workingCopy() {
   const s=sketch();
   s.world=worldId;
-  s.nodes=s.nodes.map(n => { const base=n.kind==='ground'?null:nodeDefaults(n); return base?{...n,edited:Object.keys(n.params).filter(k => k!=='seed' && !sameParam(n.params[k],base[k]))}:n; });
+  s.nodes=markEdited(s.nodes,n => nodeDefaults(n));
   return s;
 }
 function saveWorking() {
@@ -1190,7 +1189,7 @@ const resettable=() => nodes.some(n => n.points && nodeDefaults(n));
 $('reset-strokes').onclick=() => {
   if (stroke || moving || loading || !ready || !resettable()) return;
   cancelWeather();
-  nodes=nodes.map(n => { const base=n.points?nodeDefaults(n):null; if(!base)return n; const m={...n,params:{...base,...(n.params.river?{river:n.params.river}:{})}}; migrateRiverNode(m); return m; });
+  nodes=nodes.map(n => { const base=n.points?nodeDefaults(n):null; if(!base)return n; const {kept,...rest}=n,m={...rest,params:{...base,...(n.params.river?{river:n.params.river}:{})}}; migrateRiverNode(m); return m; });   // reset, a stroke that fell back follows the world again
   selected=-1; pathPoint=-1; pathAdding=false; evaluate(0); regionalFields.changed(); checkpoint(); queueWeather(); schedule();
   status('Reset every stroke to this world\'s defaults.');
 };
@@ -1288,7 +1287,7 @@ function deserializeNodes(list) {
   return list.filter(n=>n&&NODE_NAMES[n.kind]).map(n=>{
     if(n.kind==='heights')return checkedHeights(n,list.indexOf(n));
     validatePaths(n);
-    return {kind:n.kind,...(n.kind==='landform'?{tool:n.tool}:{}),hidden:Boolean(n.hidden),amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,art:n.art,seed:n.seed,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:Array.isArray(n.frame)&&n.frame.length===6&&n.frame.every(Number.isFinite)?n.frame.slice():undefined};
+    return {kind:n.kind,...(n.kind==='landform'?{tool:n.tool,...(n.kept?{kept:true}:{})}:{}),hidden:Boolean(n.hidden),amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,art:n.art,seed:n.seed,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:Array.isArray(n.frame)&&n.frame.length===6&&n.frame.every(Number.isFinite)?n.frame.slice():undefined};
   });
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }

@@ -9,7 +9,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {LANDFORM_SHAPES, toolDefaults, sceneNodes, pageSettings, strokeCard, strokeParams} from '../sculpt-scene.js';
 import {worldRocks} from '../sculpt-rock-presets.js';
-import {TOOL_ICONS, FIXED_TOOLS, LANDFORM_TOOL, MAP_TOOLS_MAX, worldTools, toolShape, toolRockSlot, strokeTool, keepStrokeTools, inferStrokeTools, carryStrokes, copyMapTools, addMapTool, deleteMapTool, nextMapToolId, CARD_KEYS} from '../sculpt-tools.js';
+import {TOOL_ICONS, FIXED_TOOLS, LANDFORM_TOOL, MAP_TOOLS_MAX, worldTools, toolShape, toolRockSlot, strokeTool, keepStrokeTools, inferStrokeTools, carryStrokes, markEdited, copyMapTools, addMapTool, deleteMapTool, nextMapToolId, CARD_KEYS} from '../sculpt-tools.js';
 
 const root = new URL('..', import.meta.url).pathname, dir = mkdtempSync(join(tmpdir(), 'tools-test-'));
 execFileSync(process.env.PYTHON || '/Users/daniel/src/terraform/.venv/bin/python', [root + 'sculpt.py', '--dump-configs', dir]);
@@ -71,6 +71,7 @@ test('a stroke shows as its tool, or as the generic landform where the toolbar l
   const kept = keepStrokeTools([stroke('hill'), stroke('crater'), {kind: 'ground'}], ids);
   assert.deepEqual(kept.map(n => n.tool), ['hill', 'landform', undefined]);
   assert.deepEqual(kept[1].params, stroke('crater').params, 'its numbers as they were');
+  assert.deepEqual(kept.map(n => n.kept), [undefined, true, undefined], 'and kept for good');
   const old = inferStrokeTools([stroke(null, 'lfHill'), stroke(null, 'lfCrater'), stroke(null, 'lfShore'), stroke('hill', 'lfCrater')], ids);
   assert.deepEqual(old.map(n => n.tool), ['hill', 'landform', 'landform', 'hill'], 'inferred where the toolbar has the tool; a stroke that names one keeps it');
   // A tool may name its rock by a preset's key: the map's slot for it, 0 for the world's own recipe, Rock beneath without one, nothing for a tool that names none.
@@ -93,6 +94,7 @@ test('a biome switch: a stroke whose tool the new world has takes its defaults w
   const out = carryStrokes(list, ids, n => defaults[n.tool] ?? null);
   assert.deepEqual(out.map(n => [n.tool, n.params]), [['hill', {radius: 200, wander: 34, lean: 1}], ['landform', {radius: 300, wander: 75, lean: 2}], ['map-1', {radius: 80, wander: 2, lean: 1}], [undefined, {radius: 5}]]);
   assert.ok(out.every(n => !('edited' in n)), 'the marks are the working copy\'s, not the map\'s');
+  assert.deepEqual(out.map(n => n.kept), [undefined, true, undefined, undefined]);
 });
 
 // A tool made from a shape: Hill's card with a wider diameter and a rock slot.
@@ -139,4 +141,20 @@ test('a save and a share link carry the map\'s tools and each stroke\'s tool', a
   assert.deepEqual(keepStrokeTools(back.nodes, ids).map(n => n.tool), ['map-1', 'hill']);
   assert.equal(shareText(back), shareText(save), 'sharing the loaded map again gives the same link');
   assert.deepEqual(keepStrokeTools(back.nodes, new Set(['landform', 'hill'])).map(n => n.tool), ['landform', 'hill'], 'a map without the tool shows its strokes as Landform');
+});
+
+test('a stroke that fell back keeps its shape for good: a Green hill through a world without Hill, then Desert', () => {
+  const green = configs.green, desert = configs.desert, noHill = {...green, tools: green.tools.filter(t => t.id !== 'hill')};
+  const ids = config => new Set(['landform', ...worldTools(config).map(t => t.id)]);
+  const params = (config, shape) => strokeParams(strokeCard(config, toolDefaults(config, shape))), defaultsIn = config => n => params(config, n.tool);
+  // A hill drawn on Green and widened by hand.
+  const start = {kind: 'landform', tool: 'hill', points: [{x: 0, y: 0}], params: {...params(green, 'hill'), widthVary: .6}};
+  let [n] = carryStrokes(markEdited([start], defaultsIn(green)), ids(noHill), defaultsIn(noHill));
+  assert.deepEqual([n.tool, n.kept], ['landform', true]); assert.deepEqual(n.params, start.params);
+  [n] = carryStrokes(markEdited([n], defaultsIn(noHill)), ids(desert), defaultsIn(desert));
+  assert.deepEqual([n.tool, n.kept], ['landform', true]);
+  assert.deepEqual(n.params, start.params, 'the numbers it started with: Desert\'s mesa (terraces 6, ledges) does not reach it');
+  // A stroke drawn with the Landform button itself still follows the world where unedited.
+  [n] = carryStrokes(markEdited([{kind: 'landform', tool: 'landform', points: [{x: 0, y: 0}], params: params(green, 'landform')}], defaultsIn(green)), ids(desert), defaultsIn(desert));
+  assert.deepEqual([n.tool, n.kept, n.params.terraces], ['landform', undefined, 6]);
 });

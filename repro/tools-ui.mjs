@@ -3,11 +3,11 @@
 // Green's toolbar (Landform first, the world's thirteen, Fissure last in Shape; four in Water); draw with Hill; Save the selected hill as a tool
 // (its own name, icon and color: it joins the Shape group after the world's tools); draw with it (the same numbers as the hill it came from);
 // undo and redo both; reload (the autosave) to the same tools, strokes and pixels; load a save whose strokes name no tool (each takes the one
-// its section form belongs to); switch to Red Planet: its toolbar, the map's tool carried
-// with the map, the hill taking Red's numbers where it was not edited, and a stroke whose tool Red lacks showing as Landform with every number
-// kept (no world lacks a tool yet, so that stroke's tool is one no world has, written into the working copy as another world would leave it);
-// then Delete the map's tool (its stroke keeps its numbers and shows as Landform) and undo that. Writes screenshots (toolbar-green.png,
-// toolbar-red.png, save-as-tool.png, map-tool.png, fallback.png) and report.json into DIR.
+// its section form belongs to); switch to Red Planet: its toolbar, the map's tool carried with the map, the hill taking Red's numbers where it
+// was not edited, and a stroke whose tool Red lacks showing as Landform with every number kept, and kept again on to Desert (no world lacks a
+// tool yet, so that stroke's tool is one no world has, written into the working copy as another world would leave it); then Delete the map's
+// tool (its stroke keeps its numbers and shows as Landform) and undo that. Writes screenshots (toolbar-green.png, toolbar-red.png,
+// save-as-tool.png, map-tool.png, fallback.png) and report.json into DIR.
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {mkdirSync, writeFileSync} from 'node:fs';
@@ -117,7 +117,7 @@ try {
   assert.deepEqual(report.red, {Shape: [...WORLD, 'map-1', 'fissure'], Water: ['deep', 'shallow', 'river', 'braided']});
   ns = await nodes();
   const lone = ns.findIndex(n => n.params?.radius === before[hill].params.radius && n.params?.widthVary === before[hill].params.widthVary && n.tool !== 'map-1');
-  assert.equal(ns[lone].tool, 'landform', 'a stroke whose tool the new world lacks shows as Landform');
+  assert.deepEqual([ns[lone].tool, ns[lone].kept], ['landform', true], 'a stroke whose tool the new world lacks shows as Landform, kept for good');
   assert.deepEqual(without(ns[lone].params), without(before[hill].params), 'with every number as it was');
   const carried = ns.find(n => n.tool === 'map-1');
   assert.deepEqual(without(carried.params), without(before[mine].params), 'the map\'s tool goes with the map, and its stroke keeps its numbers');
@@ -126,6 +126,10 @@ try {
   await shot('.tool-groups', 'toolbar-red.png');
   await select(lone); assert.equal(await title(), `Selected · Landform #${lone + 1}`);
   await shot('#brush-title', 'fallback.png', true);
+  // It keeps its shape for good: on to Desert, whose own landform is the mesa (terraces 6), and its numbers stay as they started.
+  await open('biome=desert');
+  const kept = (await nodes()).find(n => n.kept);
+  assert.deepEqual(without(kept.params), without(before[hill].params), 'a stroke that fell back keeps every number through another switch');
   // Today's carry where the world has the tool: a hill drawn on Green takes Red's hill where unedited. Draw one more on Green to see it.
   await open('biome=green'); await tool('hill'); await draw(700, 260, 900, 280); const greenHill = (await nodes()).at(-1).params;
   await sleep(1200); await open('biome=red');

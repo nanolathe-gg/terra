@@ -47,15 +47,22 @@ export function worldTools(config) {
 export const toolRockSlot=(tool,rocks=[],worldKey='') => tool?.rock===undefined?undefined:rockByKey(rocks,tool.rock,worldKey);
 // The tool a stroke shows and carries as: its own, if the toolbar (`ids`) has it, else the generic landform. A stroke of another kind is its kind.
 export const strokeTool=(n,ids) => n?.kind!=='landform'?n?.kind:ids.has(n.tool)?n.tool:LANDFORM_TOOL.id;
-// Strokes whose tool the toolbar lacks go to the generic landform, their numbers as they are (a stroke from another world, or a map tool deleted).
-export const keepStrokeTools=(nodes,ids) => nodes.map(n => n?.kind==='landform' && n.tool!==strokeTool(n,ids)?{...n,tool:strokeTool(n,ids)}:n);
+// A stroke that falls back to the generic landform keeps its shape for good: only its tool is lost. It is marked `kept` (every setting counts as set by
+// hand, so no later world switch gives it that world's defaults); a stroke drawn with the Landform button is not, and its unedited settings follow the world.
+const fallBack=n => ({...n,tool:LANDFORM_TOOL.id,kept:true});
+// Strokes whose tool the toolbar lacks fall back to the generic landform at load, their numbers as they are (a stroke from another world, or of a map tool
+// deleted before the map was saved).
+export const keepStrokeTools=(nodes,ids) => nodes.map(n => n?.kind==='landform' && !ids.has(n.tool)?fallBack(n):n);
+// A working copy's marks (sculpt.js workingCopy): per stroke the settings that differ from its tool's defaults in its world (`defaultsOf`), which are
+// the ones the artist set by hand.
+export const markEdited=(nodes,defaultsOf) => nodes.map(n => { const base=n.kind==='ground'?null:defaultsOf(n); return base?{...n,edited:Object.keys(n.params).filter(k => k!=='seed' && JSON.stringify(n.params[k])!==JSON.stringify(base[k]))}:n; });
 // A working copy's strokes carried into another world (sculpt.js carryNodes; the ground node is the page's): where the toolbar (`ids`) has a stroke's tool,
 // each setting the artist changed by hand (`edited`, the working copy's marks) stays and every other takes `defaultsOf(stroke)`, the new world's for that
-// tool; a stroke whose tool it lacks becomes the generic landform with every number as it was (there is no default of its own to take).
+// tool. A stroke whose tool it lacks falls back to the generic landform, and one that fell back before stays so: every number as it was, for good.
 export function carryStrokes(list,ids,defaultsOf) {
   return list.filter(n => n.kind!=='ground').map(n => {
     const {edited,...rest}=n;
-    if (n.kind==='landform' && !ids.has(n.tool)) return {...rest,tool:LANDFORM_TOOL.id};
+    if (n.kind==='landform' && (n.kept || !ids.has(n.tool))) return fallBack(rest);
     const base=n.params && Array.isArray(edited)?defaultsOf(n):null;
     if (!base) return rest;
     const keep=new Set(edited),params={};
@@ -65,7 +72,7 @@ export function carryStrokes(list,ids,defaultsOf) {
 }
 // A landform stroke saved before strokes named their tool takes, once, the tool its section form belongs to (landformTool) if the toolbar has it,
 // else the generic landform. Nothing else infers a tool.
-export const inferStrokeTools=(nodes,ids) => nodes.map(n => n?.kind==='landform' && typeof n.tool!=='string'?{...n,tool:ids.has(landformTool(n.params))?landformTool(n.params):LANDFORM_TOOL.id}:n);
+export const inferStrokeTools=(nodes,ids) => nodes.map(n => n?.kind==='landform' && typeof n.tool!=='string'?(ids.has(landformTool(n.params))?{...n,tool:landformTool(n.params)}:fallBack(n)):n);
 
 // ---- A map's own tools (Save as tool) ----
 // {id, label, icon, color, group, shape, card}: made from a selected shape, they join the toolbar after the world's tools in their group and live in
@@ -108,7 +115,8 @@ export function nextMapToolId(tools,nodes=[]) {
   return `map-${Math.max(0,...n)+1}`;
 }
 // A tool made from a shape's card (Save as tool): a new list, the tool last; and a list without a tool (Delete). The strokes drawn with a deleted tool keep
-// their numbers and their tool's id, which no toolbar has any more, so they show as the generic landform (strokeTool) and come back with an undo.
+// their numbers and their tool's id, which no toolbar has any more, so they show as the generic landform (strokeTool) and show as the tool again when an
+// undo brings it back. Saved and loaded, or carried to another world, without it, they fall back to the generic landform for good (keepStrokeTools, carryStrokes).
 export function addMapTool(tools,nodes,{label,icon,color,group,shape,card}) {
   if (tools.length>=MAP_TOOLS_MAX) throw Error(`A map holds at most ${MAP_TOOLS_MAX} tools of its own.`);
   const id=nextMapToolId(tools,nodes),[tool]=copyMapTools([{id,label,icon,color,group,shape,card:{...card,preset:'custom'}}]);
