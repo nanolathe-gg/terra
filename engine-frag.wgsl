@@ -1748,7 +1748,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Where the beds begin is read from the height alone, without the column's tilt and wander: those are world-space noise, which
         // carried the first bed's colour onto the plain in patches that do not repeat with the ground's pool (a bare Desert plain drew
         // 839 distinct tiles in a 2048-px window where its pool holds 210; TA's maps are tiles). The beds themselves still wander.
-        let onRaised = max(smoothstep(columnSection(0).x, columnSection(0).x+1.5, h-u.columnOrigin),faceGate*exposed) * (1.0-route);
+        // A recipe's level ground takes its beds from its own height (bedsFrom: the world's first section start for the world's rock); its faces at every height.
+        let onRaised = max(smoothstep(u.rock[rs & rockMask].bedsFrom, u.rock[rs & rockMask].bedsFrom+1.5, h-u.columnOrigin),faceGate*exposed) * (1.0-route);
         let bedCoverage=clamp(u.rock[rs & rockMask].strata*2.0,0.0,1.0)*mix(exposed,1.0,smoothstep(.5,1.0,u.rock[rs & rockMask].strata));
         material = mix(material, bedColour, max(bedCoverage * u.rock[rs & rockMask].strataContrast * onRaised, u.rock[rs & rockMask].strata * painted.x));
         if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)); }

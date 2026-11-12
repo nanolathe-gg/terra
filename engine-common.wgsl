@@ -99,8 +99,10 @@ struct Rock {
     // each bed's thickness and strength come from a hash).
     columnFirst: i32,
     columnCount: i32,
-    pad0: f32,            // padding: a uniform array's element is a multiple of 16 bytes
-    pad1: f32,
+    // Where level ground starts to take the recipe's beds, height above the column's origin (writeRocks: the world's first section start for
+    // the world's rock; a recipe with its own beds starts above the world's lowest section, so the ground at a stroke's foot keeps the plain's look).
+    bedsFrom: f32,
+    pad1: f32,            // padding: a uniform array's element is a multiple of 16 bytes
 }
 
 struct Uniforms {
