@@ -79,6 +79,9 @@ const worldDefault=key => worldDefaultIn(config,key);
 const shapeDefaults=() => shapeDefaultsIn(config);
 const nodeShapeParams=n => {const q={...shapeDefaults(),...n.params};return n.kind==='landform'?landformSteps(q):q;};
 const shapeValue=key => { const f=SHAPE_FIELDS.find(f => f[0]===key); return Number($(f[1]).value)/f[7]; };
+// A shape control set from a tool's or a stroke's numbers. A choice its list no longer holds (a rock preset deleted since the tool last used it)
+// shows and reads as the list's first choice, Rock beneath: an empty select would read as 0, the world's rock.
+const setShapeControl=(id,v) => { const e=$(id); e.value=v; if(e.selectedIndex===-1)e.selectedIndex=0; };
 function buildShapeOptions() {
   // Each option row is built for its feature group (sculpt-ui.js groupToolControls). The section and along-path
   // editors are the page's own (#section-preview-control, in the curve dock).
@@ -144,7 +147,7 @@ function stepControlRange(kind,p={}) {
 function showTool(state={},kind=strokeKind(tool)) {
   heightControlRange(state);stepControlRange(kind,state);
   [$('amount').min,$('amount').max]=amountRange(kind).map(String);
-  for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(state[key])) $(id).value=clamp(state[key],lo,hi);
+  for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(state[key])) setShapeControl(id,clamp(state[key],lo,hi));
   $('tool-style').value=Object.hasOwn(TOOL_PRESETS,state.preset)?state.preset:'custom';
 }
 function updateControls() {
@@ -924,7 +927,7 @@ function selectNode(i) {
     const [lo,hi]=amountRange(n.kind); $('amount').min=String(lo); $('amount').max=String(hi);
     $('diameter').value=clamp(p.radius*2,16,1200); $('amount').value=clamp(p.amount,lo,hi); $('roughness').value=clamp(Math.round(p.rough*100),0,100);
     $('softness').value=Math.round(p.softness*100); $('cracks').value=Math.round((p.cracks||0)*100);
-    for (const [key,id,,,lo,hi,,scale] of SHAPE_FIELDS) $(id).value=clamp(Math.round((p[key]??worldDefault(key))*scale),lo,hi);
+    for (const [key,id,,,lo,hi,,scale] of SHAPE_FIELDS) setShapeControl(id,clamp(Math.round((p[key]??worldDefault(key))*scale),lo,hi));
   }
   renderLayers(); updateControls(); schedule(false);
   if (n) status(`Selected ${NODE_NAMES[n.kind]||n.kind} #${i+1}. Drag to transform or edit its settings.`);
@@ -1086,6 +1089,7 @@ function scriptedScene(list,{ground=true}={}) {
   cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); 
   nodes=[]; selected=-1;
   for (const node of sceneNodes(config,list,{ground,seed,settings:experiment})) addNode(node);
+  nodes=keepStrokeRocks(nodes,mapRocks);   // a stroke choosing a preset the map's list does not hold keeps the rock beneath (as headless play does)
   regionalFields.changed();
   markChanged(); checkpoint();
   updateControls(); schedule(); queueWeather();
@@ -1162,7 +1166,7 @@ function loadSketch(s,carry=false) {
   // Carried into another world, the brush cards and the world's sliders stay at that world's defaults.
   if (!carry) for (const kind of Object.keys(HELP)) toolSettings[kind]={...toolDefaults(kind),...(savedToolCard(config,kind,s.toolSettings?.[kind])||{})};
   showTool(toolSettings[tool]);
-  if (!carry) for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
+  if (!carry) for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(s[key])) setShapeControl(id,clamp(s[key],lo,hi));
   if (!carry) for (const [key,id,lo,hi] of [['softness','softness',0,100],['relief','relief',0,160],['mineralRing','mineral-ring',0,100],['ringSpread','ring-spread',0,100],['ringVariation','ring-variation',0,100],['materialWeathering','material-weathering',0,100],['depositSpread','deposit-spread',0,100],['transitionDetail','transition-detail',0,100]]) if (Number.isFinite(s[key])) $(id).value=clamp(s[key],lo,hi);
   if (typeof s.weather==='boolean') $('weather').checked=s.weather;
   if (typeof s.clay==='boolean') $('clay').checked=s.clay;

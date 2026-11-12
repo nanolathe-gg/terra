@@ -94,8 +94,14 @@ try {
   await click('undo');
   assert.equal((await nodes())[0].params.rockPreset, shale.slot); assert.ok((await rocks()).some(r => r.slot === shale.slot));
   assert.equal(await capture(), edited, 'undoing the delete brings the shape’s rock back');
+  // A tool that last chose a preset deleted since: picking the tool again shows and draws Rock beneath (an empty choice would read as the world's rock).
+  const tool = async name => { await ev(`document.querySelector('[data-tool="${name}"]').click()`); await ready(); };
+  await click('tab-tool'); await tool('plateau'); await set('lf-rock', shale.slot); await tool('mountain');
+  await click('tab-world'); await set('rock-presets', shale.slot); await click('rock-delete');
+  await click('tab-tool'); await tool('plateau');
+  assert.equal(await ev(`document.getElementById('lf-rock').value`), '-1', 'a deleted preset shows as Rock beneath on the tool that chose it');
   assert.deepEqual(errors, []);
-  report.result = 'list, add, pick, edit, undo, redo, save and load, copy and paste, delete and undo: all as expected';
+  report.result = 'list, add, pick, edit, undo, redo, save and load, copy and paste, delete and undo, a tool whose preset is gone: all as expected';
 } finally {
   writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 2));
   try { ws?.close(); } catch {}
