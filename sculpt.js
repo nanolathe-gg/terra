@@ -86,8 +86,8 @@ const shapeValue=key => { const f=SHAPE_FIELDS.find(f => f[0]===key); return Num
 // shows and reads as the list's first choice, Rock beneath: an empty select would read as 0, the world's rock.
 const setShapeControl=(id,v) => { const e=$(id); e.value=v; if(e.selectedIndex===-1)e.selectedIndex=0; };
 function buildShapeOptions() {
-  // Each option row is built for its feature group (sculpt-ui.js groupToolControls). The section and along-path
-  // editors are the page's own (#section-preview-control, in the curve dock).
+  // Each option row is built for its section or part of the card (sculpt-ui.js groupToolControls). The section and along-path
+  // editors are the page's own (#section-preview-control, in the card's Profile section).
   syncToolGroups=groupToolControls(SHAPE_FIELDS,([key,id,label,,lo,hi,step,,help,choices]) => {
     if(key==='fissureNetwork')choices=[[0,'Path cut'],[1,'Fracture network']];
     if(key==='plateMaterial')choices=[[1,'Polygonal slabs'],[2,'Needle band']];
@@ -1380,8 +1380,8 @@ $('tool-save-button').onclick=() => {
   const card={...Object.fromEntries(Object.entries(TOOL_FIELDS).map(([key,[id]]) => [key,Number($(id).value)])),...(n.params.curve?{curve:structuredClone(n.params.curve)}:{}),...(n.params.along?{along:structuredClone(n.params.along)}:{})};
   try {
     const added=addMapTool(mapTools,nodes,{label:$('tool-save-name').value,icon:toolSaveIcon,color:$('tool-save-color').value,group:from.group,shape:shapeFrom(config,toolShape(from)),card});
-    restoreMapTools(added.tools); toolSaveFor=''; checkpoint(true);
-    status(`Saved the tool ${toolLabel(added.id)}: it is in the toolbar's ${from.group==='water'?'Water':'Shape'} group, after the world's tools.`);
+    restoreMapTools(added.tools); toolSaveFor=''; $('tool-save').open=false; checkpoint(true);
+    status(`Saved the tool ${toolLabel(added.id)}: it is with the ${from.group==='water'?'Water':'Land'} tools, after the world's.`);
   } catch (err) { $('tool-save-note').textContent=err.message; }
 };
 $('tool-delete').onclick=() => {
