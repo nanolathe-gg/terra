@@ -17,6 +17,9 @@
 // of the rock it belongs to (rs).
 struct Rock {
     shineRock: vec4f,     // the rock row of the shine table: x gloss, y sharpness, z roughness, w roughness scale (px)
+    // The recipe's colours: row 0 its rock (rgb; a = 1 when chosen, else the rock material's mean), rows 1-5 its beds' material slots (rgb).
+    // Rows 6 and 7 are free for later per-recipe light (a colour in rgb and a number in a each).
+    rockColors: array<vec4f, 8>,
     strata: f32,          // Strata: how much of the rock and the raised ground takes the column's bed colours
     strataContrast: f32,
     strataGrain: f32,
@@ -138,7 +141,6 @@ struct Uniforms {
     // A world's chosen base colours (a = 1 when set) and its textures' means.
     groundBase: vec4f,
     slopeBase: vec4f,
-    rockBase: vec4f,
     sandBase: vec4f,
     beachBase: vec4f,
     shallowBase: vec4f,
@@ -163,7 +165,6 @@ struct Uniforms {
     sandGrass: f32,
     bandWater: f32,
     rockCrown: f32,
-    strataColors: array<vec4f, 5>,   // rgb of the column's material slots; uniform arrays take a 16-byte stride
     paletteMix: i32,
     transitionDetail: f32,
     wetBand: f32,
@@ -1035,7 +1036,7 @@ fn voxelHardness(p:vec3f)->f32 {
     return voxelBed(p).hardness;
 }
 // Strata: coloured bands by height on raised ground (painted desert), the colours of the column's beds (slot -> strataColors).
-fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.strataColors[clamp(i, 0, 4)].rgb; }
+fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.rock[rs & rockMask].rockColors[1 + clamp(i, 0, 4)].rgb; }
 // The colour of the column's section s at coordinate c. A bed meets the next one over edge, a share of the cycle: a boundary inside a
 // cycle is softened on both sides, the cycle's top (topFade) inside its top bed. hold (0..1) holds ground that is nearly all one bed
 // (the widest bed's share of the cycle over .88) to that bed's colour: retail's pale caps are one sheet of the cool bed (card G4).

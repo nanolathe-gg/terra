@@ -81,10 +81,12 @@ export function uniformLayout(source) {
   let rockSize = 0;
   for (const f of structFields(source, 'Rock')) {
     const type = FIELD_TYPES[f.type];
-    if (!type || f.array) throw new Error(`nanolathe: unsupported Rock field "${f.line}" in engine-common.wgsl`);
-    rockSize = Math.ceil(rockSize / type[0]) * type[0];
-    rock.set(f.name, {offset: rockSize, kind: type[2], width: type[1] / 4});
-    rockSize += type[1];
+    if (!type || (f.array && f.type !== 'vec4f')) throw new Error(`nanolathe: unsupported Rock field "${f.line}" in engine-common.wgsl`);
+    // A member array (the recipe's colours) is array<vec4f, N>, 16 bytes an element, as the Uniforms' own arrays.
+    const align = f.array ? 16 : type[0], size = f.array ? 16 * f.count : type[1];
+    rockSize = Math.ceil(rockSize / align) * align;
+    rock.set(f.name, {offset: rockSize, kind: type[2], width: type[1] / 4, count: f.count, stride: f.array ? 16 : 0});
+    rockSize += size;
   }
   if (rockSize % 16) throw new Error('nanolathe: struct Rock must be a multiple of 16 bytes (a uniform array stride)');
   const fields = new Map();
@@ -93,7 +95,7 @@ export function uniformLayout(source) {
     if (f.type === 'Rock') {
       offset = Math.ceil(offset / 16) * 16;
       fields.set(f.name, {offset, kind: 'struct', count: f.count, stride: rockSize, members: rock});
-      for (const [name, m] of rock) fields.set(name, {offset: offset + m.offset, kind: m.kind, width: m.width, count: 1, stride: 0});
+      for (const [name, m] of rock) fields.set(name, {offset: offset + m.offset, kind: m.kind, width: m.width, count: m.count, stride: m.stride});
       offset += rockSize * f.count;
       continue;
     }
@@ -439,7 +441,7 @@ export class TerrainRenderer {
   setColors(colors = {}) {
     this.colorOverrides = {...colors};
     this.set('uMaterialTable', this.placementTable(this.variant));
-    for (const key of ['ground', 'slope', 'rock', 'sand', 'beach', 'shallow', 'deep', 'crystal']) {
+    for (const key of ['ground', 'slope', 'sand', 'beach', 'shallow', 'deep', 'crystal']) {
       const c = colors[key];
       this.set('u' + key[0].toUpperCase() + key.slice(1) + 'Base', c ? [...c, 1] : [0, 0, 0, 0]);
     }
@@ -451,9 +453,12 @@ export class TerrainRenderer {
     // The authored slot palette, or tones of this world's own rock.
     const strataDefaults = columnColors(this.config.column,this.means.rock);
     const strata = strataDefaults.map((c, i) => colors['strata' + (i + 1)] || c.map(v => v / 255));
-    this.set('uStrataColors', strata);
+    // The world's rock is slot 0 of the rock table: its colour (a = 1 when the world chose one) and its beds' slots, which a recipe without
+    // colours of its own takes (writeRocks).
+    this.set('uRockColors', [colors.rock ? [...colors.rock, 1] : [0, 0, 0, 0], ...strata]);
     for (const key of ['ground', 'slope', 'rock', 'beach'])
       this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
+    this.writeRocks();
   }
 
   // GLSL uniform uFooBar is the uniform block's field fooBar. A value is a

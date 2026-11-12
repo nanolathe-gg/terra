@@ -1386,7 +1386,7 @@ fn surfFoam(pixel: vec2f, p: vec2f, x: f32, q: vec2f, depth: f32, slope: f32, e:
 }
 // Weathered rock and its grains: a biome's sand, from the rock's own mean and the world's Sand row and colour. The deposits and the surf's beach draw it.
 fn sandWeathered() -> vec3f {
-    let rockAverage = select(u.rockTexMean, u.rockBase.rgb, u.rockBase.a > 0.5);
+    let rockAverage = select(u.rockTexMean, u.rock[0].rockColors[0].rgb, u.rock[0].rockColors[0].a > 0.5);   // the world's rock (slot 0): a world's sand
     let weathered = mix(vec3f(mix(rockAverage, vec3f(dot(rockAverage, vec3f(0.299, 0.587, 0.114))), 0.25)), vec3f(1.0), u.sandLight * 0.55);
     return select(weathered, u.sandBase.rgb, u.sandBase.a > 0.5);
 }
@@ -1636,7 +1636,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (cvr(0u).x > 0.5) { grass = groundCover(p, slope, broad, place.top, timeMaps, place.vegetation, grass, (1.0 - route) * step(u.sea + 1.0, h)); }
     // The one rock's colour, wherever rock shows (a face, a bare top, a crown): even (its relief's light makes the pattern), each block a
     // little lighter or darker (Color variation), each layer its own tint (Layer tint), its runnels and open partings wet (Wet streaks).
-    let rockFlat = select(u.rockMean, u.rockBase.rgb, u.rockBase.a > 0.5);
+    let rockFlat = select(u.rockMean, u.rock[rs & rockMask].rockColors[0].rgb, u.rock[rs & rockMask].rockColors[0].a > 0.5);
     let weights=pow(abs(normal),vec3f(4));let tri=weights/max(dot(weights,vec3f(1)),.001);
     let mineral=genColor(1,hit.yz)*tri.x+genColor(1,hit.xz+vec2f(173,41))*tri.y+genColor(1,hit.xy+vec2f(53,119))*tri.z;
     let grain=clamp(mineral/max(u.rockMean,vec3f(.01)),vec3f(.5),vec3f(1.6));
