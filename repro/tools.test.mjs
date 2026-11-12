@@ -8,7 +8,7 @@ import {mkdtempSync, readFileSync, readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {LANDFORM_SHAPES, toolDefaults, sceneNodes, pageSettings, strokeCard, strokeParams} from '../sculpt-scene.js';
-import {worldRocks} from '../sculpt-rock-presets.js';
+import {worldRocks, applyWorldRock} from '../sculpt-rock-presets.js';
 import {TOOL_ICONS, FIXED_TOOLS, LANDFORM_TOOL, MAP_TOOLS_MAX, worldTools, toolShape, toolRockSlot, strokeTool, keepStrokeTools, inferStrokeTools, carryStrokes, markEdited, copyMapTools, addMapTool, deleteMapTool, nextMapToolId, CARD_KEYS} from '../sculpt-tools.js';
 
 const root = new URL('..', import.meta.url).pathname, dir = mkdtempSync(join(tmpdir(), 'tools-test-'));
@@ -23,24 +23,27 @@ const allDefaults = () => Object.fromEntries(Object.entries(configs).map(([name,
 const PINNED = '440b1e5e0c04b99abfe7e184846bb96537a7fbd516d8cc814fb3384560bdf763';
 
 // The starting cards the old tables made (sculpt-scene.js TOOL_PRESETS over LANDFORM_TOOLS, main 1f0dcec0), which the world data reproduces.
-test('every world defines every shape, and the starting cards are the old tables\' to the digit', () => {
+test('every world defines every library shape, its own shapes come from one, and the library\'s starting cards are the old tables\' to the digit', async () => {
+  const {shapeFrom} = await import('../sculpt-scene.js');
   for (const [name, config] of Object.entries(configs)) {
     assert.deepEqual(Object.keys(config.worldShapes), WORLDS, name);
-    for (const w of WORLDS) assert.deepEqual(Object.keys(config.worldShapes[w]).sort(), Object.keys(LANDFORM_SHAPES).sort(), `${name}: ${w}`);
+    for (const w of WORLDS) {
+      const keys = Object.keys(config.worldShapes[w]);
+      assert.ok(Object.keys(LANDFORM_SHAPES).every(k => keys.includes(k)), `${name}: ${w} defines every library shape`);
+      for (const k of keys.filter(k => !Object.hasOwn(LANDFORM_SHAPES, k))) assert.notEqual(shapeFrom({worldShapes: config.worldShapes}, k, w), k, `${w}'s own shape ${k} comes from a library shape`);
+    }
   }
   assert.equal(createHash('sha256').update(JSON.stringify(allDefaults())).digest('hex'), PINNED);
   // A map tool saved from any of them holds only settings a card may hold (sculpt-tools.js copyMapTools).
   for (const w of WORLDS) for (const entry of ENTRIES) for (const key of Object.keys(toolDefaults(configs[w], entry))) assert.ok(CARD_KEYS.has(key), `${w} ${entry}: ${key}`);
 });
 
-// Main 1f0dcec0's thirteen shape buttons in sculpt.html, in order (Fissure, which sat between Crater and Faceted forms, is a fixed button now).
-const TODAY = [['plateau', 'Plateau', '#e6bb82', 'shape'], ['hill', 'Hill', '#b8d88d', 'shape'], ['mountain', 'Mountain', '#b3bcca', 'shape'], ['ramp', 'Ramp', '#e5cfa5', 'shape'],
-  ['valleyV', 'V valley', '#c7a97e', 'shape'], ['valleyU', 'U valley', '#c7a97e', 'shape'], ['valleyT', 'Terraced valley', '#c7a97e', 'shape'], ['crater', 'Crater', '#d5a18b', 'shape'],
-  ['crystal', 'Faceted forms', '#aaa5ec', 'shape'], ['deep', 'Deep water', '#7cb8e8', 'water'], ['shallow', 'Shallow water', '#87d9da', 'water'], ['river', 'River', '#6fb1e0', 'water'],
-  ['braided', 'Braided river', '#6fb1e0', 'water']].map(([id, label, color, group]) => ({id, label, icon: id, color, group}));
-
-test('every world\'s toolbar is today\'s shape buttons: ids, labels, icons, colors, groups and order', () => {
-  for (const [name, config] of Object.entries(configs)) assert.deepEqual(worldTools(config), TODAY, name);
+test('every world\'s and variant\'s toolbar is valid, its rocks are presets it ships, and the markup holds the icon set and the fixed buttons', () => {
+  for (const [name, config] of Object.entries(configs)) {
+    const tools = worldTools(config), rocks = worldRocks(applyWorldRock(structuredClone(config)));
+    assert.ok(tools.length > 0, name);
+    for (const t of tools.filter(t => t.rock)) assert.ok(toolRockSlot(t, rocks, config.rock?.recipe) >= 0, `${name}: ${t.id} names ${t.rock}, which the world ships`);
+  }
   // The icon set is Save as tool's icon choices, written in sculpt.html with their svgs, and the fixed buttons (the generic Landform among them) are in the
   // markup at their places.
   const html = readFileSync(root + 'sculpt.html', 'utf8'), choices = html.split('<div id="tool-save-icons"')[1].split('</div>')[0];
@@ -48,11 +51,12 @@ test('every world\'s toolbar is today\'s shape buttons: ids, labels, icons, colo
   const palette = html.split('class="tool-groups"')[1].split('</section>')[0];
   assert.deepEqual([...palette.matchAll(/data-tool="(\w+)"|id="(shape|water)-tools"/g)].map(m => m[1] ?? `[${m[2]}]`), ['move', 'landform', '[shape]', 'fissure', '[water]', 'smooth', 'erase', 'paint', 'sand', 'grass']);
   assert.deepEqual(FIXED_TOOLS.toSorted(), ['erase', 'fissure', 'grass', 'move', 'paint', 'sand', 'smooth']);
-  for (const bad of [{...TODAY[0], id: 'fissure'}, {...TODAY[0], id: 'a b'}, {...TODAY[0], icon: 'star'}, {...TODAY[0], color: 'red'}, {...TODAY[0], group: 'paint'}, {...TODAY[0], shape: 'mesa'}, {...TODAY[0], label: ''}, {...TODAY[0], id: 'map-1'}])
+  const today = {id: 'plateau', label: 'Plateau', icon: 'plateau', color: '#e6bb82', group: 'shape'};
+  for (const bad of [{...today, id: 'fissure'}, {...today, id: 'a b'}, {...today, icon: 'star'}, {...today, color: 'red'}, {...today, group: 'paint'}, {...today, shape: 'mesa'}, {...today, label: ''}, {...today, id: 'map-1'}])
     assert.throws(() => worldTools({tools: [bad]}), undefined, JSON.stringify(bad));
-  assert.throws(() => worldTools({tools: [TODAY[0], TODAY[0]]}), /twice/);
+  assert.throws(() => worldTools({tools: [today, today]}), /twice/);
   assert.equal(toolShape({id: 'soilHill', shape: 'hill'}), 'hill');
-  assert.equal(toolShape(TODAY[1]), 'hill');
+  assert.equal(toolShape(today), 'plateau');
 });
 
 test('a scene names shapes, so a world\'s toolbar cannot move it', () => {
@@ -161,19 +165,19 @@ test('a stroke that fell back keeps its shape for good: a Green hill through a w
 
 test('a world\'s own shape: a library shape as the world makes it, with its own numbers; scenes still name library shapes', async () => {
   const {shapeFrom} = await import('../sculpt-scene.js');
-  const green = configs.green, worldShapes = {...green.worldShapes, green: {...green.worldShapes.green, knoll: {from: 'hill', diameter: 140, elevation: 20}, hill: {...green.worldShapes.green.hill, from: 'mountain'}, odd: {from: 'mesa'}}};
-  const config = {...green, worldShapes, tools: [...green.tools, {id: 'knoll', label: 'Knoll', icon: 'hill', color: '#b8d88d', group: 'shape', rock: 'soil', help: 'A small round rise.'}]};
-  assert.equal(shapeFrom(config, 'knoll'), 'hill');
+  const green = configs.green, worldShapes = {...green.worldShapes, green: {...green.worldShapes.green, mound: {from: 'hill', diameter: 140, elevation: 20}, hill: {...green.worldShapes.green.hill, from: 'mountain'}, odd: {from: 'mesa'}}};
+  const config = {...green, worldShapes, tools: [...green.tools, {id: 'mound', label: 'Mound', icon: 'hill', color: '#b8d88d', group: 'shape', rock: 'soil', help: 'A small round rise.'}]};
+  assert.equal(shapeFrom(config, 'mound'), 'hill');
   assert.equal(shapeFrom(config, 'hill'), 'hill', 'a library shape keeps its own: a `from` on it means nothing');
   assert.equal(shapeFrom(config, 'odd'), 'odd', 'a `from` that names no library shape draws nothing');
-  assert.deepEqual(toolDefaults(config, 'knoll'), {...toolDefaults(config, 'hill'), diameter: 140, elevation: toolDefaults(config, 'hill').elevation - 36 + 20}, 'the world\'s Hill with its own numbers');
+  assert.deepEqual(toolDefaults(config, 'mound'), {...toolDefaults(config, 'hill'), diameter: 140, elevation: toolDefaults(config, 'hill').elevation - 36 + 20}, 'the world\'s Hill with its own numbers');
   assert.deepEqual(toolDefaults(config, 'hill'), toolDefaults(green, 'hill'));
   assert.equal(worldTools(config).at(-1).help, 'A small round rise.');
   assert.throws(() => worldTools({...config, tools: [{...config.tools.at(-1), id: 'odd'}]}), /no shape/);
   assert.throws(() => worldTools({...config, tools: [{...config.tools.at(-1), help: ''}]}), /help/);
-  assert.throws(() => sceneNodes(config, [['knoll', [[0, 0]], {}]], {ground: false, settings: pageSettings(config)}), /not a tool/, 'a scene names library shapes');
+  assert.throws(() => sceneNodes(config, [['mound', [[0, 0]], {}]], {ground: false, settings: pageSettings(config)}), /not a tool/, 'a scene names library shapes');
   // A world that does not make the shape makes no landform of it, and the Tool preset menu does not offer that world (sculpt.js syncToolStyle).
-  assert.equal(toolDefaults(config, 'knoll', 'red').curve, undefined);
+  assert.equal(toolDefaults(config, 'mound', 'red').curve, undefined);
 });
 
 test('a variant may ship its own toolbar; one without takes the world\'s', () => {
