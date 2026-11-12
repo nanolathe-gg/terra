@@ -8,8 +8,8 @@ const controlHelp={
   'knob-sunTilt':'Moves the light north or south of due west. Zero is west; positive values move it south.',
   'knob-sunHeight':'How high the sun stands above the horizon. A low sun lights the faces turned to it, darkens the others and casts long shadows; a wall casts a shadow its height divided by the tangent of this angle. Set Cast shadow on level ground to let the shadows reach level ground.',
   'knob-ambient':'Sets the share of light that reaches faces pointing away from the sun.',
-  'knob-absorbDepth':'How fast the rock\u2019s color deepens with its thickness toward its Absorption color (Colors): thin edges keep their own color, thick bodies go deep and saturated, like ice or a crystal. Zero is opaque rock.',
-  'knob-shadowTint':'How much of the sun the rock lets through its cast shadow, in its Absorption color: a thick rock\u2019s shadow is dim and colored, a thin one\u2019s brighter. Zero is a neutral shadow.',
+  'knob-absorbDepth':'For translucent rock such as ice or crystal: where the rock is thick, its color deepens toward its Absorption color (Colors, above); thin edges keep their own color. Zero leaves the color as it is. It tints everything the shape covers, grass on its ledges included, and counts raised ground under the shape as part of the rock.',
+  'knob-shadowTint':'How much sunlight the rock lets into the shadow it casts, in its Absorption color: a thick rock\u2019s shadow stays dim and tinted, a thin one\u2019s is lighter. Zero is an ordinary shadow. On level ground it shows only where Cast shadow on level ground is on.',
   'knob-lushness':'Changes how much vegetation the ground supports. On materials with flowers, richer ground can grow more flower patches.',
 };
 
