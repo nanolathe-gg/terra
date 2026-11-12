@@ -18,7 +18,7 @@
 struct Rock {
     shineRock: vec4f,     // the rock row of the shine table: x gloss, y sharpness, z roughness, w roughness scale (px)
     // The recipe's colours: row 0 its rock (rgb; a = 1 when chosen, else the rock material's mean), rows 1-5 its beds' material slots (rgb).
-    // Rows 6 and 7 are free for later per-recipe light (a colour in rgb and a number in a each).
+    // Row 6 is its absorption colour (rgb; a = 1 when chosen, else the rock's own hue); row 7 is free.
     rockColors: array<vec4f, 8>,
     strata: f32,          // Strata: how much of the rock and the raised ground takes the column's bed colours
     strataContrast: f32,
@@ -102,7 +102,13 @@ struct Rock {
     // Where level ground starts to take the recipe's beds, height above the column's origin (writeRocks: the world's first section start for
     // the world's rock; a recipe with its own beds starts above the world's lowest section, so the ground at a stroke's foot keeps the plain's look).
     bedsFrom: f32,
+    // Light through the rock (B4; 0 opaque rock, as before): how much sun passes through thin rock lit from behind, how fast the colour deepens
+    // toward the absorption colour with the rock's thickness, and how much of a cast shadow's sun the rock lets through, in its colour.
+    lightThrough: f32,
+    absorbDepth: f32,
+    shadowTint: f32,
     pad1: f32,            // padding: a uniform array's element is a multiple of 16 bytes
+    pad2: f32,
 }
 
 struct Uniforms {
@@ -260,6 +266,7 @@ struct Uniforms {
     shine: array<vec4f, 5>,
     rock: array<Rock, 16>,   // the rock recipes by slot (struct Rock); slot 0 is the world's own rock
     rimReach: f32,        // bare rock at rims: how far in from a drop the soil thins, px (0 none)
+    shadowTintAny: f32,   // the largest Tinted shadow of the rocks in use (writeRocks): a cast shadow's occluder may be any of them
     rockWeatherGrid: vec4f, // origin in art pixels, texture dimensions; 4px cells
     // Over the rock slots in use (sculpt-renderer.js writeRocks): whether any sheds debris or runs off, and the farthest rockfall reach. The passes
     // that gather from other points read these, and each source's own numbers from its slot.

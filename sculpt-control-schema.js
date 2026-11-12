@@ -182,6 +182,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'flatShadow','flatOcclusion','sunTilt','sunHeight','ambient','shadeDepth','lightCap','creaseShade',
  'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','erosionRain','wetSwath','wetGround','lushness','soilRim','slopeMarks','wrinkles',
  'shineRockSharp','shineRockRough','shineRockScale',
+ 'lightThrough','absorbDepth','shadowTint',
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
  'looseSupply','looseSize','boulders','looseKnoll','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing',
