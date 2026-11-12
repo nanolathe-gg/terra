@@ -7,16 +7,21 @@ import {applyRiver,isRiver} from './sculpt-river.js';
 import {createShapeEngine,readBuffer,comparePlanes,DRAWN_KINDS,heightsFields} from './sculpt-gpu-fields.js';
 import {erosionOf} from './sculpt-erosion.js';
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
-// Biomes choose starting values for the same brushes. These presets can be
-// borrowed independently of the canvas materials and then edited per tool.
-// Approved starting shapes use ordinary controls and editable knots. Preset elevation is a rise above the map plain; toolDefaults resolves the absolute height.
+// The shape library: the landform model's named starting shapes, which a world's tools (config.tools, its table's world.tools) and a scene's strokes
+// name. A world lays its own numbers over each (config.worldShapes[world][shape], its table's world.shapes) and may draw them with other tools, so
+// a scene that names a shape draws the same whatever the world's toolbar holds. Approved starting shapes use ordinary controls and editable knots.
+// Elevation is a rise above the map plain; toolDefaults resolves the absolute height.
 export const LANDFORM_DEFAULTS={"diameter":300,"amount":70,"roughness":0,"softness":50,"cracks":40,"faceVariation":0,"lean":100,"facing":3,"terraces":0,"elevation":70,"combine":0,"wander":90,"widthVary":35,"heightVary":3,"varySize":140,"varyFoot":115,"varyMiddle":145,"routeSmooth":0,"crestTaper":0,"fingers":0,"shoreLayers":0,"shorePlates":0,"curve":{"form":"lfPlateau","knots":[[0,0],[0.08,0.006],[0.19,0.035],[0.27,0.15],[0.37,0.65],[0.45,0.96],[0.5,1],[1,1]],"back":[[0.0,0],[0.096,0.006],[0.22799999999999998,0.035],[0.324,0.15],[0.444,0.65],[0.54,0.96],[0.6,1],[1,1]]}};
-// The palette's landform presets over LANDFORM_DEFAULTS: numbers for Landform's own controls, each the fit of the
+// The shapes over LANDFORM_DEFAULTS: numbers for Landform's own controls, each the fit of the
 // retired tool's default stroke that re-authored the fixtures. Elevation is a rise above the map plain, or with Height reference: Sea level, above the sea.
 // The valleys cut to a floor below the plain (Cut to) along one curve: V and U differ only in the curve, the terraced one is the V with the Steps control.
 const valley=(form,more={}) => ({diameter:240,lean:100,combine:1,elevation:-20,cracks:0,wander:20,widthVary:20,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,curve:{form,knots:FORMS[form]().knots},...more});
 const hillKnots=() => [[0,0],[.25,.08],[.5,.4],[.75,.8],[.9,.95],[1,1]];
-export const LANDFORM_TOOLS={
+export const LANDFORM_SHAPES={
+  // The generic landform: the model's own defaults (and the world's numbers for it). Every toolbar has it (sculpt.html's Landform button), and a
+  // stroke or a button card whose tool another world lacks shows as it. A scene or fixture that names it does not take the Plateau's look (its
+  // gullies and scree), so the fixtures keep what they were drawn as when a shape's numbers change; to draw what the plateau draws, a scene names it.
+  landform:{},
   // A plateau is high ground to build on (the owner's rule: most of it level): 800 px across and 130 over the plain, with a top that is level in the
   // game's heights (Height variation 0). Its wall takes the outer 105 px of each side (0.2625 of the half width), so the level top is 57 to 66% of the
   // footprint on a click and 66 to 77% on a drag (nine worlds, three outlines), and 48 to 68% of the footprint seats a level 64 px pad. The section is a
@@ -24,7 +29,7 @@ export const LANDFORM_TOOLS={
   // than any unit climbs) and a rounded brow. No vehicle or KBot reaches the top of any of those 27 walls: a way up is a ramp, drawn. Gullies 60 cut
   // the wall and set the cliff back in bays; Gully size 20 is a share of the half width (80 px between the widest), not of the wall: at 50 the ridges
   // between gullies stood 40 units over the top and the bays ate it. Talus reach 40 lays fans at the foot. A world's own plateau keeps its strata and
-  // outline and takes this size and section. A scene's bare "landform" does not take these (toolDefaults); repro/heights-fixture.mjs's plateau does.
+  // outline and takes this size and section. A scene's bare "landform" does not take these; repro/heights-fixture.mjs's plateau does.
   plateau:{diameter:800,elevation:130,gullies:60,gullySize:20,talus:40,heightVary:0,curve:{form:'lfPlateau',knots:[[0,0],[.02,.01],[.08,.12],[.17,.36],[.215,.9],[.235,.975],[.2625,1],[1,1]]}},
   // A hill is low and wide (240 px, rises 36), the same on both sides (lean 100), with a rounded top and shoulders (the section reaches .95 of the rise at .9 of the way up, and climbs at most .4 of it per quarter) and a smooth outline: its steepest 16 px cell steps 16 units or less against 25 at the 99th percentile of retail Green hills (measure/hill_band.py), so units cross it, and it stays off the rock slope score. Gullies 0 keeps modern Green's gully ribs off it (the other worlds have none).
   hill:{diameter:240,elevation:36,lean:100,cracks:20,gullies:0,styleVegetation:60,wander:10,widthVary:10,heightVary:6,varySize:100,varyFoot:100,varyMiddle:100,curve:{form:'lfHill',knots:hillKnots(),back:hillKnots()}},
@@ -60,40 +65,29 @@ export const LANDFORM_TOOLS={
   crystal:{diameter:200,elevation:40,lean:100,combine:0,cracks:0,wander:0,widthVary:0,heightVary:0,varySize:200,varyFoot:100,varyMiddle:100,iceFacets:100,facetForm:2,facetSurface:1,iceFacetSize:32,
     crystalSides:5,crystalTop:80,crystalVariation:50,crystalAlign:0,crystalTiers:100,bergJitter:20,bergBreak:0,bergRough:0,curve:{form:'lfCrystal',knots:FORMS.lfCrystal().knots,back:FORMS.lfCrystal().knots}}
 };
-// lfcrater: a crater with no rim in its heights (retail Red and Crystal: rim/depth -.12..0), a .06 lip for the art and a wide bowl.
-export const CRATER_BOWL=[[0,0],[.25,-.02],[.4,-.06],[.5,.04],[.6,.3],[.72,.58],[.83,.82],[.93,.97],[1,1]];
+// The worlds' own numbers (their tables' world.shapes), by what they were fitted to:
+// - Red's and Crystal's craters carry no rim in their heights (retail Red and Crystal: rim/depth -.12..0): a .06 lip for the art and a wide bowl.
+// - Red's, Desert's, Moon's and Zhon's hills, mountains and water carry the retired outline options as wander and height variation; Desert's
+//   plateau is the reviewed mesa (ragged feet, foot bumps on the ridges: the retired baseVary and baseBump), and the bare landform takes it too.
+// - Moon's hills are lobed (the retired moonLobes): wander in lobes about 60 px long, from foot to crest.
+// - Crystal's Faceted forms draw a column mound (its old brush: Height 140, 480 wide, Irregularity 40): stepped columns over the mound's
+//   (1 - r^2)^1.2 dome, the edge noise as wander. Ice's draw an iceberg a click (retail ice-2, ice-3): one rough slab 240 px wide whose flat top
+//   tilts down to the north (the front and back knots a plane through the center, Level tops 0), its corners cut, lit as the world's own slope
+//   (Surface Rock); a drag scatters a field of them.
+// - Lava's banks rise ~22-24 units over 40-60 px, steep at the lava then flattening (retail coasts, measure/lava_*): wide, concave dry banks, as
+//   shoreline steps and lobes.
 // A save's brush card for a palette button counts only if every setting it holds is one the button's card has today (or its curves and preset);
 // a card holding a removed option starts from the button's preset instead (AGENTS.md rule 7: a save loads without a removed option).
 export function savedToolCard(config,entry,card) {
   if (!card || typeof card!=='object') return null;
   // A card still on a world's preset was never edited (every edit marks it custom), so it is that preset as this editor has it: a preset's change
   // reaches a working map's buttons as it reaches a new map's (Shallow water's Shelf section, November 7).
-  if (Object.hasOwn(TOOL_PRESETS,card.preset)) return toolDefaults(config,entry,card.preset);
+  if (Object.hasOwn(config?.worldShapes||{},card.preset)) return toolDefaults(config,entry,card.preset);
   const current=new Set([...Object.keys(toolDefaults(config,entry)),'curve','along','preset']);
   return Object.keys(card).every(k => current.has(k))?card:null;
 }
-// A palette entry's stroke kind: the shape buttons all draw landforms.
-export const strokeKind=t => Object.hasOwn(LANDFORM_TOOLS,t)?'landform':t;
-export const TOOL_PRESETS={
-  green:{crater:{wander:34,heightVary:4}},
-  red:{crater:{wander:38,heightVary:4,curve:{form:'lfCrater',knots:CRATER_BOWL}},hill:{wander:34,widthVary:30,heightVary:10},mountain:{wander:8},deep:{diameter:176,wander:34,widthVary:35},shallow:{wander:4,waterShore:1}},
-  // The reviewed mesa; ragged feet and foot bumps on the ridges (the retired baseVary and baseBump, as wander and height variation).
-  desert:{plateau:{"amount":70,"roughness":0,"softness":50,"cracks":10,"faceVariation":0,"lean":100,"facing":3,"terraces":6,"combine":0,"wander":75,"widthVary":30,"heightVary":0,"varySize":210,"varyFoot":100,"varyMiddle":150,"ledge":55,"terraceJitter":40,"breakup":30},crater:{wander:32,heightVary:3,cracks:10},hill:{wander:46,widthVary:25,heightVary:10,cracks:10},mountain:{wander:24,cracks:10},deep:{wander:34,widthVary:35}},
-  // Lobed hill outlines (the retired moonLobes): wander in lobes about 60 px long, from foot to crest.
-  moon:{crater:{wander:38,heightVary:4,secondaries:6,ejecta:70,buckling:70},hill:{wander:42,widthVary:30,heightVary:9,varySize:60,varyMiddle:150},mountain:{wander:24,widthVary:5},deep:{wander:34,widthVary:35}},
-  // Crystal's Crystals draw a column mound (its old brush: Height 140, 480 wide, Irregularity 40): stepped columns over the mound's (1 - r^2)^1.2 dome, the
-  // edge noise as wander. Ice's draw an iceberg a click (retail ice-2, ice-3): one rough slab 240 px wide whose flat top tilts down to the north (the front and
-  // back knots a plane through the center, Level tops 0), its corners cut, lit as the world's own slope (Surface Rock); a drag scatters a field of them.
-  crystal:{crater:{curve:{form:'lfCrater',knots:CRATER_BOWL},iceFacets:100,iceFacetSize:16,crystalStep:1,facetSurface:1},crystal:{diameter:480,elevation:140,wander:68,varySize:170,facetForm:1,iceFacets:65,iceFacetSize:24,crystalStep:9,crystalTiers:100,crystalFacet:70,crystalSizeVar:70,
-    curve:{form:'lfCrystal',knots:[[0.0,0.0],[0.1,0.136],[0.2,0.293],[0.3,0.446],[0.4,0.585],[0.5,0.708],[0.6,0.811],[0.7,0.893],[0.8,0.952],[0.9,0.988],[1.0,1.0]],back:[[0.0,0.0],[0.1,0.136],[0.2,0.293],[0.3,0.446],[0.4,0.585],[0.5,0.708],[0.6,0.811],[0.7,0.893],[0.8,0.952],[0.9,0.988],[1.0,1.0]]}},mountain:{wander:6},deep:{wander:24,widthVary:25},shallow:{wander:6}},
-  ice:{crystal:{diameter:260,elevation:60,iceFacets:100,iceFacetSize:240,crystalSides:6,crystalTop:50,crystalVariation:0,crystalTiers:0,bergJitter:45,bergBreak:3,bergRough:8,facetSurface:0,lean:100,facing:3,
-    curve:{form:'lfCrystal',knots:[[0,0],[.04,1],[.55,1],[1,.62]],back:[[0,0],[.28,0],[1,.62]]}},mountain:{wander:6},deep:{wander:24,widthVary:25,shorePlates:1},shallow:{wander:6,shorePlates:1}},
-  // Lava banks rise ~22-24 units over 40-60 px, steep at the lava then
-  // flattening (retail coasts, measure/lava_*): wide, concave dry banks, as shoreline steps and lobes.
-  lava:{mountain:{wander:6},deep:{diameter:264,wander:40,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70,layerJag:6},shallow:{diameter:264,wander:6,fingers:100,stepReference:1,terraces:11,ledge:80,terraceJitter:70,layerJag:6}},
-  zhon:{crater:{wander:32,heightVary:3},hill:{wander:20,widthVary:15,heightVary:7},deep:{diameter:240,wander:48,widthVary:40},shallow:{diameter:240,wander:6}},
-  archipelago:{crater:{wander:34,heightVary:4},deep:{diameter:256,wander:52,widthVary:40},shallow:{diameter:248,wander:6}}
-};
+// A shape's or a palette entry's stroke kind: the shapes all draw landforms.
+export const strokeKind=t => Object.hasOwn(LANDFORM_SHAPES,t)?'landform':t;
 // Shape options: per-shape settings, shown for the tools they apply to and
 // kept in each shape, so a selected shape can be changed like a new stroke.
 // Each starts at the world's value (sculpt.py KNOB_DEFAULTS / WORLD_KNOBS).
@@ -259,12 +253,11 @@ export const shapeDefaults=config => Object.fromEntries(SHAPE_FIELDS.map(([key])
 // Cover brushes share the plateau outline and write a field, not heights; the
 // mask brush (card C5) is one of them.
 export const isCover=kind => kind==='sand' || kind==='grass' || kind==='paint';
-// A palette entry's starting settings in a world. A sea-level preset keeps its elevation above the sea. A scene or fixture that names the bare kind,
-// "landform", gets the model's own defaults with the world's plateau numbers and not the Plateau button's look (its gullies and scree), so the fixtures
-// keep what they were drawn as when a button's preset changes; to draw what the button draws, a scene names "plateau".
+// A shape's (or another palette entry's) starting settings as a world makes it: the library's numbers, then the world's (`preset`: by default the
+// config's own world; a tool's Tool preset may name another). A sea-level preset keeps its elevation above the sea.
 export function toolDefaults(config,entry,preset=config?.biomeId||'green') {
-  const shape=entry==='landform'?'plateau':entry,kind=strokeKind(shape);
-  const starting={...(kind==='landform'?{...LANDFORM_DEFAULTS,...(entry==='landform'?{}:LANDFORM_TOOLS[shape])}:{}),...TOOL_PRESETS[preset]?.[shape]},sea=Math.round(starting.heightReference||0)>=1;   // a sea-level or ground preset keeps its own offset
+  const kind=strokeKind(entry);
+  const starting={...(kind==='landform'?{...LANDFORM_DEFAULTS,...LANDFORM_SHAPES[entry]}:{}),...config?.worldShapes?.[preset]?.[entry]},sea=Math.round(starting.heightReference||0)>=1;   // a sea-level or ground preset keeps its own offset
   return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(config,key)*scale),lo,hi)])),cracks:0,diameter:200,amount:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,softness:50,preset,...starting,
     elevation:sea?Math.round(starting.elevation):clamp(Math.round((config?.baseHeight??24)+(starting.elevation??70)),-80,300)};
 }
@@ -311,7 +304,7 @@ export function sceneNodes(config,list,{ground=true,seed=DEFAULT_SEED,settings=p
     const kind=strokeKind(entry);
     if (kind==='heights') { out.push(heightsNode(options,`scene stroke ${i}: the height image`)); return; }
     // A stroke the passes would not draw is an error, not an empty stroke: a section form (mesa, cliff, lfPlateau) is a landform's curve, not a tool.
-    if (!DRAWN_KINDS.includes(kind)) throw new Error(`scene stroke ${i}: "${entry}" is not a tool the editor draws (a tool: ${Object.keys(LANDFORM_TOOLS).join(', ')}, or ${DRAWN_KINDS.filter(k => k!=='landform').join(', ')}; a section form goes in the card's curve)`);
+    if (!DRAWN_KINDS.includes(kind)) throw new Error(`scene stroke ${i}: "${entry}" is not a tool the editor draws (a shape: ${Object.keys(LANDFORM_SHAPES).join(', ')}, or ${DRAWN_KINDS.filter(k => k!=='landform').join(', ')}; a section form goes in the card's curve)`);
     const {card:override,...rest}=options,d={...toolDefaults(config,entry),...override},pts=points.map(([x,y]) => ({x,y}));
     const card={...strokeCard(config,d),seed:(seed+i*7919)>>>0};
     const probe={...card,...rest};

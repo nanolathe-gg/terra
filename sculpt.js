@@ -8,7 +8,7 @@ import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWo
 import {KNOBS,LOW_GROUND_RGB,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
-import {strokeKind,savedToolCard,TOOL_PRESETS,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,borrowBeach,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
+import {strokeKind,savedToolCard,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,borrowBeach,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
   shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,regionalCheck,repeatCheck,pagedTime,heightsNode} from './sculpt-scene.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER,lfcWidth,heightsBounds} from './sculpt-gpu-fields.js';
 
@@ -148,7 +148,7 @@ function showTool(state={},kind=strokeKind(tool)) {
   heightControlRange(state);stepControlRange(kind,state);
   [$('amount').min,$('amount').max]=amountRange(kind).map(String);
   for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(state[key])) setShapeControl(id,clamp(state[key],lo,hi));
-  $('tool-style').value=Object.hasOwn(TOOL_PRESETS,state.preset)?state.preset:'custom';
+  $('tool-style').value=Object.hasOwn(config.worldShapes||{},state.preset)?state.preset:'custom';
 }
 function updateControls() {
   const picks=JSON.stringify([strokeWaterPicks(nodes),slopeReplaced(panelFacts())]);if(picks!==panelPicks){panelPicks=picks;syncWorldControls();}   // a stroke's water choice, or the transition replacing the slope color, wakes or idles world rows
@@ -1274,7 +1274,7 @@ for(const [id,value] of [['rotate-left',-Math.PI/12],['rotate-right',Math.PI/12]
 document.addEventListener('terraform-feature-mode',()=>updateControls());
 document.addEventListener('terraform-status',event=>{featureNotice=event.detail;status(event.detail);});
 $('tool-style').addEventListener('change',() => {
-  const preset=$('tool-style').value;if(!Object.hasOwn(TOOL_PRESETS,preset))return;
+  const preset=$('tool-style').value;if(!Object.hasOwn(config.worldShapes||{},preset))return;
   // A selected landform takes the world's version of the palette entry its section form belongs to.
   const n=nodes[selected],entry=n?.kind==='landform'?landformTool(n.params):n?.kind||tool;toolSettings[tool]=toolDefaults(entry,preset);showTool(toolSettings[tool],strokeKind(entry));
   if(selected>=0){editSelectedFromControls({curve:toolSettings[tool].curve,along:toolSettings[tool].along});checkpoint();queueWeather();}

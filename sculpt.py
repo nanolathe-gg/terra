@@ -86,7 +86,7 @@ KNOB_DEFAULTS = dict(
     heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, talus=0, surf=0, varySize=140, varyFoot=1, varyMiddle=1, wallVary=0, beds=0, bedSoft=.6,
     # lfcrater: a landform's impact features (sculpt-scene.js CRATER_KEYS), off by default: ejecta round it and secondaries beyond them;
     # lfimpact2: and the ground buckled beyond the rim of a landform that digs; the secondaries fall from secondaryDistance rim radii (or, on a shape that
-    # peaks on its path, foot radii) out to twice that, 1.6 as before the row; the Crater preset sets 1 (sculpt-scene.js LANDFORM_TOOLS.crater).
+    # peaks on its path, foot radii) out to twice that, 1.6 as before the row; the Crater preset sets 1 (sculpt-scene.js LANDFORM_SHAPES.crater).
     ejecta=0, buckling=0, secondaries=0, secondaryDistance=1.6,
     # Painted masks (card C5): the Paint brush's first choice.
     paintChannel=1,
@@ -400,7 +400,7 @@ WORLD_KNOBS = {
                    faceFill=0, ambient=.3,
                    # E8: retail's aprons and mesa feet are ragged (cells 16 px wide, edges 10-20 px off a smooth
                    # lobe) and bumpy (heights vary 7-12 across an apron whose mean rise is ~8). The ridge presets carry
-                   # this as variation (sculpt.js TOOL_PRESETS).
+                   # this as variation (the world's table, world.shapes).
                    baseBand=1,
                    # G4: level ground in the pale cap zone is one sheet, as in retail (cap orange 10-12% against ours' 22%).
                    desertCapFlat=0),
@@ -438,7 +438,7 @@ WORLD_KNOBS = {
                  # height, warped); .55 of the amount that read as a contour map.
                  moonFolds=.55,
                  # G8: retail's hills and walls fold: lumpy, lobed outlines. The ridge presets carry them as
-                 # variation (sculpt.js TOOL_PRESETS).
+                 # variation (the world's table, world.shapes).
                  # E6: pits about 4 x 6 px every 7.5 px on every raised or sloped surface, and a
                  # faint sheen with a fine round grain there (the plain keeps its own grain).
                  pockmark=0, pockSize=7.5, shineGate=1, shineWhite=1, shineStretch=3,
@@ -471,7 +471,7 @@ WORLD_KNOBS = {
                  # Card E4: retail's bank is 6-9 flat layers stepping down to the lava, 12-16 px a
                  # layer and ~100 px inland (lava-1 zoom), cut as heights the sun lights (a lit top,
                  # a shaded riser) in place of dark band lines (Banding 0 above). The Water presets
-                 # carry the count, flat share and irregularity as shoreline Steps (sculpt.js TOOL_PRESETS).
+                 # carry the count, flat share and irregularity as shoreline Steps (the world's table, world.shapes).
                  layerPx=9,
                  # The Water presets turn Fingers on: low tongues of the lowest layer on the joined coast (retail lava-1: 25-35 px thumbs, blunt tips).
                  # Less ambient light, so the shaded risers read as retail's near-black lines.

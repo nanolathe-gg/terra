@@ -3,14 +3,13 @@
 // One line per row: group, key (what repro/retail.sh --query takes), label, range and step, and this world's value (its preset over
 // sculpt.py KNOB_DEFAULTS; `*` marks a row the world or variant sets away from KNOB_DEFAULTS). --group keeps the groups whose name
 // contains the text; --changed keeps the rows the world sets. Then the Colors rows the world has, with its own base colors, and the
-// brush presets it lays over the shape buttons (sculpt-scene.js TOOL_PRESETS). A row the panel disables still lists: its reason
+// numbers it lays over the shape library (its table's world.shapes, served as config.worldShapes). A row the panel disables still lists: its reason
 // depends on the scene (water strokes, painted rock), so the sweep (measure/world_controls.mjs) is where a row's state is measured.
 import {execFileSync} from 'node:child_process';
 import {mkdtempSync, readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {KNOBS, colorRows} from '../sculpt-knobs.js';
-import {TOOL_PRESETS} from '../sculpt-scene.js';
 
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const world = args[0];
@@ -34,5 +33,5 @@ for (const [title, rows] of KNOBS) {
 }
 console.log('\nColors (the Colors panel; a row with no value is the texture\'s own):');
 for (const [key, label] of colorRows(config, new URLSearchParams(config.variant ? 'variant=' + config.variant : ''))) console.log(`  ${label.padEnd(16)} ${config.colors?.[key] ?? ''}`);
-console.log('\nBrush presets over the shape buttons (sculpt-scene.js TOOL_PRESETS):');
-for (const [entry, preset] of Object.entries(TOOL_PRESETS[world] || {})) console.log(`  ${entry.padEnd(10)} ${JSON.stringify(preset)}`);
+console.log('\nThe world\'s numbers over the shape library (world.shapes; config.tools draws them):');
+for (const [entry, preset] of Object.entries(config.worldShapes?.[world] || {})) if (Object.keys(preset).length) console.log(`  ${entry.padEnd(10)} ${JSON.stringify(preset)}`);
