@@ -108,6 +108,8 @@ fieldset{min-width:0;border:0;padding:0;margin:0}
 .world-name{font-size:18px;margin:3px 0 5px}
 .color-row{display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;margin-top:6px;font-size:11px}
 .color-row input[type=color]{width:32px;height:22px;padding:0;border:1px solid var(--line);border-radius:3px;background:none}
+.palette-snap{display:inline-block;width:16px;height:16px;border:1px solid var(--line);border-radius:2px}
+#rock-colors-control .checkbox-row{display:flex;justify-content:flex-start;gap:6px;align-items:center;font-size:11px;margin-top:4px}
 .knobs-group>summary,details.panel>summary{font-size:11px;color:#c3d7ce;list-style-position:inside}
 .knobs-group .control{margin-top:9px}
 .layers-panel{display:flex;flex-direction:column;min-height:0;border-top:1px solid var(--line);padding:12px 10px 9px;background:#192125}

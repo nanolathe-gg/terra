@@ -3388,6 +3388,41 @@ configurable"; 7 "a whole sand system", lower priority; 8 "Fix it"; 9 and
   shale's first bed paints a gray band at a Desert foot), per-recipe
   hardness in the Time pass, a hover picture for the Rock option.
 
+- *A rock preset's own colors (row 3, B3) [landed 2026-11-11; built by
+  an Opus agent, reviewed and checked by Claude].* The rock color and the
+  five bed-slot colors moved into the recipe table (`rockColors`, eight
+  rows a slot; rows 6 and 7 are free for the light through a rock the
+  owner approved prototyping next). A preset carries `colors` (null: the
+  world's) and a stable `key` (its starting recipe's, for a world's shape
+  tools to name it by); the World pane shows a Rock color and five bed
+  colors with the palette entry each draws as. The ten starting recipes
+  have colors on one ramp of the game's palette each. Debris fines take
+  their source rock's tint. A preset's beds start no lower than the
+  world's second section (`bedsFrom`), so they no longer paint the plain
+  at a stroke's foot; the tiles away from the stroke still repeat
+  **[measured by the agent: 928 of 928]**. *Checks on the tip:* land tier
+  passes, 0 of 34 scenes changed; the three rock checks exit 0 (a recolor
+  moved 26.5% of its window and no pixel outside the preset's reach);
+  export bytes exit 0, the same tile counts; no hover preview moved.
+  `repro/perf.mjs` map4 on green-modern-3, two alternating sets with the
+  order swapped, load average 4 to 8: whichever build ran first in a pair
+  read slower (drag latency p50 31-36 ms against 25-27), and in the
+  quietest pair main and the tip read load to final 1611 and 1544 ms,
+  release 1299 and 1378, drag latency p50 24.7 and 25.4: no change outside
+  the noise **[measured under load]**. *Open, the owner's eye:* on Desert
+  the recipes read poorly (shale and conglomerate both olive-khaki,
+  sandstone rose and mustard): Desert draws with 52 palette entries, with
+  no dark blue-gray and no single tan ramp (its own tan is a dither of
+  rose and ochre). Either Desert's presets keep the world's colors or tan
+  beds may mix two ramps. Recipes carry no Strata, so a preset's bed
+  colors show only where Strata is above 0 (never on modern Green).
+- *Rule 8 [owner decision, 2026-11-11].* Every biome defines its own shape
+  tools (an icon and landform defaults, the rock preset among them); a
+  biome without a matching shape shows a stroke as the generic landform
+  tool; an artist can save a new tool from the selected shape. The
+  toolbar's shape buttons are therefore built from data, the one exception
+  to layout in the markup (AGENTS.md).
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.

@@ -87,7 +87,7 @@ fn rockDeposit(@builtin(global_invocation_id) id:vec3u){
             let src=u32(bed.z*.125)&rockMask;let bedSlot=bed.z-8.0*f32(src);let reach=u.rock[src & rockMask].debrisReach;
             let fracture=.25+.75*valueNoise(q/max(12.0,u.rock[src & rockMask].faceBlockSize*1.8)+vec2f(11,63));
             let weight=select(0.0,source*fracture*(1.0+bed.y*5.0)*exp(-distance/max(4.0,reach*.7)),distance<=reach);
-            let color=u.strataColors[clamp(i32(bedSlot+.5),0,4)].rgb;
+            let color=u.rock[src & rockMask].rockColors[1+clamp(i32(bedSlot+.5),0,4)].rgb;
             let size=clamp(sqrt(max(1.0,u.rock[src & rockMask].faceBlockSize*bed.w))*.09*mix(.65,1.3,bed.x),.35,2.4);
             provenance+=vec4f(color,size)*weight;
             if(weight>domWeight){domWeight=weight;dom=src;}
@@ -121,7 +121,7 @@ fn rockDeposit(@builtin(global_invocation_id) id:vec3u){
             let near=select(0.0,max(0.0,1.0-way/(u.rock[src & rockMask].debrisReach*wobble))*smoothstep(12.0,30.0,top)*smoothstep(.6,.9,steep),way>=0.0);
             if(near>0.0){
                 let size=clamp(sqrt(max(1.0,u.rock[src & rockMask].faceBlockSize*bed.w))*.09*mix(.65,1.3,bed.x),.35,2.4);
-                provenance+=vec4f(u.strataColors[clamp(i32(bedSlot+.5),0,4)].rgb,size)*near*.05;footMass+=near*.05;
+                provenance+=vec4f(u.rock[src & rockMask].rockColors[1+clamp(i32(bedSlot+.5),0,4)].rgb,size)*near*.05;footMass+=near*.05;
                 if(near>footNear){footNear=near;footFrom=src;}
             }
             foot=max(foot,near);
