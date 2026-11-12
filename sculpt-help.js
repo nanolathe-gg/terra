@@ -81,7 +81,7 @@ export function mountHelp(){
       });
     }
     const help=element('p','');
-    help.textContent=(own?'A tool saved in this map. It draws new shapes with the settings, curves and rock of the shape it was saved from.':toolHelp[shape])||(source?.disabled&&(control?.querySelector('.control-requirement')?.textContent||source.title))||controlHelp[key]||control?.querySelector('p.small')?.textContent||'Adjust this setting to change the terrain.';
+    help.textContent=(own?'A tool saved in this map. It draws new shapes with the settings, curves and rock of the shape it was saved from.':target.dataset.help||toolHelp[shape])||(source?.disabled&&(control?.querySelector('.control-requirement')?.textContent||source.title))||controlHelp[key]||control?.querySelector('p.small')?.textContent||'Adjust this setting to change the terrain.';
     tip.append(help);
     if(!tool&&!source?.disabled)tip.append(element('small','','Click: set · Double-click: type · Drag: adjust · Shift: fine'));
     target.setAttribute('aria-describedby',tip.id);tip.hidden=false;position(target);

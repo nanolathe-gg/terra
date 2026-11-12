@@ -1232,22 +1232,24 @@
    "shallow": {"diameter": 264, "wander": 6, "fingers": 100, "stepReference": 1, "terraces": 11, "ledge": 80, "terraceJitter": 70, "layerJag": 6},
    "river": {},
    "braided": {},
-   "landform": {}
+   "landform": {},
+   "cone": {"from": "crater", "diameter": 420, "elevation": 70, "secondaries": 0, "wander": 16, "heightVary": 2, "curve": {"form": "lfCrater", "knots": [[0, 0], [0.3, 0.25], [0.55, 0.7], [0.7, 1], [0.78, 0.95], [0.88, 0.7], [1, 0.62]]}}
   },
   "tools": [
    {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
-   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape"},
+   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "rock": "soil"},
    {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
    {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
    {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
-   {"id": "crystal", "label": "Faceted forms", "icon": "crystal", "color": "#aaa5ec", "group": "shape"},
-   {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
-   {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
-   {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
-   {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
+   {"id": "cone", "label": "Cinder cone", "icon": "cone", "color": "#c8826a", "group": "shape", "help": "Draw a cinder cone: a steep cone of ash with a crater in its top; a click for one."},
+   {"id": "crystal", "label": "Obsidian", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw a cluster of obsidian shards round a click, or a row of them along a drag."},
+   {"id": "deep", "label": "Lava lake", "icon": "deep", "color": "#7cb8e8", "group": "water", "help": "Draw a lake of lava: the ground is cut 55 below the lava's level behind stepped dark banks."},
+   {"id": "shallow", "label": "Lava shallows", "icon": "shallow", "color": "#87d9da", "group": "water", "help": "Draw shallow lava: a level bed just under the lava's level behind stepped banks."},
+   {"id": "river", "label": "Lava river", "icon": "river", "color": "#6fb1e0", "group": "water", "help": "Draw a river of lava: a channel whose bends grow downstream within Wander px of your line."},
+   {"id": "braided", "label": "Lava channels", "icon": "braided", "color": "#6fb1e0", "group": "water", "help": "Draw braided lava channels: thin threads of lava that split and rejoin over a dark bed."}
   ],
   "defaults": {
    "surface": "slopes",

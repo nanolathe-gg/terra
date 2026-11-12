@@ -1795,18 +1795,20 @@
    "shallow": {"wander": 6},
    "river": {},
    "braided": {},
-   "landform": {}
+   "landform": {},
+   "spires": {"from": "crystal", "diameter": 280, "elevation": 170, "facetForm": 2, "iceFacets": 80, "iceFacetSize": 64, "crystalTop": 0, "crystalSides": 6, "crystalVariation": 50}
   },
   "tools": [
    {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
-   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape"},
+   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "rock": "soil"},
    {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
    {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
    {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
-   {"id": "crystal", "label": "Faceted forms", "icon": "crystal", "color": "#aaa5ec", "group": "shape"},
+   {"id": "crystal", "label": "Crystals", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw a crystal mound: stepped crystal columns over a dome; a click for one, a drag for a ridge."},
+   {"id": "spires", "label": "Crystal spires", "icon": "crystal", "color": "#c9b8f2", "group": "shape", "help": "Draw crystal spires: tall pointed crystals, a cluster round a click or a row along a drag."},
    {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
    {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
    {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},

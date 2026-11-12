@@ -1192,22 +1192,23 @@
    "shallow": {},
    "river": {},
    "braided": {},
-   "landform": {}
+   "landform": {},
+   "smallCrater": {"from": "crater", "diameter": 140, "elevation": -14, "secondaries": 0, "ejecta": 40, "buckling": 0, "wander": 8, "heightVary": 1},
+   "basin": {"from": "crater", "diameter": 760, "elevation": -16, "wander": 60, "heightVary": 4, "secondaries": 0, "ejecta": 0, "buckling": 0, "curve": {"form": "lfCrater", "knots": [[0, 0], [0.15, -0.03], [0.3, -0.12], [0.4, -0.18], [0.5, -0.08], [0.6, 0.25], [0.75, 0.65], [0.9, 0.95], [1, 1]]}},
+   "rille": {"from": "valleyU", "diameter": 110, "elevation": -14, "wander": 70, "varySize": 200, "widthVary": 30}
   },
   "tools": [
    {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
-   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape"},
+   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "rock": "soil"},
    {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
    {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
    {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
-   {"id": "crystal", "label": "Faceted forms", "icon": "crystal", "color": "#aaa5ec", "group": "shape"},
-   {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
-   {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
-   {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
-   {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
+   {"id": "smallCrater", "label": "Small crater", "icon": "crater", "color": "#e6c0ae", "group": "shape", "help": "Strike a small fresh crater: a sharp rim and a light blanket of ejecta, no secondaries."},
+   {"id": "basin", "label": "Old basin", "icon": "crater", "color": "#b98d7a", "group": "shape", "help": "Draw a large old basin: a wide bowl with a low, worn rim and no ejecta, as time leaves a big crater."},
+   {"id": "rille", "label": "Rille", "icon": "valleyU", "color": "#bfae94", "group": "shape", "help": "Draw a rille: a narrow, winding channel cut into the plain."}
   ],
   "baseHeight": 52,
   "defaults": {
