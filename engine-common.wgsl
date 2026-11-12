@@ -1062,14 +1062,15 @@ fn fineLayer(phase:f32,spacing:f32)->f32 {
 // The fine layers at p, on the column coordinate c (voxelColumnCoord), so they bend with folds, drift and tilt with the beds and run on
 // unbroken until a joint or a block cuts them. Two sets: the ledges of the beds gathered as too thin to draw (columnGather's spread, by
 // Hard-layer ledges) at the finest spacing a repeated line keeps, FACE_LINES, and Fine layer relief at Fine layer spacing (height units,
-// never closer than FACE_LINES; the same lines when it is that close). Where the rock has a column, Variation between repeated beds varies
-// both: their spacing and darkness wander slowly, over Layer variation length along the wall and a few layers up it (0: evenly spaced and
-// even, as one bed repeated; with no column the panel offers no variation and they stay even). x: the relief in height units, y: its depth.
+// never closer than FACE_LINES; the same lines when it is that close). In a column section of two beds or more, Variation between repeated
+// beds varies both: their spacing and darkness wander slowly, over Layer variation length along the wall and a few layers up it (0: evenly
+// spaced and even, as one bed repeated). With no column or one bed the panel offers no variation (sculpt-control-schema.js), and they stay
+// even. x: the relief in height units, y: its depth.
 fn voxelFine(p:vec3f,c:f32,gathered:f32)->vec2f {
     let thin=gathered*u.rock[rs & rockMask].faceLedge*2.4;let own=u.rock[rs & rockMask].faceLamina*2.5;
     if(thin+own<=0.0){return vec2f(0.0);}
     let z=c*max(2.0,u.rock[rs & rockMask].faceBed)/5.5;   // height up the deformed column
-    let vary=select(0.0,u.rock[rs & rockMask].bedCycleVary,u.rock[rs & rockMask].columnCount>0);
+    let vary=select(0.0,u.rock[rs & rockMask].bedCycleVary,u.rock[rs & rockMask].columnCount>0&&columnSection(columnSectionAt(c)).z>=2.0);
     var warp=0.0;var dark=1.0;
     if(vary>0.0){
         let r=voxelRockSpace(p);let run=max(20.0,u.rock[rs & rockMask].faceRun);
