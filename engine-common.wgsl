@@ -84,7 +84,7 @@ struct Rock {
     faceRegular: f32, // Block regularity
     faceExtrude: f32, // Extrusion bias: inset to projecting
     faceLamina: f32, // Fine layer relief
-    faceLaminaSize: f32, // Fine layer spacing (height)
+    faceLaminaSize: f32, // Fine layer spacing (height units, 6 to 16)
     faceScratchLength: f32, // Groove length (px)
     faceScratchAngle: f32, // Groove tilt from vertical (deg)
     faceGritSize: f32, // Grit size (px)
@@ -927,14 +927,15 @@ fn voxelRockSpace(p:vec3f)->vec3f {
     return vec3f(x,y,p.z+columnOffset(p.xy)+voxelFold(p));
 }
 struct VoxelRock {face:f32,edge:f32,tone:f32}
-// The thinnest layer the face draws, in height units: 2 px up the screen on a vertical face (a height unit is half a pixel) and 4 voxels
-// at 1x. A bed or a chip thinner than this aliases against the pixel and voxel grids into rows of dashes, so thinner beds are gathered
-// (columnGather) and chips are never shorter (voxelSpall). A repeated line needs more: lines 4 units apart (2 px) break into moire wherever
-// they tilt against the pixel rows, so fine layers are never closer than FACE_LINES (voxelFine), nor are the partings of a stack of blocks:
-// blocks are never shorter (voxelBlockAxes). Thin shale drew blocks 1.8 units tall, each tilted its own way: rows of dashes.
+// The thinnest bed the face draws, in height units on a vertical face: 2 px up the screen (a height unit is half a pixel) and 4 voxels at
+// 1x. A bed that would be drawn thinner aliases against the pixel and voxel grids into rows of dashes, so it is gathered (columnGather). A
+// repeated line needs more: lines 4 units apart (2 px) break into moire wherever they tilt against the pixel rows, so fine layers are never
+// closer than FACE_LINES (voxelFine). Blocks are never shorter than FACE_BLOCKS (voxelBlockAxes): Thin shale drew blocks 1.8 units tall,
+// each tilted its own way, rows of dashes; at 3.5 a block is near 2 px tall, and every world's own rock (classic Green's 3.75) is taller.
 const FACE_FINEST = 4.0;
 const FACE_LINES = 6.0;
-fn voxelBlockAxes(size:f32)->vec3f{return vec3f(size*u.rock[rs & rockMask].faceStretch,size,max(FACE_LINES,max(2.0,u.rock[rs & rockMask].faceBed*1.5)*u.rock[rs & rockMask].faceBlockHeight*mix(1.0,size/max(4.0,u.rock[rs & rockMask].faceBlockSize),u.rock[rs & rockMask].faceScaleVary)));}
+const FACE_BLOCKS = 3.5;
+fn voxelBlockAxes(size:f32)->vec3f{return vec3f(size*u.rock[rs & rockMask].faceStretch,size,max(FACE_BLOCKS,max(2.0,u.rock[rs & rockMask].faceBed*1.5)*u.rock[rs & rockMask].faceBlockHeight*mix(1.0,size/max(4.0,u.rock[rs & rockMask].faceBlockSize),u.rock[rs & rockMask].faceScaleVary)));}
 // A point of rock space in the lattice of blocks: a grid of the blocks' axes, tilted with the joints and bent by noise.
 // Block regularity straightens the bends and (voxelBlockSeed) draws the blocks' middles onto the grid: 0 scattered, 1 a grid of boxes.
 fn voxelLattice(r:vec3f,size:f32)->vec3f {
@@ -1010,7 +1011,7 @@ fn voxelDetail(r:vec3f)->f32 {
     return mix(1.0,cluster*1.6,u.rock[rs & rockMask].faceDetailPatch);
 }
 fn voxelSpall(r:vec3f,c:VoxelRock,hard:f32)->f32 {
-    let chip=voxelNoise(r/vec3f(max(5.0,u.rock[rs & rockMask].faceBlockSize*.65),max(5.0,u.rock[rs & rockMask].faceBlockSize*.65),max(FACE_FINEST,u.rock[rs & rockMask].faceBed*.8))+vec3f(19,53,7));
+    let chip=voxelNoise(r/vec3f(max(5.0,u.rock[rs & rockMask].faceBlockSize*.65),max(5.0,u.rock[rs & rockMask].faceBlockSize*.65),max(3.0,u.rock[rs & rockMask].faceBed*.8))+vec3f(19,53,7));
     return u.rock[rs & rockMask].faceSpall*smoothstep(.32,.7,chip)*(1.0-hard*.7)*(1.0+1.8*exp(-c.edge/2.0))*3.0;
 }
 // Eight jittered inclusions: round pebbles through angular broken clasts.
@@ -1037,12 +1038,15 @@ fn voxelBed(p:vec3f)->ColumnBed {
     let c=voxelColumnCoord(p);
     return columnBedIn(c,columnSectionAt(c),u.rock[rs & rockMask].bedCycleVary);
 }
-// Beds thinner than the face can draw are gathered: from half of FACE_FINEST down, a bed's hardness gives way to the mean of its section's
-// thin beds, so the ledges, chips, wear and tint that hardness drives draw the bundle as one bed, not a stripe per voxel row. x: the hardness
-// drawn; y: how much the gathered beds' hardness spread (their standard deviation, in this bed's share), which voxelFine draws as fine layers
-// instead. A section of thick beds, or of beds of one hardness, keeps each bed's own hardness exactly.
-fn columnGather(bed:ColumnBed)->vec2f {
-    let scale=max(2.0,u.rock[rs & rockMask].faceBed)/5.5;   // height units per column unit (voxelColumnCoord)
+// Beds thinner than the face can draw are gathered. A bed t units thick is about t/2 px tall on a vertical face and t/s px wide on ground
+// of slope s (rise per px), so its drawn size, as height units on a vertical face, is t (1 + 2/s): the same bed is a line on a gentle slope
+// (classic Green's contour lines) and a stripe per voxel row on a cliff. From half of FACE_FINEST down, a bed's hardness gives way to the
+// mean of its section's beds that are as thin there, so the ledges, chips, wear and tint that hardness drives draw them as one bed. x: the
+// hardness drawn; y: how much the gathered beds' hardness spread (their standard deviation, in this bed's share), which voxelFine draws as
+// fine layers instead. A section of beds thick enough, or of one hardness, keeps each bed's own hardness exactly. slope: the surface's
+// (voxelFaceSlope, or the ground's where there is no solid).
+fn columnGather(bed:ColumnBed,slope:f32)->vec2f {
+    let scale=max(2.0,u.rock[rs & rockMask].faceBed)/5.5*(1.0+2.0/max(slope,.05));   // drawn height units per column unit (voxelColumnCoord)
     var w=0.0;var wh=0.0;var whh=0.0;
     for(var i=0;i<bed.n;i++){
         let b=u.columnBeds[bed.first+i];let thin=b.x*(1.0-smoothstep(.5*FACE_FINEST,FACE_FINEST,b.x*scale));
@@ -1053,14 +1057,9 @@ fn columnGather(bed:ColumnBed)->vec2f {
     let mean=wh/w;
     return vec2f(bed.hardness+(mean-bed.hardness)*own,sqrt(max(whh/w-mean*mean,0.0))*own);
 }
-fn voxelHardness(p:vec3f)->f32 {
+fn voxelHardness(p:vec3f,slope:f32)->f32 {
     if(u.rock[rs & rockMask].columnCount==0){return .55;}
-    return columnGather(voxelBed(p)).x;
-}
-// Each bed's own hardness, none gathered: for the soil-covered terraces, which lie on gentle slopes, where a thin bed is wide on the screen.
-fn voxelBedHardness(p:vec3f)->f32 {
-    if(u.rock[rs & rockMask].columnCount==0){return .55;}
-    return voxelBed(p).hardness;
+    return columnGather(voxelBed(p),slope).x;
 }
 // One fine layer at phase (layers up the column) for layers spacing units apart, about its mean (-.5 to .5): a lip and a notch. The
 // layer's top recedes and the next layer's foot stands out over it within a unit, so the sun lights the layer and the notch under each lip
@@ -1072,7 +1071,7 @@ fn fineLayer(phase:f32,spacing:f32)->f32 {
 // The fine layers at p, on the column coordinate c (voxelColumnCoord), so they bend with folds, drift and tilt with the beds and run on
 // unbroken until a joint or a block cuts them. Two sets: the ledges of the beds gathered as too thin to draw (columnGather's spread, by
 // Hard-layer ledges) at the finest spacing a repeated line keeps, FACE_LINES, and Fine layer relief at Fine layer spacing (height units,
-// never closer than FACE_LINES; the same lines when it is that close). In a column section of two beds or more, Variation between repeated
+// 6 to 16, never closer than FACE_LINES; the same lines at 6). In a column section of two beds or more, Variation between repeated
 // beds varies both: their spacing and darkness wander slowly, over Layer variation length along the wall and a few layers up it (0: evenly
 // spaced and even, as one bed repeated). With no column or one bed the panel offers no variation (sculpt-control-schema.js), and they stay
 // even. x: the gathered beds' relief, y: Fine layer relief's, in height units; z: their depth together.

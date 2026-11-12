@@ -1524,7 +1524,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // The beds as the solid draws them (engine-common.wgsl columnGather, voxelFine): Layer tint shades the fine layers too, each lip
     // lighter and the notch under the next one darker, so the lines the relief draws keep their tone in shadow and through the palette.
     var hard=.55;var gathered=0.0;let column=voxelColumnCoord(hit);
-    if(u.rock[rs & rockMask].columnCount>0){let g=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary));hard=g.x;gathered=g.y;}
+    if(u.rock[rs & rockMask].columnCount>0){let g=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary),voxelFaceSlope(hit.xy));hard=g.x;gathered=g.y;}
     let fine=voxelFine(hit,column,gathered);
     var fineTone=0.0;
     if(fine.z>0.0){fineTone=(fine.x+fine.y)*2.0/max(fine.z,2.5);}   // full tint from a depth of 2.5 (a unit each way)
