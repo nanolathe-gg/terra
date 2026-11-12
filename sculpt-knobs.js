@@ -63,8 +63,8 @@ export const KNOBS = [
   ['Rock runoff', [['runoff','Runoff exposure',0,2,.05,0],['runoffScale','Catchment variation size (px)',8,80,2,24],
     ['runoffConcentration','Channel concentration',0,1,.05,.65],['runoffCut','Channel incision',0,8,.1,2],['runoffStain','Mineral staining',0,1,.05,.5]]],
   ['Rock debris', [['debrisAmount','Cliff debris accumulation',0,2,.05,0],['debrisReach','Rockfall reach (px)',8,96,2,56],['debrisDepth','Accumulated bed thickness',0,12,.25,4]]],
-  // B4: light through a rock (ice, crystal, an invented translucent stone); 0 is opaque rock exactly as before.
-  ['Rock translucency', [['lightThrough','Light through thin rock',0,1,.05,0],['absorbDepth','Color deepens with thickness',0,1,.05,0],['shadowTint','Colored cast shadow',0,1,.05,0]]],
+  // B4: translucent rock (ice, crystal, an invented stone); 0 is the rock exactly as before.
+  ['Rock translucency', [['absorbDepth','Color deepens with thickness',0,1,.05,0],['shadowTint','Colored cast shadow',0,1,.05,0]]],
   ['Rock surface', [['faceShade','Shadow and crevice depth',0,1,.05,.85],['faceTone','Color variation between blocks',0,.5,.01,.12],
     ['faceFresh','Fresh fracture contrast',0,1,.05,0],['faceRind','Weathered crust coverage',0,1,.05,0],
     ['faceRindDepth','Weathering penetration (art units)',0,20,.25,6],['faceRindTone','Crust lightness (dark to bleached)',-.65,.65,.05,-.22],

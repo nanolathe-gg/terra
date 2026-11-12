@@ -77,20 +77,20 @@ try {
   report.recolor = {...colorEdit, movedShare: +(colorEdit.moved / (W * W)).toFixed(4)};
   assert.ok(colorEdit.moved > 2000, 'a preset recolored changes its wall');
   assert.equal(colorEdit.outside, 0, `${colorEdit.outside} pixels moved farther than ${reach} px from the basalt`);
-  // The basalt made translucent (B4: Light through, Color deepens with thickness, Colored cast shadow, an absorption color): only its ground
+  // The basalt made translucent (B4: Color deepens with thickness, Colored cast shadow, an absorption color): only its ground
   // and its cast shadow move.
   const solid = s.rocks.find(r => r.slot === BASALT);
-  s.setRocks(setRock(s.rocks, BASALT, {knobs: {...solid.knobs, lightThrough: .8, absorbDepth: .7, shadowTint: .7}, column: solid.column, colors: {...solid.colors, absorb: '#2f6b97'}}));
+  s.setRocks(setRock(s.rocks, BASALT, {knobs: {...solid.knobs, absorbDepth: .7, shadowTint: .7}, column: solid.column, colors: {...solid.colors, absorb: '#2f6b97'}}));
   const translucent = await renderWindow(s, color); png('translucent.png', translucent);
   const lightEdit = where(recolored, translucent, true);
   report.translucent = {...lightEdit, movedShare: +(lightEdit.moved / (W * W)).toFixed(4)};
   assert.ok(lightEdit.moved > 2000, 'a translucent preset changes its wall and its shadow');
   assert.equal(lightEdit.outside, 0, `${lightEdit.outside} pixels moved outside the basalt's reach and its cast shadow`);
   assert.deepEqual(await renderWindow(s, color), translucent, 'the translucent scene gives the same bytes twice');
-  // Its three numbers back to 0 (the absorption color kept): opaque rock to the bit, the picture it had before.
-  s.setRocks(setRock(s.rocks, BASALT, {knobs: {...solid.knobs, lightThrough: 0, absorbDepth: 0, shadowTint: 0}, column: solid.column, colors: {...solid.colors, absorb: '#2f6b97'}}));
-  assert.deepEqual(await renderWindow(s, color), recolored, 'the three numbers at 0 give the opaque picture to the bit');
-  s.setRocks(setRock(s.rocks, BASALT, {knobs: {...solid.knobs, lightThrough: .8, absorbDepth: .7, shadowTint: .7}, column: solid.column, colors: {...solid.colors, absorb: '#2f6b97'}}));
+  // Its two numbers back to 0 (the absorption color kept): opaque rock to the bit, the picture it had before.
+  s.setRocks(setRock(s.rocks, BASALT, {knobs: {...solid.knobs, absorbDepth: 0, shadowTint: 0}, column: solid.column, colors: {...solid.colors, absorb: '#2f6b97'}}));
+  assert.deepEqual(await renderWindow(s, color), recolored, 'the two numbers at 0 give the opaque picture to the bit');
+  s.setRocks(setRock(s.rocks, BASALT, {knobs: {...solid.knobs, absorbDepth: .7, shadowTint: .7}, column: solid.column, colors: {...solid.colors, absorb: '#2f6b97'}}));
   // Baked in 512-px tiles instead of 256: its shadows cross the tiles' edges. As render.mjs allows, at most 16 pixels may differ.
   const big = await renderWindow(s, {...color, tile: 512});
   let tileMoved = 0; for (let i = 0; i < big.length; i += 4) if (big[i] !== translucent[i] || big[i + 1] !== translucent[i + 1] || big[i + 2] !== translucent[i + 2]) tileMoved++;

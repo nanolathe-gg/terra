@@ -1625,21 +1625,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // west against our 20; measured on four maps), so its world keeps only
     // part of the directional shading.
     if (u.shadeDepth < 1.0) { shading = mix(1.0, shading, u.shadeDepth); lightTint = mix(vec3f(1.0), lightTint, u.shadeDepth); }
-    // B4: the rock's thickness along the sun's line, for a rock that deepens with it or lets light through (nothing runs for opaque rock).
+    // B4: the rock's thickness along the sun's line, for a rock that deepens with it (nothing runs for opaque rock).
     var chord = 0.0;
-    if (u.rock[rs & rockMask].absorbDepth > 0.0 || u.rock[rs & rockMask].lightThrough > 0.0) { chord = sunChord(hit, normal); }
-    // B4: light through thin rock. On a face turned from the sun, the sun that crosses the rock to it (less the thicker the rock: e^(-t/12), so a
-    // blade or an edge glows and a core does not), coloured as the rock filters it, joins the face's light as a share of its own, as the sun's
-    // and the sky's shares do. Relief beyond the rock toward the sun is not tested (the prototype's limit).
-    if (u.rock[rs & rockMask].lightThrough > 0.0) {
-        let through = 0.95 * u.rock[rs & rockMask].lightThrough * max(0.0, -dot(normal, u.light)) * exp(-chord / 12.0) / flatLight;
-        let filtered = absorbFilter(rs, chord) * u.sunColor / max(flatTintLuma, 0.05);
-        lightTint = (lightTint * shading + filtered * through) / max(shading + through, 0.0001);
-        shading += through;
-    }
+    if (u.rock[rs & rockMask].absorbDepth > 0.0) { chord = sunChord(hit, normal); }
     // B4: a cast shadow cast by a rock that colours its shadow lets part of the sun through, in the rock's absorption hue: Colored cast shadow of
     // the occluder (its slot where the sun's line meets it), a third of it through any thickness and the rest the less the more of the occluder
-    // the line crosses (e^(-t/12), as light through a rock): a thick rock's shadow is dim and coloured, a thin one's brighter.
+    // the line crosses (e^(-t/12)): a thick rock's shadow is dim and coloured, a thin one's brighter.
     if (u.shadowTintAny > 0.0 && shadow < 1.0) {
         let by = shadowBlocker(p, max(h, u.sea));
         let caster = rockSlotAt(by.xy);

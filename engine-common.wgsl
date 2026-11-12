@@ -102,13 +102,13 @@ struct Rock {
     // Where level ground starts to take the recipe's beds, height above the column's origin (writeRocks: the world's first section start for
     // the world's rock; a recipe with its own beds starts above the world's lowest section, so the ground at a stroke's foot keeps the plain's look).
     bedsFrom: f32,
-    // Light through the rock (B4; 0 opaque rock, as before): how much sun passes through thin rock lit from behind, how fast the colour deepens
-    // toward the absorption colour with the rock's thickness, and how much of a cast shadow's sun the rock lets through, in its colour.
-    lightThrough: f32,
+    // Translucent rock (B4; 0 as before): how fast the colour deepens toward the absorption colour with the rock's thickness, and how much of
+    // a cast shadow's sun the rock lets through, in its colour.
     absorbDepth: f32,
     shadowTint: f32,
     pad1: f32,            // padding: a uniform array's element is a multiple of 16 bytes
     pad2: f32,
+    pad3: f32,
 }
 
 struct Uniforms {
