@@ -1658,6 +1658,10 @@ function syncRockColors() {
   BED_COLOR_IDS.forEach((id,k)=>paint(id,own?.beds?.[k]||shown.beds[k],world||!own?.beds));
   $('rock-color-world').checked=world||!own?.rock;$('rock-beds-world').checked=world||!own?.beds;
   $('rock-color-world').disabled=$('rock-beds-world').disabled=world;
+  // The absorption color (Rock translucency): a preset's own or the world's; on the world's rock, the world's choice (none: the rock's own hue).
+  const worldAbsorb=mergedColors().absorb||null;
+  paint('rock-absorb',world?worldAbsorb||shown.absorb:own?.absorb||shown.absorb,world?!worldAbsorb:!own?.absorb);
+  $('rock-absorb-world').checked=world?!worldAbsorb:!own?.absorb;
   $('rock-colors-note').textContent=world?'The world\u2019s rock wears the world\u2019s colors: set them under Colors & base pattern (Rock) and in the Rock column\u2019s material slot colors.'
     :!own?.rock||!own?.beds?'A color under World\u2019s colors follows the world\u2019s: clear World\u2019s colors to choose this preset\u2019s own.':'';
   $('rock-colors-note').hidden=!$('rock-colors-note').textContent;
@@ -1679,6 +1683,11 @@ function mountRockPanel() {
   $('rock-color').oninput=()=>rockColor(false);$('rock-color').onchange=()=>rockColor(true);
   const bedColors=commit=>setPresetColors({...colorsNow(),beds:BED_COLOR_IDS.map(id=>$(id).value)},commit);
   for(const id of BED_COLOR_IDS){$(id).oninput=()=>bedColors(false);$(id).onchange=()=>bedColors(true);}
+  // The absorption color: a preset's (as its other colors), or on the world's rock the world's own 'absorb' color (saved with the world's colors).
+  const worldAbsorb=value=>{const world=activeWorld();world.colors=pickWorldColor(config,world.colors,'absorb',value);saveWorlds();renderer.setColors(worldColors());syncRockColors();markViewChanged();schedule();};
+  const absorbColor=commit=>{if(rockSelected===0)worldAbsorb($('rock-absorb').value);else setPresetColors({...colorsNow(),absorb:$('rock-absorb').value},commit);};
+  $('rock-absorb').oninput=()=>absorbColor(false);$('rock-absorb').onchange=()=>absorbColor(true);
+  $('rock-absorb-world').onchange=()=>{const off=$('rock-absorb-world').checked;if(rockSelected===0)worldAbsorb(off?null:shown().absorb);else setPresetColors({...colorsNow(),absorb:off?null:shown().absorb},true);};
   $('rock-add').onchange=()=>{
     const key=$('rock-add').value;$('rock-add').value='';if(!key)return;
     try{const added=addRock(mapRocks,key,worldRockName(config));editRocks(added.rocks);selectRock(added.slot);checkpoint(true);status(`Added the rock preset ${mapRocks.find(r=>r.slot===added.slot).name}.`);}catch(err){rockNote(err.message);}

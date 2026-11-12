@@ -152,3 +152,23 @@ test('a preset carries a stable key: the recipe a world ships it from, unique in
   const back = JSON.parse(gunzipSync(await gzipText(shareText({version: 1, rocks, nodes: []}))).toString('utf8'));
   assert.deepEqual(copyRocks(back.rocks).map(r => r.key), ['soil', 'basalt', 'limestone']);
 });
+
+test('light through a rock (B4): three numbers a preset carries and an absorption color, checked and carried like the others', async () => {
+  const {copyRockSettings, ROCK_KEYS} = await import('../sculpt-rock-presets.js');
+  for (const key of ['lightThrough', 'absorbDepth', 'shadowTint']) {
+    assert.ok(ROCK_KEYS.includes(key), key);
+    assert.deepEqual(copyRockSettings({[key]: 0.6}), {[key]: 0.6});
+    assert.throws(() => copyRockSettings({[key]: 1.5}), new RegExp(key));
+    assert.throws(() => copyRockSettings({[key]: -0.1}), new RegExp(key));
+  }
+  assert.deepEqual(checkColors({absorb: '#2F6B97'}), {rock: null, beds: null, absorb: '#2f6b97'});
+  assert.deepEqual(checkColors({rock: '#101010', absorb: null}), {rock: '#101010', beds: null}, 'no absorption color: the world\'s');
+  assert.throws(() => checkColors({absorb: 'blue'}), /colors/);
+  const ice = {slot: 4, name: 'Glacier ice', key: null, knobs: {lightThrough: 0.8, absorbDepth: 0.7, shadowTint: 0.7}, column: null, colors: {rock: null, beds: null, absorb: '#1b4b77'}};
+  assert.deepEqual(copyRocks(JSON.parse(JSON.stringify([ice]))), [ice]);
+  assert.deepEqual(parseRockRecipe(rockRecipeText(ice)), {name: 'Glacier ice', key: null, knobs: ice.knobs, column: null, colors: ice.colors});
+  assert.deepEqual(setRock([ice], 4, {knobs: {...ice.knobs, absorbDepth: 0.2}, column: null})[0].colors, ice.colors, 'a number edited keeps the absorption color');
+  const {shareText, gzipText} = await import('../sculpt-share.js'), {gunzipSync} = await import('node:zlib');
+  const back = JSON.parse(gunzipSync(await gzipText(shareText({version: 1, rocks: [ice], nodes: []}))).toString('utf8'));
+  assert.deepEqual(copyRocks(back.rocks), [ice]);
+});
