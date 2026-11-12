@@ -70,7 +70,8 @@ export function rockPresetFor(values,column){
 
 // ---- Rock presets (B2): a map's rocks, slot 0 the world's own and slots 1-15 its own recipes (the renderer's table, sculpt-renderer.js setRocks) ----
 // Slot 0 is the world's flat rock numbers, its column and its colors, as every address names them; this list holds the other slots, each
-// {slot, name, knobs, column, colors}. A preset takes slot 0's number for any it does not set, slot 0's beds if its column is null, and
+// {slot, name, key, knobs, column, colors}. `key` names the preset for data (a world's shape tool names its rock by it, rockByKey): the starting
+// recipe it came from ('soil', 'basalt', ...) while no other preset of the map carries that, else null; a rename keeps it. A preset takes slot 0's number for any it does not set, slot 0's beds if its column is null, and
 // slot 0's colors where its colors are null: {rock, beds}, the rock's color and its beds' five material slots, each '#rrggbb' or null.
 // A landform stroke chooses one (params.rockPreset: -1 Rock beneath, which claims nothing, else a slot).
 export const ROCK_SLOTS=16;
@@ -95,9 +96,20 @@ export function rockRecipeFor(rock){
 export const worldRockName=config=>ROCK_PRESETS[config.rock?.recipe]?.label||'World rock';
 // The presets a world ships (a map starts with them): Smooth soil, then the recipes its data names (config.rock.presets, sculpt.py).
 export function worldRocks(config){
- return ['soil',...(config.rock?.presets||[])].filter(key=>STARTING_RECIPES[key]).map((key,i)=>({slot:i+1,name:STARTING_RECIPES[key].label,...recipeRock(key)}));
+ return [...new Set(['soil',...(config.rock?.presets||[])])].filter(key=>STARTING_RECIPES[key]).map((key,i)=>({slot:i+1,name:STARTING_RECIPES[key].label,key,...recipeRock(key)}));
 }
-const NAME_MAX=40,ROCK_FIELDS=['slot','name','knobs','column','colors'];
+// The slot of the preset a key names: a preset of the map that carries it, else 0 where it is the world's own rock's key (`worldKey`, its
+// recipe: config.rock.recipe), else -1, Rock beneath (a world's tool that names a rock the map does not hold draws on the rock beneath).
+export function rockByKey(rocks,key,worldKey=''){
+ if(!key)return -1;
+ const rock=rocks.find(r=>r.key===key);
+ return rock?rock.slot:key===worldKey?0:-1;
+}
+const NAME_MAX=40,ROCK_FIELDS=['slot','name','key','knobs','column','colors'],KEY=/^[a-z][a-z0-9_-]{0,39}$/;
+// A preset's key: null, or a short lowercase name ('soil', 'basalt').
+function checkKey(key){if(key==null)return null;if(typeof key!=='string'||!KEY.test(key))throw Error('A rock preset\'s key is a short lowercase name, such as soil or basalt.');return key;}
+// A key for a preset made now: `key`, unless another preset of the map carries it (keys name one preset each).
+const freeKey=(rocks,key)=>key&&!rocks.some(r=>r.key===key)?key:null;
 function checkName(name){if(typeof name!=='string'||!name.trim()||name.trim().length>NAME_MAX)throw Error(`A rock preset needs a name of 1 to ${NAME_MAX} characters.`);return name.trim();}
 // A preset's column: its sections alone (the beds; colors, bands and wander stay the world's), checked as a map's column is.
 function checkColumn(column){if(column==null)return null;const c=copyColumn(column);if(!c.sections)throw Error('A rock preset\'s column needs its sections.');return {sections:c.sections};}
@@ -119,12 +131,15 @@ export function checkColors(colors){
 export function copyRocks(value){
  if(value==null)return null;
  if(!Array.isArray(value)||value.length>=ROCK_SLOTS)throw Error('Invalid rock presets.');
- const seen=new Set();
+ const seen=new Set(),keys=new Set();
  return value.map(r=>{
   if(!r||typeof r!=='object'||Array.isArray(r)||Object.keys(r).some(k=>!ROCK_FIELDS.includes(k)))throw Error('Invalid rock preset.');
   if(!Number.isInteger(r.slot)||r.slot<1||r.slot>=ROCK_SLOTS||seen.has(r.slot))throw Error('A rock preset needs its own slot, 1 to 15.');
   seen.add(r.slot);
-  return {slot:r.slot,name:checkName(r.name),knobs:copyRockSettings(r.knobs??{}),column:checkColumn(r.column),colors:checkColors(r.colors)};
+  const key=checkKey(r.key);
+  if(key&&keys.has(key))throw Error(`Two rock presets carry the key ${key}: a key names one preset.`);
+  if(key)keys.add(key);
+  return {slot:r.slot,name:checkName(r.name),key,knobs:copyRockSettings(r.knobs??{}),column:checkColumn(r.column),colors:checkColors(r.colors)};
  }).sort((a,b)=>a.slot-b.slot);
 }
 const freeSlot=rocks=>{for(let s=1;s<ROCK_SLOTS;s++)if(!rocks.some(r=>r.slot===s))return s;throw Error('A map holds at most 15 rock presets besides the world\'s own.');};
@@ -136,22 +151,22 @@ export function uniqueRockName(rocks,name,slot0){
 // The list operations. Each returns a new list (and the preset's slot); none changes its arguments.
 export function addRock(rocks,recipe,slot0Name=''){
  const slot=freeSlot(rocks);
- return {slot,rocks:[...rocks,{slot,name:uniqueRockName(rocks,STARTING_RECIPES[recipe].label,slot0Name),...recipeRock(recipe)}].sort((a,b)=>a.slot-b.slot)};
+ return {slot,rocks:[...rocks,{slot,name:uniqueRockName(rocks,STARTING_RECIPES[recipe].label,slot0Name),key:freeKey(rocks,recipe),...recipeRock(recipe)}].sort((a,b)=>a.slot-b.slot)};
 }
 // A copy of a preset, or of slot 0 (`world`: {name, knobs, column} as the world's rock has them now; a copy of slot 0 keeps the world's colors,
 // colors null, so it follows them).
 export function duplicateRock(rocks,slot,world){
  const from=slot===0?world:rocks.find(r=>r.slot===slot);if(!from)throw Error(`No rock preset in slot ${slot}.`);
  const to=freeSlot(rocks);
- return {slot:to,rocks:[...rocks,{slot:to,name:uniqueRockName(rocks,`${from.name} copy`,world?.name),knobs:structuredClone(from.knobs),column:structuredClone(from.column??null),colors:checkColors(from.colors)}].sort((a,b)=>a.slot-b.slot)};
+ return {slot:to,rocks:[...rocks,{slot:to,name:uniqueRockName(rocks,`${from.name} copy`,world?.name),key:null,knobs:structuredClone(from.knobs),column:structuredClone(from.column??null),colors:checkColors(from.colors)}].sort((a,b)=>a.slot-b.slot)};
 }
 export function renameRock(rocks,slot,name){
  if(!rocks.some(r=>r.slot===slot))throw Error(`No rock preset in slot ${slot}.`);
  return rocks.map(r=>r.slot===slot?{...r,name:checkName(name)}:r);
 }
-// A preset's numbers and beds replaced (a starting recipe, a pasted recipe, an edit), its name kept; its colors too when `colors` is given
-// (null: the world's), else kept.
-export function setRock(rocks,slot,{knobs,column,...rest}){return rocks.map(r=>r.slot===slot?{...r,knobs:copyRockSettings(knobs??{}),column:checkColumn(column),colors:'colors' in rest?checkColors(rest.colors):r.colors??null}:r);}
+// A preset's numbers and beds replaced (a starting recipe, a pasted recipe, an edit), its name and key kept; its colors too when `colors` is
+// given (null: the world's), else kept. A preset without a key takes `key` (a pasted recipe's) when no other preset carries it.
+export function setRock(rocks,slot,{knobs,column,key,...rest}){return rocks.map(r=>r.slot===slot?{...r,key:r.key??freeKey(rocks,checkKey(key)),knobs:copyRockSettings(knobs??{}),column:checkColumn(column),colors:'colors' in rest?checkColors(rest.colors):r.colors??null}:r);}
 // A preset's colors replaced (the panel's color rows), its numbers and beds kept.
 export function setRockColors(rocks,slot,colors){
  if(!rocks.some(r=>r.slot===slot))throw Error(`No rock preset in slot ${slot}.`);
@@ -179,11 +194,11 @@ export function rocksInUse(nodes,rocks){
 }
 // A recipe on the clipboard: its name, numbers, beds and colors as JSON, so two sets of numbers can be compared or moved between maps and worlds.
 const RECIPE_FORMAT='terraform-rock-recipe';
-export const rockRecipeText=rock=>JSON.stringify({format:RECIPE_FORMAT,name:rock.name,knobs:rock.knobs,column:rock.column??null,colors:rock.colors??null},null,1);
+export const rockRecipeText=rock=>JSON.stringify({format:RECIPE_FORMAT,name:rock.name,key:rock.key??null,knobs:rock.knobs,column:rock.column??null,colors:rock.colors??null},null,1);
 export function parseRockRecipe(text){
  let v;try{v=JSON.parse(text);}catch{throw Error('The clipboard holds no rock recipe.');}
  if(!v||v.format!==RECIPE_FORMAT)throw Error('The clipboard holds no rock recipe.');
- return {name:checkName(v.name),knobs:copyRockSettings(v.knobs??{}),column:checkColumn(v.column),colors:checkColors(v.colors)};
+ return {name:checkName(v.name),key:checkKey(v.key),knobs:copyRockSettings(v.knobs??{}),column:checkColumn(v.column),colors:checkColors(v.colors)};
 }
 // Slot 0 as a preset (for Duplicate and Copy): its name, every rock number as the world has it now, and its active row's sections.
 export function worldRock(name,values,column,variant){
