@@ -3512,11 +3512,12 @@ configurable"; 7 "a whole sand system", lower priority; 8 "Fix it"; 9 and
   agent]**: absorption moves 19.9% and 24.3% of crystal-1's and ice-1's
   windows at 1; the shadow moves 77.5% of the ice blocks' cast shadow on
   level ground at Sun height 25. `repro/perf.mjs` map4, alternating:
-  opaque maps the same as main (ice-2 drag latency p50 21.4 to 22.0 ms
-  against 21.8 to 22.3, green-modern-3 26.4 against 26.5); with the
-  defaults, crystal-1 21.0 to 21.4 against 20.7 to 21.2 and ice-2's quiet
-  pair 22.2 against 20.9 with the final picture after a stroke at 855 ms
-  against 826; later ice-2 pairs ran twice as slow on both builds while
+  opaque maps the same as main (drag latency p50, tip against main:
+  ice-2 21.8 to 22.3 ms against 21.4 to 22.0, green-modern-3 26.5 against
+  26.4); with the defaults, crystal-1 21.0 to 21.4 against 20.7 to 21.2
+  and ice-2's quiet pair 22.2 against 20.9, with the final picture after
+  a stroke at 855 ms against 826; later ice-2 pairs ran twice as slow on
+  both builds while
   another agent used the GPU **[measured, partly under load]**. An
   absorbing slot costs 24 height reads a pixel in the draw; the bake is
   untouched. *Limits, stated in the help:* the filter tints grass on an
