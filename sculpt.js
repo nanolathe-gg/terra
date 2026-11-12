@@ -223,12 +223,12 @@ function updateControls() {
   const featureSelection=!featureActive&&tool==='move'&&(mapFeatures?.selectionCount||0)>0;
   // The side panel's Selection block is the Select tool with no shape selected: its hint, or the selected features' values. A selected
   // shape's own actions are the bar on the map (#selection-hud) and the head of its card.
-  $('selection-panel').hidden=featureActive||tool!=='move'||hasSelection;
+  $('selection-panel').hidden=featureActive||tool!=='move'||(hasSelection&&!featureSelection);
   $('feature-selection').hidden=!featureSelection;$('shape-selection-actions').hidden=!selectionActive;
   $('selection-empty').hidden=hasSelection||featureSelection;
   $('path-actions').hidden=$('path-row').hidden=!pathEditing||!hasSelection;
   $('transform-controls').hidden=pathEditing||!hasSelection||drawMode==='add';
-  $('selection-hud').hidden=!selectionActive;
+  $('selection-hud').hidden=!selectionActive||featureSelection;   // selecting a feature deselects shapes (sculpt-features.js) and a shape clears the features: one or the other
   $('selection-hud').classList.toggle('path-mode',pathEditing);
   $('selection-mode').textContent=selectionActive?`${drawMode==='add'?'Add path · ':pathAdding?'Extend / branch · ':''}${shapeName(selected)}`:'';
   for(const id of ['selection-delete','transform-mode','canvas-deselect'])$(id).disabled=!hasSelection||loading||Boolean(stroke||moving);

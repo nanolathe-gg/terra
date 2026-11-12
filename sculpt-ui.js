@@ -102,8 +102,9 @@ export function groupToolControls(fields,buildRow){
   const master=g.master=d.querySelector('#'+masterId);g.box=box;
   box.addEventListener('click',e=>e.stopPropagation());
   box.addEventListener('change',()=>{const key=d.dataset.context,previous=Number(master.value);if(!box.checked&&previous!==0)g.memory.set(key,previous);master.value=box.checked?(g.memory.get(key)||(master.tagName==='SELECT'?[...master.options].find(o=>Number(o.value)!==0)?.value:Math.max(Number(master.step)||1,Math.min(Number(master.max),Number(master.max)*.5)))):0;master.dispatchEvent(new Event('input',{bubbles:true}));master.dispatchEvent(new Event('change',{bubbles:true}));d.open=box.checked;});
-  // The chip of a part that is off adds it (at the value it last had, or its default) and opens its rows.
-  summary.addEventListener('click',e=>{if(d.open||Number(master.value)!==0)return;e.preventDefault();box.checked=true;box.dispatchEvent(new Event('change'));});
+  // The chip of a part that is off adds it (at the value it last had, or its default) and opens its rows. A summary is not locked by the
+  // editor's fieldset as the switch is, so the chip asks the switch.
+  summary.addEventListener('click',e=>{if(d.open||Number(master.value)!==0)return;e.preventDefault();if(box.matches(':disabled'))return;box.checked=true;box.dispatchEvent(new Event('change'));});
  }
  for(const [key,label,keys,first] of definitions){if(!keys.some(field))continue;make(label,build(keys),key?field(key)[1]:null,first);}
  // A row no section or part names gets a part of its own, as before.
