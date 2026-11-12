@@ -2008,23 +2008,47 @@
    "shallow": {},
    "river": {},
    "braided": {},
-   "landform": {}
+   "landform": {},
+   "knoll": {"from": "hill", "diameter": 150, "elevation": 22, "wander": 8, "varySize": 70},
+   "tor": {"from": "hill", "diameter": 220, "elevation": 70, "iceFacets": 80, "facetForm": 0, "iceFacetSize": 32, "crystalStep": 12, "facetSurface": 0, "cracks": 50, "styleVegetation": -60},
+   "basaltWall": {"from": "plateau", "diameter": 320, "elevation": 120, "gullies": 30, "gullySize": 30, "talus": 50, "curve": {"form": "cliff"}},
+   "limestoneScarp": {"from": "plateau", "diameter": 560, "elevation": 110, "beds": 3, "bedSoft": 60}
   },
   "tools": [
    {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
-   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape"},
+   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "rock": "soil"},
    {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
+   {"id": "knoll", "label": "Knoll", "icon": "hill", "color": "#cfe3a3", "group": "shape", "help": "Draw a knoll: a small, round, walkable rise on smooth soil; a click for one.", "rock": "soil"},
    {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
    {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
-   {"id": "crystal", "label": "Faceted forms", "icon": "crystal", "color": "#aaa5ec", "group": "shape"},
    {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
    {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
    {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
    {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
   ],
+  "variantTools": {
+   "modern": [
+    {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
+    {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "rock": "soil"},
+    {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
+    {"id": "knoll", "label": "Knoll", "icon": "hill", "color": "#cfe3a3", "group": "shape", "help": "Draw a knoll: a small, round, walkable rise on smooth soil; a click for one.", "rock": "soil"},
+    {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
+    {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
+    {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
+    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
+    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
+    {"id": "tor", "label": "Granite tor", "icon": "hill", "color": "#c9c3b6", "group": "shape", "help": "Draw a granite tor: a rounded knob of bare granite standing over the plain; a click for one.", "rock": "granite"},
+    {"id": "basaltWall", "label": "Basalt wall", "icon": "plateau", "color": "#9aa0a8", "group": "shape", "help": "Draw a basalt wall: a long cliff of jointed basalt with scree at its foot.", "rock": "basalt"},
+    {"id": "limestoneScarp", "label": "Limestone scarp", "icon": "valleyT", "color": "#ddd6c2", "group": "shape", "help": "Draw a limestone scarp: a raised block whose face stands in pale limestone beds.", "rock": "limestone"},
+    {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
+    {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
+    {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
+    {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
+   ]
+  },
   "baseHeight": 9,
   "colors": {"rock": "#747474"},
   "defaults": {
