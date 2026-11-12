@@ -7,6 +7,7 @@ export class RockWeather {
     const self=new RockWeather(renderer),d=renderer.device;
     const source=await (await fetch('engine-rock-weather.wgsl')).text();
     const code=preprocess(source,renderer.commonSource,new Set(['BAKE']));
+    renderer.stageSources?.push({source:code,stage:'C'});
     const module=d.createShaderModule({label:'rock runoff and deposition',code});
     const errors=(await module.getCompilationInfo()).messages.filter(m=>m.type==='error');
     if(errors.length)throw Error(errors.map(m=>`${m.lineNum}: ${m.message}`).join('\n'));

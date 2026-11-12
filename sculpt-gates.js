@@ -61,3 +61,55 @@ export function gateValues(gates, view, slots = [0]) {
   return out;
 }
 export const gateKey = (values, order) => { let key = ''; for (const id of order) key += values[id] ? '1' : '0'; return key; };
+
+// The earliest shader stage that can read each uniform. Walk the actual
+// preprocessed WGSL call graph; a static read stays a dependency behind a gate.
+// Modules supply their entry stage, with explicit roots for fragment geometry.
+export function uniformStages(modules) {
+  const result=new Map(),order='ABCDEF';
+  const uncomment=source=>{
+    let out='',depth=0,line=false;
+    for(let i=0;i<source.length;i++){
+      const a=source[i],b=source[i+1];
+      if(line){if(a==='\n'){line=false;out+='\n';}continue;}
+      if(depth){if(a==='/'&&b==='*'){depth++;i++;}else if(a==='*'&&b==='/'){depth--;i++;}else if(a==='\n')out+='\n';continue;}
+      if(a==='/'&&b==='*'){depth=1;out+=' ';i++;}else if(a==='/'&&b==='/'){line=true;out+=' ';i++;}else out+=a;
+    }
+    if(depth)throw Error('Unclosed WGSL comment in stage scan');
+    return out;
+  };
+  for(const {source,stage,roots} of modules){
+    if(!order.includes(stage)||stage.length!==1)throw Error('Unknown shader stage '+stage);
+    const text=uncomment(source),functions=new Map(),pattern=/\bfn\s+(\w+)\s*\(/g;
+    let previous=0,match;
+    while((match=pattern.exec(text))){
+      const name=match[1],start=text.indexOf('{',pattern.lastIndex);
+      if(start<0)throw Error('Missing WGSL function body: '+name);
+      let end=start+1,depth=1;
+      for(;end<text.length&&depth;end++){if(text[end]==='{')depth++;else if(text[end]==='}')depth--;}
+      if(depth||functions.has(name))throw Error('Invalid WGSL function in stage scan: '+name);
+      const header=text.slice(previous,match.index),body=text.slice(start+1,end-1);
+      const fields=new Set([...body.matchAll(/\bu\s*\.\s*(\w+)(?:\s*\[[^\]]+\]\s*\.\s*(\w+))?/g)].map(m=>m[2]||m[1]));
+      const calls=new Set([...body.matchAll(/\b(\w+)\s*\(/g)].map(m=>m[1]));
+      functions.set(name,{fields,calls,entry:/@(compute|fragment)\b/.test(header)});
+      previous=end;pattern.lastIndex=end;
+    }
+    const entryPoints=roots??[...functions].filter(([,fn])=>fn.entry).map(([name])=>name);
+    for(const root of entryPoints){
+      if(!functions.has(root))throw Error('Missing stage root '+root);
+      const seen=new Set(),visit=name=>{
+        if(seen.has(name)||!functions.has(name))return;seen.add(name);
+        const fn=functions.get(name);
+        for(const field of fn.fields){
+          const prior=result.get(field)??{stage,entries:[]};
+          if(order.indexOf(stage)<order.indexOf(prior.stage))prior.stage=stage;
+          if(!prior.entries.includes(root))prior.entries.push(root);
+          result.set(field,prior);
+        }
+        for(const callee of fn.calls)visit(callee);
+      };
+      visit(root);
+    }
+  }
+  return result;
+}

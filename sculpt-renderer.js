@@ -10,7 +10,7 @@ import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
 import {RockWeather} from './sculpt-rock-weather.js';
 import {VoxelSurface} from './sculpt-volume.js';
-import {extractGates, gateValues, gateKey} from './sculpt-gates.js';
+import {extractGates, gateValues, gateKey, uniformStages} from './sculpt-gates.js';
 
 // The mask planes when the config names none: as many as MASK_KEYS (sculpt-scene.js, which says what each holds). The masks texture array has a layer per 4 planes.
 const MASK_PLANE_COUNT = 25;
@@ -214,8 +214,10 @@ export class TerrainRenderer {
       return module;
     };
     // P6: the draw's and the bake's uniform gates are override bools (sculpt-gates.js); the pipelines are built per set of values, see specialized().
-    const fragGates = extractGates(preprocess(frag.replace('/*VOLUME*/',this.volumeSource), common, new Set(['VOLUME_RENDER'])), this.layout.fields);
-    const bakeGates = extractGates(preprocess(bake, common, new Set(['BAKE'])), this.layout.fields);
+    const fragSource=preprocess(frag.replace('/*VOLUME*/',this.volumeSource),common,new Set(['VOLUME_RENDER']));
+    const bakeSource=preprocess(bake,common,new Set(['BAKE']));
+    this.stageSources=[{source:fragSource,stage:'F'},{source:fragSource,stage:'E',roots:['voxelHit','voxelNormal','occlusion','visibility']},{source:bakeSource,stage:'C'}];
+    const fragGates=extractGates(fragSource,this.layout.fields),bakeGates=extractGates(bakeSource,this.layout.fields);
     const [vertModule, fragModule, bakeModule] = await Promise.all([
       compile('sculpt-vert.wgsl', preprocess(vert, common, new Set())),
       compile('engine-frag.wgsl', fragGates.source),
@@ -251,6 +253,7 @@ export class TerrainRenderer {
     this.bakePipelineLayout = bakeLayout;
     this.rockWeather = await RockWeather.create(this,preprocess);
     this.voxel = await VoxelSurface.create(this,this.volumeSource,preprocess);
+    this.uniformStages=uniformStages(this.stageSources);this.stageSources=null;
     this.drawPipelineLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, this.materialLayout,this.voxel.drawLayout]});
     const mipModule = device.createShaderModule({label: 'mip levels', code: MIP_SHADER});
     this.mipPipeline = device.createRenderPipeline({label: 'mip levels', layout: 'auto',
