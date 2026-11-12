@@ -1386,6 +1386,29 @@ fn surfFoam(pixel: vec2f, p: vec2f, x: f32, q: vec2f, depth: f32, slope: f32, e:
 }
 // A rock slot's colour as the draw lays it flat (rockFlat): the recipe's own, else the rock material's mean.
 fn slotRock(slot: u32) -> vec3f { let c = u.rock[slot & rockMask].rockColors[0]; return select(u.rockMean, c.rgb, c.a > 0.5); }
+// B4: a rock's thickness along the sun's line through a point of its surface, height units. From just inside the surface, away from the sun
+// on a lit face (the rock behind what the sun lights) and toward it on a shaded face (the rock the sun's light crosses to get there), the
+// length of that line lying under the heights and 3 units over the plain over 24 steps of 1.5 (36 at most: thick). Over the plain: the ground
+// a stroke claims round its foot is the plain (its undulation a unit or two), not a body of its rock. It reads the heights as visibility() does, so a tile gives the same
+// answer as any other; the voxel relief's few units are not in it.
+fn sunChord(p: vec3f, n: vec3f) -> f32 {
+    let dir = select(-u.light, u.light, dot(n, u.light) < 0.0);
+    let start = p - n * 0.75;
+    var inside = 0.0;
+    for (var i = 1; i <= 24; i++) { let q = start + dir * (f32(i) * 1.5); inside += select(0.0, 1.5, q.z < baseHeight(q.xy) && q.z > u.base + 3.0); }
+    return inside;
+}
+// B4: the filter a rock of `slot` puts on what it shows at thickness t: toward the hue of its absorption colour at full strength (row 6;
+// unchosen, its own colour's), 1 - e^(-k t / 4) of the way for Color deepens with thickness k, so thin edges keep their colour and thick rock
+// goes deep and saturated: the colour's strongest channel passes, the others are taken.
+// A filter, so it deepens any surface the rock claims (its faces, crystal faces, ice cover) whatever drew it.
+fn absorbFilter(slot: u32, t: f32) -> vec3f {
+    let row = u.rock[slot & rockMask].rockColors[6];
+    let own = slotRock(slot);
+    let a = select(own, row.rgb, row.a > 0.5);
+    let toward = a / max(max(a.r, max(a.g, a.b)), 0.02);
+    return mix(vec3f(1.0), toward, 1.0 - exp(-u.rock[slot & rockMask].absorbDepth * t / 4.0));
+}
 // Weathered rock and its grains: a biome's sand, from the rock's own mean and the world's Sand row and colour. The deposits and the surf's beach draw it.
 fn sandWeathered() -> vec3f {
     let rockAverage = select(u.rockTexMean, u.rock[0].rockColors[0].rgb, u.rock[0].rockColors[0].a > 0.5);   // the world's rock (slot 0): a world's sand
@@ -1567,6 +1590,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // west against our 20; measured on four maps), so its world keeps only
     // part of the directional shading.
     if (u.shadeDepth < 1.0) { shading = mix(1.0, shading, u.shadeDepth); lightTint = mix(vec3f(1.0), lightTint, u.shadeDepth); }
+    // B4: the rock's thickness along the sun's line, for a rock that deepens with it or lets light through (nothing runs for opaque rock).
+    var chord = 0.0;
+    if (u.rock[rs & rockMask].absorbDepth > 0.0) { chord = sunChord(hit, normal); }
     // S4 (Archipelago's domes): a crease, where the authored height lies below its rings 6 and 12 px out (a gully's floor, a valley's), loses light
     // whatever its facing, after the directional shading is scaled, so gullies read on a world that keeps little of it. A plane or a crest gives 0.
     if (u.creaseShade > 0.0 && h > u.sea) {
@@ -2013,6 +2039,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         material = max(vec3f(0.0), lum + (material - lum) * (1.0 + 0.5 * k)) * (1.0 - 0.45 * k);
         wetFilm = wet * mix(1.0, 0.3, living);
     }
+    // B4: thick rock deepens toward its absorption colour (Color deepens with thickness).
+    if (u.rock[rs & rockMask].absorbDepth > 0.0) { material *= absorbFilter(rs, chord); }
     var color = material * mix(shading, 1.0, flatBank);
     if (u.shadeBlue > 0.0) {
         // Ice (card E5): retail's shaded ice is periwinkle (palette entries that keep blue
