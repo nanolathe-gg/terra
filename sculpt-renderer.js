@@ -989,8 +989,8 @@ export class TerrainRenderer {
     this.set('uColumnCount', own.starts.length);
     // Where level ground takes a recipe's beds (bedsFrom): the world's from its first section's start, as the gate always read it. A recipe
     // with beds of its own starts no lower than the world's second section: the world's lowest section is the plain's band (Desert's first 16
-    // units, nearly all its plain-coloured bed), and a recipe's beds start at 0, so they painted the ground at a stroke's foot, its talus a few
-    // units over the plain, in their own colours. Its faces show its beds at every height.
+    // units, nearly all its plain-colored bed), and a recipe's beds start at 0, so they painted the ground at a stroke's foot, its talus a few
+    // units over the plain, in their own colors. Its faces show its beds at every height.
     this.set('uBedsFrom', own.starts[0]?.[0] ?? 0);
     const band = own.starts[own.starts.length > 1 ? 1 : 0]?.[0] ?? 0;
     for (const [slot, rock] of this.rocks) {

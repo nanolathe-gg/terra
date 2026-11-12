@@ -25,8 +25,22 @@ export const ROCK_PRESETS={
 };
 export const ROCK_KEYS=[...Object.keys(base),'strata','strataContrast','strataGrain'];
 // The starting recipes' own colors ({rock, beds}, checkColors): a preset made from one takes them. A world that names a recipe as its rock
-// keeps its own colors (applyWorldRock takes the numbers and beds only), so its slot 0 looks as it did.
-export const ROCK_COLORS={};
+// keeps its own colors (applyWorldRock takes the numbers and beds only), so its slot 0 looks as it did. Each color is an entry of the game's
+// palette (materials/palette.json) on one ramp (granite's rock is modern Green's own gray, between two entries of the gray ramp), so a lit face steps along that ramp instead of dithering between two hues: the palette has
+// gray, olive, ochre, rose and blue-gray ramps from dark to light, and few orange-browns. Measured on a lit wall of modern Green (sunHeight 25),
+// the chroma-weighted hue spread of each recipe's rock pixels is no more than 1.4 times what it is before the palette step.
+export const ROCK_COLORS={
+ sandstone:{rock:'#836f23',beds:['#836f23','#9b5b63','#9b832f','#8b474f','#6b5b17']},   // ochre, rose beds
+ shale:{rock:'#5b5b5b',beds:['#636343','#6b6b6b','#535333','#7b7b7b','#4b4b4b']},   // gray, olive beds
+ granite:{rock:'#747474',beds:['#5b5b5b','#8b8b8b','#4b4b4b','#9b9b9b','#6b6b6b']},   // modern Green's gray
+ basalt:{rock:'#2f4b5f',beds:['#2f4b5f','#3f5f73','#273f57','#53778b','#1f2f47']},   // dark blue-gray
+ limestone:{rock:'#c3c39b',beds:['#c3c39b','#abab83','#dfdfb7','#93936f','#bbbbbb']},   // pale cream
+ gneiss:{rock:'#6b6b6b',beds:['#8b8b8b','#3b3b3b','#9b9b9b','#4b4b4b','#6b6b6b']},   // gray bands, light and dark
+ schist:{rock:'#7b7b7b',beds:['#777757','#8b8b8b','#636343','#9b9b9b','#535333']},   // silver gray, olive beds
+ conglomerate:{rock:'#777757',beds:['#777757','#93936f','#636343','#abab83','#535333']},   // olive tan
+ breccia:{rock:'#7b7b7b',beds:['#7b7b7b','#8b474f','#9b9b9b','#6f333b','#5b5b5b']},   // gray, rose clasts in its beds
+ siltstone:{rock:'#632b33',beds:['#632b33','#535333','#6f333b','#636343','#57232b']},   // maroon, olive beds
+};
 const ranges=new Map(KNOBS.flatMap(([,rows])=>rows.map(([key,,lo,hi])=>[key,[lo,hi]])));
 // Validate the entire recipe before changing the open scene. Unknown, removed
 // fields are ignored, like the editor's other saved controls.
