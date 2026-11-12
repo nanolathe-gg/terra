@@ -1529,6 +1529,37 @@
   "vent": {"params": {"size": 1.7, "thick": 1.6, "rim": 0.5, "rimSat": 2.5, "spread": 6}}
  },
  "world": {
+  "shapes": {
+   "plateau": {},
+   "hill": {},
+   "mountain": {"wander": 6},
+   "ramp": {},
+   "valleyV": {},
+   "valleyU": {},
+   "valleyT": {},
+   "crater": {},
+   "crystal": {"diameter": 260, "elevation": 60, "iceFacets": 100, "iceFacetSize": 240, "crystalSides": 6, "crystalTop": 50, "crystalVariation": 0, "crystalTiers": 0, "bergJitter": 45, "bergBreak": 3, "bergRough": 8, "facetSurface": 0, "lean": 100, "facing": 3, "curve": {"form": "lfCrystal", "knots": [[0, 0], [0.04, 1], [0.55, 1], [1, 0.62]], "back": [[0, 0], [0.28, 0], [1, 0.62]]}},
+   "deep": {"wander": 24, "widthVary": 25, "shorePlates": 1},
+   "shallow": {"wander": 6, "shorePlates": 1},
+   "river": {},
+   "braided": {},
+   "landform": {}
+  },
+  "tools": [
+   {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
+   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape"},
+   {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
+   {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
+   {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
+   {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
+   {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
+   {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
+   {"id": "crystal", "label": "Faceted forms", "icon": "crystal", "color": "#aaa5ec", "group": "shape"},
+   {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
+   {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
+   {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
+   {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
+  ],
   "defaults": {
    "surface": "slopes",
    "transition": "soil",

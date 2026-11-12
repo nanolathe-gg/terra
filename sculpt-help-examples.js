@@ -1,7 +1,7 @@
 // Authored fixtures for the hover previews. repro/ui-previews.mjs renders them through the editor's
 // own pipeline into ui-previews/ (committed, served with the editor); run it again when an example,
 // a tool preset or the renderer changes.
-export const HELP_TOOLS=['plateau','hill','mountain','ramp','deep','shallow','valleyV','valleyU','valleyT','river','braided','crater','fissure','crystal'];
+export const HELP_TOOLS=['landform','plateau','hill','mountain','ramp','deep','shallow','valleyV','valleyU','valleyT','river','braided','crater','fissure','crystal'];
 export const HELP_CONTROLS={
   diameter:{key:'diameter',values:[160,440],step:8,unit:' px'},
   'lf-elevation':{key:'elevation',values:[135,235],step:1,unit:' units'},

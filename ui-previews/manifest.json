@@ -5,6 +5,7 @@
   "ms": 160
  },
  "tools": [
+  "landform",
   "plateau",
   "hill",
   "mountain",

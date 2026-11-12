@@ -1463,6 +1463,37 @@
   "vent": {"params": {"size": 1.8, "thick": 1.2, "rim": 0.4, "rimSat": 2.2, "spread": 3}}
  },
  "world": {
+  "shapes": {
+   "plateau": {"amount": 70, "roughness": 0, "softness": 50, "cracks": 10, "faceVariation": 0, "lean": 100, "facing": 3, "terraces": 6, "combine": 0, "wander": 75, "widthVary": 30, "heightVary": 0, "varySize": 210, "varyFoot": 100, "varyMiddle": 150, "ledge": 55, "terraceJitter": 40, "breakup": 30},
+   "hill": {"wander": 46, "widthVary": 25, "heightVary": 10, "cracks": 10},
+   "mountain": {"wander": 24, "cracks": 10},
+   "ramp": {},
+   "valleyV": {},
+   "valleyU": {},
+   "valleyT": {},
+   "crater": {"wander": 32, "heightVary": 3, "cracks": 10},
+   "crystal": {},
+   "deep": {"wander": 34, "widthVary": 35},
+   "shallow": {},
+   "river": {},
+   "braided": {},
+   "landform": {"amount": 70, "roughness": 0, "softness": 50, "cracks": 10, "faceVariation": 0, "lean": 100, "facing": 3, "terraces": 6, "combine": 0, "wander": 75, "widthVary": 30, "heightVary": 0, "varySize": 210, "varyFoot": 100, "varyMiddle": 150, "ledge": 55, "terraceJitter": 40, "breakup": 30}
+  },
+  "tools": [
+   {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
+   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape"},
+   {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
+   {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
+   {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
+   {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
+   {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
+   {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
+   {"id": "crystal", "label": "Faceted forms", "icon": "crystal", "color": "#aaa5ec", "group": "shape"},
+   {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
+   {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
+   {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
+   {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
+  ],
   "defaults": {
    "surface": "structured",
    "transition": "mineral",
