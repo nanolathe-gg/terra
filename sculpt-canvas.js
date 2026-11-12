@@ -36,7 +36,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const levels=query.get('levels')!=='0',levelsOverlay=query.get('levelsOverlay')==='1';   // H7b: levels 0 is the final-only canvas
   let dirtyMarks=0,retainedInvalidations=0;
   const interacting=()=>Boolean(gesture||api.previewActive?.());
-  let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,epoch=0,viewEpoch=0,busy=false,features,metadata,passability,canonicalSize=512;
+  let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,epoch=0,viewEpoch=0,busy=false,features,metadata,passability,canonicalSize=512,displaySize=256;
   let paintedView=-1,navigationTimer=null,activeBake=null;
   // Only optional background work and hover detail wait for navigation to
   // settle. Visible terrain starts immediately, including during a held pan.
@@ -92,13 +92,17 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function configureChunks() {
     if(budgetUpdating)return;budgetUpdating=true;
     try {
-      // Every selected budget uses the same bake lattice. Budget changes evict
-      // images, rather than change GPU interpolation and palette decisions.
+      // Keep the export's fixed trial. The view uses the actual budget below.
       const reserve=fixedGPU(false)-(previewReserved?64*MB:0)+512*512*8;   // the bake lattice does not depend on what the GPU fields hold
-      finest=.25;renderer.setBudget(128*MB,reserve);const next=Math.min(512,renderer.recommendedChunkSize);
-      if(next!==canonicalSize){for(const key of cache.keys())remove(key);canonicalSize=next;}
+      finest=.25;renderer.setBudget(128*MB,reserve);canonicalSize=Math.min(512,renderer.recommendedChunkSize);
+      // The export lattice may change with its fixed trial, but retained view
+      // images keep their own 256 px grid. Only an actual budget shortage can
+      // lower that grid; a knob changing the export's size never empties it.
       trimTo(gpuBudget-fixedGPU()-renderer.stats().retainedBytes-32*MB);
-      renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+canonicalSize*canonicalSize*8);
+      renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+256*256*8);
+      const nextDisplay=Math.min(256,renderer.recommendedChunkSize);
+      if(nextDisplay!==displaySize){for(const key of cache.keys())remove(key);displaySize=nextDisplay;}
+      renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+Math.max(canonicalSize,displaySize)**2*8);
     }finally{budgetUpdating=false;}
   }
   async function region(request,options,signal,weather=true) {
@@ -114,9 +118,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     return {...request,...r,fields:r.fields,material:r.materialField??r.material,gridOrigin:r.gridOrigin,gridSpacing:r.gridSpacing,gridWidth:r.gridWidth,gridHeight:r.gridHeight,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid};
   }
   function chunkSize() { return canonicalSize; }
-  // Smaller display tiles make completed detail visible sooner. Export keeps
-  // its canonical chunk size and the renderer keeps the global field lattice.
-  function viewChunkSize() { return Math.min(256,canonicalSize); }
+  // View tiles stay on one grid beside the export's canonical bake lattice.
+  function viewChunkSize() { return displaySize; }
   // Let optional whole-map work yield until the camera has its requested
   // images. A failed/paused render must not starve background work forever.
   function foregroundPending() {
