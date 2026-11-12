@@ -8,7 +8,7 @@ import {landformTool} from './sculpt-shape-presets.js';
 import {rockByKey} from './sculpt-rock-presets.js';
 
 // The icon set: Save as tool's icon choices in sculpt.html (#tool-save-icons, one button with its svg each), which the shape buttons copy: a tool picks one by name.
-export const TOOL_ICONS=['landform','plateau','hill','mountain','ramp','valleyV','valleyU','valleyT','crater','crystal','deep','shallow','river','braided'];
+export const TOOL_ICONS=['landform','plateau','hill','mountain','ramp','valleyV','valleyU','valleyT','crater','crystal','deep','shallow','river','braided','cone','pillars','island'];
 // The palette groups a shape tool joins (sculpt.html's Shape and Water groups).
 export const TOOL_GROUPS=['shape','water'];
 // The generic landform tool: every toolbar has it (sculpt.html's fixed Landform button), and it reaches every landform feature, so a world without
