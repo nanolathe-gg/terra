@@ -8,7 +8,7 @@ import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWo
 import {KNOBS,LOW_GROUND_RGB,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
-import {strokeKind,savedToolCard,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,borrowBeach,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
+import {strokeKind,shapeFrom,savedToolCard,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,borrowBeach,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
   shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,regionalCheck,repeatCheck,pagedTime,heightsNode} from './sculpt-scene.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER,lfcWidth,heightsBounds} from './sculpt-gpu-fields.js';
 
@@ -136,9 +136,13 @@ let worldToolList=null,mapTools=[];   // the world's tools, checked once its con
 const shapeTools=(own=mapTools) => [LANDFORM_TOOL,...(worldToolList??=worldTools(config)),...own];
 const toolById=(id,own=mapTools) => shapeTools(own).find(t => t.id===id);
 const toolIds=(own=mapTools) => new Set([...FIXED_TOOLS,...shapeTools(own).map(t => t.id)]);
-// What a tool draws: its shape (a stroke kind for the fixed buttons), and that shape's stroke kind.
+// What a tool draws: its shape (a stroke kind for the fixed buttons; a world's own shape names its library shape by `from`), the library shape under it,
+// and that shape's stroke kind.
 const entryOf=id => { const t=toolById(id); return t?toolShape(t):id; };
-const toolKind=id => strokeKind(entryOf(id));
+const baseOf=id => shapeFrom(config,entryOf(id));
+const toolKind=id => strokeKind(baseOf(id));
+// A tool's help line: its own (a world's tool may carry one), else its library shape's.
+const toolHelpLine=id => toolById(id)?.help??HELP[baseOf(id)];
 // A tool's shape as world `preset` makes it, with the rock the tool names (toolRockSlot); a tool's starting card: that, or a map tool's own card.
 function shapeCard(id,preset=config?.biomeId) {
   const t=toolById(id),card=toolDefaults(entryOf(id),preset),slot=toolRockSlot(t,mapRocks,config.rock?.recipe);
@@ -156,11 +160,13 @@ function buildToolbar() {
   const icon=name => $('tool-save-icons').querySelector(`[data-icon-choice="${name}"] svg`).cloneNode(true);
   for (const [group,box] of [['shape','shape-tools'],['water','water-tools']]) $(box).replaceChildren(...shapeTools().slice(1).filter(t => t.group===group).map(t => {
     const b=document.createElement('button');
-    b.dataset.tool=t.id; b.dataset.shape=toolShape(t); b.setAttribute('aria-pressed','false'); b.setAttribute('aria-label',t.label); b.title=t.label;
+    b.dataset.tool=t.id; b.dataset.shape=shapeFrom(config,toolShape(t)); if (t.help) b.dataset.help=t.help; b.setAttribute('aria-pressed','false'); b.setAttribute('aria-label',t.label); b.title=t.label;
     b.style.setProperty('--tool-color',t.color); b.disabled=true; b.append(icon(t.icon));
     if (t.card) b.dataset.mapTool='';   // a map's own: its hover shows its shape's sketch, not the shape's rendered example
     return b;
   }));
+  // A toolbar with no water tool (a world without water) shows no Water group.
+  $('water-tools').closest('.tool-group').hidden=!shapeTools().some(t => t.group==='water');
 }
 // The map's tools replaced (Save as tool, Delete, undo, a load or a scene): the toolbar and the cards follow, and a selected tool that is gone gives way to
 // Landform. `fresh` gives every map tool its own card again (another map's tools may have had these ids).
@@ -195,7 +201,7 @@ function showTool(state={},kind=toolKind(tool)) {
 }
 // The Tool preset menu lists the worlds that make the shape a landform tool draws (every world, for the other buttons).
 function syncToolStyle(id) {
-  const shape=entryOf(id),land=strokeKind(shape)==='landform';
+  const shape=entryOf(id),land=toolKind(id)==='landform';
   for (const o of $('tool-style').options) if (o.value!=='custom') o.hidden=land && !Object.hasOwn(config.worldShapes?.[o.value]||{},shape);
 }
 function updateControls() {
@@ -296,7 +302,7 @@ function updateControls() {
   $('deposit-spread-value').textContent=$('deposit-spread').value+'%';
   $('transition-detail-value').textContent=$('transition-detail').value+'%';
   { const id=tool==='move'&&nodes[selected]?.params?strokeTool(nodes[selected],ids):entry; syncToolStyle(id); $('tool-style').value=toolSettings[id]?.preset||'custom'; }
-  $('tool-help').textContent=toolById(entry)?.card?`Draw a landform with the settings, curves and rock of ${toolLabel(entry)}, a tool saved in this map. Change any setting below.`:HELP[entryOf(entry)]||'';
+  $('tool-help').textContent=toolById(entry)?.card?`Draw a landform with the settings, curves and rock of ${toolLabel(entry)}, a tool saved in this map. Change any setting below.`:toolHelpLine(entry)||'';
   { const can=ready && resettable(); $('reset-strokes').disabled=!can; $('reset-strokes').title=can?'':'Draw a stroke first: there is nothing to reset.'; }
   $('undo').disabled=!ready || Boolean(stroke||moving) || historyIndex<=0;
   $('redo').disabled=!ready || Boolean(stroke||moving) || historyIndex>=history.length-1;
@@ -1226,6 +1232,9 @@ function loadSketch(s,carry=false) {
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
   restoreColumn(column);syncColumnPanel();
   mapRocks=rocks??worldRocks(config); rockSelected=0; syncRockChoices(); syncRockPanel(); nodes=keepStrokeRocks(next,mapRocks); selected=-1;pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
+  // The tools' cards still on a world's preset name their rock among this map's presets, now that the map's list is in.
+  for (const id of ids) if (Object.hasOwn(config.worldShapes||{},toolSettings[id]?.preset)) toolSettings[id]=shapeCard(id,toolSettings[id].preset);
+  showTool(toolSettings[tool]); updateControls();
 }
 // A sketch remembers the world it was drawn in. Loading one in another world
 // reloads the recorded world first, then plays the sketch there. The file is
@@ -1295,6 +1304,8 @@ function download(blob,name) { const url=URL.createObjectURL(blob),a=document.cr
 document.querySelector('.tool-groups').addEventListener('click',event => {
   const b=event.target.closest('[data-tool]');if(!b)return;
   if(stroke||moving)return;mapFeatures?.deactivate();rememberTool();tool=b.dataset.tool;drawMode=tool==='move'?'select':'new';pathAdding=false;
+  // A card still on a world's preset is made afresh, so the rock its tool names is the map's preset as the map holds it now (added, moved or gone).
+  if(Object.hasOwn(config.worldShapes||{},toolSettings[tool]?.preset))toolSettings[tool]=shapeCard(tool,toolSettings[tool].preset);
   if(tool==='move'&&selected>=0)selectNode(selected);
   else{selected=-1;pathPoint=-1;renderLayers();showTool(toolSettings[tool]);}
   updateControls();schedule();persistLater();
@@ -1367,7 +1378,7 @@ $('tool-save-button').onclick=() => {
   const from=toolById(strokeTool(n,toolIds()))??LANDFORM_TOOL;
   const card={...Object.fromEntries(Object.entries(TOOL_FIELDS).map(([key,[id]]) => [key,Number($(id).value)])),...(n.params.curve?{curve:structuredClone(n.params.curve)}:{}),...(n.params.along?{along:structuredClone(n.params.along)}:{})};
   try {
-    const added=addMapTool(mapTools,nodes,{label:$('tool-save-name').value,icon:toolSaveIcon,color:$('tool-save-color').value,group:from.group,shape:toolShape(from),card});
+    const added=addMapTool(mapTools,nodes,{label:$('tool-save-name').value,icon:toolSaveIcon,color:$('tool-save-color').value,group:from.group,shape:shapeFrom(config,toolShape(from)),card});
     restoreMapTools(added.tools); toolSaveFor=''; checkpoint(true);
     status(`Saved the tool ${toolLabel(added.id)}: it is in the toolbar's ${from.group==='water'?'Water':'Shape'} group, after the world's tools.`);
   } catch (err) { $('tool-save-note').textContent=err.message; }

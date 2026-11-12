@@ -806,6 +806,11 @@ def apply_variant(config, biome, variant):
     out.update(copy.deepcopy(v.get('config', {})))
     if v.get('rock'):
         out['rock'] = dict(v['rock'])   # a rock recipe by name: the page lays its numbers over the world's (sculpt-rock-presets.js applyWorldRock)
+    # A variant may ship its own toolbar (its table's world.variantTools.<variant>: modern Green's granite tor and basalt wall name rock presets
+    # only that variant ships); a variant without one takes the world's.
+    if variant in config.get('variantTools', {}):
+        out['tools'] = copy.deepcopy(config['variantTools'][variant])
+    out.pop('variantTools', None)
     out['variant'] = variant
     return out
 
@@ -849,6 +854,7 @@ def biome_config(biome):
     table = json.loads((HERE / MATERIAL_TABLES[biome]).read_text())
     world = copy.deepcopy(table['world'])
     world.pop('export', None)   # the page's world catalogue (EXPORT_DEFAULTS), not the page's config
+    variant_tools = world.pop('variantTools', {})   # apply_variant's: a variant's own toolbar
     config = {'biome': BIOME_NAMES[biome], 'biomeId': biome, 'size': 1024, 'grid': 512, 'seaLevel': 0, 'baseHeight': world.pop('baseHeight', 24),
               'materialTable': MATERIAL_TABLES[biome], 'layers': table['order'],   # the materials the table makes: which optional stages (body, beach, ring) the world has
               'material': {'groundCover': copy.deepcopy(DEFAULT_GROUND_COVER), **table['material']}, 'water': table['water'], **world}
@@ -861,6 +867,8 @@ def biome_config(biome):
     config['featureCatalog'] = feature_catalog()
     if biome in WORLD_ROCK:
         config['rock'] = dict(WORLD_ROCK[biome])
+    if variant_tools:
+        config['variantTools'] = variant_tools
     return world_knobs(biome, config)
 
 
@@ -920,7 +928,7 @@ def site_data(biomes, configs, catalogue, services):
     """Every generated file of the site, as {relative path: bytes}: one table the dev server answers from and the static build writes."""
     files = {'services.json': services, 'config/catalog.json': catalogue}
     for b in biomes:
-        files[f'config/{b}.json'] = configs[b]
+        files[f'config/{b}.json'] = {k: v for k, v in configs[b].items() if k != 'variantTools'}
         for variant in WORLD_VARIANTS.get(b, {}):
             files[f'config/{b}--{variant}.json'] = apply_variant(configs[b], b, variant)
     return {name: json.dumps(data).encode() for name, data in files.items()}

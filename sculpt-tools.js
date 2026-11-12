@@ -3,7 +3,7 @@
 // buttons (Select, the generic Landform, Fissure and the paint tools) and the icon set (Save as tool's icon choices); the page builds only the shape buttons, from this list, into
 // #shape-tools and #water-tools. A stroke names the tool it was drawn with (node.tool), and shows as the generic landform when the toolbar lacks
 // it (another world's tool). No DOM here: the page and the tests share it.
-import {LANDFORM_DEFAULTS,LANDFORM_SHAPES,SHAPE_FIELDS} from './sculpt-scene.js';
+import {LANDFORM_DEFAULTS,LANDFORM_SHAPES,SHAPE_FIELDS,shapeFrom} from './sculpt-scene.js';
 import {landformTool} from './sculpt-shape-presets.js';
 import {rockByKey} from './sculpt-rock-presets.js';
 
@@ -17,26 +17,28 @@ export const LANDFORM_TOOL={id:'landform',label:'Landform',icon:'landform',color
 // The palette's other fixed buttons: each id is the stroke kind it draws (move is Select).
 export const FIXED_TOOLS=['move','fissure','smooth','erase','paint','sand','grass'];
 export const toolShape=t => t?.shape??t?.id;
-const ID=/^[A-Za-z][A-Za-z0-9_-]{0,39}$/,COLOR=/^#[0-9a-f]{6}$/i,LABEL_MAX=40;
+const ID=/^[A-Za-z][A-Za-z0-9_-]{0,39}$/,COLOR=/^#[0-9a-f]{6}$/i,LABEL_MAX=40,HELP_MAX=300;
 const label=v => typeof v==='string' && v.trim() && v.trim().length<=LABEL_MAX;
 // A tool's presentation and shape, checked (`what` starts the error): an id no fixed button has, a label, an icon of the set, a color, a group,
-// and a shape of the library.
-function checkTool(t,what) {
+// and a shape of the library (`base`: the library shape a world's own shape draws, sculpt-scene.js shapeFrom).
+function checkTool(t,what,base=s => s) {
   if (!t || typeof t!=='object' || Array.isArray(t)) throw Error(`${what} is not a tool.`);
   if (typeof t.id!=='string' || !ID.test(t.id) || FIXED_TOOLS.includes(t.id) || t.id===LANDFORM_TOOL.id) throw Error(`${what} needs an id of its own (letters, digits, - and _).`);
   if (!label(t.label)) throw Error(`${what} needs a name of 1 to ${LABEL_MAX} characters.`);
   if (!TOOL_ICONS.includes(t.icon)) throw Error(`${what}: no icon ${JSON.stringify(t.icon)} (the set: ${TOOL_ICONS.join(', ')}).`);
   if (typeof t.color!=='string' || !COLOR.test(t.color)) throw Error(`${what} needs a color #rrggbb.`);
   if (!TOOL_GROUPS.includes(t.group)) throw Error(`${what} needs a group: ${TOOL_GROUPS.join(' or ')}.`);
-  if (!Object.hasOwn(LANDFORM_SHAPES,toolShape(t))) throw Error(`${what}: no shape ${JSON.stringify(toolShape(t))}.`);
+  if (!Object.hasOwn(LANDFORM_SHAPES,base(toolShape(t)))) throw Error(`${what}: no shape ${JSON.stringify(toolShape(t))}.`);
   if (t.rock!==undefined && (typeof t.rock!=='string' || !t.rock)) throw Error(`${what}: its rock is a preset's key.`);
 }
-// A world's toolbar (config.tools), checked: its shape tools in order, each id once.
+// A world's toolbar (config.tools), checked: its shape tools in order, each id once, each on a shape of the library or one of the world's own shapes
+// (`from`), with an optional help line of its own (the footer and the hover say it in place of its shape's).
 export function worldTools(config) {
   const tools=config?.tools??[],seen=new Set();
   if (!Array.isArray(tools)) throw Error('A world\'s tools are a list.');
   return tools.map((t,i) => {
-    checkTool(t,`The world's tool ${i+1}`);
+    checkTool(t,`The world's tool ${i+1}`,shape => shapeFrom(config,shape));
+    if (t.help!==undefined && (typeof t.help!=='string' || !t.help.trim() || t.help.length>HELP_MAX)) throw Error(`The world's tool ${t.id}: its help is a line of at most ${HELP_MAX} characters.`);
     if (/^map-\d/.test(t.id)) throw Error(`The world's tool ${t.id}: map-1, map-2, ... are a map's own tools' ids.`);
     if (seen.has(t.id)) throw Error(`The world's tool ${t.id} is listed twice.`);
     seen.add(t.id); return {...t,label:t.label.trim()};

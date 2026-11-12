@@ -158,3 +158,30 @@ test('a stroke that fell back keeps its shape for good: a Green hill through a w
   [n] = carryStrokes(markEdited([{kind: 'landform', tool: 'landform', points: [{x: 0, y: 0}], params: params(green, 'landform')}], defaultsIn(green)), ids(desert), defaultsIn(desert));
   assert.deepEqual([n.tool, n.kept, n.params.terraces], ['landform', undefined, 6]);
 });
+
+test('a world\'s own shape: a library shape as the world makes it, with its own numbers; scenes still name library shapes', async () => {
+  const {shapeFrom} = await import('../sculpt-scene.js');
+  const green = configs.green, worldShapes = {...green.worldShapes, green: {...green.worldShapes.green, knoll: {from: 'hill', diameter: 140, elevation: 20}, hill: {...green.worldShapes.green.hill, from: 'mountain'}, odd: {from: 'mesa'}}};
+  const config = {...green, worldShapes, tools: [...green.tools, {id: 'knoll', label: 'Knoll', icon: 'hill', color: '#b8d88d', group: 'shape', rock: 'soil', help: 'A small round rise.'}]};
+  assert.equal(shapeFrom(config, 'knoll'), 'hill');
+  assert.equal(shapeFrom(config, 'hill'), 'hill', 'a library shape keeps its own: a `from` on it means nothing');
+  assert.equal(shapeFrom(config, 'odd'), 'odd', 'a `from` that names no library shape draws nothing');
+  assert.deepEqual(toolDefaults(config, 'knoll'), {...toolDefaults(config, 'hill'), diameter: 140, elevation: toolDefaults(config, 'hill').elevation - 36 + 20}, 'the world\'s Hill with its own numbers');
+  assert.deepEqual(toolDefaults(config, 'hill'), toolDefaults(green, 'hill'));
+  assert.equal(worldTools(config).at(-1).help, 'A small round rise.');
+  assert.throws(() => worldTools({...config, tools: [{...config.tools.at(-1), id: 'odd'}]}), /no shape/);
+  assert.throws(() => worldTools({...config, tools: [{...config.tools.at(-1), help: ''}]}), /help/);
+  assert.throws(() => sceneNodes(config, [['knoll', [[0, 0]], {}]], {ground: false, settings: pageSettings(config)}), /not a tool/, 'a scene names library shapes');
+  // A world that does not make the shape makes no landform of it, and the Tool preset menu does not offer that world (sculpt.js syncToolStyle).
+  assert.equal(toolDefaults(config, 'knoll', 'red').curve, undefined);
+});
+
+test('a variant may ship its own toolbar; one without takes the world\'s', () => {
+  const py = process.env.PYTHON || '/Users/daniel/src/terraform/.venv/bin/python';
+  const out = JSON.parse(execFileSync(py, ['-c', `import json, sys; sys.path.insert(0, ${JSON.stringify(root)}); import sculpt
+c = {'defaults': {}, 'colors': {}, 'tools': ['world'], 'variantTools': {'modern': ['modern']}}
+print(json.dumps([sculpt.apply_variant(c, 'green', v) for v in ('modern', 'evad')]))`], {encoding: 'utf8'}));
+  assert.deepEqual(out.map(c => c.tools), [['modern'], ['world']]);
+  assert.ok(out.every(c => !('variantTools' in c)), 'the lists stay out of the page\'s config');
+  for (const config of Object.values(configs)) assert.ok(!('variantTools' in config));
+});

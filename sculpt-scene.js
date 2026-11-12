@@ -253,11 +253,19 @@ export const shapeDefaults=config => Object.fromEntries(SHAPE_FIELDS.map(([key])
 // Cover brushes share the plateau outline and write a field, not heights; the
 // mask brush (card C5) is one of them.
 export const isCover=kind => kind==='sand' || kind==='grass' || kind==='paint';
+// A world's own shape (its table's world.shapes.<name> = {from, ...numbers}): a shape of the library as that world makes it, with these numbers over it, so
+// a world can ship two tools on one library shape (two hills). Only that world's tools name one; a scene names library shapes, so none ever moves a scene.
+// The library shape a name draws: its `from` for a world's own shape (a library name keeps its own: a world's numbers for a library shape take no `from`).
+export function shapeFrom(config,entry,preset=config?.biomeId||'green') {
+  const from=config?.worldShapes?.[preset]?.[entry]?.from;
+  return !Object.hasOwn(LANDFORM_SHAPES,entry) && typeof from==='string' && Object.hasOwn(LANDFORM_SHAPES,from)?from:entry;
+}
 // A shape's (or another palette entry's) starting settings as a world makes it: the library's numbers, then the world's (`preset`: by default the
-// config's own world; a tool's Tool preset may name another). A sea-level preset keeps its elevation above the sea.
+// config's own world; a tool's Tool preset may name another); a world's own shape, its library shape as the world makes it, then its own numbers.
+// A sea-level preset keeps its elevation above the sea.
 export function toolDefaults(config,entry,preset=config?.biomeId||'green') {
-  const kind=strokeKind(entry);
-  const starting={...(kind==='landform'?{...LANDFORM_DEFAULTS,...LANDFORM_SHAPES[entry]}:{}),...config?.worldShapes?.[preset]?.[entry]},sea=Math.round(starting.heightReference||0)>=1;   // a sea-level or ground preset keeps its own offset
+  const base=shapeFrom(config,entry,preset),kind=strokeKind(base),shapes=config?.worldShapes?.[preset],numbers=name => { const {from,...n}=shapes?.[name]||{}; return n; };
+  const starting={...(kind==='landform'?{...LANDFORM_DEFAULTS,...LANDFORM_SHAPES[base]}:{}),...(base!==entry?numbers(base):{}),...numbers(entry)},sea=Math.round(starting.heightReference||0)>=1;   // a sea-level or ground preset keeps its own offset
   return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(config,key)*scale),lo,hi)])),cracks:0,diameter:200,amount:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,softness:50,preset,...starting,
     elevation:sea?Math.round(starting.elevation):clamp(Math.round((config?.baseHeight??24)+(starting.elevation??70)),-80,300)};
 }
