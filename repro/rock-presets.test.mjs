@@ -62,12 +62,13 @@ test('a recipe goes to the clipboard and back; bad lists and recipes are refused
   assert.deepEqual(back, {name: 'Columnar', key: null, knobs: ROCK_PRESETS.basalt.knobs, column: {sections: ROCK_PRESETS.basalt.sections}, colors: recipeRock('basalt').colors});
   assert.throws(() => parseRockRecipe('{"name":"x"}'), /no rock recipe/);
   assert.throws(() => parseRockRecipe('not json'), /no rock recipe/);
-  assert.throws(() => parseRockRecipe(JSON.stringify({format: 'terraform-rock-recipe', name: 'x', knobs: {faceJoint: 99}})), /faceJoint/);
+  assert.throws(() => parseRockRecipe(JSON.stringify({format: 'terraform-rock-recipe', name: 'x', knobs: {faceJoint: 'x'}})), /faceJoint/);
+  assert.equal(parseRockRecipe(JSON.stringify({format: 'terraform-rock-recipe', name: 'x', knobs: {faceJoint: 99}})).knobs.faceJoint, 3);   // out of range: its range's end
   const list = [{slot: 2, name: 'B', knobs: {faceJoint: 1}, column: null}, {slot: 1, name: 'A', knobs: {}, column: {sections: [{start: 0, beds: [[5, .5, 0]]}]}}];
   assert.deepEqual(copyRocks(JSON.parse(JSON.stringify(list))).map(r => r.slot), [1, 2]);
   assert.equal(copyRocks(undefined), null);
   for (const bad of [{}, [{slot: 0, name: 'x', knobs: {}}], [{slot: 16, name: 'x', knobs: {}}], [{slot: 1, name: 'x'}, {slot: 1, name: 'y'}], [{slot: 1, name: ''}],
-    [{slot: 1, name: 'x', knobs: {rockFace: -1}}], [{slot: 1, name: 'x', extra: 1}], [{slot: 1, name: 'x', column: {sections: [{start: 0, beds: [[-1, .5, 0]]}]}}],
+    [{slot: 1, name: 'x', knobs: {rockFace: 'deep'}}], [{slot: 1, name: 'x', extra: 1}], [{slot: 1, name: 'x', column: {sections: [{start: 0, beds: [[-1, .5, 0]]}]}}],
     [{slot: 1, name: 'x', column: {colors: []}}]])
     assert.throws(() => copyRocks(bad), undefined, JSON.stringify(bad));
 });
@@ -158,8 +159,9 @@ test('light through a rock (B4): three numbers a preset carries and an absorptio
   for (const key of ['lightThrough', 'absorbDepth', 'shadowTint']) {
     assert.ok(ROCK_KEYS.includes(key), key);
     assert.deepEqual(copyRockSettings({[key]: 0.6}), {[key]: 0.6});
-    assert.throws(() => copyRockSettings({[key]: 1.5}), new RegExp(key));
-    assert.throws(() => copyRockSettings({[key]: -0.1}), new RegExp(key));
+    assert.deepEqual(copyRockSettings({[key]: 1.5}), {[key]: 1}, 'a number past the range is held to its end (main\'s rule)');
+    assert.deepEqual(copyRockSettings({[key]: -0.1}), {[key]: 0});
+    assert.throws(() => copyRockSettings({[key]: 'clear'}), new RegExp(key));
   }
   assert.deepEqual(checkColors({absorb: '#2F6B97'}), {rock: null, beds: null, absorb: '#2f6b97'});
   assert.deepEqual(checkColors({rock: '#101010', absorb: null}), {rock: '#101010', beds: null}, 'no absorption color: the world\'s');
