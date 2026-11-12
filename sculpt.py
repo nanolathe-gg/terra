@@ -99,6 +99,8 @@ KNOB_DEFAULTS = dict(
     spurCount=0, spurLength=120, spurSpread=.4, spurWidth=.8, spurTaper=.6, spurHeight=.7, spurForks=0, spurBulb=0, crestVary=0, crestTaper=0,
     # Local vegetation (card C5 stage 2): change about the world's own cover, 0 none.
     styleVegetation=0,
+    # Rock presets (B2): the rock a landform is made of; -1, Rock beneath, keeps the rock already there.
+    rockPreset=-1,
     # Placed fissures (card C4 stage 2): only the Fissure tool reads them.
     fissureWidth=5, fissureJag=.5, fissureBranches=3, fissureBranchLen=90, fissureBranchSpread=.5, fissureTaper=.6,
     fissureNetwork=0, fissureCell=70, fissureCrack=.4, fissureDark=.6,

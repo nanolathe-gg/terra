@@ -885,10 +885,13 @@ fn rockSourceAt(p:vec2f)->vec4f {
     return rockFieldAt(rockSourceTex,p);
 }
 // The rock slot of world point p: mask plane 20 (sculpt-scene.js MASK_KEYS 'rock') holds the slot + 1 a stroke claims its cell for, read at
-// the nearest cell (a slot is not blended); 0, unclaimed, is slot 0, the world's own rock. A chunk with no claim reads nothing.
+// the nearest cell (a slot is not blended); 0, unclaimed, is slot 0, the world's own rock. A chunk with no claim reads nothing. The read is
+// moved up to 4 px by noise (8 and 3 px), so a contact between two rocks is a ragged line, not the lattice's 2-px stairs (by eye at 3x on
+// sm-sun25 drawn by two strokes: the nearest cell drew a straight seam across a wall, which 4 px breaks up).
 fn rockSlotAt(p:vec2f)->u32 {
     if(u.rockIdOn==0){return 0u;}
-    let cell=clamp(vec2i(floor(p/(u.size-1.0)*(u.grid-1.0)+.5-u.chunkGridOrigin)),vec2i(0),vec2i(textureDimensions(masksTex))-1);
+    let q=p+(vec2f(valueNoise(p/8.0+vec2f(3.1,7.7)),valueNoise(p/8.0+vec2f(11.3,5.9)))*.7+vec2f(valueNoise(p/3.0+vec2f(2.3,9.1)),valueNoise(p/3.0+vec2f(6.7,1.3)))*.3)*4.0;
+    let cell=clamp(vec2i(floor(q/(u.size-1.0)*(u.grid-1.0)+.5-u.chunkGridOrigin)),vec2i(0),vec2i(textureDimensions(masksTex))-1);
     return u32(clamp(round(textureLoad(masksTex,cell,5,0).r*127.0)-1.0,0.0,15.0));
 }
 // The point being evaluated belongs to the rock at p: every rock number it reads from here on is its slot's.

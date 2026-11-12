@@ -4,7 +4,7 @@ import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
-import {ROCK_PRESETS,ROCK_KEYS,copyRockSettings,rockPresetFor,applyWorldRock} from './sculpt-rock-presets.js';
+import {ROCK_PRESETS,ROCK_KEYS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse} from './sculpt-rock-presets.js';
 import {KNOBS,LOW_GROUND_RGB,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
@@ -59,6 +59,8 @@ let config, renderer, grid, size, spacing, services;
 // A world's configuration file, by the same relative path on a static host and on sculpt.py: config/<world>.json, or config/<world>--<variant>.json.
 const configUrl=(world,variant)=>`config/${encodeURIComponent(world)}${variant?'--'+encodeURIComponent(variant):''}.json`;
 let defaultColumn, columnOverride=null, columnEditing=false, syncColumnPanel=()=>{};
+// Rock presets (B2): the map's own rocks in slots 1-15 (sculpt-rock-presets.js); slot 0 is the world's rock, its flat settings and column.
+let mapRocks=[], rockUseKey='[]';
 let pagedCoarseStarted=false, mapCanvas=null, regionalFields=null, originCellX=0, originCellY=0, worldSize=0, worldGrid=0, regionalWeather=null;
 // Integer origins preserve the canonical multiplication order: (cell + origin)
 // times spacing, rather than an accumulated floating-point world offset.
@@ -508,7 +510,7 @@ const coastLayerReach=s => {
 // waterline if that is nearer, so each riser is an arc round its bite, concentric with the bite's other
 // risers, meeting a neighbor's arcs at a cusp (the overlap of two discs).
 function markViewChanged(invalidate=true) { revision++; $('export').disabled=true; if (mapCanvas && invalidate) mapCanvas.invalidate(); }
-function markChanged() { markViewChanged(false); error(); }
+function markChanged() { markViewChanged(false); error(); syncRocks(); }
 
 // Shapes are nodes: kind, path, parameters and seed. The map is rebuilt by
 // replaying nodes in order, so relative heights follow the ground beneath
@@ -550,6 +552,23 @@ const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0
 const overlaps=(a,b) => a.x0<=b.x1 && b.x0<=a.x1 && a.y0<=b.y1 && b.y0<=a.y1;
 function evaluate(from=0,rect=null) {
   regionalFields.changed(regionalDirtyRect(from,rect)); markChanged();
+}
+// The renderer's rock table holds the presets strokes choose, and no other (a preset no stroke uses builds no pipeline and moves no pixel).
+function syncRocks() {
+  if (!renderer) return;
+  const used=rocksInUse(nodes,mapRocks),key=JSON.stringify(used);
+  if (key===rockUseKey) return;
+  rockUseKey=key; renderer.setRocks(new Map(used.map(r => [r.slot,r]))); markViewChanged(); schedule();
+}
+// The Rock option's choices: Rock beneath, the world's rock, then the map's presets by name. A stroke whose preset is gone shows Rock beneath.
+function syncRockChoices() {
+  const select=$('lf-rock'),value=select.value;
+  select.replaceChildren(new Option('Rock beneath','-1'),new Option(worldRockName(config),'0'),...mapRocks.map(r => new Option(r.name,String(r.slot))));
+  select.value=[...select.options].some(o => o.value===value)?value:'-1';
+}
+// The map's rock presets replaced (a load, an undo, a preset edited): strokes keep only choices the list holds, and the renderer and the Rock option follow.
+function restoreRocks(rocks) {
+  mapRocks=structuredClone(rocks); nodes=keepStrokeRocks(nodes,mapRocks); syncRockChoices(); syncRocks();
 }
 
 function regionalReadApron(n) {
@@ -968,12 +987,13 @@ function flushEval() {
 }
 function checkpoint(mapOnly=false) {
   flushEval();
-  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); if (history.length>48) history.shift(); historyIndex=history.length-1;
+  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),rocks:structuredClone(mapRocks),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); if (history.length>48) history.shift(); historyIndex=history.length-1;
   renderLayers(); updateControls(); persistLater();
 }
 function moveHistory(delta) {
   const next=historyIndex+delta; if (!ready || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
   if(history[next].rock)setRockSettings(history[next].rock);
+  if(history[next].rocks&&JSON.stringify(history[next].rocks)!==JSON.stringify(mapRocks))restoreRocks(history[next].rocks);
   if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); return; }
   cancelWeather(); nodes=cloneNodes(history[next].nodes); selected=-1;pathAdding=false;drawMode='select';pathPoint=-1;pathIndex=0; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
   if (JSON.stringify(history[next].column)!==JSON.stringify(columnOverride)) { restoreColumn(history[next].column); syncColumnPanel(); }
@@ -1075,7 +1095,7 @@ function sketch() {
   applySeedControl();
   rememberTool();
   return {format:'nanolathe-terrain-sculpt',version:6,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,varySeed,refinementSeed,
-    ...(columnOverride?{column:structuredClone(columnOverride)}:{}),rock:rockSettings(),
+    ...(columnOverride?{column:structuredClone(columnOverride)}:{}),rock:rockSettings(),rocks:structuredClone(mapRocks),
     toolSettings,softness:Number($('softness').value),relief:Number($('relief').value),
     mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
@@ -1133,7 +1153,7 @@ let keepSaved=false;   // set while the saved copy failed to load: leaving the p
 addEventListener('pagehide',() => { if (!stroke && !moving && !loading && !keepSaved) saveWorking(); });
 function loadSketch(s,carry=false) {
   if (!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==6 || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n)) throw new Error('Load a map stroke graph with the same canvas and grid size.');
-  const next=deserializeNodes(carry?carryNodes(s.nodes):s.nodes),column=copyColumn(s.column),rock=copyRockSettings(s.rock);
+  const next=deserializeNodes(carry?carryNodes(s.nodes):s.nodes),column=copyColumn(s.column),rock=copyRockSettings(s.rock),rocks=copyRocks(s.rocks);
   if(!carry&&rock)setRockSettings(rock);
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
@@ -1148,7 +1168,7 @@ function loadSketch(s,carry=false) {
   if (typeof s.clay==='boolean') $('clay').checked=s.clay;
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
   restoreColumn(column);syncColumnPanel();
-  nodes=next; selected=-1;pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
+  mapRocks=rocks??worldRocks(config); syncRockChoices(); nodes=keepStrokeRocks(next,mapRocks); selected=-1;pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
 }
 // A sketch remembers the world it was drawn in. Loading one in another world
 // reloads the recorded world first, then plays the sketch there. The file is
@@ -1183,7 +1203,7 @@ async function loadSketchFile(s,commit=true) {
       served=servedConfig?.biomeId===biome;
       variant=served && typeof s.variant==='string' && servedConfig.variants?.[s.variant]?s.variant:'';
       if(s.variant && variant!==s.variant)throw new Error('The saved column variant is unavailable.');
-      copyColumn(s.column);copyRockSettings(s.rock);s.nodes.forEach(checkedHeights);
+      copyColumn(s.column);copyRockSettings(s.rock);copyRocks(s.rocks);s.nodes.forEach(checkedHeights);
     } catch (err) { error(err.message); return false; }
     if (!served) { error(`The saved terrain belongs to the ${biome} world, which this server does not have. The current terrain was left as it was.`); return false; }
     const token=Math.random().toString(36).slice(2)+Date.now().toString(36);
@@ -1629,7 +1649,7 @@ async function bootMap() {
   }
   else status('Blank map ready · draw terrain with the existing tools.');
   ready=true; $('editor').disabled=false; $('world-editor').disabled=false;
-  history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
+  history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),rocks:structuredClone(mapRocks),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
   const pending=await takePendingSketch(experiment.get('pendingSketch'));
   if (pending) { try { loadSketch(pending); checkpoint(); status('Loaded the saved map.'); if (experiment.get('shared')) { window.history.replaceState(null,'',(u => (u.searchParams.delete('shared'),u.toString()))(new URL(location.href))); announceShared(); } } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
@@ -1668,7 +1688,7 @@ async function boot() {
     if (worldId!==config.biomeId) document.querySelector('.canvas-caption h2').textContent=worlds[worldId].name+' terrain';
     addDefaults(experiment,config.defaults);
     borrowBeach(config,experiment);   // a beach another world lends (Beach, below Ground pattern): before the renderer and the panel read the world's layers
-    buildShapeOptions();
+    buildShapeOptions(); mapRocks=worldRocks(config); syncRockChoices();
     for (const kind of Object.keys(HELP)) toolSettings[kind]=toolDefaults(kind);
     showTool(toolSettings[tool]);
     // The surface sliders open at the world's material values; the address may set the ring's three (a world's own fringe settings, 0..1).

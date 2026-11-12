@@ -98,7 +98,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   await openHost();
   const engine = await import('../sculpt-scene.js'), fieldsModule = await import('../sculpt-gpu-fields.js');
   const {configureMap} = await import('../sculpt-map.js'), {TerrainRenderer} = await import('../sculpt-renderer.js');
-  const {copyRockSettings, applyWorldRock} = await import('../sculpt-rock-presets.js');
+  const {copyRockSettings, applyWorldRock, copyRocks, worldRocks, keepStrokeRocks, rocksInUse} = await import('../sculpt-rock-presets.js');
   const {copyColumn} = await import('../sculpt-column.js');
   const settings = new URLSearchParams(search);
   for (const [key,value] of Object.entries(copyRockSettings(scene.rock) || {})) if (!settings.has(key)) settings.set(key,value);
@@ -108,6 +108,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   if (config.biomeId !== scene.biome) throw new Error(`asked for world ${scene.biome}, got ${config.biomeId}`);
   config.services = services;
   const worldColumn = {column: config.column}, columnOverride = copyColumn(scene.column);
+  let rocks = copyRocks(scene.rocks) ?? worldRocks(config), rockKey = '[]';   // the map's rock presets (sculpt.js mapRocks): the scene's, else the world's
   if (columnOverride) config.column = columnOverride;
   const catalog = await json('config/catalog.json');
   config.exportCatalog = catalog; config.defaultSeaLevel = catalog.worlds[config.biomeId]?.defaultSeaLevel;
@@ -134,13 +135,17 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
     ? fieldsModule.createPagedFields({...common, budget: () => engine.pagedBudget({gpuMB, renderer, chunk: Math.min(512, renderer.chunkSize()), maskCount: engine.MASK_KEYS.length, view}), foregroundPending: () => false, apron: Number(settings.get('timeApron') || 128), forceRing: Number(settings.get('pageRing') || 0)})
     : fieldsModule.createGpuFields(common);
   // sculpt.js scriptedScene: the scene's nodes replace the map's, and the fields evaluate them.
-  const play = (list, {ground = true} = {}) => { nodes = engine.sceneNodes(config, list, {ground, seed, settings}); if (scene_) scene_.nodes = nodes; fields.changed(); return nodes.length; };
+  // sculpt.js syncRocks: the renderer's rock table holds the presets strokes choose, and no other.
+  const syncRocks = () => { const used = rocksInUse(nodes, rocks), key = JSON.stringify(used); if (key !== rockKey) { rockKey = key; renderer.setRocks(new Map(used.map(r => [r.slot, r]))); } };
+  const play = (list, {ground = true} = {}) => { nodes = keepStrokeRocks(engine.sceneNodes(config, list, {ground, seed, settings}), rocks); if (scene_) scene_.nodes = nodes; fields.changed(); syncRocks(); return nodes.length; };
   let scene_ = null;
   play(strokes, {ground: scene.ground !== false});
   if (paged) await fields.startCoarse();   // bootMap: a paged map's coarse lattice fills from the start
   const sliders = engine.surfaceSliders(config, settings);
   scene_ = {config, settings, renderer, canvas, fields, nodes, errors, play, context, engine, fieldsModule, worldSize, worldGrid, spacing, minH, maxH, seed, refinementSeed, sliders, paged, ownColors, worldColumn, columnOverride,
     material: engine.materialKnobs(sliders, refinementSeed, renderer.variant.get('transition')), drawOptions: options => engine.drawOptions(sliders, options),
+    // The map's rock presets, and a new list for them (a preset edited, added or removed), as sculpt.js restoreRocks takes it.
+    get rocks() { return rocks; }, setRocks(list) { rocks = copyRocks(list) ?? []; nodes = keepStrokeRocks(nodes, rocks); scene_.nodes = nodes; fields.changed(); syncRocks(); },
     dispose() { fields.destroy?.(); renderer.dispose(); }};
   return scene_;
 }
