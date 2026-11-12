@@ -207,9 +207,10 @@ fn voxelDensity(p:vec3f)->f32 {
     let course=voxelNoise(r/vec3f(max(14.0,u.rock[rs & rockMask].faceRun*.3),max(14.0,u.rock[rs & rockMask].faceRun*.3),max(3.0,u.rock[rs & rockMask].faceBed*.6)))-.5;
     let faces=u.rock[rs & rockMask].faceBlock*(c.face*.65+broad.face*1.05);
     let mass=course*u.rock[rs & rockMask].faceMass*2.2;
-    // Fine laminations follow the same deformed column as the larger beds.
-    let phase=fract(voxelColumnCoord(p)/u.rock[rs & rockMask].faceLaminaSize);
-    let lamina=(smoothstep(.02,.2,phase)*(1.0-smoothstep(.72,.98,phase))-.5)*u.rock[rs & rockMask].faceLamina*2.5;
+    // The beds as the face can draw them (columnGather, voxelHardness): thin beds gathered, their lost ledges drawn as fine layers.
+    let column=voxelColumnCoord(p);var gathered=0.0;
+    if(u.rock[rs & rockMask].columnCount>0){gathered=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary)).y;}
+    let lamina=voxelFine(p,column,gathered).x;
     let bed=(.55-voxelHardness(p))*u.rock[rs & rockMask].faceLedge*2.4;
     let detail=voxelDetail(r);
     let pits=(abs(voxelNoise(r/max(2.0,u.rock[rs & rockMask].faceCreaseSize))-.5)-.25)*u.rock[rs & rockMask].faceCrease*2.5;
@@ -252,7 +253,9 @@ fn voxelDensity(p:vec3f)->f32 {
     // A whole block's faces carry the relief the draped face has: the blocks' own offsets and tilts (so two rock blocks side by side meet at a
     // step, a visible joint), pits, grit, grooves, chips and fragments, at half strength and up to 1 px, so the planes stay planes. Near a face the blocks' answer changes by about 3 a px.
     let relief=clamp((faces+(pits+grit-runnel)*detail-spall+inclusion)*u.rock[rs & rockMask].rockFace*.25*voxelRelief(p.xy,slope),-1.0,1.0);
-    return draped*(1.0-share*min(blocks.y,1.0))+(8.0*blocks.x-3.0*relief*min(blocks.y,1.0))*share;
+    // The fine layers run on across the blocks, so a layered rock's lines are cut only by its joints, not wiped from every whole block.
+    let fine=clamp(lamina*u.rock[rs & rockMask].rockFace*.25*voxelRelief(p.xy,slope),-1.0,1.0);
+    return draped*(1.0-share*min(blocks.y,1.0))+(8.0*blocks.x-3.0*(relief+fine)*min(blocks.y,1.0))*share;
 }
 @compute @workgroup_size(4,8,8)
 fn voxelBuild(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) local:vec3u){
