@@ -3352,6 +3352,42 @@ configurable"; 7 "a whole sand system", lower priority; 8 "Fix it"; 9 and
   base plains repeat exactly. An 8x8 map holds 17,028 tiles, so this bites
   only above that size.
 
+- *Rock presets, the artist's model (rows 2 and 3, B2) [landed 2026-11-11;
+  built by an Opus agent, reviewed and checked by Claude].* A map holds
+  the world's own rock (slot 0) and up to 15 presets, each a name, rock
+  numbers and beds. Every world ships Smooth soil (the world's rock with
+  Rock relief, its share of steep faces, debris, runoff and soil terraces
+  at 0, ledges grass: red-1's clay high-pass 1.56 to 0.69 **[measured by
+  the agent]**); modern Green also lists Jointed basalt and Pitted
+  limestone, modern Desert Thin shale and Conglomerate. A landform's Rock
+  option chooses one (Rock beneath, the default, claims nothing); the shape
+  claims mask plane 20 wherever it moves the ground, with its talus and
+  shore fingers, so the later shape wins; Erase clears the claim all or
+  nothing. The World pane's Rock & cliffs has the list with Add from a
+  starting recipe, Duplicate, Rename, Delete (its shapes go to Rock
+  beneath in the same undo step) and Copy/Paste recipe as JSON. Editing a
+  preset uploads the table and re-bakes; the shape is not evaluated again.
+  Saves, undo, scenes, share links and export carry it; an old save loads
+  as before. The contact between two rocks is read through 4 px of noise,
+  with no blend; it does not read as a seam **[by eye, agent and
+  Claude]**. *Checks on the tip merged with main:* land tier passes, 0 of
+  34 scenes changed; `repro/rock-slots.mjs`,
+  `repro/rock-presets-scene.mjs` (an edited preset moved 6.8% of its
+  window and no pixel farther than 125 px from cells it claims; the same
+  export twice) and `repro/rock-presets-ui.mjs` (Chrome: add, pick, edit,
+  undo, redo, save and load, copy and paste, delete) exit 0; export bytes
+  exit 0 with the same tile counts. `repro/perf.mjs` map4 on
+  green-modern-3, alternating, load average 4 to 5 (another agent
+  rendering): load to final 1729/2316/2382 ms main and 2322/2414/2211
+  tip; release 2076/1975/1763 and 2155/1955/1866; drag latency p50
+  41.7/45.8/36.8 and 41.6/48.2/38.8: no change outside the noise
+  **[measured under load]**. *Not landed, for the owner:* the Hill button
+  choosing Smooth soil (branch `realism/rock-presets`, 13cf404c): green-5
+  moves 21%, any map with a hill then runs the general pipelines, and the
+  button names slot 1 by number. *Open:* colors per preset (B3; Thin
+  shale's first bed paints a gray band at a Desert foot), per-recipe
+  hardness in the Time pass, a hover picture for the Rock option.
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
