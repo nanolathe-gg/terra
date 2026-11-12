@@ -81,6 +81,35 @@ fn visibility(p: vec2f, h: f32) -> f32 {
     return 1.0 - shadow;
 }
 
+// B4: where visibility()'s cast shadow comes from: the sample that shades the point most (the same samples), and how much of the occluder the
+// sun's line crosses there: the length of the line under the heights over 36 px about that sample (a fin's thickness, or 36 for a mesa).
+// It runs only on shaded pixels and only where a rock in use colours its shadow.
+fn shadowBlocker(p: vec2f, h: f32) -> vec3f {
+    let toward = normalize(u.light.xy);
+    let elevation = u.light.z / length(u.light.xy);
+    var most = 0.0; var at = 0.0;
+    for (var i = 4; i <= 12; i++) {
+        let d = f32(i * i) * 1.4 + 2.0;
+        let q = p + toward * d;
+        if (q.x < 0.0 || q.y < 0.0 || q.x >= u.size || q.y >= u.size) { continue; }
+        let s = smoothstep(-2.0, 4.0, surfaceHeight(q) - h - d * elevation);
+        if (s > most) { most = s; at = d; }
+    }
+    let farStep = 6.0 / elevation;
+    for (var k = 0; k < 40; k++) {
+        let d = 238.6 + f32(k) * farStep;
+        let fade = clamp((240.0 - d * elevation) / 40.0, 0.0, 1.0);
+        if (fade <= 0.0) { break; }
+        let q = p + toward * d;
+        if (q.x < 0.0 || q.y < 0.0 || q.x >= u.size || q.y >= u.size) { continue; }
+        let s = fade * smoothstep(-2.0, 4.0, baseHeight(q) - h - d * elevation);
+        if (s > most) { most = s; at = d; }
+    }
+    var crossed = 0.0;
+    for (var j = -12; j < 12; j++) { let d = at + (f32(j) + 0.5) * 1.5; crossed += select(0.0, 1.5, baseHeight(p + toward * d) > h + d * elevation); }
+    return vec3f(p + toward * at, crossed);
+}
+
 fn occlusion(p: vec2f, h: f32) -> f32 {
     var result = 0.0;
     for (var i = 0; i < 8; i++) {
@@ -1601,6 +1630,20 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let filtered = absorbFilter(rs, chord) * u.sunColor / max(flatTintLuma, 0.05);
         lightTint = (lightTint * shading + filtered * through) / max(shading + through, 0.0001);
         shading += through;
+    }
+    // B4: a cast shadow cast by a rock that colours its shadow lets part of the sun through, in the rock's absorption hue: Colored cast shadow of
+    // the occluder (its slot where the sun's line meets it), a third of it through any thickness and the rest the less the more of the occluder
+    // the line crosses (e^(-t/12), as light through a rock): a thick rock's shadow is dim and coloured, a thin one's brighter.
+    if (u.shadowTintAny > 0.0 && shadow < 1.0) {
+        let by = shadowBlocker(p, max(h, u.sea));
+        let caster = rockSlotAt(by.xy);
+        let row = u.rock[caster & rockMask].rockColors[6];
+        let hue = select(slotRock(caster), row.rgb, row.a > 0.5);
+        let onSlope = smoothstep(0.08, 0.35, slope);
+        let passed = 0.95 * max(0.0, dot(normal, u.light)) * (1.0 - shadow) * mix(u.flatShadow, 1.0, onSlope) * u.rock[caster & rockMask].shadowTint * (0.3 + 0.7 * exp(-by.z / 12.0)) / flatLight;
+        let filtered = hue / max(max(hue.r, max(hue.g, hue.b)), 0.02) * u.sunColor / max(flatTintLuma, 0.05);
+        lightTint = (lightTint * shading + filtered * passed) / max(shading + passed, 0.0001);
+        shading += passed;
     }
     // S4 (Archipelago's domes): a crease, where the authored height lies below its rings 6 and 12 px out (a gully's floor, a valley's), loses light
     // whatever its facing, after the directional shading is scaled, so gullies read on a world that keeps little of it. A plane or a crest gives 0.
