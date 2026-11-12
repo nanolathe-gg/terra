@@ -62,12 +62,13 @@ test('a recipe goes to the clipboard and back; bad lists and recipes are refused
   assert.deepEqual(back, {name: 'Columnar', knobs: ROCK_PRESETS.basalt.knobs, column: {sections: ROCK_PRESETS.basalt.sections}});
   assert.throws(() => parseRockRecipe('{"name":"x"}'), /no rock recipe/);
   assert.throws(() => parseRockRecipe('not json'), /no rock recipe/);
-  assert.throws(() => parseRockRecipe(JSON.stringify({format: 'terraform-rock-recipe', name: 'x', knobs: {faceJoint: 99}})), /faceJoint/);
+  assert.throws(() => parseRockRecipe(JSON.stringify({format: 'terraform-rock-recipe', name: 'x', knobs: {faceJoint: 'x'}})), /faceJoint/);
+  assert.equal(parseRockRecipe(JSON.stringify({format: 'terraform-rock-recipe', name: 'x', knobs: {faceJoint: 99}})).knobs.faceJoint, 3);   // out of range: its range's end
   const list = [{slot: 2, name: 'B', knobs: {faceJoint: 1}, column: null}, {slot: 1, name: 'A', knobs: {}, column: {sections: [{start: 0, beds: [[5, .5, 0]]}]}}];
   assert.deepEqual(copyRocks(JSON.parse(JSON.stringify(list))).map(r => r.slot), [1, 2]);
   assert.equal(copyRocks(undefined), null);
   for (const bad of [{}, [{slot: 0, name: 'x', knobs: {}}], [{slot: 16, name: 'x', knobs: {}}], [{slot: 1, name: 'x'}, {slot: 1, name: 'y'}], [{slot: 1, name: ''}],
-    [{slot: 1, name: 'x', knobs: {rockFace: -1}}], [{slot: 1, name: 'x', extra: 1}], [{slot: 1, name: 'x', column: {sections: [{start: 0, beds: [[-1, .5, 0]]}]}}],
+    [{slot: 1, name: 'x', knobs: {rockFace: 'deep'}}], [{slot: 1, name: 'x', extra: 1}], [{slot: 1, name: 'x', column: {sections: [{start: 0, beds: [[-1, .5, 0]]}]}}],
     [{slot: 1, name: 'x', column: {colors: []}}]])
     assert.throws(() => copyRocks(bad), undefined, JSON.stringify(bad));
 });

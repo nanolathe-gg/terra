@@ -26,15 +26,17 @@ export const ROCK_PRESETS={
 export const ROCK_KEYS=[...Object.keys(base),'strata','strataContrast','strataGrain'];
 const ranges=new Map(KNOBS.flatMap(([,rows])=>rows.map(([key,,lo,hi])=>[key,[lo,hi]])));
 // Validate the entire recipe before changing the open scene. Unknown, removed
-// fields are ignored, like the editor's other saved controls.
+// fields are ignored, like the editor's other saved controls. A finite number
+// outside its control's range loads at the range's nearer end, so a map saved
+// before a range moved still opens; anything else is refused.
 export function copyRockSettings(value){
  if(value==null)return null;
  if(typeof value!=='object'||Array.isArray(value))throw Error('Invalid rock settings.');
  const result={};
  for(const key of ROCK_KEYS)if(Object.hasOwn(value,key)){
   const n=value[key],[lo,hi]=ranges.get(key);
-  if(typeof n!=='number'||!Number.isFinite(n)||n<lo||n>hi)throw Error(`Invalid rock setting: ${key}.`);
-  result[key]=n;
+  if(typeof n!=='number'||!Number.isFinite(n))throw Error(`Invalid rock setting: ${key}.`);
+  result[key]=Math.min(hi,Math.max(lo,n));
  }
  return result;
 }
