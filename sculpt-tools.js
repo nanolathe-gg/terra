@@ -1,13 +1,13 @@
 // The toolbar's shape tools. A world defines its own (config.tools, its table's world.tools), in order: each {id, label, icon, color, group, shape,
 // rock?} draws its shape (sculpt-scene.js LANDFORM_SHAPES) as the world makes it (toolDefaults, config.worldShapes). sculpt.html holds the fixed
-// buttons (Select, the generic Landform, Fissure and the paint tools) and the icon set; the page builds only the shape buttons, from this list, into
+// buttons (Select, the generic Landform, Fissure and the paint tools) and the icon set (Save as tool's icon choices); the page builds only the shape buttons, from this list, into
 // #shape-tools and #water-tools. A stroke names the tool it was drawn with (node.tool), and shows as the generic landform when the toolbar lacks
 // it (another world's tool). No DOM here: the page and the tests share it.
 import {LANDFORM_DEFAULTS,LANDFORM_SHAPES,SHAPE_FIELDS} from './sculpt-scene.js';
 import {landformTool} from './sculpt-shape-presets.js';
 import {rockByKey} from './sculpt-rock-presets.js';
 
-// The icons sculpt.html's #tool-icons template holds, one <svg data-icon> each: a tool picks one by name.
+// The icon set: Save as tool's icon choices in sculpt.html (#tool-save-icons, one button with its svg each), which the shape buttons copy: a tool picks one by name.
 export const TOOL_ICONS=['landform','plateau','hill','mountain','ramp','valleyV','valleyU','valleyT','crater','crystal','deep','shallow','river','braided'];
 // The palette groups a shape tool joins (sculpt.html's Shape and Water groups).
 export const TOOL_GROUPS=['shape','water'];

@@ -151,13 +151,13 @@ const savedCard=(id,card) => card && Object.hasOwn(config.worldShapes||{},card.p
 const toolLabel=id => toolById(id)?.label;
 const firstTool=() => shapeTools()[1]?.id??LANDFORM_TOOL.id;
 // The shape buttons, built from the world's list into their groups (the one exception to the page's layout living in sculpt.html): each a copy of its icon
-// from the set (#tool-icons), its id in data-tool as every check clicks it, its shape in data-shape for the hover help.
+// from the set (Save as tool's icon choices in sculpt.html, #tool-save-icons), its id in data-tool as every check clicks it, its shape in data-shape for the hover help.
 function buildToolbar() {
-  const icons=$('tool-icons').content;
+  const icon=name => $('tool-save-icons').querySelector(`[data-icon-choice="${name}"] svg`).cloneNode(true);
   for (const [group,box] of [['shape','shape-tools'],['water','water-tools']]) $(box).replaceChildren(...shapeTools().slice(1).filter(t => t.group===group).map(t => {
     const b=document.createElement('button');
     b.dataset.tool=t.id; b.dataset.shape=toolShape(t); b.setAttribute('aria-pressed','false'); b.setAttribute('aria-label',t.label); b.title=t.label;
-    b.style.setProperty('--tool-color',t.color); b.disabled=true; b.append(icons.querySelector(`[data-icon="${t.icon}"]`).cloneNode(true));
+    b.style.setProperty('--tool-color',t.color); b.disabled=true; b.append(icon(t.icon));
     if (t.card) b.dataset.mapTool='';   // a map's own: its hover shows its shape's sketch, not the shape's rendered example
     return b;
   }));
@@ -1340,19 +1340,11 @@ $('tool-style').addEventListener('change',() => {
 // its rock, after the world's tools in the group of the tool the shape was drawn with. One undo step; strokes are not changed. Delete (on a map tool's brush)
 // takes the button away; shapes drawn with it keep their numbers and show as Landform.
 let toolSaveFor='',toolSaveIcon=LANDFORM_TOOL.icon;
-const iconName=icon => shapeTools().find(t => t.icon===icon && !t.card)?.label??icon;
 function pickToolIcon(icon) {
   toolSaveIcon=icon;
   for (const b of $('tool-save-icons').children) b.setAttribute('aria-checked',String(b.dataset.iconChoice===icon));
 }
-function buildToolIconChoices() {
-  const icons=$('tool-icons').content;
-  $('tool-save-icons').replaceChildren(...TOOL_ICONS.map(icon => {
-    const b=document.createElement('button'); b.type='button'; b.dataset.iconChoice=icon; b.setAttribute('role','radio'); b.setAttribute('aria-checked','false');
-    b.setAttribute('aria-label',`${iconName(icon)} icon`); b.title=iconName(icon); b.append(icons.querySelector(`[data-icon="${icon}"]`).cloneNode(true));
-    b.onclick=() => pickToolIcon(icon); return b;
-  }));
-}
+for (const b of $('tool-save-icons').children) b.onclick=() => pickToolIcon(b.dataset.iconChoice);
 function prefillToolSave(n) {
   const from=toolById(strokeTool(n,toolIds()))??LANDFORM_TOOL,taken=new Set(shapeTools().map(t => t.label));
   let k=2; while (taken.has(`${from.label} ${k}`)) k++;
@@ -1904,7 +1896,7 @@ async function boot() {
     if (worldId!==config.biomeId) document.querySelector('.canvas-caption h2').textContent=worlds[worldId].name+' terrain';
     addDefaults(experiment,config.defaults);
     borrowBeach(config,experiment);   // a beach another world lends (Beach, below Ground pattern): before the renderer and the panel read the world's layers
-    buildShapeOptions(); mapRocks=worldRocks(config); syncRockChoices(); buildToolbar(); buildToolIconChoices();
+    buildShapeOptions(); mapRocks=worldRocks(config); syncRockChoices(); buildToolbar();
     // A new map starts with the world's tools, on the first of them where the world has no Plateau.
     if (!toolIds().has(tool)) tool=firstTool();
     for (const id of toolIds()) toolSettings[id]=toolCard(id);

@@ -41,10 +41,11 @@ const TODAY = [['plateau', 'Plateau', '#e6bb82', 'shape'], ['hill', 'Hill', '#b8
 
 test('every world\'s toolbar is today\'s shape buttons: ids, labels, icons, colors, groups and order', () => {
   for (const [name, config] of Object.entries(configs)) assert.deepEqual(worldTools(config), TODAY, name);
-  // The icon set is sculpt.html's template, and the fixed buttons (the generic Landform among them) are in the markup at their places.
-  const html = readFileSync(root + 'sculpt.html', 'utf8'), template = html.split('<template id="tool-icons">')[1].split('</template>')[0];
-  assert.deepEqual([...template.matchAll(/data-icon="(\w+)"/g)].map(m => m[1]), TOOL_ICONS);
-  const palette = html.split('class="tool-groups"')[1].split('<template')[0];
+  // The icon set is Save as tool's icon choices, written in sculpt.html with their svgs, and the fixed buttons (the generic Landform among them) are in the
+  // markup at their places.
+  const html = readFileSync(root + 'sculpt.html', 'utf8'), choices = html.split('<div id="tool-save-icons"')[1].split('</div>')[0];
+  assert.deepEqual([...choices.matchAll(/data-icon-choice="(\w+)"[^>]*><svg class="tool-icon"/g)].map(m => m[1]), TOOL_ICONS);
+  const palette = html.split('class="tool-groups"')[1].split('</section>')[0];
   assert.deepEqual([...palette.matchAll(/data-tool="(\w+)"|id="(shape|water)-tools"/g)].map(m => m[1] ?? `[${m[2]}]`), ['move', 'landform', '[shape]', 'fissure', '[water]', 'smooth', 'erase', 'paint', 'sand', 'grass']);
   assert.deepEqual(FIXED_TOOLS.toSorted(), ['erase', 'fissure', 'grass', 'move', 'paint', 'sand', 'smooth']);
   for (const bad of [{...TODAY[0], id: 'fissure'}, {...TODAY[0], id: 'a b'}, {...TODAY[0], icon: 'star'}, {...TODAY[0], color: 'red'}, {...TODAY[0], group: 'paint'}, {...TODAY[0], shape: 'mesa'}, {...TODAY[0], label: ''}, {...TODAY[0], id: 'map-1'}])
