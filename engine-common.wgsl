@@ -418,7 +418,9 @@ struct Uniforms {
 var<private> rs: u32 = 0u;
 // The slots a pipeline can read: 0 while the world's own rock is the only one in use, 15 otherwise (sculpt-gates.js gateValues). At 0 every
 // read is slot 0's at a fixed offset, the code a single uniform's read compiles to: read through rs alone, the draw moved 1 to 2 palette
-// pixels of 34 scenes. Modules built without the renderer's constants read every slot.
+// pixels of 34 scenes. Modules built without the renderer's constants read every slot. Accepted (2026-11-11): once a
+// map uses a second rock the pipelines read any slot, and 6.7% of green-modern-2's pixels step by a palette entry where every point is still slot 0
+// (heights identical, the same by eye, the same bytes every time; repro/rock-slots.mjs).
 override rockMask: u32 = 15u;
 
 fn cellHash(c: vec2f) -> vec2f {
