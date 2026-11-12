@@ -1477,23 +1477,46 @@
    "shallow": {},
    "river": {},
    "braided": {},
-   "landform": {"amount": 70, "roughness": 0, "softness": 50, "cracks": 10, "faceVariation": 0, "lean": 100, "facing": 3, "terraces": 6, "combine": 0, "wander": 75, "widthVary": 30, "heightVary": 0, "varySize": 210, "varyFoot": 100, "varyMiddle": 150, "ledge": 55, "terraceJitter": 40, "breakup": 30}
+   "landform": {"amount": 70, "roughness": 0, "softness": 50, "cracks": 10, "faceVariation": 0, "lean": 100, "facing": 3, "terraces": 6, "combine": 0, "wander": 75, "widthVary": 30, "heightVary": 0, "varySize": 210, "varyFoot": 100, "varyMiddle": 150, "ledge": 55, "terraceJitter": 40, "breakup": 30},
+   "butte": {"from": "plateau", "diameter": 360, "elevation": 150},
+   "hoodoos": {"from": "crystal", "diameter": 320, "elevation": 110, "facetSurface": 0, "iceFacets": 75, "iceFacetSize": 44, "crystalSides": 8, "crystalTop": 85, "crystalVariation": 60, "bergJitter": 35, "bergRough": 10, "wander": 20},
+   "badlands": {"from": "hill", "diameter": 360, "elevation": 45, "gullies": 100, "gullySize": 15, "talus": 20, "wander": 30}
   },
   "tools": [
-   {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
-   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape"},
+   {"id": "plateau", "label": "Mesa", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a mesa: a level top over stepped ledges and a cliff, with talus at its foot."},
+   {"id": "butte", "label": "Butte", "icon": "plateau", "color": "#d9a777", "group": "shape", "help": "Draw a butte: a small mesa, taller for its size, with the mesa's ledges and talus; a click or a short drag."},
+   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "rock": "soil"},
    {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
+   {"id": "hoodoos", "label": "Hoodoos", "icon": "pillars", "color": "#d8b48c", "group": "shape", "help": "Scatter hoodoos: standing rock pillars with flat caps, a cluster round a click or a row along a drag."},
    {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
    {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
-   {"id": "crystal", "label": "Faceted forms", "icon": "crystal", "color": "#aaa5ec", "group": "shape"},
    {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
    {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
    {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
    {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
   ],
+  "variantTools": {
+   "modern": [
+    {"id": "plateau", "label": "Mesa", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a mesa: a level top over stepped ledges and a cliff, with talus at its foot."},
+    {"id": "butte", "label": "Butte", "icon": "plateau", "color": "#d9a777", "group": "shape", "help": "Draw a butte: a small mesa, taller for its size, with the mesa's ledges and talus; a click or a short drag."},
+    {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "rock": "soil"},
+    {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
+    {"id": "hoodoos", "label": "Hoodoos", "icon": "pillars", "color": "#d8b48c", "group": "shape", "help": "Scatter hoodoos: standing rock pillars with flat caps, a cluster round a click or a row along a drag."},
+    {"id": "badlands", "label": "Shale badlands", "icon": "valleyV", "color": "#b9a48e", "group": "shape", "help": "Draw badlands: low hills of thin shale cut by close gullies.", "rock": "shale"},
+    {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
+    {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
+    {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
+    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
+    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
+    {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
+    {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
+    {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
+    {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
+   ]
+  },
   "defaults": {
    "surface": "structured",
    "transition": "mineral",
