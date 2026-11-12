@@ -2,7 +2,8 @@
 //   node repro/tools-ui.mjs --server http://127.0.0.1:<yours> --port <cdp> [--out DIR]
 // Green's toolbar (Landform first, the world's thirteen, Fissure last in Shape; four in Water); draw with Hill; Save the selected hill as a tool
 // (its own name, icon and color: it joins the Shape group after the world's tools); draw with it (the same numbers as the hill it came from);
-// undo and redo both; reload (the autosave) to the same tools, strokes and pixels; switch to Red Planet: its toolbar, the map's tool carried
+// undo and redo both; reload (the autosave) to the same tools, strokes and pixels; load a save whose strokes name no tool (each takes the one
+// its section form belongs to); switch to Red Planet: its toolbar, the map's tool carried
 // with the map, the hill taking Red's numbers where it was not edited, and a stroke whose tool Red lacks showing as Landform with every number
 // kept (no world lacks a tool yet, so that stroke's tool is one no world has, written into the working copy as another world would leave it);
 // then Delete the map's tool (its stroke keeps its numbers and shows as Landform) and undo that. Writes screenshots (toolbar-green.png,
@@ -100,6 +101,12 @@ try {
   assert.deepEqual((await nodes()).map(n => n.tool), before.map(n => n.tool));
   assert.ok((await toolbar()).Shape.includes('map-1'));
   assert.equal(await capture(), drawn, 'a reload gives the same pixels');
+  // A save from before strokes named their tool (the owner's working maps): each landform takes, once, the tool its section form belongs to.
+  const named = await ev('sculptDebug.sketch()'), old = structuredClone(named); for (const n of old.nodes) delete n.tool;
+  await ev(`sculptDebug.loadSketch(${JSON.stringify(old)}); true`); await ready();
+  assert.deepEqual((await nodes()).map(n => n.tool), before.map(n => n.kind === 'landform' ? 'hill' : undefined), 'both drew the Hill section: both are Hills');
+  await ev(`sculptDebug.loadSketch(${JSON.stringify(named)}); true`); await ready();
+  assert.deepEqual((await nodes()).map(n => n.tool), before.map(n => n.tool));
   // Another world's working copy: a stroke whose tool no world has (as a world without Hill would leave a hill), selected as the brush with its card.
   // Written from a page of the same server that is not the editor, so the editor's own autosave does not overwrite it as the page is left.
   await send('Page.navigate', {url: `${server}/services.json`}); await sleep(800);
