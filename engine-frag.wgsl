@@ -1521,7 +1521,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let faceLight=u.rock[rs & rockMask].faceShade*faceGate*clamp(u.rock[rs & rockMask].rockFace*.5*voxelRelief(p,slope),0.0,1.0);
     let faceSun=mix(1.0,localSun,faceLight);
     let faceOcc=(1.0-localSky)*faceLight;
-    let hard=voxelHardness(hit);
+    // The beds as the solid draws them (engine-common.wgsl columnGather, voxelFine): Layer tint shades the fine layers too, each lip
+    // lighter and the notch under the next one darker, so the lines the relief draws keep their tone in shadow and through the palette.
+    var hard=.55;var gathered=0.0;let column=voxelColumnCoord(hit);
+    if(u.rock[rs & rockMask].columnCount>0){let g=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary));hard=g.x;gathered=g.y;}
+    let fine=voxelFine(hit,column,gathered);
+    var fineTone=0.0;
+    if(fine.y>0.0){fineTone=fine.x*2.0/max(fine.y,2.5);}   // full tint from a depth of 2.5 (a unit each way)
     let rockTone=voxelNoise(voxelRockSpace(hit)/max(4.0,u.rock[rs & rockMask].faceBlockSize))*2.0-1.0;
     let accumulated=rockWeatherAt(p);
     let skin=voxelSkin(hit,slope,painted.x,rain);
@@ -1642,7 +1648,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let grain=clamp(mineral/max(u.rockMean,vec3f(.01)),vec3f(.5),vec3f(1.6));
     let clasts=voxelClasts(hit);
     let mineralPatch=u.rock[rs & rockMask].faceMineral*((voxelNoise(hit/max(1.0,u.rock[rs & rockMask].faceGritSize))-.5)*1.7+clasts.x*clasts.y*clamp(u.rock[rs & rockMask].faceClast,0.0,1.0));
-    var rock=rockFlat*mix(vec3f(1),grain,.3+u.rock[rs & rockMask].faceTone)* (1.0+u.rock[rs & rockMask].faceTone*rockTone+u.rock[rs & rockMask].faceStrata*(hard*2.0-1.0))*(1.0-.6*u.rock[rs & rockMask].faceWet*rockWet);
+    var rock=rockFlat*mix(vec3f(1),grain,.3+u.rock[rs & rockMask].faceTone)* (1.0+u.rock[rs & rockMask].faceTone*rockTone+u.rock[rs & rockMask].faceStrata*(hard*2.0-1.0+fineTone))*(1.0-.6*u.rock[rs & rockMask].faceWet*rockWet);
     // Different minerals share the rock's chosen hue while varying albedo
     // and polish together. Embedded clasts read the same field as the solid.
     rock*=1.0+mineralPatch*.65;
