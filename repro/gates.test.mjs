@@ -55,7 +55,8 @@ test('with the world\'s own rock alone every rock test of the draw and the bake 
  for(const {source,gates} of parts){
   // Every test of a recipe number against a constant is a gate (only the _mixed branch reads the slot), and every read of the table is masked.
   assert.equal(source.replace(/_mixed && u\.rock\[rs & rockMask\]\.\w+\s*(>=|<=|==|!=|>|<)\s*-?[\d.]+/g,'').match(/u\.rock\[rs & rockMask\]\.\w+\s*(>=|<=|==|!=|>|<)\s*-?\d/g),null);
-  assert.equal(source.match(/u\.rock\[(?![^\]]*& rockMask\])/g),null);
+  // (a read of the world's own rock names slot 0 itself: the sand a world weathers to is its rock's, whichever rock a pixel is)
+  assert.equal(source.match(/u\.rock\[(?!0\]|[^\]]*& rockMask\])/g),null);
   const rock=[...gates.values()].filter(g=>g.stride);
   assert.ok(rock.length>=5);
   for(const value of [0,1]){

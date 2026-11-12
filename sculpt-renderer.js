@@ -81,10 +81,12 @@ export function uniformLayout(source) {
   let rockSize = 0;
   for (const f of structFields(source, 'Rock')) {
     const type = FIELD_TYPES[f.type];
-    if (!type || f.array) throw new Error(`nanolathe: unsupported Rock field "${f.line}" in engine-common.wgsl`);
-    rockSize = Math.ceil(rockSize / type[0]) * type[0];
-    rock.set(f.name, {offset: rockSize, kind: type[2], width: type[1] / 4});
-    rockSize += type[1];
+    if (!type || (f.array && f.type !== 'vec4f')) throw new Error(`nanolathe: unsupported Rock field "${f.line}" in engine-common.wgsl`);
+    // A member array (the recipe's colours) is array<vec4f, N>, 16 bytes an element, as the Uniforms' own arrays.
+    const align = f.array ? 16 : type[0], size = f.array ? 16 * f.count : type[1];
+    rockSize = Math.ceil(rockSize / align) * align;
+    rock.set(f.name, {offset: rockSize, kind: type[2], width: type[1] / 4, count: f.count, stride: f.array ? 16 : 0});
+    rockSize += size;
   }
   if (rockSize % 16) throw new Error('nanolathe: struct Rock must be a multiple of 16 bytes (a uniform array stride)');
   const fields = new Map();
@@ -93,7 +95,7 @@ export function uniformLayout(source) {
     if (f.type === 'Rock') {
       offset = Math.ceil(offset / 16) * 16;
       fields.set(f.name, {offset, kind: 'struct', count: f.count, stride: rockSize, members: rock});
-      for (const [name, m] of rock) fields.set(name, {offset: offset + m.offset, kind: m.kind, width: m.width, count: 1, stride: 0});
+      for (const [name, m] of rock) fields.set(name, {offset: offset + m.offset, kind: m.kind, width: m.width, count: m.count, stride: m.stride});
       offset += rockSize * f.count;
       continue;
     }
@@ -439,7 +441,7 @@ export class TerrainRenderer {
   setColors(colors = {}) {
     this.colorOverrides = {...colors};
     this.set('uMaterialTable', this.placementTable(this.variant));
-    for (const key of ['ground', 'slope', 'rock', 'sand', 'beach', 'shallow', 'deep', 'crystal']) {
+    for (const key of ['ground', 'slope', 'sand', 'beach', 'shallow', 'deep', 'crystal']) {
       const c = colors[key];
       this.set('u' + key[0].toUpperCase() + key.slice(1) + 'Base', c ? [...c, 1] : [0, 0, 0, 0]);
     }
@@ -451,9 +453,12 @@ export class TerrainRenderer {
     // The authored slot palette, or tones of this world's own rock.
     const strataDefaults = columnColors(this.config.column,this.means.rock);
     const strata = strataDefaults.map((c, i) => colors['strata' + (i + 1)] || c.map(v => v / 255));
-    this.set('uStrataColors', strata);
+    // The world's rock is slot 0 of the rock table: its colour (a = 1 when the world chose one) and its beds' slots, which a recipe without
+    // colours of its own takes (writeRocks).
+    this.set('uRockColors', [colors.rock ? [...colors.rock, 1] : [0, 0, 0, 0], ...strata]);
     for (const key of ['ground', 'slope', 'rock', 'beach'])
       this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
+    this.writeRocks();
   }
 
   // GLSL uniform uFooBar is the uniform block's field fooBar. A value is a
@@ -953,9 +958,10 @@ export class TerrainRenderer {
     this.writeRocks();
   }
 
-  // Rock recipes (struct Rock in engine-common.wgsl) in slots 1 to 15, by slot: {knobs, column}, knobs by their ROCK_KEYS names and column a rock
-  // column block (sculpt-column.js). Slot 0 is the world's own rock: its numbers are the flat settings every address names (this.variant), its
-  // column config.column. A slot takes slot 0's number for any it does not set, and slot 0's column if it has none. The slots given are the
+  // Rock recipes (struct Rock in engine-common.wgsl) in slots 1 to 15, by slot: {knobs, column, colors}, knobs by their ROCK_KEYS names, column a
+  // rock column block (sculpt-column.js) and colors {rock, beds} as '#rrggbb' (sculpt-rock-presets.js checkColors). Slot 0 is the world's own
+  // rock: its numbers are the flat settings every address names (this.variant), its column config.column, its colors the world's (setColors).
+  // A slot takes slot 0's number for any it does not set, slot 0's column if it has none, and slot 0's colors where its own are null. The slots given are the
   // ones in use: their maxima bound the passes that gather (writeRocks), and a second slot builds the pipelines that read any slot (rockMask).
   setRocks(rocks = new Map()) {
     const count = this.uniform.get('rock').count;
@@ -981,6 +987,12 @@ export class TerrainRenderer {
     const own = columnRows(this.config.column, this.config.variant), beds = [...own.beds], starts = [...own.starts];
     this.set('uColumnFirst', 0);
     this.set('uColumnCount', own.starts.length);
+    // Where level ground takes a recipe's beds (bedsFrom): the world's from its first section's start, as the gate always read it. A recipe
+    // with beds of its own starts no lower than the world's second section: the world's lowest section is the plain's band (Desert's first 16
+    // units, nearly all its plain-colored bed), and a recipe's beds start at 0, so they painted the ground at a stroke's foot, its talus a few
+    // units over the plain, in their own colors. Its faces show its beds at every height.
+    this.set('uBedsFrom', own.starts[0]?.[0] ?? 0);
+    const band = own.starts[own.starts.length > 1 ? 1 : 0]?.[0] ?? 0;
     for (const [slot, rock] of this.rocks) {
       const at = table.offset + slot * table.stride;
       bytes.copyWithin(at, table.offset, table.offset + table.stride);
@@ -988,10 +1000,15 @@ export class TerrainRenderer {
         const shine = SHINE_ROCK.indexOf(key), m = table.members.get(shine >= 0 ? 'shineRock' : key);
         if (m && m.kind === 'f' && Number.isFinite(Number(value))) this.uniformView.setFloat32(at + m.offset + Math.max(shine, 0) * 4, Number(value), true);
       }
+      // Its own colors where it has them ('#rrggbb'): row 0 the rock's (a = 1, chosen), rows 1-5 its beds' slots; the rest stay slot 0's.
+      const colors = table.members.get('rockColors'), row = (k, hex) => [1, 3, 5].forEach((i, c) => this.uniformView.setFloat32(at + colors.offset + k * 16 + c * 4, parseInt(hex.slice(i, i + 2), 16) / 255, true));
+      if (rock.colors?.rock) { row(0, rock.colors.rock); this.uniformView.setFloat32(at + colors.offset + 12, 1, true); }
+      rock.colors?.beds?.forEach((hex, k) => row(1 + k, hex));
       if (rock.column) {
         const rows = columnRows(rock.column, ''), shift = beds.length;
         this.uniformView.setInt32(at + table.members.get('columnFirst').offset, starts.length, true);
         this.uniformView.setInt32(at + table.members.get('columnCount').offset, rows.starts.length, true);
+        this.uniformView.setFloat32(at + table.members.get('bedsFrom').offset, Math.max(rows.starts[0]?.[0] ?? 0, band), true);
         beds.push(...rows.beds); starts.push(...rows.starts.map(([start, first, n, period]) => [start, first + shift, n, period]));
       }
     }
@@ -1044,6 +1061,24 @@ export class TerrainRenderer {
   uniformValue(name) {
     const field = this.uniform.get(name[1].toLowerCase() + name.slice(2));
     return field.kind === 'i' ? this.uniformView.getInt32(field.offset, true) : this.uniformView.getFloat32(field.offset, true);
+  }
+  // A rock slot's colors as the draw reads them, '#rrggbb': {rock, beds}, the rock's (its own, else the rock material's mean, as rockFlat) and
+  // its five bed slots'. The World pane shows a preset's effective colors with them, and starts its own from the world's.
+  slotColors(slot) {
+    const table = this.uniform.get('rock'), at = table.offset + slot * table.stride + table.members.get('rockColors').offset;
+    const row = k => [0, 1, 2, 3].map(c => this.uniformView.getFloat32(at + k * 16 + c * 4, true)), mean = this.uniform.get('rockMean');
+    const hex = rgb => '#' + rgb.slice(0, 3).map(v => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0')).join('');
+    const own = row(0);
+    return {rock: hex(own[3] > 0.5 ? own : [0, 1, 2].map(c => this.uniformView.getFloat32(mean.offset + c * 4, true))), beds: [1, 2, 3, 4, 5].map(k => hex(row(k)))};
+  }
+  // The palette entry the draw's lookup gives a color, '#rrggbb' (engine-palette.wgsl rows 0-31: the nearest entry by rgb distance to the
+  // color's point of the 32-level cube; the dither then mixes entries around it).
+  paletteNearest(hex) {
+    const colours = (this.materialData.palette?.entries ?? this.paletteArt).map(i => this.paletteColours[i]);
+    const cube = [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * 31 / 255) * 255 / 31);
+    let best = colours[0], nearest = Infinity;
+    for (const c of colours) { const d = (c[0] - cube[0]) ** 2 + (c[1] - cube[1]) ** 2 + (c[2] - cube[2]) ** 2; if (d < nearest) { nearest = d; best = c; } }
+    return '#' + best.slice(0, 3).map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
   }
 
   // Encodes the bake into the given encoder, or submits it on its own.
