@@ -105,7 +105,7 @@
 #selection-hud #canvas-deselect{font-size:16px;line-height:16px;padding:0 4px;background:none;border:0}
 #selection-hud .top-menu>summary{font-variant-numeric:tabular-nums}
 #selection-hud .top-menu .popover{top:28px;left:50%;right:auto;transform:translateX(-50%);width:220px;display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:10px 12px}
-#path-row{flex:1 1 100%;display:flex;align-items:center;gap:8px;min-width:0}
+#path-row{flex:0 0 auto;width:0;min-width:100%;display:flex;align-items:center;gap:8px}
 #shape-path-list{display:flex;flex-wrap:wrap;gap:3px;max-height:52px;overflow-y:auto;scrollbar-width:thin;min-width:0}
 #path-help{margin:0;font-size:10px;color:#b9c4bf;white-space:normal;min-width:0}
 /* The shape card: its name and actions, the sections every shape has, then Details, where a closed part is a chip. */
