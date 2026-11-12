@@ -1662,8 +1662,8 @@ function syncRockColors() {
   const worldAbsorb=mergedColors().absorb||null;
   paint('rock-absorb',world?worldAbsorb||shown.absorb:own?.absorb||shown.absorb,world?!worldAbsorb:!own?.absorb);
   $('rock-absorb-world').checked=world?!worldAbsorb:!own?.absorb;
-  $('rock-colors-note').textContent=world?'The world\u2019s rock wears the world\u2019s colors: set them under Colors & base pattern (Rock) and in the Rock column\u2019s material slot colors.'
-    :!own?.rock||!own?.beds?'A color under World\u2019s colors follows the world\u2019s: clear World\u2019s colors to choose this preset\u2019s own.':'';
+  $('rock-colors-note').textContent=world?'The world\u2019s rock wears the world\u2019s colors: set its rock and beds under Colors & base pattern (Rock) and in the Rock column\u2019s material slot colors; Absorption here is the world\u2019s own.'
+    :!own?.rock||!own?.beds||!own?.absorb?'A color under World\u2019s colors follows the world\u2019s: clear World\u2019s colors to choose this preset\u2019s own.':'';
   $('rock-colors-note').hidden=!$('rock-colors-note').textContent;
 }
 // A color of the selected preset changed (live while the picker moves; one undo step when it is let go).

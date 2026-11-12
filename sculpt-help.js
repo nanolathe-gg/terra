@@ -8,6 +8,9 @@ const controlHelp={
   'knob-sunTilt':'Moves the light north or south of due west. Zero is west; positive values move it south.',
   'knob-sunHeight':'How high the sun stands above the horizon. A low sun lights the faces turned to it, darkens the others and casts long shadows; a wall casts a shadow its height divided by the tangent of this angle. Set Cast shadow on level ground to let the shadows reach level ground.',
   'knob-ambient':'Sets the share of light that reaches faces pointing away from the sun.',
+  'knob-lightThrough':'How much sun passes through thin rock: a blade or an edge turned from the sun glows in the rock\u2019s color instead of going gray in its own shade; a thick core stays dark. Zero is opaque rock. It shows where the sun is behind the rock as you look at it.',
+  'knob-absorbDepth':'How fast the rock\u2019s color deepens with its thickness toward its Absorption color (Colors): thin edges keep their own color, thick bodies go deep and saturated, like ice or a crystal. Zero is opaque rock.',
+  'knob-shadowTint':'How much of the sun the rock lets through its cast shadow, in its Absorption color: a thick rock\u2019s shadow is dim and colored, a thin one\u2019s brighter. Zero is a neutral shadow.',
   'knob-lushness':'Changes how much vegetation the ground supports. On materials with flowers, richer ground can grow more flower patches.',
 };
 
