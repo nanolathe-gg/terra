@@ -3,6 +3,7 @@
 //   --server http://127.0.0.1:8897 --port 9891 --out /private/tmp/lp0 --no-export
 // --viewport WIDTHxHEIGHT is terrain CSS pixels; default Chrome window: 1600x1200.
 // --only load|drag|release|resume|slider|scroll; --sliders comma-separated knob IDs.
+// --colors native|scripted: scripted explicitly substitutes value/input events.
 // --warmup discards a session; --report FILE... prints the section 2 budget table.
 // Use distinct CDP ports, discard one --warmup per fresh server, alternate workloads,
 // and check ps -Ao pcpu,command -r | head before measured runs. Never time two at once.
@@ -48,7 +49,8 @@ function budgetTable(results) {
     return `${d.p50.toFixed(1)} / ${d.p95.toFixed(1)}${status} [${d.n}/${total}]`;
   };
   const gaps=results.flatMap(r=>(r.slider||[]).filter(p=>p.status==='blocked').map(p=>r.label+': '+p.reason));
-  const lines=[...(gaps.length?[`INCOMPLETE: ${gaps.length} native Colors phases; ${[...new Set(results.flatMap(r=>(r.slider||[]).filter(p=>p.status==='blocked').map(p=>p.reason)))].join('; ')}`,'']:[]),'All times ms: p50 / p95; [observed / requested]. Superseded inputs wait for a later current image.','',
+  const scripted=results.flatMap(r=>(r.slider||[]).filter(p=>p.control==='colors'&&p.driver?.startsWith('scripted')));
+  const lines=[...(scripted.length?[`LABELED SUBSTITUTE: ${scripted.length} scripted Colors phases (value/input events on the existing picker, not native mouse).`,'']:[]),...(gaps.length?[`INCOMPLETE: ${gaps.length} native Colors phases; ${[...new Set(results.flatMap(r=>(r.slider||[]).filter(p=>p.status==='blocked').map(p=>p.reason)))].join('; ')}`,'']:[]),'All times ms: p50 / p95; [observed / requested]. Superseded inputs wait for a later current image.','',
     '| Interaction | First changed pixels | Whole view current | Release to final |',
     '| --- | ---: | ---: | ---: |'];
   for(const [name,select,first,whole] of groups){const p=results.flatMap(select);lines.push(`| ${name} | ${cell(p,'first',first)} | ${cell(p,'all',whole)} | ${cell(p,'finalRelease',null)} |`);}
@@ -65,6 +67,8 @@ function budgetTable(results) {
 if(flag('--report')){console.log(budgetTable(args.map(f=>JSON.parse(readFileSync(f,'utf8')))));process.exit(0);}
 const server=opt('--server',''),port=Number(opt('--port',0)),out=resolve(opt('--out','perf-out'));
 const sceneFile=opt('--scene','repro/scenes/green-2.json'),label=opt('--label',''),viewport=opt('--viewport','');
+const colorsMode=opt('--colors','native');
+if(!['native','scripted'].includes(colorsMode))throw Error('--colors expects native|scripted');
 const start=opt('--start','');const only=opt('--only',''),query=opt('--query',''),tool=opt('--tool','hill'),diameter=Number(opt('--diameter',0));
 const featureDensity=Number(opt('--features','0'));
 const sliderNames=opt('--sliders','knob-faceBlockSize,knob-reliefAmount,knob-ambient,knob-sunHeight,knob-erosionRain,colors').split(',');
@@ -130,7 +134,7 @@ function hooks(){
   EventTarget.prototype.addEventListener=function(type,fn,options){
     if(type!=='input'||typeof fn!=='function')return add.call(this,type,fn,options);
     return add.call(this,type,function(e){
-      const top=!P.handler;let h=P.handler||inputEvents.get(e);if(!h){h={t:now(),control:e.target.id||e.target.getAttribute('aria-label'),value:e.target.value,calls:{},ms:0};inputEvents.set(e,h);P.handlers.push(h);P.input('slider',h.control);}if(top)P.handler=h;
+      const top=!P.handler;let h=P.handler||inputEvents.get(e);if(!h){h={t:now(),control:e.target.id||e.target.getAttribute('aria-label'),value:e.target.value,isTrusted:e.isTrusted,calls:{},ms:0};inputEvents.set(e,h);P.handlers.push(h);P.input('slider',h.control);}if(top)P.handler=h;
       const start=now();try{return fn.call(this,e);}finally{if(top){h.ms+=now()-start;P.handler=null;}}
     },options);
   };
@@ -247,7 +251,7 @@ const click=async(x,y)=>{await mouse('mousePressed',x,y);await mouse('mouseRelea
 const key=async k=>{for(const type of ['keyDown','keyUp'])await send('Input.dispatchKeyEvent',{type,key:k,code:k});};
 const point=async selector=>ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Missing control '+${JSON.stringify(selector)});e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,w:r.width,h:r.height};})()`);
 const clickElement=async selector=>{const p=await point(selector);await click(p.x,p.y);};
-const result={schema:5,mode,label,scene:sceneFile,query,startedAt:new Date().toISOString(),gpuQuietSamples,loadAverageAtStart:loadavg(),warmup,baseline:execFileSync('git',['merge-base','HEAD','main'],{encoding:'utf8'}).trim(),notes:['Paint endpoint is canvas draw completion, not physical display scanout.','First changed pixels compares tile RGBA after timing stops, replaying retained immutable bitmaps; no pixel readback runs on the measured path. Extra observer bitmap memory and untimed comparison cost are reported.','Pointer tiles use rendered art coordinates, not the inverse-projected ground pick. Whole current uses every affected visible cache tile and weather readiness, never bake frequency.','Pass timestamps cannot assign a mixed on/off-screen pass to individual pixels; wholly outside time is exact, mixed and area-weighted estimates are separate.','Final latency samples include held mid-drag pauses and release; uncompleted pauses are censored.','No editor files are changed; Fetch injects timing-only observers before modules execute.']};
+const result={schema:5,mode,label,colorsDriver:colorsMode,scene:sceneFile,query,startedAt:new Date().toISOString(),gpuQuietSamples,loadAverageAtStart:loadavg(),warmup,baseline:execFileSync('git',['merge-base','HEAD','main'],{encoding:'utf8'}).trim(),notes:['Paint endpoint is canvas draw completion, not physical display scanout.','First changed pixels compares tile RGBA after timing stops, replaying retained immutable bitmaps; no pixel readback runs on the measured path. Extra observer bitmap memory and untimed comparison cost are reported.','Pointer tiles use rendered art coordinates, not the inverse-projected ground pick. Whole current uses every affected visible cache tile and weather readiness, never bake frequency.','Pass timestamps cannot assign a mixed on/off-screen pass to individual pixels; wholly outside time is exact, mixed and area-weighted estimates are separate.','Final latency samples include held mid-drag pauses and release; uncompleted pauses are censored.','No editor files are changed; Fetch injects timing-only observers before modules execute.']};
 try{result.processesAtStart=execFileSync('/bin/sh',['-c','ps -Ao pcpu,command -r | head'],{encoding:'utf8'});}catch(e){throw Error('Cannot check machine load; run with process inspection permission.');}
 const filename=join(out,`${mode}${label?'-'+label:''}-perf.json`);
 const flush=()=>{if(!warmup)writeFileSync(filename,JSON.stringify({...result,console:logs},null,1));};
@@ -405,6 +409,7 @@ process.exitCode=result.error?1:result.slider?.some(p=>p.status==='blocked')?2:0
 // its rainbow bar in a screenshot before timing, then drive that widget with
 // the same real CDP mouse events as the scrub rows. No replacement picker.
 async function colorDrag(paused){
+  if(colorsMode==='scripted')return scriptedColor(paused);
   await clickElement('#tab-world');
   await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');for(let p=e.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;})()`);
   const original=await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');return {value:e.value,checked:e.previousElementSibling.checked};})()`);
@@ -419,5 +424,27 @@ async function colorDrag(paused){
   const p=await capture(t0,anchors,{control:'colors',scenario:paused?'pause':'continuous',nativeSpectrum:bar,pauseRequestedMs:paused?1000:0});p.valuesDelivered=p.handlers.length;p.distinctValues=new Set(p.handlers.map(h=>h.value)).size;
   if(p.valuesDelivered<30){p.samples={first:[],firstTile:[],pointer:[],all:[],final:[],focus:[]};p.sampleTotals={first:36,pointer:0,all:36,final:anchors.length,focus:anchors.length};p.latencyChanged=distribution([],36);p.latency=distribution([],36);p.latencyPointer=distribution([],0);p.latencyAll=distribution([],36);p.final=distribution([],anchors.length);p.status='blocked';p.reason='Chrome native popup ignores CDP mouse events; no scripted substitute used';console.error('Colors gap:',p.reason);}
   if(p.valuesDelivered){await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');e.value=${JSON.stringify(original.value)};e.dispatchEvent(new Event('input',{bubbles:true}));if(!${original.checked}){e.previousElementSibling.checked=false;e.previousElementSibling.dispatchEvent(new Event('change',{bubbles:true}));}})()`);await settle();}
+  return p;
+}
+
+// Owner-authorized alternative for a native popup that ignores CDP input.
+// The existing picker and its own input listener do all editor work. Only
+// the workload driver is scripted; no replacement control or render path.
+async function scriptedColor(paused){
+  await clickElement('#tab-world');
+  const original=await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');for(let p=e.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;e.scrollIntoView({block:'center'});return {value:e.value,checked:e.previousElementSibling.checked,label:e.getAttribute('aria-label')};})()`);
+  // A full hue sweep at fixed saturation/value: 36 distinct legal colors.
+  const values=Array.from({length:36},(_,i)=>{const h=i/6,c=.65*.65,x=c*(1-Math.abs(h%2-1)),m=.65-c,rgb=h<1?[c,x,0]:h<2?[x,c,0]:h<3?[0,c,x]:h<4?[0,x,c]:h<5?[x,0,c]:[c,0,x];return '#'+rgb.map(v=>Math.round((v+m)*255).toString(16).padStart(2,'0')).join('');});
+  const t0=await begin(),anchors=[];
+  for(let i=0;i<values.length;i++){
+    await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');e.value=${JSON.stringify(values[i])};e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await sleep(30);
+    if(paused&&i===17){anchors.push(await anchor());await sleep(1000);}
+  }
+  anchors.push(await anchor());await settle();
+  const p=await capture(t0,anchors,{control:'colors',scenario:paused?'pause':'continuous',driver:'scripted Colors value/input sequence (not native mouse)',picker:original.label,requestedValues:values,pauseRequestedMs:paused?1000:0});
+  p.valuesDelivered=p.handlers.length;p.distinctValues=new Set(p.handlers.map(h=>h.value)).size;
+  await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');e.value=${JSON.stringify(original.value)};e.dispatchEvent(new Event('input',{bubbles:true}));if(!${original.checked}){e.previousElementSibling.checked=false;e.previousElementSibling.dispatchEvent(new Event('change',{bubbles:true}));}})()`);await settle();
+  if(p.valuesDelivered!==36||p.distinctValues!==36||p.handlers.some(h=>h.isTrusted!==false))throw Error('Scripted Colors did not deliver 36 distinct, explicitly untrusted input events');
   return p;
 }
