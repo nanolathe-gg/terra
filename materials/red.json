@@ -1479,18 +1479,19 @@
    "shallow": {"wander": 4, "waterShore": 1},
    "river": {},
    "braided": {},
-   "landform": {}
+   "landform": {},
+   "canyon": {"from": "valleyT", "diameter": 480, "elevation": -20, "terraces": 5, "ledge": 60, "wander": 40, "widthVary": 30}
   },
   "tools": [
    {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
-   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape"},
+   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "rock": "soil"},
    {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
    {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
    {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
-   {"id": "crystal", "label": "Faceted forms", "icon": "crystal", "color": "#aaa5ec", "group": "shape"},
+   {"id": "canyon", "label": "Canyon", "icon": "valleyT", "color": "#c98a6e", "group": "shape", "help": "Draw a canyon: a wide, dry valley cut to just above the sea, its walls stepped in five ledges."},
    {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
    {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
    {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},

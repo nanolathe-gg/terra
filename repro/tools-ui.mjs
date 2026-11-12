@@ -20,7 +20,10 @@ await cdpPortFree(port); mkdirSync(out, {recursive: true});
 const browser = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
   `--user-data-dir=${join(out, 'profile-' + Date.now())}`, '--window-size=1440,900', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const WORLD = ['landform', 'plateau', 'hill', 'mountain', 'ramp', 'valleyV', 'valleyU', 'valleyT', 'crater', 'crystal'];
+// Each world's toolbar as its config lists it: Landform, its shape tools (then any map tool), Fissure; its water tools.
+const lists = {};
+for (const w of ['green', 'red']) lists[w] = (await (await fetch(`${server}/config/${w}.json`)).json()).tools;
+const bar = (w, mine = []) => ({Shape: ['landform', ...lists[w].filter(t => t.group === 'shape').map(t => t.id), ...mine, 'fissure'], Water: lists[w].filter(t => t.group === 'water').map(t => t.id)});
 let ws; const report = {};
 try {
   for (let i = 0; i < 100 && !ws; i++) { try { const tab = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(t => t.type === 'page'); if (tab) ws = new WebSocket(tab.webSocketDebuggerUrl); } catch {} if (!ws) await sleep(150); }
@@ -58,14 +61,28 @@ try {
   await ev(`document.getElementById('seed-vary').checked=false;document.getElementById('seed-vary').dispatchEvent(new Event('change',{bubbles:true}));true`);
   // Green's toolbar.
   report.green = await toolbar();
-  assert.deepEqual(report.green, {Shape: [...WORLD, 'fissure'], Water: ['deep', 'shallow', 'river', 'braided']});
+  assert.deepEqual(report.green, bar('green'));
   await shot('.tool-groups', 'toolbar-green.png');
   // Draw with Hill: the stroke names its tool, and the selection says so.
-  await tool('hill'); assert.equal(await title(), 'Brush · new landform (Hill)');
+  const hillTool = lists.green.find(t => t.id === 'hill');
+  await tool('hill'); assert.equal(await title(), `Brush · new landform (${hillTool.label})`);
   await draw(380, 300, 640, 330);
   let ns = await nodes(); const hill = ns.length - 1;
   assert.deepEqual([ns[hill].kind, ns[hill].tool], ['landform', 'hill']);
-  assert.equal(await title(), `Selected · Landform (Hill) #${hill + 1}`);
+  assert.equal(await title(), `Selected · Landform (${hillTool.label}) #${hill + 1}`);
+  // A tool that names its rock by a preset's key draws on that preset of the map's list (Hill on Smooth soil), the save holds the preset and the
+  // stroke's choice, and a scene stroke with that choice is the same stroke.
+  if (hillTool.rock) {
+    const rocks = await ev('sculptDebug.sketch().rocks'), preset = rocks.find(r => r.key === hillTool.rock);
+    assert.ok(preset, `the world ships the preset its Hill names (${hillTool.rock})`);
+    assert.equal(ns[hill].params.rockPreset, preset.slot, 'the first stroke draws on it');
+    report.hillRock = {key: hillTool.rock, slot: preset.slot, name: preset.name};
+    const drawnParams = ns[hill].params;
+    await ev(`sculptDebug.scene([['hill',[[400,400],[600,420]],{card:{rockPreset:${preset.slot}}}]],{ground:true}); true`); await ready();
+    assert.deepEqual((await nodes()).at(-1).params, drawnParams, 'a scene stroke on the same preset has the same numbers');
+    await click('#undo'); ns = await nodes(); assert.equal(ns[hill].params.rockPreset, preset.slot, 'undo brings the drawn hill back');
+    await select(hill);
+  }
   // Widen it (an edit the switch keeps), then Save it as a tool: Broad hill, the mountain icon, an orange.
   await set('lf-width-vary', 60);
   assert.equal(await ev(`document.getElementById('tool-save').hidden`), false, 'Save as tool shows in a selected shape\'s options');
@@ -76,7 +93,7 @@ try {
   const saved = await ev('sculptDebug.sketch().tools');
   assert.deepEqual(saved.map(t => [t.id, t.label, t.icon, t.color, t.group, t.shape]), [['map-1', 'Broad hill', 'mountain', '#d08050', 'shape', 'hill']]);
   report.withTool = await toolbar();
-  assert.deepEqual(report.withTool.Shape, [...WORLD, 'map-1', 'fissure'], 'the map\'s tool joins its group after the world\'s tools');
+  assert.deepEqual(report.withTool, bar('green', ['map-1']), 'the map\'s tool joins its group after the world\'s tools');
   assert.equal((await nodes())[hill].tool, 'hill', 'saving a tool changes no stroke');
   await shot('.tool-groups', 'map-tool.png'); await tool('map-1'); await shot('#brush-title', 'map-tool-window.png', true);
   // Draw with it: its stroke has the hill's numbers and curves.
@@ -114,7 +131,7 @@ try {
   // Switch to Red Planet: its toolbar, the map's tool with the map, the fallback.
   await open('biome=red');
   report.red = await toolbar();
-  assert.deepEqual(report.red, {Shape: [...WORLD, 'map-1', 'fissure'], Water: ['deep', 'shallow', 'river', 'braided']});
+  assert.deepEqual(report.red, bar('red', ['map-1']));
   ns = await nodes();
   const lone = ns.findIndex(n => n.params?.radius === before[hill].params.radius && n.params?.widthVary === before[hill].params.widthVary && n.tool !== 'map-1');
   assert.deepEqual([ns[lone].tool, ns[lone].kept], ['landform', true], 'a stroke whose tool the new world lacks shows as Landform, kept for good');

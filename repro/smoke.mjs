@@ -18,7 +18,6 @@ const worlds = opt('--worlds', 'green,red,archipelago,moon,zhon,lava,desert,crys
 const jobs = Math.max(1, Number(opt('--jobs', 3)));
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const TOOLS = ['landform', 'plateau', 'hill', 'mountain', 'ramp', 'deep', 'shallow', 'valleyV', 'valleyU', 'valleyT', 'river', 'braided', 'smooth', 'crater', 'fissure', 'erase', 'crystal', 'sand', 'grass', 'paint'];   // the first eleven and Crater draw landforms
 
 async function session(url, port, fn) {
   const logs = [];
@@ -74,7 +73,8 @@ async function smokeWorld(world, port) {
     try {
       await ready(ev, world !== 'zhon');
       await ev('sculptCanvas.zoom(1); true'); await sleep(500);
-      for (const tool of TOOLS) {
+      // Every brush on this world's toolbar: the fixed ones and the world's own shape tools (a world may drop or add shape tools).
+      for (const tool of await ev(`[...document.querySelectorAll('.tool-groups [data-tool]')].map(b => b.dataset.tool).filter(t => t !== 'move')`)) {
         const before = await ev('sculptDebug.nodes().length');
         await strokeAt(send, ev, tool);
         const added = (await ev('sculptDebug.nodes().length')) - before;
