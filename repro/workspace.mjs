@@ -117,5 +117,9 @@ try{
   report.tablet={map:await rect('#viewport'),panel:await rect('#inspector-sidebar'),topOverflow:await ev('document.querySelector(".topbar").scrollWidth-document.querySelector(".topbar").clientWidth'),curves:await ev(`[...document.querySelectorAll('.curve-pane canvas')].map(c=>[c.clientWidth,c.clientHeight])`),navigator:await rect('.map-navigator')};
   assert.equal(report.tablet.topOverflow,0,'the top bar fits 1024 px');assert(report.tablet.curves.every(c=>c[0]>=240));assert(inside(report.tablet.navigator,report.tablet.map));assert.equal(report.tablet.map.x+report.tablet.map.width,report.tablet.panel.x);
   const screen=await send('Page.captureScreenshot',{format:'png'});writeFileSync(join(out,'tablet.png'),Buffer.from(screen.result.data,'base64'));
+  // A long tool list on a short window: the flyout ends above the status bar and scrolls to its last tool.
+  await send('Emulation.setDeviceMetricsOverride',{width:1024,height:420,deviceScaleFactor:1,mobile:false});await sleep(300);await click('#rail-land');
+  report.shortFlyout=await ev(`(()=>{const f=document.getElementById('land-flyout'),last=f.querySelector('[data-tool="fissure"]');last.scrollIntoView({block:'nearest'});const b=f.getBoundingClientRect(),l=last.getBoundingClientRect();return {bottom:Math.round(b.bottom),client:f.clientHeight,scroll:f.scrollHeight,last:Math.round(l.bottom),status:Math.round(document.querySelector('footer').getBoundingClientRect().top)};})()`);
+  assert(report.shortFlyout.scroll>report.shortFlyout.client,'the list is longer than the window allows');assert(report.shortFlyout.bottom<=report.shortFlyout.status&&report.shortFlyout.last<=report.shortFlyout.bottom,JSON.stringify(report.shortFlyout));await key('Escape');
   assert.deepEqual(errors,[]);report.console=errors;writeFileSync(join(out,'workspace.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));
 }finally{ws?.close();browser.kill();}
