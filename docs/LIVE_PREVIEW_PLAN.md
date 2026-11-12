@@ -1039,6 +1039,19 @@ the final's for the three scenes and report the largest offset.
 
 ### LP4. Bounded GPU work (M)
 
+**Implementation addendum, 2026-11-12.** The owner authorized continuing
+past the LP0b review checkpoint with timing runs still deferred. Performance
+gates remain pending and their thresholds are unchanged. Step 1 runs first
+on its own branch from the bench/plan base, without the prototype editor.
+
+The two-file estimate below missed the paged request chain **[read]**:
+`pagedTime` in `sculpt-scene.js` and `computeWeather` in
+`sculpt-gpu-fields.js` own those requests. Step 1 also passes the obsolete
+request check through them and retries a canceled page at its current
+revision. An unchanged Time key remains the same request even if its
+configuration wrapper was rebuilt. This does not change the Time passes,
+resolution, page regions or pass order.
+
 LP0 raised this card's weight (section 3.7): the Time pass is the longest
 thing on the GPU queue (0.76 to 0.91 s in one submission), it was in flight
 100 ms after every release measured, and it holds the next stroke's first
