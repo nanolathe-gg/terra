@@ -214,25 +214,26 @@ function updateControls() {
   $('feature-tool').setAttribute('aria-pressed',String(featureActive));
   $('feature-tool-host').hidden=!featureActive;
   $('brush-panel').hidden=featureActive||(tool==='move'&&!nodes[selected]?.params);
-  $('selection-panel').hidden=featureActive||tool!=='move';$('drawing-options').hidden=featureActive;
   $('edit-path').setAttribute('aria-pressed',String(pathEditing));
   $('transform-mode').setAttribute('aria-pressed',String(!pathEditing&&drawMode!=='add'));
-  $('selection-panel').classList.toggle('path-mode',pathEditing);
   const selectedNode=nodes[selected],hasSelection=Boolean(selectedNode?.points?.length),selectionActive=hasSelection&&tool==='move'&&!featureActive;
   // Generated features share the Select tool (sculpt-features.js): their values replace the shape's transform rows while any is selected.
   const featureSelection=!featureActive&&tool==='move'&&(mapFeatures?.selectionCount||0)>0;
-  $('feature-selection').hidden=!featureSelection;$('selection-mode-buttons').hidden=$('shape-selection-actions').hidden=featureSelection;
+  // The side panel's Selection block is the Select tool with no shape selected: its hint, or the selected features' values. A selected
+  // shape's own actions are the bar on the map (#selection-hud) and the head of its card.
+  $('selection-panel').hidden=featureActive||tool!=='move'||hasSelection;
+  $('feature-selection').hidden=!featureSelection;$('shape-selection-actions').hidden=!selectionActive;
   $('selection-empty').hidden=hasSelection||featureSelection;
-  $('path-actions').hidden=!pathEditing||!hasSelection;
-  $('transform-controls').hidden=pathEditing||!hasSelection||drawMode==='add';$('path-help').hidden=drawMode==='add'||featureSelection;
+  $('path-actions').hidden=$('path-row').hidden=!pathEditing||!hasSelection;
+  $('transform-controls').hidden=pathEditing||!hasSelection||drawMode==='add';
   $('selection-hud').hidden=!selectionActive;
   $('selection-hud').classList.toggle('path-mode',pathEditing);
-  $('selection-mode').textContent=selectionActive?`${drawMode==='add'?'Add path':pathAdding?'Extend / branch':pathEditing?'Edit paths':'Transform'} · ${NODE_NAMES[selectedNode.kind]||selectedNode.kind} #${selected+1}`:'';
-  $('canvas-path-mode').textContent=pathEditing?'Transform':'Edit paths';
-  for(const id of ['selection-clear','selection-delete','transform-mode','canvas-path-mode','canvas-deselect'])$(id).disabled=!hasSelection||loading||Boolean(stroke||moving);
+  $('selection-mode').textContent=selectionActive?`${drawMode==='add'?'Add path · ':pathAdding?'Extend / branch · ':''}${NODE_NAMES[selectedNode.kind]||selectedNode.kind} #${selected+1}`:'';
+  for(const id of ['selection-delete','transform-mode','canvas-deselect'])$(id).disabled=!hasSelection||loading||Boolean(stroke||moving);
   for(const id of ['toggle-tools','toggle-inspector','focus-canvas'])$(id).disabled=loading||Boolean(stroke||moving);
   const transform=hasSelection?selectionTransform(selectedNode).values:null;
   for(const key of ['x','y','rotation','scale']){const input=$('selection-'+key);input.disabled=!hasSelection||loading||Boolean(stroke||moving);if(document.activeElement!==input)input.value=transform?String(Math.round(transform[key]*10)/10):'';}
+  $('selection-numbers-summary').textContent=transform?`X ${Math.round(transform.x)} · Y ${Math.round(transform.y)} · ${Math.round(transform.rotation)}° · ${Math.round(transform.scale)}% ▾`:'Numbers ▾';
   if(config?.map){$('selection-x').max=config.map.width-1;$('selection-y').max=config.map.height-1;}
   const paths=hasSelection?shapePaths(selectedNode):[],activePath=paths[pathIndex]||[],pointAt=activePath.indexOf(pathPoint),locked=loading||Boolean(stroke||moving);
   const editingSeed=selectedNode?.seed!==undefined;
@@ -244,9 +245,7 @@ function updateControls() {
   $('draw-new').disabled=locked||!ready;
   $('simplify-strokes').disabled=locked;
   $('draw-add').disabled=locked||!hasSelection||selectedNode?.hidden;
-  $('draw-new').setAttribute('aria-pressed',String(tool!=='move'&&drawMode!=='add'));
   $('draw-add').setAttribute('aria-pressed',String(drawMode==='add'));
-  $('drawing-target').textContent=drawMode==='add'?`Draw into ${NODE_NAMES[selectedNode?.kind]||'shape'} #${selected+1}. Start on a point to attach a branch. Escape finishes.`:hasSelection?'Add a path to this shape, or start a new shape.':'Choose a brush, then draw a new shape.';
   $('edit-path').disabled=!hasSelection||locked;
   $('path-add').disabled=!pathEditing||pointAt<0||pointAt===activePath.length-1||locked;
   $('path-delete').disabled=!pathEditing||pathPoint<0||(selectedNode?.points?.length??0)<=1||locked;
@@ -254,7 +253,7 @@ function updateControls() {
   $('path-extend').setAttribute('aria-pressed',String(pathAdding));
   $('path-remove').disabled=!pathEditing||paths.length<=1||locked;
   if(pathEditing){$('shape-path-list').replaceChildren(...paths.map((path,i)=>{const b=document.createElement('button');b.textContent=`Path ${i+1} · ${path.length} points`;b.setAttribute('aria-pressed',String(i===pathIndex));b.disabled=locked;b.onclick=()=>{pathIndex=i;pathPoint=-1;pathAdding=false;updateControls();schedule();};return b;}));}
-  for(const id of ['rotate-left','rotate-right','scale-down','scale-up'])$(id).disabled=!nodes[selected]?.points;
+  for(const id of ['rotate-left','rotate-right','scale-down','scale-up'])$(id).disabled=!nodes[selected]?.points||locked;
   $('view-clay').setAttribute('aria-pressed',String(!$('view-passability').matches('[aria-pressed=true]')&&$('clay').checked));
   $('view-rendered').setAttribute('aria-pressed',String(!$('view-passability').matches('[aria-pressed=true]')&&!$('clay').checked));
   for(const id of ['save','load','view-clay','view-rendered','view-passability','blank'])$(id).disabled=!ready||loading||Boolean(stroke||moving);
@@ -1319,8 +1318,7 @@ for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up
 $('feature-tool').onclick=()=>{if(stroke||moving)return;selected=-1;pathAdding=false;drawMode='select';mapFeatures?.activate('deposit');renderLayers();updateControls();};
 function setPathMode(on){if(stroke||moving||loading)return;pathEditing=on;pathPoint=-1;pathAdding=false;drawMode='select';updateControls();schedule();}
 $('edit-path').onclick=()=>setPathMode(!pathEditing);$('transform-mode').onclick=()=>setPathMode(false);
-$('canvas-path-mode').onclick=()=>setPathMode(!pathEditing);
-$('selection-clear').onclick=$('canvas-deselect').onclick=()=>selectNode(-1);
+$('canvas-deselect').onclick=()=>selectNode(-1);
 $('selection-delete').onclick=()=>nodeAction('delete');
 for(const key of ['x','y','rotation','scale']){
   const input=$('selection-'+key);

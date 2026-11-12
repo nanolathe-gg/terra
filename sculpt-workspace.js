@@ -8,10 +8,10 @@ export function mountWorkspace(){
   $('zoom-out').onclick=()=>zoomBy(.5);$('zoom-in').onclick=()=>zoomBy(2);
   // Picking a tool shows its settings: the side panel opens on Build.
   palette.addEventListener('click',e=>{if(e.target.closest('[data-tool],#feature-tool'))$('tab-tool').click();});
-  // The palette sits outside the #editor fieldset, so it follows the editor's lock here. (The curve editors are inside it; their
-  // canvases lock by the stylesheet.)
+  // The palette and the selection bar on the map sit outside the #editor fieldset, so they follow the editor's lock here. (The curve
+  // editors are inside it; their canvases lock by the stylesheet.)
   let lastLock;
-  const lock=()=>{const disabled=$('editor').disabled;if(lastLock===disabled)return;lastLock=disabled;palette.querySelectorAll('button').forEach(b=>{b.disabled=disabled;});};
+  const lock=()=>{const disabled=$('editor').disabled;if(lastLock===disabled)return;lastLock=disabled;palette.querySelectorAll('button').forEach(b=>{b.disabled=disabled;});$('selection-hud').disabled=disabled;};
   new MutationObserver(lock).observe($('editor'),{attributes:true,attributeFilter:['disabled']});
   mountHelp();
   // The page's own sliders are written in the compact form; generated ones come from controlRow.

@@ -11,7 +11,6 @@ brush-panel
 brush-scope
 brush-title
 canvas-deselect
-canvas-path-mode
 clay
 column-panel
 cracks
@@ -28,8 +27,6 @@ diameter
 diameter-value
 draw-add
 draw-new
-drawing-options
-drawing-target
 edit-path
 editor
 error
@@ -280,7 +277,6 @@ seed-label
 seed-randomize
 seed-vary
 seed-vary-control
-selection-clear
 selection-delete
 selection-empty
 selection-hud
