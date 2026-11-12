@@ -1,8 +1,8 @@
 # Interface inventory
 
 Every screen, tab, tool, control and gesture of the editor as it stood on
-main `98b0288e` on 2026-11-12: what it is, what it does, where it lives,
-what it writes to, and where the redesign proposal puts it. 699 rows.
+main `8e42ae8e` on 2026-11-12: what it is, what it does, where it lives,
+what it writes to, and where the redesign proposal puts it. 714 rows.
 
 This is a record, not a rule. It was read from the live page; when the page
 changes, the page is right. The mockups built from these rows, and the
@@ -57,7 +57,7 @@ There is one screen. The build's `index.html` only forwards to it.
 | Shape card | 114 |
 | Tool tab | 22 |
 | Features tool | 76 |
-| Toolbar | 22 |
+| Toolbar | 37 |
 | Map | 17 |
 | Shapes | 6 |
 | Export | 6 |
@@ -68,7 +68,7 @@ There is one screen. The build's `index.html` only forwards to it.
 | Hidden | 1 |
 | Keyboard & pointer | 14 |
 | Address parameters | 6 |
-| **Total** | **699** |
+| **Total** | **714** |
 
 | Measured | Value |
 | --- | --- |
@@ -76,41 +76,59 @@ There is one screen. The build's `index.html` only forwards to it.
 | World tab height with fine controls and every group open | 12930 to 14384 px |
 | World slider and choice rows | 246 in the World tab (176 in the default view, 70 fine) and 3 in Settings (Palette) |
 | World rows disabled, by world or look | green 65, green-evad 65, green-modern 57, red 67, archipelago 72, moon 62, moon-pitted 67, moon-cracked 79, zhon 87, zhon-river 87, lava 70, desert 71, desert-triad 72, desert-modern 48, crystal 71, ice 74, ice-bergs 82, ice-crystal 82, ice-snow 82 |
-| Rows on a tool's card on Green (visible with groups open) | move 6, landform 50, plateau 51, hill 49, mountain 51, ramp 48, valleyV 47, valleyU 47, valleyT 50, crater 51, crystal 59, fissure 23, deep 47, shallow 49, river 43, braided 43, smooth 8, erase 10, paint 11, sand 9, grass 9 |
-| Card height with groups open | Plateau 1792 px, Faceted forms 2038 px, a tree style 1727 px |
+| Rows on a tool's card on Green (visible with groups open) | move 6, landform 50, plateau 51, hill 49, mountain 51, knoll 49, ramp 48, valleyV 47, valleyU 47, valleyT 50, crater 51, fissure 23, deep 47, shallow 49, river 43, braided 43, smooth 8, erase 10, paint 11, sand 9, grass 9 |
+| Card height with groups open | Plateau 1792 px, River 1514 px, a tree style 1727 px |
 
 ## Tools
 
-| Tool | Key | Group today | What it does | Proposed home |
-| --- | --- | --- | --- | --- |
-| Select | `move` | Select and place | Select a shape to edit its curves, settings, paths or transform. (mode; 6 rows on its card on Green) | Build › Tool rail › Select |
-| Features & starts | `features` | Select and place | Place map features and player start positions. (mode; 25 rows on its card on Green) | Build › Tool rail › Features |
-| Landform | `landform` | Shape tools | (mode; 50 rows on its card on Green) | Build › Tool rail › Land |
-| Plateau | `plateau` | Shape tools | A broad, level top with steep sides. (a preset of the one Landform shape; 51 rows on its card on Green) | Build › Tool rail › Land |
-| Hill | `hill` | Shape tools | A rounded ridge with a gentle crest. (a preset of the one Landform shape; 49 rows on its card on Green) | Build › Tool rail › Land |
-| Mountain | `mountain` | Shape tools | A narrow, pointed crest; a path makes a range. (a preset of the one Landform shape; 51 rows on its card on Green) | Build › Tool rail › Land |
-| Ramp | `ramp` | Shape tools | An incline along a path. (a preset of the one Landform shape; 48 rows on its card on Green) | Build › Tool rail › Land |
-| V valley | `valleyV` | Shape tools | A narrow, V-shaped cut. (a preset of the one Landform shape; 47 rows on its card on Green) | Build › Tool rail › Land |
-| U valley | `valleyU` | Shape tools | A broad valley with a rounded floor. (a preset of the one Landform shape; 47 rows on its card on Green) | Build › Tool rail › Land |
-| Terraced valley | `valleyT` | Shape tools | A valley with steps along its sides. (a preset of the one Landform shape; 50 rows on its card on Green) | Build › Tool rail › Land |
-| Crater | `crater` | Shape tools | A bowl with a raised rim. (a preset of the one Landform shape; 51 rows on its card on Green) | Build › Tool rail › Land |
-| Faceted forms | `crystal` | Shape tools | Clusters of faceted crystals, columns or blocks. (a preset of the one Landform shape; 59 rows on its card on Green) | Build › Tool rail › Land |
-| Fissure | `fissure` | Shape tools | A narrow fracture cut into the ground. (its own shape kind; 23 rows on its card on Green) | Build › Tool rail › Land |
-| Deep water | `deep` | Water tools | Cut below sea level to make deep water. (a preset of the one Landform shape; 47 rows on its card on Green) | Build › Tool rail › Water |
-| Shallow water | `shallow` | Water tools | Cut a shallow shelf beneath the water. (a preset of the one Landform shape; 49 rows on its card on Green) | Build › Tool rail › Water |
-| River | `river` | Water tools | A water channel along the path; bends build sand bars. (a preset of the one Landform shape; 43 rows on its card on Green) | Build › Tool rail › Water |
-| Braided river | `braided` | Water tools | A mostly dry gravel bed with thin threads of water. (a preset of the one Landform shape; 43 rows on its card on Green) | Build › Tool rail › Water |
-| Smooth | `smooth` | Paint tools | Soften changes in height beneath the brush. (a brush stroke; 8 rows on its card on Green) | Build › Tool rail › Brushes |
-| Reset ground | `erase` | Paint tools | Bring terrain back toward the base ground. (a brush stroke; 10 rows on its card on Green) | Build › Tool rail › Brushes |
-| Surface paint | `paint` | Paint tools | Paint materials and local surface effects (23 channels). (a brush stroke; 11 rows on its card on Green) | Build › Tool rail › Brushes |
-| Sand cover | `sand` | Paint tools | Paint sand coverage onto the terrain. (a brush stroke; 9 rows on its card on Green) | Build › Tool rail › Brushes |
-| Ground cover | `grass` | Paint tools | Restore ground cover beneath the brush. (a brush stroke; 9 rows on its card on Green) | Build › Tool rail › Brushes |
+| Tool | Key | Group today | What it does | Worlds | Proposed home |
+| --- | --- | --- | --- | --- | --- |
+| Select | `move` | Select and place | Select a shape to edit its curves, settings, paths or transform. (mode; 6 rows on its card) | all 19 | Build › Tool rail › Select |
+| Features & starts | `features` | Select and place | Place map features and player start positions. (mode; 25 rows on its card) splits into Features and Starts on the rail (same tool underneath) | all 19 | Build › Tool rail › Features |
+| Landform | `landform` | Shape tools | (the one Landform shape with its own starting values; 50 rows on its card) | all 19 | Build › Tool rail › Land |
+| Plateau / Mesa | `plateau` | Shape tools | A broad, level top with steep sides. (the one Landform shape with its own starting values; 51 rows on its card) named by the world: Plateau on green, green-evad, green-modern, red, archipelago, moon, moon-pitted, moon-cracked, zhon, zhon-river, lava, crystal, ice, ice-bergs, ice-crystal, ice-snow; Mesa on desert, desert-triad, desert-modern | all 19 | Build › Tool rail › Land |
+| Hill | `hill` | Shape tools | A rounded ridge with a gentle crest. (the one Landform shape with its own starting values; 49 rows on its card) | all 19 | Build › Tool rail › Land |
+| Mountain | `mountain` | Shape tools | A narrow, pointed crest; a path makes a range. (the one Landform shape with its own starting values; 51 rows on its card) | all 19 | Build › Tool rail › Land |
+| Knoll | `knoll` | Shape tools | (the one Landform shape with its own starting values; 49 rows on its card) | 3 of 19: green, green-evad, green-modern | Build › Tool rail › Land |
+| Ramp | `ramp` | Shape tools | An incline along a path. (the one Landform shape with its own starting values; 48 rows on its card) | all 19 | Build › Tool rail › Land |
+| V valley | `valleyV` | Shape tools | A narrow, V-shaped cut. (the one Landform shape with its own starting values; 47 rows on its card) | all 19 | Build › Tool rail › Land |
+| U valley | `valleyU` | Shape tools | A broad valley with a rounded floor. (the one Landform shape with its own starting values; 47 rows on its card) | all 19 | Build › Tool rail › Land |
+| Terraced valley | `valleyT` | Shape tools | A valley with steps along its sides. (the one Landform shape with its own starting values; 50 rows on its card) | all 19 | Build › Tool rail › Land |
+| Crater | `crater` | Shape tools | A bowl with a raised rim. (the one Landform shape with its own starting values; 51 rows on its card) | all 19 | Build › Tool rail › Land |
+| Fissure | `fissure` | Shape tools | A narrow fracture cut into the ground. (its own shape kind; 23 rows on its card) | all 19 | Build › Tool rail › Land |
+| Deep water / Lava lake | `deep` | Water tools | Cut below sea level to make deep water. (the one Landform shape with its own starting values; 47 rows on its card) named by the world: Deep water on green, green-evad, green-modern, red, archipelago, zhon, zhon-river, desert, desert-triad, desert-modern, crystal, ice, ice-bergs, ice-crystal, ice-snow; Lava lake on lava | 16 of 19: green, green-evad, green-modern, red, archipelago, zhon, zhon-river, lava, desert, desert-triad, desert-modern, crystal, ice, ice-bergs, ice-crystal, ice-snow | Build › Tool rail › Water |
+| Shallow water / Lava shallows | `shallow` | Water tools | Cut a shallow shelf beneath the water. (the one Landform shape with its own starting values; 49 rows on its card) named by the world: Shallow water on green, green-evad, green-modern, red, archipelago, zhon, zhon-river, desert, desert-triad, desert-modern, crystal, ice, ice-bergs, ice-crystal, ice-snow; Lava shallows on lava | 16 of 19: green, green-evad, green-modern, red, archipelago, zhon, zhon-river, lava, desert, desert-triad, desert-modern, crystal, ice, ice-bergs, ice-crystal, ice-snow | Build › Tool rail › Water |
+| River / Lava river | `river` | Water tools | A water channel along the path; bends build sand bars. (the one Landform shape with its own starting values; 43 rows on its card) named by the world: River on green, green-evad, green-modern, red, archipelago, zhon, zhon-river, desert, desert-triad, desert-modern, crystal, ice, ice-bergs, ice-crystal, ice-snow; Lava river on lava | 16 of 19: green, green-evad, green-modern, red, archipelago, zhon, zhon-river, lava, desert, desert-triad, desert-modern, crystal, ice, ice-bergs, ice-crystal, ice-snow | Build › Tool rail › Water |
+| Braided river / Lava channels | `braided` | Water tools | A mostly dry gravel bed with thin threads of water. (the one Landform shape with its own starting values; 43 rows on its card) named by the world: Braided river on green, green-evad, green-modern, red, archipelago, zhon, zhon-river, desert, desert-triad, desert-modern, crystal, ice, ice-bergs, ice-crystal, ice-snow; Lava channels on lava | 16 of 19: green, green-evad, green-modern, red, archipelago, zhon, zhon-river, lava, desert, desert-triad, desert-modern, crystal, ice, ice-bergs, ice-crystal, ice-snow | Build › Tool rail › Water |
+| Smooth | `smooth` | Paint tools | Soften changes in height beneath the brush. (a brush stroke; 8 rows on its card) | all 19 | Build › Tool rail › Brushes |
+| Reset ground | `erase` | Paint tools | Bring terrain back toward the base ground. (a brush stroke; 10 rows on its card) | all 19 | Build › Tool rail › Brushes |
+| Surface paint | `paint` | Paint tools | Paint materials and local surface effects (23 channels). (a brush stroke; 11 rows on its card) | all 19 | Build › Tool rail › Brushes |
+| Sand cover | `sand` | Paint tools | Paint sand coverage onto the terrain. (a brush stroke; 9 rows on its card) | all 19 | Build › Tool rail › Brushes |
+| Ground cover | `grass` | Paint tools | Restore ground cover beneath the brush. (a brush stroke; 9 rows on its card) | all 19 | Build › Tool rail › Brushes |
+| Granite tor | `tor` | Shape tools | (the one Landform shape with its own starting values; 53 rows on its card) | 1 of 19: green-modern | Build › Tool rail › Land |
+| Basalt wall | `basaltWall` | Shape tools | (the one Landform shape with its own starting values; 51 rows on its card) | 1 of 19: green-modern | Build › Tool rail › Land |
+| Limestone scarp | `limestoneScarp` | Shape tools | (the one Landform shape with its own starting values; 52 rows on its card) | 1 of 19: green-modern | Build › Tool rail › Land |
+| Canyon | `canyon` | Shape tools | (the one Landform shape with its own starting values; 51 rows on its card) | 1 of 19: red | Build › Tool rail › Land |
+| Island | `island` | Shape tools | (the one Landform shape with its own starting values; 49 rows on its card) | 1 of 19: archipelago | Build › Tool rail › Land |
+| Reef | `reef` | Water tools | (the one Landform shape with its own starting values; 51 rows on its card) | 1 of 19: archipelago | Build › Tool rail › Water |
+| Small crater | `smallCrater` | Shape tools | (the one Landform shape with its own starting values; 50 rows on its card) | 3 of 19: moon, moon-pitted, moon-cracked | Build › Tool rail › Land |
+| Old basin | `basin` | Shape tools | (the one Landform shape with its own starting values; 50 rows on its card) | 3 of 19: moon, moon-pitted, moon-cracked | Build › Tool rail › Land |
+| Rille | `rille` | Shape tools | (the one Landform shape with its own starting values; 47 rows on its card) | 3 of 19: moon, moon-pitted, moon-cracked | Build › Tool rail › Land |
+| Cinder cone | `cone` | Shape tools | (the one Landform shape with its own starting values; 49 rows on its card) | 1 of 19: lava | Build › Tool rail › Land |
+| Obsidian / Crystals / Iceberg | `crystal` | Shape tools | Clusters of faceted crystals, columns or blocks. (the one Landform shape with its own starting values; 59 rows on its card) named by the world: Obsidian on lava; Crystals on crystal; Iceberg on ice, ice-bergs, ice-crystal, ice-snow | 6 of 19: lava, crystal, ice, ice-bergs, ice-crystal, ice-snow | Build › Tool rail › Land |
+| Butte | `butte` | Shape tools | (the one Landform shape with its own starting values; 54 rows on its card) | 3 of 19: desert, desert-triad, desert-modern | Build › Tool rail › Land |
+| Hoodoos | `hoodoos` | Shape tools | (the one Landform shape with its own starting values; 60 rows on its card) | 3 of 19: desert, desert-triad, desert-modern | Build › Tool rail › Land |
+| Shale badlands | `badlands` | Shape tools | (the one Landform shape with its own starting values; 51 rows on its card) | 1 of 19: desert-modern | Build › Tool rail › Land |
+| Crystal spires | `spires` | Shape tools | (the one Landform shape with its own starting values; 60 rows on its card) | 1 of 19: crystal | Build › Tool rail › Land |
 
-Thirteen of the drawing tools are presets of one Landform shape and share one
-card; Fissure is its own shape kind; the five Paint tools are brush strokes.
-Select has the shortcut V. Tools show an icon only; the name and a rendered
-example appear on hover (14 tools and 17 shape rows have rendered examples in
-`ui-previews/`).
+Each world lists its own shape and water tools (20 of the 37 rows above are on some worlds only; a
+variant is counted as a world here). Select, Features, Landform, Fissure and
+the five Paint tools are on every world. Every shape and water tool is the
+one Landform shape with its own starting values, and they share one card;
+Fissure is its own shape kind; the Paint tools are brush strokes. A map can
+add tools of its own (Save as tool). Select has the shortcut V. Tools show an
+icon only; the name, and a rendered example where `ui-previews/` has one,
+appear on hover.
 
 ## Top bar
 
@@ -162,7 +180,7 @@ default on Green; the others appear when their parent is on.
 | Width variation | `lf-width-vary` | slider; 0 to 100, step 5; Green: 35 | How much the section widens and narrows along the path (100: from half to twice its width). | shape (map file) | shown by default for 14 of 19 drawing tools |  | Build › Shape card › Outline & variation |
 | Height variation (units) | `lf-height-vary` | slider; 0 to 40, step 1; Green: 0 | How far the surface rises and falls, in height units, in waves as long as the Variation size. It is zero at the feet. | shape (map file) | shown by default for 14 of 19 drawing tools |  | Build › Shape card › Outline & variation |
 | Variation size (px) | `lf-vary-size` | slider; 20 to 400, step 10; Green: 140 | The wavelength of the wander and of the width and height variation. | shape (map file) | shown by default for 14 of 19 drawing tools |  | Build › Shape card › Outline & variation |
-| Variation along the wall | `lf-wall-vary` | slider; 0 to 100, step 5; Green: 0 | How much one wall differs from stretch to stretch. 0: the same wander and the same gullies all the way round. Higher: the outline also bends in long waves, three Variation sizes across, with alcoves and salients; its small teeth come and go, so some stretches run straight; the Gullies leave some stretches plain, cut others far deeper, and run closer or wider apart; and Hard beds end and step more often. | shape (map file) | shown by default for 10 of 19 drawing tools |  | Build › Shape card › Outline & variation |
+| Variation along the wall | `lf-wall-vary` | slider; 0 to 100, step 5; Green: 0 | How much one wall differs from stretch to stretch. 0: the same wander and the same gullies all the way round. Higher: the outline also bends in long waves, three Variation sizes across, with alcoves and salients; its small teeth come and go, so some stretches run straight; the Gullies leave some stretches plain, cut others far deeper, and run closer or wider apart; and Hard beds end and step more often. | shape (map file) | shown by default for 11 of 19 drawing tools |  | Build › Shape card › Outline & variation |
 | Variation at the foot | `lf-vary-foot` | slider; 0 to 200, step 5; Green: 115 | How much of the variation acts at the foot of the section (100: all of it, 0: none, 200: twice). It blends into the next one up to the middle of the section. | shape (map file) | shown by default for 14 of 19 drawing tools |  | Build › Shape card › Outline & variation |
 | Variation up the section | `lf-vary-middle` | slider; 0 to 200, step 5; Green: 145 | How much of the variation acts from the middle of the section to its crest. Set the foot to 0 and this to 200 for variation that grows toward the crest. | shape (map file) | shown by default for 14 of 19 drawing tools |  | Build › Shape card › Outline & variation |
 | Gullies | `lf-gullies` | slider; 0 to 100, step 5; Green: 60 | Cut the raised faces into a divide, spurs off it and V-gullies that branch as they run down the fall line, deepest on steep faces and fading at the foot. Their depth varies along a wall, and where they cut deepest the wall stands back in bays between buttresses, so the rim leaves the drawn line. 0: smooth faces and the drawn rim. | shape (map file) | shown by default for 8 of 19 drawing tools |  | Build › Shape card › Details > Gullies |
@@ -217,20 +235,20 @@ default on Green; the others appear when their parent is on.
 | Surf | `water-surf` | slider; 0 to 100, step 5; Green: 0 | How much the shore is worked by waves, where this stroke makes water. 0: the shore is drawn as before. A little: a thin, broken wet strip and a few flecks of foam at the waterline. More: wider wet sand, wrack lines, a beach of sand whose inland edge breaks into the grass, cusps (the land is shaped to a gentle face, a berm and a slight back-slope, up to a few units tall) and a broken breaker line over the shallows. A rocky shore is painted with the Paint tool's rock. | shape (map file) | shown by default for 9 of 19 drawing tools |  | Build › Shape card › Details > Shore |
 | Crest taper (both ends) | `crest-taper` | slider; 0 to 100, step 5; Green: 0 | The crest narrows and lowers toward both ends of its path; it multiplies the height along the path. | shape (map file) | shown by default for 14 of 19 drawing tools |  | Build › Shape card › Outline & variation |
 | Facets | `ice-facets` | slider; 0 to 100, step 5; Green: 0 | Breaks the shape into facets of the Facet shape, each as high as the shape at its center, so the section and along curves shape the cluster or ridge they make. This sets how much of it: angular facets and columns cover this share of the surface (the rest stays smooth), prisms stand on this share of their places. On a landform that digs into the ground (Height reference Ground, below 0) the facets are angular, planes fitted to its own surface up and down, and this is how fully they replace it. 0 keeps the smooth surface. A landform with shore features keeps those instead. | shape (map file) | shown by default for 14 of 19 drawing tools |  | Build › Shape card › Details > Facets |
-| Facet shape | `lf-facet-form` | choice; Angular facets / Stepped columns / Prisms; Green: 0 | Angular facets: tilted planes fitted to the shape's own surface, a little steeper, stepped off their neighbors. Stepped columns: the surface tiled with flat polygonal columns, stepped up and down. Prisms: separate polygonal prisms standing on the ground, scattered over the shape (a cluster round a click, a ridge along a drag): crystal shards, or as wide as the shape, one block. A landform that digs takes angular facets. | shape (map file) | shown by default for 1 of 19 drawing tools |  | Build › Shape card › Details > Facets |
-| Surface | `lf-facet-surface` | choice; Rock / Crystal; Green: 0 | Rock: the facets are the shape's own ground, lit with the world's slope relief and light (rock facets, ice blocks). Crystal: clean crystal in the world's crystal color; each column or prism is shaded on its own and outlined, and angular facets become one crystal skin under the world's thin crystal web (Crystal's crater walls). | shape (map file) | shown by default for 1 of 19 drawing tools |  | Build › Shape card › Details > Facets |
-| Facet width (px) | `ice-facet-size` | slider; 8 to 1000, step 2; Green: 36 | The typical width of one facet, column or prism, and the spacing of the prisms. A prism as wide as the shape stands alone. | shape (map file) | shown by default for 1 of 19 drawing tools |  | Build › Shape card › Details > Facets |
+| Facet shape | `lf-facet-form` | choice; Angular facets / Stepped columns / Prisms; Green: 0 | Angular facets: tilted planes fitted to the shape's own surface, a little steeper, stepped off their neighbors. Stepped columns: the surface tiled with flat polygonal columns, stepped up and down. Prisms: separate polygonal prisms standing on the ground, scattered over the shape (a cluster round a click, a ridge along a drag): crystal shards, or as wide as the shape, one block. A landform that digs takes angular facets. | shape (map file) | hidden until its parent is on |  | Build › Shape card › Details > Facets |
+| Surface | `lf-facet-surface` | choice; Rock / Crystal; Green: 0 | Rock: the facets are the shape's own ground, lit with the world's slope relief and light (rock facets, ice blocks). Crystal: clean crystal in the world's crystal color; each column or prism is shaded on its own and outlined, and angular facets become one crystal skin under the world's thin crystal web (Crystal's crater walls). | shape (map file) | hidden until its parent is on |  | Build › Shape card › Details > Facets |
+| Facet width (px) | `ice-facet-size` | slider; 8 to 1000, step 2; Green: 36 | The typical width of one facet, column or prism, and the spacing of the prisms. A prism as wide as the shape stands alone. | shape (map file) | hidden until its parent is on |  | Build › Shape card › Details > Facets |
 | Step height | `crystal-step` | slider; 0 to 64, step 1; Green: 5 | Angular facets and stepped columns: how far each facet or column steps up or down from the shape under it, in height units. Angular facets on a raised shape stand up to about twice this above it; on a landform that digs, this either way; columns up to about twice this either way, with about 40% flush (retail Crystal's columns: 16; its crater walls: 1). | shape (map file) | hidden until its parent is on |  | Build › Shape card › Details > Facets |
-| Level tops | `crystal-tiers` | slider; 0 to 100, step 5; Green: 0 | Stepped columns and prisms: how level each top stands. 100: level at the height of the shape at the element's center, so it steps distinctly from its neighbors. 0: the top keeps the slope of the shape under it, as one plane across the element (a lean, a sloping section or different front and back sections tilt it: an ice slab's tilted top). | shape (map file) | shown by default for 1 of 19 drawing tools |  | Build › Shape card › Details > Facets |
+| Level tops | `crystal-tiers` | slider; 0 to 100, step 5; Green: 0 | Stepped columns and prisms: how level each top stands. 100: level at the height of the shape at the element's center, so it steps distinctly from its neighbors. 0: the top keeps the slope of the shape under it, as one plane across the element (a lean, a sloping section or different front and back sections tilt it: an ice slab's tilted top). | shape (map file) | hidden until its parent is on |  | Build › Shape card › Details > Facets |
 | Top tilt | `crystal-facet` | slider; 0 to 100, step 5; Green: 0 | Stepped columns: tilts each column's top into one or two planes that meet at a crease, so the tops read as crumpled multi-facet crystal, not flat plates. 0 keeps flat tops. | shape (map file) | hidden until its parent is on |  | Build › Shape card › Details > Facets |
 | Size mix | `crystal-size-var` | slider; 0 to 100, step 5; Green: 0 | Stepped columns: mixes three column widths (Facet width, about half and about a third of it), the small ones where the shape stands highest and in patches. 0 keeps one width. | shape (map file) | hidden until its parent is on |  | Build › Shape card › Details > Facets |
-| Polygon sides | `crystal-sides` | slider; 3 to 10, step 1; Green: 6 | Prisms: the sides of each prism's outline (Variation mixes a few more and fewer). | shape (map file) | shown by default for 1 of 19 drawing tools |  | Build › Shape card › Details > Facets |
-| Flat top share | `crystal-top` | slider; 0 to 95, step 5; Green: 20 | Prisms: the share of each prism that is its flat top. 0: pointed; higher cuts the tops level, with shorter, steeper faces (an ice block). | shape (map file) | shown by default for 1 of 19 drawing tools |  | Build › Shape card › Details > Facets |
-| Variation | `crystal-variation` | slider; 0 to 100, step 5; Green: 50 | Prisms: the spread of their sizes, heights and side counts, and how much looser their spacing gets. 0: even sizes, still irregularly spaced. | shape (map file) | shown by default for 1 of 19 drawing tools |  | Build › Shape card › Details > Facets |
-| Align to the path | `crystal-align` | slider; 0 to 100, step 5; Green: 0 | Prisms: 0 turns each prism at random, 100 sets its faces square to the path where it stands (four sides then make blocks that follow the path). | shape (map file) | shown by default for 1 of 19 drawing tools |  | Build › Shape card › Details > Facets |
-| Outline jitter | `berg-jitter` | slider; 0 to 100, step 5; Green: 50 | Prisms: how far each face's angle and distance stray from a regular polygon. | shape (map file) | shown by default for 1 of 19 drawing tools |  | Build › Shape card › Details > Facets |
-| Corner cuts | `berg-break` | slider; 0 to 8, step 1; Green: 3 | Prisms: extra planes that cut corners off each prism. | shape (map file) | shown by default for 1 of 19 drawing tools |  | Build › Shape card › Details > Facets |
-| Face roughness | `berg-rough` | slider; 0 to 30, step 1; Green: 6 | Prisms: fractal roughness added to the height, from 40 px lumps to 4 px grain. | shape (map file) | shown by default for 1 of 19 drawing tools |  | Build › Shape card › Details > Facets |
+| Polygon sides | `crystal-sides` | slider; 3 to 10, step 1; Green: 6 | Prisms: the sides of each prism's outline (Variation mixes a few more and fewer). | shape (map file) | hidden until its parent is on |  | Build › Shape card › Details > Facets |
+| Flat top share | `crystal-top` | slider; 0 to 95, step 5; Green: 20 | Prisms: the share of each prism that is its flat top. 0: pointed; higher cuts the tops level, with shorter, steeper faces (an ice block). | shape (map file) | hidden until its parent is on |  | Build › Shape card › Details > Facets |
+| Variation | `crystal-variation` | slider; 0 to 100, step 5; Green: 50 | Prisms: the spread of their sizes, heights and side counts, and how much looser their spacing gets. 0: even sizes, still irregularly spaced. | shape (map file) | hidden until its parent is on |  | Build › Shape card › Details > Facets |
+| Align to the path | `crystal-align` | slider; 0 to 100, step 5; Green: 0 | Prisms: 0 turns each prism at random, 100 sets its faces square to the path where it stands (four sides then make blocks that follow the path). | shape (map file) | hidden until its parent is on |  | Build › Shape card › Details > Facets |
+| Outline jitter | `berg-jitter` | slider; 0 to 100, step 5; Green: 50 | Prisms: how far each face's angle and distance stray from a regular polygon. | shape (map file) | hidden until its parent is on |  | Build › Shape card › Details > Facets |
+| Corner cuts | `berg-break` | slider; 0 to 8, step 1; Green: 3 | Prisms: extra planes that cut corners off each prism. | shape (map file) | hidden until its parent is on |  | Build › Shape card › Details > Facets |
+| Face roughness | `berg-rough` | slider; 0 to 30, step 1; Green: 6 | Prisms: fractal roughness added to the height, from 40 px lumps to 4 px grain. | shape (map file) | hidden until its parent is on |  | Build › Shape card › Details > Facets |
 | Rock | `lf-rock` | choice; Rock beneath / World rock / Smooth soil; Green: -1 | The rock this shape is made of, one of the map's rock presets (World pane, Rock & cliffs). Rock beneath keeps whatever rock is already there: the world's own, or an earlier shape's. The shape claims its rock wherever it moves the ground, so a later shape wins where it overlaps an earlier one. | shape (map file) | shown by default for 14 of 19 drawing tools |  | Build › Shape card › Rock & cover |
 | Local vegetation | `style-vegetation` | slider; -100 to 100, step 5; Green: 0 | Grass and moss cover inside the shape, times 1 + this: below 0 more bare rock, above 0 more cover. | shape (map file) | shown by default for 14 of 19 drawing tools |  | Build › Shape card › Rock & cover |
 | Width (px) | `fissure-width` | slider; 2 to 24, step 1; Green: 5 | Width of the cut at its widest. The grid is 2 px, so a cut never reads narrower than about 4 px, however thin it is set. | shape (map file) | shown by default for 1 of 19 drawing tools |  | Build › Shape card › Details > Cut |
@@ -911,10 +929,10 @@ button, and the weathering progress text.
 | Build › Features tool | 74 |
 | World › Cliffs & stones | 54 |
 | World › Water & shores | 42 |
+| Build › Tool rail | 37 |
 | World › Ground | 32 |
 | World › Light & shine | 31 |
 | World › Colors | 31 |
-| Build › Tool rail | 22 |
 | Build › Canvas bar | 21 |
 | Top bar › Map menu | 18 |
 | Everywhere › Shortcuts | 14 |
