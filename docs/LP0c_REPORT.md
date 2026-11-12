@@ -1,6 +1,8 @@
 # LP0c: stable view tiles and sampling, 2026-11-12
 
-**Status:** sampling fix complete; view-grid browser measurements in progress.
+**Status:** sampling, view-grid and cache-correctness work complete; final
+regression checks are running. The owner deferred timing runs until the
+system is quiet and authorized moving to the next card.
 Work stays on `lp0c/view-tiles`. Nothing landed or was pushed; no LP0b work.
 
 **Sampling fault [measured/read].** The stopped count was `green-2`, map16,
@@ -79,6 +81,21 @@ budget and live reservations. A change in the export's fixed 128 MiB
 trial no longer deletes the view cache. The export's tile selector and
 trial reserve are unchanged. No controls or panels were added.
 
+**Active-bake safety and cache retention [measured/read].** Larger view
+tiles exposed a resource race: the export's temporary `setBudget(128 MiB)`
+trial could evict textures while a bake awaited voxel allocation. The
+trial and view-size selection now use the same pure estimator with explicit
+budget/reservation arguments. Budget mutation waits until the renderer is
+idle; `bake()` also applies the budget before the next render.
+
+The corrected real-mouse Surface workload delivered 144 events across the
+large and baseline views with 0 exceptions. At the baseline 1208×841 view,
+main changed its canonical size four times and emptied 84, 15, 36 and 47
+cached images respectively. LP0c made the same four flips and kept **84→84**
+images every time; display tiles stayed 256 px. These are configuration
+checks under shared GPU load: all latency values from those runs were
+discarded. Final regression checks are being repeated after the race fix.
+
 **Scene and realism checks [measured].** The view-grid work adds **0 pixels**
 beyond the sampling fix on all 34 check scenes. Modern Green's three
 height files match main byte for byte, so its before/after realism figures
@@ -107,15 +124,15 @@ landforms (25 chunks), Lava 8×8 dense (81), Red 16×16 dense (289). Both
 WebAssembly exports and native export match byte for byte in each case.
 These are equality checks; their times are not used as speed evidence.
 
-**Browser timing:** pending the alternating matrix. One successful
-fresh-server warm-up was discarded for each build. The runner requires
-three GPU readings ≤20% and no competing check job before each run; none
-has been accepted yet because the shared GPU remains busy. The two large
-rocky fixtures on map4/map16, two alternating pairs per fixture, and the
-Surface-drag cache-retention evidence remain required before LP0c is
-accepted. First-picture, whole-view and release numbers are not inferred
-from the tile count. The timing script uses the same new scalar-only
-`configureChunks` hooks for both builds and still fails closed on drift.
+**Browser timing: deferred by the owner, 2026-11-12.** One successful
+fresh-server warm-up was discarded for each build. No alternating timing
+sample was accepted: the shared GPU remained busy. The owner said to move
+on and run timings later when the system is quiet. The original gates and
+20% quiet-start guard remain unchanged. Still owed: the two large rocky
+fixtures on map4/map16, two alternating pairs per fixture, with first
+picture, whole-view and release numbers. Speed is not inferred from the
+tile count. New scalar-only `configureChunks` hooks work on both builds
+and still fail closed on drift.
 
 **Evidence and conditions.** Apple M3 Pro / 18 GiB, macOS 26.6.2 (25G83),
 Node v24.5.0, existing Dawn binding. Small count and probe results are in

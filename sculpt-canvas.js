@@ -94,15 +94,16 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     try {
       // Keep the export's fixed trial. The view uses the actual budget below.
       const reserve=fixedGPU(false)-(previewReserved?64*MB:0)+512*512*8;   // the bake lattice does not depend on what the GPU fields hold
-      finest=.25;renderer.setBudget(128*MB,reserve);canonicalSize=Math.min(512,renderer.recommendedChunkSize);
+      finest=.25;canonicalSize=Math.min(512,renderer.chunkSize(undefined,128*MB,reserve));
       // The export lattice may change with its fixed trial, but retained view
       // images keep their own 256 px grid. Only an actual budget shortage can
       // lower that grid; a knob changing the export's size never empties it.
       trimTo(gpuBudget-fixedGPU()-renderer.stats().retainedBytes-32*MB);
-      renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+256*256*8);
-      const nextDisplay=Math.min(256,renderer.recommendedChunkSize);
+      const nextDisplay=renderer.chunkSize(256,gpuBudget,fixedGPU()+cacheBytes+256*256*8);
       if(nextDisplay!==displaySize){for(const key of cache.keys())remove(key);displaySize=nextDisplay;}
-      renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+Math.max(canonicalSize,displaySize)**2*8);
+      // A knob may arrive during the voxel allocation readback. Its textures
+      // must survive until that bake returns; bake() sets the next budget too.
+      if(!renderer.busy)renderer.setBudget(gpuBudget,fixedGPU()+cacheBytes+Math.max(canonicalSize,displaySize)**2*8);
     }finally{budgetUpdating=false;}
   }
   async function region(request,options,signal,weather=true) {

@@ -123,7 +123,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   }
   // Relief and cached output use scale s. Color is evaluated at up to four
   // native samples per output pixel, then filtered after shading and palette mapping.
-  estimate(region,width,height,maskPlaneCount=this.maskPlaneCount,scale=1) {
+  estimate(region,width,height,maskPlaneCount=this.maskPlaneCount,scale=1,{budgetBytes=this.budgetBytes,reservedBytes=this.reservedBytes}={}) {
     // input per texel: height 4 + routes 4 + weather/material 4 layers x 4 (as allocate() makes them), then 4 a mask layer.
     const fieldScale=fieldLevel(scale),field=pow2(Math.ceil(region.fieldsWidth/fieldScale))*pow2(Math.ceil(region.fieldsHeight/fieldScale))*8;
     const maskLayers=Math.max(1,Math.ceil(maskPlaneCount/4)),input=pow2(region.gridWidth)*pow2(region.gridHeight)*(24+maskLayers*4);
@@ -135,18 +135,19 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const margin=Math.max(Math.ceil(3.6*(this.number('boulders',0)>0?32:Math.min(16,3.3*this.rockMax('looseSize',this.number('looseSize',6)))))+4,PLANT_REACH);
     const loose=Math.max(this.looseBuffer?.size??16,(Math.ceil((region.fieldsWidth+2*fieldScale+2*margin)/4)+2)*(Math.ceil((region.fieldsHeight+2*fieldScale+2*margin)/4)+2)*32);
     const rockWeather=this.rockMax('runoff',this.number('runoff',0))>0||this.rockMax('debrisAmount',this.number('debrisAmount',0))>0||this.number('rimReach',0)>0||this.number('shoreRock',0)>0||this.number('shoreShelf',0)>0?rockWeatherBytes(region.fieldsWidth+2*fieldScale,region.fieldsHeight+2*fieldScale):0;
-    const voxel=Math.min(64*MB,this.budgetBytes*.35);
+    const voxel=Math.min(64*MB,budgetBytes*.35);
     return {field,input,output,loose,rockWeather,maskPlaneCount,maskLayers,voxel,workingBytes:field+input+output+loose+voxel+rockWeather,
-      retainedBytes:this.fixedBytes,reservedBytes:this.reservedBytes,gpuBytes:this.fixedBytes+this.reservedBytes+field+input+output+loose+voxel+rockWeather,
+      retainedBytes:this.fixedBytes,reservedBytes,gpuBytes:this.fixedBytes+reservedBytes+field+input+output+loose+voxel+rockWeather,
       cpuRetainedBytes:this.cpuRetainedBytes,cpuUploadBytes:input,cpuPeakBytes:this.cpuRetainedBytes+input};
   }
 
-  chunkSize(maximum=this.config.chunkSize??512) {
+  // Budget probes are pure: a view-size trial must not evict an active bake.
+  chunkSize(maximum=this.config.chunkSize??512,budgetBytes=this.budgetBytes,reservedBytes=this.reservedBytes) {
     let size=Math.floor(maximum/32)*32;
     while(size>=32) {
-      const region=this.requiredRegion({x:Math.floor(this.size/2),y:Math.floor(this.size/2),width:size,height:size}),e=this.estimate(region,size,size,this.maskPlaneCount,1);
+      const region=this.requiredRegion({x:Math.floor(this.size/2),y:Math.floor(this.size/2),width:size,height:size}),e=this.estimate(region,size,size,this.maskPlaneCount,1,{budgetBytes,reservedBytes});
       if(Math.max(pow2(region.fieldsWidth),pow2(region.fieldsHeight),pow2(region.gridWidth),pow2(region.gridHeight),size)<=this.limit&&
-        e.gpuBytes<=this.budgetBytes)return size;
+        e.gpuBytes<=budgetBytes)return size;
       size=Math.floor(size/64)*32;
     }
     throw new Error('nanolathe: terrain materials and a 32 px chunk exceed the GPU memory budget');
