@@ -10,7 +10,7 @@ import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
 import {RockWeather} from './sculpt-rock-weather.js';
 import {VoxelSurface} from './sculpt-volume.js';
-import {extractGates, gateValues, gateKey, uniformStages} from './sculpt-gates.js';
+import {extractGates, gateValues, gateKey, uniformStages, worldUniformDelta} from './sculpt-gates.js';
 
 // The mask planes when the config names none: as many as MASK_KEYS (sculpt-scene.js, which says what each holds). The masks texture array has a layer per 4 planes.
 const MASK_PLANE_COUNT = 25;
@@ -700,7 +700,7 @@ export class TerrainRenderer {
     const {clay=false,light='original',detail=this.config.material?.surfaceRelief??1,ring=.85,ringSpread=.65,ringVariation=.7,materialWeathering=this.config.material?.materialWeathering??0,transitionDetail=this.config.material?.transitionDetail??.65,exact=false}=options;
     const values={clay,light,detail,ring,ringSpread,ringVariation,materialWeathering,transitionDetail,exact};
     const key=JSON.stringify([values,this.grid,this.size]);
-    if(!this.worldDirty&&this.worldSyncKey===key)return;
+    if(!this.worldDirty&&this.worldSyncKey===key)return {fields:[],stage:null,rockSlots:[],channels:[]};
     this.worldOptions=values;
     const variant = this.variant;
     // Placement is live state too: refreshing only scalar uniforms left these
@@ -1023,7 +1023,21 @@ export class TerrainRenderer {
       this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
     }
     this.writeRocks();
+    const channels={
+      reach:this.reaches?.()??null,
+      wear:this.rockSlots().some(k=>this.rockValue(k,'faceWear')>0&&this.rockValue(k,'rockFace')>0)?4:0,
+      loose:[Math.max(this.uniformValue('uLooseSupply'),this.uniformValue('uDebrisAny'),this.uniformValue('uBoulders'))>0,this.uniformValue('uPlantsOn')>0,Math.max(...this.rockSlots().map(k=>this.rockValue(k,'looseSize')))],
+      runoff:[this.uniformValue('uRunoffAny')>0,this.uniformValue('uDebrisAny')>0,this.uniformValue('uRimReach')>0,this.uniformValue('uShoreRock')>0,this.uniformValue('uShoreShelf')>0],
+      rocks:this.rockSlots(),
+    };
+    const delta=worldUniformDelta(this.worldUniformSnapshot,this.uniformData,this.layout,this.uniformStages);
+    delta.channels=[];
+    for(const [name,value]of Object.entries(channels))if(JSON.stringify(value)!==JSON.stringify(this.worldChannelSnapshot?.[name])){
+      const stage=name==='wear'?'D':'C';delta.channels.push({name,stage});if(!delta.stage||stage<delta.stage)delta.stage=stage;
+    }
+    this.worldUniformSnapshot=new Uint32Array(this.uniformData.slice(0));this.worldChannelSnapshot=channels;
     this.worldSyncKey=key;this.worldDirty=false;
+    return delta;
   }
 
   applyKnobs() { this.worldDirty=true;const result=this.syncWorld();this.fieldsDirty=true;return result; }

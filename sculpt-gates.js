@@ -113,3 +113,20 @@ export function uniformStages(modules) {
   }
   return result;
 }
+
+// Compare only CPU-owned world fields. GPU-written flags and per-chunk
+// coordinates are absent, including the aliases of slot 0 in the Rock table.
+export function worldUniformDelta(before,after,layout,stages) {
+  const previous=before??new Uint32Array(after.byteLength/4),next=new Uint32Array(after),table=layout.fields.get('rock'),fields=[],slots=new Set();let stage=null;
+  const perChunk=new Set([...PER_CHUNK_UNIFORMS,'weatherMaps','materialReady','transitionBody','rockWeatherGrid']);
+  const differs=(f,offset=f.offset)=>{
+    for(let i=0;i<f.count;i++)for(let j=0;j<f.width;j++){const k=(offset+i*f.stride)/4+j;if(previous[k]!==next[k])return true;}return false;
+  };
+  const add=(name,key,slot)=>{const s=stages.get(key)?.stage??null;fields.push({name,stage:s});if(slot!==undefined)slots.add(slot);if(s&&(!stage||s<stage))stage=s;};
+  for(const [name,f]of layout.fields){
+    if(name==='rock'){
+      for(let slot=0;slot<f.count;slot++)for(const [member,m]of f.members)if(differs(m,f.offset+slot*f.stride+m.offset))add(`rock[${slot}].${member}`,member,slot);
+    }else if(!(table&&f.offset>=table.offset&&f.offset<table.offset+table.count*table.stride)&&!perChunk.has(name)&&!name.startsWith('chunk')&&differs(f))add(name,name);
+  }
+  return {fields,stage,rockSlots:[...slots]};
+}
