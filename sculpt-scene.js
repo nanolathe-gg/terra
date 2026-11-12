@@ -295,18 +295,19 @@ export const worldSetting=(config,settings,key) => settings.has(key)?Number(sett
 export const heightsNode=(n,name) => ({kind:'heights',hidden:Boolean(n?.hidden),...heightsFields(n,name)});
 // Capture tools rebuild a map from strokes: [kind, [[x,y],...], options], each starting from the brush card's defaults for this world: a shape of
 // the library as the world makes it, or another kind. A landform stroke names its shape as its tool (node.tool; the page shows it as the generic
-// landform where the world's toolbar lacks it). options.card overrides card values (diameter, amount, roughness ... in card units); any other key is a stroke option. Stroke i takes
+// landform where the world's toolbar lacks it), or one of the map's own tools (`tools`, sculpt-tools.js copyMapTools: a scene's `tools`), which draws
+// from its own card. options.card overrides card values (diameter, amount, roughness ... in card units); any other key is a stroke option. Stroke i takes
 // the seed + i * 7919; the ground undulation (unless ground is false) comes first, from the page's settings. A river is migrated as a
 // drawn one is, over the map. A height image is ['heights', [], {image, bits, width, height, cell, x, y, scale, offset, mode}]: it has no path.
-export function sceneNodes(config,list,{ground=true,seed=DEFAULT_SEED,settings=pageSettings(config)}={}) {
+export function sceneNodes(config,list,{ground=true,seed=DEFAULT_SEED,settings=pageSettings(config),tools=[]}={}) {
   const out=[];
   if (ground) { const g=groundDefaults(settings); if (g.amplitude>0) out.push({kind:'ground',...g,seed:seed^0x9e37}); }
   list.forEach(([entry,points,options={}],i) => {
-    const kind=strokeKind(entry);
+    const own=tools.find(t => t.id===entry),kind=own?'landform':strokeKind(entry);
     if (kind==='heights') { out.push(heightsNode(options,`scene stroke ${i}: the height image`)); return; }
     // A stroke the passes would not draw is an error, not an empty stroke: a section form (mesa, cliff, lfPlateau) is a landform's curve, not a tool.
     if (!DRAWN_KINDS.includes(kind)) throw new Error(`scene stroke ${i}: "${entry}" is not a tool the editor draws (a shape: ${Object.keys(LANDFORM_SHAPES).join(', ')}, or ${DRAWN_KINDS.filter(k => k!=='landform').join(', ')}; a section form goes in the card's curve)`);
-    const {card:override,...rest}=options,d={...toolDefaults(config,entry),...override},pts=points.map(([x,y]) => ({x,y}));
+    const {card:override,...rest}=options,d={...(own?own.card:toolDefaults(config,entry)),...override},pts=points.map(([x,y]) => ({x,y}));
     const card={...strokeCard(config,d),seed:(seed+i*7919)>>>0};
     const probe={...card,...rest};
     const node={kind,points:pts,params:strokeParams(probe),seed:probe.seed,...(kind==='landform'?{tool:entry}:{})};

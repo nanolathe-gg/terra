@@ -7,8 +7,8 @@ import {execFileSync} from 'node:child_process';
 import {mkdtempSync, readFileSync, readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {LANDFORM_SHAPES, toolDefaults, sceneNodes, pageSettings} from '../sculpt-scene.js';
-import {TOOL_ICONS, FIXED_TOOLS, LANDFORM_TOOL, worldTools, toolShape, toolRockSlot, strokeTool, keepStrokeTools, inferStrokeTools} from '../sculpt-tools.js';
+import {LANDFORM_SHAPES, toolDefaults, sceneNodes, pageSettings, strokeCard, strokeParams} from '../sculpt-scene.js';
+import {TOOL_ICONS, FIXED_TOOLS, LANDFORM_TOOL, MAP_TOOLS_MAX, worldTools, toolShape, toolRockSlot, strokeTool, keepStrokeTools, inferStrokeTools, carryStrokes, copyMapTools, addMapTool, deleteMapTool, nextMapToolId, CARD_KEYS} from '../sculpt-tools.js';
 
 const root = new URL('..', import.meta.url).pathname, dir = mkdtempSync(join(tmpdir(), 'tools-test-'));
 execFileSync(process.env.PYTHON || '/Users/daniel/src/terraform/.venv/bin/python', [root + 'sculpt.py', '--dump-configs', dir]);
@@ -28,6 +28,8 @@ test('every world defines every shape, and the starting cards are the old tables
     for (const w of WORLDS) assert.deepEqual(Object.keys(config.worldShapes[w]).sort(), Object.keys(LANDFORM_SHAPES).sort(), `${name}: ${w}`);
   }
   assert.equal(createHash('sha256').update(JSON.stringify(allDefaults())).digest('hex'), PINNED);
+  // A map tool saved from any of them holds only settings a card may hold (sculpt-tools.js copyMapTools).
+  for (const w of WORLDS) for (const entry of ENTRIES) for (const key of Object.keys(toolDefaults(configs[w], entry))) assert.ok(CARD_KEYS.has(key), `${w} ${entry}: ${key}`);
 });
 
 // Main 1f0dcec0's thirteen shape buttons in sculpt.html, in order (Fissure, which sat between Crater and Faceted forms, is a fixed button now).
@@ -75,4 +77,62 @@ test('a stroke shows as its tool, or as the generic landform where the toolbar l
   assert.equal(toolRockSlot({id: 'x', rock: 'basalt'}, rocks), -1);
   assert.equal(toolRockSlot({id: 'x'}, rocks), undefined);
   assert.equal(LANDFORM_TOOL.shape, 'landform');
+});
+
+test('a biome switch: a stroke whose tool the new world has takes its defaults where unedited; one it lacks becomes Landform with every number', () => {
+  const ids = new Set(['landform', 'hill', 'map-1']), defaults = {hill: {radius: 120, wander: 34, lean: 1}, 'map-1': {radius: 80, wander: 2, lean: 1}};
+  const list = [{kind: 'ground', amplitude: 3},
+    {kind: 'landform', tool: 'hill', params: {radius: 200, wander: 10, lean: 1}, edited: ['radius']},
+    {kind: 'landform', tool: 'mesa', params: {radius: 300, wander: 75, lean: 2}, edited: []},
+    {kind: 'landform', tool: 'map-1', params: {radius: 80, wander: 2, lean: 1}, edited: []},
+    {kind: 'fissure', params: {radius: 5}}];
+  const out = carryStrokes(list, ids, n => defaults[n.tool] ?? null);
+  assert.deepEqual(out.map(n => [n.tool, n.params]), [['hill', {radius: 200, wander: 34, lean: 1}], ['landform', {radius: 300, wander: 75, lean: 2}], ['map-1', {radius: 80, wander: 2, lean: 1}], [undefined, {radius: 5}]]);
+  assert.ok(out.every(n => !('edited' in n)), 'the marks are the working copy\'s, not the map\'s');
+});
+
+// A tool made from a shape: Hill's card with a wider diameter and a rock slot.
+const made = config => ({label: 'Broad hill', icon: 'hill', color: '#A0C080', group: 'shape', shape: 'hill', card: {...toolDefaults(config, 'hill'), diameter: 520, rockPreset: 1, preset: 'green'}});
+
+test('a map\'s own tools: add, delete, ids never reused, checked before they touch the map', () => {
+  const config = configs.green;
+  let {id, tools} = addMapTool([], [], made(config));
+  assert.equal(id, 'map-1');
+  assert.deepEqual([tools[0].color, tools[0].card.preset, tools[0].card.diameter], ['#a0c080', 'custom', 520], 'a map tool\'s card is its own, never a world\'s preset');
+  const second = addMapTool(tools, [], {...made(config), label: 'Lake', icon: 'deep', group: 'water', shape: 'deep', card: toolDefaults(config, 'deep')});
+  assert.equal(second.id, 'map-2'); tools = second.tools;
+  assert.deepEqual(deleteMapTool(tools, 'map-1').map(t => t.id), ['map-2']);
+  assert.throws(() => deleteMapTool(tools, 'map-9'), /No tool/);
+  // A stroke of a deleted tool keeps its id, so the next tool takes a new one and the stroke never shows as it.
+  assert.equal(nextMapToolId(deleteMapTool(tools, 'map-2'), [{kind: 'landform', tool: 'map-2'}]), 'map-3');
+  assert.deepEqual(copyMapTools(JSON.parse(JSON.stringify(tools))), tools);
+  assert.equal(copyMapTools(undefined), null);
+  for (const bad of [{}, [{...tools[0], id: 'hill'}], [tools[0], tools[0]], [{...tools[0], icon: 'star'}], [{...tools[0], extra: 1}], [{...tools[0], card: {...tools[0].card, craterlets: 5}}],
+    [{...tools[0], card: {...tools[0].card, diameter: 'wide'}}], [{...tools[0], card: {...tools[0].card, curve: {form: 'lfHill', knots: [[0]]}}}], [{...tools[0], label: ' '}]])
+    assert.throws(() => copyMapTools(bad), undefined, JSON.stringify(bad).slice(0, 80));
+  let many = [];
+  for (let k = 0; k < MAP_TOOLS_MAX; k++) many = addMapTool(many, [], made(config)).tools;
+  assert.throws(() => addMapTool(many, [], made(config)), /at most/);
+});
+
+test('a scene may carry the map\'s tools, and a stroke that names one draws its card', () => {
+  const config = configs.green, {tools} = addMapTool([], [], made(config)), settings = pageSettings(config);
+  const [node] = sceneNodes(config, [['map-1', [[100, 100], [300, 140]], {}]], {ground: false, settings, tools});
+  assert.equal(node.kind, 'landform'); assert.equal(node.tool, 'map-1');
+  const [same] = sceneNodes(config, [['hill', [[100, 100], [300, 140]], {card: {diameter: 520, rockPreset: 1}}]], {ground: false, settings});
+  assert.deepEqual(node.params, same.params, 'the same numbers as its shape with the card\'s changes');
+  assert.equal(node.params.radius, 260);
+  assert.throws(() => sceneNodes(config, [['map-1', [[0, 0]], {}]], {ground: false, settings}), /not a tool/, 'without the map\'s tools the name means nothing');
+});
+
+test('a save and a share link carry the map\'s tools and each stroke\'s tool', async () => {
+  const {shareText, gzipText} = await import('../sculpt-share.js'), {gunzipSync} = await import('node:zlib');
+  const {tools} = addMapTool([], [], made(configs.green)), nodes = [{kind: 'landform', tool: 'map-1', points: [{x: 0, y: 0}], params: {radius: 260}}, {kind: 'landform', tool: 'hill', points: [{x: 1, y: 1}], params: {}}];
+  const save = {version: 6, tools, tool: 'map-1', toolSettings: {'map-1': tools[0].card}, nodes};
+  const back = JSON.parse(gunzipSync(await gzipText(shareText(save))).toString('utf8'));
+  assert.deepEqual(copyMapTools(back.tools), tools);
+  const ids = new Set(['landform', 'hill', ...copyMapTools(back.tools).map(t => t.id)]);
+  assert.deepEqual(keepStrokeTools(back.nodes, ids).map(n => n.tool), ['map-1', 'hill']);
+  assert.equal(shareText(back), shareText(save), 'sharing the loaded map again gives the same link');
+  assert.deepEqual(keepStrokeTools(back.nodes, new Set(['landform', 'hill'])).map(n => n.tool), ['landform', 'hill'], 'a map without the tool shows its strokes as Landform');
 });

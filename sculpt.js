@@ -16,7 +16,7 @@ import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,
 import {selectionTransform} from './sculpt-selection.js';
 import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap,keepPrevious,takePrevious,dropPrevious} from './sculpt-share.js';
 import {isRiver,pointsSignature} from './sculpt-river.js';
-import {LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,strokeTool,keepStrokeTools,inferStrokeTools} from './sculpt-tools.js';
+import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
 
@@ -130,22 +130,24 @@ function status(message) { $('status').textContent=featureNotice&&message!==feat
 // Height slider range per shape kind; Raise / lower is signed.
 const amountRange=kind => kind==='fissure'?[2,60]:['smooth','sand','grass','paint'].includes(kind)?[5,100]:[5,160];
 function toolDefaults(entry,preset=config?.biomeId||'green') { return toolDefaultsIn(config,entry,preset); }
-// The toolbar's shape tools (sculpt-tools.js): the generic Landform button, then the world's own. A tool id names a fixed button (its stroke kind) or one of these.
-let worldToolList=null;   // the world's tools, checked once its config is in
-const shapeTools=() => [LANDFORM_TOOL,...(worldToolList??=worldTools(config))];
-const toolById=id => shapeTools().find(t => t.id===id);
-const toolIds=() => new Set([...FIXED_TOOLS,...shapeTools().map(t => t.id)]);
+// The toolbar's shape tools (sculpt-tools.js): the generic Landform button, the world's own, then the map's own (`own`: Save as tool; a load passes the list it
+// is about to open). A tool id names a fixed button (its stroke kind) or one of these.
+let worldToolList=null,mapTools=[];   // the world's tools, checked once its config is in; the map's
+const shapeTools=(own=mapTools) => [LANDFORM_TOOL,...(worldToolList??=worldTools(config)),...own];
+const toolById=(id,own=mapTools) => shapeTools(own).find(t => t.id===id);
+const toolIds=(own=mapTools) => new Set([...FIXED_TOOLS,...shapeTools(own).map(t => t.id)]);
 // What a tool draws: its shape (a stroke kind for the fixed buttons), and that shape's stroke kind.
 const entryOf=id => { const t=toolById(id); return t?toolShape(t):id; };
 const toolKind=id => strokeKind(entryOf(id));
-// A tool's starting card: its shape as world `preset` makes it, with the rock the tool names (toolRockSlot).
-function toolCard(id,preset=config?.biomeId) {
+// A tool's shape as world `preset` makes it, with the rock the tool names (toolRockSlot); a tool's starting card: that, or a map tool's own card.
+function shapeCard(id,preset=config?.biomeId) {
   const t=toolById(id),card=toolDefaults(entryOf(id),preset),slot=toolRockSlot(t,mapRocks);
   if (slot!==undefined) card.rockPreset=slot;
   return card;
 }
+const toolCard=(id,own=mapTools) => { const t=toolById(id,own); return t?.card?structuredClone(t.card):shapeCard(id); };
 // A save's card for a tool: one still on a world's preset is that preset as this editor has it (with the tool's rock); otherwise savedToolCard.
-const savedCard=(id,card) => card && Object.hasOwn(config.worldShapes||{},card.preset)?toolCard(id,card.preset):savedToolCard(config,entryOf(id),card);
+const savedCard=(id,card) => card && Object.hasOwn(config.worldShapes||{},card.preset)?shapeCard(id,card.preset):savedToolCard(config,entryOf(id),card);
 const toolLabel=id => toolById(id)?.label;
 const firstTool=() => shapeTools()[1]?.id??LANDFORM_TOOL.id;
 // The shape buttons, built from the world's list into their groups (the one exception to the page's layout living in sculpt.html): each a copy of its icon
@@ -156,8 +158,18 @@ function buildToolbar() {
     const b=document.createElement('button');
     b.dataset.tool=t.id; b.dataset.shape=toolShape(t); b.setAttribute('aria-pressed','false'); b.setAttribute('aria-label',t.label); b.title=t.label;
     b.style.setProperty('--tool-color',t.color); b.disabled=true; b.append(icons.querySelector(`[data-icon="${t.icon}"]`).cloneNode(true));
+    if (t.card) b.dataset.mapTool='';   // a map's own: its hover shows its shape's sketch, not the shape's rendered example
     return b;
   }));
+}
+// The map's tools replaced (Save as tool, Delete, undo, a load or a scene): the toolbar and the cards follow, and a selected tool that is gone gives way to
+// Landform. `fresh` gives every map tool its own card again (another map's tools may have had these ids).
+function restoreMapTools(list,fresh=false) {
+  mapTools=structuredClone(list);
+  for (const id of Object.keys(toolSettings)) if (id.startsWith('map-') && (fresh || !mapTools.some(t => t.id===id))) delete toolSettings[id];
+  for (const t of mapTools) toolSettings[t.id]??=toolCard(t.id);
+  if (!toolIds().has(tool)) { tool=LANDFORM_TOOL.id; showTool(toolSettings[tool]); }
+  buildToolbar();
 }
 function rememberTool(custom=false) {
   const state={...toolSettings[tool]};
@@ -284,7 +296,7 @@ function updateControls() {
   $('deposit-spread-value').textContent=$('deposit-spread').value+'%';
   $('transition-detail-value').textContent=$('transition-detail').value+'%';
   { const id=tool==='move'&&nodes[selected]?.params?strokeTool(nodes[selected],ids):entry; syncToolStyle(id); $('tool-style').value=toolSettings[id]?.preset||'custom'; }
-  $('tool-help').textContent=HELP[entryOf(entry)]||'';
+  $('tool-help').textContent=toolById(entry)?.card?`Draw a landform with the settings, curves and rock of ${toolLabel(entry)}, a tool saved in this map. Change any setting below.`:HELP[entryOf(entry)]||'';
   { const can=ready && resettable(); $('reset-strokes').disabled=!can; $('reset-strokes').title=can?'':'Draw a stroke first: there is nothing to reset.'; }
   $('undo').disabled=!ready || Boolean(stroke||moving) || historyIndex<=0;
   $('redo').disabled=!ready || Boolean(stroke||moving) || historyIndex>=history.length-1;
@@ -301,6 +313,7 @@ function updateControls() {
   $('brush-scope').textContent=editing?'Shared settings for every path in this shape.':tool==='move'?'Click a shape to select and edit it.':'Settings for your new shape.';
   syncToolGroups(`${tool}:${selected}`);
   editorUI.syncTools?.(activeTool,editing?nodes[selected].kind:null,locked,featureActive);
+  syncToolSave(locked,featureActive);
   if(featureActive)$('tool-help').textContent=mapFeatures.hint||'Place features and starts · Space + drag to pan';
   else if(featureSelection)$('tool-help').textContent='Drag to move the selected features on the cell grid · Shift-click adds or removes · Delete removes · Escape deselects';
 }
@@ -1028,13 +1041,14 @@ function flushEval() {
 }
 function checkpoint(mapOnly=false) {
   flushEval();
-  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),rocks:structuredClone(mapRocks),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); if (history.length>48) history.shift(); historyIndex=history.length-1;
+  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),rocks:structuredClone(mapRocks),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); if (history.length>48) history.shift(); historyIndex=history.length-1;
   renderLayers(); updateControls(); persistLater();
 }
 function moveHistory(delta) {
   const next=historyIndex+delta; if (!ready || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
   if(history[next].rock)setRockSettings(history[next].rock);
   if(history[next].rocks&&JSON.stringify(history[next].rocks)!==JSON.stringify(mapRocks))restoreRocks(history[next].rocks);
+  if(history[next].tools&&JSON.stringify(history[next].tools)!==JSON.stringify(mapTools))restoreMapTools(history[next].tools);
   if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); return; }
   cancelWeather(); nodes=cloneNodes(history[next].nodes); selected=-1;pathAdding=false;drawMode='select';pathPoint=-1;pathIndex=0; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
   if (JSON.stringify(history[next].column)!==JSON.stringify(columnOverride)) { restoreColumn(history[next].column); syncColumnPanel(); }
@@ -1122,11 +1136,12 @@ function resize() { if (!mapCanvas) return; mapCanvas.resize(); updateControls()
 
 const strokeCard=d => strokeCardIn(config,d);
 // Capture tools rebuild a map from strokes (sculpt-scene.js sceneNodes, which the headless runner shares).
-function scriptedScene(list,{ground=true}={}) {
+function scriptedScene(list,{ground=true,tools}={}) {
+  if (tools!==undefined) restoreMapTools(copyMapTools(tools)??[],true);   // a scene's own tools (a scene's `tools`), which its strokes may name
   applySeedControl(); refinementSeed=seed;
   cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); 
   nodes=[]; selected=-1;
-  for (const node of sceneNodes(config,list,{ground,seed,settings:experiment})) addNode(node);
+  for (const node of sceneNodes(config,list,{ground,seed,settings:experiment,tools:mapTools})) addNode(node);
   nodes=keepStrokeTools(keepStrokeRocks(nodes,mapRocks),toolIds());   // a stroke choosing a preset the map's list does not hold keeps the rock beneath (as headless play does)
   regionalFields.changed();
   markChanged(); checkpoint();
@@ -1137,7 +1152,7 @@ function sketch() {
   applySeedControl();
   rememberTool();
   return {format:'nanolathe-terrain-sculpt',version:6,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,varySeed,refinementSeed,
-    ...(columnOverride?{column:structuredClone(columnOverride)}:{}),rock:rockSettings(),rocks:structuredClone(mapRocks),
+    ...(columnOverride?{column:structuredClone(columnOverride)}:{}),rock:rockSettings(),rocks:structuredClone(mapRocks),...(mapTools.length?{tools:structuredClone(mapTools)}:{}),
     toolSettings,softness:Number($('softness').value),relief:Number($('relief').value),
     mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
     ringVariation:Number($('ring-variation').value),materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
@@ -1146,9 +1161,9 @@ function sketch() {
 // The working copy is the sketch plus the world it was edited in and, per stroke, the settings the artist changed by hand
 // (those that differ from that world's defaults for the stroke's tool), so a switch can carry the rest to the new world's defaults.
 const sameParam=(a,b) => JSON.stringify(a)===JSON.stringify(b);
-function nodeDefaults(n) {
-  const id=strokeTool(n,toolIds());
-  return n.params && (n.kind==='landform' || FIXED_TOOLS.includes(id)) && id!=='move'?strokeParams(strokeCard(toolCard(id))):null;
+function nodeDefaults(n,own=mapTools) {
+  const id=strokeTool(n,toolIds(own));
+  return n.params && (n.kind==='landform' || FIXED_TOOLS.includes(id)) && id!=='move'?strokeParams(strokeCard(toolCard(id,own))):null;
 }
 function workingCopy() {
   const s=sketch();
@@ -1163,17 +1178,8 @@ function saveWorking() {
 // Carry a working copy's strokes into the current world: geometry, kind and tool stay; where this world has the stroke's tool, each setting the artist
 // changed by hand stays and every other one takes this world's default. A stroke whose tool this world lacks shows as the generic landform with every
 // number as it was (there is no default of its own to take). Ground undulation always takes this world's.
-function carryNodes(list) {
-  const ids=toolIds();
-  const out=list.filter(n => n.kind!=='ground').map(n => {
-    const {edited,...rest}=n;
-    if (n.kind==='landform' && !ids.has(n.tool)) return {...rest,tool:LANDFORM_TOOL.id};
-    const base=n.params && Array.isArray(edited)?nodeDefaults(n):null;
-    if (!base) return rest;
-    const keep=new Set(edited),params={};
-    for (const k of new Set([...Object.keys(base),...Object.keys(n.params)])) params[k]=keep.has(k) || !(k in base)?n.params[k]:base[k];
-    return {...rest,params};
-  });
+function carryNodes(list,own=mapTools) {
+  const out=carryStrokes(list,toolIds(own),n => nodeDefaults(n,own));
   const ground=list.find(n => n.kind==='ground'),g=groundDefaults();
   if (g.amplitude>0) out.unshift({kind:'ground',...g,seed:ground?.seed??(seed^0x9e37)});
   return out;
@@ -1198,17 +1204,18 @@ function persistLater() {
 let keepSaved=false;   // set while the saved copy failed to load: leaving the page must not overwrite it with a blank map
 addEventListener('pagehide',() => { if (!stroke && !moving && !loading && !keepSaved) saveWorking(); });
 // A save's strokes with their tools: one saved before strokes named their tool takes the one its section form belongs to, once (inferStrokeTools); a map carried
-// from another world goes through carryNodes, and a loaded one keeps the tools the toolbar has (any other shows as the generic landform).
-const savedStrokes=(list,carry) => { const ids=toolIds(),saved=inferStrokeTools(list,ids); return carry?carryNodes(saved):keepStrokeTools(saved,ids); };
+// from another world goes through carryNodes, and a loaded one keeps the tools the toolbar has (any other shows as the generic landform). `own`: the map's tools.
+const savedStrokes=(list,carry,own) => { const ids=toolIds(own),saved=inferStrokeTools(list,ids); return carry?carryNodes(saved,own):keepStrokeTools(saved,ids); };
 function loadSketch(s,carry=false) {
   if (!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==6 || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n)) throw new Error('Load a map stroke graph with the same canvas and grid size.');
-  const next=deserializeNodes(savedStrokes(s.nodes,carry)),column=copyColumn(s.column),rock=copyRockSettings(s.rock),rocks=copyRocks(s.rocks),ids=toolIds();
+  const next=deserializeNodes(savedStrokes(s.nodes,carry,copyMapTools(s.tools)??[])),column=copyColumn(s.column),rock=copyRockSettings(s.rock),rocks=copyRocks(s.rocks),own=copyMapTools(s.tools)??[],ids=toolIds(own);
   if(!carry&&rock)setRockSettings(rock);
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
   // A button's saved brush card counts only if it holds no removed option (savedToolCard); otherwise it starts from the button's preset.
   // Carried into another world, the brush cards and the world's sliders stay at that world's defaults; a selected tool this world lacks gives way to
-  // the generic Landform, which takes its card's numbers.
+  // the generic Landform, which takes its card's numbers. The map's own tools go with it, their cards as saved.
+  restoreMapTools(own,true);
   if (ids.has(s.tool)) tool=s.tool;
   else if (carry && typeof s.tool==='string' && s.toolSettings?.[s.tool]) { tool=LANDFORM_TOOL.id; toolSettings[tool]=savedToolCard(config,tool,{...s.toolSettings[s.tool],preset:'custom'})||toolCard(tool); }
   if (!carry) for (const id of ids) toolSettings[id]={...toolCard(id),...(savedCard(id,s.toolSettings?.[id])||{})};
@@ -1254,7 +1261,7 @@ async function loadSketchFile(s,commit=true) {
       served=servedConfig?.biomeId===biome;
       variant=served && typeof s.variant==='string' && servedConfig.variants?.[s.variant]?s.variant:'';
       if(s.variant && variant!==s.variant)throw new Error('The saved column variant is unavailable.');
-      copyColumn(s.column);copyRockSettings(s.rock);copyRocks(s.rocks);s.nodes.forEach(checkedHeights);
+      copyMapTools(s.tools);copyColumn(s.column);copyRockSettings(s.rock);copyRocks(s.rocks);s.nodes.forEach(checkedHeights);
     } catch (err) { error(err.message); return false; }
     if (!served) { error(`The saved terrain belongs to the ${biome} world, which this server does not have. The current terrain was left as it was.`); return false; }
     const token=Math.random().toString(36).slice(2)+Date.now().toString(36);
@@ -1325,10 +1332,61 @@ document.addEventListener('terraform-status',event=>{featureNotice=event.detail;
 $('tool-style').addEventListener('change',() => {
   const preset=$('tool-style').value;if(!Object.hasOwn(config.worldShapes||{},preset))return;
   // A selected landform takes that world's version of its tool's shape.
-  const n=nodes[selected],id=n?.params?strokeTool(n,toolIds()):tool;toolSettings[tool]=toolCard(id,preset);showTool(toolSettings[tool],toolKind(id));
+  const n=nodes[selected],id=n?.params?strokeTool(n,toolIds()):tool;toolSettings[tool]=shapeCard(id,preset);showTool(toolSettings[tool],toolKind(id));
   if(selected>=0){editSelectedFromControls({curve:toolSettings[tool].curve,along:toolSettings[tool].along});checkpoint();queueWeather();}
   updateControls();schedule();persistLater();
 });
+// Save as tool (in a selected landform's options): a button in this map's toolbar that draws with the shape's settings as the panel shows them, its curves and
+// its rock, after the world's tools in the group of the tool the shape was drawn with. One undo step; strokes are not changed. Delete (on a map tool's brush)
+// takes the button away; shapes drawn with it keep their numbers and show as Landform.
+let toolSaveFor='',toolSaveIcon=LANDFORM_TOOL.icon;
+const iconName=icon => shapeTools().find(t => t.icon===icon && !t.card)?.label??icon;
+function pickToolIcon(icon) {
+  toolSaveIcon=icon;
+  for (const b of $('tool-save-icons').children) b.setAttribute('aria-checked',String(b.dataset.iconChoice===icon));
+}
+function buildToolIconChoices() {
+  const icons=$('tool-icons').content;
+  $('tool-save-icons').replaceChildren(...TOOL_ICONS.map(icon => {
+    const b=document.createElement('button'); b.type='button'; b.dataset.iconChoice=icon; b.setAttribute('role','radio'); b.setAttribute('aria-checked','false');
+    b.setAttribute('aria-label',`${iconName(icon)} icon`); b.title=iconName(icon); b.append(icons.querySelector(`[data-icon="${icon}"]`).cloneNode(true));
+    b.onclick=() => pickToolIcon(icon); return b;
+  }));
+}
+function prefillToolSave(n) {
+  const from=toolById(strokeTool(n,toolIds()))??LANDFORM_TOOL,taken=new Set(shapeTools().map(t => t.label));
+  let k=2; while (taken.has(`${from.label} ${k}`)) k++;
+  $('tool-save-name').value=`${from.label} ${k}`; $('tool-save-color').value=from.color; $('tool-save-icons').style.setProperty('--choice-color',from.color); pickToolIcon(from.icon);
+}
+function syncToolSave(locked,featureActive) {
+  const n=nodes[selected],saving=!featureActive && tool==='move' && n?.kind==='landform' && Boolean(n.params);
+  $('tool-save').hidden=!saving;
+  if (saving) {
+    const key=`${selected}:${n.tool}`; if (toolSaveFor!==key) { toolSaveFor=key; prefillToolSave(n); }
+    const full=mapTools.length>=MAP_TOOLS_MAX,named=Boolean($('tool-save-name').value.trim());
+    $('tool-save-button').disabled=locked || full || !named;
+    $('tool-save-note').textContent=full?`This map holds ${MAP_TOOLS_MAX} tools of its own, the most it can: delete one to save another.`:named?'':'Give the tool a name.';
+  } else toolSaveFor='';
+  $('tool-delete-control').hidden=featureActive || !mapTools.some(t => t.id===tool);
+}
+$('tool-save-name').addEventListener('input',() => updateControls());
+$('tool-save-color').addEventListener('input',() => $('tool-save-icons').style.setProperty('--choice-color',$('tool-save-color').value));
+$('tool-save-button').onclick=() => {
+  const n=nodes[selected]; if (stroke || moving || loading || !ready || tool!=='move' || n?.kind!=='landform') return;
+  const from=toolById(strokeTool(n,toolIds()))??LANDFORM_TOOL;
+  const card={...Object.fromEntries(Object.entries(TOOL_FIELDS).map(([key,[id]]) => [key,Number($(id).value)])),...(n.params.curve?{curve:structuredClone(n.params.curve)}:{}),...(n.params.along?{along:structuredClone(n.params.along)}:{})};
+  try {
+    const added=addMapTool(mapTools,nodes,{label:$('tool-save-name').value,icon:toolSaveIcon,color:$('tool-save-color').value,group:from.group,shape:toolShape(from),card});
+    restoreMapTools(added.tools); toolSaveFor=''; checkpoint(true);
+    status(`Saved the tool ${toolLabel(added.id)}: it is in the toolbar's ${from.group==='water'?'Water':'Shape'} group, after the world's tools.`);
+  } catch (err) { $('tool-save-note').textContent=err.message; }
+};
+$('tool-delete').onclick=() => {
+  if (stroke || moving || loading || !ready || !mapTools.some(t => t.id===tool)) return;
+  const label=toolLabel(tool);
+  restoreMapTools(deleteMapTool(mapTools,tool)); checkpoint(true);
+  status(`Deleted the tool ${label}. Shapes drawn with it keep their settings and show as Landform.`);
+};
 // A surface slider redraws; the two the material field reads (TIME_SLIDER_IDS) run the Time pass again.
 for (const id of SURFACE_SLIDER_IDS) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); if (TIME_SLIDER_IDS.includes(id)) queueWeather(); persistLater(); });
 function applySeedControl() {
@@ -1778,7 +1836,7 @@ async function bootMap() {
   }
   else status('Blank map ready · draw terrain with the existing tools.');
   ready=true; $('editor').disabled=false; $('world-editor').disabled=false;
-  history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),rocks:structuredClone(mapRocks),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
+  history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),rocks:structuredClone(mapRocks),tools:structuredClone(mapTools),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
   const pending=await takePendingSketch(experiment.get('pendingSketch'));
   if (pending) { try { loadSketch(pending); checkpoint(); status('Loaded the saved map.'); if (experiment.get('shared')) { window.history.replaceState(null,'',(u => (u.searchParams.delete('shared'),u.toString()))(new URL(location.href))); announceShared(); } } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
@@ -1817,7 +1875,7 @@ async function boot() {
     if (worldId!==config.biomeId) document.querySelector('.canvas-caption h2').textContent=worlds[worldId].name+' terrain';
     addDefaults(experiment,config.defaults);
     borrowBeach(config,experiment);   // a beach another world lends (Beach, below Ground pattern): before the renderer and the panel read the world's layers
-    buildShapeOptions(); mapRocks=worldRocks(config); syncRockChoices(); buildToolbar();
+    buildShapeOptions(); mapRocks=worldRocks(config); syncRockChoices(); buildToolbar(); buildToolIconChoices();
     // A new map starts with the world's tools, on the first of them where the world has no Plateau.
     if (!toolIds().has(tool)) tool=firstTool();
     for (const id of toolIds()) toolSettings[id]=toolCard(id);

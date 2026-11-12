@@ -42,7 +42,8 @@ export function mountHelp(){
     owner?.removeAttribute('aria-describedby');owner=target;const token=++revision;
     if(!target.isConnected||!target.getClientRects().length||document.hidden){hide();return;}
     // A shape tool's picture and words are its shape's (data-shape: a world's tool draws a shape of the library).
-    const tool=target.dataset.tool||target.dataset.icon,shape=target.dataset.shape||tool,control=target.closest('.control'),source=control?.querySelector('input[type=range],select'),key=source?.id;
+    // A map's own tool (Save as tool) shows its shape's sketch and says what it is: no rendered example draws its numbers.
+    const tool=target.dataset.tool||target.dataset.icon,shape=target.dataset.shape||tool,own=target.dataset.mapTool!==undefined,control=target.closest('.control'),source=control?.querySelector('input[type=range],select'),key=source?.id;
     const label=tool?target.getAttribute('aria-label'):control?.querySelector('label')?.cloneNode(true);if(label instanceof Element)label.querySelector('output')?.remove();
     const name=typeof label==='string'?label:label?.textContent?.trim();if(!name){hide();return;}
     tip.replaceChildren(element('strong',''));tip.firstChild.textContent=name;
@@ -53,7 +54,7 @@ export function mountHelp(){
       previews.then(index=>{
         if(!valid())return;
         const frames=example?helpFrames(example):null;
-        const available=Boolean(index)&&(tool?HELP_TOOLS.includes(shape)&&index.tools?.includes(shape):frames?.every((f,i)=>index.controls?.[key]?.[i]?.value===f.value)&&index.controls[key].length===frames.length);
+        const available=Boolean(index)&&(tool?!own&&HELP_TOOLS.includes(shape)&&index.tools?.includes(shape):frames?.every((f,i)=>index.controls?.[key]?.[i]?.value===f.value)&&index.controls[key].length===frames.length);
         const fallback=()=>{if(!valid())return;if(tool){art.innerHTML=illustration(shape);caption.textContent='Illustration';}else{art.remove();caption.remove();}position(target);};
         if(!available){fallback();return;}
         const url='ui-previews/'+helpImage(tool?{tool:shape}:{control:key}),image=new Image();
@@ -78,7 +79,7 @@ export function mountHelp(){
       });
     }
     const help=element('p','');
-    help.textContent=toolHelp[shape]||(source?.disabled&&(control?.querySelector('.control-requirement')?.textContent||source.title))||controlHelp[key]||control?.querySelector('p.small')?.textContent||'Adjust this setting to change the terrain.';
+    help.textContent=(own?'A tool saved in this map. It draws new shapes with the settings, curves and rock of the shape it was saved from.':toolHelp[shape])||(source?.disabled&&(control?.querySelector('.control-requirement')?.textContent||source.title))||controlHelp[key]||control?.querySelector('p.small')?.textContent||'Adjust this setting to change the terrain.';
     tip.append(help);
     if(!tool&&!source?.disabled)tip.append(element('small','','Click: set · Double-click: type · Drag: adjust · Shift: fine'));
     target.setAttribute('aria-describedby',tip.id);tip.hidden=false;position(target);

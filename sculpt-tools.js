@@ -3,7 +3,7 @@
 // buttons (Select, the generic Landform, Fissure and the paint tools) and the icon set; the page builds only the shape buttons, from this list, into
 // #shape-tools and #water-tools. A stroke names the tool it was drawn with (node.tool), and shows as the generic landform when the toolbar lacks
 // it (another world's tool). No DOM here: the page and the tests share it.
-import {LANDFORM_SHAPES} from './sculpt-scene.js';
+import {LANDFORM_DEFAULTS,LANDFORM_SHAPES,SHAPE_FIELDS} from './sculpt-scene.js';
 import {landformTool} from './sculpt-shape-presets.js';
 
 // The icons sculpt.html's #tool-icons template holds, one <svg data-icon> each: a tool picks one by name.
@@ -47,6 +47,72 @@ export const toolRockSlot=(tool,rocks=[]) => tool?.rock===undefined?undefined:ro
 export const strokeTool=(n,ids) => n?.kind!=='landform'?n?.kind:ids.has(n.tool)?n.tool:LANDFORM_TOOL.id;
 // Strokes whose tool the toolbar lacks go to the generic landform, their numbers as they are (a stroke from another world, or a map tool deleted).
 export const keepStrokeTools=(nodes,ids) => nodes.map(n => n?.kind==='landform' && n.tool!==strokeTool(n,ids)?{...n,tool:strokeTool(n,ids)}:n);
+// A working copy's strokes carried into another world (sculpt.js carryNodes; the ground node is the page's): where the toolbar (`ids`) has a stroke's tool,
+// each setting the artist changed by hand (`edited`, the working copy's marks) stays and every other takes `defaultsOf(stroke)`, the new world's for that
+// tool; a stroke whose tool it lacks becomes the generic landform with every number as it was (there is no default of its own to take).
+export function carryStrokes(list,ids,defaultsOf) {
+  return list.filter(n => n.kind!=='ground').map(n => {
+    const {edited,...rest}=n;
+    if (n.kind==='landform' && !ids.has(n.tool)) return {...rest,tool:LANDFORM_TOOL.id};
+    const base=n.params && Array.isArray(edited)?defaultsOf(n):null;
+    if (!base) return rest;
+    const keep=new Set(edited),params={};
+    for (const k of new Set([...Object.keys(base),...Object.keys(n.params)])) params[k]=keep.has(k) || !(k in base)?n.params[k]:base[k];
+    return {...rest,params};
+  });
+}
 // A landform stroke saved before strokes named their tool takes, once, the tool its section form belongs to (landformTool) if the toolbar has it,
 // else the generic landform. Nothing else infers a tool.
 export const inferStrokeTools=(nodes,ids) => nodes.map(n => n?.kind==='landform' && typeof n.tool!=='string'?{...n,tool:ids.has(landformTool(n.params))?landformTool(n.params):LANDFORM_TOOL.id}:n);
+
+// ---- A map's own tools (Save as tool) ----
+// {id, label, icon, color, group, shape, card}: made from a selected shape, they join the toolbar after the world's tools in their group and live in
+// the map (its save, undo, share links, a scene's `tools`). The card is the numbers, curves and rock slot the tool draws with, in card units as
+// toolDefaults gives them, so a map's tool draws the same in any world; `shape` is the shape it was saved from (its hover picture, its Tool preset).
+export const MAP_TOOLS_MAX=24;
+const MAP_ID=/^map-[1-9][0-9]{0,5}$/,MAP_FIELDS=['id','label','icon','color','group','shape','card'];
+// The settings a card may hold: a brush card's (the shape options and the five basics), the model's defaults and the library's shapes.
+export const CARD_KEYS=new Set([...SHAPE_FIELDS.map(([key]) => key),...Object.keys(LANDFORM_DEFAULTS),...Object.values(LANDFORM_SHAPES).flatMap(Object.keys),'cracks','diameter','amount','roughness','softness','preset','curve','along']);
+const knotList=v => Array.isArray(v) && v.length>=1 && v.length<=128 && v.every(k => Array.isArray(k) && k.length===2 && k.every(Number.isFinite));
+// A card checked as a map's tool holds it: the settings a brush card has, finite numbers, and curves of knots.
+function checkCard(card,what) {
+  if (!card || typeof card!=='object' || Array.isArray(card)) throw Error(`${what} needs its settings.`);
+  for (const [key,v] of Object.entries(card)) {
+    if (!CARD_KEYS.has(key)) throw Error(`${what}: no setting ${JSON.stringify(key)}.`);
+    if (key==='preset') { if (typeof v!=='string') throw Error(`${what}: its preset is a name.`); continue; }
+    if (key==='curve') { if (v!=null && (typeof v!=='object' || typeof v.form!=='string' || (v.knots!==undefined && !knotList(v.knots)) || (v.back!==undefined && !knotList(v.back)) || Object.keys(v).some(k => !['form','knots','back'].includes(k)))) throw Error(`${what}: its section curve is not one.`); continue; }
+    if (key==='along') { if (v!=null && !knotList(v)) throw Error(`${what}: its length vs. height curve is not one.`); continue; }
+    if (typeof v!=='number' || !Number.isFinite(v)) throw Error(`${what}: ${key} is not a number.`);
+  }
+  return structuredClone(card);
+}
+// A map's tools checked before they touch the open map (a save, a share link, a scene): ids map-1, map-2, ... each once, the presentation a world's
+// tool has, and a card. No list is null (a map without its own tools).
+export function copyMapTools(value) {
+  if (value==null) return null;
+  if (!Array.isArray(value) || value.length>MAP_TOOLS_MAX) throw Error(`A map holds at most ${MAP_TOOLS_MAX} tools of its own.`);
+  const seen=new Set();
+  return value.map((t,i) => {
+    const what=`The map's tool ${i+1}`;
+    if (!t || typeof t!=='object' || Object.keys(t).some(k => !MAP_FIELDS.includes(k))) throw Error(`${what} is not a tool.`);
+    if (typeof t.id!=='string' || !MAP_ID.test(t.id) || seen.has(t.id)) throw Error(`${what} needs an id of its own, map-1 to map-999999.`);
+    checkTool(t,what); seen.add(t.id);
+    return {id:t.id,label:t.label.trim(),icon:t.icon,color:t.color.toLowerCase(),group:t.group,shape:t.shape,card:checkCard(t.card,what)};
+  });
+}
+// The next map tool's id: one no tool and no stroke of the map has used, so a stroke of a deleted tool never shows as a later one.
+export function nextMapToolId(tools,nodes=[]) {
+  const n=[...tools.map(t => t.id),...nodes.map(s => s?.tool)].map(id => MAP_ID.test(id??'')?Number(id.slice(4)):0);
+  return `map-${Math.max(0,...n)+1}`;
+}
+// A tool made from a shape's card (Save as tool): a new list, the tool last; and a list without a tool (Delete). The strokes drawn with a deleted tool keep
+// their numbers and their tool's id, which no toolbar has any more, so they show as the generic landform (strokeTool) and come back with an undo.
+export function addMapTool(tools,nodes,{label,icon,color,group,shape,card}) {
+  if (tools.length>=MAP_TOOLS_MAX) throw Error(`A map holds at most ${MAP_TOOLS_MAX} tools of its own.`);
+  const id=nextMapToolId(tools,nodes),[tool]=copyMapTools([{id,label,icon,color,group,shape,card:{...card,preset:'custom'}}]);
+  return {id,tools:[...tools,tool]};
+}
+export function deleteMapTool(tools,id) {
+  if (!tools.some(t => t.id===id)) throw Error(`No tool ${id} in this map.`);
+  return tools.filter(t => t.id!==id);
+}
