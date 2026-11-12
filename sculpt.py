@@ -1019,10 +1019,10 @@ def build_site(out, biomes, configs, catalogue, maps_url=MAPS_URL):
     for name, body in files.items():
         (target / name).parent.mkdir(parents=True, exist_ok=True)
         (target / name).write_bytes(body)
-    index = ('<!DOCTYPE html>\n<html lang="en-US"><head><meta charset="utf-8"><title>Terraform</title>'
+    index = ('<!DOCTYPE html>\n<html lang="en-US"><head><meta charset="utf-8"><title>Terra</title>'
              f'<script>location.replace("b/{version}/sculpt.html"+location.search+location.hash)</script>'
              f'<noscript><meta http-equiv="refresh" content="0;url=b/{version}/sculpt.html"></noscript></head>'
-             f'<body><a href="b/{version}/sculpt.html">Open Terraform</a></body></html>\n')
+             f'<body><a href="b/{version}/sculpt.html">Open Terra</a></body></html>\n')
     (Path(out) / 'index.html').write_text(index)
     return target
 

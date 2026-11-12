@@ -16,6 +16,7 @@ import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,
 import {selectionTransform} from './sculpt-selection.js';
 import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap,keepPrevious,takePrevious,dropPrevious} from './sculpt-share.js';
 import {isRiver,pointsSignature} from './sculpt-river.js';
+import {HELP_TOOLS} from './sculpt-help-examples.js';
 import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
@@ -42,7 +43,7 @@ const HELP = {
   valleyV:'Draw a landform that starts as a V valley: the ground is cut down to a floor on the path, and the walls rise at one slope, as a river leaves them. Choose any setting below; the Time pass settles walls steeper than the ground can stand.',
   valleyU:'Draw a landform that starts as a U valley: the ground is cut down to a flat floor with steep upper walls, as a glacier leaves it.',
   river:'Draw a river: a valley landform whose path is migrated by the curvature rule real rivers follow, so the line you draw grows bends that travel downstream, within Wander px of where you drew it (at most four channel widths); a loop drawn closed leaves an oxbow. Width is the channel (at least 32 px, so ships can use it). The bank is cut steep on the outside of each bend, a sand bar builds inside it, and pools and riffles follow the bends. Draw a long gentle line; Cut to sets the floodplain relative to the sea.',
-  braided:'Draw a braided river: a mostly dry bed of gravel bars just above the sea, which units cross, with thin threads of water that split and rejoin around the bars; grass grows back on the older, higher bars. Brush diameter sets the size of the bars and of the bed (the bed reaches about two widths either side of the line), so raise it to widen the bed. Wander lets the whole bed stray from the line you draw, in px, as a river\'s channel does (0 keeps it as drawn).',
+  braided:'Draw a braided river: a mostly dry bed of gravel bars just above the sea, which units cross, with thin threads of water that split and rejoin around the bars; grass grows back on the older, higher bars. Size sets the size of the bars and of the bed (the bed reaches about two widths either side of the line), so raise it to widen the bed. Wander lets the whole bed stray from the line you draw, in px, as a river\'s channel does (0 keeps it as drawn).',
   valleyT:'Draw a landform that starts as a terraced valley: a V valley whose walls climb in flat treads, the levels a river left as it cut down.',
   smooth:'Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.',
   crystal:'Draw a landform broken into crystal facets: a click grows a cluster round the point, a drag a row or ridge of them along the path. The section and along curves set how high they stand across and along it, and Facet shape picks prisms or stepped columns; their size, coverage, sides and tops are in Facets.',
@@ -85,13 +86,15 @@ const shapeValue=key => { const f=SHAPE_FIELDS.find(f => f[0]===key); return Num
 // shows and reads as the list's first choice, Rock beneath: an empty select would read as 0, the world's rock.
 const setShapeControl=(id,v) => { const e=$(id); e.value=v; if(e.selectedIndex===-1)e.selectedIndex=0; };
 function buildShapeOptions() {
-  // Each option row is built for its feature group (sculpt-ui.js groupToolControls). The section and along-path
-  // editors are the page's own (#section-preview-control, in the curve dock).
+  // Each option row is built for its section or part of the card (sculpt-ui.js groupToolControls). The section and along-path
+  // editors are the page's own (#section-preview-control, in the card's Profile section).
   syncToolGroups=groupToolControls(SHAPE_FIELDS,([key,id,label,,lo,hi,step,,help,choices]) => {
     if(key==='fissureNetwork')choices=[[0,'Path cut'],[1,'Fracture network']];
     if(key==='plateMaterial')choices=[[1,'Polygonal slabs'],[2,'Needle band']];
-    const wrap=controlRow({id,label:`${label} <output id="${id}-value"${choices?' hidden':''}></output>`,range:`min="${lo}" max="${hi}" step="${step}"`,choices,select:' style="width:100%"',help});
-    wrap.id=id+'-control'; return wrap;
+    // A label's parenthetical (its unit, or what it measures) is said by the hover help, not the row.
+    const note=/ \(([^)]*)\)$/.exec(label),words=note?label.slice(0,note.index):label;
+    const wrap=controlRow({id,label:`${words} <output id="${id}-value"${choices?' hidden':''}></output>`,range:`min="${lo}" max="${hi}" step="${step}"`,choices,select:' style="width:100%"',help});
+    wrap.id=id+'-control'; if(note)wrap.dataset.note=note[1]; return wrap;
   });
   $('curve-form').addEventListener('change',() => { const f=$('curve-form').value; setCurve(f?{form:f}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
   $('curve-reset').addEventListener('click',() => { const c=currentCurve(); setCurve(c?.form?{form:c.form}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
@@ -161,7 +164,9 @@ function buildToolbar() {
   for (const [group,box] of [['shape','shape-tools'],['water','water-tools']]) $(box).replaceChildren(...shapeTools().slice(1).filter(t => t.group===group).map(t => {
     const b=document.createElement('button');
     b.dataset.tool=t.id; b.dataset.shape=shapeFrom(config,toolShape(t)); if (t.help) b.dataset.help=t.help; b.setAttribute('aria-pressed','false'); b.setAttribute('aria-label',t.label); b.title=t.label;
-    b.style.setProperty('--tool-color',t.color); b.disabled=true; b.append(icon(t.icon));
+    b.style.setProperty('--tool-color',t.color); b.disabled=true;
+    if (!t.card && HELP_TOOLS.includes(b.dataset.shape)) { const pic=new Image(); pic.className='tool-pic'; pic.loading='lazy'; pic.alt=''; pic.src=`ui-previews/tool-${b.dataset.shape}.png`; b.append(pic); }
+    const name=document.createElement('span'); name.className='tool-name'; name.textContent=t.label; b.append(icon(t.icon),name);
     if (t.card) b.dataset.mapTool='';   // a map's own: its hover shows its shape's sketch, not the shape's rendered example
     return b;
   }));
@@ -199,7 +204,7 @@ function showTool(state={},kind=toolKind(tool)) {
   for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(state[key])) setShapeControl(id,clamp(state[key],lo,hi));
   $('tool-style').value=Object.hasOwn(config.worldShapes||{},state.preset)?state.preset:'custom';
 }
-// The Tool preset menu lists the worlds that make the shape a landform tool draws (every world, for the other buttons).
+// The Defaults from world menu (#tool-style) lists the worlds that make the shape a landform tool draws (every world, for the other buttons).
 function syncToolStyle(id) {
   const shape=entryOf(id),land=toolKind(id)==='landform';
   for (const o of $('tool-style').options) if (o.value!=='custom') o.hidden=land && !Object.hasOwn(config.worldShapes?.[o.value]||{},shape);
@@ -211,25 +216,26 @@ function updateControls() {
   $('feature-tool').setAttribute('aria-pressed',String(featureActive));
   $('feature-tool-host').hidden=!featureActive;
   $('brush-panel').hidden=featureActive||(tool==='move'&&!nodes[selected]?.params);
-  $('selection-panel').hidden=featureActive||tool!=='move';$('drawing-options').hidden=featureActive;
   $('edit-path').setAttribute('aria-pressed',String(pathEditing));
   $('transform-mode').setAttribute('aria-pressed',String(!pathEditing&&drawMode!=='add'));
-  $('selection-panel').classList.toggle('path-mode',pathEditing);
   const selectedNode=nodes[selected],hasSelection=Boolean(selectedNode?.points?.length),selectionActive=hasSelection&&tool==='move'&&!featureActive;
   // Generated features share the Select tool (sculpt-features.js): their values replace the shape's transform rows while any is selected.
   const featureSelection=!featureActive&&tool==='move'&&(mapFeatures?.selectionCount||0)>0;
-  $('feature-selection').hidden=!featureSelection;$('selection-mode-buttons').hidden=$('shape-selection-actions').hidden=featureSelection;
+  // The side panel's Selection block is the Select tool with no shape selected: its hint, or the selected features' values. A selected
+  // shape's own actions are the bar on the map (#selection-hud) and the head of its card.
+  $('selection-panel').hidden=featureActive||tool!=='move'||(hasSelection&&!featureSelection);
+  $('feature-selection').hidden=!featureSelection;$('shape-selection-actions').hidden=!selectionActive;
   $('selection-empty').hidden=hasSelection||featureSelection;
-  $('path-actions').hidden=!pathEditing||!hasSelection;
-  $('transform-controls').hidden=pathEditing||!hasSelection||drawMode==='add';$('path-help').hidden=drawMode==='add'||featureSelection;
-  $('selection-hud').hidden=!selectionActive;
+  $('path-actions').hidden=$('path-row').hidden=!pathEditing||!hasSelection;
+  $('transform-controls').hidden=pathEditing||!hasSelection||drawMode==='add';
+  $('selection-hud').hidden=!selectionActive||featureSelection;   // selecting a feature deselects shapes (sculpt-features.js) and a shape clears the features: one or the other
   $('selection-hud').classList.toggle('path-mode',pathEditing);
-  $('selection-mode').textContent=selectionActive?`${drawMode==='add'?'Add path':pathAdding?'Extend / branch':pathEditing?'Edit paths':'Transform'} · ${NODE_NAMES[selectedNode.kind]||selectedNode.kind} #${selected+1}`:'';
-  $('canvas-path-mode').textContent=pathEditing?'Transform':'Edit paths';
-  for(const id of ['selection-clear','selection-delete','transform-mode','canvas-path-mode','canvas-deselect'])$(id).disabled=!hasSelection||loading||Boolean(stroke||moving);
+  $('selection-mode').textContent=selectionActive?`${drawMode==='add'?'Add path · ':pathAdding?'Extend / branch · ':''}${shapeName(selected)}`:'';
+  for(const id of ['selection-delete','transform-mode','canvas-deselect'])$(id).disabled=!hasSelection||loading||Boolean(stroke||moving);
   for(const id of ['toggle-tools','toggle-inspector','focus-canvas'])$(id).disabled=loading||Boolean(stroke||moving);
   const transform=hasSelection?selectionTransform(selectedNode).values:null;
   for(const key of ['x','y','rotation','scale']){const input=$('selection-'+key);input.disabled=!hasSelection||loading||Boolean(stroke||moving);if(document.activeElement!==input)input.value=transform?String(Math.round(transform[key]*10)/10):'';}
+  $('selection-numbers-summary').textContent=transform?`X ${Math.round(transform.x)} · Y ${Math.round(transform.y)} · ${Math.round(transform.rotation)}° · ${Math.round(transform.scale)}% ▾`:'Numbers ▾';
   if(config?.map){$('selection-x').max=config.map.width-1;$('selection-y').max=config.map.height-1;}
   const paths=hasSelection?shapePaths(selectedNode):[],activePath=paths[pathIndex]||[],pointAt=activePath.indexOf(pathPoint),locked=loading||Boolean(stroke||moving);
   const editingSeed=selectedNode?.seed!==undefined;
@@ -241,9 +247,7 @@ function updateControls() {
   $('draw-new').disabled=locked||!ready;
   $('simplify-strokes').disabled=locked;
   $('draw-add').disabled=locked||!hasSelection||selectedNode?.hidden;
-  $('draw-new').setAttribute('aria-pressed',String(tool!=='move'&&drawMode!=='add'));
   $('draw-add').setAttribute('aria-pressed',String(drawMode==='add'));
-  $('drawing-target').textContent=drawMode==='add'?`Draw into ${NODE_NAMES[selectedNode?.kind]||'shape'} #${selected+1}. Start on a point to attach a branch. Escape finishes.`:hasSelection?'Add a path to this shape, or start a new shape.':'Choose a brush, then draw a new shape.';
   $('edit-path').disabled=!hasSelection||locked;
   $('path-add').disabled=!pathEditing||pointAt<0||pointAt===activePath.length-1||locked;
   $('path-delete').disabled=!pathEditing||pathPoint<0||(selectedNode?.points?.length??0)<=1||locked;
@@ -251,7 +255,7 @@ function updateControls() {
   $('path-extend').setAttribute('aria-pressed',String(pathAdding));
   $('path-remove').disabled=!pathEditing||paths.length<=1||locked;
   if(pathEditing){$('shape-path-list').replaceChildren(...paths.map((path,i)=>{const b=document.createElement('button');b.textContent=`Path ${i+1} · ${path.length} points`;b.setAttribute('aria-pressed',String(i===pathIndex));b.disabled=locked;b.onclick=()=>{pathIndex=i;pathPoint=-1;pathAdding=false;updateControls();schedule();};return b;}));}
-  for(const id of ['rotate-left','rotate-right','scale-down','scale-up'])$(id).disabled=!nodes[selected]?.points;
+  for(const id of ['rotate-left','rotate-right','scale-down','scale-up'])$(id).disabled=!nodes[selected]?.points||locked;
   $('view-clay').setAttribute('aria-pressed',String(!$('view-passability').matches('[aria-pressed=true]')&&$('clay').checked));
   $('view-rendered').setAttribute('aria-pressed',String(!$('view-passability').matches('[aria-pressed=true]')&&!$('clay').checked));
   for(const id of ['save','load','view-clay','view-rendered','view-passability','blank'])$(id).disabled=!ready||loading||Boolean(stroke||moving);
@@ -261,7 +265,7 @@ function updateControls() {
   const activeTool=tool,entry=tool==='move'?(nodes[selected]?.params?nodes[selected].kind:'move'):tool,kind=toolKind(entry),ids=toolIds();
   {
   heightControlRange({heightReference:shapeValue('heightReference')});stepControlRange(kind,{stepReference:shapeValue('stepReference')});
-  $('lf-elevation-control').querySelector('label').firstChild.textContent=shapeValue('heightReference')===1?'Height above sea (units) ':shapeValue('heightReference')===2?'Height above ground (units) ':'Elevation (height units) ';
+  $('lf-elevation-control').querySelector('label').firstChild.textContent=shapeValue('heightReference')===1?'Height above sea ':shapeValue('heightReference')===2?'Height above ground ':'Height ';
   const fixed=['erase','landform'].includes(kind);
   $('amount-control').hidden=fixed;
   $('amount-label').textContent=kind==='smooth' || isCover(kind)?'Strength':kind==='fissure'?'Depth':'Rise';
@@ -269,7 +273,7 @@ function updateControls() {
   $('amount').value=String(clamp(Number($('amount').value),lo,hi));
   const amountNow=Number($('amount').value);
   $('amount-value').textContent=kind==='smooth' || isCover(kind)?amountNow+'%':'+'+amountNow;
-  $('diameter-value').textContent=$('diameter').value+' units';
+  $('diameter-value').textContent=$('diameter').value+' px';
   $('roughness-value').textContent=$('roughness').value+'%';
   $('roughness-label').textContent=['erase','sand','grass','paint'].includes(kind)?'Edge freedom':'Roughness';
   // A fissure's outline is its own jaggedness; Roughness would do nothing.
@@ -313,9 +317,8 @@ function updateControls() {
   // Say what the brush controls change: the next stroke, or a selected shape.
   const editing=selected>=0 && nodes[selected]?.params;
   $('brush-panel').classList.toggle('editing',Boolean(editing));
-  // A landform names its tool, or the generic landform it shows as.
-  const named=id => id&&id!==LANDFORM_TOOL.id&&toolLabel(id)?` (${toolLabel(id)})`:'';
-  $('brush-title').textContent=editing?`Selected · ${NODE_NAMES[nodes[selected].kind]||nodes[selected].kind}${nodes[selected].kind==='landform'?named(strokeTool(nodes[selected],ids)):''} #${selected+1}`:tool==='move'?'Select':`Brush · new ${toolKind(tool)==='landform'?`landform${named(tool)}`:NODE_NAMES[tool]||tool}`;
+  // A selected shape's card carries its name; a drawing tool's says what the next stroke makes; a brush's is the brush.
+  $('brush-title').textContent=editing?shapeName(selected):tool==='move'?'Select':['landform','fissure'].includes(toolKind(tool))?`New ${toolLabel(tool)||NODE_NAMES[toolKind(tool)]}`:toolLabel(tool)||NODE_NAMES[tool]||tool;
   $('brush-scope').textContent=editing?'Shared settings for every path in this shape.':tool==='move'?'Click a shape to select and edit it.':'Settings for your new shape.';
   syncToolGroups(`${tool}:${selected}`);
   editorUI.syncTools?.(activeTool,editing?nodes[selected].kind:null,locked,featureActive);
@@ -577,7 +580,11 @@ function markChanged() { markViewChanged(false); error(); syncRocks(); }
 // (a hill on a plateau rises with it). prefix[i] keeps the surface before
 // node i, so an edit replays only from the edited node onward.
 let nodes=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
-const NODE_NAMES={landform:'Landform',sand:'Sand cover',paint:'Surface paint',grass:'Ground cover',erase:'Reset ground',ground:'Ground undulation',fissure:'Fissure',smooth:'Smooth',heights:'Height image'};
+const NODE_NAMES={landform:'Landform',sand:'Sand',paint:'Surface paint',grass:'Vegetation',erase:'Reset ground',ground:'Ground undulation',fissure:'Fissure',smooth:'Smooth',heights:'Height image'};
+// A shape's name, the same on its card, the bar on the map, the Shapes list, the map's own label and the status line: its tool's name
+// (a stroke whose tool the world lacks shows as Landform) and its place in the list, as in "Plateau 3".
+const shapeLabel=n => n?.kind==='landform'?toolLabel(strokeTool(n,toolIds()))||NODE_NAMES.landform:NODE_NAMES[n?.kind]||n?.kind||'';
+const shapeName=i => nodes[i]?`${shapeLabel(nodes[i])} ${i+1}`:'';
 // The Facet shape a landform draws: its own, or angular facets where it digs (prepareNode).
 const facetShape=q => landformDigs(q)?0:clamp(Math.round(q.facetForm||0),0,2);
 function addNode(n) {
@@ -929,7 +936,7 @@ const sculptRegion={
   drawMode:()=>drawMode,drawingKind:()=>drawMode==='add'?nodes[selected]?.kind:toolKind(tool),
   selectPathPoint:i=>{pathPoint=i;if(i>=0&&!shapePaths(nodes[selected])[pathIndex]?.includes(i))pathIndex=shapePaths(nodes[selected]).findIndex(path=>path.includes(i));updateControls();},
   addPathPoint:p=>{if(pathAdding&&pathPoint>=0)changeSelected(n=>{const added=extendPoint(n,pathPoint,regionalPoints([p])[0],pathIndex);pathPoint=added.point;pathIndex=added.path;});pathAdding=true;updateControls();},
-  select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,pickAt:pickNode,selectionLabel:i=>`${NODE_NAMES[nodes[i]?.kind]||nodes[i]?.kind} #${i+1}`,
+  select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,pickAt:pickNode,selectionLabel:shapeName,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
   drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
   setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },onUpdate:fn => { mapUpdate=fn; }
@@ -987,7 +994,7 @@ function selectNode(i) {
     for (const [key,id,,,lo,hi,,scale] of SHAPE_FIELDS) setShapeControl(id,clamp(Math.round((p[key]??worldDefault(key))*scale),lo,hi));
   }
   renderLayers(); updateControls(); schedule(false);
-  if (n) status(`Selected ${NODE_NAMES[n.kind]||n.kind} #${i+1}. Drag to transform or edit its settings.`);
+  if (n) status(`Selected ${shapeName(i)}. Drag to transform or edit its settings.`);
 }
 function editSelectedFromControls(overrides={}) {
   const n=nodes[selected]; if (!n || !n.params) return;
@@ -1012,7 +1019,7 @@ function renderLayers() {
     const item=document.createElement('li');item.draggable=true;item.dataset.index=i;
     item.className=(i===selected?'selected ':'')+(n.hidden?'is-hidden':'');
     const grip=document.createElement('span');grip.className='layer-grip';grip.textContent='⠿';grip.setAttribute('aria-hidden','true');
-    const name=document.createElement('button');name.className='layer-name';name.textContent=NODE_NAMES[n.kind]||n.kind;const count=document.createElement('span');count.className='path-count';const pc=shapePaths(n).length;count.textContent=pc?`${pc} path${pc===1?'':'s'}`:'';name.setAttribute('aria-pressed',String(i===selected));name.onclick=()=>selectNode(i===selected?-1:i);
+    const name=document.createElement('button');name.className='layer-name';name.textContent=shapeLabel(n);const count=document.createElement('span');count.className='path-count';const pc=shapePaths(n).length;count.textContent=pc?`${pc} path${pc===1?'':'s'}`:'';name.setAttribute('aria-pressed',String(i===selected));name.onclick=()=>selectNode(i===selected?-1:i);
     const number=document.createElement('span');number.className='layer-index';number.textContent=String(i+1).padStart(2,'0');
     const visibility=document.createElement('button');visibility.className='layer-visibility';visibility.textContent=n.hidden?'○':'◉';visibility.title=visibility.ariaLabel=`${n.hidden?'Show':'Hide'} ${name.textContent}`;visibility.setAttribute('aria-pressed',String(!n.hidden));visibility.onclick=()=>{selected=i;nodeAction('hide');};
     name.disabled=visibility.disabled=loading||Boolean(stroke||moving);
@@ -1315,8 +1322,7 @@ for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up
 $('feature-tool').onclick=()=>{if(stroke||moving)return;selected=-1;pathAdding=false;drawMode='select';mapFeatures?.activate('deposit');renderLayers();updateControls();};
 function setPathMode(on){if(stroke||moving||loading)return;pathEditing=on;pathPoint=-1;pathAdding=false;drawMode='select';updateControls();schedule();}
 $('edit-path').onclick=()=>setPathMode(!pathEditing);$('transform-mode').onclick=()=>setPathMode(false);
-$('canvas-path-mode').onclick=()=>setPathMode(!pathEditing);
-$('selection-clear').onclick=$('canvas-deselect').onclick=()=>selectNode(-1);
+$('canvas-deselect').onclick=()=>selectNode(-1);
 $('selection-delete').onclick=()=>nodeAction('delete');
 for(const key of ['x','y','rotation','scale']){
   const input=$('selection-'+key);
@@ -1378,8 +1384,8 @@ $('tool-save-button').onclick=() => {
   const card={...Object.fromEntries(Object.entries(TOOL_FIELDS).map(([key,[id]]) => [key,Number($(id).value)])),...(n.params.curve?{curve:structuredClone(n.params.curve)}:{}),...(n.params.along?{along:structuredClone(n.params.along)}:{})};
   try {
     const added=addMapTool(mapTools,nodes,{label:$('tool-save-name').value,icon:toolSaveIcon,color:$('tool-save-color').value,group:from.group,shape:shapeFrom(config,toolShape(from)),card});
-    restoreMapTools(added.tools); toolSaveFor=''; checkpoint(true);
-    status(`Saved the tool ${toolLabel(added.id)}: it is in the toolbar's ${from.group==='water'?'Water':'Shape'} group, after the world's tools.`);
+    restoreMapTools(added.tools); toolSaveFor=''; $('tool-save').open=false; checkpoint(true);
+    status(`Saved the tool ${toolLabel(added.id)}: it is with the ${from.group==='water'?'Water':'Land'} tools, after the world's.`);
   } catch (err) { $('tool-save-note').textContent=err.message; }
 };
 $('tool-delete').onclick=() => {
@@ -1494,9 +1500,13 @@ $('export').addEventListener('click',async () => {
 const typing=target => target instanceof HTMLElement && (['INPUT','SELECT','TEXTAREA'].includes(target.tagName) || target.isContentEditable);
 window.addEventListener('keydown',event => {
   if(event.defaultPrevented)return;
+  // Escape first closes what is open on top of the editor (a tool flyout, a menu, the full-size curves), wherever the focus is.
+  if(event.key==='Escape'&&!stroke&&!moving&&editorUI.closeTop()){event.preventDefault();return;}
   if(!typing(event.target)&&!loading&&!stroke&&!moving&&!event.ctrlKey&&!event.metaKey&&!event.altKey){
     if(event.code==='KeyF'&&event.shiftKey){event.preventDefault();editorUI.toggleFocus();return;}
     if(event.key==='Escape'&&editorUI.exitFocus()){event.preventDefault();return;}
+    // Tab on the map (not in a panel, where it moves between controls) hides both panels, and shows them again.
+    if(event.key==='Tab'&&!event.shiftKey&&(event.target===overlay||event.target===document.body)){event.preventDefault();editorUI.toggleFocus();return;}
     if(event.code==='KeyV'){event.preventDefault();if(tool==='move'&&!mapFeatures?.active)setPathMode(false);else document.querySelector('[data-tool="move"]').click();return;}
   }
   if (mapFeatures?.active && event.code!=='Space' && !(event.ctrlKey||event.metaKey)) return;
@@ -1903,7 +1913,7 @@ async function boot() {
     }
     configureMap(config,experiment); MIN_HEIGHT=config.seaLevel-90; MAX_HEIGHT=config.seaLevel+300;
     if ((!config.map && config.size!==1024) || !Number.isInteger(config.grid) || config.grid<2 || config.grid>(config.map?16384:1024) || !Number.isFinite(config.baseHeight) || !Number.isFinite(config.seaLevel)) throw new Error('Unsupported sculpt configuration.');
-    document.querySelector('.canvas-caption h2').textContent=(config.biome||'Green Planet')+' terrain';
+    $('world-title').textContent=config.biome||'Green Planet';
     // The world: built-in (the biome itself) or a custom one based on it.
     // Its remembered settings come before the biome's own defaults.
     loadWorlds();
@@ -1911,7 +1921,7 @@ async function boot() {
     config.featureSet=worlds[worldId]?.featureSet;
     config.presetDefaults={...config.defaults};
     config.defaults={...config.defaults,...(worlds[worldId]?.knobs||{})};
-    if (worldId!==config.biomeId) document.querySelector('.canvas-caption h2').textContent=worlds[worldId].name+' terrain';
+    if (worldId!==config.biomeId) $('world-title').textContent=worlds[worldId].name;
     addDefaults(experiment,config.defaults);
     borrowBeach(config,experiment);   // a beach another world lends (Beach, below Ground pattern): before the renderer and the panel read the world's layers
     buildShapeOptions(); mapRocks=worldRocks(config); syncRockChoices(); buildToolbar();
