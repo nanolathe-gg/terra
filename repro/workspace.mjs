@@ -27,7 +27,8 @@ try{
   await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   await send('Page.navigate',{url:`${server}/sculpt.html?biome=green&mapX=4&mapY=4&scratch=workspace-test&gpuMB=512&heapMB=1536&undulation=0`});await ready();
   report.desktop=await ev(`({map:document.getElementById('viewport').getBoundingClientRect().toJSON(),dock:document.getElementById('curve-dock').clientHeight,curves:[...document.querySelectorAll('.curve-pane canvas')].map(c=>[c.clientWidth,c.clientHeight]),tools:document.querySelectorAll('.tool-palette button').length})`);
-  assert.equal(report.desktop.tools,21);assert.equal(report.desktop.dock,167);assert(report.desktop.curves.every(c=>c[1]<=104&&c[0]>450));
+  assert.equal(report.desktop.tools,22);   // Select, Features, Landform, the world's thirteen shape tools, Fissure and the five paint tools
+  assert.equal(report.desktop.dock,167);assert(report.desktop.curves.every(c=>c[1]<=104&&c[0]>450));
   for(const tool of ['plateau','hill','mountain','ramp','deep','shallow','valleyV','valleyU','valleyT','river','braided']){await click(`[data-tool="${tool}"]`);assert.equal(await ev('sculptDebug.state().tool'),tool);assert.equal(await ev('document.getElementById("section-preview-control").hidden'),false);}
   await click('[data-tool="hill"]');const count=(await nodes()).length;await drag({x:450,y:290},{x:660,y:340});await ready();assert.equal((await nodes()).length,count+1);
   await click('#tab-objects');if(await ev('sculptDebug.state().selected')!==count)await click('#layers li:last-child .layer-name');await click('#tab-tool');assert.equal(await ev('sculptDebug.state().selected'),count);
