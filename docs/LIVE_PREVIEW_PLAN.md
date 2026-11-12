@@ -117,9 +117,9 @@ no more than 2 GiB; more memory would not make it faster.
 and **the go/no-go**; LP1 dirty model; LP2 preview blocks for every
 interaction (with no compile and no long task on the input path); LP3
 cheaper blocks; LP4 bounded GPU work; LP5 color-only rerun; LP6 faster
-final. If LP0b does not put the whole view on screen while a control is
-held (its card gives the two numbers), stop and report before anything is
-restructured. Two things LP0 turned up can go at any time, each
+final. If LP0b does not show nine inputs in ten answered by a whole
+current view within 300 ms (its card has the test), stop and report before
+anything is restructured. Two things LP0 turned up can go at any time, each
 independent of the rest and each the owner's call (section 8): **LP0c**,
 view tiles that stay 256 px, and LP4's first step, the Time pass in slices.
 
@@ -837,6 +837,11 @@ card's first test, stays as a floor, but main's 6 to 7 s makes it nearly
 automatic. A wait for pages over 100 ms at the median goes to the owner
 with the result: it would make LP3 step 2 part of the first thing to
 land. Otherwise stop and report what the page adds that Node did not show.
+**The owner looks too.** The numbers are half of the go. The sixteenth
+level's look is the owner's to judge in the page (section 8): leave the
+slice's server running on your own port, give its address with the report,
+and stop there. LP1 starts on the owner's word, which also settles the
+window for rewriting the handlers (section 6).
 **Risk.** It is a prototype: no dirty model, quarter level and finals as
 today, seams unexamined. Its code is thrown away; its numbers are kept, and
 the bench's two additions are carried to LP2.
