@@ -141,7 +141,7 @@ const entryOf=id => { const t=toolById(id); return t?toolShape(t):id; };
 const toolKind=id => strokeKind(entryOf(id));
 // A tool's shape as world `preset` makes it, with the rock the tool names (toolRockSlot); a tool's starting card: that, or a map tool's own card.
 function shapeCard(id,preset=config?.biomeId) {
-  const t=toolById(id),card=toolDefaults(entryOf(id),preset),slot=toolRockSlot(t,mapRocks);
+  const t=toolById(id),card=toolDefaults(entryOf(id),preset),slot=toolRockSlot(t,mapRocks,config.rock?.recipe);
   if (slot!==undefined) card.rockPreset=slot;
   return card;
 }

@@ -5,6 +5,7 @@
 // it (another world's tool). No DOM here: the page and the tests share it.
 import {LANDFORM_DEFAULTS,LANDFORM_SHAPES,SHAPE_FIELDS} from './sculpt-scene.js';
 import {landformTool} from './sculpt-shape-presets.js';
+import {rockByKey} from './sculpt-rock-presets.js';
 
 // The icons sculpt.html's #tool-icons template holds, one <svg data-icon> each: a tool picks one by name.
 export const TOOL_ICONS=['landform','plateau','hill','mountain','ramp','valleyV','valleyU','valleyT','crater','crystal','deep','shallow','river','braided'];
@@ -40,9 +41,9 @@ export function worldTools(config) {
     seen.add(t.id); return {...t,label:t.label.trim()};
   });
 }
-// A tool may name its rock by a preset's key (the starting recipe a map's preset came from, sculpt-rock-presets.js): the slot of the map's
-// preset with that key when the tool's card is made, Rock beneath (-1) in a map without one, and undefined for a tool that names none.
-export const toolRockSlot=(tool,rocks=[]) => tool?.rock===undefined?undefined:rocks.find(r => r.key===tool.rock)?.slot??-1;
+// A tool may name its rock by a preset's key (sculpt-rock-presets.js rockByKey): the slot of the map's preset with that key when the tool's card is made,
+// 0 where it is the world's own rock's (`worldKey`, config.rock.recipe), Rock beneath (-1) in a map without it, and undefined for a tool that names none.
+export const toolRockSlot=(tool,rocks=[],worldKey='') => tool?.rock===undefined?undefined:rockByKey(rocks,tool.rock,worldKey);
 // The tool a stroke shows and carries as: its own, if the toolbar (`ids`) has it, else the generic landform. A stroke of another kind is its kind.
 export const strokeTool=(n,ids) => n?.kind!=='landform'?n?.kind:ids.has(n.tool)?n.tool:LANDFORM_TOOL.id;
 // Strokes whose tool the toolbar lacks go to the generic landform, their numbers as they are (a stroke from another world, or a map tool deleted).

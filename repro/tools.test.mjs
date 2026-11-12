@@ -8,6 +8,7 @@ import {mkdtempSync, readFileSync, readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {LANDFORM_SHAPES, toolDefaults, sceneNodes, pageSettings, strokeCard, strokeParams} from '../sculpt-scene.js';
+import {worldRocks} from '../sculpt-rock-presets.js';
 import {TOOL_ICONS, FIXED_TOOLS, LANDFORM_TOOL, MAP_TOOLS_MAX, worldTools, toolShape, toolRockSlot, strokeTool, keepStrokeTools, inferStrokeTools, carryStrokes, copyMapTools, addMapTool, deleteMapTool, nextMapToolId, CARD_KEYS} from '../sculpt-tools.js';
 
 const root = new URL('..', import.meta.url).pathname, dir = mkdtempSync(join(tmpdir(), 'tools-test-'));
@@ -71,10 +72,12 @@ test('a stroke shows as its tool, or as the generic landform where the toolbar l
   assert.deepEqual(kept[1].params, stroke('crater').params, 'its numbers as they were');
   const old = inferStrokeTools([stroke(null, 'lfHill'), stroke(null, 'lfCrater'), stroke(null, 'lfShore'), stroke('hill', 'lfCrater')], ids);
   assert.deepEqual(old.map(n => n.tool), ['hill', 'landform', 'landform', 'hill'], 'inferred where the toolbar has the tool; a stroke that names one keeps it');
-  // A tool may name its rock by a preset's key: the map's slot for it, Rock beneath without one, nothing for a tool that names none.
-  const rocks = [{slot: 1, name: 'Smooth soil', key: 'soil'}, {slot: 2, name: 'Jointed basalt'}];
-  assert.equal(toolRockSlot({id: 'soilHill', rock: 'soil'}, rocks), 1);
-  assert.equal(toolRockSlot({id: 'x', rock: 'basalt'}, rocks), -1);
+  // A tool may name its rock by a preset's key: the map's slot for it, 0 for the world's own recipe, Rock beneath without one, nothing for a tool that names none.
+  const rocks = worldRocks({rock: {recipe: 'granite', presets: ['basalt']}});
+  assert.equal(toolRockSlot({id: 'soilHill', rock: 'soil'}, rocks, 'granite'), 1);
+  assert.equal(toolRockSlot({id: 'x', rock: 'basalt'}, rocks, 'granite'), 2);
+  assert.equal(toolRockSlot({id: 'x', rock: 'granite'}, rocks, 'granite'), 0);
+  assert.equal(toolRockSlot({id: 'x', rock: 'shale'}, rocks, 'granite'), -1);
   assert.equal(toolRockSlot({id: 'x'}, rocks), undefined);
   assert.equal(LANDFORM_TOOL.shape, 'landform');
 });
