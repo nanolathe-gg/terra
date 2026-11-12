@@ -7,6 +7,7 @@
 // --warmup discards a session; --report FILE... prints the section 2 budget table.
 // Use distinct CDP ports, discard one --warmup per fresh server, alternate workloads,
 // and check ps -Ao pcpu,command -r | head before measured runs. Never time two at once.
+import {createCoverage} from './perf-coverage.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn, execFileSync} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync, rmSync} from 'node:fs';
@@ -17,18 +18,19 @@ const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i < 0 ? fallback : args.splice(i, 2)[1]; };
 const flag = name => { const i = args.indexOf(name); if (i < 0) return false; args.splice(i, 1); return true; };
 const quantile = (a, p) => { const s = a.filter(Number.isFinite).sort((a,b)=>a-b); return s.length ? s[Math.min(s.length-1, Math.ceil(s.length*p)-1)] : null; };
-const distribution = (a, total=a.length) => ({n:a.length, censored:total-a.length,p50:quantile(a,.5),p95:quantile(a,.95),max:a.length?Math.max(...a):null});
+const distribution = (a, total=a.length) => ({n:a.length, censored:total-a.length,p50:quantile(a,.5),p90:quantile(a,.9),p95:quantile(a,.95),max:a.length?Math.max(...a):null});
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 
 function tileSamples(p,pointer=false){
   if(p.status==='blocked')return [];
   const paints=(p.events||[]).filter(e=>e.type==='paint');
   if(!p.inputs?.length&&!pointer){const t=p.phaseStartMs??p.anchors?.[0]?.t,e=paints.find(e=>e.t>=t);return e?[e.t-t]:[];}
-  return (p.inputs||[]).filter(m=>!pointer||m.at).flatMap(m=>{const e=paints.find(e=>e.t>=m.t&&(m.kind==='stroke'&&m.rev!=null?e.rev>=m.rev:m.control==='knob-erosionRain'?e.feedSerial>=m.id:e.serial>=m.id)&&(!pointer||(m.at[0]>=e.x&&m.at[0]<e.x+e.width&&m.at[1]>=e.y&&m.at[1]<e.y+e.height)));return e?[e.t-m.t]:[];});
+  return (p.inputs||[]).filter(m=>!pointer||m.at).flatMap(m=>{const e=paints.find(e=>e.t>=m.t&&(m.kind==='stroke'&&m.rev!=null?e.rev>=m.rev:m.control==='knob-erosionRain'?e.feedSerial>=m.id:e.serial>=m.id)&&(!pointer||((e.clips??[e]).some(r=>m.at[0]>=r.x&&m.at[0]<r.x+r.width&&m.at[1]>=r.y&&m.at[1]<r.y+r.height))));return e?[e.t-m.t]:[];});
 }
 function releaseSample(p){
   if(p.status==='blocked')return [];
   const a=p.anchors?.at(-1);if(!a)return p.samples?.final?.slice(-1)||[];
+  if(p.finalObservations){const f=p.finalObservations.find(f=>f.t===a.t);return f?.final!=null?[f.final-a.t]:[];}
   const c=p.events?.find(e=>e.type==='coverage'&&e.t>=a.t&&e.ready&&e.visible.every(k=>e.keys.some(t=>t.key===k&&!t.dirty&&t.level<=1)));
   return c?[c.t-a.t]:[];
 }
@@ -62,6 +64,8 @@ function budgetTable(results) {
     `Specialized sets compiled: ${phases.reduce((n,p)=>n+(p.split?.specStats?.built||0),0)}; each set contains draw, bake and loose pipelines.`,
     `Off-screen GPU: ${max(p=>p.split?.offscreenGPU?.whollyOutsideMs||0).toFixed(1)} ms wholly outside; ${max(p=>p.split?.offscreenGPU?.mixedRegionMs||0).toFixed(1)} ms in mixed regions (largest individual phase) (not separable with pass timestamps).`,
     'Final-relative-to-today and early-preview overhead: this is today\'s baseline (ratio 1.00); no implementation comparison yet.');
+  lines.push('','LP0b per-fixture: drag and resume are separate; all waits in ms, p50 / p90 / p95.');
+  for(const r of results)for(const [name,p] of [['drag',r.drag],['resume',r.resume],...(r.slider||[]).filter(p=>p.control==='knob-faceBlockSize').map(p=>['rock '+p.scenario,p])])if(p){const d=p.latencyAll,h=p.heldLatency?.wholeCurrent;lines.push(`${r.label||r.mode} ${r.scene} ${r.query} ${name}: first tile ${p.latency?.p50} / ${p.latency?.p95}; changed pixels ${p.latencyChanged?.p50} / ${p.latencyChanged?.p95}; pointer ${p.latencyPointer?.p50} / ${p.latencyPointer?.p95}; whole ${d.p50} / ${d.p90} / ${d.p95} (${d.censored} censored); ${name==='resume'?'LP4 Time-in-flight condition: '+(p.inFlightCondition??((p.pendingAtResume?.timePassesInFlight??0)>0))+'; ':''}held ${h?.n??0}/${p.inputs.length}; pages ${JSON.stringify(p.split?.pageWaitMs)}; preview render wall ${JSON.stringify(p.split?.previewRenderMs)}; preview apart from pages ${JSON.stringify(p.split?.previewOwnApartFromPagesMs)}; apart from pages ${JSON.stringify(p.split?.wholeApartFromPagesMs)}`);}
   return lines.join('\n');
 }
 if(flag('--report')){console.log(budgetTable(args.map(f=>JSON.parse(readFileSync(f,'utf8')))));process.exit(0);}
@@ -83,16 +87,18 @@ const scene=JSON.parse(readFileSync(sceneFile,'utf8'));mkdirSync(out,{recursive:
 // expose lexical calls and entry metadata to the observer; they do not change work,
 // scheduling, values, or rendering. Fail closed if an anchor changes in a later build.
 function hooks(){
-  const P=window.__perf={events:[],inputs:[],handlers:[],stages:[],waits:[],long:[],frames:[],serial:0,blocks:[],encoders:[],submits:[],compiles:[],ctx:null,pictures:new Map(),lastPixels:new Map(),active:false};
+  const P=window.__perf={events:[],inputs:[],handlers:[],stages:[],waits:[],long:[],frames:[],serial:0,appliedSerial:0,prepID:0,blocks:[],encoders:[],submits:[],compiles:[],ctx:null,pictures:new Map(),lastPixels:new Map(),active:false};
+  const coverage=createCoverage();
   const now=()=>performance.now();
+  P.resetCoverage=()=>coverage.reset();
   P.mark=(type,data={})=>{const e={t:now(),type,...data};P.events.push(e);return e;};
   P.call=(name,fn)=>{const t=now();try{return fn();}finally{const ms=now()-t;P.stages.push({t,name,ms});if(P.handler)P.handler.calls[name]=(P.handler.calls[name]||0)+ms;}};
-  P.work=(encoder,kind,rect)=>{const e=P.encoders.findLast(e=>e.encoder===encoder);if(e){e.kind=kind;e.rect=rect;}};
+  P.work=(encoder,kind,rect)=>{const e=P.encoders.findLast(e=>e.encoder===encoder);if(e){e.kind=kind;e.rect=rect;if(kind==='shape'||kind==='time')e.prep=P.preparing;}};
   const intersects=(a,b)=>a.x<b.x+b.width&&b.x<a.x+a.width&&a.y<b.y+b.height&&b.y<a.y+a.height;
   P.visible=()=>{if(!window.sculptCanvas)return [];const v=sculptCanvas.view(),s=sculptCanvas.stats().displayChunkSize,keys=[];for(let y=Math.max(0,Math.floor(v.y/s)*s);y<v.y+v.height;y+=s)for(let x=Math.max(0,Math.floor(v.x/s)*s);x<v.x+v.width;x+=s)keys.push(x+','+y);return keys;};
   P.current=()=>{const v=sculptCanvas.view(),s=sculptCanvas.stats().displayChunkSize;return sculptCanvas.cacheSnapshot().filter(e=>e.key.endsWith(','+s+',detail')&&intersects(e,v));};
-  P.input=(kind,control,at=null,t=now())=>{if(!P.active)return null;const m={id:++P.serial,t,kind,control,at,targets:[]};P.inputs.push(m);queueMicrotask(()=>{m.rev=window.sculptRegion?.stats().revision;m.targets=P.visible();if(kind==='stroke'){const v=sculptCanvas.view();const dirty=P.current().filter(e=>e.dirty);m.targets=dirty.map(e=>e.x+','+e.y);m.rectangles=dirty.map(e=>({x:e.x,y:e.y,width:e.width,height:e.height}));}});return m;};
-  P.tag=entry=>{entry.__lpSerial??=P.serial;entry.__lpRev??=window.sculptRegion?.stats().revision;entry.__lpFeedSerial??=entry.__lpSerial;};
+  P.input=(kind,control,at=null,t=now())=>{if(!P.active)return null;const m={id:++P.serial,t,kind,control,at,targets:[]};P.inputs.push(m);if(kind!=='slider')P.appliedSerial=P.serial;queueMicrotask(()=>{m.rev=window.sculptRegion?.stats().revision;m.targets=P.visible();m.rectangles=[sculptCanvas.view()];if(kind==='stroke'){const v=sculptCanvas.view();const dirty=P.current().filter(e=>e.dirty);m.targets=dirty.map(e=>e.x+','+e.y);m.rectangles=dirty.length?dirty.map(e=>({x:e.x,y:e.y,width:e.width,height:e.height})): [v];}});return m;};
+  P.tag=entry=>{entry.__lpSerial??=P.appliedSerial;entry.__lpRev??=window.sculptRegion?.stats().revision;entry.__lpFeedSerial??=entry.__lpSerial;};
   // Observe actual tile paints. Pixel verification runs after timing stops;
   // reading a bitmap here would add 20-30 ms and change queue backpressure.
   const seen=new WeakSet(),closeBitmap=ImageBitmap.prototype.close;
@@ -110,7 +116,7 @@ function hooks(){
     for(const p of P.pixelPaints){
       const k=p.level,scale=p.view.scale,x0=Math.round((p.rect.x-p.view.x)*scale),y0=Math.round((p.rect.y-p.view.y)*scale),x1=Math.round((p.rect.x+p.bitmap.width*k-p.view.x)*scale),y1=Math.round((p.rect.y+p.bitmap.height*k-p.view.y)*scale);
       const x=Math.max(0,x0),y=Math.max(0,y0),w=Math.min(c.width,x1)-x,h=Math.min(c.height,y1)-y;if(w<=0||h<=0){p.event.changed=false;continue;}
-      const before=new Uint32Array(g.getImageData(x,y,w,h).data.buffer);g.imageSmoothingEnabled=scale<1||k*scale<1;g.imageSmoothingQuality='high';g.drawImage(p.bitmap,x0,y0,x1-x0,y1-y0);const after=new Uint32Array(g.getImageData(x,y,w,h).data.buffer);
+      const before=new Uint32Array(g.getImageData(x,y,w,h).data.buffer);g.imageSmoothingEnabled=scale<1||k*scale<1;g.imageSmoothingQuality='high';g.save();g.beginPath();for(const r of p.clips)g.rect(Math.round((r.x-p.view.x)*scale),Math.round((r.y-p.view.y)*scale),Math.round((r.x+r.width-p.view.x)*scale)-Math.round((r.x-p.view.x)*scale),Math.round((r.y+r.height-p.view.y)*scale)-Math.round((r.y-p.view.y)*scale));g.clip();g.drawImage(p.bitmap,x0,y0,x1-x0,y1-y0);g.restore();const after=new Uint32Array(g.getImageData(x,y,w,h).data.buffer);
       p.event.changed=false;for(let i=0;i<after.length;i++)if(before[i]!==after[i]){p.event.changed=true;break;}
     }
     P.pixelReady=true;P.pixelObserverMs=now()-started;
@@ -118,17 +124,21 @@ function hooks(){
   };
   P.paint=(entry,v)=>{
     if(!P.active||!intersects(entry,v))return;
-    const key=entry.x+','+entry.y;
-    if(!seen.has(entry.bitmap)){
-      seen.add(entry.bitmap);
-      const event=P.mark('paint',{key,x:entry.x,y:entry.y,width:entry.width,height:entry.height,serial:entry.__lpSerial??0,feedSerial:entry.__lpFeedSerial,rev:entry.__lpRev,seq:entry.seq,level:entry.scale??1,weathered:entry.weathered,dirty:!!entry.dirty,changed:null});P.held.add(entry.bitmap);P.pixelPaints.push({event,bitmap:entry.bitmap,rect:{x:entry.x,y:entry.y},level:entry.scale??1,view:{...v}});
-    }
-    P.pictures.set(key,{serial:entry.__lpSerial??0,feedSerial:entry.__lpFeedSerial,rev:entry.__lpRev,level:entry.scale??1,weathered:entry.weathered,dirty:!!entry.dirty});
-    const current=P.current();
-    const state=window.sculptDebug?.state?.();const ready=window.sculptRegion?.canExport?.()!==false||state?.stroke||state?.moving;
-    // Snapshot the actual visible cache. An authored-only tile during pending Rain
-    // must never count as a current weathered view.
-    P.mark('coverage',{ready,keys:current.map(e=>({key:e.x+','+e.y,x:e.x,y:e.y,width:e.width,height:e.height,dirty:e.dirty,level:e.scale??1,serial:P.pictures.get(e.x+','+e.y)?.serial??0,rev:P.pictures.get(e.x+','+e.y)?.rev,feedSerial:P.pictures.get(e.x+','+e.y)?.feedSerial})),visible:P.visible()});
+    const key=entry.x+','+entry.y,clips=(entry.paintedClips??[entry]).map(r=>coverage.intersect(r,v)).filter(Boolean);
+    if(!clips.length)return;
+    const metadata={serial:entry.__lpSerial??0,feedSerial:entry.__lpFeedSerial,rev:entry.__lpRev,seq:entry.seq,prep:entry.__lpPrep,level:entry.scale??1,weathered:entry.weathered,dirty:!!entry.dirty};
+    if(!seen.has(entry.bitmap)){seen.add(entry.bitmap);P.held.add(entry.bitmap);}
+    const event=P.mark('paint',{key,x:entry.x,y:entry.y,width:entry.width,height:entry.height,...metadata,clips,changed:null});
+    P.pixelPaints.push({event,bitmap:entry.bitmap,rect:{x:entry.x,y:entry.y},clips,level:entry.scale??1,view:{...v}});
+    for(const r of clips)coverage.paint(r,metadata);
+    if(!entry.block)P.pictures.set(key,metadata);
+    // A synchronous composition is one presented picture. Snapshot at its end,
+    // rather than walking the tile cache after each retained tile underneath it.
+    P.coverageAt=event.t;if(!P.coverageQueued){P.coverageQueued=true;queueMicrotask(()=>{
+      P.coverageQueued=false;if(!P.active)return;
+      const current=P.current(),state=window.sculptDebug?.state?.(),ready=window.sculptRegion?.canExport?.()!==false||state?.stroke||state?.moving||window.sculptRegion?.previewActive?.();
+      P.mark('coverage',{t:P.coverageAt,ready,regions:coverage.snapshot(),keys:current.map(e=>({key:e.x+','+e.y,x:e.x,y:e.y,width:e.width,height:e.height,...P.pictures.get(e.x+','+e.y),dirty:e.dirty,level:e.scale??1})),visible:P.visible()});
+    });}
   };
   const add=EventTarget.prototype.addEventListener,inputEvents=new WeakMap();
   EventTarget.prototype.addEventListener=function(type,fn,options){
@@ -146,7 +156,7 @@ function hooks(){
   const cib=window.createImageBitmap;
   window.createImageBitmap=function(...a){const t=now();return cib.apply(this,a).then(v=>{P.stages.push({t,name:'bitmap copy',ms:now()-t});return v;});};
   const cd=GPUDevice.prototype.createCommandEncoder,encMeta=new WeakMap(),bufferMeta=new WeakMap();
-  GPUDevice.prototype.createCommandEncoder=function(desc){const enc=cd.call(this,desc),m={encoder:enc,device:this,label:desc?.label,t:now(),kind:P.ctx?.kind||'other',rect:P.ctx?.rect,passes:[]};P.encoders.push(m);encMeta.set(enc,m);return enc;};
+  GPUDevice.prototype.createCommandEncoder=function(desc){const enc=cd.call(this,desc),m={encoder:enc,device:this,label:desc?.label,t:now(),kind:P.ctx?.kind||'other',rect:P.ctx?.rect,prep:P.preparing??P.ctx?.prep,passes:[]};P.encoders.push(m);encMeta.set(enc,m);return enc;};
   const finish=GPUCommandEncoder.prototype.finish;
   GPUCommandEncoder.prototype.finish=function(...a){const b=finish.apply(this,a);bufferMeta.set(b,encMeta.get(this));return b;};
   function slot(device){let b=P.blocks.at(-1);if(!b||b.device!==device||b.n===2048){b={device,n:0,queries:device.createQuerySet({type:'timestamp',count:4096}),resolve:device.createBuffer({size:2048*256,usage:GPUBufferUsage.QUERY_RESOLVE|GPUBufferUsage.COPY_SRC}),passes:[]};P.blocks.push(b);}return b;}
@@ -168,7 +178,7 @@ function hooks(){
   }
   P.gpuRead=async()=>{
     P.reading=true;const out=[];
-    try{for(const b of P.blocks){await done.call(b.device.queue);if(!b.n)continue;const read=b.device.createBuffer({size:b.n*256,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST}),e=cd.call(b.device);e.copyBufferToBuffer(b.resolve,0,read,0,b.n*256);submit.call(b.device.queue,[e.finish()]);await read.mapAsync(GPUMapMode.READ);const v=new BigUint64Array(read.getMappedRange());for(const p of b.passes){const a=v[p.index*32],z=v[p.index*32+1];if(z>=a&&a>0n)out.push({label:p.label,ms:Number(z-a)/1e6,start:Number(a)/1e6,end:Number(z)/1e6,t:p.meta.submitted,submit:p.meta.submit,kind:p.meta.kind,rect:p.meta.rect});}read.destroy();}
+    try{for(const b of P.blocks){await done.call(b.device.queue);if(!b.n)continue;const read=b.device.createBuffer({size:b.n*256,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST}),e=cd.call(b.device);e.copyBufferToBuffer(b.resolve,0,read,0,b.n*256);submit.call(b.device.queue,[e.finish()]);await read.mapAsync(GPUMapMode.READ);const v=new BigUint64Array(read.getMappedRange());for(const p of b.passes){const a=v[p.index*32],z=v[p.index*32+1];if(z>=a&&a>0n)out.push({label:p.label,ms:Number(z-a)/1e6,start:Number(a)/1e6,end:Number(z)/1e6,t:p.meta.submitted,submit:p.meta.submit,kind:p.meta.kind,rect:p.meta.rect,prep:p.meta.prep});}read.destroy();}
       // Align GPU timestamps to performance.now() after the measured work is
       // drained. Submit/completion brackets bound the clock-offset uncertainty.
       const device=sculptCanvas.renderer.device;await done.call(device.queue);
@@ -183,20 +193,27 @@ function hooks(){
   };
   P.start=()=>{P.stoppedAt=0;P.pixelReady=false;P.active=true;P.frames=[];P.frameOn=true;const gen=P.frameGen=(P.frameGen||0)+1;let last=0;const f=t=>{if(!P.frameOn||gen!==P.frameGen)return;if(last)P.frames.push({t,ms:t-last});last=t;requestAnimationFrame(f);};requestAnimationFrame(f);P.specStart=window.sculptDebug?.specStats;window.sculptCanvas?.resetMetrics?.();return now();};
   P.stop=()=>{if(P.stoppedAt)return P.stoppedAt;P.active=false;P.frameOn=false;P.frameGen=(P.frameGen||0)+1;P.stopStats=sculptCanvas.stats();return P.stoppedAt=now();};
-  P.reset=()=>{if(P.baseline){closeBitmap.call(P.baseline);P.baseline=null;}P.held=new WeakSet();P.pixelPaints=[];P.extraBitmapBytes=0;P.peakExtraBitmapBytes=0;P.active=false;P.frameOn=false;P.events=[];P.inputs=[];P.handlers=[];P.stages=[];P.waits=[];P.long=[];P.compiles=[];P.frames=[];P.submits=[];for(const b of P.blocks){b.queries.destroy();b.resolve.destroy();}P.blocks=[];P.encoders=[];};
+  P.reset=()=>{if(P.baseline){closeBitmap.call(P.baseline);P.baseline=null;}P.held=new WeakSet();P.pixelPaints=[];P.extraBitmapBytes=0;P.peakExtraBitmapBytes=0;P.active=false;P.frameOn=false;coverage.reset();P.events=[];P.inputs=[];P.handlers=[];P.stages=[];P.waits=[];P.long=[];P.compiles=[];P.frames=[];P.submits=[];for(const b of P.blocks){b.queries.destroy();b.resolve.destroy();}P.blocks=[];P.encoders=[];};
   let canvas;
-  Object.defineProperty(window,'sculptCanvas',{configurable:true,get:()=>canvas,set:c=>{canvas=c;const r=c.renderer;for(const name of ['applyKnobs','setColors','upload']){const f=r[name];r[name]=function(...a){return P.call(name,()=>f.apply(this,a));};}r.timer=()=>null;const base=Object.getPrototypeOf(Object.getPrototypeOf(r));if(!base.draw.__lpWrapped){const draw=base.draw;base.draw=async function(...a){const serial=P.serial,result=await draw.apply(this,a);return {...result,__lpSerial:serial};};base.draw.__lpWrapped=true;}const f=r.renderChunk;r.renderChunk=async function(request,options){const t=now(),previous=P.ctx;P.ctx={kind:'chunk',rect:{x:request.x,y:request.y,width:request.width,height:request.height}};P.mark('bake-start',{...P.ctx.rect,level:options?.scale??1});try{return await f.call(this,request,options);}finally{P.ctx=previous;P.mark('bake-end',{x:request.x,y:request.y,width:request.width,height:request.height,ms:now()-t,level:options?.scale??1});}};}});
+  Object.defineProperty(window,'sculptCanvas',{configurable:true,get:()=>canvas,set:c=>{canvas=c;const r=c.renderer;for(const name of ['applyKnobs','setColors','upload']){const f=r[name];r[name]=function(...a){if(name==='setColors')P.appliedSerial=P.serial;return P.call(name,()=>f.apply(this,a));};}r.timer=()=>null;const f=r.renderChunk;r.renderChunk=async function(request,options){const t=now(),previous=P.ctx,prep=P.lastPrep;P.ctx={kind:'chunk',prep,rect:{x:request.x,y:request.y,width:request.width,height:request.height}};P.mark('bake-start',{prep,...P.ctx.rect,level:options?.scale??1});try{return await f.call(this,request,options);}finally{P.ctx=previous;P.mark('bake-end',{prep,x:request.x,y:request.y,width:request.width,height:request.height,ms:now()-t,level:options?.scale??1});}};}});
 }
 function instrument(path,source){
   const replace=(before,after,count=1)=>{const found=source.split(before).length-1;if(found!==count)throw Error(`LP0 hook drift in ${path}: ${before.slice(0,70)} (${found}, expected ${count})`);source=source.split(before).join(after);};
   if(path==='/sculpt.js'){
+    replace('function setKnob(key, value) {',"function setKnob(key, value) { __perf.appliedSerial=__perf.serial;__perf.mark('knob-applied',{key,serial:__perf.appliedSerial});");
     replace('saveWorlds();',"__perf.call('saveWorlds',()=>saveWorlds());",(source.match(/saveWorlds\(\);/g)||[]).length);
     replace('syncWorldControls();',"__perf.call('syncWorldControls',()=>syncWorldControls());",(source.match(/syncWorldControls\(\);/g)||[]).length);
   }
   if(path==='/sculpt-canvas.js'){
-    replace('const seq=changeSeq,result=await renderer.renderChunk', 'const __lpSerial=__perf.serial,seq=changeSeq,result=await renderer.renderChunk');
-    replace('const result=await renderer.renderChunk(fields', 'const __lpSerial=__perf.serial,result=await renderer.renderChunk(fields');
-    replace('entry={...rect,bitmap', 'entry={...rect,__lpSerial:result.__lpSerial??__lpSerial,__lpFeedSerial:__lpSerial,bitmap',2);
+    replace('drawCoarse(repaint);','if(repaint)__perf.resetCoverage();drawCoarse(repaint);');
+    replace('const feed=fit?await previewFields.feed():await api.gpuFeedSource?.(signal,() => renderer.requiredRegion(request,options),{weather:readWeather});',"const __lpInputSerial=__perf.appliedSerial,__lpPrep=++__perf.prepID;__perf.preparing=__lpPrep;__perf.mark('pages-start',{id:__lpPrep});let feed;try{feed=fit?await previewFields.feed():await api.gpuFeedSource?.(signal,() => renderer.requiredRegion(request,options),{weather:readWeather});}finally{__perf.mark('pages-ready',{id:__lpPrep,paged:!!feed?.paged});__perf.preparing=null;}__perf.lastPrep=__lpPrep;");
+    // LP0c: observe synchronous cache retention when the export trial flips.
+    // Scalars only; no extra stats walk or pixel read on the input path.
+    replace('function configureChunks() {', 'function configureChunks() { const __lpCacheBefore=cache.size,__lpDisplayBefore=viewChunkSize(),__lpCanonicalBefore=canonicalSize;');
+    replace('}finally{budgetUpdating=false;}', "}finally{__perf.mark('configure-chunks',{cacheBefore:__lpCacheBefore,cacheAfter:cache.size,displayBefore:__lpDisplayBefore,displayAfter:viewChunkSize(),canonicalBefore:__lpCanonicalBefore,canonicalAfter:canonicalSize});budgetUpdating=false;}");
+    replace('const seq=changeSeq,result=await renderer.renderChunk', 'const __lpSerial=__lpInputSerial,seq=changeSeq,result=await renderer.renderChunk');
+    replace('const result=await renderer.renderChunk(fields', 'const __lpSerial=__lpInputSerial,result=await renderer.renderChunk(fields');
+    replace('entry={...rect,bitmap', 'entry={...rect,__lpSerial,__lpFeedSerial:__lpSerial,__lpPrep,bitmap',2);
     replace('weathered:readWeather,fed:true,seq,', 'weathered:readWeather,fed:true,__lpRev:feed.revision,seq,');
     replace('weathered:readWeather,input:', 'weathered:readWeather,__lpRev:fields.revision,input:');
     replace('metrics();return entry;', '__perf.tag(entry);metrics();return entry;',2);
@@ -205,7 +222,8 @@ function instrument(path,source){
   if(path==='/sculpt-gpu-fields.js')replace("const enc = device.createCommandEncoder({label: 'shape'}), pass = enc.beginComputePass({label: 'shape passes'});", "const enc = device.createCommandEncoder({label: 'shape'});__perf.work(enc,'shape',{x:R.x0*spacing,y:R.y0*spacing,width:(R.x1-R.x0+1)*spacing,height:(R.y1-R.y0+1)*spacing});const pass = enc.beginComputePass({label: 'shape passes'});");
   if(path==='/sculpt-erosion.js'){
     replace('async runGpu(request) {', "async runGpu(request) { __perf.activeErosion=(__perf.activeErosion||0)+1;__perf.mark('erode-start',{grid:request.grid,ox:request.ox,oy:request.oy});");
-    replace('const gpu = performance.now() - tSubmit;', "__perf.activeErosion--;__perf.mark('erode-end',{});const gpu = performance.now() - tSubmit;");
+    if(source.includes('for(const b of owned)if(!complete||!keep.has(b))b.destroy();'))replace('for(const b of owned)if(!complete||!keep.has(b))b.destroy();',"__perf.activeErosion--;__perf.mark('erode-end',{canceled:!complete});for(const b of owned)if(!complete||!keep.has(b))b.destroy();");
+    else replace('const gpu = performance.now() - tSubmit;',"__perf.activeErosion--;__perf.mark('erode-end',{});const gpu = performance.now() - tSubmit;");
     replace('const tSubmit = performance.now();',"__perf.work(encoder,'time',{x:(request.ox??0)*spacing,y:(request.oy??0)*spacing,width:grid*spacing,height:grid*spacing});const tSubmit = performance.now();");
     // Metadata must be set before queue.submit and its pass metadata is read later.
   }
@@ -251,7 +269,7 @@ const click=async(x,y)=>{await mouse('mousePressed',x,y);await mouse('mouseRelea
 const key=async k=>{for(const type of ['keyDown','keyUp'])await send('Input.dispatchKeyEvent',{type,key:k,code:k});};
 const point=async selector=>ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Missing control '+${JSON.stringify(selector)});e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,w:r.width,h:r.height};})()`);
 const clickElement=async selector=>{const p=await point(selector);await click(p.x,p.y);};
-const result={schema:5,mode,label,colorsDriver:colorsMode,scene:sceneFile,query,startedAt:new Date().toISOString(),gpuQuietSamples,loadAverageAtStart:loadavg(),warmup,baseline:execFileSync('git',['merge-base','HEAD','main'],{encoding:'utf8'}).trim(),notes:['Paint endpoint is canvas draw completion, not physical display scanout.','First changed pixels compares tile RGBA after timing stops, replaying retained immutable bitmaps; no pixel readback runs on the measured path. Extra observer bitmap memory and untimed comparison cost are reported.','Pointer tiles use rendered art coordinates, not the inverse-projected ground pick. Whole current uses every affected visible cache tile and weather readiness, never bake frequency.','Pass timestamps cannot assign a mixed on/off-screen pass to individual pixels; wholly outside time is exact, mixed and area-weighted estimates are separate.','Final latency samples include held mid-drag pauses and release; uncompleted pauses are censored.','No editor files are changed; Fetch injects timing-only observers before modules execute.']};
+const result={schema:6,mode,label,colorsDriver:colorsMode,scene:sceneFile,query,startedAt:new Date().toISOString(),gpuQuietSamples,loadAverageAtStart:loadavg(),warmup,baseline:execFileSync('git',['merge-base','HEAD','main'],{encoding:'utf8'}).trim(),notes:['Paint endpoint is canvas draw completion, not physical display scanout.','First changed pixels compares tile RGBA after timing stops, replaying retained immutable bitmaps; no pixel readback runs on the measured path. Extra observer bitmap memory and untimed comparison cost are reported.','Pointer tiles use rendered art coordinates, not the inverse-projected ground pick. Whole current uses union coverage of actual opaque painted clips, from tiles or blocks, and weather readiness, never bake frequency.','Pass timestamps cannot assign a mixed on/off-screen pass to individual pixels; wholly outside time is exact, mixed and area-weighted estimates are separate.','Final latency samples include held mid-drag pauses and release; uncompleted pauses are censored.','No editor files are changed; Fetch injects timing-only observers before modules execute.']};
 try{result.processesAtStart=execFileSync('/bin/sh',['-c','ps -Ao pcpu,command -r | head'],{encoding:'utf8'});}catch(e){throw Error('Cannot check machine load; run with process inspection permission.');}
 const filename=join(out,`${mode}${label?'-'+label:''}-perf.json`);
 const flush=()=>{if(!warmup)writeFileSync(filename,JSON.stringify({...result,console:logs},null,1));};
@@ -262,30 +280,30 @@ const settle=async()=>{await until(`(()=>{if(!window.sculptCanvas)return false;c
 const begin=async()=>{await ev('__perf.reset()');await ev('__perf.prepare()');return ev('__perf.start()');};
 function analyze(data,t0,anchors=[]){
   const current=(p,m)=>m.kind==='stroke'&&m.rev!=null?p.rev>=m.rev:m.control==='knob-erosionRain'?p.feedSerial>=m.id:p.serial>=m.id;
-  const paints=data.events.filter(e=>e.type==='paint'),coverage=data.events.filter(e=>e.type==='coverage'),first=[],pointer=[],all=[],final=[],focus=[],observations=[];
-  const inputs=data.inputs;
+  const paints=data.events.filter(e=>e.type==='paint'),coverage=data.events.filter(e=>e.type==='coverage'),first=[],pointer=[],all=[],final=[],focus=[],observations=[],finalObservations=[];
+  const inputs=data.inputs,rectCoverage=createCoverage();
   for(const m of inputs){
     const p=paints.find(e=>e.t>=m.t&&current(e,m)&&e.changed);
     if(p)first.push(p.t-m.t);
-    if(m.at){const p=paints.find(e=>e.t>=m.t&&current(e,m)&&e.changed&&m.at[0]>=e.x&&m.at[0]<e.x+e.width&&m.at[1]>=e.y&&m.at[1]<e.y+e.height);if(p)pointer.push(p.t-m.t);}
-    const c=coverage.find(e=>e.t>=m.t&&e.ready&&e.visible.every(k=>{const p=e.keys.find(p=>p.key===k);if(!p)return false;const affected=m.kind==='scroll'?false:m.kind!=='stroke'||!m.rectangles?.length||m.rectangles.some(r=>r.x<p.x+p.width&&p.x<r.x+r.width&&r.y<p.y+p.height&&p.y<r.y+r.height);return affected?current(p,m):m.kind==='scroll'?!p.dirty:true;}));
-    if(c)all.push(c.t-m.t);observations.push({id:m.id,t:m.t,first:p?.t??null,all:c?.t??null});
+    if(m.at){const p=paints.find(e=>e.t>=m.t&&current(e,m)&&e.changed&&(e.clips??[e]).some(r=>m.at[0]>=r.x&&m.at[0]<r.x+r.width&&m.at[1]>=r.y&&m.at[1]<r.y+r.height));if(p)pointer.push(p.t-m.t);}
+    const c=coverage.find(e=>e.t>=m.t&&e.ready&&rectCoverage.covered((m.rectangles?.length?m.rectangles:[data.view]).map(r=>rectCoverage.intersect(r,data.view)).filter(Boolean),p=>m.kind==='scroll'?!p.dirty:current(p,m),e.regions));
+    if(c)all.push(c.t-m.t);observations.push({id:m.id,t:m.t,first:p?.t??null,all:c?.t??null,preps:c?[...new Set(c.regions.filter(p=>current(p,m)).map(p=>p.prep).filter(Boolean))]:[]});
   }
   for(const anchor of anchors){
     const targets=anchor.keys||data.visible,id=anchor.serial??inputs.filter(m=>m.t<=anchor.t).at(-1)?.id??0;
     const nextInput=inputs.find(m=>m.t>anchor.t)?.t??Infinity;
-    const c=coverage.find(e=>e.t>=anchor.t&&e.t<nextInput&&e.ready&&targets.every(k=>e.keys.some(p=>p.key===k&&!p.dirty&&p.level<=1)));
-    if(c)final.push(c.t-anchor.t);
+    const last=inputs.findLast(m=>m.t<=anchor.t);const c=coverage.find(e=>e.t>=anchor.t&&e.t<nextInput&&e.ready&&targets.every(k=>e.keys.some(p=>p.key===k&&!p.dirty&&p.level<=1))&&(!last||rectCoverage.covered((last.rectangles?.length?last.rectangles:[data.view]).map(r=>rectCoverage.intersect(r,data.view)).filter(Boolean),p=>current(p,last),e.regions)));
+    if(c)final.push(c.t-anchor.t);finalObservations.push({t:anchor.t,final:c?.t??null});
     const at=anchor.at||[data.view.x+data.view.width/2,data.view.y+data.view.height/2];
     const focusView=coverage.find(e=>e.t>=anchor.t&&e.t<nextInput&&e.ready&&e.keys.some(p=>!p.dirty&&p.level<=1&&at[0]>=p.x&&at[0]<p.x+p.width&&at[1]>=p.y&&at[1]<p.y+p.height));if(focusView)focus.push(focusView.t-anchor.t);
   }
   if(!inputs.length){const p=paints.find(e=>e.t>=t0&&e.changed),c=coverage.find(e=>e.t>=t0&&e.ready&&data.visible.every(k=>e.keys.some(p=>p.key===k&&!p.dirty)));if(p)first.push(p.t-t0);if(c)all.push(c.t-t0);}
   const samples={first,pointer,all,final,focus},total=inputs.length||1;
-  return {samples,observations,sampleTotals:{first:total,pointer:inputs.filter(m=>m.at).length,all:total,final:anchors.length,focus:anchors.length},latency:distribution(first,total),latencyPointer:distribution(pointer,inputs.filter(m=>m.at).length),latencyAll:distribution(all,total),final:distribution(final,anchors.length),focusFinal:distribution(focus,anchors.length)};
+  return {samples,observations,finalObservations,sampleTotals:{first:total,pointer:inputs.filter(m=>m.at).length,all:total,final:anchors.length,focus:anchors.length},latency:distribution(first,total),latencyPointer:distribution(pointer,inputs.filter(m=>m.at).length),latencyAll:distribution(all,total),final:distribution(final,anchors.length),focusFinal:distribution(focus,anchors.length)};
 }
 const capture=async(t0,anchors=[],extra={})=>{
   await ev('__perf.stop()');await ev('__perf.readPixels()');
-  const data=await ev(`(()=>{const P=__perf,m=P.stopStats;return {events:P.events,inputs:P.inputs,handlers:P.handlers,stages:P.stages,waits:P.waits,long:P.long,frames:P.frames,compiles:P.compiles,specStart:P.specStart,specEnd:sculptDebug.specStats,view:sculptCanvas.view(),visible:P.visible(),chunk:m.displayChunkSize,memory:{gpuBytes:m.gpuBytes,peakGPUBytes:m.peakGPUBytes,heapBytes:m.heapBytes,peakHeapBytes:m.peakHeapBytes,peakAccountedHeapBytes:m.peakAccountedHeapBytes,rendererPeakBytes:m.renderer.peakBytes},end:P.stoppedAt,observer:{untimedPixelComparisonMs:P.pixelObserverMs,baselineBitmapBytes:P.baselineBytes,extraRetainedBitmapPeakBytes:P.peakExtraBitmapBytes}};})()`);
+  const data=await ev(`(()=>{const P=__perf,m=P.stopStats;return {events:P.events,inputs:P.inputs,handlers:P.handlers,stages:P.stages,waits:P.waits,long:P.long,frames:P.frames,compiles:P.compiles,specStart:P.specStart,specEnd:sculptDebug.specStats,browserViewport:{width:innerWidth,height:innerHeight},view:sculptCanvas.view(),visible:P.visible(),chunk:m.displayChunkSize,memory:{gpuBytes:m.gpuBytes,peakGPUBytes:m.peakGPUBytes,heapBytes:m.heapBytes,peakHeapBytes:m.peakHeapBytes,peakAccountedHeapBytes:m.peakAccountedHeapBytes,rendererPeakBytes:m.renderer.peakBytes},end:P.stoppedAt,observer:{untimedPixelComparisonMs:P.pixelObserverMs,baselineBitmapBytes:P.baselineBytes,extraRetainedBitmapPeakBytes:P.peakExtraBitmapBytes}};})()`);
   data.inputs=data.inputs.filter(e=>e.t>=t0);data.events=data.events.filter(e=>e.t>=t0);const metricsEnd=extra.metricsUntil??data.end;for(const key of ['stages','waits','long','handlers','compiles'])data[key]=data[key].filter(e=>e.t>=t0&&e.t<=metricsEnd);
   const allPasses=await ev('__perf.gpuRead()'),gpuClock=await ev('__perf.gpuClock'),passes=allPasses.filter(p=>p.cpuEnd>=t0&&p.cpuStart<=metricsEnd),a=analyze(data,t0,anchors),stage={},byPass={},submits=new Map();
   for(const s of data.stages)(stage[s.name]??=[]).push(s.ms);
@@ -293,16 +311,30 @@ const capture=async(t0,anchors=[],extra={})=>{
   const offscreen={whollyOutsideMs:0,mixedRegionMs:0,areaWeightedOutsideMs:0,unknownRegionMs:0,totalMeasuredMs:0,window:{from:t0,to:finalT}};
   for(const p of passes){
     const k=p.kind+' | '+p.label,b=byPass[k]??={n:0,ms:0,max:0};b.n++;b.ms+=p.ms;b.max=Math.max(b.max,p.ms);
-    const s=submits.get(p.submit)||{start:p.start,end:p.end};s.start=Math.min(s.start,p.start);s.end=Math.max(s.end,p.end);submits.set(p.submit,s);
+    const s=submits.get(p.submit)||{start:p.start,end:p.end,kind:p.kind};s.start=Math.min(s.start,p.start);s.end=Math.max(s.end,p.end);submits.set(p.submit,s);
   }
   for(const p of allPasses){
     const ms=Math.max(0,Math.min(p.cpuEnd,finalT)-Math.max(p.cpuStart,t0));if(!ms)continue;offscreen.totalMeasuredMs+=ms;
     if(!p.rect){offscreen.unknownRegionMs+=ms;continue;}const r=p.rect,v=data.view,area=r.width*r.height,overlap=Math.max(0,Math.min(r.x+r.width,v.x+v.width)-Math.max(r.x,v.x))*Math.max(0,Math.min(r.y+r.height,v.y+v.height)-Math.max(r.y,v.y));
     if(overlap===0)offscreen.whollyOutsideMs+=ms;else if(overlap<area){offscreen.mixedRegionMs+=ms;offscreen.areaWeightedOutsideMs+=ms*(1-overlap/area);}
   }
+  // Critical-path dependency: CPU page preparation plus outstanding shape/Time
+  // GPU work submitted by that preparation, ending at this chunk's first pass.
+  // Union intervals before subtracting; CPU and GPU work may overlap.
+  const pageIntervals=id=>{
+    const intervals=[],start=data.events.find(e=>e.type==='pages-start'&&e.id===id),ready=data.events.find(e=>e.type==='pages-ready'&&e.id===id);
+    if(start&&ready)intervals.push([start.t,ready.t]);
+    const chunk=allPasses.filter(p=>p.prep===id&&p.kind==='chunk').sort((a,b)=>a.cpuStart-b.cpuStart)[0];
+    if(chunk)for(const p of allPasses)if(p.prep===id&&['shape','time'].includes(p.kind))intervals.push([p.cpuStart,Math.min(p.cpuEnd,chunk.cpuStart)]);
+    return intervals;
+  };
+  const unionMs=(intervals,from,to)=>{let sum=0,end=-Infinity;for(const [lo,hi] of intervals.map(([x,y])=>[Math.max(x,from),Math.min(y,to)]).filter(([x,y])=>y>x).sort((a,b)=>a[0]-b[0])){sum+=Math.max(0,hi-Math.max(lo,end));end=Math.max(end,hi);}return sum;};
+  const pageWait=[],apart=[],previewOwn=[];
+  for(const o of a.observations)if(o.all!==null){const sum=unionMs(o.preps.flatMap(pageIntervals),o.t,o.all);pageWait.push(sum);apart.push(Math.max(0,o.all-o.t-sum));}
+  for(const e of data.events)if(e.type==='bake-end'&&e.level>1)previewOwn.push(Math.max(0,e.ms-unionMs(pageIntervals(e.prep),e.t-e.ms,e.t)));
   const calls={};for(const name of ['history.replaceState','saveWorlds','applyKnobs','syncWorldControls','setColors'])calls[name]=distribution(data.handlers.map(h=>h.calls[name]||0));
   if(extra.specStartOverride)data.specStart=extra.specStartOverride;const specStats={built:(data.specEnd?.built||0)-(data.specStart?.built||0),ms:(data.specEnd?.ms||0)-(data.specStart?.ms||0),start:data.specStart,end:data.specEnd};
-  const phase={...extra,phaseStartMs:t0,anchors,latencyWindow:'Input through visible final; held-only completion and censoring are also reported',durationMs:data.end-t0,view:data.view,...a,rafMs:distribution(data.frames.filter(f=>f.t>=t0&&f.t<=metricsEnd).map(f=>f.ms)),split:{stage:Object.fromEntries(Object.entries(stage).map(([k,a])=>[k,{...distribution(a),totalMs:a.reduce((n,x)=>n+x,0)}])),queueWaitMs:distribution(data.waits.map(w=>w.ms)),gpuSubmissionMs:distribution([...submits.values()].map(s=>s.end-s.start)),longTasks:{...distribution(data.long.map(e=>e.ms)),totalMs:data.long.reduce((n,e)=>n+e.ms,0),top:data.long.sort((a,b)=>b.ms-a.ms).slice(0,8)},handlerMs:distribution(data.handlers.map(h=>h.ms)),handlerCalls:calls,specStats,pipelines:data.compiles,gpuPassesMs:byPass,bitmapCopyMs:distribution(stage['bitmap copy']||[]),memory:data.memory,observer:data.observer,gpuClock,offscreenGPU:offscreen},inputs:data.inputs,handlers:data.handlers};
+  const phase={...extra,phaseStartMs:t0,anchors,latencyWindow:'Input through visible final; held-only completion and censoring are also reported',durationMs:data.end-t0,browserViewport:data.browserViewport,view:data.view,displayChunkSize:data.chunk,...a,rafMs:distribution(data.frames.filter(f=>f.t>=t0&&f.t<=metricsEnd).map(f=>f.ms)),split:{previewOwnApartFromPagesMs:distribution(previewOwn),previewRenderMs:distribution(data.events.filter(e=>e.type==='bake-end'&&e.level>1).map(e=>e.ms)),pageWaitMs:distribution(pageWait,data.inputs.length||1),wholeApartFromPagesMs:distribution(apart,data.inputs.length||1),pageWaitDefinition:"Union of CPU field preparation and its outstanding shape/Time GPU passes, clipped to input→whole-current; GPU clock uncertainty reported separately.",stage:Object.fromEntries(Object.entries(stage).map(([k,a])=>[k,{...distribution(a),totalMs:a.reduce((n,x)=>n+x,0)}])),queueWaitMs:distribution(data.waits.map(w=>w.ms)),gpuSubmissionMs:distribution([...submits.values()].map(s=>s.end-s.start)),gpuSubmissionByKindMs:Object.fromEntries([...new Set([...submits.values()].map(s=>s.kind))].map(kind=>[kind,distribution([...submits.values()].filter(s=>s.kind===kind).map(s=>s.end-s.start))])),longTasks:{...distribution(data.long.map(e=>e.ms)),totalMs:data.long.reduce((n,e)=>n+e.ms,0),top:data.long.sort((a,b)=>b.ms-a.ms).slice(0,8)},handlerMs:distribution(data.handlers.map(h=>h.ms)),handlerCalls:calls,specStats,pipelines:data.compiles,gpuPassesMs:byPass,bitmapCopyMs:distribution(stage['bitmap copy']||[]),memory:data.memory,observer:data.observer,gpuClock,offscreenGPU:offscreen},inputs:data.inputs,handlers:data.handlers};
   // Compact raw evidence remains in this one output file; no screenshots or tile art.
   const hold=anchors.at(-1)?.t??data.end;phase.heldLatency={first:distribution(a.observations.filter(o=>o.first!==null&&o.first<=hold).map(o=>o.first-o.t),data.inputs.length),wholeCurrent:distribution(a.observations.filter(o=>o.all!==null&&o.all<=hold).map(o=>o.all-o.t),data.inputs.length)};phase.events=data.events;const down=data.events.find(e=>e.type==='stroke-begin');if(down){const p=data.events.find(e=>e.type==='paint'&&e.t>=down.t&&e.rev>=down.rev&&e.changed);phase.firstStrokePreviewMs=p?p.t-down.t:null;phase.strokeBegin=down;}phase.latencyChanged=phase.latency;phase.samples.firstTile=tileSamples(phase);phase.latency=distribution(phase.samples.firstTile,data.inputs.length||1);phase.samples.pointer=tileSamples(phase,true);phase.latencyPointer=distribution(phase.samples.pointer,data.inputs.filter(m=>m.at).length);phase.releaseFinal=distribution(releaseSample(phase),1);phase.firstChunkPicture=phase.latency.p50;phase.shownInView=phase.latencyAll.p50;phase.finalInView=phase.final.p50;return phase;
 };
@@ -313,13 +345,15 @@ const setup=async()=>{
 
 try{
   await send('Runtime.enable');await send('Page.enable');
-  await send('Page.addScriptToEvaluateOnNewDocument',{source:`(${hooks.toString()})()`});
+  await send('Page.addScriptToEvaluateOnNewDocument',{source:`const createCoverage=${createCoverage.toString()};(${hooks.toString()})()`});
   await send('Fetch.enable',{patterns:['sculpt.js','sculpt-canvas.js','sculpt-gpu-fields.js','sculpt-erosion.js'].map(p=>({urlPattern:'*/'+p,requestStage:'Response'}))});
   const terrain=viewport?viewport.split('x').map(Number):null;
   if(terrain)await send('Emulation.setDeviceMetricsOverride',{width:terrain[0]+392,height:terrain[1]+359,deviceScaleFactor:1,mobile:false});
-  const url=`${server}/sculpt.html?biome=${scene.biome||'green'}&mapX=${mode.slice(3)}&mapY=${mode.slice(3)}&scratch=lp0-${port}&gpuMB=512&heapMB=1536${scene.query?'&'+scene.query:''}${query?'&'+query:''}`;
+  const search=new URLSearchParams({biome:scene.biome||'green',mapX:mode.slice(3),mapY:mode.slice(3),scratch:`lp0-${port}`,gpuMB:'512',heapMB:'1536'});
+  for(const q of [scene.query,query])for(const [key,value] of new URLSearchParams(q||''))search.set(key,value);
+  const url=`${server}/sculpt.html?${search}`;
   await send('Page.navigate',{url});
-  const boot=Date.now();await until('!!window.sculptCanvas&&!document.getElementById("map-export").disabled','editor boot');result.bootMs=Date.now()-boot;result.browser=await send('Browser.getVersion');
+  const boot=Date.now();await until('!!window.sculptCanvas&&!document.getElementById("map-export").disabled','editor boot');result.bootMs=Date.now()-boot;result.browser=await send('Browser.getVersion');result.effectiveGpuMB=await ev('sculptCanvas.stats().gpuBudget/1048576');if(result.effectiveGpuMB!==Number(search.get('gpuMB')))throw Error('Terrain budget differs from requested gpuMB');
   if(terrain)await ev(`(()=>{const v=document.getElementById('viewport');v.style.width='${terrain[0]}px';v.style.height='${terrain[1]}px';v.style.flex='none';sculptCanvas.resize();})()`);
   // Finish the blank map's startup before measuring the authored scene load.
   await settle();console.error('phase load');
@@ -340,13 +374,27 @@ try{
   {const t0=await begin(),p=await stroke();const dragStop=await ev('performance.now()'),a=await anchor();await mouse('mouseReleased',p.x,p.y);await settle();const whole=await capture(t0,[a],{metricsUntil:dragStop});result.drag={...whole,heldUntil:dragStop,movesDelivered:whole.inputs.length};result.release=await capture(a.t,[a],{input:'stroke release',specStartOverride:a.spec});flush();}
   if(['drag','release'].includes(only))throw Error(`stopped after ${only} (--only)`);
   console.error('phase resume');
-  {await setup();const t0=await begin(),p=await stroke(8),release=await anchor();await mouse('mouseReleased',p.x,p.y);await sleep(100);const began=await anchor(),pendingState=await ev('({weatherPending:!sculptRegion.canExport(),foregroundPending:sculptCanvas.foregroundPending(),rendererBusy:sculptCanvas.renderer.busy,timePassesInFlight:__perf.activeErosion||0})');const q={x:p.x-50,y:p.y+35};await mouse('mousePressed',q.x,q.y);for(let i=1;i<=32;i++){await strokeMove(q.x+i*4,q.y+Math.sin(i/4)*20);await sleep(30);}const a=await anchor();await mouse('mouseReleased',q.x+128,q.y+Math.sin(8)*20);await settle();result.resume=await capture(began.t,[a],{specStartOverride:began.spec,primingStart:t0,release,secondStroke:began,actualDelayMs:began.t-release.t,pendingAtResume:pendingState});flush();}
+  {await setup();const t0=await begin(),p=await stroke(8),release=await anchor();await mouse('mouseReleased',p.x,p.y);await sleep(100);const began=await anchor(),pendingState=await ev('({weatherPending:!sculptRegion.canExport(),foregroundPending:sculptCanvas.foregroundPending(),rendererBusy:sculptCanvas.renderer.busy,timePassesInFlight:__perf.activeErosion||0})');const q={x:p.x-50,y:p.y+35};await mouse('mousePressed',q.x,q.y);for(let i=1;i<=32;i++){await strokeMove(q.x+i*4,q.y+Math.sin(i/4)*20);await sleep(30);}const a=await anchor();await mouse('mouseReleased',q.x+128,q.y+Math.sin(8)*20);await settle();result.resume=await capture(began.t,[a],{specStartOverride:began.spec,primingStart:t0,release,secondStroke:began,actualDelayMs:began.t-release.t,pendingAtResume:pendingState,inFlightCondition:pendingState.timePassesInFlight>0});flush();}
   if(only==='resume')throw Error('stopped after resume (--only)');
   }
   // --------------------------------------------- page-native slider drags
   const openWorld=async control=>{
     await clickElement('#tab-world');
-    await ev(`(()=>{const e=${control==='colors'?"document.querySelector('#world-colors input[type=color]')":`document.getElementById(${JSON.stringify(control)})`};if(!e)throw Error('Missing row');for(let p=e.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;})()`);
+    // World can be wider than Build. Preserve the requested terrain area and
+    // leave room for the page's own panel, rather than rendering beneath it.
+    if(terrain){
+      await sleep(200);
+      const extra=await ev(`(()=>{const v=document.getElementById('viewport').getBoundingClientRect(),p=document.getElementById('inspector-sidebar').getBoundingClientRect();return Math.max(392,Math.ceil(v.left+p.width+64));})()`);
+      await send('Emulation.setDeviceMetricsOverride',{width:terrain[0]+extra,height:terrain[1]+359,deviceScaleFactor:1,mobile:false});
+      await ev('sculptCanvas.resize()');await settle();
+      const fits=await ev(`(()=>{const v=document.getElementById('viewport').getBoundingClientRect(),p=document.getElementById('inspector-sidebar').getBoundingClientRect(),s=sculptCanvas.view();return s.width===${terrain[0]}&&s.height===${terrain[1]}&&v.left>=0&&v.right<=p.left+1&&v.bottom<=innerHeight;})()`);
+      if(!fits)throw Error('Requested terrain view is clipped by the World layout');
+    }
+    if(await ev(`(()=>{const e=document.getElementById('world-fine');return e&&!e.checked;})()`))await clickElement('#world-fine');
+    const selector=control==='colors'?'#world-colors input[type=color]':'#'+control;
+    const tabs=await ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Missing row');const tabs=[];for(let p=e.parentElement;p;p=p.parentElement){if(p.tagName==='DETAILS')p.open=true;if(p.getAttribute('role')==='tabpanel'&&p.hasAttribute('aria-labelledby'))tabs.push(p.getAttribute('aria-labelledby'));}return tabs.reverse();})()`);
+    for(const id of tabs)if(await ev(`document.getElementById(${JSON.stringify(id)})?.getAttribute('aria-selected')==='false'`))await clickElement('#'+id);
+    if(!await ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)}),r=e.closest('[data-knob]')?.querySelector('.scrub')??e;return r.getClientRects().length>0&&getComputedStyle(r).visibility!=='hidden';})()`))throw Error('Row remained hidden: '+control);
   };
   const scrub=async(control,paused,cold=false)=>{
     await openWorld(control);const row=await point(`.scrub[data-source="${control}"]`),spec=await ev(`(()=>{const e=document.getElementById(${JSON.stringify(control)});return {min:+e.min,max:+e.max,step:+e.step,value:+e.value,disabled:e.disabled};})()`);
@@ -378,7 +426,7 @@ try{
     for(const control of sliderNames){
       for(const paused of [false,true]){
         console.error('phase slider',control,paused?'pause':'continuous');await setup();
-        if(control==='colors')result.slider.push(await colorDrag(paused));else result.slider.push(await scrub(control,paused));flush();
+        if(control==='colors'){await openWorld(control);result.slider.push(await colorDrag(paused));}else result.slider.push(await scrub(control,paused));flush();
       }
     }
     // A gate is a shader comparison, not every numerical zero. This gate
