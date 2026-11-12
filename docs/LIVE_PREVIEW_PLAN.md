@@ -17,6 +17,12 @@ of RAM available (e.g. iPad, iMac, Macbook Pro are what I have to test), so
 we aren't married to the 512MiB budget, feel free to expand it when it makes
 sense."
 
+**The owner's answers to this plan's four questions (2026-11-11, same
+day):** "16th level is fine to try out for interactivity"; "2048 default
+budget is okay, but the browser should detect and adjust as needed"; "Yes,
+auto refine"; "Realism is looking much better today, so I want to start the
+speed pass soon." They are folded in below and recorded in section 8.
+
 ## How to read this
 
 - Claims are tagged **[measured]** (a number and its conditions), **[read]**
@@ -74,11 +80,11 @@ evaluated again, which is not measured here (LP0b measures it, and LP3 step
 | Longest GPU submission that input must wait behind | a Time pass, 0.3 to 2.1 s **[measured]** | | 0.1 s (LP4) | |
 | Release to final, whole view | 2.2 s **[recorded]** | within 10% of today | | less (LP6) |
 
-**Memory.** The owner lifted the 512 MiB limit while this was written.
-With 1 GiB or more the whole view is one preview pass on a 16x16 map today;
-at 512 MiB it must be four (section 3.3). This plan proposes a default of
-2,048 MiB (a decision for the owner, section 8) and needs no more than
-that; more memory would not make it faster.
+**Memory.** The terrain budget's default becomes 2,048 MiB, and the page
+detects what the device allows and adjusts (section 4.8) **[owner
+decision]**. With 1 GiB or more the whole view is one preview pass on a
+16x16 map today; at 512 MiB it must be four (section 3.3). The plan needs
+no more than 2 GiB; more memory would not make it faster.
 
 **Order:** LP0 bench; LP0b the proof in the page, a throwaway slice and
 **the go/no-go**; LP1 dirty model; LP2 preview blocks for every interaction
@@ -93,10 +99,10 @@ page, stop and report before anything is restructured.
 2026-11-11].** Devices with at least 4 to 8 GB of memory available; the
 owner tests on a MacBook Pro (Apple M3 Pro, 18 GiB; every number here is
 from it), an iMac and an iPad. A 16x16 map at 100% zoom. The terrain budget
-is a setting; this plan proposes a default of 2,048 MiB from LP2 on
-(section 8). The design must still work, in more blocks, at 512 MiB, which
-may be all a device with 4 GB allows one page (what Safari on the iPad
-grants is unknown). Measure on `repro/perf.mjs map16` with
+is a setting whose default is 2,048 MiB from LP2 on, lowered by the page
+when the device cannot give it (section 4.8). The design must still work,
+in more blocks, at 512 MiB, which may be all a device with 4 GB allows one
+page (what Safari on the iPad grants is unknown). Measure on `repro/perf.mjs map16` with
 the view the earlier baseline used (1208 x 841 art pixels) and with a large
 one (1728 x 1024, `--viewport`), on three scenes: `green-modern-2` (cliffs,
 granite, whole blocks), `red-3` (the costliest world on main) and `green-7`
@@ -499,7 +505,49 @@ tiles, at final quality.
 - Sun height and turn are stage E, and E's shadows read the solid, so they
   stay on the ladder.
 
-### 4.8 What this plan does not do
+### 4.8 The memory budget: detect and adjust
+
+The owner: "2048 default budget is okay, but the browser should detect and
+adjust as needed." Today the budget is a number from the address (`gpuMB`,
+default 512) or the panel's field; nothing looks at the device, and an
+out-of-memory error or a lost device ends in the error banner
+(`sculpt-renderer.js:172-173`) **[read]**.
+
+**What a browser can tell the page** (my knowledge of the APIs; confirm on
+Chrome, Safari on macOS and Safari on the iPad in LP2): WebGPU reports no
+total or free memory. The signals are `navigator.deviceMemory` (Chromium
+only, rounded and capped at 8 GiB; absent in Safari), the adapter's limits
+(`maxBufferSize`, `maxStorageBufferBindingSize`), and failure itself: an
+`out-of-memory` error from an error scope around an allocation, a lost
+device, or, on the iPad, the tab being killed with no event at all.
+
+**So the budget is found by a cautious start and by evidence:**
+1. *Start.* 2,048 MiB; 1,024 where `navigator.deviceMemory` exists and is
+   4 or less; never more than the adapter's limits allow the largest single
+   buffer. A `gpuMB` in the address or a number typed in the panel is the
+   artist's and is not second-guessed upward or downward until it fails.
+2. *Catch.* The few large allocations (a level's working set, the brick
+   pool, the Time pass's buffers, page targets) are made inside an
+   `out-of-memory` error scope. On an error: free in eviction order
+   (geometry records, preview working sets, images out of view), step the
+   budget down one notch (2,048, 1,536, 1,024, 768, 512) and carry on in
+   more blocks. No banner unless 512 MiB fails too.
+3. *Survive a killed tab.* Before the first view of a session the page
+   notes the budget it is about to try, and clears the note once that view
+   has drawn. A note still there at the next load means the last session
+   died at that budget: start one notch lower.
+4. *Remember.* The notch a device settled on is kept with the editor's
+   existing local preferences, so it is found once, not every session. If
+   that needs a storage key of its own, ask the owner first (rule 8).
+5. *Say so.* The memory line the panel already shows
+   (`[data-memory]`, `sculpt-canvas.js:74`) gives the budget in effect and,
+   when the page lowered it, that it did and why. No new control.
+
+It never raises itself above the default. The budget counts the editor's
+own textures and buffers, not the driver's overhead, so the steps are
+deliberately coarse.
+
+### 4.9 What this plan does not do
 
 No second renderer and no preview-only shading. No brickless solid. No
 worker unless LP0 and LP4 show main-thread frames the budget cannot absorb.
@@ -597,9 +645,10 @@ changed pixels on every check scene and report the number, even when it is
 ### LP2. Preview blocks for every interaction (L)
 
 **Change.** Sections 4.3 to 4.6, with today's lattice input.
-0. The terrain budget's default goes to the figure the owner picks (2,048
-   MiB proposed; `gpuMB`, `sculpt-canvas.js:35`; the panel's field keeps
-   its 128 to 4,096 range) and `pagedBudget`'s minimum grows by the preview's working set, so the
+0. The terrain budget's default goes to 2,048 MiB (`gpuMB`,
+   `sculpt-canvas.js:35`; the panel's field keeps its 128 to 4,096 range),
+   with section 4.8's detection and stepping down, and `pagedBudget`'s
+   minimum grows by the preview's working set, so the
    pages never take the room a view pass needs. At that default the view is
    one block (section 3.3); the planner still cuts blocks, for smaller
    budgets and larger views.
@@ -613,8 +662,9 @@ changed pixels on every check scene and report the number, even when it is
 6. Load and pan: a coarse block for ground with no image.
 
 **Files.** `sculpt-canvas.js` (most of `frame`, `bake`, `paint`,
-`presentView`, `schedule`), `sculpt-chunk-renderer.js` (blocks that are not
-tile-sized; the room a preview may take), `sculpt-renderer.js` (the generic
+`presentView`, `schedule`; the budget's start, steps and memory line),
+`sculpt-chunk-renderer.js` (blocks that are not tile-sized; the room a
+preview may take; the error scopes), `sculpt-renderer.js` (the generic
 set), `sculpt.js` (`setKnob`, the row handlers, `previewActive`),
 `sculpt-gates.js`.
 
@@ -636,7 +686,13 @@ set), `sculpt.js` (`setKnob`, the row handlers, `previewActive`),
   cold bake of the same scene byte for byte (a bench step, not a new check);
 - the color bias of each preview level against final, by the measure
   `repro/interaction` used for `80aad369`, is reported for Green, Red and
-  Desert.
+  Desert;
+- a forced out-of-memory error (a debug hook that fails the next working-set
+  allocation) steps the budget down and the view still previews, in more
+  blocks, with no banner; a leftover "trying" note at load starts one notch
+  lower; the panel's memory line says what happened. Run once by hand on
+  the iMac and the iPad when they are at hand, and report what budget each
+  settles on.
 **Risks.** The block seam: blocks and tiles each read their own apron, so
 there must be none; look at a block boundary on a cliff at 512 MiB. Pages: a
 view block gathers more pages at once than a tile does (the caps are 9
@@ -793,24 +849,24 @@ branch does not edit it.
 
 ## 8. For the owner
 
-**Decisions wanted.**
-1. **The look of the coarse level.** A sixteenth is blocky and, on Desert,
-   pinker and noisier than final (section 3.4). Is that acceptable for the
-   first tenth of a second, with the quarter level about 100 ms behind it?
-   The alternative is the quarter level as the first answer, at 2 to 3
-   times the cost.
-2. **Refinement starts by itself** after a pause (about 250 ms), nearest
-   the last pointed place first. The alternative, a bake the artist starts,
-   needs a control (below).
-3. **The default terrain budget**: 2,048 MiB as proposed below, or
-   another figure.
-4. **Speed work was parked behind realism** (2026-11-09). This brief reads
-   as unparking it; LP0 to LP2 can run beside realism work because they
-   move no pixel, but they do rewrite the canvas scheduler that every
-   realism branch renders through.
+**Decided (the owner, 2026-11-11).**
+1. **The coarse level is a sixteenth, to try.** "16th level is fine to try
+   out for interactivity." It is blocky and, on Desert, pinker and noisier
+   than final (section 3.4), so it is a trial, not a settled look: LP0b puts
+   it in the owner's hands in the page, and the quarter level as the first
+   answer (2 to 3 times the cost) stays the fallback.
+2. **Refinement starts by itself** after a pause, nearest the last pointed
+   place first. "Yes, auto refine."
+3. **The default budget is 2,048 MiB, and the page detects and adjusts.**
+   "2048 default budget is okay, but the browser should detect and adjust
+   as needed." Section 4.8.
+4. **The speed pass starts soon.** "Realism is looking much better today,
+   so I want to start the speed pass soon." LP0 and LP0b touch no editor
+   code that lands, so they can start beside realism work; LP1 and LP2
+   rewrite the canvas scheduler every realism branch renders through, so
+   agree their window with the owner.
 
-**Memory, and the answer to "do we need even more".** The owner lifted the
-512 MiB limit on 2026-11-11; the number is still theirs to pick. What was
+**Memory, and the answer to "do we need even more".** What was
 measured (section 3.3): 1,024 and 1,536 MiB both give the view as one
 preview pass (about ten times today's preview on a scene that is not
 changing, against four to five times in blocks at 512 MiB) and an unsplit
@@ -819,10 +875,10 @@ session: with a working set kept per level, a 1.8 megapixel view on a 16x16
 map uses about 1.0 to 1.3 GiB, and an iMac-sized view of 2.9 megapixels
 about 1.6 to 2 GiB. The page fields do not grow to fill a larger budget
 (they are capped at 9 shape and 24 weather pages, 313 MiB in the measured
-scene; a scene whose strokes need a wider page ring holds more). Hence the
-proposal: **a default of 2,048 MiB, falling back to blocks below it**; on
-a device with 4 GB, 1,024 MiB still gives the one-pass view at 1.8
-megapixels. More than 2 GiB is not asked for, because what stays slow after
+scene; a scene whose strokes need a wider page ring holds more). Hence
+**2,048 MiB by default, stepping down to blocks where a device cannot give
+it**; on a device with 4 GB, 1,024 MiB still gives the one-pass view at
+1.8 megapixels. More than 2 GiB is not asked for, because what stays slow after
 this plan is GPU time building the solid, not memory. Two things more
 memory could buy, neither recommended: keeping the solid of the whole view
 between edits (0.5 to 1 GiB on cliffs, at about 1 KB a brick) would make
