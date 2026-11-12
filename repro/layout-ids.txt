@@ -130,6 +130,8 @@ feature-form-vent-size-value
 feature-help
 feature-kind
 feature-kind-note
+feature-look
+feature-manage
 feature-new-set
 feature-peaks
 feature-peaks-value
@@ -153,6 +155,7 @@ feature-selection-title
 feature-selection-values
 feature-shade
 feature-shade-value
+feature-shape
 feature-shrub-accent-color
 feature-shrub-color
 feature-species
@@ -194,6 +197,7 @@ load
 map-export-host
 map-features-controls
 map-features-panel
+map-features-title
 map-settings-host
 material-weathering
 material-weathering-value
@@ -330,8 +334,10 @@ softness
 softness-control
 softness-value
 stage
+start-count
 start-list
 start-remove
+starts-tool
 status
 tab-map
 tab-objects
