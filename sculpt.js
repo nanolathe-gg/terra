@@ -1679,7 +1679,8 @@ function mountRockPanel() {
       const recipe=parseRockRecipe(await navigator.clipboard.readText());
       if(rockSelected===0){setRockSettings(recipe.knobs);if(recipe.column)editColumn({...columnForEdit(),sections:recipe.column.sections,variants:{}});if(columnEditing)commitColumn();else checkpoint(true);syncColumnPanel();}
       else{editRocks(setRock(mapRocks,rockSelected,recipe));checkpoint(true);}
-      syncRockPanel();rockNote('');status(`Pasted the rock recipe ${recipe.name}.`);
+      // The world's rock wears the world's colors (Colors & base pattern): a recipe's own colors land on presets only.
+      syncRockPanel();rockNote(rockSelected===0&&recipe.colors?'The world\u2019s rock keeps the world\u2019s colors; the recipe\u2019s numbers and beds were pasted. Paste on a preset to take its colors too.':'');status(`Pasted the rock recipe ${recipe.name}.`);
     }catch(err){rockNote(err.message);}
   };
   syncRockPanel();

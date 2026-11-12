@@ -958,9 +958,10 @@ export class TerrainRenderer {
     this.writeRocks();
   }
 
-  // Rock recipes (struct Rock in engine-common.wgsl) in slots 1 to 15, by slot: {knobs, column}, knobs by their ROCK_KEYS names and column a rock
-  // column block (sculpt-column.js). Slot 0 is the world's own rock: its numbers are the flat settings every address names (this.variant), its
-  // column config.column. A slot takes slot 0's number for any it does not set, and slot 0's column if it has none. The slots given are the
+  // Rock recipes (struct Rock in engine-common.wgsl) in slots 1 to 15, by slot: {knobs, column, colors}, knobs by their ROCK_KEYS names, column a
+  // rock column block (sculpt-column.js) and colors {rock, beds} as '#rrggbb' (sculpt-rock-presets.js checkColors). Slot 0 is the world's own
+  // rock: its numbers are the flat settings every address names (this.variant), its column config.column, its colors the world's (setColors).
+  // A slot takes slot 0's number for any it does not set, slot 0's column if it has none, and slot 0's colors where its own are null. The slots given are the
   // ones in use: their maxima bound the passes that gather (writeRocks), and a second slot builds the pipelines that read any slot (rockMask).
   setRocks(rocks = new Map()) {
     const count = this.uniform.get('rock').count;
@@ -993,6 +994,10 @@ export class TerrainRenderer {
         const shine = SHINE_ROCK.indexOf(key), m = table.members.get(shine >= 0 ? 'shineRock' : key);
         if (m && m.kind === 'f' && Number.isFinite(Number(value))) this.uniformView.setFloat32(at + m.offset + Math.max(shine, 0) * 4, Number(value), true);
       }
+      // Its own colors where it has them ('#rrggbb'): row 0 the rock's (a = 1, chosen), rows 1-5 its beds' slots; the rest stay slot 0's.
+      const colors = table.members.get('rockColors'), row = (k, hex) => [1, 3, 5].forEach((i, c) => this.uniformView.setFloat32(at + colors.offset + k * 16 + c * 4, parseInt(hex.slice(i, i + 2), 16) / 255, true));
+      if (rock.colors?.rock) { row(0, rock.colors.rock); this.uniformView.setFloat32(at + colors.offset + 12, 1, true); }
+      rock.colors?.beds?.forEach((hex, k) => row(1 + k, hex));
       if (rock.column) {
         const rows = columnRows(rock.column, ''), shift = beds.length;
         this.uniformView.setInt32(at + table.members.get('columnFirst').offset, starts.length, true);

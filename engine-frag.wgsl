@@ -1384,6 +1384,8 @@ fn surfFoam(pixel: vec2f, p: vec2f, x: f32, q: vec2f, depth: f32, slope: f32, e:
     let front = (1.0 - smoothstep(0.3, 1.0, abs(surfCuspX(x, q, e) - xf))) * step(shelfHash(cell + 45.0), 0.7) * surfBeach(e) * smoothstep(-0.1, 0.25, valueNoise(q / 30.0 + vec2f(9.0, 1.0)));
     return front * 0.85;
 }
+// A rock slot's colour as the draw lays it flat (rockFlat): the recipe's own, else the rock material's mean.
+fn slotRock(slot: u32) -> vec3f { let c = u.rock[slot & rockMask].rockColors[0]; return select(u.rockMean, c.rgb, c.a > 0.5); }
 // Weathered rock and its grains: a biome's sand, from the rock's own mean and the world's Sand row and colour. The deposits and the surf's beach draw it.
 fn sandWeathered() -> vec3f {
     let rockAverage = select(u.rockTexMean, u.rock[0].rockColors[0].rgb, u.rock[0].rockColors[0].a > 0.5);   // the world's rock (slot 0): a world's sand
@@ -1636,7 +1638,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (cvr(0u).x > 0.5) { grass = groundCover(p, slope, broad, place.top, timeMaps, place.vegetation, grass, (1.0 - route) * step(u.sea + 1.0, h)); }
     // The one rock's colour, wherever rock shows (a face, a bare top, a crown): even (its relief's light makes the pattern), each block a
     // little lighter or darker (Color variation), each layer its own tint (Layer tint), its runnels and open partings wet (Wet streaks).
-    let rockFlat = select(u.rockMean, u.rock[rs & rockMask].rockColors[0].rgb, u.rock[rs & rockMask].rockColors[0].a > 0.5);
+    let rockFlat = slotRock(rs);
     let weights=pow(abs(normal),vec3f(4));let tri=weights/max(dot(weights,vec3f(1)),.001);
     let mineral=genColor(1,hit.yz)*tri.x+genColor(1,hit.xz+vec2f(173,41))*tri.y+genColor(1,hit.xy+vec2f(53,119))*tri.z;
     let grain=clamp(mineral/max(u.rockMean,vec3f(.01)),vec3f(.5),vec3f(1.6));
@@ -1789,7 +1791,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // The debris is its source's rock (rock weather's strongest source here): its beds' colours as that recipe's Strata gives them.
     let ds=debrisSlotAt(p);
     let sourceColor=mix(rock,source.rgb*mix(1.0,clamp(dot(grain,vec3f(.3333)),.82,1.12),u.rock[ds & rockMask].strataGrain),clamp(u.rock[ds & rockMask].strata*2.0,0.0,1.0)*u.rock[ds & rockMask].strataContrast);
-    let fineColor=mix(sourceColor,mix(sandWeathered(),sourceColor*.9,clamp(u.rock[ds & rockMask].strata*2.0,0.0,1.0)*u.rock[ds & rockMask].strataContrast),lying.z*.65);
+    // Its fines are the world's weathered sand tinted as its source's rock is tinted against the world's (the same where they share a colour).
+    let fines=sandWeathered()*clamp((slotRock(ds)+.01)/(slotRock(0u)+.01),vec3f(.25),vec3f(4.0));
+    let fineColor=mix(sourceColor,mix(fines,sourceColor*.9,clamp(u.rock[ds & rockMask].strata*2.0,0.0,1.0)*u.rock[ds & rockMask].strataContrast),lying.z*.65);
     material=mix(material,fineColor,depositCover);
     exposed=max(exposed,depositCover*(1.0-lying.z*.45));
     // Painted masks (card C5), after the world's own beds and before sand,
