@@ -307,7 +307,7 @@ function updateControls() {
   $('transition-detail-value').textContent=$('transition-detail').value+'%';
   { const id=tool==='move'&&nodes[selected]?.params?strokeTool(nodes[selected],ids):entry; syncToolStyle(id); $('tool-style').value=toolSettings[id]?.preset||'custom'; }
   $('tool-help').textContent=toolById(entry)?.card?`Draw a landform with the settings, curves and rock of ${toolLabel(entry)}, a tool saved in this map. Change any setting below.`:toolHelpLine(entry)||'';
-  { const can=ready && resettable(); $('reset-strokes').disabled=!can; $('reset-strokes').title=can?'':'Draw a stroke first: there is nothing to reset.'; }
+  { const can=ready && resettable(); $('reset-strokes').disabled=!can; $('reset-strokes').title=can?'':'Draw a shape first: there is nothing to reset.'; }
   $('undo').disabled=!ready || Boolean(stroke||moving) || historyIndex<=0;
   $('redo').disabled=!ready || Boolean(stroke||moving) || historyIndex>=history.length-1;
   $('export').disabled=!canExport(); mapUpdate();
@@ -1614,14 +1614,14 @@ function buildWorldPanel() {
   // Ground pattern: this world's own, or another world's, recolored by
   // the Ground base color above.
   const patterns=config.groundPatterns||{},patternRow=document.createElement('div'); patternRow.className='control';
-  patternRow.innerHTML=`<label for="ground-pattern">Ground pattern</label><select id="ground-pattern" style="width:100%"><option value="">This world's own</option>${Object.entries(patterns).filter(([id]) => id!==config.biomeId).map(([id,p]) => `<option value="${id}">${p.name}</option>`).join('')}</select><p class="small">Another world's ground grain, moved to this world's Ground color. Contrast is under Ground below.</p>`;
-  rows.prepend(patternRow);
+  patternRow.innerHTML=`<label for="ground-pattern">Ground pattern</label><select id="ground-pattern" style="width:100%"><option value="">This world's own</option>${Object.entries(patterns).filter(([id]) => id!==config.biomeId).map(([id,p]) => `<option value="${id}">${p.name}</option>`).join('')}</select><p class="small">Another world's ground grain, moved to this world's Ground color. Ground contrast is below.</p>`;
+  document.querySelector('#knobs [data-slot="ground-pattern"]').replaceChildren(patternRow);
   // Beach: a world without a beach of its own may take another world's sand (sculpt-scene.js borrowBeach); choosing reloads the page, as Ground pattern does.
   const beaches=Object.entries(config.beachSources||{}).filter(([id]) => id!==config.biomeId);
   if (beaches.length && (!config.layers.includes('beach') || config.beachTable)) {
     const beachRow=document.createElement('div'); beachRow.className='control';
-    beachRow.innerHTML=`<label for="beach-from">Beach</label><select id="beach-from" style="width:100%"><option value="">None</option>${beaches.map(([id,b]) => `<option value="${id}">${b.name}</option>`).join('')}</select><p class="small">Another world's beach sand along this world's shores. Beach width under Water sets its reach, and the Beach color below its color.</p>`;
-    patternRow.after(beachRow);
+    beachRow.innerHTML=`<label for="beach-from">Beach</label><select id="beach-from" style="width:100%"><option value="">None</option>${beaches.map(([id,b]) => `<option value="${id}">${b.name}</option>`).join('')}</select><p class="small">Another world's beach sand along this world's shores. Beach width below sets its reach, and the Beach color in Colors its color.</p>`;
+    document.querySelector('#knobs [data-slot="beach-from"]').replaceChildren(beachRow);
     $('beach-from').value=config.beachSources[experiment.get('beachFrom')]?experiment.get('beachFrom'):'';
     $('beach-from').onchange=() => setKnob('beachFrom',$('beach-from').value);
   }
@@ -1663,7 +1663,7 @@ const CRACK_STYLES={
 };
 function buildKnobs() {
   const root = $('knobs'), params = experiment;
-  // Rendering and Palette sit with the graphics settings; every other group is a block in a World section.
+  // Rendering sits with the graphics settings; every other group is a block in its rows' home in the World panel (sculpt-ui.js WORLD_HOMES).
   const group = (title, open = false) => { const d = document.createElement('details'); d.className = 'knobs-group'; d.open = open; const t = document.createElement('summary'); t.textContent = title; d.append(t); $('rendering-host').append(d); return d; };
   const render = group('Rendering',true);
   const toggle = (key, label, on, off, isOn) => {
@@ -1676,13 +1676,11 @@ function buildKnobs() {
   // Every knob needs a world default (sculpt.py KNOB_DEFAULTS).
   const missing = [...KNOBS.flatMap(([, list]) => list.map(k => k[0])), ...SHAPE_FIELDS.map(f => f[0])].filter(k => !(k in (config.defaults || {})));
   if (missing.length) console.warn('Knobs without a world default:', missing.join(', '));
-  const groups=new Map();
   for (const [title, knobs] of KNOBS) {
-    if(!groups.has(title)){if(title==='Palette'){const box=group(title);box.dataset.group=title;groups.set(title,{block:box});}else groups.set(title,worldGroup(title));}
-    const {block:box,search}=groups.get(title);
     if (title === 'Cracks') {
+      const box=worldGroup(title,knobs[0][0]).block;
       const wrap = document.createElement('div'); wrap.className = 'control';
-      wrap.innerHTML = `<label for="crack-style">Style</label><select id="crack-style" style="width:100%"><option value="">Choose a style…</option>${Object.keys(CRACK_STYLES).map(k => `<option>${k}</option>`).join('')}</select><p class="small">How much each shape cracks is its own Cracks slider (Shape panel).</p>`;
+      wrap.innerHTML = `<label for="crack-style">Style</label><select id="crack-style" style="width:100%"><option value="">Choose a style…</option>${Object.keys(CRACK_STYLES).map(k => `<option>${k}</option>`).join('')}</select><p class="small">How much each shape cracks is its own Cracks row, in the shape’s card.</p>`;
       wrap.querySelector('select').addEventListener('change', event => {
         const style = CRACK_STYLES[event.target.value]; if (!style) return;
         for (const [key, value] of Object.entries(style)) {
@@ -1696,7 +1694,8 @@ function buildKnobs() {
       const id = 'knob-' + key, current = params.has(key) ? Number(params.get(key)) : value, choices = WORLD_CHOICES[key];
       // A value shows at most three decimals (Sun height's defaults are the old light's height, 45.20597821393736 degrees on most worlds).
       const wrap = controlRow({id,label:`${label} <output${choices?' hidden':''}>${+current.toFixed(3)}</output>`,range:`min="${min}" max="${max}" step="${step}" value="${current}"`,choices});
-      wrap.dataset.knob=key;if(search)wrap.dataset.searchGroup=search;
+      const {block:box,search}=worldGroup(title,key);
+      wrap.dataset.knob=key;wrap.dataset.searchGroup=search;
       const input = wrap.querySelector('#'+id), out = wrap.querySelector('output');
       if(choices)input.value=String(current);
       input.addEventListener('input', () => { out.textContent = input.value; if (rockSelected>0 && ROCK_KEYS.includes(key)) setPresetKnob(key, Number(input.value)); else setKnob(key, input.value); });
@@ -1759,9 +1758,21 @@ function syncRockPanel() {
   const list=$('rock-presets'),world=rockSelected===0,full=mapRocks.length>=ROCK_SLOTS-1;
   list.replaceChildren(new Option(`${worldRockName(config)} (the world's rock)`,'0'),...mapRocks.map(r=>new Option(r.name,String(r.slot))));
   list.value=String(rockSelected);
+  const rockHex=slot=>mapRocks.find(r=>r.slot===slot)?.colors?.rock||renderer.slotColors(0).rock;
+  $('rock-chips').replaceChildren(...[...list.options].map(option=>{
+    const slot=Number(option.value),chip=document.createElement('button'),swatch=document.createElement('span'),name=slot===0?worldRockName(config):option.textContent;
+    chip.type='button';chip.className='rock-chip';chip.setAttribute('role','radio');chip.setAttribute('aria-checked',String(slot===rockSelected));chip.dataset.slot=option.value;chip.title=slot===0?`${name}: the world\u2019s rock type`:name;
+    swatch.className='rock-swatch';swatch.style.background=rockHex(slot);chip.append(swatch,name);
+    chip.onclick=()=>{list.value=option.value;list.dispatchEvent(new Event('change'));};
+    return chip;
+  }));
+  $('rock-current-name').textContent=world?worldRockName(config):mapRocks.find(r=>r.slot===rockSelected).name;
+  $('rock-current-scope').textContent=world?'The world\u2019s rock type: every shape\u2019s default. Edits change the world.':'This map\u2019s rock type. Saved with the map.';
+  $('rock-current-swatch').style.background=rockHex(rockSelected);
   if(document.activeElement!==$('rock-name'))$('rock-name').value=world?worldRockName(config):mapRocks.find(r=>r.slot===rockSelected).name;
   $('rock-name').disabled=$('rock-rename').disabled=world;$('rock-delete').disabled=world;$('rock-duplicate').disabled=$('rock-add').disabled=full;
-  rockNote(world?'The world\u2019s own rock keeps its recipe\u2019s name and cannot be deleted: every shape that chooses no other preset is made of it.':full?'This map holds 15 presets besides the world\u2019s rock, the most it can: delete one to add another.':'');
+  const fullNote=full?'This map holds 15 rock types besides the world\u2019s, the most it can: delete one to add another.':'';
+  rockNote(world?'The world\u2019s rock type keeps its recipe\u2019s name and cannot be deleted: every shape that chooses no other is made of it.':fullNote);$('rock-add').title=$('rock-duplicate').title=fullNote;
   const values=world?null:{...Object.fromEntries(ROCK_KEYS.map(k=>[k,Number(renderer.variant.get(k)??config.defaults[k])])),...mapRocks.find(r=>r.slot===rockSelected).knobs};
   for(const key of ROCK_KEYS){const input=$('knob-'+key);if(!input)continue;const v=values?values[key]:Number(renderer.variant.get(key)??config.defaults[key]);if(!Number.isFinite(v))continue;input.value=v;input.closest('[data-knob]').querySelector('output').textContent=+v.toFixed(3);}
   syncWorldControls();syncColumnPanel();syncRockColors();
@@ -1773,6 +1784,7 @@ function syncRockColors() {
   const world=rockSelected===0,rock=mapRocks.find(r=>r.slot===rockSelected),own=rock?.colors,shown=renderer.slotColors(0);
   const paint=(id,hex,off)=>{$(id).value=hex;$(id).disabled=off;const snap=renderer.paletteNearest(hex);$(id+'-snap').style.background=snap;$(id+'-snap').title=$(id+'-snap').ariaLabel=`Palette entry ${snap}`;};
   paint('rock-color',own?.rock||shown.rock,world||!own?.rock);
+  for(const swatch of [$('rock-current-swatch'),$('rock-chips').querySelector('[aria-checked="true"] .rock-swatch')])if(swatch)swatch.style.background=own?.rock||shown.rock;
   BED_COLOR_IDS.forEach((id,k)=>paint(id,own?.beds?.[k]||shown.beds[k],world||!own?.beds));
   $('rock-color-world').checked=world||!own?.rock;$('rock-beds-world').checked=world||!own?.beds;
   $('rock-color-world').disabled=$('rock-beds-world').disabled=world;
@@ -1780,8 +1792,8 @@ function syncRockColors() {
   const worldAbsorb=mergedColors().absorb||null;
   paint('rock-absorb',world?worldAbsorb||shown.absorb:own?.absorb||shown.absorb,world?!worldAbsorb:!own?.absorb);
   $('rock-absorb-world').checked=world?!worldAbsorb:!own?.absorb;
-  $('rock-colors-note').textContent=world?'The world\u2019s rock wears the world\u2019s colors: set its rock and beds under Colors & base pattern (Rock) and in the Rock column\u2019s material slot colors; Absorption here is the world\u2019s own.'
-    :!own?.rock||!own?.beds||!own?.absorb?'A color under World\u2019s colors follows the world\u2019s: clear World\u2019s colors to choose this preset\u2019s own.':'';
+  $('rock-colors-note').textContent=world?'The world\u2019s rock wears the world\u2019s colors: set its rock in Colors (Rock) and its beds in the Rock column\u2019s material slot colors, under Layers; Absorption here is the world\u2019s own.'
+    :!own?.rock||!own?.beds||!own?.absorb?'A color under World\u2019s colors follows the world\u2019s: clear World\u2019s colors to choose this rock type\u2019s own.':'';
   $('rock-colors-note').hidden=!$('rock-colors-note').textContent;
 }
 // A color of the selected preset changed (live while the picker moves; one undo step when it is let go).

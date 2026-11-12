@@ -26,10 +26,10 @@ try{
   await send('Page.navigate',{url:url('modern')});await ready();await click('#tab-world');
   const keys=['vegetationCover','plantRelief','flowerDensity'];
   report.controls=await ev(`Object.fromEntries(${JSON.stringify(keys.concat('plainRelief'))}.map(k=>{const e=document.getElementById('knob-'+k);return [k,{disabled:e.disabled,value:e.value,section:e.closest('.world-section').dataset.group}]}))`);
-  assert(Object.values(report.controls).every(c=>!c.disabled&&c.section==='Ground & vegetation'));
+  assert(Object.entries(report.controls).every(([k,c])=>!c.disabled&&c.section===(k==='plainRelief'?'Ground':'Vegetation')));
   assert.equal(await ev(`document.querySelectorAll('#world-colors input[type=color][aria-label^=Flower]').length`),4);
   const knob=async(k,v)=>{await ev(`(()=>{const e=document.getElementById('knob-${k}');e.value=${v};e.dispatchEvent(new Event('input',{bubbles:true}));})()`);await ready();};
-  await knob('vegetationCover',0);assert.equal(await ev(`document.querySelector('[data-group="Ground & vegetation"]').open`),true);
+  await knob('vegetationCover',0);assert.equal(await ev(`document.querySelector('[data-knob="vegetationCover"]').hidden`),false);
   for(const k of keys.slice(1))assert.equal(await ev(`document.getElementById('knob-${k}').disabled`),true);
   await knob('vegetationCover',1.5);await knob('plantRelief',0);assert.equal(await ev(`document.getElementById('knob-flowerDensity').disabled`),false);
   await knob('plantRelief',1.5);await knob('flowerDensity',3);
@@ -38,7 +38,7 @@ try{
   const colors=['#30b0ff','#ff50e0','#20ffee','#ff6020'];
   for(let i=0;i<4;i++)await ev(`(()=>{const p=document.querySelector('input[aria-label="Flower ${i+1} base color"]');p.value='${colors[i]}';p.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   await ready();const colored=await table();assert.notDeepEqual(colored,before);assert.deepEqual(colored.map(r=>r[3]),before.map(r=>r[3]));
-  await knob('ambient',.5);assert.deepEqual(await table(),colored);report.live='three sliders and four colors reach material table; unrelated knob preserves colors; zero keeps section open';
+  await knob('ambient',.5);assert.deepEqual(await table(),colored);report.live='three sliders and four colors reach material table; unrelated knob preserves colors; zero keeps its rows in the panel';
   await send('Page.reload');await sleep(700);await ready();await click('#tab-world');assert.deepEqual(await table(),colored);report.reload='vegetation and colors retained';
   const screen=await send('Page.captureScreenshot',{format:'png'});writeFileSync(join(out,'cover-colors.png'),Buffer.from(screen.result.data,'base64'));
   await ev(`window.__exportBlob=null;const originalCreate=URL.createObjectURL;URL.createObjectURL=b=>{window.__exportBlob=b;return originalCreate(b);}`);
@@ -59,6 +59,6 @@ try{
   report.importVariant=await ev(`document.getElementById('variant-select').value`);
   assert.equal(report.importVariant,'modern','importing a Modern world must restore its ground-cover material');
   assert.deepEqual(await table(),colored);report.roundTrip='world JSON imported from original Green restores Modern, knobs, and colors';
-  await click('#world-reset');await ready();assert.equal(await ev(`document.querySelector('input[aria-label="Flower 1 base color"]').value`),'#ece8d6');report.reset='flower colors restored to material defaults';
+  await click('#wsec-colors');await click('#world-reset');await ready();assert.equal(await ev(`document.querySelector('input[aria-label="Flower 1 base color"]').value`),'#ece8d6');report.reset='flower colors restored to material defaults';
   assert.deepEqual(errors,[]);report.console=errors;writeFileSync(join(out,'cover.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));
 }finally{ws?.close();browser.kill();}
