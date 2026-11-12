@@ -73,8 +73,8 @@ export const FORMS = {
 };
 // A landform's presets: its own four, and main's mesa and cliff where they fit.
 export const LANDFORM_FORMS = [['lfPlateau', 'Plateau'], ['lfHill', 'Hill'], ['lfMountain', 'Mountain'], ['lfTerraced', 'Terraced'], ['mesa', 'Mesa'], ['cliff', 'Cliff'], ['lfShore', 'Shore'], ['lfShelf', 'Shelf'], ['lfRamp', 'Ramp'], ['lfValleyV', 'Valley V'], ['lfValleyU', 'Valley U'], ['lfRiver', 'River'], ['lfBraided', 'Braided river'], ['lfCrater', 'Crater'], ['lfCrystal', 'Crystal cluster']];
-// The palette entry a landform belongs to (the brush title, the Tool preset menu's restyle and Draw new): the button whose preset draws its section form, and
-// nothing else (Facets, impact features or Height reference never change it: a faceted hill is a Hill); a shore is deep water when it cuts.
+// The tool a landform saved before strokes named their tool belongs to (sculpt-tools.js inferStrokeTools, once at load): the shape whose preset draws its
+// section form, and nothing else (Facets, impact features or Height reference never change it: a faceted hill is a Hill); a shore is deep water when it cuts.
 export const landformTool = p => ({lfHill: 'hill', lfMountain: 'mountain', lfRamp: 'ramp', lfShore: Math.round(p?.combine || 0) === 1 ? 'deep' : 'shallow', lfShelf: 'shallow', lfValleyU: 'valleyU', lfRiver: 'river', lfBraided: 'braided', lfCrater: 'crater', lfCrystal: 'crystal',
   lfValleyV: Math.round(p?.terraces || 0) > 0 ? 'valleyT' : 'valleyV'})[p?.curve?.form] ?? 'plateau';
 // The form a kind draws by default (only a landform's section is edited).

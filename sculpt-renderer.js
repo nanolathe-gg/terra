@@ -455,7 +455,8 @@ export class TerrainRenderer {
     const strata = strataDefaults.map((c, i) => colors['strata' + (i + 1)] || c.map(v => v / 255));
     // The world's rock is slot 0 of the rock table: its colour (a = 1 when the world chose one) and its beds' slots, which a recipe without
     // colours of its own takes (writeRocks).
-    this.set('uRockColors', [colors.rock ? [...colors.rock, 1] : [0, 0, 0, 0], ...strata]);
+    // Row 6: the color it deepens toward with thickness (B4), the world's 'absorb' color where it chose one.
+    this.set('uRockColors', [colors.rock ? [...colors.rock, 1] : [0, 0, 0, 0], ...strata, colors.absorb ? [...colors.absorb, 1] : [0, 0, 0, 0]]);
     for (const key of ['ground', 'slope', 'rock', 'beach'])
       this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
     this.writeRocks();
@@ -1004,6 +1005,7 @@ export class TerrainRenderer {
       const colors = table.members.get('rockColors'), row = (k, hex) => [1, 3, 5].forEach((i, c) => this.uniformView.setFloat32(at + colors.offset + k * 16 + c * 4, parseInt(hex.slice(i, i + 2), 16) / 255, true));
       if (rock.colors?.rock) { row(0, rock.colors.rock); this.uniformView.setFloat32(at + colors.offset + 12, 1, true); }
       rock.colors?.beds?.forEach((hex, k) => row(1 + k, hex));
+      if (rock.colors?.absorb) { row(6, rock.colors.absorb); this.uniformView.setFloat32(at + colors.offset + 6 * 16 + 12, 1, true); }
       if (rock.column) {
         const rows = columnRows(rock.column, ''), shift = beds.length;
         this.uniformView.setInt32(at + table.members.get('columnFirst').offset, starts.length, true);
@@ -1019,6 +1021,7 @@ export class TerrainRenderer {
     this.f('uDebrisAny', max('debrisAmount'));
     this.f('uRunoffAny', max('runoff'));
     this.f('uDebrisReachMax', max('debrisReach'));
+    this.f('uShadowTintAny', max('shadowTint'));
     // Shine is drawn where any rock in use has gloss, roughness or wetness (applyKnobs decides it for slot 0 and the other materials).
     if (slots.some(k => k && (this.rockValue(k, 'faceWet') > 0 || Math.max(...[0, 2].map(c => this.uniformView.getFloat32(table.offset + k * table.stride + table.members.get('shineRock').offset + c * 4, true))) > 0))) this.i('uShineOn', 1);
     this.uniformsDirty = true;
@@ -1068,8 +1071,10 @@ export class TerrainRenderer {
     const table = this.uniform.get('rock'), at = table.offset + slot * table.stride + table.members.get('rockColors').offset;
     const row = k => [0, 1, 2, 3].map(c => this.uniformView.getFloat32(at + k * 16 + c * 4, true)), mean = this.uniform.get('rockMean');
     const hex = rgb => '#' + rgb.slice(0, 3).map(v => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0')).join('');
-    const own = row(0);
-    return {rock: hex(own[3] > 0.5 ? own : [0, 1, 2].map(c => this.uniformView.getFloat32(mean.offset + c * 4, true))), beds: [1, 2, 3, 4, 5].map(k => hex(row(k)))};
+    const own = row(0), rock = own[3] > 0.5 ? own : [0, 1, 2].map(c => this.uniformView.getFloat32(mean.offset + c * 4, true));
+    // The absorption color: row 6 where chosen, else the rock's own hue at full strength (engine-frag.wgsl absorbFilter).
+    const absorb = row(6), top = Math.max(rock[0], rock[1], rock[2], 0.02);
+    return {rock: hex(rock), beds: [1, 2, 3, 4, 5].map(k => hex(row(k))), absorb: hex(absorb[3] > 0.5 ? absorb : rock.slice(0, 3).map(v => v / top))};
   }
   // The palette entry the draw's lookup gives a color, '#rrggbb' (engine-palette.wgsl rows 0-31: the nearest entry by rgb distance to the
   // color's point of the 32-level cube; the dither then mixes entries around it).
@@ -1103,7 +1108,7 @@ export class TerrainRenderer {
     set('uFaceStreak', number('faceStreak', 0));
     for (const [key, fallback] of [['rockFace', 0], ['rockFaceFrom', 0.6], ['faceBed', 5.5], ['faceLedge', 2.2], ['faceRun', 90], ['faceLean', 28], ['faceScratch', 2.5],
       ['faceScratchSize', 7], ['faceBlock', 3], ['faceBlockSize', 11], ['faceGrit', 0], ['faceGrass', 0.8], ['faceRock', 0.9], ['faceCrease', 2.5], ['faceCreaseSize', 6],
-      ['faceShade', 0.85], ['faceWear', 0.35], ['faceLayers', 0], ['faceMass', 1], ['faceTone', 0.12], ['faceStrata', 0], ['faceWet', 0], ['shoreRock',0],['shoreShelf',0],['runoff',0],['runoffScale',24],['runoffConcentration',.65],['runoffCut',2],['runoffStain',.5],['debrisAmount',0],['debrisReach',56],['debrisDepth',4],['rimReach',0], ['faceJointTilt',0],['faceScaleVary',0],['faceFold',0],['faceBedVary',1],['bedCycleVary',0],['faceBreak',0],['faceSpall',0],['faceClast',0],['faceClastSize',12],['faceMineral',0],['faceJointWidth',1],['faceSecondary',.35],['faceContinuity',1],['faceDetailPatch',0],['faceWhole',0],['faceWholeLarge',0],['faceRegular',0],['sandLee',0],['groundPatch',0],['groundPatchSize',200],['faceFresh',0],['faceRind',0],['faceRindDepth',6],['faceRindTone',-.22],['faceRindWarmth',.35],['faceRindRough',.65], ['faceStretch', 1], ['faceBlockHeight', 1], ['faceRound', 0], ['faceJoint', 0.35], ['faceExtrude', 0], ['faceLamina', 0], ['faceLaminaSize', 6], ['faceScratchLength', 50], ['faceScratchAngle', 0], ['faceGritSize', 1.3]])
+      ['faceShade', 0.85], ['faceWear', 0.35], ['faceLayers', 0], ['faceMass', 1], ['faceTone', 0.12], ['faceStrata', 0], ['faceWet', 0], ['shoreRock',0],['shoreShelf',0],['runoff',0],['runoffScale',24],['runoffConcentration',.65],['runoffCut',2],['runoffStain',.5],['debrisAmount',0],['debrisReach',56],['debrisDepth',4],['rimReach',0], ['faceJointTilt',0],['faceScaleVary',0],['faceFold',0],['faceBedVary',1],['bedCycleVary',0],['faceBreak',0],['faceSpall',0],['faceClast',0],['faceClastSize',12],['faceMineral',0],['faceJointWidth',1],['faceSecondary',.35],['faceContinuity',1],['faceDetailPatch',0],['faceWhole',0],['faceWholeLarge',0],['faceRegular',0],['sandLee',0],['groundPatch',0],['groundPatchSize',200],['faceFresh',0],['faceRind',0],['faceRindDepth',6],['faceRindTone',-.22],['faceRindWarmth',.35],['faceRindRough',.65], ['faceStretch', 1], ['faceBlockHeight', 1], ['faceRound', 0], ['faceJoint', 0.35], ['faceExtrude', 0], ['faceLamina', 0], ['faceLaminaSize', 6], ['faceScratchLength', 50], ['faceScratchAngle', 0], ['faceGritSize', 1.3], ['absorbDepth', 0], ['shadowTint', 0]])
       set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
     set('uFaceStreakFrom', number('faceStreakFrom', 0.3));
     set('uGentleRelief', number('gentleRelief', 0.6));

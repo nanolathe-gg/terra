@@ -99,6 +99,20 @@ try {
   assert.match(await ev(`document.getElementById('rock-colors-note').textContent`), /clear World’s colors/);
   await click('undo'); assert.equal((await rocks()).find(r => r.slot === shale.slot).colors.rock, '#2f4b5f'); assert.equal(await capture(), recolored, 'undo World’s colors');
   edited = recolored;
+  // Translucent (B4): Color deepens with thickness on the selected preset (a rock row), then its Absorption color, undone, redone.
+  await set('knob-absorbDepth', .7);
+  assert.equal((await rocks()).find(r => r.slot === shale.slot).knobs.absorbDepth, .7);
+  assert.equal(await ev(`sculptDebug.sketch().rock.absorbDepth ?? 0`), 0, 'the world’s rock stays opaque');
+  const deep = await capture();
+  assert.notEqual(deep, edited, 'a preset deepening with thickness re-renders its shape');
+  assert.equal(await ev(`document.getElementById('rock-absorb').disabled`), true, 'its Absorption follows the world’s until World’s colors is cleared');
+  await click('rock-absorb-world'); await set('rock-absorb', '#1b4b77');
+  assert.equal((await rocks()).find(r => r.slot === shale.slot).colors.absorb, '#1b4b77');
+  const blue = await capture();
+  assert.notEqual(blue, deep, 'the absorption color re-renders the shape');
+  await click('undo'); assert.notEqual((await rocks()).find(r => r.slot === shale.slot).colors?.absorb, '#1b4b77');
+  await click('redo'); assert.equal((await rocks()).find(r => r.slot === shale.slot).colors.absorb, '#1b4b77'); assert.equal(await capture(), blue, 'redo the absorption color');
+  edited = blue;
   // Save and load it back.
   const saved = await ev('sculptDebug.sketch()');
   await ev(`sculptDebug.loadSketch(${JSON.stringify(saved)}); true`); await ready();
@@ -124,7 +138,7 @@ try {
   await click('tab-tool'); await tool('plateau');
   assert.equal(await ev(`document.getElementById('lf-rock').value`), '-1', 'a deleted preset shows as Rock beneath on the tool that chose it');
   assert.deepEqual(errors, []);
-  report.result = 'list, add, pick, edit, recolor, undo, redo, save and load, copy and paste, delete and undo, a tool whose preset is gone: all as expected';
+  report.result = 'list, add, pick, edit, recolor, translucency and absorption color, undo, redo, save and load, copy and paste, delete and undo, a tool whose preset is gone: all as expected';
 } finally {
   writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 2));
   try { ws?.close(); } catch {}

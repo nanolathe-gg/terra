@@ -6,7 +6,7 @@
 // Prints one JSON line per world; exit code 1 on any failed check or a console error.
 import {cdpPortFree} from './cdp-port.mjs';
 import {FORMS, LANDFORM_FORMS} from '../sculpt-shape-presets.js';
-import {LANDFORM_DEFAULTS, LANDFORM_TOOLS, TOOL_PRESETS} from '../sculpt-scene.js';
+import {LANDFORM_DEFAULTS, LANDFORM_SHAPES} from '../sculpt-scene.js';
 import {spawn} from 'node:child_process';
 import {mkdirSync,readFileSync} from 'node:fs';
 
@@ -81,9 +81,10 @@ async function editWorld(world, port) {
       await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
       // Fix the seed so outline variation cannot turn this UI check into a lottery.
       await setValue('seed',2701,'change');await ev(`document.getElementById('seed-vary').checked=false;document.getElementById('seed-vary').dispatchEvent(new Event('change',{bubbles:true}));true`);
-      // The Plateau button's numbers (the model's, the button's and the world's own, sculpt-scene.js) must reach a new stroke, and a selected stroke
-      // through the existing Style selector.
-      const defaults = {...LANDFORM_DEFAULTS, ...LANDFORM_TOOLS.plateau, ...TOOL_PRESETS[world]?.plateau};
+      // The Plateau button's numbers (the model's, the shape library's and the world's own: sculpt-scene.js, its table's world.shapes) must reach a
+      // new stroke, and a selected stroke through the existing Style selector.
+      const worldShapes = (await (await fetch(`${server}/config/${world}.json`)).json()).worldShapes;
+      const defaults = {...LANDFORM_DEFAULTS, ...LANDFORM_SHAPES.plateau, ...worldShapes[world].plateau};
       const baseH = await ev('sculptDebug.base');
       await stroke('plateau');
       // The Wander slider snaps the reviewed 75 px to 76.

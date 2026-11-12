@@ -99,7 +99,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const engine = await import('../sculpt-scene.js'), fieldsModule = await import('../sculpt-gpu-fields.js');
   const {configureMap} = await import('../sculpt-map.js'), {TerrainRenderer} = await import('../sculpt-renderer.js');
   const {copyRockSettings, applyWorldRock, copyRocks, worldRocks, keepStrokeRocks, rocksInUse} = await import('../sculpt-rock-presets.js');
-  const {copyColumn} = await import('../sculpt-column.js');
+  const {copyColumn} = await import('../sculpt-column.js'), {copyMapTools} = await import('../sculpt-tools.js');
   const settings = new URLSearchParams(search);
   for (const [key,value] of Object.entries(copyRockSettings(scene.rock) || {})) if (!settings.has(key)) settings.set(key,value);
   globalThis.location = {search: '?' + settings};
@@ -109,6 +109,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   config.services = services;
   const worldColumn = {column: config.column}, columnOverride = copyColumn(scene.column);
   let rocks = copyRocks(scene.rocks) ?? worldRocks(config), rockKey = '[]';   // the map's rock presets (sculpt.js mapRocks): the scene's, else the world's
+  const tools = copyMapTools(scene.tools) ?? [];   // the map's own tools (sculpt.js mapTools), which its strokes may name
   if (columnOverride) config.column = columnOverride;
   const catalog = await json('config/catalog.json');
   config.exportCatalog = catalog; config.defaultSeaLevel = catalog.worlds[config.biomeId]?.defaultSeaLevel;
@@ -137,7 +138,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   // sculpt.js scriptedScene: the scene's nodes replace the map's, and the fields evaluate them.
   // sculpt.js syncRocks: the renderer's rock table holds the presets strokes choose, and no other.
   const syncRocks = () => { const used = rocksInUse(nodes, rocks), key = JSON.stringify(used); if (key !== rockKey) { rockKey = key; renderer.setRocks(new Map(used.map(r => [r.slot, r]))); } };
-  const play = (list, {ground = true} = {}) => { nodes = keepStrokeRocks(engine.sceneNodes(config, list, {ground, seed, settings}), rocks); if (scene_) scene_.nodes = nodes; fields.changed(); syncRocks(); return nodes.length; };
+  const play = (list, {ground = true} = {}) => { nodes = keepStrokeRocks(engine.sceneNodes(config, list, {ground, seed, settings, tools}), rocks); if (scene_) scene_.nodes = nodes; fields.changed(); syncRocks(); return nodes.length; };
   let scene_ = null;
   play(strokes, {ground: scene.ground !== false});
   if (paged) await fields.startCoarse();   // bootMap: a paged map's coarse lattice fills from the start

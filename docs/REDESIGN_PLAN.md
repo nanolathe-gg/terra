@@ -3455,6 +3455,78 @@ configurable"; 7 "a whole sand system", lower priority; 8 "Fix it"; 9 and
   under joint lines and blotches (a smaller gain there, by eye); sandstone
   and gneiss gain little at 1x.
 
+- *Biome-defined shape tools, the plumbing (T1) [landed 2026-11-11; built
+  by an Opus agent, reviewed and checked by Claude].* The owner: "let
+  every biome define its own shapes", a stroke of a tool the new biome
+  lacks becomes "a generic landform tool", and "there should be a way to
+  define new tools from the currently selected shape." The shape library
+  stays in code (`LANDFORM_SHAPES`); each world's table now holds its
+  numbers for the shapes (`world.shapes`, the old `TOOL_PRESETS` moved
+  verbatim: 20 configs by 21 entries by 9 presets hash the same) and its
+  toolbar (`world.tools`: id, label, icon, color, group, shape, an
+  optional rock preset key). Scenes name shapes, never tool ids. The page
+  builds only the shape buttons; a fixed Landform button is first and
+  Fissure ends the Shape group. A stroke names its tool (`node.tool`); one
+  whose tool the toolbar lacks shows as Landform and keeps every number
+  for good (`kept`), through later biome switches too. Save as tool
+  (name, icon, color) adds a map tool that draws with the selected
+  shape's settings, curves and rock; map tools live in the save, undo,
+  share links and a scene's `tools`; Delete leaves the strokes alone.
+  *Checks on the tip, merged with main:* land tier passes, 0 of 34 scenes
+  changed; `repro/tools-ui.mjs` (new), workspace, curveedit,
+  rock-presets-ui, site test and export bytes exit 0; one new hover
+  picture (the Landform button's) and no other preview moved. The drag
+  and bake path is untouched. *Open:* every world still ships the same
+  thirteen tools (T2: each world's own list, Hill on Smooth soil by key,
+  shown to the owner as a table first); hiding Tool preset options for a
+  world without a shape is untested until a world lacks one;
+  `repro/share.mjs` fails one check ("share, open, share again: same
+  link") on main too, from `mapData.featureSet` normalizing on load;
+  proposals not built: rename, reorder and edit a map tool, export a
+  map's tools into world data, `tools-ui.mjs` in the land tier.
+
+- *Translucent rock (row 3, B4) [landed 2026-11-12; built by an Opus
+  agent, reviewed and checked by Claude].* The owner approved a
+  prototype of about three numbers per rock recipe, then ruled on its
+  pictures: "Yes on absorption and shadow tint as options", and for
+  defaults "Probably some, but nowhere near 1. I'd want a subtle effect
+  to start", then "0.2 for ice" and "keep the step at 0.05 and make the
+  crystal default 0.1". Two rock numbers, 0 as before on every other
+  world: **Color deepens with thickness** (`absorbDepth`: the rock's
+  chord along the sun's line, read from the heights over 24 steps, moves
+  the color toward the preset's Absorption color, row 6 of `rockColors`,
+  or its own hue) and **Colored cast shadow** (`shadowTint`: a cast
+  shadow lets part of the sun through in that hue, less the thicker the
+  occluder). Light through thin rock was built and removed: under 1% of
+  the picture at a world's own sun, since the faces it lights are turned
+  from the camera. On Crystal and Ice the rock table draws only 2 to 7%
+  of the look (the crystal color and the ground cover draw the rest), so
+  both act as a filter on whatever drew the pixel a rock slot claims.
+  *Checks on the tip:* with every default 0, land tier passes and 0 of
+  34 scenes change; the rock checks, `rock-controls-gpu` and export bytes
+  exit 0; no hover preview moved. With the defaults, land tier passes
+  and 6 of 34 change: ice-1 17.8% of pixels (mean difference 2.5
+  levels), ice-2 10.0%, ice-3 13.2%, crystal-1 7.2%, crystal-2 6.9%,
+  crystal-3 3.2% **[measured]**; berg bodies and crystal masses a little
+  deeper, plains unchanged by eye. The 5% rule **[measured by the
+  agent]**: absorption moves 19.9% and 24.3% of crystal-1's and ice-1's
+  windows at 1; the shadow moves 77.5% of the ice blocks' cast shadow on
+  level ground at Sun height 25. `repro/perf.mjs` map4, alternating:
+  opaque maps the same as main (drag latency p50, tip against main:
+  ice-2 21.8 to 22.3 ms against 21.4 to 22.0, green-modern-3 26.5 against
+  26.4); with the defaults, crystal-1 21.0 to 21.4 against 20.7 to 21.2
+  and ice-2's quiet pair 22.2 against 20.9, with the final picture after
+  a stroke at 855 ms against 826; later ice-2 pairs ran twice as slow on
+  both builds while
+  another agent used the GPU **[measured, partly under load]**. An
+  absorbing slot costs 24 height reads a pixel in the draw; the bake is
+  untouched. *Limits, stated in the help:* the filter tints grass on an
+  absorbing rock's ledges (keeping vegetation out would take the effect
+  from Ice and Crystal, whose tops count as cover); raised ground under a
+  stroke counts as rock; the close voxel shadow is not tinted; at their
+  own sun Ice and Crystal cast no shadow on level ground, so Colored
+  cast shadow shows there only with Cast shadow on level ground.
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.

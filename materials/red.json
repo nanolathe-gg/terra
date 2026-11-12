@@ -1465,6 +1465,37 @@
   "vent": {"params": {"size": 1.4, "thick": 0.8, "rim": 0.45, "rimSat": 1.6}}
  },
  "world": {
+  "shapes": {
+   "plateau": {},
+   "hill": {"wander": 34, "widthVary": 30, "heightVary": 10},
+   "mountain": {"wander": 8},
+   "ramp": {},
+   "valleyV": {},
+   "valleyU": {},
+   "valleyT": {},
+   "crater": {"wander": 38, "heightVary": 4, "curve": {"form": "lfCrater", "knots": [[0, 0], [0.25, -0.02], [0.4, -0.06], [0.5, 0.04], [0.6, 0.3], [0.72, 0.58], [0.83, 0.82], [0.93, 0.97], [1, 1]]}},
+   "crystal": {},
+   "deep": {"diameter": 176, "wander": 34, "widthVary": 35},
+   "shallow": {"wander": 4, "waterShore": 1},
+   "river": {},
+   "braided": {},
+   "landform": {}
+  },
+  "tools": [
+   {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
+   {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape"},
+   {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
+   {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
+   {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
+   {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
+   {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
+   {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
+   {"id": "crystal", "label": "Faceted forms", "icon": "crystal", "color": "#aaa5ec", "group": "shape"},
+   {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
+   {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
+   {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
+   {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
+  ],
   "defaults": {
    "surface": "structured",
    "transition": "mineral",

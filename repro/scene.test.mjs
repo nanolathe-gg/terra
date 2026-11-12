@@ -7,7 +7,9 @@ import {sceneNodes, borrowBeach, pageSettings, shapeContext, surfaceSliders, dra
 import {landformTool} from '../sculpt-shape-presets.js';
 
 const root = new URL('..', import.meta.url).pathname;
-const config = {biomeId: 'green', baseHeight: 99, seaLevel: 75, size: 2336, worldSize: 2336, map: {width: 2080, height: 2176},
+// Every world's numbers over the shape library, as sculpt.py serves them (config.worldShapes, from each table's world.shapes).
+const worldShapes = Object.fromEntries(['green', 'red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice'].map(w => [w, JSON.parse(readFileSync(`${root}materials/${w}.json`, 'utf8')).world.shapes]));
+const config = {biomeId: 'green', baseHeight: 99, seaLevel: 75, size: 2336, worldSize: 2336, map: {width: 2080, height: 2176}, worldShapes,
   defaults: {undulation: 10, undulationScale: 200, undulationCover: .45, lean: 0}, material: {surfaceRelief: 1.12, materialWeathering: 0}};
 
 test('a scene is the ground undulation, then one node per stroke with its seed', () => {

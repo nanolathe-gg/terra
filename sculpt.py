@@ -19,7 +19,7 @@ HERE = Path(__file__).resolve().parent
 SOURCES = {name: HERE / name for name in (
     'sculpt.html', 'sculpt.js', 'sculpt-ui.js', 'sculpt-workspace.js', 'sculpt-workspace.css', 'sculpt-help.js', 'sculpt-help-examples.js', 'sculpt-control-schema.js', 'sculpt-ui.css', 'sculpt-selection.js', 'sculpt-paths.js', 'sculpt-river.js', 'sculpt-renderer.js', 'sculpt-webgpu.js', 'sculpt-vert.wgsl',
     'sculpt-rock-weather.js', 'engine-rock-weather.wgsl', 'sculpt-volume.js', 'sculpt-rock-presets.js', 'engine-volume.wgsl', 'engine-frag.wgsl', 'engine-bake.wgsl', 'engine-common.wgsl', 'engine-materials.wgsl', 'engine-palette.wgsl', 'engine-weather.wgsl',
-    'engine-erosion.wgsl', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-gates.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-export-worker.js', 'sculpt-features.js', 'sculpt-feature-set.js', 'sculpt-feature-gen.js', 'sculpt-feature-fire.js', 'sculpt-feature-worker.js', 'sculpt-canvas.js', 'sculpt-passability.js', 'sculpt-passability-view.js', 'sculpt-share.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js', 'sculpt-scene.js', 'sculpt-knobs.js',)}
+    'engine-erosion.wgsl', 'sculpt-material-model.js', 'sculpt-column.js', 'sculpt-noise.js', 'sculpt-gates.js', 'sculpt-erosion.js', 'engine-shape.wgsl', 'engine-feed.wgsl', 'sculpt-gpu-fields.js', 'sculpt-shape-presets.js', 'sculpt-map.js', 'sculpt-export.js', 'sculpt-export-worker.js', 'sculpt-features.js', 'sculpt-feature-set.js', 'sculpt-feature-gen.js', 'sculpt-feature-fire.js', 'sculpt-feature-worker.js', 'sculpt-canvas.js', 'sculpt-passability.js', 'sculpt-passability-view.js', 'sculpt-share.js', 'sculpt-preview.js', 'sculpt-change-map.js', 'sculpt-chunk-renderer.js', 'sculpt-scene.js', 'sculpt-tools.js', 'sculpt-knobs.js',)}
 
 
 BIOME_NAMES = {'green': 'Green Planet', 'red': 'Red Planet', 'archipelago': 'Archipelago',
@@ -86,7 +86,7 @@ KNOB_DEFAULTS = dict(
     heightReference=0, stepReference=0, elevation=100, combine=0, routeSmooth=0, wander=24, widthVary=.2, heightVary=3, gullies=0, gullySize=.4, talus=0, surf=0, varySize=140, varyFoot=1, varyMiddle=1, wallVary=0, beds=0, bedSoft=.6,
     # lfcrater: a landform's impact features (sculpt-scene.js CRATER_KEYS), off by default: ejecta round it and secondaries beyond them;
     # lfimpact2: and the ground buckled beyond the rim of a landform that digs; the secondaries fall from secondaryDistance rim radii (or, on a shape that
-    # peaks on its path, foot radii) out to twice that, 1.6 as before the row; the Crater preset sets 1 (sculpt-scene.js LANDFORM_TOOLS.crater).
+    # peaks on its path, foot radii) out to twice that, 1.6 as before the row; the Crater preset sets 1 (sculpt-scene.js LANDFORM_SHAPES.crater).
     ejecta=0, buckling=0, secondaries=0, secondaryDistance=1.6,
     # Painted masks (card C5): the Paint brush's first choice.
     paintChannel=1,
@@ -228,6 +228,8 @@ KNOB_DEFAULTS.update(groundPatch=0, groundPatchSize=200)
 KNOB_DEFAULTS.update(faceFresh=0, faceRind=0, faceRindDepth=6, faceRindTone=-.22, faceRindWarmth=.35, faceRindRough=.65)
 KNOB_DEFAULTS.update(bedCycleVary=0, faceBedVary=1, faceBreak=0, faceJointTilt=0, faceScaleVary=0, faceFold=0, faceSpall=0, faceClast=0, faceClastSize=12, faceMineral=0)
 KNOB_DEFAULTS.update(faceStretch=1, faceBlockHeight=1, faceRound=0, faceJoint=0.35, faceExtrude=0, faceLamina=0, faceLaminaSize=6, faceScratchLength=50, faceScratchAngle=0, faceGritSize=1.3)
+# B4: translucent rock, off (0) on every world.
+KNOB_DEFAULTS.update(absorbDepth=0, shadowTint=0)
 # Card P30: Vegetation cover 0 is off (every world has a ground-cover table: GROUND_COVER, DEFAULT_GROUND_COVER); modern Green sets 1.
 KNOB_DEFAULTS.update(vegetationCover=0, plantRelief=1, flowerDensity=1)
 KNOB_DEFAULTS.update(columnContrast=1, erosion=0, erosionAge=200, erosionRain=1, talusAngle=40)
@@ -400,7 +402,7 @@ WORLD_KNOBS = {
                    faceFill=0, ambient=.3,
                    # E8: retail's aprons and mesa feet are ragged (cells 16 px wide, edges 10-20 px off a smooth
                    # lobe) and bumpy (heights vary 7-12 across an apron whose mean rise is ~8). The ridge presets carry
-                   # this as variation (sculpt.js TOOL_PRESETS).
+                   # this as variation (the world's table, world.shapes).
                    baseBand=1,
                    # G4: level ground in the pale cap zone is one sheet, as in retail (cap orange 10-12% against ours' 22%).
                    desertCapFlat=0),
@@ -438,7 +440,7 @@ WORLD_KNOBS = {
                  # height, warped); .55 of the amount that read as a contour map.
                  moonFolds=.55,
                  # G8: retail's hills and walls fold: lumpy, lobed outlines. The ridge presets carry them as
-                 # variation (sculpt.js TOOL_PRESETS).
+                 # variation (the world's table, world.shapes).
                  # E6: pits about 4 x 6 px every 7.5 px on every raised or sloped surface, and a
                  # faint sheen with a fine round grain there (the plain keeps its own grain).
                  pockmark=0, pockSize=7.5, shineGate=1, shineWhite=1, shineStretch=3,
@@ -471,7 +473,7 @@ WORLD_KNOBS = {
                  # Card E4: retail's bank is 6-9 flat layers stepping down to the lava, 12-16 px a
                  # layer and ~100 px inland (lava-1 zoom), cut as heights the sun lights (a lit top,
                  # a shaded riser) in place of dark band lines (Banding 0 above). The Water presets
-                 # carry the count, flat share and irregularity as shoreline Steps (sculpt.js TOOL_PRESETS).
+                 # carry the count, flat share and irregularity as shoreline Steps (the world's table, world.shapes).
                  layerPx=9,
                  # The Water presets turn Fingers on: low tongues of the lowest layer on the joined coast (retail lava-1: 25-35 px thumbs, blunt tips).
                  # Less ambient light, so the shaded risers read as retail's near-black lines.
@@ -509,7 +511,8 @@ WORLD_KNOBS = {
     # crystal_geometry.py), so the block size sits at the knob's 16-px floor.
     # Its Crystals brush makes column mounds: Voronoi columns with ~15 px
     # tops stepped ~16 units (measure/crystal_geometry.py).
-    'crystal': dict(gougeWeb=.6, paletteMix=1, plainRelief=.6, crackSeverity=.7, crackNetwork=1,
+    # Thick crystal deepens a little toward its own hue (Color deepens with thickness; the owner's choice of 0.1, 2026-11-12).
+    'crystal': dict(gougeWeb=.6, paletteMix=1, plainRelief=.6, crackSeverity=.7, crackNetwork=1, absorbDepth=.1,
                     crackBlocks=.8, crackHairline=.3, crackDark=.9, crackSpacing=16, beachWidth=0,
                     crystalStep=16, crystalVariation=.35, crystalTiers=1,
                     crystalGrain=1, crystalFace=1.1, crystalInk=1, crystalTone=1.16, crystalSeam=1,
@@ -572,7 +575,8 @@ WORLD_KNOBS = {
     # sections).
     # Its Crystals brush makes ice blocks: four-sided, flat-topped (top ~0.45
     # of the base), sides ~0.7 units/px, no lean (measure/ice_features.py).
-    'ice': dict(plainRelief=.6, crackSeverity=0, crackMajor=.4, crackMinor=.3, crackHairline=.2,
+    # Thick ice deepens a little toward its own blue (Color deepens with thickness; the owner's choice of 0.2, 2026-11-12); its variants keep it.
+    'ice': dict(plainRelief=.6, crackSeverity=0, crackMajor=.4, crackMinor=.3, crackHairline=.2, absorbDepth=.2,
                 crackBlocks=.2, beachWidth=0, bankRock=0, crystalSides=4, crystalTop=.45, crystalVariation=.2,
                 # Shore (card E5): frost crystals are the Ice shore. Retail's band is
                 # mostly plain white ice with sparse fine straight lines (windows ice-1
@@ -900,7 +904,11 @@ def world_configs(biomes):
             material = json.loads((HERE / configs[b]['materialTable']).read_text())['material']
             beaches[b] = {'name': BIOME_NAMES[b], 'table': configs[b]['materialTable'],
                           'material': {k: material[k] for k in ('beachWidth', 'beachHeight', 'beachRGB') if k in material}}
+    # Each world's landform shapes (its table's world.shapes: its numbers over sculpt-scene.js LANDFORM_SHAPES, by shape name). Every config holds
+    # every world's, so a tool's Tool preset can take another world's version of its shape; the world's toolbar (world.tools) names its own.
+    shapes = {b: configs[b].pop('shapes', {}) for b in biomes}
     for config in configs.values():
+        config['worldShapes'] = shapes
         config['biomes'] = {b: BIOME_NAMES[b] for b in biomes}
         config['groundPatterns'] = patterns
         config['beachSources'] = beaches
