@@ -21,7 +21,10 @@ sense."
 day):** "16th level is fine to try out for interactivity"; "2048 default
 budget is okay, but the browser should detect and adjust as needed"; "Yes,
 auto refine"; "Realism is looking much better today, so I want to start the
-speed pass soon." They are folded in below and recorded in section 8.
+speed pass soon." They are folded in below and recorded in section 8. And
+a reminder with them: "the artist typically only needs the stuff on-screen
+at the moment to be realtime (or near realtime), the stuff off screen at
+the moment can update later."
 
 ## How to read this
 
@@ -302,20 +305,26 @@ uniform is written in one place and the other channels are named.
 
 1. **Answer first, refine after.** An input's first picture covers
    everything it changed in the view. A fresh tile is not an answer.
-2. **A preview is the pipeline at a coarser level over a larger rectangle.**
+2. **Only what is on screen is urgent** (the owner, 2026-11-11). An edit
+   marks everything it touches stale, on screen or off, and that costs
+   nothing. Work is spent on the visible view alone until the view is
+   final. Ground off screen is brought up to date when it scrolls into
+   view, or when the page has nothing else to do, and any input drops that
+   work.
+3. **A preview is the pipeline at a coarser level over a larger rectangle.**
    Same shaders, same stages, same bricks, a larger step. No second
    renderer, no preview-only shading (rule 7; REDESIGN_PLAN principle 5).
-3. **A preview predicts the final.** Ground, cliffs, water and shadows land
+4. **A preview predicts the final.** Ground, cliffs, water and shadows land
    where the final puts them; only fineness differs.
-4. **Dirt is computed, by stage and rectangle.** An edit is turned into "the
+5. **Dirt is computed, by stage and rectangle.** An edit is turned into "the
    first stage it touches, where" by comparing state, not by a table
    somebody keeps.
-5. **Input owns the GPU.** No unit of submitted work is longer than the
+6. **Input owns the GPU.** No unit of submitted work is longer than the
    budget, and queued work an input has replaced is dropped.
-6. **Final is final.** The final picture of a tile is a function of the
+7. **Final is final.** The final picture of a tile is a function of the
    scene alone: not of the previews shown, the order of work, or what was
    cached (rule 12). Export never reads a preview or a kept record.
-7. **No look change rides along.** Every card through LP4 leaves every check
+8. **No look change rides along.** Every card through LP4 leaves every check
    scene byte-identical (`--worlds none`).
 
 ### 4.2 The dirty model
@@ -427,8 +436,9 @@ preview level:
   picture is current. Also right at release, while the Time pass runs.
 - *Final*: when no input has arrived for about 250 ms, or on release;
   visible tiles in order of distance from the **focus point** (where the
-  pointer last was over the canvas; the view's center if it has not been),
-  then the ring outside the view as today. A pointer still held on a slider
+  pointer last was over the canvas; the view's center if it has not been).
+  The ring of tiles outside the view is not part of this: it is off-screen
+  work (section 4.4). A pointer still held on a slider
   does not prevent this: a pause is a request to see the result.
 
 The two delays are implementation constants (rule 9), tuned on the bench.
@@ -446,7 +456,22 @@ One queue, one unit on the GPU at a time, highest first:
 4. quarter blocks;
 5. Time pass slices (LP4);
 6. final tiles, one voxel piece at a time;
-7. background work as today (feature fitting, passability, the overview).
+7. off-screen and background work.
+
+**Items 2 to 6 are for the visible view only.** Item 7 is everything else:
+the ring of final tiles round the view (today it follows the visible tiles
+at once, `sculpt-canvas.js:269-273`), shape and Time pages beyond the
+view, the overview and minimap, feature fitting, passability. It starts
+only when every visible tile is final and no input has arrived for about a
+second, runs one bounded unit at a time, and stops at the first input. A
+world change costs the off-screen ground nothing but a stale mark; a map
+scrolled to stale ground gets a coarse block at once, like any other
+input.
+
+Two things today spend the view's time off screen, and LP0 measures both:
+the Time pass on a map small enough not to be paged runs over the whole
+map before any visible tile may go final (LP4), and a shape-level World
+row evaluates the whole lattice of such a map again.
 
 An input bumps `serial`; the unit in flight finishes (it is bounded), and
 everything queued below the input's needs is planned again. A final tile
@@ -578,7 +603,9 @@ itself, on its own branch, after the land tier passes.
   long tasks, the handler's own time per event split by callee
   (`replaceState`, `saveWorlds`, `applyKnobs`, `syncWorldControls`), the
   longest single wait on the GPU queue, pipelines compiled during the phase
-  (`specStats`), `bitmap copy` time, peak memory.
+  (`specStats`), `bitmap copy` time, peak memory, and the GPU time spent on
+  ground that is not on screen between an input and the view going final
+  (the target is none).
 - Run it on `map16` and `map4`, three scenes, two view sizes.
 
 **Accepted when** the table of section 2 prints for main with every cell
@@ -759,8 +786,22 @@ the final's for the three scenes and report the largest offset.
    if one piece exceeds 100 ms.
 3. **Pieces sized by time**, not only by memory: from the last pieces'
    measured milliseconds per pixel.
+4. **The Time pass serves the view first.** On a paged map, order the pages
+   under the view ahead of the ring's (check that this is already so; the
+   16x16 baseline recorded "view-driven page passes"). On a map that is not
+   paged the pass is the whole map's, so the view waits 0.3 to 0.9 s for
+   ground nobody is looking at; slices make that wait interruptible, not
+   shorter. Report the wait on `map4`. Shortening it means running the
+   pass for the view's region first, which is REDESIGN_PLAN's R8b question
+   (is the result the same as the whole-map pass?) or the paged runner on
+   small maps (`gpuPages=force` exists; its results differ from the
+   whole-map pass, so scenes and exports would move). Neither is in this
+   card: bring the measurement and a proposal to the owner.
+5. **Off-screen work** as section 4.4 orders it: the ring and the pages
+   beyond the view only when the view is final and input is quiet.
 
-**Accepted when** the bench's `resume` phase shows the first preview of a
+**Accepted when** no GPU time goes to off-screen ground between an input
+and the view going final, on `map16`; the bench's `resume` phase shows the first preview of a
 new stroke within the budget plus 100 ms at p95 while a Time pass and finals
 are in flight (main: it waits for the whole pass); Time results are
 byte-identical to main's; release-to-final within 10% of main.
@@ -865,6 +906,9 @@ branch does not edit it.
    code that lands, so they can start beside realism work; LP1 and LP2
    rewrite the canvas scheduler every realism branch renders through, so
    agree their window with the owner.
+5. **On screen first.** "The artist typically only needs the stuff
+   on-screen at the moment to be realtime (or near realtime), the stuff off
+   screen at the moment can update later." Principle 2 and section 4.4.
 
 **Memory, and the answer to "do we need even more".** What was
 measured (section 3.3): 1,024 and 1,536 MiB both give the view as one
