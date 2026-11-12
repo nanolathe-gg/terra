@@ -144,8 +144,13 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const sliders = engine.surfaceSliders(config, settings);
   scene_ = {config, settings, renderer, canvas, fields, nodes, errors, play, context, engine, fieldsModule, worldSize, worldGrid, spacing, minH, maxH, seed, refinementSeed, sliders, paged, ownColors, worldColumn, columnOverride,
     material: engine.materialKnobs(sliders, refinementSeed, renderer.variant.get('transition')), drawOptions: options => engine.drawOptions(sliders, options),
-    // The map's rock presets, and a new list for them (a preset edited, added or removed), as sculpt.js restoreRocks takes it.
-    get rocks() { return rocks; }, setRocks(list) { rocks = copyRocks(list) ?? []; nodes = keepStrokeRocks(nodes, rocks); scene_.nodes = nodes; fields.changed(); syncRocks(); },
+    // The map's rock presets, and a new list for them (a preset edited, added or removed), as sculpt.js editRocks takes it: an edited preset is a
+    // table upload, and the shape is evaluated again only when a stroke's choice went to Rock beneath (its preset deleted).
+    get rocks() { return rocks; }, setRocks(list) {
+      rocks = copyRocks(list) ?? []; const next = keepStrokeRocks(nodes, rocks);
+      if (next.some((n, i) => n !== nodes[i])) { nodes = scene_.nodes = next; fields.changed(); }
+      syncRocks();
+    },
     dispose() { fields.destroy?.(); renderer.dispose(); }};
   return scene_;
 }

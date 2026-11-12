@@ -71,3 +71,18 @@ test('a recipe goes to the clipboard and back; bad lists and recipes are refused
     [{slot: 1, name: 'x', column: {colors: []}}]])
     assert.throws(() => copyRocks(bad), undefined, JSON.stringify(bad));
 });
+
+test('a share link carries the map\'s presets and each stroke\'s choice; an old save without them opens on the world\'s list', async () => {
+  const {shareText, gzipText} = await import('../sculpt-share.js'), {gunzipSync} = await import('node:zlib');
+  let rocks = worldRocks({rock: {recipe: 'granite', presets: ['basalt']}});
+  rocks = setRock(rocks, 2, {knobs: {...rocks[1].knobs, faceJoint: 2.5}, column: rocks[1].column});
+  rocks = renameRock(rocks, 2, 'Columnar');
+  const save = {version: 1, rocks, nodes: [stroke(2), stroke(1), stroke(-1), stroke(0)]};
+  const back = JSON.parse(gunzipSync(await gzipText(shareText(save))).toString('utf8'));
+  assert.deepEqual(copyRocks(back.rocks), copyRocks(rocks));
+  assert.deepEqual(keepStrokeRocks(back.nodes, copyRocks(back.rocks)).map(n => n.params.rockPreset), [2, 1, -1, 0]);
+  assert.equal(shareText(back), shareText(save), 'sharing the loaded map again gives the same link');
+  const old = JSON.parse(shareText({version: 1, nodes: [{kind: 'landform', points: [{x: 0, y: 0}], params: {}}]}));
+  assert.equal(copyRocks(old.rocks), null, 'the page opens it on the world\'s list (worldRocks)');
+  assert.deepEqual(keepStrokeRocks(old.nodes, worldRocks({})), old.nodes, 'its strokes keep the rock beneath');
+});
