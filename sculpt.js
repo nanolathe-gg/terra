@@ -4,7 +4,7 @@ import {configureMap,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
-import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,deleteRock,rockRecipeText,parseRockRecipe} from './sculpt-rock-presets.js';
+import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe} from './sculpt-rock-presets.js';
 import {KNOBS,LOW_GROUND_RGB,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,landformTool,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
@@ -1587,7 +1587,7 @@ function buildKnobs() {
     }
   }
   const sync=mountWorldControlIndex(root,worldPanelValues);
-  syncWorldControls=()=>{sync();$('rock-preset').value=rockSelected>0?rockRecipeFor(mapRocks.find(r=>r.slot===rockSelected)):rockPresetFor(rockSettings(),config.column);};
+  syncWorldControls=()=>{sync();$('rock-preset').value=rockSelected>0?rockRecipeFor(mapRocks.find(r=>r.slot===rockSelected)):rockPresetFor(rockSettings(),config.column);syncRockColors();};
   $('rock-preset').onchange=()=>{
     const key=$('rock-preset').value;
     if(rockSelected>0){if(!key)return;editRocks(setRock(mapRocks,rockSelected,recipeRock(key)));checkpoint(true);syncRockPanel();return;}
@@ -1646,11 +1646,39 @@ function syncRockPanel() {
   rockNote(world?'The world\u2019s own rock keeps its recipe\u2019s name and cannot be deleted: every shape that chooses no other preset is made of it.':full?'This map holds 15 presets besides the world\u2019s rock, the most it can: delete one to add another.':'');
   const values=world?null:{...Object.fromEntries(ROCK_KEYS.map(k=>[k,Number(renderer.variant.get(k)??config.defaults[k])])),...mapRocks.find(r=>r.slot===rockSelected).knobs};
   for(const key of ROCK_KEYS){const input=$('knob-'+key);if(!input)continue;const v=values?values[key]:Number(renderer.variant.get(key)??config.defaults[key]);if(!Number.isFinite(v))continue;input.value=v;input.closest('[data-knob]').querySelector('output').textContent=+v.toFixed(3);}
-  syncWorldControls();syncColumnPanel();
+  syncWorldControls();syncColumnPanel();syncRockColors();
+}
+// The selected preset's colors: its own, or the world's where it takes them (World's colors), each with the palette entry the game draws.
+const BED_COLOR_IDS=[1,2,3,4,5].map(i=>'rock-bed-'+i);
+function syncRockColors() {
+  if(!renderer||!$('rock-color'))return;
+  const world=rockSelected===0,rock=mapRocks.find(r=>r.slot===rockSelected),own=rock?.colors,shown=renderer.slotColors(0);
+  const paint=(id,hex,off)=>{$(id).value=hex;$(id).disabled=off;const snap=renderer.paletteNearest(hex);$(id+'-snap').style.background=snap;$(id+'-snap').title=$(id+'-snap').ariaLabel=`Palette entry ${snap}`;};
+  paint('rock-color',own?.rock||shown.rock,world||!own?.rock);
+  BED_COLOR_IDS.forEach((id,k)=>paint(id,own?.beds?.[k]||shown.beds[k],world||!own?.beds));
+  $('rock-color-world').checked=world||!own?.rock;$('rock-beds-world').checked=world||!own?.beds;
+  $('rock-color-world').disabled=$('rock-beds-world').disabled=world;
+  $('rock-colors-note').textContent=world?'The world\u2019s rock wears the world\u2019s colors: set them under Colors & base pattern (Rock) and in the Rock column\u2019s material slot colors.'
+    :!own?.rock||!own?.beds?'A color under World\u2019s colors follows the world\u2019s: clear World\u2019s colors to choose this preset\u2019s own.':'';
+  $('rock-colors-note').hidden=!$('rock-colors-note').textContent;
+}
+// A color of the selected preset changed (live while the picker moves; one undo step when it is let go).
+function setPresetColors(colors,commit) {
+  if(rockSelected===0)return;
+  editRocks(setRockColors(mapRocks,rockSelected,colors));syncRockColors();markViewChanged();schedule();
+  if(commit)checkpoint(true);
 }
 function selectRock(slot) { rockSelected=slot; syncRockPanel(); }
 function mountRockPanel() {
   $('rock-presets').onchange=()=>selectRock(Number($('rock-presets').value));
+  const colorsNow=()=>mapRocks.find(r=>r.slot===rockSelected)?.colors||{rock:null,beds:null},shown=()=>renderer.slotColors(0);
+  // World's colors cleared: the preset starts from the colors it shows (the world's), so nothing changes until one is moved.
+  $('rock-color-world').onchange=()=>setPresetColors({...colorsNow(),rock:$('rock-color-world').checked?null:shown().rock},true);
+  $('rock-beds-world').onchange=()=>setPresetColors({...colorsNow(),beds:$('rock-beds-world').checked?null:shown().beds},true);
+  const rockColor=commit=>setPresetColors({...colorsNow(),rock:$('rock-color').value},commit);
+  $('rock-color').oninput=()=>rockColor(false);$('rock-color').onchange=()=>rockColor(true);
+  const bedColors=commit=>setPresetColors({...colorsNow(),beds:BED_COLOR_IDS.map(id=>$(id).value)},commit);
+  for(const id of BED_COLOR_IDS){$(id).oninput=()=>bedColors(false);$(id).onchange=()=>bedColors(true);}
   $('rock-add').onchange=()=>{
     const key=$('rock-add').value;$('rock-add').value='';if(!key)return;
     try{const added=addRock(mapRocks,key,worldRockName(config));editRocks(added.rocks);selectRock(added.slot);checkpoint(true);status(`Added the rock preset ${mapRocks.find(r=>r.slot===added.slot).name}.`);}catch(err){rockNote(err.message);}

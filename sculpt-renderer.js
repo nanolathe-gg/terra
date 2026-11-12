@@ -1062,6 +1062,24 @@ export class TerrainRenderer {
     const field = this.uniform.get(name[1].toLowerCase() + name.slice(2));
     return field.kind === 'i' ? this.uniformView.getInt32(field.offset, true) : this.uniformView.getFloat32(field.offset, true);
   }
+  // A rock slot's colors as the draw reads them, '#rrggbb': {rock, beds}, the rock's (its own, else the rock material's mean, as rockFlat) and
+  // its five bed slots'. The World pane shows a preset's effective colors with them, and starts its own from the world's.
+  slotColors(slot) {
+    const table = this.uniform.get('rock'), at = table.offset + slot * table.stride + table.members.get('rockColors').offset;
+    const row = k => [0, 1, 2, 3].map(c => this.uniformView.getFloat32(at + k * 16 + c * 4, true)), mean = this.uniform.get('rockMean');
+    const hex = rgb => '#' + rgb.slice(0, 3).map(v => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0')).join('');
+    const own = row(0);
+    return {rock: hex(own[3] > 0.5 ? own : [0, 1, 2].map(c => this.uniformView.getFloat32(mean.offset + c * 4, true))), beds: [1, 2, 3, 4, 5].map(k => hex(row(k)))};
+  }
+  // The palette entry the draw's lookup gives a color, '#rrggbb' (engine-palette.wgsl rows 0-31: the nearest entry by rgb distance to the
+  // color's point of the 32-level cube; the dither then mixes entries around it).
+  paletteNearest(hex) {
+    const colours = (this.materialData.palette?.entries ?? this.paletteArt).map(i => this.paletteColours[i]);
+    const cube = [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * 31 / 255) * 255 / 31);
+    let best = colours[0], nearest = Infinity;
+    for (const c of colours) { const d = (c[0] - cube[0]) ** 2 + (c[1] - cube[1]) ** 2 + (c[2] - cube[2]) ** 2; if (d < nearest) { nearest = d; best = c; } }
+    return '#' + best.slice(0, 3).map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+  }
 
   // Encodes the bake into the given encoder, or submits it on its own.
   bakeFields(encoder = null, timer = null) {
