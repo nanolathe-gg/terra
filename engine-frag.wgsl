@@ -1527,7 +1527,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if(u.rock[rs & rockMask].columnCount>0){let g=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary));hard=g.x;gathered=g.y;}
     let fine=voxelFine(hit,column,gathered);
     var fineTone=0.0;
-    if(fine.y>0.0){fineTone=fine.x*2.0/max(fine.y,2.5);}   // full tint from a depth of 2.5 (a unit each way)
+    if(fine.z>0.0){fineTone=(fine.x+fine.y)*2.0/max(fine.z,2.5);}   // full tint from a depth of 2.5 (a unit each way)
     let rockTone=voxelNoise(voxelRockSpace(hit)/max(4.0,u.rock[rs & rockMask].faceBlockSize))*2.0-1.0;
     let accumulated=rockWeatherAt(p);
     let skin=voxelSkin(hit,slope,painted.x,rain);

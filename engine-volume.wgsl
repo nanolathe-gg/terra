@@ -210,8 +210,11 @@ fn voxelDensity(p:vec3f)->f32 {
     // The beds as the face can draw them (columnGather, voxelHardness): thin beds gathered, their lost ledges drawn as fine layers.
     let column=voxelColumnCoord(p);var gathered=0.0;
     if(u.rock[rs & rockMask].columnCount>0){gathered=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary)).y;}
-    let lamina=voxelFine(p,column,gathered).x;
+    let layers=voxelFine(p,column,gathered);let lamina=layers.x+layers.y;
     let bed=(.55-voxelHardness(p))*u.rock[rs & rockMask].faceLedge*2.4;
+    // Soil-covered terraces lie on gentle slopes, where even a thin bed is wide on the screen: they step with each bed's own hardness, and
+    // carry no gathered fine layers over them.
+    let terrace=(.55-voxelBedHardness(p))*u.rock[rs & rockMask].faceLedge*2.4;
     let detail=voxelDetail(r);
     let pits=(abs(voxelNoise(r/max(2.0,u.rock[rs & rockMask].faceCreaseSize))-.5)-.25)*u.rock[rs & rockMask].faceCrease*2.5;
     let angle=radians(u.rock[rs & rockMask].faceScratchAngle);
@@ -228,7 +231,7 @@ fn voxelDensity(p:vec3f)->f32 {
     let inclusion=u.rock[rs & rockMask].faceClast*(clasts.x-.12)*min(4.0,u.rock[rs & rockMask].faceClastSize*.22);
     let release=voxelRelease(broad,hard)*min(24.0,u.rock[rs & rockMask].faceBlockSize*.8);
     let runoff=u.rock[rs & rockMask].runoffCut*rockWeatherAt(p.xy).x*(1.25-.75*voxelHardness(p));
-    let structure=(faces+mass+pits*detail+grit*detail-spall-release+inclusion-u.rock[rs & rockMask].faceJoint*joint*3.0-runnel*detail-runoff+bed+u.rock[rs & rockMask].faceExtrude*6.0*(.65+.35*c.tone))*face+soil*(bed*3.0+mass*1.5)+lamina*(face+soil*3.0);
+    let structure=(faces+mass+pits*detail+grit*detail-spall-release+inclusion-u.rock[rs & rockMask].faceJoint*joint*3.0-runnel*detail-runoff+bed+u.rock[rs & rockMask].faceExtrude*6.0*(.65+.35*c.tone))*face+soil*(terrace*3.0+mass*1.5)+layers.x*face+layers.y*(face+soil*3.0);
     let offset=32.0*tanh(u.rock[rs & rockMask].rockFace*.5*voxelRelief(p.xy,slope)*structure/32.0)*heightGate;
     let q=p-n*offset;let moved=voxelAuthored(q.xy);
     let draped=(q.z-moved.x)*min(max(moved.w,.015),n.z);

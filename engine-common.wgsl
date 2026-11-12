@@ -1052,6 +1052,11 @@ fn voxelHardness(p:vec3f)->f32 {
     if(u.rock[rs & rockMask].columnCount==0){return .55;}
     return columnGather(voxelBed(p)).x;
 }
+// Each bed's own hardness, none gathered: for the soil-covered terraces, which lie on gentle slopes, where a thin bed is wide on the screen.
+fn voxelBedHardness(p:vec3f)->f32 {
+    if(u.rock[rs & rockMask].columnCount==0){return .55;}
+    return voxelBed(p).hardness;
+}
 // One fine layer at phase (layers up the column) for layers spacing units apart, about its mean (-.5 to .5): a lip and a notch. The
 // layer's top recedes and the next layer's foot stands out over it within a unit, so the sun lights the layer and the notch under each lip
 // reads as a fine dark line.
@@ -1065,10 +1070,10 @@ fn fineLayer(phase:f32,spacing:f32)->f32 {
 // never closer than FACE_LINES; the same lines when it is that close). In a column section of two beds or more, Variation between repeated
 // beds varies both: their spacing and darkness wander slowly, over Layer variation length along the wall and a few layers up it (0: evenly
 // spaced and even, as one bed repeated). With no column or one bed the panel offers no variation (sculpt-control-schema.js), and they stay
-// even. x: the relief in height units, y: its depth.
-fn voxelFine(p:vec3f,c:f32,gathered:f32)->vec2f {
+// even. x: the gathered beds' relief, y: Fine layer relief's, in height units; z: their depth together.
+fn voxelFine(p:vec3f,c:f32,gathered:f32)->vec3f {
     let thin=gathered*u.rock[rs & rockMask].faceLedge*2.4;let own=u.rock[rs & rockMask].faceLamina*2.5;
-    if(thin+own<=0.0){return vec2f(0.0);}
+    if(thin+own<=0.0){return vec3f(0.0);}
     let z=c*max(2.0,u.rock[rs & rockMask].faceBed)/5.5;   // height up the deformed column
     let vary=select(0.0,u.rock[rs & rockMask].bedCycleVary,u.rock[rs & rockMask].columnCount>0&&columnSection(columnSectionAt(c)).z>=2.0);
     var warp=0.0;var dark=1.0;
@@ -1078,7 +1083,7 @@ fn voxelFine(p:vec3f,c:f32,gathered:f32)->vec2f {
         dark+=(voxelNoise(vec3f(r.xy/run,z/(3.0*FACE_LINES))+vec3f(3,83,17))-.5)*1.6*vary;
     }
     let spacing=max(u.rock[rs & rockMask].faceLaminaSize,FACE_LINES);
-    return vec2f((thin*fineLayer((z+warp)/FACE_LINES,FACE_LINES)+own*fineLayer((z+warp)/spacing,spacing))*dark,thin+own);
+    return vec3f(thin*fineLayer((z+warp)/FACE_LINES,FACE_LINES)*dark,own*fineLayer((z+warp)/spacing,spacing)*dark,thin+own);
 }
 // Strata: coloured bands by height on raised ground (painted desert), the colours of the column's beds (slot -> strataColors).
 fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.strataColors[clamp(i, 0, 4)].rgb; }
