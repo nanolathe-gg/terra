@@ -3455,6 +3455,36 @@ configurable"; 7 "a whole sand system", lower priority; 8 "Fix it"; 9 and
   under joint lines and blotches (a smaller gain there, by eye); sandstone
   and gneiss gain little at 1x.
 
+- *Biome-defined shape tools, the plumbing (T1) [landed 2026-11-11; built
+  by an Opus agent, reviewed and checked by Claude].* The owner: "let
+  every biome define its own shapes", a stroke of a tool the new biome
+  lacks becomes "a generic landform tool", and "there should be a way to
+  define new tools from the currently selected shape." The shape library
+  stays in code (`LANDFORM_SHAPES`); each world's table now holds its
+  numbers for the shapes (`world.shapes`, the old `TOOL_PRESETS` moved
+  verbatim: 20 configs by 21 entries by 9 presets hash the same) and its
+  toolbar (`world.tools`: id, label, icon, color, group, shape, an
+  optional rock preset key). Scenes name shapes, never tool ids. The page
+  builds only the shape buttons; a fixed Landform button is first and
+  Fissure ends the Shape group. A stroke names its tool (`node.tool`); one
+  whose tool the toolbar lacks shows as Landform and keeps every number
+  for good (`kept`), through later biome switches too. Save as tool
+  (name, icon, color) adds a map tool that draws with the selected
+  shape's settings, curves and rock; map tools live in the save, undo,
+  share links and a scene's `tools`; Delete leaves the strokes alone.
+  *Checks on the tip, merged with main:* land tier passes, 0 of 34 scenes
+  changed; `repro/tools-ui.mjs` (new), workspace, curveedit,
+  rock-presets-ui, site test and export bytes exit 0; one new hover
+  picture (the Landform button's) and no other preview moved. The drag
+  and bake path is untouched. *Open:* every world still ships the same
+  thirteen tools (T2: each world's own list, Hill on Smooth soil by key,
+  shown to the owner as a table first); hiding Tool preset options for a
+  world without a shape is untested until a world lacks one;
+  `repro/share.mjs` fails one check ("share, open, share again: same
+  link") on main too, from `mapData.featureSet` normalizing on load;
+  proposals not built: rename, reorder and edit a map tool, export a
+  map's tools into world data, `tools-ui.mjs` in the land tier.
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
