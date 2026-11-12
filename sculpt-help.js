@@ -86,7 +86,7 @@ export function mountHelp(){
     if(!tool&&!source?.disabled)tip.append(element('small','','Click: set · Double-click: type · Drag: adjust · Shift: fine'));
     target.setAttribute('aria-describedby',tip.id);tip.hidden=false;position(target);
   };
-  const target=e=>e.target instanceof Element&&!e.target.matches('.scrub-entry')?e.target.closest('.tool-palette button,.scrub,.control > select'):null;
+  const target=e=>e.target instanceof Element&&!e.target.matches('.scrub-entry')?e.target.closest('.tool-palette button:not(.rail-button),.scrub,.control > select'):null;
   document.addEventListener('pointerover',e=>{const t=target(e);if(!t||e.buttons||t.contains(e.relatedTarget))return;hide();hoverTimer=setTimeout(()=>show(t),500);});
   document.addEventListener('pointerout',e=>{const t=target(e);if(t&&!t.contains(e.relatedTarget))hide();});
   document.addEventListener('focusin',e=>{const t=target(e);if(t){hide();hoverTimer=setTimeout(()=>show(t),500);}});document.addEventListener('focusout',hide);

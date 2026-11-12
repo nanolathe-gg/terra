@@ -5,32 +5,66 @@ import {COLUMN_BEDS,COLUMN_SECTIONS,COLUMN_SLOTS,FIRST_SECTION} from './sculpt-c
 const $=id=>document.getElementById(id);
 export function mountEditorUI(){
  const app=document.querySelector('.app');
- let panels={tools:true,inspector:true},beforeFocus=null;
+ // Which panels show, and whether the tool rail is expanded into the palette (every tool in view): one remembered object.
+ let panels={tools:true,inspector:true,palette:false},beforeFocus=null;
  try{panels={...panels,...JSON.parse(localStorage.getItem('terraform-editor-panels')||'{}')};}catch{}
  const focused=()=>beforeFocus!==null;
  function updateLayout(){
   const showTools=!focused()&&panels.tools,showInspector=!focused()&&panels.inspector;
-  app.classList.toggle('tools-collapsed',!showTools);app.classList.toggle('inspector-collapsed',!showInspector);
+  app.classList.toggle('tools-collapsed',!showTools);app.classList.toggle('inspector-collapsed',!showInspector);app.classList.toggle('palette-open',Boolean(panels.palette));
   $('tools-sidebar').hidden=!showTools;$('inspector-sidebar').hidden=!showInspector;
-  for(const [id,on,label] of [['toggle-tools',showTools,'tools'],['toggle-inspector',showInspector,'inspector']]){const b=$(id);b.setAttribute('aria-expanded',String(on));b.title=`${on?'Hide':'Show'} ${label}`;}
+  for(const [id,on,label] of [['toggle-tools',showTools,'tools'],['toggle-inspector',showInspector,'side panel']]){const b=$(id);b.setAttribute('aria-expanded',String(on));b.title=`${on?'Hide':'Show'} ${label}`;}
   $('focus-canvas').setAttribute('aria-pressed',String(focused()));$('focus-canvas').querySelector('span').textContent=focused()?'Restore':'Focus';
+  const pin=$('palette-toggle');pin.setAttribute('aria-pressed',String(Boolean(panels.palette)));pin.firstElementChild.textContent=panels.palette?'«':'»';pin.lastElementChild.textContent=panels.palette?'Collapse':'Expand';
+  pin.title=panels.palette?'Collapse the tools to a rail':'Keep every tool in view, with its picture and name';
+  if(panels.palette||!showTools)closeFlyouts();
+  if(!showInspector)setLarge(false);
   try{localStorage.setItem('terraform-editor-panels',JSON.stringify(panels));}catch{}
  }
- function togglePanel(name){if(focused()){panels={tools:false,inspector:false};beforeFocus=null;}panels[name]=!panels[name];updateLayout();}
+ function togglePanel(name){if(focused()){panels={...panels,tools:false,inspector:false};beforeFocus=null;}panels[name]=!panels[name];updateLayout();}
  function exitFocus(){if(!focused())return false;panels=beforeFocus;beforeFocus=null;updateLayout();return true;}
- function toggleFocus(){if(!exitFocus()){beforeFocus={...panels};updateLayout();}}
+ function toggleFocus(){if(!exitFocus()){beforeFocus={...panels};closeSurfaces();updateLayout();}}
  $('toggle-tools').onclick=()=>togglePanel('tools');$('toggle-inspector').onclick=()=>togglePanel('inspector');$('focus-canvas').onclick=toggleFocus;
- updateLayout();
- const grouped=document.querySelector('.tool-groups');
+ $('palette-toggle').onclick=()=>{panels.palette=!panels.palette;updateLayout();};
+ // The rail: Land, Water and Brushes each open their tools beside the rail; one is open at a time, and picking a tool closes it.
+ const grouped=document.querySelector('.tool-groups'),rails=[...grouped.querySelectorAll('.rail-button')];
+ function closeFlyouts(){let any=false;for(const r of rails){if(r.getAttribute('aria-expanded')==='true')any=true;r.setAttribute('aria-expanded','false');}return any;}
+ for(const r of rails)r.onclick=()=>{if(panels.palette)return;const open=r.getAttribute('aria-expanded')==='true';closeFlyouts();closeSurfaces();r.setAttribute('aria-expanded',String(!open));};
+ grouped.addEventListener('click',e=>{if(e.target.closest('.tool-flyout button'))closeFlyouts();});
  const syncTools=(active,selected,locked,features)=>{
-  for(const b of grouped.querySelectorAll('button')){b.disabled=locked;b.setAttribute('aria-pressed',String(features?b.id==='feature-tool':b.dataset.tool===active));}
+  for(const b of grouped.querySelectorAll('button')){
+   b.disabled=locked;if(b.classList.contains('rail-button'))continue;
+   b.setAttribute('aria-pressed',String(features?b.id==='feature-tool':b.dataset.tool===active));
+  }
+  // A rail button is lit while the tool in hand is one of its group.
+  for(const r of rails)r.classList.toggle('has-current',!features&&Boolean(r.parentElement.querySelector(`[data-tool="${CSS.escape(active||'')}"]`)));
  };
  mountWorkspace();
- const tabs=[...document.querySelectorAll('[role="tab"]')],visibleTabs=tabs.filter(t=>!t.hidden);
- function activate(tab){for(const t of tabs){const active=t===tab;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).hidden=!active;}}
- for(const t of tabs){t.onclick=()=>activate(t);t.onkeydown=e=>{const i=visibleTabs.indexOf(t);let j;if(e.key==='ArrowRight')j=(i+1)%visibleTabs.length;if(e.key==='ArrowLeft')j=(i+visibleTabs.length-1)%visibleTabs.length;if(e.key==='Home')j=0;if(e.key==='End')j=visibleTabs.length-1;if(j!==undefined){e.preventDefault();activate(visibleTabs[j]);visibleTabs[j].focus();}};}
+ // The side panel: Build (the tool or the selection) or World.
+ const tabs=[...document.querySelectorAll('[role="tab"]')];
+ function activate(tab){for(const t of tabs){const active=t===tab;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).hidden=!active;}if(tab.id!=='tab-tool')setLarge(false);}
+ for(const t of tabs){t.onclick=()=>{if($('inspector-sidebar').hidden)togglePanel('inspector');activate(t);};t.onkeydown=e=>{const i=tabs.indexOf(t);let j;if(e.key==='ArrowRight')j=(i+1)%tabs.length;if(e.key==='ArrowLeft')j=(i+tabs.length-1)%tabs.length;if(e.key==='Home')j=0;if(e.key==='End')j=tabs.length-1;if(j!==undefined){e.preventDefault();activate(tabs[j]);tabs[j].focus();}};}
+ // The surfaces: the Map menu, Settings, Export and the Shapes list each open from their own button, in a fixed place. The three menus
+ // close when another opens or the pointer goes down elsewhere; the Shapes list stays while you work on the map.
+ const surfaces=[['tab-map','pane-map',true],['open-graphics','pane-graphics',true],['open-export','pane-export',true],['tab-objects','pane-objects',false]];
+ function setSurface(button,pane,open){$(pane).hidden=!open;$(button).setAttribute('aria-expanded',String(open));}
+ function closeSurfaces(menusOnly=false){let any=false;for(const [button,pane,menu] of surfaces)if(!$(pane).hidden&&(menu||!menusOnly)){setSurface(button,pane,false);any=true;}return any;}
+ for(const [button,pane,menu] of surfaces)$(button).onclick=()=>{const open=$(pane).hidden;if(menu)closeSurfaces(true);closeFlyouts();setSurface(button,pane,open);};
+ document.addEventListener('pointerdown',e=>{
+  const t=e.target instanceof Element?e.target:null;if(!t)return;
+  if(!t.closest('.tool-group'))closeFlyouts();
+  for(const [button,pane,menu] of surfaces)if(menu&&!$(pane).hidden&&!t.closest('#'+pane)&&!t.closest('#'+button))setSurface(button,pane,false);
+  for(const d of document.querySelectorAll('details.top-menu[open]'))if(!d.contains(t))d.open=false;
+ },true);
+ // The curve editors at full size: the same element, laid over the map view while the button is pressed.
+ function setLarge(on){if(app.classList.contains('curves-large')===on)return false;app.classList.toggle('curves-large',on);$('curve-large').setAttribute('aria-pressed',String(on));$('curve-large').textContent=on?'✕ Close':'⤢ Full size';return true;}
+ $('curve-large').onclick=()=>setLarge(!app.classList.contains('curves-large'));
+ new MutationObserver(()=>{if($('section-preview-control').hidden)setLarge(false);}).observe($('section-preview-control'),{attributes:true,attributeFilter:['hidden']});
+ // Escape closes what is open on top of the editor, one thing a press: a tool flyout, a menu, the full-size curves.
+ const closeTop=()=>closeFlyouts()||closeSurfaces(true)||[...document.querySelectorAll('details.top-menu[open],details.share-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||setLarge(false);
  for(const [id,on] of [['view-rendered',false],['view-clay',true]])$(id).onclick=()=>{$('clay').checked=on;$('clay').dispatchEvent(new Event('change'));};
- return {toggleFocus,exitFocus,syncTools};
+ updateLayout();
+ return {toggleFocus,exitFocus,syncTools,closeTop,focused};
 }
 // Each effect owns its controlling value and its dependent parameters. Zero
 // means off; switching back on restores the last value for this tool/selection.

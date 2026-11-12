@@ -1,20 +1,9 @@
-/* Workspace layout: compact rail, contextual inspector, shallow curve dock. */
-.app{--tools-width:88px;--inspector-width:304px;grid-template-columns:var(--tools-width) minmax(240px,1fr) var(--inspector-width);grid-template-rows:48px minmax(0,1fr) 168px 24px}
-.app.tools-collapsed{--tools-width:0px}.app.inspector-collapsed{--inspector-width:0px}
-.app:has(#focus-canvas[aria-pressed=true]){grid-template-rows:48px minmax(0,1fr) 0 24px}.app:has(#focus-canvas[aria-pressed=true]) .curve-dock{display:none}
+/* Controls inside the panels. The frame (top bar, tool rail, side panel, status bar, surfaces) is at the end of this file. */
 .topbar{gap:14px;padding:0 12px}.brand{font-size:14px}.brand-mark{font-size:22px}.version{font-size:8px;letter-spacing:1px}
 .top-actions,.view-tools{gap:4px}.topbar button,.topbar select{padding:5px 8px;font-size:11px}.topbar .divider{margin:0 3px}
 .view-toggle{font-size:11px;margin-left:6px;gap:5px;cursor:pointer}
 .view-toggle input{appearance:none;width:23px;height:13px;background:#465158;border-radius:8px;margin:0;position:relative;cursor:pointer;flex:none}
 .view-toggle input:before{content:'';position:absolute;width:9px;height:9px;top:2px;left:2px;border-radius:50%;background:#bdc8c8}.view-toggle input:checked{background:#669b7d}.view-toggle input:checked:before{left:12px;background:#effff3}
-.shape-panel{grid-row:2;overflow:auto;scrollbar-width:thin}.tool-palette{padding:8px 5px;border:0}
-.tool-groups{gap:9px}.tool-group{display:block;margin-top:4px}.tool-group-label{display:block;font-size:8px;letter-spacing:1px;color:#81968e;padding:0 4px 4px;text-transform:uppercase}
-.tool-groups .tools,.tool-group .tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px}
-.tool-groups .tools button{height:36px;padding:5px;border-radius:5px;display:flex;align-items:center;justify-content:center;min-width:0}
-.tool-groups .tool-icon{width:23px;height:23px}
-.tool-groups .tools button[aria-pressed=true]{background:#354d40;border-color:#82b597;box-shadow:inset 2px 0 #b0e2bc}
-.workspace{grid-row:2;grid-column:2}.canvas-caption{min-height:32px;height:32px;padding:3px 8px}.canvas-caption h2{font-size:11px}.canvas-caption button{padding:3px 5px}
-.world-panel{display:flex;grid-column:3;grid-row:2/4;overflow:hidden}.inspector{width:100%;height:100%}.inspector-content{padding:10px}.inspector-tabs{flex-shrink:0}.inspector-tabs button{padding:9px 2px}
 #editor,.tool-settings{display:block;padding:0;overflow:visible}.tool-settings .scope{font-size:10px}.tool-settings>.panel{border:0}
 #drawing-options{margin:0 0 7px;padding:0 0 7px}#drawing-target{display:none}#drawing-options .selection-modes{margin:0}#drawing-options .selection-modes button{padding:4px;font-size:10px}
 #brush-title{font-size:12px;margin-bottom:6px}#brush-scope{display:none}#seed-control{display:grid;grid-template-columns:35px minmax(0,1fr);align-items:center;gap:5px;margin:5px 0 8px;padding:0;border:0;background:none}
@@ -26,30 +15,117 @@
 #world-control-search{top:-10px;padding:9px 0 7px}#world-control-search>label:first-child{display:none}#world-search{padding:5px 7px;font-size:11px}#world-control-search .fine-controls{font-size:11px;margin:6px 0 0}#world-control-count{font-size:10px}
 #knobs>.world-section{margin:0;padding:0;border-top:1px solid var(--line)}.world-section>summary{padding:7px 0;font-size:12px;font-weight:600;cursor:pointer}.world-section>.control,.world-subsection>.control{margin:5px 0}.world-section[open]{padding-bottom:8px}.world-subsection h3{font-size:10px;font-weight:500;color:#96ada2;margin:10px 0 5px}.world-subsection:first-of-type h3{margin-top:2px}
 .brush-basics{border:0;background:none;margin:0}.brush-basics>summary{display:none}.brush-basics .feature-body{padding:0;border:0}.brush-basics .control{margin-top:5px}#tool-style{font-size:11px}.layers-panel{border:0;padding:0;background:none;min-height:200px}#layers{max-height:none}
-.curve-dock{grid-row:3;grid-column:1/3;min-width:0;display:grid;grid-template-columns:172px minmax(0,1fr);gap:0;background:#192325;border-top:1px solid #41524b;overflow:hidden}
-.minimap-panel{padding:7px 10px;border:0;border-right:1px solid var(--line);min-width:0}.minimap-panel .panel-heading{margin-bottom:5px;height:16px}.minimap-panel h2{font-size:10px}.minimap-panel .panel-heading span{font-size:9px}
-#minimap-host{height:130px;border-color:#3d5148}#minimap-host canvas{width:128px;height:128px;max-width:100%;object-fit:contain}
-.curve-editors{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0;min-width:0;margin:0}.curve-pane{min-width:0;padding:5px 10px 5px;border-right:1px solid var(--line)}.curve-pane:last-child{border-right:0}
 .curve-heading{height:25px;display:flex;align-items:center;gap:10px;justify-content:space-between}.curve-heading h2{font-size:11px;white-space:nowrap;color:#d6e4d9}.curve-heading span{font-size:10px;color:#8da59a}.curve-heading select{width:auto!important;max-width:50%;padding:2px 5px;font-size:10px;background:#24352d;border-color:#3b5144}
-#section-preview,#along-preview{height:104px!important;width:100%!important;margin:0!important;border:1px solid #394d40!important;background:#17241d!important;border-radius:3px!important}
 .curve-actions{height:25px;display:flex;align-items:center;gap:5px;overflow:hidden;white-space:nowrap}.curve-actions button{padding:2px 6px;font-size:10px;background:#26352e}.curve-actions span{font-size:9px;color:#8da397;margin-left:auto;overflow:hidden;text-overflow:ellipsis}
-.curve-actions #curve-lean{flex:initial!important;margin:0 0 0 auto;font-size:9px}.curve-empty{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:#99afa3;padding:20px;text-align:center}.curve-empty span{max-width:450px;font-size:11px}
-.curve-dock.is-disabled canvas{pointer-events:none;opacity:.5}.help-art img{width:100%;height:100%;object-fit:cover;display:block}
-footer{grid-row:4;font-size:10px}.scrub{position:relative;background:linear-gradient(to right,#3e5545 var(--fill),#27342e var(--fill));border:1px solid #455b4a;border-radius:4px;min-height:26px;cursor:ew-resize;touch-action:none;user-select:none;overflow:hidden}
+.curve-actions #curve-lean{flex:initial!important;margin:0 0 0 auto;font-size:9px}
+.scrub{position:relative;background:linear-gradient(to right,#3e5545 var(--fill),#27342e var(--fill));border:1px solid #455b4a;border-radius:4px;min-height:26px;cursor:ew-resize;touch-action:none;user-select:none;overflow:hidden}
 .scrub:hover{border-color:#78987d}.scrub[aria-disabled=true]{opacity:.45;cursor:default}.scrub label{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:24px;padding:3px 6px;margin:0;font-size:11px;cursor:inherit;pointer-events:none}.scrub label output{color:#edf6de;font-size:11px;flex:none}.scrub label>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .scrub-native{position:absolute!important;opacity:0!important;width:1px!important;height:1px!important;pointer-events:none!important;margin:0!important}.scrub-entry{position:absolute;inset:0;width:100%!important;height:100%;background:#1b2921!important;text-align:right;padding-right:8px!important;border-color:#a3c69d!important}
 .visual-help{position:fixed;width:286px;z-index:100;background:#16211f;border:1px solid #5a7465;border-radius:8px;box-shadow:0 14px 50px #0009;padding:12px;pointer-events:none;line-height:1.5}.visual-help>strong{display:block;font-size:13px;margin-bottom:6px;color:#e4efdb}.visual-help p{font-size:11px;color:#bbcabc;margin:7px 0}.visual-help small{display:block;font-size:10px;color:#91ad9a}.help-art{position:relative;width:100%;height:190px;background:#101a17;border:1px solid #34493c;border-radius:5px;overflow:hidden}.help-art svg{width:100%;height:100%}.help-sprite{position:relative;width:100%;height:100%;background-repeat:no-repeat}.help-art span{position:absolute;top:7px;left:9px;font-size:10px;color:#d8eacc;background:#203b2c;padding:2px 5px;border-radius:3px}.help-pair{display:flex;height:95px}.help-pair .help-sprite{width:50%}.visual-help .help-caption{font-size:9px;margin-top:4px}
-@media(max-width:1250px){.app{--inspector-width:280px}.version{display:none}.topbar{gap:8px}.brand{font-size:12px}.topbar button,.topbar select{padding:5px 6px}.topbar .view-toggle{font-size:10px;margin-left:3px}.top-actions{gap:3px}.share-menu>summary{font-size:10px;padding:5px}.curve-dock{grid-template-columns:160px minmax(0,1fr)}}
-@media(max-width:1050px){.brand{font-size:0;gap:0}.brand-mark{font-size:22px}.topbar{padding:0 7px;gap:5px}.top-actions .divider,.view-tools .divider{display:none}.topbar #undo,.topbar #redo{font-size:0}.topbar #undo:first-letter,.topbar #redo:first-letter{font-size:13px}.curve-actions #curve-lean{display:none}.curve-heading{gap:4px}.curve-heading select{max-width:45%}.curve-actions span{max-width:160px}.canvas-caption>h2{display:none}}
-@media(pointer:coarse){.app{--tools-width:104px}.tool-groups .tools button{height:44px}.scrub,.scrub label{min-height:40px}.curve-actions button{min-height:24px}.topbar button{min-height:36px}}
+
+
+@media(pointer:coarse){.scrub,.scrub label{min-height:40px}.curve-actions button{min-height:24px}}
 
 /* Passability stays in the existing editor and uses the export's height grid. */
-#passability-tools:not([hidden]){position:absolute;top:44px;left:12px;right:12px;z-index:4;border:1px solid #71857766;border-radius:6px;display:flex;align-items:center;gap:14px;padding:7px 12px;border-bottom:1px solid #42534b;background:#202e29;font-size:11px;flex-wrap:wrap}
+#passability-tools:not([hidden]){position:absolute;top:10px;left:12px;right:12px;z-index:4;border:1px solid #71857766;border-radius:6px;display:flex;align-items:center;gap:14px;padding:7px 12px;border-bottom:1px solid #42534b;background:#202e29;font-size:11px;flex-wrap:wrap}
 #passability-tools label{display:flex;align-items:center;gap:8px;color:#e2eadd;font-weight:600}#passability-family{font-size:11px;padding:4px 7px;max-width:145px}#passability-state{color:#b2c2b7}.passability-air{margin-left:auto;color:#c0cbe0;font-size:10px}
 #passability-legend{position:absolute;bottom:12px;left:12px;right:12px;max-width:690px;z-index:3;padding:11px 13px;border:1px solid #71857766;border-radius:7px;background:#16231eee;box-shadow:0 3px 18px #0005;pointer-events:none;font-size:11px;color:#e2eadd}
 .passability-key:not([hidden]){display:flex;gap:12px;flex-wrap:wrap;margin-bottom:7px}.passability-key span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}.passability-key span:before{content:'';width:10px;height:10px;border-radius:2px;background:var(--access)}.passability-key .access-mixed:before{background:repeating-linear-gradient(135deg,#293b3566 0 2px,transparent 2px 5px),var(--access)}
 #passability-legend p{margin:4px 0;line-height:1.5}#passability-reference{color:#a6bbab;font-size:10px}#passability-access{font-weight:600;color:#d3e2d5}#passability-readout{color:#e5d4ae;min-height:16px}#passability-legend small{font-size:10px;color:#a6bbab}
 
 .workspace{position:relative}
-.tool-list{display:contents}
 .tool-icon-choices{grid-template-columns:repeat(7,minmax(0,1fr))}.tool-icon-choices button{height:30px;padding:3px}.tool-icon-choices .tool-icon{width:19px;height:19px;color:var(--choice-color,#bad9c6)}.tool-icon-choices button[aria-checked=true]{background:#354d40;border-color:#82b597}
+
+/* ---- The frame ---------------------------------------------------------------------------------------------------------------
+   Top bar 44 px; a tool rail (56 px) that expands into a palette (176 px); the map; one side panel (320 px); a status bar (24 px).
+   The navigator and the zoom buttons sit on the map. The Map menu, Settings, Export and the Shapes list are surfaces in fixed places. */
+.app{--tools-width:56px;--inspector-width:320px;grid-template-columns:var(--tools-width) minmax(240px,1fr) var(--inspector-width);grid-template-rows:44px minmax(0,1fr) 24px}
+.app.palette-open{--tools-width:176px}.app.tools-collapsed{--tools-width:0px}.app.inspector-collapsed{--inspector-width:0px}
+.topbar{gap:10px;padding:0 10px}.top-actions,.view-tools{gap:4px}
+.mode-switch{display:flex;margin-left:auto;border:1px solid var(--line);border-radius:7px;overflow:hidden;flex:none}
+.mode-switch button{border:0;border-radius:0;background:transparent;padding:6px 16px;font-size:12px;font-weight:600;color:var(--muted)}
+.mode-switch button[aria-selected=true]{background:#344c42;color:#d9ffe5}
+.world-title{font-size:11px;font-weight:500;color:#b3c0c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;padding:4px 10px;border:1px solid var(--line);border-radius:12px;flex:0 1 auto}
+.topbar .primary{background:#3f6b4c;border-color:#78ae8d;color:#f1ffe9;font-weight:600;padding-left:14px;padding-right:14px}.topbar .primary:hover:not(:disabled){background:#4a7d59}
+.topbar #toggle-tools,.topbar #toggle-inspector{padding:5px 6px}.topbar button[aria-expanded=false]#toggle-tools,.topbar button[aria-expanded=false]#toggle-inspector{color:var(--accent);border-color:#597a69}
+.top-menu{position:relative}.top-menu>summary{list-style:none;color:inherit;background:var(--raised);border:1px solid var(--line);border-radius:5px;padding:5px 8px;font-size:11px;white-space:nowrap}.top-menu>summary::-webkit-details-marker{display:none}.top-menu>summary:hover{background:#344047}
+.top-menu .popover{top:34px;right:0;width:230px;padding:10px 12px;display:flex;flex-direction:column;gap:9px}.top-menu .view-toggle{margin:0}
+.erosion-toggle{margin:10px 0 0}
+
+/* The tool rail. Collapsed: Select, three group buttons whose tools open beside the rail, Features. Expanded: every tool in view. */
+.shape-panel{grid-row:2;grid-column:1;overflow:visible;position:relative;z-index:6;display:flex;flex-direction:column}
+.tool-palette{padding:6px 5px;border:0;flex:1;min-height:0;overflow:visible}.tool-groups{display:flex;flex-direction:column;gap:4px}
+.tool-list{display:contents}.tool-group{display:block;margin:0;position:relative}
+.tool-groups .tools{display:block}
+.tool-groups button,.rail-foot button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:46px;height:46px;padding:3px 1px;border-radius:7px;border:1px solid transparent;background:transparent;min-width:0}
+.tool-groups button:hover:not(:disabled),.rail-foot button:hover:not(:disabled){background:#2e3a40}
+.tool-groups .tool-icon,.rail-foot .tool-icon{width:22px;height:22px}.rail-foot .tool-icon{color:#bad9c6}
+.tool-name{font-size:9px;line-height:1.15;color:#b9c8c4;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tool-groups button[aria-pressed=true],.rail-button.has-current,.rail-foot button[aria-expanded=true],.rail-foot button[aria-pressed=true]{background:#354d40;border-color:#82b597}
+.tool-groups button[aria-pressed=true] .tool-name,.rail-button.has-current .tool-name{color:#e4f6e6}
+.rail-button{position:relative}.rail-button:after{content:'';position:absolute;right:4px;bottom:4px;border:3px solid transparent;border-right-color:#8fa39b;border-bottom-color:#8fa39b}
+.rail-button[aria-expanded=true]{background:#2e3a40;border-color:#5a7465}
+.tool-groups .tool-flyout{display:none}
+.tool-groups .rail-button[aria-expanded=true]+.tool-flyout{display:grid;position:absolute;left:52px;top:0;z-index:8;width:188px;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;padding:8px;background:var(--panel);border:1px solid #5a7465;border-radius:8px;box-shadow:0 12px 40px #000a}
+.tool-flyout .tool-group-label{grid-column:1/-1;display:block;font-size:9px;letter-spacing:1px;color:#81968e;text-transform:uppercase;padding:0 2px}
+/* A tool in a flyout or in the palette: its picture (or its icon) over its name. */
+.tool-flyout button{width:auto;height:auto;padding:0;gap:0;align-items:stretch;justify-content:flex-start;border-color:var(--line);background:#182024;overflow:hidden;position:relative}
+.tool-flyout button .tool-pic{display:block;width:100%;height:46px;object-fit:cover;background:#101a17}
+.tool-flyout button .tool-icon{width:26px;height:26px;margin:10px auto}
+.tool-flyout button .tool-pic+.tool-icon{position:absolute;left:3px;top:3px;width:15px;height:15px;margin:0;padding:1px;border-radius:3px;background:#101a17cc}
+.tool-flyout button .tool-name{font-size:10px;padding:3px 5px 4px;text-align:left;color:#d5e0db;border-top:1px solid var(--line)}
+.tool-flyout button[aria-pressed=true]{box-shadow:0 0 0 1px #b0e2bc inset}
+.place-tools{margin-top:2px}
+.rail-foot{display:flex;flex-direction:column;gap:4px;padding:6px 5px;border-top:1px solid var(--line)}
+/* Expanded: the same buttons, every group open in a 176 px column. */
+.app.palette-open .tool-palette{overflow-y:auto;scrollbar-width:thin;padding:8px}
+.app.palette-open .rail-button{display:none}
+.app.palette-open .tool-groups .tool-flyout,.app.palette-open .tool-groups .rail-button[aria-expanded=true]+.tool-flyout{display:grid;position:static;width:auto;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;padding:0;margin:2px 0 6px;border:0;box-shadow:none;background:none}
+.app.palette-open .primary-tools button,.app.palette-open .place-tools button,.app.palette-open .rail-foot button{flex-direction:row;justify-content:flex-start;gap:8px;width:100%;height:30px;padding:4px 8px}
+.app.palette-open .primary-tools .tool-name,.app.palette-open .place-tools .tool-name,.app.palette-open .rail-foot .tool-name{font-size:11px}
+.app.palette-open #brushes-flyout{grid-template-columns:1fr}.app.palette-open #brushes-flyout button{flex-direction:row;align-items:center;gap:8px;height:28px;padding:3px 8px;border-color:transparent;background:transparent}
+.app.palette-open #brushes-flyout button .tool-icon{width:18px;height:18px;margin:0}.app.palette-open #brushes-flyout button .tool-name{border:0;padding:0;font-size:11px}
+@media(pointer:coarse){.tool-groups button,.rail-foot button{height:50px}}
+
+/* The map and what sits on it. */
+.workspace{grid-row:2;grid-column:2;position:relative}
+#selection-hud{top:10px}
+.map-navigator{position:absolute;left:12px;bottom:14px;z-index:3;padding:5px;border:1px solid #71857766;border-radius:8px;background:#141c21ee;box-shadow:0 3px 18px #0006;min-width:0}
+.map-navigator .panel-heading{display:none}
+#minimap-host{height:118px;width:118px;border-color:#3d5148}#minimap-host canvas{width:116px;height:116px;max-width:100%;object-fit:contain}
+.workspace:has(#passability-legend:not([hidden])) .map-navigator{display:none}
+.map-zoom{position:absolute;right:16px;bottom:16px;z-index:3;display:flex;align-items:center;gap:3px;padding:4px;border:1px solid #71857766;border-radius:8px;background:#141c21ee;box-shadow:0 3px 18px #0006}
+.map-zoom button,.map-zoom select{padding:3px 7px;font-size:11px}
+
+/* The side panel. */
+.world-panel{display:flex;grid-column:3;grid-row:2;overflow:hidden}.inspector{width:100%;height:100%}.inspector-content{padding:10px;flex:1}
+/* The curve editors head the tool pane; Full size lays the same element over the map view. */
+.curve-editors{display:block;min-width:0;margin:0 0 9px;padding:0 0 8px;border-bottom:1px solid var(--line)}
+.curve-pane{min-width:0;padding:0;border:0}.curve-pane+.curve-pane{margin-top:4px}
+#section-preview{height:112px!important;width:100%!important;margin:0!important;border:1px solid #394d40!important;background:#17241d!important;border-radius:3px!important}
+#along-preview{height:64px!important;width:100%!important;margin:0!important;border:1px solid #394d40!important;background:#17241d!important;border-radius:3px!important}
+.curve-actions{flex-wrap:nowrap}.curve-editors #curve-lean{display:none}.curve-editors #along-block .curve-actions span{display:none}
+#editor:disabled .curve-editors canvas{pointer-events:none;opacity:.5}
+.app.curves-large .curve-editors{position:fixed;z-index:7;left:calc(var(--tools-width) + 12px);right:calc(var(--inspector-width) + 12px);top:56px;bottom:36px;margin:0;padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:#10171bf7;border:1px solid #5a7465;border-radius:9px;box-shadow:0 14px 60px #000b}
+.app.curves-large .curve-pane{display:flex;flex-direction:column;min-height:0}.app.curves-large .curve-pane:first-child{flex:2}.app.curves-large #along-block:not([hidden]){flex:1;display:flex}
+.app.curves-large #section-preview,.app.curves-large #along-preview{flex:1;height:auto!important;min-height:0}
+.app.curves-large .curve-editors #curve-lean,.app.curves-large .curve-editors #along-block .curve-actions span{display:inline}
+.app.curves-large .curve-actions button{padding:4px 9px;font-size:11px}.app.curves-large .curve-heading h2{font-size:13px}
+
+/* The surfaces. */
+.surface{position:fixed;z-index:15;background:var(--panel);border:1px solid #5a7465;border-radius:9px;box-shadow:0 14px 60px #000b;padding:12px 14px;overflow:auto;scrollbar-width:thin;max-height:calc(100dvh - 84px)}
+.surface-map{top:48px;left:118px;width:340px}
+.surface-settings{top:48px;right:10px;width:330px}
+.surface-export{top:60px;left:50%;transform:translateX(-50%);width:min(520px,calc(100vw - 40px))}
+/* The Shapes list ends above the navigator, which stays in reach under it. */
+.surface-shapes{top:52px;left:calc(var(--tools-width) + 8px);bottom:178px;width:244px;max-height:none;display:flex;flex-direction:column;padding:10px}
+.surface-shapes[hidden]{display:none}.surface-shapes .layers-panel{flex:1;min-height:0;display:flex;flex-direction:column}
+.surface>.panel:first-child,.surface>section:first-child{margin-top:0;border-top:0;padding-top:0}
+
+/* The status bar: the tool's hint, what the editor is doing, render time, map levels, where the map is saved. */
+footer{grid-row:3;font-size:10px;gap:14px}
+.status-line{color:#cfe0d2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:32%;flex:0 1 auto}
+footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:nowrap}.status-details .popover{right:8px;bottom:28px}
+
+@media(max-width:1250px){.app{--inspector-width:290px}.version{display:none}.topbar{gap:6px}.brand{font-size:12px}.topbar button,.topbar select{padding:5px 6px}.top-actions{gap:3px}.share-menu>summary,.top-menu>summary{font-size:10px;padding:5px}.world-title{max-width:120px}footer #levels{display:none}}
+@media(max-width:1050px){.brand{font-size:0;gap:0}.brand-mark{font-size:22px}.topbar{padding:0 7px;gap:5px}.top-actions .divider,.view-tools .divider{display:none}.topbar #undo,.topbar #redo{font-size:0}.topbar #undo:first-letter,.topbar #redo:first-letter{font-size:13px}.world-title{display:none}.mode-switch button{padding:6px 9px}#focus-canvas span{display:none}.status-line{display:none}}
