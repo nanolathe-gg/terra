@@ -222,7 +222,8 @@ function instrument(path,source){
   if(path==='/sculpt-gpu-fields.js')replace("const enc = device.createCommandEncoder({label: 'shape'}), pass = enc.beginComputePass({label: 'shape passes'});", "const enc = device.createCommandEncoder({label: 'shape'});__perf.work(enc,'shape',{x:R.x0*spacing,y:R.y0*spacing,width:(R.x1-R.x0+1)*spacing,height:(R.y1-R.y0+1)*spacing});const pass = enc.beginComputePass({label: 'shape passes'});");
   if(path==='/sculpt-erosion.js'){
     replace('async runGpu(request) {', "async runGpu(request) { __perf.activeErosion=(__perf.activeErosion||0)+1;__perf.mark('erode-start',{grid:request.grid,ox:request.ox,oy:request.oy});");
-    replace('const gpu = performance.now() - tSubmit;', "__perf.activeErosion--;__perf.mark('erode-end',{});const gpu = performance.now() - tSubmit;");
+    if(source.includes('for(const b of owned)if(!complete||!keep.has(b))b.destroy();'))replace('for(const b of owned)if(!complete||!keep.has(b))b.destroy();',"__perf.activeErosion--;__perf.mark('erode-end',{canceled:!complete});for(const b of owned)if(!complete||!keep.has(b))b.destroy();");
+    else replace('const gpu = performance.now() - tSubmit;',"__perf.activeErosion--;__perf.mark('erode-end',{});const gpu = performance.now() - tSubmit;");
     replace('const tSubmit = performance.now();',"__perf.work(encoder,'time',{x:(request.ox??0)*spacing,y:(request.oy??0)*spacing,width:grid*spacing,height:grid*spacing});const tSubmit = performance.now();");
     // Metadata must be set before queue.submit and its pass metadata is read later.
   }

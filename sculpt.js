@@ -1092,9 +1092,8 @@ function queueWeather() {
 // (engine-weather.wgsl mf*) and joins the chunk feed in gridTexture layer 1; a change of any of these drops the weather like a change of the pass's own knobs.
 const materialKnobs=() => materialKnobsIn(surfaceValues(),refinementSeed,renderer.variant.get('transition'));
 // H6b: the Time pass on the fields' GPU buffers; see gpuFeedSource. Nothing comes back to the CPU here.
-// One pass at a time. A submitted pass cannot be stopped: the GPU runs it to its end (about 0.8 s on a 4x4 map) and it keeps its 120 B a cell
-// until then. So a request made while one runs waits for it, and of the requests waiting only the newest still wanted submits the next. When
-// each request submitted its own at once, a slider dragged through eight values queued eight passes ahead of the one that mattered.
+// One Time request at a time. A newer edit stops it after the submitted
+// slice drains; only the newest waiting request allocates the next working set.
 let timePass=null;
 async function runFedWeather(job) {
   try {
@@ -1104,7 +1103,7 @@ async function runFedWeather(job) {
     const b=regionalFields.gpuBuffers();
     if (!b || job!==weatherJob) return;
     gpuPassBytes=grid*grid*120+Math.ceil(grid/8)**2*12;
-    const request={planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,...timeKnobs(renderer)};
+    const request={planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,...timeKnobs(renderer),stale:()=>job!==weatherJob||Boolean(stroke||moving)};
     const pass=erosion.runGpu(request),flight=pass.then(() => {},() => {}).then(() => { if (timePass===flight) timePass=null; });   // cleared when the pass ends, failed or not, before a waiting request looks
     timePass=flight;
     const result=await pass,material=materialKnobs();
@@ -1125,7 +1124,7 @@ async function runFedWeather(job) {
       for(const rect of dirty)mapCanvas.invalidate(rect,{refinement:true});
     }
     updateControls(); schedule();
-  } catch (err) { gpuPassBytes=0; if (job===weatherJob) failWeather(err.message,err); }
+  } catch (err) { gpuPassBytes=0; if (err.name!=='AbortError'&&job===weatherJob) failWeather(err.message,err); }
 }
 function failWeather(message,err=null) {
   console.error(err??new Error(message)); error('Weathering failed: '+message);
