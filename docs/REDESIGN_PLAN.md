@@ -3330,6 +3330,28 @@ configurable"; 7 "a whole sand system", lower priority; 8 "Fix it"; 9 and
   At Sun height 25 with Cast shadow on level ground 1: load 1523 and
   1505, release 1304 and 1315.
 
+- *Desert's plain repeats with its pool [landed 2026-11-11; found by the
+  ground-material design agent, cause and fix by Claude].* The gate that
+  says where a world's beds begin read the bed coordinate, whose tilt and
+  wander are world-space noise, so the first bed's colour crossed onto the
+  plain in patches that do not repeat. It now reads the height above the
+  column's origin; the beds themselves still wander. A bare plain, a
+  2048-px window, classic and modern Desert: pixels unlike the pixel one
+  period (1024 px) away 0.50-0.82% to 0; tiles equal to the tile one
+  period down 84.4% to 100%; distinct tiles 839 to 210 **[measured]**.
+  desert-1..3 move 4.0-4.9% (the rose patches on the plain go; feet and
+  walls the same **[by eye]**); 31 scenes identical. Land tier passes,
+  export bytes exit 0 (the same three hashes).
+- *Level ground that does not repeat yet [measured, not fixed; the owner's
+  rule is tileable flats].* On a level cap 80 units up, tile pairs one
+  period apart that are equal: Desert 20% (the wandering beds colour the
+  cap; 100% with Bed strength 0), Red 30%, Lava 0% (their relief on the
+  cap differs too: 11% and 0% in the clay view). Modern Green's plain on
+  an 8x8 map: 16,384 distinct tiles of 16,384, with 9.3% of pixels unlike
+  the pixel 2048 px away; cause not isolated. The eight classic worlds'
+  base plains repeat exactly. An 8x8 map holds 17,028 tiles, so this bites
+  only above that size.
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
