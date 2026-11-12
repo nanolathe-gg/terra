@@ -79,7 +79,7 @@ export const inferStrokeTools=(nodes,ids) => nodes.map(n => n?.kind==='landform'
 // ---- A map's own tools (Save as tool) ----
 // {id, label, icon, color, group, shape, card}: made from a selected shape, they join the toolbar after the world's tools in their group and live in
 // the map (its save, undo, share links, a scene's `tools`). The card is the numbers, curves and rock slot the tool draws with, in card units as
-// toolDefaults gives them, so a map's tool draws the same in any world; `shape` is the shape it was saved from (its hover picture, its Tool preset).
+// toolDefaults gives them, so a map's tool draws the same in any world; `shape` is the shape it was saved from (its hover picture, its Defaults from world).
 export const MAP_TOOLS_MAX=24;
 const MAP_ID=/^map-[1-9][0-9]{0,5}$/,MAP_FIELDS=['id','label','icon','color','group','shape','card'];
 // The settings a card may hold: a brush card's (the shape options and the five basics), the model's defaults and the library's shapes.

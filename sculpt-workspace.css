@@ -94,6 +94,7 @@
 #selection-hud{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:3;box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:5px 8px;width:max-content;max-width:calc(100% - 24px);min-width:0;margin:0;padding:5px 6px 5px 11px;border:1px solid #897b56;border-radius:7px;background:#182329f2;box-shadow:0 3px 14px #0005;font-size:11px}
 .workspace:has(#passability-tools:not([hidden])) #selection-hud{top:54px}
 .app.curves-large #selection-hud{display:none}
+.app:has(#pane-objects:not([hidden])) #selection-hud{left:calc(50% + 128px);max-width:calc(100% - 280px)}
 #selection-hud.path-mode{border-color:#ac86de}
 #selection-mode{color:#ffe0a0;font-weight:600;white-space:nowrap}#selection-hud.path-mode #selection-mode{color:#d6b7ff}
 #selection-hud button,#selection-hud .top-menu>summary{padding:3px 7px;font-size:10px;white-space:nowrap}

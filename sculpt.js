@@ -43,7 +43,7 @@ const HELP = {
   valleyV:'Draw a landform that starts as a V valley: the ground is cut down to a floor on the path, and the walls rise at one slope, as a river leaves them. Choose any setting below; the Time pass settles walls steeper than the ground can stand.',
   valleyU:'Draw a landform that starts as a U valley: the ground is cut down to a flat floor with steep upper walls, as a glacier leaves it.',
   river:'Draw a river: a valley landform whose path is migrated by the curvature rule real rivers follow, so the line you draw grows bends that travel downstream, within Wander px of where you drew it (at most four channel widths); a loop drawn closed leaves an oxbow. Width is the channel (at least 32 px, so ships can use it). The bank is cut steep on the outside of each bend, a sand bar builds inside it, and pools and riffles follow the bends. Draw a long gentle line; Cut to sets the floodplain relative to the sea.',
-  braided:'Draw a braided river: a mostly dry bed of gravel bars just above the sea, which units cross, with thin threads of water that split and rejoin around the bars; grass grows back on the older, higher bars. Brush diameter sets the size of the bars and of the bed (the bed reaches about two widths either side of the line), so raise it to widen the bed. Wander lets the whole bed stray from the line you draw, in px, as a river\'s channel does (0 keeps it as drawn).',
+  braided:'Draw a braided river: a mostly dry bed of gravel bars just above the sea, which units cross, with thin threads of water that split and rejoin around the bars; grass grows back on the older, higher bars. Size sets the size of the bars and of the bed (the bed reaches about two widths either side of the line), so raise it to widen the bed. Wander lets the whole bed stray from the line you draw, in px, as a river\'s channel does (0 keeps it as drawn).',
   valleyT:'Draw a landform that starts as a terraced valley: a V valley whose walls climb in flat treads, the levels a river left as it cut down.',
   smooth:'Blend the starting surface toward its local average. Repeat a new stroke for more smoothing.',
   crystal:'Draw a landform broken into crystal facets: a click grows a cluster round the point, a drag a row or ridge of them along the path. The section and along curves set how high they stand across and along it, and Facet shape picks prisms or stepped columns; their size, coverage, sides and tops are in Facets.',
@@ -91,8 +91,10 @@ function buildShapeOptions() {
   syncToolGroups=groupToolControls(SHAPE_FIELDS,([key,id,label,,lo,hi,step,,help,choices]) => {
     if(key==='fissureNetwork')choices=[[0,'Path cut'],[1,'Fracture network']];
     if(key==='plateMaterial')choices=[[1,'Polygonal slabs'],[2,'Needle band']];
-    const wrap=controlRow({id,label:`${label} <output id="${id}-value"${choices?' hidden':''}></output>`,range:`min="${lo}" max="${hi}" step="${step}"`,choices,select:' style="width:100%"',help});
-    wrap.id=id+'-control'; return wrap;
+    // A label's parenthetical (its unit, or what it measures) is said by the hover help, not the row.
+    const note=/ \(([^)]*)\)$/.exec(label),words=note?label.slice(0,note.index):label;
+    const wrap=controlRow({id,label:`${words} <output id="${id}-value"${choices?' hidden':''}></output>`,range:`min="${lo}" max="${hi}" step="${step}"`,choices,select:' style="width:100%"',help});
+    wrap.id=id+'-control'; if(note)wrap.dataset.note=note[1]; return wrap;
   });
   $('curve-form').addEventListener('change',() => { const f=$('curve-form').value; setCurve(f?{form:f}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
   $('curve-reset').addEventListener('click',() => { const c=currentCurve(); setCurve(c?.form?{form:c.form}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
@@ -202,7 +204,7 @@ function showTool(state={},kind=toolKind(tool)) {
   for (const [key,[id,lo,hi]] of Object.entries(TOOL_FIELDS)) if (Number.isFinite(state[key])) setShapeControl(id,clamp(state[key],lo,hi));
   $('tool-style').value=Object.hasOwn(config.worldShapes||{},state.preset)?state.preset:'custom';
 }
-// The Tool preset menu lists the worlds that make the shape a landform tool draws (every world, for the other buttons).
+// The Defaults from world menu (#tool-style) lists the worlds that make the shape a landform tool draws (every world, for the other buttons).
 function syncToolStyle(id) {
   const shape=entryOf(id),land=toolKind(id)==='landform';
   for (const o of $('tool-style').options) if (o.value!=='custom') o.hidden=land && !Object.hasOwn(config.worldShapes?.[o.value]||{},shape);
@@ -228,7 +230,7 @@ function updateControls() {
   $('transform-controls').hidden=pathEditing||!hasSelection||drawMode==='add';
   $('selection-hud').hidden=!selectionActive;
   $('selection-hud').classList.toggle('path-mode',pathEditing);
-  $('selection-mode').textContent=selectionActive?`${drawMode==='add'?'Add path · ':pathAdding?'Extend / branch · ':''}${NODE_NAMES[selectedNode.kind]||selectedNode.kind} #${selected+1}`:'';
+  $('selection-mode').textContent=selectionActive?`${drawMode==='add'?'Add path · ':pathAdding?'Extend / branch · ':''}${shapeName(selected)}`:'';
   for(const id of ['selection-delete','transform-mode','canvas-deselect'])$(id).disabled=!hasSelection||loading||Boolean(stroke||moving);
   for(const id of ['toggle-tools','toggle-inspector','focus-canvas'])$(id).disabled=loading||Boolean(stroke||moving);
   const transform=hasSelection?selectionTransform(selectedNode).values:null;
@@ -263,7 +265,7 @@ function updateControls() {
   const activeTool=tool,entry=tool==='move'?(nodes[selected]?.params?nodes[selected].kind:'move'):tool,kind=toolKind(entry),ids=toolIds();
   {
   heightControlRange({heightReference:shapeValue('heightReference')});stepControlRange(kind,{stepReference:shapeValue('stepReference')});
-  $('lf-elevation-control').querySelector('label').firstChild.textContent=shapeValue('heightReference')===1?'Height above sea (units) ':shapeValue('heightReference')===2?'Height above ground (units) ':'Elevation (height units) ';
+  $('lf-elevation-control').querySelector('label').firstChild.textContent=shapeValue('heightReference')===1?'Height above sea ':shapeValue('heightReference')===2?'Height above ground ':'Height ';
   const fixed=['erase','landform'].includes(kind);
   $('amount-control').hidden=fixed;
   $('amount-label').textContent=kind==='smooth' || isCover(kind)?'Strength':kind==='fissure'?'Depth':'Rise';
@@ -271,7 +273,7 @@ function updateControls() {
   $('amount').value=String(clamp(Number($('amount').value),lo,hi));
   const amountNow=Number($('amount').value);
   $('amount-value').textContent=kind==='smooth' || isCover(kind)?amountNow+'%':'+'+amountNow;
-  $('diameter-value').textContent=$('diameter').value+' units';
+  $('diameter-value').textContent=$('diameter').value+' px';
   $('roughness-value').textContent=$('roughness').value+'%';
   $('roughness-label').textContent=['erase','sand','grass','paint'].includes(kind)?'Edge freedom':'Roughness';
   // A fissure's outline is its own jaggedness; Roughness would do nothing.
@@ -315,9 +317,8 @@ function updateControls() {
   // Say what the brush controls change: the next stroke, or a selected shape.
   const editing=selected>=0 && nodes[selected]?.params;
   $('brush-panel').classList.toggle('editing',Boolean(editing));
-  // A landform names its tool, or the generic landform it shows as.
-  const named=id => id&&id!==LANDFORM_TOOL.id&&toolLabel(id)?` (${toolLabel(id)})`:'';
-  $('brush-title').textContent=editing?`Selected · ${NODE_NAMES[nodes[selected].kind]||nodes[selected].kind}${nodes[selected].kind==='landform'?named(strokeTool(nodes[selected],ids)):''} #${selected+1}`:tool==='move'?'Select':`Brush · new ${toolKind(tool)==='landform'?`landform${named(tool)}`:NODE_NAMES[tool]||tool}`;
+  // A selected shape's card carries its name; a drawing tool's says what the next stroke makes; a brush's is the brush.
+  $('brush-title').textContent=editing?shapeName(selected):tool==='move'?'Select':['landform','fissure'].includes(toolKind(tool))?`New ${toolLabel(tool)||NODE_NAMES[toolKind(tool)]}`:toolLabel(tool)||NODE_NAMES[tool]||tool;
   $('brush-scope').textContent=editing?'Shared settings for every path in this shape.':tool==='move'?'Click a shape to select and edit it.':'Settings for your new shape.';
   syncToolGroups(`${tool}:${selected}`);
   editorUI.syncTools?.(activeTool,editing?nodes[selected].kind:null,locked,featureActive);
@@ -579,7 +580,11 @@ function markChanged() { markViewChanged(false); error(); syncRocks(); }
 // (a hill on a plateau rises with it). prefix[i] keeps the surface before
 // node i, so an edit replays only from the edited node onward.
 let nodes=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
-const NODE_NAMES={landform:'Landform',sand:'Sand cover',paint:'Surface paint',grass:'Ground cover',erase:'Reset ground',ground:'Ground undulation',fissure:'Fissure',smooth:'Smooth',heights:'Height image'};
+const NODE_NAMES={landform:'Landform',sand:'Sand',paint:'Surface paint',grass:'Vegetation',erase:'Reset ground',ground:'Ground undulation',fissure:'Fissure',smooth:'Smooth',heights:'Height image'};
+// A shape's name, the same on its card, the bar on the map, the Shapes list, the map's own label and the status line: its tool's name
+// (a stroke whose tool the world lacks shows as Landform) and its place in the list, as in "Plateau 3".
+const shapeLabel=n => n?.kind==='landform'?toolLabel(strokeTool(n,toolIds()))||NODE_NAMES.landform:NODE_NAMES[n?.kind]||n?.kind||'';
+const shapeName=i => nodes[i]?`${shapeLabel(nodes[i])} ${i+1}`:'';
 // The Facet shape a landform draws: its own, or angular facets where it digs (prepareNode).
 const facetShape=q => landformDigs(q)?0:clamp(Math.round(q.facetForm||0),0,2);
 function addNode(n) {
@@ -931,7 +936,7 @@ const sculptRegion={
   drawMode:()=>drawMode,drawingKind:()=>drawMode==='add'?nodes[selected]?.kind:toolKind(tool),
   selectPathPoint:i=>{pathPoint=i;if(i>=0&&!shapePaths(nodes[selected])[pathIndex]?.includes(i))pathIndex=shapePaths(nodes[selected]).findIndex(path=>path.includes(i));updateControls();},
   addPathPoint:p=>{if(pathAdding&&pathPoint>=0)changeSelected(n=>{const added=extendPoint(n,pathPoint,regionalPoints([p])[0],pathIndex);pathPoint=added.point;pathIndex=added.path;});pathAdding=true;updateControls();},
-  select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,pickAt:pickNode,selectionLabel:i=>`${NODE_NAMES[nodes[i]?.kind]||nodes[i]?.kind} #${i+1}`,
+  select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,pickAt:pickNode,selectionLabel:shapeName,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
   drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
   setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },onUpdate:fn => { mapUpdate=fn; }
@@ -989,7 +994,7 @@ function selectNode(i) {
     for (const [key,id,,,lo,hi,,scale] of SHAPE_FIELDS) setShapeControl(id,clamp(Math.round((p[key]??worldDefault(key))*scale),lo,hi));
   }
   renderLayers(); updateControls(); schedule(false);
-  if (n) status(`Selected ${NODE_NAMES[n.kind]||n.kind} #${i+1}. Drag to transform or edit its settings.`);
+  if (n) status(`Selected ${shapeName(i)}. Drag to transform or edit its settings.`);
 }
 function editSelectedFromControls(overrides={}) {
   const n=nodes[selected]; if (!n || !n.params) return;
@@ -1014,7 +1019,7 @@ function renderLayers() {
     const item=document.createElement('li');item.draggable=true;item.dataset.index=i;
     item.className=(i===selected?'selected ':'')+(n.hidden?'is-hidden':'');
     const grip=document.createElement('span');grip.className='layer-grip';grip.textContent='⠿';grip.setAttribute('aria-hidden','true');
-    const name=document.createElement('button');name.className='layer-name';name.textContent=NODE_NAMES[n.kind]||n.kind;const count=document.createElement('span');count.className='path-count';const pc=shapePaths(n).length;count.textContent=pc?`${pc} path${pc===1?'':'s'}`:'';name.setAttribute('aria-pressed',String(i===selected));name.onclick=()=>selectNode(i===selected?-1:i);
+    const name=document.createElement('button');name.className='layer-name';name.textContent=shapeLabel(n);const count=document.createElement('span');count.className='path-count';const pc=shapePaths(n).length;count.textContent=pc?`${pc} path${pc===1?'':'s'}`:'';name.setAttribute('aria-pressed',String(i===selected));name.onclick=()=>selectNode(i===selected?-1:i);
     const number=document.createElement('span');number.className='layer-index';number.textContent=String(i+1).padStart(2,'0');
     const visibility=document.createElement('button');visibility.className='layer-visibility';visibility.textContent=n.hidden?'○':'◉';visibility.title=visibility.ariaLabel=`${n.hidden?'Show':'Hide'} ${name.textContent}`;visibility.setAttribute('aria-pressed',String(!n.hidden));visibility.onclick=()=>{selected=i;nodeAction('hide');};
     name.disabled=visibility.disabled=loading||Boolean(stroke||moving);

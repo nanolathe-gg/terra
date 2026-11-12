@@ -48,7 +48,8 @@ export function mountHelp(){
     const tool=target.dataset.tool||target.dataset.icon,shape=target.dataset.shape||tool,own=target.dataset.mapTool!==undefined,control=target.closest('.control'),source=control?.querySelector('input[type=range],select'),key=source?.id;
     const label=tool?target.getAttribute('aria-label'):control?.querySelector('label')?.cloneNode(true);if(label instanceof Element)label.querySelector('output')?.remove();
     const name=typeof label==='string'?label:label?.textContent?.trim();if(!name){hide();return;}
-    tip.replaceChildren(element('strong',''));tip.firstChild.textContent=name;
+    // A row's unit, or what it measures, is said here and not on the row (data-note).
+    tip.replaceChildren(element('strong',''));tip.firstChild.textContent=name+(control?.dataset.note?` (${control.dataset.note})`:'');
     const example=HELP_CONTROLS[key],valid=()=>owner===target&&revision===token&&!tip.hidden&&target.isConnected&&target.getClientRects().length>0;
     if(tool||example){
       const art=element('div','help-art',tool?illustration(shape):''),caption=element('small','help-caption','Illustration');tip.append(art,caption);

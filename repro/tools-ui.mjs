@@ -65,11 +65,11 @@ try {
   await shot('.tool-groups', 'toolbar-green.png');
   // Draw with Hill: the stroke names its tool, and the selection says so.
   const hillTool = lists.green.find(t => t.id === 'hill');
-  await tool('hill'); assert.equal(await title(), `Brush · new landform (${hillTool.label})`);
+  await tool('hill'); assert.equal(await title(), `New ${hillTool.label}`);
   await draw(380, 300, 640, 330);
   let ns = await nodes(); const hill = ns.length - 1;
   assert.deepEqual([ns[hill].kind, ns[hill].tool], ['landform', 'hill']);
-  assert.equal(await title(), `Selected · Landform (${hillTool.label}) #${hill + 1}`);
+  assert.equal(await title(), `${hillTool.label} ${hill + 1}`);
   // A tool that names its rock by a preset's key draws on that preset of the map's list (Hill on Smooth soil), the save holds the preset and the
   // stroke's choice, and a scene stroke with that choice is the same stroke.
   if (hillTool.rock) {
@@ -97,7 +97,7 @@ try {
   assert.equal((await nodes())[hill].tool, 'hill', 'saving a tool changes no stroke');
   await shot('.tool-groups', 'map-tool.png'); await tool('map-1'); await shot('#brush-title', 'map-tool-window.png', true);
   // Draw with it: its stroke has the hill's numbers and curves.
-  await tool('map-1'); assert.equal(await title(), 'Brush · new landform (Broad hill)');
+  await tool('map-1'); assert.equal(await title(), 'New Broad hill');
   assert.equal(await ev(`document.getElementById('tool-delete-control').hidden`), false, 'Delete shows on a map tool\'s brush');
   await draw(420, 520, 700, 560);
   ns = await nodes(); const mine = ns.length - 1;
@@ -141,7 +141,7 @@ try {
   assert.equal(await ev(`sculptDebug.state().tool`), 'landform', 'the brush this world lacks gives way to Landform');
   assert.equal(Number(await ev(`document.getElementById('diameter').value`)), 336, 'which takes its card\'s numbers');
   await shot('.tool-groups', 'toolbar-red.png');
-  await select(lone); assert.equal(await title(), `Selected · Landform #${lone + 1}`);
+  await select(lone); assert.equal(await title(), `Landform ${lone + 1}`);
   await shot('#brush-title', 'fallback.png', true);
   // It keeps its shape for good: on to Desert, whose own landform is the mesa (terraces 6), and its numbers stay as they started.
   await open('biome=desert');
@@ -157,9 +157,9 @@ try {
   assert.ok(!(await toolbar()).Shape.includes('map-1'));
   ns = await nodes(); const orphan = ns.findIndex(n => n.tool === 'map-1');
   assert.deepEqual(without(ns[orphan].params), without(carried.params), 'Delete keeps its strokes\' numbers');
-  await select(orphan); assert.equal(await title(), `Selected · Landform #${orphan + 1}`);
+  await select(orphan); assert.equal(await title(), `Landform ${orphan + 1}`);
   await click('#undo'); assert.ok((await toolbar()).Shape.includes('map-1'), 'undo brings the deleted tool back');
-  assert.equal(await title(), `Selected · Landform (Broad hill) #${orphan + 1}`, 'and its stroke shows as it again');
+  assert.equal(await title(), `Broad hill ${orphan + 1}`, 'and its stroke shows as it again');
   assert.deepEqual(errors, []);
   report.result = 'toolbars, draw, Save as tool, draw with it, undo, redo, reload, biome switch with the fallback, Delete and undo: all as expected';
 } finally {
