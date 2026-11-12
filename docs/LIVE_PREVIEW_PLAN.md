@@ -59,28 +59,33 @@ final quality, one tile at a time, and each new input throws the plan away
    geometry.
 5. The final picture and the export never depend on which previews ran.
 
-**Expected effect** (targets; LP0 to LP3 confirm them in the page):
+**Expected effect.** These are targets. The "after" cells rest on passes
+timed under Node over a scene that is not changing; in the page, during a
+drag on a paged map, a block also waits for the pages under it to be
+evaluated again, which is not measured here (LP0b measures it, and LP3 step
+2 exists to remove it).
 
 | Interaction, 16x16 map, cliff view of about 1.8 megapixels | Today | After LP2 | After LP3 | After LP5 |
 | --- | --- | --- | --- | --- |
-| Stroke drag: input to every changed part of the view current | 0.6 to 1.1 s for the whole view as quarter tiles **[measured]** | 0.1 s (one pass measured at 59 to 110 ms under Node) | under 0.1 s | |
+| Stroke drag: input to every changed part of the view current | up to 0.6 to 1.1 s, when the change spans the view (28 quarter tiles) **[measured]**; less for a small stroke | 0.1 s (one pass of the whole view: 59 to 110 ms) **[measured, static scene]** | under 0.1 s | |
 | Rock, surface or sun slider: input to whole view current | about 2.2 to 2.5 s (28 final tiles at 78 to 90 ms) **[inferred from measured tiles]**; 1.6 to 2.6 s **[recorded]** | 0.1 s at the coarse level | under 0.1 s | |
 | Color, shine or light-strength slider | 0.6 to 1.1 s **[recorded]** | 0.1 s at the coarse level | | 0.15 s at final quality **[inferred]** |
 | First gate crossing of a session | 0.7 to 1.3 s stall **[recorded]** | no stall | | |
 | Longest GPU submission that input must wait behind | a Time pass, 0.3 to 2.1 s **[measured]** | | 0.1 s (LP4) | |
 | Release to final, whole view | 2.2 s **[recorded]** | within 10% of today | | less (LP6) |
 
-**Memory.** The terrain budget's default rises from 512 MiB to 2,048 MiB
-(the owner, above). That alone lets the whole view be one preview pass on a
-16x16 map today; at 512 MiB it must be four (section 3.3). Nothing in this
-plan needs more than about 2 GiB, and more would not make it faster
-(section 8).
+**Memory.** The owner lifted the 512 MiB limit while this was written.
+With 1 GiB or more the whole view is one preview pass on a 16x16 map today;
+at 512 MiB it must be four (section 3.3). This plan proposes a default of
+2,048 MiB (a decision for the owner, section 8) and needs no more than
+that; more memory would not make it faster.
 
-**Order:** LP0 bench, LP1 dirty model, LP2 preview blocks for every
-interaction (with no compile and no long task on the input path), LP3
-cheaper blocks, LP4 bounded GPU work, LP5 color-only rerun, LP6 faster
-final. LP2 is the go/no-go: if the page does not show at least three times
-better whole-view latency than main, stop and report.
+**Order:** LP0 bench; LP0b the proof in the page, a throwaway slice and
+**the go/no-go**; LP1 dirty model; LP2 preview blocks for every interaction
+(with no compile and no long task on the input path); LP3 cheaper blocks;
+LP4 bounded GPU work; LP5 color-only rerun; LP6 faster final. If LP0b does
+not show at least three times better whole-view latency than main in the
+page, stop and report before anything is restructured.
 
 ## 2. Goal and budgets
 
@@ -88,9 +93,10 @@ better whole-view latency than main, stop and report.
 2026-11-11].** Devices with at least 4 to 8 GB of memory available; the
 owner tests on a MacBook Pro (Apple M3 Pro, 18 GiB; every number here is
 from it), an iMac and an iPad. A 16x16 map at 100% zoom. The terrain budget
-is a setting, default 2,048 MiB after LP2; the design must still work, in
-more blocks, at 512 MiB, which is what a device with 4 GB may allow one page
-(not measured: what Safari on the iPad grants is still unknown). Measure on `repro/perf.mjs map16` with
+is a setting; this plan proposes a default of 2,048 MiB from LP2 on
+(section 8). The design must still work, in more blocks, at 512 MiB, which
+may be all a device with 4 GB allows one page (what Safari on the iPad
+grants is unknown). Measure on `repro/perf.mjs map16` with
 the view the earlier baseline used (1208 x 841 art pixels) and with a large
 one (1728 x 1024, `--viewport`), on three scenes: `green-modern-2` (cliffs,
 granite, whole blocks), `red-3` (the costliest world on main) and `green-7`
@@ -259,14 +265,16 @@ look of the coarse level is the owner's call (section 8).
   and comparing the block before and after names the fields it moved
   (`ambient` moves `ambient` and nothing else). Of the 247 rows: 100 move a
   uniform when `applyKnobs` runs; 111 only once `bakeFields` writes its
-  share (`sculpt-renderer.js:1085`); 36 move none through either. Those 36
-  act through other channels: the shape context (undulation, face
-  steepness, coast ramp, frost gaps), the Time pass (Rain), the sun (set in
-  `draw`), plant cover, and rows whose feature is switched off (a shine
-  row's sharpness while its gloss is 0).
+  share (`sculpt-renderer.js:1085`); 36 move none through either.
+- Why those 36 move none is **[inferred]**, not traced row by row: the
+  script never ran `draw()`, which writes the sun and a few more; some act
+  through the shape context (undulation, face steepness, coast ramp, frost
+  gaps) or the Time pass (Rain); the rest (plant cover, flower density,
+  most Shine rows, `shoreEdge`, `paletteMix`) are unexplained here. LP1
+  accounts for each.
 
 So "what did this input change" can be computed, once every world-level
-uniform is written in one place.
+uniform is written in one place and the other channels are named.
 
 ### 3.6 What earlier branches showed [recorded]
 
@@ -337,14 +345,22 @@ records say what changed:
    pass: D. By the fragment's geometry functions (`voxelHit`, `voxelNormal`,
    `occlusion`, `visibility`, `engine-frag.wgsl:1458-1541`): E. Only by the
    rest of the fragment: F. A field's stage is the earliest of these. A
-   static reference is a superset of a real dependency, so the map errs
-   toward redoing too much, never too little.
+   static reference is a superset of what the shaders really depend on, so
+   for shader reads the map errs toward redoing too much.
 4. *Other channels are declared, and default to the earliest stage.* A
    short explicit list for inputs that are not uniforms: the shape context
-   (A), the Time knobs (B), material textures and the placement table (F),
-   the reach of `reaches()` (C: it moves every tile's input). Anything not
-   on the list and not a uniform invalidates from A.
-5. *No change, no work.* An input that moves no field and no declared
+   (A), the Time knobs (B), material textures and the placement table (F).
+   Anything not on the list and not a uniform invalidates from A.
+5. *JavaScript reads these values too, and the shader scan cannot see it.*
+   Each place where JS chooses work from a world value is declared with its
+   stage: the wear pass count from Weathering and Depth (D,
+   `sculpt-volume.js:115`); whether the loose mask runs (C,
+   `encodeLooseMask`); whether rock runoff runs (C,
+   `sculpt-rock-weather.js`); `reaches()`, which moves every tile's input
+   and the ray start (C); the plant-cover switch (C). Find them by reading
+   every use of `variant.get`, `number(`, `rockValue` and `uniformValue`
+   outside `syncWorld`; the list is short and LP1's report gives it.
+6. *No change, no work.* An input that moves no field and no declared
    channel schedules nothing. Today it re-bakes the view.
 
 **Rectangles for world changes.** A change inside one rock preset's rows of
@@ -447,7 +463,12 @@ checks for staleness between its pieces and stops.
 - **A generic set.** Build, at startup and in the background, one set of
   draw, bake and loose pipelines in which every gate is the uniform
   comparison it was written as (no constants). It is the same shader source,
-  so it is the same render path.
+  so it is the same render path. It is unbuilt: REDESIGN_PLAN's R7 expects
+  it about a quarter slower a pass **[inferred from P6's saving]**, and its
+  compile time is unknown. Measure both first. If its compile is long or its
+  passes too slow for the coarse level, fall back to **prewarming**: when a
+  pointer goes down on, or focus enters, a row whose gate is closed, build
+  the pipelines for that gate open before the value moves.
 - **Previews** use the specialized set when it is cached and the generic set
   when it is not, and never wait. **Finals** always use the specialized set
   (generic and specialized differ by 1 to 12 px of compiler drift), which
@@ -519,6 +540,26 @@ report says which budget cells main already meets.
 **Risk.** The first run against a fresh server measures nothing
 (known); CDP ports must not be reused across checks (known).
 
+### LP0b. The proof in the page (S; the go/no-go; a `prototype/*` branch that does not land)
+
+**Change.** The smallest slice that puts the central claim in Chrome, on
+today's `clear()` and `changeSeq`, with nothing restructured:
+- while `interacting()`, the plan is one coarse block over the visible
+  view (or the stroke's dirty rectangle) in place of the per-tile `want: 2`
+  entries, painted under current finals;
+- a pointer held on one rock row (`knob-faceBlockSize`) counts as
+  interacting, with one application per frame;
+- the budget raised by query (`gpuMB=2048`), and `gpuMB=512` with the block
+  cut in four.
+
+**Accepted when** LP0's bench, alternating with main on `map16` and `map4`,
+gives whole-view-current for a stroke drag and for that row, at both
+budgets, with the wait for pages reported separately from the block's own
+time. **Go** at three times better than main at the larger budget.
+Otherwise stop and report what the page adds that Node did not show.
+**Risk.** It is a prototype: no dirty model, quarter level and finals as
+today, seams unexamined. Its code is thrown away; its numbers are kept.
+
 ### LP1. The dirty model (M)
 
 **Change.** Section 4.2, with no change in what is drawn.
@@ -553,12 +594,12 @@ stay out of the comparison, `sculpt-chunk-renderer.js:254-289`). Count
 changed pixels on every check scene and report the number, even when it is
 0.
 
-### LP2. Preview blocks for every interaction (L; the go/no-go)
+### LP2. Preview blocks for every interaction (L)
 
 **Change.** Sections 4.3 to 4.6, with today's lattice input.
-0. The terrain budget's default goes to 2,048 MiB (`gpuMB`,
-   `sculpt-canvas.js:35`; the panel's field keeps its 128 to 4,096 range),
-   and `pagedBudget`'s minimum grows by the preview's working set, so the
+0. The terrain budget's default goes to the figure the owner picks (2,048
+   MiB proposed; `gpuMB`, `sculpt-canvas.js:35`; the panel's field keeps
+   its 128 to 4,096 range) and `pagedBudget`'s minimum grows by the preview's working set, so the
    pages never take the room a view pass needs. At that default the view is
    one block (section 3.3); the planner still cuts blocks, for smaller
    budgets and larger views.
@@ -580,8 +621,8 @@ set), `sculpt.js` (`setKnob`, the row handlers, `previewActive`),
 **Accepted when**, on LP0's bench, alternating with main:
 - whole-view-current p95 for a stroke drag and for a rock slider is at
   least **three times** better than main on `map16` at the new default
-  (section 3.3 predicts about 10), and at least twice at 512 MiB, where the
-  view is four blocks; if not, stop and report;
+  (section 3.3 predicts about 10 for a scene that is not changing), and at
+  least twice at 512 MiB, where the view is four blocks;
 - no phase compiles a pipeline between an input and its preview, and no
   long task appears in any drag;
 - the three cases `10477351` failed pass: a held Rain slider does not show a
@@ -597,8 +638,13 @@ set), `sculpt.js` (`setKnob`, the row handlers, `previewActive`),
   `repro/interaction` used for `80aad369`, is reported for Green, Red and
   Desert.
 **Risks.** The block seam: blocks and tiles each read their own apron, so
-there must be none; look at a block boundary on a cliff at 512 MiB. Memory:
-the report gives peak terrain memory at the default on `map16` (expected
+there must be none; look at a block boundary on a cliff at 512 MiB. Pages: a
+view block gathers more pages at once than a tile does (the caps are 9
+shape and 24 weather pages, and a feed is sized for 6;
+`sculpt-gpu-fields.js:1005,1078`), and during a drag or a shape-level World
+row every page under the block is evaluated again before the block can
+draw: measure that wait, and if it breaks the budget, LP3 step 2 moves
+ahead of the rest of LP3. Memory: the report gives peak terrain memory at the default on `map16` (expected
 about 1.0 to 1.3 GiB with a 1.8 megapixel view: fields 313 MiB, the three
 levels' working sets with shared inputs about 755, canvases and caches about
 115 **[computed from section 3.3's peaks]**), and the smallest budget at
@@ -634,13 +680,14 @@ are met.
    level), read the overflow flag without waiting, and redo the block with
    the exact count if it overflowed.
 5. **The raster.** Try one ray per image pixel at the coarse level only, and
-   keep it only if the color bias stays within what the owner accepts on
-   the toggle page; `80aad369` added the 2 x 2 raster to fix exactly that.
+   keep it only if the color bias stays within what the owner accepts on a
+   before-and-after page; `80aad369` added the 2 x 2 raster to fix exactly
+   that.
 
 **Accepted when** whole-view-current p95 meets 100 ms for strokes and World
 rows at the default budget, a 1,728 x 1,024 view on `map16` is one coarse
-block at 512 MiB, and everything LP2 accepted still holds. **Risk.** A lattice at another spacing
-moves thin features (a 2 px ridge); the preview must still put cliffs and
+block at 512 MiB, and everything LP2 accepted still holds.
+**Risk.** A lattice at another spacing moves thin features (a 2 px ridge); the preview must still put cliffs and
 shores where the final does: overlay the coarse preview's height contours on
 the final's for the three scenes and report the largest offset.
 
@@ -681,8 +728,8 @@ record to `pagedBudget`'s minimum.
 equals a full re-bake byte for byte on every check scene, and export bytes
 are unchanged apart from the split's reported drift.
 **Risks.** The record's memory (57 to 85 MiB) is counted in the budget and
-dropped first when a smaller budget is set. A dependency that sleeps until a feature wakes it:
-the map is static and conservative, and step 0 runs with the features on.
+dropped first when a smaller budget is set. A dependency that sleeps until
+a feature wakes it: the map is static and conservative, and step 0 runs with the features on.
 
 ### LP6. A faster final (M-L, in units; after the above)
 
@@ -690,15 +737,18 @@ Unchanged from REDESIGN_PLAN's R8, R8b and R6, with this plan's findings:
 - R8's four units, one at a time, each with its sheet: closed-gate bricks
   and the march fix; wear where it shows; the thin shell (which also stores
   fewer bricks, the precondition for the next point).
-- **Final tile size, first, because it is nearly free once LP4 can stop a
-  tile between pieces.** Sixteen 256 px tiles build 1.45 times the bricks
-  and 2.6 to 6 times the relief bake of four 512 px tiles, and a window took
-  1.9 to 2.3 times as long on four scenes (section 3.2, nothing split). At
-  the new default a final 512 tile on a 16x16 map is one piece (section
-  3.3). The view's final tiles go from 256 to 512 px if the bench confirms
-  the gain on `map16` and the first final tile after a pause still meets its
-  0.6 s. The picture does not depend on the tile size beyond the 16 pixels
-  `repro/render.mjs` already allows; the scenes' own tile size is unchanged.
+- **Final tile size: measure first.** Sixteen 256 px tiles build 1.45
+  times the bricks and 2.6 to 6 times the relief bake of four 512 px tiles,
+  and a window took 1.9 to 2.3 times as long on four scenes of a 4x4 map
+  (section 3.2, nothing split). On the 16x16 map the evidence is weaker:
+  one unsplit 512 tile took 252 to 305 ms against 76 to 92 ms for the one
+  256 tile of its four that was timed (section 3.3), so the gain there is
+  somewhere between none and 1.4 times and is not established. It also
+  makes the first final tile after a pause later. Change the view's final
+  tiles from 256 to 512 px only if the bench shows a gain on `map16` and
+  the focus tile still meets its 0.6 s. The picture does not depend on the
+  tile size beyond the 16 pixels `repro/render.mjs` already allows; the
+  scenes' own tile size is unchanged.
 - No readback at final (R6's fixed pool).
 - The surface atlas (R5 step 1) only if the relief bake still matters after
   the tile size is settled.
@@ -752,26 +802,34 @@ branch does not edit it.
 2. **Refinement starts by itself** after a pause (about 250 ms), nearest
    the last pointed place first. The alternative, a bake the artist starts,
    needs a control (below).
-3. **Speed work was parked behind realism** (2026-11-09). This brief reads
+3. **The default terrain budget**: 2,048 MiB as proposed below, or
+   another figure.
+4. **Speed work was parked behind realism** (2026-11-09). This brief reads
    as unparking it; LP0 to LP2 can run beside realism work because they
    move no pixel, but they do rewrite the canvas scheduler that every
    realism branch renders through.
 
-**Memory: settled by the owner on 2026-11-11, and the answer to "do we
-need even more".** The default goes to 2,048 MiB in LP2. What the memory
-buys, measured in section 3.3: the view as one preview pass (about ten
-times today's preview, against four to five times in blocks at 512 MiB), an
-unsplit final 512 tile, and a working set per level. Expected use on a
-16x16 map with a 1.8 megapixel view is 1.0 to 1.3 GiB, and about 1.6 to
-2 GiB for an iMac-sized view of 2.9 megapixels **[computed]**. More than
-that is not asked for, because what stays slow after this plan is GPU time
-building the solid, not memory. Two things more memory could buy, neither
-recommended: keeping the solid of the whole view between edits (0.5 to
-1 GiB on cliffs) would make only the two sun rows live at final quality;
-and holding a 16x16 map unpaged (about 1.2 GiB of fields and 2.2 GiB while
-a Time pass runs **[computed from the per-cell sizes in
-`sculpt-gpu-fields.js` and `sculpt.js`]**) would remove page waits while
-panning, which is not what makes editing feel slow. Unknown and owed: what
+**Memory, and the answer to "do we need even more".** The owner lifted the
+512 MiB limit on 2026-11-11; the number is still theirs to pick. What was
+measured (section 3.3): 1,024 and 1,536 MiB both give the view as one
+preview pass (about ten times today's preview on a scene that is not
+changing, against four to five times in blocks at 512 MiB) and an unsplit
+final 512 tile. What is computed from those runs' peaks, not measured in a
+session: with a working set kept per level, a 1.8 megapixel view on a 16x16
+map uses about 1.0 to 1.3 GiB, and an iMac-sized view of 2.9 megapixels
+about 1.6 to 2 GiB. The page fields do not grow to fill a larger budget
+(they are capped at 9 shape and 24 weather pages, 313 MiB in the measured
+scene; a scene whose strokes need a wider page ring holds more). Hence the
+proposal: **a default of 2,048 MiB, falling back to blocks below it**; on
+a device with 4 GB, 1,024 MiB still gives the one-pass view at 1.8
+megapixels. More than 2 GiB is not asked for, because what stays slow after
+this plan is GPU time building the solid, not memory. Two things more
+memory could buy, neither recommended: keeping the solid of the whole view
+between edits (0.5 to 1 GiB on cliffs, at about 1 KB a brick) would make
+only the two sun rows live at final quality; and holding a 16x16 map
+unpaged (its Time pass alone needs 2.2 GiB while it runs, at the 120 bytes a
+cell `sculpt.js:1100` counts, before the fields themselves) would remove
+page waits while panning, which is not what makes editing feel slow. Unknown and owed: what
 Safari on the iPad actually grants a page.
 
 **Proposed, not in any card** (rule 3: each is a new control):
