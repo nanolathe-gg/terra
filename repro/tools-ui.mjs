@@ -1,0 +1,143 @@
+// A world's shape tools and a map's own (T1) through the editor, in Chrome on your own server.
+//   node repro/tools-ui.mjs --server http://127.0.0.1:<yours> --port <cdp> [--out DIR]
+// Green's toolbar (Landform first, the world's thirteen, Fissure last in Shape; four in Water); draw with Hill; Save the selected hill as a tool
+// (its own name, icon and color: it joins the Shape group after the world's tools); draw with it (the same numbers as the hill it came from);
+// undo and redo both; reload (the autosave) to the same tools, strokes and pixels; switch to Red Planet: its toolbar, the map's tool carried
+// with the map, the hill taking Red's numbers where it was not edited, and a stroke whose tool Red lacks showing as Landform with every number
+// kept (no world lacks a tool yet, so that stroke's tool is one no world has, written into the working copy as another world would leave it);
+// then Delete the map's tool (its stroke keeps its numbers and shows as Landform) and undo that. Writes screenshots (toolbar-green.png,
+// toolbar-red.png, save-as-tool.png, map-tool.png, fallback.png) and report.json into DIR.
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {mkdirSync, writeFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {cdpPortFree} from './cdp-port.mjs';
+const args = process.argv.slice(2), opt = (k, d) => args.includes(k) ? args[args.indexOf(k) + 1] : d;
+const server = opt('--server', ''), port = Number(opt('--port', 0)), out = opt('--out', '/private/tmp/terraform-tools-ui');
+if (!server || !port) { console.error('tools-ui.mjs: give --server (your own sculpt.py) and --port (your CDP port)'); process.exit(2); }
+await cdpPortFree(port); mkdirSync(out, {recursive: true});
+const browser = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
+  `--user-data-dir=${join(out, 'profile-' + Date.now())}`, '--window-size=1440,900', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const WORLD = ['landform', 'plateau', 'hill', 'mountain', 'ramp', 'valleyV', 'valleyU', 'valleyT', 'crater', 'crystal'];
+let ws; const report = {};
+try {
+  for (let i = 0; i < 100 && !ws; i++) { try { const tab = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(t => t.type === 'page'); if (tab) ws = new WebSocket(tab.webSocketDebuggerUrl); } catch {} if (!ws) await sleep(150); }
+  await new Promise(r => ws.onopen = r);
+  let id = 0; const pending = new Map(), errors = [];
+  ws.onmessage = e => { const m = JSON.parse(e.data); if (m.id) { pending.get(m.id)?.(m); pending.delete(m.id); } if (m.method === 'Runtime.exceptionThrown') errors.push(m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text); if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') errors.push(m.params.args.map(a => a.value ?? a.description).join(' ')); };
+  const send = (method, params = {}) => new Promise(r => { const n = ++id; pending.set(n, r); ws.send(JSON.stringify({id: n, method, params})); });
+  const ev = async expression => { const r = await send('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true, userGesture: true}); if (r.result?.exceptionDetails) throw Error(JSON.stringify(r.result.exceptionDetails)); return r.result.result.value; };
+  const ready = async () => { for (let i = 0; i < 480; i++) { if (await ev('!!window.sculptCanvas&&!document.getElementById("map-export").disabled')) { await ev('sculptCanvas.idle()'); return; } const e = await ev(`document.getElementById('error')?.textContent`); if (e) throw Error(e); await sleep(150); } throw Error('Editor did not become ready: ' + errors.join('\n')); };
+  const open = async query => { await send('Page.navigate', {url: `${server}/sculpt.html?${query}&mapX=4&mapY=4&gpuMB=512&heapMB=1536`}); await sleep(500); await ready(); };
+  const set = async (elementId, value, event = 'input') => { await ev(`(()=>{const e=document.getElementById(${JSON.stringify(elementId)});e.value=${JSON.stringify(String(value))};e.dispatchEvent(new Event(${JSON.stringify(event)},{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`); await ready(); };
+  const click = async selector => { await ev(`document.querySelector(${JSON.stringify(selector)}).click()`); await sleep(50); await ready(); };
+  const tool = name => click(`[data-tool="${name}"]`);
+  const nodes = () => ev('sculptDebug.nodes()');
+  const toolbar = () => ev(`Object.fromEntries(['Shape','Water'].map(g=>[g,[...document.querySelector('[aria-label="'+g+' tools"]').querySelectorAll('[data-tool]')].map(b=>b.dataset.tool)]))`);
+  const title = () => ev(`document.getElementById('brush-title').textContent`);
+  const mouse = (type, x, y) => send('Input.dispatchMouseEvent', {type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1});
+  // A stroke with the mouse, as an artist draws one; it leaves the new shape selected.
+  const draw = async (x0, y0, x1, y1) => { await send('Input.dispatchMouseEvent', {type: 'mouseMoved', x: x0, y: y0}); await mouse('mousePressed', x0, y0); for (let t = .25; t <= 1; t += .25) { await mouse('mouseMoved', x0 + (x1 - x0) * t, y0 + (y1 - y0) * t); await sleep(30); } await mouse('mouseReleased', x1, y1); await sleep(200); await ready(); };
+  const select = async i => { await click('#tab-objects'); await click(`#layers li[data-index="${i}"] .layer-name`); await click('#tab-tool'); };
+  const capture = () => ev(`(async()=>{const b=await sculptCanvas.debugBake({x:200,y:200,width:768,height:768}),c=document.createElement('canvas');c.width=c.height=768;c.getContext('2d').drawImage(b,0,0);return c.toDataURL();})()`);
+  // A screenshot of one element, scrolled to the top of its pane (at most the window's height), or of the whole window with it in view.
+  const shot = async (selector, name, whole = false, pad = 6) => {
+    await ready();
+    const r = await ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});const d=e.closest('details');if(d)d.open=true;for(let p=e.parentElement;p;p=p.parentElement){const o=getComputedStyle(p).overflowY;if((o==='auto'||o==='scroll')&&p.scrollHeight>p.clientHeight){p.scrollTop+=e.getBoundingClientRect().top-p.getBoundingClientRect().top-8;break;}}for(const el of [document.scrollingElement,...document.querySelectorAll('.app,.world-panel,.shape-panel')])el.scrollTop=0;const b=e.getBoundingClientRect(),y=Math.max(0,b.y-${pad});return {x:Math.max(0,b.x-${pad}),y,width:b.width+${2 * pad},height:Math.min(b.height+${2 * pad},innerHeight-y)};})()`);
+    await sleep(600);
+    const s = await send('Page.captureScreenshot', whole ? {format: 'png'} : {format: 'png', clip: {...r, scale: 1}});
+    if (!s.result) throw Error(`screenshot of ${selector}: ${JSON.stringify(s.error)}`);
+    writeFileSync(join(out, name), Buffer.from(s.result.data, 'base64'));
+  };
+  const without = p => Object.fromEntries(Object.entries(p).filter(([k]) => !['river'].includes(k)));
+  await send('Runtime.enable'); await send('Page.enable');
+  await send('Emulation.setDeviceMetricsOverride', {width: 1440, height: 900, deviceScaleFactor: 1, mobile: false});
+  await open('biome=green');
+  await ev(`document.getElementById('seed-vary').checked=false;document.getElementById('seed-vary').dispatchEvent(new Event('change',{bubbles:true}));true`);
+  // Green's toolbar.
+  report.green = await toolbar();
+  assert.deepEqual(report.green, {Shape: [...WORLD, 'fissure'], Water: ['deep', 'shallow', 'river', 'braided']});
+  await shot('.tool-groups', 'toolbar-green.png');
+  // Draw with Hill: the stroke names its tool, and the selection says so.
+  await tool('hill'); assert.equal(await title(), 'Brush · new landform (Hill)');
+  await draw(380, 300, 640, 330);
+  let ns = await nodes(); const hill = ns.length - 1;
+  assert.deepEqual([ns[hill].kind, ns[hill].tool], ['landform', 'hill']);
+  assert.equal(await title(), `Selected · Landform (Hill) #${hill + 1}`);
+  // Widen it (an edit the switch keeps), then Save it as a tool: Broad hill, the mountain icon, an orange.
+  await set('lf-width-vary', 60);
+  assert.equal(await ev(`document.getElementById('tool-save').hidden`), false, 'Save as tool shows in a selected shape\'s options');
+  assert.equal(await ev(`document.getElementById('tool-save-name').value`), 'Hill 2', 'it starts with a name of its own');
+  await set('tool-save-name', 'Broad hill'); await click('[data-icon-choice="mountain"]'); await set('tool-save-color', '#d08050');
+  await shot('#tool-save', 'save-as-tool.png'); await shot('#tool-save', 'save-as-tool-window.png', true);
+  await click('#tool-save-button');
+  const saved = await ev('sculptDebug.sketch().tools');
+  assert.deepEqual(saved.map(t => [t.id, t.label, t.icon, t.color, t.group, t.shape]), [['map-1', 'Broad hill', 'mountain', '#d08050', 'shape', 'hill']]);
+  report.withTool = await toolbar();
+  assert.deepEqual(report.withTool.Shape, [...WORLD, 'map-1', 'fissure'], 'the map\'s tool joins its group after the world\'s tools');
+  assert.equal((await nodes())[hill].tool, 'hill', 'saving a tool changes no stroke');
+  await shot('.tool-groups', 'map-tool.png'); await tool('map-1'); await shot('#brush-title', 'map-tool-window.png', true);
+  // Draw with it: its stroke has the hill's numbers and curves.
+  await tool('map-1'); assert.equal(await title(), 'Brush · new landform (Broad hill)');
+  assert.equal(await ev(`document.getElementById('tool-delete-control').hidden`), false, 'Delete shows on a map tool\'s brush');
+  await draw(420, 520, 700, 560);
+  ns = await nodes(); const mine = ns.length - 1;
+  assert.equal(ns[mine].tool, 'map-1');
+  assert.deepEqual(without(ns[mine].params), without(ns[hill].params), 'the new tool draws the selected shape\'s numbers, curves and rock');
+  report.params = {widthVary: ns[mine].params.widthVary, wander: ns[mine].params.wander};
+  const drawn = await capture();
+  // Undo the stroke and the tool; redo both.
+  await click('#undo'); assert.equal((await nodes()).length, mine);
+  await click('#undo'); assert.equal(await ev('sculptDebug.sketch().tools'), undefined); assert.ok(!(await toolbar()).Shape.includes('map-1'), 'undo takes the tool away');
+  await click('#redo'); assert.ok((await toolbar()).Shape.includes('map-1'), 'redo brings it back');
+  await click('#redo'); ns = await nodes(); assert.equal(ns.length, mine + 1); assert.equal(ns[mine].tool, 'map-1');
+  assert.equal(await capture(), drawn, 'undo and redo: the same pixels');
+  // Save (the autosave) and reload.
+  const before = await nodes(); await sleep(1200);
+  await open('biome=green');
+  assert.deepEqual((await ev('sculptDebug.sketch().tools')).map(t => t.id), ['map-1']);
+  assert.deepEqual((await nodes()).map(n => n.tool), before.map(n => n.tool));
+  assert.ok((await toolbar()).Shape.includes('map-1'));
+  assert.equal(await capture(), drawn, 'a reload gives the same pixels');
+  // Another world's working copy: a stroke whose tool no world has (as a world without Hill would leave a hill), selected as the brush with its card.
+  // Written from a page of the same server that is not the editor, so the editor's own autosave does not overwrite it as the page is left.
+  await send('Page.navigate', {url: `${server}/services.json`}); await sleep(800);
+  await ev(`(()=>{const k='terraform-working-map-v1',w=JSON.parse(localStorage.getItem(k));const n=w.nodes.findIndex(n=>n.tool==='hill');w.nodes[n].tool='mesa';w.tool='mesa';w.toolSettings.mesa={...w.toolSettings.hill,diameter:336,preset:'custom'};localStorage.setItem(k,JSON.stringify(w));return n;})()`);
+  // Switch to Red Planet: its toolbar, the map's tool with the map, the fallback.
+  await open('biome=red');
+  report.red = await toolbar();
+  assert.deepEqual(report.red, {Shape: [...WORLD, 'map-1', 'fissure'], Water: ['deep', 'shallow', 'river', 'braided']});
+  ns = await nodes();
+  const lone = ns.findIndex(n => n.params?.radius === before[hill].params.radius && n.params?.widthVary === before[hill].params.widthVary && n.tool !== 'map-1');
+  assert.equal(ns[lone].tool, 'landform', 'a stroke whose tool the new world lacks shows as Landform');
+  assert.deepEqual(without(ns[lone].params), without(before[hill].params), 'with every number as it was');
+  const carried = ns.find(n => n.tool === 'map-1');
+  assert.deepEqual(without(carried.params), without(before[mine].params), 'the map\'s tool goes with the map, and its stroke keeps its numbers');
+  assert.equal(await ev(`sculptDebug.state().tool`), 'landform', 'the brush this world lacks gives way to Landform');
+  assert.equal(Number(await ev(`document.getElementById('diameter').value`)), 336, 'which takes its card\'s numbers');
+  await shot('.tool-groups', 'toolbar-red.png');
+  await select(lone); assert.equal(await title(), `Selected · Landform #${lone + 1}`);
+  await shot('#brush-title', 'fallback.png', true);
+  // Today's carry where the world has the tool: a hill drawn on Green takes Red's hill where unedited. Draw one more on Green to see it.
+  await open('biome=green'); await tool('hill'); await draw(700, 260, 900, 280); const greenHill = (await nodes()).at(-1).params;
+  await sleep(1200); await open('biome=red');
+  const redHill = (await nodes()).at(-1);
+  assert.deepEqual([redHill.tool, greenHill.wander, redHill.params.wander, redHill.params.widthVary], ['hill', 10, 34, .3], 'Red\'s hill numbers where the stroke was not edited');
+  // Delete the map's tool: its stroke keeps its numbers and shows as Landform; undo brings the tool back.
+  await tool('map-1'); await click('#tool-delete');
+  assert.ok(!(await toolbar()).Shape.includes('map-1'));
+  ns = await nodes(); const orphan = ns.findIndex(n => n.tool === 'map-1');
+  assert.deepEqual(without(ns[orphan].params), without(carried.params), 'Delete keeps its strokes\' numbers');
+  await select(orphan); assert.equal(await title(), `Selected · Landform #${orphan + 1}`);
+  await click('#undo'); assert.ok((await toolbar()).Shape.includes('map-1'), 'undo brings the deleted tool back');
+  assert.equal(await title(), `Selected · Landform (Broad hill) #${orphan + 1}`, 'and its stroke shows as it again');
+  assert.deepEqual(errors, []);
+  report.result = 'toolbars, draw, Save as tool, draw with it, undo, redo, reload, biome switch with the fallback, Delete and undo: all as expected';
+} finally {
+  writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 2));
+  try { ws?.close(); } catch {}
+  browser.kill();
+}
+console.log(JSON.stringify(report));
+process.exit(0);
