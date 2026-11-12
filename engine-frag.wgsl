@@ -1592,7 +1592,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.shadeDepth < 1.0) { shading = mix(1.0, shading, u.shadeDepth); lightTint = mix(vec3f(1.0), lightTint, u.shadeDepth); }
     // B4: the rock's thickness along the sun's line, for a rock that deepens with it or lets light through (nothing runs for opaque rock).
     var chord = 0.0;
-    if (u.rock[rs & rockMask].absorbDepth > 0.0) { chord = sunChord(hit, normal); }
+    if (u.rock[rs & rockMask].absorbDepth > 0.0 || u.rock[rs & rockMask].lightThrough > 0.0) { chord = sunChord(hit, normal); }
+    // B4: light through thin rock. On a face turned from the sun, the sun that crosses the rock to it (less the thicker the rock: e^(-t/12), so a
+    // blade or an edge glows and a core does not), coloured as the rock filters it, joins the face's light as a share of its own, as the sun's
+    // and the sky's shares do. Relief beyond the rock toward the sun is not tested (the prototype's limit).
+    if (u.rock[rs & rockMask].lightThrough > 0.0) {
+        let through = 0.95 * u.rock[rs & rockMask].lightThrough * max(0.0, -dot(normal, u.light)) * exp(-chord / 12.0) / flatLight;
+        let filtered = absorbFilter(rs, chord) * u.sunColor / max(flatTintLuma, 0.05);
+        lightTint = (lightTint * shading + filtered * through) / max(shading + through, 0.0001);
+        shading += through;
+    }
     // S4 (Archipelago's domes): a crease, where the authored height lies below its rings 6 and 12 px out (a gully's floor, a valley's), loses light
     // whatever its facing, after the directional shading is scaled, so gullies read on a world that keeps little of it. A plane or a crest gives 0.
     if (u.creaseShade > 0.0 && h > u.sea) {
