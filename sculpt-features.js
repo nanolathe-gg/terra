@@ -2,6 +2,7 @@
 // from which sculpt-feature-gen.js draws every variant, lit by the map's light. Placements belong to the map, never to its baked terrain
 // art. Deposits and vents are painted into the ground: the view draws them from the export art under them, with the export's painter.
 import {GROUND_KINDS,FILL_KINDS,LABELS,PLURALS,MAX_VARIANTS,worldKinds,normalizeSet,variants as kindVariants,pickVariant,typeLabel,normalizePlacement,hash32,MAX_RECIPES,recipeId,makeRecipe,featureCatalog,FORMS,controlRequirement} from './sculpt-feature-set.js';
+const MAX_STARTS=10;   // TA's limit of start positions on a map
 const CELL=16,PATCH=128,DEFAULT_FILL={kind:'tree',region:'brush',density:15,clustering:.5,gap:1,seed:2701,margin:96,radius:128};
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 const key=p => p.kind+'@'+p.x+','+p.z;
@@ -63,7 +64,7 @@ export async function mountMapFeatures(api) {
   const defaults=() => defaultStarts(map);
   let set=normalizeSet(config.featureSet,config),placements=[],starts=defaults(),fill={...DEFAULT_FILL},generated=new Set(),mode='',placeKind='deposit',placeVariant=-1,selectedStart=0,rolls=0;
   let selection=new Set(),gesture=null,hover=null,space=false,message='';
-  const panPointers=new Set(),controls=$('map-features-controls'),buttons=new Map([...doc.querySelectorAll('[data-feature-mode]')].map(b => [b.dataset.featureMode,b]));
+  const panPointers=new Set(),controls=$('map-features-controls'),kindTabs=[...doc.querySelectorAll('[data-feature-kind]')],buttons=new Map([...doc.querySelectorAll('[data-feature-mode]')].map(b => [b.dataset.featureMode,b]));
   const enabled=() => api.enabled();
   const status=text => { message=text; $('feature-state').textContent=text; };
   const guard=() => { if (enabled()) return true; status('Map editing is unavailable while terrain is loading or export is running.'); return false; };
@@ -259,7 +260,7 @@ export async function mountMapFeatures(api) {
     $('feature-duplicate-recipe').disabled=set[placeKind].recipes.length>=MAX_RECIPES;
     const used=placements.some(p => p.kind===placeKind && recipeId(p.v)===entry.id);
     $('feature-remove-recipe').disabled=used || set[placeKind].recipes.length<=1;
-    $('feature-remove-recipe').title=used?'Remove this recipe’s placed features first.':set[placeKind].recipes.length<=1?'Keep at least one recipe of each kind.':'';
+    $('feature-remove-recipe').title=used?'Remove this style’s placed features first.':set[placeKind].recipes.length<=1?'Keep at least one style of each kind.':'';
     if(doc.activeElement!==$('feature-recipe-name'))$('feature-recipe-name').value=entry.name;
     const firstVariant=activeList()[0], first=firstVariant?.params || {}, source=entry.data.types[firstVariant?.type] || {};
     const nominal=k => source.vary?.[k] ? (source.vary[k][0]+source.vary[k][1])/2 : source.params?.[k];
@@ -282,6 +283,10 @@ export async function mountMapFeatures(api) {
   function update() {
     controls.disabled=!enabled();
     for (const [name,button] of buttons) { button.setAttribute('aria-pressed',String(mode===name)); button.disabled=name==='fill' && !FILL_KINDS.some(k => kinds.includes(k)); button.title=button.disabled?'Fill places generated trees, shrubs and rocks; this world has none yet.':''; }
+    // Starts is its own tool on the rail: the card takes its name, and the Place / Erase / Fill switch steps aside.
+    $('map-features-title').textContent=mode==='starts'?'Start positions':'Features'; doc.querySelector('.feature-modes').hidden=mode==='starts';
+    $('start-count').hidden=mode!=='starts'; $('start-count').textContent=`${starts.length} of ${MAX_STARTS}`;
+    for (const tab of kindTabs) { const kind=tab.dataset.featureKind,off=!kinds.includes(kind); tab.setAttribute('aria-checked',String(kind===placeKind)); tab.disabled=off; tab.title=off?`No generated ${PLURALS[kind]} for this world yet.`:LABELS[kind]; }
     $('feature-place').hidden=mode!=='place';
     $('feature-starts').hidden=mode!=='starts';
     $('feature-fill').hidden=mode!=='fill'; if (mode==='fill') $('feature-fill').open=true;
@@ -316,7 +321,7 @@ export async function mountMapFeatures(api) {
     const host=$('feature-variants'),list=activeList(),sun=light(),key0=placeKind+JSON.stringify(activeRecipe())+placeVariant+lightKey(sun);
     if (host.dataset.key!==key0 || host.children.length!==list.length+1) {
       host.dataset.key=key0;
-      const random=doc.createElement('button'); random.type='button'; random.textContent='Random'; random.title='Each click picks a variant at random, from this recipe'; random.setAttribute('aria-pressed',String(placeVariant<0)); random.onclick=() => { placeVariant=-1; update(); };
+      const random=doc.createElement('button'); random.type='button'; random.textContent='Random'; random.title='Each click picks a variant at random, from this style'; random.setAttribute('aria-pressed',String(placeVariant<0)); random.onclick=() => { placeVariant=-1; update(); };
       host.replaceChildren(random,...list.map(v => {
         const b=doc.createElement('button'); b.type='button'; b.dataset.variant=v.index; b.setAttribute('aria-pressed',String(placeVariant===v.index));
         b.title=`Variant ${v.localIndex+1}${typeLabel(v.kind,v.params)?' · '+typeLabel(v.kind,v.params):''}`; b.setAttribute('aria-label',b.title);
@@ -391,6 +396,8 @@ export async function mountMapFeatures(api) {
   function clearSelection(notify=true) { if (!selection.size) return; selection=new Set(); if (notify) selectionChanged(); else refreshSelection(); }
 
   for (const [name,button] of buttons) button.onclick=() => activate(name);
+  // The kind tabs press the list behind them (#feature-kind), so its guard applies.
+  for (const tab of kindTabs) tab.onclick=() => { const list=$('feature-kind'); list.value=tab.dataset.featureKind; list.dispatchEvent(new Event('change')); };
   $('feature-kind').onchange=event => { if (!guard()) { update(); return; } placeKind=event.target.value; placeVariant=-1; update(); };
   $('feature-recipe').onchange=event => {if(!guard())return;activeRecipes[placeKind]=Number(event.target.value);placeVariant=-1;update();};
   $('feature-recipe-name').onchange=event => {if(!changeSet(placeKind,{name:event.target.value}))update();};
@@ -439,7 +446,7 @@ export async function mountMapFeatures(api) {
     const resized=moved.filter((p,i) => p && footprint(p).some((size,j) => size!==oldFootprints[i][j]));
     const mask=resized.some(p => generated.has(key(p)))?terrainMask():null;
     if(moved.some(p => !p) || resized.some(p => !inBounds(p) || moved.some(q => q!==p && overlaps(p,q))) || resized.some(p => generated.has(key(p)) && (!gentleFootprint(p,mask) || nearMargin(p,fill.margin,moved) || moved.some(q => q!==p && overlaps(p,q,fill.gap))))) {
-      set=previous; status('This recipe would make placed features overlap, leave the map, or violate fill placement rules. Move those features before changing its footprint.'); update(); return false;
+      set=previous; status('This style would make placed features overlap, leave the map, or violate fill placement rules. Move those features before changing its footprint.'); update(); return false;
     }
     placements=moved; selection=new Set(oldPlacements.flatMap((p,i) => selection.has(p)?[moved[i]]:[]));
     if(!activeList().some(v => v.index===placeVariant))placeVariant=-1;
@@ -529,7 +536,7 @@ export async function mountMapFeatures(api) {
     if (!guard()) return false;
     const p={x:Math.round(x),z:Math.round(z)};
     if (!validStart(p)) { status('A start must lie inside the play area.'); return false; }
-    if (starts.length>=10) { status('A map can have at most 10 starts. Move or remove an existing start.'); return false; }
+    if (starts.length>=MAX_STARTS) { status(`A map can have at most ${MAX_STARTS} starts. Move or remove an existing start.`); return false; }
     if (starts.some(s => s.x===p.x && s.z===p.z)) { status('Another start is already at that position.'); return false; }
     starts.push(p); selectedStart=starts.length-1; const trimmed=trimGenerated(); placements=trimmed.kept;
     changed(`Added start ${selectedStart+1}${trimmed.removed?`; cleared ${trimmed.removed} fill features inside its margin`:''}.`); return true;
@@ -765,7 +772,8 @@ export async function mountMapFeatures(api) {
     }
     if (!mode) return;
     if ((event.metaKey||event.ctrlKey) && event.key.toLowerCase()==='z') { deactivate(); return; }
-    if (event.key==='Escape') { stop(event); deactivate(); }
+    if (event.key==='Escape') { if (doc.querySelector('#map-features-panel details.top-menu[open]')) return;   // the open menu closes first (sculpt-ui.js closeTop)
+      stop(event); deactivate(); }
     else if (['Delete','Backspace'].includes(event.key)) { stop(event); if (!event.repeat && mode==='starts') removeStart(selectedStart); }
   },true);
   doc.addEventListener('keyup',event => { if (event.code==='Space') space=false; },true);
@@ -910,5 +918,5 @@ export async function mountMapFeatures(api) {
     stats:() => ({imageBytes:[...sprites.values()].reduce((n,e) => n+(e.body?e.body.w*e.body.h*4:0)+(e.shadow?e.shadow.w*e.shadow.h*4:0),0)+[...stamps.values()].filter(s => s.bitmap).length*PATCH*PATCH*4,
       sprites:sprites.size,stamps:stamps.size,grounds:{fitted:[...grounds.values()].filter(g => g.rgba && !g.stale).length,waiting:[...grounds.values()].filter(g => g.stale && !g.failed).length,failed:[...grounds.values()].filter(g => g.failed).length}}),
     anchors:() => placements.filter(p => GROUND_KINDS.includes(p.kind)).map(p => ({kind:p.kind,x:p.x,z:p.z,origin:exactOrigin(p)})),
-    get placements(){return placements.map(p => ({...p}));},get selectionCount(){return selection.size;},get hint(){return $('feature-help').textContent;},get active(){return Boolean(mode);},get busy(){return Boolean(gesture);},get status(){return message;}};
+    get placements(){return placements.map(p => ({...p}));},get selectionCount(){return selection.size;},get hint(){return $('feature-help').textContent;},get active(){return Boolean(mode);},get mode(){return mode;},get busy(){return Boolean(gesture);},get status(){return message;}};
 }

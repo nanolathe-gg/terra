@@ -13,7 +13,7 @@ const controlHelp={
   'knob-lushness':'Changes how much vegetation the ground supports. On materials with flowers, richer ground can grow more flower patches.',
 };
 
-const toolHelp={landform:'A landform from the model\'s own starting numbers. Every landform setting is yours to shape.',plateau:'A broad, level top with steep sides. Draw its footprint, then shape the section below.',hill:'A rounded ridge with a gentle crest. The section sets its silhouette.',mountain:'A narrow, pointed crest. Draw a path to make a mountain range.',ramp:'An incline along a path. Edit length vs. height to control the climb.',deep:'Cut below sea level to make deep water.',shallow:'Cut a shallow shelf beneath the water.',valleyV:'A narrow, V-shaped cut into the terrain.',valleyU:'A broad valley with a rounded floor.',valleyT:'A valley with steps along its sides.',river:'A water channel following the path you draw. Bends build sand bars along their inside banks.',braided:'A mostly dry gravel bed with thin threads of water that split and rejoin around its bars.',crater:'A bowl with a raised rim.',fissure:'A narrow fracture cut into the ground.',crystal:'Clusters of faceted crystals, columns or blocks.',smooth:'Soften changes in height beneath the brush.',erase:'Bring terrain back toward the base ground.',sand:'Paint sand coverage onto the terrain.',grass:'Restore ground cover beneath the brush.',paint:'Paint materials and local surface effects with a dedicated brush.',move:'Select a shape to edit its curves, settings, paths or transform.',features:'Place map features and player start positions.'};
+const toolHelp={landform:'A landform from the model\'s own starting numbers. Every landform setting is yours to shape.',plateau:'A broad, level top with steep sides. Draw its footprint, then shape the section below.',hill:'A rounded ridge with a gentle crest. The section sets its silhouette.',mountain:'A narrow, pointed crest. Draw a path to make a mountain range.',ramp:'An incline along a path. Edit length vs. height to control the climb.',deep:'Cut below sea level to make deep water.',shallow:'Cut a shallow shelf beneath the water.',valleyV:'A narrow, V-shaped cut into the terrain.',valleyU:'A broad valley with a rounded floor.',valleyT:'A valley with steps along its sides.',river:'A water channel following the path you draw. Bends build sand bars along their inside banks.',braided:'A mostly dry gravel bed with thin threads of water that split and rejoin around its bars.',crater:'A bowl with a raised rim.',fissure:'A narrow fracture cut into the ground.',crystal:'Clusters of faceted crystals, columns or blocks.',smooth:'Soften changes in height beneath the brush.',erase:'Bring terrain back toward the base ground.',sand:'Paint sand coverage onto the terrain.',grass:'Restore ground cover beneath the brush.',paint:'Paint materials and local surface effects with a dedicated brush.',move:'Select a shape to edit its curves, settings, paths or transform.',features:'Place metal deposits, vents, trees, shrubs, rocks and scars on the map.',starts:'Add, move and remove the players\u2019 start positions.'};
 
 // Schematic illustrations stay available without downloaded preview assets.
 // They explain silhouettes; they do not simulate or replace the GPU renderer.
@@ -48,7 +48,8 @@ export function mountHelp(){
     const tool=target.dataset.tool||target.dataset.icon,shape=target.dataset.shape||tool,own=target.dataset.mapTool!==undefined,control=target.closest('.control'),source=control?.querySelector('input[type=range],select'),key=source?.id;
     const label=tool?target.getAttribute('aria-label'):control?.querySelector('label')?.cloneNode(true);if(label instanceof Element)label.querySelector('output')?.remove();
     const name=typeof label==='string'?label:label?.textContent?.trim();if(!name){hide();return;}
-    tip.replaceChildren(element('strong',''));tip.firstChild.textContent=name;
+    // A row's unit, or what it measures, is said here and not on the row (data-note).
+    tip.replaceChildren(element('strong',''));tip.firstChild.textContent=name+(control?.dataset.note?` (${control.dataset.note})`:'');
     const example=HELP_CONTROLS[key],valid=()=>owner===target&&revision===token&&!tip.hidden&&target.isConnected&&target.getClientRects().length>0;
     if(tool||example){
       const art=element('div','help-art',tool?illustration(shape):''),caption=element('small','help-caption','Illustration');tip.append(art,caption);
@@ -86,7 +87,7 @@ export function mountHelp(){
     if(!tool&&!source?.disabled)tip.append(element('small','','Click: set · Double-click: type · Drag: adjust · Shift: fine'));
     target.setAttribute('aria-describedby',tip.id);tip.hidden=false;position(target);
   };
-  const target=e=>e.target instanceof Element&&!e.target.matches('.scrub-entry')?e.target.closest('.tool-palette button,.scrub,.control > select'):null;
+  const target=e=>e.target instanceof Element&&!e.target.matches('.scrub-entry')?e.target.closest('.tool-palette button:not(.rail-button),.scrub,.control > select'):null;
   document.addEventListener('pointerover',e=>{const t=target(e);if(!t||e.buttons||t.contains(e.relatedTarget))return;hide();hoverTimer=setTimeout(()=>show(t),500);});
   document.addEventListener('pointerout',e=>{const t=target(e);if(t&&!t.contains(e.relatedTarget))hide();});
   document.addEventListener('focusin',e=>{const t=target(e);if(t){hide();hoverTimer=setTimeout(()=>show(t),500);}});document.addEventListener('focusout',hide);

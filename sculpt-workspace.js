@@ -3,18 +3,16 @@ import {mountHelp} from './sculpt-help.js';
 const $=id=>document.getElementById(id);
 
 export function mountWorkspace(){
-  const dock=$('curve-dock'),palette=document.querySelector('.tool-palette'),curves=$('section-preview-control');
+  const palette=document.querySelector('.tool-palette');
   const zoomBy=factor=>{const camera=window.sculptCanvas;if(!camera)return;const s=camera.view().scale,levels=[.25,.5,1,2,4];camera.zoom(factor>1?(levels.find(v=>v>s+.001)??4):([...levels].reverse().find(v=>v<s-.001)??.25));};
   $('zoom-out').onclick=()=>zoomBy(.5);$('zoom-in').onclick=()=>zoomBy(2);
-  for(const name of ['export','graphics'])$('open-'+name).onclick=()=>{if($('inspector-sidebar').hidden)$('toggle-inspector').click();$('tab-'+name).click();};
-  palette.addEventListener('click',e=>{if(e.target.closest('button')){if($('inspector-sidebar').hidden)$('toggle-inspector').click();$('tab-tool').click();}});
-  // The dock sits outside the #editor fieldset, so it follows the editor's lock here. At load only its canvases
-  // lock (by the class); its buttons start enabled and lock with the editor from then on.
+  // Picking a tool shows its settings: the side panel opens on Build.
+  palette.addEventListener('click',e=>{if(e.target.closest('[data-tool],#feature-tool,#starts-tool'))$('tab-tool').click();});
+  // The palette and the selection bar on the map sit outside the #editor fieldset, so they follow the editor's lock here. (The curve
+  // editors are inside it; their canvases lock by the stylesheet.)
   let lastLock;
-  const lock=(controls=true)=>{const disabled=$('editor').disabled;if(lastLock===disabled)return;lastLock=disabled;dock.classList.toggle('is-disabled',disabled);if(controls)dock.querySelectorAll('button,select').forEach(e=>{if(disabled){e.dataset.wasDisabled=String(e.disabled);e.disabled=true;}else if(e.dataset.wasDisabled!==undefined){e.disabled=e.dataset.wasDisabled==='true';delete e.dataset.wasDisabled;}});palette.querySelectorAll('button').forEach(b=>{b.disabled=disabled;});};
-  new MutationObserver(()=>lock()).observe($('editor'),{attributes:true,attributeFilter:['disabled']});lock(false);
-  // The curve editors replace the empty-state note whenever a landform is in hand.
-  const sync=()=>{$('curve-empty').hidden=!curves.hidden;};new MutationObserver(sync).observe(curves,{attributes:true,attributeFilter:['hidden']});sync();
+  const lock=()=>{const disabled=$('editor').disabled;if(lastLock===disabled)return;lastLock=disabled;palette.querySelectorAll('button').forEach(b=>{b.disabled=disabled;});$('selection-hud').disabled=disabled;};
+  new MutationObserver(lock).observe($('editor'),{attributes:true,attributeFilter:['disabled']});
   mountHelp();
   // The page's own sliders are written in the compact form; generated ones come from controlRow.
   document.querySelectorAll('.control[data-compact]').forEach(attachScrub);

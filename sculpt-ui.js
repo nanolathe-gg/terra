@@ -5,97 +5,189 @@ import {COLUMN_BEDS,COLUMN_SECTIONS,COLUMN_SLOTS,FIRST_SECTION} from './sculpt-c
 const $=id=>document.getElementById(id);
 export function mountEditorUI(){
  const app=document.querySelector('.app');
- let panels={tools:true,inspector:true},beforeFocus=null;
+ // Which panels show, and whether the tool rail is expanded into the palette (every tool in view): one remembered object.
+ let panels={tools:true,inspector:true,palette:false},beforeFocus=null;
  try{panels={...panels,...JSON.parse(localStorage.getItem('terraform-editor-panels')||'{}')};}catch{}
  const focused=()=>beforeFocus!==null;
  function updateLayout(){
   const showTools=!focused()&&panels.tools,showInspector=!focused()&&panels.inspector;
-  app.classList.toggle('tools-collapsed',!showTools);app.classList.toggle('inspector-collapsed',!showInspector);
+  app.classList.toggle('tools-collapsed',!showTools);app.classList.toggle('inspector-collapsed',!showInspector);app.classList.toggle('palette-open',Boolean(panels.palette));
   $('tools-sidebar').hidden=!showTools;$('inspector-sidebar').hidden=!showInspector;
-  for(const [id,on,label] of [['toggle-tools',showTools,'tools'],['toggle-inspector',showInspector,'inspector']]){const b=$(id);b.setAttribute('aria-expanded',String(on));b.title=`${on?'Hide':'Show'} ${label}`;}
+  for(const [id,on,label] of [['toggle-tools',showTools,'tools'],['toggle-inspector',showInspector,'side panel']]){const b=$(id);b.setAttribute('aria-expanded',String(on));b.title=`${on?'Hide':'Show'} ${label}`;}
   $('focus-canvas').setAttribute('aria-pressed',String(focused()));$('focus-canvas').querySelector('span').textContent=focused()?'Restore':'Focus';
+  const pin=$('palette-toggle');pin.setAttribute('aria-pressed',String(Boolean(panels.palette)));pin.firstElementChild.textContent=panels.palette?'«':'»';pin.lastElementChild.textContent=panels.palette?'Collapse':'Expand';
+  pin.title=panels.palette?'Collapse the tools to a rail':'Keep every tool in view, with its picture and name';
+  if(panels.palette||!showTools)closeFlyouts();
+  if(!showInspector)setLarge(false);
   try{localStorage.setItem('terraform-editor-panels',JSON.stringify(panels));}catch{}
  }
- function togglePanel(name){if(focused()){panels={tools:false,inspector:false};beforeFocus=null;}panels[name]=!panels[name];updateLayout();}
+ function togglePanel(name){if(focused()){panels={...panels,tools:false,inspector:false};beforeFocus=null;}panels[name]=!panels[name];updateLayout();}
  function exitFocus(){if(!focused())return false;panels=beforeFocus;beforeFocus=null;updateLayout();return true;}
- function toggleFocus(){if(!exitFocus()){beforeFocus={...panels};updateLayout();}}
+ function toggleFocus(){if(!exitFocus()){beforeFocus={...panels};closeSurfaces();updateLayout();}}
  $('toggle-tools').onclick=()=>togglePanel('tools');$('toggle-inspector').onclick=()=>togglePanel('inspector');$('focus-canvas').onclick=toggleFocus;
- updateLayout();
- const grouped=document.querySelector('.tool-groups');
+ $('palette-toggle').onclick=()=>{panels.palette=!panels.palette;updateLayout();};
+ // The rail: Land, Water and Brushes each open their tools beside the rail; one is open at a time, and picking a tool closes it.
+ const grouped=document.querySelector('.tool-groups'),rails=[...grouped.querySelectorAll('.rail-button')];
+ function closeFlyouts(){let any=false;for(const r of rails){if(r.getAttribute('aria-expanded')==='true')any=true;r.setAttribute('aria-expanded','false');}return any;}
+ for(const r of rails)r.onclick=()=>{if(panels.palette)return;const open=r.getAttribute('aria-expanded')==='true';closeFlyouts();closeSurfaces();r.setAttribute('aria-expanded',String(!open));};
+ grouped.addEventListener('click',e=>{if(e.target.closest('.tool-flyout button'))closeFlyouts();});
  const syncTools=(active,selected,locked,features)=>{
-  for(const b of grouped.querySelectorAll('button')){b.disabled=locked;b.setAttribute('aria-pressed',String(features?b.id==='feature-tool':b.dataset.tool===active));}
+  for(const b of grouped.querySelectorAll('button')){
+   b.disabled=locked;if(b.classList.contains('rail-button'))continue;
+   b.setAttribute('aria-pressed',String(features?b.id===(features==='starts'?'starts-tool':'feature-tool'):b.dataset.tool===active));
+  }
+  // A rail button is lit while the tool in hand is one of its group.
+  for(const r of rails)r.classList.toggle('has-current',!features&&Boolean(r.parentElement.querySelector(`[data-tool="${CSS.escape(active||'')}"]`)));
  };
  mountWorkspace();
- const tabs=[...document.querySelectorAll('[role="tab"]')],visibleTabs=tabs.filter(t=>!t.hidden);
- function activate(tab){for(const t of tabs){const active=t===tab;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).hidden=!active;}}
- for(const t of tabs){t.onclick=()=>activate(t);t.onkeydown=e=>{const i=visibleTabs.indexOf(t);let j;if(e.key==='ArrowRight')j=(i+1)%visibleTabs.length;if(e.key==='ArrowLeft')j=(i+visibleTabs.length-1)%visibleTabs.length;if(e.key==='Home')j=0;if(e.key==='End')j=visibleTabs.length-1;if(j!==undefined){e.preventDefault();activate(visibleTabs[j]);visibleTabs[j].focus();}};}
+ // The side panel: Build (the tool or the selection) or World.
+ const tabs=[...document.querySelectorAll('.mode-switch [role="tab"]')];
+ function activate(tab){for(const t of tabs){const active=t===tab;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).hidden=!active;}app.classList.toggle('world-mode',tab.id==='tab-world');if(tab.id!=='tab-tool')setLarge(false);}
+ for(const t of tabs){t.onclick=()=>{if($('inspector-sidebar').hidden)togglePanel('inspector');activate(t);};t.onkeydown=e=>{const i=tabs.indexOf(t);let j;if(e.key==='ArrowRight')j=(i+1)%tabs.length;if(e.key==='ArrowLeft')j=(i+tabs.length-1)%tabs.length;if(e.key==='Home')j=0;if(e.key==='End')j=tabs.length-1;if(j!==undefined){e.preventDefault();activate(tabs[j]);tabs[j].focus();}};}
+ // The surfaces: the Map menu, Settings, Export and the Shapes list each open from their own button, in a fixed place. The three menus
+ // close when another opens or the pointer goes down elsewhere; the Shapes list stays while you work on the map.
+ const surfaces=[['tab-map','pane-map',true],['open-graphics','pane-graphics',true],['open-export','pane-export',true],['tab-objects','pane-objects',false]];
+ function setSurface(button,pane,open){$(pane).hidden=!open;$(button).setAttribute('aria-expanded',String(open));}
+ function closeSurfaces(menusOnly=false){let any=false;for(const [button,pane,menu] of surfaces)if(!$(pane).hidden&&(menu||!menusOnly)){setSurface(button,pane,false);any=true;}return any;}
+ for(const [button,pane,menu] of surfaces)$(button).onclick=()=>{const open=$(pane).hidden;if(menu)closeSurfaces(true);closeFlyouts();setSurface(button,pane,open);};
+ document.addEventListener('pointerdown',e=>{
+  const t=e.target instanceof Element?e.target:null;if(!t)return;
+  if(!t.closest('.tool-group'))closeFlyouts();
+  for(const [button,pane,menu] of surfaces)if(menu&&!$(pane).hidden&&!t.closest('#'+pane)&&!t.closest('#'+button))setSurface(button,pane,false);
+  for(const d of document.querySelectorAll('details.top-menu[open]'))if(!d.contains(t))d.open=false;
+ },true);
+ // The curve editors at full size: the same element, laid over the map view while the button is pressed.
+ function setLarge(on){if(app.classList.contains('curves-large')===on)return false;app.classList.toggle('curves-large',on);$('curve-large').setAttribute('aria-pressed',String(on));$('curve-large').textContent=on?'✕ Close':'⤢ Full size';return true;}
+ $('curve-large').onclick=()=>setLarge(!app.classList.contains('curves-large'));
+ new MutationObserver(()=>{if($('section-preview-control').hidden)setLarge(false);}).observe($('section-preview-control'),{attributes:true,attributeFilter:['hidden']});
+ // The curves are rows of the card's Profile section: folding it away closes them at full size too.
+ $('card-profile').addEventListener('toggle',()=>{if(!$('card-profile').open)setLarge(false);});
+ // Escape closes what is open on top of the editor, one thing a press: a tool flyout, a menu, the full-size curves.
+ const closeTop=()=>closeFlyouts()||closeSurfaces(true)||[...document.querySelectorAll('details.top-menu[open],details.share-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||setLarge(false);
  for(const [id,on] of [['view-rendered',false],['view-clay',true]])$(id).onclick=()=>{$('clay').checked=on;$('clay').dispatchEvent(new Event('change'));};
- return {toggleFocus,exitFocus,syncTools};
+ updateLayout();
+ return {toggleFocus,exitFocus,syncTools,closeTop,focused};
 }
 // Each effect owns its controlling value and its dependent parameters. Zero
 // means off; switching back on restores the last value for this tool/selection.
 // buildRow(field) returns a new control row; each row is created for its group and placed there once.
 export function groupToolControls(fields,buildRow){
- const root=$('shape-options'),groups=[],claimed=new Set(),created=[];
+ const groups=[],details=[],claimed=new Set(),field=key=>fields.find(f=>f[0]===key);
+ const build=keys=>keys.map(field).filter(Boolean).map(f=>{claimed.add(f[0]);return buildRow(f);});
+ // The card's own sections (written in sculpt.html): each generated row is created into its section's slot, in this order.
+ const placed={'card-profile-rows':['lean','facing'],'card-size-rows':['heightReference','elevation','combine','routeSmooth','paintChannel'],'card-rock-rows':['rockPreset','styleVegetation'],
+  'card-outline-rows':['wander','widthVary','heightVary','varySize','wallVary','varyFoot','varyMiddle','faceVariation','crestTaper']};
+ const rows=Object.fromEntries(Object.entries(placed).map(([slot,keys])=>{const made=build(keys);$(slot).append(...made);return [slot,made];}));
+ const own=id=>$(id).closest('.control');
+ for(const [id,controls] of [['card-profile',[$('section-preview-control'),...rows['card-profile-rows']]],['card-size',[own('diameter'),own('amount'),own('roughness'),own('softness'),...rows['card-size-rows']]],
+  ['card-rock',[...rows['card-rock-rows'],$('cracks-control')]],['card-outline',rows['card-outline-rows']],['card-advanced',[$('seed-control'),own('tool-style')]]])groups.push({d:$(id),controls,fixed:true});
+ // Details: optional parts of a shape, each a group. Closed, a group is a chip; a group with a master row (its amount, where 0 is off)
+ // turns on from its chip and off from the switch in its heading. [master key, title, rows, open at first]
  const definitions=[
- ['','Height',['heightReference','elevation','combine','routeSmooth']],
- ['','Cross-section',['lean','facing']],
- ['','Variation',['wander','widthVary','heightVary','varySize','varyFoot','varyMiddle','wallVary']],
  ['gullies','Gullies',['gullies','gullySize','talus']],
  ['','Hard beds',['beds','bedSoft']],
- ['','Impact',['ejecta','buckling','secondaries','secondaryDistance']],
- ['','Variability',['faceVariation']],
- ['fingers','Shore lobes',['fingers','fingerSize']],
- ['','Steps',['stepReference','terraces','ledge','terraceJitter','breakup','layerPx','layerRiser','layerVary','layerCircle','lavaSpread','lavaCircleVary']],
+ ['','Steps',['stepReference','terraces','ledge','terraceJitter','breakup','layerPx','layerRiser','layerVary','layerCircle','lavaSpread','lavaCircleVary','layerJag']],
  ['spurCount','Spurs',['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb','crestVary']],
- ['fissureBranches','Branches',['fissureBranches','fissureBranchLen','fissureBranchSpread']],['fissureNetwork','Fracture network',['fissureNetwork','fissureCell']],
- ['shorePlates','Shore plates',['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','plateVary']],
- [null,'Water appearance',['waterDeep','waterShore']],
- [null,'Surf',['surf']],
- [null,'Crest variation',['crestTaper']],
  ['iceFacets','Facets',['iceFacets','facetForm','facetSurface','iceFacetSize','crystalStep','crystalTiers','crystalFacet','crystalSizeVar','crystalSides','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']],
- // The shape's rock beside its cover (its choices are not an amount: no switch).
- [null,'Rock',['rockPreset']],['styleVegetation','Local vegetation',['styleVegetation']]
+ ['','Impact',['ejecta','buckling','secondaries','secondaryDistance']],
+ ['','Shore',['fingers','fingerSize','shorePlates','plateMaterial','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateVary','frostNeedles','crystalShoreSeam','waterDeep','waterShore','surf']],
+ ['','Cut',['fissureWidth','fissureJag','fissureTaper','fissureCrack','fissureDark'],true],
+ ['fissureBranches','Branches',['fissureBranches','fissureBranchLen','fissureBranchSpread']],['fissureNetwork','Fracture network',['fissureNetwork','fissureCell']]
  ];
- function wire(d,controls,master=null){
-  const memory=new Map(),box=master?d.querySelector(':scope > summary > input'):undefined;
-  if(master){box.addEventListener('click',e=>e.stopPropagation());box.addEventListener('change',()=>{const key=d.dataset.context,previous=Number(master.value);if(!box.checked&&previous!==0)memory.set(key,previous);master.value=box.checked?(memory.get(key)||(master.tagName==='SELECT'?[...master.options].find(o=>Number(o.value)!==0)?.value:Math.max(Number(master.step)||1,Math.min(Number(master.max),Number(master.max)*.5)))):0;master.dispatchEvent(new Event('input',{bubbles:true}));master.dispatchEvent(new Event('change',{bubbles:true}));if(box.checked)d.open=true;});}
-  groups.push({d,controls,master,box,memory,lastContext:null});
+ function make(title,controls,masterId=null,first=false){
+  const d=document.createElement('details');d.className='feature-group';d.dataset.part=title;const summary=document.createElement('summary');summary.textContent=title;d.append(summary);const body=document.createElement('div');body.className='feature-body';d.append(body);body.append(...controls);
+  const g={d,controls,first,memory:new Map(),lastContext:null};groups.push(g);details.push(g);
+  if(!masterId)return;
+  const box=document.createElement('input');box.type='checkbox';box.setAttribute('aria-label',`Enable ${title}`);summary.append(box);d.classList.add('has-master');
+  const master=g.master=d.querySelector('#'+masterId);g.box=box;
+  box.addEventListener('click',e=>e.stopPropagation());
+  box.addEventListener('change',()=>{const key=d.dataset.context,previous=Number(master.value);if(!box.checked&&previous!==0)g.memory.set(key,previous);master.value=box.checked?(g.memory.get(key)||(master.tagName==='SELECT'?[...master.options].find(o=>Number(o.value)!==0)?.value:Math.max(Number(master.step)||1,Math.min(Number(master.max),Number(master.max)*.5)))):0;master.dispatchEvent(new Event('input',{bubbles:true}));master.dispatchEvent(new Event('change',{bubbles:true}));d.open=box.checked;});
+  // The chip of a part that is off adds it (at the value it last had, or its default) and opens its rows. A summary is not locked by the
+  // editor's fieldset as the switch is, so the chip asks the switch.
+  summary.addEventListener('click',e=>{if(d.open||Number(master.value)!==0)return;e.preventDefault();if(box.matches(':disabled'))return;box.checked=true;box.dispatchEvent(new Event('change'));});
  }
- function make(title,rows,masterId=null){
-  const d=document.createElement('details');d.className='feature-group';const summary=document.createElement('summary');summary.textContent=title;d.append(summary);const body=document.createElement('div');body.className='feature-body';d.append(body);body.append(...rows);
-  if(masterId){const box=document.createElement('input');box.type='checkbox';box.setAttribute('aria-label',`Enable ${title}`);summary.append(box);}
-  created.push(d);wire(d,rows,masterId?d.querySelector('#'+masterId):null);
- }
- const basics=document.querySelector('#brush-panel > .brush-basics');wire(basics,['tool-style','diameter','amount','roughness','softness'].map(id=>$(id).closest('.control')));
- for(const [key,label,keys] of definitions){const present=fields.filter(f=>keys.includes(f[0]));if(!present.length)continue;present.forEach(f=>claimed.add(f[0]));make(label,present.map(buildRow),key?present.find(f=>f[0]===key)[1]:null);}
- for(const field of fields){const [key,id,label,,lo]=field;if(claimed.has(key))continue;make(label.replace(/ \(.*$/,''),[buildRow(field)],lo<=0?id:null);}
- // The generated groups go ahead of Cracks, the one group the page declares in #shape-options.
- root.prepend(...created);
- wire($('cracks-control').closest('details'),[$('cracks-control')],$('cracks'));
- // Choose initial openness on tool/selection changes; value edits never collapse a section.
- return context=>{for(const g of groups){g.d.hidden=g.controls.every(c=>c.hidden);g.d.dataset.context=context;if(!g.master){if(g.lastContext!==context&&!g.d.classList.contains('brush-basics'))g.d.open=g.controls.some(c=>c.id==='crystal-form-control'||c.id==='paint-channel-control'||(!$('lf-elevation-control').hidden&&['lf-elevation-control','section-preview-control','lf-wander-control'].includes(c.id)));g.lastContext=context;continue;}const on=Number(g.master.value)!==0;if(on)g.memory.set(context,Number(g.master.value));g.box.checked=on;g.d.classList.toggle('is-off',!on);if(g.lastContext!==context)g.d.open=on;g.lastContext=context;}};
+ for(const [key,label,keys,first] of definitions){if(!keys.some(field))continue;make(label,build(keys),key?field(key)[1]:null,first);}
+ // A row no section or part names gets a part of its own, as before.
+ for(const f of fields){const [key,id,label,,lo]=f;if(claimed.has(key))continue;make(label.replace(/ \(.*$/,''),[buildRow(f)],lo<=0?id:null);}
+ $('shape-options').append(...details.map(g=>g.d));
+ // Called on each tool or selection change and on each edit. A section or part with no row to show hides. The card's sections keep the
+ // openness the artist left them in; a part opens when it is on (or is the tool's main part) as its shape comes up, and an edit never
+ // closes one: only its switch does.
+ return context=>{
+  for(const g of groups){
+   g.d.hidden=g.controls.every(c=>c.hidden);if(g.fixed)continue;g.d.dataset.context=context;
+   if(!g.master){if(g.lastContext!==context)g.d.open=Boolean(g.first);g.lastContext=context;continue;}
+   const on=Number(g.master.value)!==0;if(on)g.memory.set(context,Number(g.master.value));g.box.checked=on;g.d.classList.toggle('is-off',!on);if(g.lastContext!==context)g.d.open=on;g.lastContext=context;
+  }
+  $('card-details').hidden=details.every(g=>g.d.hidden);
+ };
 }
 
-// One level of open sections keeps related controls together for scrolling.
-const worldSection=name=>['Shine: rock','Loose stone'].includes(name)?'Rock & cliffs':/Light|Shine/.test(name)?'Lighting':/Ground|Vegetation|Material coverage/.test(name)?'Ground & vegetation':/Water|Shore|Needle|Contour fringe|Terrace creases/.test(name)?'Water & shores':/Rock|Strata|Cracks|Contour bands|Microfacets/.test(name)?'Rock & cliffs':'Materials & texture';
-// A World group: a titled block created in its section. Its rows carry `search` as data-search-group.
-export function worldGroup(name){
- const block=document.createElement('div'),heading=document.createElement('h3');block.className='world-subsection';heading.textContent=name;block.append(heading);
- [...$('knobs').children].find(section=>section.dataset.group===worldSection(name)).append(block);
- return {block,search:`${name} ${worldSection(name)}`};
+// Where each World setting sits: "Section/Tab" (a section without tabs ends in "/"). sculpt.html holds one container per home
+// (data-home); a row is created straight into its home, under the name of its group. repro/world-homes.test.mjs holds every key to one home.
+export const WORLD_HOMES={
+ 'Ground/Pattern':'groundTiles groundContrast groundPatch groundPatchSize',
+ 'Ground/Bumps & relief':'reliefScale reliefAmount reliefLumps reliefBranch reliefWarp reliefPatchy reliefJitter gentleRelief plainRelief lumpRelief reliefOctaves worms',
+ 'Ground/Terrain shape':'undulation undulationScale undulationCover undulationArt faceSteep',
+ 'Ground/Slope cover':'hillLight slopeTexture slopeMarks wrinkles',
+ 'Ground/Low ground':'lowTint lowReach lowGrain',
+ 'Vegetation/':'vegetationCover lushness soilRim plantRelief flowerDensity moss',
+ 'Rock types/Colors & recipe':'absorbDepth shadowTint',
+ 'Rock types/Exposure & relief':'rockFace faceRock rockFaceFrom faceExtrude faceMass',
+ 'Rock types/Blocks & joints':'faceWhole faceWholeLarge faceRegular faceBlock faceBlockSize faceStretch faceBlockHeight faceJointTilt faceScaleVary faceBreak faceRound faceJoint faceJointWidth faceSecondary faceContinuity faceLean',
+ 'Rock types/Layers':'strata strataContrast strataGrain bedDip bedDipDir bedCycleVary faceBedVary faceBed faceLedge faceRun faceFold faceSpall faceLamina faceLaminaSize faceLayers faceGrass',
+ 'Rock types/Weathering':'faceWear faceCrease faceCreaseSize faceScratch faceScratchSize faceScratchLength faceScratchAngle faceClast faceClastSize faceDetailPatch faceGrit faceGritSize runoff runoffScale runoffConcentration runoffCut runoffStain',
+ 'Rock types/Surface & crust':'shineRock shineRockSharp shineRockRough shineRockScale faceShade faceTone faceFresh faceRind faceRindDepth faceRindTone faceRindWarmth faceRindRough faceMineral faceStrata faceWet',
+ 'Rock types/Stones & debris':'looseSize stoneSort stoneRound stoneSlab debrisAmount debrisReach debrisDepth',
+ 'Cliffs & stones/Where rock shows':'rockCrown rimReach shoreRock shoreShelf',
+ 'Cliffs & stones/Loose stones':'looseSupply boulders looseKnoll',
+ 'Cliffs & stones/Cracks':'crackSeverity crackSpacing crackMajor crackMinor crackHairline crackBlocks crackWidth crackNetwork crackDark',
+ 'Cliffs & stones/Bands':'banding bandSoftness bandWater sandBanding sandBandSpacing layerCrease baseBand baseBandLow baseBandHigh baseBandWander baseBandGaps desertCapFlat',
+ 'Cliffs & stones/Special surfaces':'iceFrost lavaCrust lavaPillow lavaChip lavaVeins lavaCalm lavaDusk pockmark pockSize moonCups moonCupSize moonCupDepth cupStretch moonRibs moonRibDepth moonRibDark moonFolds moonFoldSpacing iceCrystal gougeWeb iceCrest iceSoft iceSnow iceFall iceApron',
+ 'Sand/':'sandCrown sand sandLee wind sandDust sandGrass sandLight sandGrain ripple rippleHeight',
+ 'Water & shores/Depths & edges':'shallowDepth deepDepth waterSoft crispShore deepEdge stepSoftPx shelfWander shoalRag shoalStairs shoalShoreSoft',
+ 'Water & shores/Shore & beach':'coastRamp beachWidth apron shoreEdge bankRock frostGaps frostGapReach frostGapSize frostGapDepth',
+ 'Water & shores/Water bed':'bedTint bedBright bedContrast bedRelief bedFlat',
+ 'Water & shores/Mineral fringe':'ringFade ringContrast ringCount ringSize ringShift ringShiftDir ringScatter ringWobble ringLobe ringFill ringPatch ringPatchSize ringTone',
+ 'Rain & erosion/':'erosionRain wetSwath wetGround',
+ 'Light & shine/Sun & shade':'faceFill flatShadow flatOcclusion lightCap shadeDepth sunTilt sunHeight ambient creaseShade',
+ 'Light & shine/Shine':'shineOutside shineSlopeGate shineStretch shineWhite shineGround shineGroundSharp shineGroundRough shineGroundScale shineSlope shineSlopeSharp shineSlopeRough shineSlopeScale shineSand shineSandSharp shineSandRough shineSandScale shineCrystal shineCrystalSharp shineCrystalRough shineCrystalScale shineGate shineHeadroom',
+ 'Palette/':'paletteMix dither landDither',
+};
+const homeOf=new Map(Object.entries(WORLD_HOMES).flatMap(([home,keys])=>keys.split(' ').map(key=>[key,home])));
+export const worldHome=key=>homeOf.get(key)||'World/';   // a key without a home still shows, in the World section
+const homeRows=home=>document.querySelector(`#knobs [data-home="${home}"] .world-rows`);
+// A World group: a titled block created in the home of its rows. A group whose rows have different homes gets a block in each.
+// Its rows carry `search` as data-search-group.
+const worldBlocks=new Map();
+export function worldGroup(name,key){
+ const home=worldHome(key),id=home+'|'+name;
+ if(!worldBlocks.has(id)){const block=document.createElement('div'),heading=document.createElement('h3');block.className='world-subsection';heading.textContent=name;block.append(heading);homeRows(home).append(block);worldBlocks.set(id,{block,search:`${name} ${home.replace('/',' ')}`});}
+ return worldBlocks.get(id);
 }
+// The World panel: sections down its side, tabs in the larger ones (static in sculpt.html). A press shows one section and one of its tabs.
+// With a search, every tab that holds a match shows under its own name, and the fixed blocks (colors, pickers, notes) step aside.
 export function mountWorldControlIndex(root,values=()=>({})){
- const search=$('world-control-search'),blocks=[...root.querySelectorAll('.world-subsection')];
- const groups=[...root.children],input=search.querySelector('#world-search'),fine=search.querySelector('#world-fine');let previous=null,lastQuery='';
- const sync=()=>{const query=input.value.trim().toLowerCase(),current=values(),worldRows=[...root.querySelectorAll('[data-knob]')],rows=[...worldRows,...document.querySelectorAll('#rendering-host [data-knob]')];let visible=0;if(query&&!previous)previous=new Map(groups.map(d=>[d,d.open]));
-  for(const row of rows){const reason=worldControlRequirement(row.dataset.knob,current),control=row.querySelector('input[type=range],select');control.disabled=Boolean(reason);row.classList.toggle('control-inactive',Boolean(reason));let note=row.querySelector('.control-requirement');if(!note){note=document.createElement('p');note.className='small control-requirement';row.append(note);}note.textContent=reason;note.hidden=!reason;const group=row.closest('.knobs-group'),text=(row.textContent+' '+row.dataset.searchGroup+' '+group.dataset.group).toLowerCase();if(!root.contains(row))continue;   // the Palette rows live with the rendering switches: disabled with a reason, never filtered
-  row.hidden=query?!text.includes(query):!fine.checked&&!WORLD_PRIMARY_CONTROLS.has(row.dataset.knob);if(!row.hidden)visible++;}
-  for(const block of blocks)block.hidden=![...block.querySelectorAll('[data-knob]')].some(r=>!r.hidden);
-  for(const group of groups){group.hidden=![...group.querySelectorAll('[data-knob]')].some(r=>!r.hidden);if(query&&query!==lastQuery&&!group.hidden)group.open=true;}
-  if(!query&&previous){for(const [d,open] of previous)d.open=open;previous=null;}
-  lastQuery=query;$('world-control-count').textContent=query?`${visible} matching settings`:fine.checked?`${worldRows.length} settings · including fine controls`:`${visible} primary settings · ${worldRows.length} total`;
- };input.addEventListener('input',sync);fine.addEventListener('change',sync);sync();return sync;
+ const search=$('world-control-search'),studio=root.closest('.world-studio'),input=search.querySelector('#world-search'),fine=search.querySelector('#world-fine');
+ const lists=[...studio.querySelectorAll('[role="tablist"]')],panels=[...root.querySelectorAll('.world-tab')],sections=[...root.querySelectorAll('.world-section')];
+ const ALWAYS=new Set(WORLD_HOMES['Palette/'].split(' '));   // the three Palette rows always show, as they did beside the rendering switches
+ const sync=()=>{const query=input.value.trim().toLowerCase(),current=values(),rows=[...root.querySelectorAll('[data-knob]')];let visible=0;
+  for(const row of rows){const key=row.dataset.knob,reason=worldControlRequirement(key,current),control=row.querySelector('input[type=range],select');control.disabled=Boolean(reason);row.classList.toggle('control-inactive',Boolean(reason));let note=row.querySelector('.control-requirement');if(!note){note=document.createElement('p');note.className='small control-requirement';row.append(note);}note.textContent=reason;note.hidden=!reason;
+   const text=(row.textContent+' '+row.dataset.searchGroup).toLowerCase();row.hidden=query?!text.includes(query):!fine.checked&&!WORLD_PRIMARY_CONTROLS.has(key)&&!ALWAYS.has(key);if(!row.hidden)visible++;}
+  for(const block of root.querySelectorAll('.world-subsection'))block.hidden=![...block.querySelectorAll('[data-knob]')].some(r=>!r.hidden);
+  studio.classList.toggle('searching',Boolean(query));
+  // A tab or a section shows when it is the chosen one; in a search, when it holds a match.
+  const chosen=el=>$(el.getAttribute('aria-labelledby'))?.getAttribute('aria-selected')!=='false',matches=el=>[...el.querySelectorAll('[data-knob]')].some(r=>!r.hidden);
+  for(const panel of panels){if(panel.id)panel.hidden=query?!matches(panel):!chosen(panel);panel.classList.toggle('no-match',Boolean(query)&&!matches(panel));}
+  for(const section of sections)section.hidden=query?!matches(section):!chosen(section);
+  $('world-control-count').textContent=query?`${visible} matching settings`:fine.checked?`${rows.length} settings`:`${visible} main settings of ${rows.length}`;
+ };
+ for(const list of lists){const tabs=[...list.querySelectorAll(':scope > [role="tab"]')];
+  const pick=tab=>{for(const t of tabs){const on=t===tab;t.setAttribute('aria-selected',String(on));t.tabIndex=on?0:-1;}sync();};
+  list.addEventListener('click',e=>{const tab=e.target.closest('[role="tab"]');if(tab&&list.contains(tab))pick(tab);});
+  list.addEventListener('keydown',e=>{const k={ArrowDown:1,ArrowRight:1,ArrowUp:-1,ArrowLeft:-1}[e.key];if(!k)return;const at=tabs.indexOf(document.activeElement);if(at<0)return;e.preventDefault();const next=tabs[(at+k+tabs.length)%tabs.length];pick(next);next.focus();});
+ }
+ input.addEventListener('input',sync);fine.addEventListener('change',sync);sync();return sync;
 }
 
 export function mountColumnPanel(read,change,commit,reset){
