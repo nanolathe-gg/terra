@@ -3299,6 +3299,37 @@ configurable"; 7 "a whole sand system", lower priority; 8 "Fix it"; 9 and
   release to final 1310 and 1430; drag latency p50 36 and 28 ms **[measured
   under load; a quiet run is owed]**. Hover previews regenerated.
 
+- *Rock recipes in a table (rows 2 and 3, step B1) [landed 2026-11-11,
+  no picture changes].* The 72 rock numbers are `struct Rock`, held 16
+  times in the uniforms, and every point reads the slot its rock belongs
+  to (`useRock`, mask plane 20 holds slot + 1). Slot 0 is the world's
+  flat rock numbers, so every address, save, scene and tool means what it
+  did. With slot 0 alone every read compiles to a fixed offset and every
+  rock test stays a pipeline gate (`rockMask` 0): 0 of 34 scenes move.
+  Passes that gather take the source's recipe; aprons and switches take
+  the maximum over the rocks in use; the Time pass keeps slot 0's beds
+  (per-recipe hardness is not built). Nothing in the page sets a second
+  slot yet. *Accepted:* when a map first uses a second rock the pipelines
+  that read any slot compile differently, and 6.7% of green-modern-2's
+  pixels step by a palette entry where everything is still slot 0
+  (heights identical, the same by eye, the same bytes every time)
+  **[measured by the agent, `repro/rock-slots.mjs`]**; the mechanism in
+  Metal's compile was not found. A hand-painted half of basalt beside
+  granite changes nothing more than 105 px past the line **[measured]**.
+  *Checks:* land tier passes on the tip merged with main (`features`
+  needed a fresh browser profile, the known flake); export bytes exit 0
+  **[agent]**; `repro/perf.mjs` map4 on green-modern-3, alternating, load
+  average 6 to 7: load to final 1535/1579/1522 ms main, 1557/1840/1673
+  tip (the first chunk's encode holds an 80 ms compile in two of three
+  runs); release to final 1349/1532/1310 and 1324/1490/1322; drag latency
+  p50 25.7/27.3/25.7 and 26.4/27.4/26.2 **[measured]**.
+- *Sun height, the owed timing [measured on a quieter machine, load
+  average 4 to 6].* 010c0579 against the landing: load to final
+  1686/1548/1666 ms and 1531/1521/1674; release 1313/1333/1306 and
+  1315/1314/1326; drag latency p50 26.0/25.7/25.3 and 25.1/26.0/25.6.
+  At Sun height 25 with Cast shadow on level ground 1: load 1523 and
+  1505, release 1304 and 1315.
+
 **Next [proposed by Claude].** Fine relief on a block's faces; a longer
 reach for large blocks if the owner wants them more whole (costs memory);
 then rows 2 to 8.
