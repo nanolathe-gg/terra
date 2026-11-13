@@ -902,8 +902,9 @@ function rockFrame(P, seed, ctx) {
     if (capAt[k]) col = rampAt(capRamp, clamp(0.25 + 0.75 * lit[k] + (hash2(x, y, s2 + 5) - 0.5) * 0.35, 0, 1));
     paintRGB(c, x, y, col, lit[k]);
   });
-  const fu = 0.18 + 0.2 * r(), ax = Math.round(R.ox + (r() - 0.5) * 3), ay = Math.round(lerp(R.oy - SE * Sd.hgt - CE * Sd.D * 0.5 + fu * (CE * Sd.D + SE * Sd.hgt), R.oy, smoothstep(0, 0.6, P.tall)));
-  c.ax = ax; c.ay = ay;
+  // renderSolid projects the footprint's ground center to (ox, oy). The body
+  // and its ground shadow must share that origin, independent of rock height.
+  c.ax = R.ox; c.ay = R.oy;
   patternCanvas(c, P, seed, P.recolor?.to || ramp[Math.floor(ramp.length * 0.65)]);
   const body = quantize(c, ctx, P.grain * 20, s2);
   return { body, R, W: Math.round(Sd.W), H: h };

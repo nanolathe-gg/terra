@@ -149,3 +149,19 @@ test('the complete deposit stone cluster is centered on its placement anchor', (
     }
   }
 });
+
+
+test('a rock stays anchored to its ground footprint as its height changes', () => {
+  for (const seed of [1, 77, 2791713894]) for (const tall of [0, 0.6, 1]) {
+    // With a vertical sun, a smooth single rock casts its shadow directly on
+    // its ground footprint. Its body height must not displace that footprint.
+    const f = generateFeature('rock', {cells: '3x2', angular: 0, lump: 0, pits: 0, pieces: 1, shadowLen: 0, tall}, seed, {palette, bodyOnly: true});
+    const s = f.shadow, xs = [], ys = [];
+    for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if (s.a[y * s.w + x]) { xs.push(x); ys.push(y); }
+    assert.ok(xs.length, `seed ${seed}, height ${tall}: ground shadow exists`);
+    for (const [axis, coords, anchor] of [['x', xs, s.ax], ['y', ys, s.ay]]) {
+      const center = (Math.min(...coords) + Math.max(...coords) + 1) / 2;
+      assert.ok(Math.abs(center - anchor) <= 0.5, `seed ${seed}, height ${tall}: ${axis} shadow offset ${center - anchor}`);
+    }
+  }
+});
