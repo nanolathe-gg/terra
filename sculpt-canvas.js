@@ -446,10 +446,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             presented();
           }
           if(token!==serial||viewToken!==viewEpoch){rerun=true;break;}
-          // Close-view snapshots overlap GPU work, so explicitly yield to input.
+          // Close-view snapshots overlap GPU work. Yield a task to input without
+          // waiting for a display frame; bake() retains the GPU backpressure.
           // Fit keeps its GPU completion wait: its larger tiles need backpressure
           // before presentation to keep the full-map gesture responsive.
-          await (!overview||!levels?tick():undefined);
+          await (!overview||!levels?new Promise(resolve=>setTimeout(resolve,0)):undefined);
         }
         // Generated deposits and vents sit where the export puts them and take their colors from the export art under them
         // (sculpt-features.js): one anchor read or one 128 px patch per idle frame, after the view's own images and only once the
