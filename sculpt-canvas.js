@@ -470,7 +470,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   window.addEventListener('blur',()=>{space=false;pan=null;navigationPointer=null;if(gesture)end({pointerId:gesture.id,type:'pointercancel'});schedule();});
   function budgets(){gpuBudget=clamp(Number(find('[data-gpu]').value)||512,128,4096)*MB;heapBudget=clamp(Number(find('[data-heap]').value)||1024,128,8192)*MB;api.setBudget?.(heapBudget*.65);api.fitGpuBudget?.();configureChunks();metrics();schedule();}
   find('[data-gpu]').onchange=budgets;find('[data-heap]').onchange=budgets;
-  async function idle(){do{while(drawing||pending||renderer.busy||navigationTimer||navigating())await tick();await renderer.previousChunk;}while(drawing||pending||renderer.busy||navigationTimer||navigating());}
+  async function idle(){do{while(drawing||pending||renderer.busy||navigationTimer||navigating()||api.pendingInputs?.())await tick();await renderer.previousChunk;}while(drawing||pending||renderer.busy||navigationTimer||navigating()||api.pendingInputs?.());}
   // Each corner is sampled from an awaited canonical weather field (sculpt-map.js cellHeights). No uncached preview height may enter the TNT
   // while lazy tiles are refining.
   async function sampleHeights(signal){

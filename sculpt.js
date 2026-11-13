@@ -5,7 +5,7 @@ import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountC
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
 import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe} from './sculpt-rock-presets.js';
-import {KNOBS,LOW_GROUND_RGB,applyKnob,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
+import {KNOBS,LOW_GROUND_RGB,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
 import {strokeKind,shapeFrom,savedToolCard,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,borrowBeach,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
@@ -328,7 +328,7 @@ function updateControls() {
 }
 
 function canExport() {
-  return ready && !loading && !stroke && !moving && !mapFeatures?.busy && (!weatherOn() || weatherState==='ready');
+  return ready && !loading && !worldInputQueue.pending && !stroke && !moving && !mapFeatures?.busy && (!weatherOn() || weatherState==='ready');
 }
 
 const IDENTITY=[1,0,0,1,0,0];
@@ -643,7 +643,7 @@ function evaluate(from=0,rect=null) {
 // The renderer's rock table holds the presets strokes choose, and no other (a preset no stroke uses builds no pipeline and moves no pixel).
 let rockUseBounds=new Map();
 const mergeWorldRect=(a,b)=>!a?b:!b?a:{x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.max(a.x+a.width,b.x+b.width)-Math.min(a.x,b.x),height:Math.max(a.y+a.height,b.y+b.height)-Math.min(a.y,b.y)};
-function syncRocks() {
+function syncRocks({defer=false}={}) {
   if (!renderer) return;
   const used=rocksInUse(nodes,mapRocks),key=JSON.stringify(used),bounds=new Map();
   for(const n of nodes)if(!n.hidden&&n.kind==='landform'&&n.params?.rockPreset>0){const slot=n.params.rockPreset;bounds.set(slot,mergeWorldRect(bounds.get(slot),sculptRegion.bounds(n)));}
@@ -651,13 +651,14 @@ function syncRocks() {
   if (key===rockUseKey) return;
   const next=new Map(used.map(r=>[r.slot,r])),slots=[...new Set([...renderer.rocks.keys(),...next.keys()])].filter(k=>JSON.stringify(renderer.rocks.get(k))!==JSON.stringify(next.get(k)));
   let rect=null;for(const slot of slots)rect=mergeWorldRect(rect,mergeWorldRect(before.get(slot),bounds.get(slot)));
-  rockUseKey=key;const delta=renderer.setRocks(next);
+  rockUseKey=key;const delta=renderer.setRocks(next,{sync:!defer});
   if(rect){
     const x=Math.floor(rect.x),y=Math.floor(rect.y);
     const r=renderer.requiredRegion({x,y,width:Math.ceil(rect.x+rect.width)-x,height:Math.ceil(rect.y+rect.height)-y,worldSize,worldGrid},currentDrawOptions());
     rect={x:r.gridOrigin[0],y:r.gridOrigin[1],width:(r.gridWidth-1)*r.gridSpacing,height:(r.gridHeight-1)*r.gridSpacing};
+    if(defer)return {rect};
     worldChanged(delta,{world:false,rect});
-  }else worldChanged({fields:delta.fields,stage:null},{world:false});
+  }else if(!defer)worldChanged({fields:delta.fields,stage:null},{world:false});
 }
 // The Rock option's choices: Rock beneath, the world's rock, then the map's presets by name. A stroke whose preset is gone shows Rock beneath.
 function syncRockChoices() {
@@ -970,7 +971,7 @@ const sculptRegion={
   addPathPoint:p=>{if(pathAdding&&pathPoint>=0)changeSelected(n=>{const added=extendPoint(n,pathPoint,regionalPoints([p])[0],pathIndex);pathPoint=added.point;pathIndex=added.path;});pathAdding=true;updateControls();},
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,pickAt:pickNode,selectionLabel:shapeName,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
-  drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
+  pendingInputs:()=>worldInputQueue.pending,drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
   setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },onUpdate:fn => { mapUpdate=fn; }
 };
 window.sculptRegion=sculptRegion;
@@ -1181,6 +1182,7 @@ function resize() { if (!mapCanvas) return; mapCanvas.resize(); updateControls()
 const strokeCard=d => strokeCardIn(config,d);
 // Capture tools rebuild a map from strokes (sculpt-scene.js sceneNodes, which the headless runner shares).
 function scriptedScene(list,{ground=true,tools}={}) {
+  worldInputQueue.flush();
   if (tools!==undefined) restoreMapTools(copyMapTools(tools)??[],true);   // a scene's own tools (a scene's `tools`), which its strokes may name
   applySeedControl(); refinementSeed=seed;
   cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); 
@@ -1193,6 +1195,7 @@ function scriptedScene(list,{ground=true,tools}={}) {
   return nodes.length;
 }
 function sketch() {
+  worldInputQueue.flush();
   applySeedControl();
   rememberTool();
   return {format:'nanolathe-terrain-sculpt',version:6,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,varySeed,refinementSeed,
@@ -1245,11 +1248,12 @@ function persistLater() {
   },450);
 }
 let keepSaved=false;   // set while the saved copy failed to load: leaving the page must not overwrite it with a blank map
-addEventListener('pagehide',() => { if (!stroke && !moving && !loading && !keepSaved) saveWorking(); });
+addEventListener('pagehide',() => { worldInputQueue.flush();if (!stroke && !moving && !loading && !keepSaved) saveWorking(); });
 // A save's strokes with their tools: one saved before strokes named their tool takes the one its section form belongs to, once (inferStrokeTools); a map carried
 // from another world goes through carryNodes, and a loaded one keeps the tools the toolbar has (any other shows as the generic landform). `own`: the map's tools.
 const savedStrokes=(list,carry,own) => { const ids=toolIds(own),saved=inferStrokeTools(list,ids); return carry?carryNodes(saved,own):keepStrokeTools(saved,ids); };
 function loadSketch(s,carry=false) {
+  worldInputQueue.flush();
   if (!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==6 || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n)) throw new Error('Load a map stroke graph with the same canvas and grid size.');
   const next=deserializeNodes(savedStrokes(s.nodes,carry,copyMapTools(s.tools)??[])),column=copyColumn(s.column),rock=copyRockSettings(s.rock),rocks=copyRocks(s.rocks),own=copyMapTools(s.tools)??[],ids=toolIds(own);
   if(!carry&&rock)setRockSettings(rock);
@@ -1611,6 +1615,7 @@ function defaultColor(key) {
     crystal:(config.material?.crystalRGB||[110,150,225]).map(v => v/255),low:rgb(LOW_GROUND_RGB),sun:[1,1,1],sky:[1,1,1],strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
 }
 function goToWorld(base,id,extra) {
+  worldInputQueue.flush();
   if (!stroke && !moving && !loading) saveWorking();   // the working map goes with the artist to the new world
   const url=new URL(location.origin+location.pathname); url.searchParams.set('biome',base); if (id && id!==base) url.searchParams.set('world',id);
   if (config.map) for (const [key,value] of Object.entries({mapX:config.map.unitsX,mapY:config.map.unitsY,sea:config.seaLevel})) url.searchParams.set(key,value);
@@ -1642,8 +1647,8 @@ function buildWorldPanel() {
     const set=mergedColors()[key];
     row.innerHTML=`<span>${label}</span><input type="checkbox" aria-label="Use a base color for ${label}"${set?' checked':''}><input type="color" aria-label="${label} base color" value="${set||hexColor(defaultColor(key))}">`;
     const [box,pick]=row.querySelectorAll('input');
-    const apply=() => { world.colors=pickWorldColor(config,world.colors,key,box.checked?pick.value:null); saveWorlds(); worldChanged(renderer.setColors(worldColors())); syncWorldControls(); updateControls(); };
-    box.addEventListener('change',apply); pick.addEventListener('input',() => { box.checked=true; apply(); });
+    const apply=() => setWorldColor(key,box.checked?pick.value:null);
+    box.addEventListener('change',()=>{apply();worldInputQueue.end();});pick.addEventListener('input',()=>{box.checked=true;apply();});pick.addEventListener('change',()=>worldInputQueue.end());
     rows.append(row);
     if (LIGHT_COLOR_HELP[key]) { const help=document.createElement('p'); help.className='small'; help.textContent=LIGHT_COLOR_HELP[key]; rows.append(help); }
   }
@@ -1735,7 +1740,7 @@ function buildKnobs() {
       const input = wrap.querySelector('#'+id), out = wrap.querySelector('output');
       if(choices)input.value=String(current);
       input.addEventListener('input', () => { out.textContent = input.value; if (rockSelected>0 && ROCK_KEYS.includes(key)) setPresetKnob(key, Number(input.value)); else setKnob(key, input.value); });
-      if(ROCK_KEYS.includes(key))input.addEventListener('change',()=>checkpoint(true));
+      input.addEventListener('change',()=>worldInputQueue.end());
       box.append(wrap);
     }
   }
@@ -1762,6 +1767,7 @@ function worldPanelValues() {
 // material controls used by the geological starting points.
 function rockSettings(){return Object.fromEntries(ROCK_KEYS.map(k=>[k,Number(renderer.variant.get(k)??config.defaults[k])]));}
 function setRockSettings(values){
+  worldInputQueue.flush();
   const url=new URL(location.href);let changed=false;
   for(const [key,value] of Object.entries(values)){
     if(!ROCK_KEYS.includes(key))continue;
@@ -1782,11 +1788,7 @@ function selectedRock() {
 // A new list (an edit of the selected preset, an add or a delete): the renderer follows when a stroke uses a changed preset (syncRocks).
 function editRocks(rocks) { const before=rockUseKey;mapRocks=rocks; nodes=keepStrokeRocks(nodes,mapRocks); syncRockChoices(); syncRocks(); if(before===rockUseKey)worldChanged({stage:null},{world:false});persistLater(); }
 // One rock row moved while a preset is selected: that preset's number, not the world's (no address, no saved world).
-function setPresetKnob(key,value) {
-  const rock=mapRocks.find(r=>r.slot===rockSelected); if(!rock)return;
-  editRocks(setRock(mapRocks,rockSelected,{knobs:{...rock.knobs,[key]:value},column:rock.column}));
-  syncWorldControls();
-}
+function setPresetKnob(key,value) { worldInputQueue.put('knob:'+rockSelected+':'+key,{type:'knob',slot:rockSelected,key,value}); }
 // The list, the name, the buttons (each disabled one saying why), the rock rows' values and the Rock column panel, for the selected preset.
 function syncRockPanel() {
   if(!renderer||!$('knob-rockFace'))return;   // before the World pane is built
@@ -1838,7 +1840,7 @@ function setPresetColors(colors,commit) {
   editRocks(setRockColors(mapRocks,rockSelected,colors));syncRockColors();
   if(commit)checkpoint(true);
 }
-function selectRock(slot) { rockSelected=slot; syncRockPanel(); }
+function selectRock(slot) { worldInputQueue.flush();rockSelected=slot; syncRockPanel(); }
 function mountRockPanel() {
   $('rock-presets').onchange=()=>selectRock(Number($('rock-presets').value));
   const colorsNow=()=>mapRocks.find(r=>r.slot===rockSelected)?.colors||{rock:null,beds:null},shown=()=>renderer.slotColors(0);
@@ -1850,9 +1852,9 @@ function mountRockPanel() {
   const bedColors=commit=>setPresetColors({...colorsNow(),beds:BED_COLOR_IDS.map(id=>$(id).value)},commit);
   for(const id of BED_COLOR_IDS){$(id).oninput=()=>bedColors(false);$(id).onchange=()=>bedColors(true);}
   // The absorption color: a preset's (as its other colors), or on the world's rock the world's own 'absorb' color (saved with the world's colors).
-  const worldAbsorb=value=>{const world=activeWorld();world.colors=pickWorldColor(config,world.colors,'absorb',value);saveWorlds();worldChanged(renderer.setColors(worldColors()));syncRockColors();};
+  const worldAbsorb=value=>setWorldColor('absorb',value);
   const absorbColor=commit=>{if(rockSelected===0)worldAbsorb($('rock-absorb').value);else setPresetColors({...colorsNow(),absorb:$('rock-absorb').value},commit);};
-  $('rock-absorb').oninput=()=>absorbColor(false);$('rock-absorb').onchange=()=>absorbColor(true);
+  $('rock-absorb').oninput=()=>absorbColor(false);$('rock-absorb').onchange=()=>{absorbColor(true);if(rockSelected===0)worldInputQueue.end();};
   $('rock-absorb-world').onchange=()=>{const off=$('rock-absorb-world').checked;if(rockSelected===0)worldAbsorb(off?null:shown().absorb);else setPresetColors({...colorsNow(),absorb:off?null:shown().absorb},true);};
   $('rock-add').onchange=()=>{
     const key=$('rock-add').value;$('rock-add').value='';if(!key)return;
@@ -1890,15 +1892,51 @@ function mountRockPanel() {
 }
 // A world row's change: address, world store, panel and renderer settings, then
 // the shape or Time work requested by the shared applyKnob operation.
-function setKnob(key, value) {
-  const url = new URL(location.href); url.searchParams.set(key, value); window.history.replaceState(null, '', url);
-  const next = applyKnob({key, value, settings: experiment, renderer, nodes, seed});
-  if (config) { activeWorld().knobs[key] = String(value); saveWorlds(); if (key==='strata'||key==='lowTint') buildWorldPanel(); }
-  if (next.reload) { location.reload(); return; }
-  const change=worldChanged(next.change);syncWorldControls();
-  if (!change.timeChanged) return;
-  cancelWeather(); if (next.evaluate!==undefined&&change.channels.some(c=>c.name==='shape')) evaluate(next.evaluate); if (next.checkpoint&&change.stage==='A') checkpoint(); queueWeather();
+const pendingWorldAddress=new Map();let worldStoreDirty=false,worldPanelDirty=false,worldCheckpoint=false;
+const worldInputQueue=createWorldInputQueue({apply:applyWorldInputs,commit:commitWorldInputs});
+function setKnob(key,value) { worldInputQueue.put('knob:0:'+key,{type:'knob',slot:0,key,value}); }
+function setWorldColor(key,value) { worldInputQueue.put('color:'+key,{type:'color',key,value}); }
+function applyWorldInputs(batch) {
+  let colors=false,presets=false,reload=false;const nexts=[];
+  for(const input of batch){
+    if(input.type==='color'){
+      const world=activeWorld();world.colors=pickWorldColor(config,world.colors,input.key,input.value);colors=worldStoreDirty=true;continue;
+    }
+    const {key,value,slot}=input;
+    if(slot>0){
+      const rock=mapRocks.find(r=>r.slot===slot);if(!rock)continue;
+      mapRocks=setRock(mapRocks,slot,{knobs:{...rock.knobs,[key]:Number(value)},column:rock.column});presets=worldCheckpoint=true;continue;
+    }
+    const next=applyKnob({key,value,settings:experiment,renderer,nodes,seed,sync:false});nexts.push(next);reload ||= Boolean(next.reload);
+    activeWorld().knobs[key]=String(value);pendingWorldAddress.set(key,String(value));worldStoreDirty=true;
+    worldPanelDirty ||= key==='strata'||key==='lowTint';worldCheckpoint ||= ROCK_KEYS.includes(key)||Boolean(next.checkpoint);
+  }
+  if(reload){commitWorldInputs();location.reload();return;}
+  const local=presets?syncRocks({defer:true}):null,onlyPresets=batch.every(input=>input.type==='knob'&&input.slot>0);
+  // setColors writes the complete block too, including the knobs just stored.
+  // Otherwise the batch has exactly one applyKnobs call, regardless of input count.
+  const delta=colors?renderer.setColors(worldColors()):renderer.applyKnobs();
+  if(!delta.fields.length&&!delta.channels.length)for(const next of nexts)if(next.unknownInput){delta.channels.push({name:next.unknownInput,stage:'A'});delta.stage='A';}
+  const change=worldChanged(delta,onlyPresets?{world:false,rect:local?.rect??null}:{world:true});
+  if(change.timeChanged){
+    cancelWeather();const from=nexts.filter(n=>n.evaluate!==undefined).map(n=>n.evaluate);
+    if(from.length&&change.channels.some(c=>c.name==='shape'))evaluate(Math.min(...from));
+    queueWeather();
+  }
 }
+function commitWorldInputs() {
+  if(pendingWorldAddress.size){const url=new URL(location.href);for(const [key,value]of pendingWorldAddress)url.searchParams.set(key,value);window.history.replaceState(null,'',url);pendingWorldAddress.clear();}
+  if(worldStoreDirty){worldStoreDirty=false;saveWorlds();}
+  if(worldPanelDirty){worldPanelDirty=false;buildWorldPanel();}
+  syncWorldControls();updateControls();
+  if(worldCheckpoint){worldCheckpoint=false;checkpoint(true);}
+  persistLater();
+}
+// Values must reach the model before a different action reads its recipe.
+document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-knob],#world-colors'))worldInputQueue.flush();},true);
+document.addEventListener('click',e=>{if(e.target.closest('button'))worldInputQueue.flush();},true);
+document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&['z','y','s'].includes(e.key.toLowerCase()))worldInputQueue.flush();},true);
+
 async function bootMap() {
   worldSize=config.worldSize??config.size; worldGrid=config.worldGrid??config.grid;
   size=worldSize; grid=worldGrid; spacing=(worldSize-1)/(worldGrid-1);
@@ -1996,7 +2034,7 @@ function gpuRegionalCheck() {
   return regionalCheck({fields:regionalFields,device:renderer.device,nodes,context:shapeContext(),config,grid:worldGrid,spacing,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
     startCoarse:() => { if (!pagedCoarseStarted) { pagedCoarseStarted=true; regionalFields.startCoarse().catch(() => {}); } }});
 }
-window.sculptDebug = {dirty:()=>mapCanvas?.dirty(),curve:() => currentCurve(),along:() => currentAlong(),place:() => lfPlace,sectionPoint:(side,x,v) => { const cv=$('section-preview'),r=cv.getBoundingClientRect(),L=sectionLayout(curveContext()); return {x:r.left+sideX(L,side,x)*r.width/cv.width,y:r.top+L.yv(v)*r.height/cv.height}; },leanPoint:() => { const cv=$('section-preview'),r=cv.getBoundingClientRect(),L=sectionLayout(curveContext()); return {x:r.left+L.xc*r.width/cv.width,y:r.top+L.yv(0)*r.height/cv.height}; },alongPoint:(t,v) => { const cv=$('along-preview'),r=cv.getBoundingClientRect(),L=alongLayout(curveContext()); return {x:r.left+L.X(t)*r.width/cv.width,y:r.top+L.yv(v)*r.height/cv.height}; },pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shape:() => ({fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:gpuRegionalCheck,state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get specStats() { return renderer.specStats && {...renderer.specStats, cached: renderer.specCache.size, key: renderer.specKey().key}; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level), get startupParts() { return renderer.startupParts; },
+window.sculptDebug = {dirty:()=>mapCanvas?.dirty(),inputs:()=>worldInputQueue.stats(),curve:() => currentCurve(),along:() => currentAlong(),place:() => lfPlace,sectionPoint:(side,x,v) => { const cv=$('section-preview'),r=cv.getBoundingClientRect(),L=sectionLayout(curveContext()); return {x:r.left+sideX(L,side,x)*r.width/cv.width,y:r.top+L.yv(v)*r.height/cv.height}; },leanPoint:() => { const cv=$('section-preview'),r=cv.getBoundingClientRect(),L=sectionLayout(curveContext()); return {x:r.left+L.xc*r.width/cv.width,y:r.top+L.yv(0)*r.height/cv.height}; },alongPoint:(t,v) => { const cv=$('along-preview'),r=cv.getBoundingClientRect(),L=alongLayout(curveContext()); return {x:r.left+L.X(t)*r.width/cv.width,y:r.top+L.yv(v)*r.height/cv.height}; },pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shape:() => ({fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:gpuRegionalCheck,state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get specStats() { return renderer.specStats && {...renderer.specStats, cached: renderer.specCache.size, key: renderer.specKey().key}; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level), get startupParts() { return renderer.startupParts; },
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene,
   // sketch and loadSketch round-trip a recipe.

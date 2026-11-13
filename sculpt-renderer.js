@@ -1063,10 +1063,11 @@ export class TerrainRenderer {
   // rock: its numbers are the flat settings every address names (this.variant), its column config.column, its colors the world's (setColors).
   // A slot takes slot 0's number for any it does not set, slot 0's column if it has none, and slot 0's colors where its own are null. The slots given are the
   // ones in use: their maxima bound the passes that gather (writeRocks), and a second slot builds the pipelines that read any slot (rockMask).
-  setRocks(rocks = new Map()) {
+  setRocks(rocks = new Map(), {sync=true}={}) {
     const count = this.uniform.get('rock').count;
     for (const slot of rocks.keys()) if (!Number.isInteger(slot) || slot < 1 || slot >= count) throw new Error(`nanolathe: rock slot ${slot} is not 1 to ${count - 1}`);
     this.rocks = new Map(rocks);
+    if(!sync){this.worldDirty=true;return null;}
     return this.applyKnobs();
   }
   rockSlots() { return [0, ...[...this.rocks.keys()].sort((a, b) => a - b)]; }

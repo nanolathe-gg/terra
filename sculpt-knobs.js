@@ -99,11 +99,12 @@ const SHAPE_KNOBS=new Set(['frostGaps','frostGapReach','frostGapSize','frostGapD
 // node: the undulation rows edit the ground node in `nodes`, or put one first when Undulation height turns on), `checkpoint` (an undo step for
 // that edit) and `weather` (the Time pass again; alone, for the deposit supply, which changes the generated deposit field, and the rain).
 const TRACKED_WORLD_INPUTS=new Set([...KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)),'palette','erosion','erosionAge','erosionEnvelope','wetReach','talusFull','wearFull','flowK']);
-export function applyKnob({key,value,settings,renderer,nodes,seed}) {
+export function applyKnob({key,value,settings,renderer,nodes,seed,sync=true}) {
   const previous=renderer.variant.get(key);
   settings.set(key,value);
   if (key==='ground' || key==='groundPattern' || key==='beachFrom') return {reload:true};
-  renderer.variant.set(key,value); const change=renderer.applyKnobs(),result=value=>change?{...value,change}:value;
+  renderer.variant.set(key,value);
+  const unknown=!TRACKED_WORLD_INPUTS.has(key)&&String(previous)!==String(value),change=sync?renderer.applyKnobs():null,result=value=>({...value,...(change?{change}:{}),...(!sync&&unknown?{unknownInput:key}:{})});
   // Current rows are covered by the computed comparison and declared channels.
   // An unfamiliar non-uniform input is conservative, never silently a no-op.
   if(change&&!change.fields.length&&!change.channels.length&&!TRACKED_WORLD_INPUTS.has(key)&&String(previous)!==String(value)){
@@ -158,4 +159,27 @@ export function slopeReplaced({config,renderer,weathering,materialWeathering}) {
 export function worldPanelValues(facts) {
   const {config,renderer,nodes,colors}=facts,layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks(nodes);
   return {...own,stonePaint:nodes.some(n=>n.kind==='paint'&&[5,6].includes(n.params?.paintChannel))?1:0,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:columnRows(config.column,config.variant).starts.length?1:0,repeatBeds:Math.max(0,...columnRows(config.column,config.variant).starts.map(s=>s[2])),capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
+}
+
+// Latest values are applied together once per animation frame. Persistence
+// waits for release or a quiet pause; handoffs flush before reading the recipe.
+export function createWorldInputQueue({apply,commit,requestFrame=fn=>requestAnimationFrame(fn),cancelFrame=id=>cancelAnimationFrame(id),setTimer=(fn,ms)=>setTimeout(fn,ms),clearTimer=id=>clearTimeout(id)}) {
+  const values=new Map();let frame=0,timer=0,wantsCommit=false,needsCommit=false,running=false,applications=0,commits=0;
+  const schedule=()=>{if(!frame)frame=requestFrame(drain);};
+  function drain(){
+    frame=0;if(running)return;running=true;
+    try{
+      if(values.size){const batch=[...values.values()];values.clear();applications++;apply(batch);}
+      if(wantsCommit){wantsCommit=false;if(needsCommit){needsCommit=false;commits++;commit();}}
+    }finally{running=false;}
+    if(values.size)schedule();
+  }
+  function end(){if(timer){clearTimer(timer);timer=0;}wantsCommit=true;if(values.size||frame)schedule();else drain();}
+  return {
+    put(key,value){values.set(key,value);needsCommit=true;if(timer)clearTimer(timer);timer=setTimer(()=>{timer=0;end();},250);schedule();},
+    end,
+    flush(){if(running)return;if(frame){cancelFrame(frame);frame=0;}end();if(values.size){if(frame){cancelFrame(frame);frame=0;}drain();}},
+    get pending(){return values.size>0||frame!==0;},
+    stats:()=>({pending:values.size,applications,commits}),
+  };
 }

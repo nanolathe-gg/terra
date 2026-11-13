@@ -2,7 +2,7 @@
 // asks the host to run again, the Colors panel's rows and picks, and the panel facts a stroke's water choices turn on.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {KNOBS, applyKnob, colorRows, pickWorldColor, strokeWaterPicks, worldPanelValues} from '../sculpt-knobs.js';
+import {KNOBS, applyKnob, createWorldInputQueue, colorRows, pickWorldColor, strokeWaterPicks, worldPanelValues} from '../sculpt-knobs.js';
 
 const renderer = () => ({variant: new Map(), applied: 0, applyKnobs() { this.applied++; }, transitionBody: false, groundTiled: false});
 
@@ -98,4 +98,16 @@ test('an unknown non-uniform input falls back to shape, while its repeated value
   const first=applyKnob({key:'futureInput',value:'1',settings,renderer:r,nodes,seed:2701});
   assert.equal(first.change.stage,'A');assert.deepEqual(first.change.channels,[{name:'futureInput',stage:'A'}]);
   assert.equal(applyKnob({key:'futureInput',value:'1',settings,renderer:r,nodes,seed:2701}).change.stage,null);
+});
+
+function inputClock(){let serial=0;const frames=new Map(),timers=new Map(),applied=[],committed=[];const queue=createWorldInputQueue({apply:b=>applied.push(b),commit:()=>committed.push(applied.at(-1)),requestFrame:fn=>{frames.set(++serial,fn);return serial;},cancelFrame:id=>frames.delete(id),setTimer:fn=>{timers.set(++serial,fn);return serial;},clearTimer:id=>timers.delete(id)});const run=map=>{const f=[...map.values()];map.clear();for(const fn of f)fn();};return {queue,applied,committed,frame:()=>run(frames),pause:()=>run(timers),frames};}
+test('World inputs keep only the latest value per row and apply one batch per frame',()=>{
+ const c=inputClock();for(let i=0;i<40;i++)c.queue.put('rock',i);c.queue.put('light',.6);
+ assert.equal(c.applied.length,0);assert.equal(c.frames.size,1);c.frame();assert.deepEqual(c.applied,[[39,.6]]);assert.equal(c.committed.length,0);c.queue.end();assert.deepEqual(c.committed,[[39,.6]]);
+});
+test('release waits for queued values, and a pause commits the latest applied state',()=>{
+ const c=inputClock();c.queue.put('rain',1);c.queue.end();assert.equal(c.committed.length,0);c.frame();assert.deepEqual(c.committed,[[1]]);c.queue.put('rain',2);c.frame();c.pause();assert.deepEqual(c.committed,[[1],[2]]);
+});
+test('a handoff flushes pending inputs without leaving a delayed application',()=>{
+ const c=inputClock();c.queue.put('color','#778899');c.queue.flush();assert.deepEqual(c.applied,[['#778899']]);assert.deepEqual(c.committed,[['#778899']]);assert.equal(c.queue.pending,false);c.frame();c.pause();assert.equal(c.applied.length,1);assert.equal(c.committed.length,1);
 });
