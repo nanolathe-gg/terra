@@ -251,3 +251,12 @@ map's export-ready flag does not certify each weather page; shape and Time
 inputs therefore keep the previous fallback. This prevents early final
 quality from being mistaken for completed weathering during a short pause.
 The full matrix collected before this restriction is diagnostic only.
+
+The post-pause diagnostic now records WebGPU error-scope wait time, the
+first final attempt after the anchor, and native input stages. Flat Green
+Colors is stage F; its first final attempt starts 72–89 ms after the last
+anchor. Error-scope waits total about 70–72 ms across 56 final attempts
+(including the off-screen margin observed after the visible endpoint).
+They are not the whole final-cost penalty. The complete viewport still
+matches its cold replay exactly. This is diagnostic, not an alternating
+acceptance batch.
