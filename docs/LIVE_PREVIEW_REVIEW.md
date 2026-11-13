@@ -2,7 +2,8 @@
 
 All implementation work is on **`live-preview/review`**, in
 `~/src/terraform-wt-live-preview-review`. Main is untouched; the owner reviews
-before any merge. The isolated review server is **http://127.0.0.1:8903/sculpt**.
+before any merge to main. Main's accepted UI changes through `222ace7a`
+are integrated on this branch. The isolated review server is **http://127.0.0.1:8903/sculpt**.
 
 - [LP0 bench](LP0_REPORT.md): original browser baseline and limitations.
 - [LP0c](LP0c_REPORT.md): fixed view tiles and deterministic regional UVs;
@@ -16,6 +17,9 @@ before any merge. The isolated review server is **http://127.0.0.1:8903/sculpt**
 - [LP2 progress](LP2_PROGRESS.md): frame batching, native view blocks,
   pause/release refinement, exact working texture reuse, Time freshness and
   adaptive working-memory recovery are implemented with focused checks.
+  A global coarse field lattice removes the measured block-boundary mismatch
+  while preserving the captured final hash; three preview-bias samples are
+  reported.
   The default is 2048 MiB; a forced paged failure recovers at 512 in two
   blocks. The no-compile gate, remaining allocation recovery and qualified
   latency/final-cost measurements remain unfinished. Safari validation is

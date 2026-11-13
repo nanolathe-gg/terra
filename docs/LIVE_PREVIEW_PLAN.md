@@ -589,6 +589,11 @@ preview level:
 - It is cut into the fewest blocks whose `renderer.estimate()` fits the
   room a bake has today. Blocks start on a 64 px world grid, so a block's
   pixels land on the same places whatever the scroll offset.
+- The relief field's apron also starts on that level's global sampling
+  grid. Screen-block alignment alone leaves the field samples out of phase:
+  LP2's cliff check found 19,147 changed preview pixels between whole and
+  split blocks; aligning field bounds removes all of them while retaining
+  the captured final hash **[measured, LP2 progress report]**.
 - Making room for a preview never evicts a final image that is in view.
 - Each level in use keeps its own working textures. Today one set is
   reallocated whenever the size or level of a bake changes
