@@ -234,7 +234,10 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.trimWorking(keep,()=>required+unused()<=this.budgetBytes);
     if(this.maskLayers>this.device.limits.maxTextureArrayLayers)throw new Error('nanolathe: mask planes exceed the device texture array limit');
     const T=GPUTextureUsage,read=T.TEXTURE_BINDING|T.COPY_DST|(fed?T.STORAGE_BINDING:0);
-    try{
+    // Reused textures allocate nothing; an empty error scope only adds an IPC
+    // round trip to every tile. Keep every actual allocation (and the forced
+    // failure probe) inside the scope.
+    if(this.failWorkingAllocation||!input.textures.length||!level.fieldsTexture)try{
       await terrainAllocation(this.device,()=>{
       if(this.failWorkingAllocation){this.failWorkingAllocation=false;throw new TerrainMemoryError('Forced working-set allocation failure.');}
       if(!input.textures.length){
