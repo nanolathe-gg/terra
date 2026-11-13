@@ -199,7 +199,6 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.f('uChunkScreenOrigin',region.screenOrigin);this.f('uChunkScale',rasterScale);this.f('uChunkFieldScale',fieldScale);   // Shared shader coordinates stay in world pixels at every display scale.
     // Keep native material variance before nonlinear coverage and palette mapping.
     // Averaging these inputs first changes the mean rendered color at lower resolutions.
-    this.f('uMaterialFoot',this.variant.has('materialFoot')?Math.max(1,Number(this.variant.get('materialFoot'))):1);
     if(!reuse)this.bindGroups={};this.fieldsDirty=true;
     this.recordMemory();return {gw,gh,fw,fh};
   }

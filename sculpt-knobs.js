@@ -101,16 +101,16 @@ const SHAPE_KNOBS=new Set(['frostGaps','frostGapReach','frostGapSize','frostGapD
 export function applyKnob({key,value,settings,renderer,nodes,seed}) {
   settings.set(key,value);
   if (key==='ground' || key==='groundPattern' || key==='beachFrom') return {reload:true};
-  renderer.variant.set(key,value); renderer.applyKnobs();
+  renderer.variant.set(key,value); const change=renderer.applyKnobs(),result=value=>change?{...value,change}:value;
   if (Object.hasOwn(UNDULATION,key)) {
     const i=nodes.findIndex(n => n.kind==='ground');
-    if (i>=0) { nodes[i][UNDULATION[key]]=Number(value); return {evaluate:i,checkpoint:true,weather:true}; }
-    if (key==='undulation' && Number(value)>0) { nodes.unshift({kind:'ground',amplitude:Number(value),wavelength:160,art:settings.has('undulationArt')?Number(settings.get('undulationArt')):1,seed:seed^0x9e37}); return {evaluate:0,checkpoint:true,weather:true}; }
-    return {};
+    if (i>=0) { nodes[i][UNDULATION[key]]=Number(value); return result({evaluate:i,checkpoint:true,weather:true}); }
+    if (key==='undulation' && Number(value)>0) { nodes.unshift({kind:'ground',amplitude:Number(value),wavelength:160,art:settings.has('undulationArt')?Number(settings.get('undulationArt')):1,seed:seed^0x9e37}); return result({evaluate:0,checkpoint:true,weather:true}); }
+    return result({});
   }
-  if (SHAPE_KNOBS.has(key)) return {evaluate:0,weather:true};
-  if (key==='sand' || key==='erosionRain') return {weather:true};
-  return {};
+  if (SHAPE_KNOBS.has(key)) return result({evaluate:0,weather:true});
+  if (key==='sand' || key==='erosionRain') return result({weather:true});
+  return result({});
 }
 
 // Low ground's color where a world picks none (Colors: Low ground): a dark red-brown mud, as retail Zhon's lowland.

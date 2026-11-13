@@ -36,14 +36,14 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const levels=query.get('levels')!=='0',levelsOverlay=query.get('levelsOverlay')==='1';   // H7b: levels 0 is the final-only canvas
   let dirtyMarks=0,retainedInvalidations=0;
   const interacting=()=>Boolean(gesture||api.previewActive?.());
-  let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,epoch=0,viewEpoch=0,busy=false,features,metadata,passability,canonicalSize=512,displaySize=256;
+  let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,serial=0,viewEpoch=0,busy=false,features,metadata,passability,canonicalSize=512,displaySize=256;
   let paintedView=-1,navigationTimer=null,activeBake=null;
   // Only optional background work and hover detail wait for navigation to
   // settle. Visible terrain starts immediately, including during a held pan.
   const navigationDelay=180;
   const navigating=()=>Boolean(pan||navigationPointer!==null||navigationTimer!==null);
   const bakedBefore=new Set(); let lastScroll=-Infinity,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
-  let heldSince=null,pan=null,space=false,gesture=null,hover=null,pointerTurn=true,optionsKey='';
+  let heldSince=null,pan=null,space=false,gesture=null,hover=null,pointerTurn=true;
   let hoveredNode=-1;
   let lastFrame=0,frameTimes=[],strokeTimes=[],resizePending=false;
   const coarse=new OffscreenCanvas(VIEW_CANVASES.overview,VIEW_CANVASES.overview),cg=coarse.getContext('2d');
@@ -60,9 +60,6 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function fixedGPU(external=true) { return (external?(api.gpuBytes?.()??0):0)+(previewReserved?64*MB:0)+(canvas.width*canvas.height+overlay.width*overlay.height+coarse.width*coarse.height+navigatorCanvas.width*navigatorCanvas.height)*4+(features?.stats?.().imageBytes||0); }
   function steadyGPU() { return fixedGPU()-(api.gpuTransientBytes?.()??0); }   // what a bake budgets against: fixedGPU less the Time pass's memory, gone when the pass ends
   function gpuResident() { return renderer.stats().residentBytes+cacheBytes+fixedGPU(); }
-  const originalKnobs=renderer.applyKnobs.bind(renderer),originalColors=renderer.setColors.bind(renderer);
-  renderer.applyKnobs=(...args)=>{const r=originalKnobs(...args);configureChunks();clear();return r;};
-  renderer.setColors=(...args)=>{const r=originalColors(...args);clear();return r;};
   function ownedBytes(extra=[]){const buffers=new Set(api.residentBuffers?.()||[]);for(const e of cache.values())if(e.heightPatch)buffers.add(e.heightPatch.fields.h.buffer);for(const a of extra)if(ArrayBuffer.isView(a))buffers.add(a.buffer);const r=renderer.stats();return [...buffers].reduce((n,b)=>n+b.byteLength,0)+r.cpuRetainedBytes+(r.cpuWorkingBytes??0)+(api.workingBytes?.()??0);}
   function fieldArrays(r){return [...Object.values(r.fields),...Object.values(r.weather??{}),r.materialField??r.material].filter(ArrayBuffer.isView);}
   function checkHeap(r,upload=0){const arrays=fieldArrays(r),used=()=> (performance.memory?.usedJSHeapSize??0)+ownedBytes(arrays)+upload;if(used()>heapBudget){api.evict?.();for(const e of cache.values())e.heightPatch=null;if(used()>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}}
@@ -77,16 +74,25 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function remove(key) { const e=cache.get(key);if(!e)return;e.bitmap.close?.();cacheBytes-=e.bytes;cache.delete(key);evictions++; }
   // H6b: a bake from the GPU buffers records how many changes had been announced when it took them; it is still good if none announced since touched
   // its input (an edit elsewhere on the map, or a later move of the same stroke over other chunks, does not throw it away).
-  let changeSeq=0;const changeLog=[];
-  function changedSince(seq,input){return changeLog.length>=256&&changeLog[0].seq>seq+1||changeLog.some(c=>c.seq>seq&&(!c.rect||intersects(c.rect,input)));}
+  const rev={B:0,C:0,D:0,E:0,F:0},changeLog=[];let lastInput=null;
+  function changedSince(at,input){return changeLog.length>=256&&changeLog[0].serial>at+1||changeLog.some(c=>c.serial>at&&(!c.rect||intersects(c.rect,input)));}
   function cancelBake(){activeBake?.controller.abort();}
-  function clear(rect=null,{refinement=false}={}) {
-    cancelBake();if(!refinement)previewFields.invalidate(rect);
-    epoch++;changeLog.push({seq:++changeSeq,rect});if(changeLog.length>256)changeLog.shift();
-    for(const e of cache.values())if(!(refinement&&(e.fit||e.weathered===false))&&(!rect||intersects(rect,e.input??e))){
-      if(!e.dirty)dirtyMarks++;e.dirty=true;retainedInvalidations++;
+  function changed({stage=null,rect=null,refinement=false,world=rect===null&&!refinement,fields=[],channels=[],input=true,kind=null}={}) {
+    if(stage!==null&&!'ABCDEF'.includes(stage))throw Error('Unknown dirty stage '+stage);
+    let tiles=0;
+    if(stage){
+      cancelBake();if(stage==='A'&&!refinement)previewFields.invalidate(rect);
+      serial++;if(world&&stage in rev)rev[stage]++;
+      changeLog.push({serial,stage,rect});if(changeLog.length>256)changeLog.shift();
+      for(const e of cache.values())if(!(refinement&&(e.fit||e.weathered===false))&&(!rect||intersects(rect,e.input??e))){
+        if(!e.dirty){dirtyMarks++;tiles++;}e.dirty=true;retainedInvalidations++;
+      }
+      if(!refinement)configureChunks();
+      coarseColour=true;features?.groundChanged?.(rect);schedule();
     }
-    coarseColour=true;features?.groundChanged?.(rect);schedule();
+    const record={serial,rev:{...rev},stage,rect:rect?{...rect}:null,fields,channels,tiles,kind};
+    if(input)lastInput=record;
+    return record;
   }
   function trimTo(limit){limit=Math.max(0,limit);const v=state();for(const[key,e]of cache)if(cacheBytes>limit&&!intersects(e,v))remove(key);while(cacheBytes>limit&&cache.size)remove(cache.keys().next().value);}
   function configureChunks() {
@@ -152,8 +158,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(scale<1&&room<detailBytes(scale))throw new Error(`nanolathe: a view at level ${scale} needs more of GPU memory than the budget leaves`);
       trimTo(room);
       renderer.setBudget(gpuBudget,steadyGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
-      const seq=changeSeq,result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale,deferCompletion:!fit&&!exportArt});bakes++;
-      const bitmap=await createImageBitmap(result.canvas,0,0,ow,oh,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:ow*oh*4,scale,fit,weathered:readWeather,fed:true,seq,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
+      const atSerial=serial,atRev={...rev},result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale,deferCompletion:!fit&&!exportArt});bakes++;
+      const bitmap=await createImageBitmap(result.canvas,0,0,ow,oh,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:ow*oh*4,scale,fit,weathered:readWeather,fed:true,serial:atSerial,rev:atRev,shapeRev:feed.revision,level:scale,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
       const key=rect.x+','+rect.y+','+canonicalSize+','+scale;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
     }finally{feed.release?.();}
     const fields=await region(request,options,signal,readWeather);
@@ -163,8 +169,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     checkHeap(fields,estimate.cpuPeakBytes);
     const copyBytes=rect.width*rect.height*8;trimTo(gpuBudget-steadyGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes);
     renderer.setBudget(gpuBudget,steadyGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
-    const result=await renderer.renderChunk(fields,{...options,quality:'full',deferCompletion:!exportArt});bakes++;
-    const bitmap=await createImageBitmap(result.canvas,0,0,rect.width,rect.height,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:rect.width*rect.height*4,weathered:readWeather,input:{x:fields.gridOrigin[0],y:fields.gridOrigin[1],width:(fields.gridWidth-1)*fields.gridSpacing,height:(fields.gridHeight-1)*fields.gridSpacing},heightPatch:keepHeight(fields)};
+    const atSerial=serial,atRev={...rev},result=await renderer.renderChunk(fields,{...options,quality:'full',deferCompletion:!exportArt});bakes++;
+    const bitmap=await createImageBitmap(result.canvas,0,0,rect.width,rect.height,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:rect.width*rect.height*4,weathered:readWeather,serial:atSerial,rev:atRev,shapeRev:fields.revision,level:1,input:{x:fields.gridOrigin[0],y:fields.gridOrigin[1],width:(fields.gridWidth-1)*fields.gridSpacing,height:(fields.gridHeight-1)*fields.gridSpacing},heightPatch:keepHeight(fields)};
     const key=rect.x+','+rect.y+','+canonicalSize;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
   }
   // H7 2a: the overview is sampled once per edit, over the edit's dirty rectangle only, in slices that leave the frame free.
@@ -260,7 +266,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(drawing){if(paintedView!==viewEpoch)presentView();else if(passability?.active)overlays();rerun=true;return;}
       presentView();
       drawing=rendering=true;
-      const key=JSON.stringify(drawOptions?.()??api.drawOptions?.()??{});if(optionsKey&&optionsKey!==key)clear();optionsKey=key;
+      const delta=renderer.syncWorld(drawOptions?.()??api.drawOptions?.()??{});
+      if(delta.stage)changed(delta);
       // H7 2b: while the Time pass is running, a bake would read the unweathered height and be redone when the weather lands.
       // The pass is submitted first (it starts with the edit) and chunks wait for it, for at most 8 s so a failed pass cannot hide the map.
       const weatherPending=weatheredView&&api.canExport&&!api.canExport()&&!interacting()&&!features?.busy;
@@ -269,7 +276,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(holding)setTimeout(schedule,100);
       if(!busy){
         if(overview&&!previewReserved){previewReserved=true;api.fitGpuBudget?.();}
-        const size=overview?256*displayLevel():viewChunkSize(),v=state(),jobs=[],token=epoch,viewToken=viewEpoch,previewing=interacting();
+        const size=overview?256*displayLevel():viewChunkSize(),v=state(),jobs=[],token=serial,viewToken=viewEpoch,previewing=interacting();
         for(let y=Math.max(0,Math.floor(v.y/size)-1)*size;y<Math.min(map.height,v.y+v.height+size);y+=size)for(let x=Math.max(0,Math.floor(v.x/size)-1)*size;x<Math.min(map.width,v.x+v.width+size);x+=size)jobs.push({x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)});
         const dist=r=>Math.hypot(r.x+size/2-v.x-v.width/2,r.y+size/2-v.y-v.height/2);
         // H7b: with levels on, the visible chunks come before the margin, each group nearest the view's centre first (oldest first during a gesture).
@@ -304,7 +311,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           }
         }
         for(const {rect,want,authoredPreview=false} of plan){
-          if(token!==epoch||viewToken!==viewEpoch||busy||previewing!==interacting()){rerun=true;break;}
+          if(token!==serial||viewToken!==viewEpoch||busy||previewing!==interacting()){rerun=true;break;}
           if((previewing||navigating()||want<1)&&!intersects(rect,v))continue;   // a detail level bakes only what is seen: its ring would evict itself
           const key=cacheKey(rect,size);let e=cache.get(key);let baked=false;
           if(want===2&&e&&!e.dirty)continue;   // current detailed images also satisfy a preview request
@@ -314,12 +321,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             const controller=new AbortController();activeBake={controller,rect};
             // Scrolling changes the plan, but a tile still in view remains
             // useful. Keep it running instead of restarting on every input.
-            try{e=await bake(rect,false,controller.signal,()=>token!==epoch||busy||viewToken!==viewEpoch&&!intersects(rect,state()),want,overview,authoredPreview);}
+            try{e=await bake(rect,false,controller.signal,()=>token!==serial||busy||viewToken!==viewEpoch&&!intersects(rect,state()),want,overview,authoredPreview);}
             catch(err){if(want<1&&String(err.message).includes('of GPU memory')){finest=want*2;rerun=true;break;}throw err;}   // fall back to the next coarser level, never the banner
             finally{if(activeBake?.controller===controller)activeBake=null;}
-            baked=true;if(token!==epoch){
+            baked=true;if(token!==serial){
             // Keep a completed preview even if a newer input touched it. It remains dirty until the latest revision is baked.
-            if(e.fed&&changedSince(e.seq,e.input))e.dirty=true;
+            if(e.fed&&changedSince(e.serial,e.input))e.dirty=true;
             if(!e.fed){e.bitmap.close?.();break;}
           }
           // The image it replaces (a quarter one) is dropped now that the final one is in hand.
@@ -335,17 +342,17 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             if(paintedView!==viewEpoch)presentView();else{paint(e,current);overlays();}
             presented();
           }
-          if(token!==epoch||viewToken!==viewEpoch){rerun=true;break;}
+          if(token!==serial||viewToken!==viewEpoch){rerun=true;break;}
           // Close-view snapshots overlap GPU work, so explicitly yield to input.
           // Fit keeps its GPU completion wait: its larger tiles need backpressure
           // before presentation to keep the full-map gesture responsive.
           await (!overview||!levels?tick():undefined);
         }
-        if(!rerun&&token===epoch)pointerTurn=true;   // nothing newer arrived while this plan ran: the next move starts on the pointer's turn
+        if(!rerun&&token===serial)pointerTurn=true;   // nothing newer arrived while this plan ran: the next move starts on the pointer's turn
         // Generated deposits and vents sit where the export puts them and take their colors from the export art under them
         // (sculpt-features.js): one anchor read or one 128 px patch per idle frame, after the view's own images and only once the
         // weather the export reads is in.
-        if(!rerun&&token===epoch&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&(!api.canExport||api.canExport())&&await features?.fitGround?.(state()))rerun=true;
+        if(!rerun&&token===serial&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&(!api.canExport||api.canExport())&&await features?.fitGround?.(state()))rerun=true;
       }
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
     }catch(err){if(err.name==='AbortError')rerun=true;else{console.error(err);$('error').hidden=false;$('error').textContent=err.message;}}
@@ -485,30 +492,30 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     for(let y=0;y<map.height;y+=size)for(let x=0;x<map.width;x+=size){signal?.throwIfAborted();const rect={x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)},entry=await bake(rect,true,signal),tile=new OffscreenCanvas(rect.width,rect.height),c=tile.getContext('2d');c.drawImage(entry.bitmap,0,0);entry.bitmap.close?.();paint?.(c,rect);const png=await tile.convertToBlob({type:'image/png'});await accept({...rect,png},index++,total);tile.width=tile.height=1;metrics();}
   }
   // H6b: with the GPU feed the chunks rebake as a change is submitted (they read the GPU buffers); the overview and the save wait until the CPU copy holds it.
-  const invalidate=change=>clear(api.expandDirty?.(change?.rect??null)??change?.rect??null);
+  const invalidate=change=>changed({stage:'A',rect:api.expandDirty?.(change?.rect??null)??change?.rect??null,world:false,channels:[{name:'shape',stage:'A'}]});
   api.subscribeSubmit?.(change=>{if(api.gpuFeedActive?.()){pendingStrokeTime ||= performance.now();invalidate(change);}});
   api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();markCoarse(change?.rect??null);if(!api.gpuFeedActive?.())invalidate(change);});
   function setBusy(on){busy=on;api.setBusy(on);$('weathered-view').disabled=on;find('[data-gpu]').disabled=on;find('[data-heap]').disabled=on;if(!on){if(resizePending)resize();else schedule();}}
   // The export's own numbers for one feature: an anchor cell's four corner bytes, sampled as sampleHeights samples them, and a
   // rectangle of export art. Either answers null when the scene changed while it was read.
   async function exportCorners(x,z){
-    const seq=changeSeq,r=await(api.readAsync?api.readAsync({x:x*16,y:z*16,width:16,height:16}):api.read({x:x*16,y:z*16,width:16,height:16}));checkHeap(r);
+    const seq=serial,r=await(api.readAsync?api.readAsync({x:x*16,y:z*16,width:16,height:16}):api.read({x:x*16,y:z*16,width:16,height:16}));checkHeap(r);
     if(changedSince(seq,{x:x*16-16,y:z*16-16,width:48,height:48}))return null;
     return [[0,0],[1,0],[0,1],[1,1]].map(([dx,dz])=>Math.round(clamp(sampleField(r,(x+dx)*16,(z+dz)*16),0,255)));
   }
   async function bakeArt(rect){
-    const seq=changeSeq,e=await bake(rect,true),tile=new OffscreenCanvas(rect.width,rect.height),c=tile.getContext('2d');c.drawImage(e.bitmap,0,0);e.bitmap.close?.();
+    const seq=serial,e=await bake(rect,true),tile=new OffscreenCanvas(rect.width,rect.height),c=tile.getContext('2d');c.drawImage(e.bitmap,0,0);e.bitmap.close?.();
     return changedSince(seq,e.input)?null:{data:c.getImageData(0,0,rect.width,rect.height).data,input:e.input};
   }
   features=await mountMapFeatures({config,canvas:overlay,exportCorners,bakeArt,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,change:()=>{api.mapChanged();schedule();},schedule,enabled:()=>api.ready()&&!busy,
     light:()=>renderer.worldSun,lightColors:()=>({sun:renderer.colorOverrides?.sun||null,sky:renderer.colorOverrides?.sky||null,ambient:renderer.variant?.has('ambient')?Number(renderer.variant.get('ambient')):.42}),groundColor:()=>renderer.means?.ground,deselectShapes:()=>{if(api.selection()>=0)api.select?.(-1);}});api.registerFeatures?.(features);
-  metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks,bakeArt},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??epoch,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
-  passability=mountPassability({config,sampleHeightTiles,revision:()=>api.revision?.()??epoch,ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!interacting()&&!busy&&!features.busy,mapData:api.mapData,schedule,checkMemory:bytes=>api.checkMemory?.(bytes)});
+  metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks,bakeArt},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??serial,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
+  passability=mountPassability({config,sampleHeightTiles,revision:()=>api.revision?.()??serial,ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!interacting()&&!busy&&!features.busy,mapData:api.mapData,schedule,checkMemory:bytes=>api.checkMemory?.(bytes)});
   // H12: the least the terrain budget must hold besides the fields: the canvases, the bake lattice reserve and one 32 px chunk with the materials.
   // H13: what the paged fields must leave free: the canvas, one canonical chunk's whole working set (every mask layer the world has) and its copy.
   // It was a 32 px chunk's, so the fields took the rest of the budget and the first 512 px bake could not be allocated beside them.
   // The terrain canvas and its overlay share the view's size (resize); the paged fields' budget is the shared one (sculpt-scene.js pagedBudget).
   function minimumBytes(){return pagedBudget({gpuMB:0,renderer,chunk:canonicalSize,maskCount:api.maskKeys?.length,view:{width:canvas.width,height:canvas.height},preview:previewReserved,featureBytes:features?.stats?.().imageBytes||0}).minimum;}
-  const result={renderer,passability,minimumBytes,foregroundPending,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,invalidate:clear,zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets();},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),seq:e.seq,scale:e.scale,input:e.input}))};
+  const result={renderer,passability,minimumBytes,foregroundPending,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets();},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,level:e.level,scale:e.scale,input:e.input}))};
   window.sculptCanvas=result;resize();budgets();return result;
 }

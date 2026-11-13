@@ -704,6 +704,7 @@ export class TerrainRenderer {
     const values={clay,light,detail,ring,ringSpread,ringVariation,materialWeathering,transitionDetail,exact};
     const key=JSON.stringify([values,this.grid,this.size]);
     if(!this.worldDirty&&this.worldSyncKey===key)return {fields:[],stage:null,rockSlots:[],channels:[]};
+    const wasDirty=this.fieldsDirty;
     this.worldOptions=values;
     const variant = this.variant;
     // Placement is live state too: refreshing only scalar uniforms left these
@@ -1042,10 +1043,11 @@ export class TerrainRenderer {
     delta.timeChanged=channels.timeColumn!==this.worldChannelSnapshot?.timeColumn;
     this.worldUniformSnapshot=new Uint32Array(this.uniformData.slice(0));this.worldChannelSnapshot=channels;
     this.worldSyncKey=key;this.worldDirty=false;
+    this.fieldsDirty=wasDirty||Boolean(delta.stage);
     return delta;
   }
 
-  applyKnobs() { this.worldDirty=true;const result=this.syncWorld();this.fieldsDirty=true;return result; }
+  applyKnobs() { this.worldDirty=true;return this.syncWorld(); }
 
   variantNumber(key, fallback) { const x = Number(this.variant.get(key)); return Number.isFinite(x) && this.variant.has(key) ? x : fallback; }
 
