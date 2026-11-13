@@ -1,8 +1,8 @@
 // A world's shape tools as data: its table's world.tools (the toolbar's shape buttons, in order) and world.shapes (its numbers over the shape
-// library, by shape name), served as config.tools and config.worldShapes (sculpt.py world_configs).
+// library, by shape name), served as config.tools and config.worldShapes (the Go site tool).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
+import {runSite} from './site-cli.mjs';
 import {mkdtempSync, readFileSync, readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -11,7 +11,7 @@ import {worldRocks, applyWorldRock} from '../sculpt-rock-presets.js';
 import {TOOL_ICONS, FIXED_TOOLS, LANDFORM_TOOL, MAP_TOOLS_MAX, worldTools, toolShape, toolRockSlot, strokeTool, keepStrokeTools, inferStrokeTools, carryStrokes, markEdited, copyMapTools, addMapTool, deleteMapTool, nextMapToolId, CARD_KEYS} from '../sculpt-tools.js';
 
 const root = new URL('..', import.meta.url).pathname, dir = mkdtempSync(join(tmpdir(), 'tools-test-'));
-execFileSync(process.env.PYTHON || 'python3', [root + 'sculpt.py', '--dump-configs', dir]);
+runSite(['--dump-configs', dir]);
 const files = readdirSync(join(dir, 'config')).filter(f => f !== 'catalog.json').sort();
 const configs = Object.fromEntries(files.map(f => [f.replace(/\.json$/, ''), JSON.parse(readFileSync(join(dir, 'config', f), 'utf8'))]));
 const WORLDS = ['green', 'red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice'];
@@ -170,11 +170,8 @@ test('a world\'s own shape: a library shape as the world makes it, with its own 
 });
 
 test('a variant may ship its own toolbar; one without takes the world\'s', () => {
-  const py = process.env.PYTHON || 'python3';
-  const out = JSON.parse(execFileSync(py, ['-c', `import json, sys; sys.path.insert(0, ${JSON.stringify(root)}); import sculpt
-c = {'defaults': {}, 'colors': {}, 'tools': ['world'], 'variantTools': {'modern': ['modern']}}
-print(json.dumps([sculpt.apply_variant(c, 'green', v) for v in ('modern', 'evad')]))`], {encoding: 'utf8'}));
-  assert.deepEqual(out.map(c => c.tools), [['modern'], ['world']]);
-  assert.ok(out.every(c => !('variantTools' in c)), 'the lists stay out of the page\'s config');
+  const table = JSON.parse(readFileSync(root + 'materials/green.json', 'utf8')).world;
+  assert.deepEqual(configs['green--modern'].tools, table.variantTools.modern);
+  assert.deepEqual(configs['green--evad'].tools, table.tools);
   for (const config of Object.values(configs)) assert.ok(!('variantTools' in config));
 });

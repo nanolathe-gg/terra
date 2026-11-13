@@ -60,7 +60,7 @@ const mapData=() => ({...mapFeatures?.serialize(),...mapMetadata?.serialize()});
 function restoreMapData(data={}) { mapFeatures?.load(data||{}); mapMetadata?.load(data||{}); mapRevision++; }
 function mapChanged() { mapRevision++; checkpoint(true); schedule(false); }
 let config, renderer, grid, size, spacing, services;
-// A world's configuration file, by the same relative path on a static host and on sculpt.py: config/<world>.json, or config/<world>--<variant>.json.
+// A world's configuration file, by the same relative path on a static host and on the Go server: config/<world>.json, or config/<world>--<variant>.json.
 const configUrl=(world,variant)=>`config/${encodeURIComponent(world)}${variant?'--'+encodeURIComponent(variant):''}.json`;
 let defaultColumn, columnOverride=null, columnEditing=false, syncColumnPanel=()=>{};
 // Rock presets (B2): the map's own rocks in slots 1-15 (sculpt-rock-presets.js); slot 0 is the world's rock, its flat settings and column.
@@ -1774,7 +1774,7 @@ function buildKnobs() {
     row.append(box, label); render.append(row);
   };
   toggle('palette', 'TA palette', 'nearest', 'off', params.get('palette') !== 'off');
-  // Every knob needs a world default (sculpt.py KNOB_DEFAULTS).
+  // Every knob needs a world default (materials/defaults.json knobs).
   const missing = [...KNOBS.flatMap(([, list]) => list.map(k => k[0])), ...SHAPE_FIELDS.map(f => f[0])].filter(k => !(k in (config.defaults || {})));
   if (missing.length) console.warn('Knobs without a world default:', missing.join(', '));
   for (const [title, knobs] of KNOBS) {

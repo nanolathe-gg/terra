@@ -25,34 +25,26 @@ branches and the projection fix below, so re-render before judging.
    git worktree add ../terraform-wt-<card> -b <card> main
    ```
 
-2. **Your own server, browser port and assets root** (table below). Link the
-   saved catalogues once, then serve every world (a missing world silently
-   renders as Green, so never pass `--biomes`). Worlds need nothing from the
-   root; `$R/assets-*` is only the measuring source of `measure/`, read-only:
+2. **Your own server, browser port and assets root** (table below). The Go
+   server serves every world from committed JSON; no catalog symlink,
+   prepared assets, exporter helper or installed game content is needed.
+   `$R/assets-*` remains the read-only measuring source of `measure/`.
 
    ```
    R=/private/tmp/nanolathe-map-editor
-   mkdir -p $R/agent-<card> && ln -s $R/map-catalog.json $R/agent-<card>/
+   mkdir -p $R/agent-<card>
    cd ../terraform-wt-<card>
-   /Users/daniel/src/terraform/.venv/bin/python sculpt.py \
-     --port <server> --assets-root $R/agent-<card> --prepared \
-     --export-tool $R/map-export \
+   go run ./cmd/terraform --port <server> --assets-root $R/agent-<card> \
      > $R/agent-<card>/server.log 2>&1 &
    ```
 
-   `--prepared` is required since 2026-10-29: macOS removed the retail
-   sources that full preparation reads from `/private/tmp`. The server
-   loads each world's saved `config.json` and takes the knobs from
-   `sculpt.py`. A change to material preparation (the `sculpt_*.py`
-   material builders) cannot be tried; report it if a card needs one.
-
-   Restart your server after editing `sculpt.py` or any `sculpt_*.py`.
+   Source files and generated configs reload from disk on requests; refresh
+   the browser after editing them. The exporter rebuilds after Go source
+   changes. Restart the process only after changing the server's Go code.
    Ports 8766-8812 belong to other sessions, and 8801 is the owner's: never
-   use them and never stop a process you did not start. The system
-   `python3` has no numpy; use the venv above. It lives in the main
-   checkout (`python3.13 -m venv .venv`, then `.venv/bin/pip install -r
-   requirements.txt`), not under `/private/tmp`: macOS deletes files there
-   that have not changed for three days.
+   use them and never stop a process you did not start. Optional Python
+   analysis scripts use the main checkout's `.venv/bin/python`; they are not
+   required for the editor or its Go build/config tools.
 
    | Card | Server | Browser (CDP) | Out dir | Guard |
    | --- | --- | --- | --- | --- |

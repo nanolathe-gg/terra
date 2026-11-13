@@ -6,7 +6,7 @@
 //   node measure/world_controls.mjs [--find key,key] [--out DIR] [--worlds green,lava] [--variant modern] [--only key,key] [--set key=v,key=v] [--jobs 3] [--configs DIR]
 //        [--query 'key=v&key=v'] [--column FILE]
 //        [--chrome --audit-port <yours> --assets DIR --port <cdp> | --chrome --server <a running audit host> --port <cdp>]
-// The sweep runs under Node on Dawn by default (repro/headless.mjs, from this checkout's files; --configs DIR for sculpt.py --dump-configs output):
+// The sweep runs under Node on Dawn by default (repro/headless.mjs, from this checkout's files; --configs DIR for go run ./cmd/terraform --dump-configs output):
 // a world is a page load in the page's own modules, a knob goes in through sculpt-knobs.js applyKnob as the page's setKnob does, a capture is one
 // chunk baked as the page's debugBake bakes it, and the panel's rows are the ones sculpt.js buildKnobs makes, each enabled or not by
 // worldControlRequirement on sculpt-knobs.js worldPanelValues, the same functions the panel runs. The surface sliders the panel offers are

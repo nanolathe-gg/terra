@@ -6,9 +6,10 @@
 // own table, lit by the world's sun as the page does) on the world's ground colour, at 1x and then 2x. Numbers under the pictures:
 // size, drawn pixels, luma octile cut points, mean hue and saturation of the coloured pixels, outline share (boundary pixels per
 // pixel; AquaOre deposits, drawn blue for under water, are left out unless --aqua, which also paints our deposits as under water); retail rows are weighted by uses in the group mean. A world with no retail folder (Zhon) gets ours only.
-import {mkdirSync, writeFileSync, readFileSync, existsSync} from 'node:fs';
+import {mkdirSync, writeFileSync, readFileSync, existsSync, mkdtempSync} from 'node:fs';
 import {join, basename} from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {runSite} from '../repro/site-cli.mjs';
+import {tmpdir} from 'node:os';
 import {encodePNG, decodePNG} from './feature_gen_png.mjs';
 import {generateFeature, paintDeposit, paintVent, toRGBA, rng} from '../sculpt-feature-gen.js';
 import {defaultSet, variants} from '../sculpt-feature-set.js';
@@ -23,13 +24,14 @@ const NAMES = opt('names') ? new RegExp(opt('names'), 'i') : null;   // only the
 const out = opt('out', join(R, 'features-round', world)), TOP = +opt('top', 12), MAXW = 1400;
 mkdirSync(out, {recursive: true});
 
-// ---- the world: its table (Green's kinds underneath, as sculpt.py biome_config), its sun and its ground ----
+// ---- the world: its table (Green's kinds underneath, as the Go config generator), its sun and its ground ----
 const table = JSON.parse(readFileSync(join(root, 'materials', world + '.json')));
 const green = JSON.parse(readFileSync(join(root, 'materials/green.json'))).features;
 const features = {...Object.fromEntries(['tree', 'shrub', 'rock', 'scar'].map(k => [k, green[k]])), ...table.features};
 const config = {features};
-let defaults = {sunTilt: 1};
-try { defaults = JSON.parse(execFileSync(process.env.PYTHON || '/Users/daniel/src/terraform/.venv/bin/python', ['-c', 'import sys,json,sculpt;print(json.dumps(sculpt.biome_config(sys.argv[1])["defaults"]))', world], {cwd: root, encoding: 'utf8'})); } catch { /* the table's own defaults */ }
+const configDir = mkdtempSync(join(tmpdir(), 'feature-compare-config-'));
+runSite(['--dump-configs', configDir]);
+const defaults = JSON.parse(readFileSync(join(configDir, 'config', world + '.json'))).defaults;
 const tilt = Number(defaults.sunTilt ?? 1);
 const sun0 = [-0.72, 0.38 * tilt, 0.82], sm = Math.hypot(...sun0), sun = sun0.map(v => v / sm);
 const light = {x: +sun[0].toFixed(3), y: +(0.8944 * sun[1] - 0.4472 * sun[2]).toFixed(3), z: +(0.4472 * sun[1] + 0.8944 * sun[2]).toFixed(3)};

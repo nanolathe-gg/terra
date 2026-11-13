@@ -1,9 +1,9 @@
 // Compare every authored field with four regional replays (sculpt-scene.js regionalCheck): under Node on Dawn (repro/headless.mjs, the default), or
 // in an owned headless browser with --chrome.
 //   node regional.mjs <scene.json>... [--server http://127.0.0.1:<yours>] [--port <cdp>] [--chrome] [--configs DIR]
-// Under Node the engine's files come from --server, or with no --server from this checkout (world configs from sculpt.py --dump-configs, or
+// Under Node the engine's files come from --server, or with no --server from this checkout (world configs from go run ./cmd/terraform --dump-configs, or
 // --configs DIR), and --port is not used; every scene runs in one process (node repro/regional.mjs repro/scenes/*.json). --chrome takes one scene,
-// and needs --server (your own sculpt.py server; there is no default) and --port (default 9450).
+// and needs --server (your own Go development server; there is no default) and --port (default 9450).
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
 import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
@@ -28,7 +28,7 @@ function argumentsFor(args) {
   if (!options.sceneFiles) throw new Error(usage);
   if (options.chrome && options.sceneFiles.length > 1) throw new Error(`--chrome takes one scene.\n${usage}`);
   options.sceneFile = options.sceneFiles[0];
-  if (options.chrome && !seen.has('--server')) throw new Error(`--chrome needs --server http://127.0.0.1:<port> of your own sculpt.py server (there is no default server).\n${usage}`);
+  if (options.chrome && !seen.has('--server')) throw new Error(`--chrome needs --server http://127.0.0.1:<port> of your own Go development server (there is no default server).\n${usage}`);
   if (!/^\d+$/.test(String(options.port)) || !Number.isInteger(Number(options.port)) || Number(options.port) < 1 || Number(options.port) > 65535) throw new Error(`CDP port must be an integer from 1 to 65535.\n${usage}`);
   options.port = Number(options.port);
   let server;

@@ -1,13 +1,13 @@
 """Loopback-only interaction benchmark host; normal application serving is unchanged."""
-import argparse, importlib.util, json, mimetypes, sys
+import argparse, json, mimetypes, sys
 from pathlib import Path
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlsplit, parse_qs
 p=argparse.ArgumentParser();p.add_argument('--source',type=Path,required=True);p.add_argument('--port',type=int,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args()
 root=a.source.resolve();here=Path(__file__).resolve().parent;a.out.mkdir(parents=True,exist_ok=True)
-sys.path.insert(0,str(root));spec=importlib.util.spec_from_file_location('perf_sculpt',root/'sculpt.py');s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s)
-configs,catalogue=s.world_configs(list(s.BIOME_NAMES))
-generated=s.site_data(list(s.BIOME_NAMES),configs,catalogue,{'defaultWorld':'green','worlds':list(s.BIOME_NAMES),**{k:{'available':True} for k in ('export',)}})
+sys.path.insert(0,str(here.parent))
+from site_data import load_site
+configs,generated,sources=load_site(root)
 class Handler(BaseHTTPRequestHandler):
  def reply(self,data,kind='application/json',status=200):
   if not isinstance(data,bytes):data=json.dumps(data).encode()
@@ -25,7 +25,7 @@ class Handler(BaseHTTPRequestHandler):
    elif name.startswith('results/'):
     f=(a.out/name.removeprefix('results/')).resolve()
     if not f.is_relative_to(a.out.resolve()):raise ValueError('invalid path')
-   else:f=s.SOURCES.get('sculpt.html' if name in ('','sculpt') else name)
+   else:f=sources.get('sculpt.html' if name in ('','sculpt') else name)
    if f is None or not f.is_file():self.send_error(404);return
    data=f.read_bytes()
    if f.name=='sculpt.html':data=data.replace(b'<head>',b'<head><script src="/interaction/hooks.js"></script>')

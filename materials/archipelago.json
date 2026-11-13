@@ -2053,6 +2053,44 @@
   "vent": {"params": {"size": 0.65, "rim": 0.85}}
  },
  "world": {
+    "knobDefaults": {
+        "crackSeverity": 0.4,
+        "crackMajor": 0.6,
+        "banding": 0.5,
+        "crackDark": 0.3,
+        "flatBank": 1,
+        "shadeDepth": 0.3,
+        "coastRamp": 0.25,
+        "hillLight": 1,
+        "ringFade": 1,
+        "bedTint": 1,
+        "bedContrast": 0.8,
+        "bedBright": 1,
+        "bedRelief": 2,
+        "stepSoftPx": 14,
+        "shelfWander": 6,
+        "shoalRag": 4,
+        "shoalShoreSoft": 4,
+        "ringShift": 13,
+        "ringShiftDir": 315,
+        "ringScatter": 0.5,
+        "ringWobble": 9,
+        "ringLobe": 20,
+        "ringContrast": 0.95,
+        "ringCount": 22,
+        "ringSize": 0.6,
+        "ringFill": 0.45,
+        "ringPatch": 0.8,
+        "ringPatchSize": 160,
+        "ringTone": 1
+      },
+      "engineDefaults": {
+        "erosion": 1,
+        "erosionRain": 0,
+        "erosionEnvelope": 0.12
+      },
+      "variants": {},
+
   "shapes": {
    "plateau": {},
    "hill": {},

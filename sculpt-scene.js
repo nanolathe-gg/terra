@@ -1,7 +1,7 @@
 // The scene builder: the brush cards a stroke starts from in each world and the node list a scripted scene makes from its strokes
 // (repro/scenes/*.json, capture tools). No DOM: the page (sculpt.js scriptedScene, the brush panel) and the headless runner
 // (repro/render-node.mjs) import the same tables and build the same nodes. A function that reads a world's values takes its config
-// (sculpt.py world_configs) and, where the page's address may override them, the page's settings (pageSettings).
+// (the Go config generator) and, where the page's address may override them, the page's settings (pageSettings).
 import {FACING_CHOICES,FORMS} from './sculpt-shape-presets.js';
 import {applyRiver,isRiver} from './sculpt-river.js';
 import {createShapeEngine,readBuffer,comparePlanes,DRAWN_KINDS,heightsFields} from './sculpt-gpu-fields.js';
@@ -90,10 +90,10 @@ export function savedToolCard(config,entry,card) {
 export const strokeKind=t => Object.hasOwn(LANDFORM_SHAPES,t)?'landform':t;
 // Shape options: per-shape settings, shown for the tools they apply to and
 // kept in each shape, so a selected shape can be changed like a new stroke.
-// Each starts at the world's value (sculpt.py KNOB_DEFAULTS / WORLD_KNOBS).
+// Each starts at the world's value (materials/defaults.json and world.knobDefaults).
 // Cross-section (card C1): the kinds that take the parametric profile, and the
 // options that describe it. Wired like every shape option: SHAPE_FIELDS, the
-// card scriptedScene builds, strokeParams and KNOB_DEFAULTS (sculpt.py).
+// card scriptedScene builds, strokeParams and materials/defaults.json.
 // Line features (card C4): spurs and the crest's taper. All default off; spurs branch off a landform's crest (or a signed section's peak).
 export const RIDGE_KEYS=['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb','crestVary','crestTaper'];
 // Placed fissures (card C4 stage 2): the Fissure tool and its options. Depth is
@@ -285,7 +285,7 @@ export const groundDefaults=settings => ({amplitude:settings.has('undulation')?N
 export const DEFAULT_SEED=2701;
 // A page's settings: its address over the world's own defaults (boot() in sculpt.js does this to its address once the config is in).
 // A world with no beach of its own may take another world's (Colors & base pattern, Beach: the setting beachFrom names a world of config.beachSources,
-// sculpt.py world_configs): the lender's beach layer (the renderer generates it after the world's own, from the table this names) and its beach
+// the Go config generator): the lender's beach layer (the renderer generates it after the world's own, from the table this names) and its beach
 // width, height and color, so every reader of config.layers and config.material (the panel's facts and rows, the chunk margins, the renderer)
 // sees a beach. The page's boot and the headless host call this once the settings hold the world's defaults.
 export function borrowBeach(config,settings) {

@@ -1,7 +1,7 @@
 // Repeat check of the shape on the GPU: two evaluations of a scene give identical planes (all 31) (sculpt-scene.js repeatCheck).
 //   node shapecheck.mjs <scene.json>... [--out dir] [--configs DIR] [--chrome --server http://127.0.0.1:<yours> --port <cdp>]
 // The scene runs on a 4x4 map canvas (1168 samples, the whole map compared), under Node on Dawn by default (repro/headless.mjs, from this
-// checkout's files), or in one browser page with --chrome, which needs --server (your own sculpt.py server; there is no default).
+// checkout's files), or in one browser page with --chrome, which needs --server (your own Go development server; there is no default).
 // Writes <out>/<scene>.json and prints a one-line summary per scene. Exit code 1 if a repeat differs.
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
@@ -13,7 +13,7 @@ const inChrome = args.includes('--chrome') && args.splice(args.indexOf('--chrome
 const server = opt('--server', ''), port = Number(opt('--port', 9674)), out = opt('--out', 'shapecheck-out'), mapSize = opt('--size', 4), configs = opt('--configs', '');
 const scenes = args;
 if (!scenes.length) { console.error('usage: node shapecheck.mjs <scene.json>... [--out dir] [--chrome --server url --port n]'); process.exit(2); }
-if (inChrome && !server) { console.error('shapecheck.mjs: --chrome needs --server http://127.0.0.1:<port> of your own sculpt.py server (there is no default server).'); process.exit(2); }
+if (inChrome && !server) { console.error('shapecheck.mjs: --chrome needs --server http://127.0.0.1:<port> of your own Go development server (there is no default server).'); process.exit(2); }
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let bad = 0;

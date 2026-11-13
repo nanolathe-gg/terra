@@ -38,15 +38,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
       - uses: actions/setup-go@v5   # the page's map exporter is built from export/ (GOOS=js GOARCH=wasm) into the build folder
         with:
           go-version-file: go.mod
       - name: Build the site
         run: |
-          site=$(python3 sculpt.py --build-site _site)
+          site=$(go run ./cmd/terraform --build-site _site)
           TERRAFORM_SITE_DIR="$site" node --test repro/site.build.test.mjs
           echo terra.nanolathe.gg > _site/CNAME
           touch _site/.nojekyll

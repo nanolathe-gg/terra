@@ -1,3 +1,4 @@
+# Optional terrain analysis and retail research only; the editor uses Go.
 numpy>=2.5
 scipy>=1.18
 Pillow>=13.0

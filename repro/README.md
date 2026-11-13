@@ -19,9 +19,10 @@ repro/check.sh site
 `--list` previews commands; `--out DIR` selects the log directory. The
 `engine` group uses three authored fixtures unless you select scenes. The
 browser group defaults to one world and skips export and the large-map sweep.
-Build and config checks still use Python; engine checks currently use it for
-config generation. The exporter checks use Go. Site deployment validates its
-already-built output instead of building it twice.
+Build, config and exporter checks use Go. The config group also runs the Go
+server tests, including live source/config reload and local save links. Engine
+checks use Go to emit their configs; no Python is needed for these groups.
+Site deployment validates its already-built output instead of building it twice.
 
 Choose checks for the behavior you changed; see [AGENTS.md](../AGENTS.md#checks).
 The old `land`/`full` tiers, automatic baseline renders and mandatory visual
@@ -156,7 +157,7 @@ through a snow shore), `fissure-green` (cuts across a hill with its own painted
 rock) and `fissure-red` (a polygonal fracture network on a low platform; Mode 1).
 
 Variants (card C5 stage 3): a world may offer named presets over its own, listed in
-`WORLD_VARIANTS` (`sculpt.py`) and chosen in the World panel's Variant drop-down. A
+`world.variants` in `materials/<world>.json` and chosen in the World panel's Variant drop-down. A
 scene names one in its `query`: `"query": "variant=evad"` (green: Evad River and
 Barrier Reef rounded hills with irregular, broken slopes; ice: `bergs`; desert: `triad`). With no variant a scene
 renders the world's own preset exactly; green-1, green-3, ice-2 and desert-2 opt in.

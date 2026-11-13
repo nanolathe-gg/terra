@@ -1,7 +1,7 @@
 // Recipe form controls at 1x: the same 4-pixel class measure as feature_controls.mjs.
-// Run with --configs <sculpt.py --dump-configs directory> and --out <directory>.
+// Run with --configs <go run ./cmd/terraform --dump-configs directory> and --out <directory>.
 import {readFileSync, mkdirSync, writeFileSync, mkdtempSync} from 'node:fs';
-import {execFileSync} from 'node:child_process';
+import {runSite} from '../repro/site-cli.mjs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {generateFeature,drawFeature,paintVent} from '../sculpt-feature-gen.js';
@@ -9,7 +9,7 @@ import {defaultSet,makeRecipe,normalizeSet,variants,FORMS,controlRequirement} fr
 import {encodePNG} from './feature_gen_png.mjs';
 const args=process.argv.slice(2),opt=(name,fallback)=>args.includes(name)?args[args.indexOf(name)+1]:fallback;
 const root=new URL('..',import.meta.url).pathname,dir=opt('--configs',mkdtempSync(join(tmpdir(),'feature-control-config-'))),out=opt('--out','');
-if(!args.includes('--configs'))execFileSync(process.env.PYTHON||'/Users/daniel/src/terraform/.venv/bin/python',[root+'sculpt.py','--dump-configs',dir]);
+if(!args.includes('--configs'))runSite(['--dump-configs',dir]);
 const config=JSON.parse(readFileSync(join(dir,'config/green.json'))), palette=JSON.parse(readFileSync(root+'materials/palette.json')).indexed;
 const W=512,H=384,AX=256,AY=260,light={x:-0.623,y:-0.026},ground=[52,67,37];
 function picture(kind,params,seed){

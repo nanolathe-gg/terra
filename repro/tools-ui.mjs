@@ -15,7 +15,7 @@ import {join} from 'node:path';
 import {cdpPortFree} from './cdp-port.mjs';
 const args = process.argv.slice(2), opt = (k, d) => args.includes(k) ? args[args.indexOf(k) + 1] : d;
 const server = opt('--server', ''), port = Number(opt('--port', 0)), out = opt('--out', '/private/tmp/terraform-tools-ui');
-if (!server || !port) { console.error('tools-ui.mjs: give --server (your own sculpt.py) and --port (your CDP port)'); process.exit(2); }
+if (!server || !port) { console.error('tools-ui.mjs: give --server (your own Go server) and --port (your CDP port)'); process.exit(2); }
 await cdpPortFree(port); mkdirSync(out, {recursive: true});
 const browser = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
   `--user-data-dir=${join(out, 'profile-' + Date.now())}`, '--window-size=1440,900', '--no-first-run', 'about:blank'], {stdio: 'ignore'});

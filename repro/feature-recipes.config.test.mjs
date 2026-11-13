@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,mkdtempSync} from 'node:fs';
-import {execFileSync} from 'node:child_process';
+import {runSite} from './site-cli.mjs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {defaultSet,normalizeSet,variants,makeRecipe,MAX_VARIANTS,controlRequirement} from '../sculpt-feature-set.js';
 import {generateFeature} from '../sculpt-feature-gen.js';
 import {movementObstacles} from '../sculpt-passability.js';
 const root=new URL('..',import.meta.url).pathname,dir=mkdtempSync(join(tmpdir(),'feature-recipes-test-'));
-execFileSync(process.env.PYTHON||'python3',[root+'sculpt.py','--dump-configs',dir]);
+runSite(['--dump-configs',dir]);
 const config=world=>JSON.parse(readFileSync(join(dir,`config/${world}.json`))),green=config('green'),red=config('red'),palette=JSON.parse(readFileSync(root+'materials/palette.json')).indexed;
 const recipe=(kind,source,id)=>{const p=green.featureCatalog.find(p=>p.id===source);assert.equal(p.kind,kind);return makeRecipe(kind,p.data,id,p.name);};
 

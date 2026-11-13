@@ -43,7 +43,7 @@ export function tablePlacementRows(table) {
     [s.slopeGate, s.heightGate, s.fadeFrom, s.fadeTo], [q.lowBank.from, q.lowBank.to, 0, 0], [q.route.from, q.route.to, 0, 0]];
 }
 
-// Card P30: a world's ground cover is on where its table has Vegetation cover above 0 (every world has a table; sculpt.py DEFAULT_GROUND_COVER).
+// Card P30: a world's ground cover is on where its table has Vegetation cover above 0 (every world has a table; materials/defaults.json groundCover).
 // A row the variant does not set counts as 1 (the table as written); a value that is not a number, likewise.
 const coverScale=(variant,key)=>{const n=Number(variant?.get?.(key));return variant?.has?.(key)&&Number.isFinite(n)?Math.max(0,n):1;};
 export const groundCoverOn=(cover,variant)=>Boolean(cover)&&coverScale(variant,'vegetationCover')>0;

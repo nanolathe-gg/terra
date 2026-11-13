@@ -6,7 +6,7 @@
 // (sculpt-scene.js sceneNodes). H12b: the scene is played on a 4x4 map (--map WxH for another) with every stroke shifted by --offset (default 0:
 // the window is the map's top-left 1024 px; --sea N sets the sea, default the map's), and the window is captured at 1x. Writes <out-dir>/ours.png (the
 // window) and ours-heights.json (the displayed heights over the window, 512 x 512 samples at 2 px). Both hosts write the same bytes for the same pixels.
-// Under Node the engine's files come from --server, or with no --server from this checkout (the world configs from sculpt.py --dump-configs, or
+// Under Node the engine's files come from --server, or with no --server from this checkout (the world configs from go run ./cmd/terraform --dump-configs, or
 // --configs DIR); --port is Chrome's alone (default 9450). --chrome needs --server: the page path has no default server, so it never loads
 // another session's editor.
 import {cdpPortFree} from './cdp-port.mjs';
@@ -20,7 +20,7 @@ const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
 const flag = name => args.includes(name) && args.splice(args.indexOf(name), 1).length > 0;
 const chrome = flag('--chrome'), serverArg = opt('--server', ''), server = serverArg, port = Number(opt('--port', 9450));
-if (chrome && !server) { console.error('render.mjs: --chrome needs --server http://127.0.0.1:<port> of your own sculpt.py server (there is no default server).'); process.exit(2); }
+if (chrome && !server) { console.error('render.mjs: --chrome needs --server http://127.0.0.1:<port> of your own Go development server (there is no default server).'); process.exit(2); }
 const extraQuery = opt('--query', ''), configs = opt('--configs', ''), [MAPX, MAPY] = opt('--map', '4x4').split('x').map(Number), WINDOW = 1024;
 const TILE_PX = 16;   // the most pixels of a window the tile size may move
 const clayOn = flag('--clay');
@@ -32,7 +32,7 @@ const [sceneFile, out] = args;
   const [{SHAPE_FIELDS, LANDFORM_KEYS, SECTION_KEYS}, {KNOBS}] = await Promise.all([import('../sculpt-scene.js'), import('../sculpt-knobs.js')]);
   const rows = new Set(KNOBS.flatMap(([, list]) => list.map(k => k[0]))), stroke = new Set([...SHAPE_FIELDS.map(f => f[0]), ...LANDFORM_KEYS, ...SECTION_KEYS]);
   const wrong = [...new URLSearchParams(extraQuery).keys()].filter(k => stroke.has(k) && !rows.has(k));
-  if (wrong.length) { console.error(`render.mjs: --query ${wrong.join(', ')}: a stroke option, which a page setting does not reach. Set it in the scene's stroke cards, or as the world's default in sculpt.py WORLD_KNOBS.`); process.exit(2); }
+  if (wrong.length) { console.error(`render.mjs: --query ${wrong.join(', ')}: a stroke option, which a page setting does not reach. Set it in the scene's stroke cards, or as the world's default in materials/<world>.json world.knobDefaults.`); process.exit(2); }
 }
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
 mkdirSync(out, {recursive: true});

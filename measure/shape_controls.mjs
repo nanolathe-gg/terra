@@ -4,14 +4,14 @@
 //   node measure/shape_controls.mjs [--server http://127.0.0.1:<yours>] [--port <cdp>] [--out DIR] [--chrome] [--configs DIR]
 // Writes DIR/shape-controls.json; prints one row per control. Exit 1 on a console error. The heights are the authored fields, so the engine runs
 // under Node on Dawn (repro/headless.mjs) by default, from this checkout or --server; --chrome plays each case in the page on --server (your own
-// sculpt.py server, which --chrome needs: there is no default) and --port (default 9685).
+// Go development server, which --chrome needs: there is no default) and --port (default 9685).
 import {cdpPortFree} from '../repro/cdp-port.mjs';
 import {shapeControlAvailable} from '../sculpt-control-schema.js';
 import {spawn} from 'node:child_process';
 import {mkdirSync, writeFileSync} from 'node:fs';
 const args = process.argv.slice(2), opt = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
 const server = opt('--server', ''), port = Number(opt('--port', 9685)), out = opt('--out', 'shape-controls'), inChrome = args.includes('--chrome');
-if (inChrome && !server) { console.error('shape_controls.mjs: --chrome needs --server http://127.0.0.1:<port> of your own sculpt.py server (there is no default server).'); process.exit(2); }
+if (inChrome && !server) { console.error('shape_controls.mjs: --chrome needs --server http://127.0.0.1:<port> of your own Go development server (there is no default server).'); process.exit(2); }
 const STEP = 4, W = 1000, H = 600, YC = 500, Y0 = YC - H / 2, path = [[420, YC], [560, YC], [700, YC]];
 const CARD = {diameter: 280, amount: 80, roughness: 40, softness: 50, cracks: 0};
 // H27: a landform stands at an elevation (170: 71 above this 4x4 map's plain of 99), raised to it, with no variation until a row turns it on.

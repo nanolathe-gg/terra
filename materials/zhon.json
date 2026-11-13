@@ -2699,6 +2699,36 @@
    {"share": 1, "params": {"type": "stain"}, "vary": {"size": [0.6, 1.2]}}]}
  },
  "world": {
+    "knobDefaults": {
+        "crackSeverity": 0.4,
+        "crackMajor": 0.6,
+        "rockCrown": 1,
+        "apron": 0,
+        "sandBanding": 1,
+        "beachWidth": 0.6,
+        "banding": 0.3,
+        "crackDark": 0.45,
+        "sandCrown": 1,
+        "lowGrain": 0.4,
+        "lowReach": 4,
+        "bedFlat": 0.8
+      },
+      "engineDefaults": {
+        "erosion": 1,
+        "erosionRain": 0,
+        "erosionEnvelope": 0.12
+      },
+      "variants": {
+        "river": {
+          "label": "River sections: brown water",
+          "river": true,
+          "knobs": {
+            "deepDepth": 38,
+            "waterSoft": 16
+          }
+        }
+      },
+
   "shapes": {
    "plateau": {},
    "hill": {"wander": 20, "widthVary": 15, "heightVary": 7},

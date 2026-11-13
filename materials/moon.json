@@ -1178,6 +1178,93 @@
   "deposit": {"params": {"look": "blades", "blades": 5, "bladeLen": 15, "bladeWidth": 12, "fan": 1, "core": 11, "halo": 0.42, "haloSat": 1, "reach": 1.1, "rimDark": 0.3}, "vary": {"reach": [0.83, 1.65], "haloRough": [4, 10]}}
  },
  "world": {
+    "knobDefaults": {
+        "looseSupply": 0.1,
+        "looseSize": 3.5,
+        "crackSeverity": 0,
+        "crackMajor": 0.5,
+        "crackMinor": 0.5,
+        "crackBlocks": 0.4,
+        "worms": 0,
+        "plainRelief": 0.6,
+        "banding": 0,
+        "crackDark": 0.6,
+        "sunTilt": 0,
+        "sunHeight": 48.71528910542877,
+        "faceFill": 0,
+        "ambient": 0.25,
+        "slopeMarks": 0,
+        "wrinkles": 0,
+        "moonCups": 1,
+        "moonCupSize": 6.5,
+        "moonRibs": 1,
+        "moonRibDepth": 0.9,
+        "moonRibDark": 0.4,
+        "moonFolds": 0.55,
+        "pockmark": 0,
+        "pockSize": 7.5,
+        "shineGate": 1,
+        "shineWhite": 1,
+        "shineStretch": 3,
+        "shineGround": 0,
+        "shineGroundSharp": 12,
+        "shineGroundRough": 0.12,
+        "shineGroundScale": 3,
+        "shineSlope": 0.06,
+        "shineSlopeSharp": 30,
+        "shineSlopeRough": 0.12,
+        "shineSlopeScale": 3,
+        "shineRock": 0.06,
+        "shineRockSharp": 30,
+        "shineRockRough": 0.12,
+        "shineRockScale": 3
+      },
+      "engineDefaults": {
+        "erosion": 1,
+        "erosionRain": 0,
+        "erosionEnvelope": 0.12
+      },
+      "variants": {
+        "pitted": {
+          "label": "Pitted: E6 dots on all raised ground",
+          "knobs": {
+            "pockmark": 1,
+            "moonCups": 0,
+            "moonRibs": 0,
+            "moonFolds": 0,
+            "banding": 0.3
+          }
+        },
+        "cracked": {
+          "label": "Cracked slopes: smooth tops",
+          "knobs": {
+            "crackSeverity": 0.35,
+            "worms": 0.4,
+            "wrinkles": 0.8,
+            "pockmark": 0,
+            "moonCups": 0,
+            "moonRibs": 0,
+            "moonFolds": 0,
+            "banding": 0.3,
+            "shineGate": 0,
+            "shineWhite": 0.35,
+            "shineStretch": 1,
+            "shineGround": 0,
+            "shineGroundSharp": 24,
+            "shineGroundRough": 0,
+            "shineGroundScale": 6,
+            "shineSlope": 0,
+            "shineSlopeSharp": 24,
+            "shineSlopeRough": 0,
+            "shineSlopeScale": 6,
+            "shineRock": 0,
+            "shineRockSharp": 24,
+            "shineRockRough": 0,
+            "shineRockScale": 6
+          }
+        }
+      },
+
   "shapes": {
    "plateau": {},
    "hill": {"wander": 42, "widthVary": 30, "heightVary": 9, "varySize": 60, "varyMiddle": 150},

@@ -3,7 +3,7 @@
 #   repro/retail.sh <world> [--query 'key=value&key=value'] [--base DIR] [--out DIR]
 # <world> is a world (red) or a variant's windows (green-modern): it renders repro/scenes/<world>-<n>.json under Node on Dawn (no server,
 # no browser), four at a time, with --query added to every scene's page parameters (render.mjs --query: World rows by their key, such as
-# 'reliefAmount=.4&banding=.2'; the keys are sculpt-knobs.js KNOBS and sculpt.py KNOB_DEFAULTS). Then:
+# 'reliefAmount=.4&banding=.2'; the keys are sculpt-knobs.js KNOBS and materials/defaults.json knobs). Then:
 #  - repro/stats.py for the world: each retail window's numbers, ours, and the world's retail family p10-p90 (<out>/stats/stats.md);
 #  - repro/retail_gap.py: one shape score and one look score per window (mean |ours - retail| in family-band units; lower is closer),
 #    the metrics furthest from retail, and with --base the change from an earlier run (<out>/gap.txt);

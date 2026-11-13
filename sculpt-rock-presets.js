@@ -57,7 +57,7 @@ export function copyRockSettings(value){
  }
  return result;
 }
-// A world or a variant may name a recipe as its rock (config.rock = {recipe, beds}; sculpt.py WORLD_VARIANTS): when its file loads, the recipe's
+// A world or a variant may name a recipe as its rock (config.rock = {recipe, beds}; materials/<world>.json world.variants): when its file loads, the recipe's
 // numbers become the world's own, under a saved world and the page's address, and with `beds` its beds replace the column's, as the Rock recipe
 // list does. The numbers stay in this file; a world with no `rock` is as its file says.
 export function applyWorldRock(config){
@@ -96,7 +96,7 @@ export function rockRecipeFor(rock){
 }
 // Slot 0's name: the recipe the world names as its rock, else World rock.
 export const worldRockName=config=>ROCK_PRESETS[config.rock?.recipe]?.label||'World rock';
-// The presets a world ships (a map starts with them): Smooth soil, then the recipes its data names (config.rock.presets, sculpt.py).
+// The presets a world ships (a map starts with them): Smooth soil, then the recipes its data names (config.rock.presets, materials/<world>.json).
 export function worldRocks(config){
  return [...new Set(['soil',...(config.rock?.presets||[])])].filter(key=>STARTING_RECIPES[key]).map((key,i)=>({slot:i+1,name:STARTING_RECIPES[key].label,key,...recipeRock(key)}));
 }

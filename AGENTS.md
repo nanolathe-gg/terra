@@ -63,11 +63,12 @@ page and an older card disagree, this page wins.
    - Add no separate pages, save formats, storage keys or undo stacks.
    - A prototype that breaks this stays on a `prototype/*` branch and does
      not land; port its ideas instead.
-   - The editor is a static site (`sculpt.py --build-site`; GitHub Pages).
+   - The editor is a static site (`go run ./cmd/terraform --build-site <dir>`;
+     GitHub Pages).
      Everything the page needs is a file in the build: no server-only path
      or endpoint. Export runs in the page (the exporter built to
      WebAssembly), and share links go to the save-link Worker
-     (`deploy/worker/`). `sculpt.py` serves the same files for development
+     (`deploy/worker/`). The Go command serves the same files for development
      (`repro/site.build.test.mjs` checks the build on demand).
    - Layout lives in `sculpt.html`: each element sits at its final place,
      and no script moves, reorders or renames page elements at load. The one
@@ -148,11 +149,18 @@ asset dependency in this runner.
 | --- | --- | --- |
 | quick | `repro/check.sh` | Fast Node unit tests and the world-name gate; no Python, Go, GPU, browser or site build. `--test repro/paths.test.mjs` selects one test file (repeatable). |
 | browser | `repro/check.sh browser --server <yours> --port <cdp> [--worlds green]` | Changed editor behavior: brush/undo smoke on one world by default, without export or the large-map sweep. Use the affected world. |
-| engine | `repro/check.sh engine [--scene repro/shape-scenes/<fixture>.json]` | Changed GPU fields, tiling or replay: GPU height tests, regional replay and repeat determinism. Defaults to three authored fixtures; `--scene` replaces them (repeatable). Needs Dawn and currently Python for configs. |
+| engine | `repro/check.sh engine [--scene repro/shape-scenes/<fixture>.json]` | Changed GPU fields, tiling or replay: GPU height tests, regional replay and repeat determinism. Defaults to three authored fixtures; `--scene` replaces them (repeatable). Needs Dawn and Go for configs. |
 | export | `repro/check.sh export` | Changed exporter, worker or archive format: Go exporter tests and native/WebAssembly byte parity. Needs Go. |
 | features | `repro/check.sh features` | Changed procedural sprite generation or burning: CPU feature-art checks, without Python or GPU. |
-| config | `repro/check.sh config` | Changed generated configs, world/tool data or preset assembly. Currently needs Python, without scientific packages. |
-| site | `repro/check.sh site` | Changed static packaging or shipped file paths: build and inspect the static site. Currently needs Python and Go. Deployment checks the built artifact once. |
+| config | `repro/check.sh config` | Changed generated configs, world/tool data or preset assembly. Go config/server tests and generated config integration tests. Needs Go. |
+| site | `repro/check.sh site` | Changed static packaging or shipped file paths: build and inspect the static site. Needs Go. Deployment checks the built artifact once. |
+
+The development server reloads source bytes, the source manifest and JSON
+config inputs on requests; refresh the browser to see edits. Go exporter
+sources rebuild on demand. Only changes to the server's Go code require a
+process restart. Defaults are data in `materials/defaults.json` and each
+world's `world.knobDefaults`, `world.engineDefaults` and `world.variants`;
+`site.json` declares the shipped source files and world/recipe ordering.
 
 Build, config, export, feature-art and GPU integration tests use explicit
 filename suffixes: `.build.test.mjs`, `.config.test.mjs`, `.export.test.mjs`,

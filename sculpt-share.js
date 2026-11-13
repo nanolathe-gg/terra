@@ -1,4 +1,4 @@
-// Save links: the editor's side of the save-link service (services.json "maps"; deploy/worker/ in production, sculpt_maps.py in development).
+// Save links: the editor's side of the save-link service (services.json "maps"; deploy/worker/ in production, internal/site/server.go in development).
 // Pure functions, no page state, so node can test them.
 
 export const PREVIOUS_KEY = 'terraform-previous-map-v1';   // the one "previous map" slot: the visitor's own map, kept when a shared map replaces it

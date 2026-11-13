@@ -10,43 +10,37 @@ Use American English for all user-visible text, including labels, help, status
 messages, preset descriptions, and export errors (for example, color, center,
 gray, and canceled).
 
-You need:
-- Go 1.27.1 or later;
-- Python 3 with `pip install -r requirements.txt`;
-- Node, for the `repro/` scripts;
-- Chrome with WebGPU;
-- a Total Annihilation install at `~/TotalAnnihilation`. It is only read.
+To develop or build the editor, you need Go 1.27.1 or later and a browser
+with WebGPU. Node runs the checks. Python and the scientific packages in
+`requirements.txt` are optional tools for terrain analysis and retail research;
+they are not needed to serve, build, generate configs or export maps. The
+editor needs no installed game content or private assets.
 
-The Go helpers use Nanolathe's public `formats` and `vfs` packages, pinned
-in `go.mod`. Map features are generated in the page (`sculpt-feature-gen.js`)
-and packed by the exporter; no feature is read from the installed content.
-Files derived from retail content live under the assets root and are never
-committed. Build the helpers and run the server:
+Run the development server from the repository:
 
 ```sh
-R=/private/tmp/nanolathe-map-editor
-mkdir -p $R/bin
-go build -o $R/map-export ./export
-python3 sculpt.py --port 8801 --assets-root $R
+go run ./cmd/terraform --port 8801 --assets-root /private/tmp/terraform-editor
 ```
 
-The server takes a minute or two to start. Card D phase 3 adds maps up to
-40×40 units with a scrolling viewport, bounded regional replay, live
-gestures, overlapping weather tiles and streamed export. The 1024px study
-keeps its existing rendering path. Phase 3b integrates wave 2, including
-stored flow bakes. Phase 4 has not started. Phases 1 and 2 add playable
-terrain, features, starts and OTA settings. Limits and later phases are in
-[BACKLOG.md](BACKLOG.md#card-d-a-real-map-editor-full-size-maps-features-export-to-ufo).
-Where the terrain engine is going (ground, weathering, surface and light) is
-in [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md).
+Port 8801 is the owner's editor; agents use their own free ports and assets
+roots as described in AGENTS.md. `--assets-root` stores local save links only.
+A compiled tool also works: `go build -o /private/tmp/terraform ./cmd/terraform`,
+then `/private/tmp/terraform --root /path/to/terraform --port <yours>`.
 
-The nine worlds need nothing under the assets root: each is drawn from its committed table in `materials/`, and a server with an
-empty assets root opens every world and exports it, with its generated features. Helpers read `~/TotalAnnihilation` without writing
-to it. To use other content, repeat `--game-root DIR` in mount order.
-`--export-tool PATH` selects a helper built elsewhere.
-Restart the server after Python edits or changing installed content. Each
-world's derived catalogue is refreshed once per server run from its configured
-content roots, even when private files already exist.
+Source files are read on every request with caching disabled. Generated
+configs reload their JSON inputs on each request too: edit HTML, JavaScript,
+CSS, shaders, world tables, defaults, variants or the source manifest and
+refresh the page. No server restart is needed. Exporter Go changes rebuild
+WebAssembly on its next request. Changes to the server's Go code require a
+restart (rerun `go run`).
+
+Shared knob defaults and ground cover live in `materials/defaults.json`.
+Each world's `world.knobDefaults`, `world.engineDefaults` and `world.variants`
+in `materials/<world>.json` hold its authored presets. `site.json` declares
+the worlds, recipe ordering and shipped source files. The Go tool in
+`internal/site/` assembles all nine worlds from this data. All terrain and
+features are generated in the browser; `.ufo` export uses the Go exporter
+compiled to WebAssembly. The Go packages are pinned in `go.mod`.
 
 Open <http://127.0.0.1:8801/sculpt>. **Playable map** creates a blank map
 canvas. Choose 1–40 units on each axis and a sea level, initially the
@@ -73,12 +67,9 @@ terrain brushes, then use the feature tools. Water brush depths and material
 height thresholds are relative to sea. Choose a positive sea level for deep
 water: TNT heights are unsigned bytes.
 
-The feature catalogue is derived on first use from the world's installed
-maps and TDF/GAF content. PNG sprites and shadows, offsets, footprints,
-resources and usage counts stay under `<assets-root>/features/<world>/`.
-The deposit tool chooses the world's most-used drawn deposit by the map
-generator's rules. Worlds without a matching category show it as unavailable.
-Zhon export and features remain disabled until the owner chooses a planet.
+The feature catalog is assembled from the committed world tables. Sprites,
+shadows and burn animations are generated in the page; no installed TDF/GAF
+content is read. Zhon export remains disabled until the owner chooses a planet.
 
 Place and erase features on cells. Fills offer trees, foliage or rocks over
 a brush, lasso or connected flood region, with usage-weighted selection,
@@ -101,7 +92,7 @@ for the entire image, including half-pixel ties. Export captures tile-aligned
 PNG chunks, adds no noise, and deduplicates identical indexed tiles. The
 minimap averages RGB within each block before its nearest-palette lookup.
 
-The export runs in the page, on `sculpt.py` and on the static site alike: the
+The export runs in the page, on the Go development server and on the static site alike: the
 exporter (`export/`, built for WebAssembly) runs in a worker and offers the
 finished archive and indexed PNG as downloads; nothing is saved on the server.
 Each archive contains `maps/<name>.ota` and `maps/<name>.tnt`. The exporter
@@ -179,13 +170,19 @@ distinct tiles has its most alike tiles merged (`export/merge.go`).
 
 ## The static site
 
-`python3 sculpt.py --build-site <dir>` writes `<dir>/index.html` (opens the current build) and `<dir>/b/<version>/` (the page, its shaders and
-modules, `materials/`, `ui-previews/`, `config/<world>.json`, `config/<world>--<variant>.json`, `config/catalog.json`, `services.json`, and
-the map exporter: `map-export.wasm`, built then from `export/` with Go, and that Go's `wasm_exec.js`; neither is committed). The
-version is a hash of the contents, so a deploy never mixes new scripts with cached old shaders. Any static host serves it
-(`cd <dir>/b/<version> && python3 -m http.server`, then open `/sculpt.html`). `sculpt.py` serves the same relative paths for development;
-it builds the exporter when it starts and again after a Go source changes; without Go, an export says so in the Export pane.
-`services.json` lists the worlds and where share links are saved (the save-link Worker on the static site, `api/maps` under `sculpt.py`); map
-features are generated in the page, so there is no feature service. `.github/workflows/pages.yml` checks, builds and deploys the site to
-GitHub Pages. Measured on November 6: a static build served by `python3 -m http.server` passes `repro/smoke.mjs --page8` and
-`repro/features.mjs`.
+`go run ./cmd/terraform --build-site <dir>` writes `<dir>/index.html` (opens
+the current build) and `<dir>/b/<version>/` with the HTML, scripts, styles,
+shaders, world tables, previews, generated JSON configs and WebAssembly
+exporter. It prints the versioned directory. That directory's name hashes all
+shipped bytes, so a deploy does not mix new scripts with cached old shaders.
+Any static HTTP host can serve the output; the deployed site needs no Go or
+Python runtime.
+
+`go run ./cmd/terraform --dump-configs <dir>` emits just `config/*.json` and
+`services.json`, for headless rendering and measurements. It does not compile
+the exporter. `--maps-url URL` or `TERRAFORM_MAPS_URL` selects the static site's
+save-link Worker; development uses the local `api/maps` service.
+
+`.github/workflows/pages.yml` runs the fast checks, then builds with Go and
+validates that same artifact before deploying to GitHub Pages. For local
+verification, see [the focused check commands](repro/README.md).

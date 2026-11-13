@@ -1,7 +1,7 @@
 # Development assets bundle
 
 A private bundle of the retail-derived files a cloud environment needs to
-run the editor. It is for our own work only: never commit it and never
+run optional retail measurement and comparison tools. It is for our own work only: never commit it and never
 publish it to users. Unpack it to an assets root, for example
 `/private/tmp/nanolathe-map-editor`:
 
@@ -14,17 +14,18 @@ publish it to users. Unpack it to an assets root, for example
   feature TDFs for those features;
 - `repro/`: the retail crops that `repro/all.sh` compares against.
 
-Run the server in prepared mode. It loads the saved map catalogue instead of
-the retail sources and maps:
+The editor itself needs none of this bundle. Its Go development server and
+static build use only committed JSON data and source files:
 
 ```sh
-R=/private/tmp/nanolathe-map-editor
-go build -o $R/map-export ./export
-python3 sculpt.py --port 8801 --assets-root $R --game-root $R/content --prepared
-REPRO_CROPS=$R/repro PYTHON=python3 sh repro/all.sh $R/repro-out/base http://127.0.0.1:8801 9450
+go run ./cmd/terraform --port <yours> --assets-root /private/tmp/terraform-agent
 ```
 
-Worlds come from `materials/<world>.json` and `sculpt.py` in every mode, so a
-world needs no bundle. Renders under a different GPU or a
-software WebGPU adapter may differ slightly from the Mac reference renders,
-so render a fresh baseline before comparing.
+For an explicit retail comparison, set `REPRO_CROPS` to the bundle's `repro/`
+and run the standalone `repro/all.sh` workflow. That workflow still uses Python
+for crop sheets. Never use the owner's port 8801 from an agent session.
+
+World data lives in `materials/<world>.json`; common defaults live in
+`materials/defaults.json`. Renders under a different GPU or a software WebGPU
+adapter may differ slightly from the Mac references, so render a fresh
+baseline for an explicit comparison.

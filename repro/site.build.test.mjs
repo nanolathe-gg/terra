@@ -1,17 +1,16 @@
-// The static build (python3 sculpt.py --build-site, which needs Go): a versioned folder, the page's files at relative paths, every world's configs,
+// The static build (go run ./cmd/terraform --build-site, which needs Go): a versioned folder, the page's files at relative paths, every world's configs,
 // services and the map exporter.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
+import {runSite} from './site-cli.mjs';
 import {mkdtempSync, readFileSync, readdirSync, existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {ROCK_PRESETS, applyWorldRock, rockPresetFor} from '../sculpt-rock-presets.js';
 
-const root = new URL('..', import.meta.url).pathname;
 // Deployment can validate the artifact it just built, without compiling the exporter twice.
 const folder = process.env.TERRAFORM_SITE_DIR ? resolve(process.env.TERRAFORM_SITE_DIR)
-  : execFileSync(process.env.PYTHON || 'python3', [join(root, 'sculpt.py'), '--build-site', mkdtempSync(join(tmpdir(), 'site-'))], {encoding: 'utf8'}).trim();
+  : runSite(['--build-site', mkdtempSync(join(tmpdir(), 'site-'))]).trim();
 const read = name => readFileSync(join(folder, name), 'utf8');
 
 test('the root opens the versioned build', () => {

@@ -7,7 +7,7 @@
 // (repro/layouts.mjs: landforms by default, a few landforms spread over the map; 'bare' leaves the world's flat default ground; 'dense' fills it).
 // The export runs under Node on Dawn by default (repro/headless.mjs exportMap: the page's modules bake the export art and the page's exporter,
 // export/ built for WebAssembly, packs it; needs Go), from this checkout's files. --chrome exports in the page in headless Chrome instead (the Export
-// pane, its worker and its line of text); it needs --server, your own sculpt.py server (there is no default).
+// pane, its worker and its line of text); it needs --server, your own Go development server (there is no default).
 import {cdpPortFree} from '../repro/cdp-port.mjs';
 import {layoutStrokes} from '../repro/layouts.mjs';
 import {spawn} from 'node:child_process';
@@ -20,7 +20,7 @@ const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
 const chrome = args.includes('--chrome'), server = opt('--server', ''), port = Number(opt('--port', 9450)), out = opt('--out', 'tilecount-out'), configs = opt('--configs', '');
 const worlds = opt('--worlds', 'green').split(','), sizes = opt('--sizes', '4,8').split(',').map(Number), variant = opt('--variant', ''), layout = opt('--layout', 'landforms'), prefix = opt('--name', 'Tiles'), stamp = args.includes('--fixed-name'), dry = args.includes('--dry');
-if (chrome && !server) { console.error('tilecount.mjs: --chrome needs --server http://127.0.0.1:<port> of your own sculpt.py server (there is no default server).'); process.exit(2); }
+if (chrome && !server) { console.error('tilecount.mjs: --chrome needs --server http://127.0.0.1:<port> of your own Go development server (there is no default server).'); process.exit(2); }
 if (dry && !chrome) { console.error("tilecount.mjs: --dry prints the Export pane's line, which only the page has: add --chrome."); process.exit(2); }
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));

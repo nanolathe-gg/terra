@@ -686,7 +686,7 @@ export class TerrainRenderer {
 
   // The world's sun, not normalized: from the west (the east for the alternate light), sunTilt scaling its north-south component (1: as
   // before; Moon 0, lit from due west as every retail Lunar map measures), Sun height degrees above the horizon. Each world's Sun height is the
-  // height this light had before it was a control (sculpt.py sun_height): z comes out .82 to within a bit, and the uniforms are the same.
+  // height this light had before it was a control (the authored sunHeight default): z comes out .82 to within a bit, and the uniforms are the same.
   sunVector(light = 'original') {
     const tilt = this.variant.has('sunTilt') ? Number(this.variant.get('sunTilt')) : 1;
     const x = light === 'alternate' ? 0.72 : -0.72, y = 0.38 * tilt;

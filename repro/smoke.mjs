@@ -4,7 +4,7 @@
 //        [--jobs 3]
 // --jobs runs that many browsers at once (default 3), on CDP ports --port, --port+1, ...: each world is its own browser either way.
 // Prints one JSON line per world: the brushes that added a node and came back on undo, the export result and the console. The export runs in
-// the page (export/ built for WebAssembly, in a worker), so this works on sculpt.py and on a static build alike; it must pass its self-check.
+// the page (export/ built for WebAssembly, in a worker), so this works on the Go server and on a static build alike; it must pass its self-check.
 // Exit code 1 if any brush failed to add or undo a node, the console is not clean, or an export other than Zhon's (which cannot export, by design) fails.
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';

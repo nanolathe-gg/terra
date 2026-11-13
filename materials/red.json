@@ -1465,6 +1465,40 @@
   "vent": {"params": {"size": 1.4, "thick": 0.8, "rim": 0.45, "rimSat": 1.6}}
  },
  "world": {
+    "knobDefaults": {
+        "shoreRock": 96,
+        "shoreShelf": 96,
+        "undulationScale": 80,
+        "undulationCover": 0.6,
+        "groundContrast": 0.7,
+        "crackSeverity": 0.3,
+        "crackDark": 0.35,
+        "crackWidth": 0.5,
+        "banding": 0.3,
+        "reliefAmount": 0.2,
+        "slopeTexture": 0,
+        "faceSteep": 1.75,
+        "crackSpacing": 28,
+        "bedTint": 1,
+        "bedContrast": 0.65,
+        "bedBright": 1.1,
+        "bedRelief": 2.2,
+        "deepEdge": 1,
+        "shelfWander": 6,
+        "bedFlat": 0.6,
+        "shoalRag": 9
+      },
+      "engineDefaults": {
+        "erosion": 1,
+        "erosionRain": 0,
+        "erosionEnvelope": 0.12
+      },
+      "variants": {},
+      "rock": {
+        "recipe": "siltstone",
+        "beds": false
+      },
+
   "shapes": {
    "plateau": {},
    "hill": {"wander": 34, "widthVary": 30, "heightVary": 10},

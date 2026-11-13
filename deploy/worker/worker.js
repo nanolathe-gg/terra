@@ -5,7 +5,7 @@
 //   DELETE /maps/<id>   owner only: `Authorization: Bearer <ADMIN_TOKEN>`
 //
 // The id is the first 16 base32 characters (80 bits) of the SHA-256 of the gzipped bytes, so one body is one link and a
-// link never changes. A leading /api is accepted too (the local server in sculpt.py serves /api/maps), so a client uses
+// link never changes. A leading /api is accepted too (the local Go development server serves /api/maps), so a client uses
 // one path in development and in production. Objects are stored as `maps/<id>.json.gz`; other prefixes (for example a
 // later `publish/` with an expiry rule on the bucket) are left alone.
 //

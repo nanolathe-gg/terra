@@ -9,7 +9,7 @@ import vm from 'node:vm';
 
 const root = new URL('..', import.meta.url).pathname;
 export const goRoot = () => execFileSync('go', ['env', 'GOROOT'], {cwd: root, encoding: 'utf8'}).trim();
-// export/ for WebAssembly, as sculpt.py builds what the page loads (-trimpath -buildvcs=false -ldflags=-s -w), at `path`.
+// export/ for WebAssembly, as the Go site tool builds what the page loads (-trimpath -buildvcs=false -ldflags=-s -w), at `path`.
 export function buildWasm(path) {
   execFileSync('go', ['build', '-trimpath', '-buildvcs=false', '-ldflags=-s -w', '-o', path, './export'], {cwd: root, env: {...process.env, GOOS: 'js', GOARCH: 'wasm'}});
   return path;

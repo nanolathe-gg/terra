@@ -106,7 +106,7 @@ export function worldControlRequirement(key,v){
  if(['faceBedVary','bedCycleVary'].includes(key))return n('column')<=0?NO_COLUMN:(Math.max(n('rockFace'),n('strata'),n('faceStrata'),n('faceWet'),n('debrisAmount'))>0?'':'Raise rock relief or layer color coverage to vary the beds.');
  if(key==='faceRun'&&n('faceFold')>0)return '';
  if(['faceBed','faceRun'].includes(key))return n('debrisAmount')>0||n('strata')>0||n('rockFace')>0||(n('column')>0&&(n('faceStrata')>0||n('faceWet')>0))?'':'Raise Rock relief: Depth, Layer tint, or Wetness to use this setting.';
- // Every world has a ground-cover table (sculpt.py DEFAULT_GROUND_COVER): Vegetation cover above 0 turns it on.
+ // Every world has a ground-cover table (materials/defaults.json groundCover): Vegetation cover above 0 turns it on.
  const cover=n('vegetationCover')>0;
  if(['plantRelief','flowerDensity'].includes(key)&&!cover)return 'Raise Vegetation cover to use this setting.';
  // The sediment transition, at 100 percent Material weathering, replaces the ground's color outright (worldPanelValues' slopeReplaced), and the

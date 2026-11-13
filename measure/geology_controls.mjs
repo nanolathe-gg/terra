@@ -5,7 +5,7 @@
 //   node measure/geology_controls.mjs [--out DIR] [--only desert,lava] [--knobs banding,strata] [--probe archipelago.ringScatter=0] [--family geology|fractures|shores|bodies|impacts] [--scenes DIR] [--list]
 //        [--configs DIR] [--chrome --server http://127.0.0.1:<yours> --port <cdp>]
 // The renders are repro/render.mjs's: under Node on Dawn by default, from this checkout's files (the world configs dumped once), or in the page
-// with --chrome, which needs --server (your own sculpt.py server; there is no default).
+// with --chrome, which needs --server (your own Go development server; there is no default).
 // --family impacts (H21): crater/rim/skin and regolith controls. Shape cards and top-level options win over query defaults;
 // only matching stroke kinds count. --scenes DIR supplies probe scenes (missing files fall back to repro/scenes).
 // --family fractures (H17): the crack knobs. Each scene's own value is read as the page reads it (the query, then
@@ -18,7 +18,7 @@ import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {KNOBS} from '../sculpt-knobs.js';
 const args = process.argv.slice(2), opt = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
 const chrome = args.includes('--chrome'), server = opt('--server', ''), port = opt('--port', '9685'), out = opt('--out', 'geology-controls');
-if (chrome && !server) { console.error('geology_controls.mjs: --chrome needs --server http://127.0.0.1:<port> of your own sculpt.py server (there is no default server).'); process.exit(2); }
+if (chrome && !server) { console.error('geology_controls.mjs: --chrome needs --server http://127.0.0.1:<port> of your own Go development server (there is no default server).'); process.exit(2); }
 // How render.mjs runs: in the page on the server, or under Node from the server's files or (no --server) this checkout's, its configs dumped once.
 const hostArgs = chrome ? ['--chrome', '--server', server, '--port', port] : server ? ['--server', server] : ['--configs', opt('--configs', '') || (await import('../repro/headless.mjs')).dumpConfigs()];
 const only = opt('--only', '').split(',').filter(Boolean), knobsOnly = opt('--knobs', '').split(',').filter(Boolean);
@@ -64,16 +64,14 @@ for (const world of ['green', 'red', 'archipelago', 'moon', 'zhon', 'lava', 'des
   const q = [1, 2, 3].map(n => new URLSearchParams(JSON.parse(readFileSync(scenePath(world, n), 'utf8')).query));
   queries[world] = q; scenes[world] = q.map(x => x.get('variant') || '');
 }
-const dump = JSON.parse(execFileSync(py, ['-c', `import json, sys, sculpt
-scenes = json.loads(sys.argv[1])
-eff = {}
-for world, variants in scenes.items():
-    base = sculpt.biome_config(world)
-    eff[world] = []
-    for v in variants:
-        c = sculpt.apply_variant(base, world, v) if v else base
-        eff[world].append({**c['defaults'], **c.get('engineDefaults', {})})
-print(json.dumps({'d': sculpt.KNOB_DEFAULTS, 'w': sculpt.WORLD_KNOBS, 'e': eff}))`, JSON.stringify(scenes)], {cwd: here}).toString());
+// Use the same Go-generated configs as rendering; Python remains only for pixel analysis.
+const configRoot = chrome || server ? (await import('../repro/headless.mjs')).dumpConfigs() : hostArgs[hostArgs.indexOf('--configs') + 1];
+const readConfig = (world,variant) => JSON.parse(readFileSync(`${configRoot}/config/${world}${variant?'--'+variant:''}.json`));
+const dump = {d:JSON.parse(readFileSync(`${here}materials/defaults.json`)).knobs,w:{},e:{}};
+for(const [world,variants] of Object.entries(scenes)) {
+ dump.w[world]=JSON.parse(readFileSync(`${here}materials/${world}.json`)).world.knobDefaults;
+ dump.e[world]=variants.map(v=>{const c=readConfig(world,v);return {...c.defaults,...c.engineDefaults};});
+}
 const states = [];
 // A stroke card that carries the option wins over the page's default for that stroke (lava-2 asks for four circular layers, ice-3 for no plates). Water strokes that
 // disagree (lava-1's first stroke asks for no fingers, the rest take the world's) read `a|b`, and the scene counts as one where the option is not yet at its target.

@@ -49,7 +49,7 @@ test('old broad tiers and misapplied selectors fail with an actionable message',
 test('build, configuration and exporter checks are separate opt-in jobs', () => {
   assert.ok(planChecks(['site']).steps[0].args[1].endsWith('site.build.test.mjs'));
   assert.ok(planChecks(['features']).steps[0].args.slice(1).every(f => f.endsWith('.features.test.mjs')));
-  assert.ok(planChecks(['config']).steps[0].args.slice(1).every(f => f.endsWith('.config.test.mjs')));
+  assert.ok(planChecks(['config']).steps.find(s => s.name === 'config').args.slice(1).every(f => f.endsWith('.config.test.mjs')));
   assert.deepEqual(planChecks(['export']).steps.map(s => s.name), ['go-export', 'export']);
 });
 

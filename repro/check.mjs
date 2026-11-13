@@ -12,8 +12,8 @@ export const usage = `Usage: repro/check.sh [quick|browser|engine|export|feature
   engine    GPU height tests, regional replay and repeat checks on three authored fixtures
   features  CPU sprite generation, variants and burn animation checks
   export    Go exporter tests and native/WebAssembly byte parity
-  config    Generated configuration integration tests (Python, for now)
-  site      Static build integration test (Python and Go, for now)
+  config    Go config/server tests and generated configuration integration tests
+  site      Static build integration test (Go)
 Options:
   --test FILE     quick: run only this unit test file (repeatable)
   --scene FILE    engine: replace the default fixtures (repeatable)
@@ -69,7 +69,10 @@ export function planChecks(argv) {
   } else if (mode === 'export') {
     steps.push({name: 'go-export', command: 'go', args: ['test', './export']});
     node('export', '--test', ...testFiles('.export.test.mjs'));
-  } else node(mode, '--test', ...testFiles(mode === 'site' ? '.build.test.mjs' : `.${mode}.test.mjs`));
+  } else {
+    if (mode === 'config') steps.push({name: 'go-site', command: 'go', args: ['test', './internal/site', './cmd/terraform']});
+    node(mode, '--test', ...testFiles(mode === 'site' ? '.build.test.mjs' : `.${mode}.test.mjs`));
+  }
   return {mode, out, list: !!options.list, steps};
 }
 

@@ -11,14 +11,13 @@
 // copies the WebGPU canvas into 2D canvases, this reads the canvas texture.
 import {existsSync, readFileSync} from 'node:fs';
 import {dirname, join, resolve} from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {runSite} from './site-cli.mjs';
 import {mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
 export const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const DAWN_DEFAULT = '/private/tmp/nanolathe-map-editor/node-webgpu/node_modules';
-const PYTHON = process.env.PYTHON || '/Users/daniel/src/terraform/.venv/bin/python';
 const MB = 1024 * 1024;
 
 // The Dawn binding, or an error that says how to get it.
@@ -54,8 +53,8 @@ class HeadlessCanvas {
   }
 }
 
-// Where the engine's relative fetches go: the server's files (`server`, a sculpt.py base URL), or the checkout's sources with the generated files
-// (the world configs, the catalog) that sculpt.py --dump-configs writes from the same Python the server runs.
+// Where the engine's relative fetches go: the server's files (`server`, a development server base URL), or the checkout's sources with the generated files
+// (the world configs, the catalog) that go run ./cmd/terraform --dump-configs writes with the same Go code the server runs.
 function fileSource(configs) {
   return async path => {
     const name = decodeURIComponent(path.replace(/^\.?\//, '').split(/[?#]/)[0]);
@@ -64,7 +63,7 @@ function fileSource(configs) {
   };
 }
 export function dumpConfigs(dir = mkdtempSync(join(tmpdir(), 'terraform-configs-'))) {
-  execFileSync(PYTHON, [join(REPO, 'sculpt.py'), '--dump-configs', dir], {stdio: ['ignore', 'ignore', 'inherit']});
+  runSite(['--dump-configs', dir], {stdio: ['ignore', 'ignore', 'inherit']});
   return dir;
 }
 

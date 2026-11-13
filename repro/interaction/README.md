@@ -1,6 +1,6 @@
 # Drawing, editing and fit-view performance
 
-This browser harness exercises the app's real pointer and input handlers. It lives outside the normal app and adds no production instrumentation or dependencies. The host binds to loopback only and accepts PNG/JSON evidence under its output directory. It deliberately has no retail feature catalogue or export action; use `sculpt.py` for reviewing the app normally.
+This browser harness exercises the app's real pointer and input handlers. It lives outside the normal app and adds no production instrumentation or dependencies. The host binds to loopback only and accepts PNG/JSON evidence under its output directory. It deliberately has no retail feature catalogue or export action; use `go run ./cmd/terraform` for reviewing the app normally. The optional Python host gets all configs from Go. For a historical checkout that predates the Go tool, run the host from that historical checkout.
 
 Start two hosts from this directory's worktree, with a clean baseline checkout or archive and the candidate source:
 

@@ -110,7 +110,7 @@ try {
   const loaded = await ev(`(async()=>{const s=sculptRegion.sketch();s.mapData={...s.mapData,features:[{name:'Tree1',x:5,z:5},...s.mapData.features]};sculptRegion.loadSketch(s);await sculptCanvas.idle();return {n:sculptCanvas.features.serialize().features.length,status:document.getElementById('status').textContent};})()`);
   assert.equal(loaded.n, 4); assert.match(loaded.status, /1 saved feature does not fit this world or map and was left out/); report.unfit = loaded.status;
   report.select = 'select, drag, metal, re-roll, Shift-add, Delete, refused overlap';
-  // Every world places every kind: a kind its table lacks is Green's (sculpt.py biome_config), lit by the world's own sun. Moon has rocks of its
+  // Every world places every kind: a kind its table lacks is Green's (the Go config generator), lit by the world's own sun. Moon has rocks of its
   // own and Green's trees, shrubs and scars; Zhon has no table and takes all four.
   for (const world of ['moon', 'zhon']) {
     await send('Page.navigate', {url: `${server}/sculpt.html?biome=${world}&mapX=4&mapY=4&scratch=features-test-${world}&gpuMB=512&heapMB=1536`}); await ready();

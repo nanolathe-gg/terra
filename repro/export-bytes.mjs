@@ -6,7 +6,7 @@
 // to the native exporter (`map-export --catalog-file --input --features-root`). It prints one JSON line per map: the SHA-256 of the .ufo and the
 // indexed PNG from each of the page's exports (`wasm`) and from the native one, the export times and memory, and `same` (all three equal). Exit 1 if any differ.
 // The export runs under Node on Dawn by default (repro/headless.mjs exportMap: the page's modules bake the art, the worker runs in a Node context,
-// repro/export-node.mjs), from this checkout's files. --chrome exports in the page in headless Chrome instead; it needs --server, your own sculpt.py
+// repro/export-node.mjs), from this checkout's files. --chrome exports in the page in headless Chrome instead; it needs --server, your own Go server
 // server (there is no default). --features N places up to N of the map's generated features first (every kind the world has, deposits and vents
 // first): the page paints them into the art with a 2D canvas, so they need --chrome.
 // Output (chunks, manifests, the native files) goes to --out; nothing is written in the checkout.
@@ -22,7 +22,7 @@ const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? 
 const chrome = args.includes('--chrome'), server = opt('--server', ''), port = Number(opt('--port', 9450)), out = resolve(opt('--out', 'export-bytes-out')), configs = opt('--configs', '');
 const maps = opt('--maps', 'green:4:landforms,lava:8:dense,red:16:dense').split(',').map(m => { const [world, units, layout = 'landforms'] = m.split(':'); return {world, units: Number(units), layout}; });
 const featureCount = Number(opt('--features', 0));
-if (chrome && !server) { console.error('export-bytes.mjs: --chrome needs --server http://127.0.0.1:<port> of your own sculpt.py server (there is no default server).'); process.exit(2); }
+if (chrome && !server) { console.error('export-bytes.mjs: --chrome needs --server http://127.0.0.1:<port> of your own Go development server (there is no default server).'); process.exit(2); }
 if (featureCount && !chrome) { console.error('export-bytes.mjs: --features needs --chrome: the page paints deposits and vents into the export art with a 2D canvas.'); process.exit(2); }
 const root = new URL('..', import.meta.url).pathname;
 mkdirSync(out, {recursive: true});
