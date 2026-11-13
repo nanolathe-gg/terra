@@ -1,6 +1,6 @@
 import {requestAdapter} from './sculpt-webgpu.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
-import {configureMap,mountMapCanvas} from './sculpt-map.js';
+import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
@@ -101,7 +101,7 @@ function buildShapeOptions() {
   $('along-reset').addEventListener('click',() => { setCurve(null,'along'); if (selected>=0) { checkpoint(); queueWeather(); } });
   $('curve-link').addEventListener('click',() => { toggleLink(); if (selected>=0) { checkpoint(); queueWeather(); } });
   $('curve-mirror').addEventListener('click',() => { mirrorSides(); if (selected>=0) { checkpoint(); queueWeather(); } });
-  curveEditorEvents(); alongEditorEvents();
+  curveEditorEvents(); alongEditorEvents(); curveNumberEvents();
   for (const id of ['section-preview','along-preview']) new ResizeObserver(() => { if (!$('section-preview-control').hidden) drawSection(); }).observe($(id));
   for (const [key,id] of SHAPE_FIELDS) $(id).addEventListener('input',() => {
     if(key==='heightReference'&&curveKind()==='landform'){
@@ -258,7 +258,7 @@ function updateControls() {
   for(const id of ['rotate-left','rotate-right','scale-down','scale-up'])$(id).disabled=!nodes[selected]?.points||locked;
   $('view-clay').setAttribute('aria-pressed',String(!$('view-passability').matches('[aria-pressed=true]')&&$('clay').checked));
   $('view-rendered').setAttribute('aria-pressed',String(!$('view-passability').matches('[aria-pressed=true]')&&!$('clay').checked));
-  for(const id of ['save','load','view-clay','view-rendered','view-passability','blank'])$(id).disabled=!ready||loading||Boolean(stroke||moving);
+  for(const id of ['new-map','save','load','view-clay','view-rendered','view-passability','blank'])$(id).disabled=!ready||loading||Boolean(stroke||moving);
   const pointCount=nodes[selected]?.points?.length||0;
   $('path-help').textContent=pathEditing?pathAdding?'Click to extend from the selected point. An interior point starts a branch. Escape finishes.':`${paths.length} path${paths.length===1?'':'s'} · ${pointCount} points${pathPoint>=0?' · point '+(pathPoint+1)+' selected':''}. Select a point to insert, extend, or branch.`:'Drag to move · labeled handles rotate / scale · Shift snaps handles · arrow keys nudge.';
   // With Select active, show the selected shape's own controls; a palette entry shows its stroke kind's (the shape buttons draw landforms).
@@ -374,9 +374,10 @@ function mirrorSides() { const c=curveContext(),b=backKnots(c); if (!c.land || !
 function setLean(ratio) { const el=$('lean'); el.value=String(clamp(Math.round(ratio*20)*5,25,400)); el.dispatchEvent(new Event('input',{bubbles:true})); }
 // The height axis of a landform's canvases: the plain, the sea and the elevation, with room for an along curve up to 1.2.
 function heightAxis(c) {
-  const ground=landformGround(c.q),plain=ground?0:config.baseHeight,sea=ground?null:config.seaLevel,E=landformElevation(c.q,config.seaLevel),span=Math.abs(E-plain)<1?(E<plain?-1:1):E-plain,top=plain+span*1.2;
+  const ground=landformGround(c.q),plain=ground?0:config.baseHeight,sea=ground?null:config.seaLevel,E=landformElevation(c.q,config.seaLevel),span=Math.abs(E-plain)<1?(E<plain?-1:1):E-plain;
+  const values=[...frontKnots(c),...(backKnots(c)||[])].map(k=>k[1]),top=plain+span*Math.max(1.2,...values);
   // A signed section (lfcrater) reaches past the ground, away from the elevation: room for its lowest knot.
-  const lip=plain+span*Math.min(0,...frontKnots(c).map(k => k[1]),...(backKnots(c)||[]).map(k => k[1]));
+  const lip=plain+span*Math.min(0,...values);
   let lo=Math.min(sea??plain,plain,E,top,lip),hi=Math.max(sea??plain,plain,E,top,lip); const pad=Math.max(5,(hi-lo)*.1); lo-=pad; hi+=pad;
   return {plain,sea,E,span,lo,hi,ground};
 }
@@ -421,6 +422,39 @@ function sectionMark() {
 }
 // Match the dock's actual dimensions so curve text and handles stay sharp.
 function fitCanvas(cv) { const w=Math.round(cv.clientWidth),h=Math.round(cv.clientHeight); if (w>=120 && (cv.width!==w||cv.height!==h)) { cv.width=w; cv.height=h; } }
+let curvePoint={side:'front',i:0};
+function numberKnots(c=curveContext()) { return (curvePoint.side==='along'?alongKnots(c.q):curvePoint.side==='back'?backKnots(c)||frontKnots(c):frontKnots(c)).map(k=>[...k]); }
+function syncCurveNumbers(c) {
+  if(!c.land&&curvePoint.side!=='front')curvePoint={side:'front',i:0};
+  const side=$('curve-point-side');side.value=curvePoint.side;side.options[1].disabled=!c.land;side.options[2].disabled=!c.land;
+  const ks=numberKnots(c);curvePoint.i=clamp(curvePoint.i,0,ks.length-1);const i=curvePoint.i;
+  const select=$('curve-point-index');if(select.options.length!==ks.length)select.replaceChildren(...ks.map((_,j)=>new Option(String(j+1)+' of '+ks.length,j)));select.value=i;
+  for(const [id,value] of [['curve-point-x',ks[i][0]],['curve-point-y',ks[i][1]]])if(document.activeElement!==$(id))$(id).value=value;
+  $('curve-point-x').disabled=i===0||i===ks.length-1;$('curve-point-x').min=ks[i-1]?.[0]+.01||0;$('curve-point-x').max=ks[i+1]?.[0]-.01||1;
+  $('curve-point-y').min=curvePoint.side==='along'||!c.land?0:-1;$('curve-point-y').max=curvePoint.side==='along'?ALONG_HI:1.5;
+  $('curve-point-delete').disabled=i===0||i===ks.length-1||ks.length<=2;
+}
+function commitNumberKnots(ks) {
+  const c=curveContext();if(curvePoint.side==='along')setCurve(roundKnots(ks),'along');
+  else if(curvePoint.side==='back'&&!sidesLinked(c))storeSection(c,frontKnots(c),ks);
+  else storeSection(c,ks,backKnots(c));
+  if(selected>=0){checkpoint();queueWeather();}
+}
+function curveNumberEvents() {
+  $('curve-point-side').onchange=()=>{curvePoint={side:$('curve-point-side').value,i:0};drawSection();};
+  $('curve-point-index').onchange=()=>{curvePoint.i=Number($('curve-point-index').value);drawSection();};
+  for(const [id,axis]of [['curve-point-x',0],['curve-point-y',1]])$(id).onchange=()=>{const ks=numberKnots(),input=$(id),v=Number(input.value);if(!Number.isFinite(v)||input.value===''){input.value=ks[curvePoint.i][axis];return;}const value=Math.round(clamp(v,Number(input.min),Number(input.max))*1000)/1000;input.value=value;if(value===ks[curvePoint.i][axis])return;ks[curvePoint.i][axis]=value;commitNumberKnots(ks);};
+  $('curve-point-delete').onclick=()=>{const ks=numberKnots(),i=curvePoint.i;if(i<=0||i>=ks.length-1||ks.length<=2)return;ks.splice(i,1);curvePoint.i--;commitNumberKnots(ks);};
+  for(const [id,amount]of [['curve-raise',.05],['curve-lower',-.05]])$(id).onclick=()=>{const c=curveContext(),lo=curvePoint.side==='along'||!c.land?0:-1,hi=curvePoint.side==='along'?ALONG_HI:1.5;commitNumberKnots(numberKnots().map(([x,y])=>[x,clamp(y+amount,lo,hi)]));};
+  for(const [id,axis]of [['curve-scale-height',1],['curve-scale-width',0]])$(id).onchange=()=>{const input=$(id),factor=Number(input.value)/100;if(input.value===''||!input.reportValidity()||!Number.isFinite(factor)||factor<=0){input.value=100;return;}const c=curveContext(),ks=numberKnots(),lo=curvePoint.side==='along'||!c.land?0:-1,hi=curvePoint.side==='along'?ALONG_HI:1.5;const out=ks.map(([x,y],i)=>axis?[x,clamp(y*factor,lo,hi)]:[i===0?0:i===ks.length-1?1:1-(1-x)*factor,y]);if(out.some((k,i)=>i&&k[0]-out[i-1][0]<.01)){input.setCustomValidity('This scale would overlap points. Use a smaller change.');input.reportValidity();input.setCustomValidity('');return;}input.value=100;commitNumberKnots(out);};
+}
+function drawShapePreview() {
+  if(!document.querySelector('.app.curves-large')||!canvas.width||!canvas.height)return;
+  const cv=$('curve-shape-preview'),g=cv.getContext('2d');g.clearRect(0,0,cv.width,cv.height);
+  let sx=0,sy=0,sw=canvas.width,sh=canvas.height;
+  if(selected>=0&&mapCanvas){const b=nodeBounds(nodes[selected]),v=mapCanvas.view(),pad=32;const x0=clamp((b.x0*spacing-v.x)*v.scale-pad,0,canvas.width),x1=clamp((b.x1*spacing-v.x)*v.scale+pad,0,canvas.width),y0=clamp((b.y0*spacing-v.y-180)*v.scale-pad,0,canvas.height),y1=clamp((b.y1*spacing-v.y+100)*v.scale+pad,0,canvas.height);if(x1>x0&&y1>y0){sx=x0;sy=y0;sw=x1-x0;sh=y1-y0;}}
+  const ratio=Math.min(cv.width/sw,cv.height/sh),w=sw*ratio,h=sh*ratio;g.drawImage(canvas,sx,sy,sw,sh,(cv.width-w)/2,(cv.height-h)/2,w,h);
+}
 function drawSection() {
   fitCanvas($('section-preview')); fitCanvas($('along-preview'));
   const cv=$('section-preview'),g=cv.getContext('2d'),c=curveContext(),L=sectionLayout(c),{ys,back}=sectionPreview(c.kind,c.q),n=ys.length-1;
@@ -441,7 +475,7 @@ function drawSection() {
   }
   const fk=frontKnots(c),edited=Boolean(c.q.curve?.knots);
   g.fillStyle=edited?'#e8f2d8':'rgba(232,242,216,.45)';
-  for (const h of sectionHandles(c,L)) { g.fillStyle=edited?(h.side==='back'&&!h.edit?'rgba(232,242,216,.55)':'#e8f2d8'):'rgba(232,242,216,.45)'; g.beginPath(); g.arc(h.X,h.Y,3.5,0,7); g.fill(); }
+  for (const h of sectionHandles(c,L)) { g.fillStyle=edited?(h.side==='back'&&!h.edit?'rgba(232,242,216,.55)':'#e8f2d8'):'rgba(232,242,216,.45)'; if(curvePoint.side!=='along'&&curvePoint.i===h.i&&curvePoint.side===(h.edit||'front'))g.fillStyle='#ffd27a';g.beginPath(); g.arc(h.X,h.Y,3.5,0,7); g.fill(); }
   // The crest's lean handle: a diamond on the crest line at the foot's height.
   g.fillStyle='#ffd27a'; g.beginPath(); g.moveTo(L.xc,base-5); g.lineTo(L.xc+5,base); g.lineTo(L.xc,base+5); g.lineTo(L.xc-5,base); g.closePath(); g.fill();
   g.strokeStyle='rgba(255,210,122,.35)'; g.setLineDash([2,3]); g.beginPath(); g.moveTo(L.xc,L.top); g.lineTo(L.xc,L.bottom); g.stroke(); g.setLineDash([]);
@@ -454,6 +488,7 @@ function drawSection() {
   const facing=Math.round(c.q.facing||0),toward=FACING_CHOICES.find(f => f[0]===(facing||3))[1];
   $('curve-lean').textContent=`Lean ${(Math.round(L.ratio*100)/100).toFixed(2)} : 1 toward ${toward.toLowerCase()}`;
   if (c.land) drawAlong(c);
+  syncCurveNumbers(c);drawShapePreview();
 }
 // The second curve: the crest's height along the path, as a share of the elevation above the plain (0 to 1.2), against the share of the way along. The dashed
 // line is what was authored; the solid line is read from the map along the path.
@@ -477,7 +512,7 @@ function drawAlong(c) {
     g.strokeStyle='#ffd27a'; g.beginPath(); g.moveTo(L.X(lfPlace),L.top); g.lineTo(L.X(lfPlace),L.bottom); g.stroke();
   }
   g.setLineDash([5,3]); g.beginPath(); for (let k=0;k<=N;k++) g[k?'lineTo':'moveTo'](L.X(k/N),L.yv(clamp(f(k/N),0,ALONG_HI))); g.strokeStyle='#e8f2d8'; g.stroke(); g.setLineDash([]);
-  g.fillStyle=c.q.along?'#e8f2d8':'rgba(232,242,216,.45)'; for (const [x,v] of knots) { g.beginPath(); g.arc(L.X(x),L.yv(v),3.5,0,7); g.fill(); }
+  g.fillStyle=c.q.along?'#e8f2d8':'rgba(232,242,216,.45)'; for (const [i,[x,v]] of knots.entries()) { g.fillStyle=curvePoint.side==='along'&&curvePoint.i===i?'#ffd27a':c.q.along?'#e8f2d8':'rgba(232,242,216,.45)';g.beginPath(); g.arc(L.X(x),L.yv(v),3.5,0,7); g.fill(); }
 }
 function curveEditorEvents() {
   const cv=$('section-preview'); let drag=null;
@@ -494,11 +529,12 @@ function curveEditorEvents() {
     if (Math.hypot(L.xc-p.px,L.yv(0)-p.py)<9) { drag={lean:true}; cv.setPointerCapture(e.pointerId); return; }
     const h=hit(c,L,p);
     if (h && e.shiftKey) { if (remove(c,{...h,edit:h.edit||'front'}) && selected>=0) { checkpoint(); queueWeather(); } return; }
+    if(h){curvePoint={side:h.edit||'front',i:h.i};syncCurveNumbers(c);}
     if (h) drag={side:h.side,edit:h.edit||'front',i:h.i};
     else {
       const side=p.px<L.xc?'back':'front',edit=side==='back'&&!sidesLinked(c)&&c.land?'back':'front',x=clamp(distShare(L,side,p.px),.01,.99);
       const list=(edit==='back'?backKnots(c):frontKnots(c)).map(k => [...k]); let j=list.findIndex(k => k[0]>x); if (j<0) j=list.length-1;
-      list.splice(j,0,[x,vOf(c,L,p.py)]); drag={side,edit,i:j}; edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c));
+      list.splice(j,0,[x,vOf(c,L,p.py)]); curvePoint={side:edit,i:j};drag={side,edit,i:j}; edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c));
     }
     cv.setPointerCapture(e.pointerId);
   });
@@ -526,6 +562,7 @@ function alongEditorEvents() {
     if (e.button!==0||pointer!==null) return;
     const p=at(e),c=curveContext(),L=alongLayout(c),knots=alongKnots(c.q).map(k => [...k]),i=hit(c,L,knots,p); moved=false;
     if (i>=0 && e.shiftKey) { if (i>0 && i<knots.length-1 && knots.length>2) { knots.splice(i,1); store(knots); if (selected>=0) { checkpoint(); queueWeather(); } } return; }
+    if(i>=0){curvePoint={side:'along',i};syncCurveNumbers(c);}
     pointer=e.pointerId;drag=i;cv.setPointerCapture(e.pointerId);
     if(i<0)inspect(L,p);
   });
@@ -937,9 +974,20 @@ function readRegional(request) {
   }
   return {...r,fields,weather,materialField,bytes:r.bytes+extra};
 }
+let pendingControlRow=null;
+function renderProgress(stage,invalidated=false) {
+  if(invalidated&&pendingControlRow)pendingControlRow.classList.add('render-pending');$('map-progress').hidden=!stage;$('render-stage').hidden=!stage;$('render-stage').textContent=stage||'';
+  if(!stage)for(const row of document.querySelectorAll('.render-pending'))row.classList.remove('render-pending');
+}
+const controlRevisions=new WeakMap();
+for(const event of ['input','change']){
+  document.addEventListener(event,e=>{if(!ready||!e.target.closest('#editor,#world-editor,#rendering-host'))return;const row=e.target.closest('.control,.control-row,.curve-numbers label,.curve-actions');controlRevisions.set(e,{row,revision});pendingControlRow=row;requestAnimationFrame(()=>{if(pendingControlRow===row)pendingControlRow=null;});},true);
+  document.addEventListener(event,e=>{const before=controlRevisions.get(e);if(before?.row&&revision!==before.revision){before.row.classList.add('render-pending');renderProgress('Updating terrain…');}});
+}
+
 function setMapBusy(on) {
   loading=on; $('editor').disabled=on; $('world-editor').disabled=on;
-  for (const id of ['weather','clay','light','feature-tool','starts-tool']) $(id).disabled=on;
+  for (const id of ['new-map','weather','clay','light','feature-tool','starts-tool']) $(id).disabled=on;
   for(const input of document.querySelectorAll('#rendering-host input'))input.disabled=on;
   renderLayers();updateControls();
   overlay.style.pointerEvents=on?'none':''; const panel=$('map-features-controls'); if (panel) panel.disabled=on;
@@ -979,7 +1027,7 @@ const sculptRegion={
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,pickAt:pickNode,selectionLabel:shapeName,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
   pendingInputs:()=>worldInputQueue.pending,drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
-  setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },onUpdate:fn => { mapUpdate=fn; }
+  setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },renderProgress,presented:drawShapePreview,onUpdate:fn => { mapUpdate=fn; }
 };
 window.sculptRegion=sculptRegion;
 function cloneNodes(list=nodes) { return list.map(n => ({...n,points:n.points?.map(p => ({...p})),paths:clonePaths(n),frame:n.frame?.slice(),params:n.params?{...n.params}:undefined})); }
@@ -1310,8 +1358,9 @@ let leavingForWorld=false,openingShared=false;   // set while a load hands the m
 async function loadSketchFile(s,commit=true) {
   if(!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==6 || !Array.isArray(s.nodes) || s.nodes.some(n=>!n))throw new Error('Load a map stroke graph.');
   const biome=typeof s?.biome==='string'?s.biome:'';
+  const savedWorld=typeof s.world==='string'&&worlds[s.world]?.base===biome?s.world:biome;
   const mapChanged=(s?.map?.unitsX??0)!==(config.map?.unitsX??0) || (s?.map?.unitsY??0)!==(config.map?.unitsY??0) || (s?.map && s.seaLevel!==config.seaLevel);
-  if (biome && (biome!==config.biomeId || mapChanged || (s.variant||'')!==(config.variant||''))) {
+  if (biome && (biome!==config.biomeId || savedWorld!==worldId || mapChanged || (s.variant||'')!==(config.variant||''))) {
     let served=false,variant='';
     try {
       const response=await fetch(configUrl(biome));
@@ -1327,7 +1376,7 @@ async function loadSketchFile(s,commit=true) {
     catch (err) { error('The saved terrain could not be carried to '+biome+': '+err.message); return false; }
     status(`Opening ${biome} for the saved terrain…`);
     leavingForWorld=true;
-    goToWorld(biome,null,{pendingSketch:token,variant,shared:openingShared?1:'',mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
+    goToWorld(biome,savedWorld,{pendingSketch:token,variant,shared:openingShared?1:'',mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
     return false;
   }
   loadSketch(s); if(commit)checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather();return true;
@@ -1487,7 +1536,6 @@ function showPrevious() { $('share-previous').hidden=takePrevious(localStorage)=
 $('share-menu').addEventListener('toggle',async () => {
   if (!$('share-menu').open) return;
   showPrevious();
-  if (shareOpenedByLoad) { shareOpenedByLoad=false; return; }
   $('share-result').hidden=true;
   const service=mapsService(services);
   if (!service.url) { shareMessage(service.reason); return; }
@@ -1500,7 +1548,6 @@ $('share-menu').addEventListener('toggle',async () => {
     $('share-url').select();
   } catch (err) { shareMessage(err.message); }
 });
-let shareOpenedByLoad=false;
 $('share-copy').addEventListener('click',async () => {
   $('share-url').select();
   try { await navigator.clipboard.writeText($('share-url').value); shareMessage('Link copied.'); } catch (_) { shareMessage('Press Ctrl+C (Cmd+C on a Mac) to copy the selected link.'); }
@@ -1513,14 +1560,14 @@ $('share-restore').addEventListener('click',async () => {
     dropPrevious(localStorage);
     leavingForWorld=false;
     const done=await loadSketchFile(previous);
-    if (done) { showPrevious(); shareMessage('Your previous map is back.'); }
+    if (done) { showPrevious(); status('Your previous map is back.'); }
     else if (!leavingForWorld) keepPrevious(localStorage,text);   // the load failed: the slot stays
   } catch (err) { keepPrevious(localStorage,text); error(err.message); }
   finally { loading=false; $('editor').disabled=false; updateControls(); }
 });
 function announceShared() {
   status('Opened a shared map.'); shareMessage('Opened a shared map.'); showPrevious();
-  if (!$('share-previous').hidden) { shareOpenedByLoad=true; $('share-menu').open=true; }
+  if (!$('share-previous').hidden && $('pane-map').hidden) $('tab-map').click();
 }
 // Called once the editor is ready: a ?map=<id> address opens that shared map.
 async function openSharedMap() {
@@ -1745,9 +1792,10 @@ function buildKnobs() {
     for (const [key, label, min, max, step, value] of knobs) {
       const id = 'knob-' + key, current = params.has(key) ? Number(params.get(key)) : value, choices = WORLD_CHOICES[key];
       // A value shows at most three decimals (Sun height's defaults are the old light's height, 45.20597821393736 degrees on most worlds).
-      const wrap = controlRow({id,label:`${label} <output${choices?' hidden':''}>${+current.toFixed(3)}</output>`,range:`min="${min}" max="${max}" step="${step}" value="${current}"`,choices});
+      const cleanLabel=label.replace(/\s*\([^)]*\)/g,'');
+      const wrap = controlRow({id,label:`${cleanLabel} <output${choices?' hidden':''}>${+current.toFixed(3)}</output>`,range:`min="${min}" max="${max}" step="${step}" value="${current}"`,choices});
       const {block:box,search}=worldGroup(title,key);
-      wrap.dataset.knob=key;wrap.dataset.searchGroup=search;
+      wrap.dataset.knob=key;wrap.dataset.searchGroup=search+' '+label;wrap.querySelector('label').title=label;(wrap.querySelector('.scrub')||wrap).title=label;
       const input = wrap.querySelector('#'+id), out = wrap.querySelector('output');
       if(choices)input.value=String(current);
       input.addEventListener('input', () => { out.textContent = input.value; if (rockSelected>0 && ROCK_KEYS.includes(key)) setPresetKnob(key, Number(input.value)); else setKnob(key, input.value); });
@@ -1967,19 +2015,19 @@ async function bootMap() {
     if(gpuWeather)gpuWeather.invalidRect=invalidateRefinement(gpuWeather.invalidRect,rect,worldGrid);
     if(refined)refinedInvalidRect=invalidateRefinement(refinedInvalidRect,rect,worldGrid);
   });
-  addGroundNode();
+  if(!experiment.has('newMap'))addGroundNode();
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); worldChanged(renderer.setColors(worldColors()));$('export').textContent='Export view PNG';
   buildKnobs(); buildWorldPanel();
   // The Rock column panel edits the selected preset's beds: the world's column for slot 0, a preset's own sections (its copy of the world's
   // until edited; Restore gives it the world's again).
-  const presetColumn=()=>{const rock=mapRocks.find(r=>r.slot===rockSelected),own=config.column?.variants?.[config.variant]?.sections||config.column?.sections||[];return {column:{sections:structuredClone(rock.column?.sections??own)},variant:'',edited:Boolean(rock.column)};};
+  const presetColumn=()=>{const rock=mapRocks.find(r=>r.slot===rockSelected),own=config.column?.variants?.[config.variant]?.sections||config.column?.sections||[];return {column:{sections:structuredClone(rock.column?.sections??own)},bedColors:renderer.slotColors(rockSelected).beds,variant:'',edited:Boolean(rock.column)};};
   const editPresetColumn=column=>{const rock=mapRocks.find(r=>r.slot===rockSelected);editRocks(setRock(mapRocks,rockSelected,{knobs:rock.knobs,column:{sections:column.sections??[]}}));};
-  syncColumnPanel=mountColumnPanel(()=>rockSelected>0?presetColumn():({column:columnForEdit(),variant:config.variant,edited:Boolean(columnOverride)}),
+  syncColumnPanel=mountColumnPanel(()=>rockSelected>0?presetColumn():({column:columnForEdit(),bedColors:renderer.slotColors(0).beds,variant:config.variant,edited:Boolean(columnOverride)}),
     column=>rockSelected>0?editPresetColumn(column):editColumn(column),()=>rockSelected>0?checkpoint(true):commitColumn(),
     ()=>{if(rockSelected>0){const rock=mapRocks.find(r=>r.slot===rockSelected);editRocks(setRock(mapRocks,rockSelected,{knobs:rock.knobs,column:null}));checkpoint(true);}else{editColumn(null);commitColumn();}});
-  let saved=null; try { if (LOCAL_KEY && !experiment.has('pendingSketch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
+  let saved=null; try { if (LOCAL_KEY && !experiment.has('pendingSketch') && !experiment.has('newMap')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
   if (saved) {
     try {
       const s=JSON.parse(saved),same=s.biome===config.biomeId && (s.variant||'')===(config.variant||'') && (s.world||s.biome)===worldId;
@@ -1995,7 +2043,33 @@ async function bootMap() {
   updateControls(); resize(); schedule(); queueWeather();
   $('one').click();   // every page load starts at 1x, centered on the map
   await openSharedMap();
+  $('new-map').disabled=false;showPrevious();
+  if(experiment.has('newMap')){const url=new URL(location.href);url.searchParams.delete('newMap');$('map-name').value=url.searchParams.get('mapName')||'Untitled map';$('map-name').dispatchEvent(new Event('input'));url.searchParams.delete('mapName');window.history.replaceState(null,'',url);saveWorking();}
+  else if(!saved&&!location.search)openNewMap(true);
 }
+// New and first run share one picker and the existing previous-map slot.
+function openNewMap(first=false) {
+  const dialog=$('new-map-dialog'); let picked=config.biomeId;
+  $('new-map-title').textContent=first?'Start a map':'New map';
+  $('new-map-cancel').hidden=$('new-map-previous').hidden=first;
+  $('new-map-error').textContent='';
+  const choices=Object.entries(config.biomes||{});
+  $('new-map-worlds').replaceChildren(...choices.map(([id,name])=>{const b=document.createElement('button');b.type='button';const image=document.createElement('img');image.src=`ui-previews/world-${id}.png`;image.alt='';image.width=260;image.height=190;const label=document.createElement('span');label.textContent=name;b.append(image,label);b.dataset.world=id;b.setAttribute('aria-pressed',String(id===picked));b.onclick=()=>{picked=id;for(const button of $('new-map-worlds').children)button.setAttribute('aria-pressed',String(button===b));};return b;}));
+  $('new-map-width').value=config.map?.unitsX??4;$('new-map-height').value=config.map?.unitsY??4;
+  const dimensions=()=>{const m=mapGeometry(Number($('new-map-width').value),Number($('new-map-height').value));$('new-map-pixels').textContent=`${m.width} × ${m.height} pixels`;for(const b of $('new-map-sizes').children)b.setAttribute('aria-pressed',String(Number(b.dataset.size)===m.unitsX&&m.unitsX===m.unitsY||b.dataset.size==='custom'&&(![4,8,12,16].includes(m.unitsX)||m.unitsX!==m.unitsY)));};
+  $('new-map-name').value='Untitled map';
+  for(const b of $('new-map-sizes').children)b.onclick=()=>{if(b.dataset.size==='custom'){$('new-map-width').focus();return;}$('new-map-width').value=$('new-map-height').value=b.dataset.size;dimensions();};
+  $('new-map-open').onclick=()=>{dialog.close();$('load').click();};
+  $('new-map-width').oninput=$('new-map-height').oninput=dimensions;dimensions();
+  dialog.oncancel=e=>{if(first)e.preventDefault();};$('new-map-cancel').onclick=()=>dialog.close();
+  $('new-map-form').onsubmit=e=>{e.preventDefault();if(!e.target.reportValidity())return;
+    if(!first&&!keepPrevious(localStorage,JSON.stringify(workingCopy()))){$('new-map-error').textContent='Your previous map could not be kept. Save it as a file before starting a new map.';return;}
+    clearTimeout(autosaveTimer);keepSaved=true;
+    const url=new URL(location.origin+location.pathname);url.searchParams.set('biome',picked);if(picked===config.biomeId){if(config.variant)url.searchParams.set('variant',config.variant);if(worldId!==config.biomeId)url.searchParams.set('world',worldId);}url.searchParams.set('mapName',$('new-map-name').value.trim()||'Untitled map');url.searchParams.set('mapX',$('new-map-width').value);url.searchParams.set('mapY',$('new-map-height').value);url.searchParams.set('newMap','1');location.href=url;
+  };
+  dialog.showModal();
+}
+$('new-map').onclick=()=>{if(ready&&!loading&&!stroke&&!moving)openNewMap();};
 async function boot() {
   try {
     await requestAdapter();   // a browser without WebGPU, or an adapter below the engine's limits, gets a plain message before anything loads

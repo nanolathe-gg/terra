@@ -1,5 +1,62 @@
 # Interface inventory
 
+The current navigation below describes the accepted interface implemented on
+2026-11-12. It was checked from the source and with focused Chrome spots on
+Green. The 19-world audit, numeric defaults, disabled counts, row totals,
+and pixel geometry in the historical appendix were **not remeasured**.
+Those numbers describe `8e42ae8e`, before this redesign.
+
+## Current layout and locations
+
+There is one editor, `/sculpt`. The static site's `index.html` forwards to it.
+Layout is authored in `sculpt.html`; control rows remain in their World or
+Build homes. Storage, save-file fields, undo and rendering use the existing
+editor state.
+
+| Area | Current contents and behavior |
+| --- | --- |
+| Top bar | New, map name and dimensions (Map menu), Open, Save, Undo/Redo; Build/World; current-world badge; Art/Clay/Passability, View, Settings, panel toggles, Focus, Export. Long map names truncate visually and keep the full name in the hover title. |
+| Tool rail | Select, Land, Water, Brushes, Features, Starts, Shapes, Expand. Land/Water/Brushes flyouts show tool names and existing rendered examples; Expand keeps the full palette visible. |
+| Build side panel | Tool or selected-shape card with Profile, Size & height, Rock & cover, Outline & variation, Details and Advanced groups; features use their existing Place/Erase/Fill modes and kind tabs. Starts has its own rail entry into the same feature state. |
+| Shape profile | Cross-section and height-along-path canvases beside the selected-point and bulk numeric editors in Full size. Live terrain preview uses the same renderer. |
+| World side panel | World, Colors, Ground, Vegetation, Rock types, Cliffs & stones, Sand, Water & shores, Rain & erosion, Light & shine, Palette. Larger sections have tabs. Search spans authored labels and subgroup names, including hover-only parenthetical explanations, without matching every row solely through an ancestor section name. All includes fine controls. |
+| Unavailable World rows | Eligible disabled rows fold by their requirement reason within each subgroup. Keyboard-operable Show/Hide buttons retain their reason, count and row associations. Search reveals matching disabled rows with reasons. Changing a parent setting re-evaluates availability immediately. |
+| Rock types | Persistent selected-rock picker with chips, Manage and recipe add. Every tab edits that selected rock; world rock remains slot zero. Layers opens the named rock-column sheet beside the World panel. |
+| Rock-column sheet | Selected rock name, proportional colored bed stack (hardness affects inset), existing section/bed numeric table, bands, wander, material slots and Restore world column. Done/Escape closes it; undo/save and load/export locks remain the editor's. Hiding the side panel closes it. |
+| Light & shine › Shine | Ground, Slope cover, Sand and Crystal segments filter their existing four material controls; common controls remain available under the existing fine-control/requirement rules. Rock shine stays with the selected rock type in Surface & crust. |
+| Features › Fill | Brush/Lasso/Flood segmented buttons write the existing fill region. Density, clustering, spacing, seed, margins and radius stay in the existing fill state. Kind changes refresh the footer hint immediately. |
+| Map menu | Name/description, map size and sea level, OTA settings, clear/reset actions and Restore my previous map when one is retained. Shared-map arrival opens this notice here without creating a new share link. |
+| Export dialog | Existing .ufo export, cancel/status and viewport PNG export; Share link and Copy are here, using the same service and existing IDs. |
+| New / first run | One world-and-size picker, nine engine-rendered authored thumbnails, map name, standard/custom sizes, Create blank map and Open. Uses the existing previous-map slot. Images are committed in `ui-previews/world-*.png` and included in static builds. |
+| Canvas | View/zoom controls and navigator overlay; selection actions appear with a selection. Shapes opens its existing list as an overlay. |
+| Footer | Tool/feature help, rendering progress/status, timing/height information and saved-state disclosure. |
+
+## Thumbnail reproduction
+
+`node repro/ui-previews.mjs --worlds-only --server <your-server> --port <your-CDP>`
+regenerates only the nine default-world thumbnails, preserving the hover
+atlases and their manifest entries. Omitting `--worlds-only` regenerates both
+sets. The manifest records the authored hill fixture, seed, crop and frame;
+all images go through the normal GPU pipeline and wait for export-ready
+terrain. No retail map, crop, picture or scene is read. The site test checks
+that all nine PNGs ship with the static build.
+
+## Verification scope
+
+The compact browser checks cover the changed navigation and control behavior,
+including New/previous restoration, Shine filtering, disabled-row reveal,
+column edit/undo, Fill regions and feature hints. This refresh does not claim
+a full UI review, control-impact measurement or another 19-world audit.
+
+---
+
+The appendix below preserves the original audit evidence. Its old-location
+columns and dimensions are historical; use the current layout above for
+navigation. Accepted-destination columns record design intent, and the current
+layout takes precedence where the final wording differs.
+
+# Historical baseline audit
+
 Every screen, tab, tool, control and gesture of the editor as it stood on
 main `8e42ae8e` on 2026-11-12: what it is, what it does, where it lives,
 what it writes to, and where the redesign proposal puts it. 714 rows.
@@ -9,7 +66,7 @@ changes, the page is right. The mockups built from these rows, and the
 reasons for the proposed homes, are in the owner's artifact "Terra interface
 redesign" (not in the repository).
 
-## How it was read
+## How the baseline was read
 
 - One page, `/sculpt`, at 1440 x 900 in Chrome 157 with WebGPU (Apple
   Metal), from a worktree of main with its own server and browser profile.
@@ -25,7 +82,7 @@ redesign" (not in the repository).
   panel's own reason.
 - "Saved in" was read from the code (`sketch()` in `sculpt.js`, the world
   store, the storage keys), not measured.
-- "Proposed home" is direction B of the redesign proposal, which the owner
+- "Accepted destination" is direction B of the redesign proposal, which the owner
   chose on 12 November. Every row has one (a script fails otherwise). No
   control is removed and every id is kept.
 - Rock & cliffs splits in two there. "Rock types" holds the rows that read
@@ -35,7 +92,7 @@ redesign" (not in the repository).
 - Not swept here: how much each row changes the picture. The last sweep
   (9 November, Green only) is stale and is not repeated in this file.
 
-## The page at 1440 x 900
+## Historical geometry at 1440 x 900
 
 | Region | Position and size (px) |
 | --- | --- |
@@ -48,9 +105,9 @@ redesign" (not in the repository).
 
 There is one screen. The build's `index.html` only forwards to it.
 
-## Counts
+## Historical counts
 
-| Area today | Rows |
+| Area at the baseline | Rows |
 | --- | --- |
 | World | 361 |
 | Settings | 9 |
@@ -81,7 +138,7 @@ There is one screen. The build's `index.html` only forwards to it.
 
 ## Tools
 
-| Tool | Key | Group today | What it does | Worlds | Proposed home |
+| Tool | Key | Group at the baseline | What it does | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- |
 | Select | `move` | Select and place | Select a shape to edit its curves, settings, paths or transform. (mode; 6 rows on its card) | all 19 | Build › Tool rail › Select |
 | Features & starts | `features` | Select and place | Place map features and player start positions. (mode; 25 rows on its card) splits into Features and Starts on the rail (same tool underneath) | all 19 | Build › Tool rail › Features |
@@ -132,7 +189,7 @@ appear on hover.
 
 ## Top bar
 
-| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown today | Worlds | Proposed home |
+| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown at the baseline | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Save | `save` | button | Download the map recipe | editor | default view |  | Top bar › File › Save map file |
 | Load | `load` | button | Open a saved map recipe | editor | default view |  | Top bar › File › Open map file |
@@ -158,10 +215,10 @@ appear on hover.
 ## Shape card (Tool tab)
 
 One set of rows for every drawing tool; a tool shows the rows its shape
-uses. "Shown today" counts the 19 drawing tools that show the row by
+uses. "Shown at the baseline" counts the 19 drawing tools that show the row by
 default on Green; the others appear when their parent is on.
 
-| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown today | Worlds | Proposed home |
+| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown at the baseline | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Seed | `seed` | number; 0 to 4294967295; Green: 2701 | Used for the next shape, then a fresh seed is chosen. | shape (map file) | shown by default for 20 of 19 drawing tools |  | Build › Shape card › Advanced |
 | ↻ Reroll | `seed-randomize` | button | Used for the next shape, then a fresh seed is chosen. | shape (map file) | shown by default for 20 of 19 drawing tools |  | Build › Shape card › Header > New seed |
@@ -280,7 +337,7 @@ default on Green; the others appear when their parent is on.
 
 ## Selection (Tool tab, when a shape or feature is selected)
 
-| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown today | Worlds | Proposed home |
+| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown at the baseline | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | New shape | `draw-new` | button | The next stroke starts a new shape. | shape (map file) | when a shape or feature is selected |  | Build › Canvas bar › Draw |
 | Add path | `draw-add` | button | The next stroke adds a path to the selected shape. | shape (map file) | when a shape or feature is selected |  | Build › Canvas bar › Draw |
@@ -307,7 +364,7 @@ default on Green; the others appear when their parent is on.
 
 ## Features tool
 
-| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown today | Worlds | Proposed home |
+| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown at the baseline | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Place | `place` | button |  | tool state | modes/kinds: deposit, vent, tree, shrub, rock, scar, erase, starts, fill (needs: deposit, vent, tree, shrub, rock, scar, erase, starts, fill) | all 19 | Build › Features tool › Mode |
 | Erase | `erase` | button |  | tool state | modes/kinds: deposit, vent, tree, shrub, rock, scar, erase, starts, fill (needs: deposit, vent, tree, shrub, rock, scar, erase, starts, fill) | all 19 | Build › Features tool › Mode |
@@ -388,7 +445,7 @@ default on Green; the others appear when their parent is on.
 
 ## World tab
 
-| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown today | Worlds | Proposed home |
+| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown at the baseline | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Unique ground tiles | `knob-groundTiles` | slider; 1 to 16, step 1; Green: 16 |  | world (this browser) | default view | disabled on 3 of 19: This world's ground is one texture, not tiles. Choose another world's Ground pattern to use this setting. | World › Ground › Pattern |
 | Pattern contrast | `knob-groundContrast` | slider; 0 to 2, step 0.05; Green: 1 |  | world (this browser) | default view | active on all 19 | World › Ground › Pattern |
@@ -754,7 +811,7 @@ default on Green; the others appear when their parent is on.
 
 ## Map tab
 
-| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown today | Worlds | Proposed home |
+| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown at the baseline | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Width (units) | `map-x` | number; 1 to 40; Green: 4 |  | map file | default view |  | Top bar › Map menu › Map |
 | Height (units) | `map-y` | number; 1 to 40; Green: 4 |  | map file | default view |  | Top bar › Map menu › Map |
@@ -776,7 +833,7 @@ default on Green; the others appear when their parent is on.
 
 ## Shapes tab
 
-| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown today | Worlds | Proposed home |
+| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown at the baseline | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ↑ | `node-up` | button | Move shape up | map file | default view |  | Build › Shapes list |
 | ↓ | `node-down` | button | Move shape down | map file | default view |  | Build › Shapes list |
@@ -787,7 +844,7 @@ default on Green; the others appear when their parent is on.
 
 ## Export pane
 
-| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown today | Worlds | Proposed home |
+| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown at the baseline | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Export .ufo | `map-export` | button | OTA planet: Green planet. Climate: medians from its installed maps. | not saved | default view |  | Top bar › Export dialog › .ufo |
 | Cancel export | `map-cancel` | button | OTA planet: Green planet. Climate: medians from its installed maps. | not saved | hidden until needed |  | Top bar › Export dialog › .ufo |
@@ -798,7 +855,7 @@ default on Green; the others appear when their parent is on.
 
 ## Settings pane
 
-| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown today | Worlds | Proposed home |
+| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown at the baseline | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Mix palette pairs (0 nearest, 1 pairs) | `knob-paletteMix` | choice; Nearest color / Mix color pairs; Green: 0 | A World setting shown in the Settings pane today, beside the TA palette switch. | world (this browser) | default view (Settings pane) |  | World › Palette › Palette |
 | Dither (water) | `knob-dither` | slider; 0 to 4, step 0.1; Green: 2 | A World setting shown in the Settings pane today, beside the TA palette switch. | world (this browser) | default view (Settings pane) |  | World › Palette › Palette |
@@ -812,7 +869,7 @@ default on Green; the others appear when their parent is on.
 
 ## Dock
 
-| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown today | Worlds | Proposed home |
+| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown at the baseline | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Minimap: drag to pan, or use arrow keys | `` | canvas |  | not saved | default view |  | Canvas › Navigator |
 | curve-form | `curve-form` | choice; The shape's own / Plateau / Hill / Mountain / Terraced / Mesa / Cliff / Shore / Shelf / Ra…; Green: lfPlateau |  | shape (map file) | default view |  | Build › Profile strip › Cross-section |
@@ -825,7 +882,7 @@ default on Green; the others appear when their parent is on.
 
 ## On and around the map
 
-| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown today | Worlds | Proposed home |
+| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown at the baseline | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ◧ Tools | `toggle-tools` | button | Hide tools | editor (this browser) | default view |  | Top bar › Panels › Tool palette |
 | ⛶ Focus ⇧F | `focus-canvas` | button | Focus canvas · Shift F | editor (this browser) | default view |  | Top bar › Panels › Hide panels (Tab) |
@@ -841,7 +898,7 @@ default on Green; the others appear when their parent is on.
 
 ## Footer
 
-| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown today | Worlds | Proposed home |
+| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown at the baseline | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Tool hint line | `tool-help` | display | What the active tool does and its shortcuts. | not saved | default view |  | Status bar › Hint |
 | Render time and memory | `timing` | display |  | not saved | default view |  | Status bar › Progress |
@@ -852,7 +909,7 @@ default on Green; the others appear when their parent is on.
 
 ## Hidden but alive
 
-| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown today | Worlds | Proposed home |
+| Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown at the baseline | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Light select (hidden; Original / Alternate) | `light` | display | Kept so saved values stay readable. | not saved | hidden |  | Hidden › stays hidden |
 
@@ -903,7 +960,7 @@ button, and the weathering progress text.
 
 ## Words that collide
 
-| Thing | Words used today |
+| Thing | Words used at the baseline |
 | --- | --- |
 | A world | World (tab), biome (address), planet (export); the "Tool preset" list on every tool lists worlds |
 | A world's named look | Variant, which also names a feature's sprites |
@@ -920,9 +977,9 @@ button, and the weathering progress text.
 | Files | Save, Load, "map recipe", Share link, Export |
 | Preferences | Settings (button), Graphics (tab id), Editor settings (heading) |
 
-## Proposed homes, by count
+## Accepted destinations, by count
 
-| Proposed home | Rows |
+| Accepted destination | Rows |
 | --- | --- |
 | World › Rock types | 142 |
 | Build › Shape card | 115 |

@@ -85,6 +85,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     let tiles=0;
     if(stage){
       cancelBake();if(stage==='A'&&!refinement)previewFields.invalidate(rect);
+      api.renderProgress?.('Updating terrain…',true);
       if(!refinement){lastInputAt=performance.now();released=false;}
       serial++;if(world)for(const s of new Set([stage,...fields.map(f=>f.stage),...channels.map(c=>c.stage)]))if(s in rev)rev[s]++;
       changeLog.push({serial,stage,rect});if(changeLog.length>256)changeLog.shift();
@@ -155,7 +156,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const readWeather=exportArt||weatheredView;
     const options=drawOptions?.()??api.drawOptions?.()??{},request={...rect,exportArt,worldSize:config.worldSize??config.size,worldGrid:fit?512:(config.worldGrid??config.grid)};
     // H6b: with the GPU fields on, the chunk's textures are made from the fields' buffers; no CPU read, no upload, no height patch kept.
+    if(!exportArt)api.renderProgress?.('Shaping terrain…');
     const feed=fit?await previewFields.feed():await api.gpuFeedSource?.(signal,() => renderer.requiredRegion(request,options),{weather:readWeather});   // H5b: a paged map prepares the pages under the chunk's lattice
+    if(!exportArt)api.renderProgress?.('Rendering surface…');
     if(feed)try{
       signal?.throwIfAborted();
       if(stale?.())throw new DOMException('The scene changed under a queued bake.','AbortError');
@@ -295,6 +298,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     overlays();
   }
   function presented(fresh=true) {
+    api.presented?.();
     const now=performance.now();if(lastPresented&&now-lastScroll<300&&now-lastPresented<3000){frameTimes.push(now-lastPresented);if(frameTimes.length>1024)frameTimes.shift();}lastPresented=now;
     if(fresh)terrainBudget.settled();
     if(fresh&&pendingStrokeTime){strokeTimes.push(now-pendingStrokeTime);if(strokeTimes.length>256)strokeTimes.shift();pendingStrokeTime=0;}
@@ -314,7 +318,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       const weatherPending=weatheredView&&api.canExport&&!api.canExport()&&!interacting()&&!features?.busy;
       if(weatherPending){heldSince??=performance.now();}else heldSince=null;
       const holding=weatherPending&&performance.now()-heldSince<8000;
-      if(holding)setTimeout(schedule,100);
+      if(holding){api.renderProgress?.('Weathering terrain…');setTimeout(schedule,100);}
       if(!busy){
         if(overview&&!previewReserved){previewReserved=true;api.fitGpuBudget?.();}
         const size=overview?256*displayLevel():viewChunkSize(),v=state(),jobs=[],token=serial,viewToken=viewEpoch;
@@ -398,6 +402,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         // weather the export reads is in.
         if(!rerun&&token===serial&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&quiet>=1000&&(!api.canExport||api.canExport())&&await features?.fitGround?.(state()))rerun=true;
       }
+      if(!rerun&&!interacting()&&!foregroundPending()&&(!api.canExport||api.canExport()))api.renderProgress?.(null);
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
     }catch(err){if(recoverAllocation(err))rerun=true;else if(err.name==='AbortError'||err.name==='PreviewReplan')rerun=true;else{console.error(err);$('error').hidden=false;$('error').textContent=err.message;}}
     finally{if(rendering){drawing=false;if(rerun){rerun=false;schedule();}}}

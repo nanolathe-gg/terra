@@ -63,6 +63,13 @@ const strokes = json => JSON.parse(json).nodes.map(n => canon({...n, hidden: Boo
 const nodesOf = json => JSON.stringify(strokes(json));
 const differs = (a, b) => { const x = strokes(a), y = strokes(b); if (x.length !== y.length) return `${x.length} vs ${y.length} strokes`; for (let i = 0; i < x.length; i++) for (const k of new Set([...Object.keys(x[i]), ...Object.keys(y[i])])) if (JSON.stringify(x[i][k]) !== JSON.stringify(y[i][k])) return `stroke ${i}.${k}: ${JSON.stringify(x[i][k])?.slice(0, 80)} vs ${JSON.stringify(y[i][k])?.slice(0, 80)}`; return ''; };
 
+// Sharing lives in Export; the previous-map notice lives in Map. Start each share
+// from a known closed state so the details toggle fires exactly one new request.
+const openShare=async ev=>{
+  await ev(`if(document.getElementById('pane-export').hidden)document.getElementById('open-export').click();document.getElementById('share-menu').open=false;true`);await sleep(100);
+  await ev(`document.getElementById('share-result').hidden=true;document.getElementById('share-url').value='';document.getElementById('share-menu').open=true;true`);
+};
+const openMap=ev=>ev(`if(document.getElementById('pane-map').hidden)document.getElementById('tab-map').click();true`);
 const page = `${server}${entry}`;
 let link = '', sharedJson = '', ownJson = '', mapsUrl = '';
 await session(async ({send, ev, shot, open}) => {
@@ -70,13 +77,13 @@ await session(async ({send, ev, shot, open}) => {
   mapsUrl = await ev(`fetch('services.json').then(r=>r.json()).then(s=>s.maps?.url||'')`);
   await stroke(send, ev, 'hill');
   sharedJson = await sketchJson(ev);
-  await ev(`document.getElementById('share-link').click(); true`);
+  await openShare(ev);
   for (let i = 0; i < 100 && !await ev(`document.getElementById('share-url').value`); i++) await sleep(200);
   link = await ev(`document.getElementById('share-url').value`);
   await shot('1-share-link');
   check('link is page?map=id', /[?&]map=[a-z2-7]{16}$/.test(link), link);
   // The same map shared again gives the same link.
-  await ev(`document.getElementById('share-link').click(); true`); await sleep(300); await ev(`document.getElementById('share-link').click(); true`);
+  await openShare(ev);
   for (let i = 0; i < 100 && await ev(`document.getElementById('share-result').hidden`); i++) await sleep(200);
   check('same map, same link', await ev(`document.getElementById('share-url').value`) === link);
   const copied = await ev(`document.getElementById('share-copy').click(); new Promise(r=>setTimeout(()=>r(document.getElementById('share-message').textContent),500))`);
@@ -95,26 +102,25 @@ await session(async ({send, ev, shot, open}) => {
   await shot('2-unknown-link');
   await open(link);
   { const now = await sketchJson(ev); check('shared map is the same', nodesOf(now) === nodesOf(sharedJson), differs(sharedJson, now)); }
-  // Sharing the loaded map again gives the same link (close the popover that opened itself, then open it).
-  await ev(`document.getElementById('share-link').click(); true`); await sleep(300);
-  await ev(`document.getElementById('share-result').hidden=true; document.getElementById('share-url').value=''; document.getElementById('share-link').click(); true`);
+  // Sharing the loaded map again gives the same link from its Export home.
+  await openShare(ev);
   for (let i = 0; i < 100 && !await ev(`document.getElementById('share-url').value`); i++) await sleep(200);
   check('share, open, share again: same link', await ev(`document.getElementById('share-url').value`) === link, await ev(`document.getElementById('share-url').value`));
   check('map= dropped from the address', !(await ev('location.search')).includes('map='));
   check('previous map offered', await ev(`!document.getElementById('share-previous').hidden`));
   await shot('3-opened-shared');
-  await ev(`document.getElementById('share-restore').click(); true`); await sleep(1500); await ev('sculptCanvas.idle()');
+  await openMap(ev);await ev(`document.getElementById('share-restore').click(); true`); await sleep(1500); await ev('sculptCanvas.idle()');
   check('restore brings the own map back', nodesOf(await sketchJson(ev)) === nodesOf(ownJson));
   await shot('4-restored');
   // A reload keeps the visitor's edits: nothing re-opens the shared map.
   await open(page); check('reload keeps the restored map', nodesOf(await sketchJson(ev)) === nodesOf(ownJson));
 });
-// A link to another world: the page navigates and reloads, and the popover opens itself with the restore offer.
+// A link to another world: the page navigates and reloads, and the Map menu opens itself with the restore offer.
 let redLink = '';
 await session(async ({send, ev, shot, open}) => {
   await open(page + (page.includes('?') ? '&' : '?') + 'biome=red&mapX=4&mapY=4');
   await stroke(send, ev, 'mountain', 650, 700);
-  await ev(`document.getElementById('share-link').click(); true`);
+  await openShare(ev);
   for (let i = 0; i < 100 && !await ev(`document.getElementById('share-url').value`); i++) await sleep(200);
   redLink = await ev(`document.getElementById('share-url').value`);
 });
@@ -123,12 +129,12 @@ await session(async ({send, ev, shot, open}) => {
   await stroke(send, ev, 'hill', 600, 800);
   const own = await sketchJson(ev); await sleep(1200);
   await open(redLink);
-  for (let i = 0; i < 100 && !await ev(`document.getElementById('share-menu').open`); i++) await sleep(200);
+  for (let i = 0; i < 100 && await ev(`document.getElementById('pane-map').hidden`); i++) await sleep(200);
   check('world switch: world changed', await ev('sculptRegion.sketch().biome') === 'red');
-  check('world switch: popover opened itself with the offer', await ev(`document.getElementById('share-menu').open && !document.getElementById('share-previous').hidden && /Opened a shared map/.test(document.getElementById('share-message').textContent)`));
+  check('world switch: Map opened itself with the offer', await ev(`!document.getElementById('pane-map').hidden && !document.getElementById('share-previous').hidden && !document.getElementById('share-menu').open`));
   check('world switch: no map= or shared= left in the address', !/[?&](map|shared)=/.test(await ev('location.search')), await ev('location.search'));
   await shot('5-world-switch');
-  await ev(`document.getElementById('share-restore').click(); true`);
+  await openMap(ev);await ev(`document.getElementById('share-restore').click(); true`);
   for (let i = 0; i < 100 && await ev('window.sculptRegion?.sketch().biome').catch(() => 'red') !== 'green'; i++) await sleep(300);
   for (let i = 0; i < 100 && !await ev(`window.sculptRegion?.ready?.() && !document.getElementById('editor').disabled`).catch(() => false); i++) await sleep(300);
   await sleep(1500);

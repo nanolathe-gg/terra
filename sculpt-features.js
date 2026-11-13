@@ -307,6 +307,7 @@ export async function mountMapFeatures(api) {
     const select=$('start-list'); select.replaceChildren(...starts.map((s,i) => { const option=doc.createElement('option'); option.value=i; option.textContent=`${i+1}: (${s.x}, ${s.z})`; return option; }));
     select.value=String(selectedStart); $('start-remove').disabled=starts.length<=1 || selectedStart<0;
     $('fill-kind').value=fill.kind; $('fill-region').value=fill.region;
+    for(const button of doc.querySelectorAll('[data-fill-region]'))button.setAttribute('aria-pressed',String(button.dataset.fillRegion===fill.region));
     for (const [name,input] of fillInputs) if (doc.activeElement!==input) input.value=String(fill[name]);
     numericInputs.forEach(showNumericValue);
     $('feature-count-line').textContent=`${placements.length} features · ${starts.length} starts`;
@@ -398,7 +399,7 @@ export async function mountMapFeatures(api) {
   for (const [name,button] of buttons) button.onclick=() => activate(name);
   // The kind tabs press the list behind them (#feature-kind), so its guard applies.
   for (const tab of kindTabs) tab.onclick=() => { const list=$('feature-kind'); list.value=tab.dataset.featureKind; list.dispatchEvent(new Event('change')); };
-  $('feature-kind').onchange=event => { if (!guard()) { update(); return; } placeKind=event.target.value; placeVariant=-1; update(); };
+  $('feature-kind').onchange=event => { if (!guard()) { update(); return; } placeKind=event.target.value; placeVariant=-1; status(''); update(); doc.dispatchEvent(new Event('terraform-feature-mode')); };
   $('feature-recipe').onchange=event => {if(!guard())return;activeRecipes[placeKind]=Number(event.target.value);placeVariant=-1;update();};
   $('feature-recipe-name').onchange=event => {if(!changeSet(placeKind,{name:event.target.value}))update();};
   $('feature-add-recipe').onclick=() => {const preset=featureCatalog(config,placeKind).find(p => p.id===$('feature-preset').value);if(preset)addRecipe(placeKind,preset);};
@@ -424,6 +425,7 @@ export async function mountMapFeatures(api) {
   $('start-list').onchange=event => { if (!guard()) { update(); return; } selectedStart=Number(event.target.value); activate('starts'); };
   $('start-remove').onclick=() => removeStart(selectedStart);
   $('fill-kind').onchange=event => { if (setFill({kind:event.target.value})) activate('fill'); };
+  for(const button of doc.querySelectorAll('[data-fill-region]'))button.onclick=()=>{if(setFill({region:button.dataset.fillRegion}))activate('fill');};
   $('fill-region').onchange=event => { if (setFill({region:event.target.value})) activate('fill'); };
   const fillInputs=new Map(['density','clustering','gap','seed','margin','radius'].map(name => [name,$('fill-'+name)]));
   for (const [name,input] of fillInputs) input.onchange=() => { if (!setFill({[name]:Number(input.value)})) update(); };

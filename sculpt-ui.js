@@ -163,7 +163,7 @@ const homeRows=home=>document.querySelector(`#knobs [data-home="${home}"] .world
 const worldBlocks=new Map();
 export function worldGroup(name,key){
  const home=worldHome(key),id=home+'|'+name;
- if(!worldBlocks.has(id)){const block=document.createElement('div'),heading=document.createElement('h3');block.className='world-subsection';heading.textContent=name;block.append(heading);homeRows(home).append(block);worldBlocks.set(id,{block,search:`${name} ${home.replace('/',' ')}`});}
+ if(!worldBlocks.has(id)){const block=document.createElement('div'),heading=document.createElement('h3');block.className='world-subsection';heading.textContent=name;block.append(heading);homeRows(home).append(block);worldBlocks.set(id,{block,search:name});}
  return worldBlocks.get(id);
 }
 // The World panel: sections down its side, tabs in the larger ones (static in sculpt.html). A press shows one section and one of its tabs.
@@ -171,11 +171,21 @@ export function worldGroup(name,key){
 export function mountWorldControlIndex(root,values=()=>({})){
  const search=$('world-control-search'),studio=root.closest('.world-studio'),input=search.querySelector('#world-search'),fine=search.querySelector('#world-fine');
  const lists=[...studio.querySelectorAll('[role="tablist"]')],panels=[...root.querySelectorAll('.world-tab')],sections=[...root.querySelectorAll('.world-section')];
+ let shineMaterial='Ground';
+ const shine=$('shine-materials');
+ shine.addEventListener('click',e=>{const b=e.target.closest('[data-shine-material]');if(!b)return;shineMaterial=b.dataset.shineMaterial;for(const button of shine.children)button.setAttribute('aria-pressed',String(button===b));sync();});
+ const revealed=new Set();
  const ALWAYS=new Set(WORLD_HOMES['Palette/'].split(' '));   // the three Palette rows always show, as they did beside the rendering switches
  const sync=()=>{const query=input.value.trim().toLowerCase(),current=values(),rows=[...root.querySelectorAll('[data-knob]')];let visible=0;
   for(const row of rows){const key=row.dataset.knob,reason=worldControlRequirement(key,current),control=row.querySelector('input[type=range],select');control.disabled=Boolean(reason);row.classList.toggle('control-inactive',Boolean(reason));let note=row.querySelector('.control-requirement');if(!note){note=document.createElement('p');note.className='small control-requirement';row.append(note);}note.textContent=reason;note.hidden=!reason;
-   const text=(row.textContent+' '+row.dataset.searchGroup).toLowerCase();row.hidden=query?!text.includes(query):!fine.checked&&!WORLD_PRIMARY_CONTROLS.has(key)&&!ALWAYS.has(key);if(!row.hidden)visible++;}
-  for(const block of root.querySelectorAll('.world-subsection'))block.hidden=![...block.querySelectorAll('[data-knob]')].some(r=>!r.hidden);
+   const text=(row.dataset.knob+' '+row.dataset.searchGroup).toLowerCase(),material=key.match(/^shine(Ground|Slope|Sand|Crystal)(?:Sharp|Rough|Scale)?$/)?.[1];
+   row.hidden=query?!text.includes(query):(!fine.checked&&!WORLD_PRIMARY_CONTROLS.has(key)&&!ALWAYS.has(key))||(material&&material!==shineMaterial);row.dataset.eligible=String(!row.hidden);if(!row.hidden)visible++;}
+  for(const block of root.querySelectorAll('.world-subsection')){
+   const groups=new Map();for(const row of block.querySelectorAll('[data-knob]')){if(row.dataset.eligible!=='true'||!row.classList.contains('control-inactive'))continue;const reason=row.querySelector('.control-requirement').textContent;if(!groups.has(reason))groups.set(reason,[]);groups.get(reason).push(row);}
+   block.querySelectorAll('.unavailable-summary').forEach(el=>el.remove());
+   if(!query)for(const [reason,group] of groups){const key=block.querySelector('h3').textContent+'|'+reason,open=revealed.has(key),summary=document.createElement('div'),button=document.createElement('button');summary.className='unavailable-summary';button.type='button';button.textContent=`${open?'Hide':'Show'} ${group.length} unavailable setting${group.length===1?'':'s'}`;button.setAttribute('aria-expanded',String(open));button.setAttribute('aria-controls',group.map(row=>'knob-'+row.dataset.knob+'-row').join(' '));button.onclick=()=>{if(open)revealed.delete(key);else revealed.add(key);sync();[...block.querySelectorAll('.unavailable-summary button')].find(b=>b.dataset.reason===reason)?.focus();};button.dataset.reason=reason;summary.append(button,document.createTextNode(reason));block.append(summary);for(const row of group){row.id='knob-'+row.dataset.knob+'-row';row.hidden=!open;}}
+  }
+  for(const block of root.querySelectorAll('.world-subsection'))block.hidden=![...block.querySelectorAll('[data-knob]')].some(r=>r.dataset.eligible==='true');
   studio.classList.toggle('searching',Boolean(query));
   // A tab or a section shows when it is the chosen one; in a search, when it holds a match.
   const chosen=el=>$(el.getAttribute('aria-labelledby'))?.getAttribute('aria-selected')!=='false',matches=el=>[...el.querySelectorAll('[data-knob]')].some(r=>!r.hidden);
@@ -192,9 +202,20 @@ export function mountWorldControlIndex(root,values=()=>({})){
 }
 
 export function mountColumnPanel(read,change,commit,reset){
- const panel=$('column-panel'),body=panel.querySelector('.column-body'),note=panel.querySelector(':scope > [role="status"]'),restore=panel.querySelector(':scope > button');
+ const panel=$('column-panel'),body=panel.querySelector('.column-body'),note=panel.querySelector('[role="status"]'),restore=panel.querySelector('#column-fields > button');
+ $('column-open').onclick=()=>{panel.hidden=false;$('column-open').setAttribute('aria-expanded','true');$('column-done').focus();};
+ const closeColumn=()=>{panel.hidden=true;$('column-open').setAttribute('aria-expanded','false');};
+ $('column-done').onclick=()=>{closeColumn();$('column-open').focus();};
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden){closeColumn();e.stopImmediatePropagation();$('column-open').focus();}},true);
+ new MutationObserver(()=>{if($('pane-world').hidden||$('wpane-rock-types').hidden)closeColumn();}).observe($('pane-world'),{attributes:true,subtree:true,attributeFilter:['hidden']});
+ const syncLock=()=>{$('column-fields').disabled=$('world-editor').disabled;if($('inspector-sidebar').hidden)closeColumn();};
+ new MutationObserver(syncLock).observe($('world-editor'),{attributes:true,attributeFilter:['disabled']});
+ new MutationObserver(syncLock).observe($('inspector-sidebar'),{attributes:true,attributeFilter:['hidden']});syncLock();
  const at=(column,path)=>path.reduce((v,k)=>v[k],column);
- const state=()=>{const {edited}=read();restore.disabled=!edited;note.textContent=edited?'Map column edited.':'Using the world column unchanged.';};
+ function drawStack(){const {column,variant}=read(),sections=column?.variants?.[variant]?.sections||column?.sections||[];
+  const stack=$('column-stack');stack.replaceChildren();for(const [i,section] of [...sections.entries()].reverse()){for(const [j,bed] of [...section.beds.entries()].reverse()){const swatch=document.createElement('div');swatch.style.flex=String(bed[0]);const rgb=column?.colors?.[bed[2]];swatch.style.background=rgb?`rgb(${rgb.join(',')})`:read().bedColors[bed[2]];swatch.style.marginRight=`${(1-bed[1])*14}px`;swatch.title=`Section ${i+1}, bed ${j+1}: thickness ${bed[0]}, hardness ${bed[1]}, slot ${bed[2]+1}`;swatch.textContent=`${i+1}.${j+1}`;stack.append(swatch);}}stack.hidden=!sections.length;
+ }
+ const state=()=>{drawStack();$('column-title').textContent='Rock column of '+$('rock-current-name').textContent;const {edited}=read();restore.disabled=!edited;note.textContent=edited?'Map column edited.':'Using the world column unchanged.';};
  function field(parent,label,path,{min,max,step='any',choices,color=false}={}){
   const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement(choices?'select':'input');input.dataset.columnPath=path.join('.');input.setAttribute('aria-label',label);
   const value=at(read().column,path);if(choices){input.replaceChildren(...choices.map(([v,text])=>new Option(text,v)));input.value=value;}
@@ -212,6 +233,7 @@ export function mountColumnPanel(read,change,commit,reset){
   // The sections the active row draws: a variant's own row, else the column's (a world or map without any has no column, and adds one here).
   const row=column?.variants?.[variant]||{},prefix=key=>row[key]?['variants',variant,key]:[key],path=prefix('sections');
   const sections=row.sections||column?.sections||[],beds=sections.reduce((n,s)=>n+s.beds.length,0),slots=column?.colors?.length||COLUMN_SLOTS;
+
   const edit=fn=>()=>reshape(c=>{const parent=at(c,path.slice(0,-1));parent[path.at(-1)]??=[];fn(parent[path.at(-1)]);});
   if(variant){const p=document.createElement('p');p.className='small';p.textContent=`Column row: ${$('variant-select').selectedOptions[0]?.textContent||variant}`;body.append(p);}
   if(!sections.length){
