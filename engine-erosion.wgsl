@@ -213,23 +213,39 @@ fn rockTan(s: vec4f, offset: f32) -> f32 {
 // higher one's lower bound or the lower one's upper bound (an eighth each, for its eight pairs).
 // The painted repose: the erosion override plane scales both reposes (seedMain stores its share in a sample's totals, z). A pair uses the mean of its
 // two samples' shares, so both ends of a pair compute the same scale and the exchange stays symmetric. Nothing painted: a scale of exactly 1.
-fn slide(hi: vec4f, hf: vec4f, lo: vec4f, lf: vec4f, length_: f32, painted: f32) -> f32 {
+fn slide(hi: vec4f, hf: vec4f, lo: vec4f, lf: vec4f, length_: f32, painted: f32, angle: f32) -> f32 {
     let drop = ground(hi) - ground(lo);
     let run = length_ * ep.spacing * (1.0 + painted);
     let debris = select(0.0, max(0.0, drop - ep.talusTan * run), hi.y > 0.0);
-    let rock = max(0.0, drop - rockTan(hi, hf.w) * run);
+    let rock = max(0.0, drop - angle * run);
     let share = min(max(0.0, ground(hi) - hf.x), max(0.0, lf.y - ground(lo))) / 8.0;
     return min(ep.thermal * (min(debris, hi.y * 4.0) + rock), share) * min(max(hf.z, 0.0), max(lf.z, 0.0));
 }
 
+// One halo per active tile: each cell's bed angle and source values are shared
+// by its eight neighbors instead of evaluating the column for every pair.
+var<workgroup> thermalState: array<vec4f, 100>;
+var<workgroup> thermalFixed: array<vec4f, 100>;
+var<workgroup> thermalAngle: array<f32, 100>;
+var<workgroup> thermalPaint: array<f32, 100>;
+
 @compute @workgroup_size(8, 8)
-fn thermalMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid: vec3u) {
+fn thermalMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid: vec3u, @builtin(local_invocation_index) li: u32) {
+    let origin = vec2i(tiles[wg.x] * 8u);
+    for (var k = li; k < 100u; k += 64u) {
+        let p = clamp(origin + vec2i(i32(k % 10u) - 1, i32(k / 10u) - 1), vec2i(0), vec2i(i32(ep.grid) - 1));
+        let i = at(p.x, p.y); let c = src[i]; let f = fixedField[i];
+        thermalState[k] = c; thermalFixed[k] = f;
+        thermalAngle[k] = rockTan(c, f.w); thermalPaint[k] = acc[i].z;
+    }
+    workgroupBarrier();
+    let cell = (lid.y + 1u) * 10u + lid.x + 1u;
     let id = tileCell(wg.x, lid);
     let x = i32(id.x); let y = i32(id.y);
     if (!inside(x, y)) { return; }
     let i = at(x, y);
-    let c = src[i];
-    let f = fixedField[i];
+    let c = thermalState[cell];
+    let f = thermalFixed[cell];
     var out = 0.0; var gain = 0.0;
     if (f.z > 0.0) {
         for (var dy = -1; dy <= 1; dy++) {
@@ -237,12 +253,12 @@ fn thermalMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) l
                 if (dx == 0 && dy == 0) { continue; }
                 let nx = x + dx; let ny = y + dy;
                 if (!inside(nx, ny)) { continue; }
-                let j = at(nx, ny);
-                let n = src[j];
+                let j = u32(i32(cell) + dy * 10 + dx);
+                let n = thermalState[j];
                 let len = select(1.0, 1.41421356, dx != 0 && dy != 0);
-                let painted = 0.5 * (acc[i].z + acc[j].z);
-                if (ground(c) > ground(n)) { out += slide(c, f, n, fixedField[j], len, painted); }
-                else if (ground(n) > ground(c)) { gain += slide(n, fixedField[j], c, f, len, painted); }
+                let painted = 0.5 * (thermalPaint[cell] + thermalPaint[j]);
+                if (ground(c) > ground(n)) { out += slide(c, f, n, thermalFixed[j], len, painted, thermalAngle[cell]); }
+                else if (ground(n) > ground(c)) { gain += slide(n, thermalFixed[j], c, f, len, painted, thermalAngle[j]); }
             }
         }
     }
