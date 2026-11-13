@@ -10,6 +10,12 @@ plan: nothing in it is built.
 main `98b0288e` in Chrome. Its findings are section 3.7, and every place
 they changed this plan says "LP0". No editor code has changed.
 
+**Implementation status on `lp4/time-slices`, 2026-11-12.** LP4 step 1 is
+built with exact-byte correctness evidence and two alternating Chrome pairs
+per focused fixture. Its Time-slice, submission, resume and final-cost guards
+pass; full LP4 remains unfinished. See [LP4_STEP1_REPORT.md](LP4_STEP1_REPORT.md).
+The LP0c fix and LP0b prototype stay on their own branches.
+
 **The owner's brief (2026-11-11):** "We need to increase the perceived
 rendering speed and interactive responsiveness of Terraform. Artists need it
 to feel fast (near instant) while making and editing maps and they need
@@ -1038,6 +1044,19 @@ shores where the final does: overlay the coarse preview's height contours on
 the final's for the three scenes and report the largest offset.
 
 ### LP4. Bounded GPU work (M)
+
+**Implementation addendum, 2026-11-12.** The owner authorized continuing
+past the LP0b review checkpoint with timing runs initially deferred. Step 1
+now has the focused measurements linked above; thresholds are unchanged. It runs first
+on its own branch from the bench/plan base, without the prototype editor.
+
+The two-file estimate below missed the paged request chain **[read]**:
+`pagedTime` in `sculpt-scene.js` and `computeWeather` in
+`sculpt-gpu-fields.js` own those requests. Step 1 also passes the obsolete
+request check through them and retries a canceled page at its current
+revision. An unchanged Time key remains the same request even if its
+configuration wrapper was rebuilt. This does not change the Time passes,
+resolution, page regions or pass order.
 
 LP0 raised this card's weight (section 3.7): the Time pass is the longest
 thing on the GPU queue (0.76 to 0.91 s in one submission), it was in flight
