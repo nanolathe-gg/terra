@@ -10,8 +10,6 @@ import {pagedBudget,VIEW_CANVASES} from './sculpt-scene.js';
 const $=id=>document.getElementById(id),MB=1024*1024;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const tick=()=>new Promise(resolve=>requestAnimationFrame(resolve));
-// Leave headroom for the next coarse picture within the 200-ms input budget.
-const FINAL_OVERLAP_MS=75;
 const intersects=(a,b)=>a.x<b.x+b.width && b.x<a.x+a.width && a.y<b.y+b.height && b.y<a.y+a.height;
 const number=(q,key,fallback,min,max)=>clamp(Number(q.get(key))||fallback,min,max);
 
@@ -369,7 +367,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           // F leaves geometry and Time unchanged. Reuse only measured costs
           // from completed final tiles on this same budget and display level.
           const fineReady=lastInput?.stage==='F'&&(!api.canExport||api.canExport())&&stale.every(r=>{const e=cache.get(cacheKey(r,size));return Number.isFinite(e?.finalCostMs)&&e.finalCostBudget===gpuBudget&&!e.fit&&!offLevel(e,detailLevel())&&e.weathered===weatheredView;});
-          const cheapFinal=fineReady&&cache.get(cacheKey(stale[0],size)).finalCostMs<=FINAL_OVERLAP_MS;
+          const cheapFinal=fineReady&&cache.get(cacheKey(stale[0],size)).finalCostMs<=50;
           const priorCoarse=coarse.length===1?blocks.get(blockKey(coarse[0],4*detailLevel())):null;
           const fineBeforeCoarse=cheapFinal&&!fineSinceCoarse&&priorCoarse&&!changedSince(priorCoarse.serial,priorCoarse.input,'E')&&priorCoarse.weathered===weatheredView&&priorCoarse.weatherRevB>=rev.B&&renderer.specCache.has(renderer.specKey().key);
           if(coarseReady){const keep=new Set(coarse.map(r=>blockKey(r,4*detailLevel())));dropBlocks(e=>e.level===4*detailLevel()&&!keep.has(blockKey(e,e.level)));}
@@ -382,7 +380,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             // export-ready flag alone cannot certify new shape/Time pages.
             const finalNow=released||quiet>=250||fineReady&&(quiet>=100||cheapFinal);
             if(holding||!finalNow)for(const rect of previewPlan(clipped,2*detailLevel()).sort((a,b)=>dist(a)-dist(b)))plan.push({rect,want:2*detailLevel(),block:true});
-            if(!holding&&finalNow){for(const rect of jobs)if(intersects(rect,v)&&(released||quiet>=100||cache.get(cacheKey(rect,size))?.finalCostMs<=FINAL_OVERLAP_MS))plan.push({rect,want:detailLevel()});}
+            if(!holding&&finalNow){for(const rect of jobs)if(intersects(rect,v)&&(released||quiet>=100||cache.get(cacheKey(rect,size))?.finalCostMs<=50))plan.push({rect,want:detailLevel()});}
             else wakeLadder(Math.max(16,250-quiet));
           }else wakeLadder(100-quiet);
         }else{
@@ -441,7 +439,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           if(key===cacheKey(rect,currentSize)&&intersects(rect,current)){
             // A completed tile belongs at the latest camera coordinates, even
             // when input moved the view while its fields or image were pending.
-            paintedView=-1;presentView();
+            // A current final replaces only its own rectangle. Keep a full
+            // composition for stale results, so they cannot cover a newer block.
+            if(paintedView!==viewEpoch||!currentFinal(e)){paintedView=-1;presentView();}
+            else{paint(e,current);overlays();}
             presented();
           }
           if(token!==serial||viewToken!==viewEpoch){rerun=true;break;}
