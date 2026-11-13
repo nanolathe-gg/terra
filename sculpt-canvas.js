@@ -184,7 +184,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const planned=renderer.requiredRegion(request,options),estimateBefore=renderer.estimate(planned,rect.width,rect.height,api.maskKeys.length,scale,{preview:block});
     if(lattice){
       const extra=lattice.plan(planned,readWeather,interacting()).additionalBytes,copyBytes=Math.ceil(rect.width/scale)*Math.ceil(rect.height/scale)*8;
-      trimTo(gpuBudget-steadyGPU()-estimateBefore.retainedBytes-estimateBefore.workingBytes-extra-copyBytes,true);
+      const visible=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0),room=()=>gpuBudget-steadyGPU()-estimateBefore.retainedBytes-estimateBefore.workingBytes-extra-copyBytes;
+      // Input can change the graph while the preceding GPU submission drains.
+      // Reclaim/replan against that graph before allocating its source.
+      if(visible>room())api.releaseGpuStaging?.();
+      if(visible>room()){previewRejects.add(previewSignature(rect,scale,planned,estimateBefore));if(previewRejects.size>128)previewRejects.delete(previewRejects.values().next().value);const error=Error('Preview source grew; replan at the current budget.');error.name='PreviewReplan';throw error;}
+      trimTo(room(),true);
       // This is a transient source reservation, not a canonical tile-size probe.
       if(renderer.stats().residentBytes+steadyGPU()+cacheBytes+extra+copyBytes>gpuBudget)renderer.evict();
       api.fitGpuBudget?.();
@@ -312,12 +317,21 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function dropBlocks(predicate=()=>true){for(const [key,e]of blocks)if(predicate(e)){blockBytes-=e.bytes;blocks.delete(key);}}
   function wakeLadder(delay){clearTimeout(ladderTimer);ladderTimer=setTimeout(()=>{ladderTimer=null;schedule();},Math.max(0,delay));}
   function previewSignature(r,level,q,e){return [r.x,r.y,r.width,r.height,level,...q.gridOrigin,q.gridWidth,q.gridHeight,q.fieldsX,q.fieldsY,q.fieldsWidth,q.fieldsHeight,e.workingBytes].join(',');}
+  function previewCost(rect,level,options=drawOptions?.()??api.drawOptions?.()??{},visibleBytes=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0)){
+    const request={...rect,worldSize:config.worldSize??config.size,worldGrid:previewGridFor(level,true)},required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,api.maskKeys.length,level,{preview:true}),source=level>=4?previewLattice?.plan(required,weatheredView,interacting()).additionalBytes??0:0;
+    return {required,estimate,total:estimate.retainedBytes+estimate.workingBytes+source+fixedGPU()+visibleBytes+Math.ceil(rect.width/level)*Math.ceil(rect.height/level)*8};
+  }
+  function releasePreviewMemory(area,level){
+    if(!previewLattice||level<4)return;
+    const whole=planPreviewBlocks(area,map,()=>true)[0];
+    if(whole&&previewCost(whole,level).total>gpuBudget)api.releaseGpuStaging?.();
+  }
   function previewPlan(area,level){
     const scope=[viewEpoch,gpuBudget,displaySize].join(',');
     if(scope!==previewRejectScope){previewRejects.clear();previewRejectScope=scope;}
     const options=drawOptions?.()??api.drawOptions?.()??{},visibleBytes=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0);
-    return planPreviewBlocks(area,map,rect=>{const request={...rect,worldSize:config.worldSize??config.size,worldGrid:previewGridFor(level,true)},required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,api.maskKeys.length,level,{preview:true}),source=level>=4?previewLattice?.plan(required,weatheredView,interacting()).additionalBytes??0:0;
-      return !previewRejects.has(previewSignature(rect,level,required,estimate))&&estimate.retainedBytes+estimate.workingBytes+source+fixedGPU()+visibleBytes+Math.ceil(rect.width/level)*Math.ceil(rect.height/level)*8<=gpuBudget;
+    return planPreviewBlocks(area,map,rect=>{const {required,estimate,total}=previewCost(rect,level,options,visibleBytes);
+      return !previewRejects.has(previewSignature(rect,level,required,estimate))&&total<=gpuBudget;
     });
   }
   function blockCurrent(e){return e&&!e.dirty&&!changedSince(e.serial,e.input)&&e.weathered===weatheredView&&(!e.weathered||e.weatherRevB>=rev.B);}
@@ -380,6 +394,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         else if(stale.length){
           const area=stale.reduce((a,r)=>{const x=Math.min(a.x,r.x),y=Math.min(a.y,r.y);return {x,y,width:Math.max(a.x+a.width,r.x+r.width)-x,height:Math.max(a.y+a.height,r.y+r.height)-y};});
           const clipped={x:Math.max(area.x,v.x),y:Math.max(area.y,v.y),width:Math.min(area.x+area.width,v.x+v.width)-Math.max(area.x,v.x),height:Math.min(area.y+area.height,v.y+v.height)-Math.max(area.y,v.y)};
+          releasePreviewMemory(clipped,4*detailLevel());
           const coarse=previewPlan(clipped,4*detailLevel()).sort((a,b)=>dist(a)-dist(b));
           const coarseReady=coarse.every(r=>blockCurrent(blocks.get(blockKey(r,4*detailLevel()))));
           // F leaves geometry and Time unchanged. Reuse only measured costs

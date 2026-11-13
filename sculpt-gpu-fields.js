@@ -550,6 +550,17 @@ export function preprocessShader(text, defines = []) {
 
 // ---- the GPU side ----
 // refSpacing: the final grid's spacing; the hill's blur is defined in world units (2 final cells), so a coarser level uses the whole number of its own cells nearest that distance (1 at double spacing).
+// Shared by actual target allocation and display-source planning. A graph without
+// coastal passes needs three blur planes; coast graphs also keep their sites.
+export function shapeScratchBytes(cells,prepared){
+  let sites=-1;for(const p of prepared)if(p.coast)sites=Math.max(sites,p.coast.siteFloats);
+  return 4*(sites<0?3*cells:14*cells+sites);
+}
+export function shapeRequestBytes(prepared){
+  // Includes two art-level evaluations, every possible coast field/jump pass,
+  // segment/mask uploads and the full source of any authored height image.
+  return 65536+prepared.reduce((n,p)=>n+(p.coast?256:24)*NODE_BYTES+(p.segs?.length??0)*64+((p.writes?.length??0)+(p.extra?.length??0))*16+(p.values?.byteLength??0),0);
+}
 export async function createShapeEngine({device, grid, spacing, baseHeight, sea, minH, maxH, refSpacing = spacing, pages = false}) {
   const raw = await (await fetch('engine-shape.wgsl')).text();
   const S = GPUShaderStage.COMPUTE, rw = {type: 'storage'}, ro = {type: 'read-only-storage'};
@@ -570,8 +581,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
   const ST = GPUBufferUsage.STORAGE, CD = GPUBufferUsage.COPY_DST, CS = GPUBufferUsage.COPY_SRC;
   const F = buf(PLANES * cells * 4, ST | CD | CS, 'shape planes'), Mk = buf(7 * cells * 4, ST | CD | CS, 'shape masks');
   let Nz = null, Sc = null, dummy = null, queue = Promise.resolve(), peak = 0, last = {};
-  // H10: the scratch planes are three (the hill's blur), or CO_PLANES plus the circular bites when the node list has a coast pass.
-  const CO_PLANES = 14, scFloats = (n, sites) => sites < 0 ? 3 * n : CO_PLANES * n + sites;
+  // H10: scratch uses the shared feature-aware calculation below.
   const scratch = floats => { Nz ??= buf(7 * cells * 4, ST, 'shape noise'); if (!Sc || Sc.size < floats * 4) { const old = Sc; Sc = buf(floats * 4, ST, 'shape scratch'); old?.destroy(); } };
   // H5b: a page is a pw x ph block of the map with its own planes and masks (the shader's lidx); its noise is evaluated directly (u.direct), so only the
   // scratch weights of the hill's blur are shared: one buffer, grown to the largest target.
@@ -599,7 +609,6 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     const P = readRect ? intersect(readRect, whole) : R;
     if (!R || (readback && !P)) return {done: Promise.resolve(), land: null, rect: null};
     const TF = target ? target.F : F, TMk = target ? target.Mk : Mk;
-    let coastSites = -1;   // the longest list of circular bites among the coast nodes (floats), or -1 when none has a coast pass
     dummy ??= buf(16, ST, 'shape unused');
     const expandIn = (r, m) => intersect({x0: r.x0 - m, y0: r.y0 - m, x1: r.x1 + m, y1: r.y1 + m}, whole);
     const geom = {grid, spacing, refSpacing};
@@ -611,9 +620,8 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     // Phase 1: prepare every node (its segment and mask-write lists).
     const prepared = [];
     for (const n of list) { const p0 = (prepare || prepareNode)(n, geom, ctx); if (p0.multi) prepared.push(...p0.multi); else prepared.push(p0); }
-    for (const p of prepared) if (p.coast) coastSites = Math.max(coastSites, p.coast.siteFloats);
-    if (target) { const need = scFloats(target.pw * target.ph, coastSites); if (!pageScratch || pageScratch.size < need * 4) { pageScratch?.destroy(); pageScratch = buf(need * 4, ST, 'page scratch'); } }
-    else scratch(scFloats(cells, coastSites));
+    if (target) { const need = shapeScratchBytes(target.pw * target.ph, prepared); if (!pageScratch || pageScratch.size < need) { pageScratch?.destroy(); pageScratch = buf(need, ST, 'page scratch'); } }
+    else scratch(shapeScratchBytes(cells, prepared)/4);
     for (const p of prepared) {
       if (p.skip) continue;
       if (p.op === 'ground') { ops.push({ground: true, art: p.amp !== 0 ? p.art : 1, u: {seed: p.seed, gAmp: p.amp, gWave: p.wave, gCover: p.cover}}); continue; }
@@ -1335,6 +1343,7 @@ export function createPagedFields(opts) {
     return staging;
   }
 
+  let stagingPins=0,stagingDrops=0;
   let stagingChain=Promise.resolve();
   function prepareStaging(cells){
     const job=stagingChain.then(async()=>{
@@ -1430,7 +1439,7 @@ export function createPagedFields(opts) {
     const g = engine?.stats() || {}, resident = [...pagesMap.values()].filter(p => p.target).length, weathers = [...pagesMap.values()].filter(p => p.weather).length;
     return {revision, residentBytes: cpuBytes() + coarse.byteLength, cacheBytes: cpuBytes(), cacheEntries: resident, lastWorkingBytes: 0, peakBytes: cpuBytes(), budget: shapeBudget() + weatherBudget(), hits: 0, misses: 0, replays: 0, evictions: 0,
       chunkCells: CORE, worldSize, worldGrid, gridSpacing: spacing, bytesPerCell: PAGE_CELL, workspaceBytesPerCell: 0, maxWorkingCells: 0, pointSamples: 0, connectionTiles: 0, connectionCells: 0,
-      gpuShape: {...g, gpuBytes: gpuBytes(), paged: true, core: CORE, ring: RING, ringChanges, apron: APRON, shapePages: resident, weatherPages: weathers, pagesTotal: np * np, shapeBytes: shapeBytes(), weatherBytes: weatherBytes(), stagingBytes: stagingBytes(), cpuCopyBytes: cpuBytes(),
+      gpuShape: {...g, gpuBytes: gpuBytes(), paged: true, core: CORE, ring: RING, ringChanges, apron: APRON, shapePages: resident, weatherPages: weathers, pagesTotal: np * np, shapeBytes: shapeBytes(), weatherBytes: weatherBytes(), stagingBytes: stagingBytes(), stagingDrops, cpuCopyBytes: cpuBytes(),
         coarse: {points: coarse.length, filled: coarseFilled, done: coarseDone, queued: coarseQueue.size, fullAt: coarseFullAt}, weatherRuns, weatherMsTotal, error: (error || firstError)?.message || null}};
   };
 
@@ -1450,17 +1459,21 @@ export function createPagedFields(opts) {
     settle,
     // the map canvas's feed: pages ready for `rect` (cells), and a gather to encode into the bake's encoder
     async feedSource(rect, wantWeather, {signal} = {}) {
-      const lease = await prepareRect(rect, wantWeather && Boolean(time), signal);
+      const lease = await prepareRect(rect, wantWeather && Boolean(time), signal);stagingPins++;
       try{await prepareStaging((rect.x1-rect.x0+1)*(rect.y1-rect.y0+1));signal?.throwIfAborted();}
-      catch(error){lease.release();throw error;}
+      catch(error){stagingPins--;lease.release();throw error;}
+      let released=false;const release=()=>{if(released)return;released=true;stagingPins--;lease.release();};
       const weather = wantWeather && Boolean(time),material=weather&&Boolean(time?.material);
       const weatherRevB=weather?Math.min(...lease.pages.map(pg=>pg.weather?.revB??-1)):null;
-      return {paged: true, weather, weatherRevB, revision, release: () => lease.release(), maskCount: maskKeys.length,   // revision: the fields' revision the bake read (perf.mjs's move-to-picture latency)
+      return {paged: true, weather, weatherRevB, revision, release, maskCount: maskKeys.length,   // revision: the fields' revision the bake read (perf.mjs's move-to-picture latency)
         gather(enc, passes) {
           const gw = rect.x1 - rect.x0 + 1, gh = rect.y1 - rect.y0 + 1, set = stagingFor(gw * gh), tmp = encodeGather(enc, passes, rect, set, weather);
           return {planes: set.F, masks: set.Masks ?? set.Mk, weather: weather ? set.W : null, maps: weather ? set.M : null, field: material ? set.Fd : null, grid: gw, cells: gw * gh, tmp};
         }};
     },
+    // Regional display sources do not use the canonical gather cache. Its
+    // completed consumers release their leases before this memory is reclaimed.
+    releaseStaging:()=>{if(stagingPins||!staging)return 0;const bytes=staging.bytes;staging.destroy();staging=null;stagingDrops++;return bytes;},
     setTime, timeOn: () => Boolean(time),
     setFocus: r => { focus = r; },
     // The authored heights at every COARSE-th cell once all of them are current (null while pages are queued), and a promise for the moment they are.
