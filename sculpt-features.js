@@ -286,7 +286,7 @@ export async function mountMapFeatures(api) {
     // Starts is its own tool on the rail: the card takes its name, and the Place / Erase / Fill switch steps aside.
     $('map-features-title').textContent=mode==='starts'?'Start positions':'Features'; doc.querySelector('.feature-modes').hidden=mode==='starts';
     $('start-count').hidden=mode!=='starts'; $('start-count').textContent=`${starts.length} of ${MAX_STARTS}`;
-    for (const tab of kindTabs) { const kind=tab.dataset.featureKind,off=!kinds.includes(kind); tab.setAttribute('aria-checked',String(kind===placeKind)); tab.disabled=off; tab.title=off?`No generated ${PLURALS[kind]} for this world yet.`:LABELS[kind]; }
+    for (const tab of kindTabs) { const kind=tab.dataset.featureKind,off=!kinds.includes(kind); tab.setAttribute('aria-checked',String(kind===placeKind)); tab.disabled=off; tab.tabIndex=!off&&kind===placeKind?0:-1; tab.title=off?`No generated ${PLURALS[kind]} for this world yet.`:LABELS[kind]; }
     $('feature-place').hidden=mode!=='place';
     $('feature-starts').hidden=mode!=='starts';
     $('feature-fill').hidden=mode!=='fill'; if (mode==='fill') $('feature-fill').open=true;
@@ -398,7 +398,7 @@ export async function mountMapFeatures(api) {
 
   for (const [name,button] of buttons) button.onclick=() => activate(name);
   // The kind tabs press the list behind them (#feature-kind), so its guard applies.
-  for (const tab of kindTabs) tab.onclick=() => { const list=$('feature-kind'); list.value=tab.dataset.featureKind; list.dispatchEvent(new Event('change')); };
+  for (const tab of kindTabs) { tab.onkeydown=e=>{if(!['ArrowRight','ArrowDown','ArrowLeft','ArrowUp','Home','End'].includes(e.key))return;e.preventDefault();const tabs=kindTabs.filter(b=>!b.disabled),i=tabs.indexOf(tab),next=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowRight'||e.key==='ArrowDown'?1:-1)+tabs.length)%tabs.length;tabs[next].click();tabs[next].focus();}; tab.onclick=() => { const list=$('feature-kind'); list.value=tab.dataset.featureKind; list.dispatchEvent(new Event('change')); }; }
   $('feature-kind').onchange=event => { if (!guard()) { update(); return; } placeKind=event.target.value; placeVariant=-1; status(''); update(); doc.dispatchEvent(new Event('terraform-feature-mode')); };
   $('feature-recipe').onchange=event => {if(!guard())return;activeRecipes[placeKind]=Number(event.target.value);placeVariant=-1;update();};
   $('feature-recipe-name').onchange=event => {if(!changeSet(placeKind,{name:event.target.value}))update();};
