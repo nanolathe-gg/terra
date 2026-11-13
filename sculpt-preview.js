@@ -1,4 +1,5 @@
 import {createShapeEngine} from './sculpt-gpu-fields.js';
+import {terrainAllocation} from './sculpt-memory.js';
 const union=(a,b)=>!a||!b?null:{x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.max(a.x+a.width,b.x+b.width)-Math.min(a.x,b.x),height:Math.max(a.y+a.height,b.y+b.height)-Math.min(a.y,b.y)};
 // A bounded, display-only lattice for zoomed-out views. It evaluates the same
 // shape graph and masks; exports and picking continue to use canonical fields.
@@ -21,6 +22,74 @@ export function createPreviewFields(device,scene){
   },
   destroy(){target?.destroy();engine?.destroy();target=engine=null;starting=null;revision=-1;dirty=null;pending=true;}
  };
+}
+
+// Preview inputs live on one global lattice, including the map's last sample.
+// The window keeps the same world-space Time apron as canonical pages.
+export function previewGrid(size,canonicalGrid,level){
+  return Math.min(canonicalGrid,Math.ceil((size-1)/Math.max(level,(size-1)/(canonicalGrid-1)))+1);
+}
+export function previewWindow(region,grid,size,apron){
+  const spacing=(size-1)/(grid-1),pad=Math.ceil(apron/spacing);
+  const side=Math.min(grid,Math.max(region.gridWidth,region.gridHeight)+2*pad);
+  const x=Math.max(0,Math.min(grid-side,Math.round(region.gridOrigin[0]/spacing)-pad));
+  const y=Math.max(0,Math.min(grid-side,Math.round(region.gridOrigin[1]/spacing)-pad));
+  return {x,y,side,spacing,grid,cells:side*side};
+}
+// The same shape and Time kernels over a display-only window. Canonical pages,
+// picking and export do not read these buffers. Only one window is retained.
+export function createPreviewLattice(device,scene,memoryChanged=()=>{}){
+  let engine=null,target=null,weather=null,starting=null,shapeKey='',key='',weatherKey='',working=0,runs=0,timeRuns=0,weatherReuses=0,peak=0;
+  const bytes=()=> (engine?.bytes()??0)+(target?.bytes??0)+(weather?.bytes??0)+(weather?.field?.size??0)+working;
+  const dropWeather=()=>{weather?.weather.destroy();weather?.maps.forEach(b=>b.destroy());weather?.field?.destroy();weather=null;weatherKey='';};
+  const trim=()=>{target?.destroy();engine?.destroy();engine=target=starting=null;shapeKey=key='';working=0;};
+  const clear=()=>{dropWeather();trim();};
+  const plan=(region,on=true,deferTime=false)=>{
+    const s=scene(),w=previewWindow(region,region.worldGrid,s.size,s.timeApron??128*s.spacing);
+    const tm=on?s.previewTime?.({size:w.spacing*(w.side-1)+1,spacing:w.spacing}):null;
+    const geometry=[w.grid,w.x,w.y,w.side].join(','),sk=[geometry,s.revision].join('|'),wk=[geometry,tm?.key??'',tm?.revB??s.revB].join('|'),cache=sk+'|'+wk;
+    const reuse=Boolean(tm&&deferTime&&weather&&weatherKey===wk),runTime=tm&&!reuse&&key!==cache;
+    // Shape planes/masks 56, worst shape scratch 56, Time working <=144 bytes
+    // per cell. The extra reserve covers coast sites and request uniforms.
+    const peakBytes=16*1024*1024+w.cells*(112+(tm?144:0))+65536;
+    const requestPeak=runTime?peakBytes:16*1024*1024+w.cells*112+(weather?.bytes??0)+(weather?.field?.size??0)+65536;
+    return {...w,s,tm,sk,wk,reuse,cache,peakBytes,additionalBytes:key===cache&&target?0:Math.max(0,requestPeak-bytes())};
+  };
+  return {
+    grid:level=>{const s=scene();return previewGrid(s.size,s.grid,level);},plan,bytes,
+    stats:()=>({runs,timeRuns,weatherReuses,bytes:bytes(),peakBytes:peak,grid:engine?.grid??null,side:target?.pw??null}),clear,trim,
+    async feed(region,{weather:on=true,signal,stale=()=>false,deferTime=false}={}){
+      const current=()=>{signal?.throwIfAborted();if(stale?.())throw new DOMException('The preview lattice was superseded.','AbortError');};
+      current();const p=plan(region,on,deferTime),{s,tm}=p;
+      try{
+        if(engine&&engine.grid!==p.grid)clear();
+        if(!engine){
+          starting??=createShapeEngine({device,grid:p.grid,spacing:p.spacing,refSpacing:s.spacing,baseHeight:s.baseHeight,sea:s.sea,minH:s.minH,maxH:s.maxH,pages:true});
+          engine=await starting;current();
+        }
+        if(shapeKey!==p.sk){
+          if(!p.reuse)dropWeather();key='';shapeKey='';let submitted;
+          await terrainAllocation(device,()=>{
+            if(!target||target.ox!==p.x||target.oy!==p.y||target.pw!==p.side){target?.destroy();target=engine.makeTarget(p.x,p.y,p.side,p.side);}
+            submitted=engine.submit(s.nodes,s.context,null,{readback:false,target});
+          });
+          await submitted.done;current();shapeKey=p.sk;runs++;
+        }
+        if(key!==p.cache){
+          if(!p.reuse)dropWeather();else weatherReuses++;key='';
+          if(tm&&!p.reuse){
+            working=p.cells*144+65536;peak=Math.max(peak,bytes());memoryChanged();
+            try{weather=await tm.run({planes:target.F,masks:target.Mk,grid:p.side,ox:p.x,oy:p.y,stale:()=>Boolean(signal?.aborted)||Boolean(stale?.())});timeRuns++;}
+            finally{working=0;}
+            current();weatherKey=p.wk;
+          }
+          key=p.cache;
+        }
+        peak=Math.max(peak,bytes());current();
+        return {planes:target.F,masks:target.Mk,maskCount:s.maskCount,grid:p.side,origin:[p.x,p.y],spacing:p.spacing,revision:s.revision,weatherRevB:tm?.revB??s.revB,weather:weather?.weather??null,maps:weather?.maps??null,field:weather?.field??null,release:()=>{}};
+      }catch(error){if(error.name==='TerrainMemoryError')clear();throw error;}
+    }
+  };
 }
 
 // Choose the fewest cells in a balanced global grid that fit the available

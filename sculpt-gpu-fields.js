@@ -1157,7 +1157,7 @@ export function createPagedFields(opts) {
   async function pumpCpu() {
     cpuTimer = 0;
     for (const k of [...cpuWanted]) {
-      if (gesture() || foregroundPending()) { cpuTimer = setTimeout(pumpCpu, 100); return; }
+      if (gesture() || foregroundPending() || opts.prepareBackground?.(SIDE*SIDE*8)===false) { cpuTimer = setTimeout(pumpCpu, 100); return; }
       cpuWanted.delete(k); const pg = pagesMap.get(k); if (!pg) continue;
       pg.pins++;   // not evicted while its buffers are read
       try {
@@ -1185,7 +1185,7 @@ export function createPagedFields(opts) {
     coarseTimer = 0; if (coarseRunning) return; coarseRunning = true;
     try {
       while (coarseQueue.size) {
-        if (gesture() || foregroundPending() || !engine) { coarseTimer = setTimeout(pumpCoarse, 150); return; }
+        if (gesture() || foregroundPending() || !engine || opts.prepareBackground?.(16*1024*1024+SIDE*SIDE*112)===false) { coarseTimer = setTimeout(pumpCoarse, 150); return; }
         // the page nearest the focus (the view) first
         let best = null, bd = Infinity;
         for (const k of coarseQueue.keys()) { const pg = pagesMap.get(k), d = focus ? Math.hypot(pg.x0 + CORE / 2 - focus.x, pg.y0 + CORE / 2 - focus.y) : pg.key; if (d < bd) { bd = d; best = pg; } }

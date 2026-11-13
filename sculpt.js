@@ -760,7 +760,7 @@ function makeRegionalFields() {
   const common={worldSize,worldGrid,baseHeight:config.baseHeight,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving||controlsEditing||worldInputQueue.active)};
   // pageRing (a ring by hand) and timeApron are test hooks of the page ring rule and the Time pass's window; no page needs them.
   const query=new URLSearchParams(location.search);
-  return pagedWanted()?createPagedFields({...common,budget:gpuBudget,foregroundPending:()=>mapCanvas?.foregroundPending?.()??false,apron:Number(query.get('timeApron')||128),forceRing:Number(query.get('pageRing')||0)}):createGpuFields(common);
+  return pagedWanted()?createPagedFields({...common,budget:gpuBudget,foregroundPending:()=>Boolean(mapCanvas?.gpuWorkPending?.()||mapCanvas?.foregroundPending?.()),prepareBackground:bytes=>mapCanvas?.prepareBackground?.(bytes)??true,apron:Number(query.get('timeApron')||128),forceRing:Number(query.get('pageRing')||0)}):createGpuFields(common);
 }
 // Every application receives a bounded prefix window. Temporary global views
 // let the existing brush routines keep their row strides; no node retains a
@@ -1013,7 +1013,8 @@ function regionalStats() {
 const sculptRegion={
   terrainBudgetPreference:()=>editorUI.terrainBudget,saveTerrainBudget:value=>editorUI.setTerrainBudget(value),
   saveForGpuRestart:()=>!ready||saveWorking(),
-  previewScene:()=>({size:worldSize,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,nodes,context:shapeContext(),maskCount:MASK_KEYS.length,revision:regionalFields.stats().revision,fail:error}),
+  previewScene:()=>({size:worldSize,grid:worldGrid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,nodes,context:shapeContext(),maskCount:MASK_KEYS.length,revision:regionalFields.stats().revision,revB:mapCanvas?.rev.B??0,paged:Boolean(regionalFields.paged),timeApron:(regionalFields.apron??128)*spacing,
+    previewTime:({size:windowSize,spacing:windowSpacing})=>weatherOn()?{...pagedTime({config,renderer,size:windowSize,spacing:windowSpacing,material:materialKnobs()}),revB:mapCanvas?.rev.B??0}:null,fail:error}),
   fitGpuBudget:() => regionalFields?.refit?.(),
   setViewFocus:v=>regionalFields?.setFocus?.({x:(v.x+v.width/2)/spacing,y:(v.y+v.height/2)/spacing}),
   read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:n.frame?.slice()}:undefined; },

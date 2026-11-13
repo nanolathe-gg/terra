@@ -364,7 +364,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const encoder=device.createCommandEncoder({label:'chunk feed'});
     // H5b: a paged map gathers the chunk's lattice from the pages into a staging set laid out as a small whole map (origin 0, stride = the lattice's width).
     const src=feed.gather?feed.gather(encoder,passes):feed,gathered=Boolean(feed.gather);
-    const uniform=feedUniform(device,{grid:gathered?src.grid:feed.grid,cells:gathered?src.cells:feed.grid*feed.grid,ox:gathered?0:ox,oy:gathered?0:oy,gw,gh,cw:region.gridWidth,ch:region.gridHeight,sea:this.config.seaLevel,
+    const uniform=feedUniform(device,{grid:gathered?src.grid:feed.grid,cells:gathered?src.cells:feed.grid*feed.grid,ox:gathered?0:ox-(src.origin?.[0]??0),oy:gathered?0:oy-(src.origin?.[1]??0),gw,gh,cw:region.gridWidth,ch:region.gridHeight,sea:this.config.seaLevel,
       mode:(src.weather?1:0)|(src.maps?2:0)|(request.exportArt?4:0)|(src.field?8:0),invalidRect:src.invalidRect});
     this.feedDummy??=device.createBuffer({label:'feed absent',size:16,usage:GPUBufferUsage.STORAGE});
     const S=GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST,painted=device.createBuffer({label:'feed painted',size:16,usage:S}),stage=device.createBuffer({label:'feed painted read',size:16,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});

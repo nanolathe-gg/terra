@@ -20,9 +20,9 @@ test('stage scan follows calls, keeps gated reads, separates geometry, and ignor
 
 test('world comparison ignores chunk flags and names changed rock slots once',()=>{
  const scalar=offset=>({offset,width:1,count:1,stride:0,kind:'f'});
- const layout={fields:new Map([['ambient',scalar(0)],['paintOn',scalar(4)],['chunkScale',scalar(8)],['rock',{offset:16,count:2,stride:16,kind:'struct',members:new Map([['faceWear',scalar(0)]])}],['faceWear',scalar(16)]])};
- const stages=new Map([['ambient',{stage:'F'}],['faceWear',{stage:'D'}]]),before=new Uint32Array(12),after=new ArrayBuffer(48),v=new DataView(after);
- v.setFloat32(0,.4,true);v.setInt32(4,1,true);v.setFloat32(8,2,true);v.setFloat32(32,.7,true);
+ const layout={fields:new Map([['ambient',scalar(0)],['paintOn',scalar(4)],['chunkScale',scalar(8)],['grid',scalar(12)],['rock',{offset:16,count:2,stride:16,kind:'struct',members:new Map([['faceWear',scalar(0)]])}],['faceWear',scalar(16)]])};
+ const stages=new Map([['ambient',{stage:'F'}],['faceWear',{stage:'D'}],['grid',{stage:'C'}]]),before=new Uint32Array(12),after=new ArrayBuffer(48),v=new DataView(after);
+ v.setFloat32(0,.4,true);v.setInt32(4,1,true);v.setFloat32(8,2,true);v.setFloat32(32,.7,true);v.setFloat32(12,2121,true);
  assert.deepEqual(worldUniformDelta(before,after,layout,stages),{fields:[{name:'ambient',stage:'F'},{name:'rock[1].faceWear',stage:'D'}],stage:'D',rockSlots:[1]});
  assert.deepEqual(worldUniformDelta(new Uint32Array(after),after,layout,stages),{fields:[],stage:null,rockSlots:[]});
 });
