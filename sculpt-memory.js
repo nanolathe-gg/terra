@@ -10,7 +10,7 @@ export function createTerrainBudget({explicit,deviceMemory,preference,save=()=>{
   if(choice!==null&&choice===failedChoice&&TERRAIN_BUDGETS.includes(preference?.mb)){mb=Math.min(mb,preference.mb);reason=preference.reason||'remembered allocation failure';}
   const previous=preference?.trying;
   if(valid(previous)&&(!valid(explicit)||explicit===previous)){
-    mb=Math.min(mb,lowerTerrainBudget(previous)??512);reason='lowered after an interrupted memory trial';
+    mb=Math.min(mb,lowerTerrainBudget(previous)??512);reason=preference?.mb<previous&&preference.reason?preference.reason:'lowered after an interrupted memory trial';
   }else if(!valid(explicit)&&mb<2048)reason=mb<automatic?(preference?.reason||'remembered memory budget'):'smaller device memory signal';
   let trying=false,remembered=TERRAIN_BUDGETS.includes(preference?.mb)?preference.mb:automatic;
   const write=()=>save({mb:remembered,trying:trying?mb:null,reason,failedChoice});
@@ -20,6 +20,7 @@ export function createTerrainBudget({explicit,deviceMemory,preference,save=()=>{
     settled(){if(!trying)return;trying=false;remembered=Math.min(2048,Math.max(512,mb));write();},
     choose(value){if(!valid(value))throw Error('Invalid terrain memory budget.');mb=value;choice=value;failedChoice=null;reason='';trying=false;this.begin();},
     lower(why){const next=lowerTerrainBudget(mb);if(next===null)return false;failedChoice=choice;mb=next;reason='lowered after '+why;remembered=next;trying=true;write();return true;},
+    restart(why){const failed=mb;if(!this.lower(why))return false;save({mb:remembered,trying:failed,reason,failedChoice});return true;},
   };
 }
 export class TerrainMemoryError extends Error {

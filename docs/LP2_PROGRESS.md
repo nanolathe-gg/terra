@@ -208,3 +208,22 @@ about 6.6 s. Release finals improve about 45–52%. First changed pixels
 still miss 50 ms. See [LP2_TIMINGS.md](LP2_TIMINGS.md) for all three tile
 latencies, changed pixels, final cost, load, resume, pipeline and memory
 numbers and the remaining scope. LP2 acceptance remains open.
+
+Overnight hardening adds a guarded restart for device loss and unscoped
+out-of-memory events. It saves through the existing working-copy path,
+records the failed notch, and reloads at exactly one lower notch. It does
+not reload an editable recipe when local saving fails; the existing error
+path remains available then and at the 512-MiB floor. A manually typed
+budget now updates the existing `gpuMB` address parameter, so reload retains
+the artist's choice. The initial crash note starts before renderer setup
+and clears after the first final view has exercised the refinement sets.
+
+Measured forced checks: actual destruction of this check's owned device,
+reported as an unexpected loss, recovers 768 → 512 MiB both while idle and
+while voxel readback is active. All nine terrain nodes and a pending Ambient
+value survive. A synthetic native unscoped OOM event takes the same saved
+restart path with its allocation-failure reason. All three checks finish
+without a banner or console error. These are forced recovery checks, not
+real OOM stress measurements or Safari/iPad validation. Five policy tests
+pass in 40 ms, including exactly one step on reload and refusal at the
+floor. No storage key or control was added.

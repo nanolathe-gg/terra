@@ -17,3 +17,10 @@ test('an allocation scope closes before yielding and retains the failure',async(
  const pending=terrainAllocation(device,()=>{calls.push('create');return 1;});assert.deepEqual(calls,['out-of-memory','create','pop']);await assert.rejects(pending,TerrainMemoryError);
  device.popErrorScope=()=>Promise.resolve(null);await assert.rejects(terrainAllocation(device,()=>{throw Error('ordinary error');}),/ordinary error/);
 });
+
+test('a device restart records the failed notch and reloads only one step lower',()=>{
+ let preference;const first=createTerrainBudget({explicit:2048,save:value=>preference=value});first.begin();first.settled();
+ assert(first.restart('a lost GPU device'));assert.equal(preference.trying,2048);assert.equal(preference.mb,1536);
+ const next=createTerrainBudget({explicit:2048,preference});assert.equal(next.mb,1536);assert.match(next.reason,/lost GPU device/);
+ const floor=createTerrainBudget({explicit:512});assert.equal(floor.restart('a lost GPU device'),false);assert.equal(floor.mb,512);
+});

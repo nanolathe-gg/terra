@@ -158,6 +158,7 @@ export class TerrainRenderer {
 
   // Validation and device errors arrive asynchronously; report each one.
   reportError(message) {
+    if(this.recovering)return;
     console.error('nanolathe: WebGPU: ' + message);
     this.onerror?.('WebGPU: ' + message);
   }
@@ -170,8 +171,16 @@ export class TerrainRenderer {
     // so the painted masks (card C5) fit in that limit.
     const features = adapter.features.has('timestamp-query') ? ['timestamp-query'] : [];
     const device = this.device = await adapter.requestDevice({requiredFeatures: features});
-    device.lost.then(info => { if (info.reason !== 'destroyed') this.reportError(`device lost: ${info.message}`); });
-    device.addEventListener('uncapturederror', event => this.reportError(event.error.message));
+    device.lost.then(info => {
+      if(info.reason==='destroyed'||this.recovering)return;
+      if(this.config.onDeviceLost?.(info)){this.recovering=true;return;}
+      this.reportError(`device lost: ${info.message}`);
+    });
+    device.addEventListener('uncapturederror',event=>{
+      if(this.recovering){event.preventDefault();return;}
+      if(typeof GPUOutOfMemoryError!=='undefined'&&event.error instanceof GPUOutOfMemoryError&&this.config.onMemoryPressure?.(event.error)){this.recovering=true;event.preventDefault();return;}
+      this.reportError(event.error.message);
+    });
     this.format = navigator.gpu.getPreferredCanvasFormat();
     // A plain unorm canvas stores the shader's values as they are, as the
     // WebGL canvas did (no sRGB encoding); opaque, as WebGL's alpha: false.
