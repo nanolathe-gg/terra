@@ -28,3 +28,7 @@ are integrated on this branch. The isolated review server is **http://127.0.0.1:
 Checks stay focused on perf and basic correctness at the owner's request.
 The reports distinguish earlier completed sweeps from deferred combined-tree
 gates. No new benchmark runs were added to `repro/check.sh`.
+
+The latest focused same-budget comparison is [LP2_TIMINGS.md](LP2_TIMINGS.md):
+large Green/map16 whole-view stroke p95 is 96–105 ms versus about 7.6 s on
+current main. It is one measured fixture, not full LP2 acceptance.

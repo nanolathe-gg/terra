@@ -200,3 +200,11 @@ cold sketch reload byte for byte, SHA-256
 `670e9222c1e82a0830a921e566f098c32da6b0676fa400a66899a6f209d0251d`.
 Console errors: zero. This is a basic correctness result, not a qualified
 latency or final-cost claim.
+
+Two focused alternating pairs at the same 2048 MiB budget now measure current
+main versus this branch on large Green/map16. Whole-view stroke p95 is
+96–105 ms versus about 7.6 s, and continuous rock p95 is 74–75 ms versus
+about 6.6 s. Release finals improve about 45–52%. First changed pixels
+still miss 50 ms. See [LP2_TIMINGS.md](LP2_TIMINGS.md) for all three tile
+latencies, changed pixels, final cost, load, resume, pipeline and memory
+numbers and the remaining scope. LP2 acceptance remains open.
