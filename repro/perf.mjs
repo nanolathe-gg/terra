@@ -270,7 +270,7 @@ const ev=async expression=>{
 const mouse=(type,x,y,down=true)=>send('Input.dispatchMouseEvent',{type,x,y,button:'left',buttons:type==='mouseReleased'?0:down?1:0,clickCount:1});
 const click=async(x,y)=>{await mouse('mousePressed',x,y);await mouse('mouseReleased',x,y);};
 const key=async k=>{for(const type of ['keyDown','keyUp'])await send('Input.dispatchKeyEvent',{type,key:k,code:k});};
-const point=async selector=>ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Missing control '+${JSON.stringify(selector)});e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,w:r.width,h:r.height};})()`);
+const point=async selector=>ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Missing control '+${JSON.stringify(selector)});e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();if(!r.width||!r.height||getComputedStyle(e).visibility==='hidden')throw Error('Control is hidden '+${JSON.stringify(selector)});return {x:r.x+r.width/2,y:r.y+r.height/2,w:r.width,h:r.height};})()`);
 const clickElement=async selector=>{const p=await point(selector);await click(p.x,p.y);};
 const result={schema:6,mode,label,colorsDriver:colorsMode,scene:sceneFile,query,startedAt:new Date().toISOString(),gpuQuietSamples,loadAverageAtStart:loadavg(),warmup,baseline:execFileSync('git',['merge-base','HEAD','main'],{encoding:'utf8'}).trim(),notes:['Paint endpoint is canvas draw completion, not physical display scanout.','First changed pixels compares tile RGBA after timing stops, replaying retained immutable bitmaps; no pixel readback runs on the measured path. Extra observer bitmap memory and untimed comparison cost are reported.','Pointer tiles use rendered art coordinates, not the inverse-projected ground pick. Whole current uses union coverage of actual opaque painted clips, from tiles or blocks, and weather readiness, never bake frequency.','Pass timestamps cannot assign a mixed on/off-screen pass to individual pixels; wholly outside time is exact, mixed and area-weighted estimates are separate.','Final latency samples include held mid-drag pauses and release; uncompleted pauses are censored.','No editor files are changed; Fetch injects timing-only observers before modules execute.']};
 try{result.processesAtStart=execFileSync('/bin/sh',['-c','ps -Ao pcpu,command -r | head'],{encoding:'utf8'});}catch(e){throw Error('Cannot check machine load; run with process inspection permission.');}
@@ -362,22 +362,37 @@ try{
   await settle();console.error('phase load');
   {const t0=await begin();await ev(`__perf.input('load','scene');true`);const a=await anchor();delete a.keys;await setup();result.load=await capture(t0,[a]);result.viewport=result.load.view;flush();}
   if(only==='load'||warmup)throw Error('stopped after load (--only)');
+  const chooseTool=async()=>{
+    const selector=`[data-tool="${tool}"]`;
+    if(!await ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});return e&&e.getClientRects().length>0;})()`)){
+      const rail=await ev(`document.querySelector(${JSON.stringify(selector)})?.closest('.tool-group')?.querySelector('.rail-button')?.id`);
+      if(!rail)throw Error('Missing tool rail for '+tool);await clickElement('#'+rail);
+    }
+    await clickElement(selector);
+    if(await ev('sculptDebug.state().tool')!==tool)throw Error('Tool selection failed: '+tool);
+  };
+  const checkGesture=async()=>{
+    const state=await ev('sculptDebug.state()');
+    if(state.tool!==tool||!(tool==='move'?state.moving:state.stroke))throw Error('Expected '+tool+' gesture; got '+JSON.stringify(state));
+    return state;
+  };
   let box;
   const strokeMove=async(x,y)=>{await ev(`__perf.nextPointerAt=sculptCanvas.pick(${x}-(${box.x}),${y}-(${box.y}));true`);await mouse('mouseMoved',x,y);};
   const stroke=async(n=40)=>{
+    await chooseTool();
     box=await ev(`(()=>{const r=document.getElementById('overlay').getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};})()`);
-    if(await ev('sculptDebug.state().tool')!==tool)await clickElement(`[data-tool="${tool}"]`);
     if(diameter)await ev(`(()=>{const d=document.getElementById('diameter');d.value=${diameter};d.dispatchEvent(new Event('input'));})()`);
     const x=box.x+box.w*.25,y=box.y+box.h*.45;await mouse('mousePressed',x,y);
-    for(let i=1;i<=n;i++){await strokeMove(x+box.w*.45*i/n,y+Math.sin(i/6)*40);await sleep(30);}return {x:x+box.w*.45,y:y+Math.sin(n/6)*40};
+    const gesture=await checkGesture();
+    for(let i=1;i<=n;i++){await strokeMove(x+box.w*.45*i/n,y+Math.sin(i/6)*40);await sleep(30);}return {x:x+box.w*.45,y:y+Math.sin(n/6)*40,gesture};
   };
   if(featureDensity){await ev(`(async()=>{const f=sculptCanvas.features,v=sculptCanvas.view();f.fillRegion('tree',{type:'lasso',points:[[v.x,v.y],[v.x+v.width,v.y],[v.x+v.width,v.y+v.height],[v.x,v.y+v.height]]},{density:${featureDensity},margin:0,gap:0});await f.settled?.();})()`);await settle();}
   if(start!=='slider'){
   console.error('phase drag / release');
-  {const t0=await begin(),p=await stroke();const dragStop=await ev('performance.now()'),a=await anchor();await mouse('mouseReleased',p.x,p.y);await settle();const whole=await capture(t0,[a],{metricsUntil:dragStop});result.drag={...whole,heldUntil:dragStop,movesDelivered:whole.inputs.length};result.release=await capture(a.t,[a],{input:'stroke release',specStartOverride:a.spec});flush();}
+  {const t0=await begin(),p=await stroke();const dragStop=await ev('performance.now()'),a=await anchor();await mouse('mouseReleased',p.x,p.y);await settle();const whole=await capture(t0,[a],{metricsUntil:dragStop});result.drag={...whole,gesture:p.gesture,heldUntil:dragStop,movesDelivered:whole.inputs.length};result.release=await capture(a.t,[a],{input:'stroke release',specStartOverride:a.spec});flush();}
   if(['drag','release'].includes(only))throw Error(`stopped after ${only} (--only)`);
   console.error('phase resume');
-  {await setup();const t0=await begin(),p=await stroke(primeMoves);if(primePause)await sleep(primePause);const release=await anchor();await mouse('mouseReleased',p.x,p.y);await sleep(100);const began=await anchor(),pendingState=await ev('({weatherPending:!sculptRegion.canExport(),foregroundPending:sculptCanvas.foregroundPending(),rendererBusy:sculptCanvas.renderer.busy,timePassesInFlight:__perf.activeErosion||0,shapePending:sculptDebug.shape().fields?.pending??null,dirtyFinalTiles:sculptCanvas.cacheSnapshot().filter(e=>e.dirty&&(e.scale??1)<=1).length})');const q={x:p.x-50,y:p.y+35};await mouse('mousePressed',q.x,q.y);for(let i=1;i<=32;i++){await strokeMove(q.x+i*4,q.y+Math.sin(i/4)*20);await sleep(30);}const a=await anchor();await mouse('mouseReleased',q.x+128,q.y+Math.sin(8)*20);await settle();result.resume=await capture(began.t,[a],{specStartOverride:began.spec,primingStart:t0,primingMoves:primeMoves,primingPauseMs:primePause,release,secondStroke:began,actualDelayMs:began.t-release.t,pendingAtResume:pendingState,inFlightCondition:pendingState.timePassesInFlight>0});flush();}
+  {await setup();const t0=await begin(),p=await stroke(primeMoves);if(primePause)await sleep(primePause);const primingState=await ev('({state:sculptDebug.state(),erosion:sculptCanvas.renderer.variantNumber("erosion",0),rain:sculptCanvas.renderer.variantNumber("erosionRain",1),age:sculptCanvas.renderer.variantNumber("erosionAge",200),simplify:document.getElementById("simplify-strokes").checked})');if(!primingState.state.stroke&&!primingState.state.moving)throw Error('The priming gesture ended before release');const release=await anchor();await mouse('mouseReleased',p.x,p.y);await chooseTool();await sleep(Math.max(0,100-(await ev('performance.now()')-release.t)));const began=await anchor(),pendingState=await ev('({weatherPending:!sculptRegion.canExport(),foregroundPending:sculptCanvas.foregroundPending(),rendererBusy:sculptCanvas.renderer.busy,timePassesInFlight:__perf.activeErosion||0,shapePending:sculptDebug.shape().fields?.pending??null,dirtyFinalTiles:sculptCanvas.cacheSnapshot().filter(e=>e.dirty&&(e.scale??1)<=1).length})');const q={x:p.x-50,y:p.y+35};await mouse('mousePressed',q.x,q.y);const gesture=await checkGesture();for(let i=1;i<=32;i++){await strokeMove(q.x+i*4,q.y+Math.sin(i/4)*20);await sleep(30);}const a=await anchor();await mouse('mouseReleased',q.x+128,q.y+Math.sin(8)*20);await settle();result.resume=await capture(began.t,[a],{specStartOverride:began.spec,primingStart:t0,primingMoves:primeMoves,primingPauseMs:primePause,primingState,gesture,primingTimeTrace:await ev(`__perf.events.filter(e=>e.t>=${release.t}&&e.t<=${began.t}&&e.type.startsWith('erode-'))`),release,secondStroke:began,actualDelayMs:began.t-release.t,pendingAtResume:pendingState,inFlightCondition:pendingState.timePassesInFlight>0});flush();}
   if(only==='resume')throw Error('stopped after resume (--only)');
   }
   // --------------------------------------------- page-native slider drags
