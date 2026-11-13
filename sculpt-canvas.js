@@ -392,6 +392,13 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         for(let y=Math.max(0,Math.floor(v.y/size)-1)*size;y<Math.min(map.height,v.y+v.height+size);y+=size)for(let x=Math.max(0,Math.floor(v.x/size)-1)*size;x<Math.min(map.width,v.x+v.width+size);x+=size)jobs.push({x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)});
         const dist=r=>Math.hypot(r.x+r.width/2-at[0],r.y+r.height/2-at[1]);jobs.sort((a,b)=>intersects(b,v)-intersects(a,v)||dist(a)-dist(b));
         const near={x:v.x-size,y:v.y-size,width:v.width+size*2,height:v.height+size*2};for(const e of cache.values())if(!intersects(e,near))e.heightPatch=null;
+        // Keep the focus tile first, then walk neighboring visible tiles.
+        // Radial order alternates opposite sides of the view and repeatedly
+        // evicts the six-page Time working set on a low-memory map.
+        if(!overview&&!previewing){
+          const n=jobs.filter(r=>intersects(r,v)).length;
+          for(let i=1;i<n;i++){const p=jobs[i-1],distance=r=>(r.x-p.x)**2+(r.y-p.y)**2;let best=i;for(let j=i+1;j<n;j++)if(distance(jobs[j])<distance(jobs[best]))best=j;const [next]=jobs.splice(best,1);jobs.splice(i,0,next);}
+        }
         const plan=[],stale=jobs.filter(r=>intersects(r,v)&&!currentFinal(cache.get(cacheKey(r,size))));
         if(overview)for(const rect of jobs)plan.push({rect,want:displayLevel()});
         else if(!levelsOn)for(const rect of jobs)plan.push({rect,want:1});
