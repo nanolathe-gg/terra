@@ -622,10 +622,10 @@ preview level:
   to 110 ms gives 0.1 to 0.2 s.
 - *Quarter*: when no input has arrived for about 100 ms and the coarse
   picture is current. Also right at release, while the Time pass runs.
-- *Final*: on release, or after about 100 ms without input when the coarse
-  picture is current and the input starts after Time (C–F). On paged maps
-  export-ready alone does not certify all weather pages. Otherwise keep the
-  250-ms authoring fallback and the Time wait. The overnight flat-Green/map16
+- *Final*: on release, or after about 100 ms without input for an F input whose previous
+  final geometry remains valid. On paged maps export-ready alone does not
+  certify all weather pages. Other inputs keep the 250-ms authoring fallback
+  and the Time wait. The overnight flat-Green/map16
   comparison found that waiting for 250 ms and making another quarter
   picture put Colors final 22–27% behind main (phase medians); section 2's 10% final-cost
   limit is unchanged. Visible tiles run in order of distance from the **focus point** (where the
@@ -635,6 +635,18 @@ preview level:
   does not prevent this: a pause is a request to see the result.
 
 The two delays are implementation constants (rule 9), tuned on the bench.
+
+**Overnight final-cost correction.** For an F-only input, a coarse picture may also
+yield one turn to a final tile whose previous completed bake and queue
+wait were at most 50 ms. The estimate is valid only for the same level and
+budget, with no intervening geometry or Time change. While coarse is stale, a completed block must precede each such turn, and
+the next coarse update takes priority again afterward. The shortcut requires one
+view block and cached pipelines. A new input still replans after the unit
+in flight. This preserves some final work during a
+color drag, which main already performs, without sending a measured heavy
+cliff tile ahead of the next coarse update. It adds no renderer or control.
+The full alternating matrix must still satisfy the unchanged 10% final-cost
+limit and report actual input latency and submissions.
 
 **Every interaction uses it**: strokes, moves, shape cards, section curves,
 World and rock rows, colors, surface sliders, undo and redo, pan and zoom,
