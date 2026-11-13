@@ -1,10 +1,15 @@
 # LP2 progress
 
-Implementation is on `live-preview/review`; main is untouched. This is a
-partial card, not LP2 acceptance. Main is merged through `222ace7a`
-(accepted navigation/curve UI); the older qualified comparisons remain
-against their recorded `99d976c5` baseline. New comparisons must use current
-main. The review server is
+**Current landing status, November 13:** The owner accepted the measured
+final-render slowdown and instructed: “land it on main without additional
+tests.” The native implementation is included in this landing, alongside
+LP3 step 1. No additional tests or benchmarks were run. This accepts the
+reported tradeoff for the merge; the incomplete matrix and remaining
+performance targets are still documented as unfinished in
+[the current status](LIVE_PREVIEW_REVIEW.md).
+
+The entries below preserve the development history and its original
+measurement scope. The native review server remains
 http://127.0.0.1:8903/sculpt.
 
 World/preset knob rows, World colors, preset rock/bed/absorption colors,
@@ -297,3 +302,13 @@ This review branch contains that main checkpoint as an ancestor while
 preserving the native implementation unchanged. The completed comparison
 server is http://127.0.0.1:8902/sculpt and the native review server remains
 http://127.0.0.1:8903/sculpt.
+
+
+## Owner-authorized native landing, November 13
+
+After the overnight foundation landing, the owner explicitly accepted the
+>10% final slowdown and authorized merging the rest without additional
+tests. The +10.21% cold-gate measurement is retained as measured, against
+its recorded baseline; no benchmark endpoint or threshold was altered.
+The native implementation and LP3 step 1 now join main. Broader LP2/LP3
+acceptance measurements, later LP3/LP4 work, LP5 and LP6 remain unfinished.

@@ -1,3 +1,9 @@
+> **November 13 landing update:** The owner accepted the measured final-render
+> slowdown and authorized merging the native preview without additional tests.
+> Main now includes the LP2 implementation and LP3 step 1 with the foundation.
+> [Current status](LIVE_PREVIEW_REVIEW.md) lists remaining work. The dated
+> measurements and decisions below are historical.
+
 # Overnight live-preview landing, November 13, 2026
 
 The completed checkpoint contains **LP0c, LP4 step 1 and LP1**, integrated

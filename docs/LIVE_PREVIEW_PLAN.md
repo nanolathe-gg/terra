@@ -1,7 +1,8 @@
-> **November 13 checkpoint:** LP0c, LP4 step 1 and LP1 are included in the
-> completed-card main landing. [The overnight report](LP_OVERNIGHT_REPORT.md)
-> gives fresh timings and final combined checks. The dated notes below are
-> historical; broader native preview remains on `live-preview/review`.
+> **November 13 landing update:** The owner accepted the measured final-render
+> slowdown and authorized merging the native preview without additional tests.
+> Main now includes the LP2 implementation and LP3 step 1 with the foundation.
+> [Current status](LIVE_PREVIEW_REVIEW.md) lists remaining work. The dated
+> measurements and decisions below are historical.
 
 # Live preview plan: an editor that answers at once
 

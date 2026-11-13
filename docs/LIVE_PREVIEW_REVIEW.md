@@ -1,21 +1,40 @@
 # Live-preview implementation status
 
-The overnight main checkpoint contains **LP0c, LP4 step 1 and LP1**,
-with current main’s UI preserved. See [the measured overnight report](LP_OVERNIGHT_REPORT.md)
-and [the complete focused timing tables](LP_FOUNDATION_TIMINGS.md).
+Main includes the completed foundation (**LP0c, LP1 and LP4 step 1**), the
+**native LP2 implementation**, and **LP3 step 1**. On November 13 the owner
+accepted the measured final-render slowdown and authorized landing the
+review branch **without additional tests**. No new tests or benchmarks were
+run for this merge. Earlier measurements retain their original scope.
 
-The completed work fixes exact regional sampling, keeps view tiles stable,
-slices and cancels Time requests, gives Time private uniforms, and derives
-world changes from one uniform writer. The original strict pixel test and
-the landing tier pass, with only the six owner-approved sampling pixels.
+The native implementation adds whole-view preview blocks, frame-batched
+control input, automatic refinement, the adaptive 2048-MiB default, working
+texture reuse, generic preview pipelines and delayed off-screen finals.
+LP3 step 1 uses exact-size preview input textures. The measured +10.21%
+cold-gate final-cost result is accepted for this landing; its benchmark
+endpoint and historical 10% target were not changed.
 
-Broader native preview, frame batching, adaptive memory and LP3 experiments
-remain together on **`live-preview/review`**. Their cold-gate final median
-missed the unchanged 10% guard at +10.21%; they are not part of main’s
-completed checkpoint. The review branch’s `docs/LP2_PROGRESS.md` records
-that result and remaining gates. Safari validation stays deferred.
+Remaining work, in order:
 
-The historical proof remains [LP0b](LP0b_REPORT.md); its prototype code is
-outside the shipping implementation. No benchmark was added to
-`repro/check.sh`. The owner’s overnight instruction authorized this
-completed-card landing; the rest remains available for review.
+1. **LP3:** coarser shape and Time lattices to reduce page-preparation and
+   low-memory latency, then remove preview readback waits. Try the cheaper
+   coarse raster only if its measured color bias is acceptable.
+2. **LP4:** cancellation between voxel pieces, time-based piece sizing and
+   the remaining view-first/off-screen scheduling. Bring every GPU
+   submission under 100 ms.
+3. **LP5:** the color-only rerun experiment, proving it matches a full
+   re-bake before retaining geometry records and routing stage-F edits.
+4. **LP6:** faster finals: voxel work, final tile-size measurements, fixed
+   pools without readback, and an atlas only if measurements justify it.
+5. **Later validation:** finish the full scene/map/view performance matrix
+   and remaining preview-quality/memory checks. Safari/iPad validation
+   remains explicitly deferred. No validation was added to this merge.
+
+Current details are in [LP2 progress](LP2_PROGRESS.md),
+[LP3 progress](LP3_PROGRESS.md), and [the plan](LIVE_PREVIEW_PLAN.md).
+[The overnight report](LP_OVERNIGHT_REPORT.md) and
+[foundation timing tables](LP_FOUNDATION_TIMINGS.md) preserve the earlier
+landing and comparison evidence. No benchmark was added to `repro/check.sh`.
+
+An existing development server needs a restart before reloading the editor:
+`sculpt-memory.js` is registered in `sculpt.py` at server startup. The native
+review server at http://127.0.0.1:8903/sculpt already has that registration.
