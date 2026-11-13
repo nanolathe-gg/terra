@@ -688,12 +688,17 @@ checks for staleness between its pieces and stops.
 - **A generic set.** Build, at startup and in the background, one set of
   draw, bake and loose pipelines in which every gate is the uniform
   comparison it was written as (no constants). It is the same shader source,
-  so it is the same render path. It is unbuilt: REDESIGN_PLAN's R7 expects
-  it about a quarter slower a pass **[inferred from P6's saving]**, and its
-  compile time is unknown. Measure both first. If its compile is long or its
-  passes too slow for the coarse level, fall back to **prewarming**: when a
-  pointer goes down on, or focus enters, a row whose gate is closed, build
-  the pipelines for that gate open before the value moves.
+  so it is the same render path. Wait for this set before enabling editor
+  input. Record startup cost separately from interactive latency.
+  **LP2 implementation correction:** pointer-down/focus prewarming cannot
+  guarantee readiness when the next event moves a closed gate immediately;
+  an asynchronous compiler may still be running. Therefore a long compile
+  alone is not a reason to substitute prewarming for the generic set.
+  Measure startup and coarse-pass cost; if the generic pass itself misses
+  the budget, report the failed gate before changing this design. The
+  exploratory loaded probe took 6.6 s to compile and 60–65 ms of GPU work
+  versus specialized 58–59 ms on one coarse cliff window; these are not
+  qualified acceptance measurements.
 - **Previews** use the specialized set when it is cached and the generic set
   when it is not, and never wait. **Finals** always use the specialized set
   (generic and specialized differ by 1 to 12 px of compiler drift), which
