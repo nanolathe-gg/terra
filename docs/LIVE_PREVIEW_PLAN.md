@@ -1077,7 +1077,10 @@ which the page still previews.
 implementation on `live-preview/review`, with the existing shape and Time
 kernels. [The focused report](LP3_LATTICES.md) records the same-budget Chrome
 comparison, memory accounting, exact final replay, and sampled contour outlier.
-The full acceptance matrix and later steps remain open.
+The [memory/readback follow-up](LP3_MEMORY_READBACKS.md) fits the sampled far
+view in one block at 512 MiB and submits warmed predicted pools before count
+delivery, validating before presentation. Cold seeds and budget fallbacks still
+read exact counts upfront. The full acceptance matrix and raster step remain open.
 
 **Change.** Shrink a preview pass's fixed cost and working set: for the
 100 ms row where LP2 misses it, for views larger than 1.8 megapixels (an

@@ -8,7 +8,9 @@
 
 The November 13 follow-up implements regional coarse shape and Time lattices
 on the same unmerged review branch. See [the lattice report](LP3_LATTICES.md)
-for its measurements and quality limits. The step 1 record below is historical.
+for its measurements and quality limits. The [next focused report](LP3_MEMORY_READBACKS.md)
+covers far-view memory planning and warmed preview pool prediction. The step 1
+record below is historical.
 
 Step 1 is implemented on `live-preview/review`: preview lattice input
 textures use their exact dimensions, with matching estimates and planner

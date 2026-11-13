@@ -1,5 +1,9 @@
 # LP3 regional shape and Time lattices, November 13
 
+> Follow-up: [far-view memory and preview readbacks](LP3_MEMORY_READBACKS.md)
+> resolves the sampled block splitting below and adds warmed pool prediction.
+> This report retains the earlier measurements and quality limits.
+
 This follow-up is on `live-preview/review`, after main `f41ff288`. It implements
 LP3 steps 2 and 3 for paged coarse blocks. It has not been merged to main.
 The full LP3 acceptance matrix and later steps remain open.

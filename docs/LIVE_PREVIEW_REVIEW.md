@@ -16,13 +16,18 @@ endpoint and historical 10% target were not changed.
 LP3 regional shape and Time lattices are now implemented on the unmerged
 `live-preview/review` branch. [The focused report](LP3_LATTICES.md) covers
 performance, memory, final-byte checks, and the sampled contour difference.
+The [memory/readback follow-up](LP3_MEMORY_READBACKS.md) now fits the sampled
+far view in one block at 512 MiB and overlaps warmed pool allocation with
+count delivery. Its qualifying resume p95 improves 448.1 → 130.3 ms, while
+Rain and cold-gate final costs remain open tradeoffs.
 
 Remaining work, in order:
 
-1. **LP3:** review the regional coarse-lattice follow-up and its remaining
-   acceptance measurements, including far-view block splitting at 512 MiB,
-   then remove preview readback waits. Try the cheaper
-   coarse raster only if its measured color bias is acceptable.
+1. **LP3:** review the regional lattice and memory/readback follow-ups;
+   finish default-budget and broader scene/view acceptance, the coarse-contour
+   quality decision, and quiet repeats of the final-cost regressions. Cold
+   allocation seeds and tail validation remain. Try the cheaper coarse raster
+   only if its measured color bias is acceptable.
 2. **LP4:** cancellation between voxel pieces, time-based piece sizing and
    the remaining view-first/off-screen scheduling. Bring every GPU
    submission under 100 ms.
