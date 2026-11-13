@@ -79,7 +79,7 @@ export class VoxelSurface {
     const piece=async rect=>{
       this.clear();
       const s=this.bounds(rect,step,low,high,top),n=s.columnsX*s.columnsY;
-      const available=r.budgetBytes-r.reservedBytes-r.residentBytes;
+      let available=r.budgetBytes-r.reservedBytes-r.residentBytes;
       // The guide's blocks are 4 px on a side (engine-volume.wgsl voxelGuideBlocks).
       const blockCells=Math.max(1,Math.round(4/step)),blocksX=Math.ceil(s.width/blockCells),blocksY=Math.ceil(s.height/blockCells);
       const metadata=s.width*s.height*32+blocksX*blocksY*16+n*16+s.capacity*16+16;
@@ -89,6 +89,7 @@ export class VoxelSurface {
         const a=Math.max(scale,Math.floor(rect[key]/scale/2)*scale);
         await piece({...rect,[key]:a});await piece({...rect,[axis]:rect[axis]+a,[key]:rect[key]-a});
       };
+      if(metadata>available*.6){r.makeWorkingRoom(Math.ceil(metadata/.6));available=r.budgetBytes-r.reservedBytes-r.residentBytes;}
       if(metadata>available*.6||s.capacity*16>this.device.limits.maxStorageBufferBindingSize){await split();return;}
       this.height=this.texture('voxel authored surface',s.width,s.height);this.guide=this.texture('voxel cliff guides',s.width,s.height);this.blocks=this.texture('voxel guide blocks',blocksX,blocksY);
       this.columns=this.buffer('voxel column ranges',n*16);this.bricks=this.buffer('voxel brick positions',s.capacity*16);
@@ -106,7 +107,7 @@ export class VoxelSurface {
       const count=counts[0],densityBytes=count*1024;
       if(counts[1])throw Error('Terrain extends beyond the voxel projection bounds.');
       if(count>s.capacity)throw Error('The voxel brick count exceeds its conservative allocation bound.');
-      if(densityBytes>this.device.limits.maxStorageBufferBindingSize||metadata+densityBytes*2>available){await split();return;}
+      if(densityBytes>this.device.limits.maxStorageBufferBindingSize||!r.makeWorkingRoom(Math.max(16,densityBytes)*2)){await split();return;}
       this.density=[this.buffer('voxel solid A',densityBytes),this.buffer('voxel solid B',densityBytes)];this.settings(s,count);
       const reads=this.inputs();const encoder=this.device.createCommandEncoder({label:'voxel solid and terrain draw'});
       const groups=[Math.min(count,128),Math.ceil(count/128)];
