@@ -13,10 +13,15 @@ LP3 step 1 uses exact-size preview input textures. The measured +10.21%
 cold-gate final-cost result is accepted for this landing; its benchmark
 endpoint and historical 10% target were not changed.
 
+LP3 regional shape and Time lattices are now implemented on the unmerged
+`live-preview/review` branch. [The focused report](LP3_LATTICES.md) covers
+performance, memory, final-byte checks, and the sampled contour difference.
+
 Remaining work, in order:
 
-1. **LP3:** coarser shape and Time lattices to reduce page-preparation and
-   low-memory latency, then remove preview readback waits. Try the cheaper
+1. **LP3:** review the regional coarse-lattice follow-up and its remaining
+   acceptance measurements, including far-view block splitting at 512 MiB,
+   then remove preview readback waits. Try the cheaper
    coarse raster only if its measured color bias is acceptable.
 2. **LP4:** cancellation between voxel pieces, time-based piece sizing and
    the remaining view-first/off-screen scheduling. Bring every GPU

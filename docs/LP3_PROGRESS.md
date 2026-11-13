@@ -6,6 +6,10 @@
 
 # LP3 progress, 2026-11-12
 
+The November 13 follow-up implements regional coarse shape and Time lattices
+on the same unmerged review branch. See [the lattice report](LP3_LATTICES.md)
+for its measurements and quality limits. The step 1 record below is historical.
+
 Step 1 is implemented on `live-preview/review`: preview lattice input
 textures use their exact dimensions, with matching estimates and planner
 probes. Coarse and quarter blocks still share an input set. Final and
