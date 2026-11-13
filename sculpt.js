@@ -1490,7 +1490,6 @@ function showPrevious() { $('share-previous').hidden=takePrevious(localStorage)=
 $('share-menu').addEventListener('toggle',async () => {
   if (!$('share-menu').open) return;
   showPrevious();
-  if (shareOpenedByLoad) { shareOpenedByLoad=false; return; }
   $('share-result').hidden=true;
   const service=mapsService(services);
   if (!service.url) { shareMessage(service.reason); return; }
@@ -1503,7 +1502,6 @@ $('share-menu').addEventListener('toggle',async () => {
     $('share-url').select();
   } catch (err) { shareMessage(err.message); }
 });
-let shareOpenedByLoad=false;
 $('share-copy').addEventListener('click',async () => {
   $('share-url').select();
   try { await navigator.clipboard.writeText($('share-url').value); shareMessage('Link copied.'); } catch (_) { shareMessage('Press Ctrl+C (Cmd+C on a Mac) to copy the selected link.'); }
@@ -1516,14 +1514,14 @@ $('share-restore').addEventListener('click',async () => {
     dropPrevious(localStorage);
     leavingForWorld=false;
     const done=await loadSketchFile(previous);
-    if (done) { showPrevious(); shareMessage('Your previous map is back.'); }
+    if (done) { showPrevious(); status('Your previous map is back.'); }
     else if (!leavingForWorld) keepPrevious(localStorage,text);   // the load failed: the slot stays
   } catch (err) { keepPrevious(localStorage,text); error(err.message); }
   finally { loading=false; $('editor').disabled=false; updateControls(); }
 });
 function announceShared() {
   status('Opened a shared map.'); shareMessage('Opened a shared map.'); showPrevious();
-  if (!$('share-previous').hidden) { shareOpenedByLoad=true; $('share-menu').open=true; }
+  if (!$('share-previous').hidden && $('pane-map').hidden) $('tab-map').click();
 }
 // Called once the editor is ready: a ?map=<id> address opens that shared map.
 async function openSharedMap() {
@@ -1745,9 +1743,10 @@ function buildKnobs() {
     for (const [key, label, min, max, step, value] of knobs) {
       const id = 'knob-' + key, current = params.has(key) ? Number(params.get(key)) : value, choices = WORLD_CHOICES[key];
       // A value shows at most three decimals (Sun height's defaults are the old light's height, 45.20597821393736 degrees on most worlds).
-      const wrap = controlRow({id,label:`${label} <output${choices?' hidden':''}>${+current.toFixed(3)}</output>`,range:`min="${min}" max="${max}" step="${step}" value="${current}"`,choices});
+      const cleanLabel=label.replace(/\s*\([^)]*\)/g,'');
+      const wrap = controlRow({id,label:`${cleanLabel} <output${choices?' hidden':''}>${+current.toFixed(3)}</output>`,range:`min="${min}" max="${max}" step="${step}" value="${current}"`,choices});
       const {block:box,search}=worldGroup(title,key);
-      wrap.dataset.knob=key;wrap.dataset.searchGroup=search;
+      wrap.dataset.knob=key;wrap.dataset.searchGroup=search+' '+label;wrap.querySelector('label').title=label;(wrap.querySelector('.scrub')||wrap).title=label;
       const input = wrap.querySelector('#'+id), out = wrap.querySelector('output');
       if(choices)input.value=String(current);
       input.addEventListener('input', () => { out.textContent = input.value; if (rockSelected>0 && ROCK_KEYS.includes(key)) setPresetKnob(key, Number(input.value)); else setKnob(key, input.value); });
@@ -1935,7 +1934,7 @@ async function bootMap() {
   buildKnobs(); buildWorldPanel();
   // The Rock column panel edits the selected preset's beds: the world's column for slot 0, a preset's own sections (its copy of the world's
   // until edited; Restore gives it the world's again).
-  const presetColumn=()=>{const rock=mapRocks.find(r=>r.slot===rockSelected),own=config.column?.variants?.[config.variant]?.sections||config.column?.sections||[];return {column:{sections:structuredClone(rock.column?.sections??own)},variant:'',edited:Boolean(rock.column)};};
+  const presetColumn=()=>{const rock=mapRocks.find(r=>r.slot===rockSelected),own=config.column?.variants?.[config.variant]?.sections||config.column?.sections||[];return {column:{sections:structuredClone(rock.column?.sections??own)},bedColors:renderer.slotColors(rockSelected).beds,variant:'',edited:Boolean(rock.column)};};
   const editPresetColumn=column=>{const rock=mapRocks.find(r=>r.slot===rockSelected);editRocks(setRock(mapRocks,rockSelected,{knobs:rock.knobs,column:{sections:column.sections??[]}}));};
   syncColumnPanel=mountColumnPanel(()=>rockSelected>0?presetColumn():({column:columnForEdit(),variant:config.variant,edited:Boolean(columnOverride)}),
     column=>rockSelected>0?editPresetColumn(column):editColumn(column),()=>rockSelected>0?checkpoint(true):commitColumn(),
@@ -1957,7 +1956,7 @@ async function bootMap() {
   $('one').click();   // every page load starts at 1x, centered on the map
   await openSharedMap();
   $('new-map').disabled=false;showPrevious();
-  if(experiment.has('newMap')){const url=new URL(location.href);url.searchParams.delete('newMap');$('map-name').value=url.searchParams.get('mapName')||'Untitled map';url.searchParams.delete('mapName');window.history.replaceState(null,'',url);saveWorking();}
+  if(experiment.has('newMap')){const url=new URL(location.href);url.searchParams.delete('newMap');$('map-name').value=url.searchParams.get('mapName')||'Untitled map';$('map-name').dispatchEvent(new Event('input'));url.searchParams.delete('mapName');window.history.replaceState(null,'',url);saveWorking();}
   else if(!saved&&!location.search)openNewMap(true);
 }
 // New and first run share one picker and the existing previous-map slot.

@@ -45,7 +45,9 @@ export function mountMapExport(api) {
   const defaults=() => catalogue?.worlds?.[config.biomeId]?.climate||config.exportCatalog?.worlds?.[config.biomeId]?.climate;
   function setSettings(data) { if (!data) return; for (const [key] of SETTINGS) if (Number.isFinite(data[key])) $('map-'+key).value=data[key]; else if (Object.hasOwn(data,key) && (data[key]===null || Number.isNaN(data[key]))) $('map-'+key).value=''; if (typeof data.lava==='boolean') $('map-lava').checked=data.lava; }
   function serialize() { return {name:$('map-name').value,description:$('map-description').value,settings:{...Object.fromEntries(SETTINGS.map(([key]) => [key,$('map-'+key).valueAsNumber])),lava:$('map-lava').checked}}; }
-  function load(data={}) { $('map-name').value=typeof data.name==='string'?data.name:'Sculpt map'; $('map-description').value=typeof data.description==='string'?data.description:DEFAULT_DESCRIPTION; setSettings(defaults()); loadedSettings=Boolean(data.settings); if (data.settings) setSettings(data.settings); }
+  const syncMapTitle=()=>{const name=$('map-name').value.trim()||'Untitled map',size=map?`${map.unitsX} × ${map.unitsY}`:'Study';$('tab-map').textContent=`${name} · ${size} ▾`;$('tab-map').title=`Map: ${name} · ${size} — name, size, sea level and game settings`;};
+  $('map-name').addEventListener('input',syncMapTitle);syncMapTitle();
+  function load(data={}) { $('map-name').value=typeof data.name==='string'?data.name:'Sculpt map'; $('map-description').value=typeof data.description==='string'?data.description:DEFAULT_DESCRIPTION; setSettings(defaults()); loadedSettings=Boolean(data.settings); if (data.settings) setSettings(data.settings); syncMapTitle(); }
   // TNT numbers tile pictures with 16 bits, so a map keeps at most 65,536 distinct 32x32 tiles; the exporter merges the most alike tiles of a map with more.
   const TILE_LIMIT=65536,tileSlots=() => map?(map.unitsX*16+1)*(map.unitsY*16+4):0;
   const tileNote=() => tileSlots()>TILE_LIMIT?` This map has ${tileSlots().toLocaleString('en-US')} tile slots. If more than ${TILE_LIMIT.toLocaleString('en-US')} of them differ, the export merges the most alike tiles.`:'';
