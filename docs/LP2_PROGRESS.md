@@ -144,3 +144,18 @@ Safari runtime validation is explicitly deferred by the owner after its
 protected-setting authentication prompt. Remote automation remains off;
 developer-feature visibility was restored to off and Settings was closed.
 No Safari, iMac or iPad runtime memory facts are claimed.
+
+A focused overlap check found one remaining shared-uniform upload in Time.
+Starting a tiny valid Time request while a 256×256 cliff draw awaited voxel
+readback changed 51,128 pixels; restoring the input restored the reference.
+Time already reads its private uniform snapshot, so the shared upload is
+removed. The same injected overlap now changes zero pixels, with reference,
+interrupted and restored SHA-256 all
+`6f1687a412b9a7128c826d1906e5b267a5928f3d72b3f4e8c0ee727ed8899901`.
+Both focused runs have zero console errors. This is a forced scheduling
+check, not a latency measurement; it also removes one redundant upload per
+Time request. No shader or Time pass order changed.
+
+Both voxel and rock-weather backend pipeline sets (rock masks 0 and 15)
+are now ready before editor input. A startup probe sees both sets with zero
+console errors. Main draw/bake gate specialization remains unfinished.
