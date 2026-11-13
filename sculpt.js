@@ -1846,25 +1846,25 @@ function syncRockColors() {
 // A color of the selected preset changed (live while the picker moves; one undo step when it is let go).
 function setPresetColors(colors,commit) {
   if(rockSelected===0)return;
-  editRocks(setRockColors(mapRocks,rockSelected,colors));syncRockColors();
-  if(commit)checkpoint(true);
+  for(const [key,value]of Object.entries(colors))worldInputQueue.put('preset-color:'+rockSelected+':'+key,{type:'presetColor',slot:rockSelected,key,value});
+  if(commit)worldInputQueue.end();
 }
 function selectRock(slot) { worldInputQueue.flush();rockSelected=slot; syncRockPanel(); }
 function mountRockPanel() {
   $('rock-presets').onchange=()=>selectRock(Number($('rock-presets').value));
-  const colorsNow=()=>mapRocks.find(r=>r.slot===rockSelected)?.colors||{rock:null,beds:null},shown=()=>renderer.slotColors(0);
+  const shown=()=>renderer.slotColors(0);
   // World's colors cleared: the preset starts from the colors it shows (the world's), so nothing changes until one is moved.
-  $('rock-color-world').onchange=()=>setPresetColors({...colorsNow(),rock:$('rock-color-world').checked?null:shown().rock},true);
-  $('rock-beds-world').onchange=()=>setPresetColors({...colorsNow(),beds:$('rock-beds-world').checked?null:shown().beds},true);
-  const rockColor=commit=>setPresetColors({...colorsNow(),rock:$('rock-color').value},commit);
+  $('rock-color-world').onchange=()=>setPresetColors({rock:$('rock-color-world').checked?null:shown().rock},true);
+  $('rock-beds-world').onchange=()=>setPresetColors({beds:$('rock-beds-world').checked?null:shown().beds},true);
+  const rockColor=commit=>setPresetColors({rock:$('rock-color').value},commit);
   $('rock-color').oninput=()=>rockColor(false);$('rock-color').onchange=()=>rockColor(true);
-  const bedColors=commit=>setPresetColors({...colorsNow(),beds:BED_COLOR_IDS.map(id=>$(id).value)},commit);
+  const bedColors=commit=>setPresetColors({beds:BED_COLOR_IDS.map(id=>$(id).value)},commit);
   for(const id of BED_COLOR_IDS){$(id).oninput=()=>bedColors(false);$(id).onchange=()=>bedColors(true);}
   // The absorption color: a preset's (as its other colors), or on the world's rock the world's own 'absorb' color (saved with the world's colors).
   const worldAbsorb=value=>setWorldColor('absorb',value);
-  const absorbColor=commit=>{if(rockSelected===0)worldAbsorb($('rock-absorb').value);else setPresetColors({...colorsNow(),absorb:$('rock-absorb').value},commit);};
+  const absorbColor=commit=>{if(rockSelected===0)worldAbsorb($('rock-absorb').value);else setPresetColors({absorb:$('rock-absorb').value},commit);};
   $('rock-absorb').oninput=()=>absorbColor(false);$('rock-absorb').onchange=()=>{absorbColor(true);if(rockSelected===0)worldInputQueue.end();};
-  $('rock-absorb-world').onchange=()=>{const off=$('rock-absorb-world').checked;if(rockSelected===0)worldAbsorb(off?null:shown().absorb);else setPresetColors({...colorsNow(),absorb:off?null:shown().absorb},true);};
+  $('rock-absorb-world').onchange=()=>{const off=$('rock-absorb-world').checked;if(rockSelected===0){worldAbsorb(off?null:shown().absorb);worldInputQueue.end();}else setPresetColors({absorb:off?null:shown().absorb},true);};
   $('rock-add').onchange=()=>{
     const key=$('rock-add').value;$('rock-add').value='';if(!key)return;
     try{const added=addRock(mapRocks,key,worldRockName(config));editRocks(added.rocks);selectRock(added.slot);checkpoint(true);status(`Added the rock preset ${mapRocks.find(r=>r.slot===added.slot).name}.`);}catch(err){rockNote(err.message);}
@@ -1913,6 +1913,10 @@ function applyWorldInputs(batch) {
       const world=activeWorld();world.colors=pickWorldColor(config,world.colors,input.key,input.value);colors=worldStoreDirty=true;continue;
     }
     const {key,value,slot}=input;
+    if(input.type==='presetColor'){
+      const rock=mapRocks.find(r=>r.slot===slot);if(!rock)continue;
+      mapRocks=setRockColors(mapRocks,slot,{...rock.colors,[key]:value});presets=worldCheckpoint=true;continue;
+    }
     if(slot>0){
       const rock=mapRocks.find(r=>r.slot===slot);if(!rock)continue;
       mapRocks=setRock(mapRocks,slot,{knobs:{...rock.knobs,[key]:Number(value)},column:rock.column});presets=worldCheckpoint=true;continue;
@@ -1922,7 +1926,7 @@ function applyWorldInputs(batch) {
     worldPanelDirty ||= key==='strata'||key==='lowTint';worldCheckpoint ||= ROCK_KEYS.includes(key)||Boolean(next.checkpoint);
   }
   if(reload){commitWorldInputs();location.reload();return;}
-  const local=presets?syncRocks({defer:true}):null,onlyPresets=batch.every(input=>input.type==='knob'&&input.slot>0);
+  const local=presets?syncRocks({defer:true}):null,onlyPresets=batch.every(input=>input.slot>0);
   // setColors writes the complete block too, including the knobs just stored.
   // Otherwise the batch has exactly one applyKnobs call, regardless of input count.
   const delta=colors?renderer.setColors(worldColors(),currentDrawOptions()):renderer.applyKnobs(currentDrawOptions());
