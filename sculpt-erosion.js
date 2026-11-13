@@ -133,8 +133,9 @@ export class GpuErosion {
       encoder.copyBufferToBuffer(request.planes,0,weather,0,n*4);
       const initial=begin(encoder,'erosion offset');initial.step('offsetMain',flux);initial.pass.end();
       await submitSlice(encoder);await yieldWork();
-      // Start conservatively, then target 25 ms of queue wait, capped at eight
-      // iterations. Queue wait includes other work, so contention reduces a batch.
+      // Start conservatively, then target 25 ms of queue wait. Small regional
+      // passes need more than eight iterations to amortize submission overhead;
+      // cap at 32 and let measured contention reduce the next batch.
       let batch=1;
       for(let it=0;it<age;){
         current();const count=Math.min(batch,age-it);
@@ -145,7 +146,7 @@ export class GpuErosion {
           step('thermalMain',thermalA);step('thermalMain',thermalB);
         }
         pass.end();const wait=await submitSlice(encoder,count);it+=count;
-        batch=clamp(Math.floor(count*25/Math.max(wait,1)),1,8);
+        batch=clamp(Math.floor(count*25/Math.max(wait,1)),1,32);
         await yieldWork();
       }
       encoder=device.createCommandEncoder({label:'erosion output'});
