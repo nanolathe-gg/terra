@@ -22,3 +22,31 @@ export function createPreviewFields(device,scene){
   destroy(){target?.destroy();engine?.destroy();target=engine=null;starting=null;revision=-1;dirty=null;pending=true;}
  };
 }
+
+// Choose the fewest cells in a balanced global grid that fit the available
+// working memory. The caller supplies the renderer's pure estimate; no tile
+// size, allocation, page preparation or GPU work participates in planning.
+export function planPreviewBlocks(view,bounds,fits,grid=64){
+  const x0=Math.max(0,Math.floor(view.x/grid)*grid),y0=Math.max(0,Math.floor(view.y/grid)*grid),x1=Math.min(bounds.width,Math.ceil((view.x+view.width)/grid)*grid),y1=Math.min(bounds.height,Math.ceil((view.y+view.height)/grid)*grid);
+  if(x1<=x0||y1<=y0)return [];
+  const columns=Math.ceil((x1-x0)/grid),rows=Math.ceil((y1-y0)/grid);
+  // If one smallest cell cannot fit, splitting cannot make that cell cheaper.
+  const x=x0+Math.floor((columns-1)/2)*grid,y=y0+Math.floor((rows-1)/2)*grid;
+  if(!fits({x,y,width:Math.min(grid,x1-x),height:Math.min(grid,y1-y)}))throw Error('A preview block does not fit the terrain memory budget.');
+  const axis=(lo,hi,cells,count)=>Array.from({length:count+1},(_,i)=>i===count?hi:lo+Math.floor(i*cells/count)*grid);
+  for(let count=1;count<=columns*rows;count++){
+    const candidates=[];
+    for(let ny=1;ny<=Math.min(rows,count);ny++)if(count%ny===0&&count/ny<=columns)candidates.push([count/ny,ny]);
+    const balance=([nx,ny])=>Math.abs(Math.log(((x1-x0)/nx)/((y1-y0)/ny)));
+    candidates.sort((a,b)=>balance(a)-balance(b));
+    for(const [nx,ny]of candidates){
+      const xs=axis(x0,x1,columns,nx),ys=axis(y0,y1,rows,ny),rects=[];let valid=true;
+      for(let j=1;j<ys.length&&valid;j++)for(let i=1;i<xs.length;i++){
+        const rect={x:xs[i-1],y:ys[j-1],width:xs[i]-xs[i-1],height:ys[j]-ys[j-1]};
+        if(!fits(rect)){valid=false;break;}rects.push(rect);
+      }
+      if(valid)return rects;
+    }
+  }
+  throw Error('The visible preview cannot fit the terrain memory budget.');
+}
