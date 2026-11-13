@@ -1240,7 +1240,7 @@ export function createPagedFields(opts) {
       const r = await tm.run({planes: T.F, masks: T.Mk, grid: side, ox: wx0, oy: wy0, stale: () => timeKey!==key || pg.staleSeq!==seq});
       if (timeKey !== key) { r.weather.destroy(); r.maps.forEach(b => b.destroy()); r.field?.destroy(); return; }
       const d = device(), S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
-      const w = {weather: d.createBuffer({label: 'page weather', size: 2 * CORE * CORE * 4, usage: S}), maps: [0, 1, 2].map(k => d.createBuffer({label: 'page map ' + k, size: CORE * CORE * 4, usage: S})),
+      const w = {revB: tm.revB, weather: d.createBuffer({label: 'page weather', size: 2 * CORE * CORE * 4, usage: S}), maps: [0, 1, 2].map(k => d.createBuffer({label: 'page map ' + k, size: CORE * CORE * 4, usage: S})),
         field: r.field ? d.createBuffer({label: 'page material field', size: CORE * CORE * 16, usage: S}) : null};
       const enc = d.createCommandEncoder({label: 'page weather crop'}), wn = side * side;
       for (let row = 0; row < pg.ch; row++) {
@@ -1343,6 +1343,7 @@ export function createPagedFields(opts) {
     const wantWeather = weather && Boolean(time), lease = await prepareRect(rect, wantWeather);
     try {
       const passes = await feedPasses(device()), gw = rect.x1 - rect.x0 + 1, gh = rect.y1 - rect.y0 + 1, n = gw * gh, set = makeSet(n, 'read'), d = device();
+      const weatherRevB=wantWeather?Math.min(...lease.pages.map(pg=>pg.weather?.revB??-1)):time?.revB;
       const enc = d.createCommandEncoder({label: 'read rect'}), tmp = encodeGather(enc, passes, rect, set, wantWeather);
       const stage = (b, bytes) => { const s = d.createBuffer({label: 'read stage', size: Math.max(16, bytes), usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST}); enc.copyBufferToBuffer(b, 0, s, 0, bytes); return s; };
       const sF = stage(set.F, n * 4 * PLANES), sM = stage(set.Mk, n * 28), sW = wantWeather ? stage(set.W, n * 8) : null;
@@ -1352,7 +1353,7 @@ export function createPagedFields(opts) {
       [sF, sM, sW].forEach(b => b?.destroy()); set.destroy(); tmp.forEach(b => b.destroy());
       let blend = null;
       if (wt) { blend = new Float32Array(n); const base = wt.subarray(0, n), e = wt.subarray(n); for (let i = 0; i < n; i++) { const h = planes[i]; blend[i] = h + (e[i] - base[i]) * (1 - smooth(0, 10, Math.abs(h - base[i]))) * (1 - planes[2 * n + i]); } }
-      return cropFrom(rect, planes, masks, blend);
+      return {...cropFrom(rect, planes, masks, blend),weatherRevB};
     } finally { lease.release(); }
   }
   const toCells = ({x = 0, y = 0, width = 0, height = width, apron = 0}) => ({x0: Math.floor((x - apron) / spacing), y0: Math.floor((y - apron) / spacing), x1: Math.ceil((x + width + apron) / spacing), y1: Math.ceil((y + height + apron) / spacing)});
@@ -1428,7 +1429,8 @@ export function createPagedFields(opts) {
     async feedSource(rect, wantWeather, {signal} = {}) {
       const lease = await prepareRect(rect, wantWeather && Boolean(time), signal);
       const weather = wantWeather && Boolean(time);
-      return {paged: true, weather, revision, release: () => lease.release(), maskCount: maskKeys.length,   // revision: the fields' revision the bake read (perf.mjs's move-to-picture latency)
+      const weatherRevB=weather?Math.min(...lease.pages.map(pg=>pg.weather?.revB??-1)):null;
+      return {paged: true, weather, weatherRevB, revision, release: () => lease.release(), maskCount: maskKeys.length,   // revision: the fields' revision the bake read (perf.mjs's move-to-picture latency)
         gather(enc, passes) {
           const gw = rect.x1 - rect.x0 + 1, gh = rect.y1 - rect.y0 + 1, set = stagingFor(gw * gh), tmp = encodeGather(enc, passes, rect, set, weather);
           return {planes: set.F, masks: set.Masks ?? set.Mk, weather: weather ? set.W : null, maps: weather ? set.M : null, field: weather && time.material ? set.Fd : null, grid: gw, cells: gw * gh, tmp};

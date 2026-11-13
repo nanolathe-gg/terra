@@ -8,7 +8,7 @@
 // --warmup discards a session; --report FILE... prints the section 2 budget table.
 // Use distinct CDP ports, discard one --warmup per fresh server, alternate workloads,
 // and check ps -Ao pcpu,command -r | head before measured runs. Never time two at once.
-import {createCoverage} from './perf-coverage.mjs';
+import {createCoverage,pictureCurrent} from './perf-coverage.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn, execFileSync} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync, rmSync} from 'node:fs';
@@ -21,12 +21,6 @@ const flag = name => { const i = args.indexOf(name); if (i < 0) return false; ar
 const quantile = (a, p) => { const s = a.filter(Number.isFinite).sort((a,b)=>a-b); return s.length ? s[Math.min(s.length-1, Math.ceil(s.length*p)-1)] : null; };
 const distribution = (a, total=a.length) => ({n:a.length, censored:total-a.length,p50:quantile(a,.5),p90:quantile(a,.9),p95:quantile(a,.95),max:a.length?Math.max(...a):null});
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
-// Native entries and inputs use the page's change counter. A clean retained
-// tile can remain current across a change outside its own input rectangle.
-function pictureCurrent(p,m) {
-  if(m.native)return m.nativeSerial!=null&&(p.serial>=m.nativeSerial||p.current&&p.canvasSerial>=m.nativeSerial);
-  return m.kind==='stroke'&&m.rev!=null?p.rev>=m.rev:m.control==='knob-erosionRain'?p.feedSerial>=m.id:p.serial>=m.id;
-}
 
 function tileSamples(p,pointer=false){
   if(p.status==='blocked')return [];
@@ -135,7 +129,7 @@ function hooks(){
     if(!P.active||!intersects(entry,v))return;
     const key=entry.x+','+entry.y,clips=(entry.paintedClips??[entry]).map(r=>coverage.intersect(r,v)).filter(Boolean);
     if(!clips.length)return;
-    const native=typeof entry.serial==='number',metadata={serial:native?entry.serial:entry.__lpSerial??0,worldRev:native?entry.rev:null,canvasSerial:native?sculptCanvas.serial:null,current:native?!entry.dirty:null,feedSerial:entry.__lpFeedSerial,rev:native?entry.shapeRev:entry.__lpRev,seq:entry.seq,prep:entry.__lpPrep,level:entry.level??entry.scale??1,weathered:entry.weathered,dirty:!!entry.dirty};
+    const native=typeof entry.serial==='number',metadata={serial:native?entry.serial:entry.__lpSerial??0,worldRev:native?entry.rev:null,canvasSerial:native?sculptCanvas.serial:null,eligible:!entry.fit||v.overview,weatherRevB:entry.weatherRevB,current:native?!entry.dirty:null,feedSerial:entry.__lpFeedSerial,rev:native?entry.shapeRev:entry.__lpRev,seq:entry.seq,prep:entry.__lpPrep,level:entry.level??entry.scale??1,weathered:entry.weathered,dirty:!!entry.dirty};
     if(!seen.has(entry.bitmap)){seen.add(entry.bitmap);P.held.add(entry.bitmap);}
     const event=P.mark('paint',{key,x:entry.x,y:entry.y,width:entry.width,height:entry.height,...metadata,clips,changed:null});
     P.pixelPaints.push({event,bitmap:entry.bitmap,rect:{x:entry.x,y:entry.y},clips,level:entry.scale??1,view:{...v}});
@@ -299,7 +293,7 @@ function analyze(data,t0,anchors=[]){
     const p=paints.find(e=>e.t>=m.t&&current(e,m)&&e.changed);
     if(p)first.push(p.t-m.t);
     if(m.at){const p=paints.find(e=>e.t>=m.t&&current(e,m)&&e.changed&&(e.clips??[e]).some(r=>m.at[0]>=r.x&&m.at[0]<r.x+r.width&&m.at[1]>=r.y&&m.at[1]<r.y+r.height));if(p)pointer.push(p.t-m.t);}
-    const c=coverage.find(e=>e.t>=m.t&&e.ready&&rectCoverage.covered((m.rectangles?.length?m.rectangles:[data.view]).map(r=>rectCoverage.intersect(r,data.view)).filter(Boolean),p=>m.kind==='scroll'?!p.dirty:current(p,m),e.regions));
+    const c=coverage.find(e=>e.t>=m.t&&e.ready&&rectCoverage.covered((m.rectangles?.length?m.rectangles:[data.view]).map(r=>rectCoverage.intersect(r,data.view)).filter(Boolean),p=>m.kind==='scroll'?!p.dirty&&p.eligible!==false:current(p,m),e.regions));
     const completed=c?.t??(m.noopCurrent?m.t:null);if(completed!==null)all.push(completed-m.t);observations.push({id:m.id,t:m.t,first:p?.t??null,all:completed,preps:c?[...new Set(c.regions.filter(p=>current(p,m)).map(p=>p.prep).filter(Boolean))]:[]});
   }
   for(const anchor of anchors){

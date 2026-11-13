@@ -6,3 +6,14 @@ export function createCoverage(){
   let regions=[];
   return {intersect,reset(){regions=[];},paint(rect,metadata){regions=regions.flatMap(r=>subtract(r,rect));regions.push({...rect,...metadata});},snapshot(){return regions.map(r=>({...r}));},covered(targets,predicate=()=>true,snapshot=regions){return targets.length>0&&targets.every(t=>{let remaining=[t];for(const r of snapshot)if(predicate(r))remaining=remaining.flatMap(p=>subtract(p,r));return remaining.length===0;});}};
 }
+
+// A newly baked image can still read retained weather from older Time settings.
+// Fit images supply a background at detail zoom, not current detail coverage.
+export function pictureCurrent(p,m) {
+  if(m.native){
+    if(p.eligible===false||m.nativeSerial==null)return false;
+    if(p.weathered&&m.worldRev&&!(p.weatherRevB>=m.worldRev.B))return false;
+    return p.serial>=m.nativeSerial||p.current&&p.canvasSerial>=m.nativeSerial;
+  }
+  return m.kind==='stroke'&&m.rev!=null?p.rev>=m.rev:m.control==='knob-erosionRain'?p.feedSerial>=m.id:p.serial>=m.id;
+}

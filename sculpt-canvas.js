@@ -82,7 +82,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     let tiles=0;
     if(stage){
       cancelBake();if(stage==='A'&&!refinement)previewFields.invalidate(rect);
-      serial++;if(world&&stage in rev)rev[stage]++;
+      serial++;if(world)for(const s of new Set([stage,...fields.map(f=>f.stage),...channels.map(c=>c.stage)]))if(s in rev)rev[s]++;
       changeLog.push({serial,stage,rect});if(changeLog.length>256)changeLog.shift();
       for(const e of cache.values())if(!(refinement&&(e.fit||e.weathered===false))&&(!rect||intersects(rect,e.input??e))){
         if(!e.dirty){dirtyMarks++;tiles++;}e.dirty=true;retainedInvalidations++;
@@ -159,7 +159,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       trimTo(room);
       renderer.setBudget(gpuBudget,steadyGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
       const atSerial=serial,atRev={...rev},result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale,deferCompletion:!fit&&!exportArt});bakes++;
-      const bitmap=await createImageBitmap(result.canvas,0,0,ow,oh,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:ow*oh*4,scale,fit,weathered:readWeather,fed:true,serial:atSerial,rev:atRev,shapeRev:feed.revision,level:scale,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
+      const bitmap=await createImageBitmap(result.canvas,0,0,ow,oh,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:ow*oh*4,scale,fit,weathered:readWeather,fed:true,serial:atSerial,rev:atRev,shapeRev:feed.revision,weatherRevB:fit?null:feed.weatherRevB,level:scale,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
       const key=rect.x+','+rect.y+','+canonicalSize+','+scale;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
     }finally{feed.release?.();}
     const fields=await region(request,options,signal,readWeather);
@@ -170,7 +170,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const copyBytes=rect.width*rect.height*8;trimTo(gpuBudget-steadyGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes);
     renderer.setBudget(gpuBudget,steadyGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
     const atSerial=serial,atRev={...rev},result=await renderer.renderChunk(fields,{...options,quality:'full',deferCompletion:!exportArt});bakes++;
-    const bitmap=await createImageBitmap(result.canvas,0,0,rect.width,rect.height,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:rect.width*rect.height*4,weathered:readWeather,serial:atSerial,rev:atRev,shapeRev:fields.revision,level:1,input:{x:fields.gridOrigin[0],y:fields.gridOrigin[1],width:(fields.gridWidth-1)*fields.gridSpacing,height:(fields.gridHeight-1)*fields.gridSpacing},heightPatch:keepHeight(fields)};
+    const bitmap=await createImageBitmap(result.canvas,0,0,rect.width,rect.height,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:rect.width*rect.height*4,weathered:readWeather,serial:atSerial,rev:atRev,shapeRev:fields.revision,weatherRevB:fields.weatherRevB??(readWeather?-1:atRev.B),level:1,input:{x:fields.gridOrigin[0],y:fields.gridOrigin[1],width:(fields.gridWidth-1)*fields.gridSpacing,height:(fields.gridHeight-1)*fields.gridSpacing},heightPatch:keepHeight(fields)};
     const key=rect.x+','+rect.y+','+canonicalSize;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
   }
   // H7 2a: the overview is sampled once per edit, over the edit's dirty rectangle only, in slices that leave the frame free.
@@ -516,6 +516,6 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // It was a 32 px chunk's, so the fields took the rest of the budget and the first 512 px bake could not be allocated beside them.
   // The terrain canvas and its overlay share the view's size (resize); the paged fields' budget is the shared one (sculpt-scene.js pagedBudget).
   function minimumBytes(){return pagedBudget({gpuMB:0,renderer,chunk:canonicalSize,maskCount:api.maskKeys?.length,view:{width:canvas.width,height:canvas.height},preview:previewReserved,featureBytes:features?.stats?.().imageBytes||0}).minimum;}
-  const result={renderer,passability,minimumBytes,foregroundPending,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets();},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,level:e.level,scale:e.scale,input:e.input}))};
+  const result={renderer,passability,minimumBytes,foregroundPending,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets();},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
   window.sculptCanvas=result;resize();budgets();return result;
 }

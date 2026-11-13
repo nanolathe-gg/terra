@@ -880,7 +880,7 @@ async function gpuWeatherCpu(withMaps) {
 // H5b: the Time pass in pages: the knobs the pass reads (all of them in the key, so a change drops every page's weather), and the runner a page's window goes through.
 function configurePagedTime(fields=regionalFields) {
   if (!weatherOn()) return fields.setTime(null);
-  return fields.setTime(pagedTime({config,renderer,size,spacing,material:materialKnobs()}));
+  return fields.setTime({...pagedTime({config,renderer,size,spacing,material:materialKnobs()}),revB:mapCanvas?.rev.B??0});
 }
 function queuePagedWeather() {
   if (stroke||moving) return;
@@ -899,6 +899,7 @@ async function gpuFeedSource(signal,regionFn,{weather=true}={}) {
     if (!pagedCoarseStarted) { pagedCoarseStarted=true; regionalFields.startCoarse().catch(() => {}); }
     const feed=await regionalFields.feedSource({x0:ox,y0:oy,x1:ox+region.gridWidth-1,y1:oy+region.gridHeight-1},weather&&$('weather').checked,{signal});
     if (signal?.aborted) { feed.release(); signal.throwIfAborted(); }
+    if(!feed.weather)feed.weatherRevB=mapCanvas.rev.B;
     return feed;
   }
   await regionalFields.gpuReady(); signal?.throwIfAborted();
@@ -906,13 +907,14 @@ async function gpuFeedSource(signal,regionFn,{weather=true}={}) {
   const on=weather&&$('weather').checked;
   if (on && refined && !gpuWeather) return null;
   const w=on?gpuWeather:null;
-  return {...buffers,maskCount:MASK_KEYS.length,weather:w?.weather??null,maps:w?.mapsOn?w.maps:null,field:w?.mapsOn?w.field??null:null,get invalidRect(){return w?.invalidRect;},release:w?leaseGpuWeather(w):() => {}};
+  return {...buffers,weatherRevB:on&&weatherOn()?(w?.revB??-1):mapCanvas.rev.B,maskCount:MASK_KEYS.length,weather:w?.weather??null,maps:w?.mapsOn?w.maps:null,field:w?.mapsOn?w.field??null:null,get invalidRect(){return w?.invalidRect;},release:w?leaseGpuWeather(w):() => {}};
 }
 function readRegional(request) {
   if (pagedOn()) return regionalFields.readAsync(request);
   if (regionalFields.pending?.()) return regionalFields.ready().then(() => readRegional(request));
   if (gpuWeather && $('weather').checked && !(gpuWeather.cpuHeight && (gpuWeather.cpuMaps || !gpuWeather.mapsOn))) return gpuWeatherCpu(true).then(() => readRegional(request));   // H6b: a CPU reader of the Time pass
   const r=regionalFields.read(request);
+  r.weatherRevB=weatherOn()?(gpuWeather?.revB??-1):mapCanvas.rev.B;
   if (!refined || !refinedBase || !$('weather').checked) return r;
   const fields={...r.fields,h:weatheredHeights(r,{refined,refinedBase,grid:worldGrid,spacing,valid:(x,y) => refinementValid(refinedInvalidRect,x,y)})},ox=Math.round(r.gridOrigin[0]/spacing),oy=Math.round(r.gridOrigin[1]/spacing),weather={};
   const crop=(source,channels=1) => {
@@ -1146,6 +1148,7 @@ async function runFedWeather(job) {
     const b=regionalFields.gpuBuffers();
     if (!b || job!==weatherJob) return;
     gpuPassBytes=grid*grid*120+Math.ceil(grid/8)**2*12;
+    const revB=mapCanvas.rev.B;
     const request={planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,...timeKnobs(renderer),stale:()=>job!==weatherJob||Boolean(stroke||moving)};
     const pass=erosion.runGpu(request),flight=pass.then(() => {},() => {}).then(() => { if (timePass===flight) timePass=null; });   // cleared when the pass ends, failed or not, before a waiting request looks
     timePass=flight;
@@ -1158,7 +1161,7 @@ async function runFedWeather(job) {
     if(job!==weatherJob||stroke||moving){retireGpuWeather(result);return;}
     const invalid=previous?.invalidRect;
     dropGpuWeather();
-    gpuWeather={weather:result.weather,maps:result.maps,field:result.field??null,bytes:result.bytes+(result.field?grid*grid*16:0),mapsOn:true,grid,cpuHeight:false,cpuMaps:false,loading:null};
+    gpuWeather={revB,weather:result.weather,maps:result.maps,field:result.field??null,bytes:result.bytes+(result.field?grid*grid*16:0),mapsOn:true,grid,cpuHeight:false,cpuMaps:false,loading:null};
     gpuErosionMs=result.milliseconds; window.lastErosionParts=result.parts;
     weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
     if (!stroke && !moving) gpuWeatherCpu(false).catch(() => {});   // picking and the cursor read heights at once; the maps stay lazy
