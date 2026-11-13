@@ -1,3 +1,8 @@
+> **November 13 checkpoint:** LP0c, LP4 step 1 and LP1 are included in the
+> completed-card main landing. [The overnight report](LP_OVERNIGHT_REPORT.md)
+> gives fresh timings and final combined checks. The dated notes below are
+> historical; broader native preview remains on `live-preview/review`.
+
 # LP0c: stable view tiles and sampling, 2026-11-12
 
 **Status:** sampling, view-grid and cache-correctness work complete; final

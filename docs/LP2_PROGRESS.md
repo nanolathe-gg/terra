@@ -288,3 +288,12 @@ checkpoint contains the completed LP0c, LP4 step 1 and LP1 work, plus current
 main’s UI and the private-Time-buffer correction. It is verified separately;
 the unaccepted LP2/LP3 implementation is not part of that checkpoint.
 Safari validation remains explicitly deferred.
+
+The completed-card checkpoint landed on local main as `6d1b2b3a` after
+221 unit tests, the clean landing tier, the unchanged strict tile-size
+check, full-view cold replay and all three native/Wasm export comparisons.
+Only the six approved RGB pixels move; all 34 height files are identical.
+This review branch contains that main checkpoint as an ancestor while
+preserving the native implementation unchanged. The completed comparison
+server is http://127.0.0.1:8902/sculpt and the native review server remains
+http://127.0.0.1:8903/sculpt.

@@ -1,3 +1,8 @@
+> **November 13 checkpoint:** LP0c, LP4 step 1 and LP1 are included in the
+> completed-card main landing. [The overnight report](LP_OVERNIGHT_REPORT.md)
+> gives fresh timings and final combined checks. The dated notes below are
+> historical; broader native preview remains on `live-preview/review`.
+
 # LP4 step 1: interruptible Time requests, 2026-11-12
 
 **Result [measured].** Step 1 meets its focused Time-slice, submission,
