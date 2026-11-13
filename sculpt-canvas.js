@@ -62,7 +62,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const bakedBefore=new Set(); let lastScroll=-Infinity,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
   let heldSince=null,pan=null,space=false,gesture=null,hover=null;
   const previewRejects=new Set();let previewRejectScope='';
-  const blocks=new Map();let blockBytes=0,focus=null,lastInputAt=performance.now(),released=false,ladderTimer=null;
+  const blocks=new Map();let blockBytes=0,focus=null,lastInputAt=performance.now(),released=false,ladderTimer=null,fineSinceCoarse=false;
   let hoveredNode=-1;
   let lastFrame=0,frameTimes=[],strokeTimes=[],resizePending=false;
   const coarse=new OffscreenCanvas(VIEW_CANVASES.overview,VIEW_CANVASES.overview),cg=coarse.getContext('2d');
@@ -94,7 +94,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // H6b: a bake from the GPU buffers records how many changes had been announced when it took them; it is still good if none announced since touched
   // its input (an edit elsewhere on the map, or a later move of the same stroke over other chunks, does not throw it away).
   const rev={B:0,C:0,D:0,E:0,F:0},changeLog=[];let lastInput=null;
-  function changedSince(at,input){return changeLog.length>=256&&changeLog[0].serial>at+1||changeLog.some(c=>c.serial>at&&(!c.rect||intersects(c.rect,input)));}
+  function changedSince(at,input,through='F'){return changeLog.length>=256&&changeLog[0].serial>at+1||changeLog.some(c=>c.serial>at&&c.stage<=through&&(!c.rect||intersects(c.rect,input)));}
   function cancelBake(){activeBake?.controller.abort();}
   function changed({stage=null,rect=null,refinement=false,world=rect===null&&!refinement,fields=[],channels=[],input=true,kind=null}={}) {
     if(stage!==null&&!'ABCDEF'.includes(stage))throw Error('Unknown dirty stage '+stage);
@@ -106,6 +106,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       serial++;if(world)for(const s of new Set([stage,...fields.map(f=>f.stage),...channels.map(c=>c.stage)]))if(s in rev)rev[s]++;
       changeLog.push({serial,stage,rect});if(changeLog.length>256)changeLog.shift();
       for(const e of cache.values())if(!(refinement&&(e.fit||e.weathered===false))&&(!rect||intersects(rect,e.input??e))){
+        if(stage<='E'){e.finalCostMs=null;e.finalCostBudget=null;}
         if(!e.dirty){dirtyMarks++;tiles++;}e.dirty=true;retainedInvalidations++;
       }
       for(const e of blocks.values())if(!rect||intersects(rect,e.input??e))e.dirty=true;
@@ -167,6 +168,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     // Wait before preparing fields, too: a queued tile must not start a costly
     // paged replay for a viewport that has moved while the GPU was occupied.
     await renderer.previousChunk;
+    const costAt=performance.now(),costBudget=gpuBudget;
     signal?.throwIfAborted();
     if(stale?.())throw new DOMException('The view changed under a queued bake.','AbortError');
     const readWeather=exportArt||weatheredView;
@@ -186,10 +188,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(block&&[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0)>room){previewRejects.add(previewSignature(rect,scale,required,estimate));if(previewRejects.size>128)previewRejects.delete(previewRejects.values().next().value);const error=Error('Preview page residency grew; replan at the current budget.');error.name='PreviewReplan';throw error;}
       trimTo(room,block);
       renderer.setBudget(gpuBudget,steadyGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
+      const measureFinal=!exportArt&&!block&&!fit&&scale===detailLevel()&&!api.previewActive?.()&&(!api.canExport||api.canExport());
       const atSerial=serial,atRev={...rev},result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale,preview:block,deferPipelines:!exportArt,deferCompletion:!fit&&!exportArt});bakes++;
       const bitmap=block?new OffscreenCanvas(ow,oh):await createImageBitmap(result.canvas,0,0,ow,oh,{colorSpaceConversion:'none'});
       if(block)bitmap.getContext('2d').drawImage(result.canvas,0,0,ow,oh);
       const entry={...rect,bitmap,bytes:ow*oh*4,scale,fit,weathered:readWeather,fed:true,serial:atSerial,rev:atRev,shapeRev:feed.revision,weatherRevB:fit?null:feed.weatherRevB,level:scale,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
+      if(measureFinal)renderer.previousChunk.then(()=>{if(!changedSince(atSerial,entry.input,'E')){entry.finalCostMs=performance.now()-costAt;entry.finalCostBudget=costBudget;}},()=>{});
       const key=rect.x+','+rect.y+','+canonicalSize+','+scale;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
     }finally{feed.release?.();}
     const fields=await region(request,options,signal,readWeather);
@@ -324,7 +328,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(fresh&&pendingStrokeTime){strokeTimes.push(now-pendingStrokeTime);if(strokeTimes.length>256)strokeTimes.shift();pendingStrokeTime=0;}
   }
   async function frame() {
-    pending=false;let rendering=false;const renderStart=performance.now();
+    pending=false;let rendering=false,needsCoarse=false;const renderStart=performance.now();
     try {
       // Presentation never waits for terrain generation. This path only copies
       // retained images while a chunk's fields, GPU work or snapshot are pending.
@@ -355,14 +359,23 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           const clipped={x:Math.max(area.x,v.x),y:Math.max(area.y,v.y),width:Math.min(area.x+area.width,v.x+v.width)-Math.max(area.x,v.x),height:Math.min(area.y+area.height,v.y+v.height)-Math.max(area.y,v.y)};
           const coarse=previewPlan(clipped,4*detailLevel()).sort((a,b)=>dist(a)-dist(b));
           const coarseReady=coarse.every(r=>blockCurrent(blocks.get(blockKey(r,4*detailLevel()))));
+          // F leaves geometry and Time unchanged. Reuse only measured costs
+          // from completed final tiles on this same budget and display level.
+          const fineReady=lastInput?.stage==='F'&&(!api.canExport||api.canExport())&&stale.every(r=>{const e=cache.get(cacheKey(r,size));return Number.isFinite(e?.finalCostMs)&&e.finalCostBudget===gpuBudget&&!e.fit&&!offLevel(e,detailLevel())&&e.weathered===weatheredView;});
+          const cheapFinal=fineReady&&cache.get(cacheKey(stale[0],size)).finalCostMs<=50;
+          const priorCoarse=coarse.length===1?blocks.get(blockKey(coarse[0],4*detailLevel())):null;
+          const fineBeforeCoarse=cheapFinal&&!fineSinceCoarse&&priorCoarse&&!changedSince(priorCoarse.serial,priorCoarse.input,'E')&&priorCoarse.weathered===weatheredView&&priorCoarse.weatherRevB>=rev.B&&renderer.specCache.has(renderer.specKey().key);
           if(coarseReady){const keep=new Set(coarse.map(r=>blockKey(r,4*detailLevel())));dropBlocks(e=>e.level===4*detailLevel()&&!keep.has(blockKey(e,e.level)));}
-          if(!coarseReady)for(const rect of coarse)plan.push({rect,want:4*detailLevel(),block:true});
-          else if(released||quiet>=100){
-            // Inputs after Time can spend the quiet pause on final detail.
-            // A paged map's export-ready flag alone does not certify its pages.
-            const finalNow=released||quiet>=250||lastInput?.stage>='C'&&api.canExport?.();
+          if(!coarseReady){
+            if(fineBeforeCoarse)plan.push({rect:stale[0],want:detailLevel(),fineTurn:true});
+            for(const rect of coarse)plan.push({rect,want:4*detailLevel(),block:true});
+          }
+          else if(released||quiet>=100||cheapFinal){
+            // Cheap color finals preserve useful work during a drag. A paged
+            // export-ready flag alone cannot certify new shape/Time pages.
+            const finalNow=released||quiet>=250||fineReady&&(quiet>=100||cheapFinal);
             if(holding||!finalNow)for(const rect of previewPlan(clipped,2*detailLevel()).sort((a,b)=>dist(a)-dist(b)))plan.push({rect,want:2*detailLevel(),block:true});
-            if(!holding&&finalNow)for(const rect of jobs)if(intersects(rect,v))plan.push({rect,want:detailLevel()});
+            if(!holding&&finalNow){for(const rect of jobs)if(intersects(rect,v)&&(released||quiet>=100||cache.get(cacheKey(rect,size))?.finalCostMs<=50))plan.push({rect,want:detailLevel()});}
             else wakeLadder(Math.max(16,250-quiet));
           }else wakeLadder(100-quiet);
         }else{
@@ -370,7 +383,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           if(!previewing&&!navigating()&&quiet>=1000)for(const rect of jobs)if(!intersects(rect,v))plan.push({rect,want:detailLevel()});
           else if(quiet<1000)wakeLadder(1000-quiet);
         }
-        for(const {rect,want,block=false} of plan){
+        for(const {rect,want,block=false,fineTurn=false} of plan){
           if(token!==serial||viewToken!==viewEpoch||busy||previewing!==interacting()){rerun=true;break;}
           if((previewing||navigating()||want<1)&&!intersects(rect,v))continue;   // a detail level bakes only what is seen: its ring would evict itself
           if(block){
@@ -382,11 +395,13 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             try{e=await bake(rect,false,controller.signal,()=>token!==serial||busy||viewToken!==viewEpoch,want,false,true);}
             finally{if(activeBake?.controller===controller)activeBake=null;}
             e.block=true;e.dirty=changedSince(e.serial,e.input);e.bakedAt=performance.now();
+            if(want===4*detailLevel()){fineSinceCoarse=false;needsCoarse=false;}
             if(prior)blockBytes-=prior.bytes;blocks.set(key,e);blockBytes+=e.bytes;
             paintedView=-1;presentView();presented();rerun=true;
             if(token!==serial||viewToken!==viewEpoch){rerun=true;break;}continue;
           }
           if(pipelineWaits.has(renderer.specKey().key))continue;
+          if(fineTurn){fineSinceCoarse=true;needsCoarse=true;}
           const key=cacheKey(rect,size);let e=cache.get(key);let baked=false;
           const upgrade=want<=1&&e&&(offLevel(e,want)||!overview&&e.weathered!==weatheredView);
           if((!e||e.dirty||upgrade)&&holding&&!overview)continue;
@@ -403,9 +418,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             if(!e.fed){e.bitmap.close?.();break;}
           }
           // The image it replaces (a quarter one) is dropped now that the final one is in hand.
-          const prior=cache.get(key);if(prior){prior.bitmap.close?.();cacheBytes-=prior.bytes;cache.delete(key);}
+          const prior=cache.get(key);
+          if(prior?.finalCostBudget===gpuBudget&&e.scale===prior.scale&&!changedSince(prior.serial,e.input,'E')){e.finalCostMs??=prior.finalCostMs;e.finalCostBudget??=prior.finalCostBudget;}
+          if(prior){prior.bitmap.close?.();cacheBytes-=prior.bytes;cache.delete(key);}
           e.bakedAt=performance.now();cache.set(key,e);cacheBytes+=e.bytes;rerun=true;}
           else{hits++;cache.delete(key);cache.set(key,e);if(!e.heightPatch&&!e.fed){const input=await region({...rect,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid},drawOptions?.()??api.drawOptions?.()??{},undefined,weatheredView);checkHeap(input);e.heightPatch=keepHeight(input);}}
+          if(baked&&lastInput?.stage==='F')fineSinceCoarse=true;
           if(cache.get(key)!==e)break;
           if(!baked)continue;   // The retained tiles were painted together above; only fresh tiles need another presentation.
           const current=state(),currentSize=overview?256*displayLevel():viewChunkSize();
@@ -429,6 +447,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(!rerun&&!interacting()&&!foregroundPending()&&(!api.canExport||api.canExport()))api.renderProgress?.(null);
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
     }catch(err){if(err.name==='PipelinesPending'){
+      if(needsCoarse)rerun=true;   // a compile miss must not hold the next coarse picture
       if(!pipelineWaits.has(err.key)){
         pipelineWaits.set(err.key,err.ready);
         err.ready.then(()=>{pipelineWaits.delete(err.key);schedule();},error=>{pipelineWaits.delete(err.key);console.error(error);$('error').hidden=false;$('error').textContent=error.message;});
@@ -620,6 +639,6 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const b=pagedBudget({gpuMB:0,renderer,chunk:canonicalSize,maskCount:api.maskKeys?.length,view:{width:canvas.width,height:canvas.height},preview:previewReserved,featureBytes:features?.stats?.().imageBytes||0,previewWorking});
     return previews?b.previewMinimum:b.minimum;
   }
-  const result={renderer,passability,minimumBytes,foregroundPending,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
+  const result={renderer,passability,minimumBytes,foregroundPending,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
   window.sculptCanvas=result;resize();budgets();return result;
 }
