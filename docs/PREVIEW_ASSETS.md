@@ -91,3 +91,8 @@ available; do not merge their old ancestry back into cleaned main. Start from
 cleaned main and cherry-pick the source changes you need instead.
 The existing private `dev-assets-20261028` prerelease and tag are left untouched
 at the owner's request; that internal bundle is separate from authored previews.
+
+The removed preview versions are preserved in `ui-previews-history.tar.gz` on
+[the cleanup release](https://github.com/nanolathe-gg/terraform/releases/tag/previews-164451b6c5727037).
+Its `index.json` maps original commit IDs and file names to content-addressed PNGs.
+This archive is for historical lookup; normal builds download only `ui-previews.tar.gz`.

@@ -1,4 +1,4 @@
-// Render the hover examples (sculpt-help-examples.js) through the SAME /sculpt GPU pipeline into
+// Render the hover examples (sculpt-help-examples.js) through the same editor GPU pipeline into
 // ui-previews/, which is published as a pinned release bundle and served with the editor. Authored fixtures only: no retail
 // scene, crop or map is loaded. Run it again when a preset, the renderer or an example changes:
 // node repro/ui-previews.mjs --server http://127.0.0.1:<port> --port <cdp> [--out DIR]

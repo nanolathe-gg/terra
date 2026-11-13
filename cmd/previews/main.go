@@ -102,7 +102,7 @@ func run() error {
 			if len(fields) != 4 {
 				return fmt.Errorf("invalid pre-push input")
 			}
-			if !strings.HasPrefix(fields[0], "refs/heads/") || strings.Trim(fields[1], "0") == "" || seen[fields[1]] {
+			if !strings.HasPrefix(fields[2], "refs/heads/") || strings.Trim(fields[1], "0") == "" || seen[fields[1]] {
 				continue
 			}
 			sha := fields[1]
