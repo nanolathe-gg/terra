@@ -1309,9 +1309,10 @@ addEventListener('pagehide',() => { worldInputQueue.flush();if (!stroke && !movi
 // from another world goes through carryNodes, and a loaded one keeps the tools the toolbar has (any other shows as the generic landform). `own`: the map's tools.
 const savedStrokes=(list,carry,own) => { const ids=toolIds(own),saved=inferStrokeTools(list,ids); return carry?carryNodes(saved,own):keepStrokeTools(saved,ids); };
 function loadSketch(s,carry=false) {
-  worldInputQueue.flush();
   if (!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==6 || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n)) throw new Error('Load a map stroke graph with the same canvas and grid size.');
   const next=deserializeNodes(savedStrokes(s.nodes,carry,copyMapTools(s.tools)??[])),column=copyColumn(s.column),rock=copyRockSettings(s.rock),rocks=copyRocks(s.rocks),own=copyMapTools(s.tools)??[],ids=toolIds(own);
+  // Reject damaged saves before committing any pending edit to the old map.
+  worldInputQueue.flush();
   if(!carry&&rock)setRockSettings(rock);
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
