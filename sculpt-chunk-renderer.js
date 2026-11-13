@@ -14,6 +14,14 @@ const mipBytes=(w,h,layers,levels,bytes)=>{let total=0;for(let i=0;i<levels;i++)
 
 // The relief fields stop at 2x: their memory grows with the square of the level, and 4x's grain is drawn, not baked.
 const fieldLevel=scale=>Math.max(scale,.5);
+// Every level samples one global field lattice. A rectangle's apron may start
+// between coarse samples; rounding outward keeps neighboring blocks in phase.
+export function alignedFieldRegion(region,scale=1){
+  const step=fieldLevel(scale),x=Math.floor(region.fieldsX/step)*step,y=Math.floor(region.fieldsY/step)*step;
+  const endX=Math.ceil((region.fieldsX+region.fieldsWidth-1)/step)*step,endY=Math.ceil((region.fieldsY+region.fieldsHeight-1)/step)*step;
+  const width=endX-x+1,height=endY-y+1;
+  return x===region.fieldsX&&y===region.fieldsY&&width===region.fieldsWidth&&height===region.fieldsHeight?region:{...region,fieldsX:x,fieldsY:y,fieldsWidth:width,fieldsHeight:height};
+}
 const INPUT_TEXTURES=['heightTexture','routeTexture','gridTexture','maskTexture'];
 const ROCK_WORKING=['owned','final','source','rim','key'];
 export class ChunkTerrainRenderer extends TerrainRenderer {
@@ -127,6 +135,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   // Relief and cached output use scale s. Color is evaluated at up to four
   // native samples per output pixel, then filtered after shading and palette mapping.
   estimate(region,width,height,maskPlaneCount=this.maskPlaneCount,scale=1,{budgetBytes=this.budgetBytes,reservedBytes=this.reservedBytes}={}) {
+    region=alignedFieldRegion(region,scale);
     // input per texel: height 4 + routes 4 + weather/material 4 layers x 4 (as allocate() makes them), then 4 a mask layer.
     const fieldScale=fieldLevel(scale),field=pow2(Math.ceil(region.fieldsWidth/fieldScale))*pow2(Math.ceil(region.fieldsHeight/fieldScale))*8;
     const maskLayers=Math.max(1,Math.ceil(maskPlaneCount/4)),input=pow2(region.gridWidth)*pow2(region.gridHeight)*(24+maskLayers*4);
@@ -199,6 +208,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.trimWorking(new Set([this.activeInput,this.activeLevel]),enough);return enough();
   }
   async allocate(region,gridWidth,gridHeight,world_width,world_height,fed=false,scale=1) {
+    region=alignedFieldRegion(region,scale);
     this.voxel.clear();
     const rasterScale=scale<1?scale:Math.max(1,scale/2),width=Math.ceil(world_width/rasterScale),height=Math.ceil(world_height/rasterScale);   // Color raster; the cached image below still uses `scale`.
     const fieldScale=fieldLevel(scale),fw=pow2(Math.ceil(region.fieldsWidth/fieldScale)),fh=pow2(Math.ceil(region.fieldsHeight/fieldScale)),gw=pow2(gridWidth),gh=pow2(gridHeight);
