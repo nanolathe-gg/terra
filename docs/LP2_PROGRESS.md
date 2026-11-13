@@ -178,6 +178,16 @@ A short real-mouse map16 check delivered eight distinct Face steepness
 inputs and eight Rain inputs. Both finish current finals with zero console
 errors; Rain correctly says weathering is pending while held. Neither
 560-ms gesture produced a completed block before release. This does **not**
-pass the held-update gate: preparing the paged feed and then rejecting it
-for an intervening input can starve the preview. That scheduling case is
-being addressed before claiming LP2 acceptance.
+pass the held-update gate: whole-map shape invalidation was dropping every cached weather page, so
+Face steepness rebuilt Time before it could preview. The attempted change
+to block cancellation did not improve this and was removed.
+
+Held whole-map shape edits now retain each weather allocation with its whole
+core marked invalid, using the existing gather behavior for local strokes.
+It therefore shows the current authored shape and zero weather corrections
+in that core; release/pause recomputes the stale weather. Outside a gesture,
+whole-map invalidation still drops weather. Repeating the same eight-value
+real-mouse Face steepness check changes held preview counts from 0 to 8,
+with current finals afterward and zero console errors. Rain's eight-value
+continuous check still shows pending weather, without a held picture; its
+pause and broader acceptance remain open. No final shader changes.

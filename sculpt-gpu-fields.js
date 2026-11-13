@@ -1400,11 +1400,19 @@ export function createPagedFields(opts) {
     const cr = rect ? clip(rect) : null, r = cr ? clip({x0: cr.x0 - 6, y0: cr.y0 - 6, x1: cr.x1 + 6, y1: cr.y1 + 6}) : null, event = {revision, rect: cr ? worldRect(cr) : null};
     const announce = event.rect;
     for (const pg of pagesMap.values()) {
-      if (!r) { dropShape(pg); dropWeather(pg); pg.staleSeq++; pg.stale = false; continue; }
+      if (!r) {
+        dropShape(pg);pg.staleSeq++;
+        // A held whole-map shape row uses the same authored-first behavior as
+        // a local stroke. Keep the weather allocation, invalidate its contents
+        // for the gather, and refine once input is quiet.
+        if(gesture()&&pg.weather){pg.weather.invalidRect=coreRect(pg);pg.stale=true;}
+        else{dropWeather(pg);pg.stale=false;}
+        continue;
+      }
       if ((pg.weather||pg.weatherJob) && hits(windowRect(pg), {x0: r.x0 - 6, y0: r.y0 - 6, x1: r.x1 + 6, y1: r.y1 + 6})) { if(pg.weather)pg.weather.invalidRect=invalidateRefinement(pg.weather.invalidRect,r,worldGrid);pg.stale = true; pg.staleSeq++; pendingStale = pendingStale ? joinWorld(pendingStale, worldRect(r)) : worldRect(r); }
       if (pg.target && engine && hits(bufRect(pg), r)) { evalPage(pg, r); wantCpu(pg); }
     }
-    if (!r) { pendingStale = null; for (let py = 0; py < np; py++) for (let px = 0; px < np; px++) coarseAdd(page(px, py), null); }
+    if (!r) { pendingStale = gesture()?{x:0,y:0,width:worldSize-1,height:worldSize-1}:null; for (let py = 0; py < np; py++) for (let px = 0; px < np; px++) coarseAdd(page(px, py), null); }
     else for (const pg of overlapping(r)) coarseAdd(pg, announce);
     for (const fn of submitListeners) fn(event);
     return event;
