@@ -352,8 +352,8 @@ const capture=async(t0,anchors=[],extra={})=>{
   const hold=anchors.at(-1)?.t??data.end;phase.heldLatency={first:distribution(a.observations.filter(o=>o.first!==null&&o.first<=hold).map(o=>o.first-o.t),data.inputs.length),wholeCurrent:distribution(a.observations.filter(o=>o.all!==null&&o.all<=hold).map(o=>o.all-o.t),data.inputs.length)};phase.events=data.events;const down=data.events.find(e=>e.type==='stroke-begin');if(down){const p=data.events.find(e=>e.type==='paint'&&e.t>=down.t&&e.rev>=down.rev&&e.changed);phase.firstStrokePreviewMs=p?p.t-down.t:null;phase.strokeBegin=down;}phase.latencyChanged=phase.latency;phase.samples.firstTile=tileSamples(phase);phase.latency=distribution(phase.samples.firstTile,data.inputs.length||1);phase.samples.pointer=tileSamples(phase,true);phase.latencyPointer=distribution(phase.samples.pointer,data.inputs.filter(m=>m.at).length);phase.releaseFinal=distribution(releaseSample(phase),1);phase.firstChunkPicture=phase.latency.p50;phase.shownInView=phase.latencyAll.p50;phase.finalInView=phase.final.p50;return phase;
 };
 const anchor=()=>ev('({t:performance.now(),serial:sculptCanvas.serial??__perf.serial,rev:sculptCanvas.rev??null,keys:__perf.visible(),spec:sculptDebug.specStats,at:__perf.inputs.findLast(m=>m.at)?.at??null})');
-const setup=async()=>{
-  await ev(`sculptDebug.scene(${JSON.stringify(scene.strokes)},{ground:${scene.ground!==false}});sculptCanvas.zoom(1);document.getElementById('viewport').scrollTo(0,300);true`);await settle();
+const setup=async(loadInputAt=null)=>{
+  await ev(`sculptDebug.scene(${JSON.stringify(scene.strokes)},{ground:${scene.ground!==false}});sculptCanvas.zoom(1);document.getElementById('viewport').scrollTo(0,300);${loadInputAt===null?'':`__perf.input('load','scene',null,${loadInputAt});`}true`);await settle();
 };
 
 try{
@@ -370,7 +370,7 @@ try{
   if(terrain)await ev(`(()=>{const v=document.getElementById('viewport');v.style.width='${terrain[0]}px';v.style.height='${terrain[1]}px';v.style.flex='none';sculptCanvas.resize();})()`);
   // Finish the blank map's startup before measuring the authored scene load.
   await settle();console.error('phase load');
-  {const t0=await begin();await ev(`__perf.input('load','scene');true`);const a=await anchor();delete a.keys;await setup();result.load=await capture(t0,[a]);result.viewport=result.load.view;flush();}
+  {const t0=await begin(),a=await anchor();delete a.keys;await setup(t0);result.load=await capture(t0,[a]);result.viewport=result.load.view;flush();}
   if(only==='load'||warmup)throw Error('stopped after load (--only)');
   const chooseTool=async()=>{
     const selector=`[data-tool="${tool}"]`;
