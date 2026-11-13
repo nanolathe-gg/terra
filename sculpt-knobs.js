@@ -98,10 +98,17 @@ const SHAPE_KNOBS=new Set(['frostGaps','frostGapReach','frostGapSize','frostGapD
 // fields: `reload` (the ground textures and a borrowed beach are chosen when the renderer starts, so nothing else is set), `evaluate` (the shape again from that
 // node: the undulation rows edit the ground node in `nodes`, or put one first when Undulation height turns on), `checkpoint` (an undo step for
 // that edit) and `weather` (the Time pass again; alone, for the deposit supply, which changes the generated deposit field, and the rain).
+const TRACKED_WORLD_INPUTS=new Set([...KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)),'palette','erosion','erosionAge','erosionEnvelope','wetReach','talusFull','wearFull','flowK']);
 export function applyKnob({key,value,settings,renderer,nodes,seed}) {
+  const previous=renderer.variant.get(key);
   settings.set(key,value);
   if (key==='ground' || key==='groundPattern' || key==='beachFrom') return {reload:true};
   renderer.variant.set(key,value); const change=renderer.applyKnobs(),result=value=>change?{...value,change}:value;
+  // Current rows are covered by the computed comparison and declared channels.
+  // An unfamiliar non-uniform input is conservative, never silently a no-op.
+  if(change&&!change.fields.length&&!change.channels.length&&!TRACKED_WORLD_INPUTS.has(key)&&String(previous)!==String(value)){
+    change.channels.push({name:key,stage:'A'});change.stage='A';
+  }
   if (Object.hasOwn(UNDULATION,key)) {
     const i=nodes.findIndex(n => n.kind==='ground');
     if (i>=0) { nodes[i][UNDULATION[key]]=Number(value); return result({evaluate:i,checkpoint:true,weather:true}); }

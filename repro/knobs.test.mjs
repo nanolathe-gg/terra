@@ -91,3 +91,11 @@ test('the column facts follow the active column: the map\'s own, its variant row
   rows.variants.triad.sections = [{start: 0, beds: [[.3, .5, 0], [5.7, .5, 1]]}];
   assert.equal(facts(rows).column, 1); assert.equal(facts(rows).capBed, 1);
 });
+
+// The generic host must not quietly discard a newly introduced non-uniform input.
+test('an unknown non-uniform input falls back to shape, while its repeated value stays a no-op',()=>{
+  const r=renderer();r.applyKnobs=()=>({fields:[],channels:[],stage:null});const settings=new Map(),nodes=[];
+  const first=applyKnob({key:'futureInput',value:'1',settings,renderer:r,nodes,seed:2701});
+  assert.equal(first.change.stage,'A');assert.deepEqual(first.change.channels,[{name:'futureInput',stage:'A'}]);
+  assert.equal(applyKnob({key:'futureInput',value:'1',settings,renderer:r,nodes,seed:2701}).change.stage,null);
+});

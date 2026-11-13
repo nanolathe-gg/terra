@@ -576,12 +576,12 @@ function markViewChanged() { revision++; $('export').disabled=true; }
 let worldInputs=null;
 function worldInputChannels() {
   const {params,...context}=shapeContext();
-  return {shape:JSON.stringify([context,nodes.filter(n=>n.kind==='ground')]),time:JSON.stringify([timeKnobs(renderer),materialKnobs(),$('weather').checked])};
+  return {shape:JSON.stringify([context,nodes.filter(n=>n.kind==='ground')]),time:JSON.stringify([timeKnobs(renderer),materialKnobs(),weatherOn()])};
 }
 // Uniform deltas and the few inputs outside the uniform block meet here.
 // A no-op is recorded for the bench, but never advances or schedules the canvas.
 function worldChanged(...changes) {
-  const fields=changes.flatMap(c=>c?.fields??[]),channels=changes.flatMap(c=>c?.channels??[]),options=changes.find(c=>c&&Object.hasOwn(c,'world'))??{},world=options.world??true,rect=options.rect??null;
+  const fields=changes.flatMap(c=>c?.fields??[]),channels=changes.flatMap(c=>c?.channels??[]).map(c=>({...c,stage:c.stage??'A'})),options=changes.find(c=>c&&Object.hasOwn(c,'world'))??{},world=options.world??true,rect=options.rect??null;
   let stage=changes.map(c=>c?.stage).filter(Boolean).sort()[0]??null;
   if(world){
     const next=worldInputChannels();
