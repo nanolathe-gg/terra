@@ -128,6 +128,7 @@ const MIP_SHADER = `
 const GENERATED_SIZE = 512, GENERATED_LEVELS = 7;
 
 class SpecializationMiss extends Error { constructor(state) { super('nanolathe: pipelines for these gates are not built yet'); this.state = state; } }
+class PipelinesPending extends Error { constructor(state,ready) { super('Terrain pipelines are compiling in the background.');this.name='PipelinesPending';this.key=state.key;this.ready=ready; } }
 
 // The engine's materials, uniforms and passes. ChunkTerrainRenderer (sculpt-chunk-renderer.js) is the renderer that is constructed: it adds
 // the per-chunk textures, the memory accounting and renderChunk.
@@ -258,6 +259,7 @@ export class TerrainRenderer {
     this.timeUniformFields=[...uniformStages(timeModules).keys()].sort();
     this.uniformStages=uniformStages([...this.stageSources,...timeModules]);this.stageSources=null;
     this.drawPipelineLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, this.materialLayout,this.voxel.drawLayout]});
+    const genericReady=this.buildGeneric(compile,fragSource,bakeSource);
     const mipModule = device.createShaderModule({label: 'mip levels', code: MIP_SHADER});
     this.mipPipeline = device.createRenderPipeline({label: 'mip levels', layout: 'auto',
       vertex: {module: mipModule, entryPoint: 'fullScreen'},
@@ -288,7 +290,7 @@ export class TerrainRenderer {
     const generation = performance.now();
     const gpu = Promise.all([this.makeMaterials(), this.paletteTexture()]);
     this.textures.noise = this.noiseTexture();
-    this.textures.palette = (await gpu)[1];
+    this.textures.palette = (await Promise.all([gpu,genericReady]))[0][1];
     this.generationMs = performance.now() - generation;
     const variant = new URLSearchParams(location.search);
     // H4: the engine's own knob values go in first, over the world's, under the page's query.
@@ -435,15 +437,36 @@ export class TerrainRenderer {
     const parts = this.specParts, slots = this.rockSlots(), values = {...gateValues(parts.frag, this.uniformView, slots), ...gateValues(parts.bake, this.uniformView, slots)};
     return {key: gateKey(values, parts.keyOrder), values};
   }
+  // Original uniform comparisons, compiled once before input is enabled.
+  // Finals still use the unchanged specialized modules and cache.
+  async buildGeneric(compile,fragSource,bakeSource) {
+    const start=performance.now(),device=this.device;
+    const [fragmentModule,bakeModule]=await Promise.all([compile('generic terrain',fragSource),compile('generic relief',bakeSource)]);
+    this.genericPipelines=Object.fromEntries(await Promise.all([0,15].map(async rockMask=>{
+      const constants={rockMask},compute=entryPoint=>({module:bakeModule,entryPoint,constants});
+      const [draw,bake,loose]=await Promise.all([
+        device.createRenderPipelineAsync({label:'generic terrain',layout:this.drawPipelineLayout,vertex:{module:this.specParts.vertModule,entryPoint:'vertexMain'},fragment:{module:fragmentModule,entryPoint:'fragmentMain',targets:[{format:this.format}],constants},primitive:{topology:'triangle-list',cullMode:'none'}}),
+        device.createComputePipelineAsync({label:'generic relief bake',layout:this.bakePipelineLayout,compute:compute('bakeMain')}),
+        device.createComputePipelineAsync({label:'generic loose mask',layout:this.bakePipelineLayout,compute:compute('looseMain')})]);
+      return [rockMask,{draw,bake,loose}];
+    })));
+    this.specStats.genericBuilt=2;this.specStats.genericMs=performance.now()-start;this.specStats.genericUses=0;this.specStats.deferred=0;
+  }
   specialized(kind) {
-    const state = this.specKey(), entry = this.specCache.get(state.key);
+    const state = this.specKey();
+    if(this.pipelineMode==='generic'){
+      this.specUsed.push('generic:'+state.values.rockMask);this.specStats.genericUses++;
+      return this.genericPipelines[state.values.rockMask][kind];
+    }
+    const entry = this.specCache.get(state.key);
     if (!entry) throw new SpecializationMiss(state);
     this.specUsed.push(state.key);
     return entry[kind];
   }
   specCheck() {
     const state = this.specKey();
-    if (this.specUsed.some(k => k !== state.key)) throw new SpecializationMiss(state);
+    const key=this.pipelineMode==='generic'?'generic:'+state.values.rockMask:state.key;
+    if (this.specUsed.some(k => k !== key)) throw new SpecializationMiss(state);
   }
   get drawPipeline() { return this.specialized('draw'); }
   get bakePipeline() { return this.specialized('bake'); }
@@ -478,16 +501,22 @@ export class TerrainRenderer {
     }
     await this.specBuilding.get(key);
   }
-  // Runs `work` (which encodes and submits with the pipelines above); a miss builds the pipelines and runs it again.
-  async withPipelines(work) {
-    for (let attempt = 0; ; attempt++) {
-      this.specUsed = [];
-      try { return await work(); }
-      catch (error) {
-        if (!(error instanceof SpecializationMiss) || attempt >= 4) throw error;
-        await this.specialize(error.state);
+  // A preview miss retries with uniform gates and never starts a compile.
+  // A view final yields the renderer while its specialized set builds; direct
+  // readers and export await specialization as before.
+  async withPipelines(work,{preview=false,defer=false}={}) {
+    const previous=this.pipelineMode;this.pipelineMode='specialized';
+    try{for(let attempt=0;;attempt++){
+      this.specUsed=[];
+      try{return await work();}
+      catch(error){
+        if(!(error instanceof SpecializationMiss)||attempt>=4)throw error;
+        if(preview){this.pipelineMode='generic';continue;}
+        const ready=this.specialize(error.state);
+        if(defer){this.specStats.deferred++;throw new PipelinesPending(error.state,ready);}
+        await ready;
       }
-    }
+    }}finally{this.pipelineMode=previous;}
   }
 
   flushUniforms() {

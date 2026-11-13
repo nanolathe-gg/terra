@@ -128,11 +128,11 @@ At level 4 on one 1728×1024 cliff window, two alternating generic/specialized
 pairs have identical RGBA hashes; GPU pass totals are 60–65 ms generic and
 58–59 ms specialized. Driver load at start was 57–63%, so these are loaded
 exploratory observations, not qualified latency results or a settled
-pipeline choice. Startup cost needs a quiet measurement before choosing
-between the generic set and the plan's prewarming fallback. No generic
-pipeline code has been added to the editor.
+pipeline choice. Startup cost still needs a quiet measurement. The plan now requires the
+generic set to be ready before input: pointer-down prewarming alone cannot
+guarantee readiness for an immediately following value change.
 
-Still unfinished: the pipeline choice/no-compile gate; remaining large
+Still unfinished: the full no-compile interaction gate; remaining large
 allocation and lost-device recovery; the page budget's preview reserve;
 focused Rain/Face steepness interaction verification; artist look
 review; qualified alternating latency/final-cost measurements; and broader
@@ -159,3 +159,25 @@ Time request. No shader or Time pass order changed.
 Both voxel and rock-weather backend pipeline sets (rock masks 0 and 15)
 are now ready before editor input. A startup probe sees both sets with zero
 console errors. Main draw/bake gate specialization remains unfinished.
+
+Generic draw/bake/loose pipelines now compile from the original uniform-gated
+shader sources during startup, for masks 0 and 15. A preview uses a cached
+specialization or retries with generic gates without compiling. A final
+miss releases the renderer while its specialization builds, then schedules
+again; export and direct readers retain their awaited specialized path.
+No shader or final specialization source changed. One focused cold-cache
+check reports zero sets built during either preview, including a second
+preview while final compilation is deliberately held, and an idle renderer
+between them. Its final SHA-256 equals the reference `6f1687a4…8899901`.
+Both generic masks are ready, with zero console errors. This warm-driver
+startup took 145 ms; it is not a cold-start or qualified timing result.
+Benchmark anchors parse on both builds and the missing-anchor negative
+control fails as intended; 18 small CPU checks pass in 54 ms.
+
+A short real-mouse map16 check delivered eight distinct Face steepness
+inputs and eight Rain inputs. Both finish current finals with zero console
+errors; Rain correctly says weathering is pending while held. Neither
+560-ms gesture produced a completed block before release. This does **not**
+pass the held-update gate: preparing the paged feed and then rejecting it
+for an intervening input can starve the preview. That scheduling case is
+being addressed before claiming LP2 acceptance.
