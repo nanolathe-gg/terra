@@ -4,6 +4,8 @@ name: pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -23,12 +25,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
       - run: sh repro/check.sh quick
+      - name: Check preview freshness and publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: go run ./cmd/previews check --published
 
   # Skipped while the repo is private (Pages is not on); it deploys once the repo is public and Pages' source is GitHub Actions.
   deploy:
     needs: check
-    if: ${{ !github.event.repository.private }}
+    if: ${{ !github.event.repository.private && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -42,6 +51,8 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Build the site
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           site=$(go run ./cmd/terraform --build-site _site)
           TERRAFORM_SITE_DIR="$site" node --test repro/site.build.test.mjs

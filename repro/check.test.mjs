@@ -12,7 +12,7 @@ test('the default checks never build, render, launch a browser or invoke Python'
   assert.deepEqual(steps.map(s => s.name), ['unit', 'gate']);
   const files = steps[0].args.slice(1);
   assert.ok(files.length > 20);
-  assert.ok(files.every(f => f.endsWith('.test.mjs') && !/\.(gpu|config|export|build|features)\.test\.mjs$/.test(f)));
+  assert.ok(files.every(f => f.endsWith('.test.mjs') && !/\.(gpu|config|export|build|features|assets)\.test\.mjs$/.test(f)));
   assert.ok(files.some(f => f.endsWith('/heights.test.mjs')), 'save/load and undo checks remain fast');
 });
 

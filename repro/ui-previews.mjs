@@ -1,10 +1,11 @@
 // Render the hover examples (sculpt-help-examples.js) through the SAME /sculpt GPU pipeline into
-// ui-previews/, which is committed and served with the editor. Authored fixtures only: no retail
+// ui-previews/, which is published as a pinned release bundle and served with the editor. Authored fixtures only: no retail
 // scene, crop or map is loaded. Run it again when a preset, the renderer or an example changes:
 // node repro/ui-previews.mjs --server http://127.0.0.1:<port> --port <cdp> [--out DIR]
 // Add --worlds-only to regenerate just the nine New-map thumbnails, preserving all hover examples.
 // It replaces the folder's images and manifest and removes images the examples no longer name.
-import {spawn} from 'node:child_process';
+import {spawn,execFileSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {mkdirSync,writeFileSync,renameSync,readdirSync,unlinkSync,readFileSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
@@ -12,8 +13,22 @@ import {fileURLToPath} from 'node:url';
 import {cdpPortFree} from './cdp-port.mjs';
 import {HELP_TOOLS,HELP_CONTROLS,HELP_CARD,HELP_PATH,HELP_FRAME,helpFrames,helpImage} from '../sculpt-help-examples.js';
 const args=process.argv.slice(2),opt=(key,fallback)=>{const i=args.indexOf(key);return i<0?fallback:args[i+1];};
-const server=opt('--server','http://127.0.0.1:8921'),port=Number(opt('--port',9927)),out=resolve(opt('--out',fileURLToPath(new URL('../ui-previews',import.meta.url))));
+const server=opt('--server','').replace(/\/+$/,''),port=Number(opt('--port',0)),out=resolve(opt('--out',fileURLToPath(new URL('../ui-previews',import.meta.url))));
 const worldsOnly=args.includes('--worlds-only');
+const root=fileURLToPath(new URL('..',import.meta.url));
+if(!server||!Number.isInteger(port)||port<1024)throw Error('Give --server and --port for your own development server and CDP port.');
+const previewCommand=(args,options={})=>execFileSync('go',['run','./cmd/previews',...args],{cwd:root,encoding:'utf8',...options});
+const inputs=JSON.parse(previewCommand(['fingerprint','--json']));
+if(worldsOnly)previewCommand(['check-render','--dir',out],{stdio:'inherit'});
+// Verify this server serves the local inputs; a different checkout cannot stamp a fresh receipt.
+for(const [name,hash]of Object.entries(inputs.files)){
+ if(!name.endsWith('.js')&&!name.endsWith('.wgsl')&&!name.startsWith('materials/'))continue;
+ if(name.startsWith('repro/')||name==='materials/defaults.json')continue;
+ const response=await fetch(`${server}/${name}`);
+ const data=Buffer.from(await response.arrayBuffer());
+ if(!response.ok||createHash('sha256').update(data).digest('hex')!==hash)throw Error(`Render server does not match local input ${name}`);
+}
+
 await cdpPortFree(port);mkdirSync(out,{recursive:true});
 const chrome=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless=new','--enable-gpu','--use-angle=metal',`--remote-debugging-port=${port}`,`--user-data-dir=${join(tmpdir(),'terraform-ui-previews-'+port)}`,'--window-size=1440,900','--no-first-run','about:blank'],{stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -53,5 +68,6 @@ try{
   if(errors.length)throw Error(errors.join('\n'));
   save('manifest.json',JSON.stringify(manifest,null,1)+'\n');
   for(const name of readdirSync(out))if(!worldsOnly&&name.endsWith('.png')&&!written.has(name)){unlinkSync(join(out,name));console.log('removed',name);}
+  previewCommand(['stamp','--dir',out,'--expected-inputs',inputs.sha256],{stdio:'inherit'});
   console.log(`Generated ${worlds.length} world thumbnails, ${manifest.tools.length} tools and ${Object.values(manifest.controls).reduce((n,f)=>n+f.length,0)} control frames in ${out}`);
 }finally{ws?.close();chrome.kill();}

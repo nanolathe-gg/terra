@@ -32,9 +32,10 @@ page and an older card disagree, this page wins.
 6. **Never commit retail-derived files**: pictures, heights, crops, renders
    or maps. Never write into `~/TotalAnnihilation`. No `rm -rf`, and no new
    dependencies. Our own renders of authored fixtures are not retail-derived:
-   the hover examples in `ui-previews/` are committed, and
-   `repro/ui-previews.mjs` regenerates them when a preset or the renderer
-   changes. One test-only tool is owner-approved: Dawn's Node binding (npm
+   preview PNGs are published as a release bundle, not committed.
+   `preview-assets.json` pins the bundle and rendering-input fingerprint;
+   `repro/ui-previews.mjs` regenerates the full set when those inputs change.
+   One test-only tool is owner-approved: Dawn's Node binding (npm
    `webgpu`), installed outside the repository (`$TERRAFORM_WEBGPU`, see
    `repro/headless.mjs`) for the headless checks; the editor and the site
    never load it. The game's 256-color palette (`materials/palette.json`)
@@ -121,6 +122,22 @@ page and an older card disagree, this page wins.
 12. **Deterministic.** The same scene renders and exports the same bytes on
     the same machine, and `repro/regional.mjs` finds no mismatch.
 
+## Preview assets and pushing
+
+Preview PNGs and `ui-previews/rendered.json` stay outside Git. Keep the small
+`ui-previews/manifest.json`, `preview-inputs.json` and `preview-assets.json`
+committed. The Go server/build fetches the checksum-pinned release bundle when
+local files are missing; CI needs no GPU. Private releases require `gh auth
+login` or `GH_TOKEN`/`GITHUB_TOKEN`. Render only on your own server/CDP ports.
+
+After cloning, run `go run ./cmd/previews install-hook`. The pre-push hook
+checks the actual outgoing commits, publication, the receipt inside the bundle,
+and the absence of preview PNG/browser output in their history. Never bypass
+it to push stale assets. CI repeats the freshness/publication check. When it
+fails, render the full set and run `go run ./cmd/previews publish`; do not edit
+the fingerprint by hand. Changes during rendering invalidate the receipt.
+See [the asset workflow](docs/PREVIEW_ASSETS.md).
+
 ## Checks
 
 Optimize for fast iteration on this unreleased editor. Run checks that can
@@ -153,6 +170,7 @@ asset dependency in this runner.
 | export | `repro/check.sh export` | Changed exporter, worker or archive format: Go exporter tests and native/WebAssembly byte parity. Needs Go. |
 | features | `repro/check.sh features` | Changed procedural sprite generation or burning: CPU feature-art checks, without Python or GPU. |
 | config | `repro/check.sh config` | Changed generated configs, world/tool data or preset assembly. Go config/server tests and generated config integration tests. Needs Go. |
+| assets | `repro/check.sh assets` | Preview freshness/publication, fetching and PNG/manifest validation. CPU only; requires Go, Node and release access. |
 | site | `repro/check.sh site` | Changed static packaging or shipped file paths: build and inspect the static site. Needs Go. Deployment checks the built artifact once. |
 
 The development server reloads source bytes, the source manifest and JSON
@@ -164,7 +182,7 @@ world's `world.knobDefaults`, `world.engineDefaults` and `world.variants`;
 
 Build, config, export, feature-art and GPU integration tests use explicit
 filename suffixes: `.build.test.mjs`, `.config.test.mjs`, `.export.test.mjs`,
-`.features.test.mjs` and `.gpu.test.mjs`. Keep expensive work out of ordinary
+`.features.test.mjs`, `.assets.test.mjs` and `.gpu.test.mjs`. Keep expensive work out of ordinary
 `.test.mjs` files.
 Use the runner instead of `node --test repro/*.test.mjs`, which includes
 all integration tests. No new test should freeze an artistic preset or page

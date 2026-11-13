@@ -4,7 +4,7 @@ For everyday development, run `repro/check.sh` (fast Node unit tests and the
 world-name gate), or a relevant test directly, such as
 `node --test repro/paths.test.mjs`. The default needs no Python, Go, GPU,
 browser, generated configs or retail assets. Integration tests have explicit
-`.config`, `.build`, `.export`, `.features` or `.gpu` filename suffixes and run on demand:
+`.config`, `.build`, `.export`, `.features`, `.assets` or `.gpu` filename suffixes and run on demand:
 
 ```sh
 repro/check.sh quick --test repro/paths.test.mjs
@@ -14,6 +14,7 @@ repro/check.sh export
 repro/check.sh features
 repro/check.sh config
 repro/check.sh site
+repro/check.sh assets
 ```
 
 `--list` previews commands; `--out DIR` selects the log directory. The
@@ -28,6 +29,11 @@ Choose checks for the behavior you changed; see [AGENTS.md](../AGENTS.md#checks)
 The old `land`/`full` tiers, automatic baseline renders and mandatory visual
 sweeps are retired. Do not use `node --test repro/*.test.mjs` for routine
 checks: that wildcard includes expensive integration tests.
+
+GPU preview pictures are external release assets. `go run ./cmd/previews
+install-hook` installs the CPU-only outgoing-commit freshness/publication gate;
+`repro/check.sh assets` verifies the images too. Missing pinned assets are fetched
+by the Go editor/build without a GPU. See [the asset workflow](../docs/PREVIEW_ASSETS.md).
 
 ## Optional retail reproductions
 

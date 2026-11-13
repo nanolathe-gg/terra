@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/nanolathe-gg/terraform/internal/previewassets"
 	"github.com/nanolathe-gg/terraform/internal/site"
 )
 
@@ -43,6 +44,12 @@ func run() error {
 		return site.WriteFiles(*dump, files)
 	}
 	if *build != "" {
+		if _, err = previewassets.Check(*root); err != nil {
+			return err
+		}
+		if err = previewassets.Ensure(*root); err != nil {
+			return err
+		}
 		path, err := s.Build(*build, *maps)
 		if err != nil {
 			return err
@@ -52,6 +59,9 @@ func run() error {
 	}
 	if *port < 1 || *port > 65535 {
 		return fmt.Errorf("port must be between 1 and 65535")
+	}
+	if err = previewassets.Ensure(*root); err != nil {
+		return err
 	}
 	handler, err := s.Handler(*assets)
 	if err != nil {

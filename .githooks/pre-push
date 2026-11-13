@@ -1,0 +1,3 @@
+#!/bin/sh
+# Validate the commits actually being pushed, including publication. Never render here.
+exec go run ./cmd/previews check-push "$@"

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/nanolathe-gg/terraform/internal/previewassets"
 	"github.com/nanolathe-gg/terraform/internal/reprohost"
 )
 
@@ -27,6 +28,9 @@ func run() error {
 	}
 	if *port < 1 || *port > 65535 {
 		return fmt.Errorf("give --port between 1 and 65535")
+	}
+	if err := previewassets.Ensure(o.Source); err != nil {
+		return err
 	}
 	h, err := reprohost.New(o)
 	if err != nil {

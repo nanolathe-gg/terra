@@ -6,3 +6,7 @@ perf-out/
 deploy/worker/wrangler.toml
 smoke-out/
 .cloudflare/
+
+# Published GPU previews; the lock and runtime manifest stay in Git.
+/ui-previews/*.png
+/ui-previews/rendered.json

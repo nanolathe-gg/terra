@@ -16,6 +16,17 @@ with WebGPU. Node runs the checks. Python and the scientific packages in
 they are not needed to serve, build, generate configs or export maps. The
 editor needs no installed game content or private assets.
 
+Install the preview pre-push check once after cloning:
+
+```sh
+go run ./cmd/previews install-hook
+```
+
+Generated preview PNGs live in a pinned GitHub Release bundle. The Go server
+and static builder download them automatically when absent; a private repo
+needs `gh auth login` or `GH_TOKEN`. Fast unit tests need no preview download.
+See [preview publishing and freshness checks](docs/PREVIEW_ASSETS.md).
+
 Run the development server from the repository:
 
 ```sh
@@ -189,7 +200,7 @@ in the standalone analysis and report tools.
 
 `go run ./cmd/terraform --build-site <dir>` writes `<dir>/index.html` (the
 editor itself) and `<dir>/b/<version>/` with the HTML, scripts, styles,
-shaders, world tables, previews, generated JSON configs and WebAssembly
+shaders, world tables, downloaded previews, generated JSON configs and WebAssembly
 exporter. It prints the versioned directory. That directory's name hashes all
 shipped bytes, so a deploy does not mix new scripts with cached old shaders.
 The root page uses a versioned asset base and keeps query strings, fragments

@@ -5,8 +5,8 @@ import {basename, dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const optional = /\.(?:gpu|config|export|build|features)\.test\.mjs$/;
-export const usage = `Usage: repro/check.sh [quick|browser|engine|export|features|config|site] [options]
+const optional = /\.(?:gpu|config|export|build|features|assets)\.test\.mjs$/;
+export const usage = `Usage: repro/check.sh [quick|browser|engine|export|features|config|site|assets] [options]
   quick     Node unit tests and the world-name gate (default; no Python, Go or GPU)
   browser   One world's brush/undo smoke, without export; requires --server URL --port N
   engine    GPU height tests, regional replay and repeat checks on three authored fixtures
@@ -14,6 +14,7 @@ export const usage = `Usage: repro/check.sh [quick|browser|engine|export|feature
   export    Go exporter tests and native/WebAssembly byte parity
   config    Go config/server tests and generated configuration integration tests
   site      Static build integration test (Go)
+  assets    Preview freshness, publication, fetch and image checks (Go + Node)
 Options:
   --test FILE     quick: run only this unit test file (repeatable)
   --scene FILE    engine: replace the default fixtures (repeatable)
@@ -26,7 +27,7 @@ The old land/full tiers are retired; select checks relevant to your change.`;
 
 export function planChecks(argv) {
   const args = [...argv], mode = args[0] && !args[0].startsWith('-') ? args.shift() : 'quick';
-  if (!['quick', 'browser', 'engine', 'export', 'features', 'config', 'site'].includes(mode)) throw new Error(`Unknown check group: ${mode}.\n${usage}`);
+  if (!['quick', 'browser', 'engine', 'export', 'features', 'config', 'site', 'assets'].includes(mode)) throw new Error(`Unknown check group: ${mode}.\n${usage}`);
   const options = {}, tests = [], scenes = [];
   for (let i = 0; i < args.length; i++) {
     const key = args[i];
@@ -70,6 +71,10 @@ export function planChecks(argv) {
     steps.push({name: 'go-export', command: 'go', args: ['test', './export']});
     node('export', '--test', ...testFiles('.export.test.mjs'));
   } else {
+    if (mode === 'assets') {
+      steps.push({name:'preview-freshness',command:'go',args:['run','./cmd/previews','check','--published']});
+      steps.push({name:'preview-fetch',command:'go',args:['run','./cmd/previews','fetch']});
+    }
     if (mode === 'config') steps.push({name: 'go-site', command: 'go', args: ['test', './internal/site', './cmd/terraform']});
     node(mode, '--test', ...testFiles(mode === 'site' ? '.build.test.mjs' : `.${mode}.test.mjs`));
   }

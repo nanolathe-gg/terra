@@ -37,7 +37,7 @@ func (s *Site) Sources() (map[string]string, error) {
 		return nil, err
 	}
 	for _, f := range previews {
-		if !f.IsDir() && (filepath.Ext(f.Name()) == ".png" || filepath.Ext(f.Name()) == ".json") {
+		if !f.IsDir() && (filepath.Ext(f.Name()) == ".png" || f.Name() == "manifest.json") {
 			out["ui-previews/"+f.Name()] = filepath.Join(s.Root, "ui-previews", f.Name())
 		}
 	}
