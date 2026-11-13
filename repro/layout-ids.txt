@@ -494,3 +494,9 @@ render-stage
 new-map-sizes
 new-map-name
 new-map-open
+column-open
+shine-materials
+column-title
+column-done
+column-fields
+column-stack
