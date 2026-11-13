@@ -1,4 +1,37 @@
-# Reproductions
+# Checks and reproductions
+
+For everyday development, run `repro/check.sh` (fast Node unit tests and the
+world-name gate), or a relevant test directly, such as
+`node --test repro/paths.test.mjs`. The default needs no Python, Go, GPU,
+browser, generated configs or retail assets. Integration tests have explicit
+`.config`, `.build`, `.export`, `.features` or `.gpu` filename suffixes and run on demand:
+
+```sh
+repro/check.sh quick --test repro/paths.test.mjs
+repro/check.sh browser --server http://127.0.0.1:<yours> --port <cdp> --worlds green
+repro/check.sh engine --scene repro/shape-scenes/green-landform.json
+repro/check.sh export
+repro/check.sh features
+repro/check.sh config
+repro/check.sh site
+```
+
+`--list` previews commands; `--out DIR` selects the log directory. The
+`engine` group uses three authored fixtures unless you select scenes. The
+browser group defaults to one world and skips export and the large-map sweep.
+Build and config checks still use Python; engine checks currently use it for
+config generation. The exporter checks use Go. Site deployment validates its
+already-built output instead of building it twice.
+
+Choose checks for the behavior you changed; see [AGENTS.md](../AGENTS.md#checks).
+The old `land`/`full` tiers, automatic baseline renders and mandatory visual
+sweeps are retired. Do not use `node --test repro/*.test.mjs` for routine
+checks: that wildcard includes expensive integration tests.
+
+## Optional retail reproductions
+
+The following workflow is retained for a future return to retail matching.
+It is not part of routine checks and does not gate realism work.
 
 Rebuild a 1024-px window of a retail map with the editor's brushes, then put
 the two side by side. The scene files are stroke lists, so they are ours;
@@ -74,12 +107,10 @@ the retail crops stay outside git.
    reliefs, to check the strokes follow the retail layout before judging
    materials.
 
-5. Check a change: `repro/check.sh quick` renders every scene (`all.sh`,
-   four at a time) and compares it with the renders of the commit the
-   branch grew from, which it makes once and keeps in `$R/baseline/`
-   (`compare.py`: the scenes that changed, and with `--worlds` a failure
-   when another world's scene moves). `land` and `full` add the Chrome
-   checks and the sweeps (AGENTS.md "Checks").
+5. For an explicit before/after investigation, render the selected scenes
+   with `render.mjs` and compare the output directories with
+   `python repro/compare.py <before> <after> [--worlds green,lava]`.
+   `all.sh` remains the retail crop/sheet workflow; no check group invokes it.
 
 6. Compare a world with retail: `repro/retail.sh <world> [--query
    'key=v&key=v'] [--base <an earlier run>]` renders only that world's

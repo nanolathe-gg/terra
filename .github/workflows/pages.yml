@@ -23,15 +23,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      # site.test.mjs builds the site, and the site carries the map exporter: export/ built for WebAssembly.
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - run: node --test repro/*.test.mjs
-      - run: sh repro/gate.sh
+      - run: sh repro/check.sh quick
 
   # Skipped while the repo is private (Pages is not on); it deploys once the repo is public and Pages' source is GitHub Actions.
   deploy:
@@ -43,6 +35,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -51,7 +46,8 @@ jobs:
           go-version-file: go.mod
       - name: Build the site
         run: |
-          python3 sculpt.py --build-site _site
+          site=$(python3 sculpt.py --build-site _site)
+          TERRAFORM_SITE_DIR="$site" node --test repro/site.build.test.mjs
           echo terra.nanolathe.gg > _site/CNAME
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5

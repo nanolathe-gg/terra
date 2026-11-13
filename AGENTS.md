@@ -4,7 +4,7 @@ Terraform is an experimental browser (WebGPU) terrain and map editor for
 Total Annihilation. These rules apply to every agent working in this
 repository. The owner's decisions behind them are in
 [docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md) ("Decisions" and "Rules for
-the cards"). Setup, ports and the render guard are in
+the cards"). Setup and ports are in
 [BACKLOG.md's ground rules](BACKLOG.md#ground-rules-every-card). Where this
 page and an older card disagree, this page wins.
 
@@ -21,9 +21,10 @@ page and an older card disagree, this page wins.
    panels, pages, buttons, tools or controls the task does not ask for. If
    you think the editor needs one, propose it in your report.
 4. **Land on main only when the work is reviewed and its checks pass.**
-   Merge `main` into your branch first and run the checks again. If you were
-   not asked to land, commit on your branch, report and stop. Main is what
-   the live site serves: once the repository is public, every push to
+   If `main` has moved, merge it into your branch first and rerun checks
+   affected by the combined changes. Do not repeat unchanged checks. If you
+   were not asked to land, commit on your branch, report and stop. Main is
+   what the live site serves: once the repository is public, every push to
    `main` deploys to terra.nanolathe.gg (`.github/workflows/pages.yml`).
 5. **One commit per idea.** The message says what changed, why, and the
    measured effect. In your report, mark each claim as measured (with the
@@ -67,7 +68,7 @@ page and an older card disagree, this page wins.
      or endpoint. Export runs in the page (the exporter built to
      WebAssembly), and share links go to the save-link Worker
      (`deploy/worker/`). `sculpt.py` serves the same files for development
-     (`repro/site.test.mjs` checks the build).
+     (`repro/site.build.test.mjs` checks the build on demand).
    - Layout lives in `sculpt.html`: each element sits at its final place,
      and no script moves, reorders or renames page elements at load. The one
      exception is the toolbar's shape buttons, which are built from the
@@ -81,11 +82,11 @@ page and an older card disagree, this page wins.
    - Every control is continuous: its low end is a value of the same model,
      not a switch. Moving it to 0, or a small step above 0, changes the
      picture a little, never into a different render path.
-   - Every kept control must visibly matter at 1x. Across the range an
-     artist would use, it moves at least 5% of its class
+   - Every kept control must visibly matter at 1x across the range an
+     artist would use. Judge its usefulness by eye. The impact reports
      (`measure/impact.py`, `measure/shape_controls.mjs`,
-     `measure/world_controls.mjs`). Below that, make it stronger or remove
-     it.
+     `measure/world_controls.mjs`) are optional diagnostic tools; the old
+     5% threshold is evidence, not a pass/fail requirement.
    - A control must be artistically useful: something an artist would set
      on purpose for a different look. Implementation constants stay in code.
    - Presets are only numbers for existing controls.
@@ -121,38 +122,70 @@ page and an older card disagree, this page wins.
 
 ## Checks
 
-`repro/check.sh` runs the checks in three tiers and prints one line per
-check with its time and log. Run `quick` while you work and `land` before
-landing, with the checks below that your change touches; `full` runs them
-all, for a release.
+Optimize for fast iteration on this unreleased editor. Run checks that can
+catch a failure caused by your change. Do not run every integration check,
+every scene, control sweeps, realism reports or performance benchmarks for
+every change. Older cards asking for broad checks do not override this rule.
 
-| Tier | Command | Runs | Time |
-| --- | --- | --- | --- |
-| quick | `repro/check.sh quick [--worlds green,lava]` | unit tests, world names, regional replay, every scene against the base | 30 s (70 s once after main moves) |
-| land | `repro/check.sh land --server <yours> --port <cdp> [--worlds ...]` | quick, then smoke with `--page8`, features, the passability view and the shape repeat check | 2.5 min |
-| full | `repro/check.sh full --server <yours> --port <cdp> [--worlds ...]` | land, then the curve editor, the workspace and ground-cover checks, export bytes, the three control sweeps and the realism report | 19 min |
+- During iteration, run relevant unit tests (`node --test repro/paths.test.mjs`,
+  for example) and inspect changed editor behavior. Documentation-only edits
+  need no runtime checks.
+- Before handing back or merging code, run `repro/check.sh quick` once, or
+  the relevant unit tests for a narrowly scoped change. Run a small browser
+  smoke if editor behavior changed, plus the integration checks below that
+  directly protect the changed behavior. Test-runner and documentation changes
+  do not require a browser.
+- Repeat a passing check only after a relevant edit, failure, or new concern.
+  Report what was checked and what was deliberately left on demand. Do not
+  claim a check passed if it skipped the behavior being tested.
 
-A tier passes when every check in it exits 0. Scenes: untouched scenes
-match the base byte for byte, and changed ones are judged by eye on the
-sheet the check writes (rule 10). The base is the commit your branch grew from (`git merge-base HEAD
-main`); its renders are made once and kept in `$R/baseline/<commit>`.
-`--worlds` names the worlds your change may move (`none`: no scene may
-move; a variant's scenes go by their own name, such as `green-modern`). The
-world-name list may not grow. The Chrome checks use your server
-and CDP ports `<cdp>` to `<cdp>+2`. The engine checks run under Node on
-Dawn, with no server and no browser; `--chrome --server <yours>` runs one in
-the page, with the same pixels.
+`repro/check.sh` defaults to `quick`. It prints each check's time and log;
+`--list` shows the exact commands without running them. The old `land` and
+`full` tiers are retired. There is no automatic baseline render or retail
+asset dependency in this runner.
 
-| When your change touches | Also run | Passes when |
+| Group | Command | Use when |
 | --- | --- | --- |
-| a control (added, moved or removed) | `node measure/world_controls.mjs --worlds <yours>`, `measure/shape_controls.mjs`, `measure/geology_controls.mjs --only <worlds>` | the control moves at least 5% of its class (rule 9) |
-| the exporter or the art it is sent | `node repro/export-bytes.mjs` | exit 0 |
-| the section editor | `node repro/curveedit.mjs --server <yours> --port <cdp>` | exit 0 |
-| modern Green | `python measure/realism.py --scenes <out>/scenes/green-modern-1 <out>/scenes/green-modern-2 <out>/scenes/green-modern-3` | the report gives, before and after, the mean count of statistics in the real range (of 15) and how many windows pass each of the six gates (closed basins, fabric, hilltop roundness, Hack's exponent, hollow and valley shares), and says which moved and why; a slope p90 above 1.62 is the owner's call |
-| the drag or bake path | `node repro/perf.mjs` (Chrome), alternating runs of the two builds | your report gives both builds' numbers |
+| quick | `repro/check.sh` | Fast Node unit tests and the world-name gate; no Python, Go, GPU, browser or site build. `--test repro/paths.test.mjs` selects one test file (repeatable). |
+| browser | `repro/check.sh browser --server <yours> --port <cdp> [--worlds green]` | Changed editor behavior: brush/undo smoke on one world by default, without export or the large-map sweep. Use the affected world. |
+| engine | `repro/check.sh engine [--scene repro/shape-scenes/<fixture>.json]` | Changed GPU fields, tiling or replay: GPU height tests, regional replay and repeat determinism. Defaults to three authored fixtures; `--scene` replaces them (repeatable). Needs Dawn and currently Python for configs. |
+| export | `repro/check.sh export` | Changed exporter, worker or archive format: Go exporter tests and native/WebAssembly byte parity. Needs Go. |
+| features | `repro/check.sh features` | Changed procedural sprite generation or burning: CPU feature-art checks, without Python or GPU. |
+| config | `repro/check.sh config` | Changed generated configs, world/tool data or preset assembly. Currently needs Python, without scientific packages. |
+| site | `repro/check.sh site` | Changed static packaging or shipped file paths: build and inspect the static site. Currently needs Python and Go. Deployment checks the built artifact once. |
 
-`repro/retail.sh` (docs/RETAIL_ROUND.md) is parked with rule 10. Keep the
-script; do not gate a change on its scores until the owner returns to
-retail.
+Build, config, export, feature-art and GPU integration tests use explicit
+filename suffixes: `.build.test.mjs`, `.config.test.mjs`, `.export.test.mjs`,
+`.features.test.mjs` and `.gpu.test.mjs`. Keep expensive work out of ordinary
+`.test.mjs` files.
+Use the runner instead of `node --test repro/*.test.mjs`, which includes
+all integration tests. No new test should freeze an artistic preset or page
+layout merely to preserve today's implementation.
+
+Use additional standalone checks only for the work they protect:
+
+- Export art/height changes: `node repro/export-bytes.mjs`. Scope fixtures
+  where the tool supports it; a renderer change need not trigger every export.
+- Section editor, features, passability or workspace: the corresponding
+  `repro/curveedit.mjs`, `features.mjs`, `passability.mjs` or `workspace.mjs`,
+  with your own `--server` and `--port`.
+- Drag or bake performance: `node repro/perf.mjs` when investigating or
+  claiming a performance change; compare both builds under similar conditions.
+- Visual terrain work: inspect affected authored scenes at 1x. Realism reports,
+  control sweeps and before/after image comparisons are research aids, run when
+  they answer a concrete question or the owner requests them. Numeric realism
+  gates and the old 5% impact threshold do not decide artistic acceptance.
+
+The browser checks must use your own server and explicit CDP port; some
+standalone tools use `<cdp>` through `<cdp>+2`. Never use the owner's 8801.
+Engine fixtures run under Node on Dawn without a server or browser. Old
+scene images are not an artistic compatibility contract: keep same-build
+determinism, regional equivalence and valid exported maps, and judge intended
+visual changes by eye (rule 10).
+
+`repro/all.sh`, `repro/compare.py`, retail scenes and sheets remain available
+for explicit investigations. `repro/retail.sh` (docs/RETAIL_ROUND.md) stays
+parked with rule 10. Do not gate work on retail scores or generate retail
+comparison sheets as part of routine validation.
 
 Use American English in all user-visible text.

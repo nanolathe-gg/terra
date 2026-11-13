@@ -5,12 +5,13 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {mkdtempSync, readFileSync, readdirSync, existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join, resolve} from 'node:path';
 import {ROCK_PRESETS, applyWorldRock, rockPresetFor} from '../sculpt-rock-presets.js';
 
 const root = new URL('..', import.meta.url).pathname;
-const out = mkdtempSync(join(tmpdir(), 'site-'));
-const folder = execFileSync(process.env.PYTHON || 'python3', [join(root, 'sculpt.py'), '--build-site', out], {encoding: 'utf8'}).trim();
+// Deployment can validate the artifact it just built, without compiling the exporter twice.
+const folder = process.env.TERRAFORM_SITE_DIR ? resolve(process.env.TERRAFORM_SITE_DIR)
+  : execFileSync(process.env.PYTHON || 'python3', [join(root, 'sculpt.py'), '--build-site', mkdtempSync(join(tmpdir(), 'site-'))], {encoding: 'utf8'}).trim();
 const read = name => readFileSync(join(folder, name), 'utf8');
 
 test('the root opens the versioned build', () => {

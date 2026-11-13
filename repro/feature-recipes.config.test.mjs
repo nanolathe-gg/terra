@@ -8,7 +8,7 @@ import {defaultSet,normalizeSet,variants,makeRecipe,MAX_VARIANTS,controlRequirem
 import {generateFeature} from '../sculpt-feature-gen.js';
 import {movementObstacles} from '../sculpt-passability.js';
 const root=new URL('..',import.meta.url).pathname,dir=mkdtempSync(join(tmpdir(),'feature-recipes-test-'));
-execFileSync(process.env.PYTHON||'/Users/daniel/src/terraform/.venv/bin/python',[root+'sculpt.py','--dump-configs',dir]);
+execFileSync(process.env.PYTHON||'python3',[root+'sculpt.py','--dump-configs',dir]);
 const config=world=>JSON.parse(readFileSync(join(dir,`config/${world}.json`))),green=config('green'),red=config('red'),palette=JSON.parse(readFileSync(root+'materials/palette.json')).indexed;
 const recipe=(kind,source,id)=>{const p=green.featureCatalog.find(p=>p.id===source);assert.equal(p.kind,kind);return makeRecipe(kind,p.data,id,p.name);};
 

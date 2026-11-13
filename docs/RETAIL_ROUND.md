@@ -106,11 +106,12 @@ before the color.
 
    One commit per idea, with every window's shape and look scores before
    and after in the message.
-5. **Check.** `repro/check.sh quick --worlds <world>`: only the world's
-   own scenes may move. A variant's scenes go by their own name, so Green's
-   card passes `--worlds green,green-modern` only if it changed both.
-   Before you hand back, run `repro/check.sh land --server <yours>
-   --port <cdp>` too (your own server: BACKLOG ground rule 2).
+5. **Check.** Follow AGENTS.md's focused check policy. The old automatic
+   all-scene baseline and `land`/`full` tiers are retired. If a retail round
+   explicitly needs image comparisons, render the requested windows and use
+   `repro/compare.py <before> <after> --worlds <world>`; a variant's scenes go
+   by their own name, such as `green-modern`. Retail comparisons remain on
+   demand while retail matching is parked.
 6. **Propose.** When no setting closes a gap, write what retail shows,
    which metric and window show it, which existing control comes closest,
    and what change would close it: a stronger range, a new preset, a
