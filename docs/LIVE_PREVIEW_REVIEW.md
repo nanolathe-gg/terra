@@ -28,7 +28,9 @@ the owner-approved 8-pixel first Time picture. Continuous Rain p95 improves
 the final pair. Shared fragments remove edit-time ray-marcher compilation.
 These remain focused measurements: paused Rain still misses 100 ms, the
 worst sampled contour offset is 31.5 px, and load briefly exceeds the 512-MiB
-budget by 1.1 MiB. Sampled final and tile-partition pixels stay exact.
+budget by 1.1 MiB. An earlier candidate also logged a transient memory-budget
+exception and is excluded from acceptance. Sampled final and tile-partition
+pixels stay exact.
 
 Remaining work, in order:
 

@@ -10,8 +10,9 @@ rendering. These are focused measurements, not full LP3 acceptance.
 p95 improve **273.8 → 97.9 ms** continuously and
 **258.7 → 100.3 ms** with a pause.
 Release-to-final improves **9.1%** and **6.0%**, respectively.
-The preceding identical candidate measured **99.9 / 104.6 ms** p95, so the
-100-ms Rain target is not established across repeats. The limit still includes
+An earlier identical candidate logged a transient memory-budget exception
+and is excluded from acceptance. The 100-ms Rain target remains unmet in the
+clean pair, and repeatability is not established. The limit still includes
 a full coarse Time refresh and waiting for the preceding draw to drain.
 
 ## Changes
@@ -68,9 +69,12 @@ Chrome/157.0.8103.78, map16, explicit **512 MiB**, terrain view
 (2048,2048), matching the previous report. Both fresh servers discard a warm-up.
 Each timing run checks `ps` and passes three consecutive GPU-utilization
 samples at or below 20%; no concurrent benchmark was observed. The retained
-sequence is baseline, candidate, baseline, unchanged candidate; other development
-experiments are excluded. [Compact metrics](LP3_RAIN_RESPONSE_METRICS.json)
-retain both pairs, all endpoints, costs, compile probes and correctness evidence.
+sequence is baseline, candidate, baseline, unchanged candidate. The earlier
+candidate raises a transient configureChunks memory-budget exception during
+input and is excluded from acceptance. Only the last baseline/candidate pair
+qualifies here, with empty error logs; other development experiments are excluded. [Compact metrics](LP3_RAIN_RESPONSE_METRICS.json)
+retain all four runs with their qualification, all endpoints, costs, compile
+probes and correctness evidence.
 
 Times are **p50 / p95 ms**. Pointer tiles are absent for controls outside the
 terrain. Each release has one completed final sample; the mid-drag pause's
