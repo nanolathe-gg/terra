@@ -262,3 +262,29 @@ matches its cold replay exactly. This is diagnostic, not an alternating
 acceptance batch.
 
 Final specialization now starts after a coarse picture has answered the input, using the gate key captured by that draw. It does not block the generic preview. In a focused Green 7/map16 large-view diagnostic, the cold-gate final took 1405 ms, the whole-view p95 was 81 ms, no long tasks or console errors appeared, and all 1,769,472 final pixels matched a cold replay. This diagnostic is not the alternating acceptance matrix. Eight focused renderer/memory checks and all benchmark hooks pass.
+
+
+## Overnight landing decision, November 13
+
+The broader native-preview candidate `fe03c540` did not pass its unchanged
+final-cost guard. Two alternating pairs against main `222ace7a`, Green 7 /
+map16 / 1728×1024 at 2048 MiB, give cold-gate release-to-final medians of
+1216.10 ms on main and 1340.25 ms on review: **+10.21%**, against the 10%
+limit. Main’s own spread is 50.6 ms. No threshold or endpoint was relaxed.
+The full LP2 matrix stopped at that fixture; it is not an acceptance run.
+
+Incremental presentation now paints only a new current final tile when the
+camera is unchanged; stale completions retain full composition. Empty
+allocation scopes are skipped for reused textures, while real allocations
+and the forced failure remain scoped. A 75-ms final-overlap trial did not
+establish a gain and was reverted to 50 ms. Final progress yields an input
+task with GPU backpressure retained. These adjustments substantially reduce
+the earlier 22–27% Colors regression, but they do not establish LP2 acceptance.
+The complete final viewport still matches cold replay: zero changed pixels
+in both 1,769,472-pixel comparisons.
+
+The near-instant preview gains remain on this branch. The overnight landing
+checkpoint contains the completed LP0c, LP4 step 1 and LP1 work, plus current
+main’s UI and the private-Time-buffer correction. It is verified separately;
+the unaccepted LP2/LP3 implementation is not part of that checkpoint.
+Safari validation remains explicitly deferred.
