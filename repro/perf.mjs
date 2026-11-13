@@ -472,7 +472,7 @@ finally{
   console.log(warmup?'Warm-up discarded.':budgetTable([result]));if(result.error)console.error(result.error);
   ws.close();chrome.kill();await new Promise(r=>chrome.exitCode!==null?r():chrome.once('exit',r));
   // This process owns this exact temporary Chrome profile; remove it promptly.
-  rmSync(profile,{recursive:true,force:true});
+  rmSync(profile,{recursive:true,force:true,maxRetries:5,retryDelay:100});
 }
 process.exitCode=result.error?1:result.slider?.some(p=>p.status==='blocked')?2:0;
 
