@@ -638,7 +638,7 @@ The two delays are implementation constants (rule 9), tuned on the bench.
 
 **Overnight final-cost correction.** For an F-only input, a coarse picture may also
 yield one turn to a final tile whose previous completed bake and queue
-wait were at most 50 ms. The estimate is valid only for the same level and
+wait were at most 75 ms. This wall-time bound leaves headroom for the next coarse picture within LP2’s 200-ms input budget; the 50-ms preview-GPU and 100-ms submission limits are unchanged. The estimate is valid only for the same level and
 budget, with no intervening geometry or Time change. While coarse is stale, a completed block must precede each such turn, and
 the next coarse update takes priority again afterward. The shortcut requires one
 view block and cached pipelines. A new input still replans after the unit
