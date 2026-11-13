@@ -104,7 +104,10 @@ export function makeRecipe(kind, data, id = 0, name = LABELS[kind]) {
   return entry;
 }
 export function defaultSet(config) {
-  return Object.fromEntries(worldKinds(config).map(kind => [kind, {nextId: 1, recipes: [makeRecipe(kind, kindData(kind, config), 0, `${config.biome || 'Default'} ${LABELS[kind].toLowerCase()}`)]}]));
+  return Object.fromEntries(worldKinds(config).map(kind => {
+    const recipe=makeRecipe(kind,kindData(kind,config),0,`${config.biome || 'Default'} ${LABELS[kind].toLowerCase()}`);
+    return [kind,{nextId:1,recipes:[normalizeRecipe(kind,recipe,config,recipe)]}];
+  }));
 }
 // Only JSON values that the generators use are kept. Unknown/removed options do not
 // survive in saves as hidden behavior; numeric values and work sizes are bounded.
