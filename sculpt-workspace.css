@@ -216,3 +216,5 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 #start-list{font-size:11px;padding:2px}#start-list option{padding:3px 6px}
 .tool-settings .control:has(>.feature-kinds),.tool-settings #feature-starts{display:block}
 #feature-starts>label{display:none}#feature-starts>select{width:100%;margin:0 0 6px}#feature-starts>button{width:100%}
+
+#new-map-dialog{color:var(--text,#dce4df);background:#151e22;border:1px solid #587265;border-radius:12px;width:min(560px,calc(100vw - 40px));padding:24px}#new-map-dialog::backdrop{background:#05090bbb}#new-map-dialog h2{margin-top:0}.new-map-worlds{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:20px 0}.new-map-worlds button{padding:16px 8px;white-space:normal;min-height:60px}.new-map-worlds button[aria-pressed=true]{border-color:#b4d589;background:#304a35}.new-map-size{display:flex;gap:16px}.new-map-size input{width:65px}#new-map-dialog .row{justify-content:flex-end}

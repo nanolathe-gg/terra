@@ -1,6 +1,6 @@
 import {requestAdapter} from './sculpt-webgpu.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
-import {configureMap,mountMapCanvas} from './sculpt-map.js';
+import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
@@ -258,7 +258,7 @@ function updateControls() {
   for(const id of ['rotate-left','rotate-right','scale-down','scale-up'])$(id).disabled=!nodes[selected]?.points||locked;
   $('view-clay').setAttribute('aria-pressed',String(!$('view-passability').matches('[aria-pressed=true]')&&$('clay').checked));
   $('view-rendered').setAttribute('aria-pressed',String(!$('view-passability').matches('[aria-pressed=true]')&&!$('clay').checked));
-  for(const id of ['save','load','view-clay','view-rendered','view-passability','blank'])$(id).disabled=!ready||loading||Boolean(stroke||moving);
+  for(const id of ['new-map','save','load','view-clay','view-rendered','view-passability','blank'])$(id).disabled=!ready||loading||Boolean(stroke||moving);
   const pointCount=nodes[selected]?.points?.length||0;
   $('path-help').textContent=pathEditing?pathAdding?'Click to extend from the selected point. An interior point starts a branch. Escape finishes.':`${paths.length} path${paths.length===1?'':'s'} · ${pointCount} points${pathPoint>=0?' · point '+(pathPoint+1)+' selected':''}. Select a point to insert, extend, or branch.`:'Drag to move · labeled handles rotate / scale · Shift snaps handles · arrow keys nudge.';
   // With Select active, show the selected shape's own controls; a palette entry shows its stroke kind's (the shape buttons draw landforms).
@@ -900,7 +900,7 @@ function readRegional(request) {
 }
 function setMapBusy(on) {
   loading=on; $('editor').disabled=on; $('world-editor').disabled=on;
-  for (const id of ['weather','clay','light','feature-tool','starts-tool']) $(id).disabled=on;
+  for (const id of ['new-map','weather','clay','light','feature-tool','starts-tool']) $(id).disabled=on;
   for(const input of document.querySelectorAll('#rendering-host input'))input.disabled=on;
   renderLayers();updateControls();
   overlay.style.pointerEvents=on?'none':''; const panel=$('map-features-controls'); if (panel) panel.disabled=on;
@@ -1267,8 +1267,9 @@ let leavingForWorld=false,openingShared=false;   // set while a load hands the m
 async function loadSketchFile(s,commit=true) {
   if(!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==6 || !Array.isArray(s.nodes) || s.nodes.some(n=>!n))throw new Error('Load a map stroke graph.');
   const biome=typeof s?.biome==='string'?s.biome:'';
+  const savedWorld=typeof s.world==='string'&&worlds[s.world]?.base===biome?s.world:biome;
   const mapChanged=(s?.map?.unitsX??0)!==(config.map?.unitsX??0) || (s?.map?.unitsY??0)!==(config.map?.unitsY??0) || (s?.map && s.seaLevel!==config.seaLevel);
-  if (biome && (biome!==config.biomeId || mapChanged || (s.variant||'')!==(config.variant||''))) {
+  if (biome && (biome!==config.biomeId || savedWorld!==worldId || mapChanged || (s.variant||'')!==(config.variant||''))) {
     let served=false,variant='';
     try {
       const response=await fetch(configUrl(biome));
@@ -1284,7 +1285,7 @@ async function loadSketchFile(s,commit=true) {
     catch (err) { error('The saved terrain could not be carried to '+biome+': '+err.message); return false; }
     status(`Opening ${biome} for the saved terrain…`);
     leavingForWorld=true;
-    goToWorld(biome,null,{pendingSketch:token,variant,shared:openingShared?1:'',mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
+    goToWorld(biome,savedWorld,{pendingSketch:token,variant,shared:openingShared?1:'',mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
     return false;
   }
   loadSketch(s); if(commit)checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather();return true;
@@ -1879,7 +1880,7 @@ async function bootMap() {
     if(gpuWeather)gpuWeather.invalidRect=invalidateRefinement(gpuWeather.invalidRect,rect,worldGrid);
     if(refined)refinedInvalidRect=invalidateRefinement(refinedInvalidRect,rect,worldGrid);
   });
-  addGroundNode();
+  if(!experiment.has('newMap'))addGroundNode();
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); renderer.setColors(worldColors());$('export').textContent='Export view PNG';
@@ -1891,7 +1892,7 @@ async function bootMap() {
   syncColumnPanel=mountColumnPanel(()=>rockSelected>0?presetColumn():({column:columnForEdit(),variant:config.variant,edited:Boolean(columnOverride)}),
     column=>rockSelected>0?editPresetColumn(column):editColumn(column),()=>rockSelected>0?checkpoint(true):commitColumn(),
     ()=>{if(rockSelected>0){const rock=mapRocks.find(r=>r.slot===rockSelected);editRocks(setRock(mapRocks,rockSelected,{knobs:rock.knobs,column:null}));checkpoint(true);}else{editColumn(null);commitColumn();}});
-  let saved=null; try { if (LOCAL_KEY && !experiment.has('pendingSketch')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
+  let saved=null; try { if (LOCAL_KEY && !experiment.has('pendingSketch') && !experiment.has('newMap')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
   if (saved) {
     try {
       const s=JSON.parse(saved),same=s.biome===config.biomeId && (s.variant||'')===(config.variant||'') && (s.world||s.biome)===worldId;
@@ -1907,7 +1908,33 @@ async function bootMap() {
   updateControls(); resize(); schedule(); queueWeather();
   $('one').click();   // every page load starts at 1x, centered on the map
   await openSharedMap();
+  $('new-map').disabled=false;showPrevious();
+  if(experiment.has('newMap')){const url=new URL(location.href);url.searchParams.delete('newMap');$('map-name').value=url.searchParams.get('mapName')||'Untitled map';url.searchParams.delete('mapName');window.history.replaceState(null,'',url);saveWorking();}
+  else if(!saved&&!location.search)openNewMap(true);
 }
+// New and first run share one picker and the existing previous-map slot.
+function openNewMap(first=false) {
+  const dialog=$('new-map-dialog'); let picked=config.biomeId;
+  $('new-map-title').textContent=first?'Start a map':'New map';
+  $('new-map-cancel').hidden=$('new-map-previous').hidden=first;
+  $('new-map-error').textContent='';
+  const choices=Object.entries(config.biomes||{});
+  $('new-map-worlds').replaceChildren(...choices.map(([id,name])=>{const b=document.createElement('button');b.type='button';b.textContent=name;b.dataset.world=id;b.setAttribute('aria-pressed',String(id===picked));b.onclick=()=>{picked=id;for(const button of $('new-map-worlds').children)button.setAttribute('aria-pressed',String(button===b));};return b;}));
+  $('new-map-width').value=config.map?.unitsX??4;$('new-map-height').value=config.map?.unitsY??4;
+  const dimensions=()=>{const m=mapGeometry(Number($('new-map-width').value),Number($('new-map-height').value));$('new-map-pixels').textContent=`${m.width} × ${m.height} pixels`;for(const b of $('new-map-sizes').children)b.setAttribute('aria-pressed',String(Number(b.dataset.size)===m.unitsX&&m.unitsX===m.unitsY||b.dataset.size==='custom'&&(![4,8,12,16].includes(m.unitsX)||m.unitsX!==m.unitsY)));};
+  $('new-map-name').value='Untitled map';
+  for(const b of $('new-map-sizes').children)b.onclick=()=>{if(b.dataset.size==='custom'){$('new-map-width').focus();return;}$('new-map-width').value=$('new-map-height').value=b.dataset.size;dimensions();};
+  $('new-map-open').onclick=()=>{dialog.close();$('load').click();};
+  $('new-map-width').oninput=$('new-map-height').oninput=dimensions;dimensions();
+  dialog.oncancel=e=>{if(first)e.preventDefault();};$('new-map-cancel').onclick=()=>dialog.close();
+  $('new-map-form').onsubmit=e=>{e.preventDefault();if(!e.target.reportValidity())return;
+    if(!first&&!keepPrevious(localStorage,JSON.stringify(workingCopy()))){$('new-map-error').textContent='Your previous map could not be kept. Save it as a file before starting a new map.';return;}
+    clearTimeout(autosaveTimer);keepSaved=true;
+    const url=new URL(location.origin+location.pathname);url.searchParams.set('biome',picked);if(picked===config.biomeId){if(config.variant)url.searchParams.set('variant',config.variant);if(worldId!==config.biomeId)url.searchParams.set('world',worldId);}url.searchParams.set('mapName',$('new-map-name').value.trim()||'Untitled map');url.searchParams.set('mapX',$('new-map-width').value);url.searchParams.set('mapY',$('new-map-height').value);url.searchParams.set('newMap','1');location.href=url;
+  };
+  dialog.showModal();
+}
+$('new-map').onclick=()=>{if(ready&&!loading&&!stroke&&!moving)openNewMap();};
 async function boot() {
   try {
     await requestAdapter();   // a browser without WebGPU, or an adapter below the engine's limits, gets a plain message before anything loads
