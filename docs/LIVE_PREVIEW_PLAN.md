@@ -804,6 +804,12 @@ report says which budget cells main already meets.
 
 ### LP0b. The proof in the page (S; the go/no-go; a `prototype/*` branch that does not land)
 
+**Owner timing deferral, 2026-11-12.** The shared GPU was busy. The owner
+authorized continuing the correctness work and the next items without
+timing runs, to measure later when the system is quiet. LP0c and LP0b
+performance gates remain pending; their thresholds are unchanged. The
+LP0b stop for the owner’s look and Go decision still applies.
+
 **Change.** The smallest slice that puts the central claim in Chrome, on
 today's `clear()` and `changeSeq`, with nothing restructured:
 - while `interacting()`, the plan is one coarse block over the visible
@@ -853,6 +859,20 @@ today, seams unexamined. Its code is thrown away; its numbers are kept, and
 the bench's two additions are carried to LP2.
 
 ### LP0c. View tiles stay 256 px (S; proposed after LP0, the owner's call; independent of every other card)
+
+**Owner addendum, 2026-11-12.** The first pixel count stopped on one
+`green-2`/`map16` pixel. The owner requested its fix and allowed a few
+changed scene pixels if the fix is better and simpler. A shared correction
+in `regionalUv` now splits the global coordinate before subtracting the
+tile origin, avoiding fused-arithmetic rounding at different local
+precisions. It moves 6 pixels across `green-2`, `green-5` and
+`green-modern-2` against main `8e42ae8e`; every scene on both map sizes
+has 0 differing pixels between 128, 256 and 512 px tiles **[measured,
+branch `lp0c/view-tiles`, sampling fix `abf61c1b`]**. This correction is the
+sole exception to this card's `--worlds none` requirement: the land tier
+may name `green,green-modern`, with the exact 6-pixel count checked
+separately and no further scene change from the view-grid work. The
+zero-pixel tile-size test remains unchanged.
 
 **Why.** Section 3.1 and 3.7: on a large window a rocky world is baked in
 128 px tiles, which cost 2.1 to 2.7 times what 256 px tiles do for the
