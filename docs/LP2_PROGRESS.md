@@ -1,48 +1,93 @@
-# LP2 progress: input batching
+# LP2 progress
 
 Implementation is on `live-preview/review`; main is untouched. This is a
-partial card, not LP2 acceptance.
+partial card, not LP2 acceptance. The review server is
+http://127.0.0.1:8903/sculpt.
 
-World/preset knob rows and World color choices now store their latest
-values and update their numbers on input. One animation-frame batch applies
-the combined uniform change. The address, World store, control sync and
-checkpoint wait for release or 250 ms without input. Recipe handoffs flush
-pending values first. Surface sliders and clay/light use the same queue;
-applied render options stay stable until that frame, so a canvas frame
-cannot consume an unapplied DOM value. Column/color synchronization now uses
-one complete writer call.
+World/preset knob rows, World colors, preset rock/bed/absorption colors,
+Surface sliders and clay/light share one animation-frame input queue.
+Address, World storage, control sync and checkpoint wait for release or
+250 ms without input. Handoffs apply pending values before reading recipes.
+Applied surface options remain stable until the batch runs. Independent
+preset color fields merge without replacing another pending color.
 
-Measured basic checks: 13 targeted CPU checks in about 50 ms; 130 exact
-world-uniform comparisons; a 42-event World/color burst and then a 43-event
-burst including surface detail each produce one renderer update. No address
-or storage write happens in those input handlers or before the batch;
-one of each happens after the pause. Release applies before commit. Pending
-surface detail stays at its prior model value, then becomes exactly 0.7
-(up to float storage) with the batch. The paged preset check keeps its local
-1176×1394 dirty region and unchanged Time key; repeating its value does no
-render work. Console errors: zero.
+Measured basic checks: a 43-event mixed World/color/Surface burst and a
+42-event mixed preset-color burst each make one renderer update, with no
+immediate render or storage work. Preset edits keep their local dirty
+rectangle and unchanged Time key. Eleven knob checks pass in about 50 ms.
+The prior 130 exact world-uniform comparisons remain the writer proof.
 
-A mouse-driven rock row and cold gate plus the owner-authorized scripted
-Colors workload accounted for 180/180 inputs, all bound to the native cache
-serial. The custom page scrubs emit untrusted DOM `input` events from real
-mouse gestures; Colors is the explicitly scripted workload. The GPU failed
-the 20% quiet-start guard for a timing attempt, so that attempt aborted.
-The subsequent run was correctness only and all its timings were discarded.
-No new latency acceptance or speedup in milliseconds is claimed yet.
+View blocks now replace the per-tile quarter plan. A pure estimate chooses
+aligned balanced-grid partitions over visible stale ground. Immutable
+block canvases sit over older finals, clipped around current/newer final
+tiles. Coarse comes first, quarter after about 100 ms, and focused final
+tiles after release or about 250 ms. Recent World inputs count as active
+for page preparation; a pause permits refinement while a row remains held.
+Off-screen tiles wait for visible finals and about a second without input.
+Cold page preparation can grow residency: that triggers a new plan before
+working allocation, preserving visible final images. `idle()` includes
+visible refinement delays. Obsolete coarse images are pruned.
 
-The pure block planner now has four CPU checks for one/four blocks, global
-alignment, clipping and coverage. Working textures now share exact lattice
-sets and retain three levels in the focused page check. A nonflat 256×256
-window returns to the same RGBA hash after level switches and rendering a
-different window; input and final-field textures retain identity. Final
-accounting is 282.7 MiB of 512, with zero console errors. The small ownership
-check protects active sets and destroys each cached resource once.
+Measured focused page checks:
 
-Still unfinished: connecting block composition, refinement timing/focus,
-the generic pipeline measurement/set, memory adjustment and remaining
-preset-color handling. The owner deferred the Safari probe after its
+- A map4 cliff session renders coarse blocks and returns one 256×256 final
+  window to exactly its cold-bake RGBA hash after slider input. This is one
+  window, not an all-scene pixel claim.
+- On `green-modern-2`/map16, 1728×1024 at 512 MiB, the native observer binds
+  and observes whole-current coverage for 180/180 inputs: 40 stroke moves,
+  32 resume moves and three 36-value slider workloads. Coarse, quarter and
+  final pictures appear. Console errors and long tasks: zero. Accounted
+  GPU peak: 510.7 MiB. Cold work still builds two pipeline sets across the
+  run. Its timings were unqualified and discarded; the original load
+  sample is excluded because load binding was subsequently corrected.
+- A deliberately held Time result on map4 exposes its old B revision as
+  old; map16 keeps the new weather feed pending. Both expose the new
+  revision after completion, with zero console errors. The bench rejects
+  old weather and Fit backdrops at detail zoom even if an image has a new
+  serial. Paged Rain now says weather is pending until the current feed
+  arrives; export retains on-demand page computation.
+- Exact lattice texture sets are shared across levels. A nonflat 256×256
+  window keeps the same final hash after level switches and another ROI;
+  input/final-field texture identity is retained. Three levels remain,
+  ending at 282.7 MiB of 512. A small ownership check verifies exact-once
+  release and protects active sets.
+
+The default is now 2048 MiB, or 1024 with an available device-memory
+signal of 4 or less. An explicit artist budget wins until it fails.
+Working textures use allocation error scopes; a failure releases preview
+resources, lowers the budget and replans. The existing editor preference
+object holds the settled notch and a trial note; no storage key or control
+was added. Focus preserves this state. The existing memory line explains
+a reduction. A repeated address remembers a budget it failed at.
+
+Measured memory checks in Chrome: default 2048; a forced working-set
+failure at 768 lowers to 512 with no banner. On map16 the visible coarse
+view changes from one block to two, then reaches final, with zero console
+errors. A simulated interrupted 2048 trial starts at 1536 and clears its
+note after drawing. Four small policy checks pass in about 41 ms, and five
+static-site checks pass in 0.63 s. This uses a forced failure, not actual
+memory exhaustion. Other large allocations and lost-device recovery are
+still unfinished. Existing per-buffer/texture limits still constrain the
+renderer; an adapter limit does not reveal a total memory budget.
+
+An exploratory generic shader probe compiled both rock-mask sets in 6.6 s.
+At level 4 on one 1728×1024 cliff window, two alternating generic/specialized
+pairs have identical RGBA hashes; GPU pass totals are 60–65 ms generic and
+58–59 ms specialized. Driver load at start was 57–63%, so these are loaded
+exploratory observations, not qualified latency results or a settled
+pipeline choice. Startup cost needs a quiet measurement before choosing
+between the generic set and the plan's prewarming fallback. No generic
+pipeline code has been added to the editor.
+
+Still unfinished: the pipeline choice/no-compile gate; remaining large
+allocation and lost-device recovery; the page budget's preview reserve;
+focused Rain/Face steepness interaction verification; seam/color-bias
+review; qualified alternating latency/final-cost measurements; and broader
+combined pixel/export checks. The 200/400 ms, 10% final-cost and exact-pixel
+gates are unchanged. The owner asked to keep checks simple and fast, so
+broader checks remain deferred.
+
+Safari runtime validation is explicitly deferred by the owner after its
 protected-setting authentication prompt. Remote automation remains off;
 developer-feature visibility was restored to off and Settings was closed.
-No Safari runtime memory facts are claimed.
-The 200/400 ms, 10% final-cost and pixel gates remain unchanged. Broader
-correctness runs stay deferred at the owner's request.
+No Safari, iMac or iPad runtime memory facts are claimed.

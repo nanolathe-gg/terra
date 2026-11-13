@@ -13,12 +13,13 @@ before any merge. The isolated review server is **http://127.0.0.1:8903/sculpt**
   output proof and alternating timings. Later LP4 work remains unfinished.
 - [LP1](LP1_REPORT.md): native dirty model, complete computed World-row table,
   focused correctness and combined-branch slider timings.
-- LP2: input batching is in progress: World/preset rows, World colors,
-  surface sliders and view switches now share a frame queue. A 43-event
-  mixed page burst produces one uniform update; release/pause persistence
-  and handoffs have basic checks. Whole-view blocks, generic pipelines and
-  memory adjustment remain unfinished. The last qualified rock-feedback
-  p95 is still 257 ms. Safari memory validation remains pending.
+- [LP2 progress](LP2_PROGRESS.md): frame batching, native view blocks,
+  pause/release refinement, exact working texture reuse, Time freshness and
+  adaptive working-memory recovery are implemented with focused checks.
+  The default is 2048 MiB; a forced paged failure recovers at 512 in two
+  blocks. The no-compile gate, remaining allocation recovery and qualified
+  latency/final-cost measurements remain unfinished. Safari validation is
+  explicitly deferred. No LP2 acceptance or new qualified speedup is claimed.
 
 Checks stay focused on perf and basic correctness at the owner's request.
 The reports distinguish earlier completed sweeps from deferred combined-tree

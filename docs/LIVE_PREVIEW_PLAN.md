@@ -20,7 +20,9 @@ checks and timings in [LP1_REPORT.md](LP1_REPORT.md). Its combined all-scene
 and land gates are deferred under the owner's instruction to keep checks
 simple and fast; they are not claimed as passed. LP0b's throwaway editor
 remains outside the shipping branch, with its historical report included
-for review. The broader live-preview targets remain unfinished.
+for review. LP2's blocks, input batching and partial memory recovery are documented in
+[LP2_PROGRESS.md](LP2_PROGRESS.md); its acceptance gates remain unfinished.
+The broader live-preview targets remain unfinished.
 
 **The owner's brief (2026-11-11):** "We need to increase the perceived
 rendering speed and interactive responsiveness of Terraform. Artists need it
