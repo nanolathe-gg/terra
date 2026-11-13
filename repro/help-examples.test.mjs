@@ -30,5 +30,7 @@ test('committed hover previews match the examples',()=>{
   const size=name=>{const png=readFileSync(new URL(name,previews));return [png.readUInt32BE(16),png.readUInt32BE(20)];};
   const images=[...HELP_TOOLS.map(tool=>[helpImage({tool}),1]),...Object.entries(HELP_CONTROLS).map(([control,e])=>[helpImage({control}),helpFrames(e).length])];
   for(const [name,frames] of images)assert.deepEqual(size(name),[frames*HELP_FRAME.width,HELP_FRAME.height],name);
-  assert.deepEqual(readdirSync(previews).filter(f=>f.endsWith('.png')).sort(),images.map(([name])=>name).sort());
+  const worlds=Object.values(manifest.worlds.images);
+  for(const name of worlds)assert.deepEqual(size(name),[manifest.worlds.frame.width,manifest.worlds.frame.height],name);
+  assert.deepEqual(readdirSync(previews).filter(f=>f.endsWith('.png')).sort(),[...images.map(([name])=>name),...worlds].sort());
 });
