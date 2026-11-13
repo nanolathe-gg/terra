@@ -191,3 +191,12 @@ real-mouse Face steepness check changes held preview counts from 0 to 8,
 with current finals afterward and zero console errors. Rain's eight-value
 continuous check still shows pending weather, without a held picture; its
 pause and broader acceptance remain open. No final shader changes.
+
+The same short real-mouse Rain check with one 1,000-ms held pause produces
+two completed preview blocks; five held observations see a block from this
+edit. Continuous updates correctly retain the pending-weather text until a
+current pass completes. After release, the final 256×256 window equals a
+cold sketch reload byte for byte, SHA-256
+`670e9222c1e82a0830a921e566f098c32da6b0676fa400a66899a6f209d0251d`.
+Console errors: zero. This is a basic correctness result, not a qualified
+latency or final-cost claim.
