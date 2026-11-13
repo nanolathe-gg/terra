@@ -260,3 +260,5 @@ anchor. Error-scope waits total about 70–72 ms across 56 final attempts
 They are not the whole final-cost penalty. The complete viewport still
 matches its cold replay exactly. This is diagnostic, not an alternating
 acceptance batch.
+
+Final specialization now starts after a coarse picture has answered the input, using the gate key captured by that draw. It does not block the generic preview. In a focused Green 7/map16 large-view diagnostic, the cold-gate final took 1405 ms, the whole-view p95 was 81 ms, no long tasks or console errors appeared, and all 1,769,472 final pixels matched a cold replay. This diagnostic is not the alternating acceptance matrix. Eight focused renderer/memory checks and all benchmark hooks pass.

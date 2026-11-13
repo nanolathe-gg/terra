@@ -704,12 +704,12 @@ export class TerrainRenderer {
     const encoder = device.createCommandEncoder({label: 'terrain'});
     // P6: a SpecializationMiss abandons this encoder, its bake included, so the fields go back to unbaked and the retry bakes again.
     const dirty = this.fieldsDirty;
-    let drawPipeline;
+    let drawPipeline,pipelineKey;
     try {
       if (dirty) this.bakeFields(encoder);
       // Looked up after the bake, which sets some of the gates' uniforms.
       drawPipeline = this.drawPipeline;
-      this.specCheck();
+      this.specCheck();pipelineKey=this.specKey().key;
     } catch (error) { this.fieldsDirty = dirty; throw error; }
     this.flushUniforms();device.queue.submit([encoder.finish()]);
     if(!this.voxelColor||this.voxelColor.width!==this.canvas.width||this.voxelColor.height!==this.canvas.height){
@@ -730,7 +730,7 @@ export class TerrainRenderer {
     const present=device.createCommandEncoder({label:'present voxel terrain'});
     present.copyTextureToTexture({texture:this.voxelColor},{texture:this.context.getCurrentTexture()},[this.canvas.width,this.canvas.height]);device.queue.submit([present.finish()]);
     this.gpuResult=Promise.all(timers.map(t=>t.result())).then(values=>{const ms=values.reduce((a,b)=>a+(b??0),0);this.lastGPU=ms;return ms;});
-    return {milliseconds:performance.now()-start,gpuMilliseconds:this.lastGPU};
+    return {milliseconds:performance.now()-start,gpuMilliseconds:this.lastGPU,pipelineKey};
   }
 
   // Surface knobs read from the variant; callable again after a change.

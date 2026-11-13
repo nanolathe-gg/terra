@@ -192,7 +192,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       const atSerial=serial,atRev={...rev},result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale,preview:block,deferPipelines:!exportArt,deferCompletion:!fit&&!exportArt});bakes++;
       const bitmap=block?new OffscreenCanvas(ow,oh):await createImageBitmap(result.canvas,0,0,ow,oh,{colorSpaceConversion:'none'});
       if(block)bitmap.getContext('2d').drawImage(result.canvas,0,0,ow,oh);
-      const entry={...rect,bitmap,bytes:ow*oh*4,scale,fit,weathered:readWeather,fed:true,serial:atSerial,rev:atRev,shapeRev:feed.revision,weatherRevB:fit?null:feed.weatherRevB,level:scale,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
+      const entry={...rect,bitmap,bytes:ow*oh*4,scale,fit,weathered:readWeather,fed:true,serial:atSerial,rev:atRev,shapeRev:feed.revision,pipelineKey:result.pipelineKey,weatherRevB:fit?null:feed.weatherRevB,level:scale,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
       if(measureFinal)renderer.previousChunk.then(()=>{if(!changedSince(atSerial,entry.input,'E')){entry.finalCostMs=performance.now()-costAt;entry.finalCostBudget=costBudget;}},()=>{});
       const key=rect.x+','+rect.y+','+canonicalSize+','+scale;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
     }finally{feed.release?.();}
@@ -327,6 +327,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(fresh&&!foregroundPending()&&(!api.canExport||api.canExport()))terrainBudget.settled();
     if(fresh&&pendingStrokeTime){strokeTimes.push(now-pendingStrokeTime);if(strokeTimes.length>256)strokeTimes.shift();pendingStrokeTime=0;}
   }
+  function watchPipelines(key,ready){
+    if(pipelineWaits.has(key))return;
+    pipelineWaits.set(key,ready);
+    ready.then(()=>{pipelineWaits.delete(key);schedule();},error=>{pipelineWaits.delete(key);if(!renderer.recovering){console.error(error);$('error').hidden=false;$('error').textContent=error.message;}});
+  }
   async function frame() {
     pending=false;let rendering=false,needsCoarse=false;const renderStart=performance.now();
     try {
@@ -398,6 +403,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             if(want===4*detailLevel()){fineSinceCoarse=false;needsCoarse=false;}
             if(prior)blockBytes-=prior.bytes;blocks.set(key,e);blockBytes+=e.bytes;
             paintedView=-1;presentView();presented();rerun=true;
+            // The gates in this picture have already answered input. Compile
+            // their exact final set without holding another preview behind it.
+            const state=renderer.specKey();
+            if(e.pipelineKey===state.key&&!renderer.specCache.has(state.key)&&!pipelineWaits.has(state.key))watchPipelines(state.key,renderer.specialize(state));
             if(token!==serial||viewToken!==viewEpoch){rerun=true;break;}continue;
           }
           if(pipelineWaits.has(renderer.specKey().key))continue;
@@ -448,10 +457,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
     }catch(err){if(err.name==='PipelinesPending'){
       if(needsCoarse)rerun=true;   // a compile miss must not hold the next coarse picture
-      if(!pipelineWaits.has(err.key)){
-        pipelineWaits.set(err.key,err.ready);
-        err.ready.then(()=>{pipelineWaits.delete(err.key);schedule();},error=>{pipelineWaits.delete(err.key);console.error(error);$('error').hidden=false;$('error').textContent=error.message;});
-      }
+      watchPipelines(err.key,err.ready);
     }else if(recoverAllocation(err))rerun=true;else if(err.name==='AbortError'||err.name==='PreviewReplan')rerun=true;else{console.error(err);$('error').hidden=false;$('error').textContent=err.message;}}
     finally{if(rendering){drawing=false;if(rerun){rerun=false;schedule();}}}
   }
