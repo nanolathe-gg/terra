@@ -5,6 +5,7 @@
 // --only load|drag|release|resume|slider|scroll; --sliders comma-separated knob IDs.
 // --resume-prime-moves N and --resume-prime-pause MS vary the first stroke only.
 // --colors native|scripted: scripted explicitly substitutes value/input events.
+// --verify-final compares the final viewport with a cold recipe replay after timing.
 // --warmup discards a session; --report FILE... prints the section 2 budget table.
 // Use distinct CDP ports, discard one --warmup per fresh server, alternate workloads,
 // and check ps -Ao pcpu,command -r | head before measured runs. Never time two at once.
@@ -79,7 +80,7 @@ const featureDensity=Number(opt('--features','0'));
 const primeMoves=Number(opt('--resume-prime-moves','8')),primePause=Number(opt('--resume-prime-pause','0'));
 if(!Number.isInteger(primeMoves)||primeMoves<1||primeMoves>100||!Number.isFinite(primePause)||primePause<0||primePause>5000)throw Error('Invalid resume priming workload');
 const sliderNames=opt('--sliders','knob-faceBlockSize,knob-reliefAmount,knob-ambient,knob-sunHeight,knob-erosionRain,colors').split(',');
-const noExport=flag('--no-export'),warmup=flag('--warmup'),exact=flag('--exact-timestamps'),noSliders=flag('--no-sliders');
+const noExport=flag('--no-export'),warmup=flag('--warmup'),exact=flag('--exact-timestamps'),noSliders=flag('--no-sliders'),verifyFinal=flag('--verify-final');
 const [mode,...unknown]=args;
 if(!['map4','map8','map16','map40'].includes(mode)||unknown.length||!server||!port||port===9450||new URL(server).port==='8801')throw Error('Give map4|map8|map16|map40, --server <your server> --port <your CDP> --out <outside repo>.');
 if(viewport&&!/^\d{3,4}x\d{3,4}$/.test(viewport))throw Error('--viewport expects terrain WIDTHxHEIGHT');
@@ -351,6 +352,25 @@ const setup=async(loadInputAt=null)=>{
   await ev(`sculptDebug.scene(${JSON.stringify(scene.strokes)},{ground:${scene.ground!==false}});sculptCanvas.zoom(1);document.getElementById('viewport').scrollTo(0,300);${loadInputAt===null?'':`__perf.input('load','scene',null,${loadInputAt});`}true`);await settle();
 };
 
+// This runs after all measured endpoints, never inside an input/render phase.
+const verifyFinalView=async()=>{
+  await settle();
+  return ev(`(async()=>{
+    const c=document.getElementById('terrain'),r=sculptCanvas.renderer,view=sculptCanvas.view();
+    const read=()=>c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+    const hash=async a=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',a))).map(v=>v.toString(16).padStart(2,'0')).join('');
+    await r.device.queue.onSubmittedWorkDone();const warm=read(),sketch=sculptDebug.sketch();
+    r.evict();sculptDebug.loadSketch(sketch);await sculptCanvas.idle();
+    for(let i=0;i<1200&&!sculptRegion.canExport();i++)await new Promise(resolve=>setTimeout(resolve,50));
+    if(!sculptRegion.canExport())throw Error('Cold replay did not finish weathering.');
+    await sculptCanvas.idle();await r.device.queue.onSubmittedWorkDone();
+    const cold=read(),after=sculptCanvas.view();
+    if(JSON.stringify(view)!==JSON.stringify(after))throw Error('Cold replay changed the measured camera.');
+    let different=0;for(let p=0;p<warm.length;p+=4)if(warm[p]!==cold[p]||warm[p+1]!==cold[p+1]||warm[p+2]!==cold[p+2]||warm[p+3]!==cold[p+3])different++;
+    return {timed:false,view,width:c.width,height:c.height,pixels:warm.length/4,different,warm:await hash(warm),cold:await hash(cold),extraReadbackBytes:warm.byteLength+cold.byteLength};
+  })()`);
+};
+
 try{
   await send('Runtime.enable');await send('Page.enable');
   await send('Page.addScriptToEvaluateOnNewDocument',{source:`const createCoverage=${createCoverage.toString()};(${hooks.toString()})()`});
@@ -472,6 +492,7 @@ try{
   if(!noExport){console.error('phase export');const t0=await begin(),a=await anchor();await ev(`sculptMap.export('LP0${mode}${port}').then(r=>window.__export={done:true,result:r},e=>window.__export={done:true,error:e.message});true`);await until('window.__export?.done','export',900000);result.export=await capture(t0,[a],await ev('window.__export'));flush();}
 }catch(e){if(!String(e).includes('(--only)'))result.error=String(e.stack||e);}
 finally{
+  if(verifyFinal&&!warmup&&!result.error){try{result.finalVerification=await verifyFinalView();if(result.finalVerification.different)throw Error('Final viewport differs from its cold recipe replay: '+result.finalVerification.different+' pixels.');}catch(error){result.error=String(error.stack||error);}}
   result.finishedAt=new Date().toISOString();result.loadAverageAtEnd=loadavg();result.console=logs;flush();
   console.log(warmup?'Warm-up discarded.':budgetTable([result]));if(result.error)console.error(result.error);
   ws.close();chrome.kill();await new Promise(r=>chrome.exitCode!==null?r():chrome.once('exit',r));
