@@ -101,7 +101,7 @@ function buildShapeOptions() {
   $('along-reset').addEventListener('click',() => { setCurve(null,'along'); if (selected>=0) { checkpoint(); queueWeather(); } });
   $('curve-link').addEventListener('click',() => { toggleLink(); if (selected>=0) { checkpoint(); queueWeather(); } });
   $('curve-mirror').addEventListener('click',() => { mirrorSides(); if (selected>=0) { checkpoint(); queueWeather(); } });
-  curveEditorEvents(); alongEditorEvents();
+  curveEditorEvents(); alongEditorEvents(); curveNumberEvents();
   for (const id of ['section-preview','along-preview']) new ResizeObserver(() => { if (!$('section-preview-control').hidden) drawSection(); }).observe($(id));
   for (const [key,id] of SHAPE_FIELDS) $(id).addEventListener('input',() => {
     if(key==='heightReference'&&curveKind()==='landform'){
@@ -421,6 +421,39 @@ function sectionMark() {
 }
 // Match the dock's actual dimensions so curve text and handles stay sharp.
 function fitCanvas(cv) { const w=Math.round(cv.clientWidth),h=Math.round(cv.clientHeight); if (w>=120 && (cv.width!==w||cv.height!==h)) { cv.width=w; cv.height=h; } }
+let curvePoint={side:'front',i:0};
+function numberKnots(c=curveContext()) { return (curvePoint.side==='along'?alongKnots(c.q):curvePoint.side==='back'?backKnots(c)||frontKnots(c):frontKnots(c)).map(k=>[...k]); }
+function syncCurveNumbers(c) {
+  if(!c.land&&curvePoint.side!=='front')curvePoint={side:'front',i:0};
+  const side=$('curve-point-side');side.value=curvePoint.side;side.options[1].disabled=!c.land;side.options[2].disabled=!c.land;
+  const ks=numberKnots(c);curvePoint.i=clamp(curvePoint.i,0,ks.length-1);const i=curvePoint.i;
+  const select=$('curve-point-index');if(select.options.length!==ks.length)select.replaceChildren(...ks.map((_,j)=>new Option(String(j+1)+' of '+ks.length,j)));select.value=i;
+  for(const [id,value] of [['curve-point-x',ks[i][0]],['curve-point-y',ks[i][1]]])if(document.activeElement!==$(id))$(id).value=value;
+  $('curve-point-x').disabled=i===0||i===ks.length-1;$('curve-point-x').min=ks[i-1]?.[0]+.01||0;$('curve-point-x').max=ks[i+1]?.[0]-.01||1;
+  $('curve-point-y').min=curvePoint.side==='along'||!c.land?0:-1;$('curve-point-y').max=curvePoint.side==='along'?ALONG_HI:1.5;
+  $('curve-point-delete').disabled=i===0||i===ks.length-1||ks.length<=2;
+}
+function commitNumberKnots(ks) {
+  const c=curveContext();if(curvePoint.side==='along')setCurve(roundKnots(ks),'along');
+  else if(curvePoint.side==='back'&&!sidesLinked(c))storeSection(c,frontKnots(c),ks);
+  else storeSection(c,ks,backKnots(c));
+  if(selected>=0){checkpoint();queueWeather();}
+}
+function curveNumberEvents() {
+  $('curve-point-side').onchange=()=>{curvePoint={side:$('curve-point-side').value,i:0};drawSection();};
+  $('curve-point-index').onchange=()=>{curvePoint.i=Number($('curve-point-index').value);drawSection();};
+  for(const [id,axis]of [['curve-point-x',0],['curve-point-y',1]])$(id).onchange=()=>{const ks=numberKnots(),input=$(id),v=Number(input.value);if(!Number.isFinite(v)||input.value===''){input.value=ks[curvePoint.i][axis];return;}const value=clamp(v,Number(input.min),Number(input.max));input.value=value;if(value===ks[curvePoint.i][axis])return;ks[curvePoint.i][axis]=value;commitNumberKnots(ks);};
+  $('curve-point-delete').onclick=()=>{const ks=numberKnots(),i=curvePoint.i;if(i<=0||i>=ks.length-1||ks.length<=2)return;ks.splice(i,1);curvePoint.i--;commitNumberKnots(ks);};
+  for(const [id,amount]of [['curve-raise',.05],['curve-lower',-.05]])$(id).onclick=()=>{const c=curveContext(),lo=curvePoint.side==='along'||!c.land?0:-1,hi=curvePoint.side==='along'?ALONG_HI:1.5;commitNumberKnots(numberKnots().map(([x,y])=>[x,clamp(y+amount,lo,hi)]));};
+  for(const [id,axis]of [['curve-scale-height',1],['curve-scale-width',0]])$(id).onchange=()=>{const input=$(id),factor=Number(input.value)/100;if(input.value===''||!input.reportValidity()||!Number.isFinite(factor)||factor<=0){input.value=100;return;}const c=curveContext(),ks=numberKnots(),lo=curvePoint.side==='along'||!c.land?0:-1,hi=curvePoint.side==='along'?ALONG_HI:1.5;const out=ks.map(([x,y],i)=>axis?[x,clamp(y*factor,lo,hi)]:[i===0?0:i===ks.length-1?1:1-(1-x)*factor,y]);if(out.some((k,i)=>i&&k[0]-out[i-1][0]<.01)){input.setCustomValidity('This scale would overlap points. Use a smaller change.');input.reportValidity();input.setCustomValidity('');return;}input.value=100;commitNumberKnots(out);};
+}
+function drawShapePreview() {
+  if(!document.querySelector('.app.curves-large')||!canvas.width||!canvas.height)return;
+  const cv=$('curve-shape-preview'),g=cv.getContext('2d');g.clearRect(0,0,cv.width,cv.height);
+  let sx=0,sy=0,sw=canvas.width,sh=canvas.height;
+  if(selected>=0&&mapCanvas){const b=nodeBounds(nodes[selected]),v=mapCanvas.view(),pad=32;const x0=clamp((b.x0*spacing-v.x)*v.scale-pad,0,canvas.width),x1=clamp((b.x1*spacing-v.x)*v.scale+pad,0,canvas.width),y0=clamp((b.y0*spacing-v.y-180)*v.scale-pad,0,canvas.height),y1=clamp((b.y1*spacing-v.y+100)*v.scale+pad,0,canvas.height);if(x1>x0&&y1>y0){sx=x0;sy=y0;sw=x1-x0;sh=y1-y0;}}
+  const ratio=Math.min(cv.width/sw,cv.height/sh),w=sw*ratio,h=sh*ratio;g.drawImage(canvas,sx,sy,sw,sh,(cv.width-w)/2,(cv.height-h)/2,w,h);
+}
 function drawSection() {
   fitCanvas($('section-preview')); fitCanvas($('along-preview'));
   const cv=$('section-preview'),g=cv.getContext('2d'),c=curveContext(),L=sectionLayout(c),{ys,back}=sectionPreview(c.kind,c.q),n=ys.length-1;
@@ -441,7 +474,7 @@ function drawSection() {
   }
   const fk=frontKnots(c),edited=Boolean(c.q.curve?.knots);
   g.fillStyle=edited?'#e8f2d8':'rgba(232,242,216,.45)';
-  for (const h of sectionHandles(c,L)) { g.fillStyle=edited?(h.side==='back'&&!h.edit?'rgba(232,242,216,.55)':'#e8f2d8'):'rgba(232,242,216,.45)'; g.beginPath(); g.arc(h.X,h.Y,3.5,0,7); g.fill(); }
+  for (const h of sectionHandles(c,L)) { g.fillStyle=edited?(h.side==='back'&&!h.edit?'rgba(232,242,216,.55)':'#e8f2d8'):'rgba(232,242,216,.45)'; if(curvePoint.side!=='along'&&curvePoint.i===h.i&&curvePoint.side===(h.edit||'front'))g.fillStyle='#ffd27a';g.beginPath(); g.arc(h.X,h.Y,3.5,0,7); g.fill(); }
   // The crest's lean handle: a diamond on the crest line at the foot's height.
   g.fillStyle='#ffd27a'; g.beginPath(); g.moveTo(L.xc,base-5); g.lineTo(L.xc+5,base); g.lineTo(L.xc,base+5); g.lineTo(L.xc-5,base); g.closePath(); g.fill();
   g.strokeStyle='rgba(255,210,122,.35)'; g.setLineDash([2,3]); g.beginPath(); g.moveTo(L.xc,L.top); g.lineTo(L.xc,L.bottom); g.stroke(); g.setLineDash([]);
@@ -454,6 +487,7 @@ function drawSection() {
   const facing=Math.round(c.q.facing||0),toward=FACING_CHOICES.find(f => f[0]===(facing||3))[1];
   $('curve-lean').textContent=`Lean ${(Math.round(L.ratio*100)/100).toFixed(2)} : 1 toward ${toward.toLowerCase()}`;
   if (c.land) drawAlong(c);
+  syncCurveNumbers(c);drawShapePreview();
 }
 // The second curve: the crest's height along the path, as a share of the elevation above the plain (0 to 1.2), against the share of the way along. The dashed
 // line is what was authored; the solid line is read from the map along the path.
@@ -477,7 +511,7 @@ function drawAlong(c) {
     g.strokeStyle='#ffd27a'; g.beginPath(); g.moveTo(L.X(lfPlace),L.top); g.lineTo(L.X(lfPlace),L.bottom); g.stroke();
   }
   g.setLineDash([5,3]); g.beginPath(); for (let k=0;k<=N;k++) g[k?'lineTo':'moveTo'](L.X(k/N),L.yv(clamp(f(k/N),0,ALONG_HI))); g.strokeStyle='#e8f2d8'; g.stroke(); g.setLineDash([]);
-  g.fillStyle=c.q.along?'#e8f2d8':'rgba(232,242,216,.45)'; for (const [x,v] of knots) { g.beginPath(); g.arc(L.X(x),L.yv(v),3.5,0,7); g.fill(); }
+  g.fillStyle=c.q.along?'#e8f2d8':'rgba(232,242,216,.45)'; for (const [i,[x,v]] of knots.entries()) { g.fillStyle=curvePoint.side==='along'&&curvePoint.i===i?'#ffd27a':c.q.along?'#e8f2d8':'rgba(232,242,216,.45)';g.beginPath(); g.arc(L.X(x),L.yv(v),3.5,0,7); g.fill(); }
 }
 function curveEditorEvents() {
   const cv=$('section-preview'); let drag=null;
@@ -494,11 +528,12 @@ function curveEditorEvents() {
     if (Math.hypot(L.xc-p.px,L.yv(0)-p.py)<9) { drag={lean:true}; cv.setPointerCapture(e.pointerId); return; }
     const h=hit(c,L,p);
     if (h && e.shiftKey) { if (remove(c,{...h,edit:h.edit||'front'}) && selected>=0) { checkpoint(); queueWeather(); } return; }
+    if(h){curvePoint={side:h.edit||'front',i:h.i};syncCurveNumbers(c);}
     if (h) drag={side:h.side,edit:h.edit||'front',i:h.i};
     else {
       const side=p.px<L.xc?'back':'front',edit=side==='back'&&!sidesLinked(c)&&c.land?'back':'front',x=clamp(distShare(L,side,p.px),.01,.99);
       const list=(edit==='back'?backKnots(c):frontKnots(c)).map(k => [...k]); let j=list.findIndex(k => k[0]>x); if (j<0) j=list.length-1;
-      list.splice(j,0,[x,vOf(c,L,p.py)]); drag={side,edit,i:j}; edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c));
+      list.splice(j,0,[x,vOf(c,L,p.py)]); curvePoint={side:edit,i:j};drag={side,edit,i:j}; edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c));
     }
     cv.setPointerCapture(e.pointerId);
   });
@@ -526,6 +561,7 @@ function alongEditorEvents() {
     if (e.button!==0||pointer!==null) return;
     const p=at(e),c=curveContext(),L=alongLayout(c),knots=alongKnots(c.q).map(k => [...k]),i=hit(c,L,knots,p); moved=false;
     if (i>=0 && e.shiftKey) { if (i>0 && i<knots.length-1 && knots.length>2) { knots.splice(i,1); store(knots); if (selected>=0) { checkpoint(); queueWeather(); } } return; }
+    if(i>=0){curvePoint={side:'along',i};syncCurveNumbers(c);}
     pointer=e.pointerId;drag=i;cv.setPointerCapture(e.pointerId);
     if(i<0)inspect(L,p);
   });
@@ -898,6 +934,17 @@ function readRegional(request) {
   }
   return {...r,fields,weather,materialField,bytes:r.bytes+extra};
 }
+let pendingControlRow=null;
+function renderProgress(stage,invalidated=false) {
+  if(invalidated&&pendingControlRow)pendingControlRow.classList.add('render-pending');$('map-progress').hidden=!stage;$('render-stage').hidden=!stage;$('render-stage').textContent=stage||'';
+  if(!stage)for(const row of document.querySelectorAll('.render-pending'))row.classList.remove('render-pending');
+}
+const controlRevisions=new WeakMap();
+for(const event of ['input','change']){
+  document.addEventListener(event,e=>{if(!ready||!e.target.closest('#editor,#world-editor,#rendering-host'))return;const row=e.target.closest('.control,.control-row,.curve-numbers label,.curve-actions');controlRevisions.set(e,{row,revision});pendingControlRow=row;requestAnimationFrame(()=>{if(pendingControlRow===row)pendingControlRow=null;});},true);
+  document.addEventListener(event,e=>{const before=controlRevisions.get(e);if(before?.row&&revision!==before.revision){before.row.classList.add('render-pending');renderProgress('Updating terrain…');}});
+}
+
 function setMapBusy(on) {
   loading=on; $('editor').disabled=on; $('world-editor').disabled=on;
   for (const id of ['new-map','weather','clay','light','feature-tool','starts-tool']) $(id).disabled=on;
@@ -939,7 +986,7 @@ const sculptRegion={
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,pickAt:pickNode,selectionLabel:shapeName,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
   drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
-  setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },onUpdate:fn => { mapUpdate=fn; }
+  setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },renderProgress, presented:drawShapePreview,onUpdate:fn => { mapUpdate=fn; }
 };
 window.sculptRegion=sculptRegion;
 function cloneNodes(list=nodes) { return list.map(n => ({...n,points:n.points?.map(p => ({...p})),paths:clonePaths(n),frame:n.frame?.slice(),params:n.params?{...n.params}:undefined})); }
