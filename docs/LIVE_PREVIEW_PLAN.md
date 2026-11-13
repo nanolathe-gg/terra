@@ -10,11 +10,17 @@ plan: nothing in it is built.
 main `98b0288e` in Chrome. Its findings are section 3.7, and every place
 they changed this plan says "LP0". No editor code has changed.
 
-**Implementation status on `lp4/time-slices`, 2026-11-12.** LP4 step 1 is
-built with exact-byte correctness evidence and two alternating Chrome pairs
-per focused fixture. Its Time-slice, submission, resume and final-cost guards
-pass; full LP4 remains unfinished. See [LP4_STEP1_REPORT.md](LP4_STEP1_REPORT.md).
-The LP0c fix and LP0b prototype stay on their own branches.
+**Implementation status on `live-preview/review`, 2026-11-12.** Shipping
+work is consolidated in one worktree for the owner's review; main is untouched.
+LP0c's sampling fix is documented in [LP0c_REPORT.md](LP0c_REPORT.md), including
+the six owner-approved changed pixels. LP4 step 1's focused Time-slice,
+submission, resume and final-cost guards pass; see
+[LP4_STEP1_REPORT.md](LP4_STEP1_REPORT.md). LP1 is implemented with focused
+checks and timings in [LP1_REPORT.md](LP1_REPORT.md). Its combined all-scene
+and land gates are deferred under the owner's instruction to keep checks
+simple and fast; they are not claimed as passed. LP0b's throwaway editor
+remains outside the shipping branch, with its historical report included
+for review. The broader live-preview targets remain unfinished.
 
 **The owner's brief (2026-11-11):** "We need to increase the perceived
 rendering speed and interactive responsiveness of Terraform. Artists need it
@@ -916,6 +922,14 @@ trial keeps "the same bake lattice" at every budget. Find what that
 protected, and propose it separately.
 
 ### LP1. The dirty model (M)
+
+**Implementation addendum, 2026-11-12.** The computed map also includes the
+actual Time shader entry points at B, using the sources the runner compiles.
+Their nine column fields otherwise escape the original C–F scan. Time's key
+compares the world's own column data, not recipe columns appended to shared
+pools. Every current row and every historical row name is covered by the
+computed table in the report above. Broad regression runs wait for the
+owner's later check window; the acceptance thresholds below are unchanged.
 
 **Change.** Section 4.2, with no change in what is drawn.
 1. `syncWorld`: one writer for world-level uniforms. Byte-identical scenes.
