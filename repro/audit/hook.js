@@ -1,5 +1,5 @@
 localStorage.removeItem(WORLD_STORE); // Isolated audit origin only; compare preset defaults.
-// Injected only by audit/server.py on ?audit pages. No production entry point.
+// Injected only by the Go audit host on ?audit pages. No production entry point.
 const tickAudit=()=>new Promise(r=>setTimeout(r,40));
 window.terraformAudit={
  async ready(){const t=performance.now();while(!ready||!mapCanvas){if(performance.now()-t>90000)throw Error('Editor boot timeout');await tickAudit();}mapCanvas.setBusy(true);},

@@ -75,11 +75,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const rows = [], logs = [], t0 = Date.now();
 mkdirSync(out, {recursive: true});
 let server = opt('--server', ''), audit = null, configs = opt('--configs', '');
+const stopAudit=()=>{if(audit){try{process.kill(-audit.pid,'SIGTERM');}catch{}audit=null;}};
+process.once('exit',stopAudit);
 if (!CHROME && !configs && !CHILD) { const {dumpConfigs} = await import('../repro/headless.mjs'); configs = dumpConfigs(); }   // once for every child
 if (CHROME && !server) {
   server = `http://127.0.0.1:${auditPort}`;
-  const py = process.env.PYTHON || '/Users/daniel/src/terraform/.venv/bin/python';
-  audit = spawn(py, [join(repo, 'repro/audit/server.py'), '--source', repo, '--port', String(auditPort), '--out', join(out, 'audit-out'), ...(assets ? ['--assets', assets] : [])], {stdio: 'ignore'});
+  audit = spawn('go', ['run', './cmd/repro-host', '--mode', 'audit', '--source', repo, '--port', String(auditPort), '--out', join(out, 'audit-out'), ...(assets ? ['--assets', assets] : [])], {cwd: repo, stdio: 'ignore', detached: true});
   for (let i = 0; i < 100; i++) { try { if ((await fetch(server + '/audit/index.html')).ok) break; } catch {} await sleep(100); }
 }
 if (JOBS > 1 && !CHILD && WORLDS.length > 1) {
@@ -99,7 +100,7 @@ if (JOBS > 1 && !CHILD && WORLDS.length > 1) {
     }
     done();
   }));
-  await Promise.all(slots); audit?.kill();
+  await Promise.all(slots); stopAudit();
   const merged = WORLDS.map(w => JSON.parse(readFileSync(join(out, w, 'world-controls.json'), 'utf8')));
   const all = merged.flatMap(m => m.rows), bad = judge(all), con = merged.flatMap(m => m.console);
   writeFileSync(join(out, 'world-controls.json'), JSON.stringify({server: CHROME ? server : 'node', variant:VARIANT||null, seconds: (Date.now() - t0) / 1000, rows: all, unexplained: bad, console: con}));
@@ -266,7 +267,7 @@ async function nodeHost() {
   return h;
 }
 const host = CHROME ? await chromeHost() : await nodeHost();
-const finish = code => { host.close(); audit?.kill(); process.exit(code); };
+const finish = code => { host.close(); stopAudit(); process.exit(code); };
 try {
   const fixtureName=(world,i)=>VARIANT&&scenes[`${world}-${VARIANT}-${i}`]?`${world}-${VARIANT}-${i}`:`${world}-${i}`;
   const strokes = world => scenes[fixtureName(world,1)];

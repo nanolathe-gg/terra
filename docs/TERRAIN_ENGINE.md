@@ -10,7 +10,9 @@ what changes now, and in what order.
 Go site serving, static builds and config generation are complete in
 `cmd/terraform` and `internal/site`. Defaults and world presets are committed
 JSON. The editor opens at `/` from `index.html`, with versioned assets in the
-static build. Focused checks replace the old broad mandatory tiers; follow
+static build. Optional interaction/audit hosts use `cmd/repro-host` around the
+same Go development handler. Python remains in standalone analysis and report
+tools. Focused checks replace the old broad mandatory tiers; follow
 [AGENTS.md](../AGENTS.md#checks). The older decisions and card results below
 are historical records, including references to the retired Python server.
 

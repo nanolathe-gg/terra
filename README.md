@@ -168,6 +168,23 @@ and archive there without a full-map image buffer. Cancel stops the worker and
 offers no partial archive; its files are removed. A map with more than 65,536
 distinct tiles has its most alike tiles merged (`export/merge.go`).
 
+## Optional interaction and audit hosts
+
+The research browser hosts also use Go and wrap the normal development
+handler. From the repository, use your own free port and output directory:
+
+```sh
+go run ./cmd/repro-host --mode interaction --port <yours> --out /private/tmp/terraform-interaction
+go run ./cmd/repro-host --mode audit --port <yours> --out /private/tmp/terraform-audit
+```
+
+Open `/interaction/index.html` or `/audit/index.html`. The editor iframe stays
+at `/`. Hooks are confined to the selected host and query flag; they are not
+part of the normal editor or static build. See the
+[interaction harness](repro/interaction/README.md) and
+[audit host](repro/audit/README.md) for source/evidence options. Python remains
+in the standalone analysis and report tools.
+
 ## The static site
 
 `go run ./cmd/terraform --build-site <dir>` writes `<dir>/index.html` (the

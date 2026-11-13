@@ -1,15 +1,24 @@
 # Drawing, editing and fit-view performance
 
-This browser harness exercises the app's real pointer and input handlers. It lives outside the normal app and adds no production instrumentation or dependencies. The host binds to loopback only and accepts PNG/JSON evidence under its output directory. It deliberately has no retail feature catalogue or export action; use `go run ./cmd/terraform` for reviewing the app normally. The optional Python host gets all configs from Go. For a historical checkout that predates the Go tool, run the host from that historical checkout.
+This browser harness exercises the app's real pointer and input handlers.
+It lives outside the normal app and adds no production instrumentation or
+dependencies. The Go host wraps the normal editor handler, binds to loopback,
+and accepts PNG/JSON evidence under its output directory. Source files and
+configs reload on requests. The harness has no retail feature catalog or
+export action; use `go run ./cmd/terraform` for normal editing.
 
-Start two hosts from this directory's worktree, with a clean baseline checkout or archive and the candidate source:
+Run from the repository. `--source` selects the editor checkout; `--tools`
+selects the checkout containing the harness (both default to the working
+directory). For historical checkouts, run the corresponding historical host
+from that checkout. Python comparison and report tools remain unchanged.
+
 
 ```
-python repro/interaction/server.py --source /path/to/baseline --port 8906 --out /tmp/interaction-before
-python repro/interaction/server.py --source /path/to/candidate --port 8907 --out /tmp/interaction-after
+go run ./cmd/repro-host --mode interaction --source /path/to/baseline --port 8906 --out /tmp/interaction-before
+go run ./cmd/repro-host --mode interaction --source /path/to/candidate --port 8907 --out /tmp/interaction-after
 ```
 
-Open `http://127.0.0.1:8906/interaction/index.html` and its port-8907 counterpart in the same WebGPU-capable browser. Run them serially so GPU work does not contaminate timings. Keep the browser foregrounded. The iframe is fixed at 1280×900. Use a new label for each trial.
+Open `http://127.0.0.1:8906/interaction/index.html` and its port-8907 counterpart in the same WebGPU-capable browser. Run them serially so GPU work does not contaminate timings. Keep the browser foregrounded. The editor iframe opens `/` and is fixed at 1280×900. Use a new label for each trial.
 
 `/interaction/strokes.html` checks freehand simplification through the real pointer
 handlers on 1×1 (whole-map) and 5×5 (paged) maps: point reduction, endpoints,
@@ -65,3 +74,12 @@ The instrumentation deliberately destroys the old iframe's GPU device during fix
 
 
 Use **Compare preview colors** to capture identical settled terrain at final and preview resolution, then capture a translated shape during input at both resolutions and after refinement. The five PNGs are saved under `<label>/<scene>/`. Compare color means at matching coverage; a lower-resolution image is not expected to match every final pixel. See `color-results.json` for the follow-up measurements against `153fd4b`.
+
+The Go host has focused HTTP tests for hook isolation, live file serving,
+evidence round trips, output-directory confinement and size limits:
+
+```sh
+go test ./internal/reprohost ./cmd/repro-host
+```
+
+These are on demand, outside the fast Node checks.
