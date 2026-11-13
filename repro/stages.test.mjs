@@ -9,10 +9,10 @@ test('stage scan follows calls, keeps gated reads, separates geometry, and ignor
  fn geometry(){return u.form;}
  fn unused(){return u.never;}
  @fragment fn fragmentMain()->@location(0) f32{return color()+geometry();}`;
- const compute=`fn indirect(){return u.rock[slot & mask].faceWear+u.form;}
+ const compute=`fn indirect(){return u.rock[slot & mask].faceWear+u.form+u.table[u.rock[slot & mask].columnFirst].x;}
  @compute @workgroup_size(8,8) fn bakeMain(){indirect();}`;
  const stages=uniformStages([{source:fragment,stage:'F'},{source:fragment,stage:'E',roots:['geometry']},{source:compute,stage:'C'}]);
- assert.deepEqual(Object.fromEntries([...stages].map(([name,v])=>[name,v.stage])),{on:'F',tint:'F',form:'C',faceWear:'C'});
+ assert.deepEqual(Object.fromEntries([...stages].map(([name,v])=>[name,v.stage])),{on:'F',tint:'F',form:'C',faceWear:'C',table:'C',columnFirst:'C'});
  assert.deepEqual(stages.get('form').entries,['fragmentMain','geometry','bakeMain']);
  assert(!stages.has('never')&&!stages.has('comment'));
  assert.throws(()=>uniformStages([{source:fragment,stage:'E',roots:['missing']}]),/Missing stage root/);

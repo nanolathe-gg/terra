@@ -89,7 +89,16 @@ export function uniformStages(modules) {
       for(;end<text.length&&depth;end++){if(text[end]==='{')depth++;else if(text[end]==='}')depth--;}
       if(depth||functions.has(name))throw Error('Invalid WGSL function in stage scan: '+name);
       const header=text.slice(previous,match.index),body=text.slice(start+1,end-1);
-      const fields=new Set([...body.matchAll(/\bu\s*\.\s*(\w+)(?:\s*\[[^\]]+\]\s*\.\s*(\w+))?/g)].map(m=>m[2]||m[1]));
+      const fields=new Set(),references=/\bu\s*\.\s*(\w+)/g;let reference;
+      while((reference=references.exec(body))){
+        let field=reference[1];
+        if(field==='rock'){
+          let at=references.lastIndex;while(/\s/.test(body[at]??'')&&at<body.length)at++;
+          if(body[at]==='['){let depth=1;at++;while(at<body.length&&depth){if(body[at]==='[')depth++;else if(body[at]===']')depth--;at++;}
+            const member=/^\s*\.\s*(\w+)/.exec(body.slice(at));if(member)field=member[1];}
+        }
+        fields.add(field);
+      }
       const calls=new Set([...body.matchAll(/\b(\w+)\s*\(/g)].map(m=>m[1]));
       functions.set(name,{fields,calls,entry:/@(compute|fragment)\b/.test(header)});
       previous=end;pattern.lastIndex=end;
@@ -122,7 +131,7 @@ export function worldUniformDelta(before,after,layout,stages) {
   const differs=(f,offset=f.offset)=>{
     for(let i=0;i<f.count;i++)for(let j=0;j<f.width;j++){const k=(offset+i*f.stride)/4+j;if(previous[k]!==next[k])return true;}return false;
   };
-  const add=(name,key,slot)=>{const s=stages.get(key)?.stage??null;fields.push({name,stage:s});if(slot!==undefined)slots.add(slot);if(s&&(!stage||s<stage))stage=s;};
+  const add=(name,key,slot)=>{const s=(stages.get(key)??(slot!==undefined?stages.get('rock'):null))?.stage??null;fields.push({name,stage:s});if(slot!==undefined)slots.add(slot);if(s&&(!stage||s<stage))stage=s;};
   for(const [name,f]of layout.fields){
     if(name==='rock'){
       for(let slot=0;slot<f.count;slot++)for(const [member,m]of f.members)if(differs(m,f.offset+slot*f.stride+m.offset))add(`rock[${slot}].${member}`,member,slot);
