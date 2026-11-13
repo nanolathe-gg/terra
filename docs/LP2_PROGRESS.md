@@ -227,3 +227,15 @@ without a banner or console error. These are forced recovery checks, not
 real OOM stress measurements or Safari/iPad validation. Five policy tests
 pass in 40 ms, including exactly one step on reload and refusal at the
 floor. No storage key or control was added.
+
+Overnight final-cost correction: the scripted Colors workload has no change
+event at its end, so its last anchor measures a quiet pause. The full flat
+Green/map16 pairs found Colors final 22–27% slower than main by phase
+medians. The endpoint is unchanged. With weather already current, a
+current coarse picture now advances to final after 100 ms of quiet,
+skipping the redundant quarter pass. Pending authoring keeps the 250-ms
+fallback. Two focused alternating Colors pairs at 2048 MiB give continuous
+final 1460/1475 ms versus main 1327/1352 ms (+9.6% by medians), and pause
+final +7.2%. Both complete viewport cold replays have zero changed pixels
+of 1,769,472. These focused runs have a different control history from the
+full matrix and are not pooled with it. The full matrix will be repeated.

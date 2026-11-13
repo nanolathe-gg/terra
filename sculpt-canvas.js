@@ -358,8 +358,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           if(coarseReady){const keep=new Set(coarse.map(r=>blockKey(r,4*detailLevel())));dropBlocks(e=>e.level===4*detailLevel()&&!keep.has(blockKey(e,e.level)));}
           if(!coarseReady)for(const rect of coarse)plan.push({rect,want:4*detailLevel(),block:true});
           else if(released||quiet>=100){
-            if(holding||!released&&quiet<250)for(const rect of previewPlan(clipped,2*detailLevel()).sort((a,b)=>dist(a)-dist(b)))plan.push({rect,want:2*detailLevel(),block:true});
-            if(!holding&&(released||quiet>=250))for(const rect of jobs)if(intersects(rect,v))plan.push({rect,want:detailLevel()});
+            // Once weather is current, spend the quiet pause on final detail.
+            // Another quarter pass would only delay that already-ready work.
+            const finalNow=released||quiet>=250||api.canExport?.();
+            if(holding||!finalNow)for(const rect of previewPlan(clipped,2*detailLevel()).sort((a,b)=>dist(a)-dist(b)))plan.push({rect,want:2*detailLevel(),block:true});
+            if(!holding&&finalNow)for(const rect of jobs)if(intersects(rect,v))plan.push({rect,want:detailLevel()});
             else wakeLadder(Math.max(16,250-quiet));
           }else wakeLadder(100-quiet);
         }else{
