@@ -30,10 +30,19 @@ the 20% quiet-start guard for a timing attempt, so that attempt aborted.
 The subsequent run was correctness only and all its timings were discarded.
 No new latency acceptance or speedup in milliseconds is claimed yet.
 
-Still unfinished: preview block planning, retained level working sets,
-composition, refinement timing/focus, the generic pipeline measurement and
-set, memory adjustment, and remaining preset-color handling. Safari remote
-automation is disabled; a temporary API-probe permission is pending. Budget
-and browser-dependent changes have not been built from unverified facts.
+The pure block planner now has four CPU checks for one/four blocks, global
+alignment, clipping and coverage. Working textures now share exact lattice
+sets and retain three levels in the focused page check. A nonflat 256×256
+window returns to the same RGBA hash after level switches and rendering a
+different window; input and final-field textures retain identity. Final
+accounting is 282.7 MiB of 512, with zero console errors. The small ownership
+check protects active sets and destroys each cached resource once.
+
+Still unfinished: connecting block composition, refinement timing/focus,
+the generic pipeline measurement/set, memory adjustment and remaining
+preset-color handling. The owner deferred the Safari probe after its
+protected-setting authentication prompt. Remote automation remains off;
+developer-feature visibility was restored to off and Settings was closed.
+No Safari runtime memory facts are claimed.
 The 200/400 ms, 10% final-cost and pixel gates remain unchanged. Broader
 correctness runs stay deferred at the owner's request.
