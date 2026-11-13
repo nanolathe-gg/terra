@@ -1,3 +1,4 @@
+import {terrainAllocation} from './sculpt-memory.js';
 // A bounded, transient voxel solid for the editor's existing chunk stream.
 // Only allocation counts return to JS; shape, rock, wear, and rendering stay on GPU.
 const STORAGE=()=>GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST;
@@ -91,9 +92,11 @@ export class VoxelSurface {
       };
       if(metadata>available*.6){r.makeWorkingRoom(Math.ceil(metadata/.6));available=r.budgetBytes-r.reservedBytes-r.residentBytes;}
       if(metadata>available*.6||s.capacity*16>this.device.limits.maxStorageBufferBindingSize){await split();return;}
+      await terrainAllocation(this.device,()=>{
       this.height=this.texture('voxel authored surface',s.width,s.height);this.guide=this.texture('voxel cliff guides',s.width,s.height);this.blocks=this.texture('voxel guide blocks',blocksX,blocksY);
       this.columns=this.buffer('voxel column ranges',n*16);this.bricks=this.buffer('voxel brick positions',s.capacity*16);
       this.counter=this.buffer('voxel brick count',16,STORAGE()|GPUBufferUsage.COPY_SRC);
+      });
       this.device.queue.writeBuffer(this.counter,0,new Uint32Array(4));this.settings(s);
       const input={0:{buffer:this.uniform},3:this.height.createView(),4:this.guide.createView(),6:this.blocks.createView()};
       const output={0:this.height.createView(),1:this.guide.createView(),2:{buffer:this.columns},3:{buffer:this.bricks},4:{buffer:this.counter},6:this.blocks.createView()};
@@ -108,7 +111,7 @@ export class VoxelSurface {
       if(counts[1])throw Error('Terrain extends beyond the voxel projection bounds.');
       if(count>s.capacity)throw Error('The voxel brick count exceeds its conservative allocation bound.');
       if(densityBytes>this.device.limits.maxStorageBufferBindingSize||!r.makeWorkingRoom(Math.max(16,densityBytes)*2)){await split();return;}
-      this.density=[this.buffer('voxel solid A',densityBytes),this.buffer('voxel solid B',densityBytes)];this.settings(s,count);
+      await terrainAllocation(this.device,()=>{this.density=[this.buffer('voxel solid A',densityBytes),this.buffer('voxel solid B',densityBytes)];});this.settings(s,count);
       const reads=this.inputs();const encoder=this.device.createCommandEncoder({label:'voxel solid and terrain draw'});
       const groups=[Math.min(count,128),Math.ceil(count/128)];
       this.encode('voxelBuild',encoder,groups,reads,{5:{buffer:this.density[0]}});
