@@ -974,14 +974,14 @@ function readRegional(request) {
   }
   return {...r,fields,weather,materialField,bytes:r.bytes+extra};
 }
-let pendingControlRow=null;
+let pendingControlRow=null,controlInputToken=0;
 function renderProgress(stage,invalidated=false) {
   if(invalidated&&pendingControlRow)pendingControlRow.classList.add('render-pending');$('map-progress').hidden=!stage;$('render-stage').hidden=!stage;$('render-stage').textContent=stage||'';
   if(!stage)for(const row of document.querySelectorAll('.render-pending'))row.classList.remove('render-pending');
 }
 const controlRevisions=new WeakMap();
 for(const event of ['input','change']){
-  document.addEventListener(event,e=>{if(!ready||!e.target.closest('#editor,#world-editor,#rendering-host'))return;const row=e.target.closest('.control,.control-row,.curve-numbers label,.curve-actions');controlRevisions.set(e,{row,revision});pendingControlRow=row;requestAnimationFrame(()=>{if(pendingControlRow===row)pendingControlRow=null;});},true);
+  document.addEventListener(event,e=>{if(!ready||!e.target.closest('#editor,#world-editor,#rendering-host'))return;const row=e.target.closest('.control,.control-row,.curve-numbers label,.curve-actions');controlRevisions.set(e,{row,revision});pendingControlRow=row;const token=++controlInputToken;requestAnimationFrame(()=>requestAnimationFrame(()=>{if(controlInputToken===token)pendingControlRow=null;}));},true);
   document.addEventListener(event,e=>{const before=controlRevisions.get(e);if(before?.row&&revision!==before.revision){before.row.classList.add('render-pending');renderProgress('Updating terrain…');}});
 }
 
