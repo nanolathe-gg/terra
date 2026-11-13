@@ -18,15 +18,18 @@ LP3 regional shape and Time lattices are now implemented on the unmerged
 performance, memory, final-byte checks, and the sampled contour difference.
 The [memory/readback follow-up](LP3_MEMORY_READBACKS.md) now fits the sampled
 far view in one block at 512 MiB and overlaps warmed pool allocation with
-count delivery. Its qualifying resume p95 improves 448.1 → 130.3 ms, while
-Rain and cold-gate final costs remain open tradeoffs.
+count delivery. Its qualifying resume p95 improves 448.1 → 130.3 ms.
+The [Rain/finals follow-up](LP3_RAIN_FINALS.md) improves continuous Rain
+whole-current p95 297.3 → 257.5 ms and final latency 5342.0 → 4393.8 ms in
+its matched 512-MiB pair. Cold-gate final latency improves 4799.7 → 3983.9 ms.
+These remain focused measurements; Rain has not reached 100 ms.
 
 Remaining work, in order:
 
 1. **LP3:** review the regional lattice and memory/readback follow-ups;
-   finish default-budget and broader scene/view acceptance, the coarse-contour
-   quality decision, and quiet repeats of the final-cost regressions. Cold
-   allocation seeds and tail validation remain. Try the cheaper coarse raster
+   reach Rain's response target and finish default-budget/broader scene/view
+   acceptance and the coarse-contour quality decision. Cold-driver-cache
+   compilation, allocation seeds, and tail validation remain. Try the cheaper coarse raster
    only if its measured color bias is acceptable.
 2. **LP4:** cancellation between voxel pieces, time-based piece sizing and
    the remaining view-first/off-screen scheduling. Bring every GPU

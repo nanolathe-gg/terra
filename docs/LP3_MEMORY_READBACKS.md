@@ -1,5 +1,9 @@
 # LP3 far-view memory and preview readbacks, November 13
 
+> Follow-up: [Rain response and final rendering](LP3_RAIN_FINALS.md) reduces
+> Time submissions and page replays, and overlaps focus preparation with compilation.
+> The measurements and limitations below describe the preceding implementation.
+
 This follow-up stays on `live-preview/review`, based on main `f41ff288`.
 It makes no main merge; unrelated main work advanced during this session.
 The changes are `d3071a9a` (memory planning), `b352f9c0` (predicted pools),

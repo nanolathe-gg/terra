@@ -1080,7 +1080,10 @@ comparison, memory accounting, exact final replay, and sampled contour outlier.
 The [memory/readback follow-up](LP3_MEMORY_READBACKS.md) fits the sampled far
 view in one block at 512 MiB and submits warmed predicted pools before count
 delivery, validating before presentation. Cold seeds and budget fallbacks still
-read exact counts upfront. The full acceptance matrix and raster step remain open.
+read exact counts upfront. The [Rain/finals follow-up](LP3_RAIN_FINALS.md)
+reduces Time submissions and repeated page work, and prepares the focus source
+during compilation. Rain still misses 100 ms; the full acceptance matrix and
+raster step remain open.
 
 **Change.** Shrink a preview pass's fixed cost and working set: for the
 100 ms row where LP2 misses it, for views larger than 1.8 megapixels (an
