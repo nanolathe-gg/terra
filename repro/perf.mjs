@@ -105,7 +105,7 @@ function hooks(){
   // Observe actual tile paints. Pixel verification runs after timing stops;
   // reading a bitmap here would add 20-30 ms and change queue backpressure.
   const seen=new WeakSet(),closeBitmap=ImageBitmap.prototype.close;
-  P.held=new WeakSet();P.deferred=new Set();P.pixelPaints=[];P.extraBitmapBytes=0;P.peakExtraBitmapBytes=0;
+  P.held=new WeakSet();P.deferred=new Set();P.pixelPaints=[];P.extraBitmapBytes=0;P.peakExtraBitmapBytes=0;P.retainedBlockCanvasBytes=0;
   ImageBitmap.prototype.close=function(){
     if((P.active||P.stoppedAt&&!P.pixelReady)&&P.held.has(this)){if(!P.deferred.has(this)){P.deferred.add(this);P.extraBitmapBytes+=this.width*this.height*4;P.peakExtraBitmapBytes=Math.max(P.peakExtraBitmapBytes,P.extraBitmapBytes);}return;}
     return closeBitmap.call(this);
@@ -130,7 +130,7 @@ function hooks(){
     const key=entry.x+','+entry.y,clips=(entry.paintedClips??[entry]).map(r=>coverage.intersect(r,v)).filter(Boolean);
     if(!clips.length)return;
     const native=typeof entry.serial==='number',metadata={serial:native?entry.serial:entry.__lpSerial??0,worldRev:native?entry.rev:null,canvasSerial:native?sculptCanvas.serial:null,eligible:!entry.fit||v.overview,weatherRevB:entry.weatherRevB,current:native?!entry.dirty:null,feedSerial:entry.__lpFeedSerial,rev:native?entry.shapeRev:entry.__lpRev,seq:entry.seq,prep:entry.__lpPrep,level:entry.level??entry.scale??1,weathered:entry.weathered,dirty:!!entry.dirty};
-    if(!seen.has(entry.bitmap)){seen.add(entry.bitmap);P.held.add(entry.bitmap);}
+    if(!seen.has(entry.bitmap)){seen.add(entry.bitmap);P.held.add(entry.bitmap);if(entry.block)P.retainedBlockCanvasBytes+=entry.bitmap.width*entry.bitmap.height*4;}
     const event=P.mark('paint',{key,x:entry.x,y:entry.y,width:entry.width,height:entry.height,...metadata,clips,changed:null});
     P.pixelPaints.push({event,bitmap:entry.bitmap,rect:{x:entry.x,y:entry.y},clips,level:entry.scale??1,view:{...v}});
     for(const r of clips)coverage.paint(r,metadata);
@@ -196,7 +196,7 @@ function hooks(){
   };
   P.start=()=>{P.stoppedAt=0;P.pixelReady=false;P.active=true;P.frames=[];P.frameOn=true;const gen=P.frameGen=(P.frameGen||0)+1;let last=0;const f=t=>{if(!P.frameOn||gen!==P.frameGen)return;if(last)P.frames.push({t,ms:t-last});last=t;requestAnimationFrame(f);};requestAnimationFrame(f);P.specStart=window.sculptDebug?.specStats;window.sculptCanvas?.resetMetrics?.();return now();};
   P.stop=()=>{if(P.stoppedAt)return P.stoppedAt;P.active=false;P.frameOn=false;P.frameGen=(P.frameGen||0)+1;P.stopStats=sculptCanvas.stats();return P.stoppedAt=now();};
-  P.reset=()=>{if(P.baseline){closeBitmap.call(P.baseline);P.baseline=null;}P.held=new WeakSet();P.pixelPaints=[];P.extraBitmapBytes=0;P.peakExtraBitmapBytes=0;P.active=false;P.frameOn=false;coverage.reset();P.events=[];P.inputs=[];P.handlers=[];P.stages=[];P.waits=[];P.long=[];P.compiles=[];P.frames=[];P.submits=[];for(const b of P.blocks){b.queries.destroy();b.resolve.destroy();}P.blocks=[];P.encoders=[];};
+  P.reset=()=>{if(P.baseline){closeBitmap.call(P.baseline);P.baseline=null;}P.held=new WeakSet();P.pixelPaints=[];P.extraBitmapBytes=0;P.peakExtraBitmapBytes=0;P.retainedBlockCanvasBytes=0;P.active=false;P.frameOn=false;coverage.reset();P.events=[];P.inputs=[];P.handlers=[];P.stages=[];P.waits=[];P.long=[];P.compiles=[];P.frames=[];P.submits=[];for(const b of P.blocks){b.queries.destroy();b.resolve.destroy();}P.blocks=[];P.encoders=[];};
   let canvas;
   Object.defineProperty(window,'sculptCanvas',{configurable:true,get:()=>canvas,set:c=>{canvas=c;if(c.changed){const changed=c.changed;c.changed=function(change){const result=changed.call(c,change);if(change.kind==='world'&&change.input!==false){for(const m of P.inputs)if(m.native&&m.kind==='slider'&&m.nativeSerial==null){m.nativeSerial=result.serial;m.worldRev=result.rev;m.noop=!result.stage;m.noopCurrent=m.noop&&P.visible().every(k=>P.current().some(e=>e.x+','+e.y===k&&!e.dirty))&&window.sculptRegion?.canExport?.()!==false;}}return result;};}const r=c.renderer;for(const name of ['applyKnobs','setColors','upload']){const f=r[name];r[name]=function(...a){if(name==='setColors')P.appliedSerial=P.serial;return P.call(name,()=>f.apply(this,a));};}r.timer=()=>null;const f=r.renderChunk;r.renderChunk=async function(request,options){const t=now(),previous=P.ctx,prep=P.lastPrep;P.ctx={kind:'chunk',prep,rect:{x:request.x,y:request.y,width:request.width,height:request.height}};P.mark('bake-start',{prep,...P.ctx.rect,level:options?.scale??1});try{return await f.call(this,request,options);}finally{P.ctx=previous;P.mark('bake-end',{prep,x:request.x,y:request.y,width:request.width,height:request.height,ms:now()-t,level:options?.scale??1});}};}});
 }
@@ -224,6 +224,7 @@ function instrument(path,source){
     replace('weathered:readWeather,input:', 'weathered:readWeather,__lpRev:fields.revision,input:');
     replace('metrics();return entry;', '__perf.tag(entry);metrics();return entry;',2);
     }
+    if(source.includes("if(block)bitmap.getContext('2d').drawImage(result.canvas,0,0,ow,oh);"))replace("if(block)bitmap.getContext('2d').drawImage(result.canvas,0,0,ow,oh);","if(block)__perf.call('bitmap copy',()=>bitmap.getContext('2d').drawImage(result.canvas,0,0,ow,oh));");
     replace('g.drawImage(entry.bitmap,x0,y0,x1-x0,y1-y0);','g.drawImage(entry.bitmap,x0,y0,x1-x0,y1-y0);__perf.paint(entry,v);');
   }
   if(path==='/sculpt-gpu-fields.js')replace("const enc = device.createCommandEncoder({label: 'shape'}), pass = enc.beginComputePass({label: 'shape passes'});", "const enc = device.createCommandEncoder({label: 'shape'});__perf.work(enc,'shape',{x:R.x0*spacing,y:R.y0*spacing,width:(R.x1-R.x0+1)*spacing,height:(R.y1-R.y0+1)*spacing});const pass = enc.beginComputePass({label: 'shape passes'});");
@@ -310,7 +311,7 @@ function analyze(data,t0,anchors=[]){
 }
 const capture=async(t0,anchors=[],extra={})=>{
   await ev('__perf.stop()');await ev('__perf.readPixels()');
-  const data=await ev(`(()=>{const P=__perf,m=P.stopStats;return {events:P.events,inputs:P.inputs,handlers:P.handlers,stages:P.stages,waits:P.waits,long:P.long,frames:P.frames,compiles:P.compiles,specStart:P.specStart,specEnd:sculptDebug.specStats,browserViewport:{width:innerWidth,height:innerHeight},view:sculptCanvas.view(),visible:P.visible(),chunk:m.displayChunkSize,memory:{gpuBytes:m.gpuBytes,peakGPUBytes:m.peakGPUBytes,heapBytes:m.heapBytes,peakHeapBytes:m.peakHeapBytes,peakAccountedHeapBytes:m.peakAccountedHeapBytes,rendererPeakBytes:m.renderer.peakBytes},end:P.stoppedAt,observer:{untimedPixelComparisonMs:P.pixelObserverMs,baselineBitmapBytes:P.baselineBytes,extraRetainedBitmapPeakBytes:P.peakExtraBitmapBytes}};})()`);
+  const data=await ev(`(()=>{const P=__perf,m=P.stopStats;return {events:P.events,inputs:P.inputs,handlers:P.handlers,stages:P.stages,waits:P.waits,long:P.long,frames:P.frames,compiles:P.compiles,specStart:P.specStart,specEnd:sculptDebug.specStats,browserViewport:{width:innerWidth,height:innerHeight},view:sculptCanvas.view(),visible:P.visible(),chunk:m.displayChunkSize,memory:{gpuBytes:m.gpuBytes,peakGPUBytes:m.peakGPUBytes,heapBytes:m.heapBytes,peakHeapBytes:m.peakHeapBytes,peakAccountedHeapBytes:m.peakAccountedHeapBytes,rendererPeakBytes:m.renderer.peakBytes},end:P.stoppedAt,observer:{untimedPixelComparisonMs:P.pixelObserverMs,baselineBitmapBytes:P.baselineBytes,extraRetainedBitmapPeakBytes:P.peakExtraBitmapBytes,retainedBlockCanvasBytes:P.retainedBlockCanvasBytes}};})()`);
   data.inputs=data.inputs.filter(e=>e.t>=t0);data.events=data.events.filter(e=>e.t>=t0);const metricsEnd=extra.metricsUntil??data.end;for(const key of ['stages','waits','long','handlers','compiles'])data[key]=data[key].filter(e=>e.t>=t0&&e.t<=metricsEnd);
   const allPasses=await ev('__perf.gpuRead()'),gpuClock=await ev('__perf.gpuClock'),passes=allPasses.filter(p=>p.cpuEnd>=t0&&p.cpuStart<=metricsEnd),a=analyze(data,t0,anchors),stage={},byPass={},submits=new Map();
   for(const s of data.stages)(stage[s.name]??=[]).push(s.ms);
@@ -346,8 +347,8 @@ const capture=async(t0,anchors=[],extra={})=>{
   const hold=anchors.at(-1)?.t??data.end;phase.heldLatency={first:distribution(a.observations.filter(o=>o.first!==null&&o.first<=hold).map(o=>o.first-o.t),data.inputs.length),wholeCurrent:distribution(a.observations.filter(o=>o.all!==null&&o.all<=hold).map(o=>o.all-o.t),data.inputs.length)};phase.events=data.events;const down=data.events.find(e=>e.type==='stroke-begin');if(down){const p=data.events.find(e=>e.type==='paint'&&e.t>=down.t&&e.rev>=down.rev&&e.changed);phase.firstStrokePreviewMs=p?p.t-down.t:null;phase.strokeBegin=down;}phase.latencyChanged=phase.latency;phase.samples.firstTile=tileSamples(phase);phase.latency=distribution(phase.samples.firstTile,data.inputs.length||1);phase.samples.pointer=tileSamples(phase,true);phase.latencyPointer=distribution(phase.samples.pointer,data.inputs.filter(m=>m.at).length);phase.releaseFinal=distribution(releaseSample(phase),1);phase.firstChunkPicture=phase.latency.p50;phase.shownInView=phase.latencyAll.p50;phase.finalInView=phase.final.p50;return phase;
 };
 const anchor=()=>ev('({t:performance.now(),serial:sculptCanvas.serial??__perf.serial,rev:sculptCanvas.rev??null,keys:__perf.visible(),spec:sculptDebug.specStats,at:__perf.inputs.findLast(m=>m.at)?.at??null})');
-const setup=async()=>{
-  await ev(`sculptDebug.scene(${JSON.stringify(scene.strokes)},{ground:${scene.ground!==false}});sculptCanvas.zoom(1);document.getElementById('viewport').scrollTo(0,300);true`);await settle();
+const setup=async(loadInputAt=null)=>{
+  await ev(`sculptDebug.scene(${JSON.stringify(scene.strokes)},{ground:${scene.ground!==false}});sculptCanvas.zoom(1);document.getElementById('viewport').scrollTo(0,300);${loadInputAt===null?'':`__perf.input('load','scene',null,${loadInputAt});`}true`);await settle();
 };
 
 try{
@@ -364,7 +365,7 @@ try{
   if(terrain)await ev(`(()=>{const v=document.getElementById('viewport');v.style.width='${terrain[0]}px';v.style.height='${terrain[1]}px';v.style.flex='none';sculptCanvas.resize();})()`);
   // Finish the blank map's startup before measuring the authored scene load.
   await settle();console.error('phase load');
-  {const t0=await begin();await ev(`__perf.input('load','scene');true`);const a=await anchor();delete a.keys;await setup();result.load=await capture(t0,[a]);result.viewport=result.load.view;flush();}
+  {const t0=await begin(),a=await anchor();delete a.keys;await setup(t0);result.load=await capture(t0,[a]);result.viewport=result.load.view;flush();}
   if(only==='load'||warmup)throw Error('stopped after load (--only)');
   const chooseTool=async()=>{
     const selector=`[data-tool="${tool}"]`;

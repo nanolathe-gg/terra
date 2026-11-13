@@ -719,7 +719,7 @@ const pagedOn=() => Boolean(regionalFields?.paged && regionalFields.active());
 // H12: the paged fields fit their ring and page caps to the terrain GPU budget the canvas holds (gpuMB, or its field), less the canvas's minimum.
 const gpuBudget=() => ({total:(Number(document.querySelector('[data-gpu]')?.value)||Number(new URLSearchParams(location.search).get('gpuMB'))||512)*1048576,minimum:mapCanvas?.minimumBytes?.()??96*1048576});
 function makeRegionalFields() {
-  const common={worldSize,worldGrid,baseHeight:config.baseHeight,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving||controlsEditing)};
+  const common={worldSize,worldGrid,baseHeight:config.baseHeight,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving||controlsEditing||worldInputQueue.active)};
   // pageRing (a ring by hand) and timeApron are test hooks of the page ring rule and the Time pass's window; no page needs them.
   const query=new URLSearchParams(location.search);
   return pagedWanted()?createPagedFields({...common,budget:gpuBudget,foregroundPending:()=>mapCanvas?.foregroundPending?.()??false,apron:Number(query.get('timeApron')||128),forceRing:Number(query.get('pageRing')||0)}):createGpuFields(common);
@@ -969,7 +969,7 @@ const sculptRegion={
   sketch,loadSketch:s=>loadSketchFile(s,false),maskKeys:MASK_KEYS,stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
   residentBuffers:()=>[...(regionalFields.buffers?.()||[]),...[nodes,...history.map(h=>h.nodes)].flatMap(list=>list.flatMap(n=>n.result?.planes?.map(a=>a.buffer)??[])),...new Set([weatherBase,refined,refinedBase,...Object.values(regionalWeather||{})].filter(ArrayBuffer.isView).map(a=>a.buffer))],subscribe:fn => regionalFields.subscribe(fn),subscribeSubmit:fn => regionalFields.subscribeSubmit?.(fn),gpuBytes,gpuTransientBytes,gpuFeedActive:() => gpuFeedEligible(),currentTool:() => tool,strokeOptions:currentStrokeOptions,applyStroke:applyRegionalStroke,
-  beginStroke:(kind,p,options,attachment=-1)=>beginRegionalStroke(kind,p,options,attachment,drawMode==='add'?selected:-1,varySeed),previewStroke:previewRegionalStroke,endStroke:(commit=true)=>endRegionalStroke(commit,$('simplify-strokes').checked),beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),previewActive:() => Boolean(stroke||moving||controlsEditing),
+  beginStroke:(kind,p,options,attachment=-1)=>beginRegionalStroke(kind,p,options,attachment,drawMode==='add'?selected:-1,varySeed),previewStroke:previewRegionalStroke,endStroke:(commit=true)=>endRegionalStroke(commit,$('simplify-strokes').checked),beginMove:beginRegionalMove,previewMove:previewRegionalMove,endMove:endRegionalMove,gestureActive:() => Boolean(stroke||moving),previewActive:() => Boolean(stroke||moving||controlsEditing||worldInputQueue.active),
   sectionMark,pathEditing:()=>pathEditing,pathSelection:()=>pathPoint,pathIndex:()=>pathIndex,pathAdding:()=>pathAdding,
   drawMode:()=>drawMode,drawingKind:()=>drawMode==='add'?nodes[selected]?.kind:toolKind(tool),
   selectPathPoint:i=>{pathPoint=i;if(i>=0&&!shapePaths(nodes[selected])[pathIndex]?.includes(i))pathIndex=shapePaths(nodes[selected]).findIndex(path=>path.includes(i));updateControls();},
@@ -1939,6 +1939,7 @@ function applyWorldInputs(batch) {
   }
 }
 function commitWorldInputs() {
+  mapCanvas?.releaseInput();
   if(pendingWorldAddress.size){const url=new URL(location.href);for(const [key,value]of pendingWorldAddress)url.searchParams.set(key,value);window.history.replaceState(null,'',url);pendingWorldAddress.clear();}
   if(worldStoreDirty){worldStoreDirty=false;saveWorlds();}
   if(worldPanelDirty){worldPanelDirty=false;buildWorldPanel();}

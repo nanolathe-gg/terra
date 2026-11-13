@@ -103,7 +103,7 @@ test('an unknown non-uniform input falls back to shape, while its repeated value
 function inputClock(){let serial=0;const frames=new Map(),timers=new Map(),applied=[],committed=[];const queue=createWorldInputQueue({apply:b=>applied.push(b),commit:()=>committed.push(applied.at(-1)),requestFrame:fn=>{frames.set(++serial,fn);return serial;},cancelFrame:id=>frames.delete(id),setTimer:fn=>{timers.set(++serial,fn);return serial;},clearTimer:id=>timers.delete(id)});const run=map=>{const f=[...map.values()];map.clear();for(const fn of f)fn();};return {queue,applied,committed,frame:()=>run(frames),pause:()=>run(timers),frames};}
 test('World inputs keep only the latest value per row and apply one batch per frame',()=>{
  const c=inputClock();for(let i=0;i<40;i++)c.queue.put('rock',i);c.queue.put('light',.6);
- assert.equal(c.applied.length,0);assert.equal(c.frames.size,1);c.frame();assert.deepEqual(c.applied,[[39,.6]]);assert.equal(c.committed.length,0);c.queue.end();assert.deepEqual(c.committed,[[39,.6]]);
+ assert.equal(c.applied.length,0);assert.equal(c.frames.size,1);c.frame();assert.deepEqual(c.applied,[[39,.6]]);assert.equal(c.committed.length,0);assert.equal(c.queue.active,true);c.queue.end();assert.deepEqual(c.committed,[[39,.6]]);assert.equal(c.queue.active,false);
 });
 test('release waits for queued values, and a pause commits the latest applied state',()=>{
  const c=inputClock();c.queue.put('rain',1);c.queue.end();assert.equal(c.committed.length,0);c.frame();assert.deepEqual(c.committed,[[1]]);c.queue.put('rain',2);c.frame();c.pause();assert.deepEqual(c.committed,[[1],[2]]);

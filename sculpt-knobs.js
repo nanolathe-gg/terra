@@ -180,6 +180,7 @@ export function createWorldInputQueue({apply,commit,requestFrame=fn=>requestAnim
     end,
     flush(){if(running)return;if(frame){cancelFrame(frame);frame=0;}end();if(values.size){if(frame){cancelFrame(frame);frame=0;}drain();}},
     get pending(){return values.size>0||frame!==0;},
+    get active(){return needsCommit||wantsCommit||values.size>0;},
     stats:()=>({pending:values.size,applications,commits}),
   };
 }
