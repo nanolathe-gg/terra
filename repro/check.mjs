@@ -3,6 +3,7 @@ import {readdirSync, existsSync, mkdirSync, openSync, closeSync} from 'node:fs';
 import {spawn} from 'node:child_process';
 import {basename, dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {tmpdir} from 'node:os';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const optional = /\.(?:gpu|config|export|build|features|assets)\.test\.mjs$/;
@@ -42,7 +43,7 @@ export function planChecks(argv) {
   if (tests.length && mode !== 'quick') throw new Error('--test is only for quick; run an integration test directly with node --test.');
   if (scenes.length && mode !== 'engine') throw new Error('--scene is only for engine.');
   if (mode !== 'browser' && ['server', 'port', 'worlds'].some(k => options[k] !== undefined)) throw new Error('--server, --port and --worlds are only for browser. Use --scene to select engine fixtures; quick does not render scenes.');
-  const out = resolve(options.out || join(process.env.R || '/private/tmp/nanolathe-map-editor', 'check', basename(repo)));
+  const out = resolve(options.out || join(process.env.R || join(tmpdir(), 'nanolathe-map-editor'), 'check', basename(repo)));
   const steps = [], node = (name, ...args) => {
     if (args[0] === '--test' && args.length === 1) throw new Error(`No tests found for ${name}; refusing automatic test discovery.`);
     steps.push({name, command: process.execPath, args});
