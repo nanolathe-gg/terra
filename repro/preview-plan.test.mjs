@@ -44,3 +44,16 @@ test('a growing dirty area reuses a covering Time window, but a pan or level cha
  assert.notEqual(previewWindow(region(800,700,535,493),4240,size,apron,full),full);
  assert.notEqual(previewWindow(region(900,800,100,100),grid,size,apron,full),full);
 });
+
+test('the 8 px first Time view keeps map edges and its full world-space apron',()=>{
+ const size=8480,canonical=4240,grid=previewGrid(size,canonical,8),sp=(size-1)/(grid-1),apron=128*(size-1)/(canonical-1);
+ assert.equal(grid,1061);assert(sp<=8&&sp>7.99);assert.equal((grid-1)*sp,size-1);
+ for(const [x,y]of [[200,200],[0,0],[grid-300,grid-280]]){
+  const w=previewWindow({gridOrigin:[x*sp,y*sp],gridWidth:300,gridHeight:280},grid,size,apron);
+  assert(w.x<=x&&w.y<=y&&w.x+w.side>=x+300&&w.y+w.side>=y+280);
+  for(const [origin,start,count]of [[w.x,x,300],[w.y,y,280]]){
+   assert(origin===0||(start-origin)*sp>=apron);
+   assert(origin+w.side===grid||(origin+w.side-start-count)*sp>=apron);
+  }
+ }
+});

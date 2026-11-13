@@ -113,7 +113,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         if(!e.dirty){dirtyMarks++;tiles++;}e.dirty=true;retainedInvalidations++;
       }
       for(const e of blocks.values())if(!rect||intersects(rect,e.input??e))e.dirty=true;
-      paintedView=-1;if(!refinement)configureChunks();
+      // Inputs invalidate metadata, not retained pixels. Replaying unchanged
+      // tiles here competes with the new Time/draw work; results and camera
+      // changes request their own composition.
+      if(!refinement)configureChunks();
       coarseColour=true;features?.groundChanged?.(rect);schedule();
     }
     const record={serial,rev:{...rev},stage,rect:rect?{...rect}:null,fields,channels,tiles,kind};
@@ -333,6 +336,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function previewPlan(area,level){
     const scope=[viewEpoch,gpuBudget,displaySize].join(',');
     if(scope!==previewRejectScope){previewRejects.clear();previewRejectScope=scope;}
+    // An immutable current picture needs no source working set. In particular,
+    // a retained 8 px answer survives the later 4 px source allocation.
+    const current=[...blocks.values()].find(e=>e.level===level&&blockCurrent(e)&&e.x<=area.x&&e.y<=area.y&&e.x+e.width>=area.x+area.width&&e.y+e.height>=area.y+area.height);
+    if(current)return [{x:current.x,y:current.y,width:current.width,height:current.height}];
+    releasePreviewMemory(area,level);
     const options=drawOptions?.()??api.drawOptions?.()??{},visibleBytes=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0);
     return planPreviewBlocks(area,map,rect=>{const {required,estimate,total}=previewCost(rect,level,options,visibleBytes);
       return !previewRejects.has(previewSignature(rect,level,required,estimate))&&total<=gpuBudget;
@@ -388,6 +396,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         if(overview&&!previewReserved){previewReserved=true;api.fitGpuBudget?.();}
         const size=overview?256*displayLevel():viewChunkSize(),v=state(),jobs=[],token=serial,viewToken=viewEpoch;
         const previewing=interacting(),quiet=performance.now()-lastInputAt,at=focus??[v.x+v.width/2,v.y+v.height/2],levelsOn=levels&&api.gpuFeedActive?.();
+        // Time edits get an 8 px first view, then the existing 4/2/final ladder.
+        const coarseLevel=(previewLattice&&lastInput?.stage==='B'?8:4)*detailLevel();
         dropBlocks(e=>!intersects(e,v));
         for(let y=Math.max(0,Math.floor(v.y/size)-1)*size;y<Math.min(map.height,v.y+v.height+size);y+=size)for(let x=Math.max(0,Math.floor(v.x/size)-1)*size;x<Math.min(map.width,v.x+v.width+size);x+=size)jobs.push({x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)});
         const dist=r=>Math.hypot(r.x+r.width/2-at[0],r.y+r.height/2-at[1]);jobs.sort((a,b)=>intersects(b,v)-intersects(a,v)||dist(a)-dist(b));
@@ -405,27 +415,31 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         else if(stale.length){
           const area=stale.reduce((a,r)=>{const x=Math.min(a.x,r.x),y=Math.min(a.y,r.y);return {x,y,width:Math.max(a.x+a.width,r.x+r.width)-x,height:Math.max(a.y+a.height,r.y+r.height)-y};});
           const clipped={x:Math.max(area.x,v.x),y:Math.max(area.y,v.y),width:Math.min(area.x+area.width,v.x+v.width)-Math.max(area.x,v.x),height:Math.min(area.y+area.height,v.y+v.height)-Math.max(area.y,v.y)};
-          releasePreviewMemory(clipped,4*detailLevel());
-          const coarse=previewPlan(clipped,4*detailLevel()).sort((a,b)=>dist(a)-dist(b));
-          const coarseReady=coarse.every(r=>blockCurrent(blocks.get(blockKey(r,4*detailLevel()))));
+          const coarse=previewPlan(clipped,coarseLevel).sort((a,b)=>dist(a)-dist(b));
+          const coarseReady=coarse.every(r=>blockCurrent(blocks.get(blockKey(r,coarseLevel))));
           // F leaves geometry and Time unchanged. Reuse only measured costs
           // from completed final tiles on this same budget and display level.
           const fineReady=lastInput?.stage==='F'&&(!api.canExport||api.canExport())&&stale.every(r=>{const e=cache.get(cacheKey(r,size));return Number.isFinite(e?.finalCostMs)&&e.finalCostBudget===gpuBudget&&!e.fit&&!offLevel(e,detailLevel())&&e.weathered===weatheredView;});
           const cheapFinal=fineReady&&cache.get(cacheKey(stale[0],size)).finalCostMs<=50;
-          const priorCoarse=coarse.length===1?blocks.get(blockKey(coarse[0],4*detailLevel())):null;
+          const priorCoarse=coarse.length===1?blocks.get(blockKey(coarse[0],coarseLevel)):null;
           const fineBeforeCoarse=cheapFinal&&!fineSinceCoarse&&priorCoarse&&!changedSince(priorCoarse.serial,priorCoarse.input,'E')&&priorCoarse.weathered===weatheredView&&priorCoarse.weatherRevB>=rev.B&&renderer.specCache.has(renderer.specKey().key);
-          if(coarseReady){const keep=new Set(coarse.map(r=>blockKey(r,4*detailLevel())));dropBlocks(e=>e.level===4*detailLevel()&&!keep.has(blockKey(e,e.level)));}
+          if(coarseReady){const keep=new Set(coarse.map(r=>blockKey(r,coarseLevel)));dropBlocks(e=>e.level===coarseLevel&&!keep.has(blockKey(e,e.level)));}
           if(!coarseReady){
             if(fineBeforeCoarse)plan.push({rect:stale[0],want:detailLevel(),fineTurn:true});
-            for(const rect of coarse)plan.push({rect,want:4*detailLevel(),block:true});
+            for(const rect of coarse)plan.push({rect,want:coarseLevel,block:true});
           }
           else if(released||quiet>=100||cheapFinal){
             // Cheap color finals preserve useful work during a drag. A paged
             // export-ready flag alone cannot certify new shape/Time pages.
-            const finalNow=released||quiet>=250||fineReady&&(quiet>=100||cheapFinal);
-            if(holding||!finalNow)for(const rect of previewPlan(clipped,2*detailLevel()).sort((a,b)=>dist(a)-dist(b)))plan.push({rect,want:2*detailLevel(),block:true});
-            if(!holding&&finalNow){for(const rect of jobs)if(intersects(rect,v)&&(released||quiet>=100||cache.get(cacheKey(rect,size))?.finalCostMs<=50))plan.push({rect,want:detailLevel()});}
-            else wakeLadder(Math.max(16,250-quiet));
+            const middle=coarseLevel>4*detailLevel()?previewPlan(clipped,4*detailLevel()).sort((a,b)=>dist(a)-dist(b)):[];
+            if(middle.some(r=>!blockCurrent(blocks.get(blockKey(r,4*detailLevel()))))){
+              for(const rect of middle)plan.push({rect,want:4*detailLevel(),block:true});
+            }else{
+              const finalNow=released||quiet>=250||fineReady&&(quiet>=100||cheapFinal);
+              if(holding||!finalNow)for(const rect of previewPlan(clipped,2*detailLevel()).sort((a,b)=>dist(a)-dist(b)))plan.push({rect,want:2*detailLevel(),block:true});
+              if(!holding&&finalNow){for(const rect of jobs)if(intersects(rect,v)&&(released||quiet>=100||cache.get(cacheKey(rect,size))?.finalCostMs<=50))plan.push({rect,want:detailLevel()});}
+              else wakeLadder(Math.max(16,250-quiet));
+            }
           }else wakeLadder(100-quiet);
         }else{
           if(blocks.size){dropBlocks();paintedView=-1;presentView();}
@@ -442,11 +456,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             if(prior&&!prior.dirty&&!changedSince(prior.serial,prior.input)&&prior.weatherRevB<rev.B&&!api.canExport?.()){wakeLadder(100);continue;}
             // Finish a small coarse refresh even if newer input arrives. Its
             // source revision stays old; the next turn picks up the newest edit.
-            const finishOnInput=Boolean(previewLattice&&want>=4),controller=new AbortController();activeBake={controller,rect,finishOnInput};let e;
+            const finishOnInput=Boolean(previewLattice&&want>=4&&want===coarseLevel),controller=new AbortController();activeBake={controller,rect,finishOnInput};let e;
             try{e=await bake(rect,false,controller.signal,()=>!finishOnInput&&token!==serial||busy||viewToken!==viewEpoch,want,false,true);}
             finally{if(activeBake?.controller===controller)activeBake=null;}
             e.block=true;e.dirty=changedSince(e.serial,e.input);e.bakedAt=performance.now();
-            if(want===4*detailLevel()){fineSinceCoarse=false;}
+            if(want===coarseLevel){fineSinceCoarse=false;}
             if(prior)blockBytes-=prior.bytes;blocks.set(key,e);blockBytes+=e.bytes;
             paintedView=-1;presentView();presented();rerun=true;
             // The gates in this picture have already answered input. Compile
@@ -529,7 +543,17 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   // H7b: during a gesture a change is answered at once, not at the next animation frame (a pointer move is already one event a frame): the bake of
   // the change's chunks starts as soon as the one in flight ends, and nothing waits for a frame between them.
-  function schedule() { if (!pending) { pending=true; if(levels&&interacting()&&!drawing)queueMicrotask(frame);else requestAnimationFrame(frame); } }
+  let pendingFrame=null;
+  function schedule() {
+    // Input may have queued a presentation while the last bake was pending.
+    // Once it ends, start the latest interactive refresh immediately as well.
+    const immediate=levels&&interacting()&&!drawing;
+    if(pending&&(!immediate||pendingFrame===null))return;
+    if(pendingFrame!==null){cancelAnimationFrame(pendingFrame);pendingFrame=null;}
+    pending=true;
+    if(immediate)queueMicrotask(frame);
+    else pendingFrame=requestAnimationFrame(()=>{pendingFrame=null;frame();});
+  }
   function resize() {
     if(busy){resizePending=true;return;}resizePending=false;
     cancelBake();
@@ -689,7 +713,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(previews&&!overview&&levels&&api.gpuFeedActive?.()){
       const v=state(),width=Math.min(map.width,Math.ceil(v.width/64)*64),height=Math.min(map.height,Math.ceil(v.height/64)*64),options=drawOptions?.()??api.drawOptions?.()??{};
       const request={x:Math.floor((map.width-width)/2),y:Math.floor((map.height-height)/2),width,height,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid};
-      const sets=[4,2].map(k=>{const requestLevel={...request,worldGrid:previewGridFor(k*detailLevel(),true)},r=renderer.requiredRegion(requestLevel,options),e=renderer.estimate(r,width,height,api.maskKeys.length,k*detailLevel(),{preview:true});
+      const sets=(previewLattice?[8,4,2]:[4,2]).map(k=>{const requestLevel={...request,worldGrid:previewGridFor(k*detailLevel(),true)},r=renderer.requiredRegion(requestLevel,options),e=renderer.estimate(r,width,height,api.maskKeys.length,k*detailLevel(),{preview:true});
         if(k*detailLevel()>=4)e.source=previewLattice?.plan(r,weatheredView).peakBytes??0;return e;});
       // Distinct shape lattices keep separate inputs; equal lattices share them.
       // The final reserve already has the voxel pool.
