@@ -239,3 +239,9 @@ final 1460/1475 ms versus main 1327/1352 ms (+9.6% by medians), and pause
 final +7.2%. Both complete viewport cold replays have zero changed pixels
 of 1,769,472. These focused runs have a different control history from the
 full matrix and are not pooled with it. The full matrix will be repeated.
+
+A separate final-tile task-yield trial is reverted: its continuous Colors
+median moved by 17.6 ms, smaller than main's 21.6-ms spread in that batch.
+No additional gain is established. Both trial cold replays were exact and
+rAF p95 stayed 16.8 ms with no long tasks, but the shipping path keeps its
+existing frame yield.
