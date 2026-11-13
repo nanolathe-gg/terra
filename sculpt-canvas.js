@@ -203,6 +203,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(feed)try{
       signal?.throwIfAborted();
       if(stale?.())throw new DOMException('The scene changed under a queued bake.','AbortError');
+      // Warm the scheduled focus source while its final pipeline compiles.
+      // Its pages stay cached after the lease is released. Direct readers
+      // and export still complete their requested bake.
+      if(!exportArt&&!block&&!fit&&stale&&pipelineWaits.has(renderer.specKey().key))return null;
       const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount,scale,{preview:block}),ow=Math.ceil(rect.width/scale),oh=Math.ceil(rect.height/scale),copyBytes=ow*oh*8,room=gpuBudget-steadyGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes;
       // A level whose view does not fit beside the bake would have each tile evict the last, and every repaint would bake them all again.
       if(scale<1&&room<detailBytes(scale))throw new Error(`nanolathe: a view at level ${scale} needs more of GPU memory than the budget leaves`);
@@ -365,7 +369,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     ready.then(()=>{pipelineWaits.delete(key);schedule();},error=>{pipelineWaits.delete(key);if(!renderer.recovering){console.error(error);$('error').hidden=false;$('error').textContent=error.message;}});
   }
   async function frame() {
-    pending=false;let rendering=false,needsCoarse=false;const renderStart=performance.now();
+    pending=false;let rendering=false;const renderStart=performance.now();
     try {
       // Presentation never waits for terrain generation. This path only copies
       // retained images while a chunk's fields, GPU work or snapshot are pending.
@@ -435,7 +439,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             try{e=await bake(rect,false,controller.signal,()=>!finishOnInput&&token!==serial||busy||viewToken!==viewEpoch,want,false,true);}
             finally{if(activeBake?.controller===controller)activeBake=null;}
             e.block=true;e.dirty=changedSince(e.serial,e.input);e.bakedAt=performance.now();
-            if(want===4*detailLevel()){fineSinceCoarse=false;needsCoarse=false;}
+            if(want===4*detailLevel()){fineSinceCoarse=false;}
             if(prior)blockBytes-=prior.bytes;blocks.set(key,e);blockBytes+=e.bytes;
             paintedView=-1;presentView();presented();rerun=true;
             // The gates in this picture have already answered input. Compile
@@ -444,8 +448,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             if(e.pipelineKey===state.key&&!renderer.specCache.has(state.key)&&!pipelineWaits.has(state.key))watchPipelines(state.key,renderer.specialize(state));
             if(token!==serial||viewToken!==viewEpoch){rerun=true;break;}continue;
           }
-          if(pipelineWaits.has(renderer.specKey().key))continue;
-          if(fineTurn){fineSinceCoarse=true;needsCoarse=true;}
+          if(fineTurn){fineSinceCoarse=true;}
           const key=cacheKey(rect,size);let e=cache.get(key);let baked=false;
           const upgrade=want<=1&&e&&(offLevel(e,want)||!overview&&e.weathered!==weatheredView);
           if((!e||e.dirty||upgrade)&&holding&&!overview)continue;
@@ -456,6 +459,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             try{e=await bake(rect,false,controller.signal,()=>token!==serial||busy||viewToken!==viewEpoch&&!intersects(rect,state()),want,overview);}
             catch(err){if(want<1&&String(err.message).includes('of GPU memory')){finest=want*2;rerun=true;break;}throw err;}   // fall back to the next coarser level, never the banner
             finally{if(activeBake?.controller===controller)activeBake=null;}
+            // Keep the focus source resident while its pipeline finishes.
+            // Preparing the rest would evict it before the first final draw.
+            if(!e){if(!pipelineWaits.has(renderer.specKey().key))rerun=true;break;}
             baked=true;if(token!==serial){
             // Keep a completed preview even if a newer input touched it. It remains dirty until the latest revision is baked.
             if(e.fed&&changedSince(e.serial,e.input))e.dirty=true;
@@ -495,7 +501,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(!rerun&&!interacting()&&!foregroundPending()&&(!api.canExport||api.canExport()))api.renderProgress?.(null);
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
     }catch(err){if(err.name==='PipelinesPending'){
-      if(needsCoarse)rerun=true;   // a compile miss must not hold the next coarse picture
+      rerun=true;   // keep previews and canonical page preparation moving during compilation
       watchPipelines(err.key,err.ready);
     }else if(recoverAllocation(err))rerun=true;else if(err.name==='AbortError'||err.name==='PreviewReplan')rerun=true;else{console.error(err);$('error').hidden=false;$('error').textContent=err.message;}}
     finally{if(rendering){drawing=false;if(rerun){rerun=false;schedule();}}}
