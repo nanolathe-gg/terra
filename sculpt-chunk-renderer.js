@@ -1,3 +1,4 @@
+import {terrainAllocation,TerrainMemoryError} from './sculpt-memory.js';
 import {rockWeatherBytes} from './sculpt-rock-weather.js';
 // Card D: a bounded working set for the existing terrain shader. Materials
 // belong to this renderer once; callers own the LRU of copied output images.
@@ -197,7 +198,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const enough=()=>this.residentBytes+this.reservedBytes+bytes<=this.budgetBytes;
     this.trimWorking(new Set([this.activeInput,this.activeLevel]),enough);return enough();
   }
-  allocate(region,gridWidth,gridHeight,world_width,world_height,fed=false,scale=1) {
+  async allocate(region,gridWidth,gridHeight,world_width,world_height,fed=false,scale=1) {
     this.voxel.clear();
     const rasterScale=scale<1?scale:Math.max(1,scale/2),width=Math.ceil(world_width/rasterScale),height=Math.ceil(world_height/rasterScale);   // Color raster; the cached image below still uses `scale`.
     const fieldScale=fieldLevel(scale),fw=pow2(Math.ceil(region.fieldsWidth/fieldScale)),fh=pow2(Math.ceil(region.fieldsHeight/fieldScale)),gw=pow2(gridWidth),gh=pow2(gridHeight);
@@ -222,12 +223,15 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     if(this.maskLayers>this.device.limits.maxTextureArrayLayers)throw new Error('nanolathe: mask planes exceed the device texture array limit');
     const T=GPUTextureUsage,read=T.TEXTURE_BINDING|T.COPY_DST|(fed?T.STORAGE_BINDING:0);
     try{
+      await terrainAllocation(this.device,()=>{
+      if(this.failWorkingAllocation){this.failWorkingAllocation=false;throw new TerrainMemoryError('Forced working-set allocation failure.');}
       if(!input.textures.length){
         const make=(key,label,layers,format,bytes)=>{input[key]=this.texture(label,gw,gh,layers,format,bytes,read);input.textures.push(input[key]);};
         make('heightTexture','chunk height',1,'r32float',4);make('routeTexture','chunk routes',1,'rgba8unorm',4);
         make('gridTexture','chunk weather and material',4,'rgba8unorm',4);make('maskTexture','chunk masks',this.maskLayers,'rgba8snorm',4);
       }
       if(!level.fieldsTexture)level.fieldsTexture=this.texture('chunk fields',fw,fh,1,'rgba16float',8,T.STORAGE_BINDING|T.TEXTURE_BINDING);
+      });
     }catch(error){this.dropWorking({kind:'input',key:inputKey,state:input});this.dropWorking({kind:'level',key:scale,state:level});throw error;}
     this.activeInput=input;this.activeLevel=level;input.used=level.used=++this.workingTick;
     for(const k of INPUT_TEXTURES)this[k]=input[k];
@@ -391,7 +395,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       request={...request,gridWidth:w,gridHeight:h,gridOrigin:request.gridOrigin??region.gridOrigin};
       const planes=feed?new Array(feed.maskCount).fill(null):this.maskPlanes(request);this.maskPlaneCount=planes.length;this.maskLayers=Math.max(1,Math.ceil(planes.length/4));
       this.recommendedChunkSize=this.chunkSize();
-      const dimensions=this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale);
+      const dimensions=await this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale);
       if(feed)await this.feedFromGpu(request,region,dimensions,feed,passes);else this.upload(request,region,dimensions,planes);
       this.activeRegion=region;this.voxelScale=scale;
       const result=await this.withPipelines(()=>super.draw({...options,exact:options.exact||Boolean(request.exportArt)}));

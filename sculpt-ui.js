@@ -8,6 +8,7 @@ export function mountEditorUI(){
  // Which panels show, and whether the tool rail is expanded into the palette (every tool in view): one remembered object.
  let panels={tools:true,inspector:true,palette:false},beforeFocus=null;
  try{panels={...panels,...JSON.parse(localStorage.getItem('terraform-editor-panels')||'{}')};}catch{}
+ const savePanels=()=>{try{localStorage.setItem('terraform-editor-panels',JSON.stringify(panels));}catch{}};
  const focused=()=>beforeFocus!==null;
  function updateLayout(){
   const showTools=!focused()&&panels.tools,showInspector=!focused()&&panels.inspector;
@@ -19,7 +20,7 @@ export function mountEditorUI(){
   pin.title=panels.palette?'Collapse the tools to a rail':'Keep every tool in view, with its picture and name';
   if(panels.palette||!showTools)closeFlyouts();
   if(!showInspector)setLarge(false);
-  try{localStorage.setItem('terraform-editor-panels',JSON.stringify(panels));}catch{}
+  savePanels();
  }
  function togglePanel(name){if(focused()){panels={...panels,tools:false,inspector:false};beforeFocus=null;}panels[name]=!panels[name];updateLayout();}
  function exitFocus(){if(!focused())return false;panels=beforeFocus;beforeFocus=null;updateLayout();return true;}
@@ -66,7 +67,7 @@ export function mountEditorUI(){
  const closeTop=()=>closeFlyouts()||closeSurfaces(true)||[...document.querySelectorAll('details.top-menu[open],details.share-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||setLarge(false);
  for(const [id,on] of [['view-rendered',false],['view-clay',true]])$(id).onclick=()=>{$('clay').checked=on;$('clay').dispatchEvent(new Event('change'));};
  updateLayout();
- return {toggleFocus,exitFocus,syncTools,closeTop,focused};
+ return {toggleFocus,exitFocus,syncTools,closeTop,focused,get terrainBudget(){return panels.terrainBudget;},setTerrainBudget(value){panels.terrainBudget=value;if(beforeFocus)beforeFocus.terrainBudget=value;savePanels();}};
 }
 // Each effect owns its controlling value and its dependent parameters. Zero
 // means off; switching back on restores the last value for this tool/selection.
