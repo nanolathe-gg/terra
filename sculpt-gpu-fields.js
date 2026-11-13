@@ -1,3 +1,4 @@
+import {terrainAllocation} from './sculpt-memory.js';
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {isRiver, isBraided, riverWidth, riverCurvature} from './sculpt-river.js';
@@ -1320,15 +1321,28 @@ export function createPagedFields(opts) {
     return tmp;
   }
   function makeSet(cells, label) {
-    const d = device(), S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, mk = (n, l) => d.createBuffer({label: label + ' ' + l, size: Math.max(16, n), usage: S});
+    const d = device(), S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, owned=[],mk = (n, l) => {const b=d.createBuffer({label: label + ' ' + l, size: Math.max(16, n), usage: S});owned.push(b);return b;};
+    try{
     const set = {cells, F: mk(cells * 4 * PLANES, 'planes'), Mk: mk(cells * 28, 'masks'), W: mk(cells * 8, 'height'), M: [0, 1, 2].map(k => mk(cells * 4, 'map ' + k)), Fd: mk(cells * 16, 'material field')};
     set.bytes = cells * (4 * PLANES + 64); set.destroy = () => { set.F.destroy(); set.Mk.destroy(); set.W.destroy(); set.M.forEach(b => b.destroy()); set.Fd.destroy(); };
     return set;
+    }catch(error){for(const b of owned)b.destroy();throw error;}
   }
   // The staging set the chunk bake reads, reused (grown, never shrunk): the queue is in order, so a later gather runs after an earlier bake's feed pass.
   function stagingFor(cells) {
     if (!staging || staging.cells < cells) { const old = staging; staging = makeSet(Math.max(cells, 700 * 850), 'feed staging'); old?.destroy(); }
     return staging;
+  }
+
+  let stagingChain=Promise.resolve();
+  function prepareStaging(cells){
+    const job=stagingChain.then(async()=>{
+      if(staging&&staging.cells>=cells)return;
+      const before=staging;
+      try{await terrainAllocation(device(),()=>stagingFor(cells));}
+      catch(error){if(staging!==before){staging?.destroy();staging=null;}throw error;}
+    });
+    stagingChain=job.catch(()=>{});return job;
   }
 
   // ---- reads
@@ -1428,12 +1442,14 @@ export function createPagedFields(opts) {
     // the map canvas's feed: pages ready for `rect` (cells), and a gather to encode into the bake's encoder
     async feedSource(rect, wantWeather, {signal} = {}) {
       const lease = await prepareRect(rect, wantWeather && Boolean(time), signal);
-      const weather = wantWeather && Boolean(time);
+      try{await prepareStaging((rect.x1-rect.x0+1)*(rect.y1-rect.y0+1));signal?.throwIfAborted();}
+      catch(error){lease.release();throw error;}
+      const weather = wantWeather && Boolean(time),material=weather&&Boolean(time?.material);
       const weatherRevB=weather?Math.min(...lease.pages.map(pg=>pg.weather?.revB??-1)):null;
       return {paged: true, weather, weatherRevB, revision, release: () => lease.release(), maskCount: maskKeys.length,   // revision: the fields' revision the bake read (perf.mjs's move-to-picture latency)
         gather(enc, passes) {
           const gw = rect.x1 - rect.x0 + 1, gh = rect.y1 - rect.y0 + 1, set = stagingFor(gw * gh), tmp = encodeGather(enc, passes, rect, set, weather);
-          return {planes: set.F, masks: set.Masks ?? set.Mk, weather: weather ? set.W : null, maps: weather ? set.M : null, field: weather && time.material ? set.Fd : null, grid: gw, cells: gw * gh, tmp};
+          return {planes: set.F, masks: set.Masks ?? set.Mk, weather: weather ? set.W : null, maps: weather ? set.M : null, field: material ? set.Fd : null, grid: gw, cells: gw * gh, tmp};
         }};
     },
     setTime, timeOn: () => Boolean(time),
