@@ -86,7 +86,7 @@ async function inChrome() {
   for (const world of worlds) for (const size of sizes) {
     const row = {world, units: size, host: 'chrome'};
     try {
-      await session(`${server}/sculpt.html?${search(world, size)}`, async ({ev}) => {
+      await session(`${server}/?${search(world, size)}`, async ({ev}) => {
         await ready(ev); await ev(`sculptCanvas.zoom('overview'); true`); await sleep(800);
         row.nodes = await ev(`sculptDebug.scene(${JSON.stringify(layoutStrokes(layout, size))}, {ground: true})`); await ready(ev);
         for (let i = 0; i < 1200 && await ev(`document.getElementById('map-export').disabled`); i++) await sleep(250);

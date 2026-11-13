@@ -134,7 +134,7 @@ async function main() {
   if (!response.ok) throw new Error(`${sceneFile}: world ${scene.biome} is not served (HTTP ${response.status}).`);
   const config = await response.json();
   if (config?.biomeId !== scene.biome) throw new Error(`${sceneFile}: asked for world ${scene.biome}, the server returned ${config?.biomeId}.`);
-  const url = new URL('sculpt.html?' + page, server);
+  const url = new URL('index.html?' + page, server);
   let profile, chrome, ws, closed = false, chromeError, endpoint, stderr = '', cleanupPromise, exited;
   const cleanup = () => cleanupPromise ??= (async () => {
     ws?.close();

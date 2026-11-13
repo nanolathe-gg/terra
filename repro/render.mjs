@@ -79,7 +79,7 @@ async function renderInChrome() {
     console.error(`render.mjs: ${sceneFile}: asked for world ${scene.biome}, the server returned ${sceneConfig.biomeId}`);
     process.exit(1);
   }
-  const url = `${server}/sculpt.html?${search}`;
+  const url = `${server}/?${search}`;
   await cdpPortFree(port);
   const browser = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal',
     `--remote-debugging-port=${port}`, `--user-data-dir=${join(tmpdir(), `terraform-render-${port}`)}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});

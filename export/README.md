@@ -159,8 +159,8 @@ and otherwise temporary files use the OS temporary directory.
 
 ## In the browser
 
-The editor runs this same program in the page, on `sculpt.py` and on the
-static site alike: `GOOS=js GOARCH=wasm go build ./export` (sculpt.py builds
+The editor runs this same program in the page, on the Go development server and on the
+static site alike: `GOOS=js GOARCH=wasm go build ./export` (the Go site tool builds
 it, with `-trimpath -buildvcs=false -ldflags=-s -w`; nothing built is
 committed), in a Web Worker (`sculpt-export-worker.js`), in stream mode with
 the commands above. The worker plays the shell's part: it writes each chunk

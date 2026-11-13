@@ -22,7 +22,7 @@ try{
  const click=async selector=>{const p=await ev(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};})()`);for(const type of ['mousePressed','mouseReleased'])await send('Input.dispatchMouseEvent',{type,...p,button:'left',clickCount:1});};
  const capture=async name=>{const r=await send('Page.captureScreenshot',{format:'png'});writeFileSync(join(out,name),Buffer.from(r.result.data,'base64'));};
  await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1600,height:1150,deviceScaleFactor:1,mobile:false});
- await send('Page.navigate',{url:`${server}/sculpt.html?biome=green&mapX=8&mapY=8&sea=75&scratch=passability-preview&gpuMB=512`});
+ await send('Page.navigate',{url:`${server}/?biome=green&mapX=8&mapY=8&sea=75&scratch=passability-preview&gpuMB=512`});
  await until('!!window.sculptCanvas&&!document.getElementById("map-export").disabled','boot');
  if(sketch){await ev(`sculptDebug.loadSketch(${readFileSync(sketch,'utf8')})`);await until('!document.getElementById("map-export").disabled','load recipe');}
  await click('#fit');await ev('sculptCanvas.idle()');

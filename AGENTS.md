@@ -58,7 +58,7 @@ page and an older card disagree, this page wins.
      release, saves and share links are no compatibility promise; only an
      exported `.ufo` is. Remove an option outright: no migrations, no
      hidden values that still render.
-8. **One editor.** `/sculpt` is the editor. A new tool joins its tool list,
+8. **One editor.** `/` is the editor. A new tool joins its tool list,
    stroke list, undo, save file, scenes and export.
    - Add no separate pages, save formats, storage keys or undo stacks.
    - A prototype that breaks this stays on a `prototype/*` branch and does
@@ -70,7 +70,7 @@ page and an older card disagree, this page wins.
      WebAssembly), and share links go to the save-link Worker
      (`deploy/worker/`). The Go command serves the same files for development
      (`repro/site.build.test.mjs` checks the build on demand).
-   - Layout lives in `sculpt.html`: each element sits at its final place,
+   - Layout lives in `index.html`: each element sits at its final place,
      and no script moves, reorders or renames page elements at load. The one
      exception is the toolbar's shape buttons, which are built from the
      world's tool list and the map's own tools.

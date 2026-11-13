@@ -57,7 +57,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Terrain editor: http://127.0.0.1:%d/sculpt\n", *port)
+	fmt.Printf("Terrain editor: http://127.0.0.1:%d/\n", *port)
 	server := &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", *port), Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 	return server.ListenAndServe()
 }

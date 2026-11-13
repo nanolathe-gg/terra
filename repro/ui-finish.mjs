@@ -22,7 +22,7 @@ try{
   const click=async selector=>{const p=await point(selector);await mouse('mousePressed',p);await mouse('mouseReleased',p);};
   const key=async name=>{await send('Input.dispatchKeyEvent',{type:'keyDown',key:name,code:name,windowsVirtualKeyCode:name==='Enter'?13:name==='Escape'?27:0});await send('Input.dispatchKeyEvent',{type:'keyUp',key:name,code:name,windowsVirtualKeyCode:name==='Enter'?13:name==='Escape'?27:0});};
   const shown=selector=>ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0;})()`);
-  await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});const url=`${server}/sculpt.html?biome=green&mapX=4&mapY=4&scratch=finish-details-test&gpuMB=512&heapMB=1536&undulation=0`;
+  await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});const url=`${server}/?biome=green&mapX=4&mapY=4&scratch=finish-details-test&gpuMB=512&heapMB=1536&undulation=0`;
   await send('Page.navigate',{url});await ready();
 
   await click('#tab-world');await click('#wsec-light-shine');await click('#wtab-light-shine-shine');await ev(`document.getElementById('world-fine').checked=true;document.getElementById('world-fine').dispatchEvent(new Event('change'))`);

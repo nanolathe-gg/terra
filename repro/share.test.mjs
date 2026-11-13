@@ -23,15 +23,16 @@ test('crc32 matches the reference value', () => {
 });
 
 test('the share link is the page address with ?map=, and a static build links to the site root', () => {
-  assert.equal(shareUrl('http://127.0.0.1:8851/sculpt.html?biome=red&mapX=4#x', 'abcdefghijklmnop'), 'http://127.0.0.1:8851/sculpt.html?map=abcdefghijklmnop');
-  assert.equal(shareUrl('https://terra.nanolathe.gg/b/0123456789/sculpt.html?x=1', 'abcdefghijklmnop'), 'https://terra.nanolathe.gg/?map=abcdefghijklmnop');
+  assert.equal(shareUrl('http://127.0.0.1:8851/?biome=red&mapX=4#x', 'abcdefghijklmnop'), 'http://127.0.0.1:8851/?map=abcdefghijklmnop');
+  assert.equal(shareUrl('https://terra.nanolathe.gg/b/0123456789/?x=1', 'abcdefghijklmnop'), 'https://terra.nanolathe.gg/?map=abcdefghijklmnop');
+  assert.equal(shareUrl('https://terra.nanolathe.gg/index.html?x=1', 'abcdefghijklmnop'), 'https://terra.nanolathe.gg/?map=abcdefghijklmnop');
 });
 
 test('the address: reading the map id and dropping it afterwards', () => {
   assert.equal(mapIdFromSearch('?biome=red&map=abcdefghijklmnop'), 'abcdefghijklmnop');
   assert.equal(mapIdFromSearch('?biome=red'), null);
-  assert.equal(withoutMap('http://h/sculpt.html?map=abcdefghijklmnop&biome=red'), 'http://h/sculpt.html?biome=red');
-  assert.equal(withoutMap('http://h/sculpt.html?map=abcdefghijklmnop'), 'http://h/sculpt.html');
+  assert.equal(withoutMap('http://h/?map=abcdefghijklmnop&biome=red'), 'http://h/?biome=red');
+  assert.equal(withoutMap('http://h/?map=abcdefghijklmnop'), 'http://h/');
 });
 
 test('services: a missing or unavailable maps service has a reason', () => {

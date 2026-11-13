@@ -12,7 +12,7 @@ button.onclick=async()=>{
   try{
     for(const units of [Number(document.querySelector('#units').value)]){
       frame=document.createElement('iframe');frame.title='Stroke test editor';
-      frame.src=`/sculpt?biome=green&mapX=${units}&mapY=${units}&interaction=1&scratch=stroke-check-${Date.now()}`;
+      frame.src=`/?biome=green&mapX=${units}&mapY=${units}&interaction=1&scratch=stroke-check-${Date.now()}`;
       document.querySelector('#host').replaceChildren(frame);
       const started=performance.now();
       while(!frame.contentWindow.interactionEditor?.ready()){

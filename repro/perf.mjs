@@ -383,7 +383,7 @@ try{
   if(terrain)await send('Emulation.setDeviceMetricsOverride',{width:terrain[0]+392,height:terrain[1]+359,deviceScaleFactor:1,mobile:false});
   const search=new URLSearchParams({biome:scene.biome||'green',mapX:mode.slice(3),mapY:mode.slice(3),scratch:`lp0-${port}`,gpuMB:'512',heapMB:'1536'});
   for(const q of [scene.query,query])for(const [key,value] of new URLSearchParams(q||''))search.set(key,value);
-  const url=`${server}/sculpt.html?${search}`;
+  const url=`${server}/?${search}`;
   await send('Page.navigate',{url});
   const boot=Date.now();await until('!!window.sculptCanvas&&!document.getElementById("map-export").disabled','editor boot');result.bootMs=Date.now()-boot;result.browser=await send('Browser.getVersion');result.effectiveGpuMB=await ev('sculptCanvas.stats().gpuBudget/1048576');if(result.effectiveGpuMB!==Number(search.get('gpuMB')))throw Error('Terrain budget differs from requested gpuMB');
   if(terrain)await ev(`(()=>{const v=document.getElementById('viewport');v.style.width='${terrain[0]}px';v.style.height='${terrain[1]}px';v.style.flex='none';sculptCanvas.resize();})()`);

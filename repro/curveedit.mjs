@@ -54,7 +54,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // Each world is its own browser, all at once, on CDP ports --port, --port+1, ...
 async function editWorld(world, port) {
-  const url = `${server}/sculpt.html?biome=${world}&gpuMB=512&heapMB=1536`;   // no scratch: the autosave is what the reload reads (each browser has its own)
+  const url = `${server}/?biome=${world}&gpuMB=512&heapMB=1536`;   // no scratch: the autosave is what the reload reads (each browser has its own)
   const r = await session(url, port, async ({send, ev, logs}) => {
     const res = {world, checks: {}};
     const check = (name, ok, detail) => { res.checks[name] = ok ? 'ok' : `FAILED ${detail === undefined ? '' : JSON.stringify(detail)}`; if (!ok) bad++; };

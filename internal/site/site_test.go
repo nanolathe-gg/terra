@@ -43,11 +43,11 @@ func fixture(t *testing.T) (*Site, string) {
 			t.Fatal(err)
 		}
 	}
-	writeJSON(t, filepath.Join(root, "site.json"), Manifest{Worlds: []World{{ID: "green", Name: "Green Planet"}}, FeatureWorlds: []string{"green"}, FeatureFallback: "green", Sources: []string{"sculpt.html", "example.js"}})
+	writeJSON(t, filepath.Join(root, "site.json"), Manifest{Worlds: []World{{ID: "green", Name: "Green Planet"}}, FeatureWorlds: []string{"green"}, FeatureFallback: "green", Sources: []string{"index.html", "example.js"}})
 	if err := os.WriteFile(filepath.Join(root, "example.js"), []byte("first"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "sculpt.html"), []byte("editor"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "index.html"), []byte("editor"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	s, err := Load(root)
@@ -132,7 +132,7 @@ func TestDevelopmentReload(t *testing.T) {
 			t.Fatalf("%s: %d", path, w.Code)
 		}
 	}
-	if w := get(t, h, "/sculpt"); w.Code != 200 || w.Body.String() != "editor" {
+	if w := get(t, h, "/"); w.Code != 200 || w.Body.String() != "editor" {
 		t.Fatal(w)
 	}
 }

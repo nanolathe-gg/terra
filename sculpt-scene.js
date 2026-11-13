@@ -18,7 +18,7 @@ export const LANDFORM_DEFAULTS={"diameter":300,"amount":70,"roughness":0,"softne
 const valley=(form,more={}) => ({diameter:240,lean:100,combine:1,elevation:-20,cracks:0,wander:20,widthVary:20,heightVary:0,varySize:120,varyFoot:100,varyMiddle:100,curve:{form,knots:FORMS[form]().knots},...more});
 const hillKnots=() => [[0,0],[.25,.08],[.5,.4],[.75,.8],[.9,.95],[1,1]];
 export const LANDFORM_SHAPES={
-  // The generic landform: the model's own defaults (and the world's numbers for it). Every toolbar has it (sculpt.html's Landform button), and a
+  // The generic landform: the model's own defaults (and the world's numbers for it). Every toolbar has it (index.html's Landform button), and a
   // stroke or a button card whose tool another world lacks shows as it. A scene or fixture that names it does not take the Plateau's look (its
   // gullies and scree), so the fixtures keep what they were drawn as when a shape's numbers change; to draw what the plateau draws, a scene names it.
   landform:{},
@@ -281,7 +281,7 @@ export const strokeCard=(config,d) => ({radius:d.diameter/2,amount:d.amount,roug
 export const groundDefaults=settings => ({amplitude:settings.has('undulation')?Number(settings.get('undulation')):0,wavelength:settings.has('undulationScale')?Number(settings.get('undulationScale')):200,coverage:settings.has('undulationCover')?Number(settings.get('undulationCover')):.45,
   art:settings.has('undulationArt')?Number(settings.get('undulationArt')):1});   // the share of the undulation the art shows (lit and painted); the game heights keep all of it
 
-// The brush seed a page opens with (sculpt.html's Seed box): a scripted scene's strokes take their seeds from it.
+// The brush seed a page opens with (index.html's Seed box): a scripted scene's strokes take their seeds from it.
 export const DEFAULT_SEED=2701;
 // A page's settings: its address over the world's own defaults (boot() in sculpt.js does this to its address once the config is in).
 // A world with no beach of its own may take another world's (Colors & base pattern, Beach: the setting beachFrom names a world of config.beachSources,
@@ -366,7 +366,7 @@ export function pagedBudget({gpuMB,renderer,chunk,maskCount,view,preview=false,f
   // Preview retention constrains page counts, never the canonical shape ring.
   return {total:gpuMB*MB,minimum,previewMinimum:minimum+Math.max(0,previewWorking)};
 }
-// The surface sliders (sculpt.html's range inputs, by id): the material value each opens at and its default, then the slider's min, max and
+// The surface sliders (index.html's range inputs, by id): the material value each opens at and its default, then the slider's min, max and
 // step. A page opens each at round(value x 100), clamped and snapped to its step as the browser does; the address may set the ring's three.
 const SURFACE_SLIDERS={relief:['surfaceRelief',1,0,160,5],'material-weathering':['materialWeathering',0,0,100,1],'deposit-spread':['depositSpread',.65,0,100,1],
   'transition-detail':['transitionDetail',.65,0,100,1],'mineral-ring':['ringAmount',0,0,100,1],'ring-spread':['ringSpread',.65,0,100,1],'ring-variation':['ringVariation',.7,0,100,1]};

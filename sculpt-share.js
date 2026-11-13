@@ -37,7 +37,7 @@ export async function gzipText(text) {
 export function shareUrl(href, id) {
   const url = new URL(href);
   url.search = ''; url.hash = '';
-  url.pathname = url.pathname.replace(/\/b\/[0-9a-f]{10}\/[^/]*$/, '/');
+  url.pathname = url.pathname.replace(/\/b\/[0-9a-f]{10}\/[^/]*$/, '/').replace(/\/index\.html$/, '/');
   url.searchParams.set('map', id);
   return url.toString();
 }

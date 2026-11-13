@@ -10,7 +10,7 @@
 // a world is a page load in the page's own modules, a knob goes in through sculpt-knobs.js applyKnob as the page's setKnob does, a capture is one
 // chunk baked as the page's debugBake bakes it, and the panel's rows are the ones sculpt.js buildKnobs makes, each enabled or not by
 // worldControlRequirement on sculpt-knobs.js worldPanelValues, the same functions the panel runs. The surface sliders the panel offers are
-// read from sculpt.html's markup (one inside a hidden container is not offered). --chrome sweeps the page in headless Chrome instead, and also
+// read from index.html's markup (one inside a hidden container is not offered). --chrome sweeps the page in headless Chrome instead, and also
 // checks that the panel's own rows say what the schema says (the panel's DOM): it needs the audit host, which it starts itself on --audit-port
 // (your own: there is no default; --assets DIR is that host's assets root, which needs map-catalog.json and features/, as a card's own root has),
 // or --server for one already running; terraformAudit exists only on that host's ?audit pages.
@@ -168,7 +168,7 @@ async function chromeHost() {
   const q = JSON.stringify;
   return {
     async load(world, query) {
-      await send('Page.navigate', {url: `${server}/sculpt.html?${pageQuery(world, query)}`});
+      await send('Page.navigate', {url: `${server}/?${pageQuery(world, query)}`});
       for (let i = 0; i < 400; i++) { await sleep(150); try { if (await ev('!!window.terraformAudit&&document.readyState==="complete"')) break; } catch {} }
       await ev('terraformAudit.ready()'); await ev(HELPERS.replace('KINDS', q(KINDS))); await ev('terraformAudit.idle()');
     },
@@ -195,11 +195,11 @@ async function chromeHost() {
     close
   };
 }
-// The surface sliders the panel offers: sculpt.html's markup, where a slider inside a container marked hidden (other than an inspector tab, which a
+// The surface sliders the panel offers: index.html's markup, where a slider inside a container marked hidden (other than an inspector tab, which a
 // click shows) is not offered, as the Chrome sweep asks the page (closest('[hidden]:not([role=tabpanel])')), with the groups the page shows or hides
 // by the world's layers (sculpt-scene.js surfaceGroupsHidden). The legacy surface panel is hidden.
 function offeredSliders(groups) {
-  const html = readFileSync(join(repo, 'sculpt.html'), 'utf8'), open = [], offered = new Set();
+  const html = readFileSync(join(repo, 'index.html'), 'utf8'), open = [], offered = new Set();
   const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
   for (const [, close, name, attrs, self] of html.matchAll(/<(\/?)([a-zA-Z][\w-]*)((?:[^>"]|"[^"]*")*?)(\/?)>/g)) {
     const tag = name.toLowerCase(), bare = attrs.replace(/"[^"]*"/g, '""');

@@ -5,7 +5,7 @@ const save=async(name,data)=>{const r=await fetch('/interaction/save/'+name,{met
 const png=async(name,c)=>{const pixels=c.getContext('2d').getImageData(0,0,c.width,c.height).data;if(!pixels.some((v,i)=>i%4!==3&&v>2))throw Error('Empty capture: '+name);const blob=c.convertToBlob?await c.convertToBlob({type:'image/png'}):await new Promise(r=>c.toBlob(r));await save(name,blob);};
 async function load(name=$('scene').value,units=Number($('units').value)){
  try{const w=frame.contentWindow;if(w.interactionPerf)w.interactionPerf.disposing=true;w.interactionEditor?.renderer?.device?.destroy();}catch{}
- const s=scenes[name],t=performance.now(),previous=frame;frame=document.createElement('iframe');frame.id='editor';frame.title='Terrain editor';frame.src=`/sculpt?biome=${s.biome}&mapX=${units}&mapY=${units}&interaction=1&scratch=interaction-${Date.now()}&gpuMB=512&heapMB=2048&${s.query||''}`;previous.replaceWith(frame);
+ const s=scenes[name],t=performance.now(),previous=frame;frame=document.createElement('iframe');frame.id='editor';frame.title='Terrain editor';frame.src=`/?biome=${s.biome}&mapX=${units}&mapY=${units}&interaction=1&scratch=interaction-${Date.now()}&gpuMB=512&heapMB=2048&${s.query||''}`;previous.replaceWith(frame);
  while(frame.contentWindow.location.href!==frame.src||!frame.contentWindow.interactionEditor?.ready()){if(performance.now()-t>90000)throw Error('Boot timeout');await delay(60);}
  line('  ready '+name);const a=frame.contentWindow.interactionEditor;a.canvas.setBusy(true);a.scene(s.strokes,{ground:s.ground!==false});await a.settle();a.canvas.setBusy(false);line('  scene ready');a.canvas.zoom(1);frame.contentDocument.getElementById('viewport').scrollTo(0,0);await a.settle();line('  view ready');current=name+':'+units;return a;
 }

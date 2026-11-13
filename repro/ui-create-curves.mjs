@@ -30,9 +30,9 @@ try{
   const pick=async tool=>{const sel=`[data-tool="${tool}"]`;if(!await shown(sel)){await click('#'+await ev(`document.querySelector(${JSON.stringify(sel)}).closest('.tool-group').querySelector('.rail-button').id`));assert(await shown(sel),tool+' shows in its flyout');}await click(sel);};
   const selectLast=async()=>{if(await ev('document.getElementById("pane-objects").hidden'))await click('#tab-objects');if(await ev('document.querySelector("#layers li:last-child .layer-name").getAttribute("aria-pressed")')!=='true')await click('#layers li:last-child .layer-name');await click('#tab-tool');};
   const top=()=>ev('document.querySelector(".inspector-content").scrollTop=0');
-  await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});const url=`${server}/sculpt.html?biome=green&mapX=4&mapY=4&scratch=create-curves-test&gpuMB=512&heapMB=1536&undulation=0`;
+  await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});const url=`${server}/?biome=green&mapX=4&mapY=4&scratch=create-curves-test&gpuMB=512&heapMB=1536&undulation=0`;
   await send('Page.navigate',{url});await ready();
-  await ev('localStorage.clear()');await send('Page.navigate',{url:server+'/sculpt.html'});await ready();
+  await ev('localStorage.clear()');await send('Page.navigate',{url:server+'/index.html'});await ready();
   assert(await ev('document.getElementById("new-map-dialog").open'),'first run opens the picker');
   await ev(`document.getElementById('new-map-name').value='First map';document.querySelector('#new-map-worlds [data-world="green"]').click();document.getElementById('new-map-create').click()`);await sleep(300);await ready();
   assert.equal(await ev('document.getElementById("map-name").value'),'First map');assert.equal(await ev('document.getElementById("new-map-dialog").open'),false);

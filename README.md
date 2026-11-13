@@ -42,7 +42,7 @@ the worlds, recipe ordering and shipped source files. The Go tool in
 features are generated in the browser; `.ufo` export uses the Go exporter
 compiled to WebAssembly. The Go packages are pinned in `go.mod`.
 
-Open <http://127.0.0.1:8801/sculpt>. **Playable map** creates a blank map
+Open <http://127.0.0.1:8801/>. **Playable map** creates a blank map
 canvas. Choose 1–40 units on each axis and a sea level, initially the
 upper median TNT sea level of its retail world. Each unit is 512 playable
 pixels. A 4×4 map contains 130×136 cells, including the outer strips, and
@@ -170,11 +170,13 @@ distinct tiles has its most alike tiles merged (`export/merge.go`).
 
 ## The static site
 
-`go run ./cmd/terraform --build-site <dir>` writes `<dir>/index.html` (opens
-the current build) and `<dir>/b/<version>/` with the HTML, scripts, styles,
+`go run ./cmd/terraform --build-site <dir>` writes `<dir>/index.html` (the
+editor itself) and `<dir>/b/<version>/` with the HTML, scripts, styles,
 shaders, world tables, previews, generated JSON configs and WebAssembly
 exporter. It prints the versioned directory. That directory's name hashes all
 shipped bytes, so a deploy does not mix new scripts with cached old shaders.
+The root page uses a versioned asset base and keeps query strings, fragments
+and share links at `/`; it does not redirect to another page.
 Any static HTTP host can serve the output; the deployed site needs no Go or
 Python runtime.
 

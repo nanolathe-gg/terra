@@ -25,7 +25,7 @@ try{
   const send=(method,params={})=>new Promise(r=>{const n=++id;pending.set(n,r);ws.send(JSON.stringify({id:n,method,params}));});
   const ev=async expression=>{const r=await send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(r.result?.exceptionDetails)throw Error(JSON.stringify(r.result.exceptionDetails));return r.result.result.value;};
   const ready=async()=>{for(let i=0;i<480;i++){if(await ev('!!window.sculptCanvas&&!!window.sculptRegion&&sculptRegion.canExport()')){await ev('sculptCanvas.idle()');return;}await sleep(150);}throw Error('Preview renderer did not become ready: '+errors.join('\n'));};
-  await send('Runtime.enable');await send('Page.navigate',{url:`${server}/sculpt.html?biome=green&mapX=4&mapY=4&scratch=hover-previews&gpuMB=512&heapMB=1536`});await ready();
+  await send('Runtime.enable');await send('Page.navigate',{url:`${server}/?biome=green&mapX=4&mapY=4&scratch=hover-previews&gpuMB=512&heapMB=1536`});await ready();
   // A fixed art-only crop. All variants keep the same seed, light and camera.
   const manifest=worldsOnly&&existsSync(join(out,'manifest.json'))?JSON.parse(readFileSync(join(out,'manifest.json'),'utf8')):{frame:HELP_FRAME,tools:[],controls:{}},written=new Set();
   const save=(name,bytes)=>{const file=join(out,name);writeFileSync(file+'.tmp',bytes);renameSync(file+'.tmp',file);written.add(name);};
@@ -47,7 +47,7 @@ try{
   const worlds=['green','red','archipelago','moon','zhon','desert','lava','crystal','ice'];
   manifest.worlds={frame:HELP_FRAME,fixture:{kind:'hill',path:HELP_PATH,card:HELP_CARD,seed:2701,crop:{x:180,y:140,width:850,height:620}},images:{}};
   for(const world of worlds){
-    await send('Page.navigate',{url:`${server}/sculpt.html?biome=${world}&mapX=4&mapY=4&scratch=world-previews&gpuMB=512&heapMB=1536`});await ready();
+    await send('Page.navigate',{url:`${server}/?biome=${world}&mapX=4&mapY=4&scratch=world-previews&gpuMB=512&heapMB=1536`});await ready();
     await begin(1);await render('hill',HELP_CARD,0);const name=`world-${world}.png`;await finish(name);manifest.worlds.images[world]=name;
   }
   if(errors.length)throw Error(errors.join('\n'));

@@ -1,5 +1,5 @@
 // The scene builder (sculpt-scene.js), which the page and the headless runner share: the node list a scripted scene makes, and the surface
-// sliders' opening values, whose ranges must be sculpt.html's own (the browser clamps and snaps a slider to them).
+// sliders' opening values, whose ranges must be index.html's own (the browser clamps and snaps a slider to them).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -82,11 +82,11 @@ test('a stroke\'s palette entry is the button whose preset draws its section for
   assert.equal(sceneNodes(config, [['crystal', [[0, 0]], {}]], {ground: false})[0].params.curve.form, 'lfCrystal');
 });
 
-test('the surface sliders open where the browser puts them, and their ranges are sculpt.html\'s', () => {
-  const html = readFileSync(`${root}sculpt.html`, 'utf8');
+test('the surface sliders open where the browser puts them, and their ranges are index.html\'s', () => {
+  const html = readFileSync(`${root}index.html`, 'utf8');
   for (const id of SURFACE_SLIDER_IDS) {
     const tag = html.match(new RegExp(`<input id="${id}"[^>]*>`))?.[0];
-    assert.ok(tag, `${id} is in sculpt.html`);
+    assert.ok(tag, `${id} is in index.html`);
     const attr = name => Number(tag.match(new RegExp(`${name}="([^"]+)"`))[1]);
     assert.deepEqual(sliderRange(id), [attr('min'), attr('max'), attr('step')], `${id}: min, max and step`);
   }

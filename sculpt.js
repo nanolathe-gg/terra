@@ -157,8 +157,8 @@ const toolCard=(id,own=mapTools) => { const t=toolById(id,own); return t?.card?s
 const savedCard=(id,card) => card && Object.hasOwn(config.worldShapes||{},card.preset)?shapeCard(id,card.preset):savedToolCard(config,entryOf(id),card);
 const toolLabel=id => toolById(id)?.label;
 const firstTool=() => shapeTools()[1]?.id??LANDFORM_TOOL.id;
-// The shape buttons, built from the world's list into their groups (the one exception to the page's layout living in sculpt.html): each a copy of its icon
-// from the set (Save as tool's icon choices in sculpt.html, #tool-save-icons), its id in data-tool as every check clicks it, its shape in data-shape for the hover help.
+// The shape buttons, built from the world's list into their groups (the one exception to the page's layout living in index.html): each a copy of its icon
+// from the set (Save as tool's icon choices in index.html, #tool-save-icons), its id in data-tool as every check clicks it, its shape in data-shape for the hover help.
 function buildToolbar() {
   const icon=name => $('tool-save-icons').querySelector(`[data-icon-choice="${name}"] svg`).cloneNode(true);
   for (const [group,box] of [['shape','shape-tools'],['water','water-tools']]) $(box).replaceChildren(...shapeTools().slice(1).filter(t => t.group===group).map(t => {

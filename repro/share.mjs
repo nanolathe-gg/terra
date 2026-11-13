@@ -1,5 +1,5 @@
 // Share-link check in a real browser: share a map, open the link in a fresh profile, confirm the map is the same, restore the visitor's own map.
-//   node repro/share.mjs --server http://127.0.0.1:8851 [--port 9751] [--out dir] [--entry /sculpt.html] [--admin-token-file path]
+//   node repro/share.mjs --server http://127.0.0.1:8851 [--port 9751] [--out dir] [--entry /index.html] [--admin-token-file path]
 // --server is where the page is served (the dev server, or a static build on localhost); the page's own services.json says which save-link
 // service it uses. With --admin-token-file the ids this run created are deleted from that service afterwards (the token is never printed).
 // Writes screenshots to --out and prints one JSON line. Exit 1 on any failed check or console error.
@@ -9,7 +9,7 @@ import {mkdirSync, writeFileSync, readFileSync} from 'node:fs';
 
 const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
-const server = opt('--server', ''), port = Number(opt('--port', 0)), out = opt('--out', 'share-out'), entry = opt('--entry', '/sculpt.html'), tokenFile = opt('--admin-token-file', '');
+const server = opt('--server', ''), port = Number(opt('--port', 0)), out = opt('--out', 'share-out'), entry = opt('--entry', '/index.html'), tokenFile = opt('--admin-token-file', '');
 if (!server || !port) { console.error('Pass --server and --port (this script never defaults to the owner\'s editor).'); process.exit(2); }
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));

@@ -118,7 +118,7 @@ try {
   const ev = async expression => { const r = await send('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true}); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text); return r.result.result.value; };
   const ready = async () => { for (let i = 0; i < 480; i++) { await sleep(120); if (await ev('!!window.sculptCanvas&&!document.getElementById("map-export").disabled')) return true; } throw new Error('never ready ' + logs.join('|')); };
   await send('Runtime.enable'); await send('Page.enable');
-  await send('Page.navigate', {url: `${server}/sculpt.html?${page}`}); await ready();
+  await send('Page.navigate', {url: `${server}/?${page}`}); await ready();
   await sweep(async (kind, card, under = []) => {
     await ev(`sculptDebug.scene(${JSON.stringify([...under, [kind, path, {card}]])},{ground:false})`); await ready(); await ev('sculptCanvas.idle()');
     return ev(`(() => { const o = []; for (let y = 0; y < ${H}; y += ${STEP}) for (let x = 0; x < ${W}; x += ${STEP}) o.push(sculptDebug.corner(x, y + ${Y0}).authored); return o; })()`);

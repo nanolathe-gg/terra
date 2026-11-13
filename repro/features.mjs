@@ -42,7 +42,7 @@ try {
   const placements = () => ev('sculptCanvas.features.serialize().features');
   await send('Runtime.enable'); await send('Page.enable'); await send('Emulation.setDeviceMetricsOverride', {width: 1440, height: 900, deviceScaleFactor: 1, mobile: false});
 
-  await send('Page.navigate', {url: `${server}/sculpt.html?biome=green&mapX=4&mapY=4&scratch=features-test&gpuMB=512&heapMB=1536`}); await ready();
+  await send('Page.navigate', {url: `${server}/?biome=green&mapX=4&mapY=4&scratch=features-test&gpuMB=512&heapMB=1536`}); await ready();
   await ev('(async()=>{sculptCanvas.zoom(1);const v=document.getElementById("viewport");v.scrollLeft=256;v.scrollTop=256;v.dispatchEvent(new Event("scroll"));await sculptCanvas.idle();return true;})()');
   // The Features tool opens on Place, metal deposits; the set's variants are pictured.
   await press('#feature-tool');
@@ -113,7 +113,7 @@ try {
   // Every world places every kind: a kind its table lacks is Green's (the Go config generator), lit by the world's own sun. Moon has rocks of its
   // own and Green's trees, shrubs and scars; Zhon has no table and takes all four.
   for (const world of ['moon', 'zhon']) {
-    await send('Page.navigate', {url: `${server}/sculpt.html?biome=${world}&mapX=4&mapY=4&scratch=features-test-${world}&gpuMB=512&heapMB=1536`}); await ready();
+    await send('Page.navigate', {url: `${server}/?biome=${world}&mapX=4&mapY=4&scratch=features-test-${world}&gpuMB=512&heapMB=1536`}); await ready();
     await press('#feature-tool');
     assert.equal(await ev('document.getElementById("feature-kind-note").textContent'), '');
     assert.deepEqual(await ev('[...document.getElementById("feature-kind").options].filter(o=>!o.disabled).map(o=>o.value).sort()'), ['deposit', 'rock', 'scar', 'shrub', 'tree', 'vent']);
@@ -123,7 +123,7 @@ try {
   }
   report.everyWorld = 'Moon and Zhon place every kind (a kind a world lacks is Green\'s)';
   // The shared catalog: import, duplicate, recolor, edit and place independently.
-  await send('Page.navigate', {url: `${server}/sculpt.html?biome=green&mapX=4&mapY=4&gpuMB=512&heapMB=1536`}); await ready();
+  await send('Page.navigate', {url: `${server}/?biome=green&mapX=4&mapY=4&gpuMB=512&heapMB=1536`}); await ready();
   await press('#feature-tool'); await set('#feature-kind','tree');
   await set('#feature-preset','red-tree-0'); await press('#feature-add-recipe');
   await set('#feature-recipe-name','Blue tendrils'); await set('#feature-tree-color','#325caa'); await set('#feature-form-tree-curl',.8);

@@ -236,7 +236,7 @@ export async function mountMapFeatures(api) {
     for (const p of placements) { if (!GROUND_KINDS.includes(p.kind)) continue; const s=stamps.get(key(p)),[fw,fz]=footprint(p); if (s && (!rect || intersects(rect,{x:p.x*CELL-CELL,y:p.z*CELL-CELL,width:(fw+2)*CELL,height:(fz+2)*CELL}))) s.exactStale=true; }
   }
 
-  // ---- the panel (sculpt.html #map-features-panel) ----
+  // ---- the panel (index.html #map-features-panel) ----
   const unavailable=['tree','shrub','rock','scar'].filter(k => !kinds.includes(k));
   for (const option of $('feature-kind').options) option.disabled=!kinds.includes(option.value);
   for (const option of $('fill-kind').options) option.disabled=!kinds.includes(option.value);

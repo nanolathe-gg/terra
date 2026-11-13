@@ -33,7 +33,7 @@ try {
   const send = (method, params = {}) => new Promise(r => { const n = ++id; pending.set(n, r); ws.send(JSON.stringify({id: n, method, params})); });
   const ev = async expression => { const r = await send('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true, userGesture: true}); if (r.result?.exceptionDetails) throw Error(JSON.stringify(r.result.exceptionDetails)); return r.result.result.value; };
   const ready = async () => { for (let i = 0; i < 480; i++) { if (await ev('!!window.sculptCanvas&&!document.getElementById("map-export").disabled')) { await ev('sculptCanvas.idle()'); return; } const e = await ev(`document.getElementById('error')?.textContent`); if (e) throw Error(e); await sleep(150); } throw Error('Editor did not become ready: ' + errors.join('\n')); };
-  const open = async query => { await send('Page.navigate', {url: `${server}/sculpt.html?${query}&mapX=4&mapY=4&gpuMB=512&heapMB=1536`}); await sleep(500); await ready(); };
+  const open = async query => { await send('Page.navigate', {url: `${server}/?${query}&mapX=4&mapY=4&gpuMB=512&heapMB=1536`}); await sleep(500); await ready(); };
   const set = async (elementId, value, event = 'input') => { await ev(`(()=>{const e=document.getElementById(${JSON.stringify(elementId)});e.value=${JSON.stringify(String(value))};e.dispatchEvent(new Event(${JSON.stringify(event)},{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`); await ready(); };
   const click = async selector => { await ev(`document.querySelector(${JSON.stringify(selector)}).click()`); await sleep(50); await ready(); };
   const tool = name => click(`[data-tool="${name}"]`);

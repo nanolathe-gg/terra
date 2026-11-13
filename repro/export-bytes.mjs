@@ -74,7 +74,7 @@ async function exportInChrome({world, units, layout, label, dir, row}) {
     const ev = async expression => { const r = await send('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true}); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text); return r.result?.result?.value; };
     await send('Runtime.enable'); await send('Page.enable');
     await send('Emulation.setDeviceMetricsOverride', {width: 1700, height: 1300, deviceScaleFactor: 1, mobile: false});
-    await send('Page.navigate', {url: `${server}/sculpt.html?${pageQuery(world, units, label)}`});
+    await send('Page.navigate', {url: `${server}/?${pageQuery(world, units, label)}`});
     const ready = async () => {
       for (let i = 0; i < 1200; i++) {
         if (await ev(`!!window.sculptCanvas && !document.getElementById('editor').disabled && !document.getElementById('map-export').disabled`)) { await ev('sculptCanvas.idle()'); await sleep(1500); return; }

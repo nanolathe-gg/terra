@@ -36,7 +36,7 @@ curl -s https://<worker>/maps/<id> | head -c 200
 The id is the first 16 base32 characters of the SHA-256 of the gzipped bytes. The same bytes give the same link and one
 write. Note the id depends on the gzip bytes, not the JSON: a client that wants the same map to give the same link must
 compress deterministically (for example a fixed gzip header with no timestamp). A leading `/api` is accepted so the
-local `sculpt.py` server (`/api/maps`) and production share one client path.
+local Go server (`/api/maps`) and production share one client path.
 
 CORS allows `ALLOWED_ORIGINS` (comma separated) and, unless `ALLOW_LOCALHOST` is `0`, `http://localhost` and
 `http://127.0.0.1` on any port.

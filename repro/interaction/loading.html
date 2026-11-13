@@ -7,7 +7,7 @@ const assert=(ok,text)=>{if(!ok)throw Error(text);},line=s=>output.textContent+=
 document.querySelector('#run').onclick=async()=>{
   output.textContent='Running…\n';window.navigationResult=null;
   try{
-    const frame=document.createElement('iframe');frame.src='/sculpt?biome=green&mapX=8&mapY=8&interaction=1&scratch=loading-check&heapMB=2048&weatheredView=1';document.querySelector('#host').replaceChildren(frame);
+    const frame=document.createElement('iframe');frame.src='/?biome=green&mapX=8&mapY=8&interaction=1&scratch=loading-check&heapMB=2048&weatheredView=1';document.querySelector('#host').replaceChildren(frame);
     const started=performance.now();while(!frame.contentWindow.interactionEditor?.ready()){assert(performance.now()-started<90000,'Startup timeout');await delay(100);}
     const w=frame.contentWindow,d=frame.contentDocument,a=w.interactionEditor,c=a.canvas,v=d.getElementById('viewport'),P=w.interactionPerf,next=()=>new Promise(r=>w.requestAnimationFrame(r));
     await a.settle();c.setBusy(true);

@@ -1,6 +1,7 @@
 package site
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -180,10 +181,18 @@ func (s *Site) Build(out, mapsURL string) (string, error) {
 	if err = WriteFiles(target, files); err != nil {
 		return "", err
 	}
-	index := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en-US"><head><meta charset="utf-8"><title>Terra</title><script>location.replace("b/%[1]s/sculpt.html"+location.search+location.hash)</script><noscript><meta http-equiv="refresh" content="0;url=b/%[1]s/sculpt.html"></noscript></head><body><a href="b/%[1]s/sculpt.html">Open Terra</a></body></html>
-`, version)
-	if err = os.WriteFile(filepath.Join(out, "index.html"), []byte(index), 0644); err != nil {
+	// Keep the editor at the site root while all relative assets use this
+	// immutable build directory. Queries and fragments stay on the root URL.
+	index, ok := files["index.html"]
+	if !ok {
+		return "", fmt.Errorf("site sources have no index.html")
+	}
+	if !bytes.Contains(index, []byte("<head>")) {
+		return "", fmt.Errorf("index.html has no head for the versioned asset base")
+	}
+	index = bytes.Replace(index, []byte("<head>"), []byte(fmt.Sprintf("<head><base href=\"b/%s/\">", version)), 1)
+
+	if err = os.WriteFile(filepath.Join(out, "index.html"), index, 0644); err != nil {
 		return "", err
 	}
 	return target, nil

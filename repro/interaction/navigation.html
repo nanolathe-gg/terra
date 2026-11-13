@@ -11,7 +11,7 @@ button.onclick=async()=>{
   let release;
   try{
     const frame=document.createElement('iframe');frame.title='Navigation test editor';
-    frame.src='/sculpt?biome=green&mapX=8&mapY=8&interaction=1&scratch=navigation-check&heapMB=2048&weatheredView=1';
+    frame.src='/?biome=green&mapX=8&mapY=8&interaction=1&scratch=navigation-check&heapMB=2048&weatheredView=1';
     document.querySelector('#host').replaceChildren(frame);
     const started=performance.now();
     while(!frame.contentWindow.interactionEditor?.ready()){assert(performance.now()-started<90000,'Startup timed out');await delay(100);}

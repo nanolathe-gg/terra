@@ -25,7 +25,7 @@ try{
   const key=async name=>{await send('Input.dispatchKeyEvent',{type:'keyDown',key:name});await send('Input.dispatchKeyEvent',{type:'keyUp',key:name});};
   const nodes=()=>ev('sculptDebug.nodes()');
   await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
-  await send('Page.navigate',{url:`${server}/sculpt.html?biome=green&mapX=4&mapY=4&gpuMB=512&heapMB=1536&undulation=0`});await ready();
+  await send('Page.navigate',{url:`${server}/?biome=green&mapX=4&mapY=4&gpuMB=512&heapMB=1536&undulation=0`});await ready();
   await ev(`sculptDebug.scene([['landform',[[200,500],[800,500]],{card:{diameter:400,elevation:210,styleVegetation:0}}]],{ground:true}); true`);await ready();
   const set=async(id,value)=>{await ev(`(()=>{const e=document.getElementById(${JSON.stringify(id)});e.value=${JSON.stringify(String(value))};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`);await ready();};
   const snapshot=()=>ev(`(()=>{const s=sculptDebug.sketch();return {rock:s.rock,column:s.column||null};})()`);
@@ -77,7 +77,7 @@ try{
   // A single authored rock face continues through the coast, in the normal
   // editor recipe. Chosen water tints retain the same lighting controls.
   const coast=JSON.parse(readFileSync(new URL('./fixtures/fracture-coast.json',import.meta.url)));
-  await send('Page.navigate',{url:server+'/sculpt.html?'+coast.query});await ready();
+  await send('Page.navigate',{url:server+'/?'+coast.query});await ready();
   assert.equal(await ev('document.getElementById("weather-state").textContent'),'Weathering off · authored surface');
   await ev(`sculptDebug.scene(${JSON.stringify(coast.strokes)},{ground:true});true`);await ready();
   await ev(`sculptDebug.loadSketch({...sculptDebug.sketch(),rock:${JSON.stringify(coast.rock)}});true`);await ready();

@@ -13,9 +13,12 @@ const folder = process.env.TERRAFORM_SITE_DIR ? resolve(process.env.TERRAFORM_SI
   : runSite(['--build-site', mkdtempSync(join(tmpdir(), 'site-'))]).trim();
 const read = name => readFileSync(join(folder, name), 'utf8');
 
-test('the root opens the versioned build', () => {
-  assert.match(folder, /\/b\/[0-9a-f]{10}$/);
-  assert.ok(read('../../index.html').includes(`b/${folder.split('/').pop()}/sculpt.html`));
+test('the root is the editor with a versioned asset base and no navigation redirect', () => {
+  const root=read('../../index.html');
+  assert.ok(root.includes(`<base href="b/${folder.split('/').pop()}/">`));
+  assert.ok(root.includes('id="terrain"'));
+  assert.ok(!root.includes('location.replace('));
+  assert.equal(root.replace(/<base href="[^"]+">/,''),read('index.html'));
 });
 
 test('every world and variant has a config file, and the services are declared', () => {

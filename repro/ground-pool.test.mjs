@@ -1,5 +1,5 @@
-// Card tilepool: every world's table carries the period its level ground repeats with (material.groundPool), and the tool that
-// draw reads the table. Without it the draw falls back to 1,024 px silently.
+// Every world carries the period its level ground repeats with (material.groundPool).
+// The renderer reads it; missing values fall back to 1,024 px.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

@@ -50,7 +50,7 @@
   ],
   "featureFallback": "green",
   "sources": [
-    "sculpt.html",
+    "index.html",
     "sculpt.js",
     "sculpt-ui.js",
     "sculpt-workspace.js",

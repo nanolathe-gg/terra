@@ -153,8 +153,8 @@ func (s *Site) Handler(assetsRoot string) (http.Handler, error) {
 			return
 		}
 		name := strings.TrimPrefix(r.URL.Path, "/")
-		if name == "" || name == "sculpt" {
-			name = "sculpt.html"
+		if name == "" {
+			name = "index.html"
 		}
 		if !safeName(name) {
 			http.NotFound(w, r)

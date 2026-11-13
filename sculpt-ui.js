@@ -75,7 +75,7 @@ export function mountEditorUI(){
 export function groupToolControls(fields,buildRow){
  const groups=[],details=[],claimed=new Set(),field=key=>fields.find(f=>f[0]===key);
  const build=keys=>keys.map(field).filter(Boolean).map(f=>{claimed.add(f[0]);return buildRow(f);});
- // The card's own sections (written in sculpt.html): each generated row is created into its section's slot, in this order.
+ // The card's own sections (written in index.html): each generated row is created into its section's slot, in this order.
  const placed={'card-profile-rows':['lean','facing'],'card-size-rows':['heightReference','elevation','combine','routeSmooth','paintChannel'],'card-rock-rows':['rockPreset','styleVegetation'],
   'card-outline-rows':['wander','widthVary','heightVary','varySize','wallVary','varyFoot','varyMiddle','faceVariation','crestTaper']};
  const rows=Object.fromEntries(Object.entries(placed).map(([slot,keys])=>{const made=build(keys);$(slot).append(...made);return [slot,made];}));
@@ -124,7 +124,7 @@ export function groupToolControls(fields,buildRow){
  };
 }
 
-// Where each World setting sits: "Section/Tab" (a section without tabs ends in "/"). sculpt.html holds one container per home
+// Where each World setting sits: "Section/Tab" (a section without tabs ends in "/"). index.html holds one container per home
 // (data-home); a row is created straight into its home, under the name of its group. repro/world-homes.test.mjs holds every key to one home.
 export const WORLD_HOMES={
  'Ground/Pattern':'groundTiles groundContrast groundPatch groundPatchSize',
@@ -166,7 +166,7 @@ export function worldGroup(name,key){
  if(!worldBlocks.has(id)){const block=document.createElement('div'),heading=document.createElement('h3');block.className='world-subsection';heading.textContent=name;block.append(heading);homeRows(home).append(block);worldBlocks.set(id,{block,search:name});}
  return worldBlocks.get(id);
 }
-// The World panel: sections down its side, tabs in the larger ones (static in sculpt.html). A press shows one section and one of its tabs.
+// The World panel: sections down its side, tabs in the larger ones (static in index.html). A press shows one section and one of its tabs.
 // With a search, every tab that holds a match shows under its own name, and the fixed blocks (colors, pickers, notes) step aside.
 export function mountWorldControlIndex(root,values=()=>({})){
  const search=$('world-control-search'),studio=root.closest('.world-studio'),input=search.querySelector('#world-search'),fine=search.querySelector('#world-fine');

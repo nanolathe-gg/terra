@@ -67,11 +67,13 @@ const strokeAt = async (send, ev, tool) => {
 
 let bad = 0;
 async function smokeWorld(world, port) {
-  const url = `${server}/sculpt.html?biome=${world}&scratch=smoke-${world}-${Date.now()}&gpuMB=512&heapMB=1536`;
+  const url = `${server}/?biome=${world}&scratch=smoke-${world}-${Date.now()}&gpuMB=512&heapMB=1536`;
   const result = await session(url, port, async ({send, ev, logs}) => {
     const r = {world, brushes: {}, export: null};
     try {
       await ready(ev, world !== 'zhon');
+      r.path = await ev('location.pathname');
+      if (r.path !== new URL(url).pathname) throw new Error('Editor redirected away from its index URL: ' + r.path);
       await ev('sculptCanvas.zoom(1); true'); await sleep(500);
       // Every brush on this world's toolbar: the fixed ones and the world's own shape tools (a world may drop or add shape tools).
       for (const tool of await ev(`[...document.querySelectorAll('.tool-groups [data-tool]')].map(b => b.dataset.tool).filter(t => t !== 'move')`)) {
@@ -107,7 +109,7 @@ async function smokeWorld(world, port) {
   console.log(JSON.stringify(result));
 }
 async function smokePage8(world, port) {
-  const url = `${server}/sculpt.html?biome=${world}&mapX=8&mapY=8&scratch=smoke-8-${world}-${Date.now()}&gpuMB=512&heapMB=1536`;
+  const url = `${server}/?biome=${world}&mapX=8&mapY=8&scratch=smoke-8-${world}-${Date.now()}&gpuMB=512&heapMB=1536`;
   const r = await session(url, port, async ({send, ev, logs}) => {
     const r = {page8: true, world};
     try {

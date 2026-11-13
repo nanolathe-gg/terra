@@ -38,7 +38,7 @@ if (!inChrome) {
 }
 for (const file of scenes) {
   const scene = JSON.parse(readFileSync(file, 'utf8')), name = basename(file, '.json');
-  const url = `${server}/sculpt.html?${search(scene)}`;
+  const url = `${server}/?${search(scene)}`;
   await cdpPortFree(port);
   const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
     `--user-data-dir=${out}/prof-${port}-${Date.now()}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
