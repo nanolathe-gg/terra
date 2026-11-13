@@ -404,7 +404,7 @@ export class TerrainRenderer {
     return response.json();
   }
 
-  setColors(colors = {}) { this.colorOverrides={...colors};this.worldDirty=true;return this.syncWorld(); }
+  setColors(colors = {}, options) { this.colorOverrides={...colors};this.worldDirty=true;return this.syncWorld(options); }
 
   // GLSL uniform uFooBar is the uniform block's field fooBar. A value is a
   // number or boolean, a vector's components, or (for an array) a list of
@@ -1047,7 +1047,7 @@ export class TerrainRenderer {
     return delta;
   }
 
-  applyKnobs() { this.worldDirty=true;return this.syncWorld(); }
+  applyKnobs(options) { this.worldDirty=true;return this.syncWorld(options); }
 
   variantNumber(key, fallback) { const x = Number(this.variant.get(key)); return Number.isFinite(x) && this.variant.has(key) ? x : fallback; }
 

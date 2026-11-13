@@ -824,8 +824,11 @@ function endRegionalMove(commit=true) {
   else if (gesture.changed) checkpoint();
   selectNode(gesture.index); updateControls(); schedule(); queueWeather(); return commit?gesture.index:false;
 }
-const surfaceValues=() => Object.fromEntries(SURFACE_SLIDER_IDS.map(id => [id,Number($(id).value)]));
-function currentDrawOptions() { return drawOptions(surfaceValues(),{clay:$('clay').checked,light:$('light').value}); }
+const readSurfaceInputs=() => Object.fromEntries(SURFACE_SLIDER_IDS.map(id=>[id,Number($(id).value)]));
+let appliedSurface=null,appliedView=null;
+const surfaceValues=()=>appliedSurface??readSurfaceInputs();
+function syncDrawInputs(){appliedSurface=readSurfaceInputs();appliedView={clay:$('clay').checked,light:$('light').value};}
+function currentDrawOptions() { return drawOptions(surfaceValues(),appliedView??{clay:$('clay').checked,light:$('light').value}); }
 function regionalHeightCell(x,y) {
   const h=regionalFields.cell(x,y);
   if (!refined || !refinedBase || !$('weather').checked || !refinementValid(refinedInvalidRect,x,y)) return h;
@@ -1272,7 +1275,7 @@ function loadSketch(s,carry=false) {
   if (typeof s.weather==='boolean') $('weather').checked=s.weather;
   if (typeof s.clay==='boolean') $('clay').checked=s.clay;
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
-  restoreColumn(column);syncColumnPanel();
+  syncDrawInputs();restoreColumn(column);syncColumnPanel();
   mapRocks=rocks??worldRocks(config); rockSelected=0; syncRockChoices(); syncRockPanel(); nodes=keepStrokeRocks(next,mapRocks); selected=-1;pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
   // The tools' cards still on a world's preset name their rock among this map's presets, now that the map's list is in.
   for (const id of ids) if (Object.hasOwn(config.worldShapes||{},toolSettings[id]?.preset)) toolSettings[id]=shapeCard(id,toolSettings[id].preset);
@@ -1433,7 +1436,10 @@ $('tool-delete').onclick=() => {
   status(`Deleted the tool ${label}. Shapes drawn with it keep their settings and show as Landform.`);
 };
 // A surface slider redraws; the two the material field reads (TIME_SLIDER_IDS) run the Time pass again.
-for (const id of SURFACE_SLIDER_IDS) $(id).addEventListener('input',() => { const change=worldChanged(renderer.syncWorld(currentDrawOptions())); updateControls(); if (change.timeChanged) queueWeather(); persistLater(); });
+for(const id of SURFACE_SLIDER_IDS){
+  $(id).addEventListener('input',()=>{const out=$(id).closest('.control')?.querySelector('output');if(out)out.textContent=$(id).value+'%';worldInputQueue.put('surface:'+id,{type:'surface'});});
+  $(id).addEventListener('change',()=>worldInputQueue.end());
+}
 function applySeedControl() {
   const next=clamp(Math.trunc(Number($('seed').value) || 0),0,4294967295);
   // Saving or adding a path must never copy the selected shape's seed into
@@ -1453,7 +1459,7 @@ $('seed-randomize').onclick=()=>{
   else{seed=randomSeed(seed);$('seed').value=seed;updateControls();persistLater();}
 };
 $('seed-vary').onchange=()=>{varySeed=$('seed-vary').checked;updateControls();persistLater();};
-for (const id of ['clay','light']) $(id).addEventListener('change',() => { worldChanged(renderer.syncWorld(currentDrawOptions())); updateControls(); persistLater(); });
+for(const id of ['clay','light'])$(id).addEventListener('change',()=>{worldInputQueue.put('view',{type:'surface'});worldInputQueue.end();});
 $('weather').addEventListener('change',() => {
   cancelWeather(); worldChanged({channels:[{name:'weather',stage:'B'}]});
   if (!$('weather').checked) clearRendererWeather();
@@ -1595,7 +1601,7 @@ function worldColors() { return rendererColors(mergedColors(),columnOverride?.co
 function columnForEdit(){const column=structuredClone(config.column);if(column){const colors=worldColors();column.colors=Array.from({length:5},(_,i)=>(colors['strata'+(i+1)]||defaultColor('strata'+(i+1))).map(v=>v*255));}return column;}
 function restoreColumn(column){
   columnOverride=column;config.column=column||defaultColumn;columnEditing=false;
-  const knobs=renderer.applyKnobs(),colors=renderer.setColors(worldColors()),change=worldChanged(knobs,colors);
+  const change=worldChanged(renderer.setColors(worldColors(),currentDrawOptions()));
   if(change.timeChanged){cancelWeather();refined=refinedBase=null;dropGpuWeather();clearRendererWeather();}
   syncWorldControls();return change;
 }
@@ -1758,7 +1764,7 @@ function buildKnobs() {
   mountRockPanel();
 }
 // The facts the World panel enables a row by (sculpt-knobs.js worldPanelValues, which worldControlRequirement reads).
-const panelFacts=() => ({config,renderer,nodes,colors:worldColors(),weathering:weatherOn(),materialWeathering:Number($('material-weathering').value)});
+const panelFacts=() => ({config,renderer,nodes,colors:worldColors(),weathering:weatherOn(),materialWeathering:surfaceValues()['material-weathering']});
 function worldPanelValues() {
   const values=worldPanelValuesOf(panelFacts()),rock=mapRocks.find(r=>r.slot===rockSelected);
   return rock?{...values,...rock.knobs}:values;   // a selected preset's rows are enabled by its own numbers
@@ -1899,6 +1905,7 @@ function setWorldColor(key,value) { worldInputQueue.put('color:'+key,{type:'colo
 function applyWorldInputs(batch) {
   let colors=false,presets=false,reload=false;const nexts=[];
   for(const input of batch){
+    if(input.type==='surface'){syncDrawInputs();continue;}
     if(input.type==='color'){
       const world=activeWorld();world.colors=pickWorldColor(config,world.colors,input.key,input.value);colors=worldStoreDirty=true;continue;
     }
@@ -1915,7 +1922,7 @@ function applyWorldInputs(batch) {
   const local=presets?syncRocks({defer:true}):null,onlyPresets=batch.every(input=>input.type==='knob'&&input.slot>0);
   // setColors writes the complete block too, including the knobs just stored.
   // Otherwise the batch has exactly one applyKnobs call, regardless of input count.
-  const delta=colors?renderer.setColors(worldColors()):renderer.applyKnobs();
+  const delta=colors?renderer.setColors(worldColors(),currentDrawOptions()):renderer.applyKnobs(currentDrawOptions());
   if(!delta.fields.length&&!delta.channels.length)for(const next of nexts)if(next.unknownInput){delta.channels.push({name:next.unknownInput,stage:'A'});delta.stage='A';}
   const change=worldChanged(delta,onlyPresets?{world:false,rect:local?.rect??null}:{world:true});
   if(change.timeChanged){
@@ -2017,6 +2024,7 @@ async function boot() {
     showTool(toolSettings[tool]);
     // The surface sliders open at the world's material values; the address may set the ring's three (a world's own fringe settings, 0..1).
     for (const [id,value] of Object.entries(surfaceSliders(config,experiment))) $(id).value=value;
+    syncDrawInputs();
     for (const [id,hidden] of Object.entries(surfaceGroupsHidden(config))) $(id).hidden=hidden;
     await bootMap();
   } catch (err) { error(err.message); status('The experimental renderer could not start.'); }
