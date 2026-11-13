@@ -653,7 +653,8 @@ function syncRocks() {
   let rect=null;for(const slot of slots)rect=mergeWorldRect(rect,mergeWorldRect(before.get(slot),bounds.get(slot)));
   rockUseKey=key;const delta=renderer.setRocks(next);
   if(rect){
-    const r=renderer.requiredRegion({...rect,worldSize,worldGrid},currentDrawOptions());
+    const x=Math.floor(rect.x),y=Math.floor(rect.y);
+    const r=renderer.requiredRegion({x,y,width:Math.ceil(rect.x+rect.width)-x,height:Math.ceil(rect.y+rect.height)-y,worldSize,worldGrid},currentDrawOptions());
     rect={x:r.gridOrigin[0],y:r.gridOrigin[1],width:(r.gridWidth-1)*r.gridSpacing,height:(r.gridHeight-1)*r.gridSpacing};
     worldChanged(delta,{world:false,rect});
   }else worldChanged({fields:delta.fields,stage:null},{world:false});
@@ -1779,7 +1780,7 @@ function selectedRock() {
   return mapRocks.find(r=>r.slot===rockSelected)||worldRock(worldRockName(config),Object.fromEntries(ROCK_KEYS.map(k=>[k,renderer.variant.get(k)??config.defaults[k]])),config.column,config.variant);
 }
 // A new list (an edit of the selected preset, an add or a delete): the renderer follows when a stroke uses a changed preset (syncRocks).
-function editRocks(rocks) { mapRocks=rocks; nodes=keepStrokeRocks(nodes,mapRocks); syncRockChoices(); syncRocks(); persistLater(); }
+function editRocks(rocks) { const before=rockUseKey;mapRocks=rocks; nodes=keepStrokeRocks(nodes,mapRocks); syncRockChoices(); syncRocks(); if(before===rockUseKey)worldChanged({stage:null},{world:false});persistLater(); }
 // One rock row moved while a preset is selected: that preset's number, not the world's (no address, no saved world).
 function setPresetKnob(key,value) {
   const rock=mapRocks.find(r=>r.slot===rockSelected); if(!rock)return;
