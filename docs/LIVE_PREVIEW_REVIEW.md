@@ -36,4 +36,9 @@ current main. It is one measured fixture, not full LP2 acceptance.
 LP3 step 1 is in [LP3_PROGRESS.md](LP3_PROGRESS.md): exact preview inputs
 halve the sampled input allocation and allow one large coarse block at
 512 MiB. Sampled final windows remain exact; preview differences are
-reported separately. Its latency comparison is pending.
+reported separately. Its focused comparison is in [LP3_TIMINGS.md](LP3_TIMINGS.md): whole-view
+stroke p95 is 95–98 ms; wider acceptance remains open.
+
+The owner authorized autonomous landing on main overnight, with a summary
+due by 7:30 AM Pacific on November 13. The candidate will be checked and
+reviewed before merging; unfinished experiments remain outside main.

@@ -30,7 +30,10 @@ coarse block (its globally aligned rectangle is 1728×1088). Its input is
 console errors. This is a block-count/memory proof, not a timing run.
 Benchmark anchors and the missing-anchor negative control still pass.
 
-Qualified speed measurements for this step are next. LP2's focused
+Two focused alternating pairs now measure this step against current main;
+see [LP3_TIMINGS.md](LP3_TIMINGS.md). Stroke and rock whole-view p95 meet
+100 ms on this fixture, with no additional speed gain established over
+LP2. Accounted terrain peak is about 856 MiB in the timing batch. LP2's focused
 same-budget reference is [LP2_TIMINGS.md](LP2_TIMINGS.md); its remaining
 memory and broader acceptance gates remain open. Later LP3 steps are not
 implemented. Broader correctness runs remain deferred at the owner's
