@@ -22,14 +22,21 @@ count delivery. Its qualifying resume p95 improves 448.1 → 130.3 ms.
 The [Rain/finals follow-up](LP3_RAIN_FINALS.md) improves continuous Rain
 whole-current p95 297.3 → 257.5 ms and final latency 5342.0 → 4393.8 ms in
 its matched 512-MiB pair. Cold-gate final latency improves 4799.7 → 3983.9 ms.
-These remain focused measurements; Rain has not reached 100 ms.
+The [Rain first-view and compilation follow-up](LP3_RAIN_RESPONSE.md) tries
+the owner-approved 8-pixel first Time picture. Continuous Rain p95 improves
+273.8 → 97.9 ms and paused Rain 258.7 → 100.3 ms; finals improve 6–9% in
+the final pair. Shared fragments remove edit-time ray-marcher compilation.
+These remain focused measurements: paused Rain still misses 100 ms, the
+worst sampled contour offset is 31.5 px, and load briefly exceeds the 512-MiB
+budget by 1.1 MiB. Sampled final and tile-partition pixels stay exact.
 
 Remaining work, in order:
 
 1. **LP3:** review the regional lattice and memory/readback follow-ups;
-   reach Rain's response target and finish default-budget/broader scene/view
-   acceptance and the coarse-contour quality decision. Cold-driver-cache
-   compilation, allocation seeds, and tail validation remain. Try the cheaper coarse raster
+   finish the paused Rain tail, strict load-memory containment, broader
+   default-budget/scene/view acceptance, and the coarse-contour quality
+   decision. Cold compute variants, allocation seeds, and tail validation
+   remain. Try the cheaper coarse raster
    only if its measured color bias is acceptable.
 2. **LP4:** cancellation between voxel pieces, time-based piece sizing and
    the remaining view-first/off-screen scheduling. Bring every GPU

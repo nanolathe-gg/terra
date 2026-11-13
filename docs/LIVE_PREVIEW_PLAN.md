@@ -708,6 +708,15 @@ checks for staleness between its pieces and stops.
 
 ### 4.6 Pipelines
 
+**November 13 follow-up:** the [Rain response report](LP3_RAIN_RESPONSE.md)
+records a simpler implementation on the unmerged review branch: one uniform-gated
+fragment pipeline per rock mask for previews and finals, with specialized
+relief compute only. The owner allowed small pixel shifts for a better, simpler
+fix; the three sampled final windows here actually remain exact. This supersedes
+the specialized-final-fragment requirement below for that implementation.
+Observed multi-second edit-time fragment compiles disappear; broader validation
+and the remaining compute variants are still open.
+
 - **A generic set.** Build, at startup and in the background, one set of
   draw, bake and loose pipelines in which every gate is the uniform
   comparison it was written as (no constants). It is the same shader source,
@@ -1082,8 +1091,11 @@ view in one block at 512 MiB and submits warmed predicted pools before count
 delivery, validating before presentation. Cold seeds and budget fallbacks still
 read exact counts upfront. The [Rain/finals follow-up](LP3_RAIN_FINALS.md)
 reduces Time submissions and repeated page work, and prepares the focus source
-during compilation. Rain still misses 100 ms; the full acceptance matrix and
-raster step remain open.
+during compilation. The [Rain first-view/compile follow-up](LP3_RAIN_RESPONSE.md)
+tries the approved 8-pixel first view and shared fragments: the final pair
+measures continuous/paused Rain p95 of 97.9/100.3 ms. Paused tails, sampled
+contour outliers, strict load-memory containment, the full acceptance matrix,
+and the raster step remain open.
 
 **Change.** Shrink a preview pass's fixed cost and working set: for the
 100 ms row where LP2 misses it, for views larger than 1.8 megapixels (an

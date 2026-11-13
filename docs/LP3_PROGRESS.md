@@ -12,7 +12,12 @@ for its measurements and quality limits. The [next focused report](LP3_MEMORY_RE
 covers far-view memory planning and warmed preview pool prediction.
 [Rain and final-render follow-up](LP3_RAIN_FINALS.md) adds larger adaptive Time
 batches, focus-source preparation during compilation, and neighboring final-tile
-order. Rain still misses 100 ms. The step 1 record below is historical.
+order. The [Rain first-view and compilation follow-up](LP3_RAIN_RESPONSE.md)
+tries the owner-approved 8-pixel first Time view: continuous Rain p95 is
+97.9 ms and paused Rain 100.3 ms in its final pair, versus 273.8/258.7 ms.
+It removes edit-time fragment specialization, with exact sampled finals.
+Paused-tail, contour quality, strict load-memory containment, and broader
+acceptance remain open. The step 1 record below is historical.
 
 Step 1 is implemented on `live-preview/review`: preview lattice input
 textures use their exact dimensions, with matching estimates and planner
