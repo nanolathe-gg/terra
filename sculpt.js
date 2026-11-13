@@ -1,4 +1,5 @@
 import {requestAdapter} from './sculpt-webgpu.js';
+import {savedWorld,copySavedWorld,savedWorldId} from './sculpt-save.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
@@ -1255,7 +1256,7 @@ function sketch() {
   worldInputQueue.flush();
   applySeedControl();
   rememberTool();
-  return {format:'nanolathe-terrain-sculpt',version:6,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,varySeed,refinementSeed,
+  return {format:'nanolathe-terrain-sculpt',version:6,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',world:worldId,worldSettings:savedWorld(config,experiment,activeWorld()),size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,varySeed,refinementSeed,
     ...(columnOverride?{column:structuredClone(columnOverride)}:{}),rock:rockSettings(),rocks:structuredClone(mapRocks),...(mapTools.length?{tools:structuredClone(mapTools)}:{}),
     toolSettings,softness:Number($('softness').value),relief:Number($('relief').value),
     mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
@@ -1360,9 +1361,9 @@ let leavingForWorld=false,openingShared=false;   // set while a load hands the m
 async function loadSketchFile(s,commit=true) {
   if(!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==6 || !Array.isArray(s.nodes) || s.nodes.some(n=>!n))throw new Error('Load a map stroke graph.');
   const biome=typeof s?.biome==='string'?s.biome:'';
-  const savedWorld=typeof s.world==='string'&&worlds[s.world]?.base===biome?s.world:biome;
+  const savedId=s.worldSettings?savedWorldId(s):(typeof s.world==='string'&&worlds[s.world]?.base===biome?s.world:biome);
   const mapChanged=(s?.map?.unitsX??0)!==(config.map?.unitsX??0) || (s?.map?.unitsY??0)!==(config.map?.unitsY??0) || (s?.map && s.seaLevel!==config.seaLevel);
-  if (biome && (biome!==config.biomeId || savedWorld!==worldId || mapChanged || (s.variant||'')!==(config.variant||''))) {
+  if (biome && (biome!==config.biomeId || savedId!==worldId || s.worldSettings!==undefined || mapChanged || (s.variant||'')!==(config.variant||''))) {
     let served=false,variant='';
     try {
       const response=await fetch(configUrl(biome));
@@ -1370,6 +1371,7 @@ async function loadSketchFile(s,commit=true) {
       served=servedConfig?.biomeId===biome;
       variant=served && typeof s.variant==='string' && servedConfig.variants?.[s.variant]?s.variant:'';
       if(s.variant && variant!==s.variant)throw new Error('The saved column variant is unavailable.');
+      if(served)copySavedWorld(s.worldSettings,servedConfig);
       copyMapTools(s.tools);copyColumn(s.column);copyRockSettings(s.rock);copyRocks(s.rocks);s.nodes.forEach(checkedHeights);
     } catch (err) { error(err.message); return false; }
     if (!served) { error(`The saved terrain belongs to the ${biome} world, which this server does not have. The current terrain was left as it was.`); return false; }
@@ -1378,7 +1380,7 @@ async function loadSketchFile(s,commit=true) {
     catch (err) { error('The saved terrain could not be carried to '+biome+': '+err.message); return false; }
     status(`Opening ${biome} for the saved terrain…`);
     leavingForWorld=true;
-    goToWorld(biome,savedWorld,{pendingSketch:token,variant,shared:openingShared?1:'',mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
+    goToWorld(biome,savedId,{pendingSketch:token,variant,shared:openingShared?1:'',mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
     return false;
   }
   loadSketch(s); if(commit)checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather();return true;
@@ -2004,7 +2006,7 @@ document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-knob],#w
 document.addEventListener('click',e=>{if(e.target.closest('button'))worldInputQueue.flush();},true);
 document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&['z','y','s'].includes(e.key.toLowerCase()))worldInputQueue.flush();},true);
 
-async function bootMap() {
+async function bootMap(pending=null) {
   worldSize=config.worldSize??config.size; worldGrid=config.worldGrid??config.grid;
   size=worldSize; grid=worldGrid; spacing=(worldSize-1)/(worldGrid-1);
   // Outside a scoped regional replay, only the graph and empty placeholders
@@ -2039,8 +2041,13 @@ async function bootMap() {
   else status('Blank map ready · draw terrain with the existing tools.');
   ready=true; $('editor').disabled=false; $('world-editor').disabled=false;
   history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),rocks:structuredClone(mapRocks),tools:structuredClone(mapTools),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
-  const pending=await takePendingSketch(experiment.get('pendingSketch'));
-  if (pending) { try { loadSketch(pending); checkpoint(); status('Loaded the saved map.'); if (experiment.get('shared')) { window.history.replaceState(null,'',(u => (u.searchParams.delete('shared'),u.toString()))(new URL(location.href))); announceShared(); } } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
+  if (pending) { try {
+    loadSketch(pending);
+    // The one-use handoff is consumed. A refresh must restore the imported working map.
+    const shared=experiment.has('shared'),url=new URL(location.href);
+    for(const key of ['pendingSketch','shared']){experiment.delete(key);url.searchParams.delete(key);}
+    window.history.replaceState(null,'',url);checkpoint();status('Loaded the saved map.');if(shared)announceShared();
+  } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
   updateControls(); resize(); schedule(); queueWeather();
   $('one').click();   // every page load starts at 1x, centered on the map
@@ -2078,6 +2085,13 @@ async function boot() {
     services=await (await fetch('services.json')).json();   // which server-side services this host has (export, features, saving to a server)
     const response=await fetch(configUrl(experiment.get('biome')||services.defaultWorld,experiment.get('variant'))); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=applyWorldRock(await response.json()); config.services=services;
     defaultColumn=config.column;
+    const pending=await takePendingSketch(experiment.get('pendingSketch'));
+    const embedded=copySavedWorld(pending?.worldSettings,config);
+    loadWorlds();
+    if(embedded){
+      worlds[savedWorldId(pending)]=embedded;saveWorlds();
+      for(const [key,value]of Object.entries(embedded.knobs))experiment.set(key,value);
+    }
     // H12b: the editor always works on a map; an address without a size opens the default 4x4 one.
     if (!experiment.has('mapX') && !experiment.has('mapY')) {
       // A bare address reopens the working map's size and sea level.
@@ -2090,16 +2104,19 @@ async function boot() {
       const response=await fetch('config/catalog.json'),data=await response.json(); if (!response.ok) throw new Error(data.error||'Could not read map defaults from the installed content.');
       config.exportCatalog=data; config.defaultSeaLevel=config.exportCatalog.worlds[config.biomeId]?.defaultSeaLevel;
     }
-    configureMap(config,experiment); MIN_HEIGHT=config.seaLevel-90; MAX_HEIGHT=config.seaLevel+300;
+    configureMap(config,experiment);
+    if(embedded&&Number.isFinite(pending.baseHeight))config.baseHeight=pending.baseHeight;
+    MIN_HEIGHT=config.seaLevel-90; MAX_HEIGHT=config.seaLevel+300;
     if ((!config.map && config.size!==1024) || !Number.isInteger(config.grid) || config.grid<2 || config.grid>(config.map?16384:1024) || !Number.isFinite(config.baseHeight) || !Number.isFinite(config.seaLevel)) throw new Error('Unsupported sculpt configuration.');
     $('world-title').textContent=config.biome||'Green Planet';
     // The world: built-in (the biome itself) or a custom one based on it.
     // Its remembered settings come before the biome's own defaults.
-    loadWorlds();
     worldId=experiment.has('world') && worlds[experiment.get('world')]?.base===config.biomeId?experiment.get('world'):config.biomeId;
     config.featureSet=worlds[worldId]?.featureSet;
     config.presetDefaults={...config.defaults};
-    config.defaults={...config.defaults,...(worlds[worldId]?.knobs||{})};
+    const worldKnobs=worlds[worldId]?.knobs||{};
+    config.defaults={...config.defaults,...worldKnobs};
+    config.engineDefaults=Object.fromEntries(Object.entries(config.engineDefaults||{}).map(([key,value])=>[key,worldKnobs[key]??value]));
     if (worldId!==config.biomeId) $('world-title').textContent=worlds[worldId].name;
     addDefaults(experiment,config.defaults);
     borrowBeach(config,experiment);   // a beach another world lends (Beach, below Ground pattern): before the renderer and the panel read the world's layers
@@ -2112,7 +2129,7 @@ async function boot() {
     for (const [id,value] of Object.entries(surfaceSliders(config,experiment))) $(id).value=value;
     syncDrawInputs();
     for (const [id,hidden] of Object.entries(surfaceGroupsHidden(config))) $(id).hidden=hidden;
-    await bootMap();
+    await bootMap(pending);
   } catch (err) { error(err.message); status('The experimental renderer could not start.'); }
 }
 // Read-only hook for capture tools: the displayed (refined) heights.

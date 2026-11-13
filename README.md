@@ -169,8 +169,12 @@ corner heights. Field, weather and upload reservations share the page budget.
 **Share link** gzips the save (a fixed header, so the same map is the same link), posts it to the
 save-link service (`maps` in `services.json`: `/api/maps` here, the Worker in `deploy/worker/` for the
 static build) and shows `?map=<id>`. Opening such a link keeps your own map in one "previous map"
-slot and offers to restore it. The working copy autosaves in the browser; **Save** and **Load**
-write and read a file.
+slot and offers to restore it. The working copy autosaves in the browser. **Save** writes one self-contained map
+JSON with the biome and variant, effective world colors and controls, terrain
+strokes, tools, rock columns, features, starts and map settings. Send that file
+to another editor user on the same version; **Load** restores its world settings
+before rendering, without a separate world import. Undo history and generated
+render caches are session state and are not included.
 
 Export streams one tile-aligned PNG at a time to the exporter's worker. It
 keeps hashes, tile indices and attributes in memory, spills tile bytes past its

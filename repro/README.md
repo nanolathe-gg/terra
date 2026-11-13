@@ -35,6 +35,16 @@ install-hook` installs the CPU-only outgoing-commit freshness/publication gate;
 `repro/check.sh assets` verifies the images too. Missing pinned assets are fetched
 by the Go editor/build without a GPU. See [the asset workflow](../docs/PREVIEW_ASSETS.md).
 
+The focused map-file handoff check runs on demand:
+
+```sh
+node repro/save-load.mjs --server http://127.0.0.1:<yours> --port <cdp> --out <dir>
+```
+
+It uses two isolated Chrome profiles on `<cdp>` and `<cdp>+1`, exercises the
+actual Save/Load buttons, and compares the recipe and rendered pixels after
+loading and refreshing. It is outside the fast unit checks.
+
 ## Optional retail reproductions
 
 The following workflow is retained for a future return to retail matching.

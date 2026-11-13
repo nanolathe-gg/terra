@@ -52,6 +52,7 @@
   "sources": [
     "index.html",
     "sculpt.js",
+    "sculpt-save.js",
     "sculpt-ui.js",
     "sculpt-workspace.js",
     "sculpt-workspace.css",
