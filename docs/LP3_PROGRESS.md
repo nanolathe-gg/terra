@@ -1,3 +1,8 @@
+> **November 13 LP3 landing:** the owner approved the reviewed LP3 work.
+> [The landing record](LP3_LANDING.md) covers its transplant onto cleaned main,
+> validation, remaining limits, and the transition to LP6. Earlier measurements
+> retain their original scope.
+
 > **November 13 landing update:** The owner accepted the measured final-render
 > slowdown and authorized merging the native preview without additional tests.
 > Main now includes the LP2 implementation and LP3 step 1 with the foundation.

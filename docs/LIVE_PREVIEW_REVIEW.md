@@ -1,3 +1,8 @@
+> **November 13 LP3 landing:** the owner approved the LP3 trial and its reported
+> limits. [The landing record](LP3_LANDING.md) covers integration with cleaned
+> latest main. LP6 now takes priority; the earlier LP3 acceptance gaps remain
+> recorded below.
+
 # Live-preview implementation status
 
 Main includes the completed foundation (**LP0c, LP1 and LP4 step 1**), the
@@ -13,8 +18,8 @@ LP3 step 1 uses exact-size preview input textures. The measured +10.21%
 cold-gate final-cost result is accepted for this landing; its benchmark
 endpoint and historical 10% target were not changed.
 
-LP3 regional shape and Time lattices are now implemented on the unmerged
-`live-preview/review` branch. [The focused report](LP3_LATTICES.md) covers
+LP3 regional shape and Time lattices and their follow-ups are included in
+the owner-approved landing on cleaned main. [The focused report](LP3_LATTICES.md) covers
 performance, memory, final-byte checks, and the sampled contour difference.
 The [memory/readback follow-up](LP3_MEMORY_READBACKS.md) now fits the sampled
 far view in one block at 512 MiB and overlaps warmed pool allocation with
@@ -57,6 +62,6 @@ Current details are in [LP2 progress](LP2_PROGRESS.md),
 [foundation timing tables](LP_FOUNDATION_TIMINGS.md) preserve the earlier
 landing and comparison evidence. No benchmark was added to `repro/check.sh`.
 
-An existing development server needs a restart before reloading the editor:
-`sculpt-memory.js` is registered in `sculpt.py` at server startup. The native
-review server at http://127.0.0.1:8903/sculpt already has that registration.
+The current development server is `go run ./cmd/terraform`; the editor is `/`.
+Source and config changes reload on requests. Historical Python server and
+`/sculpt` addresses in dated measurement reports are retained as provenance.
