@@ -89,7 +89,8 @@ export class GpuErosion {
       owned.push(uniform);
       device.queue.writeBuffer(paramBuffer, 0, params);
       this.renderer.setColumn();
-      this.renderer.flushUniforms();
+      // Time binds its private snapshot; a shared upload could overwrite a
+      // chunk paused for voxel allocation readback.
       const res = {'0.0': {buffer: uniform}, '0.1': {buffer: request.planes}, '0.2': {buffer: request.masks},
         '1.0': {buffer: state[0]}, '1.1': {buffer: state[1]}, '1.2': {buffer: state[2]}, '1.3': {buffer: fixedBuffer}, '1.4': {buffer: tileFlag}, '1.5': {buffer: tileList},
         '1.6': {buffer: tileCount}, '1.7': {buffer: tileArgs}, '1.8': {buffer: weather}, '1.9': {buffer: state[1]}, '1.10': {buffer: acc}};
