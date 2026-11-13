@@ -1172,7 +1172,7 @@ async function runFedWeather(job) {
       for(const rect of dirty)mapCanvas.changed({stage:'B',rect,refinement:true,input:false});
     }
     updateControls(); schedule();
-  } catch (err) { gpuPassBytes=0; if (err.name!=='AbortError'&&job===weatherJob) failWeather(err.message,err); }
+  } catch (err) { gpuPassBytes=0; if(err.name!=='AbortError'&&job===weatherJob){if(await mapCanvas.recoverMemory(err))queueWeather();else failWeather(err.message,err);} }
 }
 function failWeather(message,err=null) {
   console.error(err??new Error(message)); error('Weathering failed: '+message);

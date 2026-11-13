@@ -399,8 +399,22 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         if(!rerun&&token===serial&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&quiet>=1000&&(!api.canExport||api.canExport())&&await features?.fitGround?.(state()))rerun=true;
       }
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
-    }catch(err){if(err instanceof TerrainMemoryError&&terrainBudget.lower('a GPU allocation failure')){renderer.evict();dropBlocks();for(const [key,e]of cache)if(!intersects(e,state()))remove(key);gpuBudget=terrainBudget.mb*MB;find('[data-gpu]').value=terrainBudget.mb;api.fitGpuBudget?.();configureChunks();paintedView=-1;rerun=true;}else if(err.name==='AbortError'||err.name==='PreviewReplan')rerun=true;else{console.error(err);$('error').hidden=false;$('error').textContent=err.message;}}
+    }catch(err){if(recoverAllocation(err))rerun=true;else if(err.name==='AbortError'||err.name==='PreviewReplan')rerun=true;else{console.error(err);$('error').hidden=false;$('error').textContent=err.message;}}
     finally{if(rendering){drawing=false;if(rerun){rerun=false;schedule();}}}
+  }
+  function recoverAllocation(error){
+    if(!(error instanceof TerrainMemoryError)||!terrainBudget.lower('a GPU allocation failure'))return false;
+    renderer.evict();dropBlocks();for(const [key,e]of cache)if(!intersects(e,state()))remove(key);
+    gpuBudget=terrainBudget.mb*MB;find('[data-gpu]').value=terrainBudget.mb;
+    api.fitGpuBudget?.();configureChunks();paintedView=-1;schedule();return true;
+  }
+  async function recoverMemory(error){
+    if(!(error instanceof TerrainMemoryError))return false;
+    // Time can fail alongside a useful view bake. Let that submitted work
+    // finish before releasing its working textures or changing its budget.
+    cancelBake();viewEpoch++;
+    while(renderer.busy||drawing)await tick();
+    return recoverAllocation(error);
   }
   // H7b: during a gesture a change is answered at once, not at the next animation frame (a pointer move is already one event a frame): the bake of
   // the change's chunks starts as soon as the one in flight ends, and nothing waits for a frame between them.
@@ -560,6 +574,6 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // It was a 32 px chunk's, so the fields took the rest of the budget and the first 512 px bake could not be allocated beside them.
   // The terrain canvas and its overlay share the view's size (resize); the paged fields' budget is the shared one (sculpt-scene.js pagedBudget).
   function minimumBytes(){return pagedBudget({gpuMB:0,renderer,chunk:canonicalSize,maskCount:api.maskKeys?.length,view:{width:canvas.width,height:canvas.height},preview:previewReserved,featureBytes:features?.stats?.().imageBytes||0}).minimum;}
-  const result={renderer,passability,minimumBytes,foregroundPending,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
+  const result={renderer,passability,minimumBytes,foregroundPending,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
   window.sculptCanvas=result;resize();budgets();return result;
 }

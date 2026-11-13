@@ -5,6 +5,7 @@
 // with the height this returns, so the apron, sand and material field are as before.
 // Authoring prototype, not retail rules.
 
+import {terrainAllocation} from './sculpt-memory.js';
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
 // The Time pass reads the world's own rock (slot 0) for its beds' hardness: its pipelines read every rock number at slot 0's fixed offset
 // (engine-common.wgsl rockMask). A rock preset's own beds do not reach the heights yet.
@@ -79,12 +80,15 @@ export class GpuErosion {
       const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
       const make = (label, bytes, usage = S) => { const b=device.createBuffer({label, size:Math.max(16,bytes),usage});owned.push(b);return b; };
       const tw = Math.ceil(grid / 8);
-      const state = [0, 1, 2].map(k => make('erosion state ' + k, n * 16));
-      const fluxA = make('erosion flux a', n * 16), fluxB = make('erosion flux b', n * 16), vel = make('erosion velocity', n * 8), acc = make('erosion totals', n * 16);
-      const fixedBuffer = make('erosion fixed', n * 16), paramBuffer = make('erosion params', 80, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
-      const tileFlag = make('erosion tile flags', tw * tw * 4), tileList = make('erosion tiles', tw * tw * 8), tileCount = make('erosion tile count', 4);
-      const tileArgs = make('erosion tile args', 12, S | GPUBufferUsage.INDIRECT);
-      const weather = make('time pass height', n * 8), maps = [0, 1, 2].map(k => make('time pass map ' + k, n * 4));
+      let state,fluxA,fluxB,vel,acc,fixedBuffer,paramBuffer,tileFlag,tileList,tileCount,tileArgs,weather,maps;
+      await terrainAllocation(device,()=>{
+      state = [0, 1, 2].map(k => make('erosion state ' + k, n * 16));
+      fluxA = make('erosion flux a', n * 16), fluxB = make('erosion flux b', n * 16), vel = make('erosion velocity', n * 8), acc = make('erosion totals', n * 16);
+      fixedBuffer = make('erosion fixed', n * 16), paramBuffer = make('erosion params', 80, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+      tileFlag = make('erosion tile flags', tw * tw * 4), tileList = make('erosion tiles', tw * tw * 8), tileCount = make('erosion tile count', 4);
+      tileArgs = make('erosion tile args', 12, S | GPUBufferUsage.INDIRECT);
+      weather = make('time pass height', n * 8), maps = [0, 1, 2].map(k => make('time pass map ' + k, n * 4));
+      });current();
       const uniform = feedUniform(device, {grid, cells: n, rateMask: request.rateMask, sea: seaLevel, spacing, envelope: request.envelope ?? 1, tilesWide: tw});
       owned.push(uniform);
       device.queue.writeBuffer(paramBuffer, 0, params);
