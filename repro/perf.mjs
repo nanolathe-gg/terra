@@ -64,7 +64,7 @@ function budgetTable(results) {
   lines.push('',`Fresh stroke tiles (input to paint), first: ${cell(results.flatMap(r=>[r.drag,r.resume].filter(Boolean)),'firstTile',null)}; pointer: ${cell(results.flatMap(r=>[r.drag,r.resume].filter(Boolean)),'pointer',null)}; whole area: ${cell(results.flatMap(r=>[r.drag,r.resume].filter(Boolean)),'all',null)}.`,`Focus tile after pause/release: ${cell(results.flatMap(r=>[r.drag,r.resume,...r.slider||[]].filter(p=>p&&p.status!=='blocked')),'focus',600)}.`,`GPU queue wait max: ${max(p=>p.split?.queueWaitMs?.max||0).toFixed(1)} ms (wall, includes queueing).`,
     `GPU submission max: ${max(p=>p.split?.gpuSubmissionMs?.max||0).toFixed(1)} ms (timestamp span; budget 100 ms).`,
     `Longest observed long task (>50 ms): ${max(p=>p.split?.longTasks?.max||0)||'none'}; input handler max: ${max(p=>p.split?.handlerMs?.max||0).toFixed(1)} ms.`,
-    `Specialized sets compiled: ${phases.reduce((n,p)=>n+(p.split?.specStats?.built||0),0)}; each set contains draw, bake and loose pipelines.`,
+    `Specialized sets compiled: ${phases.reduce((n,p)=>n+(p.split?.specStats?.built||0),0)}; actual pipeline calls are listed per phase.`,
     `Off-screen GPU: ${max(p=>p.split?.offscreenGPU?.whollyOutsideMs||0).toFixed(1)} ms wholly outside; ${max(p=>p.split?.offscreenGPU?.mixedRegionMs||0).toFixed(1)} ms in mixed regions (largest individual phase) (not separable with pass timestamps).`,
     'Final-cost ratios require alternating main/build results matched by fixture and effective budget; this table reports each run separately.');
   lines.push('','LP0b per-fixture: drag and resume are separate; all waits in ms, p50 / p90 / p95.');

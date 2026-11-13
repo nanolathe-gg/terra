@@ -228,16 +228,17 @@ export class TerrainRenderer {
     const fragSource=preprocess(frag.replace('/*VOLUME*/',this.volumeSource),common,new Set(['VOLUME_RENDER']));
     const bakeSource=preprocess(bake,common,new Set(['BAKE']));
     this.stageSources=[{source:fragSource,stage:'F'},{source:fragSource,stage:'E',roots:['voxelHit','voxelNormal','occlusion','visibility']},{source:bakeSource,stage:'C'}];
-    const fragGates=extractGates(fragSource,this.layout.fields),bakeGates=extractGates(bakeSource,this.layout.fields);
-    const [vertModule, fragModule, bakeModule] = await Promise.all([
+    const bakeGates=extractGates(bakeSource,this.layout.fields);
+    const [vertModule,bakeModule] = await Promise.all([
       compile('sculpt-vert.wgsl', preprocess(vert, common, new Set())),
-      compile('engine-frag.wgsl', fragGates.source),
       compile('engine-bake.wgsl', bakeGates.source)]);
-    this.specParts = {vertModule, fragModule, bakeModule, frag: fragGates.gates, bake: bakeGates.gates, keyOrder: [...new Set([...fragGates.gates.keys(), ...bakeGates.gates.keys()])]};
+    // One uniform-gated fragment pipeline per rock mask. Color/light changes
+    // no longer compile a new ray marcher; only relief gates specialize.
+    this.specParts = {vertModule,bakeModule,bake:bakeGates.gates,keyOrder:[...bakeGates.gates.keys()]};
     this.specCache = new Map();
     this.specBuilding = new Map();
     this.specUsed = [];
-    this.specStats = {built: 0, ms: 0};
+    this.specStats = {built: 0, ms: 0, pipelinesPerSet:2};
 
     // Group 0: the uniforms and the world fields, shared by the draw and the
     // bake (binding 6 is the fields for the draw, the routes for the bake).
@@ -439,15 +440,15 @@ export class TerrainRenderer {
   i(name, value) { this.set(name, Number(value)); }
   v(name, value) { this.set(name, value); }
 
-  // P6: the draw, bake and loose-mask pipelines for the gates' values now. A set of values not built yet throws SpecializationMiss; the async
+  // P6: the bake and loose-mask pipelines for the gates' values now. A set of values not built yet throws SpecializationMiss; the async
   // callers (renderChunk, timeBake, timeDraw) build it and run again. The check at the end of draw() catches a gate that changed between the
   // bake's encode and the draw's: both run with the uniform buffer as it is at submit.
   specKey() {
-    const parts = this.specParts, slots = this.rockSlots(), values = {...gateValues(parts.frag, this.uniformView, slots), ...gateValues(parts.bake, this.uniformView, slots)};
+    const parts = this.specParts, slots = this.rockSlots(), values = gateValues(parts.bake, this.uniformView, slots);
     return {key: gateKey(values, parts.keyOrder), values};
   }
-  // Original uniform comparisons, compiled once before input is enabled.
-  // Finals still use the unchanged specialized modules and cache.
+  // Original uniform comparisons, compiled before input is enabled. The draw
+  // is shared by every level; relief finals retain their specialized cache.
   async buildGeneric(compile,fragSource,bakeSource) {
     const start=performance.now(),device=this.device;
     const [fragmentModule,bakeModule]=await Promise.all([compile('generic terrain',fragSource),compile('generic relief',bakeSource)]);
@@ -463,8 +464,9 @@ export class TerrainRenderer {
   }
   specialized(kind) {
     const state = this.specKey();
-    if(this.pipelineMode==='generic'){
-      this.specUsed.push('generic:'+state.values.rockMask);this.specStats.genericUses++;
+    const generic=this.pipelineMode==='generic';
+    if(kind==='draw'||generic){
+      this.specUsed.push(generic?'generic:'+state.values.rockMask:state.key);this.specStats.genericUses++;
       return this.genericPipelines[state.values.rockMask][kind];
     }
     const entry = this.specCache.get(state.key);
@@ -481,7 +483,7 @@ export class TerrainRenderer {
   get bakePipeline() { return this.specialized('bake'); }
   get loosePipeline() { return this.specialized('loose'); }
   // The voxel solid's and rock weather's passes for the rockMask now (engine-common.wgsl), from `built` (mask -> passes); a miss builds them
-  // with the draw's and the bake's pipelines (specialize) and the work runs again.
+  // with the bake's pipelines (specialize) and the work runs again.
   rockPasses(built) {
     const passes = built?.[this.rockMask()];
     if (!passes) throw new SpecializationMiss(this.specKey());
@@ -493,18 +495,14 @@ export class TerrainRenderer {
     this.specStats.rockMs = (this.specStats.rockMs ?? 0) + performance.now() - rock;
     if (this.specCache.has(key)) return;
     if (!this.specBuilding.has(key)) {
-      const {vertModule, fragModule, bakeModule, frag, bake} = this.specParts, device = this.device, start = performance.now();
+      const {bakeModule,bake} = this.specParts, device = this.device, start = performance.now();
       const pick = gates => Object.fromEntries([...gates.keys()].map(id => [id, values[id]]));
-      const fragment = {module: fragModule, entryPoint: 'fragmentMain', targets: [{format: this.format}], constants: pick(frag)};
       const compute = entryPoint => ({module: bakeModule, entryPoint, constants: pick(bake)});
       this.specBuilding.set(key, Promise.all([
-        device.createRenderPipelineAsync({label: 'terrain', layout: this.drawPipelineLayout,
-          vertex: {module: vertModule, entryPoint: 'vertexMain'},
-          fragment, primitive: {topology: 'triangle-list', cullMode: 'none'}}),
         device.createComputePipelineAsync({label: 'relief bake', layout: this.bakePipelineLayout, compute: compute('bakeMain')}),
-        device.createComputePipelineAsync({label: 'loose mask', layout: this.bakePipelineLayout, compute: compute('looseMain')})]).then(([draw, bake, loose]) => {
+        device.createComputePipelineAsync({label: 'loose mask', layout: this.bakePipelineLayout, compute: compute('looseMain')})]).then(([bake, loose]) => {
         if (this.specCache.size >= 24) this.specCache.delete(this.specCache.keys().next().value);
-        this.specCache.set(key, {draw, bake, loose});
+        this.specCache.set(key, {bake, loose});
         this.specStats.built++; this.specStats.ms += performance.now() - start;
       }).finally(() => this.specBuilding.delete(key)));
     }
