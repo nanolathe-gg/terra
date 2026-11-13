@@ -134,11 +134,13 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   }
   // Relief and cached output use scale s. Color is evaluated at up to four
   // native samples per output pixel, then filtered after shading and palette mapping.
-  estimate(region,width,height,maskPlaneCount=this.maskPlaneCount,scale=1,{budgetBytes=this.budgetBytes,reservedBytes=this.reservedBytes}={}) {
+  estimate(region,width,height,maskPlaneCount=this.maskPlaneCount,scale=1,{budgetBytes=this.budgetBytes,reservedBytes=this.reservedBytes,preview=false}={}) {
     region=alignedFieldRegion(region,scale);
-    // input per texel: height 4 + routes 4 + weather/material 4 layers x 4 (as allocate() makes them), then 4 a mask layer.
+    // Preview blocks reuse their exact lattice dimensions. Finals retain their
+    // padded input dimensions and sampling. Coarse/quarter share the input set.
+    // Per texel: height 4 + routes 4 + weather/material 4 layers x 4, then 4 a mask layer.
     const fieldScale=fieldLevel(scale),field=pow2(Math.ceil(region.fieldsWidth/fieldScale))*pow2(Math.ceil(region.fieldsHeight/fieldScale))*8;
-    const maskLayers=Math.max(1,Math.ceil(maskPlaneCount/4)),input=pow2(region.gridWidth)*pow2(region.gridHeight)*(24+maskLayers*4);
+    const maskLayers=Math.max(1,Math.ceil(maskPlaneCount/4)),input=(preview?region.gridWidth*region.gridHeight:pow2(region.gridWidth)*pow2(region.gridHeight))*(24+maskLayers*4);
     const rasterScale=scale<1?scale:Math.max(1,scale/2);
     // Presentation, persistent color, and the copied output image.
     const output=Math.ceil(width/rasterScale)*Math.ceil(height/rasterScale)*8+Math.ceil(width/scale)*Math.ceil(height/scale)*4;
@@ -207,12 +209,12 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const enough=()=>this.residentBytes+this.reservedBytes+bytes<=this.budgetBytes;
     this.trimWorking(new Set([this.activeInput,this.activeLevel]),enough);return enough();
   }
-  async allocate(region,gridWidth,gridHeight,world_width,world_height,fed=false,scale=1) {
+  async allocate(region,gridWidth,gridHeight,world_width,world_height,fed=false,scale=1,preview=false) {
     region=alignedFieldRegion(region,scale);
     this.voxel.clear();
     const rasterScale=scale<1?scale:Math.max(1,scale/2),width=Math.ceil(world_width/rasterScale),height=Math.ceil(world_height/rasterScale);   // Color raster; the cached image below still uses `scale`.
-    const fieldScale=fieldLevel(scale),fw=pow2(Math.ceil(region.fieldsWidth/fieldScale)),fh=pow2(Math.ceil(region.fieldsHeight/fieldScale)),gw=pow2(gridWidth),gh=pow2(gridHeight);
-    let e=this.estimate({...region,gridWidth,gridHeight},world_width,world_height,this.maskPlaneCount,scale);
+    const fieldScale=fieldLevel(scale),fw=pow2(Math.ceil(region.fieldsWidth/fieldScale)),fh=pow2(Math.ceil(region.fieldsHeight/fieldScale)),gw=preview?gridWidth:pow2(gridWidth),gh=preview?gridHeight:pow2(gridHeight);
+    let e=this.estimate({...region,gridWidth,gridHeight},world_width,world_height,this.maskPlaneCount,scale,{preview});
     const required=e.gpuBytes;
     if(Math.max(fw,fh,gw,gh,width,height)>this.limit||required>this.budgetBytes){
       // H13: the parts of the estimate, so a refusal says which one crossed the budget (reserved is the canvas, the paged fields and the image cache).
@@ -405,7 +407,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       request={...request,gridWidth:w,gridHeight:h,gridOrigin:request.gridOrigin??region.gridOrigin};
       const planes=feed?new Array(feed.maskCount).fill(null):this.maskPlanes(request);this.maskPlaneCount=planes.length;this.maskLayers=Math.max(1,Math.ceil(planes.length/4));
       this.recommendedChunkSize=this.chunkSize();
-      const dimensions=await this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale);
+      const dimensions=await this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale,preview);
       if(feed)await this.feedFromGpu(request,region,dimensions,feed,passes);else this.upload(request,region,dimensions,planes);
       this.activeRegion=region;this.voxelScale=scale;
       const result=await this.withPipelines(()=>super.draw({...options,exact:options.exact||Boolean(request.exportArt)}),{preview,defer:deferPipelines});

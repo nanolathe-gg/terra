@@ -163,7 +163,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(feed)try{
       signal?.throwIfAborted();
       if(stale?.())throw new DOMException('The scene changed under a queued bake.','AbortError');
-      const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount,scale),ow=Math.ceil(rect.width/scale),oh=Math.ceil(rect.height/scale),copyBytes=ow*oh*8,room=gpuBudget-steadyGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes;
+      const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount,scale,{preview:block}),ow=Math.ceil(rect.width/scale),oh=Math.ceil(rect.height/scale),copyBytes=ow*oh*8,room=gpuBudget-steadyGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes;
       // A level whose view does not fit beside the bake would have each tile evict the last, and every repaint would bake them all again.
       if(scale<1&&room<detailBytes(scale))throw new Error(`nanolathe: a view at level ${scale} needs more of GPU memory than the budget leaves`);
       // Cold page preparation may grow residency after the pure plan. Replan
@@ -276,7 +276,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function wakeLadder(delay){clearTimeout(ladderTimer);ladderTimer=setTimeout(()=>{ladderTimer=null;schedule();},Math.max(0,delay));}
   function previewPlan(area,level){
     const options=drawOptions?.()??api.drawOptions?.()??{},visibleBytes=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0);
-    return planPreviewBlocks(area,map,rect=>{const request={...rect,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid},required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,api.maskKeys.length,level);
+    return planPreviewBlocks(area,map,rect=>{const request={...rect,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid},required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,api.maskKeys.length,level,{preview:true});
       return estimate.retainedBytes+estimate.workingBytes+fixedGPU()+visibleBytes+Math.ceil(rect.width/level)*Math.ceil(rect.height/level)*8<=gpuBudget;
     });
   }

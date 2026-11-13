@@ -32,3 +32,8 @@ gates. No new benchmark runs were added to `repro/check.sh`.
 The latest focused same-budget comparison is [LP2_TIMINGS.md](LP2_TIMINGS.md):
 large Green/map16 whole-view stroke p95 is 96–105 ms versus about 7.6 s on
 current main. It is one measured fixture, not full LP2 acceptance.
+
+LP3 step 1 is in [LP3_PROGRESS.md](LP3_PROGRESS.md): exact preview inputs
+halve the sampled input allocation and allow one large coarse block at
+512 MiB. Sampled final windows remain exact; preview differences are
+reported separately. Its latency comparison is pending.
