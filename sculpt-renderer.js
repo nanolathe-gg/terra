@@ -181,7 +181,7 @@ export class TerrainRenderer {
     // Every world's materials are numbers: the config names its table (config.materialTable).
     const tableUrl = this.config.materialTable;
     this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl'];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch(name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
@@ -198,6 +198,7 @@ export class TerrainRenderer {
     this.materialsSource = extra[0];
     this.commonSource = common;
     this.volumeSource = extra[4];
+    this.timeSources={erosion:this.preprocessShader(extra[5]),maps:this.preprocessShader(extra[6])};
     this.layout = uniformLayout(preprocess(common, '', new Set()));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
@@ -253,7 +254,9 @@ export class TerrainRenderer {
     this.bakePipelineLayout = bakeLayout;
     this.rockWeather = await RockWeather.create(this,preprocess);
     this.voxel = await VoxelSurface.create(this,this.volumeSource,preprocess);
-    this.uniformStages=uniformStages(this.stageSources);this.stageSources=null;
+    const timeModules=Object.values(this.timeSources).map(source=>({source,stage:'B'}));
+    this.timeUniformFields=[...uniformStages(timeModules).keys()].sort();
+    this.uniformStages=uniformStages([...this.stageSources,...timeModules]);this.stageSources=null;
     this.drawPipelineLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, this.materialLayout,this.voxel.drawLayout]});
     const mipModule = device.createShaderModule({label: 'mip levels', code: MIP_SHADER});
     this.mipPipeline = device.createRenderPipeline({label: 'mip levels', layout: 'auto',
@@ -1024,6 +1027,7 @@ export class TerrainRenderer {
     }
     this.writeRocks();
     const channels={
+      timeColumn:this.timeUniformKey(),
       reach:this.reaches?.()??null,
       wear:this.rockSlots().some(k=>this.rockValue(k,'faceWear')>0&&this.rockValue(k,'rockFace')>0)?4:0,
       loose:[Math.max(this.uniformValue('uLooseSupply'),this.uniformValue('uDebrisAny'),this.uniformValue('uBoulders'))>0,this.uniformValue('uPlantsOn')>0,Math.max(...this.rockSlots().map(k=>this.rockValue(k,'looseSize')))],
@@ -1033,8 +1037,9 @@ export class TerrainRenderer {
     const delta=worldUniformDelta(this.worldUniformSnapshot,this.uniformData,this.layout,this.uniformStages);
     delta.channels=[];
     for(const [name,value]of Object.entries(channels))if(JSON.stringify(value)!==JSON.stringify(this.worldChannelSnapshot?.[name])){
-      const stage=name==='wear'?'D':'C';delta.channels.push({name,stage});if(!delta.stage||stage<delta.stage)delta.stage=stage;
+      const stage=name==='timeColumn'?'B':name==='wear'?'D':'C';delta.channels.push({name,stage});if(!delta.stage||stage<delta.stage)delta.stage=stage;
     }
+    delta.timeChanged=channels.timeColumn!==this.worldChannelSnapshot?.timeColumn;
     this.worldUniformSnapshot=new Uint32Array(this.uniformData.slice(0));this.worldChannelSnapshot=channels;
     this.worldSyncKey=key;this.worldDirty=false;
     return delta;
@@ -1076,7 +1081,7 @@ export class TerrainRenderer {
   // slot's rock column; and the maxima the passes that gather from other points read (debrisAny, runoffAny, debrisReachMax).
   writeRocks() {
     const table = this.uniform.get('rock'), bytes = new Uint8Array(this.uniformData);
-    const own = columnRows(this.config.column, this.config.variant), beds = [...own.beds], starts = [...own.starts];
+    const own = this.worldColumnRows = columnRows(this.config.column, this.config.variant), beds = [...own.beds], starts = [...own.starts];
     this.set('uColumnFirst', 0);
     this.set('uColumnCount', own.starts.length);
     // Where level ground takes a recipe's beds (bedsFrom): the world's from its first section's start, as the gate always read it. A recipe
@@ -1116,6 +1121,18 @@ export class TerrainRenderer {
     // Shine is drawn where any rock in use has gloss, roughness or wetness (applyKnobs decides it for slot 0 and the other materials).
     if (slots.some(k => k && (this.rockValue(k, 'faceWet') > 0 || Math.max(...[0, 2].map(c => this.uniformView.getFloat32(table.offset + k * table.stride + table.members.get('shineRock').offset + c * 4, true))) > 0))) this.i('uShineOn', 1);
     this.uniformsDirty = true;
+  }
+
+  // Time is compiled with rockMask=0: it reads only the world's column,
+  // never the recipe slots appended to the shared column pools.
+  timeUniformKey() {
+    const words=new Uint32Array(this.uniformData),own=this.worldColumnRows;
+    return JSON.stringify((this.timeUniformFields??[]).map(name=>{
+      const f=this.uniform.get(name);if(!f)throw Error('Unknown Time uniform '+name);
+      const count=name==='columnBeds'?own.beds.length:name==='columnSections'?own.starts.length:f.count,values=[];
+      for(let i=0;i<count;i++)for(let j=0;j<f.width;j++)values.push(words[(f.offset+i*f.stride)/4+j]);
+      return [name,values];
+    }));
   }
 
   // The bake's group 1 for the chunk's fields texture and the loose-stone mask.
