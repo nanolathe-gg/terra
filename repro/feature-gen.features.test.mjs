@@ -129,3 +129,23 @@ test('an underwater deposit is an opaque blue blob whose area follows metal, and
   assert.ok(a.n > 800 && a.n < 1500, 'area at metal 116: ' + a.n); assert.ok(b.n > a.n * 1.3, 'more metal, more area');
   assert.deepEqual(a.g.rgba, again.g.rgba);
 });
+
+
+test('the complete deposit stone cluster is centered on its placement anchor', () => {
+  for (const look of ['plates', 'cluster', 'blades']) for (const seed of [1, 77, 4069523796]) {
+    const w = 128, g = {w, h: w, rgba: new Uint8ClampedArray(w * w * 4)};
+    for (let i = 0; i < w * w; i++) g.rgba.set([70, 110, 40, 0], i * 4);
+    // A black halo separates the stones from their ground treatment for this check.
+    paintDeposit(g, 64, 64, {metal: 127, look, round: 0.7, halo: 0}, seed, {palette});
+    const xs = [], ys = [];
+    for (let y = 0; y < w; y++) for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4, [r, green, b] = g.rgba.subarray(i, i + 3);
+      if (0.299 * r + 0.587 * green + 0.114 * b >= 100 && !(green > r + 8 && green > b + 8)) { xs.push(x); ys.push(y); }
+    }
+    assert.ok(xs.length, `${look}, seed ${seed}: visible stones`);
+    for (const [axis, coords] of [['x', xs], ['y', ys]]) {
+      const center = (Math.min(...coords) + Math.max(...coords) + 1) / 2;
+      assert.ok(Math.abs(center - 64) <= 0.5, `${look}, seed ${seed}: ${axis} center ${center} must meet the anchor within half a pixel`);
+    }
+  }
+});

@@ -1137,7 +1137,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   };
   const sized = (px, py, area, nv0, aspect, rot) => { const nv = nv0 + Math.round(rd * 3); let rad = Math.sqrt(area / Math.PI / 0.85), pts = polyMask(px, py, rad, nv, aspect, rot); for (let it = 0; it < 3; it++) { rad *= Math.sqrt(area / Math.max(pts.length, 1)); pts = polyMask(px, py, rad, nv, aspect, rot); } return pts; };
   const union = lists => { const seen = new Set(), out = []; for (const l of lists) for (const p of l) { const k = p[1] * 4096 + p[0]; if (!seen.has(k)) { seen.add(k); out.push(p); } } return out; };
-  const chunks = [], layout = [[0, 0]];
+  const chunks = [], stones = [], layout = [[0, 0]];
   const rDom = Math.sqrt(areas[0] / Math.PI / 0.85);
   for (let i = 0; i < 3; i++) { const a = r() * TAU + i * 2.1, d = rDom * (look === 'cluster' ? 0.95 : 0.7) + 7 + r() * 6; layout.push([Math.cos(a) * d, Math.sin(a) * d * 0.9]); }
   for (let ci = 0; ci < (look === 'blades' ? 1 : 4); ci++) {
@@ -1189,20 +1189,33 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     const mx = pts.reduce((a, p) => a + p[0], 0) / pts.length, my = pts.reduce((a, p) => a + p[1], 0) / pts.length;
     for (let f = 0; f < nf; f++) { const cls = f === 0 ? 0 : f === 1 ? 2 : weighted(r, [[0, 0.29], [1, 0.22], [2, 0.49]]); seeds.push({ x: mx + (r() - 0.5) * 12, y: my + (r() - 0.5) * 10, cls, fav: [weighted(r, STONE_CLASSES[cls].ramp), weighted(r, STONE_CLASSES[cls].ramp)] }); }
     for (const [x, y] of pts) {
-      const bx = x - ox, by = y - oy; if (bx < 0 || by < 0 || bx >= bw || by >= bh) continue;
       let b = 0, bd = 1e9; seeds.forEach((sd, i) => { const d = Math.hypot(sd.x - x, sd.y - y) + (vnoise(x / 2.5, y / 2.5, seed + ci * 7 + i) - 0.5) * 3; if (d < bd) { bd = d; b = i; } });
-      chunkId[by * bw + bx] = ci;
       // brushed metal: horizontal streaks (each row has its own tone offset and runs of 3-6 px), a noisier grain, and specular glints in short bright runs
       const rowOff = (hash2(y, ci + 3, seed) - 0.5) * 0.36 + (hash2(y >> 1, ci + 9, seed) - 0.5) * 0.2, run = vnoise(x / (2.2 + 4.5 * hash2(y, ci + 21, seed)) + 50 * hash2(y, ci + 5, seed), y * 7.3 + ci * 13, seed + 40 + ci);   // run length and phase differ per row, so the streaks break up
       const base = [0.66, 0.46, 0.2][seeds[b].cls] + rowOff * 0.8 + (run - 0.5) * 0.5 + (vnoise(x / 2.2, y / 2.2, seed + 50 + ci) - 0.5) * 0.3 + (vnoise(x / 1.2, y / 1.2, seed + 60 + ci) - 0.5) * 0.25;
       let tone = clamp(base + (rn() - 0.5) * 0.4, 0, 1), c = STONE_RAMP[clamp(Math.round(tone * (STONE_RAMP.length - 1) + (rn() + rn() - 1) * 2.2 + (rn() < 0.1 ? (rn() < 0.5 ? -4 : 4) : 0)), 0, STONE_RAMP.length - 1)];   // fine pixel grain plus a few off-tone specks
       if (hash2(x >> 2, y, seed + ci * 5 + 11) < 0.075) c = rn() < 0.14 ? 255 : pick(rn, [224, 216, 130, 114, 224]);          // a glint
-      setGround(ground, x, y, lit ? palette[q(...lit(palette[c]))] : palette[c]);
+      stones.push([x, y, lit ? palette[q(...lit(palette[c]))] : palette[c]]);
     }
   }
   // moss: one merged patch. The patch covers about stone / 0.15 pixels (retail: stone is 9-18% of the painted pixels), found by growing
   // the halo distance until the area is reached; a 3-6 px feathered rim.
-  const stonePts = chunks.flat(), s1 = (r() * 1e6) | 0, dmap = new Float32Array(bw * bh).fill(99), rawD = new Float32Array(bw * bh).fill(99);
+  const stonePts = chunks.flat();
+  // The anchor belongs to the whole deposit, including its satellite stones. Center
+  // its pixel bounds before painting so the halo samples the ground at the final
+  // position. Preserve the stones' shape, size and colors; the 3x3 footprint stays put.
+  if (stonePts.length) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of stonePts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    const dx = Math.round(cx - (x0 + x1 + 1) / 2), dy = Math.round(cy - (y0 + y1 + 1) / 2);
+    for (const p of stonePts) { p[0] += dx; p[1] += dy; }
+    for (const [x, y, rgb] of stones) setGround(ground, x + dx, y + dy, rgb);
+    chunks.forEach((pts, ci) => { for (const [x, y] of pts) {
+      const bx = x - ox, by = y - oy;
+      if (bx >= 0 && by >= 0 && bx < bw && by < bh) chunkId[by * bw + bx] = ci;
+    } });
+  }
+  const s1 = (r() * 1e6) | 0, dmap = new Float32Array(bw * bh).fill(99), rawD = new Float32Array(bw * bh).fill(99);
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
     if (chunkId[y * bw + x] >= 0) { dmap[y * bw + x] = 0; continue; }
     const X = x + ox, Y = y + oy; let d = 99;
