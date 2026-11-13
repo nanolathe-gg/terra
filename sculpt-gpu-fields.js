@@ -1080,10 +1080,10 @@ export function createPagedFields(opts) {
   // shape engine's scratch (about 16 MB and 44 bytes a cell of a page's side); a ring is allowed when that set fits.
   const STAGING_BYTES = 700 * 850 * (4 * PLANES + 64), FEED_PAGES = 6, PAGE_FIELD = CORE * CORE * 36;
   const engineEstimate = ring => 16e6 + (CORE + 2 * ring) ** 2 * 44;
-  const available = () => { const b = opts.budget?.(); return b ? b.total - b.minimum : Infinity; };
+  const available = (preview=false) => { const b = opts.budget?.(); return b ? b.total - (preview?(b.previewMinimum??b.minimum):b.minimum) : Infinity; };
   const residentSet = ring => FEED_PAGES * (CORE + 2 * ring) ** 2 * PAGE_CELL + FEED_PAGES * PAGE_FIELD + STAGING_BYTES + engineEstimate(ring);
   function fitCaps() {
-    const room = 0.92 * available() - STAGING_BYTES - engineEstimate(RING);
+    const room = 0.92 * available(true) - STAGING_BYTES - engineEstimate(RING);
     SHAPE_PAGES = clamp(Math.floor(0.8 * room / SHAPE_BYTES), FEED_PAGES, 9);
     WEATHER_PAGES = clamp(Math.floor((room - SHAPE_PAGES * SHAPE_BYTES) / PAGE_FIELD), FEED_PAGES, 24);
     if (!(room > 0)) SHAPE_PAGES = WEATHER_PAGES = FEED_PAGES;
@@ -1269,6 +1269,7 @@ export function createPagedFields(opts) {
   // ---- ensure a rectangle (cells) is ready to be read; returns a lease that pins its pages
   async function prepareRect(rect, wantWeather, signal) {
     signal?.throwIfAborted();
+    fitCaps();trim();   // view/level changes may reserve more preview memory
     if (!engine) await getEngine();
     signal?.throwIfAborted();
     focus ??= {x: (rect.x0 + rect.x1) / 2, y: (rect.y0 + rect.y1) / 2};

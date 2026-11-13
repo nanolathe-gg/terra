@@ -61,6 +61,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const navigating=()=>Boolean(pan||navigationPointer!==null||navigationTimer!==null);
   const bakedBefore=new Set(); let lastScroll=-Infinity,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
   let heldSince=null,pan=null,space=false,gesture=null,hover=null;
+  const previewRejects=new Set();let previewRejectScope='';
   const blocks=new Map();let blockBytes=0,focus=null,lastInputAt=performance.now(),released=false,ladderTimer=null;
   let hoveredNode=-1;
   let lastFrame=0,frameTimes=[],strokeTimes=[],resizePending=false;
@@ -182,7 +183,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(scale<1&&room<detailBytes(scale))throw new Error(`nanolathe: a view at level ${scale} needs more of GPU memory than the budget leaves`);
       // Cold page preparation may grow residency after the pure plan. Replan
       // before allocating, preserving every visible final image.
-      if(block&&[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0)>room){const error=Error('Preview page residency grew; replan at the current budget.');error.name='PreviewReplan';throw error;}
+      if(block&&[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0)>room){previewRejects.add(previewSignature(rect,scale,required,estimate));if(previewRejects.size>128)previewRejects.delete(previewRejects.values().next().value);const error=Error('Preview page residency grew; replan at the current budget.');error.name='PreviewReplan';throw error;}
       trimTo(room,block);
       renderer.setBudget(gpuBudget,steadyGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
       const atSerial=serial,atRev={...rev},result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale,preview:block,deferPipelines:!exportArt,deferCompletion:!fit&&!exportArt});bakes++;
@@ -288,10 +289,13 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const blockKey=(r,level)=>[r.x,r.y,r.width,r.height,level,weatheredView].join(',');
   function dropBlocks(predicate=()=>true){for(const [key,e]of blocks)if(predicate(e)){blockBytes-=e.bytes;blocks.delete(key);}}
   function wakeLadder(delay){clearTimeout(ladderTimer);ladderTimer=setTimeout(()=>{ladderTimer=null;schedule();},Math.max(0,delay));}
+  function previewSignature(r,level,q,e){return [r.x,r.y,r.width,r.height,level,...q.gridOrigin,q.gridWidth,q.gridHeight,q.fieldsX,q.fieldsY,q.fieldsWidth,q.fieldsHeight,e.workingBytes].join(',');}
   function previewPlan(area,level){
+    const scope=[viewEpoch,gpuBudget,displaySize].join(',');
+    if(scope!==previewRejectScope){previewRejects.clear();previewRejectScope=scope;}
     const options=drawOptions?.()??api.drawOptions?.()??{},visibleBytes=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0);
     return planPreviewBlocks(area,map,rect=>{const request={...rect,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid},required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,api.maskKeys.length,level,{preview:true});
-      return estimate.retainedBytes+estimate.workingBytes+fixedGPU()+visibleBytes+Math.ceil(rect.width/level)*Math.ceil(rect.height/level)*8<=gpuBudget;
+      return !previewRejects.has(previewSignature(rect,level,required,estimate))&&estimate.retainedBytes+estimate.workingBytes+fixedGPU()+visibleBytes+Math.ceil(rect.width/level)*Math.ceil(rect.height/level)*8<=gpuBudget;
     });
   }
   function blockCurrent(e){return e&&!e.dirty&&!changedSince(e.serial,e.input)&&e.weathered===weatheredView&&(!e.weathered||e.weatherRevB>=rev.B);}
@@ -600,7 +604,19 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // H13: what the paged fields must leave free: the canvas, one canonical chunk's whole working set (every mask layer the world has) and its copy.
   // It was a 32 px chunk's, so the fields took the rest of the budget and the first 512 px bake could not be allocated beside them.
   // The terrain canvas and its overlay share the view's size (resize); the paged fields' budget is the shared one (sculpt-scene.js pagedBudget).
-  function minimumBytes(){return pagedBudget({gpuMB:0,renderer,chunk:canonicalSize,maskCount:api.maskKeys?.length,view:{width:canvas.width,height:canvas.height},preview:previewReserved,featureBytes:features?.stats?.().imageBytes||0}).minimum;}
+  function minimumBytes({previews=false}={}){
+    let previewWorking=0;
+    if(previews&&!overview&&levels&&api.gpuFeedActive?.()){
+      const v=state(),width=Math.min(map.width,Math.ceil(v.width/64)*64),height=Math.min(map.height,Math.ceil(v.height/64)*64),options=drawOptions?.()??api.drawOptions?.()??{};
+      const request={x:Math.floor((map.width-width)/2),y:Math.floor((map.height-height)/2),width,height,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid},region=renderer.requiredRegion(request,options);
+      const sets=[4,2].map(k=>renderer.estimate(region,width,height,api.maskKeys.length,k*detailLevel(),{preview:true}));
+      // Inputs and the loose buffer are shared; each level keeps fields/color
+      // and rock-weather targets. The final reserve already has the voxel pool.
+      previewWorking=Math.max(...sets.map(e=>e.input))+sets.reduce((n,e)=>n+e.field+e.output+e.rockWeather,0)+Math.max(0,...sets.map(e=>e.loose-(renderer.looseBuffer?.size??0)));
+    }
+    const b=pagedBudget({gpuMB:0,renderer,chunk:canonicalSize,maskCount:api.maskKeys?.length,view:{width:canvas.width,height:canvas.height},preview:previewReserved,featureBytes:features?.stats?.().imageBytes||0,previewWorking});
+    return previews?b.previewMinimum:b.minimum;
+  }
   const result={renderer,passability,minimumBytes,foregroundPending,schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
   window.sculptCanvas=result;resize();budgets();return result;
 }

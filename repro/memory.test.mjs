@@ -1,3 +1,4 @@
+import {createPagedFields} from '../sculpt-gpu-fields.js';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createTerrainBudget,terrainAllocation,TerrainMemoryError} from '../sculpt-memory.js';
 test('automatic budget uses optional signals while an explicit choice wins',()=>{
@@ -23,4 +24,12 @@ test('a device restart records the failed notch and reloads only one step lower'
  assert(first.restart('a lost GPU device'));assert.equal(preference.trying,2048);assert.equal(preference.mb,1536);
  const next=createTerrainBudget({explicit:2048,preference});assert.equal(next.mb,1536);assert.match(next.reason,/lost GPU device/);
  const floor=createTerrainBudget({explicit:512});assert.equal(floor.restart('a lost GPU device'),false);assert.equal(floor.mb,512);
+});
+
+test('reserving preview memory reduces page counts without shrinking the shape ring',t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const MB=1048576;let previewMinimum=200*MB;
+ const fields=createPagedFields({worldSize:1025,worldGrid:513,baseHeight:24,maskKeys:[],nodes:()=>[],device:()=>null,context:()=>({}),forceRing:320,budget:()=>({total:2048*MB,minimum:200*MB,previewMinimum})});
+ try{fields.refit();const before=fields.stats();assert.equal(before.gpuShape.ring,320);previewMinimum=1900*MB;fields.refit();const after=fields.stats();assert.equal(after.gpuShape.ring,before.gpuShape.ring);assert(after.budget<before.budget);}
+ finally{fields.destroy();}
 });

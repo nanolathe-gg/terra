@@ -359,10 +359,12 @@ export function pagedTime({config,renderer,size,spacing,material}) {
 // the headless runner gives the view of the Chrome window it stands in for, so both give the pages the same budget and the same ring (pages differ
 // at their seams otherwise).
 export const VIEW_CANVASES={overview:128,minimap:200};
-export function pagedBudget({gpuMB,renderer,chunk,maskCount,view,preview=false,featureBytes=0}) {
+export function pagedBudget({gpuMB,renderer,chunk,maskCount,view,preview=false,featureBytes=0,previewWorking=0}) {
   const MB=1048576,e=renderer.estimate(renderer.requiredRegion({x:Math.floor(renderer.size/2),y:Math.floor(renderer.size/2),width:chunk,height:chunk}),chunk,chunk,maskCount,1,false);
   const canvases=2*view.width*view.height+VIEW_CANVASES.overview**2+VIEW_CANVASES.minimap**2;
-  return {total:gpuMB*MB,minimum:(preview?64*MB:0)+canvases*4+featureBytes+chunk*chunk*8+e.retainedBytes+e.workingBytes+8*MB};
+  const minimum=(preview?64*MB:0)+canvases*4+featureBytes+chunk*chunk*8+e.retainedBytes+e.workingBytes+8*MB;
+  // Preview retention constrains page counts, never the canonical shape ring.
+  return {total:gpuMB*MB,minimum,previewMinimum:minimum+Math.max(0,previewWorking)};
 }
 // The surface sliders (sculpt.html's range inputs, by id): the material value each opens at and its default, then the slider's min, max and
 // step. A page opens each at round(value x 100), clamped and snapped to its step as the browser does; the address may set the ring's three.
