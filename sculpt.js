@@ -1862,13 +1862,16 @@ function syncRockPanel() {
   list.replaceChildren(new Option(`${worldRockName(config)} (the world's rock)`,'0'),...mapRocks.map(r=>new Option(r.name,String(r.slot))));
   list.value=String(rockSelected);
   const rockHex=slot=>mapRocks.find(r=>r.slot===slot)?.colors?.rock||renderer.slotColors(0).rock;
+  const focusedChip=$('rock-chips').contains(document.activeElement);
   $('rock-chips').replaceChildren(...[...list.options].map(option=>{
     const slot=Number(option.value),chip=document.createElement('button'),swatch=document.createElement('span'),name=slot===0?worldRockName(config):option.textContent;
-    chip.type='button';chip.className='rock-chip';chip.setAttribute('role','radio');chip.setAttribute('aria-checked',String(slot===rockSelected));chip.dataset.slot=option.value;chip.title=slot===0?`${name}: the world\u2019s rock type`:name;
+    chip.type='button';chip.className='rock-chip';chip.setAttribute('role','radio');chip.setAttribute('aria-checked',String(slot===rockSelected));chip.dataset.slot=option.value;chip.tabIndex=slot===rockSelected?0:-1;chip.title=slot===0?`${name}: the world\u2019s rock type`:name;
     swatch.className='rock-swatch';swatch.style.background=rockHex(slot);chip.append(swatch,name);
+    chip.onkeydown=e=>{const keys=['ArrowRight','ArrowDown','ArrowLeft','ArrowUp','Home','End'];if(!keys.includes(e.key))return;e.preventDefault();const chips=[...$('rock-chips').children],i=chips.indexOf(chip),next=e.key==='Home'?0:e.key==='End'?chips.length-1:(i+(e.key==='ArrowRight'||e.key==='ArrowDown'?1:-1)+chips.length)%chips.length;chips[next].click();$('rock-chips').querySelector('[aria-checked=true]').focus();};
     chip.onclick=()=>{list.value=option.value;list.dispatchEvent(new Event('change'));};
     return chip;
   }));
+  if(focusedChip)$('rock-chips').querySelector('[aria-checked=true]').focus();
   $('rock-current-name').textContent=world?worldRockName(config):mapRocks.find(r=>r.slot===rockSelected).name;
   $('rock-current-scope').textContent=world?'The world\u2019s rock type: every shape\u2019s default. Edits change the world.':'This map\u2019s rock type. Saved with the map.';
   $('rock-current-swatch').style.background=rockHex(rockSelected);
@@ -2059,14 +2062,14 @@ async function bootMap(pending=null) {
   else if(!saved&&!location.search)openNewMap(true);
 }
 // New and first run share one picker and the existing previous-map slot.
-function openNewMap(first=false) {
+function openNewMap(first=false, dimensionsFromMap=null) {
   const dialog=$('new-map-dialog'); let picked=config.biomeId;
   $('new-map-title').textContent=first?'Start a map':'New map';
   $('new-map-cancel').hidden=$('new-map-previous').hidden=first;
   $('new-map-error').textContent='';
   const choices=Object.entries(config.biomes||{});
   $('new-map-worlds').replaceChildren(...choices.map(([id,name])=>{const b=document.createElement('button');b.type='button';const image=document.createElement('img');image.src=`ui-previews/world-${id}.png`;image.alt='';image.width=260;image.height=190;const label=document.createElement('span');label.textContent=name;b.append(image,label);b.dataset.world=id;b.setAttribute('aria-pressed',String(id===picked));b.onclick=()=>{picked=id;for(const button of $('new-map-worlds').children)button.setAttribute('aria-pressed',String(button===b));};return b;}));
-  $('new-map-width').value=config.map?.unitsX??4;$('new-map-height').value=config.map?.unitsY??4;
+  $('new-map-width').value=dimensionsFromMap?.x??config.map?.unitsX??4;$('new-map-height').value=dimensionsFromMap?.y??config.map?.unitsY??4;
   const dimensions=()=>{const m=mapGeometry(Number($('new-map-width').value),Number($('new-map-height').value));$('new-map-pixels').textContent=`${m.width} × ${m.height} pixels`;for(const b of $('new-map-sizes').children)b.setAttribute('aria-pressed',String(Number(b.dataset.size)===m.unitsX&&m.unitsX===m.unitsY||b.dataset.size==='custom'&&(![4,8,12,16].includes(m.unitsX)||m.unitsX!==m.unitsY)));};
   $('new-map-name').value='Untitled map';
   for(const b of $('new-map-sizes').children)b.onclick=()=>{if(b.dataset.size==='custom'){$('new-map-width').focus();return;}$('new-map-width').value=$('new-map-height').value=b.dataset.size;dimensions();};
@@ -2076,10 +2079,11 @@ function openNewMap(first=false) {
   $('new-map-form').onsubmit=e=>{e.preventDefault();if(!e.target.reportValidity())return;
     if(!first&&!keepPrevious(localStorage,JSON.stringify(workingCopy()))){$('new-map-error').textContent='Your previous map could not be kept. Save it as a file before starting a new map.';return;}
     clearTimeout(autosaveTimer);keepSaved=true;
-    const url=new URL(location.origin+location.pathname);url.searchParams.set('biome',picked);if(picked===config.biomeId){if(config.variant)url.searchParams.set('variant',config.variant);if(worldId!==config.biomeId)url.searchParams.set('world',worldId);}url.searchParams.set('mapName',$('new-map-name').value.trim()||'Untitled map');url.searchParams.set('mapX',$('new-map-width').value);url.searchParams.set('mapY',$('new-map-height').value);url.searchParams.set('newMap','1');location.href=url;
+    const url=new URL(location.origin+location.pathname);url.searchParams.set('biome',picked);if(picked===config.biomeId){if(config.variant)url.searchParams.set('variant',config.variant);if(worldId!==config.biomeId)url.searchParams.set('world',worldId);}url.searchParams.set('mapName',$('new-map-name').value.trim()||'Untitled map');url.searchParams.set('mapX',$('new-map-width').value);url.searchParams.set('mapY',$('new-map-height').value);url.searchParams.set('newMap','1');if(dimensionsFromMap)url.searchParams.set('sea',dimensionsFromMap.sea);location.href=url;
   };
   dialog.showModal();
 }
+document.addEventListener('terraform-new-map',e=>{if(ready&&!loading&&!stroke&&!moving)openNewMap(false,e.detail);});
 $('new-map').onclick=()=>{if(ready&&!loading&&!stroke&&!moving)openNewMap();};
 async function boot() {
   try {

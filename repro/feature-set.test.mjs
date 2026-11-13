@@ -87,3 +87,14 @@ test('the artist colors and rock angularity: bounds, the world default, and a re
   assert.deepEqual(variants('tree', edit(d,'tree',{color:'#b8732a'}), green)[0].params.recolor, {from: '#11723c', to: '#b8732a'});
   assert.equal(variants('rock', edit(d,'rock',{angular:0.1}), green)[0].params.angular, 0.1);
 });
+
+// Initial stock recipes and edited recipes use the same save representation as a loaded map.
+test('feature sets are fixed points before and after save/load', () => {
+  for (const world of ['green','red','moon','archipelago','desert','lava','ice','crystal','zhon']) {
+    const config={features:table(world).features};
+    const stock=normalizeSet(undefined,config);
+    assert.deepEqual(normalizeSet(JSON.parse(JSON.stringify(stock)),config),stock,world);
+    const edited=edit(stock,'deposit',{count:7,seed:12345,weight:2.4,metal:211});
+    assert.deepEqual(normalizeSet(JSON.parse(JSON.stringify(edited)),config),edited,world+' edited');
+  }
+});
