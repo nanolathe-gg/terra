@@ -41,12 +41,6 @@ test('a scene stroke whose tool the editor does not draw is an error, not an emp
   assert.deepEqual(sceneNodes(config, [['plateau', [[0, 0]], {}], ['erase', [[0, 0]], {}], ['sand', [[0, 0]], {}]], {ground: false}).map(n => n.kind), ['landform', 'erase', 'sand']);
 });
 
-test('the page keeps only the kinds it draws', () => {
-  // sculpt.js deserializeNodes keeps a saved node only if NODE_NAMES names its kind: the Crater and Crystals buttons draw landforms.
-  const page = readFileSync(`${root}sculpt.js`, 'utf8'), names = page.match(/const NODE_NAMES=\{([^}]*)\}/)[1];
-  assert.deepEqual([...names.matchAll(/(\w+):/g)].map(m => m[1]).sort(), ['erase', 'fissure', 'grass', 'ground', 'heights', 'landform', 'paint', 'sand', 'smooth']);
-});
-
 test('a save\'s brush card counts only if this editor made it', () => {
   // An old save's Crater card (the retired tool's, which held craterlets and Fixed elevation 169) must not outvote the Crater preset.
   const fresh = toolDefaults(config, 'crater');

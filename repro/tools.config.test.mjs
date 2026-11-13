@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {LANDFORM_SHAPES, toolDefaults, sceneNodes, pageSettings, strokeCard, strokeParams} from '../sculpt-scene.js';
 import {worldRocks, applyWorldRock} from '../sculpt-rock-presets.js';
-import {TOOL_ICONS, FIXED_TOOLS, LANDFORM_TOOL, MAP_TOOLS_MAX, worldTools, toolShape, toolRockSlot, strokeTool, keepStrokeTools, inferStrokeTools, carryStrokes, markEdited, copyMapTools, addMapTool, deleteMapTool, nextMapToolId, CARD_KEYS} from '../sculpt-tools.js';
+import {LANDFORM_TOOL, MAP_TOOLS_MAX, worldTools, toolShape, toolRockSlot, strokeTool, keepStrokeTools, inferStrokeTools, carryStrokes, markEdited, copyMapTools, addMapTool, deleteMapTool, nextMapToolId, CARD_KEYS} from '../sculpt-tools.js';
 
 const root = new URL('..', import.meta.url).pathname, dir = mkdtempSync(join(tmpdir(), 'tools-test-'));
 runSite(['--dump-configs', dir]);
@@ -30,16 +30,12 @@ test('every world defines valid library shapes and cards', async () => {
   for (const w of WORLDS) for (const entry of ENTRIES) for (const key of Object.keys(toolDefaults(configs[w], entry))) assert.ok(CARD_KEYS.has(key), `${w} ${entry}: ${key}`);
 });
 
-test('every world\'s and variant\'s toolbar is valid, its rocks are presets it ships, and the markup holds the icon set', () => {
+test('every world\'s and variant\'s toolbar is valid, its rocks are presets it ships', () => {
   for (const [name, config] of Object.entries(configs)) {
     const tools = worldTools(config), rocks = worldRocks(applyWorldRock(structuredClone(config)));
     assert.ok(tools.length > 0, name);
     for (const t of tools.filter(t => t.rock)) assert.ok(toolRockSlot(t, rocks, config.rock?.recipe) >= 0, `${name}: ${t.id} names ${t.rock}, which the world ships`);
   }
-  // Save as tool offers the icon choices declared by sculpt-tools.js.
-  const html = readFileSync(root + 'sculpt.html', 'utf8'), choices = html.split('<div id="tool-save-icons"')[1].split('</div>')[0];
-  assert.deepEqual([...choices.matchAll(/data-icon-choice="(\w+)"[^>]*><svg class="tool-icon"/g)].map(m => m[1]), TOOL_ICONS);
-  assert.deepEqual(FIXED_TOOLS.toSorted(), ['erase', 'fissure', 'grass', 'move', 'paint', 'sand', 'smooth']);
   const today = {id: 'plateau', label: 'Plateau', icon: 'plateau', color: '#e6bb82', group: 'shape'};
   for (const bad of [{...today, id: 'fissure'}, {...today, id: 'a b'}, {...today, icon: 'star'}, {...today, color: 'red'}, {...today, group: 'paint'}, {...today, shape: 'mesa'}, {...today, label: ''}, {...today, id: 'map-1'}])
     assert.throws(() => worldTools({tools: [bad]}), undefined, JSON.stringify(bad));

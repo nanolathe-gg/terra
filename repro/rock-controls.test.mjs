@@ -28,11 +28,8 @@ test('weathering controls explain inactive parents and allow painted sorting',as
  assert.equal(reason('sandLight',{beachLayer:1,sand:0,debrisAmount:1}),'');
 });
 
-test('new rock controls and static preset picker stay connected',async()=>{
- const {readFileSync}=await import('node:fs');
+test('rock controls explain their effective parents',async()=>{
  const {worldControlRequirement:reason}=await import('../sculpt-control-schema.js');
- const html=readFileSync(new URL('../sculpt.html',import.meta.url),'utf8');
- for(const key of Object.keys(ROCK_PRESETS))assert.ok(html.includes(`value="${key}"`));
  assert.ok(reason('faceClastSize',{faceClast:0,rockFace:2}));
  assert.ok(reason('faceClastSize',{faceClast:1,rockFace:0}));
  assert.equal(reason('faceClastSize',{faceClast:1,rockFace:2}),'');

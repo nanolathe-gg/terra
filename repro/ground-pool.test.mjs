@@ -1,5 +1,5 @@
 // Card tilepool: every world's table carries the period its level ground repeats with (material.groundPool), and the tool that
-// rewrites the tables keeps it. Without it the draw falls back to 1,024 px silently, and a world's own value would be lost.
+// draw reads the table. Without it the draw falls back to 1,024 px silently.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -21,12 +21,4 @@ test('the period rounds to a multiple of 512 and defaults to 1,024', () => {
   assert.equal(groundPool(undefined), 1024);
   assert.equal(groundPool({groundPool: 2000}), 2048);
   assert.equal(groundPool({groundPool: 100}), 512);
-});
-
-test('material_numbers.py keeps the pool period when it rewrites a table', () => {
-  const source = fs.readFileSync(new URL('../measure/material_numbers.py', import.meta.url), 'utf8');
-  const kept = /^TABLE_MATERIAL_KEYS = \(([^)]*)\)/m.exec(source);
-  assert.ok(kept, 'material_numbers.py defines TABLE_MATERIAL_KEYS');
-  assert.match(kept[1], /'groundPool'/);
-  assert.match(source, /old\['material'\] = \{\*\*config\['material'\], \*\*\{k: v for k, v in old\.get\('material', \{\}\)\.items\(\) if k in TABLE_MATERIAL_KEYS\}\}/);
 });

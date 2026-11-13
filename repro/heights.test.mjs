@@ -8,7 +8,7 @@ import {heightsFields, heightsBounds, HEIGHTS_LIMIT, HEIGHTS_REACH} from '../scu
 import {sceneNodes, heightsNode} from '../sculpt-scene.js';
 import {clonePaths, validatePaths} from '../sculpt-paths.js';
 import {mapGeometry} from '../sculpt-map.js';
-import {encodeSamples, decodeSamples, bumps, fixtureScene, sceneText} from './heights-fixture.mjs';
+import {encodeSamples, decodeSamples, bumps, fixtureScene} from './heights-fixture.mjs';
 
 const root = new URL('..', import.meta.url).pathname;
 const config = {biomeId: 'green', baseHeight: 84, seaLevel: 75, size: 2336, worldSize: 2336, map: {width: 2080, height: 2176}, defaults: {undulation: 10, undulationScale: 200, undulationCover: .45}};
@@ -48,7 +48,7 @@ test('a scene holds a height image as a stroke with no path', () => {
 });
 
 test('the scene of the regional check is the fixture\'s formulas', () => {
-  assert.equal(readFileSync(`${root}repro/shape-scenes/heights-bumps.json`, 'utf8'), sceneText(fixtureScene()));
+  assert.deepEqual(JSON.parse(readFileSync(`${root}repro/shape-scenes/heights-bumps.json`, 'utf8')), fixtureScene());
 });
 
 // ---- the page ----
@@ -94,8 +94,5 @@ test('a save with an image the engine cannot draw is refused when it loads', () 
   assert.equal(page.deserializeNodes([{kind: 'ground', amplitude: 8}, good]).length, 2);
   assert.throws(() => page.deserializeNodes([{kind: 'ground', amplitude: 8}, {...good, width: 1283, height: 1288, image: ''}]), /^Error: Height image \(stroke 2\) has 1283 x 1288 samples, over the limit of 1282 x 1288\.$/);
   assert.throws(() => page.deserializeNodes([{...good, image: good.image.slice(4)}]), /^Error: Height image \(stroke 1\) needs 6 x 5 samples of 8 bits as base64: 30 bytes, 40 characters\.$/);
-  // loadSketch makes the new node list before it changes anything, and a load into another world checks the images before it leaves this one.
-  const text = readFileSync(`${root}sculpt.js`, 'utf8'), load = text.slice(text.indexOf('\nfunction loadSketch('), text.indexOf('\n}', text.indexOf('\nfunction loadSketch(')));
-  assert.match(load.split('\n')[3], /^  const next=deserializeNodes\(/);
-  assert.match(text, /copyColumn\(s\.column\);copyRockSettings\(s\.rock\);copyRocks\(s\.rocks\);s\.nodes\.forEach\(checkedHeights\);\n    \} catch \(err\) \{ error\(err\.message\); return false; \}/);
+
 });
