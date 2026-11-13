@@ -374,9 +374,10 @@ function mirrorSides() { const c=curveContext(),b=backKnots(c); if (!c.land || !
 function setLean(ratio) { const el=$('lean'); el.value=String(clamp(Math.round(ratio*20)*5,25,400)); el.dispatchEvent(new Event('input',{bubbles:true})); }
 // The height axis of a landform's canvases: the plain, the sea and the elevation, with room for an along curve up to 1.2.
 function heightAxis(c) {
-  const ground=landformGround(c.q),plain=ground?0:config.baseHeight,sea=ground?null:config.seaLevel,E=landformElevation(c.q,config.seaLevel),span=Math.abs(E-plain)<1?(E<plain?-1:1):E-plain,top=plain+span*1.2;
+  const ground=landformGround(c.q),plain=ground?0:config.baseHeight,sea=ground?null:config.seaLevel,E=landformElevation(c.q,config.seaLevel),span=Math.abs(E-plain)<1?(E<plain?-1:1):E-plain;
+  const values=[...frontKnots(c),...(backKnots(c)||[])].map(k=>k[1]),top=plain+span*Math.max(1.2,...values);
   // A signed section (lfcrater) reaches past the ground, away from the elevation: room for its lowest knot.
-  const lip=plain+span*Math.min(0,...frontKnots(c).map(k => k[1]),...(backKnots(c)||[]).map(k => k[1]));
+  const lip=plain+span*Math.min(0,...values);
   let lo=Math.min(sea??plain,plain,E,top,lip),hi=Math.max(sea??plain,plain,E,top,lip); const pad=Math.max(5,(hi-lo)*.1); lo-=pad; hi+=pad;
   return {plain,sea,E,span,lo,hi,ground};
 }
@@ -442,7 +443,7 @@ function commitNumberKnots(ks) {
 function curveNumberEvents() {
   $('curve-point-side').onchange=()=>{curvePoint={side:$('curve-point-side').value,i:0};drawSection();};
   $('curve-point-index').onchange=()=>{curvePoint.i=Number($('curve-point-index').value);drawSection();};
-  for(const [id,axis]of [['curve-point-x',0],['curve-point-y',1]])$(id).onchange=()=>{const ks=numberKnots(),input=$(id),v=Number(input.value);if(!Number.isFinite(v)||input.value===''){input.value=ks[curvePoint.i][axis];return;}const value=clamp(v,Number(input.min),Number(input.max));input.value=value;if(value===ks[curvePoint.i][axis])return;ks[curvePoint.i][axis]=value;commitNumberKnots(ks);};
+  for(const [id,axis]of [['curve-point-x',0],['curve-point-y',1]])$(id).onchange=()=>{const ks=numberKnots(),input=$(id),v=Number(input.value);if(!Number.isFinite(v)||input.value===''){input.value=ks[curvePoint.i][axis];return;}const value=Math.round(clamp(v,Number(input.min),Number(input.max))*1000)/1000;input.value=value;if(value===ks[curvePoint.i][axis])return;ks[curvePoint.i][axis]=value;commitNumberKnots(ks);};
   $('curve-point-delete').onclick=()=>{const ks=numberKnots(),i=curvePoint.i;if(i<=0||i>=ks.length-1||ks.length<=2)return;ks.splice(i,1);curvePoint.i--;commitNumberKnots(ks);};
   for(const [id,amount]of [['curve-raise',.05],['curve-lower',-.05]])$(id).onclick=()=>{const c=curveContext(),lo=curvePoint.side==='along'||!c.land?0:-1,hi=curvePoint.side==='along'?ALONG_HI:1.5;commitNumberKnots(numberKnots().map(([x,y])=>[x,clamp(y+amount,lo,hi)]));};
   for(const [id,axis]of [['curve-scale-height',1],['curve-scale-width',0]])$(id).onchange=()=>{const input=$(id),factor=Number(input.value)/100;if(input.value===''||!input.reportValidity()||!Number.isFinite(factor)||factor<=0){input.value=100;return;}const c=curveContext(),ks=numberKnots(),lo=curvePoint.side==='along'||!c.land?0:-1,hi=curvePoint.side==='along'?ALONG_HI:1.5;const out=ks.map(([x,y],i)=>axis?[x,clamp(y*factor,lo,hi)]:[i===0?0:i===ks.length-1?1:1-(1-x)*factor,y]);if(out.some((k,i)=>i&&k[0]-out[i-1][0]<.01)){input.setCustomValidity('This scale would overlap points. Use a smaller change.');input.reportValidity();input.setCustomValidity('');return;}input.value=100;commitNumberKnots(out);};
