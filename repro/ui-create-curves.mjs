@@ -30,7 +30,7 @@ try{
   const pick=async tool=>{const sel=`[data-tool="${tool}"]`;if(!await shown(sel)){await click('#'+await ev(`document.querySelector(${JSON.stringify(sel)}).closest('.tool-group').querySelector('.rail-button').id`));assert(await shown(sel),tool+' shows in its flyout');}await click(sel);};
   const selectLast=async()=>{if(await ev('document.getElementById("pane-objects").hidden'))await click('#tab-objects');if(await ev('document.querySelector("#layers li:last-child .layer-name").getAttribute("aria-pressed")')!=='true')await click('#layers li:last-child .layer-name');await click('#tab-tool');};
   const top=()=>ev('document.querySelector(".inspector-content").scrollTop=0');
-  await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});const url=`${server}/sculpt.html?biome=green&mapX=4&mapY=4&scratch=workspace-test&gpuMB=512&heapMB=1536&undulation=0`;
+  await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});const url=`${server}/sculpt.html?biome=green&mapX=4&mapY=4&scratch=create-curves-test&gpuMB=512&heapMB=1536&undulation=0`;
   await send('Page.navigate',{url});await ready();
   await ev('localStorage.clear()');await send('Page.navigate',{url:server+'/sculpt.html'});await ready();
   assert(await ev('document.getElementById("new-map-dialog").open'),'first run opens the picker');
@@ -57,7 +57,7 @@ try{
   await key('Escape');const kept=await ev('sculptDebug.sketch()');await click('#new-map');await ev(`document.getElementById('new-map-name').value='Second map';document.querySelector('#new-map-worlds [data-world="moon"]').click();document.getElementById('new-map-width').value='2';document.getElementById('new-map-height').value='3';document.getElementById('new-map-create').click()`);await sleep(300);await ready();
   assert.equal(await ev('sculptDebug.biome'),'moon');assert.equal(await ev('document.getElementById("map-name").value'),'Second map');assert.equal((await nodes()).length,0);assert.deepEqual(await ev('sculptDebug.sketch().map.unitsX'),2);
   await ev(`document.getElementById('share-restore').click()`);await sleep(300);await ready();
-  assert.equal(await ev('sculptDebug.biome'),'green');assert.equal(await ev('document.getElementById("map-name").value'),'First map');assert.deepEqual(await ev('sculptDebug.sketch().nodes.map(n=>({...n,hidden:Boolean(n.hidden)}))'),kept.nodes.map(n=>({...n,hidden:Boolean(n.hidden)}))); 
+  assert.equal(await ev('sculptDebug.biome'),'green');assert.equal(await ev('document.getElementById("map-name").value'),'First map');assert.deepEqual(await ev('sculptDebug.sketch().nodes.map(n=>({...n,hidden:Boolean(n.hidden)}))'),kept.nodes.map(n=>({...n,hidden:Boolean(n.hidden)})));
   assert.equal(await ev('document.getElementById("map-progress").hidden'),true,'progress ends after latest result is displayed');
   assert.deepEqual(errors,[]);console.log(JSON.stringify({firstRun:true,newFlat:true,worldAndSize:true,previousRestored:true,numericPoint:true,raiseUndo:true,livePreview:true,noOpProgress:true,console:errors}));
 }catch(err){console.error(err);process.exitCode=1;}finally{ws?.close();browser.kill();}
