@@ -47,6 +47,6 @@ The remaining largest submission is about 152 ms, from the quarter
 preview's combined solid/wear/draw work; final submissions also reach
 about 112 ms. That is the next LP4 target. First changed pixels still miss
 50 ms. Other scenes, map4, the smaller view and low-budget latency remain
-pending; the 512-MiB proof so far establishes block count and memory, not
-latency. Broader final-pixel and export checks have not yet been repeated
+pending; the initial 512-MiB proof was on map4, not paged map16, and establishes
+block count and memory, not latency. The paged map16 gate is separate. Broader final-pixel and export checks have not yet been repeated
 for this combined build. This is focused evidence, not full card acceptance.
