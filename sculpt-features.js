@@ -399,7 +399,7 @@ export async function mountMapFeatures(api) {
   for (const [name,button] of buttons) button.onclick=() => activate(name);
   // The kind tabs press the list behind them (#feature-kind), so its guard applies.
   for (const tab of kindTabs) tab.onclick=() => { const list=$('feature-kind'); list.value=tab.dataset.featureKind; list.dispatchEvent(new Event('change')); };
-  $('feature-kind').onchange=event => { if (!guard()) { update(); return; } placeKind=event.target.value; placeVariant=-1; status(''); update(); };
+  $('feature-kind').onchange=event => { if (!guard()) { update(); return; } placeKind=event.target.value; placeVariant=-1; status(''); update(); doc.dispatchEvent(new Event('terraform-feature-mode')); };
   $('feature-recipe').onchange=event => {if(!guard())return;activeRecipes[placeKind]=Number(event.target.value);placeVariant=-1;update();};
   $('feature-recipe-name').onchange=event => {if(!changeSet(placeKind,{name:event.target.value}))update();};
   $('feature-add-recipe').onclick=() => {const preset=featureCatalog(config,placeKind).find(p => p.id===$('feature-preset').value);if(preset)addRecipe(placeKind,preset);};
