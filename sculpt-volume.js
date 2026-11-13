@@ -25,7 +25,7 @@ export class VoxelSurface {
       const a=d.createBindGroupLayout({entries:reads.map(input)}),b=d.createBindGroupLayout({entries:writes.map(output)});
       self.layouts[entryPoint]={layout:d.createPipelineLayout({bindGroupLayouts:[renderer.commonLayout,empty,a,b]}),reads,writes,a,b};
     }
-    await self.build(0);
+    await Promise.all([self.build(0),self.build(15)]);
     self.drawLayout=d.createBindGroupLayout({entries:[0,1,2,3,4].map(input)});
     self.uniform=d.createBuffer({label:'voxel region settings',size:64,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
     self.readback=d.createBuffer({label:'voxel allocation count readback',size:16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
@@ -33,7 +33,7 @@ export class VoxelSurface {
     return self;
   }
   constructor(renderer){this.renderer=renderer;this.device=renderer.device;this.owned=[];this.stats={pieces:0,bricks:0,peakBytes:0,allocationMs:0};}
-  // The passes for one rockMask (engine-common.wgsl): 0, slot 0's numbers at fixed offsets, is built at start; 15 when a second rock comes into use.
+  // Both allowed rock masks are ready at startup: fixed slot 0, and the recipe table.
   build(mask){
     if(!this.built.has(mask))this.built.set(mask,Promise.all(Object.entries(this.layouts).map(async([entryPoint,l])=>[entryPoint,{...l,pipeline:await this.device.createComputePipelineAsync({label:entryPoint,layout:l.layout,compute:{module:this.module,entryPoint,constants:{rockMask:mask}}})}]))
       .then(list=>{this.passesBy??={};this.passesBy[mask]=Object.fromEntries(list);}));

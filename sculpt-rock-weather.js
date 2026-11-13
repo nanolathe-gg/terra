@@ -13,12 +13,12 @@ export class RockWeather {
     if(errors.length)throw Error(errors.map(m=>`${m.lineNum}: ${m.message}`).join('\n'));
     self.layout=d.createBindGroupLayout({entries:[0,1].map(binding=>({binding,visibility:GPUShaderStage.COMPUTE,texture:{sampleType:'unfilterable-float'}})).concat([{binding:2,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:'write-only',format:'rgba32float'}},{binding:3,visibility:GPUShaderStage.COMPUTE,texture:{sampleType:'unfilterable-float'}},{binding:4,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:'write-only',format:'rgba32float'}},{binding:5,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:'write-only',format:'rgba32float'}}])});
     self.module=module;self.pipelineLayout=d.createPipelineLayout({bindGroupLayouts:[renderer.commonLayout,self.layout]});self.built=new Map();
-    await self.build(0);
+    await Promise.all([self.build(0),self.build(15)]);
     self.empty=d.createTexture({label:'empty rock weather',size:[1,1],format:'rgba32float',usage:GPUTextureUsage.TEXTURE_BINDING});renderer.track(self.empty,'empty rock weather',16,'shared');
     return self;
   }
   constructor(renderer){this.renderer=renderer;this.owned=[];this.final=null;this.source=null;this.rim=null;}
-  // The passes for one rockMask (engine-common.wgsl): 0, slot 0's numbers at fixed offsets, is built at start; 15 when a second rock comes into use.
+  // Both allowed rock masks are ready at startup: fixed slot 0, and the recipe table.
   build(mask){
     if(!this.built.has(mask))this.built.set(mask,Promise.all(['rockTerrain','rockRain','rockFlow','rockDeposit'].map(async entryPoint=>[entryPoint,await this.renderer.device.createComputePipelineAsync({label:entryPoint,layout:this.pipelineLayout,compute:{module:this.module,entryPoint,constants:{rockMask:mask}}})]))
       .then(list=>{this.pipelinesBy??={};this.pipelinesBy[mask]=Object.fromEntries(list);}));
