@@ -3,6 +3,7 @@
 //   --server http://127.0.0.1:8897 --port 9891 --out /private/tmp/lp0 --no-export
 // --viewport WIDTHxHEIGHT is terrain CSS pixels; default Chrome window: 1600x1200.
 // --only load|drag|release|resume|slider|scroll; --sliders comma-separated knob IDs.
+// --resume-prime-moves N and --resume-prime-pause MS vary the first stroke only.
 // --colors native|scripted: scripted explicitly substitutes value/input events.
 // --warmup discards a session; --report FILE... prints the section 2 budget table.
 // Use distinct CDP ports, discard one --warmup per fresh server, alternate workloads,
@@ -75,6 +76,8 @@ const colorsMode=opt('--colors','native');
 if(!['native','scripted'].includes(colorsMode))throw Error('--colors expects native|scripted');
 const start=opt('--start','');const only=opt('--only',''),query=opt('--query',''),tool=opt('--tool','hill'),diameter=Number(opt('--diameter',0));
 const featureDensity=Number(opt('--features','0'));
+const primeMoves=Number(opt('--resume-prime-moves','8')),primePause=Number(opt('--resume-prime-pause','0'));
+if(!Number.isInteger(primeMoves)||primeMoves<1||primeMoves>100||!Number.isFinite(primePause)||primePause<0||primePause>5000)throw Error('Invalid resume priming workload');
 const sliderNames=opt('--sliders','knob-faceBlockSize,knob-reliefAmount,knob-ambient,knob-sunHeight,knob-erosionRain,colors').split(',');
 const noExport=flag('--no-export'),warmup=flag('--warmup'),exact=flag('--exact-timestamps'),noSliders=flag('--no-sliders');
 const [mode,...unknown]=args;
@@ -374,7 +377,7 @@ try{
   {const t0=await begin(),p=await stroke();const dragStop=await ev('performance.now()'),a=await anchor();await mouse('mouseReleased',p.x,p.y);await settle();const whole=await capture(t0,[a],{metricsUntil:dragStop});result.drag={...whole,heldUntil:dragStop,movesDelivered:whole.inputs.length};result.release=await capture(a.t,[a],{input:'stroke release',specStartOverride:a.spec});flush();}
   if(['drag','release'].includes(only))throw Error(`stopped after ${only} (--only)`);
   console.error('phase resume');
-  {await setup();const t0=await begin(),p=await stroke(8),release=await anchor();await mouse('mouseReleased',p.x,p.y);await sleep(100);const began=await anchor(),pendingState=await ev('({weatherPending:!sculptRegion.canExport(),foregroundPending:sculptCanvas.foregroundPending(),rendererBusy:sculptCanvas.renderer.busy,timePassesInFlight:__perf.activeErosion||0})');const q={x:p.x-50,y:p.y+35};await mouse('mousePressed',q.x,q.y);for(let i=1;i<=32;i++){await strokeMove(q.x+i*4,q.y+Math.sin(i/4)*20);await sleep(30);}const a=await anchor();await mouse('mouseReleased',q.x+128,q.y+Math.sin(8)*20);await settle();result.resume=await capture(began.t,[a],{specStartOverride:began.spec,primingStart:t0,release,secondStroke:began,actualDelayMs:began.t-release.t,pendingAtResume:pendingState,inFlightCondition:pendingState.timePassesInFlight>0});flush();}
+  {await setup();const t0=await begin(),p=await stroke(primeMoves);if(primePause)await sleep(primePause);const release=await anchor();await mouse('mouseReleased',p.x,p.y);await sleep(100);const began=await anchor(),pendingState=await ev('({weatherPending:!sculptRegion.canExport(),foregroundPending:sculptCanvas.foregroundPending(),rendererBusy:sculptCanvas.renderer.busy,timePassesInFlight:__perf.activeErosion||0,shapePending:sculptDebug.shape().fields?.pending??null,dirtyFinalTiles:sculptCanvas.cacheSnapshot().filter(e=>e.dirty&&(e.scale??1)<=1).length})');const q={x:p.x-50,y:p.y+35};await mouse('mousePressed',q.x,q.y);for(let i=1;i<=32;i++){await strokeMove(q.x+i*4,q.y+Math.sin(i/4)*20);await sleep(30);}const a=await anchor();await mouse('mouseReleased',q.x+128,q.y+Math.sin(8)*20);await settle();result.resume=await capture(began.t,[a],{specStartOverride:began.spec,primingStart:t0,primingMoves:primeMoves,primingPauseMs:primePause,release,secondStroke:began,actualDelayMs:began.t-release.t,pendingAtResume:pendingState,inFlightCondition:pendingState.timePassesInFlight>0});flush();}
   if(only==='resume')throw Error('stopped after resume (--only)');
   }
   // --------------------------------------------- page-native slider drags
