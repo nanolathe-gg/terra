@@ -245,3 +245,9 @@ median moved by 17.6 ms, smaller than main's 21.6-ms spread in that batch.
 No additional gain is established. Both trial cold replays were exact and
 rAF p95 stayed 16.8 ms with no long tasks, but the shipping path keeps its
 existing frame yield.
+
+Self-review restricts the 100-ms ready-final shortcut to C–F inputs. A paged
+map's export-ready flag does not certify each weather page; shape and Time
+inputs therefore keep the previous fallback. This prevents early final
+quality from being mistaken for completed weathering during a short pause.
+The full matrix collected before this restriction is diagnostic only.

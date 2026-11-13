@@ -623,8 +623,9 @@ preview level:
 - *Quarter*: when no input has arrived for about 100 ms and the coarse
   picture is current. Also right at release, while the Time pass runs.
 - *Final*: on release, or after about 100 ms without input when the coarse
-  picture and weather are already current. Otherwise keep the 250-ms
-  authoring fallback and the Time wait. The overnight flat-Green/map16
+  picture is current and the input starts after Time (C–F). On paged maps
+  export-ready alone does not certify all weather pages. Otherwise keep the
+  250-ms authoring fallback and the Time wait. The overnight flat-Green/map16
   comparison found that waiting for 250 ms and making another quarter
   picture put Colors final 22–27% behind main (phase medians); section 2's 10% final-cost
   limit is unchanged. Visible tiles run in order of distance from the **focus point** (where the
