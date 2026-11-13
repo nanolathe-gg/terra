@@ -418,6 +418,10 @@ try{
     const tabs=await ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Missing row');const tabs=[];for(let p=e.parentElement;p;p=p.parentElement){if(p.tagName==='DETAILS')p.open=true;if(p.getAttribute('role')==='tabpanel'&&p.hasAttribute('aria-labelledby'))tabs.push(p.getAttribute('aria-labelledby'));}return tabs.reverse();})()`);
     for(const id of tabs)if(await ev(`document.getElementById(${JSON.stringify(id)})?.getAttribute('aria-selected')==='false'`))await clickElement('#'+id);
     if(!await ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)}),r=e.closest('[data-knob]')?.querySelector('.scrub')??e;return r.getClientRects().length>0&&getComputedStyle(r).visibility!=='hidden';})()`))throw Error('Row remained hidden: '+control);
+    // The row anchor checks the view center. Point there before the workload
+    // so the editor's retained refinement focus is the same physical target.
+    const focus=await ev(`(()=>{const r=document.getElementById('overlay').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+    await mouse('mouseMoved',focus.x,focus.y,false);
   };
   const scrub=async(control,paused,cold=false)=>{
     await openWorld(control);const row=await point(`.scrub[data-source="${control}"]`),spec=await ev(`(()=>{const e=document.getElementById(${JSON.stringify(control)});return {min:+e.min,max:+e.max,step:+e.step,value:+e.value,disabled:e.disabled};})()`);
