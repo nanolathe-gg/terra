@@ -13,6 +13,7 @@ struct VolumeSettings {
 @group(2) @binding(3) var vh:texture_2d<f32>;
 @group(2) @binding(4) var vg:texture_2d<f32>;
 @group(2) @binding(5) var<storage,read> vb:array<vec4i>;
+@group(2) @binding(7) var<storage,read> vCount:array<u32>;
 
 // The existing Surface relief slider and local relief paint scale the entire
 // surface, including displacement and weathering of the volumetric rock.
@@ -262,7 +263,7 @@ fn voxelDensity(p:vec3f)->f32 {
 }
 @compute @workgroup_size(4,8,8)
 fn voxelBuild(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) local:vec3u){
-    let brick=group.x+group.y*128u;if(brick>=vs.capacity){return;}
+    let brick=group.x+group.y*128u;if(vCount[0]>vs.capacity||brick>=vs.capacity||brick>=vCount[0]){return;}
     let b=vb[brick];let cell=vec3i(b.xyz)*8+vec3i(i32(local.x)*2,i32(local.y),i32(local.z));
     let p=vec3f(vs.origin,0)+(vec3f(cell)+.5)*vs.step;
     let a=voxelDensity(p);let c=voxelDensity(p+vec3f(vs.step,0,0));
@@ -285,7 +286,7 @@ fn voxelWear(p:vec3i)->f32 {
 }
 @compute @workgroup_size(4,8,8)
 fn voxelWeather(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) local:vec3u){
-    let brick=group.x+group.y*128u;if(brick>=vs.capacity){return;}
+    let brick=group.x+group.y*128u;if(vCount[0]>vs.capacity||brick>=vs.capacity||brick>=vCount[0]){return;}
     let b=vb[brick];let cell=vec3i(b.xyz)*8+vec3i(vec2i(round(vs.origin/vs.step)),0)+vec3i(i32(local.x)*2,i32(local.y),i32(local.z));
     densityOut[brick*256u+local.z*32u+local.y*4u+local.x]=pack2x16float(vec2f(voxelWear(cell),voxelWear(cell+vec3i(1,0,0))));
 }

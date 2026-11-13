@@ -7,8 +7,8 @@ const ENTRIES={
   voxelGuideBlocks:[[0,3],[6]],
   voxelGuideBuild:[[0,3,6],[1]],
   voxelClassify:[[0,4],[2,3,4]],
-  voxelBuild:[[0,1,3,4,5],[5]],
-  voxelWeather:[[0,1,2,3,4,5],[5]],
+  voxelBuild:[[0,1,3,4,5,7],[5]],
+  voxelWeather:[[0,1,2,3,4,5,7],[5]],
 };
 export class VoxelSurface {
   static async create(renderer,source,preprocess){
@@ -26,20 +26,20 @@ export class VoxelSurface {
       self.layouts[entryPoint]={layout:d.createPipelineLayout({bindGroupLayouts:[renderer.commonLayout,empty,a,b]}),reads,writes,a,b};
     }
     await Promise.all([self.build(0),self.build(15)]);
-    self.drawLayout=d.createBindGroupLayout({entries:[0,1,2,3,4].map(input)});
+    self.drawLayout=d.createBindGroupLayout({entries:[0,1,2,3,4,7].map(input)});
     self.uniform=d.createBuffer({label:'voxel region settings',size:64,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
     self.readback=d.createBuffer({label:'voxel allocation count readback',size:16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
     renderer.track(self.uniform,'voxel settings',64,'shared');renderer.track(self.readback,'voxel count readback',16,'shared');
     return self;
   }
-  constructor(renderer){this.renderer=renderer;this.device=renderer.device;this.owned=[];this.stats={pieces:0,bricks:0,peakBytes:0,allocationMs:0};}
+  constructor(renderer){this.renderer=renderer;this.device=renderer.device;this.owned=[];this.previewCounts=new Map();this.predictionStats={predicted:0,seeds:0,overflows:0,budgetFallbacks:0,preDrawWaitMs:0,postDrawWaitMs:0};this.stats={pieces:0,bricks:0,peakBytes:0,allocationMs:0};}
   // Both allowed rock masks are ready at startup: fixed slot 0, and the recipe table.
   build(mask){
     if(!this.built.has(mask))this.built.set(mask,Promise.all(Object.entries(this.layouts).map(async([entryPoint,l])=>[entryPoint,{...l,pipeline:await this.device.createComputePipelineAsync({label:entryPoint,layout:l.layout,compute:{module:this.module,entryPoint,constants:{rockMask:mask}}})}]))
       .then(list=>{this.passesBy??={};this.passesBy[mask]=Object.fromEntries(list);}));
     return this.built.get(mask);
   }
-  clear(){for(const r of this.owned)this.renderer.release(r);this.owned=[];}
+  clear(){for(const r of this.owned)this.renderer.release(r);this.owned=[];this.density=null;}
   own(resource,label,bytes){this.owned.push(resource);this.renderer.track(resource,label,bytes,'working');return resource;}
   buffer(label,size,usage=STORAGE()){return this.own(this.device.createBuffer({label,size:Math.max(16,size),usage}),label,Math.max(16,size));}
   texture(label,width,height){return this.own(this.device.createTexture({label,size:[width,height],format:'rgba32float',usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.TEXTURE_BINDING}),label,width*height*16);}
@@ -48,7 +48,7 @@ export class VoxelSurface {
     f.set([...s.origin,s.step],0);u.set([s.columnsX,s.columnsY,s.width,s.height,capacity],3);f.set([s.low,s.high,s.screenLow,s.screenHigh,s.top],8);
     this.device.queue.writeBuffer(this.uniform,0,data);
   }
-  inputs(){return {0:{buffer:this.uniform},1:{buffer:this.columns},2:{buffer:this.density[0]},3:this.height.createView(),4:this.guide.createView(),5:{buffer:this.bricks}};}
+  inputs(){return {0:{buffer:this.uniform},1:{buffer:this.columns},2:{buffer:this.density[0]},3:this.height.createView(),4:this.guide.createView(),5:{buffer:this.bricks},7:{buffer:this.counter}};}
   encode(name,encoder,groups,reads,writes){
     const p=this.passes[name];   // render() picks the rockMask's passes
     const group=(layout,bindings,resources)=>this.device.createBindGroup({layout,entries:bindings.map(binding=>({binding,resource:resources[binding]}))});
@@ -106,23 +106,54 @@ export class VoxelSurface {
       this.encode('voxelGuideBuild',countEncoder,[Math.ceil(s.width/8),Math.ceil(s.height/8)],input,output);
       this.encode('voxelClassify',countEncoder,[Math.ceil(s.columnsX/8),Math.ceil(s.columnsY/8)],input,output);
       countEncoder.copyBufferToBuffer(this.counter,0,this.readback,0,16);this.device.queue.submit([countEncoder.finish()]);
-      await this.readback.mapAsync(GPUMapMode.READ);const counts=new Uint32Array(this.readback.getMappedRange().slice(0));this.readback.unmap();
-      const count=counts[0],densityBytes=count*1024;
-      if(counts[1])throw Error('Terrain extends beyond the voxel projection bounds.');
-      if(count>s.capacity)throw Error('The voxel brick count exceeds its conservative allocation bound.');
-      if(densityBytes>this.device.limits.maxStorageBufferBindingSize||!r.makeWorkingRoom(Math.max(16,densityBytes)*2)){await split();return;}
-      await terrainAllocation(this.device,()=>{this.density=[this.buffer('voxel solid A',densityBytes),this.buffer('voxel solid B',densityBytes)];});this.settings(s,count);
-      const reads=this.inputs();const encoder=this.device.createCommandEncoder({label:'voxel solid and terrain draw'});
-      const groups=[Math.min(count,128),Math.ceil(count/128)];
-      this.encode('voxelBuild',encoder,groups,reads,{5:{buffer:this.density[0]}});
-      // Four rounds of wear, which leave the solid in buffer A again. With Weathering (rounded edges) or the rock's Depth at 0 a round changes no
-      // voxel (voxelWear adds faceWear times a term scaled by the depth), so none is run: the same solid, a fifth of the passes.
-      const wear=this.renderer.rockSlots().some(k=>this.renderer.rockValue(k,'faceWear')>0&&this.renderer.rockValue(k,'rockFace')>0)?4:0;
-      for(let i=0;i<wear;i++)this.encode('voxelWeather',encoder,groups,{...reads,2:{buffer:this.density[i%2]}},{5:{buffer:this.density[1-i%2]}});
-      const bind=this.device.createBindGroup({layout:this.drawLayout,entries:[0,1,2,3,4].map(binding=>({binding,resource:reads[binding]}))});
-      draw(encoder,bind,[(rect.x-origin[0])/scale,(rect.y-origin[1])/scale,rect.width/scale,rect.height/scale],first);first=false;
-      this.device.queue.submit([encoder.finish()]);this.stats.pieces++;this.stats.bricks+=count;
-      this.stats.peakBytes=Math.max(this.stats.peakBytes,metadata+densityBytes*2);
+      // Start the small count read now. A warmed preview can allocate and
+      // submit its solid/draw without waiting for the CPU to receive it.
+      const pending=this.readback.mapAsync(GPUMapMode.READ).then(()=>{const values=new Uint32Array(this.readback.getMappedRange().slice(0));this.readback.unmap();return values;});
+      pending.catch(()=>{}); // allocation failure may unwind before validation
+      try{
+      const preview=r.voxelScale>1,key=[step,s.columnsX,s.columnsY].join(','),last=this.previewCounts.get(key),ps=this.predictionStats;
+      let counts=null,capacity=preview&&last!==undefined?Math.min(s.capacity,Math.ceil(last*1.5)):null;
+      const readCounts=async afterDraw=>{const t=preview?performance.now():0,values=await pending;
+        if(preview)ps[afterDraw?'postDrawWaitMs':'preDrawWaitMs']+=performance.now()-t;
+        if(values[1])throw Error('Terrain extends beyond the voxel projection bounds.');
+        if(values[0]>s.capacity)throw Error('The voxel brick count exceeds its conservative allocation bound.');
+        if(preview){this.previewCounts.delete(key);this.previewCounts.set(key,values[0]);if(this.previewCounts.size>16)this.previewCounts.delete(this.previewCounts.keys().next().value);}
+        return values;
+      };
+      const fits=count=>count*1024<=this.device.limits.maxStorageBufferBindingSize&&r.makeWorkingRoom(Math.max(16,count*1024)*2);
+      if(capacity===null||!fits(capacity)){
+        if(preview){if(capacity===null)ps.seeds++;else ps.budgetFallbacks++;}
+        counts=await readCounts(false);capacity=counts[0];
+      }else ps.predicted++;
+      const drawPool=async count=>{
+        if(this.density){for(const b of this.density){r.release(b);this.owned=this.owned.filter(v=>v!==b);}this.density=null;}
+        if(!fits(count))return false;
+        const densityBytes=count*1024;
+        await terrainAllocation(this.device,()=>{this.density=[this.buffer('voxel solid A',densityBytes),this.buffer('voxel solid B',densityBytes)];});this.settings(s,count);
+        const reads=this.inputs(),encoder=this.device.createCommandEncoder({label:'voxel solid and terrain draw'}),groups=[Math.min(count,128),Math.ceil(count/128)];
+        this.encode('voxelBuild',encoder,groups,reads,{5:{buffer:this.density[0]}});
+        // The same four wear rounds and solid, with excess dispatches rejected
+        // by the GPU's actual count rather than evaluating unused bricks.
+        const wear=r.rockSlots().some(k=>r.rockValue(k,'faceWear')>0&&r.rockValue(k,'rockFace')>0)?4:0;
+        for(let i=0;i<wear;i++)this.encode('voxelWeather',encoder,groups,{...reads,2:{buffer:this.density[i%2]}},{5:{buffer:this.density[1-i%2]}});
+        const bind=this.device.createBindGroup({layout:this.drawLayout,entries:[0,1,2,3,4,7].map(binding=>({binding,resource:reads[binding]}))});
+        draw(encoder,bind,[(rect.x-origin[0])/scale,(rect.y-origin[1])/scale,rect.width/scale,rect.height/scale],first);
+        this.device.queue.submit([encoder.finish()]);
+        this.stats.peakBytes=Math.max(this.stats.peakBytes,metadata+Math.max(16,densityBytes)*2);return true;
+      };
+      if(!await drawPool(capacity)){await split();return;}
+      if(!counts){
+        counts=await readCounts(true);
+        if(counts[0]>capacity){
+          ps.overflows++;
+          // Drain the rejected pool before replacing its memory. No
+          // presentation has been submitted; earlier validated pieces survive.
+          await this.device.queue.onSubmittedWorkDone();
+          if(!await drawPool(counts[0])){await split();return;}
+        }
+      }
+      first=false;this.stats.pieces++;this.stats.bricks+=counts[0];
+      }finally{await pending.catch(()=>{});}
     };
     await piece({x:origin[0],y:origin[1],width,height});this.stats.allocationMs=performance.now()-start;
   }

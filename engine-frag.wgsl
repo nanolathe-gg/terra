@@ -1502,6 +1502,8 @@ fn sandMaterialAt(scatter: vec2f) -> vec3f {
 
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
+    // An undersized predicted pool is retried before presentation.
+    if(vCount[0]>vs.capacity){discard;}
     // GLSL's gl_FragCoord (origin bottom left; the canvas is u.size high).
     // H7b: an output texel covers chunkScale final pixels, so its screen position is scaled back (x * 1 at final).
     let fragCoord = vec2f(v.position.x * u.chunkScale + u.chunkScreenOrigin.x, u.size - (v.position.y * u.chunkScale + u.chunkScreenOrigin.y));
