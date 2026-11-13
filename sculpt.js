@@ -885,7 +885,7 @@ function configurePagedTime(fields=regionalFields) {
 function queuePagedWeather() {
   if (stroke||moving) return;
   const changedTime=configurePagedTime(),stale=regionalFields.settle(),on=$('weather').checked;
-  weatherState=on?'ready':'disabled'; $('weather-state').textContent=on?'Weathered edges · GPU time pass in pages, on demand':'Weathering off · authored surface';
+  weatherState=on?'ready':'disabled'; $('weather-state').textContent=on?(changedTime?'Weathering pending · visible pages update on demand':'Weathered edges · GPU time pass in pages, on demand'):'Weathering off · authored surface';
   weatherJob++;
   if (changedTime) { markViewChanged(); mapCanvas?.changed({stage:'B',input:false,world:false}); }
   else if (stale && on) { const pad=160*spacing; markViewChanged(); mapCanvas?.changed({stage:'B',rect:{x:Math.max(0,stale.x-pad),y:Math.max(0,stale.y-pad),width:stale.width+2*pad,height:stale.height+2*pad},input:false,world:false}); }
@@ -900,6 +900,7 @@ async function gpuFeedSource(signal,regionFn,{weather=true}={}) {
     const feed=await regionalFields.feedSource({x0:ox,y0:oy,x1:ox+region.gridWidth-1,y1:oy+region.gridHeight-1},weather&&$('weather').checked,{signal});
     if (signal?.aborted) { feed.release(); signal.throwIfAborted(); }
     if(!feed.weather)feed.weatherRevB=mapCanvas.rev.B;
+    else if(feed.weatherRevB>=mapCanvas.rev.B)$('weather-state').textContent='Weathered edges · GPU time pass in pages, on demand';
     return feed;
   }
   await regionalFields.gpuReady(); signal?.throwIfAborted();
