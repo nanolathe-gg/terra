@@ -34,3 +34,13 @@ test('coarse shape windows cover renderer inputs and preserve world-space Time a
  }
  assert.equal((grid-1)*spacing,size-1);
 });
+
+test('a growing dirty area reuses a covering Time window, but a pan or level change does not',()=>{
+ const size=8480,grid=2121,sp=(size-1)/(grid-1),apron=256;
+ const region=(x,y,w,h)=>({gridOrigin:[x*sp,y*sp],gridWidth:w,gridHeight:h});
+ const full=previewWindow(region(800,700,535,493),grid,size,apron);
+ assert.equal(previewWindow(region(820,720,500,460),grid,size,apron,full),full);
+ assert.notEqual(previewWindow(region(1000,700,535,493),grid,size,apron,full),full);
+ assert.notEqual(previewWindow(region(800,700,535,493),4240,size,apron,full),full);
+ assert.notEqual(previewWindow(region(900,800,100,100),grid,size,apron,full),full);
+});

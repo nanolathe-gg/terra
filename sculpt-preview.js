@@ -29,23 +29,26 @@ export function createPreviewFields(device,scene){
 export function previewGrid(size,canonicalGrid,level){
   return Math.min(canonicalGrid,Math.ceil((size-1)/Math.max(level,(size-1)/(canonicalGrid-1)))+1);
 }
-export function previewWindow(region,grid,size,apron){
+export function previewWindow(region,grid,size,apron,retained=null){
   const spacing=(size-1)/(grid-1),pad=Math.ceil(apron/spacing);
   const side=Math.min(grid,Math.max(region.gridWidth,region.gridHeight)+2*pad);
   const x=Math.max(0,Math.min(grid-side,Math.round(region.gridOrigin[0]/spacing)-pad));
   const y=Math.max(0,Math.min(grid-side,Math.round(region.gridOrigin[1]/spacing)-pad));
+  // Keep a held stroke on its existing window while its dirty area grows.
+  // Bound excess coverage by the same Time apron; a pan still needs new inputs.
+  if(retained?.grid===grid&&retained.side<=side+2*pad&&retained.x<=x&&retained.y<=y&&retained.x+retained.side>=x+side&&retained.y+retained.side>=y+side)return retained;
   return {x,y,side,spacing,grid,cells:side*side};
 }
 // The same shape and Time kernels over a display-only window. Canonical pages,
 // picking and export do not read these buffers. Only one window is retained.
 export function createPreviewLattice(device,scene,memoryChanged=()=>{}){
-  let engine=null,target=null,weather=null,starting=null,shapeKey='',key='',weatherKey='',working=0,runs=0,timeRuns=0,weatherReuses=0,peak=0;
+  let engine=null,target=null,weather=null,starting=null,shapeKey='',key='',weatherKey='',weatherWindow=null,working=0,runs=0,timeRuns=0,weatherReuses=0,peak=0;
   const bytes=()=> (engine?.bytes()??0)+(target?.bytes??0)+(weather?.bytes??0)+(weather?.field?.size??0)+working;
-  const dropWeather=()=>{weather?.weather.destroy();weather?.maps.forEach(b=>b.destroy());weather?.field?.destroy();weather=null;weatherKey='';};
+  const dropWeather=()=>{weather?.weather.destroy();weather?.maps.forEach(b=>b.destroy());weather?.field?.destroy();weather=null;weatherKey='';weatherWindow=null;};
   const trim=()=>{target?.destroy();engine?.destroy();engine=target=starting=null;shapeKey=key='';working=0;};
   const clear=()=>{dropWeather();trim();};
   const plan=(region,on=true,deferTime=false)=>{
-    const s=scene(),w=previewWindow(region,region.worldGrid,s.size,s.timeApron??128*s.spacing);
+    const s=scene(),w=previewWindow(region,region.worldGrid,s.size,s.timeApron??128*s.spacing,deferTime?weatherWindow:null);
     const tm=on?s.previewTime?.({size:w.spacing*(w.side-1)+1,spacing:w.spacing}):null;
     const geometry=[w.grid,w.x,w.y,w.side].join(','),sk=[geometry,s.revision].join('|'),wk=[geometry,tm?.key??'',tm?.revB??s.revB].join('|'),cache=sk+'|'+wk;
     const reuse=Boolean(tm&&deferTime&&weather&&weatherKey===wk),runTime=tm&&!reuse&&key!==cache;
@@ -81,7 +84,7 @@ export function createPreviewLattice(device,scene,memoryChanged=()=>{}){
             working=p.cells*144+65536;peak=Math.max(peak,bytes());memoryChanged();
             try{weather=await tm.run({planes:target.F,masks:target.Mk,grid:p.side,ox:p.x,oy:p.y,stale:()=>Boolean(signal?.aborted)||Boolean(stale?.())});timeRuns++;}
             finally{working=0;}
-            current();weatherKey=p.wk;
+            current();weatherKey=p.wk;weatherWindow={x:p.x,y:p.y,side:p.side,spacing:p.spacing,grid:p.grid,cells:p.cells};
           }
           key=p.cache;
         }
