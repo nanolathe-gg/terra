@@ -184,3 +184,5 @@ kbd{font:9px system-ui;color:var(--muted);margin-left:4px}
 #tab-map{max-width:220px;min-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}#pane-export .share-menu{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}#pane-export .share-menu .popover{position:static;width:auto;margin-top:8px;box-shadow:none}#share-previous{margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
 
 #column-fields{border:0;padding:0;margin:0;min-width:0;display:flow-root}#column-stack{float:left;width:38px;height:220px;display:flex;flex-direction:column;gap:1px;margin:12px 12px 8px 0;border:1px solid var(--line)}#column-stack>div{min-height:3px;font-size:9px;text-align:center;overflow:hidden;color:#fff;text-shadow:0 1px 2px #000}.column-body{overflow:hidden}#column-fields>[role=status]{clear:both}
+
+#new-map-worlds button{padding:0;overflow:hidden;display:flex;flex-direction:column;align-items:stretch}.new-map-worlds img{display:block;width:100%;height:78px;object-fit:cover;image-rendering:pixelated}.new-map-worlds button>span{padding:7px;font-size:11px}

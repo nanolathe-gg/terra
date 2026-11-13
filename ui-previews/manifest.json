@@ -756,5 +756,61 @@
     "label": "100%"
    }
   ]
+ },
+ "worlds": {
+  "frame": {
+   "width": 260,
+   "height": 190,
+   "ms": 160
+  },
+  "fixture": {
+   "kind": "hill",
+   "path": [
+    [
+     430,
+     520
+    ],
+    [
+     620,
+     420
+    ],
+    [
+     800,
+     510
+    ]
+   ],
+   "card": {
+    "diameter": 300,
+    "elevation": 200,
+    "combine": 0,
+    "wander": 0,
+    "widthVary": 0,
+    "heightVary": 0,
+    "gullies": 0,
+    "terraces": 0,
+    "cracks": 0,
+    "curve": {
+     "form": "lfHill"
+    }
+   },
+   "seed": 2701,
+   "crop": {
+    "x": 180,
+    "y": 140,
+    "width": 850,
+    "height": 620
+   }
+  },
+  "images": {
+   "green": "world-green.png",
+   "red": "world-red.png",
+   "archipelago": "world-archipelago.png",
+   "moon": "world-moon.png",
+   "zhon": "world-zhon.png",
+   "desert": "world-desert.png",
+   "lava": "world-lava.png",
+   "crystal": "world-crystal.png",
+   "ice": "world-ice.png"
+  }
  }
 }

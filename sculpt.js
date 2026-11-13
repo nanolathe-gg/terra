@@ -1936,7 +1936,7 @@ async function bootMap() {
   // until edited; Restore gives it the world's again).
   const presetColumn=()=>{const rock=mapRocks.find(r=>r.slot===rockSelected),own=config.column?.variants?.[config.variant]?.sections||config.column?.sections||[];return {column:{sections:structuredClone(rock.column?.sections??own)},bedColors:renderer.slotColors(rockSelected).beds,variant:'',edited:Boolean(rock.column)};};
   const editPresetColumn=column=>{const rock=mapRocks.find(r=>r.slot===rockSelected);editRocks(setRock(mapRocks,rockSelected,{knobs:rock.knobs,column:{sections:column.sections??[]}}));};
-  syncColumnPanel=mountColumnPanel(()=>rockSelected>0?presetColumn():({column:columnForEdit(),variant:config.variant,edited:Boolean(columnOverride)}),
+  syncColumnPanel=mountColumnPanel(()=>rockSelected>0?presetColumn():({column:columnForEdit(),bedColors:renderer.slotColors(0).beds,variant:config.variant,edited:Boolean(columnOverride)}),
     column=>rockSelected>0?editPresetColumn(column):editColumn(column),()=>rockSelected>0?checkpoint(true):commitColumn(),
     ()=>{if(rockSelected>0){const rock=mapRocks.find(r=>r.slot===rockSelected);editRocks(setRock(mapRocks,rockSelected,{knobs:rock.knobs,column:null}));checkpoint(true);}else{editColumn(null);commitColumn();}});
   let saved=null; try { if (LOCAL_KEY && !experiment.has('pendingSketch') && !experiment.has('newMap')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
@@ -1966,7 +1966,7 @@ function openNewMap(first=false) {
   $('new-map-cancel').hidden=$('new-map-previous').hidden=first;
   $('new-map-error').textContent='';
   const choices=Object.entries(config.biomes||{});
-  $('new-map-worlds').replaceChildren(...choices.map(([id,name])=>{const b=document.createElement('button');b.type='button';b.textContent=name;b.dataset.world=id;b.setAttribute('aria-pressed',String(id===picked));b.onclick=()=>{picked=id;for(const button of $('new-map-worlds').children)button.setAttribute('aria-pressed',String(button===b));};return b;}));
+  $('new-map-worlds').replaceChildren(...choices.map(([id,name])=>{const b=document.createElement('button');b.type='button';const image=document.createElement('img');image.src=`ui-previews/world-${id}.png`;image.alt='';image.width=260;image.height=190;const label=document.createElement('span');label.textContent=name;b.append(image,label);b.dataset.world=id;b.setAttribute('aria-pressed',String(id===picked));b.onclick=()=>{picked=id;for(const button of $('new-map-worlds').children)button.setAttribute('aria-pressed',String(button===b));};return b;}));
   $('new-map-width').value=config.map?.unitsX??4;$('new-map-height').value=config.map?.unitsY??4;
   const dimensions=()=>{const m=mapGeometry(Number($('new-map-width').value),Number($('new-map-height').value));$('new-map-pixels').textContent=`${m.width} × ${m.height} pixels`;for(const b of $('new-map-sizes').children)b.setAttribute('aria-pressed',String(Number(b.dataset.size)===m.unitsX&&m.unitsX===m.unitsY||b.dataset.size==='custom'&&(![4,8,12,16].includes(m.unitsX)||m.unitsX!==m.unitsY)));};
   $('new-map-name').value='Untitled map';

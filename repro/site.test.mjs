@@ -63,3 +63,11 @@ test('the page and its modules fetch by relative paths', () => {
 test('the diagnostic view ships its reference classifier and presentation module', () => {
   for (const name of ['sculpt-passability.js', 'sculpt-passability-view.js']) assert.ok(existsSync(join(folder, name)), name);
 });
+
+// Authored default-world pictures travel with the same static build as the picker.
+test('the New map picker has every authored world thumbnail',()=>{
+  const manifest=JSON.parse(read('ui-previews/manifest.json'));
+  const worlds=JSON.parse(read('services.json')).worlds;
+  assert.deepEqual(Object.keys(manifest.worlds.images).sort(),[...worlds].sort());
+  for(const world of worlds){const bytes=readFileSync(join(folder,'ui-previews',manifest.worlds.images[world]));assert.deepEqual([...bytes.subarray(0,8)],[137,80,78,71,13,10,26,10]);}
+});
