@@ -609,8 +609,28 @@ const coastLayerReach=s => {
 // moved lake carries its circles along); a layer is counted from the nearest bite's edge, or the
 // waterline if that is nearer, so each riser is an arc round its bite, concentric with the bite's other
 // risers, meeting a neighbor's arcs at a cusp (the overlap of two discs).
-function markViewChanged(invalidate=true) { revision++; $('export').disabled=true; if (mapCanvas && invalidate) mapCanvas.invalidate(); }
-function markChanged() { markViewChanged(false); error(); syncRocks(); }
+function markViewChanged() { revision++; $('export').disabled=true; }
+let worldInputs=null;
+function worldInputChannels() {
+  const {params,...context}=shapeContext();
+  return {shape:JSON.stringify([context,nodes.filter(n=>n.kind==='ground')]),time:JSON.stringify([timeKnobs(renderer),materialKnobs(),weatherOn()])};
+}
+// Uniform deltas and the few inputs outside the uniform block meet here.
+// A no-op is recorded for the bench, but never advances or schedules the canvas.
+function worldChanged(...changes) {
+  const fields=changes.flatMap(c=>c?.fields??[]),channels=changes.flatMap(c=>c?.channels??[]).map(c=>({...c,stage:c.stage??'A'})),options=changes.find(c=>c&&Object.hasOwn(c,'world'))??{},world=options.world??true,rect=options.rect??null;
+  let stage=changes.map(c=>c?.stage).filter(Boolean).sort()[0]??null;
+  if(world){
+    const next=worldInputChannels();
+    if(worldInputs)for(const [name,value]of Object.entries(next))if(worldInputs[name]!==value){const stage=name==='shape'?'A':'B';channels.push({name,stage});}
+    worldInputs=next;
+  }
+  for(const c of channels)if(!stage||c.stage<stage)stage=c.stage;
+  const result=mapCanvas?.changed({stage,rect,world,fields,channels,kind:'world'})??{stage,fields,channels,rect,tiles:0};
+  if(stage)markViewChanged();
+  return {...result,timeChanged:world&&(changes.some(c=>c?.timeChanged)||channels.some(c=>c.stage==='A'||c.stage==='B'))};
+}
+function markChanged() { markViewChanged(); error(); syncRocks(); }
 
 // Shapes are nodes: kind, path, parameters and seed. The map is rebuilt by
 // replaying nodes in order, so relative heights follow the ground beneath
@@ -658,11 +678,23 @@ function evaluate(from=0,rect=null) {
   regionalFields.changed(regionalDirtyRect(from,rect)); markChanged();
 }
 // The renderer's rock table holds the presets strokes choose, and no other (a preset no stroke uses builds no pipeline and moves no pixel).
+let rockUseBounds=new Map();
+const mergeWorldRect=(a,b)=>!a?b:!b?a:{x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.max(a.x+a.width,b.x+b.width)-Math.min(a.x,b.x),height:Math.max(a.y+a.height,b.y+b.height)-Math.min(a.y,b.y)};
 function syncRocks() {
   if (!renderer) return;
-  const used=rocksInUse(nodes,mapRocks),key=JSON.stringify(used);
+  const used=rocksInUse(nodes,mapRocks),key=JSON.stringify(used),bounds=new Map();
+  for(const n of nodes)if(!n.hidden&&n.kind==='landform'&&n.params?.rockPreset>0){const slot=n.params.rockPreset;bounds.set(slot,mergeWorldRect(bounds.get(slot),sculptRegion.bounds(n)));}
+  const before=rockUseBounds;rockUseBounds=bounds;
   if (key===rockUseKey) return;
-  rockUseKey=key; renderer.setRocks(new Map(used.map(r => [r.slot,r]))); markViewChanged(); schedule();
+  const next=new Map(used.map(r=>[r.slot,r])),slots=[...new Set([...renderer.rocks.keys(),...next.keys()])].filter(k=>JSON.stringify(renderer.rocks.get(k))!==JSON.stringify(next.get(k)));
+  let rect=null;for(const slot of slots)rect=mergeWorldRect(rect,mergeWorldRect(before.get(slot),bounds.get(slot)));
+  rockUseKey=key;const delta=renderer.setRocks(next);
+  if(rect){
+    const x=Math.floor(rect.x),y=Math.floor(rect.y);
+    const r=renderer.requiredRegion({x,y,width:Math.ceil(rect.x+rect.width)-x,height:Math.ceil(rect.y+rect.height)-y,worldSize,worldGrid},currentDrawOptions());
+    rect={x:r.gridOrigin[0],y:r.gridOrigin[1],width:(r.gridWidth-1)*r.gridSpacing,height:(r.gridHeight-1)*r.gridSpacing};
+    worldChanged(delta,{world:false,rect});
+  }else worldChanged({fields:delta.fields,stage:null},{world:false});
 }
 // The Rock option's choices: Rock beneath, the world's rock, then the map's presets by name. A stroke whose preset is gone shows Rock beneath.
 function syncRockChoices() {
@@ -888,8 +920,8 @@ function queuePagedWeather() {
   const changedTime=configurePagedTime(),stale=regionalFields.settle(),on=$('weather').checked;
   weatherState=on?'ready':'disabled'; $('weather-state').textContent=on?'Weathered edges · GPU time pass in pages, on demand':'Weathering off · authored surface';
   weatherJob++;
-  if (changedTime) { markViewChanged(); }
-  else if (stale && on) { const pad=160*spacing; markViewChanged(false); mapCanvas?.invalidate({x:Math.max(0,stale.x-pad),y:Math.max(0,stale.y-pad),width:stale.width+2*pad,height:stale.height+2*pad}); }
+  if (changedTime) { markViewChanged(); mapCanvas?.changed({stage:'B',input:false,world:false}); }
+  else if (stale && on) { const pad=160*spacing; markViewChanged(); mapCanvas?.changed({stage:'B',rect:{x:Math.max(0,stale.x-pad),y:Math.max(0,stale.y-pad),width:stale.width+2*pad,height:stale.height+2*pad},input:false,world:false}); }
   updateControls(); schedule();
 }
 async function gpuFeedSource(signal,regionFn,{weather=true}={}) {
@@ -1147,9 +1179,8 @@ function queueWeather() {
 // (engine-weather.wgsl mf*) and joins the chunk feed in gridTexture layer 1; a change of any of these drops the weather like a change of the pass's own knobs.
 const materialKnobs=() => materialKnobsIn(surfaceValues(),refinementSeed,renderer.variant.get('transition'));
 // H6b: the Time pass on the fields' GPU buffers; see gpuFeedSource. Nothing comes back to the CPU here.
-// One pass at a time. A submitted pass cannot be stopped: the GPU runs it to its end (about 0.8 s on a 4x4 map) and it keeps its 120 B a cell
-// until then. So a request made while one runs waits for it, and of the requests waiting only the newest still wanted submits the next. When
-// each request submitted its own at once, a slider dragged through eight values queued eight passes ahead of the one that mattered.
+// One Time request at a time. A newer edit stops it after the submitted
+// slice drains; only the newest waiting request allocates the next working set.
 let timePass=null;
 async function runFedWeather(job) {
   try {
@@ -1159,7 +1190,7 @@ async function runFedWeather(job) {
     const b=regionalFields.gpuBuffers();
     if (!b || job!==weatherJob) return;
     gpuPassBytes=grid*grid*120+Math.ceil(grid/8)**2*12;
-    const request={planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,...timeKnobs(renderer)};
+    const request={planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,...timeKnobs(renderer),stale:()=>job!==weatherJob||Boolean(stroke||moving)};
     const pass=erosion.runGpu(request),flight=pass.then(() => {},() => {}).then(() => { if (timePass===flight) timePass=null; });   // cleared when the pass ends, failed or not, before a waiting request looks
     timePass=flight;
     const result=await pass,material=materialKnobs();
@@ -1175,12 +1206,12 @@ async function runFedWeather(job) {
     gpuErosionMs=result.milliseconds; window.lastErosionParts=result.parts;
     weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
     if (!stroke && !moving) gpuWeatherCpu(false).catch(() => {});   // picking and the cursor read heights at once; the maps stay lazy
-    markViewChanged(false);if(dirty===null)mapCanvas.invalidate(null,{refinement:true});else {
+    markViewChanged();if(dirty===null)mapCanvas.changed({stage:'B',refinement:true,input:false});else {
       if(invalid)dirty.push({x:invalid.x0*spacing,y:invalid.y0*spacing,width:(invalid.x1-invalid.x0+1)*spacing,height:(invalid.y1-invalid.y0+1)*spacing});
-      for(const rect of dirty)mapCanvas.invalidate(rect,{refinement:true});
+      for(const rect of dirty)mapCanvas.changed({stage:'B',rect,refinement:true,input:false});
     }
     updateControls(); schedule();
-  } catch (err) { gpuPassBytes=0; if (job===weatherJob) failWeather(err.message,err); }
+  } catch (err) { gpuPassBytes=0; if (err.name!=='AbortError'&&job===weatherJob) failWeather(err.message,err); }
 }
 function failWeather(message,err=null) {
   console.error(err??new Error(message)); error('Weathering failed: '+message);
@@ -1447,7 +1478,7 @@ $('tool-delete').onclick=() => {
   status(`Deleted the tool ${label}. Shapes drawn with it keep their settings and show as Landform.`);
 };
 // A surface slider redraws; the two the material field reads (TIME_SLIDER_IDS) run the Time pass again.
-for (const id of SURFACE_SLIDER_IDS) $(id).addEventListener('input',() => { markViewChanged(); updateControls(); schedule(); if (TIME_SLIDER_IDS.includes(id)) queueWeather(); persistLater(); });
+for (const id of SURFACE_SLIDER_IDS) $(id).addEventListener('input',() => { const change=worldChanged(renderer.syncWorld(currentDrawOptions())); updateControls(); if (change.timeChanged) queueWeather(); persistLater(); });
 function applySeedControl() {
   const next=clamp(Math.trunc(Number($('seed').value) || 0),0,4294967295);
   // Saving or adding a path must never copy the selected shape's seed into
@@ -1467,9 +1498,9 @@ $('seed-randomize').onclick=()=>{
   else{seed=randomSeed(seed);$('seed').value=seed;updateControls();persistLater();}
 };
 $('seed-vary').onchange=()=>{varySeed=$('seed-vary').checked;updateControls();persistLater();};
-for (const id of ['clay','light']) $(id).addEventListener('change',() => { markViewChanged(); updateControls(); schedule(); persistLater(); });
+for (const id of ['clay','light']) $(id).addEventListener('change',() => { worldChanged(renderer.syncWorld(currentDrawOptions())); updateControls(); persistLater(); });
 $('weather').addEventListener('change',() => {
-  cancelWeather(); markViewChanged();
+  cancelWeather(); worldChanged({channels:[{name:'weather',stage:'B'}]});
   if (!$('weather').checked) clearRendererWeather();
   schedule(); queueWeather(); persistLater();
 });
@@ -1607,12 +1638,14 @@ function worldColors() { return rendererColors(mergedColors(),columnOverride?.co
 function columnForEdit(){const column=structuredClone(config.column);if(column){const colors=worldColors();column.colors=Array.from({length:5},(_,i)=>(colors['strata'+(i+1)]||defaultColor('strata'+(i+1))).map(v=>v*255));}return column;}
 function restoreColumn(column){
   columnOverride=column;config.column=column||defaultColumn;columnEditing=false;
-  cancelWeather();refined=refinedBase=null;dropGpuWeather();clearRendererWeather();renderer.applyKnobs();renderer.setColors(worldColors());syncWorldControls();markViewChanged();
+  const knobs=renderer.applyKnobs(),colors=renderer.setColors(worldColors()),change=worldChanged(knobs,colors);
+  if(change.timeChanged){cancelWeather();refined=refinedBase=null;dropGpuWeather();clearRendererWeather();}
+  syncWorldControls();return change;
 }
 function editColumn(value){
   const column=copyColumn(value),next=sameColumn(column,defaultColumn)?null:column;
   if(sameColumn(next,columnOverride))return;
-  restoreColumn(next);columnEditing=true;schedule();queueWeather();persistLater();
+  const change=restoreColumn(next);columnEditing=true;if(change.timeChanged)queueWeather();persistLater();
 }
 function commitColumn(){if(!columnEditing)return;columnEditing=false;checkpoint();queueWeather();}
 function defaultColor(key) {
@@ -1656,7 +1689,7 @@ function buildWorldPanel() {
     const set=mergedColors()[key];
     row.innerHTML=`<span>${label}</span><input type="checkbox" aria-label="Use a base color for ${label}"${set?' checked':''}><input type="color" aria-label="${label} base color" value="${set||hexColor(defaultColor(key))}">`;
     const [box,pick]=row.querySelectorAll('input');
-    const apply=() => { world.colors=pickWorldColor(config,world.colors,key,box.checked?pick.value:null); saveWorlds(); renderer.setColors(worldColors()); syncWorldControls(); updateControls(); markViewChanged(); schedule(); };
+    const apply=() => { world.colors=pickWorldColor(config,world.colors,key,box.checked?pick.value:null); saveWorlds(); worldChanged(renderer.setColors(worldColors())); syncWorldControls(); updateControls(); };
     box.addEventListener('change',apply); pick.addEventListener('input',() => { box.checked=true; apply(); });
     rows.append(row);
     if (LIGHT_COLOR_HELP[key]) { const help=document.createElement('p'); help.className='small'; help.textContent=LIGHT_COLOR_HELP[key]; rows.append(help); }
@@ -1681,7 +1714,7 @@ function buildWorldPanel() {
     if (!mergedColors().ground && renderer.means.ground) { world.colors={...world.colors,ground:hexColor(renderer.means.ground)}; saveWorlds(); }
     setKnob('groundPattern',$('ground-pattern').value);
   };
-  $('world-reset').onclick=() => { world.colors={...(config.colors||{})}; saveWorlds(); buildWorldPanel(); renderer.setColors(worldColors()); syncWorldControls(); updateControls(); markViewChanged(); schedule(); };
+  $('world-reset').onclick=() => { world.colors={...(config.colors||{})}; saveWorlds(); buildWorldPanel(); worldChanged(renderer.setColors(worldColors())); syncWorldControls(); updateControls(); };
   $('world-new').onclick=() => {
     const name=$('world-new-name').value.trim(); if (!name) { $('world-new-name').focus(); status('Name the new world first.'); return; }
     const id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
@@ -1786,7 +1819,7 @@ function setRockSettings(values){
   }
   window.history.replaceState(null,'',url);saveWorlds();
   if(!changed)return;
-  renderer.applyKnobs();syncWorldControls();markViewChanged();persistLater();schedule();
+  worldChanged(renderer.applyKnobs());syncWorldControls();persistLater();
 }
 // ---- Rock presets (B2): the World pane's list. The selected preset's numbers fill the rock rows and its beds the Rock column panel. ----
 const rockNote=text => { $('rock-presets-note').textContent=text; $('rock-presets-note').hidden=!text; };
@@ -1795,12 +1828,12 @@ function selectedRock() {
   return mapRocks.find(r=>r.slot===rockSelected)||worldRock(worldRockName(config),Object.fromEntries(ROCK_KEYS.map(k=>[k,renderer.variant.get(k)??config.defaults[k]])),config.column,config.variant);
 }
 // A new list (an edit of the selected preset, an add or a delete): the renderer follows when a stroke uses a changed preset (syncRocks).
-function editRocks(rocks) { mapRocks=rocks; nodes=keepStrokeRocks(nodes,mapRocks); syncRockChoices(); syncRocks(); persistLater(); }
+function editRocks(rocks) { const before=rockUseKey;mapRocks=rocks; nodes=keepStrokeRocks(nodes,mapRocks); syncRockChoices(); syncRocks(); if(before===rockUseKey)worldChanged({stage:null},{world:false});persistLater(); }
 // One rock row moved while a preset is selected: that preset's number, not the world's (no address, no saved world).
 function setPresetKnob(key,value) {
   const rock=mapRocks.find(r=>r.slot===rockSelected); if(!rock)return;
   editRocks(setRock(mapRocks,rockSelected,{knobs:{...rock.knobs,[key]:value},column:rock.column}));
-  syncWorldControls(); markViewChanged(); schedule();
+  syncWorldControls();
 }
 // The list, the name, the buttons (each disabled one saying why), the rock rows' values and the Rock column panel, for the selected preset.
 function syncRockPanel() {
@@ -1850,7 +1883,7 @@ function syncRockColors() {
 // A color of the selected preset changed (live while the picker moves; one undo step when it is let go).
 function setPresetColors(colors,commit) {
   if(rockSelected===0)return;
-  editRocks(setRockColors(mapRocks,rockSelected,colors));syncRockColors();markViewChanged();schedule();
+  editRocks(setRockColors(mapRocks,rockSelected,colors));syncRockColors();
   if(commit)checkpoint(true);
 }
 function selectRock(slot) { rockSelected=slot; syncRockPanel(); }
@@ -1865,7 +1898,7 @@ function mountRockPanel() {
   const bedColors=commit=>setPresetColors({...colorsNow(),beds:BED_COLOR_IDS.map(id=>$(id).value)},commit);
   for(const id of BED_COLOR_IDS){$(id).oninput=()=>bedColors(false);$(id).onchange=()=>bedColors(true);}
   // The absorption color: a preset's (as its other colors), or on the world's rock the world's own 'absorb' color (saved with the world's colors).
-  const worldAbsorb=value=>{const world=activeWorld();world.colors=pickWorldColor(config,world.colors,'absorb',value);saveWorlds();renderer.setColors(worldColors());syncRockColors();markViewChanged();schedule();};
+  const worldAbsorb=value=>{const world=activeWorld();world.colors=pickWorldColor(config,world.colors,'absorb',value);saveWorlds();worldChanged(renderer.setColors(worldColors()));syncRockColors();};
   const absorbColor=commit=>{if(rockSelected===0)worldAbsorb($('rock-absorb').value);else setPresetColors({...colorsNow(),absorb:$('rock-absorb').value},commit);};
   $('rock-absorb').oninput=()=>absorbColor(false);$('rock-absorb').onchange=()=>absorbColor(true);
   $('rock-absorb-world').onchange=()=>{const off=$('rock-absorb-world').checked;if(rockSelected===0)worldAbsorb(off?null:shown().absorb);else setPresetColors({...colorsNow(),absorb:off?null:shown().absorb},true);};
@@ -1910,9 +1943,9 @@ function setKnob(key, value) {
   const next = applyKnob({key, value, settings: experiment, renderer, nodes, seed});
   if (config) { activeWorld().knobs[key] = String(value); saveWorlds(); if (key==='strata'||key==='lowTint') buildWorldPanel(); }
   if (next.reload) { location.reload(); return; }
-  syncWorldControls(); markViewChanged(); schedule();
-  if (!next.weather) return;
-  cancelWeather(); if (next.evaluate!==undefined) evaluate(next.evaluate); if (next.checkpoint) checkpoint(); queueWeather();
+  const change=worldChanged(next.change);syncWorldControls();
+  if (!change.timeChanged) return;
+  cancelWeather(); if (next.evaluate!==undefined&&change.channels.some(c=>c.name==='shape')) evaluate(next.evaluate); if (next.checkpoint&&change.stage==='A') checkpoint(); queueWeather();
 }
 async function bootMap() {
   worldSize=config.worldSize??config.size; worldGrid=config.worldGrid??config.grid;
@@ -1930,7 +1963,7 @@ async function bootMap() {
   if(!experiment.has('newMap'))addGroundNode();
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
-  renderer=mapCanvas.renderer; renderer.onerror=message => error(message); renderer.setColors(worldColors());$('export').textContent='Export view PNG';
+  renderer=mapCanvas.renderer; renderer.onerror=message => error(message); worldChanged(renderer.setColors(worldColors()));$('export').textContent='Export view PNG';
   buildKnobs(); buildWorldPanel();
   // The Rock column panel edits the selected preset's beds: the world's column for slot 0, a preset's own sections (its copy of the world's
   // until edited; Restore gives it the world's again).
@@ -2037,7 +2070,7 @@ function gpuRegionalCheck() {
   return regionalCheck({fields:regionalFields,device:renderer.device,nodes,context:shapeContext(),config,grid:worldGrid,spacing,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,
     startCoarse:() => { if (!pagedCoarseStarted) { pagedCoarseStarted=true; regionalFields.startCoarse().catch(() => {}); } }});
 }
-window.sculptDebug = {curve:() => currentCurve(),along:() => currentAlong(),place:() => lfPlace,sectionPoint:(side,x,v) => { const cv=$('section-preview'),r=cv.getBoundingClientRect(),L=sectionLayout(curveContext()); return {x:r.left+sideX(L,side,x)*r.width/cv.width,y:r.top+L.yv(v)*r.height/cv.height}; },leanPoint:() => { const cv=$('section-preview'),r=cv.getBoundingClientRect(),L=sectionLayout(curveContext()); return {x:r.left+L.xc*r.width/cv.width,y:r.top+L.yv(0)*r.height/cv.height}; },alongPoint:(t,v) => { const cv=$('along-preview'),r=cv.getBoundingClientRect(),L=alongLayout(curveContext()); return {x:r.left+L.X(t)*r.width/cv.width,y:r.top+L.yv(v)*r.height/cv.height}; },pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shape:() => ({fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:gpuRegionalCheck,state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get specStats() { return renderer.specStats && {...renderer.specStats, cached: renderer.specCache.size, key: renderer.specKey().key}; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level), get startupParts() { return renderer.startupParts; },
+window.sculptDebug = {dirty:()=>mapCanvas?.dirty(),curve:() => currentCurve(),along:() => currentAlong(),place:() => lfPlace,sectionPoint:(side,x,v) => { const cv=$('section-preview'),r=cv.getBoundingClientRect(),L=sectionLayout(curveContext()); return {x:r.left+sideX(L,side,x)*r.width/cv.width,y:r.top+L.yv(v)*r.height/cv.height}; },leanPoint:() => { const cv=$('section-preview'),r=cv.getBoundingClientRect(),L=sectionLayout(curveContext()); return {x:r.left+L.xc*r.width/cv.width,y:r.top+L.yv(0)*r.height/cv.height}; },alongPoint:(t,v) => { const cv=$('along-preview'),r=cv.getBoundingClientRect(),L=alongLayout(curveContext()); return {x:r.left+L.X(t)*r.width/cv.width,y:r.top+L.yv(v)*r.height/cv.height}; },pageInfo:() => regionalFields?.pageInfo?.()??null,shapeCompare,shape:() => ({fields:regionalFields?.stats?.().gpuShape??null,fieldsReason:regionalFields?.reason?.()??null}),corner:(x,y) => regionalFields?{eroded:sampleRegional(x,y),authored:regionalFields.sample(x,y)}:null,regionalCheck:gpuRegionalCheck,state: () => ({tool, stroke: Boolean(stroke), moving: Boolean(moving), selected, pointerId, pan: Boolean(pan)}), bakeMs: (quality='full') => renderer.timeBake(quality), get bakeGpuMs() { return renderer.lastBakeGPU; }, get specStats() { return renderer.specStats && {...renderer.specStats, cached: renderer.specCache.size, key: renderer.specKey().key}; }, get engine() { return renderer.engine; }, get startupMs() { return renderer.startupMs; }, remakeMaterials: () => renderer.makeMaterials(), readGenerated: (layer, level) => renderer.readGenerated(layer, level), get startupParts() { return renderer.startupParts; },
   drawMs: (quality='full') => renderer.timeDraw({quality,clay:$('clay').checked,light:$('light').value,detail:Number($('relief').value)/100,ring:Number($('mineral-ring').value)/100,ringSpread:Number($('ring-spread').value)/100,ringVariation:Number($('ring-variation').value)/100,materialWeathering:Number($('material-weathering').value)/100,transitionDetail:Number($('transition-detail').value)/100}),
   scene: scriptedScene,
   // sketch and loadSketch round-trip a recipe.

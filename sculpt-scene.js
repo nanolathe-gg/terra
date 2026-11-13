@@ -343,9 +343,9 @@ export const timeKnobs=renderer => ({age:renderer.variantNumber('erosionAge',200
 // weather), and the runner a page's window goes through. `material` is materialKnobs' answer.
 export function pagedTime({config,renderer,size,spacing,material}) {
   const p={...timeKnobs(renderer),columnContrast:renderer.variantNumber('columnContrast',1)};
-  return {key:JSON.stringify({...p,material,column:config.column,variant:config.variant}),material:Boolean(material),run:async win => {
+  return {key:JSON.stringify({...p,material,column:renderer.timeUniformKey(),size,spacing,sea:config.seaLevel}),material:Boolean(material),run:async win => {
     const erosion=await erosionOf(renderer);
-    const r=await erosion.runGpu({...p,planes:win.planes,masks:win.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid:win.grid,size,spacing,seaLevel:config.seaLevel,ox:win.ox,oy:win.oy});
+    const r=await erosion.runGpu({...p,planes:win.planes,masks:win.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid:win.grid,size,spacing,seaLevel:config.seaLevel,ox:win.ox,oy:win.oy,stale:win.stale});
     // The window's eroded height (plane 1 of the pass's weather buffer) makes the material field; the page keeps its core of it.
     if (material) r.field=await erosion.materialField(materialRequest(config,material,{heightBuffer:r.weather,heightOffset:win.grid*win.grid,grid:win.grid,size,ox:win.ox,oy:win.oy}));
     return r;

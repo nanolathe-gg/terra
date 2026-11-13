@@ -1233,12 +1233,12 @@ export function createPagedFields(opts) {
   };
   async function computeWeather(pg) {
     if (!time) return;
-    const t0 = performance.now(), side = Math.min(worldGrid, CORE + 2 * APRON), wx0 = clamp(pg.x0 - APRON, 0, worldGrid - side), wy0 = clamp(pg.y0 - APRON, 0, worldGrid - side), seq = pg.staleSeq, tm = time;
+    const t0 = performance.now(), side = Math.min(worldGrid, CORE + 2 * APRON), wx0 = clamp(pg.x0 - APRON, 0, worldGrid - side), wy0 = clamp(pg.y0 - APRON, 0, worldGrid - side), seq = pg.staleSeq, tm = time, key = timeKey;
     const T = engine.makeTarget(wx0, wy0, side, side);
     try {
       engine.submit(nodes(), context(), null, {readback: false, target: T, prepare});
-      const r = await tm.run({planes: T.F, masks: T.Mk, grid: side, ox: wx0, oy: wy0});
-      if (time !== tm) { r.weather.destroy(); r.maps.forEach(b => b.destroy()); r.field?.destroy(); return; }
+      const r = await tm.run({planes: T.F, masks: T.Mk, grid: side, ox: wx0, oy: wy0, stale: () => timeKey!==key || pg.staleSeq!==seq});
+      if (timeKey !== key) { r.weather.destroy(); r.maps.forEach(b => b.destroy()); r.field?.destroy(); return; }
       const d = device(), S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
       const w = {weather: d.createBuffer({label: 'page weather', size: 2 * CORE * CORE * 4, usage: S}), maps: [0, 1, 2].map(k => d.createBuffer({label: 'page map ' + k, size: CORE * CORE * 4, usage: S})),
         field: r.field ? d.createBuffer({label: 'page material field', size: CORE * CORE * 16, usage: S}) : null};
@@ -1252,12 +1252,15 @@ export function createPagedFields(opts) {
       d.queue.submit([enc.finish()]);
       await d.queue.onSubmittedWorkDone();
       r.weather.destroy(); r.maps.forEach(b => b.destroy()); r.field?.destroy();
+      if(timeKey!==key){w.weather.destroy();w.maps.forEach(b=>b.destroy());w.field?.destroy();return;}
       // An edit can arrive while this page refines. Keep its invalid footprint
       // on the late result too; the next settled read will compute it again.
       if(pg.staleSeq!==seq){w.invalidRect=pg.weather?.invalidRect??coreRect(pg);pg.stale=true;}
       dropWeather(pg); pg.weather = w; if (pg.staleSeq === seq) pg.stale = false;
       pg.weatherMs = performance.now() - t0; weatherRuns++; weatherMsTotal += pg.weatherMs;
       touch(pg); wantCpu(pg);
+    } catch (err) {
+      if(err.name!=='AbortError'||timeKey===key&&pg.staleSeq===seq)throw err;
     } finally { T.destroy(); }
   }
   let weatherRuns = 0, weatherMsTotal = 0;
@@ -1275,9 +1278,11 @@ export function createPagedFields(opts) {
       for (const pg of need) { signal?.throwIfAborted(); ensureShape(pg); }
       if (wantWeather && time) for (const pg of need) {
         signal?.throwIfAborted();
-        if (!pg.weather || (pg.stale && !gesture())) await ensureWeather(pg);
-        // Already-submitted GPU work finishes, but the old camera must not
-        // enqueue the remaining pages while the new camera is waiting.
+        // A superseded page releases its working set and retries at the current
+        // Time key/revision. A retained stale page still serves a held gesture.
+        while(time&&(!pg.weather||(pg.stale&&!gesture()))){await ensureWeather(pg);signal?.throwIfAborted();}
+        // The submitted slice drains, but a canceled camera must not enqueue
+        // the remaining pages while the new camera is waiting.
         signal?.throwIfAborted();touch(pg);
       }
       trim();

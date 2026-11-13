@@ -1,385 +1,526 @@
-// Card H7 item 1: where the time goes between an edit or a load and the final picture.
-//   node repro/perf.mjs <map4|map8|map16|map40> --scene repro/scenes/green-2.json --out <dir>
-//        [--server http://127.0.0.1:8867] [--port 9667] [--no-export] [--label name] [--viewport 1000x800] [--features <density %>]
-// Opens a fresh headless Chrome, installs timing hooks before the page runs (no page source is edited), then scripts:
-//   load      scene applied, zoomed to 1x: first picture, weather ready, every visible chunk at final
-//   drag      a stroke drag with real mouse events: rAF frame intervals
-//   release   the stroke's release: time to weather ready and to every visible chunk at final
-//   scroll    a pan across several chunks: rAF frame intervals, coverage, time to final after it stops
-//   export    sculptMap.export (skipped with --no-export)
-// and writes <out>/<mode>-perf.json.
-// The hooks time GPU passes with timestamp queries (added to every pass that has none), the queue waits, and the JS
-// stages a chunk bake runs through: region read (shape replay), field upload, draw encode, bitmap copy.
+// LP0: the page's input-to-picture budget, with no editor files changed.
+// node repro/perf.mjs map16 --scene repro/scenes/green-modern-2.json \
+//   --server http://127.0.0.1:8897 --port 9891 --out /private/tmp/lp0 --no-export
+// --viewport WIDTHxHEIGHT is terrain CSS pixels; default Chrome window: 1600x1200.
+// --only load|drag|release|resume|slider|scroll; --sliders comma-separated knob IDs.
+// --resume-prime-moves N and --resume-prime-pause MS vary the first stroke only.
+// --colors native|scripted: scripted explicitly substitutes value/input events.
+// --warmup discards a session; --report FILE... prints the section 2 budget table.
+// Use distinct CDP ports, discard one --warmup per fresh server, alternate workloads,
+// and check ps -Ao pcpu,command -r | head before measured runs. Never time two at once.
+import {createCoverage} from './perf-coverage.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
-import {spawn} from 'node:child_process';
-import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {spawn, execFileSync} from 'node:child_process';
+import {mkdirSync, readFileSync, writeFileSync, rmSync} from 'node:fs';
+import {resolve, join} from 'node:path';
 import {loadavg} from 'node:os';
 
 const args = process.argv.slice(2);
-const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
-const flag = name => { const i = args.indexOf(name); if (i >= 0) args.splice(i, 1); return i >= 0; };
-const server = opt('--server', 'http://127.0.0.1:8867'), port = Number(opt('--port', 9667));
-const sceneFile = opt('--scene', 'repro/scenes/green-2.json'), out = opt('--out', 'perf-out'), label = opt('--label', '');
-// Compare layout changes with equal visible map area when requested.
-const viewport = opt('--viewport', '');
-if (viewport && !/^[1-9]\d{1,3}x[1-9]\d{1,3}$/.test(viewport)) throw new Error('--viewport expects WIDTHxHEIGHT in CSS pixels');
-const opt2 = (name, fallback) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : fallback; };
-const extraQuery = opt('--query', '');   // H7b: more page query, e.g. levels=0 or quarterFirst=0
-const exactTs = flag('--exact-timestamps');   // P4: Chrome flag --disable-dawn-features=timestamp_quantization (Dawn rounds GPU timestamps to 65.5 us otherwise)
-const noExport = flag('--no-export'), only = opt('--only', '');   // --only load|drag|release|scroll: stop after that phase
-const dragTool = opt('--tool', 'hill');   // H27: the shape button the drag draws with (hill: the Ridge preset; plateau, deep, ... the others)
-const [mode] = args;
-if (!['map4', 'map8', 'map16', 'map40'].includes(mode)) { console.error('usage: node repro/perf.mjs <map4|map8|map16|map40> --scene <scene.json> --out <dir>'); process.exit(1); }
-const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
-mkdirSync(out, {recursive: true});
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-const q = (a, p) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; };
+const opt = (name, fallback) => { const i = args.indexOf(name); return i < 0 ? fallback : args.splice(i, 2)[1]; };
+const flag = name => { const i = args.indexOf(name); if (i < 0) return false; args.splice(i, 1); return true; };
+const quantile = (a, p) => { const s = a.filter(Number.isFinite).sort((a,b)=>a-b); return s.length ? s[Math.min(s.length-1, Math.ceil(s.length*p)-1)] : null; };
+const distribution = (a, total=a.length) => ({n:a.length, censored:total-a.length,p50:quantile(a,.5),p90:quantile(a,.9),p95:quantile(a,.95),max:a.length?Math.max(...a):null});
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+// Native entries and inputs use the page's change counter. A clean retained
+// tile can remain current across a change outside its own input rectangle.
+function pictureCurrent(p,m) {
+  if(m.native)return m.nativeSerial!=null&&(p.serial>=m.nativeSerial||p.current&&p.canvasSerial>=m.nativeSerial);
+  return m.kind==='stroke'&&m.rev!=null?p.rev>=m.rev:m.control==='knob-erosionRain'?p.feedSerial>=m.id:p.serial>=m.id;
+}
 
-// ---------------------------------------------------------------- hooks, installed before the page's own scripts
-const HOOKS = `(() => {
-const P = window.__perf = {ev: [], gpu: [], passes: [], waits: [], images: [], draws: [], frames: [], stage: {}, ctx: ''};
-const now = () => performance.now();
-const ev = (type, data) => P.ev.push({t: now(), type, ...data});
-P.mark = ev;
-const add = (name, ms) => { const s = P.stage[name] ??= {n: 0, ms: 0, max: 0}; s.n++; s.ms += ms; s.max = Math.max(s.max, ms); };
-P.add = add;
-// ---- GPU: timestamps on every pass without its own, waits on the queue, submits
-const devices = new WeakMap();
-const cd = GPUDevice.prototype.createCommandEncoder;
-const ring = new WeakMap();   // device -> {qs, resolve, next}
-function slots(device) {
-  let r = ring.get(device);
-  if (!r && device.features.has('timestamp-query')) {
-    const count = 2048; // the device allows 4096 queries a set, two a pass
-    r = {qs: device.createQuerySet({type: 'timestamp', count: count * 2 > 4096 ? 4096 : count * 2}), resolve: device.createBuffer({size: 256 * count, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC}), next: 0, count, device};
-    ring.set(device, r); P.ring = r;
-  }
-  return r;
+function tileSamples(p,pointer=false){
+  if(p.status==='blocked')return [];
+  const paints=(p.events||[]).filter(e=>e.type==='paint');
+  if(!p.inputs?.length&&!pointer){const t=p.phaseStartMs??p.anchors?.[0]?.t,e=paints.find(e=>e.t>=t);return e?[e.t-t]:[];}
+  return (p.inputs||[]).filter(m=>!pointer||m.at).flatMap(m=>{const e=paints.find(e=>e.t>=m.t&&pictureCurrent(e,m)&&(!pointer||((e.clips??[e]).some(r=>m.at[0]>=r.x&&m.at[0]<r.x+r.width&&m.at[1]>=r.y&&m.at[1]<r.y+r.height))));return e?[e.t-m.t]:[];});
 }
-GPUDevice.prototype.createCommandEncoder = function (d) { const e = cd.call(this, d); devices.set(e, this); return e; };
-for (const kind of ['Compute', 'Render']) {
-  const orig = GPUCommandEncoder.prototype['begin' + kind + 'Pass'];
-  GPUCommandEncoder.prototype['begin' + kind + 'Pass'] = function (desc = {}) {
-    const device = devices.get(this), r = device && slots(device);
-    if (!r || desc.timestampWrites || r.next >= r.count) return orig.call(this, desc);
-    const i = r.next++, enc = this, endWrite = kind === 'Compute' ? 'endOfPassWriteIndex' : 'endOfPassWriteIndex';
-    const pass = orig.call(this, {...desc, timestampWrites: {querySet: r.qs, beginningOfPassWriteIndex: 2 * i, [endWrite]: 2 * i + 1}});
-    P.passes[i] = {label: desc.label || kind, kind, ctx: P.ctx};
-    const end = pass.end.bind(pass);
-    pass.end = () => { end(); enc.resolveQuerySet(r.qs, 2 * i, 2, r.resolve, 256 * i); };
-    return pass;
-  };
+function releaseSample(p){
+  if(p.status==='blocked')return [];
+  const a=p.anchors?.at(-1);if(!a)return p.samples?.final?.slice(-1)||[];
+  if(p.finalObservations){const f=p.finalObservations.find(f=>f.t===a.t);return f?.final!=null?[f.final-a.t]:[];}
+  const c=p.events?.find(e=>e.type==='coverage'&&e.t>=a.t&&e.ready&&e.visible.every(k=>e.keys.some(t=>t.key===k&&!t.dirty&&t.level<=1)));
+  return c?[c.t-a.t]:[];
 }
-P.readPasses = async () => {   // copy the resolved timestamps, sum the milliseconds by pass label
-  const r = P.ring; if (!r) return {};
-  await r.device.queue.onSubmittedWorkDone();
-  const n = r.next, read = r.device.createBuffer({size: 256 * Math.max(1, n), usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST});
-  const e = r.device.createCommandEncoder(); e.copyBufferToBuffer(r.resolve, 0, read, 0, 256 * Math.max(1, n)); r.device.queue.submit([e.finish()]);
-  await read.mapAsync(GPUMapMode.READ);
-  const view = new BigUint64Array(read.getMappedRange().slice(0)); read.destroy();
-  const by = {};
-  for (let i = 0; i < n; i++) {
-    const a = view[i * 32], b = view[i * 32 + 1], ms = b > a ? Number(b - a) / 1e6 : 0, p = P.passes[i], key = p.ctx + ' | ' + p.label;
-    const s = by[key] ??= {n: 0, ms: 0}; s.n++; s.ms += ms;
-  }
-  return by;
-};
-const qp = GPUQueue.prototype, sub = qp.submit, done = qp.onSubmittedWorkDone;
-qp.submit = function (list) { ev('submit', {ctx: P.ctx}); return sub.call(this, list); };
-qp.onSubmittedWorkDone = function () {
-  const t = now(), ctx = P.ctx;
-  return done.call(this).then(v => { const ms = now() - t; P.waits.push({t, ms, ctx}); add('queue wait | ' + ctx, ms); return v; });
-};
-// ---- display canvas paints: ImageBitmap draws are chunks, other draws are the overview
-const di = CanvasRenderingContext2D.prototype.drawImage;
-CanvasRenderingContext2D.prototype.drawImage = function (src, ...rest) {
-  if (this.canvas?.id === 'terrain' || this.canvas?.id === 'map' || this.canvas?.dataset?.map !== undefined || this.canvas?.parentElement?.id === 'stage') {
-    P.draws.push({t: now(), chunk: src instanceof ImageBitmap, x: rest.length === 5 ? rest[0] : null});
-  }
-  return di.call(this, src, ...rest);
-};
-const cib = window.createImageBitmap;
-window.createImageBitmap = function (...a) { const t = now(); return cib.apply(window, a).then(v => { add('bitmap copy', now() - t); return v; }); };
-// ---- main-thread long tasks (over 50 ms): what blocks the page while a queue wait looks like GPU time
-P.long = []; P.callers = {};
-try { new PerformanceObserver(list => { for (const e of list.getEntries()) P.long.push({t: e.startTime, ms: e.duration}); }).observe({type: 'longtask', buffered: true}); } catch (e) {}
-// ---- the weather state text
-new MutationObserver(() => { const el = document.getElementById('weather-state'); if (el) ev('weather-state', {text: el.textContent}); }).observe(document, {subtree: true, childList: true, characterData: true});
-// ---- JS stages of the map canvas, once it exists
-let canvasValue;
-const wrap = (obj, name, stage, tag) => {
-  const f = obj[name]; if (typeof f !== 'function' || f.__wrapped) return;
-  const g = function (...a) {
-    const t = now(), prev = P.ctx; if (tag) P.ctx = tag;
-    const finish = r => { P.ctx = prev; add(stage, now() - t); return r; };
-    let r; try { r = f.apply(this, a); } catch (e) { P.ctx = prev; throw e; }
-    return r && typeof r.then === 'function' ? r.then(finish, e => { P.ctx = prev; throw e; }) : finish(r);
+function budgetTable(results) {
+  const groups = [
+    ['Stroke / move / shape-card (stroke sampled)',r=>[r.drag,r.resume].filter(Boolean),50,100],
+    ['World / rock / surface / sun',r=>(r.slider||[]).filter(s=>['knob-faceBlockSize','knob-reliefAmount','knob-sunHeight'].includes(s.control)),50,100],
+    ['Color / shine / light / palette (color, ambient sampled)',r=>(r.slider||[]).filter(s=>['colors','knob-ambient'].includes(s.control)),50,150],
+    ['Time controls (Rain sampled)',r=>(r.slider||[]).filter(s=>s.control==='knob-erosionRain'),100,null],
+    ['Pan / zoom onto uncached ground (pan sampled)',r=>[r.scroll].filter(Boolean),50,100],
+    ['First picture after scene load',r=>[r.load].filter(Boolean),null,1000],
+  ];
+  const cell = (phases,key,budget) => {
+    const samples=phases.flatMap(p=>key==='finalRelease'?releaseSample(p):key==='firstTile'?tileSamples(p):key==='pointer'?tileSamples(p,true):p.samples?.[key]||[]), total=phases.reduce((n,p)=>n+(key==='finalRelease'?1:key==='firstTile'?(p.inputs?.length||0):p.sampleTotals?.[key]??p.samples?.[key]?.length??0),0), d=distribution(samples,total);
+    if(!d.n) return `unobserved (${d.censored} censored)`;
+    // A high censored share must never turn into a passing p95.
+    const status=budget==null?'':d.censored/total>.05?' FAIL (censored)':d.p95<=budget?' PASS':' FAIL';
+    return `${d.p50.toFixed(1)} / ${d.p95.toFixed(1)}${status} [${d.n}/${total}]`;
   };
-  g.__wrapped = true; obj[name] = g;
-};
-function patch(c) {
-  const r = c.renderer, Base = Object.getPrototypeOf(Object.getPrototypeOf(r));
-  r.timer = Base.timer;                 // the chunk renderer turns the timestamp slots off; the renderer's own pass timers stay off here
-  r.timer = () => null;                 // (our hooks time every pass instead)
-  const rc = r.renderChunk.bind(r);
-  r.renderChunk = async (request, options) => {
-    const t = now(); ev('bake-start', {x: request.x, y: request.y, w: request.width, h: request.height, level: options?.scale ?? 1}); const prev = P.ctx; P.ctx = 'chunk';
-    try { return await rc(request, options); } finally { P.ctx = prev; ev('bake-end', {x: request.x, y: request.y, ms: now() - t, rev: options?.feed?.revision ?? null, level: options?.scale ?? 1}); add('chunk bake (wall)', now() - t); }
+  const gaps=results.flatMap(r=>(r.slider||[]).filter(p=>p.status==='blocked').map(p=>r.label+': '+p.reason));
+  const scripted=results.flatMap(r=>(r.slider||[]).filter(p=>p.control==='colors'&&p.driver?.startsWith('scripted')));
+  const lines=[...(scripted.length?[`LABELED SUBSTITUTE: ${scripted.length} scripted Colors phases (value/input events on the existing picker, not native mouse).`,'']:[]),...(gaps.length?[`INCOMPLETE: ${gaps.length} native Colors phases; ${[...new Set(results.flatMap(r=>(r.slider||[]).filter(p=>p.status==='blocked').map(p=>p.reason)))].join('; ')}`,'']:[]),'All times ms: p50 / p95; [observed / requested]. Superseded inputs wait for a later current image.','',
+    '| Interaction | First changed pixels | Whole view current | Release to final |',
+    '| --- | ---: | ---: | ---: |'];
+  for(const [name,select,first,whole] of groups){const p=results.flatMap(select);lines.push(`| ${name} | ${cell(p,'first',first)} | ${cell(p,'all',whole)} | ${cell(p,'finalRelease',null)} |`);}
+  const phases=results.flatMap(r=>[r.load,r.drag,r.release,r.resume,...r.slider||[],r.scroll,r.export].filter(Boolean));
+  const max=(f)=>Math.max(0,...phases.map(f));
+  lines.push('',`Fresh stroke tiles (input to paint), first: ${cell(results.flatMap(r=>[r.drag,r.resume].filter(Boolean)),'firstTile',null)}; pointer: ${cell(results.flatMap(r=>[r.drag,r.resume].filter(Boolean)),'pointer',null)}; whole area: ${cell(results.flatMap(r=>[r.drag,r.resume].filter(Boolean)),'all',null)}.`,`Focus tile after pause/release: ${cell(results.flatMap(r=>[r.drag,r.resume,...r.slider||[]].filter(p=>p&&p.status!=='blocked')),'focus',600)}.`,`GPU queue wait max: ${max(p=>p.split?.queueWaitMs?.max||0).toFixed(1)} ms (wall, includes queueing).`,
+    `GPU submission max: ${max(p=>p.split?.gpuSubmissionMs?.max||0).toFixed(1)} ms (timestamp span; budget 100 ms).`,
+    `Longest observed long task (>50 ms): ${max(p=>p.split?.longTasks?.max||0)||'none'}; input handler max: ${max(p=>p.split?.handlerMs?.max||0).toFixed(1)} ms.`,
+    `Specialized sets compiled: ${phases.reduce((n,p)=>n+(p.split?.specStats?.built||0),0)}; each set contains draw, bake and loose pipelines.`,
+    `Off-screen GPU: ${max(p=>p.split?.offscreenGPU?.whollyOutsideMs||0).toFixed(1)} ms wholly outside; ${max(p=>p.split?.offscreenGPU?.mixedRegionMs||0).toFixed(1)} ms in mixed regions (largest individual phase) (not separable with pass timestamps).`,
+    'Final-relative-to-today and early-preview overhead: this is today\'s baseline (ratio 1.00); no implementation comparison yet.');
+  lines.push('','LP0b per-fixture: drag and resume are separate; all waits in ms, p50 / p90 / p95.');
+  for(const r of results)for(const [name,p] of [['drag',r.drag],['resume',r.resume],...(r.slider||[]).filter(p=>p.control==='knob-faceBlockSize').map(p=>['rock '+p.scenario,p])])if(p){const d=p.latencyAll,h=p.heldLatency?.wholeCurrent;lines.push(`${r.label||r.mode} ${r.scene} ${r.query} ${name}: first tile ${p.latency?.p50} / ${p.latency?.p95}; changed pixels ${p.latencyChanged?.p50} / ${p.latencyChanged?.p95}; pointer ${p.latencyPointer?.p50} / ${p.latencyPointer?.p95}; whole ${d.p50} / ${d.p90} / ${d.p95} (${d.censored} censored); ${name==='resume'?'LP4 Time-in-flight condition: '+(p.inFlightCondition??((p.pendingAtResume?.timePassesInFlight??0)>0))+'; ':''}held ${h?.n??0}/${p.inputs.length}; pages ${JSON.stringify(p.split?.pageWaitMs)}; preview render wall ${JSON.stringify(p.split?.previewRenderMs)}; preview apart from pages ${JSON.stringify(p.split?.previewOwnApartFromPagesMs)}; apart from pages ${JSON.stringify(p.split?.wholeApartFromPagesMs)}`);}
+  return lines.join('\n');
+}
+if(flag('--report')){console.log(budgetTable(args.map(f=>JSON.parse(readFileSync(f,'utf8')))));process.exit(0);}
+const server=opt('--server',''),port=Number(opt('--port',0)),out=resolve(opt('--out','perf-out'));
+const sceneFile=opt('--scene','repro/scenes/green-2.json'),label=opt('--label',''),viewport=opt('--viewport','');
+const colorsMode=opt('--colors','native');
+if(!['native','scripted'].includes(colorsMode))throw Error('--colors expects native|scripted');
+const start=opt('--start','');const only=opt('--only',''),query=opt('--query',''),tool=opt('--tool','hill'),diameter=Number(opt('--diameter',0));
+const featureDensity=Number(opt('--features','0'));
+const primeMoves=Number(opt('--resume-prime-moves','8')),primePause=Number(opt('--resume-prime-pause','0'));
+if(!Number.isInteger(primeMoves)||primeMoves<1||primeMoves>100||!Number.isFinite(primePause)||primePause<0||primePause>5000)throw Error('Invalid resume priming workload');
+const sliderNames=opt('--sliders','knob-faceBlockSize,knob-reliefAmount,knob-ambient,knob-sunHeight,knob-erosionRain,colors').split(',');
+const noExport=flag('--no-export'),warmup=flag('--warmup'),exact=flag('--exact-timestamps'),noSliders=flag('--no-sliders');
+const [mode,...unknown]=args;
+if(!['map4','map8','map16','map40'].includes(mode)||unknown.length||!server||!port||port===9450||new URL(server).port==='8801')throw Error('Give map4|map8|map16|map40, --server <your server> --port <your CDP> --out <outside repo>.');
+if(viewport&&!/^\d{3,4}x\d{3,4}$/.test(viewport))throw Error('--viewport expects terrain WIDTHxHEIGHT');
+if(out===process.cwd()||out.startsWith(process.cwd()+'/'))throw Error('--out must be outside the repository');
+const scene=JSON.parse(readFileSync(sceneFile,'utf8'));mkdirSync(out,{recursive:true});
+
+// These hooks are installed before modules execute. Narrow Fetch substitutions below
+// expose lexical calls and entry metadata to the observer; they do not change work,
+// scheduling, values, or rendering. Fail closed if an anchor changes in a later build.
+function hooks(){
+  const P=window.__perf={events:[],inputs:[],handlers:[],stages:[],waits:[],long:[],frames:[],serial:0,appliedSerial:0,prepID:0,blocks:[],encoders:[],submits:[],compiles:[],ctx:null,pictures:new Map(),lastPixels:new Map(),active:false};
+  const coverage=createCoverage();
+  const now=()=>performance.now();
+  P.resetCoverage=()=>coverage.reset();
+  P.mark=(type,data={})=>{const e={t:now(),type,...data};P.events.push(e);return e;};
+  P.call=(name,fn)=>{const t=now();try{return fn();}finally{const ms=now()-t;P.stages.push({t,name,ms});if(P.handler)P.handler.calls[name]=(P.handler.calls[name]||0)+ms;}};
+  P.work=(encoder,kind,rect)=>{const e=P.encoders.findLast(e=>e.encoder===encoder);if(e){e.kind=kind;e.rect=rect;if(kind==='shape'||kind==='time')e.prep=P.preparing;}};
+  const intersects=(a,b)=>a.x<b.x+b.width&&b.x<a.x+a.width&&a.y<b.y+b.height&&b.y<a.y+a.height;
+  P.visible=()=>{if(!window.sculptCanvas)return [];const v=sculptCanvas.view(),s=sculptCanvas.stats().displayChunkSize,keys=[];for(let y=Math.max(0,Math.floor(v.y/s)*s);y<v.y+v.height;y+=s)for(let x=Math.max(0,Math.floor(v.x/s)*s);x<v.x+v.width;x+=s)keys.push(x+','+y);return keys;};
+  P.current=()=>{const v=sculptCanvas.view(),s=sculptCanvas.stats().displayChunkSize;return sculptCanvas.cacheSnapshot().filter(e=>e.key.endsWith(','+s+',detail')&&intersects(e,v));};
+  P.input=(kind,control,at=null,t=now())=>{if(!P.active)return null;const m={id:++P.serial,t,kind,control,at,targets:[],native:typeof window.sculptCanvas?.serial==='number'};P.inputs.push(m);if(kind!=='slider')P.appliedSerial=P.serial;queueMicrotask(()=>{if(m.native&&kind!=='slider'){m.nativeSerial=sculptCanvas.serial;m.worldRev=sculptCanvas.rev;}m.rev=window.sculptRegion?.stats().revision;m.targets=P.visible();m.rectangles=[sculptCanvas.view()];if(kind==='stroke'){const v=sculptCanvas.view();const dirty=P.current().filter(e=>e.dirty);m.targets=dirty.map(e=>e.x+','+e.y);m.rectangles=dirty.length?dirty.map(e=>({x:e.x,y:e.y,width:e.width,height:e.height})): [v];}});return m;};
+  P.tag=entry=>{if(typeof entry.serial==='number')return;entry.__lpSerial??=P.appliedSerial;entry.__lpRev??=window.sculptRegion?.stats().revision;entry.__lpFeedSerial??=entry.__lpSerial;};
+  // Observe actual tile paints. Pixel verification runs after timing stops;
+  // reading a bitmap here would add 20-30 ms and change queue backpressure.
+  const seen=new WeakSet(),closeBitmap=ImageBitmap.prototype.close;
+  P.held=new WeakSet();P.deferred=new Set();P.pixelPaints=[];P.extraBitmapBytes=0;P.peakExtraBitmapBytes=0;
+  ImageBitmap.prototype.close=function(){
+    if((P.active||P.stoppedAt&&!P.pixelReady)&&P.held.has(this)){if(!P.deferred.has(this)){P.deferred.add(this);P.extraBitmapBytes+=this.width*this.height*4;P.peakExtraBitmapBytes=Math.max(P.peakExtraBitmapBytes,P.extraBitmapBytes);}return;}
+    return closeBitmap.call(this);
   };
-  wrap(r, 'upload', 'field upload (CPU pack + write)');
-  wrap(Base, 'draw', 'draw + bake encode (CPU)');
-  const region = window.sculptRegion;
-  if (region) {
-    let depth = 0;
-    for (const name of ['readAsync', 'read']) {
-      const f = region[name]; if (typeof f !== 'function') continue;
-      region[name] = function (...a) {
-        const t = now(), top = depth++ === 0;
-        const fin = v => { depth--; if (top) { add('region read (shape replay + crop)', now() - t); ev('read', {ms: now() - t, rev: v?.revision}); } return v; };
-        try { const v = f.apply(this, a); return v && v.then ? v.then(fin, e => { depth--; throw e; }) : fin(v); } catch (e) { depth--; throw e; }
-      };
+  P.prepare=async()=>{P.baseline=await cib(document.getElementById('terrain'));P.baselineBytes=P.baseline.width*P.baseline.height*4;};
+  // Retain the immutable bitmaps the page already made, without copying or
+  // reading pixels on its input/render path. Compare RGBA after timing stops.
+  P.readPixels=()=>{
+    if(P.pixelReady)return;const started=now(),c=document.createElement('canvas');c.width=P.baseline.width;c.height=P.baseline.height;
+    const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(P.baseline,0,0);
+    for(const p of P.pixelPaints){
+      const k=p.level,scale=p.view.scale,x0=Math.round((p.rect.x-p.view.x)*scale),y0=Math.round((p.rect.y-p.view.y)*scale),x1=Math.round((p.rect.x+p.bitmap.width*k-p.view.x)*scale),y1=Math.round((p.rect.y+p.bitmap.height*k-p.view.y)*scale);
+      const x=Math.max(0,x0),y=Math.max(0,y0),w=Math.min(c.width,x1)-x,h=Math.min(c.height,y1)-y;if(w<=0||h<=0){p.event.changed=false;continue;}
+      const before=new Uint32Array(g.getImageData(x,y,w,h).data.buffer);g.imageSmoothingEnabled=scale<1||k*scale<1;g.imageSmoothingQuality='high';g.save();g.beginPath();for(const r of p.clips)g.rect(Math.round((r.x-p.view.x)*scale),Math.round((r.y-p.view.y)*scale),Math.round((r.x+r.width-p.view.x)*scale)-Math.round((r.x-p.view.x)*scale),Math.round((r.y+r.height-p.view.y)*scale)-Math.round((r.y-p.view.y)*scale));g.clip();g.drawImage(p.bitmap,x0,y0,x1-x0,y1-y0);g.restore();const after=new Uint32Array(g.getImageData(x,y,w,h).data.buffer);
+      p.event.changed=false;for(let i=0;i<after.length;i++)if(before[i]!==after[i]){p.event.changed=true;break;}
     }
-  }
-  if (region) for (const name of ['sampleAuthored', 'sample']) {   // the 128 x 128 overview samples the authored field point by point
-    const f = region[name]; if (typeof f !== 'function') continue;
-    region[name] = function (...a) {
-      if (P.quiet) return f.apply(this, a);   // the harness's own reads (the drag's pointer picks) are not the page's work
-      const t = now(); const v = f.apply(this, a), d = now() - t; add('field sample (' + name + ')', d);
-      // every 97th call: who asked (the innermost page functions above the wrapper), with the time this call took
-      if ((P.sampleCalls = (P.sampleCalls || 0) + 1) % 97 === 0) {
-        const names = (new Error().stack.split('\\n').slice(2, 12).map(l => /at (?:async )?([\\w$.]+)/.exec(l)?.[1]).filter(n => n && !/^(Object\\.|Array\\.|new )?(sample|sampleAuthored|<anonymous>)$/.test(n))).slice(0, 3).join(' < ');
-        const c = P.callers[names] ??= {n: 0, ms: 0}; c.n++; c.ms += d;
-      }
-      return v;
+    P.pixelReady=true;P.pixelObserverMs=now()-started;
+    for(const bitmap of P.deferred)closeBitmap.call(bitmap);P.deferred.clear();P.extraBitmapBytes=0;
+  };
+  P.paint=(entry,v)=>{
+    if(!P.active||!intersects(entry,v))return;
+    const key=entry.x+','+entry.y,clips=(entry.paintedClips??[entry]).map(r=>coverage.intersect(r,v)).filter(Boolean);
+    if(!clips.length)return;
+    const native=typeof entry.serial==='number',metadata={serial:native?entry.serial:entry.__lpSerial??0,worldRev:native?entry.rev:null,canvasSerial:native?sculptCanvas.serial:null,current:native?!entry.dirty:null,feedSerial:entry.__lpFeedSerial,rev:native?entry.shapeRev:entry.__lpRev,seq:entry.seq,prep:entry.__lpPrep,level:entry.level??entry.scale??1,weathered:entry.weathered,dirty:!!entry.dirty};
+    if(!seen.has(entry.bitmap)){seen.add(entry.bitmap);P.held.add(entry.bitmap);}
+    const event=P.mark('paint',{key,x:entry.x,y:entry.y,width:entry.width,height:entry.height,...metadata,clips,changed:null});
+    P.pixelPaints.push({event,bitmap:entry.bitmap,rect:{x:entry.x,y:entry.y},clips,level:entry.scale??1,view:{...v}});
+    for(const r of clips)coverage.paint(r,metadata);
+    if(!entry.block)P.pictures.set(key,metadata);
+    // A synchronous composition is one presented picture. Snapshot at its end,
+    // rather than walking the tile cache after each retained tile underneath it.
+    P.coverageAt=event.t;if(!P.coverageQueued){P.coverageQueued=true;queueMicrotask(()=>{
+      P.coverageQueued=false;if(!P.active)return;
+      const current=P.current(),state=window.sculptDebug?.state?.(),ready=window.sculptRegion?.canExport?.()!==false||state?.stroke||state?.moving||window.sculptRegion?.previewActive?.();
+      P.mark('coverage',{t:P.coverageAt,ready,regions:coverage.snapshot(),keys:current.map(e=>({key:e.x+','+e.y,x:e.x,y:e.y,width:e.width,height:e.height,...P.pictures.get(e.x+','+e.y),dirty:e.dirty,level:e.scale??1})),visible:P.visible()});
+    });}
+  };
+  const add=EventTarget.prototype.addEventListener,inputEvents=new WeakMap();
+  EventTarget.prototype.addEventListener=function(type,fn,options){
+    if(type!=='input'||typeof fn!=='function')return add.call(this,type,fn,options);
+    return add.call(this,type,function(e){
+      const top=!P.handler;let h=P.handler||inputEvents.get(e);if(!h){h={t:now(),control:e.target.id||e.target.getAttribute('aria-label'),value:e.target.value,isTrusted:e.isTrusted,calls:{},ms:0};inputEvents.set(e,h);P.handlers.push(h);P.input('slider',h.control);}if(top)P.handler=h;
+      const start=now();try{return fn.call(this,e);}finally{if(top){h.ms+=now()-start;P.handler=null;}}
+    },options);
+  };
+  document.addEventListener('pointerdown',e=>{if(P.active&&e.button===0&&e.target.id==='overlay'){P.mark('stroke-begin',{t:e.timeStamp,rev:sculptRegion.stats().revision});}},false);
+  document.addEventListener('pointermove',e=>{if(e.buttons===1&&e.target.id==='overlay'){const r=e.target.getBoundingClientRect(),v=sculptCanvas.view(),at=[v.x+(e.clientX-r.left)/v.scale,v.y+(e.clientY-r.top)/v.scale];const mark=P.input('stroke',null,at,e.timeStamp);if(mark){mark.artAt=at;mark.worldAt=P.nextPointerAt??null;}P.nextPointerAt=null;}},false);
+  const replace=History.prototype.replaceState;
+  History.prototype.replaceState=function(...a){return P.call('history.replaceState',()=>replace.apply(this,a));};
+  try{new PerformanceObserver(l=>{for(const e of l.getEntries())P.long.push({t:e.startTime,ms:e.duration});}).observe({type:'longtask',buffered:true});}catch{}
+  const cib=window.createImageBitmap;
+  window.createImageBitmap=function(...a){const t=now();return cib.apply(this,a).then(v=>{P.stages.push({t,name:'bitmap copy',ms:now()-t});return v;});};
+  const cd=GPUDevice.prototype.createCommandEncoder,encMeta=new WeakMap(),bufferMeta=new WeakMap();
+  GPUDevice.prototype.createCommandEncoder=function(desc){const enc=cd.call(this,desc),m={encoder:enc,device:this,label:desc?.label,t:now(),kind:P.ctx?.kind||'other',rect:P.ctx?.rect,prep:P.preparing??P.ctx?.prep,passes:[]};P.encoders.push(m);encMeta.set(enc,m);return enc;};
+  const finish=GPUCommandEncoder.prototype.finish;
+  GPUCommandEncoder.prototype.finish=function(...a){const b=finish.apply(this,a);bufferMeta.set(b,encMeta.get(this));return b;};
+  function slot(device){let b=P.blocks.at(-1);if(!b||b.device!==device||b.n===2048){b={device,n:0,queries:device.createQuerySet({type:'timestamp',count:4096}),resolve:device.createBuffer({size:2048*256,usage:GPUBufferUsage.QUERY_RESOLVE|GPUBufferUsage.COPY_SRC}),passes:[]};P.blocks.push(b);}return b;}
+  for(const kind of ['Compute','Render']){
+    const begin=GPUCommandEncoder.prototype['begin'+kind+'Pass'];
+    GPUCommandEncoder.prototype['begin'+kind+'Pass']=function(desc={}){
+      const m=encMeta.get(this);
+      if(!m?.device.features.has('timestamp-query')||desc.timestampWrites||P.reading)return begin.call(this,desc);
+      const b=slot(m.device),i=b.n++,p={label:desc.label||kind,meta:m,index:i};b.passes.push(p);m.passes.push(p);
+      const pass=begin.call(this,{...desc,timestampWrites:{querySet:b.queries,beginningOfPassWriteIndex:i*2,endOfPassWriteIndex:i*2+1}}),end=pass.end.bind(pass),enc=this;
+      pass.end=()=>{end();enc.resolveQuerySet(b.queries,i*2,2,b.resolve,i*256);};return pass;
     };
   }
-  // The Time pass: every run of the erosion class, whether the fields feed it whole or a page asks for its window.
-  import('/sculpt-erosion.js').then(m => {
-    const proto = m.GpuErosion.prototype, run = proto.runGpu;
-    proto.runGpu = async function (request) {
-      const t = now(); ev('erode-start', {}); const prev = P.ctx; P.ctx = 'erode';
-      try { const v = await run.call(this, request); P.erodeParts = v.parts; return v; } finally { P.ctx = prev; ev('erode-end', {ms: now() - t}); add('time pass (wall)', now() - t); }
-    };
-  }).catch(e => { P.patchError = String(e); });
+  const submit=GPUQueue.prototype.submit,done=GPUQueue.prototype.onSubmittedWorkDone;
+  GPUQueue.prototype.submit=function(list){const t=now();for(const b of list){const m=bufferMeta.get(b);if(m){m.submitted=t;m.submit=P.submits.length;}}P.submits.push({t});return submit.call(this,list);};
+  GPUQueue.prototype.onSubmittedWorkDone=function(){const t=now();return done.call(this).then(v=>{if(!P.reading)P.waits.push({t,ms:now()-t});return v;});};
+  for(const name of ['createComputePipeline','createRenderPipeline','createComputePipelineAsync','createRenderPipelineAsync']){
+    const f=GPUDevice.prototype[name];GPUDevice.prototype[name]=function(...a){const t=now(),r=f.apply(this,a),finish=()=>P.compiles.push({t,ms:now()-t,name,label:a[0]?.label});if(r?.then)return r.then(v=>{finish();return v;});finish();return r;};
+  }
+  P.gpuRead=async()=>{
+    P.reading=true;const out=[];
+    try{for(const b of P.blocks){await done.call(b.device.queue);if(!b.n)continue;const read=b.device.createBuffer({size:b.n*256,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST}),e=cd.call(b.device);e.copyBufferToBuffer(b.resolve,0,read,0,b.n*256);submit.call(b.device.queue,[e.finish()]);await read.mapAsync(GPUMapMode.READ);const v=new BigUint64Array(read.getMappedRange());for(const p of b.passes){const a=v[p.index*32],z=v[p.index*32+1];if(z>=a&&a>0n)out.push({label:p.label,ms:Number(z-a)/1e6,start:Number(a)/1e6,end:Number(z)/1e6,t:p.meta.submitted,submit:p.meta.submit,kind:p.meta.kind,rect:p.meta.rect,prep:p.meta.prep});}read.destroy();}
+      // Align GPU timestamps to performance.now() after the measured work is
+      // drained. Submit/completion brackets bound the clock-offset uncertainty.
+      const device=sculptCanvas.renderer.device;await done.call(device.queue);
+      const qs=device.createQuerySet({type:'timestamp',count:2}),resolve=device.createBuffer({size:256,usage:GPUBufferUsage.QUERY_RESOLVE|GPUBufferUsage.COPY_SRC}),read=device.createBuffer({size:256,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST}),enc=cd.call(device);
+      if(!P.clockPipeline){P.clockBuffer=device.createBuffer({size:16,usage:GPUBufferUsage.STORAGE});P.clockPipeline=device.createComputePipeline({layout:'auto',compute:{module:device.createShaderModule({code:'@group(0) @binding(0) var<storage,read_write> value:array<u32>; @compute @workgroup_size(1) fn main(){value[0]=1u;}'}),entryPoint:'main'}});P.clockGroup=device.createBindGroup({layout:P.clockPipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:P.clockBuffer}}]});}
+      const pass=enc.beginComputePass({timestampWrites:{querySet:qs,beginningOfPassWriteIndex:0,endOfPassWriteIndex:1}});pass.setPipeline(P.clockPipeline);pass.setBindGroup(0,P.clockGroup);pass.dispatchWorkgroups(1);pass.end();enc.resolveQuerySet(qs,0,2,resolve,0);enc.copyBufferToBuffer(resolve,0,read,0,16);
+      const before=now();submit.call(device.queue,[enc.finish()]);await done.call(device.queue);const after=now();await read.mapAsync(GPUMapMode.READ);const stamp=Number(new BigUint64Array(read.getMappedRange())[0])/1e6;
+      if(!stamp)throw Error('GPU clock marker returned zero; off-screen attribution is unavailable');P.gpuClock={gpuStampMs:stamp,offsetMs:(before+after)/2-stamp,uncertaintyMs:(after-before)/2,calibratedAt:(before+after)/2};
+      for(const p of out){p.cpuStart=p.start+P.gpuClock.offsetMs;p.cpuEnd=p.end+P.gpuClock.offsetMs;}
+      read.destroy();resolve.destroy();qs.destroy();
+    }finally{P.reading=false;}return out;
+  };
+  P.start=()=>{P.stoppedAt=0;P.pixelReady=false;P.active=true;P.frames=[];P.frameOn=true;const gen=P.frameGen=(P.frameGen||0)+1;let last=0;const f=t=>{if(!P.frameOn||gen!==P.frameGen)return;if(last)P.frames.push({t,ms:t-last});last=t;requestAnimationFrame(f);};requestAnimationFrame(f);P.specStart=window.sculptDebug?.specStats;window.sculptCanvas?.resetMetrics?.();return now();};
+  P.stop=()=>{if(P.stoppedAt)return P.stoppedAt;P.active=false;P.frameOn=false;P.frameGen=(P.frameGen||0)+1;P.stopStats=sculptCanvas.stats();return P.stoppedAt=now();};
+  P.reset=()=>{if(P.baseline){closeBitmap.call(P.baseline);P.baseline=null;}P.held=new WeakSet();P.pixelPaints=[];P.extraBitmapBytes=0;P.peakExtraBitmapBytes=0;P.active=false;P.frameOn=false;coverage.reset();P.events=[];P.inputs=[];P.handlers=[];P.stages=[];P.waits=[];P.long=[];P.compiles=[];P.frames=[];P.submits=[];for(const b of P.blocks){b.queries.destroy();b.resolve.destroy();}P.blocks=[];P.encoders=[];};
+  let canvas;
+  Object.defineProperty(window,'sculptCanvas',{configurable:true,get:()=>canvas,set:c=>{canvas=c;if(c.changed){const changed=c.changed;c.changed=function(change){const result=changed.call(c,change);if(change.kind==='world'&&change.input!==false){for(const m of P.inputs)if(m.native&&m.kind==='slider'&&m.nativeSerial==null){m.nativeSerial=result.serial;m.worldRev=result.rev;m.noop=!result.stage;m.noopCurrent=m.noop&&P.visible().every(k=>P.current().some(e=>e.x+','+e.y===k&&!e.dirty))&&window.sculptRegion?.canExport?.()!==false;}}return result;};}const r=c.renderer;for(const name of ['applyKnobs','setColors','upload']){const f=r[name];r[name]=function(...a){if(name==='setColors')P.appliedSerial=P.serial;return P.call(name,()=>f.apply(this,a));};}r.timer=()=>null;const f=r.renderChunk;r.renderChunk=async function(request,options){const t=now(),previous=P.ctx,prep=P.lastPrep;P.ctx={kind:'chunk',prep,rect:{x:request.x,y:request.y,width:request.width,height:request.height}};P.mark('bake-start',{prep,...P.ctx.rect,level:options?.scale??1});try{return await f.call(this,request,options);}finally{P.ctx=previous;P.mark('bake-end',{prep,x:request.x,y:request.y,width:request.width,height:request.height,ms:now()-t,level:options?.scale??1});}};}});
 }
-Object.defineProperty(window, 'sculptCanvas', {configurable: true, get: () => canvasValue, set: v => { canvasValue = v; try { patch(v); } catch (e) { P.patchError = String(e); } }});
-// ---- rAF intervals, recorded on demand
-P.frameStart = () => { P.frames = []; P.last = 0; const loop = t => { if (P.last) P.frames.push(t - P.last); P.last = t; if (P.frameOn) requestAnimationFrame(loop); }; P.frameOn = true; requestAnimationFrame(loop); };
-P.frameStop = () => { P.frameOn = false; return P.frames.slice(); };
-})()`;
+function instrument(path,source){
+  const replace=(before,after,count=1)=>{const found=source.split(before).length-1;if(found!==count)throw Error(`LP0 hook drift in ${path}: ${before.slice(0,70)} (${found}, expected ${count})`);source=source.split(before).join(after);};
+  if(path==='/sculpt.js'){
+    if(!source.includes('function worldChanged('))replace('function setKnob(key, value) {',"function setKnob(key, value) { __perf.appliedSerial=__perf.serial;__perf.mark('knob-applied',{key,serial:__perf.appliedSerial});");
+    replace('saveWorlds();',"__perf.call('saveWorlds',()=>saveWorlds());",(source.match(/saveWorlds\(\);/g)||[]).length);
+    replace('syncWorldControls();',"__perf.call('syncWorldControls',()=>syncWorldControls());",(source.match(/syncWorldControls\(\);/g)||[]).length);
+  }
+  if(path==='/sculpt-canvas.js'){
+    const native=source.includes('serial:atSerial,rev:atRev,shapeRev:');
+    replace('drawCoarse(repaint);','if(repaint)__perf.resetCoverage();drawCoarse(repaint);');
+    replace('const feed=fit?await previewFields.feed():await api.gpuFeedSource?.(signal,() => renderer.requiredRegion(request,options),{weather:readWeather});',"const __lpInputSerial=__perf.appliedSerial,__lpPrep=++__perf.prepID;__perf.preparing=__lpPrep;__perf.mark('pages-start',{id:__lpPrep});let feed;try{feed=fit?await previewFields.feed():await api.gpuFeedSource?.(signal,() => renderer.requiredRegion(request,options),{weather:readWeather});}finally{__perf.mark('pages-ready',{id:__lpPrep,paged:!!feed?.paged});__perf.preparing=null;}__perf.lastPrep=__lpPrep;");
+    // LP0c: observe synchronous cache retention when the export trial flips.
+    // Scalars only; no extra stats walk or pixel read on the input path.
+    replace('function configureChunks() {', 'function configureChunks() { const __lpCacheBefore=cache.size,__lpDisplayBefore=viewChunkSize(),__lpCanonicalBefore=canonicalSize;');
+    replace('}finally{budgetUpdating=false;}', "}finally{__perf.mark('configure-chunks',{cacheBefore:__lpCacheBefore,cacheAfter:cache.size,displayBefore:__lpDisplayBefore,displayAfter:viewChunkSize(),canonicalBefore:__lpCanonicalBefore,canonicalAfter:canonicalSize});budgetUpdating=false;}");
+    if(native)replace('entry={...rect,bitmap','entry={...rect,__lpPrep,bitmap',2);
+    else {
+    replace('const seq=changeSeq,result=await renderer.renderChunk', 'const __lpSerial=__lpInputSerial,seq=changeSeq,result=await renderer.renderChunk');
+    replace('const result=await renderer.renderChunk(fields', 'const __lpSerial=__lpInputSerial,result=await renderer.renderChunk(fields');
+    replace('entry={...rect,bitmap', 'entry={...rect,__lpSerial,__lpFeedSerial:__lpSerial,__lpPrep,bitmap',2);
+    replace('weathered:readWeather,fed:true,seq,', 'weathered:readWeather,fed:true,__lpRev:feed.revision,seq,');
+    replace('weathered:readWeather,input:', 'weathered:readWeather,__lpRev:fields.revision,input:');
+    replace('metrics();return entry;', '__perf.tag(entry);metrics();return entry;',2);
+    }
+    replace('g.drawImage(entry.bitmap,x0,y0,x1-x0,y1-y0);','g.drawImage(entry.bitmap,x0,y0,x1-x0,y1-y0);__perf.paint(entry,v);');
+  }
+  if(path==='/sculpt-gpu-fields.js')replace("const enc = device.createCommandEncoder({label: 'shape'}), pass = enc.beginComputePass({label: 'shape passes'});", "const enc = device.createCommandEncoder({label: 'shape'});__perf.work(enc,'shape',{x:R.x0*spacing,y:R.y0*spacing,width:(R.x1-R.x0+1)*spacing,height:(R.y1-R.y0+1)*spacing});const pass = enc.beginComputePass({label: 'shape passes'});");
+  if(path==='/sculpt-erosion.js'){
+    replace('async runGpu(request) {', "async runGpu(request) { __perf.activeErosion=(__perf.activeErosion||0)+1;__perf.mark('erode-start',{grid:request.grid,ox:request.ox,oy:request.oy});");
+    if(source.includes('for(const b of owned)if(!complete||!keep.has(b))b.destroy();'))replace('for(const b of owned)if(!complete||!keep.has(b))b.destroy();',"__perf.activeErosion--;__perf.mark('erode-end',{canceled:!complete});for(const b of owned)if(!complete||!keep.has(b))b.destroy();");
+    else replace('const gpu = performance.now() - tSubmit;',"__perf.activeErosion--;__perf.mark('erode-end',{});const gpu = performance.now() - tSubmit;");
+    replace('const tSubmit = performance.now();',"__perf.work(encoder,'time',{x:(request.ox??0)*spacing,y:(request.oy??0)*spacing,width:grid*spacing,height:grid*spacing});const tSubmit = performance.now();");
+    // Metadata must be set before queue.submit and its pass metadata is read later.
+  }
+  return source;
+}
 
-// ---------------------------------------------------------------- Chrome and CDP
 await cdpPortFree(port);
-const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', '--enable-precise-memory-info', ...(exactTs ? ['--disable-dawn-features=timestamp_quantization'] : []),
-  `--remote-debugging-port=${port}`, `--user-data-dir=${out}/profile-${mode}`, '--window-size=1600,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
-let ws, id = 0; const wait = new Map(), logs = [];
-for (let i = 0; i < 100 && !ws; i++) { try { const p = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(p => p.type === 'page'); if (p) ws = new WebSocket(p.webSocketDebuggerUrl); } catch {} if (!ws) await sleep(200); }
-if (!ws) throw new Error('CDP unavailable');
-await new Promise(r => ws.onopen = r);
-ws.onmessage = e => {
-  const m = JSON.parse(e.data);
-  if (m.id) { wait.get(m.id)?.(m); wait.delete(m.id); }
-  if (m.method === 'Inspector.targetCrashed') logs.push('TARGET CRASHED');
-  if (m.method === 'Runtime.exceptionThrown') logs.push(m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text);
-  if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') logs.push(m.params.args.map(a => a.value ?? a.description).join(' '));
-};
-const send = (method, params = {}) => new Promise(r => { const k = ++id; wait.set(k, r); ws.send(JSON.stringify({id: k, method, params})); });
-let longWait = false;
-const ev = async expression => { const r = await Promise.race([send('Runtime.evaluate', {expression, awaitPromise: true, returnByValue: true}), sleep(longWait ? 900000 : 240000).then(() => { throw new Error('evaluate timed out: ' + expression.slice(0, 80)); })]); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text); return r.result?.result?.value; };
-const mouse = (type, x, y) => send('Input.dispatchMouseEvent', {type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1});
-
-const url = `${server}/sculpt.html?biome=${scene.biome || 'green'}&mapX=${mode.slice(3)}&mapY=${mode.slice(3)}&scratch=perf-${mode}-${port}&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;
-const result = {mode, label, query: extraQuery, scene: sceneFile, startedAt: new Date().toISOString(), loadAverageAtStart: loadavg()};
-const stable = async (quietMs = 1500, limitMs = 120000) => {   // wait for no bake/erode/read event for quietMs
-  const t0 = Date.now();
-  while (Date.now() - t0 < limitMs) {
-    const last = await ev(`(() => { const e = __perf.ev.filter(x => x.type !== 'weather-state' || true); return performance.now() - (e.length ? e[e.length - 1].t : 0); })()`);
-    if (last > quietMs) return true;
-    await sleep(200);
-  }
-  return false;
-};
-// Final-in-view analysis from the event log between t0 and the end.
-function analyse(events, visible, t0) {
-  const bakes = new Map();   // chunk key -> list of {start, end}
-  const open = new Map();
-  for (const e of events) {
-    if (e.type === 'bake-start') open.set(e.x + ',' + e.y, e.t);
-    if (e.type === 'bake-end') { const k = e.x + ',' + e.y; (bakes.get(k) ?? bakes.set(k, []).get(k)).push({start: open.get(k), end: e.t, level: e.level ?? 1}); }
-  }
-  const ready = events.filter(e => e.type === 'weather-state' && /Weathered edges|ready on demand/.test(e.text) && e.t >= t0).map(e => e.t);
-  const weatherReady = ready.length ? ready[0] - t0 : null;   // the first 'Weathered edges' text after t0
-  const perChunk = {};
-  // H7b: a bake at level 2 is a quarter image. 'final' is the last final-level bake; 'shown' is the first bake of any level (the chunk is on screen at least at quarter).
-  let finalAll = 0, staleFinal = 0, shownAll = 0, missing = 0;
-  for (const k of visible) {
-    const list = bakes.get(k) ?? [], finals = list.filter(b => b.level === 1), last = finals.at(-1), first = list[0];
-    perChunk[k] = last ? {final: last.end - t0, shown: first.end - t0, bakes: list.length, quarterBakes: list.length - finals.length, startedAfterWeather: weatherReady === null || last.start - t0 >= weatherReady - 1} : (first ? {final: null, shown: first.end - t0, bakes: list.length} : null);
-    if (first) shownAll = Math.max(shownAll, first.end - t0);
-    if (last) { finalAll = Math.max(finalAll, last.end - t0); if (weatherReady !== null && last.start - t0 < weatherReady - 1) staleFinal++; } else missing++;
-  }
-  const erode = events.filter(e => e.type === 'erode-end').map(e => e.t - t0);
-  return {weatherReady, finalInView: finalAll, shownInView: shownAll, visibleWithoutFinal: missing, quarterBakes: [...bakes.values()].reduce((n, l) => n + l.filter(b => b.level > 1).length, 0), chunksNotFinalAfterWeather: staleFinal, bakeCount: [...bakes.values()].reduce((n, l) => n + l.length, 0), erodeEnds: erode, visible: perChunk};
+// A quiet start is part of LP0's protocol. macOS's driver counter catches GPU
+// users that do not have a repro/measure process name; keep its readings with ps.
+const gpuQuietSamples=[];
+for(let quiet=0,t=Date.now();quiet<3;){
+  let utilization=null;try{const raw=execFileSync('/usr/sbin/ioreg',['-l','-r','-c','AGXAccelerator'],{encoding:'utf8'});const m=/"Device Utilization %"\s*=\s*(\d+)/.exec(raw);if(m)utilization=Number(m[1]);}catch{}
+  gpuQuietSamples.push({at:new Date().toISOString(),utilization});
+  if(utilization===null)break;
+  quiet=utilization<=20?quiet+1:0;
+  if(Date.now()-t>180000)throw Error('GPU did not become quiet (<=20% driver utilization) before timing; retry in a quiet window.');
+  if(quiet<3)await sleep(1000);
 }
-const splitStages = async () => {
-  const stage = await ev('__perf.stage'), passes = await ev('__perf.readPasses()'), waits = await ev('__perf.waits.map(w=>w.ms)');
-  return {stage, sampleCallers: await ev('Object.entries(__perf.callers).sort((a, b) => b[1].n - a[1].n).slice(0, 6).map(([k, v]) => [k, v.n * 97])'), longTasks: await ev('(() => { const l = __perf.long, sum = l.reduce((n, x) => n + x.ms, 0); return {n: l.length, totalMs: sum, top: l.slice().sort((a, b) => b.ms - a.ms).slice(0, 8).map(x => [Math.round(x.t), Math.round(x.ms)])}; })()'), gpuPassesMs: passes, erodeParts: await ev('__perf.erodeParts||null'), lastErosionParts: await ev('window.lastErosionParts||null')};
+const profile=join(out,`profile-${port}`);
+const chrome=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless=new','--enable-gpu','--use-angle=metal','--enable-precise-memory-info',...(exact?['--disable-dawn-features=timestamp_quantization']:[]),`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'--window-size=1600,1200','--no-first-run','about:blank'],{stdio:'ignore'});
+let ws,id=0;const pending=new Map(),logs=[];
+for(let i=0;i<100&&!ws;i++){try{const p=(await(await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(p=>p.type==='page');if(p)ws=new WebSocket(p.webSocketDebuggerUrl);}catch{}if(!ws)await sleep(200);}
+if(!ws){chrome.kill();throw Error('CDP unavailable');}
+await new Promise(r=>ws.onopen=r);
+const send=(method,params={})=>new Promise((resolve,reject)=>{const k=++id;pending.set(k,{resolve,reject});ws.send(JSON.stringify({id:k,method,params}));});
+let hookError;
+ws.onmessage=async e=>{
+  const m=JSON.parse(e.data);
+  if(m.id){const p=pending.get(m.id);pending.delete(m.id);if(m.error)p?.reject(Error(JSON.stringify(m.error)));else p?.resolve(m.result);}
+  if(m.method==='Runtime.exceptionThrown')logs.push(m.params.exceptionDetails.exception?.description||m.params.exceptionDetails.text);
+  if(m.method==='Runtime.consoleAPICalled'&&m.params.type==='error')logs.push(m.params.args.map(a=>a.value??a.description).join(' '));
+  if(m.method==='Fetch.requestPaused'){
+    const p=m.params;
+    try{const path=new URL(p.request.url).pathname,r=await send('Fetch.getResponseBody',{requestId:p.requestId}),raw=Buffer.from(r.body,r.base64Encoded?'base64':'utf8').toString(),source=instrument(path,raw);await send('Fetch.fulfillRequest',{requestId:p.requestId,responseCode:p.responseStatusCode,responseHeaders:p.responseHeaders.filter(h=>!['content-length','content-encoding'].includes(h.name.toLowerCase())),body:Buffer.from(source).toString('base64')});}
+    catch(e){hookError=String(e);await send('Fetch.failRequest',{requestId:p.requestId,errorReason:'Failed'});}
+  }
 };
-const flush = () => writeFileSync(`${out}/${mode}${label ? '-' + label : ''}-perf.json`, JSON.stringify({...result, console: logs.slice(0, 10)}, null, 1));
-const reset = async () => ev('(() => { const P = __perf; P.ev.length = 0; P.draws.length = 0; P.waits.length = 0; P.stage = {}; P.passes.length = 0; P.long.length = 0; P.callers = {}; if (P.ring) P.ring.next = 0; P.erodeParts = null; return true; })()');
-
-try {
-  await send('Runtime.enable'); await send('Page.enable'); await send('Inspector.enable');
-  await send('Page.addScriptToEvaluateOnNewDocument', {source: HOOKS});
-  await send('Page.navigate', {url});
-  const bootStart = Date.now();
-  for (let i = 0; i < 1200; i++) {
-    if (await ev(`!!window.sculptCanvas&&${scene.biome === 'zhon' ? 'true' : '!document.getElementById("map-export").disabled'}`)) break;   // Zhon cannot export, by design
-    const e = await ev('document.getElementById("error")?.textContent'); if (e) throw new Error(e);
-    await sleep(200);
+const ev=async expression=>{
+  let timer;try{const r=await Promise.race([send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(`evaluate timed out: ${expression.slice(0,80)}`)),240000);})]);if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description||r.exceptionDetails.text);return r.result?.value;}finally{clearTimeout(timer);}
+};
+const mouse=(type,x,y,down=true)=>send('Input.dispatchMouseEvent',{type,x,y,button:'left',buttons:type==='mouseReleased'?0:down?1:0,clickCount:1});
+const click=async(x,y)=>{await mouse('mousePressed',x,y);await mouse('mouseReleased',x,y);};
+const key=async k=>{for(const type of ['keyDown','keyUp'])await send('Input.dispatchKeyEvent',{type,key:k,code:k});};
+const point=async selector=>ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Missing control '+${JSON.stringify(selector)});e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();if(!r.width||!r.height||getComputedStyle(e).visibility==='hidden')throw Error('Control is hidden '+${JSON.stringify(selector)});return {x:r.x+r.width/2,y:r.y+r.height/2,w:r.width,h:r.height};})()`);
+const clickElement=async selector=>{const p=await point(selector);await click(p.x,p.y);};
+const result={schema:7,mode,label,colorsDriver:colorsMode,scene:sceneFile,query,startedAt:new Date().toISOString(),gpuQuietSamples,loadAverageAtStart:loadavg(),warmup,baseline:execFileSync('git',['merge-base','HEAD','main'],{encoding:'utf8'}).trim(),notes:['Paint endpoint is canvas draw completion, not physical display scanout.','First changed pixels compares tile RGBA after timing stops, replaying retained immutable bitmaps; no pixel readback runs on the measured path. Extra observer bitmap memory and untimed comparison cost are reported.','Pointer tiles use rendered art coordinates, not the inverse-projected ground pick. Whole current uses union coverage of actual opaque painted clips, from tiles or blocks, and weather readiness, never bake frequency.','Pass timestamps cannot assign a mixed on/off-screen pass to individual pixels; wholly outside time is exact, mixed and area-weighted estimates are separate.','Final latency samples include held mid-drag pauses and release; uncompleted pauses are censored.','No editor files are changed; Fetch injects timing-only observers before modules execute.']};
+try{result.processesAtStart=execFileSync('/bin/sh',['-c','ps -Ao pcpu,command -r | head'],{encoding:'utf8'});}catch(e){throw Error('Cannot check machine load; run with process inspection permission.');}
+const filename=join(out,`${mode}${label?'-'+label:''}-perf.json`);
+const flush=()=>{if(!warmup)writeFileSync(filename,JSON.stringify({...result,console:logs},null,1));};
+const until=async(test,what,ms=180000)=>{const t=Date.now();for(;;){if(hookError)throw Error(hookError);if(await ev(test))return;if(Date.now()-t>ms)throw Error(`Timed out: ${what}`);const err=await ev('document.getElementById("error")?.textContent');if(err)throw Error(err);await sleep(100);}};
+// The visible image may be final before the margin finishes. Continue observing the
+// margin but keep each latency endpoint at the visible paint, not the quiet wait.
+const settle=async()=>{await until(`(()=>{if(!window.sculptCanvas)return false;const keys=__perf.visible(),es=__perf.current();return keys.every(k=>es.some(e=>e.x+','+e.y===k&&!e.dirty&&(e.scale??1)<=1))&&sculptRegion.canExport()&&!sculptRegion.previewActive()&&!sculptCanvas.renderer.busy;})()`,'visible final');await ev('sculptCanvas.idle()');await sleep(150);};
+const begin=async()=>{await ev('__perf.reset()');await ev('__perf.prepare()');return ev('__perf.start()');};
+function analyze(data,t0,anchors=[]){
+  const current=pictureCurrent;
+  const paints=data.events.filter(e=>e.type==='paint'),coverage=data.events.filter(e=>e.type==='coverage'),first=[],pointer=[],all=[],final=[],focus=[],observations=[],finalObservations=[];
+  const inputs=data.inputs,rectCoverage=createCoverage();
+  for(const m of inputs){
+    const p=paints.find(e=>e.t>=m.t&&current(e,m)&&e.changed);
+    if(p)first.push(p.t-m.t);
+    if(m.at){const p=paints.find(e=>e.t>=m.t&&current(e,m)&&e.changed&&(e.clips??[e]).some(r=>m.at[0]>=r.x&&m.at[0]<r.x+r.width&&m.at[1]>=r.y&&m.at[1]<r.y+r.height));if(p)pointer.push(p.t-m.t);}
+    const c=coverage.find(e=>e.t>=m.t&&e.ready&&rectCoverage.covered((m.rectangles?.length?m.rectangles:[data.view]).map(r=>rectCoverage.intersect(r,data.view)).filter(Boolean),p=>m.kind==='scroll'?!p.dirty:current(p,m),e.regions));
+    const completed=c?.t??(m.noopCurrent?m.t:null);if(completed!==null)all.push(completed-m.t);observations.push({id:m.id,t:m.t,first:p?.t??null,all:completed,preps:c?[...new Set(c.regions.filter(p=>current(p,m)).map(p=>p.prep).filter(Boolean))]:[]});
   }
-  result.bootMs = Date.now() - bootStart; console.error('booted', result.bootMs);
-  result.patchError = await ev('__perf.patchError||null');
-  if (viewport) {
-    const [width, height] = viewport.split('x').map(Number);
-    result.viewport = await ev(`(() => { const v=document.getElementById('viewport');v.style.width='${width}px';v.style.height='${height}px';v.style.flex='none';sculptCanvas.resize();return {width:v.clientWidth,height:v.clientHeight}; })()`);
+  for(const anchor of anchors){
+    const targets=anchor.keys||data.visible,id=anchor.serial??inputs.filter(m=>m.t<=anchor.t).at(-1)?.id??0;
+    const nextInput=inputs.find(m=>m.t>anchor.t)?.t??Infinity;
+    const last=inputs.findLast(m=>m.t<=anchor.t);const c=coverage.find(e=>e.t>=anchor.t&&e.t<nextInput&&e.ready&&targets.every(k=>e.keys.some(p=>p.key===k&&!p.dirty&&p.level<=1))&&(!last||rectCoverage.covered((last.rectangles?.length?last.rectangles:[data.view]).map(r=>rectCoverage.intersect(r,data.view)).filter(Boolean),p=>current(p,last),e.regions)));
+    if(c)final.push(c.t-anchor.t);finalObservations.push({t:anchor.t,final:c?.t??null});
+    const at=anchor.at||[data.view.x+data.view.width/2,data.view.y+data.view.height/2];
+    const focusView=coverage.find(e=>e.t>=anchor.t&&e.t<nextInput&&e.ready&&e.keys.some(p=>!p.dirty&&p.level<=1&&at[0]>=p.x&&at[0]<p.x+p.width&&at[1]>=p.y&&at[1]<p.y+p.height));if(focusView)focus.push(focusView.t-anchor.t);
   }
-  await reset();
-
-  console.error('phase load'); flush();
-  // ------------------------------------------------------------ load: the scene applied, then zoomed to 1x at the top-left
-  const strokes = JSON.stringify(scene.strokes), ground = scene.ground !== false;
-  const visibleOf = async () => ev(`(() => { const v = sculptCanvas.view(), stats = sculptCanvas.stats(), s = stats.displayChunkSize ?? stats.canonicalChunkSize, keys = [];
-    for (let y = Math.floor(v.y / s) * s; y < v.y + v.height; y += s) for (let x = Math.floor(v.x / s) * s; x < v.x + v.width; x += s) keys.push(x + ',' + y); return {keys, chunk: s, view: v}; })()`);
-  {
-    const t0 = await ev(`(() => { const t = performance.now(); __perf.mark('load-start', {}); sculptDebug.scene(${strokes}, {ground: ${ground}}); sculptCanvas.zoom(1);
-      const v = document.getElementById('viewport'); v.scrollLeft = 0; v.scrollTop = 300; return t; })()`);
-    await sleep(500);
-    await stable(2500);
-    const events = await ev('__perf.ev'), draws = await ev('__perf.draws'), vis = await visibleOf();
-    const a = analyse(events, vis.keys, t0), firstChunk = draws.find(d => d.chunk && d.t >= t0), firstAny = draws.find(d => d.t >= t0);
-    result.load = {chunkSize: vis.chunk, view: vis.view, firstPictureAny: firstAny ? firstAny.t - t0 : null, firstChunkPicture: firstChunk ? firstChunk.t - t0 : null, ...a, split: await splitStages()};
-    writeFileSync(`${out}/${mode}-events-load.json`, JSON.stringify({t0, events, draws: draws.length}));
-  }
-
-  // --features <density %> fills the 1x view with trees before the drag (fillRegion, on either feature path), so every later frame draws them.
-  const featureDensity = Number(opt2('--features', 0));
-  if (featureDensity) { result.features = await ev(`(async () => { const f = sculptCanvas.features, v = sculptCanvas.view(), r = {type: 'lasso', points: [[v.x, v.y], [v.x + v.width, v.y], [v.x + v.width, v.y + v.height], [v.x, v.y + v.height]]};
-    f.fillRegion('tree', r, {density: ${featureDensity}, margin: 0, gap: 0}); await f.settled?.(); await sculptCanvas.idle(); return {count: f.serialize().features.length}; })()`); await stable(1500); }
-  if (only === 'load') throw new Error('stopped after load (--only)');
-  console.error('phase drag'); flush();
-  // ------------------------------------------------------------ drag: a stroke with real mouse events
-  const box = await ev(`(() => { const r = document.getElementById('overlay')?.getBoundingClientRect() ?? document.querySelector('canvas').getBoundingClientRect(); return {x: r.x, y: r.y, w: r.width, h: r.height}; })()`);
-  await ev(`document.querySelector('[data-tool="${dragTool}"]').click(); true`);
-  // A stroke captures its parameters on pointer-down; set the requested size before starting it.
-  const drawSize = Number(opt2('--diameter', 0)); if (drawSize) await ev(`(() => { const d = document.getElementById('diameter'); d.value = ${drawSize}; d.dispatchEvent(new Event('input')); d.dispatchEvent(new Event('change')); })(); true`);
-  await reset();
-  const cx = box.x + box.w * .35, cy = box.y + box.h * .5;
-  await ev('__perf.frameStart(); true');
-  const dragT0 = await ev('performance.now()'), dragWall = Date.now();
-  await mouse('mousePressed', cx, cy);
-  // H6b: move-to-picture latency. Each move is marked before it is sent and with the fields' revision after it was handled; a bake carries the
-  // revision of the fields it read (a fed bake: the revision submitted when it took the buffers; a CPU bake: the last region read before it); the
-  // picture is the first chunk paint after that bake ends.
-  // `at` is the map point under the pointer, picked before the move lands as the editor picks it, for the latency of the chunk under it.
-  const at = (x, y) => `(() => { __perf.quiet = true; try { return sculptCanvas.pick(${x}, ${y}); } finally { __perf.quiet = false; } })()`;
-  let moves = 0; for (let i = 1; i <= 70 && Date.now() - dragWall < 60000; i++) { moves++; const sx = cx + i * 9, sy = cy + Math.sin(i / 6) * 60; await ev(`__perf.mark('move', {k: ${i}, at: ${at(sx - box.x, sy - box.y)}})`); await mouse('mouseMoved', sx, sy); await ev(`__perf.mark('rev', {k: ${i}, rev: window.sculptRegion?.stats().revision ?? null})`); await sleep(30); }
-  const frames = await ev('__perf.frameStop()');
-  const dragEnd = await ev('performance.now()');
-  const dragDraws = (await ev('__perf.draws')).filter(d => d.t >= dragT0 && d.t <= dragEnd);
-  result.drag = {durationMs: dragEnd - dragT0, movesDelivered: moves, rafMs: {n: frames.length, p50: q(frames, .5), p95: q(frames, .95), max: Math.max(...frames, 0)}, chunkPaintsPerSecond: dragDraws.filter(d => d.chunk).length / ((dragEnd - dragT0) / 1000),
-    erodeDuringDrag: (await ev('__perf.ev')).filter(e => e.type === 'erode-start').length, split: await splitStages()};
-  result.drag.stroke = await ev(`(() => { const n=sculptDebug.nodes().at(-1),p=n.params; return {kind:n.kind,diameter:2*p.radius,elevation:p.elevation,wander:p.wander,widthVary:p.widthVary,routeSmooth:p.routeSmooth??0,crestTaper:p.crestTaper??0}; })()`);
-  {
-    const events = await ev('__perf.ev'), draws = (await ev('__perf.draws')).filter(d => d.chunk), runs = (await ev('window.sculptRegion?.stats().gpuShape?.runLog || []')) || [];
-    const marks = new Map(); for (const e of events) { if (e.type === 'move') Object.assign(marks.get(e.k) ?? marks.set(e.k, {}).get(e.k), {t: e.t, at: e.at}); if (e.type === 'rev') (marks.get(e.k) ?? marks.set(e.k, {}).get(e.k)).rev = e.rev; }
-    const bakes = []; let lastRead = null;
-    for (const e of events) { if (e.type === 'read') lastRead = e; if (e.type === 'bake-end') { const start = e.t - e.ms, read = events.filter(r => r.type === 'read' && r.t <= start).at(-1); bakes.push({end: e.t, rev: e.rev ?? read?.rev ?? null, key: e.x + ',' + e.y, level: e.level ?? 1}); } }
-    const lat = [], share = []; let censored = 0;
-    for (const [k, m] of marks) {
-      if (m.t === undefined || m.rev == null) continue;
-      const b = bakes.find(b => b.end >= m.t && b.rev != null && b.rev >= m.rev), d = b && draws.find(d => d.t >= b.end);
-      if (!d) { censored++; continue; }
-      lat.push(d.t - m.t);
-      const run = runs.find(r => r.t >= m.t - 1 && r.doneAt); if (run) share.push((run.doneAt - m.t) / (d.t - m.t));
-    }
-    writeFileSync(`${out}/${mode}-events-drag.json`, JSON.stringify({t0: dragT0, events, draws}));
-    // H7b: the first picture is only the first dirty chunk to show the move. 'All' waits for every chunk the drag keeps rebaking (one that
-    // baked at least 10 times) to show it, which is what a picture of the whole edit needs.
-    const counts = {}; for (const b of bakes) counts[b.key] = (counts[b.key] ?? 0) + 1;
-    const dirty = Object.keys(counts).filter(k => counts[k] >= 10), all = [];
-    for (const [k, m] of marks) {
-      if (m.t === undefined || m.rev == null || !dirty.length) continue;
-      let worst = 0, ok = true;
-      for (const key of dirty) { const b = bakes.find(b => b.key === key && b.end >= m.t && b.rev != null && b.rev >= m.rev), d = b && draws.find(d => d.t >= b.end); if (!d) { ok = false; break; } worst = Math.max(worst, d.t - m.t); }
-      if (ok) all.push(worst);
-    }
-    result.drag.latencyAll = {dirtyChunks: dirty.length, measured: all.length, p50: q(all, .5), p95: q(all, .95), max: Math.max(...all, 0)};
-    // The chunk under the pointer: its first bake that carries the move, then the picture. Censored: that chunk did not rebake before the release.
-    const size = result.load.chunkSize, latP = []; let censoredP = 0;
-    for (const [k, m] of marks) {
-      if (m.t === undefined || m.rev == null || !m.at) continue;
-      const key = Math.floor(m.at[0] / size) * size + ',' + Math.floor(m.at[1] / size) * size;
-      const b = bakes.find(b => b.key === key && b.end >= m.t && b.rev != null && b.rev >= m.rev), d = b && draws.find(d => d.t >= b.end);
-      if (!d) { censoredP++; continue; }
-      latP.push(d.t - m.t);
-    }
-    result.drag.latencyPointer = {moves: marks.size, measured: latP.length, censored: censoredP, p50: q(latP, .5), p95: q(latP, .95), max: Math.max(...latP, 0)};
-    result.drag.quarterBakes = bakes.filter(b => b.level > 1).length; result.drag.bakes = bakes.length;
-    result.drag.latency = {moves: marks.size, measured: lat.length, censored, p50: q(lat, .5), p95: q(lat, .95), max: Math.max(...lat, 0), shapeShareP50: q(share, .5), shapeShareP95: q(share, .95), shapeShareN: share.length};
-  }
-
-  result.specStats = await ev('window.sculptDebug?.specStats ?? null');   // P6: pipelines built for the gates' values, and the milliseconds they took
-  if (only === 'drag') throw new Error('stopped after drag (--only)');
-  console.error('phase release'); flush();
-  // ------------------------------------------------------------ release
-  await reset();
-  const relT0 = await ev('performance.now()');
-  await mouse('mouseReleased', cx + 70 * 9, cy + Math.sin(70 / 6) * 60);
-  {
-    await sleep(500); await stable(2500);
-    const events = await ev('__perf.ev'), vis = await visibleOf(), a = analyse(events, vis.keys, relT0);
-    result.release = {...a, split: await splitStages()};
-    writeFileSync(`${out}/${mode}-events-release.json`, JSON.stringify({t0: relT0, events}));
-  }
-
-  if (only === 'release') throw new Error('stopped after release (--only)');
-  console.error('phase scroll'); flush();
-  // ------------------------------------------------------------ scroll
-  {
-    await reset();
-    longWait = true;
-    const sc = await ev(`(() => { const v = document.getElementById('viewport'); return {w: v.scrollWidth, h: v.scrollHeight, cw: v.clientWidth, ch: v.clientHeight, left: v.scrollLeft, top: v.scrollTop}; })()`);
-    const target = Math.min(sc.w - sc.cw, sc.left + 2400);
-    const t0 = await ev(`new Promise(resolve => { const v = document.getElementById('viewport'), t0 = performance.now(), from = v.scrollLeft, to = ${target}, frames = 60; let k = 0; __perf.frameStart();
-      const step = () => { k++; v.scrollLeft = from + (to - from) * k / frames; if (k < frames) requestAnimationFrame(step); else resolve(performance.now()); }; requestAnimationFrame(step); })`);
-    const rafs = await ev('__perf.frameStop()'), stats = await ev('sculptCanvas.stats().frameMilliseconds');
-    const stopT = t0;
-    await sleep(300); await stable(2500);
-    const events = await ev('__perf.ev'), vis = await visibleOf(), a = analyse(events, vis.keys, stopT), draws = await ev('__perf.draws');
-    result.scroll = {distancePx: target - sc.left, rafMs: {n: rafs.length, p50: q(rafs, .5), p95: q(rafs, .95), max: Math.max(...rafs, 0)}, presentedMs: {n: stats.length, p50: q(stats, .5), p95: q(stats, .95), max: Math.max(...stats, 0)},
-      timeToFinalAfterStop: a.finalInView, bakes: a.bakeCount, chunkPaints: draws.filter(d => d.chunk).length, split: await splitStages()};
-  }
-
-  if (only === 'scroll') throw new Error('stopped after scroll (--only)');
-  console.error('phase export'); flush();
-  longWait = false;
-  // ------------------------------------------------------------ export
-  if (!noExport) {
-    await reset();
-    const name = `Perf${mode}${port}x${Date.now() % 100000}`;
-    await ev(`window.gateExport = {done: false}; const t = performance.now(); sculptMap.export(${JSON.stringify(name)}).then(r => window.gateExport = {done: true, ms: performance.now() - t, result: r}, e => window.gateExport = {done: true, error: e.message, ms: performance.now() - t}); true`);
-    let g = null; for (let i = 0; i < 2400 && !g?.done; i++) { g = await ev('window.gateExport'); if (!g?.done) await sleep(500); }
-    result.export = {name, ms: g?.ms ?? null, error: g?.error ?? null, split: await splitStages()};
-  }
-  result.memory = await ev('(() => { const m = sculptCanvas.stats(); return {gpuBytes: m.gpuBytes, peakGPUBytes: m.peakGPUBytes, heapBytes: m.heapBytes, peakHeapBytes: m.peakHeapBytes, cachedChunks: m.cachedChunks, bakes: m.bakes, rebakes: m.rebakes, cacheBytes: m.cacheBytes, levels: m.levels}; })()');
-} catch (e) {
-  result.error = String(e.stack || e);
-} finally {
-  result.console = logs.slice(0, 10); result.loadAverageAtEnd = loadavg();
-  writeFileSync(`${out}/${mode}${label ? '-' + label : ''}-perf.json`, JSON.stringify(result, null, 1));
-  console.log(JSON.stringify(result, (k, v) => k === 'visible' || k === 'events' ? undefined : v).slice(0, 4000));
-  ws.close(); chrome.kill(); await sleep(500);
+  if(!inputs.length){const p=paints.find(e=>e.t>=t0&&e.changed),c=coverage.find(e=>e.t>=t0&&e.ready&&data.visible.every(k=>e.keys.some(p=>p.key===k&&!p.dirty)));if(p)first.push(p.t-t0);if(c)all.push(c.t-t0);}
+  const samples={first,pointer,all,final,focus},total=inputs.length||1;
+  return {samples,observations,finalObservations,sampleTotals:{first:total,pointer:inputs.filter(m=>m.at).length,all:total,final:anchors.length,focus:anchors.length},latency:distribution(first,total),latencyPointer:distribution(pointer,inputs.filter(m=>m.at).length),latencyAll:distribution(all,total),final:distribution(final,anchors.length),focusFinal:distribution(focus,anchors.length)};
 }
-// A timer or the socket can keep node alive after the JSON is written; --only stops are not failures.
-process.exit(result.error && !result.error.includes('(--only)') ? 1 : 0);
+const capture=async(t0,anchors=[],extra={})=>{
+  await ev('__perf.stop()');await ev('__perf.readPixels()');
+  const data=await ev(`(()=>{const P=__perf,m=P.stopStats;return {events:P.events,inputs:P.inputs,handlers:P.handlers,stages:P.stages,waits:P.waits,long:P.long,frames:P.frames,compiles:P.compiles,specStart:P.specStart,specEnd:sculptDebug.specStats,browserViewport:{width:innerWidth,height:innerHeight},view:sculptCanvas.view(),visible:P.visible(),chunk:m.displayChunkSize,memory:{gpuBytes:m.gpuBytes,peakGPUBytes:m.peakGPUBytes,heapBytes:m.heapBytes,peakHeapBytes:m.peakHeapBytes,peakAccountedHeapBytes:m.peakAccountedHeapBytes,rendererPeakBytes:m.renderer.peakBytes},end:P.stoppedAt,observer:{untimedPixelComparisonMs:P.pixelObserverMs,baselineBitmapBytes:P.baselineBytes,extraRetainedBitmapPeakBytes:P.peakExtraBitmapBytes}};})()`);
+  data.inputs=data.inputs.filter(e=>e.t>=t0);data.events=data.events.filter(e=>e.t>=t0);const metricsEnd=extra.metricsUntil??data.end;for(const key of ['stages','waits','long','handlers','compiles'])data[key]=data[key].filter(e=>e.t>=t0&&e.t<=metricsEnd);
+  const allPasses=await ev('__perf.gpuRead()'),gpuClock=await ev('__perf.gpuClock'),passes=allPasses.filter(p=>p.cpuEnd>=t0&&p.cpuStart<=metricsEnd),a=analyze(data,t0,anchors),stage={},byPass={},submits=new Map();
+  for(const s of data.stages)(stage[s.name]??=[]).push(s.ms);
+  const finals=data.events.filter(e=>e.type==='coverage'&&e.ready&&data.visible.every(k=>e.keys.some(p=>p.key===k&&!p.dirty&&p.level<=1))),finalT=finals.find(e=>e.t>=(data.inputs.at(-1)?.t??t0))?.t??data.end;
+  const offscreen={whollyOutsideMs:0,mixedRegionMs:0,areaWeightedOutsideMs:0,unknownRegionMs:0,totalMeasuredMs:0,window:{from:t0,to:finalT}};
+  for(const p of passes){
+    const k=p.kind+' | '+p.label,b=byPass[k]??={n:0,ms:0,max:0};b.n++;b.ms+=p.ms;b.max=Math.max(b.max,p.ms);
+    const s=submits.get(p.submit)||{start:p.start,end:p.end,kind:p.kind};s.start=Math.min(s.start,p.start);s.end=Math.max(s.end,p.end);submits.set(p.submit,s);
+  }
+  for(const p of allPasses){
+    const ms=Math.max(0,Math.min(p.cpuEnd,finalT)-Math.max(p.cpuStart,t0));if(!ms)continue;offscreen.totalMeasuredMs+=ms;
+    if(!p.rect){offscreen.unknownRegionMs+=ms;continue;}const r=p.rect,v=data.view,area=r.width*r.height,overlap=Math.max(0,Math.min(r.x+r.width,v.x+v.width)-Math.max(r.x,v.x))*Math.max(0,Math.min(r.y+r.height,v.y+v.height)-Math.max(r.y,v.y));
+    if(overlap===0)offscreen.whollyOutsideMs+=ms;else if(overlap<area){offscreen.mixedRegionMs+=ms;offscreen.areaWeightedOutsideMs+=ms*(1-overlap/area);}
+  }
+  // Critical-path dependency: CPU page preparation plus outstanding shape/Time
+  // GPU work submitted by that preparation, ending at this chunk's first pass.
+  // Union intervals before subtracting; CPU and GPU work may overlap.
+  const pageIntervals=id=>{
+    const intervals=[],start=data.events.find(e=>e.type==='pages-start'&&e.id===id),ready=data.events.find(e=>e.type==='pages-ready'&&e.id===id);
+    if(start&&ready)intervals.push([start.t,ready.t]);
+    const chunk=allPasses.filter(p=>p.prep===id&&p.kind==='chunk').sort((a,b)=>a.cpuStart-b.cpuStart)[0];
+    if(chunk)for(const p of allPasses)if(p.prep===id&&['shape','time'].includes(p.kind))intervals.push([p.cpuStart,Math.min(p.cpuEnd,chunk.cpuStart)]);
+    return intervals;
+  };
+  const unionMs=(intervals,from,to)=>{let sum=0,end=-Infinity;for(const [lo,hi] of intervals.map(([x,y])=>[Math.max(x,from),Math.min(y,to)]).filter(([x,y])=>y>x).sort((a,b)=>a[0]-b[0])){sum+=Math.max(0,hi-Math.max(lo,end));end=Math.max(end,hi);}return sum;};
+  const pageWait=[],apart=[],previewOwn=[];
+  for(const o of a.observations)if(o.all!==null){const sum=unionMs(o.preps.flatMap(pageIntervals),o.t,o.all);pageWait.push(sum);apart.push(Math.max(0,o.all-o.t-sum));}
+  for(const e of data.events)if(e.type==='bake-end'&&e.level>1)previewOwn.push(Math.max(0,e.ms-unionMs(pageIntervals(e.prep),e.t-e.ms,e.t)));
+  const calls={};for(const name of ['history.replaceState','saveWorlds','applyKnobs','syncWorldControls','setColors'])calls[name]=distribution(data.handlers.map(h=>h.calls[name]||0));
+  if(extra.specStartOverride)data.specStart=extra.specStartOverride;const specStats={built:(data.specEnd?.built||0)-(data.specStart?.built||0),ms:(data.specEnd?.ms||0)-(data.specStart?.ms||0),start:data.specStart,end:data.specEnd};
+  const phase={...extra,phaseStartMs:t0,anchors,latencyWindow:'Input through visible final; held-only completion and censoring are also reported',durationMs:data.end-t0,browserViewport:data.browserViewport,view:data.view,displayChunkSize:data.chunk,...a,rafMs:distribution(data.frames.filter(f=>f.t>=t0&&f.t<=metricsEnd).map(f=>f.ms)),split:{previewOwnApartFromPagesMs:distribution(previewOwn),previewRenderMs:distribution(data.events.filter(e=>e.type==='bake-end'&&e.level>1).map(e=>e.ms)),pageWaitMs:distribution(pageWait,data.inputs.length||1),wholeApartFromPagesMs:distribution(apart,data.inputs.length||1),pageWaitDefinition:"Union of CPU field preparation and its outstanding shape/Time GPU passes, clipped to input→whole-current; GPU clock uncertainty reported separately.",stage:Object.fromEntries(Object.entries(stage).map(([k,a])=>[k,{...distribution(a),totalMs:a.reduce((n,x)=>n+x,0)}])),queueWaitMs:distribution(data.waits.map(w=>w.ms)),gpuSubmissionMs:distribution([...submits.values()].map(s=>s.end-s.start)),gpuSubmissionByKindMs:Object.fromEntries([...new Set([...submits.values()].map(s=>s.kind))].map(kind=>[kind,distribution([...submits.values()].filter(s=>s.kind===kind).map(s=>s.end-s.start))])),longTasks:{...distribution(data.long.map(e=>e.ms)),totalMs:data.long.reduce((n,e)=>n+e.ms,0),top:data.long.sort((a,b)=>b.ms-a.ms).slice(0,8)},handlerMs:distribution(data.handlers.map(h=>h.ms)),handlerCalls:calls,specStats,pipelines:data.compiles,gpuPassesMs:byPass,bitmapCopyMs:distribution(stage['bitmap copy']||[]),memory:data.memory,observer:data.observer,gpuClock,offscreenGPU:offscreen},inputs:data.inputs,handlers:data.handlers};
+  // Compact raw evidence remains in this one output file; no screenshots or tile art.
+  const hold=anchors.at(-1)?.t??data.end;phase.heldLatency={first:distribution(a.observations.filter(o=>o.first!==null&&o.first<=hold).map(o=>o.first-o.t),data.inputs.length),wholeCurrent:distribution(a.observations.filter(o=>o.all!==null&&o.all<=hold).map(o=>o.all-o.t),data.inputs.length)};phase.events=data.events;const down=data.events.find(e=>e.type==='stroke-begin');if(down){const p=data.events.find(e=>e.type==='paint'&&e.t>=down.t&&e.rev>=down.rev&&e.changed);phase.firstStrokePreviewMs=p?p.t-down.t:null;phase.strokeBegin=down;}phase.latencyChanged=phase.latency;phase.samples.firstTile=tileSamples(phase);phase.latency=distribution(phase.samples.firstTile,data.inputs.length||1);phase.samples.pointer=tileSamples(phase,true);phase.latencyPointer=distribution(phase.samples.pointer,data.inputs.filter(m=>m.at).length);phase.releaseFinal=distribution(releaseSample(phase),1);phase.firstChunkPicture=phase.latency.p50;phase.shownInView=phase.latencyAll.p50;phase.finalInView=phase.final.p50;return phase;
+};
+const anchor=()=>ev('({t:performance.now(),serial:sculptCanvas.serial??__perf.serial,rev:sculptCanvas.rev??null,keys:__perf.visible(),spec:sculptDebug.specStats,at:__perf.inputs.findLast(m=>m.at)?.at??null})');
+const setup=async()=>{
+  await ev(`sculptDebug.scene(${JSON.stringify(scene.strokes)},{ground:${scene.ground!==false}});sculptCanvas.zoom(1);document.getElementById('viewport').scrollTo(0,300);true`);await settle();
+};
+
+try{
+  await send('Runtime.enable');await send('Page.enable');
+  await send('Page.addScriptToEvaluateOnNewDocument',{source:`const createCoverage=${createCoverage.toString()};(${hooks.toString()})()`});
+  await send('Fetch.enable',{patterns:['sculpt.js','sculpt-canvas.js','sculpt-gpu-fields.js','sculpt-erosion.js'].map(p=>({urlPattern:'*/'+p,requestStage:'Response'}))});
+  const terrain=viewport?viewport.split('x').map(Number):null;
+  if(terrain)await send('Emulation.setDeviceMetricsOverride',{width:terrain[0]+392,height:terrain[1]+359,deviceScaleFactor:1,mobile:false});
+  const search=new URLSearchParams({biome:scene.biome||'green',mapX:mode.slice(3),mapY:mode.slice(3),scratch:`lp0-${port}`,gpuMB:'512',heapMB:'1536'});
+  for(const q of [scene.query,query])for(const [key,value] of new URLSearchParams(q||''))search.set(key,value);
+  const url=`${server}/sculpt.html?${search}`;
+  await send('Page.navigate',{url});
+  const boot=Date.now();await until('!!window.sculptCanvas&&!document.getElementById("map-export").disabled','editor boot');result.bootMs=Date.now()-boot;result.browser=await send('Browser.getVersion');result.effectiveGpuMB=await ev('sculptCanvas.stats().gpuBudget/1048576');if(result.effectiveGpuMB!==Number(search.get('gpuMB')))throw Error('Terrain budget differs from requested gpuMB');
+  if(terrain)await ev(`(()=>{const v=document.getElementById('viewport');v.style.width='${terrain[0]}px';v.style.height='${terrain[1]}px';v.style.flex='none';sculptCanvas.resize();})()`);
+  // Finish the blank map's startup before measuring the authored scene load.
+  await settle();console.error('phase load');
+  {const t0=await begin();await ev(`__perf.input('load','scene');true`);const a=await anchor();delete a.keys;await setup();result.load=await capture(t0,[a]);result.viewport=result.load.view;flush();}
+  if(only==='load'||warmup)throw Error('stopped after load (--only)');
+  const chooseTool=async()=>{
+    const selector=`[data-tool="${tool}"]`;
+    if(!await ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});return e&&e.getClientRects().length>0;})()`)){
+      const rail=await ev(`document.querySelector(${JSON.stringify(selector)})?.closest('.tool-group')?.querySelector('.rail-button')?.id`);
+      if(!rail)throw Error('Missing tool rail for '+tool);await clickElement('#'+rail);
+    }
+    await clickElement(selector);
+    if(await ev('sculptDebug.state().tool')!==tool)throw Error('Tool selection failed: '+tool);
+  };
+  const checkGesture=async()=>{
+    const state=await ev('sculptDebug.state()');
+    if(state.tool!==tool||!(tool==='move'?state.moving:state.stroke))throw Error('Expected '+tool+' gesture; got '+JSON.stringify(state));
+    return state;
+  };
+  let box;
+  const strokeMove=async(x,y)=>{await ev(`__perf.nextPointerAt=sculptCanvas.pick(${x}-(${box.x}),${y}-(${box.y}));true`);await mouse('mouseMoved',x,y);};
+  const stroke=async(n=40)=>{
+    await chooseTool();
+    box=await ev(`(()=>{const r=document.getElementById('overlay').getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};})()`);
+    if(diameter)await ev(`(()=>{const d=document.getElementById('diameter');d.value=${diameter};d.dispatchEvent(new Event('input'));})()`);
+    const x=box.x+box.w*.25,y=box.y+box.h*.45;await mouse('mousePressed',x,y);
+    const gesture=await checkGesture();
+    for(let i=1;i<=n;i++){await strokeMove(x+box.w*.45*i/n,y+Math.sin(i/6)*40);await sleep(30);}return {x:x+box.w*.45,y:y+Math.sin(n/6)*40,gesture};
+  };
+  if(featureDensity){await ev(`(async()=>{const f=sculptCanvas.features,v=sculptCanvas.view();f.fillRegion('tree',{type:'lasso',points:[[v.x,v.y],[v.x+v.width,v.y],[v.x+v.width,v.y+v.height],[v.x,v.y+v.height]]},{density:${featureDensity},margin:0,gap:0});await f.settled?.();})()`);await settle();}
+  if(start!=='slider'){
+  console.error('phase drag / release');
+  {const t0=await begin(),p=await stroke();const dragStop=await ev('performance.now()'),a=await anchor();await mouse('mouseReleased',p.x,p.y);await settle();const whole=await capture(t0,[a],{metricsUntil:dragStop});result.drag={...whole,gesture:p.gesture,heldUntil:dragStop,movesDelivered:whole.inputs.length};result.release=await capture(a.t,[a],{input:'stroke release',specStartOverride:a.spec});flush();}
+  if(['drag','release'].includes(only))throw Error(`stopped after ${only} (--only)`);
+  console.error('phase resume');
+  {await setup();const t0=await begin(),p=await stroke(primeMoves);if(primePause)await sleep(primePause);const primingState=await ev('({state:sculptDebug.state(),erosion:sculptCanvas.renderer.variantNumber("erosion",0),rain:sculptCanvas.renderer.variantNumber("erosionRain",1),age:sculptCanvas.renderer.variantNumber("erosionAge",200),simplify:document.getElementById("simplify-strokes").checked})');if(!primingState.state.stroke&&!primingState.state.moving)throw Error('The priming gesture ended before release');const release=await anchor();await mouse('mouseReleased',p.x,p.y);await chooseTool();await sleep(Math.max(0,100-(await ev('performance.now()')-release.t)));const began=await anchor(),pendingState=await ev('({weatherPending:!sculptRegion.canExport(),foregroundPending:sculptCanvas.foregroundPending(),rendererBusy:sculptCanvas.renderer.busy,timePassesInFlight:__perf.activeErosion||0,shapePending:sculptDebug.shape().fields?.pending??null,dirtyFinalTiles:sculptCanvas.cacheSnapshot().filter(e=>e.dirty&&(e.scale??1)<=1).length})');const q={x:p.x-50,y:p.y+35};await mouse('mousePressed',q.x,q.y);const gesture=await checkGesture();for(let i=1;i<=32;i++){await strokeMove(q.x+i*4,q.y+Math.sin(i/4)*20);await sleep(30);}const a=await anchor();await mouse('mouseReleased',q.x+128,q.y+Math.sin(8)*20);await settle();result.resume=await capture(began.t,[a],{specStartOverride:began.spec,primingStart:t0,primingMoves:primeMoves,primingPauseMs:primePause,primingState,gesture,primingTimeTrace:await ev(`__perf.events.filter(e=>e.t>=${release.t}&&e.t<=${began.t}&&e.type.startsWith('erode-'))`),release,secondStroke:began,actualDelayMs:began.t-release.t,pendingAtResume:pendingState,inFlightCondition:pendingState.timePassesInFlight>0});flush();}
+  if(only==='resume')throw Error('stopped after resume (--only)');
+  }
+  // --------------------------------------------- page-native slider drags
+  const openWorld=async control=>{
+    await clickElement('#tab-world');
+    // World can be wider than Build. Preserve the requested terrain area and
+    // leave room for the page's own panel, rather than rendering beneath it.
+    if(terrain){
+      await sleep(200);
+      const extra=await ev(`(()=>{const v=document.getElementById('viewport').getBoundingClientRect(),p=document.getElementById('inspector-sidebar').getBoundingClientRect();return Math.max(392,Math.ceil(v.left+p.width+64));})()`);
+      await send('Emulation.setDeviceMetricsOverride',{width:terrain[0]+extra,height:terrain[1]+359,deviceScaleFactor:1,mobile:false});
+      await ev('sculptCanvas.resize()');await settle();
+      const fits=await ev(`(()=>{const v=document.getElementById('viewport').getBoundingClientRect(),p=document.getElementById('inspector-sidebar').getBoundingClientRect(),s=sculptCanvas.view();return s.width===${terrain[0]}&&s.height===${terrain[1]}&&v.left>=0&&v.right<=p.left+1&&v.bottom<=innerHeight;})()`);
+      if(!fits)throw Error('Requested terrain view is clipped by the World layout');
+    }
+    if(await ev(`(()=>{const e=document.getElementById('world-fine');return e&&!e.checked;})()`))await clickElement('#world-fine');
+    const selector=control==='colors'?'#world-colors input[type=color]':'#'+control;
+    const tabs=await ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Missing row');const tabs=[];for(let p=e.parentElement;p;p=p.parentElement){if(p.tagName==='DETAILS')p.open=true;if(p.getAttribute('role')==='tabpanel'&&p.hasAttribute('aria-labelledby'))tabs.push(p.getAttribute('aria-labelledby'));}return tabs.reverse();})()`);
+    for(const id of tabs)if(await ev(`document.getElementById(${JSON.stringify(id)})?.getAttribute('aria-selected')==='false'`))await clickElement('#'+id);
+    if(!await ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)}),r=e.closest('[data-knob]')?.querySelector('.scrub')??e;return r.getClientRects().length>0&&getComputedStyle(r).visibility!=='hidden';})()`))throw Error('Row remained hidden: '+control);
+  };
+  const scrub=async(control,paused,cold=false)=>{
+    await openWorld(control);const row=await point(`.scrub[data-source="${control}"]`),spec=await ev(`(()=>{const e=document.getElementById(${JSON.stringify(control)});return {min:+e.min,max:+e.max,step:+e.step,value:+e.value,disabled:e.disabled};})()`);
+    if(spec.disabled)throw Error(`${control} is disabled`);
+    if(cold&&spec.value!==0)throw Error('Cold gate must start at zero');
+    const t0=await begin(),anchors=[];
+    // 4px clears the page's drag threshold. One legal step per event, with
+    // back-and-forth sweeps where a row has fewer than 30 distinct positions.
+    row.x=row.x-row.w/2+8+(spec.value-spec.min)/(spec.max-spec.min)*240;let value=spec.value,raw=spec.value,x=row.x,dir=value>(spec.max+spec.min)/2?-1:1;await mouse('mousePressed',row.x,row.y);
+    for(let i=0;i<36;i++){
+      if(value+dir*spec.step>spec.max||value+dir*spec.step<spec.min)dir=-dir;
+      value=Math.max(spec.min,Math.min(spec.max,value+dir*spec.step));
+      const dx=(value-raw)/(spec.max-spec.min)*240;raw=value;x+=dx;
+      // Wide-range integer knobs need >4px to start. The first displacement
+      // may cross two steps; subsequent steps follow the page's own rounding.
+      if(i===0&&Math.abs(x-row.x)<4){x=row.x+dir*4.1;raw=spec.value+dir*4.1*(spec.max-spec.min)/240;value=spec.min+Math.round((raw-spec.min)/spec.step)*spec.step;}
+      await mouse('mouseMoved',x,row.y);await sleep(30);
+      if(paused&&i===17){anchors.push(await anchor());await sleep(1000);}
+    }
+    anchors.push(await anchor());await mouse('mouseReleased',x,row.y);await settle();
+    const p=await capture(t0,anchors,{control,scenario:cold?'cold-gate':paused?'pause':'continuous',range:spec,pauseRequestedMs:paused?1000:0});
+    p.valuesDelivered=p.handlers.length;p.distinctValues=new Set(p.handlers.map(h=>h.value)).size;
+    await ev(`(()=>{const e=document.getElementById(${JSON.stringify(control)});e.value=${spec.value};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`);await settle();
+    if(!cold&&p.valuesDelivered<30)throw Error(`${control}: only ${p.valuesDelivered} value changes delivered`);
+    return p;
+  };
+  if(!noSliders){
+    result.slider=[];
+    for(const control of sliderNames){
+      for(const paused of [false,true]){
+        console.error('phase slider',control,paused?'pause':'continuous');await setup();
+        if(control==='colors'){await openWorld(control);result.slider.push(await colorDrag(paused));}else result.slider.push(await scrub(control,paused));flush();
+      }
+    }
+    // A gate is a shader comparison, not every numerical zero. This gate
+    // starts closed and has not been opened in this fresh session.
+    console.error('phase slider cold gate');await setup();await openWorld('knob-creaseShade');
+    await ev(`(()=>{const e=document.getElementById('knob-creaseShade');e.value=0;e.dispatchEvent(new Event('input',{bubbles:true}));})()`);await settle();
+    result.coldGateBefore=await ev('sculptDebug.specStats');
+    result.coldGateCache={note:'fresh session; creaseShade remained zero until this phase; no cache entries evicted'};
+    const cold=await scrub('knob-creaseShade',false,true);const first=cold.observations[0];cold.coldCrossing=first?{firstMs:first.first===null?null:first.first-first.t,wholeMs:first.all===null?null:first.all-first.t,pipelinesBeforeFirst: cold.split.pipelines.filter(p=>p.t>=first.t&&p.t<first.first)}:null;cold.gate='u.creaseShade > 0.0';result.slider.push(cold);flush();
+  }
+  if(only==='slider')throw Error('stopped after slider (--only)');
+  console.error('phase scroll');await setup();
+  {const t0=await begin();const jump=await ev(`(()=>{const v=document.getElementById('viewport'),from={x:v.scrollLeft,y:v.scrollTop};__perf.input('scroll','viewport');v.scrollLeft=Math.min(v.scrollWidth-v.clientWidth,from.x+2400);v.scrollTop=Math.min(v.scrollHeight-v.clientHeight,from.y+2400);return {from,to:{x:v.scrollLeft,y:v.scrollTop}};})()`);const a=await anchor();delete a.keys;await settle();result.scroll=await capture(t0,[a],{jump,driver:'one pan onto uncached ground (diagonal so map4 large also exposes new ground)'});flush();}
+
+  if(only==='scroll')throw Error('stopped after scroll (--only)');
+  if(!noExport){console.error('phase export');const t0=await begin(),a=await anchor();await ev(`sculptMap.export('LP0${mode}${port}').then(r=>window.__export={done:true,result:r},e=>window.__export={done:true,error:e.message});true`);await until('window.__export?.done','export',900000);result.export=await capture(t0,[a],await ev('window.__export'));flush();}
+}catch(e){if(!String(e).includes('(--only)'))result.error=String(e.stack||e);}
+finally{
+  result.finishedAt=new Date().toISOString();result.loadAverageAtEnd=loadavg();result.console=logs;flush();
+  console.log(warmup?'Warm-up discarded.':budgetTable([result]));if(result.error)console.error(result.error);
+  ws.close();chrome.kill();await new Promise(r=>chrome.exitCode!==null?r():chrome.once('exit',r));
+  // This process owns this exact temporary Chrome profile; remove it promptly.
+  rmSync(profile,{recursive:true,force:true});
+}
+process.exitCode=result.error?1:result.slider?.some(p=>p.status==='blocked')?2:0;
+
+// The native chooser is a browser popup widget rather than page DOM. Locate
+// its rainbow bar in a screenshot before timing, then drive that widget with
+// the same real CDP mouse events as the scrub rows. No replacement picker.
+async function colorDrag(paused){
+  if(colorsMode==='scripted')return scriptedColor(paused);
+  await clickElement('#tab-world');
+  await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');for(let p=e.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;})()`);
+  const original=await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');return {value:e.value,checked:e.previousElementSibling.checked};})()`);
+  await clickElement('#world-colors input[type=color]');await sleep(250);
+  const screenshot=await send('Page.captureScreenshot',{format:'png'});
+  const bar=await ev(`new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>{const c=document.createElement('canvas');c.width=img.width;c.height=img.height;const g=c.getContext('2d');g.drawImage(img,0,0);const d=g.getImageData(0,0,c.width,c.height).data;
+    for(let y=0;y<c.height;y++){let xs=[],bins=new Set();const check=()=>{if(xs.length<75||xs.at(-1)-xs[0]<100||xs.at(-1)-xs[0]>180||bins.size<5)return null;return {x:xs[0],y,width:xs.at(-1)-xs[0],screenshotWidth:c.width,screenshotHeight:c.height};};for(let x=0;x<c.width;x++){const i=(y*c.width+x)*4,r=d[i]/255,g=d[i+1]/255,b=d[i+2]/255,hi=Math.max(r,g,b),lo=Math.min(r,g,b);if(hi<.8||hi-lo<.7)continue;if(xs.length&&x-xs.at(-1)>20){const found=check();if(found)return resolve(found);xs=[];bins=new Set();}let h=hi===r?((g-b)/(hi-lo)+6)%6:hi===g?(b-r)/(hi-lo)+2:(r-g)/(hi-lo)+4;xs.push(x);bins.add(Math.floor(h));}const found=check();if(found)return resolve(found);}reject(Error('Native color spectrum not found'));};img.onerror=reject;img.src='data:image/png;base64,${screenshot.data}';})`);
+  const t0=await begin(),anchors=[],x=bar.x+3,y=bar.y+5;
+  await mouse('mousePressed',x,y);
+  for(let i=1;i<=36;i++){await mouse('mouseMoved',x+(bar.width-6)*i/36,y);await sleep(30);if(paused&&i===18){anchors.push(await anchor());await sleep(1000);}}
+  anchors.push(await anchor());await mouse('mouseReleased',x+bar.width-6,y);await key('Escape');await settle();
+  const p=await capture(t0,anchors,{control:'colors',scenario:paused?'pause':'continuous',nativeSpectrum:bar,pauseRequestedMs:paused?1000:0});p.valuesDelivered=p.handlers.length;p.distinctValues=new Set(p.handlers.map(h=>h.value)).size;
+  if(p.valuesDelivered<30){p.samples={first:[],firstTile:[],pointer:[],all:[],final:[],focus:[]};p.sampleTotals={first:36,pointer:0,all:36,final:anchors.length,focus:anchors.length};p.latencyChanged=distribution([],36);p.latency=distribution([],36);p.latencyPointer=distribution([],0);p.latencyAll=distribution([],36);p.final=distribution([],anchors.length);p.status='blocked';p.reason='Chrome native popup ignores CDP mouse events; no scripted substitute used';console.error('Colors gap:',p.reason);}
+  if(p.valuesDelivered){await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');e.value=${JSON.stringify(original.value)};e.dispatchEvent(new Event('input',{bubbles:true}));if(!${original.checked}){e.previousElementSibling.checked=false;e.previousElementSibling.dispatchEvent(new Event('change',{bubbles:true}));}})()`);await settle();}
+  return p;
+}
+
+// Owner-authorized alternative for a native popup that ignores CDP input.
+// The existing picker and its own input listener do all editor work. Only
+// the workload driver is scripted; no replacement control or render path.
+async function scriptedColor(paused){
+  await clickElement('#tab-world');
+  const original=await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');for(let p=e.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;e.scrollIntoView({block:'center'});return {value:e.value,checked:e.previousElementSibling.checked,label:e.getAttribute('aria-label')};})()`);
+  // A full hue sweep at fixed saturation/value: 36 distinct legal colors.
+  const values=Array.from({length:36},(_,i)=>{const h=i/6,c=.65*.65,x=c*(1-Math.abs(h%2-1)),m=.65-c,rgb=h<1?[c,x,0]:h<2?[x,c,0]:h<3?[0,c,x]:h<4?[0,x,c]:h<5?[x,0,c]:[c,0,x];return '#'+rgb.map(v=>Math.round((v+m)*255).toString(16).padStart(2,'0')).join('');});
+  const t0=await begin(),anchors=[];
+  for(let i=0;i<values.length;i++){
+    await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');e.value=${JSON.stringify(values[i])};e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await sleep(30);
+    if(paused&&i===17){anchors.push(await anchor());await sleep(1000);}
+  }
+  anchors.push(await anchor());await settle();
+  const p=await capture(t0,anchors,{control:'colors',scenario:paused?'pause':'continuous',driver:'scripted Colors value/input sequence (not native mouse)',picker:original.label,requestedValues:values,pauseRequestedMs:paused?1000:0});
+  p.valuesDelivered=p.handlers.length;p.distinctValues=new Set(p.handlers.map(h=>h.value)).size;
+  await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');e.value=${JSON.stringify(original.value)};e.dispatchEvent(new Event('input',{bubbles:true}));if(!${original.checked}){e.previousElementSibling.checked=false;e.previousElementSibling.dispatchEvent(new Event('change',{bubbles:true}));}})()`);await settle();
+  if(p.valuesDelivered!==36||p.distinctValues!==36||p.handlers.some(h=>h.isTrusted!==false))throw Error('Scripted Colors did not deliver 36 distinct, explicitly untrusted input events');
+  return p;
+}

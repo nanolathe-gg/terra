@@ -637,7 +637,13 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), sel
 // Painted style factor for f in -1..1 (card C5): 1 at 0 (exactly), 0 at -1,
 // 4 at +1 (two doublings).
 fn styleScale(f: f32) -> f32 { return select(1.0 + f, exp2(2.0 * f), f > 0.0); }
-fn regionalUv(uv: vec2f) -> vec2f { return (uv * u.grid - u.chunkGridOrigin) / u.chunkGridSize; }
+fn regionalUv(uv: vec2f) -> vec2f {
+    // Split on the global lattice before subtracting the tile origin. A fused
+    // multiply-subtract otherwise rounds at the local coordinate's precision,
+    // moving a filter weight across a rounding boundary when the tile changes.
+    let q = modf(uv * u.grid);
+    return ((q.whole - u.chunkGridOrigin) + q.fract) / u.chunkGridSize;
+}
 fn maskUv(p: vec2f) -> vec2f { return regionalUv((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid); }
 
 // Slope averaged over about 14 px: the relief a painted edge follows changes

@@ -10,7 +10,7 @@ import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
 import {RockWeather} from './sculpt-rock-weather.js';
 import {VoxelSurface} from './sculpt-volume.js';
-import {extractGates, gateValues, gateKey} from './sculpt-gates.js';
+import {extractGates, gateValues, gateKey, uniformStages, worldUniformDelta} from './sculpt-gates.js';
 
 // The mask planes when the config names none: as many as MASK_KEYS (sculpt-scene.js, which says what each holds). The masks texture array has a layer per 4 planes.
 const MASK_PLANE_COUNT = 25;
@@ -181,7 +181,7 @@ export class TerrainRenderer {
     // Every world's materials are numbers: the config names its table (config.materialTable).
     const tableUrl = this.config.materialTable;
     this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl'];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch(name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
@@ -198,6 +198,7 @@ export class TerrainRenderer {
     this.materialsSource = extra[0];
     this.commonSource = common;
     this.volumeSource = extra[4];
+    this.timeSources={erosion:this.preprocessShader(extra[5]),maps:this.preprocessShader(extra[6])};
     this.layout = uniformLayout(preprocess(common, '', new Set()));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
@@ -214,8 +215,10 @@ export class TerrainRenderer {
       return module;
     };
     // P6: the draw's and the bake's uniform gates are override bools (sculpt-gates.js); the pipelines are built per set of values, see specialized().
-    const fragGates = extractGates(preprocess(frag.replace('/*VOLUME*/',this.volumeSource), common, new Set(['VOLUME_RENDER'])), this.layout.fields);
-    const bakeGates = extractGates(preprocess(bake, common, new Set(['BAKE'])), this.layout.fields);
+    const fragSource=preprocess(frag.replace('/*VOLUME*/',this.volumeSource),common,new Set(['VOLUME_RENDER']));
+    const bakeSource=preprocess(bake,common,new Set(['BAKE']));
+    this.stageSources=[{source:fragSource,stage:'F'},{source:fragSource,stage:'E',roots:['voxelHit','voxelNormal','occlusion','visibility']},{source:bakeSource,stage:'C'}];
+    const fragGates=extractGates(fragSource,this.layout.fields),bakeGates=extractGates(bakeSource,this.layout.fields);
     const [vertModule, fragModule, bakeModule] = await Promise.all([
       compile('sculpt-vert.wgsl', preprocess(vert, common, new Set())),
       compile('engine-frag.wgsl', fragGates.source),
@@ -251,6 +254,9 @@ export class TerrainRenderer {
     this.bakePipelineLayout = bakeLayout;
     this.rockWeather = await RockWeather.create(this,preprocess);
     this.voxel = await VoxelSurface.create(this,this.volumeSource,preprocess);
+    const timeModules=Object.values(this.timeSources).map(source=>({source,stage:'B'}));
+    this.timeUniformFields=[...uniformStages(timeModules).keys()].sort();
+    this.uniformStages=uniformStages([...this.stageSources,...timeModules]);this.stageSources=null;
     this.drawPipelineLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, this.materialLayout,this.voxel.drawLayout]});
     const mipModule = device.createShaderModule({label: 'mip levels', code: MIP_SHADER});
     this.mipPipeline = device.createRenderPipeline({label: 'mip levels', layout: 'auto',
@@ -290,7 +296,6 @@ export class TerrainRenderer {
     for (const [key, value] of Object.entries(this.config.defaults || {}))
       if (!variant.has(key)) variant.set(key, value);
     this.variant = variant;
-    const slopeMaterial = ['slopes', 'structured'].includes(variant.get('surface'));
     this.means = {};
     // The materials the table makes, by name: which optional stages the world has.
     this.layers = new Set(this.materialData.order);
@@ -309,46 +314,7 @@ export class TerrainRenderer {
     // table's `beach` layer (6 in a world's own table, the last when borrowed).
     this.transitionBody = this.layers.has('body');
     if (this.layers.has('beach')) this.means.beach = this.materialData.measured.beach.meanRGB.map(v => v / 255);
-    this.i('uBeach', this.layers.has('beach'));
-    this.i('uBeachLayer', this.materialData.order.indexOf('beach'));
-    this.f('uBeachHeight',this.config.material?.beachHeight??6);
-    const mid=this.config.water?.midRGB, midDepth=this.config.material?.midDepth;
-    this.set('uWaterMid', mid && midDepth ? [...mid.map(v => v / 255), midDepth] : [0, 0, 0, 0]);
-    this.f('uGrid', this.grid);
-    this.f('uSize', this.size);
-    this.f('uBase', this.config.baseHeight - this.config.seaLevel);
-    this.f('uSea', 0);
-    this.f('uDetail', this.config.material?.surfaceRelief ?? 1.0);
-    this.i('uSlopeMaterial', slopeMaterial);
-    this.i('uMineralMargins', variant.get('transition') === 'mineral');
     this.applyKnobs();
-    this.i('uDiagnosticView', ['diffuse','occlusion','shadow','exposure','shading','material','cracks'].indexOf(variant.get('view')) + 1);
-    this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
-    const material = this.config.material || {};
-    this.set('uSlopeProfile', [material.slopeStart ?? .10,
-      material.slopeFull ?? .55, material.slopeFloor ?? 8.0, material.slopeDry ?? 24.0]);
-    this.v('uElevatedCover', material.elevatedCover || [5, 32, 0]);
-    this.i('uSlopeOnLowBanks', material.slopeOnLowBanks !== false);
-    this.f('uRampMaterial', material.rampMaterial ?? 0);
-    this.i('uSlopeSand', Boolean(material.slopeSand));
-    this.i('uGrassSlopes', Boolean(material.grassSlopes));
-    this.v('uCrystalColor', (material.crystalRGB || [110, 150, 225]).map(v => v / 255));
-    this.i('uGroundFringe', material.groundFringe === true);
-    // A preset can retain coloured veins or dark neutral grain at its edge.
-    // The blending algorithm does not choose a biome's material colour.
-    this.set('uFringeSignal', material.fringeSignal || [-.299, -.587, -.114, 1]);
-    this.set('uFringeRange', material.fringeRange || [.08, .28]);
-    this.f('uWetBand', material.wetBand ?? 13);
-    // E6: mineralDetail scales the rock art's contrast about its mean (1: as drawn).
-    const rockMean = material.hillRockMeanRGB || [85, 84, 79];
-    this.v('uRockMean', rockMean.map(v => v / 255));
-    this.v('uShallowColor', (this.config.water?.shallowRGB || [60, 115, 163]).map(v => v / 255));
-    const bed = this.config.water?.riverBedRGB;   // riverfix: a braided bed's gravel, world data (absent: the draw darkens the world's rock)
-    this.set('uRiverBed', bed ? [...bed.map(v => v / 255), 1] : [0, 0, 0, 0]);
-    this.v('uDeepColor', (this.config.water?.deepRGB || [16, 57, 133]).map(v => v / 255));
-    this.v('uWaterMean', this.materialData.measured[this.config.water.deep].meanRGB.map(v => v / 255));
-    this.i('uWaterLayer', this.materialData.order.indexOf(this.config.water.deep));
-    this.i('uShallowLayer', this.materialData.order.indexOf(this.config.water.shallow));
   }
 
   sampler(descriptor) {
@@ -438,29 +404,7 @@ export class TerrainRenderer {
     return response.json();
   }
 
-  setColors(colors = {}) {
-    this.colorOverrides = {...colors};
-    this.set('uMaterialTable', this.placementTable(this.variant));
-    for (const key of ['ground', 'slope', 'sand', 'beach', 'shallow', 'deep', 'crystal']) {
-      const c = colors[key];
-      this.set('u' + key[0].toUpperCase() + key.slice(1) + 'Base', c ? [...c, 1] : [0, 0, 0, 0]);
-    }
-    // The light's colours (card P12b): white is the grey light every world had.
-    this.v('uSunColor', colors.sun || [1, 1, 1]);
-    this.v('uSkyColor', colors.sky || [1, 1, 1]);
-    // Low ground's color: the world's pick, else a dark red-brown mud (retail Zhon's lowland).
-    this.v('uLowColor', colors.low || LOW_GROUND_RGB.map(v => v / 255));
-    // The authored slot palette, or tones of this world's own rock.
-    const strataDefaults = columnColors(this.config.column,this.means.rock);
-    const strata = strataDefaults.map((c, i) => colors['strata' + (i + 1)] || c.map(v => v / 255));
-    // The world's rock is slot 0 of the rock table: its colour (a = 1 when the world chose one) and its beds' slots, which a recipe without
-    // colours of its own takes (writeRocks).
-    // Row 6: the color it deepens toward with thickness (B4), the world's 'absorb' color where it chose one.
-    this.set('uRockColors', [colors.rock ? [...colors.rock, 1] : [0, 0, 0, 0], ...strata, colors.absorb ? [...colors.absorb, 1] : [0, 0, 0, 0]]);
-    for (const key of ['ground', 'slope', 'rock', 'beach'])
-      this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
-    this.writeRocks();
-  }
+  setColors(colors = {}) { this.colorOverrides={...colors};this.worldDirty=true;return this.syncWorld(); }
 
   // GLSL uniform uFooBar is the uniform block's field fooBar. A value is a
   // number or boolean, a vector's components, or (for an array) a list of
@@ -716,38 +660,9 @@ export class TerrainRenderer {
 
   async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
     const start = performance.now(), device = this.device;
-    this.i('uClay', clay);
-    const weatherAmount=materialWeathering;
-    this.f('uMaterialWeathering', weatherAmount);
-    this.f('uTransitionDetail', transitionDetail);
+    this.syncWorld({clay,light,detail,ring,ringSpread,ringVariation,materialWeathering,transitionDetail,exact});
     this.i('uMaterialReady', this.materialReady);
-    const useBody=this.transitionBody && this.materialReady && weatherAmount>0;
-    this.i('uTransitionBody', Boolean(useBody));
-    this.f('uDetail', this.variant.get('relief') === 'base' ? 0 : detail);
-    this.f('uRingAmount', this.layers.has('ring') ? ring : 0);
-    this.f('uRingSpread', ringSpread);
-    this.f('uRingVariation', ringVariation);
-    this.i('uQuantize', (this.variant.get('palette') || 'nearest') !== 'off');
-    this.i('uPaletteMix', Number(this.variant.get('paletteMix')) > 0.5);
-    this.f('uShoreEdge', Number(this.variant.get('shoreEdge')) || 0);
-    this.f('uCrystalGrain', Number(this.variant.get('crystalGrain')) || 0);
-    this.f('uCrystalFace', this.variant.has('crystalFace') ? Number(this.variant.get('crystalFace')) : 1);
-    this.f('uCrystalInk', Number(this.variant.get('crystalInk')) || 0);
-    this.f('uCrystalTone', this.variant.has('crystalTone') ? Number(this.variant.get('crystalTone')) : 1);
-    let sun = this.sunVector(light);
-    this.worldSun = sun.map(v => v / Math.hypot(...sun));   // the map's own sun, as exports draw it (sculpt-features.js lights the features by it)
-    // Review sun (card H1): the page's ?sun=<azimuth> turns the light about the vertical by that many degrees, for looking at the relief
-    // from other directions (ink keeps its shade, geometry does not); its height stays Sun height's. Exports never take it (exact).
-    const review = exact ? null : /^\s*(-?[\d.]+)\s*$/.exec(this.variant.get('sun') || '');
-    if (review) {
-      const turn = Math.atan2(sun[1], sun[0]) + (Number(review[1]) || 0) * Math.PI / 180, flat = Math.hypot(sun[0], sun[1]);
-      sun = [Math.cos(turn) * flat, Math.sin(turn) * flat, sun[2]];
-    }
-    const length = Math.hypot(...sun);
-    this.v('uLight', sun.map(v => v / length));
-    // Lit crack walls are baked for this light.
-    const sunKey = sun.join(',');
-    if (this.sunKey !== sunKey) { this.sunKey = sunKey; this.sun = sun.map(v => v / length); this.fieldsDirty = true; }
+    this.i('uTransitionBody', Boolean(this.transitionBody&&this.materialReady&&materialWeathering>0));
     const encoder = device.createCommandEncoder({label: 'terrain'});
     // P6: a SpecializationMiss abandons this encoder, its bake included, so the fields go back to unbaked and the retry bakes again.
     const dirty = this.fieldsDirty;
@@ -781,7 +696,16 @@ export class TerrainRenderer {
   }
 
   // Surface knobs read from the variant; callable again after a change.
-  applyKnobs() {
+  // One writer for world uniforms. Chunk availability/paint flags stay with
+  // the chunk. Repeated draws reuse the synchronized world; public setters
+  // force a refresh when their data changes.
+  syncWorld(options=this.worldOptions??{}) {
+    const {clay=false,light='original',detail=this.config.material?.surfaceRelief??1,ring=.85,ringSpread=.65,ringVariation=.7,materialWeathering=this.config.material?.materialWeathering??0,transitionDetail=this.config.material?.transitionDetail??.65,exact=false}=options;
+    const values={clay,light,detail,ring,ringSpread,ringVariation,materialWeathering,transitionDetail,exact};
+    const key=JSON.stringify([values,this.grid,this.size]);
+    if(!this.worldDirty&&this.worldSyncKey===key)return {fields:[],stage:null,rockSlots:[],channels:[]};
+    const wasDirty=this.fieldsDirty;
+    this.worldOptions=values;
     const variant = this.variant;
     // Placement is live state too: refreshing only scalar uniforms left these
     // controls frozen at startup in the generated materials.
@@ -932,18 +856,142 @@ export class TerrainRenderer {
     this.f('uLooseKnoll', variant.has('looseKnoll') ? Number(variant.get('looseKnoll')) : 0);
     this.f('uGougeWeb', variant.has('gougeWeb') ? Number(variant.get('gougeWeb')) : 0);
     this.f('uCreaseShade', variant.has('creaseShade') ? Number(variant.get('creaseShade')) : 0);
-    this.writeRocks();
     this.fieldsDirty = true;
-  }
-
-  variantNumber(key, fallback) { const x = Number(this.variant.get(key)); return Number.isFinite(x) && this.variant.has(key) ? x : fallback; }
-
-  // H5: a shader that pastes the common source under EROSION, as erosion.wgsl does.
-  preprocessShader(source) { return preprocess(source, this.commonSource, new Set(['EROSION'])); }
-
-  // H2, H16 rock column. The world's table (config.column, from materials/<world>.json; sculpt-column.js). No sections: no column.
-  // Erosion reads the same uniforms, so the draw and the pass share one column.
-  setColumn() {
+    {
+    this.i('uBeach', this.layers.has('beach'));
+    this.i('uBeachLayer', this.materialData.order.indexOf('beach'));
+    this.f('uBeachHeight',this.config.material?.beachHeight??6);
+    const mid=this.config.water?.midRGB, midDepth=this.config.material?.midDepth;
+    this.set('uWaterMid', mid && midDepth ? [...mid.map(v => v / 255), midDepth] : [0, 0, 0, 0]);
+    this.f('uGrid', this.grid);
+    this.f('uSize', this.size);
+    this.f('uBase', this.config.baseHeight - this.config.seaLevel);
+    this.f('uSea', 0);
+    this.f('uDetail', this.config.material?.surfaceRelief ?? 1.0);
+    this.i('uSlopeMaterial', ['slopes', 'structured'].includes(variant.get('surface')));
+    this.i('uMineralMargins', variant.get('transition') === 'mineral');
+    this.i('uDiagnosticView', ['diffuse','occlusion','shadow','exposure','shading','material','cracks'].indexOf(variant.get('view')) + 1);
+    this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
+    const material = this.config.material || {};
+    this.set('uSlopeProfile', [material.slopeStart ?? .10,
+      material.slopeFull ?? .55, material.slopeFloor ?? 8.0, material.slopeDry ?? 24.0]);
+    this.v('uElevatedCover', material.elevatedCover || [5, 32, 0]);
+    this.i('uSlopeOnLowBanks', material.slopeOnLowBanks !== false);
+    this.f('uRampMaterial', material.rampMaterial ?? 0);
+    this.i('uSlopeSand', Boolean(material.slopeSand));
+    this.i('uGrassSlopes', Boolean(material.grassSlopes));
+    this.v('uCrystalColor', (material.crystalRGB || [110, 150, 225]).map(v => v / 255));
+    this.i('uGroundFringe', material.groundFringe === true);
+    // A preset can retain coloured veins or dark neutral grain at its edge.
+    // The blending algorithm does not choose a biome's material colour.
+    this.set('uFringeSignal', material.fringeSignal || [-.299, -.587, -.114, 1]);
+    this.set('uFringeRange', material.fringeRange || [.08, .28]);
+    this.f('uWetBand', material.wetBand ?? 13);
+    // E6: mineralDetail scales the rock art's contrast about its mean (1: as drawn).
+    const rockMean = material.hillRockMeanRGB || [85, 84, 79];
+    this.v('uRockMean', rockMean.map(v => v / 255));
+    this.v('uShallowColor', (this.config.water?.shallowRGB || [60, 115, 163]).map(v => v / 255));
+    const bed = this.config.water?.riverBedRGB;   // riverfix: a braided bed's gravel, world data (absent: the draw darkens the world's rock)
+    this.set('uRiverBed', bed ? [...bed.map(v => v / 255), 1] : [0, 0, 0, 0]);
+    this.v('uDeepColor', (this.config.water?.deepRGB || [16, 57, 133]).map(v => v / 255));
+    this.v('uWaterMean', this.materialData.measured[this.config.water.deep].meanRGB.map(v => v / 255));
+    this.i('uWaterLayer', this.materialData.order.indexOf(this.config.water.deep));
+    this.i('uShallowLayer', this.materialData.order.indexOf(this.config.water.shallow));
+    }
+    {
+    this.i('uClay', clay);
+    const weatherAmount=materialWeathering;
+    this.f('uMaterialWeathering', weatherAmount);
+    this.f('uTransitionDetail', transitionDetail);
+    this.f('uDetail', this.variant.get('relief') === 'base' ? 0 : detail);
+    this.f('uRingAmount', this.layers.has('ring') ? ring : 0);
+    this.f('uRingSpread', ringSpread);
+    this.f('uRingVariation', ringVariation);
+    this.i('uQuantize', (this.variant.get('palette') || 'nearest') !== 'off');
+    this.i('uPaletteMix', Number(this.variant.get('paletteMix')) > 0.5);
+    this.f('uShoreEdge', Number(this.variant.get('shoreEdge')) || 0);
+    this.f('uCrystalGrain', Number(this.variant.get('crystalGrain')) || 0);
+    this.f('uCrystalFace', this.variant.has('crystalFace') ? Number(this.variant.get('crystalFace')) : 1);
+    this.f('uCrystalInk', Number(this.variant.get('crystalInk')) || 0);
+    this.f('uCrystalTone', this.variant.has('crystalTone') ? Number(this.variant.get('crystalTone')) : 1);
+    let sun = this.sunVector(light);
+    this.worldSun = sun.map(v => v / Math.hypot(...sun));   // the map's own sun, as exports draw it (sculpt-features.js lights the features by it)
+    // Review sun (card H1): the page's ?sun=<azimuth> turns the light about the vertical by that many degrees, for looking at the relief
+    // from other directions (ink keeps its shade, geometry does not); its height stays Sun height's. Exports never take it (exact).
+    const review = exact ? null : /^\s*(-?[\d.]+)\s*$/.exec(this.variant.get('sun') || '');
+    if (review) {
+      const turn = Math.atan2(sun[1], sun[0]) + (Number(review[1]) || 0) * Math.PI / 180, flat = Math.hypot(sun[0], sun[1]);
+      sun = [Math.cos(turn) * flat, Math.sin(turn) * flat, sun[2]];
+    }
+    const length = Math.hypot(...sun);
+    this.v('uLight', sun.map(v => v / length));
+    // Lit crack walls are baked for this light.
+    const sunKey = sun.join(',');
+    if (this.sunKey !== sunKey) { this.sunKey = sunKey; this.sun = sun.map(v => v / length); this.fieldsDirty = true; }
+    }
+    {
+    const v = this.variant;
+    const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
+    const set = (name, value) => this.set(name, Number(value));
+    set('uGrid', this.grid); set('uSize', this.size); set('uBase', this.config.baseHeight - this.config.seaLevel); set('uSea', 0); set('uPool', groundPool(this.config.material));
+    {
+      for (const [key, fallback] of [['terraceBreak', 0], ['terraceCalm', 0], ['wetSwath', 0], ['lushness', 0], ['rillDepth', 0], ['rillSpacing', 8]])
+        set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
+    }
+    set('uReliefScale', number('reliefScale', 28));
+    set('uReliefAmount', number('reliefAmount', 0.5));
+    set('uReliefBranch', number('reliefBranch', 2.0));
+    set('uReliefLumps', number('reliefLumps', 0.7));
+    set('uReliefGain', number('reliefGain', 0.55));
+    set('uReliefWarp', number('reliefWarp', 10));
+    set('uReliefPatchy', number('reliefPatchy', 1));
+    set('uReliefJitter', number('reliefJitter', 0.8));
+    set('uFaceStreak', number('faceStreak', 0));
+    for (const [key, fallback] of [['rockFace', 0], ['rockFaceFrom', 0.6], ['faceBed', 5.5], ['faceLedge', 2.2], ['faceRun', 90], ['faceLean', 28], ['faceScratch', 2.5],
+      ['faceScratchSize', 7], ['faceBlock', 3], ['faceBlockSize', 11], ['faceGrit', 0], ['faceGrass', 0.8], ['faceRock', 0.9], ['faceCrease', 2.5], ['faceCreaseSize', 6],
+      ['faceShade', 0.85], ['faceWear', 0.35], ['faceLayers', 0], ['faceMass', 1], ['faceTone', 0.12], ['faceStrata', 0], ['faceWet', 0], ['shoreRock',0],['shoreShelf',0],['runoff',0],['runoffScale',24],['runoffConcentration',.65],['runoffCut',2],['runoffStain',.5],['debrisAmount',0],['debrisReach',56],['debrisDepth',4],['rimReach',0], ['faceJointTilt',0],['faceScaleVary',0],['faceFold',0],['faceBedVary',1],['bedCycleVary',0],['faceBreak',0],['faceSpall',0],['faceClast',0],['faceClastSize',12],['faceMineral',0],['faceJointWidth',1],['faceSecondary',.35],['faceContinuity',1],['faceDetailPatch',0],['faceWhole',0],['faceWholeLarge',0],['faceRegular',0],['sandLee',0],['groundPatch',0],['groundPatchSize',200],['faceFresh',0],['faceRind',0],['faceRindDepth',6],['faceRindTone',-.22],['faceRindWarmth',.35],['faceRindRough',.65], ['faceStretch', 1], ['faceBlockHeight', 1], ['faceRound', 0], ['faceJoint', 0.35], ['faceExtrude', 0], ['faceLamina', 0], ['faceLaminaSize', 6], ['faceScratchLength', 50], ['faceScratchAngle', 0], ['faceGritSize', 1.3], ['absorbDepth', 0], ['shadowTint', 0]])
+      set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
+    set('uFaceStreakFrom', number('faceStreakFrom', 0.3));
+    set('uGentleRelief', number('gentleRelief', 0.6));
+    set('uSand', number('sand', 0));
+    set('uCrackSeverity', number('crackSeverity', 0.6));
+    set('uPlainRelief', number('plainRelief', 1.2));
+    set('uBedRelief', number('bedRelief', 0));
+    set('uLumpRelief', number('lumpRelief', 4));
+    set('uCrackSpacing', number('crackSpacing', 40));
+    set('uCrackWidth', number('crackWidth', 1));
+    set('uCrackNetwork', number('crackNetwork', 0.35));
+    set('uCrackMinor', number('crackMinor', 0.75));
+    set('uCrackHairline', number('crackHairline', 0.6));
+    set('uCrackBlocks', number('crackBlocks', 0.6));
+    set('uCrackMajor', number('crackMajor', 0.8));
+    if (this.sun) this.v('uSun', this.sun);
+    set('uWindAngle', number('wind', 20));
+    set('uRipple', number('ripple', 7));
+    set('uRippleHeight', number('rippleHeight', 1.4));
+    set('uBanding', number('banding', 0));
+    set('uApron', number('apron', 0));
+    set('uWorms', number('worms', 0));
+    set('uLooseSupply', number('looseSupply', 0));
+    set('uBoulders', number('boulders', 0));
+    set('uSoilRim', number('soilRim', 0));
+    set('uWetGround', number('wetGround', 0));
+    set('uLooseSize', number('looseSize', 6));
+    set('uPlantsOn', groundCoverOn(this.config.material?.groundCover, this.variant) && this.config.material.groundCover.plants ? 1 : 0);
+    set('uStoneRound', number('stoneRound',this.config.material?.stoneRound ?? 0));
+    set('uStoneSort', number('stoneSort',this.config.material?.stoneSort ?? 0.6));
+    set('uStoneSlab', number('stoneSlab',this.config.material?.stoneSlab ?? 0.05));
+    set('uStoneMoss', this.config.material?.stoneMoss ?? 0.35);
+    set('uBandSoftness', number('bandSoftness', 0.35));
+    set('uBandJag', number('bandJag', 0));
+    set('uBandFade', number('bandFade', 0.75));
+    set('uBeachDistance', this.layers.has('beach') ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
+    set('uHasBeach', this.layers.has('beach'));
+    set('uSandBanding', number('sandBanding', 0));
+    set('uSandBandSpacing', number('sandBandSpacing', 2));
+    set('uReliefOctaves', number('reliefOctaves', 5));
+    }
+    {
     const column = this.config.column, v = this.variant;
     const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
     const {beds, starts, bands} = columnRows(column, this.config.variant);
@@ -956,8 +1004,59 @@ export class TerrainRenderer {
     this.set('uColumnOrigin', column?.origin === 'plain' ? this.config.baseHeight - this.config.seaLevel : 0);
     this.set('uBandSpacing', bands[0]);
     this.set('uBandLine', bands[1]);
+    }
+    if(this.colorOverrides){const colors=this.colorOverrides;
+    this.set('uMaterialTable', this.placementTable(this.variant));
+    for (const key of ['ground', 'slope', 'sand', 'beach', 'shallow', 'deep', 'crystal']) {
+      const c = colors[key];
+      this.set('u' + key[0].toUpperCase() + key.slice(1) + 'Base', c ? [...c, 1] : [0, 0, 0, 0]);
+    }
+    // The light's colours (card P12b): white is the grey light every world had.
+    this.v('uSunColor', colors.sun || [1, 1, 1]);
+    this.v('uSkyColor', colors.sky || [1, 1, 1]);
+    // Low ground's color: the world's pick, else a dark red-brown mud (retail Zhon's lowland).
+    this.v('uLowColor', colors.low || LOW_GROUND_RGB.map(v => v / 255));
+    // The authored slot palette, or tones of this world's own rock.
+    const strataDefaults = columnColors(this.config.column,this.means.rock);
+    const strata = strataDefaults.map((c, i) => colors['strata' + (i + 1)] || c.map(v => v / 255));
+    // The world's rock is slot 0 of the rock table: its colour (a = 1 when the world chose one) and its beds' slots, which a recipe without
+    // colours of its own takes (writeRocks).
+    // Row 6: the color it deepens toward with thickness (B4), the world's 'absorb' color where it chose one.
+    this.set('uRockColors', [colors.rock ? [...colors.rock, 1] : [0, 0, 0, 0], ...strata, colors.absorb ? [...colors.absorb, 1] : [0, 0, 0, 0]]);
+    for (const key of ['ground', 'slope', 'rock', 'beach'])
+      this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
+    }
     this.writeRocks();
+    const channels={
+      timeColumn:this.timeUniformKey(),
+      reach:this.reaches?.()??null,
+      wear:this.rockSlots().some(k=>this.rockValue(k,'faceWear')>0&&this.rockValue(k,'rockFace')>0)?4:0,
+      loose:[Math.max(this.uniformValue('uLooseSupply'),this.uniformValue('uDebrisAny'),this.uniformValue('uBoulders'))>0,this.uniformValue('uPlantsOn')>0,Math.max(...this.rockSlots().map(k=>this.rockValue(k,'looseSize')))],
+      runoff:[this.uniformValue('uRunoffAny')>0,this.uniformValue('uDebrisAny')>0,this.uniformValue('uRimReach')>0,this.uniformValue('uShoreRock')>0,this.uniformValue('uShoreShelf')>0],
+      rocks:this.rockSlots(),
+    };
+    const delta=worldUniformDelta(this.worldUniformSnapshot,this.uniformData,this.layout,this.uniformStages);
+    delta.channels=[];
+    for(const [name,value]of Object.entries(channels))if(JSON.stringify(value)!==JSON.stringify(this.worldChannelSnapshot?.[name])){
+      const stage=name==='timeColumn'?'B':name==='wear'?'D':'C';delta.channels.push({name,stage});if(!delta.stage||stage<delta.stage)delta.stage=stage;
+    }
+    delta.timeChanged=channels.timeColumn!==this.worldChannelSnapshot?.timeColumn;
+    this.worldUniformSnapshot=new Uint32Array(this.uniformData.slice(0));this.worldChannelSnapshot=channels;
+    this.worldSyncKey=key;this.worldDirty=false;
+    this.fieldsDirty=wasDirty||Boolean(delta.stage);
+    return delta;
   }
+
+  applyKnobs() { this.worldDirty=true;return this.syncWorld(); }
+
+  variantNumber(key, fallback) { const x = Number(this.variant.get(key)); return Number.isFinite(x) && this.variant.has(key) ? x : fallback; }
+
+  // H5: a shader that pastes the common source under EROSION, as erosion.wgsl does.
+  preprocessShader(source) { return preprocess(source, this.commonSource, new Set(['EROSION'])); }
+
+  // H2, H16 rock column. The world's table (config.column, from materials/<world>.json; sculpt-column.js). No sections: no column.
+  // Erosion reads the same uniforms, so the draw and the pass share one column.
+  setColumn() { this.worldDirty=true;return this.syncWorld(); }
 
   // Rock recipes (struct Rock in engine-common.wgsl) in slots 1 to 15, by slot: {knobs, column, colors}, knobs by their ROCK_KEYS names, column a
   // rock column block (sculpt-column.js) and colors {rock, beds} as '#rrggbb' (sculpt-rock-presets.js checkColors). Slot 0 is the world's own
@@ -968,8 +1067,7 @@ export class TerrainRenderer {
     const count = this.uniform.get('rock').count;
     for (const slot of rocks.keys()) if (!Number.isInteger(slot) || slot < 1 || slot >= count) throw new Error(`nanolathe: rock slot ${slot} is not 1 to ${count - 1}`);
     this.rocks = new Map(rocks);
-    this.applyKnobs();
-    this.setColumn();
+    return this.applyKnobs();
   }
   rockSlots() { return [0, ...[...this.rocks.keys()].sort((a, b) => a - b)]; }
   // The pipelines' rockMask (engine-common.wgsl): 0 while slot 0 is the only rock in use, so every read is slot 0's at a fixed offset.
@@ -985,7 +1083,7 @@ export class TerrainRenderer {
   // slot's rock column; and the maxima the passes that gather from other points read (debrisAny, runoffAny, debrisReachMax).
   writeRocks() {
     const table = this.uniform.get('rock'), bytes = new Uint8Array(this.uniformData);
-    const own = columnRows(this.config.column, this.config.variant), beds = [...own.beds], starts = [...own.starts];
+    const own = this.worldColumnRows = columnRows(this.config.column, this.config.variant), beds = [...own.beds], starts = [...own.starts];
     this.set('uColumnFirst', 0);
     this.set('uColumnCount', own.starts.length);
     // Where level ground takes a recipe's beds (bedsFrom): the world's from its first section's start, as the gate always read it. A recipe
@@ -1025,6 +1123,18 @@ export class TerrainRenderer {
     // Shine is drawn where any rock in use has gloss, roughness or wetness (applyKnobs decides it for slot 0 and the other materials).
     if (slots.some(k => k && (this.rockValue(k, 'faceWet') > 0 || Math.max(...[0, 2].map(c => this.uniformView.getFloat32(table.offset + k * table.stride + table.members.get('shineRock').offset + c * 4, true))) > 0))) this.i('uShineOn', 1);
     this.uniformsDirty = true;
+  }
+
+  // Time is compiled with rockMask=0: it reads only the world's column,
+  // never the recipe slots appended to the shared column pools.
+  timeUniformKey() {
+    const words=new Uint32Array(this.uniformData),own=this.worldColumnRows;
+    return JSON.stringify((this.timeUniformFields??[]).map(name=>{
+      const f=this.uniform.get(name);if(!f)throw Error('Unknown Time uniform '+name);
+      const count=name==='columnBeds'?own.beds.length:name==='columnSections'?own.starts.length:f.count,values=[];
+      for(let i=0;i<count;i++)for(let j=0;j<f.width;j++)values.push(words[(f.offset+i*f.stride)/4+j]);
+      return [name,values];
+    }));
   }
 
   // The bake's group 1 for the chunk's fields texture and the loose-stone mask.
@@ -1088,68 +1198,8 @@ export class TerrainRenderer {
 
   // Encodes the bake into the given encoder, or submits it on its own.
   bakeFields(encoder = null, timer = null) {
-    const v = this.variant;
-    const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
-    const set = (name, value) => this.set(name, Number(value));
-    set('uGrid', this.grid); set('uSize', this.size); set('uBase', this.config.baseHeight - this.config.seaLevel); set('uSea', 0); set('uPool', groundPool(this.config.material));
-    {
-      set('uWeatherMaps', this.weatherMaps ? 1 : 0);
-      for (const [key, fallback] of [['terraceBreak', 0], ['terraceCalm', 0], ['wetSwath', 0], ['lushness', 0], ['rillDepth', 0], ['rillSpacing', 8]])
-        set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
-    }
-    set('uReliefScale', number('reliefScale', 28));
-    set('uReliefAmount', number('reliefAmount', 0.5));
-    set('uReliefBranch', number('reliefBranch', 2.0));
-    set('uReliefLumps', number('reliefLumps', 0.7));
-    set('uReliefGain', number('reliefGain', 0.55));
-    set('uReliefWarp', number('reliefWarp', 10));
-    set('uReliefPatchy', number('reliefPatchy', 1));
-    set('uReliefJitter', number('reliefJitter', 0.8));
-    set('uFaceStreak', number('faceStreak', 0));
-    for (const [key, fallback] of [['rockFace', 0], ['rockFaceFrom', 0.6], ['faceBed', 5.5], ['faceLedge', 2.2], ['faceRun', 90], ['faceLean', 28], ['faceScratch', 2.5],
-      ['faceScratchSize', 7], ['faceBlock', 3], ['faceBlockSize', 11], ['faceGrit', 0], ['faceGrass', 0.8], ['faceRock', 0.9], ['faceCrease', 2.5], ['faceCreaseSize', 6],
-      ['faceShade', 0.85], ['faceWear', 0.35], ['faceLayers', 0], ['faceMass', 1], ['faceTone', 0.12], ['faceStrata', 0], ['faceWet', 0], ['shoreRock',0],['shoreShelf',0],['runoff',0],['runoffScale',24],['runoffConcentration',.65],['runoffCut',2],['runoffStain',.5],['debrisAmount',0],['debrisReach',56],['debrisDepth',4],['rimReach',0], ['faceJointTilt',0],['faceScaleVary',0],['faceFold',0],['faceBedVary',1],['bedCycleVary',0],['faceBreak',0],['faceSpall',0],['faceClast',0],['faceClastSize',12],['faceMineral',0],['faceJointWidth',1],['faceSecondary',.35],['faceContinuity',1],['faceDetailPatch',0],['faceWhole',0],['faceWholeLarge',0],['faceRegular',0],['sandLee',0],['groundPatch',0],['groundPatchSize',200],['faceFresh',0],['faceRind',0],['faceRindDepth',6],['faceRindTone',-.22],['faceRindWarmth',.35],['faceRindRough',.65], ['faceStretch', 1], ['faceBlockHeight', 1], ['faceRound', 0], ['faceJoint', 0.35], ['faceExtrude', 0], ['faceLamina', 0], ['faceLaminaSize', 6], ['faceScratchLength', 50], ['faceScratchAngle', 0], ['faceGritSize', 1.3], ['absorbDepth', 0], ['shadowTint', 0]])
-      set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
-    set('uFaceStreakFrom', number('faceStreakFrom', 0.3));
-    set('uGentleRelief', number('gentleRelief', 0.6));
-    set('uSand', number('sand', 0));
-    set('uCrackSeverity', number('crackSeverity', 0.6));
-    set('uPlainRelief', number('plainRelief', 1.2));
-    set('uBedRelief', number('bedRelief', 0));
-    set('uLumpRelief', number('lumpRelief', 4));
-    set('uCrackSpacing', number('crackSpacing', 40));
-    set('uCrackWidth', number('crackWidth', 1));
-    set('uCrackNetwork', number('crackNetwork', 0.35));
-    set('uCrackMinor', number('crackMinor', 0.75));
-    set('uCrackHairline', number('crackHairline', 0.6));
-    set('uCrackBlocks', number('crackBlocks', 0.6));
-    set('uCrackMajor', number('crackMajor', 0.8));
-    if (this.sun) this.v('uSun', this.sun);
-    set('uWindAngle', number('wind', 20));
-    set('uRipple', number('ripple', 7));
-    set('uRippleHeight', number('rippleHeight', 1.4));
-    set('uBanding', number('banding', 0));
-    set('uApron', number('apron', 0));
-    set('uWorms', number('worms', 0));
-    set('uLooseSupply', number('looseSupply', 0));
-    set('uBoulders', number('boulders', 0));
-    set('uSoilRim', number('soilRim', 0));
-    set('uWetGround', number('wetGround', 0));
-    set('uLooseSize', number('looseSize', 6));
-    set('uPlantsOn', groundCoverOn(this.config.material?.groundCover, this.variant) && this.config.material.groundCover.plants ? 1 : 0);
-    set('uStoneRound', number('stoneRound',this.config.material?.stoneRound ?? 0));
-    set('uStoneSort', number('stoneSort',this.config.material?.stoneSort ?? 0.6));
-    set('uStoneSlab', number('stoneSlab',this.config.material?.stoneSlab ?? 0.05));
-    set('uStoneMoss', this.config.material?.stoneMoss ?? 0.35);
-    set('uBandSoftness', number('bandSoftness', 0.35));
-    set('uBandJag', number('bandJag', 0));
-    set('uBandFade', number('bandFade', 0.75));
-    set('uBeachDistance', this.layers.has('beach') ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
-    set('uHasBeach', this.layers.has('beach'));
-    set('uSandBanding', number('sandBanding', 0));
-    set('uSandBandSpacing', number('sandBandSpacing', 2));
-    set('uReliefOctaves', number('reliefOctaves', 5));
-    this.setColumn();
+    this.syncWorld();
+    this.i('uWeatherMaps', Boolean(this.weatherMaps));
     const own = !encoder;
     encoder ||= this.device.createCommandEncoder({label: 'relief bake'});
     this.rockWeather.encode(encoder);

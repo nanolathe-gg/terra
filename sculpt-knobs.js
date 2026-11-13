@@ -98,19 +98,26 @@ const SHAPE_KNOBS=new Set(['frostGaps','frostGapReach','frostGapSize','frostGapD
 // fields: `reload` (the ground textures and a borrowed beach are chosen when the renderer starts, so nothing else is set), `evaluate` (the shape again from that
 // node: the undulation rows edit the ground node in `nodes`, or put one first when Undulation height turns on), `checkpoint` (an undo step for
 // that edit) and `weather` (the Time pass again; alone, for the deposit supply, which changes the generated deposit field, and the rain).
+const TRACKED_WORLD_INPUTS=new Set([...KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)),'palette','erosion','erosionAge','erosionEnvelope','wetReach','talusFull','wearFull','flowK']);
 export function applyKnob({key,value,settings,renderer,nodes,seed}) {
+  const previous=renderer.variant.get(key);
   settings.set(key,value);
   if (key==='ground' || key==='groundPattern' || key==='beachFrom') return {reload:true};
-  renderer.variant.set(key,value); renderer.applyKnobs();
+  renderer.variant.set(key,value); const change=renderer.applyKnobs(),result=value=>change?{...value,change}:value;
+  // Current rows are covered by the computed comparison and declared channels.
+  // An unfamiliar non-uniform input is conservative, never silently a no-op.
+  if(change&&!change.fields.length&&!change.channels.length&&!TRACKED_WORLD_INPUTS.has(key)&&String(previous)!==String(value)){
+    change.channels.push({name:key,stage:'A'});change.stage='A';
+  }
   if (Object.hasOwn(UNDULATION,key)) {
     const i=nodes.findIndex(n => n.kind==='ground');
-    if (i>=0) { nodes[i][UNDULATION[key]]=Number(value); return {evaluate:i,checkpoint:true,weather:true}; }
-    if (key==='undulation' && Number(value)>0) { nodes.unshift({kind:'ground',amplitude:Number(value),wavelength:160,art:settings.has('undulationArt')?Number(settings.get('undulationArt')):1,seed:seed^0x9e37}); return {evaluate:0,checkpoint:true,weather:true}; }
-    return {};
+    if (i>=0) { nodes[i][UNDULATION[key]]=Number(value); return result({evaluate:i,checkpoint:true,weather:true}); }
+    if (key==='undulation' && Number(value)>0) { nodes.unshift({kind:'ground',amplitude:Number(value),wavelength:160,art:settings.has('undulationArt')?Number(settings.get('undulationArt')):1,seed:seed^0x9e37}); return result({evaluate:0,checkpoint:true,weather:true}); }
+    return result({});
   }
-  if (SHAPE_KNOBS.has(key)) return {evaluate:0,weather:true};
-  if (key==='sand' || key==='erosionRain') return {weather:true};
-  return {};
+  if (SHAPE_KNOBS.has(key)) return result({evaluate:0,weather:true});
+  if (key==='sand' || key==='erosionRain') return result({weather:true});
+  return result({});
 }
 
 // Low ground's color where a world picks none (Colors: Low ground): a dark red-brown mud, as retail Zhon's lowland.

@@ -61,3 +61,81 @@ export function gateValues(gates, view, slots = [0]) {
   return out;
 }
 export const gateKey = (values, order) => { let key = ''; for (const id of order) key += values[id] ? '1' : '0'; return key; };
+
+// The earliest shader stage that can read each uniform. Walk the actual
+// preprocessed WGSL call graph; a static read stays a dependency behind a gate.
+// Modules supply their entry stage, with explicit roots for fragment geometry.
+export function uniformStages(modules) {
+  const result=new Map(),order='ABCDEF';
+  const uncomment=source=>{
+    let out='',depth=0,line=false;
+    for(let i=0;i<source.length;i++){
+      const a=source[i],b=source[i+1];
+      if(line){if(a==='\n'){line=false;out+='\n';}continue;}
+      if(depth){if(a==='/'&&b==='*'){depth++;i++;}else if(a==='*'&&b==='/'){depth--;i++;}else if(a==='\n')out+='\n';continue;}
+      if(a==='/'&&b==='*'){depth=1;out+=' ';i++;}else if(a==='/'&&b==='/'){line=true;out+=' ';i++;}else out+=a;
+    }
+    if(depth)throw Error('Unclosed WGSL comment in stage scan');
+    return out;
+  };
+  for(const {source,stage,roots} of modules){
+    if(!order.includes(stage)||stage.length!==1)throw Error('Unknown shader stage '+stage);
+    const text=uncomment(source),functions=new Map(),pattern=/\bfn\s+(\w+)\s*\(/g;
+    let previous=0,match;
+    while((match=pattern.exec(text))){
+      const name=match[1],start=text.indexOf('{',pattern.lastIndex);
+      if(start<0)throw Error('Missing WGSL function body: '+name);
+      let end=start+1,depth=1;
+      for(;end<text.length&&depth;end++){if(text[end]==='{')depth++;else if(text[end]==='}')depth--;}
+      if(depth||functions.has(name))throw Error('Invalid WGSL function in stage scan: '+name);
+      const header=text.slice(previous,match.index),body=text.slice(start+1,end-1);
+      const fields=new Set(),references=/\bu\s*\.\s*(\w+)/g;let reference;
+      while((reference=references.exec(body))){
+        let field=reference[1];
+        if(field==='rock'){
+          let at=references.lastIndex;while(/\s/.test(body[at]??'')&&at<body.length)at++;
+          if(body[at]==='['){let depth=1;at++;while(at<body.length&&depth){if(body[at]==='[')depth++;else if(body[at]===']')depth--;at++;}
+            const member=/^\s*\.\s*(\w+)/.exec(body.slice(at));if(member)field=member[1];}
+        }
+        fields.add(field);
+      }
+      const calls=new Set([...body.matchAll(/\b(\w+)\s*\(/g)].map(m=>m[1]));
+      functions.set(name,{fields,calls,entry:/@(compute|fragment)\b/.test(header)});
+      previous=end;pattern.lastIndex=end;
+    }
+    const entryPoints=roots??[...functions].filter(([,fn])=>fn.entry).map(([name])=>name);
+    for(const root of entryPoints){
+      if(!functions.has(root))throw Error('Missing stage root '+root);
+      const seen=new Set(),visit=name=>{
+        if(seen.has(name)||!functions.has(name))return;seen.add(name);
+        const fn=functions.get(name);
+        for(const field of fn.fields){
+          const prior=result.get(field)??{stage,entries:[]};
+          if(order.indexOf(stage)<order.indexOf(prior.stage))prior.stage=stage;
+          if(!prior.entries.includes(root))prior.entries.push(root);
+          result.set(field,prior);
+        }
+        for(const callee of fn.calls)visit(callee);
+      };
+      visit(root);
+    }
+  }
+  return result;
+}
+
+// Compare only CPU-owned world fields. GPU-written flags and per-chunk
+// coordinates are absent, including the aliases of slot 0 in the Rock table.
+export function worldUniformDelta(before,after,layout,stages) {
+  const previous=before??new Uint32Array(after.byteLength/4),next=new Uint32Array(after),table=layout.fields.get('rock'),fields=[],slots=new Set();let stage=null;
+  const perChunk=new Set([...PER_CHUNK_UNIFORMS,'weatherMaps','materialReady','transitionBody','rockWeatherGrid']);
+  const differs=(f,offset=f.offset)=>{
+    for(let i=0;i<f.count;i++)for(let j=0;j<f.width;j++){const k=(offset+i*f.stride)/4+j;if(previous[k]!==next[k])return true;}return false;
+  };
+  const add=(name,key,slot)=>{const s=(stages.get(key)??(slot!==undefined?stages.get('rock'):null))?.stage??null;fields.push({name,stage:s});if(slot!==undefined)slots.add(slot);if(s&&(!stage||s<stage))stage=s;};
+  for(const [name,f]of layout.fields){
+    if(name==='rock'){
+      for(let slot=0;slot<f.count;slot++)for(const [member,m]of f.members)if(differs(m,f.offset+slot*f.stride+m.offset))add(`rock[${slot}].${member}`,member,slot);
+    }else if(!(table&&f.offset>=table.offset&&f.offset<table.offset+table.count*table.stride)&&!perChunk.has(name)&&!name.startsWith('chunk')&&differs(f))add(name,name);
+  }
+  return {fields,stage,rockSlots:[...slots]};
+}
