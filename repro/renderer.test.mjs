@@ -14,10 +14,10 @@ test('an abandoned draw restores the bake state before retrying',async()=>{
  assert.equal(r.fieldsDirty,true);
 });
 
-test('pipeline compilation retries a specialization miss after an async boundary',async()=>{
+test('bake pipeline compilation retries a specialization miss after an async boundary',async()=>{
  const r=Object.create(TerrainRenderer.prototype);let attempts=0,compiled=0;
  Object.assign(r,{specCache:new Map(),specKey:()=>({key:'new',values:{}}),
-  async specialize(state){compiled++;this.specCache.set(state.key,{draw:'ready'});}});
- const result=await r.withPipelines(async()=>{attempts++;await Promise.resolve();return r.drawPipeline;});
+  async specialize(state){compiled++;this.specCache.set(state.key,{bake:'ready'});}});
+ const result=await r.withPipelines(async()=>{attempts++;await Promise.resolve();return r.bakePipeline;});
  assert.equal(result,'ready');assert.equal(attempts,2);assert.equal(compiled,1);
 });
