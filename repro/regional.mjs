@@ -4,6 +4,7 @@
 // Under Node the engine's files come from --server, or with no --server from this checkout (world configs from go run ./cmd/terraform --dump-configs, or
 // --configs DIR), and --port is not used; every scene runs in one process (node repro/regional.mjs repro/scenes/*.json). --chrome takes one scene,
 // and needs --server (your own Go development server; there is no default) and --port (default 9450).
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
 import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
@@ -148,7 +149,7 @@ async function main() {
   try {
     profile = mkdtempSync(join(tmpdir(), 'nanolathe-regional-'));
     await cdpPortFree(port);
-    chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', '--remote-debugging-address=127.0.0.1',
+    chrome = spawn(chromePath, ['--headless=new', ...chromeGpuFlags, '--remote-debugging-address=127.0.0.1',
       `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: ['ignore', 'ignore', 'pipe']});
     exited = new Promise(resolve => chrome.once('close', () => { closed = true; resolve(); }));
     chrome.once('error', error => { chromeError = error; });

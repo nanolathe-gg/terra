@@ -1,5 +1,6 @@
 // Browser acceptance for the diagnostic view. Optional --sketch loads a local,
 // uncommitted authored map. Own server and CDP port are mandatory.
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync,mkdtempSync} from 'node:fs';
@@ -7,10 +8,10 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {cdpPortFree} from './cdp-port.mjs';
 const arg=(name,fallback='')=>{const i=process.argv.indexOf(name);return i<0?fallback:process.argv[i+1];};
-const server=arg('--server'),port=Number(arg('--port')),out=arg('--out','/private/tmp/terraform-passability-study/browser'),sketch=arg('--sketch');
+const server=arg('--server'),port=Number(arg('--port')),out=arg('--out','/tmp/terraform-passability-study/browser'),sketch=arg('--sketch');
 if(!server||!port)throw Error('Use --server and --port for your own preview.');
 mkdirSync(out,{recursive:true});await cdpPortFree(port);
-const browser=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless=new','--enable-gpu','--use-angle=metal',`--remote-debugging-port=${port}`,`--user-data-dir=${mkdtempSync(join(tmpdir(),'terraform-passability-'))}`,'--window-size=1600,1150','--no-first-run','about:blank'],{stdio:'ignore'});
+const browser=spawn(chromePath,['--headless=new',...chromeGpuFlags,`--remote-debugging-port=${port}`,`--user-data-dir=${mkdtempSync(join(tmpdir(),'terraform-passability-'))}`,'--window-size=1600,1150','--no-first-run','about:blank'],{stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));let ws;
 try{
  for(let i=0;i<100&&!ws;i++){try{const tabs=await(await fetch(`http://127.0.0.1:${port}/json/list`)).json();ws=new WebSocket(tabs.find(t=>t.type==='page').webSocketDebuggerUrl);}catch{}if(!ws)await sleep(150);}

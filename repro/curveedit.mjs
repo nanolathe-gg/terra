@@ -4,6 +4,7 @@
 //   node repro/curveedit.mjs [--server http://127.0.0.1:8801] [--port 9450] [--worlds green,desert] [--out dir]
 // The worlds run at once, one browser each, on CDP ports --port, --port+1, ...
 // Prints one JSON line per world; exit code 1 on any failed check or a console error.
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {FORMS, LANDFORM_FORMS} from '../sculpt-shape-presets.js';
 import {LANDFORM_DEFAULTS, LANDFORM_SHAPES} from '../sculpt-scene.js';
@@ -21,7 +22,7 @@ let bad = 0;
 async function session(url, port, fn) {
   const logs = [];
   await cdpPortFree(port);
-  const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
+  const chrome = spawn(chromePath, ['--headless=new', ...chromeGpuFlags, `--remote-debugging-port=${port}`,
     `--user-data-dir=${out}/profile-${port}-${Date.now()}`, '--window-size=1700,1300', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
   try {
     let ws;
