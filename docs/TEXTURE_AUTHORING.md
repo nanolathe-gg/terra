@@ -308,3 +308,43 @@ check passed with exact Undo, zero terrain submissions while open, and no GPU
 errors. The small GPU check confirmed exact 512px color/height repetition and
 regional replay. The saved preset's 512px render matched the chosen candidate
 byte for byte. No full suite was run.
+
+
+### Desert follow-up: rejected trials and remaining structure
+
+After the owner found the swaps still easy to see, tested 20 additional recipe
+variants and four renderer diagnostics (review folders `round7`–`round13` in
+`/private/tmp/desert-swap-review/`). These were 512px renders using the same
+five-block layout. None reliably concealed the larger blocks by eye, so this
+pass does not change the saved study, other presets, world defaults, or shaders.
+
+- Reducing relief and increasing pigment contrast made brown/white speckling;
+  warmer gradients moved the whole patch orange without fixing the structure.
+- Neutral dark grains, blended through a dot mask instead of multiplying the
+  existing pigment, improved that particular detail by eye but made the patch
+  darker and more contrasty. A separate mineral tint introduced blue/orange
+  flecks, rather than retail's more restrained variation.
+- Sharing the fine field between color and relief, reducing clod spacing again,
+  and remapping grain height with powers 0.5, 2, and 3 did not remove the visible
+  blocks. Some became too smooth; others retained coarse beige/pink clusters.
+- An offline diagnostic applied the recipe's palette diffusion after lighting
+  (9/17 right, 6/17 down, 2/17 down-left), instead of relying on the final nearest
+  palette lookup. It did not resolve the mismatch. This is an analysis artifact,
+  not a second runtime renderer or a proposed shader change.
+- Reusing the existing water bump shading in an isolated preview, without any
+  persisted assignment, also failed to reproduce the grain. It is not proof of
+  equivalence between water and ground lighting, and is not a proposed workaround.
+
+By eye, the next structural target is retail's tight light/dark grain pairs and
+neutral dark flecks, rather than additional broad noise or global color shifts.
+As supporting diagnostics, horizontal luminance correlation at offsets 2 and 3
+pixels is approximately -0.169/-0.038 in the retail sheet, versus -0.093/-0.113
+in the saved study: the negative correlation extends farther in our render.
+This suggests examining the scale/profile of lit grain before another color
+pass; it does not identify a unique height field or establish a renderer bug.
+Do not turn these diagnostics into a pixel-statistics texture generator.
+
+All 24 GPU renders completed with no reported GPU errors. No product code changed,
+so no unit, export, or full-suite rerun was needed. The rejected recipes and retail
+comparison images remain outside Git; `followup-review.png` shows the saved study
+and one rejected neutral-grain candidate at native scale and 2× magnification.
