@@ -34,7 +34,8 @@ export class VoxelSurface {
     renderer.track(self.uniform,'voxel settings',4*256,'shared');renderer.track(self.readback,'voxel count readback',32,'shared');
     return self;
   }
-  constructor(renderer){this.renderer=renderer;this.device=renderer.device;this.owned=[];this.previewCounts=new Map();this.predictionStats={predicted:0,seeds:0,overflows:0,budgetFallbacks:0,preDrawWaitMs:0,postDrawWaitMs:0};this.stats={pieces:0,bricks:0,candidateBricks:0,peakBytes:0,allocationMs:0};}
+  constructor(renderer){this.renderer=renderer;this.device=renderer.device;this.owned=[];this.made=new WeakSet();   // made: every working resource own() made, for the input checksum's guard
+    this.previewCounts=new Map();this.predictionStats={predicted:0,seeds:0,overflows:0,budgetFallbacks:0,preDrawWaitMs:0,postDrawWaitMs:0};this.stats={pieces:0,bricks:0,candidateBricks:0,peakBytes:0,allocationMs:0};}
   // Both allowed rock masks are ready at startup: fixed slot 0, and the recipe table.
   build(mask){
     if(!this.built.has(mask))this.built.set(mask,Promise.all(Object.entries(this.layouts).map(async([entryPoint,l])=>[entryPoint,{...l,pipeline:await this.device.createComputePipelineAsync({label:entryPoint,layout:l.layout,compute:{module:this.module,entryPoint,constants:{rockMask:mask}}})}]))
@@ -54,7 +55,7 @@ export class VoxelSurface {
   dropPool(){for(const x of this.pool??[])this.renderer.release(x);this.pool=[];}
   release(){this.clear();this.dropPool();}
   take(match){const i=(this.pool??[]).findIndex(match);if(i<0)return null;const [x]=this.pool.splice(i,1);this.owned.push(x);return x;}
-  own(resource,label,bytes){this.owned.push(resource);this.renderer.track(resource,label,bytes,'working');return resource;}
+  own(resource,label,bytes){this.owned.push(resource);this.made.add(resource);this.renderer.track(resource,label,bytes,'working');return resource;}
   buffer(label,size,usage=STORAGE()){
     size=Math.max(16,size);
     // A larger kept buffer serves (no voxel pass reads a buffer's length), up to twice the size asked for.

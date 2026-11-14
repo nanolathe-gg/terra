@@ -6,11 +6,12 @@ import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const optional = /\.(?:gpu|config|export|build|features|assets)\.test\.mjs$/;
-export const usage = `Usage: repro/check.sh [quick|browser|engine|export|features|config|site|assets] [options]
+const optional = /\.(?:gpu|config|export|build|features|assets|digest)\.test\.mjs$/;
+export const usage = `Usage: repro/check.sh [quick|browser|engine|digest|export|features|config|site|assets] [options]
   quick     Node unit tests and the world-name gate (default; no Python, Go or GPU)
   browser   One world's brush/undo smoke, without export; requires --server URL --port N
   engine    GPU height tests, regional replay and repeat checks on three authored fixtures
+  digest    The tile input checksum's guard: its own tests, and every Green control swept with the guard on (Dawn, Go; minutes)
   features  CPU sprite generation, variants and burn animation checks
   export    Go exporter tests and native/WebAssembly byte parity
   config    Go config/server tests and generated configuration integration tests
@@ -28,7 +29,7 @@ The old land/full tiers are retired; select checks relevant to your change.`;
 
 export function planChecks(argv) {
   const args = [...argv], mode = args[0] && !args[0].startsWith('-') ? args.shift() : 'quick';
-  if (!['quick', 'browser', 'engine', 'export', 'features', 'config', 'site', 'assets'].includes(mode)) throw new Error(`Unknown check group: ${mode}.\n${usage}`);
+  if (!['quick', 'browser', 'engine', 'digest', 'export', 'features', 'config', 'site', 'assets'].includes(mode)) throw new Error(`Unknown check group: ${mode}.\n${usage}`);
   const options = {}, tests = [], scenes = [];
   for (let i = 0; i < args.length; i++) {
     const key = args[i];
@@ -68,6 +69,9 @@ export function planChecks(argv) {
     node('gpu', '--test', ...testFiles('.gpu.test.mjs'));
     node('regional', join(repo, 'repro/regional.mjs'), ...selected);
     node('repeat', join(repo, 'repro/shapecheck.mjs'), ...selected, '--out', join(out, 'repeat'));
+  } else if (mode === 'digest') {
+    node('guard', '--test', ...testFiles('.digest.test.mjs'));
+    node('controls', join(repo, 'measure/world_controls.mjs'), '--digest', '--worlds', 'green', '--jobs', '1', '--out', join(out, 'digest'));
   } else if (mode === 'export') {
     steps.push({name: 'go-export', command: 'go', args: ['test', './export']});
     node('export', '--test', ...testFiles('.export.test.mjs'));

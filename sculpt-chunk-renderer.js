@@ -3,7 +3,7 @@ import {terrainAllocation,TerrainMemoryError} from './sculpt-memory.js';
 import {rockWeatherBytes} from './sculpt-rock-weather.js';
 // Card D: a bounded working set for the existing terrain shader. Materials
 // belong to this renderer once; callers own the LRU of copied output images.
-import {TerrainRenderer} from './sculpt-renderer.js';
+import {TerrainRenderer,INPUT_TEXTURES} from './sculpt-renderer.js';
 import {columnRows} from './sculpt-column.js';
 import {PLANT_REACH,groundCoverOn} from './sculpt-material-model.js';
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
@@ -25,7 +25,6 @@ export function alignedFieldRegion(region,scale=1){
   const width=endX-x+1,height=endY-y+1;
   return x===region.fieldsX&&y===region.fieldsY&&width===region.fieldsWidth&&height===region.fieldsHeight?region:{...region,fieldsX:x,fieldsY:y,fieldsWidth:width,fieldsHeight:height};
 }
-const INPUT_TEXTURES=['heightTexture','routeTexture','gridTexture','maskTexture'];
 const ROCK_WORKING=['owned','final','source','rim','key'];
 const COLOR_INPUT_PACK=`
 @group(0) @binding(0) var masks:texture_2d_array<f32>;
@@ -388,6 +387,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const offsets=ChunkTerrainRenderer.FLAGS.map(k=>this.layout.fields.get(k).offset);
     return this.flagsPass={pipe,out,offsets,ranges:[...offsets].sort((a,b)=>a-b)};
   }
+  gpuWrittenUniforms(){return new Set(this.gpuFlags?ChunkTerrainRenderer.FLAGS:[]);}   // the flag pass writes these on the GPU (flagPass)
   flushUniforms() {
     if(!this.gpuFlags)return super.flushUniforms();
     if(!this.uniformsDirty)return;

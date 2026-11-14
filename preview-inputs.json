@@ -6,7 +6,7 @@
     "sculpt-gpu-fields.js", "sculpt-erosion.js", "sculpt-rock-weather.js",
     "sculpt-volume.js", "sculpt-material-model.js", "sculpt-column.js",
     "sculpt-materials.js", "sculpt-material-cache.js",
-    "sculpt-noise.js", "sculpt-gates.js", "sculpt-shape-presets.js",
+    "sculpt-noise.js", "sculpt-gates.js", "sculpt-digest-guard.js", "sculpt-shape-presets.js",
     "sculpt-rock-presets.js", "sculpt-scene.js", "sculpt-river.js",
     "sculpt-paths.js", "sculpt-chunk-renderer.js", "sculpt-canvas.js",
     "sculpt-preview.js", "sculpt-map.js", "sculpt-knobs.js",

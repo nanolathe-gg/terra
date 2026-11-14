@@ -82,6 +82,7 @@
     "sculpt-column.js",
     "sculpt-noise.js",
     "sculpt-gates.js",
+    "sculpt-digest-guard.js",
     "sculpt-erosion.js",
     "engine-shape.wgsl",
     "engine-feed.wgsl",
