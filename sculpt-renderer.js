@@ -1,4 +1,3 @@
-import {materialLayerCount} from './sculpt-material-layers.js';
 // One displaced surface, shared by every terrain brush. Prototype renderer
 // on WebGPU (no WebGL fallback). Shaders: engine-common.wgsl (shared),
 // sculpt-vert.wgsl and engine-frag.wgsl (the draw), engine-bake.wgsl (the
@@ -553,7 +552,7 @@ export class TerrainRenderer {
       {binding:10,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.final??this.rockWeather.empty)).createView()},
       {binding:11,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.source??this.rockWeather.empty)).createView()},
       {binding:12,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.rim??this.rockWeather.empty)).createView()},
-      {binding:13,resource:this.groundCache.texture.createView({dimension:'2d-array'})},{binding:14,resource:this.groundCache.colorTexture.createView({dimension:'2d-array'})},{binding:15,resource:{buffer:this.groundCache.layerBuffer}},{binding:16,resource:this.groundCache.maskTexture.createView({dimension:'2d-array'})}]});
+      {binding:13,resource:this.groundCache.texture.createView({dimension:'2d-array'})},{binding:14,resource:this.groundCache.colorTexture.createView({dimension:'2d-array'})},{binding:15,resource:{buffer:this.groundCache.programBuffer}},{binding:16,resource:this.groundCache.maskTexture.createView({dimension:'2d-array'})}]});
   }
 
   // Group 1: the plain's tiles, the waters, the palette and the generated materials.
@@ -1116,8 +1115,8 @@ export class TerrainRenderer {
       if (!Number.isInteger(slot) || slot < 0 || slot >= table.count) throw new Error('Ground slots must be 0 to 7.');
       checked.set(slot, copyGroundRecipe(recipe));
     }
-    const usage=groundCacheUsage(checked.size,groundPool(this.config.material),[...checked.values()].reduce((n,p)=>n+materialLayerCount(p),0));
-    if(!usage.fits)throw Error(`These material layers need ${(usage.bytes/1048576).toFixed(0)} MiB; the cache budget is 128 MiB. Remove layers or use fewer assigned materials.`);
+    const usage=groundCacheUsage(checked.size,groundPool(this.config.material));
+    if(!usage.fits)throw Error(`These materials need ${(usage.bytes/1048576).toFixed(0)} MiB; the cache budget is 128 MiB. Use fewer assigned materials.`);
     this.i('uGroundDefault',[...grounds].find(([,p])=>p.worldGround)?.[0]??0);
     this.i('uWaterGround',[...grounds].find(([,p])=>p.worldWater)?.[0]??0);
     this.grounds = checked;

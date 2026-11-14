@@ -22,7 +22,7 @@ test('grayscale structure can feed separate color and height branches; save and 
 test('reviewed recipes contain generic combines, editable gradients and outputs, with removed effects ignored',()=>{
  for(const key of ['rust-mottling','cloudy-green','blue-streaked-water','violet-rippled-water']){
   const p=copyGroundRecipe(GROUND_PRESETS[key]);assert.ok(p.steps.some(s=>s.type==='combine'));assert.ok(p.steps.some(s=>s.type==='gradient'));assert.ok(p.steps.some(s=>s.type==='output'&&s.target==='height'));
-  assert.equal(copyGroundRecipe({...p,layer:{...p.layer,effect:'dots'}}).layer.effect,undefined);
+  const copied=copyGroundRecipe({...p,layer:{effect:'dots'},layers:[p]});assert.equal(copied.layer,undefined);assert.equal(copied.layers,undefined);assert.deepEqual(copied.steps,p.steps);
   assert.ok(compileSteps(p).signals<=4);
  }
 });
@@ -40,4 +40,18 @@ test('graph connections sort evaluation order, reject cycles, and keep layout ou
  assert.throws(()=>orderSteps([s('a','remap',{source:'b'}),s('b','remap',{source:'a'})]),/cycle/);
  const recipe=copyGroundRecipe(GROUND_PRESETS['rust-mottling']),key=materialRenderKey(recipe);recipe.steps[0].position={x:200,y:300};recipe.steps[0].name='Warp';assert.equal(materialRenderKey(recipe),key);assert.deepEqual(copyGroundRecipe(recipe).steps[0].position,{x:200,y:300});
  recipe.steps[0].params.patternWarp+=1;assert.notEqual(materialRenderKey(recipe),key);
+});
+
+test('one noise node supports fractal, fine grain and pixel fields with bounded parameters',()=>{
+ for(const kind of ['fractal','fine','pixel']){
+  const recipe={steps:copySteps([{id:'n',type:'noise',kind},{id:'out',type:'output',source:'n'}])};
+  assert.equal(recipe.steps[0].kind,kind);assert.ok(compileSteps(recipe).instructions[0].code[0]>0);
+ }
+ assert.throws(()=>copySteps([{id:'n',type:'noise',kind:'unknown'}]),/noise type/);
+ const fine=copySteps([{id:'n',type:'noise',kind:'fine',params:{textureFineSize:1000}}])[0];assert.equal(fine.params.textureFineSize,32);
+});
+
+test('removed noise node forms are dropped with their links when opening an older graph',()=>{
+ const nodes=copySteps([{id:'old',type:'grain'},{id:'out',type:'output',source:'old'}]);
+ assert.equal(nodes.length,1);assert.equal(nodes[0].source,null);
 });

@@ -9,8 +9,8 @@ export class GroundPreview {
   this.cancelled=false;
   const job={main,view,recipe:structuredClone(recipe),done,epoch:this.epoch,serial:++this.serial};
   this.pending={...job,draft:true};
-  if(!this.running&&!this.timer)this.timer=setTimeout(()=>{this.timer=null;this.run();},40);
-  clearTimeout(this.finalTimer);this.finalTimer=setTimeout(()=>{this.finalTimer=null;if(job.serial!==this.serial)return;this.pending={...job,draft:false};this.run();},240);
+  if(!this.running&&!this.timer)this.timer=setTimeout(()=>{this.timer=null;this.run();},0);
+  clearTimeout(this.finalTimer);this.finalTimer=setTimeout(()=>{this.finalTimer=null;if(job.serial!==this.serial)return;this.pending={...job,draft:false};this.run();},120);
  }
 
  async run(){
@@ -35,8 +35,8 @@ export class GroundPreview {
    request.fields={h};request.masks={ground:new Int8Array(count).fill(recipe?2:0)};
    const rendered=await r.renderChunk(request,{clay:false,light:'original'});
    if(!this.cancelled&&job.epoch===this.epoch&&(job.serial===this.serial||job.draft)){
-    const ctx=this.canvas.getContext('2d');ctx.drawImage(rendered.canvas,0,0);const pixels=ctx.getImageData(0,0,size,size).data,keys=new Set();
-    for(let y=0;y<size;y+=32)for(let x=0;x<size;x+=32){let key='';for(let j=0;j<32;j++){const at=((y+j)*size+x)*4;key+=String.fromCharCode(...pixels.subarray(at,at+128));}keys.add(key);}
+    const ctx=this.canvas.getContext('2d');ctx.drawImage(rendered.canvas,0,0);const pixels=job.draft?null:ctx.getImageData(0,0,size,size).data,keys=new Set();
+    for(let y=0;pixels&&y<size;y+=32)for(let x=0;x<size;x+=32){let key='';for(let j=0;j<32;j++){const at=((y+j)*size+x)*4;key+=String.fromCharCode(...pixels.subarray(at,at+128));}keys.add(key);}
 
     job.done(null,{draft:job.draft,distinct:keys.size,tiles:(size/32)**2,pool,perLevel:(pool/32)**2});
    }

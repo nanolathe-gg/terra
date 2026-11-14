@@ -197,15 +197,11 @@ fn stepValue(s:MaterialStep,a:vec4f,b:vec4f,c:vec4f,p:vec2f)->vec4f {
 @group(1) @binding(0) var groundOut:texture_storage_2d_array<rgba32float,write>;
 @group(1) @binding(2) var maskOut:texture_storage_2d_array<rgba16float,write>;
 @group(1) @binding(1) var<uniform> groundJob:vec4u;
-@compute @workgroup_size(8,8)
-fn groundMain(@builtin(global_invocation_id) id:vec3u){
- if(any(id.xy>=textureDimensions(groundOut))){return;}
- gs=groundJob.x;let layer=materialLayers[groundJob.z];layerRecipe=layer.recipe;
- let p=vec2f(id.xy);let point=p+vec2f(19,43)*layer.operation.y;var values:array<vec4f,40>;
- for(var i=0;i<layer.program.x;i++){
-  let s=layer.steps[i];var a=vec4f(0);var b=vec4f(0);var c=vec4f(1);
-  if(s.links.x>=0){a=values[s.links.x];}if(s.links.y>=0){b=values[s.links.y];}if(s.links.z>=0){c=values[s.links.z];}
-  var v=vec4f(0);layerRecipe=layer.recipe;let q=select(point,a.xy,s.links.x>=0);
+// The graph compiler emits straight-line calls to these same operations. Node
+// values are uniforms; numeric edits reuse the pipeline and avoid an interpreter
+// with two dynamically indexed 40-element arrays per texture pixel.
+fn generateStep(s:MaterialStep,a:vec4f,b:vec4f,c:vec4f,point:vec2f)->vec4f {
+  var v=vec4f(0);let q=select(point,a.xy,s.links.x>=0);
   switch(s.code.x){
 case 1:{layerRecipe.patternWarp=stepArg(s,0u);layerRecipe.patternWarpSize=stepArg(s,1u);layerRecipe.phaseOctaves=stepArg(s,2u);layerRecipe.phaseAxis=stepArg(s,3u);let r=layerRecipe;v=vec4f(q+texturePhase(q,r.patternWarpSize,r.phaseOctaves)*vec2f(1.0-max(r.phaseAxis,0.0),1.0+min(r.phaseAxis,0.0))*r.patternWarp,0,0);}
 case 2:{layerRecipe.patternSize=stepArg(s,0u);layerRecipe.patternDetail=stepArg(s,1u);layerRecipe.patternGradient=stepArg(s,2u);layerRecipe.patternLinear=stepArg(s,3u);layerRecipe.patternTurbulence=stepArg(s,4u);layerRecipe.patternCells=stepArg(s,5u);layerRecipe.patternStreak=stepArg(s,6u);layerRecipe.patternLength=stepArg(s,7u);layerRecipe.patternDirection=stepArg(s,8u);layerRecipe.patternSlope=stepArg(s,9u);layerRecipe.patternOctaves=stepArg(s,10u);layerRecipe.patternMottle=stepArg(s,11u);layerRecipe.patternMottleSize=stepArg(s,12u);let r=layerRecipe;let aa=textureOctaves(q,r.patternSize,r.patternOctaves);let bb=textureOctaves(q+vec2f(17,39),r.patternSize/2.0,r.patternOctaves);v=vec4f(mix(mix(aa,bb,r.patternDetail),.5+.5*groundNoise(point,r.patternMottleSize,827.0),r.patternMottle));}
@@ -215,33 +211,14 @@ case 5:{v=groundRecipe(point);}
 default:{v=stepValue(s,a,b,c,point);}
 }
 if(s.code.y==0){v=a;if(s.code.x<=6){v=vec4f(0);}if(s.code.x==1){v=vec4f(q,0,0);}}
-values[i]=v;
- }
- // Quantize scalar/color boundaries once, then evaluate the color arithmetic.
- // Sampling stays identical to the original half-float procedural fields.
- var mapped:array<vec4f,40>;var color=vec3f(0);var height=0.0;
- var finish=vec3f(layer.recipe.roughness,layer.recipe.wetness,layer.recipe.gloss);
- for(var i=0;i<layer.program.x;i++){
-  let s=layer.steps[i];var a=vec4f(0);var b=vec4f(0);var c=vec4f(1);
-  if(s.links.x>=0){a=mapped[s.links.x];}if(s.links.y>=0){b=mapped[s.links.y];}if(s.links.z>=0){c=mapped[s.links.z];}
-  var v=values[i];
-  if(s.code.z>=0){v=vec4f(sampledHalf(v.xy),sampledHalf(v.zw));}
-  else if(s.code.x>=6){v=stepValue(s,a,b,c,point);}
-  mapped[i]=v;
-  if(s.code.x==12&&s.code.y!=0){switch(s.code.w){case 0:{color=v.rgb;}case 1:{height=v.x;}case 2:{finish.x=clamp(v.x,0.0,1.0);}case 3:{finish.y=clamp(v.x,0.0,1.0);}case 4:{finish.z=clamp(v.x,0.0,1.0);}default:{}}}
- }
+return v;
+}
+@compute @workgroup_size(8,8)
+fn groundMain(@builtin(global_invocation_id) id:vec3u){
+ if(any(id.xy>=textureDimensions(groundOut))){return;}
+ gs=groundJob.x;let graph=materialGraphs[groundJob.z];
+ let point=vec2f(id.xy);
+ /*MATERIAL_PROGRAM*/
  textureStore(groundOut,vec2i(id.xy),i32(groundJob.y),vec4f(color,height));
- layerRecipe=layer.recipe;
- var mask=1.0;
- if(layer.operation.z==1.0){
-  layerRecipe.patternGradient=0.0;layerRecipe.patternLinear=0.0;layerRecipe.patternCells=select(0.0,1.0,layer.maskPattern.x==1.0||layer.maskPattern.x==2.0);
-  layerRecipe.patternTurbulence=select(0.0,1.0,layer.maskPattern.x==3.0);layerRecipe.patternStreak=select(0.0,1.0,layer.maskPattern.x==4.0);
-  layerRecipe.patternSize=layer.maskPattern.y;layerRecipe.patternLength=layer.maskPattern.y*4.0;layerRecipe.patternDirection=45.0;layerRecipe.patternSlope=0.0;
-  let q=p+vec2f(31,71)*layer.maskFilter.x+texturePhase(p,layer.maskPattern.y*2.0,0.0)*layer.maskPattern.w;
-  let size=select(layer.maskPattern.y,1.0,layer.maskPattern.x==5.0);
-  let value=mix(textureBasis(q,size),textureBasis(q+vec2f(17,39),size*.5),layer.maskPattern.z);
-  mask=smoothstep(layer.maskFilter.y,layer.maskFilter.z,value);if(layer.maskPattern.x==2.0){mask=pow(mask,3.0);}
-  mask=mix(mask,1.0-mask,layer.maskFilter.w);
- }
- textureStore(maskOut,vec2i(id.xy),i32(groundJob.y),vec4f(finish,mask));
+ textureStore(maskOut,vec2i(id.xy),i32(groundJob.y),vec4f(finish,1));
 }

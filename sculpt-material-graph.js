@@ -1,9 +1,9 @@
 import {STEP_LABELS,stepTypes} from './sculpt-material-steps.js';
 const WIDTH=176,ROW=21;
 export function nodeInputs(node){
- if(['constant','surface','hash'].includes(node.type))return [];
+ if(['constant','surface'].includes(node.type)||node.type==='noise'&&node.kind==='pixel')return [];
  if(node.type==='combine')return [['source','Base'],['other','Detail'],['mask','Mask']];
- return [['source',['noise','grain','transform'].includes(node.type)?'Coordinates':node.type==='dots'?'Coverage':'Input']];
+ return [['source',['noise','transform'].includes(node.type)?'Coordinates':node.type==='dots'?'Coverage':'Input']];
 }
 export function graphPositions(steps){
  const levels=new Map(),rows=new Map(),positions=new Map();
@@ -50,13 +50,13 @@ export function mountMaterialGraph(host){
  canvas.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();canvas.focus();const p=point(e),target=hit(p);if(connect(target))return;
   if(target?.key==='out'){wire={source:target.node.step.id,point:p};schedule();return;}
   if(target?.key==='enabled'){host.toggle(target.node.step.id);return;}
-  if(target){host.choose(target.node.step.id);if(target.key!=='body'){if(e.altKey)host.connect(null,target.node.step.id,target.key);return;}gesture={kind:'node',id:target.node.step.id,start:p,original:{...target.node.position},position:{...target.node.position},moved:false};}
+  if(target){host.choose(target.node.step.id);if(target.key!=='body'){if(target.node.step[target.key])host.connect(null,target.node.step.id,target.key);return;}gesture={kind:'node',id:target.node.step.id,start:p,original:{...target.node.position},position:{...target.node.position},moved:false};}
   else{wire=null;gesture={kind:'pan',x:e.clientX,y:e.clientY,original:{...pan}};}
   canvas.setPointerCapture(e.pointerId);schedule();
  };
  canvas.onpointermove=e=>{const p=point(e);if(wire){wire.point=p;schedule();}if(gesture?.kind==='node'){const dx=p.x-gesture.start.x,dy=p.y-gesture.start.y;gesture.moved||=Math.hypot(dx,dy)*zoom>3;if(gesture.moved)gesture.position={x:gesture.original.x+dx,y:gesture.original.y+dy};schedule();}
   else if(gesture?.kind==='pan'){pan={x:gesture.original.x+e.clientX-gesture.x,y:gesture.original.y+e.clientY-gesture.y};schedule();}
-  else{hover=hit(p);canvas.style.cursor=hover?(hover.key==='body'?'grab':'crosshair'):'grab';canvas.title=hover?hover.key==='out'?`${hover.node.type} output — drag to an input`:hover.key==='enabled'?'Enable or bypass this node':hover.node.step.name:'';}
+  else{hover=hit(p);canvas.style.cursor=hover?(hover.key==='body'?'grab':'crosshair'):'grab';canvas.title=hover?hover.key==='out'?`${hover.node.type} output — drag to an input`:hover.key==='enabled'?'Enable or bypass this node':hover.key!=='body'&&hover.node.step[hover.key]?'Click to disconnect this input':hover.node.step.name:'';}
  };
  const end=e=>{if(wire)connect(hit(point(e)));const g=gesture;gesture=null;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);if(g?.kind==='node'&&g.moved)host.move(g.id,g.position);schedule();};canvas.onpointerup=end;canvas.onpointercancel=e=>{gesture=null;wire=null;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);schedule();};
  canvas.onwheel=e=>{e.preventDefault();const p=point(e),r=canvas.getBoundingClientRect();zoom=Math.max(.25,Math.min(2,zoom*Math.exp(-e.deltaY*.001)));pan={x:e.clientX-r.left-p.x*zoom,y:e.clientY-r.top-p.y*zoom};schedule();};

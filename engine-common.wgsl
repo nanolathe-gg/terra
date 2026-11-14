@@ -113,10 +113,7 @@ struct Rock {
 
 // Absolute ground recipes; the cache holds height and unlit color parameters.
 struct Ground {
-    stackStart: i32,
-    stackCount: i32,
     colorLayer: i32,
-    terrainMask: i32,
     patternOctaves: f32,
     patternLinear: f32,
     phaseOctaves: f32,
@@ -237,13 +234,8 @@ struct MaterialStep {
  links:vec4i, // source, second input, mask, color type
  args:array<vec4f,16>,
 }
-struct MaterialLayer {
+struct MaterialGraph {
     recipe: Ground,
-    amounts: vec4f, // opacity, color, height, surface
-    operation: vec4f, // blend, seed, mask kind, mask amount
-    maskPattern: vec4f, // basis, size, detail, distortion
-    maskFilter: vec4f, // seed, low, high, invert
-    terrain: vec4f, // low, high, softness
     program: vec4i, // step count, field planes, color output, height output
     steps: array<MaterialStep,40>,
 }
@@ -765,8 +757,8 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), sel
 @group(0) @binding(11) var rockSourceTex: texture_2d<f32>;
 @group(0) @binding(12) var rockRimTex: texture_2d<f32>;
 @group(0) @binding(14) var groundColorTex: texture_2d_array<f32>;
-@group(0) @binding(15) var<storage,read> materialLayers:array<MaterialLayer>;
-@group(0) @binding(16) var materialMaskTex:texture_2d_array<f32>;
+@group(0) @binding(15) var<storage,read> materialGraphs:array<MaterialGraph>;
+@group(0) @binding(16) var materialFinishTex:texture_2d_array<f32>;
 @group(0) @binding(13) var groundTex: texture_2d_array<f32>;
 @group(0) @binding(7) var linearClamp: sampler;
 @group(0) @binding(8) var linearRepeat: sampler;
@@ -1091,59 +1083,23 @@ fn groundFinishNoise(p:vec2f,size:f32,salt:f32)->f32 {
     return mix(wrapNoise(q*n+salt,n),wrapNoise(q*(n*2.0)+salt,n*2.0),fract(log2(count)));
 }
 
-// A material is an ordered stack. Cached procedural fields are independent
-// of the terrain; height/slope masks use the authored terrain at each sample.
-fn layerWeight(layer:MaterialLayer,p:vec2f,height:f32,slope:f32,terrainOn:bool)->f32 {
- var mask=1.0;
- if(layer.operation.z==1.0){mask=textureLoad(materialMaskTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0).w;}
- if(layer.operation.z>=2.0 && terrainOn){let v=select(height,slope,layer.operation.z==3.0);let t=layer.terrain;
-  mask=smoothstep(t.x-t.z,t.x+t.z,v)*(1.0-smoothstep(t.y-t.z,t.y+t.z,v));mask=mix(mask,1.0-mask,layer.maskFilter.w);}
- return layer.amounts.x*mix(1.0,mask,layer.operation.w);
-}
-fn materialRaw(p:vec2f,slot:u32,height:f32,slope:f32,terrainOn:bool)->vec3f {
- let r=u.ground[slot & groundMask];var color=vec3f(0);
- for(var i=0;i<r.stackCount;i++){
-  let layer=materialLayers[r.stackStart+i];let w=layerWeight(layer,p,height,slope,terrainOn)*layer.amounts.y;if(w<=0.0||layer.program.z==0){continue;}
-  let value=textureLoad(groundTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0).rgb;var mixed=value;
-  if(i>0){switch(i32(layer.operation.x)){case 1:{mixed=color*value;}case 2:{mixed=1.0-(1.0-color)*(1.0-value);}case 3:{mixed=color+value;}default:{}}}
-  color=mix(color,mixed,w);
- }return color;
+// One graph produces all material channels; composition happens inside it.
+fn materialRaw(p:vec2f,slot:u32)->vec3f {
+ return textureLoad(groundTex,vec2i(poolPixel(p)),u.ground[slot & groundMask].cacheLayer,0).rgb;
 }
 fn materialRelief(p:vec2f,slot:u32)->f32 {
- let r=u.ground[slot & groundMask];var height=0.0;var terrain=vec2f(0);
- if(r.terrainMask!=0){terrain=vec2f(baseHeight(p),atan(length(broadGradient(p)))*57.2957795);}
- for(var i=0;i<r.stackCount;i++){let layer=materialLayers[r.stackStart+i];let w=layerWeight(layer,p,terrain.x,terrain.y,true)*layer.amounts.z;
-  if(w!=0.0&&layer.program.w!=0){height+=textureLoad(groundTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0).w*w;}}
- return height;
+ return textureLoad(groundTex,vec2i(poolPixel(p)),u.ground[slot & groundMask].cacheLayer,0).w;
 }
 struct MaterialFinish { shine:vec4f, wetness:f32 }
 fn materialSurface(p:vec2f,slot:u32)->MaterialFinish {
- let r=u.ground[slot & groundMask];var result=MaterialFinish(vec4f(0,16,.25,3),.5);var terrain=vec2f(0);
- if(r.terrainMask!=0){terrain=vec2f(baseHeight(p),atan(length(broadGradient(p)))*57.2957795);}
- for(var i=0;i<r.stackCount;i++){let layer=materialLayers[r.stackStart+i];let w=layerWeight(layer,p,terrain.x,terrain.y,true)*layer.amounts.w;if(w<=0.0){continue;}
-  let field=textureLoad(materialMaskTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0);let q=layer.recipe;
-  result.shine=mix(result.shine,vec4f(field.z,q.sharpness,field.x,q.roughnessScale),w);result.wetness=mix(result.wetness,field.y,w);}
- return result;
+ let r=u.ground[slot & groundMask];let f=textureLoad(materialFinishTex,vec2i(poolPixel(p)),r.cacheLayer,0);
+ return MaterialFinish(vec4f(f.z,r.sharpness,f.x,r.roughnessScale),f.y);
 }
-fn materialContinuous(p:vec2f,slot:u32)->vec3f {
- let r=u.ground[slot & groundMask];var terrain=vec2f(0);
- if(r.terrainMask!=0){terrain=vec2f(baseHeight(p),atan(length(broadGradient(p)))*57.2957795);}
- return materialRaw(p,slot,terrain.x,terrain.y,true);
-}
-// Carry the full-repeat diffusion residual into terrain-dependent color.
-// Re-quantize after compositing; the grain stays coordinate-stable and an
-// infinitesimal mask edit does not switch to a different dither pattern.
-fn materialPalette(p:vec2f,raw:vec3f,r:Ground)->vec3f {
- let v=clamp(raw,vec3f(0),vec3f(1));
- let metric=pow(v,vec3f(r.paletteGamma));var best=r.texturePalette[0].rgb;var distance=1e20;
- for(var i=0;i<r.texturePaletteCount;i++){let c=r.texturePalette[i].rgb;let d=pow(clamp(c,vec3f(0),vec3f(1)),vec3f(r.paletteGamma))-metric;let score=dot(d*d,vec3f(r.paletteRed,r.paletteGreen,r.paletteBlue));if(score<distance){distance=score;best=c;}}
- return best;
-}
+fn materialContinuous(p:vec2f,slot:u32)->vec3f {return materialRaw(p,slot);}
 fn materialPigment(p:vec2f,slot:u32)->vec3f {
  let r=u.ground[slot & groundMask];let raw=materialContinuous(p,slot);
  if(r.textureDither<=0.0){return raw;}
- if(r.terrainMask!=0){let reference=materialRaw(p,slot,0.0,0.0,false);let dithered=textureLoad(groundColorTex,vec2i(poolPixel(p)),r.colorLayer,0).rgb;
-  return mix(raw,materialPalette(p,raw+(dithered-reference),r),r.textureDither);}
+
  return mix(raw,textureLoad(groundColorTex,vec2i(poolPixel(p)),r.colorLayer,0).rgb,r.textureDither);
 }
 

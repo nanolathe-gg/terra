@@ -1,31 +1,39 @@
-// A typed, bounded DAG presented as an ordered recipe. IDs, not positions,
+// One typed, bounded DAG per material. IDs, not positions,
 // connect steps; the GPU evaluates the same program for preview and export.
 export const MAX_STEPS=40;
-export const STEP_TYPES=['transform','noise','grain','dots','surface','constant','remap','combine','gradient','channel','hash','output'];
+export const STEP_TYPES=['transform','noise','dots','surface','constant','remap','combine','gradient','channel','output'];
 export const COMBINES=['replace','add','multiply','subtract','minimum','maximum','blend','screen'];
 export const OUTPUTS=['color','height','roughness','wetness','gloss'];
+export const NOISE_TYPES={fractal:'Fractal',fine:'Fine grain',pixel:'Pixel random'};
+const FINE_PARAMS=[['textureFineSize','Size',1,32,1],['textureFineGradient','Gradient noise',0,1,0],['textureFineWarp','Distortion influence',0,1,0]];
+export const stepParams=s=>s.type==='noise'&&s.kind==='fine'?FINE_PARAMS:s.type==='noise'&&s.kind==='pixel'?[]:STEP_PARAMS[s.type];
+export const OUTPUT_KEYS=['textureDither','diffusionMix','paletteGamma','paletteRed','paletteGreen','paletteBlue'];
+export const materialReliefBound=p=>Math.max(8,stepHeightBound(p));
 export const STEP_PARAMS={
  transform:[['patternWarp','Distortion',0,24,0],['patternWarpSize','Distortion size',1,128,10],['phaseOctaves','Octaves',0,4,0],['phaseAxis','Axis balance',-1,1,0]],
  noise:[['patternSize','Size',1,128,8],['patternDetail','Secondary detail',0,1,.25],['patternGradient','Gradient noise',0,1,0],['patternLinear','Linear interpolation',0,1,0],['patternTurbulence','Turbulence',0,1,0],['patternCells','Cells',0,1,0],['patternStreak','Directional waves',0,1,0],['patternLength','Wave length',1,128,8],['patternDirection','Direction',0,180,45],['patternSlope','Crests',0,1,0],['patternOctaves','Octaves',0,5,0],['patternMottle','Broad variation',0,1,0],['patternMottleSize','Broad size',1,256,16]],
- grain:[['textureFineSize','Size',1,32,1],['textureFineGradient','Gradient noise',0,1,0],['textureFineWarp','Distortion influence',0,1,0]],
  dots:[['markAmount','Strength',0,1,1],['markSize','Radius',.25,16,1],['markSpacing','Spacing',2,64,5],['markDensity','Coverage',0,1,.2],['markScatter','Scatter',0,1.8,1.5],['markCore','Hardness',0,.95,.1],['markVariation','Variation',0,1,.3],['markFollow','Follow source',0,1,0],['markNoise','Noise distribution',0,1,0],['markNoiseSize','Noise size',1,32,2],['markLow','Noise coverage',0,.49,.1],['markHigh','Noise softness',.51,1,.65]],
  surface:[],constant:[['value','Value',-8,8,0]],
  remap:[['patternLow','Low',-.5,.49,0],['patternHigh','High',.51,1.5,1],['patternPower','Power',.2,4,1],['patternInvert','Invert',0,1,0],['patternClip','Hard clip',0,1,0],['patternSine','Sine shaping',0,1,0],['patternSineFrequency','Frequency',1,8,1]],
  combine:[['amount','Amount',-8,8,1],['offset','Second input offset',-8,8,0]],
- gradient:[['ease','Softness',0,1,1]],channel:[['channel','Component',0,3,0]],hash:[],
+ gradient:[['ease','Softness',0,1,1]],channel:[['channel','Component',0,3,0]],
  output:[['scale','Scale',-8,8,1],['offset','Offset',-8,8,0]],
 };
-export const STEP_LABELS={transform:'Transform coordinates',noise:'Fractal noise',grain:'Fine noise',dots:'Scattered dots',surface:'Surface primitives',constant:'Constant',remap:'Remap values',combine:'Combine',gradient:'Color gradient',channel:'Extract component',hash:'Pixel variation',output:'Material output'};
+export const STEP_LABELS={transform:'Transform coordinates',noise:'Noise',dots:'Scattered dots',surface:'Surface primitives',constant:'Constant',remap:'Remap values',combine:'Combine',gradient:'Color gradient',channel:'Extract component',output:'Material output'};
 const refKeys=['source','other','mask'];
 export function copySteps(value){
- if(!Array.isArray(value)||value.length<1||value.length>MAX_STEPS)throw Error(`A layer needs 1–${MAX_STEPS} steps.`);
+ if(!Array.isArray(value)||value.length<1||value.length>MAX_STEPS)throw Error(`A material needs 1–${MAX_STEPS} steps.`);
+ const removed=new Set(value.filter(s=>['grain','hash'].includes(s?.type)).map(s=>s.id));
+ if(removed.size){value=value.filter(s=>!removed.has(s?.id)).map(s=>({...s,...Object.fromEntries(refKeys.map(k=>[k,removed.has(s[k])?null:s[k]]))}));if(!value.length)value=[{id:'empty',type:'constant'}];}
  const seen=new Set();
  const steps=value.map(s=>{
   if(!s||!STEP_TYPES.includes(s.type)||typeof s.id!=='string'||!s.id||s.id.length>80||seen.has(s.id))throw Error('Invalid or duplicate material step.');
   if(s.enabled!==undefined&&typeof s.enabled!=='boolean')throw Error('Invalid step visibility.');
-  const p={};for(const [k,,lo,hi,d]of STEP_PARAMS[s.type]){const n=s.params?.[k]??d;if(typeof n!=='number'||!Number.isFinite(n))throw Error('Invalid step value: '+k);p[k]=Math.max(lo,Math.min(hi,n));}
+  if(s.type==='noise'&&s.kind!==undefined&&!Object.hasOwn(NOISE_TYPES,s.kind))throw Error('Invalid noise type.');
+  const p={};for(const [k,,lo,hi,d]of stepParams(s)){const n=s.params?.[k]??d;if(typeof n!=='number'||!Number.isFinite(n))throw Error('Invalid step value: '+k);p[k]=Math.max(lo,Math.min(hi,n));}
   if(s.type==='channel')p.channel=Math.round(p.channel);
   const out={id:s.id,name:s.name??STEP_LABELS[s.type],type:s.type,enabled:s.enabled!==false,params:p};
+  if(s.type==='noise')out.kind=s.kind??'fractal';
   if(typeof out.name!=='string'||!out.name.trim()||out.name.length>80)throw Error('A step needs a name of 1–80 characters.');
   for(const key of refKeys){out[key]=s[key]??null;if(out[key]!==null&&!seen.has(out[key]))throw Error('Step sources must refer to an earlier step. Move its source first or reconnect it.');}
   if(s.type==='combine'){out.operation=s.operation??'blend';if(!COMBINES.includes(out.operation))throw Error('Invalid combine operation.');}
@@ -40,7 +48,7 @@ export function copySteps(value){
  });
  const types=new Map(),outputs=new Set();
  for(const s of steps){const a=types.get(s.source),b=types.get(s.other),c=types.get(s.mask);
-  if(['noise','grain','transform'].includes(s.type)&&a&&a!=='position')throw Error('A generator or transform needs coordinates as its source.');
+  if(['noise','transform'].includes(s.type)&&a&&a!=='position')throw Error('A generator or transform needs coordinates as its source.');
   if(s.type==='dots'&&a&&a!=='scalar')throw Error('Dot coverage needs a grayscale source.');
   if(['remap','gradient'].includes(s.type)&&a&&a!=='scalar')throw Error('Remap and gradient steps need a grayscale source.');
   if(s.type==='combine'&&[a,b].some(t=>t==='position'||t==='surface'))throw Error('Combine needs grayscale or color inputs.');
@@ -57,8 +65,8 @@ export function makeStep(type,steps=[]){
  const id='step-'+(1+Math.max(0,...steps.map(s=>Number(s.id.replace('step-',''))||0))),types=stepTypes(steps);
  const target=type==='output'?OUTPUTS.find(t=>!steps.some(s=>s.type==='output'&&s.enabled&&s.target===t)):null;
  if(type==='output'&&!target)throw Error('All material output channels already have a node.');
- const want=['noise','grain','transform'].includes(type)?'position':['remap','gradient','dots'].includes(type)||type==='output'&&target!=='color'?'scalar':type==='channel'?'surface':null;
- const source=['constant','surface','hash'].includes(type)?null:steps.findLast(s=>s.type!=='output'&&(want?types.get(s.id)===want:['scalar','color'].includes(types.get(s.id))))?.id??null;
+ const want=['noise','transform'].includes(type)?'position':['remap','gradient','dots'].includes(type)||type==='output'&&target!=='color'?'scalar':type==='channel'?'surface':null;
+ const source=['constant','surface'].includes(type)?null:steps.findLast(s=>s.type!=='output'&&(want?types.get(s.id)===want:['scalar','color'].includes(types.get(s.id))))?.id??null;
  return copySteps([...steps,{id,name:STEP_LABELS[type],type,source,...(target?{target}:{} )}]).at(-1);
 }
 // Lower absolute recipes into ordinary steps. All recipes, including the older
@@ -66,7 +74,7 @@ export function makeStep(type,steps=[]){
 export function recipeSteps(r){
  const k=r.knobs,c=r.textureColors,steps=[];let serial=0;
  const add=(type,name,props={})=>{const id='step-'+ ++serial;steps.push({id,type,name,...props});return id;};
- const params=type=>Object.fromEntries(STEP_PARAMS[type].map(([key,,, ,d])=>[key,k[key]??d]));
+ const params=type=>Object.fromEntries((type==='fine'?FINE_PARAMS:STEP_PARAMS[type]).map(([key,,, ,d])=>[key,k[key]??d]));
  const combine=(name,a,b,operation,amount=1,offset=0,mask=null)=>add('combine',name,{source:a,other:b,mask,operation,params:{amount,offset}});
  const constant=(name,value)=>add('constant',name,{params:{value}});
  let color=null,height=null,pigment=null;
@@ -77,14 +85,14 @@ export function recipeSteps(r){
   const t=combine('Tone and variation',tone,variation,'add',.35);
   const ramp=add('gradient','Surface gradient',{source:t,colors:r.ramp.map(c=>c.map(v=>v/255)),params:{ease:0}});
   color=ramp;
-  if(k.grainColorMix>0){const other=add('gradient','Alternate gradient',{source:t,colors:r.variationRamp.map(c=>c.map(v=>v/255)),params:{ease:0}}),hash=add('hash','Color variation');color=combine('Mix surface colors',color,other,'blend',k.grainColorMix,0,hash);}
+  if(k.grainColorMix>0){const other=add('gradient','Alternate gradient',{source:t,colors:r.variationRamp.map(c=>c.map(v=>v/255)),params:{ease:0}}),hash=add('noise','Color variation',{kind:'pixel'});color=combine('Mix surface colors',color,other,'blend',k.grainColorMix,0,hash);}
   const ink=add('gradient','Line color',{source:null,colors:[r.line.map(v=>v/255),r.line.map(v=>v/255)],params:{ease:0}});color=combine('Blend lines',color,ink,'blend',1,0,line);
  }
  if(k.patternAmount>0){
   const transform=add('transform','Pattern distortion',{params:params('transform')});
   const coarse=add('noise','Mottling / streaks',{source:transform,params:params('noise')});
   let field=coarse,fine=null,marks=null;
-  if(k.textureFineStructure>0||k.textureFine>0){fine=add('grain','Fine grain',{source:transform,params:params('grain')});}
+  if(k.textureFineStructure>0||k.textureFine>0){fine=add('noise','Fine grain',{kind:'fine',source:transform,params:params('fine')});}
   if(k.textureFineStructure>0)field=combine('Add fine detail',coarse,fine,'add',k.textureFineStructure,.5);
   pigment=add('remap','Pattern levels',{source:field,params:params('remap')});
   let paint=add('gradient','Pattern colors',{source:pigment,colors:[c.low,c.middle,c.high].map(c=>c.map(v=>v/255)),params:{ease:k.patternEase}});
@@ -114,13 +122,13 @@ export function compileSteps(recipe){
  const reserve=(id,width=1)=>{if(id&&!sample.has(id)){sample.set(id,signals);signals+=width;}};
  // Surface primitives are four jointly sampled fields. Arithmetic after that
  // sampling boundary remains full precision, including palette interpolation.
- for(const s of steps){if(s.type==='surface'){reserve(s.id,4);shade.add(s.id);}if(s.type==='hash'||s.type==='gradient'||types.get(s.id)==='color'||[s.source,s.other,s.mask].some(id=>shade.has(id)))shade.add(s.id);}
+ for(const s of steps){if(s.type==='surface'){reserve(s.id,4);shade.add(s.id);}if(s.type==='noise'&&s.kind==='pixel'||s.type==='gradient'||types.get(s.id)==='color'||[s.source,s.other,s.mask].some(id=>shade.has(id)))shade.add(s.id);}
  for(const s of steps){if(s.type==='gradient'||types.get(s.id)==='color'||s.type==='output')for(const id of [s.source,s.other,s.mask])if(id&&types.get(id)==='scalar'&&!shade.has(id))reserve(id);}
  const planes=Math.max(1,Math.ceil(signals/4));
  const instructions=steps.map(s=>{
-  const code=[STEP_TYPES.indexOf(s.type)+1,s.enabled?1:0,sample.get(s.id)??-1,s.type==='combine'?COMBINES.indexOf(s.operation):s.type==='output'?OUTPUTS.indexOf(s.target):0];
+  const code=[({transform:1,noise:s.kind==='fine'?3:s.kind==='pixel'?11:2,dots:4,surface:5,constant:6,remap:7,combine:8,gradient:9,channel:10,output:12})[s.type],s.enabled?1:0,sample.get(s.id)??-1,s.type==='combine'?COMBINES.indexOf(s.operation):s.type==='output'?OUTPUTS.indexOf(s.target):0];
   const links=[s.source,s.other,s.mask].map(id=>indices.get(id)??-1);links.push(types.get(s.id)==='color'?1:0);
-  const args=STEP_PARAMS[s.type].map(([k])=>s.params[k]);
+  const args=stepParams(s).map(([k])=>s.params[k]);
   if(s.type==='gradient'){args[1]=s.colors.length;args.push(...s.colors.flat());}
   return {code,links,args};
  });
@@ -132,10 +140,10 @@ export function stepHeightBound(recipe){
  const values=new Map(),add=(a,b)=>[a[0]+b[0],a[1]+b[1]],sub=(a,b)=>[a[0]-b[1],a[1]-b[0]],mul=(a,b)=>{const v=[a[0]*b[0],a[0]*b[1],a[1]*b[0],a[1]*b[1]];return [Math.min(...v),Math.max(...v)];},mix=(a,b,w)=>add(a,mul(sub(b,a),w));
  let height=[0,0];
  for(const s of recipe.steps){const a=values.get(s.source)??[0,0],b=values.get(s.other)??[0,0],mask=values.get(s.mask)??[1,1],p=s.params;let v=a;
-  if(!s.enabled){v=['noise','grain','dots','surface','constant'].includes(s.type)?[0,0]:a;}
+  if(!s.enabled){v=['noise','dots','surface','constant'].includes(s.type)?[0,0]:a;}
   else switch(s.type){
-   case 'noise':case 'dots':case 'remap':case 'hash':v=[0,1];break;
-   case 'grain':v=[-1,2];break;
+   case 'noise':v=s.kind==='fine'?[-1,2]:[0,1];break;
+   case 'dots':case 'remap':v=[0,1];break;
    case 'constant':v=[p.value,p.value];break;
    case 'surface':{const k=recipe.knobs;v=[-8-k.textureGrainHeight-k.texturePitDepth,8+k.textureGrainHeight+k.textureHeight];break;}
    case 'gradient':{const low=Math.min(...s.colors.flat()),high=Math.max(...s.colors.flat());v=s.colors.length===2?mix([low,high],[low,high],a):[low,high];break;}
@@ -166,4 +174,21 @@ export function orderSteps(steps){
 }
 export function materialRenderKey(recipe){
  return JSON.stringify(recipe,(key,value)=>['name','position','presetKey'].includes(key)?undefined:value);
+}
+
+// Pipeline identity includes only topology/operations, never editable numbers.
+export const programKey=program=>JSON.stringify(program.instructions.map(({code,links})=>[code,links]));
+export function programSource(program){
+ const lines=[],ref=(i,stage,fallback)=>i<0?fallback:stage+i;
+ program.instructions.forEach(({code,links},i)=>{
+  lines.push(`let s${i}=MaterialStep(vec4i(${code.join(',')}),vec4i(${links.join(',')}),graph.steps[${i}].args);`);
+  lines.push(`layerRecipe=graph.recipe;let v${i}=generateStep(s${i},${ref(links[0],'v','vec4f(0)')},${ref(links[1],'v','vec4f(0)')},${ref(links[2],'v','vec4f(1)')},point);`);
+ });
+ lines.push('var color=vec3f(0);var height=0.0;var finish=vec3f(graph.recipe.roughness,graph.recipe.wetness,graph.recipe.gloss);');
+ program.instructions.forEach(({code,links},i)=>{
+  const value=code[2]>=0?`vec4f(sampledHalf(v${i}.xy),sampledHalf(v${i}.zw))`:code[0]>=6?`stepValue(s${i},${ref(links[0],'m','vec4f(0)')},${ref(links[1],'m','vec4f(0)')},${ref(links[2],'m','vec4f(1)')},point)`:`v${i}`;
+  lines.push(`let m${i}=${value};`);
+  if(code[0]===12&&code[1])lines.push(code[3]===0?`color=m${i}.rgb;`:code[3]===1?`height=m${i}.x;`:`finish[${code[3]-2}]=clamp(m${i}.x,0.0,1.0);`);
+ });
+ return lines.join('\n');
 }

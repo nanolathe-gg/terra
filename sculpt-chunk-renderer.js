@@ -1,4 +1,4 @@
-import {materialReliefBound} from './sculpt-material-layers.js';
+import {materialReliefBound} from './sculpt-material-steps.js';
 import {terrainAllocation,TerrainMemoryError} from './sculpt-memory.js';
 import {rockWeatherBytes} from './sculpt-rock-weather.js';
 // Card D: a bounded working set for the existing terrain shader. Materials

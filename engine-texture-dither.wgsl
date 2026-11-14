@@ -20,7 +20,7 @@ fn diffuseMaterial(@builtin(local_invocation_index) lane:u32){
   if(lane<rows&&x>=0&&x<i32(width)){
    let at=(lane+1u)*stride+u32(x)+1u;let prev=at-stride;
    let p=vec2u(u32(x),job.z+lane);
-   let raw=round(clamp(materialRaw(vec2f(p),job.x,0.0,0.0,false),vec3f(0),vec3f(1))*255.0);
+   let raw=round(clamp(materialRaw(vec2f(p),job.x),vec3f(0),vec3f(1))*255.0);
    let value=raw+(((errors[prev-1u].rgb*diag+errors[prev].rgb*down)+errors[prev+1u].rgb*left)+errors[at-1u].rgb*right);
    let metric=diffusionMetric(value,r.paletteGamma);var best=r.texturePalette[0].rgb;var distance=1e20;
    for(var k=0u;k<u32(r.texturePaletteCount);k++){

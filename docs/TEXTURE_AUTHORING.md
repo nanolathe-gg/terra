@@ -6,8 +6,8 @@ map's renderer, undo history, save file, embedded world settings, and export.
 
 ## Minimal graph editor
 
-Open **World → Ground → Open material editor**, or **Water & shores → Edit
-material**. Choose a preset on the left. The graph occupies the center; the live
+Open **Materials** in the global toolbar. The World and Water panels also
+link to the same editor. Choose a preset on the left. The graph occupies the center; the live
 preview and selected node's controls stay together on the right. All numerical
 controls use Terraform's shared scrubs, including drag, Shift-drag, arrows, and
 Enter/double-click to type.
@@ -17,7 +17,8 @@ Enter/double-click to type.
 - Drag an output dot to an input dot to connect nodes. Source menus in the
   inspector provide the same operation without pointer dragging. Coordinates,
   grayscale fields, and colors are distinct types; incompatible inputs and
-  cycles are rejected with an explanation.
+  cycles are rejected with an explanation. Click a connected input dot to
+  disconnect it, or click **×** beside its source menu. Undo restores the wire.
 - Drag a node to position it. Drag empty space to pan; scroll to zoom. **Fit**
   frames the graph and **Arrange** lays it out from sources to outputs.
 - **Enabled** bypasses an operation; disabled generators produce zero. Coordinate
@@ -36,18 +37,17 @@ use stable IDs; a topological sort determines evaluation order. The visible
 canvas is not the execution order. Keyboard users can select nodes using the
 node menu and connect them using their source menus.
 
-A layer groups a material graph with its existing amount, compositing mode,
-mask, and channel contributions. Layers still compose first to last. Layer
-visibility, drag ordering, duplication, deletion, and terrain/procedural masks
-remain available. Each layer holds at most 40 nodes. Each material channel has
-one enabled output per layer; multiple independent fields can feed that output.
+Each material is exactly one graph, with at most 40 nodes and one enabled
+output per channel. Blend and mask fields with Combine nodes inside that graph.
+There is no layer list, layer data, layer masking pass, or stack compositor.
 This first editor deliberately has no nested node groups, function expressions,
-subgraph library, or cross-layer wires.
+or subgraph library.
 
 ## Fields, colors, and outputs
 
-Noise, grain, and dots produce grayscale fields. Dots are a generator, not a
-layer operation. Remap shapes a field's range and contrast. Combine uses generic
+One **Noise** node offers **Fractal**, **Fine grain**, and **Pixel random**
+types. The controls change with the selected type. Dots also produce a grayscale
+field; color and blending remain ordinary graph operations. Remap shapes a field's range and contrast. Combine uses generic
 replace, add, multiply, subtract, minimum, maximum, blend, or screen arithmetic.
 Its second-input offset supports centered noise. A grayscale field can mask or
 scale a color field. Gradients support two, three, or sixteen colors, with a
@@ -60,7 +60,7 @@ are optional output channels. Lighting evaluates the resulting surface; palette
 reduction and diffusion follow the composed color.
 
 The six older relief starters retain their bundled **Surface primitives** source,
-using the layer's existing relief controls. Its components can be extracted in
+using the material's existing relief controls. Its components can be extracted in
 those graphs. The initial Add node menu focuses on the generators used by the
 four reviewed materials; more specialized primitives can follow the Desert test.
 
@@ -80,49 +80,66 @@ content is numeric procedural data; no retail pixels, traced shapes, or masks
 are loaded or committed.
 
 Existing map materials are not silently replaced. Add a starter or use **Reset
-to preset** to get the rebuilt graph. The removed special-purpose layer effects
-are discarded when reading old recipes; no compatibility renderer remains.
+to preset** to get the rebuilt graph. Removed layer settings and obsolete standalone grain/pixel nodes are dropped
+when reading old recipes; dangling connections are cleared. No compatibility
+renderer remains. Reset to preset restores the current reviewed construction.
 
 ## Engine and cache
 
 `sculpt-material-steps.js` validates and compiles typed nodes. `sculpt-material-graph.js`
 draws the graph; `sculpt-material-step-panel.js` edits it using the site's controls.
-`engine-ground.wgsl` evaluates the program once per repeated material texel.
+`engine-ground.wgsl` evaluates the graph once per repeated material texel. The
+compiler emits straight-line GPU operations instead of interpreting two dynamic
+40-element arrays at every pixel. Pipelines are cached by graph topology and
+operation; numeric settings remain uniforms. Preview, terrain, and export use
+the same compiler and shader operations.
 Scalar sampling boundaries retain the preceding renderer's truncating half-float
 precision before color mapping. Finished RGB and height are cached in
-`rgba32float`; finish and mask values use `rgba16float`. Terrain and water read
+`rgba32float`; surface finish uses `rgba16float`. Terrain and water read
 these same caches, without interpreting a graph at each terrain sample.
 
-The fixed 128 MiB material-cache budget is unchanged. Each layer uses 24 bytes
-per repeat pixel, plus 4 bytes per pixel per material for palette output. One
-reviewed preset at its 1024-pixel repeat uses 28 MiB, versus 40–52 MiB for the
-previous component-layer version. Four single-layer presets fit (112 MiB).
-Additional layers and larger repeats consume more memory; assignment checks
-explain when a recipe exceeds the budget. Program-table storage and temporary
-diffusion buffers are tracked separately by the renderer's overall budget.
+The fixed 128 MiB material-cache budget is unchanged. Each graph uses 28 bytes
+per repeat pixel: color/height, surface finish, and palette output. A material at
+its 1024-pixel repeat uses 28 MiB; four fit (112 MiB). Program-table storage and
+temporary diffusion buffers count toward the renderer's overall budget.
 
-Opening the material editor suspends terrain scheduling. The preview coalesces
-changes to one active job and the latest pending recipe. Drafts defer diffusion;
-after 240 ms without input, the final job restores palette treatment. No CPU
-texture implementation or preview-specific material shader is used.
+Opening the material editor suspends terrain scheduling, including reloads and
+weather work. The preview coalesces changes to one active job and the latest
+pending recipe. Its 256×256 sample displays art at 1×. Drafts render immediately;
+120 ms after input settles, palette diffusion finishes the same sample. Palette
+settings no longer regenerate the procedural fields. Readback and tile counting
+happen only for the finished sample. The full repeat remains available for exact
+periodicity and consistent diffusion; no CPU texture engine or special preview
+shader is introduced.
+
+Measured on the same machine with one before/after run, excluding the first
+edit of each preset: live previews improved from **316–368 ms to 32–40 ms**;
+finished dithered previews improved from **639–716 ms** (Blue water 625–634 ms)
+to **176–234 ms**. These are small-swatch authoring measurements, not terrain
+performance claims. By eye, the four before/after palette samples retain their
+appearance. The largest palette-frequency delta is 0.027 percentage points.
+The small 1,255,440-byte export replays exactly (1,142 distinct tiles); its hash
+changes because some individual dither pixels moved.
+
+A new topology still has a first-use GPU compilation cost. Numeric slider edits
+reuse its pipeline. `repro/material-preview-perf.mjs --server <url> --port <cdp>
+--out <dir>` measures first and finished preview latency for four small edits of
+each reviewed preset, with the first edit reported separately from warm edits.
 
 ## Focused validation
 
-Measured against the captured pre-change four-preset output:
+Focused checks cover typed connections, cycle rejection, independent graph
+copies, save/clipboard round trips, bounds, removed options, and layout-only
+edits. Browser checks exercise global access, all four presets, noise-type
+switching, both disconnect interactions, node previews, color/height editing,
+undo/reset, graph layout saving, and mobile containment. Terrain submits no GPU
+work while the modal is open, including a map reload.
 
-- **0 of 4,194,304** full-repeat palette pixels changed. The focused 128×128
-  continuous-color and shaded images also have **0** changed byte pixels.
-- Green and Blue water retain identical floating-point colors. Red and Violet
-  have 30 and 174 changed float components respectively, with a maximum absolute
-  difference below 0.000054 (less than 0.014 of an 8-bit channel unit).
-- The small ground/water export remains byte-identical: 1,255,440 bytes,
-  1,142 distinct tiles, SHA-256
-  `b425819e7b9b862cc3e95507aaa37d798e1924f58c328e413c9c0563f17ff1cb`.
-- Focused unit checks cover typed connections, cycles, ordering, independent
-  graph copies, save/clipboard round trips, bounds, and layout-only edits.
-- Browser checks cover the four presets, node preview, noise/gradient/height
-  edits, pointer movement and connection rejection, deletion, undo/reset,
-  graph layout saving, and mobile containment.
+The full-repeat continuous colors and sampled shaded output are compared against
+the previous procedural baseline. Recompiling GPU arithmetic changes some
+individual palette diffusion decisions near ties. The comparison reports these
+changed pixels and the RGB/palette distribution separately; it does not claim
+bit-identical dither output. Export must remain deterministic on replay.
 
 `repro/preset-components.mjs --capture` records a procedural baseline outside
 Git; run without that flag after the change to compare. `repro/material-steps-ui.mjs`

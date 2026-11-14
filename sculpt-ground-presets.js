@@ -1,5 +1,4 @@
 import {copySteps,recipeSteps} from './sculpt-material-steps.js';
-import {copyLayerSettings,MAX_MATERIAL_LAYERS} from './sculpt-material-layers.js';
 import gamePalette from './materials/palette.json' with {type:'json'};
 import texturePresets from './materials/texture-presets.json' with {type:'json'};
 import {TEXTURE_CONTROLS,copyTextureColors,copyTexturePalette} from './sculpt-texture-model.js';
@@ -30,7 +29,7 @@ const recipeColor = value => {
  if(!Array.isArray(value)||value.length!==3||value.some(n=>typeof n!=='number'||!Number.isFinite(n)||n<0||n>255))throw Error('Ground colors need RGB values from 0 to 255.');
  return [...value];
 };
-export function copyGroundRecipe(value, child=false) {
+export function copyGroundRecipe(value) {
  if (!object(value)) throw Error('Invalid ground recipe.');
  const knobs = {...GROUND_DEFAULTS};
  if (value.knobs !== undefined && !object(value.knobs)) throw Error('Invalid ground settings.');
@@ -41,9 +40,8 @@ export function copyGroundRecipe(value, child=false) {
  if (!Array.isArray(value.ramp) || value.ramp.length !== 16) throw Error('A ground ramp needs 16 colors.');
  const variationRamp=value.variationRamp ?? value.ramp;
  if(!Array.isArray(variationRamp)||variationRamp.length!==16)throw Error('A ground variation ramp needs 16 colors.');
- if(value.layers!==undefined&&(!Array.isArray(value.layers)||value.layers.length>=MAX_MATERIAL_LAYERS||child&&value.layers.length))throw Error('A material holds at most eight layers, without nested stacks.');
  if(value.presetKey!=null&&(typeof value.presetKey!=='string'||!value.presetKey.trim()||value.presetKey.length>80))throw Error('Invalid source preset.');
- const recipe={presetKey:value.presetKey??null,layer:copyLayerSettings(value.layer),layers:(value.layers??[]).map(p=>copyGroundRecipe(p,true)),knobs,textureColors:copyTextureColors(value.textureColors),texturePalette:copyTexturePalette(value.texturePalette),ramp:value.ramp.map(recipeColor),variationRamp:variationRamp.map(recipeColor),line:recipeColor(value.line ?? value.ramp[0])};
+ const recipe={presetKey:value.presetKey??null,knobs,textureColors:copyTextureColors(value.textureColors),texturePalette:copyTexturePalette(value.texturePalette),ramp:value.ramp.map(recipeColor),variationRamp:variationRamp.map(recipeColor),line:recipeColor(value.line ?? value.ramp[0])};
  recipe.steps=value.steps?copySteps(value.steps):recipeSteps(recipe);return recipe;
 }
 export function copyGrounds(value) {
@@ -100,10 +98,9 @@ export function parseGroundRecipe(text) {
  if(p?.format!=='terraform-ground-recipe')throw Error('The clipboard has no ground recipe.');
  return {name:nameOf(p.name),...copyGroundRecipe(p)};
 }
-export function groundCacheUsage(count,pool,layerCount=count) {
+export function groundCacheUsage(count,pool) {
  if(!Number.isInteger(count)||count<0||count>GROUND_SLOTS||!Number.isInteger(pool)||pool<512||pool%512)throw Error('Invalid ground cache dimensions.');
- if(!Number.isInteger(layerCount)||layerCount<count||layerCount>count*MAX_MATERIAL_LAYERS*4)throw Error('Invalid material layer count.');
- const bytes=(layerCount*24+count*4)*pool*pool,capacity=Math.min(GROUND_SLOTS,Math.floor(GROUND_CACHE_BYTES/(pool*pool*28)));
+ const bytes=count*28*pool*pool,capacity=Math.min(GROUND_SLOTS,Math.floor(GROUND_CACHE_BYTES/(pool*pool*28)));
  return {bytes,capacity,budget:GROUND_CACHE_BYTES,fits:bytes<=GROUND_CACHE_BYTES};
 }
 

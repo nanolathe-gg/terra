@@ -2,30 +2,6 @@
   "rust-mottling": {
     "name": "Rust mottling",
     "presetKey": null,
-    "layer": {
-      "visible": true,
-      "name": "Rust mottling",
-      "blend": "normal",
-      "mask": "everywhere",
-      "maskPattern": "clouds",
-      "opacity": 1,
-      "color": 1,
-      "height": 1,
-      "surface": 1,
-      "seed": 0,
-      "maskAmount": 1,
-      "maskSize": 32,
-      "maskDetail": 0.25,
-      "maskWarp": 0,
-      "maskSeed": 17,
-      "maskLow": 0,
-      "maskHigh": 1,
-      "maskInvert": 0,
-      "terrainLow": 0,
-      "terrainHigh": 64,
-      "terrainSoftness": 8
-    },
-    "layers": [],
     "knobs": {
       "patternOctaves": 0,
       "patternLinear": 0,
@@ -404,12 +380,13 @@
         },
         "source": "step-1",
         "other": null,
-        "mask": null
+        "mask": null,
+        "kind": "fractal"
       },
       {
         "id": "step-3",
         "name": "Fine grain",
-        "type": "grain",
+        "type": "noise",
         "enabled": true,
         "params": {
           "textureFineSize": 1.8,
@@ -418,7 +395,8 @@
         },
         "source": "step-1",
         "other": null,
-        "mask": null
+        "mask": null,
+        "kind": "fine"
       },
       {
         "id": "step-4",
@@ -572,30 +550,6 @@
   "cloudy-green": {
     "name": "Cloudy green",
     "presetKey": null,
-    "layer": {
-      "visible": true,
-      "name": "Cloudy green",
-      "blend": "normal",
-      "mask": "everywhere",
-      "maskPattern": "clouds",
-      "opacity": 1,
-      "color": 1,
-      "height": 1,
-      "surface": 1,
-      "seed": 0,
-      "maskAmount": 1,
-      "maskSize": 32,
-      "maskDetail": 0.25,
-      "maskWarp": 0,
-      "maskSeed": 17,
-      "maskLow": 0,
-      "maskHigh": 1,
-      "maskInvert": 0,
-      "terrainLow": 0,
-      "terrainHigh": 64,
-      "terrainSoftness": 8
-    },
-    "layers": [],
     "knobs": {
       "patternOctaves": 0,
       "patternLinear": 0,
@@ -974,12 +928,13 @@
         },
         "source": "step-1",
         "other": null,
-        "mask": null
+        "mask": null,
+        "kind": "fractal"
       },
       {
         "id": "step-3",
         "name": "Fine grain",
-        "type": "grain",
+        "type": "noise",
         "enabled": true,
         "params": {
           "textureFineSize": 1.15,
@@ -988,7 +943,8 @@
         },
         "source": "step-1",
         "other": null,
-        "mask": null
+        "mask": null,
+        "kind": "fine"
       },
       {
         "id": "step-4",
@@ -1105,30 +1061,6 @@
   "blue-streaked-water": {
     "name": "Blue streaked water",
     "presetKey": null,
-    "layer": {
-      "visible": true,
-      "name": "Blue streaked water",
-      "blend": "normal",
-      "mask": "everywhere",
-      "maskPattern": "clouds",
-      "opacity": 1,
-      "color": 1,
-      "height": 1,
-      "surface": 1,
-      "seed": 0,
-      "maskAmount": 1,
-      "maskSize": 32,
-      "maskDetail": 0.25,
-      "maskWarp": 0,
-      "maskSeed": 17,
-      "maskLow": 0,
-      "maskHigh": 1,
-      "maskInvert": 0,
-      "terrainLow": 0,
-      "terrainHigh": 64,
-      "terrainSoftness": 8
-    },
-    "layers": [],
     "knobs": {
       "patternOctaves": 0,
       "patternLinear": 0,
@@ -1483,12 +1415,13 @@
         },
         "source": "step-1",
         "other": null,
-        "mask": null
+        "mask": null,
+        "kind": "fractal"
       },
       {
         "id": "step-3",
         "name": "Fine grain",
-        "type": "grain",
+        "type": "noise",
         "enabled": true,
         "params": {
           "textureFineSize": 1.1,
@@ -1497,7 +1430,8 @@
         },
         "source": "step-1",
         "other": null,
-        "mask": null
+        "mask": null,
+        "kind": "fine"
       },
       {
         "id": "step-4",
@@ -1614,30 +1548,6 @@
   "violet-rippled-water": {
     "name": "Violet rippled water",
     "presetKey": null,
-    "layer": {
-      "visible": true,
-      "name": "Violet rippled water",
-      "blend": "normal",
-      "mask": "everywhere",
-      "maskPattern": "clouds",
-      "opacity": 1,
-      "color": 1,
-      "height": 1,
-      "surface": 1,
-      "seed": 0,
-      "maskAmount": 1,
-      "maskSize": 32,
-      "maskDetail": 0.25,
-      "maskWarp": 0,
-      "maskSeed": 17,
-      "maskLow": 0,
-      "maskHigh": 1,
-      "maskInvert": 0,
-      "terrainLow": 0,
-      "terrainHigh": 64,
-      "terrainSoftness": 8
-    },
-    "layers": [],
     "knobs": {
       "patternOctaves": 0,
       "patternLinear": 0,
@@ -2001,12 +1911,13 @@
         },
         "source": "step-1",
         "other": null,
-        "mask": null
+        "mask": null,
+        "kind": "fractal"
       },
       {
         "id": "step-3",
         "name": "Fine grain",
-        "type": "grain",
+        "type": "noise",
         "enabled": true,
         "params": {
           "textureFineSize": 1,
@@ -2015,7 +1926,8 @@
         },
         "source": "step-1",
         "other": null,
-        "mask": null
+        "mask": null,
+        "kind": "fine"
       },
       {
         "id": "step-4",
