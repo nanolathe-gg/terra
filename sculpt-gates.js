@@ -1,8 +1,8 @@
 // P6: gates. The draw and the bake test many uniforms against a constant (`u.layered != 0`, `u.rillDepth <= 0.0`, `u.columnTerrain.x != 0.0`). A
 // world fixes most of them, so each test becomes a WGSL `override` bool and the pipeline is built with the values it has now, cached by the
 // string of those bools. Every other read of a uniform stays a uniform read: the continuous values do not make a new pipeline.
-// The uniforms the chunk renderer sets for each chunk, or the GPU writes (the seven painted flags), are never gates.
-export const PER_CHUNK_UNIFORMS = new Set(['grid', 'looseGrid', 'paintOn', 'scatterOn', 'styleOn', 'waterOn', 'lumpOn', 'overrideOn', 'rockIdOn']);
+// The uniforms the chunk renderer sets for each chunk, or the GPU writes (the eight painted flags), are never gates.
+export const PER_CHUNK_UNIFORMS = new Set(['grid', 'looseGrid', 'paintOn', 'scatterOn', 'styleOn', 'waterOn', 'lumpOn', 'overrideOn', 'rockIdOn', 'groundIdOn']);
 const isPerChunk = name => PER_CHUNK_UNIFORMS.has(name) || name.startsWith('chunk');
 
 const COMPARE = {'>': (a, b) => a > b, '<': (a, b) => a < b, '>=': (a, b) => a >= b, '<=': (a, b) => a <= b, '==': (a, b) => a === b, '!=': (a, b) => a !== b};
@@ -12,7 +12,7 @@ const GATE = /\bu\.(\w+)((?:\.[xyzw])?)\s*(>=|<=|==|!=|>|<)\s*(-?\d+(?:\.\d*)?)(
 // A rock recipe's number (`u.rock[rs].name`, struct Rock in engine-common.wgsl) tested the same way is a gate on the slots in use (gateValues'
 // `slots`): where they all answer alike the test is that constant, as any other gate's; where they differ (its `_mixed` gate is on) it is the
 // pixel's own test, read from its slot.
-const ROCK_GATE = /\bu\.rock\[rs & rockMask\]\.(\w+)\s*(>=|<=|==|!=|>|<)\s*(-?\d+(?:\.\d*)?)(?=\s*(?:\)|&&|\|\||\?|;|,|\{))/g;
+const RECIPE_GATE = /\bu\.(rock|ground)\[(?:rs & rockMask|gs & groundMask)\]\.(\w+)\s*(>=|<=|==|!=|>|<)\s*(-?\d+(?:\.\d*)?)(?=\s*(?:\)|&&|\|\||\?|;|,|\{))/g;
 
 // Rewrites each gate in `source` to an override bool. `fields` is the renderer's uniform layout (name -> {offset, kind, count, width}).
 // Returns the new source (the declarations are appended, so a compiler message's line number stays valid) and the gates by id.
@@ -28,33 +28,34 @@ export function extractGates(source, fields) {
     const id = `gate_${name}${swizzle ? swizzle[1] : ''}_${SUFFIX[op]}_${literal.replace('-', 'm').replace('.', 'p')}`;
     if (!gates.has(id)) gates.set(id, {id, name, offset: field.offset + component * 4, kind: field.kind, op, constant});
     return id;
-  }).replace(ROCK_GATE, (match, name, op, literal) => {
-    const table = fields.get('rock'), member = table?.members.get(name);
+  }).replace(RECIPE_GATE, (match, recipe, name, op, literal) => {
+    const table = fields.get(recipe), member = table?.members.get(name);
     if (!member || member.width !== 1 || (member.kind === 'i' && literal.includes('.'))) return match;
     const constant = member.kind === 'i' ? Number.parseInt(literal, 10) : Math.fround(Number(literal));
-    const id = `gate_rock_${name}_${SUFFIX[op]}_${literal.replace('-', 'm').replace('.', 'p')}`;
+    const id = `gate_${recipe}_${name}_${SUFFIX[op]}_${literal.replace('-', 'm').replace('.', 'p')}`;
     if (!gates.has(id)) {
-      gates.set(id, {id, name, offset: table.offset + member.offset, kind: member.kind, op, constant, stride: table.stride});
+      gates.set(id, {id, name, offset: table.offset + member.offset, kind: member.kind, op, constant, recipe, stride: table.stride});
       gates.set(id + '_mixed', {id: id + '_mixed', mixed: id});
     }
     return `(${id} || (${id}_mixed && ${match}))`;
   });
   const out = text + '\n' + [...gates.keys()].map(id => `override ${id}: bool;`).join('\n') + '\n';
-  if (/\brockMask\b/.test(text)) gates.set('rockMask', {id: 'rockMask', mask: true});
+  for (const [recipe, mask] of [['rock', 15], ['ground', 7]]) if (new RegExp(`\\b${recipe}Mask\\b`).test(text)) gates.set(`${recipe}Mask`, {id: `${recipe}Mask`, mask, recipe});
   return {source: out, gates};
 }
 
 // The gates' values for the uniform data now: the constants a pipeline is built with. They are 1 and 0, not true and false: a pipeline's
 // `constants` are numbers (GPUPipelineConstantValue is a double); Chrome converts a boolean, Dawn's Node binding refuses one.
 // `slots`: the rock slots in use (the renderer's rockSlots), which a rock gate tests.
-export function gateValues(gates, view, slots = [0]) {
+export function gateValues(gates, view, slots = [0], groundSlots = [0]) {
   const out = {};
   for (const g of gates.values()) {
     if (g.mixed) continue;
-    if (g.mask) { out[g.id] = slots.some(k => k !== 0) ? 15 : 0; continue; }
+    const active = g.recipe === 'ground' ? groundSlots : slots;
+    if (g.mask) { out[g.id] = active.some(k => k !== 0) ? g.mask : 0; continue; }
     const test = offset => COMPARE[g.op](g.kind === 'i' ? view.getInt32(offset, true) : view.getFloat32(offset, true), g.constant);
     if (!g.stride) { out[g.id] = test(g.offset) ? 1 : 0; continue; }
-    const answers = slots.map(k => test(g.offset + k * g.stride));
+    const answers = active.map(k => test(g.offset + k * g.stride));
     out[g.id] = answers.every(Boolean) ? 1 : 0;
     out[g.id + '_mixed'] = answers.some(Boolean) && !answers.every(Boolean) ? 1 : 0;
   }

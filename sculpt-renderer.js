@@ -4,6 +4,8 @@
 // fields bake of a chunk, a compute pass).
 
 import {materialRows,tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
+import {GroundCache} from './sculpt-ground-cache.js';
+import {copyGroundRecipe,groundCacheUsage} from './sculpt-ground-presets.js';
 import {columnRows,columnColors} from './sculpt-column.js';
 import {LOW_GROUND_RGB} from './sculpt-knobs.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
@@ -62,7 +64,7 @@ export function preprocess(source, common, defines) {
 // Byte layout of the shaders' one uniform block (struct Uniforms in
 // engine-common.wgsl), by WGSL's uniform alignment rules. Arrays take a
 // 16-byte element stride, so array<vec4f, N> is the only array form used.
-// The one other struct is Rock, a rock recipe (array<Rock, N>): the members of slot 0 are also fields by their own names, so the world's own
+// Recipe tables are Rock and Ground. Rock slot 0 members also have scalar aliases, so the world's own
 // rock is set as every other uniform is (uFaceJoint).
 // The rock's shine knobs, in the order of Rock.shineRock's components.
 const SHINE_ROCK = ['shineRock', 'shineRockSharp', 'shineRockRough', 'shineRockScale'];
@@ -77,26 +79,29 @@ function structFields(source, name) {
   });
 }
 export function uniformLayout(source) {
-  const rock = new Map();
-  let rockSize = 0;
-  for (const f of structFields(source, 'Rock')) {
-    const type = FIELD_TYPES[f.type];
-    if (!type || (f.array && f.type !== 'vec4f')) throw new Error(`nanolathe: unsupported Rock field "${f.line}" in engine-common.wgsl`);
-    // A member array (the recipe's colours) is array<vec4f, N>, 16 bytes an element, as the Uniforms' own arrays.
-    const align = f.array ? 16 : type[0], size = f.array ? 16 * f.count : type[1];
-    rockSize = Math.ceil(rockSize / align) * align;
-    rock.set(f.name, {offset: rockSize, kind: type[2], width: type[1] / 4, count: f.count, stride: f.array ? 16 : 0});
-    rockSize += size;
+  const structs = new Map();
+  for (const name of ['Rock', 'Ground']) {
+    if (!source.includes(`struct ${name}`)) continue;
+    const members = new Map(); let size = 0;
+    for (const f of structFields(source, name)) {
+      const type = FIELD_TYPES[f.type];
+      if (!type || (f.array && f.type !== 'vec4f')) throw new Error(`nanolathe: unsupported ${name} field "${f.line}"`);
+      const align = f.array ? 16 : type[0];
+      size = Math.ceil(size / align) * align;
+      members.set(f.name, {offset: size, kind: type[2], width: type[1] / 4, count: f.count, stride: f.array ? 16 : 0});
+      size += f.array ? 16 * f.count : type[1];
+    }
+    structs.set(name, {members, stride: Math.ceil(size / 16) * 16});
   }
-  if (rockSize % 16) throw new Error('nanolathe: struct Rock must be a multiple of 16 bytes (a uniform array stride)');
   const fields = new Map();
   let offset = 0;
   for (const f of structFields(source, 'Uniforms')) {
-    if (f.type === 'Rock') {
+    if (structs.has(f.type)) {
+      const {members, stride} = structs.get(f.type);
       offset = Math.ceil(offset / 16) * 16;
-      fields.set(f.name, {offset, kind: 'struct', count: f.count, stride: rockSize, members: rock});
-      for (const [name, m] of rock) fields.set(name, {offset: offset + m.offset, kind: m.kind, width: m.width, count: m.count, stride: m.stride});
-      offset += rockSize * f.count;
+      fields.set(f.name, {offset, kind: 'struct', count: f.count, stride, members});
+      if (f.type === 'Rock') for (const [name, m] of members) fields.set(name, {offset: offset + m.offset, kind: m.kind, width: m.width, count: m.count, stride: m.stride});
+      offset += stride * f.count;
       continue;
     }
     const type = FIELD_TYPES[f.type];
@@ -149,6 +154,7 @@ export class TerrainRenderer {
     this.maskPlaneCount = config.maskKeys?.length ?? MASK_PLANE_COUNT;
     this.maskLayers = Math.max(1, Math.ceil(this.maskPlaneCount / 4));
     this.timers = [];
+    this.grounds = new Map();
     this.rocks = new Map();   // rock recipes in slots 1-15 (setRocks)
     this.lastGPU = null;
     this.lastBakeGPU = null;
@@ -191,7 +197,7 @@ export class TerrainRenderer {
     // Every world's materials are numbers: the config names its table (config.materialTable).
     const tableUrl = this.config.materialTable;
     this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl'];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl', 'engine-ground.wgsl'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch(name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
@@ -201,6 +207,7 @@ export class TerrainRenderer {
     this.paletteSource = extra[2];
     const palette = JSON.parse(extra[3]);
     this.paletteColours = palette.colours;
+    this.paletteIndexed = palette.indexed;
     // Slots 0-9 and 246-254 of the game's palette are Windows' static system colours, which its map art does not draw with (255, white,
     // it does: snow and surf). A colour that only those slots hold stays out of the lookup unless a world's table picks it by entry.
     const art = new Set(palette.indexed.filter((_, i) => i >= 10 && (i < 246 || i === 255)).map(String));
@@ -249,7 +256,7 @@ export class TerrainRenderer {
     this.commonLayout = device.createBindGroupLayout({label: 'world fields', entries: [
       {binding: 0, visibility: both, buffer: {type: 'uniform'}},
       texture(1, both, 'unfilterable-float'), texture(2, both), texture(4, both, 'float', '2d-array'), texture(6, both),
-      sampler(7, both), sampler(8, both), texture(9, both, 'float', '2d-array'),texture(10,both,'unfilterable-float'),texture(11,both,'unfilterable-float'),texture(12,both,'unfilterable-float')]});
+      sampler(7, both), sampler(8, both), texture(9, both, 'float', '2d-array'),texture(10,both,'unfilterable-float'),texture(11,both,'unfilterable-float'),texture(12,both,'unfilterable-float'),texture(13,both,'float','2d-array')]});
     const F = GPUShaderStage.FRAGMENT;
     // The engine draw (H4) binds only what Green reads: the plain's tiles, the water images, the palette and the generated materials
     // (binding 19, read with textureLoad); no land image remains. Binding numbers are the shared draw's, with 2-13 left out.
@@ -297,6 +304,7 @@ export class TerrainRenderer {
     }
     // The startup generation: the materials and the palette lookup (GPU) are started first and the noise (CPU) is made while they build.
     this.textures = {};
+    this.groundCache = new GroundCache(this, preprocess(extra[7], common, new Set()));
     const generation = performance.now();
     const gpu = Promise.all([this.makeMaterials(), this.paletteTexture()]);
     this.textures.noise = this.noiseTexture();
@@ -444,7 +452,7 @@ export class TerrainRenderer {
   // callers (renderChunk, timeBake, timeDraw) build it and run again. The check at the end of draw() catches a gate that changed between the
   // bake's encode and the draw's: both run with the uniform buffer as it is at submit.
   specKey() {
-    const parts = this.specParts, slots = this.rockSlots(), values = gateValues(parts.bake, this.uniformView, slots);
+    const parts = this.specParts, slots = this.rockSlots(), values = gateValues(parts.bake, this.uniformView, slots, this.groundSlots());
     return {key: gateKey(values, parts.keyOrder), values};
   }
   // Original uniform comparisons, compiled before input is enabled. The draw
@@ -543,7 +551,8 @@ export class TerrainRenderer {
       {binding: 9, resource: this.maskTexture.createView({dimension: '2d-array'})},
       {binding:10,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.final??this.rockWeather.empty)).createView()},
       {binding:11,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.source??this.rockWeather.empty)).createView()},
-      {binding:12,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.rim??this.rockWeather.empty)).createView()}]});
+      {binding:12,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.rim??this.rockWeather.empty)).createView()},
+      {binding:13,resource:this.groundCache.texture.createView({dimension:'2d-array'})}]});
   }
 
   // Group 1: the plain's tiles, the waters, the palette and the generated materials.
@@ -1099,6 +1108,31 @@ export class TerrainRenderer {
   // rock: its numbers are the flat settings every address names (this.variant), its column config.column, its colors the world's (setColors).
   // A slot takes slot 0's number for any it does not set, slot 0's column if it has none, and slot 0's colors where its own are null. The slots given are the
   // ones in use: their maxima bound the passes that gather (writeRocks), and a second slot builds the pipelines that read any slot (rockMask).
+  setGrounds(grounds = new Map()) {
+    const table = this.uniform.get('ground');
+    const checked = new Map();
+    for (const [slot, recipe] of grounds) {
+      if (!Number.isInteger(slot) || slot < 0 || slot >= table.count) throw new Error('Ground slots must be 0 to 7.');
+      checked.set(slot, copyGroundRecipe(recipe));
+    }
+    const usage=groundCacheUsage(checked.size,groundPool(this.config.material));
+    if(!usage.fits)throw Error(`This world can use at most ${usage.capacity} ground materials within its 128 MiB cache budget.`);
+    this.grounds = checked;
+    new Uint8Array(this.uniformData, table.offset, table.stride * table.count).fill(0);
+    for (const [slot, recipe] of checked) {
+      const at = table.offset + slot * table.stride;
+      for (const [key, value] of Object.entries(recipe.knobs)) this.uniformView.setFloat32(at + table.members.get(key).offset, value, true);
+      const color = (offset, index) => this.paletteIndexed[index].forEach((v, c) => this.uniformView.setFloat32(offset + c * 4, v / 255, true));
+      recipe.ramp.forEach((index, k) => color(at + table.members.get('ramp').offset + k * 16, index));
+      recipe.variationRamp.forEach((index, k) => color(at + table.members.get('variationRamp').offset + k * 16, index));
+      color(at + table.members.get('lineColor').offset, recipe.line);
+    }
+    this.groundCache.sync(groundPool(this.config.material), this.grounds);
+    this.fieldsDirty = true;
+    this.uniformsDirty = true;
+  }
+  groundSlots() { return [...new Set([0,...this.grounds.keys()])].sort((a,b)=>a-b); }
+
   setRocks(rocks = new Map(), {sync=true}={}) {
     const count = this.uniform.get('rock').count;
     for (const slot of rocks.keys()) if (!Number.isInteger(slot) || slot < 1 || slot >= count) throw new Error(`nanolathe: rock slot ${slot} is not 1 to ${count - 1}`);
@@ -1235,6 +1269,7 @@ export class TerrainRenderer {
 
   // Encodes the bake into the given encoder, or submits it on its own.
   bakeFields(encoder = null, timer = null) {
+    this.groundCache.sync(groundPool(this.config.material), this.grounds);
     this.syncWorld();
     this.i('uWeatherMaps', Boolean(this.weatherMaps));
     const own = !encoder;

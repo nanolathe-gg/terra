@@ -73,7 +73,7 @@ export function mountEditorUI(){
 // means off; switching back on restores the last value for this tool/selection.
 // buildRow(field) returns a new control row; each row is created for its group and placed there once.
 export function groupToolControls(fields,buildRow){
- const groups=[],details=[],claimed=new Set(),field=key=>fields.find(f=>f[0]===key);
+ const groups=[],details=[],claimed=new Set(['groundPreset']),field=key=>fields.find(f=>f[0]===key);
  const build=keys=>keys.map(field).filter(Boolean).map(f=>{claimed.add(f[0]);return buildRow(f);});
  // The card's own sections (written in index.html): each generated row is created into its section's slot, in this order.
  const placed={'card-profile-rows':['lean','facing'],'card-size-rows':['heightReference','elevation','combine','routeSmooth','paintChannel'],'card-rock-rows':['rockPreset','styleVegetation'],
@@ -81,7 +81,7 @@ export function groupToolControls(fields,buildRow){
  const rows=Object.fromEntries(Object.entries(placed).map(([slot,keys])=>{const made=build(keys);$(slot).append(...made);return [slot,made];}));
  const own=id=>$(id).closest('.control');
  for(const [id,controls] of [['card-profile',[$('section-preview-control'),...rows['card-profile-rows']]],['card-size',[own('diameter'),own('amount'),own('roughness'),own('softness'),...rows['card-size-rows']]],
-  ['card-rock',[...rows['card-rock-rows'],$('cracks-control')]],['card-outline',rows['card-outline-rows']],['card-advanced',[$('seed-control'),own('tool-style')]]])groups.push({d:$(id),controls,fixed:true});
+  ['card-rock',[...rows['card-rock-rows'],$('lf-ground-control'),$('cracks-control')]],['card-outline',rows['card-outline-rows']],['card-advanced',[$('seed-control'),own('tool-style')]]])groups.push({d:$(id),controls,fixed:true});
  // Details: optional parts of a shape, each a group. Closed, a group is a chip; a group with a master row (its amount, where 0 is off)
  // turns on from its chip and off from the switch in its heading. [master key, title, rows, open at first]
  const definitions=[

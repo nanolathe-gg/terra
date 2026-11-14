@@ -105,6 +105,11 @@
     "sculpt-chunk-renderer.js",
     "sculpt-scene.js",
     "sculpt-tools.js",
-    "sculpt-knobs.js"
+    "sculpt-knobs.js",
+    "engine-ground.wgsl",
+    "sculpt-ground-cache.js",
+    "sculpt-ground-presets.js",
+    "sculpt-ground-panel.js",
+    "sculpt-ground-preview.js"
   ]
 }

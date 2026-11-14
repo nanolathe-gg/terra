@@ -111,6 +111,59 @@ struct Rock {
     pad3: f32,
 }
 
+// Absolute ground recipes; the cache holds height and unlit color parameters.
+struct Ground {
+    cacheLayer: i32,
+    grainFine: f32,
+    grainMedium: f32,
+    grainBroad: f32,
+    grainRelief: f32,
+    grainColorMix: f32,
+    grainStretch: f32,
+    grainDirection: f32,
+    bumpAmount: f32,
+    bumpSize: f32,
+    bumpStretch: f32,
+    plateAmount: f32,
+    plateSize: f32,
+    plateVariation: f32,
+    plateProfile: f32,
+    borderProfile: f32,
+    crackWidth: f32,
+    rimCurl: f32,
+    plateTilt: f32,
+    secondaryCracks: f32,
+    scratchAmount: f32,
+    scratchSpacing: f32,
+    scratchWidth: f32,
+    scratchLength: f32,
+    scratchConnect: f32,
+    quietAmount: f32,
+    quietSize: f32,
+    veinAmount: f32,
+    veinSpacing: f32,
+    veinWidth: f32,
+    pebbleAmount: f32,
+    pebbleSize: f32,
+    pebbleRound: f32,
+    cushionAmount: f32,
+    cushionSize: f32,
+    rippleAmount: f32,
+    rippleSize: f32,
+    rippleAsymmetry: f32,
+    toneVariation: f32,
+    toneSize: f32,
+    lineStrength: f32,
+    gloss: f32,
+    sharpness: f32,
+    roughness: f32,
+    roughnessScale: f32,
+    wetness: f32,
+    ramp: array<vec4f, 16>,
+    variationRamp: array<vec4f, 16>,
+    lineColor: vec4f,
+}
+
 struct Uniforms {
     // Shared by the draw and the bake.
     grid: f32,
@@ -421,6 +474,9 @@ struct Uniforms {
     chunkScreenOrigin: vec2f, // preview screen pixels; export adds floor(base/2)
     chunkScale: f32,          // World pixels per raster texel.
     chunkFieldScale: f32,     // Relief bake spacing, independent of color sampling.
+    groundIdOn: i32,
+    groundAny: i32,
+    ground: array<Ground, 8>,
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -432,6 +488,8 @@ var<private> rs: u32 = 0u;
 // map uses a second rock the pipelines read any slot, and 6.7% of green-modern-2's pixels step by a palette entry where every point is still slot 0
 // (heights identical, the same by eye, the same bytes every time; repro/rock-slots.mjs).
 override rockMask: u32 = 15u;
+var<private> gs: u32 = 0u;
+override groundMask: u32 = 7u;
 
 fn cellHash(c: vec2f) -> vec2f {
     let q = vec2f(dot(c, vec2f(127.1, 311.7)), dot(c, vec2f(269.5, 183.3)));
@@ -620,6 +678,7 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), sel
 @group(0) @binding(10) var rockWeatherTex: texture_2d<f32>;
 @group(0) @binding(11) var rockSourceTex: texture_2d<f32>;
 @group(0) @binding(12) var rockRimTex: texture_2d<f32>;
+@group(0) @binding(13) var groundTex: texture_2d_array<f32>;
 @group(0) @binding(7) var linearClamp: sampler;
 @group(0) @binding(8) var linearRepeat: sampler;
 // Painted masks (card C5), grid resolution, signed bytes so unpainted is 0.0.
@@ -912,6 +971,37 @@ fn rockSlotAt(p:vec2f)->u32 {
 }
 // The point being evaluated belongs to the rock at p: every rock number it reads from here on is its slot's.
 fn useRock(p:vec2f) { rs=rockSlotAt(p); }
+// Ground choices use the authored grid directly, with no world-space noise.
+fn groundSlotAt(p:vec2f)->u32 {
+    if(u.groundIdOn==0){return 0u;}
+    let cell=clamp(vec2i(floor(p/(u.size-1.0)*(u.grid-1.0)+.5-u.chunkGridOrigin)),vec2i(0),vec2i(textureDimensions(masksTex))-1);
+    return u32(clamp(round(textureLoad(masksTex,cell,5,0).g*127.0)-1.0,0.0,7.0));
+}
+// Whole texels preserve each plate's own tone and line at a level surface.
+fn groundHere(p:vec2f)->vec4f {
+    return textureLoad(groundTex,vec2i(poolPixel(p)),u.ground[gs & groundMask].cacheLayer,0);
+}
+// Blend only art height across a two-art-pixel contact. The categorical slot
+// still chooses color and finish; no noise or gameplay height enters the edge.
+fn groundHeightFor(p:vec2f,cell:vec2i)->f32 {
+    let c=clamp(cell,vec2i(0),vec2i(textureDimensions(masksTex))-1);
+    let slot=u32(clamp(round(textureLoad(masksTex,c,5,0).g*127.0)-1.0,0.0,7.0));
+    let layer=u.ground[slot & groundMask].cacheLayer;
+    if(layer<0){return 0.0;}
+    return textureLoad(groundTex,vec2i(poolPixel(p)),layer,0).x;
+}
+fn groundHeight(p:vec2f)->f32 {
+    if(u.groundIdOn==0){if(hasGround()){return groundHere(p).x;}return 0.0;}
+    let q=p/(u.size-1.0)*(u.grid-1.0)-u.chunkGridOrigin;
+    let cell=vec2i(floor(q));let f=smoothstep(vec2f(.25),vec2f(.75),fract(q));
+    return mix(mix(groundHeightFor(p,cell),groundHeightFor(p,cell+vec2i(1,0)),f.x),
+               mix(groundHeightFor(p,cell+vec2i(0,1)),groundHeightFor(p,cell+vec2i(1,1)),f.x),f.y);
+}
+fn groundFinishNoise(p:vec2f,size:f32,salt:f32)->f32 {
+    let count=max(1.0,u.pool/max(1.0,size));let n=exp2(floor(log2(count)));let q=poolPos(p)/u.pool;
+    return mix(wrapNoise(q*n+salt,n),wrapNoise(q*(n*2.0)+salt,n*2.0),fract(log2(count)));
+}
+fn hasGround()->bool { return u.groundAny != 0 && u.ground[gs & groundMask].cacheLayer >= 0; }
 // The slot of the debris lying at p: rock weather's strongest source there (rockDeposit), read at the nearest 4-px cell.
 fn debrisSlotAt(p:vec2f)->u32 {
     if(u.rockIdOn==0){return 0u;}

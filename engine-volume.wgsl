@@ -60,7 +60,7 @@ fn voxelNormal(p:vec3f)->vec3f {
 fn voxelRockHeight(p:vec3f,painted:f32)->f32 {
     // Only authored cuts enable rock below the plain. Testing the baked
     // microrelief here would turn ordinary ground grain into rocky banks.
-    let raised=smoothstep(u.base+1.0,u.base+8.0,p.z);
+    let raised=smoothstep(u.base+1.0,u.base+8.0,baseHeight(p.xy));
     if(raised==1.0){return raised;}
     let cut=1.0-smoothstep(u.base-.5,u.base,baseHeight(p.xy));
     return max(raised,max(cut,smoothstep(.1,.6,painted)));
@@ -197,7 +197,8 @@ fn voxelDensity(p:vec3f)->f32 {
     let d=(p.z-source.x)*min(max(source.w,.015),n.z);
     let whole=u.rock[rs & rockMask].faceWhole>0.0||u.rock[rs & rockMask].faceWholeLarge>0.0;
     if((abs(d)>40.0&&!whole)||u.rock[rs & rockMask].rockFace<=0.0){return d;}
-    let slope=length(n.xy)/max(n.z,.015);let route=routeProtection(p.xy);
+    // Material selection follows the authored slope; microrelief only changes light.
+    let slope=length(broadGradient(p.xy));let route=routeProtection(p.xy);
     let painted=voxelPaintRock(p.xy);let rim=rimRockAt(p.xy);
     let face=max(rockFaceGate(slope,painted,route),rimRelief(rim,route))*(1.0-softBankAt(p.xy));
     let soil=u.rock[rs & rockMask].faceLayers*smoothstep(.08,.6,slope)*smoothstep(.5,.9,n.z)*(1.0-route);
@@ -271,17 +272,19 @@ fn voxelBuild(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) l
 }
 fn voxelWear(p:vec3i)->f32 {
     let d=voxelCell(p);if(abs(d)>6.0*vs.step){return d;}
-    let q=(vec3f(p)+.5)*vs.step;useRock(q.xy);let g=voxelGuide(q.xy);let nz=sqrt(max(.000225,1.0-dot(g.xy,g.xy)));
+    let q=(vec3f(p)+.5)*vs.step;useRock(q.xy);
     let painted=max(voxelPaintRock(q.xy),.5*rimRockAt(q.xy));
     let heightGate=voxelRockHeight(q,painted);
-    let exposure=max(1.0-smoothstep(.75,.98,nz),painted)*(1.0-routeProtection(q.xy))*heightGate;
+    let authoredSlope=broadGradient(q.xy);
+    let authoredNz=inverseSqrt(1.0+dot(authoredSlope,authoredSlope));
+    let exposure=max(1.0-smoothstep(.75,.98,authoredNz),painted)*(1.0-routeProtection(q.xy))*heightGate;
     let sum=voxelCell(p+vec3i(1,0,0))+voxelCell(p-vec3i(1,0,0))+voxelCell(p+vec3i(0,1,0))+voxelCell(p-vec3i(0,1,0))+voxelCell(p+vec3i(0,0,1))+voxelCell(p-vec3i(0,0,1));
     let gradient=length(vec3f(voxelCell(p+vec3i(1,0,0))-voxelCell(p-vec3i(1,0,0)),voxelCell(p+vec3i(0,1,0))-voxelCell(p-vec3i(0,1,0)),voxelCell(p+vec3i(0,0,1))-voxelCell(p-vec3i(0,0,1))))/(2.0*vs.step);
     // The six-neighbor diffusion coefficient stays below 1/6 at every
     // exposed control value; erosion depth and rounding remain independent.
     // Keep four wear passes within the allocated 40-pixel surface apron,
     // even when a local relief stroke amplifies the global setting.
-    let depth=min(2.0,u.rock[rs & rockMask].rockFace*.5*voxelRelief(q.xy,length(g.xy)/nz));
+    let depth=min(2.0,u.rock[rs & rockMask].rockFace*.5*voxelRelief(q.xy,length(authoredSlope)));
     return d+u.rock[rs & rockMask].faceWear*exposure*(.8*depth*(1.0-voxelHardness(q,voxelFaceSlope(q.xy)))*gradient+(sum-6.0*d)*.12*clamp(depth,0.0,1.0));
 }
 @compute @workgroup_size(4,8,8)
@@ -293,7 +296,11 @@ fn voxelWeather(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id)
 #endif
 #ifdef VOLUME_RENDER
 fn voxelRayPoint(screen:vec2f,z:f32,underwater:bool)->vec3f {
-    return vec3f(screen.x,screen.y+(select(z,u.sea,underwater)-u.base)*.5,z);
+    // Quantize the ray's vertical displacement before adding the world origin.
+    // Adding first rounded differently a pool apart; the hit was already
+    // quantized to this same 1/256-pixel precision after marching.
+    let shift=round((select(z,u.sea,underwater)-u.base)*128.0)/256.0;
+    return vec3f(screen.x,screen.y+shift,z);
 }
 fn voxelHit(screen:vec2f)->vec3f {
     var z=vs.top;var previous=z;var underwater=false;
@@ -322,9 +329,12 @@ fn voxelRain(p:vec3f,n:vec3f)->f32 {
         q.z+=clamp(d*.5,vs.step,vs.step*4.0);
     }return 0.0;
 }
+// Keep lighting taps translation-invariant at the hit's 1/256-pixel precision.
+// Adding an unrounded direction to a large world origin lost different low bits.
+fn voxelOffset(p:vec3f,delta:vec3f)->vec3f{return p+vec3f(round(delta.xy*256.0)/256.0,delta.z);}
 fn voxelShadow(p:vec3f,n:vec3f)->f32 {
     var t=vs.step;for(var i=0;i<48;i++){
-        let q=p+n*vs.step*.8+u.light*t;
+        let q=voxelOffset(p,n*vs.step*.8+u.light*t);
         if(t>24.0||q.z>vs.high+40.0){break;}
         let d=voxelField(q);if(d<.05*vs.step){return 0.0;}t+=clamp(d*.45,.4*vs.step,3.0*vs.step);
     }return 1.0;
@@ -336,7 +346,7 @@ fn voxelCavity(p:vec3f,n:vec3f)->f32 {
     let gradient=max(.05,length(voxelGradient(p)));let weights=array<f32,3>(.5,.3,.2);var curvature=0.0;
     for(var i=0;i<3;i++){
         let reach=f32(1u<<u32(i))*vs.step;
-        let mean=.25*(voxelField(p+t*reach)+voxelField(p-t*reach)+voxelField(p+b*reach)+voxelField(p-b*reach));
+        let mean=.25*(voxelField(voxelOffset(p,t*reach))+voxelField(voxelOffset(p,-t*reach))+voxelField(voxelOffset(p,b*reach))+voxelField(voxelOffset(p,-b*reach)));
         curvature-=weights[i]*mean/(reach*gradient);
     }
     return smoothstep(.02,.5,curvature)-.15*smoothstep(.08,.8,-curvature);
@@ -345,7 +355,7 @@ fn voxelOcclusion(p:vec3f,n:vec3f)->f32 {
     let axis=select(vec3f(0,0,1),vec3f(1,0,0),abs(n.z)>.9);let t=normalize(cross(n,axis));let b=cross(n,t);var occluded=0.0;
     for(var i=0;i<4;i++){
         let a=f32(i)*1.5707963;let dir=n*.6+(t*cos(a)+b*sin(a))*.8;
-        for(var j=0;j<4;j++){let distance=(1.5+f32(j*j)*1.1)*vs.step;if(voxelField(p+n*.6*vs.step+dir*distance)<.05*vs.step){occluded+=1.0-f32(j)*.16;break;}}
+        for(var j=0;j<4;j++){let distance=(1.5+f32(j*j)*1.1)*vs.step;if(voxelField(voxelOffset(p,n*.6*vs.step+dir*distance))<.05*vs.step){occluded+=1.0-f32(j)*.16;break;}}
     }return 1.0-occluded*.14;
 }
 #endif
