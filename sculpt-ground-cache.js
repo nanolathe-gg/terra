@@ -1,4 +1,4 @@
-import {materialLayers,BLENDS,MASKS,PATTERNS} from './sculpt-material-layers.js';
+import {materialLayers,resolveMaterialLayers,BLENDS,MASKS,PATTERNS,LAYER_EFFECTS} from './sculpt-material-layers.js';
 import {groundCacheUsage} from './sculpt-ground-presets.js';
 export function writeGroundData(r,recipe,view,at){
  const members=r.uniform.get('ground').members;
@@ -29,7 +29,7 @@ export class GroundCache {
   r.bindGroups={};this.keys.clear();
  }
  prepare(pool,grounds){
-  const entries=[...grounds].sort(([a],[b])=>a-b).flatMap(([slot,p])=>materialLayers(p).map((recipe,index)=>({slot,index,recipe})));
+  const entries=[...grounds].sort(([a],[b])=>a-b).flatMap(([slot,p])=>resolveMaterialLayers(p).map((recipe,index)=>({slot,index,recipe})));
   const usage=groundCacheUsage(grounds.size,pool,entries.length);
   if(!usage.fits)throw Error(`These material layers need ${(usage.bytes/1048576).toFixed(0)} MiB; the cache budget is 128 MiB. Remove layers or use fewer assigned materials.`);
   const layers=[...grounds.keys()].sort((a,b)=>a-b);
@@ -48,9 +48,9 @@ export class GroundCache {
   const data=new ArrayBuffer(this.layerStride*Math.max(1,this.entries.length)),view=new DataView(data),groundStride=r.uniform.get('ground').stride;
   this.entries.forEach(({slot,index,recipe},row)=>{
    const at=row*this.layerStride;writeGroundData(r,recipe,view,at);view.setInt32(at+r.uniform.get('ground').members.get('cacheLayer').offset,row,true);
-   const l=recipe.layer,values=[l.visible?l.opacity:0,l.color,l.height,l.surface,BLENDS.indexOf(l.blend),l.seed,MASKS.indexOf(l.mask),l.maskAmount,PATTERNS.indexOf(l.maskPattern),l.maskSize,l.maskDetail,l.maskWarp,l.maskSeed,l.maskLow,l.maskHigh,l.maskInvert,l.terrainLow,l.terrainHigh,l.terrainSoftness,0];
+   const l=recipe.layer,values=[l.visible?l.opacity:0,l.color,l.height,l.surface,BLENDS.indexOf(l.blend),l.seed,MASKS.indexOf(l.mask),l.maskAmount,PATTERNS.indexOf(l.maskPattern),l.maskSize,l.maskDetail,l.maskWarp,l.maskSeed,l.maskLow,l.maskHigh,l.maskInvert,l.terrainLow,l.terrainHigh,l.terrainSoftness,LAYER_EFFECTS.indexOf(l.effect)];
    values.forEach((v,i)=>view.setFloat32(at+groundStride+i*4,v,true));
-   const key=JSON.stringify([Object.fromEntries(Object.entries(recipe.knobs).filter(([k])=>!['textureFine','patternEase','markMultiply','textureDither','diffusionMix','paletteGamma','paletteRed','paletteGreen','paletteBlue','grainColorMix','gloss','sharpness','roughness','roughnessScale','wetness'].includes(k))),l.seed,...values.slice(6,16)]);
+   const key=JSON.stringify([Object.fromEntries(Object.entries(recipe.knobs).filter(([k])=>!['textureFine','patternEase','markMultiply','textureDither','diffusionMix','paletteGamma','paletteRed','paletteGreen','paletteBlue','grainColorMix','gloss','sharpness','roughness','roughnessScale','wetness'].includes(k))),l.seed,values[19],...values.slice(6,16)]);
    if(l.visible&&l.opacity>0&&this.keys.get(row)!==key)changed.push([slot,key,row]);
   });
   const uploadKey=JSON.stringify([...grounds]);if(uploadKey!==this.uploadKey){r.device.queue.writeBuffer(this.layerBuffer,0,data);this.uploadKey=uploadKey;}

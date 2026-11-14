@@ -10,6 +10,7 @@ const grounds=addGround([],GROUND_PRESETS['rust-mottling'],'Noise study').ground
 grounds[0].worldGround=true;grounds[0].knobs.textureDither=0;grounds[0].knobs.patternWarp=4;
 const s=await openScene({biome:'red',ground:false,grounds,strokes:[]},'biome=red&mapX=2&mapY=2&palette=off');
 const rect={x:256,y:256,width:128,height:128},report={};
+s.renderer.budgetBytes=256*1024*1024;
 try{
  const baseline=await renderWindow(s,rect);writeFileSync(out+'/baseline.png',encodePng(128,128,baseline));
  const cases={patternOctaves:3,patternLinear:1,phaseOctaves:3,phaseAxis:1,patternInvert:1,patternClip:1,patternSine:1,patternSineFrequency:3};

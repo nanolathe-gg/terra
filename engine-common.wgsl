@@ -238,7 +238,7 @@ struct MaterialLayer {
     operation: vec4f, // blend, seed, mask kind, mask amount
     maskPattern: vec4f, // basis, size, detail, distortion
     maskFilter: vec4f, // seed, low, high, invert
-    terrain: vec4f, // low, high, softness
+    terrain: vec4f, // low, high, softness, layer operation
 }
 
 struct Uniforms {
@@ -1114,8 +1114,24 @@ fn materialRaw(p:vec2f,slot:u32,height:f32,slope:f32,terrainOn:bool)->vec3f {
  for(var i=0;i<r.stackCount;i++){
   let layer=materialLayers[r.stackStart+i];let w=layerWeight(layer,p,height,slope,terrainOn)*layer.amounts.y;if(w<=0.0){continue;}
   let field=textureLoad(groundTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0);
-  let value=groundRecipeColorFor(field,layer.recipe,p+vec2f(19,43)*layer.operation.y);var mixed=value;
-  if(i>0){switch(i32(layer.operation.x)){case 1:{mixed=color*value;}case 2:{mixed=1.0-(1.0-color)*(1.0-value);}case 3:{mixed=color+value;}default:{}}}
+  let q=layer.recipe;var mixed=color;
+  switch(i32(layer.terrain.w)){
+   case 1:{ // A multiplicative pigment factor can exceed one (bright grain).
+    mixed=color*mix(vec3f(1.0),mix(q.textureFineLow.rgb,q.textureFineHigh.rgb,field.w),q.textureFine);
+   }
+   case 2:{ // Preserve the dot blend's arithmetic before final diffusion.
+    mixed=mix(mix(color,q.textureMark.rgb,field.z),color*mix(vec3f(1.0),q.textureMarkTint.rgb,field.z),q.markMultiply);
+   }
+   case 3:{ // Pre-ramp detail correction using the resolved preceding pattern.
+    let detailed=textureColorFor(vec4f(field.x,field.y,0,field.w),q);
+    let smoothColor=textureColorFor(vec4f(field.x,field.z,0,field.w),q);
+    if(all(color==smoothColor)){mixed=detailed;}else{mixed=detailed+(color-smoothColor);}
+   }
+   default:{
+    let value=groundRecipeColorFor(field,q,p+vec2f(19,43)*layer.operation.y);mixed=value;
+    if(i>0){switch(i32(layer.operation.x)){case 1:{mixed=color*value;}case 2:{mixed=1.0-(1.0-color)*(1.0-value);}case 3:{mixed=color+value;}default:{}}}
+   }
+  }
   color=mix(color,mixed,w);
  }return color;
 }

@@ -20,11 +20,11 @@
       "patternPower": 1,
       "patternEase": 1,
       "textureFine": 0,
-      "textureFineStructure": 0.25,
+      "textureFineStructure": 0,
       "textureFineSize": 1.8,
       "textureFineGradient": 0,
       "textureFineWarp": 1,
-      "markAmount": 0.6,
+      "markAmount": 0,
       "markSize": 2.1,
       "markSpacing": 5.7,
       "markDensity": 0.24,
@@ -38,7 +38,10 @@
       "paletteGamma": 1,
       "paletteRed": 1,
       "paletteGreen": 1,
-      "paletteBlue": 1
+      "paletteBlue": 1,
+      "textureHeight": 0,
+      "textureGrainHeight": 0,
+      "texturePitDepth": 0
     },
     "ramp": [
       88,
@@ -126,6 +129,193 @@
       22,
       204,
       203
+    ],
+    "layer": {
+      "name": "Rust mottling",
+      "height": 0
+    },
+    "layers": [
+      {
+        "knobs": {
+          "textureFineStructure": 0.25,
+          "textureFineSize": 1.8,
+          "textureFineGradient": 0,
+          "textureFineWarp": 1
+        },
+        "ramp": [
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88
+        ],
+        "textureColors": {},
+        "layer": {
+          "name": "Fine grain",
+          "effect": "detail",
+          "color": 1,
+          "height": 0,
+          "surface": 0
+        }
+      },
+      {
+        "knobs": {
+          "markAmount": 0.6,
+          "markSize": 2.1,
+          "markSpacing": 5.7,
+          "markDensity": 0.24,
+          "markScatter": 1.8,
+          "markCore": 0,
+          "markVariation": 0,
+          "markFollow": 0,
+          "markMultiply": 1
+        },
+        "ramp": [
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88
+        ],
+        "textureColors": {
+          "mark": [
+            86,
+            43,
+            34
+          ],
+          "markTint": [
+            0.3,
+            0.18,
+            0.14
+          ]
+        },
+        "layer": {
+          "name": "Dark dots",
+          "effect": "dots",
+          "color": 1,
+          "height": 0,
+          "surface": 0
+        }
+      },
+      {
+        "knobs": {
+          "patternAmount": 1,
+          "toneVariation": 0,
+          "roughness": 0,
+          "patternSize": 6.4,
+          "patternDetail": 0.25,
+          "patternGradient": 0,
+          "patternWarp": 0.65,
+          "patternWarpSize": 10,
+          "patternStreak": 0,
+          "patternLength": 8,
+          "patternSlope": 0,
+          "patternMottle": 0,
+          "patternMottleSize": 16,
+          "patternLow": 0.05,
+          "patternHigh": 0.95,
+          "patternPower": 1,
+          "patternEase": 1,
+          "textureFine": 0,
+          "textureFineStructure": 0.25,
+          "textureFineSize": 1.8,
+          "textureFineGradient": 0,
+          "textureFineWarp": 1,
+          "markAmount": 0.6,
+          "markSize": 2.1,
+          "markSpacing": 5.7,
+          "markDensity": 0.24,
+          "markScatter": 1.8,
+          "markCore": 0,
+          "markVariation": 0,
+          "markFollow": 0,
+          "markMultiply": 1
+        },
+        "ramp": [
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88
+        ],
+        "textureColors": {
+          "low": [
+            94.268,
+            53.71,
+            42.35
+          ],
+          "middle": [
+            111.188,
+            62.26,
+            46.85
+          ],
+          "high": [
+            135.628,
+            71.76,
+            49.85
+          ],
+          "mark": [
+            86,
+            43,
+            34
+          ],
+          "fineLow": [
+            1,
+            1,
+            1
+          ],
+          "fineHigh": [
+            1,
+            1,
+            1
+          ],
+          "markTint": [
+            0.3,
+            0.18,
+            0.14
+          ]
+        },
+        "layer": {
+          "name": "Relief",
+          "effect": "material",
+          "color": 0,
+          "height": 1,
+          "surface": 0
+        }
+      }
     ]
   },
   "cloudy-green": {
@@ -148,7 +338,7 @@
       "patternHigh": 0.95,
       "patternPower": 1,
       "patternEase": 1,
-      "textureFine": 1,
+      "textureFine": 0,
       "textureFineStructure": 0,
       "textureFineSize": 1.15,
       "textureFineGradient": 0,
@@ -167,7 +357,10 @@
       "paletteGamma": 1,
       "paletteRed": 1,
       "paletteGreen": 1,
-      "paletteBlue": 1
+      "paletteBlue": 1,
+      "textureHeight": 0,
+      "textureGrainHeight": 0,
+      "texturePitDepth": 0
     },
     "ramp": [
       88,
@@ -255,6 +448,154 @@
       70,
       182,
       181
+    ],
+    "layer": {
+      "name": "Cloudy mottling",
+      "height": 0
+    },
+    "layers": [
+      {
+        "knobs": {
+          "textureFine": 1,
+          "textureFineSize": 1.15,
+          "textureFineGradient": 0,
+          "textureFineWarp": 0
+        },
+        "ramp": [
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88
+        ],
+        "textureColors": {
+          "fineLow": [
+            0.67,
+            0.655,
+            1.035
+          ],
+          "fineHigh": [
+            1.33,
+            1.345,
+            0.965
+          ]
+        },
+        "layer": {
+          "name": "Fine grain",
+          "effect": "fine-tint",
+          "color": 1,
+          "height": 0,
+          "surface": 0
+        }
+      },
+      {
+        "knobs": {
+          "patternAmount": 1,
+          "toneVariation": 0,
+          "roughness": 0,
+          "patternSize": 3.5,
+          "patternDetail": 0.3,
+          "patternGradient": 0,
+          "patternWarp": 0,
+          "patternWarpSize": 9,
+          "patternStreak": 0,
+          "patternLength": 8,
+          "patternSlope": 0,
+          "patternMottle": 0,
+          "patternMottleSize": 16,
+          "patternLow": 0.05,
+          "patternHigh": 0.95,
+          "patternPower": 1,
+          "patternEase": 1,
+          "textureFine": 0,
+          "textureFineStructure": 0,
+          "textureFineSize": 1.15,
+          "textureFineGradient": 0,
+          "textureFineWarp": 0,
+          "markAmount": 0,
+          "markSize": 1,
+          "markSpacing": 5,
+          "markDensity": 0.2,
+          "markScatter": 0.9,
+          "markCore": 0.25,
+          "markVariation": 0,
+          "markFollow": 0,
+          "markMultiply": 0
+        },
+        "ramp": [
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88
+        ],
+        "textureColors": {
+          "low": [
+            47.3024,
+            82.27,
+            21.033
+          ],
+          "middle": [
+            57.224,
+            97.48,
+            28.173
+          ],
+          "high": [
+            68.6432,
+            112.69,
+            34.802
+          ],
+          "mark": [
+            47.3024,
+            82.27,
+            21.033
+          ],
+          "fineLow": [
+            0.67,
+            0.655,
+            1.035
+          ],
+          "fineHigh": [
+            1.33,
+            1.345,
+            0.965
+          ],
+          "markTint": [
+            1,
+            1,
+            1
+          ]
+        },
+        "layer": {
+          "name": "Relief",
+          "effect": "material",
+          "color": 0,
+          "height": 1,
+          "surface": 0
+        }
+      }
     ]
   },
   "blue-streaked-water": {
@@ -277,7 +618,7 @@
       "patternHigh": 1,
       "patternPower": 1,
       "patternEase": 1,
-      "textureFine": 1,
+      "textureFine": 0,
       "textureFineStructure": 0,
       "textureFineSize": 1.1,
       "textureFineGradient": 0,
@@ -296,7 +637,10 @@
       "paletteGamma": 1,
       "paletteRed": 1,
       "paletteGreen": 1,
-      "paletteBlue": 1
+      "paletteBlue": 1,
+      "textureHeight": 0,
+      "textureGrainHeight": 0,
+      "texturePitDepth": 0
     },
     "ramp": [
       88,
@@ -360,6 +704,154 @@
       226,
       102,
       101
+    ],
+    "layer": {
+      "name": "Water streaks",
+      "height": 0
+    },
+    "layers": [
+      {
+        "knobs": {
+          "textureFine": 1,
+          "textureFineSize": 1.1,
+          "textureFineGradient": 0,
+          "textureFineWarp": 0
+        },
+        "ramp": [
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88
+        ],
+        "textureColors": {
+          "fineLow": [
+            0.51,
+            0.5788800000000001,
+            0.937
+          ],
+          "fineHigh": [
+            1.49,
+            1.42112,
+            1.063
+          ]
+        },
+        "layer": {
+          "name": "Fine grain",
+          "effect": "fine-tint",
+          "color": 1,
+          "height": 0,
+          "surface": 0
+        }
+      },
+      {
+        "knobs": {
+          "patternAmount": 1,
+          "toneVariation": 0,
+          "roughness": 0,
+          "patternSize": 3.7,
+          "patternDetail": 0.2,
+          "patternGradient": 0,
+          "patternWarp": 1.0,
+          "patternWarpSize": 8,
+          "patternStreak": 1,
+          "patternLength": 5.4,
+          "patternSlope": 0.9,
+          "patternMottle": 0.02,
+          "patternMottleSize": 16,
+          "patternLow": 0,
+          "patternHigh": 1,
+          "patternPower": 1,
+          "patternEase": 1,
+          "textureFine": 0,
+          "textureFineStructure": 0,
+          "textureFineSize": 1.1,
+          "textureFineGradient": 0,
+          "textureFineWarp": 0,
+          "markAmount": 0,
+          "markSize": 1,
+          "markSpacing": 5,
+          "markDensity": 0.2,
+          "markScatter": 0.9,
+          "markCore": 0.25,
+          "markVariation": 0,
+          "markFollow": 0,
+          "markMultiply": 0
+        },
+        "ramp": [
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88
+        ],
+        "textureColors": {
+          "low": [
+            25.509999999999998,
+            68.565,
+            225.56
+          ],
+          "middle": [
+            38.51,
+            76.085,
+            225.56
+          ],
+          "high": [
+            51.51,
+            83.60499999999999,
+            225.56
+          ],
+          "mark": [
+            25.509999999999998,
+            68.565,
+            225.56
+          ],
+          "fineLow": [
+            0.51,
+            0.5788800000000001,
+            0.937
+          ],
+          "fineHigh": [
+            1.49,
+            1.42112,
+            1.063
+          ],
+          "markTint": [
+            1,
+            1,
+            1
+          ]
+        },
+        "layer": {
+          "name": "Relief",
+          "effect": "material",
+          "color": 0,
+          "height": 1,
+          "surface": 0
+        }
+      }
     ]
   },
   "violet-rippled-water": {
@@ -382,12 +874,12 @@
       "patternHigh": 1.1,
       "patternPower": 1,
       "patternEase": 0,
-      "textureFine": 1,
+      "textureFine": 0,
       "textureFineStructure": 0,
       "textureFineSize": 1,
       "textureFineGradient": 0,
       "textureFineWarp": 0,
-      "markAmount": 0.525,
+      "markAmount": 0,
       "markSize": 1.0,
       "markSpacing": 4.5,
       "markDensity": 0.18,
@@ -401,7 +893,10 @@
       "paletteGamma": 1.1,
       "paletteRed": 1,
       "paletteGreen": 0.95,
-      "paletteBlue": 0.75
+      "paletteBlue": 0.75,
+      "textureHeight": 0,
+      "textureGrainHeight": 0,
+      "texturePitDepth": 0
     },
     "ramp": [
       88,
@@ -474,6 +969,204 @@
       221,
       152,
       151
+    ],
+    "layer": {
+      "name": "Ripple mottling",
+      "height": 0
+    },
+    "layers": [
+      {
+        "knobs": {
+          "textureFine": 1,
+          "textureFineSize": 1,
+          "textureFineGradient": 0,
+          "textureFineWarp": 0
+        },
+        "ramp": [
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88
+        ],
+        "textureColors": {
+          "fineLow": [
+            1.06,
+            0.85,
+            1.006
+          ],
+          "fineHigh": [
+            0.94,
+            1.15,
+            0.994
+          ]
+        },
+        "layer": {
+          "name": "Fine grain",
+          "effect": "fine-tint",
+          "color": 1,
+          "height": 0,
+          "surface": 0
+        }
+      },
+      {
+        "knobs": {
+          "markAmount": 0.525,
+          "markSize": 1.0,
+          "markSpacing": 4.5,
+          "markDensity": 0.18,
+          "markScatter": 1.5,
+          "markCore": 0.1,
+          "markVariation": 0.3,
+          "markFollow": 0.85,
+          "markMultiply": 0
+        },
+        "ramp": [
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88
+        ],
+        "textureColors": {
+          "mark": [
+            80.0,
+            90.0,
+            155.0
+          ],
+          "markTint": [
+            1,
+            1,
+            1
+          ]
+        },
+        "layer": {
+          "name": "Bright flecks",
+          "effect": "dots",
+          "color": 1,
+          "height": 0,
+          "surface": 0
+        }
+      },
+      {
+        "knobs": {
+          "patternAmount": 1,
+          "toneVariation": 0,
+          "roughness": 0,
+          "patternSize": 5.2,
+          "patternDetail": 0.3,
+          "patternGradient": 0,
+          "patternWarp": 4.5,
+          "patternWarpSize": 10.0,
+          "patternStreak": 1,
+          "patternLength": 7.5,
+          "patternSlope": 1,
+          "patternMottle": 0.05,
+          "patternMottleSize": 16,
+          "patternLow": -0.1,
+          "patternHigh": 1.1,
+          "patternPower": 1,
+          "patternEase": 0,
+          "textureFine": 0,
+          "textureFineStructure": 0,
+          "textureFineSize": 1,
+          "textureFineGradient": 0,
+          "textureFineWarp": 0,
+          "markAmount": 0.525,
+          "markSize": 1.0,
+          "markSpacing": 4.5,
+          "markDensity": 0.18,
+          "markScatter": 1.5,
+          "markCore": 0.1,
+          "markVariation": 0.3,
+          "markFollow": 0.85,
+          "markMultiply": 0
+        },
+        "ramp": [
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88,
+          88
+        ],
+        "textureColors": {
+          "low": [
+            45.335,
+            38.945,
+            91.65
+          ],
+          "middle": [
+            50.665,
+            40.79,
+            104.36
+          ],
+          "high": [
+            55.3630875,
+            43.655899999999995,
+            118.31434999999999
+          ],
+          "mark": [
+            80.0,
+            90.0,
+            155.0
+          ],
+          "fineLow": [
+            1.06,
+            0.85,
+            1.006
+          ],
+          "fineHigh": [
+            0.94,
+            1.15,
+            0.994
+          ],
+          "markTint": [
+            1,
+            1,
+            1
+          ]
+        },
+        "layer": {
+          "name": "Relief",
+          "effect": "material",
+          "color": 0,
+          "height": 1,
+          "surface": 0
+        }
+      }
     ]
   }
 }

@@ -49,7 +49,7 @@ await session(`${server}/?biome=red&mapX=2&mapY=2&gpuMB=512`,port,async({send,ev
  await ev('sculptCanvas.idle()');
  await ev(`(()=>{window.terrainSubmissions=0;const queue=sculptCanvas.renderer.device.queue,submit=queue.submit.bind(queue);queue.submit=b=>{terrainSubmissions++;submit(b);};return true;})()`);
  assert.equal(await ev('sculptCanvas.suspended'),true);assert.ok(await ev(`(()=>{const r=document.getElementById('material-editor').getBoundingClientRect();return r.left===0&&r.top===0&&r.width===innerWidth&&r.height===innerHeight;})()`),'material editor fills the viewport');
- await set('ground-add','rust-mottling');await set('ground-world-default',1);await preview();
+ await set('ground-add','bed');await set('ground-world-default',1);await preview();
  const base=await state();
  await set('layer-add','clouds');await set('layer-name','Cloud color');
  await set('texture-color-high','#e9c67d','input');await set('texture-color-high','#e9c67d');

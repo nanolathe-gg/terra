@@ -10,6 +10,7 @@ let grounds=addGround([],GROUND_PRESETS['rust-mottling'],'Ground').grounds;
 grounds=addGround(grounds,GROUND_PRESETS['violet-rippled-water'],'Water').grounds;
 grounds[0].worldGround=true;grounds[1].worldWater=true;
 const s=await openScene({biome:'red',ground:false,grounds,strokes:[['deep',[[256,256],[768,256]],{card:{diameter:400}}]]},'biome=red&mapX=2&mapY=2');
+s.renderer.budgetBytes=256*1024*1024;
 try{
  const before=await renderWindow(s,{x:256,y:192,width:128,height:128});
  const generations=s.renderer.groundCache.generations;
@@ -24,7 +25,7 @@ try{
  const edited=structuredClone(grounds);edited[1].textureColors.high=[110,200,210];s.setGrounds(edited);
  const after=await renderWindow(s,{x:256,y:192,width:128,height:128});assert.notDeepEqual(after,before,'water edits update visible water');assert.equal(s.renderer.groundCache.generations,generations,'color-only edits retain field cache');
  s.setGrounds(grounds);assert.deepEqual(await renderWindow(s,{x:256,y:192,width:128,height:128}),before,'restoration');
- const relief=structuredClone(grounds);relief[1].knobs.textureHeight=4;s.setGrounds(relief);
+ const relief=structuredClone(grounds);relief[1].layers.at(-1).knobs.textureHeight=4;s.setGrounds(relief);
  assert.notDeepEqual(await renderWindow(s,{x:256,y:192,width:128,height:128}),before,'water relief changes shading');
  s.setGrounds(grounds);assert.deepEqual(await renderWindow(s,{x:256,y:192,width:128,height:128}),before,'zero water relief restores flat pigment');
  const wasm=readFileSync(buildWasm(out+'/map-export.wasm'));

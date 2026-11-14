@@ -16,8 +16,8 @@ the map's renderer, undo history, save file, embedded world settings, and export
    and touch alternatives. Uncheck a layer to hide it without discarding its
    settings. Duplicate and Delete operate on the selected layer. Keep at least
    one layer; a material supports up to eight, subject to the cache budget.
-3. Each layer has an amount, color blend (Normal, Multiply, Screen, Add), and
-   separate color, relief, and surface amounts. Negative relief cuts pits;
+3. Color and relief layers have an amount, color blend (Normal, Multiply,
+   Screen, Add), and separate color, relief, and surface amounts. Negative relief cuts pits;
    positive relief raises the art. It does not change gameplay heights.
    Seed moves the periodic pattern. Patch and distortion sizes use art pixels.
 4. Choose Everywhere, a procedural mask, a terrain height range, or a terrain
@@ -27,10 +27,12 @@ the map's renderer, undo history, save file, embedded world settings, and export
    mask amount blend continuously. Masks belong to their layer, with no links
    or references to other layers.
 5. Use Pattern, Distortion, Filter, Color & blend, and Bump & finish to refine
-   that layer. Every layer can use the existing noise, fine grain, marks, and
-   relief primitives. Established recipes start as one fully editable layer,
-   preserving their composition; new layers can be independently ordered and
-   masked. Advanced groups remain collapsible. All numerical controls use the
+   that layer. Color and relief generators can use the existing noise, fine
+   grain, marks, and relief primitives. The four reviewed texture presets expose
+   separate pattern, grain, dot (where used), and relief layers. Grain and dot
+   adjustments inherit their preceding color generator’s pattern; their own
+   controls remain editable. Unrelated tabs and color inputs are hidden.
+   Advanced groups remain collapsible. All numerical controls use the
    editor's shared scrubs: drag, Shift-drag, arrows, and Enter/double-click to type.
 6. Preview final shading, continuous color, palette color, relief, roughness,
    or wetness. Expand Preview terrain to vary height/slope and inspect masks.
@@ -103,6 +105,38 @@ diffusion also uses transient error rows (about 2 MiB at a 1024-pixel repeat).
 The four texture starters carry numerical recipes from the approved ground and
 accepted water studies: Rust mottling, Cloudy green, Blue streaked water, and
 Violet rippled water. They contain no retail pixels, traced shapes, or image masks.
+Their stacks are:
+
+| Preset | Layers, in composition order |
+| --- | --- |
+| Rust mottling | Rust mottling → Fine grain → Dark dots → Relief |
+| Cloudy green | Cloudy mottling → Fine grain → Relief |
+| Blue streaked water | Water streaks → Fine grain → Relief |
+| Violet rippled water | Ripple mottling → Fine grain → Bright flecks → Relief |
+
+The relief layers start flat, matching the reviewed recipes. Green and Blue
+have no dot layer because their original recipes have no dots. The six older
+relief presets are unchanged. Existing map recipes are not rewritten; add a
+preset or use **Reset to preset** to get its component stack.
+
+This decomposition revealed two different grain operations: Rust adds fine
+detail before its color ramp; the other three multiply the existing pigment by
+a grain tint, which can brighten as well as darken. Dots apply their color or
+multiplier after grain. These are explicit **Layer operation** choices alongside
+ordinary Color and relief generators, rather than duplicated pattern knobs.
+Adjustments inherit the nearest preceding color generator’s scale, distortion,
+filtering, colors, and seed, including later edits to those values. They expose
+only their own grain or dot controls and colors. Reordering an adjustment changes
+which generator it follows; an adjustment before any generator is inactive and
+explains how to enable it. Masks and amount still belong to each layer. There
+are no user-managed references or graph connections. Detail corrections are
+relative to that generator, not an arbitrary chain of pre-ramp field operations.
+
+At a 1024-pixel repeat the three-layer presets use 40 MiB of texture cache and
+the four-layer presets use 52 MiB. The existing 128 MiB cache limit is unchanged.
+This extra memory is a tradeoff to revisit if artists need many layered materials
+assigned simultaneously.
+
 The integrated renderer's lighting can differ from offline review tools; those
 studies do not establish pixel-identical rendering in every world.
 
@@ -117,7 +151,15 @@ periodic 2D layers rather than claiming complete Bryce emulation or 3D mapping.
 
 Measured:
 
-- Eight focused model/save tests pass, including layer ordering, ownership,
+- Decomposing the four reviewed presets changes **0** continuous floating-point
+  color components and **0 of 4,194,304** full-repeat palette pixels. The focused
+  128×128 color and shaded views also match exactly. The comparison reads the
+  earlier numeric recipes from commit `37b25a98`; it contains no retail art.
+- A focused browser check verifies all four component stacks, inherited scale,
+  independently visible grain, exact Undo restoration, reset, and save/reload,
+  with no console errors or changed world assignments.
+
+- Nine focused model/save tests pass, including adjustment inheritance, layer ordering, ownership,
   palette preservation, invalid nested stacks, and cache limits.
 - The browser check passes full-screen sizing, native pointer drag reordering,
   visibility, add/duplicate/delete, shared Undo/Redo, reset-to-preset and undo,

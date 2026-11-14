@@ -158,7 +158,13 @@ fn groundRecipe(p:vec2f)->vec4f {
 fn groundMain(@builtin(global_invocation_id) id:vec3u){
  if(any(id.xy>=textureDimensions(groundOut))){return;}
  gs=groundJob.x;let layer=materialLayers[groundJob.z];layerRecipe=layer.recipe;
- let p=vec2f(id.xy);textureStore(groundOut,vec2i(id.xy),i32(groundJob.y),groundRecipe(p+vec2f(19,43)*layer.operation.y));
+ let p=vec2f(id.xy);let point=p+vec2f(19,43)*layer.operation.y;var field=groundRecipe(point);
+ if(layer.terrain.w==3.0){
+  // Detail keeps its own smooth reference. Both pigment values pass through
+  // the same half-float cache as an ordinary layer, avoiding dither drift.
+  layerRecipe.textureFineStructure=0.0;field.z=groundRecipe(point).y;
+ }
+ textureStore(groundOut,vec2i(id.xy),i32(groundJob.y),field);
  var mask=1.0;
  if(layer.operation.z==1.0){
   layerRecipe.patternGradient=0.0;layerRecipe.patternLinear=0.0;layerRecipe.patternCells=select(0.0,1.0,layer.maskPattern.x==1.0||layer.maskPattern.x==2.0);

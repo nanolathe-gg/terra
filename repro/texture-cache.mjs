@@ -9,6 +9,7 @@ const out='/private/tmp/texture-authoring-check/'+preset;mkdirSync(out,{recursiv
 const grounds=addGround([],GROUND_PRESETS[preset],'Material').grounds;
 grounds[0].worldGround=true;
 const s=await openScene({biome:'red',ground:false,grounds,strokes:[]},'biome=red&mapX=4&mapY=4&palette=off');
+s.renderer.budgetBytes=256*1024*1024;
 try{
  const r=s.renderer;const rect={x:896,y:896,width:256,height:256};
  const a=await renderWindow(s,rect);writeFileSync(out+'/material.png',encodePng(256,256,a));
