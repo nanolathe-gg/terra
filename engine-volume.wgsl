@@ -165,7 +165,25 @@ fn voxelClassify(@builtin(global_invocation_id) id:vec3u){
     let bottom=max(max(vs.low,low)-apron,select(projectedBottom,min(projectedBottom,vs.low-apron),submergedView));
     let top=min(min(vs.high,high)+apron,select(projectedTop,max(projectedTop,u.sea+guard),submergedView));
     let first=i32(floor(bottom/(vs.step*8.0)));let last=i32(ceil(top/(vs.step*8.0)));
-    let count=u32(max(0,last-first));let start=atomicAdd(&countOut.bricks,count);
+    let count=u32(max(0,last-first));
+    // A closed column needs only the authored-surface fallback. Bound every
+    // recipe's face threshold, and sample the same XY centers as voxelBuild:
+    // a thin painted/rim/shore feature between the column's corners still counts.
+    let slope=steep/sqrt(max(.000225,1.0-steep*steep));
+    if(count>0u&&slope<.08){
+        var faceFrom=u.rock[0].rockFaceFrom;
+        for(var slot=1u;slot<=rockMask;slot++){faceFrom=min(faceFrom,u.rock[slot].rockFaceFrom);}
+        if(slope<=faceFrom){
+            var paintedAny=0.0;
+            for(var y=0;y<8;y++){for(var x=0;x<8;x++){
+                let p=vs.origin+(vec2f(id.xy*8u)+vec2f(f32(x)+.5,f32(y)+.5))*vs.step;
+                paintedAny=max(paintedAny,max(voxelPaintRock(p),rimRockAt(p)));
+                if(paintedAny>0.0){break;}
+            }if(paintedAny>0.0){break;}}
+            if(paintedAny==0.0){columnsOut[id.y*vs.columnsX+id.x]=vec4i(last,0,0,0);return;}
+        }
+    }
+    let start=atomicAdd(&countOut.bricks,count);
     columnsOut[id.y*vs.columnsX+id.x]=vec4i(first,i32(count),i32(start),0);
     for(var z=0u;z<count;z++){if(start+z<vs.capacity){bricksOut[start+z]=vec4i(vec2i(id.xy),first+i32(z),i32(start+z));}}
 }
