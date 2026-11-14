@@ -13,7 +13,7 @@ import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
 import {RockWeather} from './sculpt-rock-weather.js';
 import {VoxelSurface} from './sculpt-volume.js';
 import {terrainAllocation} from './sculpt-memory.js';
-import {extractGates, gateValues, gateKey, uniformStages, worldUniformDelta} from './sculpt-gates.js';
+import {extractGates, gateValues, gateKey, uniformStages, worldUniformDelta, PER_CHUNK_UNIFORMS} from './sculpt-gates.js';
 
 // The mask planes when the config names none: as many as MASK_KEYS (sculpt-scene.js, which says what each holds). The masks texture array has a layer per 4 planes.
 const MASK_PLANE_COUNT = 25;
@@ -709,12 +709,16 @@ export class TerrainRenderer {
     } finally { this._busy=false; }
   }
 
-  async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false, signal, stale} = {}) {
+  async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false, signal, stale, digest = null} = {}) {
     const current=()=>{signal?.throwIfAborted();if(stale?.())throw new DOMException('The scene changed during a terrain bake.','AbortError');};
     current();const start = performance.now(), device = this.device;
     this.syncWorld({clay,light,detail,ring,ringSpread,ringVariation,materialWeathering,transitionDetail,exact});
     this.i('uMaterialReady', this.materialReady);
     this.i('uTransitionBody', Boolean(this.transitionBody&&this.materialReady&&materialWeathering>0));
+    // digest {reuse}: the checksum of everything the rest of the draw reads (inputDigest). A caller that still holds the picture of the same
+    // checksum keeps it: the same inputs draw the same bytes (AGENTS.md rule 12), so the bake, the voxel solid and the march are skipped.
+    let inputDigest = null;
+    if (digest) { inputDigest = await this.inputDigest(); if (inputDigest && inputDigest === digest.reuse) return {reused: true, digest: inputDigest}; }
     const encoder = device.createCommandEncoder({label: 'terrain'});
     // P6: a SpecializationMiss abandons this encoder, its bake included, so the fields go back to unbaked and the retry bakes again.
     const dirty = this.fieldsDirty;
@@ -752,7 +756,53 @@ export class TerrainRenderer {
     const present=device.createCommandEncoder({label:'present voxel terrain'});
     present.copyTextureToTexture({texture:this.voxelColor},{texture:this.context.getCurrentTexture()},[this.canvas.width,this.canvas.height]);device.queue.submit([present.finish()]);
     this.gpuResult=Promise.all(timers.map(t=>t.result())).then(values=>{const ms=values.reduce((a,b)=>a+(b??0),0);this.lastGPU=ms;return ms;});
-    return {milliseconds:performance.now()-start,gpuMilliseconds:this.lastGPU,pipelineKey};
+    return {milliseconds:performance.now()-start,gpuMilliseconds:this.lastGPU,pipelineKey,digest:inputDigest};
+  }
+  // A checksum of a draw's inputs: every texel of the four input textures (two 32-bit sums of per-texel hashes each, on the GPU; 32 bytes read back),
+  // the settings uniform's bytes but the per-chunk ones, the shader specialization, and the canvas size. Null when an input texture is missing (no reuse).
+  async inputDigest() {
+    const textures = [this.heightTexture, this.routeTexture, this.gridTexture, this.maskTexture], device = this.device;
+    if (textures.some(t => !t)) return null;
+    this.digestPipe ??= device.createComputePipeline({label: 'input digest', layout: 'auto', compute: {entryPoint: 'main', module: device.createShaderModule({label: 'input digest', code: `
+      @group(0) @binding(0) var t: texture_2d_array<f32>;
+      @group(0) @binding(1) var<storage, read_write> acc: array<atomic<u32>, 8>;
+      @group(0) @binding(2) var<uniform> salt: vec4u;
+      var<workgroup> wa: atomic<u32>;
+      var<workgroup> wb: atomic<u32>;
+      fn mixed(x: u32) -> u32 { var h = x; h ^= h >> 16u; h *= 0x7feb352du; h ^= h >> 15u; h *= 0x846ca68bu; h ^= h >> 16u; return h; }
+      @compute @workgroup_size(8, 8, 1) fn main(@builtin(global_invocation_id) id: vec3u, @builtin(local_invocation_index) li: u32) {
+        if (li == 0u) { atomicStore(&wa, 0u); atomicStore(&wb, 0u); }
+        workgroupBarrier();
+        let d = textureDimensions(t);
+        if (id.x < d.x && id.y < d.y) {
+          let v = bitcast<vec4u>(textureLoad(t, vec2i(id.xy), i32(id.z), 0));
+          let i = (id.z * d.y + id.y) * d.x + id.x;
+          var a = mixed(i ^ salt.x); var b = mixed(i * 0x9e3779b9u + salt.y);
+          for (var c = 0u; c < 4u; c++) { a = mixed(a ^ v[c]); b = mixed(b + v[c] * 0x85ebca6bu + c); }
+          atomicAdd(&wa, a); atomicAdd(&wb, b);
+        }
+        workgroupBarrier();
+        if (li == 0u) { atomicAdd(&acc[salt.z * 2u], atomicLoad(&wa)); atomicAdd(&acc[salt.z * 2u + 1u], atomicLoad(&wb)); }
+      }`})}});
+    const S = GPUBufferUsage, acc = device.createBuffer({label: 'input digest sums', size: 32, usage: S.STORAGE | S.COPY_SRC | S.COPY_DST}), read = device.createBuffer({label: 'input digest read', size: 32, usage: S.MAP_READ | S.COPY_DST});
+    const salts = textures.map((t, k) => { const b = device.createBuffer({label: 'input digest salt', size: 16, usage: S.UNIFORM | S.COPY_DST}); device.queue.writeBuffer(b, 0, new Uint32Array([0x51ed270b * (k + 1), 0x2545f491 * (k + 3), k, 0])); return b; });
+    try {
+      const encoder = device.createCommandEncoder({label: 'input digest'});
+      textures.forEach((t, k) => {
+        const pass = encoder.beginComputePass({label: 'input digest'}); pass.setPipeline(this.digestPipe);
+        pass.setBindGroup(0, device.createBindGroup({layout: this.digestPipe.getBindGroupLayout(0), entries: [{binding: 0, resource: t.createView({dimension: '2d-array'})}, {binding: 1, resource: {buffer: acc}}, {binding: 2, resource: {buffer: salts[k]}}]}));
+        pass.dispatchWorkgroups(Math.ceil(t.width / 8), Math.ceil(t.height / 8), t.depthOrArrayLayers); pass.end();
+      });
+      encoder.copyBufferToBuffer(acc, 0, read, 0, 32); device.queue.submit([encoder.finish()]);
+      await read.mapAsync(GPUMapMode.READ); const sums = [...new Uint32Array(read.getMappedRange().slice(0))]; read.unmap();
+      // The per-chunk uniforms are left out: the draw sets them from this tile's region and inputs (the bake writes looseGrid after this
+      // point, so until then it holds the previous tile's), and both are already in the checksum.
+      const bytes = new Uint8Array(this.uniformData.slice(0));
+      for (const name of PER_CHUNK_UNIFORMS) { const f = this.layout.fields.get(name); if (f) bytes.fill(0, f.offset, f.offset + (f.count ? (f.stride || 16) * f.count : (f.width || 1) * 4)); }
+      let ca = 0x811c9dc5, cb = 0x01000193;
+      for (let i = 0; i < bytes.length; i++) { ca = Math.imul(ca ^ bytes[i], 0x01000193); cb = Math.imul(cb + bytes[i] + i, 0x5bd1e995) ^ (cb >>> 15); }
+      return [...sums, ca >>> 0, cb >>> 0].map(n => n.toString(16)).join('.') + '|' + this.specKey().key + '|' + this.canvas.width + 'x' + this.canvas.height + '|' + textures.map(t => t.width + 'x' + t.height + 'x' + t.depthOrArrayLayers).join(',');
+    } finally { acc.destroy(); read.destroy(); salts.forEach(b => b.destroy()); }
   }
 
   // Surface knobs read from the variant; callable again after a change.
