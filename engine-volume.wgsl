@@ -313,11 +313,32 @@ fn voxelWeather(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id)
 fn voxelRayPoint(screen:vec2f,z:f32,underwater:bool)->vec3f {
     return vec3f(screen.x,screen.y+(select(z,u.sea,underwater)-u.base)*.5,z);
 }
+// The four interpolation columns bound empty space above the stored solid.
+// Stop at the next Y-column transition before considering a farther jump.
+fn voxelEmptyTarget(p:vec3f,screenY:f32,underwater:bool)->f32 {
+    let lo=vec2i(floor(p.xy/vs.step-.5))-vec2i(round(vs.origin/vs.step));let hi=lo+1;
+    if(any(lo<vec2i(0))||any(hi>=vec2i(i32(vs.width),i32(vs.height)))){return p.z;}
+    let a=lo/8;let b=hi/8;
+    let c0=vc[u32(a.y)*vs.columnsX+u32(a.x)];let c1=vc[u32(a.y)*vs.columnsX+u32(b.x)];
+    let c2=vc[u32(b.y)*vs.columnsX+u32(a.x)];let c3=vc[u32(b.y)*vs.columnsX+u32(b.x)];
+    let top=f32(max(max(c0.x+c0.y,c1.x+c1.y),max(c2.x+c2.y,c3.x+c3.y))*8+1)*vs.step;
+    if(p.z<=top+vs.step){return p.z;}
+    if(underwater){return top;}
+    let edge=vs.origin.y+max(f32(a.y*8)+.5,f32(b.y*8)-.5)*vs.step;
+    let exit=u.base+2.0*(edge-screenY)-.01*vs.step;
+    return max(top,exit);
+}
 fn voxelHit(screen:vec2f)->vec3f {
     var z=vs.top;var previous=z;var underwater=false;
     for(var i=0;i<4096;i++){
-        let d=voxelField(voxelRayPoint(screen,z,underwater));if(d<=0.0){break;}
-        previous=z;z-=clamp(d*.45,.24*vs.step,8.0*vs.step);
+        let p=voxelRayPoint(screen,z,underwater);let empty=voxelEmptyTarget(p,screen.y,underwater);
+        if(empty<z){
+            previous=z;z=empty;
+            if(!underwater&&previous>=u.sea&&z<=u.sea){z=u.sea;previous=z;underwater=true;}
+            continue;
+        }
+        let d=voxelField(p);if(d<=0.0){break;}
+        previous=z;z-=clamp(d*.45,.24*vs.step,vs.step);
         // Water projects at its level. The same solid supplies its seabed.
         if(!underwater&&previous>=u.sea&&z<u.sea){z=u.sea;previous=z;underwater=true;}
         if(z<vs.low-40.0){break;}
