@@ -215,3 +215,31 @@ algorithm compilation; `repro/material-steps-ui.mjs --desert --server <url>
 preview rendering, and suspended terrain. The existing small GPU and export
 checks accept `repro/material-repeat.mjs --preset desert-clods` and
 `repro/texture-export.mjs --ground desert-clods` to scope them to this study.
+
+### Desert retail comparison pass
+
+Compared the study with an existing 256×256 retail flat-ground reference at
+native scale and with a 0.8px Gaussian diagnostic to expose structure beneath
+dithering. Review images and candidate recipes stay outside Git in
+`/private/tmp/desert-retail-review/`; none are runtime inputs.
+
+By eye, the starting study was too golden, with large, soft, regularly spaced
+highlights. Three small candidate rounds led to smaller, sharper clods, stronger
+fine gradient-noise relief, cooler tan colors, and more distinct dark grains.
+The final adjustment softened the excessive dark spots from the third round.
+The 32-color output selection uses palette entries measured in the reference;
+only palette numbers are saved, never pixels or spatial patterns. The graph's
+construction and algorithms are unchanged.
+
+On this sample, retail's mean RGB is 170.0/144.4/121.3 and luminance standard
+deviation is 39.1. The initial study measured 179.3/147.0/108.7 and 28.9;
+the revision measures 170.7/145.8/123.5 and 38.4. These are diagnostics, not an
+artistic acceptance gate. By eye, generated highlights remain more uniform;
+retail still has sharper, darker narrow crevices. This is still a study, pending
+owner review, and does not change world defaults or the four approved presets.
+
+Validation for this numbers-only pass: two focused recipe/palette unit tests
+and the Desert browser check passed, including live algorithm edits, relief,
+exact Undo, and zero terrain submissions while the editor is open. Candidate
+renders and the final browser check reported no GPU errors. No full suite or
+new export/performance sweep was run.

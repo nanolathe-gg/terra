@@ -2197,36 +2197,38 @@
     ],
     "line": 88,
     "texturePalette": [
-      17,
-      18,
+      67,
+      66,
       19,
       20,
-      21,
-      22,
-      23,
-      24,
-      57,
-      58,
-      59,
-      65,
-      66,
-      67,
       68,
-      69,
-      70,
-      83,
-      84,
-      85,
-      86,
-      87,
-      88,
-      177,
       178,
+      21,
+      18,
+      177,
+      69,
       179,
+      65,
+      22,
+      86,
+      88,
+      89,
+      87,
+      23,
+      70,
+      90,
+      57,
+      56,
+      85,
+      24,
+      91,
       180,
       181,
-      182,
-      183
+      53,
+      17,
+      25,
+      84,
+      92
     ],
     "steps": [
       {
@@ -2236,7 +2238,7 @@
         "source": null,
         "kind": "flow",
         "params": {
-          "patternWarp": 0.85,
+          "patternWarp": 1.1,
           "patternWarpSize": 13,
           "phaseOctaves": 0,
           "phaseAxis": 0
@@ -2249,11 +2251,11 @@
         "source": "warp",
         "kind": "cellular",
         "params": {
-          "cellSpacing": 7.2,
-          "cellRadius": 0.68,
+          "cellSpacing": 4.8,
+          "cellRadius": 0.9,
           "cellScatter": 1,
           "cellVariation": 0.6,
-          "cellProfile": 0.85
+          "cellProfile": 1.5
         }
       },
       {
@@ -2263,19 +2265,19 @@
         "source": "clods",
         "colors": [
           [
-            0.6705882352941176,
-            0.5254901960784314,
-            0.3764705882352941
+            0.6784313725490196,
+            0.5490196078431373,
+            0.4588235294117647
           ],
           [
-            0.7647058823529411,
-            0.6392156862745098,
-            0.4745098039215686
+            0.7764705882352941,
+            0.6666666666666666,
+            0.5647058823529412
           ],
           [
-            0.8470588235294118,
-            0.7568627450980392,
-            0.6
+            0.8627450980392157,
+            0.796078431372549,
+            0.6901960784313725
           ]
         ],
         "params": {
@@ -2289,8 +2291,8 @@
         "source": null,
         "kind": "fine",
         "params": {
-          "textureFineSize": 1.15,
-          "textureFineGradient": 0.1,
+          "textureFineSize": 1.7,
+          "textureFineGradient": 1,
           "textureFineWarp": 0
         }
       },
@@ -2301,14 +2303,14 @@
         "source": "fine",
         "colors": [
           [
-            0.8,
-            0.78,
-            0.75
+            0.5,
+            0.52,
+            0.55
           ],
           [
-            1.2,
-            1.22,
-            1.25
+            1.5,
+            1.48,
+            1.45
           ]
         ],
         "params": {
@@ -2323,7 +2325,7 @@
         "other": "fine-color",
         "operation": "multiply",
         "params": {
-          "amount": 0.65,
+          "amount": 0.4,
           "offset": 0
         }
       },
@@ -2333,13 +2335,18 @@
         "name": "Sparse dark grains",
         "source": null,
         "params": {
-          "markAmount": 0.55,
-          "markSize": 0.7,
-          "markSpacing": 5,
-          "markDensity": 0.09,
+          "markAmount": 0.9,
+          "markSize": 0.9,
+          "markSpacing": 3,
+          "markDensity": 0.4,
           "markScatter": 1.5,
-          "markCore": 0.1,
-          "markVariation": 0.65
+          "markCore": 0.45,
+          "markVariation": 0.65,
+          "markFollow": 0,
+          "markNoise": 0,
+          "markNoiseSize": 2,
+          "markLow": 0.1,
+          "markHigh": 0.65
         }
       },
       {
@@ -2354,9 +2361,9 @@
             1
           ],
           [
-            0.38,
-            0.31,
-            0.23
+            0.22,
+            0.24,
+            0.27
           ]
         ],
         "params": {
@@ -2383,7 +2390,7 @@
         "other": "fine",
         "operation": "add",
         "params": {
-          "amount": 0.12,
+          "amount": 0.65,
           "offset": 0.5
         }
       },
@@ -2405,7 +2412,7 @@
         "source": "height-grain",
         "target": "height",
         "params": {
-          "scale": 1.55,
+          "scale": 2.4,
           "offset": 0
         }
       }
