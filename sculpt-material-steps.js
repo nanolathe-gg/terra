@@ -4,9 +4,12 @@ export const MAX_STEPS=40;
 export const STEP_TYPES=['transform','noise','dots','surface','constant','remap','combine','gradient','channel','output'];
 export const COMBINES=['replace','add','multiply','subtract','minimum','maximum','blend','screen'];
 export const OUTPUTS=['color','height','roughness','wetness','gloss'];
-export const NOISE_TYPES={fractal:'Fractal',fine:'Fine grain',pixel:'Pixel random'};
+export const NOISE_TYPES={fractal:'Fractal',fine:'Fine grain',pixel:'Pixel random',cellular:'Cellular bumps',ridged:'Ridged'};
+export const DISTORTION_TYPES={turbulence:'Turbulence',flow:'Curl flow'};
+const CELL_PARAMS=[['cellSpacing','Spacing',2,128,12],['cellRadius','Radius / spacing',.05,1,.65],['cellScatter','Scatter',0,1,1],['cellVariation','Variation',0,1,.4],['cellProfile','Profile',.25,4,1]];
+const RIDGE_PARAMS=[['ridgeSize','Size',2,128,16],['ridgeOctaves','Detail octaves',0,5,2],['ridgeRoughness','Detail strength',0,1,.5],['ridgeSharpness','Sharpness',.25,4,1.5]];
 const FINE_PARAMS=[['textureFineSize','Size',1,32,1],['textureFineGradient','Gradient noise',0,1,0],['textureFineWarp','Distortion influence',0,1,0]];
-export const stepParams=s=>s.type==='noise'&&s.kind==='fine'?FINE_PARAMS:s.type==='noise'&&s.kind==='pixel'?[]:STEP_PARAMS[s.type];
+export const stepParams=s=>s.type==='noise'&&s.kind==='cellular'?CELL_PARAMS:s.type==='noise'&&s.kind==='ridged'?RIDGE_PARAMS:s.type==='noise'&&s.kind==='fine'?FINE_PARAMS:s.type==='noise'&&s.kind==='pixel'?[]:STEP_PARAMS[s.type];
 export const OUTPUT_KEYS=['textureDither','diffusionMix','paletteGamma','paletteRed','paletteGreen','paletteBlue'];
 export const materialReliefBound=p=>Math.max(8,stepHeightBound(p));
 export const STEP_PARAMS={
@@ -30,10 +33,12 @@ export function copySteps(value){
   if(!s||!STEP_TYPES.includes(s.type)||typeof s.id!=='string'||!s.id||s.id.length>80||seen.has(s.id))throw Error('Invalid or duplicate material step.');
   if(s.enabled!==undefined&&typeof s.enabled!=='boolean')throw Error('Invalid step visibility.');
   if(s.type==='noise'&&s.kind!==undefined&&!Object.hasOwn(NOISE_TYPES,s.kind))throw Error('Invalid noise type.');
+  if(s.type==='transform'&&s.kind!==undefined&&!Object.hasOwn(DISTORTION_TYPES,s.kind))throw Error('Invalid distortion type.');
   const p={};for(const [k,,lo,hi,d]of stepParams(s)){const n=s.params?.[k]??d;if(typeof n!=='number'||!Number.isFinite(n))throw Error('Invalid step value: '+k);p[k]=Math.max(lo,Math.min(hi,n));}
   if(s.type==='channel')p.channel=Math.round(p.channel);
   const out={id:s.id,name:s.name??STEP_LABELS[s.type],type:s.type,enabled:s.enabled!==false,params:p};
   if(s.type==='noise')out.kind=s.kind??'fractal';
+  if(s.type==='transform')out.kind=s.kind??'turbulence';
   if(typeof out.name!=='string'||!out.name.trim()||out.name.length>80)throw Error('A step needs a name of 1–80 characters.');
   for(const key of refKeys){out[key]=s[key]??null;if(out[key]!==null&&!seen.has(out[key]))throw Error('Step sources must refer to an earlier step. Move its source first or reconnect it.');}
   if(s.type==='combine'){out.operation=s.operation??'blend';if(!COMBINES.includes(out.operation))throw Error('Invalid combine operation.');}
@@ -126,7 +131,7 @@ export function compileSteps(recipe){
  for(const s of steps){if(s.type==='gradient'||types.get(s.id)==='color'||s.type==='output')for(const id of [s.source,s.other,s.mask])if(id&&types.get(id)==='scalar'&&!shade.has(id))reserve(id);}
  const planes=Math.max(1,Math.ceil(signals/4));
  const instructions=steps.map(s=>{
-  const code=[({transform:1,noise:s.kind==='fine'?3:s.kind==='pixel'?11:2,dots:4,surface:5,constant:6,remap:7,combine:8,gradient:9,channel:10,output:12})[s.type],s.enabled?1:0,sample.get(s.id)??-1,s.type==='combine'?COMBINES.indexOf(s.operation):s.type==='output'?OUTPUTS.indexOf(s.target):0];
+  const code=[({transform:1,noise:s.kind==='fine'?3:s.kind==='pixel'?11:2,dots:4,surface:5,constant:6,remap:7,combine:8,gradient:9,channel:10,output:12})[s.type],s.enabled?1:0,sample.get(s.id)??-1,s.type==='combine'?COMBINES.indexOf(s.operation):s.type==='output'?OUTPUTS.indexOf(s.target):s.type==='transform'&&s.kind==='flow'?1:s.type==='noise'&&s.kind==='cellular'?1:s.type==='noise'&&s.kind==='ridged'?2:0];
   const links=[s.source,s.other,s.mask].map(id=>indices.get(id)??-1);links.push(types.get(s.id)==='color'?1:0);
   const args=stepParams(s).map(([k])=>s.params[k]);
   if(s.type==='gradient'){args[1]=s.colors.length;args.push(...s.colors.flat());}
@@ -184,7 +189,7 @@ export function programSource(program){
   const a=ref(links[0],stage,'vec4f(0)'),b=ref(links[1],stage,'vec4f(0)'),c=ref(links[2],stage,'vec4f(1)'),s=`s${i}`;
   if(!code[1])return code[0]===1?(links[0]<0?'vec4f(point,0,0)':a):[2,3,4,5,6,11].includes(code[0])?'vec4f(0)':a;
   switch(code[0]){
-   case 1:return `stepTransform(${s},${a},point)`;case 2:return `stepNoise(${s},${a},point)`;case 3:return `stepFine(${s},${a},point)`;
+   case 1:return `${code[3]===1?'stepFlow':'stepTransform'}(${s},${a},point)`;case 2:return `${code[3]===1?'stepCellular':code[3]===2?'stepRidged':'stepNoise'}(${s},${a},point)`;case 3:return `stepFine(${s},${a},point)`;
    case 4:return `stepDots(${s},${a},point)`;case 5:return `stepSurface(${s},${a},point)`;case 6:return `stepConstant(${s})`;
    case 7:return `stepRemap(${s},${a})`;case 8:return `stepCombine(${s},${a},${b},${c})`;case 9:return `stepGradient(${s},${a})`;
    case 10:return `stepChannel(${s},${a})`;case 11:return `stepHash(${s},point)`;case 12:return `stepOutput(${s},${a})`;

@@ -173,3 +173,45 @@ No full suite or broad scene/control sweep was run.
 Preview publication remains required before landing: regenerate and publish
 through the normal preview-assets workflow. The rendering fingerprint was not
 bypassed. No world defaults were replaced, and the branch has not been merged.
+
+## Desert study and additional algorithms
+
+**Manage material → Add preset → Desert clods (study)** is an unassigned starting
+material. It does not replace a world's ground. Its twelve-node graph shares a
+rounded clod field between a sand-to-beige gradient and the height output, then
+adds fine grain and sparse dark spots through ordinary combines. Height is real
+art relief, so changing its output scale changes lighting; it is not a painted
+highlight. The four previously reviewed recipes are unchanged.
+
+The existing Noise node now also offers:
+
+- **Cellular bumps:** scattered smooth radial kernels. Spacing controls the
+  distance between centers; radius is relative to spacing. Scatter breaks the
+  grid, variation changes individual radii/heights, and profile shapes the
+  shoulders. Neighboring octave lattices blend for continuous size edits. The
+  result stays in 0–1 and can drive masks, color, or height.
+- **Ridged:** absolute-value ridges from periodic noise, with size, finer detail
+  octaves, detail strength, and sharpness. Fractional octave weights preserve
+  continuous edits. It also outputs 0–1.
+
+Transform coordinates now has an **Algorithm** selector: the existing
+**Turbulence** and **Curl flow**. Curl flow follows the perpendicular gradient of
+a periodic scalar potential, using midpoint steps to bend coordinates along
+curved paths. Amount zero is the identity. It retains the existing size, octave,
+and axis controls. The approach is informed by [Bridson, Hourihan, and
+Nordenstam's curl-noise paper](https://www.cs.ubc.ca/~rbridson/docs/bridson-siggraph2007-curlnoise.pdf);
+this is a modern coordinate-distortion tool, not a reconstruction of a specific
+Bryce algorithm. All three additions run in the normal graph compiler, terrain
+renderer, preview, and export, with the same 512px period.
+
+By eye, the Desert study has identifiable clods, gaps, fine grain, and lit
+relief. It still needs owner review and color/spacing refinement against the
+reference; it is not an approved retail match. The second pass reduces packed,
+rock-like relief and opens the gaps. No retail images are shipped.
+
+Focused checks: `repro/material-desert.test.mjs` covers graph round trips and
+algorithm compilation; `repro/material-steps-ui.mjs --desert --server <url>
+--port <cdp> --out <dir>` checks both noise choices, curl, relief, exact Undo,
+preview rendering, and suspended terrain. The existing small GPU and export
+checks accept `repro/material-repeat.mjs --preset desert-clods` and
+`repro/texture-export.mjs --ground desert-clods` to scope them to this study.

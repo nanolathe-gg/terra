@@ -2101,5 +2101,314 @@
         }
       }
     ]
+  },
+  "desert-clods": {
+    "name": "Desert clods (study)",
+    "knobs": {
+      "patternAmount": 1,
+      "textureDither": 1,
+      "diffusionMix": 1,
+      "paletteGamma": 1,
+      "roughness": 0,
+      "gloss": 0,
+      "wetness": 0
+    },
+    "ramp": [
+      [
+        160,
+        114,
+        68
+      ],
+      [
+        163,
+        118,
+        72
+      ],
+      [
+        166,
+        122,
+        76
+      ],
+      [
+        169,
+        126,
+        80
+      ],
+      [
+        172,
+        130,
+        84
+      ],
+      [
+        175,
+        134,
+        88
+      ],
+      [
+        178,
+        138,
+        92
+      ],
+      [
+        181,
+        142,
+        96
+      ],
+      [
+        184,
+        146,
+        100
+      ],
+      [
+        187,
+        150,
+        104
+      ],
+      [
+        190,
+        154,
+        108
+      ],
+      [
+        193,
+        158,
+        112
+      ],
+      [
+        196,
+        162,
+        116
+      ],
+      [
+        199,
+        166,
+        120
+      ],
+      [
+        202,
+        170,
+        124
+      ],
+      [
+        205,
+        174,
+        128
+      ]
+    ],
+    "line": 88,
+    "texturePalette": [
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      57,
+      58,
+      59,
+      65,
+      66,
+      67,
+      68,
+      69,
+      70,
+      83,
+      84,
+      85,
+      86,
+      87,
+      88,
+      177,
+      178,
+      179,
+      180,
+      181,
+      182,
+      183
+    ],
+    "steps": [
+      {
+        "id": "warp",
+        "type": "transform",
+        "name": "Soften clod outlines",
+        "source": null,
+        "kind": "flow",
+        "params": {
+          "patternWarp": 0.85,
+          "patternWarpSize": 13,
+          "phaseOctaves": 0,
+          "phaseAxis": 0
+        }
+      },
+      {
+        "id": "clods",
+        "type": "noise",
+        "name": "Rounded clods",
+        "source": "warp",
+        "kind": "cellular",
+        "params": {
+          "cellSpacing": 7.2,
+          "cellRadius": 0.68,
+          "cellScatter": 1,
+          "cellVariation": 0.6,
+          "cellProfile": 0.85
+        }
+      },
+      {
+        "id": "sand",
+        "type": "gradient",
+        "name": "Orange sand \u2192 beige clods",
+        "source": "clods",
+        "colors": [
+          [
+            0.6705882352941176,
+            0.5254901960784314,
+            0.3764705882352941
+          ],
+          [
+            0.7647058823529411,
+            0.6392156862745098,
+            0.4745098039215686
+          ],
+          [
+            0.8470588235294118,
+            0.7568627450980392,
+            0.6
+          ]
+        ],
+        "params": {
+          "ease": 0.55
+        }
+      },
+      {
+        "id": "fine",
+        "type": "noise",
+        "name": "Fine sand",
+        "source": null,
+        "kind": "fine",
+        "params": {
+          "textureFineSize": 1.15,
+          "textureFineGradient": 0.1,
+          "textureFineWarp": 0
+        }
+      },
+      {
+        "id": "fine-color",
+        "type": "gradient",
+        "name": "Grain tint",
+        "source": "fine",
+        "colors": [
+          [
+            0.8,
+            0.78,
+            0.75
+          ],
+          [
+            1.2,
+            1.22,
+            1.25
+          ]
+        ],
+        "params": {
+          "ease": 0
+        }
+      },
+      {
+        "id": "sand-grain",
+        "type": "combine",
+        "name": "Multiply fine grain",
+        "source": "sand",
+        "other": "fine-color",
+        "operation": "multiply",
+        "params": {
+          "amount": 0.65,
+          "offset": 0
+        }
+      },
+      {
+        "id": "spots",
+        "type": "dots",
+        "name": "Sparse dark grains",
+        "source": null,
+        "params": {
+          "markAmount": 0.55,
+          "markSize": 0.7,
+          "markSpacing": 5,
+          "markDensity": 0.09,
+          "markScatter": 1.5,
+          "markCore": 0.1,
+          "markVariation": 0.65
+        }
+      },
+      {
+        "id": "spot-color",
+        "type": "gradient",
+        "name": "Dark brown multiplier",
+        "source": "spots",
+        "colors": [
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            0.38,
+            0.31,
+            0.23
+          ]
+        ],
+        "params": {
+          "ease": 0.2
+        }
+      },
+      {
+        "id": "pigment",
+        "type": "combine",
+        "name": "Multiply dark grains",
+        "source": "sand-grain",
+        "other": "spot-color",
+        "operation": "multiply",
+        "params": {
+          "amount": 1,
+          "offset": 0
+        }
+      },
+      {
+        "id": "height-grain",
+        "type": "combine",
+        "name": "Clods + fine relief",
+        "source": "clods",
+        "other": "fine",
+        "operation": "add",
+        "params": {
+          "amount": 0.12,
+          "offset": 0.5
+        }
+      },
+      {
+        "id": "color-output",
+        "type": "output",
+        "name": "Color output",
+        "source": "pigment",
+        "target": "color",
+        "params": {
+          "scale": 1,
+          "offset": 0
+        }
+      },
+      {
+        "id": "height-output",
+        "type": "output",
+        "name": "Lit clod relief",
+        "source": "height-grain",
+        "target": "height",
+        "params": {
+          "scale": 1.55,
+          "offset": 0
+        }
+      }
+    ]
   }
 }

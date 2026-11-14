@@ -20,7 +20,8 @@ async function repeat(renderer){
  await read.mapAsync(GPUMapMode.READ);const failures=new Uint32Array(read.getMappedRange()).reduce((sum,x)=>sum+x,0);read.unmap();read.destroy();output.destroy();assert.equal(failures,0,'raw color, palette color, and height repeat exactly across the seam');
 }
 await openHost();const s=await openScene({biome:'red',ground:false,strokes:[]},'biome=red&mapX=2&mapY=2&palette=off&view=palette-color'),report={};
-try{for(const key of ['rust-mottling','cloudy-green','blue-streaked-water','violet-rippled-water']){
+const requested=process.argv.indexOf('--preset');
+try{for(const key of requested>=0?[process.argv[requested+1]]:['rust-mottling','cloudy-green','blue-streaked-water','violet-rippled-water']){
  const list=addGround([],GROUND_PRESETS[key],key).grounds;list[0].worldGround=true;s.setGrounds(list);
  const rect={x:256,y:256,width:64,height:64},base=await renderWindow(s,rect);
  assert.equal(s.renderer.groundCache.pool,MATERIAL_REPEAT);assert.equal(s.renderer.groundCache.bytes,7*1024*1024);

@@ -1,5 +1,5 @@
 import {mountMaterialGraph} from './sculpt-material-graph.js';
-import {STEP_TYPES,STEP_LABELS,stepParams,NOISE_TYPES,COMBINES,OUTPUTS,MAX_STEPS,orderSteps,makeStep,stepTypes} from './sculpt-material-steps.js';
+import {STEP_TYPES,STEP_LABELS,stepParams,NOISE_TYPES,DISTORTION_TYPES,COMBINES,OUTPUTS,MAX_STEPS,orderSteps,makeStep,stepTypes} from './sculpt-material-steps.js';
 const $=id=>document.getElementById(id);
 export function mountMaterialSteps(host){
  let selectedId=null;
@@ -27,7 +27,7 @@ export function mountMaterialSteps(host){
    const blank=key==='mask'?'No mask (1)':key==='source'&&['transform','noise'].includes(s.type)?'World coordinates':'Zero';options('step-'+key,[['',blank+' · disconnected'],...allowed.map(p=>[p.id,p.name])],s[key]);$('step-'+key+'-disconnect').disabled=!s[key];
   }
   $('step-operation-row').hidden=s.type!=='combine';$('step-operation').value=s.operation??'blend';$('step-target-row').hidden=s.type!=='output';$('step-target').value=s.target??'color';for(const option of $('step-target').options)option.disabled=steps.some(n=>n.id!==s.id&&n.type==='output'&&n.enabled&&n.target===option.value);$('step-stops-row').hidden=s.type!=='gradient';$('step-stops').value=s.colors?.length??2;
-  $('step-kind-row').hidden=s.type!=='noise';$('step-kind').value=s.kind??'fractal';
+  $('step-kind-row').hidden=!['noise','transform'].includes(s.type);options('step-kind',Object.entries(s.type==='transform'?DISTORTION_TYPES:NOISE_TYPES),s.kind??(s.type==='transform'?'turbulence':'fractal'));
   const params=stepParams(s);for(let i=0;i<16;i++){const row=$('step-param-row-'+i),spec=params[i];row.hidden=!spec;if(!spec)continue;const [key,label,min,max]=spec,input=$('step-param-'+i);$('step-param-label-'+i).textContent=label;input.min=min;input.max=max;input.step=key==='channel'?'1':'0.001';input.value=s.params[key];$('step-param-value-'+i).textContent=+s.params[key].toFixed(4);}
   $('step-colors').hidden=s.type!=='gradient';for(let i=0;i<16;i++){const c=s.colors?.[i];$('step-color-row-'+i).hidden=!c;if(!c)continue;const gain=Math.max(1,...c);$('step-color-'+i).value='#'+c.map(v=>Math.round(v/gain*255).toString(16).padStart(2,'0')).join('');$('step-color-gain-'+i).value=gain;}
  }

@@ -252,6 +252,49 @@ fn stepSurface(s:MaterialStep,a:vec4f,point:vec2f)->vec4f {
 v=groundRecipe(point);
  return v;
 }
+// Smooth scattered radial kernels: useful as a scalar mask or actual relief.
+// Adjacent octave lattices blend so size edits stay continuous and periodic.
+fn cellularBumpsAt(p:vec2f,n:f32,s:MaterialStep)->f32 {
+ let q=graphPos(p)/graphPeriod*n;let base=floor(q);var value=0.0;
+ for(var y=-1;y<=1;y++){for(var x=-1;x<=1;x++){
+  let cell=base+vec2f(f32(x),f32(y));let id=poolWrap(cell,n);
+  let h=cellHash(id+457.0);let variation=cellHash(id+491.0);
+  let center=cell+.5+(h-.5)*.9*stepArg(s,2u);
+  let radius=stepArg(s,1u)*mix(1.0,.55+.45*variation.x,stepArg(s,3u));
+  let d=length(q-center)/radius;let bump=pow(max(0.0,1.0-smoothstep(0.0,1.0,d)),stepArg(s,4u));
+  value=max(value,bump*mix(1.0,.45+.55*variation.y,stepArg(s,3u)));
+ }}return value;
+}
+fn stepCellular(s:MaterialStep,a:vec4f,point:vec2f)->vec4f {
+ let q=select(point,a.xy,s.links.x>=0);let count=max(1.0,graphPeriod/stepArg(s,0u));let n=exp2(floor(log2(count)));
+ return vec4f(mix(cellularBumpsAt(q,n,s),cellularBumpsAt(q,n*2.0,s),fract(log2(count))));
+}
+fn stepRidged(s:MaterialStep,a:vec4f,point:vec2f)->vec4f {
+ let q=select(point,a.xy,s.links.x>=0);var total=0.0;var value=0.0;
+ for(var i=0u;i<=5u;i++){
+  let weightFraction=select(clamp(stepArg(s,1u)-f32(i)+1.0,0.0,1.0),1.0,i==0u);if(weightFraction<=0.0){break;}
+  let weight=weightFraction*pow(max(.0001,stepArg(s,2u)),f32(i));
+  let ridge=pow(clamp(1.0-abs(groundNoise(q,stepArg(s,0u)/exp2(f32(i)),563.0)),0.0,1.0),stepArg(s,3u));
+  value+=ridge*weight;total+=weight;
+ }return vec4f(value/total);
+}
+// A two-dimensional curl field is the perpendicular gradient of a scalar
+// potential. Two midpoint advection steps bend coordinates along the field.
+fn flowVelocity(p:vec2f,size:f32,octaves:f32)->vec2f {
+ var sum=vec2f(0);var total=0.0;
+ for(var i=0u;i<=4u;i++){
+  let amount=select(clamp(octaves-f32(i)+1.0,0.0,1.0),1.0,i==0u);if(amount<=0.0){break;}
+  let scale=size*exp2(f32(i));let e=max(.25,scale*.025);
+  let dx=groundNoise(p+vec2f(e,0),scale,617.0)-groundNoise(p-vec2f(e,0),scale,617.0);
+  let dy=groundNoise(p+vec2f(0,e),scale,617.0)-groundNoise(p-vec2f(0,e),scale,617.0);
+  sum+=vec2f(dy,-dx)*(scale/(2.0*e))*amount;total+=amount;
+ }return sum/total;
+}
+fn stepFlow(s:MaterialStep,a:vec4f,point:vec2f)->vec4f {
+ var q=select(point,a.xy,s.links.x>=0);let axis=stepArg(s,3u);let amount=stepArg(s,0u)*.5*vec2f(1.0-max(axis,0.0),1.0+min(axis,0.0));
+ for(var i=0;i<2;i++){let mid=q+flowVelocity(q,stepArg(s,1u),stepArg(s,2u))*amount*.5;q+=flowVelocity(mid,stepArg(s,1u),stepArg(s,2u))*amount;}
+ return vec4f(q,0,0);
+}
 @compute @workgroup_size(8,8)
 fn groundMain(@builtin(global_invocation_id) id:vec3u){
  if(any(id.xy>=textureDimensions(groundOut))){return;}

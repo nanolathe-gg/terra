@@ -40,7 +40,7 @@ const ready = async ev => {
   throw new Error('the editor never became ready');
 };
 
-await session(`${server}/?biome=red&mapX=2&mapY=2&gpuMB=512`,port,async({send,ev,logs})=>{
+await session(`${server}/?biome=${process.argv.includes('--desert')?'desert':'red'}&mapX=2&mapY=2&gpuMB=512`,port,async({send,ev,logs})=>{
  const click=id=>ev(`document.getElementById(${JSON.stringify(id)}).click();true`);
  const set=(id,value,event='change')=>ev(`(()=>{const e=document.getElementById(${JSON.stringify(id)});e.value=${JSON.stringify(String(value))};e.dispatchEvent(new Event(${JSON.stringify(event)},{bubbles:true}));return true;})()`);
  const state=()=>ev('sculptDebug.sketch()');
@@ -52,7 +52,16 @@ await session(`${server}/?biome=red&mapX=2&mapY=2&gpuMB=512`,port,async({send,ev
  const shot=async name=>{await send('Page.captureScreenshot',{format:'png'}).then(r=>writeFileSync(out+'/'+name+'.png',Buffer.from(r.result.data,'base64')));};
  await ready(ev);await click('materials-toolbar');
  await ev(`(()=>{window.terrainSubmissions=0;window.terrainJobs=[];const queue=sculptCanvas.renderer.device.queue,submit=queue.submit.bind(queue);queue.submit=b=>{terrainSubmissions++;terrainJobs.push({labels:[...b].map(x=>x.label),stack:new Error().stack});submit(b);};return true;})()`);
- await set('ground-add','rust-mottling');await choose('noise');await preview();await nodeReady();
+ await set('ground-add',process.argv.includes('--desert')?'desert-clods':'rust-mottling');await choose('noise');await preview();await nodeReady();
+ if(process.argv.includes('--desert')){
+  const saveCanvas=async(id,name)=>{const data=await ev(`document.getElementById('${id}').toDataURL()`);writeFileSync(out+'/'+name+'.png',Buffer.from(data.split(',')[1],'base64'));};
+  assert.deepEqual(logs,[]);const before=await picture();await saveCanvas('ground-preview','desert');await saveCanvas('node-preview','clods');
+  await set('step-kind','ridged');await preview();await nodeReady();assert.deepEqual(logs,[]);assert.equal((await state()).grounds[0].steps.find(s=>s.id==='clods').kind,'ridged');assert.notEqual(await picture(),before);await saveCanvas('node-preview','ridged');await click('material-undo');await preview();assert.equal(await picture(),before);
+  await choose('transform');await set('step-param-0',0,'input');await set('step-param-0',0);await preview();assert.notEqual(await picture(),before,'curl flow changes clod outlines');await click('material-undo');await preview();assert.equal(await picture(),before);
+  await choose('output','height');await set('step-param-0',0,'input');await set('step-param-0',0);await preview();assert.notEqual(await picture(),before,'relief changes actual lighting');await saveCanvas('ground-preview','flat');await click('material-undo');await preview();assert.equal(await picture(),before);
+  await choose('noise');await nodeReady();await shot('editor');assert.equal(await ev('terrainSubmissions'),0);assert.deepEqual(logs,[]);assert.equal((await state()).grounds.some(p=>p.worldGround||p.worldWater),false);
+  await click('material-done');await ev('sculptCanvas.idle()');assert.deepEqual(logs,[]);console.log(JSON.stringify({desert:true,cellular:true,ridged:true,curl:true,relief:true,undoExact:true,terrainSubmissionsWhileOpen:0,worldDefaultsUnchanged:true,errors:logs}));return;
+ }
  if(process.argv.includes('--visual-only')){await sleep(300);await shot('editor');await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false});await sleep(300);await shot('mobile');assert.deepEqual(logs,[]);await click('material-done');return;}
  for(const key of ['cloudy-green','blue-streaked-water','violet-rippled-water']){await set('ground-add',key);await preview();}
  assert.equal(await ev(`document.getElementById('material-layer-list')===null`),true);
