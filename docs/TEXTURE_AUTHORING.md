@@ -177,7 +177,7 @@ bypassed. No world defaults were replaced, and the branch has not been merged.
 ## Desert study and additional algorithms
 
 **Manage material → Add preset → Desert clods (study)** is an unassigned starting
-material. It does not replace a world's ground. Its seventeen-node graph shares a
+material. It does not replace a world's ground. Its eighteen-node graph shares a
 varied clod field between a sand-to-beige gradient and the height output, then
 adds fine grain and sparse dark spots through ordinary combines. Height is real
 art relief, so changing its output scale changes lighting; it is not a painted
@@ -269,3 +269,42 @@ Undo and zero terrain submissions while open), and the small material repeat
 check passed. The 512px raw color, palette color, and relief repeat exactly;
 regional rendering also matches. No full suite or new export sweep was run.
 The four approved presets and world defaults remain unchanged.
+
+
+### Desert five-block swap pass
+
+Reviewed six small rounds (22 candidates) using the requested two 1×1, two 4×4,
+and one 8×8 tile inserts on one contiguous 768×768 retail flat-ground sheet.
+Tiles are 32px. Each candidate was rendered at the actual 512px material period,
+then pasted directly: no edge feathering, recoloring, or resizing. A retail-to-
+retail control uses the same layout. Review images, recipes, and exact crop/swap
+coordinates remain outside Git in `/private/tmp/desert-swap-review/`.
+
+By eye, the initial larger inserts were conspicuous: coarse, connected clods
+and gray grain made rectangular patches. The saved revision reduces clod spacing
+from 4.8 to 3.2, uses pixel noise for fine relief, reduces the scale/depth of
+creases, and separates pigment grain from height grain. One additional ordinary
+Noise node gives pigment slight directional coherence; its gradient and multiply
+controls set the warm/cool grain. Sand colors compensate for the changed relief.
+All 18 nodes use existing operations. Dithering and palette selection are unchanged.
+
+The single-tile swaps blend better by eye, and larger inserts are less coarse,
+but the 4×4 and 8×8 blocks remain identifiable. Fine color/grain structure still
+needs work; this is not an indistinguishable or owner-approved match. Stronger
+color/directional grain produced pink-green streaks, reduced dithering did not
+help, and an extra three-node mineral-color branch added little visible benefit,
+so those candidates were discarded.
+
+Measured on the full rendered candidate, mean RGB is 169.7/144.4/121.8 versus
+170.0/144.5/121.4 for the retail sheet; luminance standard deviation is 39.9 versus
+39.0. With a 0.8px Gaussian diagnostic it is 19.4 versus 18.5. Close aggregate
+statistics do not establish visual equivalence, as the larger swaps demonstrate.
+
+The four reviewed presets and world defaults remain unchanged. No retail pixels
+or spatial masks are runtime inputs or committed assets.
+
+Validation: two focused unit tests passed (about 52ms); the scoped Desert browser
+check passed with exact Undo, zero terrain submissions while open, and no GPU
+errors. The small GPU check confirmed exact 512px color/height repetition and
+regional replay. The saved preset's 512px render matched the chosen candidate
+byte for byte. No full suite was run.
