@@ -32,13 +32,13 @@ for(const name of ['green-modern-2','green-2','red-3','green-7']){
   await r.renderColorTile(tb,options);const wb=await read(r),replayMs=performance.now()-t;
   const fulla=await H.renderWindow(s,a),fullb=await H.renderWindow(s,b);
   assert.equal(sha(wa),sha(fulla),name+' first tile');assert.equal(sha(wb),sha(fullb),name+' interleaved odd tile');
-  const retained=r.colorBytes;await H.knob(s,'rockFace',3.9);await assert.rejects(()=>r.renderColorTile(ta,options),/needs [ABCDE]/);
+  const maskBytes=[ta.source.colorMasks??ta.source.maskTexture,tb.source.colorMasks??tb.source.maskTexture].map(texture=>r.resources.get(texture)?.bytes??0),retained=r.colorBytes;await H.knob(s,'rockFace',3.9);await assert.rejects(()=>r.renderColorTile(ta,options),/needs [ABCDE]/);
   // Retirement cannot destroy a pinned input while the preceding queue wait yields.
   let resume;const completion=r.previousChunk;r.previousChunk=new Promise(resolve=>{resume=resolve;});
   const pending=r.renderColorTile(tb,options);assert.equal(tb.users,1);r.releaseColorTile(tb);assert(r.resources.has(tb.record));resume();
   await assert.rejects(()=>pending,/evicted/);assert(!r.resources.has(tb.record));r.previousChunk=completion;
   r.trimColorTiles();assert.equal(r.colorBytes,0);await r.device.queue.onSubmittedWorkDone();await new Promise(r=>setTimeout(r,30));assert.deepEqual(s.errors,[]);
-  rows.push({scene:name,tiles:[a,b].map(({options,...r})=>r),sha:[sha(wa),sha(wb)],different:0,retained,replayIncludingReadbacksMs:replayMs,geometryEditRejected:true,retirementWaitedForReader:true,evictedBytes:r.colorBytes,errors:s.errors});
+  rows.push({scene:name,tiles:[a,b].map(({options,...r})=>r),sha:[sha(wa),sha(wb)],different:0,retained,maskBytes,replayIncludingReadbacksMs:replayMs,geometryEditRejected:true,retirementWaitedForReader:true,evictedBytes:r.colorBytes,errors:s.errors});
   console.log(rows.at(-1));s.dispose();
 }
 writeFileSync(join(out,'color-cache-proof.json'),JSON.stringify(rows));process.exit(0);

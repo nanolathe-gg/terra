@@ -633,6 +633,29 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), sel
 // -1 fewer than the world's own), g cracked bed (+1: the bed under this
 // stroke's shallows is cracked rock-like ground).
 @group(0) @binding(9) var masksTex: texture_2d_array<f32>;
+// F needs twelve of the authored mask channels; preserve their original
+// SNORM values and interpolation in three layers of the same-sized texture.
+#ifdef COLOR_PASS
+@group(3) @binding(2) var colorMasksTex:texture_2d_array<f32>;
+fn sampleMasks(uv:vec2f,layer:i32)->vec4f {
+    switch layer {
+      case 0:{return textureSampleLevel(colorMasksTex,linearClamp,uv,0,0.0);}
+      case 1:{let p=textureSampleLevel(colorMasksTex,linearClamp,uv,1,0.0);return vec4f(0,p.r,0,0);}
+      case 2:{let p=textureSampleLevel(colorMasksTex,linearClamp,uv,1,0.0);return vec4f(0,0,p.g,0);}
+      case 3:{let p=textureSampleLevel(colorMasksTex,linearClamp,uv,1,0.0);return vec4f(0,0,0,p.b);}
+      case 4:{let a=textureSampleLevel(colorMasksTex,linearClamp,uv,1,0.0);let b=textureSampleLevel(colorMasksTex,linearClamp,uv,2,0.0);return vec4f(a.a,b.rgb);}
+      case 5:{let p=textureSampleLevel(colorMasksTex,linearClamp,uv,2,0.0);return vec4f(p.a,0,0,0);}
+      default:{return vec4f(0);}
+    }
+}
+fn maskDimensions()->vec2u{return textureDimensions(colorMasksTex);}
+fn loadRockMask(at:vec2i)->f32{return textureLoad(colorMasksTex,at,2,0).a;}
+#else
+fn sampleMasks(uv:vec2f,layer:i32)->vec4f{return textureSampleLevel(masksTex,linearClamp,uv,layer,0.0);}
+fn maskDimensions()->vec2u{return textureDimensions(masksTex);}
+fn loadRockMask(at:vec2i)->f32{return textureLoad(masksTex,at,5,0).r;}
+#endif
+
 
 // Painted style factor for f in -1..1 (card C5): 1 at 0 (exactly), 0 at -1,
 // 4 at +1 (two doublings).
@@ -688,7 +711,7 @@ fn materialFieldAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, line
 // H5 override plane 17's deposits multiplier (planes 14-17: erosion, deposits, vegetation, exposure) at p: scales sand, stones and talus. 1 where nothing overrides.
 fn depositsAt(p: vec2f) -> f32 {
     if (u.overrideOn == 0) { return 1.0; }
-    return max(0.0, 1.0 + textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).w);
+    return max(0.0, 1.0 + sampleMasks(maskUv(p),3).w);
 }
 // H5: the Time pass's maps at world point p. layer 2: wear, wetness, hardness, slope; layer 3: fall line (-1..1), channel, ridge.
 struct TimeMaps { wear: f32, wet: f32, hard: f32, slope: f32, fall: vec2f, channel: f32, ridge: f32, flow: f32, talus: f32, deposit: f32 }
@@ -907,8 +930,8 @@ fn rockSourceAt(p:vec2f)->vec4f {
 fn rockSlotAt(p:vec2f)->u32 {
     if(u.rockIdOn==0){return 0u;}
     let q=p+(vec2f(valueNoise(p/8.0+vec2f(3.1,7.7)),valueNoise(p/8.0+vec2f(11.3,5.9)))*.7+vec2f(valueNoise(p/3.0+vec2f(2.3,9.1)),valueNoise(p/3.0+vec2f(6.7,1.3)))*.3)*4.0;
-    let cell=clamp(vec2i(floor(q/(u.size-1.0)*(u.grid-1.0)+.5-u.chunkGridOrigin)),vec2i(0),vec2i(textureDimensions(masksTex))-1);
-    return u32(clamp(round(textureLoad(masksTex,cell,5,0).r*127.0)-1.0,0.0,15.0));
+    let cell=clamp(vec2i(floor(q/(u.size-1.0)*(u.grid-1.0)+.5-u.chunkGridOrigin)),vec2i(0),vec2i(maskDimensions())-1);
+    return u32(clamp(round(loadRockMask(cell)*127.0)-1.0,0.0,15.0));
 }
 // The point being evaluated belongs to the rock at p: every rock number it reads from here on is its slot's.
 fn useRock(p:vec2f) { rs=rockSlotAt(p); }

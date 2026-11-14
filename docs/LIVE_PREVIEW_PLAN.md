@@ -1214,6 +1214,8 @@ and which are stage F. Then stop and report.
 
 **November 13 build, first unit:** after the owner-approved split landing at 580d0fbb, [a bounded immutable color cache](LP5_CACHE.md) runs stage F on retained visible native tiles and the coarse block. In the focused large-view pair, continuous ambient median first change is 46.8 → 4.0 ms and release final 1808.4 → 979.9 ms, with exact replay. Partial coverage costs 762.7 MiB of retained inputs, p95 tails remain mixed, and the 150-ms final-quality view target is open. This follow-up stays on the review branch; it is not complete LP5 acceptance.
 
+**November 13 mask-memory follow-up:** [exact color-mask packing](LP5_MASKS.md) cuts retained mask layers from seven to three and fits 18 records instead of 13 at the same quota. Phased, in-place packing preserves the 128-MiB engine fixture; sampled rendering/export art is unchanged. In the focused pair, continuous release final is 965.8 → 795.2 ms, with mixed input tails. The source stays on the review branch; whole-view final-quality acceptance is still open.
+
 **Build (M-L)** only if step 0's rerun equals the full re-bake: land the
 split (scenes move by the reported drift, the owner looks), keep records for
 visible tiles, route stage-F changes to priority 3 of the scheduler, add the
