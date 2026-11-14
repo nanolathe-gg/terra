@@ -30,7 +30,12 @@ fn voxelAuthored(p:vec2f)->vec4f {
     return mix(mix(textureLoad(vh,a,0),textureLoad(vh,vec2i(b.x,a.y),0),f.x),mix(textureLoad(vh,vec2i(a.x,b.y),0),textureLoad(vh,b,0),f.x),f.y);
 }
 // The slope of the authored surface at p (rise per px), smooth between its samples: how wide a bed is drawn there (columnGather).
+#ifdef COLOR_PASS
+var<private> colorFaceSlope:f32;
+fn voxelFaceSlope(p:vec2f)->f32{return colorFaceSlope;}
+#else
 fn voxelFaceSlope(p:vec2f)->f32{let a=voxelAuthored(p);return length(a.yz)/max(a.w,.015);}
+#endif
 fn voxelGuide(p:vec2f)->vec4f{return textureLoad(vg,clamp(vec2i(floor(p/vs.step))-vec2i(round(vs.origin/vs.step)),vec2i(0),vec2i(i32(vs.width),i32(vs.height))-1),0);}
 // Coarse records replace full density only outside the sampled surface band.
 // Eight half-float corners fit in 16 bytes. Round the interpolated cell

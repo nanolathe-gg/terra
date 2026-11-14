@@ -149,9 +149,9 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const margin=Math.max(Math.ceil(3.6*(this.number('boulders',0)>0?32:Math.min(16,3.3*this.rockMax('looseSize',this.number('looseSize',6)))))+4,PLANT_REACH);
     const loose=Math.max(this.looseBuffer?.size??16,(Math.ceil((region.fieldsWidth+2*fieldScale+2*margin)/4)+2)*(Math.ceil((region.fieldsHeight+2*fieldScale+2*margin)/4)+2)*32);
     const rockWeather=this.rockMax('runoff',this.number('runoff',0))>0||this.rockMax('debrisAmount',this.number('debrisAmount',0))>0||this.number('rimReach',0)>0||this.number('shoreRock',0)>0||this.number('shoreShelf',0)>0?rockWeatherBytes(region.fieldsWidth+2*fieldScale,region.fieldsHeight+2*fieldScale):0;
-    const voxel=Math.min(64*MB,budgetBytes*.35);
-    return {field,input,output,loose,rockWeather,maskPlaneCount,maskLayers,voxel,workingBytes:field+input+output+loose+voxel+rockWeather,
-      retainedBytes:this.fixedBytes,reservedBytes,gpuBytes:this.fixedBytes+reservedBytes+field+input+output+loose+voxel+rockWeather,
+    const voxel=Math.min(64*MB,budgetBytes*.35),geometryPixels=(Math.ceil(width/rasterScale)+2)*(Math.ceil(height/rasterScale)+2),geometryRecord=geometryPixels*56,geometry=geometryPixels*60;
+    return {field,input,output,loose,rockWeather,maskPlaneCount,maskLayers,voxel,geometry,geometryRecord,workingBytes:field+input+output+loose+voxel+rockWeather+geometry,
+      retainedBytes:this.fixedBytes,reservedBytes,gpuBytes:this.fixedBytes+reservedBytes+field+input+output+loose+voxel+rockWeather+geometry,
       cpuRetainedBytes:this.cpuRetainedBytes,cpuUploadBytes:input,cpuPeakBytes:this.cpuRetainedBytes+input};
   }
 
@@ -160,8 +160,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     let size=Math.floor(maximum/32)*32;
     while(size>=32) {
       const region=this.requiredRegion({x:Math.floor(this.size/2),y:Math.floor(this.size/2),width:size,height:size}),e=this.estimate(region,size,size,this.maskPlaneCount,1,{budgetBytes,reservedBytes});
-      if(Math.max(pow2(region.fieldsWidth),pow2(region.fieldsHeight),pow2(region.gridWidth),pow2(region.gridHeight),size)<=this.limit&&
-        e.gpuBytes<=budgetBytes)return size;
+      if(Math.max(pow2(region.fieldsWidth),pow2(region.fieldsHeight),pow2(region.gridWidth),pow2(region.gridHeight),size+2)<=this.limit&&
+        e.gpuBytes<=budgetBytes&&e.geometryRecord<=this.device.limits.maxStorageBufferBindingSize)return size;
       size=Math.floor(size/64)*32;
     }
     throw new Error('nanolathe: terrain materials and a 32 px chunk exceed the GPU memory budget');
@@ -210,15 +210,15 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.trimWorking(new Set([this.activeInput,this.activeLevel]),enough);return enough();
   }
   async allocate(region,gridWidth,gridHeight,world_width,world_height,fed=false,scale=1,preview=false) {
-    region=alignedFieldRegion(region,scale);
+    region=alignedFieldRegion(region,scale);this.geometryValid=false;
     this.voxel.clear();
     const rasterScale=scale<1?scale:Math.max(1,scale/2),width=Math.ceil(world_width/rasterScale),height=Math.ceil(world_height/rasterScale);   // Color raster; the cached image below still uses `scale`.
     const fieldScale=fieldLevel(scale),fw=pow2(Math.ceil(region.fieldsWidth/fieldScale)),fh=pow2(Math.ceil(region.fieldsHeight/fieldScale)),gw=preview?gridWidth:pow2(gridWidth),gh=preview?gridHeight:pow2(gridHeight);
     let e=this.estimate({...region,gridWidth,gridHeight},world_width,world_height,this.maskPlaneCount,scale,{preview});
     const required=e.gpuBytes;
-    if(Math.max(fw,fh,gw,gh,width,height)>this.limit||required>this.budgetBytes){
+    if(Math.max(fw,fh,gw,gh,width+2,height+2)>this.limit||required>this.budgetBytes||e.geometryRecord>this.device.limits.maxStorageBufferBindingSize){
       // H13: the parts of the estimate, so a refusal says which one crossed the budget (reserved is the canvas, the paged fields and the image cache).
-      const mb=n=>Math.ceil(n/MB),parts=`fixed ${mb(e.retainedBytes)}, reserved ${mb(e.reservedBytes)}, field ${mb(e.field)}, input ${mb(e.input)}, loose ${mb(e.loose)}, rock weather ${mb(e.rockWeather)}, voxels ${mb(e.voxel)}, output ${mb(e.output)} of ${mb(this.budgetBytes)}`;
+      const mb=n=>Math.ceil(n/MB),parts=`fixed ${mb(e.retainedBytes)}, reserved ${mb(e.reservedBytes)}, field ${mb(e.field)}, input ${mb(e.input)}, loose ${mb(e.loose)}, rock weather ${mb(e.rockWeather)}, voxels ${mb(e.voxel)}, geometry ${mb(e.geometry)}, output ${mb(e.output)} of ${mb(this.budgetBytes)}`;
       throw new Error(`nanolathe: chunk needs ${mb(required)} MB of GPU memory (${parts}); use chunks of ${this.chunkSize()} px or smaller`);
     }
     this.captureWorking();this.voxel.clear();

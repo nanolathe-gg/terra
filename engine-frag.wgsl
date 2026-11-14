@@ -1500,16 +1500,47 @@ fn sandMaterialAt(scatter: vec2f) -> vec3f {
     return mix(weathered, fragment, u.sandGrain);
 }
 
+// Full-precision current-tile geometry. Scalar fields keep the stride at 56
+// bytes; the one-pixel apron supplies the color pass's derivative helpers.
+struct SurfaceRecord {
+    y:f32,z:f32,nx:f32,ny:f32,nz:f32,rain:f32,sun:f32,sky:f32,
+    cavity:f32,gx:f32,gy:f32,faceSlope:f32,ao:f32,shadow:f32,
+}
+struct GeometryFrame {width:u32,height:u32,padding:vec2u}
+@group(3) @binding(1) var<uniform> geometryFrame:GeometryFrame;
+fn geometryIndex(p:vec2i)->u32 {
+    let q=clamp(p,vec2i(0),vec2i(i32(geometryFrame.width),i32(geometryFrame.height))-1);
+    return u32(q.y)*geometryFrame.width+u32(q.x);
+}
+#ifdef GEOMETRY_PASS
+@group(3) @binding(0) var<storage,read_write> geometryOut:array<SurfaceRecord>;
+@fragment
+fn geometryMain(v:VertexOut)->@location(0) vec4f {
+    if(vCount[2]>vs.capacity){discard;}
+    let pixel=v.position.xy-vec2f(1);
+    let fragCoord=vec2f(pixel.x*u.chunkScale+u.chunkScreenOrigin.x,u.size-(pixel.y*u.chunkScale+u.chunkScreenOrigin.y));
+    let hit=voxelHit(vec2f(fragCoord.x,u.size-fragCoord.y));
+    let p=round(hit.xy*64.0)/64.0;useRock(p);let normal=voxelNormal(hit);
+    let authored=voxelAuthored(p);let soft=-authored.yz/max(authored.w,.015);
+    geometryOut[geometryIndex(vec2i(floor(v.position.xy)))]=SurfaceRecord(hit.y,hit.z,normal.x,normal.y,normal.z,
+        voxelRain(hit,normal),voxelShadow(hit,normal),voxelOcclusion(hit,normal),voxelCavity(hit,normal),
+        soft.x,soft.y,voxelFaceSlope(hit.xy),occlusion(p,hit.z),visibility(p,max(hit.z,u.sea)));
+    return vec4f(0);
+}
+#endif
+#ifdef COLOR_PASS
+@group(3) @binding(0) var<storage,read> geometryIn:array<SurfaceRecord>;
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
-    // An undersized predicted pool is retried before presentation.
-    if(vCount[2]>vs.capacity){discard;}
+    let geometry=geometryIn[geometryIndex(vec2i(floor(v.position.xy))+vec2i(1))];
+    if(dot(vec3f(geometry.nx,geometry.ny,geometry.nz),vec3f(geometry.nx,geometry.ny,geometry.nz))<.5){discard;}
+    colorFaceSlope=geometry.faceSlope;
     // GLSL's gl_FragCoord (origin bottom left; the canvas is u.size high).
     // H7b: an output texel covers chunkScale final pixels, so its screen position is scaled back (x * 1 at final).
     let fragCoord = vec2f(v.position.x * u.chunkScale + u.chunkScreenOrigin.x, u.size - (v.position.y * u.chunkScale + u.chunkScreenOrigin.y));
     // Card tilepool: the interpolated world position is held to 1/64 px. Past 8,192 px (a 16x16 map's far side) f32 rounding moved it
     // by about 1e-3 px against the same ground a pool period nearer the origin, enough to flip palette pixels and make its tiles unique.
-    let hit=voxelHit(vec2f(fragCoord.x,u.size-fragCoord.y));
+    let hit=vec3f(round(fragCoord.x*256.0)/256.0,geometry.y,geometry.z);
     let p=round(hit.xy*64.0)/64.0;
     useRock(p);   // the rock this pixel shows: every rock number below is its recipe's
     // TA's fixed camera permits a native-pixel material grain. World-XY
@@ -1539,8 +1570,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.iceSoft > 0.0 || u.iceSnow > 0.0 || u.iceApron > 0.0 || u.iceFall > 0.0) {
         iceMesa = smoothstep(u.base + 1.5, u.base + 8.0, baseHeight(p));
     }
-    var normal=voxelNormal(hit);
-    let authored=voxelAuthored(p);let gSoft=-authored.yz/max(authored.w,.015);
+    var normal=vec3f(geometry.nx,geometry.ny,geometry.nz);
+    let gSoft=vec2f(geometry.gx,geometry.gy);
     let n = terrainNoise(p);
     let sediments = select(vec4f(0.0), materialFieldAt((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid), u.materialReady != 0);
     let fringeVariation = u.ringVariation / 0.75;
@@ -1562,7 +1593,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let place = landPlace(p, h, g, broad, slope, n, weather, route);
     let bare=clamp(1.0-place.vegetation,0.0,1.0);
     let faceGate=rockFaceGate(slope/(1.0-.5*bare),painted.x,route)*(1.0-softBankAt(p));
-    let rain=voxelRain(hit,normal);
+    let rain=geometry.rain;
     let footing=u.rock[rs & rockMask].faceGrass*rain*smoothstep(.6,.95,normal.z)*smoothstep(u.sea,u.sea+2.0,h);
     let solidSlope=length(normal.xy)/max(normal.z,.1);
     let rockSlope=max(slope,solidSlope*.7*smoothstep(.12,.5,slope));
@@ -1573,7 +1604,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // mixture over the whole wall. The threshold follows actual 3D footing.
     let soilEdge=.32+(patches-.5)*.8+footing*.95;
     let faceRock=smoothstep(soilEdge-.08,soilEdge+.08,share);
-    let localSun=voxelShadow(hit,normal);let localSky=voxelOcclusion(hit,normal);
+    let localSun=geometry.sun;let localSky=geometry.sky;
     let faceLight=u.rock[rs & rockMask].faceShade*faceGate*clamp(u.rock[rs & rockMask].rockFace*.5*voxelRelief(p,slope),0.0,1.0);
     let faceSun=mix(1.0,localSun,faceLight);
     let faceOcc=(1.0-localSky)*faceLight;
@@ -1591,12 +1622,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let flatLight = u.ambient + 0.95 * u.light.z;
     var lighting = (u.ambient + 0.95 * max(0.0, dot(normal, u.light))) / flatLight;
     lighting = min(lighting, u.lightCap);
-    let ao = occlusion(p, h);
-    let shadow = visibility(p, max(h, u.sea));
+    let ao = geometry.ao;
+    let shadow = geometry.shadow;
     // Nearby shadows and cavities read the displaced solid. Comparing its
     // cut faces against the old height surface falsely buried them in shadow.
     let closeVis=mix(1.0,localSun,u.closeShadow);
-    let cav=clamp(max(voxelCavity(hit,normal)*(u.cavity+2.0*faceLight),faceOcc)+(1.0-localSky)*(.3+faceLight),-.15,.92);
+    let cav=clamp(max(geometry.cavity*(u.cavity+2.0*faceLight),faceOcc)+(1.0-localSky)*(.3+faceLight),-.15,.92);
     var shading = lighting * ao * shadow;
     var lightTint = vec3f(1.0);
     // Open lit level ground keeps its brightness under any light colour (the tint is divided by its luma), so a colour changes hue and the
@@ -2394,3 +2425,5 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.diagnosticView == 7) { let code = bakedFields(p).b; color = vec3f(clamp(-code, 0.0, 1.0), clamp(code - 1.0, 0.0, 1.0), clamp(0.5 + bakedFields(p).r * 0.08, 0.0, 1.0) * 0.6); }
     return vec4f(color, 1.0);
 }
+
+#endif

@@ -50,7 +50,7 @@ test('with the world\'s own rock alone every rock test of the draw and the bake 
  const {readFileSync}=await import('node:fs'),{preprocess,uniformLayout}=await import('../sculpt-renderer.js');
  const file=name=>readFileSync(new URL(`../${name}`,import.meta.url),'utf8'),common=file('engine-common.wgsl');
  const layout=uniformLayout(preprocess(common,'',new Set()));
- const parts=[extractGates(preprocess(file('engine-frag.wgsl').replace('/*VOLUME*/',file('engine-volume.wgsl')),common,new Set(['VOLUME_RENDER'])),layout.fields),extractGates(preprocess(file('engine-bake.wgsl'),common,new Set(['BAKE'])),layout.fields)];
+ const parts=[...['GEOMETRY_PASS','COLOR_PASS'].map(stage=>extractGates(preprocess(file('engine-frag.wgsl').replace('/*VOLUME*/',file('engine-volume.wgsl')),common,new Set(['VOLUME_RENDER',stage])),layout.fields)),extractGates(preprocess(file('engine-bake.wgsl'),common,new Set(['BAKE'])),layout.fields)];
  const view=new DataView(new ArrayBuffer(layout.size)),table=layout.fields.get('rock');
  for(const {source,gates} of parts){
   // Every test of a recipe number against a constant is a gate (only the _mixed branch reads the slot), and every read of the table is masked.
