@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createCoverage,pictureCurrent,finalQualityObservations} from './perf-coverage.mjs';
+import {createCoverage,pictureCurrent,finalQualityObservations,coverageReadyForInput} from './perf-coverage.mjs';
 const view=[{x:0,y:0,width:100,height:100}];
 test('four partial blocks cover the view only after the fourth actual paint',()=>{const c=createCoverage();for(const [i,r] of [[0,0],[50,0],[0,50],[50,50]].entries()){c.paint({x:r[0],y:r[1],width:50,height:50},{serial:1});assert.equal(c.covered(view,r=>r.serial>=1),i===3);}});
 test('overlapping pictures do not hide a missing strip',()=>{const c=createCoverage();c.paint({x:0,y:0,width:80,height:100},{serial:1});c.paint({x:10,y:0,width:80,height:100},{serial:1});assert.equal(c.covered(view),false);});
@@ -34,4 +34,13 @@ test('final-quality samples preserve unfinished inputs and newer weather require
  assert.deepEqual(r.samples,[3]);assert.equal(r.observations[1].final,null);
  // Being dirty for a later input cannot revoke a real image for an older one.
  assert.equal(r.observations[0].final,13);
+});
+
+test('current native pixels do not wait for off-screen export weather, but old Time still fails',()=>{
+ const input={id:1,t:10,native:true,nativeSerial:7,worldRev:{B:3}},event={type:'coverage',t:12,ready:false,regions:[{...view[0],serial:7,level:1,weathered:true,weatherRevB:3}]};
+ assert(coverageReadyForInput(event,input));
+ assert.deepEqual(finalQualityObservations({inputs:[input],events:[event],view:view[0]}).samples,[2]);
+ const newer={...input,worldRev:{B:4}};assert.deepEqual(finalQualityObservations({inputs:[newer],events:[event],view:view[0]}).samples,[]);
+ assert(!coverageReadyForInput(event,{native:false}),'legacy builds still require readiness');
+ assert.deepEqual(finalQualityObservations({inputs:[{id:1,t:10,native:false}],events:[event],view:view[0]}).samples,[]);
 });

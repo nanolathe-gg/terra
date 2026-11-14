@@ -10,7 +10,7 @@
 // --warmup discards a session; --report FILE... prints the section 2 budget table.
 // Use distinct CDP ports, discard one --warmup per fresh server, alternate workloads,
 // and check ps -Ao pcpu,command -r | head before measured runs. Never time two at once.
-import {createCoverage,pictureCurrent,finalQualityObservations} from './perf-coverage.mjs';
+import {createCoverage,pictureCurrent,finalQualityObservations,coverageReadyForInput} from './perf-coverage.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn, execFileSync} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync, rmSync} from 'node:fs';
@@ -303,7 +303,7 @@ function analyze(data,t0,anchors=[]){
     const p=paints.find(e=>e.t>=m.t&&current(e,m)&&e.changed);
     if(p)first.push(p.t-m.t);
     if(m.at){const p=paints.find(e=>e.t>=m.t&&current(e,m)&&e.changed&&(e.clips??[e]).some(r=>m.at[0]>=r.x&&m.at[0]<r.x+r.width&&m.at[1]>=r.y&&m.at[1]<r.y+r.height));if(p)pointer.push(p.t-m.t);}
-    const c=coverage.find(e=>e.t>=m.t&&e.ready&&rectCoverage.covered((m.rectangles?.length?m.rectangles:[data.view]).map(r=>rectCoverage.intersect(r,data.view)).filter(Boolean),p=>m.kind==='scroll'?!p.dirty&&p.eligible!==false:current(p,m),e.regions));
+    const c=coverage.find(e=>e.t>=m.t&&coverageReadyForInput(e,m)&&rectCoverage.covered((m.rectangles?.length?m.rectangles:[data.view]).map(r=>rectCoverage.intersect(r,data.view)).filter(Boolean),p=>m.kind==='scroll'?!p.dirty&&p.eligible!==false:current(p,m),e.regions));
     const completed=c?.t??(m.noopCurrent?m.t:null);if(completed!==null)all.push(completed-m.t);observations.push({id:m.id,t:m.t,first:p?.t??null,all:completed,preps:c?[...new Set(c.regions.filter(p=>current(p,m)).map(p=>p.prep).filter(Boolean))]:[]});
   }
   for(const anchor of anchors){
