@@ -81,5 +81,5 @@ An earlier zero-exposure/zero-strength early-return trial kept all four
 images exact but showed no consistent native-window gain; it was discarded.
 The retained round-count trial has a modest whole-view benefit, much smaller
 than its isolated wear saving. The results do not add to earlier units'
-percentages. Shell compaction, final-tile sizing and final readback decisions
-remain open. LP5 has not started. No new benchmark enters `repro/check.sh`.
+percentages. The later [tile-size decision](LP6_TILES.md) retains 256-pixel view tiles;
+shell compaction and final readback work remain open. LP5 has not started. No new benchmark enters `repro/check.sh`.

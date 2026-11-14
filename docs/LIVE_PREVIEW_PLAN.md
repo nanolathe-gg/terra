@@ -1229,7 +1229,7 @@ halves native Time refreshes before the visible final and improves its
 latency 12.1–14.3% in the focused 512-MiB pairs, with exact final replay.
 The input tail and focus deadline remain explicit in the report. A native
 count-prediction trial did not improve the full view meaningfully and was
-discarded. The next [closed-gate and march units](LP6_VOXEL.md) reduce sampled brick memory and correct missed cliff surfaces at essentially unchanged page cost. A [continuous wear-round trial](LP6_WEAR.md) is also committed for visual review: wear GPU cost falls, but whole-view benefit is modest (flat on Modern Green, 1.7% on Green 2 in the focused pair). Shell, tile-size and fixed-pool work remain open.
+discarded. The next [closed-gate and march units](LP6_VOXEL.md) reduce sampled brick memory and correct missed cliff surfaces at essentially unchanged page cost. A [continuous wear-round trial](LP6_WEAR.md) is also committed for visual review: wear GPU cost falls, but whole-view benefit is modest (flat on Modern Green, 1.7% on Green 2 in the focused pair). The [512-pixel tile trial](LP6_TILES.md) improves the whole view 22.0% at the default budget but misses the focus deadline and more than doubles the longest submission; the view stays at 256. Shell compaction and final-pool work remain open. LP6 is not complete; LP5 has not started.
 
 Unchanged from REDESIGN_PLAN's R8, R8b and R6, with this plan's findings:
 - R8's four units, one at a time, each with its sheet: closed-gate bricks
