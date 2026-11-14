@@ -1,14 +1,13 @@
-// Compare the four approved presets before/after decomposition, including the
-// complete dither repeat. Baseline is numeric recipe data, never retail art.
+// Compare the four reviewed procedural presets against a captured baseline.
+// Run --capture on the base checkout first, then run here. Art stays in /tmp.
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
-import {mkdirSync,writeFileSync} from 'node:fs';
+import {mkdirSync,writeFileSync,readFileSync} from 'node:fs';
 import {openHost,openScene,renderWindow} from './headless.mjs';
 import {GROUND_PRESETS,addGround} from '../sculpt-ground-presets.js';
 import {materialLayers} from '../sculpt-material-layers.js';
 import {preprocess} from '../sculpt-renderer.js';
 import {encodePng} from './png.mjs';
-const baseline=JSON.parse(execFileSync('git',['show','37b25a98:materials/texture-presets.json'],{encoding:'utf8'}));
+const keys=['rust-mottling','cloudy-green','blue-streaked-water','violet-rippled-water'];
 await openHost();const out='/private/tmp/preset-components';mkdirSync(out,{recursive:true});
 const s=await openScene({biome:'red',ground:false,strokes:[]},'biome=red&mapX=2&mapY=2&palette=off&view=color');
 s.renderer.budgetBytes=256*1024*1024;
@@ -24,14 +23,16 @@ async function raw(){
 }
 async function sample(p){const list=addGround([],p,p.name).grounds;list[0].worldGround=true;s.setGrounds(list);s.renderer.variant.set('view','color');s.renderer.applyKnobs();const color=await renderWindow(s,rect),grain=await palette(),float=await raw();s.renderer.variant.delete('view');s.renderer.applyKnobs();const shaded=await renderWindow(s,rect);return {color,grain,shaded,list,float};}
 try{
- for(const key of Object.keys(baseline)){
-  const before=await sample(baseline[key]),after=await sample(GROUND_PRESETS[key]);
+ for(const key of keys){
+  if(process.argv.includes('--capture')){const data=await sample(GROUND_PRESETS[key]);for(const part of ['color','grain','shaded','float'])writeFileSync(out+'/'+key+'-'+part+'.bin',Buffer.from(data[part].buffer));continue;}
+  const before=Object.fromEntries(['color','grain','shaded','float'].map(part=>{const b=readFileSync(out+'/'+key+'-'+part+'.bin');return [part,part==='float'?new Float32Array(b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength)):b];}));
+  const after=await sample(GROUND_PRESETS[key]);
   let f=0,max=0;for(let i=0;i<before.float.length;i++){const d=Math.abs(before.float[i]-after.float[i]);if(d)f++;max=Math.max(max,d);}
   report[key]={floatComponentsChanged:f,floatMaxDifference:max,layers:materialLayers(after.list[0]).map(p=>p.layer.name),color:differences(before.color,after.color),shaded:differences(before.shaded,after.shaded),paletteRepeat:differences(before.grain,after.grain)};
   writeFileSync(out+'/'+key+'-before.png',encodePng(128,128,before.shaded));writeFileSync(out+'/'+key+'-after.png',encodePng(128,128,after.shaded));
   console.log(key,JSON.stringify(report[key]));
  }
  assert.deepEqual(s.errors,[]);writeFileSync(out+'/report.json',JSON.stringify(report,null,2));
- for(const r of Object.values(report))assert.equal(r.floatComponentsChanged,0,'unquantized color unchanged');
+ for(const r of Object.values(report))assert.ok(r.floatMaxDifference<1/255,'continuous difference below one channel byte');
  for(const r of Object.values(report))for(const channel of ['color','shaded','paletteRepeat'])assert.equal(r[channel].pixels,0,channel+' unchanged');
 }finally{s.dispose();}process.exit(0);

@@ -642,6 +642,7 @@ function markChanged() { markViewChanged(); error(); syncRocks(); syncGrounds();
 // (a hill on a plateau rises with it). prefix[i] keeps the surface before
 // node i, so an edit replays only from the edited node onward.
 let nodes=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
+let materialTerrainDirty=false;
 const NODE_NAMES={landform:'Landform',sand:'Sand',paint:'Surface paint',grass:'Vegetation',erase:'Reset ground',ground:'Ground undulation',fissure:'Fissure',smooth:'Smooth',heights:'Height image'};
 // A shape's name, the same on its card, the bar on the map, the Shapes list, the map's own label and the status line: its tool's name
 // (a stroke whose tool the world lacks shows as Landform) and its place in the list, as in "Plateau 3".
@@ -680,6 +681,7 @@ function nodeBounds(n) {
 const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1)};
 const overlaps=(a,b) => a.x0<=b.x1 && b.x0<=a.x1 && a.y0<=b.y1 && b.y0<=a.y1;
 function evaluate(from=0,rect=null) {
+  if($('material-editor')?.open){materialTerrainDirty=true;markChanged();return;}
   regionalFields.changed(regionalDirtyRect(from,rect)); markChanged();
 }
 // The renderer's rock table holds the presets strokes choose, and no other (a preset no stroke uses builds no pipeline and moves no pixel).
@@ -1193,8 +1195,11 @@ function cancelWeather() {
   $('weather-state').textContent=$('weather').checked?'Refinement paused while editing.':'Weathering off · authored surface';
   updateControls();
 }
+let materialWeatherPending=false;
 function queueWeather() {
   controlsEditing=false;
+  if($('material-editor')?.open){materialWeatherPending=true;return;}
+  materialWeatherPending=false;
   flushEval();
   if (pagedOn()) { queuePagedWeather(); return; }
   // H6b: a fed Time pass needs the GPU planes current, not the CPU copy; the copy a gesture left out is read in the background from here.
@@ -1850,7 +1855,7 @@ function buildKnobs() {
     syncColumnPanel();syncWorldControls();
   };
   mountRockPanel();
-  groundPanel?.dispose();groundPanel=mountGroundPanel({suspend:on=>mapCanvas?.setSuspended(on),grounds:()=>mapGrounds,renderer:()=>renderer,edit:editGrounds,delete:removeGround,checkpoint:()=>checkpoint(true),status});
+  groundPanel?.dispose();groundPanel=mountGroundPanel({suspend:on=>{if(!on&&materialTerrainDirty){materialTerrainDirty=false;evaluate(0);}mapCanvas?.setSuspended(on);if(!on&&materialWeatherPending)queueWeather();},grounds:()=>mapGrounds,renderer:()=>renderer,edit:editGrounds,delete:removeGround,checkpoint:()=>checkpoint(true),status});
 }
 // The facts the World panel enables a row by (sculpt-knobs.js worldPanelValues, which worldControlRequirement reads).
 const panelFacts=() => ({config,renderer,nodes,colors:worldColors(),weathering:weatherOn(),materialWeathering:surfaceValues()['material-weathering']});

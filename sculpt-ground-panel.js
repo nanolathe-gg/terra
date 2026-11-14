@@ -1,4 +1,6 @@
-import {materialLayers,resolveMaterialLayers,adjustmentOwns,replaceMaterialLayers,copyLayerSettings,LAYER_CONTROLS,OUTPUT_KEYS,patternSettings} from './sculpt-material-layers.js';
+import {stepTypes,materialRenderKey} from './sculpt-material-steps.js';
+import {mountMaterialSteps} from './sculpt-material-step-panel.js';
+import {materialLayers,replaceMaterialLayers,copyLayerSettings,LAYER_CONTROLS,OUTPUT_KEYS,patternSettings} from './sculpt-material-layers.js';
 import {TEXTURE_COLORS,textureControlRequirement} from './sculpt-texture-model.js';
 import {GROUND_PRESETS,GROUND_CONTROLS,copyGroundRecipe,addGround,duplicateGround,renameGround,setGround,groundRecipeText,parseGroundRecipe} from './sculpt-ground-presets.js';
 import {GroundPreview} from './sculpt-ground-preview.js';
@@ -18,9 +20,11 @@ export function mountGroundPanel(host){
  const hex=value=>'#'+(Array.isArray(value)?value:host.renderer().paletteIndexed[value]).map(n=>Math.round(n).toString(16).padStart(2,'0')).join('');
  const nearest=color=>{const rgb=[1,3,5].map(i=>parseInt(color.slice(i,i+2),16));let best=0,dist=Infinity;host.renderer().paletteIndexed.forEach((c,i)=>{const d=c.reduce((sum,n,k)=>sum+(n-rgb[k])**2,0);if(d<dist){dist=d;best=i;}});return best;};
  function refreshPreview(){
-  if(!shown||!dialog.open)return;const r=host.renderer(),p=material();
-  const view={channel:Number($('material-view').value),height:Number($('preview-height').value),slope:Number($('preview-slope').value)};
-  const key=JSON.stringify([p,r.variant.toString(),r.colorOverrides,view]);if(key===previewKey)return;previewKey=key;
+  if(!shown||!dialog.open)return;const r=host.renderer();let p=material();
+  const selectedStep=stepPanel.selected(),inspect=$('material-view').value==='step';
+  if(inspect&&p&&selectedStep){const row=recipe(),at=row.steps.findIndex(s=>s.id===selectedStep.id);p=structuredClone({...p,...row,layers:[]});p.layer={...p.layer,color:1,height:0,surface:0,opacity:1,visible:true,mask:'everywhere'};p.knobs.textureDither=0;p.steps=p.steps.slice(0,at+1).filter(s=>s.type!=='output');if(selectedStep.type==='output')p.steps.push({...selectedStep,target:'color'});else p.steps.push({id:'preview-output',name:'Step preview',type:'output',source:selectedStep.id,target:'color'});}
+  const view={channel:inspect?8:Number($('material-view').value),height:Number($('preview-height').value),slope:Number($('preview-slope').value)};
+  const key=JSON.stringify([materialRenderKey(p),r.variant.toString(),r.colorOverrides,view]);if(key===previewKey)return;previewKey=key;
   $('ground-preview-count').textContent='Rendering the material sample…';
   preview.request(r,p,(error,count)=>{
    if(error){previewKey='';$('ground-preview-count').textContent='Sample unavailable: '+error.message;return;}
@@ -48,24 +52,18 @@ export function mountGroundPanel(host){
   $('layer-add').disabled=$('layer-duplicate').disabled=count>=8;
   $('layer-add').title=count>=8?'A material holds at most eight layers.':'';
   if(p){
-   const resolved=resolveMaterialLayers(m)[selectedLayer],adjustment=p.layer.effect!=='material';
-   for(const tab of tabs){tab.hidden=adjustment&&(['material-tab-phase','material-tab-filter','material-tab-bump'].includes(tab.id)||p.layer.effect==='detail'&&tab.id==='material-tab-color');}
-   if(tabs.some(tab=>tab.hidden&&tab.getAttribute('aria-selected')==='true'))pick($('material-tab-noise'));
-   $('material-stage-noise').querySelector('.material-stage-help').textContent=adjustment?'Edit this adjustment’s grain or dots here. Scale, distortion, filtering, and seed follow the preceding pattern layer.':noiseHelp;
-   for(const group of $('material-stage-color').querySelectorAll('details.feature-group'))group.hidden=adjustment&&group.querySelector('summary').textContent==='Relief colors';
-   for(const group of $('material-stage-noise').querySelectorAll('details.feature-group')){const label=group.querySelector('summary').textContent;group.hidden=p.layer.effect!=='material'&&(label==='Base noise'||label==='Marks'&&p.layer.effect!=='dots'||label==='Fine grain'&&p.layer.effect==='dots');}
-   $('layer-name').value=p.layer.name;$('layer-pattern').value='';$('layer-pattern').disabled=adjustment;$('layer-pattern').title=adjustment?'Choose the base pattern on the preceding color-pattern layer.':'';
-   for(const key of ['effect','blend','mask','maskPattern'])$('layer-'+key).value=p.layer[key];
-   const effectHelp={material:'Compose this layer’s color and relief with the layers below.', 'fine-tint':'Multiply the layers below by the Fine grain tint. Bright tint values can exceed white. Distortion follows the preceding pattern.',dots:'Apply the Marks color or multiplier to the layers below. Follow light areas uses the preceding pattern.',detail:'Add fine detail before coloring the preceding pattern. Its scale, distortion, and colors follow that pattern automatically.'};
-   const source=materialLayers(m).slice(0,selectedLayer).findLast(row=>row.layer.effect==='material'&&row.layer.color>0);
-   $('layer-effect-help').textContent=effectHelp[p.layer.effect]+(p.layer.effect==='material'?'':source?' Follows '+source.layer.name+'.':' Move this adjustment after a color-pattern layer to use it.');$('layer-blend').disabled=p.layer.effect!=='material';$('layer-blend').title=p.layer.effect==='material'?'':effectHelp[p.layer.effect];
+   const resolved=p;const surface=stepPanel.selected()?.type==='surface';
+   for(const tab of tabs)tab.hidden=!surface&&['material-tab-noise','material-tab-phase','material-tab-filter','material-tab-color','material-tab-bump'].includes(tab.id);
+   if(tabs.some(tab=>tab.hidden&&tab.getAttribute('aria-selected')==='true'))pick($('material-tab-step'));
+   $('material-stage-noise').querySelector('.material-stage-help').textContent=noiseHelp;
+   $('layer-name').value=p.layer.name;$('layer-pattern').closest('.control').hidden=true;
+   for(const key of ['blend','mask','maskPattern'])$('layer-'+key).value=p.layer[key];
    const procedural=p.layer.mask==='procedural' ,terrain=['height','slope'].includes(p.layer.mask),masked=p.layer.mask!=='everywhere';
    $('layer-maskPattern').closest('.control').hidden=!procedural;$('layer-maskPattern').disabled=!procedural;$('layer-maskPattern').title=procedural?'':'Choose Procedural mask to use a mask pattern.';
-   for(const [key]of LAYER_CONTROLS){const el=$('layer-'+key);const value=p.layer.effect!=='material'&&['seed','height','surface'].includes(key)?resolved.layer[key]:p.layer[key];el.value=value;$('layer-'+key+'-value').textContent=+value.toFixed(3);
-    const inheritedLayer=p.layer.effect!=='material'&&['seed','height','surface'].includes(key);
-    const off=inheritedLayer|| (key.startsWith('terrain')?!terrain:key.startsWith('mask')?(!masked||!['maskAmount','maskInvert'].includes(key)&&!procedural):false);
+   for(const [key]of LAYER_CONTROLS){const el=$('layer-'+key);el.value=p.layer[key];$('layer-'+key+'-value').textContent=+p.layer[key].toFixed(3);
+    const off=key.startsWith('terrain')?!terrain:key.startsWith('mask')?(!masked||!['maskAmount','maskInvert'].includes(key)&&!procedural):false;
     el.closest('.control').hidden=key.startsWith('terrain')?!terrain:key.startsWith('mask')&&!['maskAmount','maskInvert'].includes(key)?!procedural:false;
-    el.disabled=off;const reason=$('layer-'+key+'-reason');reason.hidden=!off;reason.textContent=inheritedLayer?(key==='seed'?'Seed follows the preceding pattern.':'This adjustment affects color; use a Color and relief layer for this channel.'):off?'Choose '+(key.startsWith('terrain')?'a terrain range mask.':key==='maskAmount'||key==='maskInvert'?'a mask.':'Procedural mask.') :'';
+    el.disabled=off;const reason=$('layer-'+key+'-reason');reason.hidden=!off;reason.textContent=off?'Choose '+(key.startsWith('terrain')?'a terrain range mask.':key==='maskAmount'||key==='maskInvert'?'a mask.':'Procedural mask.') :'';
    }
    $('layer-mask-help').textContent=terrain?(p.layer.mask==='height'?'Height ranges use authored terrain height in art units.':'Slope ranges use degrees, from flat (0) to vertical (90).'):'The mask uses the same periodic pattern tools as a layer.';
    const terrainPalette=materialLayers(m).some(row=>['height','slope'].includes(row.layer.mask)&&row.layer.maskAmount>0);
@@ -76,21 +74,21 @@ export function mountGroundPanel(host){
     const noGrain=['grainStretch','grainDirection'].includes(key)&&!['grainFine','grainMedium','grainBroad'].some(k=>p.knobs[k]>0);
     const noReliefGrain=key==='grainRelief'&&!['grainFine','grainMedium','grainBroad'].some(k=>p.knobs[k]>0);
     const sameGrainColors=key==='grainColorMix'&&p.ramp.every((v,i)=>String(v)===String(p.variationRamp[i]));
-    const inherited=!OUTPUT_KEYS.includes(key)&&!adjustmentOwns(p.layer.effect,key);input.closest('.control').hidden=inherited;
-    const textureReason=inherited?'This adjustment inherits the preceding pattern. Edit this setting on that pattern layer.':textureControlRequirement(key,OUTPUT_KEYS.includes(key)?m.knobs:resolved.knobs),textureOff=!!textureReason;
+    const inherited=false;input.closest('.control').hidden=false;
+    const textureReason=textureControlRequirement(key,OUTPUT_KEYS.includes(key)?m.knobs:resolved.knobs),textureOff=!!textureReason;
     const off=textureOff||sameGrainColors||noReliefGrain||noGrain||(key==='grainDirection'?p.knobs.grainStretch===1:parent&&parent!==key&&p.knobs[parent]===0);
     input.disabled=!!off;const reason=$('ground-'+key+'-reason');reason.hidden=!off;reason.textContent=textureOff?textureReason:sameGrainColors?'Choose an alternate grain color different from the main ramp to mix colors.':noReliefGrain?'Raise Fine grain, Medium grain, or Broad grain above 0 to shape grain relief.':noGrain?'Raise a grain amount above 0 to use this setting.':key==='grainDirection'&&off?'Raise Grain stretch above 1 to choose a direction.':off?'Raise '+$('ground-'+parent).closest('.control').querySelector('label').firstChild.textContent.trim()+' above 0 to use this setting.':'';
    }
-   for(const key of Object.keys(TEXTURE_COLORS)){const scale=['fineLow','fineHigh','markTint'].includes(key)?127.5:1;const el=$('texture-color-'+key);el.value=hex(resolved.textureColors[key].map(v=>v*scale));el.disabled=p.layer.effect==='detail'||p.layer.effect==='fine-tint'&&!['fineLow','fineHigh'].includes(key)||p.layer.effect==='dots'&&!['mark','markTint'].includes(key);el.closest('.color-row').hidden=el.disabled;el.title=el.disabled?'This adjustment uses only its own grain or dot colors; edit the underlying colors on the pattern layer.':'';}
+   for(const key of Object.keys(TEXTURE_COLORS)){const scale=['fineLow','fineHigh','markTint'].includes(key)?127.5:1;const el=$('texture-color-'+key);el.value=hex(resolved.textureColors[key].map(v=>v*scale));el.disabled=false;el.closest('.color-row').hidden=el.disabled;el.title='';}
    $('texture-palette').value=m.texturePalette.map(hex).join(' ');
    resolved.ramp.forEach((entry,i)=>{$('ground-ramp-'+i).value=hex(entry);$('ground-ramp-'+i).title=`Tone ${i+1}: RGB ${entry}`;});
-   resolved.variationRamp.forEach((entry,i)=>{$('ground-variation-'+i).value=hex(entry);$('ground-variation-'+i).title=`Alternate tone ${i+1}: RGB ${entry}`;});$('ground-line').value=hex(resolved.line);for(const id of ['ground-line',...Array.from({length:16},(_,i)=>'ground-ramp-'+i),...Array.from({length:16},(_,i)=>'ground-variation-'+i)]){$(id).disabled=p.layer.effect!=='material';$(id).title=p.layer.effect==='material'?'':'Edit relief colors on the preceding pattern layer.';}
+   resolved.variationRamp.forEach((entry,i)=>{$('ground-variation-'+i).value=hex(entry);$('ground-variation-'+i).title=`Alternate tone ${i+1}: RGB ${entry}`;});$('ground-line').value=hex(resolved.line);for(const id of ['ground-line',...Array.from({length:16},(_,i)=>'ground-ramp-'+i),...Array.from({length:16},(_,i)=>'ground-variation-'+i)]){$(id).disabled=false;}
   }
-  refreshPreview();
+  stepPanel.refresh();const type=p?stepTypes(p.steps).get(stepPanel.selected()?.id):null;$('material-view-step').disabled=!p||['position','surface'].includes(type);$('material-view-step').title=$('material-view-step').disabled?'Select a grayscale or color step.':'';if($('material-view').value==='step'&&$('material-view-step').disabled)$('material-view').value='0';refreshPreview();
  }
  const commit=()=>host.checkpoint();
  for(const [id,role]of [['ground-world-default','worldGround'],['water-material','worldWater']])$(id).onchange=fail(()=>{const slot=Number($(id).value);change(host.grounds().map(p=>({...p,[role]:p.slot===slot})));commit();});
- function open(slot,from){opener=from;if(slot!==undefined&&slot!==selected){selected=slot;selectedLayer=0;}else if(!recipe())selected=host.grounds()[0]?.slot??0;refresh();if(!dialog.open){host.suspend(true);dialog.showModal();}shown=true;refreshPreview();}
+ function open(slot,from){opener=from;if(slot!==undefined&&slot!==selected){selected=slot;selectedLayer=0;}else if(!recipe())selected=host.grounds()[0]?.slot??0;refresh();pick($('material-tab-step'));if(!dialog.open){host.suspend(true);dialog.showModal();}shown=true;refreshPreview();}
  const close=()=>{dialog.close();shown=false;previewKey='';preview.cancel();host.suspend(false);opener?.focus();};
  $('material-open').onclick=()=>open(undefined,$('material-open'));
  $('water-material-edit').onclick=()=>open(Number($('water-material').value),$('water-material-edit'));
@@ -104,6 +102,7 @@ export function mountGroundPanel(host){
  const lock=()=>{$('material-editor-fields').disabled=$('editor').disabled;$('material-undo').disabled=$('undo').disabled;$('material-redo').disabled=$('redo').disabled;};
  const locks=new MutationObserver(lock);for(const id of ['editor','undo','redo'])locks.observe($(id),{attributes:true,attributeFilter:['disabled']});lock();
  const tabs=[...dialog.querySelectorAll('[role="tab"]')];
+ const stepPanel=mountMaterialSteps({recipe,context:()=>selected+':'+selectedLayer,edit:p=>{change(editRecipe(p));},commit,show:()=>{refresh();pick($('material-tab-step'));},note});
  const pick=tab=>{for(const t of tabs){const on=t===tab;t.setAttribute('aria-selected',String(on));t.tabIndex=on?0:-1;$(t.getAttribute('aria-controls')).hidden=!on;}};
  for(const t of tabs){t.onclick=()=>pick(t);t.onkeydown=e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const available=tabs.filter(tab=>!tab.hidden),i=available.indexOf(t),next=e.key==='Home'?available[0]:e.key==='End'?available.at(-1):available[(i+(e.key==='ArrowRight'?1:available.length-1))%available.length];pick(next);next.focus();};}
  for(const key of Object.keys(TEXTURE_COLORS)){$('texture-color-'+key).oninput=fail(()=>{const p=copyGroundRecipe(recipe()),scale=['fineLow','fineHigh','markTint'].includes(key)?127.5:1;p.textureColors[key]=[1,3,5].map(i=>parseInt($('texture-color-'+key).value.slice(i,i+2),16)/scale);change(editRecipe(p));});$('texture-color-'+key).onchange=commit;}
@@ -139,7 +138,7 @@ export function mountGroundPanel(host){
 
  const layerEdit=fn=>{const p=copyGroundRecipe(recipe());fn(p);change(editRecipe(p));};
  for(const [key]of LAYER_CONTROLS){$('layer-'+key).oninput=fail(()=>layerEdit(p=>{p.layer[key]=Number($('layer-'+key).value);}));$('layer-'+key).onchange=commit;}
- for(const key of ['name','effect','blend','mask','maskPattern'])$('layer-'+key).onchange=fail(()=>{layerEdit(p=>{p.layer[key]=$('layer-'+key).value;if(key==='effect'&&p.layer.effect!=='material'){p.layer.height=0;p.layer.surface=0;p.layer.seed=0;}});commit();});
+ for(const key of ['name','blend','mask','maskPattern'])$('layer-'+key).onchange=fail(()=>{layerEdit(p=>{p.layer[key]=$('layer-'+key).value;});commit();});
  $('layer-pattern').onchange=fail(()=>{const kind=$('layer-pattern').value;if(kind){layerEdit(p=>Object.assign(p.knobs,patternSettings(kind)));commit();}});
  const stackEdit=fn=>{const m=material(),rows=materialLayers(m).map(p=>structuredClone(p));fn(rows);change(setGround(host.grounds(),selected,replaceMaterialLayers(m,rows)));commit();};
  for(const [id,delta]of [['layer-up',-1],['layer-down',1]])$(id).onclick=fail(()=>stackEdit(rows=>{const at=selectedLayer+delta;if(at<0||at>=rows.length)return;[rows[selectedLayer],rows[at]]=[rows[at],rows[selectedLayer]];selectedLayer=at;}));
@@ -155,5 +154,5 @@ export function mountGroundPanel(host){
 
  const observer=new IntersectionObserver(entries=>{shown=entries[0].isIntersecting;if(shown)refreshPreview();});observer.observe($('ground-preview'));
  if(dialog.open){shown=true;host.suspend(true);}
- refresh();return {refresh,refreshPreview,dispose(){host.suspend(false);observer.disconnect();locks.disconnect();preview.dispose();}};
+ refresh();return {refresh,refreshPreview,dispose(){if(!dialog.open)host.suspend(false);observer.disconnect();locks.disconnect();stepPanel.dispose();preview.dispose();}};
 }

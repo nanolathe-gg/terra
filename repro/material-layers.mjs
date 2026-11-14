@@ -52,7 +52,7 @@ await session(`${server}/?biome=red&mapX=2&mapY=2&gpuMB=512`,port,async({send,ev
  await set('ground-add','bed');await set('ground-world-default',1);await preview();
  const base=await state();
  await set('layer-add','clouds');await set('layer-name','Cloud color');
- await set('texture-color-high','#e9c67d','input');await set('texture-color-high','#e9c67d');
+ await ev(`document.querySelector('[data-step-index="3"] .material-step-select').click();true`);await set('step-color-2','#e9c67d','input');await set('step-color-2','#e9c67d');
  await set('layer-mask','procedural');await set('layer-maskPattern','cells');await preview();
  let m=(await state()).grounds[0];assert.equal(m.layers.length,1);assert.equal(m.layers[0].layer.name,'Cloud color');assert.equal(m.layers[0].layer.mask,'procedural');
  // Drag the second layer before the first with actual browser pointer input.

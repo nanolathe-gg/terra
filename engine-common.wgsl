@@ -232,13 +232,20 @@ struct Ground {
     lineColor: vec4f,
 }
 
+struct MaterialStep {
+ code:vec4i, // kind, enabled, sampled-field index, operation / output
+ links:vec4i, // source, second input, mask, color type
+ args:array<vec4f,16>,
+}
 struct MaterialLayer {
     recipe: Ground,
     amounts: vec4f, // opacity, color, height, surface
     operation: vec4f, // blend, seed, mask kind, mask amount
     maskPattern: vec4f, // basis, size, detail, distortion
     maskFilter: vec4f, // seed, low, high, invert
-    terrain: vec4f, // low, high, softness, layer operation
+    terrain: vec4f, // low, high, softness
+    program: vec4i, // step count, field planes, color output, height output
+    steps: array<MaterialStep,40>,
 }
 
 struct Uniforms {
@@ -1084,27 +1091,11 @@ fn groundFinishNoise(p:vec2f,size:f32,salt:f32)->f32 {
     return mix(wrapNoise(q*n+salt,n),wrapNoise(q*(n*2.0)+salt,n*2.0),fract(log2(count)));
 }
 
-fn textureColorFor(sample:vec4f,r:Ground)->vec3f {
- let t=sample.y;
- let lo=mix(clamp(t*2.0,0.0,1.0),smoothstep(0.0,.5,t),r.patternEase);
- let hi=mix(clamp((t-.5)*2.0,0.0,1.0),smoothstep(.5,1.0,t),r.patternEase);
- let coarse=mix(mix(r.textureLow.rgb,r.textureMiddle.rgb,lo),r.textureHigh.rgb,hi);
- let base=coarse*mix(vec3f(1.0),mix(r.textureFineLow.rgb,r.textureFineHigh.rgb,sample.w),r.textureFine);
- return mix(mix(base,r.textureMark.rgb,sample.z),base*mix(vec3f(1.0),r.textureMarkTint.rgb,sample.z),r.markMultiply);
-}
-fn groundRecipeColorFor(sample:vec4f,r:Ground,p:vec2f)->vec3f {
- let t=clamp(sample.y+sample.z*.35,0.0,1.0)*15.0;
- let a=u32(floor(t));let b=min(a+1u,15u);
- var color=mix(r.ramp[a].rgb,r.ramp[b].rgb,fract(t));
- let alternate=mix(r.variationRamp[a].rgb,r.variationRamp[b].rgb,fract(t));
- color=mix(color,alternate,cellHash(poolPixel(p)+vec2f(211.0,317.0)).x*r.grainColorMix);
- return mix(mix(color,r.lineColor.rgb,sample.w),textureColorFor(sample,r),r.patternAmount);
-}
 // A material is an ordered stack. Cached procedural fields are independent
 // of the terrain; height/slope masks use the authored terrain at each sample.
 fn layerWeight(layer:MaterialLayer,p:vec2f,height:f32,slope:f32,terrainOn:bool)->f32 {
  var mask=1.0;
- if(layer.operation.z==1.0){mask=textureLoad(materialMaskTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0).x;}
+ if(layer.operation.z==1.0){mask=textureLoad(materialMaskTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0).w;}
  if(layer.operation.z>=2.0 && terrainOn){let v=select(height,slope,layer.operation.z==3.0);let t=layer.terrain;
   mask=smoothstep(t.x-t.z,t.x+t.z,v)*(1.0-smoothstep(t.y-t.z,t.y+t.z,v));mask=mix(mask,1.0-mask,layer.maskFilter.w);}
  return layer.amounts.x*mix(1.0,mask,layer.operation.w);
@@ -1112,26 +1103,9 @@ fn layerWeight(layer:MaterialLayer,p:vec2f,height:f32,slope:f32,terrainOn:bool)-
 fn materialRaw(p:vec2f,slot:u32,height:f32,slope:f32,terrainOn:bool)->vec3f {
  let r=u.ground[slot & groundMask];var color=vec3f(0);
  for(var i=0;i<r.stackCount;i++){
-  let layer=materialLayers[r.stackStart+i];let w=layerWeight(layer,p,height,slope,terrainOn)*layer.amounts.y;if(w<=0.0){continue;}
-  let field=textureLoad(groundTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0);
-  let q=layer.recipe;var mixed=color;
-  switch(i32(layer.terrain.w)){
-   case 1:{ // A multiplicative pigment factor can exceed one (bright grain).
-    mixed=color*mix(vec3f(1.0),mix(q.textureFineLow.rgb,q.textureFineHigh.rgb,field.w),q.textureFine);
-   }
-   case 2:{ // Preserve the dot blend's arithmetic before final diffusion.
-    mixed=mix(mix(color,q.textureMark.rgb,field.z),color*mix(vec3f(1.0),q.textureMarkTint.rgb,field.z),q.markMultiply);
-   }
-   case 3:{ // Pre-ramp detail correction using the resolved preceding pattern.
-    let detailed=textureColorFor(vec4f(field.x,field.y,0,field.w),q);
-    let smoothColor=textureColorFor(vec4f(field.x,field.z,0,field.w),q);
-    if(all(color==smoothColor)){mixed=detailed;}else{mixed=detailed+(color-smoothColor);}
-   }
-   default:{
-    let value=groundRecipeColorFor(field,q,p+vec2f(19,43)*layer.operation.y);mixed=value;
-    if(i>0){switch(i32(layer.operation.x)){case 1:{mixed=color*value;}case 2:{mixed=1.0-(1.0-color)*(1.0-value);}case 3:{mixed=color+value;}default:{}}}
-   }
-  }
+  let layer=materialLayers[r.stackStart+i];let w=layerWeight(layer,p,height,slope,terrainOn)*layer.amounts.y;if(w<=0.0||layer.program.z==0){continue;}
+  let value=textureLoad(groundTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0).rgb;var mixed=value;
+  if(i>0){switch(i32(layer.operation.x)){case 1:{mixed=color*value;}case 2:{mixed=1.0-(1.0-color)*(1.0-value);}case 3:{mixed=color+value;}default:{}}}
   color=mix(color,mixed,w);
  }return color;
 }
@@ -1139,17 +1113,16 @@ fn materialRelief(p:vec2f,slot:u32)->f32 {
  let r=u.ground[slot & groundMask];var height=0.0;var terrain=vec2f(0);
  if(r.terrainMask!=0){terrain=vec2f(baseHeight(p),atan(length(broadGradient(p)))*57.2957795);}
  for(var i=0;i<r.stackCount;i++){let layer=materialLayers[r.stackStart+i];let w=layerWeight(layer,p,terrain.x,terrain.y,true)*layer.amounts.z;
-  if(w!=0.0){height+=textureLoad(groundTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0).x*w;}}
+  if(w!=0.0&&layer.program.w!=0){height+=textureLoad(groundTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0).w*w;}}
  return height;
 }
 struct MaterialFinish { shine:vec4f, wetness:f32 }
 fn materialSurface(p:vec2f,slot:u32)->MaterialFinish {
  let r=u.ground[slot & groundMask];var result=MaterialFinish(vec4f(0,16,.25,3),.5);var terrain=vec2f(0);
  if(r.terrainMask!=0){terrain=vec2f(baseHeight(p),atan(length(broadGradient(p)))*57.2957795);}
- for(var i=0;i<r.stackCount;i++){let layer=materialLayers[r.stackStart+i];let w=layerWeight(layer,p,terrain.x,terrain.y,true)*layer.amounts.w;
-  let field=textureLoad(groundTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0);let q=layer.recipe;
-  let amount=w*select(clamp(field.y,0.0,1.0),1.0,i==0);
-  result.shine=mix(result.shine,vec4f(q.gloss,q.sharpness,q.roughness,q.roughnessScale),amount);result.wetness=mix(result.wetness,q.wetness,amount);}
+ for(var i=0;i<r.stackCount;i++){let layer=materialLayers[r.stackStart+i];let w=layerWeight(layer,p,terrain.x,terrain.y,true)*layer.amounts.w;if(w<=0.0){continue;}
+  let field=textureLoad(materialMaskTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0);let q=layer.recipe;
+  result.shine=mix(result.shine,vec4f(field.z,q.sharpness,field.x,q.roughnessScale),w);result.wetness=mix(result.wetness,field.y,w);}
  return result;
 }
 fn materialContinuous(p:vec2f,slot:u32)->vec3f {

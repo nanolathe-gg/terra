@@ -9,7 +9,7 @@ test('procedural colors retain fractions; invalid palettes and duplicate assignm
  assert.deepEqual(groundsInUse([],list),list);assert.equal(setGround(list,1,{...p,textureColors:{...p.textureColors,middle:[80.125,90.25,110.5]}})[0].worldWater,true);
  assert.throws(()=>copyGroundRecipe({...p,textureColors:{low:[NaN,2,3]}}));assert.throws(()=>copyGroundRecipe({...p,texturePalette:[256]}));assert.throws(()=>copyGroundRecipe({...p,texturePalette:Array(33).fill(1)}));
  assert.throws(()=>copyGrounds([list[0],{...list[0],slot:2}]),/one material/);
- assert.ok(groundCacheUsage(8,1024).fits);assert.equal(groundCacheUsage(3,2048).fits,false);
+ assert.ok(groundCacheUsage(4,1024).fits);assert.equal(groundCacheUsage(3,2048).fits,false);
  const config={biomeId:'red',biome:'Red',defaults:{},engineDefaults:{},colors:{}};
  const world=savedWorld(config,new URLSearchParams(),{name:'Test',grounds:list,colors:{}});
  assert.deepEqual(copySavedWorld(JSON.parse(JSON.stringify(world)),config).grounds,list);

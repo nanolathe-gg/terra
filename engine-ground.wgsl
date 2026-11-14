@@ -151,20 +151,87 @@ fn groundRecipe(p:vec2f)->vec4f {
  if(r.quietAmount>0.0){let activity=mix(1.0,smoothstep(-.55,.55,groundNoise(p,r.quietSize,137.0)),r.quietAmount);out.x*=activity;out.y=mix(.5,out.y,activity);out.w*=activity;}
  out.x=clamp(out.x,-8.0,8.0);out.y=clamp(out.y,0.0,1.0);out.w=clamp(out.w,0.0,1.0);if(r.patternAmount>0.0){let pattern=textureRecipe(p);let combined=mix(out,pattern,r.patternAmount);return vec4f(out.x+pattern.x*r.patternAmount,combined.yzw);}return out;
 }
-@group(1) @binding(0) var groundOut:texture_storage_2d_array<rgba16float,write>;
-@group(1) @binding(2) var maskOut:texture_storage_2d_array<r32float,write>;
+// Match the truncating half-float material-field storage used by the renderer.
+// Keep this precision boundary before color mapping, not on the final RGB.
+fn sampledHalf(v:vec2f)->vec2f {
+ let bits=pack2x16float(v);let rounded=unpack2x16float(bits);
+ let low=(bits&65535u)-select(0u,1u,abs(rounded.x)>abs(v.x));
+ let high=(bits>>16u)-select(0u,1u,abs(rounded.y)>abs(v.y));
+ return unpack2x16float(low|(high<<16u));
+}
+fn stepArg(s:MaterialStep,index:u32)->f32 {return s.args[index/4u][index%4u];}
+fn stepColor(s:MaterialStep,index:u32)->vec3f {let n=2u+index*3u;return vec3f(stepArg(s,n),stepArg(s,n+1u),stepArg(s,n+2u));}
+// Scalar and RGB operations share their arithmetic. A scalar is broadcast to
+// all components; coloring is explicit and never selected by a preset name.
+fn stepValue(s:MaterialStep,a:vec4f,b:vec4f,c:vec4f,p:vec2f)->vec4f {
+ if(s.code.y==0){return a;}
+ let x=stepArg(s,0u);
+ switch(s.code.x){
+  case 6:{return vec4f(x);}
+  case 7:{
+   var v=pow(smoothstep(x,stepArg(s,1u),clamp(a.x,0.0,1.0)),stepArg(s,2u));
+   v=mix(v,1.0-v,stepArg(s,3u));v=mix(v,step(.5,v),stepArg(s,4u));v=mix(v,.5-.5*cos(v*6.2831853*stepArg(s,6u)),stepArg(s,5u));return vec4f(v);
+  }
+  case 8:{
+   let v=b-vec4f(stepArg(s,1u));let w=x*c.x;
+   switch(s.code.w){
+    case 0:{return mix(a,v,w);}case 1:{return a+v*w;}case 2:{return a*mix(vec4f(1),v,w);}
+    case 3:{return a-v*w;}case 4:{return mix(a,min(a,v),w);}case 5:{return mix(a,max(a,v),w);}
+    case 7:{return mix(a,1.0-(1.0-a)*(1.0-v),w);}default:{return mix(a,v,w);}
+   }
+  }
+  case 9:{
+   let n=u32(stepArg(s,1u));let t=a.x;var rgb=vec3f(0);
+   if(n==3u){let lo=mix(clamp(t*2.0,0.0,1.0),smoothstep(0.0,.5,t),x);let hi=mix(clamp((t-.5)*2.0,0.0,1.0),smoothstep(.5,1.0,t),x);rgb=mix(mix(stepColor(s,0u),stepColor(s,1u),lo),stepColor(s,2u),hi);}
+   else if(n==2u){rgb=mix(stepColor(s,0u),stepColor(s,1u),mix(t,smoothstep(0.0,1.0,t),x));}
+   else{let t2=clamp(t,0.0,1.0)*f32(n-1u);let i=u32(floor(t2));rgb=mix(stepColor(s,i),stepColor(s,min(i+1u,n-1u)),mix(fract(t2),smoothstep(0.0,1.0,fract(t2)),x));}
+   return vec4f(rgb,1);
+  }
+  case 10:{return vec4f(a[u32(x)]);}
+  case 11:{return vec4f(cellHash(poolPixel(p)+vec2f(211.0,317.0)).x);}
+  case 12:{return a*x+vec4f(stepArg(s,1u));}
+  default:{return vec4f(0);}
+ }
+}
+
+@group(1) @binding(0) var groundOut:texture_storage_2d_array<rgba32float,write>;
+@group(1) @binding(2) var maskOut:texture_storage_2d_array<rgba16float,write>;
 @group(1) @binding(1) var<uniform> groundJob:vec4u;
 @compute @workgroup_size(8,8)
 fn groundMain(@builtin(global_invocation_id) id:vec3u){
  if(any(id.xy>=textureDimensions(groundOut))){return;}
  gs=groundJob.x;let layer=materialLayers[groundJob.z];layerRecipe=layer.recipe;
- let p=vec2f(id.xy);let point=p+vec2f(19,43)*layer.operation.y;var field=groundRecipe(point);
- if(layer.terrain.w==3.0){
-  // Detail keeps its own smooth reference. Both pigment values pass through
-  // the same half-float cache as an ordinary layer, avoiding dither drift.
-  layerRecipe.textureFineStructure=0.0;field.z=groundRecipe(point).y;
+ let p=vec2f(id.xy);let point=p+vec2f(19,43)*layer.operation.y;var values:array<vec4f,40>;
+ for(var i=0;i<layer.program.x;i++){
+  let s=layer.steps[i];var a=vec4f(0);var b=vec4f(0);var c=vec4f(1);
+  if(s.links.x>=0){a=values[s.links.x];}if(s.links.y>=0){b=values[s.links.y];}if(s.links.z>=0){c=values[s.links.z];}
+  var v=vec4f(0);layerRecipe=layer.recipe;let q=select(point,a.xy,s.links.x>=0);
+  switch(s.code.x){
+case 1:{layerRecipe.patternWarp=stepArg(s,0u);layerRecipe.patternWarpSize=stepArg(s,1u);layerRecipe.phaseOctaves=stepArg(s,2u);layerRecipe.phaseAxis=stepArg(s,3u);let r=layerRecipe;v=vec4f(q+texturePhase(q,r.patternWarpSize,r.phaseOctaves)*vec2f(1.0-max(r.phaseAxis,0.0),1.0+min(r.phaseAxis,0.0))*r.patternWarp,0,0);}
+case 2:{layerRecipe.patternSize=stepArg(s,0u);layerRecipe.patternDetail=stepArg(s,1u);layerRecipe.patternGradient=stepArg(s,2u);layerRecipe.patternLinear=stepArg(s,3u);layerRecipe.patternTurbulence=stepArg(s,4u);layerRecipe.patternCells=stepArg(s,5u);layerRecipe.patternStreak=stepArg(s,6u);layerRecipe.patternLength=stepArg(s,7u);layerRecipe.patternDirection=stepArg(s,8u);layerRecipe.patternSlope=stepArg(s,9u);layerRecipe.patternOctaves=stepArg(s,10u);layerRecipe.patternMottle=stepArg(s,11u);layerRecipe.patternMottleSize=stepArg(s,12u);let r=layerRecipe;let aa=textureOctaves(q,r.patternSize,r.patternOctaves);let bb=textureOctaves(q+vec2f(17,39),r.patternSize/2.0,r.patternOctaves);v=vec4f(mix(mix(aa,bb,r.patternDetail),.5+.5*groundNoise(point,r.patternMottleSize,827.0),r.patternMottle));}
+case 3:{layerRecipe.textureFineSize=stepArg(s,0u);layerRecipe.textureFineGradient=stepArg(s,1u);layerRecipe.textureFineWarp=stepArg(s,2u);let r=layerRecipe;let fpoint=mix(point,q,r.textureFineWarp)+vec2f(61,97);v=vec4f(mix(.5+.5*groundNoise(fpoint,r.textureFineSize,379.0),.5+.65*textureGradient(fpoint,r.textureFineSize,379.0),r.textureFineGradient));}
+case 4:{layerRecipe.markAmount=stepArg(s,0u);layerRecipe.markSize=stepArg(s,1u);layerRecipe.markSpacing=stepArg(s,2u);layerRecipe.markDensity=stepArg(s,3u);layerRecipe.markScatter=stepArg(s,4u);layerRecipe.markCore=stepArg(s,5u);layerRecipe.markVariation=stepArg(s,6u);layerRecipe.markFollow=stepArg(s,7u);layerRecipe.markNoise=stepArg(s,8u);layerRecipe.markNoiseSize=stepArg(s,9u);layerRecipe.markLow=stepArg(s,10u);layerRecipe.markHigh=stepArg(s,11u);let r=layerRecipe;v=vec4f(clamp(textureMarks(point)*r.markAmount*mix(1.0,2.0*smoothstep(.2,.8,a.x),r.markFollow),0.0,1.0));}
+case 5:{v=groundRecipe(point);}
+default:{v=stepValue(s,a,b,c,point);}
+}
+if(s.code.y==0){v=a;if(s.code.x<=6){v=vec4f(0);}if(s.code.x==1){v=vec4f(q,0,0);}}
+values[i]=v;
  }
- textureStore(groundOut,vec2i(id.xy),i32(groundJob.y),field);
+ // Quantize scalar/color boundaries once, then evaluate the color arithmetic.
+ // Sampling stays identical to the original half-float procedural fields.
+ var mapped:array<vec4f,40>;var color=vec3f(0);var height=0.0;
+ var finish=vec3f(layer.recipe.roughness,layer.recipe.wetness,layer.recipe.gloss);
+ for(var i=0;i<layer.program.x;i++){
+  let s=layer.steps[i];var a=vec4f(0);var b=vec4f(0);var c=vec4f(1);
+  if(s.links.x>=0){a=mapped[s.links.x];}if(s.links.y>=0){b=mapped[s.links.y];}if(s.links.z>=0){c=mapped[s.links.z];}
+  var v=values[i];
+  if(s.code.z>=0){v=vec4f(sampledHalf(v.xy),sampledHalf(v.zw));}
+  else if(s.code.x>=6){v=stepValue(s,a,b,c,point);}
+  mapped[i]=v;
+  if(s.code.x==12&&s.code.y!=0){switch(s.code.w){case 0:{color=v.rgb;}case 1:{height=v.x;}case 2:{finish.x=clamp(v.x,0.0,1.0);}case 3:{finish.y=clamp(v.x,0.0,1.0);}case 4:{finish.z=clamp(v.x,0.0,1.0);}default:{}}}
+ }
+ textureStore(groundOut,vec2i(id.xy),i32(groundJob.y),vec4f(color,height));
+ layerRecipe=layer.recipe;
  var mask=1.0;
  if(layer.operation.z==1.0){
   layerRecipe.patternGradient=0.0;layerRecipe.patternLinear=0.0;layerRecipe.patternCells=select(0.0,1.0,layer.maskPattern.x==1.0||layer.maskPattern.x==2.0);
@@ -176,5 +243,5 @@ fn groundMain(@builtin(global_invocation_id) id:vec3u){
   mask=smoothstep(layer.maskFilter.y,layer.maskFilter.z,value);if(layer.maskPattern.x==2.0){mask=pow(mask,3.0);}
   mask=mix(mask,1.0-mask,layer.maskFilter.w);
  }
- textureStore(maskOut,vec2i(id.xy),i32(groundJob.y),vec4f(mask));
+ textureStore(maskOut,vec2i(id.xy),i32(groundJob.y),vec4f(finish,mask));
 }

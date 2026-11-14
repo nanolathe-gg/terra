@@ -1,4 +1,4 @@
-import {materialLayers} from './sculpt-material-layers.js';
+import {materialLayerCount} from './sculpt-material-layers.js';
 // One displaced surface, shared by every terrain brush. Prototype renderer
 // on WebGPU (no WebGL fallback). Shaders: engine-common.wgsl (shared),
 // sculpt-vert.wgsl and engine-frag.wgsl (the draw), engine-bake.wgsl (the
@@ -257,7 +257,7 @@ export class TerrainRenderer {
     this.commonLayout = device.createBindGroupLayout({label: 'world fields', entries: [
       {binding: 0, visibility: both, buffer: {type: 'uniform'}},
       texture(1, both, 'unfilterable-float'), texture(2, both), texture(4, both, 'float', '2d-array'), texture(6, both),
-      sampler(7, both), sampler(8, both), texture(9, both, 'float', '2d-array'),texture(10,both,'unfilterable-float'),texture(11,both,'unfilterable-float'),texture(12,both,'unfilterable-float'),texture(13,both,'float','2d-array'),texture(14,both,'float','2d-array'),{binding:15,visibility:both,buffer:{type:'read-only-storage'}},texture(16,both,'unfilterable-float','2d-array')]});
+      sampler(7, both), sampler(8, both), texture(9, both, 'float', '2d-array'),texture(10,both,'unfilterable-float'),texture(11,both,'unfilterable-float'),texture(12,both,'unfilterable-float'),texture(13,both,'unfilterable-float','2d-array'),texture(14,both,'float','2d-array'),{binding:15,visibility:both,buffer:{type:'read-only-storage'}},texture(16,both,'unfilterable-float','2d-array')]});
     const F = GPUShaderStage.FRAGMENT;
     // The engine draw (H4) binds only what Green reads: the plain's tiles, the water images, the palette and the generated materials
     // (binding 19, read with textureLoad); no land image remains. Binding numbers are the shared draw's, with 2-13 left out.
@@ -1116,7 +1116,7 @@ export class TerrainRenderer {
       if (!Number.isInteger(slot) || slot < 0 || slot >= table.count) throw new Error('Ground slots must be 0 to 7.');
       checked.set(slot, copyGroundRecipe(recipe));
     }
-    const usage=groundCacheUsage(checked.size,groundPool(this.config.material),[...checked.values()].reduce((n,p)=>n+materialLayers(p).length,0));
+    const usage=groundCacheUsage(checked.size,groundPool(this.config.material),[...checked.values()].reduce((n,p)=>n+materialLayerCount(p),0));
     if(!usage.fits)throw Error(`These material layers need ${(usage.bytes/1048576).toFixed(0)} MiB; the cache budget is 128 MiB. Remove layers or use fewer assigned materials.`);
     this.i('uGroundDefault',[...grounds].find(([,p])=>p.worldGround)?.[0]??0);
     this.i('uWaterGround',[...grounds].find(([,p])=>p.worldWater)?.[0]??0);

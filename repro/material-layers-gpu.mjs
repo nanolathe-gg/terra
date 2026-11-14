@@ -8,11 +8,12 @@ import {encodePng} from './png.mjs';
 await openHost();const out='/private/tmp/material-layers-gpu';mkdirSync(out,{recursive:true});
 const grounds=addGround([],GROUND_PRESETS['rust-mottling'],'Stack').grounds;grounds[0].layers=[];grounds[0].worldGround=true;grounds[0].knobs.textureDither=0;
 const s=await openScene({biome:'red',ground:false,grounds,strokes:[]},'biome=red&mapX=4&mapY=4&palette=off&view=color');
+s.renderer.budgetBytes=256*1024*1024;
 const rect={x:896,y:896,width:128,height:128};
 const render=async(p,name)=>{s.setGrounds([p]);const a=await renderWindow(s,rect);if(name)writeFileSync(out+'/'+name+'.png',encodePng(128,128,a));return a;};
 try{
  const baseline=await render(grounds[0],'base');
- const stacked=structuredClone(grounds[0]),layer=copyGroundRecipe(GROUND_PRESETS['cloudy-green']);layer.layers=[];layer.layer.height=1;layer.layer.opacity=.7;layer.layer.seed=7;layer.layer.surface=1;layer.knobs.gloss=.8;layer.knobs.roughness=.9;layer.knobs.textureHeight=3;stacked.layers=[layer];
+ const stacked=structuredClone(grounds[0]),layer=copyGroundRecipe(GROUND_PRESETS['cloudy-green']);layer.layers=[];layer.layer.height=1;layer.layer.opacity=.7;layer.layer.seed=7;layer.layer.surface=1;layer.knobs.gloss=.8;layer.knobs.roughness=.9;layer.steps.find(s=>s.type==='output'&&s.target==='height').params.scale=3;stacked.layers=[layer];
  const color=await render(stacked,'color');assert.notDeepEqual(color,baseline);
  const hidden=structuredClone(stacked);hidden.layers[0].layer.visible=false;assert.deepEqual(await render(hidden),baseline,'hidden layers are neutral');
  const off=structuredClone(stacked);off.layers[0].layer.opacity=0;assert.deepEqual(await render(off),baseline,'zero layer is neutral');

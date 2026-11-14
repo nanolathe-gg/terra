@@ -1,3 +1,4 @@
+import {copySteps,recipeSteps} from './sculpt-material-steps.js';
 import {copyLayerSettings,MAX_MATERIAL_LAYERS} from './sculpt-material-layers.js';
 import gamePalette from './materials/palette.json' with {type:'json'};
 import texturePresets from './materials/texture-presets.json' with {type:'json'};
@@ -42,7 +43,8 @@ export function copyGroundRecipe(value, child=false) {
  if(!Array.isArray(variationRamp)||variationRamp.length!==16)throw Error('A ground variation ramp needs 16 colors.');
  if(value.layers!==undefined&&(!Array.isArray(value.layers)||value.layers.length>=MAX_MATERIAL_LAYERS||child&&value.layers.length))throw Error('A material holds at most eight layers, without nested stacks.');
  if(value.presetKey!=null&&(typeof value.presetKey!=='string'||!value.presetKey.trim()||value.presetKey.length>80))throw Error('Invalid source preset.');
- return {presetKey:value.presetKey??null,layer:copyLayerSettings(value.layer),layers:(value.layers??[]).map(p=>copyGroundRecipe(p,true)),knobs,textureColors:copyTextureColors(value.textureColors),texturePalette:copyTexturePalette(value.texturePalette),ramp:value.ramp.map(recipeColor),variationRamp:variationRamp.map(recipeColor),line:recipeColor(value.line ?? value.ramp[0])};
+ const recipe={presetKey:value.presetKey??null,layer:copyLayerSettings(value.layer),layers:(value.layers??[]).map(p=>copyGroundRecipe(p,true)),knobs,textureColors:copyTextureColors(value.textureColors),texturePalette:copyTexturePalette(value.texturePalette),ramp:value.ramp.map(recipeColor),variationRamp:variationRamp.map(recipeColor),line:recipeColor(value.line ?? value.ramp[0])};
+ recipe.steps=value.steps?copySteps(value.steps):recipeSteps(recipe);return recipe;
 }
 export function copyGrounds(value) {
  if(value==null)return null;
@@ -100,8 +102,8 @@ export function parseGroundRecipe(text) {
 }
 export function groundCacheUsage(count,pool,layerCount=count) {
  if(!Number.isInteger(count)||count<0||count>GROUND_SLOTS||!Number.isInteger(pool)||pool<512||pool%512)throw Error('Invalid ground cache dimensions.');
- if(!Number.isInteger(layerCount)||layerCount<count||layerCount>count*MAX_MATERIAL_LAYERS)throw Error('Invalid material layer count.');
- const bytes=(layerCount*12+count*4)*pool*pool,capacity=Math.min(GROUND_SLOTS,Math.floor(GROUND_CACHE_BYTES/(pool*pool*16)));
+ if(!Number.isInteger(layerCount)||layerCount<count||layerCount>count*MAX_MATERIAL_LAYERS*4)throw Error('Invalid material layer count.');
+ const bytes=(layerCount*24+count*4)*pool*pool,capacity=Math.min(GROUND_SLOTS,Math.floor(GROUND_CACHE_BYTES/(pool*pool*28)));
  return {bytes,capacity,budget:GROUND_CACHE_BYTES,fits:bytes<=GROUND_CACHE_BYTES};
 }
 

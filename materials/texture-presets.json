@@ -1,30 +1,64 @@
 {
   "rust-mottling": {
     "name": "Rust mottling",
+    "presetKey": null,
+    "layer": {
+      "visible": true,
+      "name": "Rust mottling",
+      "blend": "normal",
+      "mask": "everywhere",
+      "maskPattern": "clouds",
+      "opacity": 1,
+      "color": 1,
+      "height": 1,
+      "surface": 1,
+      "seed": 0,
+      "maskAmount": 1,
+      "maskSize": 32,
+      "maskDetail": 0.25,
+      "maskWarp": 0,
+      "maskSeed": 17,
+      "maskLow": 0,
+      "maskHigh": 1,
+      "maskInvert": 0,
+      "terrainLow": 0,
+      "terrainHigh": 64,
+      "terrainSoftness": 8
+    },
+    "layers": [],
     "knobs": {
+      "patternOctaves": 0,
+      "patternLinear": 0,
+      "phaseOctaves": 0,
+      "phaseAxis": 0,
+      "patternInvert": 0,
+      "patternClip": 0,
+      "patternSine": 0,
+      "patternSineFrequency": 1,
       "patternAmount": 1,
-      "toneVariation": 0,
-      "roughness": 0,
       "patternSize": 6.4,
       "patternDetail": 0.25,
       "patternGradient": 0,
-      "patternWarp": 0.65,
-      "patternWarpSize": 10,
+      "patternTurbulence": 0,
+      "patternCells": 0,
       "patternStreak": 0,
       "patternLength": 8,
+      "patternDirection": 45,
       "patternSlope": 0,
+      "patternWarp": 0.65,
+      "patternWarpSize": 10,
       "patternMottle": 0,
       "patternMottleSize": 16,
       "patternLow": 0.05,
       "patternHigh": 0.95,
       "patternPower": 1,
       "patternEase": 1,
+      "textureFineStructure": 0.25,
       "textureFine": 0,
-      "textureFineStructure": 0,
       "textureFineSize": 1.8,
       "textureFineGradient": 0,
       "textureFineWarp": 1,
-      "markAmount": 0,
+      "markAmount": 0.6,
       "markSize": 2.1,
       "markSpacing": 5.7,
       "markDensity": 0.24,
@@ -32,35 +66,66 @@
       "markCore": 0,
       "markVariation": 0,
       "markFollow": 0,
+      "markNoise": 0,
+      "markNoiseSize": 2,
+      "markLow": 0.1,
+      "markHigh": 0.65,
       "markMultiply": 1,
+      "textureHeight": 0,
+      "textureGrainHeight": 0,
+      "texturePitDepth": 0,
       "textureDither": 1,
       "diffusionMix": 0,
       "paletteGamma": 1,
       "paletteRed": 1,
       "paletteGreen": 1,
       "paletteBlue": 1,
-      "textureHeight": 0,
-      "textureGrainHeight": 0,
-      "texturePitDepth": 0
+      "grainFine": 0,
+      "grainMedium": 0,
+      "grainBroad": 0,
+      "grainRelief": 0,
+      "grainColorMix": 0,
+      "grainStretch": 1,
+      "grainDirection": 0,
+      "bumpAmount": 0,
+      "bumpSize": 16,
+      "bumpStretch": 1,
+      "plateAmount": 0,
+      "plateSize": 64,
+      "plateVariation": 0.5,
+      "plateProfile": 0,
+      "borderProfile": -1,
+      "crackWidth": 2,
+      "rimCurl": 0.3,
+      "plateTilt": 0.2,
+      "secondaryCracks": 0,
+      "scratchAmount": 0,
+      "scratchSpacing": 24,
+      "scratchWidth": 1,
+      "scratchLength": 64,
+      "scratchConnect": 0.5,
+      "quietAmount": 0,
+      "quietSize": 64,
+      "veinAmount": 0,
+      "veinSpacing": 32,
+      "veinWidth": 1,
+      "pebbleAmount": 0,
+      "pebbleSize": 8,
+      "pebbleRound": 0.7,
+      "cushionAmount": 0,
+      "cushionSize": 16,
+      "rippleAmount": 0,
+      "rippleSize": 24,
+      "rippleAsymmetry": 0.5,
+      "toneVariation": 0,
+      "toneSize": 64,
+      "lineStrength": 1,
+      "gloss": 0,
+      "sharpness": 16,
+      "roughness": 0,
+      "roughnessScale": 3,
+      "wetness": 0.5
     },
-    "ramp": [
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88
-    ],
     "textureColors": {
       "low": [
         94.268,
@@ -130,119 +195,298 @@
       204,
       203
     ],
-    "layer": {
-      "name": "Rust mottling",
-      "height": 0
-    },
-    "layers": [
+    "ramp": [
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ]
+    ],
+    "variationRamp": [
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ]
+    ],
+    "line": [
+      123,
+      123,
+      123
+    ],
+    "steps": [
       {
-        "knobs": {
-          "textureFineStructure": 0.25,
+        "id": "step-1",
+        "name": "Pattern distortion",
+        "type": "transform",
+        "enabled": true,
+        "params": {
+          "patternWarp": 0.65,
+          "patternWarpSize": 10,
+          "phaseOctaves": 0,
+          "phaseAxis": 0,
+          "rotation": 0,
+          "stretch": 1
+        },
+        "source": null,
+        "other": null,
+        "mask": null
+      },
+      {
+        "id": "step-2",
+        "name": "Mottling / streaks",
+        "type": "noise",
+        "enabled": true,
+        "params": {
+          "patternSize": 6.4,
+          "patternDetail": 0.25,
+          "patternGradient": 0,
+          "patternLinear": 0,
+          "patternTurbulence": 0,
+          "patternCells": 0,
+          "patternStreak": 0,
+          "patternLength": 8,
+          "patternDirection": 45,
+          "patternSlope": 0,
+          "patternOctaves": 0,
+          "patternMottle": 0,
+          "patternMottleSize": 16
+        },
+        "source": "step-1",
+        "other": null,
+        "mask": null
+      },
+      {
+        "id": "step-3",
+        "name": "Fine grain",
+        "type": "grain",
+        "enabled": true,
+        "params": {
           "textureFineSize": 1.8,
           "textureFineGradient": 0,
           "textureFineWarp": 1
         },
-        "ramp": [
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88
-        ],
-        "textureColors": {},
-        "layer": {
-          "name": "Fine grain",
-          "effect": "detail",
-          "color": 1,
-          "height": 0,
-          "surface": 0
-        }
+        "source": "step-1",
+        "other": null,
+        "mask": null
       },
       {
-        "knobs": {
-          "markAmount": 0.6,
-          "markSize": 2.1,
-          "markSpacing": 5.7,
-          "markDensity": 0.24,
-          "markScatter": 1.8,
-          "markCore": 0,
-          "markVariation": 0,
-          "markFollow": 0,
-          "markMultiply": 1
+        "id": "step-4",
+        "name": "Add fine detail",
+        "type": "combine",
+        "enabled": true,
+        "params": {
+          "amount": 0.25,
+          "offset": 0.5
         },
-        "ramp": [
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88
-        ],
-        "textureColors": {
-          "mark": [
-            86,
-            43,
-            34
-          ],
-          "markTint": [
-            0.3,
-            0.18,
-            0.14
-          ]
-        },
-        "layer": {
-          "name": "Dark dots",
-          "effect": "dots",
-          "color": 1,
-          "height": 0,
-          "surface": 0
-        }
+        "source": "step-2",
+        "other": "step-3",
+        "mask": null,
+        "operation": "add"
       },
       {
-        "knobs": {
-          "patternAmount": 1,
-          "toneVariation": 0,
-          "roughness": 0,
-          "patternSize": 6.4,
-          "patternDetail": 0.25,
-          "patternGradient": 0,
-          "patternWarp": 0.65,
-          "patternWarpSize": 10,
-          "patternStreak": 0,
-          "patternLength": 8,
-          "patternSlope": 0,
-          "patternMottle": 0,
-          "patternMottleSize": 16,
+        "id": "step-5",
+        "name": "Pattern levels",
+        "type": "remap",
+        "enabled": true,
+        "params": {
           "patternLow": 0.05,
           "patternHigh": 0.95,
           "patternPower": 1,
-          "patternEase": 1,
-          "textureFine": 0,
-          "textureFineStructure": 0.25,
-          "textureFineSize": 1.8,
-          "textureFineGradient": 0,
-          "textureFineWarp": 1,
+          "patternInvert": 0,
+          "patternClip": 0,
+          "patternSine": 0,
+          "patternSineFrequency": 1
+        },
+        "source": "step-4",
+        "other": null,
+        "mask": null
+      },
+      {
+        "id": "step-6",
+        "name": "Pattern colors",
+        "type": "gradient",
+        "enabled": true,
+        "params": {
+          "ease": 1
+        },
+        "source": "step-5",
+        "other": null,
+        "mask": null,
+        "colors": [
+          [
+            0.369678431372549,
+            0.21062745098039215,
+            0.16607843137254902
+          ],
+          [
+            0.43603137254901964,
+            0.24415686274509804,
+            0.18372549019607845
+          ],
+          [
+            0.5318745098039215,
+            0.28141176470588236,
+            0.19549019607843138
+          ]
+        ]
+      },
+      {
+        "id": "step-7",
+        "name": "Scattered spots",
+        "type": "dots",
+        "enabled": true,
+        "params": {
           "markAmount": 0.6,
           "markSize": 2.1,
           "markSpacing": 5.7,
@@ -251,95 +495,136 @@
           "markCore": 0,
           "markVariation": 0,
           "markFollow": 0,
-          "markMultiply": 1
+          "markNoise": 0,
+          "markNoiseSize": 2,
+          "markLow": 0.1,
+          "markHigh": 0.65
         },
-        "ramp": [
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88
-        ],
-        "textureColors": {
-          "low": [
-            94.268,
-            53.71,
-            42.35
-          ],
-          "middle": [
-            111.188,
-            62.26,
-            46.85
-          ],
-          "high": [
-            135.628,
-            71.76,
-            49.85
-          ],
-          "mark": [
-            86,
-            43,
-            34
-          ],
-          "fineLow": [
+        "source": "step-2",
+        "other": null,
+        "mask": null
+      },
+      {
+        "id": "step-10",
+        "name": "Spot multiplier",
+        "type": "gradient",
+        "enabled": true,
+        "params": {
+          "ease": 0
+        },
+        "source": "step-7",
+        "other": null,
+        "mask": null,
+        "colors": [
+          [
             1,
             1,
             1
           ],
-          "fineHigh": [
-            1,
-            1,
-            1
-          ],
-          "markTint": [
+          [
             0.3,
             0.18,
             0.14
           ]
+        ]
+      },
+      {
+        "id": "step-11",
+        "name": "Multiply spots",
+        "type": "combine",
+        "enabled": true,
+        "params": {
+          "amount": 1,
+          "offset": 0
         },
-        "layer": {
-          "name": "Relief",
-          "effect": "material",
-          "color": 0,
-          "height": 1,
-          "surface": 0
+        "source": "step-6",
+        "other": "step-10",
+        "mask": null,
+        "operation": "multiply"
+      },
+      {
+        "id": "step-14",
+        "name": "Color output",
+        "type": "output",
+        "enabled": true,
+        "params": {
+          "scale": 1,
+          "offset": 0
+        },
+        "source": "step-11",
+        "other": null,
+        "mask": null,
+        "target": "color"
+      },
+      {
+        "id": "height-output",
+        "name": "Height output",
+        "type": "output",
+        "source": "step-5",
+        "target": "height",
+        "params": {
+          "scale": 0,
+          "offset": 0
         }
       }
     ]
   },
   "cloudy-green": {
     "name": "Cloudy green",
+    "presetKey": null,
+    "layer": {
+      "visible": true,
+      "name": "Cloudy green",
+      "blend": "normal",
+      "mask": "everywhere",
+      "maskPattern": "clouds",
+      "opacity": 1,
+      "color": 1,
+      "height": 1,
+      "surface": 1,
+      "seed": 0,
+      "maskAmount": 1,
+      "maskSize": 32,
+      "maskDetail": 0.25,
+      "maskWarp": 0,
+      "maskSeed": 17,
+      "maskLow": 0,
+      "maskHigh": 1,
+      "maskInvert": 0,
+      "terrainLow": 0,
+      "terrainHigh": 64,
+      "terrainSoftness": 8
+    },
+    "layers": [],
     "knobs": {
+      "patternOctaves": 0,
+      "patternLinear": 0,
+      "phaseOctaves": 0,
+      "phaseAxis": 0,
+      "patternInvert": 0,
+      "patternClip": 0,
+      "patternSine": 0,
+      "patternSineFrequency": 1,
       "patternAmount": 1,
-      "toneVariation": 0,
-      "roughness": 0,
       "patternSize": 3.5,
       "patternDetail": 0.3,
       "patternGradient": 0,
-      "patternWarp": 0,
-      "patternWarpSize": 9,
+      "patternTurbulence": 0,
+      "patternCells": 0,
       "patternStreak": 0,
       "patternLength": 8,
+      "patternDirection": 45,
       "patternSlope": 0,
+      "patternWarp": 0,
+      "patternWarpSize": 9,
       "patternMottle": 0,
       "patternMottleSize": 16,
       "patternLow": 0.05,
       "patternHigh": 0.95,
       "patternPower": 1,
       "patternEase": 1,
-      "textureFine": 0,
       "textureFineStructure": 0,
+      "textureFine": 1,
       "textureFineSize": 1.15,
       "textureFineGradient": 0,
       "textureFineWarp": 0,
@@ -351,35 +636,66 @@
       "markCore": 0.25,
       "markVariation": 0,
       "markFollow": 0,
+      "markNoise": 0,
+      "markNoiseSize": 2,
+      "markLow": 0.1,
+      "markHigh": 0.65,
       "markMultiply": 0,
+      "textureHeight": 0,
+      "textureGrainHeight": 0,
+      "texturePitDepth": 0,
       "textureDither": 1,
       "diffusionMix": 0,
       "paletteGamma": 1,
       "paletteRed": 1,
       "paletteGreen": 1,
       "paletteBlue": 1,
-      "textureHeight": 0,
-      "textureGrainHeight": 0,
-      "texturePitDepth": 0
+      "grainFine": 0,
+      "grainMedium": 0,
+      "grainBroad": 0,
+      "grainRelief": 0,
+      "grainColorMix": 0,
+      "grainStretch": 1,
+      "grainDirection": 0,
+      "bumpAmount": 0,
+      "bumpSize": 16,
+      "bumpStretch": 1,
+      "plateAmount": 0,
+      "plateSize": 64,
+      "plateVariation": 0.5,
+      "plateProfile": 0,
+      "borderProfile": -1,
+      "crackWidth": 2,
+      "rimCurl": 0.3,
+      "plateTilt": 0.2,
+      "secondaryCracks": 0,
+      "scratchAmount": 0,
+      "scratchSpacing": 24,
+      "scratchWidth": 1,
+      "scratchLength": 64,
+      "scratchConnect": 0.5,
+      "quietAmount": 0,
+      "quietSize": 64,
+      "veinAmount": 0,
+      "veinSpacing": 32,
+      "veinWidth": 1,
+      "pebbleAmount": 0,
+      "pebbleSize": 8,
+      "pebbleRound": 0.7,
+      "cushionAmount": 0,
+      "cushionSize": 16,
+      "rippleAmount": 0,
+      "rippleSize": 24,
+      "rippleAsymmetry": 0.5,
+      "toneVariation": 0,
+      "toneSize": 64,
+      "lineStrength": 1,
+      "gloss": 0,
+      "sharpness": 16,
+      "roughness": 0,
+      "roughnessScale": 3,
+      "wetness": 0.5
     },
-    "ramp": [
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88
-    ],
     "textureColors": {
       "low": [
         47.3024,
@@ -449,177 +765,399 @@
       182,
       181
     ],
-    "layer": {
-      "name": "Cloudy mottling",
-      "height": 0
-    },
-    "layers": [
+    "ramp": [
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ]
+    ],
+    "variationRamp": [
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ]
+    ],
+    "line": [
+      123,
+      123,
+      123
+    ],
+    "steps": [
       {
-        "knobs": {
-          "textureFine": 1,
+        "id": "step-1",
+        "name": "Pattern distortion",
+        "type": "transform",
+        "enabled": true,
+        "params": {
+          "patternWarp": 0,
+          "patternWarpSize": 9,
+          "phaseOctaves": 0,
+          "phaseAxis": 0,
+          "rotation": 0,
+          "stretch": 1
+        },
+        "source": null,
+        "other": null,
+        "mask": null
+      },
+      {
+        "id": "step-2",
+        "name": "Mottling / streaks",
+        "type": "noise",
+        "enabled": true,
+        "params": {
+          "patternSize": 3.5,
+          "patternDetail": 0.3,
+          "patternGradient": 0,
+          "patternLinear": 0,
+          "patternTurbulence": 0,
+          "patternCells": 0,
+          "patternStreak": 0,
+          "patternLength": 8,
+          "patternDirection": 45,
+          "patternSlope": 0,
+          "patternOctaves": 0,
+          "patternMottle": 0,
+          "patternMottleSize": 16
+        },
+        "source": "step-1",
+        "other": null,
+        "mask": null
+      },
+      {
+        "id": "step-3",
+        "name": "Fine grain",
+        "type": "grain",
+        "enabled": true,
+        "params": {
           "textureFineSize": 1.15,
           "textureFineGradient": 0,
           "textureFineWarp": 0
         },
-        "ramp": [
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88
-        ],
-        "textureColors": {
-          "fineLow": [
-            0.67,
-            0.655,
-            1.035
-          ],
-          "fineHigh": [
-            1.33,
-            1.345,
-            0.965
-          ]
-        },
-        "layer": {
-          "name": "Fine grain",
-          "effect": "fine-tint",
-          "color": 1,
-          "height": 0,
-          "surface": 0
-        }
+        "source": "step-1",
+        "other": null,
+        "mask": null
       },
       {
-        "knobs": {
-          "patternAmount": 1,
-          "toneVariation": 0,
-          "roughness": 0,
-          "patternSize": 3.5,
-          "patternDetail": 0.3,
-          "patternGradient": 0,
-          "patternWarp": 0,
-          "patternWarpSize": 9,
-          "patternStreak": 0,
-          "patternLength": 8,
-          "patternSlope": 0,
-          "patternMottle": 0,
-          "patternMottleSize": 16,
+        "id": "step-4",
+        "name": "Pattern levels",
+        "type": "remap",
+        "enabled": true,
+        "params": {
           "patternLow": 0.05,
           "patternHigh": 0.95,
           "patternPower": 1,
-          "patternEase": 1,
-          "textureFine": 0,
-          "textureFineStructure": 0,
-          "textureFineSize": 1.15,
-          "textureFineGradient": 0,
-          "textureFineWarp": 0,
-          "markAmount": 0,
-          "markSize": 1,
-          "markSpacing": 5,
-          "markDensity": 0.2,
-          "markScatter": 0.9,
-          "markCore": 0.25,
-          "markVariation": 0,
-          "markFollow": 0,
-          "markMultiply": 0
+          "patternInvert": 0,
+          "patternClip": 0,
+          "patternSine": 0,
+          "patternSineFrequency": 1
         },
-        "ramp": [
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88
-        ],
-        "textureColors": {
-          "low": [
-            47.3024,
-            82.27,
-            21.033
+        "source": "step-2",
+        "other": null,
+        "mask": null
+      },
+      {
+        "id": "step-5",
+        "name": "Pattern colors",
+        "type": "gradient",
+        "enabled": true,
+        "params": {
+          "ease": 1
+        },
+        "source": "step-4",
+        "other": null,
+        "mask": null,
+        "colors": [
+          [
+            0.18549960784313724,
+            0.32262745098039214,
+            0.08248235294117648
           ],
-          "middle": [
-            57.224,
-            97.48,
-            28.173
+          [
+            0.2244078431372549,
+            0.3822745098039216,
+            0.11048235294117646
           ],
-          "high": [
-            68.6432,
-            112.69,
-            34.802
-          ],
-          "mark": [
-            47.3024,
-            82.27,
-            21.033
-          ],
-          "fineLow": [
+          [
+            0.2691890196078431,
+            0.44192156862745097,
+            0.13647843137254903
+          ]
+        ]
+      },
+      {
+        "id": "step-6",
+        "name": "Grain colors",
+        "type": "gradient",
+        "enabled": true,
+        "params": {
+          "ease": 0
+        },
+        "source": "step-3",
+        "other": null,
+        "mask": null,
+        "colors": [
+          [
             0.67,
             0.655,
             1.035
           ],
-          "fineHigh": [
+          [
             1.33,
             1.345,
             0.965
-          ],
-          "markTint": [
-            1,
-            1,
-            1
           ]
+        ]
+      },
+      {
+        "id": "step-7",
+        "name": "Multiply grain",
+        "type": "combine",
+        "enabled": true,
+        "params": {
+          "amount": 1,
+          "offset": 0
         },
-        "layer": {
-          "name": "Relief",
-          "effect": "material",
-          "color": 0,
-          "height": 1,
-          "surface": 0
+        "source": "step-5",
+        "other": "step-6",
+        "mask": null,
+        "operation": "multiply"
+      },
+      {
+        "id": "step-9",
+        "name": "Color output",
+        "type": "output",
+        "enabled": true,
+        "params": {
+          "scale": 1,
+          "offset": 0
+        },
+        "source": "step-7",
+        "other": null,
+        "mask": null,
+        "target": "color"
+      },
+      {
+        "id": "height-output",
+        "name": "Height output",
+        "type": "output",
+        "source": "step-4",
+        "target": "height",
+        "params": {
+          "scale": 0,
+          "offset": 0
         }
       }
     ]
   },
   "blue-streaked-water": {
     "name": "Blue streaked water",
+    "presetKey": null,
+    "layer": {
+      "visible": true,
+      "name": "Blue streaked water",
+      "blend": "normal",
+      "mask": "everywhere",
+      "maskPattern": "clouds",
+      "opacity": 1,
+      "color": 1,
+      "height": 1,
+      "surface": 1,
+      "seed": 0,
+      "maskAmount": 1,
+      "maskSize": 32,
+      "maskDetail": 0.25,
+      "maskWarp": 0,
+      "maskSeed": 17,
+      "maskLow": 0,
+      "maskHigh": 1,
+      "maskInvert": 0,
+      "terrainLow": 0,
+      "terrainHigh": 64,
+      "terrainSoftness": 8
+    },
+    "layers": [],
     "knobs": {
+      "patternOctaves": 0,
+      "patternLinear": 0,
+      "phaseOctaves": 0,
+      "phaseAxis": 0,
+      "patternInvert": 0,
+      "patternClip": 0,
+      "patternSine": 0,
+      "patternSineFrequency": 1,
       "patternAmount": 1,
-      "toneVariation": 0,
-      "roughness": 0,
       "patternSize": 3.7,
       "patternDetail": 0.2,
       "patternGradient": 0,
-      "patternWarp": 1.0,
-      "patternWarpSize": 8,
+      "patternTurbulence": 0,
+      "patternCells": 0,
       "patternStreak": 1,
       "patternLength": 5.4,
+      "patternDirection": 45,
       "patternSlope": 0.9,
+      "patternWarp": 1,
+      "patternWarpSize": 8,
       "patternMottle": 0.02,
       "patternMottleSize": 16,
       "patternLow": 0,
       "patternHigh": 1,
       "patternPower": 1,
       "patternEase": 1,
-      "textureFine": 0,
       "textureFineStructure": 0,
+      "textureFine": 1,
       "textureFineSize": 1.1,
       "textureFineGradient": 0,
       "textureFineWarp": 0,
@@ -631,35 +1169,66 @@
       "markCore": 0.25,
       "markVariation": 0,
       "markFollow": 0,
+      "markNoise": 0,
+      "markNoiseSize": 2,
+      "markLow": 0.1,
+      "markHigh": 0.65,
       "markMultiply": 0,
+      "textureHeight": 0,
+      "textureGrainHeight": 0,
+      "texturePitDepth": 0,
       "textureDither": 1,
       "diffusionMix": 0,
       "paletteGamma": 1,
       "paletteRed": 1,
       "paletteGreen": 1,
       "paletteBlue": 1,
-      "textureHeight": 0,
-      "textureGrainHeight": 0,
-      "texturePitDepth": 0
+      "grainFine": 0,
+      "grainMedium": 0,
+      "grainBroad": 0,
+      "grainRelief": 0,
+      "grainColorMix": 0,
+      "grainStretch": 1,
+      "grainDirection": 0,
+      "bumpAmount": 0,
+      "bumpSize": 16,
+      "bumpStretch": 1,
+      "plateAmount": 0,
+      "plateSize": 64,
+      "plateVariation": 0.5,
+      "plateProfile": 0,
+      "borderProfile": -1,
+      "crackWidth": 2,
+      "rimCurl": 0.3,
+      "plateTilt": 0.2,
+      "secondaryCracks": 0,
+      "scratchAmount": 0,
+      "scratchSpacing": 24,
+      "scratchWidth": 1,
+      "scratchLength": 64,
+      "scratchConnect": 0.5,
+      "quietAmount": 0,
+      "quietSize": 64,
+      "veinAmount": 0,
+      "veinSpacing": 32,
+      "veinWidth": 1,
+      "pebbleAmount": 0,
+      "pebbleSize": 8,
+      "pebbleRound": 0.7,
+      "cushionAmount": 0,
+      "cushionSize": 16,
+      "rippleAmount": 0,
+      "rippleSize": 24,
+      "rippleAsymmetry": 0.5,
+      "toneVariation": 0,
+      "toneSize": 64,
+      "lineStrength": 1,
+      "gloss": 0,
+      "sharpness": 16,
+      "roughness": 0,
+      "roughnessScale": 3,
+      "wetness": 0.5
     },
-    "ramp": [
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88
-    ],
     "textureColors": {
       "low": [
         25.509999999999998,
@@ -705,217 +1274,470 @@
       102,
       101
     ],
-    "layer": {
-      "name": "Water streaks",
-      "height": 0
-    },
-    "layers": [
+    "ramp": [
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ]
+    ],
+    "variationRamp": [
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ]
+    ],
+    "line": [
+      123,
+      123,
+      123
+    ],
+    "steps": [
       {
-        "knobs": {
-          "textureFine": 1,
+        "id": "step-1",
+        "name": "Pattern distortion",
+        "type": "transform",
+        "enabled": true,
+        "params": {
+          "patternWarp": 1,
+          "patternWarpSize": 8,
+          "phaseOctaves": 0,
+          "phaseAxis": 0,
+          "rotation": 0,
+          "stretch": 1
+        },
+        "source": null,
+        "other": null,
+        "mask": null
+      },
+      {
+        "id": "step-2",
+        "name": "Mottling / streaks",
+        "type": "noise",
+        "enabled": true,
+        "params": {
+          "patternSize": 3.7,
+          "patternDetail": 0.2,
+          "patternGradient": 0,
+          "patternLinear": 0,
+          "patternTurbulence": 0,
+          "patternCells": 0,
+          "patternStreak": 1,
+          "patternLength": 5.4,
+          "patternDirection": 45,
+          "patternSlope": 0.9,
+          "patternOctaves": 0,
+          "patternMottle": 0.02,
+          "patternMottleSize": 16
+        },
+        "source": "step-1",
+        "other": null,
+        "mask": null
+      },
+      {
+        "id": "step-3",
+        "name": "Fine grain",
+        "type": "grain",
+        "enabled": true,
+        "params": {
           "textureFineSize": 1.1,
           "textureFineGradient": 0,
           "textureFineWarp": 0
         },
-        "ramp": [
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88
-        ],
-        "textureColors": {
-          "fineLow": [
-            0.51,
-            0.5788800000000001,
-            0.937
-          ],
-          "fineHigh": [
-            1.49,
-            1.42112,
-            1.063
-          ]
-        },
-        "layer": {
-          "name": "Fine grain",
-          "effect": "fine-tint",
-          "color": 1,
-          "height": 0,
-          "surface": 0
-        }
+        "source": "step-1",
+        "other": null,
+        "mask": null
       },
       {
-        "knobs": {
-          "patternAmount": 1,
-          "toneVariation": 0,
-          "roughness": 0,
-          "patternSize": 3.7,
-          "patternDetail": 0.2,
-          "patternGradient": 0,
-          "patternWarp": 1.0,
-          "patternWarpSize": 8,
-          "patternStreak": 1,
-          "patternLength": 5.4,
-          "patternSlope": 0.9,
-          "patternMottle": 0.02,
-          "patternMottleSize": 16,
+        "id": "step-4",
+        "name": "Pattern levels",
+        "type": "remap",
+        "enabled": true,
+        "params": {
           "patternLow": 0,
           "patternHigh": 1,
           "patternPower": 1,
-          "patternEase": 1,
-          "textureFine": 0,
-          "textureFineStructure": 0,
-          "textureFineSize": 1.1,
-          "textureFineGradient": 0,
-          "textureFineWarp": 0,
-          "markAmount": 0,
-          "markSize": 1,
-          "markSpacing": 5,
-          "markDensity": 0.2,
-          "markScatter": 0.9,
-          "markCore": 0.25,
-          "markVariation": 0,
-          "markFollow": 0,
-          "markMultiply": 0
+          "patternInvert": 0,
+          "patternClip": 0,
+          "patternSine": 0,
+          "patternSineFrequency": 1
         },
-        "ramp": [
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88
-        ],
-        "textureColors": {
-          "low": [
-            25.509999999999998,
-            68.565,
-            225.56
+        "source": "step-2",
+        "other": null,
+        "mask": null
+      },
+      {
+        "id": "step-5",
+        "name": "Pattern colors",
+        "type": "gradient",
+        "enabled": true,
+        "params": {
+          "ease": 1
+        },
+        "source": "step-4",
+        "other": null,
+        "mask": null,
+        "colors": [
+          [
+            0.1000392156862745,
+            0.26888235294117646,
+            0.8845490196078432
           ],
-          "middle": [
-            38.51,
-            76.085,
-            225.56
+          [
+            0.15101960784313725,
+            0.2983725490196078,
+            0.8845490196078432
           ],
-          "high": [
-            51.51,
-            83.60499999999999,
-            225.56
-          ],
-          "mark": [
-            25.509999999999998,
-            68.565,
-            225.56
-          ],
-          "fineLow": [
+          [
+            0.20199999999999999,
+            0.3278627450980392,
+            0.8845490196078432
+          ]
+        ]
+      },
+      {
+        "id": "step-6",
+        "name": "Grain colors",
+        "type": "gradient",
+        "enabled": true,
+        "params": {
+          "ease": 0
+        },
+        "source": "step-3",
+        "other": null,
+        "mask": null,
+        "colors": [
+          [
             0.51,
             0.5788800000000001,
             0.937
           ],
-          "fineHigh": [
+          [
             1.49,
             1.42112,
             1.063
-          ],
-          "markTint": [
-            1,
-            1,
-            1
           ]
+        ]
+      },
+      {
+        "id": "step-7",
+        "name": "Multiply grain",
+        "type": "combine",
+        "enabled": true,
+        "params": {
+          "amount": 1,
+          "offset": 0
         },
-        "layer": {
-          "name": "Relief",
-          "effect": "material",
-          "color": 0,
-          "height": 1,
-          "surface": 0
+        "source": "step-5",
+        "other": "step-6",
+        "mask": null,
+        "operation": "multiply"
+      },
+      {
+        "id": "step-9",
+        "name": "Color output",
+        "type": "output",
+        "enabled": true,
+        "params": {
+          "scale": 1,
+          "offset": 0
+        },
+        "source": "step-7",
+        "other": null,
+        "mask": null,
+        "target": "color"
+      },
+      {
+        "id": "height-output",
+        "name": "Height output",
+        "type": "output",
+        "source": "step-4",
+        "target": "height",
+        "params": {
+          "scale": 0,
+          "offset": 0
         }
       }
     ]
   },
   "violet-rippled-water": {
     "name": "Violet rippled water",
+    "presetKey": null,
+    "layer": {
+      "visible": true,
+      "name": "Violet rippled water",
+      "blend": "normal",
+      "mask": "everywhere",
+      "maskPattern": "clouds",
+      "opacity": 1,
+      "color": 1,
+      "height": 1,
+      "surface": 1,
+      "seed": 0,
+      "maskAmount": 1,
+      "maskSize": 32,
+      "maskDetail": 0.25,
+      "maskWarp": 0,
+      "maskSeed": 17,
+      "maskLow": 0,
+      "maskHigh": 1,
+      "maskInvert": 0,
+      "terrainLow": 0,
+      "terrainHigh": 64,
+      "terrainSoftness": 8
+    },
+    "layers": [],
     "knobs": {
+      "patternOctaves": 0,
+      "patternLinear": 0,
+      "phaseOctaves": 0,
+      "phaseAxis": 0,
+      "patternInvert": 0,
+      "patternClip": 0,
+      "patternSine": 0,
+      "patternSineFrequency": 1,
       "patternAmount": 1,
-      "toneVariation": 0,
-      "roughness": 0,
       "patternSize": 5.2,
       "patternDetail": 0.3,
       "patternGradient": 0,
-      "patternWarp": 4.5,
-      "patternWarpSize": 10.0,
+      "patternTurbulence": 0,
+      "patternCells": 0,
       "patternStreak": 1,
       "patternLength": 7.5,
+      "patternDirection": 45,
       "patternSlope": 1,
+      "patternWarp": 4.5,
+      "patternWarpSize": 10,
       "patternMottle": 0.05,
       "patternMottleSize": 16,
       "patternLow": -0.1,
       "patternHigh": 1.1,
       "patternPower": 1,
       "patternEase": 0,
-      "textureFine": 0,
       "textureFineStructure": 0,
+      "textureFine": 1,
       "textureFineSize": 1,
       "textureFineGradient": 0,
       "textureFineWarp": 0,
-      "markAmount": 0,
-      "markSize": 1.0,
+      "markAmount": 0.525,
+      "markSize": 1,
       "markSpacing": 4.5,
       "markDensity": 0.18,
       "markScatter": 1.5,
       "markCore": 0.1,
       "markVariation": 0.3,
       "markFollow": 0.85,
+      "markNoise": 0,
+      "markNoiseSize": 2,
+      "markLow": 0.1,
+      "markHigh": 0.65,
       "markMultiply": 0,
+      "textureHeight": 0,
+      "textureGrainHeight": 0,
+      "texturePitDepth": 0,
       "textureDither": 1,
       "diffusionMix": 1,
       "paletteGamma": 1.1,
       "paletteRed": 1,
       "paletteGreen": 0.95,
       "paletteBlue": 0.75,
-      "textureHeight": 0,
-      "textureGrainHeight": 0,
-      "texturePitDepth": 0
+      "grainFine": 0,
+      "grainMedium": 0,
+      "grainBroad": 0,
+      "grainRelief": 0,
+      "grainColorMix": 0,
+      "grainStretch": 1,
+      "grainDirection": 0,
+      "bumpAmount": 0,
+      "bumpSize": 16,
+      "bumpStretch": 1,
+      "plateAmount": 0,
+      "plateSize": 64,
+      "plateVariation": 0.5,
+      "plateProfile": 0,
+      "borderProfile": -1,
+      "crackWidth": 2,
+      "rimCurl": 0.3,
+      "plateTilt": 0.2,
+      "secondaryCracks": 0,
+      "scratchAmount": 0,
+      "scratchSpacing": 24,
+      "scratchWidth": 1,
+      "scratchLength": 64,
+      "scratchConnect": 0.5,
+      "quietAmount": 0,
+      "quietSize": 64,
+      "veinAmount": 0,
+      "veinSpacing": 32,
+      "veinWidth": 1,
+      "pebbleAmount": 0,
+      "pebbleSize": 8,
+      "pebbleRound": 0.7,
+      "cushionAmount": 0,
+      "cushionSize": 16,
+      "rippleAmount": 0,
+      "rippleSize": 24,
+      "rippleAsymmetry": 0.5,
+      "toneVariation": 0,
+      "toneSize": 64,
+      "lineStrength": 1,
+      "gloss": 0,
+      "sharpness": 16,
+      "roughness": 0,
+      "roughnessScale": 3,
+      "wetness": 0.5
     },
-    "ramp": [
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88,
-      88
-    ],
     "textureColors": {
       "low": [
         45.335,
@@ -933,9 +1755,9 @@
         118.31434999999999
       ],
       "mark": [
-        80.0,
-        90.0,
-        155.0
+        80,
+        90,
+        155
       ],
       "fineLow": [
         1.06,
@@ -970,201 +1792,400 @@
       152,
       151
     ],
-    "layer": {
-      "name": "Ripple mottling",
-      "height": 0
-    },
-    "layers": [
+    "ramp": [
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ]
+    ],
+    "variationRamp": [
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ],
+      [
+        123,
+        123,
+        123
+      ]
+    ],
+    "line": [
+      123,
+      123,
+      123
+    ],
+    "steps": [
       {
-        "knobs": {
-          "textureFine": 1,
+        "id": "step-1",
+        "name": "Pattern distortion",
+        "type": "transform",
+        "enabled": true,
+        "params": {
+          "patternWarp": 4.5,
+          "patternWarpSize": 10,
+          "phaseOctaves": 0,
+          "phaseAxis": 0,
+          "rotation": 0,
+          "stretch": 1
+        },
+        "source": null,
+        "other": null,
+        "mask": null
+      },
+      {
+        "id": "step-2",
+        "name": "Mottling / streaks",
+        "type": "noise",
+        "enabled": true,
+        "params": {
+          "patternSize": 5.2,
+          "patternDetail": 0.3,
+          "patternGradient": 0,
+          "patternLinear": 0,
+          "patternTurbulence": 0,
+          "patternCells": 0,
+          "patternStreak": 1,
+          "patternLength": 7.5,
+          "patternDirection": 45,
+          "patternSlope": 1,
+          "patternOctaves": 0,
+          "patternMottle": 0.05,
+          "patternMottleSize": 16
+        },
+        "source": "step-1",
+        "other": null,
+        "mask": null
+      },
+      {
+        "id": "step-3",
+        "name": "Fine grain",
+        "type": "grain",
+        "enabled": true,
+        "params": {
           "textureFineSize": 1,
           "textureFineGradient": 0,
           "textureFineWarp": 0
         },
-        "ramp": [
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88
-        ],
-        "textureColors": {
-          "fineLow": [
-            1.06,
-            0.85,
-            1.006
-          ],
-          "fineHigh": [
-            0.94,
-            1.15,
-            0.994
-          ]
-        },
-        "layer": {
-          "name": "Fine grain",
-          "effect": "fine-tint",
-          "color": 1,
-          "height": 0,
-          "surface": 0
-        }
+        "source": "step-1",
+        "other": null,
+        "mask": null
       },
       {
-        "knobs": {
-          "markAmount": 0.525,
-          "markSize": 1.0,
-          "markSpacing": 4.5,
-          "markDensity": 0.18,
-          "markScatter": 1.5,
-          "markCore": 0.1,
-          "markVariation": 0.3,
-          "markFollow": 0.85,
-          "markMultiply": 0
-        },
-        "ramp": [
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88
-        ],
-        "textureColors": {
-          "mark": [
-            80.0,
-            90.0,
-            155.0
-          ],
-          "markTint": [
-            1,
-            1,
-            1
-          ]
-        },
-        "layer": {
-          "name": "Bright flecks",
-          "effect": "dots",
-          "color": 1,
-          "height": 0,
-          "surface": 0
-        }
-      },
-      {
-        "knobs": {
-          "patternAmount": 1,
-          "toneVariation": 0,
-          "roughness": 0,
-          "patternSize": 5.2,
-          "patternDetail": 0.3,
-          "patternGradient": 0,
-          "patternWarp": 4.5,
-          "patternWarpSize": 10.0,
-          "patternStreak": 1,
-          "patternLength": 7.5,
-          "patternSlope": 1,
-          "patternMottle": 0.05,
-          "patternMottleSize": 16,
+        "id": "step-4",
+        "name": "Pattern levels",
+        "type": "remap",
+        "enabled": true,
+        "params": {
           "patternLow": -0.1,
           "patternHigh": 1.1,
           "patternPower": 1,
-          "patternEase": 0,
-          "textureFine": 0,
-          "textureFineStructure": 0,
-          "textureFineSize": 1,
-          "textureFineGradient": 0,
-          "textureFineWarp": 0,
+          "patternInvert": 0,
+          "patternClip": 0,
+          "patternSine": 0,
+          "patternSineFrequency": 1
+        },
+        "source": "step-2",
+        "other": null,
+        "mask": null
+      },
+      {
+        "id": "step-5",
+        "name": "Pattern colors",
+        "type": "gradient",
+        "enabled": true,
+        "params": {
+          "ease": 0
+        },
+        "source": "step-4",
+        "other": null,
+        "mask": null,
+        "colors": [
+          [
+            0.1777843137254902,
+            0.15272549019607842,
+            0.3594117647058824
+          ],
+          [
+            0.19868627450980392,
+            0.15996078431372548,
+            0.4092549019607843
+          ],
+          [
+            0.21711014705882353,
+            0.17119960784313723,
+            0.4639778431372549
+          ]
+        ]
+      },
+      {
+        "id": "step-6",
+        "name": "Grain colors",
+        "type": "gradient",
+        "enabled": true,
+        "params": {
+          "ease": 0
+        },
+        "source": "step-3",
+        "other": null,
+        "mask": null,
+        "colors": [
+          [
+            1.06,
+            0.85,
+            1.006
+          ],
+          [
+            0.94,
+            1.15,
+            0.994
+          ]
+        ]
+      },
+      {
+        "id": "step-7",
+        "name": "Multiply grain",
+        "type": "combine",
+        "enabled": true,
+        "params": {
+          "amount": 1,
+          "offset": 0
+        },
+        "source": "step-5",
+        "other": "step-6",
+        "mask": null,
+        "operation": "multiply"
+      },
+      {
+        "id": "step-8",
+        "name": "Scattered spots",
+        "type": "dots",
+        "enabled": true,
+        "params": {
           "markAmount": 0.525,
-          "markSize": 1.0,
+          "markSize": 1,
           "markSpacing": 4.5,
           "markDensity": 0.18,
           "markScatter": 1.5,
           "markCore": 0.1,
           "markVariation": 0.3,
           "markFollow": 0.85,
-          "markMultiply": 0
+          "markNoise": 0,
+          "markNoiseSize": 2,
+          "markLow": 0.1,
+          "markHigh": 0.65
         },
-        "ramp": [
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88,
-          88
-        ],
-        "textureColors": {
-          "low": [
-            45.335,
-            38.945,
-            91.65
+        "source": "step-2",
+        "other": null,
+        "mask": null
+      },
+      {
+        "id": "step-9",
+        "name": "Spot color",
+        "type": "gradient",
+        "enabled": true,
+        "params": {
+          "ease": 0
+        },
+        "source": null,
+        "other": null,
+        "mask": null,
+        "colors": [
+          [
+            0.3137254901960784,
+            0.35294117647058826,
+            0.6078431372549019
           ],
-          "middle": [
-            50.665,
-            40.79,
-            104.36
-          ],
-          "high": [
-            55.3630875,
-            43.655899999999995,
-            118.31434999999999
-          ],
-          "mark": [
-            80.0,
-            90.0,
-            155.0
-          ],
-          "fineLow": [
-            1.06,
-            0.85,
-            1.006
-          ],
-          "fineHigh": [
-            0.94,
-            1.15,
-            0.994
-          ],
-          "markTint": [
-            1,
-            1,
-            1
+          [
+            0.3137254901960784,
+            0.35294117647058826,
+            0.6078431372549019
           ]
+        ]
+      },
+      {
+        "id": "step-10",
+        "name": "Blend spot color",
+        "type": "combine",
+        "enabled": true,
+        "params": {
+          "amount": 1,
+          "offset": 0
         },
-        "layer": {
-          "name": "Relief",
-          "effect": "material",
-          "color": 0,
-          "height": 1,
-          "surface": 0
+        "source": "step-7",
+        "other": "step-9",
+        "mask": "step-8",
+        "operation": "blend"
+      },
+      {
+        "id": "step-15",
+        "name": "Color output",
+        "type": "output",
+        "enabled": true,
+        "params": {
+          "scale": 1,
+          "offset": 0
+        },
+        "source": "step-10",
+        "other": null,
+        "mask": null,
+        "target": "color"
+      },
+      {
+        "id": "height-output",
+        "name": "Height output",
+        "type": "output",
+        "source": "step-4",
+        "target": "height",
+        "params": {
+          "scale": 0,
+          "offset": 0
         }
       }
     ]
