@@ -18,7 +18,7 @@ test('a hardware adapter passes', async () => {
 
 test('a software adapter is refused with a message', async () => {
   offer({limits, info: {isFallbackAdapter: true, architecture: 'swiftshader'}});
-  await assert.rejects(requestAdapter(), /only software WebGPU rendering/);
+  await assert.rejects(requestAdapter(), /^Error: Software rendering detected: WebGPU is running on the CPU \(swiftshader\)/);
 });
 
 test('an adapter without info passes on its limits', async () => {
