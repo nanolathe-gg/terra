@@ -561,22 +561,37 @@ export function shapeRequestBytes(prepared){
   // segment/mask uploads and the full source of any authored height image.
   return 65536+prepared.reduce((n,p)=>n+(p.coast?256:24)*NODE_BYTES+(p.segs?.length??0)*64+((p.writes?.length??0)+(p.extra?.length??0))*16+(p.values?.byteLength??0),0);
 }
+// Shader layouts and pipelines depend only on device and storage variant.
+// Each engine still owns all fields, uniforms, scratch and request queues.
+const shapePipelineCache=new WeakMap();
+async function sharedShapePipelines(device,pages){
+  let variants=shapePipelineCache.get(device);if(!variants){variants=new Map();shapePipelineCache.set(device,variants);}
+  if(!variants.has(pages)){
+    const pending=(async()=>{
+      const raw = await (await fetch('engine-shape.wgsl')).text();
+      const S = GPUShaderStage.COMPUTE, rw = {type: 'storage'}, ro = {type: 'read-only-storage'};
+      const layout = device.createBindGroupLayout({entries: [
+        {binding: 0, visibility: S, buffer: {type: 'uniform', hasDynamicOffset: true}}, {binding: 1, visibility: S, buffer: rw}, {binding: 2, visibility: S, buffer: rw},
+        {binding: 3, visibility: S, buffer: rw}, {binding: 4, visibility: S, buffer: rw}, {binding: 5, visibility: S, buffer: ro}, {binding: 6, visibility: S, buffer: ro}, {binding: 7, visibility: S, buffer: rw}]});
+      const pl = device.createPipelineLayout({bindGroupLayouts: [layout]});
+      // The pipelines of one variant of the shader: the whole-map text, or the pages text (direct noise, a target's own origin).
+      const buildPipes = (paged, entries) => {
+        const source = preprocessShader(raw, paged ? ['PAGES'] : []).replace('/*NODE_STRUCT*/', nodeStruct()).replace('/*CV_N*/', `const CV_N = ${CV_N}.0;`);
+        const module = device.createShaderModule({label: paged ? 'shape (pages)' : 'shape', code: source}), out = {};
+        for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
+        return out;
+      };
+      const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampFissure', 'smoothCopy', 'blurH', 'blurV', 'ground', 'heights', 'init', 'artHold', 'artLevel', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastJag', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'packPlane', 'lfCrystalSites', 'lfCrystalRoom', 'lfCrystalApply'];
+      const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse'] : [])]);
+      return {layout,pipes};
+    })();
+    variants.set(pages,pending);pending.catch(()=>{if(variants.get(pages)===pending)variants.delete(pages);});
+  }
+  return variants.get(pages);
+}
+
 export async function createShapeEngine({device, grid, spacing, baseHeight, sea, minH, maxH, refSpacing = spacing, pages = false}) {
-  const raw = await (await fetch('engine-shape.wgsl')).text();
-  const S = GPUShaderStage.COMPUTE, rw = {type: 'storage'}, ro = {type: 'read-only-storage'};
-  const layout = device.createBindGroupLayout({entries: [
-    {binding: 0, visibility: S, buffer: {type: 'uniform', hasDynamicOffset: true}}, {binding: 1, visibility: S, buffer: rw}, {binding: 2, visibility: S, buffer: rw},
-    {binding: 3, visibility: S, buffer: rw}, {binding: 4, visibility: S, buffer: rw}, {binding: 5, visibility: S, buffer: ro}, {binding: 6, visibility: S, buffer: ro}, {binding: 7, visibility: S, buffer: rw}]});
-  const pl = device.createPipelineLayout({bindGroupLayouts: [layout]});
-  // The pipelines of one variant of the shader: the whole-map text, or the pages text (direct noise, a target's own origin).
-  const buildPipes = (paged, entries) => {
-    const source = preprocessShader(raw, paged ? ['PAGES'] : []).replace('/*NODE_STRUCT*/', nodeStruct()).replace('/*CV_N*/', `const CV_N = ${CV_N}.0;`);
-    const module = device.createShaderModule({label: paged ? 'shape (pages)' : 'shape', code: source}), out = {};
-    for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
-    return out;
-  };
-  const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampFissure', 'smoothCopy', 'blurH', 'blurV', 'ground', 'heights', 'init', 'artHold', 'artLevel', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastJag', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'packPlane', 'lfCrystalSites', 'lfCrystalRoom', 'lfCrystalApply'];
-  const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse'] : [])]);
+  const {layout,pipes}=await sharedShapePipelines(device,pages);
   const cells = pages ? 0 : grid * grid, buf = (size, usage, label) => device.createBuffer({size: Math.max(16, size), usage, label});
   const ST = GPUBufferUsage.STORAGE, CD = GPUBufferUsage.COPY_DST, CS = GPUBufferUsage.COPY_SRC;
   const F = buf(PLANES * cells * 4, ST | CD | CS, 'shape planes'), Mk = buf(7 * cells * 4, ST | CD | CS, 'shape masks');
