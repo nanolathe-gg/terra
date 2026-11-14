@@ -10,7 +10,7 @@
 // --warmup discards a session; --report FILE... prints the section 2 budget table.
 // Use distinct CDP ports, discard one --warmup per fresh server, alternate workloads,
 // and check ps -Ao pcpu,command -r | head before measured runs. Never time two at once.
-import {createCoverage,pictureCurrent} from './perf-coverage.mjs';
+import {createCoverage,pictureCurrent,finalQualityObservations} from './perf-coverage.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn, execFileSync} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync, rmSync} from 'node:fs';
@@ -41,13 +41,13 @@ function budgetTable(results) {
   const groups = [
     ['Stroke / move / shape-card (stroke sampled)',r=>[r.drag,r.resume].filter(Boolean),50,100],
     ['World / rock / surface / sun',r=>(r.slider||[]).filter(s=>['knob-faceBlockSize','knob-reliefAmount','knob-sunHeight'].includes(s.control)),50,100],
-    ['Color / shine / light / palette (color, ambient sampled)',r=>(r.slider||[]).filter(s=>['colors','knob-ambient'].includes(s.control)),50,150],
+    ['Color / shine / light / palette (final quality; color, ambient sampled)',r=>(r.slider||[]).filter(s=>['colors','knob-ambient'].includes(s.control)),50,150,'finalQuality'],
     ['Time controls (Rain sampled)',r=>(r.slider||[]).filter(s=>s.control==='knob-erosionRain'),100,null],
     ['Pan / zoom onto uncached ground (pan sampled)',r=>[r.scroll].filter(Boolean),50,100],
     ['First picture after scene load',r=>[r.load].filter(Boolean),null,1000],
   ];
   const cell = (phases,key,budget) => {
-    const samples=phases.flatMap(p=>key==='finalRelease'?releaseSample(p):key==='firstTile'?tileSamples(p):key==='pointer'?tileSamples(p,true):p.samples?.[key]||[]), total=phases.reduce((n,p)=>n+(key==='finalRelease'?1:key==='firstTile'?(p.inputs?.length||0):p.sampleTotals?.[key]??p.samples?.[key]?.length??0),0), d=distribution(samples,total);
+    const samples=phases.flatMap(p=>key==='finalRelease'?releaseSample(p):key==='firstTile'?tileSamples(p):key==='pointer'?tileSamples(p,true):key==='finalQuality'?(p.samples?.finalQuality??finalQualityObservations(p).samples):p.samples?.[key]||[]), total=phases.reduce((n,p)=>n+(key==='finalRelease'?1:key==='firstTile'||key==='finalQuality'?(p.inputs?.length||0):p.sampleTotals?.[key]??p.samples?.[key]?.length??0),0), d=distribution(samples,total);
     if(!d.n) return `unobserved (${d.censored} censored)`;
     // A high censored share must never turn into a passing p95.
     const status=budget==null?'':d.censored/total>.05?' FAIL (censored)':d.p95<=budget?' PASS':' FAIL';
@@ -58,7 +58,7 @@ function budgetTable(results) {
   const lines=[...(scripted.length?[`LABELED SUBSTITUTE: ${scripted.length} scripted Colors phases (value/input events on the existing picker, not native mouse).`,'']:[]),...(gaps.length?[`INCOMPLETE: ${gaps.length} native Colors phases; ${[...new Set(results.flatMap(r=>(r.slider||[]).filter(p=>p.status==='blocked').map(p=>p.reason)))].join('; ')}`,'']:[]),'All times ms: p50 / p95; [observed / requested]. Superseded inputs wait for a later current image.','',
     '| Interaction | First changed pixels | Whole view current | Release to final |',
     '| --- | ---: | ---: | ---: |'];
-  for(const [name,select,first,whole] of groups){const p=results.flatMap(select);lines.push(`| ${name} | ${cell(p,'first',first)} | ${cell(p,'all',whole)} | ${cell(p,'finalRelease',null)} |`);}
+  for(const [name,select,first,whole,wholeKey='all'] of groups){const p=results.flatMap(select);lines.push(`| ${name} | ${cell(p,'first',first)} | ${cell(p,wholeKey,whole)} | ${cell(p,'finalRelease',null)} |`);}
   const phases=results.flatMap(r=>[r.load,r.drag,r.release,r.resume,...r.slider||[],r.scroll,r.export].filter(Boolean));
   const max=(f)=>Math.max(0,...phases.map(f));
   lines.push('',`Fresh stroke tiles (input to paint), first: ${cell(results.flatMap(r=>[r.drag,r.resume].filter(Boolean)),'firstTile',null)}; pointer: ${cell(results.flatMap(r=>[r.drag,r.resume].filter(Boolean)),'pointer',null)}; whole area: ${cell(results.flatMap(r=>[r.drag,r.resume].filter(Boolean)),'all',null)}.`,`Focus tile after pause/release: ${cell(results.flatMap(r=>[r.drag,r.resume,...r.slider||[]].filter(p=>p&&p.status!=='blocked')),'focus',600)}.`,`GPU queue wait max: ${max(p=>p.split?.queueWaitMs?.max||0).toFixed(1)} ms (wall, includes queueing).`,
@@ -315,8 +315,8 @@ function analyze(data,t0,anchors=[]){
     const focusView=coverage.find(e=>e.t>=anchor.t&&e.t<nextInput&&e.ready&&e.keys.some(p=>!p.dirty&&p.level<=1&&at[0]>=p.x&&at[0]<p.x+p.width&&at[1]>=p.y&&at[1]<p.y+p.height));if(focusView)focus.push(focusView.t-anchor.t);
   }
   if(!inputs.length){const p=paints.find(e=>e.t>=t0&&e.changed),c=coverage.find(e=>e.t>=t0&&e.ready&&data.visible.every(k=>e.keys.some(p=>p.key===k&&!p.dirty)));if(p)first.push(p.t-t0);if(c)all.push(c.t-t0);}
-  const samples={first,pointer,all,final,focus},total=inputs.length||1;
-  return {samples,observations,finalObservations,sampleTotals:{first:total,pointer:inputs.filter(m=>m.at).length,all:total,final:anchors.length,focus:anchors.length},latency:distribution(first,total),latencyPointer:distribution(pointer,inputs.filter(m=>m.at).length),latencyAll:distribution(all,total),final:distribution(final,anchors.length),focusFinal:distribution(focus,anchors.length)};
+  const quality=finalQualityObservations(data),samples={first,pointer,all,final,focus,finalQuality:quality.samples},total=inputs.length||1;
+  return {samples,observations,finalObservations,finalQualityObservations:quality.observations,latencyFinalQuality:distribution(quality.samples,inputs.length),sampleTotals:{first:total,pointer:inputs.filter(m=>m.at).length,all:total,final:anchors.length,focus:anchors.length,finalQuality:inputs.length},latency:distribution(first,total),latencyPointer:distribution(pointer,inputs.filter(m=>m.at).length),latencyAll:distribution(all,total),final:distribution(final,anchors.length),focusFinal:distribution(focus,anchors.length)};
 }
 const capture=async(t0,anchors=[],extra={})=>{
   await ev('__perf.stop()');await ev('__perf.readPixels()');
