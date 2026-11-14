@@ -21,7 +21,7 @@ struct VolumeSettings {
 // surface, including displacement and weathering of the volumetric rock.
 fn voxelRelief(p:vec2f,slope:f32)->f32 {
     if(u.styleOn==0){return u.detail;}
-    let local=sampleMasks(maskUv(p),1).g;
+    let local=sampleMasks(maskPoint(p),1).g;
     return u.detail*styleScale(styleEdge(p,local,slope));
 }
 fn voxelAuthored(p:vec2f)->vec4f {
@@ -210,7 +210,7 @@ fn voxelPaintRock(p:vec2f)->f32 {
     // Rock at a shore is painted rock to the solid (engine-common.wgsl shoreRockAt).
     let shore=shoreRockAt(p);
     if(u.paintOn==0){return shore;}
-    return max(shore,max(0.0,sampleMasks(maskUv(p),0).r));
+    return max(shore,max(0.0,sampleMasks(maskPoint(p),0).r));
 }
 const VOXEL_RING=array<vec2f,8>(vec2f(1.0,0.0),vec2f(0.70710678,0.70710678),vec2f(0.0,1.0),vec2f(-0.70710678,0.70710678),vec2f(-1.0,0.0),vec2f(-0.70710678,-0.70710678),vec2f(0.0,-1.0),vec2f(0.70710678,-0.70710678));
 // Whole blocks. A block is rock when its middle lies under the authored surface and air when it lies over it: one answer for the whole block

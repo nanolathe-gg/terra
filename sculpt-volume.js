@@ -71,7 +71,7 @@ export class VoxelSurface {
     const capacity=columnsX*columnsY*(Math.ceil((high+apron)/unit)-Math.floor((low-apron)/unit)+1);
     return {origin:[x0,y0],step,width,height,columnsX,columnsY,capacity,low,high,top,screenLow:rect.y,screenHigh:rect.y+rect.height};
   }
-  async render(draw){
+  async render(draw,current=()=>{}){
     this.passes=this.renderer.rockPasses(this.passesBy);   // this rockMask's passes, or a specialization miss that builds them
     const r=this.renderer,region=r.activeRegion,scale=r.uniformView.getFloat32(r.layout.fields.get('chunkScale').offset,true);
     const origin=region.screenOrigin,width=r.canvas.width*scale,height=r.canvas.height*scale;
@@ -85,7 +85,7 @@ export class VoxelSurface {
     this.stats.pieces=this.stats.bricks=this.stats.candidateBricks=this.stats.peakBytes=0;const start=performance.now();
     let first=true;
     const piece=async rect=>{
-      this.clear();
+      current();this.clear();
       const s=this.bounds(rect,step,low,high,top),n=s.columnsX*s.columnsY;
       let available=r.budgetBytes-r.reservedBytes-r.residentBytes;
       // The guide's blocks are 4 px on a side (engine-volume.wgsl voxelGuideBlocks).
@@ -106,7 +106,7 @@ export class VoxelSurface {
       this.counter=this.buffer('voxel brick count',32,STORAGE()|GPUBufferUsage.COPY_SRC);
       this.indirect=this.buffer('voxel dispatch',16,GPUBufferUsage.COPY_DST|GPUBufferUsage.INDIRECT);
       });
-      this.device.queue.writeBuffer(this.counter,0,new Uint32Array(8));this.settings(s);
+      current();this.device.queue.writeBuffer(this.counter,0,new Uint32Array(8));this.settings(s);
       const input={0:{buffer:this.uniform},3:this.height.createView(),4:this.guide.createView(),6:this.blocks.createView()};
       const output={0:this.height.createView(),1:this.guide.createView(),2:{buffer:this.columns},3:{buffer:this.bricks},4:{buffer:this.counter},6:this.blocks.createView(),7:{buffer:this.coarse}};
       const countEncoder=this.device.createCommandEncoder({label:'voxel surface allocation'});
@@ -132,7 +132,7 @@ export class VoxelSurface {
         if(values[0]>s.capacity)throw Error('The voxel brick count exceeds its conservative allocation bound.');
         if(values[2]>values[0])throw Error('The compact voxel count exceeds its candidates.');
         if(preview){this.previewCounts.delete(key);this.previewCounts.set(key,values[2]);if(this.previewCounts.size>16)this.previewCounts.delete(this.previewCounts.keys().next().value);}
-        return values;
+        current();return values;
       };
       const fits=count=>count*1024<=this.device.limits.maxStorageBufferBindingSize&&r.makeWorkingRoom(Math.max(16,count*1024)*2);
       if(capacity===null||!fits(capacity)){
@@ -140,11 +140,11 @@ export class VoxelSurface {
         counts=await readCounts(false);capacity=counts[2];
       }else ps.predicted++;
       const drawPool=async count=>{
-        if(this.density){for(const b of this.density){r.release(b);this.owned=this.owned.filter(v=>v!==b);}this.density=null;}
+        current();if(this.density){for(const b of this.density){r.release(b);this.owned=this.owned.filter(v=>v!==b);}this.density=null;}
         if(!fits(count))return false;
         const densityBytes=count*1024;
-        await terrainAllocation(this.device,()=>{this.density=[this.buffer('voxel solid A',densityBytes),this.buffer('voxel solid B',densityBytes)];});this.settings(s,count);
-        const reads=this.inputs(),encoder=this.device.createCommandEncoder({label:'voxel solid and terrain draw'}),groups=null;
+        await terrainAllocation(this.device,()=>{this.density=[this.buffer('voxel solid A',densityBytes),this.buffer('voxel solid B',densityBytes)];});current();this.settings(s,count);
+        const reads=this.inputs();let encoder=this.device.createCommandEncoder({label:'voxel solid and terrain draw'});const groups=null;
         this.encode('voxelBuild',encoder,groups,reads,{5:{buffer:this.density[0]}});
         // A round fades from zero to full strength before the next starts.
         // The last fractional round makes Weathering continuous at each
@@ -152,6 +152,16 @@ export class VoxelSurface {
         const strength=Math.max(0,...r.rockSlots().map(k=>r.rockValue(k,'rockFace')>0?r.rockValue(k,'faceWear'):0));
         const wear=Math.min(4,Math.ceil(4*strength));
         for(let i=0;i<wear;i++)this.encode('voxelWeather',encoder,groups,{...reads,0:{buffer:this.uniform,offset:i*256,size:64},2:{buffer:this.density[i%2]}},{5:{buffer:this.density[1-i%2]}});
+        // Large refinement blocks can otherwise combine a long solid build
+        // with a long geometry draw. Drain the solid and let input cancel
+        // before queuing the draw. Coarse 4+ sources are already short;
+        // those and native 256px tiles stay one submission.
+        if(r.voxelScale<4&&rect.width*rect.height/(scale*scale)>128*1024){
+          this.device.queue.submit([encoder.finish()]);
+          await this.device.queue.onSubmittedWorkDone();
+          await new Promise(resolve=>setTimeout(resolve,0));current();
+          encoder=this.device.createCommandEncoder({label:'terrain geometry after voxel solid'});
+        }
         const finalReads={...reads,2:{buffer:this.density[wear%2]}};
         const bind=this.device.createBindGroup({layout:this.drawLayout,entries:[0,1,2,3,4,5,7,8].map(binding=>({binding,resource:finalReads[binding]}))});
         draw(encoder,bind,[(rect.x-origin[0])/scale,(rect.y-origin[1])/scale,rect.width/scale,rect.height/scale],first);
@@ -172,7 +182,9 @@ export class VoxelSurface {
       first=false;this.stats.pieces++;this.stats.bricks+=counts[2];this.stats.candidateBricks+=counts[0];
       }finally{await pending.catch(()=>{});}
     };
-    await piece({x:origin[0],y:origin[1],width,height});this.stats.allocationMs=performance.now()-start;
+    try{await piece({x:origin[0],y:origin[1],width,height});}
+    catch(error){this.clear();throw error;}
+    this.stats.allocationMs=performance.now()-start;
   }
   destroy(){this.clear();this.uniform.destroy();this.readback.destroy();}
 }

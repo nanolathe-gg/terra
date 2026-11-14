@@ -1,3 +1,17 @@
+> **November 14 approved landing:** the owner authorized merging the reported
+> review branch through e1476192. The compact sampler's measured pixel changes
+> and Rain's 8–11% final-cost tradeoff are included in that approval. Main had
+> not moved; the rendering source and pinned previews are unchanged from the
+> checked build. [Landing record](LP_NOV14_LANDING.md). Earlier branch/review
+> statements below describe the checkpoint before this approval.
+
+> **November 14 overnight checkpoint:** approved cache/mask/preview-lifetime
+> units are on main a14c48c3. Newer work remains together on `live-preview/lp6`
+> for visual review. [The morning checkpoint](LP_NOV14_MORNING.md) separates
+> landed work, measured improvements and unfinished targets. The final-source
+> small-map Rain pair is 98.4 / 91.7 ms p95, with an 8–11% final-render cost;
+> [the scoped report](LP3_SMALL_MAPS.md) preserves the misses and limits too.
+
 > **November 13 LP3 landing:** the owner approved the reviewed LP3 work.
 > [The landing record](LP3_LANDING.md) covers its transplant onto cleaned main,
 > validation, remaining limits, and the transition to LP6. Earlier measurements
@@ -1164,6 +1178,8 @@ preview for 175 ms at the median and 720 ms at p95. Step 1 touches only
 depend on LP1 or LP2 and may be built before them or beside them (the
 owner's call, section 8).
 
+**November 14 bounded-stage follow-up:** [request checks and split large finer chunks](LP4_CHUNK_BOUNDARIES.md) reduce the sampled paused Rain maximum GPU submission from 120.1 to 70.3 ms and queue wait from 140.6 to 90.2 ms, with exact final pixels and effectively flat final cost. Coarse first pictures remain combined after a slower trial was rejected. Cancellation ownership passes at both count and solid boundaries. Adaptive time-based sizing and qualifying Time-in-flight resume acceptance remain open. This unit stays on the same review branch.
+
 **Change.**
 1. **The Time pass in slices.** The same passes in the same order, a few
    iterations a submission (sized so a slice is under 50 ms), yielding to
@@ -1217,6 +1233,18 @@ and which are stage F. Then stop and report.
 **November 13 mask-memory follow-up:** [exact color-mask packing](LP5_MASKS.md) cuts retained mask layers from seven to three and fits 18 records instead of 13 at the same quota. Phased, in-place packing preserves the 128-MiB engine fixture; sampled rendering/export art is unchanged. In the focused pair, continuous release final is 965.8 → 795.2 ms, with mixed input tails. The source stays on the review branch; whole-view final-quality acceptance is still open.
 
 **November 14 preview-lifetime follow-up:** [keeping the covering coarse color record](LP5_PREVIEW_LIFETIME.md) avoids rebuilding geometry after final completion or a mid-drag pause. In the focused pair, first-change p95 falls from 65–113 ms to 8–11 ms, within the unchanged cache quota; whole-current at a coarse level is equally fast. Quick replay, recomposition, zoom, invalidation and memory-lowering checks pass. Final-quality completion remains about 0.8 s and LP5 acceptance is open; the work stays on the review branch.
+
+**November 14 compact-input follow-up:** [exact-sized regional inputs and stable explicit interpolation](LP5_COMPACT_INPUTS.md) fit all 35 native records plus the coarse block inside the existing quota. In the focused pair, release-final falls from 759–829 ms to 87–123 ms, with exact same-build tile/cache/replay checks. Interpolation moves 0.476% of the sampled large view and remains on the review branch. Continuous-input final-quality p95 is still 1.62 s because native work restarts behind coarse updates; that scheduling gap is next.
+
+**November 14 native-progress follow-up:** [direct oldest-first F updates](LP5_FAIR_COLOR.md) stop a complete cache from repeatedly repainting coarse terrain and restarting at the focus. In the focused pair, native-quality input p95 falls from 795–1556 ms to 173–199 ms; 34–35 of 36 inputs reach native quality before release. Partial-cache coarse response remains 5–7 ms p95 and both budgets replay exactly. The 150-ms target remains open; bounded per-tile queue waits are next.
+
+**November 14 sweep follow-up:** [guarded native F continuation and direct rectangle repaint](LP5_COLOR_SWEEPS.md) reduce native-quality input p95 to 160 / 116 / 138 ms in the focused continuous/pause/cold pair, with first-change p95 under 20 ms and exact replay. Continuous still narrowly misses 150 ms. Geometry/Rain interruption and 512-MiB cache clearing pass; a short stroke pair is effectively flat (+1.8% final). The source stays on the review branch.
+
+**November 14 submission follow-up:** [bounded four-tile F submissions](LP5_COLOR_BATCHES.md) keep sampled native-quality p95 at 111–140 ms in two alternating large Modern Green pairs, with first-change p95 below 33 ms and exact replay. The sampled color row now meets 150 ms; partial coverage, other fixtures and cold startup remain open. The work stays on the review branch.
+
+**November 14 shifted-view follow-up:** [exact weather/material packing](LP5_GRID_INPUTS.md) fits all 40 native records plus the coarse block after a half-tile pan, at the unchanged quota. Two alternating pairs reduce native-quality color p95 from 912–1729 ms to 118–130 ms, with exact parent-art and replay checks. The original low-memory budget and tile-equality assertions stay unchanged. Other fixtures remain to measure.
+
+**November 14 visible-color follow-up:** [native F viewport scissors and partial-image validity](LP5_VISIBLE_COLOR.md) keep sampled Modern Colors p95 at 110–142 ms in two alternating pairs, with first-change p95 below 36 ms and exact pan/zoom/replay checks. Estimated off-screen F work drops to zero in the final integral-view pair. Selected Red/map16 and Green/map4 checks against main are included; full LP5 acceptance remains open.
 
 **Build (M-L)** only if step 0's rerun equals the full re-bake: land the
 split (scenes move by the reported drift, the owner looks), keep records for

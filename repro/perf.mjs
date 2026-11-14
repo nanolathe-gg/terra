@@ -10,7 +10,7 @@
 // --warmup discards a session; --report FILE... prints the section 2 budget table.
 // Use distinct CDP ports, discard one --warmup per fresh server, alternate workloads,
 // and check ps -Ao pcpu,command -r | head before measured runs. Never time two at once.
-import {createCoverage,pictureCurrent} from './perf-coverage.mjs';
+import {createCoverage,pictureCurrent,finalQualityObservations,coverageReadyForInput} from './perf-coverage.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn, execFileSync} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync, rmSync} from 'node:fs';
@@ -41,13 +41,13 @@ function budgetTable(results) {
   const groups = [
     ['Stroke / move / shape-card (stroke sampled)',r=>[r.drag,r.resume].filter(Boolean),50,100],
     ['World / rock / surface / sun',r=>(r.slider||[]).filter(s=>['knob-faceBlockSize','knob-reliefAmount','knob-sunHeight'].includes(s.control)),50,100],
-    ['Color / shine / light / palette (color, ambient sampled)',r=>(r.slider||[]).filter(s=>['colors','knob-ambient'].includes(s.control)),50,150],
+    ['Color / shine / light / palette (final quality; color, ambient sampled)',r=>(r.slider||[]).filter(s=>['colors','knob-ambient'].includes(s.control)),50,150,'finalQuality'],
     ['Time controls (Rain sampled)',r=>(r.slider||[]).filter(s=>s.control==='knob-erosionRain'),100,null],
     ['Pan / zoom onto uncached ground (pan sampled)',r=>[r.scroll].filter(Boolean),50,100],
     ['First picture after scene load',r=>[r.load].filter(Boolean),null,1000],
   ];
   const cell = (phases,key,budget) => {
-    const samples=phases.flatMap(p=>key==='finalRelease'?releaseSample(p):key==='firstTile'?tileSamples(p):key==='pointer'?tileSamples(p,true):p.samples?.[key]||[]), total=phases.reduce((n,p)=>n+(key==='finalRelease'?1:key==='firstTile'?(p.inputs?.length||0):p.sampleTotals?.[key]??p.samples?.[key]?.length??0),0), d=distribution(samples,total);
+    const samples=phases.flatMap(p=>key==='finalRelease'?releaseSample(p):key==='firstTile'?tileSamples(p):key==='pointer'?tileSamples(p,true):key==='finalQuality'?(p.samples?.finalQuality??finalQualityObservations(p).samples):p.samples?.[key]||[]), total=phases.reduce((n,p)=>n+(key==='finalRelease'?1:key==='firstTile'||key==='finalQuality'?(p.inputs?.length||0):p.sampleTotals?.[key]??p.samples?.[key]?.length??0),0), d=distribution(samples,total);
     if(!d.n) return `unobserved (${d.censored} censored)`;
     // A high censored share must never turn into a passing p95.
     const status=budget==null?'':d.censored/total>.05?' FAIL (censored)':d.p95<=budget?' PASS':' FAIL';
@@ -58,7 +58,7 @@ function budgetTable(results) {
   const lines=[...(scripted.length?[`LABELED SUBSTITUTE: ${scripted.length} scripted Colors phases (value/input events on the existing picker, not native mouse).`,'']:[]),...(gaps.length?[`INCOMPLETE: ${gaps.length} native Colors phases; ${[...new Set(results.flatMap(r=>(r.slider||[]).filter(p=>p.status==='blocked').map(p=>p.reason)))].join('; ')}`,'']:[]),'All times ms: p50 / p95; [observed / requested]. Superseded inputs wait for a later current image.','',
     '| Interaction | First changed pixels | Whole view current | Release to final |',
     '| --- | ---: | ---: | ---: |'];
-  for(const [name,select,first,whole] of groups){const p=results.flatMap(select);lines.push(`| ${name} | ${cell(p,'first',first)} | ${cell(p,'all',whole)} | ${cell(p,'finalRelease',null)} |`);}
+  for(const [name,select,first,whole,wholeKey='all'] of groups){const p=results.flatMap(select);lines.push(`| ${name} | ${cell(p,'first',first)} | ${cell(p,wholeKey,whole)} | ${cell(p,'finalRelease',null)} |`);}
   const phases=results.flatMap(r=>[r.load,r.drag,r.release,r.resume,...r.slider||[],r.scroll,r.export].filter(Boolean));
   const max=(f)=>Math.max(0,...phases.map(f));
   lines.push('',`Fresh stroke tiles (input to paint), first: ${cell(results.flatMap(r=>[r.drag,r.resume].filter(Boolean)),'firstTile',null)}; pointer: ${cell(results.flatMap(r=>[r.drag,r.resume].filter(Boolean)),'pointer',null)}; whole area: ${cell(results.flatMap(r=>[r.drag,r.resume].filter(Boolean)),'all',null)}.`,`Focus tile after pause/release: ${cell(results.flatMap(r=>[r.drag,r.resume,...r.slider||[]].filter(p=>p&&p.status!=='blocked')),'focus',600)}.`,`GPU queue wait max: ${max(p=>p.split?.queueWaitMs?.max||0).toFixed(1)} ms (wall, includes queueing).`,
@@ -174,7 +174,7 @@ function hooks(){
     GPUCommandEncoder.prototype['begin'+kind+'Pass']=function(desc={}){
       const m=encMeta.get(this);
       if(!m?.device.features.has('timestamp-query')||desc.timestampWrites||P.reading)return begin.call(this,desc);
-      const b=slot(m.device),i=b.n++,p={label:desc.label||kind,meta:m,index:i};b.passes.push(p);m.passes.push(p);
+      const b=slot(m.device),i=b.n++,p={label:desc.label||kind,rect:P.ctx?.passRect,meta:m,index:i};b.passes.push(p);m.passes.push(p);
       const pass=begin.call(this,{...desc,timestampWrites:{querySet:b.queries,beginningOfPassWriteIndex:i*2,endOfPassWriteIndex:i*2+1}}),end=pass.end.bind(pass),enc=this;
       pass.end=()=>{end();enc.resolveQuerySet(b.queries,i*2,2,b.resolve,i*256);};return pass;
     };
@@ -187,7 +187,7 @@ function hooks(){
   }
   P.gpuRead=async()=>{
     P.reading=true;const out=[];
-    try{for(const b of P.blocks){await done.call(b.device.queue);if(!b.n)continue;const read=b.device.createBuffer({size:b.n*256,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST}),e=cd.call(b.device);e.copyBufferToBuffer(b.resolve,0,read,0,b.n*256);submit.call(b.device.queue,[e.finish()]);await read.mapAsync(GPUMapMode.READ);const v=new BigUint64Array(read.getMappedRange());for(const p of b.passes){const a=v[p.index*32],z=v[p.index*32+1];if(z>=a&&a>0n)out.push({label:p.label,ms:Number(z-a)/1e6,start:Number(a)/1e6,end:Number(z)/1e6,t:p.meta.submitted,submit:p.meta.submit,kind:p.meta.kind,rect:p.meta.rect,prep:p.meta.prep});}read.destroy();}
+    try{for(const b of P.blocks){await done.call(b.device.queue);if(!b.n)continue;const read=b.device.createBuffer({size:b.n*256,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST}),e=cd.call(b.device);e.copyBufferToBuffer(b.resolve,0,read,0,b.n*256);submit.call(b.device.queue,[e.finish()]);await read.mapAsync(GPUMapMode.READ);const v=new BigUint64Array(read.getMappedRange());for(const p of b.passes){const a=v[p.index*32],z=v[p.index*32+1];if(z>=a&&a>0n)out.push({label:p.label,ms:Number(z-a)/1e6,start:Number(a)/1e6,end:Number(z)/1e6,t:p.meta.submitted,submit:p.meta.submit,kind:p.meta.kind,rect:p.rect??p.meta.rect,prep:p.meta.prep});}read.destroy();}
       // Align GPU timestamps to performance.now() after the measured work is
       // drained. Submit/completion brackets bound the clock-offset uncertainty.
       const device=sculptCanvas.renderer.device;await done.call(device.queue);
@@ -204,7 +204,7 @@ function hooks(){
   P.stop=()=>{if(P.stoppedAt)return P.stoppedAt;P.active=false;P.frameOn=false;P.frameGen=(P.frameGen||0)+1;P.stopStats=sculptCanvas.stats();return P.stoppedAt=now();};
   P.reset=()=>{if(P.baseline){closeBitmap.call(P.baseline);P.baseline=null;}P.held=new WeakSet();P.pixelPaints=[];P.extraBitmapBytes=0;P.peakExtraBitmapBytes=0;P.retainedBlockCanvasBytes=0;P.active=false;P.frameOn=false;coverage.reset();P.events=[];P.inputs=[];P.handlers=[];P.stages=[];P.waits=[];P.long=[];P.compiles=[];P.frames=[];P.submits=[];for(const b of P.blocks){b.queries.destroy();b.resolve.destroy();}P.blocks=[];P.encoders=[];};
   let canvas;
-  Object.defineProperty(window,'sculptCanvas',{configurable:true,get:()=>canvas,set:c=>{canvas=c;if(c.changed){const changed=c.changed;c.changed=function(change){const result=changed.call(c,change);if(change.kind==='world'&&change.input!==false){for(const m of P.inputs)if(m.native&&m.kind==='slider'&&m.nativeSerial==null){m.nativeSerial=result.serial;m.nativeStage=result.stage;m.worldRev=result.rev;m.noop=!result.stage;m.noopCurrent=m.noop&&P.visible().every(k=>P.current().some(e=>e.x+','+e.y===k&&!e.dirty))&&window.sculptRegion?.canExport?.()!==false;}}return result;};}const r=c.renderer;for(const name of ['applyKnobs','setColors','upload']){const f=r[name];r[name]=function(...a){if(name==='setColors')P.appliedSerial=P.serial;return P.call(name,()=>f.apply(this,a));};}r.timer=()=>null;if(r.renderColorTile){const color=r.renderColorTile;r.renderColorTile=async function(tile,options){const t=now(),previous=P.ctx;P.ctx={kind:'color',rect:tile.rect};P.mark('color-start',{...tile.rect});try{return await color.call(this,tile,options);}finally{P.ctx=previous;P.mark('color-end',{...tile.rect,ms:now()-t});}};}const f=r.renderChunk;r.renderChunk=async function(request,options){const t=now(),previous=P.ctx,prep=P.lastPrep,prediction=r.voxel.predictionStats?{...r.voxel.predictionStats}:null;P.ctx={kind:'chunk',prep,rect:{x:request.x,y:request.y,width:request.width,height:request.height}};P.mark('bake-start',{prep,...P.ctx.rect,level:options?.scale??1});try{return await f.call(this,request,options);}finally{if(prediction)P.mark('voxel-prediction',{level:options?.scale??1,...Object.fromEntries(Object.entries(r.voxel.predictionStats).map(([k,v])=>[k,v-prediction[k]]))});P.ctx=previous;P.mark('bake-end',{prep,x:request.x,y:request.y,width:request.width,height:request.height,ms:now()-t,level:options?.scale??1});}};}});
+  Object.defineProperty(window,'sculptCanvas',{configurable:true,get:()=>canvas,set:c=>{canvas=c;if(c.changed){const changed=c.changed;c.changed=function(change){const result=changed.call(c,change);if(change.kind==='world'&&change.input!==false){for(const m of P.inputs)if(m.native&&m.kind==='slider'&&m.nativeSerial==null){m.nativeSerial=result.serial;m.nativeStage=result.stage;m.worldRev=result.rev;m.noop=!result.stage;m.noopCurrent=m.noop&&P.visible().every(k=>P.current().some(e=>e.x+','+e.y===k&&!e.dirty))&&window.sculptRegion?.canExport?.()!==false;}}return result;};}const r=c.renderer;for(const name of ['applyKnobs','setColors','upload']){const f=r[name];r[name]=function(...a){if(name==='setColors')P.appliedSerial=P.serial;return P.call(name,()=>f.apply(this,a));};}r.timer=()=>null;if(r.renderColorTile){const method=r.renderColorTiles?'renderColorTiles':'renderColorTile',color=r[method];r[method]=async function(...args){const [input]=args,tiles=Array.isArray(input)?input:[input],rects=tiles.map(t=>t.rect).filter(Boolean),x=Math.min(...rects.map(r=>r.x)),y=Math.min(...rects.map(r=>r.y)),rect=rects.length?{x,y,width:Math.max(...rects.map(r=>r.x+r.width))-x,height:Math.max(...rects.map(r=>r.y+r.height))-y}:null,t=now(),previous=P.ctx;P.ctx={kind:'color',rect,records:new Map(tiles.map(t=>[t.record,{rect:t.rect,sx:t.rect?.width/t.width,sy:t.rect?.height/t.height}]))};P.mark('color-start',{...rect,tileCount:tiles.length});try{return await color.apply(this,args);}finally{P.ctx=previous;P.mark('color-end',{...rect,tileCount:tiles.length,ms:now()-t});}};const encode=r.encodeColor;r.encodeColor=function(...a){const previous=P.ctx?.passRect;if(P.ctx){const frame=P.ctx.records?.get(a[5]?.record),s=a[2];P.ctx.passRect=frame?.rect?{x:frame.rect.x+s[0]*frame.sx,y:frame.rect.y+s[1]*frame.sy,width:s[2]*frame.sx,height:s[3]*frame.sy}:P.ctx.rect;}try{return encode.apply(this,a);}finally{if(P.ctx)P.ctx.passRect=previous;}};}const f=r.renderChunk;r.renderChunk=async function(request,options){const t=now(),previous=P.ctx,prep=P.lastPrep,prediction=r.voxel.predictionStats?{...r.voxel.predictionStats}:null;P.ctx={kind:'chunk',prep,rect:{x:request.x,y:request.y,width:request.width,height:request.height}};P.mark('bake-start',{prep,...P.ctx.rect,level:options?.scale??1});try{return await f.call(this,request,options);}finally{if(prediction)P.mark('voxel-prediction',{level:options?.scale??1,...Object.fromEntries(Object.entries(r.voxel.predictionStats).map(([k,v])=>[k,v-prediction[k]]))});P.ctx=previous;P.mark('bake-end',{prep,x:request.x,y:request.y,width:request.width,height:request.height,ms:now()-t,level:options?.scale??1});}};}});
 }
 function instrument(path,source){
   const replace=(before,after,count=1)=>{const found=source.split(before).length-1;if(found!==count)throw Error(`LP0 hook drift in ${path}: ${before.slice(0,70)} (${found}, expected ${count})`);source=source.split(before).join(after);};
@@ -303,7 +303,7 @@ function analyze(data,t0,anchors=[]){
     const p=paints.find(e=>e.t>=m.t&&current(e,m)&&e.changed);
     if(p)first.push(p.t-m.t);
     if(m.at){const p=paints.find(e=>e.t>=m.t&&current(e,m)&&e.changed&&(e.clips??[e]).some(r=>m.at[0]>=r.x&&m.at[0]<r.x+r.width&&m.at[1]>=r.y&&m.at[1]<r.y+r.height));if(p)pointer.push(p.t-m.t);}
-    const c=coverage.find(e=>e.t>=m.t&&e.ready&&rectCoverage.covered((m.rectangles?.length?m.rectangles:[data.view]).map(r=>rectCoverage.intersect(r,data.view)).filter(Boolean),p=>m.kind==='scroll'?!p.dirty&&p.eligible!==false:current(p,m),e.regions));
+    const c=coverage.find(e=>e.t>=m.t&&coverageReadyForInput(e,m)&&rectCoverage.covered((m.rectangles?.length?m.rectangles:[data.view]).map(r=>rectCoverage.intersect(r,data.view)).filter(Boolean),p=>m.kind==='scroll'?!p.dirty&&p.eligible!==false:current(p,m),e.regions));
     const completed=c?.t??(m.noopCurrent?m.t:null);if(completed!==null)all.push(completed-m.t);observations.push({id:m.id,t:m.t,first:p?.t??null,all:completed,preps:c?[...new Set(c.regions.filter(p=>current(p,m)).map(p=>p.prep).filter(Boolean))]:[]});
   }
   for(const anchor of anchors){
@@ -315,8 +315,8 @@ function analyze(data,t0,anchors=[]){
     const focusView=coverage.find(e=>e.t>=anchor.t&&e.t<nextInput&&e.ready&&e.keys.some(p=>!p.dirty&&p.level<=1&&at[0]>=p.x&&at[0]<p.x+p.width&&at[1]>=p.y&&at[1]<p.y+p.height));if(focusView)focus.push(focusView.t-anchor.t);
   }
   if(!inputs.length){const p=paints.find(e=>e.t>=t0&&e.changed),c=coverage.find(e=>e.t>=t0&&e.ready&&data.visible.every(k=>e.keys.some(p=>p.key===k&&!p.dirty)));if(p)first.push(p.t-t0);if(c)all.push(c.t-t0);}
-  const samples={first,pointer,all,final,focus},total=inputs.length||1;
-  return {samples,observations,finalObservations,sampleTotals:{first:total,pointer:inputs.filter(m=>m.at).length,all:total,final:anchors.length,focus:anchors.length},latency:distribution(first,total),latencyPointer:distribution(pointer,inputs.filter(m=>m.at).length),latencyAll:distribution(all,total),final:distribution(final,anchors.length),focusFinal:distribution(focus,anchors.length)};
+  const quality=finalQualityObservations(data),samples={first,pointer,all,final,focus,finalQuality:quality.samples},total=inputs.length||1;
+  return {samples,observations,finalObservations,finalQualityObservations:quality.observations,latencyFinalQuality:distribution(quality.samples,inputs.length),sampleTotals:{first:total,pointer:inputs.filter(m=>m.at).length,all:total,final:anchors.length,focus:anchors.length,finalQuality:inputs.length},latency:distribution(first,total),latencyPointer:distribution(pointer,inputs.filter(m=>m.at).length),latencyAll:distribution(all,total),final:distribution(final,anchors.length),focusFinal:distribution(focus,anchors.length)};
 }
 const capture=async(t0,anchors=[],extra={})=>{
   await ev('__perf.stop()');await ev('__perf.readPixels()');

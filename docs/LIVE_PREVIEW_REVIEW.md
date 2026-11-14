@@ -1,3 +1,16 @@
+> **November 14 approved landing:** the owner authorized merging the reported
+> review branch through e1476192. The compact sampler's measured pixel changes
+> and Rain's 8–11% final-cost tradeoff are included in that approval. Main had
+> not moved; the rendering source and pinned previews are unchanged from the
+> checked build. [Landing record](LP_NOV14_LANDING.md). Earlier branch/review
+> statements below describe the checkpoint before this approval.
+
+> **November 14 checkpoint:** main a14c48c3 includes the owner-approved
+> bounded F cache, mask packing and coarse-record lifetime fixes. The newer
+> compact inputs, color scheduling and small-map Rain work stays on the same
+> `live-preview/lp6` review branch. [Current measured status](LP_NOV14_MORNING.md)
+> supersedes the remaining-work list in this historical November 13 record.
+
 > **November 13 LP6 and LP5 split landing:** the owner approved the retained
 > LP6 units and LP5 step 0 for main. The source merge is unchanged from the
 > reviewed branch; main had not moved. Fresh authored previews are pinned to

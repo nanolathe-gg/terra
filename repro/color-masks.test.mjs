@@ -24,3 +24,14 @@ test('the color shader reads only the packed mask channels it retains',()=>{
   }
   assert(reads>0,'the actual preprocessed color shader must be inspected');
 });
+
+test('the color shader reads only its three retained weather/material layers',()=>{
+  const file=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
+  const source=preprocess(file('engine-frag.wgsl').replace('/*VOLUME*/',file('engine-volume.wgsl')),file('engine-common.wgsl'),new Set(['VOLUME_RENDER','COLOR_PASS'])).replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g,'');
+  let reads=0;
+  for(const use of source.matchAll(/\bgridTex\b/g)){
+    const tail=source.slice(use.index);if(/^gridTex\s*:/.test(tail))continue;
+    assert.match(tail,/^gridTex\s*,\s*regionalPoint\(uv\)\s*,\s*[012]\s*\)/,'a new grid read needs a packing dependency audit');reads++;
+  }
+  assert(reads>0,'inspect the actual preprocessed color shader');
+});

@@ -111,7 +111,7 @@ export class GpuErosion {
       const thermalA = group1(s0, s1, fluxA, fluxB), thermalB = group1(s1, s0, fluxA, fluxB);
       const groups=Math.ceil(grid/8),parts={gpu:0,slices:0,iterations:[],maxSliceWait:0};
       const submitSlice=async (encoder,iterations=0) => {
-        current();
+        if(request.beforeSlice)await request.beforeSlice();current();
         const tSubmit = performance.now();
         device.queue.submit([encoder.finish()]);
         await device.queue.onSubmittedWorkDone();

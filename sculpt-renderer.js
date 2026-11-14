@@ -715,10 +715,10 @@ export class TerrainRenderer {
     this.device.queue.writeBuffer(this.geometrySettings,0,new Uint32Array([width,height,0,0]));
   }
 
-  geometryBinding(layout,record=this.geometryRecord,masks=this.colorMaskTexture){return this.device.createBindGroup({layout,entries:[{binding:0,resource:{buffer:record}},{binding:1,resource:{buffer:this.geometrySettings}},...(layout===this.geometryInLayout?[{binding:2,resource:masks.createView({dimension:'2d-array'})}]:[])]});}
-  encodeColor(commands,pipeline,rect,first,timer,{record=this.geometryRecord,group=this.commonBindGroup('draw'),masks=this.colorMaskTexture,target=this.voxelColor}={}){
+  geometryBinding(layout,record=this.geometryRecord,masks=this.colorMaskTexture,frame=this.geometrySettings){return this.device.createBindGroup({layout,entries:[{binding:0,resource:{buffer:record}},{binding:1,resource:{buffer:frame}},...(layout===this.geometryInLayout?[{binding:2,resource:masks.createView({dimension:'2d-array'})}]:[])]});}
+  encodeColor(commands,pipeline,rect,first,timer,{record=this.geometryRecord,group=this.commonBindGroup('draw'),masks=this.colorMaskTexture,target=this.voxelColor,geometryGroup=null}={}){
     const pass=commands.beginRenderPass({label:'terrain color',colorAttachments:[{view:target.createView(),clearValue:{r:0,g:0,b:0,a:1},loadOp:first?'clear':'load',storeOp:'store'}],timestampWrites:timer?.timestampWrites});
-    pass.setPipeline(pipeline);pass.setScissorRect(...rect);pass.setBindGroup(0,group);pass.setBindGroup(1,this.materialBindGroup());pass.setBindGroup(3,this.geometryBinding(this.geometryInLayout,record,masks));pass.draw(3);pass.end();timer?.encode(commands);
+    pass.setPipeline(pipeline);pass.setScissorRect(...rect);pass.setBindGroup(0,group);pass.setBindGroup(1,this.materialBindGroup());pass.setBindGroup(3,geometryGroup??this.geometryBinding(this.geometryInLayout,record,masks));pass.draw(3);pass.end();timer?.encode(commands);
   }
   // LP5 step 0 only: the current tile's color pass, never scheduler routing.
   async recolor(options=this.worldOptions){
@@ -736,8 +736,9 @@ export class TerrainRenderer {
     } finally { this._busy=false; }
   }
 
-  async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
-    const start = performance.now(), device = this.device;
+  async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false, signal, stale} = {}) {
+    const current=()=>{signal?.throwIfAborted();if(stale?.())throw new DOMException('The scene changed during a terrain bake.','AbortError');};
+    current();const start = performance.now(), device = this.device;
     this.syncWorld({clay,light,detail,ring,ringSpread,ringVariation,materialWeathering,transitionDetail,exact});
     this.i('uMaterialReady', this.materialReady);
     this.i('uTransitionBody', Boolean(this.transitionBody&&this.materialReady&&materialWeathering>0));
@@ -757,7 +758,7 @@ export class TerrainRenderer {
       this.voxelColor=device.createTexture({label:'voxel terrain color',size:[this.canvas.width,this.canvas.height],format:this.format,usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
       this.track(this.voxelColor,'voxel terrain color',this.canvas.width*this.canvas.height*4,'working');
     }
-    await this.allocateGeometry();this.geometryValid=false;
+    this.geometryValid=false;await this.allocateGeometry();current();
     this.release(this.maskPackBuffer);this.release(this.maskPackSettings);this.maskPackBuffer=this.maskPackSettings=null;
     const timers=[];
     const reset=device.createCommandEncoder({label:'clear geometry record'});reset.clearBuffer(this.geometryRecord);device.queue.submit([reset.finish()]);
@@ -766,10 +767,10 @@ export class TerrainRenderer {
       const pass=commands.beginRenderPass({label:'terrain geometry',colorAttachments:[{view:this.geometryTarget.createView(),clearValue:{r:0,g:0,b:0,a:0},loadOp:first?'clear':'load',storeOp:'store'}],timestampWrites:timer?.timestampWrites});
       const [x,y,w,h]=rect.map(Math.round);pass.setPipeline(this.genericPipelines[this.rockMask()].geometry);pass.setScissorRect(x,y,w+2,h+2);
       pass.setBindGroup(0,this.commonBindGroup('draw'));pass.setBindGroup(1,this.materialBindGroup());pass.setBindGroup(2,volume);pass.setBindGroup(3,this.geometryBinding(this.geometryOutLayout));pass.draw(3);pass.end();timer?.encode(commands);
-    });
+    },current);
     // E is complete for every piece. F has no solid dependency, so its
     // bounded mask staging replaces D instead of adding to the terrain peak.
-    this.voxel.clear();await this.packColorMasks();
+    this.voxel.clear();current();await this.packColorMasks();current();
     const color=device.createCommandEncoder({label:'terrain color'}),colorTimer=this.timer();if(colorTimer)timers.push(colorTimer);
     this.encodeColor(color,drawPipeline,[0,0,this.canvas.width,this.canvas.height],true,colorTimer);device.queue.submit([color.finish()]);
     this.geometryUniformSnapshot=new Uint32Array(this.uniformData.slice(0));this.geometryValid=true;
