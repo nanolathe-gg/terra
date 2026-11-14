@@ -1137,8 +1137,11 @@ export class TerrainRenderer {
       palette.forEach((index,k)=>color(at+table.members.get('texturePalette').offset+k*16,index));
 
     }
-    this.uniformsDirty = true;
-    this.groundCache.sync(groundPool(this.config.material), this.grounds);
+    // Input can arrive faster than full-repeat generation and diffusion finish.
+    // Keep only the latest recipe here. Reserve a changed layout for memory
+    // planning, but submit no generation work. bakeFields synchronizes the cache
+    // inside the draw cycle, after the chunk renderer's GPU completion fence.
+    this.groundCache.prepare(groundPool(this.config.material), this.grounds);
     this.fieldsDirty = true;
     this.uniformsDirty = true;
   }

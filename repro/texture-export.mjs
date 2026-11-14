@@ -13,6 +13,14 @@ const s=await openScene({biome:'red',ground:false,grounds,strokes:[['deep',[[256
 try{
  const before=await renderWindow(s,{x:256,y:192,width:128,height:128});
  const generations=s.renderer.groundCache.generations;
+ // A burst of edits must retain only CPU recipe state until a draw consumes it.
+ const queue=s.renderer.device.queue,submit=queue.submit.bind(queue);let editSubmissions=0;
+ queue.submit=commands=>{editSubmissions++;submit(commands);};
+ try{for(let i=0;i<120;i++){const pending=structuredClone(grounds);pending[1].knobs.patternWarp=i/10;s.setGrounds(pending);}}
+ finally{queue.submit=submit;}
+ assert.equal(editSubmissions,0,'slider inputs must not submit GPU work');
+ assert.equal(s.renderer.groundCache.generations,generations,'intermediate recipes do not generate fields');
+ s.setGrounds(grounds);
  const edited=structuredClone(grounds);edited[1].textureColors.high=[110,200,210];s.setGrounds(edited);
  const after=await renderWindow(s,{x:256,y:192,width:128,height:128});assert.notDeepEqual(after,before,'water edits update visible water');assert.equal(s.renderer.groundCache.generations,generations,'color-only edits retain field cache');
  s.setGrounds(grounds);assert.deepEqual(await renderWindow(s,{x:256,y:192,width:128,height:128}),before,'restoration');
@@ -23,5 +31,5 @@ try{
  const a=await exportMap(s,{name:'Texture authoring check',wasm});const b=await exportMap(s,{name:'Texture authoring check',wasm});
  assert.deepEqual(a.indexed,b.indexed,'exported art replay');assert.deepEqual(a.archive,b.archive,'exported archive replay');assert.ok(a.result.uniqueTiles>0);assert.deepEqual(s.errors,[]);
  writeFileSync(out+'/texture.ufo',a.archive);
- const report={archiveBytes:a.archive.length,uniqueTiles:a.result.uniqueTiles,sha256:createHash('sha256').update(a.archive).digest('hex'),waterColorEdit:true,waterRelief:true,fieldCacheRetained:true,artReplay:'exact',archiveReplay:'exact',gpuErrors:s.errors};writeFileSync(out+'/report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report));
+ const report={archiveBytes:a.archive.length,uniqueTiles:a.result.uniqueTiles,sha256:createHash('sha256').update(a.archive).digest('hex'),coalescedInputs:120,inputGpuSubmissions:editSubmissions,waterColorEdit:true,waterRelief:true,fieldCacheRetained:true,artReplay:'exact',archiveReplay:'exact',gpuErrors:s.errors};writeFileSync(out+'/report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report));
 }finally{s.dispose();}process.exit(0);

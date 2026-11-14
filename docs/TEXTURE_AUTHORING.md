@@ -74,12 +74,19 @@ The shared cache has eight slots (seven map recipes plus the world slot), within
 128 MiB. Stored fields and palette output cost 12 bytes per repeat pixel per active
 material. A 1024-pixel pool fits eight slots; a 2048-pixel pool fits two. Diffusion
 also uses transient row-error storage, about 2 MiB at 1024 pixels. Color edits
-retain shape fields and refresh the palette output when needed.
+retain shape fields and refresh the palette output when needed. Slider input
+updates only the latest recipe and cache layout. The paced draw cycle performs
+field generation and diffusion after the previous chunk completes, so rapid
+input cannot accumulate a full-repeat GPU job for every pointer movement.
 
 ## Focused validation
 
 Measured on the implementation branch:
 
+- Sustained 120-move scrub regression: the original input path reached 78
+  unfinished GPU submissions and lost the device. After moving generation into
+  the paced draw cycle, peak outstanding submissions were 6, no device or console
+  errors occurred, and the final slider value matched the rendered recipe.
 - Six focused model/save tests pass.
 - Ground UI check: paint and landform selection, editing, undo/redo, save/reload,
   and the 64-tile live preview pass.
