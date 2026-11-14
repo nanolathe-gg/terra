@@ -434,12 +434,19 @@ export async function repeatCheck({fields,grid,settle}) {
 // shape engine run directly over that window; every authored plane must match exactly. Quadrant windows, so each window is a regional run on its own.
 // Then the pages' coarse lattice (one height a 16 px cell, which the overview draws) against the whole-map engine's heights at the same cells: the
 // same value in every cell. `fields` is the map's paged fields (createPagedFields over `nodes`), `startCoarse` starts their coarse lattice if nothing has yet.
-export async function regionalCheck({fields,device,nodes,context,config,grid,spacing,minH,maxH,startCoarse=() => fields.startCoarse()}) {
+// `ulps` lets a value within that many float32 steps at the map's top height (maxH, so derived planes such as c share the heights' precision)
+// pass as a near match, counted apart (nearMatches): 0, exact, by default and on Metal; the callers pass 2 elsewhere (owner's decision
+// 2026-11-14). On NVIDIA's Vulkan compiler a few cells of green-landform come out 2 steps apart at their own height (1.5e-5 at heights 64 to
+// 128) and their c plane up to 9e-7 apart, while Metal matches exactly.
+const F32_STEP=x => 2**(Math.max(Math.floor(Math.log2(Math.abs(x)||2**-126)),-126)-23);
+export const regionalUlps=mac => mac?0:2;
+export async function regionalCheck({fields,device,nodes,context,config,grid,spacing,minH,maxH,ulps=0,startCoarse=() => fields.startCoarse()}) {
   if (!fields?.readRect) throw new Error('the regional check needs the paged fields: open the map with gpuPages=force');
   await fields.ready?.();
   const G=grid,engine=await createShapeEngine({device,grid:G,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH,maxH}),ctx=context;
-  const planes=Object.fromEntries(FIELD_KEYS.map(k => [k,{mismatches:0,maxDifference:0,firstMismatch:null}]));
-  let mismatches=0;
+  const planes=Object.fromEntries(FIELD_KEYS.map(k => [k,{mismatches:0,maxDifference:0,firstMismatch:null,nearMatches:0}]));
+  let mismatches=0,nearMatches=0;
+  const near=(a,b,p) => { if (!(ulps>0 && Number.isFinite(a) && Number.isFinite(b) && Math.abs(b-a)<=ulps*F32_STEP(Math.max(Math.abs(a),Math.abs(b),Math.abs(maxH))))) return false; p.nearMatches++; nearMatches++; return true; };
   try {
     const middle=Math.floor(G/2);
     for (const [y0,y1] of [[0,middle-1],[middle,G-1]]) for (const [x0,x1] of [[0,middle-1],[middle,G-1]]) {
@@ -448,7 +455,7 @@ export async function regionalCheck({fields,device,nodes,context,config,grid,spa
       for (const key of FIELD_KEYS) {
         const j=MASK_KEYS.indexOf(key),want=j>=0?out.masks[j]:expected[key],got=rp.fields[key],p=planes[key];
         for (let i=0;i<W*W;i++) {
-          const a=want[i],b=got[i]; if (a===b && Number.isFinite(b)) continue;
+          const a=want[i],b=got[i]; if (a===b && Number.isFinite(b) || near(a,b,p)) continue;
           p.mismatches++; mismatches++; p.maxDifference=Math.max(p.maxDifference,Math.abs(b-a)||Infinity); p.firstMismatch??={x:x0+i%W,y:y0+Math.floor(i/W),engine:a,paged:b};
         }
       }
@@ -456,14 +463,14 @@ export async function regionalCheck({fields,device,nodes,context,config,grid,spa
     {
       await startCoarse();
       await fields.coarseSettled();
-      const c=fields.coarseLattice(),whole=(await engine.run(nodes.slice(),ctx,null)).floats[0],step=c.step,w=Math.floor((G-1)/step)+1,p={mismatches:0,maxDifference:0,firstMismatch:null};
+      const c=fields.coarseLattice(),whole=(await engine.run(nodes.slice(),ctx,null)).floats[0],step=c.step,w=Math.floor((G-1)/step)+1,p={mismatches:0,maxDifference:0,firstMismatch:null,nearMatches:0};
       if (c.width!==w) throw new Error('the coarse lattice is not one cell a 16 px height cell');
       for (let j=0;j<w;j++) for (let i=0;i<w;i++) {
-        const a=whole[j*step*G+i*step],b=c.heights[j*w+i]; if (a===b && Number.isFinite(b)) continue;
+        const a=whole[j*step*G+i*step],b=c.heights[j*w+i]; if (a===b && Number.isFinite(b) || near(a,b,p)) continue;
         p.mismatches++; mismatches++; p.maxDifference=Math.max(p.maxDifference,Math.abs(b-a)||Infinity); p.firstMismatch??={cell:j*w+i,engine:a,paged:b};
       }
       planes.coarse=p;
     }
-    return {grid:G,planes,mismatches,gpuShape:true};
+    return {grid:G,planes,mismatches,nearMatches,ulps,gpuShape:true};
   } finally { engine.destroy(); }
 }

@@ -115,7 +115,7 @@ async function main() {
     for (const file of options.sceneFiles) {
       const scene = readScene(file), s = await headless.openScene(scene, pageFor(scene).toString());
       try {
-        const result = await s.engine.regionalCheck({fields: s.fields, device: s.renderer.device, nodes: s.nodes, context: s.context(), config: s.config, grid: s.worldGrid, spacing: s.spacing, minH: s.minH, maxH: s.maxH});
+        const result = await s.engine.regionalCheck({fields: s.fields, device: s.renderer.device, nodes: s.nodes, context: s.context(), config: s.config, grid: s.worldGrid, spacing: s.spacing, minH: s.minH, maxH: s.maxH, ulps: s.engine.regionalUlps(process.platform === 'darwin')});
         checkResult(result);
         if (s.errors.length) throw new Error(s.errors.slice(0, 20).join('\n'));
         console.log(JSON.stringify({scene: file, biome: scene.biome, nodes: s.nodes.length, ...result, host: 'node'}));
@@ -191,7 +191,7 @@ async function main() {
     if (loadedBiome !== scene.biome) throw new Error(`Page loaded world ${loadedBiome}, scene asks for ${scene.biome}.`);
     const nodes = await evaluate(`sculptDebug.scene(${JSON.stringify(scene.strokes)}, {ground:${scene.ground !== false}})`);
     await ready('Scene');
-    const result = await evaluate(`(() => { if(typeof sculptDebug.regionalCheck!=='function')throw new Error('This editor does not expose sculptDebug.regionalCheck().'); return sculptDebug.regionalCheck(); })()`);
+    const result = await evaluate(`(() => { if(typeof sculptDebug.regionalCheck!=='function')throw new Error('This editor does not expose sculptDebug.regionalCheck().'); return sculptDebug.regionalCheck(${process.platform === 'darwin' ? 0 : 2}); })()`);
     checkResult(result); await sleep(0); checkErrors();
     console.log(JSON.stringify({scene: sceneFile, biome: scene.biome, nodes, ...result, host: 'chrome'}));
     if (result.mismatches) throw new Error(`${result.mismatches} regional field samples differ.`);
