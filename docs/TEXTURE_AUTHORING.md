@@ -177,8 +177,8 @@ bypassed. No world defaults were replaced, and the branch has not been merged.
 ## Desert study and additional algorithms
 
 **Manage material → Add preset → Desert clods (study)** is an unassigned starting
-material. It does not replace a world's ground. Its twelve-node graph shares a
-rounded clod field between a sand-to-beige gradient and the height output, then
+material. It does not replace a world's ground. Its seventeen-node graph shares a
+varied clod field between a sand-to-beige gradient and the height output, then
 adds fine grain and sparse dark spots through ordinary combines. Height is real
 art relief, so changing its output scale changes lighting; it is not a painted
 highlight. The four previously reviewed recipes are unchanged.
@@ -243,3 +243,29 @@ and the Desert browser check passed, including live algorithm edits, relief,
 exact Undo, and zero terrain submissions while the editor is open. Candidate
 renders and the final browser check reported no GPU errors. No full suite or
 new export/performance sweep was run.
+
+
+### Desert highlight and crevice pass
+
+The next study adds ordinary graph branches, with no new engine operations:
+fractal noise modulates the clod field around a neutral multiplier to vary the
+highlight sizes/heights without dimming every top. A ridged field is remapped
+to a narrow crease mask and subtracted from the combined relief. Crevices are
+lit height cuts; the tested interior-color multiplier was discarded because it
+made the surface muddy. Fine relief is slightly smaller, and the brightest
+grain/beige colors are restrained. The resulting graph has 17 editable nodes.
+
+By eye, highlights are less regular and crevice shadows are deeper. The surface
+still looks somewhat coarser than retail, so this remains a study rather than an
+accepted replacement. At 1× on the same 256px sample, mean RGB is
+168.0/142.9/121.0 (retail 170.0/144.4/121.3), luminance standard deviation is
+38.8 (retail 39.1), and its fifth-percentile luminance is 75.0, down from 85.8
+and matching retail's 75.0. Softened-grain contrast is still higher: 20.5 versus
+18.4. These diagnostics do not establish visual equivalence.
+
+Review artifacts live in `/private/tmp/desert-crevice-review/`, outside Git.
+Two recipe/palette unit tests, the scoped Desert browser check (including exact
+Undo and zero terrain submissions while open), and the small material repeat
+check passed. The 512px raw color, palette color, and relief repeat exactly;
+regional rendering also matches. No full suite or new export sweep was run.
+The four approved presets and world defaults remain unchanged.
