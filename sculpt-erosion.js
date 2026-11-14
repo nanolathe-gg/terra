@@ -38,7 +38,7 @@ export class GpuErosion {
       const buffer = type => ({visibility: C, buffer: {type}});
       this.layout1 = device.createBindGroupLayout({label: 'erosion', entries: [{binding: 0, ...buffer('uniform')}, {binding: 1, ...buffer('read-only-storage')}, {binding: 2, ...buffer('storage')},
         {binding: 3, ...buffer('read-only-storage')}, {binding: 4, ...buffer('storage')}, {binding: 5, ...buffer('storage')}, {binding: 6, ...buffer('storage')}, {binding: 7, ...buffer('storage')}, {binding: 8, ...buffer('read-only-storage')}]});
-      this.layout0 = device.createBindGroupLayout({label: 'erosion u', entries: [{binding: 0, ...buffer('uniform')}, {binding: 1, ...buffer('uniform')}]});
+      this.layout0 = device.createBindGroupLayout({label: 'erosion u', entries: [{binding: 0, ...buffer('uniform')}]});
       const layout = device.createPipelineLayout({bindGroupLayouts: [this.layout0, this.layout1]});
       this.pipelines = {};
       return Promise.all(['offsetMain', 'fluxMain', 'waterMain', 'exchangeMain', 'settleMain', 'carryMain', 'thermalMain'].map(async entry =>
@@ -80,7 +80,7 @@ export class GpuErosion {
       const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
       const make = (label, bytes, usage = S) => { const b=device.createBuffer({label, size:Math.max(16,bytes),usage});owned.push(b);return b; };
       const tw = Math.ceil(grid / 8);
-      // One workgroup a tile of the window, direct (see engine-erosion.wgsl activeTiles); a window's tiles fit one dispatch dimension up to 2047 cells.
+      // The steps dispatch one workgroup per active tile, directly; a window's tiles fit one dispatch dimension up to 2047 cells.
       if (tw * tw > 65535) throw new Error(`nanolathe: a Time pass window of ${grid} cells is over the 2047 a dispatch covers`);
       let state,fluxA,fluxB,vel,acc,fixedBuffer,paramBuffer,tileFlag,tileList,tileCount,tileArgs,weather,maps;
       await terrainAllocation(device,()=>{
@@ -107,16 +107,16 @@ export class GpuErosion {
       // Time reads CPU-owned column values, never the GPU-written chunk flags.
       const worldUniform=make('time pass world uniforms',this.renderer.uniformData.byteLength,GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST);
       device.queue.writeBuffer(worldUniform,0,this.renderer.uniformData);
-      const activeTiles=make('erosion active tiles',16,GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST);
-      const group0=device.createBindGroup({layout:this.layout0,entries:[{binding:0,resource:{buffer:worldUniform}},{binding:1,resource:{buffer:activeTiles}}]});
+      const countRead=make('erosion tile count read',16,GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST);
+      const group0=device.createBindGroup({layout:this.layout0,entries:[{binding:0,resource:{buffer:worldUniform}}]});
       const [s0, s1, s2] = state;
       const flux = group1(s0, s1, fluxA, fluxB), water = group1(s0, s2, fluxB, fluxA), exchange = group1(s2, s1, fluxA, fluxB), carry = group1(s1, s0, fluxA, fluxB);
       const thermalA = group1(s0, s1, fluxA, fluxB), thermalB = group1(s1, s0, fluxA, fluxB);
       const groups=Math.ceil(grid/8),parts={gpu:0,slices:0,iterations:[],maxSliceWait:0};
-      const submitSlice=async (encoder,iterations=0) => {
+      const submitSlice=async (encoder,iterations=0,submitted=null) => {
         if(request.beforeSlice)await request.beforeSlice();current();
         const tSubmit = performance.now();
-        device.queue.submit([encoder.finish()]);
+        device.queue.submit([encoder.finish()]);submitted?.();
         await device.queue.onSubmittedWorkDone();
         const wait=performance.now()-tSubmit;
         parts.gpu+=wait;parts.slices++;parts.iterations.push(iterations);parts.maxSliceWait=Math.max(parts.maxSliceWait,wait);
@@ -127,16 +127,21 @@ export class GpuErosion {
       const yieldWork=async()=>{await new Promise(resolve=>setTimeout(resolve,0));current();};
       const begin=(encoder,label)=>{
         const pass=encoder.beginComputePass({label});
-        return {pass,step:(entry,group)=>{pass.setPipeline(this.pipelines[entry]);pass.setBindGroup(0,group0);pass.setBindGroup(1,group);if(entry!=='offsetMain')pass.dispatchWorkgroups(tw*tw);else pass.dispatchWorkgroups(groups,groups);}};
+        return {pass,step:(entry,group)=>{pass.setPipeline(this.pipelines[entry]);pass.setBindGroup(0,group0);pass.setBindGroup(1,group);if(entry==='offsetMain')pass.dispatchWorkgroups(groups,groups);else if(active)pass.dispatchWorkgroups(active);}};
       };
       let encoder=device.createCommandEncoder({label:'erosion input'});
       const input=encoder.beginComputePass({label:'erosion input'});
       const feedStep=(entry,x,y=1)=>{input.setPipeline(feed.pipes[entry]);for(const [g,bg] of feed.groups(entry,res))input.setBindGroup(g,bg);input.dispatchWorkgroups(x,y);};
       feedStep('seedMain',groups,groups);feedStep('tileFlagMain',groups,groups);feedStep('tileListMain',Math.ceil(tw/8),Math.ceil(tw/8));feedStep('tileArgsMain',1);input.end();
       encoder.copyBufferToBuffer(request.planes,0,weather,0,n*4);
-      encoder.copyBufferToBuffer(tileCount,0,activeTiles,0,4);   // the feed's active-tile count, for the direct dispatches' early return
+      // The steps dispatch exactly the active tiles, directly: an indirect dispatch costs Chrome a validation pass each, and a workgroup for
+      // every tile of the window costs the GPU its idle ones. The count is read once, with the input pass this run already waits for.
+      encoder.copyBufferToBuffer(tileCount,0,countRead,0,4);
+      let active=0,mapped;
       const initial=begin(encoder,'erosion offset');initial.step('offsetMain',flux);initial.pass.end();
-      await submitSlice(encoder);await yieldWork();
+      await submitSlice(encoder,0,()=>{mapped=countRead.mapAsync(GPUMapMode.READ);mapped.catch(()=>{});});
+      await mapped;current();active=new Uint32Array(countRead.getMappedRange(0,4))[0];countRead.unmap();
+      await yieldWork();
       // Start conservatively, then target 25 ms of queue wait. Small regional
       // passes need more than eight iterations to amortize submission overhead;
       // cap at 256 and let measured contention reduce the next batch.
@@ -165,7 +170,7 @@ export class GpuErosion {
       second.setPipeline(mp.pipeline);second.setBindGroup(0,group0);second.setBindGroup(1,mapGroup);second.dispatchWorkgroups(groups,groups);second.end();
       await submitSlice(encoder);
       complete=true;for(const b of [weather,...maps])keep.add(b);
-      return {weather,maps,grid,bytes:n*20,milliseconds:performance.now()-started,parts:{...parts,tiles:null,gpuFed:true}};
+      return {weather,maps,grid,bytes:n*20,milliseconds:performance.now()-started,parts:{...parts,tiles:null,activeTiles:active,windowTiles:tw*tw,gpuFed:true}};
     } finally {
       for(const b of owned)if(!complete||!keep.has(b))b.destroy();
     }

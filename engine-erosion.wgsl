@@ -46,10 +46,6 @@ struct EP {
 @group(1) @binding(6) var<storage, read_write> acc: array<vec4f>;        // x water throughput, y material deposited
 @group(1) @binding(7) var<storage, read_write> fixedField: array<vec4f>; // lower bound, upper bound, mobility (-1 submerged), column offset
 @group(1) @binding(8) var<storage, read> tiles: array<vec2u>;           // active tiles (x, y), 8 x 8 samples each
-// How many of `tiles` are active (x; copied on the GPU from the feed's count). The passes dispatch one workgroup per tile of the window and the
-// ones past the count return at once: Chrome validates every indirect dispatch with a pass of its own (~0.4 ms of its GPU process a dispatch),
-// which starved the GPU. A uniform, because this stage already binds the default limit of 8 storage buffers.
-@group(0) @binding(1) var<uniform> activeTiles: vec4u;
 fn tileCell(w: u32, l: vec3u) -> vec3u { let t = tiles[w]; return vec3u(t.x * 8u + l.x, t.y * 8u + l.y, 0u); }
 
 fn at(x: i32, y: i32) -> u32 { return u32(y * i32(ep.grid) + x); }
@@ -77,7 +73,6 @@ fn offsetMain(@builtin(global_invocation_id) id: vec3u) {
 // four together never exceed the water in the cell.
 @compute @workgroup_size(8, 8)
 fn fluxMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid: vec3u) {
-    if (wg.x >= activeTiles.x) { return; }
     let id = tileCell(wg.x, lid);
     let x = i32(id.x); let y = i32(id.y);
     if (!inside(x, y)) { return; }
@@ -107,7 +102,6 @@ fn fluxMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid:
 // copied back into fluxOut for the next iteration.
 @compute @workgroup_size(8, 8)
 fn waterMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid: vec3u) {
-    if (wg.x >= activeTiles.x) { return; }
     let id = tileCell(wg.x, lid);
     let x = i32(id.x); let y = i32(id.y);
     if (!inside(x, y)) { return; }
@@ -171,7 +165,6 @@ fn exchange(i: u32, x: i32, y: i32, settle: bool) {
 
 @compute @workgroup_size(8, 8)
 fn exchangeMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid: vec3u) {
-    if (wg.x >= activeTiles.x) { return; }
     let id = tileCell(wg.x, lid);
     let x = i32(id.x); let y = i32(id.y);
     if (!inside(x, y)) { return; }
@@ -180,7 +173,6 @@ fn exchangeMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) 
 
 @compute @workgroup_size(8, 8)
 fn settleMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid: vec3u) {
-    if (wg.x >= activeTiles.x) { return; }
     let id = tileCell(wg.x, lid);
     let x = i32(id.x); let y = i32(id.y);
     if (!inside(x, y)) { return; }
@@ -190,7 +182,6 @@ fn settleMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) li
 // Sediment rides the velocity (semi-Lagrangian); water evaporates.
 @compute @workgroup_size(8, 8)
 fn carryMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid: vec3u) {
-    if (wg.x >= activeTiles.x) { return; }
     let id = tileCell(wg.x, lid);
     let x = i32(id.x); let y = i32(id.y);
     if (!inside(x, y)) { return; }
@@ -240,7 +231,6 @@ var<workgroup> thermalPaint: array<f32, 100>;
 
 @compute @workgroup_size(8, 8)
 fn thermalMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid: vec3u, @builtin(local_invocation_index) li: u32) {
-    if (wg.x >= activeTiles.x) { return; }
     let origin = vec2i(tiles[wg.x] * 8u);
     for (var k = li; k < 100u; k += 64u) {
         let p = clamp(origin + vec2i(i32(k % 10u) - 1, i32(k / 10u) - 1), vec2i(0), vec2i(i32(ep.grid) - 1));
