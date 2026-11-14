@@ -48,8 +48,26 @@ await session(`${server}/?biome=red&mapX=2&mapY=2&gpuMB=512`,port,async({send,ev
  await set('ground-add','violet-rippled-water');let saved=await state();assert.equal(saved.grounds.length,1);assert.ok(saved.grounds[0].textureColors.low[0]%1,'fractional RGB preserved');assert.equal(await ev(`document.getElementById('texture-color-low').value`),'#2d275c');assert.ok((await ev(`document.getElementById('texture-palette').value`)).length>20);
  await set('water-material',1);await click('water-material-edit');await preview();
  assert.equal((await state()).grounds[0].worldWater,true);assert.equal(await ev(`document.getElementById('ground-presets').value`),'1');
- const old=(await state()).grounds[0].knobs.patternWarp;await set('ground-patternWarp',2.5,'input');await set('ground-patternWarp',2.5);assert.equal((await state()).grounds[0].knobs.patternWarp,2.5);
+ // Exercise the product's shared scrub with real keyboard and pointer input.
+ const key=async key=>{await send('Input.dispatchKeyEvent',{type:'keyDown',key});await send('Input.dispatchKeyEvent',{type:'keyUp',key});};
+ const warp='.scrub[data-source="ground-patternWarp"]';
+ assert.equal(await ev(`document.querySelectorAll('#ground-recipe-fields input[type=range]:not(.scrub-native)').length`),0);
+ await ev(`document.querySelector('${warp}').closest('details').open=true;document.querySelector('${warp}').scrollIntoView({block:'center'});document.querySelector('${warp}').focus();true`);
+ await key('Home');
+ assert.equal(await ev(`document.querySelector('.scrub[data-source="ground-patternWarpSize"]').getAttribute('aria-disabled')`),'true');
+ assert.equal(await ev(`getComputedStyle(document.getElementById('ground-patternWarpSize-reason')).display==='none'`),false,'disabled reason is visible');
+ const old=(await state()).grounds[0].knobs.patternWarp;
+ await key('Enter');await send('Input.insertText',{text:'2.5'});await key('Enter');assert.equal((await state()).grounds[0].knobs.patternWarp,2.5);
+ await sleep(50);assert.equal(await ev(`document.querySelector('${warp}').getAttribute('aria-valuenow')`),'2.5');
+ assert.equal(await ev(`document.querySelector('.scrub[data-source="ground-patternWarpSize"]').getAttribute('aria-disabled')`),'false');
  await click('undo');assert.equal((await state()).grounds[0].knobs.patternWarp,old);await click('redo');assert.equal((await state()).grounds[0].knobs.patternWarp,2.5);
+ await ev(`document.querySelector('${warp}').focus();true`);await key('ArrowRight');assert.equal((await state()).grounds[0].knobs.patternWarp,2.51);await click('undo');
+ await ev(`document.querySelector('${warp}').scrollIntoView({block:'center'});true`);
+ const point=await ev(`(()=>{const r=document.querySelector('${warp}').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+ await send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',buttons:1,clickCount:1});
+ await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:point.x+12,y:point.y,button:'left',buttons:1});
+ await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:point.x+12,y:point.y,button:'left',buttons:0,clickCount:1});
+ assert.ok((await state()).grounds[0].knobs.patternWarp>2.5,'drag changes the material');await click('undo');assert.equal((await state()).grounds[0].knobs.patternWarp,2.5);
  await set('texture-color-high','#5a9ed2','input');await set('texture-color-high','#5a9ed2');assert.deepEqual((await state()).grounds[0].textureColors.high,[90,158,210]);
  await set('ground-add','rust-mottling');await set('ground-world-default',2);saved=await state();assert.equal(saved.grounds[1].worldGround,true);assert.equal(saved.grounds[0].worldWater,true);
  assert.deepEqual(saved.worldSettings.grounds,saved.grounds,'embedded world saves materials');
@@ -61,5 +79,5 @@ await session(`${server}/?biome=red&mapX=2&mapY=2&gpuMB=512`,port,async({send,ev
  await ev(`for(const d of document.querySelectorAll('#ground-recipe-fields>details'))d.open=['Pattern','Pattern colors','Marks'].includes(d.querySelector('summary').textContent);document.getElementById('ground-recipe-fields').scrollIntoView();true`);await sleep(500);
  const shot=await send('Page.captureScreenshot',{format:'png'});writeFileSync(`${out}/editor.png`,Buffer.from(shot.result.data,'base64'));
  await set('ground-presets',2);await click('ground-delete');assert.equal((await state()).grounds.some(g=>g.worldGround),false);assert.equal((await state()).grounds[0].worldWater,true);
- assert.deepEqual(logs,[]);writeFileSync(`${out}/report.json`,JSON.stringify({continuousColors:true,waterAssignment:true,groundAssignment:true,undoRedo:true,saveReload:true,embeddedWorld:true,deleteAssignment:true,preview:count,consoleErrors:logs},null,2));console.log('texture UI: controls, assignments, undo, save/reload, embedded world and preview passed');
+ assert.deepEqual(logs,[]);writeFileSync(`${out}/report.json`,JSON.stringify({sharedScrubs:true,typedValue:true,keyboardStep:true,pointerDrag:true,disabledReason:true,continuousColors:true,waterAssignment:true,groundAssignment:true,undoRedo:true,saveReload:true,embeddedWorld:true,deleteAssignment:true,preview:count,consoleErrors:logs},null,2));console.log('texture UI: controls, assignments, undo, save/reload, embedded world and preview passed');
 });

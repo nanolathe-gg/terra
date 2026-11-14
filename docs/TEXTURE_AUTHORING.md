@@ -9,7 +9,9 @@ landform ground, and water. Built-in world assignments remain unchanged.
    The four new starters are Rust mottling, Cloudy green, Blue streaked water,
    and Violet rippled water. Duplicate a starter to make a new material.
 2. Edit the recipe and its live sample. Start with pattern size, broad mottling,
-   distortion, and colors; then tune fine grain and marks. Pattern blend mixes
+   distortion, and colors; then tune fine grain and marks. Sliders use the
+   editor's shared scrub controls: drag, Shift-drag for fine adjustment, arrow
+   keys, and double-click or Enter to type a value. Pattern blend mixes
    the procedural pigment with the existing relief-family colors. The sample
    crosses the repeat seam and reports distinct 32-pixel tiles.
 3. Choose the material as the world's ground, use it in the ground paint brush,
@@ -81,7 +83,8 @@ Measured on the implementation branch:
 - Six focused model/save tests pass.
 - Ground UI check: paint and landform selection, editing, undo/redo, save/reload,
   and the 64-tile live preview pass.
-- Texture UI check: continuous colors, ground/water assignments, undo/redo,
+- Texture UI check: shared scrub typing, arrow keys, pointer dragging, disabled
+  explanations, continuous colors, ground/water assignments, undo/redo,
   embedded world settings, save/reload, deletion, and live preview pass without
   browser console errors.
 - Green ground, Green water, and Violet water checks: 1024-pixel repetition and
