@@ -2337,14 +2337,14 @@
         "source": "pigment-grain",
         "colors": [
           [
-            0.85,
-            0.65,
-            0.8
+            0.75,
+            0.75,
+            0.75
           ],
           [
-            1.15,
-            1.35,
-            1.2
+            1.25,
+            1.25,
+            1.25
           ]
         ]
       },
@@ -2461,6 +2461,51 @@
         }
       },
       {
+        "id": "mineral-field",
+        "type": "noise",
+        "name": "Sand mineral patches",
+        "kind": "fractal",
+        "params": {
+          "patternSize": 4,
+          "patternDetail": 0.25,
+          "patternGradient": 0,
+          "patternOctaves": 0
+        }
+      },
+      {
+        "id": "mineral-color",
+        "type": "gradient",
+        "name": "Gray beige to orange sand",
+        "source": "mineral-field",
+        "colors": [
+          [
+            0.9319999999999999,
+            1.119,
+            1.204
+          ],
+          [
+            1.068,
+            0.881,
+            0.796
+          ]
+        ],
+        "params": {
+          "ease": 0
+        }
+      },
+      {
+        "id": "mineral-blend",
+        "type": "combine",
+        "name": "Tint sand patches",
+        "source": "pigment",
+        "other": "mineral-color",
+        "operation": "multiply",
+        "params": {
+          "amount": 1,
+          "offset": 0
+        }
+      },
+      {
         "id": "color-output",
         "name": "Color output",
         "type": "output",
@@ -2468,7 +2513,7 @@
           "scale": 1,
           "offset": 0
         },
-        "source": "pigment",
+        "source": "mineral-blend",
         "target": "color"
       },
       {

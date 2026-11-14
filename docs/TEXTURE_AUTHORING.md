@@ -181,7 +181,7 @@ bypassed. No world defaults were replaced, and the branch has not been merged.
 ## Desert study and additional algorithms
 
 **Manage material → Add preset → Desert clods (study)** is an unassigned starting
-material. It does not replace a world's ground. Its eighteen-node graph shares a
+material. It does not replace a world's ground. Its twenty-one-node graph shares a
 varied clod field between a sand-to-beige gradient and the height output, then
 adds fine grain and sparse dark spots through ordinary combines. Height is real
 art relief, so changing its output scale changes lighting; it is not a painted
@@ -352,3 +352,45 @@ All 24 GPU renders completed with no reported GPU errors. No product code change
 so no unit, export, or full-suite rerun was needed. The rejected recipes and retail
 comparison images remain outside Git; `followup-review.png` shows the saved study
 and one rejected neutral-grain candidate at native scale and 2× magnification.
+
+
+### Desert local-color reconstruction pass
+
+The owner's orange-versus-red observation prompted a comparison beneath the
+palette alternation. Estimate local color mixtures by separating luminance from
+RGB chroma, smoothing luminance at sigma 0.85px and chroma at 1.2px, and combining
+them again. Apply the same filter to retail and generated images; also inspect
+RGB at sigma 3px and 6px. This is not an exact inverse of dithering or a claim to
+recover the original true-color render. A generated render without quantization
+provides a check on what the filter removes. All analysis artifacts remain in
+`/private/tmp/desert-undither-review/`, outside Git and the product.
+
+By eye, the reference has darker orange patches among lighter gray-beige areas;
+the saved study had more uniform pink/tan grain. The similar average RGB values
+hid that difference. Twelve candidates tested color direction, spatial scale,
+and the relationship between warmth and brightness. The chosen revision removes
+the fine grain gradient's pink-green tint and adds three ordinary nodes: fractal
+noise, a gray-beige/orange multiplier gradient, and Multiply. The warmer end also
+reduces brightness, instead of making every orange patch a highlight. Artists
+can edit the field size/detail, both colors, and blend strength. The 21-node graph
+keeps the existing clods, relief, palette, and dithering; no new shader operations
+or controls were necessary.
+
+Measured on corresponding 512px samples at sigma 3px, the standard deviation of
+R-minus-B variation changes from 1.90 to 5.21 (retail 4.64). Its correlation with
+G-minus-(R+B)/2 changes from -0.024 to -0.769 (retail -0.829). Mean RGB remains
+169.4/144.5/121.9 versus retail 170.0/144.5/121.4. These are supporting diagnostics,
+not acceptance criteria. By eye the orange/gray-beige organization is closer;
+the large raw tile inserts still expose differences in fine highlights and dark
+cuts. The result remains an unapproved study.
+
+The final comparison includes native pixels and estimated local color for
+retail, before, and revised textures. The five-block sheet uses the saved 512px
+render directly, with the same 1×1, 1×1, 4×4, 4×4, and 8×8 hard-pasted inserts.
+Its rendered bytes exactly match the chosen candidate. The four approved presets
+and all world defaults remain unchanged; no retail-derived image is committed.
+
+Validation: six focused recipe/layout unit tests passed; the scoped Desert
+browser check passed with exact Undo and zero terrain submissions while open.
+The small GPU check confirmed exact 512px color/height repeat and regional
+replay. Candidate/final renders reported no GPU errors. No full suite was run.
