@@ -1,3 +1,12 @@
+> **November 13 LP6 and LP5 split landing:** the owner approved the retained
+> LP6 units and LP5 step 0 for main. The source merge is unchanged from the
+> reviewed branch; main had not moved. Fresh authored previews are pinned to
+> `previews-ad20b68dd40e1adc`. The existing focused checks and measurements
+> remain applicable; no broad suite is repeated. [LP6 shell](LP6_SHELL.md),
+> [readback decision](LP6_READBACK.md), and [LP5 split](LP5_STEP0.md) retain
+> their measured limits. Visible-record caching and control routing follow
+> from this landing; whole-view stage-F acceptance is still open.
+>
 > **November 13 LP3 landing:** the owner approved the LP3 trial and its reported
 > limits. [The landing record](LP3_LANDING.md) covers integration with cleaned
 > latest main. LP6 now takes priority; the earlier LP3 acceptance gaps remain
