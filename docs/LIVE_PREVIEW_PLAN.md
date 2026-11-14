@@ -1216,6 +1216,8 @@ and which are stage F. Then stop and report.
 
 **November 13 mask-memory follow-up:** [exact color-mask packing](LP5_MASKS.md) cuts retained mask layers from seven to three and fits 18 records instead of 13 at the same quota. Phased, in-place packing preserves the 128-MiB engine fixture; sampled rendering/export art is unchanged. In the focused pair, continuous release final is 965.8 → 795.2 ms, with mixed input tails. The source stays on the review branch; whole-view final-quality acceptance is still open.
 
+**November 14 preview-lifetime follow-up:** [keeping the covering coarse color record](LP5_PREVIEW_LIFETIME.md) avoids rebuilding geometry after final completion or a mid-drag pause. In the focused pair, first-change p95 falls from 65–113 ms to 8–11 ms, within the unchanged cache quota; whole-current at a coarse level is equally fast. Quick replay, recomposition, zoom, invalidation and memory-lowering checks pass. Final-quality completion remains about 0.8 s and LP5 acceptance is open; the work stays on the review branch.
+
 **Build (M-L)** only if step 0's rerun equals the full re-bake: land the
 split (scenes move by the reported drift, the owner looks), keep records for
 visible tiles, route stage-F changes to priority 3 of the scheduler, add the

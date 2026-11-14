@@ -80,6 +80,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   get colorBytes(){let bytes=0;for(const tile of this.colorTiles)bytes+=tile.bytes;return bytes;}
   get busy() { return this._busy; }
   stats() {
+    let nativeTiles=0,previewBlocks=0;for(const tile of this.colorTiles)if(!tile.retired){if(tile.block)previewBlocks++;else nativeTiles++;}
     const byKind={};for(const r of this.resources.values())byKind[r.kind]=(byKind[r.kind]??0)+r.bytes;
     return {residentBytes:this.residentBytes,peakBytes:this.peakBytes,budgetBytes:this.budgetBytes,outputBytes:this.outputBytes,
       retainedBytes:this.fixedBytes,workingBytes:(byKind.working??0)+(byKind.loose??0)+this.outputBytes,
@@ -87,7 +88,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       cpuRetainedBytes:this.cpuRetainedBytes,cpuWorkingBytes:this.cpuWorkingBytes,cpuUploadBytes:this.cpuUploadBytes??0,cpuPeakBytes:this.peakCPUBytes,
       textureBytes:this.outputBytes+[...this.resources].filter(([r])=>'format' in r).reduce((n,[,v])=>n+v.bytes,0),
       bufferBytes:[...this.resources].filter(([r])=>!('format' in r)).reduce((n,[,v])=>n+v.bytes,0),
-      colorCache:{tiles:[...this.colorTiles].filter(t=>!t.retired).length,bytes:this.colorBytes,reruns:this.colorReruns},resources:this.resources.size,byKind,workingSets:{inputs:this.inputSets.size,levels:this.levelSets.size,bytes:this.workingGroups().reduce((n,g)=>n+this.workingBytes(g.state),0)},voxel:this.voxel?.stats,busy:this.busy,evictions:this.evictions,recommendedChunkSize:this.recommendedChunkSize,
+      colorCache:{tiles:nativeTiles+previewBlocks,nativeTiles,previewBlocks,bytes:this.colorBytes,reruns:this.colorReruns},resources:this.resources.size,byKind,workingSets:{inputs:this.inputSets.size,levels:this.levelSets.size,bytes:this.workingGroups().reduce((n,g)=>n+this.workingBytes(g.state),0)},voxel:this.voxel?.stats,busy:this.busy,evictions:this.evictions,recommendedChunkSize:this.recommendedChunkSize,
       limits:{maxTextureDimension2D:this.device?.limits.maxTextureDimension2D,maxBufferSize:this.device?.limits.maxBufferSize,
         maxSampledTexturesPerShaderStage:this.device?.limits.maxSampledTexturesPerShaderStage,maxTextureArrayLayers:this.device?.limits.maxTextureArrayLayers},
       maskPlaneCount:this.maskPlaneCount,maskLayers:this.maskLayers,uploadBytes:this.uploadBytes??0};

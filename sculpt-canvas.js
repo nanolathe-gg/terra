@@ -356,6 +356,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       return !previewRejects.has(previewSignature(rect,level,required,estimate))&&total<=gpuBudget;
     });
   }
+  function coversView(e,v){return e.x<=v.x&&e.y<=v.y&&e.x+e.width>=Math.min(map.width,v.x+v.width)&&e.y+e.height>=Math.min(map.height,v.y+v.height);}
   function colorInputCurrent(e){return e?.color&&!e.color.retired&&!changedSince(e.color.serial,e.input,'E')&&e.weathered===weatheredView&&(!e.weathered||e.weatherRevB>=rev.B);}
   function colorCurrent(e){return colorInputCurrent(e)&&!offLevel(e,detailLevel());}
   async function retainColor(entry){
@@ -365,7 +366,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(cost>limit)return;
     for(const e of [...cache.values()].filter(e=>e.color).sort((a,b)=>distance(b)-distance(a))){if(renderer.colorBytes+cost<=limit)break;if(distance(e)<=distance(entry))return;renderer.releaseColorTile(e.color);e.color=null;}
     if(renderer.colorBytes+cost>limit)return;
-    const tile=await renderer.retainColorTile();if(tile){tile.serial=entry.serial;tile.rect={x:entry.x,y:entry.y,width:entry.width,height:entry.height};if(changedSince(entry.serial,entry.input,'E'))renderer.releaseColorTile(tile);else entry.color=tile;}
+    const tile=await renderer.retainColorTile();if(tile){tile.serial=entry.serial;tile.block=Boolean(entry.block);tile.rect={x:entry.x,y:entry.y,width:entry.width,height:entry.height};if(changedSince(entry.serial,entry.input,'E'))renderer.releaseColorTile(tile);else entry.color=tile;}
   }
   function blockCurrent(e){return e&&!e.dirty&&!changedSince(e.serial,e.input)&&e.weathered===weatheredView&&(!e.weathered||e.weatherRevB>=rev.B);}
   function presentView() {
@@ -435,8 +436,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         const colorJobs=lastInput?.stage==='F'&&!holding?stale.filter(r=>colorCurrent(cache.get(cacheKey(r,size)))):[];
         // A partial cache gets one fast tile, then yields to the whole-view
         // preview. Repeated input must not starve uncovered ground behind F.
-        const colorViewCurrent=[...blocks.values()].some(e=>e.level===coarseLevel&&blockCurrent(e)&&e.x<=v.x&&e.y<=v.y&&e.x+e.width>=Math.min(map.width,v.x+v.width)&&e.y+e.height>=Math.min(map.height,v.y+v.height));
-        const colorBlock=lastInput?.stage==='F'&&!holding?[...blocks.values()].find(e=>colorInputCurrent(e)&&!blockCurrent(e)&&e.x<=v.x&&e.y<=v.y&&e.x+e.width>=Math.min(map.width,v.x+v.width)&&e.y+e.height>=Math.min(map.height,v.y+v.height)):null;
+        const colorViewCurrent=[...blocks.values()].some(e=>e.level===coarseLevel&&blockCurrent(e)&&coversView(e,v));
+        const colorBlock=lastInput?.stage==='F'&&!holding?[...blocks.values()].find(e=>colorInputCurrent(e)&&!blockCurrent(e)&&coversView(e,v)):null;
         if(colorBlock)plan.push({rect:{x:colorBlock.x,y:colorBlock.y,width:colorBlock.width,height:colorBlock.height},want:colorBlock.level,block:true});
         else if(colorJobs.length&&(colorJobs.length===stale.length||!fineSinceCoarse||colorViewCurrent))for(const rect of colorJobs.slice(0,colorJobs.length===stale.length||colorViewCurrent?undefined:1))plan.push({rect,want:detailLevel(),color:true});
         else if(overview)for(const rect of jobs)plan.push({rect,want:displayLevel()});
@@ -471,7 +472,13 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             }
           }else wakeLadder(100-quiet);
         }else{
-          if(blocks.size){dropBlocks();paintedView=-1;presentView();}
+          if(blocks.size){
+            // A completed final hides the coarse image, but its immutable F
+            // inputs still answer the next drag. Keep only a covering record
+            // at this level and within the existing optional cache quota.
+            const count=blocks.size;dropBlocks(e=>!(colorInputCurrent(e)&&e.level===4*detailLevel()&&coversView(e,v)));
+            if(blocks.size!==count){paintedView=-1;presentView();}
+          }
           if(!previewing&&!navigating()&&quiet>=1000)for(const rect of jobs)if(!intersects(rect,v))plan.push({rect,want:detailLevel()});
           else if(quiet<1000)wakeLadder(1000-quiet);
         }
