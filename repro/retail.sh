@@ -12,7 +12,7 @@
 # --base is an earlier retail.sh output folder of the same world (its stats/stats.json and scenes/). Default --out:
 # $R/retail/<worktree>/<world>, or <world>-<hash of the query> with a query. Retail pixels stay there, never in the checkout.
 here=$(cd "$(dirname "$0")" && pwd); repo=$(cd "$here/.." && pwd)
-R=${R:-/private/tmp/nanolathe-map-editor}
+R=${R:-/tmp/nanolathe-map-editor}
 py=${PYTHON:-/Users/daniel/src/terraform/.venv/bin/python}
 world=$1; [ $# -gt 0 ] && shift
 [ -n "$world" ] && [ "${world#-}" = "$world" ] || { sed -n '2,3p' "$0" >&2; exit 2; }

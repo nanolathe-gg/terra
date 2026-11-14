@@ -1,6 +1,6 @@
 """Retail TA rivers at the game's scale: width, sinuosity, how far a course strays from its chord, and its bends (the riverfix card).
   river_retail.py [<R>]     R: the folder holding the retail exports (retail-<world>/<map>/heights.bin and metadata.json);
-                            default /private/tmp/nanolathe-map-editor
+                            default /tmp/nanolathe-map-editor
 Per map, water is height < sea on the 16-px height grid (bodies of 400 cells and more, islands under 120 cells filled, closed and opened twice and once,
 padded past the map edge so the edge is no bank). Its medial axis (Zhang-Suen thinning) is walked by the shortest path between each pair of places it leaves
 the map; a course is smoothed over .35 of its width. Width is twice the distance to the bank along the axis (median, in px). Over windows of 4 and 8 widths of
@@ -127,7 +127,7 @@ def measure(d):
     return rows
 
 if __name__ == '__main__':
-    root = Path(sys.argv[1] if len(sys.argv) > 1 else '/private/tmp/nanolathe-map-editor')
+    root = Path(sys.argv[1] if len(sys.argv) > 1 else '/tmp/nanolathe-map-editor')
     for world, name in MAPS:
         for d in sorted((root / world).glob('*/metadata.json')):
             if json.load(open(d))['name'] == name:

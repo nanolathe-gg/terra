@@ -87,7 +87,7 @@ test('pages and the whole map agree on a scene of height images', async () => {
   // every side of the lines only against a ground that is not level.
   const s = await headless.openScene(scene, 'biome=green&scratch=1&mapX=4&mapY=4&gpuPages=force&gpuMB=512&heapMB=1536&undulation=3');
   try {
-    const result = await s.engine.regionalCheck({fields: s.fields, device: s.renderer.device, nodes: s.nodes, context: s.context(), config: s.config, grid: s.worldGrid, spacing: s.spacing, minH: s.minH, maxH: s.maxH});
+    const result = await s.engine.regionalCheck({fields: s.fields, device: s.renderer.device, nodes: s.nodes, context: s.context(), config: s.config, grid: s.worldGrid, spacing: s.spacing, minH: s.minH, maxH: s.maxH, ulps: s.engine.regionalUlps(process.platform === 'darwin')});
     assert.equal(result.mismatches, 0, JSON.stringify(Object.entries(result.planes).filter(([, p]) => p.mismatches)));
     assert.deepEqual(s.errors, []);
     // The check can fail: each image moves cells on both sides of the page seam (cell 512) and of the quadrant lines (cell 584).

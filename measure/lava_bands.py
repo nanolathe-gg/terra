@@ -41,7 +41,7 @@ LIGHT /= np.hypot(*LIGHT)
 
 
 # Our captures are mapped to the retail palette read from this export.
-PALETTE_FROM = Path('/private/tmp/nanolathe-map-editor/retail-lava/kill_the_middle-93be44e8')
+PALETTE_FROM = Path('/tmp/nanolathe-map-editor/retail-lava/kill_the_middle-93be44e8')
 
 
 def iter_maps(root, names):

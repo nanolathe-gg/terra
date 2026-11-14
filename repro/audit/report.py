@@ -3,7 +3,7 @@ import argparse,html,json,re,shutil,statistics
 from pathlib import Path
 import numpy as np
 from PIL import Image,ImageDraw,ImageFont
-p=argparse.ArgumentParser();p.add_argument('--root',type=Path,default=Path('/private/tmp/terraform-tool-audit'));p.add_argument('--reference',type=Path,default=Path('/private/tmp/nanolathe-map-editor/agent-H12b/base-main-map-b'));p.add_argument('--out',type=Path,required=True);a=p.parse_args();a.out.mkdir(parents=True,exist_ok=True);media=a.out/'media';media.mkdir(exist_ok=True)
+p=argparse.ArgumentParser();p.add_argument('--root',type=Path,default=Path('/tmp/terraform-tool-audit'));p.add_argument('--reference',type=Path,default=Path('/tmp/nanolathe-map-editor/agent-H12b/base-main-map-b'));p.add_argument('--out',type=Path,required=True);a=p.parse_args();a.out.mkdir(parents=True,exist_ok=True);media=a.out/'media';media.mkdir(exist_ok=True)
 b=a.root/'results/before/baseline';q=a.root/'results/after/prototype';read=lambda p:json.loads(p.read_text());metrics=read(Path('docs/audit/measurements.json'));ledger=read(Path('docs/audit/controls.json'));workflow=read(Path('docs/audit/workflow-controls.json'))
 def copy(src,name):
  dst=media/name

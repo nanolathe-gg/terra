@@ -35,13 +35,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from section_common import PALETTE, palette_codes, project_cells  # noqa: E402
 
 LUMA = np.array([.299, .587, .114], np.float32)
-CATALOGS = Path('/private/tmp/nanolathe-map-editor/catalogs')
+CATALOGS = Path('/tmp/nanolathe-map-editor/catalogs')
 FAMILIES = {
     'violet (Crystal)': CATALOGS / 'sections-crystal/TASect_Crystal/sections/crystal',
     'charcoal (U_Adamante_Crystal_V12)': CATALOGS / 'sections-uadamante-crystal/TASect_U_Adamante_Crystal_V12/sections/u_adamante_crystal_v12',
     'olive-brown (U_Lava_Crystal_V11)': CATALOGS / 'sections-ulava-crystal/TASect_U_Lava_Crystal_V11/sections/u_lava_crystal_v11',
 }
-RETAIL = Path('/private/tmp/nanolathe-map-editor/retail-crystal')
+RETAIL = Path('/tmp/nanolathe-map-editor/retail-crystal')
 SETTINGS = {
     'smooth_sigma_px': 1.0, 'tophat_px': 7, 'tophat_dark': 16, 'near_black_luma': 14,
     'raised_above_base': 3, 'peak_radius_px': 4, 'min_peak_px': 2.5, 'min_line_px': 40, 'min_top_px': 60, 'max_top_px': 6000, 'min_solidity': .88,

@@ -6,6 +6,7 @@
 // Prints one JSON line per world: the brushes that added a node and came back on undo, the export result and the console. The export runs in
 // the page (export/ built for WebAssembly, in a worker), so this works on the Go server and on a static build alike; it must pass its self-check.
 // Exit code 1 if any brush failed to add or undo a node, the console is not clean, or an export other than Zhon's (which cannot export, by design) fails.
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
 import {mkdirSync, writeFileSync} from 'node:fs';
@@ -22,7 +23,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function session(url, port, fn) {
   const logs = [];
   await cdpPortFree(port);
-  const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
+  const chrome = spawn(chromePath, ['--headless=new', ...chromeGpuFlags, `--remote-debugging-port=${port}`,
     `--user-data-dir=${out}/profile-${port}-${Date.now()}`, '--window-size=1700,1300', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
   try {
     let ws;

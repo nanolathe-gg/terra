@@ -2,6 +2,7 @@
 // set and placement, the Select tool's feature selection (select, Shift-add, drag on the cell grid, metal, re-roll, Delete), undo,
 // the export of the placed features, and a world without generated trees. Writes screenshots to --out.
 //   node repro/features.mjs --server http://127.0.0.1:8941 --port 9803 --out /tmp/features-e2e
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {mkdirSync, writeFileSync} from 'node:fs';
@@ -10,7 +11,7 @@ import {cdpPortFree} from './cdp-port.mjs';
 const args = process.argv.slice(2), opt = (k, d) => args.includes(k) ? args[args.indexOf(k) + 1] : d;
 const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450)), out = opt('--out', '/tmp/features-e2e');
 await cdpPortFree(port); mkdirSync(out, {recursive: true});
-const browser = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`, `--user-data-dir=${join(out, 'profile')}`, '--window-size=1440,900', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
+const browser = spawn(chromePath, ['--headless=new', ...chromeGpuFlags, `--remote-debugging-port=${port}`, `--user-data-dir=${join(out, 'profile')}`, '--window-size=1440,900', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 const sleep = ms => new Promise(r => setTimeout(r, ms)); let ws;
 const report = {};
 try {

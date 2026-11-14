@@ -9,6 +9,7 @@
 // --time: also times the whole startup chain (every level, every layer), seven runs, in meta.json (`times`, ms, first is cold).
 // --same-seed: every layer uses layer 0's noise salt (the fit compares candidates that differ only in their numbers).
 // --z: runs entry makeZ instead (level 0): <name>.rgba holds a lit material's z, 16 bits as red*256+green, z = v / 65535 * 16 - 8.
+import {chromePath, chromeGpuFlags} from '../repro/chrome.mjs';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
@@ -151,7 +152,7 @@ const server = createServer((req, res) => {
 }).listen(0, '127.0.0.1');
 await new Promise(r => server.once('listening', r));
 const url = `http://127.0.0.1:${server.address().port}/`;
-const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal',
+const chrome = spawn(chromePath, ['--headless=new', ...chromeGpuFlags,
   `--remote-debugging-port=${cdp}`, `--user-data-dir=${resolve(out)}/.profile-${cdp}`, '--window-size=600,600', '--no-first-run', url], {stdio: 'ignore'});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 try {

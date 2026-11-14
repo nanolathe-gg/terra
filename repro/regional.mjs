@@ -4,6 +4,7 @@
 // Under Node the engine's files come from --server, or with no --server from this checkout (world configs from go run ./cmd/terraform --dump-configs, or
 // --configs DIR), and --port is not used; every scene runs in one process (node repro/regional.mjs repro/scenes/*.json). --chrome takes one scene,
 // and needs --server (your own Go development server; there is no default) and --port (default 9450).
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
 import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
@@ -114,7 +115,7 @@ async function main() {
     for (const file of options.sceneFiles) {
       const scene = readScene(file), s = await headless.openScene(scene, pageFor(scene).toString());
       try {
-        const result = await s.engine.regionalCheck({fields: s.fields, device: s.renderer.device, nodes: s.nodes, context: s.context(), config: s.config, grid: s.worldGrid, spacing: s.spacing, minH: s.minH, maxH: s.maxH});
+        const result = await s.engine.regionalCheck({fields: s.fields, device: s.renderer.device, nodes: s.nodes, context: s.context(), config: s.config, grid: s.worldGrid, spacing: s.spacing, minH: s.minH, maxH: s.maxH, ulps: s.engine.regionalUlps(process.platform === 'darwin')});
         checkResult(result);
         if (s.errors.length) throw new Error(s.errors.slice(0, 20).join('\n'));
         console.log(JSON.stringify({scene: file, biome: scene.biome, nodes: s.nodes.length, ...result, host: 'node'}));
@@ -148,7 +149,7 @@ async function main() {
   try {
     profile = mkdtempSync(join(tmpdir(), 'nanolathe-regional-'));
     await cdpPortFree(port);
-    chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', '--remote-debugging-address=127.0.0.1',
+    chrome = spawn(chromePath, ['--headless=new', ...chromeGpuFlags, '--remote-debugging-address=127.0.0.1',
       `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: ['ignore', 'ignore', 'pipe']});
     exited = new Promise(resolve => chrome.once('close', () => { closed = true; resolve(); }));
     chrome.once('error', error => { chromeError = error; });
@@ -190,7 +191,7 @@ async function main() {
     if (loadedBiome !== scene.biome) throw new Error(`Page loaded world ${loadedBiome}, scene asks for ${scene.biome}.`);
     const nodes = await evaluate(`sculptDebug.scene(${JSON.stringify(scene.strokes)}, {ground:${scene.ground !== false}})`);
     await ready('Scene');
-    const result = await evaluate(`(() => { if(typeof sculptDebug.regionalCheck!=='function')throw new Error('This editor does not expose sculptDebug.regionalCheck().'); return sculptDebug.regionalCheck(); })()`);
+    const result = await evaluate(`(() => { if(typeof sculptDebug.regionalCheck!=='function')throw new Error('This editor does not expose sculptDebug.regionalCheck().'); return sculptDebug.regionalCheck(${process.platform === 'darwin' ? 0 : 2}); })()`);
     checkResult(result); await sleep(0); checkErrors();
     console.log(JSON.stringify({scene: sceneFile, biome: scene.biome, nodes, ...result, host: 'chrome'}));
     if (result.mismatches) throw new Error(`${result.mismatches} regional field samples differ.`);

@@ -2,7 +2,7 @@
 
   python measure/crater_secondaries.py [depth units, default 6]
 
-Reads the twelve retail Moon maps' 16-px heights under $R/retail-moon (R=/private/tmp/nanolathe-map-editor). Big craters are crater_rings.py's (rim
+Reads the twelve retail Moon maps' 16-px heights under $R/retail-moon (R=/tmp/nanolathe-map-editor). Big craters are crater_rings.py's (rim
 diameter 150 px or more); small craters are bowls: a cell lower than its eight neighbours and `depth` or more units under the median of the cells 2 to 3
 cells away, outside every big crater's rim. Each small crater and each cell belongs to the big crater it is nearest to in that crater's rim radii, so the
 annuli do not overlap; the density of small craters per annulus (per 1000 cells) against the density 3 to 5 rim radii out shows where they gather
@@ -14,7 +14,7 @@ import numpy as np
 from scipy import ndimage as ndi
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import crater_rings as cr
-R = '/private/tmp/nanolathe-map-editor'
+R = '/tmp/nanolathe-map-editor'
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BANDS = [(1.0, 1.5), (1.5, 2.0), (2.0, 2.5), (2.5, 3.0), (3.0, 4.0), (4.0, 5.0)]
 DEPTH = float(sys.argv[1]) if len(sys.argv) > 1 else 6.0

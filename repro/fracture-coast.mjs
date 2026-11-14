@@ -4,7 +4,7 @@ import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {openHost,openScene,weather,renderWindow,windowHeights,knob} from './headless.mjs';
 import {encodePng} from './png.mjs';
 const opt=(k,d)=>process.argv.includes(k)?process.argv[process.argv.indexOf(k)+1]:d;
-const out=opt('--out','/private/tmp/terraform-fracture-coast/gpu'),worlds=opt('--worlds','red,green,desert').split(',');
+const out=opt('--out','/tmp/terraform-fracture-coast/gpu'),worlds=opt('--worlds','red,green,desert').split(',');
 const fixture=JSON.parse(readFileSync(new URL('./fixtures/fracture-coast.json',import.meta.url)));
 mkdirSync(out,{recursive:true});await openHost();const report={};
 const diff=(a,b,mask=null)=>{let pixels=0,sum=0,n=0;for(let i=0;i<a.length;i+=4){if(mask&&!mask[i/4])continue;const d=Math.max(...[0,1,2].map(k=>Math.abs(a[i+k]-b[i+k])));pixels+=d>0;sum+=d;n++;}return{pixels,percent:100*pixels/n,mean:sum/n};};

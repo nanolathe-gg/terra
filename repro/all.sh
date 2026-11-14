@@ -7,13 +7,13 @@
 # Both write the same files for the same pixels. Under Node the scenes render REPRO_JOBS at a time (default 4), each in its own process,
 # with the same bytes as one at a time; --chrome renders one at a time, on its one CDP port.
 # Retail crops are read from $REPRO_CROPS/<world> (retail_crop.py output;
-# default /private/tmp/nanolathe-map-editor/repro-r7, the crops every merge
+# default /tmp/nanolathe-map-editor/repro-r7, the crops every merge
 # since round 7 is judged on), or from the window a scene's "crop" names (a
 # variant's scenes, such as green-modern-1, are judged on their world's windows). REPRO_QUERY adds page parameters to every
 # scene (render.mjs --query), e.g. REPRO_QUERY='sun=90&sunHeight=30'; REPRO_SCENES names the scene files to render (default every scenes/*.json). Writes <out-dir>/<world>/
 # pair.png and layout.png, and <out-dir>/sheet.png with every world.
 set -e
-crops=${REPRO_CROPS:-/private/tmp/nanolathe-map-editor/repro-r7}
+crops=${REPRO_CROPS:-/tmp/nanolathe-map-editor/repro-r7}
 py=${PYTHON:-/Users/daniel/src/terraform/.venv/bin/python}
 here=$(cd "$(dirname "$0")" && pwd)
 # One scene (the loop below runs these): all.sh --one <scene> <out-dir> <configs> <chrome> <server> <port>

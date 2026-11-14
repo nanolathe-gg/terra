@@ -1,6 +1,6 @@
 // Retail features beside our generated ones, per world, as one PNG per group (deposit, vent, tree, shrub, rock, spire, node, scar).
 //   node measure/feature_compare.mjs <world> [--out DIR] [--top 12] [--seed N] [--names REGEX]
-// DIR defaults to $R/features-round/<world> (R=/private/tmp/nanolathe-map-editor); the PNGs, index.html and numbers.json go there and
+// DIR defaults to $R/features-round/<world> (R=/tmp/nanolathe-map-editor); the PNGs, index.html and numbers.json go there and
 // never into git: the retail sprites come from $R/features/<world>/catalog.json and are read only to draw the sheet and to measure it.
 // Each PNG has RETAIL (orange band: the sprites most used on the world's retail maps) and OURS (blue band: the variants of the world's
 // own table, lit by the world's sun as the page does) on the world's ground colour, at 1x and then 2x. Numbers under the pictures:
@@ -14,7 +14,7 @@ import {encodePNG, decodePNG} from './feature_gen_png.mjs';
 import {generateFeature, paintDeposit, paintVent, toRGBA, rng} from '../sculpt-feature-gen.js';
 import {defaultSet, variants} from '../sculpt-feature-set.js';
 
-const R = process.env.R || '/private/tmp/nanolathe-map-editor';
+const R = process.env.R || '/tmp/nanolathe-map-editor';
 const root = new URL('..', import.meta.url).pathname;
 const args = process.argv.slice(2);
 const world = args.find(a => !a.startsWith('--') && args[args.indexOf(a) - 1] !== '--out' && args[args.indexOf(a) - 1] !== '--top' && args[args.indexOf(a) - 1] !== '--seed' && args[args.indexOf(a) - 1] !== '--names');

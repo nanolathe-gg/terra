@@ -1,5 +1,5 @@
 import fs from 'node:fs';
 import {WORLD_PRIMARY_CONTROLS} from '../../sculpt-control-schema.js';
-const i=JSON.parse(fs.readFileSync(process.argv[2]||'/private/tmp/terraform-tool-audit/inventory.json'));
+const i=JSON.parse(fs.readFileSync(process.argv[2]||'/tmp/terraform-tool-audit/inventory.json'));
 const rows=[...i.shapes.map(f=>({key:f[0],label:f[2]})),...i.knobs.flatMap(([g,l])=>l.map(f=>({key:f[0],label:f[1],group:g,primary:WORLD_PRIMARY_CONTROLS.has(f[0])})))];
-fs.writeFileSync(process.argv[3]||'/private/tmp/terraform-tool-audit/presentation.json',JSON.stringify(rows,null,2));
+fs.writeFileSync(process.argv[3]||'/tmp/terraform-tool-audit/presentation.json',JSON.stringify(rows,null,2));
