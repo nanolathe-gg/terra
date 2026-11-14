@@ -18,7 +18,7 @@ const number=(q,key,fallback,min,max)=>clamp(Number(q.get(key))||fallback,min,ma
 export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const map=config.map,query=new URLSearchParams(location.search),viewport=$('viewport'),stage=$('stage');
   config.maskKeys=api.maskKeys; config.gpuBudgetBytes=128*MB;
-  const terrainBudget=createTerrainBudget({explicit:query.has('gpuMB')?number(query,'gpuMB',2048,128,4096):undefined,deviceMemory:navigator.deviceMemory,preference:api.terrainBudgetPreference?.(),save:value=>api.saveTerrainBudget?.(value)});terrainBudget.begin();
+  const terrainBudget=createTerrainBudget({explicit:query.has('gpuMB')?number(query,'gpuMB',2048,128,4096):undefined,deviceMemory:navigator.deviceMemory,preference:api.terrainBudgetPreference?.(),save:value=>api.saveTerrainBudget?.(value)});terrainBudget.begin();addEventListener('pagehide',()=>terrainBudget.leave());
   let restarting=false;
   const restartForMemory=why=>{
     if(restarting)return true;

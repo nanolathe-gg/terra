@@ -9,6 +9,8 @@ test('an interrupted trial starts lower and a completed view clears its note',()
  const saved=[],b=createTerrainBudget({preference:{mb:2048,trying:2048},save:p=>saved.push({...p})});assert.equal(b.mb,1536);
  b.begin();assert.equal(saved.at(-1).trying,1536);b.settled();assert.equal(saved.at(-1).trying,null);assert.equal(saved.at(-1).mb,1536);
  assert.equal(createTerrainBudget({explicit:1024,preference:{mb:2048,trying:2048}}).mb,1024);
+ // A reload or closed tab before the view settles is not a crash: the next load keeps its budget.
+ const left=[],c=createTerrainBudget({save:p=>left.push({...p})});c.begin();assert.equal(left.at(-1).trying,2048);c.leave();assert.equal(left.at(-1).trying,null);assert.equal(createTerrainBudget({preference:left.at(-1)}).mb,2048);
 });
 test('allocation failures step through the notches and stop at the floor',()=>{
  const saved=[],b=createTerrainBudget({explicit:2048,save:p=>saved.push(p)});for(const n of [1536,1024,768,512]){assert(b.lower('allocation failure'));assert.equal(b.mb,n);}assert.equal(b.lower('allocation failure'),false);assert.equal(createTerrainBudget({explicit:2048,preference:saved.at(-1)}).mb,512);b.choose(768);assert.equal(b.mb,768);
@@ -21,7 +23,7 @@ test('an allocation scope closes before yielding and retains the failure',async(
 
 test('a device restart records the failed notch and reloads only one step lower',()=>{
  let preference;const first=createTerrainBudget({explicit:2048,save:value=>preference=value});first.begin();first.settled();
- assert(first.restart('a lost GPU device'));assert.equal(preference.trying,2048);assert.equal(preference.mb,1536);
+ assert(first.restart('a lost GPU device'));first.leave();assert.equal(preference.trying,2048);assert.equal(preference.mb,1536);
  const next=createTerrainBudget({explicit:2048,preference});assert.equal(next.mb,1536);assert.match(next.reason,/lost GPU device/);
  const floor=createTerrainBudget({explicit:512});assert.equal(floor.restart('a lost GPU device'),false);assert.equal(floor.mb,512);
 });
