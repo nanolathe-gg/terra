@@ -77,7 +77,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   $('graphics-host').append(panel);
   $('minimap-host').innerHTML=`<canvas data-nav width="${VIEW_CANVASES.minimap}" height="${VIEW_CANVASES.minimap}" tabindex="0" aria-label="Minimap: drag to pan, or use arrow keys"></canvas>`;
   const find=s=>document.querySelector(s),navigatorCanvas=find('[data-nav]'),ng=navigatorCanvas.getContext('2d');
-  function state() { return {x:viewport.scrollLeft/(scale||1),y:viewport.scrollTop/(scale||1),width:canvas.width/(scale||1),height:canvas.height/(scale||1),scale,overview}; }
+  // The scroll position, read when it can change (a scroll event, or position() after the editor scrolls) rather than at every state():
+  // reading scrollLeft lays the page out whenever the status text changed, and the tile loop asks for state() hundreds of times a second.
+  let scrollAt=null;
+  const readScroll=()=>scrollAt=[viewport.scrollLeft,viewport.scrollTop];
+  function state() { const [sx,sy]=scrollAt??readScroll(); return {x:sx/(scale||1),y:sy/(scale||1),width:canvas.width/(scale||1),height:canvas.height/(scale||1),scale,overview}; }
   const sourceSample=api.sample;
   function heightSample(x,y){for(const e of cache.values()){const r=e.heightPatch;if(e.weathered===weatheredView&&r&&x>=r.gridOrigin[0]&&y>=r.gridOrigin[1]&&x<=r.gridOrigin[0]+(r.gridWidth-1)*r.gridSpacing&&y<=r.gridOrigin[1]+(r.gridHeight-1)*r.gridSpacing)return sampleField(r,x,y);}return null;}
   function visibleSample(x,y){return heightSample(x,y)??(weatheredView?sourceSample:api.sampleAuthored??sourceSample)(x,y);}
@@ -718,8 +722,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(!overview){viewport.scrollLeft=centre.x*scale-canvas.width/2;viewport.scrollTop=centre.y*scale-canvas.height/2;}
     position();viewEpoch++;if(renderer&&!renderer.busy)configureChunks();schedule();
   }
-  function position() { for (const c of [canvas,overlay]) { c.style.left=viewport.scrollLeft+'px'; c.style.top=viewport.scrollTop+'px'; }api.setViewFocus?.(state()); }
+  function position() { const [sx,sy]=readScroll(); for (const c of [canvas,overlay]) { c.style.left=sx+'px'; c.style.top=sy+'px'; }api.setViewFocus?.(state()); }
   function navigationChanged() {
+    readScroll();
     if(activeBake&&!intersects(activeBake.rect,state()))cancelBake();
     position();viewEpoch++;lastScroll=performance.now();lastInputAt=performance.now();released=false;schedule();
     clearTimeout(navigationTimer);
