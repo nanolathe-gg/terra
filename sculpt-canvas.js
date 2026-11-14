@@ -19,7 +19,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const map=config.map,query=new URLSearchParams(location.search),viewport=$('viewport'),stage=$('stage');
   config.maskKeys=api.maskKeys; config.gpuBudgetBytes=128*MB;
   const terrainBudget=createTerrainBudget({explicit:query.has('gpuMB')?number(query,'gpuMB',2048,128,4096):undefined,deviceMemory:navigator.deviceMemory,preference:api.terrainBudgetPreference?.(),save:value=>api.saveTerrainBudget?.(value)});terrainBudget.begin();
-  let restarting=false;
+  let restarting=false, suspended=false;
   const restartForMemory=why=>{
     if(restarting)return true;
     // Never discard a live recipe when local saving is unavailable. During
@@ -377,7 +377,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     ready.then(()=>{pipelineWaits.delete(key);schedule();},error=>{pipelineWaits.delete(key);if(!renderer.recovering){console.error(error);$('error').hidden=false;$('error').textContent=error.message;}});
   }
   async function frame() {
-    pending=false;let rendering=false;const renderStart=performance.now();
+    pending=false;if(suspended)return;let rendering=false;const renderStart=performance.now();
     try {
       // Presentation never waits for terrain generation. This path only copies
       // retained images while a chunk's fields, GPU work or snapshot are pending.
@@ -447,7 +447,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           else if(quiet<1000)wakeLadder(1000-quiet);
         }
         for(const {rect,want,block=false,fineTurn=false} of plan){
-          if(token!==serial||viewToken!==viewEpoch||busy||previewing!==interacting()){rerun=true;break;}
+          if(suspended||token!==serial||viewToken!==viewEpoch||busy||previewing!==interacting()){rerun=true;break;}
           if((previewing||navigating()||want<1)&&!intersects(rect,v))continue;   // a detail level bakes only what is seen: its ring would evict itself
           if(block){
             const key=blockKey(rect,want),prior=blocks.get(key);if(blockCurrent(prior))continue;
@@ -517,7 +517,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         // Generated deposits and vents sit where the export puts them and take their colors from the export art under them
         // (sculpt-features.js): one anchor read or one 128 px patch per idle frame, after the view's own images and only once the
         // weather the export reads is in.
-        if(!rerun&&token===serial&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&quiet>=1000&&(!api.canExport||api.canExport())&&await features?.fitGround?.(state()))rerun=true;
+        if(!suspended&&!rerun&&token===serial&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&quiet>=1000&&(!api.canExport||api.canExport())&&await features?.fitGround?.(state()))rerun=true;
       }
       if(!rerun&&!interacting()&&!foregroundPending()&&(!api.canExport||api.canExport()))api.renderProgress?.(null);
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
@@ -544,7 +544,13 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // H7b: during a gesture a change is answered at once, not at the next animation frame (a pointer move is already one event a frame): the bake of
   // the change's chunks starts as soon as the one in flight ends, and nothing waits for a frame between them.
   let pendingFrame=null;
+  function setSuspended(on) {
+    if(suspended===on)return;suspended=on;
+    if(on){cancelBake();viewEpoch++;clearTimeout(ladderTimer);ladderTimer=null;if(pendingFrame!==null)cancelAnimationFrame(pendingFrame);pendingFrame=null;pending=false;rerun=false;}
+    else schedule();
+  }
   function schedule() {
+    if(suspended)return;
     // Input may have queued a presentation while the last bake was pending.
     // Once it ends, start the latest interactive refresh immediately as well.
     const immediate=levels&&interacting()&&!drawing;
@@ -722,6 +728,6 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const b=pagedBudget({gpuMB:0,renderer,chunk:canonicalSize,maskCount:api.maskKeys?.length,view:{width:canvas.width,height:canvas.height},preview:previewReserved,featureBytes:features?.stats?.().imageBytes||0,previewWorking});
     return previews?b.previewMinimum:b.minimum;
   }
-  const result={renderer,passability,minimumBytes,foregroundPending,gpuWorkPending:()=>drawing||renderer.busy,prepareBackground:bytes=>{if(drawing||renderer.busy||foregroundPending())return false;if(gpuResident()+bytes>gpuBudget)renderer.evict();return gpuResident()+bytes<=gpuBudget;},schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
+  const result={setSuspended,get suspended(){return suspended;},renderer,passability,minimumBytes,foregroundPending,gpuWorkPending:()=>drawing||renderer.busy,prepareBackground:bytes=>{if(suspended||drawing||renderer.busy||foregroundPending())return false;if(gpuResident()+bytes>gpuBudget)renderer.evict();return gpuResident()+bytes<=gpuBudget;},schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
   window.sculptCanvas=result;resize();budgets();return result;
 }

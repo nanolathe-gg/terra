@@ -112,6 +112,7 @@
     "sculpt-ground-panel.js",
     "sculpt-ground-preview.js",
     "sculpt-texture-model.js",
+    "sculpt-material-layers.js",
     "engine-texture.wgsl",
     "engine-texture-dither.wgsl",
     "materials/texture-presets.json"

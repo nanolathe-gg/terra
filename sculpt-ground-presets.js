@@ -1,3 +1,4 @@
+import {copyLayerSettings,MAX_MATERIAL_LAYERS} from './sculpt-material-layers.js';
 import gamePalette from './materials/palette.json' with {type:'json'};
 import texturePresets from './materials/texture-presets.json' with {type:'json'};
 import {TEXTURE_CONTROLS,copyTextureColors,copyTexturePalette} from './sculpt-texture-model.js';
@@ -28,7 +29,7 @@ const recipeColor = value => {
  if(!Array.isArray(value)||value.length!==3||value.some(n=>typeof n!=='number'||!Number.isFinite(n)||n<0||n>255))throw Error('Ground colors need RGB values from 0 to 255.');
  return [...value];
 };
-export function copyGroundRecipe(value) {
+export function copyGroundRecipe(value, child=false) {
  if (!object(value)) throw Error('Invalid ground recipe.');
  const knobs = {...GROUND_DEFAULTS};
  if (value.knobs !== undefined && !object(value.knobs)) throw Error('Invalid ground settings.');
@@ -39,7 +40,9 @@ export function copyGroundRecipe(value) {
  if (!Array.isArray(value.ramp) || value.ramp.length !== 16) throw Error('A ground ramp needs 16 colors.');
  const variationRamp=value.variationRamp ?? value.ramp;
  if(!Array.isArray(variationRamp)||variationRamp.length!==16)throw Error('A ground variation ramp needs 16 colors.');
- return {knobs,textureColors:copyTextureColors(value.textureColors),texturePalette:copyTexturePalette(value.texturePalette),ramp:value.ramp.map(recipeColor),variationRamp:variationRamp.map(recipeColor),line:recipeColor(value.line ?? value.ramp[0])};
+ if(value.layers!==undefined&&(!Array.isArray(value.layers)||value.layers.length>=MAX_MATERIAL_LAYERS||child&&value.layers.length))throw Error('A material holds at most eight layers, without nested stacks.');
+ if(value.presetKey!=null&&(typeof value.presetKey!=='string'||!value.presetKey.trim()||value.presetKey.length>80))throw Error('Invalid source preset.');
+ return {presetKey:value.presetKey??null,layer:copyLayerSettings(value.layer),layers:(value.layers??[]).map(p=>copyGroundRecipe(p,true)),knobs,textureColors:copyTextureColors(value.textureColors),texturePalette:copyTexturePalette(value.texturePalette),ramp:value.ramp.map(recipeColor),variationRamp:variationRamp.map(recipeColor),line:recipeColor(value.line ?? value.ramp[0])};
 }
 export function copyGrounds(value) {
  if(value==null)return null;
@@ -95,15 +98,16 @@ export function parseGroundRecipe(text) {
  if(p?.format!=='terraform-ground-recipe')throw Error('The clipboard has no ground recipe.');
  return {name:nameOf(p.name),...copyGroundRecipe(p)};
 }
-export function groundCacheUsage(count,pool) {
+export function groundCacheUsage(count,pool,layerCount=count) {
  if(!Number.isInteger(count)||count<0||count>GROUND_SLOTS||!Number.isInteger(pool)||pool<512||pool%512)throw Error('Invalid ground cache dimensions.');
- const bytes=count*pool*pool*12,capacity=Math.min(GROUND_SLOTS,Math.floor(GROUND_CACHE_BYTES/(pool*pool*12)));
+ if(!Number.isInteger(layerCount)||layerCount<count||layerCount>count*MAX_MATERIAL_LAYERS)throw Error('Invalid material layer count.');
+ const bytes=(layerCount*12+count*4)*pool*pool,capacity=Math.min(GROUND_SLOTS,Math.floor(GROUND_CACHE_BYTES/(pool*pool*16)));
  return {bytes,capacity,budget:GROUND_CACHE_BYTES,fits:bytes<=GROUND_CACHE_BYTES};
 }
 
 // Starting recipes are only absolute settings and palette entries.
 const ramp = (dark,light) => Array.from({length:16},(_,i)=>Math.round(dark+(light-dark)*i/15));
-export const GROUND_PRESETS = {
+const presets = {
  ...texturePresets,
  bed:{name:'Cracked bed',knobs:{plateAmount:3.5,plateSize:64,plateVariation:.8,plateProfile:-.2,borderProfile:-1,crackWidth:1.8,rimCurl:.65,plateTilt:.35,secondaryCracks:.5,toneVariation:.22,roughness:0},ramp:ramp(94,80),line:93},
  salt:{name:'Salt flat',knobs:{plateAmount:.7,plateSize:48,borderProfile:1,rimCurl:.2,crackWidth:1,grainFine:.12,toneVariation:.08,roughness:.1},ramp:ramp(86,80),line:80},
@@ -112,3 +116,5 @@ export const GROUND_PRESETS = {
  ice:{name:'Ice',knobs:{plateAmount:.8,plateSize:100,plateVariation:.9,plateTilt:.15,crackWidth:.8,borderProfile:-1,rimCurl:.05,scratchAmount:.3,scratchSpacing:36,scratchWidth:.6,scratchConnect:.8,gloss:.7,sharpness:64,roughness:.05,toneVariation:.12},ramp:ramp(120,112),line:118},
  alien:{name:'Alien crust',knobs:{plateAmount:2,plateSize:36,plateProfile:.5,borderProfile:-.5,rimCurl:.25,veinAmount:.8,veinSpacing:19,veinWidth:1.5,rippleAmount:.3,rippleSize:18,rippleAsymmetry:.6,grainFine:.2,gloss:.3,toneVariation:.3},ramp:ramp(156,147),line:176},
 };
+
+export const GROUND_PRESETS=Object.fromEntries(Object.entries(presets).map(([presetKey,p])=>[presetKey,{...p,presetKey}]));

@@ -1,53 +1,77 @@
+import {materialLayers,replaceMaterialLayers,copyLayerSettings,LAYER_CONTROLS,OUTPUT_KEYS,patternSettings} from './sculpt-material-layers.js';
 import {TEXTURE_COLORS,textureControlRequirement} from './sculpt-texture-model.js';
 import {GROUND_PRESETS,GROUND_CONTROLS,copyGroundRecipe,addGround,duplicateGround,renameGround,setGround,groundRecipeText,parseGroundRecipe} from './sculpt-ground-presets.js';
 import {GroundPreview} from './sculpt-ground-preview.js';
 const $=id=>document.getElementById(id);
 // All rows live in index.html. This controller only fills choices and values.
 export function mountGroundPanel(host){
- let selected=0,previewKey='',shown=false;
+ let selected=0,selectedLayer=0,previewKey='',previewContext='',resetContext=-1,shown=false;
  const dialog=$('material-editor');let opener=null;
  const preview=new GroundPreview($('ground-preview'));
- const recipe=()=>host.grounds().find(p=>p.slot===selected);
+ const material=()=>host.grounds().find(p=>p.slot===selected);
+ const recipe=()=>material()?materialLayers(material())[selectedLayer]:null;
+ const editRecipe=p=>{const m=material(),rows=materialLayers(m);rows[selectedLayer]=p;return setGround(host.grounds(),selected,replaceMaterialLayers(m,rows));};
  const note=text=>{$('ground-presets-note').textContent=text;$('ground-presets-note').hidden=!text;};
- const fail=fn=>async()=>{try{await fn();note('');}catch(e){note(e.message);}};
+ const fail=fn=>async()=>{try{await fn();note('');}catch(e){refresh();note(e.message);}};
  const change=grounds=>{host.edit(grounds);refresh();};
- const choose=slot=>{selected=slot;refresh();};
+ const choose=slot=>{selected=slot;selectedLayer=0;refresh();};
  const hex=value=>'#'+(Array.isArray(value)?value:host.renderer().paletteIndexed[value]).map(n=>Math.round(n).toString(16).padStart(2,'0')).join('');
  const nearest=color=>{const rgb=[1,3,5].map(i=>parseInt(color.slice(i,i+2),16));let best=0,dist=Infinity;host.renderer().paletteIndexed.forEach((c,i)=>{const d=c.reduce((sum,n,k)=>sum+(n-rgb[k])**2,0);if(d<dist){dist=d;best=i;}});return best;};
  function refreshPreview(){
-  if(!shown||!dialog.open)return;const r=host.renderer(),p=recipe();
-  const neighbor=host.grounds().find(q=>q.slot!==selected);
-  const key=JSON.stringify([p,neighbor,r.variant.toString(),r.colorOverrides]);if(key===previewKey)return;previewKey=key;
+  if(!shown||!dialog.open)return;const r=host.renderer(),p=material();
+  const view={channel:Number($('material-view').value),height:Number($('preview-height').value),slope:Number($('preview-slope').value)};
+  const key=JSON.stringify([p,r.variant.toString(),r.colorOverrides,view]);if(key===previewKey)return;previewKey=key;
   $('ground-preview-count').textContent='Rendering the material sample…';
-  preview.request(r,p,neighbor,(error,count)=>{
+  preview.request(r,p,(error,count)=>{
    if(error){previewKey='';$('ground-preview-count').textContent='Sample unavailable: '+error.message;return;}
-   $('ground-preview-count').textContent=`${count.distinct} distinct tiles in this ${count.tiles}-tile sample · ${count.pool} px repeat · at most ${count.perLevel.toLocaleString()} tiles per flat height across the full repeat. The repeat seam crosses the center.${count.edgeTiles?` A separate contact sample with ${count.neighbor} has ${count.edgeDistinct} distinct edge tiles in ${count.edgeTiles} slots.`:''}`;
-  });
+   $('ground-preview-count').textContent=`${count.draft?'Draft · palette grain follows when editing stops. ':''}${count.distinct} distinct tiles in this ${count.tiles}-tile sample · ${count.pool} px repeat · at most ${count.perLevel.toLocaleString()} tiles per flat height across the full repeat. The repeat seam crosses the center.`;
+  },view);
  }
  function refresh(){
   const grounds=host.grounds();if(!grounds.some(p=>p.slot===selected))selected=0;
-  const p=recipe(),full=grounds.length>=7;
+  const m=material();selectedLayer=Math.min(selectedLayer,Math.max(0,(m?materialLayers(m).length:1)-1));const p=recipe(),full=grounds.length>=7;
+  const context=selected+':'+Boolean(m?.worldWater);if(previewContext!==context){previewContext=context;$('preview-height').value=m?.worldWater?host.renderer().config.seaLevel-64:host.renderer().config.baseHeight;$('preview-height-value').textContent=$('preview-height').value;}
   for(const [id,role,label] of [['ground-world-default','worldGround','Original world ground'],['water-material','worldWater','Original world water']]){$(id).replaceChildren(new Option(label,'0'),...grounds.map(g=>new Option(g.name,String(g.slot))));$(id).value=String(grounds.find(g=>g[role])?.slot??0);}
   $('water-material-edit').disabled=!grounds.some(g=>g.worldWater);
   $('ground-presets').replaceChildren(new Option('World ground','0'),...grounds.map(p=>new Option(p.name,String(p.slot))));$('ground-presets').value=String(selected);
-  $('ground-name').value=p?.name||'World ground';
+  $('ground-name').value=m?.name||'World ground';
   for(const id of ['ground-name','ground-rename','ground-delete','ground-copy']){$(id).disabled=!p;$(id).title=p?'':'Select a map preset first. World ground uses the Pattern controls below.';}
   for(const id of ['ground-add','ground-duplicate','ground-paste']){$(id).disabled=full||(id==='ground-duplicate'&&!p);$(id).title=full?'The map already has seven ground presets.':id==='ground-duplicate'&&!p?'Select a map preset to duplicate.':'';}
   $('ground-recipe-fields').disabled=!p;$('ground-recipe-fields').hidden=!p;
   $('ground-world-note').hidden=!!p;
+  $('material-layer-list').disabled=!m;
+  for(const row of $('material-layers').children){const i=Number(row.dataset.layerIndex),layer=m&&materialLayers(m)[i]?.layer;row.hidden=!layer;if(!layer)continue;const button=row.querySelector('button'),toggle=row.querySelector('input');button.textContent=layer.name;button.setAttribute('aria-pressed',String(i===selectedLayer));toggle.checked=layer.visible;toggle.setAttribute('aria-label','Show '+layer.name);}
+  if(resetContext!==selected){resetContext=selected;$('material-reset-preset').value=GROUND_PRESETS[m?.presetKey]?m.presetKey:'';}
+  $('material-reset-preset').disabled=!m;$('material-reset').disabled=!m||!GROUND_PRESETS[$('material-reset-preset').value];$('material-reset').title=$('material-reset').disabled?'Choose a starting preset to restore.':'Restore the selected preset. Undo can recover your edits.';
+  const count=m?materialLayers(m).length:0;
+  $('layer-up').disabled=selectedLayer===0;$('layer-down').disabled=selectedLayer>=count-1;$('layer-delete').disabled=count<=1;
+  $('layer-add').disabled=$('layer-duplicate').disabled=count>=8;
+  $('layer-add').title=count>=8?'A material holds at most eight layers.':'';
   if(p){
+   $('layer-name').value=p.layer.name;$('layer-pattern').value='';
+   for(const key of ['blend','mask','maskPattern'])$('layer-'+key).value=p.layer[key];
+   const procedural=p.layer.mask==='procedural',terrain=['height','slope'].includes(p.layer.mask),masked=p.layer.mask!=='everywhere';
+   $('layer-maskPattern').closest('.control').hidden=!procedural;$('layer-maskPattern').disabled=!procedural;$('layer-maskPattern').title=procedural?'':'Choose Procedural mask to use a mask pattern.';
+   for(const [key]of LAYER_CONTROLS){const el=$('layer-'+key);el.value=p.layer[key];$('layer-'+key+'-value').textContent=+p.layer[key].toFixed(3);
+    const off=key.startsWith('terrain')?!terrain:key.startsWith('mask')?(!masked||!['maskAmount','maskInvert'].includes(key)&&!procedural):false;
+    el.closest('.control').hidden=key.startsWith('terrain')?!terrain:key.startsWith('mask')&&!['maskAmount','maskInvert'].includes(key)?!procedural:false;
+    el.disabled=off;const reason=$('layer-'+key+'-reason');reason.hidden=!off;reason.textContent=off?'Choose '+(key.startsWith('terrain')?'a terrain range mask.':key==='maskAmount'||key==='maskInvert'?'a mask.':'Procedural mask.') :'';
+   }
+   $('layer-mask-help').textContent=terrain?(p.layer.mask==='height'?'Height ranges use authored terrain height in art units.':'Slope ranges use degrees, from flat (0) to vertical (90).'):'The mask uses the same periodic pattern tools as a layer.';
+   const terrainPalette=materialLayers(m).some(row=>['height','slope'].includes(row.layer.mask)&&row.layer.maskAmount>0);
+   $('material-palette-note').textContent=terrainPalette?'Terrain masks reuse the repeatable diffusion grain and reduce the final terrain-dependent colors to the palette.':'Repeatable stacks use full-repeat error diffusion.';
    for(const[key]of GROUND_CONTROLS){
-    const input=$('ground-'+key);input.value=p.knobs[key];$('ground-'+key+'-value').textContent=+p.knobs[key].toFixed(3);
+    const input=$('ground-'+key),value=(OUTPUT_KEYS.includes(key)?m:p).knobs[key];input.value=value;$('ground-'+key+'-value').textContent=+value.toFixed(3);
     const parent=key.startsWith('plate')||['borderProfile','crackWidth','rimCurl','secondaryCracks'].includes(key)?'plateAmount':key.startsWith('bump')?'bumpAmount':key.startsWith('scratch')?'scratchAmount':key.startsWith('quiet')?'quietAmount':key.startsWith('vein')?'veinAmount':key.startsWith('pebble')?'pebbleAmount':key.startsWith('cushion')?'cushionAmount':key.startsWith('ripple')?'rippleAmount':key==='toneSize'?'toneVariation':['sharpness','roughness','roughnessScale'].includes(key)?'gloss':null;
     const noGrain=['grainStretch','grainDirection'].includes(key)&&!['grainFine','grainMedium','grainBroad'].some(k=>p.knobs[k]>0);
     const noReliefGrain=key==='grainRelief'&&!['grainFine','grainMedium','grainBroad'].some(k=>p.knobs[k]>0);
     const sameGrainColors=key==='grainColorMix'&&p.ramp.every((v,i)=>String(v)===String(p.variationRamp[i]));
-    const textureReason=textureControlRequirement(key,p.knobs),textureOff=!!textureReason;
+    const textureReason=textureControlRequirement(key,OUTPUT_KEYS.includes(key)?m.knobs:p.knobs),textureOff=!!textureReason;
     const off=textureOff||sameGrainColors||noReliefGrain||noGrain||(key==='grainDirection'?p.knobs.grainStretch===1:parent&&parent!==key&&p.knobs[parent]===0);
     input.disabled=!!off;const reason=$('ground-'+key+'-reason');reason.hidden=!off;reason.textContent=textureOff?textureReason:sameGrainColors?'Choose an alternate grain color different from the main ramp to mix colors.':noReliefGrain?'Raise Fine grain, Medium grain, or Broad grain above 0 to shape grain relief.':noGrain?'Raise a grain amount above 0 to use this setting.':key==='grainDirection'&&off?'Raise Grain stretch above 1 to choose a direction.':off?'Raise '+$('ground-'+parent).closest('.control').querySelector('label').firstChild.textContent.trim()+' above 0 to use this setting.':'';
    }
    for(const key of Object.keys(TEXTURE_COLORS)){const scale=['fineLow','fineHigh','markTint'].includes(key)?127.5:1;$('texture-color-'+key).value=hex(p.textureColors[key].map(v=>v*scale));}
-   $('texture-palette').value=p.texturePalette.map(hex).join(' ');
+   $('texture-palette').value=m.texturePalette.map(hex).join(' ');
    p.ramp.forEach((entry,i)=>{$('ground-ramp-'+i).value=hex(entry);$('ground-ramp-'+i).title=`Tone ${i+1}: RGB ${entry}`;});
    p.variationRamp.forEach((entry,i)=>{$('ground-variation-'+i).value=hex(entry);$('ground-variation-'+i).title=`Alternate tone ${i+1}: RGB ${entry}`;});$('ground-line').value=hex(p.line);
   }
@@ -55,8 +79,8 @@ export function mountGroundPanel(host){
  }
  const commit=()=>host.checkpoint();
  for(const [id,role]of [['ground-world-default','worldGround'],['water-material','worldWater']])$(id).onchange=fail(()=>{const slot=Number($(id).value);change(host.grounds().map(p=>({...p,[role]:p.slot===slot})));commit();});
- function open(slot,from){opener=from;if(slot!==undefined)selected=slot;else if(!recipe())selected=host.grounds()[0]?.slot??0;refresh();if(!dialog.open)dialog.showModal();shown=true;refreshPreview();}
- const close=()=>{dialog.close();shown=false;opener?.focus();};
+ function open(slot,from){opener=from;if(slot!==undefined&&slot!==selected){selected=slot;selectedLayer=0;}else if(!recipe())selected=host.grounds()[0]?.slot??0;refresh();if(!dialog.open){host.suspend(true);dialog.showModal();}shown=true;refreshPreview();}
+ const close=()=>{dialog.close();shown=false;previewKey='';preview.cancel();host.suspend(false);opener?.focus();};
  $('material-open').onclick=()=>open(undefined,$('material-open'));
  $('water-material-edit').onclick=()=>open(Number($('water-material').value),$('water-material-edit'));
  $('material-done').onclick=close;
@@ -71,23 +95,54 @@ export function mountGroundPanel(host){
  const tabs=[...dialog.querySelectorAll('[role="tab"]')];
  const pick=tab=>{for(const t of tabs){const on=t===tab;t.setAttribute('aria-selected',String(on));t.tabIndex=on?0:-1;$(t.getAttribute('aria-controls')).hidden=!on;}};
  for(const t of tabs){t.onclick=()=>pick(t);t.onkeydown=e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const i=tabs.indexOf(t),next=e.key==='Home'?tabs[0]:e.key==='End'?tabs.at(-1):tabs[(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length];pick(next);next.focus();};}
- for(const key of Object.keys(TEXTURE_COLORS)){$('texture-color-'+key).oninput=fail(()=>{const p=copyGroundRecipe(recipe()),scale=['fineLow','fineHigh','markTint'].includes(key)?127.5:1;p.textureColors[key]=[1,3,5].map(i=>parseInt($('texture-color-'+key).value.slice(i,i+2),16)/scale);change(setGround(host.grounds(),selected,p));});$('texture-color-'+key).onchange=commit;}
- $('texture-palette').onchange=fail(()=>{const colors=$('texture-palette').value.trim().split(/[\s,]+/).filter(Boolean);if(colors.some(c=>!/^#[0-9a-f]{6}$/i.test(c)))throw Error('Use hex colors such as #4263a0.');const p=copyGroundRecipe(recipe());p.texturePalette=colors.map(nearest);change(setGround(host.grounds(),selected,p));commit();});
+ for(const key of Object.keys(TEXTURE_COLORS)){$('texture-color-'+key).oninput=fail(()=>{const p=copyGroundRecipe(recipe()),scale=['fineLow','fineHigh','markTint'].includes(key)?127.5:1;p.textureColors[key]=[1,3,5].map(i=>parseInt($('texture-color-'+key).value.slice(i,i+2),16)/scale);change(editRecipe(p));});$('texture-color-'+key).onchange=commit;}
+ $('texture-palette').onchange=fail(()=>{const colors=$('texture-palette').value.trim().split(/[\s,]+/).filter(Boolean);if(colors.some(c=>!/^#[0-9a-f]{6}$/i.test(c)))throw Error('Use hex colors such as #4263a0.');const p=copyGroundRecipe(material());p.texturePalette=colors.map(nearest);change(setGround(host.grounds(),selected,p));commit();});
  $('ground-presets').onchange=()=>choose(Number($('ground-presets').value));
- $('ground-add').onchange=fail(()=>{const key=$('ground-add').value;$('ground-add').value='';if(!key)return;const p=GROUND_PRESETS[key],added=addGround(host.grounds(),p,p.name);selected=added.slot;change(added.grounds);commit();});
- $('ground-duplicate').onclick=fail(()=>{const added=duplicateGround(host.grounds(),selected);selected=added.slot;change(added.grounds);commit();});
+ $('ground-add').onchange=fail(()=>{const key=$('ground-add').value;$('ground-add').value='';if(!key)return;const p=GROUND_PRESETS[key],added=addGround(host.grounds(),p,p.name);selected=added.slot;selectedLayer=0;change(added.grounds);commit();});
+ $('ground-duplicate').onclick=fail(()=>{const added=duplicateGround(host.grounds(),selected);selected=added.slot;selectedLayer=0;change(added.grounds);commit();});
  $('ground-rename').onclick=fail(()=>{change(renameGround(host.grounds(),selected,$('ground-name').value));commit();});
  $('ground-name').onkeydown=e=>{if(e.key==='Enter')$('ground-rename').click();};
  $('ground-delete').onclick=fail(()=>{host.delete(selected);selected=0;refresh();});
- $('ground-copy').onclick=fail(async()=>{await navigator.clipboard.writeText(groundRecipeText(recipe()));host.status('Copied the ground recipe.');});
- $('ground-paste').onclick=fail(async()=>{const p=parseGroundRecipe(await navigator.clipboard.readText()),added=addGround(host.grounds(),p,p.name);selected=added.slot;change(added.grounds);commit();});
+ $('ground-copy').onclick=fail(async()=>{await navigator.clipboard.writeText(groundRecipeText(material()));host.status('Copied the ground recipe.');});
+ $('ground-paste').onclick=fail(async()=>{const p=parseGroundRecipe(await navigator.clipboard.readText()),added=addGround(host.grounds(),p,p.name);selected=added.slot;selectedLayer=0;change(added.grounds);commit();});
  for(const[key]of GROUND_CONTROLS){
-  const input=$('ground-'+key);input.oninput=fail(()=>{const p=recipe();if(!p)return;change(setGround(host.grounds(),selected,{...p,knobs:{...p.knobs,[key]:Number(input.value)}}));});input.onchange=commit;
+  const input=$('ground-'+key);input.oninput=fail(()=>{const p=recipe();if(!p)return;if(OUTPUT_KEYS.includes(key)){const m=material();change(setGround(host.grounds(),selected,{...m,knobs:{...m.knobs,[key]:Number(input.value)}}));}
+   else change(editRecipe({...p,knobs:{...p.knobs,[key]:Number(input.value)}}));});input.onchange=commit;
  }
  for(let i=0;i<33;i++){
   const input=$(i===32?'ground-line':i>=16?'ground-variation-'+(i-16):'ground-ramp-'+i);
-  input.oninput=fail(()=>{const p=copyGroundRecipe(recipe()),rgb=[1,3,5].map(j=>parseInt(input.value.slice(j,j+2),16));if(i===32)p.line=rgb;else if(i>=16)p.variationRamp[i-16]=rgb;else p.ramp[i]=rgb;change(setGround(host.grounds(),selected,p));});input.onchange=commit;
+  input.oninput=fail(()=>{const p=copyGroundRecipe(recipe()),rgb=[1,3,5].map(j=>parseInt(input.value.slice(j,j+2),16));if(i===32)p.line=rgb;else if(i>=16)p.variationRamp[i-16]=rgb;else p.ramp[i]=rgb;change(editRecipe(p));});input.onchange=commit;
  }
+
+ $('material-reset-preset').onchange=()=>refresh();
+ $('material-reset').onclick=fail(()=>{const preset=GROUND_PRESETS[$('material-reset-preset').value];if(!preset||!material())return;selectedLayer=0;change(setGround(host.grounds(),selected,preset));commit();});
+ for(const row of $('material-layers').children){const index=Number(row.dataset.layerIndex);row.querySelector('button').onclick=()=>{selectedLayer=index;refresh();};row.querySelector('input').onchange=fail(()=>{const m=material(),rows=materialLayers(m).map(p=>structuredClone(p));rows[index].layer.visible=row.querySelector('input').checked;change(setGround(host.grounds(),selected,replaceMaterialLayers(m,rows)));commit();});}
+ let dragged=-1;
+ const clearDrop=()=>{for(const row of $('material-layers').children)delete row.dataset.drop;};
+ for(const row of $('material-layers').children){
+  row.ondragstart=e=>{if(!material()||row.hidden){e.preventDefault();return;}dragged=Number(row.dataset.layerIndex);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(dragged));};
+  row.ondragover=e=>{if(dragged<0)return;e.preventDefault();e.dataTransfer.dropEffect='move';clearDrop();row.dataset.drop=e.clientY<row.getBoundingClientRect().top+row.offsetHeight/2?'before':'after';};
+  row.ondragend=()=>{dragged=-1;clearDrop();};
+  row.ondrop=e=>{e.preventDefault();const from=dragged;dragged=-1;const boundary=Number(row.dataset.layerIndex)+(row.dataset.drop==='after'?1:0),to=boundary-(from<boundary?1:0);clearDrop();if(from<0||to===from)return;fail(()=>stackEdit(rows=>{const [moved]=rows.splice(from,1);rows.splice(to,0,moved);selectedLayer=to;}))();};
+ }
+
+ const layerEdit=fn=>{const p=copyGroundRecipe(recipe());fn(p);change(editRecipe(p));};
+ for(const [key]of LAYER_CONTROLS){$('layer-'+key).oninput=fail(()=>layerEdit(p=>{p.layer[key]=Number($('layer-'+key).value);}));$('layer-'+key).onchange=commit;}
+ for(const key of ['name','blend','mask','maskPattern'])$('layer-'+key).onchange=fail(()=>{layerEdit(p=>{p.layer[key]=$('layer-'+key).value;});commit();});
+ $('layer-pattern').onchange=fail(()=>{const kind=$('layer-pattern').value;if(kind){layerEdit(p=>Object.assign(p.knobs,patternSettings(kind)));commit();}});
+ const stackEdit=fn=>{const m=material(),rows=materialLayers(m).map(p=>structuredClone(p));fn(rows);change(setGround(host.grounds(),selected,replaceMaterialLayers(m,rows)));commit();};
+ for(const [id,delta]of [['layer-up',-1],['layer-down',1]])$(id).onclick=fail(()=>stackEdit(rows=>{const at=selectedLayer+delta;if(at<0||at>=rows.length)return;[rows[selectedLayer],rows[at]]=[rows[at],rows[selectedLayer]];selectedLayer=at;}));
+ $('layer-delete').onclick=fail(()=>stackEdit(rows=>{if(rows.length===1)return;rows.splice(selectedLayer,1);selectedLayer=Math.max(0,selectedLayer-1);}));
+ $('layer-duplicate').onclick=fail(()=>stackEdit(rows=>{const p=structuredClone(rows[selectedLayer]);p.layer.name=(p.layer.name+' copy').slice(0,80);rows.splice(++selectedLayer,0,p);}));
+ $('layer-add').onchange=fail(()=>{const kind=$('layer-add').value;$('layer-add').value='';if(!kind)return;stackEdit(rows=>{
+  const m=material(),p=copyGroundRecipe({knobs:{...patternSettings(kind),textureHeight:kind==='spots'?2:0},ramp:m.ramp,line:m.line,textureColors:m.textureColors});
+  p.layer=copyLayerSettings({name:{clouds:'Cloudy color',cells:'Cellular patches',spots:'Scattered pits',ridges:'Ridges',waves:'Water streaks',grain:'Fine grain'}[kind],opacity:.5,height:kind==='spots'?-1:1,seed:rows.length*13,blend:kind==='spots'?'multiply':'normal'});
+  rows.push(p);selectedLayer=rows.length-1;
+ });});
+ $('material-view').onchange=()=>refreshPreview();
+ for(const key of ['height','slope']){$('preview-'+key).oninput=()=>{$('preview-'+key+'-value').textContent=$('preview-'+key).value;refreshPreview();};$('preview-'+key+'-value').textContent=$('preview-'+key).value;}
+
  const observer=new IntersectionObserver(entries=>{shown=entries[0].isIntersecting;if(shown)refreshPreview();});observer.observe($('ground-preview'));
- refresh();return {refresh,refreshPreview,dispose(){observer.disconnect();locks.disconnect();preview.dispose();}};
+ if(dialog.open){shown=true;host.suspend(true);}
+ refresh();return {refresh,refreshPreview,dispose(){host.suspend(false);observer.disconnect();locks.disconnect();preview.dispose();}};
 }

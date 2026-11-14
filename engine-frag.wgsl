@@ -210,11 +210,15 @@ fn weatheredCover(cover: f32, deposits: vec4f, grain: vec4f) -> f32 {
 fn waterPigment(p:vec2f)->vec3f {
  if(u.waterGround>0){
   let slot=u32(u.waterGround);let layer=u.ground[slot & groundMask].cacheLayer;
-  let dx=textureLoad(groundTex,vec2i(poolPixel(p+vec2f(1,0))),layer,0).x-textureLoad(groundTex,vec2i(poolPixel(p-vec2f(1,0))),layer,0).x;
-  let dy=textureLoad(groundTex,vec2i(poolPixel(p+vec2f(0,1))),layer,0).x-textureLoad(groundTex,vec2i(poolPixel(p-vec2f(0,1))),layer,0).x;
-  let normal=normalize(vec3f(-vec2f(dx,dy)*.5,1));
+  let dx=materialRelief(p+vec2f(1,0),slot)-materialRelief(p-vec2f(1,0),slot);
+  let dy=materialRelief(p+vec2f(0,1),slot)-materialRelief(p-vec2f(0,1),slot);
+  let finish=materialSurface(p,slot);let f=finish.shine;
+  let micro=vec2f(groundFinishNoise(p,f.w,3.7),groundFinishNoise(p,f.w,19.1))*f.z*f.x;
+  let normal=normalize(vec3f(-vec2f(dx,dy)*.5+micro,1));
   let light=(u.ambient+.95*max(0.0,dot(normal,u.light)))/max(.001,u.ambient+.95*u.light.z);
-  return materialPigment(p,slot)*min(light,u.lightCap);
+  let halfLight=normalize(u.light+vec3f(0,0,1));
+  let highlight=pow(max(0.0,dot(normal,halfLight)),f.y)*f.x*mix(.2,.5,finish.wetness);
+  return materialPigment(p,slot)*min(light,u.lightCap)+vec3f(highlight);
  }
  return genColor(u.waterLayer,p);
 }
@@ -946,7 +950,7 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     var scale = 0.0;
     for (var i = 0; i < 5; i++) {
         var m = select(u.shine[i], u.rock[rs & rockMask].shineRock, i == 2);
-        if(i==0 && hasGround()){let r=u.ground[gs & groundMask];m=vec4f(r.gloss,r.sharpness,r.roughness,r.roughnessScale);}   // the rock row is the recipe's
+        if(i==0 && hasGround()){let r=u.ground[gs & groundMask];let f=materialSurface(p,gs);m=f.shine;}   // the rock row is the recipe's
         gloss += weight[i] * m.x;
         focus += weight[i] * m.x * m.y;
         rough += weight[i] * m.z;
@@ -2166,7 +2170,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.shineOn != 0 || u.paintOn != 0 || hasGround()) {
         let sunSeen = markSeen * (1.0 - flatBank) * closeVis * faceSun;
         var damp=max(max(u.rock[rs & rockMask].faceWet*exposed*rockWet,painted.z*.85),wetFilm*.8);
-        if(hasGround()){damp*=mix(1.0,u.ground[gs & groundMask].wetness,1.0-exposed);}
+        if(hasGround()){damp*=mix(1.0,materialSurface(p,gs).wetness,1.0-exposed);}
         var shine = shineTerm(pixel, p, g, normal, material, exposed, slopeShare, crystalMask, sunSeen, landform, damp, mineralPatch, skin*(1.0-depositCover));
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
@@ -2417,6 +2421,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.diagnosticView == 4) { color = vec3f(exposed); }
     if (u.diagnosticView == 5) { color = vec3f(lighting, ao, shadow); }
     if (u.diagnosticView == 6) { color = material; }
+    if (u.diagnosticView >= 8 && u.diagnosticView <= 12) {
+        let slot=select(gs,u32(max(0,u.waterGround)),h<u.sea && u.waterGround>0);
+        if(u.ground[slot & groundMask].cacheLayer>=0){
+            if(u.diagnosticView==8){color=materialContinuous(p,slot);}
+            if(u.diagnosticView==9){color=vec3f(clamp(.5+materialRelief(p,slot)/16.0,0.0,1.0));}
+            if(u.diagnosticView==10){color=vec3f(materialSurface(p,slot).shine.z);}
+            if(u.diagnosticView==11){color=vec3f(materialSurface(p,slot).wetness);}
+            if(u.diagnosticView==12){color=materialPigment(p,slot);}
+        }
+    }
     if (u.diagnosticView == 7) { let code = bakedFields(p).b; color = vec3f(clamp(-code, 0.0, 1.0), clamp(code - 1.0, 0.0, 1.0), clamp(0.5 + bakedFields(p).r * 0.08, 0.0, 1.0) * 0.6); }
     return vec4f(color, 1.0);
 }

@@ -1850,7 +1850,7 @@ function buildKnobs() {
     syncColumnPanel();syncWorldControls();
   };
   mountRockPanel();
-  groundPanel?.dispose();groundPanel=mountGroundPanel({grounds:()=>mapGrounds,renderer:()=>renderer,edit:editGrounds,delete:removeGround,checkpoint:()=>checkpoint(true),status});
+  groundPanel?.dispose();groundPanel=mountGroundPanel({suspend:on=>mapCanvas?.setSuspended(on),grounds:()=>mapGrounds,renderer:()=>renderer,edit:editGrounds,delete:removeGround,checkpoint:()=>checkpoint(true),status});
 }
 // The facts the World panel enables a row by (sculpt-knobs.js worldPanelValues, which worldControlRequirement reads).
 const panelFacts=() => ({config,renderer,nodes,colors:worldColors(),weathering:weatherOn(),materialWeathering:surfaceValues()['material-weathering']});

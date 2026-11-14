@@ -1,151 +1,146 @@
 # Procedural ground and water authoring
 
-The editor uses one numeric material recipe for base ground, painted ground,
-landform ground, and water. Built-in world assignments remain unchanged.
+One material recipe serves world ground, painted ground, landform ground, and
+water. World defaults remain unchanged. The full-screen material editor shares
+the map's renderer, undo history, save file, embedded world settings, and export.
 
 ## Artist workflow
 
-1. Open **World → Ground → Pattern → Open material editor**. The separate
-   dialog has a 512-pixel preview and Noise, Phase, Filter, Color & blend,
-   Bump & finish, and Palette tabs. Choose a starter from **Add preset**.
-   The four new starters are Rust mottling, Cloudy green, Blue streaked water,
-   and Violet rippled water. Duplicate a starter to make a new material.
-2. Edit the recipe and its live sample. Start with pattern size, broad mottling,
-   distortion, and colors; then tune fine grain and marks. Sliders use the
-   editor's shared scrub controls: drag, Shift-drag for fine adjustment, arrow
-   keys, and double-click or Enter to type a value. Pattern blend mixes
-   the procedural pigment with the existing relief-family colors. The sample
-   crosses the repeat seam and reports distinct 32-pixel tiles. **Done** or
-   Escape closes the dialog; edits apply live. The dialog uses the map's own
-   Undo and Redo, with no separate save or history.
-3. Choose the material as the world's ground, use it in the ground paint brush,
-   or select it on a landform. For water, choose it under **Water & shores**;
-   **Edit material** opens the same recipe editor. Water keeps the world's depth,
-   shore, absorption, and lighting controls.
-4. Save the map normally. Recipes and assignments participate in undo/redo,
-   reload, embedded world settings, share saves, and export. The existing world
-   duplicate/export workflow carries the recipes into a new world. Recipe
-   copy/paste shares its numeric settings without changing assignments.
+1. Open **World → Ground → Open material editor**, or **Water & shores → Edit
+   material**. Choose a starting material. The editor fills the screen, with
+   materials/layers on the left, a 512-pixel sample in the center, and controls
+   for the selected layer on the right. Small screens stack these columns.
+2. Layers compose in list order, first to last. Add a cloudy color, cellular
+   patch, scattered pits, ridges, water streaks, or fine grain. Select its row
+   to edit it; drag the grip to reorder. Earlier/Later buttons provide keyboard
+   and touch alternatives. Uncheck a layer to hide it without discarding its
+   settings. Duplicate and Delete operate on the selected layer. Keep at least
+   one layer; a material supports up to eight, subject to the cache budget.
+3. Each layer has an amount, color blend (Normal, Multiply, Screen, Add), and
+   separate color, relief, and surface amounts. Negative relief cuts pits;
+   positive relief raises the art. It does not change gameplay heights.
+   Seed moves the periodic pattern. Patch and distortion sizes use art pixels.
+4. Choose Everywhere, a procedural mask, a terrain height range, or a terrain
+   slope range. Procedural masks share the periodic clouds/cells/spots/ridges/
+   waves/grain tools, with size, detail, distortion, seed, range, and inversion.
+   Height uses authored terrain units; slope uses degrees. Range softness and
+   mask amount blend continuously. Masks belong to their layer, with no links
+   or references to other layers.
+5. Use Pattern, Distortion, Filter, Color & blend, and Bump & finish to refine
+   that layer. Every layer can use the existing noise, fine grain, marks, and
+   relief primitives. Established recipes start as one fully editable layer,
+   preserving their composition; new layers can be independently ordered and
+   masked. Advanced groups remain collapsible. All numerical controls use the
+   editor's shared scrubs: drag, Shift-drag, arrows, and Enter/double-click to type.
+6. Preview final shading, continuous color, palette color, relief, roughness,
+   or wetness. Expand Preview terrain to vary height/slope and inspect masks.
+   These viewing settings are not saved as material parameters. The sample
+   crosses the repeat seam. Water starts over a submerged bed; ground starts
+   at the world's base height.
+7. Palette treatment applies once to the composed material, not separately to
+   each layer. Use up to 32 game palette colors, diffusion spread, tone response,
+   and channel sensitivity. Continuous RGB colors remain available before this
+   output step. A blank output palette uses the first layer's relief ramp.
+8. **Reset to preset** restores the chosen preset's generators, colors, finish,
+   palette, and initial layer stack. It preserves the material's name, slot,
+   and ground/water assignments. The starting preset is remembered for built-in
+   materials and their copies; imported recipes can choose a reset preset.
+   Reset is one shared undo step, so Undo recovers the entire edited stack.
+9. Done or Escape closes the editor and returns focus to its opener. Assign the
+   material to world ground/water, paint with it, or choose it on a landform.
+   Save the map normally. Layers, visibility, masks, order, and source preset
+   travel with map saves, world copies, and recipe copy/paste.
 
-## What the controls do
+## Rendering and responsiveness
 
-- **Noise:** value and gradient noise, linear interpolation, turbulence, cellular
-  structure, stretched ripples, crest emphasis, scale, direction, and secondary
-  detail. Noise octaves add progressively broader layers at twice the amplitude;
-  fractional octaves fade the next layer in continuously.
-- **Phase:** warp the pattern, layer phase octaves, balance displacement between
-  axes, and mix a separately scaled broad mottle. Axis balance −1 affects X,
-  zero affects both axes, and +1 affects Y.
-- **Filter:** adjust the value range and power, invert values, mix in a hard clip,
-  or apply sine shaping with an editable frequency. The filtered result feeds
-  color and pattern bump.
-- **Pattern colors:** three continuous RGB stops and their range, balance, and
-  softness. These are not snapped to the game's palette while authoring.
-- **Fine grain:** independent fine structure and multiplicative color variation.
-- **Marks:** scattered spots or noise masks, coverage, spacing, scatter, hardness,
-  variation, and concentration in light areas. Blend a mark color or multiply a
-  tint into the underlying pigment.
-- **Relief:** pattern height, fine relief, and pit depth. Existing bump, plate,
-  scratch, pebble, cushion, and ripple families add their relief. Relief changes
-  rendered shading, not gameplay heights. Ground finish settings apply when the
-  recipe is used as ground; water retains its existing surface model.
-- **Palette grain:** a small palette and error diffusion, including a continuous
-  blend between Floyd–Steinberg and the lighter three-neighbor distribution.
-  Tone response and channel sensitivity control nearest-color selection.
-  Palette hex entries snap to the game's palette; a blank list uses the relief
-  ramp. Palette grain at zero keeps the continuous pigment.
+Opening the dialog suspends the terrain canvas scheduler and cancels its pending
+bake. An already submitted GPU operation can finish; no new viewport jobs are
+scheduled while the dialog is open. Edits still update the map and invalidate
+its retained terrain. Closing resumes rendering with the latest recipe.
 
-The four starters carry numbers from the approved ground studies and accepted
-water studies (`prototype/ground-calibration`, including Red water review 8 at
-`07712345`). They contain no retail pixels, masks, or traced shapes. The shared
-GPU implementation and normal world lighting can differ from the offline study
-renderers; acceptance of those studies is not a claim of pixel-identical porting.
-Final in-editor appearance remains subject to visual review.
+The material sample uses the normal GPU renderer. During input it coalesces to
+one active job and the latest pending recipe. Drafts defer palette diffusion;
+after 240 ms without new input, a final job restores the selected palette
+settings. The preview labels drafts. No separate CPU texture renderer or preview
+shader implements a second material model. The previous invisible contact-strip
+render was removed, so every preview job contributes to the displayed sample.
 
-## Bryce reference and scope
+`sculpt-material-layers.js` defines layer settings and stack operations.
+`sculpt-ground-presets.js` validates recipes; the root carries the first layer
+and material-wide palette settings, with subsequent layers in `layers`.
+This is one recipe format, without nested stacks or arbitrary graph references.
+`sculpt-ground-cache.js` packs the layer table and caches each layer's periodic
+height/color fields and procedural mask. Color/finish edits retain shape fields.
+Uniform uploads and generation occur in the paced render cycle, not every input.
 
-The organization follows the Noise / Phase / Filter and color/bump workflow
-in MetaCreations' [Bryce 4 User Guide, texture chapter](https://www.scribd.com/document/512436170/Bryce4).
-That is a 1999 primary source, not verified documentation of every 1997 option.
-Its Standard octave mode adds half-frequency, double-amplitude layers; the
-new octave controls follow that convention rather than adding finer noise.
-The supplied template archive identifies itself as Bryce 7.1, so it is useful
-for recipes but does not establish which controls existed in 1997.
+`engine-ground.wgsl` and `engine-texture.wgsl` generate the same procedural fields
+for each layer. `engine-common.wgsl` composes color, additive relief, and surface
+finish for both terrain and water. Surface layers blend gloss, sharpness,
+roughness, roughness scale, and wetness through their pattern. Ground uses the
+normal surface lighting; water adds relief and finish to its pigment while
+retaining the world's shore/depth/absorption model. Neutral starter water gloss
+preserves the earlier appearance. Projection bounds include the stacked relief.
 
-This is a Bryce-inspired, periodic 2D material editor. It does not claim exact
-Bryce noise algorithms, all 3D mapping modes, or arbitrary routing among three
-independent DTE components. Existing base/fine/mark composition remains editable.
-The new controls have neutral defaults, preserving existing preset values.
+For terrain-independent materials, canonical GPU diffusion covers the full repeat
+in 128-row wavefront batches. It never restarts at a tile or export chunk. Terrain
+masks vary with the map, so their final colors reuse the unmasked repeat's diffusion
+residual and are re-quantized after terrain-dependent composition. This is a
+coordinate-stable approximation, not whole-map error diffusion. It avoids a
+texture-wide dither switch when a terrain mask moves slightly above zero.
+Diffusion errors do not wrap across the repeat boundary; inspect the seam.
+GPU float arithmetic is not promised to match offline float64 studies.
 
-## Implementation
+The 128 MiB texture cache budgets 12 bytes per repeat pixel per layer (8 for fields,
+4 for a procedural mask), plus 4 bytes per pixel per material for final palette
+color. At a 1024-pixel repeat, one eight-layer material uses 100 MiB; eight
+single-layer materials use 128 MiB. A 2048-pixel repeat fits one two-layer material
+or two single-layer materials. The editor rejects assignments that exceed the
+budget, with an explanation. Layer-table storage is additionally tracked in the renderer's memory accounting;
+diffusion also uses transient error rows (about 2 MiB at a 1024-pixel repeat).
 
-`sculpt-texture-model.js` defines the numeric controls and color validation;
-`materials/texture-presets.json` supplies the starter values. Static controls
-live in `index.html` and use the existing Ground controller and preview.
+## Presets and Bryce reference
 
-`engine-texture.wgsl` produces periodic height, pigment, mark, and fine fields.
-Both ground and water read these through the normal renderer. Colors remain RGB
-through recipe composition. Optional material palette reduction is cached;
-normal world shading and the existing final export palette treatment still run.
-There is no offline image dependency or second CPU material renderer.
+The four texture starters carry numerical recipes from the approved ground and
+accepted water studies: Rust mottling, Cloudy green, Blue streaked water, and
+Violet rippled water. They contain no retail pixels, traced shapes, or image masks.
+The integrated renderer's lighting can differ from offline review tools; those
+studies do not establish pixel-identical rendering in every world.
 
-Palette diffusion runs over the full repeat, using 128-row GPU wavefront batches.
-It does not restart for a viewport, export chunk, or individual 32-pixel tile.
-This provides deterministic regional rendering and exact repeat addressing.
-Diffusion errors do not wrap toroidally across the repeat boundary; use the seam
-preview to judge a recipe. GPU float arithmetic is not promised to match the
-prototype's CPU arithmetic byte for byte.
+The procedural tools were informed by MetaCreations' [Bryce 4 User Guide, texture
+chapter](https://www.scribd.com/document/512436170/Bryce4), a 1999 primary source.
+Exact 1997 parity is unverified. Standard octaves add half-frequency,
+double-amplitude layers, with fractional octave weights. The supplied template
+archive identifies itself as Bryce 7.1. The editor generalizes those ideas into
+periodic 2D layers rather than claiming complete Bryce emulation or 3D mapping.
 
-The shared cache has eight slots (seven map recipes plus the world slot), within
-128 MiB. Stored fields and palette output cost 12 bytes per repeat pixel per active
-material. A 1024-pixel pool fits eight slots; a 2048-pixel pool fits two. Diffusion
-also uses transient row-error storage, about 2 MiB at 1024 pixels. Color edits
-retain shape fields and refresh the palette output when needed. Slider input
-updates only the latest recipe and cache layout. The paced draw cycle performs
-field generation and diffusion after the previous chunk completes, so rapid
-input cannot accumulate a full-repeat GPU job for every pointer movement.
+## Focused validation on this branch
 
-## Focused validation
+Measured:
 
-Measured on the implementation branch:
+- Eight focused model/save tests pass, including layer ordering, ownership,
+  palette preservation, invalid nested stacks, and cache limits.
+- The browser check passes full-screen sizing, native pointer drag reordering,
+  visibility, add/duplicate/delete, shared Undo/Redo, reset-to-preset and undo,
+  channel previews, save/reload, Escape, and a 390-pixel mobile layout.
+- Terrain GPU submissions while editing: **0**. Closing resumes rendering.
+- A 120-pointer-move scrub test reaches **3** outstanding GPU submissions at
+  peak, with no device or console errors. The final value is 0.95 in both the
+  control and renderer; the final preview includes palette treatment.
+- GPU checks cover layer order/blend, zero and hidden layers, procedural and
+  terrain masks, signed relief, channel views, water finish, and palette output.
+  Pool repetition and regional replay are exact. A 0.00001 layer amount changes
+  1 of 16,384 pixels by more than one channel byte, attributable to projected
+  relief. Starting a terrain mask at 0.00001 changes **0** pixels in its test.
+- The small ground/water export remains byte-identical to the pre-stack result:
+  SHA-256 `b425819e7b9b862cc3e95507aaa37d798e1924f58c328e413c9c0563f17ff1cb`,
+  1,255,440 archive bytes and 1,142 unique tiles. Its 120 immediate recipe edits
+  submit **0** GPU commands; same-build art and archive replay are exact.
 
-- Popup check: opening from ground and water, stage tabs, shared Undo/Redo,
-  typed and dragged scrub values, save/reload, Escape with focus return, and
-  a 390-pixel layout pass without console errors. The sample now contains
-  256 tiles in a 512-pixel square.
-- Eight new control checks on a 128-pixel procedural rust patch with phase
-  amplitude 4: 35.9–95.7% of pixels change by at least 3/255 in one channel.
-  This is a focused impact check, not a broad world-control sweep.
-- Neutral new controls preserve the small export fixture SHA-256
-  `b425819e7b9b862cc3e95507aaa37d798e1924f58c328e413c9c0563f17ff1cb`.
+By eye, the full-screen layout keeps the layer list, sample, and controls visible
+on desktop, and stacks cleanly on mobile. This is interface review, not new
+owner approval of a material appearance.
 
-- Sustained 120-move scrub regression: the original input path reached 78
-  unfinished GPU submissions and lost the device. After moving generation into
-  the paced draw cycle, peak outstanding submissions were 6, no device or console
-  errors occurred, and the final slider value matched the rendered recipe.
-- Six focused model/save tests pass.
-- Ground UI check: paint and landform selection, editing, undo/redo, save/reload,
-  and the live preview pass.
-- Texture UI check: shared scrub typing, arrow keys, pointer dragging, disabled
-  explanations, continuous colors, ground/water assignments, undo/redo,
-  embedded world settings, save/reload, deletion, and the 256-tile live preview pass without
-  browser console errors.
-- Green ground, Green water, and Violet water checks: 1024-pixel repetition and
-  four-quadrant regional rendering are byte-identical; cached colors belong to
-  each recipe's palette; no GPU errors. Green ground uses 25 colors in this
-  generated repeat, Green water 5, and Violet water 15.
-- The small export fixture checks visible water color edits, retained shape
-  fields for color-only changes, water relief, and exact replay of indexed art
-  and exported archive bytes. Detailed results are outside Git under
-  `/private/tmp/texture-authoring-export/report.json`.
-
-By eye, the live Ground panel displays the recipe colors correctly and the Green
-sample has coherent mottling with fine grain. This is not a new owner approval of
-all integrated presets.
-
-No full suite or broad control-impact sweep was run, per the requested fast
-iteration scope. The static build test stops at the stale-preview guard because
-rendering inputs changed. Before publication/landing, regenerate the authored
-hover/world thumbnails, publish the preview bundle through the repository's
-normal workflow, and run the applicable landing and control-impact checks.
-No preview lock was bypassed and no world defaults were replaced.
+No full suite, broad scene sweep, or broad control-impact sweep was run. Before
+publication/landing, regenerate and publish the authored preview bundle through
+the repository's normal workflow: the rendering-input fingerprint has changed.
+No preview lock was bypassed. No world defaults were replaced or branch merged.

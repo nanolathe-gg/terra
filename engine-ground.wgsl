@@ -36,14 +36,14 @@ fn groundGrainAxis(p:vec2f,size:f32,stretch:f32,axis:u32,salt:f32)->f32 {
  return mix(mix(groundGrainCount(q,n,salt),groundGrainCount(q,n*vec2f(2,1),salt),f.x),mix(groundGrainCount(q,n*vec2f(1,2),salt),groundGrainCount(q,n*2.0,salt),f.x),f.y);
 }
 fn groundGrain(p:vec2f,size:f32,salt:f32)->f32 {
- let r=u.ground[gs & groundMask];let plain=groundNoise(p,size,salt);
+ let r=layerRecipe;let plain=groundNoise(p,size,salt);
  if(r.grainStretch<=1.0){return plain;}
  let angle=r.grainDirection/45.0;let axis=u32(floor(angle));
  let directed=mix(groundGrainAxis(p,size,r.grainStretch,axis,salt),groundGrainAxis(p,size,r.grainStretch,axis+1u,salt),fract(angle));
  return mix(plain,directed,1.0-exp(-(r.grainStretch-1.0)));
 }
 fn groundPlateCount(p:vec2f,n:f32)->vec4f {
- let r=u.ground[gs & groundMask];let size=u.pool/n;
+ let r=layerRecipe;let size=u.pool/n;
  let cell=groundCell(poolPos(p)/size,n,3.7,r.plateVariation);
  let e=cell.edge*size;let hash=cellHash(cell.id+11.3);let gape=groundBorder(cell.id,cell.other);
  let width=r.crackWidth*(.35+.65*gape);
@@ -92,7 +92,7 @@ fn groundScratchCount(p:vec2f,count:f32,length:f32,width:f32,salt:f32)->f32 {
  }return total;
 }
 fn groundScratches(p:vec2f)->f32 {
- let r=u.ground[gs & groundMask];let count=max(1.0,u.pool/r.scratchSpacing);let n=exp2(floor(log2(count)));let f=fract(log2(count));
+ let r=layerRecipe;let count=max(1.0,u.pool/r.scratchSpacing);let n=exp2(floor(log2(count)));let f=fract(log2(count));
  let q=poolPos(p);let a=mix(groundScratchCount(q,n,r.scratchLength,r.scratchWidth,63.0),groundScratchCount(q,n*2.0,r.scratchLength,r.scratchWidth,63.0),f);
  let shear=vec2f(q.x+q.y,q.y);let b=mix(groundScratchCount(shear,n,r.scratchLength,r.scratchWidth,79.0),groundScratchCount(shear,n*2.0,r.scratchLength,r.scratchWidth,79.0),f);
  let gate=smoothstep(-.4,.4,groundNoise(q,r.scratchLength*2.0,94.0));
@@ -124,9 +124,10 @@ fn groundRipples(p:vec2f,size:f32,asymmetry:f32)->f32 {
  let count=max(1.0,u.pool/size);let n=exp2(floor(log2(count)));
  return mix(groundRippleCount(p,n,asymmetry),groundRippleCount(p,n*2.0,asymmetry),fract(log2(count)));
 }
+var<private> layerRecipe:Ground;
 /*TEXTURE_PATTERN*/
 fn groundRecipe(p:vec2f)->vec4f {
- let r=u.ground[gs & groundMask];var out=vec4f(0,.5,0,0);
+ let r=layerRecipe;var out=vec4f(0,.5,0,0);
  if(r.plateAmount>0.0){
   let count=max(1.0,u.pool/r.plateSize);let n=exp2(floor(log2(count)));
   let plates=mix(groundPlateCount(p,n),groundPlateCount(p,n*2.0),fract(log2(count)));
@@ -151,9 +152,23 @@ fn groundRecipe(p:vec2f)->vec4f {
  out.x=clamp(out.x,-8.0,8.0);out.y=clamp(out.y,0.0,1.0);out.w=clamp(out.w,0.0,1.0);if(r.patternAmount>0.0){let pattern=textureRecipe(p);let combined=mix(out,pattern,r.patternAmount);return vec4f(out.x+pattern.x*r.patternAmount,combined.yzw);}return out;
 }
 @group(1) @binding(0) var groundOut:texture_storage_2d_array<rgba16float,write>;
+@group(1) @binding(2) var maskOut:texture_storage_2d_array<r32float,write>;
 @group(1) @binding(1) var<uniform> groundJob:vec4u;
 @compute @workgroup_size(8,8)
 fn groundMain(@builtin(global_invocation_id) id:vec3u){
  if(any(id.xy>=textureDimensions(groundOut))){return;}
- gs=groundJob.x;textureStore(groundOut,vec2i(id.xy),i32(groundJob.y),groundRecipe(vec2f(id.xy)));
+ gs=groundJob.x;let layer=materialLayers[groundJob.z];layerRecipe=layer.recipe;
+ let p=vec2f(id.xy);textureStore(groundOut,vec2i(id.xy),i32(groundJob.y),groundRecipe(p+vec2f(19,43)*layer.operation.y));
+ var mask=1.0;
+ if(layer.operation.z==1.0){
+  layerRecipe.patternGradient=0.0;layerRecipe.patternLinear=0.0;layerRecipe.patternCells=select(0.0,1.0,layer.maskPattern.x==1.0||layer.maskPattern.x==2.0);
+  layerRecipe.patternTurbulence=select(0.0,1.0,layer.maskPattern.x==3.0);layerRecipe.patternStreak=select(0.0,1.0,layer.maskPattern.x==4.0);
+  layerRecipe.patternSize=layer.maskPattern.y;layerRecipe.patternLength=layer.maskPattern.y*4.0;layerRecipe.patternDirection=45.0;layerRecipe.patternSlope=0.0;
+  let q=p+vec2f(31,71)*layer.maskFilter.x+texturePhase(p,layer.maskPattern.y*2.0,0.0)*layer.maskPattern.w;
+  let size=select(layer.maskPattern.y,1.0,layer.maskPattern.x==5.0);
+  let value=mix(textureBasis(q,size),textureBasis(q+vec2f(17,39),size*.5),layer.maskPattern.z);
+  mask=smoothstep(layer.maskFilter.y,layer.maskFilter.z,value);if(layer.maskPattern.x==2.0){mask=pow(mask,3.0);}
+  mask=mix(mask,1.0-mask,layer.maskFilter.w);
+ }
+ textureStore(maskOut,vec2i(id.xy),i32(groundJob.y),vec4f(mask));
 }

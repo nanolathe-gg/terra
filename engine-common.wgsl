@@ -113,6 +113,10 @@ struct Rock {
 
 // Absolute ground recipes; the cache holds height and unlit color parameters.
 struct Ground {
+    stackStart: i32,
+    stackCount: i32,
+    colorLayer: i32,
+    terrainMask: i32,
     patternOctaves: f32,
     patternLinear: f32,
     phaseOctaves: f32,
@@ -226,6 +230,15 @@ struct Ground {
     ramp: array<vec4f, 16>,
     variationRamp: array<vec4f, 16>,
     lineColor: vec4f,
+}
+
+struct MaterialLayer {
+    recipe: Ground,
+    amounts: vec4f, // opacity, color, height, surface
+    operation: vec4f, // blend, seed, mask kind, mask amount
+    maskPattern: vec4f, // basis, size, detail, distortion
+    maskFilter: vec4f, // seed, low, high, invert
+    terrain: vec4f, // low, high, softness
 }
 
 struct Uniforms {
@@ -745,6 +758,8 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), sel
 @group(0) @binding(11) var rockSourceTex: texture_2d<f32>;
 @group(0) @binding(12) var rockRimTex: texture_2d<f32>;
 @group(0) @binding(14) var groundColorTex: texture_2d_array<f32>;
+@group(0) @binding(15) var<storage,read> materialLayers:array<MaterialLayer>;
+@group(0) @binding(16) var materialMaskTex:texture_2d_array<f32>;
 @group(0) @binding(13) var groundTex: texture_2d_array<f32>;
 @group(0) @binding(7) var linearClamp: sampler;
 @group(0) @binding(8) var linearRepeat: sampler;
@@ -1046,7 +1061,7 @@ fn groundSlotAt(p:vec2f)->u32 {
 }
 // Whole texels preserve each plate's own tone and line at a level surface.
 fn groundHere(p:vec2f)->vec4f {
-    return textureLoad(groundTex,vec2i(poolPixel(p)),u.ground[gs & groundMask].cacheLayer,0);
+    return vec4f(materialRelief(p,gs),0,0,0);
 }
 // Blend only art height across a two-art-pixel contact. The categorical slot
 // still chooses color and finish; no noise or gameplay height enters the edge.
@@ -1055,7 +1070,7 @@ fn groundHeightFor(p:vec2f,cell:vec2i)->f32 {
     let id=round(textureLoad(masksTex,c,5,0).g*127.0);let slot=select(u32(clamp(id-1.0,0.0,7.0)),u32(u.groundDefault),id<.5);
     let layer=u.ground[slot & groundMask].cacheLayer;
     if(layer<0){return 0.0;}
-    return textureLoad(groundTex,vec2i(poolPixel(p)),layer,0).x;
+    return materialRelief(p,slot);
 }
 fn groundHeight(p:vec2f)->f32 {
     if(u.groundIdOn==0){if(hasGround()){return groundHere(p).x;}return 0.0;}
@@ -1069,26 +1084,78 @@ fn groundFinishNoise(p:vec2f,size:f32,salt:f32)->f32 {
     return mix(wrapNoise(q*n+salt,n),wrapNoise(q*(n*2.0)+salt,n*2.0),fract(log2(count)));
 }
 
-fn textureColor(sample:vec4f,slot:u32)->vec3f {
- let r=u.ground[slot & groundMask];let t=sample.y;
+fn textureColorFor(sample:vec4f,r:Ground)->vec3f {
+ let t=sample.y;
  let lo=mix(clamp(t*2.0,0.0,1.0),smoothstep(0.0,.5,t),r.patternEase);
  let hi=mix(clamp((t-.5)*2.0,0.0,1.0),smoothstep(.5,1.0,t),r.patternEase);
  let coarse=mix(mix(r.textureLow.rgb,r.textureMiddle.rgb,lo),r.textureHigh.rgb,hi);
  let base=coarse*mix(vec3f(1.0),mix(r.textureFineLow.rgb,r.textureFineHigh.rgb,sample.w),r.textureFine);
  return mix(mix(base,r.textureMark.rgb,sample.z),base*mix(vec3f(1.0),r.textureMarkTint.rgb,sample.z),r.markMultiply);
 }
-fn groundRecipeColor(sample:vec4f,slot:u32,p:vec2f)->vec3f {
- let r=u.ground[slot & groundMask];let t=clamp(sample.y+sample.z*.35,0.0,1.0)*15.0;
+fn groundRecipeColorFor(sample:vec4f,r:Ground,p:vec2f)->vec3f {
+ let t=clamp(sample.y+sample.z*.35,0.0,1.0)*15.0;
  let a=u32(floor(t));let b=min(a+1u,15u);
  var color=mix(r.ramp[a].rgb,r.ramp[b].rgb,fract(t));
  let alternate=mix(r.variationRamp[a].rgb,r.variationRamp[b].rgb,fract(t));
  color=mix(color,alternate,cellHash(poolPixel(p)+vec2f(211.0,317.0)).x*r.grainColorMix);
- return mix(mix(color,r.lineColor.rgb,sample.w),textureColor(sample,slot),r.patternAmount);
+ return mix(mix(color,r.lineColor.rgb,sample.w),textureColorFor(sample,r),r.patternAmount);
+}
+// A material is an ordered stack. Cached procedural fields are independent
+// of the terrain; height/slope masks use the authored terrain at each sample.
+fn layerWeight(layer:MaterialLayer,p:vec2f,height:f32,slope:f32,terrainOn:bool)->f32 {
+ var mask=1.0;
+ if(layer.operation.z==1.0){mask=textureLoad(materialMaskTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0).x;}
+ if(layer.operation.z>=2.0 && terrainOn){let v=select(height,slope,layer.operation.z==3.0);let t=layer.terrain;
+  mask=smoothstep(t.x-t.z,t.x+t.z,v)*(1.0-smoothstep(t.y-t.z,t.y+t.z,v));mask=mix(mask,1.0-mask,layer.maskFilter.w);}
+ return layer.amounts.x*mix(1.0,mask,layer.operation.w);
+}
+fn materialRaw(p:vec2f,slot:u32,height:f32,slope:f32,terrainOn:bool)->vec3f {
+ let r=u.ground[slot & groundMask];var color=vec3f(0);
+ for(var i=0;i<r.stackCount;i++){
+  let layer=materialLayers[r.stackStart+i];let w=layerWeight(layer,p,height,slope,terrainOn)*layer.amounts.y;if(w<=0.0){continue;}
+  let field=textureLoad(groundTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0);
+  let value=groundRecipeColorFor(field,layer.recipe,p+vec2f(19,43)*layer.operation.y);var mixed=value;
+  if(i>0){switch(i32(layer.operation.x)){case 1:{mixed=color*value;}case 2:{mixed=1.0-(1.0-color)*(1.0-value);}case 3:{mixed=color+value;}default:{}}}
+  color=mix(color,mixed,w);
+ }return color;
+}
+fn materialRelief(p:vec2f,slot:u32)->f32 {
+ let r=u.ground[slot & groundMask];var height=0.0;var terrain=vec2f(0);
+ if(r.terrainMask!=0){terrain=vec2f(baseHeight(p),atan(length(broadGradient(p)))*57.2957795);}
+ for(var i=0;i<r.stackCount;i++){let layer=materialLayers[r.stackStart+i];let w=layerWeight(layer,p,terrain.x,terrain.y,true)*layer.amounts.z;
+  if(w!=0.0){height+=textureLoad(groundTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0).x*w;}}
+ return height;
+}
+struct MaterialFinish { shine:vec4f, wetness:f32 }
+fn materialSurface(p:vec2f,slot:u32)->MaterialFinish {
+ let r=u.ground[slot & groundMask];var result=MaterialFinish(vec4f(0,16,.25,3),.5);var terrain=vec2f(0);
+ if(r.terrainMask!=0){terrain=vec2f(baseHeight(p),atan(length(broadGradient(p)))*57.2957795);}
+ for(var i=0;i<r.stackCount;i++){let layer=materialLayers[r.stackStart+i];let w=layerWeight(layer,p,terrain.x,terrain.y,true)*layer.amounts.w;
+  let field=textureLoad(groundTex,vec2i(poolPixel(p)),layer.recipe.cacheLayer,0);let q=layer.recipe;
+  let amount=w*select(clamp(field.y,0.0,1.0),1.0,i==0);
+  result.shine=mix(result.shine,vec4f(q.gloss,q.sharpness,q.roughness,q.roughnessScale),amount);result.wetness=mix(result.wetness,q.wetness,amount);}
+ return result;
+}
+fn materialContinuous(p:vec2f,slot:u32)->vec3f {
+ let r=u.ground[slot & groundMask];var terrain=vec2f(0);
+ if(r.terrainMask!=0){terrain=vec2f(baseHeight(p),atan(length(broadGradient(p)))*57.2957795);}
+ return materialRaw(p,slot,terrain.x,terrain.y,true);
+}
+// Carry the full-repeat diffusion residual into terrain-dependent color.
+// Re-quantize after compositing; the grain stays coordinate-stable and an
+// infinitesimal mask edit does not switch to a different dither pattern.
+fn materialPalette(p:vec2f,raw:vec3f,r:Ground)->vec3f {
+ let v=clamp(raw,vec3f(0),vec3f(1));
+ let metric=pow(v,vec3f(r.paletteGamma));var best=r.texturePalette[0].rgb;var distance=1e20;
+ for(var i=0;i<r.texturePaletteCount;i++){let c=r.texturePalette[i].rgb;let d=pow(clamp(c,vec3f(0),vec3f(1)),vec3f(r.paletteGamma))-metric;let score=dot(d*d,vec3f(r.paletteRed,r.paletteGreen,r.paletteBlue));if(score<distance){distance=score;best=c;}}
+ return best;
 }
 fn materialPigment(p:vec2f,slot:u32)->vec3f {
- let r=u.ground[slot & groundMask];let sample=textureLoad(groundTex,vec2i(poolPixel(p)),r.cacheLayer,0);
- let raw=groundRecipeColor(sample,slot,p);
- return mix(raw,textureLoad(groundColorTex,vec2i(poolPixel(p)),r.cacheLayer,0).rgb,r.textureDither);
+ let r=u.ground[slot & groundMask];let raw=materialContinuous(p,slot);
+ if(r.textureDither<=0.0){return raw;}
+ if(r.terrainMask!=0){let reference=materialRaw(p,slot,0.0,0.0,false);let dithered=textureLoad(groundColorTex,vec2i(poolPixel(p)),r.colorLayer,0).rgb;
+  return mix(raw,materialPalette(p,raw+(dithered-reference),r),r.textureDither);}
+ return mix(raw,textureLoad(groundColorTex,vec2i(poolPixel(p)),r.colorLayer,0).rgb,r.textureDither);
 }
 
 fn hasGround()->bool { return u.groundAny != 0 && u.ground[gs & groundMask].cacheLayer >= 0; }
