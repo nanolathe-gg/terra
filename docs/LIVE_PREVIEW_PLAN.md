@@ -1,3 +1,10 @@
+> **November 14 overnight checkpoint:** approved cache/mask/preview-lifetime
+> units are on main a14c48c3. Newer work remains together on `live-preview/lp6`
+> for visual review. [The morning checkpoint](LP_NOV14_MORNING.md) separates
+> landed work, measured improvements and unfinished targets. The final-source
+> small-map Rain pair is 98.4 / 91.7 ms p95, with an 8–11% final-render cost;
+> [the scoped report](LP3_SMALL_MAPS.md) preserves the misses and limits too.
+
 > **November 13 LP3 landing:** the owner approved the reviewed LP3 work.
 > [The landing record](LP3_LANDING.md) covers its transplant onto cleaned main,
 > validation, remaining limits, and the transition to LP6. Earlier measurements

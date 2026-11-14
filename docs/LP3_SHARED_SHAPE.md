@@ -25,7 +25,9 @@ One authored regional replay reports zero mismatches. Whole-map native Time
 height and all three maps retain their four exact hashes when priority work
 runs between slices; cancellation submits no obsolete slice and destroys each
 owned allocation once. Both large Chrome viewports replay with zero changed
-pixels. A separate 512-MiB small-map probe stays below budget and replays
-exactly. These checks also exercise engines at different lattice sizes on
+pixels. The earlier separate 512-MiB probe stays below budget and replays
+exactly, but its helper inherited map16: it is a paged-map check, not a
+small-map check. The [corrected nonpaged probes](LP3_SMALL_MAPS.md) explicitly
+assert map4 and its absence of page storage. These checks also exercise engines at different lattice sizes on
 one device. Shader source, pass order, output precision and terrain art are
 unchanged. No all-world or broad export sweep was run.

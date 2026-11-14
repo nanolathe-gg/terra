@@ -73,8 +73,9 @@ including continuation-only and MessageChannel trials, are retained.
 
 ## Quick correctness and stroke check
 
-- All three slider phases finish with a viewport identical to cold recipe
-  replay: **zero differing pixels**, same hash as 9c807b05.
+- Each completed slider run finishes with a viewport identical to cold recipe
+  replay: **zero differing pixels**, same hash as 9c807b05. The pixel check
+  runs after the workload sequence, not separately after every phase.
 - A scripted page check interrupts the first native F call during its wait,
   first with Relief amount (C), then with Rain (B). All old records retire,
   the view completes without browser errors, and the final picture equals

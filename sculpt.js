@@ -892,7 +892,9 @@ const retiredWeather=new Set(); let gpuPassBytes=0;
 function destroyGpuWeather(w) { if (w.destroyed) return; w.destroyed=true; retiredWeather.delete(w); w.weather.destroy(); w.maps.forEach(m => m.destroy()); w.field?.destroy(); }
 function leaseGpuWeather(w) { w.leases=(w.leases||0)+1; let given=false; return () => { if (given) return; given=true; w.leases--; if (w.retired && w.leases<=0) destroyGpuWeather(w); }; }
 function retireGpuWeather(w) { w.retired=true; if (w.leases>0) retiredWeather.add(w); else destroyGpuWeather(w); }
-// What the Time pass holds only while it runs: its own working memory and the results it is replacing. It takes no budget check of its own, so a bake that overlaps it is not asked to make room for it.
+// Time working memory and retired results remain in the shared ledger.
+// Whole-map requests release idle view workspace before allocating; view bakes
+// also reserve this transient memory while they plan their own working sets.
 const gpuTransientBytes=() => [...retiredWeather].reduce((n,w) => n+w.bytes,0)+gpuPassBytes;
 const gpuBytes=() => (regionalFields?.stats?.().gpuShape?.gpuBytes||0)+(gpuWeather?.bytes||0)+gpuTransientBytes();
 function dropGpuWeather() { if (gpuWeather) { retireGpuWeather(gpuWeather); gpuWeather=null; } }
@@ -1194,16 +1196,23 @@ const materialKnobs=() => materialKnobsIn(surfaceValues(),refinementSeed,rendere
 // One Time request at a time. A newer edit stops it after the submitted
 // slice drains; only the newest waiting request allocates the next working set.
 let timePass=null;
+// A display-only source has no canonical dependency. Let it answer the view
+// before allocating or submitting another whole-map Time slice.
+async function yieldToPreview(job,bytes=0){
+  while(job===weatherJob&&!stroke&&!moving&&(mapCanvas?.previewWorkPending?.()||bytes&&mapCanvas?.prepareTime?.(bytes)===false))await new Promise(resolve=>setTimeout(resolve,0));
+}
 async function runFedWeather(job) {
   try {
     const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer);
     while (timePass) { await timePass; if (job!==weatherJob) return; }
     await regionalFields.gpuQuiet();   // the shape runs' own scratch (whole-map noise: peak 259 MB) is gone before the pass allocates its 120 B a cell
+    const workingBytes=grid*grid*120+Math.ceil(grid/8)**2*12;
+    await yieldToPreview(job,workingBytes);
     const b=regionalFields.gpuBuffers();
     if (!b || job!==weatherJob) return;
-    gpuPassBytes=grid*grid*120+Math.ceil(grid/8)**2*12;
+    gpuPassBytes=workingBytes;
     const revB=mapCanvas.rev.B;
-    const request={planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,...timeKnobs(renderer),stale:()=>job!==weatherJob||Boolean(stroke||moving)};
+    const request={planes:b.planes,masks:b.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid,size,seaLevel:config.seaLevel,...timeKnobs(renderer),stale:()=>job!==weatherJob||Boolean(stroke||moving),beforeSlice:()=>yieldToPreview(job)};
     const pass=erosion.runGpu(request),flight=pass.then(() => {},() => {}).then(() => { if (timePass===flight) timePass=null; });   // cleared when the pass ends, failed or not, before a waiting request looks
     timePass=flight;
     const result=await pass,material=materialKnobs();

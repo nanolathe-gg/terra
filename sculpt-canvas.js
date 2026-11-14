@@ -36,7 +36,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const output=document.createElement('canvas'),renderer=await TerrainRenderer.createChunked(output,config);
   const g=canvas.getContext('2d'),ink=overlay.getContext('2d'),cache=new Map();
   const previewFields=createPreviewFields(renderer.device,api.previewScene);
-  const previewLattice=api.previewScene().paged?createPreviewLattice(renderer.device,api.previewScene,()=>metrics()):null;
+  const previewLattice=createPreviewLattice(renderer.device,api.previewScene,()=>metrics());
   const previewGridFor=(level,block)=>block&&level>=4&&previewLattice?previewLattice.grid(level):(config.worldGrid??config.grid);
   let previewReserved=false;
   let weatheredView=true;
@@ -169,7 +169,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(!drawing&&!pending&&!ladderTimer&&!pipelineWaits.size)return false;
     const v=state(),size=overview?256*displayLevel():viewChunkSize(),level=overview?displayLevel():detailLevel();
     for(let y=Math.max(0,Math.floor(v.y/size))*size;y<Math.min(map.height,v.y+v.height);y+=size)for(let x=Math.max(0,Math.floor(v.x/size))*size;x<Math.min(map.width,v.x+v.width);x+=size){
-      const e=cache.get(cacheKey({x,y},size));if(!e||e.dirty||!colorCovers(e,v)||(level<2?offLevel(e,level):(e.scale??1)>level))return true;
+      const e=cache.get(cacheKey({x,y},size));if(!e||e.dirty||e.weathered&&!(e.weatherRevB>=rev.B)||!colorCovers(e,v)||(level<2?offLevel(e,level):(e.scale??1)>level))return true;
     }
     return false;
   }
@@ -318,11 +318,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(!e.colorRect)return true;v??=state();if(!intersects(e,v))return true;
     const r=e.colorRect;return r.x<=Math.max(e.x,v.x)&&r.y<=Math.max(e.y,v.y)&&r.x+r.width>=Math.min(e.x+e.width,v.x+v.width)&&r.y+r.height>=Math.min(e.y+e.height,v.y+v.height);
   }
-  function currentFinal(e){return e&&!e.dirty&&!e.fit&&!offLevel(e,detailLevel())&&e.weathered===weatheredView&&colorCovers(e);}
+  function currentFinal(e){return e&&!e.dirty&&!e.fit&&!offLevel(e,detailLevel())&&e.weathered===weatheredView&&(!e.weathered||e.weatherRevB>=rev.B)&&colorCovers(e);}
   function blockClips(e,v){
     const clips=[],size=viewChunkSize();
     for(let y=Math.max(0,Math.floor(v.y/size)*size);y<Math.min(map.height,v.y+v.height);y+=size)for(let x=Math.max(0,Math.floor(v.x/size)*size);x<Math.min(map.width,v.x+v.width);x+=size){
-      const final=cache.get(cacheKey({x,y},size));if(final&&colorCovers(final,v)&&(currentFinal(final)||final.serial>=e.serial))continue;
+      const final=cache.get(cacheKey({x,y},size));if(final&&colorCovers(final,v)&&final.weathered===e.weathered&&(!e.weathered||final.weatherRevB>=e.weatherRevB)&&(currentFinal(final)||final.serial>=e.serial))continue;
       const x0=Math.max(x,e.x,v.x),y0=Math.max(y,e.y,v.y),x1=Math.min(x+size,e.x+e.width,v.x+v.width,map.width),y1=Math.min(y+size,e.y+e.height,v.y+v.height,map.height);
       if(x1>x0&&y1>y0)clips.push({x:x0,y:y0,width:x1-x0,height:y1-y0});
     }return clips;
@@ -357,7 +357,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     reservePreview();releasePreviewMemory(area,level);
     const options=drawOptions?.()??api.drawOptions?.()??{},visibleBytes=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0);
     return planPreviewBlocks(area,map,rect=>{const {required,estimate,total}=previewCost(rect,level,options,visibleBytes);
-      return !previewRejects.has(previewSignature(rect,level,required,estimate))&&total<=gpuBudget;
+      return !previewRejects.has(previewSignature(rect,level,required,estimate))&&total<=gpuBudget&&estimate.geometryRecord<=renderer.device.limits.maxStorageBufferBindingSize;
     });
   }
   function coversView(e,v){return e.x<=v.x&&e.y<=v.y&&e.x+e.width>=Math.min(map.width,v.x+v.width)&&e.y+e.height>=Math.min(map.height,v.y+v.height);}
@@ -474,9 +474,16 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
               for(const rect of middle)plan.push({rect,want:4*detailLevel(),block:true});
             }else{
               const finalNow=released||quiet>=250||fineReady&&(quiet>=100||cheapFinal);
-              if(holding||!finalNow)for(const rect of previewPlan(clipped,2*detailLevel()).sort((a,b)=>dist(a)-dist(b)))plan.push({rect,want:2*detailLevel(),block:true});
-              if(!holding&&finalNow){for(const rect of jobs)if(intersects(rect,v)&&(released||quiet>=100||cache.get(cacheKey(rect,size))?.finalCostMs<=50))plan.push({rect,want:detailLevel()});}
-              else wakeLadder(Math.max(16,250-quiet));
+              // Whole-map feeds retain old Time while a refresh is pending.
+              // Keep the current coarse answer until canonical weather arrives;
+              // paged feeds still prepare their fresh canonical pages on demand.
+              const waitCanonical=weatheredView&&api.canExport&&!api.canExport()&&!api.previewScene().paged;
+              if(waitCanonical)wakeLadder(100);
+              else{
+                if(holding||!finalNow)for(const rect of previewPlan(clipped,2*detailLevel()).sort((a,b)=>dist(a)-dist(b)))plan.push({rect,want:2*detailLevel(),block:true});
+                if(!holding&&finalNow){for(const rect of jobs)if(intersects(rect,v)&&(released||quiet>=100||cache.get(cacheKey(rect,size))?.finalCostMs<=50))plan.push({rect,want:detailLevel()});}
+                else wakeLadder(Math.max(16,250-quiet));
+              }
             }
           }else wakeLadder(100-quiet);
         }else{
@@ -505,7 +512,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             if(prior&&!prior.dirty&&!changedSince(prior.serial,prior.input)&&prior.weatherRevB<rev.B&&!api.canExport?.()){wakeLadder(100);continue;}
             // Finish a small coarse refresh even if newer input arrives. Its
             // source revision stays old; the next turn picks up the newest edit.
-            const finishOnInput=Boolean(previewLattice&&want>=4&&want===coarseLevel),controller=new AbortController();activeBake={controller,rect,finishOnInput};let e;
+            const finishOnInput=Boolean(previewLattice&&want>=4&&want===coarseLevel),controller=new AbortController();activeBake={controller,rect,finishOnInput,preview:want>=4};let e;
             try{if(lastInput?.stage==='F'&&colorInputCurrent(prior)){
               const result=await renderer.renderColorTile(prior.color,drawOptions?.()??api.drawOptions?.()??{}),bitmap=new OffscreenCanvas(Math.ceil(rect.width/want),Math.ceil(rect.height/want));bitmap.getContext('2d').drawImage(result.canvas,0,0);e={...prior,bitmap,serial:token,rev:{...rev}};
             }else e=await bake(rect,false,controller.signal,()=>!finishOnInput&&token!==serial||busy||viewToken!==viewEpoch,want,false,true);}
@@ -784,6 +791,15 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const b=pagedBudget({gpuMB:0,renderer,chunk:canonicalSize,maskCount:api.maskKeys?.length,view:{width:canvas.width,height:canvas.height},preview:previewReserved,featureBytes:features?.stats?.().imageBytes||0,previewWorking:previewWorking+colorReserve()});
     return previews?b.previewMinimum:b.minimum;
   }
-  const result={renderer,passability,minimumBytes,foregroundPending,gpuWorkPending:()=>drawing||renderer.busy,prepareBackground:bytes=>{if(drawing||renderer.busy||foregroundPending())return false;if(gpuResident()+bytes>gpuBudget)renderer.evict();return gpuResident()+bytes<=gpuBudget;},schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty||!colorCovers(e)),colorRect:e.colorRect,serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
+  // The current image owns its pixels independently of these working buffers.
+  // Reclaim optional workspace before a whole-map Time request overlaps it.
+  function prepareTime(bytes){
+    if(drawing||renderer.busy)return false;
+    if(gpuResident()+bytes>gpuBudget)renderer.evict();
+    if(gpuResident()+bytes>gpuBudget)previewLattice.trim();
+    if(gpuResident()+bytes>gpuBudget)previewLattice.clear();
+    return true;
+  }
+  const result={renderer,passability,minimumBytes,prepareTime,foregroundPending,previewWorkPending:()=>Boolean(activeBake?.preview),gpuWorkPending:()=>drawing||renderer.busy,prepareBackground:bytes=>{if(drawing||renderer.busy||foregroundPending())return false;if(gpuResident()+bytes>gpuBudget)renderer.evict();return gpuResident()+bytes<=gpuBudget;},schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty||e.weathered&&!(e.weatherRevB>=rev.B)||!colorCovers(e)),colorRect:e.colorRect,serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
   window.sculptCanvas=result;resize();budgets();return result;
 }
