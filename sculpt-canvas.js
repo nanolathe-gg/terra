@@ -142,7 +142,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       // images keep their own 256 px grid. Only an actual budget shortage can
       // lower that grid; a knob changing the export's size never empties it.
       trimTo(gpuBudget-fixedGPU()-renderer.stats().retainedBytes-32*MB);
-      const nextDisplay=probe(displaySize,256,gpuBudget,fixedGPU()+cacheBytes+256*256*8);
+      // Neighbouring tiles rebuild the same voxels round their edges (a 256 px tile's solid covers about twice its area), so a larger view
+      // tile bakes the same pixels with less of that overlap. Below 1024 MiB the working set of a 512 px tile is too large a share.
+      const viewTile=gpuBudget>=1024*MB?512:256,nextDisplay=probe(displaySize,viewTile,gpuBudget,fixedGPU()+cacheBytes+viewTile*viewTile*8);
       if(nextDisplay!==displaySize){for(const key of cache.keys())remove(key);displaySize=nextDisplay;}
       // A knob may arrive during the voxel allocation readback. Its textures
       // must survive until that bake returns; bake() sets the next budget too.
