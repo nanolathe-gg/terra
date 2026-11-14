@@ -249,10 +249,10 @@ fn voxelDensity(p:vec3f)->f32 {
     let mass=course*u.rock[rs & rockMask].faceMass*2.2;
     // The beds as the face can draw them on this slope (columnGather, voxelHardness): beds too thin gathered, their lost ledges drawn as fine layers.
     let drawSlope=length(source.yz)/max(source.w,.015);   // voxelFaceSlope(p.xy)
-    let column=voxelColumnCoord(p);var gathered=0.0;
-    if(u.rock[rs & rockMask].columnCount>0){gathered=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary),drawSlope).y;}
+    let column=voxelColumnCoord(p);var gathered=0.0;var hard=.55;
+    if(u.rock[rs & rockMask].columnCount>0){let gg=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary),drawSlope);gathered=gg.y;hard=gg.x;}
     let layers=voxelFine(p,column,gathered);let lamina=layers.x+layers.y;
-    let bed=(.55-voxelHardness(p,drawSlope))*u.rock[rs & rockMask].faceLedge*2.4;
+    let bed=(.55-hard)*u.rock[rs & rockMask].faceLedge*2.4;
     let detail=voxelDetail(r);
     let pits=(abs(voxelNoise(r/max(2.0,u.rock[rs & rockMask].faceCreaseSize))-.5)-.25)*u.rock[rs & rockMask].faceCrease*2.5;
     let angle=radians(u.rock[rs & rockMask].faceScratchAngle);
@@ -263,12 +263,11 @@ fn voxelDensity(p:vec3f)->f32 {
     // slopes that also expose rock; an activation mask alone hid this control.
     // Chips remove corners and patches along weaker partings. This exposes
     // broad intact faces instead of adding the same fine noise everywhere.
-    let hard=voxelHardness(p,drawSlope);
     let spall=voxelSpall(r,c,hard);
     let clasts=voxelClasts(p);
     let inclusion=u.rock[rs & rockMask].faceClast*(clasts.x-.12)*min(4.0,u.rock[rs & rockMask].faceClastSize*.22);
     let release=voxelRelease(broad,hard)*min(24.0,u.rock[rs & rockMask].faceBlockSize*.8);
-    let runoff=u.rock[rs & rockMask].runoffCut*rockWeatherAt(p.xy).x*(1.25-.75*voxelHardness(p,drawSlope));
+    let runoff=u.rock[rs & rockMask].runoffCut*rockWeatherAt(p.xy).x*(1.25-.75*hard);
     let structure=(faces+mass+pits*detail+grit*detail-spall-release+inclusion-u.rock[rs & rockMask].faceJoint*joint*3.0-runnel*detail-runoff+bed+u.rock[rs & rockMask].faceExtrude*6.0*(.65+.35*c.tone))*face+soil*(bed*3.0+mass*1.5)+lamina*(face+soil*3.0);
     let offset=32.0*tanh(u.rock[rs & rockMask].rockFace*.5*voxelRelief(p.xy,slope)*structure/32.0)*heightGate;
     let q=p-n*offset;let moved=voxelAuthored(q.xy);
