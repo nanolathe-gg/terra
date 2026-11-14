@@ -1222,6 +1222,8 @@ and which are stage F. Then stop and report.
 
 **November 14 native-progress follow-up:** [direct oldest-first F updates](LP5_FAIR_COLOR.md) stop a complete cache from repeatedly repainting coarse terrain and restarting at the focus. In the focused pair, native-quality input p95 falls from 795–1556 ms to 173–199 ms; 34–35 of 36 inputs reach native quality before release. Partial-cache coarse response remains 5–7 ms p95 and both budgets replay exactly. The 150-ms target remains open; bounded per-tile queue waits are next.
 
+**November 14 sweep follow-up:** [guarded native F continuation and direct rectangle repaint](LP5_COLOR_SWEEPS.md) reduce native-quality input p95 to 160 / 116 / 138 ms in the focused continuous/pause/cold pair, with first-change p95 under 20 ms and exact replay. Continuous still narrowly misses 150 ms. Geometry/Rain interruption and 512-MiB cache clearing pass; a short stroke pair is effectively flat (+1.8% final). The source stays on the review branch.
+
 **Build (M-L)** only if step 0's rerun equals the full re-bake: land the
 split (scenes move by the reported drift, the owner looks), keep records for
 visible tiles, route stage-F changes to priority 3 of the scheduler, add the

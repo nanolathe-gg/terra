@@ -486,8 +486,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           if(!previewing&&!navigating()&&quiet>=1000)for(const rect of jobs)if(!intersects(rect,v))plan.push({rect,want:detailLevel()});
           else if(quiet<1000)wakeLadder(1000-quiet);
         }
+        // Immutable F inputs survive another F edit. Finish this cheap
+        // native sweep without a new rAF wait after every input; a partial
+        // cache, geometry/Time edit or navigation still replans immediately.
+        const canContinueColor=color=>color&&allColor&&lastInput?.stage==='F'&&jobs.every(r=>!intersects(r,v)||colorCurrent(cache.get(cacheKey(r,size))));
         for(const {rect,want,block=false,fineTurn=false,color=false} of plan){
-          if(token!==serial||viewToken!==viewEpoch||busy||previewing!==interacting()){rerun=true;break;}
+          if((token!==serial&&!canContinueColor(color))||viewToken!==viewEpoch||busy||previewing!==interacting()){rerun=true;break;}
           if((previewing||navigating()||want<1)&&!intersects(rect,v))continue;   // a detail level bakes only what is seen: its ring would evict itself
           if(block){
             const key=blockKey(rect,want),prior=blocks.get(key);if(blockCurrent(prior))continue;
@@ -520,8 +524,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             // Scrolling changes the plan, but a tile still in view remains
             // useful. Keep it running instead of restarting on every input.
             try{if(color){
-              const prior=e,result=await renderer.renderColorTile(prior.color,drawOptions?.()??api.drawOptions?.()??{}),bitmap=await createImageBitmap(result.canvas,0,0,Math.ceil(rect.width/want),Math.ceil(rect.height/want),{colorSpaceConversion:'none'});
-              e={...prior,bitmap,serial:token,rev:{...rev},dirty:changedSince(token,prior.input),pipelineKey:result.pipelineKey};
+              const colorSerial=serial,colorRev={...rev},prior=e,result=await renderer.renderColorTile(prior.color,drawOptions?.()??api.drawOptions?.()??{}),bitmap=await createImageBitmap(result.canvas,0,0,Math.ceil(rect.width/want),Math.ceil(rect.height/want),{colorSpaceConversion:'none'});
+              e={...prior,bitmap,serial:colorSerial,rev:colorRev,dirty:changedSince(colorSerial,prior.input),pipelineKey:result.pipelineKey};
             }else{e=await bake(rect,false,controller.signal,()=>token!==serial||busy||viewToken!==viewEpoch&&!intersects(rect,state()),want,overview);if(e&&!overview)await retainColor(e);}}
             catch(err){if(want<1&&String(err.message).includes('of GPU memory')){finest=want*2;rerun=true;break;}throw err;}   // fall back to the next coarser level, never the banner
             finally{if(activeBake?.controller===controller)activeBake=null;}
@@ -546,18 +550,17 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           if(key===cacheKey(rect,currentSize)&&intersects(rect,current)){
             // A completed tile belongs at the latest camera coordinates, even
             // when input moved the view while its fields or image were pending.
-            // A current final replaces only its own rectangle. Keep a full
-            // composition for stale results, so they cannot cover a newer block.
-            if(paintedView!==viewEpoch||!currentFinal(e)){paintedView=-1;presentView();}
+            // A complete F sweep has not painted a newer coarse block. Its
+            // finished tile can replace this rectangle even if another F edit
+            // arrived; geometry/Time results still need stale-image clipping.
+            if(paintedView!==viewEpoch||!currentFinal(e)&&!canContinueColor(color)){paintedView=-1;presentView();}
             else{paint(e,current);overlays();}
             presented();
           }
-          if(token!==serial||viewToken!==viewEpoch){rerun=true;break;}
-          // Close-view snapshots overlap GPU work. Yield a task to input without
-          // waiting for a display frame; bake() retains the GPU backpressure.
-          // Fit keeps its GPU completion wait: its larger tiles need backpressure
-          // before presentation to keep the full-map gesture responsive.
-          await (!overview||!levels?new Promise(resolve=>setTimeout(resolve,0)):undefined);
+          if((token!==serial&&!canContinueColor(color))||viewToken!==viewEpoch){rerun=true;break;}
+          // Each next chunk/color job awaits the preceding GPU completion;
+          // snapshots also yield to the browser. An extra timer/task between
+          // them only delays the sweep.
         }
         // Generated deposits and vents sit where the export puts them and take their colors from the export art under them
         // (sculpt-features.js): one anchor read or one 128 px patch per idle frame, after the view's own images and only once the
