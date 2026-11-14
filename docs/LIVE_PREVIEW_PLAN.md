@@ -1226,6 +1226,8 @@ and which are stage F. Then stop and report.
 
 **November 14 submission follow-up:** [bounded four-tile F submissions](LP5_COLOR_BATCHES.md) keep sampled native-quality p95 at 111–140 ms in two alternating large Modern Green pairs, with first-change p95 below 33 ms and exact replay. The sampled color row now meets 150 ms; partial coverage, other fixtures and cold startup remain open. The work stays on the review branch.
 
+**November 14 shifted-view follow-up:** [exact weather/material packing](LP5_GRID_INPUTS.md) fits all 40 native records plus the coarse block after a half-tile pan, at the unchanged quota. Two alternating pairs reduce native-quality color p95 from 912–1729 ms to 118–130 ms, with exact parent-art and replay checks. The original low-memory budget and tile-equality assertions stay unchanged. Other fixtures remain to measure.
+
 **Build (M-L)** only if step 0's rerun equals the full re-bake: land the
 split (scenes move by the reported drift, the owner looks), keep records for
 visible tiles, route stage-F changes to priority 3 of the scheduler, add the

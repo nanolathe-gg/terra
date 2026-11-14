@@ -716,9 +716,16 @@ fn styleEdge(p: vec2f, f: f32, slope: f32) -> f32 {
     return f * smoothstep(0.30, 0.60, abs(f) + (steep * 0.25 + lobes * 0.4 + grain * 0.6) * held);
 }
 
+#ifdef COLOR_PASS
+// F retains exactly flow/deposit, wear/wetness, material RGBA and fall XY.
+fn weatherAt(uv:vec2f)->vec2f{return sampleRegionalArray(gridTex,regionalPoint(uv),0).rg;}
+fn timeMap2(uv:vec2f)->vec2f{if(u.weatherMaps<0.5){return vec2f(0);}return sampleRegionalArray(gridTex,regionalPoint(uv),0).ba;}
+fn timeMap3(uv:vec2f)->vec2f{if(u.weatherMaps<0.5){return vec2f(.5);}return sampleRegionalArray(gridTex,regionalPoint(uv),2).rg;}
+#else
 fn weatherAt(uv: vec2f) -> vec4f { return sampleRegionalArray(gridTex,regionalPoint(uv),0); }
 fn timeMap2(uv: vec2f) -> vec4f { if (u.weatherMaps < 0.5) { return vec4f(0.0); } return sampleRegionalArray(gridTex,regionalPoint(uv),2); }
 fn timeMap3(uv: vec2f) -> vec4f { if (u.weatherMaps < 0.5) { return vec4f(0.5, 0.5, 0.0, 0.0); } return sampleRegionalArray(gridTex,regionalPoint(uv),3); }
+#endif
 fn materialFieldAt(uv: vec2f) -> vec4f { return sampleRegionalArray(gridTex,regionalPoint(uv),1); }
 
 // H5 override plane 17's deposits multiplier (planes 14-17: erosion, deposits, vegetation, exposure) at p: scales sand, stones and talus. 1 where nothing overrides.
@@ -727,12 +734,21 @@ fn depositsAt(p: vec2f) -> f32 {
     return max(0.0, 1.0 + sampleMasks(maskPoint(p),3).w);
 }
 // H5: the Time pass's maps at world point p. layer 2: wear, wetness, hardness, slope; layer 3: fall line (-1..1), channel, ridge.
+#ifdef COLOR_PASS
+// Removing unused members also makes a new F dependency a compile error.
+struct TimeMaps {wear:f32,wet:f32,fall:vec2f,deposit:f32}
+fn timeMapsAt(p:vec2f)->TimeMaps{
+    let uv=p/(u.size-1.0);let a=timeMap2(uv);let b=timeMap3(uv);let w=weatherAt(uv);
+    return TimeMaps(a.x,a.y,b*2.0-1.0,w.g);
+}
+#else
 struct TimeMaps { wear: f32, wet: f32, hard: f32, slope: f32, fall: vec2f, channel: f32, ridge: f32, flow: f32, talus: f32, deposit: f32 }
 fn timeMapsAt(p: vec2f) -> TimeMaps {
     let uv = p / (u.size - 1.0);
     let a = timeMap2(uv); let b = timeMap3(uv); let w = weatherAt(uv);
     return TimeMaps(a.x, a.y, a.z, a.w, b.xy * 2.0 - 1.0, b.z, b.w, w.r, w.b, w.g);
 }
+#endif
 
 const MM_COVER = 162u;
 fn cvr(i: u32) -> vec4f { return u.materialTable[MM_COVER + i]; }
