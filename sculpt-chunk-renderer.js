@@ -516,10 +516,16 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       }
       this.colorTargets.delete(key);this.colorTargets.set(key,target);
       this.syncWorld(options);
+      // A record whose geometry inputs moved cannot be shaded again. Retire it with the refusal, so its tile
+      // is planned as a full bake next frame instead of as the same color rerun forever.
+      let needs=null;
       for(const tile of tiles){
         if(tile.retired)throw new DOMException('The color record was evicted.','AbortError');
         const delta=worldUniformDelta(tile.world,this.uniformData,this.layout,this.uniformStages);
-        if(delta.stage&&delta.stage<'F')throw new DOMException('The color record needs '+delta.stage+'.','AbortError');
+        if(delta.stage&&delta.stage<'F'){needs??=delta.stage;this.releaseColorTile(tile);}
+      }
+      if(needs)throw new DOMException('The color record needs '+needs+'.','AbortError');
+      for(const tile of tiles){
         const cpu=tile.cpu.slice(0),skip=new Set([...PER_CHUNK_UNIFORMS,'weatherMaps','materialReady','transitionBody','rockWeatherGrid']),rock=this.layout.fields.get('rock');
         for(const [name,f]of this.layout.fields){
           if(skip.has(name)||name.startsWith('chunk')||name!=='rock'&&rock&&f.offset>=rock.offset&&f.offset<rock.offset+rock.count*rock.stride)continue;

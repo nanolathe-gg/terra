@@ -50,7 +50,7 @@ for(const name of ['green-modern-2','green-2','red-3','green-7']){
   }
   const fulla=await H.renderWindow(s,a),fullb=await H.renderWindow(s,b);
   assert.equal(sha(wa),sha(fulla),name+' first tile');assert.equal(sha(wb),sha(fullb),name+' interleaved odd tile');
-  const maskBytes=[ta.source.colorMasks??ta.source.maskTexture,tb.source.colorMasks??tb.source.maskTexture].map(texture=>r.resources.get(texture)?.bytes??0),retained=r.colorBytes;await H.knob(s,'rockFace',3.9);await assert.rejects(()=>r.renderColorTile(ta,options),/needs [ABCDE]/);
+  const maskBytes=[ta.source.colorMasks??ta.source.maskTexture,tb.source.colorMasks??tb.source.maskTexture].map(texture=>r.resources.get(texture)?.bytes??0),retained=r.colorBytes;await H.knob(s,'rockFace',3.9);await assert.rejects(()=>r.renderColorTile(ta,options),/needs [ABCDE]/);assert(ta.retired&&!r.colorTiles.has(ta),name+' a refused record is retired');
   // Retirement cannot destroy a pinned input while the preceding queue wait yields.
   let resume;const completion=r.previousChunk;r.previousChunk=new Promise(resolve=>{resume=resolve;});
   const pending=r.renderColorTile(tb,options);assert.equal(tb.users,1);r.releaseColorTile(tb);assert(r.resources.has(tb.record));resume();
