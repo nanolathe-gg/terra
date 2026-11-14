@@ -1,12 +1,21 @@
 // Shared numeric texture operations. Presets select amounts, never a world-specific shader.
 export const TEXTURE_CONTROLS = [
+ ['patternOctaves', 'Noise octaves', 0, 5, 0, 'Pattern'],
+ ['patternLinear', 'Linear interpolation', 0, 1, 0, 'Pattern'],
+ ['phaseOctaves', 'Phase octaves', 0, 4, 0, 'Distortion'],
+ ['phaseAxis', 'Phase axis balance', -1, 1, 0, 'Distortion'],
+ ['patternInvert', 'Invert', 0, 1, 0, 'Color'],
+ ['patternClip', 'Hard clip', 0, 1, 0, 'Color'],
+ ['patternSine', 'Sine shaping', 0, 1, 0, 'Color'],
+ ['patternSineFrequency', 'Sine frequency', 1, 8, 1, 'Color'],
+
  ['patternAmount','Pattern blend',0,1,0,'Pattern'],
  ['patternSize','Pattern size',1,128,8,'Pattern'],['patternDetail','Secondary detail',0,1,.25,'Pattern'],
  ['patternGradient','Gradient noise',0,1,0,'Pattern'],['patternTurbulence','Turbulence',0,1,0,'Pattern'],['patternCells','Cellular structure',0,1,0,'Pattern'],
  ['patternStreak','Ripple structure',0,1,0,'Pattern'],['patternLength','Ripple length',1,128,8,'Pattern'],['patternDirection','Ripple direction',0,180,45,'Pattern'],['patternSlope','Ripple crests',0,1,0,'Pattern'],
- ['patternWarp','Distortion',0,24,0,'Distortion'],['patternWarpSize','Distortion size',1,128,10,'Distortion'],
+ ['patternWarp','Phase amplitude',0,24,0,'Distortion'],['patternWarpSize','Phase size',1,128,10,'Distortion'],
  ['patternMottle','Broad mottling',0,1,0,'Distortion'],['patternMottleSize','Mottle size',1,256,16,'Distortion'],
- ['patternLow','Color range start',-.5,.49,0,'Color'],['patternHigh','Color range end',.51,1.5,1,'Color'],['patternPower','Color balance',.2,4,1,'Color'],['patternEase','Color softness',0,1,1,'Color'],
+ ['patternLow','Range low',-.5,.49,0,'Color'],['patternHigh','Range high',.51,1.5,1,'Color'],['patternPower','Power',.2,4,1,'Color'],['patternEase','Color softness',0,1,1,'Color'],
  ['textureFineStructure','Fine pattern detail',0,1,0,'Fine grain'],
  ['textureFine','Fine tint strength',0,1,0,'Fine grain'],['textureFineSize','Fine tint size',1,32,1,'Fine grain'],['textureFineGradient','Fine gradient noise',0,1,0,'Fine grain'],['textureFineWarp','Fine distortion',0,1,0,'Fine grain'],
  ['markAmount','Mark strength',0,1,0,'Marks'],['markSize','Mark radius',.25,16,1,'Marks'],['markSpacing','Mark spacing',2,64,5,'Marks'],['markDensity','Mark coverage',0,1,.2,'Marks'],['markScatter','Mark scatter',0,1.8,1.5,'Marks'],['markCore','Mark hardness',0,.95,.1,'Marks'],['markVariation','Mark variation',0,1,.3,'Marks'],['markFollow','Follow light areas',0,1,0,'Marks'],['markNoise','Noise marks',0,1,0,'Marks'],['markNoiseSize','Noise mark size',1,32,2,'Marks'],['markLow','Noise mark coverage',0,.49,.1,'Marks'],['markHigh','Noise mark softness',.51,1,.65,'Marks'],['markMultiply','Multiply mark tint',0,1,0,'Marks'],
@@ -25,7 +34,8 @@ export function textureControlRequirement(key,k){
  if(row[5]==='Palette')return key!=='textureDither'&&k.textureDither===0?'Raise Palette grain to use palette treatment.':'';
  if(key!=='patternAmount'&&k.patternAmount===0)return 'Raise Pattern blend to edit the procedural pattern.';
  if(['patternLength','patternDirection','patternSlope'].includes(key)&&k.patternStreak===0)return 'Raise Ripple structure to use this setting.';
- if(key==='patternWarpSize'&&k.patternWarp===0)return 'Raise Distortion to change its size.';
+ if(['patternWarpSize','phaseOctaves','phaseAxis'].includes(key)&&k.patternWarp===0)return 'Raise Phase amplitude to edit the phase field.';
+ if(key==='patternSineFrequency'&&k.patternSine===0)return 'Raise Sine shaping to change its frequency.';
  if(key==='patternMottleSize'&&k.patternMottle===0)return 'Raise Broad mottling to change its size.';
  if(['textureFineSize','textureFineGradient','textureFineWarp'].includes(key)&&k.textureFine===0&&k.textureFineStructure===0)return 'Raise Fine tint strength or Fine pattern detail.';
  if(key.startsWith('mark')&&key!=='markAmount'&&k.markAmount===0)return 'Raise Mark strength to edit marks.';

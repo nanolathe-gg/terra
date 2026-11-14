@@ -113,6 +113,15 @@ struct Rock {
 
 // Absolute ground recipes; the cache holds height and unlit color parameters.
 struct Ground {
+    patternOctaves: f32,
+    patternLinear: f32,
+    phaseOctaves: f32,
+    phaseAxis: f32,
+    patternInvert: f32,
+    patternClip: f32,
+    patternSine: f32,
+    patternSineFrequency: f32,
+
     patternAmount: f32,
     patternSize: f32,
     patternDetail: f32,

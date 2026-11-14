@@ -5,6 +5,7 @@ const $=id=>document.getElementById(id);
 // All rows live in index.html. This controller only fills choices and values.
 export function mountGroundPanel(host){
  let selected=0,previewKey='',shown=false;
+ const dialog=$('material-editor');let opener=null;
  const preview=new GroundPreview($('ground-preview'));
  const recipe=()=>host.grounds().find(p=>p.slot===selected);
  const note=text=>{$('ground-presets-note').textContent=text;$('ground-presets-note').hidden=!text;};
@@ -14,13 +15,13 @@ export function mountGroundPanel(host){
  const hex=value=>'#'+(Array.isArray(value)?value:host.renderer().paletteIndexed[value]).map(n=>Math.round(n).toString(16).padStart(2,'0')).join('');
  const nearest=color=>{const rgb=[1,3,5].map(i=>parseInt(color.slice(i,i+2),16));let best=0,dist=Infinity;host.renderer().paletteIndexed.forEach((c,i)=>{const d=c.reduce((sum,n,k)=>sum+(n-rgb[k])**2,0);if(d<dist){dist=d;best=i;}});return best;};
  function refreshPreview(){
-  if(!shown)return;const r=host.renderer(),p=recipe();
+  if(!shown||!dialog.open)return;const r=host.renderer(),p=recipe();
   const neighbor=host.grounds().find(q=>q.slot!==selected);
   const key=JSON.stringify([p,neighbor,r.variant.toString(),r.colorOverrides]);if(key===previewKey)return;previewKey=key;
-  $('ground-preview-count').textContent='Rendering the ground sample…';
+  $('ground-preview-count').textContent='Rendering the material sample…';
   preview.request(r,p,neighbor,(error,count)=>{
    if(error){previewKey='';$('ground-preview-count').textContent='Sample unavailable: '+error.message;return;}
-   $('ground-preview-count').textContent=`${count.distinct} distinct tiles in this 64-tile sample · ${count.pool} px repeat · at most ${count.perLevel.toLocaleString()} tiles per flat height across the full repeat. The repeat seam crosses the center.${count.edgeTiles?` A separate contact sample with ${count.neighbor} has ${count.edgeDistinct} distinct edge tiles in ${count.edgeTiles} slots.`:''}`;
+   $('ground-preview-count').textContent=`${count.distinct} distinct tiles in this ${count.tiles}-tile sample · ${count.pool} px repeat · at most ${count.perLevel.toLocaleString()} tiles per flat height across the full repeat. The repeat seam crosses the center.${count.edgeTiles?` A separate contact sample with ${count.neighbor} has ${count.edgeDistinct} distinct edge tiles in ${count.edgeTiles} slots.`:''}`;
   });
  }
  function refresh(){
@@ -54,7 +55,22 @@ export function mountGroundPanel(host){
  }
  const commit=()=>host.checkpoint();
  for(const [id,role]of [['ground-world-default','worldGround'],['water-material','worldWater']])$(id).onchange=fail(()=>{const slot=Number($(id).value);change(host.grounds().map(p=>({...p,[role]:p.slot===slot})));commit();});
- $('water-material-edit').onclick=()=>{$('wsec-ground').click();$('wtab-ground-pattern').click();choose(Number($('water-material').value));};
+ function open(slot,from){opener=from;if(slot!==undefined)selected=slot;else if(!recipe())selected=host.grounds()[0]?.slot??0;refresh();if(!dialog.open)dialog.showModal();shown=true;refreshPreview();}
+ const close=()=>{dialog.close();shown=false;opener?.focus();};
+ $('material-open').onclick=()=>open(undefined,$('material-open'));
+ $('water-material-edit').onclick=()=>open(Number($('water-material').value),$('water-material-edit'));
+ $('material-done').onclick=close;
+ dialog.oncancel=e=>{e.preventDefault();close();};
+ // Modal shortcuts cannot leak through to terrain selection or tool shortcuts.
+ dialog.onkeydown=e=>{if(e.defaultPrevented)return;if(e.key==='Escape'){e.preventDefault();close();}
+  else if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'&&!e.target.matches('input,textarea')){e.preventDefault();$(e.shiftKey?'redo':'undo').click();}
+  e.stopPropagation();};
+ $('material-undo').onclick=()=>$('undo').click();$('material-redo').onclick=()=>$('redo').click();
+ const lock=()=>{$('material-editor-fields').disabled=$('editor').disabled;$('material-undo').disabled=$('undo').disabled;$('material-redo').disabled=$('redo').disabled;};
+ const locks=new MutationObserver(lock);for(const id of ['editor','undo','redo'])locks.observe($(id),{attributes:true,attributeFilter:['disabled']});lock();
+ const tabs=[...dialog.querySelectorAll('[role="tab"]')];
+ const pick=tab=>{for(const t of tabs){const on=t===tab;t.setAttribute('aria-selected',String(on));t.tabIndex=on?0:-1;$(t.getAttribute('aria-controls')).hidden=!on;}};
+ for(const t of tabs){t.onclick=()=>pick(t);t.onkeydown=e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const i=tabs.indexOf(t),next=e.key==='Home'?tabs[0]:e.key==='End'?tabs.at(-1):tabs[(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length];pick(next);next.focus();};}
  for(const key of Object.keys(TEXTURE_COLORS)){$('texture-color-'+key).oninput=fail(()=>{const p=copyGroundRecipe(recipe()),scale=['fineLow','fineHigh','markTint'].includes(key)?127.5:1;p.textureColors[key]=[1,3,5].map(i=>parseInt($('texture-color-'+key).value.slice(i,i+2),16)/scale);change(setGround(host.grounds(),selected,p));});$('texture-color-'+key).onchange=commit;}
  $('texture-palette').onchange=fail(()=>{const colors=$('texture-palette').value.trim().split(/[\s,]+/).filter(Boolean);if(colors.some(c=>!/^#[0-9a-f]{6}$/i.test(c)))throw Error('Use hex colors such as #4263a0.');const p=copyGroundRecipe(recipe());p.texturePalette=colors.map(nearest);change(setGround(host.grounds(),selected,p));commit();});
  $('ground-presets').onchange=()=>choose(Number($('ground-presets').value));
@@ -73,5 +89,5 @@ export function mountGroundPanel(host){
   input.oninput=fail(()=>{const p=copyGroundRecipe(recipe()),rgb=[1,3,5].map(j=>parseInt(input.value.slice(j,j+2),16));if(i===32)p.line=rgb;else if(i>=16)p.variationRamp[i-16]=rgb;else p.ramp[i]=rgb;change(setGround(host.grounds(),selected,p));});input.onchange=commit;
  }
  const observer=new IntersectionObserver(entries=>{shown=entries[0].isIntersecting;if(shown)refreshPreview();});observer.observe($('ground-preview'));
- refresh();return {refresh,refreshPreview,dispose(){observer.disconnect();preview.dispose();}};
+ refresh();return {refresh,refreshPreview,dispose(){observer.disconnect();locks.disconnect();preview.dispose();}};
 }

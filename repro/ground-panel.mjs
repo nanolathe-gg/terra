@@ -81,7 +81,7 @@ await session(`${server}/?biome=green&mapX=2&mapY=2&gpuMB=512`,port,async({send,
  await stroke('landform',.6);assert.equal((await state()).nodes.at(-1).params.groundPreset,1);console.log('paint and landform choices');
  saved=await state();await ev(`sculptDebug.loadSketch(${JSON.stringify(saved)});true`);assert.deepEqual((await state()).grounds,saved.grounds);
  await sleep(900);await send('Page.reload');await ready(ev);assert.deepEqual((await state()).grounds,saved.grounds);assert.equal((await state()).nodes.at(-1).params.groundPreset,1);console.log('save/reload');
- await click('tab-world');await click('wsec-ground');await set('ground-presets',1);
+ await click('tab-world');await click('wsec-ground');await click('material-open');await set('ground-presets',1);
  await ev(`document.getElementById('ground-preview').scrollIntoView();true`);
  let count='';for(let i=0;i<100;i++){count=await ev(`document.getElementById('ground-preview-count').textContent`);if(count.includes('distinct')||count.includes('unavailable'))break;await sleep(200);}
  assert.match(count,/distinct tiles/);const picture=await ev(`document.getElementById('ground-preview').toDataURL()`);writeFileSync(`${out}/preview.png`,Buffer.from(picture.split(',')[1],'base64'));console.log(count);

@@ -5,7 +5,9 @@ landform ground, and water. Built-in world assignments remain unchanged.
 
 ## Artist workflow
 
-1. Open **World → Ground → Pattern**. Choose a starter from **Add preset**.
+1. Open **World → Ground → Pattern → Open material editor**. The separate
+   dialog has a 512-pixel preview and Noise, Phase, Filter, Color & blend,
+   Bump & finish, and Palette tabs. Choose a starter from **Add preset**.
    The four new starters are Rust mottling, Cloudy green, Blue streaked water,
    and Violet rippled water. Duplicate a starter to make a new material.
 2. Edit the recipe and its live sample. Start with pattern size, broad mottling,
@@ -13,7 +15,9 @@ landform ground, and water. Built-in world assignments remain unchanged.
    editor's shared scrub controls: drag, Shift-drag for fine adjustment, arrow
    keys, and double-click or Enter to type a value. Pattern blend mixes
    the procedural pigment with the existing relief-family colors. The sample
-   crosses the repeat seam and reports distinct 32-pixel tiles.
+   crosses the repeat seam and reports distinct 32-pixel tiles. **Done** or
+   Escape closes the dialog; edits apply live. The dialog uses the map's own
+   Undo and Redo, with no separate save or history.
 3. Choose the material as the world's ground, use it in the ground paint brush,
    or select it on a landform. For water, choose it under **Water & shores**;
    **Edit material** opens the same recipe editor. Water keeps the world's depth,
@@ -25,9 +29,16 @@ landform ground, and water. Built-in world assignments remain unchanged.
 
 ## What the controls do
 
-- **Pattern:** value and gradient noise, turbulence, cellular structure, stretched
-  ripples, crest emphasis, scale, direction, and secondary detail.
-- **Distortion:** warp the pattern and mix a separately scaled broad mottle.
+- **Noise:** value and gradient noise, linear interpolation, turbulence, cellular
+  structure, stretched ripples, crest emphasis, scale, direction, and secondary
+  detail. Noise octaves add progressively broader layers at twice the amplitude;
+  fractional octaves fade the next layer in continuously.
+- **Phase:** warp the pattern, layer phase octaves, balance displacement between
+  axes, and mix a separately scaled broad mottle. Axis balance −1 affects X,
+  zero affects both axes, and +1 affects Y.
+- **Filter:** adjust the value range and power, invert values, mix in a hard clip,
+  or apply sine shaping with an editable frequency. The filtered result feeds
+  color and pattern bump.
 - **Pattern colors:** three continuous RGB stops and their range, balance, and
   softness. These are not snapped to the game's palette while authoring.
 - **Fine grain:** independent fine structure and multiplicative color variation.
@@ -50,6 +61,21 @@ water studies (`prototype/ground-calibration`, including Red water review 8 at
 GPU implementation and normal world lighting can differ from the offline study
 renderers; acceptance of those studies is not a claim of pixel-identical porting.
 Final in-editor appearance remains subject to visual review.
+
+## Bryce reference and scope
+
+The organization follows the Noise / Phase / Filter and color/bump workflow
+in MetaCreations' [Bryce 4 User Guide, texture chapter](https://www.scribd.com/document/512436170/Bryce4).
+That is a 1999 primary source, not verified documentation of every 1997 option.
+Its Standard octave mode adds half-frequency, double-amplitude layers; the
+new octave controls follow that convention rather than adding finer noise.
+The supplied template archive identifies itself as Bryce 7.1, so it is useful
+for recipes but does not establish which controls existed in 1997.
+
+This is a Bryce-inspired, periodic 2D material editor. It does not claim exact
+Bryce noise algorithms, all 3D mapping modes, or arbitrary routing among three
+independent DTE components. Existing base/fine/mark composition remains editable.
+The new controls have neutral defaults, preserving existing preset values.
 
 ## Implementation
 
@@ -83,16 +109,26 @@ input cannot accumulate a full-repeat GPU job for every pointer movement.
 
 Measured on the implementation branch:
 
+- Popup check: opening from ground and water, stage tabs, shared Undo/Redo,
+  typed and dragged scrub values, save/reload, Escape with focus return, and
+  a 390-pixel layout pass without console errors. The sample now contains
+  256 tiles in a 512-pixel square.
+- Eight new control checks on a 128-pixel procedural rust patch with phase
+  amplitude 4: 35.9–95.7% of pixels change by at least 3/255 in one channel.
+  This is a focused impact check, not a broad world-control sweep.
+- Neutral new controls preserve the small export fixture SHA-256
+  `b425819e7b9b862cc3e95507aaa37d798e1924f58c328e413c9c0563f17ff1cb`.
+
 - Sustained 120-move scrub regression: the original input path reached 78
   unfinished GPU submissions and lost the device. After moving generation into
   the paced draw cycle, peak outstanding submissions were 6, no device or console
   errors occurred, and the final slider value matched the rendered recipe.
 - Six focused model/save tests pass.
 - Ground UI check: paint and landform selection, editing, undo/redo, save/reload,
-  and the 64-tile live preview pass.
+  and the live preview pass.
 - Texture UI check: shared scrub typing, arrow keys, pointer dragging, disabled
   explanations, continuous colors, ground/water assignments, undo/redo,
-  embedded world settings, save/reload, deletion, and live preview pass without
+  embedded world settings, save/reload, deletion, and the 256-tile live preview pass without
   browser console errors.
 - Green ground, Green water, and Violet water checks: 1024-pixel repetition and
   four-quadrant regional rendering are byte-identical; cached colors belong to
