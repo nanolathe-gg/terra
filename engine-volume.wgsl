@@ -347,6 +347,8 @@ fn voxelWear(p:vec3i)->f32 {
     let painted=max(voxelPaintRock(q.xy),.5*rimRockAt(q.xy));
     let heightGate=voxelRockHeight(q,painted);
     let exposure=max(1.0-smoothstep(.75,.98,nz),painted)*(1.0-routeProtection(q.xy))*heightGate;
+    // Unexposed ground wears by exactly nothing; skip its fourteen neighbour reads.
+    if(exposure<=0.0){return d;}
     let sum=voxelCell(p+vec3i(1,0,0))+voxelCell(p-vec3i(1,0,0))+voxelCell(p+vec3i(0,1,0))+voxelCell(p-vec3i(0,1,0))+voxelCell(p+vec3i(0,0,1))+voxelCell(p-vec3i(0,0,1));
     let gradient=length(vec3f(voxelCell(p+vec3i(1,0,0))-voxelCell(p-vec3i(1,0,0)),voxelCell(p+vec3i(0,1,0))-voxelCell(p-vec3i(0,1,0)),voxelCell(p+vec3i(0,0,1))-voxelCell(p-vec3i(0,0,1))))/(2.0*vs.step);
     // The six-neighbor diffusion coefficient stays below 1/6 at every
