@@ -37,7 +37,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const g=canvas.getContext('2d'),ink=overlay.getContext('2d'),cache=new Map();
   const previewFields=createPreviewFields(renderer.device,api.previewScene);
   const previewLattice=createPreviewLattice(renderer.device,api.previewScene,()=>metrics());
-  const previewGridFor=(level,block)=>block&&level>=4&&previewLattice?previewLattice.grid(level):(config.worldGrid??config.grid);
+  // The half-level draft reads the quarter level's lattice (its shape and its own coarse Time), so it follows a release without waiting for the
+  // canonical pages' Time; the finals read those pages.
+  const previewGridFor=(level,block)=>block&&level>=2&&previewLattice?previewLattice.grid(Math.max(level,4)):(config.worldGrid??config.grid);
   let previewReserved=false;
   let weatheredView=true;
   try{weatheredView=localStorage.getItem('terraform-weathered-view')!=='false';}catch{}
@@ -65,7 +67,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const bakedBefore=new Set(); let lastScroll=-Infinity,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
   let heldSince=null,pan=null,space=false,gesture=null,hover=null;
   const previewRejects=new Set();let previewRejectScope='';
-  const blocks=new Map();let blockBytes=0,focus=null,lastInputAt=performance.now(),released=false,ladderTimer=null,fineSinceCoarse=false,finalizing=false;
+  const DRAFT_REST=900;   // ms without input before the view refines from the half-level draft to final tiles
+  const blocks=new Map();let blockBytes=0,focus=null,lastInputAt=performance.now(),released=false,ladderTimer=null,fineSinceCoarse=false,finalizing=false,warmedSerial=-1;
   let hoveredNode=-1;
   let lastFrame=0,frameTimes=[],strokeTimes=[],resizePending=false;
   const coarse=new OffscreenCanvas(VIEW_CANVASES.overview,VIEW_CANVASES.overview),cg=coarse.getContext('2d');
@@ -193,14 +196,14 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   // Display levels use the same chunk pipeline; blocks copy its reusable output
   // synchronously, while final tiles and export keep immutable bitmaps.
-  async function bake(rect,exportArt=false,signal,stale=null,scale=1,fit=false,block=false) {
+  async function bake(rect,exportArt=false,signal,stale=null,scale=1,fit=false,block=false,warm=false) {
     // Wait before preparing fields, too: a queued tile must not start a costly
     // paged replay for a viewport that has moved while the GPU was occupied.
     await renderer.previousChunk;
     // The completed voxel solid is rebuilt every draw. Release it before page
     // preparation and Time allocate their working sets, rather than afterward.
     renderer.voxel.clear();
-    if(previewLattice&&!exportArt&&!block&&!fit&&!interacting()&&!finalizing){
+    if(previewLattice&&!exportArt&&!block&&!fit&&!warm&&!interacting()&&!finalizing){
       // The immutable preview picture remains visible; its source and future
       // refinement working sets no longer need to displace canonical pages.
       finalizing=true;previewLattice.clear();api.fitGpuBudget?.();
@@ -208,7 +211,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const costAt=performance.now(),costBudget=gpuBudget;
     signal?.throwIfAborted();
     if(stale?.())throw new DOMException('The view changed under a queued bake.','AbortError');
-    const readWeather=exportArt||weatheredView,lattice=block&&scale>=4?previewLattice:null,sourceSerial=serial,sourceRev={...rev};
+    const readWeather=exportArt||weatheredView,lattice=block&&scale>=2?previewLattice:null,sourceSerial=serial,sourceRev={...rev};
     const options=drawOptions?.()??api.drawOptions?.()??{},request={...rect,exportArt,worldSize:config.worldSize??config.size,worldGrid:fit?512:previewGridFor(scale,block)};
     // H6b: with the GPU fields on, the chunk's textures are made from the fields' buffers; no CPU read, no upload, no height patch kept.
     if(!exportArt)api.renderProgress?.('Shaping terrain…');
@@ -230,6 +233,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       previewLattice.trim();
     }
     const feed=fit?await previewFields.feed():lattice?await lattice.feed(planned,{weather:readWeather,signal,stale,deferTime:interacting()}):await api.gpuFeedSource?.(signal,() => renderer.requiredRegion(request,options),{weather:readWeather});   // H5b: a paged map prepares the pages under the chunk's lattice
+    if(warm){feed?.release?.();return null;}   // the canonical pages (shape and Time) stay prepared for the finals
     if(!exportArt)api.renderProgress?.('Rendering surface…');
     if(feed)try{
       signal?.throwIfAborted();
@@ -501,16 +505,25 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             if(middle.some(r=>!blockCurrent(blocks.get(blockKey(r,4*detailLevel()))))){
               for(const rect of middle)plan.push({rect,want:4*detailLevel(),block:true});
             }else{
-              const finalNow=released||quiet>=250||fineReady&&(quiet>=100||cheapFinal);
+              // The half-level picture is the resting state: it covers the stale ground first, and the finals wait until the artist has been
+              // idle for DRAFT_REST, so the GPU is free for the next edit instead of deep in tiles that edit would discard. Finals already
+              // measured as cheap (a color edit over kept records) still follow at once.
+              const draft=previewPlan(previewArea,2*detailLevel()).sort((a,b)=>dist(a)-dist(b)),draftReady=draft.every(r=>blockCurrent(blocks.get(blockKey(r,2*detailLevel()))));
+              const settled=fineReady&&(quiet>=100||cheapFinal),finalNow=settled||(released||quiet>=250)&&draftReady&&quiet>=DRAFT_REST;
               // Whole-map feeds retain old Time while a refresh is pending.
               // Keep the current coarse answer until canonical weather arrives;
               // paged feeds still prepare their fresh canonical pages on demand.
               const waitCanonical=weatheredView&&api.canExport&&!api.canExport()&&!api.previewScene().paged;
               if(waitCanonical)wakeLadder(100);
               else{
-                if(holding||!finalNow)for(const rect of previewPlan(previewArea,2*detailLevel()).sort((a,b)=>dist(a)-dist(b)))plan.push({rect,want:2*detailLevel(),block:true});
+                if(holding||!finalNow)for(const rect of draft)plan.push({rect,want:2*detailLevel(),block:true});
                 if(!holding&&finalNow){for(const rect of jobs)if(intersects(rect,v)&&(released||quiet>=100||cache.get(cacheKey(rect,size))?.finalCostMs<=50))plan.push({rect,want:detailLevel()});}
-                else wakeLadder(Math.max(16,250-quiet));
+                else{
+                  // While the draft rests, the finals' canonical pages are prepared, so the first final starts when the rest ends.
+                  const warmDue=draftReady&&!holding&&!previewing&&warmedSerial!==serial;
+                  if(warmDue&&quiet>=250)for(const rect of jobs)if(intersects(rect,v)&&!currentFinal(cache.get(cacheKey(rect,size))))plan.push({rect,want:detailLevel(),warm:true});
+                  wakeLadder(Math.max(16,(draftReady&&!(warmDue&&quiet<250)?DRAFT_REST:250)-quiet));
+                }
               }
             }
           }else wakeLadder(100-quiet);
@@ -530,7 +543,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         // cache, geometry/Time edit or navigation still replans immediately.
         const canContinueColor=color=>color&&allColor&&lastInput?.stage==='F'&&jobs.every(r=>!intersects(r,v)||colorCurrent(cache.get(cacheKey(r,size))));
         const colorResults=new Map();
-        try{for(const [jobIndex,{rect,want,block=false,fineTurn=false,color=false}] of plan.entries()){
+        try{for(const [jobIndex,{rect,want,block=false,fineTurn=false,color=false,warm=false}] of plan.entries()){
           if((token!==serial&&!canContinueColor(color))||viewToken!==viewEpoch||busy||previewing!==interacting()){rerun=true;break;}
           if((previewing||navigating()||want<1)&&!intersects(rect,v))continue;   // a detail level bakes only what is seen: its ring would evict itself
           if(block){
@@ -554,6 +567,13 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             const state=renderer.specKey();
             if(e.pipelineKey===state.key&&!renderer.specCache.has(state.key)&&!pipelineWaits.has(state.key))watchPipelines(state.key,renderer.specialize(state));
             if(token!==serial||viewToken!==viewEpoch){rerun=true;break;}continue;
+          }
+          if(warm){
+            const controller=new AbortController();activeBake={controller,rect};
+            try{await bake(rect,false,controller.signal,()=>token!==serial||busy||viewToken!==viewEpoch||interacting(),want,false,false,true);}
+            finally{if(activeBake?.controller===controller)activeBake=null;}
+            if(token!==serial||viewToken!==viewEpoch||interacting()){rerun=true;break;}
+            if(jobIndex===plan.length-1)warmedSerial=serial;continue;
           }
           if(fineTurn){fineSinceCoarse=true;}
           const key=cacheKey(rect,size);let e=cache.get(key);let baked=false;
