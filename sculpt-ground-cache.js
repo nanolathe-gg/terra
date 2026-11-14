@@ -36,7 +36,7 @@ export class GroundCache {
   if(this.pool!==pool||String(this.layers)!==String(layers)||this.entries?.length!==entries.length||this.planes!==planes){
    this.allocate(layers.length?pool:1,Math.max(1,planes),Math.max(1,layers.length));this.pool=pool;this.layers=layers;
   }
-  const r=this.renderer,table=r.uniform.get('ground');r.f('uPool',pool);
+  const r=this.renderer,table=r.uniform.get('ground');
   this.entries=entries;this.planes=planes;
   for(let slot=0;slot<table.count;slot++){const set=(k,v)=>r.uniformView.setInt32(table.offset+slot*table.stride+table.members.get(k).offset,v,true);set('cacheLayer',layers.indexOf(slot));set('colorLayer',layers.indexOf(slot));}
   r.i('uGroundAny',layers.length?1:0);
@@ -66,13 +66,13 @@ export class GroundCache {
    const program=this.entries[row].program,id=programKey(program);
    if(!this.pipelines.has(id)){
     if(this.pipelines.size>=16)this.pipelines.delete(this.pipelines.keys().next().value);
-    this.pipelines.set(id,r.device.createComputePipeline({label:'material graph',layout:'auto',compute:{module:r.device.createShaderModule({label:'material graph',code:this.source.replace('/*MATERIAL_PROGRAM*/',programSource(program))}),entryPoint:'groundMain'}}));
+    this.pipelines.set(id,r.device.createComputePipeline({label:'material graph: '+program.steps.map(s=>s.type==='noise'?s.kind:s.type).join(' → '),layout:'auto',compute:{module:r.device.createShaderModule({label:'material graph',code:this.source.replace('/*MATERIAL_PROGRAM*/',programSource(program))}),entryPoint:'groundMain'}}));
    }
    const pipeline=this.pipelines.get(id);
    const job=r.device.createBuffer({size:16,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});buffers.push(job);
    r.device.queue.writeBuffer(job,0,new Uint32Array([slot,this.entries[row].cacheLayer,row,0]));
    const pass=encoder.beginComputePass({label:'ground recipe'});pass.setPipeline(pipeline);
-   pass.setBindGroup(0,r.device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:r.uniformBuffer}},{binding:15,resource:{buffer:this.programBuffer}}]}));
+   pass.setBindGroup(0,r.device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:15,resource:{buffer:this.programBuffer}}]}));
    pass.setBindGroup(1,r.device.createBindGroup({layout:pipeline.getBindGroupLayout(1),entries:[{binding:0,resource:this.texture.createView({dimension:'2d-array'})},{binding:1,resource:{buffer:job}},{binding:2,resource:this.maskTexture.createView({dimension:'2d-array'})}]}));
    pass.dispatchWorkgroups(Math.ceil(pool/8),Math.ceil(pool/8));pass.end();this.keys.set(row,key);this.generations++;
   }

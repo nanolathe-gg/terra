@@ -18,7 +18,7 @@ const differences=(a,b)=>{let pixels=0,max=0;for(let i=0;i<a.length;i+=4){let d=
 function paletteStatistics(a,b){
  const n=a.length/4,means=[0,0,0],hist=new Map();let blockMax=0,blockMean=0;
  for(let i=0;i<a.length;i+=4){for(let c=0;c<3;c++)means[c]+=(b[i+c]-a[i+c])/n;const x=[...a.subarray(i,i+3)].join(','),y=[...b.subarray(i,i+3)].join(',');hist.set(x,(hist.get(x)??0)-1);hist.set(y,(hist.get(y)??0)+1);}
- for(let y=0;y<1024;y+=16)for(let x=0;x<1024;x+=16)for(let c=0;c<3;c++){let diff=0;for(let j=0;j<16;j++)for(let i=0;i<16;i++){const at=((y+j)*1024+x+i)*4+c;diff+=b[at]-a[at];}diff=Math.abs(diff/256);blockMax=Math.max(blockMax,diff);blockMean+=diff/(64*64*3);}
+ const size=Math.sqrt(n);for(let y=0;y<size;y+=16)for(let x=0;x<size;x+=16)for(let c=0;c<3;c++){let diff=0;for(let j=0;j<16;j++)for(let i=0;i<16;i++){const at=((y+j)*size+x+i)*4+c;diff+=b[at]-a[at];}diff=Math.abs(diff/256);blockMax=Math.max(blockMax,diff);blockMean+=diff/((size/16)**2*3);}
  return {meanRGBDelta:means,paletteFrequencyDelta:Math.max(...[...hist.values()].map(Math.abs))/n,blockMeanDelta:blockMean,blockMaxDelta:blockMax};
 }
 async function palette(){const r=s.renderer,size=r.groundCache.pool,row=size*4,buffer=r.device.createBuffer({size:row*size,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});const e=r.device.createCommandEncoder();e.copyTextureToBuffer({texture:r.groundCache.colorTexture},{buffer,bytesPerRow:row},[size,size,1]);r.device.queue.submit([e.finish()]);await buffer.mapAsync(GPUMapMode.READ);const bytes=new Uint8Array(buffer.getMappedRange()).slice();buffer.unmap();buffer.destroy();return bytes;}
@@ -26,7 +26,7 @@ async function raw(){
  const r=s.renderer,n=r.groundCache.pool,b=r.device.createBuffer({size:n*n*16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC}),read=r.device.createBuffer({size:n*n*16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
  const pipeline=r.device.createComputePipeline({layout:'auto',compute:{module:r.device.createShaderModule({code:preprocess(`/*COMMON*/
 @group(1) @binding(0) var<storage,read_write> output:array<vec4f>;
-@compute @workgroup_size(8,8) fn main(@builtin(global_invocation_id) id:vec3u){if(any(id.xy>=vec2u(u32(u.pool)))){return;}output[id.y*u32(u.pool)+id.x]=vec4f(materialRaw(vec2f(id.xy),1u),1);}`,r.commonSource,new Set())}),entryPoint:'main'}});
+@compute @workgroup_size(8,8) fn main(@builtin(global_invocation_id) id:vec3u){if(any(id.xy>=vec2u(textureDimensions(groundTex).x))){return;}output[id.y*textureDimensions(groundTex).x+id.x]=vec4f(materialRaw(vec2f(id.xy),1u),1);}`,r.commonSource,new Set())}),entryPoint:'main'}});
  const e=r.device.createCommandEncoder(),pass=e.beginComputePass();pass.setPipeline(pipeline);pass.setBindGroup(0,r.device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:r.uniformBuffer}},{binding:13,resource:r.groundCache.texture.createView({dimension:'2d-array'})}]}));pass.setBindGroup(1,r.device.createBindGroup({layout:pipeline.getBindGroupLayout(1),entries:[{binding:0,resource:{buffer:b}}]}));pass.dispatchWorkgroups(n/8,n/8);pass.end();e.copyBufferToBuffer(b,0,read,0,n*n*16);r.device.queue.submit([e.finish()]);await read.mapAsync(GPUMapMode.READ);const f=new Float32Array(read.getMappedRange()).slice();read.unmap();b.destroy();read.destroy();return f;
 }
 async function sample(p){const list=addGround([],p,p.name).grounds;list[0].worldGround=true;s.setGrounds(list);s.renderer.variant.set('view','color');s.renderer.applyKnobs();const color=await renderWindow(s,rect),grain=await palette(),float=await raw();s.renderer.variant.delete('view');s.renderer.applyKnobs();const shaded=await renderWindow(s,rect);return {color,grain,shaded,list,float};}
@@ -35,9 +35,10 @@ try{
   if(process.argv.includes('--capture')){const data=await sample(GROUND_PRESETS[key]);for(const part of ['color','grain','shaded','float'])writeFileSync(out+'/'+key+'-'+part+'.bin',Buffer.from(data[part].buffer));continue;}
   const before=Object.fromEntries(['color','grain','shaded','float'].map(part=>{const b=readFileSync(out+'/'+key+'-'+part+'.bin');return [part,part==='float'?new Float32Array(b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength)):b];}));
   const after=await sample(GROUND_PRESETS[key]);
+  assert.equal(after.grain.length,before.grain.length,'Baseline repeat size differs; capture a matching baseline before comparing.');
   let f=0,max=0;for(let i=0;i<before.float.length;i++){const d=Math.abs(before.float[i]-after.float[i]);if(d)f++;max=Math.max(max,d);}
   report[key]={floatComponentsChanged:f,floatMaxDifference:max,nodes:after.list[0].steps.length,paletteStatistics:paletteStatistics(before.grain,after.grain),color:differences(before.color,after.color),shaded:differences(before.shaded,after.shaded),paletteRepeat:differences(before.grain,after.grain)};
-  for(const [label,bytes]of [['before',before.grain],['after',after.grain]])writeFileSync(out+'/'+key+'-palette-'+label+'.png',encodePng(1024,1024,bytes));
+  for(const [label,bytes]of [['before',before.grain],['after',after.grain]])writeFileSync(out+'/'+key+'-palette-'+label+'.png',encodePng(Math.sqrt(bytes.length/4),Math.sqrt(bytes.length/4),bytes));
   writeFileSync(out+'/'+key+'-before.png',encodePng(128,128,before.shaded));writeFileSync(out+'/'+key+'-after.png',encodePng(128,128,after.shaded));
   console.log(key,JSON.stringify(report[key]));
  }

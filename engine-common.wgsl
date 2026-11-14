@@ -1078,21 +1078,22 @@ fn groundHeight(p:vec2f)->f32 {
     return mix(mix(groundHeightFor(p,cell),groundHeightFor(p,cell+vec2i(1,0)),f.x),
                mix(groundHeightFor(p,cell+vec2i(0,1)),groundHeightFor(p,cell+vec2i(1,1)),f.x),f.y);
 }
+fn materialPixel(p:vec2f)->vec2f {return poolWrap(floor(p),f32(textureDimensions(groundTex).x));}
 fn groundFinishNoise(p:vec2f,size:f32,salt:f32)->f32 {
-    let count=max(1.0,u.pool/max(1.0,size));let n=exp2(floor(log2(count)));let q=poolPos(p)/u.pool;
+    let period=f32(textureDimensions(groundTex).x);let count=max(1.0,period/max(1.0,size));let n=exp2(floor(log2(count)));let q=poolWrap(p,period)/period;
     return mix(wrapNoise(q*n+salt,n),wrapNoise(q*(n*2.0)+salt,n*2.0),fract(log2(count)));
 }
 
 // One graph produces all material channels; composition happens inside it.
 fn materialRaw(p:vec2f,slot:u32)->vec3f {
- return textureLoad(groundTex,vec2i(poolPixel(p)),u.ground[slot & groundMask].cacheLayer,0).rgb;
+ return textureLoad(groundTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).rgb;
 }
 fn materialRelief(p:vec2f,slot:u32)->f32 {
- return textureLoad(groundTex,vec2i(poolPixel(p)),u.ground[slot & groundMask].cacheLayer,0).w;
+ return textureLoad(groundTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).w;
 }
 struct MaterialFinish { shine:vec4f, wetness:f32 }
 fn materialSurface(p:vec2f,slot:u32)->MaterialFinish {
- let r=u.ground[slot & groundMask];let f=textureLoad(materialFinishTex,vec2i(poolPixel(p)),r.cacheLayer,0);
+ let r=u.ground[slot & groundMask];let f=textureLoad(materialFinishTex,vec2i(materialPixel(p)),r.cacheLayer,0);
  return MaterialFinish(vec4f(f.z,r.sharpness,f.x,r.roughnessScale),f.y);
 }
 fn materialContinuous(p:vec2f,slot:u32)->vec3f {return materialRaw(p,slot);}
@@ -1100,7 +1101,7 @@ fn materialPigment(p:vec2f,slot:u32)->vec3f {
  let r=u.ground[slot & groundMask];let raw=materialContinuous(p,slot);
  if(r.textureDither<=0.0){return raw;}
 
- return mix(raw,textureLoad(groundColorTex,vec2i(poolPixel(p)),r.colorLayer,0).rgb,r.textureDither);
+ return mix(raw,textureLoad(groundColorTex,vec2i(materialPixel(p)),r.colorLayer,0).rgb,r.textureDither);
 }
 
 fn hasGround()->bool { return u.groundAny != 0 && u.ground[gs & groundMask].cacheLayer >= 0; }

@@ -5,7 +5,7 @@
 
 import {materialRows,tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {GroundCache,writeGroundData} from './sculpt-ground-cache.js';
-import {copyGroundRecipe,groundCacheUsage} from './sculpt-ground-presets.js';
+import {copyGroundRecipe,groundCacheUsage,MATERIAL_REPEAT} from './sculpt-ground-presets.js';
 import {columnRows,columnColors} from './sculpt-column.js';
 import {LOW_GROUND_RGB} from './sculpt-knobs.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
@@ -1115,7 +1115,7 @@ export class TerrainRenderer {
       if (!Number.isInteger(slot) || slot < 0 || slot >= table.count) throw new Error('Ground slots must be 0 to 7.');
       checked.set(slot, copyGroundRecipe(recipe));
     }
-    const usage=groundCacheUsage(checked.size,groundPool(this.config.material));
+    const usage=groundCacheUsage(checked.size,MATERIAL_REPEAT);
     if(!usage.fits)throw Error(`These materials need ${(usage.bytes/1048576).toFixed(0)} MiB; the cache budget is 128 MiB. Use fewer assigned materials.`);
     this.i('uGroundDefault',[...grounds].find(([,p])=>p.worldGround)?.[0]??0);
     this.i('uWaterGround',[...grounds].find(([,p])=>p.worldWater)?.[0]??0);
@@ -1129,7 +1129,7 @@ export class TerrainRenderer {
     // Keep only the latest recipe here. Reserve a changed layout for memory
     // planning, but submit no generation work. bakeFields synchronizes the cache
     // inside the draw cycle, after the chunk renderer's GPU completion fence.
-    this.groundCache.prepare(groundPool(this.config.material), this.grounds);
+    this.groundCache.prepare(MATERIAL_REPEAT, this.grounds);
     this.fieldsDirty = true;
     this.uniformsDirty = true;
   }
@@ -1271,7 +1271,7 @@ export class TerrainRenderer {
 
   // Encodes the bake into the given encoder, or submits it on its own.
   bakeFields(encoder = null, timer = null) {
-    this.groundCache.sync(groundPool(this.config.material), this.grounds);
+    this.groundCache.sync(MATERIAL_REPEAT, this.grounds);
     this.syncWorld();
     this.i('uWeatherMaps', Boolean(this.weatherMaps));
     const own = !encoder;

@@ -180,15 +180,46 @@ export function materialRenderKey(recipe){
 export const programKey=program=>JSON.stringify(program.instructions.map(({code,links})=>[code,links]));
 export function programSource(program){
  const lines=[],ref=(i,stage,fallback)=>i<0?fallback:stage+i;
- program.instructions.forEach(({code,links},i)=>{
-  lines.push(`let s${i}=MaterialStep(vec4i(${code.join(',')}),vec4i(${links.join(',')}),graph.steps[${i}].args);`);
-  lines.push(`layerRecipe=graph.recipe;let v${i}=generateStep(s${i},${ref(links[0],'v','vec4f(0)')},${ref(links[1],'v','vec4f(0)')},${ref(links[2],'v','vec4f(1)')},point);`);
+ const call=({code,links},i,stage)=>{
+  const a=ref(links[0],stage,'vec4f(0)'),b=ref(links[1],stage,'vec4f(0)'),c=ref(links[2],stage,'vec4f(1)'),s=`s${i}`;
+  if(!code[1])return code[0]===1?(links[0]<0?'vec4f(point,0,0)':a):[2,3,4,5,6,11].includes(code[0])?'vec4f(0)':a;
+  switch(code[0]){
+   case 1:return `stepTransform(${s},${a},point)`;case 2:return `stepNoise(${s},${a},point)`;case 3:return `stepFine(${s},${a},point)`;
+   case 4:return `stepDots(${s},${a},point)`;case 5:return `stepSurface(${s},${a},point)`;case 6:return `stepConstant(${s})`;
+   case 7:return `stepRemap(${s},${a})`;case 8:return `stepCombine(${s},${a},${b},${c})`;case 9:return `stepGradient(${s},${a})`;
+   case 10:return `stepChannel(${s},${a})`;case 11:return `stepHash(${s},point)`;case 12:return `stepOutput(${s},${a})`;
+  }
+ };
+ program.instructions.forEach((instruction,i)=>{
+  lines.push(`let s${i}=graph.steps[${i}];`);
+  lines.push(`layerRecipe=graph.recipe;let v${i}=${call(instruction,i,'v')};`);
  });
  lines.push('var color=vec3f(0);var height=0.0;var finish=vec3f(graph.recipe.roughness,graph.recipe.wetness,graph.recipe.gloss);');
- program.instructions.forEach(({code,links},i)=>{
-  const value=code[2]>=0?`vec4f(sampledHalf(v${i}.xy),sampledHalf(v${i}.zw))`:code[0]>=6?`stepValue(s${i},${ref(links[0],'m','vec4f(0)')},${ref(links[1],'m','vec4f(0)')},${ref(links[2],'m','vec4f(1)')},point)`:`v${i}`;
+ program.instructions.forEach((instruction,i)=>{
+  const {code}=instruction,value=code[2]>=0?`vec4f(sampledHalf(v${i}.xy),sampledHalf(v${i}.zw))`:code[0]>=6?call(instruction,i,'m'):`v${i}`;
   lines.push(`let m${i}=${value};`);
   if(code[0]===12&&code[1])lines.push(code[3]===0?`color=m${i}.rgb;`:code[3]===1?`height=m${i}.x;`:`finish[${code[3]-2}]=clamp(m${i}.x,0.0,1.0);`);
  });
  return lines.join('\n');
+}
+
+// Inspect only the selected node's dependency branch. The temporary recipe
+// uses ordinary nodes and the same renderer; it never enters the map or Undo.
+export function nodePreviewRecipe(recipe,id){
+ const byId=new Map(recipe.steps.map(s=>[s.id,s])),selected=byId.get(id);if(!selected)return null;
+ const needed=new Set();const visit=s=>{if(!s||needed.has(s.id))return;needed.add(s.id);for(const k of refKeys)visit(byId.get(s[k]));};visit(selected);
+ const p=structuredClone(recipe);p.worldGround=false;p.knobs.textureDither=0;
+ p.steps=p.steps.filter(s=>needed.has(s.id));let type=stepTypes(p.steps).get(id),source=id,description=type==='color'||selected.type==='output'&&selected.target==='color'?'Color output':'Grayscale output';
+ const add=(type,props={})=>{const node=makeStep(type,p.steps);Object.assign(node,props);p.steps.push(node);return node.id;};
+ if(type==='position'){
+  source=add('noise',{name:'Reference cells',source:id,params:{patternSize:24,patternDetail:0,patternCells:1}});
+  description='Coordinates shown on reference cells';
+ }else if(type==='surface'){
+  source=add('channel',{source:id,params:{channel:0}});description='Surface height · zero is mid-gray';
+ }
+ if(selected.type==='output'){
+  const out=p.steps.find(s=>s.id===id);out.target='color';
+  if(selected.target==='height'){out.params.scale/=16;out.params.offset=.5+out.params.offset/16;description='Height · zero is mid-gray';}
+ }else add('output',{name:'Node preview',target:'color',source,params:type==='surface'?{scale:1/16,offset:.5}:{scale:1,offset:0}});
+ p.steps=copySteps(p.steps);return {recipe:p,description};
 }

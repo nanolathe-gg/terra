@@ -5,6 +5,8 @@ import {TEXTURE_CONTROLS,copyTextureColors,copyTexturePalette} from './sculpt-te
 // Absolute ground recipes. Slots 1–7 belong to the map; slot 0 belongs to the world.
 // Colors are continuous RGB; numeric palette references normalize to RGB on input.
 export const GROUND_SLOTS = 8;
+// Authored graph materials have their own repeat, independent of world ground.
+export const MATERIAL_REPEAT = 512;
 export const GROUND_CACHE_BYTES = 128 * 1024 * 1024;
 export const GROUND_CONTROLS = [
  ...TEXTURE_CONTROLS.map(([key,,lo,hi,def])=>[key,lo,hi,def]),

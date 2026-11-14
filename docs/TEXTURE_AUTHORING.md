@@ -7,8 +7,10 @@ map's renderer, undo history, save file, embedded world settings, and export.
 ## Minimal graph editor
 
 Open **Materials** in the global toolbar. The World and Water panels also
-link to the same editor. Choose a preset on the left. The graph occupies the center; the live
-preview and selected node's controls stay together on the right. All numerical
+link to the same editor. The compact material selector stays at the top;
+**Manage material** holds presets, naming, copy/paste, and reset. The graph gets
+the main workspace, node settings scroll on the right, and the final texture
+and selected-node output remain visible together in a fixed preview dock. All numerical
 controls use Terraform's shared scrubs, including drag, Shift-drag, arrows, and
 Enter/double-click to type.
 
@@ -20,14 +22,18 @@ Enter/double-click to type.
   cycles are rejected with an explanation. Click a connected input dot to
   disconnect it, or click **×** beside its source menu. Undo restores the wire.
 - Drag a node to position it. Drag empty space to pan; scroll to zoom. **Fit**
-  frames the graph and **Arrange** lays it out from sources to outputs.
+  frames the graph and **Arrange** groups related branches from sources to
+  outputs. Long edges reserve space during layout. Orthogonal wires route
+  through free gutters around cards; selecting a node highlights its connections.
 - **Enabled** bypasses an operation; disabled generators produce zero. Coordinate
   transforms pass their coordinates through. Disabled outputs contribute nothing.
 - **Delete** removes the node and its connections. Disconnected numeric inputs
   use zero; an absent blend mask uses one. Undo restores the node and its wires.
-- **Selected node** in the preview menu shows a grayscale field or color result
-  using the same renderer. Final shading, continuous color, palette color,
-  height, roughness, and wetness remain available. Preview terrain is optional.
+- The final texture never switches to a node diagnostic. The second preview
+  follows the selected node: grayscale fields, RGB gradients/combines, or height
+  with zero at mid-gray. Coordinates warp a reference cellular pattern. These
+  are temporary ordinary graphs rendered by the same GPU operations, not saved
+  recipes or new node types. **Preview setup** holds the sample height and slope.
 - **Reset to preset** restores the complete authored graph and palette. It keeps
   the material name and assignments and is one reversible map edit.
 
@@ -90,7 +96,9 @@ renderer remains. Reset to preset restores the current reviewed construction.
 draws the graph; `sculpt-material-step-panel.js` edits it using the site's controls.
 `engine-ground.wgsl` evaluates the graph once per repeated material texel. The
 compiler emits straight-line GPU operations instead of interpreting two dynamic
-40-element arrays at every pixel. Pipelines are cached by graph topology and
+40-element arrays at every pixel. It calls each operation directly, keeping
+unused generator branches out of the reachable shader; this also avoids Metal
+compiler failures observed when switching node previews. Pipelines are cached by graph topology and
 operation; numeric settings remain uniforms. Preview, terrain, and export use
 the same compiler and shader operations.
 Scalar sampling boundaries retain the preceding renderer's truncating half-float
@@ -98,28 +106,35 @@ precision before color mapping. Finished RGB and height are cached in
 `rgba32float`; surface finish uses `rgba16float`. Terrain and water read
 these same caches, without interpreting a graph at each terrain sample.
 
-The fixed 128 MiB material-cache budget is unchanged. Each graph uses 28 bytes
-per repeat pixel: color/height, surface finish, and palette output. A material at
-its 1024-pixel repeat uses 28 MiB; four fit (112 MiB). Program-table storage and
-temporary diffusion buffers count toward the renderer's overall budget.
+Graph materials now repeat every **512 pixels**, as requested. This is separate
+from the pre-existing world's ground period: those world settings and original
+textures are unchanged. Generation derives its period from its output texture;
+terrain, water, and diffusion sample that same period.
+
+Each graph uses 28 bytes per repeat pixel: color/height, surface finish, and
+palette output. The 512×512 repeat costs **7 MiB** per material, down from 28 MiB
+at 1024. It has at most **256 distinct 32×32 tile positions** at one flat height
+and lighting condition, versus 1,024 at 1024. Changed lighting, relief and edges
+can create additional exported tiles. Seven assigned graphs fit in 49 MiB;
+the fixed 128 MiB material-cache budget remains unchanged. Program storage and
+temporary diffusion buffers also count toward the overall renderer budget.
+
+512 is a cost/repetition tradeoff, not a resolution reduction: one texel is still
+one art pixel. A shorter repeat changes procedural lattice wrapping and palette
+diffusion, so the new textures are not expected to match the old 1024 repeat
+byte for byte. The graph recipes, colors, and authored pattern scales stay the
+same; fewer unique tile positions repeat sooner.
 
 Opening the material editor suspends terrain scheduling, including reloads and
-weather work. The preview coalesces changes to one active job and the latest
-pending recipe. Its 256×256 sample displays art at 1×. Drafts render immediately;
-120 ms after input settles, palette diffusion finishes the same sample. Palette
-settings no longer regenerate the procedural fields. Readback and tile counting
-happen only for the finished sample. The full repeat remains available for exact
-periodicity and consistent diffusion; no CPU texture engine or special preview
-shader is introduced.
+weather work. Final and node swatches share one renderer and serialize their
+jobs. Each swatch retains only its latest pending recipe. Selecting a node does
+not request a new final image. Desktop swatches are 256×256 at 1×; narrow layouts
+scale both down while keeping both visible and letting the inspector scroll.
 
-Measured on the same machine with one before/after run, excluding the first
-edit of each preset: live previews improved from **316–368 ms to 32–40 ms**;
-finished dithered previews improved from **639–716 ms** (Blue water 625–634 ms)
-to **176–234 ms**. These are small-swatch authoring measurements, not terrain
-performance claims. By eye, the four before/after palette samples retain their
-appearance. The largest palette-frequency delta is 0.027 percentage points.
-The small 1,255,440-byte export replays exactly (1,142 distinct tiles); its hash
-changes because some individual dither pixels moved.
+Drafts render immediately; 120 ms after input settles, palette diffusion
+finishes the final sample. Node previews skip diffusion and tile counting.
+Palette-only edits retain generated fields. No CPU texture engine or special
+preview shader is introduced.
 
 A new topology still has a first-use GPU compilation cost. Numeric slider edits
 reuse its pipeline. `repro/material-preview-perf.mjs --server <url> --port <cdp>
@@ -135,14 +150,23 @@ switching, both disconnect interactions, node previews, color/height editing,
 undo/reset, graph layout saving, and mobile containment. Terrain submits no GPU
 work while the modal is open, including a map reload.
 
-The full-repeat continuous colors and sampled shaded output are compared against
-the previous procedural baseline. Recompiling GPU arithmetic changes some
-individual palette diffusion decisions near ties. The comparison reports these
-changed pixels and the RGB/palette distribution separately; it does not claim
-bit-identical dither output. Export must remain deterministic on replay.
+`repro/material-design.test.mjs` checks independent preview recipes, deterministic
+layout, unobstructed routes across the four reviewed graphs, and 7 MiB cache
+accounting. `repro/material-repeat.mjs` checks the 512px horizontal and vertical
+repeat, regional equivalence, and retention of the world's original 1024px
+period on a small authored fixture. It probes the material sampler directly;
+projected terrain pixels can sample different surface hit points and are not a
+texture-period test. Regional rendering is checked separately.
+
+This pass: 16 focused unit tests passed; all four material samplers and regional
+renders matched exactly; the browser interaction check reported no errors and
+zero terrain submissions while open. The small export replay was byte-exact
+(1,256,464 bytes, 1,143 unique tiles), with zero GPU errors. Its 120-input edit
+burst submitted no GPU work before a draw. Desktop/mobile layout was inspected
+by eye; no broad performance or scene suite was run.
 
 `repro/preset-components.mjs --capture` records a procedural baseline outside
-Git; run without that flag after the change to compare. `repro/material-steps-ui.mjs`
+Git; compare only baselines with the same repeat dimensions. `repro/material-steps-ui.mjs`
 requires explicit server and CDP ports. These checks do not import retail art.
 No full suite or broad scene/control sweep was run.
 
