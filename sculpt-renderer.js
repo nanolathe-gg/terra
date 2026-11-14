@@ -213,7 +213,7 @@ export class TerrainRenderer {
     this.layout = uniformLayout(preprocess(common, '', new Set()));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
-    this.uniformBuffer = device.createBuffer({size: this.layout.size, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
+    this.uniformBuffer = device.createBuffer({size: this.layout.size, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC});
     const compile = async (label, code) => {
       const module = device.createShaderModule({label, code});
       const messages = (await module.getCompilationInfo()).messages;
@@ -540,17 +540,19 @@ export class TerrainRenderer {
   }
 
   // Group 0 with the fields (draw) or the routes (bake) at binding 6.
-  commonBindGroup(kind) {
-    return this.bindGroups[kind] ??= this.device.createBindGroup({label: kind, layout: this.commonLayout, entries: [
-      {binding: 0, resource: {buffer: this.uniformBuffer}},
-      ...[this.heightTexture, this.textures.noise.texture].map((t, i) => ({binding: i + 1, resource: t.createView()})),
-      {binding: 4, resource: this.gridTexture.createView({dimension: '2d-array'})},
-      {binding: 6, resource: (kind === 'bake'||kind==='rock-weather' ? this.routeTexture : this.fieldsTexture).createView()},
+  commonBindGroup(kind,source=this,uniformBuffer=this.uniformBuffer) {
+    if(source===this&&this.bindGroups[kind])return this.bindGroups[kind];
+    const group=this.device.createBindGroup({label: kind, layout: this.commonLayout, entries: [
+      {binding: 0, resource: {buffer: uniformBuffer}},
+      ...[source.heightTexture, this.textures.noise.texture].map((t, i) => ({binding: i + 1, resource: t.createView()})),
+      {binding: 4, resource: source.gridTexture.createView({dimension: '2d-array'})},
+      {binding: 6, resource: (kind === 'bake'||kind==='rock-weather' ? source.routeTexture : source.fieldsTexture).createView()},
       {binding: 7, resource: this.linearClamp}, {binding: 8, resource: this.linearRepeat},
-      {binding: 9, resource: this.maskTexture.createView({dimension: '2d-array'})},
-      {binding:10,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.final??this.rockWeather.empty)).createView()},
-      {binding:11,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.source??this.rockWeather.empty)).createView()},
-      {binding:12,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.rim??this.rockWeather.empty)).createView()}]});
+      {binding: 9, resource: source.maskTexture.createView({dimension: '2d-array'})},
+      {binding:10,resource:(kind==='rock-weather'?source.rockWeather.empty:(source.rockWeather.final??source.rockWeather.empty)).createView()},
+      {binding:11,resource:(kind==='rock-weather'?source.rockWeather.empty:(source.rockWeather.source??source.rockWeather.empty)).createView()},
+      {binding:12,resource:(kind==='rock-weather'?source.rockWeather.empty:(source.rockWeather.rim??source.rockWeather.empty)).createView()}]});
+    if(source===this)this.bindGroups[kind]=group;return group;
   }
 
   // Group 1: the plain's tiles, the waters, the palette and the generated materials.
@@ -704,17 +706,19 @@ export class TerrainRenderer {
   async allocateGeometry(){
     const width=this.canvas.width+2,height=this.canvas.height+2,bytes=width*height*56;
     if(bytes>this.device.limits.maxStorageBufferBindingSize)throw Error('The geometry record exceeds the GPU memory storage binding limit.');
-    if(this.geometryRecord&&(!this.resources?.has(this.geometryRecord)||this.geometryRecord.size!==bytes)){this.release(this.geometryRecord);this.release(this.geometryTarget);this.geometryRecord=null;}
-    if(!this.geometryRecord)await terrainAllocation(this.device,()=>{
-      this.geometryRecord=this.device.createBuffer({label:'surface geometry record',size:bytes,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});this.track(this.geometryRecord,'surface geometry record',bytes,'working');
-      this.geometryTarget=this.device.createTexture({label:'geometry raster target',size:[width,height],format:this.format,usage:GPUTextureUsage.RENDER_ATTACHMENT});this.track(this.geometryTarget,'geometry raster target',width*height*4,'working');
+    if(this.geometryRecord&&(!this.resources.has(this.geometryRecord)||this.geometryRecord.size!==bytes)){this.release(this.geometryRecord);this.geometryRecord=null;}
+    if(this.geometryTarget&&(!this.resources.has(this.geometryTarget)||this.geometryTarget.width!==width||this.geometryTarget.height!==height)){this.release(this.geometryTarget);this.geometryTarget=null;}
+    if(!this.geometryRecord||!this.geometryTarget)await terrainAllocation(this.device,()=>{
+      if(!this.geometryRecord){this.geometryRecord=this.device.createBuffer({label:'surface geometry record',size:bytes,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});this.track(this.geometryRecord,'surface geometry record',bytes,'working');}
+      if(!this.geometryTarget){this.geometryTarget=this.device.createTexture({label:'geometry raster target',size:[width,height],format:this.format,usage:GPUTextureUsage.RENDER_ATTACHMENT});this.track(this.geometryTarget,'geometry raster target',width*height*4,'working');}
     });
     this.device.queue.writeBuffer(this.geometrySettings,0,new Uint32Array([width,height,0,0]));
   }
-  geometryBinding(layout){return this.device.createBindGroup({layout,entries:[{binding:0,resource:{buffer:this.geometryRecord}},{binding:1,resource:{buffer:this.geometrySettings}}]});}
-  encodeColor(commands,pipeline,rect,first,timer){
-    const pass=commands.beginRenderPass({label:'terrain color',colorAttachments:[{view:this.voxelColor.createView(),clearValue:{r:0,g:0,b:0,a:1},loadOp:first?'clear':'load',storeOp:'store'}],timestampWrites:timer?.timestampWrites});
-    pass.setPipeline(pipeline);pass.setScissorRect(...rect);pass.setBindGroup(0,this.commonBindGroup('draw'));pass.setBindGroup(1,this.materialBindGroup());pass.setBindGroup(3,this.geometryBinding(this.geometryInLayout));pass.draw(3);pass.end();timer?.encode(commands);
+
+  geometryBinding(layout,record=this.geometryRecord){return this.device.createBindGroup({layout,entries:[{binding:0,resource:{buffer:record}},{binding:1,resource:{buffer:this.geometrySettings}}]});}
+  encodeColor(commands,pipeline,rect,first,timer,{record=this.geometryRecord,group=this.commonBindGroup('draw'),target=this.voxelColor}={}){
+    const pass=commands.beginRenderPass({label:'terrain color',colorAttachments:[{view:target.createView(),clearValue:{r:0,g:0,b:0,a:1},loadOp:first?'clear':'load',storeOp:'store'}],timestampWrites:timer?.timestampWrites});
+    pass.setPipeline(pipeline);pass.setScissorRect(...rect);pass.setBindGroup(0,group);pass.setBindGroup(1,this.materialBindGroup());pass.setBindGroup(3,this.geometryBinding(this.geometryInLayout,record));pass.draw(3);pass.end();timer?.encode(commands);
   }
   // LP5 step 0 only: the current tile's color pass, never scheduler routing.
   async recolor(options=this.worldOptions){

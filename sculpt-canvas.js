@@ -93,7 +93,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     find('[data-memory]').textContent=`Terrain ${(gpu/MB).toFixed(1)} / ${gpuBudget/MB} MiB · heap ${(accounted/MB).toFixed(1)} / ${heapBudget/MB} MiB · ${cache.size} cached · ${evictions} evictions · ${canonicalSize}px bake${terrainBudget.reason?' · '+terrainBudget.reason:''}`;
     return {gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,gpuBudget,budgetReason:terrainBudget.reason,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,previewBlocks:blocks.size,previewBlockBytes:blockBytes,preview:previewFields.stats(),previewLattice:previewLattice?.stats()??null,finalizing,dirtyChunks:[...cache.values()].filter(e=>e.dirty).length,dirtyMarks,retainedInvalidations,evictions,bakes,hits,rebakes,levels:{quarter:[...cache.values()].filter(e=>(e.scale??1)>1).length,final:[...cache.values()].filter(e=>(e.scale??1)===1).length,quarterBytes:[...cache.values()].filter(e=>(e.scale??1)>1).reduce((n,e)=>n+e.bytes,0)},canonicalChunkSize:canonicalSize,displayChunkSize:viewChunkSize(),field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
   }
-  function remove(key) { const e=cache.get(key);if(!e)return;e.bitmap.close?.();cacheBytes-=e.bytes;cache.delete(key);evictions++; }
+  function remove(key) { const e=cache.get(key);if(!e)return;renderer.releaseColorTile(e.color);e.bitmap.close?.();cacheBytes-=e.bytes;cache.delete(key);evictions++; }
   // H6b: a bake from the GPU buffers records how many changes had been announced when it took them; it is still good if none announced since touched
   // its input (an edit elsewhere on the map, or a later move of the same stroke over other chunks, does not throw it away).
   const rev={B:0,C:0,D:0,E:0,F:0},changeLog=[];let lastInput=null;
@@ -109,10 +109,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       serial++;if(world)for(const s of new Set([stage,...fields.map(f=>f.stage),...channels.map(c=>c.stage)]))if(s in rev)rev[s]++;
       changeLog.push({serial,stage,rect});if(changeLog.length>256)changeLog.shift();
       for(const e of cache.values())if(!(refinement&&(e.fit||e.weathered===false))&&(!rect||intersects(rect,e.input??e))){
-        if(stage<='E'){e.finalCostMs=null;e.finalCostBudget=null;}
+        if(stage<='E'){renderer.releaseColorTile(e.color);e.color=null;e.finalCostMs=null;e.finalCostBudget=null;}
         if(!e.dirty){dirtyMarks++;tiles++;}e.dirty=true;retainedInvalidations++;
       }
-      for(const e of blocks.values())if(!rect||intersects(rect,e.input??e))e.dirty=true;
+      for(const e of blocks.values())if(!rect||intersects(rect,e.input??e)){if(stage<='E'){renderer.releaseColorTile(e.color);e.color=null;}e.dirty=true;}
       // Inputs invalidate metadata, not retained pixels. Replaying unchanged
       // tiles here competes with the new Time/draw work; results and camera
       // changes request their own composition.
@@ -131,7 +131,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function configureChunks() {
     if(budgetUpdating)return;budgetUpdating=true;
     try {
-      reservePreview();
+      renderer.trimColorTiles(()=>renderer.colorBytes<=colorReserve());reservePreview();
       // Keep the export's fixed trial. The view uses the actual budget below.
       const reserve=fixedGPU(false)-(previewReserved?64*MB:0)+512*512*8;   // the bake lattice does not depend on what the GPU fields hold
       finest=.25;canonicalSize=Math.min(512,renderer.chunkSize(undefined,128*MB,reserve));
@@ -331,7 +331,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(entry.block)g.restore();
   }
   const blockKey=(r,level)=>[r.x,r.y,r.width,r.height,level,weatheredView].join(',');
-  function dropBlocks(predicate=()=>true){for(const [key,e]of blocks)if(predicate(e)){blockBytes-=e.bytes;blocks.delete(key);}}
+  function dropBlocks(predicate=()=>true){for(const [key,e]of blocks)if(predicate(e)){renderer.releaseColorTile(e.color);blockBytes-=e.bytes;blocks.delete(key);}}
   function wakeLadder(delay){clearTimeout(ladderTimer);ladderTimer=setTimeout(()=>{ladderTimer=null;schedule();},Math.max(0,delay));}
   function previewSignature(r,level,q,e){return [r.x,r.y,r.width,r.height,level,...q.gridOrigin,q.gridWidth,q.gridHeight,q.fieldsX,q.fieldsY,q.fieldsWidth,q.fieldsHeight,e.workingBytes].join(',');}
   function previewCost(rect,level,options=drawOptions?.()??api.drawOptions?.()??{},visibleBytes=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0)){
@@ -355,6 +355,17 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     return planPreviewBlocks(area,map,rect=>{const {required,estimate,total}=previewCost(rect,level,options,visibleBytes);
       return !previewRejects.has(previewSignature(rect,level,required,estimate))&&total<=gpuBudget;
     });
+  }
+  function colorInputCurrent(e){return e?.color&&!e.color.retired&&!changedSince(e.color.serial,e.input,'E')&&e.weathered===weatheredView&&(!e.weathered||e.weatherRevB>=rev.B);}
+  function colorCurrent(e){return colorInputCurrent(e)&&!offLevel(e,detailLevel());}
+  async function retainColor(entry){
+    const v=state();if(overview||!entry.fed||(!entry.block&&entry.scale!==detailLevel()||entry.block&&entry.scale!==4*detailLevel())||!intersects(entry,v)||changedSince(entry.serial,entry.input,'E'))return;
+    const limit=colorReserve();if(!limit)return;
+    const cost=renderer.colorTileBytes(),at=focus??[v.x+v.width/2,v.y+v.height/2],distance=e=>e.block?-1:Math.hypot(e.x+e.width/2-at[0],e.y+e.height/2-at[1]);
+    if(cost>limit)return;
+    for(const e of [...cache.values()].filter(e=>e.color).sort((a,b)=>distance(b)-distance(a))){if(renderer.colorBytes+cost<=limit)break;if(distance(e)<=distance(entry))return;renderer.releaseColorTile(e.color);e.color=null;}
+    if(renderer.colorBytes+cost>limit)return;
+    const tile=await renderer.retainColorTile();if(tile){tile.serial=entry.serial;tile.rect={x:entry.x,y:entry.y,width:entry.width,height:entry.height};if(changedSince(entry.serial,entry.input,'E'))renderer.releaseColorTile(tile);else entry.color=tile;}
   }
   function blockCurrent(e){return e&&!e.dirty&&!changedSince(e.serial,e.input)&&e.weathered===weatheredView&&(!e.weathered||e.weatherRevB>=rev.B);}
   function presentView() {
@@ -409,6 +420,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         // Time edits get an 8 px first view, then the existing 4/2/final ladder.
         const coarseLevel=(previewLattice&&lastInput?.stage==='B'?8:4)*detailLevel();
         dropBlocks(e=>!intersects(e,v));
+        for(const e of cache.values())if(e.color&&(!intersects(e,v)||e.color.retired)){renderer.releaseColorTile(e.color);e.color=null;}
         for(let y=Math.max(0,Math.floor(v.y/size)-1)*size;y<Math.min(map.height,v.y+v.height+size);y+=size)for(let x=Math.max(0,Math.floor(v.x/size)-1)*size;x<Math.min(map.width,v.x+v.width+size);x+=size)jobs.push({x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)});
         const dist=r=>Math.hypot(r.x+r.width/2-at[0],r.y+r.height/2-at[1]);jobs.sort((a,b)=>intersects(b,v)-intersects(a,v)||dist(a)-dist(b));
         const near={x:v.x-size,y:v.y-size,width:v.width+size*2,height:v.height+size*2};for(const e of cache.values())if(!intersects(e,near))e.heightPatch=null;
@@ -420,7 +432,14 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           for(let i=1;i<n;i++){const p=jobs[i-1],distance=r=>(r.x-p.x)**2+(r.y-p.y)**2;let best=i;for(let j=i+1;j<n;j++)if(distance(jobs[j])<distance(jobs[best]))best=j;const [next]=jobs.splice(best,1);jobs.splice(i,0,next);}
         }
         const plan=[],stale=jobs.filter(r=>intersects(r,v)&&!currentFinal(cache.get(cacheKey(r,size))));
-        if(overview)for(const rect of jobs)plan.push({rect,want:displayLevel()});
+        const colorJobs=lastInput?.stage==='F'&&!holding?stale.filter(r=>colorCurrent(cache.get(cacheKey(r,size)))):[];
+        // A partial cache gets one fast tile, then yields to the whole-view
+        // preview. Repeated input must not starve uncovered ground behind F.
+        const colorViewCurrent=[...blocks.values()].some(e=>e.level===coarseLevel&&blockCurrent(e)&&e.x<=v.x&&e.y<=v.y&&e.x+e.width>=Math.min(map.width,v.x+v.width)&&e.y+e.height>=Math.min(map.height,v.y+v.height));
+        const colorBlock=lastInput?.stage==='F'&&!holding?[...blocks.values()].find(e=>colorInputCurrent(e)&&!blockCurrent(e)&&e.x<=v.x&&e.y<=v.y&&e.x+e.width>=Math.min(map.width,v.x+v.width)&&e.y+e.height>=Math.min(map.height,v.y+v.height)):null;
+        if(colorBlock)plan.push({rect:{x:colorBlock.x,y:colorBlock.y,width:colorBlock.width,height:colorBlock.height},want:colorBlock.level,block:true});
+        else if(colorJobs.length&&(colorJobs.length===stale.length||!fineSinceCoarse||colorViewCurrent))for(const rect of colorJobs.slice(0,colorJobs.length===stale.length||colorViewCurrent?undefined:1))plan.push({rect,want:detailLevel(),color:true});
+        else if(overview)for(const rect of jobs)plan.push({rect,want:displayLevel()});
         else if(!levelsOn)for(const rect of jobs)plan.push({rect,want:1});
         else if(stale.length){
           const area=stale.reduce((a,r)=>{const x=Math.min(a.x,r.x),y=Math.min(a.y,r.y);return {x,y,width:Math.max(a.x+a.width,r.x+r.width)-x,height:Math.max(a.y+a.height,r.y+r.height)-y};});
@@ -430,7 +449,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           // F leaves geometry and Time unchanged. Reuse only measured costs
           // from completed final tiles on this same budget and display level.
           const fineReady=lastInput?.stage==='F'&&(!api.canExport||api.canExport())&&stale.every(r=>{const e=cache.get(cacheKey(r,size));return Number.isFinite(e?.finalCostMs)&&e.finalCostBudget===gpuBudget&&!e.fit&&!offLevel(e,detailLevel())&&e.weathered===weatheredView;});
-          const cheapFinal=fineReady&&cache.get(cacheKey(stale[0],size)).finalCostMs<=50;
+          const cheapFinal=fineReady&&cache.get(cacheKey(stale[0],size)).finalCostMs<=50&&!(previewing&&renderer.colorBytes);
           const priorCoarse=coarse.length===1?blocks.get(blockKey(coarse[0],coarseLevel)):null;
           const fineBeforeCoarse=cheapFinal&&!fineSinceCoarse&&priorCoarse&&!changedSince(priorCoarse.serial,priorCoarse.input,'E')&&priorCoarse.weathered===weatheredView&&priorCoarse.weatherRevB>=rev.B&&renderer.specCache.has(renderer.specKey().key);
           if(coarseReady){const keep=new Set(coarse.map(r=>blockKey(r,coarseLevel)));dropBlocks(e=>e.level===coarseLevel&&!keep.has(blockKey(e,e.level)));}
@@ -456,7 +475,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           if(!previewing&&!navigating()&&quiet>=1000)for(const rect of jobs)if(!intersects(rect,v))plan.push({rect,want:detailLevel()});
           else if(quiet<1000)wakeLadder(1000-quiet);
         }
-        for(const {rect,want,block=false,fineTurn=false} of plan){
+        for(const {rect,want,block=false,fineTurn=false,color=false} of plan){
           if(token!==serial||viewToken!==viewEpoch||busy||previewing!==interacting()){rerun=true;break;}
           if((previewing||navigating()||want<1)&&!intersects(rect,v))continue;   // a detail level bakes only what is seen: its ring would evict itself
           if(block){
@@ -467,11 +486,13 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             // Finish a small coarse refresh even if newer input arrives. Its
             // source revision stays old; the next turn picks up the newest edit.
             const finishOnInput=Boolean(previewLattice&&want>=4&&want===coarseLevel),controller=new AbortController();activeBake={controller,rect,finishOnInput};let e;
-            try{e=await bake(rect,false,controller.signal,()=>!finishOnInput&&token!==serial||busy||viewToken!==viewEpoch,want,false,true);}
+            try{if(lastInput?.stage==='F'&&colorInputCurrent(prior)){
+              const result=await renderer.renderColorTile(prior.color,drawOptions?.()??api.drawOptions?.()??{}),bitmap=new OffscreenCanvas(Math.ceil(rect.width/want),Math.ceil(rect.height/want));bitmap.getContext('2d').drawImage(result.canvas,0,0);e={...prior,bitmap,serial:token,rev:{...rev}};
+            }else e=await bake(rect,false,controller.signal,()=>!finishOnInput&&token!==serial||busy||viewToken!==viewEpoch,want,false,true);}
             finally{if(activeBake?.controller===controller)activeBake=null;}
-            e.block=true;e.dirty=changedSince(e.serial,e.input);e.bakedAt=performance.now();
+            e.block=true;e.dirty=changedSince(e.serial,e.input);e.bakedAt=performance.now();if(!e.color)await retainColor(e);
             if(want===coarseLevel){fineSinceCoarse=false;}
-            if(prior)blockBytes-=prior.bytes;blocks.set(key,e);blockBytes+=e.bytes;
+            if(prior){if(prior.color!==e.color)renderer.releaseColorTile(prior.color);blockBytes-=prior.bytes;}blocks.set(key,e);blockBytes+=e.bytes;
             paintedView=-1;presentView();presented();rerun=true;
             // The gates in this picture have already answered input. Compile
             // their exact final set without holding another preview behind it.
@@ -487,7 +508,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             const controller=new AbortController();activeBake={controller,rect};
             // Scrolling changes the plan, but a tile still in view remains
             // useful. Keep it running instead of restarting on every input.
-            try{e=await bake(rect,false,controller.signal,()=>token!==serial||busy||viewToken!==viewEpoch&&!intersects(rect,state()),want,overview);}
+            try{if(color){
+              const prior=e,result=await renderer.renderColorTile(prior.color,drawOptions?.()??api.drawOptions?.()??{}),bitmap=await createImageBitmap(result.canvas,0,0,Math.ceil(rect.width/want),Math.ceil(rect.height/want),{colorSpaceConversion:'none'});
+              e={...prior,bitmap,serial:token,rev:{...rev},dirty:changedSince(token,prior.input),pipelineKey:result.pipelineKey};
+            }else{e=await bake(rect,false,controller.signal,()=>token!==serial||busy||viewToken!==viewEpoch&&!intersects(rect,state()),want,overview);if(e&&!overview)await retainColor(e);}}
             catch(err){if(want<1&&String(err.message).includes('of GPU memory')){finest=want*2;rerun=true;break;}throw err;}   // fall back to the next coarser level, never the banner
             finally{if(activeBake?.controller===controller)activeBake=null;}
             // Keep the focus source resident while its pipeline finishes.
@@ -501,7 +525,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           // The image it replaces (a quarter one) is dropped now that the final one is in hand.
           const prior=cache.get(key);
           if(prior?.finalCostBudget===gpuBudget&&e.scale===prior.scale&&!changedSince(prior.serial,e.input,'E')){e.finalCostMs??=prior.finalCostMs;e.finalCostBudget??=prior.finalCostBudget;}
-          if(prior){prior.bitmap.close?.();cacheBytes-=prior.bytes;cache.delete(key);}
+          if(prior){if(prior.color!==e.color)renderer.releaseColorTile(prior.color);prior.bitmap.close?.();cacheBytes-=prior.bytes;cache.delete(key);}
           e.bakedAt=performance.now();cache.set(key,e);cacheBytes+=e.bytes;rerun=true;}
           else{hits++;cache.delete(key);cache.set(key,e);if(!e.heightPatch&&!e.fed){const input=await region({...rect,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid},drawOptions?.()??api.drawOptions?.()??{},undefined,weatheredView);checkHeap(input);e.heightPatch=keepHeight(input);}}
           if(baked&&lastInput?.stage==='F')fineSinceCoarse=true;
@@ -539,7 +563,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   function recoverAllocation(error){
     if(!(error instanceof TerrainMemoryError)||!terrainBudget.lower('a GPU allocation failure'))return false;
-    renderer.evict();dropBlocks();previewLattice?.clear();for(const [key,e]of cache)if(!intersects(e,state()))remove(key);
+    renderer.evict();for(const e of cache.values())e.color=null;dropBlocks();previewLattice?.clear();for(const [key,e]of cache)if(!intersects(e,state()))remove(key);
     gpuBudget=terrainBudget.mb*MB;find('[data-gpu]').value=terrainBudget.mb;
     api.fitGpuBudget?.();configureChunks();paintedView=-1;schedule();return true;
   }
@@ -671,7 +695,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   for(const name of ['pointerup','pointercancel','lostpointercapture'])overlay.addEventListener(name,end);
   document.addEventListener('keydown',event=>{if(event.code==='Space'&&!['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName)){space=true;event.preventDefault();}if(event.key==='Escape'&&gesture){event.preventDefault();end({pointerId:gesture.id,type:'pointercancel'});}});document.addEventListener('keyup',event=>{if(event.code==='Space')space=false;});
   window.addEventListener('blur',()=>{space=false;pan=null;navigationPointer=null;if(gesture)end({pointerId:gesture.id,type:'pointercancel'});schedule();});
-  function budgets(event){if(event?.target===find('[data-gpu]')){terrainBudget.choose(clamp(Number(find('[data-gpu]').value)||terrainBudget.mb,128,4096));const url=new URL(location.href);url.searchParams.set('gpuMB',terrainBudget.mb);history.replaceState(null,'',url);}gpuBudget=terrainBudget.mb*MB;heapBudget=clamp(Number(find('[data-heap]').value)||1024,128,8192)*MB;api.setBudget?.(heapBudget*.65);api.fitGpuBudget?.();configureChunks();metrics();schedule();}
+  function budgets(event){if(event?.target===find('[data-gpu]')){terrainBudget.choose(clamp(Number(find('[data-gpu]').value)||terrainBudget.mb,128,4096));const url=new URL(location.href);url.searchParams.set('gpuMB',terrainBudget.mb);history.replaceState(null,'',url);}gpuBudget=terrainBudget.mb*MB;heapBudget=clamp(Number(find('[data-heap]').value)||1024,128,8192)*MB;renderer.trimColorTiles(()=>renderer.colorBytes<=colorReserve());api.setBudget?.(heapBudget*.65);api.fitGpuBudget?.();configureChunks();metrics();schedule();}
   find('[data-gpu]').onchange=budgets;find('[data-heap]').onchange=budgets;
   async function idle(){do{while(drawing||pending||renderer.busy||pipelineWaits.size||navigationTimer||navigating()||api.pendingInputs?.()||ladderTimer&&foregroundPending())await tick();await renderer.previousChunk;}while(drawing||pending||renderer.busy||pipelineWaits.size||navigationTimer||navigating()||api.pendingInputs?.()||ladderTimer&&foregroundPending());}
   // Each corner is sampled from an awaited canonical weather field (sculpt-map.js cellHeights). No uncached preview height may enter the TNT
@@ -718,6 +742,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // H13: what the paged fields must leave free: the canvas, one canonical chunk's whole working set (every mask layer the world has) and its copy.
   // It was a 32 px chunk's, so the fields took the rest of the budget and the first 512 px bake could not be allocated beside them.
   // The terrain canvas and its overlay share the view's size (resize); the paged fields' budget is the shared one (sculpt-scene.js pagedBudget).
+  function colorReserve(){return overview?0:Math.max(0,Math.min(gpuBudget*.4,gpuBudget-512*MB));}
   function minimumBytes({previews=false}={}){
     let previewWorking=finalizing?cacheBytes+blockBytes:0;
     if(previews&&!finalizing&&!overview&&levels&&api.gpuFeedActive?.()){
@@ -729,7 +754,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       // The final reserve already has the voxel pool.
       previewWorking=Math.max(...sets.map(e=>e.source??0))+(previewLattice?sets.reduce((n,e)=>n+e.input,0):Math.max(...sets.map(e=>e.input)))+sets.reduce((n,e)=>n+e.field+e.output+e.rockWeather,0)+Math.max(0,...sets.map(e=>e.loose-(renderer.looseBuffer?.size??0)));
     }
-    const b=pagedBudget({gpuMB:0,renderer,chunk:canonicalSize,maskCount:api.maskKeys?.length,view:{width:canvas.width,height:canvas.height},preview:previewReserved,featureBytes:features?.stats?.().imageBytes||0,previewWorking});
+    const b=pagedBudget({gpuMB:0,renderer,chunk:canonicalSize,maskCount:api.maskKeys?.length,view:{width:canvas.width,height:canvas.height},preview:previewReserved,featureBytes:features?.stats?.().imageBytes||0,previewWorking:previewWorking+colorReserve()});
     return previews?b.previewMinimum:b.minimum;
   }
   const result={renderer,passability,minimumBytes,foregroundPending,gpuWorkPending:()=>drawing||renderer.busy,prepareBackground:bytes=>{if(drawing||renderer.busy||foregroundPending())return false;if(gpuResident()+bytes>gpuBudget)renderer.evict();return gpuResident()+bytes<=gpuBudget;},schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};

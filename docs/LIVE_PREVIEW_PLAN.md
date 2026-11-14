@@ -1212,6 +1212,8 @@ and which are stage F. Then stop and report.
 
 **November 13 step 0:** [the split experiment](LP5_STEP0.md) proves exact warm/full equality on eight small feature cases plus a Chrome tile, with no added split drift in those crops. Records cost 56 bytes per raster pixel; the 94.5-MiB visible-pixel minimum and retained C inputs need a budgeted cache design. This experiment stays on the same review branch at the owner's request. No visible cache or control routing is built; step 0 stops for its report.
 
+**November 13 build, first unit:** after the owner-approved split landing at 580d0fbb, [a bounded immutable color cache](LP5_CACHE.md) runs stage F on retained visible native tiles and the coarse block. In the focused large-view pair, continuous ambient median first change is 46.8 → 4.0 ms and release final 1808.4 → 979.9 ms, with exact replay. Partial coverage costs 762.7 MiB of retained inputs, p95 tails remain mixed, and the 150-ms final-quality view target is open. This follow-up stays on the review branch; it is not complete LP5 acceptance.
+
 **Build (M-L)** only if step 0's rerun equals the full re-bake: land the
 split (scenes move by the reported drift, the owner looks), keep records for
 visible tiles, route stage-F changes to priority 3 of the scheduler, add the
