@@ -41,6 +41,15 @@ const COLOR_INPUT_PACK=`
   packed[3u*plane+i]=pack4x8unorm(vec4f(weather.rg,time.rg));packed[4u*plane+i]=pack4x8unorm(material);packed[5u*plane+i]=pack4x8unorm(vec4f(fall.rg,0,0));
 }`;
 
+// Scissor cached native F work in raster pixels, retaining helper invocations
+// in the unchanged full-sized target. Resampled images keep their filter apron.
+export function colorScissor(tile,view){
+  const full=[0,0,tile.width,tile.height],r=tile.rect;
+  if(!view||!r||tile.width!==tile.outWidth||tile.height!==tile.outHeight||r.width/tile.width*(view.scale??1)<1||r.height/tile.height*(view.scale??1)<1)return full;
+  const sx=tile.width/r.width,sy=tile.height/r.height,x=Math.max(0,Math.min(tile.width,Math.floor((view.x-r.x)*sx))),y=Math.max(0,Math.min(tile.height,Math.floor((view.y-r.y)*sy))),right=Math.max(x,Math.min(tile.width,Math.ceil((view.x+view.width-r.x)*sx))),bottom=Math.max(y,Math.min(tile.height,Math.ceil((view.y+view.height-r.y)*sy)));
+  return [x,y,right-x,bottom-y];
+}
+
 export class ChunkTerrainRenderer extends TerrainRenderer {
   static async create(canvas,config) {
     const self=new ChunkTerrainRenderer(canvas,config);
@@ -490,7 +499,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   }
   // A small bounded color batch shares one completion wait and presentation
   // canvas. Every draw still reads its own immutable region and geometry.
-  async renderColorTiles(tiles,options=this.worldOptions){
+  async renderColorTiles(tiles,options=this.worldOptions,view=null){
     if(this.busy)throw Error('The renderer is already rendering.');
     if(!tiles.length||tiles.length>4)throw Error('A color batch needs one to four tiles.');
     for(const tile of tiles)if(!this.colorTiles.has(tile)||tile.retired)throw new DOMException('The color record was evicted.','AbortError');
@@ -525,9 +534,11 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       this.outputBytes=atlasWidth*height*4+outWidth*outHeight*4;this.recordMemory();
       const encoder=this.device.createCommandEncoder({label:'cached tile colors'}),presentation=this.context.getCurrentTexture(),pipeline=this.genericPipelines[this.rockMask()].draw,regions=[];let x=0,outX=0;
       for(const tile of tiles){
-        this.encodeColor(encoder,pipeline,[0,0,tile.width,tile.height],true,null,{record:tile.record,group:tile.group,masks:tile.source.colorMasks,target,geometryGroup:tile.geometryGroup});
+        const scissor=colorScissor(tile,view),r=tile.rect;
+        this.encodeColor(encoder,pipeline,scissor,true,null,{record:tile.record,group:tile.group,masks:tile.source.colorMasks,target,geometryGroup:tile.geometryGroup});
         encoder.copyTextureToTexture({texture:target},{texture:presentation,origin:[x,0,0]},[tile.width,tile.height]);
-        regions.push({x:outX,y:0,width:tile.outWidth,height:tile.outHeight,sourceX:x,tile});x+=tile.width;outX+=tile.outWidth;
+        const fresh=r&&(scissor[2]!==tile.width||scissor[3]!==tile.height)?{x:r.x+scissor[0]*r.width/tile.width,y:r.y+scissor[1]*r.height/tile.height,width:scissor[2]*r.width/tile.width,height:scissor[3]*r.height/tile.height}:null;
+        regions.push({x:outX,y:0,width:tile.outWidth,height:tile.outHeight,sourceX:x,tile,fresh});x+=tile.width;outX+=tile.outWidth;
       }
       this.device.queue.submit([encoder.finish()]);
       const copy=this.outputCanvas.getContext('2d');copy.imageSmoothingEnabled=true;copy.imageSmoothingQuality='high';

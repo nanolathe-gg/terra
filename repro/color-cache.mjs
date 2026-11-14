@@ -38,6 +38,16 @@ for(const name of ['green-modern-2','green-2','red-3','green-7']){
     for(let y=0;y<height;y++)pixels.set(atlas.subarray((y*atlasWidth+offset)*4,(y*atlasWidth+offset+width)*4),y*width*4);
     assert.equal(sha(pixels),sha(i%2?wb:wa),name+' batch tile '+i);
   }
+  ta.rect={x:a.x,y:a.y,width:a.width,height:a.height};tb.rect={x:b.x,y:b.y,width:b.width,height:b.height};
+  const view={x:a.x+35.25,y:a.y+28.5,width:168.5,height:103.25},clipped=await r.renderColorTiles([ta,tb],options,view),partial=await read(r),partialWidth=r.canvas.width;let clippedPixels=0;
+  for(const [i,region]of clipped.regions.entries()){
+    const tile=i?tb:ta,full=i?wb:wa,sourceX=i?ta.width:0,fresh=region.fresh??tile.rect;
+    for(let y=0;y<tile.height;y++)for(let x=0;x<tile.width;x++){
+      const at=((y*partialWidth)+sourceX+x)*4,p=(y*tile.width+x)*4,wx=tile.rect.x+x+.5,wy=tile.rect.y+y+.5;
+      if(wx>=fresh.x&&wx<fresh.x+fresh.width&&wy>=fresh.y&&wy<fresh.y+fresh.height){assert.deepEqual([...partial.subarray(at,at+4)],[...full.subarray(p,p+4)],name+' clipped '+i+' at '+x+','+y);clippedPixels++;}
+      else assert.deepEqual([...partial.subarray(at,at+4)],[0,0,0,255],name+' unpainted output stays absent');
+    }
+  }
   const fulla=await H.renderWindow(s,a),fullb=await H.renderWindow(s,b);
   assert.equal(sha(wa),sha(fulla),name+' first tile');assert.equal(sha(wb),sha(fullb),name+' interleaved odd tile');
   const maskBytes=[ta.source.colorMasks??ta.source.maskTexture,tb.source.colorMasks??tb.source.maskTexture].map(texture=>r.resources.get(texture)?.bytes??0),retained=r.colorBytes;await H.knob(s,'rockFace',3.9);await assert.rejects(()=>r.renderColorTile(ta,options),/needs [ABCDE]/);
@@ -46,7 +56,7 @@ for(const name of ['green-modern-2','green-2','red-3','green-7']){
   const pending=r.renderColorTile(tb,options);assert.equal(tb.users,1);r.releaseColorTile(tb);assert(r.resources.has(tb.record));resume();
   await assert.rejects(()=>pending,/evicted/);assert(!r.resources.has(tb.record));r.previousChunk=completion;
   r.trimColorTiles();assert.equal(r.colorBytes,0);await r.device.queue.onSubmittedWorkDone();await new Promise(r=>setTimeout(r,30));assert.deepEqual(s.errors,[]);
-  rows.push({scene:name,tiles:[a,b].map(({options,...r})=>r),sha:[sha(wa),sha(wb)],different:0,batchedTiles:4,retained,maskBytes,replayIncludingReadbacksMs:replayMs,geometryEditRejected:true,retirementWaitedForReader:true,evictedBytes:r.colorBytes,errors:s.errors});
+  rows.push({scene:name,tiles:[a,b].map(({options,...r})=>r),sha:[sha(wa),sha(wb)],different:0,batchedTiles:4,clippedPixels,retained,maskBytes,replayIncludingReadbacksMs:replayMs,geometryEditRejected:true,retirementWaitedForReader:true,evictedBytes:r.colorBytes,errors:s.errors});
   console.log(rows.at(-1));s.dispose();
 }
 writeFileSync(join(out,'color-cache-proof.json'),JSON.stringify(rows));process.exit(0);

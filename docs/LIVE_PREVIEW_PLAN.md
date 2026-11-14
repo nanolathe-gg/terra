@@ -1228,6 +1228,8 @@ and which are stage F. Then stop and report.
 
 **November 14 shifted-view follow-up:** [exact weather/material packing](LP5_GRID_INPUTS.md) fits all 40 native records plus the coarse block after a half-tile pan, at the unchanged quota. Two alternating pairs reduce native-quality color p95 from 912–1729 ms to 118–130 ms, with exact parent-art and replay checks. The original low-memory budget and tile-equality assertions stay unchanged. Other fixtures remain to measure.
 
+**November 14 visible-color follow-up:** [native F viewport scissors and partial-image validity](LP5_VISIBLE_COLOR.md) keep sampled Modern Colors p95 at 110–142 ms in two alternating pairs, with first-change p95 below 36 ms and exact pan/zoom/replay checks. Estimated off-screen F work drops to zero in the final integral-view pair. Selected Red/map16 and Green/map4 checks against main are included; full LP5 acceptance remains open.
+
 **Build (M-L)** only if step 0's rerun equals the full re-bake: land the
 split (scenes move by the reported drift, the owner looks), keep records for
 visible tiles, route stage-F changes to priority 3 of the scheduler, add the

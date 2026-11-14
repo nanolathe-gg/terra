@@ -169,7 +169,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(!drawing&&!pending&&!ladderTimer&&!pipelineWaits.size)return false;
     const v=state(),size=overview?256*displayLevel():viewChunkSize(),level=overview?displayLevel():detailLevel();
     for(let y=Math.max(0,Math.floor(v.y/size))*size;y<Math.min(map.height,v.y+v.height);y+=size)for(let x=Math.max(0,Math.floor(v.x/size))*size;x<Math.min(map.width,v.x+v.width);x+=size){
-      const e=cache.get(cacheKey({x,y},size));if(!e||e.dirty||(level<2?offLevel(e,level):(e.scale??1)>level))return true;
+      const e=cache.get(cacheKey({x,y},size));if(!e||e.dirty||!colorCovers(e,v)||(level<2?offLevel(e,level):(e.scale??1)>level))return true;
     }
     return false;
   }
@@ -314,21 +314,25 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // A tile's edges snap to whole canvas pixels. At a fractional offset (a fractional scroll on a 2x screen, or a zoom that is not
   // a whole number) two neighboring tiles each cover only part of their shared pixel, and the coarse picture underneath showed
   // through as a 1 px line. Neighbors round the same edge the same way, so they meet exactly.
-  function currentFinal(e){return e&&!e.dirty&&!e.fit&&!offLevel(e,detailLevel())&&e.weathered===weatheredView;}
+  function colorCovers(e,v){
+    if(!e.colorRect)return true;v??=state();if(!intersects(e,v))return true;
+    const r=e.colorRect;return r.x<=Math.max(e.x,v.x)&&r.y<=Math.max(e.y,v.y)&&r.x+r.width>=Math.min(e.x+e.width,v.x+v.width)&&r.y+r.height>=Math.min(e.y+e.height,v.y+v.height);
+  }
+  function currentFinal(e){return e&&!e.dirty&&!e.fit&&!offLevel(e,detailLevel())&&e.weathered===weatheredView&&colorCovers(e);}
   function blockClips(e,v){
     const clips=[],size=viewChunkSize();
     for(let y=Math.max(0,Math.floor(v.y/size)*size);y<Math.min(map.height,v.y+v.height);y+=size)for(let x=Math.max(0,Math.floor(v.x/size)*size);x<Math.min(map.width,v.x+v.width);x+=size){
-      const final=cache.get(cacheKey({x,y},size));if(final&&(currentFinal(final)||final.serial>=e.serial))continue;
+      const final=cache.get(cacheKey({x,y},size));if(final&&colorCovers(final,v)&&(currentFinal(final)||final.serial>=e.serial))continue;
       const x0=Math.max(x,e.x,v.x),y0=Math.max(y,e.y,v.y),x1=Math.min(x+size,e.x+e.width,v.x+v.width,map.width),y1=Math.min(y+size,e.y+e.height,v.y+v.height,map.height);
       if(x1>x0&&y1>y0)clips.push({x:x0,y:y0,width:x1-x0,height:y1-y0});
     }return clips;
   }
   function paint(entry,v=state()) {
     const k=entry.scale??1,x0=Math.round((entry.x-v.x)*scale),y0=Math.round((entry.y-v.y)*scale),x1=Math.round((entry.x+entry.bitmap.width*k-v.x)*scale),y1=Math.round((entry.y+entry.bitmap.height*k-v.y)*scale);
-    entry.paintedClips=entry.block?blockClips(entry,v):null;
-    if(entry.block){if(!entry.paintedClips.length)return;g.save();g.beginPath();for(const r of entry.paintedClips)g.rect(Math.round((r.x-v.x)*scale),Math.round((r.y-v.y)*scale),Math.round((r.x+r.width-v.x)*scale)-Math.round((r.x-v.x)*scale),Math.round((r.y+r.height-v.y)*scale)-Math.round((r.y-v.y)*scale));g.clip();}
+    entry.paintedClips=entry.block?blockClips(entry,v):entry.colorRect?[entry.colorRect]:null;
+    if(entry.paintedClips){if(!entry.paintedClips.length)return;g.save();g.beginPath();for(const r of entry.paintedClips)g.rect(Math.round((r.x-v.x)*scale),Math.round((r.y-v.y)*scale),Math.round((r.x+r.width-v.x)*scale)-Math.round((r.x-v.x)*scale),Math.round((r.y+r.height-v.y)*scale)-Math.round((r.y-v.y)*scale));g.clip();}
     g.imageSmoothingEnabled=scale<1||k*scale<1;g.imageSmoothingQuality='high';g.drawImage(entry.bitmap,x0,y0,x1-x0,y1-y0);
-    if(entry.block)g.restore();
+    if(entry.paintedClips)g.restore();
   }
   const blockKey=(r,level)=>[r.x,r.y,r.width,r.height,level,weatheredView].join(',');
   function dropBlocks(predicate=()=>true){for(const [key,e]of blocks)if(predicate(e)){renderer.releaseColorTile(e.color);blockBytes-=e.bytes;blocks.delete(key);}}
@@ -441,7 +445,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         // A partial cache gets one fast tile, then yields to the whole-view
         // preview. Repeated input must not starve uncovered ground behind F.
         const colorViewCurrent=[...blocks.values()].some(e=>e.level===coarseLevel&&blockCurrent(e)&&coversView(e,v));
-        const colorBlock=lastInput?.stage==='F'&&!holding?[...blocks.values()].find(e=>colorInputCurrent(e)&&!blockCurrent(e)&&coversView(e,v)):null;
+        const colorBlock=stale.length&&lastInput?.stage==='F'&&!holding?[...blocks.values()].find(e=>colorInputCurrent(e)&&!blockCurrent(e)&&coversView(e,v)):null;
         if(colorBlock&&!allColor)plan.push({rect:{x:colorBlock.x,y:colorBlock.y,width:colorBlock.width,height:colorBlock.height},want:colorBlock.level,block:true});
         else if(colorJobs.length&&(allColor||!fineSinceCoarse||colorViewCurrent))for(const rect of colorJobs.slice(0,allColor||colorViewCurrent?undefined:1))plan.push({rect,want:detailLevel(),color:true});
         else if(overview)for(const rect of jobs)plan.push({rect,want:displayLevel()});
@@ -518,7 +522,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           }
           if(fineTurn){fineSinceCoarse=true;}
           const key=cacheKey(rect,size);let e=cache.get(key);let baked=false;
-          const upgrade=want<=1&&e&&(offLevel(e,want)||!overview&&e.weathered!==weatheredView);
+          const upgrade=want<=1&&e&&(offLevel(e,want)||!overview&&e.weathered!==weatheredView||!colorCovers(e,v));
           if((!e||e.dirty||upgrade)&&holding&&!overview)continue;
           if(!e||e.dirty||upgrade){
             const controller=new AbortController();activeBake={controller,rect};
@@ -527,11 +531,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             try{if(color){
               if(!colorResults.has(key)){
                 const colorSerial=serial,colorRev={...rev},batch=plan.slice(jobIndex,jobIndex+4).filter(j=>j.color&&!j.block&&j.want===want).map(j=>({key:cacheKey(j.rect,size),prior:cache.get(cacheKey(j.rect,size))}));
-                const result=await renderer.renderColorTiles(batch.map(j=>j.prior.color),drawOptions?.()??api.drawOptions?.()??{});
+                const result=await renderer.renderColorTiles(batch.map(j=>j.prior.color),drawOptions?.()??api.drawOptions?.()??{},v);
                 const snapshots=await Promise.allSettled(result.regions.map(r=>createImageBitmap(result.canvas,r.x,r.y,r.width,r.height,{colorSpaceConversion:'none'})));
                 const failure=snapshots.find(s=>s.status==='rejected');if(failure){for(const s of snapshots)if(s.status==='fulfilled')s.value.close();throw failure.reason;}
                 const bitmaps=snapshots.map(s=>s.value);
-                batch.slice(0,result.regions.length).forEach(({key,prior},i)=>colorResults.set(key,{...prior,bitmap:bitmaps[i],serial:colorSerial,rev:colorRev,dirty:changedSince(colorSerial,prior.input),pipelineKey:result.pipelineKey}));
+                batch.slice(0,result.regions.length).forEach(({key,prior},i)=>colorResults.set(key,{...prior,bitmap:bitmaps[i],colorRect:result.regions[i].fresh,serial:colorSerial,rev:colorRev,dirty:changedSince(colorSerial,prior.input),pipelineKey:result.pipelineKey}));
               }
               e=colorResults.get(key);colorResults.delete(key);
             }else{e=await bake(rect,false,controller.signal,()=>token!==serial||busy||viewToken!==viewEpoch&&!intersects(rect,state()),want,overview);if(e&&!overview)await retainColor(e);}}
@@ -780,6 +784,6 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const b=pagedBudget({gpuMB:0,renderer,chunk:canonicalSize,maskCount:api.maskKeys?.length,view:{width:canvas.width,height:canvas.height},preview:previewReserved,featureBytes:features?.stats?.().imageBytes||0,previewWorking:previewWorking+colorReserve()});
     return previews?b.previewMinimum:b.minimum;
   }
-  const result={renderer,passability,minimumBytes,foregroundPending,gpuWorkPending:()=>drawing||renderer.busy,prepareBackground:bytes=>{if(drawing||renderer.busy||foregroundPending())return false;if(gpuResident()+bytes>gpuBudget)renderer.evict();return gpuResident()+bytes<=gpuBudget;},schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty),serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
+  const result={renderer,passability,minimumBytes,foregroundPending,gpuWorkPending:()=>drawing||renderer.busy,prepareBackground:bytes=>{if(drawing||renderer.busy||foregroundPending())return false;if(gpuResident()+bytes>gpuBudget)renderer.evict();return gpuResident()+bytes<=gpuBudget;},schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty||!colorCovers(e)),colorRect:e.colorRect,serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
   window.sculptCanvas=result;resize();budgets();return result;
 }
