@@ -17,7 +17,7 @@ import (
 func run() error {
 	root := flag.String("root", ".", "repository root (defaults to current directory)")
 	port := flag.Int("port", 8767, "development server port (loopback only)")
-	assets := flag.String("assets-root", "/private/tmp/nanolathe-map-editor", "local save-link storage; worlds need no external assets")
+	assets := flag.String("assets-root", "/tmp/nanolathe-map-editor", "local save-link storage; worlds need no external assets")
 	build := flag.String("build-site", "", "write the static site to this directory and exit")
 	dump := flag.String("dump-configs", "", "write generated configuration files to this directory and exit")
 	mapsDefault := os.Getenv("TERRAFORM_MAPS_URL")

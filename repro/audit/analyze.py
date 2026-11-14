@@ -3,7 +3,7 @@ Run with the project's Python environment; media stay in the local audit folder.
 """
 import argparse,csv,json,re
 from pathlib import Path
-p=argparse.ArgumentParser();p.add_argument('--root',type=Path,default=Path('/private/tmp/terraform-tool-audit'));p.add_argument('--out',type=Path,default=Path('docs/audit'));a=p.parse_args();a.out.mkdir(parents=True,exist_ok=True)
+p=argparse.ArgumentParser();p.add_argument('--root',type=Path,default=Path('/tmp/terraform-tool-audit'));p.add_argument('--out',type=Path,default=Path('docs/audit'));a=p.parse_args();a.out.mkdir(parents=True,exist_ok=True)
 def read(p,default=None):return json.loads(p.read_text()) if p.exists() else default
 inv=read(a.root/'inventory.json');defaults=read(a.root/'defaults.json');before=a.root/'results/before/baseline';after=a.root/'results/after/prototype'
 world=[r for f in sorted(before.glob('world-*.json')) for r in read(f,[])];diag=[dict(r,phase=phase) for phase,folder in [('before',before),('after',after)] for f in sorted(folder.glob('diagnostic-*.json')) for r in read(f,[])];shapes=read(before/'shape-controls.json',[]);reg=read(after/'regressions.json',{});experiments=Path('EXPERIMENTS.md').read_text().splitlines();schema=Path('sculpt-control-schema.js').read_text();primary=set(re.findall(r"'([^']+)'",schema.split('export const WORLD_PRIMARY_CONTROLS=new Set([')[1].split(']);')[0]));fixed={'frostGaps','frostGapReach','frostGapSize','frostGapDepth','mineralDetail','faceEdge','gullyRock','strataSpacing'}

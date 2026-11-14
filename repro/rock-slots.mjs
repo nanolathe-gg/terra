@@ -18,7 +18,7 @@ import {encodePng} from './png.mjs';
 import {ROCK_PRESETS} from '../sculpt-rock-presets.js';
 
 const arg = (k, d) => process.argv.includes(k) ? process.argv[process.argv.indexOf(k) + 1] : d;
-const out = arg('--out', '/private/tmp/terraform-rock-slots'); mkdirSync(out, {recursive: true});
+const out = arg('--out', '/tmp/terraform-rock-slots'); mkdirSync(out, {recursive: true});
 const scene = JSON.parse(readFileSync(new URL('./scenes/green-modern-2.json', import.meta.url), 'utf8'));
 const W = 1024, SPLIT = 512, SLOT = 1, RECIPE = 'basalt';
 const rect = {x: 0, y: 0, width: W, height: W, tile: 256};

@@ -16,8 +16,8 @@ from scipy.ndimage import label
 
 import desert_common as dc
 
-MAPS = ['/private/tmp/nanolathe-map-editor/retail-desert/the_desert_triad-0e1a7587',
-        '/private/tmp/nanolathe-map-editor/retail-desert/painted_desert-e2c3dad3']
+MAPS = ['/tmp/nanolathe-map-editor/retail-desert/the_desert_triad-0e1a7587',
+        '/tmp/nanolathe-map-editor/retail-desert/painted_desert-e2c3dad3']
 
 
 def gaps(corpus, hmin, tag):

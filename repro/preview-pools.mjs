@@ -1,6 +1,6 @@
 // Quick Dawn check for preview allocation: delayed count delivery, normal prediction,
 // and forced overflow must all preserve the exact picture before presentation.
-// node repro/preview-pools.mjs --out /private/tmp/<your-output> [--bench]
+// node repro/preview-pools.mjs --out /tmp/<your-output> [--bench]
 // Check shared GPU load before timing with --bench. No retail pixels are read.
 import{readFileSync,writeFileSync,mkdirSync}from'node:fs';import{resolve,dirname}from'node:path';import{fileURLToPath}from'node:url';import{createHash}from'node:crypto';import assert from'node:assert/strict';
 const args=process.argv.slice(2),at=args.indexOf('--out');if(at<0)throw Error('Give --out <outside repo>; --bench adds five alternating allocation samples.');

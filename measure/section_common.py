@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-PALETTE = Path('/private/tmp/nanolathe-neural-terrain/editor-green-sections/palette.pal')
+PALETTE = Path('/tmp/nanolathe-neural-terrain/editor-green-sections/palette.pal')
 
 
 def palette_codes(palette):
