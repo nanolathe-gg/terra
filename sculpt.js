@@ -1014,7 +1014,8 @@ function regionalStats() {
 }
 const sculptRegion={
   terrainBudgetPreference:()=>editorUI.terrainBudget,saveTerrainBudget:value=>editorUI.setTerrainBudget(value),
-  saveForGpuRestart:()=>!ready||saveWorking(),
+  // A saved copy that failed to load is retained until the artist edits (keepSaved): a restart must not replace it with the blank map.
+  saveForGpuRestart:()=>!ready||keepSaved||saveWorking(),
   previewScene:()=>({size:worldSize,grid:worldGrid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT,nodes,context:shapeContext(),maskCount:MASK_KEYS.length,revision:regionalFields.stats().revision,revB:mapCanvas?.rev.B??0,paged:Boolean(regionalFields.paged),timeApron:(regionalFields.apron??128)*spacing,
     previewTime:({size:windowSize,spacing:windowSpacing})=>weatherOn()?{...pagedTime({config,renderer,size:windowSize,spacing:windowSpacing,material:materialKnobs()}),revB:mapCanvas?.rev.B??0}:null,fail:error}),
   fitGpuBudget:() => regionalFields?.refit?.(),
