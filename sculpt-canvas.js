@@ -194,7 +194,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const options=drawOptions?.()??api.drawOptions?.()??{},request={...rect,exportArt,worldSize:config.worldSize??config.size,worldGrid:fit?512:previewGridFor(scale,block)};
     // H6b: with the GPU fields on, the chunk's textures are made from the fields' buffers; no CPU read, no upload, no height patch kept.
     if(!exportArt)api.renderProgress?.('Shaping terrain…');
-    const planned=renderer.requiredRegion(request,options),estimateBefore=renderer.estimate(planned,rect.width,rect.height,api.maskKeys.length,scale,{preview:block});
+    const planned=renderer.requiredRegion(request,options),estimateBefore=renderer.estimate(planned,rect.width,rect.height,api.maskKeys.length,scale);
     if(lattice){
       const extra=lattice.plan(planned,readWeather,interacting()).additionalBytes,copyBytes=Math.ceil(rect.width/scale)*Math.ceil(rect.height/scale)*8;
       const visible=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0),room=()=>gpuBudget-steadyGPU()-estimateBefore.retainedBytes-estimateBefore.workingBytes-extra-copyBytes;
@@ -220,7 +220,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       // Its pages stay cached after the lease is released. Direct readers
       // and export still complete their requested bake.
       if(!exportArt&&!block&&!fit&&stale&&pipelineWaits.has(renderer.specKey().key))return null;
-      const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount,scale,{preview:block}),ow=Math.ceil(rect.width/scale),oh=Math.ceil(rect.height/scale),copyBytes=ow*oh*8,room=gpuBudget-steadyGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes;
+      const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount,scale),ow=Math.ceil(rect.width/scale),oh=Math.ceil(rect.height/scale),copyBytes=ow*oh*8,room=gpuBudget-steadyGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes;
       // A level whose view does not fit beside the bake would have each tile evict the last, and every repaint would bake them all again.
       if(scale<1&&room<detailBytes(scale))throw new Error(`nanolathe: a view at level ${scale} needs more of GPU memory than the budget leaves`);
       // Cold page preparation may grow residency after the pure plan. Replan
@@ -335,7 +335,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function wakeLadder(delay){clearTimeout(ladderTimer);ladderTimer=setTimeout(()=>{ladderTimer=null;schedule();},Math.max(0,delay));}
   function previewSignature(r,level,q,e){return [r.x,r.y,r.width,r.height,level,...q.gridOrigin,q.gridWidth,q.gridHeight,q.fieldsX,q.fieldsY,q.fieldsWidth,q.fieldsHeight,e.workingBytes].join(',');}
   function previewCost(rect,level,options=drawOptions?.()??api.drawOptions?.()??{},visibleBytes=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0)){
-    const request={...rect,worldSize:config.worldSize??config.size,worldGrid:previewGridFor(level,true)},required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,api.maskKeys.length,level,{preview:true}),source=level>=4?previewLattice?.plan(required,weatheredView,interacting()).additionalBytes??0:0;
+    const request={...rect,worldSize:config.worldSize??config.size,worldGrid:previewGridFor(level,true)},required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,api.maskKeys.length,level),source=level>=4?previewLattice?.plan(required,weatheredView,interacting()).additionalBytes??0:0;
     return {required,estimate,total:estimate.retainedBytes+estimate.workingBytes+source+fixedGPU()+visibleBytes+Math.ceil(rect.width/level)*Math.ceil(rect.height/level)*8};
   }
   function releasePreviewMemory(area,level){
@@ -755,7 +755,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(previews&&!finalizing&&!overview&&levels&&api.gpuFeedActive?.()){
       const v=state(),width=Math.min(map.width,Math.ceil(v.width/64)*64),height=Math.min(map.height,Math.ceil(v.height/64)*64),options=drawOptions?.()??api.drawOptions?.()??{};
       const request={x:Math.floor((map.width-width)/2),y:Math.floor((map.height-height)/2),width,height,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid};
-      const sets=(previewLattice?[8,4,2]:[4,2]).map(k=>{const requestLevel={...request,worldGrid:previewGridFor(k*detailLevel(),true)},r=renderer.requiredRegion(requestLevel,options),e=renderer.estimate(r,width,height,api.maskKeys.length,k*detailLevel(),{preview:true});
+      const sets=(previewLattice?[8,4,2]:[4,2]).map(k=>{const requestLevel={...request,worldGrid:previewGridFor(k*detailLevel(),true)},r=renderer.requiredRegion(requestLevel,options),e=renderer.estimate(r,width,height,api.maskKeys.length,k*detailLevel());
         if(k*detailLevel()>=4)e.source=previewLattice?.plan(r,weatheredView).peakBytes??0;return e;});
       // Distinct shape lattices keep separate inputs; equal lattices share them.
       // The final reserve already has the voxel pool.

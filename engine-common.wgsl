@@ -414,7 +414,7 @@ struct Uniforms {
     stoneMoss: f32,       // world material data: share of stones with a mossy cap
     // Card D: bounded regional fields, with every position on the world lattice.
     chunkGridOrigin: vec2f,   // first uploaded sample's global grid index
-    chunkGridSize: vec2f,     // padded regional texture dimensions
+    chunkGridSize: vec2f,     // regional texture dimensions
     chunkGridCount: vec2f,    // supplied samples (padding repeats their last row/column)
     chunkFieldsOrigin: vec2f, // integer world pixel at baked texel (0,0)
     chunkFieldsSize: vec2f,
@@ -633,25 +633,38 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), sel
 // -1 fewer than the world's own), g cracked bed (+1: the bed under this
 // stroke's shallows is cracked rock-like ground).
 @group(0) @binding(9) var masksTex: texture_2d_array<f32>;
+// Fractions come from texel coordinates, independent of the allocation size.
+// Gather at the center of the four cells: its normalized coordinate is far
+// from a cell-selection boundary. Only the chosen cells use hardware sampling;
+// the interpolation weights remain the same when a tile changes dimensions.
+fn blendGather(v:vec4f,f:vec2f)->f32{return mix(mix(v.w,v.z,f.x),mix(v.x,v.y,f.x),f.y);}
+fn sampleRegional2D(t:texture_2d<f32>,point:vec2f)->vec4f {
+    let q=point-.5;let f=fract(q);let uv=(floor(q)+1.0)/vec2f(textureDimensions(t));
+    return vec4f(blendGather(textureGather(0,t,linearClamp,uv),f),blendGather(textureGather(1,t,linearClamp,uv),f),blendGather(textureGather(2,t,linearClamp,uv),f),blendGather(textureGather(3,t,linearClamp,uv),f));
+}
+fn sampleRegionalArray(t:texture_2d_array<f32>,point:vec2f,layer:i32)->vec4f {
+    let q=point-.5;let f=fract(q);let uv=(floor(q)+1.0)/vec2f(textureDimensions(t));
+    return vec4f(blendGather(textureGather(0,t,linearClamp,uv,layer),f),blendGather(textureGather(1,t,linearClamp,uv,layer),f),blendGather(textureGather(2,t,linearClamp,uv,layer),f),blendGather(textureGather(3,t,linearClamp,uv,layer),f));
+}
 // F needs twelve of the authored mask channels; preserve their original
 // SNORM values and interpolation in three layers of the same-sized texture.
 #ifdef COLOR_PASS
 @group(3) @binding(2) var colorMasksTex:texture_2d_array<f32>;
 fn sampleMasks(uv:vec2f,layer:i32)->vec4f {
     switch layer {
-      case 0:{return textureSampleLevel(colorMasksTex,linearClamp,uv,0,0.0);}
-      case 1:{let p=textureSampleLevel(colorMasksTex,linearClamp,uv,1,0.0);return vec4f(0,p.r,0,0);}
-      case 2:{let p=textureSampleLevel(colorMasksTex,linearClamp,uv,1,0.0);return vec4f(0,0,p.g,0);}
-      case 3:{let p=textureSampleLevel(colorMasksTex,linearClamp,uv,1,0.0);return vec4f(0,0,0,p.b);}
-      case 4:{let a=textureSampleLevel(colorMasksTex,linearClamp,uv,1,0.0);let b=textureSampleLevel(colorMasksTex,linearClamp,uv,2,0.0);return vec4f(a.a,b.rgb);}
-      case 5:{let p=textureSampleLevel(colorMasksTex,linearClamp,uv,2,0.0);return vec4f(p.a,0,0,0);}
+      case 0:{return sampleRegionalArray(colorMasksTex,uv,0);}
+      case 1:{let p=sampleRegionalArray(colorMasksTex,uv,1);return vec4f(0,p.r,0,0);}
+      case 2:{let p=sampleRegionalArray(colorMasksTex,uv,1);return vec4f(0,0,p.g,0);}
+      case 3:{let p=sampleRegionalArray(colorMasksTex,uv,1);return vec4f(0,0,0,p.b);}
+      case 4:{let a=sampleRegionalArray(colorMasksTex,uv,1);let b=sampleRegionalArray(colorMasksTex,uv,2);return vec4f(a.a,b.rgb);}
+      case 5:{let p=sampleRegionalArray(colorMasksTex,uv,2);return vec4f(p.a,0,0,0);}
       default:{return vec4f(0);}
     }
 }
 fn maskDimensions()->vec2u{return textureDimensions(colorMasksTex);}
 fn loadRockMask(at:vec2i)->f32{return textureLoad(colorMasksTex,at,2,0).a;}
 #else
-fn sampleMasks(uv:vec2f,layer:i32)->vec4f{return textureSampleLevel(masksTex,linearClamp,uv,layer,0.0);}
+fn sampleMasks(uv:vec2f,layer:i32)->vec4f{return sampleRegionalArray(masksTex,uv,layer);}
 fn maskDimensions()->vec2u{return textureDimensions(masksTex);}
 fn loadRockMask(at:vec2i)->f32{return textureLoad(masksTex,at,5,0).r;}
 #endif
@@ -660,14 +673,14 @@ fn loadRockMask(at:vec2i)->f32{return textureLoad(masksTex,at,5,0).r;}
 // Painted style factor for f in -1..1 (card C5): 1 at 0 (exactly), 0 at -1,
 // 4 at +1 (two doublings).
 fn styleScale(f: f32) -> f32 { return select(1.0 + f, exp2(2.0 * f), f > 0.0); }
-fn regionalUv(uv: vec2f) -> vec2f {
+fn regionalPoint(uv: vec2f) -> vec2f {
     // Split on the global lattice before subtracting the tile origin. A fused
     // multiply-subtract otherwise rounds at the local coordinate's precision,
     // moving a filter weight across a rounding boundary when the tile changes.
     let q = modf(uv * u.grid);
-    return ((q.whole - u.chunkGridOrigin) + q.fract) / u.chunkGridSize;
+    return (q.whole - u.chunkGridOrigin) + q.fract;
 }
-fn maskUv(p: vec2f) -> vec2f { return regionalUv((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid); }
+fn maskPoint(p: vec2f) -> vec2f { return regionalPoint((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid); }
 
 // Slope averaged over about 14 px: the relief a painted edge follows changes
 // over tens of pixels, not at the 5 px the shading's slope does.
@@ -703,15 +716,15 @@ fn styleEdge(p: vec2f, f: f32, slope: f32) -> f32 {
     return f * smoothstep(0.30, 0.60, abs(f) + (steep * 0.25 + lobes * 0.4 + grain * 0.6) * held);
 }
 
-fn weatherAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, regionalUv(uv), 0, 0.0); }
-fn timeMap2(uv: vec2f) -> vec4f { if (u.weatherMaps < 0.5) { return vec4f(0.0); } return textureSampleLevel(gridTex, linearClamp, regionalUv(uv), 2, 0.0); }
-fn timeMap3(uv: vec2f) -> vec4f { if (u.weatherMaps < 0.5) { return vec4f(0.5, 0.5, 0.0, 0.0); } return textureSampleLevel(gridTex, linearClamp, regionalUv(uv), 3, 0.0); }
-fn materialFieldAt(uv: vec2f) -> vec4f { return textureSampleLevel(gridTex, linearClamp, regionalUv(uv), 1, 0.0); }
+fn weatherAt(uv: vec2f) -> vec4f { return sampleRegionalArray(gridTex,regionalPoint(uv),0); }
+fn timeMap2(uv: vec2f) -> vec4f { if (u.weatherMaps < 0.5) { return vec4f(0.0); } return sampleRegionalArray(gridTex,regionalPoint(uv),2); }
+fn timeMap3(uv: vec2f) -> vec4f { if (u.weatherMaps < 0.5) { return vec4f(0.5, 0.5, 0.0, 0.0); } return sampleRegionalArray(gridTex,regionalPoint(uv),3); }
+fn materialFieldAt(uv: vec2f) -> vec4f { return sampleRegionalArray(gridTex,regionalPoint(uv),1); }
 
 // H5 override plane 17's deposits multiplier (planes 14-17: erosion, deposits, vegetation, exposure) at p: scales sand, stones and talus. 1 where nothing overrides.
 fn depositsAt(p: vec2f) -> f32 {
     if (u.overrideOn == 0) { return 1.0; }
-    return max(0.0, 1.0 + sampleMasks(maskUv(p),3).w);
+    return max(0.0, 1.0 + sampleMasks(maskPoint(p),3).w);
 }
 // H5: the Time pass's maps at world point p. layer 2: wear, wetness, hardness, slope; layer 3: fall line (-1..1), channel, ridge.
 struct TimeMaps { wear: f32, wet: f32, hard: f32, slope: f32, fall: vec2f, channel: f32, ridge: f32, flow: f32, talus: f32, deposit: f32 }
@@ -802,22 +815,19 @@ fn terrainNoise(p: vec2f) -> vec4f {
 
 #ifdef BAKE
 fn routeProtection(p: vec2f) -> f32 {
-    return textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0).r;
+    return sampleRegional2D(routesTex,maskPoint(p)).r;
 }
 #else
 // H7b: fields texel j holds the bake at world position origin + j * scale + (scale - 1) / 2 (the centre of the scale x scale block it stands
 // for); at scale 1 every term below is x * 1, x / 1 or x - 0, so the lookup is the one it replaced.
-fn bakedFields(p: vec2f) -> vec4f {
-    let q = clamp(p, vec2f(0.0), vec2f(u.size - 1.0));
-    let centre = (u.chunkFieldScale - 1.0) * 0.5;
-    return textureSampleLevel(fieldsTex, linearClamp, (((q + 0.5 * u.chunkFieldScale) - u.chunkFieldsOrigin) - centre) / u.chunkFieldScale / u.chunkFieldsSize, 0.0);
+fn fieldPoint(p:vec2f)->vec2f {
+    let q=modf((clamp(p,vec2f(0),vec2f(u.size-1.0))+.5)/u.chunkFieldScale);
+    return (q.whole-u.chunkFieldsOrigin/u.chunkFieldScale)+q.fract;
 }
-// The texel nearest p: what a field's code is there, unblended with its neighbours'.
+fn bakedFields(p: vec2f) -> vec4f { return sampleRegional2D(fieldsTex,fieldPoint(p)); }
+// The field code nearest p, without blending it with neighboring codes.
 fn bakedFieldsNearest(p: vec2f) -> vec4f {
-    let q = clamp(p, vec2f(0.0), vec2f(u.size - 1.0));
-    let centre = (u.chunkFieldScale - 1.0) * 0.5;
-    let t = (((q + 0.5 * u.chunkFieldScale) - u.chunkFieldsOrigin) - centre) / u.chunkFieldScale;
-    return textureSampleLevel(fieldsTex, linearClamp, (floor(t) + 0.5) / u.chunkFieldsSize, 0.0);
+    return textureLoad(fieldsTex,clamp(vec2i(floor(fieldPoint(p))),vec2i(0),vec2i(textureDimensions(fieldsTex))-1),0);
 }
 // Green: route protection 0..1, beach as negative, or 2 + crystal cover.
 fn routeProtection(p: vec2f) -> f32 { let g = bakedFields(p).g; return select(max(g, 0.0), 1.0, g > 1.5); }

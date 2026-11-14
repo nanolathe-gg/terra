@@ -172,7 +172,7 @@ fn rockDeposit(@builtin(global_invocation_id) id:vec3u){
                 if((level<0.0)!=under){
                     // The water's own choice, read a little way into the water it belongs to: a stroke set to Soft bank has no shore rock.
                     let way=stride*(f32(k)-1.0+clamp(before/(before-level),0.0,1.0));
-                    let soft=textureSampleLevel(masksTex,linearClamp,maskUv(p+dir*max(0.0,way+select(8.0,-8.0,under))),2,0.0).g;
+                    let soft=sampleRegionalArray(masksTex,maskPoint(p+dir*max(0.0,way+select(8.0,-8.0,under))),2).g;
                     let lake=smoothstep(.25,.75,soft);shore=max(shore,(1.0-way/reach)*(1.0-lake));bank=max(bank,(1.0-way/reach)*lake);break;
                 }
                 before=level;

@@ -270,7 +270,7 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
     out.deposits = 1.0;
     out.vegetation = 1.0 + u.lushness;
     if (u.overrideOn != 0) {
-        let uv = maskUv(p);
+        let uv = maskPoint(p);
         let planes = sampleMasks(uv,4);
         vegetation = u.lushness + planes.r;
         out.vegetation = 1.0 + vegetation;
@@ -769,7 +769,7 @@ fn sandBarAt(p: vec2f) -> f32 {
 // slope cover (moss), its lightest ground or beach (snow), its ground darkened
 // as the shoreline band darkens it (wet).
 fn paintCoverage(p: vec2f, slope: f32, hollow: f32) -> vec4f {
-    let raw = sampleMasks(maskUv(p),0);
+    let raw = sampleMasks(maskPoint(p),0);
     return paintEdge(p, raw, slope, hollow);
 }
 // The lightest of the world's ground and beach materials, grain damped (snow
@@ -1790,7 +1790,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var surfQ = vec2f(0.0);
     var surfSlope = 0.12;
     var surfE = 0.0;
-    if (u.waterOn != 0) { surfE = max(sampleMasks(maskUv(p),4).b, 0.0); }
+    if (u.waterOn != 0) { surfE = max(sampleMasks(maskPoint(p),4).b, 0.0); }
     if (surfE > 0.0) {
         let shore = surfShore(p);
         surfX = shore.x;
@@ -1923,7 +1923,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             var sandMaterial = sandMaterialAt(scatter);
             // riverfix: where a braided river's bed lies (mask plane 19) the sand is its gravel and silt instead, the world's river-bed colour (or its rock's,
             // darkened) with the sand's grain and a mottle of pebble-sized flecks; the pebbles themselves are the loose-stone scatter the bed paints denser.
-            let bed = max(sampleMasks(maskUv(p),4).a, 0.0);
+            let bed = max(sampleMasks(maskPoint(p),4).a, 0.0);
             if (bed > 0.0) {
                 let tone = select(u.rockTexMean * vec3f(0.78, 0.74, 0.68), u.riverBed.rgb, u.riverBed.a > 0.5);
                 let fleck = valueNoise(pixel / 1.4 + 7.0) * 0.5 + valueNoise(pixel / 2.9 + 41.0) * 0.3 + valueNoise(pixel / 9.0 + 3.0) * 0.2;
@@ -2279,7 +2279,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let shoreHard = u.crispShore;
         var edgeHard = u.deepEdge;
         if (u.waterOn != 0) {
-            let pick = sampleMasks(maskUv(p),2).b;
+            let pick = sampleMasks(maskPoint(p),2).b;
             if (pick > 0.5) { edgeHard = 1.0; } else if (pick < -0.5) { edgeHard = 0.0; }
         }
         var deep = smoothstep(u.shallowDepth, u.deepDepth, colorDepth);

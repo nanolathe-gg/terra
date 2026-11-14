@@ -1218,6 +1218,8 @@ and which are stage F. Then stop and report.
 
 **November 14 preview-lifetime follow-up:** [keeping the covering coarse color record](LP5_PREVIEW_LIFETIME.md) avoids rebuilding geometry after final completion or a mid-drag pause. In the focused pair, first-change p95 falls from 65–113 ms to 8–11 ms, within the unchanged cache quota; whole-current at a coarse level is equally fast. Quick replay, recomposition, zoom, invalidation and memory-lowering checks pass. Final-quality completion remains about 0.8 s and LP5 acceptance is open; the work stays on the review branch.
 
+**November 14 compact-input follow-up:** [exact-sized regional inputs and stable explicit interpolation](LP5_COMPACT_INPUTS.md) fit all 35 native records plus the coarse block inside the existing quota. In the focused pair, release-final falls from 759–829 ms to 87–123 ms, with exact same-build tile/cache/replay checks. Interpolation moves 0.476% of the sampled large view and remains on the review branch. Continuous-input final-quality p95 is still 1.62 s because native work restarts behind coarse updates; that scheduling gap is next.
+
 **Build (M-L)** only if step 0's rerun equals the full re-bake: land the
 split (scenes move by the reported drift, the owner looks), keep records for
 visible tiles, route stage-F changes to priority 3 of the scheduler, add the
