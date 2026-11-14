@@ -58,11 +58,12 @@ coverage for this work. Broad scene, realism and control sweeps stay on demand.
 ## Next LP6 work
 
 The owner still needs to review the march and wear sheets before landing.
-Thin-shell compaction is not implemented: the old 27 probes are an
-approximation, not a proven bound across the controls' ranges. It needs its
-own measured review unit rather than silently applying that defaults-only
-result. Surface-only wear dispatch compaction is also open. Larger tiles can
-be revisited after reducing solid cost and focus latency. The earlier native
+The subsequent [sampled-shell unit](LP6_SHELL.md) compacts density and skips
+full build/wear work outside its sampled band. It reports default-window
+equality, extreme-setting drift and a full-cell audit; the probe remains an
+approximation for visual review. A separate compact dispatch-list trial was
+discarded. Even after this solid speedup, the repeated 512-grid trial misses
+focus and submission deadlines, so 256-pixel view tiles remain. The earlier native
 count-prediction trial showed only a 0.5% view gain and increased memory; no
 final-pool or final-readback change is retained. Surface-atlas and per-landform
 Time work remain conditional on evidence.
