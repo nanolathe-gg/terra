@@ -1224,6 +1224,8 @@ and which are stage F. Then stop and report.
 
 **November 14 sweep follow-up:** [guarded native F continuation and direct rectangle repaint](LP5_COLOR_SWEEPS.md) reduce native-quality input p95 to 160 / 116 / 138 ms in the focused continuous/pause/cold pair, with first-change p95 under 20 ms and exact replay. Continuous still narrowly misses 150 ms. Geometry/Rain interruption and 512-MiB cache clearing pass; a short stroke pair is effectively flat (+1.8% final). The source stays on the review branch.
 
+**November 14 submission follow-up:** [bounded four-tile F submissions](LP5_COLOR_BATCHES.md) keep sampled native-quality p95 at 111–140 ms in two alternating large Modern Green pairs, with first-change p95 below 33 ms and exact replay. The sampled color row now meets 150 ms; partial coverage, other fixtures and cold startup remain open. The work stays on the review branch.
+
 **Build (M-L)** only if step 0's rerun equals the full re-bake: land the
 split (scenes move by the reported drift, the owner looks), keep records for
 visible tiles, route stage-F changes to priority 3 of the scheduler, add the

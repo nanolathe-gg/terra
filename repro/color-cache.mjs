@@ -30,6 +30,14 @@ for(const name of ['green-modern-2','green-2','red-3','green-7']){
   if(name==='green-7')r.setColors({...r.colorOverrides,deep:[.9,.12,.07]});else await H.knob(s,'ambient',.51);
   const t=performance.now();await r.renderColorTile(ta,options);const wa=await read(r);
   await r.renderColorTile(tb,options);const wb=await read(r),replayMs=performance.now()-t;
+  // Heterogeneous rectangles in one submission must keep local geometry and
+  // sampling coordinates, including the odd tile's derivative apron.
+  const batched=await r.renderColorTiles([ta,tb,ta,tb],options),atlas=await read(r),atlasWidth=r.canvas.width;
+  for(const [i,region]of batched.regions.entries()){
+    const tile=i%2?tb:ta,width=tile.width,height=tile.height,x=i<2?0:ta.width+tb.width,offset=x+(i%2?ta.width:0),pixels=new Uint8Array(width*height*4);
+    for(let y=0;y<height;y++)pixels.set(atlas.subarray((y*atlasWidth+offset)*4,(y*atlasWidth+offset+width)*4),y*width*4);
+    assert.equal(sha(pixels),sha(i%2?wb:wa),name+' batch tile '+i);
+  }
   const fulla=await H.renderWindow(s,a),fullb=await H.renderWindow(s,b);
   assert.equal(sha(wa),sha(fulla),name+' first tile');assert.equal(sha(wb),sha(fullb),name+' interleaved odd tile');
   const maskBytes=[ta.source.colorMasks??ta.source.maskTexture,tb.source.colorMasks??tb.source.maskTexture].map(texture=>r.resources.get(texture)?.bytes??0),retained=r.colorBytes;await H.knob(s,'rockFace',3.9);await assert.rejects(()=>r.renderColorTile(ta,options),/needs [ABCDE]/);
@@ -38,7 +46,7 @@ for(const name of ['green-modern-2','green-2','red-3','green-7']){
   const pending=r.renderColorTile(tb,options);assert.equal(tb.users,1);r.releaseColorTile(tb);assert(r.resources.has(tb.record));resume();
   await assert.rejects(()=>pending,/evicted/);assert(!r.resources.has(tb.record));r.previousChunk=completion;
   r.trimColorTiles();assert.equal(r.colorBytes,0);await r.device.queue.onSubmittedWorkDone();await new Promise(r=>setTimeout(r,30));assert.deepEqual(s.errors,[]);
-  rows.push({scene:name,tiles:[a,b].map(({options,...r})=>r),sha:[sha(wa),sha(wb)],different:0,retained,maskBytes,replayIncludingReadbacksMs:replayMs,geometryEditRejected:true,retirementWaitedForReader:true,evictedBytes:r.colorBytes,errors:s.errors});
+  rows.push({scene:name,tiles:[a,b].map(({options,...r})=>r),sha:[sha(wa),sha(wb)],different:0,batchedTiles:4,retained,maskBytes,replayIncludingReadbacksMs:replayMs,geometryEditRejected:true,retirementWaitedForReader:true,evictedBytes:r.colorBytes,errors:s.errors});
   console.log(rows.at(-1));s.dispose();
 }
 writeFileSync(join(out,'color-cache-proof.json'),JSON.stringify(rows));process.exit(0);

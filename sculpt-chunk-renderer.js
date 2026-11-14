@@ -441,20 +441,22 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   // Geometry and surface textures transfer from the mutable workspace; only
   // the three packed mask layers are copied. Evict these before reusable work.
   colorResources(){return [...new Set([this.geometryRecord,this.heightTexture,this.gridTexture,this.fieldsTexture,this.rockWeather.final,this.rockWeather.source,this.rockWeather.rim].filter(r=>this.resources.get(r)?.kind==='working'))];}
-  colorTileBytes(){return this.colorResources().reduce((n,r)=>n+this.resources.get(r).bytes,0)+this.maskTexture.width*this.maskTexture.height*12+this.layout.size;}
+  colorTileBytes(){return this.colorResources().reduce((n,r)=>n+this.resources.get(r).bytes,0)+this.maskTexture.width*this.maskTexture.height*12+this.layout.size+16;}
   async retainColorTile(){
     if(this.busy||!this.geometryValid||!this.activeInput||!this.activeLevel)return null;
-    if(!this.makeWorkingRoom(this.maskTexture.width*this.maskTexture.height*12+this.layout.size))return null;
+    if(!this.makeWorkingRoom(this.maskTexture.width*this.maskTexture.height*12+this.layout.size+16))return null;
     this._busy=true;try {
       const owned=this.colorResources(),source={heightTexture:this.heightTexture,gridTexture:this.gridTexture,maskTexture:this.emptyColorMasks,colorMasks:null,fieldsTexture:this.fieldsTexture,rockWeather:{empty:this.rockWeather.empty,final:this.rockWeather.final,source:this.rockWeather.source,rim:this.rockWeather.rim}};
       const tile={owned,source,world:this.geometryUniformSnapshot.slice(),cpu:this.uniformData.slice(0),width:this.canvas.width,height:this.canvas.height,outWidth:this.outputCanvas.width,outHeight:this.outputCanvas.height,record:this.geometryRecord,gpuFlags:this.gpuFlags,users:0,retired:false};
       try{await terrainAllocation(this.device,()=>{
         source.colorMasks=this.texture('retained color masks',this.maskTexture.width,this.maskTexture.height,3,'rgba8snorm',4,GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST,'color-cache');
         tile.uniform=this.device.createBuffer({label:'retained color uniforms',size:this.layout.size,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});this.track(tile.uniform,'retained color uniforms',this.layout.size,'color-cache');
-      });}catch(error){this.release(tile.uniform);this.release(source.colorMasks);throw error;}
+        tile.frame=this.device.createBuffer({label:'retained color frame',size:16,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});this.track(tile.frame,'retained color frame',16,'color-cache');
+      });}catch(error){this.release(tile.uniform);this.release(tile.frame);this.release(source.colorMasks);throw error;}
+      this.device.queue.writeBuffer(tile.frame,0,new Uint32Array([tile.width+2,tile.height+2,0,0]));
       const encoder=this.device.createCommandEncoder({label:'retain color flags'});encoder.copyBufferToBuffer(this.uniformBuffer,0,tile.uniform,0,this.layout.size);encoder.copyTextureToTexture({texture:this.maskTexture},{texture:source.colorMasks},[this.maskTexture.width,this.maskTexture.height,3]);this.device.queue.submit([encoder.finish()]);
-      tile.owned.push(tile.uniform,source.colorMasks);tile.bytes=tile.owned.reduce((n,r)=>n+this.resources.get(r).bytes,0);for(const r of tile.owned)this.resources.get(r).kind='color-cache';
-      tile.group=this.commonBindGroup('draw',source,tile.uniform);this.colorTiles.add(tile);
+      tile.owned.push(tile.uniform,tile.frame,source.colorMasks);tile.bytes=tile.owned.reduce((n,r)=>n+this.resources.get(r).bytes,0);for(const r of tile.owned)this.resources.get(r).kind='color-cache';
+      tile.group=this.commonBindGroup('draw',source,tile.uniform);tile.geometryGroup=this.geometryBinding(this.geometryInLayout,tile.record,source.colorMasks,tile.frame);this.colorTiles.add(tile);
       // Remove transferred textures from the workspace owners before reuse.
       const keep=new Set(tile.owned),input=this.activeInput,level=this.activeLevel;
       for(const [key,state]of this.inputSets)if(state===input)this.inputSets.delete(key);
@@ -470,36 +472,64 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   }
   trimColorTiles(enough=()=>false){for(const tile of this.colorTiles){if(enough())break;this.releaseColorTile(tile);}}
   async renderColorTile(tile,options=this.worldOptions){
+    const result=await this.renderColorTiles([tile],options);return {canvas:result.canvas,pipelineKey:result.pipelineKey};
+  }
+  colorBatchSize(tiles){
+    for(let n=Math.min(4,tiles.length);n>0;n--){
+      const batch=tiles.slice(0,n),width=Math.max(...batch.map(t=>t.width)),height=Math.max(...batch.map(t=>t.height)),atlasWidth=batch.reduce((a,t)=>a+t.width,0),outWidth=batch.reduce((a,t)=>a+t.outWidth,0),outHeight=Math.max(...batch.map(t=>t.outHeight));
+      const target=this.colorTargets.get(width+','+height),targetBytes=target&&this.resources.has(target)?0:width*height*4;
+      if(Math.max(atlasWidth,outWidth,height,outHeight)>this.device.limits.maxTextureDimension2D)continue;
+      const outputs=atlasWidth*height*4+outWidth*outHeight*4;
+      if(this.residentBytes-this.outputBytes+this.reservedBytes+outputs+targetBytes<=this.budgetBytes)return n;
+    }return 0;
+  }
+  // A small bounded color batch shares one completion wait and presentation
+  // canvas. Every draw still reads its own immutable region and geometry.
+  async renderColorTiles(tiles,options=this.worldOptions){
     if(this.busy)throw Error('The renderer is already rendering.');
-    if(!this.colorTiles.has(tile)||tile.retired)throw new DOMException('The color record was evicted.','AbortError');
-    this._busy=true;tile.users++;
+    if(!tiles.length||tiles.length>4)throw Error('A color batch needs one to four tiles.');
+    for(const tile of tiles)if(!this.colorTiles.has(tile)||tile.retired)throw new DOMException('The color record was evicted.','AbortError');
+    const count=this.colorBatchSize(tiles);if(!count){this.trimColorTiles();throw new DOMException('The color output no longer fits.','AbortError');}tiles=tiles.slice(0,count);
+    this._busy=true;for(const tile of tiles)tile.users++;
     try {
-      await this.previousChunk;if(tile.retired)throw new DOMException('The color record was evicted.','AbortError');
-      this.syncWorld(options);const delta=worldUniformDelta(tile.world,this.uniformData,this.layout,this.uniformStages);
-      if(delta.stage&&delta.stage<'F')throw new DOMException('The color record needs '+delta.stage+'.','AbortError');
-      const cpu=tile.cpu.slice(0),skip=new Set([...PER_CHUNK_UNIFORMS,'weatherMaps','materialReady','transitionBody','rockWeatherGrid']),rock=this.layout.fields.get('rock');
-      for(const [name,f]of this.layout.fields){
-        if(skip.has(name)||name.startsWith('chunk')||name!=='rock'&&rock&&f.offset>=rock.offset&&f.offset<rock.offset+rock.count*rock.stride)continue;
-        const bytes=f.kind==='struct'?f.count*f.stride:(f.count-1)*f.stride+f.width*4;new Uint8Array(cpu,f.offset,bytes).set(new Uint8Array(this.uniformData,f.offset,bytes));
-      }
-      // Seven availability flags belong to the GPU snapshot, not this CPU copy.
-      let at=0;for(const offset of tile.gpuFlags?this.flagsPass.ranges:[]){if(offset>at)this.device.queue.writeBuffer(tile.uniform,at,cpu,at,offset-at);at=offset+4;}if(at<cpu.byteLength)this.device.queue.writeBuffer(tile.uniform,at,cpu,at,cpu.byteLength-at);
-      const {width,height,outWidth,outHeight}=tile;if(this.canvas.width!==width)this.canvas.width=width;if(this.canvas.height!==height)this.canvas.height=height;
-      const key=width+','+height;let target=this.colorTargets.get(key);
+      await this.previousChunk;
+      for(const tile of tiles)if(tile.retired)throw new DOMException('The color record was evicted.','AbortError');
+      const width=Math.max(...tiles.map(t=>t.width)),height=Math.max(...tiles.map(t=>t.height)),key=width+','+height;
+      let target=this.colorTargets.get(key);
       if(!target||!this.resources.has(target)){
         if(this.colorTargets.size>=3){const [old,resource]=this.colorTargets.entries().next().value;this.release(resource);this.colorTargets.delete(old);}
         await terrainAllocation(this.device,()=>{target=this.texture('cached color target',width,height,1,this.format,4,GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC);});
       }
-      this.colorTargets.delete(key);this.colorTargets.set(key,target);this.colorReplayTarget=target;
-      if(tile.retired)throw new DOMException('The color record was evicted.','AbortError');
-      this.device.queue.writeBuffer(this.geometrySettings,0,new Uint32Array([width+2,height+2,0,0]));const encoder=this.device.createCommandEncoder({label:'cached tile color'});
-      this.encodeColor(encoder,this.genericPipelines[this.rockMask()].draw,[0,0,width,height],true,null,{record:tile.record,group:tile.group,masks:tile.source.colorMasks,target:this.colorReplayTarget});
-      encoder.copyTextureToTexture({texture:this.colorReplayTarget},{texture:this.context.getCurrentTexture()},[width,height]);this.device.queue.submit([encoder.finish()]);
+      this.colorTargets.delete(key);this.colorTargets.set(key,target);
+      this.syncWorld(options);
+      for(const tile of tiles){
+        if(tile.retired)throw new DOMException('The color record was evicted.','AbortError');
+        const delta=worldUniformDelta(tile.world,this.uniformData,this.layout,this.uniformStages);
+        if(delta.stage&&delta.stage<'F')throw new DOMException('The color record needs '+delta.stage+'.','AbortError');
+        const cpu=tile.cpu.slice(0),skip=new Set([...PER_CHUNK_UNIFORMS,'weatherMaps','materialReady','transitionBody','rockWeatherGrid']),rock=this.layout.fields.get('rock');
+        for(const [name,f]of this.layout.fields){
+          if(skip.has(name)||name.startsWith('chunk')||name!=='rock'&&rock&&f.offset>=rock.offset&&f.offset<rock.offset+rock.count*rock.stride)continue;
+          const bytes=f.kind==='struct'?f.count*f.stride:(f.count-1)*f.stride+f.width*4;new Uint8Array(cpu,f.offset,bytes).set(new Uint8Array(this.uniformData,f.offset,bytes));
+        }
+        // Seven availability flags belong to the GPU snapshot, not this CPU copy.
+        let at=0;for(const offset of tile.gpuFlags?this.flagsPass.ranges:[]){if(offset>at)this.device.queue.writeBuffer(tile.uniform,at,cpu,at,offset-at);at=offset+4;}if(at<cpu.byteLength)this.device.queue.writeBuffer(tile.uniform,at,cpu,at,cpu.byteLength-at);
+      }
+      const atlasWidth=tiles.reduce((n,t)=>n+t.width,0),outWidth=tiles.reduce((n,t)=>n+t.outWidth,0),outHeight=Math.max(...tiles.map(t=>t.outHeight));
+      if(this.canvas.width!==atlasWidth)this.canvas.width=atlasWidth;if(this.canvas.height!==height)this.canvas.height=height;
       if(this.outputCanvas.width!==outWidth)this.outputCanvas.width=outWidth;if(this.outputCanvas.height!==outHeight)this.outputCanvas.height=outHeight;
-      const copy=this.outputCanvas.getContext('2d');copy.imageSmoothingEnabled=true;copy.imageSmoothingQuality='high';copy.drawImage(this.canvas,0,0,outWidth,outHeight);
-      const completion=this.device.queue.onSubmittedWorkDone();this.previousChunk=completion;completion.then(()=>{this.completedChunk=completion;},()=>{});this.colorReruns++;
-      return {canvas:this.outputCanvas,pipelineKey:this.specKey().key};
-    }finally{this._busy=false;tile.users--;if(tile.retired)this.releaseColorTile(tile);}
+      this.outputBytes=atlasWidth*height*4+outWidth*outHeight*4;this.recordMemory();
+      const encoder=this.device.createCommandEncoder({label:'cached tile colors'}),presentation=this.context.getCurrentTexture(),pipeline=this.genericPipelines[this.rockMask()].draw,regions=[];let x=0,outX=0;
+      for(const tile of tiles){
+        this.encodeColor(encoder,pipeline,[0,0,tile.width,tile.height],true,null,{record:tile.record,group:tile.group,masks:tile.source.colorMasks,target,geometryGroup:tile.geometryGroup});
+        encoder.copyTextureToTexture({texture:target},{texture:presentation,origin:[x,0,0]},[tile.width,tile.height]);
+        regions.push({x:outX,y:0,width:tile.outWidth,height:tile.outHeight,sourceX:x,tile});x+=tile.width;outX+=tile.outWidth;
+      }
+      this.device.queue.submit([encoder.finish()]);
+      const copy=this.outputCanvas.getContext('2d');copy.imageSmoothingEnabled=true;copy.imageSmoothingQuality='high';
+      for(const r of regions)copy.drawImage(this.canvas,r.sourceX,0,r.tile.width,r.tile.height,r.x,0,r.width,r.height);
+      const completion=this.device.queue.onSubmittedWorkDone();this.previousChunk=completion;completion.then(()=>{this.completedChunk=completion;},()=>{});this.colorReruns+=tiles.length;
+      return {canvas:this.outputCanvas,pipelineKey:this.specKey().key,regions};
+    }finally{this._busy=false;for(const tile of tiles){tile.users--;if(tile.retired)this.releaseColorTile(tile);}}
   }
   // A reusable canvas is returned. Copy it before the next renderChunk; the
   // caller must count its retained bitmap/canvas bytes separately from stats.
