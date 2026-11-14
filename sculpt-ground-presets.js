@@ -1,8 +1,12 @@
+import gamePalette from './materials/palette.json' with {type:'json'};
+import texturePresets from './materials/texture-presets.json' with {type:'json'};
+import {TEXTURE_CONTROLS,copyTextureColors,copyTexturePalette} from './sculpt-texture-model.js';
 // Absolute ground recipes. Slots 1–7 belong to the map; slot 0 belongs to the world.
-// Ramp values index the game's 256-entry palette, not an RGB approximation.
+// Colors are continuous RGB; numeric palette references normalize to RGB on input.
 export const GROUND_SLOTS = 8;
 export const GROUND_CACHE_BYTES = 128 * 1024 * 1024;
 export const GROUND_CONTROLS = [
+ ...TEXTURE_CONTROLS.map(([key,,lo,hi,def])=>[key,lo,hi,def]),
  ['grainFine',0,1,0],['grainMedium',0,1,0],['grainBroad',0,1,0],['grainRelief',0,8,0],['grainColorMix',0,1,0],['grainStretch',1,8,1],['grainDirection',0,180,0],
  ['bumpAmount',0,8,0],['bumpSize',3,96,16],['bumpStretch',1,4,1],
  ['plateAmount',0,8,0],['plateSize',12,256,64],['plateVariation',0,1,.5],['plateProfile',-1,1,0],['borderProfile',-1,1,-1],['crackWidth',0,12,2],['rimCurl',0,1,.3],['plateTilt',0,1,.2],['secondaryCracks',0,1,0],
@@ -19,7 +23,11 @@ export const GROUND_KEYS = GROUND_CONTROLS.map(([key]) => key);
 export const GROUND_DEFAULTS = Object.fromEntries(GROUND_CONTROLS.map(([key,,,value]) => [key,value]));
 const object = x => x && typeof x === 'object' && !Array.isArray(x);
 const nameOf = name => { if (typeof name !== 'string' || !name.trim() || name.trim().length > 80) throw Error('A ground preset needs a name of 1 to 80 characters.'); return name.trim(); };
-const paletteIndex = n => { if (!Number.isInteger(n) || n < 0 || n > 255) throw Error('Ground colors must be game palette entries (0–255).'); return n; };
+const recipeColor = value => {
+ if(Number.isInteger(value)&&value>=0&&value<=255)return [...gamePalette.indexed[value]];
+ if(!Array.isArray(value)||value.length!==3||value.some(n=>typeof n!=='number'||!Number.isFinite(n)||n<0||n>255))throw Error('Ground colors need RGB values from 0 to 255.');
+ return [...value];
+};
 export function copyGroundRecipe(value) {
  if (!object(value)) throw Error('Invalid ground recipe.');
  const knobs = {...GROUND_DEFAULTS};
@@ -28,28 +36,29 @@ export function copyGroundRecipe(value) {
   const n=value.knobs[key]; if(typeof n!=='number'||!Number.isFinite(n)) throw Error(`Invalid ground setting: ${key}.`);
   knobs[key]=Math.max(lo,Math.min(hi,n));
  }
- if (!Array.isArray(value.ramp) || value.ramp.length !== 16) throw Error('A ground ramp needs 16 palette entries.');
+ if (!Array.isArray(value.ramp) || value.ramp.length !== 16) throw Error('A ground ramp needs 16 colors.');
  const variationRamp=value.variationRamp ?? value.ramp;
- if(!Array.isArray(variationRamp)||variationRamp.length!==16)throw Error('A ground variation ramp needs 16 palette entries.');
- return {knobs,ramp:value.ramp.map(paletteIndex),variationRamp:variationRamp.map(paletteIndex),line:paletteIndex(value.line ?? value.ramp[0])};
+ if(!Array.isArray(variationRamp)||variationRamp.length!==16)throw Error('A ground variation ramp needs 16 colors.');
+ return {knobs,textureColors:copyTextureColors(value.textureColors),texturePalette:copyTexturePalette(value.texturePalette),ramp:value.ramp.map(recipeColor),variationRamp:variationRamp.map(recipeColor),line:recipeColor(value.line ?? value.ramp[0])};
 }
 export function copyGrounds(value) {
  if(value==null)return null;
  if(!Array.isArray(value)||value.length>=GROUND_SLOTS)throw Error('A map holds at most seven ground presets besides the world’s own.');
+ for(const role of ['worldGround','worldWater'])if(value.filter(p=>p?.[role]===true).length>1)throw Error('Only one material can be assigned as '+role+'.');
  const slots=new Set(),keys=new Set();
  return value.map(p=>{
   if(!object(p)||!Number.isInteger(p.slot)||p.slot<1||p.slot>=GROUND_SLOTS||slots.has(p.slot))throw Error('A ground preset needs its own slot, 1 to 7.');
   slots.add(p.slot);const key=p.key??null;
   if(key!==null&&(typeof key!=='string'||!key.trim()||key.length>80||keys.has(key)))throw Error('Ground preset keys must be unique nonempty strings.');
   if(key)keys.add(key);
-  return {slot:p.slot,name:nameOf(p.name),key,...copyGroundRecipe(p)};
+  return {slot:p.slot,name:nameOf(p.name),key,worldGround:p.worldGround===true,worldWater:p.worldWater===true,...copyGroundRecipe(p)};
  }).sort((a,b)=>a.slot-b.slot);
 }
 export const worldGrounds = config => copyGrounds(config.grounds) ?? [];
 const freeSlot = grounds => {for(let slot=1;slot<GROUND_SLOTS;slot++)if(!grounds.some(p=>p.slot===slot))return slot;throw Error('A map holds at most seven ground presets besides the world’s own.');};
 function uniqueName(grounds,name,worldName='World ground') {const taken=new Set([worldName,...grounds.map(p=>p.name)]);if(!taken.has(name))return name;for(let n=2;;n++)if(!taken.has(`${name} ${n}`))return `${name} ${n}`;}
 export function addGround(grounds,recipe,name='Ground',worldName) {
- const slot=freeSlot(grounds),p={slot,name:uniqueName(grounds,nameOf(name),worldName),key:null,...copyGroundRecipe(recipe)};
+ const slot=freeSlot(grounds),p={slot,name:uniqueName(grounds,nameOf(name),worldName),key:null,worldGround:false,worldWater:false,...copyGroundRecipe(recipe)};
  return {slot,grounds:[...grounds,p].sort((a,b)=>a.slot-b.slot)};
 }
 export function duplicateGround(grounds,slot,world) {
@@ -72,7 +81,7 @@ export function keepStrokeGrounds(nodes,grounds) {
  return nodes.map(n=>n.params&&n.params.groundPreset!==undefined&&n.params.groundPreset!==strokeGround(n,grounds)?{...n,params:{...n.params,groundPreset:strokeGround(n,grounds)}}:n);
 }
 export function groundsInUse(nodes,grounds) {
- const used=new Set(nodes.filter(n=>!n.hidden&&(n.kind==='landform'||n.kind==='paint'&&(n.params?.paintChannel===26||n.params?.paintChannel===undefined))).map(n=>strokeGround(n,grounds)));
+ const used=new Set([...grounds.filter(p=>p.worldGround||p.worldWater).map(p=>p.slot),...nodes.filter(n=>!n.hidden&&(n.kind==='landform'||n.kind==='paint'&&(n.params?.paintChannel===26||n.params?.paintChannel===undefined))).map(n=>strokeGround(n,grounds))]);
  return grounds.filter(p=>used.has(p.slot)).sort((a,b)=>a.slot-b.slot);
 }
 export function deleteGround(grounds,nodes,slot) {
@@ -88,13 +97,14 @@ export function parseGroundRecipe(text) {
 }
 export function groundCacheUsage(count,pool) {
  if(!Number.isInteger(count)||count<0||count>GROUND_SLOTS||!Number.isInteger(pool)||pool<512||pool%512)throw Error('Invalid ground cache dimensions.');
- const bytes=count*pool*pool*8,capacity=Math.min(GROUND_SLOTS,Math.floor(GROUND_CACHE_BYTES/(pool*pool*8)));
+ const bytes=count*pool*pool*12,capacity=Math.min(GROUND_SLOTS,Math.floor(GROUND_CACHE_BYTES/(pool*pool*12)));
  return {bytes,capacity,budget:GROUND_CACHE_BYTES,fits:bytes<=GROUND_CACHE_BYTES};
 }
 
 // Starting recipes are only absolute settings and palette entries.
 const ramp = (dark,light) => Array.from({length:16},(_,i)=>Math.round(dark+(light-dark)*i/15));
 export const GROUND_PRESETS = {
+ ...texturePresets,
  bed:{name:'Cracked bed',knobs:{plateAmount:3.5,plateSize:64,plateVariation:.8,plateProfile:-.2,borderProfile:-1,crackWidth:1.8,rimCurl:.65,plateTilt:.35,secondaryCracks:.5,toneVariation:.22,roughness:0},ramp:ramp(94,80),line:93},
  salt:{name:'Salt flat',knobs:{plateAmount:.7,plateSize:48,borderProfile:1,rimCurl:.2,crackWidth:1,grainFine:.12,toneVariation:.08,roughness:.1},ramp:ramp(86,80),line:80},
  gravel:{name:'Gravel',knobs:{pebbleAmount:3,pebbleSize:9,pebbleRound:.3,bumpAmount:.5,bumpSize:23,grainFine:.3,toneVariation:.2,roughness:.2},ramp:ramp(94,83),line:94},

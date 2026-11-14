@@ -207,20 +207,18 @@ fn weatheredCover(cover: f32, deposits: vec4f, grain: vec4f) -> f32 {
 // drawn into the first row of the ground texture at startup.
 // The grid is the export's: its rows start tileShift screen rows down (TA's projection offset), so a tile of the plain is one TNT tile
 // (16 on a bare Green map, where a grid on the screen's rows cut every TNT tile across two of them and made 256).
-fn recipeGround(p:vec2f)->vec3f {
-    let sample=groundHere(p);let t=clamp(sample.y+sample.z*.35,0.0,1.0)*15.0;
-    let a=u32(floor(t));let b=min(a+1u,15u);
-    let r=u.ground[gs & groundMask];
-    var color=mix(r.ramp[a].rgb,r.ramp[b].rgb,fract(t));
-    if(r.grainColorMix>0.0){
-        let alternate=mix(r.variationRamp[a].rgb,r.variationRamp[b].rgb,fract(t));
-        // An independent, whole-world-pixel sample lets hue vary within a tone.
-        // Both ramps remain unlit and editable without regenerating the cache.
-        let variation=cellHash(poolPixel(p)+vec2f(211.0,317.0)).x;
-        color=mix(color,alternate,variation*r.grainColorMix);
-    }
-    return mix(color,r.lineColor.rgb,sample.w);
+fn waterPigment(p:vec2f)->vec3f {
+ if(u.waterGround>0){
+  let slot=u32(u.waterGround);let layer=u.ground[slot & groundMask].cacheLayer;
+  let dx=textureLoad(groundTex,vec2i(poolPixel(p+vec2f(1,0))),layer,0).x-textureLoad(groundTex,vec2i(poolPixel(p-vec2f(1,0))),layer,0).x;
+  let dy=textureLoad(groundTex,vec2i(poolPixel(p+vec2f(0,1))),layer,0).x-textureLoad(groundTex,vec2i(poolPixel(p-vec2f(0,1))),layer,0).x;
+  let normal=normalize(vec3f(-vec2f(dx,dy)*.5,1));
+  let light=(u.ambient+.95*max(0.0,dot(normal,u.light)))/max(.001,u.ambient+.95*u.light.z);
+  return materialPigment(p,slot)*min(light,u.lightCap);
+ }
+ return genColor(u.waterLayer,p);
 }
+fn recipeGround(p:vec2f)->vec3f { return materialPigment(p,gs); }
 fn groundTile(world: vec2f) -> vec3f {
     let pixel = grainPixel(world - vec2f(0.0, u.tileShift));
     let cell = vec2i(floor(pixel / 32.0));
@@ -2281,12 +2279,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
         var deep = smoothstep(u.shallowDepth, u.deepDepth, colorDepth);
         if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, bedDepth); }
-        var grain = genColor(u.waterLayer, pixel) - u.waterMean;
+        var grain = waterPigment(pixel) - u.waterMean;
         if (u.lowGrain < 1.0) { grain *= lowGrain; }
         // Colors choose the water's tint, never replace the bed-light model.
         var water=vec3f(0);
         {
-            var deepWater = select(genColor(u.waterLayer,pixel),u.deepBase.rgb+grain*.95,u.deepBase.a>.5);
+            var deepWater = select(waterPigment(pixel),u.deepBase.rgb+grain*.95,u.deepBase.a>.5);
             if (u.lowGrain < 1.0) { deepWater = select(u.waterMean,u.deepBase.rgb,u.deepBase.a>.5) + grain; }
             // One bed model: the shallows are the ground under the water, lit by the same sun, seen through
             // the water's tint (retail draws its shallows as lit terrain through a tint). Shallows see the same

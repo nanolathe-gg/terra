@@ -124,6 +124,7 @@ fn groundRipples(p:vec2f,size:f32,asymmetry:f32)->f32 {
  let count=max(1.0,u.pool/size);let n=exp2(floor(log2(count)));
  return mix(groundRippleCount(p,n,asymmetry),groundRippleCount(p,n*2.0,asymmetry),fract(log2(count)));
 }
+/*TEXTURE_PATTERN*/
 fn groundRecipe(p:vec2f)->vec4f {
  let r=u.ground[gs & groundMask];var out=vec4f(0,.5,0,0);
  if(r.plateAmount>0.0){
@@ -147,7 +148,7 @@ fn groundRecipe(p:vec2f)->vec4f {
  if(r.rippleAmount>0.0){out.x+=groundRipples(p,r.rippleSize,r.rippleAsymmetry)*r.rippleAmount;}
  if(r.toneVariation>0.0){out.z+=groundNoise(p,r.toneSize,191.0)*r.toneVariation*.4;}
  if(r.quietAmount>0.0){let activity=mix(1.0,smoothstep(-.55,.55,groundNoise(p,r.quietSize,137.0)),r.quietAmount);out.x*=activity;out.y=mix(.5,out.y,activity);out.w*=activity;}
- out.x=clamp(out.x,-8.0,8.0);out.y=clamp(out.y,0.0,1.0);out.w=clamp(out.w,0.0,1.0);return out;
+ out.x=clamp(out.x,-8.0,8.0);out.y=clamp(out.y,0.0,1.0);out.w=clamp(out.w,0.0,1.0);if(r.patternAmount>0.0){let pattern=textureRecipe(p);let combined=mix(out,pattern,r.patternAmount);return vec4f(out.x+pattern.x*r.patternAmount,combined.yzw);}return out;
 }
 @group(1) @binding(0) var groundOut:texture_storage_2d_array<rgba16float,write>;
 @group(1) @binding(1) var<uniform> groundJob:vec4u;

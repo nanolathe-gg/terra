@@ -113,6 +113,61 @@ struct Rock {
 
 // Absolute ground recipes; the cache holds height and unlit color parameters.
 struct Ground {
+    patternAmount: f32,
+    patternSize: f32,
+    patternDetail: f32,
+    patternGradient: f32,
+    patternTurbulence: f32,
+    patternCells: f32,
+    patternStreak: f32,
+    patternLength: f32,
+    patternDirection: f32,
+    patternSlope: f32,
+    patternWarp: f32,
+    patternWarpSize: f32,
+    patternMottle: f32,
+    patternMottleSize: f32,
+    patternLow: f32,
+    patternHigh: f32,
+    patternPower: f32,
+    patternEase: f32,
+    textureFineStructure: f32,
+    textureFine: f32,
+    textureFineSize: f32,
+    textureFineGradient: f32,
+    textureFineWarp: f32,
+    markAmount: f32,
+    markSize: f32,
+    markSpacing: f32,
+    markDensity: f32,
+    markScatter: f32,
+    markCore: f32,
+    markVariation: f32,
+    markFollow: f32,
+    markNoise: f32,
+    markNoiseSize: f32,
+    markLow: f32,
+    markHigh: f32,
+    markMultiply: f32,
+    textureHeight: f32,
+    textureGrainHeight: f32,
+    texturePitDepth: f32,
+    textureDither: f32,
+    diffusionMix: f32,
+    paletteGamma: f32,
+    paletteRed: f32,
+    paletteGreen: f32,
+    paletteBlue: f32,
+    textureLow: vec4f,
+    textureMiddle: vec4f,
+    textureHigh: vec4f,
+    textureMark: vec4f,
+    textureFineLow: vec4f,
+    textureFineHigh: vec4f,
+    textureMarkTint: vec4f,
+    texturePaletteCount: i32,
+    texturePalette: array<vec4f,32>,
+
     cacheLayer: i32,
     grainFine: f32,
     grainMedium: f32,
@@ -475,6 +530,8 @@ struct Uniforms {
     chunkScale: f32,          // World pixels per raster texel.
     chunkFieldScale: f32,     // Relief bake spacing, independent of color sampling.
     groundIdOn: i32,
+    groundDefault: i32,
+    waterGround: i32,
     groundAny: i32,
     ground: array<Ground, 8>,
 }
@@ -678,6 +735,7 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), sel
 @group(0) @binding(10) var rockWeatherTex: texture_2d<f32>;
 @group(0) @binding(11) var rockSourceTex: texture_2d<f32>;
 @group(0) @binding(12) var rockRimTex: texture_2d<f32>;
+@group(0) @binding(14) var groundColorTex: texture_2d_array<f32>;
 @group(0) @binding(13) var groundTex: texture_2d_array<f32>;
 @group(0) @binding(7) var linearClamp: sampler;
 @group(0) @binding(8) var linearRepeat: sampler;
@@ -973,9 +1031,9 @@ fn rockSlotAt(p:vec2f)->u32 {
 fn useRock(p:vec2f) { rs=rockSlotAt(p); }
 // Ground choices use the authored grid directly, with no world-space noise.
 fn groundSlotAt(p:vec2f)->u32 {
-    if(u.groundIdOn==0){return 0u;}
+    if(u.groundIdOn==0){return u32(u.groundDefault);}
     let cell=clamp(vec2i(floor(p/(u.size-1.0)*(u.grid-1.0)+.5-u.chunkGridOrigin)),vec2i(0),vec2i(textureDimensions(masksTex))-1);
-    return u32(clamp(round(textureLoad(masksTex,cell,5,0).g*127.0)-1.0,0.0,7.0));
+    let id=round(textureLoad(masksTex,cell,5,0).g*127.0);return select(u32(clamp(id-1.0,0.0,7.0)),u32(u.groundDefault),id<.5);
 }
 // Whole texels preserve each plate's own tone and line at a level surface.
 fn groundHere(p:vec2f)->vec4f {
@@ -985,7 +1043,7 @@ fn groundHere(p:vec2f)->vec4f {
 // still chooses color and finish; no noise or gameplay height enters the edge.
 fn groundHeightFor(p:vec2f,cell:vec2i)->f32 {
     let c=clamp(cell,vec2i(0),vec2i(textureDimensions(masksTex))-1);
-    let slot=u32(clamp(round(textureLoad(masksTex,c,5,0).g*127.0)-1.0,0.0,7.0));
+    let id=round(textureLoad(masksTex,c,5,0).g*127.0);let slot=select(u32(clamp(id-1.0,0.0,7.0)),u32(u.groundDefault),id<.5);
     let layer=u.ground[slot & groundMask].cacheLayer;
     if(layer<0){return 0.0;}
     return textureLoad(groundTex,vec2i(poolPixel(p)),layer,0).x;
@@ -1001,6 +1059,29 @@ fn groundFinishNoise(p:vec2f,size:f32,salt:f32)->f32 {
     let count=max(1.0,u.pool/max(1.0,size));let n=exp2(floor(log2(count)));let q=poolPos(p)/u.pool;
     return mix(wrapNoise(q*n+salt,n),wrapNoise(q*(n*2.0)+salt,n*2.0),fract(log2(count)));
 }
+
+fn textureColor(sample:vec4f,slot:u32)->vec3f {
+ let r=u.ground[slot & groundMask];let t=sample.y;
+ let lo=mix(clamp(t*2.0,0.0,1.0),smoothstep(0.0,.5,t),r.patternEase);
+ let hi=mix(clamp((t-.5)*2.0,0.0,1.0),smoothstep(.5,1.0,t),r.patternEase);
+ let coarse=mix(mix(r.textureLow.rgb,r.textureMiddle.rgb,lo),r.textureHigh.rgb,hi);
+ let base=coarse*mix(vec3f(1.0),mix(r.textureFineLow.rgb,r.textureFineHigh.rgb,sample.w),r.textureFine);
+ return mix(mix(base,r.textureMark.rgb,sample.z),base*mix(vec3f(1.0),r.textureMarkTint.rgb,sample.z),r.markMultiply);
+}
+fn groundRecipeColor(sample:vec4f,slot:u32,p:vec2f)->vec3f {
+ let r=u.ground[slot & groundMask];let t=clamp(sample.y+sample.z*.35,0.0,1.0)*15.0;
+ let a=u32(floor(t));let b=min(a+1u,15u);
+ var color=mix(r.ramp[a].rgb,r.ramp[b].rgb,fract(t));
+ let alternate=mix(r.variationRamp[a].rgb,r.variationRamp[b].rgb,fract(t));
+ color=mix(color,alternate,cellHash(poolPixel(p)+vec2f(211.0,317.0)).x*r.grainColorMix);
+ return mix(mix(color,r.lineColor.rgb,sample.w),textureColor(sample,slot),r.patternAmount);
+}
+fn materialPigment(p:vec2f,slot:u32)->vec3f {
+ let r=u.ground[slot & groundMask];let sample=textureLoad(groundTex,vec2i(poolPixel(p)),r.cacheLayer,0);
+ let raw=groundRecipeColor(sample,slot,p);
+ return mix(raw,textureLoad(groundColorTex,vec2i(poolPixel(p)),r.cacheLayer,0).rgb,r.textureDither);
+}
+
 fn hasGround()->bool { return u.groundAny != 0 && u.ground[gs & groundMask].cacheLayer >= 0; }
 // The slot of the debris lying at p: rock weather's strongest source there (rockDeposit), read at the nearest 4-px cell.
 fn debrisSlotAt(p:vec2f)->u32 {

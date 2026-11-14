@@ -14,9 +14,9 @@ try {
  const stroke=['paint',[[256,256]],{groundPreset:1,card:{diameter:200,amount:100,softness:0}}];
  console.log('ground slots: applying ground paint');
  s.play([stroke]);console.log('ground slots: ground paint ready');
- assert.equal(s.renderer.grounds.size,1);assert.equal(s.renderer.groundCache.bytes,8*1024*1024);
+ assert.equal(s.renderer.grounds.size,1);assert.equal(s.renderer.groundCache.bytes,12*1024*1024);
  const previous=s.renderer.grounds;s.config.material.groundPool=2048;
- assert.throws(()=>s.renderer.setGrounds(new Map(Array.from({length:5},(_,i)=>[i+1,grounds[0]]))),/at most 4/);
+ assert.throws(()=>s.renderer.setGrounds(new Map(Array.from({length:5},(_,i)=>[i+1,grounds[0]]))),/at most 2/);
  assert.equal(s.renderer.grounds,previous,'a budget rejection leaves the active table alone');
  s.config.material.groundPool=1024;
  const read=async()=>{await s.fields.gpuReady();const {masks}=s.fields.gpuBuffers();return new Uint32Array(await s.fieldsModule.readBuffer(s.renderer.device,masks,0,s.worldGrid*s.worldGrid*28));};

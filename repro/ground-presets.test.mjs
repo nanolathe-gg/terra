@@ -29,7 +29,7 @@ test('only visible chosen presets count and the cache limit follows the world pe
  let grounds=[];for(let i=0;i<7;i++)grounds=addGround(grounds,recipe,'Ground').grounds;
  assert.throws(()=>addGround(grounds,recipe));
  assert.deepEqual(groundsInUse([node(1),node(1),{...node(2),hidden:true},node(7)],grounds).map(p=>p.slot),[1,7]);
- assert.deepEqual(groundCacheUsage(4,2048),{bytes:128*1024*1024,capacity:4,budget:128*1024*1024,fits:true});
+ assert.deepEqual(groundCacheUsage(4,2048),{bytes:192*1024*1024,capacity:2,budget:128*1024*1024,fits:false});
  assert.deepEqual(groundsInUse([{kind:'paint',params:{groundPreset:1,paintChannel:3}},{kind:'paint',params:{groundPreset:2,paintChannel:26}}],grounds).map(p=>p.slot),[2]);
  assert.equal(groundCacheUsage(5,2048).fits,false);assert.equal(groundCacheUsage(8,1024).fits,true);
 });

@@ -110,6 +110,10 @@
     "sculpt-ground-cache.js",
     "sculpt-ground-presets.js",
     "sculpt-ground-panel.js",
-    "sculpt-ground-preview.js"
+    "sculpt-ground-preview.js",
+    "sculpt-texture-model.js",
+    "engine-texture.wgsl",
+    "engine-texture-dither.wgsl",
+    "materials/texture-presets.json"
   ]
 }

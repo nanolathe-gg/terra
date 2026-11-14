@@ -39,7 +39,7 @@ const ready = async ev => {
   throw new Error('the editor never became ready');
 };
 
-await session(`${server}/sculpt.html?biome=green&mapX=2&mapY=2&gpuMB=512`,port,async({send,ev,logs})=>{
+await session(`${server}/?biome=green&mapX=2&mapY=2&gpuMB=512`,port,async({send,ev,logs})=>{
  const set=(id,value,event='change')=>ev(`(()=>{const e=document.getElementById(${JSON.stringify(id)});e.value=${JSON.stringify(String(value))};e.dispatchEvent(new Event(${JSON.stringify(event)},{bubbles:true}));return true;})()`);
  const click=id=>ev(`document.getElementById(${JSON.stringify(id)}).click();true`);
  const state=()=>ev('sculptDebug.sketch()');

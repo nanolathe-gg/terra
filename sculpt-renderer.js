@@ -197,7 +197,7 @@ export class TerrainRenderer {
     // Every world's materials are numbers: the config names its table (config.materialTable).
     const tableUrl = this.config.materialTable;
     this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl', 'engine-ground.wgsl'];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl', 'engine-ground.wgsl', 'engine-texture.wgsl', 'engine-texture-dither.wgsl'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch(name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
@@ -256,7 +256,7 @@ export class TerrainRenderer {
     this.commonLayout = device.createBindGroupLayout({label: 'world fields', entries: [
       {binding: 0, visibility: both, buffer: {type: 'uniform'}},
       texture(1, both, 'unfilterable-float'), texture(2, both), texture(4, both, 'float', '2d-array'), texture(6, both),
-      sampler(7, both), sampler(8, both), texture(9, both, 'float', '2d-array'),texture(10,both,'unfilterable-float'),texture(11,both,'unfilterable-float'),texture(12,both,'unfilterable-float'),texture(13,both,'float','2d-array')]});
+      sampler(7, both), sampler(8, both), texture(9, both, 'float', '2d-array'),texture(10,both,'unfilterable-float'),texture(11,both,'unfilterable-float'),texture(12,both,'unfilterable-float'),texture(13,both,'float','2d-array'),texture(14,both,'float','2d-array')]});
     const F = GPUShaderStage.FRAGMENT;
     // The engine draw (H4) binds only what Green reads: the plain's tiles, the water images, the palette and the generated materials
     // (binding 19, read with textureLoad); no land image remains. Binding numbers are the shared draw's, with 2-13 left out.
@@ -304,7 +304,7 @@ export class TerrainRenderer {
     }
     // The startup generation: the materials and the palette lookup (GPU) are started first and the noise (CPU) is made while they build.
     this.textures = {};
-    this.groundCache = new GroundCache(this, preprocess(extra[7], common, new Set()));
+    this.groundCache = new GroundCache(this, preprocess(extra[7].replace('/*TEXTURE_PATTERN*/',extra[8]), common, new Set()),preprocess(extra[9],common,new Set()));
     const generation = performance.now();
     const gpu = Promise.all([this.makeMaterials(), this.paletteTexture()]);
     this.textures.noise = this.noiseTexture();
@@ -552,7 +552,7 @@ export class TerrainRenderer {
       {binding:10,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.final??this.rockWeather.empty)).createView()},
       {binding:11,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.source??this.rockWeather.empty)).createView()},
       {binding:12,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.rim??this.rockWeather.empty)).createView()},
-      {binding:13,resource:this.groundCache.texture.createView({dimension:'2d-array'})}]});
+      {binding:13,resource:this.groundCache.texture.createView({dimension:'2d-array'})},{binding:14,resource:this.groundCache.colorTexture.createView({dimension:'2d-array'})}]});
   }
 
   // Group 1: the plain's tiles, the waters, the palette and the generated materials.
@@ -1117,16 +1117,27 @@ export class TerrainRenderer {
     }
     const usage=groundCacheUsage(checked.size,groundPool(this.config.material));
     if(!usage.fits)throw Error(`This world can use at most ${usage.capacity} ground materials within its 128 MiB cache budget.`);
+    this.i('uGroundDefault',[...grounds].find(([,p])=>p.worldGround)?.[0]??0);
+    this.i('uWaterGround',[...grounds].find(([,p])=>p.worldWater)?.[0]??0);
     this.grounds = checked;
     new Uint8Array(this.uniformData, table.offset, table.stride * table.count).fill(0);
     for (const [slot, recipe] of checked) {
       const at = table.offset + slot * table.stride;
       for (const [key, value] of Object.entries(recipe.knobs)) this.uniformView.setFloat32(at + table.members.get(key).offset, value, true);
-      const color = (offset, index) => this.paletteIndexed[index].forEach((v, c) => this.uniformView.setFloat32(offset + c * 4, v / 255, true));
+      const color = (offset, value) => (Array.isArray(value)?value:this.paletteIndexed[value]).forEach((v, c) => this.uniformView.setFloat32(offset + c * 4, v / 255, true));
       recipe.ramp.forEach((index, k) => color(at + table.members.get('ramp').offset + k * 16, index));
       recipe.variationRamp.forEach((index, k) => color(at + table.members.get('variationRamp').offset + k * 16, index));
       color(at + table.members.get('lineColor').offset, recipe.line);
+      for(const [key,rgb] of Object.entries(recipe.textureColors)){
+        const name='texture'+key[0].toUpperCase()+key.slice(1),scale=['fineLow','fineHigh','markTint'].includes(key)?1:255;
+        rgb.forEach((v,c)=>this.uniformView.setFloat32(at+table.members.get(name).offset+c*4,v/scale,true));
+      }
+      const palette=recipe.texturePalette.length?recipe.texturePalette:[...new Set(recipe.ramp)];
+      this.uniformView.setUint32(at+table.members.get('texturePaletteCount').offset,palette.length,true);
+      palette.forEach((index,k)=>color(at+table.members.get('texturePalette').offset+k*16,index));
+
     }
+    this.uniformsDirty = true;
     this.groundCache.sync(groundPool(this.config.material), this.grounds);
     this.fieldsDirty = true;
     this.uniformsDirty = true;

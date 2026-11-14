@@ -1286,7 +1286,7 @@ function sketch() {
   worldInputQueue.flush();
   applySeedControl();
   rememberTool();
-  return {format:'nanolathe-terrain-sculpt',version:6,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',world:worldId,worldSettings:savedWorld(config,experiment,activeWorld()),size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,varySeed,refinementSeed,
+  return {format:'nanolathe-terrain-sculpt',version:6,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',variant:config.variant||'',world:worldId,worldSettings:savedWorld(config,experiment,{...activeWorld(),grounds:mapGrounds}),size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,varySeed,refinementSeed,
     ...(columnOverride?{column:structuredClone(columnOverride)}:{}),rock:rockSettings(),rocks:structuredClone(mapRocks),grounds:structuredClone(mapGrounds),...(mapTools.length?{tools:structuredClone(mapTools)}:{}),
     toolSettings,softness:Number($('softness').value),relief:Number($('relief').value),
     mineralRing:Number($('mineral-ring').value),ringSpread:Number($('ring-spread').value),
@@ -1850,7 +1850,7 @@ function buildKnobs() {
     syncColumnPanel();syncWorldControls();
   };
   mountRockPanel();
-  groundPanel=mountGroundPanel({grounds:()=>mapGrounds,renderer:()=>renderer,edit:editGrounds,delete:removeGround,checkpoint:()=>checkpoint(true),status});
+  groundPanel?.dispose();groundPanel=mountGroundPanel({grounds:()=>mapGrounds,renderer:()=>renderer,edit:editGrounds,delete:removeGround,checkpoint:()=>checkpoint(true),status});
 }
 // The facts the World panel enables a row by (sculpt-knobs.js worldPanelValues, which worldControlRequirement reads).
 const panelFacts=() => ({config,renderer,nodes,colors:worldColors(),weathering:weatherOn(),materialWeathering:surfaceValues()['material-weathering']});
