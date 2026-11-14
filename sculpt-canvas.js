@@ -97,6 +97,17 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // H6b: a bake from the GPU buffers records how many changes had been announced when it took them; it is still good if none announced since touched
   // its input (an edit elsewhere on the map, or a later move of the same stroke over other chunks, does not throw it away).
   const rev={B:0,C:0,D:0,E:0,F:0},changeLog=[];let lastInput=null;
+  // The shape rectangles edited since the view was last all final (none after a change with no rectangle). Previews use it; finals never do.
+  // A Time result's rectangle does not widen it: on a paged map that is the stale pages, far more ground than the edit weathers.
+  let editRect=null,editWide=false;
+  // A preview redraws the surroundings of an edit, not every tile whose inputs reach it: a tile reads terrain up to 628 px away for shadows,
+  // stones and tall ground, but an edit moves few pixels beyond its own bounds (measured on a hill stroke: 23 px). The margins cover the
+  // edit's own projection at the map's tallest ground and its near shading; a far shadow waits for the tile's final. Final tiles keep the
+  // full input test (changed()).
+  function editSurroundings(rect){
+    const up=Math.ceil(renderer.reaches().projection[1])+32,side=48,down=48,x=Math.floor((rect.x-side)/16)*16,y=Math.floor((rect.y-up)/16)*16;
+    return {x,y,width:Math.ceil((rect.x+rect.width+side-x)/16)*16,height:Math.ceil((rect.y+rect.height+down-y)/16)*16};
+  }
   function changedSince(at,input,through='F'){return changeLog.length>=256&&changeLog[0].serial>at+1||changeLog.some(c=>c.serial>at&&c.stage<=through&&(!c.rect||intersects(c.rect,input)));}
   function cancelBake(input=false){if(!input||!activeBake?.finishOnInput)activeBake?.controller.abort();}
   function changed({stage=null,rect=null,refinement=false,world=rect===null&&!refinement,fields=[],channels=[],input=true,kind=null}={}) {
@@ -108,6 +119,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(!refinement){lastInputAt=performance.now();released=false;}
       serial++;if(world)for(const s of new Set([stage,...fields.map(f=>f.stage),...channels.map(c=>c.stage)]))if(s in rev)rev[s]++;
       changeLog.push({serial,stage,rect});if(changeLog.length>256)changeLog.shift();
+      if(!rect){editWide=true;editRect=null;}
+      else if(stage==='A'&&!editWide){const a=editRect,x=a?Math.min(a.x,rect.x):rect.x,y=a?Math.min(a.y,rect.y):rect.y;editRect={x,y,width:(a?Math.max(a.x+a.width,rect.x+rect.width):rect.x+rect.width)-x,height:(a?Math.max(a.y+a.height,rect.y+rect.height):rect.y+rect.height)-y};}
       for(const e of cache.values())if(!(refinement&&(e.fit||e.weathered===false))&&(!rect||intersects(rect,e.input??e))){
         if(stage<='E'){renderer.releaseColorTile(e.color);e.color=null;e.finalCostMs=null;e.finalCostBudget=null;}
         if(!e.dirty){dirtyMarks++;tiles++;}e.dirty=true;retainedInvalidations++;
@@ -439,7 +452,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           const n=jobs.filter(r=>intersects(r,v)).length;
           for(let i=1;i<n;i++){const p=jobs[i-1],distance=r=>(r.x-p.x)**2+(r.y-p.y)**2;let best=i;for(let j=i+1;j<n;j++)if(distance(jobs[j])<distance(jobs[best]))best=j;const [next]=jobs.splice(best,1);jobs.splice(i,0,next);}
         }
+        // Finals start with the tiles around the edit and work outward: the ground that visibly changed is final first.
+        const editNear=editRect&&!editWide?editSurroundings(editRect):null;
+        const editCore=editNear?{x:editRect.x-32,y:editRect.y-32,width:editRect.width+64,height:editRect.height+64}:null,editTier=r=>!intersects(r,v)?0:intersects(r,editCore)?2:intersects(r,editNear)?1:0;
+        if(editNear)jobs.sort((a,b)=>editTier(b)-editTier(a));
         const plan=[],stale=jobs.filter(r=>intersects(r,v)&&!currentFinal(cache.get(cacheKey(r,size))));
+        if(!stale.length){editRect=null;editWide=false;}
         const colorJobs=lastInput?.stage==='F'&&!holding?stale.filter(r=>colorCurrent(cache.get(cacheKey(r,size)))).sort((a,b)=>cache.get(cacheKey(a,size)).serial-cache.get(cacheKey(b,size)).serial||dist(a)-dist(b)):[];
         // With complete F coverage, refresh the oldest native picture first.
         // A coarse overpaint on every input would erase that progress; partial
@@ -456,7 +474,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         else if(stale.length){
           const area=stale.reduce((a,r)=>{const x=Math.min(a.x,r.x),y=Math.min(a.y,r.y);return {x,y,width:Math.max(a.x+a.width,r.x+r.width)-x,height:Math.max(a.y+a.height,r.y+r.height)-y};});
           const clipped={x:Math.max(area.x,v.x),y:Math.max(area.y,v.y),width:Math.min(area.x+area.width,v.x+v.width)-Math.max(area.x,v.x),height:Math.min(area.y+area.height,v.y+v.height)-Math.max(area.y,v.y)};
-          const coarse=previewPlan(clipped,coarseLevel).sort((a,b)=>dist(a)-dist(b));
+          // Outside the edit's surroundings the retained final tiles stay on screen; with none retained there, the whole stale area is previewed.
+          const nearX=editNear?Math.max(editNear.x,clipped.x):0,nearY=editNear?Math.max(editNear.y,clipped.y):0;
+          const nearArea=editNear?{x:nearX,y:nearY,width:Math.min(editNear.x+editNear.width,clipped.x+clipped.width)-nearX,height:Math.min(editNear.y+editNear.height,clipped.y+clipped.height)-nearY}:null;
+          const retained=e=>e&&e.bitmap&&!e.fit&&!offLevel(e,detailLevel())&&e.weathered===weatheredView;
+          const previewArea=nearArea&&nearArea.width>0&&nearArea.height>0&&stale.every(r=>intersects(r,nearArea)||retained(cache.get(cacheKey(r,size))))?nearArea:clipped;
+          const coarse=previewPlan(previewArea,coarseLevel).sort((a,b)=>dist(a)-dist(b));
           const coarseReady=coarse.every(r=>blockCurrent(blocks.get(blockKey(r,coarseLevel))));
           // F leaves geometry and Time unchanged. Reuse only measured costs
           // from completed final tiles on this same budget and display level.
@@ -472,7 +495,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           else if(released||quiet>=100||cheapFinal){
             // Cheap color finals preserve useful work during a drag. A paged
             // export-ready flag alone cannot certify new shape/Time pages.
-            const middle=coarseLevel>4*detailLevel()?previewPlan(clipped,4*detailLevel()).sort((a,b)=>dist(a)-dist(b)):[];
+            const middle=coarseLevel>4*detailLevel()?previewPlan(previewArea,4*detailLevel()).sort((a,b)=>dist(a)-dist(b)):[];
             if(middle.some(r=>!blockCurrent(blocks.get(blockKey(r,4*detailLevel()))))){
               for(const rect of middle)plan.push({rect,want:4*detailLevel(),block:true});
             }else{
@@ -483,7 +506,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
               const waitCanonical=weatheredView&&api.canExport&&!api.canExport()&&!api.previewScene().paged;
               if(waitCanonical)wakeLadder(100);
               else{
-                if(holding||!finalNow)for(const rect of previewPlan(clipped,2*detailLevel()).sort((a,b)=>dist(a)-dist(b)))plan.push({rect,want:2*detailLevel(),block:true});
+                if(holding||!finalNow)for(const rect of previewPlan(previewArea,2*detailLevel()).sort((a,b)=>dist(a)-dist(b)))plan.push({rect,want:2*detailLevel(),block:true});
                 if(!holding&&finalNow){for(const rect of jobs)if(intersects(rect,v)&&(released||quiet>=100||cache.get(cacheKey(rect,size))?.finalCostMs<=50))plan.push({rect,want:detailLevel()});}
                 else wakeLadder(Math.max(16,250-quiet));
               }
