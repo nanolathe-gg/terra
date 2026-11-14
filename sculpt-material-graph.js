@@ -5,69 +5,64 @@ export function nodeInputs(node){
  if(node.type==='combine')return [['source','Base'],['other','Detail'],['mask','Mask']];
  return [['source',['noise','transform'].includes(node.type)?'Coordinates':node.type==='dots'?'Coverage':'Input']];
 }
-// Layered DAG layout with virtual vertices for long edges. Alternating
-// barycenter sweeps keep related branches together rather than using save order.
+// Place each dependency close to its first consumer, then order and align
+// branches by their connected ports. Virtual vertices reserve space for long
+// links during layout only; connections remain simple, smooth curves.
 export function graphPositions(steps){
- const rank=new Map(),groups=[],vertices=new Map();
- for(const s of steps)rank.set(s.id,Math.max(-1,...nodeInputs(s).map(([k])=>rank.get(s[k])??-1))+1);
- const last=Math.max(0,...rank.values());for(const s of steps)if(s.type==='output')rank.set(s.id,last);
- const add=(id,level)=>{const v={id,level,before:[],after:[],order:0};vertices.set(id,v);(groups[level]??=[]).push(v);return v;};
- for(const s of steps)add(s.id,rank.get(s.id));
- for(const s of steps)for(const [key]of nodeInputs(s)){let source=vertices.get(s[key]);if(!source)continue;const target=vertices.get(s.id);
-  for(let level=source.level+1;level<target.level;level++){const dummy=add(`@${s.id}:${key}:${level}`,level);source.after.push(dummy);dummy.before.push(source);source=dummy;}
-  source.after.push(target);target.before.push(source);
+ const rank=new Map(),consumers=new Map(steps.map(s=>[s.id,[]])),groups=[],vertices=new Map();
+ for(const s of steps){rank.set(s.id,Math.max(-1,...nodeInputs(s).map(([k])=>rank.get(s[k])??-1))+1);for(const [k]of nodeInputs(s))consumers.get(s[k])?.push(s.id);}
+ for(const s of [...steps].reverse()){const next=consumers.get(s.id);if(next.length&&s.type!=='output')rank.set(s.id,Math.min(...next.map(id=>rank.get(id)))-1);}
+ const add=(id,level,step=null)=>{const height=step?Math.max(90,54+nodeInputs(step).length*ROW):24,v={id,level,before:[],after:[],y:0,top:step?48:12,bottom:step?height-48:12};vertices.set(id,v);(groups[level]??=[]).push(v);return v;};
+ for(const s of steps)add(s.id,rank.get(s.id),s);
+ for(const s of steps)for(const [i,[key]]of nodeInputs(s).entries()){let source=vertices.get(s[key]);if(!source)continue;const target=vertices.get(s.id);
+  const link=(a,b,offset)=>{a.after.push({v:b,offset});b.before.push({v:a,offset});};
+  for(let level=source.level+1;level<target.level;level++){const dummy=add(`@${s.id}:${key}:${level}`,level);link(source,dummy,0);source=dummy;}
+  link(source,target,i*ROW);
  }
- const index=()=>groups.forEach(group=>group?.forEach((v,i)=>v.order=i));index();
- for(let sweep=0;sweep<8;sweep++){
+ // Least-squares alignment under the current order and card-spacing constraint.
+ // Pool adjacent groups when their desired positions would overlap.
+ const pack=(group,want)=>{let shift=0;const blocks=[];
+  group.forEach((v,i)=>{if(i)shift+=group[i-1].bottom+32+v.top;const b={first:i,last:i,sum:want(v)-shift,count:1};v.shift=shift;blocks.push(b);
+   while(blocks.length>1){const a=blocks.at(-2),b=blocks.at(-1);if(a.sum/a.count<=b.sum/b.count)break;a.last=b.last;a.sum+=b.sum;a.count+=b.count;blocks.pop();}
+  });
+  for(const b of blocks)for(let i=b.first;i<=b.last;i++)group[i].y=b.sum/b.count+group[i].shift;
+ };
+ for(const group of groups)if(group){pack(group,()=>0);const middle=(group[0].y+group.at(-1).y)/2;for(const v of group)v.y-=middle;}
+ for(let sweep=0;sweep<12;sweep++){
   const forward=sweep%2===0,levels=groups.map((_,i)=>i);if(!forward)levels.reverse();
-  for(const level of levels){const group=groups[level];if(!group)continue;const score=v=>{const neighbors=forward?v.before:v.after;return neighbors.length?neighbors.reduce((n,p)=>n+p.order,0)/neighbors.length:v.order;};group.sort((a,b)=>score(a)-score(b)||a.order-b.order);index();}
- }
- const positions=new Map();for(const s of steps){const v=vertices.get(s.id),group=groups[v.level];positions.set(s.id,{x:v.level*240,y:(v.order-(group.length-1)/2)*148});}return positions;
-}
-
-class RouteQueue {
- constructor(){this.items=[];}
- push(v){const a=this.items;let i=a.length;a.push(v);while(i){const p=(i-1)>>1;if(a[p].f<=v.f)break;a[i]=a[p];i=p;}a[i]=v;}
- pop(){const a=this.items,top=a[0],last=a.pop();if(a.length){let i=0;while(i*2+1<a.length){let j=i*2+1;if(j+1<a.length&&a[j+1].f<a[j].f)j++;if(a[j].f>=last.f)break;a[i]=a[j];i=j;}a[i]=last;}return top;}
-}
-// Orthogonal wires use the free gutters around nodes. A small bend/overlap cost
-// favors readable routes; no segment can cut through another node's card.
-export function graphRoutes(nodes){
- const pad=16,boxes=nodes.map(n=>({left:n.position.x-pad,right:n.position.x+WIDTH+pad,top:n.position.y-pad,bottom:n.position.y+n.height+pad}));
- const port=(n,k)=>({x:n.position.x+(k==='out'?WIDTH:0),y:n.position.y+48+(k==='out'?0:n.inputs.findIndex(([key])=>key===k)*ROW)});
- const xs=new Set(),ys=new Set();for(let i=0;i<nodes.length;i++){const n=nodes[i],b=boxes[i];xs.add(b.left);xs.add(b.right);ys.add(b.top);ys.add(b.bottom);ys.add(port(n,'out').y);for(const [k]of n.inputs)ys.add(port(n,k).y);}
- const x=[...xs].sort((a,b)=>a-b),y=[...ys].sort((a,b)=>a-b),nx=x.length,ny=y.length,byId=new Map(nodes.map(n=>[n.step.id,n])),used=new Map(),routes=new Map();
- const horizontal=new Uint8Array(nx*ny),vertical=new Uint8Array(nx*ny);
- for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const at=j*nx+i;
-  if(i+1<nx)horizontal[at]=!boxes.some(b=>y[j]>b.top&&y[j]<b.bottom&&x[i]<b.right&&x[i+1]>b.left);
-  if(j+1<ny)vertical[at]=!boxes.some(b=>x[i]>b.left&&x[i]<b.right&&y[j]<b.bottom&&y[j+1]>b.top);
- }
- const edgeKey=(a,b)=>a<b?a+':'+b:b+':'+a;
- for(const target of nodes)for(const [key]of target.inputs){const source=byId.get(target.step[key]);if(!source)continue;
-  const a=port(source,'out'),b=port(target,key),start=y.indexOf(a.y)*nx+x.indexOf(a.x+pad),end=y.indexOf(b.y)*nx+x.indexOf(b.x-pad);
-  const distance=new Float64Array(nx*ny*2).fill(Infinity),parent=new Int32Array(nx*ny*2).fill(-1),queue=new RouteQueue();
-  const heuristic=p=>Math.abs(x[p%nx]-(b.x-pad))+Math.abs(y[Math.floor(p/nx)]-b.y);
-  distance[start*2]=0;queue.push({id:start*2,g:0,f:heuristic(start)});let found=-1;
-  while(queue.items.length){const item=queue.pop();if(item.g!==distance[item.id])continue;const p=item.id>>1,dir=item.id&1;if(p===end){found=item.id;break;}const i=p%nx,j=Math.floor(p/nx),next=[];
-   if(i&&horizontal[p-1])next.push([p-1,0,x[i]-x[i-1]]);if(i+1<nx&&horizontal[p])next.push([p+1,0,x[i+1]-x[i]]);
-   if(j&&vertical[p-nx])next.push([p-nx,1,y[j]-y[j-1]]);if(j+1<ny&&vertical[p])next.push([p+nx,1,y[j+1]-y[j]]);
-   for(const [q,d,length]of next){const id=q*2+d,g=item.g+length+(d===dir?0:20)+(used.get(edgeKey(p,q))??0)*length*.2;if(g>=distance[id])continue;distance[id]=g;parent[id]=item.id;queue.push({id,g,f:g+heuristic(q)});}
+  for(const level of levels){const group=groups[level];if(!group)continue;
+   const score=v=>{const neighbors=forward?v.before:v.after;return neighbors.length?neighbors.reduce((sum,n)=>sum+n.v.y+(forward?-n.offset:n.offset),0)/neighbors.length:v.y;};
+   const wanted=new Map(group.map(v=>[v,score(v)]));group.sort((a,b)=>wanted.get(a)-wanted.get(b)||a.y-b.y);pack(group,v=>wanted.get(v));
   }
-  let path=[];if(found>=0){for(let id=found;id>=0;id=parent[id]){const p=id>>1;path.push({x:x[p%nx],y:y[Math.floor(p/nx)]});if(parent[id]>=0){const edge=edgeKey(p,parent[id]>>1);used.set(edge,(used.get(edge)??0)+1);}}path.reverse();}
-  else {const top=Math.min(...boxes.map(b=>b.top))-24;path=[{x:a.x+pad,y:a.y},{x:a.x+pad,y:top},{x:b.x-pad,y:top},{x:b.x-pad,y:b.y}];}
-  path=[a,...path,b];const simple=path.filter((p,i)=>!i||i===path.length-1||!((p.x===path[i-1].x&&p.x===path[i+1].x)||(p.y===path[i-1].y&&p.y===path[i+1].y)));
-  routes.set(target.step.id+':'+key,simple);
  }
- return routes;
+ const positions=new Map(steps.map(s=>{const v=vertices.get(s.id);return [s.id,{x:v.level*240,y:Math.round(v.y-48)}];}));
+ // Finish by moving cards, not routing wires: open a lane where a smooth
+ // connection would otherwise disappear behind an unrelated branch.
+ const nodes=steps.map(s=>({s,p:positions.get(s.id),height:Math.max(90,54+nodeInputs(s).length*ROW)})),byId=new Map(nodes.map(n=>[n.s.id,n]));
+ const wires=nodes.flatMap(n=>nodeInputs(n.s).flatMap(([k],i)=>byId.has(n.s[k])?[{a:byId.get(n.s[k]),b:n,offset:i*ROW}]:[]));
+ const blocked=()=>{let count=0;for(const {a,b,offset}of wires){const ax=a.p.x+WIDTH,ay=a.p.y+48,bx=b.p.x,by=b.p.y+48+offset,d=Math.max(45,Math.abs(bx-ax)*.45),hit=new Set();
+  for(let i=1;i<24;i++){const t=i/24,u=1-t,x=u*u*u*ax+3*u*u*t*(ax+d)+3*u*t*t*(bx-d)+t*t*t*bx,y=ay+(by-ay)*(3*t*t-2*t*t*t);
+   for(const n of nodes)if(n!==a&&n!==b&&x>n.p.x-8&&x<n.p.x+WIDTH+8&&y>n.p.y-8&&y<n.p.y+n.height+8)hit.add(n);
+  }count+=hit.size;
+ }return count;};
+ let obstruction=blocked();
+ for(let pass=0;pass<4&&obstruction;pass++){let best=null,bestCount=obstruction;
+  for(const n of nodes){const column=nodes.filter(o=>o!==n&&o.p.x===n.p.x);if(!column.length)continue;
+   const original=n.p.y,options=[Math.min(...column.map(o=>o.p.y))-n.height-32,Math.max(...column.map(o=>o.p.y+o.height))+32];
+   for(const y of options){n.p.y=y;const count=blocked();if(count<bestCount){bestCount=count;best={n,y};}}n.p.y=original;
+  }
+  if(!best)break;best.n.p.y=best.y;obstruction=bestCount;
+ }
+ return positions;
 }
 
 export function mountMaterialGraph(host){
  const canvas=document.getElementById('material-graph'),ctx=canvas.getContext('2d'),help=document.getElementById('graph-help');
  let zoom=1,pan={x:30,y:40},context=null,count=0,pendingFit=true,gesture=null,wire=null,hover=null,frame=0,disposed=false;
- let routeKey='',routes=new Map();
  const palette={position:'#91b9df',scalar:'#d9bf8c',color:'#9bd5ae',surface:'#d3a7dd'};
  const recipe=()=>host.recipe(),steps=()=>recipe()?.steps??[];
- const all=()=>{const list=steps(),auto=graphPositions(list),types=stepTypes(list);return list.map(s=>({step:s,position:gesture?.kind==='node'&&gesture.id===s.id?gesture.position:s.position??auto.get(s.id),type:types.get(s.id),inputs:nodeInputs(s),height:Math.max(90,54+nodeInputs(s).length*ROW)}));};
+ let placementKey='',placement=new Map();
+ const all=()=>{const list=steps(),key=JSON.stringify(list.map(s=>[s.id,s.type,s.kind,s.source,s.other,s.mask]));if(key!==placementKey){placementKey=key;placement=graphPositions(list);}const auto=placement,types=stepTypes(list);return list.map(s=>({step:s,position:gesture?.kind==='node'&&gesture.id===s.id?gesture.position:s.position??auto.get(s.id),type:types.get(s.id),inputs:nodeInputs(s),height:Math.max(90,54+nodeInputs(s).length*ROW)}));};
  const port=(node,key)=>({x:node.position.x+(key==='out'?WIDTH:0),y:node.position.y+48+(key==='out'?0:node.inputs.findIndex(([k])=>k===key)*ROW)});
  const point=e=>{const r=canvas.getBoundingClientRect();return {x:(e.clientX-r.left-pan.x)/zoom,y:(e.clientY-r.top-pan.y)/zoom};};
  const hit=p=>{const nodes=all();for(const node of nodes.reverse()){
@@ -84,12 +79,11 @@ export function mountMaterialGraph(host){
   if(pendingFit)fit();ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#141d20';ctx.fillRect(0,0,r.width,r.height);
   const grid=32*zoom;ctx.fillStyle='#2b383d';for(let x=pan.x%grid;x<r.width;x+=grid)for(let y=pan.y%grid;y<r.height;y+=grid)ctx.fillRect(x,y,1,1);
   ctx.translate(pan.x,pan.y);ctx.scale(zoom,zoom);const nodes=all(),byId=new Map(nodes.map(n=>[n.step.id,n])),selected=host.selected()?.id;
-  const nextKey=JSON.stringify(nodes.map(n=>[n.step.id,n.position,n.step.source,n.step.other,n.step.mask]));if(nextKey!==routeKey){routeKey=nextKey;routes=graphRoutes(nodes);}
   const wires=[];for(const n of nodes)for(const [key]of n.inputs){const source=byId.get(n.step[key]);if(source)wires.push({n,key,source,active:n.step.id===selected||source.step.id===selected});}
-  for(const {n,key,source,active}of wires.sort((a,b)=>Number(a.active)-Number(b.active))){const points=routes.get(n.step.id+':'+key);if(!points?.length)continue;
-   ctx.globalAlpha=active?1:.42;ctx.beginPath();ctx.moveTo(points[0].x,points[0].y);for(let i=1;i<points.length-1;i++)ctx.arcTo(points[i].x,points[i].y,points[i+1].x,points[i+1].y,7);ctx.lineTo(points.at(-1).x,points.at(-1).y);
-   ctx.strokeStyle='#141d20';ctx.lineWidth=(active?6:4)/zoom;ctx.stroke();ctx.strokeStyle=palette[source.type]??palette.scalar;ctx.lineWidth=(active?2.3:1.3)/zoom;ctx.stroke();ctx.globalAlpha=1;
+  for(const {n,key,source,active}of wires.sort((a,b)=>Number(a.active)-Number(b.active))){const a=port(source,'out'),b=port(n,key);
+   ctx.globalAlpha=active?1:.42;line(a,b,'#141d20',active?6:4);line(a,b,palette[source.type]??palette.scalar,active?2.3:1.3);ctx.globalAlpha=1;
   }
+
   if(wire){const source=byId.get(wire.source);if(source)line(port(source,'out'),wire.point??port(source,'out'),palette[source.type]??palette.scalar,2.5);}
   for(const n of [...nodes.filter(n=>n.step.id!==selected),...nodes.filter(n=>n.step.id===selected)]){
    const {x,y}=n.position,on=n.step.id===selected;ctx.globalAlpha=n.step.enabled?1:.48;ctx.fillStyle=on?'#2c3e37':'#202c30';ctx.strokeStyle=on?'#9bd5ae':'#425158';ctx.lineWidth=(on?1.8:1)/zoom;ctx.beginPath();ctx.roundRect(x,y,WIDTH,n.height,7);ctx.fill();ctx.stroke();

@@ -23,8 +23,11 @@ Enter/double-click to type.
   disconnect it, or click **×** beside its source menu. Undo restores the wire.
 - Drag a node to position it. Drag empty space to pan; scroll to zoom. **Fit**
   frames the graph and **Arrange** groups related branches from sources to
-  outputs. Long edges reserve space during layout. Orthogonal wires route
-  through free gutters around cards; selecting a node highlights its connections.
+  outputs. Connections use smooth Bezier curves. Inputs sit near their first
+  consumer, branches align with input ports, and outputs stay beside their
+  producing branch. Long links reserve layout space; a final placement pass
+  moves obstructing cards aside where possible. Selecting a node highlights
+  its connections. Existing manual positions are preserved until **Arrange**.
 - **Enabled** bypasses an operation; disabled generators produce zero. Coordinate
   transforms pass their coordinates through. Disabled outputs contribute nothing.
 - **Delete** removes the node and its connections. Disconnected numeric inputs
@@ -151,8 +154,9 @@ undo/reset, graph layout saving, and mobile containment. Terrain submits no GPU
 work while the modal is open, including a map reload.
 
 `repro/material-design.test.mjs` checks independent preview recipes, deterministic
-layout, unobstructed routes across the four reviewed graphs, and 7 MiB cache
-accounting. `repro/material-repeat.mjs` checks the 512px horizontal and vertical
+layout, nonoverlapping cards, forward dependencies, nearby branch inputs,
+input-port ordering, and 7 MiB cache accounting. Layout checks include the
+four reviewed graphs and the Desert study. `repro/material-repeat.mjs` checks the 512px horizontal and vertical
 repeat, regional equivalence, and retention of the world's original 1024px
 period on a small authored fixture. It probes the material sampler directly;
 projected terrain pixels can sample different surface hit points and are not a

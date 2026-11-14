@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {GROUND_PRESETS,copyGroundRecipe,groundCacheUsage,MATERIAL_REPEAT} from '../sculpt-ground-presets.js';
 import {nodePreviewRecipe,compileSteps} from '../sculpt-material-steps.js';
-import {graphPositions,graphRoutes,nodeInputs} from '../sculpt-material-graph.js';
+import {graphPositions,nodeInputs} from '../sculpt-material-graph.js';
 const keys=['rust-mottling','cloudy-green','blue-streaked-water','violet-rippled-water'];
 test('node previews use ordinary graphs and leave the material untouched',()=>{
  for(const key of [...keys,'bed']){const recipe=copyGroundRecipe(GROUND_PRESETS[key]),before=structuredClone(recipe);
@@ -10,14 +10,17 @@ test('node previews use ordinary graphs and leave the material untouched',()=>{
  }
  const p=copyGroundRecipe(GROUND_PRESETS['rust-mottling']);assert.match(nodePreviewRecipe(p,p.steps[0].id).description,/reference cells/);
 });
-test('Arrange is deterministic and routes every reviewed connection outside node cards',()=>{
- for(const key of keys){const steps=copyGroundRecipe(GROUND_PRESETS[key]).steps,pos=graphPositions(steps);assert.deepEqual(graphPositions(steps),pos);
-  const nodes=steps.map(step=>({step,position:pos.get(step.id),inputs:nodeInputs(step),height:Math.max(90,54+nodeInputs(step).length*21)})),routes=graphRoutes(nodes);
-  assert.equal(routes.size,nodes.reduce((n,node)=>n+node.inputs.filter(([key])=>node.step[key]).length,0));
-  for(const path of routes.values())for(let i=1;i<path.length;i++)for(const n of nodes){const a=path[i-1],b=path[i],left=n.position.x,right=left+176,top=n.position.y,bottom=top+n.height;
-   const crosses=a.y===b.y&&a.y>top&&a.y<bottom&&Math.max(a.x,b.x)>left&&Math.min(a.x,b.x)<right||a.x===b.x&&a.x>left&&a.x<right&&Math.max(a.y,b.y)>top&&Math.min(a.y,b.y)<bottom;assert.equal(crosses,false,'wire crosses '+n.step.name);
+test('Arrange preserves graphs, separates cards, and keeps dependencies left of consumers',()=>{
+ for(const key of [...keys,'desert-clods']){const steps=copyGroundRecipe(GROUND_PRESETS[key]).steps,before=structuredClone(steps),pos=graphPositions(steps);assert.deepEqual(graphPositions(steps),pos);assert.deepEqual(steps,before);
+  for(const s of steps){const p=pos.get(s.id),height=Math.max(90,54+nodeInputs(s).length*21);
+   for(const [key]of nodeInputs(s))if(s[key])assert.ok(pos.get(s[key]).x<p.x,'dependency flows left to right');
+   for(const other of steps){if(other.id===s.id)continue;const q=pos.get(other.id),h=Math.max(90,54+nodeInputs(other).length*21);assert.ok(p.x+176<=q.x||q.x+176<=p.x||p.y+height<=q.y||q.y+h<=p.y,'cards do not overlap');}
   }
  }
+});
+test('Arrange puts late branch inputs beside their consumer and follows input port order',()=>{
+ const steps=[{id:'detail',type:'noise'},{id:'base',type:'noise'},{id:'a',type:'remap',source:'base'},{id:'b',type:'remap',source:'a'},{id:'join',type:'combine',source:'b',other:'detail'},{id:'out',type:'output',source:'join'}];
+ const p=graphPositions(steps);assert.equal(p.get('detail').x,p.get('b').x);assert.ok(p.get('b').y<p.get('detail').y,'Base branch above Detail branch');
 });
 test('graph materials use a 512px repeat with 7 MiB of texture cache',()=>{
  assert.equal(MATERIAL_REPEAT,512);assert.equal(groundCacheUsage(1,MATERIAL_REPEAT).bytes,7*1024*1024);assert.ok(groundCacheUsage(7,MATERIAL_REPEAT).fits);
