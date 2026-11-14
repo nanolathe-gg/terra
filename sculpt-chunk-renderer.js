@@ -207,6 +207,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   makeWorkingRoom(bytes){
     this.captureWorking();
     const enough=()=>this.residentBytes+this.reservedBytes+bytes<=this.budgetBytes;
+    if(!enough())this.voxel?.dropPool();
     this.trimWorking(new Set([this.activeInput,this.activeLevel]),enough);return enough();
   }
   async allocate(region,gridWidth,gridHeight,world_width,world_height,fed=false,scale=1,preview=false) {
@@ -428,7 +429,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     } finally { this._busy=false;this.cpuWorkingBytes=0; }
   }
   evict() {
-    this.voxel?.clear();this.rockWeather?.clear();
+    this.voxel?.release();this.rockWeather?.clear();
     for(const [resource,entry] of [...this.resources])if(entry.kind==='working')this.release(resource);
     this.inputSets.clear();this.levelSets.clear();this.activeInput=this.activeLevel=null;
     for(const key of ['heightTexture','routeTexture','gridTexture','maskTexture','fieldsTexture','voxelColor'])this[key]=null;
