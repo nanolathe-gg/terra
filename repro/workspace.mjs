@@ -2,6 +2,7 @@
 // map, side panel, status bar), the rail's flyouts and the expanded palette (remembered), the curve editors in the tool pane and at full size,
 // the Map, Settings, Export and Shapes surfaces, Focus (button, Escape, Tab on the map), and the slider, undo and hover behaviors.
 // node repro/workspace.mjs --server http://127.0.0.1:8921 --port 9927 --out /tmp/artist-ui
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {mkdirSync,writeFileSync} from 'node:fs';
@@ -10,7 +11,7 @@ import {cdpPortFree} from './cdp-port.mjs';
 const args=process.argv.slice(2),opt=(k,d)=>args.includes(k)?args[args.indexOf(k)+1]:d;
 const server=opt('--server','http://127.0.0.1:8921'),port=Number(opt('--port',9927)),out=opt('--out','/tmp/artist-ui');
 await cdpPortFree(port);mkdirSync(out,{recursive:true});
-const browser=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless=new','--enable-gpu','--use-angle=metal',`--remote-debugging-port=${port}`,`--user-data-dir=${join(out,'profile-'+Date.now())}`,'--window-size=1440,900','--no-first-run','about:blank'],{stdio:'ignore'});
+const browser=spawn(chromePath,['--headless=new',...chromeGpuFlags,`--remote-debugging-port=${port}`,`--user-data-dir=${join(out,'profile-'+Date.now())}`,'--window-size=1440,900','--no-first-run','about:blank'],{stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));let ws;
 try{
   for(let i=0;i<100&&!ws;i++){try{const tab=(await(await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(t=>t.type==='page');if(tab)ws=new WebSocket(tab.webSocketDebuggerUrl);}catch{}if(!ws)await sleep(150);}

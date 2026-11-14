@@ -1,6 +1,6 @@
 // LP0: the page's input-to-picture budget, with no editor files changed.
 // node repro/perf.mjs map16 --scene repro/scenes/green-modern-2.json \
-//   --server http://127.0.0.1:8897 --port 9891 --out /private/tmp/lp0 --no-export
+//   --server http://127.0.0.1:8897 --port 9891 --out /tmp/lp0 --no-export
 // --viewport WIDTHxHEIGHT is terrain CSS pixels; default Chrome window: 1600x1200.
 // --origin X,Y sets the terrain view origin (default 0,300).
 // --only load|drag|release|resume|slider|scroll; --sliders comma-separated knob IDs.
@@ -10,6 +10,7 @@
 // --warmup discards a session; --report FILE... prints the section 2 budget table.
 // Use distinct CDP ports, discard one --warmup per fresh server, alternate workloads,
 // and check ps -Ao pcpu,command -r | head before measured runs. Never time two at once.
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {createCoverage,pictureCurrent,finalQualityObservations,coverageReadyForInput} from './perf-coverage.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn, execFileSync} from 'node:child_process';
@@ -260,7 +261,7 @@ for(let quiet=0,t=Date.now();quiet<3;){
   if(quiet<3)await sleep(1000);
 }
 const profile=join(out,`profile-${port}`);
-const chrome=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless=new','--enable-gpu','--use-angle=metal','--enable-precise-memory-info',...(exact?['--disable-dawn-features=timestamp_quantization']:[]),`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'--window-size=1600,1200','--no-first-run','about:blank'],{stdio:'ignore'});
+const chrome=spawn(chromePath,['--headless=new',...chromeGpuFlags,'--enable-precise-memory-info',...(exact?['--disable-dawn-features=timestamp_quantization']:[]),`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'--window-size=1600,1200','--no-first-run','about:blank'],{stdio:'ignore'});
 let ws,id=0;const pending=new Map(),logs=[];
 for(let i=0;i<100&&!ws;i++){try{const p=(await(await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(p=>p.type==='page');if(p)ws=new WebSocket(p.webSocketDebuggerUrl);}catch{}if(!ws)await sleep(200);}
 if(!ws){chrome.kill();throw Error('CDP unavailable');}

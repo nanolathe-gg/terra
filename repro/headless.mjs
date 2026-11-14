@@ -17,7 +17,7 @@ import {tmpdir} from 'node:os';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
 export const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-export const DAWN_DEFAULT = '/private/tmp/nanolathe-map-editor/node-webgpu/node_modules';
+export const DAWN_DEFAULT = '/tmp/nanolathe-map-editor/node-webgpu/node_modules';
 const MB = 1024 * 1024;
 
 // The Dawn binding, or an error that says how to get it.

@@ -10,6 +10,7 @@
 // server (there is no default). --features N places up to N of the map's generated features first (every kind the world has, deposits and vents
 // first): the page paints them into the art with a 2D canvas, so they need --chrome.
 // Output (chunks, manifests, the native files) goes to --out; nothing is written in the checkout.
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {layoutStrokes} from './layouts.mjs';
 import {spawn, execFileSync} from 'node:child_process';
@@ -57,7 +58,7 @@ const exportUnderNode = chrome ? null : await (async () => {
 
 async function exportInChrome({world, units, layout, label, dir, row}) {
   await cdpPortFree(port);
-  const browser = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
+  const browser = spawn(chromePath, ['--headless=new', ...chromeGpuFlags, `--remote-debugging-port=${port}`,
     `--user-data-dir=${out}/profile-${port}-${Date.now()}`, '--window-size=1700,1300', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
   try {
     let ws;

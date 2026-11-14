@@ -16,7 +16,7 @@ from PIL import Image
 W = 256
 out_root, rnd, key_path = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
 rng = random.Random(int(sys.argv[4]) if len(sys.argv) > 4 else 8088)
-RETAIL = Path('/private/tmp/nanolathe-map-editor')
+RETAIL = Path('/tmp/nanolathe-map-editor')
 ZHON = RETAIL / 'catalogs/sections-zhon/TASect_Zhon/sections/zhon'
 
 

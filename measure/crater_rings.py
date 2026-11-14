@@ -2,7 +2,7 @@
 
   python measure/crater_rings.py <world,...> [min rim diameter px, default 120] [out.json] [--apron]
 
-Reads each retail map's 16-px heights under $R/retail-<world> (R=/private/tmp/nanolathe-map-editor) and finds the round, rimmed bowls (cells 3 units
+Reads each retail map's 16-px heights under $R/retail-<world> (R=/tmp/nanolathe-map-editor) and finds the round, rimmed bowls (cells 3 units
 under a 31-cell median of the ground; rim 2+ units over the ground at 3-4 rim radii, depth 4+ under it, the rim radius varying by under 30% round the
 ring). Retail maps reuse crater art, so craters with the same rim diameter, rim and depth are counted once (`n`: how many copies). For each it prints the
 rim crest radius R (the median of 72 sectors' highest point between .7 and 2.5 bowl radii), the rim's height over the far ground and the depth under
@@ -14,7 +14,7 @@ percentile). Prints numbers only: no retail pixels or heights are written.
 """
 import json, os, sys, math, numpy as np
 from scipy import ndimage as ndi
-R = '/private/tmp/nanolathe-map-editor'
+R = '/tmp/nanolathe-map-editor'
 ARGS = [a for a in sys.argv[1:] if a != '--apron']; APRON = '--apron' in sys.argv
 worlds = ARGS[0].split(',') if __name__ == '__main__' and ARGS else []
 min_d = float(ARGS[1]) if __name__ == '__main__' and len(ARGS) > 1 else 120

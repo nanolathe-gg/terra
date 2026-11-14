@@ -4,7 +4,7 @@ retail maps they were cut from, the world's other retail map exports (stats.py's
   retail_sources.py [--root $R] [--worlds green,red] [--json]
 
 Prints a Markdown table per world (or JSON). It reads only names, sizes and counts: no pixels. Paths are under --root
-(default /private/tmp/nanolathe-map-editor): retail-<world>/ (map exports, retail_crop.py's input), repro-r7/<window>/ (the crops),
+(default /tmp/nanolathe-map-editor): retail-<world>/ (map exports, retail_crop.py's input), repro-r7/<window>/ (the crops),
 catalogs/sections*/ (section packs: a manifest.json and contact sheets by kind, or TA's own section folders with art and heights).
 """
 import argparse
@@ -60,7 +60,7 @@ def sections(world, root):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--root', default='/private/tmp/nanolathe-map-editor')
+    ap.add_argument('--root', default='/tmp/nanolathe-map-editor')
     ap.add_argument('--worlds', default='')
     ap.add_argument('--json', action='store_true')
     args = ap.parse_args()

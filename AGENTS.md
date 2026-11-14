@@ -120,7 +120,10 @@ page and an older card disagree, this page wins.
     most 65,536 distinct 32-pixel tiles; beyond that, export merges the
     most alike tiles and the Export pane warns.
 12. **Deterministic.** The same scene renders and exports the same bytes on
-    the same machine, and `repro/regional.mjs` finds no mismatch.
+    the same machine, and `repro/regional.mjs` finds no mismatch: exact
+    on macOS (Metal); on other GPUs a value within 2 float32 steps at the
+    map's top height counts as a near match (owner's decision of
+    2026-11-14, for NVIDIA's Vulkan rounding).
 
 ## Preview assets and pushing
 

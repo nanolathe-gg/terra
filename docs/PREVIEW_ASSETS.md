@@ -10,7 +10,7 @@ The archive includes a rendering receipt binding those pixels to their inputs.
 
 ```sh
 go run ./cmd/previews install-hook
-go run ./cmd/terraform --port <yours> --assets-root /private/tmp/terraform-agent
+go run ./cmd/terraform --port <yours> --assets-root /tmp/terraform-agent
 ```
 
 The Go development/build commands fetch missing previews. Once cached, ordinary

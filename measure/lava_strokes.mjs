@@ -7,6 +7,7 @@
 // scenes.json: {"scenes": [{"name", "url", "seed"?, "strokes": [{"tool",
 //   "diameter"?, "amount"?, "softness"?, "roughness"?, "bank"?,
 //   "points": [[x, y], ...]}]}]}; points are world px on the 1024 world.
+import {chromePath, chromeGpuFlags} from '../repro/chrome.mjs';
 import {spawn} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -15,8 +16,8 @@ const [, , manifestPath, outDir] = process.argv;
 const {scenes} = JSON.parse(readFileSync(manifestPath, 'utf8'));
 mkdirSync(outDir, {recursive: true});
 const port = Number(process.env.CAPTURE_PORT || 9452);
-const chrome = spawn(process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
+const chrome = spawn(chromePath,
+  ['--headless=new', ...chromeGpuFlags, `--remote-debugging-port=${port}`,
     `--user-data-dir=${join(outDir, '.profile')}`, '--window-size=1500,1250', '--no-first-run', 'about:blank'],
   {stdio: 'ignore'});
 const sleep = ms => new Promise(r => setTimeout(r, ms));

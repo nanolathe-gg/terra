@@ -41,10 +41,29 @@ export class VoxelSurface {
       .then(list=>{this.passesBy??={};this.passesBy[mask]=Object.fromEntries(list);}));
     return this.built.get(mask);
   }
-  clear(){for(const r of this.owned)this.renderer.release(r);this.owned=[];this.density=null;}
+  // A finished piece's buffers and textures stay as a one-set pool for the next piece instead of being destroyed: view tiles share a size, and
+  // creating then freeing ~30 MB a tile (Chrome zero-fills each new resource) kept its GPU process busy while the GPU waited. Every pass writes
+  // what it later reads (the brick counter is reset below), so a reused resource draws the same picture. The pool stays tracked against the
+  // budget, holds one set at most, and goes whenever the renderer is past 80% of its budget, needs room or evicts (dropPool(), release()).
+  clear(){
+    // Several callers clear in a row before one piece allocates; only a piece that owned something replaces the pool.
+    if(this.owned.length){this.dropPool();this.pool=this.owned;this.owned=[];}
+    this.density=null;
+    const r=this.renderer;if(r.residentBytes+r.reservedBytes>.8*r.budgetBytes)this.dropPool();
+  }
+  dropPool(){for(const x of this.pool??[])this.renderer.release(x);this.pool=[];}
+  release(){this.clear();this.dropPool();}
+  take(match){const i=(this.pool??[]).findIndex(match);if(i<0)return null;const [x]=this.pool.splice(i,1);this.owned.push(x);return x;}
   own(resource,label,bytes){this.owned.push(resource);this.renderer.track(resource,label,bytes,'working');return resource;}
-  buffer(label,size,usage=STORAGE()){return this.own(this.device.createBuffer({label,size:Math.max(16,size),usage}),label,Math.max(16,size));}
-  texture(label,width,height){return this.own(this.device.createTexture({label,size:[width,height],format:'rgba32float',usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.TEXTURE_BINDING}),label,width*height*16);}
+  buffer(label,size,usage=STORAGE()){
+    size=Math.max(16,size);
+    // A larger kept buffer serves (no voxel pass reads a buffer's length), up to twice the size asked for.
+    return this.take(b=>b instanceof GPUBuffer&&b.label===label&&b.usage===usage&&b.size>=size&&b.size<=2*size)??this.own(this.device.createBuffer({label,size,usage}),label,size);
+  }
+  texture(label,width,height){
+    // Exactly the size asked for: voxelGuideBlocks reads its texture's dimensions.
+    return this.take(t=>t instanceof GPUTexture&&t.label===label&&t.width===width&&t.height===height)??this.own(this.device.createTexture({label,size:[width,height],format:'rgba32float',usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.TEXTURE_BINDING}),label,width*height*16);
+  }
   settings(s,capacity=s.capacity){
     // Each encoded wear round needs its own immutable settings. Rewriting
     // one uniform between passes would make all passes see the last value.
@@ -186,5 +205,5 @@ export class VoxelSurface {
     catch(error){this.clear();throw error;}
     this.stats.allocationMs=performance.now()-start;
   }
-  destroy(){this.clear();this.uniform.destroy();this.readback.destroy();}
+  destroy(){this.release();this.uniform.destroy();this.readback.destroy();}
 }
