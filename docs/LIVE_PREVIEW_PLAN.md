@@ -1222,6 +1222,15 @@ a feature wakes it: the map is static and conservative, and step 0 runs with the
 
 ### LP6. A faster final (M-L, in units; after the above)
 
+**November 13 first unit:** [the final-memory report](LP6_FINAL_MEMORY.md)
+records a cache-reservation change on `live-preview/lp6`, based on landed
+clean main. Releasing completed preview workspace during final refinement
+halves native Time refreshes before the visible final and improves its
+latency 12.1–14.3% in the focused 512-MiB pairs, with exact final replay.
+The input tail and focus deadline remain explicit in the report. A native
+count-prediction trial did not improve the full view meaningfully and was
+discarded. The voxel, tile-size and fixed-pool units below remain open.
+
 Unchanged from REDESIGN_PLAN's R8, R8b and R6, with this plan's findings:
 - R8's four units, one at a time, each with its sheet: closed-gate bricks
   and the march fix; wear where it shows; the thin shell (which also stores

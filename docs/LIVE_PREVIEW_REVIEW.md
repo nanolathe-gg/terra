@@ -37,24 +37,26 @@ budget by 1.1 MiB. An earlier candidate also logged a transient memory-budget
 exception and is excluded from acceptance. Sampled final and tile-partition
 pixels stay exact.
 
-Remaining work, in order:
+Remaining work, with LP6 now active:
 
-1. **LP3:** review the regional lattice and memory/readback follow-ups;
-   finish the paused Rain tail, strict load-memory containment, broader
-   default-budget/scene/view acceptance, and the coarse-contour quality
-   decision. Cold compute variants, allocation seeds, and tail validation
-   remain. Try the cheaper coarse raster
-   only if its measured color bias is acceptable.
-2. **LP4:** cancellation between voxel pieces, time-based piece sizing and
+1. **LP6:** [the first final-memory unit](LP6_FINAL_MEMORY.md) is committed
+   on `live-preview/lp6` for review. On the focused 512-MiB fixture, finals
+   improve 12.1–14.3% by retaining canonical Time pages. The drag tail is
+   somewhat slower, and the focus deadline remains unestablished. Next:
+   voxel allocation/march units, wear and shell measurements, tile sizing,
+   and fixed pools only when the full-view measurement justifies them.
+2. **LP3:** the remaining paused Rain tail, strict load-memory containment,
+   broader default-budget/scene/view acceptance and the coarse-contour
+   quality decision. Cold compute variants, allocation seeds and tail
+   validation remain. The cheaper coarse raster is still optional.
+3. **LP4:** cancellation between voxel pieces, time-based piece sizing and
    the remaining view-first/off-screen scheduling. Bring every GPU
    submission under 100 ms.
-3. **LP5:** the color-only rerun experiment, proving it matches a full
+4. **LP5:** the color-only rerun experiment, proving it matches a full
    re-bake before retaining geometry records and routing stage-F edits.
-4. **LP6:** faster finals: voxel work, final tile-size measurements, fixed
-   pools without readback, and an atlas only if measurements justify it.
-5. **Later validation:** finish the full scene/map/view performance matrix
-   and remaining preview-quality/memory checks. Safari/iPad validation
-   remains explicitly deferred. No validation was added to this merge.
+5. **Later validation:** the full scene/map/view performance matrix and
+   remaining preview-quality/memory checks. Safari/iPad validation remains
+   explicitly deferred.
 
 Current details are in [LP2 progress](LP2_PROGRESS.md),
 [LP3 progress](LP3_PROGRESS.md), and [the plan](LIVE_PREVIEW_PLAN.md).
