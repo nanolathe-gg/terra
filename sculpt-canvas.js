@@ -127,14 +127,17 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function configureChunks() {
     if(budgetUpdating)return;budgetUpdating=true;
     try {
-      // Keep the export's fixed trial. The view uses the actual budget below.
-      const reserve=fixedGPU(false)-(previewReserved?64*MB:0)+512*512*8;   // the bake lattice does not depend on what the GPU fields hold
-      finest=.25;canonicalSize=Math.min(512,renderer.chunkSize(undefined,128*MB,reserve));
+      // Keep the export's fixed trial: 128 MiB less room for its own output image. The view uses the actual budget below. The bake lattice
+      // depends on neither the GPU fields nor the view: the window's canvases and the feature images are counted against the actual budget
+      // (fixedGPU), and counted here they left a 4K window with many ground features no room for any tile, so every stroke threw.
+      // A size that cannot be probed keeps the last one: the bake's own allocation reports a real shortage.
+      const probe=(size,...args)=>{try{return renderer.chunkSize(...args);}catch(error){console.warn(error.message);return size;}};
+      finest=.25;canonicalSize=Math.min(512,probe(canonicalSize,undefined,128*MB,512*512*8));
       // The export lattice may change with its fixed trial, but retained view
       // images keep their own 256 px grid. Only an actual budget shortage can
       // lower that grid; a knob changing the export's size never empties it.
       trimTo(gpuBudget-fixedGPU()-renderer.stats().retainedBytes-32*MB);
-      const nextDisplay=renderer.chunkSize(256,gpuBudget,fixedGPU()+cacheBytes+256*256*8);
+      const nextDisplay=probe(displaySize,256,gpuBudget,fixedGPU()+cacheBytes+256*256*8);
       if(nextDisplay!==displaySize){for(const key of cache.keys())remove(key);displaySize=nextDisplay;}
       // A knob may arrive during the voxel allocation readback. Its textures
       // must survive until that bake returns; bake() sets the next budget too.
