@@ -1220,6 +1220,8 @@ and which are stage F. Then stop and report.
 
 **November 14 compact-input follow-up:** [exact-sized regional inputs and stable explicit interpolation](LP5_COMPACT_INPUTS.md) fit all 35 native records plus the coarse block inside the existing quota. In the focused pair, release-final falls from 759–829 ms to 87–123 ms, with exact same-build tile/cache/replay checks. Interpolation moves 0.476% of the sampled large view and remains on the review branch. Continuous-input final-quality p95 is still 1.62 s because native work restarts behind coarse updates; that scheduling gap is next.
 
+**November 14 native-progress follow-up:** [direct oldest-first F updates](LP5_FAIR_COLOR.md) stop a complete cache from repeatedly repainting coarse terrain and restarting at the focus. In the focused pair, native-quality input p95 falls from 795–1556 ms to 173–199 ms; 34–35 of 36 inputs reach native quality before release. Partial-cache coarse response remains 5–7 ms p95 and both budgets replay exactly. The 150-ms target remains open; bounded per-tile queue waits are next.
+
 **Build (M-L)** only if step 0's rerun equals the full re-bake: land the
 split (scenes move by the reported drift, the owner looks), keep records for
 visible tiles, route stage-F changes to priority 3 of the scheduler, add the

@@ -433,13 +433,17 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           for(let i=1;i<n;i++){const p=jobs[i-1],distance=r=>(r.x-p.x)**2+(r.y-p.y)**2;let best=i;for(let j=i+1;j<n;j++)if(distance(jobs[j])<distance(jobs[best]))best=j;const [next]=jobs.splice(best,1);jobs.splice(i,0,next);}
         }
         const plan=[],stale=jobs.filter(r=>intersects(r,v)&&!currentFinal(cache.get(cacheKey(r,size))));
-        const colorJobs=lastInput?.stage==='F'&&!holding?stale.filter(r=>colorCurrent(cache.get(cacheKey(r,size)))):[];
+        const colorJobs=lastInput?.stage==='F'&&!holding?stale.filter(r=>colorCurrent(cache.get(cacheKey(r,size)))).sort((a,b)=>cache.get(cacheKey(a,size)).serial-cache.get(cacheKey(b,size)).serial||dist(a)-dist(b)):[];
+        // With complete F coverage, refresh the oldest native picture first.
+        // A coarse overpaint on every input would erase that progress; partial
+        // caches still need its immediate answer for uncovered ground.
+        const allColor=Boolean(colorJobs.length&&colorJobs.length===stale.length);
         // A partial cache gets one fast tile, then yields to the whole-view
         // preview. Repeated input must not starve uncovered ground behind F.
         const colorViewCurrent=[...blocks.values()].some(e=>e.level===coarseLevel&&blockCurrent(e)&&coversView(e,v));
         const colorBlock=lastInput?.stage==='F'&&!holding?[...blocks.values()].find(e=>colorInputCurrent(e)&&!blockCurrent(e)&&coversView(e,v)):null;
-        if(colorBlock)plan.push({rect:{x:colorBlock.x,y:colorBlock.y,width:colorBlock.width,height:colorBlock.height},want:colorBlock.level,block:true});
-        else if(colorJobs.length&&(colorJobs.length===stale.length||!fineSinceCoarse||colorViewCurrent))for(const rect of colorJobs.slice(0,colorJobs.length===stale.length||colorViewCurrent?undefined:1))plan.push({rect,want:detailLevel(),color:true});
+        if(colorBlock&&!allColor)plan.push({rect:{x:colorBlock.x,y:colorBlock.y,width:colorBlock.width,height:colorBlock.height},want:colorBlock.level,block:true});
+        else if(colorJobs.length&&(allColor||!fineSinceCoarse||colorViewCurrent))for(const rect of colorJobs.slice(0,allColor||colorViewCurrent?undefined:1))plan.push({rect,want:detailLevel(),color:true});
         else if(overview)for(const rect of jobs)plan.push({rect,want:displayLevel()});
         else if(!levelsOn)for(const rect of jobs)plan.push({rect,want:1});
         else if(stale.length){
