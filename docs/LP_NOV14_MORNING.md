@@ -1,3 +1,10 @@
+> **November 14 approved landing:** the owner authorized merging the reported
+> review branch through e1476192. The compact sampler's measured pixel changes
+> and Rain's 8–11% final-cost tradeoff are included in that approval. Main had
+> not moved; the rendering source and pinned previews are unchanged from the
+> checked build. [Landing record](LP_NOV14_LANDING.md). Earlier branch/review
+> statements below describe the checkpoint before this approval.
+
 # Live preview overnight checkpoint, November 14
 
 The owner-approved LP5 cache, mask packing and coarse-preview lifetime work
