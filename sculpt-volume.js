@@ -27,9 +27,9 @@ export class VoxelSurface {
     }
     await Promise.all([self.build(0),self.build(15)]);
     self.drawLayout=d.createBindGroupLayout({entries:[0,1,2,3,4,7].map(input)});
-    self.uniform=d.createBuffer({label:'voxel region settings',size:64,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+    self.uniform=d.createBuffer({label:'voxel region settings',size:4*256,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
     self.readback=d.createBuffer({label:'voxel allocation count readback',size:16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
-    renderer.track(self.uniform,'voxel settings',64,'shared');renderer.track(self.readback,'voxel count readback',16,'shared');
+    renderer.track(self.uniform,'voxel settings',4*256,'shared');renderer.track(self.readback,'voxel count readback',16,'shared');
     return self;
   }
   constructor(renderer){this.renderer=renderer;this.device=renderer.device;this.owned=[];this.previewCounts=new Map();this.predictionStats={predicted:0,seeds:0,overflows:0,budgetFallbacks:0,preDrawWaitMs:0,postDrawWaitMs:0};this.stats={pieces:0,bricks:0,peakBytes:0,allocationMs:0};}
@@ -44,11 +44,16 @@ export class VoxelSurface {
   buffer(label,size,usage=STORAGE()){return this.own(this.device.createBuffer({label,size:Math.max(16,size),usage}),label,Math.max(16,size));}
   texture(label,width,height){return this.own(this.device.createTexture({label,size:[width,height],format:'rgba32float',usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.TEXTURE_BINDING}),label,width*height*16);}
   settings(s,capacity=s.capacity){
-    const data=new ArrayBuffer(64),f=new Float32Array(data),u=new Uint32Array(data);
-    f.set([...s.origin,s.step],0);u.set([s.columnsX,s.columnsY,s.width,s.height,capacity],3);f.set([s.low,s.high,s.screenLow,s.screenHigh,s.top],8);
+    // Each encoded wear round needs its own immutable settings. Rewriting
+    // one uniform between passes would make all passes see the last value.
+    const data=new ArrayBuffer(4*256);
+    for(let round=0;round<4;round++){
+      const f=new Float32Array(data,round*256,16),u=new Uint32Array(data,round*256,16);
+      f.set([...s.origin,s.step],0);u.set([s.columnsX,s.columnsY,s.width,s.height,capacity],3);f.set([s.low,s.high,s.screenLow,s.screenHigh,s.top,round],8);
+    }
     this.device.queue.writeBuffer(this.uniform,0,data);
   }
-  inputs(){return {0:{buffer:this.uniform},1:{buffer:this.columns},2:{buffer:this.density[0]},3:this.height.createView(),4:this.guide.createView(),5:{buffer:this.bricks},7:{buffer:this.counter}};}
+  inputs(){return {0:{buffer:this.uniform,offset:0,size:64},1:{buffer:this.columns},2:{buffer:this.density[0]},3:this.height.createView(),4:this.guide.createView(),5:{buffer:this.bricks},7:{buffer:this.counter}};}
   encode(name,encoder,groups,reads,writes){
     const p=this.passes[name];   // render() picks the rockMask's passes
     const group=(layout,bindings,resources)=>this.device.createBindGroup({layout,entries:bindings.map(binding=>({binding,resource:resources[binding]}))});
@@ -132,11 +137,14 @@ export class VoxelSurface {
         await terrainAllocation(this.device,()=>{this.density=[this.buffer('voxel solid A',densityBytes),this.buffer('voxel solid B',densityBytes)];});this.settings(s,count);
         const reads=this.inputs(),encoder=this.device.createCommandEncoder({label:'voxel solid and terrain draw'}),groups=[Math.min(count,128),Math.ceil(count/128)];
         this.encode('voxelBuild',encoder,groups,reads,{5:{buffer:this.density[0]}});
-        // The same four wear rounds and solid, with excess dispatches rejected
-        // by the GPU's actual count rather than evaluating unused bricks.
-        const wear=r.rockSlots().some(k=>r.rockValue(k,'faceWear')>0&&r.rockValue(k,'rockFace')>0)?4:0;
-        for(let i=0;i<wear;i++)this.encode('voxelWeather',encoder,groups,{...reads,2:{buffer:this.density[i%2]}},{5:{buffer:this.density[1-i%2]}});
-        const bind=this.device.createBindGroup({layout:this.drawLayout,entries:[0,1,2,3,4,7].map(binding=>({binding,resource:reads[binding]}))});
+        // A round fades from zero to full strength before the next starts.
+        // The last fractional round makes Weathering continuous at each
+        // quarter; no pass exceeds the diffusion stability bound.
+        const strength=Math.max(0,...r.rockSlots().map(k=>r.rockValue(k,'rockFace')>0?r.rockValue(k,'faceWear'):0));
+        const wear=Math.min(4,Math.ceil(4*strength));
+        for(let i=0;i<wear;i++)this.encode('voxelWeather',encoder,groups,{...reads,0:{buffer:this.uniform,offset:i*256,size:64},2:{buffer:this.density[i%2]}},{5:{buffer:this.density[1-i%2]}});
+        const finalReads={...reads,2:{buffer:this.density[wear%2]}};
+        const bind=this.device.createBindGroup({layout:this.drawLayout,entries:[0,1,2,3,4,7].map(binding=>({binding,resource:finalReads[binding]}))});
         draw(encoder,bind,[(rect.x-origin[0])/scale,(rect.y-origin[1])/scale,rect.width/scale,rect.height/scale],first);
         this.device.queue.submit([encoder.finish()]);
         this.stats.peakBytes=Math.max(this.stats.peakBytes,metadata+Math.max(16,densityBytes)*2);return true;

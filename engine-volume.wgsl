@@ -6,6 +6,7 @@ struct VolumeSettings {
     columnsY:u32, width:u32, height:u32, capacity:u32,
     low:f32, high:f32, screenY:vec2f,
     top:f32,   // where every ray starts (sculpt-volume.js render)
+    wearRound:f32,   // index of this ping-pong round, 0 through 3
 }
 @group(2) @binding(0) var<uniform> vs:VolumeSettings;
 @group(2) @binding(1) var<storage,read> vc:array<vec4i>;
@@ -289,7 +290,10 @@ fn voxelBuild(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) l
 }
 fn voxelWear(p:vec3i)->f32 {
     let d=voxelCell(p);if(abs(d)>6.0*vs.step){return d;}
-    let q=(vec3f(p)+.5)*vs.step;useRock(q.xy);let g=voxelGuide(q.xy);let nz=sqrt(max(.000225,1.0-dot(g.xy,g.xy)));
+    let q=(vec3f(p)+.5)*vs.step;useRock(q.xy);
+    let wear=clamp(4.0*u.rock[rs & rockMask].faceWear-vs.wearRound,0.0,1.0);
+    if(wear<=0.0){return d;}
+    let g=voxelGuide(q.xy);let nz=sqrt(max(.000225,1.0-dot(g.xy,g.xy)));
     let painted=max(voxelPaintRock(q.xy),.5*rimRockAt(q.xy));
     let heightGate=voxelRockHeight(q,painted);
     let exposure=max(1.0-smoothstep(.75,.98,nz),painted)*(1.0-routeProtection(q.xy))*heightGate;
@@ -297,10 +301,10 @@ fn voxelWear(p:vec3i)->f32 {
     let gradient=length(vec3f(voxelCell(p+vec3i(1,0,0))-voxelCell(p-vec3i(1,0,0)),voxelCell(p+vec3i(0,1,0))-voxelCell(p-vec3i(0,1,0)),voxelCell(p+vec3i(0,0,1))-voxelCell(p-vec3i(0,0,1))))/(2.0*vs.step);
     // The six-neighbor diffusion coefficient stays below 1/6 at every
     // exposed control value; erosion depth and rounding remain independent.
-    // Keep four wear passes within the allocated 40-pixel surface apron,
+    // Fade in up to four full-strength rounds within the 40-pixel apron,
     // even when a local relief stroke amplifies the global setting.
     let depth=min(2.0,u.rock[rs & rockMask].rockFace*.5*voxelRelief(q.xy,length(g.xy)/nz));
-    return d+u.rock[rs & rockMask].faceWear*exposure*(.8*depth*(1.0-voxelHardness(q,voxelFaceSlope(q.xy)))*gradient+(sum-6.0*d)*.12*clamp(depth,0.0,1.0));
+    return d+wear*exposure*(.8*depth*(1.0-voxelHardness(q,voxelFaceSlope(q.xy)))*gradient+(sum-6.0*d)*.12*clamp(depth,0.0,1.0));
 }
 @compute @workgroup_size(4,8,8)
 fn voxelWeather(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) local:vec3u){
