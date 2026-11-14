@@ -1171,6 +1171,8 @@ preview for 175 ms at the median and 720 ms at p95. Step 1 touches only
 depend on LP1 or LP2 and may be built before them or beside them (the
 owner's call, section 8).
 
+**November 14 bounded-stage follow-up:** [request checks and split large finer chunks](LP4_CHUNK_BOUNDARIES.md) reduce the sampled paused Rain maximum GPU submission from 120.1 to 70.3 ms and queue wait from 140.6 to 90.2 ms, with exact final pixels and effectively flat final cost. Coarse first pictures remain combined after a slower trial was rejected. Cancellation ownership passes at both count and solid boundaries. Adaptive time-based sizing and qualifying Time-in-flight resume acceptance remain open. This unit stays on the same review branch.
+
 **Change.**
 1. **The Time pass in slices.** The same passes in the same order, a few
    iterations a submission (sized so a slice is under 50 ms), yielding to

@@ -38,6 +38,10 @@ scripted picker workload; the named sliders and strokes use real mouse input.
   restarting work at the same tile. [Viewport scissors](LP5_VISIBLE_COLOR.md)
   shade only visible native F pixels, with explicit partial-image coverage
   and exact pan/zoom replay. A larger eight-tile batch was rejected.
+- [Bounded finer chunks](LP4_CHUNK_BOUNDARIES.md) stop obsolete work after
+  counts, solid completion and between pieces. The final focused Rain pair
+  bounds its longest load/paused submission at 69–70 ms instead of 119–120 ms;
+  the 193 fast tests and exactly-once GPU cleanup checks pass.
 - The bench now separately measures [native final quality](LP5_FINAL_QUALITY_METRIC.md)
   and [actual view weather epochs](LP3_VIEW_READY_METRIC.md). Neither change
   relaxes a deadline or hides missing/stale coverage. A formerly passing
@@ -72,8 +76,8 @@ owner has not reviewed the new sampler; this branch has not been landed.
 the 150-ms color target with partial caches/other devices, initial cold
 compilation, final focus deadlines, the earlier coarse-contour outlier,
 strict load-memory containment across devices and the full matrix. One
-paged refinement chunk still submits 120.6 ms of GPU work and waits 141.1 ms
-on the queue. The fixed-100-ms small-map resume did not catch Time in flight;
+paged refinement chunk submitted 120.6 ms of GPU work and waited 141.1 ms
+on the queue at the preceding checkpoint. The [bounded-stage follow-up](LP4_CHUNK_BOUNDARIES.md) reduces that sampled paused submission to 70.3 ms and queue wait to 90.2 ms, at effectively flat final cost. It keeps coarse first pictures combined; the broader submission bound and adaptive sizing remain open. The fixed-100-ms small-map resume did not catch Time in flight;
 a separate observed-native-flight mouse check canceled in 15.5 ms and
 replayed exactly, without being claimed as qualifying resume timing.
 Safari/iPad checks remain deferred by the owner.
@@ -82,6 +86,8 @@ All 41 preview PNGs were regenerated from the frozen source and published
 as [previews-a2de09dd4eeae531](https://github.com/nanolathe-gg/terraform/releases/tag/previews-a2de09dd4eeae531). All file hashes change; decoded pixels move
 30,696 / 9,830,600 (0.312%). By eye, the inspected Green world/hill thumbnails
 keep their form and texture character. The runtime manifest is unchanged.
+The later bounded-stage receipt is pinned as
+[previews-36f2d2e215a88130](https://github.com/nanolathe-gg/terraform/releases/tag/previews-36f2d2e215a88130); all 41 PNG hashes match a2de exactly.
 Freshness, publication, fetch and PNG/manifest checks pass. Raw timing outputs
 and Chrome profiles are disposable outside-repository files; compact
 measurements stay in these reports. No benchmark was added to the quick runner.

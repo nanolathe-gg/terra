@@ -580,6 +580,11 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       completion.then(()=>{this.completedChunk=completion;},()=>{}); // Device errors are also reported by the renderer.
       if(!deferCompletion)await this.previousChunk;
       return {...result,canvas:this.outputCanvas,x:request.x,y:request.y,width:request.width,height:request.height,scale,outWidth:Math.ceil(request.width/scale),outHeight:Math.ceil(request.height/scale),exportArt:Boolean(request.exportArt),outputBytes:Math.ceil(request.width/scale)*Math.ceil(request.height/scale)*4,region,stats:{...this.stats(),busy:false}};
+    } catch(error) {
+      // A canceled stage can already own submitted work. The next tile must
+      // drain it before recycling the working set, just as on success.
+      const completion=this.device.queue.onSubmittedWorkDone();this.previousChunk=completion;
+      completion.then(()=>{this.completedChunk=completion;},()=>{});throw error;
     } finally { this._busy=false;this.cpuWorkingBytes=0; }
   }
   evict() {
