@@ -65,7 +65,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const bakedBefore=new Set(); let lastScroll=-Infinity,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
   let heldSince=null,pan=null,space=false,gesture=null,hover=null;
   const previewRejects=new Set();let previewRejectScope='';
-  const blocks=new Map();let blockBytes=0,focus=null,lastInputAt=performance.now(),released=false,ladderTimer=null,fineSinceCoarse=false;
+  const blocks=new Map();let blockBytes=0,focus=null,lastInputAt=performance.now(),released=false,ladderTimer=null,fineSinceCoarse=false,finalizing=false;
   let hoveredNode=-1;
   let lastFrame=0,frameTimes=[],strokeTimes=[],resizePending=false;
   const coarse=new OffscreenCanvas(VIEW_CANVASES.overview,VIEW_CANVASES.overview),cg=coarse.getContext('2d');
@@ -91,7 +91,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const heightBytes=[...new Set([...cache.values()].map(e=>e.heightPatch?.fields.h.buffer).filter(Boolean))].reduce((n,b)=>n+b.byteLength,0),owned=ownedBytes()+(passability?.stats().bytes||0),accounted=heap+owned;
     peakGPU=Math.max(peakGPU,gpu);peakHeap=Math.max(peakHeap,heap);peakAccountedHeap=Math.max(peakAccountedHeap,accounted);
     find('[data-memory]').textContent=`Terrain ${(gpu/MB).toFixed(1)} / ${gpuBudget/MB} MiB · heap ${(accounted/MB).toFixed(1)} / ${heapBudget/MB} MiB · ${cache.size} cached · ${evictions} evictions · ${canonicalSize}px bake${terrainBudget.reason?' · '+terrainBudget.reason:''}`;
-    return {gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,gpuBudget,budgetReason:terrainBudget.reason,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,previewBlocks:blocks.size,previewBlockBytes:blockBytes,preview:previewFields.stats(),previewLattice:previewLattice?.stats()??null,dirtyChunks:[...cache.values()].filter(e=>e.dirty).length,dirtyMarks,retainedInvalidations,evictions,bakes,hits,rebakes,levels:{quarter:[...cache.values()].filter(e=>(e.scale??1)>1).length,final:[...cache.values()].filter(e=>(e.scale??1)===1).length,quarterBytes:[...cache.values()].filter(e=>(e.scale??1)>1).reduce((n,e)=>n+e.bytes,0)},canonicalChunkSize:canonicalSize,displayChunkSize:viewChunkSize(),field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
+    return {gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,gpuBudget,budgetReason:terrainBudget.reason,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,previewBlocks:blocks.size,previewBlockBytes:blockBytes,preview:previewFields.stats(),previewLattice:previewLattice?.stats()??null,finalizing,dirtyChunks:[...cache.values()].filter(e=>e.dirty).length,dirtyMarks,retainedInvalidations,evictions,bakes,hits,rebakes,levels:{quarter:[...cache.values()].filter(e=>(e.scale??1)>1).length,final:[...cache.values()].filter(e=>(e.scale??1)===1).length,quarterBytes:[...cache.values()].filter(e=>(e.scale??1)>1).reduce((n,e)=>n+e.bytes,0)},canonicalChunkSize:canonicalSize,displayChunkSize:viewChunkSize(),field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
   }
   function remove(key) { const e=cache.get(key);if(!e)return;e.bitmap.close?.();cacheBytes-=e.bytes;cache.delete(key);evictions++; }
   // H6b: a bake from the GPU buffers records how many changes had been announced when it took them; it is still good if none announced since touched
@@ -124,9 +124,14 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     return record;
   }
   function trimTo(limit,protectVisible=false){limit=Math.max(0,limit);const v=state();for(const[key,e]of cache)if(cacheBytes>limit&&!intersects(e,v))remove(key);if(protectVisible&&cacheBytes>limit)throw Error("The preview cannot fit beside the visible final images.");while(cacheBytes>limit&&cache.size)remove(cache.keys().next().value);}
+  function reservePreview(){
+    if(!finalizing)return;
+    finalizing=false;api.fitGpuBudget?.();
+  }
   function configureChunks() {
     if(budgetUpdating)return;budgetUpdating=true;
     try {
+      reservePreview();
       // Keep the export's fixed trial. The view uses the actual budget below.
       const reserve=fixedGPU(false)-(previewReserved?64*MB:0)+512*512*8;   // the bake lattice does not depend on what the GPU fields hold
       finest=.25;canonicalSize=Math.min(512,renderer.chunkSize(undefined,128*MB,reserve));
@@ -177,6 +182,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     // The completed voxel solid is rebuilt every draw. Release it before page
     // preparation and Time allocate their working sets, rather than afterward.
     renderer.voxel.clear();
+    if(previewLattice&&!exportArt&&!block&&!fit&&!interacting()&&!finalizing){
+      // The immutable preview picture remains visible; its source and future
+      // refinement working sets no longer need to displace canonical pages.
+      finalizing=true;previewLattice.clear();api.fitGpuBudget?.();
+    }
     const costAt=performance.now(),costBudget=gpuBudget;
     signal?.throwIfAborted();
     if(stale?.())throw new DOMException('The view changed under a queued bake.','AbortError');
@@ -340,7 +350,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     // a retained 8 px answer survives the later 4 px source allocation.
     const current=[...blocks.values()].find(e=>e.level===level&&blockCurrent(e)&&e.x<=area.x&&e.y<=area.y&&e.x+e.width>=area.x+area.width&&e.y+e.height>=area.y+area.height);
     if(current)return [{x:current.x,y:current.y,width:current.width,height:current.height}];
-    releasePreviewMemory(area,level);
+    reservePreview();releasePreviewMemory(area,level);
     const options=drawOptions?.()??api.drawOptions?.()??{},visibleBytes=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0);
     return planPreviewBlocks(area,map,rect=>{const {required,estimate,total}=previewCost(rect,level,options,visibleBytes);
       return !previewRejects.has(previewSignature(rect,level,required,estimate))&&total<=gpuBudget;
@@ -709,8 +719,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // It was a 32 px chunk's, so the fields took the rest of the budget and the first 512 px bake could not be allocated beside them.
   // The terrain canvas and its overlay share the view's size (resize); the paged fields' budget is the shared one (sculpt-scene.js pagedBudget).
   function minimumBytes({previews=false}={}){
-    let previewWorking=0;
-    if(previews&&!overview&&levels&&api.gpuFeedActive?.()){
+    let previewWorking=finalizing?cacheBytes+blockBytes:0;
+    if(previews&&!finalizing&&!overview&&levels&&api.gpuFeedActive?.()){
       const v=state(),width=Math.min(map.width,Math.ceil(v.width/64)*64),height=Math.min(map.height,Math.ceil(v.height/64)*64),options=drawOptions?.()??api.drawOptions?.()??{};
       const request={x:Math.floor((map.width-width)/2),y:Math.floor((map.height-height)/2),width,height,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid};
       const sets=(previewLattice?[8,4,2]:[4,2]).map(k=>{const requestLevel={...request,worldGrid:previewGridFor(k*detailLevel(),true)},r=renderer.requiredRegion(requestLevel,options),e=renderer.estimate(r,width,height,api.maskKeys.length,k*detailLevel(),{preview:true});
