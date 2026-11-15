@@ -137,6 +137,8 @@ struct Rock {
     moonRibDepth: f32,    // stroke steepness: the gradient the strokes add (1: about 0.8 at their steepest)
     moonRibDark: f32,     // how much darker the strokes' mean is on faces turned from the sun (0: the face's own shade)
     moonFoldSpacing: f32, // height units between the folds' first set of contours
+    rockCrown: f32,
+    gougeWeb: f32,        // 0..1: a bold web of long dark gouges across raised crystal, round cells about 42 px (0: none)
 }
 
 // Absolute ground recipes; the cache holds height and unlit color parameters.
@@ -220,7 +222,6 @@ struct Uniforms {
     sandDust: f32,
     sandGrass: f32,
     bandWater: f32,
-    rockCrown: f32,
     highland: f32,      // Highland ground: how far level raised ground takes the world's highland material (0: none)
     highFrom: f32,      // the rise above the plain where the highland material starts
     highReach: f32,     // the rise over which it comes in fully
@@ -400,7 +401,6 @@ struct Uniforms {
     wetGround: f32,       // 0..1: ground that water wets (the band above a waterline, hollows and channels, runoff off rock) is darker, more saturated and glossy (0: as before)
     boulders: f32,        // 0..1: blocks fallen from a wall and lying under it, up to 60 px and more across (0: none; the runout blocks as before)
     looseKnoll: f32,      // 0..1: the share of loose stones drawn as knolls, a low pale ring of ground round a hollow (0: all stones, as before)
-    gougeWeb: f32,        // 0..1: a bold web of long dark gouges across raised crystal, round cells about 42 px (0: none)
     creaseShade: f32,     // 0..1: how much light a crease (a gully or valley floor, the authored height below its rings 6 and 12 px out) loses, whatever its facing (0: none)
     // H1 (lit relief, Green). Every default is the earlier look.
     closeShadow: f32,     // how much a ledge 1-6 px toward the sun darkens the direct light on the ground behind it, 0..1 (0: only the far taps)
