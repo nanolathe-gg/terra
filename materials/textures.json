@@ -127,12 +127,12 @@
   "seed": 0,
   "nodes": [
    {"id":"step-1","type":"warp","kind":"turbulence","name":"Pattern distortion","params":{"amount":1,"size":4,"layers":0,"axis":0,"seed":0},"in":{"in":null},"x":0,"y":38},
-   {"id":"step-2-pattern","type":"noise","kind":"waves","name":"Mottling / streaks","params":{"size":2.2,"detail":0.35,"layers":0,"seed":0,"length":4.8,"direction":45,"crests":0.9},"in":{"in":"step-1"},"x":236,"y":38},
+   {"id":"step-2-pattern","type":"noise","kind":"waves","name":"Mottling / streaks","params":{"size":1.9,"detail":0.35,"layers":0,"seed":0,"length":3.5,"direction":45,"crests":0.9},"in":{"in":"step-1"},"x":236,"y":38},
    {"id":"step-2-broad","type":"noise","kind":"smooth","name":"Broad variation","params":{"size":16,"detail":0,"layers":0,"seed":12},"in":{"in":null},"x":236,"y":188},
-   {"id":"step-2","type":"combine","kind":"mix","name":"Mottling / streaks","params":{"amount":0.02,"offset":0},"in":{"a":"step-2-pattern","b":"step-2-broad","mask":null},"x":472,"y":113},
+   {"id":"step-2","type":"combine","kind":"mix","name":"Mottling / streaks","params":{"amount":0,"offset":0},"in":{"a":"step-2-pattern","b":"step-2-broad","mask":null},"x":472,"y":113},
    {"id":"step-3","type":"noise","kind":"smooth","name":"Fine grain","params":{"size":1.1,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":708,"y":-37},
-   {"id":"step-4","type":"levels","name":"Pattern levels","params":{"low":0.15,"high":0.95,"gamma":1.6,"invert":0},"in":{"in":"step-2"},"x":708,"y":113},
-   {"id":"step-5","type":"gradient","name":"Pattern colors","params":{"ease":1},"in":{"in":"step-4"},"stops":[[0,0.09,0.28,0.45],[0.6,0.11,0.31,0.48],[1,0.27,0.5,0.68]],"x":944,"y":113},
+   {"id":"step-4","type":"levels","name":"Pattern levels","params":{"low":0.15,"high":0.95,"gamma":1.8,"invert":0},"in":{"in":"step-2"},"x":708,"y":113},
+   {"id":"step-5","type":"gradient","name":"Pattern colors","params":{"ease":1},"in":{"in":"step-4"},"stops":[[0,0.1,0.3,0.47],[0.6,0.12,0.33,0.5],[1,0.29,0.52,0.7]],"x":944,"y":113},
    {"id":"step-6","type":"gradient","name":"Grain colors","params":{"ease":0},"in":{"in":"step-3"},"stops":[[0,0.8,0.85,0.9],[1,1.2,1.15,1.1]],"x":944,"y":-37},
    {"id":"step-7","type":"combine","kind":"multiply","name":"Multiply grain","params":{"amount":1,"offset":0},"in":{"a":"step-5","b":"step-6","mask":null},"x":1180,"y":38},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"step-7","height":null,"shine":null},"x":1416,"y":38}
@@ -146,11 +146,11 @@
   "seed": 0,
   "nodes": [
    {"id":"warp","type":"warp","kind":"turbulence","name":"Ragged blotch edges","params":{"amount":1,"size":5,"layers":0,"axis":0,"seed":0},"in":{"in":null},"x":0,"y":0},
-   {"id":"blotches","type":"noise","kind":"waves","name":"Blotches, stretched sideways","params":{"size":2.6,"detail":0.3,"layers":0,"seed":0,"length":3.7,"direction":90,"crests":0},"in":{"in":"warp"},"x":236,"y":0},
-   {"id":"grit","type":"noise","kind":"smooth","name":"Fine grit","params":{"size":1.2,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":236,"y":150},
+   {"id":"blotches","type":"noise","kind":"waves","name":"Blotches, stretched sideways","params":{"size":2.0,"detail":0.3,"layers":0,"seed":0,"length":3.0,"direction":90,"crests":0},"in":{"in":"warp"},"x":236,"y":0},
+   {"id":"grit","type":"noise","kind":"smooth","name":"Fine grit","params":{"size":1.0,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":236,"y":150},
    {"id":"gritty","type":"combine","kind":"add","name":"Break blotches into grit","params":{"amount":0.45,"offset":0.5},"in":{"a":"blotches","b":"grit","mask":null},"x":472,"y":75},
-   {"id":"blotch-mask","type":"levels","name":"Blotches against clean dust","params":{"low":0.36,"high":0.78,"gamma":1,"invert":0},"in":{"in":"gritty"},"x":708,"y":75},
-   {"id":"dust","type":"gradient","name":"Light dust to olive gray","params":{"ease":0},"in":{"in":"blotch-mask"},"stops":[[0,0.733,0.733,0.733],[0.15,0.735,0.735,0.7],[0.5,0.67,0.67,0.61],[1,0.555,0.555,0.505]],"x":944,"y":75},
+   {"id":"blotch-mask","type":"levels","name":"Blotches against clean dust","params":{"low":0.38,"high":0.78,"gamma":1,"invert":0},"in":{"in":"gritty"},"x":708,"y":75},
+   {"id":"dust","type":"gradient","name":"Light dust to olive gray","params":{"ease":0},"in":{"in":"blotch-mask"},"stops":[[0,0.74,0.74,0.73],[0.15,0.74,0.74,0.7],[0.5,0.69,0.69,0.62],[1,0.58,0.58,0.51]],"x":944,"y":75},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"dust","height":null,"shine":null},"x":1180,"y":75}
   ],
   "controls": [{"label":"Blotches, stretched sideways: size","node":"blotches","param":"size"},{"label":"Light dust to olive gray: colors","node":"dust","param":"stops"}],
