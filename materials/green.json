@@ -1817,7 +1817,7 @@
         "coastRamp": 0.75,
         "looseSupply": 0.08,
         "looseSize": 3.5,
-        "banding": 0,
+        "banding": 0.3,
         "crackDark": 0.75,
         "wetSwath": 0.35,
         "faceStreak": 1,
@@ -1858,7 +1858,12 @@
         "cavity": 0.6,
         "erosion": 1,
         "faceWet": 0.75,
-        "faceStrata": 0.2
+        "faceStrata": 0.2,
+        "sunHeight": 28,
+        "ambient": 0.3,
+        "bandSoftness": 0.1,
+        "moonFolds": 0.5,
+        "moonFoldSpacing": 0.5
       },
       "engineDefaults": {
         "terraceBreak": 0,
@@ -1869,7 +1874,11 @@
 
    "presets": [
 
-    "evad"
+    "evad",
+
+    "greenstone",
+
+    "escarpment"
 
    ],
 
@@ -1881,27 +1890,87 @@
 
      "knobs": {
 
-      "banding": 0,
+      "faceLayers": 0.2
+
+     }
+
+    },
+
+    "greenstone": {
+
+     "label": "Greenstone",
+
+     "knobs": {
+
+      "rockFace": 2.5,
+
+      "faceRock": 1,
+
+      "rockFaceFrom": 0.25,
+
+      "faceGrass": 0.3,
 
       "faceLayers": 0.2,
 
-      "crackSeverity": 0.45,
+      "faceBlockSize": 12,
 
-      "crackBlocks": 0.3,
+      "faceJoint": 1.2,
 
-      "crackDark": 0.75,
+      "faceShade": 0.85,
 
-      "crackMinor": 0.2,
+      "debrisAmount": 0
 
-      "crackHairline": 0,
+     },
 
-      "crackSpacing": 80,
+     "colors": {
 
-      "crackWidth": 0.8,
+      "rock": "#747474"
 
-      "crackMajor": 0.5,
+     }
 
-      "crackNetwork": 0.8
+    },
+
+    "escarpment": {
+
+     "label": "Dark escarpment",
+
+     "knobs": {
+
+      "faceStrata": 0,
+
+      "faceLayers": 0.4,
+
+      "faceGrass": 0.6,
+
+      "faceShade": 1,
+
+      "faceTone": 0.1,
+
+      "faceBlockSize": 10,
+
+      "faceJoint": 1.5,
+
+      "faceCrease": 2,
+
+      "faceScratch": 2,
+
+      "faceScratchAngle": 90,
+
+      "debrisAmount": 0.3,
+
+      "faceRindTone": -0.4,
+
+      "rockFace": 2.5,
+
+      "faceRock": 1,
+
+      "rockFaceFrom": 0.2
+
+     },
+
+     "colors": {
+
+      "rock": "#4b4b4b"
 
      }
 
@@ -1912,6 +1981,13 @@
   },
 
   "shapes": {
+   "brokenHill": {"from": "hill", "diameter": 460, "elevation": 76, "lean": 250, "facing": 8, "gullies": 30, "gullySize": 30, "cracks": 50},
+   "fin": {"from": "mountain", "diameter": 70, "elevation": 155, "gullies": 0, "talus": 0, "cracks": 60, "wander": 8, "crestTaper": 70, "lean": 250, "facing": 2},
+   "massif": {"from": "mountain", "diameter": 700, "elevation": 137, "lean": 100, "terraces": 12, "ledge": 15, "terraceJitter": 40, "gullies": 15, "talus": 20, "styleVegetation": -20, "along": [[0, 1], [1, 1]]},
+   "escarpment": {"from": "mountain", "diameter": 600, "elevation": 96, "lean": 220, "facing": 1, "beds": 2, "bedSoft": 30, "gullies": 10, "gullySize": 40, "talus": 30, "cracks": 40, "heightVary": 4, "along": [[0, 1], [1, 1]]},
+   "cupKnoll": {"from": "hill", "diameter": 210, "elevation": 41, "lean": 160, "facing": 8, "cracks": 30, "styleVegetation": 40, "curve": {"form": "lfHill", "knots": [[0, 0], [0.3, 0.15], [0.5, 0.6], [0.64, 1], [0.78, 0.88], [1, 0.62]]}},
+   "crescent": {"from": "hill", "diameter": 260, "elevation": 76, "lean": 120, "facing": 2, "gullies": 20, "gullySize": 30, "cracks": 50, "crestTaper": 70, "routeSmooth": 100},
+   "knob": {"from": "hill", "diameter": 70, "elevation": 30, "wander": 8, "cracks": 40, "lean": 200, "facing": 8, "styleVegetation": 40},
    "plateau": {},
    "hill": {},
    "mountain": {},
@@ -1926,21 +2002,25 @@
    "river": {},
    "braided": {},
    "landform": {},
-   "knoll": {"from": "hill", "diameter": 150, "elevation": 22, "wander": 8, "varySize": 70},
-   "tor": {"from": "hill", "diameter": 220, "elevation": 70, "iceFacets": 80, "facetForm": 0, "iceFacetSize": 32, "crystalStep": 12, "facetSurface": 0, "cracks": 50, "styleVegetation": -60},
-   "basaltWall": {"from": "plateau", "diameter": 320, "elevation": 120, "gullies": 30, "gullySize": 30, "talus": 50, "curve": {"form": "cliff"}},
-   "limestoneScarp": {"from": "plateau", "diameter": 560, "elevation": 110, "beds": 3, "bedSoft": 60}
+   "knoll": {"from": "hill", "diameter": 180, "elevation": 34, "wander": 12, "varySize": 70, "lean": 220, "facing": 8, "cracks": 35}
   },
   "tools": [
    {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
    {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "rock": "soil"},
    {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
-   {"id": "knoll", "label": "Knoll", "icon": "hill", "color": "#cfe3a3", "group": "shape", "help": "Draw a knoll: a small, round, walkable rise on smooth soil; a click for one.", "rock": "soil"},
+   {"id": "knoll", "label": "Knoll", "icon": "hill", "color": "#cfe3a3", "group": "shape", "help": "Draw a knoll: a round, walkable rise with a steep shaded side to the north-east; a click for one.", "rock": "soil"},
    {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
    {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
+   {"id": "knob", "label": "Knob", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Draw a knob: a small rocky cone of gray greenstone, about 70 px across; a click for one.", "rock": "greenstone"},
+   {"id": "crescent", "label": "Crescent hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Draw an arc: a crescent hill whose long slope lies on the right of your line and whose steep, shaded face is on the left; draw clockwise to put the face outside the arc.", "rock": "soil"},
+   {"id": "cupKnoll", "label": "Cup knoll", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Draw a cup knoll: a round knoll with a shallow cup in its crest; a click for one.", "rock": "greenstone"},
+   {"id": "escarpment", "label": "Escarpment", "icon": "mountain", "color": "#b3bcca", "group": "shape", "help": "Draw an escarpment: a long ridge with a gentle grass back slope on the left of your line and dark rock bands with a grass bench on the right. Vehicles cross it slowly; it is not a wall.", "rock": "escarpment"},
+   {"id": "massif", "label": "Terraced massif", "icon": "valleyT", "color": "#c7a97e", "group": "shape", "help": "Draw a terraced massif: a high, broad block of dark rock stepped in many thin ledges, with a grass top.", "rock": "escarpment"},
+   {"id": "fin", "label": "Rock fin", "icon": "mountain", "color": "#b3bcca", "group": "shape", "help": "Draw a rock fin: a narrow blade of bare rock that tapers at both ends, its long face on the right of your line and its sheer face on the left. Units cannot climb it.", "rock": "greenstone"},
+   {"id": "brokenHill", "label": "Broken hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Draw a broken hill: a big hill whose slopes are split by cracks and patches of bare rock (the Evad River look).", "rock": "evad"},
    {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
    {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
    {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},

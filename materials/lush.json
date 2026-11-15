@@ -1937,10 +1937,7 @@
    "river": {},
    "braided": {},
    "landform": {},
-   "knoll": {"from": "hill", "diameter": 150, "elevation": 22, "wander": 8, "varySize": 70},
-   "tor": {"from": "hill", "diameter": 220, "elevation": 70, "iceFacets": 80, "facetForm": 0, "iceFacetSize": 32, "crystalStep": 12, "facetSurface": 0, "cracks": 50, "styleVegetation": -60},
-   "basaltWall": {"from": "plateau", "diameter": 320, "elevation": 120, "gullies": 30, "gullySize": 30, "talus": 50, "curve": {"form": "cliff"}},
-   "limestoneScarp": {"from": "plateau", "diameter": 560, "elevation": 110, "beds": 3, "bedSoft": 60}
+   "knoll": {"from": "hill", "diameter": 150, "elevation": 22, "wander": 8, "varySize": 70}
   },
   "tools": [
    {"id": "plateau", "label": "Jungle plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw jungle high ground: a level top 170 over the plain under the world's highland jungle, walled by a dark, unclimbable cliff.", "rock": "junglecliff"},
