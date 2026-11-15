@@ -8,11 +8,11 @@ strip() { sed -e 's://.*$::' -e 's:/\*.*\*/::' "$1"; }
 bad=0
 for f in $files; do
   # 'crystal' is left out: it is also a palette button (Crystals), a section form and a material's colour key, not only a planet.
-  hits=$(strip "$f" | /usr/bin/grep -n -E "biome|biomeId|worldId|['\"](green|red|archipelago|moon|zhon|lava|desert|ice)['\"]")
+  hits=$(strip "$f" | /usr/bin/grep -n -E "biome|biomeId|worldId|['\"](green|red|archipelago|moon|zhon|lush|lava|desert|ice)['\"]")
   [ -n "$hits" ] && { echo "$f:"; echo "$hits"; bad=1; }
 done
 echo "--- world-named identifiers (feature cards rename or replace them)"
 for f in engine-*.wgsl sculpt-gpu-fields.js sculpt-erosion.js sculpt-chunk-renderer.js; do
-  strip "$f" | /usr/bin/grep -o -E "\b(green|moon|ice|lava|crystal|desert|zhon|archipelago|shoal)[A-Z][A-Za-z0-9]*" | sort -u | sed "s:^:$f :"
+  strip "$f" | /usr/bin/grep -o -E "\b(green|moon|ice|lava|crystal|desert|zhon|lush|archipelago|shoal)[A-Z][A-Za-z0-9]*" | sort -u | sed "s:^:$f :"
 done
 exit $bad

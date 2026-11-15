@@ -14,7 +14,7 @@ const recipe=(kind,source,id)=>{const p=green.featureCatalog.find(p=>p.id===sour
 
 test('every world shares every preset, and each preset survives serialization in every world',()=>{
  let checked=0;
- for(const world of ['green','red','lava','ice','moon','desert','archipelago','crystal','zhon']){
+ for(const world of ['green','red','lava','ice','moon','desert','archipelago','crystal','zhon','lush']){
   const c=config(world);assert.deepEqual(c.featureCatalog,green.featureCatalog);
   for(const preset of green.featureCatalog){const kind=preset.kind,r=makeRecipe(kind,preset.data,7,preset.name),s={...defaultSet(c),[kind]:{nextId:8,recipes:[r]}};
    const before=variants(kind,s,c),after=variants(kind,normalizeSet(JSON.parse(JSON.stringify(s)),c),c);

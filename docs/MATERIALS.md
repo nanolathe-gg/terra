@@ -130,19 +130,23 @@ The world's own settings for level ground (low-ground tint, the vegetation
 cover table, ground patches) apply over the world's ground material; a
 material a stroke chose keeps its own look.
 
-## Status of the shipped materials (2026-11-14)
+## Status of the shipped materials (2026-11-15)
 
 | World | Ground | Water |
 | --- | --- | --- |
 | Red | owner-approved | good for now (owner) |
 | Green | owner-approved | owner-approved |
-| Desert | study, unfinished | first pass by eye |
-| Moon, Zhon, Lava, Ice, Crystal, Archipelago | first pass by eye | first pass by eye |
+| Lava, Desert, Crystal, Ice, Lush, Moon, Archipelago | patch-swapped against retail | patch-swapped against retail |
+| Lush highland | patch-swapped, first pass | |
 | Ice, "bergs" variant | first pass by eye | Ice's |
+| Zhon | first pass by eye | first pass by eye |
 
-"First pass by eye" means the material was fitted against a render of the
-generator it replaces until it read alike at 1x; it is not a claim of a
-match, and the owner has not reviewed it.
+"Patch-swapped" means two 1x1, two 4x4 and one 8x8 patches of 32-px tiles
+of our export art (lit, palette-reduced) were inserted into a retail flat
+or sea crop and could not be found by eye at 1x, or only faintly (Crystal,
+Ice and Lush highland ground). Desert water and Moon water have no retail
+sea: Desert's follows the Wet Desert planet's, Moon's is a guess. None of
+these has the owner's review yet.
 
 ## Checks
 
