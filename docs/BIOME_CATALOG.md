@@ -28,7 +28,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Painted Desert | pass | pass | flat crop; water from Wet Desert, as no Painted Desert map has any |
 | Ice | pass after this round's retune (palette shares now within a few points of retail's; before, the 8x8 read bluer) | faint | flat and water crops |
 | Crystal | pass after this round's retune (median (91,59,111) against retail's (91,59,107)); its streaks are a little more regular | pass | flat and water crops |
-| Archipelago | pass | pass | flat and water sections |
+| Archipelago | **fail since the plain moved to sea+2** (measured 2026-11-15: mean color off by 13.9, 32 px block spread 2.69 against retail's 0.75, puddles; it passed at sea+8 with 3.8 and 0.54). The ground material's art relief dips about 2 units, so at sea+2 it reaches the material's wet band (5 above the sea) and the sea itself. Wet band 1.5 at sea+3 measures 1.9 and 1.20, at sea+4 3.4 and 0.65; at sea+2 it stays blotchy (3.29) | pass | flat and water sections |
 | Lush | pass; jungle highland faint (after this round's retune; it failed before) | pass | flat, water and canopy crops |
 | Moon | pass | no retail water to compare (Moon maps have no sea) | flat section |
 | Moon mare | pass after this round's retune: median 75 as retail's; olive flecks 1.6% (retail 1.8%); gray shares 59/75/91/107/123/139 at 27/36/19/4/7/5% (retail 19/31/23/13/6/2%). The seam it showed was the palette dither restarting at the repeat's edge, now fixed for every material | | a dark mare crop |
