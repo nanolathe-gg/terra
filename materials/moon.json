@@ -1174,9 +1174,9 @@
       },
 
   "shapes": {
-   "plateau": {},
-   "hill": {"wander": 42, "widthVary": 30, "heightVary": 9, "varySize": 60, "varyMiddle": 150},
-   "mountain": {"wander": 24, "widthVary": 5},
+   "plateau": {"elevation": 90, "gullies": 25, "talus": 80, "wander": 50},
+   "hill": {"wander": 42, "widthVary": 30, "heightVary": 9, "varySize": 60, "varyMiddle": 150, "cracks": 10, "diameter": 300, "elevation": 70},
+   "mountain": {"wander": 24, "widthVary": 5, "cracks": 10, "gullies": 10, "talus": 100, "elevation": 110},
    "ramp": {},
    "valleyV": {},
    "valleyU": {},
