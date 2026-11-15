@@ -160,6 +160,7 @@
     "crestTaper": 0,
     "styleVegetation": 0,
     "rockPreset": -1,
+    "groundPreset": 0,
     "fissureWidth": 5,
     "fissureJag": 0.5,
     "fissureBranches": 3,
