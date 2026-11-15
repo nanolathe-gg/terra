@@ -362,8 +362,10 @@ fn voxelBuild(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) l
     let a=voxelDensity(p);let c=voxelDensity(p+vec3f(vs.step,0,0));
     densityOut[u32(b.w)*256u+local.z*32u+local.y*4u+local.x]=pack2x16float(vec2f(a,c));
 }
-fn voxelWear(p:vec3i)->f32 {
-    let d=voxelCell(p);if(abs(d)>6.0*vs.step){return d;}
+// One round of wear at p, whose cell is d. voxelWeather wears a voxel pair along x and reads each cell once: partner is the pair's other cell,
+// at p+x when after is true, else at p-x.
+fn voxelWear(p:vec3i,d:f32,partner:f32,after:bool)->f32 {
+    if(abs(d)>6.0*vs.step){return d;}
     let q=(vec3f(p)+.5)*vs.step;useRock(q.xy);
     let wear=clamp(4.0*u.rock[rs & rockMask].faceWear-vs.wearRound,0.0,1.0);
     if(wear<=0.0){return d;}
@@ -372,11 +374,14 @@ fn voxelWear(p:vec3i)->f32 {
     let authoredSlope=broadGradient(q.xy);
     let authoredNz=inverseSqrt(1.0+dot(authoredSlope,authoredSlope));
     let exposure=max(1.0-smoothstep(.75,.98,authoredNz),painted)*(1.0-routeProtection(q.xy))*heightGate;
-    // Unexposed ground wears by exactly nothing; skip its fourteen neighbour reads. Only an exposure of zero: a negative one (route protection
+    // Unexposed ground wears by exactly nothing; skip its neighbour reads. Only an exposure of zero: a negative one (route protection
     // above 1) sharpens, and the crystal tool's picture shows it.
     if(exposure==0.0){return d;}
-    let sum=voxelCell(p+vec3i(1,0,0))+voxelCell(p-vec3i(1,0,0))+voxelCell(p+vec3i(0,1,0))+voxelCell(p-vec3i(0,1,0))+voxelCell(p+vec3i(0,0,1))+voxelCell(p-vec3i(0,0,1));
-    let gradient=length(vec3f(voxelCell(p+vec3i(1,0,0))-voxelCell(p-vec3i(1,0,0)),voxelCell(p+vec3i(0,1,0))-voxelCell(p-vec3i(0,1,0)),voxelCell(p+vec3i(0,0,1))-voxelCell(p-vec3i(0,0,1))))/(2.0*vs.step);
+    var xp=partner;var xn=partner;
+    if(after){xn=voxelCell(p-vec3i(1,0,0));}else{xp=voxelCell(p+vec3i(1,0,0));}
+    let yp=voxelCell(p+vec3i(0,1,0));let yn=voxelCell(p-vec3i(0,1,0));let zp=voxelCell(p+vec3i(0,0,1));let zn=voxelCell(p-vec3i(0,0,1));
+    let sum=xp+xn+yp+yn+zp+zn;
+    let gradient=length(vec3f(xp-xn,yp-yn,zp-zn))/(2.0*vs.step);
     // The six-neighbor diffusion coefficient stays below 1/6 at every
     // exposed control value; erosion depth and rounding remain independent.
     // Fade in up to four full-strength rounds within the 40-pixel apron,
@@ -388,7 +393,8 @@ fn voxelWear(p:vec3i)->f32 {
 fn voxelWeather(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) local:vec3u){
     let brick=group.x+group.y*128u;if(vCount[2]>vs.capacity||brick>=vCount[0]){return;}
     let b=vb[brick];if(b.w<0){return;}let cell=vec3i(b.xyz)*8+vec3i(vec2i(round(vs.origin/vs.step)),0)+vec3i(i32(local.x)*2,i32(local.y),i32(local.z));
-    densityOut[u32(b.w)*256u+local.z*32u+local.y*4u+local.x]=pack2x16float(vec2f(voxelWear(cell),voxelWear(cell+vec3i(1,0,0))));
+    let first=voxelCell(cell);let second=voxelCell(cell+vec3i(1,0,0));
+    densityOut[u32(b.w)*256u+local.z*32u+local.y*4u+local.x]=pack2x16float(vec2f(voxelWear(cell,first,second,true),voxelWear(cell+vec3i(1,0,0),second,first,false)));
 }
 #endif
 #ifdef VOLUME_RENDER
