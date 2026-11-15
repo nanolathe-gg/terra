@@ -1261,7 +1261,7 @@
 
   "shapes": {
    "smoothPool": {"from": "deep", "stepReference": 0, "terraces": 4, "ledge": 60, "terraceJitter": 40, "layerJag": 0, "wander": 50, "diameter": 240},
-   "lavaRidge": {"from": "plateau", "diameter": 800, "elevation": 150, "wander": 50, "widthVary": 45, "varySize": 360, "heightVary": 0, "gullies": 60, "gullySize": 25, "talus": 30, "cracks": 60},
+   "lavaRidge": {"from": "mountain", "diameter": 420, "elevation": 120, "wander": 50, "widthVary": 40, "heightVary": 45, "varySize": 110, "gullies": 40, "gullySize": 45, "talus": 30, "talusLumps": 80, "cracks": 40, "spurCount": 6, "spurLength": 120, "spurWidth": 70, "spurBulb": 80, "spurHeight": 70, "crestVary": 60},
    "domeBlock": {"from": "hill", "diameter": 900, "elevation": 175, "wander": 60, "widthVary": 20, "heightVary": 30, "varySize": 120, "cracks": 60, "gullies": 20, "talus": 25, "curve": {"form": "lfHill", "knots": [[0, 0], [0.1, 0.3], [0.25, 0.62], [0.45, 0.85], [0.7, 0.97], [1, 1]]}, "spurCount": 7, "spurLength": 150, "spurWidth": 40, "spurBulb": 90, "spurHeight": 60, "spurSpread": 80, "crestVary": 60},
    "lavaTrough": {"from": "hill", "heightReference": 2, "combine": 2, "elevation": 45, "diameter": 280, "wander": 24, "widthVary": 40, "varySize": 140, "heightVary": 0, "cracks": 30, "terraces": 4, "ledge": 60, "terraceJitter": 50, "stepReference": 0, "lean": 100, "curve": {"form": "lfHill", "knots": [[0, 0], [0.25, 0.35], [0.45, 0.85], [0.55, 1], [0.65, 0.6], [0.72, -0.45], [0.8, -0.62], [1, -0.62]]}},
    "shield": {"from": "plateau", "diameter": 520, "elevation": 63, "wander": 30, "wallVary": 0, "widthVary": 15, "varySize": 260, "heightVary": 0, "gullies": 0, "talus": 0, "cracks": 0, "terraces": 4, "ledge": 90, "terraceJitter": 30, "lean": 180, "facing": 3, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.05, 0.15], [0.15, 0.45], [0.25, 0.75], [0.33, 0.95], [0.38, 1], [1, 1]]}},
@@ -1301,7 +1301,7 @@
    {"id": "smoothPool", "label": "Lava pool", "icon": "deep", "color": "#c7a97e", "group": "shape", "help": "Draw a pool of lava with clean stepped dark banks; a drag for a longer one."},
    {"id": "lavaTrough", "label": "Lava trough", "icon": "valleyU", "color": "#c7a97e", "group": "shape", "help": "Draw a channel of lava between raised stepped banks: a straight drag for a slot, a curved drag for a crescent pool."},
    {"id": "domeBlock", "label": "Dome block", "icon": "mountain", "color": "#b3bcca", "group": "shape", "help": "Draw a big dark rounded block of rock, too steep to climb.", "rock": "dome"},
-   {"id": "lavaRidge", "label": "Lava ridge", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Drag a long level-topped ridge that swells and narrows along its length.", "rock": "crumpled"},
+   {"id": "lavaRidge", "label": "Lava ridge", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Drag a long, knotted ridge of crumpled lava rock: lumpy crowns and dark clefts, not ground to build on.", "rock": "crumpled"},
    {"id": "crystal", "label": "Obsidian", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw a cluster of obsidian shards round a click, or a row of them along a drag."},
    {"id": "deep", "label": "Lava lake", "icon": "deep", "color": "#7cb8e8", "group": "water", "help": "Draw a lake of lava: the ground is cut 55 below the lava's level behind stepped dark banks."},
    {"id": "shallow", "label": "Lava shallows", "icon": "shallow", "color": "#87d9da", "group": "water", "help": "Draw shallow lava: a level bed just under the lava's level behind stepped banks."},
