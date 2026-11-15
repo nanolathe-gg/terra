@@ -42,7 +42,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Scatter for click shapes: craterlet fields, knoll fields, boulders, rubble, islets | Moon (9), Green (5), Ice (9), Archipelago, Lush | Copies: a count, spread, size and size variation on any landform | **Done** this round: Craterlet field, Knoll field, Boulder field, Islet scatter use it |
 | Irregular shore lobes and spits; `fingers` makes a regular comb | Lava (8), Archipelago (8), Green, Red, Crystal | Lobe variety: clustered lobes, a few long and wide | **Done** in part (Lush uses it); the lobes' sides stay straight, and a raised bank's relief is still missing |
 | Rock art on level tops and walkable grades (rock follows slope today) | Lava, Red, Desert, Green, Moon | Rock exposure by noise or per shape, art only so heights stay level (per-shape Rock crown) | Missing |
-| Lumpy, ragged aprons and concentric skirt rings at a landform's foot | Desert (every feature), Red, Moon | Talus lumps | **Done** for talus (Desert's Dark outcrop uses it); skirt rings round a mesa's banded foot are still missing |
+| Lumpy, ragged aprons and concentric skirt rings at a landform's foot | Desert (every feature), Red, Moon | Talus lumps; the Mesa's banded climbable slope | **Done**: Desert's Mesa draws concentric banded rings round its foot (retail's outer fringe is a little lumpier); Dark outcrop uses Talus lumps |
 | Soft gully profile: retail has 6-10 rounded valleys where ours cuts 15-25 crisp rills (steepest step 53 against 29-31, measured) | Archipelago (10), Green, Lush, Lava, Red | Fewer, shallower gullies on the presets (Rock mound gullies 35: p95 step 26, was 33). A Gully softness control was tried and reverted: it changed curvature 15% but not visibly at 1x | Partial |
 | Rings that break into arcs (atolls, crater rims, calderas) | Archipelago (9), Moon, Lava, Red | Gaps: breaks in what a shape raises, round a click or along a path | **Done** this round (Crater mound, Ring crater use it) |
 | Coast shelf at an absolute depth; a deep stroke's bank surfaces as land unless it overlaps a wide shelf | Archipelago (14), Crystal (7), Ice (13), Green | A shelf depth below the sea; a deep bank that starts below the sea | Missing |
@@ -104,7 +104,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Banded knobs on caps | Cap knob | close |
 | Dark crescent outcrops | Dark outcrop (Dark outcrop rock) | close |
 | Desert Triad's tall gray mesas, domes and cones | Gray mesa (245), Gray dome (125), Cones (65), on the Gray caprock rock type (the old triad variant) | close |
-| Ragged aprons and skirt rings | none | missing |
+| Ragged aprons and skirt rings | Mesa (banded slope), Talus lumps | close |
 | Hoodoos | Hoodoos | no retail counterpart (an invented look) |
 | Water (no Painted Desert map has any) | Wet Desert's blues: deep (19,63,103), the band within 10 of the sea (47,107,145) | a measured guess |
 
