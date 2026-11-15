@@ -57,6 +57,17 @@ test('a gradient keeps 2 to 8 stops in order, and a stop may brighten up to 2', 
   assert.throws(() => graph([node('g', 'gradient', {stops: [[0, 0, 0, 0]]})]), /2 to 8 stops/);
 });
 
+test('a Constant gives a gray value or a color, and its color publishes like a gradient’s', () => {
+  const m = graph([node('k', 'constant', {kind: 'color', stops: [[.3, .2, 2.4, .1]]}), node('v', 'constant'), node('o', 'output', {in: {color: 'k'}})]);
+  const k = m.nodes[0];
+  assert.deepEqual(k.stops, [[0, .2, 2, .1]], 'one stop, brightened at most to 2'); assert.deepEqual(k.params, {});
+  assert.equal(nodeTypes(m.nodes).get('k'), 'color'); assert.equal(nodeTypes(m.nodes).get('v'), 'gray');
+  assert.ok(controlSpec(m, {label: 'Tint', node: 'k', param: 'stops'})?.stops);
+  assert.deepEqual(compileMaterial(m).instructions.find(i => i.type === 'constant' && i.kind === 'color').args, [.2, 2, .1]);
+  assert.deepEqual(graph([node('k', 'constant', {kind: 'color'})]).nodes[0].stops, [[0, .5, .5, .5]], 'a new color starts gray');
+  for (const [key, lib] of Object.entries(LIBRARY)) assert.ok(!lib.nodes.some(n => n.type === 'gradient' && !n.in.in), `${key} makes a flat color with a Constant`);
+});
+
 test('the compiled program follows evaluation order and its pipeline key ignores numbers', () => {
   const m = LIBRARY['red-ground'], program = compileMaterial(m), index = new Map(program.nodes.map((n, i) => [n.id, i]));
   for (const n of program.nodes) for (const from of Object.values(n.in)) if (from) assert.ok(index.get(from) < index.get(n.id));

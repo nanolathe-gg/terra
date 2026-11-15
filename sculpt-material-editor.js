@@ -199,12 +199,16 @@ export function mountMaterialEditor(host) {
       $('node-input-' + i).replaceChildren(new Option(want === 'coords' ? 'Plain coordinates' : 'Not connected', ''), ...m.nodes.filter(fits).map(o => new Option(o.name, o.id)));
       $('node-input-' + i).value = n.in[key] ?? ''; $('node-input-clear-' + i).disabled = !n.in[key];
     }
-    $('node-gradient').hidden = n.type !== 'gradient'; $('node-histogram').hidden = n.type !== 'levels';
-    if (n.type === 'gradient') {
+    // A Constant's color shows the gradient's color fields for its one stop: no bar, position or Remove.
+    const single = n.type === 'constant' && !!n.stops;
+    $('node-gradient').hidden = !n.stops; $('node-histogram').hidden = n.type !== 'levels';
+    for (const el of [$('gradient-bar'), $('stop-position'), document.querySelector('label[for="stop-position"]'), $('stop-remove')]) el.hidden = single;
+    if (single) stopAt = 0;
+    if (n.stops) {
       stopAt = Math.min(stopAt, n.stops.length - 1); const stop = n.stops[stopAt], gain = Math.max(1, ...stop.slice(1));
       $('stop-color').value = hex(stop.slice(1).map(v => v / gain * 255)); if (document.activeElement !== $('stop-gain')) $('stop-gain').value = +gain.toFixed(3); if (document.activeElement !== $('stop-position')) $('stop-position').value = +stop[0].toFixed(3);
-      $('stop-remove').disabled = n.stops.length <= 2; const on = published(m, n.id, 'stops') >= 0; $('gradient-pin').setAttribute('aria-pressed', String(on)); $('gradient-pin').textContent = on ? 'Colors are published' : 'Publish these colors';
-      drawGradient(n); drawPaletteGrid($('stop-palette'), 8, null);
+      $('stop-remove').disabled = n.stops.length <= 2; const on = published(m, n.id, 'stops') >= 0; $('gradient-pin').setAttribute('aria-pressed', String(on)); $('gradient-pin').textContent = single ? (on ? 'Color is published' : 'Publish this color') : on ? 'Colors are published' : 'Publish these colors';
+      if (!single) drawGradient(n); drawPaletteGrid($('stop-palette'), 8, null);
     }
     if (n.type === 'levels') drawHistogram(n);
     $('material-node-delete').disabled = $('node-duplicate').disabled = n.type === 'output'; $('node-solo').disabled = n.type === 'output'; $('node-solo').setAttribute('aria-pressed', String(solo === n.id));
@@ -252,7 +256,7 @@ export function mountMaterialEditor(host) {
   $('stop-gain').onchange = () => { setStop(stop => { const old = Math.max(1, ...stop.slice(1)), gain = Math.max(1, Math.min(2, Number($('stop-gain').value) || 1)); for (let j = 1; j < 4; j++) stop[j] = Math.min(2, stop[j] * gain / old); })(); commit(); };
   $('stop-position').onchange = () => { setStop((stop, g) => { stop[0] = Math.max(0, Math.min(1, Number($('stop-position').value) || 0)); const ref = stop; g.stops.sort((a, b) => a[0] - b[0]); stopAt = g.stops.indexOf(ref); })(); commit(); };
   $('stop-remove').onclick = () => { setStop((stop, g) => { g.stops.splice(stopAt, 1); stopAt = Math.max(0, stopAt - 1); })(); commit(); };
-  $('gradient-pin').onclick = () => { const n = node(); togglePublish(n.id, 'stops', `${n.name}: colors`.slice(0, 60)); };
+  $('gradient-pin').onclick = () => { const n = node(); togglePublish(n.id, 'stops', `${n.name}: ${n.type === 'constant' ? 'color' : 'colors'}`.slice(0, 60)); };
   const cellAt = (canvas, e, size) => { const r = canvas.getBoundingClientRect(), columns = canvas.width / size, x = Math.floor((e.clientX - r.left) * canvas.width / r.width / size), y = Math.floor((e.clientY - r.top) * canvas.height / r.height / size); return y * columns + x; };
   $('stop-palette').onclick = e => { const index = cellAt($('stop-palette'), e, 8); if (index < 0 || index > 255) return; setStop(stop => { paletteRgb(index).forEach((v, j) => { stop[j + 1] = v / 255; }); })(); commit(); };
 

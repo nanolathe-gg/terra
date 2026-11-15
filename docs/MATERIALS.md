@@ -76,7 +76,7 @@ Combine. Every pattern wraps at the 512-px repeat.
 | Gradient | color | 2 to 8 stops. A stop brighter than 1 lightens when the result multiplies another color. |
 | Light | gray | A height's slope toward a light: tints color like a lit bump. |
 | Cavity | gray | Hollows (below .5) and crests (above) of a height. |
-| Constant | gray | One value. |
+| Constant | gray or color | One value (Gray) or one color (Color), everywhere. A Color has the gradient's color fields for its one stop and publishes like a gradient's colors. |
 | Material | | The one output: Color, Height (Relief scales it, in px) and Shine. |
 
 Keep the set small: a new node type must do what no combination of these can.

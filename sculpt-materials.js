@@ -23,7 +23,8 @@ const NOISE_KIND = {
   pixel: [SEED],
 };
 // Each node type: its output type, inputs [key, label, accepted type], optional kinds, parameters and a line of help.
-// Types: coords (where a pattern is read), gray (one number a texel) and color. An input of type any takes gray or color.
+// Types: coords (where a pattern is read), gray (one number a texel) and color. An input of type any takes gray or color. A node's output
+// type is fixed, follows its inputs (any) or follows its kind (a function of the node).
 export const NODES = {
   warp: {code: 1, label: 'Warp', out: 'coords', inputs: [['in', 'Coordinates', 'coords']], kinds: {turbulence: 'Turbulence', flow: 'Curl flow'},
     params: () => [P('amount', 'Amount (px)', 0, 24, 2), P('size', 'Size (px)', 1, 128, 10), P('layers', 'Broad layers', 0, 4, 0), P('axis', 'Axis balance', -1, 1, 0), SEED],
@@ -56,7 +57,8 @@ export const NODES = {
   cavity: {code: 9, label: 'Cavity', out: 'gray', inputs: [['in', 'Height', 'gray']],
     params: () => [P('radius', 'Radius (px)', 1, 8, 2), P('strength', 'Strength', 0, 8, 2)],
     help: 'Hollows and crests of a height: below .5 in hollows, above it on crests. Darkens crevices or lightens worn tops.'},
-  constant: {code: 10, label: 'Constant', out: 'gray', inputs: [], params: () => [P('value', 'Value', 0, 1, .5)], help: 'One gray value everywhere.'},
+  constant: {code: 10, label: 'Constant', out: n => n.kind === 'color' ? 'color' : 'gray', inputs: [], kinds: {gray: 'Gray', color: 'Color'},
+    params: kind => kind === 'color' ? [] : [P('value', 'Value', 0, 1, .5)], help: 'One gray value, or one color, everywhere.'},
   output: {code: 11, label: 'Material', out: null, inputs: [['color', 'Color', 'any'], ['height', 'Height', 'gray'], ['shine', 'Shine', 'gray']],
     params: () => [P('relief', 'Relief (px)', 0, 8, 0)],
     help: 'What the material is: its color, the art height the sun lights (Relief scales it; gameplay heights never change) and its shine.'},
@@ -83,6 +85,11 @@ function copyStops(value) {
     return [clamp(number(s[0], 'stop position'), 0, 1), ...s.slice(1).map(v => clamp(number(v, 'stop color'), 0, 2))];
   }).sort((a, b) => a[0] - b[0]);
 }
+// A Constant's color: one stop, kept as a gradient's stops are so the same color fields and published controls serve both.
+function copyColor(value) {
+  const stop = Array.isArray(value?.[0]) && value[0].length === 4 ? value[0] : [0, .5, .5, .5];
+  return [[0, ...stop.slice(1).map(v => clamp(number(v, 'color'), 0, 2))]];
+}
 // The type each node puts out, in evaluation order, checking each connection on the way.
 function typeNodes(ordered) {
   const types = new Map();
@@ -94,7 +101,7 @@ function typeNodes(ordered) {
       if (got === null) throw Error('The Material node has no output to connect.');
       if (want === 'any' ? got === 'coords' : got !== want) throw Error(`${n.name}: ${label} needs ${want === 'any' ? 'a gray or color' : want === 'coords' ? 'a Warp node’s coordinates' : 'a ' + want} input.`);
     }
-    types.set(n.id, spec.out === 'any' ? (['a', 'b'].some(k => types.get(n.in[k]) === 'color') ? 'color' : 'gray') : spec.out);
+    types.set(n.id, typeof spec.out === 'function' ? spec.out(n) : spec.out === 'any' ? (['a', 'b'].some(k => types.get(n.in[k]) === 'color') ? 'color' : 'gray') : spec.out);
   }
   return types;
 }
@@ -127,6 +134,7 @@ function copyNode(n, seen) {
   out.in = {};
   for (const [key] of spec.inputs) { const from = n.in?.[key] ?? null; if (from !== null && typeof from !== 'string') throw Error('Invalid node connection.'); out.in[key] = from; }
   if (n.type === 'gradient') out.stops = copyStops(n.stops);
+  if (n.type === 'constant' && out.kind === 'color') out.stops = copyColor(n.stops);
   if (n.x !== undefined || n.y !== undefined) { out.x = Math.round(clamp(number(n.x, 'node position'), -20000, 20000)); out.y = Math.round(clamp(number(n.y, 'node position'), -20000, 20000)); }
   return out;
 }
@@ -168,7 +176,7 @@ export function copyPalette(value = []) {
 // The controls a material publishes: a label over one number of one node, or over a gradient's colors (param 'stops').
 export function controlSpec(material, control) {
   const node = material.nodes.find(n => n.id === control.node); if (!node) return null;
-  if (control.param === 'stops') return node.type === 'gradient' ? {node, stops: true} : null;
+  if (control.param === 'stops') return node.stops ? {node, stops: true} : null;
   const spec = nodeParams(node).find(p => p.key === control.param); if (!spec) return null;
   // The control's own range, inside the node setting's: what its author thinks a map maker should reach.
   const min = clamp(Number.isFinite(control.min) ? control.min : spec.min, spec.min, spec.max), max = clamp(Number.isFinite(control.max) ? control.max : spec.max, spec.min, spec.max);
@@ -220,6 +228,7 @@ export function compileMaterial(material) {
     const links = spec.inputs.map(([key]) => index.get(n.in[key]) ?? -1); while (links.length < 4) links.push(-1);
     const args = spec.params(n.kind).map(p => n.params[p.key] + (p.key === 'seed' ? material.seed : 0));
     if (n.type === 'gradient') args.push(n.stops.length, ...n.stops.flat());
+    if (n.type === 'constant' && n.kind === 'color') args.push(...n.stops[0].slice(1));
     return {type: n.type, kind: n.kind ?? '', code: [spec.code, n.enabled ? 1 : 0, Math.max(0, kinds.indexOf(n.kind)), types.get(n.id) === 'color' ? 1 : 0], links, args, out: types.get(n.id)};
   });
   return {nodes, instructions, index};
@@ -245,7 +254,7 @@ export function programSource(program, thumbnails = false) {
       case 'gradient': return `nGradient(${s},${value(0, 'vec4f(0)')})`;
       case 'light': return tapped ? `nLight(${s},${taps('1.0')})` : 'vec4f(.5)';
       case 'cavity': return tapped ? `nCavity(${s},v${links[0]}.x,${taps(`arg(${s},0u)`)})` : 'vec4f(.5)';
-      case 'constant': return `vec4f(arg(${s},0u))`;
+      case 'constant': return kind === 'color' ? `vec4f(arg(${s},0u),arg(${s},1u),arg(${s},2u),1)` : `vec4f(arg(${s},0u))`;
       default: return 'vec4f(0)';
     }
   };
@@ -289,7 +298,7 @@ export function materialReliefBound(material) {
     const get = (key, fallback = [0, 0]) => values.get(n.in[key]) ?? fallback, p = n.params; let v = [0, 1];
     if (!n.enabled) v = ['noise', 'scatter', 'constant'].includes(n.type) ? [0, 0] : ['light', 'cavity'].includes(n.type) ? [.5, .5] : get(Object.keys(n.in)[0]);
     else switch (n.type) {
-      case 'constant': v = [p.value, p.value]; break;
+      case 'constant': v = n.kind === 'color' ? [Math.min(...n.stops[0].slice(1)), Math.max(...n.stops[0].slice(1))] : [p.value, p.value]; break;
       case 'gradient': { const all = n.stops.flatMap(s => s.slice(1)); v = [Math.min(...all), Math.max(...all)]; break; }
       case 'heightblend': { const a = get('a'), b = get('b'); v = [Math.min(a[0], b[0]), Math.max(a[1], b[1])]; break; }
       case 'combine': {
@@ -309,7 +318,7 @@ export function materialReliefBound(material) {
 export function materialTint(material) {
   const byId = new Map(material.nodes.map(n => [n.id, n]));
   let node = byId.get(material.nodes.find(n => n.type === 'output').in.color);
-  for (let hops = 0; node && node.type !== 'gradient' && hops < MAX_NODES; hops++) node = byId.get(node.in.a ?? node.in.in ?? node.in.b);
+  for (let hops = 0; node && !node.stops && hops < MAX_NODES; hops++) node = byId.get(node.in.a ?? node.in.in ?? node.in.b);
   if (!node?.stops) return [.5, .5, .5];
   return [1, 2, 3].map(c => Math.min(1, node.stops.reduce((sum, stop) => sum + stop[c], 0) / node.stops.length));
 }
