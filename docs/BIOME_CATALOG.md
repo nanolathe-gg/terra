@@ -64,7 +64,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Knoll fields (5 maps) | Knoll field (Copies 8) | close |
 | Small round knolls and knobs, dark on their lee | Knoll, Knob (Greenstone), Cup knoll | close (lee from sun 28 and ambient 0.3: darkest 5% of a knob went from luminance 33 to 27, retail 27-42) |
 | Crescent hills | Crescent | close (blocks vehicles on 33% of cells, retail 17-23%) |
-| Long escarpments and terraced massifs | Escarpment, Terraced massif (Dark escarpment) | close for the massif (irregular terraces); poor for the escarpment (rock follows slope, so a softened one loses its rock) |
+| Long escarpments and terraced massifs | Escarpment, Terraced massif (Dark escarpment) | close for the massif (irregular terraces) and the escarpment (a dark rock band with grass clumps, as retail's ridges; a lower rock threshold was tried and smeared rock and soil over its foot) |
 | Rock fins | Rock fin (Greenstone) | close |
 | Broken, branching slopes (Evad River) | Broken hill (Broken slopes rock type, the old evad variant) | close |
 | Contour striations on slopes | world bands and form lines | poor |
