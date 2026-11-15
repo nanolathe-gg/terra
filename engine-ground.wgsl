@@ -155,9 +155,15 @@ fn nFlow(s:MaterialStep,q0:vec2f)->vec4f{
  for(var i=0;i<2;i++){let mid=q+flowVelocity(q,arg(s,1u),arg(s,2u),salt)*amount*.5;q+=flowVelocity(mid,arg(s,1u),arg(s,2u),salt)*amount;}
  return vec4f(q,0,0);
 }
-// Levels: low, high, gamma, invert.
+// Levels: low, high, gamma, steps, terracing, invert. Terracing narrows each step's riser from the whole step (0, the value unchanged) to
+// nothing (1, flat shelves), so the slider is continuous.
 fn nLevels(s:MaterialStep,a:vec4f)->vec4f{
- let v=pow(smoothstep(arg(s,0u),arg(s,1u),clamp(a.x,0.0,1.0)),arg(s,2u));return vec4f(mix(v,1.0-v,arg(s,3u)));
+ var v=pow(smoothstep(arg(s,0u),arg(s,1u),clamp(a.x,0.0,1.0)),arg(s,2u));
+ if(arg(s,4u)>0.0){
+  let t=v*arg(s,3u);let k=floor(t);let rise=max(1.0-arg(s,4u),.0001);
+  v=min(1.0,(k+clamp((t-k-(1.0-rise))/rise,0.0,1.0))/arg(s,3u));
+ }
+ return vec4f(mix(v,1.0-v,arg(s,5u)));
 }
 // Combine: amount, layer offset. A gray input is the same number in every channel, so gray and color mix freely.
 fn nCombine(s:MaterialStep,a:vec4f,b:vec4f,mask:vec4f)->vec4f{

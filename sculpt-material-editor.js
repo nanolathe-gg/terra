@@ -264,7 +264,7 @@ export function mountMaterialEditor(host) {
   function drawHistogram(n) {
     const canvas = $('node-histogram'), ctx = canvas.getContext('2d'), w = canvas.width, h = canvas.height, pixels = thumbPixels.get(n.in.in), bins = new Array(64).fill(0);
     ctx.fillStyle = '#10171a'; ctx.fillRect(0, 0, w, h);
-    if (pixels) { for (let i = 0; i < pixels.length; i += 4) bins[Math.min(63, pixels[i] >> 2)]++; const top = Math.max(1, ...bins); ctx.fillStyle = '#8fa3a8'; bins.forEach((v, i) => ctx.fillRect(i * w / 64, h - v / top * (h - 4), w / 64 - .5, v / top * (h - 4))); }
+    if (pixels) { for (let i = 0; i < pixels.length; i += 4) bins[Math.min(63, Math.round(.2126 * pixels[i] + .7152 * pixels[i + 1] + .0722 * pixels[i + 2]) >> 2)]++; const top = Math.max(1, ...bins); ctx.fillStyle = '#8fa3a8'; bins.forEach((v, i) => ctx.fillRect(i * w / 64, h - v / top * (h - 4), w / 64 - .5, v / top * (h - 4))); }
     ctx.fillStyle = '#e8d38a'; for (const key of ['low', 'high']) ctx.fillRect(Math.max(0, Math.min(w - 2, n.params[key] * w)), 0, 2, h);
   }
 
