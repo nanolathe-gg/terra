@@ -49,7 +49,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Soft-edged ground strokes: maria fade over ~100 px in 200-600 px lobes; a stroke lays a material only where it changes the height (a rise under 3 claims nothing, measured) | Moon (6), Lush swamps (9) | Ground edge: the material ends in scalloped lobes | **Done** in part: lobed edges; a fade in tone is out of reach of a per-cell material, and a claim still needs a small rise |
 | Inner crest ridges inside outcrops and massifs | Crystal (7), Green, Moon, Lava | An inner ridge network within one footprint | Missing |
 | A second, lighter shallow tone (a -9 lagoon renders as a -25 shoal) | Archipelago, every water world | A shallow-water tone ramp by depth | Missing |
-| River channel depth and bank shelf (the River bed reaches only 18 under the sea) | Lush (14), Lava | Channel depth and bank width on River | Partial: Lush's River is 160 px, so its channel reaches deep water; a narrow deep channel still needs a depth control |
+| River channel depth and bank shelf (the River bed reaches only 18 under the sea) | Lush (14), Lava | Channel depth | **Done** this round (Lush River: 90 px at 220%) |
 | Per-shape crystal surface (tone, shine, web) and per-shape snow on caps | Crystal, Ice | Move gougeWeb, the crystal shine rows and Snow on caps into rock types | Partial: iceSnow is per rock type now |
 | Needle hatching and crack stars along cliff and terrace edges | Ice (8), Moon, Red, Lava | Edge dressing per shape (today only shore plates draw it) | Missing |
 | Elongated prisms (only square blocks today) | Ice (2), Desert, Crystal, Lava | Prism stretch | **Done** this round (Ice block at 220%) |
@@ -162,5 +162,5 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Jungle ridges | Jungle ridge (lays the jungle material) | close |
 | Cuestas and coastal bluffs | Cuesta, Coastal bluff | close (back slopes ~3x the cliff side, retail ~10x) |
 | Rocky knolls | Rock knoll (Bare tan rock) | close |
-| Rivers with wide pale braided shallows | River (160 px), Braided river | close (a deep channel inside pale margins; a channel's depth is a quarter of its width, so a narrow river stays pale) |
+| Rivers with wide pale braided shallows | River (90 px, Channel depth 220%), Braided river | close (a dark channel inside pale margins) |
 | Swamp thickets (9 maps) | Swamp thicket (lays the Swamp thicket material, Ground edge 30) | close (water glints ~22% of pixels against ~16% in a retail crop; retail's are a little larger and brighter) |
