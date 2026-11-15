@@ -123,6 +123,11 @@ Archipelago's fringe after the blind test (the judge saw crisp contour lines in 
 Measured on its windows: mean look gap 0.79 -> 0.53 (window 2 1.21 -> 0.45, window 3 0.70 -> 0.79), close to retail 44 -> 45 of 75. Ripple
 height 0 and Vegetation cover 0 changed nothing in these windows; contrast 0.5 scored worse (0.98), though retail's lines read crisper by eye.
 
+Archipelago re-judged after the fringe change (the same six pairs, plus the same pairs shuffled with sides flipped, a fresh judge): every
+answer flipped with its side, so no side bias, and the judge picked the original in 5 of 6 on both sheets. Archipelago is still told apart
+from retail, now the right way round. The judge's cue for ours: "wide even contour rings, rippled sand, banded shallows" (the fringe is now
+too even; the sand ripple is the one noted in the swap test; the shallows band where the depth steps).
+
 ## Cross-biome gaps, ranked by how much of the retail set they cover
 
 | Gap | Biomes | Generic control that would close it | Status |
