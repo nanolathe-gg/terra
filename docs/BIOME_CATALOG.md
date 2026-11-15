@@ -137,7 +137,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | --- | --- | --- |
 | Flat sand islands at sea+2 with a pale halo | Island (drawn in water; on the sea+8 plain the sea tools add nothing) | close |
 | Sandbars, shoals, islet chains | Sandbar, Shoal, Islet scatter (Copies 8) | close |
-| Atolls | Atoll | poor (thin slivers of sand on a ring that mostly sits under the sea; retail's atolls carry chunky sand islands) |
+| Atolls | Atoll (a wider ring split by 7 Gaps) | close (chunky sand islands with shallow gaps; the lagoon stays deep where retail's is pale) |
 | Dark rock mounds with radial ridges | Rock mound, Rock knob, Crater mound (Mound rock) | close (ridges are crisp rills) |
 | Halos and shoals pale blue: (43,101,144) against retail (45,104,148) | world water depths 38 and 52 | good |
 
@@ -162,5 +162,5 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Jungle ridges | Jungle ridge (lays the jungle material) | close |
 | Cuestas and coastal bluffs | Cuesta, Coastal bluff | close (back slopes ~3x the cliff side, retail ~10x) |
 | Rocky knolls | Rock knoll (Bare tan rock) | close |
-| Rivers with wide pale braided shallows | River, Braided river | poor (the bed reaches 18 under the sea) |
+| Rivers with wide pale braided shallows | River (160 px), Braided river | close (a deep channel inside pale margins; a channel's depth is a quarter of its width, so a narrow river stays pale) |
 | Swamp thickets | none | missing (needs a thicket material and soft paint edges) |
