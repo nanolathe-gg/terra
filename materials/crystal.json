@@ -1805,7 +1805,7 @@
    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
    {"id": "crystal", "label": "Crystal mound", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw a dark crystal mass under a bold web: a click for a mound 420 px across, a drag for a crystal ridge."},
-   {"id": "outcrop", "label": "Crystal outcrop", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw a large crystal outcrop, about 900 px across, with a raised rim round a lower heart. Drag a short bent path, or overlap two strokes, for inner crests."},
+   {"id": "outcrop", "label": "Crystal outcrop", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw a large crystal outcrop, about 900 px across, with a raised rim round a lower heart. For inner crests, drag a short bent path or overlap two smaller strokes (about 400 px)."},
    {"id": "crust", "label": "Crystal crust", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Drag a low, lit crust of crystal over the plain: light facets under a thin web, walkable at its edges.", "rock": "litcrust"},
    {"id": "knob", "label": "Crystal knob", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw a small, low patch of crystal that units can walk round: a click for one."},
    {"id": "shards", "label": "Crystal shards", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Scatter flat crystal chips over the plain: a click for a handful, a drag for a trail."},
