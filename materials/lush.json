@@ -1838,10 +1838,10 @@
         "erosion": 1,
         "rockCrown": 0,
         "slopeTexture": 0,
-        "shallowDepth": 40,
+        "shallowDepth": 20,
         "bedBright": 1.15,
         "highland": 1,
-        "highFrom": 6,
+        "highFrom": 115,
         "highReach": 8
       },
       "engineDefaults": {
@@ -1849,8 +1849,81 @@
         "terraceCalm": 0
       },
 
+  "rock": {
+
+   "presets": [
+
+    "junglecliff",
+
+    "tanrock"
+
+   ],
+
+   "recipes": {
+
+    "junglecliff": {
+
+     "label": "Jungle cliff",
+
+     "knobs": {
+
+      "faceRindTone": -0.3,
+
+      "faceWet": 0.5,
+
+      "faceShade": 1,
+
+      "faceScratch": 0.6,
+
+      "faceMass": 3,
+
+      "faceFresh": 0.9,
+
+      "faceLayers": 0,
+
+      "faceGrass": 1
+
+     }
+
+    },
+
+    "tanrock": {
+
+     "label": "Bare tan rock",
+
+     "from": "granite",
+
+     "knobs": {
+
+      "faceRindTone": 0.35,
+
+      "faceRindWarmth": 0.3,
+
+      "faceRound": 0.4,
+
+      "faceGrass": 0.2
+
+     },
+
+     "colors": {
+
+      "rock": "#93936f"
+
+     }
+
+    }
+
+   }
+
+  },
+
   "shapes": {
-   "plateau": {},
+   "ridge": {"from": "plateau", "diameter": 360, "elevation": 150, "talus": 10, "gullies": 40, "gullySize": 20, "wander": 40, "varySize": 140, "heightVary": 30, "cracks": 60, "styleVegetation": 60},
+   "outcrop": {"from": "hill", "diameter": 140, "elevation": 40, "cracks": 60, "wander": 20, "varySize": 60, "heightVary": 4, "styleVegetation": -20, "curve": {"form": "lfHill", "knots": [[0, 0], [0.1, 0.05], [0.25, 0.7], [0.35, 0.9], [1, 1]], "back": [[0, 0], [0.1, 0.05], [0.25, 0.7], [0.35, 0.9], [1, 1]]}},
+   "bluff": {"from": "plateau", "diameter": 340, "elevation": 50, "talus": 0, "gullies": 10, "gullySize": 15, "wander": 14, "varySize": 100, "heightVary": 0, "lean": 250, "facing": 1, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.04, 0.05], [0.1, 0.8], [0.15, 0.95], [0.3, 1], [1, 1]], "back": [[0, 0], [0.3, 0.4], [0.6, 0.85], [1, 1]]}, "styleVegetation": 0},
+   "cuesta": {"from": "plateau", "diameter": 340, "elevation": 90, "talus": 0, "gullies": 0, "wander": 12, "varySize": 160, "cracks": 10, "heightVary": 0, "lean": 300, "facing": 3, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.03, 0.03], [0.07, 0.5], [0.1, 0.62], [0.4, 0.8], [0.7, 0.93], [1, 1]], "back": [[0, 0], [0.5, 0.55], [1, 1]]}, "styleVegetation": 0},
+   "mesa": {"from": "plateau", "diameter": 340, "elevation": 62, "talus": 0, "gullies": 0, "wander": 14, "varySize": 120, "cracks": 10, "heightVary": 0, "styleVegetation": 0},
+   "plateau": {"elevation": 170, "talus": 10, "gullies": 30, "gullySize": 15, "styleVegetation": 60},
    "hill": {},
    "mountain": {},
    "ramp": {},
@@ -1859,8 +1932,8 @@
    "valleyT": {},
    "crater": {"wander": 34, "heightVary": 4},
    "crystal": {},
-   "deep": {},
-   "shallow": {},
+   "deep": {"wander": 10, "varySize": 120, "fingers": 40},
+   "shallow": {"wander": 36, "varySize": 60, "fingers": 60},
    "river": {},
    "braided": {},
    "landform": {},
@@ -1870,7 +1943,12 @@
    "limestoneScarp": {"from": "plateau", "diameter": 560, "elevation": 110, "beds": 3, "bedSoft": 60}
   },
   "tools": [
-   {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
+   {"id": "plateau", "label": "Jungle plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw jungle high ground: a level top 170 over the plain under the world's highland jungle, walled by a dark, unclimbable cliff.", "rock": "junglecliff"},
+   {"id": "mesa", "label": "Grass mesa", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a low grass-topped mesa: level top about 60 over the plain, a smooth outline and a thin cliff band all round."},
+   {"id": "cuesta", "label": "Cuesta", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Draw a tilted grass block: a long gentle slope up to a short cliff; Lean toward sets the gentle side."},
+   {"id": "bluff", "label": "Coastal bluff", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a grass bluff along a shore: a cliff toward the water (the right of the line), a long slope behind it."},
+   {"id": "outcrop", "label": "Rock knoll", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "A click makes a small rocky knoll about 40 over the plain; drag a C at Width 60 for a horseshoe.", "rock": "tanrock"},
+   {"id": "ridge", "label": "Jungle ridge", "icon": "mountain", "color": "#b3bcca", "group": "shape", "help": "Draw a rugged, jungle-covered ridge with cliffs: not level ground to build on.", "rock": "junglecliff", "material": "lush-highland"},
    {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "rock": "soil"},
    {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
    {"id": "knoll", "label": "Knoll", "icon": "hill", "color": "#cfe3a3", "group": "shape", "help": "Draw a knoll: a small, round, walkable rise on smooth soil; a click for one.", "rock": "soil"},
