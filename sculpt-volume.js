@@ -94,7 +94,8 @@ export class VoxelSurface {
     this.passes=this.renderer.rockPasses(this.passesBy);   // this rockMask's passes, or a specialization miss that builds them
     const r=this.renderer,region=r.activeRegion,scale=r.uniformView.getFloat32(r.layout.fields.get('chunkScale').offset,true);
     const origin=region.screenOrigin,width=r.canvas.width*scale,height=r.canvas.height*scale;
-    const step=2**Math.max(0,Math.floor(Math.log2(r.voxelScale)));
+    // Voxels at least 2 px at every level: the rock finer than that is drawn per pixel at the hit (engine-volume.wgsl rockDetail).
+    const step=2**Math.max(1,Math.floor(Math.log2(r.voxelScale)));
     const h=r.config.heightBounds??[-90,300],extra=Math.max(64,region.reach.projection[1]*2+r.config.baseHeight-h[1]);
     const low=h[0]-extra-r.config.seaLevel,high=h[1]+extra-r.config.seaLevel;
     // The rays start from one height, the authored maximum with 64 units for the relief and the 40 the bricks reach above it: not from the

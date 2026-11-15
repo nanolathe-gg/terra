@@ -1147,17 +1147,19 @@ fn voxelRelease(block:VoxelRock,hard:f32)->f32 {
     return u.rock[rs & rockMask].faceBreak*selected*smoothstep(.15,1.7,block.edge)*(.35+.65*(1.0-hard));
 }
 // The same cuts supply density and the depth exposed through the outer rind.
-fn voxelJoint(r:vec3f,c:VoxelRock,broad:VoxelRock)->f32 {
-    let width=(.65+u.rock[rs & rockMask].faceWear*1.2)*u.rock[rs & rockMask].faceJointWidth;
+fn voxelJoint(r:vec3f,c:VoxelRock,broad:VoxelRock)->f32 { return voxelJointW(r,c,broad,voxelJointWidth(),u.rock[rs & rockMask].faceSecondary); }
+fn voxelJointWidth()->f32 { return (.65+u.rock[rs & rockMask].faceWear*1.2)*u.rock[rs & rockMask].faceJointWidth; }
+// The joints' opening (0 to 1.15) for joints width units wide, the fine joints at share secondary.
+fn voxelJointW(r:vec3f,c:VoxelRock,broad:VoxelRock,width:f32,secondary:f32)->f32 {
     // Coherent interruptions taper both depth and opening; they do not select
     // a different topology at zero. Fine joints subdivide the larger blocks.
     let size=max(8.0,u.rock[rs & rockMask].faceBlockSize);
-    var primary=1.0;var secondary=1.0;
+    var primary=1.0;var fine=1.0;
     if(u.rock[rs & rockMask].faceContinuity<1.0){
         primary=mix(smoothstep(.24,.64,voxelNoise(r/vec3f(size*2.1,size*2.1,size*1.1)+17.0)),1.0,u.rock[rs & rockMask].faceContinuity);
-        secondary=mix(smoothstep(.3,.66,voxelNoise(r/vec3f(size*.9,size*.9,size*.65)-29.0)),1.0,u.rock[rs & rockMask].faceContinuity);
+        fine=mix(smoothstep(.3,.66,voxelNoise(r/vec3f(size*.9,size*.9,size*.65)-29.0)),1.0,u.rock[rs & rockMask].faceContinuity);
     }
-    return (1.0-smoothstep(width*.25,width,c.edge))*u.rock[rs & rockMask].faceSecondary*secondary
+    return (1.0-smoothstep(width*.25,width,c.edge))*secondary*fine
         +(1.0-smoothstep(width*.15,width*.85,broad.edge))*1.15*primary;
 }
 fn voxelDetail(r:vec3f)->f32 {

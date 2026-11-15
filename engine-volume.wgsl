@@ -97,6 +97,54 @@ fn voxelSkin(p:vec3f,slope:f32,painted:f32,rain:f32)->vec2f {
     let mature=mix(.65,1.0,clamp(rain,0.0,1.0));
     return vec2f(fresh*u.rock[rs & rockMask].faceFresh,(1.0-fresh)*u.rock[rs & rockMask].faceRind*mature)*skinGate;
 }
+fn voxelPaintRock(p:vec2f)->f32 {
+    // Rock at a shore is painted rock to the solid (engine-common.wgsl shoreRockAt).
+    let shore=shoreRockAt(p);
+    if(u.paintOn==0){return shore;}
+    return max(shore,max(0.0,sampleMasks(maskPoint(p),0).r));
+}
+// Joints and fine layers finer than the solid's voxels. The solid cuts a joint at least voxelJointResolved wide (1.5 voxels), shallower so
+// the cut keeps its volume; the hit draws the rest (rockDetail): the joint as a 1 px solid would show it less as this one does (both after
+// their wear rounds), and the fine
+// layers' blur over 1 px less their blur over one voxel. The 1 px solid is the reference: drawn against an ideal sharp joint they were lines.
+fn voxelJointResolved(width:f32,step:f32)->f32 { return max(width,1.5*step); }
+// A joint's width as a solid of this step shows it after its wear rounds (voxelWear): each full round spreads it as diffusion of .12 a
+// voxel squared, so its edges blur by sigma^2 = .24 rounds step^2, which widens the opening by about 2 sigma, keeping its volume.
+fn voxelJointSeen(width:f32,step:f32)->f32 { let r=voxelJointResolved(width,step);return sqrt(r*r+.96*min(4.0*u.rock[rs & rockMask].faceWear,4.0)*step*step); }
+// What rockDetail reads once at a pixel, for every tap around it: the rock's gates and gain (voxelDensity's own), its beds' gathered share.
+struct RockSite { on:bool, face:f32, layers:f32, gain:f32, gathered:f32 }
+fn rockSite(p:vec3f)->RockSite {
+    useRock(p.xy);
+    var site=RockSite(false,0.0,0.0,0.0,0.0);
+    if(u.rock[rs & rockMask].rockFace<=0.0||max(u.rock[rs & rockMask].faceJoint,max(u.rock[rs & rockMask].faceLamina,u.rock[rs & rockMask].faceLedge))<=0.0){return site;}
+    let source=voxelAuthored(p.xy);let guide=voxelGuide(p.xy);let nz=sqrt(max(.000225,1.0-dot(guide.xy,guide.xy)));
+    let slope=length(broadGradient(p.xy));let route=routeProtection(p.xy);
+    let painted=voxelPaintRock(p.xy);let rim=rimRockAt(p.xy);
+    let face=max(rockFaceGate(slope,painted,route),rimRelief(rim,route))*(1.0-softBankAt(p.xy));
+    let soil=u.rock[rs & rockMask].faceLayers*smoothstep(.08,.6,slope)*smoothstep(.5,.9,nz)*(1.0-route);
+    let heightGate=voxelRockHeight(p,max(painted,rim));
+    if(max(face,soil)*heightGate<.001){return site;}
+    var gathered=0.0;
+    if(u.rock[rs & rockMask].columnCount>0){let column=voxelColumnCoord(p);gathered=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary),length(source.yz)/max(source.w,.015)).y;}
+    return RockSite(true,face,face+soil*3.0,u.rock[rs & rockMask].rockFace*.5*voxelRelief(p.xy,slope)*heightGate,gathered);
+}
+fn rockLayers(p:vec3f,gathered:f32)->f32 { let l=voxelFine(p,voxelColumnCoord(p),gathered);return l.x+l.y; }
+// The height (outward) the solid lacks at p, near the pixel its site was read at.
+fn rockDetail(p:vec3f,site:RockSite)->f32 {
+    var h=0.0;
+    if(u.rock[rs & rockMask].faceJoint>0.0&&site.face>.001){
+        let r=voxelRockSpace(p);
+        let c=voxelBlocks(r,max(4.0,u.rock[rs & rockMask].faceBlockSize));let broad=voxelBlocks(r,max(24.0,u.rock[rs & rockMask].faceBlockSize*2.5));
+        let w=voxelJointWidth();let fine=u.rock[rs & rockMask].faceSecondary;
+        let w1=voxelJointSeen(max(w,u.chunkScale),1.0);let w2=voxelJointSeen(w,vs.step);   // as a 1 px solid shows it (never finer than a pixel), as this one does
+        h-=u.rock[rs & rockMask].faceJoint*3.0*(voxelJointW(r,c,broad,w1,fine)*w/w1-voxelJointW(r,c,broad,w2,fine)*w/w2)*site.face;
+    }
+    if(u.rock[rs & rockMask].faceLamina>0.0||(site.gathered>0.0&&u.rock[rs & rockMask].faceLedge>0.0)){
+        let s1=vec3f(0,0,1);let s2=vec3f(0,0,vs.step);
+        h+=.25*(rockLayers(p-s1,site.gathered)+rockLayers(p+s1,site.gathered)-rockLayers(p-s2,site.gathered)-rockLayers(p+s2,site.gathered))*site.layers;
+    }
+    return h*site.gain;
+}
 #ifdef VOLUME_COMPUTE
 @group(3) @binding(0) var cacheOut:texture_storage_2d<rgba32float,write>;
 @group(3) @binding(1) var guideOut:texture_storage_2d<rgba32float,write>;
@@ -206,12 +254,6 @@ fn voxelClassify(@builtin(global_invocation_id) id:vec3u){
     columnsOut[id.y*vs.columnsX+id.x]=vec4i(first,i32(count),i32(start),0);
     for(var z=0u;z<count;z++){if(start+z<vs.capacity){bricksOut[start+z]=vec4i(vec2i(id.xy),first+i32(z),i32(start+z));}}
 }
-fn voxelPaintRock(p:vec2f)->f32 {
-    // Rock at a shore is painted rock to the solid (engine-common.wgsl shoreRockAt).
-    let shore=shoreRockAt(p);
-    if(u.paintOn==0){return shore;}
-    return max(shore,max(0.0,sampleMasks(maskPoint(p),0).r));
-}
 const VOXEL_RING=array<vec2f,8>(vec2f(1.0,0.0),vec2f(0.70710678,0.70710678),vec2f(0.0,1.0),vec2f(-0.70710678,0.70710678),vec2f(-1.0,0.0),vec2f(-0.70710678,-0.70710678),vec2f(0.0,-1.0),vec2f(0.70710678,-0.70710678));
 // Whole blocks. A block is rock when its middle lies under the authored surface and air when it lies over it: one answer for the whole block
 // (graded while the middle is within 4 units of the surface), so the faces between a rock block and an air block become the rock's skin.
@@ -244,7 +286,8 @@ fn voxelDensity(p:vec3f)->f32 {
     if(max(face,soil)*heightGate<.001){return d;}
     let r=voxelRockSpace(p);
     let c=voxelBlocks(r,max(4.0,u.rock[rs & rockMask].faceBlockSize));let broad=voxelBlocks(r,max(24.0,u.rock[rs & rockMask].faceBlockSize*2.5));
-    let joint=voxelJoint(r,c,broad);
+    let jw=voxelJointWidth();let js=voxelJointResolved(jw,vs.step);
+    let joint=voxelJointW(r,c,broad,js,u.rock[rs & rockMask].faceSecondary)*jw/js;   // the share this solid holds (rockDetail draws the rest)
     let course=voxelNoise(r/vec3f(max(14.0,u.rock[rs & rockMask].faceRun*.3),max(14.0,u.rock[rs & rockMask].faceRun*.3),max(3.0,u.rock[rs & rockMask].faceBed*.6)))-.5;
     let faces=u.rock[rs & rockMask].faceBlock*(c.face*.65+broad.face*1.05);
     let mass=course*u.rock[rs & rockMask].faceMass*2.2;
