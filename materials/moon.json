@@ -1098,16 +1098,16 @@
         "banding": 0,
         "crackDark": 0.6,
         "sunTilt": 0,
-        "sunHeight": 48.71528910542877,
+        "sunHeight": 34,
         "faceFill": 0,
-        "ambient": 0.25,
+        "ambient": 0.3,
         "slopeMarks": 0,
         "wrinkles": 0,
         "moonCups": 1,
         "moonCupSize": 6.5,
         "moonRibs": 1,
         "moonRibDepth": 0.9,
-        "moonRibDark": 0.4,
+        "moonRibDark": 0.7,
         "moonFolds": 0.55,
         "pockmark": 0,
         "pockSize": 7.5,
@@ -1147,11 +1147,25 @@
 
     "pitted": {
 
-     "label": "Pitted regolith",
+     "label": "Pocked rubble",
 
      "knobs": {
 
+      "faceCrease": 6,
+
+      "faceCreaseSize": 5,
+
+      "faceShade": 1,
+
+      "faceGrit": 1.2,
+
+      "faceRock": 1,
+
+      "rockFaceFrom": 0.4,
+
       "pockmark": 1,
+
+      "pockSize": 5,
 
       "moonCups": 0,
 
@@ -1160,6 +1174,12 @@
       "moonFolds": 0,
 
       "banding": 0.3
+
+     },
+
+     "colors": {
+
+      "rock": "#5b5b59"
 
      }
 
@@ -1167,13 +1187,29 @@
 
     "cracked": {
 
-     "label": "Cracked slopes",
+     "label": "Streaked crater wall",
 
      "knobs": {
 
-      "crackSeverity": 0.35,
+      "faceScratch": 6,
 
-      "pockmark": 0,
+      "faceScratchSize": 4,
+
+      "faceScratchLength": 100,
+
+      "faceCrease": 1,
+
+      "faceShade": 1,
+
+      "shineRock": 0,
+
+      "shineRockSharp": 24,
+
+      "shineRockRough": 0,
+
+      "shineRockScale": 6,
+
+      "crackSeverity": 0.35,
 
       "moonCups": 0,
 
@@ -1181,7 +1217,15 @@
 
       "moonFolds": 0,
 
-      "banding": 0.3
+      "banding": 0.3,
+
+      "pockmark": 0
+
+     },
+
+     "colors": {
+
+      "rock": "#747472"
 
      }
 
@@ -1192,6 +1236,14 @@
   },
 
   "shapes": {
+   "flowLobe": {"from": "hill", "diameter": 300, "elevation": 24, "lean": 100, "cracks": 10, "wander": 40, "widthVary": 20, "heightVary": 3, "varySize": 100, "terraces": 5, "ledge": 30, "terraceJitter": 50},
+   "wrinkleRidge": {"from": "mountain", "diameter": 40, "elevation": 16, "wander": 6, "widthVary": 40, "heightVary": 4, "varySize": 60, "gullies": 0, "talus": 0, "crestTaper": 60},
+   "lobedMesa": {"from": "plateau", "diameter": 100, "elevation": 11, "gullies": 0, "talus": 0, "wander": 18, "widthVary": 30, "heightVary": 2, "varySize": 100, "cracks": 20, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.08, 0.4], [0.16, 0.95], [0.22, 1], [0.32, 0.72], [1, 0.65]]}},
+   "dome": {"from": "hill", "diameter": 250, "elevation": 45, "lean": 100, "cracks": 10, "wander": 8, "widthVary": 10, "heightVary": 2, "varySize": 100, "varyMiddle": 100, "curve": {"form": "lfHill", "knots": [[0, 0], [0.2, 0.12], [0.45, 0.55], [0.7, 0.88], [0.85, 0.97], [1, 1]]}},
+   "pockedCrater": {"from": "crater", "diameter": 240, "elevation": -27, "wander": 30, "heightVary": 10, "varySize": 60, "secondaries": 0, "ejecta": 80, "buckling": 100, "cracks": 100, "roughness": 80},
+   "terracedCrater": {"from": "crater", "diameter": 280, "elevation": -20, "wander": 14, "heightVary": 2, "secondaries": 0, "ejecta": 30, "buckling": 0, "terraces": 3, "ledge": 45, "terraceJitter": 60, "breakup": 30, "curve": {"form": "lfCrater", "knots": [[0, 0], [0.1, -0.05], [0.18, -0.2], [0.24, -0.25], [0.3, -0.05], [0.45, 0.45], [0.58, 0.85], [0.64, 1], [1, 1]]}},
+   "starburst": {"from": "crater", "diameter": 260, "elevation": -18, "wander": 16, "heightVary": 3, "secondaries": 0, "ejecta": 40, "buckling": 0, "spurCount": 7, "spurLength": 180, "spurWidth": 100, "spurSpread": 70, "spurTaper": 60, "spurHeight": 100, "spurBulb": 30, "crestVary": 50, "curve": {"form": "lfCrater", "knots": [[0, 0], [0.12, -0.25], [0.25, -0.7], [0.33, -0.8], [0.42, -0.4], [0.5, 0.2], [0.62, 0.8], [0.7, 1], [1, 1]]}},
+   "freshCrater": {"from": "crater", "diameter": 320, "elevation": -48, "wander": 14, "heightVary": 2, "secondaries": 0, "ejecta": 60, "buckling": 0, "curve": {"form": "lfCrater", "knots": [[0, 0], [0.1, -0.05], [0.16, -0.2], [0.2, -0.25], [0.26, -0.05], [0.4, 0.45], [0.6, 0.75], [0.8, 0.95], [1, 1]]}},
    "plateau": {"elevation": 37, "gullies": 25, "talus": 80, "wander": 50},
    "hill": {"wander": 42, "widthVary": 30, "heightVary": 9, "varySize": 60, "varyMiddle": 150, "cracks": 10, "diameter": 300, "elevation": 37},
    "mountain": {"wander": 24, "widthVary": 5, "cracks": 10, "gullies": 10, "talus": 100, "elevation": 57},
@@ -1206,8 +1258,8 @@
    "river": {},
    "braided": {},
    "landform": {},
-   "smallCrater": {"from": "crater", "diameter": 140, "elevation": -14, "secondaries": 0, "ejecta": 40, "buckling": 0, "wander": 8, "heightVary": 1},
-   "basin": {"from": "crater", "diameter": 760, "elevation": -16, "wander": 60, "heightVary": 4, "secondaries": 0, "ejecta": 0, "buckling": 0, "curve": {"form": "lfCrater", "knots": [[0, 0], [0.15, -0.03], [0.3, -0.12], [0.4, -0.18], [0.5, -0.08], [0.6, 0.25], [0.75, 0.65], [0.9, 0.95], [1, 1]]}},
+   "smallCrater": {"from": "crater", "diameter": 110, "elevation": -14, "secondaries": 0, "ejecta": 30, "buckling": 0, "wander": 6, "heightVary": 1, "curve": {"form": "lfCrater", "knots": [[0, 0], [0.12, -0.2], [0.22, -0.45], [0.3, -0.2], [0.45, 0.5], [0.6, 0.9], [0.7, 1], [1, 1]]}},
+   "basin": {"from": "crater", "diameter": 1020, "elevation": -43, "wander": 40, "heightVary": 6, "secondaries": 0, "ejecta": 0, "buckling": 40, "curve": {"form": "lfCrater", "knots": [[0, 0], [0.1, -0.02], [0.19, -0.19], [0.28, -0.51], [0.37, -0.6], [0.46, -0.3], [0.55, 0.14], [0.64, 0.58], [0.73, 0.9], [0.82, 1], [1, 1]]}, "varySize": 200, "cracks": 40},
    "rille": {"from": "valleyU", "diameter": 110, "elevation": -14, "wander": 70, "varySize": 200, "widthVary": 30}
   },
   "tools": [
@@ -1219,8 +1271,16 @@
    {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
-   {"id": "smallCrater", "label": "Small crater", "icon": "crater", "color": "#e6c0ae", "group": "shape", "help": "Strike a small fresh crater: a sharp rim and a light blanket of ejecta, no secondaries."},
-   {"id": "basin", "label": "Old basin", "icon": "crater", "color": "#b98d7a", "group": "shape", "help": "Draw a large old basin: a wide bowl with a low, worn rim and no ejecta, as time leaves a big crater."},
+   {"id": "freshCrater", "label": "Fresh crater", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Strike a deep, sharp bowl about 300 px across with a narrow rim and a ragged ejecta blanket."},
+   {"id": "starburst", "label": "Starburst crater", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Strike a shallow crater with long, winding legs of ejecta reaching out from its rim."},
+   {"id": "terracedCrater", "label": "Terraced crater", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Strike a crater whose inner wall has slumped into concentric terraces around a flat floor."},
+   {"id": "pockedCrater", "label": "Pocked crater", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Strike a rough crater with a broken, pitted rim of dark rubble.", "rock": "pitted"},
+   {"id": "dome", "label": "Dome", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Raise a smooth round dome; add a small crater for a summit pit."},
+   {"id": "lobedMesa", "label": "Lobed mesa", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a low, flat-topped lobe with a raised lip round its edge."},
+   {"id": "wrinkleRidge", "label": "Wrinkle ridge", "icon": "mountain", "color": "#b3bcca", "group": "shape", "help": "Draw a narrow, low ridge line: short slivers, forks or long winding loops."},
+   {"id": "flowLobe", "label": "Flow lobe", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Raise a low lobe whose flank is wrapped in concentric folds."},
+   {"id": "smallCrater", "label": "Small crater", "icon": "crater", "color": "#e6c0ae", "group": "shape", "help": "Strike a small fresh crater about 100 px across: a sharp rim, a dark inner wall away from the sun."},
+   {"id": "basin", "label": "Large crater", "icon": "crater", "color": "#b98d7a", "group": "shape", "help": "Strike a large crater about 1000 px across: a flat floor 43 below the plain, a rim 25 above it, streaked walls.", "rock": "cracked"},
    {"id": "rille", "label": "Rille", "icon": "valleyU", "color": "#bfae94", "group": "shape", "help": "Draw a rille: a narrow, winding channel cut into the plain."}
   ],
   "baseHeight": 52,
