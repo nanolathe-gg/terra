@@ -125,7 +125,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Feature | Tool, rock type | Status |
 | --- | --- | --- |
 | Outcrops: large ~900 px rising 124-145, medium 370-460 px rising 120-150, small 250-350 px | Crystal outcrop, Crystals, Crystal knob | close (domes where retail's outlines are lobed and carry inner crests) |
-| Low lit crystal crusts | Crystals as a drag | poor in tone (dark where retail is lit) |
+| Low lit crystal crusts | Crystal crust (Lit crystal crust rock: web 0.3) | close (lighter plates under a thin web; retail's web is bolder and its crust shows ridged streaks) |
 | Shards on the plain | Crystal shards | close |
 | Coasts with a slab shelf 8-10 under the sea | Shallow with shore plates | close |
 | Islets ringed by slabs | Islet | good |

@@ -1736,7 +1736,44 @@
         "erosionEnvelope": 0.12
       },
 
+  "rock": {
+
+   "presets": [
+
+    "litcrust"
+
+   ],
+
+   "recipes": {
+
+    "litcrust": {
+
+     "label": "Lit crystal crust",
+
+     "knobs": {
+
+      "gougeWeb": 0.3,
+
+      "faceShade": 0.4,
+
+      "faceRindTone": 0.4
+
+     },
+
+     "colors": {
+
+      "rock": "#5b4b6f"
+
+     }
+
+    }
+
+   }
+
+  },
+
   "shapes": {
+   "crust": {"from": "crystal", "diameter": 620, "elevation": 45, "facetForm": 1, "facetSurface": 1, "iceFacets": 100, "iceFacetSize": 40, "crystalStep": 2, "crystalTiers": 0, "crystalFacet": 50, "wander": 60, "roughness": 40, "heightVary": 20},
    "islet": {"from": "plateau", "diameter": 480, "elevation": 0, "gullies": 0, "talus": 0, "wander": 40, "shorePlates": 1, "plateMaterial": 1, "plateWaterPx": 120, "plateLandPx": 16, "plateSize": 28, "plateVary": 40},
    "shards": {"from": "crystal", "diameter": 360, "elevation": 4, "facetForm": 2, "facetSurface": 1, "iceFacets": 35, "iceFacetSize": 44, "crystalTop": 90, "crystalSides": 5, "crystalVariation": 80, "crystalTiers": 100, "wander": 0},
    "knob": {"from": "crystal", "diameter": 180, "elevation": 8, "facetForm": 1, "facetSurface": 1, "iceFacets": 100, "iceFacetSize": 28, "crystalStep": 2, "crystalTiers": 0, "crystalFacet": 50, "wander": 30},
@@ -1768,6 +1805,7 @@
    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
    {"id": "crystal", "label": "Crystal mound", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw a dark crystal mass under a bold web: a click for a mound 420 px across, a drag for a crystal ridge."},
    {"id": "outcrop", "label": "Crystal outcrop", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw a large crystal outcrop, about 900 px across, with a raised rim round a lower heart."},
+   {"id": "crust", "label": "Crystal crust", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Drag a low, lit crust of crystal over the plain: light facets under a thin web, walkable at its edges.", "rock": "litcrust"},
    {"id": "knob", "label": "Crystal knob", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw a small, low patch of crystal that units can walk round: a click for one."},
    {"id": "shards", "label": "Crystal shards", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Scatter flat crystal chips over the plain: a click for a handful, a drag for a trail."},
    {"id": "islet", "label": "Islet", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a flat island at plain height in water, ringed by a shelf of blue crystal slabs under the water (on the plain it adds nothing)."},
