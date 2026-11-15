@@ -349,6 +349,12 @@ export function withWorldMaterials(value, config) {
   if (high && !list.some(m => m.worldHigh) && list.length < MATERIAL_SLOTS - 1) {
     const added = addMaterial(list, high, high.name); list = added.materials.map(m => m.slot === added.slot ? {...m, worldHigh: true} : m);
   }
+  // A world may name more materials its tools lay down (config.materials.extra: library keys; a tool's `material`, sculpt-tools.js
+  // toolMaterialSlot). Each the list lacks is added while it has room.
+  for (const key of config.materials?.extra || []) {
+    const m = LIBRARY[key];
+    if (m && !list.some(o => o.source === key) && list.length < MATERIAL_SLOTS - 1) list = addMaterial(list, m, m.name).materials;
+  }
   return list;
 }
 // A map carried into another world: a ground or water still as the library made it gives way to the new world's own; one the artist

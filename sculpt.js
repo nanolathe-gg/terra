@@ -20,7 +20,7 @@ import {selectionTransform,toggleSelection} from './sculpt-selection.js';
 import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap,keepPrevious,takePrevious,dropPrevious} from './sculpt-share.js';
 import {isRiver,pointsSignature} from './sculpt-river.js';
 import {HELP_TOOLS} from './sculpt-help-examples.js';
-import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
+import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,toolMaterialSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
 
@@ -150,10 +150,12 @@ const baseOf=id => shapeFrom(config,entryOf(id));
 const toolKind=id => strokeKind(baseOf(id));
 // A tool's help line: its own (a world's tool may carry one), else its library shape's.
 const toolHelpLine=id => toolById(id)?.help??HELP[baseOf(id)];
-// A tool's shape as world `preset` makes it, with the rock the tool names (toolRockSlot); a tool's starting card: that, or a map tool's own card.
+// A tool's shape as world `preset` makes it, with the rock and ground material the tool names (toolRockSlot, toolMaterialSlot); a tool's starting
+// card: that, or a map tool's own card.
 function shapeCard(id,preset=config?.biomeId) {
-  const t=toolById(id),card=toolDefaults(entryOf(id),preset),slot=toolRockSlot(t,mapRocks,config.rock?.recipe);
+  const t=toolById(id),card=toolDefaults(entryOf(id),preset),slot=toolRockSlot(t,mapRocks,config.rock?.recipe),ground=toolMaterialSlot(t,mapMaterials);
   if (slot!==undefined) card.rockPreset=slot;
+  if (ground!==undefined) card.groundPreset=ground;
   return card;
 }
 const toolCard=(id,own=mapTools) => { const t=toolById(id,own); return t?.card?structuredClone(t.card):shapeCard(id); };

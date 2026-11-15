@@ -30,6 +30,7 @@ function checkTool(t,what,base=s => s) {
   if (!TOOL_GROUPS.includes(t.group)) throw Error(`${what} needs a group: ${TOOL_GROUPS.join(' or ')}.`);
   if (!Object.hasOwn(LANDFORM_SHAPES,base(toolShape(t)))) throw Error(`${what}: no shape ${JSON.stringify(toolShape(t))}.`);
   if (t.rock!==undefined && (typeof t.rock!=='string' || !t.rock)) throw Error(`${what}: its rock is a preset's key.`);
+  if (t.material!==undefined && (typeof t.material!=='string' || !t.material)) throw Error(`${what}: its material is a library material's key.`);
 }
 // A world's toolbar (config.tools), checked: its shape tools in order, each id once, each on a shape of the library or one of the world's own shapes
 // (`from`), with an optional help line of its own (the footer and the hover say it in place of its shape's).
@@ -47,6 +48,10 @@ export function worldTools(config) {
 // A tool may name its rock by a preset's key (sculpt-rock-presets.js rockByKey): the slot of the map's preset with that key when the tool's card is made,
 // 0 where it is the world's own rock's (`worldKey`, config.rock.recipe), Rock beneath (-1) in a map without it, and undefined for a tool that names none.
 export const toolRockSlot=(tool,rocks=[],worldKey='') => tool?.rock===undefined?undefined:rockByKey(rocks,tool.rock,worldKey);
+// A tool may name the ground material it lays down by its library key (`material`; the world adds it to a map, config.materials.extra): the
+// slot of the map's material made from it (0 where that is the world's ground), the ground beneath (-1) in a map without it, and undefined for a
+// tool that names none. Its card's Ground row starts there.
+export const toolMaterialSlot=(tool,materials=[]) => { if(tool?.material===undefined)return undefined; const m=materials.find(m=>m.source===tool.material&&!m.worldWater); return m?(m.worldGround?0:m.slot):-1; };
 // The tool a stroke shows and carries as: its own, if the toolbar (`ids`) has it, else the generic landform. A stroke of another kind is its kind.
 export const strokeTool=(n,ids) => n?.kind!=='landform'?n?.kind:ids.has(n.tool)?n.tool:LANDFORM_TOOL.id;
 // A stroke that falls back to the generic landform keeps its shape for good: only its tool is lost. It is marked `kept` (every setting counts as set by

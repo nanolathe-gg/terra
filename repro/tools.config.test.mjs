@@ -35,6 +35,7 @@ test('every world\'s toolbar is valid, its rocks are presets it ships', () => {
     const tools = worldTools(config), rocks = worldRocks(applyWorldRock(structuredClone(config)));
     assert.ok(tools.length > 0, name);
     for (const t of tools.filter(t => t.rock)) assert.ok(toolRockSlot(t, rocks, config.rock?.recipe) >= 0, `${name}: ${t.id} names ${t.rock}, which the world ships`);
+    for (const t of tools.filter(t => t.material)) assert.ok([config.materials?.ground, config.materials?.high, ...(config.materials?.extra || [])].includes(t.material), `${name}: ${t.id} lays ${t.material}, which the world adds to a map`);
   }
   const today = {id: 'plateau', label: 'Plateau', icon: 'plateau', color: '#e6bb82', group: 'shape'};
   for (const bad of [{...today, id: 'fissure'}, {...today, id: 'a b'}, {...today, icon: 'star'}, {...today, color: 'red'}, {...today, group: 'paint'}, {...today, shape: 'mesa'}, {...today, label: ''}, {...today, id: 'map-1'}])
@@ -167,4 +168,17 @@ test('a world\'s own shape: a library shape as the world makes it, with its own 
 
 test('worlds ship no variants or variant toolbars', () => {
   for (const config of Object.values(configs)) assert.ok(!('variantTools' in config) && !('variants' in config) && !('variant' in config));
+});
+
+test('a tool may name the ground material it lays down; the world adds it to a map', async () => {
+  const {withWorldMaterials, LIBRARY} = await import('../sculpt-materials.js');
+  const {toolMaterialSlot} = await import('../sculpt-tools.js');
+  const keys = Object.keys(LIBRARY), extra = keys.find(k => k.endsWith('-ground') && k !== 'green-ground');
+  const list = withWorldMaterials(null, {materials: {ground: 'green-ground', water: 'green-water', extra: [extra, 'no-such-material']}});
+  assert.equal(list.filter(m => m.source === extra).length, 1, 'the extra material is added once');
+  assert.equal(withWorldMaterials(list, {materials: {ground: 'green-ground', water: 'green-water', extra: [extra]}}).length, list.length, 'and not again');
+  assert.equal(toolMaterialSlot({id: 't', material: extra}, list), list.find(m => m.source === extra).slot);
+  assert.equal(toolMaterialSlot({id: 't', material: 'green-ground'}, list), 0, 'the world\'s ground is slot 0');
+  assert.equal(toolMaterialSlot({id: 't', material: 'green-water'}, list), -1, 'water is no ground: the ground beneath');
+  assert.equal(toolMaterialSlot({id: 't'}, list), undefined);
 });
