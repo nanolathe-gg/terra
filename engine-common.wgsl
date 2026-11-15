@@ -368,6 +368,7 @@ struct Uniforms {
     lavaVeins: f32,       // darkness of the veins that hang down the fall line (0: none)
     lavaCalm: f32,        // share of the fall-line relief the crust replaces on hills
     lavaDusk: f32,        // rock turned from the sun goes darker, as a power of its shading (0: none)
+    duskFrom: f32,        // the rise above the plain where that darkening starts; full 40 units higher
     // E6 (shine fix: Moon, Ice).
     shineGate: f32,       // shine roughness only on raised ground and slopes, not the level plain (0: everywhere, as before; 1: only there)
     shineHeadroom: f32,   // dim the lit body where the lobe is low, so glints stand against it on near-white ice (0: additive only, as before)

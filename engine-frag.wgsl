@@ -1659,9 +1659,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         shading *= 1.0 - 0.6 * u.creaseShade * smoothstep(0.04, 0.4, crease);
     }
     // G5 (Lava): rock turned from the sun, or in a cast shadow, goes darker than the diffuse term alone gives (retail's far sides are near black).
-    // Retail's small hills keep nearly the plain's tone on their far sides; the dark masses are the tall hills', so it grows with height.
+    // It grows with height from Shade from (duskFrom) to 40 units above it: Lava's small hills keep nearly the plain's tone on their far sides,
+    // while Green's and Red's low hills are dark on theirs.
     // Only faces turned from the sun take it (n.l from .5 down to .1), so a flank that faces the light is not darkened by its occlusion.
-    if (u.lavaDusk > 0.0 && shading < 1.0) { shading = pow(max(shading, 0.0), 1.0 + u.lavaDusk * smoothstep(u.base + 20.0, u.base + 60.0, baseHeight(p)) * (1.0 - smoothstep(0.1, 0.5, dot(normal, u.light)))); }
+    if (u.lavaDusk > 0.0 && shading < 1.0) { shading = pow(max(shading, 0.0), 1.0 + u.lavaDusk * smoothstep(u.base + u.duskFrom, u.base + u.duskFrom + 40.0, baseHeight(p)) * (1.0 - smoothstep(0.1, 0.5, dot(normal, u.light)))); }
     let timeMaps = timeMapsAt(p);
     gs=groundSlotAt(p);
     var grass = materialPigment(p,gs);

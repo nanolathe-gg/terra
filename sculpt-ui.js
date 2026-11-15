@@ -145,7 +145,7 @@ export const WORLD_HOMES={
  'Cliffs & stones/Where rock shows':'rockCrown rimReach shoreRock shoreShelf',
  'Cliffs & stones/Loose stones':'looseSupply boulders looseKnoll',
  'Cliffs & stones/Bands':'bandSoftness bandWater sandBanding sandBandSpacing layerCrease baseBand baseBandLow baseBandHigh baseBandWander baseBandGaps desertCapFlat',
- 'Cliffs & stones/Special surfaces':'iceFrost lavaCrust lavaPillow lavaChip lavaVeins lavaCalm lavaDusk gougeWeb iceSoft',
+ 'Cliffs & stones/Special surfaces':'iceFrost lavaCrust lavaPillow lavaChip lavaVeins lavaCalm lavaDusk duskFrom gougeWeb iceSoft',
  'Sand/':'sandCrown sand sandLee wind sandDust sandGrass sandLight sandGrain ripple rippleHeight',
  'Water & shores/Depths & edges':'shallowDepth deepDepth waterSoft crispShore deepEdge stepSoftPx shelfWander shoalRag shoalStairs shoalShoreSoft',
  'Water & shores/Shore & beach':'coastRamp beachWidth apron shoreEdge bankRock frostGaps frostGapReach frostGapSize frostGapDepth',

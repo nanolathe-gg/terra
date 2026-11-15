@@ -129,6 +129,7 @@ export function worldControlRequirement(key,v){
  if(/^moonRib/.test(key)&&key!=='moonRibs')return needs('moonRibs','Slope ribs');
  if(key==='moonFoldSpacing')return needs('moonFolds','Contour folds');
  if(['lavaPillow','lavaChip','lavaVeins','lavaCalm'].includes(key))return needs('lavaCrust','Pillow crust strength');
+ if(key==='duskFrom')return needs('lavaDusk','Shade away from light');
  if(['frostGapReach','frostGapSize','frostGapDepth'].includes(key))return needs('frostGaps','Shore pockets');
  // Colour beds and the bands on them need the strata switch, and the band and cap rows a rock column to bed.
  if(['strataContrast','strataGrain'].includes(key))return needs('strata','Layer color coverage in Strata');
