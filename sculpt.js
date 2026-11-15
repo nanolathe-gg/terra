@@ -1851,8 +1851,9 @@ function buildKnobs() {
         const style = CRACK_STYLES[event.target.value]; if (!style) return;
         for (const [key, value] of Object.entries(style)) {
           const input = $('knob-' + key); if (input) { input.value = value; input.previousElementSibling.querySelector('output').textContent = value; }
-          setKnob(key, value);
+          if (rockSelected>0 && ROCK_KEYS.includes(key)) setPresetKnob(key, value); else setKnob(key, value);   // the selected rock type's, as its sliders
         }
+        worldInputQueue.end();
       });
       box.append(wrap);
     }
