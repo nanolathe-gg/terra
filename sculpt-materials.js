@@ -53,6 +53,9 @@ export const NODES = {
   gradient: {code: 7, label: 'Gradient', out: 'color', inputs: [['in', 'Input', 'gray']],
     params: () => [P('ease', 'Softness', 0, 1, 0)],
     help: 'Colors a gray pattern, dark to light. A stop brighter than 1 lightens when the result multiplies another color.'},
+  adjust: {code: 12, label: 'Color adjust', out: 'color', inputs: [['in', 'Color', 'any'], ['mask', 'Mask', 'gray']],
+    params: () => [P('hue', 'Hue (°)', -180, 180, 0), P('saturation', 'Saturation', -1, 1, 0), P('value', 'Brightness', -1, 1, 0)],
+    help: 'Turns a color’s hue, and scales its saturation and brightness, through an optional Mask: drier or greener patches over every layer at once. The material’s palette limits what shows; after a large change, Pick from the material.'},
   light: {code: 8, label: 'Light', out: 'gray', inputs: [['in', 'Height', 'gray']],
     params: () => [P('direction', 'Direction (°)', 0, 360, 135), P('strength', 'Strength', 0, 8, 2)],
     help: 'How a height’s slopes face a light: .5 on the level, lighter toward the light. Tints color like a lit bump without real relief.'},
@@ -258,6 +261,7 @@ export function programSource(program, thumbnails = false) {
       case 'combine': return `nCombine(${s},${value(0, 'vec4f(0)')},${value(1, 'vec4f(0)')},${value(2, 'vec4f(1)')})`;
       case 'heightblend': return `nHeightBlend(${s},${value(0, 'vec4f(0)')},${value(1, 'vec4f(0)')},${value(2, 'vec4f(0)')},${value(3, 'vec4f(0)')})`;
       case 'gradient': return `nGradient(${s},${value(0, 'vec4f(0)')})`;
+      case 'adjust': return `nAdjust(${s},${value(0, 'vec4f(0)')},${value(1, 'vec4f(1)')})`;
       case 'light': return tapped ? `nLight(${s},${taps('1.0')})` : 'vec4f(.5)';
       case 'cavity': return tapped ? `nCavity(${s},${read(i, 0)}.x,${taps(`arg(${s},0u)`)})` : 'vec4f(.5)';
       case 'constant': return kind === 'color' ? `vec4f(arg(${s},0u),arg(${s},1u),arg(${s},2u),1)` : `vec4f(arg(${s},0u))`;
@@ -307,6 +311,7 @@ export function materialReliefBound(material) {
       case 'constant': v = n.kind === 'color' ? [Math.min(...n.stops[0].slice(1)), Math.max(...n.stops[0].slice(1))] : [p.value, p.value]; break;
       case 'gradient': { const all = n.stops.flatMap(s => s.slice(1)); v = [Math.min(...all), Math.max(...all)]; break; }
       case 'heightblend': { const a = get('a'), b = get('b'); v = [Math.min(a[0], b[0]), Math.max(a[1], b[1])]; break; }
+      case 'adjust': { const a = get('in'); v = [Math.min(0, a[0]), Math.max(a[1], a[1] * (1 + Math.max(0, p.value)))]; break; }   // a turn keeps the brightest channel
       case 'combine': {
         const a = get('a'), q = sub(get('b'), [p.offset, p.offset]), w = mul([p.amount, p.amount], get('mask', [1, 1]));
         v = n.kind === 'add' ? add(a, mul(q, w)) : n.kind === 'subtract' ? sub(a, mul(q, w)) : n.kind === 'multiply' ? mul(a, mix([1, 1], q, w))

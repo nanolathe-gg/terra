@@ -76,6 +76,7 @@ with gray stops is a curve for a height or mask. Every pattern wraps at the
 | Combine | gray or color | Mix, Add, Multiply, Subtract, Darker, Lighter, Screen, through an optional Mask. Layer offset `.5` centers a noise. |
 | Height blend | gray or color | The layer shows where its height stands above the base's. |
 | Gradient | color | 2 to 8 stops. A stop brighter than 1 lightens when the result multiplies another color. |
+| Color adjust | color | Turns a color's hue and scales its saturation and brightness (0 leaves each), through an optional Mask: varies every layer at once. The material's palette limits what shows; after a large change, Pick from the material. |
 | Light | gray | A height's slope toward a light: tints color like a lit bump. |
 | Cavity | gray | Hollows (below .5) and crests (above) of a height. |
 | Constant | gray or color | One value (Gray) or one color (Color), everywhere. A Color has the gradient's color fields for its one stop and publishes like a gradient's colors. |

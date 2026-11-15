@@ -73,6 +73,12 @@ test('a Constant gives a gray value or a color, and its color publishes like a g
   for (const [key, lib] of Object.entries(LIBRARY)) assert.ok(!lib.nodes.some(n => n.type === 'gradient' && !n.in.in), `${key} makes a flat color with a Constant`);
 });
 
+test('Color adjust gives a color from gray or color, and its mask defaults to everywhere', () => {
+  const m = graph([node('n', 'noise'), node('a', 'adjust', {in: {in: 'n'}, params: {hue: 400}}), node('o', 'output', {in: {color: 'a'}})]);
+  assert.equal(nodeTypes(m.nodes).get('a'), 'color'); assert.equal(m.nodes[1].params.hue, 180);
+  assert.match(programSource(compileMaterial(m)).main, /nAdjust\(s1,v0,vec4f\(1\)\)/);
+});
+
 test('the compiled program follows evaluation order and its pipeline key ignores numbers', () => {
   const m = LIBRARY['red-ground'], program = compileMaterial(m), index = new Map(program.nodes.map((n, i) => [n.id, i]));
   for (const n of program.nodes) for (const from of Object.values(n.in)) if (from) assert.ok(index.get(from) < index.get(n.id));
