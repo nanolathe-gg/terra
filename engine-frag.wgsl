@@ -1773,7 +1773,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     exposed = mix(exposed, faceShare, faceGate);   // on the rock face the face's share decides
     let lowBank = place.lowBank;
     let sandBar = sandBarAt(p);
-    var nearWater = frostDry(1.0 - smoothstep(u.sea + 1.0, u.sea + u.wetBand, h), route);
+    // The damp band reaches wetBand above the sea by the authored height (the relief's grit would speckle it, and on a plain just above the sea
+    // blot it); at 1 or less it has no width (the ground is damp only below sea + 1).
+    var nearWater = frostDry(1.0 - waterRamp(u.sea + 1.0, u.sea + max(u.wetBand, 1.0), baseHeight(p)), route);
     // Card P27, Surf: the signed distance to the waterline, and the wet sand it extends the wet band with.
     var surfX = 1.0e3;
     var surfQ = vec2f(0.0);
