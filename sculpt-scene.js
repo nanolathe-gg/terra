@@ -263,11 +263,12 @@ export function shapeFrom(config,entry,preset=config?.biomeId||'green') {
 }
 // A shape's (or another palette entry's) starting settings as a world makes it: the library's numbers, then the world's (`preset`: by default the
 // config's own world; a tool's Defaults from world may name another); a world's own shape, its library shape as the world makes it, then its own numbers.
-// A sea-level preset keeps its elevation above the sea.
+// A sea-level preset keeps its elevation above the sea. A landform keeps the ground beneath it unless told otherwise; the Paint brush, which
+// has nothing to paint with "Ground beneath", starts on the world's ground.
 export function toolDefaults(config,entry,preset=config?.biomeId||'green') {
   const base=shapeFrom(config,entry,preset),kind=strokeKind(base),shapes=config?.worldShapes?.[preset],numbers=name => { const {from,...n}=shapes?.[name]||{}; return n; };
   const starting={...(kind==='landform'?{...LANDFORM_DEFAULTS,...LANDFORM_SHAPES[base]}:{}),...(base!==entry?numbers(base):{}),...numbers(entry)},sea=Math.round(starting.heightReference||0)>=1;   // a sea-level or ground preset keeps its own offset
-  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(config,key)*scale),lo,hi)])),cracks:0,diameter:200,amount:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,softness:50,preset,...starting,
+  return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(config,key)*scale),lo,hi)])),cracks:0,diameter:200,amount:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,softness:50,preset,...(kind==='paint'?{groundPreset:0}:{}),...starting,
     elevation:sea?Math.round(starting.elevation):clamp(Math.round((config?.baseHeight??24)+(starting.elevation??70)),-80,300)};
 }
 export function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,softness:s.softness,lean:s.lean,facing:s.facing,fingers:s.fingers,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,styleVegetation:s.styleVegetation,rockPreset:s.rockPreset,groundPreset:s.groundPreset,waterDeep:s.waterDeep,waterShore:s.waterShore,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalTop:s.crystalTop,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergJitter','bergBreak','bergRough'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(LANDFORM_KEYS.map(k => [k,s[k]])),...Object.fromEntries(CRATER_KEYS.map(k => [k,s[k]])),curve:s.curve,along:s.along,...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
