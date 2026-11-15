@@ -1132,46 +1132,64 @@
         "erosionRain": 0,
         "erosionEnvelope": 0.12
       },
-      "variants": {
-        "pitted": {
-          "label": "Pitted: E6 dots on all raised ground",
-          "knobs": {
-            "pockmark": 1,
-            "moonCups": 0,
-            "moonRibs": 0,
-            "moonFolds": 0,
-            "banding": 0.3
-          }
-        },
-        "cracked": {
-          "label": "Cracked slopes: smooth tops",
-          "knobs": {
-            "crackSeverity": 0.35,
-            "worms": 0.4,
-            "wrinkles": 0.8,
-            "pockmark": 0,
-            "moonCups": 0,
-            "moonRibs": 0,
-            "moonFolds": 0,
-            "banding": 0.3,
-            "shineGate": 0,
-            "shineWhite": 0.35,
-            "shineStretch": 1,
-            "shineGround": 0,
-            "shineGroundSharp": 24,
-            "shineGroundRough": 0,
-            "shineGroundScale": 6,
-            "shineSlope": 0,
-            "shineSlopeSharp": 24,
-            "shineSlopeRough": 0,
-            "shineSlopeScale": 6,
-            "shineRock": 0,
-            "shineRockSharp": 24,
-            "shineRockRough": 0,
-            "shineRockScale": 6
-          }
-        }
-      },
+
+  "rock": {
+
+   "presets": [
+
+    "pitted",
+
+    "cracked"
+
+   ],
+
+   "recipes": {
+
+    "pitted": {
+
+     "label": "Pitted regolith",
+
+     "knobs": {
+
+      "pockmark": 1,
+
+      "moonCups": 0,
+
+      "moonRibs": 0,
+
+      "moonFolds": 0,
+
+      "banding": 0.3
+
+     }
+
+    },
+
+    "cracked": {
+
+     "label": "Cracked slopes",
+
+     "knobs": {
+
+      "crackSeverity": 0.35,
+
+      "pockmark": 0,
+
+      "moonCups": 0,
+
+      "moonRibs": 0,
+
+      "moonFolds": 0,
+
+      "banding": 0.3
+
+     }
+
+    }
+
+   }
+
+  },
 
   "shapes": {
    "plateau": {"elevation": 37, "gullies": 25, "talus": 80, "wander": 50},

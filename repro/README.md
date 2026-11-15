@@ -172,22 +172,22 @@ branches across a mesa's cap and face), `fissure-ice` (one branching crevasse
 through a snow shore), `fissure-green` (cuts across a hill with its own painted
 rock) and `fissure-red` (a polygonal fracture network on a low platform; Mode 1).
 
-Variants (card C5 stage 3): a world may offer named presets over its own, listed in
-`world.variants` in `materials/<world>.json` and chosen in the World panel's Variant drop-down. A
-scene names one in its `query`: `"query": "variant=evad"` (green: Evad River and
-Barrier Reef rounded hills with irregular, broken slopes; ice: `bergs`; desert: `triad`). With no variant a scene
-renders the world's own preset exactly; green-1, green-3, ice-2 and desert-2 opt in.
+Rock types instead of variants: world variants are gone (2026-11-15). The retail sub-looks they held are
+rock types a world defines in `world.rock.recipes` (Green `evad` Broken slopes, Ice `slate`, `streaked` and
+`blueice`, Desert `triad` Gray butte rock, Moon `pitted` and `cracked`), and the scenes that used a variant
+choose that rock type on their strokes (`"card": {"rockPreset": <slot>}`; green-1, green-3, ice-1, ice-2,
+desert-2). Zhon's brown river water and Green and Desert's Modern looks were dropped.
 
 Ice's shore (card E5): the Water button's preset in Ice turns on frost-crystal shore plates (plate
 material 2: needles in parallel runs, straight seams, thinning toward deep water; the
 floe shelf of plate material 0 was dropped with the JS shape engine). ice-2's bergs and ice-3's box
 are landforms with Facets (Facet shape Prisms, one prism a click, Surface Rock, Face roughness,
 Corner cuts and Outline jitter; ice-2's flat top tilts with its section below Level tops 100), as
-the Crystals button draws them in Ice; `variant=bergs` gives the bergs their blue ice.
+the Crystals button draws them in Ice; the Blue ice rock type gives the bergs their blue ice.
 
 Ice blocks, frost lines and facets (card G6): the Ice world's raised ground is lit by its blurred height and
 snow-capped, its faces carry smooth fibres down the slope and its foot a hatched apron (`iceSoft`, `iceSnow`,
-`iceFall`, `iceApron`; ice-3 is the window; the variants `snow`, `crystal` and `bergs` set them to 0). The frost
+`iceFall`, `iceApron`; ice-3 is the window; the rock types Snowless slate, Crystal-streaked ice and Blue ice set the last three to 0). The frost
 band carries fine blue hairlines (`iceFrost`). A landform takes optional **Facets** (`iceFacets`, 0 off, with
 `iceFacetSize` px, `facetForm` angular facets, stepped columns or prisms, `crystalStep` and `facetSurface`; not with shore
 features): at Facet shape Angular facets and Surface Rock part of it is tiled into tilted planes fitted to its own

@@ -76,16 +76,13 @@ test("a stroke's water choices count as the world switches they turn on", () => 
   assert.equal(v.waterColored, 1); assert.equal(v.waterTones, 2); assert.equal(v.ringLayer, 1); assert.equal(v.beachLayer, 0);
 });
 
-test('the column facts follow the active column: the map\'s own, its variant row, or none', () => {
-  const facts = column => worldPanelValues({config: {layers: [], water: {}, column, variant: 'triad'}, renderer: renderer(), nodes: [], colors: {}, weathering: false, materialWeathering: 0});
+test('the column facts follow the active column: the map\'s own, or none', () => {
+  const facts = column => worldPanelValues({config: {layers: [], water: {}, column}, renderer: renderer(), nodes: [], colors: {}, weathering: false, materialWeathering: 0});
   assert.equal(facts(undefined).column, 0, 'a world without a column');
   assert.equal(facts({bands: [3.7, 1]}).column, 0, 'contour bands alone are no column');
   assert.equal(facts({bands: [3.7, 1], sections: [{start: 0, beds: [[5, .8, 0], [7, .3, 1]]}]}).column, 1, 'a column the map added');
   assert.equal(facts({sections: []}).column, 0, 'every section removed');
-  // A variant's row replaces the sections: emptied there, the world's own no longer draw.
-  const rows = {sections: [{start: 0, beds: [[.3, .5, 0], [5.7, .5, 1]]}], variants: {triad: {sections: []}}};
-  assert.equal(facts(rows).column, 0); assert.equal(facts(rows).capBed, 0);
-  rows.variants.triad.sections = [{start: 0, beds: [[.3, .5, 0], [5.7, .5, 1]]}];
+  const rows = {sections: [{start: 0, beds: [[.3, .5, 0], [5.7, .5, 1]]}]};
   assert.equal(facts(rows).column, 1); assert.equal(facts(rows).capBed, 1);
 });
 

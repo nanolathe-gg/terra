@@ -31,7 +31,6 @@ type Site struct {
 	defaults     object
 	tables       map[string]object
 	featureKinds map[string][]string
-	variantOrder map[string][]string
 	configs      map[string]object
 	catalog      object
 }
@@ -155,7 +154,7 @@ func Load(root string) (*Site, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open site.json (run from the repository or pass --root): %w", err)
 	}
-	s := &Site{Root: root, tables: map[string]object{}, featureKinds: map[string][]string{}, variantOrder: map[string][]string{}, configs: map[string]object{}}
+	s := &Site{Root: root, tables: map[string]object{}, featureKinds: map[string][]string{}, configs: map[string]object{}}
 	if err = json.Unmarshal(data, &s.Manifest); err != nil {
 		return nil, err
 	}
@@ -186,28 +185,10 @@ func Load(root string) (*Site, error) {
 		if err = json.Unmarshal(raw, &table); err != nil {
 			return nil, err
 		}
-		var worldRaw map[string]json.RawMessage
-		if err = json.Unmarshal(table["world"], &worldRaw); err != nil {
-			return nil, err
-		}
-		if variants, ok := worldRaw["variants"]; ok {
-			s.variantOrder[w.ID], err = orderedKeys(variants)
-			if err != nil {
-				return nil, err
-			}
-		}
 		if features, ok := table["features"]; ok {
 			s.featureKinds[w.ID], err = orderedKeys(features)
 			if err != nil {
 				return nil, err
-			}
-		}
-		world := obj(s.tables[w.ID]["world"])
-		for name, v := range obj(world["variants"]) {
-			for k := range obj(obj(v)["knobs"]) {
-				if _, ok := obj(s.defaults["knobs"])[k]; !ok {
-					return nil, fmt.Errorf("variant %s/%s sets unknown knob %s", w.ID, name, k)
-				}
 			}
 		}
 	}
@@ -297,10 +278,8 @@ func (s *Site) configure() error {
 		world := merge(obj(table["world"]))
 		overrides := obj(world["knobDefaults"])
 		engine := obj(world["engineDefaults"])
-		variants := obj(world["variants"])
 		delete(world, "knobDefaults")
 		delete(world, "engineDefaults")
-		delete(world, "variants")
 		delete(world, "export")
 		base := value(world["baseHeight"], 24)
 		delete(world, "baseHeight")
@@ -327,11 +306,6 @@ func (s *Site) configure() error {
 		c["defaults"] = merge(obj(c["defaults"]), stringsOf(knobs))
 		c["engineDefaults"] = stringsOf(engine)
 		c["knobs"] = keys(knobs)
-		labels := object{}
-		for id, v := range variants {
-			labels[id] = obj(v)["label"]
-		}
-		c["variants"] = labels
 		for _, layer := range array(table["order"]) {
 			if layer == "beach" {
 				m := object{}
@@ -355,41 +329,6 @@ func (s *Site) configure() error {
 	}
 	s.catalog = object{"worlds": worlds}
 	return nil
-}
-func applyVariant(config, v object, name string) object {
-	out := merge(config)
-	knobs := obj(v["knobs"])
-	out["defaults"] = merge(obj(out["defaults"]), stringsOf(knobs))
-	for k := range knobs {
-		delete(obj(out["engineDefaults"]), k)
-	}
-	if v["river"] == true {
-		for k, val := range obj(config["river"]) {
-			out[k] = merge(obj(out[k]), obj(val))
-		}
-	}
-	out["baseColors"] = merge(obj(config["colors"]))
-	out["colors"] = merge(obj(config["colors"]), obj(v["colors"]))
-	if m := obj(v["material"]); len(m) > 0 {
-		out["material"] = merge(obj(out["material"]), m)
-		for k := range materialKnobs {
-			if val, ok := m[k]; ok {
-				if _, explicit := knobs[k]; !explicit {
-					obj(out["defaults"])[k] = text(val)
-				}
-			}
-		}
-	}
-	out = merge(out, obj(v["config"]))
-	if rock, ok := v["rock"]; ok {
-		out["rock"] = clone(rock)
-	}
-	if tools, ok := obj(config["variantTools"])[name]; ok {
-		out["tools"] = clone(tools)
-	}
-	delete(out, "variantTools")
-	out["variant"] = name
-	return out
 }
 
 // Browser pickers enumerate these objects. Preserve their authored order even
@@ -433,7 +372,6 @@ func (s *Site) pickerOrder(c object, w string) object {
 	for _, k := range []string{"biomes", "worldShapes", "beachSources"} {
 		c[k] = orderedObject{obj(c[k]), s.Worlds()}
 	}
-	c["variants"] = orderedObject{obj(c["variants"]), s.variantOrder[w]}
 	return c
 }
 
@@ -444,12 +382,7 @@ func (s *Site) Generated(mapsURL string) (map[string][]byte, error) {
 	}
 	data := map[string]any{"services.json": services, "config/catalog.json": s.catalog}
 	for _, w := range s.Worlds() {
-		base := merge(s.configs[w])
-		delete(base, "variantTools")
-		data["config/"+w+".json"] = s.pickerOrder(base, w)
-		for id, v := range obj(obj(s.tables[w]["world"])["variants"]) {
-			data["config/"+w+"--"+id+".json"] = s.pickerOrder(applyVariant(s.configs[w], obj(v), id), w)
-		}
+		data["config/"+w+".json"] = s.pickerOrder(merge(s.configs[w]), w)
 	}
 	out := map[string][]byte{}
 	for name, v := range data {

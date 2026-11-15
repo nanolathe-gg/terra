@@ -2495,16 +2495,6 @@
         "erosionRain": 0,
         "erosionEnvelope": 0.12
       },
-      "variants": {
-        "river": {
-          "label": "River sections: brown water",
-          "river": true,
-          "knobs": {
-            "deepDepth": 38,
-            "waterSoft": 16
-          }
-        }
-      },
 
   "shapes": {
    "plateau": {},

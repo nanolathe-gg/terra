@@ -60,13 +60,13 @@ export function copyRockSettings(value){
  }
  return result;
 }
-// A world or a variant may name a recipe as its rock (config.rock = {recipe, beds}; materials/<world>.json world.variants): when its file loads, the recipe's
+// A world may name a recipe as its rock (config.rock = {recipe, beds}; materials/<world>.json world.rock): when its file loads, the recipe's
 // numbers become the world's own, under a saved world and the page's address, and with `beds` its beds replace the column's, as the Rock recipe
 // list does. The numbers stay in this file; a world with no `rock` is as its file says.
 export function applyWorldRock(config){
  const p=ROCK_PRESETS[config.rock?.recipe];if(!p)return config;
  for(const[key,value]of Object.entries(p.knobs)){config.defaults[key]=String(value);delete config.engineDefaults?.[key];}
- if(config.rock.beds)config.column={...config.column,sections:structuredClone(p.sections),variants:{}};
+ if(config.rock.beds)config.column={...config.column,sections:structuredClone(p.sections)};
  return config;
 }
 export function rockPresetFor(values,column){
@@ -88,10 +88,23 @@ export const SMOOTH_SOIL={label:'Smooth soil',knobs:{rockFace:0,faceRock:0,rockF
 // The starting recipes a preset can start from: the nine, then Smooth soil.
 export const STARTING_RECIPES={...ROCK_PRESETS,soil:SMOOTH_SOIL};
 // A preset's numbers and beds as a starting recipe gives them (Smooth soil keeps the world's beds: column null).
-export function recipeRock(key){
+// With a world's config, a key may name one of the world's own rock types (worldRecipe).
+export function recipeRock(key,config){
+ const w=worldRecipe(config,key);if(w)return {knobs:w.knobs,column:w.column,colors:w.colors};
  const r=STARTING_RECIPES[key];if(!r)throw Error(`No starting recipe ${key}.`);
  return {knobs:{...r.knobs},column:r.sections?{sections:structuredClone(r.sections)}:null,colors:checkColors(ROCK_COLORS[key])};
 }
+// A world's own rock types (materials/<world>.json world.rock.recipes: {key: {label, from, knobs, beds, sections, colors}}): its numbers lie over the
+// starting recipe it names (`from`, else none: the world's own rock under them, as Smooth soil's), its beds ([[thickness, hardness, slot], ...]),
+// or its column sections by height ([{start, beds}, ...]), replace that recipe's, and its colors ({rock, beds, absorb}) that recipe's. A world's tools name them by key, as the built-in recipes.
+export function worldRecipe(config,key){
+ const w=config?.rock?.recipes?.[key];if(!w)return null;
+ const from=w.from?STARTING_RECIPES[w.from]:null;if(w.from&&!from)throw Error(`The rock type ${key} starts from ${w.from}, which is no starting recipe.`);
+ const sections=w.sections?structuredClone(w.sections):w.beds?[{start:0,beds:structuredClone(w.beds)}]:from?.sections?structuredClone(from.sections):null;
+ return {label:w.label,knobs:{...(from?.knobs||{}),...copyRockSettings(w.knobs||{})},column:sections?{sections}:null,colors:checkColors(w.colors??(w.from?ROCK_COLORS[w.from]:null)??null)};
+}
+// A recipe's name: the world's own type's label, else the starting recipe's.
+export const recipeLabel=(key,config)=>config?.rock?.recipes?.[key]?.label??STARTING_RECIPES[key]?.label;
 // The starting recipe a preset still is (its numbers and beds as the recipe gives them), or ''.
 export function rockRecipeFor(rock){
  const same=(a,b)=>JSON.stringify(a??null)===JSON.stringify(b??null);
@@ -99,9 +112,10 @@ export function rockRecipeFor(rock){
 }
 // Slot 0's name: the recipe the world names as its rock, else World rock.
 export const worldRockName=config=>ROCK_PRESETS[config.rock?.recipe]?.label||'World rock';
-// The presets a world ships (a map starts with them): Smooth soil, then the recipes its data names (config.rock.presets, materials/<world>.json).
+// The presets a world ships (a map starts with them): Smooth soil, then the recipes its data names (config.rock.presets, materials/<world>.json),
+// built-in or the world's own (config.rock.recipes).
 export function worldRocks(config){
- return [...new Set(['soil',...(config.rock?.presets||[])])].filter(key=>STARTING_RECIPES[key]).map((key,i)=>({slot:i+1,name:STARTING_RECIPES[key].label,key,...recipeRock(key)}));
+ return [...new Set(['soil',...(config.rock?.presets||[])])].filter(key=>recipeLabel(key,config)).map((key,i)=>({slot:i+1,name:recipeLabel(key,config),key,...recipeRock(key,config)}));
 }
 // The slot of the preset a key names: a preset of the map that carries it, else 0 where it is the world's own rock's key (`worldKey`, its
 // recipe: config.rock.recipe), else -1, Rock beneath (a world's tool that names a rock the map does not hold draws on the rock beneath).
@@ -154,9 +168,9 @@ export function uniqueRockName(rocks,name,slot0){
  for(let k=2;;k++)if(!taken.has(`${name} ${k}`))return `${name} ${k}`;
 }
 // The list operations. Each returns a new list (and the preset's slot); none changes its arguments.
-export function addRock(rocks,recipe,slot0Name=''){
+export function addRock(rocks,recipe,slot0Name='',config=null){
  const slot=freeSlot(rocks);
- return {slot,rocks:[...rocks,{slot,name:uniqueRockName(rocks,STARTING_RECIPES[recipe].label,slot0Name),key:freeKey(rocks,recipe),...recipeRock(recipe)}].sort((a,b)=>a.slot-b.slot)};
+ return {slot,rocks:[...rocks,{slot,name:uniqueRockName(rocks,recipeLabel(recipe,config),slot0Name),key:freeKey(rocks,recipe),...recipeRock(recipe,config)}].sort((a,b)=>a.slot-b.slot)};
 }
 // A copy of a preset, or of slot 0 (`world`: {name, knobs, column} as the world's rock has them now; a copy of slot 0 keeps the world's colors,
 // colors null, so it follows them).
@@ -206,7 +220,7 @@ export function parseRockRecipe(text){
  return {name:checkName(v.name),key:checkKey(v.key),knobs:copyRockSettings(v.knobs??{}),column:checkColumn(v.column),colors:checkColors(v.colors)};
 }
 // Slot 0 as a preset (for Duplicate and Copy): its name, every rock number as the world has it now, and its active row's sections.
-export function worldRock(name,values,column,variant){
- const sections=columnRows(column,variant).starts.length?(column?.variants?.[variant]?.sections||column?.sections):null;
+export function worldRock(name,values,column){
+ const sections=columnRows(column).starts.length?column.sections:null;
  return {name,knobs:Object.fromEntries(ROCK_KEYS.map(k=>[k,Number(values[k])]).filter(([,v])=>Number.isFinite(v))),column:sections?{sections:structuredClone(sections)}:null};
 }

@@ -25,7 +25,7 @@ const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const report = {};
 
 await openHost();
-const s = await openScene(scene, 'biome=green&variant=modern&mapX=4&mapY=4&scratch=1&gpuMB=512&heapMB=1536&sunHeight=25&flatShadow=1');
+const s = await openScene(scene, 'biome=green&mapX=4&mapY=4&scratch=1&gpuMB=512&heapMB=1536&sunHeight=25&flatShadow=1');
 try {
   await weather(s);
   report.inUse = [...s.renderer.rocks.keys()];

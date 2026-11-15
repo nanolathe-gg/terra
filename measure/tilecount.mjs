@@ -1,5 +1,5 @@
 // Export maps of growing size through the editor's real export and report how many distinct 32x32 tiles each uses.
-//   node measure/tilecount.mjs [--worlds green,red,lava] [--sizes 4,8,12,16,20] [--variant modern] [--layout bare|landforms|dense] [--name Prefix]
+//   node measure/tilecount.mjs [--worlds green,red,lava] [--sizes 4,8,12,16,20] [--layout bare|landforms|dense] [--name Prefix]
 //        [--fixed-name (no timestamp in the map name, so two builds' archives compare byte for byte: archiveSHA256)] [--out dir] [--configs DIR]
 //        [--chrome --server http://127.0.0.1:<yours> --port <cdp> [--dry (print the Export pane's line and stop)]]
 // Prints one JSON line per world and size: distinct tiles (uniqueTiles; before merging when the exporter merged), tile slots, the share of
@@ -20,13 +20,13 @@ import {join} from 'node:path';
 const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
 const chrome = args.includes('--chrome'), server = opt('--server', ''), port = Number(opt('--port', 9450)), out = opt('--out', 'tilecount-out'), configs = opt('--configs', '');
-const worlds = opt('--worlds', 'green').split(','), sizes = opt('--sizes', '4,8').split(',').map(Number), variant = opt('--variant', ''), layout = opt('--layout', 'landforms'), prefix = opt('--name', 'Tiles'), stamp = args.includes('--fixed-name'), dry = args.includes('--dry');
+const worlds = opt('--worlds', 'green').split(','), sizes = opt('--sizes', '4,8').split(',').map(Number), layout = opt('--layout', 'landforms'), prefix = opt('--name', 'Tiles'), stamp = args.includes('--fixed-name'), dry = args.includes('--dry');
 if (chrome && !server) { console.error('tilecount.mjs: --chrome needs --server http://127.0.0.1:<port> of your own Go development server (there is no default server).'); process.exit(2); }
 if (dry && !chrome) { console.error("tilecount.mjs: --dry prints the Export pane's line, which only the page has: add --chrome."); process.exit(2); }
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
-const search = (world, size) => `biome=${world}${variant ? '&variant=' + variant : ''}&mapX=${size}&mapY=${size}&scratch=tc-${world}-${size}-${Date.now()}&gpuMB=512&heapMB=1536`;
+const search = (world, size) => `biome=${world}&mapX=${size}&mapY=${size}&scratch=tc-${world}-${size}-${Date.now()}&gpuMB=512&heapMB=1536`;
 const mapName = (world, size) => `${prefix}${world}${size}${stamp ? '' : Date.now() % 100000}`;
 const summary = x => ({uniqueTiles: x.uniqueTiles, tileSlots: x.tileSlots, uniqueShare: +(x.uniqueTiles / x.tileSlots).toFixed(4), merge: x.merge, metrics: x.metrics, selfCheck: x.selfCheck});
 

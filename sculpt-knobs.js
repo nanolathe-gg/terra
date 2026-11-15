@@ -155,10 +155,10 @@ export function waterTones(config,colors) {
 // `weathering`: Weathering is on and the world runs a Time pass; `materialWeathering`: the Material weathering slider (0 to 100).
 export function slopeReplaced({config,renderer,weathering,materialWeathering}) { const own=renderer.variant; return Boolean(renderer.transitionBody&&config.material?.groundFringe===true&&weathering&&own.get('transition')==='mineral'&&materialWeathering>=100); }
 // What worldControlRequirement may read: the renderer's settings, a stroke's water choices counted as the switch they turn on, and the facts of the world's material that no slider sets.
-// The column facts read the active column (config.column: the map's own from the Rock column panel, else the world's) and its variant row.
+// The column facts read the active column (config.column: the map's own from the Rock column panel, else the world's).
 export function worldPanelValues(facts) {
   const {config,renderer,nodes,colors}=facts,layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks(nodes);
-  return {...own,highMaterial:(facts.materials||[]).some(m=>m.worldHigh)?1:0,stonePaint:nodes.some(n=>n.kind==='paint'&&[5,6].includes(n.params?.paintChannel))?1:0,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:columnRows(config.column,config.variant).starts.length?1:0,repeatBeds:Math.max(0,...columnRows(config.column,config.variant).starts.map(s=>s[2])),capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,slopeSand:config.material?.slopeSand?1:0};
+  return {...own,highMaterial:(facts.materials||[]).some(m=>m.worldHigh)?1:0,stonePaint:nodes.some(n=>n.kind==='paint'&&[5,6].includes(n.params?.paintChannel))?1:0,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:columnRows(config.column).starts.length?1:0,repeatBeds:Math.max(0,...columnRows(config.column).starts.map(s=>s[2])),capBed:columnHasCapBed(config.column)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,slopeSand:config.material?.slopeSand?1:0};
 }
 
 // Latest values are applied together once per animation frame. Persistence

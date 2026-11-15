@@ -20,7 +20,7 @@ let beds;
 try{
  await weather(s);const heights=await windowHeights(s,{samples:64,step:8});
  await set({...ROCK_PRESETS.sandstone.knobs,strata:.5,strataContrast:.85,strataGrain:.25,faceFold:12,faceBedVary:1.4,faceBreak:.65,faceGrass:.2});
- beds={...s.worldColumn.column,origin:'plain',colors,sections:[{start:0,beds:[[11,.9,0],[5,.25,1],[3,.65,2],[7,.7,3]]}],variants:{}};
+ beds={...s.worldColumn.column,origin:'plain',colors,sections:[{start:0,beds:[[11,.9,0],[5,.25,1],[3,.65,2],[7,.7,3]]}]};
  await column(s,beds);const art=await render(false),clay=await render(true);png('layered',art);png('layered-clay',clay);
  await knob(s,'strata',0);const plain=await render(false);const mask=Array.from({length:art.length/4},(_,i)=>[0,1,2].some(c=>art[i*4+c]!==plain[i*4+c]));await knob(s,'strata',.5);
  const results={};

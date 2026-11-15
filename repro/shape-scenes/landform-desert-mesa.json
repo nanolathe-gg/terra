@@ -1,7 +1,5 @@
-{"biome": "desert", "source": {"note": "H27 sheet: Desert mesas made with the Landform tool, for the window of desert-2 (the desert triad): a banded mesa with a spur, a knoll beside it, and a second mesa top-left. Plain 24 and sea 0 on this map."},
- "ground": true, "query": "variant=triad",
+{"biome": "desert", "source": {"note": "H27 sheet: Desert mesas made with the Landform tool, for the window of desert-2 (the desert triad): a banded mesa with a spur, a knoll beside it, and a second mesa top-left. Plain 24 and sea 0 on this map."}, "ground": true, "query": "",
  "strokes": [
-  ["landform", [[565,700],[610,690]], {"card": {"diameter": 280, "elevation": 139, "combine": 0, "terraces": 7, "ledge": 55, "terraceJitter": 40, "breakup": 35, "wander": 30, "widthVary": 25, "heightVary": 4, "varySize": 120, "spurCount": 1, "spurLength": 170, "spurWidth": 45, "spurHeight": 55, "cracks": 20}, "curve": {"form": "lfHill"}}],
-  ["landform", [[505,525]], {"card": {"diameter": 150, "elevation": 74, "combine": 0, "terraces": 3, "ledge": 50, "breakup": 20, "wander": 10, "widthVary": 10, "heightVary": 2, "cracks": 10}, "curve": {"form": "lfHill"}}],
-  ["landform", [[205,165]], {"card": {"diameter": 290, "elevation": 114, "combine": 0, "terraces": 6, "ledge": 55, "terraceJitter": 40, "breakup": 30, "wander": 26, "widthVary": 25, "heightVary": 3, "varySize": 110, "cracks": 20}, "curve": {"form": "lfHill"}}]
- ]}
+  ["landform", [[565, 700], [610, 690]], {"card": {"diameter": 280, "elevation": 139, "combine": 0, "terraces": 7, "ledge": 55, "terraceJitter": 40, "breakup": 35, "wander": 30, "widthVary": 25, "heightVary": 4, "varySize": 120, "spurCount": 1, "spurLength": 170, "spurWidth": 45, "spurHeight": 55, "cracks": 20, "rockPreset": 2}, "curve": {"form": "lfHill"}}],
+  ["landform", [[505, 525]], {"card": {"diameter": 150, "elevation": 74, "combine": 0, "terraces": 3, "ledge": 50, "breakup": 20, "wander": 10, "widthVary": 10, "heightVary": 2, "cracks": 10, "rockPreset": 2}, "curve": {"form": "lfHill"}}],
+  ["landform", [[205, 165]], {"card": {"diameter": 290, "elevation": 114, "combine": 0, "terraces": 6, "ledge": 55, "terraceJitter": 40, "breakup": 30, "wander": 26, "widthVary": 25, "heightVary": 3, "varySize": 110, "cracks": 20, "rockPreset": 2}, "curve": {"form": "lfHill"}}]]}

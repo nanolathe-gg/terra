@@ -845,7 +845,7 @@ export async function mountMapFeatures(api) {
   async function featurePack(name) {
     const sun=light(); if (!sun) throw new Error('Wait for the terrain to draw before exporting its features.');
     const used=[...new Map(placements.map(p => [p.kind+'|'+(p.kind==='deposit'?p.metal:GROUND_KINDS.includes(p.kind)?'':p.v),p])).values()].sort(ordered);
-    const prefix='TF'+(hashText(JSON.stringify({name,world:config.biomeId,variant:config.variant||'',set,sun,used:used.map(p => [p.kind,p.v,p.metal??null])}))).toString(36).padStart(6,'0').slice(-6);
+    const prefix='TF'+(hashText(JSON.stringify({name,world:config.biomeId,set,sun,used:used.map(p => [p.kind,p.v,p.metal??null])}))).toString(36).padStart(6,'0').slice(-6);
     const P=prefix,b=prefix.toLowerCase(),nameOf=exportNames(P),defs=[],sequences=[];
     const def=(n,keys) => defs.push({name:n,keys:[...keys,['filename',b]].map(([k,v]) => [k,String(v)])});
     const seq=(n,frames) => { sequences.push({name:n,frames}); return n; };

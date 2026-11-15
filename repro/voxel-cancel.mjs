@@ -8,7 +8,7 @@ const args=process.argv.slice(2),opt=name=>{const i=args.indexOf(name);return i<
 const server=opt('--server'),out=resolve(opt('--out'));
 assert(server&&new URL(server).port!=='8801'&&!args.length&&out!==H.REPO&&!out.startsWith(H.REPO+'/'),'Use your own server and an outside-repository output folder.');
 mkdirSync(out,{recursive:true});await H.openHost({server});
-const scene=JSON.parse(readFileSync(new URL('./scenes/green-modern-2.json',import.meta.url))),s=await H.openScene(scene,'biome=green&variant=modern&mapX=4&mapY=4&scratch=1&gpuMB=2048');
+const scene=JSON.parse(readFileSync(new URL('./scenes/green-modern-2.json',import.meta.url))),s=await H.openScene(scene,'biome=green&mapX=4&mapY=4&scratch=1&gpuMB=2048');
 await H.weather(s);const r=s.renderer,d=r.device,q=d.queue; r.setBudget(1024*1024*1024,0);
 const window={x:0,y:300,width:512,height:512,tile:512},digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const expected=digest(await H.renderWindow(s,window));await r.previousChunk;

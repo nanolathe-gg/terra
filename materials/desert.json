@@ -1197,33 +1197,164 @@
         "erosionRain": 0,
         "erosionEnvelope": 0.12
       },
-      "variants": {
-        "triad": {
-          "label": "Desert Triad: gray buttes",
-          "knobs": {
-            "banding": 0.9,
-            "crackSeverity": 0.5,
-            "crackMajor": 0.7,
-            "crackMinor": 0.15,
-            "crackBlocks": 0.15,
-            "ambient": 0.12
-          }
-        },
-        "modern": {
-          "label": "Modern: realistic look (in progress)",
-          "knobs": {
-            "rimReach": 60
-          },
-          "rock": {
-            "recipe": "sandstone",
-            "beds": false,
-            "presets": [
-              "shale",
-              "conglomerate"
-            ]
-          }
-        }
+
+  "rock": {
+
+   "presets": [
+
+    "triad"
+
+   ],
+
+   "recipes": {
+
+    "triad": {
+
+     "label": "Gray butte rock",
+
+     "sections": [
+
+      {
+
+       "start": 1,
+
+       "beds": [
+
+        [
+
+         3,
+
+         0.5,
+
+         0
+
+        ],
+
+        [
+
+         1,
+
+         0.5,
+
+         1
+
+        ]
+
+       ]
+
       },
+
+      {
+
+       "start": 14,
+
+       "beds": [
+
+        [
+
+         8.4,
+
+         0.5,
+
+         2
+
+        ],
+
+        [
+
+         3.6,
+
+         0.5,
+
+         3
+
+        ]
+
+       ]
+
+      },
+
+      {
+
+       "start": 60,
+
+       "beds": [
+
+        [
+
+         9.8,
+
+         0.5,
+
+         2
+
+        ],
+
+        [
+
+         4.2,
+
+         0.5,
+
+         3
+
+        ]
+
+       ]
+
+      },
+
+      {
+
+       "start": 95,
+
+       "beds": [
+
+        [
+
+         9.1,
+
+         0.5,
+
+         1
+
+        ],
+
+        [
+
+         4.9,
+
+         0.5,
+
+         2
+
+        ]
+
+       ]
+
+      }
+
+     ],
+
+     "knobs": {
+
+      "banding": 0.9,
+
+      "crackSeverity": 0.5,
+
+      "crackMajor": 0.7,
+
+      "crackMinor": 0.15,
+
+      "crackBlocks": 0.15
+
+     }
+
+    }
+
+   }
+
+  },
 
   "shapes": {
    "plateau": {"amount": 70, "roughness": 0, "softness": 50, "cracks": 10, "faceVariation": 0, "lean": 100, "facing": 3, "terraces": 6, "combine": 0, "wander": 75, "widthVary": 30, "heightVary": 0, "varySize": 210, "varyFoot": 100, "varyMiddle": 150, "ledge": 55, "terraceJitter": 40, "breakup": 30, "gullies": 30},
@@ -1260,25 +1391,6 @@
    {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
    {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
   ],
-  "variantTools": {
-   "modern": [
-    {"id": "plateau", "label": "Mesa", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a mesa: a level top over stepped ledges and a cliff, with talus at its foot."},
-    {"id": "butte", "label": "Butte", "icon": "plateau", "color": "#d9a777", "group": "shape", "help": "Draw a butte: a small mesa, taller for its size, with the mesa's ledges and talus; a click or a short drag."},
-    {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "rock": "soil"},
-    {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
-    {"id": "hoodoos", "label": "Hoodoos", "icon": "pillars", "color": "#d8b48c", "group": "shape", "help": "Scatter hoodoos: standing rock pillars with flat caps, a cluster round a click or a row along a drag."},
-    {"id": "badlands", "label": "Shale badlands", "icon": "valleyV", "color": "#b9a48e", "group": "shape", "help": "Draw badlands: low hills of thin shale cut by close gullies.", "rock": "shale"},
-    {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
-    {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
-    {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
-    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
-    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
-    {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
-    {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
-    {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
-    {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
-   ]
-  },
   "defaults": {
    "surface": "structured",
    "transition": "mineral",
@@ -1296,15 +1408,7 @@
     {"start": 53, "beds": [[3.6, 0.5, 0], [2.4, 0.5, 1]]},
     {"start": 58, "beds": [[0.3, 0.5, 0], [5.7, 0.5, 1]]},
     {"start": 69, "beds": [[7.7, 0.5, 2], [3.3, 0.5, 3]]}
-   ],
-   "variants": {
-    "triad": {"bands": [4, 0.6], "sections": [
-     {"start": 1, "beds": [[3, 0.5, 0], [1, 0.5, 1]]},
-     {"start": 14, "beds": [[8.4, 0.5, 2], [3.6, 0.5, 3]]},
-     {"start": 60, "beds": [[9.8, 0.5, 2], [4.2, 0.5, 3]]},
-     {"start": 95, "beds": [[9.1, 0.5, 1], [4.9, 0.5, 2]]}
-    ]}
-   }
+   ]
   },
   "export": {
    "planet": "Desert",

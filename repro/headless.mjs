@@ -104,7 +104,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   for (const [key,value] of Object.entries(copyRockSettings(scene.rock) || {})) if (!settings.has(key)) settings.set(key,value);
   globalThis.location = {search: '?' + settings};
   const services = await json('services.json');
-  const config = applyWorldRock(await json(`config/${encodeURIComponent(settings.get('biome') || services.defaultWorld)}${settings.get('variant') ? '--' + encodeURIComponent(settings.get('variant')) : ''}.json`));
+  const config = applyWorldRock(await json(`config/${encodeURIComponent(settings.get('biome') || services.defaultWorld)}.json`));
   if (config.biomeId !== scene.biome) throw new Error(`asked for world ${scene.biome}, got ${config.biomeId}`);
   config.services = services;
   const worldColumn = {column: config.column}, columnOverride = copyColumn(scene.column);
@@ -125,7 +125,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const canvas = new HeadlessCanvas(), renderer = await TerrainRenderer.createChunked(canvas, config), errors = [];
   renderer.onerror = message => errors.push(message);   // WebGPU validation and device errors arrive after the call that caused them
   fieldsModule.setFailureHandler(error => errors.push('shape fields: ' + (error?.message ?? String(error))));   // a failed shape run leaves the base height
-  const ownColors = config.baseColors || config.colors || {};   // sculpt.js activeWorld: a world opens with its base colors as its own
+  const ownColors = config.colors || {};   // sculpt.js activeWorld: a world opens with its colors as its own
   renderer.setColors(engine.rendererColors(engine.worldHexColors(config, settings, ownColors), columnOverride?.colors));
   const seed = engine.DEFAULT_SEED, refinementSeed = seed;
   let nodes = [];

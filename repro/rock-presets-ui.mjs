@@ -45,7 +45,7 @@ try {
   await send('Emulation.setDeviceMetricsOverride', {width: 1440, height: 900, deviceScaleFactor: 1, mobile: false});
   await send('Emulation.setFocusEmulationEnabled', {enabled: true});   // the clipboard answers a focused page only
   await send('Browser.grantPermissions', {origin: server, permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite']});
-  await send('Page.navigate', {url: `${server}/?biome=green&variant=modern&mapX=4&mapY=4&gpuMB=512&heapMB=1536&sunHeight=25&flatShadow=1`}); await ready();
+  await send('Page.navigate', {url: `${server}/?biome=green&mapX=4&mapY=4&gpuMB=512&heapMB=1536&sunHeight=25&flatShadow=1`}); await ready();
   // A wall, a dome and a hill, all on the rock beneath.
   await ev(`sculptDebug.scene([['plateau',[[260,330],[560,300]],{card:{diameter:420}}],['mountain',[[700,620]],{card:{diameter:260,elevation:120}}],['hill',[[420,700],[560,720]]]],{ground:true}); true`); await ready();
   await click('tab-world');

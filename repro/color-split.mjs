@@ -52,7 +52,7 @@ for(const name of (edgesOnly?[]:['green-modern-2','green-2','red-3','green-7']))
 if(!edgesOnly)writeFileSync(join(out,`lp5-${label}.json`),JSON.stringify(rows));
 if(edgesOnly||rows[0].warmResult){
   const scene={biome:'green',ground:true,strokes:[['plateau',[[260,420],[760,360]],{seed:11,card:{diameter:480,elevation:200,rockPreset:2}}],['mountain',[[960,760]],{seed:12,card:{diameter:300,elevation:140,rockPreset:0}}]]};
-  const s=await H.openScene(scene,'biome=green&variant=modern&mapX=4&mapY=4&scratch=1&gpuMB=512&sunHeight=25&flatShadow=1');await H.weather(s);const r=s.renderer;r.setBudgetMB(1024);assert(r.rocks.size>0);
+  const s=await H.openScene(scene,'biome=green&mapX=4&mapY=4&scratch=1&gpuMB=512&sunHeight=25&flatShadow=1');await H.weather(s);const r=s.renderer;r.setBudgetMB(1024);assert(r.rocks.size>0);
   const rect={x:500,y:400,width:131,height:129},options=s.drawOptions(),full=await H.renderWindow(s,{...rect,tile:256,options}),tiled=await H.renderWindow(s,{...rect,tile:64,options});assert.equal(sha(full),sha(tiled),'odd-sized mixed-recipe tiles');
   await H.renderWindow(s,{x:500,y:400,width:128,height:128,tile:128,options});r.voxel.clear();await H.knob(s,'ambient',.51);await r.recolor(options);await H.knob(s,'rockFace',3.9);await assert.rejects(()=>r.recolor(options),/requires [ABCDE]/);
   await r.device.queue.onSubmittedWorkDone();await new Promise(resolve=>setTimeout(resolve,30));assert.deepEqual(s.errors,[]);

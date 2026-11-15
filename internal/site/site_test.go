@@ -136,32 +136,6 @@ func TestDevelopmentReload(t *testing.T) {
 		t.Fatal(w)
 	}
 }
-func TestVariantPrecedence(t *testing.T) {
-	config := object{"defaults": object{"ambient": "0.5", "stoneSort": "0.6"}, "engineDefaults": object{"ambient": "0.8", "erosion": "1"}, "colors": object{"sun": "old"}, "tools": []any{"world"}, "variantTools": object{"look": []any{"special"}}, "material": object{}, "river": object{"water": object{"deep": "blue"}}}
-	variant := object{"knobs": object{"ambient": json.Number("0.25")}, "material": object{"stoneSort": json.Number("0.3")}, "colors": object{"sun": "new"}, "river": true}
-	got := applyVariant(config, variant, "look")
-	if obj(got["defaults"])["ambient"] != "0.25" || obj(got["defaults"])["stoneSort"] != "0.3" {
-		t.Fatal(got)
-	}
-	if _, ok := obj(got["engineDefaults"])["ambient"]; ok {
-		t.Fatal("engine overrides variant")
-	}
-	if obj(got["baseColors"])["sun"] != "old" || obj(got["colors"])["sun"] != "new" {
-		t.Fatal(got)
-	}
-	if array(got["tools"])[0] != "special" || obj(got["water"])["deep"] != "blue" {
-		t.Fatal(got)
-	}
-	if _, ok := got["variantTools"]; ok {
-		t.Fatal("private toolbar metadata leaked")
-	}
-	if obj(config["defaults"])["ambient"] != "0.5" {
-		t.Fatal("variant mutated base")
-	}
-	if array(applyVariant(config, object{}, "other")["tools"])[0] != "world" {
-		t.Fatal("variant without toolbar lost world tools")
-	}
-}
 func TestGeneratedDeterminism(t *testing.T) {
 	s, _ := fixture(t)
 	a, err := s.Generated("")
@@ -186,8 +160,8 @@ func TestGeneratedDeterminism(t *testing.T) {
 			if _, ok := c["knobDefaults"]; ok {
 				t.Fatal("assembly metadata leaked")
 			}
-			if _, ok := c["variantTools"]; ok {
-				t.Fatal("toolbar metadata leaked")
+			if _, ok := c["variants"]; ok {
+				t.Fatal("world variants are gone")
 			}
 		}
 	}

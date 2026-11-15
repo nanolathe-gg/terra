@@ -1405,85 +1405,86 @@
         "erosionRain": 0,
         "erosionEnvelope": 0.12
       },
-      "variants": {
-        "bergs": {
-          "label": "Icy Bergs: blue blocks",
-          "config": {"materials": {"ground": "ice-bergs-ground", "water": "ice-water"}},
-          "colors": {
-            "crystal": "#8ea6ee",
-            "slope": "#a5bef9",
-            "rock": "#9ab2f4"
-          },
-          "material": {
-            "slopeStart": 3.0,
-            "slopeFull": 4.0,
-            "wetBand": 2.0,
-            "rockSlope": 9.0
-          },
-          "knobs": {
-            "crystalFace": 2.2,
-            "crystalTone": 0.92,
-            "crystalGrain": 0.4,
-            "crackSeverity": 0,
-            "shadeBlue": 0.9,
-            "lightCap": 1.4,
-            "ambient": 0.32,
-            "iceSoft": 0,
-            "iceSnow": 0,
-            "iceFall": 0,
-            "iceApron": 0,
-            "reliefAmount": 0.35,
-            "reliefScale": 28,
-            "reliefLumps": 0.4,
-            "shineWhite": 0.35,
-            "shineStretch": 1,
-            "shineHeadroom": 0,
-            "shineRock": 0,
-            "shineRockSharp": 24,
-            "shineRockRough": 0,
-            "shineRockScale": 6
-          }
-        },
-        "crystal": {
-          "label": "Crystal mountains: straight strokes",
-          "knobs": {
-            "iceCrystal": 1,
-            "iceCrest": 0.3,
-            "iceSoft": 0,
-            "iceSnow": 0,
-            "iceFall": 0,
-            "iceApron": 0,
-            "shineRock": 0,
-            "shineRockRough": 0,
-            "shineHeadroom": 0,
-            "shineStretch": 1,
-            "shineWhite": 0.35
-          }
-        },
-        "snow": {
-          "label": "Snow and slate: cracked mountains",
-          "knobs": {
-            "iceSoft": 0,
-            "iceSnow": 0,
-            "iceFall": 0,
-            "iceApron": 0,
-            "crackSeverity": 0.2,
-            "shadeBlue": 0,
-            "reliefAmount": 0.5,
-            "reliefScale": 28,
-            "reliefLumps": 0.7,
-            "lightCap": 1.13,
-            "ambient": 0.42,
-            "shineWhite": 0.35,
-            "shineStretch": 1,
-            "shineHeadroom": 0,
-            "shineRock": 0,
-            "shineRockSharp": 24,
-            "shineRockRough": 0,
-            "shineRockScale": 6
-          }
-        }
-      },
+
+  "rock": {
+
+   "presets": [
+
+    "slate",
+
+    "streaked",
+
+    "blueice"
+
+   ],
+
+   "recipes": {
+
+    "slate": {
+
+     "label": "Snowless slate",
+
+     "knobs": {
+
+      "crackSeverity": 0.2,
+
+      "iceSnow": 0,
+
+      "iceFall": 0,
+
+      "iceApron": 0
+
+     }
+
+    },
+
+    "streaked": {
+
+     "label": "Crystal-streaked ice",
+
+     "knobs": {
+
+      "iceCrystal": 1,
+
+      "iceCrest": 0.3,
+
+      "iceSnow": 0,
+
+      "iceFall": 0,
+
+      "iceApron": 0
+
+     }
+
+    },
+
+    "blueice": {
+
+     "label": "Blue ice",
+
+     "knobs": {
+
+      "crackSeverity": 0,
+
+      "iceSnow": 0,
+
+      "iceFall": 0,
+
+      "iceApron": 0
+
+     },
+
+     "colors": {
+
+      "rock": "#9ab2f4"
+
+     }
+
+    }
+
+   }
+
+  },
 
   "shapes": {
    "plateau": {},

@@ -1046,7 +1046,7 @@ export class TerrainRenderer {
     {
     const column = this.config.column, v = this.variant;
     const number = (key, fallback) => { const x = Number(v.get(key)); return Number.isFinite(x) && v.has(key) ? x : fallback; };
-    const {beds, starts, bands} = columnRows(column, this.config.variant);
+    const {beds, starts, bands} = columnRows(column);
     // Refinement can run before any relief bake; its column offset must not depend on the last displayed view.
     this.set('uBedDip', number('bedDip', 0));
     this.set('uBedDipDir', number('bedDipDir', 90));
@@ -1161,7 +1161,7 @@ export class TerrainRenderer {
   // slot's rock column; and the maxima the passes that gather from other points read (debrisAny, runoffAny, debrisReachMax).
   writeRocks() {
     const table = this.uniform.get('rock'), bytes = new Uint8Array(this.uniformData);
-    const own = this.worldColumnRows = columnRows(this.config.column, this.config.variant), beds = [...own.beds], starts = [...own.starts];
+    const own = this.worldColumnRows = columnRows(this.config.column), beds = [...own.beds], starts = [...own.starts];
     this.set('uColumnFirst', 0);
     this.set('uColumnCount', own.starts.length);
     // Where level ground takes a recipe's beds (bedsFrom): the world's from its first section's start, as the gate always read it. A recipe
@@ -1183,7 +1183,7 @@ export class TerrainRenderer {
       rock.colors?.beds?.forEach((hex, k) => row(1 + k, hex));
       if (rock.colors?.absorb) { row(6, rock.colors.absorb); this.uniformView.setFloat32(at + colors.offset + 6 * 16 + 12, 1, true); }
       if (rock.column) {
-        const rows = columnRows(rock.column, ''), shift = beds.length;
+        const rows = columnRows(rock.column), shift = beds.length;
         this.uniformView.setInt32(at + table.members.get('columnFirst').offset, starts.length, true);
         this.uniformView.setInt32(at + table.members.get('columnCount').offset, rows.starts.length, true);
         this.uniformView.setFloat32(at + table.members.get('bedsFrom').offset, Math.max(rows.starts[0]?.[0] ?? 0, band), true);

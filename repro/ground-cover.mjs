@@ -23,8 +23,8 @@ try{
   const click=async selector=>{const p=await point(selector);await mouse('mousePressed',p);await mouse('mouseReleased',p);};
 
   await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
-  const url=variant=>`${server}/?biome=green&variant=${variant}&mapX=4&mapY=4&scratch=cover-check&gpuMB=512&heapMB=1536`;
-  await send('Page.navigate',{url:url('modern')});await ready();await click('#tab-world');
+  const url=()=>`${server}/?biome=green&mapX=4&mapY=4&scratch=cover-check&gpuMB=512&heapMB=1536`;
+  await send('Page.navigate',{url:url()});await ready();await click('#tab-world');
   const keys=['vegetationCover','plantRelief','flowerDensity'];
   report.controls=await ev(`Object.fromEntries(${JSON.stringify(keys.concat('plainRelief'))}.map(k=>{const e=document.getElementById('knob-'+k);return [k,{disabled:e.disabled,value:e.value,section:e.closest('.world-section').dataset.group}]}))`);
   assert(Object.entries(report.controls).every(([k,c])=>!c.disabled&&c.section===(k==='plainRelief'?'Ground':'Vegetation')));
@@ -57,9 +57,7 @@ try{
   report.everyWorld='original Green shows the vegetation and flower colors; Vegetation cover 0 turns the cover off and raising it turns it on';
   await ev(`(()=>{const data=${JSON.stringify(exported)},dt=new DataTransfer();data.world.name='Cover round trip';dt.items.add(new File([JSON.stringify(data)],'cover.world.json',{type:'application/json'}));const e=document.getElementById('world-file');e.files=dt.files;e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   await sleep(1000);await ready();await click('#tab-world');
-  report.importVariant=await ev(`document.getElementById('variant-select').value`);
-  assert.equal(report.importVariant,'modern','importing a Modern world must restore its ground-cover material');
-  assert.deepEqual(await table(),colored);report.roundTrip='world JSON imported from original Green restores Modern, knobs, and colors';
+  assert.deepEqual(await table(),colored);report.roundTrip='world JSON imported from original Green restores its knobs and colors';
   await click('#wsec-colors');await click('#world-reset');await ready();assert.equal(await ev(`document.querySelector('input[aria-label="Flower 1 base color"]').value`),'#ece8d6');report.reset='flower colors restored to material defaults';
   assert.deepEqual(errors,[]);report.console=errors;writeFileSync(join(out,'cover.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));
 }finally{ws?.close();browser.kill();}

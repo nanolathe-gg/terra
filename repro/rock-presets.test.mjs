@@ -176,3 +176,19 @@ test('translucent rock (B4): two numbers a preset carries and an absorption colo
   const back = JSON.parse(gunzipSync(await gzipText(shareText({version: 1, rocks: [ice], nodes: []}))).toString('utf8'));
   assert.deepEqual(copyRocks(back.rocks), [ice]);
 });
+test('a world defines its own rock types in data, over a starting recipe or the world\'s rock', () => {
+  const config = {rock: {presets: ['slate', 'pitted', 'basalt'], recipes: {
+    slate: {label: 'Slate', from: 'shale', knobs: {crackSeverity: .4, faceTone: .3}, colors: {rock: '#4b4b4b'}},
+    pitted: {label: 'Pitted', knobs: {pockmark: 1, noSuchKnob: 3}, beds: [[6, .8, 0]]}}}};
+  const rocks = worldRocks(config);
+  assert.deepEqual(rocks.map(r => [r.slot, r.name, r.key]), [[1, 'Smooth soil', 'soil'], [2, 'Slate', 'slate'], [3, 'Pitted', 'pitted'], [4, 'Jointed basalt', 'basalt']]);
+  assert.equal(rocks[1].knobs.crackSeverity, .4, 'its own numbers');
+  assert.equal(rocks[1].knobs.faceStretch, ROCK_PRESETS.shale.knobs.faceStretch, 'the rest from the recipe it starts from');
+  assert.deepEqual(rocks[1].column, {sections: ROCK_PRESETS.shale.sections});
+  assert.equal(rocks[1].colors.rock, '#4b4b4b');
+  assert.deepEqual(rocks[2].knobs, {pockmark: 1}, 'no recipe: only its own numbers, over the world\'s rock; unknown keys are dropped');
+  assert.deepEqual(rocks[2].column, {sections: [{start: 0, beds: [[6, .8, 0]]}]});
+  assert.equal(rocks[2].colors, null);
+  assert.equal(rockByKey(rocks, 'pitted'), 3, 'a tool names it by key');
+  assert.equal(addRock(rocks.slice(0, 1), 'slate', '', config).rocks[1].name, 'Slate');
+});

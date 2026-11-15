@@ -213,7 +213,7 @@ export function mountColumnPanel(read,change,commit,reset){
  new MutationObserver(syncLock).observe($('world-editor'),{attributes:true,attributeFilter:['disabled']});
  new MutationObserver(syncLock).observe($('inspector-sidebar'),{attributes:true,attributeFilter:['hidden']});syncLock();
  const at=(column,path)=>path.reduce((v,k)=>v[k],column);
- function drawStack(){const {column,variant}=read(),sections=column?.variants?.[variant]?.sections||column?.sections||[];
+ function drawStack(){const {column}=read(),sections=column?.sections||[];
   const stack=$('column-stack');stack.replaceChildren();for(const [i,section] of [...sections.entries()].reverse()){for(const [j,bed] of [...section.beds.entries()].reverse()){const swatch=document.createElement('div');swatch.style.flex=String(bed[0]);const rgb=column?.colors?.[bed[2]];swatch.style.background=rgb?`rgb(${rgb.join(',')})`:read().bedColors[bed[2]];swatch.style.marginRight=`${(1-bed[1])*14}px`;swatch.title=`Section ${i+1}, bed ${j+1}: thickness ${bed[0]}, hardness ${bed[1]}, slot ${bed[2]+1}`;swatch.textContent=`${i+1}.${j+1}`;stack.append(swatch);}}stack.hidden=!sections.length;
  }
  const state=()=>{drawStack();$('column-title').textContent='Rock column of '+$('rock-current-name').textContent;const {edited}=read();restore.disabled=!edited;note.textContent=edited?'Map column edited.':'Using the world column unchanged.';};
@@ -230,13 +230,12 @@ export function mountColumnPanel(read,change,commit,reset){
  function reshape(edit){const column=structuredClone(read().column||{});edit(column);try{change(column);commit();}catch(err){note.textContent=err.message;return;}sync();}
  function button(parent,text,label,onclick,disabled=false){const b=document.createElement('button');b.type='button';b.textContent=text;if(label)b.setAttribute('aria-label',label);b.disabled=disabled;b.onclick=onclick;parent.append(b);return b;}
  function sync(){
-  const {column,variant}=read();body.replaceChildren();state();
-  // The sections the active row draws: a variant's own row, else the column's (a world or map without any has no column, and adds one here).
-  const row=column?.variants?.[variant]||{},prefix=key=>row[key]?['variants',variant,key]:[key],path=prefix('sections');
-  const sections=row.sections||column?.sections||[],beds=sections.reduce((n,s)=>n+s.beds.length,0),slots=column?.colors?.length||COLUMN_SLOTS;
+  const {column}=read();body.replaceChildren();state();
+  // The column's sections (a world or map without any has no column, and adds one here).
+  const path=['sections'];
+  const sections=column?.sections||[],beds=sections.reduce((n,s)=>n+s.beds.length,0),slots=column?.colors?.length||COLUMN_SLOTS;
 
   const edit=fn=>()=>reshape(c=>{const parent=at(c,path.slice(0,-1));parent[path.at(-1)]??=[];fn(parent[path.at(-1)]);});
-  if(variant){const p=document.createElement('p');p.className='small';p.textContent=`Column row: ${$('variant-select').selectedOptions[0]?.textContent||variant}`;body.append(p);}
   if(!sections.length){
    const p=document.createElement('p');p.className='small';p.textContent='This map has no rock column. Strata, the Foot color band and Cap color paint its beds: add one to use them.';body.append(p);
    button(body,'Add a rock column','',edit(list=>list.push(structuredClone(FIRST_SECTION))));
@@ -254,7 +253,7 @@ export function mountColumnPanel(read,change,commit,reset){
   }
   // A new section starts 16 units above the last and repeats its beds, as many as the uniforms have room for.
   if(sections.length)button(body,'Add section','',edit(list=>list.push({start:sections.at(-1).start+16,beds:structuredClone(sections.at(-1).beds.slice(0,COLUMN_BEDS-beds))})),sections.length>=COLUMN_SECTIONS||beds>=COLUMN_BEDS);
-  const bands=row.bands||column?.bands;if(bands){const group=document.createElement('div');group.className='column-options';const h=document.createElement('h4');h.textContent='Contour bands';body.append(h,group);field(group,'Height step',[...prefix('bands'),0],{min:.001});field(group,'Line strength',[...prefix('bands'),1],{min:0,max:1});}
+  const bands=column?.bands;if(bands){const group=document.createElement('div');group.className='column-options';const h=document.createElement('h4');h.textContent='Contour bands';body.append(h,group);field(group,'Height step',['bands',0],{min:.001});field(group,'Line strength',['bands',1],{min:0,max:1});}
   const options=document.createElement('div');options.className='column-options';body.append(options);
   if(column?.origin!==undefined)field(options,'Count height from',['origin'],{choices:[['plain','Dry plain'],['sea','Sea level']]});
   if(column?.wander?.value!==undefined)field(options,'Bed wander',['wander','value']);

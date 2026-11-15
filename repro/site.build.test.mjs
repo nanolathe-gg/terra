@@ -6,7 +6,6 @@ import {runSite} from './site-cli.mjs';
 import {mkdtempSync, readFileSync, readdirSync, existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
-import {ROCK_PRESETS, applyWorldRock, rockPresetFor} from '../sculpt-rock-presets.js';
 
 // Deployment can validate the artifact it just built, without compiling the exporter twice.
 const folder = process.env.TERRAFORM_SITE_DIR ? resolve(process.env.TERRAFORM_SITE_DIR)
@@ -21,25 +20,13 @@ test('the root is the editor with a versioned asset base and no navigation redir
   assert.equal(root.replace(/<base href="[^"]+">/,''),read('index.html'));
 });
 
-test('every world and variant has a config file, and the services are declared', () => {
+test('every world has a config file, and the services are declared', () => {
   const services = JSON.parse(read('services.json'));
   for (const world of services.worlds) {
     const config = JSON.parse(read(`config/${world}.json`));
     assert.equal(config.biomeId, world);
     assert.ok(existsSync(join(folder, config.materialTable)), `${world}: table ${config.materialTable} is in the build`);
-    for (const variant of Object.keys(config.variants)) {
-      const file = JSON.parse(read(`config/${world}--${variant}.json`));
-      assert.equal(file.variant, variant);
-      // A variant that names a rock recipe names one the page has, and the page lays its numbers (and, where asked, its beds) over the world's.
-      if (file.rock) {
-        const recipe = ROCK_PRESETS[file.rock.recipe], beds = file.column?.sections;
-        assert.ok(recipe, `${world}/${variant}: recipe ${file.rock.recipe}`);
-        applyWorldRock(file);
-        for (const [key, value] of Object.entries(recipe.knobs)) assert.equal(Number(file.defaults[key]), value, `${world}/${variant}: ${key}`);
-        assert.deepEqual(file.column?.sections, file.rock.beds ? recipe.sections : beds);
-        assert.equal(rockPresetFor(file.defaults, file.column), file.rock.beds ? file.rock.recipe : '');
-      }
-    }
+    assert.ok(!('variants' in config), `${world}: no variants`);
   }
   assert.ok(JSON.parse(read('config/catalog.json')).worlds.green);
   assert.equal(services.maps.available, true);

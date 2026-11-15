@@ -62,11 +62,11 @@ const scenes = {};   // world -> the three scenes' variants, for the page's own 
 const queries = {};   // world -> the three scenes' own query pairs (zhon-1: beachWidth=0), which win over every table
 for (const world of ['green', 'red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice']) {
   const q = [1, 2, 3].map(n => new URLSearchParams(JSON.parse(readFileSync(scenePath(world, n), 'utf8')).query));
-  queries[world] = q; scenes[world] = q.map(x => x.get('variant') || '');
+  queries[world] = q; scenes[world] = q.map(() => '');
 }
 // Use the same Go-generated configs as rendering; Python remains only for pixel analysis.
 const configRoot = chrome || server ? (await import('../repro/headless.mjs')).dumpConfigs() : hostArgs[hostArgs.indexOf('--configs') + 1];
-const readConfig = (world,variant) => JSON.parse(readFileSync(`${configRoot}/config/${world}${variant?'--'+variant:''}.json`));
+const readConfig = world => JSON.parse(readFileSync(`${configRoot}/config/${world}.json`));
 const dump = {d:JSON.parse(readFileSync(`${here}materials/defaults.json`)).knobs,w:{},e:{}};
 for(const [world,variants] of Object.entries(scenes)) {
  dump.w[world]=JSON.parse(readFileSync(`${here}materials/${world}.json`)).world.knobDefaults;

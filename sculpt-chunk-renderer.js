@@ -140,7 +140,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const relief=Math.abs(n('reliefAmount',.5)*n('reliefScale',28))*Math.max(2.5,.25*n('gentleRelief',.6))*Math.max(1,Math.abs(n('gentleRelief',.6)))*Math.max(1,1+.65*n('reliefPatchy',1))*4;
     const severity=Math.max(rock('crackSeverity',.6),.6),major=rock('crackSpacing',40),minor=major/3.2;
     const blocks=(.5*(1+3*severity)+1.225*major+.5*(.6+1.6*severity)+4.41*minor)*Math.max(rock('crackBlocks',.6),.6);
-    const bands=columnRows(this.config.column,this.config.variant).bands[0]*Math.max(Math.abs(rock('banding',0))*4,.8);
+    const bands=columnRows(this.config.column).bands[0]*Math.max(Math.abs(rock('banding',0))*4,.8);
     // The bed's lumps (bedRelief) stay under the water plane, but the pictures are sensitive to this reach (Green's hills shade differently by about one unit of it), so it keeps counting them.
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
     const extra=relief+blocks+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(rock('looseSize',6))+Math.abs(n('rippleHeight',1.4))+(rock('debrisAmount',0)>0?1.5*rock('debrisDepth',4):0);

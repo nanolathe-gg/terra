@@ -1735,7 +1735,6 @@
         "erosionRain": 0,
         "erosionEnvelope": 0.12
       },
-      "variants": {},
 
   "shapes": {
    "plateau": {"gullies": 30},

@@ -198,7 +198,7 @@ The development server reloads source bytes, the source manifest and JSON
 config inputs on requests; refresh the browser to see edits. Go exporter
 sources rebuild on demand. Only changes to the server's Go code require a
 process restart. Defaults are data in `materials/defaults.json` and each
-world's `world.knobDefaults`, `world.engineDefaults` and `world.variants`;
+world's `world.knobDefaults`, `world.engineDefaults` and `world.rock` (its own rock types);
 `site.json` declares the shipped source files and world/recipe ordering.
 
 Build, config, export, feature-art and GPU integration tests use explicit

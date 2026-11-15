@@ -3,7 +3,7 @@
 // end to their high end on a fixture that holds the features, and the two captures are compared: the most any pixel channel moves, and how many
 // pixels change at all. A direction (`wind`, `*Dir`) moves a half turn, because the two ends of a full turn are one value. Each control is put
 // back after its pair, and at the end of a world the first fixture is drawn again and must match its first capture, so no row leaks into the next.
-//   node measure/world_controls.mjs [--find key,key] [--out DIR] [--worlds green,lava] [--variant modern] [--only key,key] [--set key=v,key=v] [--jobs 3] [--configs DIR]
+//   node measure/world_controls.mjs [--find key,key] [--out DIR] [--worlds green,lava] [--only key,key] [--set key=v,key=v] [--jobs 3] [--configs DIR]
 //        [--query 'key=v&key=v'] [--column FILE]
 //        [--chrome --audit-port <yours> --assets DIR --port <cdp> | --chrome --server <a running audit host> --port <cdp>]
 // The sweep runs under Node on Dawn by default (repro/headless.mjs, from this checkout's files; --configs DIR for go run ./cmd/terraform --dump-configs output):
@@ -38,7 +38,7 @@ const JOBS = Number(opt('--jobs', 3)), CHILD = args.includes('--child'), CHROME 
 const assets = opt('--assets', ''), port = Number(opt('--port', 9685)), out = resolve(opt('--out', 'world-controls')), auditPort = Number(opt('--audit-port', 0));
 if (CHROME && !opt('--server', '') && !auditPort) { console.error('world_controls.mjs: --chrome needs --audit-port <port> (your own: the tool starts the audit host there) or --server <an audit host already running>; there is no default.'); process.exit(2); }
 const WORLDS = opt('--worlds', 'green,archipelago,crystal,desert,ice,lava,moon,red,zhon').split(',');
-const VARIANT = opt('--variant', '');
+const VARIANT = '';
 const FIND = opt('--find', '') ? opt('--find', '').split(',') : null;
 const ONLY = opt('--only', '') ? opt('--only', '').split(',') : null;
 const SET = Object.fromEntries((opt('--set', '') || '').split(',').filter(Boolean).map(s => s.split('=')).map(([k, v]) => [k, Number(v)]));
@@ -86,7 +86,7 @@ if (CHROME && !server) {
 }
 if (JOBS > 1 && !CHILD && WORLDS.length > 1) {
   // A pool of browsers, one child per world, the dearest worlds first; rows are merged into the same file and the same exit code.
-  const pass = []; for (const f of ['--only', '--set', '--variant', '--query']) if (opt(f, '')) pass.push(f, opt(f, ''));
+  const pass = []; for (const f of ['--only', '--set', '--query']) if (opt(f, '')) pass.push(f, opt(f, ''));
   if (COLUMN) pass.push('--column', resolve(opt('--column', '')));
   const cost = {green: 3, zhon: 2, red: 2}, order = [...WORLDS].sort((a, b) => (cost[b] || 1) - (cost[a] || 1)), queue = [...order], codes = [], tries = {};
   const slots = Array.from({length: Math.min(JOBS, WORLDS.length)}, (_, k) => new Promise(async done => {

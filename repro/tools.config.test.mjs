@@ -30,7 +30,7 @@ test('every world defines valid library shapes and cards', async () => {
   for (const w of WORLDS) for (const entry of ENTRIES) for (const key of Object.keys(toolDefaults(configs[w], entry))) assert.ok(CARD_KEYS.has(key), `${w} ${entry}: ${key}`);
 });
 
-test('every world\'s and variant\'s toolbar is valid, its rocks are presets it ships', () => {
+test('every world\'s toolbar is valid, its rocks are presets it ships', () => {
   for (const [name, config] of Object.entries(configs)) {
     const tools = worldTools(config), rocks = worldRocks(applyWorldRock(structuredClone(config)));
     assert.ok(tools.length > 0, name);
@@ -165,9 +165,6 @@ test('a world\'s own shape: a library shape as the world makes it, with its own 
   assert.equal(toolDefaults(config, 'mound', 'red').curve, undefined);
 });
 
-test('a variant may ship its own toolbar; one without takes the world\'s', () => {
-  const table = JSON.parse(readFileSync(root + 'materials/green.json', 'utf8')).world;
-  assert.deepEqual(configs['green--modern'].tools, table.variantTools.modern);
-  assert.deepEqual(configs['green--evad'].tools, table.tools);
-  for (const config of Object.values(configs)) assert.ok(!('variantTools' in config));
+test('worlds ship no variants or variant toolbars', () => {
+  for (const config of Object.values(configs)) assert.ok(!('variantTools' in config) && !('variants' in config) && !('variant' in config));
 });

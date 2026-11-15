@@ -11,7 +11,7 @@ const args=process.argv.slice(2),opt=name=>{const i=args.indexOf(name);return i<
 const server=opt('--server'),out=resolve(opt('--out'));
 assert(server&&new URL(server).port!=='8801'&&!args.length&&out!==H.REPO&&!out.startsWith(H.REPO+'/'),'Use your own server and an outside-repository output folder.');
 mkdirSync(out,{recursive:true});await H.openHost({server});
-const scene=JSON.parse(readFileSync(new URL('./scenes/green-modern-2.json',import.meta.url))),s=await H.openScene(scene,'biome=green&variant=modern&mapX=4&mapY=4&scratch=1&gpuMB=512');
+const scene=JSON.parse(readFileSync(new URL('./scenes/green-modern-2.json',import.meta.url))),s=await H.openScene(scene,'biome=green&mapX=4&mapY=4&scratch=1&gpuMB=512');
 await s.fields.gpuReady();await s.fields.gpuQuiet();
 const r=s.renderer,d=r.device,q=d.queue,erosion=await erosionOf(r),source=s.fields.gpuBuffers();await erosion.ready;await erosion.mapsPipeline();
 const request={...s.engine.timeKnobs(r),planes:source.planes,masks:source.masks,rateMask:s.engine.MASK_KEYS.indexOf('ovErosion'),grid:source.grid,size:s.worldSize,spacing:s.spacing,seaLevel:s.config.seaLevel};
