@@ -1378,7 +1378,7 @@
         "plateGap": 5,
         "plateHeight": 4,
         "frostWet": 1,
-        "shadeBlue": 0.25,
+        "shadeBlue": 0.4,
         "reliefAmount": 0.22,
         "reliefScale": 14,
         "reliefLumps": 0.3,
@@ -1395,10 +1395,10 @@
         "frostGapReach": 0.7,
         "frostGapSize": 7,
         "iceSoft": 0.85,
-        "iceSnow": 1,
+        "iceSnow": 0.4,
         "iceFall": 1,
         "iceApron": 1,
-        "iceFrost": 0.7
+        "iceFrost": 0.3
       },
       "engineDefaults": {
         "erosion": 1,
