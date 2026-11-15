@@ -202,6 +202,22 @@
   "palette": [91,92,90,89,88,93,87,55,54,86,94],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
+ "moon-mare": {
+  "name": "Moon mare",
+  "seed": 0,
+  "nodes": [
+   {"id":"warp","type":"warp","kind":"turbulence","name":"Ragged blotch edges","params":{"amount":1,"size":5,"layers":0,"axis":0,"seed":0},"in":{"in":null},"x":0,"y":0},
+   {"id":"blotches","type":"noise","kind":"waves","name":"Blotches, stretched sideways","params":{"size":2.0,"detail":0.3,"layers":0,"seed":0,"length":3.0,"direction":90,"crests":0},"in":{"in":"warp"},"x":236,"y":0},
+   {"id":"grit","type":"noise","kind":"smooth","name":"Fine grit","params":{"size":2.0,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":236,"y":150},
+   {"id":"gritty","type":"combine","kind":"add","name":"Break blotches into coarse grit","params":{"amount":0.9,"offset":0.5},"in":{"a":"blotches","b":"grit","mask":null},"x":472,"y":75},
+   {"id":"blotch-mask","type":"levels","name":"Blotches against clean dust","params":{"low":0.25,"high":0.85,"gamma":1,"invert":0},"in":{"in":"gritty"},"x":708,"y":75},
+   {"id":"dust","type":"gradient","name":"Dark mare grays","params":{"ease":0},"in":{"in":"blotch-mask"},"stops":[[0,0.42,0.42,0.4],[0.35,0.31,0.31,0.31],[0.65,0.25,0.25,0.25],[1,0.18,0.18,0.18]],"x":944,"y":75},
+   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"dust","height":null,"shine":null},"x":1180,"y":75}
+  ],
+  "controls": [{"label":"Blotches, stretched sideways: size","node":"blotches","param":"size"},{"label":"Dark mare grays: colors","node":"dust","param":"stops"}],
+  "palette": [87,88,89,90,91,92,93],
+  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
+ },
  "zhon-ground": {
   "name": "Zhon soil",
   "seed": 0,

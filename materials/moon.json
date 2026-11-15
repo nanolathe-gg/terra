@@ -1085,7 +1085,7 @@
   "deposit": {"params": {"look": "blades", "blades": 5, "bladeLen": 15, "bladeWidth": 12, "fan": 1, "core": 11, "halo": 0.42, "haloSat": 1, "reach": 1.1, "rimDark": 0.3}, "vary": {"reach": [0.83, 1.65], "haloRough": [4, 10]}}
  },
  "world": {
-    "materials": {"ground": "moon-ground", "water": "moon-water"},
+    "materials": {"ground": "moon-ground", "water": "moon-water", "extra": ["moon-mare"]},
     "knobDefaults": {
         "looseSupply": 0.1,
         "looseSize": 3.5,
@@ -1236,6 +1236,7 @@
   },
 
   "shapes": {
+   "mare": {"from": "plateau", "diameter": 900, "elevation": 4, "gullies": 0, "talus": 0, "cracks": 0, "wander": 60, "widthVary": 40, "varySize": 300, "heightVary": 0, "terraces": 0},
    "flowLobe": {"from": "hill", "diameter": 300, "elevation": 24, "lean": 100, "cracks": 10, "wander": 40, "widthVary": 20, "heightVary": 3, "varySize": 100, "terraces": 5, "ledge": 30, "terraceJitter": 50},
    "wrinkleRidge": {"from": "mountain", "diameter": 40, "elevation": 16, "wander": 6, "widthVary": 40, "heightVary": 4, "varySize": 60, "gullies": 0, "talus": 0, "crestTaper": 60},
    "lobedMesa": {"from": "plateau", "diameter": 100, "elevation": 11, "gullies": 0, "talus": 0, "wander": 18, "widthVary": 30, "heightVary": 2, "varySize": 100, "cracks": 20, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.08, 0.4], [0.16, 0.95], [0.22, 1], [0.32, 0.72], [1, 0.65]]}},
@@ -1277,6 +1278,7 @@
    {"id": "pockedCrater", "label": "Pocked crater", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Strike a rough crater with a broken, pitted rim of dark rubble.", "rock": "pitted"},
    {"id": "dome", "label": "Dome", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Raise a smooth round dome; add a small crater for a summit pit."},
    {"id": "lobedMesa", "label": "Lobed mesa", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a low, flat-topped lobe with a raised lip round its edge."},
+   {"id": "mare", "label": "Mare", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Lay a dark mare on the plain: a level sheet of dark regolith with a lobed edge; a drag for a long one.", "material": "moon-mare"},
    {"id": "wrinkleRidge", "label": "Wrinkle ridge", "icon": "mountain", "color": "#b3bcca", "group": "shape", "help": "Draw a narrow, low ridge line: short slivers, forks or long winding loops."},
    {"id": "flowLobe", "label": "Flow lobe", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Raise a low lobe whose flank is wrapped in concentric folds."},
    {"id": "smallCrater", "label": "Small crater", "icon": "crater", "color": "#e6c0ae", "group": "shape", "help": "Strike a small fresh crater about 100 px across: a sharp rim, a dark inner wall away from the sun."},
