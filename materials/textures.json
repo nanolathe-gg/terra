@@ -242,11 +242,15 @@
    {"id":"grit","type":"noise","kind":"smooth","name":"Fine grit","params":{"size":1.0,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":236,"y":150},
    {"id":"gritty","type":"combine","kind":"add","name":"Break blotches into coarse grit","params":{"amount":0.7,"offset":0.5},"in":{"a":"blotches","b":"grit","mask":null},"x":472,"y":75},
    {"id":"blotch-mask","type":"levels","name":"Blotches against clean dust","params":{"low":0.05,"high":1.0,"gamma":1,"invert":0},"in":{"in":"gritty"},"x":708,"y":75},
-   {"id":"dust","type":"gradient","name":"Dark mare grays","params":{"ease":0},"in":{"in":"blotch-mask"},"stops":[[0,0.5,0.5,0.48],[0.3,0.38,0.38,0.38],[0.55,0.31,0.31,0.31],[0.8,0.25,0.25,0.25],[1,0.19,0.19,0.19]],"x":944,"y":75},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"dust","height":null,"shine":null},"x":1180,"y":75}
+   {"id":"dust","type":"gradient","name":"Dark mare grays","params":{"ease":0},"in":{"in":"blotch-mask"},"stops":[[0,0.52,0.52,0.52],[0.12,0.3324,0.3324,0.3324],[0.3,0.3324,0.3324,0.3324],[0.55,0.2883,0.2883,0.2883],[0.8,0.2505,0.2505,0.2505],[1,0.2127,0.2127,0.2127]],"x":944,"y":75},
+   {"id":"olive-flecks","type":"scatter","name":"Olive flecks","params":{"spacing":6,"radius":0.7,"coverage":0.4,"jitter":1.6,"hardness":1,"profile":1,"sizeVariation":0.5,"toneVariation":0.3,"follow":0,"seed":11},"in":{"in":null,"density":null},"x":944,"y":250},
+   {"id":"olive","type":"gradient","name":"Olive","params":{"ease":0},"in":{"in":"olive-flecks"},"stops":[[0,0.373,0.388,0.278],[1,0.373,0.388,0.278]],"x":1180,"y":400},
+   {"id":"fleck-mask","type":"levels","name":"Flecks only","params":{"low":0.55,"high":0.65,"gamma":1,"invert":0},"in":{"in":"olive-flecks"},"x":1180,"y":250},
+   {"id":"flecked","type":"combine","kind":"mix","name":"Olive flecks over the grays","params":{"amount":1,"offset":0},"in":{"a":"dust","b":"olive","mask":"fleck-mask"},"x":1180,"y":75},
+   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"flecked","height":null,"shine":null},"x":1180,"y":75}
   ],
   "controls": [{"label":"Blotches, stretched sideways: size","node":"blotches","param":"size"},{"label":"Dark mare grays: colors","node":"dust","param":"stops"}],
-  "palette": [87,88,89,90,91,92,93],
+  "palette": [87,88,89,90,91,92,93,55],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
  "zhon-ground": {
