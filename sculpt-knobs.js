@@ -124,7 +124,7 @@ export function applyKnob({key,value,settings,renderer,nodes,seed,sync=true}) {
 // Low ground's color where a world picks none (Colors: Low ground): a dark red-brown mud, as retail Zhon's lowland.
 export const LOW_GROUND_RGB=[80,52,42];
 // The Colors panel's rows, [key, label].
-export const COLOR_KEYS=[['slope','Slope cover'],['rock','Rock'],['sand','Sand'],['beach','Beach'],['shallow','Shallow water'],['deep','Deep water'],['low','Low ground'],['crystal','Crystal'],['vegetation','Vegetation'],...Array.from({length:4},(_,i)=>['flower'+(i+1),'Flower '+(i+1)]),['sun','Sun color'],['sky','Sky color'],['strata1','Strata 1'],['strata2','Strata 2'],['strata3','Strata 3'],['strata4','Strata 4'],['strata5','Strata 5']];
+export const COLOR_KEYS=[['slope','Slope cover'],['rock','Rock'],['sand','Sand'],['beach','Beach'],['shallow','Shallow water'],['low','Low ground'],['crystal','Crystal'],['vegetation','Vegetation'],...Array.from({length:4},(_,i)=>['flower'+(i+1),'Flower '+(i+1)]),['sun','Sun color'],['sky','Sky color'],['strata1','Strata 1'],['strata2','Strata 2'],['strata3','Strata 3'],['strata4','Strata 4'],['strata5','Strata 5']];
 // The rows this world shows: Vegetation and a flower's where the world's ground-cover table has them (every world's has; they act once
 // Vegetation cover is above 0), Beach only with a beach layer, Low ground only
 // while its Tint is above 0. Layer colors live in the existing Rock column.
@@ -143,8 +143,9 @@ export function strokeWaterPicks(nodes) {
   const water=nodes.filter(n=>n.kind==='landform'),picked=(key,...choices)=>water.some(n=>choices.includes(Math.round(n.params?.[key]||0)))?1:0;
   return {deepEdge:picked('waterDeep',1),fadedEdge:picked('waterDeep',2)};
 }
-// Chosen water colors replace the palette tints, retaining the lit bed. They use two depth tones rather than the optional third tone.
-export const waterColored=colors => Boolean(colors.shallow||colors.deep);
+// A chosen shallow-water color replaces the bed's tint, retaining the lit bed, and uses two depth tones rather than the optional third.
+// Deep water has no color of its own here: it is the world's water material.
+export const waterColored=colors => Boolean(colors.shallow);
 // How many tones the world's water has: 1 where shallow and deep are one colour, 3 where a third colour follows the depth, else 2; a picked base color makes it 2.
 export function waterTones(config,colors) {
   const w=config.water||{};
