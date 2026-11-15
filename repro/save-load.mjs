@@ -29,13 +29,15 @@ const image=page=>page.ev(`(async()=>{const b=await sculptCanvas.debugBake({x:24
 const normalize=s=>({...s,nodes:s.nodes.map(n=>({...n,hidden:Boolean(n.hidden)}))});
 try{
   const source=await open(0);
-  await source.send('Page.addScriptToEvaluateOnNewDocument',{source:`localStorage.setItem('nanolathe-map-editor-worlds',JSON.stringify({'shared-test':{name:'Shared planet',base:'green',variant:'modern',colors:{ground:'#876543',sky:null,sun:'#ffeebb'},knobs:{groundPattern:'moon',beachFrom:'zhon',erosionRain:'0',lowTint:'.4'}}}));`});
+  await source.send('Page.addScriptToEvaluateOnNewDocument',{source:`localStorage.setItem('nanolathe-map-editor-worlds',JSON.stringify({'shared-test':{name:'Shared planet',base:'green',variant:'modern',colors:{slope:'#876543',sky:null,sun:'#ffeebb'},knobs:{beachFrom:'zhon',erosionRain:'0',lowTint:'.4'}}}));`});
   await source.send('Page.navigate',{url:`${server}/?biome=green&variant=modern&world=shared-test&mapX=2&mapY=1&sea=95&scratch=save-test&gpuMB=512&heapMB=1536&sunColor=ffd9a8&terraceBreak=.7`});await source.ready();
-  await source.ev(`(()=>{const w=document.getElementById('weather');if(w.checked)w.click();sculptDebug.scene([['hill',[[240,230],[430,260]],{card:{elevation:95,gullies:20}}]],{ground:true});const d=sculptRegion.mapData();d.name='Collaboration fixture';d.description='Self-contained save';d.starts=[{x:128,z:128},{x:768,z:256}];d.settings.minWind=7;d.features=[{kind:'deposit',v:0,x:8,z:8,metal:143}];sculptRegion.restoreMapData(d);return true;})()`);await source.ready();
+  await source.ev(`(()=>{const w=document.getElementById('weather');if(w.checked)w.click();const own=sculptDebug.sketch().materials.map(m=>m.worldGround?{...m,seed:3}:m),sand={...own.find(m=>m.worldGround),slot:5,name:'Second ground',worldGround:false,seed:9};sculptDebug.scene([['hill',[[240,230],[430,260]],{card:{elevation:95,gullies:20}}],['paint',[[150,150]],{groundPreset:5,card:{diameter:120,amount:100,softness:0}}]],{ground:true,materials:[...own,sand]});const d=sculptRegion.mapData();d.name='Collaboration fixture';d.description='Self-contained save';d.starts=[{x:128,z:128},{x:768,z:256}];d.settings.minWind=7;d.features=[{kind:'deposit',v:0,x:8,z:8,metal:143}];sculptRegion.restoreMapData(d);return true;})()`);await source.ready();
   // Capture the blob produced by the real button; suppress the browser's disk download.
   await source.send('Browser.setDownloadBehavior',{behavior:'deny'});
   const saved=JSON.parse(await source.ev(`(async()=>{const original=URL.createObjectURL;URL.createObjectURL=blob=>{window.savedBlob=blob;return original(blob);};document.getElementById('save').click();return await savedBlob.text();})()`));
-  assert.equal(saved.worldSettings.name,'Shared planet');assert.equal(saved.worldSettings.colors.sky,null);assert.equal(saved.worldSettings.colors.sun,'#ffd9a8');assert.equal(saved.worldSettings.knobs.groundPattern,'moon');
+  assert.equal(saved.worldSettings.name,'Shared planet');assert.equal(saved.worldSettings.colors.sky,null);assert.equal(saved.worldSettings.colors.sun,'#ffd9a8');assert.equal(saved.worldSettings.knobs.beachFrom,'zhon');
+  // The map's materials travel in the save, and in the world it embeds: the ground was given another seed above.
+  assert.equal(saved.materials.find(m=>m.worldGround).seed,3);assert.equal(saved.materials.length,3);assert.deepEqual(saved.worldSettings.materials,saved.materials);
   const uniforms=await source.ev(`Object.fromEntries(Object.keys(sculptDebug.sketch().worldSettings.knobs).map(k=>[k,sculptCanvas.renderer.variant.get(k)]))`);
   const file=join(out,'map.json');writeFileSync(file,JSON.stringify(saved));const before=await image(source);
   const recipient=await open(1);
