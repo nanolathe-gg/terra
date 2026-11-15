@@ -77,10 +77,10 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Knobs rising 80-91 over the plain, about 180 px (red_river's "pit rows") | Knob (Dark knob rock) | close |
 | Crescents | Crescent (Dark knob rock) | close |
 | Low rough hills with a dark lee | Hill, under Face steepness 1, Sampled slope texture 0.4, no world cracks, sun from the west (sun tilt 0), laminae 0.5 | close (smooth rises with streaky shading; retail's are a little lumpier) |
-| Ring craters about 1450 px with a rubble rim | Ring crater | poor in art, close in heights |
+| Ring craters about 1450 px with a rubble rim | Ring crater (Rubble rim rock: polygonal cracks; Cracks 70) | close (a cracked rubble band on the rim, as retail's) |
 | Basins with a level floor at sea+1 (Yerrot) | Basin | poor |
 | Ponds | Pond | close |
-| Craterlets | Craterlet | poor |
+| Craterlets | Craterlet (floor at -19, dry) | close (a dry bowl; retail's walls are more streaked) |
 
 ### Lava (19 maps, stamped from the tile kit)
 

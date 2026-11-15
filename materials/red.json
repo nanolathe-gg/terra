@@ -1475,7 +1475,9 @@
 
    "presets": [
 
-    "darkknob"
+    "darkknob",
+
+    "rubble"
 
    ],
 
@@ -1493,6 +1495,32 @@
 
      }
 
+    },
+
+    "rubble": {
+
+     "label": "Rubble rim",
+
+     "knobs": {
+
+      "crackSeverity": 0.7,
+
+      "crackNetwork": 1,
+
+      "crackSpacing": 18,
+
+      "crackMajor": 0.9,
+
+      "crackMinor": 0.6,
+
+      "crackBlocks": 0.8,
+
+      "crackDark": 0.8,
+
+      "rockCrown": 0.5
+
+     }
+
     }
 
    }
@@ -1501,7 +1529,7 @@
 
   "shapes": {
    "basin": {"from": "crater", "diameter": 1150, "elevation": -19, "secondaries": 0, "wander": 40, "varySize": 240, "widthVary": 20, "heightVary": 0, "cracks": 40, "curve": {"form": "lfCrater", "knots": [[0, 0], [0.12, 0.06], [0.24, 0.35], [0.34, 0.75], [0.42, 0.97], [0.46, 1], [1, 1]]}},
-   "ringCrater": {"from": "plateau", "diameter": 1200, "elevation": 55, "gullies": 0, "talus": 0, "heightVary": 0, "wander": 24, "varySize": 300, "widthVary": 10, "cracks": 0, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.1, 0.15], [0.2, 0.4], [0.3, 0.7], [0.4, 0.92], [0.47, 1], [0.55, 0.9], [0.63, 0.76], [0.7, 0.72], [1, 0.72]]}},
+   "ringCrater": {"from": "plateau", "diameter": 1200, "elevation": 55, "gullies": 0, "talus": 0, "heightVary": 0, "wander": 24, "varySize": 300, "widthVary": 10, "cracks": 70, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.1, 0.15], [0.2, 0.4], [0.3, 0.7], [0.4, 0.92], [0.47, 1], [0.55, 0.9], [0.63, 0.76], [0.7, 0.72], [1, 0.72]]}},
    "craterlet": {"from": "crater", "diameter": 200, "elevation": -19, "secondaries": 0},
    "pond": {"from": "deep", "diameter": 150, "elevation": -20, "wander": 16},
    "crescent": {"from": "hill", "diameter": 200, "elevation": 73, "lean": 160, "facing": 2, "wander": 12},
@@ -1535,7 +1563,7 @@
    {"id": "knob", "label": "Knob", "icon": "mountain", "color": "#b3bcca", "group": "shape", "help": "Click a dark rock knob: a steep dome 200 px across that rises 90 over the plain, too steep to climb. Retail Red scatters them in loose rows 400 to 500 px apart.", "rock": "darkknob"},
    {"id": "crescent", "label": "Crescent", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Drag an arc: a curved ridge with a long back slope on the right of the line and a steep, shaded face on the left, round a hollow.", "rock": "darkknob"},
    {"id": "craterlet", "label": "Craterlet", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Click a small bowl 200 px across, dug 22 into the ground it lands on, with a low lip."},
-   {"id": "ringCrater", "label": "Ring crater", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Click a large crater whose level floor stands 40 over the plain inside a rim 55 over it. Add a Knob at its center for the central peak."},
+   {"id": "ringCrater", "label": "Ring crater", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Click a large crater whose level floor stands 40 over the plain inside a rim 55 over it. Add a Knob at its center for the central peak.", "rock": "rubble"},
    {"id": "basin", "label": "Basin", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Click a flat-floored basin 1150 px across, its level floor 22 below the ground, just above the sea. Add a low Hill for a central peak."},
    {"id": "pond", "label": "Pond", "icon": "deep", "color": "#c7a97e", "group": "shape", "help": "Click a small pond: a bowl 150 px across whose bed lies 20 under the sea, with no rim."},
    {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
