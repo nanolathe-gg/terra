@@ -1970,7 +1970,7 @@
         "ringFade": 1,
         "bedTint": 1,
         "bedContrast": 0.8,
-        "bedBright": 1,
+        "bedBright": 1.18,
         "bedRelief": 2,
         "stepSoftPx": 14,
         "shelfWander": 6,
@@ -1989,7 +1989,7 @@
         "ringPatchSize": 160,
         "ringTone": 0.0,
         "faceFill": 0.25,
-        "shallowDepth": 38,
+        "shallowDepth": 4,
         "deepDepth": 52
       },
       "engineDefaults": {
