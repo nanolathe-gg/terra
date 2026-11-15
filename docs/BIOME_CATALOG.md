@@ -47,7 +47,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Rings that break into arcs (atolls, crater rims, calderas) | Archipelago (9), Moon, Lava, Red | Gaps: breaks in what a shape raises, round a click or along a path | **Done** this round (Crater mound, Ring crater use it) |
 | Coast shelf at an absolute depth; a deep stroke's bank surfaces as land unless it overlaps a wide shelf | Archipelago (14), Crystal (7), Ice (13), Green | A shelf depth below the sea; a deep bank that starts below the sea | Missing |
 | Soft-edged ground strokes: maria fade over ~100 px in 200-600 px lobes; a stroke lays a material only where it changes the height (a rise under 3 claims nothing, measured) | Moon (6), Lush swamps (9) | Ground edge: the material ends in scalloped lobes | **Done** in part: lobed edges; a fade in tone is out of reach of a per-cell material, and a claim still needs a small rise |
-| Inner crest ridges inside outcrops and massifs | Crystal (7), Green, Moon, Lava | Crystal facets that follow the envelope's own ridges (spurs on the envelope were tried: the facet field replaces their relief, so they barely show) | Missing |
+| Inner crest ridges inside outcrops and massifs | Crystal (7), Green, Moon, Lava | Shape data, no engine change: column facets already follow the envelope (a seed reads its height and slope). Two overlapping outcrop drags, or one short bent drag, leave an inner ridge and hollow like retail's. A click's spurs start at the center under the rim, so they barely show. Height variation 120 over 220 px gives the bare mound its inner relief. Known artifact: thin column spikes on the outer wall at a sharp path bend (far seeds of the next segment); a distance cutoff only shrank them | Close (by drawing) |
 | A second, lighter shallow tone (a -9 lagoon renders as a -25 shoal) | Archipelago, every water world | A shallow-water tone ramp by depth | Missing |
 | River channel depth and bank shelf (the River bed reaches only 18 under the sea) | Lush (14), Lava | Channel depth | **Done** this round (Lush River: 90 px at 220%) |
 | Per-shape crystal surface (tone, shine, web) and per-shape snow on caps | Crystal, Ice | Move gougeWeb, the crystal shine rows and Snow on caps into rock types | Partial: iceSnow is per rock type now |
@@ -126,7 +126,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 
 | Feature | Tool, rock type | Status |
 | --- | --- | --- |
-| Outcrops: large ~900 px rising 124-145, medium 370-460 px rising 120-150, small 250-350 px | Crystal outcrop, Crystals, Crystal knob | close (domes where retail's outlines are lobed and carry inner crests) |
+| Outcrops: large ~900 px rising 124-145, medium 370-460 px rising 120-150, small 250-350 px | Crystal outcrop, Crystals, Crystal knob | close (lobed by Height variation; inner crests by overlapping drags) |
 | Low lit crystal crusts | Crystal crust (Lit crystal crust rock: web 0.3) | close (lighter plates under a thin web; retail's web is bolder and its crust shows ridged streaks) |
 | Shards on the plain | Crystal shards | close |
 | Coasts with a slab shelf 8-10 under the sea | Shallow with shore plates | close |
