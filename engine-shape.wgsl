@@ -433,6 +433,37 @@ fn heights(@builtin(global_invocation_id) g: vec3u) {
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
 }
 
+// A regional run covers more than its rectangle when a coast or smooth node reads the height beyond it (rects in the host's submit), and only the
+// rectangle comes out exact. marginSave keeps the planes and masks of everything the run covers (its region) in Out; marginRestore puts back every
+// cell outside the rectangle (coBx0..coBy1), so the buffers hold what they held there.
+@compute @workgroup_size(8, 8)
+fn marginSave(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+#ifdef PAGES
+  let cells = pcells(); let i = lidx(x, y);
+#else
+  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
+#endif
+  let w = u32(u.rx1 - u.rx0 + 1); let kept = w * u32(u.ry1 - u.ry0 + 1); let k = g.y * w + g.x;
+  for (var p = 0u; p < 7u; p++) { Out[p * kept + k] = bitcast<u32>(F[p * cells + i]); }
+  for (var m = 0u; m < 7u; m++) { Out[(7u + m) * kept + k] = Mk[i * 7u + m]; }
+}
+@compute @workgroup_size(8, 8)
+fn marginRestore(@builtin(global_invocation_id) g: vec3u) {
+  let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
+  if (x > u.rx1 || y > u.ry1) { return; }
+  if (x >= u.coBx0 && x <= u.coBx1 && y >= u.coBy0 && y <= u.coBy1) { return; }
+#ifdef PAGES
+  let cells = pcells(); let i = lidx(x, y);
+#else
+  let n = u.grid; let cells = n * n; let i = u32(y) * n + u32(x);
+#endif
+  let w = u32(u.rx1 - u.rx0 + 1); let kept = w * u32(u.ry1 - u.ry0 + 1); let k = g.y * w + g.x;
+  for (var p = 0u; p < 7u; p++) { F[p * cells + i] = bitcast<f32>(Out[p * kept + k]); }
+  for (var m = 0u; m < 7u; m++) { Mk[i * 7u + m] = Out[(7u + m) * kept + k]; }
+}
+
 // Back to the empty map over the rectangle: dry base height, nothing else.
 @compute @workgroup_size(8, 8)
 fn init(@builtin(global_invocation_id) g: vec3u) {

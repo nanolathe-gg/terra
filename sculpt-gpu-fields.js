@@ -583,7 +583,7 @@ async function sharedShapePipelines(device,pages){
         for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
         return out;
       };
-      const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampFissure', 'smoothCopy', 'blurH', 'blurV', 'ground', 'heights', 'init', 'artHold', 'artLevel', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastJag', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'packPlane', 'lfCrystalSites', 'lfCrystalRoom', 'lfCrystalApply'];
+      const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampFissure', 'smoothCopy', 'blurH', 'blurV', 'ground', 'heights', 'init', 'artHold', 'artLevel', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastJag', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'packPlane', 'lfCrystalSites', 'lfCrystalRoom', 'lfCrystalApply', 'marginSave', 'marginRestore'];
       const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse'] : [])]);
       return {layout,pipes};
     })();
@@ -603,7 +603,9 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
   // H5b: a page is a pw x ph block of the map with its own planes and masks (the shader's lidx); its noise is evaluated directly (u.direct), so only the
   // scratch weights of the hill's blur are shared: one buffer, grown to the largest target.
   let pageScratch = null;
-  const bytes = () => F.size + Mk.size + (Nz?.size || 0) + (Sc?.size || 0) + (pageScratch?.size || 0);
+  // The cells a regional run covers beyond its rectangle, kept while it runs (marginSave and marginRestore in submit): one buffer, grown to the largest.
+  let marginKeep = null;
+  const bytes = () => F.size + Mk.size + (Nz?.size || 0) + (Sc?.size || 0) + (pageScratch?.size || 0) + (marginKeep?.size || 0);
   function makeTarget(ox, oy, pw, ph) {
     const F2 = buf(PLANES * pw * ph * 4, ST | CD | CS, 'page planes'), Mk2 = buf(pw * ph * 28, ST | CD | CS, 'page masks');
     return {F: F2, Mk: Mk2, ox, oy, pw, ph, bytes: F2.size + Mk2.size, destroy() { F2.destroy(); Mk2.destroy(); }};
@@ -630,7 +632,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     const expandIn = (r, m) => intersect({x0: r.x0 - m, y0: r.y0 - m, x1: r.x1 + m, y1: r.y1 + m}, whole);
     const geom = {grid, spacing, refSpacing};
     const passes = [], segData = [], mwData = [], mwBlocks = [], ops = [];
-    let segCount = 0, mwCount = 0;
+    let segCount = 0, mwCount = 0, keepWords = 0;
     const base = {grid, spacing, baseH: baseHeight, sea, minH, maxH, blurR: Math.max(1, Math.round(2 * refSpacing / spacing)), ox: target ? target.ox : 0, oy: target ? target.oy : 0, pw: target ? target.pw : grid, ph: target ? target.ph : grid, direct: target ? 1 : 0};
     const add = (entry, region, extra = {}) => passes.push({entry, region, u: {...base, rx0: region.x0, ry0: region.y0, rx1: region.x1, ry1: region.y1, ...extra}});
     if (!readOnly) {
@@ -740,18 +742,29 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     const exMain = (r, m) => expandIn(r, m);
     // A smooth node reads the prefix height `smoothR` cells beyond its footprint, so every node before it is evaluated over that much more (rects[k]: what node k
     // must cover so the cells wanted exact, R, come out exact). Without a smooth node every rectangle is R.
+    // The buffers keep every cell, so a margin the earlier nodes cover beyond R must come out as it went in: only R is exact there (the later nodes are
+    // stamped over R alone). The run keeps the margin's planes and masks first (marginSave, over what init covers) and puts back every cell outside R
+    // at the end (marginRestore). When the margin would take more than half of what exists, the run covers all of it instead, which needs neither.
     const rects = new Array(ops.length);
     {
-      let need = R;
-      for (let k = ops.length - 1; k >= 0; k--) {
-        rects[k] = need;
-        const q = ops[k].p;
-        if (q?.coast) { const hit = intersect(need, q.coast.box); if (hit) { const e = expandIn(hit, q.coast.readR); need = {x0: Math.min(need.x0, e.x0), y0: Math.min(need.y0, e.y0), x1: Math.max(need.x1, e.x1), y1: Math.max(need.y1, e.y1)}; } }
-        if (q?.smoothR && q.region) { const hit = intersect(need, q.region); if (hit) { const e = expandIn(hit, q.smoothR); need = {x0: Math.min(need.x0, e.x0), y0: Math.min(need.y0, e.y0), x1: Math.max(need.x1, e.x1), y1: Math.max(need.y1, e.y1)}; } }
-      }
+      const plan = E => {
+        let need = E;
+        for (let k = ops.length - 1; k >= 0; k--) {
+          rects[k] = need;
+          const q = ops[k].p;
+          if (q?.coast) { const hit = intersect(need, q.coast.box); if (hit) { const e = expandIn(hit, q.coast.readR); need = {x0: Math.min(need.x0, e.x0), y0: Math.min(need.y0, e.y0), x1: Math.max(need.x1, e.x1), y1: Math.max(need.y1, e.y1)}; } }
+          if (q?.smoothR && q.region) { const hit = intersect(need, q.region); if (hit) { const e = expandIn(hit, q.smoothR); need = {x0: Math.min(need.x0, e.x0), y0: Math.min(need.y0, e.y0), x1: Math.max(need.x1, e.x1), y1: Math.max(need.y1, e.y1)}; } }
+        }
+        return ops.length ? need : E;
+      };
+      const area = r => (r.x1 - r.x0 + 1) * (r.y1 - r.y0 + 1);
+      let E = R, span = plan(E);
+      if (area(span) > area(E) && 2 * area(span) > area(whole)) { E = whole; span = plan(E); }
+      const margin = area(span) > area(E);
       // Undulation in the art below 1: the list without its ground node first, its height held in plane u, then the whole list, and artLevel over what init
       // covered (every plane is as exact there as h).
-      const span = ops.length ? need : R, level = ops.find(op => op.ground && op.art < 1);
+      const level = ops.find(op => op.ground && op.art < 1);
+      if (margin) { add('marginSave', span); keepWords = (PLANES + 7) * area(span); }
       if (level) {
         add('init', span);
         ops.forEach((op, j) => { if (!op.ground) emitOp(op, rects[j], exMain, !target); });
@@ -762,6 +775,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
         emitOp(op, rects[j], exMain, !target);
       });
       if (level) add('artLevel', span, {...level.u, gArt: level.art});
+      if (margin) add('marginRestore', span, {coBx0: E.x0, coBy0: E.y0, coBx1: E.x1, coBy1: E.y1});
     }
     }
     // Pack the rectangle for readback.
@@ -787,14 +801,18 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     if (mwData.length) device.queue.writeBuffer(MWB, 0, new Float32Array(mwData));
     for (const b of mwBlocks) device.queue.writeBuffer(MWB, b.row * 16, b.data);   // the height images' windows, after every node's rows
     const OutB = buf(readback ? outWords * 4 : 16, ST | CS, 'shape out');
-    const group = device.createBindGroup({layout, entries: [
+    if (keepWords && (!marginKeep || marginKeep.size < keepWords * 4)) { const old = marginKeep; marginKeep = buf(keepWords * 4, ST, 'shape margin'); old?.destroy(); }
+    // Binding 7 holds the kept margin for the shape passes and the packed rectangle for the readback's.
+    const bind = out => device.createBindGroup({layout, entries: [
       {binding: 0, resource: {buffer: ub, size: NODE_BYTES}}, {binding: 1, resource: {buffer: TF}}, {binding: 2, resource: {buffer: TMk}}, {binding: 3, resource: {buffer: (target ? null : Nz) ?? dummy}},
-      {binding: 4, resource: {buffer: (target ? pageScratch : Sc) ?? dummy}}, {binding: 5, resource: {buffer: SegB}}, {binding: 6, resource: {buffer: MWB}}, {binding: 7, resource: {buffer: OutB}}]});
+      {binding: 4, resource: {buffer: (target ? pageScratch : Sc) ?? dummy}}, {binding: 5, resource: {buffer: SegB}}, {binding: 6, resource: {buffer: MWB}}, {binding: 7, resource: {buffer: out}}]});
+    const packGroup = bind(OutB), group = keepWords ? bind(marginKeep) : packGroup;
     const enc = device.createCommandEncoder({label: 'shape'}), pass = enc.beginComputePass({label: 'shape passes'});
     passes.forEach((ps, k) => {
-      pass.setPipeline(pipes[ps.entry]); pass.setBindGroup(0, group, [k * NODE_BYTES]);
+      const packing = ps.entry === 'pack' || ps.entry === 'packPlane';
+      pass.setPipeline(pipes[ps.entry]); pass.setBindGroup(0, packing ? packGroup : group, [k * NODE_BYTES]);
       const w = ps.region.x1 - ps.region.x0 + 1, h = ps.region.y1 - ps.region.y0 + 1;
-      if (ps.entry === 'pack' || ps.entry === 'packPlane') { const g = Math.ceil(outWords / 256), gx = Math.min(g, 65535); pass.dispatchWorkgroups(gx, Math.ceil(g / gx)); }
+      if (packing) { const g = Math.ceil(outWords / 256), gx = Math.min(g, 65535); pass.dispatchWorkgroups(gx, Math.ceil(g / gx)); }
       else pass.dispatchWorkgroups(Math.ceil(w / 8), Math.ceil(h / 8));
     });
     pass.end();
@@ -845,7 +863,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     return {w, h, values};
   }
   return {run, submit, copyOut, bytes, makeTarget, decimate, planes: F, masks: Mk, stats: () => ({gpuBytes: bytes(), peakGpuBytes: peak, planeBytes: F.size, maskBytes: Mk.size, noiseBytes: Nz?.size || 0, scratchBytes: Sc?.size || 0, last}),
-    destroy() { F.destroy(); Mk.destroy(); Nz?.destroy(); Sc?.destroy(); pageScratch?.destroy(); Nz = Sc = pageScratch = null; }, grid, spacing, device};
+    destroy() { F.destroy(); Mk.destroy(); Nz?.destroy(); Sc?.destroy(); pageScratch?.destroy(); marginKeep?.destroy(); Nz = Sc = pageScratch = marginKeep = null; }, grid, spacing, device};
 }
 
 // ---- the fields object ----
