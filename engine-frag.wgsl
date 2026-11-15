@@ -1844,7 +1844,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // A recipe's level ground takes its beds from its own height (bedsFrom: the world's first section start for the world's rock); its faces at every height.
         let onRaised = max(smoothstep(u.rock[rs & rockMask].bedsFrom, u.rock[rs & rockMask].bedsFrom+1.5, baseHeight(p)-u.columnOrigin),faceGate*exposed) * (1.0-route);
         let bedCoverage=clamp(u.rock[rs & rockMask].strata*2.0,0.0,1.0)*select(mix(exposed,1.0,smoothstep(.5,1.0,u.rock[rs & rockMask].strata)),exposed,!ownGround);
-        material = mix(material, bedColour, max(bedCoverage * u.rock[rs & rockMask].strataContrast * onRaised, u.rock[rs & rockMask].strata * painted.x));
+        // Highland ground (highShare) wins over the beds on level ground, so a world's pale caprock or jungle lies on its high tops whatever bed
+        // their height falls in; faces keep their bands.
+        let capped = 1.0 - level * select(0.0, highShare(p), ownGround);
+        material = mix(material, bedColour, max(bedCoverage * u.rock[rs & rockMask].strataContrast * onRaised * capped, u.rock[rs & rockMask].strata * painted.x));
         if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)*select(1.0,exposed,!ownGround)); }
     }
     // Ground patches: level ground is not one tone. One gray field (two sizes of noise, sizes rounded to divide the pool) is read through a ramp of five flat steps: damp ground
