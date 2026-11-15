@@ -131,8 +131,6 @@ const NODE_FIELDS = [
   ...['lfGaps', 'lfGapWidth', 'lfGapDepth'].map(k => [k, 'f']),
   // Ground edge: the outer share of the section where the stroke's ground material breaks into lobes (0: a clean edge).
   ...['lfGroundEdge'].map(k => [k, 'f']),
-  // Gully softness: rounder, fewer gully valleys (0: as before).
-  ...['lfGullySoft'].map(k => [k, 'f']),
   // Lobe variety: clustered shore fingers, a few long and wide (0: the even comb).
   ...['cfVary'].map(k => [k, 'f']),
   // lfcrater: an impact's groove: the along curve's value at its end (the groove's width is scaled by the curve over it); 0: none.
@@ -452,7 +450,7 @@ export function prepareNode(n, geom, c) {
       lfRiver: isRiver(q) ? riverWidth(q) : 0, lfBraid: isBraided(q) ? 1 : 0, lfWander: isRiver(q) ? 0 : Math.max(0, q.wander || 0) * frameScale,   // a river's Wander is the band its migration may fill (sculpt-river.js), not an outline noise
       lfWidth: Math.max(0, q.widthVary || 0), lfHeight: Math.max(0, q.heightVary || 0), lfSize: Math.max(8, q.varySize || 0),
       lfFoot: q.varyFoot ?? 1, lfMid: q.varyMiddle ?? 1, lfTaper: clamp(q.crestTaper || 0, 0, 1), lfRoute: clamp(q.routeSmooth || 0, 0, 1),
-      lfGaps: Math.round(clamp(q.rimGaps || 0, 0, 12)), lfGapWidth: clamp(q.rimGapWidth ?? .3, .05, 1), lfGapDepth: clamp(q.rimGapDepth ?? 200, 1, 400), lfGroundEdge: clamp(q.groundEdge || 0, 0, 1), lfGullySoft: clamp(q.gullySoft || 0, 0, 1),
+      lfGaps: Math.round(clamp(q.rimGaps || 0, 0, 12)), lfGapWidth: clamp(q.rimGapWidth ?? .3, .05, 1), lfGapDepth: clamp(q.rimGapDepth ?? 200, 1, 400), lfGroundEdge: clamp(q.groundEdge || 0, 0, 1),
       // P1 Gullies: 100% is the research lab's depth (.45 per wavelength per unit slope); the first wavelength is a share of the wider side (world px, as the
       // sides are), given in the shape's own frame, where the pattern runs.
       gully: .45 * clamp(q.gullies || 0, 0, 1.5), gullySize: clamp(clamp(q.gullySize ?? .4, .1, 1) * Math.max(sd.front, sd.back), 16, 480) / frameScale,

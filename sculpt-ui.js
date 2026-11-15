@@ -85,7 +85,7 @@ export function groupToolControls(fields,buildRow){
  // Details: optional parts of a shape, each a group. Closed, a group is a chip; a group with a master row (its amount, where 0 is off)
  // turns on from its chip and off from the switch in its heading. [master key, title, rows, open at first]
  const definitions=[
- ['gullies','Gullies',['gullies','gullySize','gullySoft','talus']],
+ ['gullies','Gullies',['gullies','gullySize','talus']],
  ['','Hard beds',['beds','bedSoft']],
  ['','Steps',['stepReference','terraces','ledge','terraceJitter','breakup','layerPx','layerRiser','layerVary','layerCircle','lavaSpread','lavaCircleVary','layerJag']],
  ['rimGaps','Gaps',['rimGaps','rimGapWidth','rimGapDepth']],
