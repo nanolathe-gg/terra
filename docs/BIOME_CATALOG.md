@@ -94,7 +94,7 @@ Seven worlds moved toward retail or held; **Painted Desert moved slightly away**
 directions 0.19 / 0.35 against 0.19 / 0.33), so the gap is on the mesas: too many thin dark lines (0.050 against 0.019 in window 1), too
 much 2 px band energy, edges leaning vertical where retail's lean horizontal, and a pale cap twice retail's share in window 1 (0.152 against
 0.069). Highland from 55 or 70 and banding 0.5 (with strata contrast 0.6) were scored and did not move closeness (26-27 of 72); its shape
-score, the worst of the eight at 0.35, did not change in the round. Archipelago keeps thin dark lines at 3-7x retail's.
+score, the worst of the eight at 0.35, did not change in the round. Also scored without moving closeness off 26: a rust bed color (24-25), face creases 0.3 and 0 (no change at all), creases 0.3 with banding 0.5 (look 0.97 -> 0.89). Ten world-setting variants in all; Desert's gap is in its windows' stepped shapes and their light, so redrawing them with its Mesa and cap tools, or the owner's eye, is the next step. Archipelago keeps thin dark lines at 3-7x retail's.
 
 ### Blind A/B, one judge (2026-11-15)
 
