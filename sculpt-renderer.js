@@ -728,10 +728,16 @@ export class TerrainRenderer {
     this.syncWorld({clay,light,detail,ring,ringSpread,ringVariation,materialWeathering,transitionDetail,exact});
     this.i('uMaterialReady', this.materialReady);
     this.i('uTransitionBody', Boolean(this.transitionBody&&this.materialReady&&materialWeathering>0));
-    // digest {reuse}: the checksum of everything the rest of the draw reads (inputDigest). A caller that still holds the picture of the same
+    // digest {reuse, check}: the checksum of everything the rest of the draw reads (inputDigest). A caller that still holds the picture of the same
     // checksum keeps it: the same inputs draw the same bytes (AGENTS.md rule 12), so the bake, the voxel solid and the march are skipped.
+    // check: only the checksum, as a promise, so a caller can submit several tiles' checksums and wait once. Without reuse the draw does
+    // not wait for it either: the result's digest is then a promise.
     let inputDigest = null;
-    if (digest) { inputDigest = await this.inputDigest(); if (inputDigest && inputDigest === digest.reuse) return {reused: true, digest: inputDigest}; }
+    if (digest) {
+      inputDigest = this.inputDigest();
+      if (digest.check) return {check: inputDigest};
+      if (digest.reuse) { inputDigest = await inputDigest; if (inputDigest && inputDigest === digest.reuse) return {reused: true, digest: inputDigest}; }
+    }
     this.guard?.begin();
     const encoder = device.createCommandEncoder({label: 'terrain'});
     // P6: a SpecializationMiss abandons this encoder, its bake included, so the fields go back to unbaked and the retry bakes again.
@@ -770,24 +776,26 @@ export class TerrainRenderer {
     const present=device.createCommandEncoder({label:'present voxel terrain'});
     present.copyTextureToTexture({texture:this.voxelColor},{texture:this.context.getCurrentTexture()},[this.canvas.width,this.canvas.height]);device.queue.submit([present.finish()]);
     this.gpuResult=Promise.all(timers.map(t=>t.result())).then(values=>{const ms=values.reduce((a,b)=>a+(b??0),0);this.lastGPU=ms;return ms;});
-    if (this.guard && !await this.guard.check(this, inputDigest)) inputDigest = null;   // after a violation, no tile is kept
+    if (this.guard && !await this.guard.check(this, await inputDigest)) inputDigest = null;   // after a violation, no tile is kept
     return {milliseconds:performance.now()-start,gpuMilliseconds:this.lastGPU,pipelineKey,digest:inputDigest};
   }
   // A checksum of a draw's inputs: every texel of the input textures (INPUT_TEXTURES; textureSums), the settings uniform's bytes but the
   // per-chunk ones, the shader specialization, the canvas and texture sizes, and the world version (worldResource). Null when an input
   // texture is missing (no reuse). The guard (sculpt-digest-guard.js, in tests and ?digestGuard runs) checks that nothing else reaches a draw.
-  async inputDigest() {
+  // Everything is taken when it is called: the sums are submitted then, and the uniform bytes copied, so the next tile may change both
+  // while the promise waits for the GPU.
+  inputDigest() {
     const textures = INPUT_TEXTURES.map(k => this[k]);
-    if (textures.some(t => !t)) return null;
-    const sums = await this.textureSums(textures.map(texture => ({texture})));
+    if (textures.some(t => !t)) return Promise.resolve(null);
+    const sums = this.textureSums(textures.map(texture => ({texture})));
     // The per-chunk uniforms are left out: the draw sets them from this tile's region and inputs (the bake writes looseGrid after this
     // point, so until then it holds the previous tile's), and both are already in the checksum.
     const bytes = new Uint8Array(this.uniformData.slice(0));
     for (const name of PER_CHUNK_UNIFORMS) { const f = this.layout.fields.get(name); if (f) bytes.fill(0, f.offset, f.offset + uniformSpan(f)); }
     let ca = 0x811c9dc5, cb = 0x01000193;
     for (let i = 0; i < bytes.length; i++) { ca = Math.imul(ca ^ bytes[i], 0x01000193); cb = Math.imul(cb + bytes[i] + i, 0x5bd1e995) ^ (cb >>> 15); }
-    return [...sums, ca >>> 0, cb >>> 0].map(n => n.toString(16)).join('.') + '|' + this.specKey().key + '|' + this.canvas.width + 'x' + this.canvas.height + '|' +
-      textures.map(t => t.width + 'x' + t.height + 'x' + t.depthOrArrayLayers).join(',') + '|w' + this.worldEpoch;
+    const rest = '|' + this.specKey().key + '|' + this.canvas.width + 'x' + this.canvas.height + '|' + textures.map(t => t.width + 'x' + t.height + 'x' + t.depthOrArrayLayers).join(',') + '|w' + this.worldEpoch;
+    return sums.then(s => [...s, ca >>> 0, cb >>> 0].map(n => n.toString(16)).join('.') + rest);
   }
   // Two 32-bit sums of per-texel hashes for each {texture, mip} (mip 0 by default), on the GPU; 8 bytes a texture read back. Float formats.
   async textureSums(entries) {

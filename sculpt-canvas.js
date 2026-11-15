@@ -211,7 +211,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     return {...planned,gridOrigin:[gx,gy],gridWidth:Math.round((Math.max(a[0],b[0])-gx)/sp)+1,gridHeight:Math.round((Math.max(a[1],b[1])-gy)/sp)+1};
   }
   // prior: the cached picture this bake replaces. A final view tile whose inputs check the same as prior's (digest) keeps prior's picture.
-  async function bake(rect,exportArt=false,signal,stale=null,scale=1,fit=false,block=false,warm=false,prior=null) {
+  // The checksum a final view tile's picture can be kept under: prior's, when nothing world-wide changed since prior's bake in the stages after
+  // the fields (C: bake to F: palette). The checksum holds the inputs, settings and specialization, not the material textures, palette or tables a
+  // world change regenerates.
+  const keepable=(prior,scale,weathered)=>prior?.fed&&prior.bitmap&&typeof prior.digest==='string'&&prior.scale===scale&&prior.weathered===weathered&&!prior.block&&['C','D','E','F'].every(k=>prior.rev?.[k]===rev[k])?prior.digest:null;
+  // check: only prior's checksum is compared (prior kept), and {pending} comes back without waiting for the GPU: a promise of the kept entry, or null.
+  async function bake(rect,exportArt=false,signal,stale=null,scale=1,fit=false,block=false,warm=false,prior=null,check=false) {
     // Wait before preparing fields, too: a queued tile must not start a costly
     // paged replay for a viewport that has moved while the GPU was occupied.
     // One tile's GPU work may still run: this tile prepares beside it (the queue keeps their order), and the wait bounds the GPU work in flight.
@@ -272,15 +277,20 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       trimTo(room,block);
       renderer.setBudget(gpuBudget,steadyGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
       const measureFinal=!exportArt&&!block&&!fit&&scale===detailLevel()&&!api.previewActive?.()&&(!api.canExport||api.canExport());
-      // Reuse also needs no world-wide change since prior's bake in the stages after the fields (C: bake to F: palette): the checksum holds the
-      // inputs, settings and specialization, not the material textures, palette or tables a world change regenerates.
-      const view=!exportArt&&!block&&!fit,reuse=view&&prior?.fed&&prior.digest&&prior.scale===scale&&prior.weathered===readWeather&&!prior.block&&['C','D','E','F'].every(k=>prior.rev?.[k]===rev[k])?prior.digest:null;
-      const atSerial=lattice?sourceSerial:serial,atRev=lattice?sourceRev:{...rev},result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale,signal,stale,preview:block,fastRaster:block&&interacting(),deferPipelines:!exportArt,deferCompletion:!fit&&!exportArt,digest:view?{reuse}:null});
+      const view=!exportArt&&!block&&!fit,reuse=view?keepable(prior,scale,readWeather):null;
+      if(check&&!reuse)return null;
+      const atSerial=lattice?sourceSerial:serial,atRev=lattice?sourceRev:{...rev},result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale,signal,stale,preview:block,fastRaster:block&&interacting(),deferPipelines:!exportArt,deferCompletion:!fit&&!exportArt,digest:view?{reuse,check}:null});
+      const entryFor=bitmap=>({...rect,bitmap,bytes:ow*oh*4,digest:null,kept:false,scale,fit,lattice:Boolean(lattice),weathered:readWeather,fed:true,serial:atSerial,rev:atRev,shapeRev:feed.revision,pipelineKey:result.pipelineKey,weatherRevB:fit?null:feed.weatherRevB,level:scale,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null});
+      const kept=entry=>{entry.digest=reuse;entry.kept=true;entry.pipelineKey=prior.pipelineKey;entry.finalCostMs=prior.finalCostMs;entry.finalCostBudget=prior.finalCostBudget;return entry;};
+      // A kept picture is prior's bitmap; the caller replaces prior with it only while prior is still the cached entry.
+      if(check)return {pending:result.check.then(d=>{if(d!==reuse)return null;reused++;metrics();return kept(entryFor(prior.bitmap));},()=>null)};
       if(result.reused)reused++;else bakes++;
       const bitmap=result.reused?prior.bitmap:block?new OffscreenCanvas(ow,oh):await createImageBitmap(result.canvas,0,0,ow,oh,{colorSpaceConversion:'none'});
       if(block)bitmap.getContext('2d').drawImage(result.canvas,0,0,ow,oh);
-      const entry={...rect,bitmap,bytes:ow*oh*4,digest:result.digest??null,kept:Boolean(result.reused),scale,fit,lattice:Boolean(lattice),weathered:readWeather,fed:true,serial:atSerial,rev:atRev,shapeRev:feed.revision,pipelineKey:result.pipelineKey,weatherRevB:fit?null:feed.weatherRevB,level:scale,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null};
-      if(result.reused){entry.pipelineKey=prior.pipelineKey;entry.finalCostMs=prior.finalCostMs;entry.finalCostBudget=prior.finalCostBudget;}
+      const entry=entryFor(bitmap);
+      // A drawn tile's checksum arrives after its GPU work; until then the tile cannot be kept on a later check.
+      if(!result.reused)Promise.resolve(result.digest).then(d=>{entry.digest=d??null;},()=>{});
+      if(result.reused)kept(entry);
       else if(measureFinal)renderer.previousChunk.then(()=>{if(!changedSince(atSerial,entry.input,'E')){entry.finalCostMs=performance.now()-costAt;entry.finalCostBudget=costBudget;}},()=>{});
       const key=rect.x+','+rect.y+','+canonicalSize+','+scale;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
     }finally{feed.release?.();}
@@ -574,6 +584,31 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           if(!previewing&&!navigating()&&quiet>=1000)for(const rect of jobs)if(!intersects(rect,v))plan.push({rect,want:detailLevel()});
           else if(quiet<1000)wakeLadder(1000-quiet);
         }
+        // 2c: the dirty final tiles that may keep their pictures are checked first. Each one's inputs are fed and its checksum submitted without
+        // waiting for the GPU, and one wait answers them all. A tile whose checksum differs bakes below without being checked again (missed).
+        const missed=new Set();
+        if(!overview&&!previewing){
+          const checks=[];
+          try{
+            for(const {rect,want,block=false,color=false,warm=false} of plan){
+              if(suspended||token!==serial||viewToken!==viewEpoch||busy||previewing!==interacting())break;
+              const key=cacheKey(rect,size),e=cache.get(key);
+              if(block||color||warm||holding||!intersects(rect,v)||!e?.dirty||!keepable(e,want,weatheredView))continue;
+              const controller=new AbortController();activeBake={controller,rect};
+              try{const got=await bake(rect,false,controller.signal,()=>token!==serial||busy||viewToken!==viewEpoch&&!intersects(rect,state()),want,false,false,e,true);if(got)checks.push([key,e,got.pending]);else missed.add(key);}
+              finally{if(activeBake?.controller===controller)activeBake=null;}
+            }
+          }finally{
+            let any=false;
+            for(const [key,e,pending] of checks){
+              const k=await pending;
+              if(!k||cache.get(key)!==e){missed.add(key);continue;}
+              if(changedSince(k.serial,k.input))k.dirty=true;
+              k.bakedAt=performance.now();cache.delete(key);cache.set(key,k);cacheBytes+=k.bytes-e.bytes;any=true;
+            }
+            if(any){paintedView=-1;presentView();overlays();rerun=true;}
+          }
+        }
         // Immutable F inputs survive another F edit. Finish this cheap
         // native sweep without a new rAF wait after every input; a partial
         // cache, geometry/Time edit or navigation still replans immediately.
@@ -629,7 +664,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
                 batch.slice(0,result.regions.length).forEach(({key,prior},i)=>colorResults.set(key,{...prior,digest:null,kept:false,bitmap:bitmaps[i],colorRect:result.regions[i].fresh,serial:colorSerial,rev:colorRev,dirty:changedSince(colorSerial,prior.input),pipelineKey:result.pipelineKey}));
               }
               e=colorResults.get(key);colorResults.delete(key);
-            }else{e=await bake(rect,false,controller.signal,()=>token!==serial||busy||viewToken!==viewEpoch&&!intersects(rect,state()),want,overview,false,false,e);if(e&&!overview&&!e.kept)await retainColor(e);}}
+            }else{e=await bake(rect,false,controller.signal,()=>token!==serial||busy||viewToken!==viewEpoch&&!intersects(rect,state()),want,overview,false,false,missed.has(key)?null:e);if(e&&!overview&&!e.kept)await retainColor(e);}}
             catch(err){if(want<1&&String(err.message).includes('of GPU memory')){finest=want*2;rerun=true;break;}throw err;}   // fall back to the next coarser level, never the banner
             finally{if(activeBake?.controller===controller)activeBake=null;}
             // Keep the focus source resident while its pipeline finishes.

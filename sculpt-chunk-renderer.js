@@ -584,6 +584,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       this.activeRegion=region;this.voxelScale=scale;
       const result=await this.withPipelines(()=>super.draw({...options,exact:options.exact||Boolean(request.exportArt)}),{preview,defer:deferPipelines});
       this.captureWorking();
+      if(result.check)return {check:result.check};   // a checksum only (draw's digest.check): nothing drawn
       if(result.reused)return {reused:true,digest:result.digest,x:request.x,y:request.y,width:request.width,height:request.height,scale};   // the caller keeps its picture
       // A WebGPU presentation image expires at the next browser frame. Copy
       // synchronously before waiting for the queue, so the returned pixels live.
