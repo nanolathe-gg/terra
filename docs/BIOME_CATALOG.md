@@ -1,9 +1,11 @@
 # Retail biome catalog: features, tools, rock types and gaps
 
 A catalog of the terrain features that recur across each retail biome's maps, the Terra tool and rock type that draw each one, and the
-generic controls still missing. Written 2026-11-15 from a pass over 151 retail maps: Green 37, Red 17, Lava 19, Painted Desert 3 (plus Wet
-Desert 6), Ice 22, Crystal 10, Archipelago 14, Moon 12, Lush 22. Sizes and heights were measured from the maps' TA heights (one byte per 16 px
-cell). Every look and status is by eye. The retail pictures, crops and pairs stay outside the repository.
+generic controls still missing. Written 2026-11-15 from a pass over 156 retail maps (162 with Wet Desert): Green 37, Red 17, Lava 19, Painted
+Desert 3 (plus Wet Desert 6), Ice 22, Crystal 10, Archipelago 14, Moon 12, Lush 22. Sizes and heights were measured from the maps' TA heights (one byte per 16 px
+cell). Every look and status is by eye: from 1x pairs of each tool beside retail crops, then every world's tools rendered again through the
+editor's own cards (its presets, rock types and ground materials) and compared with those statuses. The retail pictures, crops and pairs stay
+outside the repository.
 
 Status means: **good** (reads as retail at 1x), **close** (same design language, details differ), **poor** (recognizable but wrong in
 an important way), **missing** (no tool draws it).
@@ -70,8 +72,8 @@ material it lays down (`material`; the world lists it in `world.materials.extra`
 | Lumpy stepped knolls | Knoll | close |
 | Low flat lava shields (walkable, steps 17.5 per cell) | Lava shield | close |
 | Crescent pools and lava slots between raised banks | Lava trough | close |
-| Big dark rounded dome blocks | Dome block (Dark dome rock) | poor |
-| Long knotted ridges | Lava ridge (Crumpled flow rock) | poor |
+| Big dark rounded dome blocks | Dome block (Dark dome rock, Rock crown 1) | poor (dark rock on top now, but a flat top over a wall) |
+| Long knotted ridges | Lava ridge (Crumpled flow rock, Rock crown 1) | poor (its top still shows plain ground) |
 | Fringed lava coasts, rimmed plateaus, lava rivers | Shallow, Plateau, River | poor |
 
 ### Painted Desert (3 maps; Wet Desert's 6 in crops)
@@ -84,6 +86,7 @@ material it lays down (`material`; the world lists it in `world.materials.extra`
 | Desert Triad's tall gray mesas, domes and cones | Gray mesa (245), Gray dome (125), Cones (65), on the Gray caprock rock type (the old triad variant) | close |
 | Ragged aprons and skirt rings | none | missing |
 | Hoodoos | Hoodoos | no retail counterpart (an invented look) |
+| Water (no Painted Desert map has any) | Wet Desert's blues: deep (19,63,103), the band within 10 of the sea (47,107,145) | a measured guess |
 
 ### Ice (22 maps)
 
@@ -112,7 +115,7 @@ material it lays down (`material`; the world lists it in `world.materials.extra`
 
 | Feature | Tool, rock type | Status |
 | --- | --- | --- |
-| Flat sand islands at sea+2 with a pale halo | Island | close |
+| Flat sand islands at sea+2 with a pale halo | Island (drawn in water; on the sea+8 plain the sea tools add nothing) | close |
 | Sandbars, shoals | Sandbar, Shoal | close |
 | Atolls | Atoll | close (rings stay closed) |
 | Dark rock mounds with radial ridges | Rock mound, Rock knob, Crater mound (Mound rock) | close (ridges are crisp rills) |
@@ -127,6 +130,7 @@ material it lays down (`material`; the world lists it in `world.materials.extra`
 | Domes with a shaded far side | Dome (sun 34, ambient 0.3) | close |
 | Lobed mesas, wrinkle ridges, flow lobes | Lobed mesa, Wrinkle ridge, Flow lobe | close |
 | Dark maria at the plain's height (0-unit step on 6 of 6 maps) | Mare (lays the Moon mare material) | close (edge hard where retail fades over ~100 px) |
+| Crater walls in dark gray shade, not black | world shade depth 0.6 with sun 34 | close |
 | Ring craterlets scattered on the plain | none | missing (needs scatter) |
 
 ### Lush (22 maps)
