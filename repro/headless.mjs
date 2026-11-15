@@ -202,7 +202,7 @@ export async function renderWindow(s, {x = 0, y = 0, width = 1024, height = 1024
     const w = Math.min(tile, width - tx), h = Math.min(tile, height - ty);
     const request = {x: x + tx, y: y + ty, width: w, height: h, exportArt, worldSize: config.worldSize ?? config.size, worldGrid: config.worldGrid ?? config.grid};
     const feed = await feedFor(s, request, options);
-    try { const result = await renderer.renderChunk(request, {...options, feed, scale: 1, deferCompletion: !exportArt, ...(digest ? {digest: {reuse: null}} : {})}); digests.push(result.digest ?? null); } finally { feed.release?.(); }
+    try { const result = await renderer.renderChunk(request, {...options, feed, scale: 1, deferCompletion: !exportArt, ...(digest ? {digest: {reuse: null}} : {})}); digests.push(await (result.digest ?? null)); } finally { feed.release?.(); }
     const row = Math.ceil(w * 4 / 256) * 256, buffer = device.createBuffer({label: 'headless readback', size: row * h, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ});
     const encoder = device.createCommandEncoder({label: 'headless readback'});
     encoder.copyTextureToBuffer({texture: canvas.gpu.texture}, {buffer, bytesPerRow: row}, [w, h]);
