@@ -26,22 +26,33 @@ controls; node settings are the author's tools.
 
 - **The library** (`materials/textures.json`) holds the shipped materials by
   key. A world names its two in its table: `world.materials: {ground, water}`
-  in `materials/<world>.json`. A variant overrides them through its `config`.
-- **A map** holds up to seven materials in slots 1 to 7: exactly one is the
-  world's ground, one its water, the rest are for landforms and the Paint
-  brush (a stroke's Ground choice: `-1` the ground beneath, `0` the world's
-  ground, else a slot). They are in the map's save, its undo steps, share
-  links, and the world settings it embeds.
+  in `materials/<world>.json`.
+- **The world owns its ground and its water** (owner, 2026-11-14). They are
+  world settings like its sliders: where you change one, the world keeps it
+  in this browser and every map drawn in that world shows it. One the world
+  never changed stays the library's, so a library revision reaches it.
+  "Restore built-in settings" returns both to the library's. What the world
+  keeps is marked with the library material it replaces, so a library
+  material keeps its own edit.
+- **A map** holds up to seven materials in slots 1 to 7: the world's two and
+  up to five of its own, for landforms and the Paint brush (a stroke's Ground
+  choice: `-1` the ground beneath, `0` the world's ground, else a slot; shown
+  as chips with each material's color). A new landform starts on the ground
+  beneath; the Paint brush's Material starts on the world's ground. A
+  map opened in a world takes that world's two, in the slots the map already
+  gave those roles; its own materials stay.
+- **Saves, undo and share links** carry the map's list, and the world
+  settings a save embeds carry the world's two. Opening a save sets the
+  world's two in this browser, as it sets the world's sliders.
+- **A world of your own** (World, New) and a world file carry the two.
 - **Highland ground.** A world may also name a highland material
   (`world.materials.high`): a new map adds it with the role *highland
   ground*, and level raised ground takes it in place of the world's ground
   by its rise above the plain (World rows Highland ground, from and fade;
-  0 strength draws as before). Rock faces and the column's beds still draw
-  over it. Any material becomes it with Manage, Use as highland ground.
-- **A world of your own** (World, New) keeps the map's materials, and a world
-  file carries them. A new map in that world starts with them.
-- A map carried into another world lets go of a ground and water still as the
-  library made them and takes the new world's; ones you changed stay.
+  0 strength draws as before). On level tops it wins over the column's
+  beds; rock faces still draw over it. Any material becomes it with
+  Manage, Use as highland ground. A world may also list materials its
+  tools lay down (`world.materials.extra`); a new map adds them too.
 - A save with no materials (or an earlier format's `grounds`) loads with the
   world's own two. There is no migration.
 
@@ -101,7 +112,14 @@ sections open it on that material. The map stops rendering while it is open.
   repeats each way (Repeat), or a shore, a plain and a hill (On terrain); 2×
   magnifies, Node shows the selected node alone.
 - **Controls**: the published settings. In the Node pane, ◆ beside a setting
-  publishes it; a gradient publishes its colors.
+  publishes it; a gradient publishes its colors. A control has its own range
+  inside the node setting's: a newly published scale (a size in px) starts
+  with a quarter to four times its value, and Edit controls sets a control's
+  name and range or removes it.
+  The World pane shows the same controls for the world's ground (Ground,
+  Pattern) and water (Water & shores), live on the map, beside a chip of the
+  material's color. The map is the preview there; the pane starts no second
+  renderer.
 - **Palette**: click a game color to put it in or out; *Pick from the
   material* chooses the colors nearest what the graph makes.
 - **Manage**: rename, use as the world's ground or water, duplicate, delete,
@@ -130,7 +148,14 @@ The world's own settings for level ground (low-ground tint, the vegetation
 cover table, ground patches) apply over the world's ground material; a
 material a stroke chose keeps its own look.
 
-## Status of the shipped materials (2026-11-15)
+One way for each part of the look. Deep water has no color in World, Colors:
+the water material is its color. Two older settings still act beside a
+material and are candidates to fold into it once the owner has judged the
+look: Ground bumps (`plainRelief`, lit noise on level land, above 0 in seven
+worlds) beside a material's Height, and Shine, Ground gloss (`shineGround`,
+above 0 on Lava) beside a material's Shine.
+
+## Status of the shipped materials (2026-11-14)
 
 | World | Ground | Water |
 | --- | --- | --- |
@@ -138,7 +163,7 @@ material a stroke chose keeps its own look.
 | Green | owner-approved | owner-approved |
 | Lava, Desert, Crystal, Ice, Lush, Moon, Archipelago | patch-swapped against retail | patch-swapped against retail |
 | Lush highland | patch-swapped, first pass | |
-| Ice, "bergs" variant | first pass by eye | Ice's |
+| Ice bergs ground (laid by the Ice floe tool) | first pass by eye | Ice's |
 | Zhon | first pass by eye | first pass by eye |
 
 "Patch-swapped" means two 1x1, two 4x4 and one 8x8 patches of 32-px tiles

@@ -945,10 +945,8 @@ export class TerrainRenderer {
     // E6: mineralDetail scales the rock art's contrast about its mean (1: as drawn).
     const rockMean = material.hillRockMeanRGB || [85, 84, 79];
     this.v('uRockMean', rockMean.map(v => v / 255));
-    this.v('uShallowColor', (this.config.water?.shallowRGB || [60, 115, 163]).map(v => v / 255));
     const bed = this.config.water?.riverBedRGB;   // riverfix: a braided bed's gravel, world data (absent: the draw darkens the world's rock)
     this.set('uRiverBed', bed ? [...bed.map(v => v / 255), 1] : [0, 0, 0, 0]);
-    this.v('uDeepColor', (this.config.water?.deepRGB || [16, 57, 133]).map(v => v / 255));
     }
     {
     this.i('uClay', clay);
@@ -1059,7 +1057,7 @@ export class TerrainRenderer {
     }
     if(this.colorOverrides){const colors=this.colorOverrides;
     this.set('uMaterialTable', this.placementTable(this.variant));
-    for (const key of ['slope', 'sand', 'beach', 'shallow', 'deep', 'crystal']) {
+    for (const key of ['slope', 'sand', 'beach', 'shallow', 'crystal']) {
       const c = colors[key];
       this.set('u' + key[0].toUpperCase() + key.slice(1) + 'Base', c ? [...c, 1] : [0, 0, 0, 0]);
     }

@@ -36,8 +36,8 @@ try{
   await source.send('Browser.setDownloadBehavior',{behavior:'deny'});
   const saved=JSON.parse(await source.ev(`(async()=>{const original=URL.createObjectURL;URL.createObjectURL=blob=>{window.savedBlob=blob;return original(blob);};document.getElementById('save').click();return await savedBlob.text();})()`));
   assert.equal(saved.worldSettings.name,'Shared planet');assert.equal(saved.worldSettings.colors.sky,null);assert.equal(saved.worldSettings.colors.sun,'#ffd9a8');assert.equal(saved.worldSettings.knobs.beachFrom,'zhon');
-  // The map's materials travel in the save, and in the world it embeds: the ground was given another seed above.
-  assert.equal(saved.materials.find(m=>m.worldGround).seed,3);assert.equal(saved.materials.length,3);assert.deepEqual(saved.worldSettings.materials,saved.materials);
+  // The map's materials travel in the save; the world it embeds carries its own two (the ground was given another seed above).
+  assert.equal(saved.materials.find(m=>m.worldGround).seed,3);assert.equal(saved.materials.length,3);assert.deepEqual(saved.worldSettings.materials,saved.materials.filter(m=>m.worldGround||m.worldWater));
   const uniforms=await source.ev(`Object.fromEntries(Object.keys(sculptDebug.sketch().worldSettings.knobs).map(k=>[k,sculptCanvas.renderer.variant.get(k)]))`);
   const file=join(out,'map.json');writeFileSync(file,JSON.stringify(saved));const before=await image(source);
   const recipient=await open(1);

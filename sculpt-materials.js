@@ -166,8 +166,17 @@ export function copyPalette(value = []) {
 export function controlSpec(material, control) {
   const node = material.nodes.find(n => n.id === control.node); if (!node) return null;
   if (control.param === 'stops') return node.type === 'gradient' ? {node, stops: true} : null;
-  const spec = nodeParams(node).find(p => p.key === control.param);
-  return spec ? {node, spec} : null;
+  const spec = nodeParams(node).find(p => p.key === control.param); if (!spec) return null;
+  // The control's own range, inside the node setting's: what its author thinks a map maker should reach.
+  const min = clamp(Number.isFinite(control.min) ? control.min : spec.min, spec.min, spec.max), max = clamp(Number.isFinite(control.max) ? control.max : spec.max, spec.min, spec.max);
+  return {node, spec: min < max ? {...spec, min, max} : spec};
+}
+// The range a newly published setting starts with. A scale (a size from 1 to 256 px) gets a window about its value, a quarter to four
+// times, so a small drag is a small change; any other setting gets its whole range. Its author can change either.
+export function controlRange(spec, value) {
+  if (!(value > 0) || !(spec.min > 0) || spec.max < 16 * spec.min) return {min: spec.min, max: spec.max};
+  const nice = v => Number(v.toPrecision(2));
+  return {min: clamp(nice(value / 4), spec.min, spec.max), max: clamp(nice(value * 4), spec.min, spec.max)};
 }
 export function copyMaterial(value) {
   if (!object(value)) throw Error('Invalid material.');
@@ -180,6 +189,11 @@ export function copyMaterial(value) {
   for (const c of (value.controls ?? []).slice(0, MAX_CONTROLS)) {
     if (!object(c) || typeof c.node !== 'string' || typeof c.param !== 'string') throw Error('Invalid material control.');
     const control = {label: text(c.label, 'Control', 'A control name'), node: c.node, param: c.param};
+    if (c.param !== 'stops' && c.min !== undefined && c.max !== undefined) { control.min = number(c.min, 'A control’s range'); control.max = number(c.max, 'A control’s range'); }
+    else if (c.param !== 'stops') {   // one saved before controls had ranges takes the range a new control starts with, so an untouched copy still equals the library's
+      const target = controlSpec(material, control);
+      if (target) Object.assign(control, controlRange(nodeParams(target.node).find(p => p.key === c.param), target.node.params[c.param]));
+    }
     if (controlSpec(material, control) && !material.controls.some(o => o.node === control.node && o.param === control.param)) material.controls.push(control);
   }
   material.palette = copyPalette(value.palette);
@@ -333,13 +347,15 @@ export function addMaterial(list, material, name = 'Material') {
   const slot = freeSlot(list), added = {slot, name: uniqueName(list, nameOf(name)), key: null, worldGround: false, worldWater: false, ...copyMaterial(material)};
   return {slot, materials: [...list, added].sort((a, b) => a.slot - b.slot)};
 }
-// Every map has a ground and a water material. Where a list lacks one (a new map, an older save), the world's own is added;
-// when the list is full, the first material that is not the other role takes it.
+// Every map has a ground and a water material. Where a list lacks one (a scene, an older save), the library's is added; when the list
+// is full, the first material that is not the other role takes it.
+const ROLES = [['worldGround', 'ground'], ['worldWater', 'water']];
+const libraryFor = (config, which) => LIBRARY[config.materials?.[which]] ?? LIBRARY[`green-${which}`];
 export function withWorldMaterials(value, config) {
   let list = copyMaterials(value) ?? [];
-  for (const [role, which] of [['worldGround', 'ground'], ['worldWater', 'water']]) {
+  for (const [role, which] of ROLES) {
     if (list.some(m => m[role])) continue;
-    const preset = LIBRARY[config.materials?.[which]] ?? LIBRARY[`green-${which}`];
+    const preset = libraryFor(config, which);
     if (list.length >= MATERIAL_SLOTS - 1) { const taker = list.find(m => !m.worldGround && !m.worldWater); list = list.map(m => m === taker ? {...m, [role]: true} : m); continue; }
     const added = addMaterial(list, preset, preset.name); list = added.materials.map(m => m.slot === added.slot ? {...m, [role]: true} : m);
   }
@@ -357,12 +373,46 @@ export function withWorldMaterials(value, config) {
   }
   return list;
 }
-// A map carried into another world: a ground or water still as the library made it gives way to the new world's own; one the artist
-// changed stays, as do the map's other materials.
-export const carriedMaterials = list => list?.filter(m => !((m.worldGround || m.worldWater || m.worldHigh) && LIBRARY[m.source] && materialRenderKey(m) === materialRenderKey(LIBRARY[m.source]))) ?? null;
-// A world's materials for a new map: a world of the user's own carries its list (config.worldMaterials); a built-in world names its
-// ground and water in the library (config.materials).
-export const worldMaterials = config => withWorldMaterials(config.worldMaterials, config);
+// The world's ground and its water are world settings, like its sliders: every map drawn in the world shows the same two, and a map's
+// other materials are its own. A map's list (a save's, or none for a new map) takes the world's two here, each in the slot the map
+// already gave that role. `config.worldMaterials` holds the ones the artist changed (keptWorldMaterials); the rest are the library's.
+export function adoptWorldMaterials(value, config) {
+  let list = withWorldMaterials(value, config);
+  for (const [role, which] of ROLES) {
+    const source = config.worldMaterials?.find(m => m[role]) ?? libraryFor(config, which), at = list.find(m => m[role]);
+    const name = uniqueName(list.filter(m => m !== at), nameOf(source.name));
+    list = list.map(m => m === at ? {...m, name, ...copyMaterial(source)} : m);
+  }
+  return list;
+}
+// What the world keeps of a map's list: its ground and its water where they differ from the library's, each marked with the library
+// material it replaces (`replaces`). A world nobody changed keeps nothing, so a later revision of the library reaches it; and an edit
+// follows the library material it replaces.
+const libraryKey = (config, which) => LIBRARY[config.materials?.[which]] ? config.materials[which] : `green-${which}`;
+export function worldOwnMaterials(list, config) {
+  return (list ?? []).filter(m => m.worldGround || m.worldWater).filter(m => {
+    const preset = libraryFor(config, m.worldGround ? 'ground' : 'water');
+    return m.name !== preset.name || JSON.stringify(copyMaterial(m)) !== JSON.stringify(copyMaterial(preset));
+  }).map(m => ({replaces: libraryKey(config, m.worldGround ? 'ground' : 'water'), name: m.name, worldGround: m.worldGround, worldWater: m.worldWater, ...copyMaterial(m)}));
+}
+// The kept materials that apply to this look of the world: for each role, the one that replaces the library material the look names.
+// One with no mark (a world file's, or an earlier store's) applies to any look. Damaged entries are dropped.
+export function keptWorldMaterials(stored, config) {
+  const kept = [];
+  for (const [role, which] of ROLES) {
+    const m = (Array.isArray(stored) ? stored : []).find(m => object(m) && m[role] === true && (m.replaces === undefined || m.replaces === libraryKey(config, which)));
+    try { if (m) kept.push({replaces: libraryKey(config, which), name: nameOf(m.name), worldGround: role === 'worldGround', worldWater: role === 'worldWater', ...copyMaterial(m)}); } catch (_) {}
+  }
+  return kept;
+}
+// The store after an edit: this look's own, beside what the world keeps for the library materials its other looks name.
+export function mergeWorldMaterials(stored, own, config) {
+  const mine = new Set(ROLES.map(([, which]) => libraryKey(config, which)));
+  return [...(Array.isArray(stored) ? stored : []).filter(m => object(m) && typeof m.replaces === 'string' && !mine.has(m.replaces)), ...own];
+}
+export const worldPair = list => (list ?? []).filter(m => m.worldGround || m.worldWater);
+// A new map's materials: the world's two.
+export const worldMaterials = config => adoptWorldMaterials(null, config);
 export const duplicateMaterial = (list, slot) => { const m = find(list, slot); return addMaterial(list, m, `${m.name} copy`); };
 const find = (list, slot) => { const m = list.find(m => m.slot === slot); if (!m) throw Error(`No material in slot ${slot}.`); return m; };
 export const renameMaterial = (list, slot, name) => { find(list, slot); return list.map(m => m.slot === slot ? {...m, name: nameOf(name)} : m); };

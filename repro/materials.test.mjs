@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {NODES, LIBRARY, MAX_NODES, MATERIAL_SLOTS, copyMaterial, copyMaterials, blankMaterial, makeNode, orderNodes, nodeTypes, compileMaterial, programKey, programSource,
-  materialReliefBound, materialRenderKey, soloMaterial, controlSpec, withWorldMaterials, worldMaterials, carriedMaterials, addMaterial, duplicateMaterial, setMaterial,
+  materialReliefBound, materialRenderKey, soloMaterial, controlSpec, controlRange, nodeParams, withWorldMaterials, worldMaterials, adoptWorldMaterials, worldOwnMaterials, keptWorldMaterials, mergeWorldMaterials, worldPair, addMaterial, duplicateMaterial, setMaterial,
   assignMaterial, deleteMaterial, strokeMaterial, keepStrokeMaterials, materialsInUse, materialUsers, materialText, parseMaterialText, reseedMaterial, materialTint} from '../sculpt-materials.js';
 import {graphPositions, cardHeight, CARD} from '../sculpt-material-graph.js';
 import {savedWorld, copySavedWorld} from '../sculpt-save.js';
@@ -109,7 +109,6 @@ test('a map always has a ground and a water material, and an older save falls ba
   assert.equal(copyMaterials(undefined), null);
   const waterOnly = withWorldMaterials([{...list[1], slot: 5}], config);
   assert.deepEqual(waterOnly.map(m => [m.slot, m.worldGround, m.worldWater]), [[1, true, false], [5, false, true]]);
-  assert.deepEqual(worldMaterials({...config, worldMaterials: waterOnly}), waterOnly, 'a world of the user’s own carries its list');
   assert.equal(worldMaterials({materials: {}}).find(m => m.worldGround).source, 'green-ground');
   assert.throws(() => copyMaterials([{...list[0], worldWater: true}]), /two materials/);
   assert.throws(() => copyMaterials([list[0], {...list[1], slot: 1}]), /own slot/);
@@ -136,14 +135,69 @@ test('adding, assigning, deleting and what strokes keep', () => {
   assert.equal(setMaterial(list, 3, LIBRARY['green-ground']).find(m => m.slot === 3).name, 'Sand', 'a new graph keeps the name and slot');
 });
 
-test('a map carried into another world lets go of an untouched ground and water, and keeps what the artist changed', () => {
-  const list = addMaterial(worldMaterials(config), LIBRARY['desert-ground'], 'Sand').materials;
-  assert.deepEqual(carriedMaterials(list).map(m => m.name), ['Sand']);
-  const edited = list.map(m => m.worldGround ? {...m, seed: 4} : m);
-  assert.deepEqual(carriedMaterials(edited).map(m => m.slot), [1, 3]);
-  const green = withWorldMaterials(carriedMaterials(list), {materials: {ground: 'green-ground', water: 'green-water'}});
-  assert.deepEqual(green.map(m => [m.slot, m.source]), [[1, 'green-ground'], [2, 'green-water'], [3, 'desert-ground']]);
-  assert.equal(carriedMaterials(null), null);
+test('a published control has its own range inside the node setting’s, and a new one starts with a window about its value', () => {
+  const base = blankMaterial(), size = nodeParams(base.nodes.find(n => n.id === 'noise')).find(p => p.key === 'size');
+  assert.deepEqual(controlRange(size, 3.5), {min: 1, max: 14}); assert.deepEqual(controlRange(size, 40), {min: 10, max: 160});
+  assert.deepEqual(controlRange({min: 0, max: 8}, 2.4), {min: 0, max: 8}, 'a setting that starts at 0 keeps its whole range');
+  const ranged = copyMaterial({...base, controls: [{label: 'Size', node: 'noise', param: 'size', min: 2, max: 20}]});
+  assert.deepEqual(ranged.controls, [{label: 'Size', node: 'noise', param: 'size', min: 2, max: 20}]);
+  assert.deepEqual([controlSpec(ranged, ranged.controls[0]).spec.min, controlSpec(ranged, ranged.controls[0]).spec.max], [2, 20]);
+  // A range outside the setting's is held inside it; an empty one falls back to the setting's own.
+  const wide = controlSpec(ranged, {node: 'noise', param: 'size', min: -5, max: 9000}).spec; assert.deepEqual([wide.min, wide.max], [size.min, size.max]);
+  const empty = controlSpec(ranged, {node: 'noise', param: 'size', min: 20, max: 20}).spec; assert.deepEqual([empty.min, empty.max], [size.min, size.max]);
+  assert.throws(() => copyMaterial({...base, controls: [{label: 'Size', node: 'noise', param: 'size', min: 'a', max: 3}]}), /range/);
+  // A copy saved before controls had ranges is still the library's material: the world does not mistake it for an edit.
+  const older = worldMaterials(config).map(m => ({...m, controls: m.controls.map(({min, max, ...c}) => c)}));
+  assert.ok(older.some(m => m.controls.some(c => c.param !== 'stops')), 'the fixture has a ranged control to lose');
+  assert.deepEqual(worldOwnMaterials(copyMaterials(older), config), []);
+  assert.deepEqual(keptWorldMaterials(older, config).map(m => m.controls), worldMaterials(config).map(m => m.controls));
+  for (const [key, m] of Object.entries(LIBRARY)) for (const c of m.controls) if (c.param !== 'stops') {
+    const {node, spec} = controlSpec(m, c); assert.ok(node.params[c.param] >= spec.min && node.params[c.param] <= spec.max, `${key}: ${c.label} starts inside its range`);
+  }
+});
+
+test('the world’s ground and water belong to the world: a map takes them, and the world keeps only what differs from the library', () => {
+  const fresh = worldMaterials(config);
+  assert.deepEqual(worldOwnMaterials(fresh, config), [], 'a world nobody changed keeps nothing');
+  // An edited ground is the world's: it is what the world keeps, and what a new map and another map's list take.
+  const edited = fresh.map(m => m.worldGround ? {...m, seed: 4} : m), own = worldOwnMaterials(edited, config), mine = {...config, worldMaterials: own};
+  assert.deepEqual(own.map(m => [m.worldGround, m.seed]), [[true, 4]], 'the untouched water is not kept');
+  assert.equal(worldMaterials(mine).find(m => m.worldGround).seed, 4);
+  assert.equal(worldMaterials(mine).find(m => m.worldWater).source, 'red-water');
+  // Another map: its own material stays, in its slot; its ground gives way to the world's in the slot that map gave it, so a
+  // stroke that named a slot still finds the same material there.
+  const other = [{...LIBRARY['desert-ground'], slot: 1, name: 'Sand', key: null, worldGround: false, worldWater: false}, {...fresh[0], slot: 4}, {...fresh[1], slot: 2}];
+  const taken = adoptWorldMaterials(other, mine);
+  assert.deepEqual(taken.map(m => [m.slot, m.source, m.worldGround, m.seed]), [[1, 'desert-ground', false, 0], [2, 'red-water', false, 0], [4, 'red-ground', true, 4]]);
+  assert.deepEqual(worldOwnMaterials(taken, config).map(m => m.seed), [4], 'and the world keeps the same after');
+  // A map carried into another world takes that world's two and keeps its own others.
+  const green = adoptWorldMaterials(taken, {materials: {ground: 'green-ground', water: 'green-water'}});
+  assert.deepEqual(green.map(m => [m.slot, m.source]), [[1, 'desert-ground'], [2, 'green-water'], [4, 'green-ground']]);
+  // A full list still holds both; a renamed material counts as changed; the pair is the two alone.
+  let full = fresh; while (full.length < MATERIAL_SLOTS - 1) full = addMaterial(full, blankMaterial(), 'More').materials;
+  assert.equal(adoptWorldMaterials(full, mine).length, MATERIAL_SLOTS - 1);
+  assert.deepEqual(worldOwnMaterials(fresh.map(m => m.worldWater ? {...m, name: 'My sea'} : m), config).map(m => m.name), ['My sea']);
+  assert.deepEqual(worldPair(taken).map(m => m.slot), [2, 4]);
+});
+
+test('what the world keeps follows the library material a look names, so looks that share one share the edit and others keep their own', () => {
+  const snow = {materials: {ground: 'ice-ground', water: 'ice-water'}}, bergs = {materials: {ground: 'ice-bergs-ground', water: 'ice-water'}};
+  const edit = (cfg, role, seed) => worldOwnMaterials(worldMaterials(cfg).map(m => m[role] ? {...m, seed} : m), cfg);
+  let store = mergeWorldMaterials(undefined, edit(snow, 'worldGround', 7), snow);
+  assert.deepEqual(store.map(m => [m.replaces, m.seed]), [['ice-ground', 7]]);
+  assert.deepEqual(keptWorldMaterials(store, bergs), [], 'the other look names its own ground and keeps it');
+  assert.equal(worldMaterials({...bergs, worldMaterials: keptWorldMaterials(store, bergs)}).find(m => m.worldGround).source, 'ice-bergs-ground');
+  // An edit of the shared water on the other look joins the store without displacing the first look's ground, and both looks see it.
+  store = mergeWorldMaterials(store, edit(bergs, 'worldWater', 5), bergs);
+  assert.deepEqual(store.map(m => [m.replaces, m.seed]), [['ice-ground', 7], ['ice-water', 5]]);
+  assert.deepEqual(keptWorldMaterials(store, snow).map(m => [m.replaces, m.seed]), [['ice-ground', 7], ['ice-water', 5]]);
+  assert.deepEqual(keptWorldMaterials(store, bergs).map(m => m.replaces), ['ice-water']);
+  // Back to the library's on one look removes only that look's own; an unmarked entry (a world file's) applies to any look;
+  // a damaged entry is dropped.
+  assert.deepEqual(mergeWorldMaterials(store, [], bergs).map(m => m.replaces), ['ice-ground']);
+  const loose = worldMaterials(snow).filter(m => m.worldGround).map(m => ({...m, seed: 9}));
+  assert.equal(keptWorldMaterials(loose, bergs)[0].seed, 9);
+  assert.deepEqual(keptWorldMaterials([{worldGround: true, name: 'Broken', nodes: 'no'}, 4, null], snow), []);
 });
 
 test('materials round-trip through the clipboard text, the saved world and a world file', () => {
@@ -151,8 +205,8 @@ test('materials round-trip through the clipboard text, the saved world and a wor
   const pasted = parseMaterialText(materialText(list[2])); assert.equal(pasted.name, 'Meadow'); assert.deepEqual(copyMaterial(pasted), copyMaterial(list[2]));
   assert.throws(() => parseMaterialText('{"format":"other"}'), /no material/);
   const world = savedWorld(config, new URLSearchParams(), {name: 'Mine', colors: {}, knobs: {}, materials: list});
-  assert.deepEqual(world.materials, list);
-  assert.deepEqual(copySavedWorld(JSON.parse(JSON.stringify(world)), config).materials, list);
+  assert.deepEqual(world.materials, list.slice(0, 2), 'the saved world carries its ground and water; the map carries its own list');
+  assert.deepEqual(copySavedWorld(JSON.parse(JSON.stringify(world)), config).materials, list.slice(0, 2));
   // A save from before materials (no list, or the earlier `grounds` key) loads with the world's own.
   const {materials, ...older} = world;
   assert.deepEqual(copySavedWorld({...older, grounds: [{slot: 1, name: 'Old preset', knobs: {}, ramp: []}]}, config).materials, worldMaterials(config));
@@ -176,7 +230,7 @@ test('the page declares every row the editor fills', () => {
   const most = Math.max(...Object.values(NODES).flatMap(spec => spec.kinds ? Object.keys(spec.kinds).map(k => spec.params(k).length) : [spec.params().length]));
   for (let i = 0; i < most; i++) assert.ok(has('node-param-' + i) && has('node-param-pin-' + i), 'a row for setting ' + i);
   for (let i = 0; i < Math.max(...Object.values(NODES).map(s => s.inputs.length)); i++) assert.ok(has('node-input-' + i));
-  for (let i = 0; i < 12; i++) assert.ok(has('ctl-' + i) && has(`ctl-color-${i}-7`));
+  for (const list of ['ctl', 'wg', 'ww']) for (let i = 0; i < 12; i++) assert.ok(has(`${list}-${i}`) && has(`${list}-row-${i}`) && has(`${list}-color-${i}-7`), `${list} row ${i}`);
   for (const [type, spec] of Object.entries(NODES)) if (type !== 'output') assert.ok(page.includes(`data-type="${type}"`), `the add menu offers ${spec.label}`);
 });
 

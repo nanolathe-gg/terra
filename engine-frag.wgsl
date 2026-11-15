@@ -2277,8 +2277,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Colors choose the water's tint, never replace the bed-light model.
         var water=vec3f(0);
         {
-            var deepWater = select(waterPigment(pixel),u.deepBase.rgb+grain*.95,u.deepBase.a>.5);
-            if (u.lowGrain < 1.0) { deepWater = select(waterMean(),u.deepBase.rgb,u.deepBase.a>.5) + grain; }
+            var deepWater = waterPigment(pixel);
+            if (u.lowGrain < 1.0) { deepWater = waterMean() + grain; }
             // One bed model: the shallows are the ground under the water, lit by the same sun, seen through
             // the water's tint (retail draws its shallows as lit terrain through a tint). Shallows see the same
             // shaded voxel rock, beds and crusts as the exposed coast; soft ground is the level ground.
@@ -2304,7 +2304,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             water = mix(absorbed, deepWater, deep);
             // Some worlds' water passes through a third colour; a straight
             // blend of the two textures lands on colours the art never uses.
-            if (u.waterMid.a > 0.0 && u.shallowBase.a < .5 && u.deepBase.a < .5) {
+            if (u.waterMid.a > 0.0 && u.shallowBase.a < .5) {
                 let toMid = smoothstep(u.shallowDepth, u.waterMid.a, colorDepth);
                 let toDeep = smoothstep(u.waterMid.a, u.deepDepth, colorDepth);
                 var mid = u.waterMid.rgb + (deepWater - waterMean()) * 0.9;

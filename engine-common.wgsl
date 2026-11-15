@@ -179,9 +179,7 @@ struct Uniforms {
     detail: f32,
     light: vec3f,
     // Draw (engine-frag.wgsl).
-    shallowColor: vec3f,
     riverBed: vec4f,       // riverfix: the braided bed's gravel colour (materials/<world>.json water.riverBedRGB), a = 1 when the world gives one
-    deepColor: vec3f,
     rockMean: vec3f,
     clay: i32,
     slopeMaterial: i32,
@@ -205,7 +203,6 @@ struct Uniforms {
     sandBase: vec4f,
     beachBase: vec4f,
     shallowBase: vec4f,
-    deepBase: vec4f,
     slopeTexMean: vec3f,
     rockTexMean: vec3f,
     beachTexMean: vec3f,

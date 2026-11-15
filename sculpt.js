@@ -5,7 +5,7 @@ import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
-import {copyMaterials,carriedMaterials,withWorldMaterials,worldMaterials,keepStrokeMaterials,materialsInUse,deleteMaterial} from './sculpt-materials.js';
+import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldPair,keepStrokeMaterials,materialsInUse,deleteMaterial,materialTint} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe} from './sculpt-rock-presets.js';
 import {KNOBS,LOW_GROUND_RGB,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
@@ -301,7 +301,7 @@ function updateControls() {
   { const riv=kind==='landform'&&isRiver(shapeOptions),node=nodes[selected],stale=riv&&Boolean(node?.params)&&(node.params.river?.sig===undefined||node.params.river.sig!==pointsSignature(node.points)),why='The path was edited by hand, so it is not migrated again: draw a new river to change its bends.';
     $('lf-wander-control').querySelector('.small').textContent=stale?why:riv?'How far, in px, the river may stray from the line you drew, at most four channel widths: its bends grow by the river\'s own rule until they fill that band, and travel downstream. 0 keeps the line as drawn; a braided river\'s whole bed strays the same way. A loop drawn closed is cut off and left as an oxbow lake. A new seed gives other bends.':SHAPE_FIELDS.find(f => f[0]==='wander')[8];
     $('lf-wander').disabled=stale;$('lf-wander').title=stale?why:''; }
-  $('lf-ground-control').hidden=!(kind==='landform'||kind==='paint'&&shapeValue('paintChannel')===26);
+  $('lf-ground-control').hidden=!(kind==='landform'||kind==='paint'&&shapeValue('paintChannel')===26); syncGroundChips(kind);
   $('section-preview-control').hidden=featureActive||kind!=='landform';
   if (!$('section-preview-control').hidden) drawSection();
   $('softness-value').textContent=$('softness').value+'%';
@@ -699,14 +699,37 @@ function syncMaterials() {
   renderer.setMaterials(new Map(used.map(m=>[m.slot,m]))); materialUseKey=key; worldChanged({stage:'C',world:false}); schedule();
 }
 function restoreMaterials(materials) {
-  mapMaterials=structuredClone(materials); nodes=keepStrokeMaterials(nodes,mapMaterials); syncMaterialChoices(); syncMaterials(); materialEditor?.refresh();
+  mapMaterials=structuredClone(materials); nodes=keepStrokeMaterials(nodes,mapMaterials); syncMaterialChoices(); syncMaterials(); materialEditor?.refresh(); keepWorldMaterials();
+}
+// The world's ground and water are world settings: where the artist changed them from the library's, the world keeps them (this
+// browser's world store) for every map drawn in it, as it keeps its sliders. Called once an edit is complete, not on every drag step.
+function keepWorldMaterials() {
+  const own=worldOwnMaterials(mapMaterials,config),stored=worlds[worldId]?.materials,next=mergeWorldMaterials(stored,own,config);
+  config.worldMaterials=own;
+  if (JSON.stringify(next)===JSON.stringify(stored??[])) return;
+  activeWorld().materials=next; saveWorlds();
 }
 // A stroke's Ground choice: the ground beneath, the world's ground, or another of the map's materials (not its water).
 function syncMaterialChoices() {
   const select=$('lf-ground'),value=select.value;
   select.replaceChildren(new Option('Ground beneath','-1'),new Option('World ground','0'),...mapMaterials.filter(m=>!m.worldGround&&!m.worldWater).map(m=>new Option(m.name,String(m.slot))));
   select.value=[...select.options].some(o=>o.value===value)?value:'-1';
+  syncGroundChips();
 }
+// The Ground choice as chips: each of the select's choices with its material's color, the chosen one pressed. The Paint brush has
+// nothing to paint with "Ground beneath", so it does not offer it.
+const MATERIAL_CHOICES=8;
+let groundChipKind='landform';
+function syncGroundChips(kind=groundChipKind) {
+  groundChipKind=kind; const select=$('lf-ground'),hex=m=>'#'+materialTint(m).map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');
+  for (let v=-1; v<MATERIAL_CHOICES; v++) {
+    const chip=$('lf-ground-chip-'+v),option=[...select.options].find(o=>o.value===String(v)),m=v===0?mapMaterials.find(m=>m.worldGround):mapMaterials.find(m=>m.slot===v);
+    chip.hidden=!option||(v===-1&&kind==='paint'); if (chip.hidden) continue;
+    chip.querySelector('.material-choice-name').textContent=option.textContent; chip.title=v===-1?'Leave the surface that is already there.':v===0?'The world’s ground: '+(m?.name??''):option.textContent;
+    chip.querySelector('.material-chip').style.background=v>=0&&m?hex(m):''; chip.setAttribute('aria-checked',String(select.value===String(v))); chip.disabled=select.disabled;
+  }
+}
+for (let v=-1; v<MATERIAL_CHOICES; v++) $('lf-ground-chip-'+v).onclick=()=>{ const select=$('lf-ground'); if (select.value===String(v)) return; select.value=String(v); select.dispatchEvent(new Event('input',{bubbles:true})); select.dispatchEvent(new Event('change',{bubbles:true})); syncGroundChips(); };
 function editMaterials(materials) {
   const used=materialsInUse(nodes,materials);renderer.setMaterials(new Map(used.map(m=>[m.slot,m])));
   mapMaterials=materials;materialUseKey=JSON.stringify(used);syncMaterialChoices();worldChanged({stage:'C',world:false});persistLater();schedule();
@@ -1217,7 +1240,7 @@ function flushEval() {
   evaluate(from,rect);
 }
 function checkpoint(mapOnly=false) {
-  flushEval();
+  flushEval(); keepWorldMaterials();
   history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),rocks:structuredClone(mapRocks),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); if (history.length>48) history.shift(); historyIndex=history.length-1;
   renderLayers(); updateControls(); persistLater();
 }
@@ -1328,7 +1351,7 @@ function scriptedScene(list,{ground=true,tools,materials}={}) {
   const nextMaterials=materials===undefined?mapMaterials:withWorldMaterials(materials,config);
   worldInputQueue.flush();
   if (tools!==undefined) restoreMapTools(copyMapTools(tools)??[],true);   // a scene's own tools (a scene's `tools`), which its strokes may name
-  mapMaterials=nextMaterials;syncMaterialChoices();materialEditor?.refresh();
+  mapMaterials=nextMaterials;syncMaterialChoices();materialEditor?.refresh();if(materials!==undefined)keepWorldMaterials();   // a scene's ground and water become the world's, as an edit's do
   applySeedControl(); refinementSeed=seed;
   cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); 
   nodes=[]; selected=-1;alsoSelected=[];
@@ -1420,7 +1443,7 @@ function loadSketch(s,carry=false) {
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
   syncDrawInputs();
   restoreColumn(column);syncColumnPanel();
-  mapMaterials=withWorldMaterials(carry?carriedMaterials(materials):materials,config);syncMaterialChoices();materialEditor?.refresh(); mapRocks=rocks??worldRocks(config); rockSelected=0; syncRockChoices(); syncRockPanel(); nodes=keepStrokeMaterials(keepStrokeRocks(next,mapRocks),mapMaterials); selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
+  mapMaterials=adoptWorldMaterials(materials,config);syncMaterialChoices();materialEditor?.refresh(); mapRocks=rocks??worldRocks(config); rockSelected=0; syncRockChoices(); syncRockPanel(); nodes=keepStrokeMaterials(keepStrokeRocks(next,mapRocks),mapMaterials); selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
   // The tools' cards still on a world's preset name their rock among this map's presets, now that the map's list is in.
   for (const id of ids) if (Object.hasOwn(config.worldShapes||{},toolSettings[id]?.preset)) toolSettings[id]=shapeCard(id,toolSettings[id].preset);
   showTool(toolSettings[tool]); updateControls();
@@ -1758,7 +1781,7 @@ function defaultColor(key) {
   const m=renderer.means,w=config.water||{},mat=config.material||{};
   const rgb=v => v&&v.map(x => x/255);
   const strata=columnColors(config.column,renderer.means.rock).map(rgb);
-  return {ground:m.ground,slope:m.slope,rock:m.rock,sand:m.rock&&m.rock.map(v => v+(1-v)*.3),beach:rgb(mat.beachRGB),shallow:rgb(w.shallowRGB),deep:rgb(w.deepRGB),
+  return {ground:m.ground,slope:m.slope,rock:m.rock,sand:m.rock&&m.rock.map(v => v+(1-v)*.3),beach:rgb(mat.beachRGB),shallow:rgb(w.shallowRGB),
     crystal:(config.material?.crystalRGB||[110,150,225]).map(v => v/255),low:rgb(LOW_GROUND_RGB),sun:[1,1,1],sky:[1,1,1],strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
 }
 function goToWorld(base,id,extra) {
@@ -1802,16 +1825,16 @@ function buildWorldPanel() {
     const name=$('world-new-name').value.trim(); if (!name) { $('world-new-name').focus(); status('Name the new world first.'); return; }
     const id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
     const knobs={...world.knobs}; for (const [,list] of KNOBS) for (const [key] of list) if (experiment.has(key)) knobs[key]=experiment.get(key);
-    worlds[id]={name,materials:structuredClone(mapMaterials),base:config.biomeId,colors:{...world.colors},knobs,featureSet:mapFeatures?.serialize().featureSet}; saveWorlds(); goToWorld(config.biomeId,id);
+    worlds[id]={name,materials:worldOwnMaterials(mapMaterials,config),base:config.biomeId,colors:{...world.colors},knobs,featureSet:mapFeatures?.serialize().featureSet}; saveWorlds(); goToWorld(config.biomeId,id);
   };
-  $('world-export').onclick=() => download(new Blob([JSON.stringify({format:'nanolathe-map-world',version:1,world:{...world,materials:structuredClone(mapMaterials),knobs:{...world.knobs},featureSet:mapFeatures?.serialize().featureSet}},null,1)],{type:'application/json'}),(world.name||'world').replace(/[^\w-]+/g,'_')+'.world.json');
+  $('world-export').onclick=() => download(new Blob([JSON.stringify({format:'nanolathe-map-world',version:1,world:{...world,materials:structuredClone(worldPair(mapMaterials)),knobs:{...world.knobs},featureSet:mapFeatures?.serialize().featureSet}},null,1)],{type:'application/json'}),(world.name||'world').replace(/[^\w-]+/g,'_')+'.world.json');
   $('world-import').onclick=() => $('world-file').click();
   $('world-file').onchange=async () => {
     try {
       const data=JSON.parse(await $('world-file').files[0].text()),w=data?.world;
       if (data?.format!=='nanolathe-map-world' || !w || typeof w.name!=='string' || !(w.base in (config.biomes||{}))) throw new Error('Not a world file for a world this server has.');
       const id=w.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
-      worlds[id]={name:w.name,materials:copyMaterials(w.materials)??undefined,base:w.base,featureSet:w.featureSet,colors:Object.fromEntries(Object.entries(w.colors||{}).filter(([,v]) => v===null || /^#[0-9a-f]{6}$/i.test(v))),knobs:Object.fromEntries(Object.entries(w.knobs||{}).map(([k,v]) => [k,String(v)]))};
+      worlds[id]={name:w.name,materials:worldPair(copyMaterials(w.materials)),base:w.base,featureSet:w.featureSet,colors:Object.fromEntries(Object.entries(w.colors||{}).filter(([,v]) => v===null || /^#[0-9a-f]{6}$/i.test(v))),knobs:Object.fromEntries(Object.entries(w.knobs||{}).map(([k,v]) => [k,String(v)]))};
       saveWorlds(); goToWorld(w.base,id);
     } catch (err) { error(err.message); }
   };
@@ -2161,7 +2184,7 @@ async function boot() {
     const embedded=copySavedWorld(pending?.worldSettings,config);
     loadWorlds();
     if(embedded){
-      worlds[savedWorldId(pending)]=embedded;saveWorlds();
+      { const id=savedWorldId(pending); worlds[id]={...embedded,materials:mergeWorldMaterials(worlds[id]?.materials,worldOwnMaterials(embedded.materials,config),config)}; } saveWorlds();   // the store keeps the two only where they differ from the library's
       for(const [key,value]of Object.entries(embedded.knobs))experiment.set(key,value);
     }
     // H12b: the editor always works on a map; an address without a size opens the default 4x4 one.
@@ -2185,7 +2208,8 @@ async function boot() {
     // Its remembered settings come before the biome's own defaults.
     worldId=experiment.has('world') && worlds[experiment.get('world')]?.base===config.biomeId?experiment.get('world'):config.biomeId;
     config.featureSet=worlds[worldId]?.featureSet;
-    config.worldMaterials=worlds[worldId]?.materials;   // a world of the user's own carries its materials; a built-in world names its two in the library
+    // The world's ground and water where the artist changed them (keepWorldMaterials); the rest are the library's.
+    config.worldMaterials=keptWorldMaterials(worlds[worldId]?.materials,config);
     config.presetDefaults={...config.defaults};
     const worldKnobs=worlds[worldId]?.knobs||{};
     config.defaults={...config.defaults,...worldKnobs};
