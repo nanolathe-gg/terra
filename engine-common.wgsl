@@ -1082,7 +1082,8 @@ fn voxelLattice(r:vec3f,size:f32)->vec3f {
     let variation=(voxelNoise(tilted/(size*3.7))-.5)*size*u.rock[rs & rockMask].faceScaleVary*2.5;
     return (tilted+warp*size*mix(.28,.12,u.rock[rs & rockMask].faceScaleVary)*(1.0-u.rock[rs & rockMask].faceRegular)+vec3f(variation,-variation*.7,variation*.5))/voxelBlockAxes(size);
 }
-fn voxelBlockSeed(cell:vec3f)->vec3f{return cell+(.12+.38*u.rock[rs & rockMask].faceRegular)+voxelRandom(cell)*(.76*(1.0-u.rock[rs & rockMask].faceRegular));}
+fn voxelRandomOnce(p:vec3f)->vec3f{let i=vec3i(floor(p));var n=(bitcast<u32>(i.x)*374761393u) ^ (bitcast<u32>(i.y)*668265263u) ^ (bitcast<u32>(i.z)*2246822519u);n=(n^(n>>13u))*1274126177u;n=n^(n>>16u);return vec3f(f32(n&2047u)/2047.0,f32((n>>11u)&2047u)/2047.0,f32(n>>22u)/1023.0);}
+fn voxelBlockSeed(cell:vec3f)->vec3f{return cell+(.12+.38*u.rock[rs & rockMask].faceRegular)+voxelRandomOnce(cell)*(.76*(1.0-u.rock[rs & rockMask].faceRegular));}
 // The cells of the two blocks nearest a point (voxelBlocks finds the same two), for a question asked of a whole block: voxelBlockMiddle.
 struct VoxelBlockPair {near:vec3f,next:vec3f}
 fn voxelBlockPair(r:vec3f,size:f32)->VoxelBlockPair {
