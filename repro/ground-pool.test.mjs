@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {groundPool} from '../sculpt-material-model.js';
 
-const WORLDS = ['green', 'red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice'];
+const WORLDS = ['green', 'red', 'archipelago', 'moon', 'zhon', 'lush', 'lava', 'desert', 'crystal', 'ice'];
 const table = world => JSON.parse(fs.readFileSync(new URL(`../materials/${world}.json`, import.meta.url)));
 
 test('every world table sets its ground pool period, a multiple of 512 px', () => {

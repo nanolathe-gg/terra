@@ -14,7 +14,7 @@ const root = new URL('..', import.meta.url).pathname, dir = mkdtempSync(join(tmp
 runSite(['--dump-configs', dir]);
 const files = readdirSync(join(dir, 'config')).filter(f => f !== 'catalog.json').sort();
 const configs = Object.fromEntries(files.map(f => [f.replace(/\.json$/, ''), JSON.parse(readFileSync(join(dir, 'config', f), 'utf8'))]));
-const WORLDS = ['green', 'red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice'];
+const WORLDS = ['green', 'red', 'archipelago', 'moon', 'zhon', 'lush', 'lava', 'desert', 'crystal', 'ice'];
 const ENTRIES = [...Object.keys(LANDFORM_SHAPES).filter(k => k !== 'landform'), 'landform', 'fissure', 'smooth', 'erase', 'paint', 'sand', 'grass', 'move'];
 test('every world defines valid library shapes and cards', async () => {
   const {shapeFrom} = await import('../sculpt-scene.js');

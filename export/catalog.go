@@ -54,6 +54,7 @@ var worldExamples = []struct {
 	{"desert", []string{"painted desert", "the desert triad"}},
 	{"crystal", []string{"crystal cracked", "crystal isles", "brilliant cut lake"}},
 	{"ice", []string{"ice scream", "icy bergs", "polar range"}},
+	{"lush", []string{"luschaven", "the bayou", "crossing two rivers"}},
 }
 
 type catalogMap struct {

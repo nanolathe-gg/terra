@@ -21,6 +21,10 @@
       "name": "Zhon"
     },
     {
+      "id": "lush",
+      "name": "Lush"
+    },
+    {
       "id": "lava",
       "name": "Lava"
     },
@@ -46,7 +50,8 @@
     "ice",
     "red",
     "crystal",
-    "archipelago"
+    "archipelago",
+    "lush"
   ],
   "featureFallback": "green",
   "sources": [
