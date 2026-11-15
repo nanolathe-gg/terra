@@ -1463,7 +1463,9 @@
         "shineRockSharp": 34,
         "shineRockRough": 0.5,
         "shineRockScale": 3,
-        "sunTilt": 0
+        "sunTilt": 0,
+        "bedCracks": 0.55,
+        "bedCrackSize": 42
       },
       "engineDefaults": {
         "erosion": 1,

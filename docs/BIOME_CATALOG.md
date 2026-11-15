@@ -115,6 +115,10 @@ The judge separated Red, Desert, Crystal and Archipelago in 5 of 6 pairs each, b
 confident picks were wrong. So these four still differ from retail in a consistent way a viewer can see; Green, Lava, Ice and Moon did not.
 One judge and six pairs a world is a small test: repeat it with more pairs or the owner's eye before treating a world as matched.
 
+Red after the Cracked bed (the same six pairs, a fresh judge): 4 of 6, but the judge answered B for every pair, so the result is a side
+bias and says nothing. On the windows, Cracked bed 0.55 at 42 px moved red-3's look gap from 0.99 to 0.88 and Red's mean from 0.49 to 0.44;
+closeness held at 50 of 75 (median distance 0.17 -> 0.16).
+
 ## Cross-biome gaps, ranked by how much of the retail set they cover
 
 | Gap | Biomes | Generic control that would close it | Status |
