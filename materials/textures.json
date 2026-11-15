@@ -369,7 +369,7 @@
    {"id":"chunk","type":"noise","name":"Lumpy chunks","params":{"size":11.0,"detail":0.3,"layers":0,"seed":5},"in":{"in":null},"x":0,"y":0,"kind":"cells"},
    {"id":"mix2","type":"combine","name":"Chunks into fibers","params":{"amount":0.2,"offset":0.5},"in":{"a":"mix","b":"chunk","mask":null},"x":0,"y":0,"kind":"add"},
    {"id":"lv","type":"levels","name":"Spread contrast","params":{"low":0.0,"high":1.0,"gamma":1,"invert":0},"in":{"in":"mix2"},"x":0,"y":0},
-   {"id":"col","type":"gradient","name":"Violet fibers","params":{"ease":0},"in":{"in":"lv"},"x":0,"y":0,"stops":[[0,0.144,0.1104,0.2016],[0.3,0.2688,0.192,0.3456],[0.6,0.3696,0.2784,0.4512],[0.85,0.4704,0.3744,0.5616],[1,0.6048,0.528,0.7008]]},
+   {"id":"col","type":"gradient","name":"Violet fibers","params":{"ease":0},"in":{"in":"lv"},"x":0,"y":0,"stops":[[0,0.14976,0.1104,0.2016],[0.3,0.27955199999999997,0.192,0.3456],[0.6,0.384384,0.2784,0.4512],[0.85,0.489216,0.3744,0.5616],[1,0.628992,0.528,0.7008]]},
    {"id":"grit","type":"noise","name":"Pixel grit","params":{"size":1,"detail":0,"layers":0,"seed":2},"in":{"in":null},"x":0,"y":0,"kind":"pixel"},
    {"id":"gritc","type":"gradient","name":"Grit tone","params":{"ease":0},"in":{"in":"grit"},"x":0,"y":0,"stops":[[0,0.9,0.9,0.9],[1,1.1,1.1,1.1]]},
    {"id":"tex","type":"combine","name":"Multiply grit","params":{"amount":1,"offset":0},"in":{"a":"col","b":"gritc","mask":null},"x":0,"y":0,"kind":"multiply"},
