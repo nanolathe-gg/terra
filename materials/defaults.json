@@ -155,6 +155,7 @@
     "groundEdge": 0,
     "fingerVary": 0,
     "riverDepth": 1,
+    "talusLumps": 0,
     "rimGaps": 0,
     "rimGapWidth": 0.3,
     "rimGapDepth": 200,

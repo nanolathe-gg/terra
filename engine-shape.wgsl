@@ -1362,6 +1362,11 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   if (u.gully > 0.0 && value > base) { value = landformGullies(value, pick.y, pk, psh, wx, wy, lx, ly, base, nA, nB, nC, x, y, i, cells); }
   if (u.bedN >= 1.0 && u.bedSoft > 0.0 && u.combine == 0u && value > base) { value = hardBeds(value, base, pick.x, pick.y, lx, ly); }
   var scree = 0.0;   // how far the talus covers the cell: loose ground takes no cracks
+  // Talus lumps: the apron breaks into hummocks (~20 px) and ragged rings along the foot, its height varied by up to the share given; 0 a smooth cone.
+  if (talus > 0.0 && u.talusLumps > 0.0) {
+    let hum = vnoise(wx / 19.0, wy / 19.0, u.seed ^ 0x7a1u) * 0.6 + vnoise(wx / 7.0, wy / 7.0, u.seed ^ 0x3b5u) * 0.4;
+    talus = max(0.0, talus * (1.0 + u.talusLumps * hum));
+  }
   if (talus > 0.0) { scree = sm(0.0, 8.0, base + talus - value); talusGround(i, scree); value = max(value, base + talus); claimRock(i); }
   if (u.combine == 0u) { value = max(base, value); } else if (u.combine == 1u) { value = min(base, value); }
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);

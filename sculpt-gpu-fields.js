@@ -135,6 +135,8 @@ const NODE_FIELDS = [
   ...['cfVary'].map(k => [k, 'f']),
   // Channel depth: a river channel's depth over a quarter of its width (1: as before).
   ...['lfRiverDepth'].map(k => [k, 'f']),
+  // Talus lumps: hummocky aprons (0: a smooth cone).
+  ...['talusLumps'].map(k => [k, 'f']),
   // lfcrater: an impact's groove: the along curve's value at its end (the groove's width is scaled by the curve over it); 0: none.
   ...['grooveEnd'].map(k => [k, 'f']),
   // lfimpact2: the buckled ground's height (Buckling x .3 of the relief; BK_AMP in engine-shape.wgsl scales it), apart from the ejecta's; 0: none.
@@ -460,7 +462,7 @@ export function prepareNode(n, geom, c) {
       gully: .45 * clamp(q.gullies || 0, 0, 1.5), gullySize: clamp(clamp(q.gullySize ?? .4, .1, 1) * Math.max(sd.front, sd.back), 16, 480) / frameScale,
       // P17 Talus: cones below the Gullies' chutes, as long as the reach (world px) at the repose of the world's talusAngle; only where Gullies cut and the stroke raises.
       lfVary: isRiver(q) ? 0 : clamp(q.wallVary || 0, 0, 1), bedN: clamp(Math.round(q.beds || 0), 0, 8), bedSoft: clamp(q.bedSoft ?? .6, 0, 1),
-      talusReach: talusOn(q) ? clamp(q.talus, 0, 400) : 0, talusTan: c.repose ?? .84, lfPeak: Math.round(q.spurCount) >= 1 && landformSigned(q) ? landformPeak(q) : 0,
+      talusReach: talusOn(q) ? clamp(q.talus, 0, 400) : 0, talusLumps: clamp(q.talusLumps || 0, 0, 1), talusTan: c.repose ?? .84, lfPeak: Math.round(q.spurCount) >= 1 && landformSigned(q) ? landformPeak(q) : 0,
       lfGround: Math.round(q.heightReference || 0) === 2 ? 1 : 0, lfSigned: landformSigned(q) ? 1 : 0,
       // Coast ramp: a stroke whose crest stands under the sea (a fixed or sea-level height) makes a coast; others keep their sections as drawn.
       lfCoast: Math.round(q.heightReference || 0) !== 2 && landformElevation(q, c.sea) < c.sea ? clamp(c.coastRamp ?? 1, 0, 1) : 1,
