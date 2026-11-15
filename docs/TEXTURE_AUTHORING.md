@@ -394,3 +394,32 @@ Validation: six focused recipe/layout unit tests passed; the scoped Desert
 browser check passed with exact Undo and zero terrain submissions while open.
 The small GPU check confirmed exact 512px color/height repeat and regional
 replay. Candidate/final renders reported no GPU errors. No full suite was run.
+
+
+### Desert highlight restraint
+
+After owner feedback that the inserts were slightly brighter and had too many
+highlights, compared eight small variants across two rounds. The saved revision
+uses a neutral three-stop grain multiplier (0.9, 1.005, 1.08), softening the bright
+end without uniformly darkening the material. A modest increase in dot hardness
+(0.45 to 0.52) and darker dot multiplier preserve sparse dark grains. The graph,
+orange/gray-beige patch branch, relief, palette, and dithering are unchanged.
+
+Measured on the 512px review samples, pixels above luminance 200 fall from 6.59%
+to 3.31% (retail 3.39%). The 95th-percentile luminance after a 0.85px Gaussian
+filter falls from 176.8 to 173.7 (retail 172.9). Mean RGB changes from
+169.4/144.5/121.9 to 168.8/143.8/121.4. These are review diagnostics, not a visual
+acceptance gate. By eye the larger inserts are less conspicuous, but fine-texture
+differences remain. No claim of indistinguishability or owner approval is made.
+
+The raw five-block swaps were also inspected on a second visually flat retail
+crop at (4608, 768), 768×768px, in the same Painted Desert map. The improvement
+in highlight balance carries across that crop by eye. Both sheets use direct
+pastes with no edge blending. Artifacts and candidate recipes are outside Git in
+`/private/tmp/desert-highlight-review/`. All world defaults and the four approved
+presets remain unchanged.
+
+Validation: two focused recipe/palette unit tests passed (about 62ms), all eight
+candidate renders and the saved-preset render reported no GPU errors, and the
+saved render matched the chosen candidate byte for byte. The small GPU check
+confirmed exact 512px color/height repeat and regional replay. No full suite ran.
