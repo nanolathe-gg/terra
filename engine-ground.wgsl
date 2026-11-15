@@ -38,16 +38,25 @@ fn graphCell(q:vec2f,n:f32,salt:f32)->GraphCell{
  }}
  return GraphCell(sqrt(md),edge,poolWrap(g+mb,n));
 }
-// Stretched lattice noise along one of eight directions; neighboring directions blend. Integer shears keep it periodic.
-fn waveAt(p:vec2f,size:f32,ratio:f32,axis:u32,salt:f32)->f32{
- let diagonal=(axis%2u)==1u;let n=max(vec2f(1),round(vec2f(graphPeriod)/(vec2f(size,size*ratio)*select(1.0,1.41421356,diagonal))));
- let v=graphPos(p);var point=v;switch(axis%4u){case 1u:{point=vec2f(v.x-v.y,v.x+v.y);}case 2u:{point=vec2f(v.y,-v.x);}case 3u:{point=vec2f(v.x+v.y,v.y-v.x);}default:{}}
+// Stretched lattice noise along a direction w (x right, y down; Direction d is the line (sin d, cos d)): the lattice is turned by the integer
+// matrix with rows (w.y, -w.x) and (w.x, w.y), so it still divides the repeat, and its cells are long along w. WAVE_DIRS holds the sixteen
+// directions of integer vectors up to 3 long a side between 0 and 180 degrees (WAVE_ANGLES); a Direction between two blends the two, 7 to 18
+// degrees apart. 0, 45, 90 and 135 are the four turns the node always had.
+const WAVE_DIRS=array<vec2f,17>(vec2f(0,1),vec2f(1,3),vec2f(1,2),vec2f(2,3),vec2f(1,1),vec2f(3,2),vec2f(2,1),vec2f(3,1),vec2f(-1,0),
+ vec2f(-3,1),vec2f(-2,1),vec2f(-3,2),vec2f(-1,1),vec2f(-2,3),vec2f(-1,2),vec2f(-1,3),vec2f(0,1));
+const WAVE_ANGLES=array<f32,17>(0.0,18.43495,26.56505,33.69007,45.0,56.30993,63.43495,71.56505,90.0,108.43495,116.56505,123.69007,135.0,146.30993,153.43495,161.56505,180.0);
+fn waveAt(p:vec2f,size:f32,ratio:f32,w:vec2f,salt:f32)->f32{
+ let len=length(w);let n=max(vec2f(1),round(vec2f(graphPeriod)/(vec2f(size,size*ratio)*len)));
+ let v=graphPos(p);let point=vec2f(w.y*v.x-w.x*v.y,w.x*v.x+w.y*v.y);
  let q=point/graphPeriod*n;let c=floor(q);let t=fract(q);let fade=t*t*t*(t*(t*6.0-15.0)+10.0);
  var values:array<f32,4>;for(var i=0u;i<4u;i++){let cell=c+vec2f(f32(i&1u),f32(i>>1u));values[i]=cellHash(cell-floor(cell/n)*n+salt).x;}
  return mix(mix(values[0],values[1],fade.x),mix(values[2],values[3],fade.x),fade.y);
 }
 fn waveBase(p:vec2f,size:f32,ratio:f32,direction:f32,salt:f32)->f32{
- let angle=direction/45.0;let a=u32(floor(angle));return mix(waveAt(p,size,ratio,a,salt),waveAt(p,size,ratio,a+1u,salt),fract(angle));
+ let d=direction-180.0*floor(direction/180.0);var i=0u;for(var k=1u;k<16u;k++){if(d>=WAVE_ANGLES[k]){i=k;}}
+ let f=(d-WAVE_ANGLES[i])/(WAVE_ANGLES[i+1u]-WAVE_ANGLES[i]);
+ if(f<=0.0){return waveAt(p,size,ratio,WAVE_DIRS[i],salt);}
+ return mix(waveAt(p,size,ratio,WAVE_DIRS[i],salt),waveAt(p,size,ratio,WAVE_DIRS[i+1u],salt),f);
 }
 // One noise type at one size, in 0 to 1. kind: 0 smooth, 1 gradient, 2 billow, 3 cells, 4 waves.
 fn noiseBasis(kind:i32,p:vec2f,size:f32,salt:f32,wave:vec3f)->f32{

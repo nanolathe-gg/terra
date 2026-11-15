@@ -50,7 +50,7 @@ Combine. Every pattern wraps at the 512-px repeat.
 
 | Node | Makes | Use |
 | --- | --- | --- |
-| Noise | gray | One algorithm a type: Smooth, Gradient, Billow, Cells, Waves (directional), Ridged, Pixel. Size in px, Fine detail, Broad layers, Seed. |
+| Noise | gray | One algorithm a type: Smooth, Gradient, Billow, Cells, Waves (directional: sixteen true directions from turns by small integer vectors, which keep the repeat; between two, a blend), Ridged, Pixel. Size in px, Fine detail, Broad layers, Seed. |
 | Scatter | gray | Round shapes on a jittered lattice: dots, pits, clods, glints. A Density input thins them where it is dark. |
 | Warp | coordinates | Bends what a Noise or Scatter reads: Turbulence or Curl flow. |
 | Levels | gray | Stretches between Low and High, with Gamma and Invert. Shows a histogram of its input. |
