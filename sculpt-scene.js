@@ -97,7 +97,7 @@ export const strokeKind=t => Object.hasOwn(LANDFORM_SHAPES,t)?'landform':t;
 // Line features (card C4): spurs and the crest's taper. All default off; spurs branch off a landform's crest (or a signed section's peak).
 export const RIDGE_KEYS=['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb','crestVary','crestTaper'];
 // Copies: smaller copies of the shape scattered round its path (a field of knolls, craterlets, boulders or islets from one stroke). Off at 0.
-export const SCATTER_KEYS=['scatterCount','scatterSpread','scatterSize','scatterVary','rimGaps','rimGapWidth','rimGapDepth'];
+export const SCATTER_KEYS=['scatterCount','scatterSpread','scatterSize','scatterVary','rimGaps','rimGapWidth','rimGapDepth','groundEdge'];
 // Placed fissures (card C4 stage 2): the Fissure tool and its options. Depth is
 // the stroke's own amount; the rest are shape options kept in the shape.
 export const FISSURE_KEYS=['fissureWidth','fissureJag','fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper','fissureNetwork','fissureCell','fissureCrack','fissureDark'];
@@ -179,6 +179,7 @@ export const SHAPE_FIELDS=[
   ['scatterSpread','scatter-spread','Copies\' spread (px)',['landform'],20,1200,10,1,'How far from the path the copies land: anywhere within this distance of a point on it.'],
   ['scatterSize','scatter-size','Copy size',['landform'],5,100,5,100,'A copy\'s typical size, width and height, as a share of the shape\'s own.'],
   ['scatterVary','scatter-vary','Copy size variation',['landform'],0,100,5,100,'How much the copies\' sizes differ: 0 all alike, 100 from almost nothing to twice the typical size.'],
+  ['groundEdge','ground-edge','Ground edge',['landform'],0,100,5,100,'How the material this stroke lays down (Ground) ends: 0 a clean edge; higher, over that share of the shape from its foot inward it breaks into scalloped lobes and specks, as a dark mare or a swamp fades into the plain.'],
   ['rimGaps','rim-gaps','Gaps',['landform'],0,12,1,1,'Breaks in what the shape raises: round a click (an atoll\'s or a crater\'s rim breaks into arcs) or along a drawn ridge, spaced evenly and moved a little by the shape\'s seed. A crater\'s bowl stays whole. 0: none.'],
   ['rimGapWidth','rim-gap-width','Gap width',['landform'],5,100,5,100,'A break\'s width as a share of the spacing between breaks.'],
   ['rimGapDepth','rim-gap-depth','Gap depth (units)',['landform'],1,300,1,1,'How far a break lowers the raised ground, at most down to the ground the shape stands on: a little for a notch, a lot to cut the ring through.'],

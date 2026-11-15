@@ -194,9 +194,9 @@ fn leanToward(ddx: f32, ddy: f32, sx: f32, sy: f32, span2: f32) -> f32 {
 }
 
 // H9: a landform's or water stroke's mask writes, once the node is settled: plane, target, gain, flat per write (maskSetup/paintCell of sculpt.js).
-fn shapeMasks(i: u32, f: f32) {
+fn shapeMasks(i: u32, f: f32, groundCut: bool) {
   for (var m = 0u; m < u.nwrites; m++) {
-    let mw = MW[u.mwBase + m]; let pl = u32(mw.x); let b = f32(maskGet(i, pl));
+    let mw = MW[u.mwBase + m]; let pl = u32(mw.x); if (groundCut && pl == 21u) { continue; } let b = f32(maskGet(i, pl));
     var k = f * mw.z; if (mw.w != 0.0) { k = 1.0; }
     maskSet(i, pl, i32(floor(b + (mw.y - b) * k + 0.5)));
   }
@@ -1381,7 +1381,10 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   F[PR * cells + i] = max(F[PR * cells + i] * (1.0 - inf), route);
   F[PP * cells + i] = max(max(F[PP * cells + i] * (1.0 - inf), sm(0.65, 0.95, inf)), u.lfRoute * sm(0.55, 0.92, pick.y));
   if (inf <= 0.0) { return; }
-  if (u.nwrites > 0u) { shapeMasks(i, inf); }
+  // Ground edge: over the outer part of the section the stroke lays its ground material only where a scalloped noise lets it, so the material's
+  // edge breaks into lobes and specks instead of a line (0: everywhere the stroke moves the height).
+  let groundCut = u.lfGroundEdge > 0.0 && pick.y < u.lfGroundEdge * clamp(0.5 + 0.38 * vnoise(wx / 46.0, wy / 46.0, u.seed ^ 0x3e1du) + 0.2 * vnoise(wx / 7.0, wy / 7.0, u.seed ^ 0x77a1u), 0.02, 1.0);
+  if (u.nwrites > 0u) { shapeMasks(i, inf, groundCut); }
   if (u.crackAmt > 0.0) { F[PC * cells + i] = max(F[PC * cells + i], min(1.0, inf * 1.6) * u.crackAmt * (1.0 - scree)); }
 }
 

@@ -1238,7 +1238,7 @@
 
   "shapes": {
    "craterField": {"from": "crater", "diameter": 110, "elevation": -14, "secondaries": 0, "ejecta": 20, "buckling": 0, "wander": 6, "heightVary": 1, "scatterCount": 14, "scatterSpread": 300, "scatterSize": 45, "scatterVary": 60},
-   "mare": {"from": "plateau", "diameter": 900, "elevation": 4, "gullies": 0, "talus": 0, "cracks": 0, "wander": 60, "widthVary": 40, "varySize": 300, "heightVary": 0, "terraces": 0},
+   "mare": {"from": "hill", "diameter": 900, "elevation": 4, "gullies": 0, "talus": 0, "cracks": 0, "wander": 60, "widthVary": 40, "varySize": 300, "heightVary": 0, "groundEdge": 35},
    "flowLobe": {"from": "hill", "diameter": 300, "elevation": 24, "lean": 100, "cracks": 10, "wander": 40, "widthVary": 20, "heightVary": 3, "varySize": 100, "terraces": 5, "ledge": 30, "terraceJitter": 50},
    "wrinkleRidge": {"from": "mountain", "diameter": 40, "elevation": 16, "wander": 6, "widthVary": 40, "heightVary": 4, "varySize": 60, "gullies": 0, "talus": 0, "crestTaper": 60},
    "lobedMesa": {"from": "plateau", "diameter": 100, "elevation": 11, "gullies": 0, "talus": 0, "wander": 18, "widthVary": 30, "heightVary": 2, "varySize": 100, "cracks": 20, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.08, 0.4], [0.16, 0.95], [0.22, 1], [0.32, 0.72], [1, 0.65]]}},
