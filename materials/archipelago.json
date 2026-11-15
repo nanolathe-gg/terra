@@ -2031,7 +2031,7 @@
    "rockMound": {"from": "hill", "diameter": 480, "elevation": 112, "gullies": 35, "gullySize": 70, "talus": 0, "wander": 40, "varySize": 100, "widthVary": 15, "heightVary": 12, "cracks": 20, "styleVegetation": -70, "curve": {"form": "lfHill", "knots": [[0, 0], [0.2, 0.15], [0.4, 0.45], [0.6, 0.75], [0.8, 0.93], [1, 1]], "back": [[0, 0], [0.2, 0.15], [0.4, 0.45], [0.6, 0.75], [0.8, 0.93], [1, 1]]}},
    "atoll": {"from": "hill", "heightReference": 1, "elevation": 3, "combine": 0, "wander": 25, "gullies": 0, "cracks": 0, "widthVary": 20, "varySize": 90, "diameter": 480, "heightVary": 10, "rimGaps": 7, "rimGapWidth": 40, "rimGapDepth": 6, "curve": {"form": "lfHill", "knots": [[0, 0], [0.05, 0.75], [0.1, 1], [0.26, 1], [0.32, 0.6], [0.38, 0], [1, 0]]}},
    "shoal": {"from": "shallow", "heightReference": 1, "elevation": -25, "combine": 0, "diameter": 120, "wander": 14, "varySize": 120, "crestTaper": 60},
-   "sandbar": {"from": "shallow", "heightReference": 1, "elevation": 2, "combine": 0, "diameter": 200, "wander": 14, "varySize": 120, "wallVary": 0, "widthVary": 30, "crestTaper": 100, "curve": {"form": "lfShelf", "knots": [[0, 0], [0.12, 0.62], [0.3, 0.7], [0.42, 1], [1, 1]]}},
+   "sandbar": {"from": "shallow", "heightReference": 1, "elevation": 2, "combine": 0, "diameter": 200, "wander": 14, "varySize": 120, "wallVary": 0, "widthVary": 30, "crestTaper": 100, "curve": {"form": "lfShelf", "knots": [[0, 0], [0.05, 0.68], [0.16, 0.72], [0.26, 1], [1, 1]]}},
    "plateau": {},
    "hill": {"diameter": 300, "elevation": 28, "wander": 40, "varySize": 80, "widthVary": 20, "heightVary": 8, "cracks": 0},
    "mountain": {},
@@ -2046,7 +2046,7 @@
    "river": {},
    "braided": {},
    "landform": {},
-   "island": {"from": "shallow", "heightReference": 1, "elevation": 2, "diameter": 460, "wander": 60, "widthVary": 30, "combine": 0, "varySize": 140, "wallVary": 60, "fingers": 0, "curve": {"form": "lfShelf", "knots": [[0, 0], [0.12, 0.62], [0.3, 0.7], [0.42, 1], [1, 1]]}},
+   "island": {"from": "shallow", "heightReference": 1, "elevation": 2, "diameter": 460, "wander": 60, "widthVary": 30, "combine": 0, "varySize": 140, "wallVary": 60, "fingers": 0, "curve": {"form": "lfShelf", "knots": [[0, 0], [0.05, 0.68], [0.16, 0.72], [0.26, 1], [1, 1]]}},
    "reef": {"from": "shallow", "combine": 0, "elevation": -9, "diameter": 220, "wander": 30}
   },
   "tools": [
