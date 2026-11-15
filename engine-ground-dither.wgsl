@@ -1,26 +1,31 @@
 // Reducing a material's cached color: its mean, and its game-palette colors by error diffusion over the whole repeat.
 // The diffusion runs in 128-row wavefronts. The
 // dependency order x+2*y puts left and all previous-row inputs before a pixel.
+// The repeat wraps, so the diffusion first runs over the repeat's last WARM columns (and, in a warm-up dispatch, its last rows) without
+// writing them: its first column and row then carry the error a pixel inside the repeat would, and no band of fresh, error-free
+// diffusion shows along the repeat's edges.
 // Each invocation writes only its own error; barriers make the next wave see it.
 /*COMMON*/
 @group(1) @binding(0) var pigmentOut:texture_storage_2d_array<rgba8unorm,write>;
 @group(1) @binding(1) var<storage,read_write> errors:array<vec4f>;
-@group(1) @binding(2) var<uniform> job:vec4u; // slot, layer, first row, row count
+@group(1) @binding(2) var<uniform> job:vec4u; // slot, layer, first row, row count (+ WARM_ROWS_FLAG: a warm-up dispatch that writes no pixels)
+const WARM=64u;
+const WARM_ROWS_FLAG=0x10000u;
 var<workgroup> metrics:array<vec3f,32>;
 fn diffusionMetric(v:vec3f,gamma:f32)->vec3f {return pow(clamp(v/255.0,vec3f(0),vec3f(1)),vec3f(gamma));}
 @compute @workgroup_size(128)
 fn diffuseMaterial(@builtin(local_invocation_index) lane:u32){
- let r=u.ground[job.x & groundMask];let width=textureDimensions(pigmentOut).x;let stride=width+2u;let rows=min(job.w,width-job.z);
+ let r=u.ground[job.x & groundMask];let width=textureDimensions(pigmentOut).x;let stride=width+WARM+2u;let rows=min(job.w & 0xffffu,width-job.z);let store=(job.w & WARM_ROWS_FLAG)==0u;
  let weights=r.weights.rgb;
  let right=mix(7.0/16.0,9.0/17.0,r.spread);let left=mix(3.0/16.0,2.0/17.0,r.spread);
  let down=mix(5.0/16.0,6.0/17.0,r.spread);let diag=mix(1.0/16.0,0.0,r.spread);
  if(lane<u32(r.paletteCount)){metrics[lane]=diffusionMetric(r.palette[lane].rgb*255.0,r.tone);}
  workgroupBarrier();
- for(var wave=0u;wave<width+2u*(rows-1u);wave++){
-  let x=i32(wave)-2*i32(lane);
-  if(lane<rows&&x>=0&&x<i32(width)){
-   let at=(lane+1u)*stride+u32(x)+1u;let prev=at-stride;
-   let p=vec2u(u32(x),job.z+lane);
+ for(var wave=0u;wave<width+WARM+2u*(rows-1u);wave++){
+  let x=i32(wave)-2*i32(lane)-i32(WARM);
+  if(lane<rows&&x>=-i32(WARM)&&x<i32(width)){
+   let at=(lane+1u)*stride+u32(x+i32(WARM))+1u;let prev=at-stride;
+   let p=vec2u(u32(x+i32(width)) % width,job.z+lane);
    let raw=round(clamp(materialRaw(vec2f(p),job.x),vec3f(0),vec3f(1))*255.0);
    let value=raw+(((errors[prev-1u].rgb*diag+errors[prev].rgb*down)+errors[prev+1u].rgb*left)+errors[at-1u].rgb*right);
    let metric=diffusionMetric(value,r.tone);var best=r.palette[0].rgb;var distance=1e20;
@@ -29,7 +34,7 @@ fn diffuseMaterial(@builtin(local_invocation_index) lane:u32){
     if(d<distance){distance=d;best=r.palette[k].rgb;}
    }
    errors[at]=vec4f(value-best*255.0,0);
-   textureStore(pigmentOut,vec2i(p),i32(job.y),vec4f(best,1));
+   if(store&&x>=0){textureStore(pigmentOut,vec2i(p),i32(job.y),vec4f(best,1));}
   }
   storageBarrier();
  }

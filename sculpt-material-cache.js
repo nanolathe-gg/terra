@@ -111,11 +111,13 @@ export class MaterialCache {
       let error = null;
       if (reduces) {
         const pipeline = stage('diffuseMaterial');
-        error = device.createBuffer({label: 'material error rows', size: (pool + 2) * 129 * 16, usage: GPUBufferUsage.STORAGE});
+        // engine-ground-dither.wgsl: rows of the pool plus its WARM (64) wrapped columns and two borders. The first dispatch runs the repeat's
+        // last 64 rows without writing (WARM_ROWS_FLAG), so row 0 starts with the error the repeat's last row leaves.
+        error = device.createBuffer({label: 'material error rows', size: (pool + 64 + 2) * 129 * 16, usage: GPUBufferUsage.STORAGE});
         const common = device.createBindGroup({layout: pipeline.getBindGroupLayout(0), entries: [{binding: 0, resource: {buffer: r.uniformBuffer}}, {binding: 13, resource: fields}]});
-        for (let row = 0; row < pool; row += 128) {
+        for (const [row, count] of [[pool - 64, 64 | 0x10000], ...Array.from({length: Math.ceil(pool / 128)}, (_, k) => [k * 128, 128])]) {
           const pass = encoder.beginComputePass(); pass.setPipeline(pipeline); pass.setBindGroup(0, common);
-          pass.setBindGroup(1, device.createBindGroup({layout: pipeline.getBindGroupLayout(1), entries: [{binding: 0, resource: this.colorTexture.createView({dimension: '2d-array'})}, {binding: 1, resource: {buffer: error}}, {binding: 2, resource: {buffer: job([e.slot, e.layer, row, 128])}}]}));
+          pass.setBindGroup(1, device.createBindGroup({layout: pipeline.getBindGroupLayout(1), entries: [{binding: 0, resource: this.colorTexture.createView({dimension: '2d-array'})}, {binding: 1, resource: {buffer: error}}, {binding: 2, resource: {buffer: job([e.slot, e.layer, row, count])}}]}));
           pass.dispatchWorkgroups(1); pass.end();
         }
       }
