@@ -1444,12 +1444,38 @@ export function createPagedFields(opts) {
     for (const fn of submitListeners) fn(event);
     return event;
   }
-  // The gesture is over: the stale pages' region (for the canvas to rebake), and the deferred reads.
+  // The gesture is over: the stale pages' region (for the canvas to rebake), and the deferred reads. The stale pages' Time pass starts now
+  // (pumpWeather), not when a tile first asks for its page.
   function settle() {
     const out = pendingStale; pendingStale = null;
     for (const pg of pagesMap.values()) if (pg.target && !pg.cpu) wantCpu(pg);
     for (const pg of pagesMap.values()) if (pg.target && pg.cpuRev !== pg.rev) wantCpu(pg);
+    if (time) pumpWeather();
     return out;
+  }
+  // After an edit, the stale pages' Time pass runs ahead of the tiles that read them, the page nearest the view first, one page at a time:
+  // the job a tile's prepareRect would start (ensureWeather), so the result is the same, but the tiles of pages already done draw meanwhile,
+  // and a tile that needs another page waits behind only the running one. It starts a page only when no Time pass runs, so two passes never
+  // split the queue. A held gesture stops it; the next settle starts it again.
+  let weatherPumping = false;
+  async function pumpWeather() {
+    if (weatherPumping) return; weatherPumping = true;
+    try {
+      while (time && !gesture()) {
+        let best = null, bd = Infinity;
+        for (const pg of pagesMap.values()) {
+          if (!pg.stale || !pg.weather || pg.weatherJob) continue;
+          const d = focus ? Math.hypot(pg.x0 + CORE / 2 - focus.x, pg.y0 + CORE / 2 - focus.y) : 0;
+          if (d < bd) { bd = d; best = pg; }
+        }
+        if (!best) break;
+        await time.quiet?.(); if (!time || gesture() || !best.stale || best.weatherJob) continue;   // after any running pass (the preview's own, a page a tile asked for)
+        best.pins++;
+        try { await ensureWeather(best); } finally { unpin(best); }
+        await new Promise(r => setTimeout(r, 0));
+      }
+    } catch (err) { fail(err); }
+    finally { weatherPumping = false; trim(); }
   }
 
   const stats = () => {

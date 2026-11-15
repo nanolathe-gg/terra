@@ -46,6 +46,9 @@ export class GpuErosion {
     });
   }
 
+  // Resolves when no Time pass is running (the paged fields start a page's pass in the background only then).
+  quiet() { return this.running ? new Promise(r => (this.quietWaiters ??= []).push(r)) : Promise.resolve(); }
+
   // H5: the maps pass (engine-weather.wgsl) on the erosion's own device and common source, built on first use.
   async mapsPipeline() {
     if (this.maps) return this.maps;
@@ -67,6 +70,7 @@ export class GpuErosion {
   async runGpu(request) {
     const owned=[],keep=new Set();let complete=false;
     const current=()=>{if(request.stale?.())throw new DOMException('The Time request was superseded.','AbortError');};
+    this.running=(this.running||0)+1;
     try {
       current();await this.ready;current();
       window.erodeRuns=(window.erodeRuns||0)+1;
@@ -177,6 +181,7 @@ export class GpuErosion {
       return {weather,maps,grid,bytes:n*20,milliseconds:performance.now()-started,parts:{...parts,tiles:null,activeTiles:active,windowTiles:tw*tw,gpuFed:true}};
     } finally {
       for(const b of owned)if(!complete||!keep.has(b))b.destroy();
+      if(!--this.running&&this.quietWaiters?.length){const w=this.quietWaiters;this.quietWaiters=[];w.forEach(r=>r());}
     }
   }
 
