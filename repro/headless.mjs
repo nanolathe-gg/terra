@@ -130,7 +130,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const seed = engine.DEFAULT_SEED, refinementSeed = seed;
   let nodes = [];
   const context = () => engine.shapeContext({config, settings, seed, talusAngle: renderer.variantNumber('talusAngle', 40), minH, maxH});
-  const gpuMB = Math.min(4096, Math.max(128, Number(settings.get('gpuMB')) || 512));
+  const gpuMB = Math.min(16384, Math.max(128, Number(settings.get('gpuMB')) || 512));   // sculpt-memory.js TERRAIN_BUDGET_MAX
   const common = {worldSize, worldGrid, baseHeight: config.baseHeight, maskKeys: engine.MASK_KEYS, nodes: () => nodes, device: () => renderer.device, context, gesture: () => false};
   const paged = worldGrid > 1168 || settings.get('gpuPages') === 'force';
   const fields = paged

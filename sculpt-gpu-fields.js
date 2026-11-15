@@ -1067,7 +1067,7 @@ export function createPagedFields(opts) {
   const PAGE_CELL = 4 * PLANES + 28;   // a shape page's bytes a cell: the float planes and the packed masks
   let RING = 4, SIDE = CORE + 2 * RING, SHAPE_BYTES = SIDE * SIDE * PAGE_CELL;
   const WEATHER_BYTES = CORE * CORE * 20, CPU_PAGES = 16;
-  // Page caps: 9 shape pages and 24 weather pages when the GPU budget allows; fewer (never under the 6 a chunk's feed gathers at once) when it does not.
+  // Page caps (fitCaps): as many as the GPU budget's room holds, never under the 6 a chunk's feed gathers at once.
   let SHAPE_PAGES = 9, WEATHER_PAGES = 24;
   const shapeBudget = () => opts.shapeBudget ?? SHAPE_PAGES * SHAPE_BYTES, weatherBudget = () => opts.weatherBudget ?? WEATHER_PAGES * WEATHER_BYTES;   // H13: a function like shapeBudget, so a refit's page cap holds (it was read once, at 24 pages)
   const listeners = new Set(), submitListeners = new Set(), pagesMap = new Map();
@@ -1152,10 +1152,12 @@ export function createPagedFields(opts) {
   const residentSet = ring => FEED_PAGES * (CORE + 2 * ring) ** 2 * PAGE_CELL + FEED_PAGES * PAGE_FIELD + STAGING_BYTES + engineEstimate(ring);
   // Time results first (a page's Time pass costs far more than evaluating its shape), then as many shape pages as the rest holds: after an edit a
   // view's tiles gather from 20-odd pages, and a cap of 9 had them evict each other tile after tile (24 pages evaluated 144 times in one settle).
+  // At most 24 weather and 64 shape pages for each 2 GiB of the budget: at the default 2 GiB the pages hold about 1.2 GB (the smallest ring) and the rest of the room
+  // stays with the renderer's caches, and a larger budget keeps proportionally more pages resident (96 and 256 at 8 GiB).
   function fitCaps() {
-    const room = 0.92 * available(true) - STAGING_BYTES - engineEstimate(RING);
-    WEATHER_PAGES = clamp(Math.floor(0.4 * room / PAGE_FIELD), FEED_PAGES, 24);
-    SHAPE_PAGES = clamp(Math.floor((room - WEATHER_PAGES * PAGE_FIELD) / SHAPE_BYTES), FEED_PAGES, 64);
+    const room = 0.92 * available(true) - STAGING_BYTES - engineEstimate(RING), per = Math.max(1, (opts.budget?.()?.total || 0) / 2 ** 31);
+    WEATHER_PAGES = clamp(Math.floor(0.4 * room / PAGE_FIELD), FEED_PAGES, Math.round(24 * per));
+    SHAPE_PAGES = clamp(Math.floor((room - WEATHER_PAGES * PAGE_FIELD) / SHAPE_BYTES), FEED_PAGES, Math.round(64 * per));
     if (!(room > 0)) SHAPE_PAGES = WEATHER_PAGES = FEED_PAGES;
   }
   function setRing(need) {
