@@ -14,7 +14,10 @@ export const THUMB = 64, THUMB_STRIDE = 2;
 const P = (key, label, min, max, value, step = 0) => ({key, label, min, max, value, step});
 const SEED = P('seed', 'Seed', 0, 999, 0, 1);
 const NOISE = [P('size', 'Size (px)', 1, 256, 8), P('detail', 'Fine detail', 0, 1, 0), P('layers', 'Broad layers', 0, 5, 0), SEED];
+// Cells, Cracks and Facets read one lattice of scattered points; Jitter is how far each point strays from its cell's middle (0 a square grid).
+const CELLS = [...NOISE, P('jitter', 'Jitter', 0, 1, .8)];
 const NOISE_KIND = {
+  cells: CELLS, cracks: CELLS, facets: CELLS,
   waves: [...NOISE, P('length', 'Length (px)', 1, 256, 24), P('direction', 'Direction (°)', 0, 180, 45), P('crests', 'Crests', 0, 1, 0)],
   ridged: [P('size', 'Size (px)', 2, 256, 16), P('layers', 'Detail layers', 0, 5, 2), P('roughness', 'Detail strength', 0, 1, .5), P('sharpness', 'Sharpness', .25, 4, 1.5), SEED],
   pixel: [SEED],
@@ -26,9 +29,9 @@ export const NODES = {
     params: () => [P('amount', 'Amount (px)', 0, 24, 2), P('size', 'Size (px)', 1, 128, 10), P('layers', 'Broad layers', 0, 4, 0), P('axis', 'Axis balance', -1, 1, 0), SEED],
     help: 'Bends the coordinates a Noise or Scatter node reads, so its shapes lose their regular outlines.'},
   noise: {code: 2, label: 'Noise', out: 'gray', inputs: [['in', 'Coordinates', 'coords']],
-    kinds: {smooth: 'Smooth', gradient: 'Gradient', billow: 'Billow', cells: 'Cells', waves: 'Waves', ridged: 'Ridged', pixel: 'Pixel'},
+    kinds: {smooth: 'Smooth', gradient: 'Gradient', billow: 'Billow', cells: 'Cells', cracks: 'Cracks', facets: 'Facets', waves: 'Waves', ridged: 'Ridged', pixel: 'Pixel'},
     params: kind => NOISE_KIND[kind] ?? NOISE,
-    help: 'A gray pattern. Color, height and masks can all read the same one.'},
+    help: 'A gray pattern. Color, height and masks can all read the same one. Cells is bright in each cell’s middle, Cracks is the distance to the nearest cell border (dark on the crack) and Facets gives each cell one flat value.'},
   scatter: {code: 3, label: 'Scatter', out: 'gray', inputs: [['in', 'Coordinates', 'coords'], ['density', 'Density', 'gray']],
     params: () => [P('spacing', 'Spacing (px)', 2, 64, 6), P('radius', 'Radius (px)', .25, 16, 2), P('coverage', 'Coverage', 0, 1, .5), P('jitter', 'Jitter', 0, 1.8, 1.5),
       P('hardness', 'Hardness', 0, .95, .1), P('profile', 'Profile', .25, 4, 1), P('sizeVariation', 'Size variation', 0, 1, .5), P('toneVariation', 'Tone variation', 0, 1, .3),
@@ -247,13 +250,13 @@ export function programSource(program, thumbnails = false) {
     }
   };
   // Noise kinds share nNoise and tell it which by the instruction's third code, so the index must be the shader's (0 smooth, 1 gradient,
-  // 2 billow, 3 cells, 4 waves): the order of NODES.noise.kinds.
+  // 2 billow, 3 cells, 4 cracks, 5 facets, 6 waves): the order of NODES.noise.kinds.
   const lines = indices => indices.map(i => `let s${i}=node(${i}u);let v${i}=${call(i, 'point')};`).join('\n');
   const closure = i => { const seen = new Set(), visit = k => { if (k < 0 || seen.has(k)) return; seen.add(k); list[k].links.forEach(visit); }; visit(i); return [...seen].sort((a, b) => a - b); };
   const taps = list.map((n, i) => ['light', 'cavity'].includes(n.type) && n.code[1] && n.links[0] >= 0 ? `fn tap${i}(point:vec2f)->f32{\n${lines(closure(n.links[0]))}\nreturn v${n.links[0]}.x;\n}` : '').filter(Boolean).join('\n');
   const all = lines(list.map((_, i) => i)), out = list.findIndex(n => n.type === 'output'), o = list[out].links;
   if (thumbnails) {
-    const store = list.map((n, i) => n.type === 'output' ? '' : `textureStore(thumbOut,vec2i(id.xy),${i},vec4f(${n.out === 'coords' ? `vec3f(noiseBasis(3,v${i}.xy,24.0,379.0,vec3f(0)))` : n.out === 'color' ? `v${i}.rgb` : `vec3f(v${i}.x)`},1));`).join('\n');
+    const store = list.map((n, i) => n.type === 'output' ? '' : `textureStore(thumbOut,vec2i(id.xy),${i},vec4f(${n.out === 'coords' ? `vec3f(noiseBasis(3,v${i}.xy,24.0,379.0,vec3f(.8,0,0)))` : n.out === 'color' ? `v${i}.rgb` : `vec3f(v${i}.x)`},1));`).join('\n');
     return {taps, main: `@group(1) @binding(0) var thumbOut:texture_storage_2d_array<rgba8unorm,write>;
 @group(1) @binding(1) var<uniform> groundJob:vec4u;
 @compute @workgroup_size(8,8)
