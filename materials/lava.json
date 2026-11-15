@@ -1277,7 +1277,7 @@
    "valleyT": {},
    "crater": {},
    "crystal": {},
-   "deep": {"diameter": 264, "wander": 60, "stepReference": 1, "terraces": 3, "ledge": 30, "terraceJitter": 80, "layerJag": 12, "widthVary": 50},
+   "deep": {"diameter": 264, "wander": 60, "stepReference": 1, "terraces": 3, "ledge": 30, "terraceJitter": 80, "layerJag": 12, "widthVary": 50, "fingers": 130, "fingerSize": 160, "fingerVary": 85, "fingerInlet": 85},
    "shallow": {"diameter": 264, "wander": 60, "stepReference": 1, "terraces": 3, "ledge": 30, "terraceJitter": 80, "layerJag": 12, "widthVary": 50},
    "river": {},
    "braided": {},
