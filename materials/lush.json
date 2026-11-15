@@ -1738,8 +1738,8 @@
   "rockFeather": 0.43,
   "rockCurvature": 0.28,
   "wetBand": 13,
-  "shallowDepth": 24,
-  "deepDepth": 60,
+  "shallowDepth": 4,
+  "deepDepth": 28,
   "grassDetail": 1.0,
   "rockDetail": 1.0,
   "waterDetail": 1.0,
@@ -1759,31 +1759,11 @@
  },
  "water": {
   "riverBedRGB": [108, 100, 87],
-  "shallowRGB": [
-   96,
-   138,
-   252
-  ],
-  "deepRGB": [
-   38,
-   76,
-   226
-  ],
-  "shallowMeanRGB": [
-   72.73431396484375,
-   112.0411376953125,
-   240.67425537109375
-  ],
-  "meanRGB": [
-   38.5101318359375,
-   76.08489990234375,
-   225.5614013671875
-  ],
-  "mean": [
-   0.15102012484681374,
-   0.29837215647977944,
-   0.8845545151654411
-  ],
+  "shallowRGB": [32, 88, 128],
+  "deepRGB": [12, 51, 88],
+  "shallowMeanRGB": [28, 80, 116],
+  "meanRGB": [12, 51, 88],
+  "mean": [0.047, 0.2, 0.345],
   "grainRGB": [
    1.0,
    1.0,

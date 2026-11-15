@@ -1491,7 +1491,7 @@
   "groundPool": 1024,
   "midDepth": 50,
   "shallowDepth": 22,
-  "deepDepth": 72,
+  "deepDepth": 56,
   "rockSlope": 0.96,
   "rockFeather": 0.48,
   "rockCurvature": 0.28,
