@@ -1160,7 +1160,109 @@
         "erosionEnvelope": 0.12
       },
 
+  "rock": {
+
+   "presets": [
+
+    "dome",
+
+    "crumpled"
+
+   ],
+
+   "recipes": {
+
+    "dome": {
+
+     "label": "Dark dome rock",
+
+     "knobs": {
+
+      "faceRindTone": -0.5,
+
+      "faceShade": 1,
+
+      "faceRound": 0.8,
+
+      "faceWhole": 0.3,
+
+      "faceBlock": 1.5,
+
+      "faceBlockSize": 30,
+
+      "rockFaceFrom": 0.35,
+
+      "faceMass": 2,
+
+      "debrisAmount": 0.5,
+
+      "faceRindDepth": 12,
+
+      "faceScratch": 0.2,
+
+      "faceGrit": 0.5
+
+     },
+
+     "colors": {
+
+      "rock": "#3b3323"
+
+     }
+
+    },
+
+    "crumpled": {
+
+     "label": "Crumpled flow rock",
+
+     "knobs": {
+
+      "faceCrease": 3,
+
+      "faceCreaseSize": 12,
+
+      "faceFold": 20,
+
+      "faceRun": 150,
+
+      "faceSpall": 1.5,
+
+      "faceGrit": 1,
+
+      "faceWear": 0.4,
+
+      "rockFaceFrom": 0.3,
+
+      "faceRindTone": 0.15,
+
+      "faceBlock": 4,
+
+      "faceBlockSize": 22
+
+     },
+
+     "colors": {
+
+      "rock": "#534333"
+
+     }
+
+    }
+
+   }
+
+  },
+
   "shapes": {
+   "smoothPool": {"from": "deep", "stepReference": 0, "terraces": 4, "ledge": 60, "terraceJitter": 40, "layerJag": 0, "wander": 50, "diameter": 240},
+   "lavaRidge": {"from": "plateau", "diameter": 800, "elevation": 150, "wander": 50, "widthVary": 45, "varySize": 360, "heightVary": 0, "gullies": 60, "gullySize": 25, "talus": 30, "cracks": 60},
+   "domeBlock": {"from": "hill", "diameter": 900, "elevation": 175, "wander": 60, "widthVary": 20, "heightVary": 6, "varySize": 160, "cracks": 60, "gullies": 20, "talus": 25, "curve": {"form": "lfHill", "knots": [[0, 0], [0.08, 0.3], [0.16, 0.7], [0.25, 0.88], [0.45, 0.96], [1, 1]]}},
+   "lavaTrough": {"from": "hill", "heightReference": 2, "combine": 2, "elevation": 45, "diameter": 280, "wander": 24, "widthVary": 40, "varySize": 140, "heightVary": 0, "cracks": 30, "terraces": 4, "ledge": 60, "terraceJitter": 50, "stepReference": 0, "lean": 100, "curve": {"form": "lfHill", "knots": [[0, 0], [0.25, 0.35], [0.45, 0.85], [0.55, 1], [0.65, 0.6], [0.72, -0.45], [0.8, -0.62], [1, -0.62]]}},
+   "shield": {"from": "plateau", "diameter": 520, "elevation": 63, "wander": 30, "wallVary": 0, "widthVary": 15, "varySize": 260, "heightVary": 0, "gullies": 0, "talus": 0, "cracks": 0, "terraces": 4, "ledge": 55, "terraceJitter": 30, "lean": 180, "facing": 3, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.05, 0.15], [0.15, 0.45], [0.25, 0.75], [0.33, 0.95], [0.38, 1], [1, 1]]}},
+   "knoll": {"from": "hill", "diameter": 110, "elevation": 30, "wander": 24, "varySize": 40, "heightVary": 6, "widthVary": 40, "terraces": 3, "ledge": 50, "terraceJitter": 60, "cracks": 40},
+   "vent": {"from": "crater", "diameter": 220, "elevation": -30, "secondaries": 0, "ejecta": 0, "wander": 10, "cracks": 80, "gullies": 100, "gullySize": 30, "talus": 0, "curve": {"form": "lfCrater", "knots": [[0, 0], [0.25, -0.6], [0.42, -1.1], [0.55, -0.6], [0.65, 0.6], [0.75, 1], [1, 1]]}},
+   "lavaPit": {"from": "crater", "diameter": 300, "elevation": -28, "secondaries": 0, "ejecta": 0, "wander": 14, "cracks": 0, "terraces": 6, "ledge": 75, "terraceJitter": 40, "stepReference": 0, "curve": {"form": "lfCrater", "knots": [[0, 0], [0.15, -0.2], [0.3, -0.6], [0.42, -0.9], [0.5, -0.8], [0.6, -0.2], [0.68, 0.6], [0.74, 1], [1, 1]]}},
    "plateau": {},
    "hill": {"elevation": 23, "diameter": 320, "wander": 50, "widthVary": 25, "heightVary": 20, "cracks": 0, "terraces": 7, "ledge": 60, "terraceJitter": 55, "roughness": 20},
    "mountain": {"wander": 6},
@@ -1187,6 +1289,14 @@
    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
    {"id": "cone", "label": "Cinder cone", "icon": "cone", "color": "#c8826a", "group": "shape", "help": "Draw a cinder cone: a steep cone of ash with a crater in its top; a click for one."},
+   {"id": "lavaPit", "label": "Lava pit", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Draw a rimmed pit with lava in its floor: a click for one. Size 300 for a pit cone, 80 or more for a lava hole (at 70 the lava barely shows)."},
+   {"id": "vent", "label": "Spatter vent", "icon": "cone", "color": "#c7a97e", "group": "shape", "help": "Draw a vent: a ring of ribbed spatter round a lava core; a click for one."},
+   {"id": "knoll", "label": "Knoll", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Draw a small lumpy stepped knoll; a click, or a short drag for a cluster."},
+   {"id": "shield", "label": "Lava shield", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a low flat-topped flow with stepped edges, walkable from every side."},
+   {"id": "smoothPool", "label": "Lava pool", "icon": "deep", "color": "#c7a97e", "group": "shape", "help": "Draw a pool of lava with clean stepped dark banks; a drag for a longer one."},
+   {"id": "lavaTrough", "label": "Lava trough", "icon": "valleyU", "color": "#c7a97e", "group": "shape", "help": "Draw a channel of lava between raised stepped banks: a straight drag for a slot, a curved drag for a crescent pool."},
+   {"id": "domeBlock", "label": "Dome block", "icon": "mountain", "color": "#b3bcca", "group": "shape", "help": "Draw a big dark rounded block of rock, too steep to climb.", "rock": "dome"},
+   {"id": "lavaRidge", "label": "Lava ridge", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Drag a long level-topped ridge that swells and narrows along its length.", "rock": "crumpled"},
    {"id": "crystal", "label": "Obsidian", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw a cluster of obsidian shards round a click, or a row of them along a drag."},
    {"id": "deep", "label": "Lava lake", "icon": "deep", "color": "#7cb8e8", "group": "water", "help": "Draw a lake of lava: the ground is cut 55 below the lava's level behind stepped dark banks."},
    {"id": "shallow", "label": "Lava shallows", "icon": "shallow", "color": "#87d9da", "group": "water", "help": "Draw shallow lava: a level bed just under the lava's level behind stepped banks."},
