@@ -1297,7 +1297,7 @@ function scriptedScene(list,{ground=true,tools,materials}={}) {
   const nextMaterials=materials===undefined?mapMaterials:withWorldMaterials(materials,config);
   worldInputQueue.flush();
   if (tools!==undefined) restoreMapTools(copyMapTools(tools)??[],true);   // a scene's own tools (a scene's `tools`), which its strokes may name
-  mapMaterials=nextMaterials;syncMaterialChoices();materialEditor?.refresh();
+  mapMaterials=nextMaterials;syncMaterialChoices();materialEditor?.refresh();if(materials!==undefined)keepWorldMaterials();   // a scene's ground and water become the world's, as an edit's do
   applySeedControl(); refinementSeed=seed;
   cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); 
   nodes=[]; selected=-1;
