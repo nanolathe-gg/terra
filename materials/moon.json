@@ -1125,7 +1125,8 @@
         "shineRock": 0.06,
         "shineRockSharp": 30,
         "shineRockRough": 0.12,
-        "shineRockScale": 3
+        "shineRockScale": 3,
+        "shadeDepth": 0.6
       },
       "engineDefaults": {
         "erosion": 1,
