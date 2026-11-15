@@ -1,119 +1,220 @@
-import {STEP_LABELS,stepTypes} from './sculpt-material-steps.js';
-const WIDTH=176,ROW=21;
-export function nodeInputs(node){
- if(['constant','surface'].includes(node.type)||node.type==='noise'&&node.kind==='pixel')return [];
- if(node.type==='combine')return [['source','Base'],['other','Detail'],['mask','Mask']];
- return [['source',['noise','transform'].includes(node.type)?'Coordinates':node.type==='dots'?'Coverage':'Input']];
-}
-// Place each dependency close to its first consumer, then order and align
-// branches by their connected ports. Virtual vertices reserve space for long
-// links during layout only; connections remain simple, smooth curves.
-export function graphPositions(steps){
- const rank=new Map(),consumers=new Map(steps.map(s=>[s.id,[]])),groups=[],vertices=new Map();
- for(const s of steps){rank.set(s.id,Math.max(-1,...nodeInputs(s).map(([k])=>rank.get(s[k])??-1))+1);for(const [k]of nodeInputs(s))consumers.get(s[k])?.push(s.id);}
- for(const s of [...steps].reverse()){const next=consumers.get(s.id);if(next.length&&s.type!=='output')rank.set(s.id,Math.min(...next.map(id=>rank.get(id)))-1);}
- const add=(id,level,step=null)=>{const height=step?Math.max(90,54+nodeInputs(step).length*ROW):24,v={id,level,before:[],after:[],y:0,top:step?48:12,bottom:step?height-48:12};vertices.set(id,v);(groups[level]??=[]).push(v);return v;};
- for(const s of steps)add(s.id,rank.get(s.id),s);
- for(const s of steps)for(const [i,[key]]of nodeInputs(s).entries()){let source=vertices.get(s[key]);if(!source)continue;const target=vertices.get(s.id);
-  const link=(a,b,offset)=>{a.after.push({v:b,offset});b.before.push({v:a,offset});};
-  for(let level=source.level+1;level<target.level;level++){const dummy=add(`@${s.id}:${key}:${level}`,level);link(source,dummy,0);source=dummy;}
-  link(source,target,i*ROW);
- }
- // Least-squares alignment under the current order and card-spacing constraint.
- // Pool adjacent groups when their desired positions would overlap.
- const pack=(group,want)=>{let shift=0;const blocks=[];
-  group.forEach((v,i)=>{if(i)shift+=group[i-1].bottom+32+v.top;const b={first:i,last:i,sum:want(v)-shift,count:1};v.shift=shift;blocks.push(b);
-   while(blocks.length>1){const a=blocks.at(-2),b=blocks.at(-1);if(a.sum/a.count<=b.sum/b.count)break;a.last=b.last;a.sum+=b.sum;a.count+=b.count;blocks.pop();}
-  });
-  for(const b of blocks)for(let i=b.first;i<=b.last;i++)group[i].y=b.sum/b.count+group[i].shift;
- };
- for(const group of groups)if(group){pack(group,()=>0);const middle=(group[0].y+group.at(-1).y)/2;for(const v of group)v.y-=middle;}
- for(let sweep=0;sweep<12;sweep++){
-  const forward=sweep%2===0,levels=groups.map((_,i)=>i);if(!forward)levels.reverse();
-  for(const level of levels){const group=groups[level];if(!group)continue;
-   const score=v=>{const neighbors=forward?v.before:v.after;return neighbors.length?neighbors.reduce((sum,n)=>sum+n.v.y+(forward?-n.offset:n.offset),0)/neighbors.length:v.y;};
-   const wanted=new Map(group.map(v=>[v,score(v)]));group.sort((a,b)=>wanted.get(a)-wanted.get(b)||a.y-b.y);pack(group,v=>wanted.get(v));
+// The material editor's graph canvas: node cards with a picture of what each makes, typed ports, wires and labeled frames.
+// It draws and reports gestures; the editor (sculpt-material-editor.js) owns the material and makes every change.
+import {NODES, nodeTypes, orderNodes} from './sculpt-materials.js';
+
+export const CARD = {width: 172, head: 38, row: 22, thumb: 72, port: 6, reach: 14};
+const COLORS = {coords: '#91b9df', gray: '#d9bf8c', color: '#9bd5ae'};
+const inputsOf = n => NODES[n.type].inputs;
+export const cardHeight = n => CARD.head + Math.max(n.type === 'output' ? 0 : CARD.thumb + 8, inputsOf(n).length * CARD.row + 6) + 6;
+
+// Where Arrange puts every node: columns by depth from the sources, each column ordered and aligned to what it connects to, so wires
+// run left to right and cross little. Positions change only when the artist asks for this.
+export function graphPositions(nodes) {
+  const ordered = orderNodes(nodes), rank = new Map(), consumers = new Map(nodes.map(n => [n.id, []])), columns = [];
+  for (const n of ordered) {
+    rank.set(n.id, Math.max(-1, ...Object.values(n.in).filter(Boolean).map(id => rank.get(id))) + 1);
+    for (const id of Object.values(n.in)) if (id) consumers.get(id).push(n.id);
   }
- }
- const positions=new Map(steps.map(s=>{const v=vertices.get(s.id);return [s.id,{x:v.level*240,y:Math.round(v.y-48)}];}));
- // Finish by moving cards, not routing wires: open a lane where a smooth
- // connection would otherwise disappear behind an unrelated branch.
- const nodes=steps.map(s=>({s,p:positions.get(s.id),height:Math.max(90,54+nodeInputs(s).length*ROW)})),byId=new Map(nodes.map(n=>[n.s.id,n]));
- const wires=nodes.flatMap(n=>nodeInputs(n.s).flatMap(([k],i)=>byId.has(n.s[k])?[{a:byId.get(n.s[k]),b:n,offset:i*ROW}]:[]));
- const blocked=()=>{let count=0;for(const {a,b,offset}of wires){const ax=a.p.x+WIDTH,ay=a.p.y+48,bx=b.p.x,by=b.p.y+48+offset,d=Math.max(45,Math.abs(bx-ax)*.45),hit=new Set();
-  for(let i=1;i<24;i++){const t=i/24,u=1-t,x=u*u*u*ax+3*u*u*t*(ax+d)+3*u*t*t*(bx-d)+t*t*t*bx,y=ay+(by-ay)*(3*t*t-2*t*t*t);
-   for(const n of nodes)if(n!==a&&n!==b&&x>n.p.x-8&&x<n.p.x+WIDTH+8&&y>n.p.y-8&&y<n.p.y+n.height+8)hit.add(n);
-  }count+=hit.size;
- }return count;};
- let obstruction=blocked();
- for(let pass=0;pass<4&&obstruction;pass++){let best=null,bestCount=obstruction;
-  for(const n of nodes){const column=nodes.filter(o=>o!==n&&o.p.x===n.p.x);if(!column.length)continue;
-   const original=n.p.y,options=[Math.min(...column.map(o=>o.p.y))-n.height-32,Math.max(...column.map(o=>o.p.y+o.height))+32];
-   for(const y of options){n.p.y=y;const count=blocked();if(count<bestCount){bestCount=count;best={n,y};}}n.p.y=original;
+  // A source sits one column before its first reader, not at the far left.
+  for (const n of [...ordered].reverse()) { const next = consumers.get(n.id); if (next.length) rank.set(n.id, Math.min(...next.map(id => rank.get(id))) - 1); }
+  const top = Math.max(...rank.values()); for (const n of nodes) if (n.type === 'output') rank.set(n.id, top);
+  for (const n of ordered) (columns[rank.get(n.id)] ??= []).push({n, y: 0, height: cardHeight(n)});
+  const item = new Map(columns.flat().map(v => [v.n.id, v]));
+  const pack = (column, want) => {   // keep the order, sit as near the wanted heights as the cards' sizes allow
+    column.sort((a, b) => want(a) - want(b));
+    let y = -Infinity;
+    for (const v of column) { v.y = Math.max(want(v), y); y = v.y + v.height + 26; }
+    const shift = column.reduce((sum, v) => sum + want(v) - v.y, 0) / column.length;
+    for (const v of column) v.y += shift;
+  };
+  for (const column of columns) if (column) pack(column, v => column.indexOf(v) * 150);
+  for (let sweep = 0; sweep < 10; sweep++) {
+    const forward = sweep % 2 === 0, list = forward ? columns : [...columns].reverse();
+    for (const column of list) if (column) pack(column, v => {
+      const near = forward ? Object.values(v.n.in).filter(Boolean) : consumers.get(v.n.id);
+      return near.length ? near.reduce((sum, id) => sum + item.get(id).y, 0) / near.length : v.y;
+    });
   }
-  if(!best)break;best.n.p.y=best.y;obstruction=bestCount;
- }
- return positions;
+  return new Map(columns.flatMap((column, level) => (column ?? []).map(v => [v.n.id, {x: level * 236, y: Math.round(v.y)}])));
 }
 
-export function mountMaterialGraph(host){
- const canvas=document.getElementById('material-graph'),ctx=canvas.getContext('2d'),help=document.getElementById('graph-help');
- let zoom=1,pan={x:30,y:40},context=null,count=0,pendingFit=true,gesture=null,wire=null,hover=null,frame=0,disposed=false;
- const palette={position:'#91b9df',scalar:'#d9bf8c',color:'#9bd5ae',surface:'#d3a7dd'};
- const recipe=()=>host.recipe(),steps=()=>recipe()?.steps??[];
- let placementKey='',placement=new Map();
- const all=()=>{const list=steps(),key=JSON.stringify(list.map(s=>[s.id,s.type,s.kind,s.source,s.other,s.mask]));if(key!==placementKey){placementKey=key;placement=graphPositions(list);}const auto=placement,types=stepTypes(list);return list.map(s=>({step:s,position:gesture?.kind==='node'&&gesture.id===s.id?gesture.position:s.position??auto.get(s.id),type:types.get(s.id),inputs:nodeInputs(s),height:Math.max(90,54+nodeInputs(s).length*ROW)}));};
- const port=(node,key)=>({x:node.position.x+(key==='out'?WIDTH:0),y:node.position.y+48+(key==='out'?0:node.inputs.findIndex(([k])=>k===key)*ROW)});
- const point=e=>{const r=canvas.getBoundingClientRect();return {x:(e.clientX-r.left-pan.x)/zoom,y:(e.clientY-r.top-pan.y)/zoom};};
- const hit=p=>{const nodes=all();for(const node of nodes.reverse()){
-   if(node.step.type!=='output'){const q=port(node,'out');if(Math.hypot(p.x-q.x,p.y-q.y)<10/zoom)return {node,key:'out'};}
-   for(const [key]of node.inputs){const q=port(node,key);if(Math.hypot(p.x-q.x,p.y-q.y)<10/zoom)return {node,key};}
-   if(p.x>=node.position.x&&p.x<=node.position.x+WIDTH&&p.y>=node.position.y&&p.y<=node.position.y+node.height)return {node,key:p.y<node.position.y+27&&p.x<node.position.x+24?'enabled':'body'};
-  }return null;};
- const schedule=()=>{if(!frame&&!disposed)frame=requestAnimationFrame(draw);};
- function fit(){const nodes=all();if(!nodes.length)return;const r=canvas.getBoundingClientRect();if(r.width<10||r.height<10){pendingFit=true;return;}const x=Math.min(...nodes.map(n=>n.position.x))-35,y=Math.min(...nodes.map(n=>n.position.y))-35,w=Math.max(...nodes.map(n=>n.position.x+WIDTH))-x+35,h=Math.max(...nodes.map(n=>n.position.y+n.height))-y+35;zoom=Math.max(.12,Math.min(1.1,r.width/w,r.height/h));pan={x:(r.width-w*zoom)/2-x*zoom,y:(r.height-h*zoom)/2-y*zoom};pendingFit=false;schedule();}
- function line(a,b,color,width=2){ctx.beginPath();ctx.moveTo(a.x,a.y);const d=Math.max(45,Math.abs(b.x-a.x)*.45);ctx.bezierCurveTo(a.x+d,a.y,b.x-d,b.y,b.x,b.y);ctx.strokeStyle=color;ctx.lineWidth=width/zoom;ctx.stroke();}
- function text(value,x,y,max,color,size=12){ctx.font=`${size}px system-ui,sans-serif`;ctx.fillStyle=color;let shown=value;while(ctx.measureText(shown).width>max&&shown.length>1)shown=shown.slice(0,-2)+'…';ctx.fillText(shown,x,y);}
- function draw(){frame=0;if(disposed)return;const r=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;if(r.width<1||r.height<1)return;
-  if(canvas.width!==Math.round(r.width*dpr)||canvas.height!==Math.round(r.height*dpr)){canvas.width=Math.round(r.width*dpr);canvas.height=Math.round(r.height*dpr);}
-  if(pendingFit)fit();ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#141d20';ctx.fillRect(0,0,r.width,r.height);
-  const grid=32*zoom;ctx.fillStyle='#2b383d';for(let x=pan.x%grid;x<r.width;x+=grid)for(let y=pan.y%grid;y<r.height;y+=grid)ctx.fillRect(x,y,1,1);
-  ctx.translate(pan.x,pan.y);ctx.scale(zoom,zoom);const nodes=all(),byId=new Map(nodes.map(n=>[n.step.id,n])),selected=host.selected()?.id;
-  const wires=[];for(const n of nodes)for(const [key]of n.inputs){const source=byId.get(n.step[key]);if(source)wires.push({n,key,source,active:n.step.id===selected||source.step.id===selected});}
-  for(const {n,key,source,active}of wires.sort((a,b)=>Number(a.active)-Number(b.active))){const a=port(source,'out'),b=port(n,key);
-   ctx.globalAlpha=active?1:.42;line(a,b,'#141d20',active?6:4);line(a,b,palette[source.type]??palette.scalar,active?2.3:1.3);ctx.globalAlpha=1;
+export function mountMaterialGraph(host) {
+  const canvas = document.getElementById('material-graph'), ctx = canvas.getContext('2d');
+  let zoom = 1, pan = {x: 40, y: 40}, shown = null, gesture = null, wire = null, hover = null, frame = 0, disposed = false, pendingFit = true, auto = new Map(), autoKey = '';
+  const nodes = () => host.material()?.nodes ?? [];
+  // Cards with their place (the node's own, the gesture's while it is dragged, else Arrange's), type and size.
+  const cards = () => {
+    const list = nodes(); if (!list.length) return [];
+    if (list.some(n => n.x === undefined)) { const key = JSON.stringify(list.map(n => [n.id, n.in])); if (key !== autoKey) { autoKey = key; auto = graphPositions(list); } }
+    const types = nodeTypes(list), moved = gesture?.kind === 'move' ? gesture.positions : null;
+    return list.map(n => ({n, ...(moved?.get(n.id) ?? (n.x === undefined ? auto.get(n.id) : {x: n.x, y: n.y})), type: types.get(n.id), height: cardHeight(n), inputs: inputsOf(n)}));
+  };
+  const inPort = (c, key) => ({x: c.x, y: c.y + CARD.head + CARD.row / 2 + c.inputs.findIndex(i => i[0] === key) * CARD.row});
+  const outPort = c => ({x: c.x + CARD.width, y: c.y + CARD.head + CARD.row / 2});
+  const point = e => { const r = canvas.getBoundingClientRect(); return {x: (e.clientX - r.left - pan.x) / zoom, y: (e.clientY - r.top - pan.y) / zoom}; };
+  const frames = list => (host.material()?.frames ?? []).map((f, index) => {
+    const members = list.filter(c => f.nodes.includes(c.n.id)); if (!members.length) return null;
+    const x = Math.min(...members.map(c => c.x)) - 14, y = Math.min(...members.map(c => c.y)) - 30;
+    return {index, name: f.name, x, y, width: Math.max(...members.map(c => c.x + CARD.width)) + 14 - x, height: Math.max(...members.map(c => c.y + c.height)) + 14 - y};
+  }).filter(Boolean);
+  // What lies under a point: a port first (ports reach past their dot so they are easy to grab), then a card, then a frame's label.
+  function hit(p) {
+    const list = cards(), reach = CARD.reach / Math.min(zoom, 1);
+    for (const c of [...list].reverse()) {
+      if (c.type) { const q = outPort(c); if (Math.hypot(p.x - q.x, p.y - q.y) < reach) return {c, port: 'out'}; }
+      for (const [key] of c.inputs) { const q = inPort(c, key); if (Math.hypot(p.x - q.x, p.y - q.y) < reach) return {c, port: key}; }
+    }
+    for (const c of [...list].reverse()) if (p.x >= c.x && p.x <= c.x + CARD.width && p.y >= c.y && p.y <= c.y + c.height) return {c, toggle: p.x < c.x + 24 && p.y < c.y + 26};
+    for (const f of frames(list)) if (p.x >= f.x && p.x <= f.x + f.width && p.y >= f.y && p.y <= f.y + 24) return {frame: f};
+    return null;
   }
-
-  if(wire){const source=byId.get(wire.source);if(source)line(port(source,'out'),wire.point??port(source,'out'),palette[source.type]??palette.scalar,2.5);}
-  for(const n of [...nodes.filter(n=>n.step.id!==selected),...nodes.filter(n=>n.step.id===selected)]){
-   const {x,y}=n.position,on=n.step.id===selected;ctx.globalAlpha=n.step.enabled?1:.48;ctx.fillStyle=on?'#2c3e37':'#202c30';ctx.strokeStyle=on?'#9bd5ae':'#425158';ctx.lineWidth=(on?1.8:1)/zoom;ctx.beginPath();ctx.roundRect(x,y,WIDTH,n.height,7);ctx.fill();ctx.stroke();
-   ctx.fillStyle=palette[n.type]??palette.scalar;ctx.beginPath();ctx.arc(x+13,y+15,4,0,Math.PI*2);if(n.step.enabled)ctx.fill();else ctx.stroke();
-   text(n.step.name,x+25,y+19,WIDTH-34,'#e2ece7',14);text(STEP_LABELS[n.step.type],x+12,y+35,WIDTH-24,'#9aafb3',11);
-   for(const [key,label]of n.inputs){const q=port(n,key);ctx.beginPath();ctx.arc(q.x,q.y,4.5,0,Math.PI*2);ctx.fillStyle=n.step[key]?'#d8e5dc':'#56676e';ctx.fill();text(label,q.x+11,q.y+4,WIDTH-35,'#b7c9cc',11);}
-   if(n.step.type!=='output'){const q=port(n,'out');ctx.beginPath();ctx.arc(q.x,q.y,5,0,Math.PI*2);ctx.fillStyle=palette[n.type]??palette.scalar;ctx.fill();}
-   if(n.step.type==='gradient'){const g=ctx.createLinearGradient(x+12,0,x+WIDTH-12,0);n.step.colors.forEach((c,i)=>g.addColorStop(i/(n.step.colors.length-1),`rgb(${c.map(v=>Math.round(Math.min(1,v)*255)).join(',')})`));ctx.fillStyle=g;ctx.fillRect(x+12,y+n.height-15,WIDTH-24,5);}
-   if(n.step.type==='combine')text(n.step.operation,x+12,y+n.height-8,WIDTH-24,'#86b499',10);
-   if(n.step.type==='output')text(n.step.target.toUpperCase(),x+12,y+n.height-12,WIDTH-24,'#9bd5ae',10);
-   ctx.globalAlpha=1;
+  const accepts = (c, key, type) => { const want = c.inputs.find(i => i[0] === key)?.[2]; return want === 'any' ? type !== 'coords' : want === type; };
+  const schedule = () => { if (!frame && !disposed) frame = requestAnimationFrame(draw); };
+  function fit() {
+    const list = cards(), r = canvas.getBoundingClientRect();
+    if (!list.length || r.width < 10 || r.height < 10) { pendingFit = true; return; }
+    const x = Math.min(...list.map(c => c.x)) - 40, y = Math.min(...list.map(c => c.y)) - 50, w = Math.max(...list.map(c => c.x + CARD.width)) - x + 40, h = Math.max(...list.map(c => c.y + c.height)) - y + 40;
+    zoom = Math.max(.2, Math.min(1, r.width / w, r.height / h)); pan = {x: (r.width - w * zoom) / 2 - x * zoom, y: (r.height - h * zoom) / 2 - y * zoom}; pendingFit = false; schedule();
   }
- }
- function connect(target){if(!wire||!target||['out','body','enabled'].includes(target.key))return false;host.connect(wire.source,target.node.step.id,target.key);wire=null;schedule();return true;}
- canvas.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();canvas.focus();const p=point(e),target=hit(p);if(connect(target))return;
-  if(target?.key==='out'){wire={source:target.node.step.id,point:p};schedule();return;}
-  if(target?.key==='enabled'){host.toggle(target.node.step.id);return;}
-  if(target){host.choose(target.node.step.id);if(target.key!=='body'){if(target.node.step[target.key])host.connect(null,target.node.step.id,target.key);return;}gesture={kind:'node',id:target.node.step.id,start:p,original:{...target.node.position},position:{...target.node.position},moved:false};}
-  else{wire=null;gesture={kind:'pan',x:e.clientX,y:e.clientY,original:{...pan}};}
-  canvas.setPointerCapture(e.pointerId);schedule();
- };
- canvas.onpointermove=e=>{const p=point(e);if(wire){wire.point=p;schedule();}if(gesture?.kind==='node'){const dx=p.x-gesture.start.x,dy=p.y-gesture.start.y;gesture.moved||=Math.hypot(dx,dy)*zoom>3;if(gesture.moved)gesture.position={x:gesture.original.x+dx,y:gesture.original.y+dy};schedule();}
-  else if(gesture?.kind==='pan'){pan={x:gesture.original.x+e.clientX-gesture.x,y:gesture.original.y+e.clientY-gesture.y};schedule();}
-  else{hover=hit(p);canvas.style.cursor=hover?(hover.key==='body'?'grab':'crosshair'):'grab';canvas.title=hover?hover.key==='out'?`${hover.node.type} output — drag to an input`:hover.key==='enabled'?'Enable or bypass this node':hover.key!=='body'&&hover.node.step[hover.key]?'Click to disconnect this input':hover.node.step.name:'';}
- };
- const end=e=>{if(wire)connect(hit(point(e)));const g=gesture;gesture=null;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);if(g?.kind==='node'&&g.moved)host.move(g.id,g.position);schedule();};canvas.onpointerup=end;canvas.onpointercancel=e=>{gesture=null;wire=null;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);schedule();};
- canvas.onwheel=e=>{e.preventDefault();const p=point(e),r=canvas.getBoundingClientRect();zoom=Math.max(.12,Math.min(2,zoom*Math.exp(-e.deltaY*.001)));pan={x:e.clientX-r.left-p.x*zoom,y:e.clientY-r.top-p.y*zoom};schedule();};
- canvas.onkeydown=e=>{if(e.key==='Escape'&&wire){e.preventDefault();wire=null;schedule();}else if(['Delete','Backspace'].includes(e.key)){e.preventDefault();host.remove();}else if(e.key.toLowerCase()==='f'){e.preventDefault();fit();}};
- document.getElementById('graph-fit').onclick=fit;document.getElementById('graph-arrange').onclick=()=>{host.arrange(graphPositions(steps()));fit();};
- const select=document.getElementById('graph-node-select');select.onchange=()=>host.choose(select.value);
- const resize=new ResizeObserver(()=>{pendingFit=true;schedule();});resize.observe(canvas);
- return {refresh(){const next=host.context();if(next!==context){context=next;wire=null;gesture=null;pendingFit=true;}if(steps().length!==count){count=steps().length;pendingFit=true;}document.getElementById('graph-empty').hidden=!!steps().length;select.replaceChildren(...steps().map(s=>new Option(s.name,s.id)));select.value=host.selected()?.id??'';document.getElementById('graph-arrange').disabled=document.getElementById('graph-fit').disabled=!count;schedule();},fit,dispose(){disposed=true;resize.disconnect();cancelAnimationFrame(frame);},positions:()=>all().map(n=>({id:n.step.id,...n.position,width:WIDTH,height:n.height}))};
+  function curve(a, b, color, width) {
+    const d = Math.max(40, Math.abs(b.x - a.x) * .45);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.bezierCurveTo(a.x + d, a.y, b.x - d, b.y, b.x, b.y); ctx.strokeStyle = color; ctx.lineWidth = width / Math.min(zoom, 1); ctx.stroke();
+  }
+  function label(value, x, y, max, color, size = 12, weight = '') {
+    ctx.font = `${weight} ${size}px system-ui,sans-serif`; ctx.fillStyle = color; let s = value;
+    while (ctx.measureText(s).width > max && s.length > 1) s = s.slice(0, -2) + '…';
+    ctx.fillText(s, x, y);
+  }
+  function draw() {
+    frame = 0; if (disposed) return;
+    const r = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1; if (r.width < 1 || r.height < 1) return;
+    if (canvas.width !== Math.round(r.width * dpr) || canvas.height !== Math.round(r.height * dpr)) { canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr); }
+    if (pendingFit) fit();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#141d20'; ctx.fillRect(0, 0, r.width, r.height);
+    const grid = 32 * zoom; ctx.fillStyle = '#26333a'; for (let x = pan.x % grid; x < r.width; x += grid) for (let y = pan.y % grid; y < r.height; y += grid) ctx.fillRect(x, y, 1, 1);
+    ctx.translate(pan.x, pan.y); ctx.scale(zoom, zoom);
+    const list = cards(), byId = new Map(list.map(c => [c.n.id, c])), selection = host.selection(), thumbs = host.thumbnails(), frameAt = host.frame();
+    for (const f of frames(list)) {
+      const on = f.index === frameAt;
+      ctx.fillStyle = '#1b262a'; ctx.strokeStyle = on ? '#9bd5ae' : '#3c4b52'; ctx.lineWidth = 1 / Math.min(zoom, 1); ctx.setLineDash([6, 5]);
+      ctx.beginPath(); ctx.roundRect(f.x, f.y, f.width, f.height, 10); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+      label(f.name, f.x + 10, f.y + 17, f.width - 20, on ? '#cfe6d6' : '#8fa3a8', 12, '600');
+    }
+    for (const c of list) for (const [key] of c.inputs) {
+      const from = byId.get(c.n.in[key]); if (!from || (wire?.detached?.id === c.n.id && wire.detached.key === key)) continue;
+      const active = selection.has(c.n.id) || selection.has(from.n.id);
+      ctx.globalAlpha = active ? 1 : .55; curve(outPort(from), inPort(c, key), '#141d20', active ? 6 : 4); curve(outPort(from), inPort(c, key), COLORS[from.type], active ? 2.4 : 1.5); ctx.globalAlpha = 1;
+    }
+    if (wire) { const from = byId.get(wire.from); if (from) curve(outPort(from), wire.point, COLORS[from.type], 2.4); }
+    for (const c of [...list.filter(c => !selection.has(c.n.id)), ...list.filter(c => selection.has(c.n.id))]) {
+      const {x, y, n} = c, on = selection.has(n.id), target = wire && hover?.c === c;
+      ctx.globalAlpha = n.enabled ? 1 : .5;
+      ctx.fillStyle = on ? '#2c3e37' : '#202c30'; ctx.strokeStyle = on ? '#9bd5ae' : target ? '#d9bf8c' : '#425158'; ctx.lineWidth = (on ? 1.8 : 1) / Math.min(zoom, 1);
+      ctx.beginPath(); ctx.roundRect(x, y, CARD.width, c.height, 7); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x + 13, y + 14, 4, 0, Math.PI * 2); ctx.fillStyle = ctx.strokeStyle = c.type ? COLORS[c.type] : '#9bd5ae'; if (n.enabled) ctx.fill(); else ctx.stroke();
+      label(n.name, x + 24, y + 18, CARD.width - 32, '#e2ece7', 13, '600');
+      label(NODES[n.type].label + (NODES[n.type].kinds ? ' · ' + NODES[n.type].kinds[n.kind] : ''), x + 12, y + 32, CARD.width - 24, '#93a8ad', 10.5);
+      if (n.type !== 'output') {
+        const tx = x + CARD.width - CARD.thumb - 10, ty = y + CARD.head, picture = thumbs.get(n.id);
+        ctx.fillStyle = '#10171a'; ctx.fillRect(tx, ty, CARD.thumb, CARD.thumb);
+        if (picture) { ctx.imageSmoothingEnabled = false; ctx.drawImage(picture, tx, ty, CARD.thumb, CARD.thumb); }
+        if (host.solo() === n.id) { ctx.strokeStyle = '#e8d38a'; ctx.lineWidth = 2 / Math.min(zoom, 1); ctx.strokeRect(tx - 1, ty - 1, CARD.thumb + 2, CARD.thumb + 2); }
+      }
+      for (const [key, name] of c.inputs) {
+        const q = inPort(c, key), linked = !!n.in[key], offered = wire && accepts(c, key, byId.get(wire.from)?.type);
+        ctx.beginPath(); ctx.arc(q.x, q.y, CARD.port * (offered ? 1.35 : 1), 0, Math.PI * 2); ctx.fillStyle = offered ? '#f1e2b0' : linked ? '#d8e5dc' : '#56676e'; ctx.fill(); ctx.strokeStyle = '#141d20'; ctx.lineWidth = 1.5; ctx.stroke();
+        label(name, q.x + 12, q.y + 4, CARD.width - (n.type === 'output' ? 30 : CARD.thumb + 34), '#b7c9cc', 11);
+      }
+      if (c.type) { const q = outPort(c); ctx.beginPath(); ctx.arc(q.x, q.y, CARD.port, 0, Math.PI * 2); ctx.fillStyle = COLORS[c.type]; ctx.fill(); ctx.strokeStyle = '#141d20'; ctx.lineWidth = 1.5; ctx.stroke(); }
+      ctx.globalAlpha = 1;
+    }
+  }
+  // Releasing a wire: on an input port, on a card (its first free input that takes the type), or in the open, where the add menu
+  // offers the nodes that take it.
+  function drop(e) {
+    const p = point(e), target = hit(p), from = cards().find(c => c.n.id === wire.from), was = wire; wire = null;
+    if (target?.c && target.c.n.id !== was.from) {
+      const key = target.port && target.port !== 'out' ? target.port : target.c.inputs.find(([k]) => accepts(target.c, k, from.type) && !target.c.n.in[k])?.[0] ?? target.c.inputs.find(([k]) => accepts(target.c, k, from.type))?.[0];
+      if (key) { host.connect(was.from, target.c.n.id, key, was.detached); return; }
+    }
+    if (was.detached && !target) { host.connect(null, was.detached.id, was.detached.key); return; }
+    if (!target && !was.detached) host.menu({x: e.clientX, y: e.clientY}, p, {from: was.from, type: from.type});
+  }
+  canvas.onpointerdown = e => {
+    if (e.button !== 0) return; e.preventDefault(); canvas.focus(); host.closeMenu();
+    const p = point(e), target = hit(p);
+    if (target?.port === 'out') { wire = {from: target.c.n.id, point: p}; }
+    else if (target?.port) {
+      // Dragging a connected input takes its wire along; a plain click on it disconnects.
+      const from = target.c.n.in[target.port];
+      if (from) wire = {from, point: p, detached: {id: target.c.n.id, key: target.port}, start: {x: e.clientX, y: e.clientY}};
+      else host.select([target.c.n.id]);
+    }
+    else if (target?.toggle) host.toggle(target.c.n.id);
+    else if (target?.c) {
+      const id = target.c.n.id, selection = host.selection();
+      if (e.shiftKey) host.select(selection.has(id) ? [...selection].filter(s => s !== id) : [...selection, id]);
+      else if (!selection.has(id)) host.select([id]);
+      const moving = host.selection(), list = cards();
+      gesture = {kind: 'move', start: p, origin: new Map(list.filter(c => moving.has(c.n.id)).map(c => [c.n.id, {x: c.x, y: c.y}])), positions: new Map(), moved: false, id};
+    }
+    else if (target?.frame) host.selectFrame(target.frame.index);
+    else { gesture = {kind: 'pan', x: e.clientX, y: e.clientY, origin: {...pan}, moved: false}; }
+    canvas.setPointerCapture(e.pointerId); schedule();
+  };
+  canvas.onpointermove = e => {
+    const p = point(e);
+    if (wire) { wire.point = p; hover = hit(p); schedule(); return; }
+    if (gesture?.kind === 'move') {
+      const dx = p.x - gesture.start.x, dy = p.y - gesture.start.y; gesture.moved ||= Math.hypot(dx, dy) * zoom > 3;
+      if (gesture.moved) gesture.positions = new Map([...gesture.origin].map(([id, o]) => [id, {x: Math.round(o.x + dx), y: Math.round(o.y + dy)}]));
+      schedule();
+    } else if (gesture?.kind === 'pan') {
+      gesture.moved ||= Math.hypot(e.clientX - gesture.x, e.clientY - gesture.y) > 3;
+      pan = {x: gesture.origin.x + e.clientX - gesture.x, y: gesture.origin.y + e.clientY - gesture.y}; schedule();
+    } else {
+      hover = hit(p);
+      canvas.style.cursor = hover?.port ? 'crosshair' : hover?.c ? 'grab' : hover?.frame ? 'pointer' : 'default';
+      canvas.title = hover?.port === 'out' ? 'Drag to an input to connect' : hover?.port ? (hover.c.n.in[hover.port] ? 'Drag the wire away or click to disconnect' : 'Drag an output here to connect') : hover?.toggle ? 'Turn this node on or off' : '';
+    }
+  };
+  canvas.onpointerup = e => {
+    if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    if (wire) {
+      const still = wire.detached && Math.hypot(e.clientX - wire.start.x, e.clientY - wire.start.y) < 4;
+      if (still) { const d = wire.detached; wire = null; host.connect(null, d.id, d.key); } else drop(e);
+    }
+    const g = gesture; gesture = null; hover = null;
+    if (g?.kind === 'move' && g.moved) host.move(g.positions);
+    else if (g?.kind === 'move' && !e.shiftKey) host.select([g.id]);
+    else if (g?.kind === 'pan' && !g.moved) host.select([]);
+    schedule();
+  };
+  canvas.onpointercancel = e => { gesture = null; wire = null; if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId); schedule(); };
+  canvas.ondblclick = e => { const target = hit(point(e)); if (target?.c && !target.port) host.toggleSolo(target.c.n.id); else if (!target) host.menu({x: e.clientX, y: e.clientY}, point(e)); };
+  canvas.oncontextmenu = e => { e.preventDefault(); const target = hit(point(e)); if (!target) host.menu({x: e.clientX, y: e.clientY}, point(e)); };
+  canvas.onwheel = e => {
+    e.preventDefault(); const p = point(e), r = canvas.getBoundingClientRect();
+    zoom = Math.max(.2, Math.min(2, zoom * Math.exp(-e.deltaY * .0015))); pan = {x: e.clientX - r.left - p.x * zoom, y: e.clientY - r.top - p.y * zoom}; schedule();
+  };
+  canvas.onkeydown = e => {
+    const r = canvas.getBoundingClientRect(), center = {x: r.left + r.width / 2, y: r.top + r.height / 2};
+    if (e.key === 'Escape' && wire) { wire = null; schedule(); }
+    else if (['Delete', 'Backspace'].includes(e.key)) host.remove();
+    else if (e.key.toLowerCase() === 'd' && (e.metaKey || e.ctrlKey)) host.duplicate();
+    else if (e.key === 'Tab' && !e.shiftKey) host.menu(center, {x: (center.x - r.left - pan.x) / zoom, y: (center.y - r.top - pan.y) / zoom});
+    else if (e.key.toLowerCase() === 'f' && !e.metaKey && !e.ctrlKey) fit();
+    else return;
+    e.preventDefault(); e.stopPropagation();
+  };
+  const resize = new ResizeObserver(() => { if (pendingFit) fit(); schedule(); }); resize.observe(canvas);
+  return {
+    // A different material fits to the view; the same one keeps the artist's zoom and place.
+    refresh(context) { if (context !== shown) { shown = context; wire = null; gesture = null; pendingFit = true; } schedule(); },
+    fit, redraw: schedule,
+    // The middle of the view, in graph units: where a node added from the toolbar lands.
+    center() { const r = canvas.getBoundingClientRect(); return {x: (r.width / 2 - pan.x) / zoom, y: (r.height / 2 - pan.y) / zoom}; },
+    places() { return new Map(cards().map(c => [c.n.id, {x: c.x, y: c.y}])); },
+    dispose() { disposed = true; resize.disconnect(); cancelAnimationFrame(frame); },
+  };
 }

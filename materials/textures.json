@@ -1,0 +1,1270 @@
+{
+ "red-ground": {
+  "name": "Red rust",
+  "seed": 0,
+  "nodes": [
+   {
+    "id": "step-1",
+    "name": "Pattern distortion",
+    "type": "warp",
+    "kind": "turbulence",
+    "params": {
+     "amount": 0.65,
+     "size": 10,
+     "layers": 0,
+     "axis": 0
+    },
+    "in": {
+     "in": null
+    }
+   },
+   {
+    "id": "step-2",
+    "name": "Mottling / streaks",
+    "type": "noise",
+    "kind": "smooth",
+    "params": {
+     "size": 6.4,
+     "detail": 0.25,
+     "layers": 0
+    },
+    "in": {
+     "in": "step-1"
+    }
+   },
+   {
+    "id": "step-3",
+    "name": "Fine grain",
+    "type": "noise",
+    "kind": "smooth",
+    "params": {
+     "size": 1.8,
+     "detail": 0,
+     "seed": 1
+    },
+    "in": {
+     "in": "step-1"
+    }
+   },
+   {
+    "id": "step-4",
+    "name": "Add fine detail",
+    "type": "combine",
+    "kind": "add",
+    "params": {
+     "amount": 0.25,
+     "offset": 0.5
+    },
+    "in": {
+     "a": "step-2",
+     "b": "step-3",
+     "mask": null
+    }
+   },
+   {
+    "id": "step-5",
+    "name": "Pattern levels",
+    "type": "levels",
+    "params": {
+     "low": 0.05,
+     "high": 0.95,
+     "gamma": 1,
+     "invert": 0
+    },
+    "in": {
+     "in": "step-4"
+    }
+   },
+   {
+    "id": "step-6",
+    "name": "Pattern colors",
+    "type": "gradient",
+    "params": {
+     "ease": 1
+    },
+    "stops": [
+     [
+      0.0,
+      0.3697,
+      0.2106,
+      0.1661
+     ],
+     [
+      0.5,
+      0.436,
+      0.2442,
+      0.1837
+     ],
+     [
+      1.0,
+      0.5319,
+      0.2814,
+      0.1955
+     ]
+    ],
+    "in": {
+     "in": "step-5"
+    }
+   },
+   {
+    "id": "step-7",
+    "name": "Scattered spots",
+    "type": "scatter",
+    "params": {
+     "spacing": 5.7,
+     "radius": 2.1,
+     "coverage": 0.24,
+     "jitter": 1.8,
+     "hardness": 0,
+     "profile": 1,
+     "sizeVariation": 0.5,
+     "toneVariation": 0,
+     "follow": 0
+    },
+    "in": {
+     "in": null,
+     "density": null
+    }
+   },
+   {
+    "id": "step-10",
+    "name": "Spot multiplier",
+    "type": "gradient",
+    "params": {
+     "ease": 0
+    },
+    "stops": [
+     [
+      0.0,
+      1,
+      1,
+      1
+     ],
+     [
+      1.0,
+      0.58,
+      0.508,
+      0.484
+     ]
+    ],
+    "in": {
+     "in": "step-7"
+    }
+   },
+   {
+    "id": "step-11",
+    "name": "Multiply spots",
+    "type": "combine",
+    "kind": "multiply",
+    "params": {
+     "amount": 1,
+     "offset": 0
+    },
+    "in": {
+     "a": "step-6",
+     "b": "step-10",
+     "mask": null
+    }
+   },
+   {
+    "id": "material",
+    "type": "output",
+    "name": "Material",
+    "params": {
+     "relief": 0
+    },
+    "in": {
+     "color": "step-11",
+     "height": null,
+     "shine": null
+    }
+   }
+  ],
+  "palette": [
+   61,
+   189,
+   29,
+   188,
+   60,
+   187,
+   28,
+   186,
+   59,
+   185,
+   58,
+   27,
+   184,
+   207,
+   57,
+   183,
+   71,
+   26,
+   56,
+   206,
+   25,
+   70,
+   182,
+   24,
+   205,
+   23,
+   181,
+   22,
+   204,
+   203
+  ],
+  "dither": {
+   "amount": 1,
+   "spread": 0,
+   "tone": 1,
+   "red": 1,
+   "green": 1,
+   "blue": 1
+  }
+ },
+ "green-ground": {
+  "name": "Green grass",
+  "seed": 0,
+  "nodes": [
+   {
+    "id": "step-1",
+    "name": "Pattern distortion",
+    "type": "warp",
+    "kind": "turbulence",
+    "params": {
+     "amount": 0,
+     "size": 9,
+     "layers": 0,
+     "axis": 0
+    },
+    "in": {
+     "in": null
+    }
+   },
+   {
+    "id": "step-2",
+    "name": "Mottling / streaks",
+    "type": "noise",
+    "kind": "smooth",
+    "params": {
+     "size": 3.5,
+     "detail": 0.3,
+     "layers": 0
+    },
+    "in": {
+     "in": "step-1"
+    }
+   },
+   {
+    "id": "step-3",
+    "name": "Fine grain",
+    "type": "noise",
+    "kind": "smooth",
+    "params": {
+     "size": 1.15,
+     "detail": 0,
+     "seed": 1
+    },
+    "in": {
+     "in": null
+    }
+   },
+   {
+    "id": "step-4",
+    "name": "Pattern levels",
+    "type": "levels",
+    "params": {
+     "low": 0.05,
+     "high": 0.95,
+     "gamma": 1,
+     "invert": 0
+    },
+    "in": {
+     "in": "step-2"
+    }
+   },
+   {
+    "id": "step-5",
+    "name": "Pattern colors",
+    "type": "gradient",
+    "params": {
+     "ease": 1
+    },
+    "stops": [
+     [
+      0.0,
+      0.1855,
+      0.3226,
+      0.0825
+     ],
+     [
+      0.5,
+      0.2244,
+      0.3823,
+      0.1105
+     ],
+     [
+      1.0,
+      0.2692,
+      0.4419,
+      0.1365
+     ]
+    ],
+    "in": {
+     "in": "step-4"
+    }
+   },
+   {
+    "id": "step-6",
+    "name": "Grain colors",
+    "type": "gradient",
+    "params": {
+     "ease": 0
+    },
+    "stops": [
+     [
+      0.0,
+      0.67,
+      0.655,
+      1.035
+     ],
+     [
+      1.0,
+      1.33,
+      1.345,
+      0.965
+     ]
+    ],
+    "in": {
+     "in": "step-3"
+    }
+   },
+   {
+    "id": "step-7",
+    "name": "Multiply grain",
+    "type": "combine",
+    "kind": "multiply",
+    "params": {
+     "amount": 1,
+     "offset": 0
+    },
+    "in": {
+     "a": "step-5",
+     "b": "step-6",
+     "mask": null
+    }
+   },
+   {
+    "id": "material",
+    "type": "output",
+    "name": "Material",
+    "params": {
+     "relief": 0
+    },
+    "in": {
+     "color": "step-7",
+     "height": null,
+     "shine": null
+    }
+   }
+  ],
+  "palette": [
+   43,
+   42,
+   41,
+   40,
+   39,
+   38,
+   238,
+   37,
+   172,
+   170,
+   61,
+   74,
+   169,
+   93,
+   168,
+   60,
+   167,
+   73,
+   166,
+   59,
+   92,
+   72,
+   165,
+   58,
+   184,
+   71,
+   55,
+   70,
+   182,
+   181
+  ],
+  "dither": {
+   "amount": 1,
+   "spread": 0,
+   "tone": 1,
+   "red": 1,
+   "green": 1,
+   "blue": 1
+  }
+ },
+ "green-water": {
+  "name": "Blue streaked water",
+  "seed": 0,
+  "nodes": [
+   {
+    "id": "step-1",
+    "name": "Pattern distortion",
+    "type": "warp",
+    "kind": "turbulence",
+    "params": {
+     "amount": 1,
+     "size": 8,
+     "layers": 0,
+     "axis": 0
+    },
+    "in": {
+     "in": null
+    }
+   },
+   {
+    "id": "step-2-pattern",
+    "name": "Mottling / streaks",
+    "type": "noise",
+    "kind": "waves",
+    "params": {
+     "size": 3.7,
+     "detail": 0.2,
+     "layers": 0,
+     "length": 5.4,
+     "direction": 45,
+     "crests": 0.9
+    },
+    "in": {
+     "in": "step-1"
+    }
+   },
+   {
+    "id": "step-2-broad",
+    "name": "Broad variation",
+    "type": "noise",
+    "kind": "smooth",
+    "params": {
+     "size": 16,
+     "seed": 12
+    },
+    "in": {
+     "in": null
+    }
+   },
+   {
+    "id": "step-2",
+    "name": "Mottling / streaks",
+    "type": "combine",
+    "kind": "mix",
+    "params": {
+     "amount": 0.02,
+     "offset": 0
+    },
+    "in": {
+     "a": "step-2-pattern",
+     "b": "step-2-broad",
+     "mask": null
+    }
+   },
+   {
+    "id": "step-3",
+    "name": "Fine grain",
+    "type": "noise",
+    "kind": "smooth",
+    "params": {
+     "size": 1.1,
+     "detail": 0,
+     "seed": 1
+    },
+    "in": {
+     "in": null
+    }
+   },
+   {
+    "id": "step-4",
+    "name": "Pattern levels",
+    "type": "levels",
+    "params": {
+     "low": 0,
+     "high": 1,
+     "gamma": 1,
+     "invert": 0
+    },
+    "in": {
+     "in": "step-2"
+    }
+   },
+   {
+    "id": "step-5",
+    "name": "Pattern colors",
+    "type": "gradient",
+    "params": {
+     "ease": 1
+    },
+    "stops": [
+     [
+      0.0,
+      0.1,
+      0.2689,
+      0.8845
+     ],
+     [
+      0.5,
+      0.151,
+      0.2984,
+      0.8845
+     ],
+     [
+      1.0,
+      0.202,
+      0.3279,
+      0.8845
+     ]
+    ],
+    "in": {
+     "in": "step-4"
+    }
+   },
+   {
+    "id": "step-6",
+    "name": "Grain colors",
+    "type": "gradient",
+    "params": {
+     "ease": 0
+    },
+    "stops": [
+     [
+      0.0,
+      0.51,
+      0.5789,
+      0.937
+     ],
+     [
+      1.0,
+      1.49,
+      1.4211,
+      1.063
+     ]
+    ],
+    "in": {
+     "in": "step-3"
+    }
+   },
+   {
+    "id": "step-7",
+    "name": "Multiply grain",
+    "type": "combine",
+    "kind": "multiply",
+    "params": {
+     "amount": 1,
+     "offset": 0
+    },
+    "in": {
+     "a": "step-5",
+     "b": "step-6",
+     "mask": null
+    }
+   },
+   {
+    "id": "material",
+    "type": "output",
+    "name": "Material",
+    "params": {
+     "relief": 0
+    },
+    "in": {
+     "color": "step-7",
+     "height": null,
+     "shine": null
+    }
+   }
+  ],
+  "palette": [
+   227,
+   104,
+   103,
+   226,
+   102,
+   101
+  ],
+  "dither": {
+   "amount": 1,
+   "spread": 0,
+   "tone": 1,
+   "red": 1,
+   "green": 1,
+   "blue": 1
+  }
+ },
+ "red-water": {
+  "name": "Violet rippled water",
+  "seed": 0,
+  "nodes": [
+   {
+    "id": "step-1",
+    "name": "Pattern distortion",
+    "type": "warp",
+    "kind": "turbulence",
+    "params": {
+     "amount": 4.5,
+     "size": 10,
+     "layers": 0,
+     "axis": 0
+    },
+    "in": {
+     "in": null
+    }
+   },
+   {
+    "id": "step-2-pattern",
+    "name": "Mottling / streaks",
+    "type": "noise",
+    "kind": "waves",
+    "params": {
+     "size": 5.2,
+     "detail": 0.3,
+     "layers": 0,
+     "length": 7.5,
+     "direction": 45,
+     "crests": 1
+    },
+    "in": {
+     "in": "step-1"
+    }
+   },
+   {
+    "id": "step-2-broad",
+    "name": "Broad variation",
+    "type": "noise",
+    "kind": "smooth",
+    "params": {
+     "size": 16,
+     "seed": 12
+    },
+    "in": {
+     "in": null
+    }
+   },
+   {
+    "id": "step-2",
+    "name": "Mottling / streaks",
+    "type": "combine",
+    "kind": "mix",
+    "params": {
+     "amount": 0.05,
+     "offset": 0
+    },
+    "in": {
+     "a": "step-2-pattern",
+     "b": "step-2-broad",
+     "mask": null
+    }
+   },
+   {
+    "id": "step-3",
+    "name": "Fine grain",
+    "type": "noise",
+    "kind": "smooth",
+    "params": {
+     "size": 1,
+     "detail": 0,
+     "seed": 1
+    },
+    "in": {
+     "in": null
+    }
+   },
+   {
+    "id": "step-4",
+    "name": "Pattern levels",
+    "type": "levels",
+    "params": {
+     "low": -0.1,
+     "high": 1.1,
+     "gamma": 1,
+     "invert": 0
+    },
+    "in": {
+     "in": "step-2"
+    }
+   },
+   {
+    "id": "step-5",
+    "name": "Pattern colors",
+    "type": "gradient",
+    "params": {
+     "ease": 0
+    },
+    "stops": [
+     [
+      0.0,
+      0.1778,
+      0.1527,
+      0.3594
+     ],
+     [
+      0.5,
+      0.1987,
+      0.16,
+      0.4093
+     ],
+     [
+      1.0,
+      0.2171,
+      0.1712,
+      0.464
+     ]
+    ],
+    "in": {
+     "in": "step-4"
+    }
+   },
+   {
+    "id": "step-6",
+    "name": "Grain colors",
+    "type": "gradient",
+    "params": {
+     "ease": 0
+    },
+    "stops": [
+     [
+      0.0,
+      1.06,
+      0.85,
+      1.006
+     ],
+     [
+      1.0,
+      0.94,
+      1.15,
+      0.994
+     ]
+    ],
+    "in": {
+     "in": "step-3"
+    }
+   },
+   {
+    "id": "step-7",
+    "name": "Multiply grain",
+    "type": "combine",
+    "kind": "multiply",
+    "params": {
+     "amount": 1,
+     "offset": 0
+    },
+    "in": {
+     "a": "step-5",
+     "b": "step-6",
+     "mask": null
+    }
+   },
+   {
+    "id": "step-8",
+    "name": "Scattered spots",
+    "type": "scatter",
+    "params": {
+     "spacing": 4.5,
+     "radius": 1,
+     "coverage": 0.18,
+     "jitter": 1.5,
+     "hardness": 0.1,
+     "profile": 1,
+     "sizeVariation": 0.5,
+     "toneVariation": 0.3,
+     "follow": 0.85
+    },
+    "in": {
+     "in": null,
+     "density": "step-2"
+    }
+   },
+   {
+    "id": "step-9",
+    "name": "Spot color",
+    "type": "gradient",
+    "params": {
+     "ease": 0
+    },
+    "stops": [
+     [
+      0.0,
+      0.3137,
+      0.3529,
+      0.6078
+     ],
+     [
+      1.0,
+      0.3137,
+      0.3529,
+      0.6078
+     ]
+    ],
+    "in": {
+     "in": null
+    }
+   },
+   {
+    "id": "step-10",
+    "name": "Blend spot color",
+    "type": "combine",
+    "kind": "mix",
+    "params": {
+     "amount": 0.525,
+     "offset": 0
+    },
+    "in": {
+     "a": "step-7",
+     "b": "step-9",
+     "mask": "step-8"
+    }
+   },
+   {
+    "id": "material",
+    "type": "output",
+    "name": "Material",
+    "params": {
+     "relief": 0
+    },
+    "in": {
+     "color": "step-10",
+     "height": null,
+     "shine": null
+    }
+   }
+  ],
+  "palette": [
+   109,
+   108,
+   139,
+   107,
+   138,
+   106,
+   137,
+   121,
+   120,
+   119,
+   154,
+   153,
+   221,
+   152,
+   151
+  ],
+  "dither": {
+   "amount": 1,
+   "spread": 1,
+   "tone": 1.1,
+   "red": 1,
+   "green": 0.95,
+   "blue": 0.75
+  }
+ },
+ "desert-ground": {
+  "name": "Desert sand",
+  "seed": 0,
+  "nodes": [
+   {
+    "id": "warp",
+    "name": "Soften clod outlines",
+    "type": "warp",
+    "kind": "flow",
+    "params": {
+     "amount": 1.1,
+     "size": 13,
+     "layers": 0,
+     "axis": 0
+    },
+    "in": {
+     "in": null
+    }
+   },
+   {
+    "id": "clods",
+    "name": "Rounded clods",
+    "type": "scatter",
+    "params": {
+     "spacing": 3.2,
+     "radius": 2.448,
+     "coverage": 1,
+     "jitter": 0.9,
+     "hardness": 0,
+     "profile": 1.5,
+     "sizeVariation": 0.3,
+     "toneVariation": 0.752,
+     "follow": 0
+    },
+    "in": {
+     "in": "warp",
+     "density": null
+    }
+   },
+   {
+    "id": "clod-variation",
+    "name": "Clod variation",
+    "type": "noise",
+    "kind": "gradient",
+    "params": {
+     "size": 9,
+     "detail": 0.25,
+     "layers": 0
+    },
+    "in": {
+     "in": null
+    }
+   },
+   {
+    "id": "varied-clods",
+    "name": "Break up clod highlights",
+    "type": "combine",
+    "kind": "multiply",
+    "params": {
+     "amount": 0.8,
+     "offset": -0.1
+    },
+    "in": {
+     "a": "clods",
+     "b": "clod-variation",
+     "mask": null
+    }
+   },
+   {
+    "id": "sand",
+    "name": "Orange sand \u2192 beige clods",
+    "type": "gradient",
+    "params": {
+     "ease": 0.55
+    },
+    "stops": [
+     [
+      0.0,
+      0.6941,
+      0.5725,
+      0.4784
+     ],
+     [
+      0.5,
+      0.7922,
+      0.6902,
+      0.5843
+     ],
+     [
+      1.0,
+      0.8471,
+      0.7765,
+      0.6667
+     ]
+    ],
+    "in": {
+     "in": "varied-clods"
+    }
+   },
+   {
+    "id": "fine",
+    "name": "Fine sand",
+    "type": "noise",
+    "kind": "pixel",
+    "params": {},
+    "in": {
+     "in": null
+    }
+   },
+   {
+    "id": "pigment-grain",
+    "name": "Fine pigment grain",
+    "type": "noise",
+    "kind": "waves",
+    "params": {
+     "size": 1.1,
+     "detail": 0,
+     "layers": 0,
+     "length": 1.4,
+     "direction": 0,
+     "crests": 0
+    },
+    "in": {
+     "in": null
+    }
+   },
+   {
+    "id": "fine-color",
+    "name": "Grain tint",
+    "type": "gradient",
+    "params": {
+     "ease": 0
+    },
+    "stops": [
+     [
+      0.0,
+      0.9,
+      0.9,
+      0.9
+     ],
+     [
+      0.5,
+      1.005,
+      1.005,
+      1.005
+     ],
+     [
+      1.0,
+      1.08,
+      1.08,
+      1.08
+     ]
+    ],
+    "in": {
+     "in": "pigment-grain"
+    }
+   },
+   {
+    "id": "sand-grain",
+    "name": "Multiply fine grain",
+    "type": "combine",
+    "kind": "multiply",
+    "params": {
+     "amount": 0.9,
+     "offset": 0
+    },
+    "in": {
+     "a": "sand",
+     "b": "fine-color",
+     "mask": null
+    }
+   },
+   {
+    "id": "spots",
+    "name": "Sparse dark grains",
+    "type": "scatter",
+    "params": {
+     "spacing": 3,
+     "radius": 0.9,
+     "coverage": 0.4,
+     "jitter": 1.5,
+     "hardness": 0.52,
+     "profile": 1,
+     "sizeVariation": 0.5,
+     "toneVariation": 0.65,
+     "follow": 0
+    },
+    "in": {
+     "in": null,
+     "density": null
+    }
+   },
+   {
+    "id": "spot-color",
+    "name": "Dark brown multiplier",
+    "type": "gradient",
+    "params": {
+     "ease": 0.2
+    },
+    "stops": [
+     [
+      0.0,
+      1,
+      1,
+      1
+     ],
+     [
+      1.0,
+      0.262,
+      0.28,
+      0.307
+     ]
+    ],
+    "in": {
+     "in": "spots"
+    }
+   },
+   {
+    "id": "pigment",
+    "name": "Multiply dark grains",
+    "type": "combine",
+    "kind": "multiply",
+    "params": {
+     "amount": 1,
+     "offset": 0
+    },
+    "in": {
+     "a": "sand-grain",
+     "b": "spot-color",
+     "mask": null
+    }
+   },
+   {
+    "id": "height-grain",
+    "name": "Clods + fine relief",
+    "type": "combine",
+    "kind": "add",
+    "params": {
+     "amount": 0.65,
+     "offset": 0.5
+    },
+    "in": {
+     "a": "varied-clods",
+     "b": "fine",
+     "mask": null
+    }
+   },
+   {
+    "id": "crease-field",
+    "name": "Narrow crease network",
+    "type": "noise",
+    "kind": "ridged",
+    "params": {
+     "size": 3,
+     "layers": 0.6,
+     "roughness": 0.35,
+     "sharpness": 2
+    },
+    "in": {
+     "in": "warp"
+    }
+   },
+   {
+    "id": "crease-mask",
+    "name": "Isolate sharp crevices",
+    "type": "levels",
+    "params": {
+     "low": 0.49,
+     "high": 0.98,
+     "gamma": 4,
+     "invert": 0
+    },
+    "in": {
+     "in": "crease-field"
+    }
+   },
+   {
+    "id": "crease-height",
+    "name": "Cut narrow crevices",
+    "type": "combine",
+    "kind": "subtract",
+    "params": {
+     "amount": 0.4,
+     "offset": 0
+    },
+    "in": {
+     "a": "height-grain",
+     "b": "crease-mask",
+     "mask": null
+    }
+   },
+   {
+    "id": "mineral-field",
+    "name": "Sand mineral patches",
+    "type": "noise",
+    "kind": "smooth",
+    "params": {
+     "size": 4,
+     "detail": 0.25,
+     "layers": 0
+    },
+    "in": {
+     "in": null
+    }
+   },
+   {
+    "id": "mineral-color",
+    "name": "Gray beige to orange sand",
+    "type": "gradient",
+    "params": {
+     "ease": 0
+    },
+    "stops": [
+     [
+      0.0,
+      0.932,
+      1.119,
+      1.204
+     ],
+     [
+      1.0,
+      1.068,
+      0.881,
+      0.796
+     ]
+    ],
+    "in": {
+     "in": "mineral-field"
+    }
+   },
+   {
+    "id": "mineral-blend",
+    "name": "Tint sand patches",
+    "type": "combine",
+    "kind": "multiply",
+    "params": {
+     "amount": 1,
+     "offset": 0
+    },
+    "in": {
+     "a": "pigment",
+     "b": "mineral-color",
+     "mask": null
+    }
+   },
+   {
+    "id": "material",
+    "type": "output",
+    "name": "Material",
+    "params": {
+     "relief": 2.4
+    },
+    "in": {
+     "color": "mineral-blend",
+     "height": "crease-height",
+     "shine": null
+    }
+   }
+  ],
+  "palette": [
+   67,
+   66,
+   19,
+   20,
+   68,
+   178,
+   21,
+   18,
+   177,
+   69,
+   179,
+   65,
+   22,
+   86,
+   88,
+   89,
+   87,
+   23,
+   70,
+   90,
+   57,
+   56,
+   85,
+   24,
+   91,
+   180,
+   181,
+   53,
+   17,
+   25,
+   84,
+   92
+  ],
+  "dither": {
+   "amount": 1,
+   "spread": 1,
+   "tone": 1,
+   "red": 1,
+   "green": 1,
+   "blue": 1
+  }
+ }
+}

@@ -97,7 +97,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   await openHost();
   const engine = await import('../sculpt-scene.js'), fieldsModule = await import('../sculpt-gpu-fields.js');
   const {configureMap} = await import('../sculpt-map.js'), {TerrainRenderer} = await import('../sculpt-renderer.js');
-  const {copyGrounds, worldGrounds, keepStrokeGrounds, groundsInUse} = await import('../sculpt-ground-presets.js');
+  const {withWorldMaterials, keepStrokeMaterials, materialsInUse} = await import('../sculpt-materials.js');
   const {copyRockSettings, applyWorldRock, copyRocks, worldRocks, keepStrokeRocks, rocksInUse} = await import('../sculpt-rock-presets.js');
   const {copyColumn} = await import('../sculpt-column.js'), {copyMapTools} = await import('../sculpt-tools.js');
   const settings = new URLSearchParams(search);
@@ -108,7 +108,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   if (config.biomeId !== scene.biome) throw new Error(`asked for world ${scene.biome}, got ${config.biomeId}`);
   config.services = services;
   const worldColumn = {column: config.column}, columnOverride = copyColumn(scene.column);
-  let grounds = copyGrounds(scene.grounds) ?? worldGrounds(config), groundKey = '[]';
+  let materials = withWorldMaterials(scene.materials, config), materialKey = '[]';   // the map's materials (sculpt.js mapMaterials): the scene's, else the world's
   let rocks = copyRocks(scene.rocks) ?? worldRocks(config), rockKey = '[]';   // the map's rock presets (sculpt.js mapRocks): the scene's, else the world's
   const tools = copyMapTools(scene.tools) ?? [];   // the map's own tools (sculpt.js mapTools), which its strokes may name
   if (columnOverride) config.column = columnOverride;
@@ -138,9 +138,9 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
     : fieldsModule.createGpuFields(common);
   // sculpt.js scriptedScene: the scene's nodes replace the map's, and the fields evaluate them.
   // sculpt.js syncRocks: the renderer's rock table holds the presets strokes choose, and no other.
-  const syncGrounds = () => { const used = groundsInUse(nodes, grounds), key = JSON.stringify(used); if (key !== groundKey) { renderer.setGrounds(new Map(used.map(p => [p.slot, p]))); groundKey = key; } };
+  const syncMaterials = () => { const used = materialsInUse(nodes, materials), key = JSON.stringify(used); if (key !== materialKey) { renderer.setMaterials(new Map(used.map(m => [m.slot, m]))); materialKey = key; } };
   const syncRocks = () => { const used = rocksInUse(nodes, rocks), key = JSON.stringify(used); if (key !== rockKey) { rockKey = key; renderer.setRocks(new Map(used.map(r => [r.slot, r]))); } };
-  const play = (list, {ground = true} = {}) => { nodes = keepStrokeGrounds(keepStrokeRocks(engine.sceneNodes(config, list, {ground, seed, settings, tools}), rocks), grounds); if (scene_) scene_.nodes = nodes; fields.changed(); syncRocks(); syncGrounds(); return nodes.length; };
+  const play = (list, {ground = true} = {}) => { nodes = keepStrokeMaterials(keepStrokeRocks(engine.sceneNodes(config, list, {ground, seed, settings, tools}), rocks), materials); if (scene_) scene_.nodes = nodes; fields.changed(); syncRocks(); syncMaterials(); return nodes.length; };
   let scene_ = null;
   play(strokes, {ground: scene.ground !== false});
   if (paged) await fields.startCoarse();   // bootMap: a paged map's coarse lattice fills from the start
@@ -149,10 +149,10 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
     material: engine.materialKnobs(sliders, refinementSeed, renderer.variant.get('transition')), drawOptions: options => engine.drawOptions(sliders, options),
     // The map's rock presets, and a new list for them (a preset edited, added or removed), as sculpt.js editRocks takes it: an edited preset is a
     // table upload, and the shape is evaluated again only when a stroke's choice went to Rock beneath (its preset deleted).
-    get grounds() { return grounds; }, setGrounds(list) {
-      grounds = copyGrounds(list) ?? []; const next = keepStrokeGrounds(nodes, grounds);
+    get materials() { return materials; }, setMaterials(list) {
+      materials = withWorldMaterials(list, config); const next = keepStrokeMaterials(nodes, materials);
       if (next.some((n, i) => n !== nodes[i])) { nodes = scene_.nodes = next; fields.changed(); }
-      syncGrounds();
+      syncMaterials();
     },
     get rocks() { return rocks; }, setRocks(list) {
       rocks = copyRocks(list) ?? []; const next = keepStrokeRocks(nodes, rocks);

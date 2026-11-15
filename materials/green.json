@@ -1994,6 +1994,7 @@
   "deposit": {"params": {"reach": 1, "round": 0.7}, "vary": {"reach": [0.8, 1.4], "haloRough": [4, 10]}}
  },
  "world": {
+    "materials": {"ground": "green-ground", "water": "green-water"},
     "knobDefaults": {
         "coastRamp": 0.75,
         "looseSupply": 0.08,

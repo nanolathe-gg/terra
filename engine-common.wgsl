@@ -112,131 +112,25 @@ struct Rock {
 }
 
 // Absolute ground recipes; the cache holds height and unlit color parameters.
+// A material slot as the terrain reads it: where its cached repeat lies and the game-palette colors it is reduced to.
 struct Ground {
-    colorLayer: i32,
-    patternOctaves: f32,
-    patternLinear: f32,
-    phaseOctaves: f32,
-    phaseAxis: f32,
-    patternInvert: f32,
-    patternClip: f32,
-    patternSine: f32,
-    patternSineFrequency: f32,
-
-    patternAmount: f32,
-    patternSize: f32,
-    patternDetail: f32,
-    patternGradient: f32,
-    patternTurbulence: f32,
-    patternCells: f32,
-    patternStreak: f32,
-    patternLength: f32,
-    patternDirection: f32,
-    patternSlope: f32,
-    patternWarp: f32,
-    patternWarpSize: f32,
-    patternMottle: f32,
-    patternMottleSize: f32,
-    patternLow: f32,
-    patternHigh: f32,
-    patternPower: f32,
-    patternEase: f32,
-    textureFineStructure: f32,
-    textureFine: f32,
-    textureFineSize: f32,
-    textureFineGradient: f32,
-    textureFineWarp: f32,
-    markAmount: f32,
-    markSize: f32,
-    markSpacing: f32,
-    markDensity: f32,
-    markScatter: f32,
-    markCore: f32,
-    markVariation: f32,
-    markFollow: f32,
-    markNoise: f32,
-    markNoiseSize: f32,
-    markLow: f32,
-    markHigh: f32,
-    markMultiply: f32,
-    textureHeight: f32,
-    textureGrainHeight: f32,
-    texturePitDepth: f32,
-    textureDither: f32,
-    diffusionMix: f32,
-    paletteGamma: f32,
-    paletteRed: f32,
-    paletteGreen: f32,
-    paletteBlue: f32,
-    textureLow: vec4f,
-    textureMiddle: vec4f,
-    textureHigh: vec4f,
-    textureMark: vec4f,
-    textureFineLow: vec4f,
-    textureFineHigh: vec4f,
-    textureMarkTint: vec4f,
-    texturePaletteCount: i32,
-    texturePalette: array<vec4f,32>,
-
-    cacheLayer: i32,
-    grainFine: f32,
-    grainMedium: f32,
-    grainBroad: f32,
-    grainRelief: f32,
-    grainColorMix: f32,
-    grainStretch: f32,
-    grainDirection: f32,
-    bumpAmount: f32,
-    bumpSize: f32,
-    bumpStretch: f32,
-    plateAmount: f32,
-    plateSize: f32,
-    plateVariation: f32,
-    plateProfile: f32,
-    borderProfile: f32,
-    crackWidth: f32,
-    rimCurl: f32,
-    plateTilt: f32,
-    secondaryCracks: f32,
-    scratchAmount: f32,
-    scratchSpacing: f32,
-    scratchWidth: f32,
-    scratchLength: f32,
-    scratchConnect: f32,
-    quietAmount: f32,
-    quietSize: f32,
-    veinAmount: f32,
-    veinSpacing: f32,
-    veinWidth: f32,
-    pebbleAmount: f32,
-    pebbleSize: f32,
-    pebbleRound: f32,
-    cushionAmount: f32,
-    cushionSize: f32,
-    rippleAmount: f32,
-    rippleSize: f32,
-    rippleAsymmetry: f32,
-    toneVariation: f32,
-    toneSize: f32,
-    lineStrength: f32,
-    gloss: f32,
-    sharpness: f32,
-    roughness: f32,
-    roughnessScale: f32,
-    wetness: f32,
-    ramp: array<vec4f, 16>,
-    variationRamp: array<vec4f, 16>,
-    lineColor: vec4f,
+    cacheLayer: i32,       // the material's layer of the cached repeat (color and height, shine), -1 when the slot is empty
+    colorLayer: i32,       // its layer of the palette-reduced color
+    paletteCount: i32,
+    dither: f32,           // 0 leaves the color continuous; 1 is the full palette reduction
+    spread: f32,           // how the diffusion shares its error: 0 Floyd-Steinberg, 1 a wider kernel
+    tone: f32,             // the gamma colors are compared in
+    weights: vec4f,        // how much a red, green or blue difference counts when a palette color is chosen
+    palette: array<vec4f, 32>,
 }
-
+// One node of a material graph (sculpt-materials.js compileMaterial).
 struct MaterialStep {
- code:vec4i, // kind, enabled, sampled-field index, operation / output
- links:vec4i, // source, second input, mask, color type
+ code:vec4i, // node type, enabled, kind, color output
+ links:vec4i, // the nodes its inputs read, -1 when open
  args:array<vec4f,16>,
 }
 struct MaterialGraph {
-    recipe: Ground,
-    program: vec4i, // step count, field planes, color output, height output
+    program: vec4i, // node count
     steps: array<MaterialStep,40>,
 }
 
@@ -255,7 +149,6 @@ struct Uniforms {
     shallowColor: vec3f,
     riverBed: vec4f,       // riverfix: the braided bed's gravel colour (materials/<world>.json water.riverBedRGB), a = 1 when the world gives one
     deepColor: vec3f,
-    waterMean: vec3f,
     rockMean: vec3f,
     clay: i32,
     slopeMaterial: i32,
@@ -276,13 +169,11 @@ struct Uniforms {
     transitionBody: i32,
     crackDark: f32,
     // A world's chosen base colours (a = 1 when set) and its textures' means.
-    groundBase: vec4f,
     slopeBase: vec4f,
     sandBase: vec4f,
     beachBase: vec4f,
     shallowBase: vec4f,
     deepBase: vec4f,
-    groundTexMean: vec3f,
     slopeTexMean: vec3f,
     rockTexMean: vec3f,
     beachTexMean: vec3f,
@@ -296,8 +187,6 @@ struct Uniforms {
     // Crystals: their own colour (world base colour 'crystal', else the world's).
     crystalColor: vec3f,
     crystalBase: vec4f,
-    groundContrast: f32,
-    groundBorrowed: i32,
     sandDust: f32,
     sandGrass: f32,
     bandWater: f32,
@@ -324,13 +213,7 @@ struct Uniforms {
     waterSoft: f32,
     crispShore: f32,
     bankRock: f32,
-    groundMode: i32,
-    waterLayer: i32,       // H14e: the generated layers that are the deep and the shallow water's grain (the table's water materials)
-    shallowLayer: i32,
-    groundLayer: i32,      // H14b: the generated layer that is the plain's quilted image, or -1 (the plain is the sampled image or the tiles)
     beachLayer: i32,       // the generated layer that is the beach sand (the world's own, or one borrowed from another world's table), or -1
-    groundTiles: i32,
-    tileShift: f32,        // the export's TNT tile grid starts this many screen rows down: floor(base height / 2), the TA projection's offset (sculpt-chunk-renderer.js requiredRegion)
     sandGrain: f32,
     // Bake (engine-bake.wgsl).
     reliefScale: f32,     // wavelength of the first octave, world px
@@ -554,6 +437,7 @@ struct Uniforms {
     groundDefault: i32,
     waterGround: i32,
     groundAny: i32,
+    groundShine: i32,      // 1 when a material in use puts out shine, so the shine pass runs for it
     ground: array<Ground, 8>,
 }
 
@@ -759,6 +643,7 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), sel
 @group(0) @binding(14) var groundColorTex: texture_2d_array<f32>;
 @group(0) @binding(15) var<storage,read> materialGraphs:array<MaterialGraph>;
 @group(0) @binding(16) var materialFinishTex:texture_2d_array<f32>;
+@group(0) @binding(17) var materialMeanTex:texture_2d_array<f32>;   // one texel a material: the mean color of its repeat
 @group(0) @binding(13) var groundTex: texture_2d_array<f32>;
 @group(0) @binding(7) var linearClamp: sampler;
 @group(0) @binding(8) var linearRepeat: sampler;
@@ -1108,55 +993,45 @@ fn useRock(p:vec2f) { rs=rockSlotAt(p); }
 fn groundSlotAt(p:vec2f)->u32 {
     if(u.groundIdOn==0){return u32(u.groundDefault);}
     let cell=clamp(vec2i(floor(p/(u.size-1.0)*(u.grid-1.0)+.5-u.chunkGridOrigin)),vec2i(0),vec2i(maskDimensions())-1);
-    let id=round(loadGroundMask(cell)*127.0);return select(u32(clamp(id-1.0,0.0,7.0)),u32(u.groundDefault),id<.5);
-}
-// Whole texels preserve each plate's own tone and line at a level surface.
-fn groundHere(p:vec2f)->vec4f {
-    return vec4f(materialRelief(p,gs),0,0,0);
+    let id=round(loadGroundMask(cell)*127.0);return select(u32(clamp(id-1.0,0.0,7.0)),u32(u.groundDefault),id<1.5);
 }
 // Blend only art height across a two-art-pixel contact. The categorical slot
 // still chooses color and finish; no noise or gameplay height enters the edge.
 fn groundHeightFor(p:vec2f,cell:vec2i)->f32 {
     let c=clamp(cell,vec2i(0),vec2i(maskDimensions())-1);
-    let id=round(loadGroundMask(c)*127.0);let slot=select(u32(clamp(id-1.0,0.0,7.0)),u32(u.groundDefault),id<.5);
+    let id=round(loadGroundMask(c)*127.0);let slot=select(u32(clamp(id-1.0,0.0,7.0)),u32(u.groundDefault),id<1.5);
     let layer=u.ground[slot & groundMask].cacheLayer;
     if(layer<0){return 0.0;}
     return materialRelief(p,slot);
 }
 fn groundHeight(p:vec2f)->f32 {
-    if(u.groundIdOn==0){if(hasGround()){return groundHere(p).x;}return 0.0;}
+    if(u.groundIdOn==0){return materialRelief(p,gs);}
     let q=p/(u.size-1.0)*(u.grid-1.0)-u.chunkGridOrigin;
     let cell=vec2i(floor(q));let f=smoothstep(vec2f(.25),vec2f(.75),fract(q));
     return mix(mix(groundHeightFor(p,cell),groundHeightFor(p,cell+vec2i(1,0)),f.x),
                mix(groundHeightFor(p,cell+vec2i(0,1)),groundHeightFor(p,cell+vec2i(1,1)),f.x),f.y);
 }
 fn materialPixel(p:vec2f)->vec2f {return poolWrap(floor(p),f32(textureDimensions(groundTex).x));}
-fn groundFinishNoise(p:vec2f,size:f32,salt:f32)->f32 {
-    let period=f32(textureDimensions(groundTex).x);let count=max(1.0,period/max(1.0,size));let n=exp2(floor(log2(count)));let q=poolWrap(p,period)/period;
-    return mix(wrapNoise(q*n+salt,n),wrapNoise(q*(n*2.0)+salt,n*2.0),fract(log2(count)));
-}
 
-// One graph produces all material channels; composition happens inside it.
+// A material's cached repeat: unlit color and art height, its shine, and its color reduced to its palette.
 fn materialRaw(p:vec2f,slot:u32)->vec3f {
  return textureLoad(groundTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).rgb;
 }
 fn materialRelief(p:vec2f,slot:u32)->f32 {
  return textureLoad(groundTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).w;
 }
-struct MaterialFinish { shine:vec4f, wetness:f32 }
-fn materialSurface(p:vec2f,slot:u32)->MaterialFinish {
- let r=u.ground[slot & groundMask];let f=textureLoad(materialFinishTex,vec2i(materialPixel(p)),r.cacheLayer,0);
- return MaterialFinish(vec4f(f.z,r.sharpness,f.x,r.roughnessScale),f.y);
+fn materialShine(p:vec2f,slot:u32)->f32 {
+ return textureLoad(materialFinishTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).x;
 }
-fn materialContinuous(p:vec2f,slot:u32)->vec3f {return materialRaw(p,slot);}
+fn materialMean(slot:u32)->vec3f {
+ return textureLoad(materialMeanTex,vec2i(0),u.ground[slot & groundMask].cacheLayer,0).rgb;
+}
 fn materialPigment(p:vec2f,slot:u32)->vec3f {
- let r=u.ground[slot & groundMask];let raw=materialContinuous(p,slot);
- if(r.textureDither<=0.0){return raw;}
-
- return mix(raw,textureLoad(groundColorTex,vec2i(materialPixel(p)),r.colorLayer,0).rgb,r.textureDither);
+ let r=u.ground[slot & groundMask];let raw=materialRaw(p,slot);
+ if(r.dither<=0.0){return raw;}
+ return mix(raw,textureLoad(groundColorTex,vec2i(materialPixel(p)),r.colorLayer,0).rgb,r.dither);
 }
 
-fn hasGround()->bool { return u.groundAny != 0 && u.ground[gs & groundMask].cacheLayer >= 0; }
 // The slot of the debris lying at p: rock weather's strongest source there (rockDeposit), read at the nearest 4-px cell.
 fn debrisSlotAt(p:vec2f)->u32 {
     if(u.rockIdOn==0){return 0u;}

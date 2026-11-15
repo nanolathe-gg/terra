@@ -1,307 +1,171 @@
-// Pool-periodic ground generator. Output is height, ramp position, tone, line.
-// No light enters this pass. The solid lights the height after the chunk bake.
+// Material graphs. One compute pass evaluates a material's node graph once per texel of its repeat and writes unlit color, art height
+// and shine. Every field wraps at the repeat (graphPeriod), so the tile joins itself on all sides. No light enters this pass: the
+// renderer lights the height afterwards. sculpt-materials.js compiles a graph into the straight-line calls pasted at MATERIAL_PROGRAM;
+// node numbers stay in the materialGraphs buffer, so dragging a control never recompiles a pipeline.
 /*COMMON*/
 var<private> graphPeriod:f32;
+var<private> graphRow:u32;
 fn graphPos(p:vec2f)->vec2f{return poolWrap(p,graphPeriod);}
 fn graphPixel(p:vec2f)->vec2f{return poolWrap(floor(p),graphPeriod);}
-struct GroundCell { radius:f32, edge:f32, id:vec2f, other:vec2f, offset:vec2f }
-// Ported from prototype/ground-spike's poolCellAt: neighbors wrap their IDs,
-// while distances stay local so the pool boundary is an ordinary cell border.
-fn groundCell(q:vec2f,n:f32,salt:f32,variation:f32)->GroundCell {
+fn node(i:u32)->MaterialStep{return materialGraphs[graphRow].steps[i];}
+fn arg(s:MaterialStep,index:u32)->f32{return s.args[index/4u][index%4u];}
+// A seed moves a field's lattice or its hash: 0 is the field the node always had.
+fn seeded(salt:f32,seed:f32)->f32{return salt+37.0*seed;}
+
+// Smooth value noise on a lattice that divides the repeat. Neighboring lattice counts blend, so a size edit stays continuous.
+fn smoothCount(p:vec2f,n:f32,salt:f32)->f32{return wrapNoise(graphPos(p)*(n/graphPeriod)+salt,n);}
+fn smoothNoise(p:vec2f,size:f32,salt:f32)->f32{
+ let count=max(1.0,graphPeriod/max(1.0,size));let n=exp2(floor(log2(count)));
+ return mix(smoothCount(p,n,salt),smoothCount(p,n*2.0,salt),fract(log2(count)));
+}
+fn gradientNoise(p:vec2f,size:f32,salt:f32)->f32{
+ let n=max(1.0,round(graphPeriod/size));let q=graphPos(p)/graphPeriod*n;let c=floor(q);let t=fract(q);let fade=t*t*t*(t*(t*6.0-15.0)+10.0);
+ var values:array<f32,4>;for(var i=0u;i<4u;i++){let off=vec2f(f32(i&1u),f32(i>>1u));let a=cellHash(poolWrap(c+off,n)+salt).x*6.2831853;values[i]=dot(vec2f(cos(a),sin(a)),t-off);}
+ return mix(mix(values[0],values[1],fade.x),mix(values[2],values[3],fade.x),fade.y)*1.41421356;
+}
+struct GraphCell{radius:f32,edge:f32,id:vec2f}
+// The nearest scattered point of a wrapped lattice and the distance to the border with its neighbor.
+fn graphCell(q:vec2f,n:f32,salt:f32)->GraphCell{
  let g=floor(q);let f=q-g;var mr=vec2f(0);var mb=vec2f(0);var md=8.0;
  for(var j=-1;j<=1;j++){for(var i=-1;i<=1;i++){
-  let b=vec2f(f32(i),f32(j));let r=b+.5+(cellHash(poolWrap(g+b,n)+salt)-.5)*.8*variation-f;
+  let b=vec2f(f32(i),f32(j));let r=b+.5+(cellHash(poolWrap(g+b,n)+salt)-.5)*.8-f;
   let d=dot(r,r);if(d<md){md=d;mr=r;mb=b;}
  }}
- var edge=8.0;var other=vec2f(0);
+ var edge=8.0;
  for(var j=-2;j<=2;j++){for(var i=-2;i<=2;i++){
-  let b=mb+vec2f(f32(i),f32(j));let r=b+.5+(cellHash(poolWrap(g+b,n)+salt)-.5)*.8*variation-f;let dr=r-mr;
-  if(dot(dr,dr)>1e-6){let e=dot(.5*(mr+r),normalize(dr));if(e<edge){edge=e;other=poolWrap(g+b,n);}}
+  let b=mb+vec2f(f32(i),f32(j));let r=b+.5+(cellHash(poolWrap(g+b,n)+salt)-.5)*.8-f;let dr=r-mr;
+  if(dot(dr,dr)>1e-6){edge=min(edge,dot(.5*(mr+r),normalize(dr)));}
  }}
- return GroundCell(sqrt(md),edge,poolWrap(g+mb,n),other,-mr);
+ return GraphCell(sqrt(md),edge,poolWrap(g+mb,n));
 }
-fn groundBorder(a:vec2f,b:vec2f)->f32{return cellHash(a+b+.37*a*b+5.1).x;}
-fn groundNoiseCount(p:vec2f,n:f32,salt:f32)->f32{return wrapNoise(graphPos(p)*(n/graphPeriod)+salt,n);}
-fn groundNoise(p:vec2f,size:f32,salt:f32)->f32{
- let count=max(1.0,graphPeriod/max(1.0,size));let n=exp2(floor(log2(count)));
- return mix(groundNoiseCount(p,n,salt),groundNoiseCount(p,n*2.0,salt),fract(log2(count)));
+// Stretched lattice noise along one of eight directions; neighboring directions blend. Integer shears keep it periodic.
+fn waveAt(p:vec2f,size:f32,ratio:f32,axis:u32,salt:f32)->f32{
+ let diagonal=(axis%2u)==1u;let n=max(vec2f(1),round(vec2f(graphPeriod)/(vec2f(size,size*ratio)*select(1.0,1.41421356,diagonal))));
+ let v=graphPos(p);var point=v;switch(axis%4u){case 1u:{point=vec2f(v.x-v.y,v.x+v.y);}case 2u:{point=vec2f(v.y,-v.x);}case 3u:{point=vec2f(v.x+v.y,v.y-v.x);}default:{}}
+ let q=point/graphPeriod*n;let c=floor(q);let t=fract(q);let fade=t*t*t*(t*(t*6.0-15.0)+10.0);
+ var values:array<f32,4>;for(var i=0u;i<4u;i++){let cell=c+vec2f(f32(i&1u),f32(i>>1u));values[i]=cellHash(cell-floor(cell/n)*n+salt).x;}
+ return mix(mix(values[0],values[1],fade.x),mix(values[2],values[3],fade.x),fade.y);
 }
-// Integer torus shears keep directional grain periodic. Orientation blends
-// neighboring fields instead of rotating coordinates off the pool lattice.
-fn groundGrainCount(p:vec2f,n:vec2f,salt:f32)->f32 {
- let q=graphPos(p)/graphPeriod*n+salt;let c=floor(q);let f=fract(q);let fade=f*f*(3.0-2.0*f);
- let a=c-floor(c/n)*n;let b=c+vec2f(1,0);let d=c+vec2f(0,1);let e=c+vec2f(1,1);
- return mix(mix(cellHash(a).x,cellHash(b-floor(b/n)*n).x,fade.x),mix(cellHash(d-floor(d/n)*n).x,cellHash(e-floor(e/n)*n).x,fade.x),fade.y)*2.0-1.0;
+fn waveBase(p:vec2f,size:f32,ratio:f32,direction:f32,salt:f32)->f32{
+ let angle=direction/45.0;let a=u32(floor(angle));return mix(waveAt(p,size,ratio,a,salt),waveAt(p,size,ratio,a+1u,salt),fract(angle));
 }
-fn groundGrainAxis(p:vec2f,size:f32,stretch:f32,axis:u32,salt:f32)->f32 {
- var q=p;switch(axis%4u){case 1u:{q=vec2f(p.x,p.y-p.x);}case 2u:{q=p.yx;}case 3u:{q=vec2f(p.y,p.x+p.y);}default:{}}
- let count=max(vec2f(1),vec2f(graphPeriod)/vec2f(size*stretch,size));let n=exp2(floor(log2(count)));let f=fract(log2(count));
- return mix(mix(groundGrainCount(q,n,salt),groundGrainCount(q,n*vec2f(2,1),salt),f.x),mix(groundGrainCount(q,n*vec2f(1,2),salt),groundGrainCount(q,n*2.0,salt),f.x),f.y);
-}
-fn groundGrain(p:vec2f,size:f32,salt:f32)->f32 {
- let r=layerRecipe;let plain=groundNoise(p,size,salt);
- if(r.grainStretch<=1.0){return plain;}
- let angle=r.grainDirection/45.0;let axis=u32(floor(angle));
- let directed=mix(groundGrainAxis(p,size,r.grainStretch,axis,salt),groundGrainAxis(p,size,r.grainStretch,axis+1u,salt),fract(angle));
- return mix(plain,directed,1.0-exp(-(r.grainStretch-1.0)));
-}
-fn groundPlateCount(p:vec2f,n:f32)->vec4f {
- let r=layerRecipe;let size=graphPeriod/n;
- let cell=groundCell(graphPos(p)/size,n,3.7,r.plateVariation);
- let e=cell.edge*size;let hash=cellHash(cell.id+11.3);let gape=groundBorder(cell.id,cell.other);
- let width=r.crackWidth*(.35+.65*gape);
- let line=(1.0-smoothstep(max(0.0,width-.5),width+.5,e))*min(width,1.0);
- let rim=pow(1.0-smoothstep(width,width+size*.15,e),2.0);
- let profile=(1.0-smoothstep(0.0,size*.45,cell.radius*size))*r.plateProfile;
- let border=(1.0-smoothstep(0.0,width+2.2,e))*r.borderProfile;
- var height=profile+border*.5+rim*r.rimCurl;
- height+=dot(cellHash(cell.id+5.5)-.5,cell.offset)*r.plateTilt;
- var crack=line;
- if(r.secondaryCracks>0.0){
-  let small=groundCell(graphPos(p)/size*3.0+.37,n*3.0,9.1,r.plateVariation);
-  let e2=small.edge*size/3.0;
-  let open=r.secondaryCracks*smoothstep(width+1.0,width+4.0,e)*(1.0-smoothstep(.35,.85,groundBorder(small.id,small.other)));
-  let seam=1.0-smoothstep(.1,.9,e2);height-=open*seam*.25;crack=max(crack,open*seam);
+// One noise type at one size, in 0 to 1. kind: 0 smooth, 1 gradient, 2 billow, 3 cells, 4 waves.
+fn noiseBasis(kind:i32,p:vec2f,size:f32,salt:f32,wave:vec3f)->f32{
+ switch kind{
+  case 1:{return clamp(.5+.65*gradientNoise(p,size,salt),0.0,1.0);}
+  case 2:{return clamp(abs(gradientNoise(p,size,salt))*1.8,0.0,1.0);}
+  case 3:{let n=max(1.0,round(graphPeriod/size));return clamp(1.0-graphCell(graphPos(p)/graphPeriod*n,n,salt).radius,0.0,1.0);}
+  case 4:{
+   let ratio=wave.x;let angle=wave.y*.01745329252;let offset=vec2f(cos(angle),-sin(angle))*size*.35;
+   let base=waveBase(p,size,ratio,wave.y,salt);
+   if(wave.z<=0.0){return clamp(base,0.0,1.0);}
+   let slope=.5+(waveBase(p+offset,size,ratio,wave.y,salt)-waveBase(p-offset,size,ratio,wave.y,salt))/.7;
+   return clamp(mix(base,slope,wave.z),0.0,1.0);
+  }
+  default:{return clamp(.5+.5*smoothNoise(p,size,salt),0.0,1.0);}
  }
- return vec4f(height,profile*.15,(hash.x-.5)*2.0,crack);
 }
-// Rounded compact bumps ported from mmBumpField (base-material-editor).
-// Blend adjacent octave lattices on both axes. Neighboring integer counts
-// churned too much of the picture during a small size or stretch step.
-fn groundBumpCount(p:vec2f,counts:vec2f)->f32 {
- let q=graphPos(p)/graphPeriod*counts;let cell=floor(q);var value=0.0;
- for(var j=-1;j<=1;j++){for(var i=-1;i<=1;i++){
-  let c=cell+vec2f(f32(i),f32(j));let id=c-floor(c/counts)*counts;
-  let h=cellHash(id+17.1);let point=c+.15+.7*h;let d=q-point;
-  let major=.75+.25*cellHash(id+23.0).x;let minor=.45+.35*cellHash(id+31.0).y;
-  let angle=6.2831853*cellHash(id+51.0).x;let axis=vec2f(cos(angle),sin(angle));
-  let local=vec2f(dot(d,axis),dot(d,vec2f(-axis.y,axis.x)))/vec2f(major,minor);
-  let f=max(1.0-dot(local,local),0.0);value+=(.45+1.1*h.y)*f*f*f;
- }}return value;
+// Broad layers add the same noise at twice the size and twice the weight, a layer at a time, so the slider is continuous.
+fn noiseLayers(kind:i32,p:vec2f,size:f32,layers:f32,salt:f32,wave:vec3f)->f32{
+ var sum=noiseBasis(kind,p,size,salt,wave);var total=1.0;
+ for(var i=1u;i<=5u;i++){let amount=clamp(layers-f32(i)+1.0,0.0,1.0);if(amount<=0.0){break;}
+  let scale=exp2(f32(i));let weight=scale*amount;sum+=noiseBasis(kind,p,size*scale,salt,wave)*weight;total+=weight;}
+ return sum/total;
 }
-fn groundBumps(p:vec2f,size:f32,stretch:f32)->f32 {
- let count=max(vec2f(1),vec2f(graphPeriod)/vec2f(size*stretch,size));let n=exp2(floor(log2(count)));let f=fract(log2(count));
- return mix(mix(groundBumpCount(p,n),groundBumpCount(p,n*vec2f(2,1)),f.x),mix(groundBumpCount(p,n*vec2f(1,2)),groundBumpCount(p,n*2.0),f.x),f.y);
+// Noise: size, detail, broad layers, seed, then for waves: length, direction, crests. Detail mixes in a layer at half the size.
+fn nNoise(s:MaterialStep,q:vec2f)->vec4f{
+ let kind=s.code.z;let size=arg(s,0u);let salt=seeded(379.0,arg(s,3u));let wave=vec3f(arg(s,4u)/max(size,.001),arg(s,5u),arg(s,6u));
+ let a=noiseLayers(kind,q,size,arg(s,2u),salt,wave);
+ if(arg(s,1u)<=0.0){return vec4f(a);}
+ return vec4f(mix(a,noiseLayers(kind,q+vec2f(17,39),size/2.0,arg(s,2u),salt,wave),arg(s,1u)));
 }
-// Connected scratch lanes ported from mmScratchLanes; the solid supplies normals.
-fn groundScratchCount(p:vec2f,count:f32,length:f32,width:f32,salt:f32)->f32 {
- let size=graphPeriod/count;let x=p.x/size;let cell=floor(x);var total=0.0;
- for(var j=-1;j<=1;j++){
-  let lane=cell+f32(j);let wrapped=lane-floor(lane/count)*count;let character=cellHash(vec2f(wrapped,0)+salt).x;
-  let wave=groundNoise(vec2f((wrapped+.5)*size,p.y),max(length*(.7+.6*character),4.0),salt);
-  let distance=(x-lane-.5-.24*(character-.5)-.45*wave)*size;
-  let radius=min(.5+.5*width,.9*size);let f=max(1.0-distance*distance/(radius*radius),0.0);
-  let cover=min(width,1.0)*f*f*f;total+=cover*(1.0-total);
- }return total;
-}
-fn groundScratches(p:vec2f)->f32 {
- let r=layerRecipe;let count=max(1.0,graphPeriod/r.scratchSpacing);let n=exp2(floor(log2(count)));let f=fract(log2(count));
- let q=graphPos(p);let a=mix(groundScratchCount(q,n,r.scratchLength,r.scratchWidth,63.0),groundScratchCount(q,n*2.0,r.scratchLength,r.scratchWidth,63.0),f);
- let shear=vec2f(q.x+q.y,q.y);let b=mix(groundScratchCount(shear,n,r.scratchLength,r.scratchWidth,79.0),groundScratchCount(shear,n*2.0,r.scratchLength,r.scratchWidth,79.0),f);
- let gate=smoothstep(-.4,.4,groundNoise(q,r.scratchLength*2.0,94.0));
- return mix(a*.7,max(a,b),r.scratchConnect)*mix(gate,1.0,r.scratchConnect);
-}
-fn groundPebbleCount(p:vec2f,n:f32,roundness:f32)->f32 {
- let c=groundCell(graphPos(p)/graphPeriod*n,n,151.0,1.0);
- let radius=.24+.18*cellHash(c.id+157.0).x;
- let d=c.radius/radius;let dome=sqrt(max(0.0,1.0-d*d));let pointed=max(0.0,1.0-d);
- return mix(pointed,dome,roundness)*(.6+.4*cellHash(c.id+163.0).y);
-}
-fn groundPebbles(p:vec2f,size:f32,roundness:f32)->f32 {
- let count=max(1.0,graphPeriod/size);let n=exp2(floor(log2(count)));
- return mix(groundPebbleCount(p,n,roundness),groundPebbleCount(p,n*2.0,roundness),fract(log2(count)));
-}
-fn groundVeinCount(p:vec2f,n:f32,width:f32)->f32 {
- let c=groundCell(graphPos(p)/graphPeriod*n,n,173.0,1.0);let edge=c.edge*graphPeriod/n;
- return (1.0-smoothstep(max(0.0,width-.5),width+.5,edge))*min(width,1.0);
-}
-fn groundVeins(p:vec2f,size:f32,width:f32)->f32 {
- let count=max(1.0,graphPeriod/size);let n=exp2(floor(log2(count)));
- return mix(groundVeinCount(p,n,width),groundVeinCount(p,n*2.0,width),fract(log2(count)));
-}
-fn groundRippleCount(p:vec2f,n:f32,asymmetry:f32)->f32 {
- let phase=6.2831853*(graphPos(p).x/graphPeriod*n+.15*groundNoise(p,48.0,181.0));
- return (sin(phase)+.4*asymmetry*sin(phase*2.0))/(1.0+.4*asymmetry);
-}
-fn groundRipples(p:vec2f,size:f32,asymmetry:f32)->f32 {
- let count=max(1.0,graphPeriod/size);let n=exp2(floor(log2(count)));
- return mix(groundRippleCount(p,n,asymmetry),groundRippleCount(p,n*2.0,asymmetry),fract(log2(count)));
-}
-var<private> layerRecipe:Ground;
-/*TEXTURE_PATTERN*/
-fn groundRecipe(p:vec2f)->vec4f {
- let r=layerRecipe;var out=vec4f(0,.5,0,0);
- if(r.plateAmount>0.0){
-  let count=max(1.0,graphPeriod/r.plateSize);let n=exp2(floor(log2(count)));
-  let plates=mix(groundPlateCount(p,n),groundPlateCount(p,n*2.0),fract(log2(count)));
-  out.x=plates.x*r.plateAmount;out.y+=plates.y*min(r.plateAmount,1.0);out.z=plates.z*r.toneVariation;out.w=plates.w*min(r.plateAmount,1.0)*r.lineStrength;
- }
- if(r.bumpAmount>0.0){out.x+=(groundBumps(p,r.bumpSize,r.bumpStretch)-.35)*r.bumpAmount;}
- if(r.scratchAmount>0.0){let scratch=groundScratches(p);out.x-=scratch*r.scratchAmount;out.w=max(out.w,scratch*min(r.scratchAmount,1.0)*r.lineStrength);}
- // All three bands shape color and, with Grain relief, real art height.
- // Fine pigment and fine height use independent fields; larger color
- // patches can still follow the medium and broad forms.
- var shapedGrain=0.0;
- if(r.grainFine>0.0){let v=groundGrain(p,1.0,101.0)*r.grainFine;out.y+=v*.35;shapedGrain+=groundGrain(p,1.0,197.0)*r.grainFine;}
- if(r.grainMedium>0.0){let v=groundGrain(p,3.0,113.0)*r.grainMedium;out.y+=v*.35;shapedGrain+=v;}
- if(r.grainBroad>0.0){let v=groundGrain(p,9.0,127.0)*r.grainBroad;out.y+=v*.35;shapedGrain+=v;}
- if(r.grainRelief>0.0){out.x+=shapedGrain*r.grainRelief/max(1.0,r.grainFine+r.grainMedium+r.grainBroad);}
- if(r.veinAmount>0.0){out.w=max(out.w,groundVeins(p,r.veinSpacing,r.veinWidth)*r.veinAmount*r.lineStrength);}
- if(r.pebbleAmount>0.0){let h=groundPebbles(p,r.pebbleSize,r.pebbleRound);out.x+=h*r.pebbleAmount;out.y+=h*.15*min(r.pebbleAmount,1.0);}
- if(r.cushionAmount>0.0){let h=1.0-exp(-groundBumps(p,r.cushionSize,1.0)*2.0);out.x+=h*r.cushionAmount;out.y+=h*.1*min(r.cushionAmount,1.0);}
- if(r.rippleAmount>0.0){out.x+=groundRipples(p,r.rippleSize,r.rippleAsymmetry)*r.rippleAmount;}
- if(r.toneVariation>0.0){out.z+=groundNoise(p,r.toneSize,191.0)*r.toneVariation*.4;}
- if(r.quietAmount>0.0){let activity=mix(1.0,smoothstep(-.55,.55,groundNoise(p,r.quietSize,137.0)),r.quietAmount);out.x*=activity;out.y=mix(.5,out.y,activity);out.w*=activity;}
- out.x=clamp(out.x,-8.0,8.0);out.y=clamp(out.y,0.0,1.0);out.w=clamp(out.w,0.0,1.0);if(r.patternAmount>0.0){let pattern=textureRecipe(p);let combined=mix(out,pattern,r.patternAmount);return vec4f(out.x+pattern.x*r.patternAmount,combined.yzw);}return out;
-}
-// Match the truncating half-float material-field storage used by the renderer.
-// Keep this precision boundary before color mapping, not on the final RGB.
-fn sampledHalf(v:vec2f)->vec2f {
- let bits=pack2x16float(v);let rounded=unpack2x16float(bits);
- let low=(bits&65535u)-select(0u,1u,abs(rounded.x)>abs(v.x));
- let high=(bits>>16u)-select(0u,1u,abs(rounded.y)>abs(v.y));
- return unpack2x16float(low|(high<<16u));
-}
-fn stepArg(s:MaterialStep,index:u32)->f32 {return s.args[index/4u][index%4u];}
-fn stepColor(s:MaterialStep,index:u32)->vec3f {let n=2u+index*3u;return vec3f(stepArg(s,n),stepArg(s,n+1u),stepArg(s,n+2u));}
-// Scalar and RGB operations share their arithmetic. A scalar is broadcast to
-// all components; coloring is explicit and never selected by a preset name.
-fn stepConstant(s:MaterialStep)->vec4f {
- let x=stepArg(s,0u);
-return vec4f(x);
-}
-
-fn stepRemap(s:MaterialStep,a:vec4f)->vec4f {
- let x=stepArg(s,0u);
-
-   var v=pow(smoothstep(x,stepArg(s,1u),clamp(a.x,0.0,1.0)),stepArg(s,2u));
-   v=mix(v,1.0-v,stepArg(s,3u));v=mix(v,step(.5,v),stepArg(s,4u));v=mix(v,.5-.5*cos(v*6.2831853*stepArg(s,6u)),stepArg(s,5u));return vec4f(v);
-
-}
-
-fn stepCombine(s:MaterialStep,a:vec4f,b:vec4f,c:vec4f)->vec4f {
- let x=stepArg(s,0u);
-
-   let v=b-vec4f(stepArg(s,1u));let w=x*c.x;
-   switch(s.code.w){
-    case 0:{return mix(a,v,w);}case 1:{return a+v*w;}case 2:{return a*mix(vec4f(1),v,w);}
-    case 3:{return a-v*w;}case 4:{return mix(a,min(a,v),w);}case 5:{return mix(a,max(a,v),w);}
-    case 7:{return mix(a,1.0-(1.0-a)*(1.0-v),w);}default:{return mix(a,v,w);}
-   }
-
-}
-
-fn stepGradient(s:MaterialStep,a:vec4f)->vec4f {
- let x=stepArg(s,0u);
-
-   let n=u32(stepArg(s,1u));let t=a.x;var rgb=vec3f(0);
-   if(n==3u){let lo=mix(clamp(t*2.0,0.0,1.0),smoothstep(0.0,.5,t),x);let hi=mix(clamp((t-.5)*2.0,0.0,1.0),smoothstep(.5,1.0,t),x);rgb=mix(mix(stepColor(s,0u),stepColor(s,1u),lo),stepColor(s,2u),hi);}
-   else if(n==2u){rgb=mix(stepColor(s,0u),stepColor(s,1u),mix(t,smoothstep(0.0,1.0,t),x));}
-   else{let t2=clamp(t,0.0,1.0)*f32(n-1u);let i=u32(floor(t2));rgb=mix(stepColor(s,i),stepColor(s,min(i+1u,n-1u)),mix(fract(t2),smoothstep(0.0,1.0,fract(t2)),x));}
-   return vec4f(rgb,1);
-
-}
-
-fn stepChannel(s:MaterialStep,a:vec4f)->vec4f {
- let x=stepArg(s,0u);
-return vec4f(a[u32(x)]);
-}
-
-fn stepHash(s:MaterialStep,p:vec2f)->vec4f {
- let x=stepArg(s,0u);
-return vec4f(cellHash(graphPixel(p)+vec2f(211.0,317.0)).x);
-}
-
-fn stepOutput(s:MaterialStep,a:vec4f)->vec4f {
- let x=stepArg(s,0u);
-return a*x+vec4f(stepArg(s,1u));
-}
-
-@group(1) @binding(0) var groundOut:texture_storage_2d_array<rgba32float,write>;
-@group(1) @binding(2) var maskOut:texture_storage_2d_array<rgba16float,write>;
-@group(1) @binding(1) var<uniform> groundJob:vec4u;
-// The compiler calls only the operations present in the graph. Keeping unrelated
-// surface primitives out of the reachable shader also avoids Metal optimizer
-// failures from a large switch containing every possible generator.
-fn stepTransform(s:MaterialStep,a:vec4f,point:vec2f)->vec4f {
- var v=vec4f(0);let q=select(point,a.xy,s.links.x>=0);
-layerRecipe.patternWarp=stepArg(s,0u);layerRecipe.patternWarpSize=stepArg(s,1u);layerRecipe.phaseOctaves=stepArg(s,2u);layerRecipe.phaseAxis=stepArg(s,3u);let r=layerRecipe;v=vec4f(q+texturePhase(q,r.patternWarpSize,r.phaseOctaves)*vec2f(1.0-max(r.phaseAxis,0.0),1.0+min(r.phaseAxis,0.0))*r.patternWarp,0,0);
- return v;
-}
-
-fn stepNoise(s:MaterialStep,a:vec4f,point:vec2f)->vec4f {
- var v=vec4f(0);let q=select(point,a.xy,s.links.x>=0);
-layerRecipe.patternSize=stepArg(s,0u);layerRecipe.patternDetail=stepArg(s,1u);layerRecipe.patternGradient=stepArg(s,2u);layerRecipe.patternLinear=stepArg(s,3u);layerRecipe.patternTurbulence=stepArg(s,4u);layerRecipe.patternCells=stepArg(s,5u);layerRecipe.patternStreak=stepArg(s,6u);layerRecipe.patternLength=stepArg(s,7u);layerRecipe.patternDirection=stepArg(s,8u);layerRecipe.patternSlope=stepArg(s,9u);layerRecipe.patternOctaves=stepArg(s,10u);layerRecipe.patternMottle=stepArg(s,11u);layerRecipe.patternMottleSize=stepArg(s,12u);let r=layerRecipe;let aa=textureOctaves(q,r.patternSize,r.patternOctaves);let bb=textureOctaves(q+vec2f(17,39),r.patternSize/2.0,r.patternOctaves);v=vec4f(mix(mix(aa,bb,r.patternDetail),.5+.5*groundNoise(point,r.patternMottleSize,827.0),r.patternMottle));
- return v;
-}
-
-fn stepFine(s:MaterialStep,a:vec4f,point:vec2f)->vec4f {
- var v=vec4f(0);let q=select(point,a.xy,s.links.x>=0);
-layerRecipe.textureFineSize=stepArg(s,0u);layerRecipe.textureFineGradient=stepArg(s,1u);layerRecipe.textureFineWarp=stepArg(s,2u);let r=layerRecipe;let fpoint=mix(point,q,r.textureFineWarp)+vec2f(61,97);v=vec4f(mix(.5+.5*groundNoise(fpoint,r.textureFineSize,379.0),.5+.65*textureGradient(fpoint,r.textureFineSize,379.0),r.textureFineGradient));
- return v;
-}
-
-fn stepDots(s:MaterialStep,a:vec4f,point:vec2f)->vec4f {
- var v=vec4f(0);let q=select(point,a.xy,s.links.x>=0);
-layerRecipe.markAmount=stepArg(s,0u);layerRecipe.markSize=stepArg(s,1u);layerRecipe.markSpacing=stepArg(s,2u);layerRecipe.markDensity=stepArg(s,3u);layerRecipe.markScatter=stepArg(s,4u);layerRecipe.markCore=stepArg(s,5u);layerRecipe.markVariation=stepArg(s,6u);layerRecipe.markFollow=stepArg(s,7u);layerRecipe.markNoise=stepArg(s,8u);layerRecipe.markNoiseSize=stepArg(s,9u);layerRecipe.markLow=stepArg(s,10u);layerRecipe.markHigh=stepArg(s,11u);let r=layerRecipe;v=vec4f(clamp(textureMarks(point)*r.markAmount*mix(1.0,2.0*smoothstep(.2,.8,a.x),r.markFollow),0.0,1.0));
- return v;
-}
-
-fn stepSurface(s:MaterialStep,a:vec4f,point:vec2f)->vec4f {
- var v=vec4f(0);let q=select(point,a.xy,s.links.x>=0);
-v=groundRecipe(point);
- return v;
-}
-// Smooth scattered radial kernels: useful as a scalar mask or actual relief.
-// Adjacent octave lattices blend so size edits stay continuous and periodic.
-fn cellularBumpsAt(p:vec2f,n:f32,s:MaterialStep)->f32 {
- let q=graphPos(p)/graphPeriod*n;let base=floor(q);var value=0.0;
- for(var y=-1;y<=1;y++){for(var x=-1;x<=1;x++){
-  let cell=base+vec2f(f32(x),f32(y));let id=poolWrap(cell,n);
-  let h=cellHash(id+457.0);let variation=cellHash(id+491.0);
-  let center=cell+.5+(h-.5)*.9*stepArg(s,2u);
-  let radius=stepArg(s,1u)*mix(1.0,.55+.45*variation.x,stepArg(s,3u));
-  let d=length(q-center)/radius;let bump=pow(max(0.0,1.0-smoothstep(0.0,1.0,d)),stepArg(s,4u));
-  value=max(value,bump*mix(1.0,.45+.55*variation.y,stepArg(s,3u)));
- }}return value;
-}
-fn stepCellular(s:MaterialStep,a:vec4f,point:vec2f)->vec4f {
- let q=select(point,a.xy,s.links.x>=0);let count=max(1.0,graphPeriod/stepArg(s,0u));let n=exp2(floor(log2(count)));
- return vec4f(mix(cellularBumpsAt(q,n,s),cellularBumpsAt(q,n*2.0,s),fract(log2(count))));
-}
-fn stepRidged(s:MaterialStep,a:vec4f,point:vec2f)->vec4f {
- let q=select(point,a.xy,s.links.x>=0);var total=0.0;var value=0.0;
+// Ridged: size, detail layers, detail strength, sharpness, seed.
+fn nRidged(s:MaterialStep,q:vec2f)->vec4f{
+ var total=0.0;var value=0.0;let salt=seeded(563.0,arg(s,4u));
  for(var i=0u;i<=5u;i++){
-  let weightFraction=select(clamp(stepArg(s,1u)-f32(i)+1.0,0.0,1.0),1.0,i==0u);if(weightFraction<=0.0){break;}
-  let weight=weightFraction*pow(max(.0001,stepArg(s,2u)),f32(i));
-  let ridge=pow(clamp(1.0-abs(groundNoise(q,stepArg(s,0u)/exp2(f32(i)),563.0)),0.0,1.0),stepArg(s,3u));
-  value+=ridge*weight;total+=weight;
+  let share=select(clamp(arg(s,1u)-f32(i)+1.0,0.0,1.0),1.0,i==0u);if(share<=0.0){break;}
+  let weight=share*pow(max(.0001,arg(s,2u)),f32(i));
+  value+=pow(clamp(1.0-abs(smoothNoise(q,arg(s,0u)/exp2(f32(i)),salt)),0.0,1.0),arg(s,3u))*weight;total+=weight;
  }return vec4f(value/total);
 }
-// A two-dimensional curl field is the perpendicular gradient of a scalar
-// potential. Two midpoint advection steps bend coordinates along the field.
-fn flowVelocity(p:vec2f,size:f32,octaves:f32)->vec2f {
+// Pixel: one random value a texel. seed.
+fn nPixel(s:MaterialStep,q:vec2f)->vec4f{return vec4f(cellHash(graphPixel(q)+vec2f(211.0,317.0)+37.0*arg(s,0u)).x);}
+// Scatter: spacing, radius, coverage, jitter, hardness, profile, size variation, tone variation, follow, seed. One shape a lattice
+// cell, kept by chance (coverage). A connected density field thins the shapes where it is dark (follow).
+fn nScatter(s:MaterialStep,p:vec2f,density:vec4f,linked:bool)->vec4f{
+ let n=max(1.0,round(graphPeriod/arg(s,0u)));let size=graphPeriod/n;let q=graphPos(p)/size;let c=floor(q);var result=0.0;let seed=37.0*arg(s,9u);
+ for(var y=-2;y<=2;y++){for(var x=-2;x<=2;x++){
+  let cell=c+vec2f(f32(x),f32(y));let id=poolWrap(cell,n);let h=cellHash(id+643.0+seed);let v=cellHash(id+671.0+seed);
+  let point=cell+.5+(h-.5)*arg(s,3u);let radius=arg(s,1u)*(1.0+arg(s,6u)*1.2*(v.x-.5));let d=length(q-point)*size;
+  let keep=smoothstep(v.y-.04,v.y+.04,arg(s,2u))*smoothstep(0.0,.04,arg(s,2u));
+  let shape=pow(1.0-smoothstep(radius*arg(s,4u),radius,d),arg(s,5u));
+  result=max(result,keep*mix(1.0,.4+.6*cellHash(id+743.0+seed).x,arg(s,7u))*shape);
+ }}
+ if(linked){result*=mix(1.0,2.0*smoothstep(.2,.8,density.x),arg(s,8u));}
+ return vec4f(clamp(result,0.0,1.0));
+}
+// Warp: amount, size, broad layers, axis balance, seed. Moves the coordinates a later node reads.
+fn warpField(p:vec2f,size:f32,layers:f32,seed:f32)->vec2f{
+ let a=seeded(311.0,seed);let b=seeded(347.0,seed);
+ var sum=vec2f(gradientNoise(p,size,a),gradientNoise(p,size,b));var total=1.0;
+ for(var i=1u;i<=4u;i++){let amount=clamp(layers-f32(i)+1.0,0.0,1.0);if(amount<=0.0){break;}
+  let scale=exp2(f32(i));let weight=scale*amount;sum+=vec2f(gradientNoise(p,size*scale,a),gradientNoise(p,size*scale,b))*weight;total+=weight;}
+ return sum/total;
+}
+fn warpAxes(axis:f32)->vec2f{return vec2f(1.0-max(axis,0.0),1.0+min(axis,0.0));}
+fn nWarp(s:MaterialStep,q:vec2f)->vec4f{return vec4f(q+warpField(q,arg(s,1u),arg(s,2u),arg(s,4u))*warpAxes(arg(s,3u))*arg(s,0u),0,0);}
+// Curl flow follows the perpendicular gradient of a scalar potential, in two midpoint steps, so shapes bend without tearing.
+fn flowVelocity(p:vec2f,size:f32,layers:f32,salt:f32)->vec2f{
  var sum=vec2f(0);var total=0.0;
  for(var i=0u;i<=4u;i++){
-  let amount=select(clamp(octaves-f32(i)+1.0,0.0,1.0),1.0,i==0u);if(amount<=0.0){break;}
+  let amount=select(clamp(layers-f32(i)+1.0,0.0,1.0),1.0,i==0u);if(amount<=0.0){break;}
   let scale=size*exp2(f32(i));let e=max(.25,scale*.025);
-  let dx=groundNoise(p+vec2f(e,0),scale,617.0)-groundNoise(p-vec2f(e,0),scale,617.0);
-  let dy=groundNoise(p+vec2f(0,e),scale,617.0)-groundNoise(p-vec2f(0,e),scale,617.0);
+  let dx=smoothNoise(p+vec2f(e,0),scale,salt)-smoothNoise(p-vec2f(e,0),scale,salt);
+  let dy=smoothNoise(p+vec2f(0,e),scale,salt)-smoothNoise(p-vec2f(0,e),scale,salt);
   sum+=vec2f(dy,-dx)*(scale/(2.0*e))*amount;total+=amount;
  }return sum/total;
 }
-fn stepFlow(s:MaterialStep,a:vec4f,point:vec2f)->vec4f {
- var q=select(point,a.xy,s.links.x>=0);let axis=stepArg(s,3u);let amount=stepArg(s,0u)*.5*vec2f(1.0-max(axis,0.0),1.0+min(axis,0.0));
- for(var i=0;i<2;i++){let mid=q+flowVelocity(q,stepArg(s,1u),stepArg(s,2u))*amount*.5;q+=flowVelocity(mid,stepArg(s,1u),stepArg(s,2u))*amount;}
+fn nFlow(s:MaterialStep,q0:vec2f)->vec4f{
+ var q=q0;let amount=arg(s,0u)*.5*warpAxes(arg(s,3u));let salt=seeded(617.0,arg(s,4u));
+ for(var i=0;i<2;i++){let mid=q+flowVelocity(q,arg(s,1u),arg(s,2u),salt)*amount*.5;q+=flowVelocity(mid,arg(s,1u),arg(s,2u),salt)*amount;}
  return vec4f(q,0,0);
 }
-@compute @workgroup_size(8,8)
-fn groundMain(@builtin(global_invocation_id) id:vec3u){
- if(any(id.xy>=textureDimensions(groundOut))){return;}
- graphPeriod=f32(textureDimensions(groundOut).x);
- gs=groundJob.x;let graph=materialGraphs[groundJob.z];
- let point=vec2f(id.xy);
- /*MATERIAL_PROGRAM*/
- textureStore(groundOut,vec2i(id.xy),i32(groundJob.y),vec4f(color,height));
- textureStore(maskOut,vec2i(id.xy),i32(groundJob.y),vec4f(finish,1));
+// Levels: low, high, gamma, invert.
+fn nLevels(s:MaterialStep,a:vec4f)->vec4f{
+ let v=pow(smoothstep(arg(s,0u),arg(s,1u),clamp(a.x,0.0,1.0)),arg(s,2u));return vec4f(mix(v,1.0-v,arg(s,3u)));
 }
+// Combine: amount, layer offset. A gray input is the same number in every channel, so gray and color mix freely.
+fn nCombine(s:MaterialStep,a:vec4f,b:vec4f,mask:vec4f)->vec4f{
+ let v=b-vec4f(arg(s,1u));let w=arg(s,0u)*mask.x;
+ switch s.code.z{
+  case 1:{return a+v*w;}case 2:{return a*mix(vec4f(1),v,w);}case 3:{return a-v*w;}
+  case 4:{return mix(a,min(a,v),w);}case 5:{return mix(a,max(a,v),w);}case 6:{return mix(a,1.0-(1.0-a)*(1.0-v),w);}
+  default:{return mix(a,v,w);}
+ }
+}
+// Height blend: softness, bias. The layer shows where its height stands above the base's, as sand fills between stones.
+fn nHeightBlend(s:MaterialStep,a:vec4f,b:vec4f,ha:vec4f,hb:vec4f)->vec4f{
+ let soft=max(arg(s,0u),.001);return mix(a,b,smoothstep(-soft,soft,hb.x-ha.x+arg(s,1u)));
+}
+// Gradient: softness, stop count, then position and color for each stop, in order of position.
+fn nGradient(s:MaterialStep,a:vec4f)->vec4f{
+ let n=u32(arg(s,1u));let t=clamp(a.x,0.0,1.0);var rgb=vec3f(arg(s,3u),arg(s,4u),arg(s,5u));
+ for(var i=1u;i<n;i++){
+  let at=2u+i*4u;let lower=arg(s,at-4u);let upper=arg(s,at);if(t<=lower){break;}
+  let color=vec3f(arg(s,at+1u),arg(s,at+2u),arg(s,at+3u));
+  if(t>=upper){rgb=color;continue;}
+  let f=(t-lower)/max(upper-lower,.0001);rgb=mix(vec3f(arg(s,at-3u),arg(s,at-2u),arg(s,at-1u)),color,mix(f,smoothstep(0.0,1.0,f),arg(s,0u)));
+ }
+ return vec4f(rgb,1);
+}
+// Light: direction, strength. A height's slope toward a light, .5 on the level, so it can tint color the way a lit bump does.
+fn nLight(s:MaterialStep,east:f32,west:f32,south:f32,north:f32)->vec4f{
+ let angle=arg(s,0u)*.01745329252;let toward=vec2f(cos(angle),-sin(angle));
+ return vec4f(clamp(.5-.5*arg(s,1u)*dot(vec2f(east-west,south-north)*.5,toward),0.0,1.0));
+}
+// Cavity: radius, strength. Above .5 on crests and below it in hollows, from the height against its surroundings.
+fn nCavity(s:MaterialStep,center:f32,east:f32,west:f32,south:f32,north:f32)->vec4f{
+ return vec4f(clamp(.5+arg(s,1u)*(center-.25*(east+west+south+north)),0.0,1.0));
+}
+/*MATERIAL_TAPS*/
+/*MATERIAL_MAIN*/
