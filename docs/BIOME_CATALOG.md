@@ -38,7 +38,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Gap | Biomes | Generic control that would close it | Status |
 | --- | --- | --- | --- |
 | Radial ribs from a click: starburst legs, spatter-vent teeth, collapse stars | Moon (9 maps), Lava (9), Red (4) | Spurs on a crater section | **Done** this round: spurs off a clicked crater now draw. Collapse stars on cut shapes still draw nothing |
-| Dense contour hatch on grass and rock slopes (6-12 px wobbly lines); risers ~6 px where retail's are 1-2 | Green (8+), Lava (12), Red, Moon, Lush, Desert | Thin risers: steps with a high flat share (ledge 90) draw 2-3 px lines | **Done** for Lava's shields and knolls; Green's dense slope hatch is still partial (thin contour bands) |
+| Dense contour hatch on grass and rock slopes (6-12 px wobbly lines); risers ~6 px where retail's are 1-2 | Green (8+), Lava (12), Red, Moon, Lush, Desert | Thin risers: steps with a high flat share (ledge 90) draw 2-3 px lines | **Done**: Lava's shields and knolls (ledge 90); Green's slope hatch from contour bands 1.3 units apart |
 | Scatter for click shapes: craterlet fields, knoll fields, boulders, rubble, islets | Moon (9), Green (5), Ice (9), Archipelago, Lush | Copies: a count, spread, size and size variation on any landform | **Done** this round: Craterlet field, Knoll field, Boulder field, Islet scatter use it |
 | Irregular shore lobes and spits; `fingers` makes a regular comb | Lava (8), Archipelago (8), Green, Red, Crystal | Lobe variety: clustered lobes, a few long and wide | **Done** in part (Lush uses it); the lobes' sides stay straight, and a raised bank's relief is still missing |
 | Rock art on level tops and walkable grades (rock follows slope today) | Lava, Red, Desert, Green, Moon | Rock exposure by noise or per shape, art only so heights stay level (per-shape Rock crown) | Missing |
@@ -67,7 +67,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Long escarpments and terraced massifs | Escarpment, Terraced massif (Dark escarpment) | close for the massif (irregular terraces) and the escarpment (a dark rock band with grass clumps, as retail's ridges; a lower rock threshold was tried and smeared rock and soil over its foot) |
 | Rock fins | Rock fin (Greenstone) | close |
 | Broken, branching slopes (Evad River) | Broken hill (Broken slopes rock type, the old evad variant) | close |
-| Contour striations on slopes | world bands and form lines | poor |
+| Contour striations on slopes | contour bands 1.3 units apart (strength 0.6, no jag) | close (fine dense lines on slopes, as retail's; our slopes underneath are lumpier) |
 | Rivers, lakes, islands | Deep, Shallow, River | close |
 
 ### Red Planet (17 maps)
