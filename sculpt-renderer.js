@@ -241,7 +241,7 @@ export class TerrainRenderer {
       texture(1, both, 'unfilterable-float'), texture(2, both), texture(4, both, 'float', '2d-array'), texture(6, both),
       sampler(7, both), sampler(8, both), texture(9, both, 'float', '2d-array'),texture(10,both,'unfilterable-float'),texture(11,both,'unfilterable-float'),texture(12,both,'unfilterable-float'),texture(13,both,'unfilterable-float','2d-array'),texture(14,both,'float','2d-array'),{binding:15,visibility:both,buffer:{type:'read-only-storage'}},texture(16,both,'unfilterable-float','2d-array'),texture(17,both,'unfilterable-float','2d-array')]});
     const F = GPUShaderStage.FRAGMENT;
-    // The engine draw (H4) binds only what Green reads: the plain's tiles, the water images, the palette and the generated materials
+    // The engine draw (H4) binds the palette and the generated materials
     // (binding 19, read with textureLoad); no land image remains. Binding numbers are the shared draw's, with 2-13 left out.
     this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: [
       texture(18, F), texture(19, F, 'float', '2d-array')]});
@@ -279,8 +279,6 @@ export class TerrainRenderer {
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
     this.materialData = JSON.parse(modelTable);
-    // The water's grain is two more generated materials after the table's own, named by the config's water block (shared when the two are one).
-    for (const name of [this.config.water.deep, this.config.water.shallow]) if (!this.materialData.order.includes(name)) this.materialData.order.push(name);
     // A borrowed beach (sculpt-scene.js borrowBeach names the lender's table): its beach material, generated as one more layer after the world's own,
     // so every other layer keeps its place and its noise.
     if (this.config.beachTable && !this.materialData.order.includes('beach')) {
@@ -552,7 +550,7 @@ export class TerrainRenderer {
   // (Green's); every other table leaves them to the world's material, as the world's placement always was.
   placementTable(variant) {
     const rows = this.materialData?.placement ? tablePlacementRows(this.materialData) : this.placementRows(variant);
-    return [...Array.from({length: PLACEMENT_ROW}, () => [0, 0, 0, 0]), ...rows, ...groundCoverRows(this.config.material?.groundCover,variant,this.colorOverrides||{},this.colorOverrides?.ground||this.means?.ground)];
+    return [...Array.from({length: PLACEMENT_ROW}, () => [0, 0, 0, 0]), ...rows, ...groundCoverRows(this.config.material?.groundCover,variant,this.colorOverrides||{},this.means?.ground)];
   }
 
   // H4 round 2: one generated layer at one level as RGBA bytes (a check of the pass against the images it replaced; not used by the draw).

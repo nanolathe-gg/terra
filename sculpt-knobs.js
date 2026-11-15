@@ -6,7 +6,7 @@ import {columnHasCapBed,columnRows} from './sculpt-column.js';
 // Surface knobs: each writes the page address and the renderer's variant,
 // then the renderer re-reads its uniforms and re-bakes its fields.
 export const KNOBS = [
-  ['Ground', [['groundTiles','Unique ground tiles',1,16,1,16],['groundContrast','Pattern contrast',0,2,.05,1],['groundPatch','Ground patches (damp and dusty tones)',0,1,.05,0],['groundPatchSize','Patch size (px)',60,400,10,200],['undulation','Undulation height',0,16,.5,0],['undulationScale','Undulation size (px)',48,400,8,200],['undulationCover','Undulating share of land',0,1,.05,.45],['undulationArt','Undulation in the art',0,1,.05,1],['faceSteep','Landform face steepness',1,4,.1,1]]],
+  ['Ground', [['groundPatch','Ground patches (damp and dusty tones)',0,1,.05,0],['groundPatchSize','Patch size (px)',60,400,10,200],['undulation','Undulation height',0,16,.5,0],['undulationScale','Undulation size (px)',48,400,8,200],['undulationCover','Undulating share of land',0,1,.05,.45],['undulationArt','Undulation in the art',0,1,.05,1],['faceSteep','Landform face steepness',1,4,.1,1]]],
   // Low ground: the ground from the sea up to Reach above it, and the shallows, take the Colors panel's Low ground color.
   ['Low ground', [['lowTint','Tint (Colors: Low ground)',0,1,.05,0],['lowReach','Reach (height above the sea)',.5,40,.5,6],['lowGrain','Grain kept (low ground and water)',0,1,.05,1]]],
   ['Ground detail', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
@@ -102,7 +102,7 @@ const TRACKED_WORLD_INPUTS=new Set([...KNOBS.flatMap(([,rows])=>rows.map(([key])
 export function applyKnob({key,value,settings,renderer,nodes,seed,sync=true}) {
   const previous=renderer.variant.get(key);
   settings.set(key,value);
-  if (key==='ground' || key==='groundPattern' || key==='beachFrom') return {reload:true};
+  if (key==='beachFrom') return {reload:true};
   renderer.variant.set(key,value);
   const unknown=!TRACKED_WORLD_INPUTS.has(key)&&String(previous)!==String(value),change=sync?renderer.applyKnobs():null,result=value=>({...value,...(change?{change}:{}),...(!sync&&unknown?{unknownInput:key}:{})});
   // Current rows are covered by the computed comparison and declared channels.
@@ -124,7 +124,7 @@ export function applyKnob({key,value,settings,renderer,nodes,seed,sync=true}) {
 // Low ground's color where a world picks none (Colors: Low ground): a dark red-brown mud, as retail Zhon's lowland.
 export const LOW_GROUND_RGB=[80,52,42];
 // The Colors panel's rows, [key, label].
-export const COLOR_KEYS=[['ground','Ground'],['slope','Slope cover'],['rock','Rock'],['sand','Sand'],['beach','Beach'],['shallow','Shallow water'],['deep','Deep water'],['low','Low ground'],['crystal','Crystal'],['vegetation','Vegetation'],...Array.from({length:4},(_,i)=>['flower'+(i+1),'Flower '+(i+1)]),['sun','Sun color'],['sky','Sky color'],['strata1','Strata 1'],['strata2','Strata 2'],['strata3','Strata 3'],['strata4','Strata 4'],['strata5','Strata 5']];
+export const COLOR_KEYS=[['slope','Slope cover'],['rock','Rock'],['sand','Sand'],['beach','Beach'],['shallow','Shallow water'],['deep','Deep water'],['low','Low ground'],['crystal','Crystal'],['vegetation','Vegetation'],...Array.from({length:4},(_,i)=>['flower'+(i+1),'Flower '+(i+1)]),['sun','Sun color'],['sky','Sky color'],['strata1','Strata 1'],['strata2','Strata 2'],['strata3','Strata 3'],['strata4','Strata 4'],['strata5','Strata 5']];
 // The rows this world shows: Vegetation and a flower's where the world's ground-cover table has them (every world's has; they act once
 // Vegetation cover is above 0), Beach only with a beach layer, Low ground only
 // while its Tint is above 0. Layer colors live in the existing Rock column.
@@ -158,7 +158,7 @@ export function slopeReplaced({config,renderer,weathering,materialWeathering}) {
 // The column facts read the active column (config.column: the map's own from the Rock column panel, else the world's) and its variant row.
 export function worldPanelValues(facts) {
   const {config,renderer,nodes,colors}=facts,layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks(nodes);
-  return {...own,stonePaint:nodes.some(n=>n.kind==='paint'&&[5,6].includes(n.params?.paintChannel))?1:0,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:columnRows(config.column,config.variant).starts.length?1:0,repeatBeds:Math.max(0,...columnRows(config.column,config.variant).starts.map(s=>s[2])),capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,groundTiled:renderer.groundTiled?1:0,slopeSand:config.material?.slopeSand?1:0};
+  return {...own,stonePaint:nodes.some(n=>n.kind==='paint'&&[5,6].includes(n.params?.paintChannel))?1:0,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:columnRows(config.column,config.variant).starts.length?1:0,repeatBeds:Math.max(0,...columnRows(config.column,config.variant).starts.map(s=>s[2])),capBed:columnHasCapBed(config.column,config.variant)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,slopeSand:config.material?.slopeSand?1:0};
 }
 
 // Latest values are applied together once per animation frame. Persistence

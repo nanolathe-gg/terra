@@ -59,11 +59,12 @@ export function mountMaterialGraph(host) {
   }).filter(Boolean);
   // What lies under a point: a port first (ports reach past their dot so they are easy to grab), then a card, then a frame's label.
   function hit(p) {
-    const list = cards(), reach = CARD.reach / Math.min(zoom, 1);
-    for (const c of [...list].reverse()) {
-      if (c.type) { const q = outPort(c); if (Math.hypot(p.x - q.x, p.y - q.y) < reach) return {c, port: 'out'}; }
-      for (const [key] of c.inputs) { const q = inPort(c, key); if (Math.hypot(p.x - q.x, p.y - q.y) < reach) return {c, port: key}; }
+    const list = cards(), reach = CARD.reach / Math.min(zoom, 1); let best = null, nearest = reach;
+    for (const c of list) {   // the nearest port wins: zoomed out, neighboring ports lie within each other's reach
+      const ports = [...(c.type ? [['out', outPort(c)]] : []), ...c.inputs.map(([key]) => [key, inPort(c, key)])];
+      for (const [port, q] of ports) { const d = Math.hypot(p.x - q.x, p.y - q.y); if (d < nearest) { nearest = d; best = {c, port}; } }
     }
+    if (best) return best;
     for (const c of [...list].reverse()) if (p.x >= c.x && p.x <= c.x + CARD.width && p.y >= c.y && p.y <= c.y + c.height) return {c, toggle: p.x < c.x + 24 && p.y < c.y + 26};
     for (const f of frames(list)) if (p.x >= f.x && p.x <= f.x + f.width && p.y >= f.y && p.y <= f.y + 24) return {frame: f};
     return null;

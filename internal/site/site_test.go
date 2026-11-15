@@ -104,9 +104,9 @@ func TestDevelopmentReload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	obj(defaults["knobs"])["groundTiles"] = 99
+	obj(defaults["knobs"])["groundPatch"] = 99
 	writeJSON(t, path, defaults)
-	if got := obj(jsonBody(t, get(t, h, "/config/green.json"))["defaults"])["groundTiles"]; got != "99" {
+	if got := obj(jsonBody(t, get(t, h, "/config/green.json"))["defaults"])["groundPatch"]; got != "99" {
 		t.Fatal("stale common default", got)
 	}
 	// Adding a source to the manifest is live too.

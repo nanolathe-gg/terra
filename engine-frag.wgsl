@@ -371,9 +371,11 @@ fn groundCover(p: vec2f, slope: f32, broad: vec2f, top: f32, tm: TimeMaps, veget
     var acc = 0.0;
     var klass = 6u;
     for (var k = 0u; k < 7u; k++) { acc += cover[k]; if (pick < acc) { klass = k; break; } }
-    let col = cvr(4u + 5u * klass);
+    var col = cvr(4u + 5u * klass);
+    // A table without a ground color of its own, and a class without one (bare soil), take the ground material's mean.
+    if (cvr(5u + 5u * klass).z > 0.5) { col = vec4f(groundMean(), col.w); }
     let grain = (cellHash(poolPixel(p) + 3.7).y - 0.5) * 2.0 * col.w;
-    let ratio = grass / max(cvr(3u).rgb, vec3f(0.01));
+    let ratio = grass / max(select(groundMean(), cvr(3u).rgb, cvr(3u).a > 0.5), vec3f(0.01));
     let tl = dot(ratio, vec3f(0.299, 0.587, 0.114));
     let ground = col.rgb * clamp(ratio, vec3f(0.7 * tl), vec3f(1.3 * tl)) * (1.0 + grain);
     let flower = flowersAt(p, cover, total, coverSite(broad, tm).y, vegetation, gate);

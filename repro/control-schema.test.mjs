@@ -168,8 +168,6 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('ringShiftDir',{ringLayer:1,ringShift:0}),/Offset between copies/);
  assert.match(requirement('beachWidth',{beachLayer:0}),/no beach of its own. Choose another world's Beach, above,/);
  shows('beachWidth',{beachLayer:1});
- assert.match(requirement('groundTiles',{groundTiled:0}),/Ground pattern/);
- shows('groundTiles',{groundTiled:1});
  assert.match(requirement('slopeTexture',{slopeSand:1}),/sand/);
  assert.match(requirement('slopeTexture',{vegetationCover:1}),/ground cover decides the slope cover/);
  shows('slopeTexture',{vegetationCover:0});

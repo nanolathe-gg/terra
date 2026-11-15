@@ -1,9 +1,6 @@
 {
   "knobs": {
-    "groundTiles": 16,
-    "groundPattern": "",
     "beachFrom": "",
-    "groundContrast": 1,
     "undulation": 0,
     "undulationScale": 200,
     "undulationCover": 0.45,

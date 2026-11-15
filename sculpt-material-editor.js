@@ -98,6 +98,8 @@ export function mountMaterialEditor(host) {
   for (const b of menuItems) b.onclick = () => addNode(b);
   $('graph-add').onclick = e => { const r = e.currentTarget.getBoundingClientRect(); openMenu({x: r.left, y: r.bottom + 6}, graph.center(), null); };
   $('graph-fit').onclick = () => graph.fit();
+  // The same selection without a pointer: every node by name.
+  $('graph-node-select').onchange = () => { const id = $('graph-node-select').value; selection = new Set(id ? [id] : []); primary = id || null; frameAt = -1; stopAt = 0; if (id) pick('node'); refresh(); };
   $('graph-arrange').onclick = attempt(() => { change(m => { const places = graphPositions(m.nodes); for (const n of m.nodes) Object.assign(n, places.get(n.id)); }); graph.fit(); });
   $('graph-frame').onclick = attempt(() => {
     const ids = [...selection]; if (!ids.length) throw Error('Select the nodes to frame first (Shift-click adds to the selection).');
@@ -309,6 +311,7 @@ export function mountMaterialEditor(host) {
     $('mview-zoom').setAttribute('aria-pressed', String(zoomed)); $('mview-zoom').disabled = view === 'repeat';
     $('mview-solo').setAttribute('aria-pressed', String(!!solo)); $('mview-solo').disabled = !solo && (!primary || node()?.type === 'output');
     $('graph-frame').disabled = !selection.size;
+    $('graph-node-select').replaceChildren(new Option('Select a node…', ''), ...m.nodes.map(n => new Option(n.name, n.id))); $('graph-node-select').value = primary ?? '';
     if (!$('material-pane-controls').hidden) refreshControls(m);
     if (!$('material-pane-node').hidden) refreshNode(m);
     if (!$('material-pane-palette').hidden) refreshPalette(m);

@@ -57,9 +57,9 @@ export function recolorRGB(c,from,to){
   return fromHSL([((h+ht-hf)%360+360)%360,clamp01(s+st-sf),clamp01(l*Math.max(.35,Math.min(2.5,lt/Math.max(lf,.01))))]);
 }
 // The rows of a `groundCover` block (the layout is engine-frag.wgsl's, above MM_COVER). Colours are sRGB 0..255, windows are [from, full, full
-// until, gone by] on moisture, soil depth and light; strength and lush are a class's weight and its exponent on Lushness. `ground` (0..1) is the
-// world's ground colour as drawn (its Ground base color, else its pattern's mean): the reference of a table with no `ground` of its own, and the
-// colour of a class with no `rgb` (the default table's bare soil). Off (Vegetation cover 0, or no table), every row is 0.
+// until, gone by] on moisture, soil depth and light; strength and lush are a class's weight and its exponent on Lushness. A table with no `ground` of its own takes
+// the world's ground material's mean color as its reference, and so does a class with no `rgb` (the default table's bare soil): the draw
+// reads that mean on the GPU (rows[3].a and a class's second row's z say so), so `ground` here is only what a host without one shows. Off (Vegetation cover 0, or no table), every row is 0.
 export function groundCoverRows(cover, overrides = null, colors = {}, ground = [.5, .5, .5]) {
   const rows = Array.from({length: COVER_ROWS}, () => [0, 0, 0, 0]);
   if (!groundCoverOn(cover, overrides)) return rows;
@@ -69,11 +69,11 @@ export function groundCoverRows(cover, overrides = null, colors = {}, ground = [
   rows[0] = [1, cover.wet[0], cover.wet[1], cover.dry];
   rows[1] = [cover.soil.slope[0], cover.soil.slope[1], cover.soil.convex, cover.soil.deposit];
   rows[2] = [cover.patch, cover.moisture.perSwath, cover.moisture.swathRef, cover.moisture.shade];
-  rows[3] = [...reference, 0];
+  rows[3] = [...reference, cover.ground ? 1 : 0];
   cover.classes.forEach((k, i) => {
     const b = 4 + 5 * i, own = k.rgb ? rgb(k.rgb) : ground;
     rows[b] = [...(k.bare ? own : plant(own)), k.grain];
-    rows[b + 1] = [k.strength * (i ? scale('vegetationCover') : 1), k.lush, 0, 0];
+    rows[b + 1] = [k.strength * (i ? scale('vegetationCover') : 1), k.lush, k.rgb ? 0 : 1, 0];
     rows[b + 2] = k.moisture; rows[b + 3] = k.soil; rows[b + 4] = k.light;
   });
   // Card P31: the plants (tufts, cushions, shrubs, flowers) the bake's loose scatter adds on the classes that grow them; no block, none.

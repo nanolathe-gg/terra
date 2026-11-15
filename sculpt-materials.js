@@ -344,6 +344,9 @@ export function withWorldMaterials(value, config) {
   }
   return list;
 }
+// A map carried into another world: a ground or water still as the library made it gives way to the new world's own; one the artist
+// changed stays, as do the map's other materials.
+export const carriedMaterials = list => list?.filter(m => !((m.worldGround || m.worldWater) && LIBRARY[m.source] && materialRenderKey(m) === materialRenderKey(LIBRARY[m.source]))) ?? null;
 // A world's materials for a new map: a world of the user's own carries its list (config.worldMaterials); a built-in world names its
 // ground and water in the library (config.materials).
 export const worldMaterials = config => withWorldMaterials(config.worldMaterials, config);
