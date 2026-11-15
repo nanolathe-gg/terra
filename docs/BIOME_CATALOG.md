@@ -120,7 +120,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Icebergs, ice blocks, glacier fronts | Iceberg, Ice block (Glacier ice), Glacier front (Snow and slate) | close |
 | Rubble clumps and boulders | Frost rubble, Boulder, Boulder field (Frost rubble; Copies 10) | close |
 | Snow drifts | Snow drift | close |
-| Ragged frost coasts | Deep water (plates 8 px on land, 40 px in water; uneven lobes) | close (plain snow and a ragged edge with inlets, as retail's; retail's darker mottled shelf and melt holes are still missing) |
+| Ragged frost coasts | Deep water (plates 8 px on land, 40 px in water; uneven lobes) | close (plain snow and a ragged edge with inlets, as retail's; retail's darker mottled shelf and melt holes are still missing: depth ramp, bed relief, bed tint and the rock shelf were tried and only tint a thin band, so a lumpy submerged ledge with floating chunks needs engine work) |
 
 ### Crystal (10 maps)
 
