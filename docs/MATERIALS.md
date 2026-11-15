@@ -27,15 +27,21 @@ controls; node settings are the author's tools.
 - **The library** (`materials/textures.json`) holds the shipped materials by
   key. A world names its two in its table: `world.materials: {ground, water}`
   in `materials/<world>.json`. A variant overrides them through its `config`.
-- **A map** holds up to seven materials in slots 1 to 7: exactly one is the
-  world's ground, one its water, the rest are for landforms and the Paint
-  brush (a stroke's Ground choice: `-1` the ground beneath, `0` the world's
-  ground, else a slot). They are in the map's save, its undo steps, share
-  links, and the world settings it embeds.
-- **A world of your own** (World, New) keeps the map's materials, and a world
-  file carries them. A new map in that world starts with them.
-- A map carried into another world lets go of a ground and water still as the
-  library made them and takes the new world's; ones you changed stay.
+- **The world owns its ground and its water** (owner, 2026-11-14). They are
+  world settings like its sliders: where you change one, the world keeps it
+  in this browser and every map drawn in that world shows it. One the world
+  never changed stays the library's, so a library revision reaches it.
+  "Restore built-in settings" returns both to the library's. The world keeps
+  them for one look (variant) at a time; another look names its own.
+- **A map** holds up to seven materials in slots 1 to 7: the world's two and
+  up to five of its own, for landforms and the Paint brush (a stroke's Ground
+  choice: `-1` the ground beneath, `0` the world's ground, else a slot). A
+  map opened in a world takes that world's two, in the slots the map already
+  gave those roles; its own materials stay.
+- **Saves, undo and share links** carry the map's list, and the world
+  settings a save embeds carry the world's two. Opening a save sets the
+  world's two in this browser, as it sets the world's sliders.
+- **A world of your own** (World, New) and a world file carry the two.
 - A save with no materials (or an earlier format's `grounds`) loads with the
   world's own two. There is no migration.
 
@@ -96,6 +102,10 @@ sections open it on that material. The map stops rendering while it is open.
   magnifies, Node shows the selected node alone.
 - **Controls**: the published settings. In the Node pane, ◆ beside a setting
   publishes it; a gradient publishes its colors.
+  The World pane shows the same controls for the world's ground (Ground,
+  Pattern) and water (Water & shores), live on the map, beside a chip of the
+  material's color. The map is the preview there; the pane starts no second
+  renderer.
 - **Palette**: click a game color to put it in or out; *Pick from the
   material* chooses the colors nearest what the graph makes.
 - **Manage**: rename, use as the world's ground or water, duplicate, delete,
@@ -123,6 +133,13 @@ than one run a frame.
 The world's own settings for level ground (low-ground tint, the vegetation
 cover table, ground patches) apply over the world's ground material; a
 material a stroke chose keeps its own look.
+
+One way for each part of the look. Deep water has no color in World, Colors:
+the water material is its color. Two older settings still act beside a
+material and are candidates to fold into it once the owner has judged the
+look: Ground bumps (`plainRelief`, lit noise on level land, above 0 in seven
+worlds) beside a material's Height, and Shine, Ground gloss (`shineGround`,
+above 0 on Lava) beside a material's Shine.
 
 ## Status of the shipped materials (2026-11-14)
 
