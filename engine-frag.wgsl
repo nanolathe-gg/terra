@@ -193,6 +193,12 @@ fn weatheredCover(cover: f32, deposits: vec4f, grain: vec4f) -> f32 {
 fn worldGround(p:vec2f)->vec3f { return materialPigment(p,u32(u.groundDefault)); }
 fn groundMean()->vec3f { return materialMean(u32(u.groundDefault)); }
 fn waterMean()->vec3f { return materialMean(u32(u.waterGround)); }
+// A Hermite ramp from 0 at depth a to 1 at depth b, defined for either order (b below a runs it down); equal depths step.
+fn waterRamp(a: f32, b: f32, x: f32) -> f32 {
+    if (abs(b - a) < 1e-4) { return step(a, x); }
+    let t = clamp((x - a) / (b - a), 0.0, 1.0);
+    return t * t * (3.0 - 2.0 * t);
+}
 // Water is lit by its own art height here: the bed's light is another model (the shallows), and the sea has no terrain normal.
 fn waterPigment(p:vec2f)->vec3f {
  let slot=u32(u.waterGround);
@@ -2307,7 +2313,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             // Some worlds' water passes through a third colour; a straight
             // blend of the two textures lands on colours the art never uses.
             if (u.waterMid.a > 0.0 && u.shallowBase.a < .5) {
-                let toMid = smoothstep(u.shallowDepth, u.waterMid.a, colorDepth);
+                // A Shallow until depth past the third colour's depth runs this ramp down: the third colour at the waterline,
+                // the lit bed between the two depths (a submerged shelf), deep beyond. smoothstep leaves reversed edges undefined.
+                let toMid = waterRamp(u.shallowDepth, u.waterMid.a, colorDepth);
                 let toDeep = smoothstep(u.waterMid.a, u.deepDepth, colorDepth);
                 var mid = u.waterMid.rgb + (deepWater - waterMean()) * 0.9;
                 if (lowShare > 0.0) { mid = mix(mid, lowTinted(mid, u.waterMid.rgb), lowShare); }
