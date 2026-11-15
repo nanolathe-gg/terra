@@ -1856,7 +1856,9 @@
         "shoalStairs": 2,
         "closeShadow": 0.8,
         "cavity": 0.6,
-        "erosion": 1
+        "erosion": 1,
+        "faceWet": 0.75,
+        "faceStrata": 0.2
       },
       "engineDefaults": {
         "terraceBreak": 0,
