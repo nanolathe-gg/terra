@@ -189,6 +189,6 @@ test('the page declares every row the editor fills', () => {
   const most = Math.max(...Object.values(NODES).flatMap(spec => spec.kinds ? Object.keys(spec.kinds).map(k => spec.params(k).length) : [spec.params().length]));
   for (let i = 0; i < most; i++) assert.ok(has('node-param-' + i) && has('node-param-pin-' + i), 'a row for setting ' + i);
   for (let i = 0; i < Math.max(...Object.values(NODES).map(s => s.inputs.length)); i++) assert.ok(has('node-input-' + i));
-  for (let i = 0; i < 12; i++) assert.ok(has('ctl-' + i) && has(`ctl-color-${i}-7`));
+  for (const list of ['ctl', 'wg', 'ww']) for (let i = 0; i < 12; i++) assert.ok(has(`${list}-${i}`) && has(`${list}-row-${i}`) && has(`${list}-color-${i}-7`), `${list} row ${i}`);
   for (const [type, spec] of Object.entries(NODES)) if (type !== 'output') assert.ok(page.includes(`data-type="${type}"`), `the add menu offers ${spec.label}`);
 });

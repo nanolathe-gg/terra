@@ -2,7 +2,7 @@
 // preview and three panes: Controls (what the material publishes, for adjusting it), Node (the selected node) and Palette (the game
 // colors it is reduced to). Every element is in index.html; this fills values and applies edits through the map's own undo and save.
 import {NODES, NODE_TYPES, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
-  nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, materialRenderKey, paletteRgb,
+  nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, materialRenderKey, materialTint, paletteRgb,
   addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText} from './sculpt-materials.js';
 import {mountMaterialGraph, graphPositions, CARD, cardHeight} from './sculpt-material-graph.js';
 import {MaterialPreview, TILE, TERRAIN} from './sculpt-material-preview.js';
@@ -121,27 +121,53 @@ export function mountMaterialEditor(host) {
     else { if (m.controls.length >= MAX_CONTROLS) throw Error(`A material publishes at most ${MAX_CONTROLS} controls.`); m.controls.push({label, node: id, param}); }
   }));
 
-  // Controls pane: the published numbers and gradients.
+  // A material's published controls, in the fixed rows the page declares under `prefix`: the editor's Controls pane ("ctl") and the
+  // World pane's ground ("wg") and water ("ww"). `of()` is the material the rows act on. Names and Remove exist only in the editor.
+  function controlRows(prefix, of) {
+    const id = (part, i) => `${prefix}-${part}-${i}`, optional = name => document.getElementById(name);
+    const editOf = fn => { const m = structuredClone(of()); if (!m) return; fn(m); update(setMaterial(materials(), m.slot, m)); };
+    for (let i = 0; i < MAX_CONTROLS; i++) {
+      const scrub = $(`${prefix}-${i}`), target = () => { const m = of(), c = m?.controls[i]; return c && controlSpec(m, c) ? c : null; };
+      scrub.oninput = attempt(() => { const c = target(); if (c) editOf(m => { m.nodes.find(n => n.id === c.node).params[c.param] = Number(scrub.value); }); });
+      scrub.onchange = commit;
+      for (let k = 0; k < MAX_STOPS; k++) {
+        const color = $(`${prefix}-color-${i}-${k}`);
+        color.oninput = attempt(() => { const c = target(); if (c) editOf(m => { const stop = m.nodes.find(n => n.id === c.node).stops[k], gain = Math.max(1, ...stop.slice(1)); rgbOf(color.value).forEach((v, j) => { stop[j + 1] = v / 255 * gain; }); }); });
+        color.onchange = commit;
+      }
+      if (optional(id('name', i))) {
+        $(id('name', i)).onchange = attempt(() => { editOf(m => { m.controls[i].label = $(id('name', i)).value; }); commit(); });
+        $(id('remove', i)).onclick = attempt(() => { editOf(m => { m.controls.splice(i, 1); }); commit(); });
+      }
+    }
+    return (m, naming = false) => {
+      for (let i = 0; i < MAX_CONTROLS; i++) {
+        const c = m?.controls[i], target = c && controlSpec(m, c); $(id('row', i)).hidden = !target; if (!target) continue;
+        const name = optional(id('name', i));
+        if (name) { name.hidden = $(id('remove', i)).hidden = !naming; if (document.activeElement !== name) name.value = c.label; }
+        $(id('scrub', i)).hidden = !!target.stops; $(id('colors', i)).hidden = !target.stops;
+        if (target.stops) { $(id('colors-label', i)).textContent = c.label; for (let k = 0; k < MAX_STOPS; k++) { const stop = target.node.stops[k], input = $(`${prefix}-color-${i}-${k}`); input.hidden = !stop; if (stop) input.value = hex(stop.slice(1).map(v => v / Math.max(1, ...stop.slice(1)) * 255)); } }
+        else { $(id('label', i)).textContent = c.label; setScrub(`${prefix}-${i}`, target.spec, target.node.params[c.param]); }
+      }
+    };
+  }
+  const showControls = controlRows('ctl', material);
   function refreshControls(m) {
     $('controls-empty').hidden = m.controls.length > 0; $('controls-edit').hidden = !m.controls.length; $('controls-edit').setAttribute('aria-pressed', String(editingControls));
-    for (let i = 0; i < MAX_CONTROLS; i++) {
-      const c = m.controls[i], target = c && controlSpec(m, c); $('ctl-row-' + i).hidden = !target; if (!target) continue;
-      $('ctl-name-' + i).hidden = $('ctl-remove-' + i).hidden = !editingControls; if (document.activeElement !== $('ctl-name-' + i)) $('ctl-name-' + i).value = c.label;
-      $('ctl-scrub-' + i).hidden = !!target.stops; $('ctl-colors-' + i).hidden = !target.stops;
-      if (target.stops) { $('ctl-colors-label-' + i).textContent = c.label; for (let k = 0; k < MAX_STOPS; k++) { const stop = target.node.stops[k], input = $(`ctl-color-${i}-${k}`); input.hidden = !stop; if (stop) input.value = hex(stop.slice(1).map(v => v / Math.max(1, ...stop.slice(1)) * 255)); } }
-      else { $('ctl-label-' + i).textContent = c.label; setScrub('ctl-' + i, target.spec, target.node.params[c.param]); }
-    }
+    showControls(m, editingControls);
   }
-  for (let i = 0; i < MAX_CONTROLS; i++) {
-    const target = () => { const c = material()?.controls[i]; return c && controlSpec(material(), c) ? c : null; };
-    $('ctl-' + i).oninput = attempt(() => { const c = target(); if (c) edit(m => { m.nodes.find(n => n.id === c.node).params[c.param] = Number($('ctl-' + i).value); }); });
-    $('ctl-' + i).onchange = commit;
-    for (let k = 0; k < MAX_STOPS; k++) {
-      $(`ctl-color-${i}-${k}`).oninput = attempt(() => { const c = target(); if (c) edit(m => { const stop = m.nodes.find(n => n.id === c.node).stops[k], gain = Math.max(1, ...stop.slice(1)); rgbOf($(`ctl-color-${i}-${k}`).value).forEach((v, j) => { stop[j + 1] = v / 255 * gain; }); }); });
-      $(`ctl-color-${i}-${k}`).onchange = commit;
+  // The World pane: which material is the world's ground and which its water, a chip of its color, and the settings it publishes,
+  // live on the map. The graph behind them opens with Edit material.
+  const worldRows = [['wg', 'worldGround', 'ground-world-default', 'material-open'], ['ww', 'worldWater', 'water-material', 'water-material-edit']]
+    .map(([prefix, role, select, open]) => ({prefix, role, select, open, show: controlRows(prefix, () => materials().find(m => m[role]) ?? null)}));
+  function refreshWorld() {
+    const list = materials();
+    for (const {prefix, role, select, open, show} of worldRows) {
+      const m = list.find(o => o[role]) ?? null;
+      $(select).replaceChildren(...list.filter(o => !o[role === 'worldGround' ? 'worldWater' : 'worldGround']).map(o => new Option(o.name, String(o.slot)))); $(select).value = String(m?.slot ?? ''); $(open).disabled = !list.length;
+      $(prefix + '-chip').style.background = m ? hex(materialTint(m).map(v => v * 255)) : '';
+      show(m); $(prefix + '-empty').hidden = !m || m.controls.some(c => controlSpec(m, c));
     }
-    $('ctl-name-' + i).onchange = attempt(() => change(m => { m.controls[i].label = $('ctl-name-' + i).value; }));
-    $('ctl-remove-' + i).onclick = attempt(() => change(m => { m.controls.splice(i, 1); }));
   }
   $('controls-edit').onclick = () => { editingControls = !editingControls; refresh(); };
 
@@ -292,9 +318,8 @@ export function mountMaterialEditor(host) {
   function refresh() {
     const list = materials(); if (!list.some(m => m.slot === slot)) { slot = (list.find(m => m.worldGround) ?? list[0])?.slot ?? 0; selection = new Set(); primary = null; frameAt = -1; solo = null; }
     const m = material(), role = o => o.worldGround ? ' · world ground' : o.worldWater ? ' · world water' : '', full = list.length >= MATERIAL_SLOTS - 1;
-    for (const [id, key, edit] of [['ground-world-default', 'worldGround', 'material-open'], ['water-material', 'worldWater', 'water-material-edit']]) {
-      $(id).replaceChildren(...list.filter(o => !o[key === 'worldGround' ? 'worldWater' : 'worldGround']).map(o => new Option(o.name, String(o.slot)))); $(id).value = String(list.find(o => o[key])?.slot ?? ''); $(edit).disabled = !list.length;
-    }
+    refreshWorld();
+    if (!dialog.open) return;   // the rest is the editor's own face
     $('material-select').replaceChildren(...list.map(o => new Option(o.name + role(o), String(o.slot)))); $('material-select').value = String(slot);
     if (!m) return;
     if (m.nodes.every(n => n.id !== primary)) { primary = null; selection = new Set([...selection].filter(id => m.nodes.some(n => n.id === id))); }
@@ -335,7 +360,7 @@ export function mountMaterialEditor(host) {
   for (const [id, role] of [['ground-world-default', 'worldGround'], ['water-material', 'worldWater']]) $(id).onchange = attempt(() => { update(assignMaterial(materials(), Number($(id).value), role)); commit(); });
 
   function open(which, from) {
-    opener = from; if (which !== undefined) slot = which; pick('controls'); refresh();
+    opener = from; if (which !== undefined) slot = which; pick('controls');
     if (!dialog.open) { host.suspend(true); dialog.showModal(); }
     pictureKey = thumbKey = ''; refresh(); graph.fit();
   }

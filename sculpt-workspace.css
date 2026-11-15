@@ -249,6 +249,7 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 #material-preview-note{margin:6px 0 0;min-height:16px}
 .material-tabs{display:flex;gap:5px;padding:12px 0 10px;position:sticky;top:-10px;background:var(--panel);z-index:1}.material-tabs button{padding:6px 12px}
 .material-pane .control{margin-top:7px}.material-pane p.small{line-height:1.55;margin:0 0 10px}
+.material-pick{display:flex;gap:6px;align-items:center}.material-pick select{flex:1;min-width:0}.material-chip{flex:none;width:22px;height:22px;border-radius:4px;border:1px solid #0c1214;background:#555}.material-world-controls{margin:2px 0 8px}
 .material-control{margin-top:7px}.material-control-edit{gap:6px;margin-bottom:3px}.material-control-edit input{flex:1;min-width:0}
 .material-control-colors{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid #455b4a;border-radius:4px;padding:3px 6px;font-size:11px;min-height:26px}.material-control-colors .swatches{display:flex;gap:3px}
 .material-control-colors input[type=color],#stop-color{width:26px;height:20px;padding:0;border:1px solid #0c1214;background:none}
