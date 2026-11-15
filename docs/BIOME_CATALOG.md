@@ -96,6 +96,25 @@ much 2 px band energy, edges leaning vertical where retail's lean horizontal, an
 0.069). Highland from 55 or 70 and banding 0.5 (with strata contrast 0.6) were scored and did not move closeness (26-27 of 72); its shape
 score, the worst of the eight at 0.35, did not change in the round. Archipelago keeps thin dark lines at 3-7x retail's.
 
+### Blind A/B, one judge (2026-11-15)
+
+Six pairs of 256 px patches per world, cut at the same place from three retail windows and our renders of them, sides randomized; a fresh
+model judge with no context picked the original in each pair (sheets and key in `/private/tmp/claude-501/abx*`, outside the repository).
+Indistinguishable is 3 of 6; 0-1 or 5-6 means the judge separates them.
+
+| World | Original picked | Judge's main cue |
+| --- | --- | --- |
+| Green, Lava, Ice, Moon | 3 of 6 each | not separated (chance) |
+| Red | 1 of 6 | hard pixel shore edges against Voronoi crack patterns |
+| Painted Desert | 1 of 6 | small crater circles, sharp banding, pixel artifacts |
+| Crystal | 1 of 6 | clean Voronoi polygons (taken, wrongly, for the imitation) |
+| Archipelago | 1 of 6 | crisp drawn contour lines against blurry blobs |
+| All | 16 of 48 (by chance 16 or fewer: p = 0.015) | |
+
+The judge separated Red, Desert, Crystal and Archipelago in 5 of 6 pairs each, but took ours for the original, and all 11 of its
+confident picks were wrong. So these four still differ from retail in a consistent way a viewer can see; Green, Lava, Ice and Moon did not.
+One judge and six pairs a world is a small test: repeat it with more pairs or the owner's eye before treating a world as matched.
+
 ## Cross-biome gaps, ranked by how much of the retail set they cover
 
 | Gap | Biomes | Generic control that would close it | Status |
