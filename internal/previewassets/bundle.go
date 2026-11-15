@@ -318,7 +318,9 @@ func pruneGenerated(dir string, l Lock) error {
 }
 
 // The receipt inside the checksum-pinned archive binds the rendered pixels to
-// their source fingerprint. Editing only the lock cannot mark old pictures fresh.
+// the fingerprint they were rendered from. The lock may name newer accepted
+// inputs (publish records them after a render shows no visible change); the
+// receipt must still match the inputs the bundle itself came from.
 func verifyReceiptBytes(data []byte, l Lock) error {
 	if sum(data) != l.SHA256 {
 		return fmt.Errorf("preview bundle checksum mismatch")
@@ -359,7 +361,7 @@ func verifyReceiptBytes(data []byte, l Lock) error {
 		if err = json.Unmarshal(b, &r); err != nil {
 			return err
 		}
-		if r.Version != 1 || r.InputsSHA256 != l.InputsSHA256 || len(r.Files)+1 != len(l.Files) {
+		if r.Version != 1 || r.InputsSHA256 != l.renderedInputs() || len(r.Files)+1 != len(l.Files) {
 			return fmt.Errorf("published previews were rendered from different inputs; re-render and publish")
 		}
 		for name, hash := range r.Files {

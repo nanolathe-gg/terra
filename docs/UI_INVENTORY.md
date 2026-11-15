@@ -927,12 +927,13 @@ button, and the weathering progress text.
 | Escape | Leave focus, path adding, add-path, path mode, selection, feature placement (in that order) | unchanged |
 | Cmd/Ctrl Z, Shift Z | Undo, redo | unchanged |
 | Delete / Backspace | Delete the selected path point, else the selected shape or feature | unchanged |
-| Arrow keys (Shift: 10) | Nudge the selected shape or path point by 1 map px | unchanged |
+| Arrow keys (Shift: 10) | Nudge the selected shapes or path point by 1 map px | unchanged |
 | , and . | Rotate the selection 15° | unchanged |
 | [ and ] | Scale the selection 10% | unchanged |
 | Page Up / Down | Raise or lower the selection by 5 height units | unchanged |
 | Space + drag | Pan the map | unchanged |
-| Shift + drag (Select) | Change height; Shift also snaps rotate and scale | unchanged |
+| Shift + click (Select) | Add a shape to the selection or remove it; dragging any selected shape moves them together, and Delete removes them all | new |
+| Shift + drag (Select) | Change height when one shape is selected; Shift also snaps rotate and scale | unchanged |
 | Slider: drag, click, double-click or Enter to type, arrows, Page Up/Down, Home/End, Shift for fine | Every slider row | unchanged |
 | Curve canvases: drag points, click line to add, Shift-click to remove, drag the diamond to lean, double-click to add (along) | Cross-section and Length vs. height | unchanged |
 

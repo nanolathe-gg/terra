@@ -16,7 +16,7 @@ import (
 
 func run() error {
 	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: go run ./cmd/previews fingerprint|stamp|package|publish|fetch|check|check-push|install-hook")
+		return fmt.Errorf("usage: go run ./cmd/previews fingerprint|stamp|package|compare|publish|fetch|check|check-push|install-hook")
 	}
 	command := os.Args[1]
 	f := flag.NewFlagSet(command, flag.ContinueOnError)
@@ -28,6 +28,9 @@ func run() error {
 	asJSON := f.Bool("json", false, "print fingerprint and input file checksums")
 	published := f.Bool("published", false, "verify the pinned release asset exists and matches its checksum")
 	replace := f.Bool("replace", false, "replace local previews with the pinned bundle")
+	force := f.Bool("force", false, "publish a new bundle even when the render shows no visible change")
+	pixelDelta := f.Int("pixel-delta", previewassets.DefaultTolerance.PixelDelta, "levels (of 255) a channel may differ before a pixel counts as moved")
+	maxChanged := f.Float64("max-changed", 100*previewassets.DefaultTolerance.MaxChanged, "percent of a frame's pixels that may move before the change counts as visible")
 	if err := f.Parse(os.Args[2:]); err != nil {
 		return err
 	}
@@ -43,6 +46,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	tol := previewassets.Tolerance{PixelDelta: *pixelDelta, MaxChanged: *maxChanged / 100}
 	switch command {
 	case "fingerprint":
 		input, err := previewassets.Fingerprint(*root)
@@ -72,10 +76,23 @@ func run() error {
 			return err
 		}
 		fmt.Println(hash)
-	case "publish":
-		l, err := previewassets.Publish(*root, *dir, *repo)
+	case "compare":
+		result, err := previewassets.Compare(*root, *dir, tol)
 		if err != nil {
 			return err
+		}
+		report(result)
+	case "publish":
+		l, result, err := previewassets.Publish(*root, *dir, *repo, *force, tol)
+		if err != nil {
+			return err
+		}
+		if !*force {
+			report(result)
+		}
+		if result.Equivalent && !*force {
+			fmt.Printf("Kept %s: no visible change, so %s now accepts the current inputs and no release was made.\n", l.Tag, previewassets.LockName)
+			return nil
 		}
 		fmt.Printf("Published %s (%s) and pinned %s\n", l.Tag, l.SHA256, previewassets.LockName)
 	case "fetch":
@@ -136,6 +153,30 @@ func run() error {
 		return fmt.Errorf("unknown preview command %q", command)
 	}
 	return nil
+}
+// report prints how a render differs from the pinned bundle, most changed frames first.
+func report(result previewassets.Comparison) {
+	if result.Reason != "" && !result.Equivalent && len(result.Frames) == 0 {
+		fmt.Println("Needs a new bundle:", result.Reason)
+		return
+	}
+	if len(result.Frames) == 0 {
+		fmt.Println("The render matches the pinned bundle exactly.")
+		return
+	}
+	shown := result.Frames
+	if len(shown) > 8 {
+		shown = shown[:8]
+	}
+	fmt.Printf("%d frames differ from the pinned bundle; most changed:\n", len(result.Frames))
+	for _, frame := range shown {
+		fmt.Println("  " + frame.String())
+	}
+	if result.Equivalent {
+		fmt.Println("No visible change.")
+	} else {
+		fmt.Println("Needs a new bundle:", result.Reason)
+	}
 }
 func main() {
 	if err := run(); err != nil {

@@ -192,7 +192,7 @@ export function mountMaterialGraph(host) {
     schedule();
   };
   canvas.onpointercancel = e => { gesture = null; wire = null; if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId); schedule(); };
-  canvas.ondblclick = e => { const target = hit(point(e)); if (target?.c && !target.port) host.toggleSolo(target.c.n.id); else if (!target) host.menu({x: e.clientX, y: e.clientY}, point(e)); };
+  canvas.ondblclick = e => { const target = hit(point(e)); if (target?.c && !target.port) host.viewAlone(target.c.n.id); else if (!target) host.menu({x: e.clientX, y: e.clientY}, point(e)); };
   canvas.oncontextmenu = e => { e.preventDefault(); const target = hit(point(e)); if (!target) host.menu({x: e.clientX, y: e.clientY}, point(e)); };
   canvas.onwheel = e => {
     e.preventDefault(); const p = point(e), r = canvas.getBoundingClientRect();

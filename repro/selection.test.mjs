@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {selectionTransform,selectionGeometry,hitSelection} from '../sculpt-selection.js';
+import {selectionTransform,selectionGeometry,hitSelection,toggleSelection} from '../sculpt-selection.js';
 
 const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
 const apply=(m,p)=>({x:m[0]*p.x+m[2]*p.y+m[4],y:m[1]*p.x+m[3]*p.y+m[5]});
@@ -62,4 +62,15 @@ test('hidden/offscreen strokes cannot be hit; partially visible strokes keep usa
     }
     assert.ok(Math.hypot(g.move.x-g.rotate.x,g.move.y-g.rotate.y)>=28);
   }
+});
+
+test('Shift-click adds a shape as the primary and removes a selected one',()=>{
+  assert.deepEqual(toggleSelection(-1,[],4),{primary:4,others:[]});
+  assert.deepEqual(toggleSelection(4,[],2),{primary:2,others:[4]});
+  assert.deepEqual(toggleSelection(2,[4],7),{primary:7,others:[4,2]});
+  assert.deepEqual(toggleSelection(7,[4,2],4),{primary:7,others:[2]});
+  // The primary leaving hands its place to the most recently added shape.
+  assert.deepEqual(toggleSelection(7,[4,2],7),{primary:2,others:[4]});
+  assert.deepEqual(toggleSelection(2,[],2),{primary:-1,others:[]});
+  assert.deepEqual(toggleSelection(2,[4],-1),{primary:2,others:[4]});
 });

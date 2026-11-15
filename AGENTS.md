@@ -155,7 +155,8 @@ checks the actual outgoing commits, publication, the receipt inside the bundle,
 and the absence of preview PNG/browser output in their history. Never bypass
 it to push stale assets. CI repeats the freshness/publication check. When it
 fails, render the full set and run `go run ./cmd/previews publish`; do not edit
-the fingerprint by hand. Changes during rendering invalidate the receipt.
+the fingerprint by hand. Publish keeps the pinned bundle and only records the
+new inputs when no frame changed visibly; `--force` uploads anyway. Changes during rendering invalidate the receipt.
 See [the asset workflow](docs/PREVIEW_ASSETS.md).
 
 ## Checks

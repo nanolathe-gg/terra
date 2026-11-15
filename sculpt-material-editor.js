@@ -34,7 +34,7 @@ export function mountMaterialEditor(host) {
     select: ids => { selection = new Set(ids); primary = ids.at(-1) ?? null; frameAt = -1; stopAt = 0; if (primary) pick('node'); refresh(); },
     selectFrame: index => { frameAt = index; selection = new Set(); primary = null; pick('node'); refresh(); },
     toggle: attempt(id => change(m => { const n = m.nodes.find(n => n.id === id); n.enabled = !n.enabled; })),
-    toggleSolo: id => { solo = solo === id ? null : id; refresh(); },
+    viewAlone: id => { solo = primary = id; if (!selection.has(id)) selection = new Set([id]); refresh(); },
     move: attempt(positions => change(m => { const places = graph.places(); for (const n of m.nodes) { const p = positions.get(n.id) ?? places.get(n.id); n.x = p.x; n.y = p.y; } })),
     connect: attempt((from, to, key, detached) => change(m => {
       if (detached && (detached.id !== to || detached.key !== key)) m.nodes.find(n => n.id === detached.id).in[detached.key] = null;
@@ -331,6 +331,8 @@ export function mountMaterialEditor(host) {
     if (m.nodes.every(n => n.id !== primary)) { primary = null; selection = new Set([...selection].filter(id => m.nodes.some(n => n.id === id))); }
     if (frameAt >= m.frames.length) frameAt = -1;
     if (solo && !m.nodes.some(n => n.id === solo)) solo = null;
+    // The Node preview follows the selection; selecting the output node, a frame or nothing keeps the last node shown.
+    if (solo && primary && node()?.type !== 'output') solo = primary;
     const users = materialUsers(host.strokes(), list, slot), strokes = users.strokes ? `${users.strokes} stroke${users.strokes > 1 ? 's' : ''}` : '';
     $('material-used').textContent = 'Used by: ' + ([users.world && 'the world’s ' + users.world, strokes].filter(Boolean).join(', ') || 'nothing yet');
     if (document.activeElement !== $('material-name')) $('material-name').value = m.name;
