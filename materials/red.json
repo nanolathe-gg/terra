@@ -1501,7 +1501,7 @@
 
   "shapes": {
    "basin": {"from": "crater", "diameter": 1150, "elevation": -19, "secondaries": 0, "wander": 40, "varySize": 240, "widthVary": 20, "heightVary": 0, "cracks": 40, "curve": {"form": "lfCrater", "knots": [[0, 0], [0.12, 0.06], [0.24, 0.35], [0.34, 0.75], [0.42, 0.97], [0.46, 1], [1, 1]]}},
-   "ringCrater": {"from": "plateau", "diameter": 1200, "elevation": 55, "gullies": 0, "talus": 0, "heightVary": 0, "wander": 24, "varySize": 300, "widthVary": 10, "cracks": 0, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.1, 0.15], [0.2, 0.4], [0.3, 0.7], [0.4, 0.92], [0.47, 1], [0.55, 0.9], [0.63, 0.76], [0.7, 0.72], [1, 0.72]]}},
+   "ringCrater": {"from": "plateau", "diameter": 1200, "elevation": 55, "gullies": 0, "talus": 0, "heightVary": 0, "wander": 24, "varySize": 300, "widthVary": 10, "cracks": 0, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.1, 0.15], [0.2, 0.4], [0.3, 0.7], [0.4, 0.92], [0.47, 1], [0.55, 0.9], [0.63, 0.76], [0.7, 0.72], [1, 0.72]]}, "rimGaps": 2, "rimGapWidth": 35, "rimGapDepth": 30},
    "craterlet": {"from": "crater", "diameter": 200, "elevation": -19, "secondaries": 0},
    "pond": {"from": "deep", "diameter": 150, "elevation": -20, "wander": 16},
    "crescent": {"from": "hill", "diameter": 200, "elevation": 73, "lean": 160, "facing": 2, "wander": 12},
