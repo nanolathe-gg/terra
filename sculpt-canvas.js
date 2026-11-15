@@ -120,7 +120,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(stage){
       cancelBake(true);if(stage==='A'&&!refinement)previewFields.invalidate(rect);
       api.renderProgress?.('Updating terrain…',true);
-      if(!refinement){lastInputAt=performance.now();released=false;if(stage==='A')draftDue=true;}
+      if(!refinement){lastInputAt=performance.now();released=false;if(stage==='A'&&2*detailLevel()>=2)draftDue=true;}
       serial++;if(world)for(const s of new Set([stage,...fields.map(f=>f.stage),...channels.map(c=>c.stage)]))if(s in rev)rev[s]++;
       changeLog.push({serial,stage,rect,refinement});if(changeLog.length>256)changeLog.shift();
       if(!rect){editWide=true;editRect=null;}
@@ -523,10 +523,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
               // The half-level picture is the resting state: it covers the stale ground first, and the finals wait until the artist has been
               // idle for DRAFT_REST, so the GPU is free for the next edit instead of deep in tiles that edit would discard. Finals already
               // measured as cheap (a color edit over kept records) still follow at once.
-              const draft=previewPlan(previewArea,2*detailLevel()).sort((a,b)=>dist(a)-dist(b)),draftReady=draft.every(r=>blockCurrent(blocks.get(blockKey(r,2*detailLevel()))));
+              // Zoomed in past 100% the half-level picture is a canonical block as costly as the finals it would precede, so there the finals
+              // follow at once, as they did before the draft.
+              const draftOn=2*detailLevel()>=2,draft=previewPlan(previewArea,2*detailLevel()).sort((a,b)=>dist(a)-dist(b)),draftReady=draft.every(r=>blockCurrent(blocks.get(blockKey(r,2*detailLevel()))));
               // A draft that cannot be made (no room for it, or its weather still pending) does not hold the finals back for good.
               if(draftReady)draftDue=false;
-              const settled=fineReady&&(quiet>=100||cheapFinal),finalNow=settled||(released||quiet>=250)&&(draftReady&&quiet>=DRAFT_REST||quiet>=4*DRAFT_REST);
+              const settled=fineReady&&(quiet>=100||cheapFinal),finalNow=settled||(released||quiet>=250)&&(!draftOn||draftReady&&quiet>=DRAFT_REST||quiet>=4*DRAFT_REST);
               // Whole-map feeds retain old Time while a refresh is pending.
               // Keep the current coarse answer until canonical weather arrives;
               // paged feeds still prepare their fresh canonical pages on demand.
@@ -541,9 +543,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
                 if(!holding&&finalNow){for(const rect of jobs)if(intersects(rect,v)&&(released||quiet>=100||cache.get(cacheKey(rect,size))?.finalCostMs<=50))plan.push({rect,want:detailLevel()});}
                 else{
                   // While the draft rests, the finals' canonical pages are prepared, so the first final starts when the rest ends.
-                  const warmDue=draftReady&&!holding&&!previewing&&warmedSerial!==serial;
+                  const warmDue=draftOn&&draftReady&&!holding&&!previewing&&warmedSerial!==serial;
                   if(warmDue&&quiet>=250)for(const rect of jobs)if(intersects(rect,v)&&!currentFinal(cache.get(cacheKey(rect,size))))plan.push({rect,want:detailLevel(),warm:true});
-                  wakeLadder(Math.max(16,(draftReady&&!(warmDue&&quiet<250)?DRAFT_REST:250)-quiet));
+                  wakeLadder(Math.max(16,(draftOn&&draftReady&&!(warmDue&&quiet<250)?DRAFT_REST:250)-quiet));
                 }
               }
             }
