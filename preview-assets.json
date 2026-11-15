@@ -1,10 +1,10 @@
 {
   "version": 1,
   "repository": "nanolathe-gg/terraform",
-  "tag": "previews-57386092047e7628",
+  "tag": "previews-cf80015d4c794ba4",
   "asset": "ui-previews.tar.gz",
-  "sha256": "57386092047e76288ae6581e1fb806ded826f2bdc8e73f3561f6248aea6e4fbb",
-  "inputsSHA256": "a22cb366ea433ced9e2ab7518c876c5b62d9417d91a2b81d977e550eaf61eadf",
+  "sha256": "cf80015d4c794ba4ed554d85d65d8c06a828f2e76fdb3d9e000793e09b6e5191",
+  "inputsSHA256": "6addf4810071f3c551c41cf4014de3289a07d25ebd1fc65d58be579aef9a2fcb",
   "files": {
     "diameter.png": "91d2f192068a10658bf26d5ebda89fcc46e62a8cecab5f4a4fe768f34960a215",
     "lean.png": "0d35f35a81b1f347f5e9c8ae6988726cc4022c39e414d6bcf5979f08f24a1e5e",
@@ -20,7 +20,7 @@
     "lf-wander.png": "93207e5dcd97ee65a523dfdec9854e15c49b7a5df5317015a26da6412d06b64c",
     "lf-width-vary.png": "dff7adc462aba5abef45ad55aa79d25b2dd753228bdd97965344ee9afa16dfc4",
     "manifest.json": "330b7a12e945a1fd27b6becc541d78676dfd503e97a51a97209839558cffe3b4",
-    "rendered.json": "f4a1a075da704c2dc6125caf28d49dc778ae75e566557f163e8d9fdeca048315",
+    "rendered.json": "f893f5c85b21f08737428c7bbf7fc10d4503565a6f378de7bde441d91f97dadc",
     "sec-ledge.png": "a958bdb5b22f3676a43a8f5c6e0afb050c9c14730d2b931e36d44c6c9754c0f7",
     "sec-terraces.png": "15740cce2d1da7b9c5a25986a39def7ad983f2eaa0f0069630a121005abd1728",
     "spur-count.png": "9cd40d7338ab137d91c595192dae6e8b61e4e18a0217baa88b795496fa99d5bd",
