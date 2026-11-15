@@ -315,31 +315,36 @@
   "name": "Crystal fibers",
   "seed": 0,
   "nodes": [
-   {"id":"warp","type":"warp","kind":"turbulence","name":"Break the fibers","params":{"amount":0.35,"size":3,"layers":0,"axis":0,"seed":3},"in":{"in":null},"x":0,"y":0},
-   {"id":"fibers","type":"noise","kind":"waves","name":"Steep fibers","params":{"size":1,"detail":0.5,"layers":0,"seed":0,"length":12,"direction":55,"crests":0.3},"in":{"in":"warp"},"x":236,"y":-75},
-   {"id":"fibers2","type":"noise","kind":"waves","name":"Second fiber layer","params":{"size":1.1,"detail":0.5,"layers":0,"seed":7,"length":9,"direction":55,"crests":0.3},"in":{"in":"warp"},"x":236,"y":75},
-   {"id":"mix","type":"combine","kind":"add","name":"Overlap two fiber layers","params":{"amount":0.8,"offset":0.5},"in":{"a":"fibers","b":"fibers2","mask":null},"x":472,"y":0},
-   {"id":"lv","type":"levels","name":"Spread contrast","params":{"low":0.15,"high":0.85,"gamma":1,"invert":0},"in":{"in":"mix"},"x":708,"y":0},
-   {"id":"col","type":"gradient","name":"Navy to violet to gray","params":{"ease":0},"in":{"in":"lv"},"stops":[[0,0.15,0.25,0.33],[0.1,0.22,0.1,0.33],[0.3,0.27,0.13,0.4],[0.45,0.32,0.18,0.45],[0.6,0.41,0.25,0.51],[0.72,0.38,0.38,0.38],[0.88,0.41,0.41,0.41],[1,0.48,0.48,0.48]],"x":944,"y":0},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"col","height":null,"shine":null},"x":1180,"y":0}
+   {"id":"warp","type":"warp","name":"Break the fibers","params":{"amount":0.9,"size":10.0,"layers":0,"axis":0,"seed":3},"in":{"in":null},"x":0,"y":0,"kind":"turbulence"},
+   {"id":"fine","type":"noise","name":"Fine fibers","params":{"size":2.5,"detail":0.5,"layers":0,"seed":0,"length":20.0,"direction":31.0,"crests":0.3},"in":{"in":"warp"},"x":0,"y":0,"kind":"waves"},
+   {"id":"broad","type":"noise","name":"Broad fibers","params":{"size":5.0,"detail":0.5,"layers":0,"seed":7,"length":40.0,"direction":31.0,"crests":0.3},"in":{"in":"warp"},"x":0,"y":0,"kind":"waves"},
+   {"id":"mix","type":"combine","name":"Overlap fiber scales","params":{"amount":0.6,"offset":0.5},"in":{"a":"fine","b":"broad","mask":null},"x":0,"y":0,"kind":"add"},
+   {"id":"lv","type":"levels","name":"Spread contrast","params":{"low":0.1,"high":0.92,"gamma":1,"invert":0},"in":{"in":"mix"},"x":0,"y":0},
+   {"id":"col","type":"gradient","name":"Violet fibers","params":{"ease":0},"in":{"in":"lv"},"x":0,"y":0,"stops":[[0,0.15,0.115,0.21],[0.3,0.28,0.2,0.36],[0.6,0.385,0.29,0.47],[0.85,0.49,0.39,0.585],[1,0.63,0.55,0.73]]},
+   {"id":"grit","type":"noise","name":"Pixel grit","params":{"size":1,"detail":0,"layers":0,"seed":2},"in":{"in":null},"x":0,"y":0,"kind":"pixel"},
+   {"id":"gritc","type":"gradient","name":"Grit tone","params":{"ease":0},"in":{"in":"grit"},"x":0,"y":0,"stops":[[0,0.9,0.9,0.9],[1,1.1,1.1,1.1]]},
+   {"id":"tex","type":"combine","name":"Multiply grit","params":{"amount":1,"offset":0},"in":{"a":"col","b":"gritc","mask":null},"x":0,"y":0,"kind":"multiply"},
+   {"id":"material","type":"output","name":"Material","params":{"relief":2.2},"in":{"color":"tex","height":"lv","shine":null},"x":0,"y":0}
   ],
-  "controls": [{"label":"Second fiber layer: size","node":"fibers2","param":"size"},{"label":"Navy to violet to gray: colors","node":"col","param":"stops"}],
-  "palette": [90,152,221,220,89,151,153,91,88,154,150,121,120,92,118,149],
+  "controls": [{"label":"Broad fibers: size","node":"broad","param":"size"},{"label":"Violet fibers: colors","node":"col","param":"stops"}],
+  "palette": [220,90,152,221,91,89,150,120,121,92,88,153,154,118,149,219,119,222,87,122,117,86,148,93],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
  "crystal-water": {
   "name": "Deep violet water",
   "seed": 0,
   "nodes": [
-   {"id":"warp","type":"warp","kind":"turbulence","name":"Roughen grain","params":{"amount":0.4,"size":3,"layers":0,"axis":0,"seed":1},"in":{"in":null},"x":0,"y":0},
-   {"id":"grain","type":"noise","kind":"waves","name":"Faint diagonal grain","params":{"size":1,"detail":0.2,"layers":0,"seed":1,"length":8,"direction":55,"crests":0},"in":{"in":"warp"},"x":236,"y":0},
-   {"id":"mottle","type":"noise","kind":"smooth","name":"Slow darkening","params":{"size":6,"detail":0.3,"layers":0,"seed":4},"in":{"in":null},"x":236,"y":150},
-   {"id":"mix","type":"combine","kind":"add","name":"Grain over mottle","params":{"amount":0.5,"offset":0.5},"in":{"a":"grain","b":"mottle","mask":null},"x":472,"y":75},
-   {"id":"col","type":"gradient","name":"Deep navy","params":{"ease":0},"in":{"in":"mix"},"stops":[[0.1,0.08,0.05,0.17],[0.4,0.085,0.1,0.2],[0.7,0.1,0.13,0.24],[0.9,0.13,0.12,0.29]],"x":708,"y":75},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"col","height":null,"shine":null},"x":944,"y":75}
+   {"id":"warp","type":"warp","name":"Ripple bend","params":{"amount":0.0,"size":5,"layers":0,"axis":0,"seed":1},"in":{"in":null},"x":0,"y":0,"kind":"turbulence"},
+   {"id":"rip","type":"noise","name":"Fine ripple","params":{"size":4.5,"detail":0.3,"layers":0,"seed":1},"in":{"in":"warp"},"x":0,"y":0,"kind":"cells"},
+   {"id":"lv","type":"levels","name":"Ripple contrast","params":{"low":0.1,"high":0.9,"gamma":1,"invert":0},"in":{"in":"rip"},"x":0,"y":0},
+   {"id":"col","type":"gradient","name":"Deep navy","params":{"ease":0},"in":{"in":"lv"},"x":0,"y":0,"stops":[[0,0.07700000000000001,0.07150000000000001,0.15400000000000003],[1,0.108,0.10200000000000001,0.20400000000000001]]},
+   {"id":"grit","type":"noise","name":"Pixel grit","params":{"size":1,"detail":0,"layers":0,"seed":2},"in":{"in":null},"x":0,"y":0,"kind":"pixel"},
+   {"id":"gritc","type":"gradient","name":"Grit tone","params":{"ease":0},"in":{"in":"grit"},"x":0,"y":0,"stops":[[0,0.95,0.95,0.95],[1,1.05,1.05,1.05]]},
+   {"id":"tex","type":"combine","name":"Multiply grit","params":{"amount":1,"offset":0},"in":{"a":"col","b":"gritc","mask":null},"x":0,"y":0,"kind":"multiply"},
+   {"id":"material","type":"output","name":"Material","params":{"relief":3.0},"in":{"color":"tex","height":"lv","shine":null},"x":0,"y":0}
   ],
-  "controls": [{"label":"Slow darkening: size","node":"mottle","param":"size"},{"label":"Deep navy: colors","node":"col","param":"stops"}],
-  "palette": [124,123,125,156,122,155,140,93,222,154,223,94],
+  "controls": [{"label":"Fine ripple: size","node":"rip","param":"size"},{"label":"Deep navy: colors","node":"col","param":"stops"}],
+  "palette": [125,126,124,223,93,222,157,127,94,123,155,156],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
  "ice-ground": {
