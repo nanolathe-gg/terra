@@ -100,7 +100,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 
 | Feature | Tool, rock type | Status |
 | --- | --- | --- |
-| Mesas and buttes with pale caps and banded steps | Mesa, Butte (Cap color flat 1) | good up to a rise of about 69; higher caps take their band's color |
+| Mesas and buttes with pale caps and banded steps | Mesa, Butte, Gray mesa (Pale caprock as Highland ground from a rise of 40) | good: caps are pale caprock at any height, the steps keep their bands |
 | Banded knobs on caps | Cap knob | close |
 | Dark crescent outcrops | Dark outcrop (Dark outcrop rock) | close |
 | Desert Triad's tall gray mesas, domes and cones | Gray mesa (245), Gray dome (125), Cones (65), on the Gray caprock rock type (the old triad variant) | close |

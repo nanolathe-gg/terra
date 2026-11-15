@@ -389,6 +389,22 @@
   "palette": [138,139,137,140,136],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
+ "desert-cap": {
+  "name": "Pale caprock",
+  "seed": 0,
+  "nodes": [
+   {"id":"warp","type":"warp","kind":"turbulence","name":"Ragged blotch edges","params":{"amount":1,"size":5,"layers":0,"axis":0,"seed":0},"in":{"in":null},"x":0,"y":0},
+   {"id":"blotches","type":"noise","kind":"waves","name":"Blotches, stretched sideways","params":{"size":2.0,"detail":0.3,"layers":0,"seed":0,"length":1.5,"direction":90,"crests":0},"in":{"in":"warp"},"x":236,"y":0},
+   {"id":"grit","type":"noise","kind":"smooth","name":"Fine grit","params":{"size":1.0,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":236,"y":150},
+   {"id":"gritty","type":"combine","kind":"add","name":"Break blotches into grit","params":{"amount":0.7,"offset":0.5},"in":{"a":"blotches","b":"grit","mask":null},"x":472,"y":75},
+   {"id":"blotch-mask","type":"levels","name":"Blotches against clean dust","params":{"low":0.2,"high":0.85,"gamma":1,"invert":0},"in":{"in":"gritty"},"x":708,"y":75},
+   {"id":"dust","type":"gradient","name":"Caprock grays, cream and pale cyan","params":{"ease":0},"in":{"in":"blotch-mask"},"stops":[[0,0.6902,0.6902,0.6902],[0.35,0.7333,0.7333,0.7333],[0.55,0.6863,0.8118,0.7961],[0.78,0.8745,0.8745,0.7176],[1,0.749,0.8588,0.9059]],"x":944,"y":75},
+   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"dust","height":null,"shine":null},"x":1180,"y":75}
+  ],
+  "controls": [{"label":"Caprock grays, cream and pale cyan: colors","node":"dust","param":"stops"}],
+  "palette": [50,51,65,66,84,85,113],
+  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
+ },
  "crystal-ground": {
   "name": "Crystal fibers",
   "seed": 0,

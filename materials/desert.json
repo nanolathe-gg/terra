@@ -1139,7 +1139,7 @@
   "vent": {"params": {"size": 1.8, "thick": 1.2, "rim": 0.4, "rimSat": 2.2, "spread": 3}}
  },
  "world": {
-    "materials": {"ground": "desert-ground", "water": "desert-water"},
+    "materials": {"ground": "desert-ground", "water": "desert-water", "high": "desert-cap"},
     "knobDefaults": {
         "lightCap": 1.25,
         "sunTilt": 0.5,
@@ -1170,7 +1170,10 @@
         "faceBlock": 1,
         "faceJoint": 0.15,
         "faceWear": 0.8,
-        "faceCrease": 1
+        "faceCrease": 1,
+        "highland": 1,
+        "highFrom": 40,
+        "highReach": 10
       },
       "engineDefaults": {
         "erosion": 1,
