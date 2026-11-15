@@ -1398,7 +1398,9 @@
         "iceSnow": 0.4,
         "iceFall": 1,
         "iceApron": 1,
-        "iceFrost": 0.3
+        "iceFrost": 0.3,
+        "shallowDepth": 30,
+        "deepDepth": 45
       },
       "engineDefaults": {
         "erosion": 1,
@@ -1666,6 +1668,7 @@
    "crystal": {"diameter": 260, "elevation": 60, "iceFacets": 100, "iceFacetSize": 240, "crystalSides": 6, "crystalTop": 50, "crystalVariation": 0, "crystalTiers": 0, "bergJitter": 45, "bergBreak": 3, "bergRough": 8, "facetSurface": 0, "lean": 100, "facing": 3, "curve": {"form": "lfCrystal", "knots": [[0, 0], [0.04, 1], [0.55, 1], [1, 0.62]], "back": [[0, 0], [0.28, 0], [1, 0.62]]}},
    "deep": {"wander": 50, "widthVary": 25, "shorePlates": 1, "plateLandPx": 8, "plateWaterPx": 40, "frostNeedles": 40, "fingers": 110, "fingerSize": 60, "fingerVary": 85},
    "shallow": {"wander": 6, "shorePlates": 1},
+   "shelf": {"from": "shallow", "diameter": 260, "elevation": -25, "heightVary": 20, "varySize": 50},
    "river": {},
    "braided": {},
    "landform": {}
@@ -1694,6 +1697,7 @@
    {"id": "crystal", "label": "Iceberg", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw an iceberg: a click is one tilted slab, a drag scatters a field of them.", "rock": "blueice"},
    {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
    {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
+   {"id": "shelf", "label": "Coast shelf", "icon": "shallow", "color": "#87d9da", "group": "water", "help": "Draw a submerged shelf along a coast, about 260 px wide and 25 under the sea: a dark, mottled band of lumps and loose chunks off a ragged, needle-hatched edge. Draw it along the water's edge after the Deep water stroke."},
    {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
    {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
   ],
