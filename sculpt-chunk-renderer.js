@@ -252,7 +252,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   async allocate(region,gridWidth,gridHeight,world_width,world_height,fed=false,scale=1) {
     region=alignedFieldRegion(region,scale);this.geometryValid=false;
     this.voxel.clear();
-    const rasterScale=scale<1?scale:Math.max(1,scale/2),width=Math.ceil(world_width/rasterScale),height=Math.ceil(world_height/rasterScale);   // Color raster; the cached image below still uses `scale`.
+    const rasterScale=scale<1?scale:this.fastRaster?scale:Math.max(1,scale/2),width=Math.ceil(world_width/rasterScale),height=Math.ceil(world_height/rasterScale);   // Color raster; the cached image below still uses `scale`.
     const fieldScale=fieldLevel(scale),fw=fieldDimension(region.fieldsWidth,scale),fh=fieldDimension(region.fieldsHeight,scale),gw=gridWidth,gh=gridHeight;
 
     this.trimColorTiles(()=>this.estimate({...region,gridWidth,gridHeight},world_width,world_height,this.maskPlaneCount,scale).gpuBytes<=this.budgetBytes);
@@ -562,7 +562,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   // caller must count its retained bitmap/canvas bytes separately from stats.
   // H6b: options.feed (the GPU shape fields' buffers and the Time pass's, see sculpt.js gpuFeedSource) makes the chunk's textures by a compute pass
   // in place of the CPU read and `upload`; the request then carries no fields, only the chunk's rectangle.
-  async renderChunk(request,{feed=null,scale=1,deferCompletion=false,preview=false,deferPipelines=false,...options}={}) {   // feed rides in the options so wrappers that forward (request, options) keep it
+  async renderChunk(request,{feed=null,scale=1,deferCompletion=false,preview=false,deferPipelines=false,fastRaster=false,...options}={}) {   // feed rides in the options so wrappers that forward (request, options) keep it
     if(this.disposed)throw new Error('nanolathe: chunk renderer is disposed');
     if(this.busy)throw new Error('nanolathe: chunk renderer is already rendering');
     this._busy=true;this.gpuFlags=false;   // set by a fed bake whose flags the GPU writes
@@ -576,6 +576,9 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       request={...request,gridWidth:w,gridHeight:h,gridOrigin:request.gridOrigin??region.gridOrigin};
       const planes=feed?new Array(feed.maskCount).fill(null):this.maskPlanes(request);this.maskPlaneCount=planes.length;this.maskLayers=Math.max(1,Math.ceil(planes.length/4));
       this.recommendedChunkSize=this.chunkSize();
+      // A gesture's own previews (quarter level and coarser) shade one sample per image pixel instead of four: they are replaced within
+      // a few frames, and the geometry pass was the largest part of each update.
+      this.fastRaster=Boolean(fastRaster)&&scale>=4;
       const dimensions=await this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale);
       if(feed)await this.feedFromGpu(request,region,dimensions,feed,passes);else this.upload(request,region,dimensions,planes);
       this.activeRegion=region;this.voxelScale=scale;
