@@ -509,7 +509,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
               // idle for DRAFT_REST, so the GPU is free for the next edit instead of deep in tiles that edit would discard. Finals already
               // measured as cheap (a color edit over kept records) still follow at once.
               const draft=previewPlan(previewArea,2*detailLevel()).sort((a,b)=>dist(a)-dist(b)),draftReady=draft.every(r=>blockCurrent(blocks.get(blockKey(r,2*detailLevel()))));
-              const settled=fineReady&&(quiet>=100||cheapFinal),finalNow=settled||(released||quiet>=250)&&draftReady&&quiet>=DRAFT_REST;
+              // A draft that cannot be made (no room for it, or its weather still pending) does not hold the finals back for good.
+              const settled=fineReady&&(quiet>=100||cheapFinal),finalNow=settled||(released||quiet>=250)&&(draftReady&&quiet>=DRAFT_REST||quiet>=4*DRAFT_REST);
               // Whole-map feeds retain old Time while a refresh is pending.
               // Keep the current coarse answer until canonical weather arrives;
               // paged feeds still prepare their fresh canonical pages on demand.
