@@ -68,7 +68,7 @@ Combine. Every pattern wraps at the 512-px repeat.
 | Node | Makes | Use |
 | --- | --- | --- |
 | Noise | gray | One algorithm a type: Smooth, Gradient, Billow, Cells, Cracks, Facets, Waves (directional: sixteen true directions from turns by small integer vectors, which keep the repeat; between two, a blend), Ridged, Pixel. Size in px, Fine detail, Broad layers, Seed. Cells, Cracks and Facets read one lattice of scattered points: Cells is bright in each cell's middle, Cracks is the distance to the nearest cell border (dark on the crack; Levels gamma rounds it into cobbles) and Facets is one flat value a cell. Their Jitter is how far each point strays (0 a square grid, .8 by default). Cracks at two sizes are two Noise nodes joined by Combine, Darker. |
-| Scatter | gray | Round shapes on a jittered lattice: dots, pits, clods, glints. A Density input thins them where it is dark. |
+| Scatter | gray | Shapes on a jittered lattice: dots, pits, clods, glints. Elongation narrows each across its length into a streak (scratches, gouges, blade marks), inside its radius; Angle sets the direction and Angle variation turns each its own way (0 aligned, 1 any way). A Density input thins them where it is dark. |
 | Warp | coordinates | Bends what a Noise or Scatter reads: Turbulence or Curl flow. |
 | Levels | gray | Stretches between Low and High, with Gamma and Invert. Shows a histogram of its input. |
 | Combine | gray or color | Mix, Add, Multiply, Subtract, Darker, Lighter, Screen, through an optional Mask. Layer offset `.5` centers a noise. |

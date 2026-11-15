@@ -108,18 +108,23 @@ fn nRidged(s:MaterialStep,q:vec2f)->vec4f{
 }
 // Pixel: one random value a texel. seed.
 fn nPixel(s:MaterialStep,q:vec2f)->vec4f{return vec4f(cellHash(graphPixel(q)+vec2f(211.0,317.0)+37.0*arg(s,0u)).x);}
-// Scatter: spacing, radius, coverage, jitter, hardness, profile, size variation, tone variation, follow, seed. One shape a lattice
-// cell, kept by chance (coverage). A connected density field thins the shapes where it is dark (follow).
+// Scatter: spacing, radius, coverage, jitter, hardness, profile, size variation, tone variation, elongation, angle, angle variation, follow,
+// seed. One shape a lattice cell, kept by chance (coverage). Elongation narrows a shape across its length, so it stays inside its radius
+// and the cells searched; each turns from Angle by its own share of Angle variation. A connected density field thins the shapes where it
+// is dark (follow).
 fn nScatter(s:MaterialStep,p:vec2f,density:vec4f,linked:bool)->vec4f{
- let n=max(1.0,round(graphPeriod/arg(s,0u)));let size=graphPeriod/n;let q=graphPos(p)/size;let c=floor(q);var result=0.0;let seed=37.0*arg(s,9u);
+ let n=max(1.0,round(graphPeriod/arg(s,0u)));let size=graphPeriod/n;let q=graphPos(p)/size;let c=floor(q);var result=0.0;let seed=37.0*arg(s,12u);
+ let width=1.0-.92*arg(s,8u);
  for(var y=-2;y<=2;y++){for(var x=-2;x<=2;x++){
   let cell=c+vec2f(f32(x),f32(y));let id=poolWrap(cell,n);let h=cellHash(id+643.0+seed);let v=cellHash(id+671.0+seed);
-  let point=cell+.5+(h-.5)*arg(s,3u);let radius=arg(s,1u)*(1.0+arg(s,6u)*1.2*(v.x-.5));let d=length(q-point)*size;
+  let point=cell+.5+(h-.5)*arg(s,3u);let radius=arg(s,1u)*(1.0+arg(s,6u)*1.2*(v.x-.5));
+  let angle=(arg(s,9u)+arg(s,10u)*180.0*(cellHash(id+811.0+seed).x-.5))*.01745329252;let along=vec2f(cos(angle),-sin(angle));
+  let o=(q-point)*size;let d=select(length(vec2f(dot(o,along),dot(o,vec2f(-along.y,along.x))/width)),length(q-point)*size,arg(s,8u)<=0.0);
   let keep=smoothstep(v.y-.04,v.y+.04,arg(s,2u))*smoothstep(0.0,.04,arg(s,2u));
   let shape=pow(1.0-smoothstep(radius*arg(s,4u),radius,d),arg(s,5u));
   result=max(result,keep*mix(1.0,.4+.6*cellHash(id+743.0+seed).x,arg(s,7u))*shape);
  }}
- if(linked){result*=mix(1.0,2.0*smoothstep(.2,.8,density.x),arg(s,8u));}
+ if(linked){result*=mix(1.0,2.0*smoothstep(.2,.8,density.x),arg(s,11u));}
  return vec4f(clamp(result,0.0,1.0));
 }
 // Warp: amount, size, broad layers, axis balance, seed. Moves the coordinates a later node reads.
