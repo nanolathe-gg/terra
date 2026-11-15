@@ -1186,7 +1186,7 @@
         "faceFill": 0,
         "ambient": 0.3,
         "baseBand": 1,
-        "desertCapFlat": 0,
+        "desertCapFlat": 1,
         "faceBlock": 1,
         "faceJoint": 0.15,
         "faceWear": 0.8,
@@ -1202,7 +1202,9 @@
 
    "presets": [
 
-    "triad"
+    "triad",
+
+    "outcroprock"
 
    ],
 
@@ -1210,7 +1212,55 @@
 
     "triad": {
 
-     "label": "Gray butte rock",
+     "label": "Gray caprock",
+
+     "knobs": {
+
+      "strata": 1,
+
+      "strataContrast": 1,
+
+      "strataGrain": 0.25,
+
+      "faceBlock": 1,
+
+      "faceJoint": 0.15,
+
+      "faceWear": 0.8,
+
+      "faceCrease": 1,
+
+      "banding": 0.9,
+
+      "crackSeverity": 0.5,
+
+      "crackMajor": 0.7,
+
+      "crackMinor": 0.15,
+
+      "crackBlocks": 0.15
+
+     },
+
+     "colors": {
+
+      "rock": "#8b8b8b",
+
+      "beds": [
+
+       "#bd8c6c",
+
+       "#bec6b9",
+
+       "#96907f",
+
+       "#af6f5a",
+
+       "#767370"
+
+      ]
+
+     },
 
      "sections": [
 
@@ -1334,21 +1384,79 @@
 
       }
 
-     ],
+     ]
+
+    },
+
+    "outcroprock": {
+
+     "label": "Dark outcrop",
 
      "knobs": {
 
-      "banding": 0.9,
+      "strata": 1,
 
-      "crackSeverity": 0.5,
+      "strataContrast": 1,
 
-      "crackMajor": 0.7,
+      "faceBlock": 1,
 
-      "crackMinor": 0.15,
+      "faceWear": 0.8
 
-      "crackBlocks": 0.15
+     },
 
-     }
+     "colors": {
+
+      "rock": "#777757",
+
+      "beds": [
+
+       "#5b5b5b",
+
+       "#9b5b63",
+
+       "#777757",
+
+       "#8b8b8b",
+
+       "#534333"
+
+      ]
+
+     },
+
+     "sections": [
+
+      {
+
+       "start": 1,
+
+       "beds": [
+
+        [
+
+         1.6,
+
+         0.5,
+
+         0
+
+        ],
+
+        [
+
+         1.0,
+
+         0.5,
+
+         1
+
+        ]
+
+       ]
+
+      }
+
+     ]
 
     }
 
@@ -1357,7 +1465,12 @@
   },
 
   "shapes": {
-   "plateau": {"amount": 70, "roughness": 0, "softness": 50, "cracks": 10, "faceVariation": 0, "lean": 100, "facing": 3, "terraces": 6, "combine": 0, "wander": 75, "widthVary": 30, "heightVary": 0, "varySize": 210, "varyFoot": 100, "varyMiddle": 150, "ledge": 55, "terraceJitter": 40, "breakup": 30, "gullies": 30},
+   "cones": {"from": "hill", "diameter": 200, "elevation": 65, "wander": 10, "cracks": 30},
+   "grayDome": {"from": "hill", "diameter": 330, "elevation": 125, "wander": 10, "cracks": 60, "talus": 60},
+   "grayMesa": {"from": "plateau", "diameter": 900, "elevation": 245, "terraces": 10, "ledge": 25, "terraceJitter": 40, "wander": 30, "widthVary": 15, "varySize": 160, "gullies": 0, "breakup": 0, "talus": 40, "cracks": 60, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.08, 0.04], [0.16, 0.1], [0.24, 0.22], [0.32, 0.45], [0.38, 0.7], [0.44, 0.9], [0.5, 0.98], [0.55, 1], [1, 1]]}},
+   "outcrop": {"from": "mountain", "diameter": 190, "elevation": 80, "wander": 40, "varySize": 50, "widthVary": 40, "heightVary": 20, "gullies": 30, "gullySize": 30, "talus": 70, "cracks": 30},
+   "capKnob": {"from": "hill", "diameter": 200, "elevation": 116, "wander": 10, "cracks": 30},
+   "plateau": {"amount": 70, "roughness": 0, "softness": 50, "cracks": 10, "faceVariation": 0, "lean": 100, "facing": 3, "terraces": 12, "combine": 0, "wander": 24, "widthVary": 10, "heightVary": 0, "varySize": 120, "varyFoot": 100, "varyMiddle": 150, "ledge": 40, "terraceJitter": 40, "breakup": 0, "gullies": 0, "elevation": 65, "talus": 30, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.08, 0.06], [0.18, 0.15], [0.3, 0.22], [0.4, 0.27], [0.43, 0.97], [0.44, 1], [1, 1]]}},
    "hill": {"wander": 46, "widthVary": 25, "heightVary": 10, "cracks": 10},
    "mountain": {"wander": 24, "cracks": 10},
    "ramp": {},
@@ -1371,13 +1484,18 @@
    "river": {},
    "braided": {},
    "landform": {"amount": 70, "roughness": 0, "softness": 50, "cracks": 10, "faceVariation": 0, "lean": 100, "facing": 3, "terraces": 6, "combine": 0, "wander": 75, "widthVary": 30, "heightVary": 0, "varySize": 210, "varyFoot": 100, "varyMiddle": 150, "ledge": 55, "terraceJitter": 40, "breakup": 30},
-   "butte": {"from": "plateau", "diameter": 360, "elevation": 150},
+   "butte": {"from": "plateau", "diameter": 420, "elevation": 64, "terraces": 8, "ledge": 40, "wander": 20, "widthVary": 10, "varySize": 100, "talus": 25, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.1, 0.06], [0.25, 0.2], [0.4, 0.36], [0.5, 0.45], [0.56, 0.97], [0.58, 1], [1, 1]]}},
    "hoodoos": {"from": "crystal", "diameter": 320, "elevation": 110, "facetSurface": 0, "iceFacets": 75, "iceFacetSize": 44, "crystalSides": 8, "crystalTop": 85, "crystalVariation": 60, "bergJitter": 35, "bergRough": 10, "wander": 20},
    "badlands": {"from": "hill", "diameter": 360, "elevation": 45, "gullies": 100, "gullySize": 15, "talus": 20, "wander": 30}
   },
   "tools": [
-   {"id": "plateau", "label": "Mesa", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a mesa: a level top over stepped ledges and a cliff, with talus at its foot."},
-   {"id": "butte", "label": "Butte", "icon": "plateau", "color": "#d9a777", "group": "shape", "help": "Draw a butte: a small mesa, taller for its size, with the mesa's ledges and talus; a click or a short drag."},
+   {"id": "plateau", "label": "Mesa", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a mesa: a level pale cap over many thin banded steps and a short caprock cliff, with a ragged apron."},
+   {"id": "butte", "label": "Butte", "icon": "plateau", "color": "#d9a777", "group": "shape", "help": "Draw a butte: a small mesa about 420 px across with a pale cap; a click or a short drag."},
+   {"id": "capKnob", "label": "Cap knob", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Raise a banded rock knob, about 200 px across, on a mesa's cap."},
+   {"id": "outcrop", "label": "Dark outcrop", "icon": "mountain", "color": "#b3bcca", "group": "shape", "help": "Drag a low, dark, lumpy rock ridge: a crescent or a bent outcrop with no cap.", "rock": "outcroprock"},
+   {"id": "grayMesa", "label": "Gray mesa", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a tall gray mesa with a pale cap, a rounded brow, dark cracked flanks and a banded apron.", "rock": "triad"},
+   {"id": "grayDome", "label": "Gray dome", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Raise a smooth gray dome with cracks and banded rings at its foot.", "rock": "triad"},
+   {"id": "cones", "label": "Cones", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Raise a small banded cone; click several close together for a cluster.", "rock": "triad"},
    {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "rock": "soil"},
    {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
    {"id": "hoodoos", "label": "Hoodoos", "icon": "pillars", "color": "#d8b48c", "group": "shape", "help": "Scatter hoodoos: standing rock pillars with flat caps, a cluster round a click or a row along a drag."},
