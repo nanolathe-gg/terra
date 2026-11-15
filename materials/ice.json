@@ -1357,7 +1357,7 @@
   "vent": {"params": {"size": 1.7, "thick": 1.6, "rim": 0.5, "rimSat": 2.5, "spread": 6}}
  },
  "world": {
-    "materials": {"ground": "ice-ground", "water": "ice-water"},
+    "materials": {"ground": "ice-ground", "water": "ice-water", "extra": ["ice-bergs-ground"]},
     "knobDefaults": {
         "plainRelief": 0.6,
         "crackSeverity": 0,
@@ -1658,7 +1658,7 @@
    {"id": "icecliff", "label": "Ice cliff", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw an ice cliff: a level ice sheet 170 high that ends in a sheer wall no unit climbs; drag along the line of the edge for a long scarp."},
    {"id": "terrace", "label": "Ice terrace", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw an ice terrace: a level step 85 high with a short, steep riser; drag along the step's line."},
    {"id": "glacierfront", "label": "Glacier front", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a glacier front: high ice ending in a long, dark slate slope; it reads darkest facing south.", "rock": "slate"},
-   {"id": "floe", "label": "Ice floe", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw an ice floe: a flat, low slab 10 above the sea, with a short ice cliff round it; click in deep water.", "rock": "blueice"},
+   {"id": "floe", "label": "Ice floe", "icon": "plateau", "material": "ice-bergs-ground", "color": "#e6bb82", "group": "shape", "help": "Draw an ice floe: a flat, low slab 10 above the sea, with a short ice cliff round it; click in deep water.", "rock": "blueice"},
    {"id": "prism", "label": "Ice pyramid", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw an ice pyramid: a three-sided pointed prism; a click for one, a drag for a row.", "rock": "streaked"},
    {"id": "iceblock", "label": "Ice block", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw an ice block: a four-sided block with a flat top and sloping walls; a click for one.", "rock": "blueice"},
    {"id": "butte", "label": "Ice butte", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a small ice butte with steep walls; drag a short path to bend it into an L, V or X."},

@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync, readdirSync} from 'node:fs';
 import {ROCK_KEYS, STARTING_RECIPES, worldRocks} from '../sculpt-rock-presets.js';
+import {KNOBS} from '../sculpt-knobs.js';
+const RANGE = new Map(KNOBS.flatMap(([, rows]) => rows.map(([key, , lo, hi]) => [key, [lo, hi]])));
 // Every world's own rock types are well formed: a label, a known starting recipe, rock settings only, and listed among its presets.
 test('worlds\' own rock types name only rock settings', () => {
   for (const file of readdirSync(new URL('../materials/', import.meta.url)).filter(f => f.endsWith('.json'))) {
@@ -12,6 +14,7 @@ test('worlds\' own rock types name only rock settings', () => {
       assert.ok(typeof r.label === 'string' && r.label.trim(), `${what} needs a label`);
       assert.ok(!r.from || STARTING_RECIPES[r.from], `${what} starts from an unknown recipe`);
       assert.deepEqual(Object.keys(r.knobs || {}).filter(k => !ROCK_KEYS.includes(k)), [], `${what} sets only rock settings`);
+      for (const [k, v] of Object.entries(r.knobs || {})) { const [lo, hi] = RANGE.get(k) || [-Infinity, Infinity]; assert.ok(v >= lo && v <= hi, `${what}: ${k} ${v} is outside ${lo}..${hi}`); }
       assert.ok(rock.presets?.includes(key), `${what} is among the world's presets`);
     }
     if (rock) worldRocks({rock});
