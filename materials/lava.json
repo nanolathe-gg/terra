@@ -1200,7 +1200,9 @@
 
       "faceScratch": 0.2,
 
-      "faceGrit": 0.5
+      "faceGrit": 0.5,
+
+      "rockCrown": 1
 
      },
 
@@ -1238,7 +1240,9 @@
 
       "faceBlock": 4,
 
-      "faceBlockSize": 22
+      "faceBlockSize": 22,
+
+      "rockCrown": 1
 
      },
 
