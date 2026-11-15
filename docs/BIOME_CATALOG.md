@@ -52,7 +52,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | River channel depth and bank shelf (the River bed reaches only 18 under the sea) | Lush (14), Lava | Channel depth and bank width on River | Missing |
 | Per-shape crystal surface (tone, shine, web) and per-shape snow on caps | Crystal, Ice | Move gougeWeb, the crystal shine rows and Snow on caps into rock types | Partial: iceSnow is per rock type now |
 | Needle hatching and crack stars along cliff and terrace edges | Ice (8), Moon, Red, Lava | Edge dressing per shape (today only shore plates draw it) | Missing |
-| Elongated prisms (only square blocks today) | Ice (2), Desert, Crystal, Lava | Prism aspect ratio | Missing |
+| Elongated prisms (only square blocks today) | Ice (2), Desert, Crystal, Lava | Prism stretch | **Done** this round (Ice block at 220%) |
 | Banded slopes that large KBots can climb under a pale caprock | Desert | A minimum cliff drop per cell all round, with bands that still show on a narrow cliff | Owner's decision |
 
 ## Per biome
