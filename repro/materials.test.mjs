@@ -179,3 +179,18 @@ test('the page declares every row the editor fills', () => {
   for (let i = 0; i < 12; i++) assert.ok(has('ctl-' + i) && has(`ctl-color-${i}-7`));
   for (const [type, spec] of Object.entries(NODES)) if (type !== 'output') assert.ok(page.includes(`data-type="${type}"`), `the add menu offers ${spec.label}`);
 });
+
+test('a world’s highland material joins a new map, keeps its own role and leaves when assigned away', async () => {
+  const {assignMaterial, materialsInUse} = await import('../sculpt-materials.js');
+  const config = {materials: {ground: 'green-ground', water: 'green-water', high: 'crystal-ground'}};
+  const list = withWorldMaterials(undefined, config), high = list.find(m => m.worldHigh);
+  assert.equal(high?.source, 'crystal-ground');
+  assert.ok(!high.worldGround && !high.worldWater);
+  assert.ok(materialsInUse([], list).some(m => m.worldHigh), 'the renderer gets it with no stroke using it');
+  assert.deepEqual(withWorldMaterials(undefined, {materials: {ground: 'green-ground', water: 'green-water'}}).filter(m => m.worldHigh), [], 'a world without one has none');
+  assert.throws(() => copyMaterials(list.map(m => ({...m, worldHigh: true}))), /Only one/);
+  const ground = list.find(m => m.worldGround);
+  assert.throws(() => assignMaterial(list, ground.slot, 'worldHigh'), /Duplicate/);
+  const moved = assignMaterial(list, high.slot, 'worldGround');
+  assert.ok(!moved.some(m => m.worldHigh), 'a highland material made the ground stops being the highland');
+});

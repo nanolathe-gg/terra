@@ -319,9 +319,10 @@ export function copyMaterials(value) {
     slots.add(m.slot); const key = m.key ?? null;
     if (key !== null && (typeof key !== 'string' || !key.trim() || key.length > 80 || keys.has(key))) throw Error('Material keys must be unique nonempty strings.');
     if (key) keys.add(key);
-    return {slot: m.slot, name: nameOf(m.name), key, worldGround: m.worldGround === true, worldWater: m.worldWater === true, ...copyMaterial(m)};
+    return {slot: m.slot, name: nameOf(m.name), key, worldGround: m.worldGround === true, worldWater: m.worldWater === true, ...(m.worldHigh === true ? {worldHigh: true} : {}), ...copyMaterial(m)};
   }).sort((a, b) => a.slot - b.slot);
-  for (const role of ['worldGround', 'worldWater']) if (list.filter(m => m[role]).length > 1) throw Error('Only one material can be the ' + (role === 'worldGround' ? 'world’s ground.' : 'world’s water.'));
+  for (const role of ['worldGround', 'worldWater', 'worldHigh']) if (list.filter(m => m[role]).length > 1) throw Error('Only one material can be the ' + ({worldGround: 'world’s ground.', worldWater: 'world’s water.', worldHigh: 'world’s highland ground.'})[role]);
+  if (list.some(m => m.worldHigh && (m.worldGround || m.worldWater))) throw Error('The world’s highland ground is a material of its own.');
   if (list.some(m => m.worldGround && m.worldWater)) throw Error('The world’s ground and its water are two materials.');
   return list;
 }
@@ -342,11 +343,17 @@ export function withWorldMaterials(value, config) {
     if (list.length >= MATERIAL_SLOTS - 1) { const taker = list.find(m => !m.worldGround && !m.worldWater); list = list.map(m => m === taker ? {...m, [role]: true} : m); continue; }
     const added = addMaterial(list, preset, preset.name); list = added.materials.map(m => m.slot === added.slot ? {...m, [role]: true} : m);
   }
+  // A world may also name a highland material (config.materials.high): level raised ground takes it (World row Highland ground). It is added
+  // while the list has room; a map without it draws its ground there.
+  const high = LIBRARY[config.materials?.high];
+  if (high && !list.some(m => m.worldHigh) && list.length < MATERIAL_SLOTS - 1) {
+    const added = addMaterial(list, high, high.name); list = added.materials.map(m => m.slot === added.slot ? {...m, worldHigh: true} : m);
+  }
   return list;
 }
 // A map carried into another world: a ground or water still as the library made it gives way to the new world's own; one the artist
 // changed stays, as do the map's other materials.
-export const carriedMaterials = list => list?.filter(m => !((m.worldGround || m.worldWater) && LIBRARY[m.source] && materialRenderKey(m) === materialRenderKey(LIBRARY[m.source]))) ?? null;
+export const carriedMaterials = list => list?.filter(m => !((m.worldGround || m.worldWater || m.worldHigh) && LIBRARY[m.source] && materialRenderKey(m) === materialRenderKey(LIBRARY[m.source]))) ?? null;
 // A world's materials for a new map: a world of the user's own carries its list (config.worldMaterials); a built-in world names its
 // ground and water in the library (config.materials).
 export const worldMaterials = config => withWorldMaterials(config.worldMaterials, config);
@@ -355,9 +362,15 @@ const find = (list, slot) => { const m = list.find(m => m.slot === slot); if (!m
 export const renameMaterial = (list, slot, name) => { find(list, slot); return list.map(m => m.slot === slot ? {...m, name: nameOf(name)} : m); };
 export const setMaterial = (list, slot, material) => { find(list, slot); const copy = copyMaterial(material); return list.map(m => m.slot === slot ? {...m, ...copy} : m); };
 export function assignMaterial(list, slot, role) {
-  const m = find(list, slot), other = role === 'worldGround' ? 'worldWater' : 'worldGround';
+  const m = find(list, slot);
+  if (role === 'worldHigh') {
+    if (m.worldGround || m.worldWater) throw Error('This material is the world’s ' + (m.worldGround ? 'ground' : 'water') + '. Duplicate it to use it as highland ground too.');
+    return list.map(({worldHigh, ...o}) => o.slot === slot ? {...o, worldHigh: true} : o);
+  }
+  const other = role === 'worldGround' ? 'worldWater' : 'worldGround';
   if (m[other]) throw Error(role === 'worldGround' ? 'This material is the world’s water. Duplicate it to use it as ground too.' : 'This material is the world’s ground. Duplicate it to use it as water too.');
-  return list.map(o => ({...o, [role]: o.slot === slot}));
+  // A material that becomes the ground or water stops being the highland ground.
+  return list.map(({worldHigh, ...o}) => ({...o, ...(worldHigh && o.slot !== slot ? {worldHigh} : {}), [role]: o.slot === slot}));
 }
 // A stroke's material: -1 for the ground beneath, 0 for the world's ground, else a slot the map still has.
 export function strokeMaterial(node, list) {
@@ -366,12 +379,13 @@ export function strokeMaterial(node, list) {
 }
 export const keepStrokeMaterials = (nodes, list) => nodes.map(n => n.params && n.params.groundPreset !== undefined && n.params.groundPreset !== strokeMaterial(n, list) ? {...n, params: {...n.params, groundPreset: strokeMaterial(n, list)}} : n);
 export function materialsInUse(nodes, list) {
-  const used = new Set([...list.filter(m => m.worldGround || m.worldWater).map(m => m.slot), ...nodes.filter(n => !n.hidden && (n.kind === 'landform' || n.kind === 'paint' && (n.params?.paintChannel === 26 || n.params?.paintChannel === undefined))).map(n => strokeMaterial(n, list))]);
+  const used = new Set([...list.filter(m => m.worldGround || m.worldWater || m.worldHigh).map(m => m.slot), ...nodes.filter(n => !n.hidden && (n.kind === 'landform' || n.kind === 'paint' && (n.params?.paintChannel === 26 || n.params?.paintChannel === undefined))).map(n => strokeMaterial(n, list))]);
   return list.filter(m => used.has(m.slot));
 }
 export function deleteMaterial(list, nodes, slot) {
   const m = find(list, slot);
   if (m.worldGround || m.worldWater) throw Error(`This is the world’s ${m.worldGround ? 'ground' : 'water'}. Assign another material first.`);
+  // Deleting the highland material leaves the map without one: raised ground draws the ground.
   const next = list.filter(o => o.slot !== slot); return {materials: next, nodes: keepStrokeMaterials(nodes, next)};
 }
 // Where a material is used: as the world's ground or water, and by how many visible strokes.

@@ -32,6 +32,12 @@ controls; node settings are the author's tools.
   brush (a stroke's Ground choice: `-1` the ground beneath, `0` the world's
   ground, else a slot). They are in the map's save, its undo steps, share
   links, and the world settings it embeds.
+- **Highland ground.** A world may also name a highland material
+  (`world.materials.high`): a new map adds it with the role *highland
+  ground*, and level raised ground takes it in place of the world's ground
+  by its rise above the plain (World rows Highland ground, from and fade;
+  0 strength draws as before). Rock faces and the column's beds still draw
+  over it. Any material becomes it with Manage, Use as highland ground.
 - **A world of your own** (World, New) keeps the map's materials, and a world
   file carries them. A new map in that world starts with them.
 - A map carried into another world lets go of a ground and water still as the

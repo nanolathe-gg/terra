@@ -191,6 +191,9 @@ struct Uniforms {
     sandGrass: f32,
     bandWater: f32,
     rockCrown: f32,
+    highland: f32,      // Highland ground: how far level raised ground takes the world's highland material (0: none)
+    highFrom: f32,      // the rise above the plain where the highland material starts
+    highReach: f32,     // the rise over which it comes in fully
     paletteMix: i32,
     transitionDetail: f32,
     wetBand: f32,
@@ -435,6 +438,7 @@ struct Uniforms {
     chunkFieldScale: f32,     // Relief bake spacing, independent of color sampling.
     groundIdOn: i32,
     groundDefault: i32,
+    highGround: i32,    // the map's highland material slot (sculpt-materials.js worldHigh), -1 none
     waterGround: i32,
     groundAny: i32,
     groundShine: i32,      // 1 when a material in use puts out shine, so the shine pass runs for it
@@ -995,6 +999,22 @@ fn groundSlotAt(p:vec2f)->u32 {
     let cell=clamp(vec2i(floor(p/(u.size-1.0)*(u.grid-1.0)+.5-u.chunkGridOrigin)),vec2i(0),vec2i(maskDimensions())-1);
     let id=round(loadGroundMask(cell)*127.0);return select(u32(clamp(id-1.0,0.0,7.0)),u32(u.groundDefault),id<1.5);
 }
+// Highland ground: level raised ground takes the world's highland material in place of its ground material, by the rise above the plain
+// (u.highFrom, over u.highReach, its edge ragged by 20-px noise), times u.highland. 0 where there is no highland material.
+fn highShare(p:vec2f)->f32 {
+    if(u.highGround<0 || u.highland<=0.0){return 0.0;}
+    let reach=max(u.highReach,0.5);
+    let rise=baseHeight(p)-u.base+(terrainNoise(p*0.05+vec2f(7.0,31.0)).g-0.5)*0.6*reach;
+    return smoothstep(u.highFrom,u.highFrom+reach,rise)*u.highland;
+}
+// The world ground's art height, with the highland material's where it lies.
+fn ownGroundRelief(p:vec2f,slot:u32)->f32 {
+    let r=materialRelief(p,slot);
+    if(slot!=u32(u.groundDefault)){return r;}
+    let hs=highShare(p);
+    if(hs<=0.0){return r;}
+    return mix(r,materialRelief(p,u32(u.highGround)),hs);
+}
 // Blend only art height across a two-art-pixel contact. The categorical slot
 // still chooses color and finish; no noise or gameplay height enters the edge.
 fn groundHeightFor(p:vec2f,cell:vec2i)->f32 {
@@ -1002,10 +1022,10 @@ fn groundHeightFor(p:vec2f,cell:vec2i)->f32 {
     let id=round(loadGroundMask(c)*127.0);let slot=select(u32(clamp(id-1.0,0.0,7.0)),u32(u.groundDefault),id<1.5);
     let layer=u.ground[slot & groundMask].cacheLayer;
     if(layer<0){return 0.0;}
-    return materialRelief(p,slot);
+    return ownGroundRelief(p,slot);
 }
 fn groundHeight(p:vec2f)->f32 {
-    if(u.groundIdOn==0){return materialRelief(p,gs);}
+    if(u.groundIdOn==0){return ownGroundRelief(p,gs);}
     let q=p/(u.size-1.0)*(u.grid-1.0)-u.chunkGridOrigin;
     let cell=vec2i(floor(q));let f=smoothstep(vec2f(.25),vec2f(.75),fract(q));
     return mix(mix(groundHeightFor(p,cell),groundHeightFor(p,cell+vec2i(1,0)),f.x),

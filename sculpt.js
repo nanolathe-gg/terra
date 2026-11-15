@@ -1897,7 +1897,7 @@ function buildKnobs() {
   materialEditor?.dispose();materialEditor=mountMaterialEditor({suspend:on=>{if(!on&&materialTerrainDirty){materialTerrainDirty=false;evaluate(0);}mapCanvas?.setSuspended(on);if(!on&&materialWeatherPending)queueWeather();},materials:()=>mapMaterials,strokes:()=>nodes,renderer:()=>renderer,edit:editMaterials,delete:removeMaterial,checkpoint:()=>checkpoint(true),status});
 }
 // The facts the World panel enables a row by (sculpt-knobs.js worldPanelValues, which worldControlRequirement reads).
-const panelFacts=() => ({config,renderer,nodes,colors:worldColors(),weathering:weatherOn(),materialWeathering:surfaceValues()['material-weathering']});
+const panelFacts=() => ({config,renderer,nodes,materials:mapMaterials,colors:worldColors(),weathering:weatherOn(),materialWeathering:surfaceValues()['material-weathering']});
 function worldPanelValues() {
   const values=worldPanelValuesOf(panelFacts()),rock=mapRocks.find(r=>r.slot===rockSelected);
   return rock?{...values,...rock.knobs}:values;   // a selected preset's rows are enabled by its own numbers

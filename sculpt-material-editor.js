@@ -291,7 +291,7 @@ export function mountMaterialEditor(host) {
   // The header: which material, where it is used, and the list's own actions.
   function refresh() {
     const list = materials(); if (!list.some(m => m.slot === slot)) { slot = (list.find(m => m.worldGround) ?? list[0])?.slot ?? 0; selection = new Set(); primary = null; frameAt = -1; solo = null; }
-    const m = material(), role = o => o.worldGround ? ' · world ground' : o.worldWater ? ' · world water' : '', full = list.length >= MATERIAL_SLOTS - 1;
+    const m = material(), role = o => o.worldGround ? ' · world ground' : o.worldWater ? ' · world water' : o.worldHigh ? ' · highland ground' : '', full = list.length >= MATERIAL_SLOTS - 1;
     for (const [id, key, edit] of [['ground-world-default', 'worldGround', 'material-open'], ['water-material', 'worldWater', 'water-material-edit']]) {
       $(id).replaceChildren(...list.filter(o => !o[key === 'worldGround' ? 'worldWater' : 'worldGround']).map(o => new Option(o.name, String(o.slot)))); $(id).value = String(list.find(o => o[key])?.slot ?? ''); $(edit).disabled = !list.length;
     }
@@ -305,7 +305,7 @@ export function mountMaterialEditor(host) {
     const users = materialUsers(host.strokes(), list, slot), strokes = users.strokes ? `${users.strokes} stroke${users.strokes > 1 ? 's' : ''}` : '';
     $('material-used').textContent = 'Used by: ' + ([users.world && 'the world’s ' + users.world, strokes].filter(Boolean).join(', ') || 'nothing yet');
     if (document.activeElement !== $('material-name')) $('material-name').value = m.name;
-    $('material-use-ground').disabled = m.worldGround || m.worldWater; $('material-use-water').disabled = m.worldWater || m.worldGround;
+    $('material-use-ground').disabled = m.worldGround || m.worldWater; $('material-use-water').disabled = m.worldWater || m.worldGround; $('material-use-high').disabled = m.worldHigh || m.worldGround || m.worldWater;
     $('material-delete').disabled = m.worldGround || m.worldWater; $('material-delete').title = $('material-delete').disabled ? 'The world’s ground and water cannot be deleted. Assign another material first.' : '';
     for (const id of ['material-duplicate', 'material-paste', 'material-add']) { $(id).disabled = full; $(id).title = full ? 'The map already has seven materials.' : ''; }
     $('material-reset').disabled = !LIBRARY[m.source]; $('material-reset').title = LIBRARY[m.source] ? `Back to “${LIBRARY[m.source].name}” from the library. Undo brings your version back.` : 'This material did not come from the library.';
@@ -330,6 +330,7 @@ export function mountMaterialEditor(host) {
   $('material-delete').onclick = attempt(() => { host.delete(slot); $('material-menu').open = false; refresh(); });
   $('material-use-ground').onclick = attempt(() => { update(assignMaterial(materials(), slot, 'worldGround')); commit(); });
   $('material-use-water').onclick = attempt(() => { update(assignMaterial(materials(), slot, 'worldWater')); commit(); });
+  $('material-use-high').onclick = attempt(() => { update(assignMaterial(materials(), slot, 'worldHigh')); commit(); });
   $('material-copy').onclick = async () => { try { await navigator.clipboard.writeText(materialText(material())); host.status('Copied the material.'); note(''); } catch (e) { note(e.message); } };
   $('material-paste').onclick = async () => { try { const m = parseMaterialText(await navigator.clipboard.readText()); addToMap(m, m.name); } catch (e) { note(e.message); } };
   $('material-reseed').onclick = attempt(() => change(m => { m.seed = reseedMaterial(m).seed; }));

@@ -1668,6 +1668,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // The world's own settings for level ground (its low-ground tint, its cover table, its patches) belong to its ground material;
     // a material a stroke chose keeps its own look.
     let ownGround = gs == u32(u.groundDefault);
+    if (ownGround) { let hs = highShare(p); if (hs > 0.0) { grass = mix(grass, materialPigment(p, u32(u.highGround)), hs); } }
     // Low ground: the ground from the sea up to lowReach above it takes the low color (its grain kept), by the authored
     // height (the relief's grit would speckle the edge); the edge is ragged by 20-px noise and fades over the upper half of the reach.
     // Under the sea it is all low ground: the lit bed takes it from here and the shallow water's art below.

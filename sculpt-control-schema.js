@@ -75,6 +75,9 @@ export function worldControlRequirement(key,v){
  if(['faceWhole','faceWholeLarge'].includes(key))return needs('rockFace','Rock relief: Depth');
  if(key==='sandLee')return needs('sand','Deposit supply in Sand');
  if(key==='groundPatchSize')return needs('groundPatch','Ground patches');
+ // Highland ground needs a highland material in the map (Materials, Manage: Use as highland ground); its height rows need Highland ground.
+ if(key==='highland')return n('highMaterial')<=0?'The map has no highland material. In Materials, choose one and Use as highland ground.':'';
+ if(['highFrom','highReach'].includes(key))return needs('highland','Highland ground');
  if(key==='faceRegular')return worldControlRequirement('faceBlockSize',v);   // it moves every block and joint, as Joint spacing does
  if(key==='faceDetailPatch')return needs('rockFace','Rock relief: Depth')||(Math.max(n('faceCrease'),n('faceGrit'),n('faceScratch'))>0?'':'Raise Pitting, Grit relief, or Scratches and water grooves to cluster fine detail.');
  const fractures=Math.max(n('faceBreak'),n('faceSpall'),n('faceJoint'));
@@ -179,7 +182,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'groundPatch','groundPatchSize','undulation','undulationScale','undulationCover','undulationArt','coastRamp','faceSteep','lowTint','lowReach','lowGrain',
  'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
  'flatShadow','flatOcclusion','sunTilt','sunHeight','ambient','shadeDepth','lightCap','creaseShade',
- 'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','erosionRain','wetSwath','wetGround','lushness','soilRim','slopeMarks','wrinkles',
+ 'hillLight','faceFill','rockCrown','highland','sandCrown','slopeTexture','moss','erosionRain','wetSwath','wetGround','lushness','soilRim','slopeMarks','wrinkles',
  'shineRockSharp','shineRockRough','shineRockScale',
  'absorbDepth','shadowTint',
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
