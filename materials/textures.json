@@ -169,6 +169,30 @@
   "palette": [109,108,139,107,138,106,137,121,120,119,154,153,221,152,151],
   "dither": {"amount":1,"spread":1,"tone":1.1,"red":1,"green":0.95,"blue":0.75}
  },
+ "red-rough": {
+  "name": "Rough red ground",
+  "seed": 0,
+  "nodes": [
+   {"id":"step-1","type":"warp","kind":"turbulence","name":"Pattern distortion","params":{"amount":0.65,"size":10,"layers":0,"axis":0,"seed":0},"in":{"in":null},"x":0,"y":0},
+   {"id":"step-2","type":"noise","kind":"smooth","name":"Mottling / streaks","params":{"size":6.4,"detail":0.25,"layers":0,"seed":0},"in":{"in":"step-1"},"x":236,"y":-75},
+   {"id":"step-3","type":"noise","kind":"smooth","name":"Fine grain","params":{"size":1.8,"detail":0,"layers":0,"seed":1},"in":{"in":"step-1"},"x":236,"y":75},
+   {"id":"step-4","type":"combine","kind":"add","name":"Add fine detail","params":{"amount":0.25,"offset":0.5},"in":{"a":"step-2","b":"step-3","mask":null},"x":472,"y":0},
+   {"id":"step-5","type":"levels","name":"Pattern levels","params":{"low":0.05,"high":0.95,"gamma":1,"invert":0},"in":{"in":"step-4"},"x":708,"y":0},
+   {"id":"step-6","type":"gradient","name":"Pattern colors","params":{"ease":1},"in":{"in":"step-5"},"stops":[[0,0.3697,0.2106,0.1661],[0.5,0.436,0.2442,0.1837],[1,0.5319,0.2814,0.1955]],"x":944,"y":0},
+   {"id":"step-7","type":"scatter","name":"Scattered spots","params":{"spacing":5.7,"radius":2.1,"coverage":0.24,"jitter":1.8,"hardness":0,"profile":1,"sizeVariation":0.5,"toneVariation":0,"follow":0,"seed":0},"in":{"in":null,"density":null},"x":708,"y":150},
+   {"id":"step-10","type":"gradient","name":"Spot multiplier","params":{"ease":0},"in":{"in":"step-7"},"stops":[[0,1,1,1],[1,0.58,0.508,0.484]],"x":944,"y":150},
+   {"id":"step-11","type":"combine","kind":"multiply","name":"Multiply spots","params":{"amount":1,"offset":0},"in":{"a":"step-6","b":"step-10","mask":null},"x":1180,"y":75},
+   {"id":"cw","type":"warp","kind":"turbulence","name":"Crumple warp","params":{"amount":1.2,"size":14,"layers":0,"axis":0,"seed":4},"in":{"in":null},"x":0,"y":400},
+   {"id":"crumple","type":"noise","kind":"ridged","name":"Crumples","params":{"size":9,"layers":2,"roughness":0.7,"sharpness":1.4,"seed":6},"in":{"in":"cw"},"x":236,"y":400},
+   {"id":"cl","type":"levels","name":"Dark folds","params":{"low":0.35,"high":0.85,"gamma":1,"invert":1},"in":{"in":"crumple"},"x":472,"y":400},
+   {"id":"cg","type":"gradient","name":"Fold shade","params":{"ease":0},"in":{"in":"cl"},"stops":[[0,1.08,1.08,1.08],[0.6,0.8,0.8,0.8],[1,0.42,0.42,0.42]],"x":708,"y":400},
+   {"id":"rough","type":"combine","kind":"multiply","name":"Crumpled","params":{"amount":1,"offset":0},"in":{"a":"step-11","b":"cg","mask":null},"x":944,"y":250},
+   {"id":"material","type":"output","name":"Material","params":{"relief":2.2},"in":{"color":"rough","height":"crumple","shine":null},"x":1416,"y":75}
+  ],
+  "controls": [{"label":"Mottling / streaks: size","node":"step-2","param":"size","min":1.6,"max":26},{"label":"Pattern colors: colors","node":"step-6","param":"stops"}],
+  "palette": [61,189,29,188,60,187,28,186,59,185,58,27,184,207,57,183,71,26,56,206,25,70,182,24,205,23,181,22,204,203],
+  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
+ },
  "archipelago-ground": {
   "name": "Coral sand",
   "seed": 0,

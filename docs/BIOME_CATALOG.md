@@ -78,7 +78,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Crescents | Crescent (Dark knob rock) | close |
 | Low rough hills with a dark lee | Hill, under Face steepness 1, Sampled slope texture 0.4, no world cracks, sun from the west (sun tilt 0), laminae 0.5 | close (smooth rises with streaky shading; retail's are a little lumpier) |
 | Ring craters about 1450 px with a rubble rim | Ring crater (Rubble rim rock: polygonal cracks; Cracks 70) | close (a cracked rubble band on the rim, as retail's) |
-| Basins with a level floor at sea+1 (Yerrot) | Basin | poor |
+| Basins with a level floor at sea+1 in rough, crumpled high ground (Yerrot) | Basin, with Rough ground (lays the Rough red ground material) round it | close (the rough ground's luminance spread matches retail's, p10/50/90 35/61/88; retail's crumples carry more relief) |
 | Ponds | Pond | close |
 | Craterlets | Craterlet (floor at -19, dry) | close (a dry bowl; retail's walls are more streaked) |
 
