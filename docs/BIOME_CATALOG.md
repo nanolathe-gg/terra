@@ -141,7 +141,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Sandbars, shoals, islet chains | Sandbar, Shoal, Islet scatter (Copies 8) | close |
 | Atolls | Atoll (a wider ring split by 7 Gaps) | close (chunky sand islands with shallow gaps; the lagoon stays deep where retail's is pale) |
 | Dark rock mounds with radial ridges | Rock mound, Rock knob, Crater mound (Mound rock) | close (ridges are crisp rills) |
-| Halos and shoals pale blue: (43,101,144) against retail (45,104,148) | world water depths 38 and 52 | good |
+| Halos, shoals and lagoons: shoal (43,101,144) against retail (45,104,148); a -9 lagoon or Reef (60,120,161) against (63,123,163); halo (55,115,157) against (54,113,155), all measured | world water: shallow until 4, deep from 52, tinted bed brightness 1.18 (was 38 and 52, bed 1, when the lagoon took the shoal's tone) | close (the halo now grades from the shore where retail's is an even 20-30 px band with a distinct edge; ours is also wider) |
 
 ### Moon (12 maps)
 
