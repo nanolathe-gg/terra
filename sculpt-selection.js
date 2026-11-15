@@ -14,6 +14,15 @@ export function selectionTransform(node, changes={}) {
   const a=Math.cos(turn)*k,b=Math.sin(turn)*k,c=-b,d=a;
   return {values,matrix:[a,b,c,d,next.x-a*x-c*y,next.y-b*x-d*y]};
 }
+// Shift-click on a shape: an unselected shape joins and becomes the primary (its handles and card show); a selected one leaves, and
+// when the primary leaves the most recently added other shape takes its place. `others` keeps the order shapes were added.
+export function toggleSelection(primary,others,index) {
+  if(index<0)return {primary,others:[...others]};
+  const rest=others.filter(i=>i!==index&&i!==primary);
+  if(index===primary)return {primary:rest.length?rest.at(-1):-1,others:rest.slice(0,-1)};
+  if(others.includes(index))return {primary,others:rest};
+  return {primary:index,others:primary>=0?[...rest,primary]:rest};
+}
 export function selectionGeometry(node,project,view) {
   if(!node?.points?.length||node.hidden)return null;
   const points=node.points.map(project),scale=view.scale||1;
@@ -43,7 +52,8 @@ export function hitSelection(geometry,p,pathMode=false) {
   }
   return null;
 }
-export function drawSelection(ctx,g,{label='',pathMode=false,point=-1,activePath=-1,hover=false}={}) {
+// member: another shape in a multi-selection, outlined without handles (they belong to the primary).
+export function drawSelection(ctx,g,{label='',pathMode=false,point=-1,activePath=-1,hover=false,member=false}={}) {
   if(!g?.visible)return;
   const s=g.scale,b=g.bounds,color=hover?'#9ce5ef':pathMode?'#d2b1ff':'#ffe0a0';
   ctx.save();ctx.strokeStyle=color;ctx.lineWidth=(hover?1.5:1)/s;
@@ -51,7 +61,7 @@ export function drawSelection(ctx,g,{label='',pathMode=false,point=-1,activePath
   for(const [i,path] of g.paths.entries()){ctx.beginPath();path.forEach((index,j)=>{const p=g.points[index];j?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});ctx.globalAlpha=pathMode&&activePath>=0&&i!==activePath?0.45:1;ctx.lineWidth=(hover?3:2)/s;ctx.stroke();}ctx.globalAlpha=1;
   const tag=(text,p)=>{ctx.font=`${11/s}px system-ui`;ctx.textAlign='left';ctx.textBaseline='middle';const w=ctx.measureText(text).width+12/s,x=clamp(p.x,g.view.x+3/s,g.view.x+g.view.width-w-3/s),y=clamp(p.y,g.view.y+12/s,g.view.y+g.view.height-12/s);ctx.fillStyle='#142128ed';ctx.fillRect(x,y-10/s,w,20/s);ctx.fillStyle=color;ctx.fillText(text,x+6/s,y);};
   // Selected identity lives in the canvas toolbar; hover previews need a tag.
-  if(hover){tag(label,{x:b.x0,y:b.y0-14/s});ctx.restore();return;}
+  if(hover||member){if(hover)tag(label,{x:b.x0,y:b.y0-14/s});ctx.restore();return;}
   if(pathMode){
     g.points.forEach((p,i)=>{ctx.beginPath();ctx.arc(p.x,p.y,(i===point?6:4.5)/s,0,Math.PI*2);ctx.fillStyle=i===point?color:'#18252b';ctx.fill();ctx.stroke();});
   }else{
