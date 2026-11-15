@@ -132,6 +132,7 @@ export const WORLD_HOMES={
  'Ground/Terrain shape':'undulation undulationScale undulationCover undulationArt faceSteep',
  'Ground/Slope cover':'hillLight slopeTexture slopeMarks wrinkles',
  'Ground/Low ground':'lowTint lowReach lowGrain',
+ 'Ground/Highland':'highland highFrom highReach',
  'Vegetation/':'vegetationCover lushness soilRim plantRelief flowerDensity moss',
  'Rock types/Colors & recipe':'absorbDepth shadowTint',
  'Rock types/Exposure & relief':'rockFace faceRock rockFaceFrom faceExtrude faceMass',
