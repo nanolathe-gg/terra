@@ -1934,7 +1934,7 @@
    "crystal": {},
    "deep": {"wander": 10, "varySize": 120, "fingers": 40, "fingerVary": 70},
    "shallow": {"wander": 36, "varySize": 60, "fingers": 60, "fingerVary": 70},
-   "river": {},
+   "river": {"diameter": 160},
    "braided": {},
    "landform": {},
    "knoll": {"from": "hill", "diameter": 150, "elevation": 22, "wander": 8, "varySize": 70}
