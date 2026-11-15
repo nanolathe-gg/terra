@@ -14,7 +14,8 @@ test('a world’s ground repeats, a material edit reaches export art and reverts
   const s = await openScene({biome: 'red', ground: false, strokes: []}, 'biome=red&mapX=5&mapY=5');
   try {
     const win = (x, y, options = {}) => renderWindow(s, {x, y, width: 256, height: 256, ...options}), own = s.materials;
-    assert.deepEqual(own.map(m => [m.source, m.worldGround, m.worldWater]), [['red-ground', true, false], ['red-water', false, true]]);
+    // The world's pair, then the extra materials Red's tools lay down (world.materials.extra).
+    assert.deepEqual(own.map(m => [m.source, m.worldGround, m.worldWater]), [['red-ground', true, false], ['red-water', false, true], ...s.config.materials.extra.map(k => [k, false, false])]);
     // The material repeats every 512 px; the world's own level-ground settings repeat with its pool, a multiple of that.
     const here = await win(640, 640), pool = groundPool(s.config.material);
     assert.ok(same(here, await win(640 + pool, 640)), 'the plain repeats a pool to the right');
