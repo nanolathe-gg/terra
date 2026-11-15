@@ -1541,7 +1541,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let broad = broadGradient(p);
     // Card G6: raised ice is lit by its blurred height (the gradient g keeps the relief for everything else).
     var iceMesa = 0.0;
-    if (u.iceSoft > 0.0 || u.iceSnow > 0.0 || u.iceApron > 0.0 || u.iceFall > 0.0) {
+    if (u.iceSoft > 0.0 || u.rock[rs & rockMask].iceSnow > 0.0 || u.rock[rs & rockMask].iceApron > 0.0 || u.rock[rs & rockMask].iceFall > 0.0) {
         iceMesa = smoothstep(u.base + 1.5, u.base + 8.0, baseHeight(p));
     }
     var normal=vec3f(geometry.nx,geometry.ny,geometry.nz);
@@ -1943,7 +1943,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // lit by the carved geometry.
         // Codes below -1 come only from band lines with Line darkness above
         // 1 (Green's dark terrace steps); up to -1 this is unchanged.
-        material *= 1.0 - min(u.crackDark * max(-coverOrCrack, 0.0), 1.0);
+        material *= 1.0 - min(u.rock[rs & rockMask].crackDark * max(-coverOrCrack, 0.0), 1.0);
     }
     let chip = smoothstep(0.035, 0.40, materialChipHeight(p) * (1.0 - route)) * 0.65;
     material = mix(material, rock, chip * (1.0 - exposed));
@@ -2044,18 +2044,18 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     }
     // Ice crystal mountains (card E6): snow-white lumps ~30-50 px across stand on the raised ground (retail ice-1:
     // six or seven rounded white caps on one mountain), a ragged edge, taken before the light so they shade as snow.
-    if (u.iceCrest > 0.0) {
+    if (u.rock[rs & rockMask].iceCrest > 0.0) {
         let lumps = terrainNoise(p * 0.05 + vec2f(31.0, 7.0)).r + (n.b - 0.5) * 0.12;
         let raised = smoothstep(u.base + 12.0, u.base + 40.0, h);
-        let crest = smoothstep(0.0, 0.05, lumps - mix(0.75, 0.45, u.iceCrest)) * raised;
+        let crest = smoothstep(0.0, 0.05, lumps - mix(0.75, 0.45, u.rock[rs & rockMask].iceCrest)) * raised;
         material = mix(material, snowMaterial(pixel), crest);
         exposed *= 1.0 - crest;
     }
     // Card G6, snow on the flat tops of raised ice (retail ice-3's white top with a few pits): where the blurred
     // height is gentle the block is snow, its edge ragged, so the slate begins at the crest's roll-over.
-    if (u.iceSnow > 0.0) {
+    if (u.rock[rs & rockMask].iceSnow > 0.0) {
         let gentle = 1.0 - smoothstep(0.42, 0.78, length(gSoft) + (n.g - 0.5) * 0.25);
-        let cap = u.iceSnow * iceMesa * gentle;
+        let cap = u.rock[rs & rockMask].iceSnow * iceMesa * gentle;
         // A little under the plain's snow: lit at the block's strong light a full-white top clips and loses its pits (retail's top ~(225,232,255)).
         material = mix(material, snowMaterial(pixel) * 0.9, cap);
         exposed *= 1.0 - cap;
@@ -2120,16 +2120,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Raised or sloped ground (card E6): the footprint of the shine gate and of Moon's pockmarks; level plain is 0.
     // Raised ground counts whole, tops included, where a crater's floor counts only where it slopes.
     var landform = 1.0;
-    if (u.shineGate > 0.0 || u.pockmark > 0.0 || u.moonCups > 0.0) { landform = max(smoothstep(0.1, 0.35, slope), smoothstep(u.base + 3.0, u.base + 9.0, baseHeight(p))); }
+    if (u.shineGate > 0.0 || u.rock[rs & rockMask].pockmark > 0.0 || u.rock[rs & rockMask].moonCups > 0.0) { landform = max(smoothstep(0.1, 0.35, slope), smoothstep(u.base + 3.0, u.base + 9.0, baseHeight(p))); }
     var iceFace = 0.0;
-    if (u.iceFall > 0.0) {
+    if (u.rock[rs & rockMask].iceFall > 0.0) {
         // Card G6: the faces' fibres, in place of the rock art's grain and the glint's dashes.
         iceFace = clamp(exposed, 0.0, 1.0) * iceMesa;
         let fibre = iceFibre(pixel);
         // Dark strokes keep their blue (a plain multiply goes brown in the palette).
-        color *= 1.0 + u.iceFall * iceFace * select(0.2 * fibre, 0.8 * fibre, fibre < 0.0) * vec3f(1.0, 0.85, 0.55);
+        color *= 1.0 + u.rock[rs & rockMask].iceFall * iceFace * select(0.2 * fibre, 0.8 * fibre, fibre < 0.0) * vec3f(1.0, 0.85, 0.55);
     }
-    if (u.iceApron > 0.0 && iceMesa < 0.9) {
+    if (u.rock[rs & rockMask].iceApron > 0.0 && iceMesa < 0.9) {
         // Card G6: dark fibres spill past the foot into the snow and thin out with the distance (retail ice-3's
         // feathered edge): the same strokes as the faces', kept where raised ice is near and the broad noise allows.
         let near = iceNearness(p);
@@ -2138,7 +2138,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // fuzz of the same dark lies under them close to the foot.
         let wander = (terrainNoise(p * 0.22).rg - 0.5) * 16.0 + (terrainNoise(p * 0.9).ba - 0.5) * 5.0;
         let drift = smoothstep(0.12, 0.5, -iceDrift(pixel + wander)) * (0.35 + 0.65 * smoothstep(0.1, 0.6, near));
-        color *= 1.0 - u.iceApron * (0.5 * keep * drift + 0.16 * smoothstep(0.25, 0.8, near)) * (1.0 - iceMesa) * vec3f(1.0, 0.85, 0.55);
+        color *= 1.0 - u.rock[rs & rockMask].iceApron * (0.5 * keep * drift + 0.16 * smoothstep(0.25, 0.8, near)) * (1.0 - iceMesa) * vec3f(1.0, 0.85, 0.55);
     }
     if (u.iceFrost > 0.0 && h > u.sea + 1.0 && route > 0.003) {
         // The band's trace in the route channel (1/255 inland .. 5/255 at the coast); the coast's own bank, the needles and
@@ -2147,9 +2147,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let lines = iceFrostLines(pixel, 0.06 + 0.94 * near * near);
         color *= 1.0 - u.iceFrost * lines * mix(0.5, 1.0, near) * vec3f(0.95, 0.8, 0.3);
     }
-    if (u.iceCrystal > 0.0) {
+    if (u.rock[rs & rockMask].iceCrystal > 0.0) {
         // Straight strokes over the rock faces, darker the more rock shows (card E6; after shadeBlue, which rebuilds the colour).
-        color *= 1.0 - 0.75 * u.iceCrystal * iceHatch(pixel) * smoothstep(0.3, 0.8, exposed);
+        color *= 1.0 - 0.75 * u.rock[rs & rockMask].iceCrystal * iceHatch(pixel) * smoothstep(0.3, 0.8, exposed);
     }
     // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), shared by shine and the surface marks.
     let markSeen = 1.0 - (1.0 - shadow) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope));
@@ -2161,42 +2161,42 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
         if (u.shineSlopeGate > 0.0) { shine = shineSlopeGated(shine, slope); }
-        if (u.iceFall > 0.0) { shine = vec4f(shine.xyz * (1.0 - 0.75 * u.iceFall * iceFace), shine.w); }
+        if (u.rock[rs & rockMask].iceFall > 0.0) { shine = vec4f(shine.xyz * (1.0 - 0.75 * u.rock[rs & rockMask].iceFall * iceFace), shine.w); }
         // A glint is the sun mirrored: it takes the sun's colour, not the sky's.
         color = surfaceSRGB(surfaceLinear(color)*shine.w+shine.xyz);
     }
     if (u.layerCrease > 0.0) { color *= 1.0 - u.layerCrease * layerCreaseTerm(p); }
-    if (u.pockmark > 0.0 && h > u.sea + 1.0 && landform > 0.0) {
-        let pits = pockPits(pixel, u.pockSize, u.pockmark * mix(0.6, 1.0, turned));
+    if (u.rock[rs & rockMask].pockmark > 0.0 && h > u.sea + 1.0 && landform > 0.0) {
+        let pits = pockPits(pixel, u.rock[rs & rockMask].pockSize, u.rock[rs & rockMask].pockmark * mix(0.6, 1.0, turned));
         color *= 1.0 - pits * landform * mix(0.5, 0.92, turned);
     }
-    if (u.moonFolds > 0.0 && h > u.sea + 1.0) {
+    if (u.rock[rs & rockMask].moonFolds > 0.0 && h > u.sea + 1.0) {
         // G8 (Moon): thin dark folds across the lit and moderate slopes.
-        color *= 1.0 - 0.34 * u.moonFolds * moonFolds(p, baseHeight(p), slope, u.moonFoldSpacing);
+        color *= 1.0 - 0.34 * u.rock[rs & rockMask].moonFolds * moonFolds(p, baseHeight(p), slope, u.rock[rs & rockMask].moonFoldSpacing);
     }
-    if (u.moonRibs > 0.0 && h > u.sea + 1.0) {
+    if (u.rock[rs & rockMask].moonRibs > 0.0 && h > u.sea + 1.0) {
         // G8 (Moon): the shaded flank's strokes, on steep ground of every facing, more where turned from the sun.
-        let wall = u.moonRibs * smoothstep(0.15, 0.5, slope) * smoothstep(0.12, 0.5, turned);
+        let wall = u.rock[rs & rockMask].moonRibs * smoothstep(0.15, 0.5, slope) * smoothstep(0.12, 0.5, turned);
         if (wall > 0.0) {
             let beforeRib = max(0.0, dot(normal, u.light));
-            let afterRib = max(0.0, dot(normalize(vec3f(-(g + u.moonRibDepth * moonRibs(pixel)), 1.0)), u.light));
+            let afterRib = max(0.0, dot(normalize(vec3f(-(g + u.rock[rs & rockMask].moonRibDepth * moonRibs(pixel)), 1.0)), u.light));
             let strokes = clamp((u.ambient + 0.95 * afterRib * markSeen) / (u.ambient + 0.95 * beforeRib * markSeen), 0.3, 2.6);
-            color *= mix(1.0, strokes * (1.0 - u.moonRibDark * smoothstep(0.1, 0.55, turned)), wall);
+            color *= mix(1.0, strokes * (1.0 - u.rock[rs & rockMask].moonRibDark * smoothstep(0.1, 0.55, turned)), wall);
         }
     }
-    if (u.moonCups > 0.0 && h > u.sea + 1.0 && landform > 0.0) {
+    if (u.rock[rs & rockMask].moonCups > 0.0 && h > u.sea + 1.0 && landform > 0.0) {
         // G8 (Moon): lit cups, many on shaded steep faces, few on lit ground, none on the flat top. The
         // sun shades each one as it shades the face: the cup's wall turned from the sun goes dark, the
         // wall toward it keeps the face's light.
         let steep = smoothstep(0.08, 0.40, slope);
         let clump = 0.6 + 0.8 * (0.5 + 0.5 * wrinkleNoise(pixel / 38.0 + 5.0));
-        let keep = min(u.moonCups * mix(0.04, 1.0, smoothstep(0.1, 0.55, turned)) * steep * clump * landform, 1.0);
+        let keep = min(u.rock[rs & rockMask].moonCups * mix(0.04, 1.0, smoothstep(0.1, 0.55, turned)) * steep * clump * landform, 1.0);
         if (keep > 0.0) {
             var cups: vec3f;
-            if (u.cupStretch > 1.0) {
-                cups = cupStrokes(pixel, u.moonCupSize, keep, u.moonCupDepth, u.cupStretch);
+            if (u.rock[rs & rockMask].cupStretch > 1.0) {
+                cups = cupStrokes(pixel, u.rock[rs & rockMask].moonCupSize, keep, u.rock[rs & rockMask].moonCupDepth, u.rock[rs & rockMask].cupStretch);
             } else {
-                cups = moonCups(pixel, u.moonCupSize, keep, u.moonCupDepth);
+                cups = moonCups(pixel, u.rock[rs & rockMask].moonCupSize, keep, u.rock[rs & rockMask].moonCupDepth);
             }
             let before = max(0.0, dot(normal, u.light));
             let after = max(0.0, dot(normalize(vec3f(-(g + cups.xy), 1.0)), u.light));

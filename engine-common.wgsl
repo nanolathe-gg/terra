@@ -109,6 +109,34 @@ struct Rock {
     pad1: f32,            // padding: a uniform array's element is a multiple of 16 bytes
     pad2: f32,
     pad3: f32,
+    // Rock surfaces, per recipe (moved from the world uniforms so a shape's rock can carry them): cracks, contour bands, moon pits,
+    // cups, ribs and folds, ice crystal strokes, crests, snow caps, fibres and aprons.
+    crackDark: f32,
+    crackSeverity: f32,   // crack depth
+    crackWidth: f32,      // crack core width, world px
+    crackNetwork: f32,    // 0: rills down the slope; 1: polygonal plates
+    crackSpacing: f32,    // major crack block size, world px
+    banding: f32,         // contour banding strength (0: none)
+    crackMinor: f32,      // share of minor cracks inside blocks
+    crackHairline: f32,   // share of hairline crazing
+    crackBlocks: f32,     // how far blocks step and tilt against each other
+    crackMajor: f32,      // share of major cracks
+    pockmark: f32,        // dark pits scattered evenly over raised ground and slopes, tops and sides alike (0: none, as before)
+    pockSize: f32,        // pit spacing across the retail glint axis, px
+    moonCups: f32,        // lit pits, 2-3 px wide and 4-6 px tall, many on shaded steep faces and few on lit ground (0: none; the pockmark dots are separate)
+    moonRibs: f32,        // stringy light and dark strokes down steep faces, shaded by the sun (0: none)
+    moonFolds: f32,       // thin dark lines that follow the form across lit and moderate slopes (0: none)
+    iceCrystal: f32,      // crystal mountains: dark straight strokes in domains across the rock faces (0: none, as before)
+    iceCrest: f32,        // crystal mountains: share of the raised ground under snow-white lumps (0: none)
+    iceSnow: f32,         // the flat tops of raised ice lie under snow (0: none)
+    iceFall: f32,         // smooth fibres down the faces of raised ice, in place of grain (0: none)
+    iceApron: f32,        // dark hatched drifts spilling past the foot of raised ice into the snow (0: none)
+    moonCupSize: f32,     // pit spacing across the glint axis, px (the cell is 1.5 times that along it)
+    moonCupDepth: f32,    // pit depth in height units: how steep its walls shade
+    cupStretch: f32,      // cups drawn out along the glint axis into strokes this many times their length and narrower, each turned a little its own way (1: the pits, as before)
+    moonRibDepth: f32,    // stroke steepness: the gradient the strokes add (1: about 0.8 at their steepest)
+    moonRibDark: f32,     // how much darker the strokes' mean is on faces turned from the sun (0: the face's own shade)
+    moonFoldSpacing: f32, // height units between the folds' first set of contours
 }
 
 // Absolute ground recipes; the cache holds height and unlit color parameters.
@@ -135,6 +163,9 @@ struct MaterialGraph {
 }
 
 struct Uniforms {
+    crystalGrain: f32,    // crystal tops: 0 the slope cover's art, 1 the level ground's
+    crystalFace: f32,     // crystal side-face colour, times crystal colour x 0.38 (1: as before)
+    crystalTone: f32,     // crystal top brightness (1: as before)
     // Shared by the draw and the bake.
     grid: f32,
     size: f32,
@@ -167,7 +198,6 @@ struct Uniforms {
     fringeSignal: vec4f,
     fringeRange: vec2f,
     transitionBody: i32,
-    crackDark: f32,
     // A world's chosen base colours (a = 1 when set) and its textures' means.
     slopeBase: vec4f,
     sandBase: vec4f,
@@ -232,16 +262,11 @@ struct Uniforms {
     faceStreakFrom: f32,  // slope where the turn toward the contours starts
     gentleRelief: f32,    // relief on gentle slopes
     sand: f32,            // 0 disables sand
-    crackSeverity: f32,   // crack depth
-    crackWidth: f32,      // crack core width, world px
-    crackNetwork: f32,    // 0: rills down the slope; 1: polygonal plates
     plainRelief: f32,     // faint lit lumps on level ground (appearance only)
-    crackSpacing: f32,    // major crack block size, world px
     windAngle: f32,       // direction the wind blows toward, degrees (0 = east)
     ripple: f32,          // ripple wavelength, world px (0: none)
     rippleHeight: f32,    // ripple amplitude, height units
     beachDistance: f32,   // beach reach from the waterline, world px (0: none)
-    banding: f32,         // contour banding strength (0: none)
     hasBeach: i32,        // the world has beach-sand art: painted sand uses it
     sandBanding: f32,     // streaks on sand and ramps
     sandBandSpacing: f32,
@@ -253,14 +278,7 @@ struct Uniforms {
     bandJag: f32,         // pixel-scale wiggle of the band lines, in band steps (0: smooth)
     bandFade: f32,        // slope where bands are gone (they fade from 0.35/0.75 of it)
     sun: vec3f,           // the renderer's light, for lit crack walls
-    crackMinor: f32,      // share of minor cracks inside blocks
-    crackHairline: f32,   // share of hairline crazing
-    crackBlocks: f32,     // how far blocks step and tilt against each other
-    crackMajor: f32,      // share of major cracks
-    crystalGrain: f32,    // crystal tops: 0 the slope cover's art, 1 the level ground's
-    crystalFace: f32,     // crystal side-face colour, times crystal colour x 0.38 (1: as before)
     crystalInk: f32,      // crystal outlines: 0 soft 92% dark, 1 crisp pure black
-    crystalTone: f32,     // crystal top brightness (1: as before)
     // Painted masks (card C5).
     paintOn: i32,         // 1 once any cell carries a painted mask; 0 skips every read of masksTex
     rockIdOn: i32,        // 1 once any cell of the chunk belongs to a rock other than the world's own (mask plane 20); 0: every point is slot 0
@@ -354,21 +372,8 @@ struct Uniforms {
     shineGate: f32,       // shine roughness only on raised ground and slopes, not the level plain (0: everywhere, as before; 1: only there)
     shineHeadroom: f32,   // dim the lit body where the lobe is low, so glints stand against it on near-white ice (0: additive only, as before)
     // E6 (Moon).
-    pockmark: f32,        // dark pits scattered evenly over raised ground and slopes, tops and sides alike (0: none, as before)
-    pockSize: f32,        // pit spacing across the retail glint axis, px
     // G8 (Moon): the surface read from retail pictures.
-    moonCups: f32,        // lit pits, 2-3 px wide and 4-6 px tall, many on shaded steep faces and few on lit ground (0: none; the pockmark dots are separate)
-    moonCupSize: f32,     // pit spacing across the glint axis, px (the cell is 1.5 times that along it)
-    moonCupDepth: f32,    // pit depth in height units: how steep its walls shade
-    cupStretch: f32,      // cups drawn out along the glint axis into strokes this many times their length and narrower, each turned a little its own way (1: the pits, as before)
-    moonRibs: f32,        // stringy light and dark strokes down steep faces, shaded by the sun (0: none)
-    moonRibDepth: f32,    // stroke steepness: the gradient the strokes add (1: about 0.8 at their steepest)
-    moonRibDark: f32,     // how much darker the strokes' mean is on faces turned from the sun (0: the face's own shade)
-    moonFolds: f32,       // thin dark lines that follow the form across lit and moderate slopes (0: none)
-    moonFoldSpacing: f32, // height units between the folds' first set of contours
     // E6 (Ice mountains).
-    iceCrystal: f32,      // crystal mountains: dark straight strokes in domains across the rock faces (0: none, as before)
-    iceCrest: f32,        // crystal mountains: share of the raised ground under snow-white lumps (0: none)
     // G3 (Archipelago rings): the fringe as stacked, offset copies of the hill's outline. Every default is the earlier look.
     ringShift: f32,       // px each copy sits from the hill's own outline (0: the earlier concentric lines; ringCount copies otherwise)
     ringShiftDir: f32,    // degrees the copies drift towards on average, clockwise from east in the world (90: south)
@@ -381,9 +386,6 @@ struct Uniforms {
     ringTone: f32,        // the copies' lines take retail's rose, darker on the inner copies and paler on the outer (0: the earlier crimson)
     // G6 (Ice blocks and mesas, retail ice-3 and Polar Range).
     iceSoft: f32,         // raised ice is lit by its height blurred over ~13 px, so crests are rounded and faces smooth (0: the full relief lights it, as before)
-    iceSnow: f32,         // the flat tops of raised ice lie under snow (0: none)
-    iceFall: f32,         // smooth fibres down the faces of raised ice, in place of grain (0: none)
-    iceApron: f32,        // dark hatched drifts spilling past the foot of raised ice into the snow (0: none)
     iceFrost: f32,        // Ice frost band: fine dark-blue hairlines in parallel runs, thinning inland (0: none)
     // G1 (shallow water round 3: Green, Red, Archipelago). Every default is the earlier look.
     shoalRag: f32,        // the shallow-to-deep step's outline: pixel notches of up to this many px, whatever the bed's slope (0: as before)

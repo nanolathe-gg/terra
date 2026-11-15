@@ -619,13 +619,13 @@ const CRACK_LENGTH = 2.0;
 // level shares to at least its defaults times boost, so cracks also appear in a
 // world that has none; 0 changes nothing.
 fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> vec4f {
-    let severity = max(u.crackSeverity, 0.6 * boost);
-    let majorShare = max(u.crackMajor, 0.8 * boost);
+    let severity = max(u.rock[rs & rockMask].crackSeverity, 0.6 * boost);
+    let majorShare = max(u.rock[rs & rockMask].crackMajor, 0.8 * boost);
     // Frost: above 1 the finer levels fill in (full shares at 1.5), the cracks widen to double and the blocks step twice as far; the carve keeps growing with the depth.
     let frost = clamp(2.0 * (severity - 1.0), 0.0, 1.0);
-    let minorShare = max(max(u.crackMinor, 0.75 * boost), frost);
-    let hairShare = max(max(u.crackHairline, 0.6 * boost), frost);
-    let blockShare = max(u.crackBlocks, 0.6 * boost);
+    let minorShare = max(max(u.rock[rs & rockMask].crackMinor, 0.75 * boost), frost);
+    let hairShare = max(max(u.rock[rs & rockMask].crackHairline, 0.6 * boost), frost);
+    let blockShare = max(u.rock[rs & rockMask].crackBlocks, 0.6 * boost);
     if (mask <= 0.0 || severity <= 0.0 || h < u.sea + 1.0) { return vec4f(0.0); }
     let start = mix(0.95, 0.10, CRACK_REACH);
     // Rocky ground takes the whole hierarchy; gentle ground only majors.
@@ -633,7 +633,7 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
     let gentle = smoothstep(start * 0.35, start * 1.1, slope);
     if (gentle <= 0.0) { return vec4f(0.0); }
     let sun = normalize(u.sun.xy);
-    let major = u.crackSpacing;
+    let major = u.rock[rs & rockMask].crackSpacing;
     let minorCell = major / 3.2;
     let hairCell = max(3.0, major / 9.0);
     // Shared warp: every level bends with the rock.
@@ -649,7 +649,7 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
         let turnBy = u.faceStreak * smoothstep(u.faceStreakFrom, u.faceStreakFrom + 0.35, slope) * clamp(0.75 + 0.6 * valueNoise(p / 37.0 + 71.0), 0.0, 1.0);
         majorFall = normalize(mix(fall, vec2f(-fall.y, fall.x), turnBy));
     }
-    let c0 = fractureLevel(w, majorFall, major, CRACK_LENGTH, m * gentle * majorShare, u.crackNetwork, 3.7);
+    let c0 = fractureLevel(w, majorFall, major, CRACK_LENGTH, m * gentle * majorShare, u.rock[rs & rockMask].crackNetwork, 3.7);
     // Minor lattice turned and shifted per major block.
     let h0 = cellHash(c0.id + 11.1);
     let r0 = turn(h0.x * TAU);
@@ -664,7 +664,7 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
     var c2 = fractureLevel(q2, r1 * r0 * fall, hairCell, 1.0, m * mix(0.4, 1.0, rocky) * gentle * hairShare, 1.0, 21.7);
     c2.normal = transpose(r1 * r0) * c2.normal;
     // Shading: majors widest, hairlines a single soft dark pixel.
-    let width = u.crackWidth * (1.0 + frost);
+    let width = u.rock[rs & rockMask].crackWidth * (1.0 + frost);
     let s0 = crackShade(c0, width * 1.25 * mix(0.6, 1.0, rocky), sun, 1.0);
     let s1 = crackShade(c1, width * 0.9 * mix(0.8, 1.0, rocky), sun, 0.8);
     let s2 = crackShade(c2, width * 0.55, sun, 0.0) * vec2f(0.6, 0.0);
@@ -1243,7 +1243,7 @@ fn bake(p: vec2f) -> vec4f {
     }
     // Painted banding: fainter scales the world's strength down, stronger
     // doubles it up to twice and never drops below 0.8 times the painted amount.
-    let banding = select(u.banding * (1.0 + style.z), max(u.banding * styleScale(style.z), 0.8 * style.z), style.z > 0.0);
+    let banding = select(u.rock[rs & rockMask].banding * (1.0 + style.z), max(u.rock[rs & rockMask].banding * styleScale(style.z), 0.8 * style.z), style.z > 0.0);
     let bandsAt = contourBands(p, h, slope, fall, banding);
     var bands = bandsAt.xy * (1.0 - route);
     // E11: the dark lines round Archipelago's hills were the first contour risers on the
@@ -1305,7 +1305,7 @@ fn bake(p: vec2f) -> vec4f {
     var crackAt = cracks(p, fall, faceSlope, crackMask * (1.0 - route), h, max(style.y, 0.0)) * (1.0 - buried);
     // Where rock is broken into blocks, the blocks replace part of the
     // fall-line ribs, so faces read as fractured rock rather than combed.
-    let broken = smoothstep(0.0, 0.5, crackMask) * max(u.crackBlocks, 0.6 * max(style.y, 0.0)) * smoothstep(0.5, 1.2, faceSlope) * (1.0 - route);
+    let broken = smoothstep(0.0, 0.5, crackMask) * max(u.rock[rs & rockMask].crackBlocks, 0.6 * max(style.y, 0.0)) * smoothstep(0.5, 1.2, faceSlope) * (1.0 - route);
     height = height * (1.0 - 0.75 * broken) + crackAt.w - crackAt.x;
     // The rock face (rockFaceAt) takes the place of the scatter's ribs, cracks and blocks wherever the ground is steep enough for it.
     // The scatter's cracks and blocks give way to the face (its ribs' fine octaves already did, above).

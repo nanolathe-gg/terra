@@ -23,7 +23,10 @@ export const ROCK_PRESETS={
  // landing on the maroon ones; the joints are narrow, half-deep shadowed lines (faceJointWidth 1.5, faceJoint 2), not open black trenches.
  siltstone:preset('Jointed siltstone',{debrisAmount:0,faceBed:7,faceLedge:0,faceRegular:.3,faceJointWidth:1.5,faceSecondary:.25,faceContinuity:1,faceFresh:.65,faceRindDepth:9,faceRindTone:.35,faceRindWarmth:.3,faceTone:.5,faceWet:0,faceBreak:0,stoneRound:.8,stoneSlab:.1,faceScaleVary:.3,faceSpall:0,faceMineral:.8,faceBlock:.5,faceBlockSize:18,faceWear:.8,faceCrease:.1,faceScratch:.2,faceGrit:.2,faceLayers:0,faceMass:.5,faceStrata:0,faceBlockHeight:4,faceRound:.85,faceJoint:2,faceExtrude:.15,faceGritSize:2,shineRock:.4,shineRockSharp:34,shineRockRough:.5},[[12,.8,0]])
 };
-export const ROCK_KEYS=[...Object.keys(base),'strata','strataContrast','strataGrain','absorbDepth','shadowTint'];
+// Rock surfaces a recipe may carry too (struct Rock): cracks, contour bands, moon pits and strokes, ice crystal strokes, crests, snow caps, fibres
+// and aprons. A recipe that does not set one takes the world's.
+export const ROCK_SURFACE_KEYS=['crackSeverity','crackMajor','crackMinor','crackHairline','crackBlocks','crackSpacing','crackWidth','crackDark','crackNetwork','banding','pockmark','pockSize','moonCups','moonCupSize','moonCupDepth','cupStretch','moonRibs','moonRibDepth','moonRibDark','moonFolds','moonFoldSpacing','iceCrystal','iceCrest','iceSnow','iceFall','iceApron'];
+export const ROCK_KEYS=[...Object.keys(base),'strata','strataContrast','strataGrain','absorbDepth','shadowTint',...ROCK_SURFACE_KEYS];
 // The starting recipes' own colors ({rock, beds}, checkColors): a preset made from one takes them. A world that names a recipe as its rock
 // keeps its own colors (applyWorldRock takes the numbers and beds only), so its slot 0 looks as it did. Each color is an entry of the game's
 // palette (materials/palette.json) on one ramp (granite's rock is modern Green's own gray, between two entries of the gray ramp), so a lit face steps along that ramp instead of dithering between two hues: the palette has
