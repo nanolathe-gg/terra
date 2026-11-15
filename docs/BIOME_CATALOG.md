@@ -33,6 +33,51 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Moon | pass | no retail water to compare (Moon maps have no sea) | flat section |
 | Moon mare | pass after this round's retune: median 75 as retail's; olive flecks 1.6% (retail 1.8%); gray shares 59/75/91/107/123/139 at 27/36/19/4/7/5% (retail 19/31/23/13/6/2%). The seam it showed was the palette dither restarting at the repeat's edge, now fixed for every material | | a dark mare crop |
 
+## Scores (2026-11-15)
+
+### Patch swap, measured
+
+Each world's flat ground and open water (export art, 512 px) against its retail reference: the largest channel's mean color difference,
+fine grain (luminance minus a 4x blur, standard deviation) and 32 px block spread (standard deviation of block means), ours / retail
+(`~/terraform-assets/agent-biome-match/tools/swapstats.py`). Pass: color within 4, grain ratio 0.8-1.25, block spread ratio 0.5-2 or within
+0.5. These thresholds were set after the fact, from the one failure visible in a swap sheet (Archipelago at sea+2: 13.9 and 2.69 / 0.75).
+
+| World | Ground: color, grain, spread | Water: color, grain, spread | Result |
+| --- | --- | --- | --- |
+| Green | 3.6, 13.5/12.7, 0.91/0.76 | 0.9, 10.8/9.0, 0.44/0.31 | pass |
+| Red | 0.5, 11.3/11.7, 1.45/1.19 | 0.3, 8.9/7.5, 0.22/0.18 | pass |
+| Lava | 0.6, 11.2/11.2, 1.34/0.86 | 1.9, 17.2/14.7, 1.61/1.30 | pass |
+| Desert | 1.2, 33.8/35.8, 3.14/5.12 | 1.3, 5.3/6.2, 0.12/0.10 | pass |
+| Ice | 1.8, 10.2/10.5, 0.90/0.72 | 2.0, 11.2/9.0, 0.46/0.31 | pass (water grain at 1.24) |
+| Crystal | 3.9, 18.3/17.9, 2.42/4.16 | 1.6, 7.5/7.3, 0.17/0.57 | pass |
+| Archipelago | 1.1, 20.8/17.0, 1.41/0.75 | 2.9, 12.2/11.3, 0.54/0.43 | pass, barely (ground grain 1.22, spread 1.88) |
+| Lush | 0.9, 8.8/8.6, 0.47/0.53 | 1.8, 7.5/6.1, 0.26/0.41 | pass (water grain at 1.23) |
+| Moon | 3.4, 16.1/15.5, 1.11/1.15 | no retail water | pass |
+
+### Retail windows: round start against today
+
+`repro/retail.sh <world> --base <run>` on the 28 retail windows (`repro/scenes/<world>-<n>.json`; Lush has none), run on a68b2954 (main
+before this goal) and on 022d00dc. Shape and look are mean gaps in units of the retail family's p10-p90 band (lower is closer); "in band"
+counts the metrics inside that band. **The windows draw library shapes only, so this measures each world's look (ground, light, rock
+surfaces, water, world numbers), not the new tools or rock types.**
+
+| World | Shape, start -> today | Look, start -> today | Metrics in band, start -> today |
+| --- | --- | --- | --- |
+| Red | 0.19 -> 0.23 | 2.06 -> 0.49 | 60 -> 57 of 72 |
+| Green (7 windows) | 0.24 -> 0.24 | 0.24 -> 0.23 | 139 -> 139 of 171 |
+| Lava | 0.12 -> 0.12 | 1.01 -> 0.15 | 60 -> 67 of 75 |
+| Painted Desert | 0.35 -> 0.35 | 1.05 -> 0.97 | 40 -> 39 of 69 |
+| Ice | 0.15 -> 0.15 | 0.48 -> 0.11 | 67 -> 65 of 75 |
+| Crystal | 0.14 -> 0.14 | 0.51 -> 0.21 | 62 -> 69 of 75 |
+| Archipelago | 0.17 -> 0.22 | 1.18 -> 0.79 | 61 -> 51 of 72 |
+| Moon | 0.24 -> 0.25 | 1.15 -> 0.32 | 32 -> 54 of 66 |
+| All | | | 521 -> 541 of 675 |
+
+Look improved in 7 of 8 worlds, mostly by removing far outliers (thin dark line density, edge counts). Moon, Lava and Crystal also gained
+metrics in band. Archipelago lost 10: its art has about 1.8x retail's edge density and thin dark lines (0.079 against 0.045 in window 2),
+and its shape score rose where the plain moved to sea+2. Red's window 2 lost steep walls (cells steeper than 1: 0.5% against retail's
+2.7%), and Ice window 1's shore band is 202 px against retail's 137. Painted Desert is the furthest world on both scores and barely moved.
+
 ## Cross-biome gaps, ranked by how much of the retail set they cover
 
 | Gap | Biomes | Generic control that would close it | Status |
