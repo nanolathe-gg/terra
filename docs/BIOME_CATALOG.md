@@ -95,7 +95,8 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Big dark rounded dome blocks | Dome block (Dark dome rock, Rock crown 1, knuckle spurs) | close (a rounded, lumpy dark mass) |
 | Long knotted ridges (lava_alley); flat-topped cliffed ridges (rock_alley) | Lava ridge (a lumpy mountain mass with bulbous spurs, Talus lumps); Plateau for the flat kind | close (knotted and dark; retail's crowns are a bit more lit) |
 | Fringed lava coasts | Lava lake (Inlet share 85: tapering lava inlets into the land) | close (retail's inlets branch more) |
-| Rimmed plateaus, lava rivers | Plateau, River | poor |
+| Rimmed plateaus (calderas) | Rimmed plateau (a section with a lip 12% over its flat top) | close |
+| Lava rivers | Lava river (170 px with the lava lake's stepped, jagged banks) | close |
 
 ### Painted Desert (3 maps; Wet Desert's 6 in crops)
 
