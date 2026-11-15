@@ -133,6 +133,8 @@ const NODE_FIELDS = [
   ...['lfGroundEdge'].map(k => [k, 'f']),
   // Lobe variety: clustered shore fingers, a few long and wide (0: the even comb).
   ...['cfVary'].map(k => [k, 'f']),
+  // Channel depth: a river channel's depth over a quarter of its width (1: as before).
+  ...['lfRiverDepth'].map(k => [k, 'f']),
   // lfcrater: an impact's groove: the along curve's value at its end (the groove's width is scaled by the curve over it); 0: none.
   ...['grooveEnd'].map(k => [k, 'f']),
   // lfimpact2: the buckled ground's height (Buckling x .3 of the relief; BK_AMP in engine-shape.wgsl scales it), apart from the ejecta's; 0: none.
@@ -449,7 +451,7 @@ export function prepareNode(n, geom, c) {
     // H27: the elevation and how it combines, the two half widths, the along curve's table, and the variation (px in the shape's own frame: wander scales with it).
     const sd = landformSides({...q, radius});
     Object.assign(main.u, {elev: landformElevation(q, c.sea), combine: clamp(Math.round(q.combine || 0), 0, 2), lfFront: sd.front, lfBack: sd.back, alongBase: put(sampleKnots(alongKnots(q))),
-      lfRiver: isRiver(q) ? riverWidth(q) : 0, lfBraid: isBraided(q) ? 1 : 0, lfWander: isRiver(q) ? 0 : Math.max(0, q.wander || 0) * frameScale,   // a river's Wander is the band its migration may fill (sculpt-river.js), not an outline noise
+      lfRiver: isRiver(q) ? riverWidth(q) : 0, lfRiverDepth: clamp(q.riverDepth ?? 1, .25, 4), lfBraid: isBraided(q) ? 1 : 0, lfWander: isRiver(q) ? 0 : Math.max(0, q.wander || 0) * frameScale,   // a river's Wander is the band its migration may fill (sculpt-river.js), not an outline noise
       lfWidth: Math.max(0, q.widthVary || 0), lfHeight: Math.max(0, q.heightVary || 0), lfSize: Math.max(8, q.varySize || 0),
       lfFoot: q.varyFoot ?? 1, lfMid: q.varyMiddle ?? 1, lfTaper: clamp(q.crestTaper || 0, 0, 1), lfRoute: clamp(q.routeSmooth || 0, 0, 1),
       lfGaps: Math.round(clamp(q.rimGaps || 0, 0, 12)), lfGapWidth: clamp(q.rimGapWidth ?? .3, .05, 1), lfGapDepth: clamp(q.rimGapDepth ?? 200, 1, 400), lfGroundEdge: clamp(q.groundEdge || 0, 0, 1),

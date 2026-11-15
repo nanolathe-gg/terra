@@ -93,7 +93,7 @@ export function groupToolControls(fields,buildRow){
  ['spurCount','Spurs',['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb','crestVary']],
  ['iceFacets','Facets',['iceFacets','facetForm','facetSurface','iceFacetSize','crystalStep','crystalTiers','crystalFacet','crystalSizeVar','crystalSides','crystalStretch','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']],
  ['','Impact',['ejecta','buckling','secondaries','secondaryDistance']],
- ['','Shore',['fingers','fingerSize','fingerVary','shorePlates','plateMaterial','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateVary','frostNeedles','crystalShoreSeam','waterDeep','waterShore','surf']],
+ ['','Shore',['fingers','fingerSize','fingerVary','riverDepth','shorePlates','plateMaterial','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateVary','frostNeedles','crystalShoreSeam','waterDeep','waterShore','surf']],
  ['','Cut',['fissureWidth','fissureJag','fissureTaper','fissureCrack','fissureDark'],true],
  ['fissureBranches','Branches',['fissureBranches','fissureBranchLen','fissureBranchSpread']],['fissureNetwork','Fracture network',['fissureNetwork','fissureCell']]
  ];

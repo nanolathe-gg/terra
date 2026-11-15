@@ -663,7 +663,8 @@ fn riverChannel(fl: f32, qq: f32, c: f32, e: f32, kw: f32, silt: f32, wx: f32, w
   if (v < v0) { f = 1.0 - pow(clamp((v0 - v) / (1.0 + v0), 0.0, 1.0), mix(2.0, 5.0, ak)); }
   else { f = 1.0 - pow(clamp((v - v0) / (1.0 - v0), 0.0, 1.0), mix(2.0, 1.25, ak)); }
   let sea = u.sea;
-  let depth = 0.25 * W * (0.5 + 0.75 * ak) * (1.0 + 0.15 * vnoise(wx / 30.0, wy / 30.0, u.seed ^ 0x99u)) * silt;
+  // Channel depth (lfRiverDepth): the channel's depth as a multiple of a quarter of its width (1: as before), so a narrow river can run deep.
+  let depth = 0.25 * W * u.lfRiverDepth * (0.5 + 0.75 * ak) * (1.0 + 0.15 * vnoise(wx / 30.0, wy / 30.0, u.seed ^ 0x99u)) * silt;
   let lev = 0.07 * W * exp(-max(d - hw, 0.0) / (0.8 * W)) * qq * qq * silt;
   let fp = fl + lev;
   // The point bar: on the inner side of a bend (v > 1), as wide as the bend is tight and the channel wide (0.65 + 1.3 x the tightness, in channel widths),
