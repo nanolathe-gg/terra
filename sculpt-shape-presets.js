@@ -136,11 +136,17 @@ export function landformBackSide(lean, turn, dx, dy) {
   return lean.side || ((dy * bx - dx * by) < 0 ? -1 : 1);
 }
 // H27: the most a cell can stand from a landform's path and still be on it (world px; `scale` is the frame's), over the widest side grown by the width
-// variation at its largest weight, the wander, and the spurs. The segment boxes (stamp: the ejecta, not the secondaries, which are nodes of their own) and nodeBounds (all of it) both use it.
+// variation at its largest weight, the wander, and the spurs. The segment boxes (stamp: the ejecta, not the secondaries or copies, which are nodes of their
+// own) and nodeBounds (all of it) both use it.
 export function landformReach(q, scale = 1, widthMul = 1, stamp = false) {
   const {front, back} = landformSides(q), weight = Math.max(q.varyFoot ?? 1, q.varyMiddle ?? 1);
-  return Math.max(front, back) * widthMul * Math.exp(1.35 * (q.widthVary || 0) * weight) + (isRiver(q) ? 0 : (q.wander || 0) * scale * weight) + 2 + (talusOn(q) ? clamp(q.talus, 0, 400) : 0) + (stamp ? ejectaReach(q) : impactReach(q)) * widthMul;
+  const own = Math.max(front, back) * widthMul * Math.exp(1.35 * (q.widthVary || 0) * weight) + (isRiver(q) ? 0 : (q.wander || 0) * scale * weight) + 2 + (talusOn(q) ? clamp(q.talus, 0, 400) : 0);
+  return own + (stamp ? ejectaReach(q) : Math.max(impactReach(q), scatterReach(q, own))) * widthMul;
 }
+// Copies (scatterCount): smaller copies of a landform within Copies' spread of its path, each at most twice Copy size of the shape (scatterNodes,
+// sculpt-gpu-fields.js). How far past the path they reach, for the node's bounds: the spread and the largest copy's own reach.
+export const scatterSize = (q, u) => clamp((q.scatterSize ?? .4) * (1 + clamp(q.scatterVary ?? .5, 0, 1) * (2 * u - 1)), .05, 2);
+export const scatterReach = (q, own) => Math.round(q?.scatterCount || 0) >= 1 ? clamp(q.scatterSpread ?? 200, 0, 1200) + own * scatterSize(q, 1) : 0;
 
 // ---- lfcrater: the impact features (Ejecta, Buckling, Secondaries) and the impact the drawn path describes ----
 // Ejecta and secondaries are landform features: any landform throws them (a crater's bowl, a mound's foot). A stroke that throws them reads its path as the

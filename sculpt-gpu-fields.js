@@ -2,7 +2,7 @@ import {terrainAllocation} from './sculpt-memory.js';
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {isRiver, isBraided, riverWidth, riverCurvature} from './sculpt-river.js';
-import {strokeCurve, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, landformDigs, impactOn, bucklingOn, secondaryNear, impactSetup, impactPoint, impactEnd, impactSpread, impactWeight, landformPeak} from './sculpt-shape-presets.js';
+import {strokeCurve, scatterSize, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, landformDigs, impactOn, bucklingOn, secondaryNear, impactSetup, impactPoint, impactEnd, impactSpread, impactWeight, landformPeak} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -281,6 +281,27 @@ function secondaryNodes(n, q, imp, seed, geom, c) {
   }
   return out;
 }
+// Copies (scatterCount): Copies smaller copies of the stroke, each at a point drawn along its path (a click: the point itself) and moved within
+// Copies' spread of it, its width, relief, wander and spurs scaled by its size (Copy size, varied by Copy size variation). They are nodes of their
+// own, as the secondaries are (claiming with the stroke), with seeds of their own drawn from the stroke's.
+function scatterNodes(n, q, seed, geom, c) {
+  const count = Math.round(clamp(q.scatterCount, 0, 24)), spread = clamp(q.scatterSpread ?? 200, 0, 1200), world = geom.spacing * (geom.grid - 1) + 1;
+  const rnd = (k, a) => rand01(seed ^ 0x5ca7, k, a), out = [], ref = Math.round(q.heightReference || 0);
+  const lift = k => ref === 2 ? q.elevation * k : (landformElevation(q, c.sea) - c.baseHeight) * k + c.baseHeight - (ref === 1 ? c.sea : 0);
+  const path = shapePaths(n)[0].map(i => n.points[i]), cum = [0];
+  for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y));
+  const L = cum.at(-1);
+  for (let k = 0; k < count; k++) {
+    let at = path[0];
+    if (L > 0) { const s = rnd(k, 1) * L; let i = 1; while (i < cum.length - 1 && cum[i] < s) i++; const f = (s - cum[i - 1]) / Math.max(cum[i] - cum[i - 1], 1e-6); at = {x: path[i - 1].x + (path[i].x - path[i - 1].x) * f, y: path[i - 1].y + (path[i].y - path[i - 1].y) * f}; }
+    const ang = rnd(k, 2) * Math.PI * 2, dist = spread * Math.sqrt(rnd(k, 3)), size = scatterSize(q, rnd(k, 4));
+    const spot = {x: clamp(at.x + Math.cos(ang) * dist, 0, world - 1), y: clamp(at.y + Math.sin(ang) * dist, 0, world - 1)};
+    out.push(prepareNode({kind: 'landform', satellite: true, points: [spot], frame: n.frame, seed: (seed + (k + 101) * 2654435761) >>> 0,
+      params: {...n.params, radius: q.radius * size, elevation: lift(Math.min(1.5, size)), scatterCount: 0, secondaries: 0, ejecta: (q.ejecta || 0), along: undefined,
+        wander: (q.wander || 0) * size, varySize: Math.max(20, (q.varySize || 140) * size), spurLength: (q.spurLength || 0) * size, talus: (q.talus || 0) * size, gullySize: (q.gullySize || 40) * Math.max(.3, size)}}, geom, c));
+  }
+  return out;
+}
 // A height image's pass: the cells its rectangle covers (the shader tests each cell's own position against the same rectangle) and its samples' heights.
 function prepareHeights(n, {grid, spacing}) {
   const {fields: f, values} = heightsImage(n), b = heightsBounds(f);
@@ -438,8 +459,8 @@ export function prepareNode(n, geom, c) {
       grooveEnd: grooved ? impactEnd(q) : 0});
     if (impact) Object.assign(main.u, impactUniforms(q, sd, impact, c));
   }
-  if (kind === 'landform' && impact && Math.round(q.secondaries || 0) >= 1 && !n.satellite) return {multi: [main, ...secondaryNodes(n, q, impact, seed, geom, c)]};
-  return main;
+  const satellites = kind === 'landform' && !n.satellite ? [...(impact && Math.round(q.secondaries || 0) >= 1 ? secondaryNodes(n, q, impact, seed, geom, c) : []), ...(Math.round(q.scatterCount || 0) >= 1 ? scatterNodes(n, q, seed, geom, c) : [])] : [];
+  return satellites.length ? {multi: [main, ...satellites]} : main;
 }
 
 // ---- the coast pass (H10): fingers on the joined coast and shore layers, after the stroke is swept (stampCoastShore in sculpt.js) ----

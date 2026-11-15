@@ -88,6 +88,7 @@ export function groupToolControls(fields,buildRow){
  ['gullies','Gullies',['gullies','gullySize','talus']],
  ['','Hard beds',['beds','bedSoft']],
  ['','Steps',['stepReference','terraces','ledge','terraceJitter','breakup','layerPx','layerRiser','layerVary','layerCircle','lavaSpread','lavaCircleVary','layerJag']],
+ ['scatterCount','Copies',['scatterCount','scatterSpread','scatterSize','scatterVary']],
  ['spurCount','Spurs',['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb','crestVary']],
  ['iceFacets','Facets',['iceFacets','facetForm','facetSurface','iceFacetSize','crystalStep','crystalTiers','crystalFacet','crystalSizeVar','crystalSides','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']],
  ['','Impact',['ejecta','buckling','secondaries','secondaryDistance']],
