@@ -1123,7 +1123,7 @@ function moveSelectedShapes(dx,dy) {
   cancelWeather();
   for (const i of group) { const n=nodes[i],before=nodeBounds(n); transformNode(n,nodeState(n),[1,0,0,1,dx,dy]); pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); }
   pendingEval=pendingEval<0?group[0]:Math.min(pendingEval,group[0]);
-  flushEval(); checkpoint(); queueWeather(); selectNode(selected,true); schedule();
+  flushEval(); checkpoint(); queueWeather();const adding=pathAdding,mode=drawMode;selectNode(selected,true);pathAdding=adding;drawMode=mode;updateControls();schedule();
 }
 function pickNode(p) {
   let best=-1,bestScore=Infinity;
@@ -1151,7 +1151,8 @@ function selectNode(i,keepOthers=false) {
 // Shift-click on the map or in the Shapes list. Answers whether the shape is now selected.
 function toggleShape(i) {
   if (i<0 || !nodes[i] || stroke || moving || loading) return false;
-  if (pathEditing || drawMode==='add') { selectNode(i); return true; }
+  // Only shapes with a path move as a group; a pathless row (Ground undulation) is selected alone.
+  if (pathEditing || drawMode==='add' || !nodes[i].points || (selected>=0 && !nodes[selected]?.points)) { selectNode(i); return true; }
   const next=toggleSelection(selected,alsoSelected.filter(j => nodes[j]?.points),i);
   alsoSelected=next.others; selectNode(next.primary,true);
   if (next.primary<0) status('Deselected the shape.');
