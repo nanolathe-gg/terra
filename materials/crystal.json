@@ -1739,8 +1739,8 @@
 
   "shapes": {
    "plateau": {"gullies": 30},
-   "hill": {"diameter": 300, "elevation": 100, "iceFacets": 100, "facetForm": 1, "facetSurface": 1, "iceFacetSize": 30, "crystalStep": 8, "crystalTiers": 100, "crystalFacet": 60, "crystalSizeVar": 60, "cracks": 0},
-   "mountain": {"wander": 6, "diameter": 260, "elevation": 170, "iceFacets": 90, "facetForm": 1, "facetSurface": 1, "iceFacetSize": 30, "crystalStep": 14, "crystalTiers": 100, "crystalFacet": 70, "crystalSizeVar": 70, "cracks": 0, "gullies": 0, "talus": 0},
+   "hill": {"diameter": 300, "elevation": 11, "iceFacets": 100, "facetForm": 1, "facetSurface": 1, "iceFacetSize": 30, "crystalStep": 8, "crystalTiers": 100, "crystalFacet": 60, "crystalSizeVar": 60, "cracks": 0},
+   "mountain": {"wander": 6, "diameter": 260, "elevation": 81, "iceFacets": 90, "facetForm": 1, "facetSurface": 1, "iceFacetSize": 30, "crystalStep": 14, "crystalTiers": 100, "crystalFacet": 70, "crystalSizeVar": 70, "cracks": 0, "gullies": 0, "talus": 0},
    "ramp": {},
    "valleyV": {},
    "valleyU": {},
