@@ -2332,13 +2332,16 @@ fn lfCrystalPrisms(x: i32, y: i32, i: u32, cells: u32) {
       if (n < 0) { continue; }
       let R = lfcAt(n, 2u, cells).x;
       if (R <= 0.0) { continue; }
-      let sp = lfcAt(n, 0u, cells); let q = lfCrystalLocal(here - sp.xy, sp.zw);
-      if (dot(q, q) > 2.6 * R * R) { continue; }
+      let sp = lfcAt(n, 0u, cells); var q = lfCrystalLocal(here - sp.xy, sp.zw);
+      // Prism stretch: the prism is drawn elongated along its own turned axis (a rectangle from a square), so the cull allows its length.
+      let el = clamp(u.lfcStretch, 1.0, 3.0);
+      if (dot(q, q) > 2.6 * R * R * el * el) { continue; }
       let sec = lfcAt(n, 1u, cells);
       let H = (sec.x + sec.y * base) * (1.0 + u.cgVar * (cgRnd(ii, j, 25u) - 0.5));
       if (H <= 3.0) { continue; }   // lower than 3 units a prism does not read as one, only as its crystal mark
       let ns = u32(clamp(round(u.lfcSides + u.cgVar * (cgRnd(ii, j, 26u) - 0.5) * 2.4), 3.0, 12.0));
       let rot = (1.0 - clamp(u.lfcAlign, 0.0, 1.0)) * cgRnd(ii, j, 27u) * 6.2831853;
+      if (el > 1.0) { let ax = vec2f(cos(rot), sin(rot)); let ay = vec2f(-ax.y, ax.x); q = ax * (dot(q, ax) / el) + ay * dot(q, ay); }
       let inr = R * cos(3.1415927 / f32(ns));
       var m = 1.0e9;
       for (var e = 0u; e < ns; e++) {

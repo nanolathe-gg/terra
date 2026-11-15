@@ -138,7 +138,7 @@ const NODE_FIELDS = [
   // lfimpact2: the buckled ground's height (Buckling x .3 of the relief; BK_AMP in engine-shape.wgsl scales it), apart from the ejecta's; 0: none.
   ...['bkAmt'].map(k => [k, 'f']),
   // lfcrystal: a landform's faceted structure (Facet shape, the share of sites with an element, its polygon's sides, how square it turns to the path, corner cuts).
-  ...['lfcForm'].map(k => [k, 'u']), ...['lfcShare', 'lfcSides', 'lfcAlign', 'lfcBreak'].map(k => [k, 'f']),
+  ...['lfcForm'].map(k => [k, 'u']), ...['lfcShare', 'lfcSides', 'lfcAlign', 'lfcBreak', 'lfcStretch'].map(k => [k, 'f']),
   // The seed table of a landform's columns and prisms (lfcSeedTable): where its rows start in MW, its seeds, its path-and-level blocks and width levels, the
   // cells whose seeds the site pass fills in, and the prisms' lattice spacing and how far their seeds stray along and across the path.
   ...['lfcTab', 'lfcSites', 'lfcBlocks', 'lfcLevels'].map(k => [k, 'u']), ...['lfcWx0', 'lfcWy0', 'lfcWx1', 'lfcWy1'].map(k => [k, 'i']), ...['lfcSpace', 'lfcJs', 'lfcJc'].map(k => [k, 'f']),
@@ -436,7 +436,7 @@ export function prepareNode(n, geom, c) {
     Object.assign(main.u, {lfcTab: main.extra.length, lfcSites: seeds.sites, lfcBlocks: seeds.blocks, lfcLevels: seeds.levels, lfcSpace: seeds.space, lfcJs: seeds.js, lfcJc: seeds.jc});
     main.extra.push(...seeds.rows);
   }
-  if (lfc) Object.assign(main.u, {cTop: clamp(q.crystalTop ?? 0, 0, .95), lfcForm: lfc, lfcShare: clamp(q.iceFacets, 0, 1), lfcSides: clamp(Math.round(q.crystalSides ?? 6), 3, 12), lfcAlign: clamp(q.crystalAlign ?? 0, 0, 1), lfcBreak: clamp(Math.round(q.bergBreak ?? 0), 0, 8),
+  if (lfc) Object.assign(main.u, {cTop: clamp(q.crystalTop ?? 0, 0, .95), lfcForm: lfc, lfcShare: clamp(q.iceFacets, 0, 1), lfcSides: clamp(Math.round(q.crystalSides ?? 6), 3, 12), lfcStretch: clamp(q.crystalStretch ?? 1, 1, 3), lfcAlign: clamp(q.crystalAlign ?? 0, 0, 1), lfcBreak: clamp(Math.round(q.bergBreak ?? 0), 0, 8),
     cgSize: lfcL, cgFacet: clamp(q.crystalFacet ?? 0, 0, 1), cgSizeVar: clamp(q.crystalSizeVar ?? 0, 0, 1), cgSmooth: 1 - clamp(q.iceFacets, 0, 1), cgTiers: clamp(q.crystalTiers ?? 0, 0, 1), cgStep: Math.max(0, q.crystalStep ?? 0),
     cgVar: clamp(q.crystalVariation ?? 0, 0, 1), bgRough: Math.max(0, q.bergRough ?? 0), bgJit: clamp(q.bergJitter ?? 0, 0, 1)});
   // H15 part 2: the stroke's curve tables, after every other extra row (rim sectors, coast sites); the shader reads them at curveBase and backBase.

@@ -65,6 +65,7 @@
     "apron": 0,
     "crystalStep": 5,
     "crystalSides": 6,
+    "crystalStretch": 1,
     "crystalTop": 0.2,
     "crystalVariation": 0.5,
     "crystalTiers": 0,
