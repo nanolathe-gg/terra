@@ -875,6 +875,17 @@ fn lfCraterSpurShare(c: f32, e: f32, wm: f32) -> f32 {
   if (r >= w) { return 0.0; }
   return curveAt(u.curveBase, u.lfPeak * (1.0 - r / w));
 }
+// Gaps: a ring or ridge broken into arcs. Gaps breaks spaced evenly round a click (the angle about its point) or along a drawn path (its share), each
+// moved a little by the stroke's seed, Gap width of the spacing wide with soft sides: 1 in a break, 0 between.
+fn lfGapMask(phase: f32) -> f32 {
+  let n = u.lfGaps; let t = phase * n; let k = floor(t); var m = 0.0;
+  for (var j = -1; j <= 1; j++) {
+    let kk = k + f32(j); let w = i32(kk - n * floor(kk / n));
+    let c = kk + 0.5 + 0.3 * hashi(w, 7, u.seed ^ 0x9a3u);
+    m = max(m, 1.0 - smoothstep(0.08 * u.lfGapWidth, 0.5 * u.lfGapWidth, abs(t - c)));
+  }
+  return m;
+}
 // One segment's candidate at a cell: (the value before combine, q clamped to 0..1).
 // trunkShare: the cell's place along the path (0 to 1), for a trunk segment; a spur piece carries its root's.
 fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32, nB: f32, nC: f32, trunkShare: f32, x: i32, y: i32, i: u32, cells: u32) -> vec3f {
@@ -922,6 +933,12 @@ fn lfEval(s0: vec4f, s1: vec4f, s2: vec4f, wx: f32, wy: f32, base: f32, nA: f32,
     else { let ch = riverChannel(value, q, c, e, mix(s2.y, s2.z, tt), s2.w, wx, wy); value = ch.x; bar = ch.y; }
   }
   if (u.lfHeight > 0.0) { value = value + u.lfHeight * lfWeight(q) * nC * sm(0.0, 0.15, q); }
+  // Gaps lower only the ground this shape raises above its base (a crater's rim, not its bowl), by at most Gap depth.
+  if (u.lfGaps > 0.0 && !spur && value > base) {
+    let click = dx * dx + dy * dy < 1.0;
+    let phase = select(clamp(share, 0.0, 1.0), fract(atan2(wy - s0.y, wx - s0.x) / 6.2831853 + 1.0), click);
+    value = value - min(value - base, u.lfGapDepth) * lfGapMask(phase);
+  }
   return vec3f(value, lfCraterCover(q, cc, ee, cap, s1.w, wm), bar);
 }
 // ---- P1 gullies: a slope-aligned stripe filter (ported from the research lab's gully filter, docs/research/lab/lib.wgsl on the research branch) ----
