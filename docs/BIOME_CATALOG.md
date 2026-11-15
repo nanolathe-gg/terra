@@ -16,7 +16,7 @@ material it lays down (`material`; the world lists it in `world.materials.extra`
 
 ## Ground and water: the patch swap
 
-Each world's flat ground and deep water, as the export draws them, were checked on this branch (2026-11-15) by the patch swap: two 1x1,
+Each world's flat ground and deep water, as the export draws them, were checked on this branch (2026-11-15, rerun after the dither fix) by the patch swap: two 1x1,
 two 4x4 and one 8x8 contiguous 32 px tiles of ours pasted into a 512 px retail crop of flat ground or open water. **Pass** means the patches
 could not be found by eye at 1x; **faint** means they could be found only by looking for them.
 
@@ -137,7 +137,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | --- | --- | --- |
 | Flat sand islands at sea+2 with a pale halo | Island (drawn in water; on the sea+8 plain the sea tools add nothing) | close |
 | Sandbars, shoals, islet chains | Sandbar, Shoal, Islet scatter (Copies 8) | close |
-| Atolls | Atoll | close (rings stay closed) |
+| Atolls | Atoll | poor (thin slivers of sand on a ring that mostly sits under the sea; retail's atolls carry chunky sand islands) |
 | Dark rock mounds with radial ridges | Rock mound, Rock knob, Crater mound (Mound rock) | close (ridges are crisp rills) |
 | Halos and shoals pale blue: (43,101,144) against retail (45,104,148) | world water depths 38 and 52 | good |
 

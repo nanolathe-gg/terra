@@ -293,7 +293,9 @@ function secondaryNodes(n, q, imp, seed, geom, c) {
 function scatterNodes(n, q, seed, geom, c) {
   const count = Math.round(clamp(q.scatterCount, 0, 24)), spread = clamp(q.scatterSpread ?? 200, 0, 1200), world = geom.spacing * (geom.grid - 1) + 1;
   const rnd = (k, a) => rand01(seed ^ 0x5ca7, k, a), out = [], ref = Math.round(q.heightReference || 0);
-  const lift = k => ref === 2 ? q.elevation * k : (landformElevation(q, c.sea) - c.baseHeight) * k + c.baseHeight - (ref === 1 ? c.sea : 0);
+  // A copy's relief scales with its size about the plain (Fixed) or its ground (Ground); a sea-referenced shape (an islet, a shoal) keeps its height
+  // over the sea, so a small copy is not raised above its parent.
+  const lift = k => ref === 2 ? q.elevation * k : ref === 1 ? q.elevation : (landformElevation(q, c.sea) - c.baseHeight) * k + c.baseHeight;
   const path = shapePaths(n)[0].map(i => n.points[i]), cum = [0];
   for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y));
   const L = cum.at(-1);
