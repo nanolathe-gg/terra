@@ -63,7 +63,9 @@ its art like everything else.
 
 Three types flow along wires: **coordinates** (where a pattern is read),
 **gray** (one number a texel) and **color**. Gray and color mix freely in
-Combine. Every pattern wraps at the 512-px repeat.
+Combine, and a gray input wired to a color reads its brightness: a Gradient
+with gray stops is a curve for a height or mask. Every pattern wraps at the
+512-px repeat.
 
 | Node | Makes | Use |
 | --- | --- | --- |

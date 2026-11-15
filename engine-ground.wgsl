@@ -11,6 +11,8 @@ fn node(i:u32)->MaterialStep{return materialGraphs[graphRow].steps[i];}
 fn arg(s:MaterialStep,index:u32)->f32{return s.args[index/4u][index%4u];}
 // A seed moves a field's lattice or its hash: 0 is the field the node always had.
 fn seeded(salt:f32,seed:f32)->f32{return salt+37.0*seed;}
+// A color read by a gray input: its brightness (Rec. 709 weights), the same number in every channel.
+fn graphGray(c:vec4f)->vec4f{return vec4f(dot(c.rgb,vec3f(.2126,.7152,.0722)));}
 
 // Smooth value noise on a lattice that divides the repeat. Neighboring lattice counts blend, so a size edit stays continuous.
 fn smoothCount(p:vec2f,n:f32,salt:f32)->f32{return wrapNoise(graphPos(p)*(n/graphPeriod)+salt,n);}

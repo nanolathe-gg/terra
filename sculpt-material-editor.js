@@ -1,7 +1,7 @@
 // The material editor: one full-screen dialog for the map's ground and water materials. The graph fills the screen; beside it sit one
 // preview and three panes: Controls (what the material publishes, for adjusting it), Node (the selected node) and Palette (the game
 // colors it is reduced to). Every element is in index.html; this fills values and applies edits through the map's own undo and save.
-import {NODES, NODE_TYPES, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
+import {NODES, NODE_TYPES, accepts, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
   nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb,
   addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText} from './sculpt-materials.js';
 import {mountMaterialGraph, graphPositions, CARD, cardHeight} from './sculpt-material-graph.js';
@@ -66,7 +66,7 @@ export function mountMaterialEditor(host) {
   function openMenu(screen, place, wire) {
     if (!material()) return;
     menuAt = {place, wire}; const menu = $('node-menu'), stage = menu.parentElement.getBoundingClientRect();
-    for (const b of menuItems) { const spec = NODES[b.dataset.type]; b.dataset.fits = String(!wire || spec.inputs.some(([, , want]) => want === 'any' ? wire.type !== 'coords' : want === wire.type)); }
+    for (const b of menuItems) { const spec = NODES[b.dataset.type]; b.dataset.fits = String(!wire || spec.inputs.some(([, , want]) => accepts(want, wire.type))); }
     menu.hidden = false; $('node-search').value = ''; filterMenu();
     menu.style.left = Math.max(8, Math.min(stage.width - menu.offsetWidth - 8, screen.x - stage.left)) + 'px';
     menu.style.top = Math.max(8, Math.min(stage.height - menu.offsetHeight - 8, screen.y - stage.top)) + 'px';
@@ -89,7 +89,7 @@ export function mountMaterialEditor(host) {
     change(m => {
       if (m.nodes.length >= MAX_NODES) throw Error(`A material has at most ${MAX_NODES} nodes.`);
       made = makeNode(button.dataset.type, m.nodes, {...(button.dataset.kind ? {kind: button.dataset.kind} : {}), x: Math.round(place.x - (wire ? 0 : CARD.width / 2)), y: Math.round(place.y - 30)});
-      if (wire) { const key = NODES[made.type].inputs.find(([, , want]) => want === 'any' ? wire.type !== 'coords' : want === wire.type)[0]; made.in[key] = wire.from; }
+      if (wire) { const inputs = NODES[made.type].inputs, key = (inputs.find(([, , want]) => want === wire.type || want === 'any' && wire.type !== 'coords') ?? inputs.find(([, , want]) => accepts(want, wire.type)))[0]; made.in[key] = wire.from; }
       const places = graph.places(); for (const n of m.nodes) if (n.x === undefined) { const p = places.get(n.id); n.x = p.x; n.y = p.y; }   // the rest keep their places
       m.nodes.push(made);
     });
@@ -194,7 +194,7 @@ export function mountMaterialEditor(host) {
     }
     for (let i = 0; i < INPUT_ROWS; i++) {
       const input = spec.inputs[i]; $('node-input-row-' + i).hidden = !input; if (!input) continue;
-      const [key, label, want] = input, fits = o => o.id !== n.id && o.type !== 'output' && (want === 'any' ? types.get(o.id) !== 'coords' : types.get(o.id) === want);
+      const [key, label, want] = input, fits = o => o.id !== n.id && o.type !== 'output' && accepts(want, types.get(o.id));
       $('node-input-label-' + i).textContent = label;
       $('node-input-' + i).replaceChildren(new Option(want === 'coords' ? 'Plain coordinates' : 'Not connected', ''), ...m.nodes.filter(fits).map(o => new Option(o.name, o.id)));
       $('node-input-' + i).value = n.in[key] ?? ''; $('node-input-clear-' + i).disabled = !n.in[key];

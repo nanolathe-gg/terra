@@ -27,10 +27,15 @@ test('every library material is valid, compiles, and survives a copy unchanged',
 
 test('connections are typed, loops are refused, and a deleted source leaves its input open', () => {
   assert.throws(() => graph([node('a', 'noise', {in: {in: 'b'}}), node('b', 'noise')]), /Coordinates needs a Warp/);
-  assert.throws(() => graph([node('w', 'warp'), node('g', 'gradient', {in: {in: 'w'}})]), /Input needs a gray input/);
+  assert.throws(() => graph([node('w', 'warp'), node('g', 'gradient', {in: {in: 'w'}})]), /Input needs a gray or color input/);
   assert.throws(() => graph([node('a', 'levels', {in: {in: 'b'}}), node('b', 'levels', {in: {in: 'a'}})]), /loop/);
   assert.throws(() => graph([node('o', 'output'), node('p', 'output')]), /one Material node/);
-  assert.throws(() => graph([node('n', 'noise'), node('g', 'gradient', {in: {in: 'n'}}), node('o', 'output', {in: {height: 'g'}})]), /Height needs a gray input/);
+  assert.throws(() => graph([node('w', 'warp'), node('o', 'output', {in: {height: 'w'}})]), /Height needs a gray or color input/);
+  // A gray input wired to a color reads its brightness: a Gradient with gray stops is a curve for a height.
+  const curved = graph([node('n', 'noise'), node('g', 'gradient', {in: {in: 'n'}}), node('l', 'levels', {in: {in: 'g'}}), node('o', 'output', {in: {color: 'g', height: 'g'}})]);
+  const at = id => curved.nodes.findIndex(n => n.id === id), main = programSource(compileMaterial(curved)).main;
+  assert.match(main, new RegExp(`nLevels\\(s${at('l')},graphGray\\(v${at('g')}\\)\\)`)); assert.match(main, new RegExp(`let height=graphGray\\(v${at('g')}\\)\\.x`));
+  assert.match(main, new RegExp(`let color=v${at('g')}\\.rgb`), 'a color input reads the color itself');
   const m = graph([node('n', 'noise'), node('g', 'gradient', {in: {in: 'gone'}}), node('o', 'output', {in: {color: 'g'}})]);
   assert.equal(m.nodes.find(n => n.id === 'g').in.in, null);
   assert.equal(graph([node('n', 'noise')]).nodes.at(-1).type, 'output', 'a graph always has its Material node');

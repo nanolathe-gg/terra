@@ -64,6 +64,8 @@ export const NODES = {
     help: 'What the material is: its color, the art height the sun lights (Relief scales it; gameplay heights never change) and its shine.'},
 };
 export const NODE_TYPES = Object.keys(NODES);
+// Whether an input that wants one type takes an output of another: any takes gray or color, and a gray input reads a color's brightness.
+export const accepts = (want, got) => got != null && (want === 'any' ? got !== 'coords' : want === 'gray' ? got === 'gray' || got === 'color' : want === got);
 export const nodeParams = n => NODES[n.type].params(n.kind);
 export const nodeKinds = n => NODES[n.type].kinds ?? null;
 export const DITHER = [P('amount', 'Palette grain', 0, 1, 1), P('spread', 'Diffusion spread', 0, 1, 0), P('tone', 'Tone response', .5, 2, 1),
@@ -99,7 +101,7 @@ function typeNodes(ordered) {
       const from = n.in[key]; if (from === null) continue;
       const got = types.get(from);
       if (got === null) throw Error('The Material node has no output to connect.');
-      if (want === 'any' ? got === 'coords' : got !== want) throw Error(`${n.name}: ${label} needs ${want === 'any' ? 'a gray or color' : want === 'coords' ? 'a Warp node’s coordinates' : 'a ' + want} input.`);
+      if (!accepts(want, got)) throw Error(`${n.name}: ${label} needs ${want === 'any' ? 'a gray or color' : want === 'coords' ? 'a Warp node’s coordinates' : want === 'gray' ? 'a gray or color' : 'a ' + want} input.`);
     }
     types.set(n.id, typeof spec.out === 'function' ? spec.out(n) : spec.out === 'any' ? (['a', 'b'].some(k => types.get(n.in[k]) === 'color') ? 'color' : 'gray') : spec.out);
   }
@@ -239,8 +241,10 @@ export const programKey = program => JSON.stringify(program.instructions.map(i =
 // function that evaluates that height's own branch at another point.
 export function programSource(program, thumbnails = false) {
   const list = program.instructions;
+  // A gray input wired to a color reads its brightness (graphGray); every other input reads its source as it is.
+  const read = (i, k) => { const from = list[i].links[k]; return NODES[list[i].type].inputs[k][2] === 'gray' && list[from].out === 'color' ? `graphGray(v${from})` : `v${from}`; };
   const call = (i, point) => {
-    const {type, kind, code, links} = list[i], s = `s${i}`, value = (k, fallback) => links[k] < 0 ? fallback : `v${links[k]}`;
+    const {type, kind, code, links} = list[i], s = `s${i}`, value = (k, fallback) => links[k] < 0 ? fallback : read(i, k);
     const coords = links[0] < 0 ? point : `v${links[0]}.xy`, tapped = links[0] >= 0;
     if (!code[1]) return type === 'warp' ? `vec4f(${coords},0,0)` : ['noise', 'scatter', 'constant', 'output'].includes(type) ? 'vec4f(0)' : ['light', 'cavity'].includes(type) ? 'vec4f(.5)' : value(0, 'vec4f(0)');
     const taps = step => ['+vec2f(' + step + ',0)', '-vec2f(' + step + ',0)', '+vec2f(0,' + step + ')', '-vec2f(0,' + step + ')'].map(d => `tap${i}(${point}${d})`).join(',');
@@ -253,7 +257,7 @@ export function programSource(program, thumbnails = false) {
       case 'heightblend': return `nHeightBlend(${s},${value(0, 'vec4f(0)')},${value(1, 'vec4f(0)')},${value(2, 'vec4f(0)')},${value(3, 'vec4f(0)')})`;
       case 'gradient': return `nGradient(${s},${value(0, 'vec4f(0)')})`;
       case 'light': return tapped ? `nLight(${s},${taps('1.0')})` : 'vec4f(.5)';
-      case 'cavity': return tapped ? `nCavity(${s},v${links[0]}.x,${taps(`arg(${s},0u)`)})` : 'vec4f(.5)';
+      case 'cavity': return tapped ? `nCavity(${s},${read(i, 0)}.x,${taps(`arg(${s},0u)`)})` : 'vec4f(.5)';
       case 'constant': return kind === 'color' ? `vec4f(arg(${s},0u),arg(${s},1u),arg(${s},2u),1)` : `vec4f(arg(${s},0u))`;
       default: return 'vec4f(0)';
     }
@@ -262,7 +266,7 @@ export function programSource(program, thumbnails = false) {
   // 2 billow, 3 cells, 4 cracks, 5 facets, 6 waves): the order of NODES.noise.kinds.
   const lines = indices => indices.map(i => `let s${i}=node(${i}u);let v${i}=${call(i, 'point')};`).join('\n');
   const closure = i => { const seen = new Set(), visit = k => { if (k < 0 || seen.has(k)) return; seen.add(k); list[k].links.forEach(visit); }; visit(i); return [...seen].sort((a, b) => a - b); };
-  const taps = list.map((n, i) => ['light', 'cavity'].includes(n.type) && n.code[1] && n.links[0] >= 0 ? `fn tap${i}(point:vec2f)->f32{\n${lines(closure(n.links[0]))}\nreturn v${n.links[0]}.x;\n}` : '').filter(Boolean).join('\n');
+  const taps = list.map((n, i) => ['light', 'cavity'].includes(n.type) && n.code[1] && n.links[0] >= 0 ? `fn tap${i}(point:vec2f)->f32{\n${lines(closure(n.links[0]))}\nreturn ${read(i, 0)}.x;\n}` : '').filter(Boolean).join('\n');
   const all = lines(list.map((_, i) => i)), out = list.findIndex(n => n.type === 'output'), o = list[out].links;
   if (thumbnails) {
     const store = list.map((n, i) => n.type === 'output' ? '' : `textureStore(thumbOut,vec2i(id.xy),${i},vec4f(${n.out === 'coords' ? `vec3f(noiseBasis(3,v${i}.xy,24.0,379.0,vec3f(.8,0,0)))` : n.out === 'color' ? `v${i}.rgb` : `vec3f(v${i}.x)`},1));`).join('\n');
@@ -284,7 +288,7 @@ fn groundMain(@builtin(global_invocation_id) id:vec3u){
  if(any(id.xy>=textureDimensions(groundOut))){return;}
  graphPeriod=f32(textureDimensions(groundOut).x);graphRow=groundJob.z;let point=vec2f(id.xy);
 ${all}
- let color=${o[0] < 0 ? 'vec3f(.5)' : `v${o[0]}.rgb`};let height=${o[1] < 0 ? '0.0' : `v${o[1]}.x*arg(s${out},0u)`};let shine=${o[2] < 0 ? '0.0' : `clamp(v${o[2]}.x,0.0,1.0)`};
+ let color=${o[0] < 0 ? 'vec3f(.5)' : `v${o[0]}.rgb`};let height=${o[1] < 0 ? '0.0' : `${read(out, 1)}.x*arg(s${out},0u)`};let shine=${o[2] < 0 ? '0.0' : `clamp(${read(out, 2)}.x,0.0,1.0)`};
  textureStore(groundOut,vec2i(id.xy),i32(groundJob.y),vec4f(color,height));
  textureStore(maskOut,vec2i(id.xy),i32(groundJob.y),vec4f(shine,0,0,1));
 }`};
