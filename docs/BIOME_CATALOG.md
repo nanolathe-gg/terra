@@ -73,10 +73,28 @@ surfaces, water, world numbers), not the new tools or rock types.**
 | Moon | 0.24 -> 0.25 | 1.15 -> 0.32 | 32 -> 54 of 66 |
 | All | | | 521 -> 541 of 675 |
 
-Look improved in 7 of 8 worlds, mostly by removing far outliers (thin dark line density, edge counts). Moon, Lava and Crystal also gained
-metrics in band. Archipelago lost 10: its art has about 1.8x retail's edge density and thin dark lines (0.079 against 0.045 in window 2),
-and its shape score rose where the plain moved to sea+2. Red's window 2 lost steep walls (cells steeper than 1: 0.5% against retail's
-2.7%), and Ice window 1's shore band is 202 px against retail's 137. Painted Desert is the furthest world on both scores and barely moved.
+"In band" misleads where a window's own retail value lies outside the family band (Archipelago window 2's retail brightness is 170.9,
+above the band's 164.3; ours went from 83.3 to 178.5, closer but out of band). The measure to read is closeness to each window's own retail
+value: the metrics within a quarter band of it, and the median distance in band units
+(`~/terraform-assets/agent-biome-match/tools/benchclose.py <base> <now> <world>...`):
+
+| World | Close to its own retail, start -> today | Median distance, start -> today |
+| --- | --- | --- |
+| Moon | 27 -> 41 of 72 | 0.52 -> 0.21 |
+| Ice | 45 -> 64 of 75 | 0.16 -> 0.10 |
+| Archipelago | 34 -> 44 of 75 | 0.30 -> 0.16 |
+| Lava | 58 -> 66 of 75 | 0.14 -> 0.11 |
+| Crystal | 50 -> 57 of 75 | 0.15 -> 0.10 |
+| Red | 45 -> 50 of 75 | 0.17 -> 0.17 |
+| Green (7 windows) | 117 -> 115 of 171 | 0.13 -> 0.13 |
+| Painted Desert | 29 -> 26 of 72 | 0.34 -> 0.38 |
+| All | 405 -> 463 of 690 | |
+
+Seven worlds moved toward retail or held; **Painted Desert moved slightly away** and is the furthest. Its flat sand matches retail (edge
+directions 0.19 / 0.35 against 0.19 / 0.33), so the gap is on the mesas: too many thin dark lines (0.050 against 0.019 in window 1), too
+much 2 px band energy, edges leaning vertical where retail's lean horizontal, and a pale cap twice retail's share in window 1 (0.152 against
+0.069). Highland from 55 or 70 and banding 0.5 (with strata contrast 0.6) were scored and did not move closeness (26-27 of 72); its shape
+score, the worst of the eight at 0.35, did not change in the round. Archipelago keeps thin dark lines at 3-7x retail's.
 
 ## Cross-biome gaps, ranked by how much of the retail set they cover
 
