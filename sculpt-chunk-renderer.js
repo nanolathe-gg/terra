@@ -569,7 +569,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     try {
       // Bound live GPU work without delaying the preceding image snapshot.
       // A queued shape edit can arrive while this wait yields to input.
-      await this.previousChunk;
+      await this.olderChunk;
       const passes=feed?await feedPasses(this.device):null;   // nothing awaits between here and the feed pass's submit: the buffers it reads stay current
       this.size=request.worldSize??this.size;this.grid=request.worldGrid??this.grid;
       const region=this.requiredRegion(request),w=request.gridWidth??region.gridWidth,h=request.gridHeight??region.gridHeight;
@@ -591,7 +591,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       copy.drawImage(this.canvas,0,0,this.outputCanvas.width,this.outputCanvas.height);
       // Prepare the snapshot now; apply GPU backpressure at the next tile.
       // Canvas copying preserves command order and owns this image before reuse.
-      const completion=this.device.queue.onSubmittedWorkDone();this.previousChunk=completion;
+      const completion=this.device.queue.onSubmittedWorkDone();this.olderChunk=this.previousChunk;this.previousChunk=completion;
       completion.then(()=>{this.completedChunk=completion;},()=>{}); // Device errors are also reported by the renderer.
       if(!deferCompletion)await this.previousChunk;
       return {...result,canvas:this.outputCanvas,x:request.x,y:request.y,width:request.width,height:request.height,scale,outWidth:Math.ceil(request.width/scale),outHeight:Math.ceil(request.height/scale),exportArt:Boolean(request.exportArt),outputBytes:Math.ceil(request.width/scale)*Math.ceil(request.height/scale)*4,region,stats:{...this.stats(),busy:false}};

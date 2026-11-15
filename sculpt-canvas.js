@@ -214,7 +214,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   async function bake(rect,exportArt=false,signal,stale=null,scale=1,fit=false,block=false,warm=false,prior=null) {
     // Wait before preparing fields, too: a queued tile must not start a costly
     // paged replay for a viewport that has moved while the GPU was occupied.
-    await renderer.previousChunk;
+    // One tile's GPU work may still run: this tile prepares beside it (the queue keeps their order), and the wait bounds the GPU work in flight.
+    await renderer.olderChunk;
     // The completed voxel solid is rebuilt every draw. Release it before page
     // preparation and Time allocate their working sets, rather than afterward.
     renderer.voxel.clear();
