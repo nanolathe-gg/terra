@@ -97,7 +97,7 @@ export const strokeKind=t => Object.hasOwn(LANDFORM_SHAPES,t)?'landform':t;
 // Line features (card C4): spurs and the crest's taper. All default off; spurs branch off a landform's crest (or a signed section's peak).
 export const RIDGE_KEYS=['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb','crestVary','crestTaper'];
 // Copies: smaller copies of the shape scattered round its path (a field of knolls, craterlets, boulders or islets from one stroke). Off at 0.
-export const SCATTER_KEYS=['scatterCount','scatterSpread','scatterSize','scatterVary','rimGaps','rimGapWidth','rimGapDepth','groundEdge','fingerVary','riverDepth','talusLumps'];
+export const SCATTER_KEYS=['scatterCount','scatterSpread','scatterSize','scatterVary','rimGaps','rimGapWidth','rimGapDepth','groundEdge','fingerVary','riverDepth','talusLumps','fingerInlet'];
 // Placed fissures (card C4 stage 2): the Fissure tool and its options. Depth is
 // the stroke's own amount; the rest are shape options kept in the shape.
 export const FISSURE_KEYS=['fissureWidth','fissureJag','fissureBranches','fissureBranchLen','fissureBranchSpread','fissureTaper','fissureNetwork','fissureCell','fissureCrack','fissureDark'];
@@ -225,6 +225,7 @@ export const SHAPE_FIELDS=[
   // E10 (Lava): finger size; layer width variation; circle size of the circular layers.
   ['fingerSize','finger-size','Lobe size',['landform'],20,300,5,100,'Fingers on the joined coast: length and (less) width of each finger. Fingers never reach past this stroke\'s bank.'],
   ['fingerVary','finger-vary','Lobe variety',['landform'],0,100,5,100,'Shore lobes gather in clusters, and a few grow long and wide (spits and broad lobes) among many small ones. 0: an even row of fingers.'],
+  ['fingerInlet','finger-inlet','Inlet share',['landform'],0,100,5,100,'The share of shore lobes that cut a tapering inlet into the land (water or lava reaching in) instead of a tongue of land reaching out. 0: all tongues.'],
   ['riverDepth','river-depth','Channel depth',['landform'],25,400,5,100,'Rivers: how deep the channel cuts, as a share of its usual depth (a quarter of its width): higher for a narrow river that still runs deep and dark, lower for a shallow, pale one.'],
   ['layerVary','layer-vary','Layer width variation',['landform'],0,100,5,100,'How much each layer\'s width and riser height change along the shore and from one layer to the next, so risers bunch, part and merge as retail\'s do. 0 keeps the even layers.'],
   ['layerCircle','layer-circle','Circle size (px, circular layers)',['landform'],8,80,1,1,'Circular layers: the typical radius of the round bites cut from the bank.'],

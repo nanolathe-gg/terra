@@ -1629,7 +1629,7 @@ fn uhash(i: i32, j: i32, salt: u32, k: u32) -> f32 { return hashi(i, j, salt ^ k
 fn thumbAt(lx: f32, ly: f32, nx: f32, ny: f32, amount: f32) -> f32 {
   let tx = -ny; let ty = nx; let salt = u.seed;
   let ci = i32(floor(lx / THUMB_CELL)); let cj = i32(floor(ly / THUMB_CELL));
-  var best = 0.0;
+  var best = 0.0; var inlet = 0.0;
   let size = u.cfSize;
   for (var j = cj - 1; j <= cj + 1; j++) { for (var i = ci - 1; i <= ci + 1; i++) {
     let ax = (f32(i) + 0.5 + 0.45 * hashi(i, j, salt ^ 0x5a7u)) * THUMB_CELL;
@@ -1652,9 +1652,10 @@ fn thumbAt(lx: f32, ly: f32, nx: f32, ny: f32, amount: f32) -> f32 {
     var r = Ls + sqrt(max(ht * ht - tau * tau, 0.0));
     if (tau > ht) { r = Ls * (1.0 - sh * sh); }
     if (fork && r > 0.5 * L) { let wn = 0.42 * h0; if (tau < wn) { r = min(r, 0.5 * L + (r - 0.5 * L) * tau / wn); } }
-    best = max(best, r);
+    // Inlet share (cfInlet): that share of sites cut a tapering inlet into the land instead of growing a finger out of it.
+    if (uhash(i, j, salt, 0x7e1u) < u.cfInlet) { inlet = max(inlet, r); } else { best = max(best, r); }
   } }
-  return best + vnoise(lx / 12.0, ly / 12.0, salt ^ 0x5c1u) * 1.6;
+  return best - inlet + vnoise(lx / 12.0, ly / 12.0, salt ^ 0x5c1u) * 1.6;
 }
 // thumbReach: the world position and inland normal go into the shape's frame; the lattice is turned 26 degrees off the axes.
 fn thumbReach(wx: f32, wy: f32, nx: f32, ny: f32, amount: f32) -> f32 {
