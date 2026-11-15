@@ -1147,8 +1147,12 @@ fn voxelRelease(block:VoxelRock,hard:f32)->f32 {
     return u.rock[rs & rockMask].faceBreak*selected*smoothstep(.15,1.7,block.edge)*(.35+.65*(1.0-hard));
 }
 // The same cuts supply density and the depth exposed through the outer rind.
-fn voxelJoint(r:vec3f,c:VoxelRock,broad:VoxelRock)->f32 { return voxelJointW(r,c,broad,voxelJointWidth(),u.rock[rs & rockMask].faceSecondary); }
-fn voxelJointWidth()->f32 { return (.65+u.rock[rs & rockMask].faceWear*1.2)*u.rock[rs & rockMask].faceJointWidth; }
+fn voxelJoint(r:vec3f,c:VoxelRock,broad:VoxelRock,hard:f32)->f32 { let wear=voxelJointWear(hard);return voxelJointW(r,c,broad,voxelJointWidth(wear),voxelJointFine(wear)); }
+// Weathering at a joint (0 to 1): the rock's Wear, more where its bed is soft (hard .55 is the bed of a rock with no column). It opens the joints
+// wider and wears the hairlines away first; rockDetail also fills the floor of what the solid cannot hold.
+fn voxelJointWear(hard:f32)->f32 { return clamp(u.rock[rs & rockMask].faceWear*(1.45-hard),0.0,1.0); }
+fn voxelJointWidth(wear:f32)->f32 { return (.65+wear*1.2)*u.rock[rs & rockMask].faceJointWidth; }
+fn voxelJointFine(wear:f32)->f32 { return u.rock[rs & rockMask].faceSecondary*(1.0-.6*wear); }
 // The joints' opening (0 to 1.15) for joints width units wide, the fine joints at share secondary.
 fn voxelJointW(r:vec3f,c:VoxelRock,broad:VoxelRock,width:f32,secondary:f32)->f32 {
     // Coherent interruptions taper both depth and opening; they do not select
