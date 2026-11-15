@@ -1791,7 +1791,7 @@
   "deposit": {"params": {"reach": 1, "round": 0.7}, "vary": {"reach": [0.8, 1.4], "haloRough": [4, 10]}}
  },
  "world": {
-    "materials": {"ground": "lush-ground", "water": "lush-water"},
+    "materials": {"ground": "lush-ground", "water": "lush-water", "high": "lush-highland"},
     "knobDefaults": {
         "coastRamp": 0.4,
         "looseSupply": 0.08,
@@ -1836,10 +1836,13 @@
         "closeShadow": 0.8,
         "cavity": 0.6,
         "erosion": 1,
-        "rockCrown": 0.7,
-        "slopeTexture": 1,
+        "rockCrown": 0,
+        "slopeTexture": 0,
         "shallowDepth": 40,
-        "bedBright": 1.15
+        "bedBright": 1.15,
+        "highland": 1,
+        "highFrom": 6,
+        "highReach": 8
       },
       "engineDefaults": {
         "terraceBreak": 0,
