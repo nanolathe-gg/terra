@@ -17,12 +17,13 @@ function terrainHeight(x, sea, base) {
 // each from none at the top of the picture to all of it at the bottom, so the picture shows every level a From setting can pick.
 function terrainWeather(region, request) {
   const count = region.gridWidth * region.gridHeight, wear = new Float32Array(count), deposit = new Float32Array(count), clamp = v => Math.max(0, Math.min(1, v));
+  const level = new Float32Array(count).fill(.5);   // the fall line's "none" (engine-common.wgsl timeMap3 without Time maps); every other map's is 0
   for (let y = 0; y < region.gridHeight; y++) for (let x = 0; x < region.gridWidth; x++) {
     const t = (region.gridOrigin[0] + x * region.gridSpacing - request.x) / TERRAIN, down = clamp((region.gridOrigin[1] + y * region.gridSpacing - request.y) / TERRAIN), i = y * region.gridWidth + x;
     wear[i] = clamp((t - .6) / .04) * clamp((.86 - t) / .04) * down;
     deposit[i] = clamp(1 - Math.abs(t - .56) / .04) * down;
   }
-  return {wear, deposit};
+  return {wear, deposit, fx: level, fy: level};
 }
 export class MaterialPreview {
   constructor() { this.jobs = new Map(); this.serial = 0; this.pictureSerial = 0; this.running = false; this.renderer = null; this.timer = null; }

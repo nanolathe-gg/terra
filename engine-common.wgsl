@@ -1059,7 +1059,8 @@ fn materialPigmentAt(p:vec2f,slot:u32,layer:i32)->vec3f {
  return mix(raw,textureLoad(groundColorTex,vec2i(materialPixel(p)),layer,0).rgb,r.dither);
 }
 // The ground's color where Time's water wore it (wear) or laid sediment (deposit), both 0 to 1: the material's own color, then its Worn and
-// Deposit colors over it from each one's From level (over .35 of the map) as far as its Amount. Every read of a ground's color goes here.
+// Deposit colors over it from each one's From level (over .35 of the map) as far as its Amount. The ground and high ground read it; snow,
+// moss and water keep the material's own color.
 fn groundPigment(p:vec2f,slot:u32,wear:f32,deposit:f32)->vec3f {
  let r=u.ground[slot & groundMask];var c=materialPigment(p,slot);
  if(r.wornLayer>=0){c=mix(c,materialPigmentAt(p,slot,r.wornLayer),r.states.y*smoothstep(r.states.x,r.states.x+.35,wear));}
