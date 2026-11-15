@@ -1770,7 +1770,7 @@
    {"id": "outcrop", "label": "Crystal outcrop", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw a large crystal outcrop, about 900 px across, with a raised rim round a lower heart."},
    {"id": "knob", "label": "Crystal knob", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw a small, low patch of crystal that units can walk round: a click for one."},
    {"id": "shards", "label": "Crystal shards", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Scatter flat crystal chips over the plain: a click for a handful, a drag for a trail."},
-   {"id": "islet", "label": "Islet", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a flat island at plain height, ringed by a shelf of blue crystal slabs under the water."},
+   {"id": "islet", "label": "Islet", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a flat island at plain height in water, ringed by a shelf of blue crystal slabs under the water (on the plain it adds nothing)."},
    {"id": "spires", "label": "Crystal spires", "icon": "crystal", "color": "#c9b8f2", "group": "shape", "help": "Draw crystal spires: tall pointed crystals, a cluster round a click or a row along a drag."},
    {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
    {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
