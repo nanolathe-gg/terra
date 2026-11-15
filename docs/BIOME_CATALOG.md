@@ -14,6 +14,25 @@ World variants are gone. The sub-looks they held are now rock types, which a wor
 A rock type now carries cracks, contour bands, and the Moon and Ice surfaces as well as rock-face numbers. A tool can also name the ground
 material it lays down (`material`; the world lists it in `world.materials.extra`).
 
+## Ground and water: the patch swap
+
+Each world's flat ground and deep water, as the export draws them, were checked on this branch (2026-11-15) by the patch swap: two 1x1,
+two 4x4 and one 8x8 contiguous 32 px tiles of ours pasted into a 512 px retail crop of flat ground or open water. **Pass** means the patches
+could not be found by eye at 1x; **faint** means they could be found only by looking for them.
+
+| World | Ground | Water | Reference |
+| --- | --- | --- | --- |
+| Green Planet | pass | pass | flat and water sections |
+| Red Planet | pass | pass | flat and water sections |
+| Lava | pass | pass (lava) | flat and lava sections |
+| Painted Desert | pass | pass | flat crop; water from Wet Desert, as no Painted Desert map has any |
+| Ice | faint (the 8x8 is a little lumpier and bluer) | faint | flat and water crops |
+| Crystal | faint (the 8x8 is a little darker and streakier) | pass | flat and water crops |
+| Archipelago | pass | pass | flat and water sections |
+| Lush | pass; jungle highland faint (after this round's retune; it failed before) | pass | flat, water and canopy crops |
+| Moon | pass | no retail water to compare (Moon maps have no sea) | flat section |
+| Moon mare | fails: darker, a little blotchy, short of retail's light speckle; a faint seam shows where the material repeats | | a dark mare crop |
+
 ## Cross-biome gaps, ranked by how much of the retail set they cover
 
 | Gap | Biomes | Generic control that would close it | Status |
