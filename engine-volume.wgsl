@@ -274,7 +274,7 @@ fn voxelDensity(p:vec3f)->f32 {
     let mass=course*u.rock[rs & rockMask].faceMass*2.2;
     // The beds as the face can draw them on this slope (columnGather, voxelHardness): beds too thin gathered, their lost ledges drawn as fine layers.
     let drawSlope=length(source.yz)/max(source.w,.015);   // voxelFaceSlope(p.xy)
-    let column=voxelColumnCoord(p);var gathered=0.0;var hard=.55;
+    let column=voxelColumnAt(p,r);var gathered=0.0;var hard=.55;
     if(u.rock[rs & rockMask].columnCount>0){let gg=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary),drawSlope);gathered=gg.y;hard=gg.x;}
     let layers=voxelFine(p,column,gathered);let lamina=layers.x+layers.y;
     let bed=(.55-hard)*u.rock[rs & rockMask].faceLedge*2.4;

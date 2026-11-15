@@ -1166,8 +1166,9 @@ fn voxelClasts(p:vec3f)->vec2f {
     return vec2f(best,tone);
 }
 // Unequal, deformed beds use the same hardness for rock shape and wear.
-fn voxelColumnCoord(p:vec3f)->f32 {
-    let r=voxelRockSpace(p);
+fn voxelColumnCoord(p:vec3f)->f32 {return voxelColumnAt(p,voxelRockSpace(p));}
+// voxelColumnCoord at p, whose rock space point (voxelRockSpace(p)) the caller already has.
+fn voxelColumnAt(p:vec3f,r:vec3f)->f32 {
     let drift=(voxelNoise(r/vec3f(max(8.0,u.rock[rs & rockMask].faceRun),max(8.0,u.rock[rs & rockMask].faceRun),140.0))-.5)*2.2;
     return (columnCoord(p.xy,p.z)+voxelFold(p))*(5.5/max(2.0,u.rock[rs & rockMask].faceBed))+drift*u.rock[rs & rockMask].faceBed*.2*u.rock[rs & rockMask].faceBedVary;
 }
