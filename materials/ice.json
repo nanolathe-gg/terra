@@ -1414,7 +1414,9 @@
 
     "streaked",
 
-    "blueice"
+    "blueice",
+
+    "rubble"
 
    ],
 
@@ -1422,9 +1424,41 @@
 
     "slate": {
 
-     "label": "Snowless slate",
+     "label": "Snow and slate",
 
      "knobs": {
+
+      "faceShade": 0.9,
+
+      "faceRindTone": -0.3,
+
+      "faceRind": 0.4,
+
+      "faceStretch": 2,
+
+      "faceScratch": 3,
+
+      "faceScratchLength": 160,
+
+      "faceScratchAngle": 0,
+
+      "faceBlock": 2.5,
+
+      "faceBlockSize": 20,
+
+      "rockFace": 2.5,
+
+      "faceRock": 1,
+
+      "rockFaceFrom": 0.25,
+
+      "stoneSlab": 0.8,
+
+      "faceLamina": 1,
+
+      "shineRock": 0.2,
+
+      "debrisAmount": 0.2,
 
       "crackSeverity": 0.2,
 
@@ -1434,15 +1468,45 @@
 
       "iceApron": 0
 
+     },
+
+     "colors": {
+
+      "rock": "#3f5f73"
+
      }
 
     },
 
     "streaked": {
 
-     "label": "Crystal-streaked ice",
+     "label": "Crystal ice",
 
      "knobs": {
+
+      "faceRindTone": 0.6,
+
+      "faceRind": 1,
+
+      "faceShade": 0.5,
+
+      "faceScratch": 4,
+
+      "faceScratchLength": 160,
+
+      "faceScratchAngle": 90,
+
+      "faceStretch": 4,
+
+      "faceBlock": 1,
+
+      "faceTone": 0.03,
+
+      "rockFace": 1.2,
+
+      "shineRock": 0.8,
+
+      "shineRockSharp": 60,
 
       "iceCrystal": 1,
 
@@ -1454,15 +1518,51 @@
 
       "iceApron": 0
 
+     },
+
+     "colors": {
+
+      "rock": "#c8e6ff"
+
      }
 
     },
 
     "blueice": {
 
-     "label": "Blue ice",
+     "label": "Glacier ice",
 
      "knobs": {
+
+      "faceRindTone": 0.45,
+
+      "faceRind": 0.8,
+
+      "faceShade": 0.45,
+
+      "faceTone": 0.05,
+
+      "faceWet": 0.2,
+
+      "faceScratch": 1.5,
+
+      "faceScratchLength": 100,
+
+      "faceBlock": 1.5,
+
+      "faceBlockSize": 30,
+
+      "faceRound": 0.3,
+
+      "rockFace": 1.5,
+
+      "absorbDepth": 0.4,
+
+      "shadowTint": 0.5,
+
+      "shineRock": 0.6,
+
+      "shineRockSharp": 40,
 
       "crackSeverity": 0,
 
@@ -1476,7 +1576,47 @@
 
      "colors": {
 
-      "rock": "#9ab2f4"
+      "rock": "#b2cee4"
+
+     }
+
+    },
+
+    "rubble": {
+
+     "label": "Frost rubble",
+
+     "knobs": {
+
+      "faceShade": 0.8,
+
+      "faceRindTone": -0.1,
+
+      "faceRind": 0.5,
+
+      "faceScratch": 3,
+
+      "faceScratchLength": 60,
+
+      "faceBlock": 2,
+
+      "faceBlockSize": 16,
+
+      "faceRound": 0.5,
+
+      "rockFace": 2,
+
+      "faceRock": 1,
+
+      "faceGrit": 0.6,
+
+      "shineRock": 0.3
+
+     },
+
+     "colors": {
+
+      "rock": "#6b7f9b"
 
      }
 
@@ -1487,6 +1627,17 @@
   },
 
   "shapes": {
+   "pond": {"from": "deep", "diameter": 260, "shorePlates": 0, "wander": 40, "varySize": 80},
+   "drift": {"from": "hill", "diameter": 260, "elevation": 25},
+   "boulder": {"from": "hill", "diameter": 80, "elevation": 75, "wander": 10, "varySize": 40},
+   "rubble": {"from": "mountain", "diameter": 500, "elevation": 170, "wander": 40, "heightVary": 30, "varySize": 70, "gullies": 40, "talus": 20, "spurCount": 8, "spurLength": 110, "spurBulb": 80, "spurSpread": 70, "crestVary": 60},
+   "butte": {"from": "plateau", "diameter": 110, "elevation": 130, "gullies": 0, "talus": 20, "wander": 8, "varySize": 40, "widthVary": 0, "heightVary": 0, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.1, 0.2], [0.25, 0.85], [0.32, 1], [1, 1]]}},
+   "iceblock": {"from": "crystal", "diameter": 620, "elevation": 155, "crystalSides": 4, "crystalTop": 55, "iceFacetSize": 620, "crystalVariation": 0, "bergJitter": 15, "bergBreak": 1, "bergRough": 10, "curve": {"form": "lfCrystal", "knots": [[0, 0], [0.04, 1], [1, 1]], "back": [[0, 0], [0.04, 1], [1, 1]]}},
+   "prism": {"from": "crystal", "diameter": 320, "elevation": 130, "crystalSides": 3, "crystalTop": 0, "iceFacetSize": 320, "crystalVariation": 0, "bergJitter": 10, "bergBreak": 0, "bergRough": 4, "curve": {"form": "lfCrystal", "knots": [[0, 0], [0.04, 1], [1, 1]], "back": [[0, 0], [0.04, 1], [1, 1]]}},
+   "floe": {"from": "plateau", "diameter": 440, "heightReference": 1, "elevation": 10, "gullies": 0, "talus": 0, "wander": 60, "varySize": 200, "widthVary": 0, "heightVary": 0, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.06, 0.3], [0.1, 0.9], [0.12, 1], [1, 1]]}},
+   "glacierfront": {"from": "plateau", "diameter": 900, "elevation": 165, "gullies": 20, "talus": 20, "wander": 20, "varySize": 220, "widthVary": 0, "heightVary": 0, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.1, 0.15], [0.22, 0.6], [0.32, 0.95], [0.35, 1], [1, 1]]}},
+   "terrace": {"from": "plateau", "diameter": 700, "elevation": 85, "gullies": 0, "talus": 0, "wander": 18, "varySize": 50, "widthVary": 0, "heightVary": 0, "cracks": 40, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.04, 0.2], [0.08, 0.85], [0.1, 1], [1, 1]]}},
+   "icecliff": {"from": "plateau", "diameter": 900, "elevation": 170, "gullies": 0, "talus": 0, "wander": 14, "varySize": 40, "wallVary": 40, "widthVary": 0, "heightVary": 0, "cracks": 0, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.02, 0.15], [0.04, 0.8], [0.05, 1], [1, 1]]}},
    "plateau": {},
    "hill": {},
    "mountain": {"wander": 6},
@@ -1504,6 +1655,17 @@
   },
   "tools": [
    {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
+   {"id": "icecliff", "label": "Ice cliff", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw an ice cliff: a level ice sheet 170 high that ends in a sheer wall no unit climbs; drag along the line of the edge for a long scarp."},
+   {"id": "terrace", "label": "Ice terrace", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw an ice terrace: a level step 85 high with a short, steep riser; drag along the step's line."},
+   {"id": "glacierfront", "label": "Glacier front", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a glacier front: high ice ending in a long, dark slate slope; it reads darkest facing south.", "rock": "slate"},
+   {"id": "floe", "label": "Ice floe", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw an ice floe: a flat, low slab 10 above the sea, with a short ice cliff round it; click in deep water.", "rock": "blueice"},
+   {"id": "prism", "label": "Ice pyramid", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw an ice pyramid: a three-sided pointed prism; a click for one, a drag for a row.", "rock": "streaked"},
+   {"id": "iceblock", "label": "Ice block", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw an ice block: a four-sided block with a flat top and sloping walls; a click for one.", "rock": "blueice"},
+   {"id": "butte", "label": "Ice butte", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a small ice butte with steep walls; drag a short path to bend it into an L, V or X."},
+   {"id": "rubble", "label": "Frost rubble", "icon": "mountain", "color": "#b3bcca", "group": "shape", "help": "Draw a rubble massif: lumpy, snow-capped knobs of broken rock; drag for a band.", "rock": "rubble"},
+   {"id": "boulder", "label": "Boulder", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Draw one rounded boulder, 75 high; click several for a cluster.", "rock": "rubble"},
+   {"id": "drift", "label": "Snow drift", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Draw a snow drift: a low, soft, walkable rise.", "rock": "soil"},
+   {"id": "pond", "label": "Frozen pond", "icon": "deep", "color": "#c7a97e", "group": "shape", "help": "Draw a small frozen pond: open water with a soft snow rim and no shore plates; add the Fissure tool's network round it for a crack web."},
    {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "rock": "soil"},
    {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
    {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
@@ -1511,7 +1673,7 @@
    {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
-   {"id": "crystal", "label": "Iceberg", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw an iceberg: a click is one tilted slab, a drag scatters a field of them."},
+   {"id": "crystal", "label": "Iceberg", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw an iceberg: a click is one tilted slab, a drag scatters a field of them.", "rock": "blueice"},
    {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
    {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
    {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
