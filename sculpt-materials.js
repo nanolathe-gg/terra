@@ -32,7 +32,7 @@ export const NODES = {
   scatter: {code: 3, label: 'Scatter', out: 'gray', inputs: [['in', 'Coordinates', 'coords'], ['density', 'Density', 'gray']],
     params: () => [P('spacing', 'Spacing (px)', 2, 64, 6), P('radius', 'Radius (px)', .25, 16, 2), P('coverage', 'Coverage', 0, 1, .5), P('jitter', 'Jitter', 0, 1.8, 1.5),
       P('hardness', 'Hardness', 0, .95, .1), P('profile', 'Profile', .25, 4, 1), P('sizeVariation', 'Size variation', 0, 1, .5), P('toneVariation', 'Tone variation', 0, 1, .3),
-      P('follow', 'Follow density', 0, 1, 0), SEED],
+      P('follow', 'Follow density', 0, 1, 1), SEED],
     help: 'Scattered round shapes: dots, pits, clods, pebbles, glints. A Density input thins them where it is dark.'},
   levels: {code: 4, label: 'Levels', out: 'gray', inputs: [['in', 'Input', 'gray']],
     params: () => [P('low', 'Low', -.5, 1, 0), P('high', 'High', 0, 1.5, 1), P('gamma', 'Gamma', .2, 4, 1), P('invert', 'Invert', 0, 1, 0)],
