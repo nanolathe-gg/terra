@@ -1771,15 +1771,14 @@
   ]
  },
  "features": {
-  "note": "The kinds sculpt-feature-gen.js draws for this world, as tuned for Green (prototype/fgen, approved November 6). A type's share is its retail use share on the Green maps (measure/feature_tables/green_gameplay.json on prototype/faudit): broadleaf Tree1-3 43,227 of 65,018 tree uses, conifers Tree4-7 the rest; the sparse Shrub3 34,188 of 41,323 shrub uses; rocks by footprint 474, 276, 118, 113 and 87 of 1,068; rock stains 1,179 and smudges 538 of the scars. Each type's vary ranges are the retail sizes (spec sections 5, 6). Gameplay: every tree 250 energy; rock metal 25 for the smallest footprint to 100 for 3x3 and larger. Round 12: Tree1-6Dead (2,220 uses) are the dead types, 50 energy, neither burning nor leaving a successor.",
-  "tree": {"count": 7, "taper": 0.5, "peaks": 0.5, "energy": [250, 250], "types": [
-   {"share": 0.64, "params": {"species": "broadleaf", "lights": [["#53df4f", 0.001], ["#33bf2b", 0.022], ["#2fb783", 0.003], ["#1f9f67", 0.014]]}, "vary": {"height": [66, 71], "width": [0.68, 0.73]}},
-   {"share": 0.327, "params": {"species": "conifer"}, "vary": {"height": [57, 64], "width": [0.44, 0.62]}},
-   {"share": 0.02, "params": {"species": "dead", "energy": [50, 50], "ash": 0.1}, "vary": {"height": [50, 60], "width": [0.5, 0.62]}},
-   {"share": 0.013, "params": {"species": "deadConifer", "energy": [50, 50]}, "vary": {"height": [56, 64], "width": [0.4, 0.55]}}]},
-  "shrub": {"count": 3, "types": [
-   {"share": 0.827, "params": {"density": 0.12, "width": 33, "height": 26}},
-   {"share": 0.173, "params": {"density": 0.6, "width": 27, "height": 20}}]},
+  "note": "Retail Lush (22 maps, uses counted from their TNT feature tables): jungle trees Lush01-09 and LushTree01 about 27,000 uses, foliage clumps lushfoliage* about 35,000, vines lushvine01-03 about 8,900, rocks and metal few. Trees are dark emerald broadleaves, most with clustered crowns, a few palms; vines are left out (the tendril plant reads as a bulb with legs, not a vine); foliage is dense, low clumps.",
+  "tree": {"count": 8, "taper": 0.3, "peaks": 0.4, "energy": [200, 250], "types": [
+   {"share": 0.6, "params": {"species": "broadleaf", "canopyStyle": "clustered", "clusters": 0.7, "density": 0.7, "crown": 0.75, "colors": ["#081a0c", "#0b2914", "#0e3a1c", "#0f4c25", "#11612f", "#16783a", "#229048", "#3aa85c"], "flecks": [["#4fbf6f", 0.02]]}, "vary": {"height": [60, 74], "width": [0.8, 1.0]}},
+   {"share": 0.28, "params": {"species": "broadleaf", "canopyStyle": "round", "density": 0.8, "crown": 0.8, "colors": ["#081a0c", "#0b2914", "#0e3a1c", "#0f4c25", "#11612f", "#16783a", "#229048", "#3aa85c"]}, "vary": {"height": [56, 66], "width": [0.85, 1.05]}},
+   {"share": 0.12, "params": {"species": "broadleaf", "canopyStyle": "palm", "canopyLift": 0.4, "colors": ["#081a0c", "#0b2914", "#0e3a1c", "#0f4c25", "#11612f", "#16783a", "#229048", "#3aa85c"]}, "vary": {"height": [58, 70], "width": [0.7, 0.9]}}]},
+  "shrub": {"count": 4, "types": [
+   {"share": 0.6, "params": {"density": 0.75, "width": 30, "height": 22, "colors": ["#081a0c", "#0b2914", "#0e3a1c", "#0f4c25", "#11612f", "#16783a", "#229048", "#3aa85c"]}},
+   {"share": 0.4, "params": {"density": 0.5, "width": 24, "height": 18, "colors": ["#081a0c", "#0b2914", "#0e3a1c", "#0f4c25", "#11612f", "#16783a", "#229048", "#3aa85c"]}}]},
   "rock": {"count": 10, "shade": 0.6, "metal": [25, 100], "types": [
    {"share": 0.444, "params": {"cells": "1x1"}},
    {"share": 0.258, "params": {"cells": "2x2"}},
@@ -1794,11 +1793,11 @@
  "world": {
     "materials": {"ground": "lush-ground", "water": "lush-water"},
     "knobDefaults": {
-        "coastRamp": 0.75,
+        "coastRamp": 0.4,
         "looseSupply": 0.08,
         "looseSize": 3.5,
         "banding": 0,
-        "crackDark": 0.75,
+        "crackDark": 1,
         "wetSwath": 0.35,
         "faceStreak": 1,
         "bandJag": 1,
@@ -1815,10 +1814,10 @@
         "faceLedge": 1.2,
         "faceWear": 0.15,
         "faceJoint": 0.15,
-        "faceShade": 0.65,
+        "faceShade": 0.9,
         "faceGrit": 0.5,
         "bedTint": 1,
-        "bedContrast": 0.7,
+        "bedContrast": 1,
         "bedRelief": 2,
         "deepEdge": 1,
         "undulationScale": 48,
@@ -1828,7 +1827,7 @@
         "shineRockSharp": 2,
         "shineRockRough": 0.18,
         "shineRockScale": 5,
-        "shineWhite": 1,
+        "shineWhite": 0,
         "shineOutside": 1,
         "shelfWander": 24,
         "bedFlat": 1,
@@ -1836,7 +1835,11 @@
         "shoalStairs": 2,
         "closeShadow": 0.8,
         "cavity": 0.6,
-        "erosion": 1
+        "erosion": 1,
+        "rockCrown": 0.7,
+        "slopeTexture": 1,
+        "shallowDepth": 40,
+        "bedBright": 1.15
       },
       "engineDefaults": {
         "terraceBreak": 0,
@@ -1879,7 +1882,7 @@
    {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
   ],
   "baseHeight": 9,
-  "colors": {"rock": "#747474"},
+  "colors": {"rock": "#3a3222"},
   "defaults": {
    "surface": "slopes",
    "transition": "soil",
