@@ -31,8 +31,10 @@ controls; node settings are the author's tools.
   world settings like its sliders: where you change one, the world keeps it
   in this browser and every map drawn in that world shows it. One the world
   never changed stays the library's, so a library revision reaches it.
-  "Restore built-in settings" returns both to the library's. The world keeps
-  them for one look (variant) at a time; another look names its own.
+  "Restore built-in settings" returns both to the library's. What the world
+  keeps is marked with the library material it replaces, so an edit follows
+  every look (variant) of the world that names that material, and a look
+  that names another keeps its own.
 - **A map** holds up to seven materials in slots 1 to 7: the world's two and
   up to five of its own, for landforms and the Paint brush (a stroke's Ground
   choice: `-1` the ground beneath, `0` the world's ground, else a slot). A

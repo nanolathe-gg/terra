@@ -348,7 +348,7 @@ export function withWorldMaterials(value, config) {
 }
 // The world's ground and its water are world settings, like its sliders: every map drawn in the world shows the same two, and a map's
 // other materials are its own. A map's list (a save's, or none for a new map) takes the world's two here, each in the slot the map
-// already gave that role. `config.worldMaterials` holds the ones the artist changed; the rest are the library's (`config.materials`).
+// already gave that role. `config.worldMaterials` holds the ones the artist changed (keptWorldMaterials); the rest are the library's.
 export function adoptWorldMaterials(value, config) {
   let list = withWorldMaterials(value, config);
   for (const [role, which] of ROLES) {
@@ -358,13 +358,30 @@ export function adoptWorldMaterials(value, config) {
   }
   return list;
 }
-// What the world keeps of a map's list: its ground and its water, where they differ from the library's. A world nobody changed keeps
-// nothing, so a later revision of the library reaches it.
+// What the world keeps of a map's list: its ground and its water where they differ from the library's, each marked with the library
+// material it replaces (`replaces`). A world nobody changed keeps nothing, so a later revision of the library reaches it; and an edit
+// follows every look of the world (a variant) that names the same library material, never one that names another.
+const libraryKey = (config, which) => LIBRARY[config.materials?.[which]] ? config.materials[which] : `green-${which}`;
 export function worldOwnMaterials(list, config) {
   return (list ?? []).filter(m => m.worldGround || m.worldWater).filter(m => {
     const preset = libraryFor(config, m.worldGround ? 'ground' : 'water');
     return m.name !== preset.name || JSON.stringify(copyMaterial(m)) !== JSON.stringify(copyMaterial(preset));
-  }).map(m => ({slot: m.slot, name: m.name, key: null, worldGround: m.worldGround, worldWater: m.worldWater, ...copyMaterial(m)}));
+  }).map(m => ({replaces: libraryKey(config, m.worldGround ? 'ground' : 'water'), name: m.name, worldGround: m.worldGround, worldWater: m.worldWater, ...copyMaterial(m)}));
+}
+// The kept materials that apply to this look of the world: for each role, the one that replaces the library material the look names.
+// One with no mark (a world file's, or an earlier store's) applies to any look. Damaged entries are dropped.
+export function keptWorldMaterials(stored, config) {
+  const kept = [];
+  for (const [role, which] of ROLES) {
+    const m = (Array.isArray(stored) ? stored : []).find(m => object(m) && m[role] === true && (m.replaces === undefined || m.replaces === libraryKey(config, which)));
+    try { if (m) kept.push({replaces: libraryKey(config, which), name: nameOf(m.name), worldGround: role === 'worldGround', worldWater: role === 'worldWater', ...copyMaterial(m)}); } catch (_) {}
+  }
+  return kept;
+}
+// The store after an edit: this look's own, beside what the world keeps for the library materials its other looks name.
+export function mergeWorldMaterials(stored, own, config) {
+  const mine = new Set(ROLES.map(([, which]) => libraryKey(config, which)));
+  return [...(Array.isArray(stored) ? stored : []).filter(m => object(m) && typeof m.replaces === 'string' && !mine.has(m.replaces)), ...own];
 }
 export const worldPair = list => (list ?? []).filter(m => m.worldGround || m.worldWater);
 // A new map's materials: the world's two.

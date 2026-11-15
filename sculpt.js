@@ -5,7 +5,7 @@ import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
-import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,worldPair,keepStrokeMaterials,materialsInUse,deleteMaterial} from './sculpt-materials.js';
+import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldPair,keepStrokeMaterials,materialsInUse,deleteMaterial} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe} from './sculpt-rock-presets.js';
 import {KNOBS,LOW_GROUND_RGB,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
@@ -697,12 +697,10 @@ function restoreMaterials(materials) {
 // The world's ground and water are world settings: where the artist changed them from the library's, the world keeps them (this
 // browser's world store) for every map drawn in it, as it keeps its sliders. Called once an edit is complete, not on every drag step.
 function keepWorldMaterials() {
-  const own=worldOwnMaterials(mapMaterials,config),variant=config.variant||'',world=worlds[worldId];
+  const own=worldOwnMaterials(mapMaterials,config),stored=worlds[worldId]?.materials,next=mergeWorldMaterials(stored,own,config);
   config.worldMaterials=own;
-  // A world keeps one look's two: another look of the world (a variant) names its own in the library, and is left alone until edited.
-  const stored=world && (world.materialsVariant??world.variant??'')===variant ? world.materials??[] : [];
-  if (JSON.stringify(stored)===JSON.stringify(own)) return;
-  Object.assign(activeWorld(),{materials:own,materialsVariant:variant}); saveWorlds();
+  if (JSON.stringify(next)===JSON.stringify(stored??[])) return;
+  activeWorld().materials=next; saveWorlds();
 }
 // A stroke's Ground choice: the ground beneath, the world's ground, or another of the map's materials (not its water).
 function syncMaterialChoices() {
@@ -1787,7 +1785,7 @@ function buildWorldPanel() {
     const knobs={...world.knobs}; for (const [,list] of KNOBS) for (const [key] of list) if (experiment.has(key)) knobs[key]=experiment.get(key);
     worlds[id]={name,materials:worldOwnMaterials(mapMaterials,config),base:config.biomeId,variant:config.variant||'',colors:{...world.colors},knobs,featureSet:mapFeatures?.serialize().featureSet}; saveWorlds(); goToWorld(config.biomeId,id);
   };
-  $('world-export').onclick=() => download(new Blob([JSON.stringify({format:'nanolathe-map-world',version:1,world:{...world,materials:structuredClone(worldPair(mapMaterials)),materialsVariant:undefined,variant:config.variant||'',knobs:{...world.knobs},featureSet:mapFeatures?.serialize().featureSet}},null,1)],{type:'application/json'}),(world.name||'world').replace(/[^\w-]+/g,'_')+'.world.json');
+  $('world-export').onclick=() => download(new Blob([JSON.stringify({format:'nanolathe-map-world',version:1,world:{...world,materials:structuredClone(worldPair(mapMaterials)),variant:config.variant||'',knobs:{...world.knobs},featureSet:mapFeatures?.serialize().featureSet}},null,1)],{type:'application/json'}),(world.name||'world').replace(/[^\w-]+/g,'_')+'.world.json');
   $('world-import').onclick=() => $('world-file').click();
   $('world-file').onchange=async () => {
     try {
@@ -2141,7 +2139,7 @@ async function boot() {
     const embedded=copySavedWorld(pending?.worldSettings,config);
     loadWorlds();
     if(embedded){
-      worlds[savedWorldId(pending)]={...embedded,materials:worldOwnMaterials(embedded.materials,config)};saveWorlds();   // the store keeps the two only where they differ from the library's
+      { const id=savedWorldId(pending); worlds[id]={...embedded,materials:mergeWorldMaterials(worlds[id]?.materials,worldOwnMaterials(embedded.materials,config),config)}; } saveWorlds();   // the store keeps the two only where they differ from the library's
       for(const [key,value]of Object.entries(embedded.knobs))experiment.set(key,value);
     }
     // H12b: the editor always works on a map; an address without a size opens the default 4x4 one.
@@ -2165,8 +2163,8 @@ async function boot() {
     // Its remembered settings come before the biome's own defaults.
     worldId=experiment.has('world') && worlds[experiment.get('world')]?.base===config.biomeId?experiment.get('world'):config.biomeId;
     config.featureSet=worlds[worldId]?.featureSet;
-    // The world's ground and water where the artist changed them (keepWorldMaterials); the rest are the library's. They belong to one look of the world.
-    { const own=worlds[worldId]; let kept=null; try { kept=(own?.materialsVariant??own?.variant??'')===(config.variant||'')?worldPair(copyMaterials(own?.materials)):null; } catch (_) {} config.worldMaterials=kept??[]; }
+    // The world's ground and water where the artist changed them (keepWorldMaterials); the rest are the library's.
+    config.worldMaterials=keptWorldMaterials(worlds[worldId]?.materials,config);
     config.presetDefaults={...config.defaults};
     const worldKnobs=worlds[worldId]?.knobs||{};
     config.defaults={...config.defaults,...worldKnobs};

@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {NODES, LIBRARY, MAX_NODES, MATERIAL_SLOTS, copyMaterial, copyMaterials, blankMaterial, makeNode, orderNodes, nodeTypes, compileMaterial, programKey, programSource,
-  materialReliefBound, materialRenderKey, soloMaterial, controlSpec, withWorldMaterials, worldMaterials, adoptWorldMaterials, worldOwnMaterials, worldPair, addMaterial, duplicateMaterial, setMaterial,
+  materialReliefBound, materialRenderKey, soloMaterial, controlSpec, withWorldMaterials, worldMaterials, adoptWorldMaterials, worldOwnMaterials, keptWorldMaterials, mergeWorldMaterials, worldPair, addMaterial, duplicateMaterial, setMaterial,
   assignMaterial, deleteMaterial, strokeMaterial, keepStrokeMaterials, materialsInUse, materialUsers, materialText, parseMaterialText, reseedMaterial, materialTint} from '../sculpt-materials.js';
 import {graphPositions, cardHeight, CARD} from '../sculpt-material-graph.js';
 import {savedWorld, copySavedWorld} from '../sculpt-save.js';
@@ -157,6 +157,26 @@ test('the world’s ground and water belong to the world: a map takes them, and 
   assert.equal(adoptWorldMaterials(full, mine).length, MATERIAL_SLOTS - 1);
   assert.deepEqual(worldOwnMaterials(fresh.map(m => m.worldWater ? {...m, name: 'My sea'} : m), config).map(m => m.name), ['My sea']);
   assert.deepEqual(worldPair(taken).map(m => m.slot), [2, 4]);
+});
+
+test('what the world keeps follows the library material a look names, so looks that share one share the edit and others keep their own', () => {
+  const snow = {materials: {ground: 'ice-ground', water: 'ice-water'}}, bergs = {materials: {ground: 'ice-bergs-ground', water: 'ice-water'}};
+  const edit = (cfg, role, seed) => worldOwnMaterials(worldMaterials(cfg).map(m => m[role] ? {...m, seed} : m), cfg);
+  let store = mergeWorldMaterials(undefined, edit(snow, 'worldGround', 7), snow);
+  assert.deepEqual(store.map(m => [m.replaces, m.seed]), [['ice-ground', 7]]);
+  assert.deepEqual(keptWorldMaterials(store, bergs), [], 'the other look names its own ground and keeps it');
+  assert.equal(worldMaterials({...bergs, worldMaterials: keptWorldMaterials(store, bergs)}).find(m => m.worldGround).source, 'ice-bergs-ground');
+  // An edit of the shared water on the other look joins the store without displacing the first look's ground, and both looks see it.
+  store = mergeWorldMaterials(store, edit(bergs, 'worldWater', 5), bergs);
+  assert.deepEqual(store.map(m => [m.replaces, m.seed]), [['ice-ground', 7], ['ice-water', 5]]);
+  assert.deepEqual(keptWorldMaterials(store, snow).map(m => [m.replaces, m.seed]), [['ice-ground', 7], ['ice-water', 5]]);
+  assert.deepEqual(keptWorldMaterials(store, bergs).map(m => m.replaces), ['ice-water']);
+  // Back to the library's on one look removes only that look's own; an unmarked entry (a world file's) applies to any look;
+  // a damaged entry is dropped.
+  assert.deepEqual(mergeWorldMaterials(store, [], bergs).map(m => m.replaces), ['ice-ground']);
+  const loose = worldMaterials(snow).filter(m => m.worldGround).map(m => ({...m, seed: 9}));
+  assert.equal(keptWorldMaterials(loose, bergs)[0].seed, 9);
+  assert.deepEqual(keptWorldMaterials([{worldGround: true, name: 'Broken', nodes: 'no'}, 4, null], snow), []);
 });
 
 test('materials round-trip through the clipboard text, the saved world and a world file', () => {
