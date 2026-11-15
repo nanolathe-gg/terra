@@ -131,7 +131,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Shards on the plain | Crystal shards | close |
 | Coasts with a slab shelf 8-10 under the sea | Shallow with shore plates | close |
 | Islets ringed by slabs | Islet | good |
-| Submerged reefs | none | poor (plates follow the waterline only) |
+| Submerged reefs | Shallow water below the sea, with Crystal's mosaic in all shallows | close (slab mosaic on the reef, as retail's) |
 
 ### Archipelago (14 maps)
 

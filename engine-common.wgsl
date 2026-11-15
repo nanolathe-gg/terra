@@ -339,6 +339,7 @@ struct Uniforms {
     crystalCraterLight: f32,   // how much stronger the crater wall's light and shade run than the sun gives (1: as the sun gives)
     crystalSeamEnd: f32,       // the field value where a seam's ink has faded out (0.74 as before; lower draws thinner seams)
     crystalShallowInk: f32,    // shallow cells' seam ink (0.55 as before)
+    crystalShallowAll: f32,    // how far the mosaic covers shallow water away from slabs too (0: only a fringe round the slabs, as before)
     // E8 (Painted Desert)
     baseBand: f32,         // the grey band at the foot of the raised ground (strata colour 5): its strength, 0 off
     baseBandLow: f32,      // lower edge of its height window, above the plain

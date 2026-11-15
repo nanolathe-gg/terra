@@ -1732,6 +1732,7 @@
       },
       "engineDefaults": {
         "erosion": 1,
+        "crystalShallowAll": 1,
         "erosionRain": 0,
         "erosionEnvelope": 0.12
       },

@@ -227,6 +227,7 @@
     "crystalShoreSeam": 0.5,
     "crystalSeamEnd": 0.74,
     "crystalShallowInk": 0.55,
+    "crystalShallowAll": 0,
     "plateVary": 0,
     "baseBand": 0,
     "baseBandLow": 4,

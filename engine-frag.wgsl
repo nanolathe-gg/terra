@@ -802,6 +802,8 @@ fn crystalShallowWater(color: vec3f, p: vec2f, deep: f32, submerged: f32, slab: 
     // Only a fringe round the slabs: the open sea beyond reach of the slab marks (eight taps 48 px out) stays smooth, as retail's does.
     var near = smoothstep(0.05, 0.3, slab);
     for (var k = 0; k < 8; k++) { near = max(near, smoothstep(0.05, 0.3, crystalField(p + vec2f(cos(f32(k) * 0.785398), sin(f32(k) * 0.785398)) * 48.0))); }
+    // Mosaic in all shallows: a submerged reef with no slabs of its own takes the mosaic too.
+    near = max(near, u.crystalShallowAll);
     let w = u.crystalShallow * submerged * near * (1.0 - smoothstep(0.1, 0.55, deep)) * (1.0 - smoothstep(0.05, 0.3, slab));
     return color * (1.0 + w * (shade - 1.0)) * (1.0 - w * u.crystalShallowInk * seam);
 }
