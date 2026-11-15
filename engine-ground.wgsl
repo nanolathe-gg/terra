@@ -138,7 +138,10 @@ fn warpField(p:vec2f,size:f32,layers:f32,seed:f32)->vec2f{
  return sum/total;
 }
 fn warpAxes(axis:f32)->vec2f{return vec2f(1.0-max(axis,0.0),1.0+min(axis,0.0));}
-fn nWarp(s:MaterialStep,q:vec2f)->vec4f{return vec4f(q+warpField(q,arg(s,1u),arg(s,2u),arg(s,4u))*warpAxes(arg(s,3u))*arg(s,0u),0,0);}
+// by: the By input (1 when open) scales every warp's move.
+fn nWarp(s:MaterialStep,q:vec2f,by:vec4f)->vec4f{return vec4f(q+warpField(q,arg(s,1u),arg(s,2u),arg(s,4u))*warpAxes(arg(s,3u))*arg(s,0u)*by.x,0,0);}
+// Push: distance, direction. Moves the coordinates along one direction (x right, y down) by By times the distance.
+fn nPush(s:MaterialStep,q:vec2f,by:vec4f)->vec4f{let a=arg(s,1u)*.01745329252;return vec4f(q+vec2f(cos(a),-sin(a))*arg(s,0u)*by.x,0,0);}
 // Curl flow follows the perpendicular gradient of a scalar potential, in two midpoint steps, so shapes bend without tearing.
 fn flowVelocity(p:vec2f,size:f32,layers:f32,salt:f32)->vec2f{
  var sum=vec2f(0);var total=0.0;
@@ -150,8 +153,8 @@ fn flowVelocity(p:vec2f,size:f32,layers:f32,salt:f32)->vec2f{
   sum+=vec2f(dy,-dx)*(scale/(2.0*e))*amount;total+=amount;
  }return sum/total;
 }
-fn nFlow(s:MaterialStep,q0:vec2f)->vec4f{
- var q=q0;let amount=arg(s,0u)*.5*warpAxes(arg(s,3u));let salt=seeded(617.0,arg(s,4u));
+fn nFlow(s:MaterialStep,q0:vec2f,by:vec4f)->vec4f{
+ var q=q0;let amount=arg(s,0u)*.5*warpAxes(arg(s,3u))*by.x;let salt=seeded(617.0,arg(s,4u));
  for(var i=0;i<2;i++){let mid=q+flowVelocity(q,arg(s,1u),arg(s,2u),salt)*amount*.5;q+=flowVelocity(mid,arg(s,1u),arg(s,2u),salt)*amount;}
  return vec4f(q,0,0);
 }

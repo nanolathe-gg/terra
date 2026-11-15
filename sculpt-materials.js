@@ -26,9 +26,10 @@ const NOISE_KIND = {
 // Types: coords (where a pattern is read), gray (one number a texel) and color. An input of type any takes gray or color. A node's output
 // type is fixed, follows its inputs (any) or follows its kind (a function of the node).
 export const NODES = {
-  warp: {code: 1, label: 'Warp', out: 'coords', inputs: [['in', 'Coordinates', 'coords']], kinds: {turbulence: 'Turbulence', flow: 'Curl flow'},
-    params: () => [P('amount', 'Amount (px)', 0, 24, 2), P('size', 'Size (px)', 1, 128, 10), P('layers', 'Broad layers', 0, 4, 0), P('axis', 'Axis balance', -1, 1, 0), SEED],
-    help: 'Bends the coordinates a Noise or Scatter node reads, so its shapes lose their regular outlines.'},
+  warp: {code: 1, label: 'Warp', out: 'coords', inputs: [['in', 'Coordinates', 'coords'], ['by', 'By', 'gray']], kinds: {turbulence: 'Turbulence', flow: 'Curl flow', push: 'Push'},
+    params: kind => kind === 'push' ? [P('amount', 'Distance (px)', 0, 64, 8), P('direction', 'Direction (°)', 0, 360, 0)]
+      : [P('amount', 'Amount (px)', 0, 24, 2), P('size', 'Size (px)', 1, 128, 10), P('layers', 'Broad layers', 0, 4, 0), P('axis', 'Axis balance', -1, 1, 0), SEED],
+    help: 'Bends the coordinates a Noise or Scatter node reads, so its shapes lose their regular outlines; Push moves them along one Direction instead. A By input scales the move: all of it where white, none where black, so one pattern can shift or break another.'},
   noise: {code: 2, label: 'Noise', out: 'gray', inputs: [['in', 'Coordinates', 'coords']],
     kinds: {smooth: 'Smooth', gradient: 'Gradient', billow: 'Billow', cells: 'Cells', cracks: 'Cracks', facets: 'Facets', waves: 'Waves', ridged: 'Ridged', pixel: 'Pixel'},
     params: kind => NOISE_KIND[kind] ?? NOISE,
@@ -250,7 +251,7 @@ export function programSource(program, thumbnails = false) {
     if (!code[1]) return type === 'warp' ? `vec4f(${coords},0,0)` : ['noise', 'scatter', 'constant', 'output'].includes(type) ? 'vec4f(0)' : ['light', 'cavity'].includes(type) ? 'vec4f(.5)' : value(0, 'vec4f(0)');
     const taps = step => ['+vec2f(' + step + ',0)', '-vec2f(' + step + ',0)', '+vec2f(0,' + step + ')', '-vec2f(0,' + step + ')'].map(d => `tap${i}(${point}${d})`).join(',');
     switch (type) {
-      case 'warp': return `${kind === 'flow' ? 'nFlow' : 'nWarp'}(${s},${coords})`;
+      case 'warp': return `${kind === 'flow' ? 'nFlow' : kind === 'push' ? 'nPush' : 'nWarp'}(${s},${coords},${value(1, 'vec4f(1)')})`;
       case 'noise': return `${kind === 'ridged' ? 'nRidged' : kind === 'pixel' ? 'nPixel' : 'nNoise'}(${s},${coords})`;
       case 'scatter': return `nScatter(${s},${coords},${value(1, 'vec4f(1)')},${links[1] >= 0})`;
       case 'levels': return `nLevels(${s},${value(0, 'vec4f(0)')})`;
