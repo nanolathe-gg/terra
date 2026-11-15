@@ -1036,188 +1036,6 @@
   "slopeGrass",
   "slopeGrass"
  ],
- "ground": {
-  "entries": [
-   [
-    87,
-    35,
-    43
-   ],
-   [
-    111,
-    51,
-    59
-   ],
-   [
-    83,
-    67,
-    51
-   ],
-   [
-    75,
-    75,
-    75
-   ],
-   [
-    123,
-    59,
-    71
-   ],
-   [
-    91,
-    87,
-    59
-   ],
-   [
-    91,
-    91,
-    91
-   ],
-   [
-    139,
-    71,
-    79
-   ],
-   [
-    99,
-    99,
-    67
-   ],
-   [
-    107,
-    107,
-    107
-   ],
-   [
-    131,
-    111,
-    35
-   ],
-   [
-    155,
-    91,
-    99
-   ],
-   [
-    119,
-    119,
-    87
-   ],
-   [
-    107,
-    135,
-    103
-   ],
-   [
-    123,
-    123,
-    123
-   ],
-   [
-    155,
-    131,
-    47
-   ],
-   [
-    175,
-    111,
-    127
-   ],
-   [
-    139,
-    139,
-    139
-   ],
-   [
-    147,
-    147,
-    111
-   ],
-   [
-    179,
-    151,
-    63
-   ],
-   [
-    195,
-    135,
-    151
-   ],
-   [
-    155,
-    155,
-    155
-   ],
-   [
-    171,
-    171,
-    131
-   ],
-   [
-    171,
-    171,
-    171
-   ],
-   [
-    203,
-    175,
-    83
-   ],
-   [
-    215,
-    163,
-    179
-   ],
-   [
-    187,
-    187,
-    187
-   ],
-   [
-    195,
-    195,
-    155
-   ],
-   [
-    227,
-    199,
-    115
-   ],
-   [
-    235,
-    199,
-    211
-   ],
-   [
-    223,
-    223,
-    183
-   ],
-   [
-    255,
-    227,
-    159
-   ]
-  ],
-  "tiles": [
-   "CuwnqwBwszBwukwzwwDBuwwBoihqBvBywqmcCCBqtBzsuqqBwBwEwBuCzwqwlwlwCwwwuuEwuzwwltwzBquBEBwhiqyCwrmusdcwslwwvEsuwhyuwghtlBflgcbBwDaqBsaubtuywovyruyurasqyuwcaciwuBcsDjajbutqCvFhjqaeemmqsuBomdlwyqtqCkqccpuCqgwqotbCyuFBvsumlwlEvruBlqCuBuyqyuBwwqfquCuButyqtziDssBrqyuszCuyuylwBshyszwsqqwhqwqpqwugjyqBuqCutqyEwlchCzslyyChyuwqyywElyqBsmqCjlqwEszscsmueqqsuBBslqtBwdfujcsqayyqBEwzawuyhylyzBgqtuyqyCllmjClzEgsBrEBsjsqkuyuqBBwzCuBohqqetmfswrwuszvBwqysCutyuBwBBBBBrjmfqeelumlweyhuBCqzlaluyEuwqBzyyziecglwwwfzflvtBBuBsalyuBsBtlytqCrmjcsuwDvBwfvlwEusylluyrqlCqysodwuEgymyBusDsltuBwzolcuuwBsqtulEcuyuqqjluwCEhyqBwzwqwoFlwultlylBojeyBshwtuuEwwwBBweyBwuwqChlqyuBqBqCqBBvuyqBuBBqBshBuylClomtqywEsByuwuBmBsBEwljyBsgwwuohywdbyqslqoqyuBrbCuBsuqcluqxumsituraflywccrlqwqwtuBBrwqtuyqBwswjhyuhtuuqcwwneyhsqCqEwsygwuBBqucltlylywsBslEuaqfqlyyuwqqwwCvvwltuluqyqCwEjmwuwlhlmqClCwqvEBqBzwsCsBlyqwvtAatzBsmtqwuyustqwBsBxhCuqwmlusBvuEvszjmhyuusuqqwzBqEjcbbqshyyEzwwBuoqyCwluyCltywBwvwmalswsqquBslwvwujguuwquutqyuEwBujcyumEwywBqEwEqsswEzmcpuyqyuBBBBjqwblsCuCBi",
-   "wlyBzvwuBBoBBwlkywwrillsEsllyuyyqwhuBBqtuBqwyxkhyqCxakwBweyqCqCusslsswsuwBBjuEleCjhqdgwuBstuqyuBwmlEghthuCuEsvtqywieyivBBwhCxywBCuCBBjqsszwEwwquBuihBqsuBvAyqubtpouusiqszwqBuEBphylfzsBwqEzuyBatBclwcbyuweozwBBqwuBrvsBBuwzstzmqlchCqyqplkwmnuwsuBEBvEzwwwvqCuwrBasuyuwCulCCzBqshtuBEquBuCwnupuwqazsqyuusqqqAzshlqwqBwupuwEsqayulBistqytuwvqwymlhiruvlylyyBlylqyBEjlqqyuwsuyuulsqBswBwqClyzsqtqyawwsfslCzEwxfyutqEquurBqtuwEwzuqwBdlbtCqBBjEwlButoFsBwuBmzBzEBsssusqfqlwwzrzsqtuCluBrqtwovEwsumupwlmhtrCvqCmtuqyusCumiqouqwuuCotqylurrrlEnqluyyuCCuywqyqwwqyuuohwzsCBwqsBuywlqlhwCulCyluCBsquqtcutqlzsyqmBqlyywhyuwwlqttlEsqtyuyuqujwdlelCBqqqwrhylEBsqtqBuuhqylmyCuqhthtuwBwBBuBqyzEwmqewBwpuyyxyuBslBhzBzxvxCBBwuwuwlklCzxuwuumszBjasgfzmCzBllBwaCwwfuohswCByusqwsetuosBjqAoftzEsuwDvBBqurCBuyqutqfCjowusywwCudahwzscCtuyzwuyqsCjmvzgalwzquuuBwBmlBqwusyqwouqyyqcaEwswwqsattyEuwusBohyqurwslyqEwwlBqfuCCtbqqCzBBwwrbbuyqCowuwjCzBhsChouyumyyuwlwCuyspbyqCuwwwBoaBwlqtlsuoihliutblCujhkutuBBzBuyyuwapqEiylalClyqyqCzckqyuuEuswwwqyqmbuBBulutuyluyqBqtogyslBwyuz",
-   "yqbyluydCzweuilwrzuewxuwsmlfqyuCuwelthwvBBzmyqtqswBhtuaijmlyqqsuwziuhyuBwEBlBBlsqyuwlCavwwzrllszlyqchywBBuClCBBmqCqBqyFwzBBweyCBEgwjfzqwEwjbyuBuyquBBAwyBBuButuBsmuEwwBwqwiilywBqtyEqwwqCvywiuywzspwqBBjswzswyuBwwlwohqtmBzClyCBllhplBwlqqwslzwxuwcyuleyuvqjBqyzBwhltuBuyqmumCzBBjCltukhCBoczslBuwylslshyzwlkuBBDsBzdwjtuBrlBfbuhCuleqsglzwfsBBzwBzwBjsuyuyljhiClvBwntqBswEBzBBwwuBBzsswxBqtejvqBswDwlyBwExzwvBzBvDBBCuEvEnukuBwBvzwBhyzBwjwqwqBwyBzuyuEwDwubpvwwvBBBsCusqBsyzwollzBjeicuBsylcqBlDBwzlhtosEcewsuwwxwfelmCuwuBzBuhwzBBmbwDsEsfuEutqtuemtquBqtuwzyuCwwzwBjwgwzwuBwuwzlilhwBBwCqyCuqwrwwyuwBlCBwzBwluwleywuBvqEsrgkyumsEuyuEiDBwCvqsawBsuuBBBswBuiqssisBzrgjcvuyuEetutuqwBEzwqBzBBmqqmqwBraaqszyuqtuyuyCCuBBmhwwwrutumhCvBihyCwxwhqyvrvqqrrBuimubqtuEsmqEChhluBwukuuwlwlpzowEsimhyqsEmlpuyswlBBwBmBwwtzBqwswzEolmqyyusqaCwoBhCguuBzyzABBBwwrwwBluhufqhmhquBBsBwrswmsassuEwqotuBkyplsCseftwlwlhyutusuBuyyuBltqBwlqtsuuemeCxBvwslbyyuszCuyqyslfuBhyqsuyhjtzBwzEslmuCBwsBBuylqwbyuslqtlefatwBwwqssclyutBrqqlyyqfaplyuqslzoqCuwqplehClwuEuyqtlutbbhqyuB",
-   "wgooEohCwuwzElCCwlwBBwsowBetwBvwqsouExmuwaaEswqumwvzBvuwwEyqCzFBmiwmqEmlyyzwwxqqtewEjwwBuBqyuBzwBoelpuslqzjghEsyqyljjccuBwhyzvBwywhtlhlCtvBwqBzhqqsuwuwwzBltwBBBkzdbkfyuuBBsysmltwwwuswlyBwhyzBzutukqnuyeBuwuqieCzBBBwqgluBltCoqqdwllmuymwBmhphmuvwdBzsitCBwuqBBBwlCByuywqombhtqtuEswwwjulBBsmvwBsiuoqyuuBvwihlylyEullltEvwzjjsyvBmBriqyBrvBwywqyuuviuqgmvlyqlyqlwwussluuwiCquuCqyqsabCzmBqylmltwwwBshyysziuyyCwwzxCBwlzmBBqmhtquhCzwwuuBBshulquwvvlzwEalqreasqwwtqsBvwCvBsvopyuCzBqwqwobyhetuCwqswBwsdqEBuwqtuuyhwkuwmbihjhlylwlyuBqtujwBwBisqyusBbCuylcbazhlCwyuwBmlsjuqqzwoyqyCvlyqyywqBwwszsEhuuBvquCtqwwgqqquwluyqqusButqwlzwvrBBmmlqtshiwvpwvsvCytuylyupxteCwwwrBsstuBrmyzwuwuwqwzCqyuBuwulzzwqCumqqwBlwusqwBivwBBvfllwwqwBwEDsEBwBwqwzswlysuqmwurwrfmmEBBhCzslBEuBsswwiybuCCBjatyBAdelBDBzuCuywEsDszwEmuCwjuwwilCuwwstwBrBuyqwzEzsclqabyuwBdzatluBsBwluyzqwzwuyuEwrfhdyqtqjswtuyywlhlthqwCuEsmuBzsilkllyCosBBqyqqussllyqBtqBsgvuyDwwqwhClBmuBdhpwwquBslCqsyBufvyqCuCwBszlqjmlwieuqiusmlyqBAftbButuyqCqpBmqmuBjmhtqiqqiuylBzwuyqyqltueyqBmteCuvBjhthqywBqy",
-   "sBuwusncpqtuylushuClmwBqsBewwuBsqwjirrslalCuyuplcuuwhCzwBBiCuyqtwwwmlhscquBBuumcutqCqqyqwumlCuwuBzvsEwomyqwuywtqyqguujqsdtlyuiuuzwuuEBmflaqBjhutlcsyljfqwuClCyqytByyzBvmiadBazsuyuiqlwlijslqllyqqmuuqwqteywCqwBqyBBqCqyzsBjmhyuBalltuutllyuyuwwBxEvwwoBuqjslmqtvuCqyqyuBslyuCEqtvswsumuwwileyyquqlCltqBuBqCsqBBwsluslfylqtqtqltimhBzvtBwEghutwuBrsyuFxytqtuhyqtufqBwglusvsslBsuwroCcBBhqmlqyqyuABBzsjsqCushwEwwBwghlBxopqCiuCqywzBwBuusElyBBzBzwDskqBBBqyubyAxusuoyuyysuCquEBBBBwzuwBzwBuyqyuwBsuwuslyuyuyCuwuzBuyuwuswEuhltufqCqCuqyuawuyuwuBmwzrhBBwEoBilqyluwqqyyqqsomjpuwwqwEBrBBzsiuwBwzeyBujqltlwhihqCEBEsBlkowmqetuzwwcuCCqsyqyqtqhfuwBvwBmlyuwshqyhyuyyqyqCqyqtupufwBzFmqbEwuslisqsluuusBweuyqtsCjemEwralkrmwrkhfyqlylwBchnBslCqCBmCwBsqpqwhCbcyqyltzfsEAkhwwqhyuwsqCzwuihCyusayqylywlyByuyBuqtuBqylywwBslqutqlCuyqlCqzwCqwBstqwEErbCuyzswlmuCqCutlmqywwwylEulbwwuBBgsqBsuhyzwodwlsotqwEmunqltlwxmfBwlyllwsCBBBoBsDsrzBEwydnsqyqzmuxwuqywqzouBzErbyCbywsqywlihyqjcpEwmaFBwBBEBBBuwuyBohlfusutCutClazujbwzsuBBzBrhBwzrbyywxCqrbbuwEjlBBwqwnhyzBBwuExBwrBv",
-   "wchBwwvqCwBvswzEgasBqrwBhwBzgaazlCwmawFwErzBzBcglaltswuwihCBBBjbyqujeBqvwwwwwqtqylwlyBBwhmvuzFBsvwwwyzxqEBzvlsuqylCqyuBvmlsssoulqEgBuyuvsBBwcuysslyqsuBEBBjsuiitywEzCuwwzBuBgtlyqyqzjmqczirhyuwzuvEsByzuBBjuxBelyqpBuwsqBsqtuBBwCvwEBuwCvBlyzFqqyuugCzwswsullyugwEuBlBrulBwuwjbyuyuqqswqsqqsqqyEtuBEwEstwuuBBztuwuyBBwuvfupqysqECwqBsqhqlnBjBuulyuzozBBBltqtuCBzsuBBBjfyquBqwtswwlCuBvlztqtquwFcqtwdzsmzrCuswvBzBqtuBBwyuibyuzCrwqyuBwuwuukzsvBwsshssBuuBmayvwuCqllyuwsEBElsBhmdEqswusltqtbyqjwzswquouBwzwEuwwfcllqyEwsutujhyqwByqlwasBsslzBwDscpqtuwusmqqlshysEqCwEmgsEwywomBsdlqwwjwllkltqyqtvzrusElyzBwEBuzwoltBBzBssvllkqtuwmupqshyzBzBBBwsuCuCBBwBxBsrbtqCBsBstzwlsBxDvBvBwlyuuwzsoussylyuCuwubyBsquyvBBwzwwzBBwwwiyquqylCqwuyuyuwBBguCzBwsgsqBomwjlpslCqhsyBuyuBwzsqwuuBuswBwsqlwuBuBmqCwBloBqsEBwomlnBBBwwuyuyeCyBBsrjbmwzsBBxqBDayuwwErlqwwlurrqEwBvwsbqslCwBBwwjqyqwzwnewBuwwvwdjBEBsfaCfuuBzmooaCwuwwlfuEwwrzwBlucABgclsoaylkwwwuBBBjBwwwlEBBBqcysjBihoalalluBzwBBBjszBuwsBwBxmcuwqBrszcqBBBBBBzBuEwoBvCzwwqtlysyBBvDslhtqwzBBuyzwzEusqwBwsluqyuyuBuwF",
-   "gyyqCArqCqlywquwvahyqyyyuuqniquBEryquEsweyyquypuEdtqyqqCCrqusBpuwulpqBzvhyltqtltDqlyuuwquBywBBbsuBBjmEuwmlyuqqmuBmauyywyuolCuBjwmBDswBrFBcqmlEuCBgczyqCzBsyqBszElzwqjqBaByhmfDwllleyqyuBBqhsEsuBwBwswsqasqlyqBihtCmusuyqBBjCBjmBsBuhcomcCsiqCBrbuulyuyyywzwzwhmvqqythmlaswmtuBBewscutuuulwBBzkqyBmyehqtyqBzqCqemqyuwlCCylyzwmhsrwwwlluhyqwuweyfgiClwsquyqCzBvjlsBurekujbqCwwhqtecluwltqCjqvDsbhyswqiepuEBvlBwcltitsusuquEwqBwiuyBupltqyzBsjuEwlucjlyCysjBjlwushBuBbqjlyzwusywzsqmjguuCggwmtyyBszhCeBatuBvEjlsvayslkyCzicsqqquEwBButBclCzvsvBqwmuwyqyuyqeyyyyCBEzwiqyqtuBBumlwwlBsqpqyyuuuqqqqlwCnltqyuyBBsqtzBhtlttlyuylylmltrqqeyqCqyqCxCwqwBweuqqBjyuyqtuBejltBuyqtlyuBdoBBuBtylyzCwuuyqyqtFvdlyvrrllwBmjrqCABzwuwuhuhyqyqyBwlquyjhtsuwmqCtuwBBBwuCsschtqyzwulzsljcqutqsylqyuwuwvquzjltuvCnBwmkgmmdyBBwslByaCuBltqyuetuyBquBBBllqwEzozwFsClsusBlqsuyeCuzwgfwBzlqyuBBBzyuiluwjqhltyqqkuwwzEsvBwwClyuBzBxqierwjscqszyuwwzBBweawjAylBousztuwszsmuqyzBxswswBuBsavoBqvwzBsvlusuBfukwBszBwEuBBwwlyqrCuwwwBuBBwwBuftuEvmwBuBwBzBuyllywqyuCBwwwltuylhfDsumuBlzBwzsqcmu",
-   "sBwuAqsuBBfqyuBzwoBltqyByyuxBmutBqjtlpuhyBsluywwhmshhmhEoqyuwwwhlthqylywuyqthqDsjqCwqmmwgyqzBzlimultqyuBuuuejEBuCyuBoloDBByCowmolwsuyqwswyxmqamjzuBwuvBBuzuzjuwsEBsBuyqtluBhxabhyBEuwBwEBAqCwwujEwqwzwhuyBwqsuwtyzwECuszsjsuuvsgmwABBulhyzwwvBrvewsBzwsBceCyuCuiBqBjwwwpqmhCBBvBqyuBBuwqiluqCutqClEhomuitlwwzwuwbbpuCwBamtwBBlswuCByuslctutqCuEwieqywzsalqCzErhlyuvsuyaclyuuvBBzwmtqBBBlytzBBscqwsDswqeklyCBBwEBCqyuwuCfqqyBEsuswzsuEwlqwhqeEEaBurqyuCuiiflwlwwBBEwluBhyqfoizBEqyhtuCuturhyutluByuEBBzkhydBssBBEaatqywluBwqCjmyuFwBwzjhllnDsergwlyutCzsizwBBsoqEyuEBwwCsBamdaaflhqyqBcBsBwzwBquByuwqBuhwqEuoqzwttudlusBqswwsBnBBsutyqlqwjuBgsBweuCrmhqBBrbCzsqjwusulyyyBwsEquBrsqtllhtuwvlqmtuEuwwwwuquBqyxBswrhyBlklqwwzlqluyuChBzwBwtzyqwowugszEylpuBuwhywqqyuBBBwvhqCvrwwBBBwqwuwCBsswgquyqlyzwDzzwswwlyuiuuBEBjyugxswscyupqqzBEByqczBlqyqwEwBuwuzcmEBlClyhlqsuBBqyarqyClBEErwjirtumFBsylyqthBwswhtbsihuBEBBsmoissqwzwuulCyqiwvghuqyuwsyuBryljoilwwBBuBsqyqttjeCftuBBBuCBEszfeswfCzuomCltuuutdnuilwEzBwlyBErmcalqwsBwlwBoyysqwuCsruBBBlhlzwpheclplwwzBqorhyuy",
-   "qslqqBsBzBqyqutuuwsgowuBBxtqEBwjmmsfuwdBwBlAdbzCBBBuqswBFvwwuBqolctbywqmvutlfqwuzBwuuBqouBurEBlEyhlCuuBEotCslijyCvwwEBlllwuBdBBzelhwsBBwmluqmcequErEoshhtqtBgwBsBmszzBzwfqyCquuyCuyzwohtuyqwBqoDEvEwwBwEgtuutBuyutqBBBaCuyyuBBwBvqBruEwrauytluyqyqlBDBowiAqwozwEswwuyuBsqBuyhwuylqlslyFrwopqtuwBBwwsulBBwBsqusqlClutqqBsumhtqwwBCuBqwwBBBBxwErmhusyuhyBmmjflbCzBuBEszwzEzjrBulCmylhCqswibylylyhtuEuyCzBwocqEwemllqCquBjFlyqylyqyuduuwwwojotwlwqwBwvBsBsxiyhlqquukwsigEuEEsqmhyuBzsvBowscflqtqtBBCBBBwusEassmheoBwumfuEgaqCllyquCsuwuwBrBifqletuBwBqeawzBihqqqltbCuBwzFEblyBslCCuswwwblwwjwqyyyzmlwjuwuwieqBowhutullumhyzlCyluuBslqcyuhBllyEBxmsllkhyhhywcuufyuBrmekhCqwttuwEjqoryqkustuBgkwjgmqswwbtqyuiqyuzjmBllyqyuqtBglCdemmutahhyqyuyqCukusmhlyuttuqciqbkqluBgwousquyquyuyulitquyutuFlyqllrpxBwmhtqyqqsqyqlsguwBuymyolgwysqtCvwBmuuyytltlyFsgtuBBsluEwuzljsuuBvsudwuluultujssqwBomswuBzBwDBgllgCacqCuyqhzslshlqojmwwBuwwrCAmqtuvacluulyuCBEwyqCArlyuEBBBzcwfeyqsdllqBwhlyqBvuBuwBsqyuruwsbCozuBqbkhCzEslqBwBryqywwqqwBlyqphmsyuyyufqyEwcswqsflyuwoaCCzsllcyw",
-   "BuCrqyCvwbsslsyBEwBBestuyuqCuwuywwuBwuuEzBuEwluBEwuBhyumquyuihyvAwyBqyyuwzwzEBBBDwwujaBihsqyueyBzBlzwueiBwBwsusDkhlszwwcyzslyeqrBBowwemlwqyuuCuBzclywzwcqBfbutkeuEBrwCyqzwuBqyzwshClywglfufhwqltyzwuyByqeByzwuBqytqyuCxwbshlwtluyBwyqCuCsBvBwwEBqquyuwqyBuvBwuciCqBzyuyqfwuslqscyyuCqslyuArouysqlwoqCuyqwwswckgmuutuwsqqwuBwuqyutuEwyqyrbwqwswuEqyqwBuwBBkzscCqyBuBEgwvqmeyqfhymswrqBrwzElsafzyquyuBBBwBBhlplesqnrBwwuuBBgmtlyuywCwwqBzCBsErarhuwwElBsBBEimuylqCquBBjuBzsosweeusBjutzouwBqrzuhnuEBqCuCsBltqoiyyCzjllxEwwBBrEsiyCwrmqCqmqylBslCquyuwwwDwdCusEBluyfuywqCEwuuyhtzwBuCEuwwwwujsuwwyqllyuwvmwwszwBwuBwuBwjsuwwrututlpzEouBEszwBwrsuCqBEBqchwwBvCuyqslwqciBueBBEuBBBuwwEEwgmcjzvCuyyCwqCwuquuBDmutwEwBuBwwBBjoqwEuyuusqwuBwspuEutuqBBBBwqzBwwmetzEvsAoijwEgsCsjymqyzwzEwyuzBBBfqCzBjclsuBBnquwvqieqwBwEuuBmyzrsryhCwqpeyEqCuyqBBmcyzomEywAgyEuCvzpqwyllyBwuyzBBzyahBBbuwwBrhutqltluuuCClqBqyBwBBhCqCAdsBBBBwmuwmlsltuzvscoFaioEuCqywxowqsuEreswqkCyuBwuwulBomlBwqlyFnlsBvBBjhyqyuyusgFqCBiBzwwuBrblqyqBqyzFwshyutuymlBryzwDwswwCvlthyCBwusotulqClbltwu",
-   "mquBqsgbcsuBoqsyvkgqnyutqyvyquwBvBBsqqthyzBwwBlumeCyqCuqtuwqyCEEyzBztqtuywwquBlshklqyuypqyBCleqBCsEBuisuCuBwBBsEtuyqhlzgtuuhqClueyllyrhylyuBuBlwqtuyhyCllCwpqquyzyqpqmuCqatBsBwusoqyllqwjquowzmqyqyqtetuyjwuwuwBwmqqllpqEBBwuEriuqyqmmllwBriusszwlkyyltyzowmezrBtsxmlCywuBmlyqqEwflqqyluscqrassEieCAlulBCBofqyqBuimyyqyyBlpccadDhpuBtqlBzooslsBwBolyqylqrtlbpgbqxuwvEBrBBsillluCzsmlylylhhlqqBqyqqCwwEqCwvaywttuwhetzwhhytmtlsCluyuEsjhyqjaCErwyuBshssEayCshpqutyuyBloaqqumlBwuCqmEvdqBiuyzmlywzywqrmlwBsylhwvuqyuvwwwzoslFgluusBFBqhtuwuqCsuwBlltuBuBsiuEuwetCozBBBtuwwmyuwBwqyCuwwwBrmhwBEmuqwwBBzwewoqyuwuBClyltuuyzCkuBzsBBswzEozBwBqsuuyzsyumqlyutlqyqyyzwwEwExBBBvyqwyuBBjiqCyqyqtqqyquBuCmaluBzwrotqyqszsdfqeyqqtqyqyqBwqBswwmBBnquutqmylwfutuylsqyqmwCuwEaqBuCzsltCjqauwwgrvylCyylyuyzwlqhyuEgsmclyyquwCucdlCqqqqyqyqwjBqyuBuqvBohqqyBBsleyylyyyuslyzswujwwBBswlthtsqyzEwmlqyquusmulyuywswwzwzqywshltuwwqqlqyuyyusltqyuBlsuswwwrBuvsuwEwuyshyquuCvsuyuBwBlwyzCuCuAlsBvuBsuBqyuBBBwuwszBwyFBuyqCuwxtqosChwCuyuBEzBznoswwBluuyuyupqBuCAldsuhyuyzwwEBCgiquB",
-   "wlyqyqCvuBjseqyqlyuBuyzwhmlCBlErbaqtqtqwsAlwtyuwBuBBsqwBwzyslcEszslquhutgBwvruyquBzBBsqwBsusumsuwmsyyqwqsBuwBrhwBBxwqsltulyqsilwrmluuyunqqyuBEwuAwBBojfqCqfhwonwuyuttuyuctuBBwwqBwbmszmhwBBwljlyBuBvutuCwqCvBxssqyqqBBwqyzBEBsieuyusvchyltuCzByqyqytBEoyuBsEBrCuuyuqtqrqlCauyEqyqyqlhBEryEsAzBqyuyuhabwBqyCvewjqqyqtbzwBzEswBwbasuyqfczBdlBuswjwoBBxhCwlwqswuysqwylusjwqyBwBrsgwEovukuumBBEutljBwuBwmuwrewqswsqquEcyuCBzwwEwlcfussBsqEjthlsCFshyCBiyuwBBBuBqyFxsqlwjlwhqlkquvEmlCrwqyyBuBsBwujwoErmBswqyqsfhqwumCrdlAqzosowuputqlwsEowuqyufyuCsuqBqywaExwBsCwyusmxrqimhtupuwwuCuwyuuuozwuoBuuCuqqBvsmsCusCutCuwwEuysCgfqwswtuuBBuwmqyzsBquChqyzBzBzwEjwCwqqltBBudcqqCBsvwnuftuBBCoBzwwBzwuzCuEuuyultuBEBjlmbrBEBrjwwzBvBwvBBswsszsCuCzwwBwashzwzEcuBBwusDwqzwlywlmqCuCwsuqlwfBwdBqbtCmwuswyBshwDuFBuqwllpuCzmvzwzsquhdwtuCuwuyuBsowmkuCluBuszrswvCqyqwwlylyutuwwAgdlyBzaBBBssBBBuylyzCBwhvlwuBCusmisqwyBBDwEouEwwBsqtuuFwEnhuBuEwzsBsllzwwBuBEBBBghyuyyutwuwBBwuqtlwuBswzqssBuwuajwqyquylwagBBzwkbBBErhyBvhylBBdfewrhCswwlqwBuwEwqqyzifuwBBstAwugkzBBuqsuvsquBvz",
-   "uquwxdfyquheyylqjBwwByuqtqaeyuCwyswwwscuhyysuqyuelwsBuyyqwsmqyqthlsmlCBBwulyswuybmxwshuuBwuwwyqwcmqituuwwBwqwomumgmyzpuqBwwwquyzCuyshyBsqBByuCywuslyxroiwllyutqmftlyuBllyuzuwquuymugtuyqyrshyuwqqCqyqyjcwlyuBsCquBBwlisluAstlCCwtuyuyuBnouuBuwzwwszsmlCedwguvllzCuyuyCEwmmsBwBslwqwBzmusBufsBsBBlCwuyquBzmqssEwrFBuiEwsBabrzEvwzszwqChyBojmCudlacjsBwujqEsoBuqCmwBwBsqyBwsdqyjhCltqyzmiyvaloBwaywBluosyzwuyflqszwhmsBBvlEzsnzEmhqBvbyqqwmlyyyyqEsqbuEqwmBBwBBuocowlayyBujsuqqqwilyssBszosqBzwwlqEsylquzwBmtlyzsbyqqCEsBjjyqCwuBsqErsyyBqsruqyuukqqyuwEsBjbrhrijswBsqquBBEBalyqyuylyuCBuswuCvBhwcsErmuqwzBwdBlyayuylCuEdsoswowcsmBsuwwjBBvomyButuwuyuCBzBssszBswqllBwvwzwqtuyusowBllCuoswAszBuwuyBhwvBswwyuwuturBqywxfjqwzBwBBBBzsbyBwzwDrhBwuqwuyqtlirsoBssuEzBzBwuwwoBmlqBBalBuyqqyuwzuzwmBBBBBtusyBwqbywwukqtaurqqwCcasstuBqBslCwhzyyqylcsltqqyhCqBzaelhyuBwuwzsBhuClyuBdhyuxsusuwFibCstuBwuEwqyBiCqwuBBilyuBqsweuzwuwouywzBwsoqBqCyuvDqyqllmfgBfhywsuBwlBzwvswBByurwFitqyyzoqcuchyuwsghtwBzBstAflwBmhyuCuqBsqlwncuuCorlqCBwsuwsslCwmCqCuCswutrwumBwvBzcauxuwl",
-   "eyBEuystuBwhuswlBCyzulhzslyDsauBwltziawhsBfuwClpquvjhpuvwulEccsEhyuBsaryBEBBBlkqBBoqsutuwEuwclCzqlsEBiqqsBzBvdqtBBqCBslwsvyquCqllBqcsatlyzBwBomuEByuudmxCBqyyuBrsBsaBmlqqAzuFglyCuuyyCoBqsCqyuwulwlmuBBiswBlBlClyyCqquBvBdqyqyAlhyblysmlqjsBusyuetqCiswuzwwuCqClwylhwCEByluBBsuyuCuyzuwvEzwklhCvlwicBxsmltCwzosutuyqBBCzsEghbyuBlChiwvwvqtuqBwmqdwzBBEbCuwxjblsuuvqigwuwBmsmwzwBwwBBuudwqmrcwCqqzslyqBmuulCjuEwuEzwwuBdEushcuzyymlhCdrllicuCCBwqBBBwyzsusEwaaseCowcucqlChlyuuBwwozBuuBBwBBuBswmCBqmlnalhpqyuqwuBqwwBvmwBzBsDwchwswwBEsohwbbyCzwEsmBzBzElEBvzwjcaBuBzBojtladqqslBuyBBBBBjuBBBjulkoayluBwomqmyBBBsEuuvlqCrBtuEsBgyylqlyzBwqyqolEzuEswFhtqwElhgieClBswsqzwBsyyqlBwswwzBBqhCBjhiqcByqsetuBwEBahlyuBwzBssoyuuwBlyuFDrlmcCwBzwBvCBwzBuvEwgjuBByArmlusBzwsuwwaCzmvzBBBstcuquywwuwwalwwqlswwwumqsCEwwzBwwqwwBzErwjqmgalsEwllcyqyruuBgsrlyuCzBBBsjqyCwihwwvyqculqsetBilyqlyhssqwzBhquvieClqwetuyyBiqwflqCcwqBzBBzBsmwvomCuBvhqyllyqybqkqyhuswBwzwEBjuwwlquwEwlqBslyzfBseqqwysBBBzBuwzBsccsuBBwwuwuyumusstyuCouBuwzsBBBwrsBBwEwDwswCamyqlhqyuBwBwwxzBuBzBw",
-   "wbhuyCBvyqyuusuABBlyuqyvwzBsBwsBvlkuyuyluyuwByuBEzsuCxomlyEuBzwurmhqqylwqyuwBumqBEslqEwvsqilwssCBBstqyuwrqyqBwlyzzjyuBqyqysmxwjzwBjhmyutlyuyqrmqmwBzwEmyqBuscslsmwBvBqtqlyuyuujmadrwBzwuBErlilqBylmlwwswsqqyuwwwgbtszBByurEwxscaqtbhwulwqltultuEvhustwzyuoBwhyhczBBsvqtqyuyuwlyBuqyuCzCumwlplhwclwqyvBzulyutBBuBBqqyhBBwwBsClfhewjpuyuwtqayzeuywusqqqBzltusuBikqtzwwhyCuuauBBBjvEsqytutcuwwwzglwqzwBswqCClyDvBwmqshCvBlciqirwifsuwyuBwBzwmqywzwlyzwlnClbwyuiuBwvBwuBBwwBCqqyuEwuwzwjyqlgvuBjwrBuDsewwwzwuCyuywwlzwwqyuBmwsrBswzBloiCBgwosuqyuuBswsoilysqsolwcqsuqwcqrjBwmpsuwCzBojoChactzwwBotyuEwhwwcErmllCuuCwwehBmclhawztllCymjwisbwwlwjwtuwuxmtqletqfyzloflqlqBlysuwtqwwulEBEsoytqeylyBwEvsBwwalqzssupuwwwBqrqmhCillqyuCuCzBsswhtCsyydqBzBzwBmhBjcaylutqCuwBhswqyqzuyClBvzwwzBmBljeqyqquvwzvjowswuEBlqyusCwwwwsAywnszBwBwwBBBosdhsBEwwuClyeCuwqwwElqyBDcaumohouEzwzuBwEbCqemwwrbuBBwzBwwBvwwiwmuswBEBBwilChmubmqyzCxBqsuBBuEtayEvBBBzBzshuyupqtuumlBsBvsvBcEjbyeBBqwumBiuBqutqyuwwwvquBzBBalCjvgljwBucaclmsqCqqyzBzEvnDwlBusuEBswBuisjakhscylyyuyuBEzwwBhywB",
-   "yuxjhyxvsBzwlcsiqtutgjqtqzsutzwzBwjllqwwuBwwlesifqtuflyltEEmlwBwsldietyEyuEjspllhtsgqtqyqlBEwsBsututqualqyBzwqthsBwsBuyzwBEoBuCuBisqwwrayuBweyqCusqylwuwuyzwwszsmqBsltyuCwBshyqqysmqwhltuyBBdltuyyBoyqlCyuwtqbhplsomqyuuyzoumBlqyqBBuqlurzBulmwlggauyqyyqBBsbzsiBqyzCmrpzBwwmuCCdaatlqquBBBcwwwlqkuuzmqCnzzvuwjlnqetqyeyuBvswwBszwBrszwrBwBBwwuCuymbyqyuyuxsqhCyzBwrumvBwuCuwBuuylkeqCqyuBBzwqlqlvwqwqyBzsqyyuyyqhqlyhtuyEscuslyqwEBwsyzBfCuquylqywBuwlyuEBlswsloqBEgmqwshqyywuyuBEsqBlyuwBsogfmswzEgmewsqphhuyuyzzBwaqlBwuszBwqtuyBlxmussehsuyqlmEwzwvuwuyhBhyuuyqrelyEjmflswqssEogBwBBwzqqBsuyueyBqyrwjjyquEwhCBjgBuzrwwwwqyullcuyuEsocjvhywweCBEoqutBuuvEwqlyquvAqBosamlqyzwhlyzwmqxDwyEqBswusCBBsucylywClErtqqwwhyuBuvwmuwuyrlqzwBuuquzvmuylyqvsmuBBowEsuuoqBssBwEwCuysvftvuwsvguCBzwuutqtqyeihBuBBsuusughqsusujhzwwBwsqllyqwocwfzwBwBssdfCBBoaahtyBBwlswwzwlqtumwyuBgxsslyuExacalCwumtulBBrkullwqywqleltuqwwBgaacqlfqumyqBrsslsBCCqyCkqwshBuBzsurmuBwBwuCCrlvllBzwlzyuyqsuwlBsqBuwmCuCmmuqlmylCiEwimuwqzwwjwEwsEwsrqCugcyqysBqecltelBwywjqwzBzEBzoiuvBnhqyq"
-  ]
- },
  "material": {
   "bedCycleVary": 1,
   "faceBedVary": 0,
@@ -1280,9 +1098,7 @@
    1.0,
    1.0,
    1.0
-  ],
-  "deep": "water",
-  "shallow": "shallow"
+  ]
  },
  "model": {
   "slopeGrass": {
@@ -1325,70 +1141,6 @@
     "seamVary": 0.55,
     "warp": 2.0
    }
-  },
-  "water": {
-   "amps": [
-    0.0,
-    0.6074,
-    1.4608,
-    11.9306,
-    1.9531,
-    1.8832,
-    2.2165
-   ],
-   "stretch": 1.0,
-   "tintMix": 0.8,
-   "tintScale": 0.0,
-   "zq": [
-    -3.1484,
-    -2.7289,
-    -2.1833,
-    -1.7939,
-    -1.0075,
-    -0.4523,
-    -0.1578,
-    0.1034,
-    0.4428,
-    0.7824,
-    0.9257,
-    1.1017,
-    1.1637
-   ],
-   "lit": {
-    "relief": 0.3502,
-    "light": 0.39,
-    "shear": 0
-   },
-   "dither": 1.0
-  },
-  "shallow": {
-   "amps": [
-    0.9929,
-    1.4411,
-    1.1788,
-    0.3967,
-    0.154,
-    0.0497,
-    0.0048
-   ],
-   "stretch": 1.0,
-   "tintMix": 0.07,
-   "tintScale": 1.0,
-   "zq": [
-    -2.7458,
-    -2.2253,
-    -1.6477,
-    -1.3043,
-    -0.6976,
-    -0.2636,
-    0.001,
-    0.2653,
-    0.7006,
-    1.3095,
-    1.6526,
-    2.2257,
-    2.745
-   ]
   }
  },
  "palette": {
@@ -1463,6 +1215,7 @@
   "vent": {"params": {"size": 1.8, "thick": 1.2, "rim": 0.4, "rimSat": 2.2, "spread": 3}}
  },
  "world": {
+    "materials": {"ground": "desert-ground", "water": "desert-water"},
     "knobDefaults": {
         "lightCap": 1.25,
         "sunTilt": 0.5,

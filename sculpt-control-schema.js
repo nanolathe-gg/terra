@@ -163,7 +163,6 @@ export function worldControlRequirement(key,v){
  if(key==='shoalStairs')return needs('crispShore','Crisp waterline')||(n('shoalShoreSoft')>0?'Waterline blur replaces the stairs. Set it to 0 to use this setting.':'');
  if(/^ring[A-Z]/.test(key)&&n('ringLayer')<=0)return 'This world draws no mineral fringe.';
  if(key==='beachWidth'&&n('beachLayer')<=0)return 'This world has no beach of its own. Choose another world\'s Beach, above, to use this setting.';
- if(key==='groundTiles'&&n('groundTiled')<=0)return 'This world\'s ground is one texture, not tiles. Choose another world\'s Ground pattern to use this setting.';
  if(key==='ringShiftDir'||key==='ringScatter')return needs('ringShift','Offset between copies');
  if(key==='ringPatchSize')return needs('ringPatch','Reach variation');
  return '';
@@ -177,7 +176,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'vegetationCover','plantRelief','flowerDensity',
  'bedDip','bedDipDir','faceStretch','faceBlockHeight','faceRound','faceJoint','faceExtrude','faceLamina','faceLaminaSize','faceScratchLength','faceScratchAngle','faceGritSize',
  'rockFace','faceRock','rockFaceFrom','rimReach','faceCreaseSize','faceCrease','faceBlock','faceBlockSize','faceBed','faceLedge','faceRun','faceScratch','faceScratchSize','faceLean','faceGrit','faceGrass','faceWear','faceShade','faceLayers','faceMass','faceTone','faceStrata','faceWet',
- 'groundTiles','groundContrast','groundPatch','groundPatchSize','undulation','undulationScale','undulationCover','undulationArt','coastRamp','faceSteep','lowTint','lowReach','lowGrain',
+ 'groundPatch','groundPatchSize','undulation','undulationScale','undulationCover','undulationArt','coastRamp','faceSteep','lowTint','lowReach','lowGrain',
  'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
  'flatShadow','flatOcclusion','sunTilt','sunHeight','ambient','shadeDepth','lightCap','creaseShade',
  'hillLight','faceFill','rockCrown','sandCrown','slopeTexture','moss','erosionRain','wetSwath','wetGround','lushness','soilRim','slopeMarks','wrinkles',

@@ -1,0 +1,181 @@
+// Materials (sculpt-materials.js): the node model's rules, what it compiles to, and a map's list of materials through save and world files.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {NODES, LIBRARY, MAX_NODES, MATERIAL_SLOTS, copyMaterial, copyMaterials, blankMaterial, makeNode, orderNodes, nodeTypes, compileMaterial, programKey, programSource,
+  materialReliefBound, materialRenderKey, soloMaterial, controlSpec, withWorldMaterials, worldMaterials, carriedMaterials, addMaterial, duplicateMaterial, setMaterial,
+  assignMaterial, deleteMaterial, strokeMaterial, keepStrokeMaterials, materialsInUse, materialUsers, materialText, parseMaterialText, reseedMaterial, materialTint} from '../sculpt-materials.js';
+import {graphPositions, cardHeight, CARD} from '../sculpt-material-graph.js';
+import {savedWorld, copySavedWorld} from '../sculpt-save.js';
+
+const config = {biomeId: 'red', biome: 'Red Planet', materials: {ground: 'red-ground', water: 'red-water'}, defaults: {}, engineDefaults: {}, colors: {}};
+const node = (id, type, extra = {}) => ({id, type, ...extra});
+const graph = nodes => copyMaterial({nodes});
+
+test('every library material is valid, compiles, and survives a copy unchanged', () => {
+  assert.ok(Object.keys(LIBRARY).length >= 5);
+  for (const [key, m] of Object.entries(LIBRARY)) {
+    assert.equal(m.source, key);
+    assert.deepEqual(copyMaterial(JSON.parse(JSON.stringify(m))), copyMaterial(m), key);
+    const program = compileMaterial(m), source = programSource(program);
+    assert.equal(program.instructions.length, m.nodes.length);
+    assert.match(source.main, /fn groundMain/); assert.match(programSource(program, true).main, /fn thumbMain/);
+    assert.equal(m.nodes.filter(n => n.type === 'output').length, 1, key);
+    assert.ok(m.palette.length >= 2 && m.dither.amount > 0, key + ' is reduced to a palette');
+  }
+});
+
+test('connections are typed, loops are refused, and a deleted source leaves its input open', () => {
+  assert.throws(() => graph([node('a', 'noise', {in: {in: 'b'}}), node('b', 'noise')]), /Coordinates needs a Warp/);
+  assert.throws(() => graph([node('w', 'warp'), node('g', 'gradient', {in: {in: 'w'}})]), /Input needs a gray input/);
+  assert.throws(() => graph([node('a', 'levels', {in: {in: 'b'}}), node('b', 'levels', {in: {in: 'a'}})]), /loop/);
+  assert.throws(() => graph([node('o', 'output'), node('p', 'output')]), /one Material node/);
+  assert.throws(() => graph([node('n', 'noise'), node('g', 'gradient', {in: {in: 'n'}}), node('o', 'output', {in: {height: 'g'}})]), /Height needs a gray input/);
+  const m = graph([node('n', 'noise'), node('g', 'gradient', {in: {in: 'gone'}}), node('o', 'output', {in: {color: 'g'}})]);
+  assert.equal(m.nodes.find(n => n.id === 'g').in.in, null);
+  assert.equal(graph([node('n', 'noise')]).nodes.at(-1).type, 'output', 'a graph always has its Material node');
+  // Gray and color mix freely in a Combine; its output is color once either input is.
+  const mixed = graph([node('n', 'noise'), node('g', 'gradient', {in: {in: 'n'}}), node('c', 'combine', {kind: 'multiply', in: {a: 'g', b: 'n'}})]);
+  assert.equal(nodeTypes(mixed.nodes).get('c'), 'color'); assert.equal(nodeTypes(mixed.nodes).get('n'), 'gray');
+});
+
+test('numbers are held in range, kinds choose their settings, and a new node has its own seed', () => {
+  const m = graph([node('n', 'noise', {kind: 'waves', params: {size: 9999, direction: 30}}), node('r', 'noise', {kind: 'ridged'}), node('l', 'levels', {params: {low: .8, high: .2}})]);
+  const waves = m.nodes[0], ridged = m.nodes[1];
+  assert.equal(waves.params.size, 256); assert.equal(waves.params.direction, 30); assert.ok('crests' in waves.params);
+  assert.deepEqual(Object.keys(ridged.params), ['size', 'layers', 'roughness', 'sharpness', 'seed']);
+  assert.ok(m.nodes[2].params.high > m.nodes[2].params.low, 'Levels keeps High above Low');
+  assert.throws(() => graph([node('n', 'noise', {kind: 'plasma'})]), /Invalid Noise type/);
+  assert.throws(() => graph([node('n', 'noise', {params: {size: NaN}})]), /Invalid Size/);
+  const next = makeNode('noise', m.nodes); assert.notEqual(next.params.seed, 0); assert.equal(makeNode('scatter', m.nodes).id, 'scatter');
+  assert.throws(() => graph(Array.from({length: MAX_NODES + 1}, (_, i) => node('n' + i, 'constant'))), /at most 40/);
+});
+
+test('a gradient keeps 2 to 8 stops in order, and a stop may brighten up to 2', () => {
+  const g = graph([node('n', 'noise'), node('g', 'gradient', {in: {in: 'n'}, stops: [[1, 2.5, 1, 1], [0, 0, 0, 0], [.5, .5, .5, .5]]})]).nodes[1];
+  assert.deepEqual(g.stops, [[0, 0, 0, 0], [.5, .5, .5, .5], [1, 2, 1, 1]]);
+  assert.throws(() => graph([node('g', 'gradient', {stops: [[0, 0, 0, 0]]})]), /2 to 8 stops/);
+});
+
+test('the compiled program follows evaluation order and its pipeline key ignores numbers', () => {
+  const m = LIBRARY['red-ground'], program = compileMaterial(m), index = new Map(program.nodes.map((n, i) => [n.id, i]));
+  for (const n of program.nodes) for (const from of Object.values(n.in)) if (from) assert.ok(index.get(from) < index.get(n.id));
+  const changed = structuredClone(m); changed.nodes[1].params.size = 20; changed.seed = 7;
+  assert.equal(programKey(compileMaterial(changed)), programKey(program), 'a control or the seed never recompiles');
+  assert.notEqual(materialRenderKey(changed), materialRenderKey(m));
+  const rewired = structuredClone(m); rewired.nodes.find(n => n.type === 'output').in.height = rewired.nodes.find(n => n.type === 'levels').id;
+  assert.notEqual(programKey(compileMaterial(copyMaterial(rewired))), programKey(program));
+  // The seed reaches every seeded node's arguments.
+  const seeded = compileMaterial({...m, seed: 5}).instructions.find(i => i.type === 'noise'), plain = program.instructions.find(i => i.type === 'noise');
+  assert.equal(seeded.args[3], plain.args[3] + 5);
+  assert.notEqual(reseedMaterial(m).seed, m.seed);
+});
+
+test('Light and Cavity read their height at neighbors through a function of that branch only, with limits on chains', () => {
+  const m = graph([node('w', 'warp'), node('n', 'noise', {in: {in: 'w'}}), node('other', 'noise'), node('light', 'light', {in: {in: 'n'}}), node('cav', 'cavity', {in: {in: 'light'}}),
+    node('g', 'gradient', {in: {in: 'cav'}}), node('o', 'output', {in: {color: 'g', height: 'other'}})]);
+  const program = compileMaterial(m), source = programSource(program), at = id => program.nodes.findIndex(n => n.id === id);
+  const tap = source.taps.match(new RegExp(`fn tap${at('light')}\\(point:vec2f\\)->f32\\{[^}]*\\}`))[0];
+  assert.match(tap, new RegExp(`let v${at('n')}=nNoise`)); assert.doesNotMatch(tap, new RegExp(`let v${at('other')}=`), 'only the branch it reads');
+  assert.match(source.taps, new RegExp(`fn tap${at('cav')}`)); assert.match(source.main, /nLight\(/);
+  const chain = [node('n', 'noise'), node('a', 'light', {in: {in: 'n'}}), node('b', 'cavity', {in: {in: 'a'}}), node('c', 'light', {in: {in: 'b'}})];
+  assert.throws(() => graph(chain), /at most two in a chain/);
+  assert.doesNotThrow(() => graph(chain.map(n => n.id === 'c' ? {...n, enabled: false} : n)));
+});
+
+test('the relief bound follows the graph, and a node shown alone is the same graph with one output', () => {
+  assert.equal(materialReliefBound(LIBRARY['red-ground']), 0);
+  const desert = LIBRARY['desert-ground'], relief = desert.nodes.find(n => n.type === 'output').params.relief;
+  assert.ok(materialReliefBound(desert) >= relief * .5 && materialReliefBound(desert) < relief * 3);
+  const solo = soloMaterial(desert, desert.nodes[1].id), out = solo.nodes.find(n => n.type === 'output');
+  assert.equal(out.in.color, desert.nodes[1].id); assert.equal(out.in.height, null); assert.equal(solo.dither.amount, 0); assert.deepEqual(solo.palette, []);
+  const warp = desert.nodes.find(n => n.type === 'warp'); assert.equal(soloMaterial(desert, warp.id).nodes.at(-1).kind, 'cells', 'coordinates are shown on a cell pattern');
+  assert.equal(materialTint(LIBRARY['red-ground']).length, 3);
+});
+
+test('published controls name a node setting or a gradient’s colors, and vanish with their node', () => {
+  const base = blankMaterial(), m = copyMaterial({...base, controls: [{label: 'Patch size', node: 'noise', param: 'size'}, {label: 'Colors', node: 'gradient', param: 'stops'}, {label: 'Gone', node: 'nothing', param: 'size'}, {label: 'Twice', node: 'noise', param: 'size'}], frames: [{name: 'Pattern', nodes: ['noise', 'missing']}]});
+  assert.deepEqual(m.controls.map(c => c.label), ['Patch size', 'Colors']);
+  assert.equal(controlSpec(m, m.controls[0]).spec.key, 'size'); assert.equal(controlSpec(m, m.controls[1]).stops, true);
+  assert.deepEqual(m.frames, [{name: 'Pattern', nodes: ['noise']}]);
+  const without = copyMaterial({...m, nodes: m.nodes.filter(n => n.id !== 'noise')});
+  assert.deepEqual(without.controls.map(c => c.label), ['Colors']); assert.deepEqual(without.frames, []);
+});
+
+test('a map always has a ground and a water material, and an older save falls back to the world’s', () => {
+  const list = worldMaterials(config);
+  assert.deepEqual(list.map(m => [m.slot, m.source, m.worldGround, m.worldWater]), [[1, 'red-ground', true, false], [2, 'red-water', false, true]]);
+  assert.deepEqual(withWorldMaterials(undefined, config), list);
+  assert.equal(copyMaterials(undefined), null);
+  const waterOnly = withWorldMaterials([{...list[1], slot: 5}], config);
+  assert.deepEqual(waterOnly.map(m => [m.slot, m.worldGround, m.worldWater]), [[1, true, false], [5, false, true]]);
+  assert.deepEqual(worldMaterials({...config, worldMaterials: waterOnly}), waterOnly, 'a world of the user’s own carries its list');
+  assert.equal(worldMaterials({materials: {}}).find(m => m.worldGround).source, 'green-ground');
+  assert.throws(() => copyMaterials([{...list[0], worldWater: true}]), /two materials/);
+  assert.throws(() => copyMaterials([list[0], {...list[1], slot: 1}]), /own slot/);
+  assert.throws(() => copyMaterials([list[0], {...list[0], slot: 3}]), /Only one material/);
+  // Fields of an earlier format are dropped: what is left is a material with only its Material node.
+  assert.deepEqual(copyMaterials([{slot: 1, name: 'Old', steps: [], knobs: {}}])[0].nodes.map(n => n.type), ['output']);
+});
+
+test('adding, assigning, deleting and what strokes keep', () => {
+  let list = worldMaterials(config);
+  const added = addMaterial(list, LIBRARY['desert-ground'], 'Sand'); list = added.materials; assert.equal(added.slot, 3);
+  list = duplicateMaterial(list, 3).materials; assert.equal(list.at(-1).name, 'Sand copy');
+  const stroke = slot => ({kind: 'landform', params: {groundPreset: slot}}), nodes = [stroke(3), stroke(0), stroke(-1), stroke(2), stroke(6), {kind: 'ground'}];
+  assert.deepEqual(nodes.map(n => strokeMaterial(n, list)), [3, 0, -1, -1, -1, -1], 'water and missing slots are not ground choices');
+  assert.deepEqual(materialsInUse(nodes, list).map(m => m.slot), [1, 2, 3]);
+  assert.deepEqual(materialUsers(nodes, list, 3), {world: '', strokes: 1}); assert.equal(materialUsers(nodes, list, 1).world, 'ground');
+  assert.throws(() => deleteMaterial(list, nodes, 1), /world’s ground/);
+  const gone = deleteMaterial(list, nodes, 3); assert.equal(gone.nodes[0].params.groundPreset, -1); assert.equal(gone.materials.length, 3);
+  assert.equal(keepStrokeMaterials(nodes, list)[0], nodes[0], 'an unchanged stroke is the same object');
+  const swapped = assignMaterial(list, 3, 'worldGround'); assert.deepEqual(swapped.filter(m => m.worldGround).map(m => m.slot), [3]);
+  assert.throws(() => assignMaterial(list, 2, 'worldGround'), /world’s water/);
+  let full = list; while (full.length < MATERIAL_SLOTS - 1) full = addMaterial(full, blankMaterial(), 'More').materials;
+  assert.throws(() => addMaterial(full, blankMaterial()), /at most seven/);
+  assert.equal(setMaterial(list, 3, LIBRARY['green-ground']).find(m => m.slot === 3).name, 'Sand', 'a new graph keeps the name and slot');
+});
+
+test('a map carried into another world lets go of an untouched ground and water, and keeps what the artist changed', () => {
+  const list = addMaterial(worldMaterials(config), LIBRARY['desert-ground'], 'Sand').materials;
+  assert.deepEqual(carriedMaterials(list).map(m => m.name), ['Sand']);
+  const edited = list.map(m => m.worldGround ? {...m, seed: 4} : m);
+  assert.deepEqual(carriedMaterials(edited).map(m => m.slot), [1, 3]);
+  const green = withWorldMaterials(carriedMaterials(list), {materials: {ground: 'green-ground', water: 'green-water'}});
+  assert.deepEqual(green.map(m => [m.slot, m.source]), [[1, 'green-ground'], [2, 'green-water'], [3, 'desert-ground']]);
+  assert.equal(carriedMaterials(null), null);
+});
+
+test('materials round-trip through the clipboard text, the saved world and a world file', () => {
+  const list = addMaterial(worldMaterials(config), {...LIBRARY['green-ground'], controls: [{label: 'Mottle', node: LIBRARY['green-ground'].nodes[1].id, param: 'size'}]}, 'Meadow').materials;
+  const pasted = parseMaterialText(materialText(list[2])); assert.equal(pasted.name, 'Meadow'); assert.deepEqual(copyMaterial(pasted), copyMaterial(list[2]));
+  assert.throws(() => parseMaterialText('{"format":"other"}'), /no material/);
+  const world = savedWorld(config, new URLSearchParams(), {name: 'Mine', colors: {}, knobs: {}, materials: list});
+  assert.deepEqual(world.materials, list);
+  assert.deepEqual(copySavedWorld(JSON.parse(JSON.stringify(world)), config).materials, list);
+  // A save from before materials (no list, or the earlier `grounds` key) loads with the world's own.
+  const {materials, ...older} = world;
+  assert.deepEqual(copySavedWorld({...older, grounds: [{slot: 1, name: 'Old preset', knobs: {}, ramp: []}]}, config).materials, worldMaterials(config));
+  assert.throws(() => copySavedWorld({...world, materials: [{slot: 1, name: 'Broken', nodes: 'no'}]}, config), /at most 40 nodes|Invalid/);
+});
+
+test('Arrange places every node once, sources left of their readers, without overlaps', () => {
+  for (const m of Object.values(LIBRARY)) {
+    const places = graphPositions(m.nodes), byId = new Map(m.nodes.map(n => [n.id, n]));
+    assert.equal(places.size, m.nodes.length);
+    for (const n of m.nodes) for (const from of Object.values(n.in)) if (from) assert.ok(places.get(from).x < places.get(n.id).x, `${from} is left of ${n.id}`);
+    const boxes = [...places].map(([id, p]) => ({...p, h: cardHeight(byId.get(id))}));
+    for (const a of boxes) for (const b of boxes) if (a !== b && a.x === b.x) assert.ok(a.y + a.h <= b.y || b.y + b.h <= a.y, 'cards in a column do not overlap');
+    assert.deepEqual(graphPositions(m.nodes), places, 'the layout is deterministic');
+  }
+  assert.ok(CARD.reach >= 12, 'ports are easy to grab');
+});
+
+test('the page declares every row the editor fills', () => {
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8'), has = id => page.includes(`id="${id}"`);
+  const most = Math.max(...Object.values(NODES).flatMap(spec => spec.kinds ? Object.keys(spec.kinds).map(k => spec.params(k).length) : [spec.params().length]));
+  for (let i = 0; i < most; i++) assert.ok(has('node-param-' + i) && has('node-param-pin-' + i), 'a row for setting ' + i);
+  for (let i = 0; i < Math.max(...Object.values(NODES).map(s => s.inputs.length)); i++) assert.ok(has('node-input-' + i));
+  for (let i = 0; i < 12; i++) assert.ok(has('ctl-' + i) && has(`ctl-color-${i}-7`));
+  for (const [type, spec] of Object.entries(NODES)) if (type !== 'output') assert.ok(page.includes(`data-type="${type}"`), `the add menu offers ${spec.label}`);
+});

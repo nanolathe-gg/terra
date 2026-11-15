@@ -1240,9 +1240,7 @@
   "slopeGrass",
   "slopeGrass",
   "slopeGrass",
-  "slopeGrass",
-  "quilt"
- ],
+  "slopeGrass"],
  "material": {
   "groundPool": 1024,
   "rockSlope": 0.96,
@@ -1303,9 +1301,7 @@
    1.0,
    1.0,
    1.0
-  ],
-  "deep": "water",
-  "shallow": "shallow"
+  ]
  },
  "model": {
   "slopeGrass": {
@@ -1349,104 +1345,6 @@
     "warp": 2.0
    },
    "dither": 1.0
-  },
-  "quilt": {
-   "amps": [
-    0.0,
-    1.3297,
-    0.9742199999999999,
-    0.5823,
-    0.17772000000000002,
-    0.0486,
-    0.0115
-   ],
-   "stretch": 1.0,
-   "tintMix": 0.0,
-   "tintScale": 0.0,
-   "dither": 1.0,
-   "zq": [
-    -2.7877,
-    -2.2337,
-    -1.6419,
-    -1.2981,
-    -0.6939,
-    -0.2618,
-    0.0012,
-    0.2639,
-    0.6994,
-    1.3096,
-    1.6525,
-    2.2338,
-    2.7959
-   ],
-   "dotCell": 13,
-   "dotShare": 1,
-   "dotRadius": 1.2,
-   "dotDepth": 5.0
-  },
-  "water": {
-   "amps": [
-    0.0,
-    0.6074,
-    1.4608,
-    11.9306,
-    1.9531,
-    1.8832,
-    2.2165
-   ],
-   "stretch": 1.0,
-   "tintMix": 0.8,
-   "tintScale": 0.0,
-   "zq": [
-    -3.155,
-    -2.7553,
-    -2.2152,
-    -1.8239,
-    -1.0241,
-    -0.4562,
-    -0.1537,
-    0.1075,
-    0.4515,
-    0.7911,
-    0.9362,
-    1.11,
-    1.1652
-   ],
-   "lit": {
-    "relief": 0.3502,
-    "light": 0.39,
-    "shear": 0
-   },
-   "dither": 1.0
-  },
-  "shallow": {
-   "amps": [
-    0.9959,
-    1.4385,
-    1.1767,
-    0.3985,
-    0.1539,
-    0.0492,
-    0.0048
-   ],
-   "stretch": 1.0,
-   "tintMix": 0.064,
-   "tintScale": 1.0,
-   "zq": [
-    -2.7457,
-    -2.2253,
-    -1.6477,
-    -1.3046,
-    -0.6977,
-    -0.2636,
-    0.0012,
-    0.2652,
-    0.7007,
-    1.3095,
-    1.6525,
-    2.2257,
-    2.7448
-   ]
   }
  },
  "features": {
@@ -1465,12 +1363,12 @@
   "vent": {"params": {"size": 1.4, "thick": 0.8, "rim": 0.45, "rimSat": 1.6}}
  },
  "world": {
+    "materials": {"ground": "red-ground", "water": "red-water"},
     "knobDefaults": {
         "shoreRock": 96,
         "shoreShelf": 96,
         "undulationScale": 80,
         "undulationCover": 0.6,
-        "groundContrast": 0.7,
         "crackSeverity": 0.3,
         "crackDark": 0.35,
         "crackWidth": 0.5,

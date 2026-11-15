@@ -105,6 +105,14 @@
     "sculpt-chunk-renderer.js",
     "sculpt-scene.js",
     "sculpt-tools.js",
-    "sculpt-knobs.js"
+    "sculpt-knobs.js",
+    "engine-ground.wgsl",
+    "engine-ground-dither.wgsl",
+    "sculpt-materials.js",
+    "sculpt-material-cache.js",
+    "sculpt-material-preview.js",
+    "sculpt-material-graph.js",
+    "sculpt-material-editor.js",
+    "materials/textures.json"
   ]
 }

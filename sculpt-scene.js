@@ -118,9 +118,9 @@ export const LANDFORM_KEYS=['stepReference','heightReference','elevation','combi
 // fewer) and the cracked-bed flag.
 // Planes 0-20 are in use (14-17 are the override planes, 18 a water stroke's Surf, 0..127 of 1, 19 a braided river's bed, 0..127 of 1, which the draw lays as
 // the world's river-bed gravel, 20 the rock a cell belongs to: the slot + 1 of a rock recipe, 0 the world's own, engine-common.wgsl rockSlotAt);
-// 21-24 are unused placeholders (the flow bake's planes 20-24 went with it). The shape engine's buffers hold seven
+// 21 holds a ground slot + 1; 22-24 are unused placeholders (the flow bake's planes 20-24 went with it). The shape engine's buffers hold seven
 // words a cell (28 planes), so the layout stays as they and the shaders read it.
-export const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','riverBed','rock','fv','s1','s2','s3'];
+export const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','riverBed','rock','ground','s1','s2','s3'];
 export const MASK_CHOICES=[[1,'Rock'],[2,'Snow or ice'],[3,'Wet or dark ground'],[4,'Moss'],[5,'Denser scatter'],[6,'Sparser scatter']];
 export const LUMP_CHOICES=[[16,'Ground lumps'],[17,'Smoother ground']];
 // H3 override planes 14-17 (a signed value v multiplies the control it names by 1 + v; 0 changes nothing): erosion rate (H2's pass),
@@ -204,9 +204,10 @@ export const SHAPE_FIELDS=[
   // Water looks (card E1): each stroke may keep the world's choice (0) or set its own.
   ['waterDeep','water-deep','Shallow-to-deep edge',['landform'],0,2,1,1,'World default keeps the World panel\'s Shallow-to-deep step. Hard: the shallow color stops at one depth with ragged stairs (retail Green). Faded: the color follows the depth ramp gradually (retail Archipelago).',[[0,'World default'],[1,'Hard'],[2,'Faded']]],
   ['waterShore','water-shore','Shore',['landform'],0,1,1,1,'World default keeps the World panel\'s Rock at shores and Rock shelf under water: an open, wave-cut shore of bare jointed rock. Soft bank: no shore rock round this water, on land or on the bed (an inland lake).',[[0,'World default'],[1,'Soft bank']]],
-  ['paintChannel','paint-channel','Paint',['paint'],1,25,1,1,'What the brush paints. Denser scatter supplies its own stones where the World panel\'s Boulders and Debris are 0 and multiplies them where they are not. Style settings go more or less than the world\'s own value; Strength is how far. Erase clears every mask and style under the brush.',[...MASK_CHOICES,...LUMP_CHOICES,...STYLE_CHOICES,[7,'Erase all masks and style']]],
+  ['paintChannel','paint-channel','Paint',['paint'],1,26,1,1,'What the brush paints. Denser scatter supplies its own stones where the World panel\'s Boulders and Debris are 0 and multiplies them where they are not. Style settings go more or less than the world\'s own value; Strength is how far. Erase clears every mask and style under the brush.',[...MASK_CHOICES,...LUMP_CHOICES,...STYLE_CHOICES,[26,'Ground preset'],[7,'Erase all masks and style']]],
   // Rock presets (B2): the rock this landform is made of, one of the map's presets (sculpt-rock-presets.js); -1, Rock beneath, keeps the rock that is
   // already there. Its choices are the map's presets (sculpt.js syncRockChoices).
+  ['groundPreset','lf-ground','Ground',['landform','paint'],-1,7,1,1,'The material this stroke lays down: the world’s ground or another of the map’s materials. Ground beneath leaves the previous surface alone.',[[-1,'Ground beneath']]],
   ['rockPreset','lf-rock','Rock',['landform'],-1,15,1,1,'The rock this shape is made of, one of the map\'s rock presets (World pane, Rock & cliffs). Rock beneath keeps whatever rock is already there: the world\'s own, or an earlier shape\'s. The shape claims its rock wherever it moves the ground, so a later shape wins where it overlaps an earlier one.',[[-1,'Rock beneath']]],
   // Local vegetation inside the shape (card C5 stage 2): a change about the world's own cover, 0 none.
   ['styleVegetation','style-vegetation','Local vegetation',['landform'],-100,100,5,100,'Grass and moss cover inside the shape, times 1 + this: below 0 more bare rock, above 0 more cover.'],
@@ -269,7 +270,7 @@ export function toolDefaults(config,entry,preset=config?.biomeId||'green') {
   return {...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,lo,hi,,scale]) => [key,clamp(Math.round(worldDefault(config,key)*scale),lo,hi)])),cracks:0,diameter:200,amount:kind==='fissure'?12:isCover(kind)?100:70,roughness:35,softness:50,preset,...starting,
     elevation:sea?Math.round(starting.elevation):clamp(Math.round((config?.baseHeight??24)+(starting.elevation??70)),-80,300)};
 }
-export function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,softness:s.softness,lean:s.lean,facing:s.facing,fingers:s.fingers,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,styleVegetation:s.styleVegetation,rockPreset:s.rockPreset,waterDeep:s.waterDeep,waterShore:s.waterShore,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalTop:s.crystalTop,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergJitter','bergBreak','bergRough'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(LANDFORM_KEYS.map(k => [k,s[k]])),...Object.fromEntries(CRATER_KEYS.map(k => [k,s[k]])),curve:s.curve,along:s.along,...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
+export function strokeParams(s) { return {...Object.fromEntries(['shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles',...COAST_KEYS].map(k => [k,s[k]])),radius:s.radius,amount:s.amount,rough:s.rough,softness:s.softness,lean:s.lean,facing:s.facing,fingers:s.fingers,faceVariation:s.faceVariation,crystalTiers:s.crystalTiers,paintChannel:s.paintChannel,styleVegetation:s.styleVegetation,rockPreset:s.rockPreset,groundPreset:s.groundPreset,waterDeep:s.waterDeep,waterShore:s.waterShore,crystalStep:s.crystalStep,crystalSides:s.crystalSides,crystalTop:s.crystalTop,crystalVariation:s.crystalVariation,...Object.fromEntries(['crystalAlign','bergJitter','bergBreak','bergRough'].map(k => [k,s[k]])),...Object.fromEntries(SECTION_KEYS.map(k => [k,s[k]])),...Object.fromEntries(LANDFORM_KEYS.map(k => [k,s[k]])),...Object.fromEntries(CRATER_KEYS.map(k => [k,s[k]])),curve:s.curve,along:s.along,...Object.fromEntries(RIDGE_KEYS.map(k => [k,s[k]])),...Object.fromEntries(FISSURE_KEYS.map(k => [k,s[k]])),cracks:s.cracks,
   // E7, G7, G6
   ...Object.fromEntries([...E7_KEYS,...G7_KEYS,...G6_KEYS,...CRYSTAL_KEYS].map(k => [k,s[k]]))}; }
 // Capture tools rebuild a map from strokes: [kind, [[x,y],...], options],
@@ -277,7 +278,7 @@ export function strokeParams(s) { return {...Object.fromEntries(['shorePlates','
 // overrides card values (diameter, amount, roughness ... in card units); any
 // other key is a stroke option.
 export const strokeCard=(config,d) => ({radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,softness:d.softness/100,cracks:d.cracks/100,
-  ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),curve:d.curve,along:d.along});
+  ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),curve:d.curve,along:d.along,groundPreset:d.groundPreset??-1});
 export const groundDefaults=settings => ({amplitude:settings.has('undulation')?Number(settings.get('undulation')):0,wavelength:settings.has('undulationScale')?Number(settings.get('undulationScale')):200,coverage:settings.has('undulationCover')?Number(settings.get('undulationCover')):.45,
   art:settings.has('undulationArt')?Number(settings.get('undulationArt')):1});   // the share of the undulation the art shows (lit and painted); the game heights keep all of it
 
@@ -318,6 +319,7 @@ export function sceneNodes(config,list,{ground=true,seed=DEFAULT_SEED,settings=p
     const {card:override,...rest}=options,d={...(own?own.card:toolDefaults(config,entry)),...override},pts=points.map(([x,y]) => ({x,y}));
     const card={...strokeCard(config,d),seed:(seed+i*7919)>>>0};
     const probe={...card,...rest};
+    if(kind==='paint' && (rest.groundPreset!==undefined || override?.groundPreset!==undefined) && rest.paintChannel===undefined && override?.paintChannel===undefined)probe.paintChannel=26;
     const node={kind,points:pts,params:strokeParams(probe),seed:probe.seed,...(kind==='landform'?{tool:entry}:{})};
     if(isRiver(node.params)){node.params.river={drawn:pts.map(p => ({...p}))};migrateRiver(config,node);}
     out.push(node);

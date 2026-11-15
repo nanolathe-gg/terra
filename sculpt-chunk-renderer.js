@@ -1,3 +1,4 @@
+import {materialReliefBound} from './sculpt-materials.js';
 import {terrainAllocation,TerrainMemoryError} from './sculpt-memory.js';
 import {rockWeatherBytes} from './sculpt-rock-weather.js';
 // Card D: a bounded working set for the existing terrain shader. Materials
@@ -36,7 +37,9 @@ const COLOR_INPUT_PACK=`
   let p=vec2i(vec2u(id.x,id.y+band.x));let stride=((size.x+63u)/64u)*64u;let plane=stride*band.y;let i=id.y*stride+id.x;
   let a=textureLoad(masks,p,0,0);let b=textureLoad(masks,p,1,0);let c=textureLoad(masks,p,2,0);
   let d=textureLoad(masks,p,3,0);let e=textureLoad(masks,p,4,0);let f=textureLoad(masks,p,5,0);
-  packed[i]=pack4x8snorm(a);packed[plane+i]=pack4x8snorm(vec4f(b.g,c.b,d.a,e.r));packed[2u*plane+i]=pack4x8snorm(vec4f(e.gba,f.r));
+  packed[i]=pack4x8snorm(a);packed[plane+i]=pack4x8snorm(vec4f(b.g,c.b,d.a,e.r));// Rock and ground ids share one channel: rock (0 to 16) + 17 * ground (0 to 8), moved into SNORM's range.
+  let ids=(round(f.r*127.0)+17.0*round(f.g*127.0)-127.0)/127.0;
+  packed[2u*plane+i]=pack4x8snorm(vec4f(e.gba,ids));
   let weather=textureLoad(grids,p,0,0);let material=textureLoad(grids,p,1,0);let time=textureLoad(grids,p,2,0);let fall=textureLoad(grids,p,3,0);
   packed[3u*plane+i]=pack4x8unorm(vec4f(weather.rg,time.rg));packed[4u*plane+i]=pack4x8unorm(material);packed[5u*plane+i]=pack4x8unorm(vec4f(fall.rg,0,0));
 }`;
@@ -141,7 +144,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     // The bed's lumps (bedRelief) stay under the water plane, but the pictures are sensitive to this reach (Green's hills shade differently by about one unit of it), so it keeps counting them.
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
     const extra=relief+blocks+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(rock('looseSize',6))+Math.abs(n('rippleHeight',1.4))+(rock('debrisAmount',0)>0?1.5*rock('debrisDepth',4):0);
-    const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4);
+    const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4+Math.max(0,...[...(this.grounds?.values()??[])].map(materialReliefBound)));
     return {draw,bake,direct,far,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};
   }
   requiredRegion(request) {
@@ -352,7 +355,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     }
     const q=this.device.queue;q.writeTexture({texture:this.heightTexture},height,{bytesPerRow:gw*4},[gw,gh]);q.writeTexture({texture:this.routeTexture},routes,{bytesPerRow:gw*4},[gw,gh]);
     q.writeTexture({texture:this.gridTexture},grid,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,4]);q.writeTexture({texture:this.maskTexture},masks,{bytesPerRow:gw*4,rowsPerImage:gh},[gw,gh,this.maskLayers]);
-    const flags={paintOn:painted.slice(0,9).some(Boolean),scatterOn:painted[4],styleOn:painted.slice(5,9).some(Boolean),waterOn:painted.slice(9,11).some(Boolean)||painted[18],lumpOn:painted[12],overrideOn:painted.slice(14,18).some(Boolean),rockIdOn:painted[20],...request.maskFlags};
+    const flags={paintOn:painted.slice(0,9).some(Boolean),scatterOn:painted[4],styleOn:painted.slice(5,9).some(Boolean),waterOn:painted.slice(9,11).some(Boolean)||painted[18],lumpOn:painted[12],overrideOn:painted.slice(14,18).some(Boolean),rockIdOn:painted[20],groundIdOn:painted[21],...request.maskFlags};
     for(const k of ChunkTerrainRenderer.FLAGS)this.i('u'+k[0].toUpperCase()+k.slice(1),flags[k]??0);
     this.materialReady=Boolean(material);this.weatherMaps=Boolean(weather?.wear);this.cpuWorkingBytes=0;
   }
@@ -362,12 +365,12 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   //   paintOn: any of bits 0-8, scatterOn: bit 4, styleOn: any of 5-8, waterOn: any of 9-10 or 18, lumpOn: bit 12, overrideOn: any of 14-17,
   //   rockIdOn: bit 20 (a cell claimed for a rock other than the world's own).
   // While it is in use, flushUniforms writes the CPU copy around those seven fields, so the CPU never overwrites the GPU's values.
-  static FLAGS=['paintOn','scatterOn','styleOn','waterOn','lumpOn','overrideOn','rockIdOn'];
+  static FLAGS=['paintOn','scatterOn','styleOn','waterOn','lumpOn','overrideOn','rockIdOn','groundIdOn'];
   flagPass() {
     if(this.flagsPass)return this.flagsPass;
     const device=this.device,module=device.createShaderModule({label:'chunk flags',code:`
       @group(0) @binding(0) var<storage, read> painted: array<u32>;
-      @group(0) @binding(1) var<storage, read_write> flags: array<u32, 7>;
+      @group(0) @binding(1) var<storage, read_write> flags: array<u32, 8>;
       fn any_(w: u32, a: u32, b: u32) -> u32 { let mask = ((1u << (b - a)) - 1u) << a; return select(0u, 1u, (w & mask) != 0u); }
       @compute @workgroup_size(1) fn main() {
         let w = painted[0];
@@ -378,9 +381,10 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
         flags[4] = (w >> 12u) & 1u;
         flags[5] = any_(w, 14u, 18u);
         flags[6] = (w >> 20u) & 1u;
+        flags[7] = (w >> 21u) & 1u;
       }`});
     const pipe=device.createComputePipeline({label:'chunk flags',layout:'auto',compute:{module,entryPoint:'main'}});
-    const out=device.createBuffer({label:'chunk flags out',size:28,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+    const out=device.createBuffer({label:'chunk flags out',size:32,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
     const offsets=ChunkTerrainRenderer.FLAGS.map(k=>this.layout.fields.get(k).offset);
     return this.flagsPass={pipe,out,offsets,ranges:[...offsets].sort((a,b)=>a-b)};
   }
@@ -424,7 +428,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     else{
       await stage.mapAsync(GPUMapMode.READ);const word=new Uint32Array(stage.getMappedRange().slice(0))[0];stage.unmap();stage.destroy();painted.destroy();uniform.destroy();
       const on=k=>(word>>>k)&1,any=(a,b)=>{for(let k=a;k<b;k++)if(on(k))return 1;return 0;};
-      const flags={paintOn:any(0,9),scatterOn:on(4),styleOn:any(5,9),waterOn:any(9,11)||on(18),lumpOn:on(12),overrideOn:any(14,18),rockIdOn:on(20),...request.maskFlags};
+      const flags={paintOn:any(0,9),scatterOn:on(4),styleOn:any(5,9),waterOn:any(9,11)||on(18),lumpOn:on(12),overrideOn:any(14,18),rockIdOn:on(20),groundIdOn:on(21),...request.maskFlags};
       for(const k of ChunkTerrainRenderer.FLAGS)this.i('u'+k[0].toUpperCase()+k.slice(1),flags[k]??0);
     }
     this.materialReady=Boolean(src.field);this.weatherMaps=Boolean(src.maps);   // the material field rides in layer 1 when the Time pass made one

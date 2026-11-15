@@ -19,11 +19,8 @@ test('a knob goes into the address and the renderer, and says what else it needs
   assert.deepEqual(applyKnob({key: 'sand', value: '1', settings, renderer: r, nodes, seed: 2701}), {weather: true});
   // The draw's rows (Low ground, Shade in creases) only re-read the renderer's uniforms.
   for (const key of ['lowTint', 'lowGrain', 'creaseShade']) assert.deepEqual(applyKnob({key, value: '.5', settings, renderer: r, nodes, seed: 2701}), {});
-  // The ground textures are chosen when the renderer starts: the address changes, the renderer does not.
+  // A borrowed beach is chosen when the renderer starts (sculpt-scene.js borrowBeach): the address changes, the renderer does not.
   const applied = r.applied;
-  assert.deepEqual(applyKnob({key: 'groundPattern', value: 'lava', settings, renderer: r, nodes, seed: 2701}), {reload: true});
-  assert.equal(settings.get('groundPattern'), 'lava'); assert.equal(r.variant.has('groundPattern'), false); assert.equal(r.applied, applied);
-  // So is a borrowed beach (sculpt-scene.js borrowBeach, before the renderer starts).
   assert.deepEqual(applyKnob({key: 'beachFrom', value: 'zhon', settings, renderer: r, nodes, seed: 2701}), {reload: true});
   assert.equal(settings.get('beachFrom'), 'zhon'); assert.equal(r.variant.has('beachFrom'), false); assert.equal(r.applied, applied);
 });

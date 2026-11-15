@@ -693,16 +693,18 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
 // The jittered point of each cell in the 3 x 3 around q (cell units), at jit.x + jit.y * hash of its cell (facets .15 + .7, Lava .12 + .76): the nearest, its
 // cell's id, and the squared distances to the nearest, second and third nearest, measured as (point - q) * metric (cell units: 1; the pieces' px: their size).
 struct CellPick { id: vec2f, point: vec2f, best: f32, second: f32, third: f32 }
-fn cells(q: vec2f, metric: vec2f, salt: f32, jit: vec2f) -> CellPick {
+fn cells(q: vec2f, metric: vec2f, salt: f32, jit: vec2f, count: f32, fall: vec2f) -> CellPick {
     let g = floor(q);
     var n = CellPick(g, vec2f(0.0), 1e9, 1e9, 1e9);
     for (var j = -1; j <= 1; j++) {
         for (var i = -1; i <= 1; i++) {
             let c = g + vec2f(f32(i), f32(j));
-            let point = c + jit.x + jit.y * cellHash(c + salt);
-            let d = (point - q) * metric;
+            let wrapped = poolWrap(c, count);
+            let point = c + jit.x + jit.y * cellHash(wrapped + salt);
+            let delta = point - q;
+            let d = vec2f(dot(delta, vec2f(fall.y, -fall.x)), dot(delta, fall)) * metric;
             let dd = dot(d, d);
-            if (dd < n.best) { n.third = n.second; n.second = n.best; n.best = dd; n.id = c; n.point = point; }
+            if (dd < n.best) { n.third = n.second; n.second = n.best; n.best = dd; n.id = wrapped; n.point = point; }
             else if (dd < n.second) { n.third = n.second; n.second = dd; }
             else if (dd < n.third) { n.third = dd; }
         }
@@ -988,6 +990,28 @@ fn sandRipples(p: vec2f, lambda: f32) -> vec3f {
 // facets, olive toward the sun and brown away from it, split by hairline cracks; and thin dark veins hang down the fall
 // line and fork. This builds that as height (lit by the sun like any relief) and as the dark of its creases, from the
 // world position only. Returns (height added, darkness as a crack code, how much of the fall-line relief to replace).
+// Periodic crust cells. Rotate the distance metric, not the lattice, so a
+// flat cap has the same seamless world-plane period at every orientation.
+fn crustPillows(p: vec2f, fall: vec2f, count: f32, tall: f32) -> vec2f {
+    let size = u.pool / count;
+    let warp = vec2f(poolNoise(p, 31.0, 3.0), poolNoise(p, 31.0, 17.0)) * 0.22 * u.lavaPillow;
+    let pil = cells((poolPos(p) + warp) / size, vec2f(1.0 / 1.35, 1.0), 5.0, vec2f(0.12, 0.76), count, fall);
+    let pd = sqrt(vec3f(pil.best, pil.second, pil.third));
+    let t = clamp(pd.x / max(pd.y, 1e-3), 0.0, 1.0);
+    let dome = 1.0 - pow(t, 2.4);
+    let triple = 1.0 - smoothstep(0.0, 0.16, pd.z - pd.x);
+    let height = u.lavaPillow * mix(0.035, 0.11, tall) * (dome + 0.7 * (cellHash(pil.id + 36.7).x - 0.5)) - u.lavaPillow * mix(0.03, 0.08, tall) * triple;
+    let dark = mix(0.2, 1.5, tall) * smoothstep(0.80, 0.97, t) + mix(0.6, 2.4, tall) * triple * smoothstep(0.35, 0.8, t);
+    return vec2f(height, dark);
+}
+fn crustChips(p: vec2f, count: f32, tall: f32) -> vec2f {
+    let q = poolPos(p) * (count / u.pool);
+    let chip = cells(q, vec2f(1.0), 11.0, vec2f(0.12, 0.76), count, vec2f(0.0, 1.0));
+    let cid = cellHash(chip.id + 42.7);
+    let height = dot((cid - 0.5) * 2.0, q - chip.point) * u.lavaChip * mix(0.07, 0.12, tall);
+    let seam = 1.0 - smoothstep(0.0, 0.16, sqrt(chip.second) - sqrt(chip.best));
+    return vec2f(height, mix(0.25, 0.9, tall) * seam * step(0.55, cid.x));
+}
 fn lavaCrust(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
     // Raised ground only: hills and their flanks, not the banks between the sea and the plain.
     // Lava's plain undulates up to ~4 units over the base, so the crust starts above that (open ground keeps its own lumps).
@@ -996,32 +1020,15 @@ fn lavaCrust(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
     let calm = u.lavaCalm * max(smoothstep(u.base + 0.2, u.base + 2.5, h), smoothstep(u.base - 0.6, u.base - 0.1, h) * smoothstep(0.06, 0.22, slope));
     if (gate <= 0.0) { return vec3f(0.0, 0.0, calm); }
     let across = vec2f(fall.y, -fall.x);
-    // Pillows, a little longer along the contour, their borders wandering.
-    let warp = vec2f(valueNoise(p / 31.0 + 3.0), valueNoise(p / 31.0 + 17.0)) * 0.22 * u.lavaPillow;
-    let pp = p + warp;
-    let qp = vec2f(dot(pp, across) / (u.lavaPillow * 1.35), dot(pp, fall) / u.lavaPillow);
-    let pil = cells(qp, vec2f(1.0), 5.0, vec2f(0.12, 0.76));
-    let pd = sqrt(vec3f(pil.best, pil.second, pil.third));
-    let t = clamp(pd.x / max(pd.y, 1e-3), 0.0, 1.0);
-    // A rounded dome that falls steeply at its border, each pillow standing a little higher or lower than the next.
-    let dome = 1.0 - pow(t, 2.4);
-    // Retail's small hills are nearly smooth (lava-1) or carry broad arcs (lava-2); the heaped pillows are the tall ones' (lava-3), so
-    // the pillows and their creases grow with the height above the plain.
     let tall = smoothstep(u.base + 18.0, u.base + 70.0, h);
-    var height = u.lavaPillow * mix(0.035, 0.11, tall) * (dome + 0.7 * (cellHash(pil.id + 5.0 + 31.7).x - 0.5));
-    // Crease on every border, deepest toward the shade; the wedge where three pillows meet is a cut-out.
-    let border = smoothstep(0.80, 0.97, t);
-    let triple = 1.0 - smoothstep(0.0, 0.16, (pd.z - pd.x));
-    height -= u.lavaPillow * mix(0.03, 0.08, tall) * triple;
-    var dark = mix(0.2, 1.5, tall) * border + mix(0.6, 2.4, tall) * triple * smoothstep(0.35, 0.8, t);
-    // Chips: flat facets tilted at random, hairline cracks on some of their borders.
-    let qc = p / u.lavaChip;
-    let chip = cells(qc, vec2f(1.0), 11.0, vec2f(0.12, 0.76));
-    let cid = cellHash(chip.id + 11.0 + 31.7);
-    let tilt = (cid - 0.5) * 2.0;
-    height += dot(tilt, qc - chip.point) * u.lavaChip * mix(0.07, 0.12, tall);
-    let seam = 1.0 - smoothstep(0.0, 0.16, sqrt(chip.second) - sqrt(chip.best));
-    dark = max(dark, mix(0.25, 0.9, tall) * seam * step(0.55, cid.x));
+    // Blend neighboring whole lattice counts: every size is periodic, with no
+    // jump when a size slider crosses a cell-count boundary.
+    let pillowCount = max(1.0, u.pool / u.lavaPillow);
+    let chipCount = max(1.0, u.pool / u.lavaChip);
+    let pillows = mix(crustPillows(p, fall, floor(pillowCount), tall), crustPillows(p, fall, floor(pillowCount) + 1.0, tall), fract(pillowCount));
+    let chips = mix(crustChips(p, floor(chipCount), tall), crustChips(p, floor(chipCount) + 1.0, tall), fract(chipCount));
+    var height = pillows.x + chips.x;
+    var dark = max(pillows.y, chips.y);
     // Veins hang down the fall line: zero lines of a noise stretched along it, in stretches that begin and end.
     if (u.lavaVeins > 0.0) {
         let qv = vec2f(dot(p, across) / 7.0, dot(p, fall) / 40.0) + 0.5 * vec2f(valueNoise(p / 23.0 + 5.0), valueNoise(p / 23.0 + 9.0));
@@ -1097,6 +1104,7 @@ fn terracettes(p: vec2f, h: f32, slope: f32) -> vec2f {
 // GLSL main(): the fields at world pixel p.
 fn bake(p: vec2f) -> vec4f {
     useRock(p);   // the rock this texel belongs to: every rock number below is its recipe's
+    gs=groundSlotAt(p);
     let h = baseHeight(p);
     let g = broadGradient(p);
     let slope = length(g);
@@ -1292,6 +1300,7 @@ fn bake(p: vec2f) -> vec4f {
     height += drift;
     // The bed's lumps lie on the sand the bed holds: silt does not smooth them away (the lake's bed is lumpy ground through the tint).
     height += bedLumps;
+    if(u.groundAny!=0){height+=groundHeight(p)*(1.0-smoothstep(.1,.6,slope))*(1.0-buried);}
     // Cracks, carved into the relief; sand fills them.
     var crackAt = cracks(p, fall, faceSlope, crackMask * (1.0 - route), h, max(style.y, 0.0)) * (1.0 - buried);
     // Where rock is broken into blocks, the blocks replace part of the

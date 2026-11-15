@@ -291,7 +291,7 @@ var materialKnobs = object{"stoneSort": json.Number("0.6"), "stoneRound": 0, "st
 func (s *Site) configure() error {
 	names := s.names()
 	features := s.featureCatalog()
-	patterns, beaches, shapes, worlds := object{}, object{}, object{}, object{}
+	beaches, shapes, worlds := object{}, object{}, object{}
 	for _, w := range s.Worlds() {
 		table := s.tables[w]
 		world := merge(obj(table["world"]))
@@ -332,9 +332,6 @@ func (s *Site) configure() error {
 			labels[id] = obj(v)["label"]
 		}
 		c["variants"] = labels
-		if _, ok := table["ground"]; ok {
-			patterns[w] = object{"name": names[w], "groundTable": materialPath(w)}
-		}
 		for _, layer := range array(table["order"]) {
 			if layer == "beach" {
 				m := object{}
@@ -354,7 +351,6 @@ func (s *Site) configure() error {
 	for _, c := range s.configs {
 		c["worldShapes"] = clone(shapes)
 		c["biomes"] = clone(names)
-		c["groundPatterns"] = clone(patterns)
 		c["beachSources"] = clone(beaches)
 	}
 	s.catalog = object{"worlds": worlds}
@@ -434,7 +430,7 @@ func (o orderedObject) MarshalJSON() ([]byte, error) {
 	return b.Bytes(), nil
 }
 func (s *Site) pickerOrder(c object, w string) object {
-	for _, k := range []string{"biomes", "worldShapes", "groundPatterns", "beachSources"} {
+	for _, k := range []string{"biomes", "worldShapes", "beachSources"} {
 		c[k] = orderedObject{obj(c[k]), s.Worlds()}
 	}
 	c["variants"] = orderedObject{obj(c["variants"]), s.variantOrder[w]}

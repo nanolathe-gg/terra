@@ -6,8 +6,6 @@
 // Material textures, as the GLSL texture units held them. A renderer may
 // bind one texture to several of these (an absent slope material reads the
 // ground, as the GLSL sampler pointed at the ground's unit).
-@group(1) @binding(0) var grassTex: texture_2d<f32>;
-@group(1) @binding(1) var grassSamp: sampler;
 @group(1) @binding(18) var paletteTex: texture_2d<f32>;
 // H4: the land materials of materials/green.json, made at startup (engine-materials.wgsl): a layer per material, a mip level per footprint.
 @group(1) @binding(19) var generatedTex: texture_2d_array<f32>;
@@ -19,17 +17,6 @@ fn grainPixel(pixel: vec2f) -> vec2f {
 
 // Move a texture to a new base colour, keeping its grain.
 fn based(c: vec3f, mean: vec3f, base: vec4f) -> vec3f { return select(c, saturate(c - mean + base.rgb), base.a > 0.5); }
-// Ground pattern: its grain scaled about its mean, then moved to the base.
-// A borrowed pattern (another world's) lends only its brightness grain:
-// its hue variation would speckle on a different base colour.
-fn groundBased(c: vec3f) -> vec3f {
-    if (u.groundBorrowed != 0 && u.groundBase.a > 0.5) {
-        const luma = vec3f(0.299, 0.587, 0.114);
-        let grain = dot(c, luma) / max(dot(u.groundTexMean, luma), 0.02);
-        return saturate(u.groundBase.rgb * (1.0 + (grain - 1.0) * u.groundContrast));
-    }
-    return based(u.groundTexMean + (c - u.groundTexMean) * u.groundContrast, u.groundTexMean, u.groundBase);
-}
 // Low ground: a colour moved to the low colour, its difference from its material's mean kept as grain (as based() moves a texture),
 // so the palette still mixes the grain's hues where a single tone would land on one entry.
 fn lowTinted(c: vec3f, mean: vec3f) -> vec3f { return saturate(c - mean + u.lowColor); }
@@ -201,27 +188,21 @@ fn weatheredCover(cover: f32, deposits: vec4f, grain: vec4f) -> f32 {
     return clamp(varied + (clusters - 0.5) * 0.30 * sqrt(max(0.0, varied)) * edge, 0.0, 1.0);
 }
 
-// Base ground from a fixed set of 32-px tiles, randomly placed on the TNT
-// tile grid, so level ground costs only uGroundTiles unique tiles. The tiles
-// are measured offline from retail neighbour statistics (the table's `ground` data) and
-// drawn into the first row of the ground texture at startup.
-// The grid is the export's: its rows start tileShift screen rows down (TA's projection offset), so a tile of the plain is one TNT tile
-// (16 on a bare Green map, where a grid on the screen's rows cut every TNT tile across two of them and made 256).
-fn groundTile(world: vec2f) -> vec3f {
-    let pixel = grainPixel(world - vec2f(0.0, u.tileShift));
-    let cell = vec2i(floor(pixel / 32.0));
-    let local = vec2i(glslMod(floor(pixel), 32.0));
-    // Card tilepool: the placement repeats with the pool, and every row and every column of cells in a period holds each tile equally
-    // often (row j is one shuffled sequence turned by a shuffled offset: a Latin square), so no column or row of a repeat is lighter
-    // than another. A hashed pick repeated with the pool stacked its chance excesses into stripes at overview (Lava's column means
-    // ranged 0.76 luma against main's 0.42).
-    let n = u32(u.pool / 32.0);
-    let c = vec2u(poolWrap(vec2f(cell), f32(n)));
-    let k = poolPerm((c.x + poolPerm(c.y, n, 0x5bd1u)) % n, n, 0x68e3u);
-    let tile = min(i32(k % u32(max(u.groundTiles, 1))), 15);
-    return textureLoad(grassTex, vec2i(tile * 32 + local.x, local.y), 0).rgb;
+// The world's ground and water are materials (sculpt-materials.js): unlit color and art height cached over a repeat, read at the
+// world point so a level plain costs only the repeat's own 32-px tiles.
+fn worldGround(p:vec2f)->vec3f { return materialPigment(p,u32(u.groundDefault)); }
+fn groundMean()->vec3f { return materialMean(u32(u.groundDefault)); }
+fn waterMean()->vec3f { return materialMean(u32(u.waterGround)); }
+// Water is lit by its own art height here: the bed's light is another model (the shallows), and the sea has no terrain normal.
+fn waterPigment(p:vec2f)->vec3f {
+ let slot=u32(u.waterGround);
+ let dx=materialRelief(p+vec2f(1,0),slot)-materialRelief(p-vec2f(1,0),slot);
+ let dy=materialRelief(p+vec2f(0,1),slot)-materialRelief(p-vec2f(0,1),slot);
+ let normal=normalize(vec3f(-vec2f(dx,dy)*.5,1));
+ let light=(u.ambient+.95*max(0.0,dot(normal,u.light)))/max(.001,u.ambient+.95*u.light.z);
+ let highlight=pow(max(0.0,dot(normal,normalize(u.light+vec3f(0,0,1)))),16.0)*materialShine(p,slot)*.35;
+ return materialPigment(p,slot)*min(light,u.lightCap)+vec3f(highlight);
 }
-
 // Green's land materials come from images, or (materialModel, Card H3) from the numbers in
 // materials/green.json through material-model.wgsl. Every draw that wants one of them asks here.
 fn matRow(i: u32) -> vec4f { return u.materialTable[i]; }
@@ -231,16 +212,6 @@ fn genColor(layer: i32, world: vec2f) -> vec3f {
     let level = clamp(i32(log2(max(u.materialFoot, 1.0)) + 0.5), 0, 6);
     let mask = vec2i((512 >> u32(level)) - 1);
     return textureLoad(generatedTex, vec2i(floor(pixel / f32(1 << u32(level)))) & mask, layer, level).rgb;
-}
-// The plain keeps its 16 tiles, now built at startup from materials/green.json's `ground` data (sculpt-renderer.js), not an image file.
-// H7b: at a footprint above 1 the plain's tiles are averaged over the final pixels the drawn one covers (2 x 2 at quarter), as the mip does
-// for the generated materials; at final (the study included) the branch is not taken and the lookup is the one it was.
-fn groundSource(pixel: vec2f) -> vec3f {
-    if (u.groundMode == 0) { return genColor(u.groundLayer, pixel); }   // a world whose plain is one quilted image takes the generated layer its table's `quilt` material makes; the 16-tile plain stays in groundTile
-    if (u.materialFoot > 1.5) {
-        return 0.25 * (groundTile(pixel + vec2f(-0.5, -0.5)) + groundTile(pixel + vec2f(0.5, -0.5)) + groundTile(pixel + vec2f(-0.5, 0.5)) + groundTile(pixel + vec2f(0.5, 0.5)));
-    }
-    return groundTile(pixel);
 }
 fn slopeGrassSource(pixel: vec2f) -> vec3f { return genColor(0, pixel); }
 // The rocks keep their images until H3b: the model's noise has the rocks' grain and histogram but not their facets, and the
@@ -279,10 +250,10 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
     }
     // Rock: the broad slope, the form's slope and convexity at the tap spacing, noise, and the weathering's wear.
     let d = r1.w;
-    let west = surfaceHeight(p - vec2f(d, 0.0));
-    let east = surfaceHeight(p + vec2f(d, 0.0));
-    let north = surfaceHeight(p - vec2f(0.0, d));
-    let south = surfaceHeight(p + vec2f(0.0, d));
+    let west = baseHeight(p - vec2f(d, 0.0));
+    let east = baseHeight(p + vec2f(d, 0.0));
+    let north = baseHeight(p - vec2f(0.0, d));
+    let south = baseHeight(p + vec2f(0.0, d));
     let formSlope = length(vec2f(east - west, south - north) / (2.0 * d));
     let convexity = clamp((h - 0.25 * (west + east + north + south)) / r0.w, -1.0, 1.0);
     let score = r0.x * slope + r0.y * formSlope + convexity * r0.z + (n.g - 0.5) * r1.x - weather.g * r1.z + (n.r - 0.5) * r1.y + (n.b - 0.5) * r2.z;
@@ -320,8 +291,8 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
     out.exposure = 1.0 + exposure;
     out.lowBank = lowBank;
     // How far the surface stands above the mean of a ring 3 px out (a lump's top, 1; a hollow, -1): the ground cover's soil reads it.
-    let around = 0.25 * (surfaceHeight(p - vec2f(3.0, 0.0)) + surfaceHeight(p + vec2f(3.0, 0.0))
-                       + surfaceHeight(p - vec2f(0.0, 3.0)) + surfaceHeight(p + vec2f(0.0, 3.0)));
+    let around = 0.25 * (baseHeight(p - vec2f(3.0, 0.0)) + baseHeight(p + vec2f(3.0, 0.0))
+                       + baseHeight(p - vec2f(0.0, 3.0)) + baseHeight(p + vec2f(0.0, 3.0)));
     out.top = clamp((h - around) / 1.5, -1.0, 1.0);
     return out;
 }
@@ -400,9 +371,11 @@ fn groundCover(p: vec2f, slope: f32, broad: vec2f, top: f32, tm: TimeMaps, veget
     var acc = 0.0;
     var klass = 6u;
     for (var k = 0u; k < 7u; k++) { acc += cover[k]; if (pick < acc) { klass = k; break; } }
-    let col = cvr(4u + 5u * klass);
+    var col = cvr(4u + 5u * klass);
+    // A table without a ground color of its own, and a class without one (bare soil), take the ground material's mean.
+    if (cvr(5u + 5u * klass).z > 0.5) { col = vec4f(groundMean(), col.w); }
     let grain = (cellHash(poolPixel(p) + 3.7).y - 0.5) * 2.0 * col.w;
-    let ratio = grass / max(cvr(3u).rgb, vec3f(0.01));
+    let ratio = grass / max(select(groundMean(), cvr(3u).rgb, cvr(3u).a > 0.5), vec3f(0.01));
     let tl = dot(ratio, vec3f(0.299, 0.587, 0.114));
     let ground = col.rgb * clamp(ratio, vec3f(0.7 * tl), vec3f(1.3 * tl)) * (1.0 + grain);
     let flower = flowersAt(p, cover, total, coverSite(broad, tm).y, vegetation, gate);
@@ -778,8 +751,8 @@ fn paintCoverage(p: vec2f, slope: f32, hollow: f32) -> vec4f {
 // still reads as snow with its own tint. Lift 0 would be the bare material.
 fn snowMaterial(pixel: vec2f) -> vec3f {
     const luma = vec3f(0.299, 0.587, 0.114);
-    var snow = groundBased(groundSource(pixel));
-    var mean = select(u.groundTexMean, u.groundBase.rgb, u.groundBase.a > 0.5);
+    var snow = worldGround(pixel);
+    var mean = groundMean();
     if (u.beach != 0 && dot(beachMean(), luma) > dot(mean, luma)) { snow = beachColour(pixel); mean = beachMean(); }   // snow takes the beach when it is lighter
     return saturate(mix(mix(snow, mean, 0.50), vec3f(1.0), 0.55));
 }
@@ -790,8 +763,8 @@ fn snowMaterial(pixel: vec2f) -> vec3f {
 fn mossMaterial(pixel: vec2f) -> vec3f {
     const luma = vec3f(0.299, 0.587, 0.114);
     let cover = based(slopeGrassSource(pixel), u.slopeTexMean, u.slopeBase);
-    let ground = groundBased(groundSource(pixel));
-    let mean = mix(select(u.slopeTexMean, u.slopeBase.rgb, u.slopeBase.a > 0.5), select(u.groundTexMean, u.groundBase.rgb, u.groundBase.a > 0.5), u.mossFromGround);
+    let ground = worldGround(pixel);
+    let mean = mix(select(u.slopeTexMean, u.slopeBase.rgb, u.slopeBase.a > 0.5), groundMean(), u.mossFromGround);
     let face = mix(cover, ground, u.mossFromGround);
     let grain = dot(face, luma) / max(dot(mean, luma), 0.02);
     return saturate(face * (1.0 + (grain - 1.0) * 0.8) * 0.85);
@@ -933,7 +906,8 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     var rough = 0.0;
     var scale = 0.0;
     for (var i = 0; i < 5; i++) {
-        let m = select(u.shine[i], u.rock[rs & rockMask].shineRock, i == 2);   // the rock row is the recipe's
+        var m = select(u.shine[i], u.rock[rs & rockMask].shineRock, i == 2);
+        if(i==0){m.x=max(m.x,materialShine(p,gs));m.y=select(m.y,16.0,m.y<=0.0);}   // a material's own shine adds to the world's ground row
         gloss += weight[i] * m.x;
         focus += weight[i] * m.x * m.y;
         rough += weight[i] * m.z;
@@ -956,7 +930,7 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     rough *= reach;
     gloss *= reach;
     let q=vec2f(dot(pixel,SHINE_ACROSS)/scale,dot(pixel,SHINE_ALONG)/(scale*max(u.shineStretch,1.0)));
-    let grain=shineNoise(q)*rough;
+    var grain=shineNoise(q)*rough;
     let axis=select(vec3f(0,0,1),vec3f(1,0,0),abs(normal.z)>.9);
     let tangent=normalize(cross(normal,axis));let bitangent=cross(normal,tangent);
     let grained=normalize(normal+tangent*grain.x+bitangent*grain.y);
@@ -1165,7 +1139,7 @@ fn litBed(bed: vec3f, rockShare: f32, rockLevel: f32) -> vec3f {
     // The light is the bed's brightness against its own material's: the level ground's mean for the soft bed, the rock's own colour
     // (rockLevel) for rock, so a rock darker than the ground does not count as shade and a submerged platform is as pale as the shelf
     // round it, with its joints.
-    let level = max(mix(dot(groundBased(u.groundTexMean), luma), rockLevel, rockShare), 0.02);
+    let level = max(mix(dot(groundMean(), luma), rockLevel, rockShare), 0.02);
     // Shade stays paler under water than on land (retail's shaded bank beds show
     // as soft darker blue, never as black rims), so the dark side carries less,
     // on rock as on soft ground. The artist's contrast control applies to all beds.
@@ -1210,7 +1184,7 @@ fn drawMineralMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, gras
     // Native fissures reach farther than their brighter mineral fill. Fade through that structure instead of blurring two full images.
     let stone = dot(*slopeGrass, vec3f(0.299, 0.587, 0.114));
     let edge = (0.26 - stone) * 0.9 + (n.b - 0.5) * 0.12;
-    *slopeCover = smoothstep(0.04, 0.96, cover + edge * 4.0 * cover * (1.0 - cover)) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, h);
+    *slopeCover = smoothstep(0.04, 0.96, cover + edge * 4.0 * cover * (1.0 - cover)) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, baseHeight(p));
     if (u.groundFringe == 0) { return; }
     // This fringe already contains native ground plus thin vein tails. Preserve its pixels before the darker face arrives.
     let face = genColor(0, pixel);
@@ -1228,7 +1202,7 @@ fn drawMineralMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, gras
         margin = mix(margin, ring, ringMask * u.ringAmount);
         *slopeGrass = mix(margin, face, smoothstep(0.22, 0.96, zone + detail));
     }
-    *slopeCover = smoothstep(0.01, 0.28, cover) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, h);
+    *slopeCover = smoothstep(0.01, 0.28, cover) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, baseHeight(p));
     if (materialWeather > 0.0 && u.transitionBody != 0) {
         // The worker's spatially softened source measures a join across world pixels; all three materials use that coordinate.
         var source = sediments.b;
@@ -1254,7 +1228,7 @@ fn drawMineralMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, gras
         }
         if (u.transitionDetail > 0.0) {
             let uv = grainPixel(pixel) / 512.0;
-            let groundLow = select(textureSampleLevel(grassTex, grassSamp, uv, 3.0).rgb, textureSampleLevel(generatedTex, linearRepeat, uv, max(u.groundLayer, 0), 3.0).rgb, u.groundLayer >= 0);
+            let groundLow = groundMean();
             let ringLow = textureSampleLevel(generatedTex, linearRepeat, uv, 7, 3.0).rgb;
             let bodyLow = textureSampleLevel(generatedTex, linearRepeat, uv, 5, 3.0).rgb;
             transitionLow = mix(mix(groundLow, ringLow, ringWeight), bodyLow, warm);
@@ -1590,7 +1564,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         painted = paintCoverage(p, wideSlope(p), clamp((around - h) / 1.5, -1.0, 1.0));
     }
     painted.x = max(painted.x, max(rimRockAt(p), shoreRockAt(p)));   // bare rock at a rim or a shore is painted rock (engine-common.wgsl rimRockAt, shoreRockAt)
-    let place = landPlace(p, h, g, broad, slope, n, weather, route);
+    let place = landPlace(p, baseHeight(p), broad, broad, slope, n, weather, route);
     let bare=clamp(1.0-place.vegetation,0.0,1.0);
     let faceGate=rockFaceGate(slope/(1.0-.5*bare),painted.x,route)*(1.0-softBankAt(p));
     let rain=geometry.rain;
@@ -1689,20 +1663,24 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Only faces turned from the sun take it (n.l from .5 down to .1), so a flank that faces the light is not darkened by its occlusion.
     if (u.lavaDusk > 0.0 && shading < 1.0) { shading = pow(max(shading, 0.0), 1.0 + u.lavaDusk * smoothstep(u.base + 20.0, u.base + 60.0, baseHeight(p)) * (1.0 - smoothstep(0.1, 0.5, dot(normal, u.light)))); }
     let timeMaps = timeMapsAt(p);
-    var grass = groundBased(groundSource(pixel));
+    gs=groundSlotAt(p);
+    var grass = materialPigment(p,gs);
+    // The world's own settings for level ground (its low-ground tint, its cover table, its patches) belong to its ground material;
+    // a material a stroke chose keeps its own look.
+    let ownGround = gs == u32(u.groundDefault);
     // Low ground: the ground from the sea up to lowReach above it takes the low color (its grain kept), by the authored
     // height (the relief's grit would speckle the edge); the edge is ragged by 20-px noise and fades over the upper half of the reach.
     // Under the sea it is all low ground: the lit bed takes it from here and the shallow water's art below.
     // Its grain (Grain kept below 1): the ground pattern about its mean, and in the water the art and the depth mottle, so mud reads smooth.
     var lowShare = 0.0;
     var lowGrain = 1.0;
-    if (u.lowTint > 0.0 || u.lowGrain < 1.0) {
+    if ((u.lowTint > 0.0 || u.lowGrain < 1.0) && ownGround) {
         let above = baseHeight(p) - u.sea + (terrainNoise(p * 0.05 + vec2f(19.0, 47.0)).g - 0.5) * 0.6 * u.lowReach;
         let low = 1.0 - smoothstep(0.5 * u.lowReach, u.lowReach, above);
-        let groundMean = select(u.groundTexMean, u.groundBase.rgb, u.groundBase.a > 0.5);
-        if (u.lowGrain < 1.0) { lowGrain = mix(1.0, u.lowGrain, low); grass = groundMean + (grass - groundMean) * lowGrain; }
+        let groundTone = groundMean();
+        if (u.lowGrain < 1.0) { lowGrain = mix(1.0, u.lowGrain, low); grass = groundTone + (grass - groundTone) * lowGrain; }
         lowShare = u.lowTint * low;
-        if (lowShare > 0.0) { grass = mix(grass, lowTinted(grass, groundMean), lowShare); }
+        if (lowShare > 0.0) { grass = mix(grass, lowTinted(grass, groundTone), lowShare); }
     }
     // The model's slope grass costs noise taps, so the slope and face blocks share one read.
     // Level ground (slope under the cover ramp's start, no painted rock) never mixes it in, so it skips the taps.
@@ -1719,7 +1697,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Small native slope interiors retain moss ribs and scattered stone.
         // This is an appearance material, not recovered albedo or geometry.
         var slopeGrass = slopeBased;
-        var slopeCover = select(smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, h), 0.0, tabled);
+        var slopeCover = select(smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, baseHeight(p)), 0.0, tabled);
         drawMineralMargins(p, h, slope, n, pixel, grass, sediments, brokenSediments, materialWeather, fringeVariation, &slopeGrass, &slopeCover);
         // Level dry ground can receive mineral tails from a nearby hill.
         // Only banks below that plane need the high-coast admission check.
@@ -1743,7 +1721,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         grass = mix(grass, slopeGrass, slopeCover);
     }
     // Card P30: a world with a ground-cover table colours its grass by class (the slope-only ramp above still gates the slope texture).
-    if (cvr(0u).x > 0.5) { grass = groundCover(p, slope, broad, place.top, timeMaps, place.vegetation, grass, (1.0 - route) * step(u.sea + 1.0, h)); }
+    if (cvr(0u).x > 0.5 && ownGround) { grass = groundCover(p, slope, broad, place.top, timeMaps, place.vegetation, grass, (1.0 - route) * step(u.sea + 1.0, h)); }
     // The one rock's colour, wherever rock shows (a face, a bare top, a crown): even (its relief's light makes the pattern), each block a
     // little lighter or darker (Color variation), each layer its own tint (Layer tint), its runnels and open partings wet (Wet streaks).
     let rockFlat = slotRock(rs);
@@ -1767,9 +1745,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.soilRim > 0.0) {
         // The edges fray by the art pixel, so cover and rock interleave where they meet instead of one lying over the other: single pixels of
         // grass stand in the bare ground and single pixels of earth in the grass. Along an edge the seam of earth comes and goes (53 and 17 px).
-        let fray = shelfHash(floor(grainPixel(pixel)) + 37.0) - 0.5;
-        let comes = smoothstep(0.25, 0.7, 0.5 + 0.5 * (0.6 * valueNoise(p / 53.0 + vec2f(3.0, 91.0)) + 0.4 * valueNoise(p / 17.0 + vec2f(57.0, 21.0))));
-        let line = 0.5 + (patches - 0.5) * 0.4 + (voxelNoise(hit / vec3f(4.0, 4.0, 3.0)) - 0.5) * 0.2 + fray * 0.22;
+        let fray = shelfHash(poolPixel(grainPixel(pixel)) + 37.0) - 0.5;
+        let comes = smoothstep(0.25, 0.7, 0.5 + 0.5 * (0.6 * poolNoise(p, 53.0, 91.0) + 0.4 * poolNoise(p, 17.0, 57.0)));
+        // Soil on level ground is a ground choice, so all of its variation
+        // uses the pool. Rock-face variation remains in rock space.
+        let line = 0.5 + poolNoise(p, 13.0, 43.0) * 0.2 + poolNoise(p, 4.0, 17.0) * 0.1 + fray * 0.22;
         let bared = smoothstep(line - 0.05, line + 0.05, place.exposed);
         let rimGround = smoothstep(line - 0.4, line - 0.1, place.exposed) * smoothstep(0.05, 0.2, place.exposed) * (1.0 - bared);
         let frayedFace = smoothstep(soilEdge + fray * 0.3 - 0.05, soilEdge + fray * 0.3 + 0.05, share);
@@ -1820,7 +1800,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.rockCrown > 0.0) {
         // Some worlds' raised ground is bare rock to its crown (Zhon's
         // domes), not only where it is steep.
-        let crown = smoothstep(u.base + 5.0, u.base + 14.0, h + (n.g - 0.5) * 6.0) * u.rockCrown * (1.0 - route) * (1.0 - sandBar);
+        let crown = smoothstep(u.base + 5.0, u.base + 14.0, baseHeight(p) + (n.g - 0.5) * 6.0) * u.rockCrown * (1.0 - route) * (1.0 - sandBar);
         material = mix(material, rock, crown);
         exposed = max(exposed, crown);
     }
@@ -1830,7 +1810,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // share varies per cycle), and B's share ramps toward the next section when both use the same pair. Beds colour all
         // raised ground, level tops included (retail mesa caps take their band's colour); edges are hard (~3 px); bed edges
         // wander ~1-1.5 units at 5-25 px and meander broadly.
-        let hr = voxelColumnCoord(hit);
+        // On a level cap the authored height chooses one bed. Art relief and
+        // world-space bed wander must not select a different ground material.
+        let bedSlope = smoothstep(0.05, 0.22, slope);
+        let levelColumn = (baseHeight(p) - u.columnOrigin) * (5.5 / max(2.0, u.rock[rs & rockMask].faceBed));
+        let hr = mix(levelColumn, voxelColumnCoord(hit), bedSlope);
         let zone = columnSectionAt(hr);
         // Card G4: retail's pale caps are one sheet of the cool bed. The cap pixels (height 56 and up on slopes under .35 per px)
         // are 9.6-12% orange in retail and 22% in ours, hue 64-77 against 42: the beds' fine warp and the spread of a section's
@@ -1849,7 +1833,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (painted.x > 0.0) { rockBed = columnColour(hr, topZone, 0.04, false, 0.0); }
         let bed = mix(stratum, rockBed, painted.x);
         let lum = dot(material, vec3f(0.299, 0.587, 0.114));
-        let meanLum = max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);
+        let meanLum = max(dot(groundMean(), vec3f(0.299, 0.587, 0.114)), 0.05);
         // The ground's grain survives in the beds as brightness, scaled by
         // Bed grain (retail desert bands are smooth colour).
         let bedColour = saturate(bed * mix(1.0, clamp(lum / meanLum, 0.82, 1.12), u.rock[rs & rockMask].strataGrain));
@@ -1857,17 +1841,17 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // carried the first bed's colour onto the plain in patches that do not repeat with the ground's pool (a bare Desert plain drew
         // 839 distinct tiles in a 2048-px window where its pool holds 210; TA's maps are tiles). The beds themselves still wander.
         // A recipe's level ground takes its beds from its own height (bedsFrom: the world's first section start for the world's rock); its faces at every height.
-        let onRaised = max(smoothstep(u.rock[rs & rockMask].bedsFrom, u.rock[rs & rockMask].bedsFrom+1.5, h-u.columnOrigin),faceGate*exposed) * (1.0-route);
-        let bedCoverage=clamp(u.rock[rs & rockMask].strata*2.0,0.0,1.0)*mix(exposed,1.0,smoothstep(.5,1.0,u.rock[rs & rockMask].strata));
+        let onRaised = max(smoothstep(u.rock[rs & rockMask].bedsFrom, u.rock[rs & rockMask].bedsFrom+1.5, baseHeight(p)-u.columnOrigin),faceGate*exposed) * (1.0-route);
+        let bedCoverage=clamp(u.rock[rs & rockMask].strata*2.0,0.0,1.0)*select(mix(exposed,1.0,smoothstep(.5,1.0,u.rock[rs & rockMask].strata)),exposed,!ownGround);
         material = mix(material, bedColour, max(bedCoverage * u.rock[rs & rockMask].strataContrast * onRaised, u.rock[rs & rockMask].strata * painted.x));
-        if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)); }
+        if (u.baseBand > 0.0) { material = mix(material, strataSlot(4), baseBandMask(p, h - u.base, slope)*select(1.0,exposed,!ownGround)); }
     }
     // Ground patches: level ground is not one tone. One gray field (two sizes of noise, sizes rounded to divide the pool) is read through a ramp of five flat steps: damp ground
     // up to a fifth darker, plain ground as it is, dusty ground paler toward the world's weathered sand. The steps' edges are frayed over some
     // 30 px and each tone is mottled a little, so a patch has no outline. Every part of the field repeats with the ground's pool, as the
     // ground's own tiles do, so a plain keeps the tiles it had (TA's maps are tiles, at most 65,536 of them; with the patches off the pool
     // the same plain had four times as many distinct tiles). Color only; the heights stay flat.
-    if (u.groundPatch > 0.0) {
+    if (u.groundPatch > 0.0 && ownGround) {
         let level = (1.0 - smoothstep(0.05, 0.22, slope)) * (1.0 - exposed) * (1.0 - route) * smoothstep(u.sea + 1.0, u.sea + 3.0, h);
         if (level > 0.0) {
             let size = max(40.0, u.groundPatchSize);
@@ -1951,7 +1935,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             let held = bakedFieldsNearest(p).b;
             // A stone lying in a cliff's debris has the color of the bed it fell from, as the debris around it has (sourceColor: the
             // beds' colors as far as the faces show them, Strata's coverage and strength); a stone elsewhere is the world's rock.
-            material = mix(material, mix(rock, sourceColor, clamp(accumulated.y * 2.0, 0.0, 1.0)) * 1.08, select(max(coverOrCrack, 0.0), 0.0, held > 1.0 || held < 0.0));
+            material = mix(material, mix(rock, sourceColor, clamp(accumulated.y * 2.0, 0.0, 1.0)) * 1.08, select(max(coverOrCrack, 0.0), 0.0, held > 1.0 || held <= 0.0));
         }
         // A crack's floor is in shadow: darken what is there, so a crack in
         // grass stays green-black and one in rock grey-black. The walls are
@@ -2001,7 +1985,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Crystal Grain 1: the tops carry the level ground's own art (retail
         // column tops are streaked like the ground), not the slope cover.
         let topBase = mix(material, levelGround, u.crystalGrain);
-        let grainLum = dot(topBase, vec3f(0.299, 0.587, 0.114)) / max(dot(u.groundTexMean, vec3f(0.299, 0.587, 0.114)), 0.05);
+        let grainLum = dot(topBase, vec3f(0.299, 0.587, 0.114)) / max(dot(groundMean(), vec3f(0.299, 0.587, 0.114)), 0.05);
         var faces = mix(topBase, crystalColor * clamp(grainLum, 0.6, 1.5), 0.35) * (1.0 + 0.25 * jitter) * u.crystalTone;
         faces = mix(faces, crystalColor * 0.38 * u.crystalFace, smoothstep(1.2, 2.5, length(g)));
         // G7: a crater's skin has no seams, so the ramp from its mark to bare ground (the only place below .66) draws no outline.
@@ -2169,9 +2153,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // Cast shadow as the diffuse term applies it (level ground keeps flatShadow), shared by shine and the surface marks.
     let markSeen = 1.0 - (1.0 - shadow) * mix(u.flatShadow, 1.0, smoothstep(0.08, 0.35, slope));
     let turned = 1.0 - clamp(shading, 0.0, 1.0);
-    if (u.shineOn != 0 || u.paintOn != 0) {
+    if (u.shineOn != 0 || u.paintOn != 0 || u.groundShine != 0) {
         let sunSeen = markSeen * (1.0 - flatBank) * closeVis * faceSun;
-        let damp=max(max(u.rock[rs & rockMask].faceWet*exposed*rockWet,painted.z*.85),wetFilm*.8);
+        var damp=max(max(u.rock[rs & rockMask].faceWet*exposed*rockWet,painted.z*.85),wetFilm*.8);
         var shine = shineTerm(pixel, p, g, normal, material, exposed, slopeShare, crystalMask, sunSeen, landform, damp, mineralPatch, skin*(1.0-depositCover));
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
@@ -2284,13 +2268,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
         var deep = smoothstep(u.shallowDepth, u.deepDepth, colorDepth);
         if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, bedDepth); }
-        var grain = genColor(u.waterLayer, pixel) - u.waterMean;
+        var grain = waterPigment(pixel) - waterMean();
         if (u.lowGrain < 1.0) { grain *= lowGrain; }
         // Colors choose the water's tint, never replace the bed-light model.
         var water=vec3f(0);
         {
-            var deepWater = select(genColor(u.waterLayer,pixel),u.deepBase.rgb+grain*.95,u.deepBase.a>.5);
-            if (u.lowGrain < 1.0) { deepWater = select(u.waterMean,u.deepBase.rgb,u.deepBase.a>.5) + grain; }
+            var deepWater = select(waterPigment(pixel),u.deepBase.rgb+grain*.95,u.deepBase.a>.5);
+            if (u.lowGrain < 1.0) { deepWater = select(waterMean(),u.deepBase.rgb,u.deepBase.a>.5) + grain; }
             // One bed model: the shallows are the ground under the water, lit by the same sun, seen through
             // the water's tint (retail draws its shallows as lit terrain through a tint). Shallows see the same
             // shaded voxel rock, beds and crusts as the exposed coast; soft ground is the level ground.
@@ -2319,7 +2303,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             if (u.waterMid.a > 0.0 && u.shallowBase.a < .5 && u.deepBase.a < .5) {
                 let toMid = smoothstep(u.shallowDepth, u.waterMid.a, colorDepth);
                 let toDeep = smoothstep(u.waterMid.a, u.deepDepth, colorDepth);
-                var mid = u.waterMid.rgb + (deepWater - u.waterMean) * 0.9;
+                var mid = u.waterMid.rgb + (deepWater - waterMean()) * 0.9;
                 if (lowShare > 0.0) { mid = mix(mid, lowTinted(mid, u.waterMid.rgb), lowShare); }
                 water = mix(mix(shallow, mid, toMid), deepWater, toDeep);
             }
@@ -2422,6 +2406,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.diagnosticView == 4) { color = vec3f(exposed); }
     if (u.diagnosticView == 5) { color = vec3f(lighting, ao, shadow); }
     if (u.diagnosticView == 6) { color = material; }
+    if (u.diagnosticView >= 8 && u.diagnosticView <= 12) {
+        let slot=select(gs,u32(max(0,u.waterGround)),h<u.sea && u.waterGround>0);
+        if(u.diagnosticView==8){color=materialRaw(p,slot);}
+        if(u.diagnosticView==9){color=vec3f(clamp(.5+materialRelief(p,slot)/16.0,0.0,1.0));}
+        if(u.diagnosticView==12){color=materialPigment(p,slot);}
+    }
     if (u.diagnosticView == 7) { let code = bakedFields(p).b; color = vec3f(clamp(-code, 0.0, 1.0), clamp(code - 1.0, 0.0, 1.0), clamp(0.5 + bakedFields(p).r * 0.08, 0.0, 1.0) * 0.6); }
     return vec4f(color, 1.0);
 }

@@ -207,7 +207,7 @@ fn shapeMasks(i: u32, f: f32) {
 // Rock presets (B2): the stroke's claim (its write to plane 20, sculpt-gpu-fields.js rockClaim) on the cells it shapes outside its own footprint, its
 // talus and its shore fingers, so they are the stroke's rock.
 fn claimRock(i: u32) {
-  for (var m = 0u; m < u.nwrites; m++) { let mw = MW[u.mwBase + m]; if (u32(mw.x) == 20u) { maskSet(i, 20u, i32(mw.y)); } }
+  for (var m = 0u; m < u.nwrites; m++) { let mw = MW[u.mwBase + m]; if (u32(mw.x) == 20u || u32(mw.x) == 21u) { maskSet(i, u32(mw.x), i32(mw.y)); } }
 }
 fn talusGround(i: u32, k: f32) {
   if (k <= 0.0) { return; }
@@ -287,6 +287,8 @@ fn stamp(@builtin(global_invocation_id) g: vec3u) {
     let f = w * u.amountPct;
     for (var m = 0u; m < u.nwrites; m++) {
       let mw = MW[u.mwBase + m]; let pl = u32(mw.x); let b = f32(maskGet(i, pl));
+      // A preset ID is categorical: blending 2 toward 0 would paint slot 0.
+      if(mw.w==1.0){if(f>0.0){maskSet(i,pl,i32(mw.y));}continue;}
       maskSet(i, pl, i32(floor(b + (mw.y - b) * f * mw.z + 0.5)));
     }
   } else {
