@@ -8,6 +8,7 @@
 // The export runs under Node on Dawn by default (repro/headless.mjs exportMap: the page's modules bake the export art and the page's exporter,
 // export/ built for WebAssembly, packs it; needs Go), from this checkout's files. --chrome exports in the page in headless Chrome instead (the Export
 // pane, its worker and its line of text); it needs --server, your own Go development server (there is no default).
+import {chromePath, chromeGpuFlags} from '../repro/chrome.mjs';
 import {cdpPortFree} from '../repro/cdp-port.mjs';
 import {layoutStrokes} from '../repro/layouts.mjs';
 import {spawn} from 'node:child_process';
@@ -59,7 +60,7 @@ async function inNode() {
 async function inChrome() {
   async function session(url, fn) {
     await cdpPortFree(port);
-    const browser = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
+    const browser = spawn(chromePath, ['--headless=new', ...chromeGpuFlags, `--remote-debugging-port=${port}`,
       `--user-data-dir=${out}/profile-${port}-${Date.now()}`, '--window-size=1700,1300', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
     try {
       let ws;

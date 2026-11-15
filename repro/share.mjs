@@ -3,6 +3,7 @@
 // --server is where the page is served (the dev server, or a static build on localhost); the page's own services.json says which save-link
 // service it uses. With --admin-token-file the ids this run created are deleted from that service afterwards (the token is never printed).
 // Writes screenshots to --out and prints one JSON line. Exit 1 on any failed check or console error.
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
 import {mkdirSync, writeFileSync, readFileSync} from 'node:fs';
@@ -18,7 +19,7 @@ const check = (name, ok, detail = '') => { checks[name] = ok ? 'ok' : 'FAILED ' 
 
 async function session(fn) {
   await cdpPortFree(port);
-  const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
+  const chrome = spawn(chromePath, ['--headless=new', ...chromeGpuFlags, `--remote-debugging-port=${port}`,
     `--user-data-dir=${out}/profile-${port}-${Date.now()}`, '--window-size=1700,1300', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
   try {
     let ws;

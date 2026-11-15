@@ -14,7 +14,7 @@ import {encodePng} from './png.mjs';
 import {setRock, setRockColors} from '../sculpt-rock-presets.js';
 
 const arg = (k, d) => process.argv.includes(k) ? process.argv[process.argv.indexOf(k) + 1] : d;
-const out = arg('--out', '/private/tmp/terraform-rock-presets-scene'); mkdirSync(out, {recursive: true});
+const out = arg('--out', '/tmp/terraform-rock-presets-scene'); mkdirSync(out, {recursive: true});
 const W = 1024, rect = {x: 100, y: 100, width: W, height: W, tile: 256}, BASALT = 2;
 const scene = {biome: 'green', ground: true, strokes: [
   ['plateau', [[260, 420], [760, 360]], {seed: 11, card: {diameter: 480, elevation: 200, rockPreset: BASALT}}],

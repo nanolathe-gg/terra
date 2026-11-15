@@ -25,6 +25,7 @@
 // --set puts values in before the sweep, to probe a row under a gate. --query adds page parameters to every page load, for a setting that reloads the
 // page (Ground pattern, Beach). --column FILE gives every page load the rock column in FILE (a `column` block, as the Rock column panel saves one with
 // the map; Node only), for the rows a column turns on.
+import {chromePath, chromeGpuFlags} from '../repro/chrome.mjs';
 import {cdpPortFree} from '../repro/cdp-port.mjs';
 import {worldControlRequirement, shapeControlAvailable, LANDFORM_FACET_KEYS} from '../sculpt-control-schema.js';
 import {spawn} from 'node:child_process';
@@ -124,7 +125,7 @@ const diff = (a, b) => { let max = 0, n = 0; for (let i = 0; i < a.length; i += 
 // page and only the two numbers travel), or the page's own modules under Node on Dawn (repro/headless.mjs).
 async function chromeHost() {
   await cdpPortFree(port);
-  const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
+  const chrome = spawn(chromePath, ['--headless=new', ...chromeGpuFlags, `--remote-debugging-port=${port}`,
     `--user-data-dir=${out}/.profile-${port}-${Date.now()}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
   let ws, id = 0; const wait = new Map();
   const close = () => { try { ws?.close(); } catch {} chrome.kill(); };

@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 from scipy.ndimage import label, map_coordinates, uniform_filter
 
-DEFAULT_MAP = Path('/private/tmp/nanolathe-map-editor/retail-desert/painted_desert-e2c3dad3')
+DEFAULT_MAP = Path('/tmp/nanolathe-map-editor/retail-desert/painted_desert-e2c3dad3')
 LUMA = np.array([.299, .587, .114], np.float32)
 
 

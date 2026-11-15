@@ -1,3 +1,25 @@
+> **November 14 approved landing:** the owner authorized merging the reported
+> review branch through e1476192. The compact sampler's measured pixel changes
+> and Rain's 8–11% final-cost tradeoff are included in that approval. Main had
+> not moved; the rendering source and pinned previews are unchanged from the
+> checked build. [Landing record](LP_NOV14_LANDING.md). Earlier branch/review
+> statements below describe the checkpoint before this approval.
+
+> **November 14 checkpoint:** main a14c48c3 includes the owner-approved
+> bounded F cache, mask packing and coarse-record lifetime fixes. The newer
+> compact inputs, color scheduling and small-map Rain work stays on the same
+> `live-preview/lp6` review branch. [Current measured status](LP_NOV14_MORNING.md)
+> supersedes the remaining-work list in this historical November 13 record.
+
+> **November 13 LP6 and LP5 split landing:** the owner approved the retained
+> LP6 units and LP5 step 0 for main. The source merge is unchanged from the
+> reviewed branch; main had not moved. Fresh authored previews are pinned to
+> `previews-ad20b68dd40e1adc`. The existing focused checks and measurements
+> remain applicable; no broad suite is repeated. [LP6 shell](LP6_SHELL.md),
+> [readback decision](LP6_READBACK.md), and [LP5 split](LP5_STEP0.md) retain
+> their measured limits. Visible-record caching and control routing follow
+> from this landing; whole-view stage-F acceptance is still open.
+>
 > **November 13 LP3 landing:** the owner approved the LP3 trial and its reported
 > limits. [The landing record](LP3_LANDING.md) covers integration with cleaned
 > latest main. LP6 now takes priority; the earlier LP3 acceptance gaps remain
@@ -37,24 +59,26 @@ budget by 1.1 MiB. An earlier candidate also logged a transient memory-budget
 exception and is excluded from acceptance. Sampled final and tile-partition
 pixels stay exact.
 
-Remaining work, in order:
+Remaining work, with LP6 now active:
 
-1. **LP3:** review the regional lattice and memory/readback follow-ups;
-   finish the paused Rain tail, strict load-memory containment, broader
-   default-budget/scene/view acceptance, and the coarse-contour quality
-   decision. Cold compute variants, allocation seeds, and tail validation
-   remain. Try the cheaper coarse raster
-   only if its measured color bias is acceptable.
-2. **LP4:** cancellation between voxel pieces, time-based piece sizing and
+1. **LP6:** [the first final-memory unit](LP6_FINAL_MEMORY.md) is committed
+   on `live-preview/lp6` for review. On the focused 512-MiB fixture, finals
+   improve 12.1–14.3% by retaining canonical Time pages. The drag tail is
+   somewhat slower, and the focus deadline remains unestablished. Next:
+   voxel allocation/march units, wear and shell measurements, tile sizing,
+   and fixed pools only when the full-view measurement justifies them.
+2. **LP3:** the remaining paused Rain tail, strict load-memory containment,
+   broader default-budget/scene/view acceptance and the coarse-contour
+   quality decision. Cold compute variants, allocation seeds and tail
+   validation remain. The cheaper coarse raster is still optional.
+3. **LP4:** cancellation between voxel pieces, time-based piece sizing and
    the remaining view-first/off-screen scheduling. Bring every GPU
    submission under 100 ms.
-3. **LP5:** the color-only rerun experiment, proving it matches a full
+4. **LP5:** the color-only rerun experiment, proving it matches a full
    re-bake before retaining geometry records and routing stage-F edits.
-4. **LP6:** faster finals: voxel work, final tile-size measurements, fixed
-   pools without readback, and an atlas only if measurements justify it.
-5. **Later validation:** finish the full scene/map/view performance matrix
-   and remaining preview-quality/memory checks. Safari/iPad validation
-   remains explicitly deferred. No validation was added to this merge.
+5. **Later validation:** the full scene/map/view performance matrix and
+   remaining preview-quality/memory checks. Safari/iPad validation remains
+   explicitly deferred.
 
 Current details are in [LP2 progress](LP2_PROGRESS.md),
 [LP3 progress](LP3_PROGRESS.md), and [the plan](LIVE_PREVIEW_PLAN.md).

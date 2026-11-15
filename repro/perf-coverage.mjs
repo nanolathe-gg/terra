@@ -17,3 +17,20 @@ export function pictureCurrent(p,m) {
   }
   return m.kind==='stroke'&&m.rev!=null?p.rev>=m.rev:m.control==='knob-erosionRain'?p.feedSerial>=m.id:p.serial>=m.id;
 }
+
+// Native pictures carry the exact Time epoch they read. Whole-map export
+// readiness can lag a correct coarse view; keep epoch/serial coverage authoritative.
+// Legacy builds without that metadata still need their global ready flag.
+export const coverageReadyForInput=(event,input)=>Boolean(input.native||event.ready);
+
+// A coarse answer is current terrain, but cannot satisfy LP5's final-quality
+// color budget. Use the actual painted partition, including any overpaint.
+export function finalQualityObservations({inputs=[],events=[],view}={}) {
+  const coverage=createCoverage(),pictures=events.filter(e=>e.type==='coverage');
+  const observations=inputs.map(m=>{
+    const targets=view?(m.rectangles?.length?m.rectangles:[view]).map(r=>coverage.intersect(r,view)).filter(Boolean):[];
+    const done=pictures.find(e=>e.t>=m.t&&coverageReadyForInput(e,m)&&coverage.covered(targets,p=>p.level<=1&&pictureCurrent(p,m),e.regions));
+    return {id:m.id,t:m.t,final:done?.t??null};
+  });
+  return {observations,samples:observations.filter(o=>o.final!==null).map(o=>o.final-o.t)};
+}

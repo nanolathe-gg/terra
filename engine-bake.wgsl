@@ -50,7 +50,7 @@ fn gullies(q: vec2f, dir: vec2f, n: f32) -> vec3f {
 // them. Stones read f at their centre, so a stone is wholly in or out.
 const SCATTER_BASE = 0.80;
 fn scatterAt(p: vec2f) -> f32 {
-    return textureSampleLevel(masksTex, linearClamp, maskUv(p), 1, 0.0).r;
+    return sampleRegionalArray(masksTex,maskPoint(p),1).r;
 }
 fn scatterDensity(f: f32, world: f32, base: f32) -> f32 {
     return select(world * (1.0 + f), max(world * exp2(3.0 * f), f * base), f > 0.0);
@@ -151,7 +151,7 @@ fn plantMask(c: vec2f) -> vec4f {
     let broad = broadGradient(c);
     let around = 0.25 * (baseHeight(c - vec2f(3.0, 0.0)) + baseHeight(c + vec2f(3.0, 0.0)) + baseHeight(c - vec2f(0.0, 3.0)) + baseHeight(c + vec2f(0.0, 3.0)));
     var vegetation = 1.0 + u.lushness;
-    if (u.overrideOn != 0) { vegetation += textureSampleLevel(masksTex, linearClamp, maskUv(c), 4, 0.0).r; }
+    if (u.overrideOn != 0) { vegetation += sampleRegionalArray(masksTex,maskPoint(c),4).r; }
     let cover = coverAt(length(broad), broad, clamp((h0 - around) / 1.5, -1.0, 1.0), tm, vegetation);
     var total = 0.0;
     for (var k = 0u; k < 7u; k++) { total += cover[k]; }
@@ -877,7 +877,7 @@ fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
 
 // The painted-cover texture (Sand, Ground cover and Paint strokes) at world point p.
 fn paintAt(p: vec2f) -> vec4f {
-    return textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0);
+    return sampleRegional2D(routesTex,maskPoint(p));
 }
 
 // Painted sand seen through a blur: (the share of a ring of taps 9 to 20 px out that lies inside the painted sand, which feathers the
@@ -1118,7 +1118,7 @@ fn bake(p: vec2f) -> vec4f {
     var paintFall = vec2f(0.0, 1.0);
     if (u.paintOn != 0) {
         paintFall = normalize(vec2f(valueNoise(p / 60.0 + 3.0), valueNoise(p / 60.0 + 9.0)) + vec2f(1e-3));
-        let raw = textureSampleLevel(masksTex, linearClamp, maskUv(p), 0, 0.0);
+        let raw = sampleRegionalArray(masksTex,maskPoint(p),0);
         let cover = paintEdge(p, raw, wideSlope(p), 0.0);
         paintRock = cover.x;
         faceSlope = max(slope, 0.8 * max(paintRock, 0.5 * cover.w));
@@ -1127,7 +1127,7 @@ fn bake(p: vec2f) -> vec4f {
     // -1 less .. +1 more than the world's own, 0 unchanged.
     var style = vec3f(0.0);
     if (u.styleOn != 0) {
-        let raw = textureSampleLevel(masksTex, linearClamp, maskUv(p), 1, 0.0).gba;
+        let raw = sampleRegionalArray(masksTex,maskPoint(p),1).gba;
         let wide = wideSlope(p);
         style = vec3f(styleEdge(p, raw.x, wide), styleEdge(p, raw.y, wide), styleEdge(p, raw.z, wide));
     }
@@ -1137,10 +1137,10 @@ fn bake(p: vec2f) -> vec4f {
     // cracks, bands or sand, as on a graded route.
     // The crystal channel also carries a column's brightness (0.8-1.0) and
     // its edges (0.5); the shader reads it raw from the fields.
-    let crystalRaw = textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0).a;
+    let crystalRaw = sampleRegional2D(routesTex,maskPoint(p)).a;
     let crystalCell = smoothstep(0.15, 0.6, crystalRaw);
     let route = max(routeProtection(p) * (1.0 - smoothstep(0.45, 0.9, length(broadGradient(p)))), crystalCell);
-    let crackShape = max(textureSampleLevel(routesTex, linearClamp, maskUv(p), 0.0).g, 0.6 * paintRock);
+    let crackShape = max(sampleRegional2D(routesTex,maskPoint(p)).g, 0.6 * paintRock);
     // Painted cracks: fewer scales the shape's mask down, more raises it to at least the painted amount.
     let crackMask = select(crackShape * (1.0 + style.y), max(crackShape, style.y), style.y > 0.0);
     // Retail level ground is not dead flat in the art: faint embossed lumps
@@ -1150,7 +1150,7 @@ fn bake(p: vec2f) -> vec4f {
     var lumpGain = 1.0;
     var lumpAdd = 0.0;
     if (u.lumpOn != 0) {
-        let painted = textureSampleLevel(masksTex, linearClamp, maskUv(p), 3, 0.0).r;
+        let painted = sampleRegionalArray(masksTex,maskPoint(p),3).r;
         lumpGain = 1.0 + min(painted, 0.0);
         lumpAdd = max(painted, 0.0) * u.lumpRelief;
     }
@@ -1281,7 +1281,7 @@ fn bake(p: vec2f) -> vec4f {
     // painted sand bars (sandCrown) bury theirs too.
     // riverfix: a braided river's bed (mask plane 19) is gravel, not sand: its pebbles stay on top and it takes no ripples.
     var gravelBed = 0.0;
-    if (sand > 0.0) { gravelBed = min(max(textureSampleLevel(masksTex, linearClamp, maskUv(p), 4, 0.0).a, 0.0) * 8.0, 1.0); }
+    if (sand > 0.0) { gravelBed = min(max(sampleRegionalArray(masksTex,maskPoint(p),4).a, 0.0) * 8.0, 1.0); }
     let buried = max(smoothstep(0.10, 0.90, sand), paintSand * u.sandCrown) * (1.0 - gravelBed);
     // Sand ripples (card P18): asymmetric crests with defects, coarse grains on the crests, and sand shadows behind the scatter's big stones.
     // They lie on the buried ground, so they go in after the sand buries relief. Height is lambda / 9 at the default Ripple height (1.4).

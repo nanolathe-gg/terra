@@ -11,6 +11,7 @@
 //  g  at the smallest GPU budget 100% settles on, zoom 4 settles without the error banner (the level may fall back; it is reported)
 //  h  a detail bake the allocator refuses falls back to level 1 with no banner, and a budget change tries the finest again
 // Writes one JSON line; exit 1 if any check fails.
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
 import {readFileSync} from 'node:fs';
@@ -25,7 +26,7 @@ const [sceneFile] = args;
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
 const url = `${server}/?biome=${scene.biome}&mapX=${map}&mapY=${map}&scratch=1&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}`;
 await cdpPortFree(port);
-const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal',
+const chrome = spawn(chromePath, ['--headless=new', ...chromeGpuFlags,
   `--remote-debugging-port=${port}`, `--user-data-dir=${join(tmpdir(), `terraform-zoom-${port}`)}`, `--window-size=${vw},${vh}`, '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const result = {scene: sceneFile, checks: {}};

@@ -5,6 +5,7 @@
 // Writes DIR/shape-controls.json; prints one row per control. Exit 1 on a console error. The heights are the authored fields, so the engine runs
 // under Node on Dawn (repro/headless.mjs) by default, from this checkout or --server; --chrome plays each case in the page on --server (your own
 // Go development server, which --chrome needs: there is no default) and --port (default 9685).
+import {chromePath, chromeGpuFlags} from '../repro/chrome.mjs';
 import {cdpPortFree} from '../repro/cdp-port.mjs';
 import {shapeControlAvailable} from '../sculpt-control-schema.js';
 import {spawn} from 'node:child_process';
@@ -107,7 +108,7 @@ if (!inChrome) {
   } finally { s.dispose(); }
 } else {
 await cdpPortFree(port);
-const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
+const chrome = spawn(chromePath, ['--headless=new', ...chromeGpuFlags, `--remote-debugging-port=${port}`,
   `--user-data-dir=${out}/.profile-${port}-${Date.now()}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 try {
   let ws; for (let i = 0; i < 100 && !ws; i++) { try { const p = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(x => x.type === 'page'); if (p) ws = new WebSocket(p.webSocketDebuggerUrl); } catch {} if (!ws) await sleep(200); }

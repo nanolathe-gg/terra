@@ -31,7 +31,7 @@ branches and the projection fix below, so re-render before judging.
    `$R/assets-*` remains the read-only measuring source of `measure/`.
 
    ```
-   R=/private/tmp/nanolathe-map-editor
+   R=/tmp/nanolathe-map-editor
    mkdir -p $R/agent-<card>
    cd ../terraform-wt-<card>
    go run ./cmd/terraform --port <server> --assets-root $R/agent-<card> \

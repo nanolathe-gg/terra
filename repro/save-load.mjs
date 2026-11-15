@@ -1,5 +1,6 @@
 // Actual Save -> Load between isolated browser profiles. Authored fixture only.
 // node repro/save-load.mjs --server http://127.0.0.1:<yours> --port <cdp> --out <dir>
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import assert from 'node:assert/strict';
 import {isDeepStrictEqual} from 'node:util';
 import {spawn} from 'node:child_process';
@@ -14,7 +15,7 @@ const out=resolve(args.includes('--out')?opt('--out'):mkdtempSync(join(tmpdir(),
 const sleep=ms=>new Promise(r=>setTimeout(r,ms)),browsers=[];
 async function open(offset){
   const p=port+offset;await cdpPortFree(p);
-  const browser=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless=new','--enable-gpu','--use-angle=metal',`--remote-debugging-port=${p}`,`--user-data-dir=${join(out,'profile-'+offset)}`,'--window-size=1440,900','--no-first-run','about:blank'],{stdio:'ignore'});
+  const browser=spawn(chromePath,['--headless=new',...chromeGpuFlags,`--remote-debugging-port=${p}`,`--user-data-dir=${join(out,'profile-'+offset)}`,'--window-size=1440,900','--no-first-run','about:blank'],{stdio:'ignore'});
   const item={browser};browsers.push(item);let ws;
   for(let i=0;i<100&&!ws;i++){try{const tabs=await(await fetch(`http://127.0.0.1:${p}/json/list`)).json();ws=new WebSocket(tabs.find(t=>t.type==='page').webSocketDebuggerUrl);}catch{}if(!ws)await sleep(100);}
   await new Promise(r=>ws.onopen=r);item.ws=ws;let id=0;const pending=new Map(),errors=[];

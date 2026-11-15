@@ -397,19 +397,19 @@ def fmt(table, label):
     return '\n'.join(rows)
 
 
-PALETTE = Path('/private/tmp/nanolathe-neural-terrain/editor-green-sections/palette.pal')
-CORPUS = Path('/private/tmp/nanolathe-neural-terrain/corpus')
-CATALOGS = Path('/private/tmp/nanolathe-map-editor/catalogs')
+PALETTE = Path('/tmp/nanolathe-neural-terrain/editor-green-sections/palette.pal')
+CORPUS = Path('/tmp/nanolathe-neural-terrain/corpus')
+CATALOGS = Path('/tmp/nanolathe-map-editor/catalogs')
 RETAIL = {
     # world: (loader, root, kinds, sea level for the height mask)
     'green': ('corpus', CORPUS, None, None),
-    'greensections': ('decoded', Path('/private/tmp/nanolathe-neural-terrain/editor-green-decoded/greenworld'), ['hills', 'island'], None),
-    'red': ('decoded', Path('/private/tmp/red-planet-inspection/decoded'), ['big', 'hills', 'islands', 'misc'], None),
-    'archipelago': ('decoded', Path('/private/tmp/archipelago-inspection/decoded'), ['caldera', 'hills', 'islands', 'sections'], None),
+    'greensections': ('decoded', Path('/tmp/nanolathe-neural-terrain/editor-green-decoded/greenworld'), ['hills', 'island'], None),
+    'red': ('decoded', Path('/tmp/red-planet-inspection/decoded'), ['big', 'hills', 'islands', 'misc'], None),
+    'archipelago': ('decoded', Path('/tmp/archipelago-inspection/decoded'), ['caldera', 'hills', 'islands', 'sections'], None),
     'moon': ('catalog', CATALOGS / 'sections/worlds/sections/moon', ['dark', 'misc'], None),
     'lava': ('catalog', CATALOGS / 'sections/worlds/sections/lava', ['coast', 'isle', 'misc', 'mtn'], 24),
     'zhon': ('catalog', CATALOGS / 'sections-zhon/TASect_Zhon/sections/zhon', None, 59),
-    'desert': ('map', Path('/private/tmp/nanolathe-map-editor/retail-desert/painted_desert-e2c3dad3'), None, None),
+    'desert': ('map', Path('/tmp/nanolathe-map-editor/retail-desert/painted_desert-e2c3dad3'), None, None),
 }
 
 

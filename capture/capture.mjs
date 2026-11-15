@@ -9,6 +9,7 @@
 //   node capture.mjs scenes.json OUT_DIR
 //
 // scenes.json: {"scenes": [{"name", "url", "seed"?, "example"?}]}
+import {chromePath, chromeGpuFlags} from '../repro/chrome.mjs';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
@@ -22,14 +23,13 @@ if (!manifestPath || !outDir) {
 const {scenes} = JSON.parse(readFileSync(manifestPath, 'utf8'));
 mkdirSync(outDir, {recursive: true});
 
-const chromePath = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const port = Number(process.env.CAPTURE_PORT || 9431);
 // --enable-gpu gives headless Chrome the real GPU on macOS: WebGPU runs on
 // Dawn's Metal backend (navigator.gpu needs a secure context, which
 // 127.0.0.1 is), and Metal-backed ANGLE serves the 2D overlay. SwiftShader
 // timings would not be comparable with interactive use. toDataURL reads the
 // last presented WebGPU frame.
-const chrome = spawn(chromePath, ['--headless=new', '--enable-gpu', '--use-angle=metal',
+const chrome = spawn(chromePath, ['--headless=new', ...chromeGpuFlags,
   `--remote-debugging-port=${port}`, `--user-data-dir=${join(outDir, '.profile')}`,
   '--window-size=1500,1250', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));

@@ -35,9 +35,9 @@ from section_common import PALETTE, palette_codes, project_cells  # noqa: E402
 from crystal_geometry import q, simplify_closed, calipers, colour_summary  # noqa: E402
 
 LUMA = np.array([.299, .587, .114], np.float32)
-ROOT = Path('/private/tmp/nanolathe-map-editor/catalogs/sections-ice/TASect_Ice/sections/ice')
-RETAIL = Path('/private/tmp/nanolathe-map-editor/retail-ice')
-MATERIALS = Path('/private/tmp/nanolathe-map-editor/agent-icecrystal/assets-ice/materials.json')
+ROOT = Path('/tmp/nanolathe-map-editor/catalogs/sections-ice/TASect_Ice/sections/ice')
+RETAIL = Path('/tmp/nanolathe-map-editor/retail-ice')
+MATERIALS = Path('/tmp/nanolathe-map-editor/agent-icecrystal/assets-ice/materials.json')
 SETTINGS = {'snow_luma': 150, 'water_blue_minus_red': 100, 'ridge_tophat_luma': 25, 'ridge_min_px': 30,
             'crack_luma': 120, 'block_rise_units': 20, 'block_top_within_units': 15,
             'face_slope_units_per_px': .3}

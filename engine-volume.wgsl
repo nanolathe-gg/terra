@@ -6,6 +6,7 @@ struct VolumeSettings {
     columnsY:u32, width:u32, height:u32, capacity:u32,
     low:f32, high:f32, screenY:vec2f,
     top:f32,   // where every ray starts (sculpt-volume.js render)
+    wearRound:f32,   // index of this ping-pong round, 0 through 3
 }
 @group(2) @binding(0) var<uniform> vs:VolumeSettings;
 @group(2) @binding(1) var<storage,read> vc:array<vec4i>;
@@ -14,12 +15,13 @@ struct VolumeSettings {
 @group(2) @binding(4) var vg:texture_2d<f32>;
 @group(2) @binding(5) var<storage,read> vb:array<vec4i>;
 @group(2) @binding(7) var<storage,read> vCount:array<u32>;
+@group(2) @binding(8) var<storage,read> vCoarse:array<u32>;
 
 // The existing Surface relief slider and local relief paint scale the entire
 // surface, including displacement and weathering of the volumetric rock.
 fn voxelRelief(p:vec2f,slope:f32)->f32 {
     if(u.styleOn==0){return u.detail;}
-    let local=textureSampleLevel(masksTex,linearClamp,maskUv(p),1,0.0).g;
+    let local=sampleMasks(maskPoint(p),1).g;
     return u.detail*styleScale(styleEdge(p,local,slope));
 }
 fn voxelAuthored(p:vec2f)->vec4f {
@@ -28,8 +30,22 @@ fn voxelAuthored(p:vec2f)->vec4f {
     return mix(mix(textureLoad(vh,a,0),textureLoad(vh,vec2i(b.x,a.y),0),f.x),mix(textureLoad(vh,vec2i(a.x,b.y),0),textureLoad(vh,b,0),f.x),f.y);
 }
 // The slope of the authored surface at p (rise per px), smooth between its samples: how wide a bed is drawn there (columnGather).
+#ifdef COLOR_PASS
+var<private> colorFaceSlope:f32;
+fn voxelFaceSlope(p:vec2f)->f32{return colorFaceSlope;}
+#else
 fn voxelFaceSlope(p:vec2f)->f32{let a=voxelAuthored(p);return length(a.yz)/max(a.w,.015);}
+#endif
 fn voxelGuide(p:vec2f)->vec4f{return textureLoad(vg,clamp(vec2i(floor(p/vs.step))-vec2i(round(vs.origin/vs.step)),vec2i(0),vec2i(i32(vs.width),i32(vs.height))-1),0);}
+// Coarse records replace full density only outside the sampled surface band.
+// Eight half-float corners fit in 16 bytes. Round the interpolated cell
+// back to half precision, like a stored cell.
+fn voxelCoarseCell(brick:u32,cell:vec3i)->f32 {
+    let f=vec3f(cell)/7.0;
+    let a=unpack2x16float(vCoarse[brick*4u]);let b=unpack2x16float(vCoarse[brick*4u+1u]);
+    let c=unpack2x16float(vCoarse[brick*4u+2u]);let d=unpack2x16float(vCoarse[brick*4u+3u]);
+    return unpack2x16float(pack2x16float(vec2f(mix(mix(mix(a.x,a.y,f.x),mix(b.x,b.y,f.x),f.y),mix(mix(c.x,c.y,f.x),mix(d.x,d.y,f.x),f.y),f.z)))).x;
+}
 fn voxelCell(i:vec3i)->f32 {
     let xy=i.xy-vec2i(round(vs.origin/vs.step));
     if(any(xy<vec2i(0))||any(xy>=vec2i(i32(vs.width),i32(vs.height)))){
@@ -43,7 +59,9 @@ fn voxelCell(i:vec3i)->f32 {
         let p=(vec3f(i)+.5)*vs.step;let h=voxelAuthored(p.xy);
         return (p.z-h.x)*max(h.w,.02);
     }
-    let index=u32(c.z)*512u+u32(z)*64u+u32(xy.y%8)*8u+u32(xy.x%8);
+    let brick=u32(c.z)+u32(z/8);let dense=vb[brick].w;let cell=vec3i(xy.x%8,xy.y%8,z%8);
+    if(dense<0){return voxelCoarseCell(brick,cell);}
+    let index=u32(dense)*512u+u32(cell.z)*64u+u32(cell.y)*8u+u32(cell.x);
     let pair=unpack2x16float(vd[index/2u]);return select(pair.x,pair.y,(index&1u)!=0u);
 }
 fn voxelField(p:vec3f)->f32 {
@@ -84,10 +102,11 @@ fn voxelSkin(p:vec3f,slope:f32,painted:f32,rain:f32)->vec2f {
 @group(3) @binding(1) var guideOut:texture_storage_2d<rgba32float,write>;
 @group(3) @binding(2) var<storage,read_write> columnsOut:array<vec4i>;
 @group(3) @binding(3) var<storage,read_write> bricksOut:array<vec4i>;
-struct VolumeCount {bricks:atomic<u32>,invalid:atomic<u32>,padding:vec2u}
+struct VolumeCount {bricks:atomic<u32>,invalid:atomic<u32>,kept:atomic<u32>,padding:u32,dispatch:vec3u,pad:u32}
 @group(3) @binding(4) var<storage,read_write> countOut:VolumeCount;
 @group(3) @binding(5) var<storage,read_write> densityOut:array<u32>;
 @group(3) @binding(6) var blockOut:texture_storage_2d<rgba32float,write>;
+@group(3) @binding(7) var<storage,read_write> coarseOut:array<u32>;
 @group(2) @binding(6) var vk:texture_2d<f32>;
 fn voxelSourceHeight(p:vec2f)->f32 {
     let h=surfaceHeight(p);
@@ -165,7 +184,25 @@ fn voxelClassify(@builtin(global_invocation_id) id:vec3u){
     let bottom=max(max(vs.low,low)-apron,select(projectedBottom,min(projectedBottom,vs.low-apron),submergedView));
     let top=min(min(vs.high,high)+apron,select(projectedTop,max(projectedTop,u.sea+guard),submergedView));
     let first=i32(floor(bottom/(vs.step*8.0)));let last=i32(ceil(top/(vs.step*8.0)));
-    let count=u32(max(0,last-first));let start=atomicAdd(&countOut.bricks,count);
+    let count=u32(max(0,last-first));
+    // A closed column needs only the authored-surface fallback. Bound every
+    // recipe's face threshold, and sample the same XY centers as voxelBuild:
+    // a thin painted/rim/shore feature between the column's corners still counts.
+    let slope=steep/sqrt(max(.000225,1.0-steep*steep));
+    if(count>0u&&slope<.08){
+        var faceFrom=u.rock[0].rockFaceFrom;
+        for(var slot=1u;slot<=rockMask;slot++){faceFrom=min(faceFrom,u.rock[slot].rockFaceFrom);}
+        if(slope<=faceFrom){
+            var paintedAny=0.0;
+            for(var y=0;y<8;y++){for(var x=0;x<8;x++){
+                let p=vs.origin+(vec2f(id.xy*8u)+vec2f(f32(x)+.5,f32(y)+.5))*vs.step;
+                paintedAny=max(paintedAny,max(voxelPaintRock(p),rimRockAt(p)));
+                if(paintedAny>0.0){break;}
+            }if(paintedAny>0.0){break;}}
+            if(paintedAny==0.0){columnsOut[id.y*vs.columnsX+id.x]=vec4i(last,0,0,0);return;}
+        }
+    }
+    let start=atomicAdd(&countOut.bricks,count);
     columnsOut[id.y*vs.columnsX+id.x]=vec4i(first,i32(count),i32(start),0);
     for(var z=0u;z<count;z++){if(start+z<vs.capacity){bricksOut[start+z]=vec4i(vec2i(id.xy),first+i32(z),i32(start+z));}}
 }
@@ -173,7 +210,7 @@ fn voxelPaintRock(p:vec2f)->f32 {
     // Rock at a shore is painted rock to the solid (engine-common.wgsl shoreRockAt).
     let shore=shoreRockAt(p);
     if(u.paintOn==0){return shore;}
-    return max(shore,max(0.0,textureSampleLevel(masksTex,linearClamp,maskUv(p),0,0.0).r));
+    return max(shore,max(0.0,sampleMasks(maskPoint(p),0).r));
 }
 const VOXEL_RING=array<vec2f,8>(vec2f(1.0,0.0),vec2f(0.70710678,0.70710678),vec2f(0.0,1.0),vec2f(-0.70710678,0.70710678),vec2f(-1.0,0.0),vec2f(-0.70710678,-0.70710678),vec2f(0.0,-1.0),vec2f(0.70710678,-0.70710678));
 // Whole blocks. A block is rock when its middle lies under the authored surface and air when it lies over it: one answer for the whole block
@@ -262,17 +299,51 @@ fn voxelDensity(p:vec3f)->f32 {
     let fine=clamp(lamina*u.rock[rs & rockMask].rockFace*.25*voxelRelief(p.xy,slope),-1.0,1.0);
     return draped*(1.0-share*min(blocks.y,1.0))+(8.0*blocks.x-3.0*(relief+fine)*min(blocks.y,1.0))*share;
 }
+// The range pass determines the candidate dispatch entirely on the GPU.
+@compute @workgroup_size(1)
+fn voxelDispatch(){
+    let n=atomicLoad(&countOut.bricks);countOut.dispatch=vec3u(min(n,128u),(n+127u)/128u,1u);
+}
+var<workgroup> shellSamples:array<f32,28>;
+var<workgroup> shellDense:i32;
+var<workgroup> shellCandidates:u32;
+@compute @workgroup_size(4,8,8)
+fn voxelSelect(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_index) li:u32){
+    let brick=group.x+group.y*128u;if(brick>=vs.capacity){return;}
+    if(li==0u){shellCandidates=atomicLoad(&countOut.bricks);}
+    let candidates=workgroupUniformLoad(&shellCandidates);if(brick>=candidates){return;}
+    let b=bricksOut[brick];let corner=vec3f(vs.origin,0)+vec3f(b.xyz*8)*vs.step;
+    if(li<27u){shellSamples[li]=voxelDensity(corner+(vec3f(f32(li%3u),f32((li/3u)%3u),f32(li/9u))*3.5+.5)*vs.step);}
+    if(li==27u){shellSamples[27]=0.0;}
+    workgroupBarrier();
+    if(li==0u){
+        var low=shellSamples[0];var high=low;
+        for(var i=1u;i<27u;i++){low=min(low,shellSamples[i]);high=max(high,shellSamples[i]);}
+        // Keep a wider sampled band around the six-unit wear region.
+        // The probes are an approximation, not a Lipschitz bound on detail.
+        shellDense=-1;
+        if(low<12.0*vs.step&&high> -12.0*vs.step){shellDense=i32(atomicAdd(&countOut.kept,1u));}
+        bricksOut[brick].w=shellDense;
+    }
+    workgroupBarrier();
+    if(shellDense<0&&li<4u){
+        let i=(li/2u)*18u+(li%2u)*6u;
+        coarseOut[brick*4u+li]=pack2x16float(vec2f(shellSamples[i],shellSamples[i+2u]));
+    }
+}
 @compute @workgroup_size(4,8,8)
 fn voxelBuild(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) local:vec3u){
-    let brick=group.x+group.y*128u;if(vCount[0]>vs.capacity||brick>=vs.capacity||brick>=vCount[0]){return;}
-    let b=vb[brick];let cell=vec3i(b.xyz)*8+vec3i(i32(local.x)*2,i32(local.y),i32(local.z));
+    let brick=group.x+group.y*128u;if(vCount[2]>vs.capacity||brick>=vCount[0]){return;}
+    let b=vb[brick];if(b.w<0){return;}let cell=vec3i(b.xyz)*8+vec3i(i32(local.x)*2,i32(local.y),i32(local.z));
     let p=vec3f(vs.origin,0)+(vec3f(cell)+.5)*vs.step;
     let a=voxelDensity(p);let c=voxelDensity(p+vec3f(vs.step,0,0));
-    densityOut[brick*256u+local.z*32u+local.y*4u+local.x]=pack2x16float(vec2f(a,c));
+    densityOut[u32(b.w)*256u+local.z*32u+local.y*4u+local.x]=pack2x16float(vec2f(a,c));
 }
 fn voxelWear(p:vec3i)->f32 {
     let d=voxelCell(p);if(abs(d)>6.0*vs.step){return d;}
     let q=(vec3f(p)+.5)*vs.step;useRock(q.xy);
+    let wear=clamp(4.0*u.rock[rs & rockMask].faceWear-vs.wearRound,0.0,1.0);
+    if(wear<=0.0){return d;}
     let painted=max(voxelPaintRock(q.xy),.5*rimRockAt(q.xy));
     let heightGate=voxelRockHeight(q,painted);
     let authoredSlope=broadGradient(q.xy);
@@ -282,16 +353,16 @@ fn voxelWear(p:vec3i)->f32 {
     let gradient=length(vec3f(voxelCell(p+vec3i(1,0,0))-voxelCell(p-vec3i(1,0,0)),voxelCell(p+vec3i(0,1,0))-voxelCell(p-vec3i(0,1,0)),voxelCell(p+vec3i(0,0,1))-voxelCell(p-vec3i(0,0,1))))/(2.0*vs.step);
     // The six-neighbor diffusion coefficient stays below 1/6 at every
     // exposed control value; erosion depth and rounding remain independent.
-    // Keep four wear passes within the allocated 40-pixel surface apron,
+    // Fade in up to four full-strength rounds within the 40-pixel apron,
     // even when a local relief stroke amplifies the global setting.
     let depth=min(2.0,u.rock[rs & rockMask].rockFace*.5*voxelRelief(q.xy,length(authoredSlope)));
-    return d+u.rock[rs & rockMask].faceWear*exposure*(.8*depth*(1.0-voxelHardness(q,voxelFaceSlope(q.xy)))*gradient+(sum-6.0*d)*.12*clamp(depth,0.0,1.0));
+    return d+wear*exposure*(.8*depth*(1.0-voxelHardness(q,voxelFaceSlope(q.xy)))*gradient+(sum-6.0*d)*.12*clamp(depth,0.0,1.0));
 }
 @compute @workgroup_size(4,8,8)
 fn voxelWeather(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) local:vec3u){
-    let brick=group.x+group.y*128u;if(vCount[0]>vs.capacity||brick>=vs.capacity||brick>=vCount[0]){return;}
-    let b=vb[brick];let cell=vec3i(b.xyz)*8+vec3i(vec2i(round(vs.origin/vs.step)),0)+vec3i(i32(local.x)*2,i32(local.y),i32(local.z));
-    densityOut[brick*256u+local.z*32u+local.y*4u+local.x]=pack2x16float(vec2f(voxelWear(cell),voxelWear(cell+vec3i(1,0,0))));
+    let brick=group.x+group.y*128u;if(vCount[2]>vs.capacity||brick>=vCount[0]){return;}
+    let b=vb[brick];if(b.w<0){return;}let cell=vec3i(b.xyz)*8+vec3i(vec2i(round(vs.origin/vs.step)),0)+vec3i(i32(local.x)*2,i32(local.y),i32(local.z));
+    densityOut[u32(b.w)*256u+local.z*32u+local.y*4u+local.x]=pack2x16float(vec2f(voxelWear(cell),voxelWear(cell+vec3i(1,0,0))));
 }
 #endif
 #ifdef VOLUME_RENDER
@@ -302,11 +373,32 @@ fn voxelRayPoint(screen:vec2f,z:f32,underwater:bool)->vec3f {
     let shift=round((select(z,u.sea,underwater)-u.base)*128.0)/256.0;
     return vec3f(screen.x,screen.y+shift,z);
 }
+// The four interpolation columns bound empty space above the stored solid.
+// Stop at the next Y-column transition before considering a farther jump.
+fn voxelEmptyTarget(p:vec3f,screenY:f32,underwater:bool)->f32 {
+    let lo=vec2i(floor(p.xy/vs.step-.5))-vec2i(round(vs.origin/vs.step));let hi=lo+1;
+    if(any(lo<vec2i(0))||any(hi>=vec2i(i32(vs.width),i32(vs.height)))){return p.z;}
+    let a=lo/8;let b=hi/8;
+    let c0=vc[u32(a.y)*vs.columnsX+u32(a.x)];let c1=vc[u32(a.y)*vs.columnsX+u32(b.x)];
+    let c2=vc[u32(b.y)*vs.columnsX+u32(a.x)];let c3=vc[u32(b.y)*vs.columnsX+u32(b.x)];
+    let top=f32(max(max(c0.x+c0.y,c1.x+c1.y),max(c2.x+c2.y,c3.x+c3.y))*8+1)*vs.step;
+    if(p.z<=top+vs.step){return p.z;}
+    if(underwater){return top;}
+    let edge=vs.origin.y+max(f32(a.y*8)+.5,f32(b.y*8)-.5)*vs.step;
+    let exit=u.base+2.0*(edge-screenY)-.01*vs.step;
+    return max(top,exit);
+}
 fn voxelHit(screen:vec2f)->vec3f {
     var z=vs.top;var previous=z;var underwater=false;
     for(var i=0;i<4096;i++){
-        let d=voxelField(voxelRayPoint(screen,z,underwater));if(d<=0.0){break;}
-        previous=z;z-=clamp(d*.45,.24*vs.step,8.0*vs.step);
+        let p=voxelRayPoint(screen,z,underwater);let empty=voxelEmptyTarget(p,screen.y,underwater);
+        if(empty<z){
+            previous=z;z=empty;
+            if(!underwater&&previous>=u.sea&&z<=u.sea){z=u.sea;previous=z;underwater=true;}
+            continue;
+        }
+        let d=voxelField(p);if(d<=0.0){break;}
+        previous=z;z-=clamp(d*.45,.24*vs.step,vs.step);
         // Water projects at its level. The same solid supplies its seabed.
         if(!underwater&&previous>=u.sea&&z<u.sea){z=u.sea;previous=z;underwater=true;}
         if(z<vs.low-40.0){break;}

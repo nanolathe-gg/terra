@@ -12,6 +12,7 @@ import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
 import {RockWeather} from './sculpt-rock-weather.js';
 import {VoxelSurface} from './sculpt-volume.js';
+import {terrainAllocation} from './sculpt-memory.js';
 import {extractGates, gateValues, gateKey, uniformStages, worldUniformDelta} from './sculpt-gates.js';
 
 // The mask planes when the config names none: as many as MASK_KEYS (sculpt-scene.js, which says what each holds). The masks texture array has a layer per 4 planes.
@@ -219,7 +220,7 @@ export class TerrainRenderer {
     this.layout = uniformLayout(preprocess(common, '', new Set()));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
-    this.uniformBuffer = device.createBuffer({size: this.layout.size, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
+    this.uniformBuffer = device.createBuffer({size: this.layout.size, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC});
     const compile = async (label, code) => {
       const module = device.createShaderModule({label, code});
       const messages = (await module.getCompilationInfo()).messages;
@@ -232,9 +233,10 @@ export class TerrainRenderer {
       return module;
     };
     // P6: the draw's and the bake's uniform gates are override bools (sculpt-gates.js); the pipelines are built per set of values, see specialized().
-    const fragSource=preprocess(frag.replace('/*VOLUME*/',this.volumeSource),common,new Set(['VOLUME_RENDER']));
+    const fragSource=preprocess(frag.replace('/*VOLUME*/',this.volumeSource),common,new Set(['VOLUME_RENDER','COLOR_PASS']));
+    const geometrySource=preprocess(frag.replace('/*VOLUME*/',this.volumeSource),common,new Set(['VOLUME_RENDER','GEOMETRY_PASS']));
     const bakeSource=preprocess(bake,common,new Set(['BAKE']));
-    this.stageSources=[{source:fragSource,stage:'F'},{source:fragSource,stage:'E',roots:['voxelHit','voxelNormal','occlusion','visibility']},{source:bakeSource,stage:'C'}];
+    this.stageSources=[{source:fragSource,stage:'F'},{source:geometrySource,stage:'E',roots:['geometryMain']},{source:bakeSource,stage:'C'}];
     const bakeGates=extractGates(bakeSource,this.layout.fields);
     const [vertModule,bakeModule] = await Promise.all([
       compile('sculpt-vert.wgsl', preprocess(vert, common, new Set())),
@@ -275,8 +277,12 @@ export class TerrainRenderer {
     const timeModules=Object.values(this.timeSources).map(source=>({source,stage:'B'}));
     this.timeUniformFields=[...uniformStages(timeModules).keys()].sort();
     this.uniformStages=uniformStages([...this.stageSources,...timeModules]);this.stageSources=null;
-    this.drawPipelineLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, this.materialLayout,this.voxel.drawLayout]});
-    const genericReady=this.buildGeneric(compile,fragSource,bakeSource);
+    this.geometryOutLayout=device.createBindGroupLayout({entries:[{binding:0,visibility:F,buffer:{type:'storage'}},{binding:1,visibility:F,buffer:{type:'uniform'}}]});
+    this.geometryInLayout=device.createBindGroupLayout({entries:[{binding:0,visibility:F,buffer:{type:'read-only-storage'}},{binding:1,visibility:F,buffer:{type:'uniform'}},{binding:2,visibility:F,texture:{sampleType:'float',viewDimension:'2d-array'}}]});
+    this.geometrySettings=device.createBuffer({label:'geometry frame',size:16,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});this.track(this.geometrySettings,'geometry frame',16,'shared');
+    this.geometryPipelineLayout=device.createPipelineLayout({bindGroupLayouts:[this.commonLayout,this.materialLayout,this.voxel.drawLayout,this.geometryOutLayout]});
+    this.drawPipelineLayout=device.createPipelineLayout({bindGroupLayouts:[this.commonLayout,this.materialLayout,device.createBindGroupLayout({entries:[]}),this.geometryInLayout]});
+    const genericReady=this.buildGeneric(compile,fragSource,bakeSource,geometrySource);
     const mipModule = device.createShaderModule({label: 'mip levels', code: MIP_SHADER});
     this.mipPipeline = device.createRenderPipeline({label: 'mip levels', layout: 'auto',
       vertex: {module: mipModule, entryPoint: 'fullScreen'},
@@ -457,16 +463,17 @@ export class TerrainRenderer {
   }
   // Original uniform comparisons, compiled before input is enabled. The draw
   // is shared by every level; relief finals retain their specialized cache.
-  async buildGeneric(compile,fragSource,bakeSource) {
+  async buildGeneric(compile,fragSource,bakeSource,geometrySource) {
     const start=performance.now(),device=this.device;
-    const [fragmentModule,bakeModule]=await Promise.all([compile('generic terrain',fragSource),compile('generic relief',bakeSource)]);
+    const [fragmentModule,bakeModule,geometryModule]=await Promise.all([compile('generic terrain',fragSource),compile('generic relief',bakeSource),compile('terrain geometry',geometrySource)]);
     this.genericPipelines=Object.fromEntries(await Promise.all([0,15].map(async rockMask=>{
       const constants={rockMask},compute=entryPoint=>({module:bakeModule,entryPoint,constants});
-      const [draw,bake,loose]=await Promise.all([
+      const [draw,bake,loose,geometry]=await Promise.all([
         device.createRenderPipelineAsync({label:'generic terrain',layout:this.drawPipelineLayout,vertex:{module:this.specParts.vertModule,entryPoint:'vertexMain'},fragment:{module:fragmentModule,entryPoint:'fragmentMain',targets:[{format:this.format}],constants},primitive:{topology:'triangle-list',cullMode:'none'}}),
         device.createComputePipelineAsync({label:'generic relief bake',layout:this.bakePipelineLayout,compute:compute('bakeMain')}),
-        device.createComputePipelineAsync({label:'generic loose mask',layout:this.bakePipelineLayout,compute:compute('looseMain')})]);
-      return [rockMask,{draw,bake,loose}];
+        device.createComputePipelineAsync({label:'generic loose mask',layout:this.bakePipelineLayout,compute:compute('looseMain')}),
+        device.createRenderPipelineAsync({label:'terrain geometry',layout:this.geometryPipelineLayout,vertex:{module:this.specParts.vertModule,entryPoint:'vertexMain'},fragment:{module:geometryModule,entryPoint:'geometryMain',targets:[{format:this.format}],constants},primitive:{topology:'triangle-list',cullMode:'none'}})]);
+      return [rockMask,{draw,bake,loose,geometry}];
     })));
     this.specStats.genericBuilt=2;this.specStats.genericMs=performance.now()-start;this.specStats.genericUses=0;this.specStats.deferred=0;
   }
@@ -541,18 +548,20 @@ export class TerrainRenderer {
   }
 
   // Group 0 with the fields (draw) or the routes (bake) at binding 6.
-  commonBindGroup(kind) {
-    return this.bindGroups[kind] ??= this.device.createBindGroup({label: kind, layout: this.commonLayout, entries: [
-      {binding: 0, resource: {buffer: this.uniformBuffer}},
-      ...[this.heightTexture, this.textures.noise.texture].map((t, i) => ({binding: i + 1, resource: t.createView()})),
-      {binding: 4, resource: this.gridTexture.createView({dimension: '2d-array'})},
-      {binding: 6, resource: (kind === 'bake'||kind==='rock-weather' ? this.routeTexture : this.fieldsTexture).createView()},
+  commonBindGroup(kind,source=this,uniformBuffer=this.uniformBuffer) {
+    if(source===this&&this.bindGroups[kind])return this.bindGroups[kind];
+    const group=this.device.createBindGroup({label: kind, layout: this.commonLayout, entries: [
+      {binding: 0, resource: {buffer: uniformBuffer}},
+      ...[source.heightTexture, this.textures.noise.texture].map((t, i) => ({binding: i + 1, resource: t.createView()})),
+      {binding: 4, resource: source.gridTexture.createView({dimension: '2d-array'})},
+      {binding: 6, resource: (kind === 'bake'||kind==='rock-weather' ? source.routeTexture : source.fieldsTexture).createView()},
       {binding: 7, resource: this.linearClamp}, {binding: 8, resource: this.linearRepeat},
-      {binding: 9, resource: this.maskTexture.createView({dimension: '2d-array'})},
-      {binding:10,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.final??this.rockWeather.empty)).createView()},
-      {binding:11,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.source??this.rockWeather.empty)).createView()},
-      {binding:12,resource:(kind==='rock-weather'?this.rockWeather.empty:(this.rockWeather.rim??this.rockWeather.empty)).createView()},
+      {binding: 9, resource: source.maskTexture.createView({dimension: '2d-array'})},
+      {binding:10,resource:(kind==='rock-weather'?source.rockWeather.empty:(source.rockWeather.final??source.rockWeather.empty)).createView()},
+      {binding:11,resource:(kind==='rock-weather'?source.rockWeather.empty:(source.rockWeather.source??source.rockWeather.empty)).createView()},
+      {binding:12,resource:(kind==='rock-weather'?source.rockWeather.empty:(source.rockWeather.rim??source.rockWeather.empty)).createView()},
       {binding:13,resource:this.groundCache.texture.createView({dimension:'2d-array'})},{binding:14,resource:this.groundCache.colorTexture.createView({dimension:'2d-array'})},{binding:15,resource:{buffer:this.groundCache.programBuffer}},{binding:16,resource:this.groundCache.maskTexture.createView({dimension:'2d-array'})}]});
+    if(source===this)this.bindGroups[kind]=group;return group;
   }
 
   // Group 1: the plain's tiles, the waters, the palette and the generated materials.
@@ -703,8 +712,42 @@ export class TerrainRenderer {
     return [x, y, height === null ? 0.82 : Math.hypot(x, y) * Math.tan(height * Math.PI / 180)];
   }
 
-  async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false} = {}) {
-    const start = performance.now(), device = this.device;
+  async allocateGeometry(){
+    const width=this.canvas.width+2,height=this.canvas.height+2,bytes=width*height*56;
+    if(bytes>this.device.limits.maxStorageBufferBindingSize)throw Error('The geometry record exceeds the GPU memory storage binding limit.');
+    if(this.geometryRecord&&(!this.resources.has(this.geometryRecord)||this.geometryRecord.size!==bytes)){this.release(this.geometryRecord);this.geometryRecord=null;}
+    if(this.geometryTarget&&(!this.resources.has(this.geometryTarget)||this.geometryTarget.width!==width||this.geometryTarget.height!==height)){this.release(this.geometryTarget);this.geometryTarget=null;}
+    if(!this.geometryRecord||!this.geometryTarget)await terrainAllocation(this.device,()=>{
+      if(!this.geometryRecord){this.geometryRecord=this.device.createBuffer({label:'surface geometry record',size:bytes,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});this.track(this.geometryRecord,'surface geometry record',bytes,'working');}
+      if(!this.geometryTarget){this.geometryTarget=this.device.createTexture({label:'geometry raster target',size:[width,height],format:this.format,usage:GPUTextureUsage.RENDER_ATTACHMENT});this.track(this.geometryTarget,'geometry raster target',width*height*4,'working');}
+    });
+    this.device.queue.writeBuffer(this.geometrySettings,0,new Uint32Array([width,height,0,0]));
+  }
+
+  geometryBinding(layout,record=this.geometryRecord,masks=this.colorMaskTexture,frame=this.geometrySettings){return this.device.createBindGroup({layout,entries:[{binding:0,resource:{buffer:record}},{binding:1,resource:{buffer:frame}},...(layout===this.geometryInLayout?[{binding:2,resource:masks.createView({dimension:'2d-array'})}]:[])]});}
+  encodeColor(commands,pipeline,rect,first,timer,{record=this.geometryRecord,group=this.commonBindGroup('draw'),masks=this.colorMaskTexture,target=this.voxelColor,geometryGroup=null}={}){
+    const pass=commands.beginRenderPass({label:'terrain color',colorAttachments:[{view:target.createView(),clearValue:{r:0,g:0,b:0,a:1},loadOp:first?'clear':'load',storeOp:'store'}],timestampWrites:timer?.timestampWrites});
+    pass.setPipeline(pipeline);pass.setScissorRect(...rect);pass.setBindGroup(0,group);pass.setBindGroup(1,this.materialBindGroup());pass.setBindGroup(3,geometryGroup??this.geometryBinding(this.geometryInLayout,record,masks));pass.draw(3);pass.end();timer?.encode(commands);
+  }
+  // LP5 step 0 only: the current tile's color pass, never scheduler routing.
+  async recolor(options=this.worldOptions){
+    if(this.busy)throw Error('The renderer is already rendering.');
+    if(!this.geometryValid||!this.resources?.has(this.geometryRecord))throw Error('No current geometry record.');
+    this._busy=true;
+    try {
+      await this.previousChunk;const start=performance.now();this.syncWorld(options);
+      const delta=worldUniformDelta(this.geometryUniformSnapshot,this.uniformData,this.layout,this.uniformStages);
+      if(delta.stage&&delta.stage<'F')throw Error('The edit requires '+delta.stage+', not only color.');
+      this.flushUniforms();const encoder=this.device.createCommandEncoder({label:'cached terrain color'}),timer=this.timer();
+      this.encodeColor(encoder,this.genericPipelines[this.rockMask()].draw,[0,0,this.canvas.width,this.canvas.height],true,timer);
+      encoder.copyTextureToTexture({texture:this.voxelColor},{texture:this.context.getCurrentTexture()},[this.canvas.width,this.canvas.height]);this.device.queue.submit([encoder.finish()]);this.previousChunk=this.device.queue.onSubmittedWorkDone();await this.previousChunk;
+      return {milliseconds:performance.now()-start,gpuMilliseconds:timer?await timer.result():null,recordBytes:this.geometryRecord.size};
+    } finally { this._busy=false; }
+  }
+
+  async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false, signal, stale} = {}) {
+    const current=()=>{signal?.throwIfAborted();if(stale?.())throw new DOMException('The scene changed during a terrain bake.','AbortError');};
+    current();const start = performance.now(), device = this.device;
     this.syncWorld({clay,light,detail,ring,ringSpread,ringVariation,materialWeathering,transitionDetail,exact});
     this.i('uMaterialReady', this.materialReady);
     this.i('uTransitionBody', Boolean(this.transitionBody&&this.materialReady&&materialWeathering>0));
@@ -724,14 +767,22 @@ export class TerrainRenderer {
       this.voxelColor=device.createTexture({label:'voxel terrain color',size:[this.canvas.width,this.canvas.height],format:this.format,usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
       this.track(this.voxelColor,'voxel terrain color',this.canvas.width*this.canvas.height*4,'working');
     }
-    const clear=this.means.ground||[.19,.28,.14],timers=[];
+    this.geometryValid=false;await this.allocateGeometry();current();
+    this.release(this.maskPackBuffer);this.release(this.maskPackSettings);this.maskPackBuffer=this.maskPackSettings=null;
+    const timers=[];
+    const reset=device.createCommandEncoder({label:'clear geometry record'});reset.clearBuffer(this.geometryRecord);device.queue.submit([reset.finish()]);
     await this.voxel.render((commands,volume,rect,first)=>{
       const timer=this.timer();if(timer)timers.push(timer);
-      const pass=commands.beginRenderPass({label:'voxel terrain',colorAttachments:[{view:this.voxelColor.createView(),clearValue:{r:clear[0],g:clear[1],b:clear[2],a:1},loadOp:first?'clear':'load',storeOp:'store'}],
-        timestampWrites:timer?.timestampWrites});
-      pass.setPipeline(drawPipeline);pass.setScissorRect(...rect.map(Math.round));
-      pass.setBindGroup(0,this.commonBindGroup('draw'));pass.setBindGroup(1,this.materialBindGroup());pass.setBindGroup(2,volume);pass.draw(3);pass.end();timer?.encode(commands);
-    });
+      const pass=commands.beginRenderPass({label:'terrain geometry',colorAttachments:[{view:this.geometryTarget.createView(),clearValue:{r:0,g:0,b:0,a:0},loadOp:first?'clear':'load',storeOp:'store'}],timestampWrites:timer?.timestampWrites});
+      const [x,y,w,h]=rect.map(Math.round);pass.setPipeline(this.genericPipelines[this.rockMask()].geometry);pass.setScissorRect(x,y,w+2,h+2);
+      pass.setBindGroup(0,this.commonBindGroup('draw'));pass.setBindGroup(1,this.materialBindGroup());pass.setBindGroup(2,volume);pass.setBindGroup(3,this.geometryBinding(this.geometryOutLayout));pass.draw(3);pass.end();timer?.encode(commands);
+    },current);
+    // E is complete for every piece. F has no solid dependency, so its
+    // bounded mask staging replaces D instead of adding to the terrain peak.
+    this.voxel.clear();current();await this.packColorMasks();current();
+    const color=device.createCommandEncoder({label:'terrain color'}),colorTimer=this.timer();if(colorTimer)timers.push(colorTimer);
+    this.encodeColor(color,drawPipeline,[0,0,this.canvas.width,this.canvas.height],true,colorTimer);device.queue.submit([color.finish()]);
+    this.geometryUniformSnapshot=new Uint32Array(this.uniformData.slice(0));this.geometryValid=true;
     // Keep intermediate pieces in a persistent texture: a canvas presentation
     // image expires at the next browser frame while allocation readback yields.
     const present=device.createCommandEncoder({label:'present voxel terrain'});

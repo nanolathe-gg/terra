@@ -5,16 +5,17 @@
 // Recolor it (its rock color, then World's colors), undo and redo; Copy and Paste a recipe between two presets; delete the preset (its shape goes
 // to Rock beneath) and undo that. Writes panel.png, colors.png and option.png (screenshots of the list, the colors and the shape's Rock option)
 // and report.json into DIR.
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {cdpPortFree} from './cdp-port.mjs';
 const args = process.argv.slice(2), opt = (k, d) => args.includes(k) ? args[args.indexOf(k) + 1] : d;
-const server = opt('--server', ''), port = Number(opt('--port', 0)), out = opt('--out', '/private/tmp/terraform-rock-presets-ui');
+const server = opt('--server', ''), port = Number(opt('--port', 0)), out = opt('--out', '/tmp/terraform-rock-presets-ui');
 if (!server || !port) { console.error('rock-presets-ui.mjs: give --server (your own Go server) and --port (your CDP port)'); process.exit(2); }
 await cdpPortFree(port); mkdirSync(out, {recursive: true});
-const browser = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
+const browser = spawn(chromePath, ['--headless=new', ...chromeGpuFlags, `--remote-debugging-port=${port}`,
   `--user-data-dir=${join(out, 'profile-' + Date.now())}`, '--window-size=1440,900', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let ws; const report = {};

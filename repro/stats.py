@@ -58,7 +58,7 @@ reported as a diagnostic, not used as the gate.
 
 Only numpy, Pillow and scipy (already used by the measure scripts) are
 imported. Nothing here goes into Git: retail pixels and derived sheets stay
-under /private/tmp/nanolathe-map-editor.
+under /tmp/nanolathe-map-editor.
 """
 import argparse
 import hashlib
@@ -90,7 +90,7 @@ SAMPLE = 1024
 SLOPE_BINS = [0.0, .03, .08, .15, .3, .5, 1.0, 2.0, np.inf]
 DISK5 = np.array([[0, 1, 1, 1, 0], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1],
                   [1, 1, 1, 1, 1], [0, 1, 1, 1, 0]], bool)
-DEFAULT_R = Path('/private/tmp/nanolathe-map-editor')
+DEFAULT_R = Path('/tmp/nanolathe-map-editor')
 DEFAULT_ZHON = DEFAULT_R / 'catalogs/sections-zhon/TASect_Zhon/sections/zhon'
 LUMA = np.array([.299, .587, .114], np.float32)
 EDGE_THRESH = 10.0

@@ -3,6 +3,7 @@
 // The scene runs on a 4x4 map canvas (1168 samples, the whole map compared), under Node on Dawn by default (repro/headless.mjs, from this
 // checkout's files), or in one browser page with --chrome, which needs --server (your own Go development server; there is no default).
 // Writes <out>/<scene>.json and prints a one-line summary per scene. Exit code 1 if a repeat differs.
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
@@ -40,7 +41,7 @@ for (const file of scenes) {
   const scene = JSON.parse(readFileSync(file, 'utf8')), name = basename(file, '.json');
   const url = `${server}/?${search(scene)}`;
   await cdpPortFree(port);
-  const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal', `--remote-debugging-port=${port}`,
+  const chrome = spawn(chromePath, ['--headless=new', ...chromeGpuFlags, `--remote-debugging-port=${port}`,
     `--user-data-dir=${out}/prof-${port}-${Date.now()}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
   try {
     let ws;

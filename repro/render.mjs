@@ -9,6 +9,7 @@
 // Under Node the engine's files come from --server, or with no --server from this checkout (the world configs from go run ./cmd/terraform --dump-configs, or
 // --configs DIR); --port is Chrome's alone (default 9450). --chrome needs --server: the page path has no default server, so it never loads
 // another session's editor.
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {encodePng} from './png.mjs';
 import {spawn} from 'node:child_process';
@@ -81,7 +82,7 @@ async function renderInChrome() {
   }
   const url = `${server}/?${search}`;
   await cdpPortFree(port);
-  const browser = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--enable-gpu', '--use-angle=metal',
+  const browser = spawn(chromePath, ['--headless=new', ...chromeGpuFlags,
     `--remote-debugging-port=${port}`, `--user-data-dir=${join(tmpdir(), `terraform-render-${port}`)}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   try {

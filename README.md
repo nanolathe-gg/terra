@@ -30,13 +30,19 @@ See [preview publishing and freshness checks](docs/PREVIEW_ASSETS.md).
 Run the development server from the repository:
 
 ```sh
-go run ./cmd/terraform --port 8801 --assets-root /private/tmp/terraform-editor
+go run ./cmd/terraform --port 8801 --assets-root /tmp/terraform-editor
 ```
 
 Port 8801 is the owner's editor; agents use their own free ports and assets
 roots as described in AGENTS.md. `--assets-root` stores local save links only.
-A compiled tool also works: `go build -o /private/tmp/terraform ./cmd/terraform`,
-then `/private/tmp/terraform --root /path/to/terraform --port <yours>`.
+A compiled tool also works: `go build -o /tmp/terraform ./cmd/terraform`,
+then `/tmp/terraform --root /path/to/terraform --port <yours>`.
+
+The editor and the browser checks run on macOS and Linux. On Linux, Chrome
+needs WebGPU and Vulkan turned on, or it falls back to software rendering,
+which the editor refuses: start it with `--enable-unsafe-webgpu
+--enable-features=Vulkan` (the checks add these themselves, see
+`repro/chrome.mjs`; `CHROME=<path>` picks another binary).
 
 Source files are read on every request with caching disabled. Generated
 configs reload their JSON inputs on each request too: edit HTML, JavaScript,
@@ -189,8 +195,8 @@ The research browser hosts also use Go and wrap the normal development
 handler. From the repository, use your own free port and output directory:
 
 ```sh
-go run ./cmd/repro-host --mode interaction --port <yours> --out /private/tmp/terraform-interaction
-go run ./cmd/repro-host --mode audit --port <yours> --out /private/tmp/terraform-audit
+go run ./cmd/repro-host --mode interaction --port <yours> --out /tmp/terraform-interaction
+go run ./cmd/repro-host --mode audit --port <yours> --out /tmp/terraform-audit
 ```
 
 Open `/interaction/index.html` or `/audit/index.html`. The editor iframe stays

@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 from scipy import ndimage
 
-ROOT = Path('/private/tmp/nanolathe-map-editor')
+ROOT = Path('/tmp/nanolathe-map-editor')
 CELL = 16
 FOOT = 2.0          # a cell is in a feature from this many units over the plain (a foot at the plain itself would take the noise in)
 MIN_RISE = 8.0      # the feature's top over the plain

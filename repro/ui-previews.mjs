@@ -4,6 +4,7 @@
 // node repro/ui-previews.mjs --server http://127.0.0.1:<port> --port <cdp> [--out DIR]
 // Add --worlds-only to regenerate just the nine New-map thumbnails, preserving all hover examples.
 // It replaces the folder's images and manifest and removes images the examples no longer name.
+import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {spawn,execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {mkdirSync,writeFileSync,renameSync,readdirSync,unlinkSync,readFileSync,existsSync} from 'node:fs';
@@ -30,7 +31,7 @@ for(const [name,hash]of Object.entries(inputs.files)){
 }
 
 await cdpPortFree(port);mkdirSync(out,{recursive:true});
-const chrome=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless=new','--enable-gpu','--use-angle=metal',`--remote-debugging-port=${port}`,`--user-data-dir=${join(tmpdir(),'terraform-ui-previews-'+port)}`,'--window-size=1440,900','--no-first-run','about:blank'],{stdio:'ignore'});
+const chrome=spawn(chromePath,['--headless=new',...chromeGpuFlags,`--remote-debugging-port=${port}`,`--user-data-dir=${join(tmpdir(),'terraform-ui-previews-'+port)}`,'--window-size=1440,900','--no-first-run','about:blank'],{stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 let ws;
 try{
