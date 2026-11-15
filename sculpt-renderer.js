@@ -165,7 +165,10 @@ export class TerrainRenderer {
     // weather and material-field grids share one array texture (gridTexture)
     // so the painted masks (card C5) fit in that limit.
     const features = adapter.features.has('timestamp-query') ? ['timestamp-query'] : [];
-    const device = this.device = await adapter.requestDevice({requiredFeatures: features});
+    // The adapter's own buffer limits, not WebGPU's defaults (256 MB buffers, 128 MB bindings): the voxel solid and the page caches are
+    // sized against them, and a desktop GPU offers gigabytes. The default limits stay the floor requestAdapter checks.
+    const requiredLimits = {maxBufferSize: adapter.limits.maxBufferSize, maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize};
+    const device = this.device = await adapter.requestDevice({requiredFeatures: features, requiredLimits});
     if (digestGuardRequested()) this.guard = installDigestGuard(device);   // tests and debug runs only: before any resource is made
     device.lost.then(info => {
       if(info.reason==='destroyed'||this.recovering)return;
