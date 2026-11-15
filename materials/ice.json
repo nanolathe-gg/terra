@@ -1416,7 +1416,9 @@
 
     "blueice",
 
-    "rubble"
+    "rubble",
+
+    "scarp"
 
    ],
 
@@ -1620,6 +1622,20 @@
 
      }
 
+    },
+
+    "scarp": {
+
+     "label": "Scarp ice",
+
+     "knobs": {
+
+      "iceCrystal": 1,
+
+      "iceCrest": 0.3
+
+     }
+
     }
 
    }
@@ -1656,8 +1672,8 @@
   },
   "tools": [
    {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
-   {"id": "icecliff", "label": "Ice cliff", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw an ice cliff: a level ice sheet 170 high that ends in a sheer wall no unit climbs; drag along the line of the edge for a long scarp."},
-   {"id": "terrace", "label": "Ice terrace", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw an ice terrace: a level step 85 high with a short, steep riser; drag along the step's line."},
+   {"id": "icecliff", "label": "Ice cliff", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw an ice cliff: a level ice sheet 170 high that ends in a sheer wall no unit climbs; drag along the line of the edge for a long scarp.", "rock": "scarp"},
+   {"id": "terrace", "label": "Ice terrace", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw an ice terrace: a level step 85 high with a short, steep riser; drag along the step's line.", "rock": "scarp"},
    {"id": "glacierfront", "label": "Glacier front", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a glacier front: high ice ending in a long, dark slate slope; it reads darkest facing south.", "rock": "slate"},
    {"id": "floe", "label": "Ice floe", "icon": "plateau", "material": "ice-bergs-ground", "color": "#e6bb82", "group": "shape", "help": "Draw an ice floe: a flat, low slab 10 above the sea, with a short ice cliff round it; click in deep water.", "rock": "blueice"},
    {"id": "prism", "label": "Ice pyramid", "icon": "crystal", "color": "#aaa5ec", "group": "shape", "help": "Draw an ice pyramid: a three-sided pointed prism; a click for one, a drag for a row.", "rock": "streaked"},

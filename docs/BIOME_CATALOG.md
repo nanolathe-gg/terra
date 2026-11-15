@@ -51,7 +51,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | A second, lighter shallow tone (a -9 lagoon renders as a -25 shoal) | Archipelago, every water world | A shallow-water tone ramp by depth | Missing |
 | River channel depth and bank shelf (the River bed reaches only 18 under the sea) | Lush (14), Lava | Channel depth | **Done** this round (Lush River: 90 px at 220%) |
 | Per-shape crystal surface (tone, shine, web) and per-shape snow on caps | Crystal, Ice | Move gougeWeb, the crystal shine rows and Snow on caps into rock types | Partial: iceSnow is per rock type now |
-| Needle hatching and crack stars along cliff and terrace edges | Ice (8), Moon, Red, Lava | Edge dressing per shape (today only shore plates draw it) | Missing |
+| Needle hatching and crack stars along cliff and terrace edges | Ice (8), Moon, Red, Lava | The ice crystal strokes on a rock type (Ice's Scarp ice) | **Done** for Ice's cliff and terrace (fine dark needles on the wall; retail's cross more and spill onto the snow); three-pronged crack stars and other worlds' edges still missing |
 | Elongated prisms (only square blocks today) | Ice (2), Desert, Crystal, Lava | Prism stretch | **Done** this round (Ice block at 220%) |
 | Banded slopes that large KBots can climb under a pale caprock | Desert | Mesa section | **Done** (owner, 2026-11-15: climbable, as retail; 0 of 72 rays blocked, retail 3) |
 
@@ -116,7 +116,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | --- | --- | --- |
 | Ice floes and frozen ponds | Ice floe (Glacier ice, lays the Icy Bergs ground), Frozen pond | good |
 | Ice pyramids and small mesas | Ice pyramid (Crystal ice), Ice butte | good |
-| Ice cliffs (170) and terraces (85), closed to every unit | Ice cliff, Ice terrace | close |
+| Ice cliffs (170) and terraces (85), closed to every unit | Ice cliff, Ice terrace (Scarp ice: needle-hatched walls) | close |
 | Icebergs, ice blocks, glacier fronts | Iceberg, Ice block (Glacier ice), Glacier front (Snow and slate) | close |
 | Rubble clumps and boulders | Frost rubble, Boulder, Boulder field (Frost rubble; Copies 10) | close |
 | Snow drifts | Snow drift | close |
