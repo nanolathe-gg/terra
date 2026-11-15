@@ -39,7 +39,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | --- | --- | --- | --- |
 | Radial ribs from a click: starburst legs, spatter-vent teeth, collapse stars | Moon (9 maps), Lava (9), Red (4) | Spurs on a crater section | **Done** this round: spurs off a clicked crater now draw. Collapse stars on cut shapes still draw nothing |
 | Dense contour hatch on grass and rock slopes (6-12 px wobbly lines); risers ~6 px where retail's are 1-2 | Green (8+), Lava (12), Red, Moon, Lush, Desert | A slope-hatch control (spacing, wobble, darkness, slope gate), or a riser width under Contour bands | Partial: Green uses bands 0.3 with Riser share 0.1 and form lines |
-| Scatter for click shapes: craterlet fields, knoll fields, boulders, rubble, islets | Moon (9), Green (5), Ice (9), Archipelago, Lush | A count and spacing along a drag, with size variation (crater Secondaries are the nearest existing piece) | Missing |
+| Scatter for click shapes: craterlet fields, knoll fields, boulders, rubble, islets | Moon (9), Green (5), Ice (9), Archipelago, Lush | Copies: a count, spread, size and size variation on any landform | **Done** this round: Craterlet field, Knoll field, Boulder field, Islet scatter use it |
 | Irregular shore lobes and spits; `fingers` makes a regular comb | Lava (8), Archipelago (8), Green, Red, Crystal | Random lobes with a few long spits on a raised bank | Missing |
 | Rock art on level tops and walkable grades (rock follows slope today) | Lava, Red, Desert, Green, Moon | Rock exposure by noise or per shape, art only so heights stay level (per-shape Rock crown) | Missing |
 | Lumpy, ragged aprons and concentric skirt rings at a landform's foot | Desert (every feature), Red, Moon | A lumpy apron / skirt-rings control on Talus | Missing |
@@ -61,9 +61,10 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 
 | Feature | Tool, rock type | Status |
 | --- | --- | --- |
+| Knoll fields (5 maps) | Knoll field (Copies 8) | close |
 | Small round knolls and knobs, dark on their lee | Knoll, Knob (Greenstone), Cup knoll | close (lee from sun 28 and ambient 0.3: darkest 5% of a knob went from luminance 33 to 27, retail 27-42) |
 | Crescent hills | Crescent | close (blocks vehicles on 33% of cells, retail 17-23%) |
-| Long escarpments and terraced massifs | Escarpment, Terraced massif (Dark escarpment) | poor (rock follows slope, so a softened escarpment loses its rock) |
+| Long escarpments and terraced massifs | Escarpment, Terraced massif (Dark escarpment) | close for the massif (irregular terraces); poor for the escarpment (rock follows slope, so a softened one loses its rock) |
 | Rock fins | Rock fin (Greenstone) | close |
 | Broken, branching slopes (Evad River) | Broken hill (Broken slopes rock type, the old evad variant) | close |
 | Contour striations on slopes | world bands and form lines | poor |
@@ -75,7 +76,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | --- | --- | --- |
 | Knobs rising 80-91 over the plain, about 180 px (red_river's "pit rows") | Knob (Dark knob rock) | close |
 | Crescents | Crescent (Dark knob rock) | close |
-| Low rough hills with a dark lee | Hill, under Face steepness 1, Sampled slope texture 1, sun from the west (sun tilt 0) | poor (lumpier in retail) |
+| Low rough hills with a dark lee | Hill, under Face steepness 1, Sampled slope texture 1, sun from the west (sun tilt 0), laminae 0.5 | poor (crack networks where retail has fine downslope streaks; the dense contour rings are gone) |
 | Ring craters about 1450 px with a rubble rim | Ring crater | poor in art, close in heights |
 | Basins with a level floor at sea+1 (Yerrot) | Basin | poor |
 | Ponds | Pond | close |
@@ -91,7 +92,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Lumpy stepped knolls | Knoll | close |
 | Low flat lava shields (walkable, steps 17.5 per cell) | Lava shield | close |
 | Crescent pools and lava slots between raised banks | Lava trough | close |
-| Big dark rounded dome blocks | Dome block (Dark dome rock, Rock crown 1) | poor (dark rock on top now, but a flat top over a wall) |
+| Big dark rounded dome blocks | Dome block (Dark dome rock, Rock crown 1, knuckle spurs) | close (a rounded, lumpy dark mass) |
 | Long knotted ridges | Lava ridge (Crumpled flow rock, Rock crown 1) | poor (its top still shows plain ground) |
 | Fringed lava coasts, rimmed plateaus, lava rivers | Shallow, Plateau, River | poor |
 
@@ -115,7 +116,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Ice pyramids and small mesas | Ice pyramid (Crystal ice), Ice butte | good |
 | Ice cliffs (170) and terraces (85), closed to every unit | Ice cliff, Ice terrace | close |
 | Icebergs, ice blocks, glacier fronts | Iceberg, Ice block (Glacier ice), Glacier front (Snow and slate) | close |
-| Rubble clumps and boulders | Frost rubble, Boulder (Frost rubble) | close |
+| Rubble clumps and boulders | Frost rubble, Boulder, Boulder field (Frost rubble; Copies 10) | close |
 | Snow drifts | Snow drift | close |
 | Ragged frost coasts | Shallow with shore plates | close (needs a pale shelf and melt pockets on the waterline) |
 
@@ -135,7 +136,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Feature | Tool, rock type | Status |
 | --- | --- | --- |
 | Flat sand islands at sea+2 with a pale halo | Island (drawn in water; on the sea+8 plain the sea tools add nothing) | close |
-| Sandbars, shoals | Sandbar, Shoal | close |
+| Sandbars, shoals, islet chains | Sandbar, Shoal, Islet scatter (Copies 8) | close |
 | Atolls | Atoll | close (rings stay closed) |
 | Dark rock mounds with radial ridges | Rock mound, Rock knob, Crater mound (Mound rock) | close (ridges are crisp rills) |
 | Halos and shoals pale blue: (43,101,144) against retail (45,104,148) | world water depths 38 and 52 | good |
@@ -150,7 +151,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Lobed mesas, wrinkle ridges, flow lobes | Lobed mesa, Wrinkle ridge, Flow lobe | close |
 | Dark maria at the plain's height (0-unit step on 6 of 6 maps) | Mare (lays the Moon mare material) | close (edge hard where retail fades over ~100 px) |
 | Crater walls in dark gray shade, not black | world shade depth 0.6 with sun 34 | close |
-| Ring craterlets scattered on the plain | none | missing (needs scatter) |
+| Ring craterlets scattered on the plain | Craterlet field (Copies 14) | close |
 
 ### Lush (22 maps)
 

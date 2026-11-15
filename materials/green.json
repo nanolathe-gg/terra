@@ -1981,6 +1981,7 @@
   },
 
   "shapes": {
+   "knollField": {"from": "hill", "diameter": 130, "elevation": 32, "lean": 220, "facing": 8, "cracks": 35, "wander": 12, "varySize": 70, "scatterCount": 8, "scatterSpread": 220, "scatterSize": 70, "scatterVary": 50},
    "brokenHill": {"from": "hill", "diameter": 460, "elevation": 76, "lean": 250, "facing": 8, "gullies": 30, "gullySize": 30, "cracks": 50},
    "fin": {"from": "mountain", "diameter": 70, "elevation": 155, "gullies": 0, "talus": 0, "cracks": 60, "wander": 8, "crestTaper": 70, "lean": 250, "facing": 2},
    "massif": {"from": "mountain", "diameter": 700, "elevation": 137, "lean": 100, "terraces": 7, "ledge": 15, "terraceJitter": 90, "gullies": 15, "talus": 20, "styleVegetation": -20, "along": [[0, 1], [1, 1]], "wander": 50, "heightVary": 25, "widthVary": 30, "varySize": 160},
@@ -2009,6 +2010,7 @@
    {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "rock": "soil"},
    {"id": "mountain", "label": "Mountain", "icon": "mountain", "color": "#b3bcca", "group": "shape"},
    {"id": "knoll", "label": "Knoll", "icon": "hill", "color": "#cfe3a3", "group": "shape", "help": "Draw a knoll: a round, walkable rise with a steep shaded side to the north-east; a click for one.", "rock": "soil"},
+   {"id": "knollField", "label": "Knoll field", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Click for a cluster of small round knolls; a drag lays a band of them.", "rock": "soil"},
    {"id": "ramp", "label": "Ramp", "icon": "ramp", "color": "#e5cfa5", "group": "shape"},
    {"id": "valleyV", "label": "V valley", "icon": "valleyV", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},

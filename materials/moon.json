@@ -1237,6 +1237,7 @@
   },
 
   "shapes": {
+   "craterField": {"from": "crater", "diameter": 110, "elevation": -14, "secondaries": 0, "ejecta": 20, "buckling": 0, "wander": 6, "heightVary": 1, "scatterCount": 14, "scatterSpread": 300, "scatterSize": 45, "scatterVary": 60},
    "mare": {"from": "plateau", "diameter": 900, "elevation": 4, "gullies": 0, "talus": 0, "cracks": 0, "wander": 60, "widthVary": 40, "varySize": 300, "heightVary": 0, "terraces": 0},
    "flowLobe": {"from": "hill", "diameter": 300, "elevation": 24, "lean": 100, "cracks": 10, "wander": 40, "widthVary": 20, "heightVary": 3, "varySize": 100, "terraces": 5, "ledge": 30, "terraceJitter": 50},
    "wrinkleRidge": {"from": "mountain", "diameter": 40, "elevation": 16, "wander": 6, "widthVary": 40, "heightVary": 4, "varySize": 60, "gullies": 0, "talus": 0, "crestTaper": 60},
@@ -1283,6 +1284,7 @@
    {"id": "wrinkleRidge", "label": "Wrinkle ridge", "icon": "mountain", "color": "#b3bcca", "group": "shape", "help": "Draw a narrow, low ridge line: short slivers, forks or long winding loops."},
    {"id": "flowLobe", "label": "Flow lobe", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Raise a low lobe whose flank is wrapped in concentric folds."},
    {"id": "smallCrater", "label": "Small crater", "icon": "crater", "color": "#e6c0ae", "group": "shape", "help": "Strike a small fresh crater about 100 px across: a sharp rim, a dark inner wall away from the sun."},
+   {"id": "craterField", "label": "Craterlet field", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Click for a field of small fresh craters, one bigger and a dozen smaller round it; a drag spreads them along it."},
    {"id": "basin", "label": "Large crater", "icon": "crater", "color": "#b98d7a", "group": "shape", "help": "Strike a large crater about 1000 px across: a flat floor 43 below the plain, a rim 25 above it, streaked walls.", "rock": "cracked"},
    {"id": "rille", "label": "Rille", "icon": "valleyU", "color": "#bfae94", "group": "shape", "help": "Draw a rille: a narrow, winding channel cut into the plain."}
   ],

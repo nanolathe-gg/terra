@@ -1627,6 +1627,7 @@
   },
 
   "shapes": {
+   "boulderField": {"from": "hill", "diameter": 70, "elevation": 60, "wander": 10, "varySize": 40, "scatterCount": 10, "scatterSpread": 160, "scatterSize": 70, "scatterVary": 50},
    "pond": {"from": "deep", "diameter": 260, "shorePlates": 0, "wander": 40, "varySize": 80},
    "drift": {"from": "hill", "diameter": 260, "elevation": 25},
    "boulder": {"from": "hill", "diameter": 80, "elevation": 75, "wander": 10, "varySize": 40},
@@ -1664,6 +1665,7 @@
    {"id": "butte", "label": "Ice butte", "icon": "plateau", "color": "#e6bb82", "group": "shape", "help": "Draw a small ice butte with steep walls; drag a short path to bend it into an L, V or X."},
    {"id": "rubble", "label": "Frost rubble", "icon": "mountain", "color": "#b3bcca", "group": "shape", "help": "Draw a rubble massif: lumpy, snow-capped knobs of broken rock; drag for a band.", "rock": "rubble"},
    {"id": "boulder", "label": "Boulder", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Draw one rounded boulder, 75 high; click several for a cluster.", "rock": "rubble"},
+   {"id": "boulderField", "label": "Boulder field", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Click for a scatter of frost boulders round a bigger one; a drag spreads them along it.", "rock": "rubble"},
    {"id": "drift", "label": "Snow drift", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Draw a snow drift: a low, soft, walkable rise.", "rock": "soil"},
    {"id": "pond", "label": "Frozen pond", "icon": "deep", "color": "#c7a97e", "group": "shape", "help": "Draw a small frozen pond: open water with a soft snow rim and no shore plates; add the Fissure tool's network round it for a crack web."},
    {"id": "hill", "label": "Hill", "icon": "hill", "color": "#b8d88d", "group": "shape", "rock": "soil"},
