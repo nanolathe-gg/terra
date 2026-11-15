@@ -1983,12 +1983,14 @@
         "ringLobe": 20,
         "ringContrast": 0.6,
         "ringCount": 30.0,
-        "ringSize": 0.35,
+        "ringSize": 0.25,
         "ringFill": 0.1,
         "ringPatch": 0.8,
         "ringPatchSize": 160,
         "ringTone": 0.0,
-        "faceFill": 0.25
+        "faceFill": 0.25,
+        "shallowDepth": 38,
+        "deepDepth": 52
       },
       "engineDefaults": {
         "erosion": 1,
@@ -1996,9 +1998,41 @@
         "erosionEnvelope": 0.12
       },
 
+  "rock": {
+
+   "presets": [
+
+    "mound"
+
+   ],
+
+   "recipes": {
+
+    "mound": {
+
+     "label": "Mound rock",
+
+     "colors": {
+
+      "rock": "#636343"
+
+     }
+
+    }
+
+   }
+
+  },
+
   "shapes": {
+   "craterMound": {"from": "crater", "diameter": 470, "heightReference": 2, "elevation": 85, "combine": 0, "secondaries": 0, "wander": 30, "heightVary": 40, "varySize": 160, "gullies": 25, "gullySize": 60, "cracks": 20, "styleVegetation": -70, "curve": {"form": "lfCrater", "knots": [[0, 0], [0.12, 0.35], [0.24, 0.8], [0.32, 1], [0.4, 0.85], [0.5, 0.3], [0.57, 0.05], [0.62, 0], [1, 0]]}},
+   "rockKnob": {"from": "hill", "diameter": 180, "elevation": 80, "gullies": 20, "gullySize": 60, "talus": 0, "wander": 26, "varySize": 70, "widthVary": 30, "heightVary": 16, "cracks": 20, "styleVegetation": -70, "curve": {"form": "lfHill", "knots": [[0, 0], [0.2, 0.15], [0.4, 0.45], [0.6, 0.75], [0.8, 0.93], [1, 1]], "back": [[0, 0], [0.2, 0.15], [0.4, 0.45], [0.6, 0.75], [0.8, 0.93], [1, 1]]}},
+   "rockMound": {"from": "hill", "diameter": 480, "elevation": 112, "gullies": 50, "gullySize": 70, "talus": 0, "wander": 40, "varySize": 100, "widthVary": 15, "heightVary": 12, "cracks": 20, "styleVegetation": -70, "curve": {"form": "lfHill", "knots": [[0, 0], [0.2, 0.15], [0.4, 0.45], [0.6, 0.75], [0.8, 0.93], [1, 1]], "back": [[0, 0], [0.2, 0.15], [0.4, 0.45], [0.6, 0.75], [0.8, 0.93], [1, 1]]}},
+   "atoll": {"from": "hill", "heightReference": 1, "elevation": 2, "combine": 0, "diameter": 220, "wander": 12, "heightVary": 12, "varySize": 60, "gullies": 0, "cracks": 0, "curve": {"form": "lfHill", "knots": [[0, 0], [0.06, 0.6], [0.12, 0.7], [0.16, 1], [0.22, 1], [0.26, 0.7], [0.32, 0.6], [0.4, 0], [1, 0]]}, "widthVary": 0},
+   "shoal": {"from": "shallow", "heightReference": 1, "elevation": -25, "combine": 0, "diameter": 120, "wander": 14, "varySize": 120, "crestTaper": 60},
+   "sandbar": {"from": "shallow", "heightReference": 1, "elevation": 2, "combine": 0, "diameter": 200, "wander": 14, "varySize": 120, "wallVary": 0, "widthVary": 30, "crestTaper": 100, "curve": {"form": "lfShelf", "knots": [[0, 0], [0.12, 0.62], [0.3, 0.7], [0.42, 1], [1, 1]]}},
    "plateau": {},
-   "hill": {},
+   "hill": {"diameter": 300, "elevation": 28, "wander": 40, "varySize": 80, "widthVary": 20, "heightVary": 8, "cracks": 0},
    "mountain": {},
    "ramp": {},
    "valleyV": {},
@@ -2006,13 +2040,13 @@
    "valleyT": {},
    "crater": {"wander": 34, "heightVary": 4},
    "crystal": {},
-   "deep": {"diameter": 256, "wander": 52, "widthVary": 40},
+   "deep": {"diameter": 256, "wander": 52, "widthVary": 40, "elevation": -80},
    "shallow": {"diameter": 248, "wander": 6},
    "river": {},
    "braided": {},
    "landform": {},
-   "island": {"from": "hill", "heightReference": 1, "elevation": 26, "diameter": 340, "wander": 40, "widthVary": 30},
-   "reef": {"from": "shallow", "combine": 0, "elevation": -5, "diameter": 220, "wander": 30}
+   "island": {"from": "shallow", "heightReference": 1, "elevation": 2, "diameter": 460, "wander": 60, "widthVary": 30, "combine": 0, "varySize": 140, "wallVary": 60, "fingers": 0, "curve": {"form": "lfShelf", "knots": [[0, 0], [0.12, 0.62], [0.3, 0.7], [0.42, 1], [1, 1]]}},
+   "reef": {"from": "shallow", "combine": 0, "elevation": -9, "diameter": 220, "wander": 30}
   },
   "tools": [
    {"id": "plateau", "label": "Plateau", "icon": "plateau", "color": "#e6bb82", "group": "shape"},
@@ -2023,7 +2057,13 @@
    {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
-   {"id": "island", "label": "Island", "icon": "island", "color": "#cdd59b", "group": "shape", "help": "Draw an island: land rising above the sea wherever you draw it, over deep water or not.", "rock": "soil"},
+   {"id": "island", "label": "Island", "icon": "island", "color": "#cdd59b", "group": "shape", "help": "Draw a flat sand island just above the sea, with a pale shallow shelf round it, over deep water or not.", "rock": "soil"},
+   {"id": "sandbar", "label": "Sandbar", "icon": "island", "color": "#c7a97e", "group": "shape", "help": "Drag a long sand bar that tapers to points at both ends, with a shallow shelf round it."},
+   {"id": "atoll", "label": "Atoll", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Click a ring of sand round deep water; the ring dips under the sea in places."},
+   {"id": "rockMound", "label": "Rock mound", "icon": "mountain", "color": "#b3bcca", "group": "shape", "help": "Click a dark rock dome with ridges and valleys running down from its summit; drag for a rock ridge.", "rock": "mound"},
+   {"id": "rockKnob", "label": "Rock knob", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Click or drag a small lumpy rock outcrop on the sand.", "rock": "mound"},
+   {"id": "craterMound", "label": "Crater mound", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Click a rock ring round a sandy floor at ground level.", "rock": "mound"},
+   {"id": "shoal", "label": "Shoal", "icon": "shallow", "color": "#c7a97e", "group": "shape", "help": "Drag a pale underwater bank, too deep to wade, often in arcs off a coast."},
    {"id": "deep", "label": "Deep water", "icon": "deep", "color": "#7cb8e8", "group": "water"},
    {"id": "shallow", "label": "Shallow water", "icon": "shallow", "color": "#87d9da", "group": "water"},
    {"id": "reef", "label": "Reef", "icon": "shallow", "color": "#a7e3c9", "group": "water", "help": "Draw a reef: raises a deep bed to a shallow one units can wade, and leaves higher ground as it is."},
