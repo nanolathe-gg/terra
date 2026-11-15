@@ -26,7 +26,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Red Planet | pass | pass | flat and water sections |
 | Lava | pass | pass (lava) | flat and lava sections |
 | Painted Desert | pass | pass | flat crop; water from Wet Desert, as no Painted Desert map has any |
-| Ice | faint (the 8x8 is a little lumpier and bluer) | faint | flat and water crops |
+| Ice | pass after this round's retune (palette shares now within a few points of retail's; before, the 8x8 read bluer) | faint | flat and water crops |
 | Crystal | faint (the 8x8 is a little darker and streakier) | pass | flat and water crops |
 | Archipelago | pass | pass | flat and water sections |
 | Lush | pass; jungle highland faint (after this round's retune; it failed before) | pass | flat, water and canopy crops |
