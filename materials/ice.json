@@ -1357,6 +1357,7 @@
   "vent": {"params": {"size": 1.7, "thick": 1.6, "rim": 0.5, "rimSat": 2.5, "spread": 6}}
  },
  "world": {
+    "materials": {"ground": "ice-ground", "water": "ice-water"},
     "knobDefaults": {
         "plainRelief": 0.6,
         "crackSeverity": 0,
@@ -1407,6 +1408,7 @@
       "variants": {
         "bergs": {
           "label": "Icy Bergs: blue blocks",
+          "config": {"materials": {"ground": "ice-bergs-ground", "water": "ice-water"}},
           "colors": {
             "crystal": "#8ea6ee",
             "slope": "#a5bef9",

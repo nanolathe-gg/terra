@@ -1085,6 +1085,7 @@
   "deposit": {"params": {"look": "blades", "blades": 5, "bladeLen": 15, "bladeWidth": 12, "fan": 1, "core": 11, "halo": 0.42, "haloSat": 1, "reach": 1.1, "rimDark": 0.3}, "vary": {"reach": [0.83, 1.65], "haloRough": [4, 10]}}
  },
  "world": {
+    "materials": {"ground": "moon-ground", "water": "moon-water"},
     "knobDefaults": {
         "looseSupply": 0.1,
         "looseSize": 3.5,

@@ -1675,6 +1675,7 @@
   "vent": {"params": {"look": "pit", "hole": 8, "ring": 26, "cell": 10, "lumps": 0, "lumpTone": 0.55}}
  },
  "world": {
+    "materials": {"ground": "crystal-ground", "water": "crystal-water"},
     "knobDefaults": {
         "gougeWeb": 0.6,
         "paletteMix": 1,

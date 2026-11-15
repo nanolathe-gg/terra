@@ -47,7 +47,8 @@ page and an older card disagree, this page wins.
 
 7. **One engine.** Every world runs the same GPU pipeline: shape, ground,
    time, surface and light. A world is data: its numbers in
-   `materials/<world>.json` and its presets.
+   `materials/<world>.json`, its presets, and its ground and water
+   materials (`materials/textures.json`).
    - Code branches on a feature or on material data, never on a world's
      name (`repro/gate.sh` checks this).
    - There is one render path. Don't keep a CPU copy of GPU work, add a
@@ -91,7 +92,20 @@ page and an older card disagree, this page wins.
      5% threshold is evidence, not a pass/fail requirement.
    - A control must be artistically useful: something an artist would set
      on purpose for a different look. Implementation constants stay in code.
-   - Presets are only numbers for existing controls.
+   - Presets are only numbers for existing controls, except a material's
+     (next point).
+   - Ground and water textures are materials, and the material editor is
+     the only way to set them (owner's decisions of 2026-11-14). A material
+     is a node graph (`sculpt-materials.js`) with two tiers. Its graph is
+     its source: a node's settings and type choices are its author's tools,
+     not world controls, and the points above do not govern them. The
+     controls a material publishes are what a map maker adjusts, and the
+     points above do govern those. A material preset is a graph with its
+     numbers. Keep the node set small: a new node type must do what no
+     combination of the existing ones can.
+   - The editor shows only the material itself (its repeat, on terrain, a
+     node alone). It holds no reference pictures and no comparison tools;
+     matching a look against a picture is work done outside it.
    - A control the panel disables says why (`worldControlRequirement`,
      `shapeControlAvailable`).
 10. **Real terrain is the standard for now; retail comes back later.** The
@@ -123,7 +137,10 @@ page and an older card disagree, this page wins.
     the same machine, and `repro/regional.mjs` finds no mismatch: exact
     on macOS (Metal); on other GPUs a value within 2 float32 steps at the
     map's top height counts as a near match (owner's decision of
-    2026-11-14, for NVIDIA's Vulkan rounding).
+    2026-11-14, for NVIDIA's Vulkan rounding). Two machines may export
+    slightly different files: a map is exported once and every match uses
+    that file (owner, 2026-11-14). A material's palette reduction spreads
+    such rounding differences, so its dither dots may differ between GPUs.
 
 ## Preview assets and pushing
 

@@ -1957,6 +1957,7 @@
   "vent": {"params": {"size": 0.65, "rim": 0.85}}
  },
  "world": {
+    "materials": {"ground": "archipelago-ground", "water": "archipelago-water"},
     "knobDefaults": {
         "crackSeverity": 0.4,
         "crackMajor": 0.6,
