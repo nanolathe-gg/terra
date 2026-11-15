@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {NODES, LIBRARY, MAX_NODES, MATERIAL_SLOTS, copyMaterial, copyMaterials, blankMaterial, makeNode, orderNodes, nodeTypes, compileMaterial, programKey, programSource,
-  materialReliefBound, materialRenderKey, soloMaterial, controlSpec, withWorldMaterials, worldMaterials, adoptWorldMaterials, worldOwnMaterials, keptWorldMaterials, mergeWorldMaterials, worldPair, addMaterial, duplicateMaterial, setMaterial,
+  materialReliefBound, materialRenderKey, soloMaterial, controlSpec, controlRange, nodeParams, withWorldMaterials, worldMaterials, adoptWorldMaterials, worldOwnMaterials, keptWorldMaterials, mergeWorldMaterials, worldPair, addMaterial, duplicateMaterial, setMaterial,
   assignMaterial, deleteMaterial, strokeMaterial, keepStrokeMaterials, materialsInUse, materialUsers, materialText, parseMaterialText, reseedMaterial, materialTint} from '../sculpt-materials.js';
 import {graphPositions, cardHeight, CARD} from '../sculpt-material-graph.js';
 import {savedWorld, copySavedWorld} from '../sculpt-save.js';
@@ -133,6 +133,22 @@ test('adding, assigning, deleting and what strokes keep', () => {
   let full = list; while (full.length < MATERIAL_SLOTS - 1) full = addMaterial(full, blankMaterial(), 'More').materials;
   assert.throws(() => addMaterial(full, blankMaterial()), /at most seven/);
   assert.equal(setMaterial(list, 3, LIBRARY['green-ground']).find(m => m.slot === 3).name, 'Sand', 'a new graph keeps the name and slot');
+});
+
+test('a published control has its own range inside the node setting’s, and a new one starts with a window about its value', () => {
+  const base = blankMaterial(), size = nodeParams(base.nodes.find(n => n.id === 'noise')).find(p => p.key === 'size');
+  assert.deepEqual(controlRange(size, 3.5), {min: 1, max: 14}); assert.deepEqual(controlRange(size, 40), {min: 10, max: 160});
+  assert.deepEqual(controlRange({min: 0, max: 8}, 2.4), {min: 0, max: 8}, 'a setting that starts at 0 keeps its whole range');
+  const ranged = copyMaterial({...base, controls: [{label: 'Size', node: 'noise', param: 'size', min: 2, max: 20}]});
+  assert.deepEqual(ranged.controls, [{label: 'Size', node: 'noise', param: 'size', min: 2, max: 20}]);
+  assert.deepEqual([controlSpec(ranged, ranged.controls[0]).spec.min, controlSpec(ranged, ranged.controls[0]).spec.max], [2, 20]);
+  // A range outside the setting's is held inside it; an empty one falls back to the setting's own.
+  const wide = controlSpec(ranged, {node: 'noise', param: 'size', min: -5, max: 9000}).spec; assert.deepEqual([wide.min, wide.max], [size.min, size.max]);
+  const empty = controlSpec(ranged, {node: 'noise', param: 'size', min: 20, max: 20}).spec; assert.deepEqual([empty.min, empty.max], [size.min, size.max]);
+  assert.throws(() => copyMaterial({...base, controls: [{label: 'Size', node: 'noise', param: 'size', min: 'a', max: 3}]}), /range/);
+  for (const [key, m] of Object.entries(LIBRARY)) for (const c of m.controls) if (c.param !== 'stops') {
+    const {node, spec} = controlSpec(m, c); assert.ok(node.params[c.param] >= spec.min && node.params[c.param] <= spec.max, `${key}: ${c.label} starts inside its range`);
+  }
 });
 
 test('the world’s ground and water belong to the world: a map takes them, and the world keeps only what differs from the library', () => {

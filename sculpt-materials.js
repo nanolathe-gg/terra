@@ -166,8 +166,17 @@ export function copyPalette(value = []) {
 export function controlSpec(material, control) {
   const node = material.nodes.find(n => n.id === control.node); if (!node) return null;
   if (control.param === 'stops') return node.type === 'gradient' ? {node, stops: true} : null;
-  const spec = nodeParams(node).find(p => p.key === control.param);
-  return spec ? {node, spec} : null;
+  const spec = nodeParams(node).find(p => p.key === control.param); if (!spec) return null;
+  // The control's own range, inside the node setting's: what its author thinks a map maker should reach.
+  const min = clamp(Number.isFinite(control.min) ? control.min : spec.min, spec.min, spec.max), max = clamp(Number.isFinite(control.max) ? control.max : spec.max, spec.min, spec.max);
+  return {node, spec: min < max ? {...spec, min, max} : spec};
+}
+// The range a newly published setting starts with. A scale (a size from 1 to 256 px) gets a window about its value, a quarter to four
+// times, so a small drag is a small change; any other setting gets its whole range. Its author can change either.
+export function controlRange(spec, value) {
+  if (!(value > 0) || !(spec.min > 0) || spec.max < 16 * spec.min) return {min: spec.min, max: spec.max};
+  const nice = v => Number(v.toPrecision(2));
+  return {min: clamp(nice(value / 4), spec.min, spec.max), max: clamp(nice(value * 4), spec.min, spec.max)};
 }
 export function copyMaterial(value) {
   if (!object(value)) throw Error('Invalid material.');
@@ -180,6 +189,7 @@ export function copyMaterial(value) {
   for (const c of (value.controls ?? []).slice(0, MAX_CONTROLS)) {
     if (!object(c) || typeof c.node !== 'string' || typeof c.param !== 'string') throw Error('Invalid material control.');
     const control = {label: text(c.label, 'Control', 'A control name'), node: c.node, param: c.param};
+    if (c.param !== 'stops' && c.min !== undefined && c.max !== undefined) { control.min = number(c.min, 'A control’s range'); control.max = number(c.max, 'A control’s range'); }
     if (controlSpec(material, control) && !material.controls.some(o => o.node === control.node && o.param === control.param)) material.controls.push(control);
   }
   material.palette = copyPalette(value.palette);

@@ -2,7 +2,7 @@
 // preview and three panes: Controls (what the material publishes, for adjusting it), Node (the selected node) and Palette (the game
 // colors it is reduced to). Every element is in index.html; this fills values and applies edits through the map's own undo and save.
 import {NODES, NODE_TYPES, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
-  nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, materialRenderKey, materialTint, paletteRgb,
+  nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb,
   addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText} from './sculpt-materials.js';
 import {mountMaterialGraph, graphPositions, CARD, cardHeight} from './sculpt-material-graph.js';
 import {MaterialPreview, TILE, TERRAIN} from './sculpt-material-preview.js';
@@ -118,7 +118,7 @@ export function mountMaterialEditor(host) {
   const togglePublish = attempt((id, param, label) => change(m => {
     const at = published(m, id, param);
     if (at >= 0) m.controls.splice(at, 1);
-    else { if (m.controls.length >= MAX_CONTROLS) throw Error(`A material publishes at most ${MAX_CONTROLS} controls.`); m.controls.push({label, node: id, param}); }
+    else { if (m.controls.length >= MAX_CONTROLS) throw Error(`A material publishes at most ${MAX_CONTROLS} controls.`); const control = {label, node: id, param}, n = m.nodes.find(n => n.id === id); if (param !== 'stops') Object.assign(control, controlRange(nodeParams(n).find(p => p.key === param), n.params[param])); m.controls.push(control); }
   }));
 
   // A material's published controls, in the fixed rows the page declares under `prefix`: the editor's Controls pane ("ctl") and the
@@ -138,13 +138,19 @@ export function mountMaterialEditor(host) {
       if (optional(id('name', i))) {
         $(id('name', i)).onchange = attempt(() => { editOf(m => { m.controls[i].label = $(id('name', i)).value; }); commit(); });
         $(id('remove', i)).onclick = attempt(() => { editOf(m => { m.controls.splice(i, 1); }); commit(); });
+        // Its range: what a map maker can reach with it, inside what the node setting allows.
+        for (const end of ['min', 'max']) $(id(end, i)).onchange = attempt(() => { const lo = $(id('min', i)).valueAsNumber, hi = $(id('max', i)).valueAsNumber; if (!(lo < hi)) throw Error('A control’s range runs from a lower value to a higher one.'); editOf(m => { m.controls[i].min = lo; m.controls[i].max = hi; }); commit(); });
       }
     }
     return (m, naming = false) => {
       for (let i = 0; i < MAX_CONTROLS; i++) {
         const c = m?.controls[i], target = c && controlSpec(m, c); $(id('row', i)).hidden = !target; if (!target) continue;
         const name = optional(id('name', i));
-        if (name) { name.hidden = $(id('remove', i)).hidden = !naming; if (document.activeElement !== name) name.value = c.label; }
+        if (name) {
+          name.hidden = $(id('remove', i)).hidden = !naming; if (document.activeElement !== name) name.value = c.label;
+          $(id('range', i)).hidden = !naming || !!target.stops;
+          if (!target.stops) for (const end of ['min', 'max']) { const input = $(id(end, i)); input.min = nodeParams(target.node).find(p => p.key === c.param).min; input.max = nodeParams(target.node).find(p => p.key === c.param).max; if (document.activeElement !== input) input.value = target.spec[end]; }
+        }
         $(id('scrub', i)).hidden = !!target.stops; $(id('colors', i)).hidden = !target.stops;
         if (target.stops) { $(id('colors-label', i)).textContent = c.label; for (let k = 0; k < MAX_STOPS; k++) { const stop = target.node.stops[k], input = $(`${prefix}-color-${i}-${k}`); input.hidden = !stop; if (stop) input.value = hex(stop.slice(1).map(v => v / Math.max(1, ...stop.slice(1)) * 255)); } }
         else { $(id('label', i)).textContent = c.label; setScrub(`${prefix}-${i}`, target.spec, target.node.params[c.param]); }
