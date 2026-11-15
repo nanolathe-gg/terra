@@ -163,4 +163,4 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Cuestas and coastal bluffs | Cuesta, Coastal bluff | close (back slopes ~3x the cliff side, retail ~10x) |
 | Rocky knolls | Rock knoll (Bare tan rock) | close |
 | Rivers with wide pale braided shallows | River (160 px), Braided river | close (a deep channel inside pale margins; a channel's depth is a quarter of its width, so a narrow river stays pale) |
-| Swamp thickets | none | missing (needs a thicket material and soft paint edges) |
+| Swamp thickets (9 maps) | Swamp thicket (lays the Swamp thicket material, Ground edge 30) | close (water glints ~22% of pixels against ~16% in a retail crop; retail's are a little larger and brighter) |
