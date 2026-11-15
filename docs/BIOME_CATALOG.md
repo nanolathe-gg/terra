@@ -31,7 +31,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Archipelago | pass | pass | flat and water sections |
 | Lush | pass; jungle highland faint (after this round's retune; it failed before) | pass | flat, water and canopy crops |
 | Moon | pass | no retail water to compare (Moon maps have no sea) | flat section |
-| Moon mare | faint after this round's retune: gray shares within a few points of retail's (75: 28% against 31%, 107: 21% against 13%); it lacks retail's few olive flecks. The seam it showed was the palette dither restarting at the repeat's edge, now fixed for every material | | a dark mare crop |
+| Moon mare | faint after this round's retune: gray shares within a few points of retail's (75: 28% against 31%, 107: 21% against 13%); it lacks retail's few olive flecks (an olive fleck scatter was tried: olive reached 0.1% of pixels against retail's 2%, and the grays shifted light, so it was dropped). The seam it showed was the palette dither restarting at the repeat's edge, now fixed for every material | | a dark mare crop |
 
 ## Cross-biome gaps, ranked by how much of the retail set they cover
 
