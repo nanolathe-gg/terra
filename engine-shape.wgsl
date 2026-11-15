@@ -1209,6 +1209,15 @@ fn talusFan(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32, shar
 fn landformTalus(wx: f32, wy: f32, lx: f32, ly: f32, x: i32, y: i32, trunk: u32, share: f32, nA: f32, nB: f32, base: f32, face: f32) -> f32 {
   return max(talusApron(wx, wy, lx, ly, x, y, trunk, share, nA, nB, base, face), talusFan(wx, wy, lx, ly, x, y, trunk, share, nA, nB, base));
 }
+// Whether a landform's candidate beats the one it holds, by Combine: the higher (Raise to), the lower (Cut to) or the farther from the ground (Flatten to).
+fn lfBetter(cand: vec3f, pick: vec3f, seen: bool, base: f32) -> bool {
+  if (!seen) { return true; }
+  if (u.combine == 0u) { return cand.x > pick.x; }
+  if (u.combine == 1u) { return cand.x < pick.x; }
+  return abs(cand.x - base) > abs(pick.x - base);
+}
+// lfcrater: how far past a section's peak (in shares of its half width, toward the path) a rim spur's root fades into the bowl's wall.
+const SPUR_INNER = 0.05;
 
 @compute @workgroup_size(8, 8)
 fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
@@ -1235,6 +1244,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   var nearest = 3.0e38; var trunk = 0xffffffffu;
   var pick = vec3f(base, 0.0, 0.0); var seen = false; var pk = 0u; var psh = 0.0;
   var land = vec3f(base, 0.0, 0.0);
+  var spr = vec3f(base, 0.0, 0.0); var sk = 0u;   // lfcrater: the strongest rim spur at the cell (sk its segment), merged with the section below
   var tShare = 0.0;
   for (var k = 0u; k < u.nseg; k++) {
     let bx = bitcast<vec4<i32>>(Seg[(u.segBase + k) * 4u + 3u]);
@@ -1250,11 +1260,8 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
     let cand = lfEval(s0, s1, s2, wx, wy, base, nA, nB, nC, 0.0, x, y, i, cells);
     if (cand.y <= 0.0) { continue; }
     if (k == 0u && u.grooveEnd != 0.0) { land = cand; continue; }   // an impact's landing meets the groove below
-    var better = !seen;
-    if (seen) {
-      if (u.combine == 0u) { better = cand.x > pick.x; } else if (u.combine == 1u) { better = cand.x < pick.x; } else { better = abs(cand.x - base) > abs(pick.x - base); }
-    }
-    if (better) { pick = cand; seen = true; pk = k; psh = 0.0; }
+    if (u.lfPeak > 0.0 && s1.x == 0.0) { if (spr.y <= 0.0 || abs(cand.x - base) > abs(spr.x - base)) { spr = cand; sk = k; } continue; }
+    if (lfBetter(cand, pick, seen, base)) { pick = cand; seen = true; pk = k; psh = 0.0; }
   }
   if (trunk != 0xffffffffu) {
     // The cell's place along the path. On the inside of a bend the nearest point jumps from one segment to the next, so the place is blended over the
@@ -1289,15 +1296,26 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
       else { let rc = cand.x - base; let rl = land.x - base; cand = vec3f(base + min(min(rc, 0.0), min(rl, 0.0)) + max(max(rc, 0.0), max(rl, 0.0)), max(cand.y, land.y), cand.z); }
       land = vec3f(base, 0.0, 0.0);
     }
-    if (cand.y > 0.0) {
-      var better = !seen;
-      if (seen) {
-        if (u.combine == 0u) { better = cand.x > pick.x; } else if (u.combine == 1u) { better = cand.x < pick.x; } else { better = abs(cand.x - base) > abs(pick.x - base); }
+    var ck = trunk; var csh = ss / sw;
+    // lfcrater: spurs off a section's peak (a crater's rim) stand on its outer flank, whatever Combine is: there the cell keeps the higher of the two rises in
+    // the rim's direction. Past the peak, toward the path (the section's share across, its cover, above u.lfPeak), the section alone holds, so a spur's root
+    // never fills the bowl's wall; at the peak the section stands at the rim's height, at or over any spur, so the hand-over meets itself.
+    if (spr.y > 0.0) {
+      if (cand.y <= 0.0) { cand = spr; ck = sk; csh = 0.0; }
+      else {
+        let rt = cand.x - base; let rs = spr.x - base;
+        let f = 1.0 - sm(u.lfPeak, u.lfPeak + SPUR_INNER, cand.y);
+        let rim = curveRaw(u.curveBase, u.lfPeak) * select(u.elev - u.baseH, u.elev, u.lfGround != 0u);   // the section's rise at its peak: the rim's direction
+        let wins = select((rs < rt), (rs > rt), rim > 0.0) && f > 0.0;
+        cand = vec3f(base + select(rt, mix(rt, rs, f), wins), max(cand.y, spr.y * f), cand.z);
+        if (wins && f >= 0.5) { ck = sk; csh = 0.0; }
       }
-      if (better) { pick = cand; seen = true; pk = trunk; psh = ss / sw; }
+      spr = vec3f(base, 0.0, 0.0);
     }
+    if (cand.y > 0.0 && lfBetter(cand, pick, seen, base)) { pick = cand; seen = true; pk = ck; psh = csh; }
   }
   if (land.y > 0.0 && !seen) { pick = land; seen = true; }   // a landing no groove segment reaches (its box is the trunk's own; kept for safety)
+  if (spr.y > 0.0 && lfBetter(spr, pick, seen, base)) { pick = spr; seen = true; pk = sk; psh = 0.0; }   // a rim spur past every trunk segment's box
   // P17: the talus cones, where Gullies cut the faces (the chutes are theirs) and the stroke raises. Beyond the footprint the cone is all there is.
   var talus = 0.0;
   if (u.talusReach > 0.0 && u.gully > 0.0 && u.combine == 0u && trunk != 0xffffffffu) { talus = landformTalus(wx, wy, lx, ly, x, y, trunk, tShare, nA, nB, base, select(0.0, pick.x - base, seen));

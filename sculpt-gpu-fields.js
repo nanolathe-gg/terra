@@ -235,12 +235,13 @@ function spurPieces(s, roots) {
   return out;
 }
 // Where a ridge's spurs leave it: along the path, alternating sides with a seeded wobble (share: how far along the path, 0 to 1, for a landform's along curve).
+// Spurs all round a point (L 0: a crater's click, an impact's landing) read the along curve at its end, as the click's section and the landing do.
 function ridgeRoots(s, path, cum, L) {
   const N = Math.round(clamp(s.spurCount, 0, 12)), roots = [];
   if (N < 1) return roots;
   const spread = s.spurSpread, phase = rand01(s.seed, 7, 0x4b1) * Math.PI * 2;
   for (let k = 0; k < N; k++) {
-    if (L <= 0) { roots.push({x: path[0].x, y: path[0].y, heading: phase + Math.atan2(s.rot[1], s.rot[0]) + Math.PI * 2 * (k + (rand01(s.seed, k, 11) - .5) * .5) / N, k, share: 0}); continue; }
+    if (L <= 0) { roots.push({x: path[0].x, y: path[0].y, heading: phase + Math.atan2(s.rot[1], s.rot[0]) + Math.PI * 2 * (k + (rand01(s.seed, k, 11) - .5) * .5) / N, k, share: 1}); continue; }
     const at = L * (.08 + .84 * (k + .2 + .6 * rand01(s.seed, k, 11)) / N), side = ((k + (rand01(s.seed, k, 12) < .25 ? 1 : 0)) & 1) ? 1 : -1;
     let i = 1; while (i < cum.length - 1 && cum[i] < at) i++;
     const a = path[i - 1], b = path[i], f = (at - cum[i - 1]) / Math.max(cum[i] - cum[i - 1], 1e-6);
