@@ -337,7 +337,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     }
     drawMapBounds(ink,map,config,navigating()?coarseSample:api.sampleAuthored??sourceSample); features?.draw(ink,v);
     if(!navigating()&&api.currentTool()==='move'&&!features?.active){
-      if(hoveredNode>=0&&hoveredNode!==api.selection())drawSelection(ink,geometry(hoveredNode),{label:api.selectionLabel(hoveredNode),hover:true});
+      const members=api.selectedShapes?.()||[];
+      if(hoveredNode>=0&&hoveredNode!==api.selection()&&!members.includes(hoveredNode))drawSelection(ink,geometry(hoveredNode),{label:api.selectionLabel(hoveredNode),hover:true});
+      for(const i of members)if(i!==api.selection())drawSelection(ink,geometry(i),{member:true});
       drawSelection(ink,geometry(api.selection()),{label:api.selectionLabel(api.selection()),pathMode:api.pathEditing?.()||api.drawMode?.()==='add',point:api.pathSelection?.(),activePath:api.pathIndex?.()});
       // H27: a landform's section picked on its along-the-path canvas, marked across the path.
       const mark=api.sectionMark?.();if(mark){const a=project(mark.a),b=project(mark.b);ink.save();ink.strokeStyle='#ffd27a';ink.lineWidth=2.5/scale;ink.beginPath();ink.moveTo(a.x,a.y);ink.lineTo(b.x,b.y);ink.stroke();ink.restore();}
@@ -768,12 +770,19 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(api.currentTool()==='move'&&api.drawMode?.()!=='add'){
       const screenPoint=screen(event),selected=api.selection(),handles=geometry(selected);
       const hit=hitSelection(handles,{x:screenPoint.x,y:screenPoint.z},api.pathEditing?.());
-      const index=hit?selected:api.selectAt(p);if(index<0)return;
+      // Shift-click adds a shape to the selection or removes it (the sole selected shape keeps Shift + drag for height); pressing any
+      // selected shape drags them all (sculpt.js beginRegionalMove).
+      const members=api.selectedShapes?.()||[],picked=hit?selected:api.pickAt(p);
+      const toggle=!hit&&event.shiftKey&&!api.pathEditing?.()&&api.toggleShape&&picked>=0&&!(members.length===1&&members[0]===picked);
+      if(!hit&&event.shiftKey&&picked<0&&!api.pathEditing?.()&&members.length)return;   // a Shift-click that misses keeps the selection, as features do
+      if(toggle&&!api.toggleShape(picked)){schedule();return;}
+      const index=hit||toggle||members.length>1&&members.includes(picked)?picked:api.selectAt(p);if(index<0)return;
+      const group=(api.selectedShapes?.()||[]).length>1;
       const pointIndex=hit?.action==='point'?hit.index:-1;api.selectPathPoint?.(pointIndex);
       // In path mode empty ground selects; only a point can start a drag.
       if(api.pathEditing?.()&&pointIndex<0)return;
       const h=geometry(index);if(api.beginMove(index)===false)return;
-      gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'move',index,start,p,screen:screenPoint,handles:h,amount:nodeMetadata(index)?.params?.amount??0,pointIndex,point:pointIndex>=0?{...nodeMetadata(index).points[pointIndex]}:null,action:hit?.action==='rotate'||hit?.action==='scale'||pointIndex>=0?hit.action:event.shiftKey?'amount':'move'};
+      gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'move',index,start,p,screen:screenPoint,handles:h,amount:nodeMetadata(index)?.params?.amount??0,pointIndex,point:pointIndex>=0?{...nodeMetadata(index).points[pointIndex]}:null,action:hit?.action==='rotate'||hit?.action==='scale'||pointIndex>=0?hit.action:event.shiftKey&&!group?'amount':'move'};
     }else{
       const q=screen(event),hit=api.drawMode?.()==='add'?hitSelection(geometry(api.selection()),{x:q.x,y:q.z},true):null;
       const anchor=hit?.action==='point'?hit.index:-1,startPoint=anchor>=0?nodeMetadata(api.selection()).points[anchor]:p;
