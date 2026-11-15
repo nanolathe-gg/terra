@@ -142,10 +142,13 @@ export class GpuErosion {
       await submitSlice(encoder,0,()=>{mapped=countRead.mapAsync(GPUMapMode.READ);mapped.catch(()=>{});});
       await mapped;current();active=new Uint32Array(countRead.getMappedRange(0,4))[0];countRead.unmap();
       await yieldWork();
-      // Start conservatively, then target 25 ms of queue wait. Small regional
-      // passes need more than eight iterations to amortize submission overhead;
-      // cap at 256 and let measured contention reduce the next batch.
-      let batch=1;
+      // A slice is sized to about 25 ms of the pass's own GPU work, so input and visible chunks get the queue between slices. A slice's wait
+      // also holds whatever else was queued ahead of it (tiles, another Time pass), so it only bounds the pass's own cost: the lowest cost an
+      // iteration a million cells has shown (this.rate, per wet or dry pass, drifting up 2% a slice) sizes the batch, and a busy queue no
+      // longer shrinks the slices into many more round trips. The first pass starts at one iteration. Slicing does not change the result.
+      const rateKey=rain!==0?'wet':'dry',mcells=n/1e6;this.rate??={};
+      const sized=()=>clamp(Math.floor(25/(this.rate[rateKey]*mcells)),1,256);
+      let batch=this.rate[rateKey]?sized():1;
       for(let it=0;it<age;){
         current();const count=Math.min(batch,age-it);
         encoder=device.createCommandEncoder({label:'erosion gpu slice'});
@@ -155,7 +158,8 @@ export class GpuErosion {
           step('thermalMain',thermalA);step('thermalMain',thermalB);
         }
         pass.end();const wait=await submitSlice(encoder,count);it+=count;
-        batch=clamp(Math.floor(count*25/Math.max(wait,1)),1,256);
+        const cost=Math.max(wait,.01)/(count*mcells),known=this.rate[rateKey];
+        this.rate[rateKey]=known?Math.min(cost,known*1.02):cost;batch=sized();
         await yieldWork();
       }
       encoder=device.createCommandEncoder({label:'erosion output'});
