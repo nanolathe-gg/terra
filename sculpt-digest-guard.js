@@ -65,10 +65,10 @@ export function installDigestGuard(device) {
   // After a draw: true when nothing escaped the checksum. renderer: the TerrainRenderer that drew; digest: its input checksum, or null.
   guard.check = async (renderer, digest) => {
     const window = guard.window; guard.window = null; if (!window) return true; guard.draws++;
-    const {input, produced, world} = renderer.digestClasses(), worldBound = [];
+    const {input, produced, world, volatile = new Set()} = renderer.digestClasses(), worldBound = [];
     for (const r of window.bound) {
       if (r.unknown) report(`a draw binds ${r.unknown}, which the guard cannot trace: make it after the renderer installs the guard`);
-      else if (world.has(r)) worldBound.push(r);
+      else if (world.has(r)) { if (typeof r.mipLevelCount === 'number') worldBound.push(r); }   // a world buffer is versioned, not hashed
       else if (!input.has(r) && !produced.has(r)) report(`a draw reads '${nameOf(r)}', which the input checksum does not cover: hash it in inputDigest, or classify it in digestClasses (sculpt-renderer.js)`);
     }
     if (worldBound.length) {
@@ -85,7 +85,7 @@ export function installDigestGuard(device) {
       if (seen) {
         const names = renderer.digestUniformDiff(seen.uniforms, uniforms);
         if (names.length) report(`two draws with the same input checksum ran with different uniforms (${names.join(', ')}): what sets them must be in the checksum`);
-        for (const [r, hash] of window.writes) if (r !== renderer.uniformBuffer && seen.writes.has(r) && seen.writes.get(r) !== hash)
+        for (const [r, hash] of window.writes) if (r !== renderer.uniformBuffer && !volatile.has(r) && seen.writes.has(r) && seen.writes.get(r) !== hash)
           report(`two draws with the same input checksum wrote different data to '${nameOf(r)}': what sets it must be in the checksum`);
       } else {
         if (guard.writes.size >= 4096) guard.writes.delete(guard.writes.keys().next().value);

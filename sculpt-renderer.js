@@ -846,9 +846,13 @@ export class TerrainRenderer {
     // The fields and rock weather textures (bakeFields), the loose-stone mask (encodeLooseMask), the voxel solid and its region settings
     // (VoxelSurface.render; the guard checks the settings' bytes against the checksum). The voxel solid and rock weather count what they
     // made, not what they hold: a large tile draws in pieces and hands a piece's resources back before the draw ends.
-    const own = new Set([this.fieldsTexture, this.looseBuffer, voxel?.uniform].filter(Boolean));
+    // Also the color pass's geometry record and frame (allocateGeometry; the frame holds the canvas size) and its mask staging (packColorMasks).
+    const own = new Set([this.fieldsTexture, this.looseBuffer, voxel?.uniform, this.geometryRecord, this.geometrySettings, this.maskPackBuffer, this.maskPackSettings].filter(Boolean));
     const produced = {has: r => own.has(r) || Boolean(voxel?.made?.has(r) || rock?.made?.has(r))};
-    return {input, produced, world: this.worldTextures};
+    // volatile: produced resources whose bytes may differ between two draws of the same checksum without changing the picture. The voxel
+    // settings hold the solid's pool capacity, predicted from the last count; a piece that overflows builds again at its count.
+    const volatile = new Set([voxel?.uniform].filter(Boolean));
+    return {input, produced, world: this.worldTextures, volatile};
   }
   // The uniform fields that differ between two copies of uniformData, without the ones the GPU writes (gpuWrittenUniforms): for the guard.
   digestUniformDiff(a, b) {
