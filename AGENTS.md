@@ -188,6 +188,7 @@ asset dependency in this runner.
 | quick | `repro/check.sh` | Fast Node unit tests and the world-name gate; no Python, Go, GPU, browser or site build. `--test repro/paths.test.mjs` selects one test file (repeatable). |
 | browser | `repro/check.sh browser --server <yours> --port <cdp> [--worlds green]` | Changed editor behavior: brush/undo smoke on one world by default, without export or the large-map sweep. Use the affected world. |
 | engine | `repro/check.sh engine [--scene repro/shape-scenes/<fixture>.json]` | Changed GPU fields, tiling or replay: GPU height tests, regional replay and repeat determinism. Defaults to three authored fixtures; `--scene` replaces them (repeatable). Needs Dawn and Go for configs. |
+| digest | `repro/check.sh digest` | Changed what a tile draw reads (a uniform, texture, buffer, draw option or world resource) or the tile input checksum (`inputDigest`, `digestClasses`, `worldResource` in `sculpt-renderer.js`). Runs the guard's tests and sweeps every Green control with the guard on (`?digestGuard`, `sculpt-digest-guard.js`); about 12 minutes, Dawn and Go. A new binding fails until it is classified. |
 | export | `repro/check.sh export` | Changed exporter, worker or archive format: Go exporter tests and native/WebAssembly byte parity. Needs Go. |
 | features | `repro/check.sh features` | Changed procedural sprite generation or burning: CPU feature-art checks, without Python or GPU. |
 | config | `repro/check.sh config` | Changed generated configs, world/tool data or preset assembly. Go config/server tests and generated config integration tests. Needs Go. |
@@ -203,7 +204,7 @@ world's `world.knobDefaults`, `world.engineDefaults` and `world.variants`;
 
 Build, config, export, feature-art and GPU integration tests use explicit
 filename suffixes: `.build.test.mjs`, `.config.test.mjs`, `.export.test.mjs`,
-`.features.test.mjs`, `.assets.test.mjs` and `.gpu.test.mjs`. Keep expensive work out of ordinary
+`.features.test.mjs`, `.assets.test.mjs`, `.digest.test.mjs` and `.gpu.test.mjs`. Keep expensive work out of ordinary
 `.test.mjs` files.
 Use the runner instead of `node --test repro/*.test.mjs`, which includes
 all integration tests. No new test should freeze an artistic preset or page

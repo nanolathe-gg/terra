@@ -863,7 +863,7 @@ default on Green; the others appear when their parent is on.
 | Vary seed per new shape | `seed-vary` | switch; Green: true |  | map file / editor | default view |  | Top bar › Settings › Drawing |
 | Simplify strokes | `simplify-strokes` | switch; Green: true |  | map file / editor | default view |  | Top bar › Settings › Drawing |
 | Preview weathered detail | `weathered-view` | switch; Green: true | Show weathered terrain when zoomed in. Turn off for faster editing. Map export keeps the map’s weathering settings. | editor (this browser) | default view |  | Top bar › View menu › Preview weathered detail |
-| Terrain GPU budget (MiB) | `` | number; 128 to 4096; Green: 512 |  | editor (this browser) | default view |  | Top bar › Settings › Memory |
+| Terrain GPU budget (MiB) | `` | number; 128 to 16384; Green: 512 |  | editor (this browser) | default view |  | Top bar › Settings › Memory |
 | Page heap budget (MiB) | `` | number; 128 to 8192; Green: 1024 |  | editor (this browser) | default view |  | Top bar › Settings › Memory |
 | TA palette | `` | switch; Green: true |  | editor (this browser) | default view |  | Top bar › View menu › TA palette preview |
 

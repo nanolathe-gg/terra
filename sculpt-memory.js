@@ -1,8 +1,12 @@
 // The page has no free-memory counter. Choose a cautious budget from an
 // optional device signal, the artist's explicit choice, and prior failures.
-export const TERRAIN_BUDGETS=[2048,1536,1024,768,512];
+// The automatic budget stays at most 2048 MiB; the larger notches are an
+// artist's explicit choice for a card with room (and the steps a failure at
+// one of them comes down by).
+export const TERRAIN_BUDGETS=[8192,6144,4096,3072,2048,1536,1024,768,512];
+export const TERRAIN_BUDGET_MAX=16384;
 export const lowerTerrainBudget=mb=>TERRAIN_BUDGETS.find(n=>n<mb)??null;
-const valid=mb=>Number.isFinite(mb)&&mb>=128&&mb<=4096;
+const valid=mb=>Number.isFinite(mb)&&mb>=128&&mb<=TERRAIN_BUDGET_MAX;
 export function createTerrainBudget({explicit,deviceMemory,preference,save=()=>{}}={}){
   const automatic=Number.isFinite(deviceMemory)&&deviceMemory<=4?1024:2048;
   let mb=valid(explicit)?explicit:Math.min(automatic,TERRAIN_BUDGETS.includes(preference?.mb)?preference.mb:automatic),reason='';

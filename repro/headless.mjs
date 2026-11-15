@@ -130,7 +130,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const seed = engine.DEFAULT_SEED, refinementSeed = seed;
   let nodes = [];
   const context = () => engine.shapeContext({config, settings, seed, talusAngle: renderer.variantNumber('talusAngle', 40), minH, maxH});
-  const gpuMB = Math.min(4096, Math.max(128, Number(settings.get('gpuMB')) || 512));
+  const gpuMB = Math.min(16384, Math.max(128, Number(settings.get('gpuMB')) || 512));   // sculpt-memory.js TERRAIN_BUDGET_MAX
   const common = {worldSize, worldGrid, baseHeight: config.baseHeight, maskKeys: engine.MASK_KEYS, nodes: () => nodes, device: () => renderer.device, context, gesture: () => false};
   const paged = worldGrid > 1168 || settings.get('gpuPages') === 'force';
   const fields = paged
@@ -195,13 +195,14 @@ async function feedFor(s, request, options) {
 
 // The picture of a window, in tiles of `tile` px as the canvas bakes them (sculpt-canvas.js bake: fed, at 1x): RGBA bytes, opaque.
 // exportArt bakes the export's art as sculpt-canvas.js exportChunks does (bake with exportArt: weathered, completed before it returns).
-export async function renderWindow(s, {x = 0, y = 0, width = 1024, height = 1024, tile = 256, options = s.drawOptions(), exportArt = false} = {}) {
-  const {renderer, canvas, config} = s, device = renderer.device, out = new Uint8Array(width * height * 4), reads = [];
+// digest: also take each tile's input checksum (TerrainRenderer.inputDigest), joined in out.digest.
+export async function renderWindow(s, {x = 0, y = 0, width = 1024, height = 1024, tile = 256, options = s.drawOptions(), exportArt = false, digest = false} = {}) {
+  const {renderer, canvas, config} = s, device = renderer.device, out = new Uint8Array(width * height * 4), reads = [], digests = [];
   for (let ty = 0; ty < height; ty += tile) for (let tx = 0; tx < width; tx += tile) {
     const w = Math.min(tile, width - tx), h = Math.min(tile, height - ty);
     const request = {x: x + tx, y: y + ty, width: w, height: h, exportArt, worldSize: config.worldSize ?? config.size, worldGrid: config.worldGrid ?? config.grid};
     const feed = await feedFor(s, request, options);
-    try { await renderer.renderChunk(request, {...options, feed, scale: 1, deferCompletion: !exportArt}); } finally { feed.release?.(); }
+    try { const result = await renderer.renderChunk(request, {...options, feed, scale: 1, deferCompletion: !exportArt, ...(digest ? {digest: {reuse: null}} : {})}); digests.push(await (result.digest ?? null)); } finally { feed.release?.(); }
     const row = Math.ceil(w * 4 / 256) * 256, buffer = device.createBuffer({label: 'headless readback', size: row * h, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ});
     const encoder = device.createCommandEncoder({label: 'headless readback'});
     encoder.copyTextureToBuffer({texture: canvas.gpu.texture}, {buffer, bytesPerRow: row}, [w, h]);
@@ -215,6 +216,7 @@ export async function renderWindow(s, {x = 0, y = 0, width = 1024, height = 1024
     buffer.unmap(); buffer.destroy();
   }
   for (let i = 3; i < out.length; i += 4) out[i] = 255;   // the canvas is opaque (alphaMode 'opaque'), as the page shows it
+  if (digest) out.digest = digests.includes(null) ? null : digests.join(' ');
   return out;
 }
 
