@@ -38,7 +38,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Gap | Biomes | Generic control that would close it | Status |
 | --- | --- | --- | --- |
 | Radial ribs from a click: starburst legs, spatter-vent teeth, collapse stars | Moon (9 maps), Lava (9), Red (4) | Spurs on a crater section | **Done** this round: spurs off a clicked crater now draw. Collapse stars on cut shapes still draw nothing |
-| Dense contour hatch on grass and rock slopes (6-12 px wobbly lines); risers ~6 px where retail's are 1-2 | Green (8+), Lava (12), Red, Moon, Lush, Desert | A slope-hatch control (spacing, wobble, darkness, slope gate), or a riser line drawn in the art at each terrace step | Partial: Green and Lava use thin contour bands; Lava's shield ledges are softer |
+| Dense contour hatch on grass and rock slopes (6-12 px wobbly lines); risers ~6 px where retail's are 1-2 | Green (8+), Lava (12), Red, Moon, Lush, Desert | Thin risers: steps with a high flat share (ledge 90) draw 2-3 px lines | **Done** for Lava's shields and knolls; Green's dense slope hatch is still partial (thin contour bands) |
 | Scatter for click shapes: craterlet fields, knoll fields, boulders, rubble, islets | Moon (9), Green (5), Ice (9), Archipelago, Lush | Copies: a count, spread, size and size variation on any landform | **Done** this round: Craterlet field, Knoll field, Boulder field, Islet scatter use it |
 | Irregular shore lobes and spits; `fingers` makes a regular comb | Lava (8), Archipelago (8), Green, Red, Crystal | Lobe variety: clustered lobes, a few long and wide | **Done** in part (Lush uses it); the lobes' sides stay straight, and a raised bank's relief is still missing |
 | Rock art on level tops and walkable grades (rock follows slope today) | Lava, Red, Desert, Green, Moon | Rock exposure by noise or per shape, art only so heights stay level (per-shape Rock crown) | Missing |
@@ -90,7 +90,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Rimmed pits with lava in their floor | Lava pit | close |
 | Spatter vents with radial teeth | Spatter vent (spurs) | close |
 | Lumpy stepped knolls | Knoll | close |
-| Low flat lava shields (walkable, steps 17.5 per cell) | Lava shield | close |
+| Low flat lava shields (walkable, steps 17.5 per cell) | Lava shield (ledge 90: thin riser lines) | close |
 | Crescent pools and lava slots between raised banks | Lava trough | close |
 | Big dark rounded dome blocks | Dome block (Dark dome rock, Rock crown 1, knuckle spurs) | close (a rounded, lumpy dark mass) |
 | Long knotted ridges | Lava ridge (Crumpled flow rock, Rock crown 1) | poor (its top still shows plain ground) |
