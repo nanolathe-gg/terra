@@ -1168,7 +1168,7 @@
         "strata": 1,
         "strataContrast": 1,
         "columnContrast": 0,
-        "banding": 0.4,
+        "banding": 0.9,
         "strataGrain": 0.25,
         "crackSeverity": 0,
         "crackMajor": 0.2,
@@ -1186,7 +1186,11 @@
         "faceFill": 0,
         "ambient": 0.3,
         "baseBand": 1,
-        "desertCapFlat": 0
+        "desertCapFlat": 0,
+        "faceBlock": 1,
+        "faceJoint": 0.15,
+        "faceWear": 0.8,
+        "faceCrease": 1
       },
       "engineDefaults": {
         "erosion": 1,
@@ -1222,7 +1226,7 @@
       },
 
   "shapes": {
-   "plateau": {"amount": 70, "roughness": 0, "softness": 50, "cracks": 10, "faceVariation": 0, "lean": 100, "facing": 3, "terraces": 6, "combine": 0, "wander": 75, "widthVary": 30, "heightVary": 0, "varySize": 210, "varyFoot": 100, "varyMiddle": 150, "ledge": 55, "terraceJitter": 40, "breakup": 30},
+   "plateau": {"amount": 70, "roughness": 0, "softness": 50, "cracks": 10, "faceVariation": 0, "lean": 100, "facing": 3, "terraces": 6, "combine": 0, "wander": 75, "widthVary": 30, "heightVary": 0, "varySize": 210, "varyFoot": 100, "varyMiddle": 150, "ledge": 55, "terraceJitter": 40, "breakup": 30, "gullies": 30},
    "hill": {"wander": 46, "widthVary": 25, "heightVary": 10, "cracks": 10},
    "mountain": {"wander": 24, "cracks": 10},
    "ramp": {},
