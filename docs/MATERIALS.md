@@ -37,7 +37,9 @@ controls; node settings are the author's tools.
   that names another keeps its own.
 - **A map** holds up to seven materials in slots 1 to 7: the world's two and
   up to five of its own, for landforms and the Paint brush (a stroke's Ground
-  choice: `-1` the ground beneath, `0` the world's ground, else a slot). A
+  choice: `-1` the ground beneath, `0` the world's ground, else a slot; shown
+  as chips with each material's color). A new landform starts on the ground
+  beneath; the Paint brush's Material starts on the world's ground. A
   map opened in a world takes that world's two, in the slots the map already
   gave those roles; its own materials stay.
 - **Saves, undo and share links** carry the map's list, and the world
@@ -103,7 +105,10 @@ sections open it on that material. The map stops rendering while it is open.
   repeats each way (Repeat), or a shore, a plain and a hill (On terrain); 2×
   magnifies, Node shows the selected node alone.
 - **Controls**: the published settings. In the Node pane, ◆ beside a setting
-  publishes it; a gradient publishes its colors.
+  publishes it; a gradient publishes its colors. A control has its own range
+  inside the node setting's: a newly published scale (a size in px) starts
+  with a quarter to four times its value, and Edit controls sets a control's
+  name and range or removes it.
   The World pane shows the same controls for the world's ground (Ground,
   Pattern) and water (Water & shores), live on the map, beside a chip of the
   material's color. The map is the preview there; the pane starts no second

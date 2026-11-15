@@ -5,7 +5,7 @@ import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
-import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldPair,keepStrokeMaterials,materialsInUse,deleteMaterial} from './sculpt-materials.js';
+import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldPair,keepStrokeMaterials,materialsInUse,deleteMaterial,materialTint} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe} from './sculpt-rock-presets.js';
 import {KNOBS,LOW_GROUND_RGB,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
@@ -299,7 +299,7 @@ function updateControls() {
   { const riv=kind==='landform'&&isRiver(shapeOptions),node=nodes[selected],stale=riv&&Boolean(node?.params)&&(node.params.river?.sig===undefined||node.params.river.sig!==pointsSignature(node.points)),why='The path was edited by hand, so it is not migrated again: draw a new river to change its bends.';
     $('lf-wander-control').querySelector('.small').textContent=stale?why:riv?'How far, in px, the river may stray from the line you drew, at most four channel widths: its bends grow by the river\'s own rule until they fill that band, and travel downstream. 0 keeps the line as drawn; a braided river\'s whole bed strays the same way. A loop drawn closed is cut off and left as an oxbow lake. A new seed gives other bends.':SHAPE_FIELDS.find(f => f[0]==='wander')[8];
     $('lf-wander').disabled=stale;$('lf-wander').title=stale?why:''; }
-  $('lf-ground-control').hidden=!(kind==='landform'||kind==='paint'&&shapeValue('paintChannel')===26);
+  $('lf-ground-control').hidden=!(kind==='landform'||kind==='paint'&&shapeValue('paintChannel')===26); syncGroundChips(kind);
   $('section-preview-control').hidden=featureActive||kind!=='landform';
   if (!$('section-preview-control').hidden) drawSection();
   $('softness-value').textContent=$('softness').value+'%';
@@ -707,7 +707,22 @@ function syncMaterialChoices() {
   const select=$('lf-ground'),value=select.value;
   select.replaceChildren(new Option('Ground beneath','-1'),new Option('World ground','0'),...mapMaterials.filter(m=>!m.worldGround&&!m.worldWater).map(m=>new Option(m.name,String(m.slot))));
   select.value=[...select.options].some(o=>o.value===value)?value:'-1';
+  syncGroundChips();
 }
+// The Ground choice as chips: each of the select's choices with its material's color, the chosen one pressed. The Paint brush has
+// nothing to paint with "Ground beneath", so it does not offer it.
+const MATERIAL_CHOICES=8;
+let groundChipKind='landform';
+function syncGroundChips(kind=groundChipKind) {
+  groundChipKind=kind; const select=$('lf-ground'),hex=m=>'#'+materialTint(m).map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');
+  for (let v=-1; v<MATERIAL_CHOICES; v++) {
+    const chip=$('lf-ground-chip-'+v),option=[...select.options].find(o=>o.value===String(v)),m=v===0?mapMaterials.find(m=>m.worldGround):mapMaterials.find(m=>m.slot===v);
+    chip.hidden=!option||(v===-1&&kind==='paint'); if (chip.hidden) continue;
+    chip.querySelector('.material-choice-name').textContent=option.textContent; chip.title=v===-1?'Leave the surface that is already there.':v===0?'The world’s ground: '+(m?.name??''):option.textContent;
+    chip.querySelector('.material-chip').style.background=v>=0&&m?hex(m):''; chip.setAttribute('aria-checked',String(select.value===String(v))); chip.tabIndex=select.value===String(v)?0:-1; chip.disabled=select.disabled;
+  }
+}
+for (let v=-1; v<MATERIAL_CHOICES; v++) $('lf-ground-chip-'+v).onclick=()=>{ const select=$('lf-ground'); if (select.value===String(v)) return; select.value=String(v); select.dispatchEvent(new Event('input',{bubbles:true})); select.dispatchEvent(new Event('change',{bubbles:true})); syncGroundChips(); };
 function editMaterials(materials) {
   const used=materialsInUse(nodes,materials);renderer.setMaterials(new Map(used.map(m=>[m.slot,m])));
   mapMaterials=materials;materialUseKey=JSON.stringify(used);syncMaterialChoices();worldChanged({stage:'C',world:false});persistLater();schedule();
