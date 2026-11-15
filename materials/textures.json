@@ -221,9 +221,15 @@
    {"id":"fleck","type":"scatter","name":"Sparse flecks","params":{"spacing":5,"radius":1.1,"coverage":0.25,"jitter":1.5,"hardness":0.5,"profile":1,"sizeVariation":0.5,"toneVariation":0.3,"follow":0,"seed":2},"in":{"in":null,"density":null},"x":944,"y":150},
    {"id":"fleckmul","type":"gradient","name":"Maroon flecks","params":{"ease":0},"in":{"in":"fleck"},"stops":[[0,1,1,1],[1,0.9,0.45,0.55]],"x":1180,"y":150},
    {"id":"flecked","type":"combine","kind":"multiply","name":"Flecks in crust","params":{"amount":1,"offset":0},"in":{"a":"crust","b":"fleckmul","mask":null},"x":1416,"y":75},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"flecked","height":null,"shine":null},"x":1652,"y":75}
+   {"id":"material","type":"output","name":"Material","params":{"relief":2},"in":{"color":"m2","height":"lv","shine":null},"x":1888,"y":75},
+   {"id":"mott","type":"noise","kind":"smooth","name":"Broad olive mottling","params":{"size":24,"detail":0.4,"layers":0,"seed":7},"in":{"in":null},"x":708,"y":-150},
+   {"id":"mottg","type":"gradient","name":"Mottling tint","params":{"ease":1},"in":{"in":"mott"},"stops":[[0,0.93,0.93,0.95],[1,1.07,1.07,1.03]],"x":944,"y":-150},
+   {"id":"crack","type":"noise","kind":"ridged","name":"Hairline cracks","params":{"size":60,"layers":0,"roughness":0.4,"sharpness":4,"seed":11},"in":{"in":"warp"},"x":708,"y":300},
+   {"id":"crackg","type":"gradient","name":"Crack darkening","params":{"ease":0},"in":{"in":"crack"},"stops":[[0,1,1,1],[0.95,1,1,1],[1,0.6,0.6,0.6]],"x":944,"y":300},
+   {"id":"m1","type":"combine","kind":"multiply","name":"Mottling over crust","params":{"amount":1,"offset":0},"in":{"a":"flecked","b":"mottg","mask":null},"x":1416,"y":-75},
+   {"id":"m2","type":"combine","kind":"multiply","name":"Cracks over crust","params":{"amount":1,"offset":0},"in":{"a":"m1","b":"crackg","mask":null},"x":1652,"y":0}
   ],
-  "controls": [{"label":"Narrow dark recesses: size","node":"recess","param":"size"},{"label":"Gray-brown crust: colors","node":"crust","param":"stops"}],
+  "controls": [{"label":"Crust relief","node":"material","param":"relief"},{"label":"Gray-brown crust: colors","node":"crust","param":"stops"}],
   "palette": [58,57,56,59,70,26,60,28,74,91],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -231,17 +237,17 @@
   "name": "Molten lava",
   "seed": 0,
   "nodes": [
-   {"id":"clouds","type":"noise","kind":"smooth","name":"Dark red clouds","params":{"size":6,"detail":0.3,"layers":0,"seed":0},"in":{"in":null},"x":0,"y":38},
-   {"id":"spots","type":"noise","kind":"smooth","name":"Hot spots","params":{"size":2.5,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":0,"y":188},
+   {"id":"clouds","type":"noise","kind":"smooth","name":"Dark red clouds","params":{"size":3,"detail":0.2,"layers":0,"seed":0},"in":{"in":null},"x":0,"y":38},
+   {"id":"spots","type":"noise","kind":"smooth","name":"Hot spots","params":{"size":1.6,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":0,"y":188},
    {"id":"grain","type":"noise","kind":"smooth","name":"Fine grain","params":{"size":1.2,"detail":0,"layers":0,"seed":2},"in":{"in":null},"x":236,"y":-37},
-   {"id":"c1","type":"combine","kind":"add","name":"Hot spots in clouds","params":{"amount":0.7,"offset":0.5},"in":{"a":"clouds","b":"spots","mask":null},"x":236,"y":113},
+   {"id":"c1","type":"combine","kind":"add","name":"Hot spots in clouds","params":{"amount":0.45,"offset":0.5},"in":{"a":"clouds","b":"spots","mask":null},"x":236,"y":113},
    {"id":"c2","type":"combine","kind":"add","name":"Grain on top","params":{"amount":0.7,"offset":0.5},"in":{"a":"c1","b":"grain","mask":null},"x":472,"y":38},
    {"id":"lv","type":"levels","name":"Stretch","params":{"low":0,"high":1,"gamma":1,"invert":0},"in":{"in":"c2"},"x":708,"y":38},
-   {"id":"lava","type":"gradient","name":"Dark red to orange","params":{"ease":0},"in":{"in":"lv"},"stops":[[0.1,0.45,0.03,0],[0.35,0.62,0.09,0],[0.5,0.7,0.11,0],[0.65,0.78,0.13,0],[0.9,0.95,0.22,0]],"x":944,"y":38},
+   {"id":"lava","type":"gradient","name":"Dark red to orange","params":{"ease":0},"in":{"in":"lv"},"stops":[[0.05,0.48,0.03,0],[0.3,0.6,0.08,0],[0.5,0.72,0.11,0],[0.75,0.8,0.12,0],[1.0,1.0,0.28,0]],"x":944,"y":38},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"lava","height":null,"shine":null},"x":1180,"y":38}
   ],
   "controls": [{"label":"Dark red clouds: size","node":"clouds","param":"size"},{"label":"Dark red to orange: colors","node":"lava","param":"stops"}],
-  "palette": [202,201,213,204,203,214,212,205,211,206,215,207],
+  "palette": [202,201,213,204,203,214,205,211,206,215,207],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
  "desert-ground": {
