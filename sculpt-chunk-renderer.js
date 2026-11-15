@@ -37,7 +37,9 @@ const COLOR_INPUT_PACK=`
   let p=vec2i(vec2u(id.x,id.y+band.x));let stride=((size.x+63u)/64u)*64u;let plane=stride*band.y;let i=id.y*stride+id.x;
   let a=textureLoad(masks,p,0,0);let b=textureLoad(masks,p,1,0);let c=textureLoad(masks,p,2,0);
   let d=textureLoad(masks,p,3,0);let e=textureLoad(masks,p,4,0);let f=textureLoad(masks,p,5,0);
-  packed[i]=pack4x8snorm(a);packed[plane+i]=pack4x8snorm(vec4f(b.g,c.b,d.a,e.r));packed[2u*plane+i]=pack4x8snorm(vec4f(e.gba,f.r));
+  packed[i]=pack4x8snorm(a);packed[plane+i]=pack4x8snorm(vec4f(b.g,c.b,d.a,e.r));// Rock and ground ids share one channel: rock (0 to 16) + 17 * ground (0 to 8), moved into SNORM's range.
+  let ids=(round(f.r*127.0)+17.0*round(f.g*127.0)-127.0)/127.0;
+  packed[2u*plane+i]=pack4x8snorm(vec4f(e.gba,ids));
   let weather=textureLoad(grids,p,0,0);let material=textureLoad(grids,p,1,0);let time=textureLoad(grids,p,2,0);let fall=textureLoad(grids,p,3,0);
   packed[3u*plane+i]=pack4x8unorm(vec4f(weather.rg,time.rg));packed[4u*plane+i]=pack4x8unorm(material);packed[5u*plane+i]=pack4x8unorm(vec4f(fall.rg,0,0));
 }`;

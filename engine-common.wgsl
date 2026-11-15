@@ -802,11 +802,14 @@ fn sampleMasks(uv:vec2f,layer:i32)->vec4f {
     }
 }
 fn maskDimensions()->vec2u{return textureDimensions(colorMasksTex);}
-fn loadRockMask(at:vec2i)->f32{return textureLoad(colorMasksTex,at,2,0).a;}
+fn maskIds(at:vec2i)->f32{return round(textureLoad(colorMasksTex,at,2,0).a*127.0)+127.0;}
+fn loadRockMask(at:vec2i)->f32{let id=maskIds(at);return (id-17.0*floor(id/17.0))/127.0;}
+fn loadGroundMask(at:vec2i)->f32{return floor(maskIds(at)/17.0)/127.0;}
 #else
 fn sampleMasks(uv:vec2f,layer:i32)->vec4f{return sampleRegionalArray(masksTex,uv,layer);}
 fn maskDimensions()->vec2u{return textureDimensions(masksTex);}
 fn loadRockMask(at:vec2i)->f32{return textureLoad(masksTex,at,5,0).r;}
+fn loadGroundMask(at:vec2i)->f32{return textureLoad(masksTex,at,5,0).g;}
 #endif
 
 
@@ -1104,8 +1107,8 @@ fn useRock(p:vec2f) { rs=rockSlotAt(p); }
 // Ground choices use the authored grid directly, with no world-space noise.
 fn groundSlotAt(p:vec2f)->u32 {
     if(u.groundIdOn==0){return u32(u.groundDefault);}
-    let cell=clamp(vec2i(floor(p/(u.size-1.0)*(u.grid-1.0)+.5-u.chunkGridOrigin)),vec2i(0),vec2i(textureDimensions(masksTex))-1);
-    let id=round(textureLoad(masksTex,cell,5,0).g*127.0);return select(u32(clamp(id-1.0,0.0,7.0)),u32(u.groundDefault),id<.5);
+    let cell=clamp(vec2i(floor(p/(u.size-1.0)*(u.grid-1.0)+.5-u.chunkGridOrigin)),vec2i(0),vec2i(maskDimensions())-1);
+    let id=round(loadGroundMask(cell)*127.0);return select(u32(clamp(id-1.0,0.0,7.0)),u32(u.groundDefault),id<.5);
 }
 // Whole texels preserve each plate's own tone and line at a level surface.
 fn groundHere(p:vec2f)->vec4f {
@@ -1114,8 +1117,8 @@ fn groundHere(p:vec2f)->vec4f {
 // Blend only art height across a two-art-pixel contact. The categorical slot
 // still chooses color and finish; no noise or gameplay height enters the edge.
 fn groundHeightFor(p:vec2f,cell:vec2i)->f32 {
-    let c=clamp(cell,vec2i(0),vec2i(textureDimensions(masksTex))-1);
-    let id=round(textureLoad(masksTex,c,5,0).g*127.0);let slot=select(u32(clamp(id-1.0,0.0,7.0)),u32(u.groundDefault),id<.5);
+    let c=clamp(cell,vec2i(0),vec2i(maskDimensions())-1);
+    let id=round(loadGroundMask(c)*127.0);let slot=select(u32(clamp(id-1.0,0.0,7.0)),u32(u.groundDefault),id<.5);
     let layer=u.ground[slot & groundMask].cacheLayer;
     if(layer<0){return 0.0;}
     return materialRelief(p,slot);
