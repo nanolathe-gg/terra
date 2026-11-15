@@ -152,7 +152,22 @@ func (c client) published(l Lock) error {
 	return verifyReceiptBytes(data, l)
 }
 func CheckPublished(l Lock) error { return githubClient().published(l) }
-func Publish(root, dir, repository string) (Lock, error) {
+// Publish keeps the pinned bundle when the render in dir shows no visible
+// change from it (see Tolerance); otherwise, or with force, it uploads the
+// render as a new release and pins it. It reports the comparison either way.
+func Publish(root, dir, repository string, force bool, tol Tolerance) (Lock, Comparison, error) {
+	var result Comparison
+	if !force {
+		l, kept, err := acceptWithClient(root, dir, tol, githubClient())
+		if err != nil || kept.Equivalent {
+			return l, kept, err
+		}
+		result = kept
+	}
+	l, err := publish(root, dir, repository)
+	return l, result, err
+}
+func publish(root, dir, repository string) (Lock, error) {
 	var l Lock
 	temp, err := os.MkdirTemp("", "terraform-preview-publish-")
 	if err != nil {

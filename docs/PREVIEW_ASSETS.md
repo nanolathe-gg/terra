@@ -42,8 +42,25 @@ a receipt only after the complete render succeeds. If a rendering input changes
 mid-render, stamping fails. `--worlds-only` is allowed only when the previous
 complete receipt already matches the current inputs and pictures.
 
-Publishing validates PNG dimensions, the file set, receipt and input fingerprint,
-then creates a deterministic archive. It creates/reuses a prerelease named by
+Publishing first compares the render with the pinned bundle's pixels, frame
+by frame. A pixel has moved when any channel differs by more than 8 of 255
+levels; a frame has changed visibly when more than 0.05% of its pixels moved
+(about 25 of a 260x190 frame). A render of unchanged inputs matches exactly on
+the same machine; the smallest real change seen in past bundles, a wrong
+crystal tool picture, moved 0.117% of its frame.
+When the manifest and file set are unchanged and no frame changed visibly,
+publish makes no release: it keeps the pinned bundle, records the current
+inputs as accepted in the lock (`inputsSHA256`, with the bundle's own
+`renderedInputsSHA256` and the largest accepted change in `acceptedChange`)
+and restores the pinned pictures locally. The comparison is always against
+the pinned pixels, so accepted changes cannot add up unnoticed; once they do,
+publish uploads a new bundle. `go run ./cmd/previews compare` prints the same
+report without changing anything; `publish --force` uploads regardless, and
+`--pixel-delta`/`--max-changed` (percent) adjust the tolerance. Every input
+change still needs a full render: the comparison only saves the release.
+
+Otherwise publishing validates PNG dimensions, the file set, receipt and input
+fingerprint, then creates a deterministic archive. It creates/reuses a prerelease named by
 its archive checksum, verifies the uploaded asset, and updates the lock. Release
 tags point to a tiny parentless metadata commit; they pin no application history
 or PNG blobs. Commit the lock and runtime manifest together with the source
@@ -64,7 +81,7 @@ reinstall after moving the checkout. The installed `.githooks/pre-push` runs `go
 It reads Git's outgoing ref/commit list and checks those snapshots, not merely
 the current working tree. It fails if:
 
-- Rendering inputs differ from the pinned receipt.
+- Rendering inputs differ from the inputs the lock accepts.
 - The runtime manifest differs from the bundle.
 - The bundle is missing, still a draft, or has the wrong checksum/receipt.
 - Preview PNGs or `smoke-out/` occur anywhere in the pushed branch history.

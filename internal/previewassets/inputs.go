@@ -25,7 +25,21 @@ type Lock struct {
 	SHA256       string            `json:"sha256"`
 	InputsSHA256 string            `json:"inputsSHA256"`
 	Files        map[string]string `json:"files"`
+	// Set when publish kept this bundle for newer inputs because a render at
+	// InputsSHA256 showed no visible change: the inputs the bundle's own receipt
+	// was rendered from, and the largest accepted difference.
+	RenderedInputsSHA256 string `json:"renderedInputsSHA256,omitempty"`
+	AcceptedChange       string `json:"acceptedChange,omitempty"`
 }
+
+// renderedInputs is the fingerprint inside the bundle's receipt.
+func (l Lock) renderedInputs() string {
+	if l.RenderedInputsSHA256 != "" {
+		return l.RenderedInputsSHA256
+	}
+	return l.InputsSHA256
+}
+
 type Receipt struct {
 	Version      int               `json:"version"`
 	InputsSHA256 string            `json:"inputsSHA256"`
@@ -67,7 +81,7 @@ func readLock(s source) (Lock, error) {
 		return l, err
 	}
 	parts := strings.Split(l.Repository, "/")
-	if l.Version != 1 || len(parts) != 2 || !validHash(l.SHA256) || !validHash(l.InputsSHA256) || l.Tag == "" || l.Asset == "" || len(l.Files) == 0 {
+	if l.Version != 1 || len(parts) != 2 || !validHash(l.SHA256) || !validHash(l.InputsSHA256) || (l.RenderedInputsSHA256 != "" && !validHash(l.RenderedInputsSHA256)) || l.Tag == "" || l.Asset == "" || len(l.Files) == 0 {
 		return l, fmt.Errorf("invalid preview asset lock")
 	}
 	for _, part := range append(parts, l.Tag, l.Asset) {
