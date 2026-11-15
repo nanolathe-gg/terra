@@ -197,6 +197,15 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   // Display levels use the same chunk pipeline; blocks copy its reusable output
   // synchronously, while final tiles and export keep immutable bitmaps.
+  // The inputs of the whole visible view on a block's lattice, joined with the block's own: the lattice window of a gesture (bake()).
+  function latticeWindow(planned,request,options){
+    if(!interacting())return planned;
+    const v=state(),x=Math.max(0,Math.floor(v.x/64)*64),y=Math.max(0,Math.floor(v.y/64)*64),x1=Math.min(map.width,Math.ceil((v.x+v.width)/64)*64),y1=Math.min(map.height,Math.ceil((v.y+v.height)/64)*64);
+    if(x1<=x||y1<=y)return planned;
+    const c=renderer.requiredRegion({...request,x,y,width:x1-x,height:y1-y},options),sp=planned.gridSpacing,end=r=>[r.gridOrigin[0]+(r.gridWidth-1)*sp,r.gridOrigin[1]+(r.gridHeight-1)*sp],a=end(planned),b=end(c);
+    const gx=Math.min(planned.gridOrigin[0],c.gridOrigin[0]),gy=Math.min(planned.gridOrigin[1],c.gridOrigin[1]);
+    return {...planned,gridOrigin:[gx,gy],gridWidth:Math.round((Math.max(a[0],b[0])-gx)/sp)+1,gridHeight:Math.round((Math.max(a[1],b[1])-gy)/sp)+1};
+  }
   async function bake(rect,exportArt=false,signal,stale=null,scale=1,fit=false,block=false,warm=false) {
     // Wait before preparing fields, too: a queued tile must not start a costly
     // paged replay for a viewport that has moved while the GPU was occupied.
@@ -216,10 +225,15 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const options=drawOptions?.()??api.drawOptions?.()??{},request={...rect,exportArt,worldSize:config.worldSize??config.size,worldGrid:fit?512:previewGridFor(scale,block)};
     // H6b: with the GPU fields on, the chunk's textures are made from the fields' buffers; no CPU read, no upload, no height patch kept.
     if(!exportArt)api.renderProgress?.('Shaping terrain…');
-    const planned=renderer.requiredRegion(request,options),estimateBefore=renderer.estimate(planned,rect.width,rect.height,api.maskKeys.length,scale);
+    const planned=renderer.requiredRegion(request,options),estimateBefore=renderer.estimate(planned,rect.width,rect.height,api.maskKeys.length,scale);let latticeRegion=planned;
     if(lattice){
-      const extra=lattice.plan(planned,readWeather,interacting()).additionalBytes,copyBytes=Math.ceil(rect.width/scale)*Math.ceil(rect.height/scale)*8;
-      const visible=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0),room=()=>gpuBudget-steadyGPU()-estimateBefore.retainedBytes-estimateBefore.workingBytes-extra-copyBytes;
+      const copyBytes=Math.ceil(rect.width/scale)*Math.ceil(rect.height/scale)*8,visible=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0);
+      // During a gesture the lattice's window covers the whole view's inputs, not this block's: the block grows with the gesture, and each
+      // new window ran the lattice's Time again in the middle of the drag (40-50 ms, six times in a 40-move stroke). The view's window
+      // is made once. Where it does not fit beside the visible tiles, the block's own window serves as before.
+      const wide=latticeWindow(planned,request,options),wideExtra=wide===planned?0:lattice.plan(wide,readWeather,true).additionalBytes;
+      latticeRegion=wide!==planned&&visible<=gpuBudget-steadyGPU()-estimateBefore.retainedBytes-estimateBefore.workingBytes-wideExtra-copyBytes?wide:planned;
+      const extra=lattice.plan(latticeRegion,readWeather,interacting()).additionalBytes,room=()=>gpuBudget-steadyGPU()-estimateBefore.retainedBytes-estimateBefore.workingBytes-extra-copyBytes;
       // Input can change the graph while the preceding GPU submission drains.
       // Reclaim/replan against that graph before allocating its source.
       if(visible>room())api.releaseGpuStaging?.();
@@ -233,7 +247,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       // Its immutable image survives giving the buffers back to final tiles.
       previewLattice.trim();
     }
-    const feed=fit?await previewFields.feed():lattice?await lattice.feed(planned,{weather:readWeather,signal,stale,deferTime:interacting()}):await api.gpuFeedSource?.(signal,() => renderer.requiredRegion(request,options),{weather:readWeather});   // H5b: a paged map prepares the pages under the chunk's lattice
+    const feed=fit?await previewFields.feed():lattice?await lattice.feed(latticeRegion,{weather:readWeather,signal,stale,deferTime:interacting()}):await api.gpuFeedSource?.(signal,() => renderer.requiredRegion(request,options),{weather:readWeather});   // H5b: a paged map prepares the pages under the chunk's lattice
     if(warm){feed?.release?.();return null;}   // the canonical pages (shape and Time) stay prepared for the finals
     if(!exportArt)api.renderProgress?.('Rendering surface…');
     if(feed)try{
