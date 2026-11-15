@@ -152,6 +152,7 @@
     "deepEdge": 0,
     "lumpRelief": 4,
     "groundEdge": 0,
+    "gullySoft": 0,
     "rimGaps": 0,
     "rimGapWidth": 0.3,
     "rimGapDepth": 200,

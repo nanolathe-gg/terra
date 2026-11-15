@@ -974,9 +974,10 @@ fn gullies(p: vec2f, h0: f32, steer: vec2f, slope0: f32, wave0: f32, depth: f32,
     let dir = g / s; let perp = vec2f(-dir.y, dir.x);
     let cs = gullyStripes(p, dir, f, seed + u32(k) * 0x3c6ef35fu);
     let a = dk * (1.0 / f) * min(slope0, 1.6);
-    h -= a * (0.5 - abs(cs.y));
+    // Gully softness: the stripe's profile goes from a V (|sin|) to a smooth wave (sin^2), and each finer octave cuts less, so fewer, rounder valleys.
+    h -= a * mix(0.5 - abs(cs.y), 0.5 - cs.y * cs.y, u.lfGullySoft);
     g += a * sign(cs.y) * cs.x * 6.2831853 * f * perp;
-    f *= 2.0; dk *= 0.5;
+    f *= 2.0; dk *= mix(0.5, 0.25, u.lfGullySoft);
   }
   return h;
 }
