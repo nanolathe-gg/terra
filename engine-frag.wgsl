@@ -1694,11 +1694,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.lavaDusk > 0.0 && shading < 1.0) { shading = pow(max(shading, 0.0), 1.0 + u.lavaDusk * smoothstep(u.base + 20.0, u.base + 60.0, baseHeight(p)) * (1.0 - smoothstep(0.1, 0.5, dot(normal, u.light)))); }
     let timeMaps = timeMapsAt(p);
     gs=groundSlotAt(p);
-    var grass = materialPigment(p,gs);
+    var grass = groundPigment(p,gs,timeMaps.wear,timeMaps.deposit);
     // The world's own settings for level ground (its low-ground tint, its cover table, its patches) belong to its ground material;
     // a material a stroke chose keeps its own look.
     let ownGround = gs == u32(u.groundDefault);
-    if (ownGround) { let hs = highShare(p); if (hs > 0.0) { grass = mix(grass, materialPigment(p, u32(u.highGround)), hs); } }
+    if (ownGround) { let hs = highShare(p); if (hs > 0.0) { grass = mix(grass, groundPigment(p, u32(u.highGround), timeMaps.wear, timeMaps.deposit), hs); } }
     // Low ground: the ground from the sea up to lowReach above it takes the low color (its grain kept), by the authored
     // height (the relief's grit would speckle the edge); the edge is ragged by 20-px noise and fades over the upper half of the reach.
     // Under the sea it is all low ground: the lit bed takes it from here and the shallow water's art below.

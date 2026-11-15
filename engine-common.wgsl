@@ -150,7 +150,10 @@ struct Ground {
     dither: f32,           // 0 leaves the color continuous; 1 is the full palette reduction
     spread: f32,           // how the diffusion shares its error: 0 Floyd-Steinberg, 1 a wider kernel
     tone: f32,             // the gamma colors are compared in
+    wornLayer: i32,        // the layer of its Worn color (cached and reduced like its own), -1 when it has none
+    depositLayer: i32,     // the layer of its Deposit color, -1 when it has none
     weights: vec4f,        // how much a red, green or blue difference counts when a palette color is chosen
+    states: vec4f,         // Worn from, Worn amount, Deposit from, Deposit amount (the Material node's)
     palette: array<vec4f, 32>,
 }
 // One node of a material graph (sculpt-materials.js compileMaterial).
@@ -1034,8 +1037,9 @@ fn groundHeight(p:vec2f)->f32 {
 fn materialPixel(p:vec2f)->vec2f {return poolWrap(floor(p),f32(textureDimensions(groundTex).x));}
 
 // A material's cached repeat: unlit color and art height, its shine, and its color reduced to its palette.
-fn materialRaw(p:vec2f,slot:u32)->vec3f {
- return textureLoad(groundTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).rgb;
+fn materialRaw(p:vec2f,slot:u32)->vec3f { return materialRawAt(p,u.ground[slot & groundMask].cacheLayer); }
+fn materialRawAt(p:vec2f,layer:i32)->vec3f {
+ return textureLoad(groundTex,vec2i(materialPixel(p)),layer,0).rgb;
 }
 fn materialRelief(p:vec2f,slot:u32)->f32 {
  return textureLoad(groundTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).w;
@@ -1046,10 +1050,21 @@ fn materialShine(p:vec2f,slot:u32)->f32 {
 fn materialMean(slot:u32)->vec3f {
  return textureLoad(materialMeanTex,vec2i(0),u.ground[slot & groundMask].cacheLayer,0).rgb;
 }
-fn materialPigment(p:vec2f,slot:u32)->vec3f {
- let r=u.ground[slot & groundMask];let raw=materialRaw(p,slot);
+fn materialPigment(p:vec2f,slot:u32)->vec3f { return materialPigmentAt(p,slot,u.ground[slot & groundMask].cacheLayer); }
+// A layer of slot's cache as the map draws it: its color, reduced to the slot's palette as far as its dither says (a state's layer shares
+// the slot's palette and its index in the reduced colors).
+fn materialPigmentAt(p:vec2f,slot:u32,layer:i32)->vec3f {
+ let r=u.ground[slot & groundMask];let raw=materialRawAt(p,layer);
  if(r.dither<=0.0){return raw;}
- return mix(raw,textureLoad(groundColorTex,vec2i(materialPixel(p)),r.colorLayer,0).rgb,r.dither);
+ return mix(raw,textureLoad(groundColorTex,vec2i(materialPixel(p)),layer,0).rgb,r.dither);
+}
+// The ground's color where Time's water wore it (wear) or laid sediment (deposit), both 0 to 1: the material's own color, then its Worn and
+// Deposit colors over it from each one's From level (over .35 of the map) as far as its Amount. Every read of a ground's color goes here.
+fn groundPigment(p:vec2f,slot:u32,wear:f32,deposit:f32)->vec3f {
+ let r=u.ground[slot & groundMask];var c=materialPigment(p,slot);
+ if(r.wornLayer>=0){c=mix(c,materialPigmentAt(p,slot,r.wornLayer),r.states.y*smoothstep(r.states.x,r.states.x+.35,wear));}
+ if(r.depositLayer>=0){c=mix(c,materialPigmentAt(p,slot,r.depositLayer),r.states.w*smoothstep(r.states.z,r.states.z+.35,deposit));}
+ return c;
 }
 
 // The slot of the debris lying at p: rock weather's strongest source there (rockDeposit), read at the nearest 4-px cell.

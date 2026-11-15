@@ -54,9 +54,9 @@ export const NODES = {
     params: () => [P('radius', 'Radius (px)', 1, 8, 2), P('strength', 'Strength', 0, 8, 2)],
     help: 'Hollows and crests of a height: below .5 in hollows, above it on crests. Darkens crevices or lightens worn tops.'},
   constant: {code: 10, label: 'Constant', out: 'gray', inputs: [], params: () => [P('value', 'Value', 0, 1, .5)], help: 'One gray value everywhere.'},
-  output: {code: 11, label: 'Material', out: null, inputs: [['color', 'Color', 'any'], ['height', 'Height', 'gray'], ['shine', 'Shine', 'gray']],
-    params: () => [P('relief', 'Relief (px)', 0, 8, 0)],
-    help: 'What the material is: its color, the art height the sun lights (Relief scales it; gameplay heights never change) and its shine.'},
+  output: {code: 11, label: 'Material', out: null, inputs: [['color', 'Color', 'any'], ['height', 'Height', 'gray'], ['shine', 'Shine', 'gray'], ['worn', 'Worn color', 'any'], ['deposit', 'Deposit color', 'any']],
+    params: () => [P('relief', 'Relief (px)', 0, 8, 0), P('wornFrom', 'Worn from', 0, 1, .2), P('wornAmount', 'Worn amount', 0, 1, 1), P('depositFrom', 'Deposit from', 0, 1, .2), P('depositAmount', 'Deposit amount', 0, 1, 1)],
+    help: 'What the material is: its color, the art height the sun lights (Relief scales it; gameplay heights never change) and its shine. Where Time’s water wore the ground away, or laid sediment down, the map shows the Worn or Deposit color instead, from the erosion level set by From, as much as Amount.'},
 };
 export const NODE_TYPES = Object.keys(NODES);
 export const nodeParams = n => NODES[n.type].params(n.kind);
@@ -208,13 +208,16 @@ export const blankMaterial = () => copyMaterial({nodes: [
 export const reseedMaterial = material => ({...material, seed: (material.seed + 1 + Math.floor(Math.random() * 997)) % 1000});
 export const paletteRgb = index => gamePalette.indexed[index];
 
+// The states a material draws besides its color, in cache order: the Material node's Worn and Deposit inputs that are connected.
+export const MATERIAL_STATES = ['worn', 'deposit'];
+export const materialStates = material => { const out = material.nodes.find(n => n.type === 'output'); return MATERIAL_STATES.filter(k => out.enabled && out.in[k]); };
 // The compiled graph: nodes in evaluation order, each an instruction of codes, links and numbers for the materialGraphs buffer.
 export const STEP_STRIDE = 288, PROGRAM_BYTES = 16 + MAX_NODES * STEP_STRIDE;
 export function compileMaterial(material) {
   const nodes = orderNodes(material.nodes), types = typeNodes(nodes), index = new Map(nodes.map((n, i) => [n.id, i]));
   const instructions = nodes.map(n => {
     const spec = NODES[n.type], kinds = spec.kinds ? Object.keys(spec.kinds) : [];
-    const links = spec.inputs.map(([key]) => index.get(n.in[key]) ?? -1); while (links.length < 4) links.push(-1);
+    const links = spec.inputs.map(([key]) => index.get(n.in[key]) ?? -1); while (links.length < 4) links.push(-1);   // the Material node's fifth (Deposit) is read only by programSource
     const args = spec.params(n.kind).map(p => n.params[p.key] + (p.key === 'seed' ? material.seed : 0));
     if (n.type === 'gradient') args.push(n.stops.length, ...n.stops.flat());
     return {type: n.type, kind: n.kind ?? '', code: [spec.code, n.enabled ? 1 : 0, Math.max(0, kinds.indexOf(n.kind)), types.get(n.id) === 'color' ? 1 : 0], links, args, out: types.get(n.id)};
@@ -272,7 +275,7 @@ fn groundMain(@builtin(global_invocation_id) id:vec3u){
  if(any(id.xy>=textureDimensions(groundOut))){return;}
  graphPeriod=f32(textureDimensions(groundOut).x);graphRow=groundJob.z;let point=vec2f(id.xy);
 ${all}
- let color=${o[0] < 0 ? 'vec3f(.5)' : `v${o[0]}.rgb`};let height=${o[1] < 0 ? '0.0' : `v${o[1]}.x*arg(s${out},0u)`};let shine=${o[2] < 0 ? '0.0' : `clamp(v${o[2]}.x,0.0,1.0)`};
+ var color=${o[0] < 0 ? 'vec3f(.5)' : `v${o[0]}.rgb`};${o[3] >= 0 ? `if(groundJob.w==1u){color=v${o[3]}.rgb;}` : ''}${o[4] >= 0 ? `if(groundJob.w==2u){color=v${o[4]}.rgb;}` : ''}let height=${o[1] < 0 ? '0.0' : `v${o[1]}.x*arg(s${out},0u)`};let shine=${o[2] < 0 ? '0.0' : `clamp(v${o[2]}.x,0.0,1.0)`};
  textureStore(groundOut,vec2i(id.xy),i32(groundJob.y),vec4f(color,height));
  textureStore(maskOut,vec2i(id.xy),i32(groundJob.y),vec4f(shine,0,0,1));
 }`};
@@ -453,6 +456,6 @@ export function parseMaterialText(value) {
   return {name: nameOf(m.name), ...copyMaterial(m)};
 }
 export function materialCacheUsage(count, pool = MATERIAL_REPEAT) {
-  if (!Number.isInteger(count) || count < 0 || count >= MATERIAL_SLOTS) throw Error('Invalid material cache size.');
+  if (!Number.isInteger(count) || count < 0 || count > MATERIAL_SLOTS * (1 + MATERIAL_STATES.length)) throw Error('Invalid material cache size.');
   const bytes = count * 28 * pool * pool; return {bytes, budget: MATERIAL_CACHE_BYTES, fits: bytes <= MATERIAL_CACHE_BYTES};
 }

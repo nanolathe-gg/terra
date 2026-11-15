@@ -13,6 +13,17 @@ function terrainHeight(x, sea, base) {
   if (t < .58) return base;
   return mix(base, base + 78, (t - .58) / .3);
 }
+// The terrain fixture's Time maps, so a material's Worn and Deposit colors show: water wore the hill's flank and laid sediment at its foot,
+// each from none at the top of the picture to all of it at the bottom, so the picture shows every level a From setting can pick.
+function terrainWeather(region, request) {
+  const count = region.gridWidth * region.gridHeight, wear = new Float32Array(count), deposit = new Float32Array(count), clamp = v => Math.max(0, Math.min(1, v));
+  for (let y = 0; y < region.gridHeight; y++) for (let x = 0; x < region.gridWidth; x++) {
+    const t = (region.gridOrigin[0] + x * region.gridSpacing - request.x) / TERRAIN, down = clamp((region.gridOrigin[1] + y * region.gridSpacing - request.y) / TERRAIN), i = y * region.gridWidth + x;
+    wear[i] = clamp((t - .6) / .04) * clamp((.86 - t) / .04) * down;
+    deposit[i] = clamp(1 - Math.abs(t - .56) / .04) * down;
+  }
+  return {wear, deposit};
+}
 export class MaterialPreview {
   constructor() { this.jobs = new Map(); this.serial = 0; this.pictureSerial = 0; this.running = false; this.renderer = null; this.timer = null; }
   // A picture of `material` beside `companion` (the map's water when the material is ground, its ground when it is water).
@@ -58,6 +69,7 @@ export class MaterialPreview {
           for (let y = 0; y < region.gridHeight; y++) for (let x = 0; x < region.gridWidth; x++)
             h[y * region.gridWidth + x] = job.view === 'terrain' ? terrainHeight(region.gridOrigin[0] + x * region.gridSpacing - request.x, sea, base) : water ? sea - 64 : base;
           request.fields = {h}; request.masks = {ground: new Int8Array(count)};
+          if (job.view === 'terrain') request.weather = terrainWeather(region, request);
           const rendered = await r.renderChunk(request, {clay: false, light: 'original'});
           if (this.disposed || (job.serial !== this.pictureSerial && !job.draft)) continue;
           const canvas = new OffscreenCanvas(size, size), ctx = canvas.getContext('2d', {willReadFrequently: true}); ctx.drawImage(rendered.canvas, 0, 0);
