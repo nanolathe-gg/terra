@@ -133,6 +133,8 @@ const NODE_FIELDS = [
   ...['lfGroundEdge'].map(k => [k, 'f']),
   // Gully softness: rounder, fewer gully valleys (0: as before).
   ...['lfGullySoft'].map(k => [k, 'f']),
+  // Lobe variety: clustered shore fingers, a few long and wide (0: the even comb).
+  ...['cfVary'].map(k => [k, 'f']),
   // lfcrater: an impact's groove: the along curve's value at its end (the groove's width is scaled by the curve over it); 0: none.
   ...['grooveEnd'].map(k => [k, 'f']),
   // lfimpact2: the buckled ground's height (Buckling x .3 of the relief; BK_AMP in engine-shape.wgsl scales it), apart from the ejecta's; 0: none.
@@ -521,7 +523,7 @@ function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0
       plMat: plates ? (q.plateMaterial >= 1.5 ? 2 : 1) : 0, plWater, plLand, plSize: q.plateSize, plGap: q.plateGap, plHeight: q.plateHeight, plSeam: q.crystalShoreSeam ?? .5, plVary: q.plateVary ?? 0, plNeedles: q.frostNeedles ?? 0,
       frGapSize: Math.max(3, c.frost?.gapSize ?? 3), frGapDepth: c.frost?.gapDepth ?? 0, frGaps: c.frost?.gaps ?? 0, frGapReach: c.frost?.gapReach ?? 0,
       coPutW: 1, coFar: 1e5 + 2 * spacing, coLimit: fLimit, coFReach: fReach, coFAmt: q.fingers * clamp(radius / 140, .35, 1),
-      cfSize: q.fingerSize ?? 1,
+      cfSize: q.fingerSize ?? 1, cfVary: clamp(q.fingerVary || 0, 0, 1),
       coN: n, coW: W, coLedge: clamp(q.layerLedge, .4, .95), coIrr: clamp(q.layerRough, 0, 1), coVary: vary, coSpread: clamp(q.lavaSpread || 0, 0, 2), coMeander: LAYER_MEANDER,
       coLReach: lReach, coRiser: q.layerRiser > 0 ? q.layerRiser : 0, coScal: scal ? 1 : 0, coRc: Rc, coCV: cv, coRs: 1.4 * Rc + cv * .1 * Rc + n * W * (1 + .45 * cv) + spacing,
       coBeach: beach ? 1 : 0, coSurf: beach ? clamp(q.surf, 0, 1) : 0, coJag: layers ? clamp(q.layerJag || 0, 0, 12) : 0,

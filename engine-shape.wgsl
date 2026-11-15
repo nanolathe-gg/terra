@@ -1629,13 +1629,16 @@ fn thumbAt(lx: f32, ly: f32, nx: f32, ny: f32, amount: f32) -> f32 {
   for (var j = cj - 1; j <= cj + 1; j++) { for (var i = ci - 1; i <= ci + 1; i++) {
     let ax = (f32(i) + 0.5 + 0.45 * hashi(i, j, salt ^ 0x5a7u)) * THUMB_CELL;
     let ay = (f32(j) + 0.5 + 0.45 * hashi(i, j, salt ^ 0x1d3u)) * THUMB_CELL;
-    let chance = clamp((0.7 + 1.5 * THUMB_SPREAD * vnoise(ax / 130.0, ay / 130.0, salt ^ 0x1f3u)) * THUMB_AMOUNT, 0.04, 0.97);
+    // Lobe variety (cfVary): sites gather in clusters, and a few grow long, wide lobes and spits among many small ones (0: the even comb).
+    let cluster = mix(1.0, 0.55 + 0.9 * (vnoise(ax / 260.0, ay / 260.0, salt ^ 0x7c3u) * 0.5 + 0.5), u.cfVary);
+    let chance = clamp((0.7 + 1.5 * THUMB_SPREAD * vnoise(ax / 130.0, ay / 130.0, salt ^ 0x1f3u)) * THUMB_AMOUNT * cluster, 0.04, 0.97);
     if (uhash(i, j, salt, 0x31fu) >= chance) { continue; }
     // Only sites within half a cell of the coast along its normal grow a finger here.
     if (abs((lx - ax) * nx + (ly - ay) * ny) >= THUMB_CELL * 0.5) { continue; }
-    let L = amount * 52.0 * (0.3 + 2.0 * pow(uhash(i, j, salt, 0x4e5u), 2.4)) * size;
+    let grow = mix(1.0, 0.35 + 2.6 * pow(uhash(i, j, salt, 0x9d1u), 3.0), u.cfVary);
+    let L = amount * 52.0 * (0.3 + 2.0 * pow(uhash(i, j, salt, 0x4e5u), 2.4)) * size * grow;
     let fork = L > 40.0 * amount * size && L < 95.0 * amount * size && uhash(i, j, salt, 0x2c9u) > 0.8;
-    var h0 = clamp(5.0 + 0.15 * L / max(amount, 0.2) + (uhash(i, j, salt, 0x6b1u) - 0.5) * 6.0, 7.0, 24.0) * min(1.0, 0.4 + amount * 0.6);
+    var h0 = clamp(5.0 + 0.15 * L / max(amount, 0.2) + (uhash(i, j, salt, 0x6b1u) - 0.5) * 6.0, 7.0, 24.0) * min(1.0, 0.4 + amount * 0.6) * mix(1.0, 0.7 + 0.5 * min(grow, 1.6), u.cfVary);
     if (fork) { h0 = clamp(h0 * 1.3, 16.0, 26.0); }
     let tau = abs((lx - ax) * tx + (ly - ay) * ty);
     if (tau >= h0) { continue; }
