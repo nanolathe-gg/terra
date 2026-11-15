@@ -146,6 +146,11 @@ test('a published control has its own range inside the node setting’s, and a n
   const wide = controlSpec(ranged, {node: 'noise', param: 'size', min: -5, max: 9000}).spec; assert.deepEqual([wide.min, wide.max], [size.min, size.max]);
   const empty = controlSpec(ranged, {node: 'noise', param: 'size', min: 20, max: 20}).spec; assert.deepEqual([empty.min, empty.max], [size.min, size.max]);
   assert.throws(() => copyMaterial({...base, controls: [{label: 'Size', node: 'noise', param: 'size', min: 'a', max: 3}]}), /range/);
+  // A copy saved before controls had ranges is still the library's material: the world does not mistake it for an edit.
+  const older = worldMaterials(config).map(m => ({...m, controls: m.controls.map(({min, max, ...c}) => c)}));
+  assert.ok(older.some(m => m.controls.some(c => c.param !== 'stops')), 'the fixture has a ranged control to lose');
+  assert.deepEqual(worldOwnMaterials(copyMaterials(older), config), []);
+  assert.deepEqual(keptWorldMaterials(older, config).map(m => m.controls), worldMaterials(config).map(m => m.controls));
   for (const [key, m] of Object.entries(LIBRARY)) for (const c of m.controls) if (c.param !== 'stops') {
     const {node, spec} = controlSpec(m, c); assert.ok(node.params[c.param] >= spec.min && node.params[c.param] <= spec.max, `${key}: ${c.label} starts inside its range`);
   }

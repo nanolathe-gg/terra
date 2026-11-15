@@ -719,7 +719,7 @@ function syncGroundChips(kind=groundChipKind) {
     const chip=$('lf-ground-chip-'+v),option=[...select.options].find(o=>o.value===String(v)),m=v===0?mapMaterials.find(m=>m.worldGround):mapMaterials.find(m=>m.slot===v);
     chip.hidden=!option||(v===-1&&kind==='paint'); if (chip.hidden) continue;
     chip.querySelector('.material-choice-name').textContent=option.textContent; chip.title=v===-1?'Leave the surface that is already there.':v===0?'The world’s ground: '+(m?.name??''):option.textContent;
-    chip.querySelector('.material-chip').style.background=v>=0&&m?hex(m):''; chip.setAttribute('aria-checked',String(select.value===String(v))); chip.tabIndex=select.value===String(v)?0:-1; chip.disabled=select.disabled;
+    chip.querySelector('.material-chip').style.background=v>=0&&m?hex(m):''; chip.setAttribute('aria-checked',String(select.value===String(v))); chip.disabled=select.disabled;
   }
 }
 for (let v=-1; v<MATERIAL_CHOICES; v++) $('lf-ground-chip-'+v).onclick=()=>{ const select=$('lf-ground'); if (select.value===String(v)) return; select.value=String(v); select.dispatchEvent(new Event('input',{bubbles:true})); select.dispatchEvent(new Event('change',{bubbles:true})); syncGroundChips(); };

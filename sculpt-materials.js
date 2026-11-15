@@ -190,6 +190,10 @@ export function copyMaterial(value) {
     if (!object(c) || typeof c.node !== 'string' || typeof c.param !== 'string') throw Error('Invalid material control.');
     const control = {label: text(c.label, 'Control', 'A control name'), node: c.node, param: c.param};
     if (c.param !== 'stops' && c.min !== undefined && c.max !== undefined) { control.min = number(c.min, 'A control’s range'); control.max = number(c.max, 'A control’s range'); }
+    else if (c.param !== 'stops') {   // one saved before controls had ranges takes the range a new control starts with, so an untouched copy still equals the library's
+      const target = controlSpec(material, control);
+      if (target) Object.assign(control, controlRange(nodeParams(target.node).find(p => p.key === c.param), target.node.params[c.param]));
+    }
     if (controlSpec(material, control) && !material.controls.some(o => o.node === control.node && o.param === control.param)) material.controls.push(control);
   }
   material.palette = copyPalette(value.palette);
