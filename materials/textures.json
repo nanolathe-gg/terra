@@ -353,20 +353,19 @@
   "name": "Ice",
   "seed": 0,
   "nodes": [
-   {"id":"soften","type":"warp","kind":"turbulence","name":"Soften patch outlines","params":{"amount":2,"size":9,"layers":0,"axis":0,"seed":0},"in":{"in":null},"x":0,"y":63},
-   {"id":"patches","type":"noise","kind":"smooth","name":"Soft frost patches","params":{"size":9,"detail":0.35,"layers":0,"seed":0},"in":{"in":"soften"},"x":236,"y":63},
-   {"id":"patch-levels","type":"levels","name":"Patch contrast","params":{"low":0.1,"high":0.9,"gamma":1,"invert":0},"in":{"in":"patches"},"x":472,"y":63},
-   {"id":"ice","type":"gradient","name":"Lavender blue to frost white","params":{"ease":1},"in":{"in":"patch-levels"},"stops":[[0,0.8,0.855,1],[0.5,0.848,0.908,1],[1,0.9,0.965,1]],"x":708,"y":63},
-   {"id":"frost","type":"noise","kind":"smooth","name":"Fine frost grain","params":{"size":1.2,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":472,"y":213},
-   {"id":"frost-tint","type":"gradient","name":"Frost grain tint","params":{"ease":0},"in":{"in":"frost"},"stops":[[0,0.93,0.93,1],[1,1.07,1.07,1]],"x":708,"y":213},
-   {"id":"frosted","type":"combine","kind":"multiply","name":"Multiply frost grain","params":{"amount":1,"offset":0},"in":{"a":"ice","b":"frost-tint","mask":null},"x":944,"y":163},
-   {"id":"flecks","type":"scatter","name":"Sparse lilac flecks","params":{"spacing":5,"radius":0.9,"coverage":0.3,"jitter":1.6,"hardness":0.3,"profile":1,"sizeVariation":0.5,"toneVariation":0.4,"follow":0,"seed":3},"in":{"in":null,"density":null},"x":708,"y":363},
-   {"id":"fleck-tint","type":"gradient","name":"Lilac multiplier","params":{"ease":0},"in":{"in":"flecks"},"stops":[[0,1,1,1],[1,1,0.82,0.98]],"x":944,"y":313},
-   {"id":"flecked","type":"combine","kind":"multiply","name":"Multiply lilac flecks","params":{"amount":1,"offset":0},"in":{"a":"frosted","b":"fleck-tint","mask":null},"x":1180,"y":238},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"flecked","height":null,"shine":null},"x":1416,"y":238}
+   {"id":"warp","type":"warp","name":"Crinkle bend","params":{"amount":1.6,"size":6,"layers":0,"axis":0,"seed":0},"in":{"in":null},"x":0,"y":0,"kind":"turbulence"},
+   {"id":"bumps","type":"noise","name":"Crinkle bumps","params":{"size":9.0,"detail":0.5,"layers":0,"seed":2},"in":{"in":"warp"},"x":0,"y":0,"kind":"billow"},
+   {"id":"fine","type":"noise","name":"Fine grain","params":{"size":1.6,"detail":0,"layers":0,"seed":5},"in":{"in":null},"x":0,"y":0,"kind":"smooth"},
+   {"id":"height","type":"combine","name":"Bumps plus grain","params":{"amount":0.15,"offset":0.5},"in":{"a":"bumps","b":"fine","mask":null},"x":0,"y":0,"kind":"add"},
+   {"id":"hl","type":"levels","name":"Height contrast","params":{"low":0.1,"high":0.9,"gamma":1,"invert":0},"in":{"in":"height"},"x":0,"y":0},
+   {"id":"tone","type":"gradient","name":"Snow tone","params":{"ease":1},"in":{"in":"hl"},"x":0,"y":0,"stops":[[0,0.8,0.85,1],[0.5,0.86,0.91,1],[1,0.93,0.96,1]]},
+   {"id":"flecks","type":"scatter","name":"Hairline flecks","params":{"spacing":7,"radius":0.8,"coverage":0.12,"jitter":1.6,"hardness":0.4,"profile":1,"sizeVariation":0.5,"toneVariation":0.5,"follow":0,"seed":3},"in":{"in":null,"density":null},"x":0,"y":0},
+   {"id":"fleck-tint","type":"gradient","name":"Fleck multiplier","params":{"ease":0},"in":{"in":"flecks"},"x":0,"y":0,"stops":[[0,1,1,1],[1,0.72,0.74,0.9]]},
+   {"id":"col","type":"combine","name":"Multiply flecks","params":{"amount":1,"offset":0},"in":{"a":"tone","b":"fleck-tint","mask":null},"x":0,"y":0,"kind":"multiply"},
+   {"id":"material","type":"output","name":"Material","params":{"relief":0.9},"in":{"color":"col","height":"hl","shine":null},"x":0,"y":0}
   ],
-  "controls": [{"label":"Soft frost patches: size","node":"patches","param":"size"},{"label":"Lavender blue to frost white: colors","node":"ice","param":"stops"}],
-  "palette": [224,112,48,128,97,96,98,49,255,216,129,145,113,81,80,217,130],
+  "controls": [{"label":"Crinkle size","node":"bumps","param":"size"},{"label":"Relief","node":"material","param":"relief"},{"label":"Snow tone: colors","node":"tone","param":"stops"}],
+  "palette": [224,112,128,97,96,48,98,49,255,216,129,145,81,113,217,130],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
  "ice-bergs-ground": {
