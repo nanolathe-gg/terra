@@ -2058,10 +2058,10 @@
    {"id": "valleyU", "label": "U valley", "icon": "valleyU", "color": "#c7a97e", "group": "shape"},
    {"id": "valleyT", "label": "Terraced valley", "icon": "valleyT", "color": "#c7a97e", "group": "shape"},
    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape"},
-   {"id": "island", "label": "Island", "icon": "island", "color": "#cdd59b", "group": "shape", "help": "Draw a flat sand island just above the sea, with a pale shallow shelf round it, in water (on land higher than the sea it adds nothing).", "rock": "soil"},
+   {"id": "island", "label": "Island", "icon": "island", "color": "#cdd59b", "group": "shape", "help": "Draw a flat sand island just above the sea, with a pale shallow shelf round it, in water (on the plain, which stands at the same height, it adds nothing).", "rock": "soil"},
    {"id": "isletScatter", "label": "Islet scatter", "icon": "island", "color": "#c7a97e", "group": "shape", "help": "Click in water for a scatter of small sand islets with pale shelves; a drag strews them along a chain."},
    {"id": "sandbar", "label": "Sandbar", "icon": "island", "color": "#c7a97e", "group": "shape", "help": "Drag a long sand bar in water that tapers to points at both ends, with a shallow shelf round it."},
-   {"id": "atoll", "label": "Atoll", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Click in deep water for a ring of sand round a lagoon; the ring dips under the sea in places."},
+   {"id": "atoll", "label": "Atoll", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Click in deep water for a ring of sand islands round a lagoon; the ring dips under the sea in places."},
    {"id": "rockMound", "label": "Rock mound", "icon": "mountain", "color": "#b3bcca", "group": "shape", "help": "Click a dark rock dome with ridges and valleys running down from its summit; drag for a rock ridge.", "rock": "mound"},
    {"id": "rockKnob", "label": "Rock knob", "icon": "hill", "color": "#b8d88d", "group": "shape", "help": "Click or drag a small lumpy rock outcrop on the sand.", "rock": "mound"},
    {"id": "craterMound", "label": "Crater mound", "icon": "crater", "color": "#d5a18b", "group": "shape", "help": "Click a rock ring round a sandy floor at ground level.", "rock": "mound"},
@@ -2072,7 +2072,7 @@
    {"id": "river", "label": "River", "icon": "river", "color": "#6fb1e0", "group": "water"},
    {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
   ],
-  "baseHeight": 8,
+  "baseHeight": 2,
   "defaults": {
    "surface": "structured",
    "transition": "mineral",

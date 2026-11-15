@@ -53,7 +53,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Per-shape crystal surface (tone, shine, web) and per-shape snow on caps | Crystal, Ice | Move gougeWeb, the crystal shine rows and Snow on caps into rock types | Partial: iceSnow is per rock type now |
 | Needle hatching and crack stars along cliff and terrace edges | Ice (8), Moon, Red, Lava | Edge dressing per shape (today only shore plates draw it) | Missing |
 | Elongated prisms (only square blocks today) | Ice (2), Desert, Crystal, Lava | Prism stretch | **Done** this round (Ice block at 220%) |
-| Banded slopes that large KBots can climb under a pale caprock | Desert | A minimum cliff drop per cell all round, with bands that still show on a narrow cliff | Owner's decision |
+| Banded slopes that large KBots can climb under a pale caprock | Desert | Mesa section | **Done** (owner, 2026-11-15: climbable, as retail; 0 of 72 rays blocked, retail 3) |
 
 ## Per biome
 
@@ -135,7 +135,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 
 | Feature | Tool, rock type | Status |
 | --- | --- | --- |
-| Flat sand islands at sea+2 with a pale halo | Island (drawn in water; on the sea+8 plain the sea tools add nothing) | close |
+| Flat sand islands at sea+2 with a pale halo | Island (the plain now stands at sea+2 as retail's, owner 2026-11-15) | close |
 | Sandbars, shoals, islet chains | Sandbar, Shoal, Islet scatter (Copies 8) | close |
 | Atolls | Atoll (a wider ring split by 7 Gaps) | close (chunky sand islands with shallow gaps; the lagoon stays deep where retail's is pale) |
 | Dark rock mounds with radial ridges | Rock mound, Rock knob, Crater mound (Mound rock) | close (ridges are crisp rills) |
@@ -164,3 +164,10 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 | Rocky knolls | Rock knoll (Bare tan rock) | close |
 | Rivers with wide pale braided shallows | River (90 px, Channel depth 220%), Braided river | close (a dark channel inside pale margins) |
 | Swamp thickets (9 maps) | Swamp thicket (lays the Swamp thicket material, Ground edge 30) | close (water glints ~22% of pixels against ~16% in a retail crop; retail's are a little larger and brighter) |
+
+## Owner's decisions (2026-11-15)
+
+- Painted Desert mesas climbable like retail's banded slopes.
+- The lighting changes on Green, Red and Moon stay.
+- Archipelago's plain stands at sea+2, as retail's sand.
+- Zhon's brown river water stays dropped.
