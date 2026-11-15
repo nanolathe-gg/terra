@@ -119,6 +119,10 @@ Red after the Cracked bed (the same six pairs, a fresh judge): 4 of 6, but the j
 bias and says nothing. On the windows, Cracked bed 0.55 at 42 px moved red-3's look gap from 0.99 to 0.88 and Red's mean from 0.49 to 0.44;
 closeness held at 50 of 75 (median distance 0.17 -> 0.16).
 
+Archipelago's fringe after the blind test (the judge saw crisp contour lines in retail): fringe reach 0.25 -> 0.8, contrast 0.6 -> 0.35.
+Measured on its windows: mean look gap 0.79 -> 0.53 (window 2 1.21 -> 0.45, window 3 0.70 -> 0.79), close to retail 44 -> 45 of 75. Ripple
+height 0 and Vegetation cover 0 changed nothing in these windows; contrast 0.5 scored worse (0.98), though retail's lines read crisper by eye.
+
 ## Cross-biome gaps, ranked by how much of the retail set they cover
 
 | Gap | Biomes | Generic control that would close it | Status |
