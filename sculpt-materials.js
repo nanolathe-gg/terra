@@ -332,24 +332,43 @@ export function addMaterial(list, material, name = 'Material') {
   const slot = freeSlot(list), added = {slot, name: uniqueName(list, nameOf(name)), key: null, worldGround: false, worldWater: false, ...copyMaterial(material)};
   return {slot, materials: [...list, added].sort((a, b) => a.slot - b.slot)};
 }
-// Every map has a ground and a water material. Where a list lacks one (a new map, an older save), the world's own is added;
-// when the list is full, the first material that is not the other role takes it.
+// Every map has a ground and a water material. Where a list lacks one (a scene, an older save), the library's is added; when the list
+// is full, the first material that is not the other role takes it.
+const ROLES = [['worldGround', 'ground'], ['worldWater', 'water']];
+const libraryFor = (config, which) => LIBRARY[config.materials?.[which]] ?? LIBRARY[`green-${which}`];
 export function withWorldMaterials(value, config) {
   let list = copyMaterials(value) ?? [];
-  for (const [role, which] of [['worldGround', 'ground'], ['worldWater', 'water']]) {
+  for (const [role, which] of ROLES) {
     if (list.some(m => m[role])) continue;
-    const preset = LIBRARY[config.materials?.[which]] ?? LIBRARY[`green-${which}`];
+    const preset = libraryFor(config, which);
     if (list.length >= MATERIAL_SLOTS - 1) { const taker = list.find(m => !m.worldGround && !m.worldWater); list = list.map(m => m === taker ? {...m, [role]: true} : m); continue; }
     const added = addMaterial(list, preset, preset.name); list = added.materials.map(m => m.slot === added.slot ? {...m, [role]: true} : m);
   }
   return list;
 }
-// A map carried into another world: a ground or water still as the library made it gives way to the new world's own; one the artist
-// changed stays, as do the map's other materials.
-export const carriedMaterials = list => list?.filter(m => !((m.worldGround || m.worldWater) && LIBRARY[m.source] && materialRenderKey(m) === materialRenderKey(LIBRARY[m.source]))) ?? null;
-// A world's materials for a new map: a world of the user's own carries its list (config.worldMaterials); a built-in world names its
-// ground and water in the library (config.materials).
-export const worldMaterials = config => withWorldMaterials(config.worldMaterials, config);
+// The world's ground and its water are world settings, like its sliders: every map drawn in the world shows the same two, and a map's
+// other materials are its own. A map's list (a save's, or none for a new map) takes the world's two here, each in the slot the map
+// already gave that role. `config.worldMaterials` holds the ones the artist changed; the rest are the library's (`config.materials`).
+export function adoptWorldMaterials(value, config) {
+  let list = withWorldMaterials(value, config);
+  for (const [role, which] of ROLES) {
+    const source = config.worldMaterials?.find(m => m[role]) ?? libraryFor(config, which), at = list.find(m => m[role]);
+    const name = uniqueName(list.filter(m => m !== at), nameOf(source.name));
+    list = list.map(m => m === at ? {...m, name, ...copyMaterial(source)} : m);
+  }
+  return list;
+}
+// What the world keeps of a map's list: its ground and its water, where they differ from the library's. A world nobody changed keeps
+// nothing, so a later revision of the library reaches it.
+export function worldOwnMaterials(list, config) {
+  return (list ?? []).filter(m => m.worldGround || m.worldWater).filter(m => {
+    const preset = libraryFor(config, m.worldGround ? 'ground' : 'water');
+    return m.name !== preset.name || JSON.stringify(copyMaterial(m)) !== JSON.stringify(copyMaterial(preset));
+  }).map(m => ({slot: m.slot, name: m.name, key: null, worldGround: m.worldGround, worldWater: m.worldWater, ...copyMaterial(m)}));
+}
+export const worldPair = list => (list ?? []).filter(m => m.worldGround || m.worldWater);
+// A new map's materials: the world's two.
+export const worldMaterials = config => adoptWorldMaterials(null, config);
 export const duplicateMaterial = (list, slot) => { const m = find(list, slot); return addMaterial(list, m, `${m.name} copy`); };
 const find = (list, slot) => { const m = list.find(m => m.slot === slot); if (!m) throw Error(`No material in slot ${slot}.`); return m; };
 export const renameMaterial = (list, slot, name) => { find(list, slot); return list.map(m => m.slot === slot ? {...m, name: nameOf(name)} : m); };
