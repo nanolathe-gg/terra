@@ -31,6 +31,8 @@ test('the color shader reads only its three retained weather/material layers',()
   let reads=0;
   for(const use of source.matchAll(/\bgridTex\b/g)){
     const tail=source.slice(use.index);if(/^gridTex\s*:/.test(tail))continue;
+    // The ground id rides in the fall layer's blue (COLOR_INPUT_PACK), read by cell.
+    if(/^gridTex\s*,\s*at\s*,\s*2\s*,\s*0\s*\)\s*\.b\b/.test(tail)){reads++;continue;}
     assert.match(tail,/^gridTex\s*,\s*regionalPoint\(uv\)\s*,\s*[012]\s*\)/,'a new grid read needs a packing dependency audit');reads++;
   }
   assert(reads>0,'inspect the actual preprocessed color shader');

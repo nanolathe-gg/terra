@@ -696,9 +696,9 @@ fn sampleMasks(uv:vec2f,layer:i32)->vec4f {
     }
 }
 fn maskDimensions()->vec2u{return textureDimensions(colorMasksTex);}
-fn maskIds(at:vec2i)->f32{return round(textureLoad(colorMasksTex,at,2,0).a*127.0)+127.0;}
-fn loadRockMask(at:vec2i)->f32{let id=maskIds(at);return (id-17.0*floor(id/17.0))/127.0;}
-fn loadGroundMask(at:vec2i)->f32{return floor(maskIds(at)/17.0)/127.0;}
+// The ids (sculpt-chunk-renderer.js COLOR_INPUT_PACK): the rock id in the third mask layer's alpha, the ground id in the fall layer's blue.
+fn loadRockMask(at:vec2i)->f32{return (round(textureLoad(colorMasksTex,at,2,0).a*127.0)+127.0)/127.0;}
+fn loadGroundMask(at:vec2i)->f32{return round(textureLoad(gridTex,at,2,0).b*255.0)/127.0;}
 #else
 fn sampleMasks(uv:vec2f,layer:i32)->vec4f{return sampleRegionalArray(masksTex,uv,layer);}
 fn maskDimensions()->vec2u{return textureDimensions(masksTex);}
@@ -754,7 +754,7 @@ fn styleEdge(p: vec2f, f: f32, slope: f32) -> f32 {
 }
 
 #ifdef COLOR_PASS
-// F retains exactly flow/deposit, wear/wetness, material RGBA and fall XY.
+// F retains exactly flow/deposit, wear/wetness, material RGBA, fall XY and the ground id (fall layer blue).
 fn weatherAt(uv:vec2f)->vec2f{return sampleRegionalArray(gridTex,regionalPoint(uv),0).rg;}
 fn timeMap2(uv:vec2f)->vec2f{if(u.weatherMaps<0.5){return vec2f(0);}return sampleRegionalArray(gridTex,regionalPoint(uv),0).ba;}
 fn timeMap3(uv:vec2f)->vec2f{if(u.weatherMaps<0.5){return vec2f(.5);}return sampleRegionalArray(gridTex,regionalPoint(uv),2).rg;}
