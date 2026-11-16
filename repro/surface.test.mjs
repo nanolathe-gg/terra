@@ -96,3 +96,13 @@ test('a built-in may draw a library material in place of its own color, bound by
   assert.throws(() => copySurface([...surface, {builtin: 'rock', material: 'rock-granite'}]), /once in a list/);
   assert.throws(() => surfaceRows([{id: 'x'}]), /built-in or draws a material/);
 });
+
+test('height contrast rides in the rule head; a layer without a rule gets an empty one, and only a layer that draws a material has it', () => {
+  const {rows} = surfaceRows([{id: 'a', material: 'green-ground', edge: {height: .5}}, {id: 'b', material: 'green-ground', where: [{fact: 'slope', from: 1}], edge: {height: 2}}, {builtin: 'sand', edge: {height: 1}}]);
+  assert.deepEqual(rows[0].slice(3), [1], 'one rule row');
+  assert.deepEqual(rows[2], [1, 0, 0, .5], 'an empty windows rule carrying the contrast');
+  assert.deepEqual(rows[3].slice(3), [2]);
+  assert.equal(rows[5][3], 1, 'clamped to 1');
+  assert.deepEqual(rows.at(-2).slice(3), [0], 'a built-in drawing its own color has no height to compare');
+  assert.equal(copySurface([{id: 'a', material: 'x', edge: {height: .3, junk: 1}}])[0].edge.height, .3);
+});

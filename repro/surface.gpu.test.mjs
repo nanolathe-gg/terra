@@ -26,6 +26,9 @@ test('surface layers: a rule limits a built-in; a material layer draws where its
     const capped = await view();
     const share = changed(base.pixels, capped.pixels);
     assert.ok(share > .03 && share < .6, `the cap covers the mesa's top and nothing else (${(share * 100).toFixed(1)}%)`);
+    withSurface(s => [...s, {id: 'cap', name: 'Cap', material: 'ice-ground', stage: 'snow', where: [{fact: 'abovePlain', from: 20, fade: 4}], edge: {height: 1}}]);
+    const lifted = await view();
+    assert.ok(changed(capped.pixels, lifted.pixels) > 0, 'height contrast moves the cap’s edge');
     withSurface(s => s.map(l => l.builtin === 'rock' ? {...l, material: 'lush-ground'} : l));
     const drawn = await view();
     const swapped = changed(base.pixels, drawn.pixels);

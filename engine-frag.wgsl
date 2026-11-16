@@ -366,7 +366,7 @@ fn flowersAt(p: vec2f, cover: array<f32, 7>, total: f32, light: f32, vegetation:
 // surfaces (a built-in: its color and share are the draw's) or a material of the map (bound to the layer by the material's worldLayer); a
 // rule over the site's facts may limit where it shows. Rows (sculpt-material-model.js surfaceRows), from row 0, sorted by stage:
 //   0 (built-in slot in its stage, or -1 a material layer; Amount; material slot or -1; rule rows), 1 (edge width, noise, noise size, salt),
-//   then with a rule: (kind 1 windows, 2 score; score from; score half width; 0), and its terms: windows (fact, from, to, fade), all of which
+//   then with a rule: (kind 1 windows, 2 score; score from; score half width; height contrast), and its terms: windows (fact, from, to, fade), all of which
 //   must hold, or score terms (fact, weight, 0, 0), summed with the edge's noise and passed through one smoothstep.
 // SURFACE_HEAD's four rows hold the eight stages' (first row, layer count) pairs; row SURFACE_FLAGS x is 1 when a layer reads facts or draws a
 // material. A stage runs where the draw made its surfaces before (the effects between stages read the color below, so a layer stays in its
@@ -420,12 +420,17 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
         if (rules == 0u) { c = surfaceEdge(share, e, p, pixel); }
         else {
             let rule = u.materialTable[ruleAt];
+            // Height contrast (the rule head's w): the layer's material against the ground below, art height in units of 4, so the taller
+            // wins where the layer meets what it covers. Windows feel it only inside their edge (4 share (1 - share)); a score at its threshold.
+            var lift = 0.0;
+            if (rule.w > 0.0 && r0.z >= 0.0) { lift = rule.w * 0.25 * (materialRelief(p, u32(r0.z)) - materialRelief(p, gs)); }
             if (rule.x < 1.5) {
                 for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; share *= surfaceWindow(surfaceFacts[min(u32(w.x), SURFACE_FACTS - 1u)], w.y, w.z, w.w); }
                 if (share == 0.0) { continue; }
+                if (lift != 0.0) { share = clamp(share + lift * 4.0 * share * (1.0 - share), 0.0, 1.0); }
                 c = surfaceEdge(share, e, p, pixel);
             } else {
-                var score = surfaceNoise(e, p, pixel);
+                var score = surfaceNoise(e, p, pixel) + lift;
                 for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; score += w.y * surfaceFacts[min(u32(w.x), SURFACE_FACTS - 1u)]; }
                 c = share * smoothstep(rule.y - rule.z, rule.y + rule.z, score);
                 if (c == 0.0) { continue; }
