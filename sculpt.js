@@ -1,5 +1,5 @@
 import {requestAdapter} from './sculpt-webgpu.js';
-import {savedWorld,copySavedWorld,savedWorldId,sameSavedWorld} from './sculpt-save.js';
+import {savedWorld,copySavedWorld,savedWorldId,sameSavedWorld,worldKeys} from './sculpt-save.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
@@ -8,11 +8,11 @@ import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-co
 import {materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
-import {KNOBS,LOW_GROUND_RGB,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
+import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
 import {strokeKind,shapeFrom,savedToolCard,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,borrowBeach,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
-  shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,regionalCheck,repeatCheck,pagedTime,heightsNode} from './sculpt-scene.js';
+  shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,rgbColor,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,regionalCheck,repeatCheck,pagedTime,heightsNode} from './sculpt-scene.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER,lfcWidth,heightsBounds} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -1816,9 +1816,8 @@ new ResizeObserver(resize).observe($('viewport'));
 // this browser (localStorage) and exportable as JSON.
 const WORLD_STORE='nanolathe-map-editor-worlds';
 // Card P12b: the light's two colors ride with the world's colors; white (off) is the grey light. Help for each row is shown under it.
-const LIGHT_COLOR_HELP={sun:'The direct light and the glints it mirrors. A warm sun lights slopes that face it.',sky:'The ambient light that fills the shade. A cool sky keeps shaded ground and the lee of hills blue.',
-  low:'The color of the ground from the sea up to Reach above it (Low ground in World), and of the shallows: Tint moves them toward it, keeping their grain.',
-  vegetation:'The plants of the ground cover (Vegetation cover above 0): every kind moves by the change from this color, so lush and dry ground keep their difference. Bare ground keeps the world\'s own.'};
+const COLOR_HELP={shallowTone:'The tint of the shallows, kept as a shift of the water material\'s color, so recoloring the water moves its shallows too. Off: the world\'s own tint.',
+  sun:'The direct light and the glints it mirrors. A warm sun lights slopes that face it.',sky:'The ambient light that fills the shade. A cool sky keeps shaded ground and the lee of hills blue.'};
 let worlds={},worldId=null,openedAsOwnWorld=null;   // the last: set when a map's world opened as a world of its own
 function loadWorlds() { try { worlds=JSON.parse(localStorage.getItem(WORLD_STORE)||'{}')||{}; } catch (_) { worlds={}; } }
 function saveWorlds() { try { localStorage.setItem(WORLD_STORE,JSON.stringify(worlds)); } catch (_) {} }
@@ -1856,12 +1855,14 @@ function editColumn(value){
   const change=restoreColumn(next);columnEditing=true;if(change.timeChanged)queueWeather();persistLater();
 }
 function commitColumn(){if(!columnEditing)return;columnEditing=false;checkpoint();queueWeather();}
-function defaultColor(key) {
-  const w=config.water||{};
-  const rgb=v => v&&v.map(x => x/255);
-  return {shallow:rgb(w.shallowRGB),
-    low:rgb(LOW_GROUND_RGB),sun:[1,1,1],sky:[1,1,1]}[key]||[.5,.5,.5];
+// The water material's drawn color, which Shallow water's tone shifts (its data's mean before there is one).
+function waterDrawn(){const m=mapMaterials.find(m=>m.worldWater);return m?drawnColor(m):(config.water?.meanRGB||[0,0,0]).map(v=>v/255);}
+// What a Colors row shows: Shallow water's tone (the world's own, else its data's) on the water's drawn color; a light's color, else white.
+function shownColor(key,set) {
+  if (key==='shallowTone') return hexColor(toneColor(waterDrawn(),set||waterTone(config,'shallow')||[0,0,0]));
+  return set||hexColor([1,1,1]);
 }
+let refreshShallowRow=()=>{};
 function goToWorld(base,id,extra) {
   worldInputQueue.flush();
   if (!stroke && !moving && !loading) saveWorking();   // the working map goes with the artist to the new world
@@ -1882,12 +1883,15 @@ function buildWorldPanel() {
   for (const [key,label] of colorRows(config,experiment)) {
     const row=document.createElement('div'); row.className='color-row';
     const set=mergedColors()[key];
-    row.innerHTML=`<span>${label}</span><input type="checkbox" aria-label="Use a base color for ${label}"${set?' checked':''}><input type="color" aria-label="${label} base color" value="${set||hexColor(defaultColor(key))}">`;
+    row.innerHTML=`<span>${label}</span><input type="checkbox" aria-label="Use a base color for ${label}"${set?' checked':''}><input type="color" aria-label="${label} base color" value="${shownColor(key,set)}">`;
     const [box,pick]=row.querySelectorAll('input');
-    const apply=() => setWorldColor(key,box.checked?pick.value:null);
+    // Shallow water keeps the pick as a tone of the water's drawn color (sculpt-column.js colorTone), as the Rock column's beds do.
+    const value=() => key==='shallowTone'?colorTone(waterDrawn(),rgbColor(pick.value)):pick.value;
+    const apply=() => setWorldColor(key,box.checked?value():null);
+    if (key==='shallowTone') refreshShallowRow=() => { if (document.activeElement!==pick) pick.value=shownColor(key,mergedColors()[key]); };
     box.addEventListener('change',()=>{apply();worldInputQueue.end();});pick.addEventListener('input',()=>{box.checked=true;apply();});pick.addEventListener('change',()=>worldInputQueue.end());
     rows.append(row);
-    if (LIGHT_COLOR_HELP[key]) { const help=document.createElement('p'); help.className='small'; help.textContent=LIGHT_COLOR_HELP[key]; rows.append(help); }
+    if (COLOR_HELP[key]) { const help=document.createElement('p'); help.className='small'; help.textContent=COLOR_HELP[key]; rows.append(help); }
   }
   // Beach: a world without a beach of its own may take another world's sand (sculpt-scene.js borrowBeach); choosing reloads the page.
   const beaches=Object.entries(config.beachSources||{}).filter(([id]) => id!==config.biomeId);
@@ -2237,7 +2241,7 @@ function applyWorldInputs(batch) {
     }
     const next=applyKnob({key,value,settings:experiment,renderer,nodes,seed,sync:false});nexts.push(next);reload ||= Boolean(next.reload);
     activeWorld().knobs[key]=String(value);pendingWorldAddress.set(key,String(value));worldStoreDirty=true;
-    worldPanelDirty ||= key==='strata'||key==='lowTint';worldCheckpoint ||= !input.restore;
+    worldPanelDirty ||= key==='strata';worldCheckpoint ||= !input.restore;
   }
   if(reload){commitWorldInputs();location.reload();return;}
   const local=presets?syncRocks({defer:true}):null,onlyPresets=batch.every(input=>input.slot>0);
@@ -2284,7 +2288,7 @@ async function bootMap(pending=null) {
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); materialUseKey='[]'; syncMaterials();
   // A material's drawn color read back (sculpt-material-cache.js readMeans): the Color pickers show it.
-  renderer.onmeans=()=>{syncRockColors();surfacePanel?.refresh();materialEditor?.refreshColors?.();};   // the world's ground and water are materials: a renderer has none until told
+  renderer.onmeans=()=>{syncRockColors();refreshShallowRow();surfacePanel?.refresh();materialEditor?.refreshColors?.();};   // the world's ground and water are materials: a renderer has none until told
   worldChanged(renderer.setColors(worldColors()));$('export').textContent='Export view PNG';
   buildKnobs(); buildWorldPanel();
   // The Rock column panel edits the selected preset's beds: the world's column for slot 0, a preset's own sections (its copy of the world's
@@ -2401,7 +2405,9 @@ async function boot() {
     // layers draw (which needs the layers above); the rest are the library's.
     config.worldMaterials=keptWorldMaterials(worlds[worldId]?.materials,config);
     config.presetDefaults={...config.defaults};
-    const worldKnobs=worlds[worldId]?.knobs||{};
+    // Only the rows this build has: a stored world keeps a removed option's value (lowTint) until it is saved again, and it must not reach
+    // the defaults, where a map save would carry it (sculpt-save.js savedWorld) and the open would drop it.
+    const known=worldKeys(config),worldKnobs=Object.fromEntries(Object.entries(worlds[worldId]?.knobs||{}).filter(([key])=>known.has(key)));
     config.defaults={...config.defaults,...worldKnobs};
     config.engineDefaults=Object.fromEntries(Object.entries(config.engineDefaults||{}).map(([key,value])=>[key,worldKnobs[key]??value]));
     if (worldId!==config.biomeId) $('world-title').textContent=worlds[worldId].name;

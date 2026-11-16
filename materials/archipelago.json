@@ -801,7 +801,8 @@
    1.0,
    1.0,
    1.0
-  ]
+  ],
+  "shallowTone": [0.05337, 0.078389, 0.078499]
  },
  "features": {
   "note": "Round 9, the shared generators in Archipelago's colors (ramps measured by luma octile from palm01-06/ArchiTree01-06 and frond01-07). Shares from retail uses (features/archipelago/catalog.json): fronds about 26,000 shrub uses (energy 75), half yellow-olive (frond01, 04, 05) and half green (frond02, 03, 06, 07); palms and ArchiTrees are one clustered tree (energy 250). Retail's deposits sit in a halo lighter than the sand. Round 12: Round 12: Frond0xScar (retail 2% of uses) are clouds of near-black specks, 30-45 px wide.",

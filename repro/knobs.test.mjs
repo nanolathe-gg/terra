@@ -2,7 +2,7 @@
 // asks the host to run again, the Colors panel's rows and picks, and the panel facts a stroke's water choices turn on.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {KNOBS, applyKnob, createWorldInputQueue, colorRows, pickWorldColor, strokeWaterPicks, worldPanelValues} from '../sculpt-knobs.js';
+import {KNOBS, applyKnob, createWorldInputQueue, colorRows, pickWorldColor, strokeWaterPicks, worldPanelValues, waterTone} from '../sculpt-knobs.js';
 
 const renderer = () => ({variant: new Map(), applied: 0, applyKnobs() { this.applied++; }, transitionBody: false, groundTiled: false});
 
@@ -18,7 +18,7 @@ test('a knob goes into the address and the renderer, and says what else it needs
   assert.deepEqual(applyKnob({key: 'faceSteep', value: '2', settings, renderer: r, nodes, seed: 2701}), {evaluate: 0, weather: true});
   assert.deepEqual(applyKnob({key: 'sand', value: '1', settings, renderer: r, nodes, seed: 2701}), {weather: true});
   // The draw's rows (Low ground, Shade in creases) only re-read the renderer's uniforms.
-  for (const key of ['lowTint', 'lowGrain', 'creaseShade']) assert.deepEqual(applyKnob({key, value: '.5', settings, renderer: r, nodes, seed: 2701}), {});
+  for (const key of ['lowGrain', 'creaseShade']) assert.deepEqual(applyKnob({key, value: '.5', settings, renderer: r, nodes, seed: 2701}), {});
   // A borrowed beach is chosen when the renderer starts (sculpt-scene.js borrowBeach): the address changes, the renderer does not.
   const applied = r.applied;
   assert.deepEqual(applyKnob({key: 'beachFrom', value: 'zhon', settings, renderer: r, nodes, seed: 2701}), {reload: true});
@@ -59,19 +59,27 @@ test('the Colors panel shows the rows a world has, and a cleared row the server 
   const labels = colorRows(config, new URLSearchParams()).map(([, l]) => l);
   assert.ok(!labels.some(l => /Flower|Vegetation|Beach|Strata|Rock|Crystal/.test(l)), 'vegetation, flowers, rock, crystal and the beds are materials');
   assert.ok(!colorRows({...config, layers: ['beach']}, new URLSearchParams('strata=1')).some(([k]) => ['beach', 'slope', 'sand', 'strata1'].includes(k)), 'a beach, a slope cover and sand take their materials’ colors');
-  // Low ground's color shows while its Tint is above 0.
-  assert.ok(!labels.includes('Low ground'));
-  assert.ok(colorRows(config, new URLSearchParams('lowTint=.5')).some(([k, l]) => k === 'low' && l === 'Low ground'));
-  assert.deepEqual(pickWorldColor(config, {ground: '#101010'}, 'shallow', '#c03030'), {ground: '#101010', shallow: '#c03030'});
+  assert.ok(!labels.includes('Low ground'), 'low ground is a surface layer');
+  assert.deepEqual(pickWorldColor(config, {sky: '#101010'}, 'shallowTone', [.1, -.05, 0]), {sky: '#101010', shallowTone: [.1, -.05, 0]});
   assert.deepEqual(pickWorldColor(config, {sun: '#ffc880'}, 'sun', null), {sun: null});
-  assert.deepEqual(pickWorldColor(config, {shallow: '#c03030'}, 'shallow', null), {});
+  assert.deepEqual(pickWorldColor(config, {shallowTone: [.1, 0, 0]}, 'shallowTone', null), {});
+});
+
+test("shallow water and the third color are tones of the world's water: its measured tone, else its data's color less its mean", () => {
+  const config = {water: {meanRGB: [51, 41, 102], shallowMeanRGB: [102, 82, 153], midRGB: [51, 61, 102]}};
+  assert.deepEqual(waterTone(config, 'shallow'), [.2, .1608, .2]);
+  assert.deepEqual(waterTone(config, 'mid'), [0, .0784, 0]);
+  assert.deepEqual(waterTone({water: {...config.water, shallowTone: [.05, .07, .08]}}, 'shallow'), [.05, .07, .08], 'the world\'s measured tone wins');
+  assert.deepEqual(waterTone({water: {meanRGB: [1, 2, 3], shallowRGB: [1, 2, 3]}}, 'shallow'), [0, 0, 0], 'the shallow table where no mean is measured');
+  assert.equal(waterTone({water: {meanRGB: [1, 2, 3]}}, 'mid'), null, 'no third color');
+  assert.ok(colorRows(config, new URLSearchParams()).some(([k, l]) => k === 'shallowTone' && l === 'Shallow water'));
 });
 
 test("a stroke's water choices count as the world switches they turn on", () => {
   const nodes = [{kind: 'ground'}, {kind: 'landform', params: {waterDeep: 2}}];
   assert.deepEqual(strokeWaterPicks(nodes), {deepEdge: 0, fadedEdge: 1});
   const r = renderer(); r.variant.set('deepEdge', '1');
-  const v = worldPanelValues({config: {layers: ['ring'], water: {}}, renderer: r, nodes, colors: {shallow: [1, 0, 0]}, weathering: true, materialWeathering: 0});
+  const v = worldPanelValues({config: {layers: ['ring'], water: {}}, renderer: r, nodes, colors: {shallowTone: [.1, 0, 0]}, weathering: true, materialWeathering: 0});
   assert.equal(v.deepEdge, 1); assert.equal(v.rampWater, 1);
   assert.equal(v.waterColored, 1); assert.equal(v.waterTones, 2); assert.equal(v.ringLayer, 1); assert.equal(v.beachLayer, 0);
 });

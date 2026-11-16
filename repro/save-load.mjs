@@ -38,6 +38,8 @@ try{
   assert.equal(saved.worldSettings.name,'Shared planet');assert.equal(saved.worldSettings.colors.sky,null);assert.equal(saved.worldSettings.colors.sun,'#ffd9a8');assert.equal(saved.worldSettings.knobs.beachFrom,'zhon');
   // The map's materials travel in the save; the world it embeds carries its own two (the ground was given another seed above).
   const fixture=await source.ev('window.__fixture');assert.equal(saved.materials.find(m=>m.worldGround).seed,3);assert.equal(saved.materials.length,fixture.count);assert.deepEqual(saved.worldSettings.materials,saved.materials.filter(m=>Object.keys(m).some(k=>/^world[A-Z]/.test(k)&&m[k])));
+  // The fixture's stored world still holds lowTint, a removed row (round 7): it stays out of the save, as the open would drop it.
+  assert.equal(saved.worldSettings.knobs.lowTint,undefined);
   const uniforms=await source.ev(`Object.fromEntries(Object.keys(sculptDebug.sketch().worldSettings.knobs).map(k=>[k,sculptCanvas.renderer.variant.get(k)]))`);
   const file=join(out,'map.json');writeFileSync(file,JSON.stringify(saved));const before=await image(source);
   const recipient=await open(1);

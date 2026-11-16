@@ -134,7 +134,7 @@ export const WORLD_HOMES={
  'Ground/Bumps & relief':'reliefScale reliefAmount reliefLumps reliefBranch reliefWarp reliefPatchy reliefJitter gentleRelief plainRelief lumpRelief reliefOctaves worms',
  'Ground/Terrain shape':'undulation undulationScale undulationCover undulationArt faceSteep',
  'Ground/Slope cover':'hillLight slopeTexture slopeMarks wrinkles',
- 'Ground/Low ground':'lowTint lowReach lowGrain',
+ 'Ground/Low ground':'lowReach lowGrain',
  'Vegetation/':'lushness soilRim plantRelief',
  'Rock types/Colors & recipe':'absorbDepth shadowTint',
  'Rock types/Exposure & relief':'rockFace faceRock rockFaceFrom faceExtrude faceMass rockCrown',

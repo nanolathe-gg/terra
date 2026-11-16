@@ -617,7 +617,9 @@ export function withWorldMaterials(value, config, {carried = false} = {}) {
     const m = LIBRARY[key];
     if (m && !list.some(o => o.source === key) && list.length < MATERIAL_SLOTS - 1) list = addMaterial(list, m, m.name).materials;
   }
-  return list;
+  // In copyMaterials' key order, as the list it started from: a role added above goes last in its material, and a caller that compares
+  // lists as text (sculpt.js setSurfaceList) would see a change where there is none.
+  return copyMaterials(list);
 }
 // The world's ground and its water are world settings, like its sliders: every map drawn in the world shows the same two, and a map's
 // other materials are its own. A map's list (a save's, or none for a new map) takes the world's two here, each in the slot the map

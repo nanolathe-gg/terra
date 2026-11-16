@@ -826,7 +826,8 @@
    1.0,
    1.0,
    1.0
-  ]
+  ],
+  "shallowTone": [0.110311, 0.172601, 0.164611]
  },
  "features": {
   "note": "Round 9, the shared generators in Desert's colors (ramp measured from DryRock01-15 by luma octile: smooth pitted blue-grey boulders, often several in one feature). Shares from retail uses (features/desert/catalog.json), metal 25-100. Retail's deposits sit in a halo darker than the sand. Round 12: dryruin01-20 (40 uses, 5%) are the two ruin types (form blocks).",
