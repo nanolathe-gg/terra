@@ -18,7 +18,7 @@ import {digestGuardRequested, installDigestGuard} from './sculpt-digest-guard.js
 // The textures a chunk's feed fills, which the input checksum hashes texel by texel (inputDigest).
 export const INPUT_TEXTURES = ['heightTexture', 'routeTexture', 'gridTexture', 'maskTexture'];
 // A uniform field's bytes in uniformData (sculpt-renderer.js uniformLayout).
-const uniformSpan = f => f.count ? (f.stride || 16) * f.count : (f.width || 1) * 4;
+const uniformSpan = f => f.stride ? f.stride * f.count : (f.width || 1) * 4;
 
 // The mask planes when the config names none: as many as MASK_KEYS (sculpt-scene.js, which says what each holds). The masks texture array has a layer per 4 planes.
 const MASK_PLANE_COUNT = 25;
