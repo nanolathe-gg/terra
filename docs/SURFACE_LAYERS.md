@@ -315,11 +315,31 @@ Built (each a commit; the measurements are in their messages):
 Limits: plants know no shares (rock, debris, sand) or convexity, and a built-in layer neither grows nor covers them (the bake does not
 see the draw's own surfaces); their density is one value a 4-px cell, not the layer's pixel pattern.
 
+## Round 7 (branch `surface-layers-7`, 2026-11-16): the last simple colors
+
+The owner: "Shallow water, Low ground". The Colors panel's two surface colors become materials, or tones of one; its other rows are
+the light's colors.
+
+Built (each a commit; the measurements are in their messages):
+- **Low ground's color is a surface layer**: its tint, the Colors panel's Low ground row and the `lowColor` address key go. The Surface
+  preset "Low ground by the water" draws a material from the sea up to 5 above it. Ground › Low ground keeps Reach and Grain kept
+  (Zhon's lowland keeps its grain). The 27 scenes are byte-identical (no world tinted its low ground).
+- **Shallow water is a tone of the water material**: the shallows' tint is the water material's mean plus a tone, and the third color
+  (Crystal, Ice, Zhon) too, so recoloring the water moves its shallows. Each world's data holds its tones (water: `shallowTone`,
+  `midTone`: the measured color less the water material's drawn mean, static numbers). The Shallow water row shows the tone on the
+  water's drawn color and stores a pick as a tone (world colors: `shallowTone`), as the Rock column's beds do; an old hex `shallow` is
+  dropped. The 13 water scenes change by 0 to 5 px; computed from the table mean in place of the drawn mean, Archipelago's shallows
+  had moved 59,953 px into pale speckle.
+
+Limits: a world's tones are measured against its water material as drawn on this machine (Metal); recoloring the water in the
+material editor keeps the tone, which is the intent. Lava's and Moon's tones are their measured -1 to +3 level offsets, kept so
+their look does not move.
+
 ## Sources (phase 1)
 
 Built-in sources are the surfaces the engine draws today without a material: rock (the rock type's color and
 grain), bare soil, debris fines, sand dust, sand, snow, moss, the beach (a role material), slope cover with
-its mineral margins, the highland ground, low-ground tint, beds, crown rock, ground patches, river-bed gravel.
+its mineral margins, the highland ground, beds, crown rock, ground patches, river-bed gravel.
 Phase 4 turns them into materials one by one.
 
 ## Limits
@@ -333,4 +353,6 @@ Phase 4 turns them into materials one by one.
 
 - Crystal's art (round 5): judge the flatter tops by eye.
 - Plants (round 6): judge the presets' tufts, meadow and shrubs by eye; whether built-ins should cover plants.
+- Low ground (round 7): the "Low ground by the water" preset draws Red's ground as a band along the shore; judge its material and reach.
+- Shallow water (round 7): a picked tone is kept in the world's colors (`shallowTone`); say if it should live elsewhere.
 - Converting highland, base band and rock face into rules means their World rows move into the Surface section.
