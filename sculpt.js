@@ -746,7 +746,10 @@ function setSurfaceList(list,keep) {
   // A layer's material joins the map; a copy no layer draws leaves it unless a stroke uses it (sculpt-materials.js surfaceMaterials).
   try{const next=surfaceMaterials(list,mapMaterials,{config,nodes,rocks:mapRocks});if(JSON.stringify(next)!==JSON.stringify(mapMaterials))editMaterials(next);}catch(err){status(err.message);}   // a layer's material may enable a row (Highland ground)
   worldChanged({stage:'C',world:false}); schedule();
+  // The World rows whose requirement reads the list (Vegetation relief needs a layer that grows plants).
+  const plants=list.filter(l=>l?.plants?.amount>0).length;if(plants!==surfacePlants){surfacePlants=plants;syncWorldControls();}
 }
+let surfacePlants=-1;   // the surface layers that grow plants, last seen (setSurfaceList)
 function applySurface(next,{commit=false}={}) {
   let list; try { list=copySurface(next); } catch (err) { status(err.message); return false; }
   setSurfaceList(list,true);
