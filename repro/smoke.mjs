@@ -68,7 +68,7 @@ const strokeAt = async (send, ev, tool) => {
 
 let bad = 0;
 async function smokeWorld(world, port) {
-  const url = `${server}/?biome=${world}&scratch=smoke-${world}-${Date.now()}&gpuMB=512&heapMB=1536`;
+  const url = `${server}/?biome=${world}&scratch=smoke-${world}-${Date.now()}&gpuMB=1024&heapMB=1536`;
   const result = await session(url, port, async ({send, ev, logs}) => {
     const r = {world, brushes: {}, export: null};
     try {
@@ -110,7 +110,7 @@ async function smokeWorld(world, port) {
   console.log(JSON.stringify(result));
 }
 async function smokePage8(world, port) {
-  const url = `${server}/?biome=${world}&mapX=8&mapY=8&scratch=smoke-8-${world}-${Date.now()}&gpuMB=512&heapMB=1536`;
+  const url = `${server}/?biome=${world}&mapX=8&mapY=8&scratch=smoke-8-${world}-${Date.now()}&gpuMB=1024&heapMB=1536`;
   const r = await session(url, port, async ({send, ev, logs}) => {
     const r = {page8: true, world};
     try {
