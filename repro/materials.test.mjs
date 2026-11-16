@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {NODES, LIBRARY, MAX_NODES, MATERIAL_SLOTS, copyMaterial, copyMaterials, blankMaterial, makeNode, orderNodes, nodeTypes, compileMaterial, programKey, programSource, stagePlan,
-  materialReliefBound, materialRenderKey, soloMaterial, controlSpec, controlRange, nodeParams, withWorldMaterials, worldMaterials, adoptWorldMaterials, worldOwnMaterials, keptWorldMaterials, mergeWorldMaterials, worldKept, addMaterial, duplicateMaterial, setMaterial,
+  materialReliefBound, materialRenderKey, soloMaterial, colorSources, materialColor, recolorMaterial, controlSpec, controlRange, nodeParams, withWorldMaterials, worldMaterials, adoptWorldMaterials, worldOwnMaterials, keptWorldMaterials, mergeWorldMaterials, worldKept, addMaterial, duplicateMaterial, setMaterial,
   assignMaterial, deleteMaterial, strokeMaterial, keepStrokeMaterials, materialsInUse, materialUsers, materialText, parseMaterialText, reseedMaterial, materialTint} from '../sculpt-materials.js';
 import {graphPositions, cardHeight, CARD} from '../sculpt-material-graph.js';
 import {savedWorld, copySavedWorld} from '../sculpt-save.js';
@@ -356,4 +356,20 @@ test('every starting point joins a graph as valid, wired nodes, and its menu ent
   const once = snippetNodes('cobbles', blankMaterial().nodes), twice = snippetNodes('cobbles', [...blankMaterial().nodes, ...once]);
   assert.ok(twice.every(n => !once.some(o => o.id === n.id)));
   assert.throws(() => snippetNodes('cobbles', Array.from({length: 38}, (_, i) => ({id: 'n' + i, params: {}}))), /at most 40/);
+});
+
+test('a material’s own Color moves every color step together, not the steps that scale it, and its palette with it', () => {
+  const m = copyMaterial({nodes: [
+    {id: 'n', type: 'noise'}, {id: 'g', type: 'gradient', in: {in: 'n'}, stops: [[0, .2, .3, .1], [1, .4, .5, .3]]},
+    {id: 'shade', type: 'gradient', in: {in: 'n'}, stops: [[0, .8, .8, .8], [1, 1.2, 1.2, 1.2]]},
+    {id: 'lit', type: 'combine', kind: 'multiply', in: {a: 'g', b: 'shade'}},
+    {id: 'material', type: 'output', in: {color: 'lit'}}], palette: [10, 20, 30]});
+  assert.deepEqual(colorSources(m).map(n => n.id), ['g'], 'a multiplier is not a color source');
+  const red = recolorMaterial(m, [.7, .2, .1]);
+  assert.deepEqual(materialColor(red).map(v => +v.toFixed(6)), [.7, .2, .1]);
+  const g = red.nodes.find(n => n.id === 'g').stops;
+  assert.ok(Math.abs((g[1][1] - g[0][1]) - .2) < 1e-9, 'the steps keep their differences');
+  assert.deepEqual(red.nodes.find(n => n.id === 'shade').stops, m.nodes.find(n => n.id === 'shade').stops);
+  assert.notDeepEqual(red.palette, m.palette, 'the palette moves with it');
+  for (const key of Object.keys(LIBRARY)) assert.ok(colorSources(LIBRARY[key]).length, `${key} has a color to set`);
 });

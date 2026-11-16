@@ -81,7 +81,8 @@ export function mountSurfacePanel(host) {
   let editing = null;   // the list while a slider moves; committed on change
   const current = () => editing ?? host.surface();
   const put = (next, commit) => { editing = commit ? null : next; host.apply(next, {commit}); if (commit) { build(); reinspect(); } };
-  const refresh = () => { if (!editing) { build(); sendView(true); } };   // after a material edit, an undo or a load; not while a slider moves
+  let picking = false;   // a Color picker is open: a rebuild would close it
+  const refresh = () => { if (!editing && !picking) { build(); sendView(true); } };   // after a material edit, an undo or a load; not while a slider moves
   const edit = (i, change, commit) => { const next = structuredClone(current()); change(next[i], next); put(next, commit); };
   const slider = (label, value, min, max, step, onInput, title = '') => {
     const id = uid(label), out = el('output', {htmlFor: id, value: String(value)});
@@ -181,13 +182,22 @@ export function mountSurfacePanel(host) {
       const edge = layer.edge ?? {}, body = el('div', {className: 'surface-body'});
       // A built-in that already draws a role material or its rock type's rock takes it from there (sculpt-material-model.js SURFACE_DRAWABLE).
       const own = builtin && !SURFACE_DRAWABLE.includes(layer.builtin);
-      const materialRow = own ? el('p', {className: 'small surface-wide', textContent: `Drawn with ${BUILTIN_SOURCES[layer.builtin]}: set it in ${ROCK_TYPED.includes(layer.builtin) ? 'Rock types' : 'the Materials panel'}.`}) : el('div', {className: 'surface-wide surface-line'}, materialSelect(layer, i));
+      const materialRow = own ? el('p', {className: 'small surface-wide', textContent: `Drawn with ${role?.name ?? BUILTIN_SOURCES[layer.builtin]}: choose it in ${ROCK_TYPED.includes(layer.builtin) ? 'Rock types' : 'the Materials panel'}.`}) : el('div', {className: 'surface-wide surface-line'}, materialSelect(layer, i));
       if (material && !own) { const b = el('button', {type: 'button', textContent: 'Edit…', title: 'Open its material in the material editor (the world’s: every map in this world shows your edit)'}); b.onclick = () => host.edit(layer, b); materialRow.append(b); }
       // Its place in the stack (within its stage) and, for a material layer, removing it: in the open row, so the head keeps room for the name.
       const order = el('div', {className: 'surface-wide surface-line surface-order'}, el('span', {className: 'small', textContent: siblings.length > 1 ? 'Order in its group' : 'Alone in its group'}),
         move(1, '↑ Raise', 'Raise: over the layer above it'), move(-1, '↓ Lower', 'Lower: under the layer below it'));
       if (!builtin) order.append(el('button', {type: 'button', textContent: 'Remove', title: 'Remove this layer (its material leaves the map unless a stroke uses it)', onclick: () => { const next = structuredClone(layers); next.splice(i, 1); put(next, true); }}));
       body.append(materialRow, order);
+      // The material's own Color (sculpt-materials.js recolorMaterial): all its color steps move together; the steps stay editable in it.
+      const colored = material ?? (own ? role : null);
+      if (colored?.own) {
+        const pick = el('input', {type: 'color', value: colored.own, id: uid('color'), title: 'Moves all of the material’s color steps together (the world’s copy, on every map); each step stays editable in the material editor'});
+        const rgb = () => [1, 3, 5].map(k => parseInt(pick.value.slice(k, k + 2), 16) / 255);
+        pick.oninput = () => { picking = true; host.recolor(layer, rgb(), false); };
+        pick.onchange = () => { picking = false; host.recolor(layer, rgb(), true); build(); };
+        body.append(el('label', {className: 'surface-number surface-wide'}, el('span', {textContent: 'Color'}), pick));
+      }
       if (builtin && BUILTIN_SETTINGS[layer.builtin]) {
         const b = el('button', {type: 'button', className: 'surface-wide link', textContent: 'Its strength and height: Built-in settings below'}); b.onclick = () => host.settings(BUILTIN_SETTINGS[layer.builtin]);
         body.append(b);

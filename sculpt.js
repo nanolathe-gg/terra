@@ -5,7 +5,7 @@ import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
-import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
+import {materialColor,recolorMaterial,setMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
 import {KNOBS,LOW_GROUND_RGB,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
@@ -756,6 +756,8 @@ function applySurface(next,{commit=false}={}) {
 function surfaceHost() {
   const hex=m=>'#'+materialTint(m).map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');
   const layerMaterial=layer=>mapMaterials.find(m=>m.worldLayer===layerKey(layer));
+  const own=m=>'#'+materialColor(m).map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');
+  const roleCopy=builtin=>{const role={highland:'worldHigh',slopeCover:'worldSlope',beach:'worldBeach',fines:'worldDebris',rock:'worldRock',crown:'worldRock',paintedRock:'worldRock',chips:'worldRock'}[builtin];return role?mapMaterials.find(m=>m[role])??null:null;};
   return {
     surface:()=>config.surface,
     apply:applySurface,
@@ -768,12 +770,13 @@ function surfaceHost() {
       document.addEventListener('pointerdown',handler,true);overlay.style.cursor='crosshair';return cancel;},
     inspect:at=>mapCanvas?mapCanvas.inspect(at):Promise.resolve(null),
     // The material a built-in that draws a world role takes (Materials panel; the rock built-ins the world's rock): its name, or null.
-    roleMaterial:builtin=>{const role={highland:'worldHigh',slopeCover:'worldSlope',beach:'worldBeach',fines:'worldDebris',rock:'worldRock',crown:'worldRock',paintedRock:'worldRock',chips:'worldRock'}[builtin];
-      const m=role&&mapMaterials.find(m=>m[role]);return m?{name:m.name,color:hex(m)}:null;},
+    roleMaterial:builtin=>{const m=roleCopy(builtin);return m?{name:m.name,color:hex(m),own:own(m)}:null;},
+    // A layer's material's own Color (sculpt-materials.js recolorMaterial): its copy, or for a built-in that draws a role, the role's.
+    recolor:(layer,rgb,commit)=>{const m=layer.material!=null?layerMaterial(layer):roleCopy(layer.builtin);if(!m)return;editMaterials(setMaterial(mapMaterials,m.slot,recolorMaterial(m,rgb)));if(commit)checkpoint(true);},
     slotMaterial:slot=>{const m=mapMaterials.find(m=>m.slot===slot);return m?{name:m.name,color:hex(m)}:null;},
     // Layers hidden while the artist designs (their keys): a view of this page only, never saved, undone or exported.
     hide:keys=>{if(!renderer)return;renderer.setSurfaceHidden(keys);worldChanged({stage:'C',world:false});schedule();},
-    material:layer=>{const m=layerMaterial(layer);return m?{name:m.name,color:hex(m),height:Boolean(m.nodes?.find(n=>n.type==='output')?.in?.height)}:null;},
+    material:layer=>{const m=layerMaterial(layer);return m?{name:m.name,color:hex(m),own:own(m),height:Boolean(m.nodes?.find(n=>n.type==='output')?.in?.height)}:null;},
     edit:(layer,button)=>{const m=layerMaterial(layer);if(m)materialEditor?.open(m.slot,button);},
     library:()=>Object.entries(LIBRARY).filter(([key])=>!key.endsWith('-water')).map(([key,m])=>({key,name:m.name,color:hex(m)})),
     // A built-in's World setting (the Surface section's Built-in settings): show its block, reveal the row if the panel folded it away as

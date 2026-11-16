@@ -493,6 +493,40 @@ export function materialTint(material) {
   if (!node?.stops) return [.5, .5, .5];
   return [1, 2, 3].map(c => Math.min(1, node.stops.reduce((sum, stop) => sum + stop[c], 0) / node.stops.length));
 }
+// A material's own color (the owner's decision of 2026-11-16: one color a map maker sets, or every step an author sets): the gradients and
+// color constants its color comes from (colorSources: what the Material node's Color, Worn and Deposit inputs read through inputs that
+// carry a color, not those that scale or offset one: a Multiply's, Add's or Subtract's layer), and their mean (materialColor).
+const COLOR_INPUTS = {heightblend: ['a', 'b'], stamp: ['base', 'shape'], adjust: ['in'], blur: ['in'], slopeblur: ['in']};
+export function colorSources(material) {
+  const byId = new Map(material.nodes.map(n => [n.id, n])), out = material.nodes.find(n => n.type === 'output'), seen = new Set(), sources = [];
+  const visit = id => {
+    const n = byId.get(id); if (!n || seen.has(id)) return; seen.add(id);
+    if (n.type === 'gradient' || (n.type === 'constant' && n.kind === 'color')) { sources.push(n); return; }
+    const inputs = n.type === 'combine' ? ['a', ...(['mix', 'min', 'max', 'screen'].includes(n.kind ?? 'mix') ? ['b'] : [])] : COLOR_INPUTS[n.type] ?? [];
+    for (const k of inputs) if (n.in?.[k]) visit(n.in[k]);
+  };
+  for (const k of ['color', 'worn', 'deposit']) if (out?.in?.[k]) visit(out.in[k]);
+  return sources;
+}
+export function materialColor(material) {
+  const sources = colorSources(material); if (!sources.length) return [.5, .5, .5];
+  return [1, 2, 3].map(c => Math.min(1, sources.reduce((sum, n) => sum + n.stops.reduce((t, s) => t + s[c], 0) / n.stops.length, 0) / sources.length));
+}
+// The material moved to a color: every color step moves by the same amount (each keeps its difference from the others, its grain), so
+// the material's color becomes `rgb` ([0, 1] each); a palette it is reduced to moves with it, each color to the game color nearest its
+// moved one. The steps stay editable one by one in their nodes.
+export function recolorMaterial(material, rgb) {
+  const sources = new Set(colorSources(material).map(n => n.id)); if (!sources.size) return material;
+  const now = materialColor(material), d = rgb.map((v, i) => clamp(v, 0, 1) - now[i]), copy = structuredClone(material);
+  for (const n of copy.nodes) if (sources.has(n.id)) n.stops = n.stops.map(s => [s[0], ...s.slice(1).map((v, i) => clamp(v + d[i], 0, 2))]);
+  if (copy.palette.length >= 2) copy.palette = [...new Set(copy.palette.map(index => nearestGameColor(gamePalette.indexed[index].map((v, i) => v + d[i] * 255))))];
+  return copy;
+}
+function nearestGameColor(rgb) {
+  let best = 0, distance = Infinity;
+  gamePalette.indexed.forEach((c, i) => { const e = (c[0] - rgb[0]) ** 2 + (c[1] - rgb[1]) ** 2 + (c[2] - rgb[2]) ** 2; if (e < distance) { distance = e; best = i; } });
+  return best;
+}
 // What decides a material's pixels: not its name, its layout or which controls it publishes.
 export const materialRenderKey = m => JSON.stringify([m.seed, m.nodes.map(({name, x, y, ...n}) => n), m.palette, m.dither]);
 // The selected node alone, as the material's color: the same graph and renderer, never saved.

@@ -2,7 +2,7 @@
 // preview and three panes: Controls (what the material publishes, for adjusting it), Node (the selected node) and Palette (the game
 // colors it is reduced to). Every element is in index.html; this fills values and applies edits through the map's own undo and save.
 import {NODES, NODE_TYPES, accepts, snippetNodes, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
-  nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb,
+  nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb, materialColor, recolorMaterial,
   addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText, MAP_ROLES, roleOf, roleName, materialStatesApply} from './sculpt-materials.js';
 import {mountMaterialGraph, graphPositions, CARD, cardHeight} from './sculpt-material-graph.js';
 import {MaterialPreview, TILE, TERRAIN} from './sculpt-material-preview.js';
@@ -136,6 +136,10 @@ export function mountMaterialEditor(host) {
   function controlRows(prefix, of) {
     const id = (part, i) => `${prefix}-${part}-${i}`, optional = name => document.getElementById(name);
     const editOf = fn => { const m = structuredClone(of()); if (!m) return; fn(m); update(setMaterial(materials(), m.slot, m)); };
+    // The material's own Color (recolorMaterial): every color step moves together while the picker moves; one undo step when it closes.
+    const own = $(`${prefix}-matcolor`);
+    own.oninput = attempt(() => { const m = of(); if (m) editOf(o => Object.assign(o, recolorMaterial(o, rgbOf(own.value).map(v => v / 255)))); });
+    own.onchange = commit;
     for (let i = 0; i < MAX_CONTROLS; i++) {
       const scrub = $(`${prefix}-${i}`), target = () => { const m = of(), c = m?.controls[i]; return c && controlSpec(m, c) ? c : null; };
       scrub.oninput = attempt(() => { const c = target(); if (c) editOf(m => { m.nodes.find(n => n.id === c.node).params[c.param] = Number(scrub.value); }); });
@@ -153,6 +157,7 @@ export function mountMaterialEditor(host) {
       }
     }
     return (m, naming = false) => {
+      $(`${prefix}-matcolor-row`).hidden = !m; if (m && document.activeElement !== own) own.value = hex(materialColor(m).map(v => v * 255));
       for (let i = 0; i < MAX_CONTROLS; i++) {
         const c = m?.controls[i], target = c && controlSpec(m, c); $(id('row', i)).hidden = !target; if (!target) continue;
         const name = optional(id('name', i));
