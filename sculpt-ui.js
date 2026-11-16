@@ -157,7 +157,6 @@ export const WORLD_HOMES={
  'Rain & erosion/':'erosionRain wetSwath wetGround',
  'Light & shine/Sun & shade':'faceFill flatShadow flatOcclusion lightCap shadeDepth sunTilt sunHeight ambient creaseShade',
  'Light & shine/Shine':'shineOutside shineSlopeGate shineStretch shineWhite shineGround shineGroundSharp shineGroundRough shineGroundScale shineSlope shineSlopeSharp shineSlopeRough shineSlopeScale shineSand shineSandSharp shineSandRough shineSandScale shineCrystal shineCrystalSharp shineCrystalRough shineCrystalScale shineGate shineHeadroom',
- 'Palette/':'paletteMix dither landDither',
 };
 const homeOf=new Map(Object.entries(WORLD_HOMES).flatMap(([home,keys])=>keys.split(' ').map(key=>[key,home])));
 export const worldHome=key=>homeOf.get(key)||'World/';   // a key without a home still shows, in the World section
@@ -179,11 +178,10 @@ export function mountWorldControlIndex(root,values=()=>({})){
  const shine=$('shine-materials');
  shine.addEventListener('click',e=>{const b=e.target.closest('[data-shine-material]');if(!b)return;shineMaterial=b.dataset.shineMaterial;for(const button of shine.children)button.setAttribute('aria-pressed',String(button===b));sync();});
  const revealed=new Set();
- const ALWAYS=new Set(WORLD_HOMES['Palette/'].split(' '));   // the three Palette rows always show, as they did beside the rendering switches
  const sync=()=>{const query=input.value.trim().toLowerCase(),current=values(),rows=[...root.querySelectorAll('[data-knob]')];let visible=0;
   for(const row of rows){const key=row.dataset.knob,reason=worldControlRequirement(key,current),control=row.querySelector('input[type=range],select');control.disabled=Boolean(reason);row.classList.toggle('control-inactive',Boolean(reason));let note=row.querySelector('.control-requirement');if(!note){note=document.createElement('p');note.className='small control-requirement';row.append(note);}note.textContent=reason;note.hidden=!reason;
    const text=(row.dataset.knob+' '+row.dataset.searchGroup).toLowerCase(),material=key.match(/^shine(Ground|Slope|Sand|Crystal)(?:Sharp|Rough|Scale)?$/)?.[1];
-   row.hidden=query?!text.includes(query):(!fine.checked&&!WORLD_PRIMARY_CONTROLS.has(key)&&!ALWAYS.has(key))||(material&&material!==shineMaterial);row.dataset.eligible=String(!row.hidden);if(!row.hidden)visible++;}
+   row.hidden=query?!text.includes(query):(!fine.checked&&!WORLD_PRIMARY_CONTROLS.has(key))||(material&&material!==shineMaterial);row.dataset.eligible=String(!row.hidden);if(!row.hidden)visible++;}
   for(const block of root.querySelectorAll('.world-subsection')){
    const groups=new Map();for(const row of block.querySelectorAll('[data-knob]')){if(row.dataset.eligible!=='true'||!row.classList.contains('control-inactive'))continue;const reason=row.querySelector('.control-requirement').textContent;if(!groups.has(reason))groups.set(reason,[]);groups.get(reason).push(row);}
    block.querySelectorAll('.unavailable-summary').forEach(el=>el.remove());

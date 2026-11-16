@@ -17,5 +17,5 @@ test('Rock types holds the settings of the selected rock type, and only those', 
   assert.deepEqual([...rock].sort(), [...ROCK_KEYS].sort());
 });
 test('each tab shows something before All is on', () => {
-  for (const [home, list] of homes) if (!['Palette/', 'Rock types/Colors & recipe'].includes(home)) assert(list.some(k => WORLD_PRIMARY_CONTROLS.has(k)), home + ' has a main setting');
+  for (const [home, list] of homes) if (!['Rock types/Colors & recipe'].includes(home)) assert(list.some(k => WORLD_PRIMARY_CONTROLS.has(k)), home + ' has a main setting');
 });

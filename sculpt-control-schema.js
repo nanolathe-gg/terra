@@ -1,7 +1,7 @@
 import {strokeKnots,sampleKnots,landformSteps,landformShore,landformMakesWater,landformDigs} from './sculpt-shape-presets.js';
 import {isRiver} from './sculpt-river.js';
 // Presentation names and applicability belong to features, never to worlds.
-export const WORLD_CHOICES={deepEdge:[[0,'Ramp'],[1,'Hard step']],paletteMix:[[0,'Nearest color'],[1,'Mix color pairs']]};
+export const WORLD_CHOICES={deepEdge:[[0,'Ramp'],[1,'Hard step']]};
 // Facets: each Facet shape's own rows (0 angular facets, 1 stepped columns, 2 prisms); Step height serves angular facets and columns, Level tops columns and prisms.
 const FACET_SHAPE_KEYS=[[],['crystalFacet','crystalSizeVar'],['crystalSides','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']];
 export const LANDFORM_FACET_KEYS=['crystalStep','crystalTiers',...FACET_SHAPE_KEYS.flat()];
@@ -150,8 +150,6 @@ export function worldControlRequirement(key,v){
  // The sediment transition is built from the ground and replaces the slope cover's color outright at 100 percent Material weathering (worldPanelValues passes slopeReplaced); the texture then scales only the slope's share of the shine.
  // (A slope gloss counts here even while the texture is 0: raising the texture gives the slope its share.)
  if(key==='slopeTexture'&&n('slopeReplaced')>0&&!shiny&&!rough&&n('shineSlope')<=0&&n('shineSlopeRough')<=0)return 'The sediment transition replaces the slope color at 100 percent Material weathering, so this scales only the slope\'s gloss. Lower Material weathering, or set a Gloss or Roughness above zero in one of the Shine groups, to use this setting.';
- // The palette's ordered dither runs only when colors are not mixed in pairs.
- if(['dither','landDither'].includes(key)&&n('paletteMix')>0)return 'Choose Nearest color in the Palette to use this setting.';
  // The water: the hard step is the only place the step's rows draw; the ramp's rows draw only where the step is off.
  if(['waterSoft','bandWater'].includes(key))return Number(v.waterTones)===3?'':n('rampWater')>0?'':RAMP_IDLE;
  if(['stepSoftPx','shelfWander','shoalRag'].includes(key))return needs('deepEdge',HARD_STEP);

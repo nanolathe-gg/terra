@@ -163,8 +163,6 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('beachWidth',{beachLayer:1});
  assert.match(requirement('slopeTexture',{slopeSand:1}),/sand/);
  shows('slopeTexture',{slopeSand:0});
- assert.match(requirement('dither',{paletteMix:1}),/Nearest color/);
- shows('dither',{paletteMix:0});
  assert.equal(available('facing','landform',{lean:0}),false,'equal sides have no side to lean toward');
  assert.equal(available('facing','landform',{lean:2}),true);
 });

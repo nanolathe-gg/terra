@@ -23,14 +23,6 @@ const uniformSpan = f => f.stride ? f.stride * f.count : (f.width || 1) * 4;
 // The mask planes when the config names none: as many as MASK_KEYS (sculpt-scene.js, which says what each holds). The masks texture array has a layer per 4 planes.
 const MASK_PLANE_COUNT = 25;
 
-// sRGB 0..255 to OKLab (Ottosson 2020), as engine-palette.wgsl does on the GPU: the palette's colours are converted once here.
-function oklab(rgb) {
-  const lin = rgb.map(v => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
-  const [l, m, s] = [[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566], [0.0883024619, 0.2817188376, 0.6299787005]]
-    .map(r => Math.cbrt(r[0] * lin[0] + r[1] * lin[1] + r[2] * lin[2]));
-  return [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s];
-}
-
 // The shaders keep their GLSL origins' structure: the common source is
 // pasted at /*COMMON*/, and #ifdef / #ifndef / #else / #endif keep or drop
 // lines by the defined names. Dropped lines stay blank, so a compiler
@@ -192,15 +184,14 @@ export class TerrainRenderer {
     // Every world's materials are numbers: the config names its table (config.materialTable).
     const tableUrl = this.config.materialTable;
     this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl', 'engine-ground.wgsl', 'engine-ground-dither.wgsl', 'engine-output.wgsl'];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', tableUrl, 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl', 'engine-ground.wgsl', 'engine-ground-dither.wgsl', 'engine-output.wgsl'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch(name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
     const modelTable = extra[0];
-    this.paletteSource = extra[1];
-    const palette = JSON.parse(extra[2]);
+    const palette = JSON.parse(extra[1]);
     this.paletteColours = palette.colours;
     this.paletteIndexed = palette.indexed;
     // Slots 0-9 and 246-254 of the game's palette are Windows' static system colours, which its map art does not draw with (255, white,
@@ -209,8 +200,8 @@ export class TerrainRenderer {
     this.paletteArt = palette.colours.map((_, i) => i).filter(i => art.has(String(palette.colours[i])));
     this.commonSource = common;
     this.outputSource = extra[extra.length - 1];
-    this.volumeSource = extra[3];
-    this.timeSources={erosion:this.preprocessShader(extra[4]),maps:this.preprocessShader(extra[5])};
+    this.volumeSource = extra[2];
+    this.timeSources={erosion:this.preprocessShader(extra[3]),maps:this.preprocessShader(extra[4])};
     this.layout = uniformLayout(preprocess(common, '', new Set()));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
@@ -254,10 +245,8 @@ export class TerrainRenderer {
       texture(1, both, 'unfilterable-float'), texture(2, both), texture(4, both, 'float', '2d-array'), texture(6, both),
       sampler(7, both), sampler(8, both), texture(9, both, 'float', '2d-array'),texture(10,both,'unfilterable-float'),texture(11,both,'unfilterable-float'),texture(12,both,'unfilterable-float'),texture(13,both,'unfilterable-float','2d-array'),texture(14,both,'float','2d-array'),{binding:15,visibility:both,buffer:{type:'read-only-storage'}},texture(16,both,'unfilterable-float','2d-array'),texture(17,both,'unfilterable-float','2d-array')]});
     const F = GPUShaderStage.FRAGMENT;
-    // The engine draw (H4) binds the palette and the generated materials
-    // (binding 19, read with textureLoad); no land image remains. Binding numbers are the shared draw's, with 2-13 left out.
-    this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: [
-      texture(18, F)]});
+    // Group 1 is empty since the palette lookup went to the output stage (engine-output.wgsl); it stays so groups 2 and 3 keep their numbers.
+    this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: []});
     // The bake's group 1: the fields texture, and the loose-stone mask lattice (looseMain fills it, the bake reads it).
     const fieldsLayout = device.createBindGroupLayout({label: 'fields out', entries: [
       {binding: 0, visibility: GPUShaderStage.COMPUTE, storageTexture: {access: 'write-only', format: 'rgba16float'}},
@@ -294,13 +283,13 @@ export class TerrainRenderer {
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
     this.materialData = JSON.parse(modelTable);
-    // The startup generation: the materials and the palette lookup (GPU) are started first and the noise (CPU) is made while they build.
+    // The startup generation: the materials (GPU) are started first and the noise (CPU) is made while they build.
     this.textures = {};
-    this.groundCache = new MaterialCache(this, preprocess(extra[6], common, new Set()), preprocess(extra[7], common, new Set()));
+    this.groundCache = new MaterialCache(this, preprocess(extra[5], common, new Set()), preprocess(extra[6], common, new Set()));
     const generation = performance.now();
-    const gpu = this.paletteTexture();
+    this.outputPaletteBuffer();
     this.textures.noise = this.noiseTexture();
-    this.textures.palette = (await Promise.all([gpu,genericReady]))[0];
+    await genericReady;
     this.generationMs = performance.now() - generation;
     const variant = new URLSearchParams(location.search);
     // H4: the engine's own knob values go in first, over the world's, under the page's query.
@@ -353,41 +342,16 @@ export class TerrainRenderer {
     return {texture, view: texture.createView(), sampler: this.sampler({minFilter: 'linear', magFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat'})};
   }
 
-  // The palette lookup (engine-palette.wgsl): the colours map art draws with, or the ones the table's `palette.entries` pick, as a 1024 x 288 RGBA8 texture.
-  async paletteTexture() {
-    const device = this.device, start = performance.now();
+  // The output stage's palette (engine-output.wgsl): the colours map art draws with, or the ones the table's `palette.entries` pick, rgb in
+  // 0..255.
+  outputPaletteBuffer() {
     const colours = (this.materialData.palette?.entries ?? this.paletteArt).map(i => this.paletteColours[i]);
-    const rows = new Float32Array(colours.length * 8);
-    colours.forEach((c, i) => { rows.set([c[0], c[1], c[2], 0], i * 8); rows.set(oklab(c), i * 8 + 4); });
-    const buffer = device.createBuffer({size: rows.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
-    device.queue.writeBuffer(buffer, 0, rows);
-    const count = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
-    device.queue.writeBuffer(count, 0, new Uint32Array([colours.length, 0, 0, 0]));
-    // The output stage's palette (engine-output.wgsl): the same colours, rgb in 0..255.
     if (this.outputPalette) this.outputPalette.destroy();
-    this.outputPalette = device.createBuffer({label: 'output palette', size: Math.max(16, colours.length * 16), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
-    device.queue.writeBuffer(this.outputPalette, 0, new Float32Array(colours.flatMap(c => [c[0], c[1], c[2], 0])));
+    this.outputPalette = this.device.createBuffer({label: 'output palette', size: Math.max(16, colours.length * 16), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
+    this.device.queue.writeBuffer(this.outputPalette, 0, new Float32Array(colours.flatMap(c => [c[0], c[1], c[2], 0])));
     this.outputCount = colours.length;
-    const texture = device.createTexture({label: 'palette lookup', size: [1024, 288], format: 'rgba8unorm', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
-    if (!this.palettePipeline) {
-      const module = device.createShaderModule({label: 'engine-palette.wgsl', code: this.paletteSource});
-      const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
-      if (errors.length) throw new Error('nanolathe: engine-palette.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
-      this.palettePipeline = await device.createComputePipelineAsync({label: 'palette', layout: 'auto', compute: {module, entryPoint: 'paletteMain'}});
-    }
-    const encoder = device.createCommandEncoder({label: 'palette'});
-    const pass = encoder.beginComputePass();
-    pass.setPipeline(this.palettePipeline);
-    pass.setBindGroup(0, device.createBindGroup({layout: this.palettePipeline.getBindGroupLayout(0), entries: [
-      {binding: 0, resource: {buffer}}, {binding: 1, resource: {buffer: count}}, {binding: 2, resource: texture.createView()}]}));
-    pass.dispatchWorkgroups(128, 4);
-    pass.end();
-    device.queue.submit([encoder.finish()]);
-    await device.queue.onSubmittedWorkDone();
-    buffer.destroy(); count.destroy();
-    this.worldResource(texture);this.paletteMs = performance.now() - start;
-    return {texture, view: texture.createView()};
   }
+
 
   generateMipmaps(texture, layers, levels) {
     const encoder = this.device.createCommandEncoder({label: 'mip levels'});
@@ -537,10 +501,9 @@ export class TerrainRenderer {
     if(source===this)this.bindGroups[kind]=group;return group;
   }
 
-  // Group 1: the plain's tiles, the waters, the palette and the generated materials.
+  // Group 1: empty (see materialLayout).
   materialBindGroup() {
-    return this.bindGroups.materials ??= this.device.createBindGroup({label: 'materials', layout: this.materialLayout, entries: [
-      {binding: 18, resource: this.textures.palette.view}]});
+    return this.bindGroups.materials ??= this.device.createBindGroup({label: 'materials', layout: this.materialLayout, entries: []});
   }
 
   // The six placement rows of a world whose table has no `placement` block (engine-frag.wgsl landPlace reads them), from the world's
@@ -570,7 +533,7 @@ export class TerrainRenderer {
 
 
   // What the startup generation took, in ms: the noise (CPU), the palette lookup and the materials (GPU), and the wall time of all three.
-  get startupParts() { return {noise: this.noiseMs, palette: this.paletteMs, total: this.generationMs}; }
+  get startupParts() { return {noise: this.noiseMs, total: this.generationMs}; }
 
   // GPU time of one pass from timestamp queries, read back without
   // stalling; at most three in flight, as the WebGL timer queries were.
@@ -920,7 +883,6 @@ export class TerrainRenderer {
     this.f('uBedFlat', variant.has('bedFlat') ? Number(variant.get('bedFlat')) : 0);
     this.f('uSandCrown', variant.has('sandCrown') ? Number(variant.get('sandCrown')) : 0);
     this.f('uFlatBank', variant.has('flatBank') ? Number(variant.get('flatBank')) : 0.0);
-    this.f('uDither', variant.has('dither') ? Number(variant.get('dither')) : 2.0);
     this.f('uFlatShadow', variant.has('flatShadow') ? Number(variant.get('flatShadow')) : 0.0);
     this.f('uFlatOcclusion', variant.has('flatOcclusion') ? Number(variant.get('flatOcclusion')) : 0.4);
     this.f('uSandEdge', variant.has('sandEdge') ? Number(variant.get('sandEdge')) : 1.0);
@@ -939,7 +901,6 @@ export class TerrainRenderer {
     this.f('uCrispShore', variant.has('crispShore') ? Number(variant.get('crispShore')) : 1.0);
     this.f('uBankRock', variant.has('bankRock') ? Number(variant.get('bankRock')) : 0.25);
     this.f('uWaterSoft', variant.has('waterSoft') ? Number(variant.get('waterSoft')) : 32);
-    this.f('uLandDither', variant.has('landDither') ? Number(variant.get('landDither')) : 0.25);
     this.f('uCrackDark', variant.has('crackDark') ? Number(variant.get('crackDark')) : 0.75);
     this.f('uSlopeTexture', variant.has('slopeTexture') ? Number(variant.get('slopeTexture')) : 0.3);
     this.f('uShallowDepth', variant.has('shallowDepth') ? Number(variant.get('shallowDepth')) : this.config.material?.shallowDepth ?? 2);
@@ -1049,7 +1010,6 @@ export class TerrainRenderer {
     this.f('uRingSpread', ringSpread);
     this.f('uRingVariation', ringVariation);
     this.i('uQuantize', (this.variant.get('palette') || 'nearest') !== 'off');
-    this.i('uPaletteMix', Number(this.variant.get('paletteMix')) > 0.5);
     this.f('uShoreEdge', Number(this.variant.get('shoreEdge')) || 0);
     this.f('uCrystalGrain', Number(this.variant.get('crystalGrain')) || 0);
     this.f('uCrystalFace', this.variant.has('crystalFace') ? Number(this.variant.get('crystalFace')) : 1);
@@ -1388,11 +1348,10 @@ export class TerrainRenderer {
     const absorb = row(6), top = Math.max(rock[0], rock[1], rock[2], 0.02);
     return {rock: hex(rock), beds: [1, 2, 3, 4, 5].map(k => hex(toneColor(rock, row(k)))), absorb: hex(absorb[3] > 0.5 ? absorb : rock.slice(0, 3).map(v => v / top))};
   }
-  // The palette entry the draw's lookup gives a color, '#rrggbb' (engine-palette.wgsl rows 0-31: the nearest entry by rgb distance to the
-  // color's point of the 32-level cube; the dither then mixes entries around it).
+  // The palette entry nearest a color, '#rrggbb', by rgb distance (the output stage's pattern then mixes entries around it).
   paletteNearest(hex) {
     const colours = (this.materialData.palette?.entries ?? this.paletteArt).map(i => this.paletteColours[i]);
-    const cube = [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * 31 / 255) * 255 / 31);
+    const cube = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
     let best = colours[0], nearest = Infinity;
     for (const c of colours) { const d = (c[0] - cube[0]) ** 2 + (c[1] - cube[1]) ** 2 + (c[2] - cube[2]) ** 2; if (d < nearest) { nearest = d; best = c; } }
     return '#' + best.slice(0, 3).map(v => Math.round(v).toString(16).padStart(2, '0')).join('');

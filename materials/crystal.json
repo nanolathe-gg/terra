@@ -1094,7 +1094,6 @@
     "materials": {"ground": "crystal-ground", "water": "crystal-water", "rock": "crystal-rock", "slope": "crystal-slope", "debris": "crystal-debris", "soil": "crystal-soil", "snow": "crystal-snow", "moss": "crystal-moss", "sand": "crystal-sand", "band": "crystal-band", "crystal": "crystal-crystals"},
     "knobDefaults": {
         "gougeWeb": 1,
-        "paletteMix": 1,
         "plainRelief": 0.6,
         "crackSeverity": 0.7,
         "crackNetwork": 1,

@@ -216,7 +216,6 @@ struct Uniforms {
     highland: f32,      // Highland ground: how far level raised ground takes the world's highland material (0: none)
     highFrom: f32,      // the rise above the plain where the highland material starts
     highReach: f32,     // the rise over which it comes in fully
-    paletteMix: i32,
     transitionDetail: f32,
     wetBand: f32,
     shallowDepth: f32,
@@ -227,13 +226,11 @@ struct Uniforms {
     slopeMarks: f32,    // Moon: density of crisp dark marks on slopes (0: none)
     sandCrown: f32,     // painted sand stays sand to the crown, no rock (Zhon sand bars)
     flatBank: f32,        // low dry banks lit as level ground, no wet band (0: off)
-    dither: f32,
     sandLight: f32,
     sandEdge: f32,
     flatShadow: f32,
     flatOcclusion: f32,
     slopeTexture: f32,
-    landDither: f32,
     waterSoft: f32,
     crispShore: f32,
     bankRock: f32,

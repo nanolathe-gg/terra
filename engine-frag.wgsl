@@ -3,11 +3,6 @@
 /*COMMON*/
 /*VOLUME*/
 
-// Material textures, as the GLSL texture units held them. A renderer may
-// bind one texture to several of these (an absent slope material reads the
-// ground, as the GLSL sampler pointed at the ground's unit).
-@group(1) @binding(18) var paletteTex: texture_2d<f32>;
-
 // Above 1x a texel is one drawn pixel, not one world pixel: the pattern comes out smaller and keeps its grain and dither.
 fn grainPixel(pixel: vec2f) -> vec2f {
     return pixel / min(u.chunkScale, 1.0);
@@ -102,28 +97,6 @@ fn occlusion(p: vec2f, h: f32) -> f32 {
         result += clamp((surfaceHeight(q) - h) / d - 0.12, 0.0, 1.0);
     }
     return 1.0 - result * 0.045;
-}
-
-// Pattern mixes (card P9): retail art shows colours the palette lacks as pixel
-// mixes of palette entries (Painted Desert's tans are 50/50 pairs). The lookup's
-// rows 32-287 hold eight candidates per colour, sorted dark to light, whose
-// mean is the colour (Knoll, engine-palette.wgsl); a per-pixel ordered
-// threshold picks one.
-fn palettePattern(rgb: vec3f, threshold: f32) -> vec3f {
-    let c = vec3i(clamp(floor(rgb * 31.0 + 0.5), vec3f(0.0), vec3f(31.0)));
-    let at = vec2i(c.r + 32 * c.b, c.g);
-    // Subpixel palette patterns converge to their mixture when zoomed out.
-    if(u.chunkScale>1.0){
-        var sum = vec3f(0.0);
-        for (var k = 0; k < 8; k++) { sum += textureLoad(paletteTex, at + vec2i(0, 32 + 32 * k), 0).rgb; }
-        return sum * 0.125;
-    }
-    let k = min(i32(threshold * 8.0), 7);
-    return textureLoad(paletteTex, at + vec2i(0, 32 + 32 * k), 0).rgb;
-}
-fn paletteColor(rgb: vec3f) -> vec3f {
-    let c = vec3i(clamp(floor(rgb * 31.0 + 0.5), vec3f(0.0), vec3f(31.0)));
-    return textureLoad(paletteTex, vec2i(c.r + 32 * c.b, c.g), 0).rgb;
 }
 
 fn uphillSoil(p: vec2f, uphill: vec2f, h: f32, reach: f32) -> f32 {
@@ -2298,7 +2271,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             color = min(color * (1.0 + 0.2 * away * gate * lines.y), max(color, material * 0.9));
         }
     }
-    var shoalWeight = 0.0;   // G1: how much of this pixel is lit shallow bed, for the palette dither below
     var surfWater = 0.0;     // Card P27: how much of this pixel is drawn as water, for the foam below
     if (h < u.sea + 1.0) {
         let depth = max(0.0, u.sea - h);
@@ -2382,7 +2354,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Shared bed elevation makes a painted shallow passage persist even
         // far from shore; there is no fixed-width coastal blue collar.
         var submerged = smoothstep(-0.2, 2.8, depth);
-        shoalWeight = (1.0 - deep) * submerged * select(0.0, 1.0, edgeHard > 0.0);
         if (shoreHard > 0.0) {
             // Retail waterlines are hard edges with small stair-step notches,
             // not soft fades: threshold depth against pixel-block jitter.
