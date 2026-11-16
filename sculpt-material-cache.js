@@ -79,7 +79,7 @@ export class MaterialCache {
       const {taps, stages} = programSource(program), r = this.renderer, plan = stagePlan(program);
       const module = r.device.createShaderModule({label: 'material blur stages', code: this.source.replace('/*MATERIAL_TAPS*/', taps).replace('/*MATERIAL_MAIN*/', stages)});
       const make = entryPoint => r.device.createComputePipeline({label: 'material ' + entryPoint, layout: 'auto', compute: {module, entryPoint}});
-      this.pipelines.set(id, {stages: plan.stages.map((_, k) => make('stage' + k)), blur: make('blurPass'), slope: make('slopePass')});
+      this.pipelines.set(id, {stages: plan.stages.map((_, k) => make('stage' + k)), blur: make('blurPass'), slope: make('slopePass'), line: make('dirPass')});
     }
     return this.pipelines.get(id);
   }
@@ -88,15 +88,16 @@ export class MaterialCache {
   runStages(encoder, program, row, size, buffers) {
     const plan = stagePlan(program); if (!plan.stages.length) return;
     this.stageTextures(size);
-    const device = this.renderer.device, {stages, blur, slope} = this.stagePipelines(program), groups = Math.ceil(size / 8);
+    const device = this.renderer.device, {stages, blur, slope, line} = this.stagePipelines(program), groups = Math.ceil(size / 8);
     const job = values => { const b = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}); buffers.push(b); device.queue.writeBuffer(b, 0, new Uint32Array(values)); return b; };
     const layer = (texture, k) => texture.createView({dimension: '2d', baseArrayLayer: k, arrayLayerCount: 1});
     const graphs = pipeline => device.createBindGroup({layout: pipeline.getBindGroupLayout(0), entries: [{binding: 15, resource: {buffer: this.programBuffer}}]});
     const run = (pipeline, entries) => { const pass = encoder.beginComputePass({label: 'material blur stage'}); pass.setPipeline(pipeline); pass.setBindGroup(0, graphs(pipeline)); pass.setBindGroup(1, device.createBindGroup({layout: pipeline.getBindGroupLayout(1), entries})); pass.dispatchWorkgroups(groups, groups); pass.end(); };
-    plan.stages.forEach(({step, type}, k) => {
+    plan.stages.forEach(({step, type, kind}, k) => {
       run(stages[k], [{binding: 1, resource: {buffer: job([0, 0, row, 0])}}, {binding: 4, resource: layer(this.scratchTexture, 0)},
         ...(plan.stageReads[k] ? [{binding: 3, resource: this.stageTexture.createView({dimension: '2d-array'})}] : [])]);
       if (type === 'stamp') { encoder.copyTextureToTexture({texture: this.scratchTexture}, {texture: this.stageTexture, origin: {x: 0, y: 0, z: k}}, [size, size, 1]); return; }
+      if (type === 'blur' && kind === 'directional') { run(line, [{binding: 1, resource: {buffer: job([0, 0, row, step])}}, {binding: 5, resource: layer(this.scratchTexture, 0)}, {binding: 4, resource: layer(this.stageTexture, k)}]); return; }
       if (type === 'slopeblur') { run(slope, [{binding: 1, resource: {buffer: job([0, 0, row, step])}}, {binding: 5, resource: layer(this.scratchTexture, 0)}, {binding: 4, resource: layer(this.stageTexture, k)}]); return; }
       run(blur, [{binding: 1, resource: {buffer: job([0, 0, row, step])}}, {binding: 5, resource: layer(this.scratchTexture, 0)}, {binding: 4, resource: layer(this.scratchTexture, 1)}]);
       run(blur, [{binding: 1, resource: {buffer: job([1, 0, row, step])}}, {binding: 5, resource: layer(this.scratchTexture, 1)}, {binding: 4, resource: layer(this.stageTexture, k)}]);

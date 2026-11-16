@@ -131,3 +131,19 @@ test('hex rows of Cells, Cracks and Facets, and patterns through Warp Snap, join
     assert.deepEqual(s.errors, []);
   } finally { s.dispose(); }
 });
+
+test('a Directional blur at radius 0 leaves its input exactly, and its repeat joins', async () => {
+  await openHost();
+  const s = await openScene({biome: 'green', ground: false, strokes: []}, 'biome=green&mapX=5&mapY=5');
+  try {
+    const dots = {id: 's', type: 'scatter', params: {spacing: 14, radius: 2, coverage: .7, hardness: .9}};
+    const use = nodes => s.setMaterials(s.materials.map(m => m.worldGround ? {...m, nodes, palette: [], controls: [], frames: []} : m));
+    const win = (x = 640, y = 640) => renderWindow(s, {x, y, width: 128, height: 128, exportArt: true}), pool = groundPool(s.config.material);
+    use([dots, {id: 'o', type: 'output', in: {color: 's'}}]); const plain = await win();
+    const line = radius => use([dots, {id: 'b', type: 'blur', kind: 'directional', in: {in: 's'}, params: {radius, direction: 30}}, {id: 'o', type: 'output', in: {color: 'b'}}]);
+    line(0); assert.ok(same(plain, await win()));
+    line(12); const smear = await win(); assert.ok(!same(plain, smear));
+    assert.ok(same(smear, await win(640 + pool, 640)) && same(smear, await win(640, 640 + pool)));
+    assert.deepEqual(s.errors, []);
+  } finally { s.dispose(); }
+});

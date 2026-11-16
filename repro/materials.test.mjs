@@ -96,7 +96,7 @@ test('the compiled program follows evaluation order and its pipeline key ignores
 test('a Slope blur stages its input and its slope together, and passes its input through until a slope is wired', () => {
   const m = graph([node('n', 'noise'), node('h', 'gradient', {in: {in: 'n'}}), node('f', 'noise', {kind: 'facets'}), node('sb', 'slopeblur', {in: {in: 'f', slope: 'h'}}), node('o', 'output', {in: {color: 'sb'}})]);
   const program = compileMaterial(m), at = id => program.nodes.findIndex(n => n.id === id), plan = stagePlan(program), source = programSource(program);
-  assert.deepEqual(plan.stages, [{step: at('sb'), type: 'slopeblur', links: [at('f'), at('h')]}]);
+  assert.deepEqual(plan.stages, [{step: at('sb'), type: 'slopeblur', kind: '', links: [at('f'), at('h')]}]);
   assert.match(source.stages, new RegExp(`textureStore\\(stageOut,vec2i\\(id.xy\\),vec4f\\(v${at('f')}.rgb,graphGray\\(v${at('h')}\\).x\\)\\)`), 'a color slope reads as its brightness');
   assert.match(source.stages, /fn slopePass/); assert.equal(nodeTypes(m.nodes).get('sb'), 'gray');
   const open = graph([node('f', 'noise'), node('sb', 'slopeblur', {in: {in: 'f'}}), node('o', 'output', {in: {color: 'sb'}})]), p = compileMaterial(open);
@@ -116,7 +116,7 @@ test('a Stamp stages only its Shape; its Base, Coordinates and Density are read 
   const m = graph([node('w', 'warp'), node('b', 'noise'), node('f', 'noise', {kind: 'facets'}), node('g', 'gradient', {in: {in: 'f'}}), node('d', 'noise', {kind: 'smooth'}),
     node('st', 'stamp', {in: {base: 'b', shape: 'g', in: 'w', density: 'd'}}), node('o', 'output', {in: {color: 'st'}})]);
   const program = compileMaterial(m), at = id => program.nodes.findIndex(n => n.id === id), plan = stagePlan(program), source = programSource(program);
-  assert.deepEqual(plan.stages, [{step: at('st'), type: 'stamp', links: [at('g')]}]); assert.equal(nodeTypes(m.nodes).get('st'), 'color');
+  assert.deepEqual(plan.stages, [{step: at('st'), type: 'stamp', kind: '', links: [at('g')]}]); assert.equal(nodeTypes(m.nodes).get('st'), 'color');
   assert.match(source.main, new RegExp(`nStamp\\(s${at('st')},v${at('w')}.xy,v${at('b')},v${at('d')},true,0\\)`));
   for (const id of ['w', 'b', 'd']) assert.match(source.main, new RegExp(`let v${at(id)}=`), id + ' is read where it stamps');
   assert.doesNotMatch(source.main, new RegExp(`let v${at('f')}=`), 'the Shape comes from its stage'); assert.match(source.taps, /fn nStamp/);

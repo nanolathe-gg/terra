@@ -60,8 +60,9 @@ export const NODES = {
   adjust: {code: 12, label: 'Color adjust', out: 'color', inputs: [['in', 'Color', 'any'], ['mask', 'Mask', 'gray']],
     params: () => [P('hue', 'Hue (°)', -180, 180, 0), P('saturation', 'Saturation', -1, 1, 0), P('value', 'Brightness', -1, 1, 0)],
     help: 'Turns a color’s hue, and scales its saturation and brightness; an optional Mask scales all three, so a soft mask sweeps the hue gradually: drier or greener patches over every layer at once, iridescent films. The material’s palette limits what shows; after a large change, Pick from the material.'},
-  blur: {code: 13, label: 'Blur', out: 'any', inputs: [['in', 'Input', 'any']], params: () => [P('radius', 'Radius (px)', 0, 32, 2)],
-    help: 'Softens a gray or color pattern over Radius px (0 leaves it), wrapping at the repeat: soft halos from hard masks, dirt filling cracks, smoother heights. Its input is computed over the whole repeat first: a material may use four Blur, Slope blur and Stamp nodes in all.'},
+  blur: {code: 13, label: 'Blur', out: 'any', inputs: [['in', 'Input', 'any']], kinds: {gaussian: 'Gaussian', directional: 'Directional'},
+    params: kind => kind === 'directional' ? [P('radius', 'Radius (px)', 0, 32, 4), P('direction', 'Direction (°)', 0, 180, 0)] : [P('radius', 'Radius (px)', 0, 32, 2)],
+    help: 'Softens a gray or color pattern over Radius px (0 leaves it), wrapping at the repeat; Directional smears along one line only (wind streaks, drag marks), its Direction measured as a Waves noise’s, so the same number lies parallel to its streaks: soft halos from hard masks, dirt filling cracks, smoother heights. Its input is computed over the whole repeat first: a material may use four Blur, Slope blur and Stamp nodes in all.'},
   slopeblur: {code: 14, label: 'Slope blur', out: 'any', inputs: [['in', 'Input', 'any'], ['slope', 'Slope', 'gray']], params: () => [P('distance', 'Distance (px)', -32, 32, 6)],
     help: 'Smears a pattern along another pattern’s slope, downhill by Distance px (uphill when negative; 0 leaves it): melted or eroded rock, wind-swept sand, runnels. Level parts of the Slope stay put. Its inputs are computed over the whole repeat first, as a Blur’s are.'},
   stamp: {code: 15, label: 'Stamp', out: 'any', inputs: [['base', 'Base', 'any'], ['shape', 'Shape', 'any'], ['in', 'Coordinates', 'coords'], ['density', 'Density', 'gray']],
@@ -272,7 +273,7 @@ export function stagePlan(program) {
     roots.forEach(visit); return [...seen].sort((a, b) => a - b);
   };
   const reads = indices => indices.some(k => stage.has(k)), out = list.findIndex(n => n.type === 'output');
-  return {stages: steps.map(i => ({step: i, type: list[i].type, links: linksOf(i)})), stage, closure, out, mainReads: reads(closure(out)), stageReads: steps.map(i => reads(closure(...linksOf(i))))};
+  return {stages: steps.map(i => ({step: i, type: list[i].type, kind: list[i].kind, links: linksOf(i)})), stage, closure, out, mainReads: reads(closure(out)), stageReads: steps.map(i => reads(closure(...linksOf(i))))};
 }
 // The WGSL for a compiled graph: one line a node, in order. A Light or Cavity node reads its height at four neighbors through a
 // function that evaluates that height's own branch at another point. With Blurs, `stages` is the source of a third module: one entry
@@ -322,7 +323,8 @@ ${lines(closure(...st.links))}
  textureStore(stageOut,vec2i(id.xy),${stored(st)});
 }`).join('\n')}
 ${BLUR_PASS}
-${SLOPE_PASS}` : null;
+${SLOPE_PASS}
+${DIR_PASS}` : null;
   if (thumbnails) {
     const store = list.map((n, i) => n.type === 'output' ? '' : `textureStore(thumbOut,vec2i(id.xy),${i},vec4f(${n.out === 'coords' ? `vec3f(noiseBasis(3,v${i}.xy,24.0,379.0,vec3f(.8,0,0)))` : n.out === 'color' ? `v${i}.rgb` : `vec3f(v${i}.x)`},1));`).join('\n');
     return {taps, main: `@group(1) @binding(0) var thumbOut:texture_storage_2d_array<rgba8unorm,write>;
@@ -389,6 +391,18 @@ const STAMP = `fn nStamp(s:MaterialStep,p:vec2f,base:vec4f,density:vec4f,linked:
  return mix(mix(base,v2,w2),v1,w1);
 }
 `;
+// A Directional Blur's pass: a Gaussian (sigma half the Radius) along one line, read between texels, wrapping. Direction is a Waves
+// noise's (across its crests), so the smear runs a quarter turn from it, parallel to that noise's streaks.
+const DIR_PASS = `@compute @workgroup_size(8,8)
+fn dirPass(@builtin(global_invocation_id) id:vec3u){
+ let n=vec2i(textureDimensions(blurSrc));let p=vec2i(id.xy);if(any(p>=n)){return;}
+ graphRow=groundJob.z;let s=node(groundJob.w);let sigma=arg(s,0u)*.5;
+ if(sigma<.05){textureStore(stageOut,p,textureLoad(blurSrc,p,0));return;}
+ let a=(arg(s,1u)+90.0)*.01745329252;let d=vec2f(cos(a),-sin(a));let r=min(i32(ceil(sigma*3.0)),48);
+ var sum=vec4f(0);var total=0.0;
+ for(var k=-r;k<=r;k++){let w=exp(-f32(k*k)/(2.0*sigma*sigma));sum+=slopeSrc(vec2f(p)+d*f32(k))*w;total+=w;}
+ textureStore(stageOut,p,sum/total);
+}`;
 // A Slope blur's pass: from each texel, steps up its slope (the stage's alpha) by Distance in all, averaging its input (the stage's
 // color) along the way, so a value travels downhill from where it lies; uphill when Distance is negative. Where the slope is level the walk stays put. The layer keeps the same gray in
 // every channel, as a gray value does.
