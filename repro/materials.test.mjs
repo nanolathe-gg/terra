@@ -93,19 +93,29 @@ test('the compiled program follows evaluation order and its pipeline key ignores
   assert.notEqual(reseedMaterial(m).seed, m.seed);
 });
 
+test('a Slope blur stages its input and its slope together, and passes its input through until a slope is wired', () => {
+  const m = graph([node('n', 'noise'), node('h', 'gradient', {in: {in: 'n'}}), node('f', 'noise', {kind: 'facets'}), node('sb', 'slopeblur', {in: {in: 'f', slope: 'h'}}), node('o', 'output', {in: {color: 'sb'}})]);
+  const program = compileMaterial(m), at = id => program.nodes.findIndex(n => n.id === id), plan = stagePlan(program), source = programSource(program);
+  assert.deepEqual(plan.stages, [{step: at('sb'), type: 'slopeblur', links: [at('f'), at('h')]}]);
+  assert.match(source.stages, new RegExp(`textureStore\\(stageOut,vec2i\\(id.xy\\),vec4f\\(v${at('f')}.rgb,graphGray\\(v${at('h')}\\).x\\)\\)`), 'a color slope reads as its brightness');
+  assert.match(source.stages, /fn slopePass/); assert.equal(nodeTypes(m.nodes).get('sb'), 'gray');
+  const open = graph([node('f', 'noise'), node('sb', 'slopeblur', {in: {in: 'f'}}), node('o', 'output', {in: {color: 'sb'}})]), p = compileMaterial(open);
+  assert.deepEqual(stagePlan(p).stages, []); assert.match(programSource(p).main, /let v1=v0;/);
+});
+
 test('a Blur computes its input in a stage of its own; later passes read the stage, never the branch behind it', () => {
   const m = graph([node('n', 'noise'), node('b1', 'blur', {in: {in: 'n'}}), node('b2', 'blur', {in: {in: 'b1'}}), node('g', 'gradient', {in: {in: 'b2'}}),
     node('cav', 'cavity', {in: {in: 'b2'}}), node('soft', 'blur', {in: {in: 'g'}}), node('o', 'output', {in: {color: 'soft', height: 'cav'}})]);
   const program = compileMaterial(m), at = id => program.nodes.findIndex(n => n.id === id), plan = stagePlan(program), source = programSource(program);
-  assert.deepEqual(plan.blurs, [at('b1'), at('b2'), at('soft')]); assert.deepEqual(plan.stageReads, [false, true, true]); assert.ok(plan.mainReads);
+  assert.deepEqual(plan.stages.map(st => st.step), [at('b1'), at('b2'), at('soft')]); assert.deepEqual(plan.stageReads, [false, true, true]); assert.ok(plan.mainReads);
   assert.equal(nodeTypes(m.nodes).get('soft'), 'color', 'a Blur gives what it reads'); assert.equal(nodeTypes(m.nodes).get('b1'), 'gray');
   assert.match(source.stages, /fn stage0/); assert.match(source.stages, /fn stage2/); assert.match(source.stages, /fn blurPass/);
   assert.doesNotMatch(source.main, new RegExp(`let v${at('n')}=`), 'the main pass leaves the blurred branch to its stage');
   assert.match(source.main, new RegExp(`let v${at('soft')}=stageAt\\(2,point\\)`)); assert.match(source.taps, /fn stageAt/);
   assert.equal(programSource(compileMaterial(graph([node('n', 'noise'), node('o', 'output', {in: {color: 'n'}})]))).stages, null, 'no Blur, no stages');
   const off = graph([node('n', 'noise'), node('b', 'blur', {enabled: false, in: {in: 'n'}}), node('o', 'output', {in: {color: 'b'}})]);
-  assert.deepEqual(stagePlan(compileMaterial(off)).blurs, [], 'a Blur that is off passes its input through');
-  assert.throws(() => graph([node('n', 'noise'), ...Array.from({length: 5}, (_, i) => node('b' + i, 'blur', {in: {in: 'n'}}))]), /4 Blur nodes/);
+  assert.deepEqual(stagePlan(compileMaterial(off)).stages, [], 'a Blur that is off passes its input through');
+  assert.throws(() => graph([node('n', 'noise'), ...Array.from({length: 5}, (_, i) => node('b' + i, 'blur', {in: {in: 'n'}}))]), /4 Blur, Slope blur or Stamp nodes/);
   assert.equal(materialReliefBound(copyMaterial({nodes: [node('k', 'constant', {params: {value: .5}}), node('b', 'blur', {in: {in: 'k'}}), node('o', 'output', {in: {height: 'b'}, params: {relief: 4}})]})), 2);
 });
 

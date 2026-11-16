@@ -78,6 +78,7 @@ with gray stops is a curve for a height or mask. Every pattern wraps at the
 | Gradient | color | 2 to 8 stops. A stop brighter than 1 lightens when the result multiplies another color. |
 | Color adjust | color | Turns a color's hue and scales its saturation and brightness (0 leaves each), through an optional Mask: varies every layer at once. The material's palette limits what shows; after a large change, Pick from the material. |
 | Blur | gray or color | Softens its input over Radius px (0 leaves it exactly), wrapping at the repeat: soft halos from hard masks, dirt filling cracks, smoother heights. Gives what it reads. |
+| Slope blur | gray or color | Smears its Input along its Slope's downhill direction by Distance px (uphill when negative; 0 leaves it exactly), averaging along the way; level parts of the Slope stay put. Melted or eroded rock, wind-swept sand, runnels. |
 | Light | gray | A height's slope toward a light: tints color like a lit bump. |
 | Cavity | gray | Hollows (below .5) and crests (above) of a height. |
 | Constant | gray or color | One value (Gray) or one color (Color), everywhere. A Color has the gradient's color fields for its one stop and publishes like a gradient's colors. |
@@ -88,7 +89,8 @@ Height is art relief only; gameplay heights never change.
 
 A graph has at most 40 nodes. Light and Cavity evaluate their input again at
 four neighbors, so a material may use four of them, two in a chain. A
-material may use four Blurs (each needs its input over the whole repeat).
+material may use four Blur, Slope blur and Stamp nodes in all (each needs
+an input over the whole repeat).
 
 ## The palette
 
@@ -142,10 +144,12 @@ buffer, so a dragged control regenerates the repeat without compiling.
 Light and Cavity read their height through a generated function that
 evaluates only that branch at another point.
 
-A Blur needs its input at every texel at once, so the graph runs in stages
-(`stagePlan`): before a material's pass, each Blur's input is computed over
-the whole repeat into a scratch layer, blurred across then down (Gaussian,
-sigma half the Radius, wrapping) into that Blur's layer, and every later
+A Blur or Slope blur needs its input at every texel at once, so the graph
+runs in stages (`stagePlan`): before a material's pass, each such node's
+inputs are computed over the whole repeat into a scratch layer, then its pass
+writes that node's layer (a Blur across then down: Gaussian, sigma half the
+Radius, wrapping; a Slope blur 24 steps down its slope, kept in the stage's
+alpha, averaging its input), and every later
 pass (another Blur's stage, the material's pass, the node thumbnails) reads
 the layer instead of the branch behind it. The stage textures
 (`rgba32float`, four Blur layers and two scratch layers, 24 MiB at 512 px)
