@@ -77,10 +77,8 @@ test('world dependencies explain bypasses without biome gates',async()=>{
  assert.match(requirement('undulationArt',{undulation:0}),/Undulation height/);
  assert.equal(requirement('undulationArt',{undulation:8}),'');
  // Low ground's reach serves its tint and its grain.
- assert.match(requirement('lowReach',{lowTint:0,lowGrain:1}),/Raise Tint or lower Grain kept/);
- assert.equal(requirement('lowReach',{lowTint:.5}),'');
- assert.equal(requirement('lowReach',{lowTint:0,lowGrain:.5}),'');
- assert.equal(requirement('lowTint',{}),'');
+ assert.match(requirement('lowReach',{lowGrain:1}),/Lower Grain kept/);
+ assert.equal(requirement('lowReach',{lowGrain:.5}),'');
  assert.equal(requirement('lowGrain',{}),'');
  assert.equal(requirement('looseSize',{looseSupply:0}),'','painted scatter still uses size when the world Supply is zero');
  assert.equal(requirement('bandSoftness',{banding:0}),'','painted banding still uses the riser share when the world strength is zero');

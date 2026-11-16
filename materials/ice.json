@@ -778,7 +778,9 @@
    54.24,
    79.64,
    218.86
-  ]
+  ],
+  "shallowTone": [0.105105, 0.057178, 0.001207],
+  "midTone": [0.071262, 0.019648, -0.026087]
  },
  "features": {
   "note": "Round 9, the shared generators in Ice's colors (ramp measured from IceChunk01-14 by luma octile: flat-faced shards, often several). Shares from retail uses (features/ice/catalog.json): no metal, not reclaimable. Retail's deposits sit in a halo a little darker than the snow.",

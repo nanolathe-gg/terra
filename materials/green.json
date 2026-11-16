@@ -783,7 +783,8 @@
    1.0,
    1.0,
    1.0
-  ]
+  ],
+  "shallowTone": [0.134314, 0.141231, 0.059459]
  },
  "features": {
   "note": "The kinds sculpt-feature-gen.js draws for this world, as tuned for Green (prototype/fgen, approved November 6). A type's share is its retail use share on the Green maps (measure/feature_tables/green_gameplay.json on prototype/faudit): broadleaf Tree1-3 43,227 of 65,018 tree uses, conifers Tree4-7 the rest; the sparse Shrub3 34,188 of 41,323 shrub uses; rocks by footprint 474, 276, 118, 113 and 87 of 1,068; rock stains 1,179 and smudges 538 of the scars. Each type's vary ranges are the retail sizes (spec sections 5, 6). Gameplay: every tree 250 energy; rock metal 25 for the smallest footprint to 100 for 3x3 and larger. Round 12: Tree1-6Dead (2,220 uses) are the dead types, 50 energy, neither burning nor leaving a successor.",

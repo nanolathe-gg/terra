@@ -1076,7 +1076,9 @@
    32.71,
    32.36,
    63.46
-  ]
+  ],
+  "shallowTone": [0.067567, 0.070562, 0.125832],
+  "midTone": [0.031449, 0.035896, 0.062891]
  },
  "features": {
   "note": "Round 9, the shared generators in Crystal's colors (ramp measured from CrystalSpire01-11 by luma octile). Its spires are clusters of tall faceted rocks (5x6-8x8, no metal, not reclaimable), from retail uses (features/crystal/catalog.json). Retail's deposits sit in a halo of the ground's own lightness.",

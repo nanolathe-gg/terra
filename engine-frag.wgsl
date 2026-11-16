@@ -16,7 +16,6 @@ fn grainPixel(pixel: vec2f) -> vec2f {
 // Move a texture to a new base colour, keeping its grain.
 // Low ground: a colour moved to the low colour, its difference from its material's mean kept as grain (as a material's Color moves its steps),
 // so the palette still mixes the grain's hues where a single tone would land on one entry.
-fn lowTinted(c: vec3f, mean: vec3f) -> vec3f { return saturate(c - mean + u.lowColor); }
 // Card E8 (Painted Desert): the grey band at the foot of retail's raised ground. Retail's
 // neutral grey (mean (118,115,112)) sits in a thin height window on the first rise of the
 // raised ground (world height 9-12 on a plain of 2-3; ribbons median 9 px wide on gently
@@ -1146,7 +1145,8 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
 }
 
 // Shallow water as the bed under it (card E1): the ground colour already lit at
-// this pixel, moved toward the water's own hue. The tint keeps the bed's light
+// this pixel, moved toward the shallows' tint: the water material's mean plus the world's shallow tone (Colors: Shallow water),
+// so recoloring the water moves its shallows with it. The tint keeps the bed's light
 // (its brightness against flat ground), so lumps, shade and grain carry through;
 // bedTint is how much of the bed's own colour the tint replaces.
 fn litBed(bed: vec3f, rockShare: f32, rockLevel: f32) -> vec3f {
@@ -1161,7 +1161,7 @@ fn litBed(bed: vec3f, rockShare: f32, rockLevel: f32) -> vec3f {
     let ratio = clamp(dot(bed, luma) / level, 0.25, 2.0);
     let contrast = u.bedContrast;
     let light = pow(ratio, select(contrast * 0.6, contrast, ratio >= 1.0));
-    let tint = select(u.shallowMean,u.shallowBase.rgb,u.shallowBase.a>.5) * light * u.bedBright;
+    let tint = saturate(waterMean() + u.shallowTone.rgb) * light * u.bedBright;
     return saturate(mix(bed, tint, u.bedTint));
 }
 // Ice frost band (card E5): the frost stroke marks every cell of its band with a
@@ -1724,19 +1724,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     }
     if (ownGround) { let hs = highShare(p); if (hs > 0.0) { surfSrc[0] = groundPigment(p, u32(u.highGround), timeMaps.wear, timeMaps.deposit); surfMask[0] = hs; } }
     surfaceStage(0u, &grass, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 0: highland ground
-    // Low ground: the ground from the sea up to lowReach above it takes the low color (its grain kept), by the authored
-    // height (the relief's grit would speckle the edge); the edge is ragged by 20-px noise and fades over the upper half of the reach.
-    // Under the sea it is all low ground: the lit bed takes it from here and the shallow water's art below.
-    // Its grain (Grain kept below 1): the ground pattern about its mean, and in the water the art and the depth mottle, so mud reads smooth.
-    var lowShare = 0.0;
+    // Low ground: the ground from the sea up to lowReach above it keeps Grain kept of its grain, by the authored height (the relief's
+    // grit would speckle the edge); the edge is ragged by 20-px noise and fades over the upper half of the reach. Under the sea it is all
+    // low ground. Its grain: the ground pattern about its mean, and in the water the art and the depth mottle, so mud reads smooth. (Its
+    // color is a surface layer's: the Low ground by the water preset.)
     var lowGrain = 1.0;
-    if ((u.lowTint > 0.0 || u.lowGrain < 1.0) && ownGround) {
+    if (u.lowGrain < 1.0 && ownGround) {
         let above = baseHeight(p) - u.sea + (terrainNoise(p * 0.05 + vec2f(19.0, 47.0)).g - 0.5) * 0.6 * u.lowReach;
         let low = 1.0 - smoothstep(0.5 * u.lowReach, u.lowReach, above);
         let groundTone = groundMean();
-        if (u.lowGrain < 1.0) { lowGrain = mix(1.0, u.lowGrain, low); grass = groundTone + (grass - groundTone) * lowGrain; }
-        lowShare = u.lowTint * low;
-        if (lowShare > 0.0) { grass = mix(grass, lowTinted(grass, groundTone), lowShare); }
+        lowGrain = mix(1.0, u.lowGrain, low); grass = groundTone + (grass - groundTone) * lowGrain;
     }
     // The model's slope grass costs noise taps, so the slope and face blocks share one read.
     // Level ground (slope under the cover ramp's start, no painted rock) never mixes it in, so it skips the taps.
@@ -2373,13 +2370,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             water = mix(absorbed, deepWater, deep);
             // Some worlds' water passes through a third colour; a straight
             // blend of the two textures lands on colours the art never uses.
-            if (u.waterMid.a > 0.0 && u.shallowBase.a < .5) {
+            if (u.waterMid.a > 0.0 && u.shallowTone.a < .5) {
                 // A Shallow until depth past the third colour's depth runs this ramp down: the third colour at the waterline,
                 // the lit bed between the two depths (a submerged shelf), deep beyond. smoothstep leaves reversed edges undefined.
                 let toMid = waterRamp(u.shallowDepth, u.waterMid.a, colorDepth);
                 let toDeep = smoothstep(u.waterMid.a, u.deepDepth, colorDepth);
-                var mid = u.waterMid.rgb + (deepWater - waterMean()) * 0.9;
-                if (lowShare > 0.0) { mid = mix(mid, lowTinted(mid, u.waterMid.rgb), lowShare); }
+                var mid = waterMean() + u.waterMid.rgb + (deepWater - waterMean()) * 0.9;
                 water = mix(mix(shallow, mid, toMid), deepWater, toDeep);
             }
         }
@@ -2499,7 +2495,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (probeHere) {
         probeOut[0] = 1.0; probeOut[1] = color.r; probeOut[2] = color.g; probeOut[3] = color.b; probeOut[4] = f32(gs); probeOut[5] = h - u.sea;
         for (var k = 0u; k < SURFACE_FACTS; k++) { probeOut[6u + k] = surfaceFacts[k]; }
-        probeOut[20] = lowShare; probeOut[21] = nearWater; probeOut[22] = surfCover; probeOut[23] = select(0.0, 1.0, ownGround); probeOut[24] = f32(probeCount);
+        probeOut[21] = nearWater; probeOut[22] = surfCover; probeOut[23] = select(0.0, 1.0, ownGround); probeOut[24] = f32(probeCount);
     }
     return vec4f(color, 1.0);
 }

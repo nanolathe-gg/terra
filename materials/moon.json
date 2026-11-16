@@ -530,7 +530,8 @@
    1.0,
    1.0,
    1.0
-  ]
+  ],
+  "shallowTone": [0.010848, 0.010966, 0.006339]
  },
  "features": {
   "note": "Round 9, the shared generators in Moon's colors (ramp measured from MoonRock01-11 by luma octile). Shares from retail uses (features/moon/catalog.json), metal 25-75. Retail's deposits sit in a darker grey halo.",

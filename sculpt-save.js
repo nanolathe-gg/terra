@@ -2,7 +2,7 @@ import {withWorldMaterials,worldKept,worldOwnFor} from './sculpt-materials.js';
 // The map carries its effective world settings, including defaults, URL overrides and the world's ground and water materials.
 // Keep browser/session parameters out of the recipe; removed controls are dropped on load.
 import {KNOBS} from './sculpt-knobs.js';
-import {worldHexColors} from './sculpt-scene.js';
+import {worldHexColors,isTone} from './sculpt-scene.js';
 import {copySurface} from './sculpt-material-model.js';
 
 const worldKeys=config => new Set([...Object.keys(config.defaults||{}),...Object.keys(config.engineDefaults||{}),...KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)),'beachFrom','sandEdge','view','fill','relief','palette','sun']);
@@ -22,9 +22,11 @@ export function copySavedWorld(value,config) {
     knobs[key]=String(v);
   }
   const colors={};
+  // Every color is a hex or null (off), but Shallow water's tone (sculpt-knobs.js waterTone); its old color (`shallow`) is dropped.
   for(const [key,v]of Object.entries(value.colors)){
-    if(v!==null&&(typeof v!=='string'||!/^#[0-9a-f]{6}$/i.test(v)))throw Error('The saved world color '+key+' is invalid.');
-    colors[key]=v;
+    if(key==='shallow')continue;
+    if(key==='shallowTone'?v!==null&&!isTone(v):v!==null&&(typeof v!=='string'||!/^#[0-9a-f]{6}$/i.test(v)))throw Error('The saved world color '+key+' is invalid.');
+    colors[key]=key==='shallowTone'&&v?[...v]:v;
   }
   const surface=value.surface===undefined?null:copySurface(value.surface);
   return {materials:worldKept(withWorldMaterials(value.materials,config)),name:value.name.slice(0,120),base:value.base,colors,knobs,...(surface?{surface}:{})};

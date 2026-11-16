@@ -302,10 +302,13 @@ export async function edit(s, i, values) {
 }
 // A scripted scene (sculpt.js scriptedScene) with its Time pass.
 export async function scene(s, list, {ground = true} = {}) { s.play(list, {ground}); await s.fields.ready(); return weather(s); }
-// A Colors panel row picked (a hex) or cleared (null): sculpt-knobs.js pickWorldColor, as the panel's row applies it.
+// A Colors panel row picked (a hex) or cleared (null): sculpt-knobs.js pickWorldColor, as the panel's row applies it. Shallow water keeps
+// the pick as a tone of the water material's drawn color (sculpt.js buildWorldPanel).
 export async function pickColor(s, key, hex) {
-  const {pickWorldColor} = await import('../sculpt-knobs.js');
-  s.ownColors = pickWorldColor(s.config, s.ownColors, key, hex);
+  const {pickWorldColor} = await import('../sculpt-knobs.js'), {colorTone} = await import('../sculpt-column.js');
+  const water = s.materials?.find(m => m.worldWater);
+  const value = key === 'shallowTone' && hex ? colorTone(water ? s.renderer.drawnColor(water) : s.config.water.meanRGB.map(v => v / 255), s.engine.rgbColor(hex)) : hex;
+  s.ownColors = pickWorldColor(s.config, s.ownColors, key, value);
   s.renderer.setColors(s.engine.rendererColors(s.engine.worldHexColors(s.config, s.settings, s.ownColors)));
 }
 // The map's own rock column (sculpt.js editColumn and restoreColumn, the Rock column panel's edit; null puts the world's back): checked as the

@@ -7,7 +7,7 @@ import {tablePlacementRows,coverRows,groundPool,PLACEMENT_ROW,PLANT_REACH,surfac
 import {MaterialCache,writeMaterialSlot} from './sculpt-material-cache.js';
 import {copyMaterial,materialCacheUsage,materialStaged,materialTint,materialColor,materialRenderKey,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES,LIBRARY,materialStates} from './sculpt-materials.js';
 import {columnRows,columnTones,toneColor} from './sculpt-column.js';
-import {LOW_GROUND_RGB} from './sculpt-knobs.js';
+import {waterTone} from './sculpt-knobs.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
 import {RockWeather} from './sculpt-rock-weather.js';
@@ -627,7 +627,7 @@ export class TerrainRenderer {
     encoder.copyBufferToBuffer(this.probeBuffer,0,read,0,96*4);this.device.queue.submit([encoder.finish()]);
     try{await read.mapAsync(GPUMapMode.READ);const v=[...new Float32Array(read.getMappedRange().slice(0))];read.unmap();if(!v[0])return null;
       const count=Math.min(32,Math.round(v[24])),layers=Array.from({length:count},(_,k)=>({row:Math.round(v[25+2*k]),cover:v[26+2*k]}));
-      return {color:v.slice(1,4),slot:Math.round(v[4]),aboveSea:v[5],facts:v.slice(6,20),lowTint:v[20],wet:v[21],surf:v[22],ownGround:v[23]>.5,layers};}
+      return {color:v.slice(1,4),slot:Math.round(v[4]),aboveSea:v[5],facts:v.slice(6,20),wet:v[21],surf:v[22],ownGround:v[23]>.5,layers};}
     finally{read.destroy();}
   }
 
@@ -890,7 +890,6 @@ export class TerrainRenderer {
     this.f('uDeepDepth', variant.has('deepDepth') ? Number(variant.get('deepDepth')) : this.config.material?.deepDepth ?? 42);
     // Water looks (card E1): every default is the earlier water.
     this.f('uBedTint', variant.has('bedTint') ? Number(variant.get('bedTint')) : 0.85);
-    this.v('uShallowMean', (this.config.water?.shallowMeanRGB || this.config.water?.shallowRGB || [60, 115, 163]).map(v => v / 255));
     this.f('uBedBright', variant.has('bedBright') ? Number(variant.get('bedBright')) : 1);
     this.f('uRingFade', variant.has('ringFade') ? Number(variant.get('ringFade')) : 0);
     this.f('uHillLight', variant.has('hillLight') ? Number(variant.get('hillLight')) : 1);
@@ -944,7 +943,6 @@ export class TerrainRenderer {
     this.f('uShoalStairs', variant.has('shoalStairs') ? Number(variant.get('shoalStairs')) : 0);
     this.f('uShoalShoreSoft', variant.has('shoalShoreSoft') ? Number(variant.get('shoalShoreSoft')) : 0);
     // Low ground: its tint and reach (0: none, as before); its color is set with the others (setColors).
-    this.f('uLowTint', variant.has('lowTint') ? Number(variant.get('lowTint')) : 0);
     this.f('uLowReach', variant.has('lowReach') ? Number(variant.get('lowReach')) : 6);
     this.f('uLowGrain', variant.has('lowGrain') ? Number(variant.get('lowGrain')) : 1);
     this.f('uLooseKnoll', variant.has('looseKnoll') ? Number(variant.get('looseKnoll')) : 0);
@@ -954,8 +952,9 @@ export class TerrainRenderer {
     {
     this.i('uBeach', this.layers.has('beach'));
     this.f('uBeachHeight',this.config.material?.beachHeight??6);
-    const mid=this.config.water?.midRGB, midDepth=this.config.material?.midDepth;
-    this.set('uWaterMid', mid && midDepth ? [...mid.map(v => v / 255), midDepth] : [0, 0, 0, 0]);
+    // The third colour is a tone on the water material's mean, as the shallows' is (sculpt-knobs.js waterTone).
+    const mid=waterTone(this.config,'mid'), midDepth=this.config.material?.midDepth;
+    this.set('uWaterMid', mid && midDepth ? [...mid, midDepth] : [0, 0, 0, 0]);
     this.f('uGrid', this.grid);
     this.f('uSize', this.size);
     this.f('uBase', this.config.baseHeight - this.config.seaLevel);
@@ -1095,12 +1094,11 @@ export class TerrainRenderer {
     }
     if(this.colorOverrides){const colors=this.colorOverrides;
     this.set('uMaterialTable', this.placementTable(this.variant));
-    this.set('uShallowBase', colors.shallow ? [...colors.shallow, 1] : [0, 0, 0, 0]);
+    // The shallows' tint: the world's own tone (Colors: Shallow water) or its data's, on the water material's mean.
+    this.set('uShallowTone', colors.shallowTone ? [...colors.shallowTone, 1] : [...(waterTone(this.config,'shallow') || [0, 0, 0]), 0]);
     // The light's colours (card P12b): white is the grey light every world had.
     this.v('uSunColor', colors.sun || [1, 1, 1]);
     this.v('uSkyColor', colors.sky || [1, 1, 1]);
-    // Low ground's color: the world's pick, else a dark red-brown mud (retail Zhon's lowland).
-    this.v('uLowColor', colors.low || LOW_GROUND_RGB.map(v => v / 255));
     // The column's bed tones (sculpt-column.js columnTones): shifts of the rock material's color, the authored ones or five grays.
     const strata = columnTones(this.config.column).map(t => [...t, 1]);
     // The world's rock is slot 0 of the rock table: its beds' tones, which a recipe without tones of its own takes (writeRocks). Row 0 is
