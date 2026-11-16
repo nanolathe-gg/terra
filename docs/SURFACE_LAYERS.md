@@ -315,7 +315,7 @@ Built (each a commit; the measurements are in their messages):
 Limits: plants know no shares (rock, debris, sand) or convexity, and a built-in layer neither grows nor covers them (the bake does not
 see the draw's own surfaces); their density is one value a 4-px cell, not the layer's pixel pattern.
 
-## Round 7 (branch `surface-layers-7`, 2026-11-16): the last simple colors
+## Round 7 (branch `surface-layers-7`, 2026-11-16, landed): the last simple colors
 
 The owner: "Shallow water, Low ground". The Colors panel's two surface colors become materials, or tones of one; its other rows are
 the light's colors.
