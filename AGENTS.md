@@ -94,8 +94,11 @@ page and an older card disagree, this page wins.
      on purpose for a different look. Implementation constants stay in code.
    - Presets are only numbers for existing controls, except a material's
      (next point).
-   - Ground and water textures are materials, and the material editor is
-     the only way to set them (owner's decisions of 2026-11-14). A material
+   - A world's surface textures are materials: its ground and water, and
+     the surfaces it names a material for (highland ground, rock, slope
+     cover, debris, beach sand, mineral margins); every rock type shows a
+     rock material, the world's or its own. The material editor is the only
+     way to set them (owner's decisions of 2026-11-14 and 2026-11-15). A material
      is a node graph (`sculpt-materials.js`) with two tiers. Its graph is
      its source: a node's settings and type choices are its author's tools,
      not world controls, and the points above do not govern them. The

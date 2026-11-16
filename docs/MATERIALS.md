@@ -1,6 +1,8 @@
-# Materials: ground and water textures
+# Materials: the world's surface textures
 
-A world's ground and its deep water are **materials**. A material is one node
+A world's ground and its deep water are **materials**, and so are the other
+surfaces it names a material for: highland ground, rock, slope cover, debris,
+beach sand and mineral margins. Every rock type shows a rock material. A material is one node
 graph that makes a repeating texture: unlit color, an art height the sun
 lights, and shine, reduced to a set of the game's 256 colors. The material
 editor is the only way to set these textures (owner, 2026-11-14); the old
@@ -34,8 +36,9 @@ controls; node settings are the author's tools.
   "Restore built-in settings" returns both to the library's. What the world
   keeps is marked with the library material it replaces, so a library
   material keeps its own edit.
-- **A map** holds up to seven materials in slots 1 to 7: the world's two and
-  up to five of its own, for landforms and the Paint brush (a stroke's Ground
+- **A map** holds up to fifteen materials in slots 1 to 15: the world's two,
+  the materials for the surfaces its world names, its rock types' rock
+  materials, and its own for landforms and the Paint brush (a stroke's Ground
   choice: `-1` the ground beneath, `0` the world's ground, else a slot; shown
   as chips with each material's color). A new landform starts on the ground
   beneath; the Paint brush's Material starts on the world's ground. A
@@ -50,9 +53,30 @@ controls; node settings are the author's tools.
   ground*, and level raised ground takes it in place of the world's ground
   by its rise above the plain (World rows Highland ground, from and fade;
   0 strength draws as before). On level tops it wins over the column's
-  beds; rock faces still draw over it. Any material becomes it with
-  Manage, Use as highland ground. A world may also list materials its
+  beds; rock faces still draw over it. A world may also list materials its
   tools lay down (`world.materials.extra`); a new map adds them too.
+- **The world's other surfaces** are roles a material holds, one each:
+  highland ground (`high`), rock (`rock`), slope cover (`slope`), debris
+  (`debris`), beach sand (`beach`) and mineral margins (`fringe`, `body`,
+  `ring`), named in `world.materials`. A new map adds the world's; Manage,
+  *Also the world's*, gives a material a role or takes it away. A map
+  reopened in its world keeps the roles its artist cleared; a map carried
+  into another world takes that world's surfaces, and a library material
+  still unedited in a role follows the world. A surface without a material
+  draws from another (the slope cover, else the ground). The highland
+  ground and the beach join any map with room, since a beach another world
+  lends is chosen after the map was made.
+- **Rock.** The world's rock material is what every rock face shows under
+  its rock type's color: its color's variation as grain, its Height as the
+  grit the sun lights at 1x, its Shine. A rock type may name another
+  (Rock types, Surface). The starting recipes each bring a library rock
+  material (`rock-granite`, `-sandstone`, `-basalt`, `-limestone`,
+  `-shale`): adding a preset, or a new map's world rock types, adds it
+  while the map has room.
+- **Worn and Deposit.** Where Time's water wore ground away or laid
+  sediment down, a ground material shows its Worn or Deposit color instead
+  of its Color, from the erosion level its *From* setting names, as much as
+  its *Amount*. Each connected one is a layer of its own in the cache.
 - A save with no materials (or an earlier format's `grounds`) loads with the
   world's own two. There is no migration.
 
@@ -83,7 +107,7 @@ with gray stops is a curve for a height or mask. Every pattern wraps at the
 | Light | gray | A height's slope toward a light: tints color like a lit bump. |
 | Cavity | gray | Hollows (below .5) and crests (above) of a height. |
 | Constant | gray or color | One value (Gray) or one color (Color), everywhere. A Color has the gradient's color fields for its one stop and publishes like a gradient's colors. |
-| Material | | The one output: Color, Height (Relief scales it, in px) and Shine. |
+| Material | | The one output: Color, Height (Relief scales it, in px) and Shine, plus optional Worn and Deposit colors (below). |
 
 Keep the set small: a new node type must do what no combination of these can.
 Height is art relief only; gameplay heights never change.
@@ -163,7 +187,9 @@ material's pass evaluates only the nodes its Material node reaches.
 
 Each material in use has a layer of the cached repeat (512 px: color and
 height in `rgba32float`, shine, the palette-reduced color) and one texel of
-its mean color, about 7 MiB. The terrain shader reads these by world
+its mean color, about 7 MiB, and one more layer for each Worn or Deposit
+color it draws. The budget is 128 MiB; past it, the editor keeps the
+materials it has and the status line says so. The terrain shader reads these by world
 position, so a level plain costs at most 256 distinct 32-px tiles.
 Regeneration runs inside the draw cycle, so a fast drag never queues more
 than one run a frame.
