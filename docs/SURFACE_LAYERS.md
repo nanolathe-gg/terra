@@ -259,8 +259,8 @@ Built (each a commit; the measurements are in their messages):
 
 A new map's materials: archipelago 15, crystal 12, desert 14, green 12, ice 16, lava 13, lush 14, moon 14, red 12, zhon 12 (of 23).
 
-**Memory.** Each material in use takes about 7 MiB of GPU cache, counted in the terrain budget. The renderer caches a rock type's
-material only while a shown stroke uses that rock type, and the crystal material only while a stroke may lay crystal. The browser smoke
+**Memory.** Each material in use takes about 7 MiB of GPU cache, counted in the terrain budget (every rock type's material is cached;
+see Round 5). The browser smoke
 (`repro/smoke.mjs`) ran at `gpuMB=512`, below any budget the editor picks itself (2048 MiB, 1024 on devices reporting 4 GB or less):
 main's Green passed there with under 12 MiB to spare and its Ice failed, and the branch's Green failed once the escarpment rock type
 had a material of its own. At the owner's word ("Smoke at 1024 MiB") it runs at 1024 MiB, where Green and Ice pass. A smaller
@@ -274,6 +274,24 @@ bands on faces and raised ground) and by rock weather (the color of debris from 
 - **Beds as materials of their own**: each bed shows a material's art. Up to five materials per bedded rock type: Desert would need
   about 15 more, past 23, and 15 more cache layers.
 - **Keep the bed colors** as the column's palette, for now.
+
+## Round 5 (branch `surface-layers-5`, 2026-11-16)
+
+The owner: "yes, do the open remaining items" (round 4's strata, the picker's color, Crystal's art).
+
+Built (each a commit; the measurements are in their messages):
+- **The picker shows the drawn color**: the material cache reads each regenerated material's GPU mean back (readMeans); every Color
+  picker (Rock types, Surface rows, the material editor, the World pane's ground and water) shows it and moves it to the color picked.
+  Measured: Green's rock material draws #747474 (its graph's estimate #79787b); picking #995933 draws #995933. Until a page has drawn,
+  a picker shows the graph's estimate. The Surface rows of the rock-typed built-ins show the world's rock material's Color.
+- **Strata are tones of the rock material**: a bed is its rock material's mean plus a tone (an [r, g, b] shift, -1 to 1), in the color
+  pass and in rock weather; a column's `tones` replace its colors and a rock type's `beds` are tones. Additive, as a material's Color
+  moves its steps: Desert's pale beds on its dark rock would have needed gains near 7 as a product. Recoloring a rock type moves every
+  bed by the same shift; a bed picker sets only its own tone. Desert's scenes change 0.06% and 0.02% of pixels (isolated dither flips).
+- **Crystal shows its material's art**: the tops move toward the crystal material's own art, the sides keep its mean. Crystal's scene
+  changes 11.2% of pixels; the tops read a little flatter and more even (the owner's eye decides).
+- **Fix: every rock type's and the crystal material cached again.** Round 4's 84344e55 let a stroke's shape settings change the cached
+  set, which rebuilt the cache inside a draw and failed the digest sweep. The smoke's 1024 MiB budget makes the saving unnecessary.
 
 ## Sources (phase 1)
 
@@ -291,7 +309,6 @@ Phase 4 turns them into materials one by one.
 
 ## Open questions for the owner
 
-- Strata: beds as tones of the rock material, as materials, or kept (see Round 4).
-- Crystal's art: only its material's mean shows; the crystals could show its art instead (a look change).
+- Crystal's art (round 5): judge the flatter tops by eye.
 - The cover classes' plants (tufts and shrubs) following a layer: needs the bake to read surface rules.
 - Converting highland, base band and rock face into rules means their World rows move into the Surface section.
