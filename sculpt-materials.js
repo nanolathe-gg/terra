@@ -386,8 +386,8 @@ const STAMP = `fn nStamp(s:MaterialStep,p:vec2f,base:vec4f,density:vec4f,linked:
  return mix(mix(base,v2,w2),v1,w1);
 }
 `;
-// A Slope blur's pass: from each texel, steps down its slope (the stage's alpha) by Distance in all, averaging its input (the stage's
-// color) along the way; uphill when Distance is negative. Where the slope is level the walk stays put. The layer keeps the same gray in
+// A Slope blur's pass: from each texel, steps up its slope (the stage's alpha) by Distance in all, averaging its input (the stage's
+// color) along the way, so a value travels downhill from where it lies; uphill when Distance is negative. Where the slope is level the walk stays put. The layer keeps the same gray in
 // every channel, as a gray value does.
 const SLOPE_PASS = `fn slopeSrc(p:vec2f)->vec4f{
  let n=vec2i(textureDimensions(blurSrc));let c=floor(p);let f=p-c;let i=vec2i(c);
@@ -403,7 +403,7 @@ fn slopePass(@builtin(global_invocation_id) id:vec3u){
  let steps=24;let step=distance/f32(steps);var q=vec2f(p);var sum=here;
  for(var k=0;k<steps;k++){
   let g=.5*vec2f(slopeSrc(q+vec2f(1,0)).a-slopeSrc(q-vec2f(1,0)).a,slopeSrc(q+vec2f(0,1)).a-slopeSrc(q-vec2f(0,1)).a);let m=length(g);
-  q-=g/max(m,1e-6)*step*smoothstep(0.0,.01,m);sum+=slopeSrc(q);
+  q+=g/max(m,1e-6)*step*smoothstep(0.0,.01,m);sum+=slopeSrc(q);
  }
  let c=sum/f32(steps+1);textureStore(stageOut,p,vec4f(c.rgb,c.r));
 }`;

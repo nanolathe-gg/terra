@@ -87,3 +87,30 @@ test('a Stamp at Coverage 0 is its Base; Stamp and Slope blur repeats join thems
     assert.deepEqual(s.errors, []);
   } finally { s.dispose(); }
 });
+
+test('a Slope blur carries a spot downhill along its slope, and uphill when its Distance is negative', async () => {
+  await openHost();
+  const s = await openScene({biome: 'green', ground: false, strokes: []}, 'biome=green&mapX=2&mapY=2');
+  try {
+    const field = {id: 'h', type: 'noise', params: {size: 96, seed: 2}}, dots = {id: 's', type: 'scatter', params: {spacing: 40, radius: 2.5, coverage: 1, hardness: .9, jitter: .6}};
+    const render = nodes => { s.setMaterials(s.materials.map(m => m.worldGround ? {...m, nodes, palette: [], controls: [], frames: []} : m)); return renderWindow(s, {x: 0, y: 0, width: 512, height: 512, exportArt: true}); };
+    const D = await render([dots, {id: 'o', type: 'output', in: {color: 's'}}]), F = await render([field, {id: 'o', type: 'output', in: {color: 'h'}}]);
+    const W = 512, at = (img, x, y) => img[(((y + W) % W) * W + ((x + W) % W)) * 4];
+    // For each dot on a slope, which way the smear's centroid moved against the slope's uphill direction.
+    const lean = async distance => {
+      const S = await render([dots, field, {id: 'sb', type: 'slopeblur', in: {in: 's', slope: 'h'}, params: {distance}}, {id: 'o', type: 'output', in: {color: 'sb'}}]);
+      let down = 0, up = 0;
+      for (let y = 20; y < W - 20; y++) for (let x = 20; x < W - 20; x++) {
+        const v = at(D, x, y); if (v < 200 || at(D, x - 1, y) >= v || at(D, x + 1, y) > v || at(D, x, y - 1) >= v || at(D, x, y + 1) > v) continue;
+        const gx = at(F, x + 4, y) - at(F, x - 4, y), gy = at(F, x, y + 4) - at(F, x, y - 4); if (Math.hypot(gx, gy) < 3) continue;
+        let sx = 0, sy = 0, sw = 0; for (let dy = -20; dy <= 20; dy++) for (let dx = -20; dx <= 20; dx++) { const w = Math.max(0, at(S, x + dx, y + dy) - at(D, x + dx, y + dy)); sx += w * dx; sy += w * dy; sw += w; }
+        if (sw) (sx * gx + sy * gy > 0 ? up++ : down++);
+      }
+      return {down, up};
+    };
+    const forward = await lean(16), back = await lean(-16);
+    assert.ok(forward.down > 2 * forward.up, `Distance 16 smears downhill (${forward.down} down, ${forward.up} up)`);
+    assert.ok(back.up > 2 * back.down, `Distance -16 smears uphill (${back.up} up, ${back.down} down)`);
+    assert.deepEqual(s.errors, []);
+  } finally { s.dispose(); }
+});
