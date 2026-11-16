@@ -765,7 +765,7 @@ function surfaceHost() {
     apply:applySurface,
     restore:()=>{setSurfaceList(structuredClone(baseSurface),false);saveWorlds();checkpoint(true);},
     preview:row=>{if(!renderer||renderer.surfacePreview===row)return;renderer.setSurfacePreview(row);worldChanged({stage:'C',world:false});schedule();},
-    material:layer=>{const m=layerMaterial(layer);return m?{name:m.name,color:hex(m)}:null;},
+    material:layer=>{const m=layerMaterial(layer);return m?{name:m.name,color:hex(m),height:Boolean(m.nodes?.find(n=>n.type==='output')?.in?.height)}:null;},
     edit:(layer,button)=>{const m=layerMaterial(layer);if(m)materialEditor?.open(m.slot,button);},
     library:()=>Object.entries(LIBRARY).filter(([key])=>!key.endsWith('-water')).map(([key,m])=>({key,name:m.name,color:hex(m)})),
     // A built-in's World setting (the Surface section's Built-in settings): show its block, reveal the row if the panel folded it away as

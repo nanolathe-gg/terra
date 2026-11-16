@@ -60,7 +60,7 @@ function switchRule(layer, kind) {
 }
 
 // `host`: surface() the list now, apply(next, {commit}), restore() the world's own, preview(row or -1), material(layer) → {name, color} or
-// null, edit(layer, button) to open its material, materialKey(preset) → a library key for a preset's material, library() → the materials a
+// null (height: whether it has art height), edit(layer, button) to open its material, materialKey(preset) → a library key for a preset's material, library() → the materials a
 // layer may draw [{key, name, color}], settings(key) to show a World setting's row and settingNote(key) why it is unavailable ('' if not).
 export function mountSurfacePanel(host) {
   const list = $('surface-layers');
@@ -167,6 +167,7 @@ export function mountSurfacePanel(host) {
         slider('Edge noise', edge.noise ?? 0, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, noise: v}; }, c), 'How ragged its edge is'),
         slider('Noise size (px)', edge.noiseSize ?? 8, 1, 64, 1, (v, c) => edit(i, l => { l.edge = {...l.edge, noiseSize: v}; }, c), '1 speckles by the pixel; larger makes patches'));
       if (layer.material != null) body.append(slider('Height contrast', edge.height ?? 0, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, height: v}; }, c), 'At its edge the taller wins: its material’s art height against the ground’s (stones stand out of sand, grass fills the gaps)'));
+      if (material && !material.height) body.append(el('p', {className: 'small', textContent: 'This material has no art height, so Height contrast has nothing to compare: choose one with height (a rock material, for one) or give it a height in the material editor.'}));
       body.append(ruleBlock(layer, i));
       item.append(body);
     }
