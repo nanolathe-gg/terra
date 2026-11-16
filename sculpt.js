@@ -696,7 +696,9 @@ function syncMaterials() {
   if (!renderer) return;
   const used=materialsInUse(nodes,mapMaterials,mapRocks),key=JSON.stringify(used);
   if (key===materialUseKey) return;
-  renderer.setMaterials(new Map(used.map(m=>[m.slot,m]))); materialUseKey=key; worldChanged({stage:'C',world:false}); schedule();
+  // Past the cache budget (sculpt-materials.js materialCacheUsage) the renderer keeps the materials it holds and the status line says why.
+  try { renderer.setMaterials(new Map(used.map(m=>[m.slot,m]))); } catch (error) { status(error.message); return; }
+  materialUseKey=key; worldChanged({stage:'C',world:false}); schedule();
 }
 function restoreMaterials(materials) {
   mapMaterials=structuredClone(materials); nodes=keepStrokeMaterials(nodes,mapMaterials); syncMaterialChoices(); syncMaterials(); materialEditor?.refresh(); keepWorldMaterials();
@@ -2021,7 +2023,7 @@ function syncRockMaterial() {
 }
 $('rock-material').onchange=()=>{
   const v=Number($('rock-material').value);
-  if(rockSelected===0){ if(v>0){editMaterials(assignMaterial(mapMaterials,v,'worldRock'));checkpoint();} }
+  if(rockSelected===0){ if(v>0){ try{editMaterials(assignMaterial(mapMaterials,v,'worldRock'));checkpoint();}catch(error){status(error.message);} } }
   else { mapRocks=mapRocks.map(r=>r.slot===rockSelected?(({material,...o})=>v>0?{...o,material:v}:o)(r):r); rockUseKey=''; syncRocks(); syncMaterials(); worldChanged({stage:'C',world:false}); persistLater(); checkpoint(); }
   materialEditor?.refresh(); syncRockMaterial();
 };
