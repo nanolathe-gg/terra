@@ -1,6 +1,6 @@
 # Surface layers: where each material shows
 
-Status: plan (2026-11-15). Branch `surface-layers`. The research behind it is the prototype branch
+Status: phase 1 landed on local main (c2243290); phase 2 built; phase 3 next (2026-11-15). Branch `surface-layers`. The research behind it is the prototype branch
 `prototype/surface-stack` (not for landing), summarized below.
 
 ## The model
@@ -98,12 +98,20 @@ Each phase lands on its own. Rule 7: a phase becomes every world's behavior or d
    - engine determinism, the digest guard, the browser smoke on our own port;
    - draw cost: the `perf.mjs` pair and Node per-pass timings against main, before it lands.
    - A custom world, an old world file and a borrowed beach each get a stack.
-2. **Rules as data.** Masks that facts can express exactly become windows or scores (the rock face first,
-   proven). Masks they cannot (the bake's sand, debris lie, beach reach) become named facts, so a layer can
-   still be given its own rule. A rule that never shows is deleted only after
-   checking at today's soft mix (a low share still tints), on a route scene and on every world (Green's
-   gentle rock showed 0.01% through a threshold edge on four scenes: not yet proof). Same pictures where exact; any
-   change judged by the owner.
+2. **Facts, rules and material layers** (built). Any layer may have a rule: up to four windows over facts, all of which
+   must hold, or a score (weighted facts summed with the edge noise, through one smoothstep). A built-in's rule limits its own
+   share; a material layer draws a map material by Amount times its rule. Facts: slope, height above the sea and the plain,
+   wear, deposit, wetness, moisture, soil depth, light, top, convexity, and the rock's, debris' and sand's shares (from
+   their own stage on). They are computed once a pixel, only when a layer reads them or draws a material. A material layer
+   (`{id, name, material: libraryKey, stage, where|score}`) binds to the map's copy of that material, which carries the layer's
+   id as `worldLayer` (added to a map as roles are; one binding per material). Material layers above rock take their
+   coverage out of the rock share the later effects read.
+   - Changed from the first plan: the built-ins keep their shares. Turning the highland ground, base band and rock face
+     into rules would duplicate the World rows that set them today (rule 9), so each conversion moves to phase 3, where
+     the editor replaces those rows. The rock face's score is exact only with Bare soil 0.
+   - Not in phase 2: height contrast (relief is in pixels per material, so it needs normalizing and a fixture).
+   - Measured: the shipped stack renders byte-identical to main (28 scenes, every world). Rules, material layers and each
+     fact change pixels on a fixture. Computing the facts costs nothing measurable.
 3. **The editor** (needs phase 1's list, facts and material layers, not phase 2: the order of 2 and 3 is the
    owner's choice). World → Surface: the list with a row per layer (material chip, Amount, the rule's
    sliders with plain fact names, edge), reorder, add a layer from presets, remove, a mask preview on the map
@@ -129,7 +137,8 @@ Phase 4 turns them into materials one by one.
 
 - 12 layers in the prototype: a row budget, not a design limit. The shader loops over the layers at every
   pixel and the gates cannot specialize the loop, so phase 1 measures its cost before landing.
-- Rows live in the material table's first rows (zeros since the legacy generator went): 7 a layer.
+- Rows live in the material table's first 151 rows (zeros since the legacy generator went): two a layer plus one per
+  rule row; 32 layers at most.
 
 ## Open questions for the owner
 

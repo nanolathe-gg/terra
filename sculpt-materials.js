@@ -263,9 +263,10 @@ export const MATERIAL_STATES = ['worn', 'deposit'];
 export const MAP_ROLES = [['worldHigh', 'high', 'highland ground'], ['worldRock', 'rock', 'rock'], ['worldSlope', 'slope', 'slope cover'], ['worldDebris', 'debris', 'debris'],
   ['worldBeach', 'beach', 'beach'], ['worldFringe', 'fringe', 'margin fringe'], ['worldBody', 'body', 'margin body'], ['worldRing', 'ring', 'margin ring']];
 const ROLE_NAMES = {worldGround: 'ground', worldWater: 'water', ...Object.fromEntries(MAP_ROLES.map(([r, , what]) => [r, what]))};
-export const roleOf = m => Object.keys(ROLE_NAMES).find(r => m?.[r] === true) ?? null;
-export const roleName = role => ROLE_NAMES[role] ?? '';
-const roleCount = m => Object.keys(ROLE_NAMES).filter(r => m[r] === true).length;
+// A material may instead draw one of the world's surface layers (docs/SURFACE_LAYERS.md): its worldLayer is that layer's id.
+export const roleOf = m => Object.keys(ROLE_NAMES).find(r => m?.[r] === true) ?? (m?.worldLayer ? 'worldLayer' : null);
+export const roleName = role => role === 'worldLayer' ? 'surface layer' : ROLE_NAMES[role] ?? '';
+const roleCount = m => Object.keys(ROLE_NAMES).filter(r => m[r] === true).length + (m.worldLayer ? 1 : 0);
 // Only a ground draws them (the world's ground, highland ground, a stroke's material): water and the world's other surfaces never read a state.
 export const materialStatesApply = m => !m.worldWater && !MAP_ROLES.slice(1).some(([r]) => m[r]);
 export const materialStates = material => { const out = material.nodes.find(n => n.type === 'output'); return materialStatesApply(material) ? MATERIAL_STATES.filter(k => out.enabled && out.in[k]) : []; };
@@ -514,10 +515,13 @@ export function copyMaterials(value) {
     slots.add(m.slot); const key = m.key ?? null;
     if (key !== null && (typeof key !== 'string' || !key.trim() || key.length > 80 || keys.has(key))) throw Error('Material keys must be unique nonempty strings.');
     if (key) keys.add(key);
-    return {slot: m.slot, name: nameOf(m.name), key, worldGround: m.worldGround === true, worldWater: m.worldWater === true, ...Object.fromEntries(MAP_ROLES.filter(([role]) => m[role] === true).map(([role]) => [role, true])), ...copyMaterial(m)};
+    const layer = typeof m.worldLayer === 'string' && m.worldLayer.trim() && m.worldLayer.length <= 80 ? m.worldLayer : null;
+    return {slot: m.slot, name: nameOf(m.name), key, worldGround: m.worldGround === true, worldWater: m.worldWater === true, ...Object.fromEntries(MAP_ROLES.filter(([role]) => m[role] === true).map(([role]) => [role, true])), ...(layer ? {worldLayer: layer} : {}), ...copyMaterial(m)};
   }).sort((a, b) => a.slot - b.slot);
   for (const role of ['worldGround', 'worldWater', ...MAP_ROLES.map(([role]) => role)]) if (list.filter(m => m[role]).length > 1) throw Error(`Only one material can be the world’s ${roleName(role)}.`);
   for (const [role, , what] of MAP_ROLES) if (list.some(m => m[role] && roleCount(m) > 1)) throw Error(`The world’s ${what} is a material of its own.`);
+  if (list.some(m => m.worldLayer && roleCount(m) > 1)) throw Error('A surface layer’s material is a material of its own.');
+  if (new Set(list.filter(m => m.worldLayer).map(m => m.worldLayer)).size !== list.filter(m => m.worldLayer).length) throw Error('Only one material can draw a surface layer.');
   if (list.some(m => m.worldGround && m.worldWater)) throw Error('The world’s ground and its water are two materials.');
   return list;
 }
@@ -552,6 +556,12 @@ export function withWorldMaterials(value, config, {carried = false} = {}) {
   for (const [role, key] of MAP_ROLES) {
     const m = LIBRARY[config.materials?.[key]];
     if (m && (role === 'worldHigh' || (role === 'worldBeach' && config.beachTable) || !surfaced) && !list.some(o => o[role]) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, [role]: true} : o); }
+  }
+  // The world's surface layers that draw a material (config.surface, a layer with `material`: a library key and an `id`): each the list
+  // lacks is added with the layer's id as its worldLayer, while the list has room.
+  for (const layer of config.surface || []) {
+    const m = layer?.material != null && layer.id ? LIBRARY[layer.material] : null;
+    if (m && !list.some(o => o.worldLayer === layer.id) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, layer.name || m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, worldLayer: layer.id} : o); }
   }
   // A world may name more materials its tools lay down (config.materials.extra: library keys; a tool's `material`, sculpt-tools.js
   // toolMaterialSlot). Each the list lacks is added while it has room.

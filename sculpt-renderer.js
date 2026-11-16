@@ -3,7 +3,7 @@
 // sculpt-vert.wgsl and engine-frag.wgsl (the draw), engine-bake.wgsl (the
 // fields bake of a chunk, a compute pass).
 
-import {tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH,surfaceRows,SURFACE_HEAD_ROW} from './sculpt-material-model.js';
+import {tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH,surfaceRows,SURFACE_FLAGS_ROW} from './sculpt-material-model.js';
 import {MaterialCache,writeMaterialSlot} from './sculpt-material-cache.js';
 import {copyMaterial,materialCacheUsage,materialStaged,materialTint,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES,LIBRARY,materialStates} from './sculpt-materials.js';
 import {columnRows,columnColors} from './sculpt-column.js';
@@ -548,8 +548,10 @@ export class TerrainRenderer {
   placementTable(variant) {
     const rows = this.materialData?.placement ? tablePlacementRows(this.materialData) : this.placementRows(variant);
     // The world's surface layers in the rows before the placement rows (engine-frag.wgsl surfaceStage): two a layer from row 0, the stages' heads at SURFACE_HEAD_ROW.
-    const surface = surfaceRows(this.config.surface);
-    const head = [...surface.rows, ...Array.from({length: SURFACE_HEAD_ROW - surface.rows.length}, () => [0, 0, 0, 0]), ...surface.head];
+    // A material layer draws the map's material that carries its id (worldLayer).
+    const slotOf = id => [...(this.grounds || new Map())].find(([, m]) => m.worldLayer === id)?.[0] ?? -1;
+    const surface = surfaceRows(this.config.surface, slotOf);
+    const head = [...surface.rows, ...Array.from({length: SURFACE_FLAGS_ROW - surface.rows.length}, () => [0, 0, 0, 0]), surface.flags, ...surface.head];
     return [...head, ...rows, ...groundCoverRows(this.config.material?.groundCover,variant,this.colorOverrides||{},this.means?.ground)];
   }
 
@@ -1137,7 +1139,7 @@ export class TerrainRenderer {
     const table = this.uniform.get('ground'), checked = new Map();
     for (const [slot, material] of materials) {
       if (!Number.isInteger(slot) || slot < 1 || slot >= MATERIAL_SLOTS) throw new Error(`Material slots are 1 to ${MATERIAL_SLOTS - 1}.`);
-      checked.set(slot, {worldGround: material.worldGround === true, worldWater: material.worldWater === true, ...Object.fromEntries(MAP_ROLES.map(([r]) => [r, material[r] === true])), ...copyMaterial(material)});
+      checked.set(slot, {worldGround: material.worldGround === true, worldWater: material.worldWater === true, ...Object.fromEntries(MAP_ROLES.map(([r]) => [r, material[r] === true])), ...(material.worldLayer ? {worldLayer: material.worldLayer} : {}), ...copyMaterial(material)});
     }
     const usage = materialCacheUsage([...checked.values()].reduce((n, m) => n + 1 + materialStates(m).length, 0), MATERIAL_REPEAT, [...checked.values()].some(materialStaged));   // layers: one a material and one a state
     if (!usage.fits) throw Error(`These materials need ${(usage.bytes / 1048576).toFixed(0)} MiB; the cache budget is ${usage.budget / 1048576} MiB. Use fewer materials.`);
@@ -1147,6 +1149,7 @@ export class TerrainRenderer {
     this.i('uGroundAny', checked.size ? 1 : 0);
     this.i('uGroundShine', [...checked.values()].some(m => m.nodes.find(n => n.type === 'output').in.shine) ? 1 : 0);
     this.grounds = checked;
+    if (this.variant && (this.config.surface || []).some(l => l?.material != null)) this.set('uMaterialTable', this.placementTable(this.variant));   // a material layer's slot
     if (this.means) this.means.ground = checked.size ? materialTint(checked.get(role('worldGround'))) : [.5, .5, .5];
     if (this.means && role('worldSlope')) this.means.slope = materialTint(checked.get(role('worldSlope')));   // the map's slope cover, once it has one
     new Uint8Array(this.uniformData, table.offset, table.stride * table.count).fill(0);

@@ -55,11 +55,14 @@ export function groundCoverRows(cover, overrides = null, colors = {}, ground = [
   return rows;
 }
 // A world's surface layers (docs/SURFACE_LAYERS.md; config.surface, from world.surface or materials/defaults.json) as the draw's rows
-// (engine-frag.wgsl surfaceStage). A built-in layer is one of the draw's own surfaces: its color and its share are the draw's, and its stage
-// (the effects that run between stages fix where a layer can go) and its place in that stage are the built-in's. The world's list sets their
-// order within a stage, their Amount and their edge. Rows: SURFACE_HEAD_ROW.. the stages' [first layer, count] pairs, then two rows a
-// layer from row 0, sorted by stage: (stage slot, amount, 0, 0) and (width, noise, noise size, 0).
-export const SURFACE_STAGES = 8, SURFACE_LAYER_ROWS = 2, SURFACE_MAX = 24, SURFACE_HEAD_ROW = 152;
+// (engine-frag.wgsl surfaceStage). A layer is a built-in (one of the draw's own surfaces: its color and share are the draw's, and its stage, the
+// place among the effects that read the color below, is the built-in's) or a material layer (`material`: a library key, drawn from the map's
+// copy that carries the layer's id as worldLayer; `stage` one of SURFACE_STAGE_NAMES, default land). Either may have a rule over the site's
+// facts: `where` (up to four windows {fact, from, to, fade}, all of which must hold) or `score` ({terms: [{fact, weight}], from, fade}).
+// The world's list sets their order within a stage, an Amount and an edge. Rows from row 0, sorted by stage: (built-in slot or -1, Amount,
+// material slot or -1, rule rows), (width, noise, noise size, salt), then the rule's (kind, score from, score fade, 0) and its terms;
+// SURFACE_FLAGS_ROW x is 1 when a layer reads facts or draws a material; SURFACE_HEAD_ROW's four rows the stages' (first row, count) pairs.
+export const SURFACE_STAGES = 8, SURFACE_MAX = 32, SURFACE_HEAD_ROW = 152, SURFACE_FLAGS_ROW = 151, SURFACE_RULE_TERMS = 4;
 // Built-ins: [stage, slot in its stage]. Stages: 0 after the ground, 1 after the low-ground tint, 2 after the cover classes, 3 after the
 // margin join, 4 after the beds, 5 after the patches and the rock skin, 6 after the bake's stones and cracks, 7 after the crystals and hill light.
 export const SURFACE_BUILTINS = {
@@ -67,17 +70,38 @@ export const SURFACE_BUILTINS = {
   regrownMoss: [5, 0], fines: [5, 1], paintedRock: [5, 2], paintedSnow: [5, 3], paintedMoss: [5, 4], sandDust: [5, 5], sand: [5, 6],
   chips: [6, 0], iceCrest: [7, 0], iceCap: [7, 1],
 };
-export function surfaceRows(surface) {
+export const SURFACE_STAGE_NAMES = ['ground', 'slope', 'land', 'crown', 'band', 'loose', 'chips', 'snow'];
+// Facts a rule reads (engine-frag.wgsl surfaceFacts), in their order there. The shares exist from their own stage on.
+export const SURFACE_FACTS = ['slope', 'aboveSea', 'abovePlain', 'wear', 'deposit', 'wetness', 'moisture', 'soilDepth', 'light', 'top', 'convexity',
+  'rockShare', 'debrisShare', 'sandShare'];
+// A layer's salt for its edge noise, from its id (or its built-in), so adding a layer does not reshuffle another's speckle.
+const layerSalt = key => { let h = 17; for (const c of String(key)) h = (h * 31 + c.charCodeAt(0)) % 9973; return 17 + h; };
+export const layerKey = layer => layer?.id ?? layer?.builtin ?? '';
+// `slotOf(id)`: the map's slot of the material that carries this layer's id (-1 when the map lacks it).
+export function surfaceRows(surface, slotOf = () => -1) {
   const list = Array.isArray(surface) ? surface : [];
   if (list.length > SURFACE_MAX) throw Error(`A world's surface holds at most ${SURFACE_MAX} layers.`);
+  let facts = false;
   const layers = list.map((layer, i) => {
-    const at = SURFACE_BUILTINS[layer?.builtin];
-    if (!at) throw Error(`Surface layer ${i + 1}: unknown built-in "${layer?.builtin}".`);
-    const edge = layer.edge || {}, number = (v, fallback) => Number.isFinite(Number(v)) ? Number(v) : fallback;
-    return {stage: at[0], rows: [[at[1], number(layer.amount, 1), 0, 0], [number(edge.width, 1), number(edge.noise, 0), number(edge.noiseSize, 8), 0]]};
+    const material = layer?.material != null, at = material ? null : SURFACE_BUILTINS[layer?.builtin];
+    if (!material && !at) throw Error(`Surface layer ${i + 1}: unknown built-in "${layer?.builtin}".`);
+    if (material && !layer.id) throw Error(`Surface layer ${i + 1}: a material layer needs an id.`);
+    const stage = material ? SURFACE_STAGE_NAMES.indexOf(layer.stage ?? 'land') : at[0];
+    if (stage < 0) throw Error(`Surface layer ${i + 1}: unknown stage "${layer.stage}".`);
+    const edge = layer.edge || {}, number = (v, fallback) => Number.isFinite(Number(v)) ? Number(v) : fallback, fact = name => {
+      const k = SURFACE_FACTS.indexOf(name); if (k < 0) throw Error(`Surface layer ${i + 1}: unknown fact "${name}".`); return k;
+    };
+    let rule = [];
+    if (layer.score) rule = [[2, number(layer.score.from, .5), Math.max(number(layer.score.fade, .05), 1e-4), 0], ...(layer.score.terms || []).slice(0, SURFACE_RULE_TERMS).map(t => [fact(t.fact), number(t.weight, 1), 0, 0])];
+    else if (layer.where?.length) rule = [[1, 0, 0, 0], ...layer.where.slice(0, SURFACE_RULE_TERMS).map(w => [fact(w.fact), number(w.from, -1e9), number(w.to, 1e9), Math.max(number(w.fade, .05), 1e-4)])];
+    if (rule.length || material) facts = true;
+    const slot = material ? slotOf(layer.id) : -1;
+    return {stage, rows: [[material ? -1 : at[1], number(layer.amount, 1), slot, rule.length], [number(edge.width, 1), number(edge.noise, 0), number(edge.noiseSize, 8), layerSalt(layerKey(layer))], ...rule]};
   });
   // Stable by stage: the list's order within a stage is kept.
   const sorted = layers.map((l, i) => [l, i]).sort((a, b) => a[0].stage - b[0].stage || a[1] - b[1]).map(([l]) => l);
-  const head = Array.from({length: SURFACE_STAGES}, (_, s) => { const first = sorted.findIndex(l => l.stage === s); return [first < 0 ? 0 : first, sorted.filter(l => l.stage === s).length]; });
-  return {rows: sorted.flatMap(l => l.rows), head: [0, 2, 4, 6].map(k => [...head[k], ...head[k + 1]])};
+  const rows = [], heads = Array.from({length: SURFACE_STAGES}, () => [0, 0]);
+  for (const l of sorted) { if (!heads[l.stage][1]) heads[l.stage][0] = rows.length; heads[l.stage][1]++; rows.push(...l.rows); }
+  if (rows.length > SURFACE_FLAGS_ROW) throw Error(`A world's surface needs ${rows.length} rows; the draw holds ${SURFACE_FLAGS_ROW}. Use fewer layers or simpler rules.`);
+  return {rows, flags: [facts ? 1 : 0, 0, 0, 0], head: [0, 2, 4, 6].map(k => [...heads[k], ...heads[k + 1]])};
 }

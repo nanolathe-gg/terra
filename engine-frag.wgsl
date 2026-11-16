@@ -232,7 +232,7 @@ fn slopeTexMean() -> vec3f { return roleMean(u.slopeGround, u.groundDefault); }
 // (read outside, through Place.deposits); the erosion plane is read on the CPU side by the GPU pass.
 const MM_PLACE = 156u;
 fn pr(i: u32) -> vec4f { return matRow(MM_PLACE + i); }
-struct Place { exposed: f32, lowBank: f32, top: f32, deposits: f32, vegetation: f32, exposure: f32 }
+struct Place { exposed: f32, lowBank: f32, top: f32, deposits: f32, vegetation: f32, exposure: f32, convexity: f32 }
 fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, weather: vec2f, route: f32) -> Place {
     var out: Place;
     let r0 = pr(0u); let r1 = pr(1u); let r2 = pr(2u); let r3 = pr(3u); let r4 = pr(4u); let r5 = pr(5u);
@@ -294,6 +294,7 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
     let around = 0.25 * (baseHeight(p - vec2f(3.0, 0.0)) + baseHeight(p + vec2f(3.0, 0.0))
                        + baseHeight(p - vec2f(0.0, 3.0)) + baseHeight(p + vec2f(0.0, 3.0)));
     out.top = clamp((h - around) / 1.5, -1.0, 1.0);
+    out.convexity = convexity;   // a surface layer's fact
     return out;
 }
 
@@ -361,38 +362,81 @@ fn flowersAt(p: vec2f, cover: array<f32, 7>, total: f32, light: f32, vegetation:
     }
     return vec4f(col * (1.1 + 0.25 * ho.x), 1.0);
 }
-// The world's surface layers (docs/SURFACE_LAYERS.md): an ordered list of the draw's own surfaces, each laid over what is below by its share.
-// The rows (sculpt-material-model.js surfaceRows): two a layer from row 0, sorted by stage, (slot in its stage, Amount) and (edge width, noise,
-// noise size); SURFACE_HEAD's four rows hold the eight stages' (first layer, count) pairs. A stage runs where the draw made its surfaces before
-// (the effects between stages read and change the color below, so a layer stays in its stage); the caller fills `src` and `mask` by slot.
-// Coverage: the share times Amount; with an edge of width under 1 or noise, clamp((share + noise - .5) / width + .5). Noise is Noise times an
-// even value from -.5 to .5, by the art pixel at a size of 1 or less and in patches of that size above (the cover classes' pick), both
-// repeating with the ground's pool. Width 1 and no noise lay the share itself, as the draw always has.
+// The world's surface layers (docs/SURFACE_LAYERS.md): an ordered list, each laid over what is below. A layer draws one of the draw's own
+// surfaces (a built-in: its color and share are the draw's) or a material of the map (bound to the layer by the material's worldLayer); a
+// rule over the site's facts may limit where it shows. Rows (sculpt-material-model.js surfaceRows), from row 0, sorted by stage:
+//   0 (built-in slot in its stage, or -1 a material layer; Amount; material slot or -1; rule rows), 1 (edge width, noise, noise size, salt),
+//   then with a rule: (kind 1 windows, 2 score; score from; score half width; 0), and its terms: windows (fact, from, to, fade), all of which
+//   must hold, or score terms (fact, weight, 0, 0), summed with the edge's noise and passed through one smoothstep.
+// SURFACE_HEAD's four rows hold the eight stages' (first row, layer count) pairs; row SURFACE_FLAGS x is 1 when a layer reads facts or draws a
+// material. A stage runs where the draw made its surfaces before (the effects between stages read the color below, so a layer stays in its
+// stage); the caller fills `src` and `mask` by built-in slot. A built-in's share is its mask times Amount (times its rule); a material layer's
+// is Amount times its rule. Coverage: with an edge of width under 1 or noise, clamp((share + noise - .5) / width + .5); a score's coverage is
+// its smoothstep. Noise is Noise times an even value from -.5 to .5, by the art pixel at a size of 1 or less and in patches of that size above
+// (the cover classes' pick), both repeating with the ground's pool. Width 1 and no noise lay the share itself, as the draw always has.
 const SURFACE_HEAD = 152u;
-fn surfaceEdge(share: f32, e: vec4f, p: vec2f, pixel: vec2f, salt: f32) -> f32 {
-    if (e.x >= 1.0 && e.y == 0.0) { return share; }
-    var noise = 0.0;
-    if (e.y != 0.0) {
-        let px = shelfHash(poolPixel(grainPixel(pixel)) + salt) - 0.5;
-        noise = e.y * select(1.0 / (1.0 + exp(-1.702 * coverZ(p, max(e.z, 2.0)))) - 0.5, px, e.z <= 1.0);
-    }
-    return clamp((share + noise - 0.5) / max(e.x, 0.001) + 0.5, 0.0, 1.0);
+const SURFACE_FLAGS = 151u;
+// Facts (surfaceFacts): 0 slope, 1 height above the sea, 2 above the plain, 3 wear, 4 deposit, 5 wetness, 6 moisture, 7 soil depth, 8 light
+// (level 1, sunward slopes more), 9 top (a lump 1, a hollow -1), 10 convexity, 11 the rock's share, 12 the debris', 13 the sand's. The shares
+// exist from their stage on (0 before it).
+const SURFACE_FACTS = 14u;
+var<private> surfaceFacts: array<f32, 14>;
+fn surfaceNoise(e: vec4f, p: vec2f, pixel: vec2f) -> f32 {
+    if (e.y == 0.0) { return 0.0; }
+    let px = shelfHash(poolPixel(grainPixel(pixel)) + e.w) - 0.5;
+    return e.y * select(1.0 / (1.0 + exp(-1.702 * coverZ(p, max(e.z, 2.0)))) - 0.5, px, e.z <= 1.0);
 }
-// The stage's layers over `color` in place; `cover` gets each slot's coverage (a union where several layers draw one slot).
-fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, array<vec3f, 7>>, mask: ptr<function, array<f32, 7>>, cover: ptr<function, array<f32, 7>>, p: vec2f, pixel: vec2f) {
+fn surfaceEdge(share: f32, e: vec4f, p: vec2f, pixel: vec2f) -> f32 {
+    if (e.x >= 1.0 && e.y == 0.0) { return share; }
+    return clamp((share + surfaceNoise(e, p, pixel) - 0.5) / max(e.x, 0.001) + 0.5, 0.0, 1.0);
+}
+fn surfaceWindow(v: f32, lo: f32, hi: f32, fade: f32) -> f32 {
+    let f = max(fade, 0.0001);
+    return smoothstep(lo - f, lo + f, v) * (1.0 - smoothstep(hi - f, hi + f, v));
+}
+// The stage's layers over `color` in place; `cover` gets each built-in slot's coverage (a union where several layers draw one slot), and
+// `over` the share material layers cover (they lie over what is below, so the built-ins' coverage under them shrinks).
+fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, array<vec3f, 7>>, mask: ptr<function, array<f32, 7>>, cover: ptr<function, array<f32, 7>>, over: ptr<function, f32>, p: vec2f, pixel: vec2f) {
     let head = u.materialTable[SURFACE_HEAD + stage / 2u];
     let odd = (stage & 1u) == 1u;
-    let first = u32(select(head.x, head.z, odd));
+    var row = u32(select(head.x, head.z, odd));
     let count = u32(select(head.y, head.w, odd));
     *cover = array<f32, 7>();
+    *over = 0.0;
     for (var i = 0u; i < count; i++) {
-        let r0 = u.materialTable[2u * (first + i)];
-        let k = min(u32(r0.x), 6u);
-        let share = select((*mask)[k] * r0.y, (*mask)[k], r0.y == 1.0);
+        let r0 = u.materialTable[row];
+        let e = u.materialTable[row + 1u];
+        let ruleAt = row + 2u;
+        let rules = u32(r0.w);
+        row += 2u + rules;
+        let builtin = r0.x >= 0.0;
+        if (!builtin && r0.z < 0.0) { continue; }   // a material layer whose material the map lacks draws nothing
+        let k = min(u32(max(r0.x, 0.0)), 6u);
+        var share = select(r0.y, select((*mask)[k] * r0.y, (*mask)[k], r0.y == 1.0), builtin);
         if (share == 0.0) { continue; }   // only an exact 0: some draw shares run a little outside 0 to 1, and the mix keeps them as it always has
-        let c = surfaceEdge(share, u.materialTable[2u * (first + i) + 1u], p, pixel, 17.0 + 13.0 * f32(first + i));
-        *color = mix(*color, (*src)[k], c);
-        (*cover)[k] = select(1.0 - (1.0 - (*cover)[k]) * (1.0 - c), c, (*cover)[k] == 0.0);   // layers of one slot join as a union
+        var c = 0.0;
+        if (rules == 0u) { c = surfaceEdge(share, e, p, pixel); }
+        else {
+            let rule = u.materialTable[ruleAt];
+            if (rule.x < 1.5) {
+                for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; share *= surfaceWindow(surfaceFacts[min(u32(w.x), SURFACE_FACTS - 1u)], w.y, w.z, w.w); }
+                if (share == 0.0) { continue; }
+                c = surfaceEdge(share, e, p, pixel);
+            } else {
+                var score = surfaceNoise(e, p, pixel);
+                for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; score += w.y * surfaceFacts[min(u32(w.x), SURFACE_FACTS - 1u)]; }
+                c = share * smoothstep(rule.y - rule.z, rule.y + rule.z, score);
+                if (c == 0.0) { continue; }
+            }
+        }
+        if (builtin) {
+            *color = mix(*color, (*src)[k], c);
+            (*cover)[k] = select(1.0 - (1.0 - (*cover)[k]) * (1.0 - c), c, (*cover)[k] == 0.0);   // layers of one slot join as a union
+        } else {
+            *color = mix(*color, groundPigment(p, u32(r0.z), surfaceFacts[3], surfaceFacts[4]), c);
+            for (var j = 0u; j < 7u; j++) { (*cover)[j] *= 1.0 - c; }
+            *over = 1.0 - (1.0 - *over) * (1.0 - c);
+        }
     }
 }
 fn groundCover(p: vec2f, slope: f32, broad: vec2f, top: f32, tm: TimeMaps, vegetation: f32, grass: vec3f, gate: f32) -> vec3f {
@@ -1754,8 +1798,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var surfSrc: array<vec3f, 7>;
     var surfMask: array<f32, 7>;
     var layerCover: array<f32, 7>;
+    var layerOver = 0.0;
+    if (u.materialTable[SURFACE_FLAGS].x > 0.0) {
+        // The surface layers' facts (surfaceFacts), once a pixel and only when a layer reads them or draws a material.
+        let site = coverSite(broad, timeMaps);
+        surfaceFacts = array<f32, 14>(slope, baseHeight(p) - u.sea, baseHeight(p) - u.base, timeMaps.wear, timeMaps.deposit, timeMaps.wet,
+            site.x, coverSoil(slope, place.top, timeMaps, site.x), site.y, place.top, place.convexity, 0.0, 0.0, 0.0);
+    }
     if (ownGround) { let hs = highShare(p); if (hs > 0.0) { surfSrc[0] = groundPigment(p, u32(u.highGround), timeMaps.wear, timeMaps.deposit); surfMask[0] = hs; } }
-    surfaceStage(0u, &grass, &surfSrc, &surfMask, &layerCover, p, pixel);   // stage 0: highland ground
+    surfaceStage(0u, &grass, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 0: highland ground
     // Low ground: the ground from the sea up to lowReach above it takes the low color (its grain kept), by the authored
     // height (the relief's grit would speckle the edge); the edge is ragged by 20-px noise and fades over the upper half of the reach.
     // Under the sea it is all low ground: the lit bed takes it from here and the shallow water's art below.
@@ -1807,7 +1858,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (u.slopeSand != 0) { slopeCover *= max(smoothstep(0.15, 0.6, beachField(p) + max(bakedFields(p).a, 0.0)), route); }
         surfMask = array<f32, 7>();
         surfSrc[0] = slopeGrass; surfMask[0] = slopeCover;
-        surfaceStage(1u, &grass, &surfSrc, &surfMask, &layerCover, p, pixel);   // stage 1: slope cover
+        surfaceStage(1u, &grass, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 1: slope cover
         slopeShare = layerCover[0];
     }
     // Card P30: a world with a ground-cover table colours its grass by class (the slope-only ramp above still gates the slope texture).
@@ -1889,18 +1940,20 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         surfSrc[2] = beachColour(pixel); surfMask[2] = beach * (1.0 - exposed * 0.7);
     }
     var material = grass;
-    surfaceStage(2u, &material, &surfSrc, &surfMask, &layerCover, p, pixel);   // stage 2: bare soil, rock, beach
+    surfaceStage(2u, &material, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 2: bare soil, rock, beach
     exposed = layerCover[1];
+    surfaceFacts[11] = exposed;
     material = joinSedimentTransition(material, pixel, rock, exposed, materialWeather);
-    if (u.rock[rs & rockMask].rockCrown > 0.0) {
+    surfMask = array<f32, 7>();
+    let crowned = u.rock[rs & rockMask].rockCrown > 0.0;
+    if (crowned) {
         // Some worlds' raised ground is bare rock to its crown (Zhon's
         // domes), not only where it is steep.
-        let crown = smoothstep(u.base + 5.0, u.base + 14.0, baseHeight(p) + (n.g - 0.5) * 6.0) * u.rock[rs & rockMask].rockCrown * (1.0 - route) * (1.0 - sandBar);
-        surfMask = array<f32, 7>();
-        surfSrc[0] = rock; surfMask[0] = crown;
-        surfaceStage(3u, &material, &surfSrc, &surfMask, &layerCover, p, pixel);   // stage 3: crown rock
-        exposed = max(exposed, layerCover[0]);
+        surfSrc[0] = rock; surfMask[0] = smoothstep(u.base + 5.0, u.base + 14.0, baseHeight(p) + (n.g - 0.5) * 6.0) * u.rock[rs & rockMask].rockCrown * (1.0 - route) * (1.0 - sandBar);
     }
+    surfaceStage(3u, &material, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 3: crown rock
+    if (crowned) { exposed = max(exposed, layerCover[0]); }
+    exposed *= 1.0 - layerOver;
     var bandSrc = vec3f(0.0); var bandMask = 0.0;
     if (u.rock[rs & rockMask].strata > 0.0 && u.rock[rs & rockMask].columnCount > 0) {
         // Beds by height, measured on retail Painted Desert: the column's sections (a start above the plain, a pair of beds as
@@ -1949,7 +2002,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     }
     surfMask = array<f32, 7>();
     surfSrc[0] = bandSrc; surfMask[0] = bandMask;
-    surfaceStage(4u, &material, &surfSrc, &surfMask, &layerCover, p, pixel);   // stage 4: base band
+    surfaceStage(4u, &material, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 4: base band
+    exposed *= 1.0 - layerOver;
     // Ground patches: level ground is not one tone. One gray field (two sizes of noise, sizes rounded to divide the pool) is read through a ramp of five flat steps: damp ground
     // up to a fifth darker, plain ground as it is, dusty ground paler toward the world's weathered sand. The steps' edges are frayed over some
     // 30 px and each tone is mottled a little, so a patch has no outline. Every part of the field repeats with the ground's pool, as the
@@ -2028,8 +2082,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
     }
     {
-        surfaceStage(5u, &material, &surfSrc, &surfMask, &layerCover, p, pixel);
-        exposed = max(exposed, layerCover[1] * (1.0 - lying.z * 0.45));   // debris fines
+        surfaceFacts[12] = surfMask[1]; surfaceFacts[13] = surfMask[6];
+        surfaceStage(5u, &material, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);
+        exposed = max(exposed, layerCover[1] * (1.0 - lying.z * 0.45)) * (1.0 - layerOver);   // debris fines
         if (u.paintOn != 0) { exposed = max(exposed, painted.x); }            // painted rock
     }
     // Baked boulders take rock material, lit by the same surface.
@@ -2055,7 +2110,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let chip = smoothstep(0.035, 0.40, materialChipHeight(p) * (1.0 - route)) * 0.65;
     surfMask = array<f32, 7>();
     surfSrc[0] = rock; surfMask[0] = chip * (1.0 - exposed);
-    surfaceStage(6u, &material, &surfSrc, &surfMask, &layerCover, p, pixel);   // stage 6: chips
+    surfaceStage(6u, &material, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 6: chips
+    exposed *= 1.0 - layerOver;
     material *= 1.0 - weather.r * 0.06;
     // H5 3a: wet swaths. Water darkens grass along its flow: soft streaks 15-40 px across and 70 px along the fall line, where the
     // wetness map is high and the ground slopes (the retail slopes' diagonal dark swaths, 20-40 px wide).
@@ -2169,9 +2225,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         surfSrc[1] = snowMaterial(pixel) * 0.9; surfMask[1] = cap;
     }
     {
-        surfaceStage(7u, &material, &surfSrc, &surfMask, &layerCover, p, pixel);
+        surfaceStage(7u, &material, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);
         exposed *= 1.0 - layerCover[0];
         exposed *= 1.0 - layerCover[1];
+        exposed *= 1.0 - layerOver;
     }
     // Card P27: the surf's beach is drawn last over the material, so the bake's cracks, chips and stones do not mark it: sand with its own fine
     // grain (colour the world's Sand), the shading eased toward level, then the wet sand to the last uprush and the wrack lines.

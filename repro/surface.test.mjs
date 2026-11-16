@@ -1,32 +1,69 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {surfaceRows, SURFACE_BUILTINS, SURFACE_STAGES, SURFACE_MAX, SURFACE_HEAD_ROW, SURFACE_LAYER_ROWS} from '../sculpt-material-model.js';
+import {surfaceRows, SURFACE_BUILTINS, SURFACE_STAGES, SURFACE_FACTS, SURFACE_FLAGS_ROW} from '../sculpt-material-model.js';
+import {withWorldMaterials, materialsInUse, copyMaterials, roleOf, LIBRARY} from '../sculpt-materials.js';
 
 const defaults = JSON.parse(readFileSync(new URL('../materials/defaults.json', import.meta.url), 'utf8'));
+const world = name => JSON.parse(readFileSync(new URL(`../materials/${name}.json`, import.meta.url), 'utf8')).world;
 
-test('the default surface draws every built-in once, in a stage order the draw can run', () => {
+test('the default surface draws every built-in once, in a stage order the draw can run, and reads no facts', () => {
   const names = defaults.surface.map(l => l.builtin);
   assert.deepEqual([...names].sort(), Object.keys(SURFACE_BUILTINS).sort(), 'each built-in once');
   const stages = names.map(n => SURFACE_BUILTINS[n][0]);
   assert.deepEqual(stages, [...stages].sort((a, b) => a - b), 'listed in stage order');
-  assert.ok(SURFACE_MAX * SURFACE_LAYER_ROWS <= SURFACE_HEAD_ROW, 'the layer rows end before the stage heads');
+  const {rows, flags} = surfaceRows(defaults.surface);
+  assert.equal(rows.length, 2 * names.length, 'two rows a layer without a rule');
+  assert.equal(flags[0], 0, 'no fact is computed for the shipped stack');
 });
 
-test('rows sort by stage, keep the list order within a stage, and head each stage with its first layer and count', () => {
+test('rows sort by stage, keep the list order within a stage, and head each stage with its first row and count', () => {
   const {rows, head} = surfaceRows([{builtin: 'sand'}, {builtin: 'highland', amount: .5}, {builtin: 'fines', edge: {width: .2, noise: .6, noiseSize: 1}}, {builtin: 'rock'}]);
   assert.equal(rows.length, 8);
-  assert.deepEqual(rows[0], [SURFACE_BUILTINS.highland[1], .5, 0, 0], 'stage 0 first, with its Amount');
+  assert.deepEqual(rows[0], [SURFACE_BUILTINS.highland[1], .5, -1, 0], 'stage 0 first, with its Amount');
   assert.deepEqual(rows.filter((_, i) => i % 2 === 0).map(r => r[0]), [0, 1, 6, 1], 'highland, rock, sand, fines by slot');
-  assert.deepEqual(rows[7], [.2, .6, 1, 0], 'an edge row');
+  assert.deepEqual(rows[7].slice(0, 3), [.2, .6, 1], 'an edge row');
   assert.equal(head.length, SURFACE_STAGES / 2);
-  assert.deepEqual(head[0], [0, 1, 0, 0], 'stage 0: one layer at 0; stage 1: none');
-  assert.deepEqual(head[1], [1, 1, 0, 0], 'stage 2: rock at 1');
-  assert.deepEqual(head[2].slice(2), [2, 2], 'stage 5: sand then fines, the list order kept');
+  assert.deepEqual(head[0], [0, 1, 0, 0], 'stage 0: one layer at row 0; stage 1: none');
+  assert.deepEqual(head[1], [2, 1, 0, 0], 'stage 2: rock at row 2');
+  assert.deepEqual(head[2].slice(2), [4, 2], 'stage 5: sand then fines, the list order kept');
+});
+
+test('a rule adds its rows and turns facts on; a material layer binds its id to a slot', () => {
+  const {rows, flags, head} = surfaceRows([
+    {builtin: 'rock', where: [{fact: 'slope', from: 1, to: 9, fade: .2}, {fact: 'aboveSea', from: 10}]},
+    {id: 'snow', material: 'green-ground', stage: 'snow', score: {terms: [{fact: 'abovePlain', weight: 1}, {fact: 'light', weight: -2}], from: 40, fade: 5}},
+  ], id => id === 'snow' ? 9 : -1);
+  assert.equal(flags[0], 1);
+  assert.deepEqual(rows[0], [1, 1, -1, 3], 'rock: three rule rows');
+  assert.deepEqual(rows[2], [1, 0, 0, 0], 'windows');
+  assert.deepEqual(rows[3], [SURFACE_FACTS.indexOf('slope'), 1, 9, .2]);
+  assert.equal(rows[4][2], 1e9, 'an open end');
+  assert.deepEqual(rows[5], [-1, 1, 9, 3], 'the material layer: slot 9, three rule rows');
+  assert.deepEqual(rows[7], [2, 40, 5, 0], 'a score');
+  assert.deepEqual(head[3].slice(2), [5, 1], 'the snow stage starts at row 5');
+  assert.notEqual(rows[1][3], rows[6][3], 'each layer its own salt');
 });
 
 test('a bad list is refused', () => {
   assert.throws(() => surfaceRows([{builtin: 'lava lamp'}]), /unknown built-in/);
-  assert.throws(() => surfaceRows(Array.from({length: SURFACE_MAX + 1}, () => ({builtin: 'rock'}))), /at most/);
+  assert.throws(() => surfaceRows([{builtin: 'rock', where: [{fact: 'vibes'}]}]), /unknown fact/);
+  assert.throws(() => surfaceRows([{material: 'green-ground'}]), /needs an id/);
+  assert.throws(() => surfaceRows([{id: 'x', material: 'green-ground', stage: 'attic'}]), /unknown stage/);
+  assert.throws(() => surfaceRows(Array.from({length: 33}, () => ({builtin: 'rock'}))), /at most/);
+  const big = Array.from({length: 30}, (_, i) => ({id: 'm' + i, material: 'green-ground', where: [{fact: 'slope'}, {fact: 'slope'}, {fact: 'slope'}, {fact: 'slope'}]}));
+  assert.throws(() => surfaceRows(big), new RegExp(`holds ${SURFACE_FLAGS_ROW}`));
   assert.deepEqual(surfaceRows(undefined).rows, [], 'no list: no layers');
+});
+
+test('a world whose surface draws a material gives a new map that material, bound to the layer and in use', () => {
+  const w = world('green'), config = {materials: w.materials, surface: [...defaults.surface, {id: 'scree', name: 'Scree', material: 'green-debris', stage: 'land', where: [{fact: 'slope', from: 1}]}]};
+  const list = withWorldMaterials(null, config), m = list.find(o => o.worldLayer === 'scree');
+  assert.ok(m, 'added');
+  assert.equal(m.source, 'green-debris');
+  assert.equal(roleOf(m), 'worldLayer');
+  assert.ok(materialsInUse([], list).some(o => o.slot === m.slot), 'in use');
+  assert.deepEqual(copyMaterials(list).find(o => o.slot === m.slot).worldLayer, 'scree', 'kept by a save');
+  assert.throws(() => copyMaterials([{...m, worldRock: true}]), /material of its own/);
+  assert.ok(LIBRARY['green-debris']);
 });
