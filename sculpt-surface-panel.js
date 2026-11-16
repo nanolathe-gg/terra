@@ -79,7 +79,7 @@ export function mountSurfacePanel(host) {
   };
   let editing = null;   // the list while a slider moves; committed on change
   const current = () => editing ?? host.surface();
-  const put = (next, commit) => { editing = commit ? null : next; host.apply(next, {commit}); if (commit) build(); };
+  const put = (next, commit) => { editing = commit ? null : next; host.apply(next, {commit}); if (commit) { build(); reinspect(); } };
   const refresh = () => { if (!editing) { build(); sendView(true); } };   // after a material edit, an undo or a load; not while a slider moves
   const edit = (i, change, commit) => { const next = structuredClone(current()); change(next[i], next); put(next, commit); };
   const slider = (label, value, min, max, step, onInput, title = '') => {
@@ -238,6 +238,67 @@ export function mountSurfacePanel(host) {
     const stage = stageOf(layer), next = [...layers]; let at = 0; for (let j = next.length - 1; j >= 0; j--) if (stageOf(next[j]) <= stage) { at = j + 1; break; }
     next.splice(at, 0, layer); open.add(layer.id); put(next, true);
   };
+  // The inspector (host.pickPixel, host.inspect): the layers that drew one pixel, top first, with what each covers and what of it shows,
+  // the effects laid after them, and the facts rules read there. It reads again after each committed edit.
+  const inspectButton = $('surface-inspect'), result = $('surface-inspect-result');
+  let cancelPick = null, lastAt = null, reading = 0;
+  const pressed = on => { inspectButton.ariaPressed = String(on); inspectButton.textContent = on ? 'Click the map… (Esc or here to stop)' : 'Inspect a pixel'; };
+  inspectButton.onclick = () => {
+    if (cancelPick) { cancelPick(); cancelPick = null; pressed(false); return; }
+    pressed(true);
+    cancelPick = host.pickPixel(at => { cancelPick = null; pressed(false); lastAt = at; inspect(); });
+  };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && cancelPick) { cancelPick(); cancelPick = null; pressed(false); } });
+  async function inspect() {
+    if (!lastAt) return;
+    const ticket = ++reading;
+    result.hidden = false;
+    if (!result.childElementCount) result.replaceChildren(el('p', {textContent: 'Reading the pixel…'}));
+    const read = await host.inspect(lastAt).catch(error => ({error}));
+    if (ticket === reading) showInspect(read);
+  }
+  function reinspect() { if (lastAt && !result.hidden) inspect(); }
+  const percent = v => Math.round(v * 100) + '%';
+  function openLayer(key) {
+    open.add(key); build();
+    const row = list.querySelector(`[data-key="${CSS.escape(key)}"]`); row?.scrollIntoView({block: 'nearest', behavior: 'smooth'}); row?.querySelector('.surface-toggle')?.focus({preventScroll: true});
+  }
+  function showInspect(read) {
+    const again = el('button', {type: 'button', textContent: 'Read again'}), close = el('button', {type: 'button', textContent: 'Close'});
+    again.onclick = inspect; close.onclick = () => { result.hidden = true; result.replaceChildren(); lastAt = null; };
+    const tools = el('div', {className: 'surface-line'}, again, close);
+    if (!read || read.error) { result.replaceChildren(el('p', {textContent: read?.error ? 'The pixel could not be read: ' + read.error.message : 'That point is off the map.'}), tools); return; }
+    const layers = host.surface(); let layerRows = [];
+    try { layerRows = surfaceRows(layers).layerRows; } catch (_) {}
+    const byRow = new Map(layerRows.map((row, i) => [row, i]));
+    const hex = c => '#' + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('');
+    const final = hex(read.color), ground = host.slotMaterial(read.slot);
+    const swatch = color => { const chip = el('span', {className: 'material-chip'}); chip.style.background = color; return chip; };
+    const out = [el('p', {className: 'surface-line'}, swatch(final), el('span', {textContent: `Pixel ${Math.floor(lastAt.x)}, ${Math.floor(lastAt.y)}: ${final}`}))];
+    out.push(el('p', {textContent: `Ground: ${ground?.name ?? 'the world’s ground'}${read.ownGround ? ' (the world’s ground)' : ' (a stroke’s material)'}` + (read.aboveSea < 0 ? `; under water, ${(-read.aboveSea).toFixed(1)} below the sea` : '')}));
+    // What of each layer shows: its coverage, less what every layer drawn after it covers.
+    const seen = new Array(read.layers.length); let over = 1;
+    for (let k = read.layers.length - 1; k >= 0; k--) { seen[k] = read.layers[k].cover * over; over *= 1 - Math.max(0, Math.min(1, read.layers[k].cover)); }
+    if (!read.layers.length) out.push(el('p', {textContent: 'No layer drew here: the ground shows.'}));
+    else {
+      out.push(el('p', {textContent: 'Layers that drew here, top first:'}));
+      const items = [];
+      read.layers.forEach((l, k) => {
+        const i = byRow.get(l.row), layer = layers[i]; if (!layer) return;
+        const material = layer.material != null ? host.material(layer) : null, source = material?.name ?? (isMaterialLayer(layer) ? 'its material (missing)' : BUILTIN_SOURCES[layer.builtin]);
+        const name = el('button', {type: 'button', className: 'link', textContent: nameOf(layer), title: 'Open this layer'}); name.onclick = () => openLayer(layerKey(layer));
+        const chip = material ? swatch(material.color) : el('span', {className: 'material-chip own'});
+        const fate = seen[k] >= .995 ? 'shows' : seen[k] < .005 ? 'covered by a later layer' : `${percent(seen[k])} shows`;
+        items.unshift(el('li', {className: 'surface-line'}, chip, name, el('span', {textContent: `${source} · covers ${percent(Math.min(1, l.cover))} · ${fate}`})));
+      });
+      out.push(el('ol', {className: 'surface-inspect-layers'}, ...items));
+    }
+    const effects = [['low-ground tint', read.lowTint], ['wet band', read.wet], ['surf sand', read.surf]].filter(([, v]) => v > .005).map(([n, v]) => `${n} ${percent(Math.min(1, v))}`);
+    out.push(el('p', {textContent: (effects.length ? 'Laid after the layers here: ' + effects.join(', ') + '. ' : '') + 'Light, weather, cracks, stones and the palette come after the layers too.'}));
+    const facts = el('details', {}, el('summary', {textContent: 'Facts here (what rules read)'}),
+      el('dl', {className: 'surface-facts'}, ...SURFACE_FACTS.flatMap((f, k) => [el('dt', {textContent: FACT_LABELS[f][0]}), el('dd', {textContent: read.facts[k].toFixed(2)})])));
+    result.replaceChildren(...out, facts, tools);
+  }
   $('surface-show').onchange = () => { if (!$('surface-show').checked) host.preview(-1); };
   $('surface-reset').onclick = () => { host.restore(); build(); sendView(); };
   build();

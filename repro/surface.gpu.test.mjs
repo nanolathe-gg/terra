@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {openHost, openScene, renderWindow, dumpConfigs} from './headless.mjs';
+import {surfaceRows} from '../sculpt-material-model.js';
 
 const configs = dumpConfigs(), file = join(configs, 'config', 'green.json'), original = readFileSync(file, 'utf8');
 const withSurface = edit => { const c = JSON.parse(original); c.surface = edit(c.surface); writeFileSync(file, JSON.stringify(c)); };
@@ -13,7 +14,7 @@ const scene = {biome: 'green', ground: true, query: '', strokes: [['landform', [
 const changed = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) n++; return n / (a.length / 4); };
 const view = async (extra = '') => { const s = await openScene(scene, 'biome=green&mapX=4&mapY=4' + extra); try { await s.fields.ready(); return {pixels: await renderWindow(s, {x: 0, y: 0, width: 512, height: 512}), errors: s.errors}; } finally { s.dispose(); } };
 
-test('surface layers: a rule limits a built-in; a material layer draws where its rule holds; an engine-colored built-in draws a material; amount is coverage; a missing material draws nothing', {timeout: 600000}, async () => {
+test('surface layers: a rule limits a built-in; a material layer draws where its rule holds; an engine-colored built-in draws a material; amount is coverage; the inspector reads a pixel; a missing material draws nothing', {timeout: 600000}, async () => {
   await openHost({configs});
   try {
     withSurface(s => s);
@@ -26,6 +27,16 @@ test('surface layers: a rule limits a built-in; a material layer draws where its
     const capped = await view();
     const share = changed(base.pixels, capped.pixels);
     assert.ok(share > .03 && share < .6, `the cap covers the mesa's top and nothing else (${(share * 100).toFixed(1)}%)`);
+    // The inspector (renderer.setProbe, readProbe): at a pixel the cap took, the draw records the cap last, its coverage, and the pixel's color.
+    let at = -1; for (let i = 0; i < capped.pixels.length; i += 4) if (capped.pixels[i] !== base.pixels[i] && capped.pixels[i + 4] !== base.pixels[i + 4] && capped.pixels[i - 4] !== base.pixels[i - 4]) { at = i / 4; break; }
+    const px = at % 512, py = Math.floor(at / 512), probed = await openScene(scene, 'biome=green&mapX=4&mapY=4');
+    let read;
+    try { await probed.fields.ready(); probed.renderer.setProbe({x: px, y: py}); await renderWindow(probed, {x: 0, y: 0, width: 512, height: 512}); read = await probed.renderer.readProbe(); } finally { probed.dispose(); }
+    assert.ok(read, 'the draw recorded the inspected pixel');
+    const rows = surfaceRows(JSON.parse(readFileSync(file, 'utf8')).surface).layerRows;
+    assert.equal(read.layers.at(-1).row, rows.at(-1), 'the cap is the last layer drawn there');
+    assert.ok(read.layers.at(-1).cover > .5, `the cap covers it (${read.layers.at(-1).cover})`);
+    for (let k = 0; k < 3; k++) assert.ok(Math.abs(read.color[k] * 255 - capped.pixels[at * 4 + k]) <= 1, 'the recorded color is the pixel’s');
     withSurface(s => [...s, {id: 'cap', name: 'Cap', material: 'ice-ground', stage: 'snow', where: [{fact: 'abovePlain', from: 20, fade: 4}], edge: {height: 1}}]);
     const lifted = await view();
     assert.ok(changed(capped.pixels, lifted.pixels) > 0, 'height contrast moves the cap’s edge');

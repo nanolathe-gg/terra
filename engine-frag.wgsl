@@ -383,6 +383,9 @@ const SURFACE_FACTS = 14u;
 var<private> surfaceFacts: array<f32, 14>;
 var<private> surfacePreviewCover: f32 = 0.0;   // the previewed layer's coverage (diagnostic view 13)
 var<private> surfacePreviewSeen: f32 = -1.0;   // what of it the layers after it leave showing (-1 until it is drawn)
+// The inspector's pixel (GeometryFrame.probe): this invocation draws it, and how many layers it has recorded (probeOut).
+var<private> probeHere: bool = false;
+var<private> probeCount: u32 = 0u;
 // A layer's pattern, about evenly spread over 0 to 1: by the art pixel at Noise size 1, else smooth patches that size. Its edge noise and its
 // coverage read the same pattern, so the pixels a ragged edge reaches first are the ones a partial Amount keeps.
 fn surfacePattern(e: vec4f, p: vec2f, pixel: vec2f) -> f32 {
@@ -446,6 +449,9 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
             }
         }
         if (amount < 1.0) { c *= step(1.0 - amount, surfacePattern(e, p, pixel) + lift); if (c == 0.0) { continue; } }
+#ifdef COLOR_PASS
+        if (probeHere && probeCount < 32u) { probeOut[PROBE_LAYERS + probeCount * 2u] = f32(layerRow); probeOut[PROBE_LAYERS + 1u + probeCount * 2u] = c; probeCount++; }
+#endif
         if (surfacePreviewSeen >= 0.0) { surfacePreviewSeen *= 1.0 - c; }   // a later layer lies over the previewed one
         if (i32(layerRow) == u.surfacePreview) { surfacePreviewCover = c; surfacePreviewSeen = c; }
         if (builtin) {
@@ -1607,7 +1613,8 @@ struct SurfaceRecord {
     y:f32,z:f32,nx:f32,ny:f32,nz:f32,rain:f32,sun:f32,sky:f32,
     cavity:f32,gx:f32,gy:f32,faceSlope:f32,ao:f32,shadow:f32,
 }
-struct GeometryFrame {width:u32,height:u32,padding:vec2u}
+// probe: the art pixel the Surface section's inspector asks about, plus one (0: none); the color pass writes what it drew there (probeOut).
+struct GeometryFrame {width:u32,height:u32,probe:vec2u}
 @group(3) @binding(1) var<uniform> geometryFrame:GeometryFrame;
 fn geometryIndex(p:vec2i)->u32 {
     let q=clamp(p,vec2i(0),vec2i(i32(geometryFrame.width),i32(geometryFrame.height))-1);
@@ -1653,6 +1660,11 @@ fn geometryMain(v:VertexOut)->@location(0) vec4f {
 #endif
 #ifdef COLOR_PASS
 @group(3) @binding(0) var<storage,read> geometryIn:array<SurfaceRecord>;
+// The inspector's record of its pixel (sculpt-renderer.js readProbe): 0 set, 1-3 the final color, 4 the ground's slot, 5 the height above the
+// sea, 6-19 the surface facts, 20 the low-ground tint's share, 21 the wet band's, 22 the surf sand's, 23 whether it is the world's own ground,
+// 24 how many layers drew, then each layer's (row, coverage) in draw order.
+const PROBE_LAYERS = 25u;
+@group(3) @binding(3) var<storage,read_write> probeOut:array<f32,96>;
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let geometry=geometryIn[geometryIndex(vec2i(floor(v.position.xy))+vec2i(1))];
@@ -1670,6 +1682,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // sampling stretches that grain over projected south-facing slopes.
     // Geometry and broad material decisions still use world coordinates.
     var pixel = vec2f(fragCoord.x, u.size - fragCoord.y);
+    probeHere = geometryFrame.probe.x > 0u && all(vec2u(max(floor(pixel), vec2f(0.0))) == geometryFrame.probe - 1u);
     // Stable, stratified native-pixel sampling: retain the material distribution
     // without locking every preview texel to one phase of a repeating grain.
     if (u.chunkScale > 1.0) {
@@ -1821,7 +1834,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var surfMask: array<f32, 7>;
     var layerCover: array<f32, 7>;
     var layerOver = 0.0;
-    if (u.materialTable[SURFACE_FLAGS].x > 0.0) {
+    if (u.materialTable[SURFACE_FLAGS].x > 0.0 || probeHere) {
         // The surface layers' facts (surfaceFacts), once a pixel and only when a layer reads them or draws a material.
         let site = coverSite(broad, timeMaps);
         surfaceFacts = array<f32, 14>(slope, baseHeight(p) - u.sea, baseHeight(p) - u.base, timeMaps.wear, timeMaps.deposit, timeMaps.wet,
@@ -2618,6 +2631,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if(u.diagnosticView==12){color=materialPigment(p,slot);}
     }
     if (u.diagnosticView == 7) { let code = bakedFields(p).b; color = vec3f(clamp(-code, 0.0, 1.0), clamp(code - 1.0, 0.0, 1.0), clamp(0.5 + bakedFields(p).r * 0.08, 0.0, 1.0) * 0.6); }
+    if (probeHere) {
+        probeOut[0] = 1.0; probeOut[1] = color.r; probeOut[2] = color.g; probeOut[3] = color.b; probeOut[4] = f32(gs); probeOut[5] = h - u.sea;
+        for (var k = 0u; k < SURFACE_FACTS; k++) { probeOut[6u + k] = surfaceFacts[k]; }
+        probeOut[20] = lowShare; probeOut[21] = nearWater; probeOut[22] = surfCover; probeOut[23] = select(0.0, 1.0, ownGround); probeOut[24] = f32(probeCount);
+    }
     return vec4f(color, 1.0);
 }
 

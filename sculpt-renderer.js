@@ -269,7 +269,9 @@ export class TerrainRenderer {
     this.timeUniformFields=[...uniformStages(timeModules).keys()].sort();
     this.uniformStages=uniformStages([...this.stageSources,...timeModules]);this.stageSources=null;
     this.geometryOutLayout=device.createBindGroupLayout({entries:[{binding:0,visibility:F,buffer:{type:'storage'}},{binding:1,visibility:F,buffer:{type:'uniform'}}]});
-    this.geometryInLayout=device.createBindGroupLayout({entries:[{binding:0,visibility:F,buffer:{type:'read-only-storage'}},{binding:1,visibility:F,buffer:{type:'uniform'}},{binding:2,visibility:F,texture:{sampleType:'float',viewDimension:'2d-array'}}]});
+    this.geometryInLayout=device.createBindGroupLayout({entries:[{binding:0,visibility:F,buffer:{type:'read-only-storage'}},{binding:1,visibility:F,buffer:{type:'uniform'}},{binding:2,visibility:F,texture:{sampleType:'float',viewDimension:'2d-array'}},{binding:3,visibility:F,buffer:{type:'storage'}}]});
+    // The Surface section's inspector: the color pass records what it drew at one pixel here (engine-frag.wgsl probeOut; setProbe, readProbe).
+    this.probeBuffer=device.createBuffer({label:'surface inspector',size:96*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});this.track(this.probeBuffer,'surface inspector',96*4,'shared');
     this.geometrySettings=device.createBuffer({label:'geometry frame',size:16,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});this.track(this.geometrySettings,'geometry frame',16,'shared');
     this.geometryPipelineLayout=device.createPipelineLayout({bindGroupLayouts:[this.commonLayout,this.materialLayout,this.voxel.drawLayout,this.geometryOutLayout]});
     this.drawPipelineLayout=device.createPipelineLayout({bindGroupLayouts:[this.commonLayout,this.materialLayout,device.createBindGroupLayout({entries:[]}),this.geometryInLayout]});
@@ -613,10 +615,20 @@ export class TerrainRenderer {
       if(!this.geometryRecord){this.geometryRecord=this.device.createBuffer({label:'surface geometry record',size:bytes,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});this.track(this.geometryRecord,'surface geometry record',bytes,'working');}
       if(!this.geometryTarget){this.geometryTarget=this.device.createTexture({label:'geometry raster target',size:[width,height],format:this.format,usage:GPUTextureUsage.RENDER_ATTACHMENT});this.track(this.geometryTarget,'geometry raster target',width*height*4,'working');}
     });
-    this.device.queue.writeBuffer(this.geometrySettings,0,new Uint32Array([width,height,0,0]));
+    this.device.queue.writeBuffer(this.geometrySettings,0,new Uint32Array([width,height,this.probe?this.probe.x+1:0,this.probe?this.probe.y+1:0]));
+  }
+  // The art pixel the inspector asks about ({x, y}), or none (null): the next color draws record what they drew there; readProbe reads it.
+  setProbe(at=null){this.probe=at&&{x:Math.max(0,Math.floor(at.x)),y:Math.max(0,Math.floor(at.y))};if(at)this.device.queue.writeBuffer(this.probeBuffer,0,new Float32Array(96));}
+  async readProbe(){
+    const read=this.device.createBuffer({label:'surface inspector read',size:96*4,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST}),encoder=this.device.createCommandEncoder({label:'surface inspector read'});
+    encoder.copyBufferToBuffer(this.probeBuffer,0,read,0,96*4);this.device.queue.submit([encoder.finish()]);
+    try{await read.mapAsync(GPUMapMode.READ);const v=[...new Float32Array(read.getMappedRange().slice(0))];read.unmap();if(!v[0])return null;
+      const count=Math.min(32,Math.round(v[24])),layers=Array.from({length:count},(_,k)=>({row:Math.round(v[25+2*k]),cover:v[26+2*k]}));
+      return {color:v.slice(1,4),slot:Math.round(v[4]),aboveSea:v[5],facts:v.slice(6,20),lowTint:v[20],wet:v[21],surf:v[22],ownGround:v[23]>.5,layers};}
+    finally{read.destroy();}
   }
 
-  geometryBinding(layout,record=this.geometryRecord,masks=this.colorMaskTexture,frame=this.geometrySettings){return this.device.createBindGroup({layout,entries:[{binding:0,resource:{buffer:record}},{binding:1,resource:{buffer:frame}},...(layout===this.geometryInLayout?[{binding:2,resource:masks.createView({dimension:'2d-array'})}]:[])]});}
+  geometryBinding(layout,record=this.geometryRecord,masks=this.colorMaskTexture,frame=this.geometrySettings){return this.device.createBindGroup({layout,entries:[{binding:0,resource:{buffer:record}},{binding:1,resource:{buffer:frame}},...(layout===this.geometryInLayout?[{binding:2,resource:masks.createView({dimension:'2d-array'})},{binding:3,resource:{buffer:this.probeBuffer}}]:[])]});}
   encodeColor(commands,pipeline,rect,first,timer,{record=this.geometryRecord,group=this.commonBindGroup('draw'),masks=this.colorMaskTexture,target=this.voxelColor,geometryGroup=null}={}){
     const pass=commands.beginRenderPass({label:'terrain color',colorAttachments:[{view:target.createView(),clearValue:{r:0,g:0,b:0,a:1},loadOp:first?'clear':'load',storeOp:'store'}],timestampWrites:timer?.timestampWrites});
     pass.setPipeline(pipeline);pass.setScissorRect(...rect);pass.setBindGroup(0,group);pass.setBindGroup(1,this.materialBindGroup());pass.setBindGroup(3,geometryGroup??this.geometryBinding(this.geometryInLayout,record,masks));pass.draw(3);pass.end();timer?.encode(commands);
@@ -762,7 +774,8 @@ export class TerrainRenderer {
     // (VoxelSurface.render; the guard checks the settings' bytes against the checksum). The voxel solid and rock weather count what they
     // made, not what they hold: a large tile draws in pieces and hands a piece's resources back before the draw ends.
     // Also the color pass's geometry record and frame (allocateGeometry; the frame holds the canvas size) and its mask staging (packColorMasks).
-    const own = new Set([this.fieldsTexture, this.looseBuffer, voxel?.uniform, this.geometryRecord, this.geometrySettings, this.maskPackBuffer, this.maskPackSettings].filter(Boolean));
+    // The inspector's record (probeBuffer) is written by the color pass and read only by the page.
+    const own = new Set([this.fieldsTexture, this.looseBuffer, voxel?.uniform, this.geometryRecord, this.geometrySettings, this.maskPackBuffer, this.maskPackSettings, this.probeBuffer].filter(Boolean));
     const produced = {has: r => own.has(r) || Boolean(voxel?.made?.has(r) || rock?.made?.has(r))};
     // volatile: produced resources whose bytes may differ between two draws of the same checksum without changing the picture. The voxel
     // settings hold the solid's pool capacity, predicted from the last count; a piece that overflows builds again at its count.

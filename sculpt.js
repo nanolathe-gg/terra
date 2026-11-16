@@ -760,6 +760,13 @@ function surfaceHost() {
     apply:applySurface,
     restore:()=>{setSurfaceList(structuredClone(baseSurface),false);saveWorlds();checkpoint(true);},
     preview:row=>{if(!renderer||renderer.surfacePreview===row)return;renderer.setSurfacePreview(row);worldChanged({stage:'C',world:false});schedule();},
+    // The inspector: the next left click on the map picks an art pixel (that click does nothing else); onPick(at). Returns a cancel function.
+    pickPixel:onPick=>{if(!mapCanvas)return ()=>{};
+      const handler=e=>{if(e.button!==0||!(e.target===overlay||overlay.contains(e.target)))return;e.preventDefault();e.stopImmediatePropagation();cancel();onPick(mapCanvas.artPoint(e));};
+      const cancel=()=>{document.removeEventListener('pointerdown',handler,true);overlay.style.cursor='';};
+      document.addEventListener('pointerdown',handler,true);overlay.style.cursor='crosshair';return cancel;},
+    inspect:at=>mapCanvas?mapCanvas.inspect(at):Promise.resolve(null),
+    slotMaterial:slot=>{const m=mapMaterials.find(m=>m.slot===slot);return m?{name:m.name,color:hex(m)}:null;},
     // Layers hidden while the artist designs (their keys): a view of this page only, never saved, undone or exported.
     hide:keys=>{if(!renderer)return;renderer.setSurfaceHidden(keys);worldChanged({stage:'C',world:false});schedule();},
     material:layer=>{const m=layerMaterial(layer);return m?{name:m.name,color:hex(m),height:Boolean(m.nodes?.find(n=>n.type==='output')?.in?.height)}:null;},
