@@ -36,12 +36,16 @@ test('surface layers: a rule limits a built-in; a material layer draws where its
     const rows = surfaceRows(JSON.parse(readFileSync(file, 'utf8')).surface).layerRows;
     assert.equal(read.layers.at(-1).row, rows.at(-1), 'the cap is the last layer drawn there');
     assert.ok(read.layers.at(-1).cover > .5, `the cap covers it (${read.layers.at(-1).cover})`);
-    for (let k = 0; k < 3; k++) assert.ok(Math.abs(read.color[k] * 255 - capped.pixels[at * 4 + k]) <= 1, 'the recorded color is the pixel’s');
+    // The draw ends in true color; the output stage (engine-output.wgsl) reduces it to the palette after, so the record is the pixel's color
+    // with the palette off.
+    const lit = await view('&palette=off');
+    for (let k = 0; k < 3; k++) assert.ok(Math.abs(read.color[k] * 255 - lit.pixels[at * 4 + k]) <= 1, 'the recorded color is the pixel’s lit color');
     withSurface(s => [...s, {id: 'cap', name: 'Cap', material: 'ice-ground', stage: 'snow', where: [{fact: 'abovePlain', from: 20, fade: 4}], edge: {height: 1}}]);
     const lifted = await view();
     assert.ok(changed(capped.pixels, lifted.pixels) > 0, 'height contrast moves the cap’s edge');
     // Bare soil (where the cover thins, soilRim) drawn with a library material in place of the soil color.
     withSurface(s => s);
+    const plainLit = (await view('&palette=off')).pixels;   // coverage below is counted in true color: the palette's diffusion moves a tile's other pixels
     const soil = await view('&soilRim=1');
     withSurface(s => s.map(l => l.builtin === 'soil' ? {...l, material: 'red-ground'} : l));
     const swapped = changed(soil.pixels, (await view('&soilRim=1')).pixels);
@@ -49,12 +53,12 @@ test('surface layers: a rule limits a built-in; a material layer draws where its
     // Coverage (amount): a partial amount covers about that share of the area, each covered pixel as the full layer draws it.
     const everywhere = amount => withSurface(s => [...s, {id: 'all', name: 'All', material: 'ice-ground', stage: 'snow', amount, edge: {noiseSize: 1}}]);
     everywhere(1);
-    const full = (await view()).pixels;
+    const full = (await view('&palette=off')).pixels;
     everywhere(.3);
-    const part = (await view()).pixels;
+    const part = (await view('&palette=off')).pixels;
     let covered = 0, same = 0;
     for (let i = 0; i < part.length; i += 4) {
-      if (part[i] === base.pixels[i] && part[i + 1] === base.pixels[i + 1] && part[i + 2] === base.pixels[i + 2]) continue;
+      if (part[i] === plainLit[i] && part[i + 1] === plainLit[i + 1] && part[i + 2] === plainLit[i + 2]) continue;
       covered++;
       if (part[i] === full[i] && part[i + 1] === full[i + 1] && part[i + 2] === full[i + 2]) same++;
     }

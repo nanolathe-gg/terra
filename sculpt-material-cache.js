@@ -8,7 +8,7 @@ const SCRATCH_ROW = MATERIAL_SLOTS;   // the materialGraphs row a thumbnail run 
 export function writeMaterialSlot(r, material, view, at) {
   const members = r.uniform.get('ground').members, d = material.dither, reduce = material.palette.length >= 2;
   const set = (key, value, int = false) => int ? view.setInt32(at + members.get(key).offset, value, true) : view.setFloat32(at + members.get(key).offset, value, true);
-  set('paletteCount', material.palette.length, true); set('dither', reduce ? d.amount : 0); set('spread', d.spread); set('tone', d.tone);
+  set('paletteCount', material.palette.length, true); set('dither', 0); set('spread', d.spread); set('tone', d.tone);
   [d.red, d.green, d.blue].forEach((v, c) => view.setFloat32(at + members.get('weights').offset + c * 4, v, true));
   const out = material.nodes.find(n => n.type === 'output').params;
   [out.wornFrom, out.wornAmount, out.depositFrom, out.depositAmount].forEach((v, c) => view.setFloat32(at + members.get('states').offset + c * 4, v, true));
@@ -181,7 +181,7 @@ export class MaterialCache {
     const stage = entryPoint => this[entryPoint] ??= device.createComputePipeline({label: entryPoint, layout: 'auto', compute: {module: this.reduceModule ??= device.createShaderModule({label: 'material reduction', code: this.reduceSource}), entryPoint}});
     const fields = this.fieldTexture.createView({dimension: '2d-array'});
     for (const e of this.entries) {
-      const fresh = regenerated.includes(e.layer), key = materialRenderKey(e.material), reduces = e.material.palette.length >= 2 && e.material.dither.amount > 0;
+      const fresh = regenerated.includes(e.layer), key = materialRenderKey(e.material), reduces = false;   // prototype end-dither: the output stage reduces the lit picture; a material keeps its true color
       if (!fresh && (!reduces || this.colorKeys.get(e.layer) === key)) continue;
       r.uniformsDirty = true; r.flushUniforms(); r.worldResource?.(this.colorTexture);
       const encoder = device.createCommandEncoder({label: 'material reduction'}), jobs = [];

@@ -465,7 +465,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     if(!this.makeWorkingRoom(this.maskTexture.width*this.maskTexture.height*24+this.layout.size+16))return null;
     this._busy=true;try {
       const owned=this.colorResources(),source={heightTexture:this.heightTexture,gridTexture:null,maskTexture:this.emptyColorMasks,colorMasks:null,fieldsTexture:this.fieldsTexture,rockWeather:{empty:this.rockWeather.empty,final:this.rockWeather.final,source:this.rockWeather.source,rim:this.rockWeather.rim}};
-      const tile={owned,source,world:this.geometryUniformSnapshot.slice(),cpu:this.uniformData.slice(0),width:this.canvas.width,height:this.canvas.height,outWidth:this.outputCanvas.width,outHeight:this.outputCanvas.height,record:this.geometryRecord,gpuFlags:this.gpuFlags,users:0,retired:false};
+      const tile={owned,source,world:this.geometryUniformSnapshot.slice(),cpu:this.uniformData.slice(0),place:this.outputPlace,width:this.canvas.width,height:this.canvas.height,outWidth:this.outputCanvas.width,outHeight:this.outputCanvas.height,record:this.geometryRecord,gpuFlags:this.gpuFlags,users:0,retired:false};
       try{await terrainAllocation(this.device,()=>{
         source.gridTexture=this.texture('retained color weather and material',this.gridTexture.width,this.gridTexture.height,3,'rgba8unorm',4,GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST,'color-cache');
         source.colorMasks=this.texture('retained color masks',this.maskTexture.width,this.maskTexture.height,3,'rgba8snorm',4,GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST,'color-cache');
@@ -517,7 +517,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       let target=this.colorTargets.get(key);
       if(!target||!this.resources.has(target)){
         if(this.colorTargets.size>=3){const [old,resource]=this.colorTargets.entries().next().value;this.release(resource);this.colorTargets.delete(old);}
-        await terrainAllocation(this.device,()=>{target=this.texture('cached color target',width,height,1,this.format,4,GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC);});
+        await terrainAllocation(this.device,()=>{target=this.texture('cached color target',width,height,1,this.format,4,GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC|GPUTextureUsage.TEXTURE_BINDING);});
       }
       this.colorTargets.delete(key);this.colorTargets.set(key,target);
       this.syncWorld(options);
@@ -543,11 +543,12 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       if(this.canvas.width!==atlasWidth)this.canvas.width=atlasWidth;if(this.canvas.height!==height)this.canvas.height=height;
       if(this.outputCanvas.width!==outWidth)this.outputCanvas.width=outWidth;if(this.outputCanvas.height!==outHeight)this.outputCanvas.height=outHeight;
       this.outputBytes=atlasWidth*height*4+outWidth*outHeight*4;this.recordMemory();
-      const encoder=this.device.createCommandEncoder({label:'cached tile colors'}),presentation=this.context.getCurrentTexture(),pipeline=this.genericPipelines[this.rockMask()].draw,regions=[];let x=0,outX=0;
+      await this.outputPipelines();
+      const encoder=this.device.createCommandEncoder({label:'cached tile colors'}),presentation=this.context.getCurrentTexture(),pipeline=this.genericPipelines[this.rockMask()].draw,regions=[];let x=0,outX=0,slot=0;
       for(const tile of tiles){
         const scissor=colorScissor(tile,view),r=tile.rect;
         this.encodeColor(encoder,pipeline,scissor,true,null,{record:tile.record,group:tile.group,masks:tile.source.colorMasks,target,geometryGroup:tile.geometryGroup});
-        encoder.copyTextureToTexture({texture:target},{texture:presentation,origin:[x,0,0]},[tile.width,tile.height]);
+        this.encodeOutput(encoder,target,presentation,{chunk:tile.cpu,place:tile.place,offset:[x,0],width:tile.width,height:tile.height,slot:slot++,resampled:tile.width!==tile.outWidth||tile.height!==tile.outHeight});
         const fresh=r&&(scissor[2]!==tile.width||scissor[3]!==tile.height)?{x:r.x+scissor[0]*r.width/tile.width,y:r.y+scissor[1]*r.height/tile.height,width:scissor[2]*r.width/tile.width,height:scissor[3]*r.height/tile.height}:null;
         regions.push({x:outX,y:0,width:tile.outWidth,height:tile.outHeight,sourceX:x,tile,fresh});x+=tile.width;outX+=tile.outWidth;
       }
@@ -581,7 +582,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       this.fastRaster=Boolean(fastRaster)&&scale>=4;
       const dimensions=await this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale);
       if(feed)await this.feedFromGpu(request,region,dimensions,feed,passes);else this.upload(request,region,dimensions,planes);
-      this.activeRegion=region;this.voxelScale=scale;
+      this.activeRegion=region;this.voxelScale=scale;this.outputPlace=[request.x,request.y];   // the output stage's tiles (engine-output.wgsl)
       // An export draws the world as saved: the Surface section's design view (hidden layers, its coverage preview) is set aside for its tiles.
       const design=request.exportArt?this.suspendDesignView():null;
       let result;

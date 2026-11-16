@@ -192,7 +192,7 @@ export class TerrainRenderer {
     // Every world's materials are numbers: the config names its table (config.materialTable).
     const tableUrl = this.config.materialTable;
     this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl', 'engine-ground.wgsl', 'engine-ground-dither.wgsl'];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl', 'engine-ground.wgsl', 'engine-ground-dither.wgsl', 'engine-output.wgsl'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch(name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
@@ -208,6 +208,7 @@ export class TerrainRenderer {
     const art = new Set(palette.indexed.filter((_, i) => i >= 10 && (i < 246 || i === 255)).map(String));
     this.paletteArt = palette.colours.map((_, i) => i).filter(i => art.has(String(palette.colours[i])));
     this.commonSource = common;
+    this.outputSource = extra[extra.length - 1];
     this.volumeSource = extra[3];
     this.timeSources={erosion:this.preprocessShader(extra[4]),maps:this.preprocessShader(extra[5])};
     this.layout = uniformLayout(preprocess(common, '', new Set()));
@@ -362,6 +363,11 @@ export class TerrainRenderer {
     device.queue.writeBuffer(buffer, 0, rows);
     const count = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
     device.queue.writeBuffer(count, 0, new Uint32Array([colours.length, 0, 0, 0]));
+    // The output stage's palette (engine-output.wgsl): the same colours, rgb in 0..255.
+    if (this.outputPalette) this.outputPalette.destroy();
+    this.outputPalette = device.createBuffer({label: 'output palette', size: Math.max(16, colours.length * 16), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
+    device.queue.writeBuffer(this.outputPalette, 0, new Float32Array(colours.flatMap(c => [c[0], c[1], c[2], 0])));
+    this.outputCount = colours.length;
     const texture = device.createTexture({label: 'palette lookup', size: [1024, 288], format: 'rgba8unorm', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
     if (!this.palettePipeline) {
       const module = device.createShaderModule({label: 'engine-palette.wgsl', code: this.paletteSource});
@@ -636,6 +642,54 @@ export class TerrainRenderer {
     const pass=commands.beginRenderPass({label:'terrain color',colorAttachments:[{view:target.createView(),clearValue:{r:0,g:0,b:0,a:1},loadOp:first?'clear':'load',storeOp:'store'}],timestampWrites:timer?.timestampWrites});
     pass.setPipeline(pipeline);pass.setScissorRect(...rect);pass.setBindGroup(0,group);pass.setBindGroup(1,this.materialBindGroup());pass.setBindGroup(3,geometryGroup??this.geometryBinding(this.geometryInLayout,record,masks));pass.draw(3);pass.end();timer?.encode(commands);
   }
+  // The output stage (engine-output.wgsl): the draw's lit color in `source` reduced to the game palette, 32 px art tile by tile, and drawn
+  // into `target` at `offset`. `chunk` holds the raster's place and scale (a cached tile's own settings); the world's settings are current:
+  // palette off, Clay, a diagnostic view, or a raster coarser than art pixels pass the true color through, as does a raster the caller
+  // resamples (`resampled`).
+  async outputPipelines() {
+    if (this.outputPipeline) return;
+    const device = this.device, module = device.createShaderModule({label: 'engine-output.wgsl', code: this.outputSource});
+    const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
+    if (errors.length) throw new Error('nanolathe: engine-output.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
+    [this.outputPipeline, this.outputBlit] = await Promise.all([
+      device.createComputePipelineAsync({label: 'output stage', layout: 'auto', compute: {module, entryPoint: 'diffuseTiles'}}),
+      device.createRenderPipelineAsync({label: 'output blit', layout: 'auto', vertex: {module, entryPoint: 'blitVertex'}, fragment: {module, entryPoint: 'blitFragment', targets: [{format: this.format}]}, primitive: {topology: 'triangle-list'}})]);
+  }
+  encodeOutput(encoder, source, target, {chunk = this.uniformData, place = this.outputPlace, offset = [0, 0], width = source.width, height = source.height, slot = 0, resampled = false} = {}) {
+    const device = this.device, field = name => this.layout.fields.get(name), settings = new DataView(chunk);
+    const int = name => this.uniformView.getInt32(field(name).offset, true), float = (name, k = 0) => settings.getFloat32(field(name).offset + 4 * k, true);
+    const scale = float('chunkScale') || 1;
+    const enabled = int('quantize') !== 0 && int('clay') === 0 && int('diagnosticView') === 0 && scale <= 1 && !resampled;
+    // Tiles keyed to the raster's own rectangle (`place`, the chunk's x and y), in drawn pixels when the raster is finer: an export's are its
+    // art pixels, so its tiles are the game's, and a preview's are its screen pixels, so neither depends on how the map is cut into chunks. A
+    // preview's tiles therefore sit the base's half height above an export's: the same statistics, another phase.
+    const at = place ?? [float('chunkScreenOrigin', 0), float('chunkScreenOrigin', 1)], origin = [Math.round(at[0] / scale), Math.round(at[1] / scale)];
+    this.outputJobs ??= [];
+    const job = this.outputJobs[slot] ??= device.createBuffer({label: 'output job', size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
+    const words = new Int32Array([origin[0], origin[1], width, height, offset[0], offset[1], this.outputCount, enabled ? 1 : 0]);
+    device.queue.writeBuffer(job, 0, words);
+    if (!this.outputTexture || this.outputTexture.width < width || this.outputTexture.height < height) {
+      if (this.outputTexture) this.release(this.outputTexture);
+      const w = Math.max(width, this.outputTexture?.width ?? 0), h = Math.max(height, this.outputTexture?.height ?? 0);
+      this.outputTexture = device.createTexture({label: 'output stage color', size: [w, h], format: 'rgba8unorm', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING});
+      this.track(this.outputTexture, 'output stage color', w * h * 4, 'working');
+    }
+    const firstX = Math.floor(origin[0] / 32) * 32 - origin[0], firstY = Math.floor(origin[1] / 32) * 32 - origin[1];
+    const tiles = Math.ceil((width - firstX) / 32) * Math.ceil((height - firstY) / 32);
+    const compute = encoder.beginComputePass({label: 'output stage'});
+    compute.setPipeline(this.outputPipeline);
+    compute.setBindGroup(0, device.createBindGroup({layout: this.outputPipeline.getBindGroupLayout(0), entries: [
+      {binding: 0, resource: source.createView()}, {binding: 1, resource: this.outputTexture.createView()}, {binding: 2, resource: {buffer: this.outputPalette}}, {binding: 3, resource: {buffer: job}}]}));
+    compute.dispatchWorkgroups(Math.ceil(tiles / 64));
+    compute.end();
+    const blit = encoder.beginRenderPass({label: 'output blit', colorAttachments: [{view: target.createView(), loadOp: 'load', storeOp: 'store'}]});
+    blit.setPipeline(this.outputBlit);
+    blit.setViewport(offset[0], offset[1], width, height, 0, 1);
+    blit.setScissorRect(offset[0], offset[1], width, height);
+    blit.setBindGroup(0, device.createBindGroup({layout: this.outputBlit.getBindGroupLayout(0), entries: [{binding: 3, resource: {buffer: job}}, {binding: 4, resource: this.outputTexture.createView()}]}));
+    blit.draw(3);
+    blit.end();
+  }
   // LP5 step 0 only: the current tile's color pass, never scheduler routing.
   async recolor(options=this.worldOptions){
     if(this.busy)throw Error('The renderer is already rendering.');
@@ -647,7 +701,7 @@ export class TerrainRenderer {
       if(delta.stage&&delta.stage<'F')throw Error('The edit requires '+delta.stage+', not only color.');
       this.flushUniforms();const encoder=this.device.createCommandEncoder({label:'cached terrain color'}),timer=this.timer();
       this.encodeColor(encoder,this.genericPipelines[this.rockMask()].draw,[0,0,this.canvas.width,this.canvas.height],true,timer);
-      encoder.copyTextureToTexture({texture:this.voxelColor},{texture:this.context.getCurrentTexture()},[this.canvas.width,this.canvas.height]);this.device.queue.submit([encoder.finish()]);this.previousChunk=this.device.queue.onSubmittedWorkDone();await this.previousChunk;
+      await this.outputPipelines();this.encodeOutput(encoder,this.voxelColor,this.context.getCurrentTexture());this.device.queue.submit([encoder.finish()]);this.previousChunk=this.device.queue.onSubmittedWorkDone();await this.previousChunk;
       return {milliseconds:performance.now()-start,gpuMilliseconds:timer?await timer.result():null,recordBytes:this.geometryRecord.size};
     } finally { this._busy=false; }
   }
@@ -682,7 +736,7 @@ export class TerrainRenderer {
     this.flushUniforms();device.queue.submit([encoder.finish()]);
     if(!this.voxelColor||this.voxelColor.width!==this.canvas.width||this.voxelColor.height!==this.canvas.height){
       if(this.voxelColor)this.release(this.voxelColor);
-      this.voxelColor=device.createTexture({label:'voxel terrain color',size:[this.canvas.width,this.canvas.height],format:this.format,usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
+      this.voxelColor=device.createTexture({label:'voxel terrain color',size:[this.canvas.width,this.canvas.height],format:this.format,usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC|GPUTextureUsage.TEXTURE_BINDING});
       this.track(this.voxelColor,'voxel terrain color',this.canvas.width*this.canvas.height*4,'working');
     }
     this.geometryValid=false;await this.allocateGeometry();current();
@@ -704,7 +758,7 @@ export class TerrainRenderer {
     // Keep intermediate pieces in a persistent texture: a canvas presentation
     // image expires at the next browser frame while allocation readback yields.
     const present=device.createCommandEncoder({label:'present voxel terrain'});
-    present.copyTextureToTexture({texture:this.voxelColor},{texture:this.context.getCurrentTexture()},[this.canvas.width,this.canvas.height]);device.queue.submit([present.finish()]);
+    await this.outputPipelines();this.encodeOutput(present,this.voxelColor,this.context.getCurrentTexture());device.queue.submit([present.finish()]);
     this.gpuResult=Promise.all(timers.map(t=>t.result())).then(values=>{const ms=values.reduce((a,b)=>a+(b??0),0);this.lastGPU=ms;return ms;});
     if (this.guard && !await this.guard.check(this, await inputDigest)) inputDigest = null;   // after a violation, no tile is kept
     return {milliseconds:performance.now()-start,gpuMilliseconds:this.lastGPU,pipelineKey,digest:inputDigest};

@@ -80,6 +80,7 @@
     "engine-bake.wgsl",
     "engine-common.wgsl",
     "engine-palette.wgsl",
+    "engine-output.wgsl",
     "engine-weather.wgsl",
     "engine-erosion.wgsl",
     "sculpt-material-model.js",

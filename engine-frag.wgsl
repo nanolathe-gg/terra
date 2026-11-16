@@ -2451,29 +2451,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (h < u.sea) { color = mix(color, vec3f(0.20, 0.32, 0.40), 0.72); }
     }
     color = saturate(color);
-    if (u.quantize != 0 && u.clay == 0) {
-        // Ordered dither before the palette lookup: a fixed per-pixel
-        // threshold pattern, so edits change only local pixels and level
-        // ground keeps a repeating pattern. Strength is in palette-LUT steps.
-        var fc = floor(fragCoord);
-        if (u.chunkScale > 1.0) { fc = floor(vec2f(pixel.x, u.size - pixel.y)); }
-        if (u.chunkScale < 1.0) { fc = floor(fragCoord / u.chunkScale); }
-        // Card tilepool: the threshold repeats with the pool, as level ground does, so it does not make every tile of a plain differ.
-        let ign = fract(52.9829189 * fract(dot(poolWrap(fc, u.pool), vec2f(0.06711056, 0.00583715))));
-        // Smooth water gradients need dither; noisy ground grain does not.
-        // The hard step's lit bed takes no palette dither (where a world draws lit bumps there, they replace its noise).
-        let ditherStrength = select(u.dither * u.landDither, u.dither * (1.0 - shoalWeight), h < u.sea + 1.0);
-        // Pairs mix on an ordered 4x4 threshold: retail's mixes are even
-        // local checkerboards, which read as one colour; a noise threshold
-        // clumped them into speckles.
-        let bq = vec2i(fc) & vec2i(3);
-        var bayer = array<i32, 16>(0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
-        if (u.paletteMix != 0) { color = palettePattern(color, (f32(bayer[bq.y * 4 + bq.x]) + 0.5) / 16.0); }
-        else {
-            color = saturate(color + (ign - 0.5) * ditherStrength / 31.0);
-            color = paletteColor(color);
-        }
-    }
+    // The palette is the output stage's (engine-output.wgsl): the draw ends in true color.
     // Read-only pixel probes separate shaded form from material coverage.
     if (u.diagnosticView == 1) { color = vec3f(lighting); }
     if (u.diagnosticView == 2) { color = vec3f(ao); }
