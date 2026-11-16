@@ -2,7 +2,7 @@
 
 Status: phases 1-3 landed on local main (b89971fd, 2026-11-15); the rest of phase 3, phase 4 as an opt-in and phase 5's height
 contrast landed on local main from branch `surface-layers-2` (09c0cc52, 2026-11-16). Round 3 (branch `surface-layers-3`) landed on local main
-(2026-11-16): see "Round 3" below. Round 4 (branch `surface-layers-4`: rock and Crystal as materials, 23 material slots) landed on local main (2026-11-16): see "Round 4". Not pushed; previews stale. Branch `surface-layers`. The research behind it is the prototype branch
+(2026-11-16): see "Round 3" below. Round 4 (branch `surface-layers-4`: rock and Crystal as materials, 23 material slots) landed on local main (2026-11-16): see "Round 4". Round 5 (branch `surface-layers-5`: the drawn color, strata as tones, Crystal's art) landed on local main (2026-11-16): see "Round 5". Not pushed; previews stale. Branch `surface-layers`. The research behind it is the prototype branch
 `prototype/surface-stack` (not for landing), summarized below.
 
 ## The model
@@ -275,7 +275,7 @@ bands on faces and raised ground) and by rock weather (the color of debris from 
   about 15 more, past 23, and 15 more cache layers.
 - **Keep the bed colors** as the column's palette, for now.
 
-## Round 5 (branch `surface-layers-5`, 2026-11-16)
+## Round 5 (branch `surface-layers-5`, 2026-11-16, landed)
 
 The owner: "yes, do the open remaining items" (round 4's strata, the picker's color, Crystal's art).
 
