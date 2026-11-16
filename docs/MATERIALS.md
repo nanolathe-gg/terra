@@ -45,8 +45,11 @@ controls; node settings are the author's tools.
   map opened in a world takes that world's two, in the slots the map already
   gave those roles; its own materials stay.
 - **Saves, undo and share links** carry the map's list, and the world
-  settings a save embeds carry the world's two. Opening a save sets the
-  world's two in this browser, as it sets the world's sliders.
+  settings a save embeds carry the world's two. Opening a save whose world
+  draws as this browser's changes nothing in the world; one whose world
+  differs (sliders, colors, surface or kept materials) opens as a world of
+  its own, named for the map, and leaves yours unchanged. World › Use for my
+  <world> adopts it and keeps the one it replaces as "<world> before <map>".
 - **A world of your own** (World, New) and a world file carry the two.
 - **Highland ground.** A world may also name a highland material
   (`world.materials.high`): a new map adds it with the role *highland

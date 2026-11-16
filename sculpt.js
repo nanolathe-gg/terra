@@ -1,5 +1,5 @@
 import {requestAdapter} from './sculpt-webgpu.js';
-import {savedWorld,copySavedWorld,savedWorldId} from './sculpt-save.js';
+import {savedWorld,copySavedWorld,savedWorldId,sameSavedWorld} from './sculpt-save.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
@@ -1814,7 +1814,7 @@ const WORLD_STORE='nanolathe-map-editor-worlds';
 const LIGHT_COLOR_HELP={sun:'The direct light and the glints it mirrors. A warm sun lights slopes that face it.',sky:'The ambient light that fills the shade. A cool sky keeps shaded ground and the lee of hills blue.',
   low:'The color of the ground from the sea up to Reach above it (Low ground in World), and of the shallows: Tint moves them toward it, keeping their grain.',
   vegetation:'The plants of the ground cover (Vegetation cover above 0): every kind moves by the change from this color, so lush and dry ground keep their difference. Bare ground keeps the world\'s own.'};
-let worlds={},worldId=null;
+let worlds={},worldId=null,openedAsOwnWorld=null;   // the last: set when a map's world opened as a world of its own
 function loadWorlds() { try { worlds=JSON.parse(localStorage.getItem(WORLD_STORE)||'{}')||{}; } catch (_) { worlds={}; } }
 function saveWorlds() { try { localStorage.setItem(WORLD_STORE,JSON.stringify(worlds)); } catch (_) {} }
 function activeWorld() { return worlds[worldId] ??= {name:config.biome,base:config.biomeId,colors:{...(config.colors||{})},knobs:{}}; }
@@ -1902,6 +1902,18 @@ function buildWorldPanel() {
   const isCustom=!(worldId in (config.biomes||{}));
   $('world-delete').textContent=isCustom?'Delete this world':'Restore built-in settings';
   $('world-delete').onclick=() => { delete worlds[worldId]; saveWorlds(); goToWorld(config.biomeId); };
+  // A world a map brought (its world differed from yours): say so, and offer to make it yours. Your earlier one stays, renamed.
+  const from=worlds[worldId]?.openedFrom,target=from?(worlds[from.world]?.name||config.biomes?.[from.world]||from.world):'';
+  $('world-from').hidden=$('world-adopt').hidden=!from;
+  if (from) {
+    $('world-from').textContent=`Opened from the map “${from.map}”, whose world differs from your ${target}. Your ${target} is unchanged.`;
+    $('world-adopt').textContent=`Use for my ${target}`;
+    $('world-adopt').onclick=() => {
+      const {openedFrom,...adopted}=worlds[worldId];
+      if (worlds[from.world]) { const keep=`${target} before ${from.map}`.slice(0,120); worlds[keep.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6)]={...worlds[from.world],name:keep}; }
+      worlds[from.world]={...adopted,name:target}; delete worlds[worldId]; saveWorlds(); goToWorld(adopted.base,from.world);
+    };
+  }
 }
 
 // Crack styles set several crack knobs at once; each stays editable.
@@ -2239,6 +2251,10 @@ async function bootMap(pending=null) {
     const shared=experiment.has('shared'),url=new URL(location.href);
     for(const key of ['pendingSketch','shared']){experiment.delete(key);url.searchParams.delete(key);}
     window.history.replaceState(null,'',url);checkpoint();status('Loaded the saved map.');if(shared)announceShared();
+    if(openedAsOwnWorld){   // said in the status line and in the Map menu, which a shared map opens
+      const note=`Opened in its own world, “${openedAsOwnWorld.name}”: the map’s world differs from your ${openedAsOwnWorld.mine}, which is unchanged. World › Use for my ${openedAsOwnWorld.mine} adopts it.`;
+      status(note);$('map-world-note').textContent=note;$('map-world-note').hidden=false;if(shared&&$('pane-map').hidden)$('tab-map').click();
+    }
   } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
   updateControls(); resize(); schedule(); queueWeather();
@@ -2282,7 +2298,20 @@ async function boot() {
     const embedded=copySavedWorld(pending?.worldSettings,config);
     loadWorlds();
     if(embedded){
-      { const id=savedWorldId(pending); worlds[id]={...embedded,materials:mergeWorldMaterials(worlds[id]?.materials,worldOwnMaterials(embedded.materials,config),config)}; } saveWorlds();   // the store keeps the two only where they differ from the library's
+      // A map's world never replaces yours. One that draws differently from this browser's world of the same id opens as a world of
+      // its own, named for the map; "Use for my <world>" (World section) adopts it on purpose. A world this browser lacks is added.
+      let id=savedWorldId(pending);const mine=worlds[id]??(id===config.biomeId?{}:null);
+      // The same world under another id (a fork opened before, the built-in a fork came from, a world of your own): open in it.
+      const match=mine&&sameSavedWorld(embedded,mine,config)?id:[config.biomeId,...Object.keys(worlds)].find(w=>w!==id&&(w===config.biomeId||worlds[w]?.base===config.biomeId)&&sameSavedWorld(embedded,worlds[w]??{},config));
+      if(match&&match!==id){id=match;const url=new URL(location.href);if(id===config.biomeId){experiment.delete('world');url.searchParams.delete('world');}else{experiment.set('world',id);url.searchParams.set('world',id);}window.history.replaceState(null,'',url);}
+      else if(!match&&mine){
+        const from=String(pending.mapData?.name||'a map').trim().slice(0,60)||'a map',name=`${embedded.name} from ${from}`.slice(0,120);
+        id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
+        worlds[id]={...embedded,name,openedFrom:{map:from,world:savedWorldId(pending)},materials:worldOwnMaterials(embedded.materials,config)};
+        experiment.set('world',id);const url=new URL(location.href);url.searchParams.set('world',id);window.history.replaceState(null,'',url);
+        openedAsOwnWorld={name,from,mine:worlds[savedWorldId(pending)]?.name||config.biome};
+      } else if(!match) worlds[id]={...embedded,materials:mergeWorldMaterials(worlds[id]?.materials,worldOwnMaterials(embedded.materials,config),config)};   // the store keeps the two only where they differ from the library's
+      saveWorlds();
       for(const [key,value]of Object.entries(embedded.knobs))experiment.set(key,value);
     }
     // H12b: the editor always works on a map; an address without a size opens the default 4x4 one.
