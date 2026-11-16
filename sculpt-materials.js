@@ -714,12 +714,10 @@ export function strokeMaterial(node, list) {
   return Number.isInteger(slot) && (slot === 0 || list.some(m => m.slot === slot && !m.worldWater)) ? slot : -1;
 }
 export const keepStrokeMaterials = (nodes, list) => nodes.map(n => n.params && n.params.groundPreset !== undefined && n.params.groundPreset !== strokeMaterial(n, list) ? {...n, params: {...n.params, groundPreset: strokeMaterial(n, list)}} : n);
-// Strokes that may lay crystal (engine-shape.wgsl writes the crystal plane for a landform's facets with Surface Crystal and for shore
-// plates): a superset of those that do, so the crystal material is cached wherever a crystal shows, and on no other map.
-const crystalStrokes = nodes => nodes.some(n => !n.hidden && ((n.params?.iceFacets > 0 && Math.round(n.params?.facetSurface || 0) >= 1) || n.params?.shorePlates > 0));
+// The materials the renderer caches: the world's surfaces, every rock type's and the strokes'. The set changes only with a material, a rock
+// type or a painted stroke, never with a stroke's shape settings, so the cache is not rebuilt inside a draw (the digest guard).
 export function materialsInUse(nodes, list, rocks = []) {
-  const crystal = crystalStrokes(nodes);
-  const used = new Set([...list.filter(m => roleOf(m) && (crystal || !m.worldCrystal)).map(m => m.slot), ...(rocks ?? []).map(r => r.material).filter(s => s > 0), ...nodes.filter(n => !n.hidden && (n.kind === 'landform' || n.kind === 'paint' && (n.params?.paintChannel === 26 || n.params?.paintChannel === undefined))).map(n => strokeMaterial(n, list))]);
+  const used = new Set([...list.filter(m => roleOf(m)).map(m => m.slot), ...(rocks ?? []).map(r => r.material).filter(s => s > 0), ...nodes.filter(n => !n.hidden && (n.kind === 'landform' || n.kind === 'paint' && (n.params?.paintChannel === 26 || n.params?.paintChannel === undefined))).map(n => strokeMaterial(n, list))]);
   return list.filter(m => used.has(m.slot));
 }
 // The map's materials as a world's surface list draws them (docs/SURFACE_LAYERS.md; layers bind copies by layerKey). A copy whose layer no

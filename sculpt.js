@@ -696,8 +696,7 @@ function evaluate(from=0,rect=null) {
 // The renderer holds the materials in use: the world's ground and water, and those a visible stroke chose.
 function syncMaterials() {
   if (!renderer) return;
-  // The cache holds what draws: the world's surfaces, the strokes' materials and those of the rock types a shown stroke chooses.
-  const used=materialsInUse(nodes,mapMaterials,rocksInUse(nodes,mapRocks)),key=JSON.stringify(used);
+  const used=materialsInUse(nodes,mapMaterials,mapRocks),key=JSON.stringify(used);
   if (key===materialUseKey) return;
   // Past the cache budget (sculpt-materials.js materialCacheUsage) the renderer keeps the materials it holds and the status line says why.
   try { renderer.setMaterials(new Map(used.map(m=>[m.slot,m]))); } catch (error) { status(error.message); return; }
@@ -790,7 +789,7 @@ function surfaceHost() {
   };
 }
 function editMaterials(materials) {
-  const used=materialsInUse(nodes,materials,rocksInUse(nodes,mapRocks));renderer.setMaterials(new Map(used.map(m=>[m.slot,m])));
+  const used=materialsInUse(nodes,materials,mapRocks);renderer.setMaterials(new Map(used.map(m=>[m.slot,m])));
   mapMaterials=materials;materialUseKey=JSON.stringify(used);syncMaterialChoices();surfacePanel?.refresh();worldChanged({stage:'C',world:false});persistLater();schedule();
 }
 function removeMaterial(slot) {
