@@ -3,7 +3,7 @@
 // sculpt-vert.wgsl and engine-frag.wgsl (the draw), engine-bake.wgsl (the
 // fields bake of a chunk, a compute pass).
 
-import {tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
+import {tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH,surfaceRows,SURFACE_HEAD_ROW} from './sculpt-material-model.js';
 import {MaterialCache,writeMaterialSlot} from './sculpt-material-cache.js';
 import {copyMaterial,materialCacheUsage,materialStaged,materialTint,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES,LIBRARY,materialStates} from './sculpt-materials.js';
 import {columnRows,columnColors} from './sculpt-column.js';
@@ -547,7 +547,10 @@ export class TerrainRenderer {
   // (Green's); every other table leaves them to the world's material, as the world's placement always was.
   placementTable(variant) {
     const rows = this.materialData?.placement ? tablePlacementRows(this.materialData) : this.placementRows(variant);
-    return [...Array.from({length: PLACEMENT_ROW}, () => [0, 0, 0, 0]), ...rows, ...groundCoverRows(this.config.material?.groundCover,variant,this.colorOverrides||{},this.means?.ground)];
+    // The world's surface layers in the rows before the placement rows (engine-frag.wgsl surfaceStage): two a layer from row 0, the stages' heads at SURFACE_HEAD_ROW.
+    const surface = surfaceRows(this.config.surface);
+    const head = [...surface.rows, ...Array.from({length: SURFACE_HEAD_ROW - surface.rows.length}, () => [0, 0, 0, 0]), ...surface.head];
+    return [...head, ...rows, ...groundCoverRows(this.config.material?.groundCover,variant,this.colorOverrides||{},this.means?.ground)];
   }
 
 

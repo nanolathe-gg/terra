@@ -385,6 +385,25 @@
     "erosionRain": 1,
     "talusAngle": 40
   },
+  "surface": [
+    {"name": "Highland ground", "builtin": "highland"},
+    {"name": "Slope cover", "builtin": "slopeCover"},
+    {"name": "Bare soil", "builtin": "soil"},
+    {"name": "Rock", "builtin": "rock"},
+    {"name": "Beach", "builtin": "beach"},
+    {"name": "Crown rock", "builtin": "crown"},
+    {"name": "Base band", "builtin": "baseBand"},
+    {"name": "Moss on regrown debris", "builtin": "regrownMoss"},
+    {"name": "Debris fines", "builtin": "fines"},
+    {"name": "Painted rock", "builtin": "paintedRock"},
+    {"name": "Painted snow", "builtin": "paintedSnow"},
+    {"name": "Painted moss", "builtin": "paintedMoss"},
+    {"name": "Sand dust", "builtin": "sandDust"},
+    {"name": "Sand", "builtin": "sand"},
+    {"name": "Chips", "builtin": "chips"},
+    {"name": "Snow on ice crests", "builtin": "iceCrest"},
+    {"name": "Snow on ice tops", "builtin": "iceCap"}
+  ],
   "groundCover": {
     "plants": {
       "tuft": 4,

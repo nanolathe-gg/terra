@@ -294,6 +294,10 @@ func (s *Site) configure() error {
 			}
 		}
 		c := merge(object{"biome": names[w], "biomeId": w, "size": 1024, "grid": 512, "seaLevel": 0, "baseHeight": base, "materialTable": materialPath(w), "layers": surfaces, "material": material, "water": table["water"]}, world)
+		// The world's surface layers (docs/SURFACE_LAYERS.md): its own (world.surface) or the shared default stack.
+		if _, ok := c["surface"]; !ok {
+			c["surface"] = clone(s.defaults["surface"])
+		}
 		if river, ok := table["river"]; ok {
 			c["river"] = clone(river)
 		}

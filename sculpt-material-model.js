@@ -54,3 +54,30 @@ export function groundCoverRows(cover, overrides = null, colors = {}, ground = [
   (cover.plants?.flowers?.palette ?? []).slice(0, 4).forEach((k, i) => { rows[40 + i] = [...(colors['flower'+(i+1)] ?? rgb(k.slice(0,3))), k[3]]; });
   return rows;
 }
+// A world's surface layers (docs/SURFACE_LAYERS.md; config.surface, from world.surface or materials/defaults.json) as the draw's rows
+// (engine-frag.wgsl surfaceStage). A built-in layer is one of the draw's own surfaces: its color and its share are the draw's, and its stage
+// (the effects that run between stages fix where a layer can go) and its place in that stage are the built-in's. The world's list sets their
+// order within a stage, their Amount and their edge. Rows: SURFACE_HEAD_ROW.. the stages' [first layer, count] pairs, then two rows a
+// layer from row 0, sorted by stage: (stage slot, amount, 0, 0) and (width, noise, noise size, 0).
+export const SURFACE_STAGES = 8, SURFACE_LAYER_ROWS = 2, SURFACE_MAX = 24, SURFACE_HEAD_ROW = 152;
+// Built-ins: [stage, slot in its stage]. Stages: 0 after the ground, 1 after the low-ground tint, 2 after the cover classes, 3 after the
+// margin join, 4 after the beds, 5 after the patches and the rock skin, 6 after the bake's stones and cracks, 7 after the crystals and hill light.
+export const SURFACE_BUILTINS = {
+  highland: [0, 0], slopeCover: [1, 0], soil: [2, 0], rock: [2, 1], beach: [2, 2], crown: [3, 0], baseBand: [4, 0],
+  regrownMoss: [5, 0], fines: [5, 1], paintedRock: [5, 2], paintedSnow: [5, 3], paintedMoss: [5, 4], sandDust: [5, 5], sand: [5, 6],
+  chips: [6, 0], iceCrest: [7, 0], iceCap: [7, 1],
+};
+export function surfaceRows(surface) {
+  const list = Array.isArray(surface) ? surface : [];
+  if (list.length > SURFACE_MAX) throw Error(`A world's surface holds at most ${SURFACE_MAX} layers.`);
+  const layers = list.map((layer, i) => {
+    const at = SURFACE_BUILTINS[layer?.builtin];
+    if (!at) throw Error(`Surface layer ${i + 1}: unknown built-in "${layer?.builtin}".`);
+    const edge = layer.edge || {}, number = (v, fallback) => Number.isFinite(Number(v)) ? Number(v) : fallback;
+    return {stage: at[0], rows: [[at[1], number(layer.amount, 1), 0, 0], [number(edge.width, 1), number(edge.noise, 0), number(edge.noiseSize, 8), 0]]};
+  });
+  // Stable by stage: the list's order within a stage is kept.
+  const sorted = layers.map((l, i) => [l, i]).sort((a, b) => a[0].stage - b[0].stage || a[1] - b[1]).map(([l]) => l);
+  const head = Array.from({length: SURFACE_STAGES}, (_, s) => { const first = sorted.findIndex(l => l.stage === s); return [first < 0 ? 0 : first, sorted.filter(l => l.stage === s).length]; });
+  return {rows: sorted.flatMap(l => l.rows), head: [0, 2, 4, 6].map(k => [...head[k], ...head[k + 1]])};
+}
