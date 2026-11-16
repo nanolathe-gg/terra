@@ -1,4 +1,4 @@
-import {withWorldMaterials,worldKept} from './sculpt-materials.js';
+import {withWorldMaterials,worldKept,worldOwnFor} from './sculpt-materials.js';
 // The map carries its effective world settings, including defaults, URL overrides and the world's ground and water materials.
 // Keep browser/session parameters out of the recipe; removed controls are dropped on load.
 import {KNOBS} from './sculpt-knobs.js';
@@ -31,4 +31,24 @@ export function copySavedWorld(value,config) {
 }
 export function savedWorldId(s) {
   return typeof s.world==='string'&&/^[a-z0-9-]{1,80}$/.test(s.world)&&!['constructor','prototype'].includes(s.world)?s.world:s.biome;
+}
+
+// Whether a save's world (copySavedWorld's) draws as this browser's stored world of the same id (`mine`, the store's entry, or {} for a
+// built-in never changed here): every World row, color, surface layer and kept material. Opening a map whose world differs keeps both
+// (sculpt.js: the map's world opens as a world of its own), so a false "differs" only adds a world; it never loses one.
+export function sameSavedWorld(theirs,mine,config) {
+  const defaults=Object.fromEntries(KNOBS.flatMap(([,rows])=>rows.map(([key,,,,,value])=>[key,value])));
+  const base=key=>config.defaults?.[key]??config.engineDefaults?.[key]??defaults[key];
+  const keys=worldKeys(config);   // every key a save's world carries, a borrowed beach and the palette included
+  for(const key of keys){
+    const a=theirs.knobs?.[key]??base(key),b=mine.knobs?.[key]??base(key);
+    if(a===undefined||b===undefined){if(a!==b)return false;continue;}
+    const na=Number(a),nb=Number(b);
+    if(Number.isFinite(na)&&Number.isFinite(nb)?na!==nb:String(a)!==String(b))return false;
+  }
+  const colors=own=>JSON.stringify(Object.entries(worldHexColors(config,new Map(),own||{})).map(([k,v])=>[k,typeof v==='string'?v.toLowerCase():v]).sort(([a],[b])=>a<b?-1:1));
+  if(colors(theirs.colors)!==colors(mine.colors))return false;
+  if(JSON.stringify(theirs.surface??null)!==JSON.stringify(mine.surface??null))return false;
+  const a=worldOwnFor(theirs.materials,config),b=worldOwnFor(mine.materials,config,{stored:true});
+  return JSON.stringify(Object.entries(a).sort())===JSON.stringify(Object.entries(b).sort());
 }
