@@ -1288,6 +1288,9 @@ export class TerrainRenderer {
   // The world's surface layers changed (docs/SURFACE_LAYERS.md): their rows go to the table. A material layer's material reaches the cache
   // through setMaterials (the map's list carries it).
   setSurface(surface) { this.config.surface = surface; this.set('uMaterialTable', this.placementTable(this.variant)); }
+  // The earliest stage an edit that writes the world's uniforms directly reaches (worldUniformDelta over the stage scan), null if none changed:
+  // a Surface section edit stays in the surface rows, which only the color pass reads.
+  uniformStage(write) { const before = new Uint32Array(this.uniformData.slice(0)); write(); return worldUniformDelta(before, this.uniformData, this.layout, this.uniformStages).stage; }
   // The Surface section's preview of one layer (its first row, surfaceRows layerRows), or none (-1): the draw shows where that layer lies.
   setSurfacePreview(row = -1) {
     this.surfacePreview = row;
