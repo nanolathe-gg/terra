@@ -1167,25 +1167,13 @@
    "recipes": {
 
     "litcrust": {
-
      "label": "Lit crystal crust",
-
+     "material": "crystal-litcrust",
      "knobs": {
-
       "gougeWeb": 0.3,
-
       "faceShade": 0.4,
-
       "faceRindTone": 0.4
-
-     },
-
-     "colors": {
-
-      "rock": "#5b4b6f"
-
      }
-
     }
 
    }

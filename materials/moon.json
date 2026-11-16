@@ -606,87 +606,43 @@
    "recipes": {
 
     "pitted": {
-
      "label": "Pocked rubble",
-
+     "material": "moon-pitted",
      "knobs": {
-
       "faceCrease": 6,
-
       "faceCreaseSize": 5,
-
       "faceShade": 1,
-
       "faceRock": 1,
-
       "rockFaceFrom": 0.4,
-
       "pockmark": 1,
-
       "pockSize": 5,
-
       "moonCups": 0,
-
       "moonRibs": 0,
-
       "moonFolds": 0,
-
       "banding": 0.3
-
-     },
-
-     "colors": {
-
-      "rock": "#5b5b59"
-
      }
-
     },
 
     "cracked": {
-
      "label": "Streaked crater wall",
-
+     "material": "moon-cracked",
      "knobs": {
-
       "faceScratch": 6,
-
       "faceScratchSize": 4,
-
       "faceScratchLength": 100,
-
       "faceCrease": 1,
-
       "faceShade": 1,
-
       "shineRock": 0,
-
       "shineRockSharp": 24,
-
       "shineRockRough": 0,
-
       "shineRockScale": 6,
-
       "crackSeverity": 0.35,
-
       "moonCups": 0,
-
       "moonRibs": 0,
-
       "moonFolds": 0,
-
       "banding": 0.3,
-
       "pockmark": 0
-
-     },
-
-     "colors": {
-
-      "rock": "#747472"
-
      }
-
     }
 
    }

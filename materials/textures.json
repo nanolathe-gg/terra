@@ -529,6 +529,7 @@
  },
  "green-rock": {
   "name": "Green rock grain",
+  "color": "#79787b",
   "seed": 0,
   "nodes": [
    {"id":"mid","type":"constant","name":"Middle","params":{"value":0.5},"x":0,"y":0},
@@ -551,6 +552,7 @@
  },
  "lush-rock": {
   "name": "Lush rock grain",
+  "color": "#3f3628",
   "seed": 0,
   "nodes": [
    {"id":"mid","type":"constant","name":"Middle","params":{"value":0.5},"x":0,"y":0},
@@ -755,6 +757,7 @@
  },
  "zhon-rock": {
   "name": "Zhon rock grain",
+  "color": "#42567b",
   "seed": 0,
   "nodes": [
    {"id":"mid","type":"constant","name":"Middle","params":{"value":0.5},"x":0,"y":0},
@@ -1513,5 +1516,29 @@
  "zhon-moss": {"name": "Zhon moss", "like": "zhon-slope", "color": "#a88d6a"},
  "zhon-sand": {"name": "Zhon sand", "like": "zhon-debris", "color": "#64676d"},
  "zhon-band": {"name": "Zhon base band", "like": "desert-ground", "color": "#3a4d6e"},
+ "rock-sandstone-ochre": {"name": "Layered sandstone", "like": "rock-sandstone", "color": "#836f23"},
+ "rock-conglomerate": {"name": "Rounded conglomerate", "like": "rock-sandstone", "color": "#777757"},
+ "rock-siltstone": {"name": "Jointed siltstone", "like": "rock-shale", "color": "#632b33"},
+ "rock-shale-gray": {"name": "Thin shale", "like": "rock-shale", "color": "#5b5b5b"},
+ "rock-schist": {"name": "Flaky schist", "like": "rock-shale", "color": "#7b7b7b"},
+ "rock-granite-gray": {"name": "Rounded granite", "like": "rock-granite", "color": "#757576"},
+ "rock-gneiss": {"name": "Folded gneiss", "like": "rock-granite", "color": "#6c6c6d"},
+ "rock-breccia": {"name": "Angular breccia", "like": "rock-granite", "color": "#7c7c7d"},
+ "rock-basalt-blue": {"name": "Jointed basalt", "like": "rock-basalt", "color": "#304c5f"},
+ "rock-limestone-cream": {"name": "Pitted limestone", "like": "rock-limestone", "color": "#c8c8a0"},
+ "archipelago-mound": {"name": "Mound rock", "like": "archipelago-rock", "color": "#6a6849"},
+ "crystal-litcrust": {"name": "Lit crystal crust", "like": "crystal-rock", "color": "#4d3e62"},
+ "desert-triad": {"name": "Gray caprock", "like": "desert-rock", "color": "#918495"},
+ "desert-outcrop": {"name": "Dark outcrop", "like": "desert-rock", "color": "#615465"},
+ "green-escarpment": {"name": "Dark escarpment", "like": "green-rock", "color": "#504f52"},
+ "ice-slate": {"name": "Snow and slate", "like": "ice-rock", "color": "#336d8b"},
+ "ice-streaked": {"name": "Crystal ice", "like": "ice-rock", "color": "#d4f4ff"},
+ "ice-blueice": {"name": "Glacier ice", "like": "ice-rock", "color": "#bedcfc"},
+ "ice-rubble": {"name": "Frost rubble", "like": "ice-rock", "color": "#778db3"},
+ "lava-dome": {"name": "Dark dome rock", "like": "lava-rock", "color": "#3d3825"},
+ "lava-crumpled": {"name": "Crumpled flow rock", "like": "lava-rock", "color": "#554835"},
+ "lush-tanrock": {"name": "Bare tan rock", "like": "rock-granite", "color": "#949471"},
+ "moon-pitted": {"name": "Pocked rubble", "like": "moon-rock", "color": "#5f5f5b"},
+ "moon-cracked": {"name": "Streaked crater wall", "like": "moon-rock", "color": "#787874"},
  "flowers": {"name":"Flowers","seed":0,"nodes":[{"id":"species","type":"noise","kind":"facets","name":"Species clumps","params":{"size":22,"detail":0,"layers":0,"seed":0,"jitter":0.8,"hex":0},"in":{"in":null},"x":0,"y":0},{"id":"colors","type":"gradient","name":"Flower colors","params":{"ease":0},"stops":[[0,0.9255,0.9098,0.8392],[0.44,0.9255,0.9098,0.8392],[0.45,1.0,0.8392,0.251],[0.77,1.0,0.8392,0.251],[0.78,0.6667,0.4706,0.8431],[0.88,0.6667,0.4706,0.8431],[0.89,0.8824,0.3137,0.2353],[1,0.8824,0.3137,0.2353]],"in":{"in":"species"},"x":240,"y":0},{"id":"material","type":"output","name":"Material","params":{"relief":0,"wornFrom":0.2,"wornAmount":1,"depositFrom":0.2,"depositAmount":1},"in":{"color":"colors","height":null,"shine":null,"worn":null,"deposit":null},"x":480,"y":0}],"controls":[{"label":"Clump size","node":"species","param":"size","min":4,"max":64},{"label":"Flower colors","node":"colors","param":"stops"}],"palette":[81,195,200,218],"dither":{"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}}
 }

@@ -1566,9 +1566,6 @@
    "material": "single",
    "scree": "0"
   },
-  "colors": {
-   "rock": "#3d5174"
-  },
   "export": {
    "disabledReason": "Zhon has no retail planet or feature set; the owner must choose one before export"
   }

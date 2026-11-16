@@ -17,8 +17,8 @@
 // of the rock it belongs to (rs).
 struct Rock {
     shineRock: vec4f,     // the rock row of the shine table: x gloss, y sharpness, z roughness, w roughness scale (px)
-    // The recipe's colours: row 0 its rock (rgb; a = 1 when chosen, else the rock material's mean), rows 1-5 its beds' material slots (rgb).
-    // Row 6 is its absorption colour (rgb; a = 1 when chosen, else the rock's own hue); row 7 is free.
+    // The recipe's colours: rows 1-5 its beds' material slots (rgb). Row 6 is its absorption colour (rgb; a = 1 when chosen, else the rock's
+    // own hue); rows 0 and 7 are free (a rock's own colour is its material's Color).
     rockColors: array<vec4f, 8>,
     strata: f32,          // Strata: how much of the rock and the raised ground takes the column's bed colours
     strataContrast: f32,

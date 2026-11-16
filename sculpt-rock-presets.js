@@ -28,22 +28,22 @@ export const ROCK_PRESETS={
 // and aprons, the crystal web and rock on level tops (Rock crown). A recipe that does not set one takes the world's.
 export const ROCK_SURFACE_KEYS=['crackSeverity','crackMajor','crackMinor','crackHairline','crackBlocks','crackSpacing','crackWidth','crackDark','crackNetwork','banding','pockmark','pockSize','moonCups','moonCupSize','moonCupDepth','cupStretch','moonRibs','moonRibDepth','moonRibDark','moonFolds','moonFoldSpacing','iceCrystal','iceCrest','iceSnow','iceFall','iceApron','gougeWeb','rockCrown'];
 export const ROCK_KEYS=[...Object.keys(base),'strata','strataContrast','strataGrain','absorbDepth','shadowTint',...ROCK_SURFACE_KEYS];
-// The starting recipes' own colors ({rock, beds}, checkColors): a preset made from one takes them. A world that names a recipe as its rock
+// The starting recipes' bed colors ({beds}, checkColors): a preset made from one takes them. A world that names a recipe as its rock
 // keeps its own colors (applyWorldRock takes the numbers and beds only), so its slot 0 looks as it did. Each color is an entry of the game's
-// palette (materials/palette.json) on one ramp (granite's rock is modern Green's own gray, between two entries of the gray ramp), so a lit face steps along that ramp instead of dithering between two hues: the palette has
-// gray, olive, ochre, rose and blue-gray ramps from dark to light, and few orange-browns. Measured on a lit wall of modern Green (sunHeight 25),
-// the chroma-weighted hue spread of each recipe's rock pixels is no more than 1.4 times what it is before the palette step.
+// palette (materials/palette.json) on one ramp, so a lit face steps along that ramp instead of dithering between two hues: the palette has
+// gray, olive, ochre, rose and blue-gray ramps from dark to light, and few orange-browns. A recipe's rock color is its material's Color
+// (ROCK_MATERIALS: library entries like a rock graph, each at the color the recipe's rock had, measured as the material's GPU mean).
 export const ROCK_COLORS={
- sandstone:{rock:'#836f23',beds:['#836f23','#9b5b63','#9b832f','#8b474f','#6b5b17']},   // ochre, rose beds
- shale:{rock:'#5b5b5b',beds:['#636343','#6b6b6b','#535333','#7b7b7b','#4b4b4b']},   // gray, olive beds
- granite:{rock:'#747474',beds:['#5b5b5b','#8b8b8b','#4b4b4b','#9b9b9b','#6b6b6b']},   // modern Green's gray
- basalt:{rock:'#2f4b5f',beds:['#2f4b5f','#3f5f73','#273f57','#53778b','#1f2f47']},   // dark blue-gray
- limestone:{rock:'#c3c39b',beds:['#c3c39b','#abab83','#dfdfb7','#93936f','#bbbbbb']},   // pale cream
- gneiss:{rock:'#6b6b6b',beds:['#8b8b8b','#3b3b3b','#9b9b9b','#4b4b4b','#6b6b6b']},   // gray bands, light and dark
- schist:{rock:'#7b7b7b',beds:['#777757','#8b8b8b','#636343','#9b9b9b','#535333']},   // silver gray, olive beds
- conglomerate:{rock:'#777757',beds:['#777757','#93936f','#636343','#abab83','#535333']},   // olive tan
- breccia:{rock:'#7b7b7b',beds:['#7b7b7b','#8b474f','#9b9b9b','#6f333b','#5b5b5b']},   // gray, rose clasts in its beds
- siltstone:{rock:'#632b33',beds:['#632b33','#535333','#6f333b','#636343','#57232b']},   // maroon, olive beds
+ sandstone:{beds:['#836f23','#9b5b63','#9b832f','#8b474f','#6b5b17']},   // ochre, rose beds
+ shale:{beds:['#636343','#6b6b6b','#535333','#7b7b7b','#4b4b4b']},   // gray, olive beds
+ granite:{beds:['#5b5b5b','#8b8b8b','#4b4b4b','#9b9b9b','#6b6b6b']},   // modern Green's gray
+ basalt:{beds:['#2f4b5f','#3f5f73','#273f57','#53778b','#1f2f47']},   // dark blue-gray
+ limestone:{beds:['#c3c39b','#abab83','#dfdfb7','#93936f','#bbbbbb']},   // pale cream
+ gneiss:{beds:['#8b8b8b','#3b3b3b','#9b9b9b','#4b4b4b','#6b6b6b']},   // gray bands, light and dark
+ schist:{beds:['#777757','#8b8b8b','#636343','#9b9b9b','#535333']},   // silver gray, olive beds
+ conglomerate:{beds:['#777757','#93936f','#636343','#abab83','#535333']},   // olive tan
+ breccia:{beds:['#7b7b7b','#8b474f','#9b9b9b','#6f333b','#5b5b5b']},   // gray, rose clasts in its beds
+ siltstone:{beds:['#632b33','#535333','#6f333b','#636343','#57232b']},   // maroon, olive beds
 };
 const ranges=new Map(KNOBS.flatMap(([,rows])=>rows.map(([key,,lo,hi])=>[key,[lo,hi]])));
 // Validate the entire recipe before changing the open scene. Unknown, removed
@@ -95,29 +95,31 @@ export function recipeRock(key,config){
  const r=STARTING_RECIPES[key];if(!r)throw Error(`No starting recipe ${key}.`);
  return {knobs:{...r.knobs},column:r.sections?{sections:structuredClone(r.sections)}:null,colors:checkColors(ROCK_COLORS[key])};
 }
-// The rock material each starting recipe's faces show (library materials, materials/textures.json): its grain, grit and shine under the
-// recipe's colors. A world's own rock type takes its `from` recipe's; Smooth soil none (the world's rock material).
-export const ROCK_MATERIALS={sandstone:'rock-sandstone',conglomerate:'rock-sandstone',siltstone:'rock-shale',shale:'rock-shale',schist:'rock-shale',
- granite:'rock-granite',gneiss:'rock-granite',breccia:'rock-granite',basalt:'rock-basalt',limestone:'rock-limestone'};
-export const recipeMaterial=(key,config)=>ROCK_MATERIALS[key]??ROCK_MATERIALS[config?.rock?.recipes?.[key]?.from]??null;
-// Rock types made from a starting recipe (those in `slots`) show its rock material (recipeMaterial): the map's copy of that library
+// The rock material each starting recipe's faces show (library materials, materials/textures.json): its color, grain, grit and shine. A
+// world's own rock type takes the one it names (`material`), else its `from` recipe's; Smooth soil none (the world's rock material).
+export const ROCK_MATERIALS={sandstone:'rock-sandstone-ochre',conglomerate:'rock-conglomerate',siltstone:'rock-siltstone',shale:'rock-shale-gray',schist:'rock-schist',
+ granite:'rock-granite-gray',gneiss:'rock-gneiss',breccia:'rock-breccia',basalt:'rock-basalt-blue',limestone:'rock-limestone-cream'};
+export const recipeMaterial=(key,config)=>config?.rock?.recipes?.[key]?.material??ROCK_MATERIALS[key]??ROCK_MATERIALS[config?.rock?.recipes?.[key]?.from]??null;
+// Rock types made from a starting recipe or a world's rock type that names a material (those in `slots`) show it (recipeMaterial): the map's copy of that library
 // material, added while the list and the material cache have room; a rock type that already names one keeps it. The editor (sculpt.js)
-// and the headless host give a map's world rock types theirs when the map has no rock list of its own, and a preset its own when added.
-export function giveRockMaterials(rocks, materials, slots, config) {
-  let list = materials; const layers = l => l.reduce((n, m) => n + 1 + materialStates(m).length, 0);
+// and the headless host give a map's world rock types theirs when the map has no rock list of its own, and a preset its own when added or
+// started again from a recipe (`keyOf`: the recipe each rock type is made from, its key by default).
+export function giveRockMaterials(rocks, materials, slots, config, keyOf = r => r.key) {
+  let list = materials; const layers = l => l.reduce((n, m) => n + 1 + materialStates(m).length, 0), missed = [];
   const out = rocks.map(r => {
     if (!slots.includes(r.slot) || r.material > 0) return r;
-    const key = recipeMaterial(r.key, config), m = LIBRARY[key]; if (!m) return r;
+    const key = recipeMaterial(keyOf(r), config), m = LIBRARY[key]; if (!m) return r;
     let at = list.find(o => o.source === key && !roleOf(o));
     if (!at) {
-      if (list.length >= MATERIAL_SLOTS - 1 || !materialCacheUsage(layers(list) + 1 + materialStates(m).length, undefined, [...list, m].some(materialStaged)).fits) return r;
+      // No room: the rock type shows the world's rock material, and the caller says so (`missed`, the rock types' names).
+      if (list.length >= MATERIAL_SLOTS - 1 || !materialCacheUsage(layers(list) + 1 + materialStates(m).length, undefined, [...list, m].some(materialStaged)).fits) { missed.push(r.name); return r; }
       const added = addMaterial(list, m, m.name); list = added.materials; at = list.find(o => o.slot === added.slot);
     }
     return {...r, material: at.slot};
   });
-  return {rocks: out, materials: list};
+  return {rocks: out, materials: list, missed};
 }
-// A world's own rock types (materials/<world>.json world.rock.recipes: {key: {label, from, knobs, beds, sections, colors}}): its numbers lie over the
+// A world's own rock types (materials/<world>.json world.rock.recipes: {key: {label, material, from, knobs, beds, sections, colors}}): its numbers lie over the
 // starting recipe it names (`from`, else none: the world's own rock under them, as Smooth soil's), its beds ([[thickness, hardness, slot], ...]),
 // or its column sections by height ([{start, beds}, ...]), replace that recipe's, and its colors ({rock, beds, absorb}) that recipe's. A world's tools name them by key, as the built-in recipes.
 export function worldRecipe(config,key){
@@ -155,18 +157,18 @@ const freeKey=(rocks,key)=>key&&!rocks.some(r=>r.key===key)?key:null;
 function checkName(name){if(typeof name!=='string'||!name.trim()||name.trim().length>NAME_MAX)throw Error(`A rock preset needs a name of 1 to ${NAME_MAX} characters.`);return name.trim();}
 // A preset's column: its sections alone (the beds; colors, bands and wander stay the world's), checked as a map's column is.
 function checkColumn(column){if(column==null)return null;const c=copyColumn(column);if(!c.sections)throw Error('A rock preset\'s column needs its sections.');return {sections:c.sections};}
-// A preset's colors: {rock, beds, absorb}, the rock's color, its beds' material slots (COLUMN_SLOTS of them) and the color it deepens toward
-// with thickness (Color deepens with thickness), each '#rrggbb' or null for slot 0's. None at all is null.
+// A preset's colors: {beds, absorb}, its beds' material slots (COLUMN_SLOTS of them) and the color it deepens toward with thickness (Color
+// deepens with thickness), each '#rrggbb' or null for slot 0's. None at all is null. The rock's own color is its material's Color; a `rock`
+// color from an older save or recipe is dropped.
 const HEX=/^#[0-9a-f]{6}$/i;
 export function checkColors(colors){
  if(colors==null)return null;
- const fail=()=>{throw Error(`A rock preset's colors are {rock, beds, absorb}: '#rrggbb' for the rock, ${COLUMN_SLOTS} for its beds and one it deepens toward, or null for the world's.`);};
+ const fail=()=>{throw Error(`A rock preset's colors are {beds, absorb}: ${COLUMN_SLOTS} '#rrggbb' for its beds and one it deepens toward, or null for the world's.`);};
  if(typeof colors!=='object'||Array.isArray(colors)||Object.keys(colors).some(k=>!['rock','beds','absorb'].includes(k)))fail();
  const hex=v=>{if(typeof v!=='string'||!HEX.test(v))fail();return v.toLowerCase();};
- const rock=colors.rock==null?null:hex(colors.rock);
  if(colors.beds!=null&&(!Array.isArray(colors.beds)||colors.beds.length!==COLUMN_SLOTS))fail();
  const beds=colors.beds==null?null:colors.beds.map(hex),absorb=colors.absorb==null?null:hex(colors.absorb);
- return rock||beds||absorb?{rock,beds,...(absorb?{absorb}:{})}:null;
+ return beds||absorb?{beds,...(absorb?{absorb}:{})}:null;
 }
 // A map's rock presets checked before they touch the open map (a save, a share link, a scene): slots 1-15, each once, a name, numbers within
 // the controls' ranges, and a column the uniforms hold. No list is null (the world's own list then).

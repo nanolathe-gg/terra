@@ -559,12 +559,14 @@ export function copyMaterials(value) {
   if (list.some(m => m.worldGround && m.worldWater)) throw Error('The world’s ground and its water are two materials.');
   return list;
 }
-// A library entry is a material, or one `like` another with its own Color (recolorMaterial): a world's soil, snow, moss, sand and base band
-// are its graphs with the world's color, so a revision of the graph reaches every world.
-const libraryEntry = (key, m) => {
-  if (m.like == null) return {name: nameOf(m.name), ...copyMaterial({...m, source: key})};
-  const base = library[m.like]; if (!base || base.like != null || !/^#[0-9a-f]{6}$/i.test(m.color ?? '')) throw Error(`Library material ${key}: like names a material of the library and color is #rrggbb.`);
-  return {name: nameOf(m.name), ...copyMaterial({...recolorMaterial(copyMaterial(base), [1, 3, 5].map(i => parseInt(m.color.slice(i, i + 2), 16) / 255)), source: key})};
+// A library entry is a material, or one `like` another, either with its own Color (`color`, recolorMaterial): a world's soil, snow, moss,
+// sand, base band and colored rock types are its graphs with the world's color, so a revision of the graph reaches every world.
+const libraryEntry = (key, {like, color, ...m}) => {
+  const hex = /^#[0-9a-f]{6}$/i.test(color ?? '');
+  if (like == null) { if (color != null && !hex) throw Error(`Library material ${key}: color is #rrggbb.`); }
+  else if (!library[like] || library[like].like != null || !hex) throw Error(`Library material ${key}: like names a material of the library and color is #rrggbb.`);
+  const {color: _, ...graph} = like == null ? m : library[like], base = copyMaterial({...graph, name: m.name ?? graph.name});
+  return {name: nameOf(m.name ?? graph.name), ...copyMaterial({...(hex ? recolorMaterial(base, [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16) / 255)) : base), source: key})};
 };
 export const LIBRARY = Object.fromEntries(Object.entries(library).map(([key, m]) => [key, libraryEntry(key, m)]));
 const freeSlot = list => { for (let slot = 1; slot < MATERIAL_SLOTS; slot++) if (!list.some(m => m.slot === slot)) return slot; throw Error(`A map holds at most ${MATERIAL_SLOTS - 1} materials.`); };

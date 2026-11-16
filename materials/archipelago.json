@@ -869,15 +869,8 @@
    "recipes": {
 
     "mound": {
-
      "label": "Mound rock",
-
-     "colors": {
-
-      "rock": "#636343"
-
-     }
-
+     "material": "archipelago-mound"
     }
 
    }

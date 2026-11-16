@@ -621,81 +621,40 @@
    "recipes": {
 
     "dome": {
-
      "label": "Dark dome rock",
-
+     "material": "lava-dome",
      "knobs": {
-
       "faceRindTone": -0.5,
-
       "faceShade": 1,
-
       "faceRound": 0.8,
-
       "faceWhole": 0.3,
-
       "faceBlock": 1.5,
-
       "faceBlockSize": 30,
-
       "rockFaceFrom": 0.35,
-
       "faceMass": 2,
-
       "debrisAmount": 0.5,
-
       "faceRindDepth": 12,
-
       "faceScratch": 0.2,
-
       "rockCrown": 1
-
-     },
-
-     "colors": {
-
-      "rock": "#3b3323"
-
      }
-
     },
 
     "crumpled": {
-
      "label": "Crumpled flow rock",
-
+     "material": "lava-crumpled",
      "knobs": {
-
       "faceCrease": 3,
-
       "faceCreaseSize": 12,
-
       "faceFold": 20,
-
       "faceRun": 150,
-
       "faceSpall": 1.5,
-
       "faceWear": 0.4,
-
       "rockFaceFrom": 0.3,
-
       "faceRindTone": 0.15,
-
       "faceBlock": 4,
-
       "faceBlockSize": 22,
-
       "rockCrown": 1
-
-     },
-
-     "colors": {
-
-      "rock": "#534333"
-
      }
-
     }
 
    }
