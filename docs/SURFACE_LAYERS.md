@@ -1,8 +1,8 @@
 # Surface layers: where each material shows
 
 Status: phases 1-3 landed on local main (b89971fd, 2026-11-15); the rest of phase 3, phase 4 as an opt-in and phase 5's height
-contrast landed on local main from branch `surface-layers-2` (09c0cc52, 2026-11-16). Round 3 (branch `surface-layers-3`, not landed): see
-"Round 3" below. Not pushed; previews stale. Branch `surface-layers`. The research behind it is the prototype branch
+contrast landed on local main from branch `surface-layers-2` (09c0cc52, 2026-11-16). Round 3 (branch `surface-layers-3`) landed on local main
+(2026-11-16): see "Round 3" below. Not pushed; previews stale. Branch `surface-layers`. The research behind it is the prototype branch
 `prototype/surface-stack` (not for landing), summarized below.
 
 ## The model
