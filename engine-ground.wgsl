@@ -194,8 +194,8 @@ fn nGradient(s:MaterialStep,a:vec4f)->vec4f{
  }
  return vec4f(rgb,1);
 }
-// Color adjust: hue turn (degrees), saturation and brightness scales (0 leaves each), through a mask. In HSV, so a turn keeps the brightest
-// channel; a color brightened above 1 keeps its gain.
+// Color adjust: hue turn (degrees), saturation and brightness scales (0 leaves each). The mask scales all three, so half a mask is half
+// the turn, not a blend of two colors. In HSV, so a turn keeps the brightest channel; a color brightened above 1 keeps its gain.
 fn graphHsv(c:vec3f)->vec3f{
  let hi=max(c.r,max(c.g,c.b));let d=hi-min(c.r,min(c.g,c.b));if(d<=1e-6){return vec3f(0,0,hi);}
  var h=select(select(4.0+(c.r-c.g)/d,2.0+(c.b-c.r)/d,hi==c.g),(c.g-c.b)/d,hi==c.r);
@@ -203,8 +203,8 @@ fn graphHsv(c:vec3f)->vec3f{
 }
 fn graphRgb(c:vec3f)->vec3f{return c.z*mix(vec3f(1),clamp(abs(fract(c.x+vec3f(1,2.0/3.0,1.0/3.0))*6.0-3.0)-1.0,vec3f(0),vec3f(1)),c.y);}
 fn nAdjust(s:MaterialStep,a:vec4f,mask:vec4f)->vec4f{
- let hsv=graphHsv(a.rgb);let turned=graphRgb(vec3f(fract(hsv.x+arg(s,0u)/360.0),clamp(hsv.y*(1.0+arg(s,1u)),0.0,1.0),hsv.z*(1.0+arg(s,2u))));
- return vec4f(mix(a.rgb,turned,clamp(mask.x,0.0,1.0)),1);
+ let m=clamp(mask.x,0.0,1.0);if(m<=0.0){return vec4f(a.rgb,1);}
+ let hsv=graphHsv(a.rgb);return vec4f(graphRgb(vec3f(fract(hsv.x+m*arg(s,0u)/360.0),clamp(hsv.y*(1.0+m*arg(s,1u)),0.0,1.0),hsv.z*(1.0+m*arg(s,2u)))),1);
 }
 // Light: direction, strength. A height's slope toward a light, .5 on the level, so it can tint color the way a lit bump does.
 fn nLight(s:MaterialStep,east:f32,west:f32,south:f32,north:f32)->vec4f{

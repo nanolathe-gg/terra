@@ -56,7 +56,7 @@ export const NODES = {
     help: 'Colors a gray pattern, dark to light. A stop brighter than 1 lightens when the result multiplies another color.'},
   adjust: {code: 12, label: 'Color adjust', out: 'color', inputs: [['in', 'Color', 'any'], ['mask', 'Mask', 'gray']],
     params: () => [P('hue', 'Hue (°)', -180, 180, 0), P('saturation', 'Saturation', -1, 1, 0), P('value', 'Brightness', -1, 1, 0)],
-    help: 'Turns a color’s hue, and scales its saturation and brightness, through an optional Mask: drier or greener patches over every layer at once. The material’s palette limits what shows; after a large change, Pick from the material.'},
+    help: 'Turns a color’s hue, and scales its saturation and brightness; an optional Mask scales all three, so a soft mask sweeps the hue gradually: drier or greener patches over every layer at once, iridescent films. The material’s palette limits what shows; after a large change, Pick from the material.'},
   blur: {code: 13, label: 'Blur', out: 'any', inputs: [['in', 'Input', 'any']], params: () => [P('radius', 'Radius (px)', 0, 32, 2)],
     help: 'Softens a gray or color pattern over Radius px (0 leaves it), wrapping at the repeat: soft halos from hard masks, dirt filling cracks, smoother heights. Its input is computed over the whole repeat first: a material may use four Blur, Slope blur and Stamp nodes in all.'},
   slopeblur: {code: 14, label: 'Slope blur', out: 'any', inputs: [['in', 'Input', 'any'], ['slope', 'Slope', 'gray']], params: () => [P('distance', 'Distance (px)', -32, 32, 6)],
