@@ -188,7 +188,9 @@ export function mountSurfacePanel(host) {
       const order = el('div', {className: 'surface-wide surface-line surface-order'}, el('span', {className: 'small', textContent: siblings.length > 1 ? 'Order in its group' : 'Alone in its group'}),
         move(1, '↑ Raise', 'Raise: over the layer above it'), move(-1, '↓ Lower', 'Lower: under the layer below it'));
       if (!builtin) order.append(el('button', {type: 'button', textContent: 'Remove', title: 'Remove this layer (its material leaves the map unless a stroke uses it)', onclick: () => { const next = structuredClone(layers); next.splice(i, 1); put(next, true); }}));
-      body.append(materialRow, order);
+      // Layers that draw one library material share the world's copy of it (one snow for every snow layer).
+      const sharing = layer.material != null ? layers.filter((l, j) => j !== i && l.material === layer.material).map(nameOf) : [];
+      body.append(materialRow, ...(sharing.length ? [el('p', {className: 'small surface-wide', textContent: `Shared with ${sharing.join(', ')}: one material, so its Color and edits change them all.`})] : []), order);
       // The material's own Color (sculpt-materials.js recolorMaterial): all its color steps move together; the steps stay editable in it.
       const colored = material ?? (own ? role : null);
       if (colored?.own) {

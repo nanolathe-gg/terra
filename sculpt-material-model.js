@@ -88,7 +88,7 @@ export const layerKey = layer => layer?.id ?? layer?.builtin ?? '';
 // A material layer is any layer that is not a built-in; a built-in may also draw a material (`material`, docs/SURFACE_LAYERS.md phase 4)
 // in place of the engine's own color, keeping its own share. Either binds the map's copy that carries its key (layerKey) as worldLayer.
 export const isMaterialLayer = layer => layer?.builtin == null;
-// `slotOf(id)`: the map's slot of the material that carries this layer's id (-1 when the map lacks it). `hidden`: the keys (layerKey) of
+// `slotOf(key)`: the map's slot of the world's copy of library material `key` (its worldLayer; -1 when the map lacks it). `hidden`: the keys (layerKey) of
 // layers the Surface section hides while an artist designs (a view, never saved or exported): they draw nothing.
 export function surfaceRows(surface, slotOf = () => -1, hidden = null) {
   const list = Array.isArray(surface) ? surface : [];
@@ -115,7 +115,7 @@ export function surfaceRows(surface, slotOf = () => -1, hidden = null) {
     const height = Math.max(0, Math.min(1, number(edge.height, 0)));
     if (height > 0 && draws) { if (!rule.length) rule = [[1, 0, 0, 0]]; rule[0][3] = height; }
     if (rule.length > 1 || layer.score || draws) facts = true;
-    const slot = draws ? slotOf(layerKey(layer)) : -1;
+    const slot = draws ? slotOf(layer.material) : -1;   // the world's copy of its library material, shared by every layer that draws it
     const amount = hidden?.has(layerKey(layer)) ? 0 : !material && SURFACE_OWN_AMOUNT.includes(layer.builtin) ? 1 : number(layer.amount, 1);
     return {index: i, stage, rows: [[material ? -1 : at[1], amount, slot, rule.length], fixed ? [1, 0, 8, layerSalt(layerKey(layer))] : [number(edge.width, 1), number(edge.noise, 0), number(edge.noiseSize, 8), layerSalt(layerKey(layer))], ...rule]};
   });

@@ -5,7 +5,6 @@
 import gamePalette from './materials/palette.json' with {type:'json'};
 import library from './materials/textures.json' with {type:'json'};
 import snippets from './materials/snippets.json' with {type:'json'};
-import {layerKey} from './sculpt-material-model.js';
 
 export const MATERIAL_SLOTS = 16;                  // slot 0 is "the world's ground" on a stroke; materials take slots 1 to 15
 export const MATERIAL_REPEAT = 512;
@@ -592,12 +591,12 @@ export function withWorldMaterials(value, config, {carried = false} = {}) {
     const m = LIBRARY[config.materials?.[key]];
     if (m && (role === 'worldHigh' || (role === 'worldBeach' && config.beachTable) || !surfaced) && !list.some(o => o[role]) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, [role]: true} : o); }
   }
-  // The world's surface layers that draw a material (config.surface, a layer with `material`: a library key and an `id`): each the list
-  // lacks is added with the layer's id as its worldLayer, while the list has room.
-  // A built-in that draws a material binds by its built-in's name (sculpt-material-model.js layerKey).
-  for (const layer of config.surface || []) {
-    const key = layerKey(layer), m = layer?.material != null && key ? LIBRARY[layer.material] : null;
-    if (m && !list.some(o => o.worldLayer === key) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, layer.builtin == null ? layer.name || m.name : `${layer.name || layer.builtin}: ${m.name}`); list = added.materials.map(o => o.slot === added.slot ? {...o, worldLayer: key} : o); }
+  // The world's surface layers that draw a material (config.surface, a layer with `material`, a library key): one copy of each library
+  // material they draw, its key as the copy's worldLayer, shared by every layer that draws it (the three snows draw one snow), added
+  // while the list has room.
+  for (const key of new Set((config.surface || []).map(l => l?.material).filter(k => k != null))) {
+    const m = LIBRARY[key];
+    if (m && !list.some(o => o.worldLayer === key) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, worldLayer: key} : o); }
   }
   // A world may name more materials its tools lay down (config.materials.extra: library keys; a tool's `material`, sculpt-tools.js
   // toolMaterialSlot). Each the list lacks is added while it has room.
@@ -640,8 +639,8 @@ function worldLibraryKey(config, key) {
   if (key === 'worldGround' || key === 'worldWater') return libraryKey(config, key === 'worldGround' ? 'ground' : 'water');
   const role = MAP_ROLES.find(([r]) => r === key);
   if (role) return LIBRARY[config.materials?.[role[1]]] ? config.materials[role[1]] : null;
-  const layer = (config.surface || []).find(l => 'layer:' + layerKey(l) === key);
-  return layer?.material != null && LIBRARY[layer.material] ? layer.material : null;
+  const material = key.slice(6);   // 'layer:' and the library material the world's layers draw
+  return LIBRARY[material] && (config.surface || []).some(l => l?.material === material) ? material : null;
 }
 // What the world keeps of a map's list: each of its world materials (worldKey: ground, water, a role, a layer's) where it differs from the
 // library material that look names, marked with that library material (`replaces`; null where the look names none). A world nobody
@@ -711,11 +710,9 @@ export function materialsInUse(nodes, list, rocks = []) {
 // binding and leaves the list unless a stroke (hidden ones too) or a rock type uses it; then each layer that draws a material and lacks a
 // copy gets one (withWorldMaterials). Pure: the editor calls it on each surface edit and on loading a map, with that map's strokes.
 export function surfaceMaterials(surface, materials, {config, nodes = [], rocks = []}) {
-  const drawn = new Map((surface || []).filter(l => l?.material != null).map(l => [layerKey(l), l.material])), loose = new Set();
+  const drawn = new Set((surface || []).map(l => l?.material).filter(k => k != null)), loose = new Set();
   let next = (materials || []).map(m => {
-    if (!m.worldLayer) return m;
-    const want = drawn.get(m.worldLayer);
-    if (want && (!m.source || m.source === want)) return m;
+    if (!m.worldLayer || drawn.has(m.worldLayer)) return m;
     loose.add(m.slot); const {worldLayer, ...rest} = m; return rest;
   });
   if (loose.size) { const used = new Set(materialsInUse(nodes.map(n => n.hidden ? {...n, hidden: false} : n), next, rocks).map(m => m.slot)); next = next.filter(m => !loose.has(m.slot) || used.has(m.slot)); }
@@ -723,7 +720,7 @@ export function surfaceMaterials(surface, materials, {config, nodes = [], rocks 
 }
 export function deleteMaterial(list, nodes, slot, rocks = []) {
   const m = find(list, slot);
-  if (m.worldLayer) throw Error(`This material draws the surface layer “${m.worldLayer}”. In World › Surface, choose another material for that layer or remove it first.`);
+  if (m.worldLayer) throw Error('This material draws surface layers. In World › Surface, choose another material for them or remove them first.');
   const rock = (rocks ?? []).find(r => r.material === slot);
   if (rock) throw Error(`This is the surface of the rock type ${rock.name}. Choose another material for it first.`);
   if (m.worldGround || m.worldWater) throw Error(`This is the world’s ${m.worldGround ? 'ground' : 'water'}. Assign another material first.`);

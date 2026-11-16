@@ -755,7 +755,7 @@ function applySurface(next,{commit=false}={}) {
 }
 function surfaceHost() {
   const hex=m=>'#'+materialTint(m).map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');
-  const layerMaterial=layer=>mapMaterials.find(m=>m.worldLayer===layerKey(layer));
+  const layerMaterial=layer=>layer.material!=null?mapMaterials.find(m=>m.worldLayer===layer.material):undefined;   // the world's copy its layers share
   const own=m=>'#'+materialColor(m).map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');
   const roleCopy=builtin=>{const role={highland:'worldHigh',slopeCover:'worldSlope',beach:'worldBeach',fines:'worldDebris',rock:'worldRock',crown:'worldRock',paintedRock:'worldRock',chips:'worldRock'}[builtin];return role?mapMaterials.find(m=>m[role])??null:null;};
   return {
@@ -1967,7 +1967,7 @@ function buildKnobs() {
   };
   mountRockPanel();
   materialEditor?.dispose();materialEditor=mountMaterialEditor({suspend:on=>{if(!on&&materialTerrainDirty){materialTerrainDirty=false;evaluate(0);}mapCanvas?.setSuspended(on);if(!on&&materialWeatherPending)queueWeather();},materials:()=>mapMaterials,strokes:()=>nodes,rocks:()=>mapRocks,renderer:()=>renderer,edit:editMaterials,delete:removeMaterial,checkpoint:()=>checkpoint(true),status,
-    layerName:key=>{const l=(config.surface||[]).find(l=>layerKey(l)===key);return l?l.name||BUILTIN_LABELS[l.builtin]||key:null;}});
+    layerName:key=>{const names=(config.surface||[]).filter(l=>l.material===key).map(l=>l.name||BUILTIN_LABELS[l.builtin]||l.builtin);return names.length?names.join(', '):null;}});
   surfacePanel=mountSurfacePanel(surfaceHost());
 }
 // The facts the World panel enables a row by (sculpt-knobs.js worldPanelValues, which worldControlRequirement reads).
