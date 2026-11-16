@@ -268,6 +268,7 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 @media(max-width:1000px){.material-layout{grid-template-columns:minmax(0,1fr) 320px}#material-used{display:none}}
 @media(max-width:700px){.material-layout{grid-template-columns:1fr;grid-template-rows:minmax(220px,45dvh) minmax(0,1fr)}.material-side{border-left:0;border-top:1px solid var(--line)}.material-header{flex-wrap:wrap;gap:8px}.material-header h2{display:none}#graph-help{display:none}}
 /* World › Surface (sculpt-surface-panel.js): one row a layer, top first; a row opens to its settings. */
+.surface-show{display:flex;gap:6px;align-items:flex-start;margin:4px 0}
 .surface-layers{list-style:none;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:3px;overflow-y:auto;min-height:0}
 .surface-layer{border:1px solid var(--line,#3a3a3a);border-radius:6px;padding:3px 6px;min-width:0}
 .surface-layer.open{padding-bottom:6px}

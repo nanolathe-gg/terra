@@ -382,6 +382,7 @@ const SURFACE_FLAGS = 151u;
 const SURFACE_FACTS = 14u;
 var<private> surfaceFacts: array<f32, 14>;
 var<private> surfacePreviewCover: f32 = 0.0;   // the previewed layer's coverage (diagnostic view 13)
+var<private> surfacePreviewSeen: f32 = -1.0;   // what of it the layers after it leave showing (-1 until it is drawn)
 // A layer's pattern, about evenly spread over 0 to 1: by the art pixel at Noise size 1, else smooth patches that size. Its edge noise and its
 // coverage read the same pattern, so the pixels a ragged edge reaches first are the ones a partial Amount keeps.
 fn surfacePattern(e: vec4f, p: vec2f, pixel: vec2f) -> f32 {
@@ -445,7 +446,8 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
             }
         }
         if (amount < 1.0) { c *= step(1.0 - amount, surfacePattern(e, p, pixel) + lift); if (c == 0.0) { continue; } }
-        if (i32(layerRow) == u.surfacePreview) { surfacePreviewCover = c; }
+        if (surfacePreviewSeen >= 0.0) { surfacePreviewSeen *= 1.0 - c; }   // a later layer lies over the previewed one
+        if (i32(layerRow) == u.surfacePreview) { surfacePreviewCover = c; surfacePreviewSeen = c; }
         if (builtin) {
             // A built-in that draws a material (docs/SURFACE_LAYERS.md phase 4) lays that material's color by its own share.
             var source = (*src)[k];
@@ -2601,8 +2603,14 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.diagnosticView == 4) { color = vec3f(exposed); }
     if (u.diagnosticView == 5) { color = vec3f(lighting, ao, shadow); }
     if (u.diagnosticView == 6) { color = material; }
-    // The Surface section's preview: where the layer it names shows, magenta over the picture dimmed to gray.
-    if (u.diagnosticView == 13) { color = mix(vec3f(dot(color, vec3f(0.299, 0.587, 0.114)) * 0.6), vec3f(1.0, 0.1, 0.9), clamp(surfacePreviewCover, 0.0, 1.0)); }
+    // The Surface section's preview over the finished picture, in stripes so the picture shows between them: magenta where the layer it
+    // names shows, cyan where it lies but a later layer covers it.
+    if (u.diagnosticView == 13) {
+        let cover = clamp(surfacePreviewCover, 0.0, 1.0);
+        let seen = clamp(surfacePreviewSeen, 0.0, cover);
+        let at = vec2u(max(floor(v.position.xy + u.chunkScreenOrigin / u.chunkScale), vec2f(0.0)));   // screen pixels, so tiles' stripes meet
+        if ((at.x + at.y) % 6u < 2u && cover > 0.0) { color = mix(color, (vec3f(1.0, 0.1, 0.9) * seen + vec3f(0.1, 0.9, 1.0) * (cover - seen)) / cover, min(cover * 1.5, 1.0)); }
+    }
     if (u.diagnosticView >= 8 && u.diagnosticView <= 12) {
         let slot=select(gs,u32(max(0,u.waterGround)),h<u.sea && u.waterGround>0);
         if(u.diagnosticView==8){color=materialRaw(p,slot);}

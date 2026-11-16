@@ -181,7 +181,7 @@ export function mountSurfacePanel(host) {
       if (!fixed) body.append(ruleBlock(layer, i));
       item.append(body);
     }
-    item.onpointerenter = item.onfocusin = () => host.preview(layerRows[i]);
+    item.onpointerenter = item.onfocusin = () => host.preview($('surface-show').checked ? layerRows[i] : -1);
     item.onpointerleave = () => { if (!item.contains(document.activeElement)) host.preview(-1); };
     item.onfocusout = event => { if (!item.contains(event.relatedTarget)) host.preview(-1); };
     return item;
@@ -212,6 +212,7 @@ export function mountSurfacePanel(host) {
     const stage = stageOf(layer), next = [...layers]; let at = 0; for (let j = next.length - 1; j >= 0; j--) if (stageOf(next[j]) <= stage) { at = j + 1; break; }
     next.splice(at, 0, layer); open.add(layer.id); put(next, true);
   };
+  $('surface-show').onchange = () => { if (!$('surface-show').checked) host.preview(-1); };
   $('surface-reset').onclick = () => { host.restore(); build(); };
   build();
   return {refresh};
