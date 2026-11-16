@@ -64,8 +64,8 @@ controls; node settings are the author's tools.
   into another world takes that world's surfaces, and a library material
   still unedited in a role follows the world. A surface without a material
   draws from another (the slope cover, else the ground). The highland
-  ground and the beach join any map with room, since a beach another world
-  lends is chosen after the map was made.
+  ground joins any map with room, and so does a beach another world lends,
+  since it is chosen after the map was made.
 - **Rock.** The world's rock material is what every rock face shows under
   its rock type's color: its color's variation as grain, its Height as the
   grit the sun lights at 1x, its Shine. A rock type may name another

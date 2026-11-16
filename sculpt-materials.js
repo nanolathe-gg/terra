@@ -511,12 +511,12 @@ export function withWorldMaterials(value, config, {carried = false} = {}) {
   // sand and a world's mineral margins read theirs. A map without one draws that surface from another (engine-frag.wgsl roleColor).
   // A list that already holds one of the world's surface roles (a map made with them, reopened in its world) keeps the ones its artist
   // cleared or deleted; a new map, a scene, a list saved before them and a map carried from another world (`carried`: its clears were made
-  // for that world's surfaces) take every one the world names. The highland material and the beach join any list with room: a beach
-  // another world lends (sculpt-scene.js borrowBeach) is chosen on purpose, after the map was made.
+  // for that world's surfaces) take every one the world names. The highland material joins any list with room, and so does a beach another
+  // world lends (sculpt-scene.js borrowBeach sets config.beachTable): it is chosen on purpose, after the map was made.
   const surfaced = !carried && list.some(o => MAP_ROLES.slice(1).some(([r]) => o[r]));
   for (const [role, key] of MAP_ROLES) {
     const m = LIBRARY[config.materials?.[key]];
-    if (m && (role === 'worldHigh' || role === 'worldBeach' || !surfaced) && !list.some(o => o[role]) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, [role]: true} : o); }
+    if (m && (role === 'worldHigh' || (role === 'worldBeach' && config.beachTable) || !surfaced) && !list.some(o => o[role]) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, [role]: true} : o); }
   }
   // A world may name more materials its tools lay down (config.materials.extra: library keys; a tool's `material`, sculpt-tools.js
   // toolMaterialSlot). Each the list lacks is added while it has room.
