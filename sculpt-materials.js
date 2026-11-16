@@ -33,7 +33,7 @@ export const NODES = {
       : [P('amount', 'Amount (px)', 0, 24, 2), P('size', 'Size (px)', 1, 128, 10), P('layers', 'Broad layers', 0, 4, 0), P('axis', 'Axis balance', -1, 1, 0), SEED],
     help: 'Bends the coordinates a Noise or Scatter node reads, so its shapes lose their regular outlines; Push moves them along one Direction instead; Snap moves each to the point of the cell it falls in, so a pattern read through it is flat per cell yet keeps its broad shape (Jitter 0: square blocks). A By input scales the move: all of it where white, none where black, so one pattern can shift or break another.'},
   noise: {code: 2, label: 'Noise', out: 'gray', inputs: [['in', 'Coordinates', 'coords']],
-    kinds: {smooth: 'Smooth', gradient: 'Gradient', billow: 'Billow', cells: 'Cells', cracks: 'Cracks', facets: 'Facets', waves: 'Waves', ridged: 'Ridged', pixel: 'Pixel'},
+    kinds: {smooth: 'Smooth', gradient: 'Perlin', billow: 'Billow', cells: 'Cells (Voronoi)', cracks: 'Cracks', facets: 'Facets', waves: 'Waves', ridged: 'Ridged', pixel: 'Pixel'},
     params: kind => NOISE_KIND[kind] ?? NOISE,
     help: 'A gray pattern. Color, height and masks can all read the same one. Cells is bright in each cell’s middle, Cracks is the distance to the nearest cell border (dark on the crack) and Facets gives each cell one flat value.'},
   scatter: {code: 3, label: 'Scatter', out: 'gray', inputs: [['in', 'Coordinates', 'coords'], ['density', 'Density', 'gray']],

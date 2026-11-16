@@ -317,3 +317,15 @@ test('a world’s highland material joins a new map, keeps its own role and leav
   const moved = assignMaterial(list, high.slot, 'worldGround');
   assert.ok(!moved.some(m => m.worldHigh), 'a highland material made the ground stops being the highland');
 });
+
+test('the add-node menu names real types, and other editors’ names find them', () => {
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8'), list = page.slice(page.indexOf('id="node-list"'), page.indexOf('</div>', page.indexOf('id="node-list"')));
+  const entries = [...list.matchAll(/<button[^>]*data-type="([^"]+)"(?: data-kind="([^"]+)")?(?: data-keywords="([^"]*)")?>([^<]+)<\/button>/g)].map(([, type, kind, words, label]) => ({type, kind, words: words ?? '', label}));
+  assert.ok(entries.length >= 25);
+  for (const e of entries) { assert.ok(NODES[e.type], e.label); if (e.kind) assert.ok(Object.hasOwn(NODES[e.type].kinds ?? {}, e.kind), `${e.label}: ${e.kind}`); }
+  const find = q => entries.filter(e => (e.label + ' ' + e.words).toLowerCase().includes(q)).map(e => `${e.type}:${e.kind ?? ''}`);
+  for (const [q, want] of [['perlin', 'noise:gradient'], ['voronoi', 'noise:cells'], ['worley', 'noise:cracks'], ['tile sampler', 'stamp:'], ['bomber', 'stamp:'], ['hsl', 'adjust:'], ['posterize', 'levels:'],
+    ['displace', 'warp:turbulence'], ['pixelate', 'warp:snap'], ['motion blur', 'blur:directional'], ['emboss', 'light:'], ['curvature', 'cavity:'], ['gradient map', 'gradient:']])
+    assert.ok(find(q).includes(want), `“${q}” finds ${want}`);
+  for (const [type, spec] of Object.entries(NODES)) for (const kind of Object.keys(spec.kinds ?? {})) if (!['combine'].includes(type)) assert.ok(entries.some(e => e.type === type && (e.kind === kind || (!e.kind && kind === Object.keys(spec.kinds)[0]))), `the menu offers ${spec.label} · ${spec.kinds[kind]}`);
+});
