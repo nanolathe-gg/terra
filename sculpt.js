@@ -748,7 +748,7 @@ function setSurfaceList(list,keep) {
   let next=mapMaterials.map(m=>{if(!m.worldLayer)return m;const want=drawn.get(m.worldLayer);if(want&&(!m.source||m.source===want))return m;if(want)swapped.add(m.slot);return (({worldLayer,...o})=>o)(m);});
   if(swapped.size){const used=new Set(materialsInUse(nodes,next,mapRocks).map(m=>m.slot));next=next.filter(m=>!swapped.has(m.slot)||used.has(m.slot));}
   next=withWorldMaterials(next,config);
-  if(JSON.stringify(next)!==JSON.stringify(mapMaterials)){try{editMaterials(next);}catch(err){status(err.message);}}
+  if(JSON.stringify(next)!==JSON.stringify(mapMaterials)){try{editMaterials(next);}catch(err){status(err.message);}syncWorldControls?.();}   // a layer's material may enable a row (Highland ground)
   worldChanged({stage:'C',world:false}); schedule();
 }
 function applySurface(next,{commit=false}={}) {

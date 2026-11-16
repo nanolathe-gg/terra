@@ -1149,6 +1149,10 @@ export class TerrainRenderer {
     const role = key => [...checked].find(([, m]) => m[key])?.[0];
     if (checked.size && (!role('worldGround') || !role('worldWater'))) throw new Error('A map needs a ground material and a water material.');
     this.i('uGroundDefault', role('worldGround') ?? 0); this.i('uWaterGround', role('worldWater') ?? 0); for (const [r, key] of MAP_ROLES) this.i('u' + key[0].toUpperCase() + key.slice(1) + 'Ground', role(r) ?? -1);   // uHighGround, uRockGround, uSlopeGround...
+    // The Highland ground layer drawing a material of its own (docs/SURFACE_LAYERS.md phase 4) makes that material the highland one, so its
+    // share, its art relief and the beds it caps all read it, on a world without a highland material too.
+    const highLayer = [...checked].find(([, m]) => m.worldLayer === 'highland')?.[0];
+    if (highLayer !== undefined) this.i('uHighGround', highLayer);
     this.i('uGroundAny', checked.size ? 1 : 0);
     this.i('uGroundShine', [...checked.values()].some(m => m.nodes.find(n => n.type === 'output').in.shine) ? 1 : 0);
     this.grounds = checked;
