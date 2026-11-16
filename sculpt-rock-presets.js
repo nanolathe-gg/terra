@@ -1,5 +1,6 @@
 // Geological starting points are ordinary artist settings and Rock column beds.
 // No preset name reaches the renderer; the edited numbers are the saved result.
+import {LIBRARY,MATERIAL_SLOTS,addMaterial,materialCacheUsage,materialStaged,materialStates,roleOf} from './sculpt-materials.js';
 import {KNOBS} from './sculpt-knobs.js';
 import {copyColumn,columnRows,COLUMN_SLOTS} from './sculpt-column.js';
 const base={faceWhole:0,faceWholeLarge:0,faceRegular:0,faceJointWidth:1,faceSecondary:.35,faceContinuity:.8,faceDetailPatch:.6,faceFresh:.55,faceRind:.65,faceRindDepth:6,faceRindTone:-.22,faceRindWarmth:.25,faceRindRough:.7,bedCycleVary:.6,faceBedVary:1,faceBreak:.4,stoneRound:.15,stoneSlab:.25,faceJointTilt:12,faceScaleVary:.55,faceFold:0,faceSpall:.65,faceClast:0,faceClastSize:12,faceMineral:.3,runoff:.65,runoffScale:24,runoffConcentration:.65,runoffCut:2,runoffStain:.35,debrisAmount:1.1,debrisReach:80,debrisDepth:5,looseSize:7,stoneSort:.7,rockFace:2,faceRock:1,rockFaceFrom:.2,faceBed:5.5,faceLedge:2,faceRun:120,faceBlock:3,faceBlockSize:18,faceLean:0,faceWear:.25,faceCrease:.5,faceCreaseSize:6,faceScratch:.6,faceScratchSize:6,faceShade:.7,faceGrass:.25,faceLayers:.3,faceMass:1,faceTone:.12,faceStrata:.08,faceWet:.2,
@@ -99,6 +100,23 @@ export function recipeRock(key,config){
 export const ROCK_MATERIALS={sandstone:'rock-sandstone',conglomerate:'rock-sandstone',siltstone:'rock-shale',shale:'rock-shale',schist:'rock-shale',
  granite:'rock-granite',gneiss:'rock-granite',breccia:'rock-granite',basalt:'rock-basalt',limestone:'rock-limestone'};
 export const recipeMaterial=(key,config)=>ROCK_MATERIALS[key]??ROCK_MATERIALS[config?.rock?.recipes?.[key]?.from]??null;
+// Rock types made from a starting recipe (those in `slots`) show its rock material (recipeMaterial): the map's copy of that library
+// material, added while the list and the material cache have room; a rock type that already names one keeps it. The editor (sculpt.js)
+// and the headless host give a map's world rock types theirs when the map has no rock list of its own, and a preset its own when added.
+export function giveRockMaterials(rocks, materials, slots, config) {
+  let list = materials; const layers = l => l.reduce((n, m) => n + 1 + materialStates(m).length, 0);
+  const out = rocks.map(r => {
+    if (!slots.includes(r.slot) || r.material > 0) return r;
+    const key = recipeMaterial(r.key, config), m = LIBRARY[key]; if (!m) return r;
+    let at = list.find(o => o.source === key && !roleOf(o));
+    if (!at) {
+      if (list.length >= MATERIAL_SLOTS - 1 || !materialCacheUsage(layers(list) + 1 + materialStates(m).length, undefined, [...list, m].some(materialStaged)).fits) return r;
+      const added = addMaterial(list, m, m.name); list = added.materials; at = list.find(o => o.slot === added.slot);
+    }
+    return {...r, material: at.slot};
+  });
+  return {rocks: out, materials: list};
+}
 // A world's own rock types (materials/<world>.json world.rock.recipes: {key: {label, from, knobs, beds, sections, colors}}): its numbers lie over the
 // starting recipe it names (`from`, else none: the world's own rock under them, as Smooth soil's), its beds ([[thickness, hardness, slot], ...]),
 // or its column sections by height ([{start, beds}, ...]), replace that recipe's, and its colors ({rock, beds, absorb}) that recipe's. A world's tools name them by key, as the built-in recipes.

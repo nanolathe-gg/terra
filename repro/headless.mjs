@@ -98,7 +98,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const engine = await import('../sculpt-scene.js'), fieldsModule = await import('../sculpt-gpu-fields.js');
   const {configureMap} = await import('../sculpt-map.js'), {TerrainRenderer} = await import('../sculpt-renderer.js');
   const {withWorldMaterials, keepStrokeMaterials, materialsInUse} = await import('../sculpt-materials.js');
-  const {copyRockSettings, applyWorldRock, copyRocks, worldRocks, keepStrokeRocks, rocksInUse} = await import('../sculpt-rock-presets.js');
+  const {copyRockSettings, applyWorldRock, copyRocks, worldRocks, keepStrokeRocks, rocksInUse, giveRockMaterials} = await import('../sculpt-rock-presets.js');
   const {copyColumn} = await import('../sculpt-column.js'), {copyMapTools} = await import('../sculpt-tools.js');
   const settings = new URLSearchParams(search);
   for (const [key,value] of Object.entries(copyRockSettings(scene.rock) || {})) if (!settings.has(key)) settings.set(key,value);
@@ -110,6 +110,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const worldColumn = {column: config.column}, columnOverride = copyColumn(scene.column);
   let materials = withWorldMaterials(scene.materials, config), materialKey = '[]';   // the map's materials (sculpt.js mapMaterials): the scene's, else the world's
   let rocks = copyRocks(scene.rocks) ?? worldRocks(config), rockKey = '[]';   // the map's rock presets (sculpt.js mapRocks): the scene's, else the world's
+  if (!scene.rocks) ({rocks, materials} = giveRockMaterials(rocks, materials, rocks.map(r => r.slot), config));   // sculpt.js loadSketch: the world's rock types bring their rock materials
   const tools = copyMapTools(scene.tools) ?? [];   // the map's own tools (sculpt.js mapTools), which its strokes may name
   if (columnOverride) config.column = columnOverride;
   const catalog = await json('config/catalog.json');
