@@ -149,7 +149,7 @@ export function mountSurfacePanel(host) {
     if (summary) head.append(el('span', {className: 'small surface-stage', textContent: summary}));
     const move = (d, text, title) => { const b = el('button', {type: 'button', textContent: text, title, ariaLabel: title, disabled: at + d < 0 || at + d >= siblings.length}); b.onclick = () => { const next = structuredClone(layers), j = siblings[at + d]; [next[i], next[j]] = [next[j], next[i]]; put(next, true); }; return b; };
     head.append(move(1, '↑', 'Raise: over the layer above it'), move(-1, '↓', 'Lower: under the layer below it'));
-    if (!builtin) head.append(remover('Remove this layer (its material stays in the map)', () => { const next = structuredClone(layers); next.splice(i, 1); put(next, true); }));
+    if (!builtin) head.append(remover('Remove this layer (its material leaves the map unless a stroke uses it)', () => { const next = structuredClone(layers); next.splice(i, 1); put(next, true); }));
     const item = el('li', {className: 'surface-layer' + (isOpen ? ' open' : ''), tabIndex: -1}, head);
     item.dataset.key = key;
     if (isOpen) {
@@ -167,6 +167,7 @@ export function mountSurfacePanel(host) {
         slider('Edge noise', edge.noise ?? 0, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, noise: v}; }, c), 'How ragged its edge is'),
         slider('Noise size (px)', edge.noiseSize ?? 8, 1, 64, 1, (v, c) => edit(i, l => { l.edge = {...l.edge, noiseSize: v}; }, c), '1 speckles by the pixel; larger makes patches'));
       if (layer.material != null) body.append(slider('Height contrast', edge.height ?? 0, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, height: v}; }, c), 'At its edge the taller wins: its material’s art height against the ground’s (stones stand out of sand, grass fills the gaps)'));
+      if (layer.material != null && !layer.where?.length && !layer.score && (layer.amount ?? 1) >= 1 && (edge.noise ?? 0) === 0) body.append(el('p', {className: 'small', textContent: 'It covers everywhere with no edge, so Height contrast has no edge to work on: give it a rule, an Amount under 1 or edge noise.'}));
       if (material && !material.height) body.append(el('p', {className: 'small', textContent: 'This material has no art height, so Height contrast has nothing to compare: choose one with height (a rock material, for one) or give it a height in the material editor.'}));
       body.append(ruleBlock(layer, i));
       item.append(body);

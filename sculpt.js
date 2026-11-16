@@ -742,14 +742,19 @@ function setSurfaceList(list,keep) {
   config.surface=list;
   if(keep)activeWorld().surface=list; else delete activeWorld().surface;
   renderer?.setSurface(list);
-  // A layer's material joins the map (bound by its key, sculpt-material-model.js layerKey); a removed layer's material stays in the map as
-  // an ordinary one. A layer that now draws another library material gives up its copy, which leaves the map unless a stroke uses it.
-  const drawn=new Map(list.filter(l=>l.material!=null).map(l=>[layerKey(l),l.material])),swapped=new Set();
-  let next=mapMaterials.map(m=>{if(!m.worldLayer)return m;const want=drawn.get(m.worldLayer);if(want&&(!m.source||m.source===want))return m;if(want)swapped.add(m.slot);return (({worldLayer,...o})=>o)(m);});
-  if(swapped.size){const used=new Set(materialsInUse(nodes,next,mapRocks).map(m=>m.slot));next=next.filter(m=>!swapped.has(m.slot)||used.has(m.slot));}
-  next=withWorldMaterials(next,config);
+  const next=surfaceMaterials(list,mapMaterials,true);
   if(JSON.stringify(next)!==JSON.stringify(mapMaterials)){try{editMaterials(next);}catch(err){status(err.message);}syncWorldControls?.();}   // a layer's material may enable a row (Highland ground)
   worldChanged({stage:'C',world:false}); schedule();
+}
+// The map's materials as a surface list draws them (bound by layer key, sculpt-material-model.js layerKey). A copy whose layer no longer
+// draws it (the layer was removed, cleared to its own color or set to another material, or the list is another world's or another map's)
+// gives up its binding and leaves the map unless a stroke uses it, hidden strokes included; `add`: each layer that draws a material and
+// lacks a copy gets one (withWorldMaterials).
+function surfaceMaterials(list,materials,add) {
+  const drawn=new Map((list||[]).filter(l=>l.material!=null).map(l=>[layerKey(l),l.material])),loose=new Set();
+  let next=materials.map(m=>{if(!m.worldLayer)return m;const want=drawn.get(m.worldLayer);if(want&&(!m.source||m.source===want))return m;loose.add(m.slot);return (({worldLayer,...o})=>o)(m);});
+  if(loose.size){const used=new Set(materialsInUse(nodes.map(n=>n.hidden?{...n,hidden:false}:n),next,mapRocks).map(m=>m.slot));next=next.filter(m=>!loose.has(m.slot)||used.has(m.slot));}
+  return add?withWorldMaterials(next,config):next;
 }
 function applySurface(next,{commit=false}={}) {
   let list; try { list=copySurface(next); } catch (err) { status(err.message); return false; }
@@ -771,7 +776,7 @@ function surfaceHost() {
     // A built-in's World setting (the Surface section's Built-in settings): show its block, reveal the row if the panel folded it away as
     // unavailable, and focus it; settingNote says why it is unavailable ('' when it is not).
     settings:key=>{const row=document.querySelector(`#wpane-surface [data-knob="${key}"]`),block=row?.closest('.world-subsection');if(!row)return;
-      if(row.hidden)block?.querySelector('.unavailable-summary button[aria-expanded="false"]')?.click();
+      if(row.hidden)block?.querySelector(`.unavailable-summary button[aria-expanded="false"][aria-controls~="knob-${key}-row"]`)?.click();
       (block??row).scrollIntoView({block:'center',behavior:'smooth'});row.querySelector('input,select')?.focus({preventScroll:true});},
     settingNote:key=>document.querySelector(`#wpane-surface [data-knob="${key}"] .control-requirement`)?.textContent??'',
     materialKey:preset=>{const key=preset.material.startsWith('role:')?config.materials?.[preset.material.slice(5)]:preset.material;return LIBRARY[key]?key:config.materials?.ground??'green-ground';},
@@ -1295,8 +1300,9 @@ function moveHistory(delta) {
   const next=historyIndex+delta; if (!ready || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
   if(history[next].rock)setRockSettings(history[next].rock);
   if(history[next].rocks&&JSON.stringify(history[next].rocks)!==JSON.stringify(mapRocks))restoreRocks(history[next].rocks);
-  if(history[next].surface&&JSON.stringify(history[next].surface)!==JSON.stringify(config.surface)){setSurfaceList(structuredClone(history[next].surface),JSON.stringify(history[next].surface)!==JSON.stringify(baseSurface));saveWorlds();surfacePanel?.refresh();}
+  // Materials first: the surface then finds its copies bound as they were and changes none.
   if(history[next].materials&&JSON.stringify(history[next].materials)!==JSON.stringify(mapMaterials))restoreMaterials(history[next].materials);
+  if(history[next].surface&&JSON.stringify(history[next].surface)!==JSON.stringify(config.surface)){setSurfaceList(structuredClone(history[next].surface),JSON.stringify(history[next].surface)!==JSON.stringify(baseSurface));saveWorlds();surfacePanel?.refresh();}
   if(history[next].tools&&JSON.stringify(history[next].tools)!==JSON.stringify(mapTools))restoreMapTools(history[next].tools);
   if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); return; }
   cancelWeather(); nodes=cloneNodes(history[next].nodes); selected=-1;alsoSelected=[];pathAdding=false;drawMode='select';pathPoint=-1;pathIndex=0; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
@@ -1491,7 +1497,7 @@ function loadSketch(s,carry=false) {
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
   syncDrawInputs();
   restoreColumn(column);syncColumnPanel();
-  mapMaterials=adoptWorldMaterials(materials,config,{carried:carry}); mapRocks=rocks??worldRocks(config); if(!rocks){const given=giveRockMaterials(mapRocks,mapMaterials,mapRocks.map(r=>r.slot),config);mapRocks=given.rocks;mapMaterials=given.materials;} syncMaterialChoices();materialEditor?.refresh(); rockSelected=0; syncRockChoices(); syncRockPanel(); nodes=keepStrokeMaterials(keepStrokeRocks(next,mapRocks),mapMaterials); selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
+  mapRocks=rocks??worldRocks(config); mapMaterials=surfaceMaterials(config.surface,adoptWorldMaterials(materials,config,{carried:carry}),false); if(!rocks){const given=giveRockMaterials(mapRocks,mapMaterials,mapRocks.map(r=>r.slot),config);mapRocks=given.rocks;mapMaterials=given.materials;} syncMaterialChoices();materialEditor?.refresh(); rockSelected=0; syncRockChoices(); syncRockPanel(); nodes=keepStrokeMaterials(keepStrokeRocks(next,mapRocks),mapMaterials); selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
   // The tools' cards still on a world's preset name their rock among this map's presets, now that the map's list is in.
   for (const id of ids) if (Object.hasOwn(config.worldShapes||{},toolSettings[id]?.preset)) toolSettings[id]=shapeCard(id,toolSettings[id].preset);
   showTool(toolSettings[tool]); updateControls();

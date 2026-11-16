@@ -95,6 +95,8 @@ test('a built-in may draw a library material in place of its own color, bound by
   assert.deepEqual(copySurface(surface).find(l => l.builtin === 'rock'), {builtin: 'rock', name: 'Rock', material: 'rock-basalt'});
   assert.throws(() => copySurface([...surface, {builtin: 'rock', material: 'rock-granite'}]), /once in a list/);
   assert.throws(() => surfaceRows([{id: 'x'}]), /built-in or draws a material/);
+  assert.throws(() => copySurface([{id: 'highland', material: 'red-ground'}]), /id of its own/, 'a material layer cannot take a built-in’s name');
+  assert.throws(() => surfaceRows([{id: 'rock', material: 'red-ground'}]), /built-in's name/);
 });
 
 test('height contrast rides in the rule head; a layer without a rule gets an empty one, and only a layer that draws a material has it', () => {

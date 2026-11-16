@@ -116,7 +116,7 @@ Each phase lands on its own. Rule 7: a phase becomes every world's behavior or d
 3. **The editor** (built). World › Surface lists the layers top first. Each row has its Amount, edge width, edge noise and
    noise size, and its rule's conditions (a fact by its plain name, from, to, fade; up to four). Rows move up and down among
    the layers they are drawn with. A material layer is named, shows its material's chip, opens its material in the
-   material editor, and can be removed (its map material stays as an ordinary one). Add a layer starts one from a preset:
+   material editor, and can be removed (on branch `surface-layers-2`: its map copy leaves the map unless a stroke uses it, hidden strokes included; a map loaded or carried into a world gives up any copy bound to a layer that no longer draws it). Add a layer starts one from a preset:
    snow above a height, moss in damp shade, scree on steep ground, dry ground on sunny slopes, mud in wet hollows, or a
    blank material layer. Pointing at or focusing a row previews where that layer lies, in magenta over the dimmed map
    (diagnostic view 13). Restore returns to the world's own surface.

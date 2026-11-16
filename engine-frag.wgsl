@@ -423,7 +423,7 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
             // Height contrast (the rule head's w): the layer's material against the ground below, art height in units of 4, so the taller
             // wins where the layer meets what it covers. Windows feel it only inside their edge (4 share (1 - share)); a score at its threshold.
             var lift = 0.0;
-            if (rule.w > 0.0 && r0.z >= 0.0) { lift = rule.w * 0.25 * (materialRelief(p, u32(r0.z)) - materialRelief(p, gs)); }
+            if (rule.w > 0.0 && r0.z >= 0.0) { lift = rule.w * 0.25 * (materialRelief(p, u32(r0.z)) - ownGroundRelief(p, gs)); }
             if (rule.x < 1.5) {
                 for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; share *= surfaceWindow(surfaceFacts[min(u32(w.x), SURFACE_FACTS - 1u)], w.y, w.z, w.w); }
                 if (share == 0.0) { continue; }

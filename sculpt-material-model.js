@@ -91,6 +91,7 @@ export function surfaceRows(surface, slotOf = () => -1) {
     if (!material && !at) throw Error(`Surface layer ${i + 1}: unknown built-in "${layer?.builtin}".`);
     if (material && !draws) throw Error(`Surface layer ${i + 1}: a layer is a built-in or draws a material.`);
     if (material && !layer.id) throw Error(`Surface layer ${i + 1}: a material layer needs an id.`);
+    if (material && SURFACE_BUILTINS[layer.id]) throw Error(`Surface layer ${i + 1}: "${layer.id}" is a built-in's name; a material layer needs another id.`);
     const stage = material ? SURFACE_STAGE_NAMES.indexOf(layer.stage ?? 'land') : at[0];
     if (stage < 0) throw Error(`Surface layer ${i + 1}: unknown stage "${layer.stage}".`);
     const edge = layer.edge || {}, number = (v, fallback) => Number.isFinite(Number(v)) ? Number(v) : fallback, fact = name => {
@@ -128,7 +129,7 @@ export function copySurface(value) {
     const score = l.score && typeof l.score === 'object' ? clean({from: finite(l.score.from), fade: finite(l.score.fade), terms: (Array.isArray(l.score.terms) ? l.score.terms : []).slice(0, SURFACE_RULE_TERMS).map(t => clean({fact: String(t?.fact), weight: finite(t?.weight)}))}) : undefined;
     const base = clean({name, amount: finite(l.amount), edge, ...(where?.length ? {where} : {}), ...(score ? {score} : {})});
     if (l.builtin == null) {
-      if (typeof l.material !== 'string' || !SURFACE_ID.test(String(l.id)) || ids.has(l.id)) throw Error(`Surface layer ${i + 1} needs a material and an id of its own.`);
+      if (typeof l.material !== 'string' || !SURFACE_ID.test(String(l.id)) || ids.has(l.id) || Object.hasOwn(SURFACE_BUILTINS, l.id)) throw Error(`Surface layer ${i + 1} needs a material and an id of its own.`);
       ids.add(l.id);
       return clean({id: l.id, ...base, material: l.material.slice(0, 80), stage: typeof l.stage === 'string' ? l.stage : undefined});
     }
