@@ -181,8 +181,8 @@ export function copyRocks(value){
   const key=checkKey(r.key);
   if(key&&keys.has(key))throw Error(`Two rock presets carry the key ${key}: a key names one preset.`);
   if(key)keys.add(key);
-  // Its surface material: a map material's slot (1 to 15), or none for the world's rock material.
-  if(r.material!=null&&(!Number.isInteger(r.material)||r.material<0||r.material>15))throw Error('A rock preset\'s material is a material slot, 1 to 15.');
+  // Its surface material: a map material's slot (1 to MATERIAL_SLOTS - 1), or none for the world's rock material.
+  if(r.material!=null&&(!Number.isInteger(r.material)||r.material<0||r.material>=MATERIAL_SLOTS))throw Error(`A rock preset's material is a material slot, 1 to ${MATERIAL_SLOTS-1}.`);
   return {slot:r.slot,name:checkName(r.name),key,knobs:copyRockSettings(r.knobs??{}),column:checkColumn(r.column),colors:checkColors(r.colors),...(r.material>0?{material:r.material}:{})};
  }).sort((a,b)=>a.slot-b.slot);
 }

@@ -6,7 +6,7 @@ import gamePalette from './materials/palette.json' with {type:'json'};
 import library from './materials/textures.json' with {type:'json'};
 import snippets from './materials/snippets.json' with {type:'json'};
 
-export const MATERIAL_SLOTS = 16;                  // slot 0 is "the world's ground" on a stroke; materials take slots 1 to 15
+export const MATERIAL_SLOTS = 24;                  // slot 0 is "the world's ground" on a stroke; materials take slots 1 to 23 (the GPU's ground table holds 32)
 export const MATERIAL_REPEAT = 512;
 export const MATERIAL_CACHE_BYTES = 128 * 1024 * 1024;
 export const MAX_NODES = 40, MAX_STOPS = 8, MAX_PALETTE = 32, MAX_CONTROLS = 12, MAX_FRAMES = 12, MAX_TAPPED = 4, MAX_STAGES = 4;

@@ -1,9 +1,9 @@
 // The GPU side of materials (sculpt-materials.js): each material in use has one layer of a cached repeat holding its unlit color, art
 // height and shine (and one more layer for each state it draws: Worn, Deposit), a layer of that color reduced to its game-palette colors, and one texel of its mean color. A graph is compiled to a
 // pipeline once per shape; its numbers are a buffer upload. A palette-only edit redoes the reduction, not the fields.
-import {compileMaterial, PROGRAM_BYTES, STEP_STRIDE, MAX_NODES, MAX_STAGES, materialRenderKey, programKey, programSource, stagePlan, materialCacheUsage, paletteRgb, THUMB, THUMB_STRIDE, materialStates, MATERIAL_STATES} from './sculpt-materials.js';
+import {MATERIAL_SLOTS, compileMaterial, PROGRAM_BYTES, STEP_STRIDE, MAX_NODES, MAX_STAGES, materialRenderKey, programKey, programSource, stagePlan, materialCacheUsage, paletteRgb, THUMB, THUMB_STRIDE, materialStates, MATERIAL_STATES} from './sculpt-materials.js';
 
-const SCRATCH_ROW = 16;   // the materialGraphs row a thumbnail run borrows (after one a slot)
+const SCRATCH_ROW = MATERIAL_SLOTS;   // the materialGraphs row a thumbnail run borrows (after one a slot)
 // A slot's row of the uniform table: its palette and how the reduction treats it.
 export function writeMaterialSlot(r, material, view, at) {
   const members = r.uniform.get('ground').members, d = material.dither, reduce = material.palette.length >= 2;

@@ -200,7 +200,7 @@ test('adding, assigning, deleting and what strokes keep', () => {
   const swapped = assignMaterial(list, 3, 'worldGround'); assert.deepEqual(swapped.filter(m => m.worldGround).map(m => m.slot), [3]);
   assert.throws(() => assignMaterial(list, 2, 'worldGround'), /world’s water/);
   let full = list; while (full.length < MATERIAL_SLOTS - 1) full = addMaterial(full, blankMaterial(), 'More').materials;
-  assert.throws(() => addMaterial(full, blankMaterial()), /at most 15 materials/);
+  assert.throws(() => addMaterial(full, blankMaterial()), new RegExp(`at most ${MATERIAL_SLOTS - 1} materials`));
   assert.equal(setMaterial(list, 3, LIBRARY['green-ground']).find(m => m.slot === 3).name, 'Sand', 'a new graph keeps the name and slot');
 });
 
