@@ -116,7 +116,7 @@ struct RockSite { on:bool, face:f32, layers:f32, gain:f32, gathered:f32, wear:f3
 fn rockSite(p:vec3f)->RockSite {
     useRock(p.xy);
     var site=RockSite(false,0.0,0.0,0.0,0.0,0.0);
-    if(u.rock[rs & rockMask].rockFace<=0.0||max(u.rock[rs & rockMask].faceJoint,max(u.rock[rs & rockMask].faceLamina,u.rock[rs & rockMask].faceLedge))<=0.0){return site;}
+    if(u.rock[rs & rockMask].rockFace<=0.0||max(max(u.rock[rs & rockMask].faceJoint,u.rock[rs & rockMask].faceLamina),max(u.rock[rs & rockMask].faceLedge,max(u.rock[rs & rockMask].faceCrease,u.rock[rs & rockMask].faceScratch)))<=0.0){return site;}
     let source=voxelAuthored(p.xy);let guide=voxelGuide(p.xy);let nz=sqrt(max(.000225,1.0-dot(guide.xy,guide.xy)));
     let slope=length(broadGradient(p.xy));let route=routeProtection(p.xy);
     let painted=voxelPaintRock(p.xy);let rim=rimRockAt(p.xy);
@@ -128,12 +128,21 @@ fn rockSite(p:vec3f)->RockSite {
     if(u.rock[rs & rockMask].columnCount>0){let column=voxelColumnCoord(p);let gg=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary),length(source.yz)/max(source.w,.015));gathered=gg.y;hard=gg.x;}
     return RockSite(true,face,face+soil*3.0,u.rock[rs & rockMask].rockFace*.5*voxelRelief(p.xy,slope)*heightGate,gathered,voxelJointWear(hard));
 }
+// Pits and runnels (Pits, Runnels), a height outward in rock space: 1 to 2 px marks the 2 px solid would blur away, so they are drawn at the
+// hit (rockDetail), not cut.
+fn rockMarks(r:vec3f)->f32 {
+    let pits=(abs(voxelNoise(r/max(2.0,u.rock[rs & rockMask].faceCreaseSize))-.5)-.25)*u.rock[rs & rockMask].faceCrease*2.5;
+    let angle=radians(u.rock[rs & rockMask].faceScratchAngle);
+    let scratched=vec3f(r.x*cos(angle)-r.z*sin(angle),r.y,r.x*sin(angle)+r.z*cos(angle));
+    let runnel=pow(1.0-abs(voxelNoise(scratched/vec3f(max(2.0,u.rock[rs & rockMask].faceScratchSize),max(2.0,u.rock[rs & rockMask].faceScratchSize),u.rock[rs & rockMask].faceScratchLength))*2.0-1.0),4.0)*u.rock[rs & rockMask].faceScratch*.5;
+    return pits-runnel;
+}
 fn rockLayers(p:vec3f,gathered:f32)->f32 { let l=voxelFine(p,voxelColumnCoord(p),gathered);return l.x+l.y; }
 // The height (outward) the solid lacks at p, near the pixel its site was read at.
 fn rockDetail(p:vec3f,site:RockSite)->f32 {
-    var h=0.0;
+    var h=0.0;let r=voxelRockSpace(p);
+    if(max(u.rock[rs & rockMask].faceCrease,u.rock[rs & rockMask].faceScratch)>0.0&&site.face>.001){h+=rockMarks(r)*voxelDetail(r)*site.face;}
     if(u.rock[rs & rockMask].faceJoint>0.0&&site.face>.001){
-        let r=voxelRockSpace(p);
         let c=voxelBlocks(r,max(4.0,u.rock[rs & rockMask].faceBlockSize));let broad=voxelBlocks(r,max(24.0,u.rock[rs & rockMask].faceBlockSize*2.5));
         let w=voxelJointWidth(site.wear);let fine=voxelJointFine(site.wear);
         let w1=voxelJointSeen(max(w,u.chunkScale),1.0);let w2=voxelJointSeen(w,vs.step);   // as a 1 px solid shows it (never finer than a pixel), as this one does
@@ -298,10 +307,6 @@ fn voxelDensity(p:vec3f)->f32 {
     let layers=voxelFine(p,column,gathered);let lamina=layers.x+layers.y;
     let bed=(.55-hard)*u.rock[rs & rockMask].faceLedge*2.4;
     let detail=voxelDetail(r);
-    let pits=(abs(voxelNoise(r/max(2.0,u.rock[rs & rockMask].faceCreaseSize))-.5)-.25)*u.rock[rs & rockMask].faceCrease*2.5;
-    let angle=radians(u.rock[rs & rockMask].faceScratchAngle);
-    let scratched=vec3f(r.x*cos(angle)-r.z*sin(angle),r.y,r.x*sin(angle)+r.z*cos(angle));
-    let runnel=pow(1.0-abs(voxelNoise(scratched/vec3f(max(2.0,u.rock[rs & rockMask].faceScratchSize),max(2.0,u.rock[rs & rockMask].faceScratchSize),u.rock[rs & rockMask].faceScratchLength))*2.0-1.0),4.0)*u.rock[rs & rockMask].faceScratch*.5;
     let grit=(voxelNoise(p/u.rock[rs & rockMask].faceGritSize)-.5)*u.rock[rs & rockMask].faceGrit*4.0;
     // Soil-covered beds have their own rounded terraces, including on
     // slopes that also expose rock; an activation mask alone hid this control.
@@ -312,7 +317,7 @@ fn voxelDensity(p:vec3f)->f32 {
     let inclusion=u.rock[rs & rockMask].faceClast*(clasts.x-.12)*min(4.0,u.rock[rs & rockMask].faceClastSize*.22);
     let release=voxelRelease(broad,hard)*min(24.0,u.rock[rs & rockMask].faceBlockSize*.8);
     let runoff=u.rock[rs & rockMask].runoffCut*rockWeatherAt(p.xy).x*(1.25-.75*hard);
-    let structure=(faces+mass+pits*detail+grit*detail-spall-release+inclusion-u.rock[rs & rockMask].faceJoint*joint*3.0-runnel*detail-runoff+bed+u.rock[rs & rockMask].faceExtrude*6.0*(.65+.35*c.tone))*face+soil*(bed*3.0+mass*1.5)+lamina*(face+soil*3.0);
+    let structure=(faces+mass+grit*detail-spall-release+inclusion-u.rock[rs & rockMask].faceJoint*joint*3.0-runoff+bed+u.rock[rs & rockMask].faceExtrude*6.0*(.65+.35*c.tone))*face+soil*(bed*3.0+mass*1.5)+lamina*(face+soil*3.0);
     let offset=32.0*tanh(u.rock[rs & rockMask].rockFace*.5*voxelRelief(p.xy,slope)*structure/32.0)*heightGate;
     let q=p-n*offset;let moved=voxelAuthored(q.xy);
     let draped=(q.z-moved.x)*min(max(moved.w,.015),n.z);
@@ -336,7 +341,7 @@ fn voxelDensity(p:vec3f)->f32 {
     if(u.rock[rs & rockMask].faceWholeLarge>0.0){blocks+=voxelWhole(p,r,broad.edge,max(24.0,u.rock[rs & rockMask].faceBlockSize*2.5),u.rock[rs & rockMask].faceWholeLarge);}
     // A whole block's faces carry the relief the draped face has: the blocks' own offsets and tilts (so two rock blocks side by side meet at a
     // step, a visible joint), pits, grit, grooves, chips and fragments, at half strength and up to 1 px, so the planes stay planes. Near a face the blocks' answer changes by about 3 a px.
-    let relief=clamp((faces+(pits+grit-runnel)*detail-spall+inclusion)*u.rock[rs & rockMask].rockFace*.25*voxelRelief(p.xy,slope),-1.0,1.0);
+    let relief=clamp((faces+grit*detail-spall+inclusion)*u.rock[rs & rockMask].rockFace*.25*voxelRelief(p.xy,slope),-1.0,1.0);
     // The fine layers run on across the blocks, so a layered rock's lines are cut only by its joints, not wiped from every whole block.
     let fine=clamp(lamina*u.rock[rs & rockMask].rockFace*.25*voxelRelief(p.xy,slope),-1.0,1.0);
     return draped*(1.0-share*min(blocks.y,1.0))+(8.0*blocks.x-3.0*(relief+fine)*min(blocks.y,1.0))*share;
