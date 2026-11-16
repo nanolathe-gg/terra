@@ -103,6 +103,18 @@ test('a Slope blur stages its input and its slope together, and passes its input
   assert.deepEqual(stagePlan(p).stages, []); assert.match(programSource(p).main, /let v1=v0;/);
 });
 
+test('a Stamp stages only its Shape; its Base, Coordinates and Density are read where it stamps', () => {
+  const m = graph([node('w', 'warp'), node('b', 'noise'), node('f', 'noise', {kind: 'facets'}), node('g', 'gradient', {in: {in: 'f'}}), node('d', 'noise', {kind: 'smooth'}),
+    node('st', 'stamp', {in: {base: 'b', shape: 'g', in: 'w', density: 'd'}}), node('o', 'output', {in: {color: 'st'}})]);
+  const program = compileMaterial(m), at = id => program.nodes.findIndex(n => n.id === id), plan = stagePlan(program), source = programSource(program);
+  assert.deepEqual(plan.stages, [{step: at('st'), type: 'stamp', links: [at('g')]}]); assert.equal(nodeTypes(m.nodes).get('st'), 'color');
+  assert.match(source.main, new RegExp(`nStamp\\(s${at('st')},v${at('w')}.xy,v${at('b')},v${at('d')},true,0\\)`));
+  for (const id of ['w', 'b', 'd']) assert.match(source.main, new RegExp(`let v${at(id)}=`), id + ' is read where it stamps');
+  assert.doesNotMatch(source.main, new RegExp(`let v${at('f')}=`), 'the Shape comes from its stage'); assert.match(source.taps, /fn nStamp/);
+  const open = graph([node('b', 'noise'), node('st', 'stamp', {in: {base: 'b'}}), node('o', 'output', {in: {color: 'st'}})]);
+  assert.match(programSource(compileMaterial(open)).main, /let v1=v0;/, 'without a Shape it is its Base');
+});
+
 test('a Blur computes its input in a stage of its own; later passes read the stage, never the branch behind it', () => {
   const m = graph([node('n', 'noise'), node('b1', 'blur', {in: {in: 'n'}}), node('b2', 'blur', {in: {in: 'b1'}}), node('g', 'gradient', {in: {in: 'b2'}}),
     node('cav', 'cavity', {in: {in: 'b2'}}), node('soft', 'blur', {in: {in: 'g'}}), node('o', 'output', {in: {color: 'soft', height: 'cav'}})]);

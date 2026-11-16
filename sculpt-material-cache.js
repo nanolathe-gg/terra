@@ -53,14 +53,14 @@ export class MaterialCache {
     }
     return this.pipelines.get(id);
   }
-  // Stages (sculpt-materials.js stagePlan): one layer a staged node (Blur, Slope blur) for what the later passes read, and two scratch
+  // Stages (sculpt-materials.js stagePlan): one layer a staged node (Blur, Slope blur, Stamp) for what the later passes read, and two scratch
   // layers (a stage's inputs, then a blur's first direction). Made the first time a material in use has one, at the repeat's size; materials
   // share them, since each material's stages run just before its own pass.
   stageTextures(size) {
     if (this.stageSize === size) return;
     const usage = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING;
-    this.stageTexture = this.texture(this.stageTexture, 'material blur stages', [size, size, MAX_STAGES], 'rgba32float', usage, size * size * MAX_STAGES * 16);
-    this.scratchTexture = this.texture(this.scratchTexture, 'material blur scratch', [size, size, 2], 'rgba32float', usage, size * size * 2 * 16);
+    this.stageTexture = this.texture(this.stageTexture, 'material blur stages', [size, size, MAX_STAGES], 'rgba32float', usage | GPUTextureUsage.COPY_DST, size * size * MAX_STAGES * 16);
+    this.scratchTexture = this.texture(this.scratchTexture, 'material blur scratch', [size, size, 2], 'rgba32float', usage | GPUTextureUsage.COPY_SRC, size * size * 2 * 16);
     const r = this.renderer; if (r.resources) r.fixedBytes = [...r.resources.values()].filter(v => v.kind === 'materials' || v.kind === 'shared').reduce((n, v) => n + v.bytes, 0);
     this.stageSize = size;
   }
@@ -76,7 +76,7 @@ export class MaterialCache {
     return this.pipelines.get(id);
   }
   // A program's stages into `encoder`, before its own pass: each staged node's inputs over the whole repeat, then its pass into its layer
-  // (a Blur across and down, a Slope blur's walk).
+  // (a Blur across and down, a Slope blur's walk, a Stamp's copy of its shape).
   runStages(encoder, program, row, size, buffers) {
     const plan = stagePlan(program); if (!plan.stages.length) return;
     this.stageTextures(size);
@@ -88,6 +88,7 @@ export class MaterialCache {
     plan.stages.forEach(({step, type}, k) => {
       run(stages[k], [{binding: 1, resource: {buffer: job([0, 0, row, 0])}}, {binding: 4, resource: layer(this.scratchTexture, 0)},
         ...(plan.stageReads[k] ? [{binding: 3, resource: this.stageTexture.createView({dimension: '2d-array'})}] : [])]);
+      if (type === 'stamp') { encoder.copyTextureToTexture({texture: this.scratchTexture}, {texture: this.stageTexture, origin: {x: 0, y: 0, z: k}}, [size, size, 1]); return; }
       if (type === 'slopeblur') { run(slope, [{binding: 1, resource: {buffer: job([0, 0, row, step])}}, {binding: 5, resource: layer(this.scratchTexture, 0)}, {binding: 4, resource: layer(this.stageTexture, k)}]); return; }
       run(blur, [{binding: 1, resource: {buffer: job([0, 0, row, step])}}, {binding: 5, resource: layer(this.scratchTexture, 0)}, {binding: 4, resource: layer(this.scratchTexture, 1)}]);
       run(blur, [{binding: 1, resource: {buffer: job([1, 0, row, step])}}, {binding: 5, resource: layer(this.scratchTexture, 1)}, {binding: 4, resource: layer(this.stageTexture, k)}]);
