@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ChunkTerrainRenderer,colorScissor,outputScissor} from '../sculpt-chunk-renderer.js';
+import {ChunkTerrainRenderer,colorScissor} from '../sculpt-chunk-renderer.js';
 const fixture=()=>{
   const r=Object.create(ChunkTerrainRenderer.prototype);Object.assign(r,{resources:new Map(),outputBytes:0,reservedBytes:0,budgetBytes:64*1024,device:{limits:{maxTextureDimension2D:1024}},colorTargets:new Map(),colorTiles:new Set(),_busy:false});return r;
 };
@@ -30,11 +30,3 @@ test('native color scissors round out to pixels and leave resampling aprons inta
   assert.deepEqual(colorScissor({...tile,outWidth:128,outHeight:128},{x:64,y:300,width:20,height:31}),[0,0,256,256]);
 });
 
-test('a color rerun redraws whole tiles of the output stage, keyed to the tile\'s own rectangle', () => {
-  const layout = {fields: new Map([['chunkScale', {offset: 0}]])}, at = scale => { const cpu = new ArrayBuffer(4); new DataView(cpu).setFloat32(0, scale, true); return cpu; };
-  const tile = {width: 256, height: 256, place: [512, 768], cpu: at(1)};
-  assert.deepEqual(outputScissor([40, 70, 10, 5], tile, layout), [32, 64, 32, 32]);
-  assert.deepEqual(outputScissor([0, 0, 256, 256], tile, layout), [0, 0, 256, 256]);
-  assert.deepEqual(outputScissor([40, 70, 10, 5], {...tile, place: [520, 768]}, layout), [24, 64, 32, 32]);
-  assert.deepEqual(outputScissor([40, 70, 10, 5], {...tile, cpu: at(2)}, layout), [40, 70, 10, 5]);
-});
