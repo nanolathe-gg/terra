@@ -308,6 +308,8 @@ export class TerrainRenderer {
     // The world's rock material's broad color (the strata's default tones and a rock with no color of its own read it before the map's
     // materials are set; sculpt-materials.js materialTint).
     this.means.rock = materialTint(LIBRARY[this.config.materials?.rock] ?? {nodes: [{type: 'output', in: {}}]});
+    // The slope cover's broad color the same way: the Colors row Slope cover starts from it (sculpt.js defaultColor).
+    this.means.slope = materialTint(LIBRARY[this.config.materials?.slope] ?? {nodes: [{type: 'output', in: {}}]});
     // The transition body is generated layer 5 and the transition (ring, body, contours) needs the flag; the ring is layer 7. The beach is the
     // table's `beach` layer (6 in a world's own table, the last when borrowed).
     this.transitionBody = this.layers.has('body');
@@ -1150,6 +1152,7 @@ export class TerrainRenderer {
     this.i('uGroundShine', [...checked.values()].some(m => m.nodes.find(n => n.type === 'output').in.shine) ? 1 : 0);
     this.grounds = checked;
     if (this.means) this.means.ground = checked.size ? materialTint(checked.get(role('worldGround'))) : [.5, .5, .5];
+    if (this.means && role('worldSlope')) this.means.slope = materialTint(checked.get(role('worldSlope')));   // the map's slope cover, once it has one
     new Uint8Array(this.uniformData, table.offset, table.stride * table.count).fill(0);
     for (const [slot, material] of checked) writeMaterialSlot(this, material, this.uniformView, table.offset + slot * table.stride);
     this.groundCache.prepare(MATERIAL_REPEAT, this.grounds);
