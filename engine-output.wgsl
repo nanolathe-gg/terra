@@ -59,7 +59,8 @@ const RANKS = array<u32, 1024>(
     634,989,405,872,470,976,26,594,360,468,857,2,526,275,84,880,724,313,138,356,93,944,27,304,438,79,994,157,777,963,456,855,
     52,499,254,768,618,176,422,812,1012,145,569,402,959,813,359,446,201,937,657,797,581,398,523,918,645,791,515,688,395,104,558,340);
 
-fn luma(c: vec3f) -> f32 { return dot(c, vec3f(0.299, 0.587, 0.114)); }
+// Whole-number weights over whole-number colors (0..255): exact in f32 on every GPU, so the order never depends on rounding.
+fn luma(c: vec3f) -> f32 { return c.r * 299.0 + c.g * 587.0 + c.b * 114.0; }
 // a before b: darker first, equal lightness by red, green, blue, so the order is fixed.
 fn before(a: vec3f, b: vec3f) -> bool {
     let la = luma(a); let lb = luma(b);
