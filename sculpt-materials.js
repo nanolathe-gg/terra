@@ -515,9 +515,11 @@ export function materialColor(material) {
 // The material moved to a color: every color step moves by the same amount (each keeps its difference from the others, its grain), so
 // the material's color becomes `rgb` ([0, 1] each); a palette it is reduced to moves with it, each color to the game color nearest its
 // moved one. The steps stay editable one by one in their nodes.
-export function recolorMaterial(material, rgb) {
+// `from` is the color it is moved from: its graph's (materialColor) by default; the editor passes the color the GPU draws it in
+// (sculpt-renderer.js drawnColor), so the drawn color lands on the one picked.
+export function recolorMaterial(material, rgb, from = materialColor(material)) {
   const sources = new Set(colorSources(material).map(n => n.id)); if (!sources.size) return material;
-  const now = materialColor(material), d = rgb.map((v, i) => clamp(v, 0, 1) - now[i]), copy = structuredClone(material);
+  const now = from, d = rgb.map((v, i) => clamp(v, 0, 1) - now[i]), copy = structuredClone(material);
   for (const n of copy.nodes) if (sources.has(n.id)) n.stops = n.stops.map(s => [s[0], ...s.slice(1).map((v, i) => clamp(v + d[i], 0, 2))]);
   if (copy.palette.length >= 2) copy.palette = [...new Set(copy.palette.map(index => nearestGameColor(gamePalette.indexed[index].map((v, i) => v + d[i] * 255))))];
   return copy;

@@ -5,7 +5,7 @@
 
 import {tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH,surfaceRows,SURFACE_FLAGS_ROW} from './sculpt-material-model.js';
 import {MaterialCache,writeMaterialSlot} from './sculpt-material-cache.js';
-import {copyMaterial,materialCacheUsage,materialStaged,materialTint,materialColor,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES,LIBRARY,materialStates} from './sculpt-materials.js';
+import {copyMaterial,materialCacheUsage,materialStaged,materialTint,materialColor,materialRenderKey,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES,LIBRARY,materialStates} from './sculpt-materials.js';
 import {columnRows,columnColors} from './sculpt-column.js';
 import {LOW_GROUND_RGB} from './sculpt-knobs.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
@@ -144,6 +144,7 @@ export class TerrainRenderer {
     this.timers = [];
     this.grounds = new Map();
     this.rocks = new Map();   // rock recipes in slots 1-15 (setRocks)
+    this.drawnMeans = new Map(); this.drawnBase = new Map();   // slot -> the GPU's mean color of its material, and that less its graph's Color (drawnColor)
     this.lastGPU = null;
     this.lastBakeGPU = null;
     // Set by the page to show WebGPU errors that arrive after a call returns.
@@ -1303,6 +1304,15 @@ export class TerrainRenderer {
     if (!hidden && preview < 0) return null;
     this.surfaceHidden = null; this.set('uMaterialTable', this.placementTable(this.variant)); this.setSurfacePreview(-1);
     return () => { this.surfaceHidden = hidden; this.set('uMaterialTable', this.placementTable(this.variant)); this.setSurfacePreview(preview); };
+  }
+  // The color a material is drawn in: its slot's mean as the GPU computed it (sculpt-material-cache.js readMeans) when that read is of this
+  // graph; else its graph's Color (materialColor) moved by the slot's last measured difference between the two, which recoloring keeps.
+  drawnColor(m) {
+    const read = this.drawnMeans.get(m.slot), own = materialColor(m);
+    if (!read) return own;
+    if (read.key === materialRenderKey(m)) return read.rgb;
+    const was = this.drawnBase.get(m.slot);
+    return was ? own.map((v, i) => Math.min(1, Math.max(0, v + was[i]))) : own;
   }
   // A rock slot's material's Color (sculpt-materials.js materialColor): its own material, else the world's rock material's.
   rockMaterialTint(slot = 0) {

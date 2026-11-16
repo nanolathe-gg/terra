@@ -757,7 +757,7 @@ function applySurface(next,{commit=false}={}) {
 function surfaceHost() {
   const hex=m=>'#'+materialTint(m).map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');
   const layerMaterial=layer=>layer.material!=null?mapMaterials.find(m=>m.worldLayer===layer.material):undefined;   // the world's copy its layers share
-  const own=m=>'#'+materialColor(m).map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');
+  const own=m=>'#'+drawnColor(m).map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');
   const roleCopy=builtin=>{const role={highland:'worldHigh',slopeCover:'worldSlope',beach:'worldBeach',fines:'worldDebris',rock:'worldRock',crown:'worldRock',paintedRock:'worldRock',chips:'worldRock'}[builtin];return role?mapMaterials.find(m=>m[role])??null:null;};
   return {
     surface:()=>config.surface,
@@ -773,7 +773,7 @@ function surfaceHost() {
     // The material a built-in that draws a world role takes (Materials panel; the rock built-ins the world's rock): its name, or null.
     roleMaterial:builtin=>{const m=roleCopy(builtin);return m?{name:m.name,color:hex(m),own:own(m)}:null;},
     // A layer's material's own Color (sculpt-materials.js recolorMaterial): its copy, or for a built-in that draws a role, the role's.
-    recolor:(layer,rgb,commit)=>{const m=layer.material!=null?layerMaterial(layer):roleCopy(layer.builtin);if(!m)return;editMaterials(setMaterial(mapMaterials,m.slot,recolorMaterial(m,rgb)));if(commit)checkpoint(true);},
+    recolor:(layer,rgb,commit)=>{const m=layer.material!=null?layerMaterial(layer):roleCopy(layer.builtin);if(!m)return;editMaterials(setMaterial(mapMaterials,m.slot,recolorMaterial(m,rgb,drawnColor(m))));if(commit)checkpoint(true);},
     slotMaterial:slot=>{const m=mapMaterials.find(m=>m.slot===slot);return m?{name:m.name,color:hex(m)}:null;},
     // Layers hidden while the artist designs (their keys): a view of this page only, never saved, undone or exported.
     hide:keys=>{if(!renderer)return;renderer.setSurfaceHidden(keys);worldChanged({stage:'C',world:false});schedule();},
@@ -2039,6 +2039,8 @@ function syncRockPanel() {
   for(const key of ROCK_KEYS){const input=$('knob-'+key);if(!input)continue;const v=values?values[key]:Number(renderer.variant.get(key)??config.defaults[key]);if(!Number.isFinite(v))continue;input.value=v;input.closest('[data-knob]').querySelector('output').textContent=+v.toFixed(3);}
   syncWorldControls();syncColumnPanel();syncRockColors();
 }
+// The color a material is drawn in (sculpt-renderer.js drawnColor: the GPU's mean of it), what the Color pickers show and move.
+const drawnColor=m=>renderer?.drawnColor?renderer.drawnColor(m):materialColor(m);
 // Rock types the map had no room to give their own material (giveRockMaterials): they show the world's rock material, and the status says so.
 function noteMissedRocks(given) { if(given.missed.length)status(`No room for the rock material of ${given.missed.join(', ')}: ${given.missed.length>1?'they show':'it shows'} the world\u2019s rock material. Remove a material to make room.`); }
 // A rock type's material: its own, else the world's rock material (slot 0's), or null when the world has none.
@@ -2048,7 +2050,7 @@ function rockMaterialOf(slot) {
 }
 // A rock type's color as its faces wear it: its material's Color ('#rrggbb'), the draw's fixed gray without one.
 const hexOfRgb=rgb=>'#'+rgb.map(v=>Math.round(Math.min(1,Math.max(0,v))*255).toString(16).padStart(2,'0')).join('');
-function rockHex(slot) { const m=rockMaterialOf(slot); return m?hexOfRgb(materialColor(m)):'#545454'; }
+function rockHex(slot) { const m=rockMaterialOf(slot); return m?hexOfRgb(drawnColor(m)):'#545454'; }
 // The selected rock type's Color picked: its material's Color (recolorMaterial). The world's rock recolors the world's rock material; another
 // rock type recolors its own material, or first takes its own copy of the one it shares (the world's rock material, or one another rock type,
 // a world surface or a layer draws), so no other surface moves with it.
@@ -2057,9 +2059,9 @@ function setRockColor(hex,commit) {
   const rgb=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255),rock=mapRocks.find(r=>r.slot===slot);
   const shared=slot>0&&(!(rock.material>0)||roleOf(m)||m.worldLayer||mapRocks.some(r=>r!==rock&&r.material===m.slot));
   try{
-    if(!shared)editMaterials(setMaterial(mapMaterials,m.slot,recolorMaterial(m,rgb)));
+    if(!shared)editMaterials(setMaterial(mapMaterials,m.slot,recolorMaterial(m,rgb,drawnColor(m))));
     else{
-      const added=addMaterial(mapMaterials,recolorMaterial(m,rgb),rock.name);
+      const added=addMaterial(mapMaterials,recolorMaterial(m,rgb,drawnColor(m)),rock.name);
       mapRocks=mapRocks.map(r=>r.slot===slot?{...r,material:added.slot}:r);editMaterials(added.materials);rockUseKey='';syncRocks();materialEditor?.refresh();
     }
   }catch(error){status(error.message);return;}
@@ -2229,7 +2231,9 @@ async function bootMap(pending=null) {
   if(!experiment.has('newMap'))addGroundNode();
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
-  renderer=mapCanvas.renderer; renderer.onerror=message => error(message); materialUseKey='[]'; syncMaterials();   // the world's ground and water are materials: a renderer has none until told
+  renderer=mapCanvas.renderer; renderer.onerror=message => error(message); materialUseKey='[]'; syncMaterials();
+  // A material's drawn color read back (sculpt-material-cache.js readMeans): the Color pickers show it.
+  renderer.onmeans=()=>{syncRockColors();surfacePanel?.refresh();materialEditor?.refreshColors?.();};   // the world's ground and water are materials: a renderer has none until told
   worldChanged(renderer.setColors(worldColors()));$('export').textContent='Export view PNG';
   buildKnobs(); buildWorldPanel();
   // The Rock column panel edits the selected preset's beds: the world's column for slot 0, a preset's own sections (its copy of the world's

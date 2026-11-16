@@ -133,12 +133,14 @@ export function mountMaterialEditor(host) {
 
   // A material's published controls, in the fixed rows the page declares under `prefix`: the editor's Controls pane ("ctl") and the
   // World pane's ground ("wg") and water ("ww"). `of()` is the material the rows act on. Names and Remove exist only in the editor.
+  // The color a material is drawn in (the renderer's GPU mean of it, sculpt-renderer.js drawnColor), which the Color rows show and move.
+  const drawn = m => { const r = host.renderer?.(); return r?.drawnColor ? r.drawnColor(m) : materialColor(m); };
   function controlRows(prefix, of) {
     const id = (part, i) => `${prefix}-${part}-${i}`, optional = name => document.getElementById(name);
     const editOf = fn => { const m = structuredClone(of()); if (!m) return; fn(m); update(setMaterial(materials(), m.slot, m)); };
     // The material's own Color (recolorMaterial): every color step moves together while the picker moves; one undo step when it closes.
     const own = $(`${prefix}-matcolor`);
-    own.oninput = attempt(() => { const m = of(); if (m) editOf(o => Object.assign(o, recolorMaterial(o, rgbOf(own.value).map(v => v / 255)))); });
+    own.oninput = attempt(() => { const m = of(); if (m) editOf(o => Object.assign(o, recolorMaterial(o, rgbOf(own.value).map(v => v / 255), drawn(o)))); });
     own.onchange = commit;
     for (let i = 0; i < MAX_CONTROLS; i++) {
       const scrub = $(`${prefix}-${i}`), target = () => { const m = of(), c = m?.controls[i]; return c && controlSpec(m, c) ? c : null; };
@@ -157,7 +159,7 @@ export function mountMaterialEditor(host) {
       }
     }
     return (m, naming = false) => {
-      $(`${prefix}-matcolor-row`).hidden = !m; if (m && document.activeElement !== own) own.value = hex(materialColor(m).map(v => v * 255));
+      $(`${prefix}-matcolor-row`).hidden = !m; if (m && document.activeElement !== own) own.value = hex(drawn(m).map(v => v * 255));
       for (let i = 0; i < MAX_CONTROLS; i++) {
         const c = m?.controls[i], target = c && controlSpec(m, c); $(id('row', i)).hidden = !target; if (!target) continue;
         const name = optional(id('name', i));
@@ -424,5 +426,7 @@ export function mountMaterialEditor(host) {
   const locks = new MutationObserver(lock); for (const id of ['editor', 'undo', 'redo']) locks.observe($(id), {attributes: true, attributeFilter: ['disabled']}); lock();
   if (dialog.open) host.suspend(true);
   refresh();
-  return {refresh, open, refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (!dialog.open) host.suspend(false); clearTimeout(thumbTimer); locks.disconnect(); graph.dispose(); preview.dispose(); }};
+  // The Color rows again, once the renderer has read back what the materials are drawn in (sculpt.js renderer.onmeans).
+  const refreshColors = () => { for (const [prefix, m] of [['ctl', material()], ...worldRows.map(w => [w.prefix, materials().find(o => o[w.role]) ?? null])]) { const own = $(`${prefix}-matcolor`); if (m && document.activeElement !== own) own.value = hex(drawn(m).map(v => v * 255)); } };
+  return {refresh, refreshColors, open, refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (!dialog.open) host.suspend(false); clearTimeout(thumbTimer); locks.disconnect(); graph.dispose(); preview.dispose(); }};
 }

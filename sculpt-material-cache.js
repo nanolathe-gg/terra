@@ -1,7 +1,7 @@
 // The GPU side of materials (sculpt-materials.js): each material in use has one layer of a cached repeat holding its unlit color, art
 // height and shine (and one more layer for each state it draws: Worn, Deposit), a layer of that color reduced to its game-palette colors, and one texel of its mean color. A graph is compiled to a
 // pipeline once per shape; its numbers are a buffer upload. A palette-only edit redoes the reduction, not the fields.
-import {MATERIAL_SLOTS, compileMaterial, PROGRAM_BYTES, STEP_STRIDE, MAX_NODES, MAX_STAGES, materialRenderKey, programKey, programSource, stagePlan, materialCacheUsage, paletteRgb, THUMB, THUMB_STRIDE, materialStates, MATERIAL_STATES} from './sculpt-materials.js';
+import {MATERIAL_SLOTS, materialColor, compileMaterial, PROGRAM_BYTES, STEP_STRIDE, MAX_NODES, MAX_STAGES, materialRenderKey, programKey, programSource, stagePlan, materialCacheUsage, paletteRgb, THUMB, THUMB_STRIDE, materialStates, MATERIAL_STATES} from './sculpt-materials.js';
 
 const SCRATCH_ROW = MATERIAL_SLOTS;   // the materialGraphs row a thumbnail run borrows (after one a slot)
 // A slot's row of the uniform table: its palette and how the reduction treats it.
@@ -43,7 +43,7 @@ export class MaterialCache {
     this.fieldTexture = this.texture(this.fieldTexture, 'material color and height', [pool, pool, count], 'rgba32float', read | GPUTextureUsage.COPY_SRC, pool * pool * count * 16);
     this.colorTexture = this.texture(this.colorTexture, 'material palette color', [pool, pool, count], 'rgba8unorm', read | GPUTextureUsage.COPY_SRC, pool * pool * count * 4);
     this.shineTexture = this.texture(this.shineTexture, 'material shine', [pool, pool, count], 'rgba16float', read, pool * pool * count * 8);
-    this.meanTexture = this.texture(this.meanTexture, 'material mean color', [1, 1, count], 'rgba32float', read, count * 16);
+    this.meanTexture = this.texture(this.meanTexture, 'material mean color', [1, 1, count], 'rgba32float', read | GPUTextureUsage.COPY_SRC, count * 16);
     for (const t of [this.fieldTexture, this.colorTexture, this.shineTexture, this.meanTexture]) r.worldResource?.(t);
     if (r.resources) r.fixedBytes = [...r.resources.values()].filter(v => v.kind === 'materials' || v.kind === 'shared').reduce((n, v) => n + v.bytes, 0);
     r.bindGroups = {}; this.keys.clear(); this.colorKeys.clear();
@@ -155,6 +155,25 @@ export class MaterialCache {
       device.queue.submit([encoder.finish()]); buffers.forEach(b => b.destroy());
     }
     this.reduce(pool, changed.map(([e]) => e.layer));
+    if (changed.length) this.readMeans();
+  }
+  // The mean color each slot's material is drawn in, read back after a regeneration (the renderer's drawnMeans; the editor's color pickers
+  // show it). Asynchronous: a read overtaken by a newer one is dropped.
+  async readMeans() {
+    const r = this.renderer, device = r.device, layers = [...this.layers], entries = this.entries.filter(e => !e.state), count = layers.length;
+    if (!count || !r.drawnMeans) return;
+    const ticket = this.meanTicket = (this.meanTicket ?? 0) + 1, buffer = device.createBuffer({label: 'material means read', size: 256 * count, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ});
+    const encoder = device.createCommandEncoder({label: 'material means read'});
+    encoder.copyTextureToBuffer({texture: this.meanTexture}, {buffer, bytesPerRow: 256, rowsPerImage: 1}, [1, 1, count]); device.queue.submit([encoder.finish()]);
+    try { await buffer.mapAsync(GPUMapMode.READ); } catch { buffer.destroy(); return; }
+    const v = new Float32Array(buffer.getMappedRange().slice(0)); buffer.unmap(); buffer.destroy();
+    if (ticket !== this.meanTicket || r.disposed) return;
+    for (const e of entries) {
+      const k = layers.indexOf(`${e.slot}`); if (k < 0) continue;
+      const rgb = [v[64 * k], v[64 * k + 1], v[64 * k + 2]], own = materialColor(e.material);
+      r.drawnMeans.set(e.slot, {key: materialRenderKey(e.material), rgb}); r.drawnBase.set(e.slot, rgb.map((c, i) => c - own[i]));
+    }
+    r.onmeans?.();
   }
   // The mean color of each regenerated material, and the palette reduction of each whose fields or palette changed.
   reduce(pool, regenerated) {
