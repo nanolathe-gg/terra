@@ -89,12 +89,13 @@ test('a share link carries the map\'s presets and each stroke\'s choice; an old 
 });
 
 test('a preset carries its own colors: validated, kept by edits of its numbers, replaced by a recipe, on the clipboard and in a share link', async () => {
-  const beds = ['#112233', '#445566', '#778899', '#aabbcc', '#ddeeff'];
+  const beds = [[.1, -.1, 0], [.2, .2, .2], [-.3, 0, .1], [0, 0, 0], [.05, .1, -.05]];
   assert.equal(checkColors(null), null);
   assert.equal(checkColors({rock: null, beds: null}), null, 'no colors at all is the world\'s');
   assert.equal(checkColors({rock: '#A0B0C0'}), null, 'a rock color from an older save is dropped: the rock\'s color is its material\'s');
-  assert.deepEqual(checkColors({beds: beds.map(b => b.toUpperCase())}), {beds});
-  for (const bad of [[], 'red', {beds: beds.slice(1)}, {beds: [...beds.slice(1), 3]}, {tint: '#000000'}])
+  assert.deepEqual(checkColors({beds}), {beds});
+  assert.equal(checkColors({beds: ['#112233', '#445566', '#778899', '#aabbcc', '#ddeeff']}), null, 'beds saved as colors, before tones, are dropped');
+  for (const bad of [[], 'red', {beds: beds.slice(1)}, {beds: [...beds.slice(1), 3]}, {beds: [...beds.slice(1), [2, 0, 0]]}, {tint: '#000000'}])
     assert.throws(() => checkColors(bad), /colors/, JSON.stringify(bad));
   let rocks = copyRocks([{slot: 1, name: 'Dark', knobs: {}, column: null, colors: {rock: '#202830', beds}}, {slot: 2, name: 'Plain', knobs: {}}]);
   assert.deepEqual(rocks.map(r => r.colors), [{beds}, null], 'an old preset without colors takes the world\'s; an old rock color is dropped');

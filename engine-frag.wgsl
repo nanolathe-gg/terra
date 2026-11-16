@@ -1488,7 +1488,6 @@ fn surfFoam(pixel: vec2f, p: vec2f, x: f32, q: vec2f, depth: f32, slope: f32, e:
     return front * 0.85;
 }
 // A rock slot's surface material (its own, else the world's rock material), -1 none; and that material's mean color (the old fixed mean without one).
-fn rockMaterialMean(slot: u32) -> vec3f { let m = rockMaterialOf(slot); if (m < 0) { return vec3f(0.33); } return materialMean(u32(m)); }
 // The rock's grain at a native pixel: its material's unlit color over the material's mean (1 where the rock has no material).
 fn rockGrain(slot: u32, pixel: vec2f) -> vec3f {
     let m = rockMaterialOf(slot); if (m < 0) { return vec3f(1.0); }

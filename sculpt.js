@@ -4,7 +4,7 @@ import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt
 import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
-import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
+import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
 import {materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
@@ -1822,8 +1822,18 @@ const hexColor=c => '#'+c.map(v => Math.round(clamp(v,0,1)*255).toString(16).pad
 // A world's colors: the server's defaults for its base world, then the
 // world's own choices; null means explicitly off (the texture's own color).
 function mergedColors() { return worldHexColors(config,experiment,activeWorld().colors||{}); }
-function worldColors() { return rendererColors(mergedColors(),columnOverride?.colors); }
-function columnForEdit(){const column=structuredClone(config.column);if(column){const colors=worldColors();column.colors=Array.from({length:5},(_,i)=>(colors['strata'+(i+1)]||defaultColor('strata'+(i+1))).map(v=>v*255));}return column;}
+function worldColors() { return rendererColors(mergedColors()); }
+// The world's column as the Rock column panel edits it: its bed tones shown as the colors they draw (the world's rock material's drawn color
+// and each tone, sculpt-column.js toneColor), 0-255; editColumn turns a changed color back into its tone and keeps the others.
+let columnShown=null;
+function columnForEdit(){
+  const column=structuredClone(config.column);if(!column)return column;
+  const rock=rockDrawn(0),tones=columnTones(column);delete column.tones;
+  column.colors=tones.map(t=>toneColor(rock,t).map(v=>Math.round(v*255)));columnShown={colors:structuredClone(column.colors),tones,own:Boolean(config.column?.tones)};
+  return column;
+}
+// A rock slot's material's drawn color, [r, g, b] 0..1 (the plain gray the draw uses without one).
+function rockDrawn(slot){const m=rockMaterialOf(slot);return m?drawnColor(m):[.33,.33,.33];}
 function restoreColumn(column){
   columnOverride=column;config.column=column||defaultColumn;columnEditing=false;
   const change=worldChanged(renderer.setColors(worldColors(),currentDrawOptions()));
@@ -1831,6 +1841,11 @@ function restoreColumn(column){
   syncWorldControls();return change;
 }
 function editColumn(value){
+  if(value?.colors){
+    const rock=rockDrawn(0),shown=columnShown,changed=value.colors.map((c,i)=>!shown||c.some((v,k)=>v!==shown.colors[i]?.[k]));
+    const tones=value.colors.map((c,i)=>changed[i]?colorTone(rock,c.map(v=>v/255)):shown.tones[i]);
+    value={...value};delete value.colors;if(changed.some(Boolean)||shown?.own)value.tones=tones;
+  }
   const column=copyColumn(value),next=sameColumn(column,defaultColumn)?null:column;
   if(sameColumn(next,columnOverride))return;
   const change=restoreColumn(next);columnEditing=true;if(change.timeChanged)queueWeather();persistLater();
@@ -1841,9 +1856,8 @@ function defaultColor(key) {
   const flower=/^flower([1-4])$/.exec(key);if(flower)return (config.material?.groundCover?.plants?.flowers?.palette?.[Number(flower[1])-1]?.slice(0,3)||[255,255,255]).map(v=>v/255);
   const w=config.water||{};
   const rgb=v => v&&v.map(x => x/255);
-  const strata=columnColors(config.column,renderer.means.rock).map(rgb);
   return {shallow:rgb(w.shallowRGB),
-    low:rgb(LOW_GROUND_RGB),sun:[1,1,1],sky:[1,1,1],strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
+    low:rgb(LOW_GROUND_RGB),sun:[1,1,1],sky:[1,1,1]}[key]||[.5,.5,.5];
 }
 function goToWorld(base,id,extra) {
   worldInputQueue.flush();
@@ -2069,6 +2083,7 @@ function setRockColor(hex,commit) {
   const snap=renderer.paletteNearest(hex);$('rock-color-snap').style.background=snap;$('rock-color-snap').title=$('rock-color-snap').ariaLabel=`Palette entry ${snap}`;
   if(commit){checkpoint(true);syncRockMaterial();}
 }
+let bedShown=null;   // the bed colors the Rock types pane shows and the tones behind them (a changed picker sets only its own tone)
 // The selected preset's colors: its rock's (its material's Color), and its beds' and absorption's own, or the world's where it takes them
 // (World's colors), each with the palette entry the game draws.
 const BED_COLOR_IDS=[1,2,3,4,5].map(i=>'rock-bed-'+i);
@@ -2078,7 +2093,9 @@ function syncRockColors() {
   const paint=(id,hex,off)=>{$(id).value=hex;$(id).disabled=off;const snap=renderer.paletteNearest(hex);$(id+'-snap').style.background=snap;$(id+'-snap').title=$(id+'-snap').ariaLabel=`Palette entry ${snap}`;};
   if(document.activeElement!==$('rock-color'))paint('rock-color',rockHex(rockSelected),!rockMaterialOf(rockSelected));
   for(const swatch of [$('rock-current-swatch'),$('rock-chips').querySelector('[aria-checked="true"] .rock-swatch')])if(swatch)swatch.style.background=rockHex(rockSelected);
-  BED_COLOR_IDS.forEach((id,k)=>paint(id,own?.beds?.[k]||shown.beds[k],world||!own?.beds));
+  // Its beds: its own tones, else the world column's, shown as the colors they draw on this rock type's material.
+  const rock2=rockDrawn(rockSelected),tones=own?.beds??columnTones(config.column);bedShown={slot:rockSelected,tones,colors:tones.map(t=>hexOfRgb(toneColor(rock2,t)))};
+  BED_COLOR_IDS.forEach((id,k)=>{if(document.activeElement!==$(id))paint(id,bedShown.colors[k],world||!own?.beds);});
   $('rock-beds-world').checked=world||!own?.beds;
   $('rock-beds-world').disabled=world;
   // The absorption color (Rock translucency): a preset's own or the world's; on the world's rock, the world's choice (none: the rock's own hue).
@@ -2119,9 +2136,11 @@ function mountRockPanel() {
   $('rock-presets').onchange=()=>selectRock(Number($('rock-presets').value));
   const shown=()=>renderer.slotColors(0);
   // World's colors cleared: the preset starts from the colors it shows (the world's), so nothing changes until one is moved.
-  $('rock-beds-world').onchange=()=>setPresetColors({beds:$('rock-beds-world').checked?null:shown().beds},true);
+  $('rock-beds-world').onchange=()=>setPresetColors({beds:$('rock-beds-world').checked?null:structuredClone(columnTones(config.column))},true);
   $('rock-color').oninput=()=>setRockColor($('rock-color').value,false);$('rock-color').onchange=()=>setRockColor($('rock-color').value,true);
-  const bedColors=commit=>setPresetColors({beds:BED_COLOR_IDS.map(id=>$(id).value)},commit);
+  // A bed's color picked: its tone on this rock type's material (sculpt-column.js colorTone); the beds not touched keep theirs.
+  const bedColors=commit=>{const rock=rockDrawn(rockSelected),shownNow=bedShown;if(!shownNow||shownNow.slot!==rockSelected)return;
+    setPresetColors({beds:BED_COLOR_IDS.map((id,k)=>$(id).value===shownNow.colors[k]?shownNow.tones[k]:colorTone(rock,[1,3,5].map(i=>parseInt($(id).value.slice(i,i+2),16)/255)))},commit);};
   for(const id of BED_COLOR_IDS){$(id).oninput=()=>bedColors(false);$(id).onchange=()=>bedColors(true);}
   // The absorption color: a preset's (as its other colors), or on the world's rock the world's own 'absorb' color (saved with the world's colors).
   const worldAbsorb=value=>setWorldColor('absorb',value);

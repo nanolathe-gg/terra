@@ -410,14 +410,14 @@ export const materialRequest=(config,material,{heightBuffer,heightOffset,grid,si
   seed:material.seed,depositSpread:material.depositSpread,profile:{...config.material,mineral:material.mineral}});
 // A world's colors for the renderer ([r, g, b], 0..1): the world's hex colors (null is off: the texture's own), ?sunColor=ffd9a8&skyColor=8fb0ff
 // and ?lowColor=5c322a from the address (a light's or the low ground's colors tried on a page without changing the world: renders, review
-// sheets), and an edited column's strata.
+// sheets).
 export function hexColors(colors,settings) {
   const out={...colors};
   for (const key of ['sun','sky','low']) { const q=settings.get(key+'Color'); if (q && /^#?[0-9a-f]{6}$/i.test(q)) out[key]=q.startsWith('#')?q:'#'+q; }
   return out;
 }
 export const rgbColor=h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255);
-export function rendererColors(hex,strata) { const out={}; for (const [k,v] of Object.entries(hex)) if (typeof v==='string' && /^#[0-9a-f]{6}$/i.test(v)) out[k]=rgbColor(v); strata?.forEach((c,i)=>{out['strata'+(i+1)]=c.map(v=>v/255);});return out; }
+export function rendererColors(hex) { const out={}; for (const [k,v] of Object.entries(hex)) if (typeof v==='string' && /^#[0-9a-f]{6}$/i.test(v)) out[k]=rgbColor(v); return out; }
 // A world's hex colors (sculpt.js mergedColors): the server's defaults for its base world, then the world's own choices (`own`; a world that
 // opens with no choices of its own, sculpt.js activeWorld, starts from its base colors), then the address.
 export const worldHexColors=(config,settings,own=config.colors||{}) => hexColors({...(config.colors||{}),...own},settings);

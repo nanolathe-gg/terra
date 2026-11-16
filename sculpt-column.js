@@ -29,7 +29,7 @@ export function columnHasCapBed(column) {
 
 // A map's column, checked before it touches the open map: the types, ranges and counts the uniforms hold, never the world's own shape, so a
 // map may add a column, sections and beds to any world. The copy has one key order, and sameColumn compares tables whatever their order.
-const COLUMN_KEYS = ['colors', 'origin', 'bands', 'wander', 'sections'];
+const COLUMN_KEYS = ['tones', 'origin', 'bands', 'wander', 'sections'];
 export function copyColumn(value) {
   if (value == null) return null;
   const fail = () => { throw new Error(`Invalid rock column: keep finite values, positive thicknesses, hardness from 0 to 1, ordered starts, and at most ${COLUMN_SECTIONS} sections and ${COLUMN_BEDS} beds.`); };
@@ -37,8 +37,9 @@ export function copyColumn(value) {
   const number = v => { if (typeof v !== 'number' || !Number.isFinite(Math.fround(v))) fail(); return v; };
   const list = (v, length) => { if (!Array.isArray(v) || (length !== undefined && v.length !== length)) fail(); return v; };
   if (value && typeof value === 'object' && 'variants' in value) { value = {...value}; delete value.variants; }   // a map saved with the removed variant rows opens without them
+  if (value && typeof value === 'object' && 'colors' in value) { value = {...value}; delete value.colors; }   // and one saved with bed colors, before they were tones
   object(value, COLUMN_KEYS);
-  const slots = Array.isArray(value.colors) ? value.colors.length : COLUMN_SLOTS;
+  const slots = Array.isArray(value.tones) ? value.tones.length : COLUMN_SLOTS;
   // Its bands and sections.
   function row(v) {
     const out = {};
@@ -60,7 +61,7 @@ export function copyColumn(value) {
   const own = row(value), out = {};
   for (const key of COLUMN_KEYS) {
     if (!(key in value)) continue;
-    if (key === 'colors') { out.colors = list(value.colors, COLUMN_SLOTS).map(c => list(c, 3).map(number)); if (out.colors.some(c => c.some(v => v < 0 || v > 255))) fail(); }
+    if (key === 'tones') { out.tones = list(value.tones, COLUMN_SLOTS).map(c => list(c, 3).map(number)); if (out.tones.some(c => c.some(v => v < -1 || v > 1))) fail(); }
     else if (key === 'origin') { if (!['plain', 'sea'].includes(value.origin)) fail(); out.origin = value.origin; }
     else if (key === 'wander') {
       const w = object(value.wander, ['value', 'terrain']); out.wander = {};
@@ -76,8 +77,11 @@ export function copyColumn(value) {
 const canonical = v => Array.isArray(v) ? v.map(canonical) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, canonical(v[k])])) : v;
 export const sameColumn = (a, b) => JSON.stringify(canonical(a ?? null)) === JSON.stringify(canonical(b ?? null));
 
-// Worlds without an authored layer palette start from their own rock, not
-// another biome's colors. The existing slot editors remain the authority.
-export function columnColors(column,rock=[.5,.5,.5]) {
- return column?.colors || [.82,1.15,.65,1.32,.95].map(gain=>rock.map(v=>Math.round(Math.min(255,Math.max(0,v*255*gain)))));
-}
+// A column's beds are tones of its rock: each slot is the rock material's color (the mean the GPU draws it in) plus that slot's shift
+// ([r, g, b], -1 to 1), so the material's Color moves every bed with it and a bed's own color sets its shift. A column without tones of
+// its own takes five grays of its rock, darker and lighter.
+export const DEFAULT_TONES = [-.07, .06, -.14, .13, -.02].map(v => [v, v, v]);
+export const columnTones = column => column?.tones ?? DEFAULT_TONES;
+// A bed's color from its rock's color and its tone, and the tone that gives a color; each [0..1] rgb.
+export const toneColor = (rock, tone) => rock.map((v, i) => Math.min(1, Math.max(0, v + tone[i])));
+export const colorTone = (rock, color) => color.map((v, i) => Math.round((v - rock[i]) * 1e4) / 1e4);

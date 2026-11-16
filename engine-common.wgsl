@@ -1061,6 +1061,11 @@ fn materialShine(p:vec2f,slot:u32)->f32 {
 fn materialMean(slot:u32)->vec3f {
  return textureLoad(materialMeanTex,vec2i(0),u.ground[slot & groundMask].cacheLayer,0).rgb;
 }
+// A rock slot's material's mean color (rockMaterialOf: its own, else the world's rock material's; the old fixed mean without one): the
+// rock's color, and the color its beds' tones shift (bedColor).
+fn rockMaterialMean(slot: u32) -> vec3f { let m = rockMaterialOf(slot); if (m < 0) { return vec3f(0.33); } return materialMean(u32(m)); }
+// A bed slot k (0-4) of a rock slot: its rock's color shifted by the bed's tone (rows 1-5 of rockColors, sculpt-column.js columnTones).
+fn bedColor(slot: u32, k: i32) -> vec3f { return saturate(rockMaterialMean(slot) + u.rock[slot & rockMask].rockColors[1 + clamp(k, 0, 4)].rgb); }
 fn materialPigment(p:vec2f,slot:u32)->vec3f { return materialPigmentAt(p,slot,u.ground[slot & groundMask].cacheLayer); }
 // A layer of slot's cache as the map draws it: its color, reduced to the slot's palette as far as its dither says (a state's layer shares
 // the slot's palette and its index in the reduced colors).
@@ -1284,8 +1289,8 @@ fn voxelFine(p:vec3f,c:f32,gathered:f32)->vec3f {
     let spacing=max(u.rock[rs & rockMask].faceLaminaSize,FACE_LINES);
     return vec3f(thin*fineLayer((z+warp)/FACE_LINES,FACE_LINES)*dark,own*fineLayer((z+warp)/spacing,spacing)*dark,thin+own);
 }
-// Strata: coloured bands by height on raised ground (painted desert), the colours of the column's beds (slot -> strataColors).
-fn strataSlot(k: f32) -> vec3f { let i = i32(k + 0.5); return u.rock[rs & rockMask].rockColors[1 + clamp(i, 0, 4)].rgb; }
+// Strata: coloured bands by height on raised ground (painted desert), the colours of the column's beds (slot -> bedColor).
+fn strataSlot(k: f32) -> vec3f { return bedColor(rs, i32(k + 0.5)); }
 // The colour of the column's section s at coordinate c. A bed meets the next one over edge, a share of the cycle: a boundary inside a
 // cycle is softened on both sides, the cycle's top (topFade) inside its top bed. hold (0..1) holds ground that is nearly all one bed
 // (the widest bed's share of the cycle over .88) to that bed's colour: retail's pale caps are one sheet of the cool bed (card G4).
