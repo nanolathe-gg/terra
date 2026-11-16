@@ -65,7 +65,8 @@ function switchRule(layer, kind) {
 
 // `host`: surface() the list now, apply(next, {commit}), restore() the world's own, preview(row or -1), hide(keys) the layers not shown now, material(layer) → {name, color} or
 // null (height: whether it has art height), edit(layer, button) to open its material, materialKey(preset) → a library key for a preset's material, library() → the materials a
-// layer may draw [{key, name, color}], settings(key) to show a World setting's row and settingNote(key) why it is unavailable ('' if not).
+// layer may draw [{key, name, color}], settings(key) to show a World setting's row and settingNote(key) why it is unavailable ('' if not),
+// roleMaterial(builtin) and slotMaterial(slot) → {name, color} or null, pickPixel(onPick) → cancel, inspect(at) → what the draw laid there.
 export function mountSurfacePanel(host) {
   const list = $('surface-layers');
   const open = new Set();   // the layers whose rows are open, by key
@@ -152,14 +153,19 @@ export function mountSurfacePanel(host) {
     const chip = el('span', {className: 'material-chip', title: material?.name ?? (layer.material != null ? 'The map lacks this layer’s material' : 'Its own color')});
     if (material) chip.style.background = material.color; else if (layer.material == null) chip.classList.add('own');
     head.append(toggle, chip);
+    // The layer's name over what it draws: its material's name, or where a built-in's look comes from.
+    const role = builtin && layer.material == null ? host.roleMaterial?.(layer.builtin) : null;
+    const drawn = el('span', {className: 'small surface-drawn', textContent: material?.name ?? role?.name ?? (layer.material != null ? 'its material is missing from this map' : BUILTIN_SOURCES[layer.builtin])});
+    if (role) { chip.style.background = role.color; chip.classList.remove('own'); chip.title = role.name; }
     if (!builtin) {
       const name = el('input', {type: 'text', value: nameOf(layer), maxLength: 80, className: 'surface-name', title: 'The layer’s name', id: uid('name')});
       name.onchange = () => edit(i, l => { l.name = name.value.trim() || 'Material layer'; }, true);
-      head.append(name);
+      head.append(el('div', {className: 'surface-label'}, name, drawn));
     } else {
-      const name = el('span', {className: 'surface-name', textContent: nameOf(layer)}); name.onclick = () => toggle.click(); head.append(name);
+      const name = el('span', {className: 'surface-name', textContent: nameOf(layer)}); name.onclick = () => toggle.click();
+      const label = el('div', {className: 'surface-label'}, name, drawn); label.onclick = () => toggle.click(); head.append(label);
     }
-    const summary = [layer.amount != null && layer.amount !== 1 ? Math.round(layer.amount * 100) + '%' : '', ruleKind(layer) !== 'none' ? 'ruled' : '', layer.material != null && builtin ? 'material' : ''].filter(Boolean).join(' · ');
+    const summary = [layer.amount != null && layer.amount !== 1 ? Math.round(layer.amount * 100) + '%' : '', ruleKind(layer) !== 'none' ? 'ruled' : ''].filter(Boolean).join(' · ');
     if (summary) head.append(el('span', {className: 'small surface-stage', textContent: summary}));
     const move = (d, text, title) => { const b = el('button', {type: 'button', textContent: text, title, ariaLabel: title, disabled: at + d < 0 || at + d >= siblings.length}); b.onclick = () => { const next = structuredClone(layers), j = siblings[at + d]; [next[i], next[j]] = [next[j], next[i]]; put(next, true); }; return b; };
     const eye = el('button', {type: 'button', className: 'surface-eye', textContent: shown(key) ? '●' : '○', ariaPressed: String(!hidden.has(key)),
@@ -285,7 +291,8 @@ export function mountSurfacePanel(host) {
       const items = [];
       read.layers.forEach((l, k) => {
         const i = byRow.get(l.row), layer = layers[i]; if (!layer) return;
-        const material = layer.material != null ? host.material(layer) : null, source = material?.name ?? (isMaterialLayer(layer) ? 'its material (missing)' : BUILTIN_SOURCES[layer.builtin]);
+        const material = layer.material != null ? host.material(layer) : !isMaterialLayer(layer) ? host.roleMaterial?.(layer.builtin) ?? null : null;
+        const source = material?.name ?? (isMaterialLayer(layer) || layer.material != null ? 'its material (missing)' : BUILTIN_SOURCES[layer.builtin]);
         const name = el('button', {type: 'button', className: 'link', textContent: nameOf(layer), title: 'Open this layer'}); name.onclick = () => openLayer(layerKey(layer));
         const chip = material ? swatch(material.color) : el('span', {className: 'material-chip own'});
         const fate = seen[k] >= .995 ? 'shows' : seen[k] < .005 ? 'covered by a later layer' : `${percent(seen[k])} shows`;

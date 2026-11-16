@@ -274,6 +274,8 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .surface-layer.open{padding-bottom:6px}
 .surface-layer:hover,.surface-layer:focus-within{border-color:var(--accent,#c43bd1)}
 .surface-head{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}
+.surface-label{flex:1;min-width:0;display:flex;flex-direction:column;cursor:pointer}
+.surface-label .surface-drawn{opacity:.65;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .surface-head .surface-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:default}
 .surface-head span.surface-name{cursor:pointer}
 .surface-head input.surface-name{min-width:6em}

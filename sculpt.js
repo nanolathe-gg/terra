@@ -21,7 +21,7 @@ import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postM
 import {isRiver,pointsSignature} from './sculpt-river.js';
 import {HELP_TOOLS} from './sculpt-help-examples.js';
 import {copySurface,layerKey} from './sculpt-material-model.js';
-import {mountSurfacePanel} from './sculpt-surface-panel.js';
+import {mountSurfacePanel,BUILTIN_LABELS} from './sculpt-surface-panel.js';
 import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,toolMaterialSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
@@ -766,6 +766,9 @@ function surfaceHost() {
       const cancel=()=>{document.removeEventListener('pointerdown',handler,true);overlay.style.cursor='';};
       document.addEventListener('pointerdown',handler,true);overlay.style.cursor='crosshair';return cancel;},
     inspect:at=>mapCanvas?mapCanvas.inspect(at):Promise.resolve(null),
+    // The material a built-in that draws a world role takes (Materials panel; the rock built-ins the world's rock): its name, or null.
+    roleMaterial:builtin=>{const role={highland:'worldHigh',slopeCover:'worldSlope',beach:'worldBeach',fines:'worldDebris',rock:'worldRock',crown:'worldRock',paintedRock:'worldRock',chips:'worldRock'}[builtin];
+      const m=role&&mapMaterials.find(m=>m[role]);return m?{name:m.name,color:hex(m)}:null;},
     slotMaterial:slot=>{const m=mapMaterials.find(m=>m.slot===slot);return m?{name:m.name,color:hex(m)}:null;},
     // Layers hidden while the artist designs (their keys): a view of this page only, never saved, undone or exported.
     hide:keys=>{if(!renderer)return;renderer.setSurfaceHidden(keys);worldChanged({stage:'C',world:false});schedule();},
@@ -1959,7 +1962,8 @@ function buildKnobs() {
     syncColumnPanel();syncWorldControls();
   };
   mountRockPanel();
-  materialEditor?.dispose();materialEditor=mountMaterialEditor({suspend:on=>{if(!on&&materialTerrainDirty){materialTerrainDirty=false;evaluate(0);}mapCanvas?.setSuspended(on);if(!on&&materialWeatherPending)queueWeather();},materials:()=>mapMaterials,strokes:()=>nodes,rocks:()=>mapRocks,renderer:()=>renderer,edit:editMaterials,delete:removeMaterial,checkpoint:()=>checkpoint(true),status});
+  materialEditor?.dispose();materialEditor=mountMaterialEditor({suspend:on=>{if(!on&&materialTerrainDirty){materialTerrainDirty=false;evaluate(0);}mapCanvas?.setSuspended(on);if(!on&&materialWeatherPending)queueWeather();},materials:()=>mapMaterials,strokes:()=>nodes,rocks:()=>mapRocks,renderer:()=>renderer,edit:editMaterials,delete:removeMaterial,checkpoint:()=>checkpoint(true),status,
+    layerName:key=>{const l=(config.surface||[]).find(l=>layerKey(l)===key);return l?l.name||BUILTIN_LABELS[l.builtin]||key:null;}});
   surfacePanel=mountSurfacePanel(surfaceHost());
 }
 // The facts the World panel enables a row by (sculpt-knobs.js worldPanelValues, which worldControlRequirement reads).

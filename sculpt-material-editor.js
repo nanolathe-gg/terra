@@ -342,7 +342,9 @@ export function mountMaterialEditor(host) {
   // The header: which material, where it is used, and the list's own actions.
   function refresh() {
     const list = materials(); if (!list.some(m => m.slot === slot)) { slot = (list.find(m => m.worldGround) ?? list[0])?.slot ?? 0; selection = new Set(); primary = null; frameAt = -1; solo = null; }
-    const m = material(), role = o => roleOf(o) ? ` · world ${roleName(roleOf(o))}` : '', full = list.length >= MATERIAL_SLOTS - 1;
+    // A copy a surface layer draws names that layer (World › Surface), as a world role names its role.
+    const layerOf = o => o.worldLayer ? host.layerName?.(o.worldLayer) ?? o.worldLayer : null;
+    const m = material(), role = o => layerOf(o) ? ` · surface layer ${layerOf(o)}` : roleOf(o) ? ` · world ${roleName(roleOf(o))}` : '', full = list.length >= MATERIAL_SLOTS - 1;
     refreshWorld();
     if (!dialog.open) return;   // the rest is the editor's own face
     $('material-select').replaceChildren(...list.map(o => new Option(o.name + role(o), String(o.slot)))); $('material-select').value = String(slot);
@@ -354,7 +356,7 @@ export function mountMaterialEditor(host) {
     if (solo && primary && node()?.type !== 'output') solo = primary;
     const users = materialUsers(host.strokes(), list, slot, host.rocks?.() ?? []), strokes = users.strokes ? `${users.strokes} stroke${users.strokes > 1 ? 's' : ''}` : '';
     const rocks = users.rocks.length ? `rock type${users.rocks.length > 1 ? 's' : ''} ${users.rocks.join(', ')}` : '';
-    $('material-used').textContent = 'Used by: ' + ([users.world && 'the world’s ' + users.world, rocks, strokes].filter(Boolean).join(', ') || 'nothing yet');
+    $('material-used').textContent = 'Used by: ' + ([users.world && 'the world’s ' + users.world, layerOf(m) && `the surface layer “${layerOf(m)}” (World › Surface)`, rocks, strokes].filter(Boolean).join(', ') || 'nothing yet');
     if (document.activeElement !== $('material-name')) $('material-name').value = m.name;
     $('material-use-ground').disabled = m.worldGround || m.worldWater; $('material-use-water').disabled = m.worldWater || m.worldGround; $('material-role').value = MAP_ROLES.some(([r]) => m[r]) ? roleOf(m) : ''; $('material-role').disabled = m.worldGround || m.worldWater; $('material-role').title = $('material-role').disabled ? 'The world’s ground and water draw nothing else.' : '';
     $('material-delete').disabled = m.worldGround || m.worldWater; $('material-delete').title = $('material-delete').disabled ? 'The world’s ground and water cannot be deleted. Assign another material first.' : '';
