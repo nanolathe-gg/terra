@@ -218,7 +218,9 @@ const ROLE_NAMES = {worldGround: 'ground', worldWater: 'water', ...Object.fromEn
 export const roleOf = m => Object.keys(ROLE_NAMES).find(r => m?.[r] === true) ?? null;
 export const roleName = role => ROLE_NAMES[role] ?? '';
 const roleCount = m => Object.keys(ROLE_NAMES).filter(r => m[r] === true).length;
-export const materialStates = material => { const out = material.nodes.find(n => n.type === 'output'); return MATERIAL_STATES.filter(k => out.enabled && out.in[k]); };
+// Only a ground draws them (the world's ground, highland ground, a stroke's material): water and the world's other surfaces never read a state.
+export const materialStatesApply = m => !m.worldWater && !MAP_ROLES.slice(1).some(([r]) => m[r]);
+export const materialStates = material => { const out = material.nodes.find(n => n.type === 'output'); return materialStatesApply(material) ? MATERIAL_STATES.filter(k => out.enabled && out.in[k]) : []; };
 // The compiled graph: nodes in evaluation order, each an instruction of codes, links and numbers for the materialGraphs buffer.
 export const STEP_STRIDE = 288, PROGRAM_BYTES = 16 + MAX_NODES * STEP_STRIDE;
 export function compileMaterial(material) {
@@ -367,16 +369,19 @@ export function withWorldMaterials(value, config) {
   for (const [role, which] of ROLES) {
     if (list.some(m => m[role])) continue;
     const preset = libraryFor(config, which);
-    if (list.length >= MATERIAL_SLOTS - 1) { const taker = list.find(m => !m.worldGround && !m.worldWater); list = list.map(m => m === taker ? {...m, [role]: true} : m); continue; }
+    if (list.length >= MATERIAL_SLOTS - 1) { const taker = list.find(m => !m.worldGround && !m.worldWater); list = list.map(m => m === taker ? {...Object.fromEntries(Object.entries(m).filter(([k]) => !MAP_ROLES.some(([r]) => r === k))), [role]: true} : m); continue; }   // the taker gives up any other role
     const added = addMaterial(list, preset, preset.name); list = added.materials.map(m => m.slot === added.slot ? {...m, [role]: true} : m);
   }
   // The world's other roles (MAP_ROLES: config.materials.high, .rock, .slope, .debris, .beach, .fringe, .body, .ring), each a library material
   // added while the list has room. Level raised ground takes the highland material; every rock face shows the rock material's grain, grit and
   // shine under its rock type's color (a rock type may name another, struct Rock material); the slope cover, the debris fragments, the beach
   // sand and a world's mineral margins read theirs. A map without one draws that surface from another (engine-frag.wgsl roleColor).
+  // A list that already holds one of the world's surface roles (a map made with them) keeps the ones its artist cleared or deleted; a new map,
+  // a scene and a list saved before them take every one the world names. The highland material joins any list with room, as it always has.
+  const surfaced = list.some(o => MAP_ROLES.slice(1).some(([r]) => o[r]));
   for (const [role, key] of MAP_ROLES) {
     const m = LIBRARY[config.materials?.[key]];
-    if (m && !list.some(o => o[role]) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, [role]: true} : o); }
+    if (m && (role === 'worldHigh' || !surfaced) && !list.some(o => o[role]) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, [role]: true} : o); }
   }
   // A world may name more materials its tools lay down (config.materials.extra: library keys; a tool's `material`, sculpt-tools.js
   // toolMaterialSlot). Each the list lacks is added while it has room.

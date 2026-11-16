@@ -179,7 +179,7 @@ export function addRock(rocks,recipe,slot0Name='',config=null){
 export function duplicateRock(rocks,slot,world){
  const from=slot===0?world:rocks.find(r=>r.slot===slot);if(!from)throw Error(`No rock preset in slot ${slot}.`);
  const to=freeSlot(rocks);
- return {slot:to,rocks:[...rocks,{slot:to,name:uniqueRockName(rocks,`${from.name} copy`,world?.name),key:null,knobs:structuredClone(from.knobs),column:structuredClone(from.column??null),colors:checkColors(from.colors)}].sort((a,b)=>a.slot-b.slot)};
+ return {slot:to,rocks:[...rocks,{slot:to,name:uniqueRockName(rocks,`${from.name} copy`,world?.name),key:null,knobs:structuredClone(from.knobs),column:structuredClone(from.column??null),colors:checkColors(from.colors),...(from.material>0?{material:from.material}:{})}].sort((a,b)=>a.slot-b.slot)};
 }
 export function renameRock(rocks,slot,name){
  if(!rocks.some(r=>r.slot===slot))throw Error(`No rock preset in slot ${slot}.`);

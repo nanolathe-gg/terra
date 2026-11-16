@@ -911,6 +911,7 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     for (var i = 0; i < 5; i++) {
         var m = select(u.shine[i], u.rock[rs & rockMask].shineRock, i == 2);
         if(i==0){m.x=max(m.x,materialShine(p,gs));m.y=select(m.y,16.0,m.y<=0.0);}   // a material's own shine adds to the world's ground row
+        if(i==2){let rm=rockMaterialOf(rs);if(rm>=0){m.x=max(m.x,materialShine(grainPixel(pixel),u32(rm)));}}   // and the rock material's to the rock's (read at the native pixel, as its grain)
         gloss += weight[i] * m.x;
         focus += weight[i] * m.x * m.y;
         rough += weight[i] * m.z;

@@ -218,7 +218,7 @@ export const SHAPE_FIELDS=[
   ['paintChannel','paint-channel','Paint',['paint'],1,26,1,1,'What the brush paints. Material lays down one of the map’s materials, chosen under Ground. Denser scatter supplies its own stones where the World panel\'s Boulders and Debris are 0 and multiplies them where they are not. Style settings go more or less than the world\'s own value; Strength is how far. Erase clears every mask and style under the brush.',[[26,'Material'],...MASK_CHOICES,...LUMP_CHOICES,...STYLE_CHOICES,[7,'Erase all masks and style']]],
   // Rock presets (B2): the rock this landform is made of, one of the map's presets (sculpt-rock-presets.js); -1, Rock beneath, keeps the rock that is
   // already there. Its choices are the map's presets (sculpt.js syncRockChoices).
-  ['groundPreset','lf-ground','Ground',['landform','paint'],-1,7,1,1,'The material this stroke lays down: the world’s ground or another of the map’s materials. Ground beneath leaves the previous surface alone.',[[-1,'Ground beneath']]],
+  ['groundPreset','lf-ground','Ground',['landform','paint'],-1,15,1,1,'The material this stroke lays down: the world’s ground or another of the map’s materials. Ground beneath leaves the previous surface alone.',[[-1,'Ground beneath']]],
   ['rockPreset','lf-rock','Rock',['landform'],-1,15,1,1,'The rock this shape is made of, one of the map\'s rock presets (World pane, Rock & cliffs). Rock beneath keeps whatever rock is already there: the world\'s own, or an earlier shape\'s. The shape claims its rock wherever it moves the ground, so a later shape wins where it overlaps an earlier one.',[[-1,'Rock beneath']]],
   // Local vegetation inside the shape (card C5 stage 2): a change about the world's own cover, 0 none.
   ['styleVegetation','style-vegetation','Local vegetation',['landform'],-100,100,5,100,'Grass and moss cover inside the shape, times 1 + this: below 0 more bare rock, above 0 more cover.'],
@@ -309,7 +309,7 @@ export function borrowBeach(config,settings) {
   const lender=config.beachSources?.[settings.get('beachFrom')];
   if (!lender || config.layers.includes('beach')) return config;
   config.layers=[...config.layers,'beach']; config.material={...config.material,...lender.material}; config.beachTable=lender.table;
-  config.materials={...config.materials,beach:`${settings.get('beachFrom')}-beach`};   // its sand is the lender's beach material (the map's beach role)
+  if (lender.beachMaterial) config.materials={...config.materials,beach:lender.beachMaterial};   // its sand is the lender's beach material (the map's beach role)
   return config;
 }
 export function addDefaults(settings,defaults={}) { for (const [key,value] of Object.entries(defaults||{})) if (!settings.has(key)) settings.set(key,value); return settings; }

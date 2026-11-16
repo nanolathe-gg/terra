@@ -1038,7 +1038,12 @@ fn materialPixel(p:vec2f)->vec2f {return poolWrap(floor(p),f32(textureDimensions
 
 // A material's cached repeat: unlit color and art height, its shine, and its color reduced to its palette.
 // A rock slot's surface material (its rock type's, else the world's rock material), -1 none.
-fn rockMaterialOf(slot:u32)->i32 { let m=u.rock[slot & rockMask].material; return select(m,u.rockGround,m<=0); }
+fn rockMaterialOf(slot:u32)->i32 {
+ let m=u.rock[slot & rockMask].material;
+ if(m>0&&u.ground[u32(m) & groundMask].cacheLayer>=0){return m;}   // a slot the map no longer draws falls back to the world's rock material
+ if(u.rockGround>=0&&u.ground[u32(u.rockGround) & groundMask].cacheLayer>=0){return u.rockGround;}
+ return -1;
+}
 // A cache layer's art height at a native pixel q, bilinear between texels (the taps that light it read between pixels).
 fn materialReliefBilinear(q:vec2f,layer:i32)->f32 {
  let size=f32(textureDimensions(groundTex).x);let b=floor(q-.5);let f=q-.5-b;

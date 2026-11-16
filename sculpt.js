@@ -5,7 +5,7 @@ import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
-import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldPair,keepStrokeMaterials,materialsInUse,deleteMaterial,materialTint,assignMaterial} from './sculpt-materials.js';
+import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldPair,keepStrokeMaterials,materialsInUse,deleteMaterial,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe} from './sculpt-rock-presets.js';
 import {KNOBS,LOW_GROUND_RGB,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
@@ -715,10 +715,11 @@ function syncMaterialChoices() {
   select.replaceChildren(new Option('Ground beneath','-1'),new Option('World ground','0'),...mapMaterials.filter(m=>!m.worldGround&&!m.worldWater).map(m=>new Option(m.name,String(m.slot))));
   select.value=[...select.options].some(o=>o.value===value)?value:'-1';
   syncGroundChips();
+  if($('rock-material'))syncRockMaterial();
 }
 // The Ground choice as chips: each of the select's choices with its material's color, the chosen one pressed. The Paint brush has
 // nothing to paint with "Ground beneath", so it does not offer it.
-const MATERIAL_CHOICES=8;
+const MATERIAL_CHOICES=MATERIAL_SLOTS;
 let groundChipKind='landform';
 function syncGroundChips(kind=groundChipKind) {
   groundChipKind=kind; const select=$('lf-ground'),hex=m=>'#'+materialTint(m).map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');
@@ -1995,7 +1996,7 @@ function syncRockColors() {
 // that role); on another, the world's rock material or any of the map's other materials.
 function syncRockMaterial() {
   const select=$('rock-material'),world=rockSelected===0,rock=mapRocks.find(r=>r.slot===rockSelected),own=mapMaterials.find(m=>m.worldRock);
-  const choices=mapMaterials.filter(m=>!m.worldGround&&!m.worldWater&&!m.worldHigh&&(world?true:!m.worldRock));
+  const choices=mapMaterials.filter(m=>!m.worldGround&&!m.worldWater&&(world?!roleOf(m)||m.worldRock:!m.worldRock));   // the world's rock takes the role, so only a material with no other
   select.replaceChildren(...(world?[]:[new Option(own?`World rock material (${own.name})`:'World rock material (none)','0')]),...choices.map(m=>new Option(m.name,String(m.slot))));
   if(world&&!own)select.prepend(new Option('None (flat color)',''));
   select.value=world?(own?String(own.slot):''):String(rock?.material||0);

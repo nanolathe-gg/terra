@@ -3,7 +3,7 @@
 // colors it is reduced to). Every element is in index.html; this fills values and applies edits through the map's own undo and save.
 import {NODES, NODE_TYPES, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
   nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb,
-  addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText, MAP_ROLES, roleOf, roleName} from './sculpt-materials.js';
+  addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText, MAP_ROLES, roleOf, roleName, materialStatesApply} from './sculpt-materials.js';
 import {mountMaterialGraph, graphPositions, CARD, cardHeight} from './sculpt-material-graph.js';
 import {MaterialPreview, TILE, TERRAIN} from './sculpt-material-preview.js';
 import gamePalette from './materials/palette.json' with {type: 'json'};
@@ -198,6 +198,9 @@ export function mountMaterialEditor(host) {
       $('node-input-label-' + i).textContent = label;
       $('node-input-' + i).replaceChildren(new Option(want === 'coords' ? 'Plain coordinates' : 'Not connected', ''), ...m.nodes.filter(fits).map(o => new Option(o.name, o.id)));
       $('node-input-' + i).value = n.in[key] ?? ''; $('node-input-clear-' + i).disabled = !n.in[key];
+      // Worn and Deposit draw only on a ground: say so where this material is water or another of the world's surfaces.
+      const inert = n.type === 'output' && ['worn', 'deposit'].includes(key) && !materialStatesApply(m);
+      $('node-input-' + i).disabled = inert; $('node-input-' + i).title = inert ? 'Only a ground draws its Worn and Deposit colors: this material is the world’s water or another of its surfaces.' : '';
     }
     $('node-gradient').hidden = n.type !== 'gradient'; $('node-histogram').hidden = n.type !== 'levels';
     if (n.type === 'gradient') {

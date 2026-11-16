@@ -99,7 +99,7 @@ test('the surface sliders open where the browser puts them, and their ranges are
 const {LIBRARY} = await import('../sculpt-materials.js');
 test('a world without a beach borrows another world\'s: its layer, its numbers, and the facts and rows that read them', async () => {
   const {worldPanelValues, colorRows} = await import('../sculpt-knobs.js');
-  const lender = {name: 'Zhon', table: 'materials/zhon.json', material: {beachWidth: 178, beachHeight: 6, beachRGB: [200, 180, 140]}};
+  const lender = {name: 'Zhon', table: 'materials/zhon.json', material: {beachWidth: 178, beachHeight: 6, beachRGB: [200, 180, 140]}, beachMaterial: 'zhon-beach'};
   const world = () => ({layers: ['slopeGrass', 'rock'], material: {wetBand: 9}, water: {}, beachSources: {zhon: lender}});
   const facts = c => worldPanelValues({config: c, renderer: {variant: new Map(), groundTiled: false}, nodes: [], colors: {}, weathering: false, materialWeathering: 0});
   const none = borrowBeach(world(), new URLSearchParams(''));

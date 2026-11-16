@@ -157,7 +157,7 @@ fn rockDetail(p:vec3f,site:RockSite)->f32 {
     // the grain the color reads, so the light and the color agree.
     var grit=0.0;
     if(site.layer>=0&&site.relief>0.0){
-        let q=vec2f(p.x,p.y-(p.z-u.base)*.5)/min(u.chunkScale,1.0);
+        let q=vec2f(p.x,p.y-(max(p.z,u.sea)-u.base)*.5)/min(u.chunkScale,1.0);   // voxelRayPoint's shift: below the sea a ray projects at its level
         grit=(materialReliefBilinear(q,site.layer)-.5*site.relief)*site.cover;
     }
     return h*site.gain+grit;

@@ -284,11 +284,11 @@ func (s *Site) configure() error {
 		base := value(world["baseHeight"], 24)
 		delete(world, "baseHeight")
 		material := merge(object{"groundCover": s.defaults["groundCover"]}, obj(table["material"]))
-		// The world's surfaces: the slope cover and the rock always, a beach and the mineral margins' body where its world.materials names one
+		// The world's surfaces: the slope cover and the rock always, a beach and the mineral margins' fringe, body and ring where its world.materials names one
 		// (sculpt-materials.js MAP_ROLES); the draw reads which optional stages it has from this list.
 		roles := obj(obj(table["world"])["materials"])
 		surfaces := []any{"slopeGrass", "rock"}
-		for _, k := range []string{"beach", "body"} {
+		for _, k := range []string{"beach", "fringe", "body", "ring"} {
 			if _, ok := roles[k]; ok {
 				surfaces = append(surfaces, k)
 			}
@@ -323,7 +323,7 @@ func (s *Site) configure() error {
 						m[k] = v
 					}
 				}
-				beaches[w] = object{"name": names[w], "table": materialPath(w), "material": m}
+				beaches[w] = object{"name": names[w], "table": materialPath(w), "material": m, "beachMaterial": roles["beach"]}
 			}
 		}
 		shapes[w] = value(c["shapes"], object{})
