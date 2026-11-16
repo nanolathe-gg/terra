@@ -742,10 +742,10 @@ let baseSurface=null,surfacePanel=null;
 function setSurfaceList(list,keep) {
   config.surface=list;
   if(keep)activeWorld().surface=list; else delete activeWorld().surface;
-  renderer?.setSurface(list);
+  const stage=renderer?renderer.uniformStage(()=>renderer.setSurface(list)):'C';
   // A layer's material joins the map; a copy no layer draws leaves it unless a stroke uses it (sculpt-materials.js surfaceMaterials).
   try{const next=surfaceMaterials(list,mapMaterials,{config,nodes,rocks:mapRocks});if(JSON.stringify(next)!==JSON.stringify(mapMaterials))editMaterials(next);}catch(err){status(err.message);}   // a layer's material may enable a row (Highland ground)
-  worldChanged({stage:'C',world:false}); schedule();
+  worldChanged({stage:stage??'F',world:false}); schedule();   // the surface rows alone: the color pass (a material it brings: editMaterials)
 }
 function applySurface(next,{commit=false}={}) {
   let list; try { list=copySurface(next); } catch (err) { status(err.message); return false; }
@@ -762,7 +762,7 @@ function surfaceHost() {
     surface:()=>config.surface,
     apply:applySurface,
     restore:()=>{setSurfaceList(structuredClone(baseSurface),false);saveWorlds();checkpoint(true);},
-    preview:row=>{if(!renderer||renderer.surfacePreview===row)return;renderer.setSurfacePreview(row);worldChanged({stage:'C',world:false});schedule();},
+    preview:row=>{if(!renderer||renderer.surfacePreview===row)return;const stage=renderer.uniformStage(()=>renderer.setSurfacePreview(row));worldChanged({stage:stage??'F',world:false});schedule();},
     // The inspector: the next left click on the map picks an art pixel (that click does nothing else); onPick(at). Returns a cancel function.
     pickPixel:onPick=>{if(!mapCanvas)return ()=>{};
       const handler=e=>{if(e.button!==0||!(e.target===overlay||overlay.contains(e.target)))return;e.preventDefault();e.stopImmediatePropagation();cancel();onPick(mapCanvas.artPoint(e));};
@@ -775,7 +775,7 @@ function surfaceHost() {
     recolor:(layer,rgb,commit)=>{const m=layer.material!=null?layerMaterial(layer):roleCopy(layer.builtin);if(!m)return;editMaterials(setMaterial(mapMaterials,m.slot,recolorMaterial(m,rgb,drawnColor(m))));if(commit)checkpoint(true);},
     slotMaterial:slot=>{const m=mapMaterials.find(m=>m.slot===slot);return m?{name:m.name,color:hex(m)}:null;},
     // Layers hidden while the artist designs (their keys): a view of this page only, never saved, undone or exported.
-    hide:keys=>{if(!renderer)return;renderer.setSurfaceHidden(keys);worldChanged({stage:'C',world:false});schedule();},
+    hide:keys=>{if(!renderer)return;const stage=renderer.uniformStage(()=>renderer.setSurfaceHidden(keys));worldChanged({stage:stage??'F',world:false});schedule();},
     material:layer=>{const m=layerMaterial(layer);return m?{name:m.name,color:hex(m),own:own(m),height:Boolean(m.nodes?.find(n=>n.type==='output')?.in?.height)}:null;},
     edit:(layer,button)=>{const m=layerMaterial(layer);if(m)materialEditor?.open(m.slot,button);},
     library:()=>Object.entries(LIBRARY).filter(([key])=>!key.endsWith('-water')).map(([key,m])=>({key,name:m.name,color:hex(m)})),

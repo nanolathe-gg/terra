@@ -1,3 +1,4 @@
+import {PLACEMENT_ROW} from './sculpt-material-model.js';
 // P6: gates. The draw and the bake test many uniforms against a constant (`u.layered != 0`, `u.rillDepth <= 0.0`, `u.columnTerrain.x != 0.0`). A
 // world fixes most of them, so each test becomes a WGSL `override` bool and the pipeline is built with the values it has now, cached by the
 // string of those bools. Every other read of a uniform stays a uniform read: the continuous values do not make a new pipeline.
@@ -99,6 +100,9 @@ export function uniformStages(modules) {
           if(body[at]==='['){let depth=1;at++;while(at<body.length&&depth){if(body[at]==='[')depth++;else if(body[at]===']')depth--;at++;}
             const member=/^\s*\.\s*(\w+)/.exec(body.slice(at));if(member)field=member[1];}
         }
+        // The material table's ground-cover rows (engine-common.wgsl cvr: MM_COVER and up) count apart from its other rows: the bake reads
+        // only those, so a change to the surface rows below them is the color pass's alone (worldUniformDelta).
+        if(field==='materialTable'&&/^\s*\[\s*MM_COVER\b/.test(body.slice(references.lastIndex)))field='materialTable.cover';
         fields.add(field);
       }
       const calls=new Set([...body.matchAll(/\b(\w+)\s*\(/g)].map(m=>m[1]));
@@ -127,6 +131,8 @@ export function uniformStages(modules) {
 
 // Compare only CPU-owned world fields. GPU-written flags and per-chunk
 // coordinates are absent, including the aliases of slot 0 in the Rock table.
+// The material table's first ground-cover row (engine-common.wgsl MM_COVER): six placement rows after PLACEMENT_ROW.
+export const TABLE_COVER_ROW=PLACEMENT_ROW+6;
 export function worldUniformDelta(before,after,layout,stages) {
   const previous=before??new Uint32Array(after.byteLength/4),next=new Uint32Array(after),table=layout.fields.get('rock'),fields=[],slots=new Set();let stage=null;
   const perChunk=new Set([...PER_CHUNK_UNIFORMS,'weatherMaps','materialReady','transitionBody','rockWeatherGrid']);
@@ -137,6 +143,11 @@ export function worldUniformDelta(before,after,layout,stages) {
   for(const [name,f]of layout.fields){
     if(name==='rock'){
       for(let slot=0;slot<f.count;slot++)for(const [member,m]of f.members)if(differs(m,f.offset+slot*f.stride+m.offset))add(`rock[${slot}].${member}`,member,slot);
+    }else if(name==='materialTable'&&stages.has('materialTable.cover')){
+      // Rows below the cover rows are read where the table is read directly; the cover rows also where cvr reads them (uniformStages).
+      const head={...f,count:Math.min(TABLE_COVER_ROW,f.count)},tail={...f,count:Math.max(0,f.count-TABLE_COVER_ROW)},direct=stages.get(name)?.stage,cover=stages.get('materialTable.cover').stage;
+      if(differs(head))add(name,name);
+      if(tail.count&&differs(tail,f.offset+TABLE_COVER_ROW*f.stride)){const s=!direct||cover<direct?cover:direct;fields.push({name:'materialTable.cover',stage:s});if(!stage||s<stage)stage=s;}
     }else if(!(table&&f.offset>=table.offset&&f.offset<table.offset+table.count*table.stride)&&!perChunk.has(name)&&!name.startsWith('chunk')&&differs(f))add(name,name);
   }
   return {fields,stage,rockSlots:[...slots]};
