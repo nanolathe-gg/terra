@@ -497,7 +497,7 @@ export function addMaterial(list, material, name = 'Material') {
 // is full, the first material that is not the other role takes it.
 const ROLES = [['worldGround', 'ground'], ['worldWater', 'water']];
 const libraryFor = (config, which) => LIBRARY[config.materials?.[which]] ?? LIBRARY[`green-${which}`];
-export function withWorldMaterials(value, config) {
+export function withWorldMaterials(value, config, {carried = false} = {}) {
   let list = copyMaterials(value) ?? [];
   for (const [role, which] of ROLES) {
     if (list.some(m => m[role])) continue;
@@ -509,12 +509,14 @@ export function withWorldMaterials(value, config) {
   // added while the list has room. Level raised ground takes the highland material; every rock face shows the rock material's grain, grit and
   // shine under its rock type's color (a rock type may name another, struct Rock material); the slope cover, the debris fragments, the beach
   // sand and a world's mineral margins read theirs. A map without one draws that surface from another (engine-frag.wgsl roleColor).
-  // A list that already holds one of the world's surface roles (a map made with them) keeps the ones its artist cleared or deleted; a new map,
-  // a scene and a list saved before them take every one the world names. The highland material joins any list with room, as it always has.
-  const surfaced = list.some(o => MAP_ROLES.slice(1).some(([r]) => o[r]));
+  // A list that already holds one of the world's surface roles (a map made with them, reopened in its world) keeps the ones its artist
+  // cleared or deleted; a new map, a scene, a list saved before them and a map carried from another world (`carried`: its clears were made
+  // for that world's surfaces) take every one the world names. The highland material and the beach join any list with room: a beach
+  // another world lends (sculpt-scene.js borrowBeach) is chosen on purpose, after the map was made.
+  const surfaced = !carried && list.some(o => MAP_ROLES.slice(1).some(([r]) => o[r]));
   for (const [role, key] of MAP_ROLES) {
     const m = LIBRARY[config.materials?.[key]];
-    if (m && (role === 'worldHigh' || !surfaced) && !list.some(o => o[role]) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, [role]: true} : o); }
+    if (m && (role === 'worldHigh' || role === 'worldBeach' || !surfaced) && !list.some(o => o[role]) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, [role]: true} : o); }
   }
   // A world may name more materials its tools lay down (config.materials.extra: library keys; a tool's `material`, sculpt-tools.js
   // toolMaterialSlot). Each the list lacks is added while it has room.
@@ -527,8 +529,8 @@ export function withWorldMaterials(value, config) {
 // The world's ground and its water are world settings, like its sliders: every map drawn in the world shows the same two, and a map's
 // other materials are its own. A map's list (a save's, or none for a new map) takes the world's two here, each in the slot the map
 // already gave that role. `config.worldMaterials` holds the ones the artist changed (keptWorldMaterials); the rest are the library's.
-export function adoptWorldMaterials(value, config) {
-  let list = withWorldMaterials(value, config);
+export function adoptWorldMaterials(value, config, {carried = false} = {}) {
+  let list = withWorldMaterials(value, config, {carried});
   for (const [role, which] of ROLES) {
     const source = config.worldMaterials?.find(m => m[role]) ?? libraryFor(config, which), at = list.find(m => m[role]);
     const name = uniqueName(list.filter(m => m !== at), nameOf(source.name));

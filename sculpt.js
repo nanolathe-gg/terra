@@ -1444,7 +1444,7 @@ function loadSketch(s,carry=false) {
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
   syncDrawInputs();
   restoreColumn(column);syncColumnPanel();
-  mapMaterials=adoptWorldMaterials(materials,config); mapRocks=rocks??worldRocks(config); if(!rocks){const given=giveRockMaterials(mapRocks,mapMaterials,mapRocks.map(r=>r.slot));mapRocks=given.rocks;mapMaterials=given.materials;} syncMaterialChoices();materialEditor?.refresh(); rockSelected=0; syncRockChoices(); syncRockPanel(); nodes=keepStrokeMaterials(keepStrokeRocks(next,mapRocks),mapMaterials); selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
+  mapMaterials=adoptWorldMaterials(materials,config,{carried:carry}); mapRocks=rocks??worldRocks(config); if(!rocks){const given=giveRockMaterials(mapRocks,mapMaterials,mapRocks.map(r=>r.slot));mapRocks=given.rocks;mapMaterials=given.materials;} syncMaterialChoices();materialEditor?.refresh(); rockSelected=0; syncRockChoices(); syncRockPanel(); nodes=keepStrokeMaterials(keepStrokeRocks(next,mapRocks),mapMaterials); selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
   // The tools' cards still on a world's preset name their rock among this map's presets, now that the map's list is in.
   for (const id of ids) if (Object.hasOwn(config.worldShapes||{},toolSettings[id]?.preset)) toolSettings[id]=shapeCard(id,toolSettings[id].preset);
   showTool(toolSettings[tool]); updateControls();
