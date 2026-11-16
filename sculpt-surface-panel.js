@@ -17,12 +17,11 @@ export const BUILTIN_LABELS = {
   regrownMoss: 'Moss on regrown debris', fines: 'Debris fines', paintedRock: 'Painted rock', paintedSnow: 'Painted snow', paintedMoss: 'Painted moss',
   sandDust: 'Sand dust', sand: 'Sand', chips: 'Chips', iceCrest: 'Snow on ice crests', iceCap: 'Snow on ice tops',
 };
-// What draws each built-in today, so a row can say where its look comes from before a material replaces it.
+// Where a built-in's material comes from when the row has no material of its own to name: a role of the Materials panel or the rock types.
+// The others (SURFACE_DRAWABLE) each draw a material the row chooses.
 const BUILTIN_SOURCES = {
-  highland: 'the world’s highland material', slopeCover: 'the world’s slope material', soil: 'the soil color', rock: 'each rock type’s rock',
-  beach: 'the world’s beach material', crown: 'the rock type’s rock', baseBand: 'the band color', regrownMoss: 'the moss color', fines: 'the debris material',
-  paintedRock: 'the rock type’s rock', paintedSnow: 'the snow color', paintedMoss: 'the moss color', sandDust: 'the sand color', sand: 'the sand color',
-  chips: 'the rock type’s chips', iceCrest: 'the snow color', iceCap: 'the snow color',
+  highland: 'the world’s highland material', slopeCover: 'the world’s slope material', rock: 'each rock type’s rock', beach: 'the world’s beach material',
+  crown: 'the rock type’s rock', fines: 'the debris material', paintedRock: 'the rock type’s rock', chips: 'the rock type’s chips',
 };
 // Built-ins whose strength and placement are World settings of their own (the rows under the list, in this section's "Built-in settings"):
 // their row shows no Coverage, which would only repeat the strength.
@@ -39,6 +38,8 @@ export const SURFACE_PRESETS = [
   {key: 'ledge', name: 'Rock on steep convex edges', material: 'role:rock', stage: 'land', score: {terms: [{fact: 'slope', weight: 1}, {fact: 'convexity', weight: 1.5}], from: 1.2, fade: .2}, edge: {width: .1, noise: .6, noiseSize: 4}},
   {key: 'dry', name: 'Dry ground on sunny slopes', material: 'desert-ground', stage: 'land', where: [{fact: 'light', from: 1.15, fade: .1}, {fact: 'moisture', to: .35, fade: .1}], amount: .3, edge: {width: .05, noise: 1, noiseSize: 22}},
   {key: 'mud', name: 'Mud in wet hollows', material: 'red-ground', stage: 'land', where: [{fact: 'wetness', from: .5, fade: .1}, {fact: 'top', to: -.1, fade: .1}], edge: {width: .2, noise: .6, noiseSize: 1}},
+  // Flowers (the cover classes' flowers, as a layer): single pixels of the Flowers material, a clump of one species each, where the ground is wet.
+  {key: 'flowers', name: 'Flowers in wet ground', material: 'flowers', stage: 'land', where: [{fact: 'wetness', from: .35, fade: .1}], amount: .1, edge: {width: .05, noise: 1, noiseSize: 1}},
   {key: 'blank', name: 'Material layer', material: 'role:ground', stage: 'land', where: [{fact: 'slope', from: 0, fade: .05}], amount: .5},
 ];
 
@@ -134,8 +135,8 @@ export function mountSurfacePanel(host) {
   }
   function materialSelect(layer, i) {
     const builtin = !isMaterialLayer(layer), options = host.library();
-    const select = el('select', {className: 'surface-material', id: uid('material'), title: builtin ? 'Draw this surface with a material of the library, in place of ' + BUILTIN_SOURCES[layer.builtin] : 'The library material this layer draws'});
-    if (builtin) select.append(el('option', {value: '', textContent: 'Its own: ' + BUILTIN_SOURCES[layer.builtin], selected: layer.material == null}));
+    const select = el('select', {className: 'surface-material', id: uid('material'), title: 'The library material this layer draws (the world’s copy, shared by every layer that draws it)'});
+    if (builtin && layer.material == null) select.append(el('option', {value: '', textContent: 'None: it draws nothing', selected: true}));
     const groups = new Map();
     for (const m of options) { const g = m.key.split('-')[0]; if (!groups.has(g)) groups.set(g, el('optgroup', {label: g[0].toUpperCase() + g.slice(1)})); groups.get(g).append(el('option', {value: m.key, textContent: m.name, selected: m.key === layer.material})); }
     if (layer.material != null && !options.some(m => m.key === layer.material)) select.append(el('option', {value: layer.material, textContent: layer.material + ' (not in the library)', selected: true}));
@@ -156,7 +157,7 @@ export function mountSurfacePanel(host) {
     head.append(toggle, chip);
     // The layer's name over what it draws: its material's name, or where a built-in's look comes from.
     const role = builtin && layer.material == null ? host.roleMaterial?.(layer.builtin) : null;
-    const drawn = el('span', {className: 'small surface-drawn', textContent: material?.name ?? role?.name ?? (layer.material != null ? 'its material is missing from this map' : BUILTIN_SOURCES[layer.builtin])});
+    const drawn = el('span', {className: 'small surface-drawn', textContent: material?.name ?? role?.name ?? (layer.material != null ? 'its material is missing from this map' : BUILTIN_SOURCES[layer.builtin] ?? 'no material: it draws nothing')});
     if (role) { chip.style.background = role.color; chip.classList.remove('own'); chip.title = role.name; }
     if (!builtin) {
       const name = el('input', {type: 'text', value: nameOf(layer), maxLength: 80, className: 'surface-name', title: 'The layer’s name', id: uid('name')});
@@ -304,7 +305,7 @@ export function mountSurfacePanel(host) {
       read.layers.forEach((l, k) => {
         const i = byRow.get(l.row), layer = layers[i]; if (!layer) return;
         const material = layer.material != null ? host.material(layer) : !isMaterialLayer(layer) ? host.roleMaterial?.(layer.builtin) ?? null : null;
-        const source = material?.name ?? (isMaterialLayer(layer) || layer.material != null ? 'its material (missing)' : BUILTIN_SOURCES[layer.builtin]);
+        const source = material?.name ?? (isMaterialLayer(layer) || layer.material != null ? 'its material (missing)' : BUILTIN_SOURCES[layer.builtin] ?? 'no material');
         const name = el('button', {type: 'button', className: 'link', textContent: nameOf(layer), title: 'Open this layer'}); name.onclick = () => openLayer(layerKey(layer));
         const chip = material ? swatch(material.color) : el('span', {className: 'material-chip own'});
         const fate = seen[k] >= .995 ? 'shows' : seen[k] < .005 ? 'covered by a later layer' : `${percent(seen[k])} shows`;

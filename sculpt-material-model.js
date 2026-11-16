@@ -88,6 +88,10 @@ export const layerKey = layer => layer?.id ?? layer?.builtin ?? '';
 // A material layer is any layer that is not a built-in; a built-in may also draw a material (`material`, docs/SURFACE_LAYERS.md phase 4)
 // in place of the engine's own color, keeping its own share. Either binds the map's copy that carries its key (layerKey) as worldLayer.
 export const isMaterialLayer = layer => layer?.builtin == null;
+// A stored list (this browser's world store, a save's world settings) made before the engine's surfaces drew materials: each engine
+// surface without one takes the world's (its own list, `base`), so it does not draw nothing.
+export const withSurfaceMaterials = (list, base) => list.map(l => l?.builtin != null && SURFACE_DRAWABLE.includes(l.builtin) && l.material == null
+  ? {...l, ...(base?.find(b => b.builtin === l.builtin)?.material != null ? {material: base.find(b => b.builtin === l.builtin).material} : {})} : l);
 // `slotOf(key)`: the map's slot of the world's copy of library material `key` (its worldLayer; -1 when the map lacks it). `hidden`: the keys (layerKey) of
 // layers the Surface section hides while an artist designs (a view, never saved or exported): they draw nothing.
 export function surfaceRows(surface, slotOf = () => -1, hidden = null) {
@@ -115,9 +119,12 @@ export function surfaceRows(surface, slotOf = () => -1, hidden = null) {
     const height = Math.max(0, Math.min(1, number(edge.height, 0)));
     if (height > 0 && draws) { if (!rule.length) rule = [[1, 0, 0, 0]]; rule[0][3] = height; }
     if (rule.length > 1 || layer.score || draws) facts = true;
-    const slot = draws ? slotOf(layer.material) : -1;   // the world's copy of its library material, shared by every layer that draws it
+    // The world's copy of its library material, shared by every layer that draws it; -2 where the layer must draw a material and the map
+    // has none for it (a material layer, or a built-in the engine no longer colors: SURFACE_DRAWABLE): it draws nothing.
+    const bound = draws ? slotOf(layer.material) : -1;
+    const packed = bound >= 0 ? bound : draws || (!material && SURFACE_DRAWABLE.includes(layer.builtin)) ? -2 : -1;
     const amount = hidden?.has(layerKey(layer)) ? 0 : !material && SURFACE_OWN_AMOUNT.includes(layer.builtin) ? 1 : number(layer.amount, 1);
-    return {index: i, stage, rows: [[material ? -1 : at[1], amount, slot, rule.length], fixed ? [1, 0, 8, layerSalt(layerKey(layer))] : [number(edge.width, 1), number(edge.noise, 0), number(edge.noiseSize, 8), layerSalt(layerKey(layer))], ...rule]};
+    return {index: i, stage, rows: [[material ? -1 : at[1], amount, packed, rule.length], fixed ? [1, 0, 8, layerSalt(layerKey(layer))] : [number(edge.width, 1), number(edge.noise, 0), number(edge.noiseSize, 8), layerSalt(layerKey(layer))], ...rule]};
   });
   // Stable by stage: the list's order within a stage is kept.
   const sorted = layers.map((l, i) => [l, i]).sort((a, b) => a[0].stage - b[0].stage || a[1] - b[1]).map(([l]) => l);

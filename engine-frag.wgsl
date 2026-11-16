@@ -14,8 +14,7 @@ fn grainPixel(pixel: vec2f) -> vec2f {
 }
 
 // Move a texture to a new base colour, keeping its grain.
-fn based(c: vec3f, mean: vec3f, base: vec4f) -> vec3f { return select(c, saturate(c - mean + base.rgb), base.a > 0.5); }
-// Low ground: a colour moved to the low colour, its difference from its material's mean kept as grain (as based() moves a texture),
+// Low ground: a colour moved to the low colour, its difference from its material's mean kept as grain (as a material's Color moves its steps),
 // so the palette still mixes the grain's hues where a single tone would land on one entry.
 fn lowTinted(c: vec3f, mean: vec3f) -> vec3f { return saturate(c - mean + u.lowColor); }
 // Card E8 (Painted Desert): the grey band at the foot of retail's raised ground. Retail's
@@ -385,6 +384,8 @@ var<private> surfacePreviewCover: f32 = 0.0;   // the previewed layer's coverage
 var<private> surfacePreviewSeen: f32 = -1.0;   // what of it the layers after it leave showing (-1 until it is drawn)
 // The inspector's pixel (GeometryFrame.probe): this invocation draws it, and how many layers it has recorded (probeOut).
 var<private> probeHere: bool = false;
+// A braided river's bed over the sand (its gravel, and how much of it): the sand and sand dust layers draw their material under it.
+var<private> riverBedOver: vec4f = vec4f(0.0);
 var<private> probeCount: u32 = 0u;
 // A layer's pattern, about evenly spread over 0 to 1: by the art pixel at Noise size 1, else smooth patches that size. Its edge noise and its
 // coverage read the same pattern, so the pixels a ragged edge reaches first are the ones a partial Amount keeps.
@@ -420,7 +421,7 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
         let rules = u32(r0.w);
         row += 2u + rules;
         let builtin = r0.x >= 0.0;
-        if (!builtin && r0.z < 0.0) { continue; }   // a material layer whose material the map lacks draws nothing
+        if (r0.z < -1.5) { continue; }   // a layer that draws a material the map lacks (a material layer, or an engine surface) draws nothing
         let k = min(u32(max(r0.x, 0.0)), 6u);
         // Amount is coverage: the share of the layer's area it covers, each covered pixel at full strength (TA's look), not an opacity.
         let amount = r0.y;
@@ -458,6 +459,7 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
             // A built-in that draws a material (docs/SURFACE_LAYERS.md phase 4) lays that material's color by its own share.
             var source = (*src)[k];
             if (r0.z >= 0.0) { source = groundPigment(p, u32(r0.z), surfaceFacts[3], surfaceFacts[4]); }
+            if (stage == 5u && k >= 5u) { source = mix(source, riverBedOver.rgb, riverBedOver.a); }   // sand dust and sand: a braided river's gravel
             *color = mix(*color, source, c);
             (*cover)[k] = select(1.0 - (1.0 - (*cover)[k]) * (1.0 - c), c, (*cover)[k] == 0.0);   // layers of one slot join as a union
         } else {
@@ -831,8 +833,8 @@ fn iceFrostLines(pixel: vec2f, keep: f32) -> f32 {
 
 // The beach (Zhon, the one world with the beach layer): sand where the bake found water within reach (beachField), sand bars painted to their crown
 // (the baked alpha, negative) and the beach's own colour. Beach sand is a shore material, so every read of the baked beach comes through here.
-fn beachColour(pixel: vec2f) -> vec3f { return based(roleColor(u.beachGround, u.slopeGround, pixel), roleMean(u.beachGround, u.slopeGround), u.beachBase); }
-fn beachMean() -> vec3f { return select(roleMean(u.beachGround, u.slopeGround), u.beachBase.rgb, u.beachBase.a > 0.5); }
+fn beachColour(pixel: vec2f) -> vec3f { return roleColor(u.beachGround, u.slopeGround, pixel); }
+fn beachMean() -> vec3f { return roleMean(u.beachGround, u.slopeGround); }
 // The beach's cover at p, its inland edge ragged by speck (0.5: smooth); the sand bars' own cover, before sandCrown scales it.
 fn beachSand(p: vec2f, speck: f32) -> f32 { return smoothstep(0.25, 0.75, beachField(p) + (speck - 0.5) * 0.5); }
 fn barCover(p: vec2f) -> f32 { return smoothstep(0.15, 0.6, max(-bakedFields(p).a, 0.0)); }
@@ -851,31 +853,6 @@ fn paintCoverage(p: vec2f, slope: f32, hollow: f32) -> vec4f {
     let raw = sampleMasks(maskPoint(p),0);
     return paintEdge(p, raw, slope, hollow);
 }
-// The lightest of the world's ground and beach materials, grain damped (snow
-// lies smoother than the ground it covers) and frosted: lifted 55% toward white,
-// as the sand block lifts the rock's colour by Sand light, so a dark ground
-// still reads as snow with its own tint. Lift 0 would be the bare material.
-fn snowMaterial(pixel: vec2f) -> vec3f {
-    const luma = vec3f(0.299, 0.587, 0.114);
-    var snow = worldGround(pixel);
-    var mean = groundMean();
-    if (u.beach != 0 && dot(beachMean(), luma) > dot(mean, luma)) { snow = beachColour(pixel); mean = beachMean(); }   // snow takes the beach when it is lighter
-    return saturate(mix(mix(snow, mean, 0.50), vec3f(1.0), 0.55));
-}
-// Moss: the world's slope cover (leaning toward its ground by Moss from
-// ground, as the face blend does), its brightness grain widened about the
-// cover's mean (not its hue, which would speckle) and a little darker, so a
-// patch reads as clumpy moss rather than ground.
-fn mossMaterial(pixel: vec2f) -> vec3f {
-    const luma = vec3f(0.299, 0.587, 0.114);
-    let cover = based(slopeGrassSource(pixel), slopeTexMean(), u.slopeBase);
-    let ground = worldGround(pixel);
-    let mean = mix(select(slopeTexMean(), u.slopeBase.rgb, u.slopeBase.a > 0.5), groundMean(), u.mossFromGround);
-    let face = mix(cover, ground, u.mossFromGround);
-    let grain = dot(face, luma) / max(dot(mean, luma), 0.02);
-    return saturate(face * (1.0 + (grain - 1.0) * 0.8) * 0.85);
-}
-
 // Crystal shore slabs (card C2): water repaints whatever colour a crystal mark
 // gives, so the marks of cells under water are read here. A slab's bed is lit
 // paler than the water round it, slab by slab (the field's 0.8-1.0 brightness
@@ -1549,7 +1526,7 @@ fn absorbFilter(slot: u32, t: f32) -> vec3f {
 fn sandWeathered() -> vec3f {
     let rockAverage = select(rockMaterialMean(0u), u.rock[0].rockColors[0].rgb, u.rock[0].rockColors[0].a > 0.5);   // the world's rock (slot 0): a world's sand
     let weathered = mix(vec3f(mix(rockAverage, vec3f(dot(rockAverage, vec3f(0.299, 0.587, 0.114))), 0.25)), vec3f(1.0), u.sandLight * 0.55);
-    return select(weathered, u.sandBase.rgb, u.sandBase.a > 0.5);
+    return weathered;
 }
 // How much of a pixel the sand covers, from the sand's share there (0..1): over the thinning edge a scatter of clumps 3 to 8 px across,
 // with the ground's grass and moss regrowing through it in tufts (regrowth scales them: 1 for the deposits, less on the surf's beach near the water). The deposits' sand and the surf's beach draw through it.
@@ -1597,14 +1574,6 @@ fn debrisRegrown(deposit: f32, p: vec2f, wet: f32, vegetation: f32) -> vec2f {
     let need = clamp(((0.45 * stretch + 0.35 * clump + 0.2 * tuft) - 0.5) * 2.2 + 0.5, 0.03, 1.0) * lush + 0.45 * wet * min(lush, 1.0);
     let grown = 1.0 - smoothstep(need - 0.06, need + 0.06, deposit * 0.9);
     return vec2f(grown, grown * smoothstep(0.25, 0.7, wet) * min(lush, 1.0) * smoothstep(0.02, 0.1, deposit));
-}
-fn sandMaterialAt(scatter: vec2f) -> vec3f {
-    let rockLevel = rockMaterialMean(0u);
-    let weathered = sandWeathered();
-    var fragment = roleColor(u.debrisGround, u.slopeGround, scatter);
-    fragment = mix(fragment, vec3f(1.0), u.sandLight * 0.45);
-    if (u.sandBase.a > 0.5) { fragment = saturate(fragment - rockLevel + u.sandBase.rgb); }
-    return mix(weathered, fragment, u.sandGrain);
 }
 
 // Full-precision current-tile geometry. Scalar fields keep the stride at 56
@@ -1863,7 +1832,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // so it reads the slope texture only for the mineral margins.
     let tabled = cvr(0u).x > 0.5;
     let slopeTexWanted = slope > u.slopeProfile.x && !tabled;
-    if (slopeTexWanted || u.mineralMargins != 0) { slopeBased = based(slopeGrassSource(pixel), slopeTexMean(), u.slopeBase); }
+    if (slopeTexWanted || u.mineralMargins != 0) { slopeBased = slopeGrassSource(pixel); }
     // The level ground before any slope cover, for crystal tops (crystalGrain).
     let levelGround = grass;
     var slopeShare = 0.0;
@@ -1958,11 +1927,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (surfX < 900.0) { nearWater = max(nearWater, surfWet(surfX, surfQ, p, surfE)); }
     }
     surfMask = array<f32, 7>();
-    if (soil > 0.0) {
-        // Bare soil is the world's weathered rock, darker and browner, with a grain of its own.
-        surfSrc[0] = sandWeathered() * vec3f(0.58, 0.5, 0.42) * (0.82 + 0.36 * terrainNoise(p * 3.0 + vec2f(7.0, 83.0)).g);
-        surfMask[0] = soil;
-    }
+    surfMask[0] = soil;   // bare soil: the world's soil material (@soil) where the cover thins
     surfSrc[1] = rock; surfMask[1] = exposed;
     if (u.beach != 0 && h > u.sea - 1.0) {
         // Beach sand within reach of the water (baked), or failing that a low band above the waterline; its inland edge is ragged and breaks into grains.
@@ -2033,7 +1998,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // their height falls in; faces keep their bands.
         let capped = 1.0 - level * select(0.0, highShare(p), ownGround);
         material = mix(material, bedColour, max(bedCoverage * u.rock[rs & rockMask].strataContrast * onRaised * capped, u.rock[rs & rockMask].strata * painted.x));
-        if (u.baseBand > 0.0) { bandSrc = strataSlot(4); bandMask = baseBandMask(p, h - u.base, slope)*select(1.0,exposed,!ownGround); }
+        if (u.baseBand > 0.0) { bandMask = baseBandMask(p, h - u.base, slope)*select(1.0,exposed,!ownGround); }   // its material: the world's band (@band)
     }
     surfMask = array<f32, 7>();
     surfSrc[0] = bandSrc; surfMask[0] = bandMask;
@@ -2071,7 +2036,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             let grains=lying.z*1.2*(shelfHash(floor(grainPixel(pixel))+23.0)-.5)*smoothstep(0.0,.08,lying.y);
             let regrown=debrisRegrown(max(lying.y*(1.0+2.0*lying.z)+grains,0.0),p,clamp(lying.w*1.6,0.0,1.0),place.vegetation);
             depositCover=clamp(lying.y*.9+.45,0.0,1.0)*(1.0-regrown.x);
-            if(regrown.y>0.0){surfSrc[0]=mossMaterial(pixel)*.85;surfMask[0]=regrown.y*.6;}
+            if(regrown.y>0.0){surfMask[0]=regrown.y*.6;}   // moss on regrown debris: the world's moss material (@moss)
         }
     }
     let source=rockSourceAt(p);
@@ -2086,34 +2051,26 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // which covers them. Painted rock is the rock face where the face is drawn (faceGate), and the plain rock material elsewhere.
     if (u.paintOn != 0) {
         surfSrc[2] = rockSkinColor(rock,grain,skin); surfMask[2] = painted.x * (1.0 - faceGate);
-        surfSrc[3] = snowMaterial(pixel); surfMask[3] = painted.y;
-        surfSrc[4] = mossMaterial(pixel); surfMask[4] = painted.w;
+        surfMask[3] = painted.y; surfMask[4] = painted.w;   // painted snow and moss: the world's snow and moss materials
     }
     {
         // Procedural sand: a colour with two scales of grain, so it needs no
         // sampled art. Coverage comes from the bake.
         let sand = bakedFields(p).a * place.deposits;
         if (sand > 0.0) {
-            // Weathered rock and its grains (sandMaterialAt): a biome's sand follows its own rock.
-            var weathered = sandWeathered();
-            var sandMaterial = sandMaterialAt(scatter);
-            // riverfix: where a braided river's bed lies (mask plane 19) the sand is its gravel and silt instead, the world's river-bed colour (or its rock's,
-            // darkened) with the sand's grain and a mottle of pebble-sized flecks; the pebbles themselves are the loose-stone scatter the bed paints denser.
+            // The sand and its dust draw the world's sand material (@sand). riverfix: where a braided river's bed lies (mask plane 19) they are
+            // its gravel and silt instead, the world's river-bed colour (or its rock's, darkened) with a mottle of pebble-sized flecks; the
+            // pebbles themselves are the loose-stone scatter the bed paints denser.
             let bed = max(sampleMasks(maskPoint(p),4).a, 0.0);
             if (bed > 0.0) {
                 let tone = select(rockMaterialMean(0u) * vec3f(0.78, 0.74, 0.68), u.riverBed.rgb, u.riverBed.a > 0.5);
                 let fleck = valueNoise(pixel / 1.4 + 7.0) * 0.5 + valueNoise(pixel / 2.9 + 41.0) * 0.3 + valueNoise(pixel / 9.0 + 3.0) * 0.2;
-                let gravel = saturate(tone * (1.0 + 0.22 * fleck));
-                let on = min(bed * 8.0, 1.0);   // any bed at all: its edges keep the sand cover's own scatter, not a blend toward the world's sand
-                weathered = mix(weathered, tone, on);
-                sandMaterial = mix(sandMaterial, gravel, on);
+                riverBedOver = vec4f(saturate(tone * (1.0 + 0.22 * fleck)), min(bed * 8.0, 1.0));   // any bed at all: its edges keep the sand cover's own scatter
             }
-            // Three stages, so sand thins into the ground over tens of
-            // pixels: fines tint what is there, then grains appear between
-            // grass blades (a per-pixel threshold against fine noise), then
-            // sand covers the ground.
-            surfSrc[5] = weathered; surfMask[5] = smoothstep(0.0, 0.6, sand) * u.sandDust * 0.6;
-            surfSrc[6] = sandMaterial; surfMask[6] = sandCoverAt(sand, p, 1.0);
+            // Three stages, so sand thins into the ground over tens of pixels: dust tints what is there, then grains appear between grass blades
+            // (a per-pixel threshold against fine noise), then sand covers the ground.
+            surfMask[5] = smoothstep(0.0, 0.6, sand) * u.sandDust * 0.6;
+            surfMask[6] = sandCoverAt(sand, p, 1.0);
         }
     }
     {
@@ -2249,7 +2206,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let lumps = terrainNoise(p * 0.05 + vec2f(31.0, 7.0)).r + (n.b - 0.5) * 0.12;
         let raised = smoothstep(u.base + 12.0, u.base + 40.0, h);
         let crest = smoothstep(0.0, 0.05, lumps - mix(0.75, 0.45, u.rock[rs & rockMask].iceCrest)) * raised;
-        surfSrc[0] = snowMaterial(pixel); surfMask[0] = crest;
+        surfMask[0] = crest;   // the world's snow material (@snow)
     }
     // Card G6, snow on the flat tops of raised ice (retail ice-3's white top with a few pits): where the blurred
     // height is gentle the block is snow, its edge ragged, so the slate begins at the crest's roll-over.
@@ -2257,7 +2214,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let gentle = 1.0 - smoothstep(0.42, 0.78, length(gSoft) + (n.g - 0.5) * 0.25);
         let cap = u.rock[rs & rockMask].iceSnow * iceMesa * gentle;
         // A little under the plain's snow: lit at the block's strong light a full-white top clips and loses its pits (retail's top ~(225,232,255)).
-        surfSrc[1] = snowMaterial(pixel) * 0.9; surfMask[1] = cap;
+        surfMask[1] = cap;
     }
     {
         surfaceStage(7u, &material, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);

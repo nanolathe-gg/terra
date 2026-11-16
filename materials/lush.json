@@ -786,7 +786,7 @@
   "deposit": {"params": {"reach": 1, "round": 0.7}, "vary": {"reach": [0.8, 1.4], "haloRough": [4, 10]}}
  },
  "world": {
-    "materials": {"ground": "lush-ground", "water": "lush-water", "rock": "lush-rock", "slope": "lush-slope", "debris": "lush-debris", "high": "lush-highland", "extra": ["lush-swamp"]},
+    "materials": {"ground": "lush-ground", "water": "lush-water", "rock": "lush-rock", "slope": "lush-slope", "debris": "lush-debris", "high": "lush-highland", "extra": ["lush-swamp"], "soil": "lush-soil", "snow": "lush-snow", "moss": "lush-moss", "sand": "lush-sand", "band": "lush-band"},
     "knobDefaults": {
         "coastRamp": 0.4,
         "looseSupply": 0.08,

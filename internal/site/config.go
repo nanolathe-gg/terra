@@ -298,6 +298,23 @@ func (s *Site) configure() error {
 		if _, ok := c["surface"]; !ok {
 			c["surface"] = clone(s.defaults["surface"])
 		}
+		// A layer's material "@soil" is the world's own (world.materials.soil): the default stack names each engine surface's material by
+		// role, and each world says which library material that is.
+		if layers, ok := c["surface"].([]any); ok {
+			for _, l := range layers {
+				layer, ok := l.(map[string]any)
+				if !ok {
+					continue
+				}
+				if m, ok := layer["material"].(string); ok && strings.HasPrefix(m, "@") {
+					if key, ok := roles[m[1:]].(string); ok {
+						layer["material"] = key
+					} else {
+						delete(layer, "material")
+					}
+				}
+			}
+		}
 		if river, ok := table["river"]; ok {
 			c["river"] = clone(river)
 		}

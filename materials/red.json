@@ -976,7 +976,7 @@
   "vent": {"params": {"size": 1.4, "thick": 0.8, "rim": 0.45, "rimSat": 1.6}}
  },
  "world": {
-    "materials": {"ground": "red-ground", "water": "red-water", "rock": "red-rock", "slope": "red-slope", "debris": "red-debris", "extra": ["red-rough"]},
+    "materials": {"ground": "red-ground", "water": "red-water", "rock": "red-rock", "slope": "red-slope", "debris": "red-debris", "extra": ["red-rough"], "soil": "red-soil", "snow": "red-snow", "moss": "red-moss", "sand": "red-sand", "band": "red-band"},
     "knobDefaults": {
         "shoreRock": 96,
         "shoreShelf": 96,

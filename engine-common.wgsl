@@ -201,9 +201,6 @@ struct Uniforms {
     fringeRange: vec2f,
     transitionBody: i32,
     // A world's chosen base colours (a = 1 when set) and its textures' means.
-    slopeBase: vec4f,
-    sandBase: vec4f,
-    beachBase: vec4f,
     shallowBase: vec4f,
     beach: i32,
     waterMid: vec4f,   // rgb mid-depth colour, a: its depth (0: two stops)
@@ -226,7 +223,6 @@ struct Uniforms {
     wetBand: f32,
     shallowDepth: f32,
     deepDepth: f32,
-    mossFromGround: f32,
     lightCap: f32,
     shadeDepth: f32,      // share of the directional shading kept (1: all)
     ambient: f32,       // unlit share of the light (0.42; Moon lower: no sky)
@@ -243,7 +239,6 @@ struct Uniforms {
     waterSoft: f32,
     crispShore: f32,
     bankRock: f32,
-    sandGrain: f32,
     // Bake (engine-bake.wgsl).
     reliefScale: f32,     // wavelength of the first octave, world px
     reliefAmount: f32,    // height per unit slope per wavelength

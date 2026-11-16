@@ -817,7 +817,7 @@
   "vent": {"params": {"size": 0.65, "rim": 0.85}}
  },
  "world": {
-    "materials": {"ground": "archipelago-ground", "water": "archipelago-water", "rock": "archipelago-rock", "slope": "archipelago-slope", "debris": "archipelago-debris", "fringe": "archipelago-fringe", "body": "archipelago-body", "ring": "archipelago-ring"},
+    "materials": {"ground": "archipelago-ground", "water": "archipelago-water", "rock": "archipelago-rock", "slope": "archipelago-slope", "debris": "archipelago-debris", "fringe": "archipelago-fringe", "body": "archipelago-body", "ring": "archipelago-ring", "soil": "archipelago-soil", "snow": "archipelago-snow", "moss": "archipelago-moss", "sand": "archipelago-sand", "band": "archipelago-band"},
     "knobDefaults": {
         "crackSeverity": 0.7,
         "crackMajor": 0.9,

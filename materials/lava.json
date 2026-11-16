@@ -552,7 +552,7 @@
   "vent": {"params": {"look": "pit", "hole": 8, "ring": 34, "cell": 10, "lumps": 1, "lumpTone": 0.7, "rim": 0.55}}
  },
  "world": {
-    "materials": {"ground": "lava-ground", "water": "lava-water", "rock": "lava-rock", "slope": "lava-slope", "debris": "lava-debris"},
+    "materials": {"ground": "lava-ground", "water": "lava-water", "rock": "lava-rock", "slope": "lava-slope", "debris": "lava-debris", "soil": "lava-soil", "snow": "lava-snow", "moss": "lava-moss", "sand": "lava-sand", "band": "lava-band"},
     "knobDefaults": {
         "undulationCover": 1,
         "undulationScale": 96,

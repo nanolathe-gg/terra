@@ -111,7 +111,7 @@ test('a world without a beach borrows another world\'s: its layer, its numbers, 
   assert.equal(borrowed.materials.beach, 'zhon-beach', 'its sand is the lender\'s beach material');
   assert.deepEqual(borrowed.material, {wetBand: 9, beachWidth: 178, beachHeight: 6, beachRGB: [200, 180, 140]});
   assert.equal(facts(borrowed).beachLayer, 1);
-  assert.ok(colorRows(borrowed, new URLSearchParams()).some(([k]) => k === 'beach'), 'and the Beach color row');
+  assert.ok(!colorRows(borrowed, new URLSearchParams()).some(([k]) => k === 'beach'), 'its color is its material’s (no Beach color row)');
   const own = {...world(), layers: ['slopeGrass', 'beach'], material: {beachWidth: 120}};
   assert.equal(borrowBeach(own, new URLSearchParams('beachFrom=zhon')).material.beachWidth, 120, 'a world\'s own beach stays its own');
   // Every world that lacks a beach is offered the ones whose tables make one.

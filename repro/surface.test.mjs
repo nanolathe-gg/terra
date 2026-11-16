@@ -1,20 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {surfaceRows, copySurface, SURFACE_BUILTINS, SURFACE_STAGES, SURFACE_FACTS, SURFACE_FLAGS_ROW} from '../sculpt-material-model.js';
+import {surfaceRows, copySurface, SURFACE_BUILTINS, SURFACE_STAGES, SURFACE_FACTS, SURFACE_FLAGS_ROW, SURFACE_DRAWABLE} from '../sculpt-material-model.js';
 import {withWorldMaterials, materialsInUse, copyMaterials, roleOf, LIBRARY, surfaceMaterials, deleteMaterial, assignMaterial, worldMaterials, worldOwnMaterials, keptWorldMaterials, worldKept} from '../sculpt-materials.js';
 
 const defaults = JSON.parse(readFileSync(new URL('../materials/defaults.json', import.meta.url), 'utf8'));
 const world = name => JSON.parse(readFileSync(new URL(`../materials/${name}.json`, import.meta.url), 'utf8')).world;
 
-test('the default surface draws every built-in once, in a stage order the draw can run, and reads no facts', () => {
+test('the default surface draws every built-in once, in a stage order the draw can run, each engine surface with the world’s material', () => {
   const names = defaults.surface.map(l => l.builtin);
   assert.deepEqual([...names].sort(), Object.keys(SURFACE_BUILTINS).sort(), 'each built-in once');
   const stages = names.map(n => SURFACE_BUILTINS[n][0]);
   assert.deepEqual(stages, [...stages].sort((a, b) => a - b), 'listed in stage order');
   const {rows, flags} = surfaceRows(defaults.surface);
   assert.equal(rows.length, 2 * names.length, 'two rows a layer without a rule');
-  assert.equal(flags[0], 0, 'no fact is computed for the shipped stack');
+  assert.equal(flags[0], 1, 'materials read the wear and deposit facts');
+  for (const l of defaults.surface) assert.equal(l.material?.startsWith('@') ?? false, SURFACE_DRAWABLE.includes(l.builtin), `${l.builtin}: the world’s material, by role, exactly where the engine colored it`);
+  assert.ok(surfaceRows([{builtin: 'soil'}]).rows[0][2] === -2, 'an engine surface without a material draws nothing');
 });
 
 test('rows sort by stage, keep the list order within a stage, and head each stage with its first row and count', () => {
@@ -150,4 +152,10 @@ test('surface: the world keeps its role and layer materials, as it keeps its gro
   const relooked = {...config, surface: [{id: 'cap', name: 'Cap', material: 'lush-ground', stage: 'snow'}]};
   assert.deepEqual(keptWorldMaterials(own, relooked).map(m => m.worldSlope ? 'slope' : m.worldLayer), ['slope']);
   assert.deepEqual(worldKept(edited).map(m => m.slot).length, 3 + 1, 'ground, water, slope and the cap go with the world');
+});
+
+test('surface: a stored list from before the engine surfaces drew materials takes the world’s for them', async () => {
+  const {withSurfaceMaterials} = await import('../sculpt-material-model.js');
+  const base = [{builtin: 'sand', material: 'green-sand'}, {builtin: 'rock'}], old = [{builtin: 'sand', amount: .5}, {builtin: 'rock'}, {builtin: 'soil'}];
+  assert.deepEqual(withSurfaceMaterials(old, base), [{builtin: 'sand', amount: .5, material: 'green-sand'}, {builtin: 'rock'}, {builtin: 'soil'}]);
 });

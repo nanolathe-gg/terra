@@ -58,7 +58,7 @@ test('the Colors panel shows the rows a world has, and a cleared row the server 
   const config = {layers: ['body'], material: {groundCover: {plants: {flowers: {palette: [[1, 2, 3, 1]]}}}}, colors: {sun: '#ffffff'}};
   const labels = colorRows(config, new URLSearchParams()).map(([, l]) => l);
   assert.ok(labels.includes('Flower 1') && !labels.includes('Flower 2') && !labels.includes('Beach') && !labels.includes('Strata 1'));
-  assert.ok(colorRows({...config, layers: ['beach']}, new URLSearchParams('strata=1')).some(([k]) => k === 'beach' || k === 'strata1'));
+  assert.ok(!colorRows({...config, layers: ['beach']}, new URLSearchParams('strata=1')).some(([k]) => ['beach', 'slope', 'sand', 'strata1'].includes(k)), 'a beach, a slope cover and sand take their materials’ colors');
   // Low ground's color shows while its Tint is above 0.
   assert.ok(!labels.includes('Low ground'));
   assert.ok(colorRows(config, new URLSearchParams('lowTint=.5')).some(([k, l]) => k === 'low' && l === 'Low ground'));

@@ -807,7 +807,7 @@
   "deposit": {"params": {"reach": 1, "round": 0.7}, "vary": {"reach": [0.8, 1.4], "haloRough": [4, 10]}}
  },
  "world": {
-    "materials": {"ground": "green-ground", "water": "green-water", "rock": "green-rock", "slope": "green-slope", "debris": "green-debris"},
+    "materials": {"ground": "green-ground", "water": "green-water", "rock": "green-rock", "slope": "green-slope", "debris": "green-debris", "soil": "green-soil", "snow": "green-snow", "moss": "green-moss", "sand": "green-sand", "band": "green-band"},
     "knobDefaults": {
         "coastRamp": 0.75,
         "looseSupply": 0.08,
