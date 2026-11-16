@@ -293,6 +293,28 @@ Built (each a commit; the measurements are in their messages):
 - **Fix: every rock type's and the crystal material cached again.** Round 4's 84344e55 let a stroke's shape settings change the cached
   set, which rebuilt the cache inside a draw and failed the digest sweep. The smoke's 1024 MiB budget makes the saving unnecessary.
 
+## Round 6 (branch `surface-layers-6`, 2026-11-16): vegetation
+
+The owner: "Vegetation round". The seven-class ground cover (off in every world) is retired, and its plants grow on surface layers.
+
+Built (each a commit; the measurements are in their messages):
+- **One rule evaluator**: the rule's windows and score live in engine-common.wgsl (surfaceWindows, surfaceScore), read by the color
+  pass and the bake. The 27 identity scenes are byte-identical.
+- **The cover table is retired**: the class pick and its recolor, the table's flowers (the Flowers material is a layer), Vegetation cover,
+  Flower density and the Colors panel's Vegetation and Flower rows. Lushness and a stroke's Local vegetation stay (they move bare rock,
+  debris regrowth and wet ground, and now the plants). Byte-identical on the 27 scenes.
+- **The Moisture and Soil depth facts read the world's `site` numbers** (wetness thresholds, soil and moisture terms), which the table
+  wrote only while it was on, so they were computed from zeros. The 27 scenes are identical (no default layer reads them); with the
+  Moss and Dry ground presets on Green the picture changes 2.5% more (dry ground finds sunny slopes and the sunny shore bank).
+- **Plants on layers**: a material layer grows one kind (grass tufts, meadow tufts, moss cushions, shrubs) at a Plant density, where it
+  shows; a layer may grow plants alone ("None: plants only"). The bake places them (plantMask): the material layers in draw order, the
+  same rule on the facts the bake knows (slope to top), each covering the plants under it by its share; Lushness and Local vegetation
+  scale them; Vegetation relief their height. Presets: Grass tufts on level ground, Meadow in damp ground, Shrubs in damp hollows, and
+  Moss in damp shade grows moss cushions.
+
+Limits: plants know no shares (rock, debris, sand) or convexity, and a built-in layer neither grows nor covers them (the bake does not
+see the draw's own surfaces); their density is one value a 4-px cell, not the layer's pixel pattern.
+
 ## Sources (phase 1)
 
 Built-in sources are the surfaces the engine draws today without a material: rock (the rock type's color and
@@ -310,5 +332,5 @@ Phase 4 turns them into materials one by one.
 ## Open questions for the owner
 
 - Crystal's art (round 5): judge the flatter tops by eye.
-- The cover classes' plants (tufts and shrubs) following a layer: needs the bake to read surface rules.
+- Plants (round 6): judge the presets' tufts, meadow and shrubs by eye; whether built-ins should cover plants.
 - Converting highland, base band and rock face into rules means their World rows move into the Surface section.
