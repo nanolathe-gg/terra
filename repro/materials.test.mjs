@@ -103,6 +103,15 @@ test('a Slope blur stages its input and its slope together, and passes its input
   assert.deepEqual(stagePlan(p).stages, []); assert.match(programSource(p).main, /let v1=v0;/);
 });
 
+test('the cache budget counts the stage textures while a material in use needs them', async () => {
+  const {materialCacheUsage, materialStaged, MAX_STAGES} = await import('../sculpt-materials.js');
+  const plain = materialCacheUsage(2), staged = materialCacheUsage(2, 512, true);
+  assert.equal(plain.stageBytes, 0); assert.equal(staged.stageBytes, (MAX_STAGES + 2) * 16 * 512 * 512); assert.equal(staged.bytes - plain.bytes, staged.stageBytes);
+  assert.ok(!materialStaged(LIBRARY['red-ground']));
+  assert.ok(materialStaged(graph([node('n', 'noise'), node('b', 'blur', {in: {in: 'n'}}), node('o', 'output', {in: {color: 'b'}})])));
+  assert.ok(!materialStaged(graph([node('n', 'noise'), node('b', 'blur', {enabled: false, in: {in: 'n'}}), node('o', 'output', {in: {color: 'b'}})])), 'a Blur that is off needs none');
+});
+
 test('a Stamp stages only its Shape; its Base, Coordinates and Density are read where it stamps', () => {
   const m = graph([node('w', 'warp'), node('b', 'noise'), node('f', 'noise', {kind: 'facets'}), node('g', 'gradient', {in: {in: 'f'}}), node('d', 'noise', {kind: 'smooth'}),
     node('st', 'stamp', {in: {base: 'b', shape: 'g', in: 'w', density: 'd'}}), node('o', 'output', {in: {color: 'st'}})]);

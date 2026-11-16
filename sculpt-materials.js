@@ -257,6 +257,8 @@ export const programKey = program => JSON.stringify(program.instructions.map(i =
 // behind it. STAGED lists the inputs each such node computes in its stage; it is staged once it is on and those are wired. A pass reads
 // earlier stages only where its own nodes reach one (auto layouts leave out a texture a pass never reads, so the cache binds it only then).
 const STAGED = {blur: ['in'], slopeblur: ['in', 'slope'], stamp: ['shape']};
+// Whether a material needs the stage textures: one of its staged nodes is on and wired.
+export const materialStaged = material => stagePlan(compileMaterial(material)).stages.length > 0;
 export function stagePlan(program) {
   const list = program.instructions, keys = i => NODES[list[i].type].inputs.map(([key]) => key), staged = i => STAGED[list[i].type] ?? [];
   const linksOf = i => staged(i).map(key => list[i].links[keys(i).indexOf(key)]);
@@ -583,7 +585,10 @@ export function parseMaterialText(value) {
   if (m?.format !== 'terraform-material') throw Error('The clipboard has no material.');
   return {name: nameOf(m.name), ...copyMaterial(m)};
 }
-export function materialCacheUsage(count, pool = MATERIAL_REPEAT) {
+// What the cache holds: 28 bytes a texel a material, and while any material in use has a staged node (stagePlan) the stage textures,
+// MAX_STAGES layers and two scratch layers of rgba32float.
+export function materialCacheUsage(count, pool = MATERIAL_REPEAT, staged = false) {
   if (!Number.isInteger(count) || count < 0 || count >= MATERIAL_SLOTS) throw Error('Invalid material cache size.');
-  const bytes = count * 28 * pool * pool; return {bytes, budget: MATERIAL_CACHE_BYTES, fits: bytes <= MATERIAL_CACHE_BYTES};
+  const stageBytes = staged ? (MAX_STAGES + 2) * 16 * pool * pool : 0, bytes = count * 28 * pool * pool + stageBytes;
+  return {bytes, stageBytes, budget: MATERIAL_CACHE_BYTES, fits: bytes <= MATERIAL_CACHE_BYTES};
 }

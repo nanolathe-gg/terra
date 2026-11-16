@@ -65,7 +65,7 @@ test('a Blur at radius 0 leaves its input exactly; a wider one softens it, and t
   } finally { s.dispose(); }
 });
 
-test('a Stamp at Coverage 0 is its Base; Stamp and Slope blur repeats join themselves', async () => {
+test('a Stamp at Coverage 0 is its Base; Stamp and Slope blur repeats join themselves; stage textures go with the last staged material', async () => {
   await openHost();
   const s = await openScene({biome: 'green', ground: false, strokes: []}, 'biome=green&mapX=5&mapY=5');
   try {
@@ -79,6 +79,11 @@ test('a Stamp at Coverage 0 is its Base; Stamp and Slope blur repeats join thems
     assert.ok(same(stamps, await win(640 + pool, 640)) && same(stamps, await win(640, 640 + pool)), 'the stamped repeat joins itself');
     use([shape, {id: 'h', type: 'noise', params: {size: 40, seed: 3}}, {id: 'sb', type: 'slopeblur', in: {in: 'f', slope: 'h'}, params: {distance: 12}}, {id: 'o', type: 'output', in: {color: 'sb', height: 'sb'}, params: {relief: 2}}]);
     const smeared = await win(); assert.ok(same(smeared, await win(640 + pool, 640)) && same(smeared, await win(640, 640 + pool)), 'the smeared repeat joins itself');
+    // The stage textures exist while a material in use needs them, and go with the last one.
+    const cache = s.renderer.groundCache, held = s.renderer.fixedBytes; assert.ok(cache.stageTexture, 'staged materials have their textures');
+    use([base, {id: 'o', type: 'output', in: {color: 'b'}}]); assert.ok(same(plain, await win()));
+    assert.equal(cache.stageTexture, null, 'none in use, none kept');
+    if (held !== undefined) assert.ok(s.renderer.fixedBytes < held, 'and the renderer stops counting them');
     assert.deepEqual(s.errors, []);
   } finally { s.dispose(); }
 });

@@ -154,9 +154,11 @@ alpha, averaging its input; a Stamp's Shape copied as it is, to be cut into
 discs where the Stamp is read), and every later
 pass (another Blur's stage, the material's pass, the node thumbnails) reads
 the layer instead of the branch behind it. The stage textures
-(`rgba32float`, four Blur layers and two scratch layers, 24 MiB at 512 px)
-are made the first time a material in use has a Blur and are shared by all
-materials, since each material's stages run just before its own pass. The
+(`rgba32float`, four layers and two scratch layers, 24 MiB at 512 px) are
+made the first time a material in use has a staged node, shared by all
+materials (each material's stages run just before its own pass), counted in
+the material cache's budget while held, and freed once no material in use
+needs them. The
 material's pass evaluates only the nodes its Material node reaches.
 
 Each material in use has a layer of the cached repeat (512 px: color and

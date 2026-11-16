@@ -64,6 +64,14 @@ export class MaterialCache {
     const r = this.renderer; if (r.resources) r.fixedBytes = [...r.resources.values()].filter(v => v.kind === 'materials' || v.kind === 'shared').reduce((n, v) => n + v.bytes, 0);
     this.stageSize = size;
   }
+  // Once no material in use has a staged node, the stage textures go; the next one that needs them makes them again.
+  releaseStages() {
+    if (!this.stageTexture) return;
+    const r = this.renderer;
+    for (const texture of [this.stageTexture, this.scratchTexture]) { if (r.release) r.release(texture); else texture.destroy(); }
+    this.stageTexture = this.scratchTexture = null; this.stageSize = 0;
+    if (r.resources) r.fixedBytes = [...r.resources.values()].filter(v => v.kind === 'materials' || v.kind === 'shared').reduce((n, v) => n + v.bytes, 0);
+  }
   stagePipelines(program) {
     const id = 'stages ' + programKey(program);
     if (!this.pipelines.has(id)) {
@@ -96,14 +104,16 @@ export class MaterialCache {
   }
   // The cache's shape for these materials (a Map of slot to material): which layer each slot reads. No GPU work is submitted.
   prepare(pool, materials) {
-    const usage = materialCacheUsage(materials.size, pool);
+    const programs = new Map([...materials].map(([slot, m]) => [slot, compileMaterial(m)])), staged = [...programs.values()].some(p => stagePlan(p).stages.length);
+    const usage = materialCacheUsage(materials.size, pool, staged);
     if (!usage.fits) throw Error(`These materials need ${(usage.bytes / 1048576).toFixed(0)} MiB; the cache budget is ${usage.budget / 1048576} MiB. Use fewer materials.`);
     const layers = [...materials.keys()].sort((a, b) => a - b);
     if (this.pool !== pool || String(this.layers) !== String(layers)) { this.allocate(layers.length ? pool : 1, Math.max(1, layers.length)); this.pool = pool; this.layers = layers; }
     const r = this.renderer, table = r.uniform.get('ground');
     for (let slot = 0; slot < table.count; slot++) for (const key of ['cacheLayer', 'colorLayer'])
       r.uniformView.setInt32(table.offset + slot * table.stride + table.members.get(key).offset, layers.indexOf(slot), true);
-    this.entries = layers.map((slot, layer) => ({slot, layer, material: materials.get(slot), program: compileMaterial(materials.get(slot))}));
+    this.entries = layers.map((slot, layer) => ({slot, layer, material: materials.get(slot), program: programs.get(slot)}));
+    if (!staged) this.releaseStages();
   }
   // Generates what changed. Called inside the draw cycle, so a fast drag never queues more than one run a frame.
   sync(pool, materials) {
