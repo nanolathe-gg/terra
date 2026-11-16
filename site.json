@@ -118,6 +118,7 @@
     "sculpt-material-preview.js",
     "sculpt-material-graph.js",
     "sculpt-material-editor.js",
-    "materials/textures.json"
+    "materials/textures.json",
+    "materials/snippets.json"
   ]
 }

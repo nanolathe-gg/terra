@@ -1,0 +1,121 @@
+{
+ "cracked-mud": {
+  "name": "Cracked mud",
+  "keywords": "cracked mud dry lakebed playa plates",
+  "nodes": [
+   {"id":"cracks","type":"noise","name":"Mud cracks","kind":"cracks","params":{"size":36,"jitter":0.85,"seed":0},"x":0,"y":0},
+   {"id":"depth","type":"levels","name":"Crack depth","params":{"low":0,"high":0.18,"gamma":0.6},"in":{"in":"cracks"},"x":240,"y":0},
+   {"id":"plates","type":"noise","name":"Plate tones","kind":"facets","params":{"size":36,"jitter":0.85,"seed":0},"x":0,"y":150},
+   {"id":"tone","type":"gradient","name":"Mud colors","stops":[[0,0.55,0.45,0.34],[1,0.68,0.57,0.43]],"in":{"in":"plates"},"x":240,"y":150},
+   {"id":"mud","type":"combine","name":"Cracked mud","kind":"multiply","in":{"a":"tone","b":"depth"},"x":480,"y":0}
+  ]
+ },
+ "cobbles": {
+  "name": "Cobbles",
+  "keywords": "cobbles cobblestones pebbles gravel stones beach",
+  "nodes": [
+   {"id":"joints","type":"noise","name":"Stone joints","kind":"cracks","params":{"size":18,"jitter":1,"seed":0},"x":0,"y":0},
+   {"id":"domes","type":"levels","name":"Rounded stones","params":{"low":0,"high":0.5,"gamma":0.45},"in":{"in":"joints"},"x":240,"y":0},
+   {"id":"stones","type":"noise","name":"Stone tones","kind":"facets","params":{"size":18,"jitter":1,"seed":0},"x":0,"y":150},
+   {"id":"tone","type":"gradient","name":"Stone colors","stops":[[0,0.4,0.38,0.36],[1,0.66,0.63,0.58]],"in":{"in":"stones"},"x":240,"y":150},
+   {"id":"cobbles","type":"combine","name":"Cobbles","kind":"multiply","in":{"a":"tone","b":"domes"},"x":480,"y":0}
+  ]
+ },
+ "basalt-hex": {
+  "name": "Basalt columns",
+  "keywords": "basalt columns hex hexagon honeycomb lava tiles",
+  "nodes": [
+   {"id":"joints","type":"noise","name":"Column joints","kind":"cracks","params":{"size":26,"jitter":0.12,"hex":1,"seed":0},"x":0,"y":0},
+   {"id":"edges","type":"levels","name":"Column tops","params":{"low":0,"high":0.3,"gamma":0.6},"in":{"in":"joints"},"x":240,"y":0},
+   {"id":"tops","type":"noise","name":"Top tones","kind":"facets","params":{"size":26,"jitter":0.12,"hex":1,"seed":0},"x":0,"y":150},
+   {"id":"tone","type":"gradient","name":"Basalt colors","stops":[[0,0.16,0.15,0.16],[1,0.36,0.34,0.34]],"in":{"in":"tops"},"x":240,"y":150},
+   {"id":"basalt","type":"combine","name":"Basalt columns","kind":"multiply","in":{"a":"tone","b":"edges"},"x":480,"y":0}
+  ]
+ },
+ "scratches": {
+  "name": "Scratches",
+  "keywords": "scratches gouges scuffs marks streaks",
+  "nodes": [
+   {"id":"marks","type":"scatter","name":"Scratches","params":{"spacing":10,"radius":6,"coverage":0.6,"hardness":0.3,"elongation":0.95,"direction":0,"directionVariation":0.3},"x":0,"y":0},
+   {"id":"tone","type":"gradient","name":"Scratch colors","stops":[[0,0,0,0],[1,0.8,0.78,0.72]],"in":{"in":"marks"},"x":240,"y":0}
+  ]
+ },
+ "marble-veins": {
+  "name": "Marble veins",
+  "keywords": "marble veins mineral stone",
+  "nodes": [
+   {"id":"bend","type":"warp","name":"Vein bend","kind":"turbulence","params":{"amount":10,"size":40,"layers":1},"x":0,"y":0},
+   {"id":"veins","type":"noise","name":"Veins","kind":"ridged","params":{"size":48,"layers":2,"roughness":0.5,"sharpness":4},"in":{"in":"bend"},"x":240,"y":0},
+   {"id":"layers","type":"levels","name":"Vein width","params":{"low":0.42,"high":0.95},"in":{"in":"veins"},"x":480,"y":0},
+   {"id":"tone","type":"gradient","name":"Marble colors","stops":[[0,0.84,0.82,0.8],[0.6,0.62,0.6,0.62],[1,0.22,0.21,0.25]],"in":{"in":"layers"},"x":720,"y":0}
+  ]
+ },
+ "agate": {
+  "name": "Agate rings",
+  "keywords": "agate rings banded mineral crystal contour",
+  "nodes": [
+   {"id":"bend","type":"warp","name":"Ring bend","kind":"turbulence","params":{"amount":4,"size":20},"x":0,"y":0},
+   {"id":"cells","type":"noise","name":"Ring centers","kind":"cells","params":{"size":90,"jitter":1},"in":{"in":"bend"},"x":240,"y":0},
+   {"id":"rings","type":"levels","name":"Rings","params":{"bands":7},"in":{"in":"cells"},"x":480,"y":0},
+   {"id":"tone","type":"gradient","name":"Agate colors","stops":[[0,0.35,0.18,0.3],[0.5,0.7,0.55,0.65],[1,0.9,0.85,0.8]],"in":{"in":"rings"},"x":720,"y":0}
+  ]
+ },
+ "moss-in-hollows": {
+  "name": "Moss in hollows",
+  "keywords": "moss lichen hollows crevices cavity grass",
+  "nodes": [
+   {"id":"hollows","type":"cavity","name":"Hollows (wire a height in)","params":{"radius":3,"strength":4},"x":0,"y":0},
+   {"id":"mask","type":"levels","name":"Moss amount","params":{"low":0.3,"high":0.55,"invert":1},"in":{"in":"hollows"},"x":240,"y":0},
+   {"id":"moss","type":"constant","name":"Moss color","kind":"color","stops":[[0,0.3,0.42,0.16]],"x":240,"y":150},
+   {"id":"mossy","type":"combine","name":"Mossy (wire a base in)","kind":"mix","in":{"b":"moss","mask":"mask"},"x":480,"y":0}
+  ]
+ },
+ "runoff-stains": {
+  "name": "Runoff stains",
+  "keywords": "runoff stains leaks drips runs streaks slope",
+  "nodes": [
+   {"id":"slope","type":"noise","name":"Slope","kind":"smooth","params":{"size":80},"x":0,"y":0},
+   {"id":"spots","type":"scatter","name":"Stain sources","params":{"spacing":16,"radius":2,"coverage":0.6,"hardness":0.6},"x":0,"y":150},
+   {"id":"runs","type":"slopeblur","name":"Runs downhill","params":{"distance":18},"in":{"in":"spots","slope":"slope"},"x":240,"y":0},
+   {"id":"amount","type":"levels","name":"Stain strength","params":{"high":0.35},"in":{"in":"runs"},"x":480,"y":0},
+   {"id":"tone","type":"gradient","name":"Stain colors","stops":[[0,0.72,0.6,0.45],[1,0.35,0.18,0.1]],"in":{"in":"amount"},"x":720,"y":0}
+  ]
+ },
+ "glowing-cracks": {
+  "name": "Glowing cracks",
+  "keywords": "glowing cracks lava magma glow emissive",
+  "nodes": [
+   {"id":"cracks","type":"noise","name":"Cracks","kind":"cracks","params":{"size":40},"x":0,"y":0},
+   {"id":"lines","type":"levels","name":"Crack lines","params":{"low":0,"high":0.08,"invert":1},"in":{"in":"cracks"},"x":240,"y":0},
+   {"id":"halo","type":"blur","name":"Glow","params":{"radius":6},"in":{"in":"lines"},"x":480,"y":0},
+   {"id":"glow","type":"gradient","name":"Glow colors","stops":[[0,0,0,0],[0.5,0.9,0.35,0.05],[1,1,0.85,0.45]],"in":{"in":"halo"},"x":720,"y":0},
+   {"id":"lit","type":"combine","name":"Glowing (wire a base in)","kind":"screen","in":{"b":"glow"},"x":960,"y":0}
+  ]
+ },
+ "iridescent-film": {
+  "name": "Iridescent film",
+  "keywords": "iridescent oil sheen film rainbow slick",
+  "nodes": [
+   {"id":"bend","type":"warp","name":"Film swirl","kind":"turbulence","params":{"amount":12,"size":40,"layers":1},"x":0,"y":0},
+   {"id":"film","type":"noise","name":"Film thickness","kind":"smooth","params":{"size":50,"detail":0.3},"in":{"in":"bend"},"x":240,"y":0},
+   {"id":"tone","type":"gradient","name":"Rainbow","params":{"ease":1},"stops":[[0,0.3,0.1,0.45],[0.15,0.1,0.3,0.6],[0.3,0.1,0.55,0.45],[0.45,0.45,0.6,0.15],[0.6,0.65,0.45,0.1],[0.75,0.6,0.15,0.3],[0.9,0.3,0.1,0.5],[1,0.1,0.3,0.6]],"in":{"in":"film"},"x":480,"y":0}
+  ]
+ },
+ "froth": {
+  "name": "Froth",
+  "keywords": "froth foam bubbles crust",
+  "nodes": [
+   {"id":"bubbles","type":"scatter","name":"Bubbles","params":{"spacing":9,"radius":6,"coverage":1,"hardness":0.5,"sizeVariation":0.9,"rim":1,"jitter":1.5},"x":0,"y":0},
+   {"id":"tone","type":"gradient","name":"Froth colors","stops":[[0,0.25,0.32,0.12],[1,0.82,0.9,0.55]],"in":{"in":"bubbles"},"x":240,"y":0}
+  ]
+ },
+ "hair-grass": {
+  "name": "Hair-grass",
+  "keywords": "hair grass fur fibers alien grass mycelium",
+  "nodes": [
+   {"id":"comb","type":"warp","name":"Combing","kind":"flow","params":{"amount":10,"size":40},"x":0,"y":0},
+   {"id":"blades","type":"scatter","name":"Blades","params":{"spacing":3,"radius":3,"coverage":0.9,"hardness":0.2,"elongation":1,"direction":20,"directionVariation":0.25,"toneVariation":0.8},"in":{"in":"comb"},"x":240,"y":0},
+   {"id":"tone","type":"gradient","name":"Grass colors","stops":[[0,0.18,0.08,0.22],[0.6,0.55,0.25,0.6],[1,0.85,0.6,0.9]],"in":{"in":"blades"},"x":480,"y":0}
+  ]
+ }
+}

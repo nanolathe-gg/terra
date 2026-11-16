@@ -329,3 +329,22 @@ test('the add-node menu names real types, and other editors’ names find them',
     assert.ok(find(q).includes(want), `“${q}” finds ${want}`);
   for (const [type, spec] of Object.entries(NODES)) for (const kind of Object.keys(spec.kinds ?? {})) if (!['combine'].includes(type)) assert.ok(entries.some(e => e.type === type && (e.kind === kind || (!e.kind && kind === Object.keys(spec.kinds)[0]))), `the menu offers ${spec.label} · ${spec.kinds[kind]}`);
 });
+
+test('every starting point joins a graph as valid, wired nodes, and its menu entry counts them', async () => {
+  const {SNIPPETS, snippetNodes} = await import('../sculpt-materials.js');
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  for (const [key, snippet] of Object.entries(SNIPPETS)) {
+    const base = blankMaterial(), made = snippetNodes(key, base.nodes, {x: 100, y: 50});
+    assert.equal(made.length, snippet.nodes.length, key);
+    const m = copyMaterial({...base, nodes: [...base.nodes, ...made]});   // valid types, ranges and wiring
+    assert.ok(programSource(compileMaterial(m)).main, key);
+    const ids = new Set(base.nodes.map(n => n.id)); assert.ok(made.every(n => !ids.has(n.id)), `${key} takes fresh ids`);
+    const wired = snippet.nodes.reduce((sum, n) => sum + Object.values(n.in ?? {}).filter(Boolean).length, 0);
+    assert.equal(made.reduce((sum, n) => sum + Object.values(n.in).filter(v => made.some(o => o.id === v)).length, 0), wired, `${key} keeps its wiring`);
+    assert.ok(page.includes(`data-snippet="${key}"`) && page.includes(`${snippet.name} (${snippet.nodes.length} nodes)`), `the menu offers ${snippet.name} with its count`);
+  }
+  // Twice into one graph: the second copy takes fresh ids again.
+  const once = snippetNodes('cobbles', blankMaterial().nodes), twice = snippetNodes('cobbles', [...blankMaterial().nodes, ...once]);
+  assert.ok(twice.every(n => !once.some(o => o.id === n.id)));
+  assert.throws(() => snippetNodes('cobbles', Array.from({length: 38}, (_, i) => ({id: 'n' + i, params: {}}))), /at most 40/);
+});

@@ -4,6 +4,7 @@
 // The GPU evaluates the compiled graph once per texel of a 512-px repeat (engine-ground.wgsl); terrain, preview and export read that.
 import gamePalette from './materials/palette.json' with {type:'json'};
 import library from './materials/textures.json' with {type:'json'};
+import snippets from './materials/snippets.json' with {type:'json'};
 
 export const MATERIAL_SLOTS = 8;                   // slot 0 is "the world's ground" on a stroke; materials take slots 1 to 7
 export const MATERIAL_REPEAT = 512;
@@ -188,6 +189,21 @@ export function makeNode(type, nodes, props = {}) {
   const node = copyNode({id: freeId(nodes, type), type, ...props}, new Set());
   if (node.params.seed !== undefined && props.params?.seed === undefined) node.params.seed = seed;
   return node;
+}
+
+// Starting points (materials/snippets.json): small wired groups of nodes with their numbers, like a material preset but joined to the
+// graph being edited. Their nodes take fresh ids and keep their wiring to each other; an input a snippet leaves open stays open.
+export const SNIPPETS = snippets;
+export function snippetNodes(key, nodes, place = {x: 0, y: 0}) {
+  const snippet = SNIPPETS[key]; if (!snippet) throw Error('No such starting point.');
+  if (nodes.length + snippet.nodes.length > MAX_NODES) throw Error(`${snippet.name} adds ${snippet.nodes.length} nodes; a material has at most ${MAX_NODES}.`);
+  const all = [...nodes], made = [], renamed = new Map();
+  for (const {id, x, y, in: links, ...props} of snippet.nodes) {
+    const node = makeNode(props.type, all, {...props, x: Math.round(place.x + x), y: Math.round(place.y + y)});
+    renamed.set(id, node.id); all.push(node); made.push([node, links ?? {}]);
+  }
+  for (const [node, links] of made) for (const [key, from] of Object.entries(links)) if (from && Object.hasOwn(node.in, key)) node.in[key] = renamed.get(from);
+  return made.map(([node]) => node);
 }
 
 export function copyPalette(value = []) {

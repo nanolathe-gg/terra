@@ -1,7 +1,7 @@
 // The material editor: one full-screen dialog for the map's ground and water materials. The graph fills the screen; beside it sit one
 // preview and three panes: Controls (what the material publishes, for adjusting it), Node (the selected node) and Palette (the game
 // colors it is reduced to). Every element is in index.html; this fills values and applies edits through the map's own undo and save.
-import {NODES, NODE_TYPES, accepts, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
+import {NODES, NODE_TYPES, accepts, snippetNodes, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
   nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb,
   addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText} from './sculpt-materials.js';
 import {mountMaterialGraph, graphPositions, CARD, cardHeight} from './sculpt-material-graph.js';
@@ -66,7 +66,7 @@ export function mountMaterialEditor(host) {
   function openMenu(screen, place, wire) {
     if (!material()) return;
     menuAt = {place, wire}; const menu = $('node-menu'), stage = menu.parentElement.getBoundingClientRect();
-    for (const b of menuItems) { const spec = NODES[b.dataset.type]; b.dataset.fits = String(!wire || spec.inputs.some(([, , want]) => accepts(want, wire.type))); }
+    for (const b of menuItems) b.dataset.fits = String(!wire || (!b.dataset.snippet && NODES[b.dataset.type].inputs.some(([, , want]) => accepts(want, wire.type))));   // a starting point takes no wire
     menu.hidden = false; $('node-search').value = ''; filterMenu();
     menu.style.left = Math.max(8, Math.min(stage.width - menu.offsetWidth - 8, screen.x - stage.left)) + 'px';
     menu.style.top = Math.max(8, Math.min(stage.height - menu.offsetHeight - 8, screen.y - stage.top)) + 'px';
@@ -96,7 +96,16 @@ export function mountMaterialEditor(host) {
     });
     closeMenu(); selection = new Set([made.id]); primary = made.id; frameAt = -1; pick('node'); refresh(); $('material-graph').focus();
   });
-  for (const b of menuItems) b.onclick = () => addNode(b);
+  // A starting point: its nodes join the graph at the pointer, wired to each other, and are selected.
+  const addSnippet = attempt(button => {
+    const {place} = menuAt ?? {place: graph.center()}; let made;
+    change(m => {
+      const places = graph.places(); for (const n of m.nodes) if (n.x === undefined) { const p = places.get(n.id); n.x = p.x; n.y = p.y; }
+      made = snippetNodes(button.dataset.snippet, m.nodes, {x: place.x - CARD.width / 2, y: place.y - 30}); m.nodes.push(...made);
+    });
+    closeMenu(); selection = new Set(made.map(n => n.id)); primary = made.at(-1).id; frameAt = -1; pick('node'); refresh(); $('material-graph').focus();
+  });
+  for (const b of menuItems) b.onclick = () => b.dataset.snippet ? addSnippet(b) : addNode(b);
   $('graph-add').onclick = e => { const r = e.currentTarget.getBoundingClientRect(); openMenu({x: r.left, y: r.bottom + 6}, graph.center(), null); };
   $('graph-fit').onclick = () => graph.fit();
   // The same selection without a pointer: every node by name.

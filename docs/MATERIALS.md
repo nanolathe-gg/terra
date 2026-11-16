@@ -113,6 +113,13 @@ sections open it on that material. The map stops rendering while it is open.
 - Add a node from its menu: it lists every node and type by name, and a search
   also matches the names other editors use (Perlin, Voronoi, Worley, fBm,
   terrace, posterize, HSL, displace, tile sampler, bomber, motion blur ...).
+- **Starting points** (Start · … in the same menu, `materials/snippets.json`):
+  twelve named looks, each two to five wired nodes with their numbers, that
+  join the graph being edited at the pointer, selected and ready to tune or
+  wire to the Material node. Unlike Manage's add from the library (a whole
+  material), a starting point joins the open graph, and its nodes count
+  toward the 40-node limit (its menu entry says how many). A few leave an
+  input open for you to wire: a height (Moss in hollows) or a base color.
 - Drag from an output dot to an input to connect; drag a wire off an input or
   click the input to disconnect. Dropped in the open, a wire offers the nodes
   that take it. Right-click, double-click or Tab adds a node at the pointer.
