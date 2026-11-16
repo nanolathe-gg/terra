@@ -15,7 +15,8 @@ const P = (key, label, min, max, value, step = 0) => ({key, label, min, max, val
 const SEED = P('seed', 'Seed', 0, 999, 0, 1);
 const NOISE = [P('size', 'Size (px)', 1, 256, 8), P('detail', 'Fine detail', 0, 1, 0), P('layers', 'Broad layers', 0, 5, 0), SEED];
 // Cells, Cracks and Facets read one lattice of scattered points; Jitter is how far each point strays from its cell's middle (0 a square grid).
-const CELLS = [...NOISE, P('jitter', 'Jitter', 0, 1, .8)];
+// Hex rows (1) shifts every other row half a cell, on an even row count, so cells are hexagons: basalt tops, honeycomb, scale plates.
+const CELLS = [...NOISE, P('jitter', 'Jitter', 0, 1, .8), P('hex', 'Hex rows', 0, 1, 0, 1)];
 const NOISE_KIND = {
   cells: CELLS, cracks: CELLS, facets: CELLS,
   waves: [...NOISE, P('length', 'Length (px)', 1, 256, 24), P('direction', 'Direction (°)', 0, 180, 45), P('crests', 'Crests', 0, 1, 0)],

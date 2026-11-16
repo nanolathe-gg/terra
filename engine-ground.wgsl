@@ -25,7 +25,7 @@ fn gradientNoise(p:vec2f,size:f32,salt:f32)->f32{
  var values:array<f32,4>;for(var i=0u;i<4u;i++){let off=vec2f(f32(i&1u),f32(i>>1u));let a=cellHash(poolWrap(c+off,n)+salt).x*6.2831853;values[i]=dot(vec2f(cos(a),sin(a)),t-off);}
  return mix(mix(values[0],values[1],fade.x),mix(values[2],values[3],fade.x),fade.y)*1.41421356;
 }
-struct GraphCell{radius:f32,edge:f32,id:vec2f}
+struct GraphCell{radius:f32,edge:f32,id:vec2f,toPoint:vec2f}   // toPoint: from the position to its cell's point, in px
 // The nearest scattered point of a wrapped lattice and the distance to the border with its neighbor. Jitter is how far a point strays from
 // its cell's middle, up to .5 of a cell each way (0 a square grid).
 fn graphCell(q:vec2f,n:f32,salt:f32,jitter:f32)->GraphCell{
@@ -39,7 +39,25 @@ fn graphCell(q:vec2f,n:f32,salt:f32,jitter:f32)->GraphCell{
   let b=mb+vec2f(f32(i),f32(j));let r=b+.5+(cellHash(poolWrap(g+b,n)+salt)-.5)*jitter-f;let dr=r-mr;
   if(dot(dr,dr)>1e-6){edge=min(edge,dot(.5*(mr+r),normalize(dr)));}
  }}
- return GraphCell(sqrt(md),edge,poolWrap(g+mb,n));
+ return GraphCell(sqrt(md),edge,poolWrap(g+mb,n),mr*(graphPeriod/n));
+}
+// The same on hex rows: every other row shifted half a cell, on an even row count about n·2/√3 so the hexes are near regular and the
+// repeat still joins. p is in px; radius and edge come back in column widths, as graphCell's do in cells.
+fn graphHexCell(p:vec2f,n:f32,salt:f32,jitter:f32)->GraphCell{
+ let m=max(2.0,2.0*round(n/1.7320508));let cell=vec2f(graphPeriod/n,graphPeriod/m);let q=p/cell;let g=floor(q);
+ var md=1e9;var mr=vec2f(0);var mb=vec2f(0);
+ for(var j=-1;j<=1;j++){for(var i=-2;i<=2;i++){
+  let c=g+vec2f(f32(i),f32(j));let row=c.y-m*floor(c.y/m);let w=vec2f(c.x-n*floor(c.x/n),row);
+  let r=(vec2f(c.x+.5+.5*(row-2.0*floor(row*.5)),c.y+.5)+(cellHash(w+salt)-.5)*jitter-q)*cell;
+  let d=dot(r,r);if(d<md){md=d;mr=r;mb=vec2f(f32(i),f32(j));}
+ }}
+ var edge=1e9;
+ for(var j=-2;j<=2;j++){for(var i=-3;i<=3;i++){
+  let c=g+mb+vec2f(f32(i),f32(j));let row=c.y-m*floor(c.y/m);let w=vec2f(c.x-n*floor(c.x/n),row);
+  let r=(vec2f(c.x+.5+.5*(row-2.0*floor(row*.5)),c.y+.5)+(cellHash(w+salt)-.5)*jitter-q)*cell;let dr=r-mr;
+  if(dot(dr,dr)>1e-6){edge=min(edge,dot(.5*(mr+r),normalize(dr)));}
+ }}
+ let c=g+mb;return GraphCell(sqrt(md)/cell.x,edge/cell.x,vec2f(c.x-n*floor(c.x/n),c.y-m*floor(c.y/m)),mr);
 }
 // Stretched lattice noise along a direction w (x right, y down; Direction d is the line (sin d, cos d)): the lattice is turned by the integer
 // matrix with rows (w.y, -w.x) and (w.x, w.y), so it still divides the repeat, and its cells are long along w. WAVE_DIRS holds the sixteen
@@ -61,14 +79,15 @@ fn waveBase(p:vec2f,size:f32,ratio:f32,direction:f32,salt:f32)->f32{
  if(f<=0.0){return waveAt(p,size,ratio,WAVE_DIRS[i],salt);}
  return mix(waveAt(p,size,ratio,WAVE_DIRS[i],salt),waveAt(p,size,ratio,WAVE_DIRS[i+1u],salt),f);
 }
-// One noise type at one size, in 0 to 1. kind: 0 smooth, 1 gradient, 2 billow, 3 cells, 4 cracks, 5 facets, 6 waves. extra: jitter for the
-// cell types; length over the node's size, direction and crests for waves.
+// One noise type at one size, in 0 to 1. kind: 0 smooth, 1 gradient, 2 billow, 3 cells, 4 cracks, 5 facets, 6 waves. extra: jitter and hex
+// rows for the cell types; length over the node's size, direction and crests for waves.
 fn noiseBasis(kind:i32,p:vec2f,size:f32,salt:f32,extra:vec3f)->f32{
  switch kind{
   case 1:{return clamp(.5+.65*gradientNoise(p,size,salt),0.0,1.0);}
   case 2:{return clamp(abs(gradientNoise(p,size,salt))*1.8,0.0,1.0);}
   case 3,4,5:{
-   let n=max(1.0,round(graphPeriod/size));let c=graphCell(graphPos(p)/graphPeriod*n,n,salt,extra.x);
+   let n=max(1.0,round(graphPeriod/size));var c:GraphCell;
+   if(extra.y>0.0){c=graphHexCell(graphPos(p),n,salt,extra.x);}else{c=graphCell(graphPos(p)/graphPeriod*n,n,salt,extra.x);}
    if(kind==4){return clamp(c.edge*2.0,0.0,1.0);}
    if(kind==5){return cellHash(c.id+salt+97.0).x;}
    return clamp(1.0-c.radius,0.0,1.0);
@@ -94,7 +113,7 @@ fn noiseLayers(kind:i32,p:vec2f,size:f32,layers:f32,salt:f32,wave:vec3f)->f32{
 // layer at half the size.
 fn nNoise(s:MaterialStep,q:vec2f)->vec4f{
  let kind=s.code.z;let size=arg(s,0u);let salt=seeded(379.0,arg(s,3u));
- let wave=select(vec3f(arg(s,4u),0,0),vec3f(arg(s,4u)/max(size,.001),arg(s,5u),arg(s,6u)),kind==6);
+ let wave=select(vec3f(arg(s,4u),arg(s,5u),0),vec3f(arg(s,4u)/max(size,.001),arg(s,5u),arg(s,6u)),kind==6);
  let a=noiseLayers(kind,q,size,arg(s,2u),salt,wave);
  if(arg(s,1u)<=0.0){return vec4f(a);}
  return vec4f(mix(a,noiseLayers(kind,q+vec2f(17,39),size/2.0,arg(s,2u),salt,wave),arg(s,1u)));

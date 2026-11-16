@@ -114,3 +114,16 @@ test('a Slope blur carries a spot downhill along its slope, and uphill when its 
     assert.deepEqual(s.errors, []);
   } finally { s.dispose(); }
 });
+
+test('hex rows of Cells, Cracks and Facets join the repeat', async () => {
+  await openHost();
+  const s = await openScene({biome: 'green', ground: false, strokes: []}, 'biome=green&mapX=5&mapY=5');
+  try {
+    const win = (x = 640, y = 640) => renderWindow(s, {x, y, width: 128, height: 128, exportArt: true}), pool = groundPool(s.config.material);
+    for (const kind of ['cells', 'cracks', 'facets']) {
+      s.setMaterials(s.materials.map(m => m.worldGround ? {...m, nodes: [{id: 'c', type: 'noise', kind, params: {size: 23, jitter: .3, hex: 1}}, {id: 'o', type: 'output', in: {color: 'c'}}], palette: [], controls: [], frames: []} : m));
+      const here = await win(); assert.ok(same(here, await win(640 + pool, 640)) && same(here, await win(640, 640 + pool)), `${kind} on hex rows joins itself`);
+    }
+    assert.deepEqual(s.errors, []);
+  } finally { s.dispose(); }
+});
