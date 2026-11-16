@@ -1343,8 +1343,10 @@ export class TerrainRenderer {
   }
 
   // Encodes the bake into the given encoder, or submits it on its own.
+  // The material cache generates what changed in the materials (the bake's and a cached tile's color rerun's).
+  syncMaterialCache() { this.groundCache.sync(MATERIAL_REPEAT, this.grounds); }
   bakeFields(encoder = null, timer = null) {
-    this.groundCache.sync(MATERIAL_REPEAT, this.grounds);
+    this.syncMaterialCache();
     this.syncWorld();
     this.i('uWeatherMaps', Boolean(this.weatherMaps));
     const own = !encoder;

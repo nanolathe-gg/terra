@@ -5,7 +5,7 @@ import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
-import {materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
+import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
 import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
@@ -699,8 +699,18 @@ function syncMaterials() {
   const used=materialsInUse(nodes,mapMaterials,mapRocks),key=JSON.stringify(used);
   if (key===materialUseKey) return;
   // Past the cache budget (sculpt-materials.js materialCacheUsage) the renderer keeps the materials it holds and the status line says why.
-  try { renderer.setMaterials(new Map(used.map(m=>[m.slot,m]))); } catch (error) { status(error.message); return; }
-  materialUseKey=key; worldChanged({stage:'C',world:false}); schedule();
+  let stage; try { stage=setRendererMaterials(new Map(used.map(m=>[m.slot,m]))); } catch (error) { status(error.message); return; }
+  materialUseKey=key; worldChanged({stage,world:false}); schedule();
+}
+// Hands the renderer its materials and says the stage the change reaches: C when the cache's layers or a material's art height change (the
+// bake, the geometry and the solid read them: engine-common.wgsl materialRelief, sculpt-materials.js materialHeightKey), else the earliest
+// stage that reads a uniform it changed, at least F (the material's colors are the color pass's alone).
+function setRendererMaterials(next) {
+  const before=renderer.grounds??new Map(),uniform=renderer.uniformStage(()=>renderer.setMaterials(next)),after=renderer.grounds;
+  // A slot's cache layers and the world surfaces it draws (its roles: the solid reads which slot is the rock's, and no scan covers it).
+  const layers=list=>[...list].sort(([a],[b])=>a-b).map(([slot,m])=>[slot,...materialStates(m),...Object.keys(m).filter(k=>/^world[A-Z]/.test(k)&&m[k]).sort(),m.worldLayer??''].join(':')).join(',');
+  const height=layers(before)===layers(after)&&[...after].every(([slot,m])=>materialHeightKey(m)===materialHeightKey(before.get(slot)));
+  return [height?null:'C',uniform,'F'].filter(Boolean).sort()[0];
 }
 function restoreMaterials(materials) {
   mapMaterials=structuredClone(materials); nodes=keepStrokeMaterials(nodes,mapMaterials); syncMaterialChoices(); syncMaterials(); materialEditor?.refresh(); keepWorldMaterials(); surfacePanel?.refresh();
@@ -792,8 +802,8 @@ function surfaceHost() {
   };
 }
 function editMaterials(materials) {
-  const used=materialsInUse(nodes,materials,mapRocks);renderer.setMaterials(new Map(used.map(m=>[m.slot,m])));
-  mapMaterials=materials;materialUseKey=JSON.stringify(used);syncMaterialChoices();surfacePanel?.refresh();worldChanged({stage:'C',world:false});persistLater();schedule();
+  const used=materialsInUse(nodes,materials,mapRocks),stage=setRendererMaterials(new Map(used.map(m=>[m.slot,m])));
+  mapMaterials=materials;materialUseKey=JSON.stringify(used);syncMaterialChoices();surfacePanel?.refresh();worldChanged({stage,world:false});persistLater();schedule();
 }
 function removeMaterial(slot) {
   const gone=deleteMaterial(mapMaterials,nodes,slot,mapRocks);cancelWeather();nodes=gone.nodes;editMaterials(gone.materials);evaluate(0);checkpoint();queueWeather();updateControls();

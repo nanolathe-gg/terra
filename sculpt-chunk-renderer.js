@@ -530,6 +530,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
         if(delta.stage&&delta.stage<'F'){needs??=delta.stage;this.releaseColorTile(tile);}
       }
       if(needs)throw new DOMException('The color record needs '+needs+'.','AbortError');
+      // A material whose colors changed (an edit of stage F: sculpt.js setRendererMaterials) is generated again before it is drawn.
+      this.syncMaterialCache();
       for(const tile of tiles){
         const cpu=tile.cpu.slice(0),skip=new Set([...PER_CHUNK_UNIFORMS,'weatherMaps','materialReady','transitionBody','rockWeatherGrid']),rock=this.layout.fields.get('rock');
         for(const [name,f]of this.layout.fields){

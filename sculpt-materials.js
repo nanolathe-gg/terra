@@ -529,6 +529,16 @@ function nearestGameColor(rgb) {
   gamePalette.indexed.forEach((c, i) => { const e = (c[0] - rgb[0]) ** 2 + (c[1] - rgb[1]) ** 2 + (c[2] - rgb[2]) ** 2; if (e < distance) { distance = e; best = i; } });
   return best;
 }
+// What decides a material's art height (the bake, the geometry and the solid read it: engine-common.wgsl materialRelief): its seed, its
+// Relief, and every node its Material node's Height input reads, directly or through others. Two materials with the same key have the same
+// height in every pixel, whatever their colors (sculpt.js editMaterials: an edit that leaves it redraws only the color pass).
+export function materialHeightKey(m) {
+  const byId = new Map(m.nodes.map(n => [n.id, n])), out = m.nodes.find(n => n.type === 'output'), seen = new Set(), upstream = [];
+  const visit = id => { const n = byId.get(id); if (!n || seen.has(id)) return; seen.add(id); upstream.push(n); for (const v of Object.values(n.in ?? {})) for (const k of [v].flat()) if (k != null) visit(k); };
+  if (out?.in?.height) visit(out.in.height);
+  const node = ({name, x, y, ...n}) => n;
+  return JSON.stringify([m.seed, out?.in?.height ? out.params?.relief : 0, upstream.map(node).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)]);
+}
 // What decides a material's pixels: not its name, its layout or which controls it publishes.
 export const materialRenderKey = m => JSON.stringify([m.seed, m.nodes.map(({name, x, y, ...n}) => n), m.palette, m.dither]);
 // The selected node alone, as the material's color: the same graph and renderer, never saved.
