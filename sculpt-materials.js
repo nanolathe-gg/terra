@@ -401,6 +401,15 @@ export function adoptWorldMaterials(value, config) {
     const name = uniqueName(list.filter(m => m !== at), nameOf(source.name));
     list = list.map(m => m === at ? {...m, name, ...copyMaterial(source)} : m);
   }
+  // The world's other surfaces follow it too: a role still holding a library material unedited (another world's, as a map carried into this
+  // one has) takes this world's; one its artist edited, or made, stays theirs.
+  for (const [role, key] of MAP_ROLES.slice(1)) {
+    const want = LIBRARY[config.materials?.[key]], at = list.find(m => m[role]);
+    if (!want || !at || at.source === config.materials[key] || !LIBRARY[at.source]) continue;
+    if (JSON.stringify(copyMaterial(at)) !== JSON.stringify(copyMaterial(LIBRARY[at.source]))) continue;
+    const name = uniqueName(list.filter(m => m !== at), want.name);
+    list = list.map(m => m === at ? {...m, name, ...copyMaterial(want)} : m);
+  }
   return list;
 }
 // What the world keeps of a map's list: its ground and its water where they differ from the library's, each marked with the library

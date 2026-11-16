@@ -234,6 +234,15 @@ test('the page declares every row the editor fills', () => {
   for (const [type, spec] of Object.entries(NODES)) if (type !== 'output') assert.ok(page.includes(`data-type="${type}"`), `the add menu offers ${spec.label}`);
 });
 
+test('a map carried into another world takes its surfaces unless the artist edited them', () => {
+  const moon = worldMaterials({materials: {ground: 'green-ground', water: 'green-water', rock: 'moon-rock', slope: 'moon-slope'}});
+  const green = {materials: {ground: 'green-ground', water: 'green-water', rock: 'green-rock', slope: 'green-slope'}};
+  const moved = adoptWorldMaterials(moon, green);
+  assert.equal(moved.find(m => m.worldRock).source, 'green-rock'); assert.equal(moved.find(m => m.worldSlope).source, 'green-slope');
+  const edited = moon.map(m => m.worldRock ? {...m, seed: m.seed + 1} : m);
+  assert.equal(adoptWorldMaterials(edited, green).find(m => m.worldRock).source, 'moon-rock', 'an edited rock material stays the artist\'s');
+});
+
 test('a world’s highland material joins a new map, keeps its own role and leaves when assigned away', async () => {
   const {assignMaterial, materialsInUse} = await import('../sculpt-materials.js');
   const config = {materials: {ground: 'green-ground', water: 'green-water', high: 'crystal-ground'}};
