@@ -557,7 +557,9 @@ export class TerrainRenderer {
     const slotOf = id => [...(this.grounds || new Map())].find(([, m]) => m.worldLayer === id)?.[0] ?? -1;
     const surface = surfaceRows(this.config.surface, slotOf, this.surfaceHidden);
     const head = [...surface.rows, ...Array.from({length: SURFACE_FLAGS_ROW - surface.rows.length}, () => [0, 0, 0, 0]), surface.flags, ...surface.head];
-    return [...head, ...rows, ...coverRows(this.config.material?.site)];
+    // The layers that grow plants (engine-bake.wgsl plantMask), and the switch for the bake's plant pass.
+    this.plantLayers = surface.plants.length; if (this.layout) this.i('uPlantsOn', this.plantLayers > 0);
+    return [...head, ...rows, ...coverRows(this.config.material?.site, surface.plants, variant?.get?.('plantRelief') ?? 1)];
   }
 
 
@@ -1063,7 +1065,7 @@ export class TerrainRenderer {
     set('uSoilRim', number('soilRim', 0));
     set('uWetGround', number('wetGround', 0));
     set('uLooseSize', number('looseSize', 6));
-    set('uPlantsOn', 0);
+    set('uPlantsOn', this.plantLayers > 0 ? 1 : 0);
     set('uStoneRound', number('stoneRound',this.config.material?.stoneRound ?? 0));
     set('uStoneSort', number('stoneSort',this.config.material?.stoneSort ?? 0.6));
     set('uStoneSlab', number('stoneSlab',this.config.material?.stoneSlab ?? 0.05));

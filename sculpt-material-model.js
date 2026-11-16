@@ -16,13 +16,19 @@ export function tablePlacementRows(table) {
 }
 
 // The rows from MM_COVER (engine-common.wgsl): the world's site rows (`site`, materials/defaults.json: the numbers the Moisture and Soil depth
-// facts read), then the plants' (the surface layers that carry plants). A world without `site` gives zeros.
-export function coverRows(site = null) {
+// facts read), then the plants': row 3 (tuft height, shrub height, shrub density, entries) with the heights times Vegetation relief, then one
+// row an entry (surfaceRows' plants: the layer's first row, its kind, its amount). A world without `site` gives zeros.
+export function coverRows(site = null, plants = [], relief = 1) {
   const rows = Array.from({length: COVER_ROWS}, () => [0, 0, 0, 0]);
   if (site) {
     rows[0] = [0, site.wet[0], site.wet[1], site.dry];
     rows[1] = [site.soil.slope[0], site.soil.slope[1], site.soil.convex, site.soil.deposit];
     rows[2] = [0, site.moisture.perSwath, site.moisture.swathRef, site.moisture.shade];
+    if (plants.length) {
+      const k = Number.isFinite(Number(relief)) ? Math.max(0, Number(relief)) : 1;
+      rows[3] = [site.plants.tuft * k, site.plants.shrub * k, site.plants.shrubs, plants.length];
+      plants.slice(0, PLANT_MAX).forEach((p, i) => { rows[4 + i] = [p.row, p.kind, p.amount, 0]; });
+    }
   }
   return rows;
 }
@@ -60,6 +66,13 @@ export const layerKey = layer => layer?.id ?? layer?.builtin ?? '';
 // A material layer is any layer that is not a built-in; a built-in may also draw a material (`material`, docs/SURFACE_LAYERS.md phase 4)
 // in place of the engine's own color, keeping its own share. Either binds the map's copy that carries its key (layerKey) as worldLayer.
 export const isMaterialLayer = layer => layer?.builtin == null;
+// Plants a material layer may grow where it shows (its `plants`: {kind, amount}), placed by the bake (engine-bake.wgsl plantMask): grass tufts,
+// meadow tufts, moss cushions and shrubs. A map's layers grow at most PLANT_MAX kinds of plants between them.
+export const PLANT_KINDS = ['grass', 'meadow', 'moss', 'shrubs'];
+export const PLANT_LABELS = {grass: 'Grass tufts', meadow: 'Meadow tufts', moss: 'Moss cushions', shrubs: 'Shrubs'};
+export const PLANT_MAX = 8;
+// The facts the bake knows where it places plants (the shares of rock, debris and sand and the convexity exist only in the color pass).
+export const PLANT_FACTS = ['slope', 'aboveSea', 'abovePlain', 'wear', 'deposit', 'wetness', 'moisture', 'soilDepth', 'light', 'top'];
 // A stored list (this browser's world store, a save's world settings) made before the engine's surfaces drew materials: each engine
 // surface without one takes the world's (its own list, `base`), so it does not draw nothing.
 export const withSurfaceMaterials = (list, base) => list.map(l => l?.builtin != null && SURFACE_DRAWABLE.includes(l.builtin) && l.material == null
@@ -73,10 +86,11 @@ export function surfaceRows(surface, slotOf = () => -1, hidden = null) {
   const layers = list.map((layer, i) => {
     const material = isMaterialLayer(layer), draws = layer?.material != null, at = material ? null : SURFACE_BUILTINS[layer?.builtin];
     if (!material && !at) throw Error(`Surface layer ${i + 1}: unknown built-in "${layer?.builtin}".`);
-    if (material && !draws) throw Error(`Surface layer ${i + 1}: a layer is a built-in or draws a material.`);
+    if (material && !draws && !layer.plants) throw Error(`Surface layer ${i + 1}: a layer is a built-in, draws a material or grows plants.`);
     if (material && !layer.id) throw Error(`Surface layer ${i + 1}: a material layer needs an id.`);
     if (draws && !material && !SURFACE_DRAWABLE.includes(layer.builtin)) throw Error(`Surface layer ${i + 1}: ${layer.builtin} draws a material set in the Materials panel or Rock types, not a material of its own.`);
     if (material && SURFACE_BUILTINS[layer.id]) throw Error(`Surface layer ${i + 1}: "${layer.id}" is a built-in's name; a material layer needs another id.`);
+    if (layer?.plants != null && (!material || !PLANT_KINDS.includes(layer.plants.kind))) throw Error(`Surface layer ${i + 1}: plants grow on a material layer, as one of ${PLANT_KINDS.join(', ')}.`);
     const stage = material ? SURFACE_STAGE_NAMES.indexOf(layer.stage ?? 'land') : at[0];
     if (stage < 0) throw Error(`Surface layer ${i + 1}: unknown stage "${layer.stage}".`);
     const edge = layer.edge || {}, number = (v, fallback) => Number.isFinite(Number(v)) ? Number(v) : fallback, fact = name => {
@@ -94,7 +108,8 @@ export function surfaceRows(surface, slotOf = () => -1, hidden = null) {
     // The world's copy of its library material, shared by every layer that draws it; -2 where the layer must draw a material and the map
     // has none for it (a material layer, or a built-in the engine no longer colors: SURFACE_DRAWABLE): it draws nothing.
     const bound = draws ? slotOf(layer.material) : -1;
-    const packed = bound >= 0 ? bound : draws || (!material && SURFACE_DRAWABLE.includes(layer.builtin)) ? -2 : -1;
+    // -3: a material layer that draws no material and grows plants (the color pass skips it; the bake grows its plants).
+    const packed = bound >= 0 ? bound : material && !draws ? -3 : draws || (!material && SURFACE_DRAWABLE.includes(layer.builtin)) ? -2 : -1;
     const amount = hidden?.has(layerKey(layer)) ? 0 : !material && SURFACE_OWN_AMOUNT.includes(layer.builtin) ? 1 : number(layer.amount, 1);
     return {index: i, stage, rows: [[material ? -1 : at[1], amount, packed, rule.length], fixed ? [1, 0, 8, layerSalt(layerKey(layer))] : [number(edge.width, 1), number(edge.noise, 0), number(edge.noiseSize, 8), layerSalt(layerKey(layer))], ...rule]};
   });
@@ -103,7 +118,10 @@ export function surfaceRows(surface, slotOf = () => -1, hidden = null) {
   const rows = [], heads = Array.from({length: SURFACE_STAGES}, () => [0, 0]), layerRows = new Array(layers.length);
   for (const l of sorted) { if (!heads[l.stage][1]) heads[l.stage][0] = rows.length; heads[l.stage][1]++; layerRows[l.index] = rows.length; rows.push(...l.rows); }
   if (rows.length > SURFACE_FLAGS_ROW) throw Error(`A world's surface needs ${rows.length} rows; the draw holds ${SURFACE_FLAGS_ROW}. Use fewer layers or simpler rules.`);
-  return {rows, flags: [facts ? 1 : 0, 0, 0, 0], head: [0, 2, 4, 6].map(k => [...heads[k], ...heads[k + 1]]), layerRows};
+  // The layers that grow plants, by their first row (the bake walks the layers in draw order and adds each one's plants where it shows).
+  const plants = list.flatMap((layer, i) => layer?.plants?.amount > 0 ? [{row: layerRows[i], kind: PLANT_KINDS.indexOf(layer.plants.kind), amount: Math.min(1, Number(layer.plants.amount))}] : []);
+  if (plants.length > PLANT_MAX) throw Error(`A world's surface grows plants on at most ${PLANT_MAX} layers.`);
+  return {rows, flags: [facts ? 1 : 0, 0, 0, 0], head: [0, 2, 4, 6].map(k => [...heads[k], ...heads[k + 1]]), layerRows, plants};
 }
 // A surface read from a save, a world file or this browser's world store: only the fields a layer has, numbers checked, and the draw's
 // row limits (surfaceRows throws on anything it cannot draw). Returns a fresh list.
@@ -120,9 +138,10 @@ export function copySurface(value) {
     const score = l.score && typeof l.score === 'object' ? clean({from: finite(l.score.from), fade: finite(l.score.fade), terms: (Array.isArray(l.score.terms) ? l.score.terms : []).slice(0, SURFACE_RULE_TERMS).map(t => clean({fact: String(t?.fact), weight: finite(t?.weight)}))}) : undefined;
     const base = clean({name, amount: finite(l.amount), edge, ...(where?.length ? {where} : {}), ...(score ? {score} : {})});
     if (l.builtin == null) {
-      if (typeof l.material !== 'string' || !SURFACE_ID.test(String(l.id)) || ids.has(l.id) || Object.hasOwn(SURFACE_BUILTINS, l.id)) throw Error(`Surface layer ${i + 1} needs a material and an id of its own.`);
+      const plants = l.plants && typeof l.plants === 'object' && PLANT_KINDS.includes(l.plants.kind) && finite(l.plants.amount) > 0 ? {kind: l.plants.kind, amount: Math.min(1, finite(l.plants.amount))} : undefined;
+      if ((typeof l.material !== 'string' && !(l.material == null && plants)) || !SURFACE_ID.test(String(l.id)) || ids.has(l.id) || Object.hasOwn(SURFACE_BUILTINS, l.id)) throw Error(`Surface layer ${i + 1} needs a material or plants, and an id of its own.`);
       ids.add(l.id);
-      return clean({id: l.id, ...base, material: l.material.slice(0, 80), stage: typeof l.stage === 'string' ? l.stage : undefined});
+      return clean({id: l.id, ...base, material: typeof l.material === 'string' ? l.material.slice(0, 80) : undefined, stage: typeof l.stage === 'string' ? l.stage : undefined, plants});
     }
     // A built-in that draws a material binds by its built-in's name, so one built-in a list draws a material at most once. A built-in keeps
     // only the fields it has: Highland ground and Base band no Amount, Highland ground no rule or edge (SURFACE_OWN_AMOUNT, SURFACE_FIXED).

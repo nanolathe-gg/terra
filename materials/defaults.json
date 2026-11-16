@@ -400,5 +400,5 @@
     {"name": "Snow on ice crests", "builtin": "iceCrest", "material": "@snow"},
     {"name": "Snow on ice tops", "builtin": "iceCap", "material": "@snow"}
   ],
-  "site": {"wet": [0.25, 0.9], "dry": 0.4, "soil": {"slope": [0.6, 1.6], "convex": 0.5, "deposit": 0.3}, "moisture": {"perSwath": 0.5, "swathRef": 0.35, "shade": 0.28}, "plants": {"tuft": 4, "shrub": 2}}
+  "site": {"wet": [0.25, 0.9], "dry": 0.4, "soil": {"slope": [0.6, 1.6], "convex": 0.5, "deposit": 0.3}, "moisture": {"perSwath": 0.5, "swathRef": 0.35, "shade": 0.28}, "plants": {"tuft": 4, "shrub": 2, "shrubs": 1.5}}
 }

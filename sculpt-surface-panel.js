@@ -2,7 +2,7 @@
 // Coverage (stored as amount), its edge and its rule (conditions that must all hold, or a score); a row moves within its stage, a material layer can be removed,
 // and a layer is added from a preset. Hovering or focusing a row previews where that layer lies on the map. The list is a world setting:
 // `host.apply(next, {commit})` stores it.
-import {SURFACE_BUILTINS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, surfaceRows, isMaterialLayer, layerKey} from './sculpt-material-model.js';
+import {SURFACE_BUILTINS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, PLANT_KINDS, PLANT_LABELS, PLANT_FACTS, surfaceRows, isMaterialLayer, layerKey} from './sculpt-material-model.js';
 
 const $ = id => document.getElementById(id);
 // Plain names for the facts a rule reads, with the range a window's sliders cover.
@@ -28,12 +28,16 @@ const BUILTIN_SOURCES = {
 const BUILTIN_SETTINGS = {highland: 'highland', baseBand: 'baseBand'};
 // The stages as the list's group headings, top first in the list; a layer moves only within its group (the engine's effects lie between them).
 const STAGE_TITLES = ['Ground', 'Slope cover', 'Soil, rock and beach', 'Crown rock', 'Bands', 'Loose ground: debris, paint, sand', 'Chips', 'Snow'];
-const STAGE_HELP = ['Over the ground material, under the low-ground tint.', 'Under the cover classes.', 'Under the margin join.', 'Under the beds.',
+const STAGE_HELP = ['Over the ground material, under the low-ground tint.', 'Over the ground, under the slope cover’s effects.', 'Under the margin join.', 'Under the beds.',
   'Under the ground patches and the rock skin.', 'Under the boulders and cracks.', 'Under the weather, crystals and hill light.', 'Over everything but surf and water.'];
 // Presets a new layer starts from: a material (a library key, or a role of the world's own list) and a rule.
 export const SURFACE_PRESETS = [
   {key: 'snow', name: 'Snow above a height', material: 'ice-ground', stage: 'snow', where: [{fact: 'abovePlain', from: 40, fade: 6}], edge: {width: .2, noise: .6, noiseSize: 1}},
-  {key: 'moss', name: 'Moss in damp shade', material: 'lush-ground', stage: 'land', where: [{fact: 'moisture', from: .4, fade: .1}, {fact: 'light', to: .8, fade: .1}], amount: .6, edge: {width: .05, noise: 1, noiseSize: 22}},
+  {key: 'moss', name: 'Moss in damp shade', material: 'lush-ground', stage: 'land', where: [{fact: 'moisture', from: .4, fade: .1}, {fact: 'light', to: .8, fade: .1}], amount: .6, edge: {width: .05, noise: 1, noiseSize: 22}, plants: {kind: 'moss', amount: .5}},
+  // Plants (the cover classes' tufts and shrubs, as layers): plants-only layers, which draw no material, so only the plants change the picture.
+  {key: 'tufts', name: 'Grass tufts on level ground', material: null, stage: 'ground', where: [{fact: 'slope', to: .45, fade: .1}, {fact: 'moisture', from: .15, fade: .1}], plants: {kind: 'grass', amount: .6}},
+  {key: 'meadow', name: 'Meadow in damp ground', material: null, stage: 'ground', where: [{fact: 'moisture', from: .5, fade: .1}, {fact: 'soilDepth', from: .4, fade: .1}], edge: {width: .2, noise: .6, noiseSize: 22}, plants: {kind: 'meadow', amount: .7}},
+  {key: 'shrubs', name: 'Shrubs in damp hollows', material: null, stage: 'ground', where: [{fact: 'moisture', from: .55, fade: .1}, {fact: 'top', to: .1, fade: .1}], amount: .8, edge: {width: .2, noise: .8, noiseSize: 22}, plants: {kind: 'shrubs', amount: .5}},
   {key: 'scree', name: 'Scree on steep ground', material: 'role:debris', stage: 'land', where: [{fact: 'slope', from: .9, fade: .2}], amount: .7, edge: {width: .1, noise: .8, noiseSize: 6}},
   {key: 'ledge', name: 'Rock on steep convex edges', material: 'role:rock', stage: 'land', score: {terms: [{fact: 'slope', weight: 1}, {fact: 'convexity', weight: 1.5}], from: 1.2, fade: .2}, edge: {width: .1, noise: .6, noiseSize: 4}},
   {key: 'dry', name: 'Dry ground on sunny slopes', material: 'desert-ground', stage: 'land', where: [{fact: 'light', from: 1.15, fade: .1}, {fact: 'moisture', to: .35, fade: .1}], amount: .3, edge: {width: .05, noise: 1, noiseSize: 22}},
@@ -137,11 +141,13 @@ export function mountSurfacePanel(host) {
     const builtin = !isMaterialLayer(layer), options = host.library();
     const select = el('select', {className: 'surface-material', id: uid('material'), title: 'The library material this layer draws (the world’s copy, shared by every layer that draws it)'});
     if (builtin && layer.material == null) select.append(el('option', {value: '', textContent: 'None: it draws nothing', selected: true}));
+    // A material layer with plants may draw no material: its plants grow on whatever lies below.
+    if (!builtin && layer.plants) select.append(el('option', {value: '', textContent: 'None: plants only', selected: layer.material == null}));
     const groups = new Map();
     for (const m of options) { const g = m.key.split('-')[0]; if (!groups.has(g)) groups.set(g, el('optgroup', {label: g[0].toUpperCase() + g.slice(1)})); groups.get(g).append(el('option', {value: m.key, textContent: m.name, selected: m.key === layer.material})); }
     if (layer.material != null && !options.some(m => m.key === layer.material)) select.append(el('option', {value: layer.material, textContent: layer.material + ' (not in the library)', selected: true}));
     select.append(...groups.values());
-    select.onchange = () => edit(i, l => { if (select.value) l.material = select.value; else delete l.material; }, true);
+    select.onchange = () => edit(i, l => { if (select.value) l.material = select.value; else delete l.material; }, true);   // a plants-only layer keeps its plants
     return el('label', {className: 'surface-number surface-material-row'}, el('span', {textContent: 'Material'}), select);
   }
   function row(layer, i, layers, layerRows) {
@@ -215,6 +221,7 @@ export function mountSurfacePanel(host) {
       if (layer.material != null) body.append(slider('Height contrast', edge.height ?? 0, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, height: v}; }, c), 'At its edge the taller wins: its material’s art height against the ground material’s, so a blocky material keeps its high points and the ground takes its gaps'));
       if (!builtin && !layer.where?.length && !layer.score && (layer.amount ?? 1) >= 1) body.append(el('p', {className: 'small', textContent: 'At full Coverage everywhere it has no edge, so Height contrast does nothing: give it a rule or a Coverage under 1.'}));
       if (material && !material.height && (edge.height ?? 0) > 0) body.append(el('p', {className: 'small', textContent: 'This material has no art height, so Height contrast only lets a ground with height push it back: choose one with height (a rock material, for one) for blocks that stand out.'}));
+      if (!builtin) body.append(plantsBlock(layer, i));
       if (!fixed) body.append(ruleBlock(layer, i));
       item.append(body);
     }
@@ -222,6 +229,22 @@ export function mountSurfacePanel(host) {
     item.onpointerleave = () => { if (!item.contains(document.activeElement)) host.preview(-1); };
     item.onfocusout = event => { if (!item.contains(event.relatedTarget)) host.preview(-1); };
     return item;
+  }
+  // A material layer's plants (sculpt-material-model.js PLANT_KINDS): one kind, grown where the layer shows, as dense as its Plants amount.
+  // The bake places them (engine-bake.wgsl plantMask) and knows only some facts: a rule that reads another grows them as if it were 0.
+  function plantsBlock(layer, i) {
+    const wrap = el('div', {className: 'surface-wide surface-plants'}), id = uid('plants');
+    const select = el('select', {id, title: 'Plants this layer grows where it shows; their height is World › Vegetation relief'}, new Option('No plants', ''), ...PLANT_KINDS.map(k => new Option(PLANT_LABELS[k], k)));
+    select.value = layer.plants?.kind ?? '';
+    // Its plants removed from a layer that draws no material: it would draw nothing at all, so it takes the world's ground material.
+    select.onchange = () => edit(i, l => { if (select.value) l.plants = {kind: select.value, amount: l.plants?.amount ?? .6}; else { delete l.plants; if (l.material == null) l.material = host.materialKey({material: 'role:ground'}); } }, true);
+    wrap.append(el('label', {className: 'surface-line', htmlFor: id}, el('span', {textContent: 'Plants'}), select));
+    if (layer.plants) {
+      wrap.append(slider('Plant density', layer.plants.amount ?? .6, 0, 1, .01, (v, c) => edit(i, l => { l.plants = {...l.plants, amount: v}; }, c), 'How many of them grow where the layer shows'));
+      const facts = [...(layer.where || []).map(w => w.fact), ...(layer.score?.terms || []).map(t => t.fact)].filter(f => !PLANT_FACTS.includes(f));
+      if (facts.length) wrap.append(el('p', {className: 'small', textContent: `Plants are placed before ${[...new Set(facts)].join(', ')} ${facts.length > 1 ? 'are' : 'is'} known, so they grow as if ${facts.length > 1 ? 'those were' : 'it were'} 0.`}));
+    }
+    return wrap;
   }
   function build() {
     const focused = document.activeElement?.id?.startsWith('surface-') ? document.activeElement.id : '';
@@ -253,7 +276,8 @@ export function mountSurfacePanel(host) {
   add.onchange = () => {
     const preset = SURFACE_PRESETS.find(p => p.key === add.value); add.value = ''; if (!preset) return;
     const layers = host.surface(), taken = new Set(layers.map(l => l.id)); let n = 1; while (taken.has(`${preset.key}-${n}`)) n++;
-    const {key, ...rest} = preset, layer = {...structuredClone(rest), id: `${key}-${n}`, material: host.materialKey(preset)};
+    const {key, ...rest} = preset, layer = {...structuredClone(rest), id: `${key}-${n}`, ...(preset.material == null ? {} : {material: host.materialKey(preset)})};
+    if (layer.material == null) delete layer.material;
     // A new layer goes on top of its stage, and opens.
     const stage = stageOf(layer), next = [...layers]; let at = 0; for (let j = next.length - 1; j >= 0; j--) if (stageOf(next[j]) <= stage) { at = j + 1; break; }
     next.splice(at, 0, layer); open.add(layer.id); put(next, true);

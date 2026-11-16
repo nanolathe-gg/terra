@@ -356,7 +356,7 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
         let rules = u32(r0.w);
         row += 2u + rules;
         let builtin = r0.x >= 0.0;
-        if (r0.z < -1.5) { continue; }   // a layer that draws a material the map lacks (a material layer, or an engine surface) draws nothing
+        if (r0.z < -1.5) { continue; }   // a layer that draws a material the map lacks (-2: a material layer, or an engine surface) draws nothing, nor does a plants-only layer (-3)
         let k = min(u32(max(r0.x, 0.0)), 6u);
         // Amount is coverage: the share of the layer's area it covers, each covered pixel at full strength (TA's look), not an opacity.
         let amount = r0.y;
