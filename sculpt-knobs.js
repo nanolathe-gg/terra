@@ -126,12 +126,12 @@ export function applyKnob({key,value,settings,renderer,nodes,seed,sync=true}) {
 // Low ground's color where a world picks none (Colors: Low ground): a dark red-brown mud, as retail Zhon's lowland.
 export const LOW_GROUND_RGB=[80,52,42];
 // The Colors panel's rows, [key, label].
-export const COLOR_KEYS=[['shallow','Shallow water'],['low','Low ground'],['vegetation','Vegetation'],...Array.from({length:4},(_,i)=>['flower'+(i+1),'Flower '+(i+1)]),['sun','Sun color'],['sky','Sky color'],['strata1','Strata 1'],['strata2','Strata 2'],['strata3','Strata 3'],['strata4','Strata 4'],['strata5','Strata 5']];
+export const COLOR_KEYS=[['shallow','Shallow water'],['low','Low ground'],['vegetation','Vegetation'],...Array.from({length:4},(_,i)=>['flower'+(i+1),'Flower '+(i+1)]),['sun','Sun color'],['sky','Sky color']];
 // The rows this world shows: Vegetation and a flower's where the world's ground-cover table has them (every world's has; they act once
 // Vegetation cover is above 0), Beach only with a beach layer, Low ground only
 // while its Tint is above 0. Layer colors live in the existing Rock column.
 export const colorRows=(config,settings) => COLOR_KEYS.filter(([key]) => !(key.startsWith('flower')&&!config.material?.groundCover?.plants?.flowers?.palette?.[Number(key.slice(6))-1]) && !(key==='vegetation'&&!config.material?.groundCover?.color)
-  && !(key==='low'&&!(Number(settings.get('lowTint'))>0)) && !key.startsWith('strata'));
+  && !(key==='low'&&!(Number(settings.get('lowTint'))>0)));
 // A world's own base colors after a row is picked (a hex) or cleared (null): a color the server sets is then explicitly off (null, the
 // texture's own color), any other is dropped.
 export function pickWorldColor(config,own,key,hex) {

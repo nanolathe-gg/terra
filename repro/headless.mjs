@@ -127,7 +127,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   renderer.onerror = message => errors.push(message);   // WebGPU validation and device errors arrive after the call that caused them
   fieldsModule.setFailureHandler(error => errors.push('shape fields: ' + (error?.message ?? String(error))));   // a failed shape run leaves the base height
   const ownColors = config.colors || {};   // sculpt.js activeWorld: a world opens with its colors as its own
-  renderer.setColors(engine.rendererColors(engine.worldHexColors(config, settings, ownColors), columnOverride?.colors));
+  renderer.setColors(engine.rendererColors(engine.worldHexColors(config, settings, ownColors)));
   const seed = engine.DEFAULT_SEED, refinementSeed = seed;
   let nodes = [];
   const context = () => engine.shapeContext({config, settings, seed, talusAngle: renderer.variantNumber('talusAngle', 40), minH, maxH});
@@ -139,7 +139,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
     : fieldsModule.createGpuFields(common);
   // sculpt.js scriptedScene: the scene's nodes replace the map's, and the fields evaluate them.
   // sculpt.js syncRocks: the renderer's rock table holds the presets strokes choose, and no other.
-  const syncMaterials = () => { const used = materialsInUse(nodes, materials, rocksInUse(nodes, rocks)), key = JSON.stringify(used); if (key !== materialKey) { renderer.setMaterials(new Map(used.map(m => [m.slot, m]))); materialKey = key; } };
+  const syncMaterials = () => { const used = materialsInUse(nodes, materials, rocks), key = JSON.stringify(used); if (key !== materialKey) { renderer.setMaterials(new Map(used.map(m => [m.slot, m]))); materialKey = key; } };
   const syncRocks = () => { const used = rocksInUse(nodes, rocks), key = JSON.stringify(used); if (key !== rockKey) { rockKey = key; renderer.setRocks(new Map(used.map(r => [r.slot, r]))); } };
   const play = (list, {ground = true} = {}) => { nodes = keepStrokeMaterials(keepStrokeRocks(engine.sceneNodes(config, list, {ground, seed, settings, tools}), rocks), materials); if (scene_) scene_.nodes = nodes; fields.changed(); syncRocks(); syncMaterials(); return nodes.length; };
   let scene_ = null;
@@ -306,7 +306,7 @@ export async function scene(s, list, {ground = true} = {}) { s.play(list, {groun
 export async function pickColor(s, key, hex) {
   const {pickWorldColor} = await import('../sculpt-knobs.js');
   s.ownColors = pickWorldColor(s.config, s.ownColors, key, hex);
-  s.renderer.setColors(s.engine.rendererColors(s.engine.worldHexColors(s.config, s.settings, s.ownColors), s.columnOverride?.colors));
+  s.renderer.setColors(s.engine.rendererColors(s.engine.worldHexColors(s.config, s.settings, s.ownColors)));
 }
 // The map's own rock column (sculpt.js editColumn and restoreColumn, the Rock column panel's edit; null puts the world's back): checked as the
 // page checks it, then the config the renderer and the Time pass read, the column's uniforms and slot colors, and the Time pass again.
@@ -316,12 +316,12 @@ export async function column(s, value) {
   s.columnOverride = copyColumn(value);
   s.config.column = s.columnOverride || s.worldColumn.column;
   s.renderer.applyKnobs();
-  s.renderer.setColors(s.engine.rendererColors(s.engine.worldHexColors(s.config, s.settings, s.ownColors), s.columnOverride?.colors));
+  s.renderer.setColors(s.engine.rendererColors(s.engine.worldHexColors(s.config, s.settings, s.ownColors)));
   await weather(s);
 }
 // What the World panel enables a row by (sculpt-knobs.js worldPanelValues), with Weathering on as the page opens.
 export async function panelValues(s) {
   const {worldPanelValues} = await import('../sculpt-knobs.js');
-  const colors = s.engine.rendererColors(s.engine.worldHexColors(s.config, s.settings, s.ownColors), s.columnOverride?.colors);
+  const colors = s.engine.rendererColors(s.engine.worldHexColors(s.config, s.settings, s.ownColors));
   return worldPanelValues({config: s.config, renderer: s.renderer, nodes: s.nodes, colors, weathering: s.renderer.variantNumber('erosion', 0) > 0, materialWeathering: s.sliders['material-weathering']});
 }

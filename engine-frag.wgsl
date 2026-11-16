@@ -1488,7 +1488,6 @@ fn surfFoam(pixel: vec2f, p: vec2f, x: f32, q: vec2f, depth: f32, slope: f32, e:
     return front * 0.85;
 }
 // A rock slot's surface material (its own, else the world's rock material), -1 none; and that material's mean color (the old fixed mean without one).
-fn rockMaterialMean(slot: u32) -> vec3f { let m = rockMaterialOf(slot); if (m < 0) { return vec3f(0.33); } return materialMean(u32(m)); }
 // The rock's grain at a native pixel: its material's unlit color over the material's mean (1 where the rock has no material).
 fn rockGrain(slot: u32, pixel: vec2f) -> vec3f {
     let m = rockMaterialOf(slot); if (m < 0) { return vec3f(1.0); }
@@ -2138,13 +2137,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // highlights.
         let crystalColor = roleMean(u.crystalGround, u.rockGround);   // the crystal material's Color (else the rock material's)
         let jitter = clamp((crystalMask - 0.9) * 10.0, -1.0, 1.0);
-        // Tops keep the ground's own grain (Crystal's streaks), moved
-        // toward the crystal colour.
+        // Tops keep the ground's own grain (Crystal's streaks), moved toward the crystal material's own art (its facets and tones; the
+        // rock material's where a map has none).
         // Crystal Grain 1: the tops carry the level ground's own art (retail
         // column tops are streaked like the ground), not the slope cover.
         let topBase = mix(material, levelGround, u.crystalGrain);
-        let grainLum = dot(topBase, vec3f(0.299, 0.587, 0.114)) / max(dot(groundMean(), vec3f(0.299, 0.587, 0.114)), 0.05);
-        var faces = mix(topBase, crystalColor * clamp(grainLum, 0.6, 1.5), 0.35) * (1.0 + 0.25 * jitter) * u.crystalTone;
+        let crystalArt = roleColor(u.crystalGround, u.rockGround, pixel);
+        var faces = mix(topBase, crystalArt, 0.35) * (1.0 + 0.25 * jitter) * u.crystalTone;
         faces = mix(faces, crystalColor * 0.38 * u.crystalFace, smoothstep(1.2, 2.5, length(g)));
         // G7: a crater's skin has no seams, so the ramp from its mark to bare ground (the only place below .66) draws no outline.
         var skinEdge = 0.0;

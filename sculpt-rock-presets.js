@@ -28,22 +28,22 @@ export const ROCK_PRESETS={
 // and aprons, the crystal web and rock on level tops (Rock crown). A recipe that does not set one takes the world's.
 export const ROCK_SURFACE_KEYS=['crackSeverity','crackMajor','crackMinor','crackHairline','crackBlocks','crackSpacing','crackWidth','crackDark','crackNetwork','banding','pockmark','pockSize','moonCups','moonCupSize','moonCupDepth','cupStretch','moonRibs','moonRibDepth','moonRibDark','moonFolds','moonFoldSpacing','iceCrystal','iceCrest','iceSnow','iceFall','iceApron','gougeWeb','rockCrown'];
 export const ROCK_KEYS=[...Object.keys(base),'strata','strataContrast','strataGrain','absorbDepth','shadowTint',...ROCK_SURFACE_KEYS];
-// The starting recipes' bed colors ({beds}, checkColors): a preset made from one takes them. A world that names a recipe as its rock
+// The starting recipes' bed tones ({beds}, checkColors: shifts of the recipe's rock material's color): a preset made from one takes them. A world that names a recipe as its rock
 // keeps its own colors (applyWorldRock takes the numbers and beds only), so its slot 0 looks as it did. Each color is an entry of the game's
 // palette (materials/palette.json) on one ramp, so a lit face steps along that ramp instead of dithering between two hues: the palette has
 // gray, olive, ochre, rose and blue-gray ramps from dark to light, and few orange-browns. A recipe's rock color is its material's Color
 // (ROCK_MATERIALS: library entries like a rock graph, each at the color the recipe's rock had, measured as the material's GPU mean).
 export const ROCK_COLORS={
- sandstone:{beds:['#836f23','#9b5b63','#9b832f','#8b474f','#6b5b17']},   // ochre, rose beds
- shale:{beds:['#636343','#6b6b6b','#535333','#7b7b7b','#4b4b4b']},   // gray, olive beds
- granite:{beds:['#5b5b5b','#8b8b8b','#4b4b4b','#9b9b9b','#6b6b6b']},   // modern Green's gray
- basalt:{beds:['#2f4b5f','#3f5f73','#273f57','#53778b','#1f2f47']},   // dark blue-gray
- limestone:{beds:['#c3c39b','#abab83','#dfdfb7','#93936f','#bbbbbb']},   // pale cream
- gneiss:{beds:['#8b8b8b','#3b3b3b','#9b9b9b','#4b4b4b','#6b6b6b']},   // gray bands, light and dark
- schist:{beds:['#777757','#8b8b8b','#636343','#9b9b9b','#535333']},   // silver gray, olive beds
- conglomerate:{beds:['#777757','#93936f','#636343','#abab83','#535333']},   // olive tan
- breccia:{beds:['#7b7b7b','#8b474f','#9b9b9b','#6f333b','#5b5b5b']},   // gray, rose clasts in its beds
- siltstone:{beds:['#632b33','#535333','#6f333b','#636343','#57232b']},   // maroon, olive beds
+ sandstone:{beds:[[0.0,0.0,0.0],[0.0941,-0.0784,0.251],[0.0941,0.0784,0.0471],[0.0314,-0.1569,0.1725],[-0.0941,-0.0784,-0.0471]]},   // ochre, rose beds
+ shale:{beds:[[0.0314,0.0314,-0.0941],[0.0627,0.0627,0.0627],[-0.0314,-0.0314,-0.1569],[0.1255,0.1255,0.1255],[-0.0627,-0.0627,-0.0627]]},   // gray, olive beds
+ granite:{beds:[[-0.098,-0.098,-0.098],[0.0902,0.0902,0.0902],[-0.1608,-0.1608,-0.1608],[0.1529,0.1529,0.1529],[-0.0353,-0.0353,-0.0353]]},   // modern Green's gray
+ basalt:{beds:[[0.0,0.0,0.0],[0.0627,0.0784,0.0784],[-0.0314,-0.0471,-0.0314],[0.1412,0.1725,0.1725],[-0.0627,-0.1098,-0.0941]]},   // dark blue-gray
+ limestone:{beds:[[0.0,0.0,0.0],[-0.0941,-0.0941,-0.0941],[0.1098,0.1098,0.1098],[-0.1882,-0.1882,-0.1725],[-0.0314,-0.0314,0.1255]]},   // pale cream
+ gneiss:{beds:[[0.1255,0.1255,0.1255],[-0.1882,-0.1882,-0.1882],[0.1882,0.1882,0.1882],[-0.1255,-0.1255,-0.1255],[0.0,0.0,0.0]]},   // gray bands, light and dark
+ schist:{beds:[[-0.0157,-0.0157,-0.1412],[0.0627,0.0627,0.0627],[-0.0941,-0.0941,-0.2196],[0.1255,0.1255,0.1255],[-0.1569,-0.1569,-0.2824]]},   // silver gray, olive beds
+ conglomerate:{beds:[[0.0,0.0,0.0],[0.1098,0.1098,0.0941],[-0.0784,-0.0784,-0.0784],[0.2039,0.2039,0.1725],[-0.1412,-0.1412,-0.1412]]},   // olive tan
+ breccia:{beds:[[0.0,0.0,0.0],[0.0627,-0.2039,-0.1725],[0.1255,0.1255,0.1255],[-0.0471,-0.2824,-0.251],[-0.1255,-0.1255,-0.1255]]},   // gray, rose clasts in its beds
+ siltstone:{beds:[[0.0,0.0,0.0],[-0.0627,0.1569,0.0],[0.0471,0.0314,0.0314],[0.0,0.2196,0.0627],[-0.0471,-0.0314,-0.0314]]},   // maroon, olive beds
 };
 const ranges=new Map(KNOBS.flatMap(([,rows])=>rows.map(([key,,lo,hi])=>[key,[lo,hi]])));
 // Validate the entire recipe before changing the open scene. Unknown, removed
@@ -157,17 +157,18 @@ const freeKey=(rocks,key)=>key&&!rocks.some(r=>r.key===key)?key:null;
 function checkName(name){if(typeof name!=='string'||!name.trim()||name.trim().length>NAME_MAX)throw Error(`A rock preset needs a name of 1 to ${NAME_MAX} characters.`);return name.trim();}
 // A preset's column: its sections alone (the beds; colors, bands and wander stay the world's), checked as a map's column is.
 function checkColumn(column){if(column==null)return null;const c=copyColumn(column);if(!c.sections)throw Error('A rock preset\'s column needs its sections.');return {sections:c.sections};}
-// A preset's colors: {beds, absorb}, its beds' material slots (COLUMN_SLOTS of them) and the color it deepens toward with thickness (Color
-// deepens with thickness), each '#rrggbb' or null for slot 0's. None at all is null. The rock's own color is its material's Color; a `rock`
-// color from an older save or recipe is dropped.
+// A preset's colors: {beds, absorb}, its beds' tones (COLUMN_SLOTS [r, g, b] shifts of its material's color, -1 to 1: sculpt-column.js
+// columnTones) and the color it deepens toward with thickness (Color deepens with thickness, '#rrggbb'), each null for slot 0's. None at all
+// is null. The rock's own color is its material's Color; a `rock` color, or beds as colors, from an older save or recipe are dropped.
 const HEX=/^#[0-9a-f]{6}$/i;
 export function checkColors(colors){
  if(colors==null)return null;
- const fail=()=>{throw Error(`A rock preset's colors are {beds, absorb}: ${COLUMN_SLOTS} '#rrggbb' for its beds and one it deepens toward, or null for the world's.`);};
+ const fail=()=>{throw Error(`A rock preset's colors are {beds, absorb}: ${COLUMN_SLOTS} tones ([r, g, b] from -1 to 1) for its beds and one '#rrggbb' it deepens toward, or null for the world's.`);};
  if(typeof colors!=='object'||Array.isArray(colors)||Object.keys(colors).some(k=>!['rock','beds','absorb'].includes(k)))fail();
  const hex=v=>{if(typeof v!=='string'||!HEX.test(v))fail();return v.toLowerCase();};
  if(colors.beds!=null&&(!Array.isArray(colors.beds)||colors.beds.length!==COLUMN_SLOTS))fail();
- const beds=colors.beds==null?null:colors.beds.map(hex),absorb=colors.absorb==null?null:hex(colors.absorb);
+ const tone=v=>{if(!Array.isArray(v)||v.length!==3||v.some(c=>typeof c!=='number'||!Number.isFinite(c)||c<-1||c>1))fail();return [...v];};
+ const beds=colors.beds==null||colors.beds.every(v=>typeof v==='string')?null:colors.beds.map(tone),absorb=colors.absorb==null?null:hex(colors.absorb);
  return beds||absorb?{beds,...(absorb?{absorb}:{})}:null;
 }
 // A map's rock presets checked before they touch the open map (a save, a share link, a scene): slots 1-15, each once, a name, numbers within

@@ -85,13 +85,22 @@ test('invalid map column values and shapes are rejected before application', () 
     c=>c.sections[0].beds[0][0]=0,c=>c.sections[0].beds[0][0]=1e-50,c=>c.sections[0].beds[0][1]=1.1,
     c=>c.sections[0].beds[0][2]=.5,c=>c.sections[0].beds[0][2]=5,c=>c.sections[0].start=NaN,
     c=>c.sections[1].start=c.sections[0].start,c=>{c.sections[0].start=1e10;c.sections[1].start=1e10+1;},
-    c=>c.sections[0].beds.forEach(b=>b[0]=3e38),c=>c.bands[0]=-1,c=>c.bands[1]=2,c=>c.colors[0][0]=256,
+    c=>c.sections[0].beds.forEach(b=>b[0]=3e38),c=>c.bands[0]=-1,c=>c.bands[1]=2,c=>c.tones[0][0]=1.5,
     c=>c.wander.terrain[0]='4',c=>c.origin='unknown',c=>c.sections.push(c.sections[0]),
     c=>c.extra=1,
-    // the generic checks: a bed without its three numbers, a section without beds or with an unknown key, the bands' pair, the five slot colors, an unknown key
-    c=>c.sections[0].beds[0].pop(),c=>c.sections[0].beds=[],c=>c.sections[0].lip=1,c=>c.bands.push(1),c=>c.colors.pop(),
+    // the generic checks: a bed without its three numbers, a section without beds or with an unknown key, the bands' pair, the five slot tones, an unknown key
+    c=>c.sections[0].beds[0].pop(),c=>c.sections[0].beds=[],c=>c.sections[0].lip=1,c=>c.bands.push(1),c=>c.tones.pop(),
     c=>c.wander.extra=1,c=>c.sections='1'
   ]){const bad=structuredClone(desert);mutate(bad);assert.throws(()=>copyColumn(bad));}
   assert.throws(()=>copyColumn([]));
-  assert.throws(()=>copyColumn({sections:[{start:0,beds:[[1,.5,5]]}]}),'five slots without colors of its own');
+  assert.throws(()=>copyColumn({sections:[{start:0,beds:[[1,.5,5]]}]}),'five slots without tones of its own');
+});
+
+test('a column\'s beds are tones of its rock: shifts of its material\'s color; a column saved with bed colors opens without them', async () => {
+  const {columnTones, toneColor, colorTone, DEFAULT_TONES} = await import('../sculpt-column.js');
+  assert.deepEqual(columnTones(null), DEFAULT_TONES, 'five grays of the rock without tones of its own');
+  const rock = [.3, .2, .1], color = [.74, .55, .42], tone = colorTone(rock, color);
+  assert.deepEqual(toneColor(rock, tone).map(v => Math.round(v * 1e4)), color.map(v => Math.round(v * 1e4)), 'a color picked is drawn back');
+  assert.deepEqual(toneColor([.6, .2, .1], tone).map(v => +v.toFixed(4)), [1, .55, .42], 'the rock\'s color moves the bed, held to 0..1');
+  assert.equal(copyColumn({...structuredClone(desert), colors: [[1, 2, 3]]}).colors, undefined, 'old bed colors are dropped');
 });

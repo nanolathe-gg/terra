@@ -374,15 +374,10 @@ test('a material’s own Color moves every color step together, not the steps th
   for (const key of Object.keys(LIBRARY)) assert.ok(colorSources(LIBRARY[key]).length, `${key} has a color to set`);
 });
 
-test('the world’s crystal material joins every map and is cached only while a stroke may lay crystal', async () => {
+test('the world’s crystal material joins every map and is cached with the world’s other surfaces', async () => {
   const {materialsInUse} = await import('../sculpt-materials.js');
   const config = {materials: {ground: 'green-ground', water: 'green-water', crystal: 'crystals'}};
   const list = withWorldMaterials(undefined, config), crystal = list.find(m => m.worldCrystal);
   assert.equal(crystal?.source, 'crystals');
-  const cached = nodes => materialsInUse(nodes, list).some(m => m.worldCrystal);
-  assert.ok(!cached([]), 'no stroke: not cached');
-  assert.ok(!cached([{kind: 'landform', params: {iceFacets: 1, facetSurface: 0}}]), 'rock facets lay no crystal');
-  assert.ok(cached([{kind: 'landform', params: {iceFacets: 1, facetSurface: 1}}]), 'crystal facets');
-  assert.ok(cached([{kind: 'landform', params: {shorePlates: 1}}]), 'shore plates');
-  assert.ok(!cached([{kind: 'landform', hidden: true, params: {iceFacets: 1, facetSurface: 1}}]), 'a hidden stroke draws nothing');
+  assert.ok(materialsInUse([], list).some(m => m.worldCrystal), 'no stroke needed: a stroke\'s shape settings never change the cached set');
 });
