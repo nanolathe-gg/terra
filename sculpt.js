@@ -426,7 +426,7 @@ const landformCut=(lp,t,n=33) => { const p=landformAt(lp,t),out=[]; for (let j=0
 let lfPlace=.5;
 const selectedLandform=() => selected>=0 && nodes[selected]?.kind==='landform' && nodes[selected].points?.length ? nodes[selected] : null;
 function sectionMark() {
-  const n=tool==='move'?selectedLandform():null; if (!n || !regionalFields) return null;
+  const n=selectedLandform(); if (!n || !regionalFields) return null;
   const lp=landformPath(n),p=landformAt(lp,lfPlace); return {a:{x:p.x+p.bx*lp.back,y:p.y+p.by*lp.back},b:{x:p.x-p.bx*lp.front,y:p.y-p.by*lp.front}};
 }
 // Match the dock's actual dimensions so curve text and handles stay sharp.
@@ -933,13 +933,15 @@ function endRegionalStroke(commit=true,simplify=false) {
     node.params={...node.params,river:{drawn:node.points.map(p=>({x:p.x,y:p.y}))}};
     migrateRiverNode(node);evaluate(stroke.index,unionRect(before,nodeBounds(node)));
   }
-  const gesture=stroke,rect=nodeBounds(gesture.node);stroke=null;
+  const gesture=stroke,rect=nodeBounds(gesture.node),drawing=tool;stroke=null;
   const emptyBranch=gesture.original&&gesture.attachment>=0&&gesture.node.paths[gesture.pathIndex].length===1;
   if(!commit||emptyBranch){
     if(gesture.original)nodes[gesture.index]=gesture.original;else nodes.splice(gesture.index,1);
     selected=gesture.selectionBefore;evaluate(gesture.index,unionRect(rect,gesture.original?nodeBounds(gesture.original):null));
   }else{selected=gesture.index;pathPoint=-1;pathIndex=gesture.original?gesture.pathIndex:0;if(!gesture.original)pathEditing=false;if(gesture.advanceSeed)seed=randomSeed(gesture.node.seed);checkpoint();}
   if(selected>=0)selectNode(selected);
+  // A new shape stays selected for its card, and the drawing tool stays: the next drag draws another. V or Select edits on the map.
+  if(commit&&!emptyBranch&&!gesture.original&&drawing!=='move'&&tool==='move'){tool=drawing;drawMode='new';}
   if(commit&&!emptyBranch&&gesture.original){drawMode='add';pathIndex=gesture.pathIndex;}
   renderLayers();updateControls();schedule();queueWeather();return commit?gesture.index:false;
 }

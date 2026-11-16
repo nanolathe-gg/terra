@@ -362,9 +362,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(hoveredNode>=0&&hoveredNode!==api.selection()&&!members.includes(hoveredNode))drawSelection(ink,geometry(hoveredNode),{label:api.selectionLabel(hoveredNode),hover:true});
       for(const i of members)if(i!==api.selection())drawSelection(ink,geometry(i),{member:true});
       drawSelection(ink,geometry(api.selection()),{label:api.selectionLabel(api.selection()),pathMode:api.pathEditing?.()||api.drawMode?.()==='add',point:api.pathSelection?.(),activePath:api.pathIndex?.()});
-      // H27: a landform's section picked on its along-the-path canvas, marked across the path.
-      const mark=api.sectionMark?.();if(mark){const a=project(mark.a),b=project(mark.b);ink.save();ink.strokeStyle='#ffd27a';ink.lineWidth=2.5/scale;ink.beginPath();ink.moveTo(a.x,a.y);ink.lineTo(b.x,b.y);ink.stroke();ink.restore();}
     }
+    // H27: a landform's section picked on its along-the-path canvas, marked across the path (also while the drawing tool keeps the shape just drawn).
+    if(!navigating()&&!features?.active){const mark=api.sectionMark?.();if(mark){const a=project(mark.a),b=project(mark.b);ink.save();ink.strokeStyle='#ffd27a';ink.lineWidth=2.5/scale;ink.beginPath();ink.moveTo(a.x,a.y);ink.lineTo(b.x,b.y);ink.stroke();ink.restore();}}
     if (!navigating() && hover && !features?.active && (api.currentTool()!=='move'||api.drawMode?.()==='add')) { ink.strokeStyle='#b8eef3'; ink.lineWidth=1/scale; ink.beginPath(); ink.arc(hover[0],hover[1]-(Math.max(config.seaLevel,visibleSample(...hover))-config.baseHeight)/2,Number($('diameter').value)/2,0,Math.PI*2); ink.stroke(); }
     // H7b: ?levelsOverlay=1 marks each shown chunk with its level: orange Q for a quarter image, green F for a final one.
     if(levelsOverlay)for(const e of cache.values())if(intersects(e,v)){const q=(e.scale??1)>1;ink.strokeStyle=q?'#ff9a3c':'#7dff7d';ink.lineWidth=2/scale;ink.strokeRect(e.x+1/scale,e.y+1/scale,e.width-2/scale,e.height-2/scale);ink.fillStyle=ink.strokeStyle;ink.font=`${16/scale}px monospace`;ink.fillText(q?'Q':'F',e.x+8/scale,e.y+20/scale);}
