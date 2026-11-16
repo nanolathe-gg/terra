@@ -67,8 +67,8 @@ export const NODES = {
     help: 'Smears a pattern along another pattern’s slope, downhill by Distance px (uphill when negative; 0 leaves it): melted or eroded rock, wind-swept sand, runnels. Level parts of the Slope stay put. Its inputs are computed over the whole repeat first, as a Blur’s are.'},
   stamp: {code: 15, label: 'Stamp', out: 'any', inputs: [['base', 'Base', 'any'], ['shape', 'Shape', 'any'], ['in', 'Coordinates', 'coords'], ['density', 'Density', 'gray']],
     params: () => [P('spacing', 'Spacing (px)', 4, 128, 24), P('radius', 'Radius (px)', 1, 64, 10), P('coverage', 'Coverage', 0, 1, .7), P('jitter', 'Jitter', 0, 1.8, 1),
-      P('hardness', 'Hardness', 0, .98, .8), P('sizeVariation', 'Size variation', 0, 1, .3), P('turn', 'Turn variation', 0, 1, 1), P('variety', 'Variety', 0, 1, 1), SEED],
-    help: 'Stamps copies of another pattern (Shape) over a Base: each a disc of Radius px cut from the Shape, turned and sized its own way, on a jittered lattice. Variety 0 cuts every copy from the Shape’s middle; 1 from anywhere in it. The topmost copy wins where two overlap; Hardness sharpens their edges; a Density input thins them where it is dark. For a color and a height that match, duplicate the node and change its inputs.'},
+      P('hardness', 'Hardness', 0, .98, .8), P('sizeVariation', 'Size variation', 0, 1, .3), P('turn', 'Turn variation', 0, 1, 1), P('variety', 'Variety', 0, 1, 1), P('roughness', 'Outline roughness', 0, 1, 0), SEED],
+    help: 'Stamps copies of another pattern (Shape) over a Base: each a disc of Radius px cut from the Shape, turned and sized its own way, on a jittered lattice. Variety 0 cuts every copy from the Shape’s middle; 1 from anywhere in it. Outline roughness breaks each copy’s circle into an irregular outline of its own. The topmost copy wins where two overlap; Hardness sharpens their edges; a Density input thins them where it is dark. For a color and a height that match, duplicate the node and change its inputs.'},
   light: {code: 8, label: 'Light', out: 'gray', inputs: [['in', 'Height', 'gray']],
     params: () => [P('direction', 'Direction (°)', 0, 360, 135), P('strength', 'Strength', 0, 8, 2)],
     help: 'How a height’s slopes face a light: .5 on the level, lighter toward the light. Tints color like a lit bump without real relief.'},
@@ -371,18 +371,20 @@ fn blurPass(@builtin(global_invocation_id) id:vec3u){
  for(var k=-r;k<=r;k++){let w=exp(-f32(k*k)/(2.0*sigma*sigma));sum+=textureLoad(blurSrc,((p+dir*k)%n+n)%n,0)*w;total+=w;}
  textureStore(stageOut,p,sum/total);
 }`;
-// Stamp: spacing, radius, coverage, jitter, hardness, size variation, turn variation, variety, seed; k is its stage. Each lattice cell may
+// Stamp: spacing, radius, coverage, jitter, hardness, size variation, turn variation, variety, outline roughness, seed; k is its stage.
+// Roughness pulls each copy's edge in by up to .6 of its radius along an outline of two waves with phases of its own (0 a circle). Each lattice cell may
 // hold one copy, kept by chance (coverage, times the density where one is wired): a disc of its radius cut from the stage (around the
 // repeat's middle at Variety 0, anywhere at 1), turned and scaled its own way. The two topmost copies over a texel are laid on the base
 // in order, each through its soft edge, so overlaps keep a clean order.
 const STAMP = `fn nStamp(s:MaterialStep,p:vec2f,base:vec4f,density:vec4f,linked:bool,k:i32)->vec4f{
- let n=max(1.0,round(graphPeriod/arg(s,0u)));let size=graphPeriod/n;let q=graphPos(p)/size;let c=floor(q);let seed=37.0*arg(s,8u);
+ let n=max(1.0,round(graphPeriod/arg(s,0u)));let size=graphPeriod/n;let q=graphPos(p)/size;let c=floor(q);let seed=37.0*arg(s,9u);
  let reach=i32(min(3.0,ceil(arg(s,1u)*(1.0+.6*arg(s,5u))/size+.5*arg(s,3u))));let cover=arg(s,2u)*select(1.0,clamp(density.x,0.0,1.0),linked);
  var v1=base;var w1=0.0;var p1=-1.0;var v2=base;var w2=0.0;var p2=-1.0;
  for(var y=-reach;y<=reach;y++){for(var x=-reach;x<=reach;x++){
   let cell=c+vec2f(f32(x),f32(y));let id=poolWrap(cell,n);let h=cellHash(id+907.0+seed);let v=cellHash(id+953.0+seed);
   let keep=smoothstep(v.y-.04,v.y+.04,cover)*smoothstep(0.0,.04,cover);if(keep<=0.0){continue;}
-  let scale=1.0+arg(s,5u)*1.2*(v.x-.5);let radius=arg(s,1u)*scale;let o=(q-(cell+.5+(h-.5)*arg(s,3u)))*size;let d=length(o);if(d>=radius){continue;}
+  let scale=1.0+arg(s,5u)*1.2*(v.x-.5);let o=(q-(cell+.5+(h-.5)*arg(s,3u)))*size;let d=length(o);
+  let ph=cellHash(id+1091.0+seed)*6.2831853;let th=atan2(o.y,o.x);let radius=arg(s,1u)*scale*(1.0-arg(s,8u)*.6*(.5+.25*sin(3.0*th+ph.x)+.25*sin(5.0*th+ph.y)));if(d>=radius){continue;}
   let w=keep*(1.0-smoothstep(radius*arg(s,4u),radius,d));let r=cellHash(id+983.0+seed);let t=arg(s,6u)*6.2831853*(r.x-.5);
   let local=vec2f(cos(t)*o.x+sin(t)*o.y,cos(t)*o.y-sin(t)*o.x)/scale;
   let value=stageAt(k,mix(vec2f(.5*graphPeriod),cellHash(id+1013.0+seed)*graphPeriod,arg(s,7u))+local);let rank=r.y;
