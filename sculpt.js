@@ -1879,7 +1879,7 @@ function buildWorldPanel() {
   const beaches=Object.entries(config.beachSources||{}).filter(([id]) => id!==config.biomeId);
   if (beaches.length && (!config.layers.includes('beach') || config.beachTable)) {
     const beachRow=document.createElement('div'); beachRow.className='control';
-    beachRow.innerHTML=`<label for="beach-from">Beach</label><select id="beach-from" style="width:100%"><option value="">None</option>${beaches.map(([id,b]) => `<option value="${id}">${b.name}</option>`).join('')}</select><p class="small">Another world's beach sand along this world's shores. Beach width below sets its reach, and the Beach color in Colors its color.</p>`;
+    beachRow.innerHTML=`<label for="beach-from">Beach</label><select id="beach-from" style="width:100%"><option value="">None</option>${beaches.map(([id,b]) => `<option value="${id}">${b.name}</option>`).join('')}</select><p class="small">Another world's beach sand along this world's shores. Beach width below sets its reach.</p>`;
     document.querySelector('#knobs [data-slot="beach-from"]').replaceChildren(beachRow);
     $('beach-from').value=config.beachSources[experiment.get('beachFrom')]?experiment.get('beachFrom'):'';
     $('beach-from').onchange=() => setKnob('beachFrom',$('beach-from').value);
