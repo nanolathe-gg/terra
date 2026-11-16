@@ -279,6 +279,14 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .surface-head input.surface-name{min-width:6em}
 .surface-head button{flex:none;padding:1px 6px}
 .surface-head .surface-toggle{border:0;background:none;width:1.4em;padding:0}
+.surface-layer.unshown>.surface-head .surface-name,.surface-layer.unshown>.surface-head .material-chip{opacity:.45}
+.surface-head button[aria-pressed="true"].surface-solo{background:var(--accent,#c43b3b);color:#fff}
+.surface-head .surface-eye,.surface-head .surface-solo{border:0;background:none;width:1.6em;padding:0;opacity:.8}
+.surface-head .surface-eye:disabled{opacity:.3}
+.surface-order{flex-wrap:wrap}
+.surface-order>span{flex:1}
+.surface-view{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;padding:4px 6px;border:1px dashed var(--accent,#c43b3b);border-radius:6px}
+.surface-view button{margin-left:auto}
 .surface-head .surface-stage{opacity:.75;white-space:nowrap}
 .material-chip.own{background:repeating-linear-gradient(45deg,#777 0 2px,#444 2px 4px)}
 .surface-body{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;margin-top:6px}

@@ -552,7 +552,7 @@ export class TerrainRenderer {
     // The world's surface layers in the rows before the placement rows (engine-frag.wgsl surfaceStage): two a layer from row 0, the stages' heads at SURFACE_HEAD_ROW.
     // A material layer draws the map's material that carries its id (worldLayer).
     const slotOf = id => [...(this.grounds || new Map())].find(([, m]) => m.worldLayer === id)?.[0] ?? -1;
-    const surface = surfaceRows(this.config.surface, slotOf);
+    const surface = surfaceRows(this.config.surface, slotOf, this.surfaceHidden);
     const head = [...surface.rows, ...Array.from({length: SURFACE_FLAGS_ROW - surface.rows.length}, () => [0, 0, 0, 0]), surface.flags, ...surface.head];
     return [...head, ...rows, ...groundCoverRows(this.config.material?.groundCover,variant,this.colorOverrides||{},this.means?.ground)];
   }
@@ -1287,6 +1287,16 @@ export class TerrainRenderer {
     this.surfacePreview = row;
     this.i('uSurfacePreview', row);
     this.i('uDiagnosticView', row >= 0 ? DIAGNOSTIC_VIEWS.indexOf('surface-layer') + 1 : DIAGNOSTIC_VIEWS.indexOf(this.variant?.get('view')) + 1);
+  }
+  // The layers the Surface section hides while an artist designs (their keys): a view only. An export draws every layer (designView).
+  setSurfaceHidden(keys = []) { this.surfaceHidden = keys.length ? new Set(keys) : null; this.set('uMaterialTable', this.placementTable(this.variant)); }
+  // Clears the Surface section's design view (hidden layers, the coverage preview) for an export's tiles; returns the function that puts it back,
+  // or null when there is none.
+  suspendDesignView() {
+    const hidden = this.surfaceHidden, preview = this.surfacePreview ?? -1;
+    if (!hidden && preview < 0) return null;
+    this.surfaceHidden = null; this.set('uMaterialTable', this.placementTable(this.variant)); this.setSurfacePreview(-1);
+    return () => { this.surfaceHidden = hidden; this.set('uMaterialTable', this.placementTable(this.variant)); this.setSurfacePreview(preview); };
   }
   rockMaterialTint() { const slot = [...(this.grounds || new Map())].find(([, m]) => m.worldRock)?.[0]; return slot ? materialTint(this.grounds.get(slot)) : this.means.rock; }
   // A rock slot's colors as the draw reads them, '#rrggbb': {rock, beds}, the rock's (its own, else the rock material's mean, as rockFlat) and

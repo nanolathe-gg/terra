@@ -760,6 +760,8 @@ function surfaceHost() {
     apply:applySurface,
     restore:()=>{setSurfaceList(structuredClone(baseSurface),false);saveWorlds();checkpoint(true);},
     preview:row=>{if(!renderer||renderer.surfacePreview===row)return;renderer.setSurfacePreview(row);worldChanged({stage:'C',world:false});schedule();},
+    // Layers hidden while the artist designs (their keys): a view of this page only, never saved, undone or exported.
+    hide:keys=>{if(!renderer)return;renderer.setSurfaceHidden(keys);worldChanged({stage:'C',world:false});schedule();},
     material:layer=>{const m=layerMaterial(layer);return m?{name:m.name,color:hex(m),height:Boolean(m.nodes?.find(n=>n.type==='output')?.in?.height)}:null;},
     edit:(layer,button)=>{const m=layerMaterial(layer);if(m)materialEditor?.open(m.slot,button);},
     library:()=>Object.entries(LIBRARY).filter(([key])=>!key.endsWith('-water')).map(([key,m])=>({key,name:m.name,color:hex(m)})),

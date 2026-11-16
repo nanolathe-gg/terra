@@ -130,3 +130,11 @@ test('a map’s materials follow the surface: a copy no layer draws leaves unles
   assert.throws(() => deleteMaterial(withSand, [], copy.slot), /draws the surface layer/);
   assert.equal(assignMaterial(withSand, copy.slot, 'worldGround').find(m => m.slot === copy.slot).worldLayer, undefined, 'made the ground, it draws no layer');
 });
+
+test('surface: a hidden layer (the design view) draws nothing and keeps its place', () => {
+  const list = [{builtin: 'rock'}, {id: 'cap', name: 'Cap', material: 'ice-ground', stage: 'snow', amount: .4}];
+  const shown = surfaceRows(list), hidden = surfaceRows(list, () => -1, new Set(['rock', 'cap']));
+  assert.deepEqual(hidden.layerRows, shown.layerRows);
+  for (const i of [0, 1]) assert.equal(hidden.rows[hidden.layerRows[i]][1], 0);
+  assert.equal(shown.rows[shown.layerRows[1]][1], .4);
+});

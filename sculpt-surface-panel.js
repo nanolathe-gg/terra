@@ -63,16 +63,24 @@ function switchRule(layer, kind) {
   if (kind === 'score') layer.score = {terms: (facts.length ? facts : ['slope']).map(fact => ({fact, weight: 1})), from: .5, fade: .1};
 }
 
-// `host`: surface() the list now, apply(next, {commit}), restore() the world's own, preview(row or -1), material(layer) → {name, color} or
+// `host`: surface() the list now, apply(next, {commit}), restore() the world's own, preview(row or -1), hide(keys) the layers not shown now, material(layer) → {name, color} or
 // null (height: whether it has art height), edit(layer, button) to open its material, materialKey(preset) → a library key for a preset's material, library() → the materials a
 // layer may draw [{key, name, color}], settings(key) to show a World setting's row and settingNote(key) why it is unavailable ('' if not).
 export function mountSurfacePanel(host) {
   const list = $('surface-layers');
   const open = new Set();   // the layers whose rows are open, by key
+  // The design view, by key: layers hidden for now, or the one layer shown alone (solo). Never saved, undone or exported (host.hide).
+  const hidden = new Set();
+  let solo = null, sent = '';
+  const shown = key => solo ? key === solo : !hidden.has(key);
+  const sendView = (force = false) => {
+    const keys = host.surface().map(layerKey).filter(k => !shown(k)), text = keys.join('\n');
+    if (force ? text || sent : text !== sent) { sent = text; host.hide(keys); }
+  };
   let editing = null;   // the list while a slider moves; committed on change
   const current = () => editing ?? host.surface();
   const put = (next, commit) => { editing = commit ? null : next; host.apply(next, {commit}); if (commit) build(); };
-  const refresh = () => { if (!editing) build(); };   // after a material edit, an undo or a load; not while a slider moves
+  const refresh = () => { if (!editing) { build(); sendView(true); } };   // after a material edit, an undo or a load; not while a slider moves
   const edit = (i, change, commit) => { const next = structuredClone(current()); change(next[i], next); put(next, commit); };
   const slider = (label, value, min, max, step, onInput, title = '') => {
     const id = uid(label), out = el('output', {htmlFor: id, value: String(value)});
@@ -154,9 +162,14 @@ export function mountSurfacePanel(host) {
     const summary = [layer.amount != null && layer.amount !== 1 ? Math.round(layer.amount * 100) + '%' : '', ruleKind(layer) !== 'none' ? 'ruled' : '', layer.material != null && builtin ? 'material' : ''].filter(Boolean).join(' · ');
     if (summary) head.append(el('span', {className: 'small surface-stage', textContent: summary}));
     const move = (d, text, title) => { const b = el('button', {type: 'button', textContent: text, title, ariaLabel: title, disabled: at + d < 0 || at + d >= siblings.length}); b.onclick = () => { const next = structuredClone(layers), j = siblings[at + d]; [next[i], next[j]] = [next[j], next[i]]; put(next, true); }; return b; };
-    head.append(move(1, '↑', 'Raise: over the layer above it'), move(-1, '↓', 'Lower: under the layer below it'));
-    if (!builtin) head.append(remover('Remove this layer (its material leaves the map unless a stroke uses it)', () => { const next = structuredClone(layers); next.splice(i, 1); put(next, true); }));
-    const item = el('li', {className: 'surface-layer' + (isOpen ? ' open' : ''), tabIndex: -1}, head);
+    const eye = el('button', {type: 'button', className: 'surface-eye', textContent: shown(key) ? '●' : '○', ariaPressed: String(!hidden.has(key)),
+      title: hidden.has(key) ? 'Show this layer again' : 'Hide this layer while you design (not saved; an export draws it)', disabled: Boolean(solo)});
+    eye.onclick = () => { if (hidden.has(key)) hidden.delete(key); else hidden.add(key); build(); sendView(); list.querySelector(`[data-key="${CSS.escape(key)}"] .surface-eye`)?.focus(); };
+    const alone = el('button', {type: 'button', className: 'surface-solo', textContent: 'S', ariaPressed: String(solo === key),
+      title: solo === key ? 'Show every layer again' : 'Show this layer alone over the ground while you design (not saved; an export draws every layer)'});
+    alone.onclick = () => { solo = solo === key ? null : key; build(); sendView(); list.querySelector(`[data-key="${CSS.escape(key)}"] .surface-solo`)?.focus(); };
+    head.append(eye, alone);
+    const item = el('li', {className: 'surface-layer' + (isOpen ? ' open' : '') + (shown(key) ? '' : ' unshown'), tabIndex: -1}, head);
     item.dataset.key = key;
     if (isOpen) {
       const edge = layer.edge ?? {}, body = el('div', {className: 'surface-body'});
@@ -164,7 +177,11 @@ export function mountSurfacePanel(host) {
       const own = builtin && !SURFACE_DRAWABLE.includes(layer.builtin);
       const materialRow = own ? el('p', {className: 'small surface-wide', textContent: `Drawn with ${BUILTIN_SOURCES[layer.builtin]}: set it in ${ROCK_TYPED.includes(layer.builtin) ? 'Rock types' : 'the Materials panel'}.`}) : el('div', {className: 'surface-wide surface-line'}, materialSelect(layer, i));
       if (material && !own) { const b = el('button', {type: 'button', textContent: 'Edit…', title: 'Open its material in the material editor (this map’s copy)'}); b.onclick = () => host.edit(layer, b); materialRow.append(b); }
-      body.append(materialRow);
+      // Its place in the stack (within its stage) and, for a material layer, removing it: in the open row, so the head keeps room for the name.
+      const order = el('div', {className: 'surface-wide surface-line surface-order'}, el('span', {className: 'small', textContent: siblings.length > 1 ? 'Order in its group' : 'Alone in its group'}),
+        move(1, '↑ Raise', 'Raise: over the layer above it'), move(-1, '↓ Lower', 'Lower: under the layer below it'));
+      if (!builtin) order.append(el('button', {type: 'button', textContent: 'Remove', title: 'Remove this layer (its material leaves the map unless a stroke uses it)', onclick: () => { const next = structuredClone(layers); next.splice(i, 1); put(next, true); }}));
+      body.append(materialRow, order);
       if (builtin && BUILTIN_SETTINGS[layer.builtin]) {
         const b = el('button', {type: 'button', className: 'surface-wide link', textContent: 'Its strength and height: Built-in settings below'}); b.onclick = () => host.settings(BUILTIN_SETTINGS[layer.builtin]);
         body.append(b);
@@ -188,7 +205,9 @@ export function mountSurfacePanel(host) {
   }
   function build() {
     const focused = document.activeElement?.id?.startsWith('surface-') ? document.activeElement.id : '';
-    const layers = host.surface();
+    const layers = host.surface(), keys = new Set(layers.map(layerKey));
+    for (const k of hidden) if (!keys.has(k)) hidden.delete(k);
+    if (solo && !keys.has(solo)) solo = null;
     let layerRows = [];
     try { layerRows = surfaceRows(layers).layerRows; } catch (_) {}
     // Shown top first (the topmost layer first), as the map stacks them: the last stage's last layer first.
@@ -198,6 +217,13 @@ export function mountSurfacePanel(host) {
       const stage = stageOf(layers[i]);
       if (stage !== last) items.push(el('li', {className: 'surface-group small', textContent: STAGE_TITLES[stage], title: STAGE_HELP[stage]}));
       last = stage; items.push(row(layers[i], i, layers, layerRows));
+    }
+    const unshown = layers.filter(l => !shown(layerKey(l))).length;
+    if (unshown) {
+      const all = el('button', {type: 'button', textContent: 'Show all', id: 'surface-show-all'});
+      all.onclick = () => { hidden.clear(); solo = null; build(); sendView(); };
+      items.unshift(el('li', {className: 'surface-view small'}, el('span', {textContent: solo ? `Showing “${nameOf(layers.find(l => layerKey(l) === solo))}” alone.` : `${unshown} hidden while you design.`}),
+        el('span', {className: 'small', textContent: ' Saves and exports draw every layer.'}), all));
     }
     list.replaceChildren(...items);
     if (focused) $(focused)?.focus({preventScroll: true});
@@ -213,7 +239,7 @@ export function mountSurfacePanel(host) {
     next.splice(at, 0, layer); open.add(layer.id); put(next, true);
   };
   $('surface-show').onchange = () => { if (!$('surface-show').checked) host.preview(-1); };
-  $('surface-reset').onclick = () => { host.restore(); build(); };
+  $('surface-reset').onclick = () => { host.restore(); build(); sendView(); };
   build();
   return {refresh};
 }

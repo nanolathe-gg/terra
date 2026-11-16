@@ -582,7 +582,10 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       const dimensions=await this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale);
       if(feed)await this.feedFromGpu(request,region,dimensions,feed,passes);else this.upload(request,region,dimensions,planes);
       this.activeRegion=region;this.voxelScale=scale;
-      const result=await this.withPipelines(()=>super.draw({...options,exact:options.exact||Boolean(request.exportArt)}),{preview,defer:deferPipelines});
+      // An export draws the world as saved: the Surface section's design view (hidden layers, its coverage preview) is set aside for its tiles.
+      const design=request.exportArt?this.suspendDesignView():null;
+      let result;
+      try { result=await this.withPipelines(()=>super.draw({...options,exact:options.exact||Boolean(request.exportArt)}),{preview,defer:deferPipelines}); } finally { design?.(); }
       this.captureWorking();
       if(result.check)return {check:result.check};   // a checksum only (draw's digest.check): nothing drawn
       if(result.reused)return {reused:true,digest:result.digest,x:request.x,y:request.y,width:request.width,height:request.height,scale};   // the caller keeps its picture
