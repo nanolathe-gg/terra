@@ -193,7 +193,9 @@ export function mountSurfacePanel(host) {
       const sharing = layer.material != null ? layers.filter((l, j) => j !== i && l.material === layer.material).map(nameOf) : [];
       body.append(materialRow, ...(sharing.length ? [el('p', {className: 'small surface-wide', textContent: `Shared with ${sharing.join(', ')}: one material, so its Color and edits change them all.`})] : []), order);
       // The material's own Color (sculpt-materials.js recolorMaterial): all its color steps move together; the steps stay editable in it.
-      const colored = material ?? (own ? role : null);
+      // A rock-typed built-in's color is still its rock type's (Rock types), which may override its material's: no Color here until rock
+      // types draw their colors from materials too.
+      const colored = material ?? (own && !ROCK_TYPED.includes(layer.builtin) ? role : null);
       if (colored?.own) {
         const pick = el('input', {type: 'color', value: colored.own, id: uid('color'), title: 'Moves all of the material’s color steps together (the world’s copy, on every map); each step stays editable in the material editor'});
         const rgb = () => [1, 3, 5].map(k => parseInt(pick.value.slice(k, k + 2), 16) / 255);
