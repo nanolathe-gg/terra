@@ -6,7 +6,7 @@ import gamePalette from './materials/palette.json' with {type:'json'};
 import library from './materials/textures.json' with {type:'json'};
 import snippets from './materials/snippets.json' with {type:'json'};
 
-export const MATERIAL_SLOTS = 8;                   // slot 0 is "the world's ground" on a stroke; materials take slots 1 to 7
+export const MATERIAL_SLOTS = 16;                  // slot 0 is "the world's ground" on a stroke; materials take slots 1 to 15
 export const MATERIAL_REPEAT = 512;
 export const MATERIAL_CACHE_BYTES = 128 * 1024 * 1024;
 export const MAX_NODES = 40, MAX_STOPS = 8, MAX_PALETTE = 32, MAX_CONTROLS = 12, MAX_FRAMES = 12, MAX_TAPPED = 4, MAX_STAGES = 4;
@@ -78,9 +78,9 @@ export const NODES = {
     help: 'Hollows and crests of a height: below .5 in hollows, above it on crests. Darkens crevices or lightens worn tops.'},
   constant: {code: 10, label: 'Constant', out: n => n.kind === 'color' ? 'color' : 'gray', inputs: [], kinds: {gray: 'Gray', color: 'Color'},
     params: kind => kind === 'color' ? [] : [P('value', 'Value', 0, 1, .5)], help: 'One gray value, or one color, everywhere.'},
-  output: {code: 11, label: 'Material', out: null, inputs: [['color', 'Color', 'any'], ['height', 'Height', 'gray'], ['shine', 'Shine', 'gray']],
-    params: () => [P('relief', 'Relief (px)', 0, 8, 0)],
-    help: 'What the material is: its color, the art height the sun lights (Relief scales it; gameplay heights never change) and its shine.'},
+  output: {code: 11, label: 'Material', out: null, inputs: [['color', 'Color', 'any'], ['height', 'Height', 'gray'], ['shine', 'Shine', 'gray'], ['worn', 'Worn color', 'any'], ['deposit', 'Deposit color', 'any']],
+    params: () => [P('relief', 'Relief (px)', 0, 8, 0), P('wornFrom', 'Worn from', 0, 1, .2), P('wornAmount', 'Worn amount', 0, 1, 1), P('depositFrom', 'Deposit from', 0, 1, .2), P('depositAmount', 'Deposit amount', 0, 1, 1)],
+    help: 'What the material is: its color, the art height the sun lights (Relief scales it; gameplay heights never change) and its shine. Where Time’s water wore the ground away, or laid sediment down, the map shows the Worn or Deposit color instead, from the erosion level set by From, as much as Amount.'},
 };
 export const NODE_TYPES = Object.keys(NODES);
 // Whether an input that wants one type takes an output of another: any takes gray or color, and a gray input reads a color's brightness.
@@ -256,13 +256,26 @@ export const blankMaterial = () => copyMaterial({nodes: [
 export const reseedMaterial = material => ({...material, seed: (material.seed + 1 + Math.floor(Math.random() * 997)) % 1000});
 export const paletteRgb = index => gamePalette.indexed[index];
 
+// The states a material draws besides its color, in cache order: the Material node's Worn and Deposit inputs that are connected.
+export const MATERIAL_STATES = ['worn', 'deposit'];
+// The roles a material of the map may hold besides the world's ground and water: [flag, world.materials key, what it is]. Each surface reads
+// its role's material (engine-frag.wgsl); a material holds one role at most.
+export const MAP_ROLES = [['worldHigh', 'high', 'highland ground'], ['worldRock', 'rock', 'rock'], ['worldSlope', 'slope', 'slope cover'], ['worldDebris', 'debris', 'debris'],
+  ['worldBeach', 'beach', 'beach'], ['worldFringe', 'fringe', 'margin fringe'], ['worldBody', 'body', 'margin body'], ['worldRing', 'ring', 'margin ring']];
+const ROLE_NAMES = {worldGround: 'ground', worldWater: 'water', ...Object.fromEntries(MAP_ROLES.map(([r, , what]) => [r, what]))};
+export const roleOf = m => Object.keys(ROLE_NAMES).find(r => m?.[r] === true) ?? null;
+export const roleName = role => ROLE_NAMES[role] ?? '';
+const roleCount = m => Object.keys(ROLE_NAMES).filter(r => m[r] === true).length;
+// Only a ground draws them (the world's ground, highland ground, a stroke's material): water and the world's other surfaces never read a state.
+export const materialStatesApply = m => !m.worldWater && !MAP_ROLES.slice(1).some(([r]) => m[r]);
+export const materialStates = material => { const out = material.nodes.find(n => n.type === 'output'); return materialStatesApply(material) ? MATERIAL_STATES.filter(k => out.enabled && out.in[k]) : []; };
 // The compiled graph: nodes in evaluation order, each an instruction of codes, links and numbers for the materialGraphs buffer.
 export const STEP_STRIDE = 288, PROGRAM_BYTES = 16 + MAX_NODES * STEP_STRIDE;
 export function compileMaterial(material) {
   const nodes = orderNodes(material.nodes), types = typeNodes(nodes), index = new Map(nodes.map((n, i) => [n.id, i]));
   const instructions = nodes.map(n => {
     const spec = NODES[n.type], kinds = spec.kinds ? Object.keys(spec.kinds) : [];
-    const links = spec.inputs.map(([key]) => index.get(n.in[key]) ?? -1); while (links.length < 4) links.push(-1);
+    const links = spec.inputs.map(([key]) => index.get(n.in[key]) ?? -1); while (links.length < 4) links.push(-1);   // the Material node's fifth (Deposit) is read only by programSource
     const args = spec.params(n.kind).map(p => n.params[p.key] + (p.key === 'seed' ? material.seed : 0));
     if (n.type === 'gradient') args.push(n.stops.length, ...n.stops.flat());
     if (n.type === 'constant' && n.kind === 'color') args.push(...n.stops[0].slice(1));
@@ -361,7 +374,7 @@ fn groundMain(@builtin(global_invocation_id) id:vec3u){
  if(any(id.xy>=textureDimensions(groundOut))){return;}
  graphPeriod=f32(textureDimensions(groundOut).x);graphRow=groundJob.z;let point=vec2f(id.xy);
 ${lines(closure(out))}
- let color=${o[0] < 0 ? 'vec3f(.5)' : `v${o[0]}.rgb`};let height=${o[1] < 0 ? '0.0' : `${read(out, 1)}.x*arg(s${out},0u)`};let shine=${o[2] < 0 ? '0.0' : `clamp(${read(out, 2)}.x,0.0,1.0)`};
+ var color=${o[0] < 0 ? 'vec3f(.5)' : `v${o[0]}.rgb`};${o[3] >= 0 ? `if(groundJob.w==1u){color=v${o[3]}.rgb;}` : ''}${o[4] >= 0 ? `if(groundJob.w==2u){color=v${o[4]}.rgb;}` : ''}let height=${o[1] < 0 ? '0.0' : `${read(out, 1)}.x*arg(s${out},0u)`};let shine=${o[2] < 0 ? '0.0' : `clamp(${read(out, 2)}.x,0.0,1.0)`};
  textureStore(groundOut,vec2i(id.xy),i32(groundJob.y),vec4f(color,height));
  textureStore(maskOut,vec2i(id.xy),i32(groundJob.y),vec4f(shine,0,0,1));
 }`, stages: stageSource};
@@ -490,26 +503,26 @@ export function soloMaterial(material, id) {
   return {...copyMaterial({...material, nodes, palette: [], controls: [], frames: []}), dither: {...material.dither, amount: 0}};
 }
 
-// A map's materials: each in a slot 1 to 7, one of them the world's ground and one its water.
+// A map's materials: each in a slot 1 to 15, one of them the world's ground and one its water.
 const nameOf = name => text(name, null, 'A material name', 80);
 export function copyMaterials(value) {
   if (value == null) return null;
-  if (!Array.isArray(value) || value.length >= MATERIAL_SLOTS) throw Error('A map holds at most seven materials.');
+  if (!Array.isArray(value) || value.length >= MATERIAL_SLOTS) throw Error(`A map holds at most ${MATERIAL_SLOTS - 1} materials.`);
   const slots = new Set(), keys = new Set();
   const list = value.map(m => {
-    if (!object(m) || !Number.isInteger(m.slot) || m.slot < 1 || m.slot >= MATERIAL_SLOTS || slots.has(m.slot)) throw Error('A material needs its own slot, 1 to 7.');
+    if (!object(m) || !Number.isInteger(m.slot) || m.slot < 1 || m.slot >= MATERIAL_SLOTS || slots.has(m.slot)) throw Error(`A material needs its own slot, 1 to ${MATERIAL_SLOTS - 1}.`);
     slots.add(m.slot); const key = m.key ?? null;
     if (key !== null && (typeof key !== 'string' || !key.trim() || key.length > 80 || keys.has(key))) throw Error('Material keys must be unique nonempty strings.');
     if (key) keys.add(key);
-    return {slot: m.slot, name: nameOf(m.name), key, worldGround: m.worldGround === true, worldWater: m.worldWater === true, ...(m.worldHigh === true ? {worldHigh: true} : {}), ...copyMaterial(m)};
+    return {slot: m.slot, name: nameOf(m.name), key, worldGround: m.worldGround === true, worldWater: m.worldWater === true, ...Object.fromEntries(MAP_ROLES.filter(([role]) => m[role] === true).map(([role]) => [role, true])), ...copyMaterial(m)};
   }).sort((a, b) => a.slot - b.slot);
-  for (const role of ['worldGround', 'worldWater', 'worldHigh']) if (list.filter(m => m[role]).length > 1) throw Error('Only one material can be the ' + ({worldGround: 'world’s ground.', worldWater: 'world’s water.', worldHigh: 'world’s highland ground.'})[role]);
-  if (list.some(m => m.worldHigh && (m.worldGround || m.worldWater))) throw Error('The world’s highland ground is a material of its own.');
+  for (const role of ['worldGround', 'worldWater', ...MAP_ROLES.map(([role]) => role)]) if (list.filter(m => m[role]).length > 1) throw Error(`Only one material can be the world’s ${roleName(role)}.`);
+  for (const [role, , what] of MAP_ROLES) if (list.some(m => m[role] && roleCount(m) > 1)) throw Error(`The world’s ${what} is a material of its own.`);
   if (list.some(m => m.worldGround && m.worldWater)) throw Error('The world’s ground and its water are two materials.');
   return list;
 }
 export const LIBRARY = Object.fromEntries(Object.entries(library).map(([key, m]) => [key, {name: nameOf(m.name), ...copyMaterial({...m, source: key})}]));
-const freeSlot = list => { for (let slot = 1; slot < MATERIAL_SLOTS; slot++) if (!list.some(m => m.slot === slot)) return slot; throw Error('A map holds at most seven materials.'); };
+const freeSlot = list => { for (let slot = 1; slot < MATERIAL_SLOTS; slot++) if (!list.some(m => m.slot === slot)) return slot; throw Error(`A map holds at most ${MATERIAL_SLOTS - 1} materials.`); };
 const uniqueName = (list, name) => { const taken = new Set(list.map(m => m.name)); if (!taken.has(name)) return name; for (let n = 2; ; n++) if (!taken.has(`${name} ${n}`)) return `${name} ${n}`; };
 export function addMaterial(list, material, name = 'Material') {
   const slot = freeSlot(list), added = {slot, name: uniqueName(list, nameOf(name)), key: null, worldGround: false, worldWater: false, ...copyMaterial(material)};
@@ -519,19 +532,26 @@ export function addMaterial(list, material, name = 'Material') {
 // is full, the first material that is not the other role takes it.
 const ROLES = [['worldGround', 'ground'], ['worldWater', 'water']];
 const libraryFor = (config, which) => LIBRARY[config.materials?.[which]] ?? LIBRARY[`green-${which}`];
-export function withWorldMaterials(value, config) {
+export function withWorldMaterials(value, config, {carried = false} = {}) {
   let list = copyMaterials(value) ?? [];
   for (const [role, which] of ROLES) {
     if (list.some(m => m[role])) continue;
     const preset = libraryFor(config, which);
-    if (list.length >= MATERIAL_SLOTS - 1) { const taker = list.find(m => !m.worldGround && !m.worldWater); list = list.map(m => m === taker ? {...m, [role]: true} : m); continue; }
+    if (list.length >= MATERIAL_SLOTS - 1) { const taker = list.find(m => !m.worldGround && !m.worldWater); list = list.map(m => m === taker ? {...Object.fromEntries(Object.entries(m).filter(([k]) => !MAP_ROLES.some(([r]) => r === k))), [role]: true} : m); continue; }   // the taker gives up any other role
     const added = addMaterial(list, preset, preset.name); list = added.materials.map(m => m.slot === added.slot ? {...m, [role]: true} : m);
   }
-  // A world may also name a highland material (config.materials.high): level raised ground takes it (World row Highland ground). It is added
-  // while the list has room; a map without it draws its ground there.
-  const high = LIBRARY[config.materials?.high];
-  if (high && !list.some(m => m.worldHigh) && list.length < MATERIAL_SLOTS - 1) {
-    const added = addMaterial(list, high, high.name); list = added.materials.map(m => m.slot === added.slot ? {...m, worldHigh: true} : m);
+  // The world's other roles (MAP_ROLES: config.materials.high, .rock, .slope, .debris, .beach, .fringe, .body, .ring), each a library material
+  // added while the list has room. Level raised ground takes the highland material; every rock face shows the rock material's grain, grit and
+  // shine under its rock type's color (a rock type may name another, struct Rock material); the slope cover, the debris fragments, the beach
+  // sand and a world's mineral margins read theirs. A map without one draws that surface from another (engine-frag.wgsl roleColor).
+  // A list that already holds one of the world's surface roles (a map made with them, reopened in its world) keeps the ones its artist
+  // cleared or deleted; a new map, a scene, a list saved before them and a map carried from another world (`carried`: its clears were made
+  // for that world's surfaces) take every one the world names. The highland material joins any list with room, and so does a beach another
+  // world lends (sculpt-scene.js borrowBeach sets config.beachTable): it is chosen on purpose, after the map was made.
+  const surfaced = !carried && list.some(o => MAP_ROLES.slice(1).some(([r]) => o[r]));
+  for (const [role, key] of MAP_ROLES) {
+    const m = LIBRARY[config.materials?.[key]];
+    if (m && (role === 'worldHigh' || (role === 'worldBeach' && config.beachTable) || !surfaced) && !list.some(o => o[role]) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, [role]: true} : o); }
   }
   // A world may name more materials its tools lay down (config.materials.extra: library keys; a tool's `material`, sculpt-tools.js
   // toolMaterialSlot). Each the list lacks is added while it has room.
@@ -544,12 +564,21 @@ export function withWorldMaterials(value, config) {
 // The world's ground and its water are world settings, like its sliders: every map drawn in the world shows the same two, and a map's
 // other materials are its own. A map's list (a save's, or none for a new map) takes the world's two here, each in the slot the map
 // already gave that role. `config.worldMaterials` holds the ones the artist changed (keptWorldMaterials); the rest are the library's.
-export function adoptWorldMaterials(value, config) {
-  let list = withWorldMaterials(value, config);
+export function adoptWorldMaterials(value, config, {carried = false} = {}) {
+  let list = withWorldMaterials(value, config, {carried});
   for (const [role, which] of ROLES) {
     const source = config.worldMaterials?.find(m => m[role]) ?? libraryFor(config, which), at = list.find(m => m[role]);
     const name = uniqueName(list.filter(m => m !== at), nameOf(source.name));
     list = list.map(m => m === at ? {...m, name, ...copyMaterial(source)} : m);
+  }
+  // The world's other surfaces follow it too: a role still holding a library material unedited (another world's, as a map carried into this
+  // one has) takes this world's; one its artist edited, or made, stays theirs.
+  for (const [role, key] of MAP_ROLES.slice(1)) {
+    const want = LIBRARY[config.materials?.[key]], at = list.find(m => m[role]);
+    if (!want || !at || at.source === config.materials[key] || !LIBRARY[at.source]) continue;
+    if (JSON.stringify(copyMaterial(at)) !== JSON.stringify(copyMaterial(LIBRARY[at.source]))) continue;
+    const name = uniqueName(list.filter(m => m !== at), want.name);
+    list = list.map(m => m === at ? {...m, name, ...copyMaterial(want)} : m);
   }
   return list;
 }
@@ -587,14 +616,16 @@ export const renameMaterial = (list, slot, name) => { find(list, slot); return l
 export const setMaterial = (list, slot, material) => { find(list, slot); const copy = copyMaterial(material); return list.map(m => m.slot === slot ? {...m, ...copy} : m); };
 export function assignMaterial(list, slot, role) {
   const m = find(list, slot);
-  if (role === 'worldHigh') {
-    if (m.worldGround || m.worldWater) throw Error('This material is the world’s ' + (m.worldGround ? 'ground' : 'water') + '. Duplicate it to use it as highland ground too.');
-    return list.map(({worldHigh, ...o}) => o.slot === slot ? {...o, worldHigh: true} : o);
+  const mapRole = MAP_ROLES.find(([r]) => r === role);
+  if (mapRole) {
+    const held = roleOf(m);
+    if (held && held !== role) throw Error(`This material is the world’s ${roleName(held)}. Duplicate it to use it as ${mapRole[2]} too.`);
+    return list.map(({[role]: _, ...o}) => o.slot === slot ? {...o, [role]: true} : o);
   }
   const other = role === 'worldGround' ? 'worldWater' : 'worldGround';
   if (m[other]) throw Error(role === 'worldGround' ? 'This material is the world’s water. Duplicate it to use it as ground too.' : 'This material is the world’s ground. Duplicate it to use it as water too.');
-  // A material that becomes the ground or water stops being the highland ground.
-  return list.map(({worldHigh, ...o}) => ({...o, ...(worldHigh && o.slot !== slot ? {worldHigh} : {}), [role]: o.slot === slot}));
+  // A material that becomes the ground or water stops being the highland ground or the rock.
+  return list.map(o => { const kept = o.slot === slot ? Object.fromEntries(Object.entries(o).filter(([k]) => !MAP_ROLES.some(([r]) => r === k))) : o; return {...kept, [role]: o.slot === slot}; });
 }
 // A stroke's material: -1 for the ground beneath, 0 for the world's ground, else a slot the map still has.
 export function strokeMaterial(node, list) {
@@ -602,28 +633,31 @@ export function strokeMaterial(node, list) {
   return Number.isInteger(slot) && (slot === 0 || list.some(m => m.slot === slot && !m.worldWater)) ? slot : -1;
 }
 export const keepStrokeMaterials = (nodes, list) => nodes.map(n => n.params && n.params.groundPreset !== undefined && n.params.groundPreset !== strokeMaterial(n, list) ? {...n, params: {...n.params, groundPreset: strokeMaterial(n, list)}} : n);
-export function materialsInUse(nodes, list) {
-  const used = new Set([...list.filter(m => m.worldGround || m.worldWater || m.worldHigh).map(m => m.slot), ...nodes.filter(n => !n.hidden && (n.kind === 'landform' || n.kind === 'paint' && (n.params?.paintChannel === 26 || n.params?.paintChannel === undefined))).map(n => strokeMaterial(n, list))]);
+export function materialsInUse(nodes, list, rocks = []) {
+  const used = new Set([...list.filter(m => roleOf(m)).map(m => m.slot), ...(rocks ?? []).map(r => r.material).filter(s => s > 0), ...nodes.filter(n => !n.hidden && (n.kind === 'landform' || n.kind === 'paint' && (n.params?.paintChannel === 26 || n.params?.paintChannel === undefined))).map(n => strokeMaterial(n, list))]);
   return list.filter(m => used.has(m.slot));
 }
-export function deleteMaterial(list, nodes, slot) {
+export function deleteMaterial(list, nodes, slot, rocks = []) {
   const m = find(list, slot);
+  const rock = (rocks ?? []).find(r => r.material === slot);
+  if (rock) throw Error(`This is the surface of the rock type ${rock.name}. Choose another material for it first.`);
   if (m.worldGround || m.worldWater) throw Error(`This is the world’s ${m.worldGround ? 'ground' : 'water'}. Assign another material first.`);
-  // Deleting the highland material leaves the map without one: raised ground draws the ground.
+  // Deleting the highland material leaves the map without one: raised ground draws the ground. Deleting the rock material leaves rock its
+  // flat color, with no grain or grit.
   const next = list.filter(o => o.slot !== slot); return {materials: next, nodes: keepStrokeMaterials(nodes, next)};
 }
 // Where a material is used: as the world's ground or water, and by how many visible strokes.
-export const materialUsers = (nodes, list, slot) => { const m = find(list, slot); return {world: m.worldGround ? 'ground' : m.worldWater ? 'water' : '', strokes: nodes.filter(n => !n.hidden && n.params?.groundPreset === slot).length}; };
+export const materialUsers = (nodes, list, slot, rocks = []) => { const m = find(list, slot); return {rocks: (rocks ?? []).filter(r => r.material === slot).map(r => r.name), world: roleOf(m) ? roleName(roleOf(m)) : '', strokes: nodes.filter(n => !n.hidden && n.params?.groundPreset === slot).length}; };
 export const materialText = m => JSON.stringify({format: 'terraform-material', name: m.name, ...copyMaterial(m)});
 export function parseMaterialText(value) {
   let m; try { m = JSON.parse(value); } catch { throw Error('The clipboard has no material.'); }
   if (m?.format !== 'terraform-material') throw Error('The clipboard has no material.');
   return {name: nameOf(m.name), ...copyMaterial(m)};
 }
-// What the cache holds: 28 bytes a texel a material, and while any material in use has a staged node (stagePlan) the stage textures,
-// MAX_STAGES layers and two scratch layers of rgba32float.
+// What the cache holds: 28 bytes a texel a layer (a material, or a Worn or Deposit color it draws), and while any material in use has a
+// staged node (stagePlan) the stage textures, MAX_STAGES layers and two scratch layers of rgba32float.
 export function materialCacheUsage(count, pool = MATERIAL_REPEAT, staged = false) {
-  if (!Number.isInteger(count) || count < 0 || count >= MATERIAL_SLOTS) throw Error('Invalid material cache size.');
+  if (!Number.isInteger(count) || count < 0 || count > MATERIAL_SLOTS * (1 + MATERIAL_STATES.length)) throw Error('Invalid material cache size.');
   const stageBytes = staged ? (MAX_STAGES + 2) * 16 * pool * pool : 0, bytes = count * 28 * pool * pool + stageBytes;
   return {bytes, stageBytes, budget: MATERIAL_CACHE_BYTES, fits: bytes <= MATERIAL_CACHE_BYTES};
 }

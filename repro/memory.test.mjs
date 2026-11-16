@@ -15,6 +15,12 @@ test('an interrupted trial starts lower and a completed view clears its note',()
 test('allocation failures step through the notches and stop at the floor',()=>{
  const saved=[],b=createTerrainBudget({explicit:2048,save:p=>saved.push(p)});for(const n of [1536,1024,768,512]){assert(b.lower('allocation failure'));assert.equal(b.mb,n);}assert.equal(b.lower('allocation failure'),false);assert.equal(createTerrainBudget({explicit:2048,preference:saved.at(-1)}).mb,512);b.choose(768);assert.equal(b.mb,768);
 });
+test('a budget above 4 GiB is an explicit choice, and a failure there steps down through the larger notches',()=>{
+ assert.equal(createTerrainBudget({preference:{mb:8192}}).mb,2048,'the automatic budget does not grow');
+ const b=createTerrainBudget({explicit:16384});assert.equal(b.mb,16384);
+ for(const n of [8192,6144,4096,3072,2048]){assert(b.lower('allocation failure'));assert.equal(b.mb,n);}
+ b.choose(6144);assert.equal(b.mb,6144);assert.throws(()=>b.choose(16385));
+});
 test('an allocation scope closes before yielding and retains the failure',async()=>{
  const calls=[],device={pushErrorScope:k=>calls.push(k),popErrorScope:()=>{calls.push('pop');return Promise.resolve({message:'forced OOM'});}};
  const pending=terrainAllocation(device,()=>{calls.push('create');return 1;});assert.deepEqual(calls,['out-of-memory','create','pop']);await assert.rejects(pending,TerrainMemoryError);
@@ -28,6 +34,15 @@ test('a device restart records the failed notch and reloads only one step lower'
  const floor=createTerrainBudget({explicit:512});assert.equal(floor.restart('a lost GPU device'),false);assert.equal(floor.mb,512);
 });
 
+test('the page caches grow with a budget above 2 GiB and keep their caps at 2 GiB',t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const MB=1048576,caps=gpuMB=>{const fields=createPagedFields({worldSize:16385,worldGrid:8193,baseHeight:24,maskKeys:[],nodes:()=>[],device:()=>null,context:()=>({}),forceRing:4,budget:()=>({total:gpuMB*MB,minimum:300*MB})});
+  try{fields.refit();return fields.stats().budget;}finally{fields.destroy();}};
+ const side=512+8,shape=side*side*56,weather=512*512*20;
+ assert.equal(caps(2048),64*shape+24*weather);
+ assert.equal(caps(8192),256*shape+96*weather);
+ assert(caps(1024)<caps(2048));
+});
 test('reserving preview memory reduces page counts without shrinking the shape ring',t=>{
  t.mock.timers.enable({apis:['setTimeout']});
  const MB=1048576;let previewMinimum=200*MB;

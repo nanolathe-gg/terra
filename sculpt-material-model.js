@@ -1,5 +1,4 @@
-// Cards H3 and H14: materials/<world>.json as the rows engine-materials.wgsl reads (see its header for the layout).
-export const MM_ROWS = 63;
+// materials/<world>.json as the draw's table rows: its placement and its ground cover (the surfaces' looks are materials, sculpt-materials.js).
 // The first placement row of the draw's uniform table (engine-frag.wgsl MM_PLACE, engine-common.wgsl materialTable): six rows after it.
 export const PLACEMENT_ROW = 156;
 // The rows after them: a world's ground-cover table (engine-frag.wgsl MM_COVER), 4 + 5 * 7 of them, the plants' row and the four flower palette rows. A table without `groundCover` gives zeros: the feature is off.
@@ -9,33 +8,6 @@ export const PLANT_REACH = 46;
 // Card tilepool: the period level ground repeats with, in world px: the table's material.groundPool, rounded to a multiple of 512 so the
 // 512-px noise texture repeats with it (1024 where a table sets none). A level plain's 32-px tiles come from (period / 32)^2 at most.
 export const groundPool = material => Math.max(512, Math.round((Number(material?.groundPool) || 1024) / 512) * 512);
-// The rows engine-materials.wgsl makes the layers from: MM_ROWS per layer, in the table's order. A material named twice in the order
-// (a layer that shares its image with an earlier one) takes the same rows and its own layer's noise.
-export function materialRows(table) {
-  const rows = [];
-  for (const name of table.order) {
-    const m = table.measured[name], f = table.model[name], a = f.amps;
-    rows.push([a[0], a[1], a[2], a[3]], [a[4], a[5], a[6], f.stretch], [f.tintMix, f.tintScale, f.dither ?? 0, 0]);
-    for (const c of m.ramp) rows.push([c[0], c[1], c[2], 0]);
-    for (const c of m.tint) rows.push([c[0], c[1], c[2], 0]);
-    for (let k = 0; k < 4; k++) rows.push([0, 1, 2, 3].map(i => f.zq[Math.min(k * 4 + i, 12)]));
-    rows.push(...litRows(f.lit));
-    // H14d rows 46-61: the colours a dithered material reduces to (rgb, w = 1 in use); zeros when it is not dithered.
-    for (let k = 0; k < 16; k++) rows.push(m.vocab?.[k] ? [...m.vocab[k], 1] : [0, 0, 0, 0]);
-    // Row 62: the dither's dot lattice (dotCell px, dotShare, dotRadius px, dotDepth z); all zero is none.
-    rows.push([f.dotCell ?? 0, f.dotShare ?? 0, f.dotRadius ?? 0, f.dotDepth ?? 0]);
-  }
-  return rows;
-}
-// H14b: the seven rows of a material's lit height field (engine-materials.wgsl header). All zero, or no `lit` block, is the unlit model.
-// light is the azimuth in turns (0 = light from +x, increasing towards +y, which is down the screen); veinRGB is 0..255.
-function litRows(lit) {
-  if (!lit) return [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
-  const x = k => lit[k] ?? 0, rgb = lit.veinRGB ?? [0, 0, 0];
-  return [[x('relief'), x('light') * 2 * Math.PI, x('shear'), x('heightShare')], [x('ridged'), x('cell'), x('tilt'), x('tone')],
-    [x('seamWidth'), x('seamDepth'), x('veinWidth'), x('veinSpacing')], [rgb[0], rgb[1], rgb[2], x('veinShare')], [x('warp'), x('cone'), x('seamVary'), x('seamGap')],
-    [x('cellVary'), x('streakBand'), x('skew'), x('strokeCore')], [x('strokeSize'), x('strokeShare'), x('strokeRadius'), x('strokeDepth')]];
-}
 // A table with a `placement` block (Green's) gives the draw's six placement rows: where rock shows off the rock face (engine-frag.wgsl landPlace).
 export function tablePlacementRows(table) {
   const q = table.placement, r = q.rock, s = q.soil;

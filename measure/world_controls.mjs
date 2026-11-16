@@ -16,6 +16,9 @@
 // or --server for one already running; terraformAudit exists only on that host's ?audit pages.
 // --jobs splits the worlds over that many processes (Node) or browsers (Chrome; CDP ports --port, then --port+2, +3, ...). Alone, a world takes
 // about four minutes in Chrome.
+// --digest (Node only): check the input checksum instead of the controls' effect (TerrainRenderer.inputDigest, sculpt-digest-guard.js). Every
+// capture takes its checksum with the guard on; a pair whose pixels move while its checksum stays the same fails, naming the control, and so
+// does any guard violation. The sweep's own verdicts (rows that read 0, leaks, gates) are not judged. repro/check.sh digest runs it on Green.
 // --find key,key: instead of the sweep, set each other enabled row to its high end in turn and print which of the named rows then move (the search for a row's parent).
 // Writes DIR/world-controls.json and prints one row per control and world. Exit 1 on a console error or on an unexplained exact 0, that is a
 // row that reads 0 on every fixture (the world's three scenes, the diagnostic fixture, the painted fixture; stroke rows the second and wide stroke fixtures and
@@ -34,7 +37,10 @@ import {fileURLToPath} from 'node:url';
 import {dirname, join, resolve} from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url)), repo = resolve(here, '..');
 const args = process.argv.slice(2), opt = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
-const JOBS = Number(opt('--jobs', 3)), CHILD = args.includes('--child'), CHROME = args.includes('--chrome');
+const JOBS = Number(opt('--jobs', 3)), CHILD = args.includes('--child'), CHROME = args.includes('--chrome'), DIGEST = args.includes('--digest');
+if (CHROME && DIGEST) { console.error('world_controls.mjs: --digest runs under Node only.'); process.exit(2); }
+// --digest: what escaped the input checksum, one line each; `current` names the pair being captured.
+const digestMisses = []; let current = '';
 const assets = opt('--assets', ''), port = Number(opt('--port', 9685)), out = resolve(opt('--out', 'world-controls')), auditPort = Number(opt('--audit-port', 0));
 if (CHROME && !opt('--server', '') && !auditPort) { console.error('world_controls.mjs: --chrome needs --audit-port <port> (your own: the tool starts the audit host there) or --server <an audit host already running>; there is no default.'); process.exit(2); }
 const WORLDS = opt('--worlds', 'green,archipelago,crystal,desert,ice,lava,moon,red,zhon').split(',');
@@ -87,6 +93,7 @@ if (CHROME && !server) {
 if (JOBS > 1 && !CHILD && WORLDS.length > 1) {
   // A pool of browsers, one child per world, the dearest worlds first; rows are merged into the same file and the same exit code.
   const pass = []; for (const f of ['--only', '--set', '--query']) if (opt(f, '')) pass.push(f, opt(f, ''));
+  if (DIGEST) pass.push('--digest');
   if (COLUMN) pass.push('--column', resolve(opt('--column', '')));
   const cost = {green: 3, zhon: 2, red: 2}, order = [...WORLDS].sort((a, b) => (cost[b] || 1) - (cost[a] || 1)), queue = [...order], codes = [], tries = {};
   const slots = Array.from({length: Math.min(JOBS, WORLDS.length)}, (_, k) => new Promise(async done => {
@@ -103,11 +110,12 @@ if (JOBS > 1 && !CHILD && WORLDS.length > 1) {
   }));
   await Promise.all(slots); stopAudit();
   const merged = WORLDS.map(w => JSON.parse(readFileSync(join(out, w, 'world-controls.json'), 'utf8')));
-  const all = merged.flatMap(m => m.rows), bad = judge(all), con = merged.flatMap(m => m.console);
+  const all = merged.flatMap(m => m.rows), bad = DIGEST ? [] : judge(all), con = merged.flatMap(m => m.console), misses = merged.flatMap(m => m.digestMisses ?? []);
+  if (DIGEST) { console.log(misses.length ? `\ninput checksum: ${misses.length} problem(s)` : '\ninput checksum: every pair that moved changed it; the guard saw nothing escape'); for (const m of misses) console.log('! ' + m); }
   writeFileSync(join(out, 'world-controls.json'), JSON.stringify({server: CHROME ? server : 'node', variant:VARIANT||null, seconds: (Date.now() - t0) / 1000, rows: all, unexplained: bad, console: con}));
   console.log(`\n${all.filter(r => r.type === 'knob' && r.state === 'enabled').length} enabled world rows, ${all.filter(r => r.type === 'knob' && r.state === 'gated').length} gated, ${all.filter(r => r.type === 'shape').length} stroke rows, ${all.filter(r => r.type === 'surface').length} sliders; ${all.filter(r => r.zero).length} read 0 (${all.filter(r => r.allowed).length} allowed), ${all.filter(r => r.hides).length} hidden and moving, ${bad.length} unexplained (!), ${((Date.now() - t0) / 60000).toFixed(1)} min`);
   if (con.length) console.log('console:', con.slice(0, 5));
-  process.exit(codes.some(c => c > 1) || con.length || bad.length ? 1 : 0);
+  process.exit(codes.some(c => c > 1) || con.length || bad.length || (DIGEST && misses.length) ? 1 : 0);
 }
 const scenes = {};
 for (const w of WORLDS) for (const n of [1, 2, 3]) {
@@ -118,9 +126,11 @@ for (const w of WORLDS) for (const n of [1, 2, 3]) {
 }
 // The stroke kinds whose tool defaults the state reads.
 const KINDS = Object.fromEntries(Object.keys(KIND_AT).map(k => [k, 1]));
-const pageQuery = (world, query) => { if(VARIANT||QUERY){const params=new URLSearchParams(query);if(VARIANT)params.set('variant',VARIANT);for(const [k,v] of new URLSearchParams(QUERY))params.set(k,v);query=params.toString();} return `biome=${world}&mapX=4&mapY=4&scratch=wc${Date.now()}&audit=1&gpuMB=512&heapMB=2048${query ? '&' + query : ''}`; };
+const pageQuery = (world, query) => { if(VARIANT||QUERY){const params=new URLSearchParams(query);if(VARIANT)params.set('variant',VARIANT);for(const [k,v] of new URLSearchParams(QUERY))params.set(k,v);query=params.toString();} return `biome=${world}&mapX=4&mapY=4&scratch=wc${Date.now()}&audit=1&gpuMB=512&heapMB=2048${DIGEST ? '&digestGuard=1' : ''}${query ? '&' + query : ''}`; };
 // The two numbers of a pair: the most any pixel channel moves, and how many pixels move at all (RGBA captures, alpha left out).
-const diff = (a, b) => { let max = 0, n = 0; for (let i = 0; i < a.length; i += 4) { const d = Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2])); if (d) { n++; if (d > max) max = d; } } return {max, px: n}; };
+const diff = (a, b) => { let max = 0, n = 0; for (let i = 0; i < a.length; i += 4) { const d = Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2])); if (d) { n++; if (d > max) max = d; } }
+  if (DIGEST && n && a.digest && a.digest === b.digest) { const miss = `${current}: ${n} px move and the input checksum stays the same`; if (!digestMisses.includes(miss)) digestMisses.push(miss); }
+  return {max, px: n}; };
 // The host the sweep drives, the same calls on either: the page in headless Chrome on the audit host (terraformAudit; the captures stay in the
 // page and only the two numbers travel), or the page's own modules under Node on Dawn (repro/headless.mjs).
 async function chromeHost() {
@@ -221,13 +231,14 @@ async function nodeHost() {
   const WEATHER_KEYS = ['erosion', 'erosionAge', 'erosionRain', 'erosionEnvelope'];   // the audit host's knob runs the Time pass again for these (repro/audit/hook.js)
   const rect = {x: 0, y: 0, width: 1024, height: 1024};
   let s = null, saved = [], first = null;
-  const grab = (r = rect) => headless.renderWindow(s, {...r, tile: Math.max(r.width, r.height)});
+  const grab = (r = rect) => headless.renderWindow(s, {...r, tile: Math.max(r.width, r.height), digest: DIGEST});
   const knob = (key, value) => headless.knob(s, key, value, {weatherKeys: WEATHER_KEYS});
-  const drain = () => { if (s) logs.push(...s.errors.splice(0)); };
+  let world = '';
+  const drain = () => { if (s) logs.push(...s.errors.splice(0)); for (const v of s?.renderer.guard?.violations ?? []) { const miss = `${world}: ${v}`; if (!digestMisses.includes(miss)) digestMisses.push(miss); } };
   const h = {
-    async load(world, query) {
-      drain(); s?.dispose();
-      s = await headless.openScene({biome: world, strokes: []}, pageQuery(world, query));
+    async load(name, query) {
+      drain(); s?.dispose(); world = name;
+      s = await headless.openScene({biome: name, strokes: []}, pageQuery(name, query));
       s.renderer.setBudgetMB(512);   // the page's terrain budget (gpuMB): a 1024 px capture is one chunk
       if (COLUMN) await headless.column(s, COLUMN);
     },
@@ -265,6 +276,10 @@ async function nodeHost() {
     drain,
     close() { drain(); s?.dispose(); s = null; }
   };
+  // --digest: name each pair by its control, for a checksum that stays the same while pixels move.
+  if (DIGEST) for (const [m, kind, at] of [['knobPair', 'world row', 0], ['controlPair', 'slider', 0], ['strokePair', 'stroke row', 1], ['colorPair', 'color', 0]]) {
+    const f = h[m]; h[m] = (...a) => { current = `${world} ${kind} ${a[at]}`; return f(...a); };
+  }
   return h;
 }
 const host = CHROME ? await chromeHost() : await nodeHost();
@@ -514,10 +529,11 @@ try {
     console.log(`-- ${world}: ${((Date.now() - tw) / 1000).toFixed(0)} s`);
   }
   host.drain();
-  const bad = rows.filter(failed);
-  writeFileSync(`${out}/world-controls.json`, JSON.stringify({server: CHROME ? server : 'node', variant:VARIANT||null, seconds: (Date.now() - t0) / 1000, rows, unexplained: bad.map(named), console: logs.slice(0, 20)}));
+  const bad = DIGEST ? [] : rows.filter(failed);
+  writeFileSync(`${out}/world-controls.json`, JSON.stringify({server: CHROME ? server : 'node', variant:VARIANT||null, seconds: (Date.now() - t0) / 1000, rows, unexplained: bad.map(named), console: logs.slice(0, 20), ...(DIGEST ? {digestMisses} : {})}));
   const count = (t, p) => rows.filter(r => r.type === t && p(r)).length;
   console.log(`\n${count('knob', r => r.state === 'enabled')} enabled world rows, ${count('knob', r => r.state === 'gated')} gated, ${count('shape', () => true)} stroke rows, ${count('surface', () => true)} sliders; ${rows.filter(r => r.zero).length} read 0, ${rows.filter(r => r.hides).length} hidden and moving, ${bad.length} unexplained (!), ${((Date.now() - t0) / 60000).toFixed(1)} min`);
   if (logs.length) console.log('console:', logs.slice(0, 5));
-  finish(logs.length || bad.length ? 1 : 0);
+  if (DIGEST) { console.log(digestMisses.length ? `\ninput checksum: ${digestMisses.length} problem(s)` : '\ninput checksum: every pair that moved changed it; the guard saw nothing escape'); for (const m of digestMisses) console.log('! ' + m); }
+  finish(logs.length || bad.length || digestMisses.length ? 1 : 0);
 } catch (e) { console.error(e); finish(2); }

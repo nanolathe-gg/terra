@@ -35,7 +35,7 @@ test('connections are typed, loops are refused, and a deleted source leaves its 
   const curved = graph([node('n', 'noise'), node('g', 'gradient', {in: {in: 'n'}}), node('l', 'levels', {in: {in: 'g'}}), node('o', 'output', {in: {color: 'g', height: 'g'}})]);
   const at = id => curved.nodes.findIndex(n => n.id === id), main = programSource(compileMaterial(curved)).main;
   assert.match(programSource(compileMaterial(curved), true).main, new RegExp(`nLevels\\(s${at('l')},graphGray\\(v${at('g')}\\)\\)`)); assert.match(main, new RegExp(`let height=graphGray\\(v${at('g')}\\)\\.x`));
-  assert.match(main, new RegExp(`let color=v${at('g')}\\.rgb`), 'a color input reads the color itself');
+  assert.match(main, new RegExp(`var color=v${at('g')}\\.rgb`), 'a color input reads the color itself');
   const m = graph([node('n', 'noise'), node('g', 'gradient', {in: {in: 'gone'}}), node('o', 'output', {in: {color: 'g'}})]);
   assert.equal(m.nodes.find(n => n.id === 'g').in.in, null);
   assert.equal(graph([node('n', 'noise')]).nodes.at(-1).type, 'output', 'a graph always has its Material node');
@@ -193,14 +193,14 @@ test('adding, assigning, deleting and what strokes keep', () => {
   const stroke = slot => ({kind: 'landform', params: {groundPreset: slot}}), nodes = [stroke(3), stroke(0), stroke(-1), stroke(2), stroke(6), {kind: 'ground'}];
   assert.deepEqual(nodes.map(n => strokeMaterial(n, list)), [3, 0, -1, -1, -1, -1], 'water and missing slots are not ground choices');
   assert.deepEqual(materialsInUse(nodes, list).map(m => m.slot), [1, 2, 3]);
-  assert.deepEqual(materialUsers(nodes, list, 3), {world: '', strokes: 1}); assert.equal(materialUsers(nodes, list, 1).world, 'ground');
+  assert.deepEqual(materialUsers(nodes, list, 3), {rocks: [], world: '', strokes: 1}); assert.deepEqual(materialUsers(nodes, list, 3, [{slot: 1, name: 'Granite', material: 3}]).rocks, ['Granite']); assert.throws(() => deleteMaterial(list, nodes, 3, [{slot: 1, name: 'Granite', material: 3}]), /surface of the rock type Granite/); assert.equal(materialUsers(nodes, list, 1).world, 'ground');
   assert.throws(() => deleteMaterial(list, nodes, 1), /world’s ground/);
   const gone = deleteMaterial(list, nodes, 3); assert.equal(gone.nodes[0].params.groundPreset, -1); assert.equal(gone.materials.length, 3);
   assert.equal(keepStrokeMaterials(nodes, list)[0], nodes[0], 'an unchanged stroke is the same object');
   const swapped = assignMaterial(list, 3, 'worldGround'); assert.deepEqual(swapped.filter(m => m.worldGround).map(m => m.slot), [3]);
   assert.throws(() => assignMaterial(list, 2, 'worldGround'), /world’s water/);
   let full = list; while (full.length < MATERIAL_SLOTS - 1) full = addMaterial(full, blankMaterial(), 'More').materials;
-  assert.throws(() => addMaterial(full, blankMaterial()), /at most seven/);
+  assert.throws(() => addMaterial(full, blankMaterial()), /at most 15 materials/);
   assert.equal(setMaterial(list, 3, LIBRARY['green-ground']).find(m => m.slot === 3).name, 'Sand', 'a new graph keeps the name and slot');
 });
 
@@ -301,6 +301,15 @@ test('the page declares every row the editor fills', () => {
   for (let i = 0; i < Math.max(...Object.values(NODES).map(s => s.inputs.length)); i++) assert.ok(has('node-input-' + i));
   for (const list of ['ctl', 'wg', 'ww']) for (let i = 0; i < 12; i++) assert.ok(has(`${list}-${i}`) && has(`${list}-row-${i}`) && has(`${list}-color-${i}-7`), `${list} row ${i}`);
   for (const [type, spec] of Object.entries(NODES)) if (type !== 'output') assert.ok(page.includes(`data-type="${type}"`), `the add menu offers ${spec.label}`);
+});
+
+test('a map carried into another world takes its surfaces unless the artist edited them', () => {
+  const moon = worldMaterials({materials: {ground: 'green-ground', water: 'green-water', rock: 'moon-rock', slope: 'moon-slope'}});
+  const green = {materials: {ground: 'green-ground', water: 'green-water', rock: 'green-rock', slope: 'green-slope'}};
+  const moved = adoptWorldMaterials(moon, green);
+  assert.equal(moved.find(m => m.worldRock).source, 'green-rock'); assert.equal(moved.find(m => m.worldSlope).source, 'green-slope');
+  const edited = moon.map(m => m.worldRock ? {...m, seed: m.seed + 1} : m);
+  assert.equal(adoptWorldMaterials(edited, green).find(m => m.worldRock).source, 'moon-rock', 'an edited rock material stays the artist\'s');
 });
 
 test('a world’s highland material joins a new map, keeps its own role and leaves when assigned away', async () => {

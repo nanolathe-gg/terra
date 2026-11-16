@@ -96,9 +96,10 @@ test('the surface sliders open where the browser puts them, and their ranges are
   assert.equal(drawOptions(s).detail, 1.1);
 });
 
+const {LIBRARY} = await import('../sculpt-materials.js');
 test('a world without a beach borrows another world\'s: its layer, its numbers, and the facts and rows that read them', async () => {
   const {worldPanelValues, colorRows} = await import('../sculpt-knobs.js');
-  const lender = {name: 'Zhon', table: 'materials/zhon.json', material: {beachWidth: 178, beachHeight: 6, beachRGB: [200, 180, 140]}};
+  const lender = {name: 'Zhon', table: 'materials/zhon.json', material: {beachWidth: 178, beachHeight: 6, beachRGB: [200, 180, 140]}, beachMaterial: 'zhon-beach'};
   const world = () => ({layers: ['slopeGrass', 'rock'], material: {wetBand: 9}, water: {}, beachSources: {zhon: lender}});
   const facts = c => worldPanelValues({config: c, renderer: {variant: new Map(), groundTiled: false}, nodes: [], colors: {}, weathering: false, materialWeathering: 0});
   const none = borrowBeach(world(), new URLSearchParams(''));
@@ -107,6 +108,7 @@ test('a world without a beach borrows another world\'s: its layer, its numbers, 
   const borrowed = borrowBeach(world(), new URLSearchParams('beachFrom=zhon'));
   assert.deepEqual(borrowed.layers, ['slopeGrass', 'rock', 'beach'], 'the beach is generated after the world\'s own layers');
   assert.equal(borrowed.beachTable, 'materials/zhon.json');
+  assert.equal(borrowed.materials.beach, 'zhon-beach', 'its sand is the lender\'s beach material');
   assert.deepEqual(borrowed.material, {wetBand: 9, beachWidth: 178, beachHeight: 6, beachRGB: [200, 180, 140]});
   assert.equal(facts(borrowed).beachLayer, 1);
   assert.ok(colorRows(borrowed, new URLSearchParams()).some(([k]) => k === 'beach'), 'and the Beach color row');
@@ -114,7 +116,7 @@ test('a world without a beach borrows another world\'s: its layer, its numbers, 
   assert.equal(borrowBeach(own, new URLSearchParams('beachFrom=zhon')).material.beachWidth, 120, 'a world\'s own beach stays its own');
   // Every world that lacks a beach is offered the ones whose tables make one.
   const tables = ['green', 'moon', 'desert', 'zhon', 'lava', 'ice', 'red', 'crystal', 'archipelago'].map(w => JSON.parse(readFileSync(`${root}materials/${w}.json`, 'utf8')));
-  assert.ok(tables.some(t => t.order.includes('beach') && t.measured.beach && t.model.beach), 'a table lends its beach material');
+  assert.ok(tables.some(t => LIBRARY[t.world?.materials?.beach]), 'a world lends its beach material');
 });
 
 test('the address may try the light\'s and the low ground\'s colors without changing the world', async () => {

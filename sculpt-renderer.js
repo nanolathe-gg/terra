@@ -3,9 +3,9 @@
 // sculpt-vert.wgsl and engine-frag.wgsl (the draw), engine-bake.wgsl (the
 // fields bake of a chunk, a compute pass).
 
-import {materialRows,tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
+import {tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {MaterialCache,writeMaterialSlot} from './sculpt-material-cache.js';
-import {copyMaterial,materialCacheUsage,materialStaged,materialTint,MATERIAL_REPEAT,MATERIAL_SLOTS} from './sculpt-materials.js';
+import {copyMaterial,materialCacheUsage,materialStaged,materialTint,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES,LIBRARY,materialStates} from './sculpt-materials.js';
 import {columnRows,columnColors} from './sculpt-column.js';
 import {LOW_GROUND_RGB} from './sculpt-knobs.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
@@ -13,7 +13,12 @@ import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
 import {RockWeather} from './sculpt-rock-weather.js';
 import {VoxelSurface} from './sculpt-volume.js';
 import {terrainAllocation} from './sculpt-memory.js';
-import {extractGates, gateValues, gateKey, uniformStages, worldUniformDelta} from './sculpt-gates.js';
+import {extractGates, gateValues, gateKey, uniformStages, worldUniformDelta, PER_CHUNK_UNIFORMS} from './sculpt-gates.js';
+import {digestGuardRequested, installDigestGuard} from './sculpt-digest-guard.js';
+// The textures a chunk's feed fills, which the input checksum hashes texel by texel (inputDigest).
+export const INPUT_TEXTURES = ['heightTexture', 'routeTexture', 'gridTexture', 'maskTexture'];
+// A uniform field's bytes in uniformData (sculpt-renderer.js uniformLayout).
+const uniformSpan = f => f.stride ? f.stride * f.count : (f.width || 1) * 4;
 
 // The mask planes when the config names none: as many as MASK_KEYS (sculpt-scene.js, which says what each holds). The masks texture array has a layer per 4 planes.
 const MASK_PLANE_COUNT = 25;
@@ -112,7 +117,6 @@ const MIP_SHADER = `
 }`;
 
 // H4: the generated materials' level-0 size and level count (512 down to 8 px).
-const GENERATED_SIZE = 512, GENERATED_LEVELS = 7;
 
 class SpecializationMiss extends Error { constructor(state) { super('nanolathe: pipelines for these gates are not built yet'); this.state = state; } }
 class PipelinesPending extends Error { constructor(state,ready) { super('Terrain pipelines are compiling in the background.');this.name='PipelinesPending';this.key=state.key;this.ready=ready; } }
@@ -142,6 +146,8 @@ export class TerrainRenderer {
     this.lastBakeGPU = null;
     // Set by the page to show WebGPU errors that arrive after a call returns.
     this.onerror = null;
+    this.worldEpoch = 0;   // the world textures' version, in the input checksum (worldResource)
+    this.worldTextures = new Set();
   }
 
   // Validation and device errors arrive asynchronously; report each one.
@@ -158,7 +164,11 @@ export class TerrainRenderer {
     // weather and material-field grids share one array texture (gridTexture)
     // so the painted masks (card C5) fit in that limit.
     const features = adapter.features.has('timestamp-query') ? ['timestamp-query'] : [];
-    const device = this.device = await adapter.requestDevice({requiredFeatures: features});
+    // The adapter's own buffer limits, not WebGPU's defaults (256 MB buffers, 128 MB bindings): the voxel solid and the page caches are
+    // sized against them, and a desktop GPU offers gigabytes. The default limits stay the floor requestAdapter checks.
+    const requiredLimits = {maxBufferSize: adapter.limits.maxBufferSize, maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize};
+    const device = this.device = await adapter.requestDevice({requiredFeatures: features, requiredLimits});
+    if (digestGuardRequested()) this.guard = installDigestGuard(device);   // tests and debug runs only: before any resource is made
     device.lost.then(info => {
       if(info.reason==='destroyed'||this.recovering)return;
       if(this.config.onDeviceLost?.(info)){this.recovering=true;return;}
@@ -179,29 +189,28 @@ export class TerrainRenderer {
     // Every world's materials are numbers: the config names its table (config.materialTable).
     const tableUrl = this.config.materialTable;
     this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl', 'engine-ground.wgsl', 'engine-ground-dither.wgsl'];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl', 'engine-ground.wgsl', 'engine-ground-dither.wgsl'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch(name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
-    const modelTable = extra[1];
-    this.paletteSource = extra[2];
-    const palette = JSON.parse(extra[3]);
+    const modelTable = extra[0];
+    this.paletteSource = extra[1];
+    const palette = JSON.parse(extra[2]);
     this.paletteColours = palette.colours;
     this.paletteIndexed = palette.indexed;
     // Slots 0-9 and 246-254 of the game's palette are Windows' static system colours, which its map art does not draw with (255, white,
     // it does: snow and surf). A colour that only those slots hold stays out of the lookup unless a world's table picks it by entry.
     const art = new Set(palette.indexed.filter((_, i) => i >= 10 && (i < 246 || i === 255)).map(String));
     this.paletteArt = palette.colours.map((_, i) => i).filter(i => art.has(String(palette.colours[i])));
-    this.materialsSource = extra[0];
     this.commonSource = common;
-    this.volumeSource = extra[4];
-    this.timeSources={erosion:this.preprocessShader(extra[5]),maps:this.preprocessShader(extra[6])};
+    this.volumeSource = extra[3];
+    this.timeSources={erosion:this.preprocessShader(extra[4]),maps:this.preprocessShader(extra[5])};
     this.layout = uniformLayout(preprocess(common, '', new Set()));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
-    this.uniformBuffer = device.createBuffer({size: this.layout.size, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC});
+    this.uniformBuffer = device.createBuffer({label: 'terrain uniforms', size: this.layout.size, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC});
     const compile = async (label, code) => {
       const module = device.createShaderModule({label, code});
       const messages = (await module.getCompilationInfo()).messages;
@@ -244,7 +253,7 @@ export class TerrainRenderer {
     // The engine draw (H4) binds the palette and the generated materials
     // (binding 19, read with textureLoad); no land image remains. Binding numbers are the shared draw's, with 2-13 left out.
     this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: [
-      texture(18, F), texture(19, F, 'float', '2d-array')]});
+      texture(18, F)]});
     // The bake's group 1: the fields texture, and the loose-stone mask lattice (looseMain fills it, the bake reads it).
     const fieldsLayout = device.createBindGroupLayout({label: 'fields out', entries: [
       {binding: 0, visibility: GPUShaderStage.COMPUTE, storageTexture: {access: 'write-only', format: 'rgba16float'}},
@@ -279,20 +288,13 @@ export class TerrainRenderer {
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
     this.materialData = JSON.parse(modelTable);
-    // A borrowed beach (sculpt-scene.js borrowBeach names the lender's table): its beach material, generated as one more layer after the world's own,
-    // so every other layer keeps its place and its noise.
-    if (this.config.beachTable && !this.materialData.order.includes('beach')) {
-      const lender = await this.groundTable(this.config.beachTable);
-      this.materialData.measured.beach = lender.measured.beach; this.materialData.model.beach = lender.model.beach;
-      this.materialData.order.push('beach');
-    }
     // The startup generation: the materials and the palette lookup (GPU) are started first and the noise (CPU) is made while they build.
     this.textures = {};
-    this.groundCache = new MaterialCache(this, preprocess(extra[7], common, new Set()), preprocess(extra[8], common, new Set()));
+    this.groundCache = new MaterialCache(this, preprocess(extra[6], common, new Set()), preprocess(extra[7], common, new Set()));
     const generation = performance.now();
-    const gpu = Promise.all([this.makeMaterials(), this.paletteTexture()]);
+    const gpu = this.paletteTexture();
     this.textures.noise = this.noiseTexture();
-    this.textures.palette = (await Promise.all([gpu,genericReady]))[0][1];
+    this.textures.palette = (await Promise.all([gpu,genericReady]))[0];
     this.generationMs = performance.now() - generation;
     const variant = new URLSearchParams(location.search);
     // H4: the engine's own knob values go in first, over the world's, under the page's query.
@@ -301,15 +303,16 @@ export class TerrainRenderer {
       if (!variant.has(key)) variant.set(key, value);
     this.variant = variant;
     this.means = {};
-    // The materials the table makes, by name: which optional stages the world has.
-    this.layers = new Set(this.materialData.order);
-    // Mean colour of each base material, so a world can move it to a new base colour while keeping the texture's grain.
-    this.means.slope = this.materialData.measured[this.materialData.order[0]].meanRGB.map(v => v / 255);
-    this.means.rock = this.materialData.measured[this.materialData.order[1]].meanRGB.map(v => v / 255);
+    // The world's surfaces (config.layers, from its world.materials): which optional stages it has (a beach, mineral margins' body).
+    this.layers = new Set(this.config.layers || []);
+    // The world's rock material's broad color (the strata's default tones and a rock with no color of its own read it before the map's
+    // materials are set; sculpt-materials.js materialTint).
+    this.means.rock = materialTint(LIBRARY[this.config.materials?.rock] ?? {nodes: [{type: 'output', in: {}}]});
+    // The slope cover's broad color the same way: the Colors row Slope cover starts from it (sculpt.js defaultColor).
+    this.means.slope = materialTint(LIBRARY[this.config.materials?.slope] ?? {nodes: [{type: 'output', in: {}}]});
     // The transition body is generated layer 5 and the transition (ring, body, contours) needs the flag; the ring is layer 7. The beach is the
     // table's `beach` layer (6 in a world's own table, the last when borrowed).
     this.transitionBody = this.layers.has('body');
-    if (this.layers.has('beach')) this.means.beach = this.materialData.measured.beach.meanRGB.map(v => v / 255);
     this.applyKnobs();
   }
 
@@ -330,6 +333,7 @@ export class TerrainRenderer {
     images.forEach((source, layer) => this.device.queue.writeTexture({texture, origin: [0, 0, layer]}, source.data,
       {bytesPerRow: width * 4, rowsPerImage: height}, [width, height]));
     if (mipmaps) this.generateMipmaps(texture, layers, mipLevelCount);
+    this.worldResource(texture);
     return {texture, view: texture.createView({dimension: layers > 1 ? '2d-array' : '2d'}),
       sampler: this.sampler({minFilter, magFilter, mipmapFilter: mipmaps ? 'linear' : 'nearest', addressModeU: 'repeat', addressModeV: 'repeat'})};
   }
@@ -339,7 +343,7 @@ export class TerrainRenderer {
     const start = performance.now();
     const texture = this.device.createTexture({label: 'noise', size: [NOISE_SIZE, NOISE_SIZE], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST});
     this.device.queue.writeTexture({texture}, makeNoise(), {bytesPerRow: NOISE_SIZE * 4}, [NOISE_SIZE, NOISE_SIZE]);
-    this.noiseMs = performance.now() - start;
+    this.worldResource(texture);this.noiseMs = performance.now() - start;
     return {texture, view: texture.createView(), sampler: this.sampler({minFilter: 'linear', magFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat'})};
   }
 
@@ -370,7 +374,7 @@ export class TerrainRenderer {
     device.queue.submit([encoder.finish()]);
     await device.queue.onSubmittedWorkDone();
     buffer.destroy(); count.destroy();
-    this.paletteMs = performance.now() - start;
+    this.worldResource(texture);this.paletteMs = performance.now() - start;
     return {texture, view: texture.createView()};
   }
 
@@ -387,13 +391,6 @@ export class TerrainRenderer {
     this.device.queue.submit([encoder.finish()]);
   }
 
-  // A world's table by URL (a borrowed beach): this world's own is already loaded.
-  async groundTable(url) {
-    if (url === this.config.materialTable) return this.materialData;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Cannot load ${url}`);
-    return response.json();
-  }
 
   setColors(colors = {}, options) { this.colorOverrides={...colors};this.worldDirty=true;return this.syncWorld(options); }
 
@@ -532,7 +529,7 @@ export class TerrainRenderer {
   // Group 1: the plain's tiles, the waters, the palette and the generated materials.
   materialBindGroup() {
     return this.bindGroups.materials ??= this.device.createBindGroup({label: 'materials', layout: this.materialLayout, entries: [
-      {binding: 18, resource: this.textures.palette.view}, {binding: 19, resource: this.generated.view}]});
+      {binding: 18, resource: this.textures.palette.view}]});
   }
 
   // The six placement rows of a world whose table has no `placement` block (engine-frag.wgsl landPlace reads them), from the world's
@@ -553,86 +550,10 @@ export class TerrainRenderer {
     return [...Array.from({length: PLACEMENT_ROW}, () => [0, 0, 0, 0]), ...rows, ...groundCoverRows(this.config.material?.groundCover,variant,this.colorOverrides||{},this.means?.ground)];
   }
 
-  // H4 round 2: one generated layer at one level as RGBA bytes (a check of the pass against the images it replaced; not used by the draw).
-  async readGenerated(layer, level = 0) {
-    const size = GENERATED_SIZE >> level, row = Math.ceil(size * 4 / 256) * 256;
-    const buffer = this.device.createBuffer({size: row * size, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ});
-    const encoder = this.device.createCommandEncoder();
-    encoder.copyTextureToBuffer({texture: this.generated.texture, mipLevel: level, origin: [0, 0, layer]}, {buffer, bytesPerRow: row}, [size, size, 1]);
-    this.device.queue.submit([encoder.finish()]);
-    await buffer.mapAsync(GPUMapMode.READ);
-    const mapped = new Uint8Array(buffer.getMappedRange()), out = new Uint8Array(size * size * 4);
-    for (let y = 0; y < size; y++) out.set(mapped.subarray(y * row, y * row + size * 4), y * size * 4);
-    buffer.destroy();
-    return {size, data: Array.from(out)};
-  }
 
   // What the startup generation took, in ms: the noise (CPU), the palette lookup and the materials (GPU), and the wall time of all three.
-  get startupParts() { return {noise: this.noiseMs, palette: this.paletteMs, materials: this.startupMs, total: this.generationMs}; }
+  get startupParts() { return {noise: this.noiseMs, palette: this.paletteMs, total: this.generationMs}; }
 
-  // H4 item 2: the land materials of materials/green.json made on the GPU, once at startup and again when the table changes.
-  // One layer per material, GENERATED_SIZE px square, MIP levels halving down to 8 px; level L is made with a footprint of 2^L
-  // (engine-materials.wgsl). Returns the milliseconds from submit to the GPU finishing.  All four materials are always made.
-  async makeMaterials() {
-    const device = this.device, size = GENERATED_SIZE, levels = GENERATED_LEVELS, layers = this.materialData.order.length;
-    const start = performance.now();
-    if (!this.materialPipeline) {
-      const module = device.createShaderModule({label: 'engine-materials.wgsl', code: this.materialsSource});
-      const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
-      if (errors.length) throw new Error('nanolathe: engine-materials.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
-      this.materialPipeline = await device.createComputePipelineAsync({label: 'materials', layout: 'auto', compute: {module, entryPoint: 'makeMaterial'}});
-      this.ditherPipeline = await device.createComputePipelineAsync({label: 'material dither', layout: 'auto', compute: {module, entryPoint: 'makeDither'}});
-    }
-    if (!this.generated) {
-      const texture = device.createTexture({label: 'generated materials', size: [size, size, layers], format: 'rgba8unorm', mipLevelCount: levels,
-        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
-      this.generated = {texture, view: texture.createView({dimension: '2d-array'})};
-    }
-    const rows = Float32Array.from(materialRows(this.materialData).flat());
-    const table = device.createBuffer({size: rows.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
-    device.queue.writeBuffer(table, 0, rows);
-    const encoder = device.createCommandEncoder({label: 'materials'});
-    const params = [];
-    for (let level = 0; level < levels; level++) {
-      const buffer = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
-      device.queue.writeBuffer(buffer, 0, new Float32Array([size, 2 ** level, 0, 0]));
-      params.push(buffer);
-      const pass = encoder.beginComputePass({label: 'materials level ' + level});
-      pass.setPipeline(this.materialPipeline);
-      pass.setBindGroup(0, device.createBindGroup({layout: this.materialPipeline.getBindGroupLayout(0), entries: [
-        {binding: 0, resource: {buffer: table}},
-        {binding: 1, resource: this.generated.texture.createView({dimension: '2d-array', baseMipLevel: level, mipLevelCount: 1})},
-        {binding: 2, resource: {buffer: buffer}},
-        {binding: 3, resource: this.generated.texture.createView({dimension: '2d-array', baseMipLevel: level ? level - 1 : 1, mipLevelCount: 1})}]}));
-      const n = Math.ceil(size / 2 ** level / 8);
-      pass.dispatchWorkgroups(n, n, layers);
-      pass.end();
-      if (level === 0) {
-        // A dithered material's level 0 (engine-materials.wgsl makeDither): dot diffusion, one dispatch per class of the 8 x 8 matrix, in
-        // order; each pass gathers the errors the lower classes left in ditherErr. The levels above box-mean it.
-        const err = device.createBuffer({size: size * size * 16 * layers, usage: GPUBufferUsage.STORAGE});
-        const dither = encoder.beginComputePass({label: 'materials dither'});
-        dither.setPipeline(this.ditherPipeline);
-        const n = Math.ceil(size / 8 / 8);
-        for (let cls = 0; cls < 64; cls++) {
-          const pass = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
-          device.queue.writeBuffer(pass, 0, new Float32Array([size, 1, cls, 0]));
-          params.push(pass);
-          dither.setBindGroup(0, device.createBindGroup({layout: this.ditherPipeline.getBindGroupLayout(0), entries: [
-            {binding: 0, resource: {buffer: table}},
-            {binding: 1, resource: this.generated.texture.createView({dimension: '2d-array', baseMipLevel: 0, mipLevelCount: 1})},
-            {binding: 2, resource: {buffer: pass}}, {binding: 6, resource: {buffer: err}}]}));
-          dither.dispatchWorkgroups(n, n, layers);
-        }
-        dither.end();
-        params.push(err);
-      }
-    }
-    device.queue.submit([encoder.finish()]);
-    await device.queue.onSubmittedWorkDone();
-    table.destroy(); params.forEach(b => b.destroy());
-    return this.startupMs = performance.now() - start;
-  }
   // GPU time of one pass from timestamp queries, read back without
   // stalling; at most three in flight, as the WebGL timer queries were.
   timer() {
@@ -709,12 +630,23 @@ export class TerrainRenderer {
     } finally { this._busy=false; }
   }
 
-  async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false, signal, stale} = {}) {
+  async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false, signal, stale, digest = null} = {}) {
     const current=()=>{signal?.throwIfAborted();if(stale?.())throw new DOMException('The scene changed during a terrain bake.','AbortError');};
     current();const start = performance.now(), device = this.device;
     this.syncWorld({clay,light,detail,ring,ringSpread,ringVariation,materialWeathering,transitionDetail,exact});
     this.i('uMaterialReady', this.materialReady);
     this.i('uTransitionBody', Boolean(this.transitionBody&&this.materialReady&&materialWeathering>0));
+    // digest {reuse, check}: the checksum of everything the rest of the draw reads (inputDigest). A caller that still holds the picture of the same
+    // checksum keeps it: the same inputs draw the same bytes (AGENTS.md rule 12), so the bake, the voxel solid and the march are skipped.
+    // check: only the checksum, as a promise, so a caller can submit several tiles' checksums and wait once. Without reuse the draw does
+    // not wait for it either: the result's digest is then a promise.
+    let inputDigest = null;
+    if (digest) {
+      inputDigest = this.inputDigest();
+      if (digest.check) return {check: inputDigest};
+      if (digest.reuse) { inputDigest = await inputDigest; if (inputDigest && inputDigest === digest.reuse) return {reused: true, digest: inputDigest}; }
+    }
+    this.guard?.begin();
     const encoder = device.createCommandEncoder({label: 'terrain'});
     // P6: a SpecializationMiss abandons this encoder, its bake included, so the fields go back to unbaked and the retry bakes again.
     const dirty = this.fieldsDirty;
@@ -752,8 +684,94 @@ export class TerrainRenderer {
     const present=device.createCommandEncoder({label:'present voxel terrain'});
     present.copyTextureToTexture({texture:this.voxelColor},{texture:this.context.getCurrentTexture()},[this.canvas.width,this.canvas.height]);device.queue.submit([present.finish()]);
     this.gpuResult=Promise.all(timers.map(t=>t.result())).then(values=>{const ms=values.reduce((a,b)=>a+(b??0),0);this.lastGPU=ms;return ms;});
-    return {milliseconds:performance.now()-start,gpuMilliseconds:this.lastGPU,pipelineKey};
+    if (this.guard && !await this.guard.check(this, await inputDigest)) inputDigest = null;   // after a violation, no tile is kept
+    return {milliseconds:performance.now()-start,gpuMilliseconds:this.lastGPU,pipelineKey,digest:inputDigest};
   }
+  // A checksum of a draw's inputs: every texel of the input textures (INPUT_TEXTURES; textureSums), the settings uniform's bytes but the
+  // per-chunk ones, the shader specialization, the canvas and texture sizes, and the world version (worldResource). Null when an input
+  // texture is missing (no reuse). The guard (sculpt-digest-guard.js, in tests and ?digestGuard runs) checks that nothing else reaches a draw.
+  // Everything is taken when it is called: the sums are submitted then, and the uniform bytes copied, so the next tile may change both
+  // while the promise waits for the GPU.
+  inputDigest() {
+    const textures = INPUT_TEXTURES.map(k => this[k]);
+    if (textures.some(t => !t)) return Promise.resolve(null);
+    const sums = this.textureSums(textures.map(texture => ({texture})));
+    // The per-chunk uniforms are left out: the draw sets them from this tile's region and inputs (the bake writes looseGrid after this
+    // point, so until then it holds the previous tile's), and both are already in the checksum.
+    const bytes = new Uint8Array(this.uniformData.slice(0));
+    for (const name of PER_CHUNK_UNIFORMS) { const f = this.layout.fields.get(name); if (f) bytes.fill(0, f.offset, f.offset + uniformSpan(f)); }
+    let ca = 0x811c9dc5, cb = 0x01000193;
+    for (let i = 0; i < bytes.length; i++) { ca = Math.imul(ca ^ bytes[i], 0x01000193); cb = Math.imul(cb + bytes[i] + i, 0x5bd1e995) ^ (cb >>> 15); }
+    const rest = '|' + this.specKey().key + '|' + this.canvas.width + 'x' + this.canvas.height + '|' + textures.map(t => t.width + 'x' + t.height + 'x' + t.depthOrArrayLayers).join(',') + '|w' + this.worldEpoch;
+    return sums.then(s => [...s, ca >>> 0, cb >>> 0].map(n => n.toString(16)).join('.') + rest);
+  }
+  // Two 32-bit sums of per-texel hashes for each {texture, mip} (mip 0 by default), on the GPU; 8 bytes a texture read back. Float formats.
+  async textureSums(entries) {
+    const device = this.device, n = entries.length;
+    this.digestPipe ??= device.createComputePipeline({label: 'texture sums', layout: 'auto', compute: {entryPoint: 'main', module: device.createShaderModule({label: 'texture sums', code: `
+      @group(0) @binding(0) var t: texture_2d_array<f32>;
+      @group(0) @binding(1) var<storage, read_write> acc: array<atomic<u32>>;
+      @group(0) @binding(2) var<uniform> salt: vec4u;
+      var<workgroup> wa: atomic<u32>;
+      var<workgroup> wb: atomic<u32>;
+      fn mixed(x: u32) -> u32 { var h = x; h ^= h >> 16u; h *= 0x7feb352du; h ^= h >> 15u; h *= 0x846ca68bu; h ^= h >> 16u; return h; }
+      @compute @workgroup_size(8, 8, 1) fn main(@builtin(global_invocation_id) id: vec3u, @builtin(local_invocation_index) li: u32) {
+        if (li == 0u) { atomicStore(&wa, 0u); atomicStore(&wb, 0u); }
+        workgroupBarrier();
+        let d = textureDimensions(t);
+        if (id.x < d.x && id.y < d.y) {
+          let v = bitcast<vec4u>(textureLoad(t, vec2i(id.xy), i32(id.z), 0));
+          let i = (id.z * d.y + id.y) * d.x + id.x;
+          var a = mixed(i ^ salt.x); var b = mixed(i * 0x9e3779b9u + salt.y);
+          for (var c = 0u; c < 4u; c++) { a = mixed(a ^ v[c]); b = mixed(b + v[c] * 0x85ebca6bu + c); }
+          atomicAdd(&wa, a); atomicAdd(&wb, b);
+        }
+        workgroupBarrier();
+        if (li == 0u) { atomicAdd(&acc[salt.z * 2u], atomicLoad(&wa)); atomicAdd(&acc[salt.z * 2u + 1u], atomicLoad(&wb)); }
+      }`})}});
+    const S = GPUBufferUsage, acc = device.createBuffer({label: 'texture sums', size: 8 * n, usage: S.STORAGE | S.COPY_SRC | S.COPY_DST}), read = device.createBuffer({label: 'texture sums read', size: 8 * n, usage: S.MAP_READ | S.COPY_DST});
+    const salts = entries.map((e, k) => { const b = device.createBuffer({label: 'texture sums salt', size: 16, usage: S.UNIFORM | S.COPY_DST}); device.queue.writeBuffer(b, 0, new Uint32Array([0x51ed270b * (k + 1), 0x2545f491 * (k + 3), k, 0])); return b; });
+    try {
+      const encoder = device.createCommandEncoder({label: 'texture sums'});
+      entries.forEach(({texture: t, mip = 0}, k) => {
+        const pass = encoder.beginComputePass({label: 'texture sums'}); pass.setPipeline(this.digestPipe);
+        pass.setBindGroup(0, device.createBindGroup({layout: this.digestPipe.getBindGroupLayout(0), entries: [{binding: 0, resource: t.createView({dimension: '2d-array', baseMipLevel: mip, mipLevelCount: 1})}, {binding: 1, resource: {buffer: acc}}, {binding: 2, resource: {buffer: salts[k]}}]}));
+        pass.dispatchWorkgroups(Math.ceil(Math.max(1, t.width >> mip) / 8), Math.ceil(Math.max(1, t.height >> mip) / 8), t.depthOrArrayLayers); pass.end();
+      });
+      encoder.copyBufferToBuffer(acc, 0, read, 0, 8 * n); device.queue.submit([encoder.finish()]);
+      await read.mapAsync(GPUMapMode.READ); const sums = [...new Uint32Array(read.getMappedRange().slice(0))]; read.unmap();
+      return sums;
+    } finally { acc.destroy(); read.destroy(); salts.forEach(b => b.destroy()); }
+  }
+  // A texture every draw may read and only the renderer's set-up writes (noise, palette, generated materials, the plain's tiles): its version
+  // is in the input checksum, so making or rewriting one must come through here. The guard fails a draw that sees one change otherwise.
+  worldResource(texture) { this.worldEpoch++; this.worldTextures.add(texture); return texture; }
+  // What a draw may bind, for the guard: an input (in the checksum), a resource the draw makes from its inputs before reading it, or a world
+  // texture (worldResource). A new binding fails the guard until it is placed here, and an input or a world texture needs the checksum to cover it.
+  digestClasses() {
+    const voxel = this.voxel, rock = this.rockWeather;
+    const input = new Set([...INPUT_TEXTURES.map(k => this[k]), this.uniformBuffer].filter(Boolean));
+    // The fields and rock weather textures (bakeFields), the loose-stone mask (encodeLooseMask), the voxel solid and its region settings
+    // (VoxelSurface.render; the guard checks the settings' bytes against the checksum). The voxel solid and rock weather count what they
+    // made, not what they hold: a large tile draws in pieces and hands a piece's resources back before the draw ends.
+    // Also the color pass's geometry record and frame (allocateGeometry; the frame holds the canvas size) and its mask staging (packColorMasks).
+    const own = new Set([this.fieldsTexture, this.looseBuffer, voxel?.uniform, this.geometryRecord, this.geometrySettings, this.maskPackBuffer, this.maskPackSettings].filter(Boolean));
+    const produced = {has: r => own.has(r) || Boolean(voxel?.made?.has(r) || rock?.made?.has(r))};
+    // volatile: produced resources whose bytes may differ between two draws of the same checksum without changing the picture. The voxel
+    // settings hold the solid's pool capacity, predicted from the last count; a piece that overflows builds again at its count.
+    const volatile = new Set([voxel?.uniform].filter(Boolean));
+    return {input, produced, world: this.worldTextures, volatile};
+  }
+  // The uniform fields that differ between two copies of uniformData, without the ones the GPU writes (gpuWrittenUniforms): for the guard.
+  digestUniformDiff(a, b) {
+    const x = new Uint8Array(a), y = new Uint8Array(b), skip = this.gpuWrittenUniforms(), names = [];
+    for (const [name, f] of this.layout.fields) {
+      if (skip.has(name) || f.members) continue;
+      for (let i = f.offset, end = f.offset + uniformSpan(f); i < end; i++) if (x[i] !== y[i]) { names.push(name); break; }
+    }
+    return names;
+  }
+  gpuWrittenUniforms() { return new Set(); }
 
   // Surface knobs read from the variant; callable again after a change.
   // One writer for world uniforms. Chunk availability/paint flags stay with
@@ -770,7 +788,6 @@ export class TerrainRenderer {
     // Placement is live state too: refreshing only scalar uniforms left these
     // controls frozen at startup in the generated materials.
     this.set('uMaterialTable', this.placementTable(variant));
-    this.f('uMaterialFoot', variant.has('materialFoot') ? Math.max(1, Number(variant.get('materialFoot'))) : 1);   // H3: ?materialFoot=4 trials a quarter-resolution draw
     this.f('uMossFromGround', variant.has('moss') ? Number(variant.get('moss')) : 0.0);
     this.f('uLightCap', variant.has('lightCap') ? Number(variant.get('lightCap')) : 1.13);
     this.f('uShadeDepth', variant.has('shadeDepth') ? Number(variant.get('shadeDepth')) : 1.0);
@@ -915,7 +932,6 @@ export class TerrainRenderer {
     this.fieldsDirty = true;
     {
     this.i('uBeach', this.layers.has('beach'));
-    this.i('uBeachLayer', this.materialData.order.indexOf('beach'));
     this.f('uBeachHeight',this.config.material?.beachHeight??6);
     const mid=this.config.water?.midRGB, midDepth=this.config.material?.midDepth;
     this.set('uWaterMid', mid && midDepth ? [...mid.map(v => v / 255), midDepth] : [0, 0, 0, 0]);
@@ -944,8 +960,6 @@ export class TerrainRenderer {
     this.set('uFringeRange', material.fringeRange || [.08, .28]);
     this.f('uWetBand', material.wetBand ?? 13);
     // E6: mineralDetail scales the rock art's contrast about its mean (1: as drawn).
-    const rockMean = material.hillRockMeanRGB || [85, 84, 79];
-    this.v('uRockMean', rockMean.map(v => v / 255));
     const bed = this.config.water?.riverBedRGB;   // riverfix: a braided bed's gravel, world data (absent: the draw darkens the world's rock)
     this.set('uRiverBed', bed ? [...bed.map(v => v / 255), 1] : [0, 0, 0, 0]);
     }
@@ -999,8 +1013,8 @@ export class TerrainRenderer {
     set('uReliefJitter', number('reliefJitter', 0.8));
     set('uFaceStreak', number('faceStreak', 0));
     for (const [key, fallback] of [['rockFace', 0], ['rockFaceFrom', 0.6], ['faceBed', 5.5], ['faceLedge', 2.2], ['faceRun', 90], ['faceLean', 28], ['faceScratch', 2.5],
-      ['faceScratchSize', 7], ['faceBlock', 3], ['faceBlockSize', 11], ['faceGrit', 0], ['faceGrass', 0.8], ['faceRock', 0.9], ['faceCrease', 2.5], ['faceCreaseSize', 6],
-      ['faceShade', 0.85], ['faceWear', 0.35], ['faceLayers', 0], ['faceMass', 1], ['faceTone', 0.12], ['faceStrata', 0], ['faceWet', 0], ['shoreRock',0],['shoreShelf',0],['runoff',0],['runoffScale',24],['runoffConcentration',.65],['runoffCut',2],['runoffStain',.5],['debrisAmount',0],['debrisReach',56],['debrisDepth',4],['rimReach',0], ['faceJointTilt',0],['faceScaleVary',0],['faceFold',0],['faceBedVary',1],['bedCycleVary',0],['faceBreak',0],['faceSpall',0],['faceClast',0],['faceClastSize',12],['faceMineral',0],['faceJointWidth',1],['faceSecondary',.35],['faceContinuity',1],['faceDetailPatch',0],['faceWhole',0],['faceWholeLarge',0],['faceRegular',0],['sandLee',0],['groundPatch',0],['groundPatchSize',200],['faceFresh',0],['faceRind',0],['faceRindDepth',6],['faceRindTone',-.22],['faceRindWarmth',.35],['faceRindRough',.65], ['faceStretch', 1], ['faceBlockHeight', 1], ['faceRound', 0], ['faceJoint', 0.35], ['faceExtrude', 0], ['faceLamina', 0], ['faceLaminaSize', 6], ['faceScratchLength', 50], ['faceScratchAngle', 0], ['faceGritSize', 1.3], ['absorbDepth', 0], ['shadowTint', 0]])
+      ['faceScratchSize', 7], ['faceBlock', 3], ['faceBlockSize', 11], ['faceGrass', 0.8], ['faceRock', 0.9], ['faceCrease', 2.5], ['faceCreaseSize', 6],
+      ['faceShade', 0.85], ['faceWear', 0.35], ['faceLayers', 0], ['faceMass', 1], ['faceTone', 0.12], ['faceStrata', 0], ['faceWet', 0], ['shoreRock',0],['shoreShelf',0],['runoff',0],['runoffScale',24],['runoffConcentration',.65],['runoffCut',2],['runoffStain',.5],['debrisAmount',0],['debrisReach',56],['debrisDepth',4],['rimReach',0], ['faceJointTilt',0],['faceScaleVary',0],['faceFold',0],['faceBedVary',1],['bedCycleVary',0],['faceBreak',0],['faceSpall',0],['faceClast',0],['faceClastSize',12],['faceMineral',0],['faceJointWidth',1],['faceSecondary',.35],['faceContinuity',1],['faceDetailPatch',0],['faceWhole',0],['faceWholeLarge',0],['faceRegular',0],['sandLee',0],['groundPatch',0],['groundPatchSize',200],['faceFresh',0],['faceRind',0],['faceRindDepth',6],['faceRindTone',-.22],['faceRindWarmth',.35],['faceRindRough',.65], ['faceStretch', 1], ['faceBlockHeight', 1], ['faceRound', 0], ['faceJoint', 0.35], ['faceExtrude', 0], ['faceLamina', 0], ['faceLaminaSize', 6], ['faceScratchLength', 50], ['faceScratchAngle', 0], ['absorbDepth', 0], ['shadowTint', 0]])
       set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
     set('uFaceStreakFrom', number('faceStreakFrom', 0.3));
     set('uGentleRelief', number('gentleRelief', 0.6));
@@ -1076,8 +1090,6 @@ export class TerrainRenderer {
     // colours of its own takes (writeRocks).
     // Row 6: the color it deepens toward with thickness (B4), the world's 'absorb' color where it chose one.
     this.set('uRockColors', [colors.rock ? [...colors.rock, 1] : [0, 0, 0, 0], ...strata, colors.absorb ? [...colors.absorb, 1] : [0, 0, 0, 0]]);
-    for (const key of ['slope', 'rock', 'beach'])
-      this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
     }
     this.writeRocks();
     const channels={
@@ -1121,18 +1133,19 @@ export class TerrainRenderer {
   setMaterials(materials = new Map()) {
     const table = this.uniform.get('ground'), checked = new Map();
     for (const [slot, material] of materials) {
-      if (!Number.isInteger(slot) || slot < 1 || slot >= MATERIAL_SLOTS) throw new Error('Material slots are 1 to 7.');
-      checked.set(slot, {worldGround: material.worldGround === true, worldWater: material.worldWater === true, worldHigh: material.worldHigh === true, ...copyMaterial(material)});
+      if (!Number.isInteger(slot) || slot < 1 || slot >= MATERIAL_SLOTS) throw new Error(`Material slots are 1 to ${MATERIAL_SLOTS - 1}.`);
+      checked.set(slot, {worldGround: material.worldGround === true, worldWater: material.worldWater === true, ...Object.fromEntries(MAP_ROLES.map(([r]) => [r, material[r] === true])), ...copyMaterial(material)});
     }
-    const usage = materialCacheUsage(checked.size, MATERIAL_REPEAT, [...checked.values()].some(materialStaged));
+    const usage = materialCacheUsage([...checked.values()].reduce((n, m) => n + 1 + materialStates(m).length, 0), MATERIAL_REPEAT, [...checked.values()].some(materialStaged));   // layers: one a material and one a state
     if (!usage.fits) throw Error(`These materials need ${(usage.bytes / 1048576).toFixed(0)} MiB; the cache budget is ${usage.budget / 1048576} MiB. Use fewer materials.`);
     const role = key => [...checked].find(([, m]) => m[key])?.[0];
     if (checked.size && (!role('worldGround') || !role('worldWater'))) throw new Error('A map needs a ground material and a water material.');
-    this.i('uGroundDefault', role('worldGround') ?? 0); this.i('uWaterGround', role('worldWater') ?? 0); this.i('uHighGround', role('worldHigh') ?? -1);
+    this.i('uGroundDefault', role('worldGround') ?? 0); this.i('uWaterGround', role('worldWater') ?? 0); for (const [r, key] of MAP_ROLES) this.i('u' + key[0].toUpperCase() + key.slice(1) + 'Ground', role(r) ?? -1);   // uHighGround, uRockGround, uSlopeGround...
     this.i('uGroundAny', checked.size ? 1 : 0);
     this.i('uGroundShine', [...checked.values()].some(m => m.nodes.find(n => n.type === 'output').in.shine) ? 1 : 0);
     this.grounds = checked;
     if (this.means) this.means.ground = checked.size ? materialTint(checked.get(role('worldGround'))) : [.5, .5, .5];
+    if (this.means && role('worldSlope')) this.means.slope = materialTint(checked.get(role('worldSlope')));   // the map's slope cover, once it has one
     new Uint8Array(this.uniformData, table.offset, table.stride * table.count).fill(0);
     for (const [slot, material] of checked) writeMaterialSlot(this, material, this.uniformView, table.offset + slot * table.stride);
     this.groundCache.prepare(MATERIAL_REPEAT, this.grounds);
@@ -1178,6 +1191,8 @@ export class TerrainRenderer {
         const shine = SHINE_ROCK.indexOf(key), m = table.members.get(shine >= 0 ? 'shineRock' : key);
         if (m && m.kind === 'f' && Number.isFinite(Number(value))) this.uniformView.setFloat32(at + m.offset + Math.max(shine, 0) * 4, Number(value), true);
       }
+      // Its surface material (a material slot; 0 the world's rock material).
+      this.uniformView.setInt32(at + table.members.get('material').offset, Number.isInteger(rock.material) ? rock.material : 0, true);
       // Its own colors where it has them ('#rrggbb'): row 0 the rock's (a = 1, chosen), rows 1-5 its beds' slots; the rest stay slot 0's.
       const colors = table.members.get('rockColors'), row = (k, hex) => [1, 3, 5].forEach((i, c) => this.uniformView.setFloat32(at + colors.offset + k * 16 + c * 4, parseInt(hex.slice(i, i + 2), 16) / 255, true));
       if (rock.colors?.rock) { row(0, rock.colors.rock); this.uniformView.setFloat32(at + colors.offset + 12, 1, true); }
@@ -1254,13 +1269,15 @@ export class TerrainRenderer {
     const field = this.uniform.get(name[1].toLowerCase() + name.slice(2));
     return field.kind === 'i' ? this.uniformView.getInt32(field.offset, true) : this.uniformView.getFloat32(field.offset, true);
   }
+  // The broad color of the map's world rock material (its own, else the world's library material's).
+  rockMaterialTint() { const slot = [...(this.grounds || new Map())].find(([, m]) => m.worldRock)?.[0]; return slot ? materialTint(this.grounds.get(slot)) : this.means.rock; }
   // A rock slot's colors as the draw reads them, '#rrggbb': {rock, beds}, the rock's (its own, else the rock material's mean, as rockFlat) and
   // its five bed slots'. The World pane shows a preset's effective colors with them, and starts its own from the world's.
   slotColors(slot) {
     const table = this.uniform.get('rock'), at = table.offset + slot * table.stride + table.members.get('rockColors').offset;
-    const row = k => [0, 1, 2, 3].map(c => this.uniformView.getFloat32(at + k * 16 + c * 4, true)), mean = this.uniform.get('rockMean');
+    const row = k => [0, 1, 2, 3].map(c => this.uniformView.getFloat32(at + k * 16 + c * 4, true)), mean = this.rockMaterialTint();
     const hex = rgb => '#' + rgb.slice(0, 3).map(v => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0')).join('');
-    const own = row(0), rock = own[3] > 0.5 ? own : [0, 1, 2].map(c => this.uniformView.getFloat32(mean.offset + c * 4, true));
+    const own = row(0), rock = own[3] > 0.5 ? own : mean;
     // The absorption color: row 6 where chosen, else the rock's own hue at full strength (engine-frag.wgsl absorbFilter).
     const absorb = row(6), top = Math.max(rock[0], rock[1], rock[2], 0.02);
     return {rock: hex(rock), beds: [1, 2, 3, 4, 5].map(k => hex(row(k))), absorb: hex(absorb[3] > 0.5 ? absorb : rock.slice(0, 3).map(v => v / top))};

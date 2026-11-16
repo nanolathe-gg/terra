@@ -139,7 +139,7 @@ export const WORLD_HOMES={
  'Rock types/Exposure & relief':'rockFace faceRock rockFaceFrom faceExtrude faceMass rockCrown',
  'Rock types/Blocks & joints':'faceWhole faceWholeLarge faceRegular faceBlock faceBlockSize faceStretch faceBlockHeight faceJointTilt faceScaleVary faceBreak faceRound faceJoint faceJointWidth faceSecondary faceContinuity faceLean',
  'Rock types/Layers':'strata strataContrast strataGrain bedDip bedDipDir bedCycleVary faceBedVary faceBed faceLedge faceRun faceFold faceSpall faceLamina faceLaminaSize faceLayers faceGrass',
- 'Rock types/Weathering':'faceWear faceCrease faceCreaseSize faceScratch faceScratchSize faceScratchLength faceScratchAngle faceClast faceClastSize faceDetailPatch faceGrit faceGritSize runoff runoffScale runoffConcentration runoffCut runoffStain',
+ 'Rock types/Weathering':'faceWear faceCrease faceCreaseSize faceScratch faceScratchSize faceScratchLength faceScratchAngle faceClast faceClastSize faceDetailPatch runoff runoffScale runoffConcentration runoffCut runoffStain',
  'Rock types/Surface & crust':'shineRock shineRockSharp shineRockRough shineRockScale faceShade faceTone faceFresh faceRind faceRindDepth faceRindTone faceRindWarmth faceRindRough faceMineral faceStrata faceWet',
  'Rock types/Stones & debris':'looseSize stoneSort stoneRound stoneSlab debrisAmount debrisReach debrisDepth',
  'Rock types/Cracks & bands':'crackSeverity crackSpacing crackMajor crackMinor crackHairline crackBlocks crackWidth crackNetwork crackDark banding',

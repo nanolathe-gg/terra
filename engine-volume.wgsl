@@ -64,9 +64,33 @@ fn voxelCell(i:vec3i)->f32 {
     let index=u32(dense)*512u+u32(cell.z)*64u+u32(cell.y)*8u+u32(cell.x);
     let pair=unpack2x16float(vd[index/2u]);return select(pair.x,pair.y,(index&1u)!=0u);
 }
+// voxelCell of i and of the voxel above it: one column read and at most one authored-surface read for both. Each value is the arithmetic
+// voxelCell does (the analytic one at the voxel's own height over the same surface sample), so the field is bit for bit the same.
+fn voxelCellPair(i:vec3i)->vec2f {
+    let xy=i.xy-vec2i(round(vs.origin/vs.step));var out=vec2f(0);var analytic=vec2<bool>(true,true);
+    if(all(xy>=vec2i(0))&&all(xy<vec2i(i32(vs.width),i32(vs.height)))){
+        let c=vc[u32(xy.y/8)*vs.columnsX+u32(xy.x/8)];
+        for(var k=0;k<2;k++){
+            let z=i.z+k-c.x*8;
+            if(z>=0&&z<c.y*8){
+                let brick=u32(c.z)+u32(z/8);let dense=vb[brick].w;let cell=vec3i(xy.x%8,xy.y%8,z%8);
+                if(dense<0){out[k]=voxelCoarseCell(brick,cell);}
+                else{let index=u32(dense)*512u+u32(cell.z)*64u+u32(cell.y)*8u+u32(cell.x);let pair=unpack2x16float(vd[index/2u]);out[k]=select(pair.x,pair.y,(index&1u)!=0u);}
+                analytic[k]=false;
+            }
+        }
+    }
+    if(any(analytic)){
+        let p=(vec3f(i)+.5)*vs.step;let h=voxelAuthored(p.xy);
+        if(analytic.x){out.x=(p.z-h.x)*max(h.w,.02);}
+        if(analytic.y){out.y=((f32(i.z+1)+.5)*vs.step-h.x)*max(h.w,.02);}
+    }
+    return out;
+}
 fn voxelField(p:vec3f)->f32 {
     let q=p/vs.step-.5;let i=vec3i(floor(q));let f=fract(q);
-    return mix(mix(mix(voxelCell(i),voxelCell(i+vec3i(1,0,0)),f.x),mix(voxelCell(i+vec3i(0,1,0)),voxelCell(i+vec3i(1,1,0)),f.x),f.y),mix(mix(voxelCell(i+vec3i(0,0,1)),voxelCell(i+vec3i(1,0,1)),f.x),mix(voxelCell(i+vec3i(0,1,1)),voxelCell(i+vec3i(1,1,1)),f.x),f.y),f.z);
+    let a=voxelCellPair(i);let b=voxelCellPair(i+vec3i(1,0,0));let c=voxelCellPair(i+vec3i(0,1,0));let d=voxelCellPair(i+vec3i(1,1,0));
+    return mix(mix(mix(a.x,b.x,f.x),mix(c.x,d.x,f.x),f.y),mix(mix(a.y,b.y,f.x),mix(c.y,d.y,f.x),f.y),f.z);
 }
 fn voxelGradient(p:vec3f)->vec3f {
     let e=vs.step*.75;
@@ -91,11 +115,76 @@ fn voxelSkin(p:vec3f,slope:f32,painted:f32,rain:f32)->vec2f {
     if(skinGate<=0.0){return vec2f(0);}
     let r=voxelRockSpace(p);let hard=voxelHardness(p,voxelFaceSlope(p.xy));
     let c=voxelBlocks(r,max(4.0,u.rock[rs & rockMask].faceBlockSize));let broad=voxelBlocks(r,max(24.0,u.rock[rs & rockMask].faceBlockSize*2.5));
-    let removed=(voxelSpall(r,c,hard)+voxelRelease(broad,hard)*min(24.0,u.rock[rs & rockMask].faceBlockSize*.8)+u.rock[rs & rockMask].faceJoint*voxelJoint(r,c,broad)*3.0)*u.rock[rs & rockMask].rockFace*.5*voxelRelief(p.xy,slope);
+    let removed=(voxelSpall(r,c,hard)+voxelRelease(broad,hard)*min(24.0,u.rock[rs & rockMask].faceBlockSize*.8)+u.rock[rs & rockMask].faceJoint*voxelJoint(r,c,broad,hard)*3.0)*u.rock[rs & rockMask].rockFace*.5*voxelRelief(p.xy,slope);
     let depth=u.rock[rs & rockMask].faceRindDepth*(.75+.5*voxelNoise(r/max(12.0,u.rock[rs & rockMask].faceBlockSize*1.7)));
     let fresh=smoothstep(depth*.35+.2,depth*1.25+.8,removed);
     let mature=mix(.65,1.0,clamp(rain,0.0,1.0));
     return vec2f(fresh*u.rock[rs & rockMask].faceFresh,(1.0-fresh)*u.rock[rs & rockMask].faceRind*mature)*skinGate;
+}
+fn voxelPaintRock(p:vec2f)->f32 {
+    // Rock at a shore is painted rock to the solid (engine-common.wgsl shoreRockAt).
+    let shore=shoreRockAt(p);
+    if(u.paintOn==0){return shore;}
+    return max(shore,max(0.0,sampleMasks(maskPoint(p),0).r));
+}
+// Joints and fine layers finer than the solid's voxels. The solid cuts a joint at least voxelJointResolved wide (1.5 voxels), shallower so
+// the cut keeps its volume; the hit draws the rest (rockDetail): the joint as a 1 px solid would show it less as this one does (both after
+// their wear rounds), and the fine
+// layers' blur over 1 px less their blur over one voxel. The 1 px solid is the reference: drawn against an ideal sharp joint they were lines.
+fn voxelJointResolved(width:f32,step:f32)->f32 { return max(width,1.5*step); }
+// A joint's width as a solid of this step shows it after its wear rounds (voxelWear): each full round spreads it as diffusion of .12 a
+// voxel squared, so its edges blur by sigma^2 = .24 rounds step^2, which widens the opening by about 2 sigma, keeping its volume.
+fn voxelJointSeen(width:f32,step:f32)->f32 { let r=voxelJointResolved(width,step);return sqrt(r*r+.96*min(4.0*u.rock[rs & rockMask].faceWear,4.0)*step*step); }
+// What rockDetail reads once at a pixel, for every tap around it: the rock's gates and gain (voxelDensity's own), its beds' gathered share.
+struct RockSite { on:bool, face:f32, layers:f32, gain:f32, gathered:f32, wear:f32, cover:f32, layer:i32, relief:f32 }
+fn rockSite(p:vec3f)->RockSite {
+    useRock(p.xy);
+    var site=RockSite(false,0.0,0.0,0.0,0.0,0.0,0.0,-1,0.0);
+    let m=rockMaterialOf(rs);let layer=select(-1,u.ground[u32(max(m,0)) & groundMask].cacheLayer,m>=0);let relief=select(0.0,u.ground[u32(max(m,0)) & groundMask].finish.x,layer>=0);
+    if(u.rock[rs & rockMask].rockFace<=0.0||max(max(max(u.rock[rs & rockMask].faceJoint,u.rock[rs & rockMask].faceLamina),relief),max(u.rock[rs & rockMask].faceLedge,max(u.rock[rs & rockMask].faceCrease,u.rock[rs & rockMask].faceScratch)))<=0.0){return site;}
+    let source=voxelAuthored(p.xy);let guide=voxelGuide(p.xy);let nz=sqrt(max(.000225,1.0-dot(guide.xy,guide.xy)));
+    let slope=length(broadGradient(p.xy));let route=routeProtection(p.xy);
+    let painted=voxelPaintRock(p.xy);let rim=rimRockAt(p.xy);
+    let face=max(rockFaceGate(slope,painted,route),rimRelief(rim,route))*(1.0-softBankAt(p.xy));
+    let soil=u.rock[rs & rockMask].faceLayers*smoothstep(.08,.6,slope)*smoothstep(.5,.9,nz)*(1.0-route);
+    let heightGate=voxelRockHeight(p,max(painted,rim));
+    if(max(face,soil)*heightGate<.001){return site;}
+    var gathered=0.0;var hard=.55;
+    if(u.rock[rs & rockMask].columnCount>0){let column=voxelColumnCoord(p);let gg=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary),length(source.yz)/max(source.w,.015));gathered=gg.y;hard=gg.x;}
+    return RockSite(true,face,face+soil*3.0,u.rock[rs & rockMask].rockFace*.5*voxelRelief(p.xy,slope)*heightGate,gathered,voxelJointWear(hard),face*heightGate,layer,relief);
+}
+// Pits and runnels (Pits, Runnels), a height outward in rock space: 1 to 2 px marks the 2 px solid would blur away, so they are drawn at the
+// hit (rockDetail), not cut.
+fn rockMarks(r:vec3f)->f32 {
+    let pits=(abs(voxelNoise(r/max(2.0,u.rock[rs & rockMask].faceCreaseSize))-.5)-.25)*u.rock[rs & rockMask].faceCrease*2.5;
+    let angle=radians(u.rock[rs & rockMask].faceScratchAngle);
+    let scratched=vec3f(r.x*cos(angle)-r.z*sin(angle),r.y,r.x*sin(angle)+r.z*cos(angle));
+    let runnel=pow(1.0-abs(voxelNoise(scratched/vec3f(max(2.0,u.rock[rs & rockMask].faceScratchSize),max(2.0,u.rock[rs & rockMask].faceScratchSize),u.rock[rs & rockMask].faceScratchLength))*2.0-1.0),4.0)*u.rock[rs & rockMask].faceScratch*.5;
+    return pits-runnel;
+}
+fn rockLayers(p:vec3f,gathered:f32)->f32 { let l=voxelFine(p,voxelColumnCoord(p),gathered);return l.x+l.y; }
+// The height (outward) the solid lacks at p, near the pixel its site was read at.
+fn rockDetail(p:vec3f,site:RockSite)->f32 {
+    var h=0.0;let r=voxelRockSpace(p);
+    if(max(u.rock[rs & rockMask].faceCrease,u.rock[rs & rockMask].faceScratch)>0.0&&site.face>.001){h+=rockMarks(r)*voxelDetail(r)*site.face;}
+    if(u.rock[rs & rockMask].faceJoint>0.0&&site.face>.001){
+        let c=voxelBlocks(r,max(4.0,u.rock[rs & rockMask].faceBlockSize));let broad=voxelBlocks(r,max(24.0,u.rock[rs & rockMask].faceBlockSize*2.5));
+        let w=voxelJointWidth(site.wear);let fine=voxelJointFine(site.wear);
+        let w1=voxelJointSeen(max(w,u.chunkScale),1.0);let w2=voxelJointSeen(w,vs.step);   // as a 1 px solid shows it (never finer than a pixel), as this one does
+        h-=u.rock[rs & rockMask].faceJoint*3.0*(voxelJointW(r,c,broad,w1,fine)*w/w1-voxelJointW(r,c,broad,w2,fine)*w/w2)*site.face*(1.0-.5*site.wear);   // weathered floors fill
+    }
+    if(u.rock[rs & rockMask].faceLamina>0.0||(site.gathered>0.0&&u.rock[rs & rockMask].faceLedge>0.0)){
+        let s1=vec3f(0,0,1);let s2=vec3f(0,0,vs.step);
+        h+=.25*(rockLayers(p-s1,site.gathered)+rockLayers(p+s1,site.gathered)-rockLayers(p-s2,site.gathered)-rockLayers(p+s2,site.gathered))*site.layers*(1.0-.5*site.wear);
+    }
+    // The rock material's art height (its grit) about its middle, at the native pixel p projects to (a height unit rises half a pixel):
+    // the grain the color reads, so the light and the color agree.
+    var grit=0.0;
+    if(site.layer>=0&&site.relief>0.0){
+        let q=vec2f(p.x,p.y-(max(p.z,u.sea)-u.base)*.5)/min(u.chunkScale,1.0);   // voxelRayPoint's shift: below the sea a ray projects at its level
+        grit=(materialReliefBilinear(q,site.layer)-.5*site.relief)*site.cover;
+    }
+    return h*site.gain+grit;
 }
 #ifdef VOLUME_COMPUTE
 @group(3) @binding(0) var cacheOut:texture_storage_2d<rgba32float,write>;
@@ -206,12 +295,6 @@ fn voxelClassify(@builtin(global_invocation_id) id:vec3u){
     columnsOut[id.y*vs.columnsX+id.x]=vec4i(first,i32(count),i32(start),0);
     for(var z=0u;z<count;z++){if(start+z<vs.capacity){bricksOut[start+z]=vec4i(vec2i(id.xy),first+i32(z),i32(start+z));}}
 }
-fn voxelPaintRock(p:vec2f)->f32 {
-    // Rock at a shore is painted rock to the solid (engine-common.wgsl shoreRockAt).
-    let shore=shoreRockAt(p);
-    if(u.paintOn==0){return shore;}
-    return max(shore,max(0.0,sampleMasks(maskPoint(p),0).r));
-}
 const VOXEL_RING=array<vec2f,8>(vec2f(1.0,0.0),vec2f(0.70710678,0.70710678),vec2f(0.0,1.0),vec2f(-0.70710678,0.70710678),vec2f(-1.0,0.0),vec2f(-0.70710678,-0.70710678),vec2f(0.0,-1.0),vec2f(0.70710678,-0.70710678));
 // Whole blocks. A block is rock when its middle lies under the authored surface and air when it lies over it: one answer for the whole block
 // (graded while the middle is within 4 units of the surface), so the faces between a rock block and an air block become the rock's skin.
@@ -244,22 +327,18 @@ fn voxelDensity(p:vec3f)->f32 {
     if(max(face,soil)*heightGate<.001){return d;}
     let r=voxelRockSpace(p);
     let c=voxelBlocks(r,max(4.0,u.rock[rs & rockMask].faceBlockSize));let broad=voxelBlocks(r,max(24.0,u.rock[rs & rockMask].faceBlockSize*2.5));
-    let joint=voxelJoint(r,c,broad);
     let course=voxelNoise(r/vec3f(max(14.0,u.rock[rs & rockMask].faceRun*.3),max(14.0,u.rock[rs & rockMask].faceRun*.3),max(3.0,u.rock[rs & rockMask].faceBed*.6)))-.5;
     let faces=u.rock[rs & rockMask].faceBlock*(c.face*.65+broad.face*1.05);
     let mass=course*u.rock[rs & rockMask].faceMass*2.2;
     // The beds as the face can draw them on this slope (columnGather, voxelHardness): beds too thin gathered, their lost ledges drawn as fine layers.
     let drawSlope=length(source.yz)/max(source.w,.015);   // voxelFaceSlope(p.xy)
-    let column=voxelColumnCoord(p);var gathered=0.0;var hard=.55;
+    let column=voxelColumnAt(p,r);var gathered=0.0;var hard=.55;
     if(u.rock[rs & rockMask].columnCount>0){let gg=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary),drawSlope);gathered=gg.y;hard=gg.x;}
+    let wear=voxelJointWear(hard);let jw=voxelJointWidth(wear);let js=voxelJointResolved(jw,vs.step);
+    let joint=voxelJointW(r,c,broad,js,voxelJointFine(wear))*jw/js;   // the share this solid holds (rockDetail draws the rest)
     let layers=voxelFine(p,column,gathered);let lamina=layers.x+layers.y;
     let bed=(.55-hard)*u.rock[rs & rockMask].faceLedge*2.4;
     let detail=voxelDetail(r);
-    let pits=(abs(voxelNoise(r/max(2.0,u.rock[rs & rockMask].faceCreaseSize))-.5)-.25)*u.rock[rs & rockMask].faceCrease*2.5;
-    let angle=radians(u.rock[rs & rockMask].faceScratchAngle);
-    let scratched=vec3f(r.x*cos(angle)-r.z*sin(angle),r.y,r.x*sin(angle)+r.z*cos(angle));
-    let runnel=pow(1.0-abs(voxelNoise(scratched/vec3f(max(2.0,u.rock[rs & rockMask].faceScratchSize),max(2.0,u.rock[rs & rockMask].faceScratchSize),u.rock[rs & rockMask].faceScratchLength))*2.0-1.0),4.0)*u.rock[rs & rockMask].faceScratch*.5;
-    let grit=(voxelNoise(p/u.rock[rs & rockMask].faceGritSize)-.5)*u.rock[rs & rockMask].faceGrit*4.0;
     // Soil-covered beds have their own rounded terraces, including on
     // slopes that also expose rock; an activation mask alone hid this control.
     // Chips remove corners and patches along weaker partings. This exposes
@@ -269,7 +348,7 @@ fn voxelDensity(p:vec3f)->f32 {
     let inclusion=u.rock[rs & rockMask].faceClast*(clasts.x-.12)*min(4.0,u.rock[rs & rockMask].faceClastSize*.22);
     let release=voxelRelease(broad,hard)*min(24.0,u.rock[rs & rockMask].faceBlockSize*.8);
     let runoff=u.rock[rs & rockMask].runoffCut*rockWeatherAt(p.xy).x*(1.25-.75*hard);
-    let structure=(faces+mass+pits*detail+grit*detail-spall-release+inclusion-u.rock[rs & rockMask].faceJoint*joint*3.0-runnel*detail-runoff+bed+u.rock[rs & rockMask].faceExtrude*6.0*(.65+.35*c.tone))*face+soil*(bed*3.0+mass*1.5)+lamina*(face+soil*3.0);
+    let structure=(faces+mass-spall-release+inclusion-u.rock[rs & rockMask].faceJoint*joint*3.0-runoff+bed+u.rock[rs & rockMask].faceExtrude*6.0*(.65+.35*c.tone))*face+soil*(bed*3.0+mass*1.5)+lamina*(face+soil*3.0);
     let offset=32.0*tanh(u.rock[rs & rockMask].rockFace*.5*voxelRelief(p.xy,slope)*structure/32.0)*heightGate;
     let q=p-n*offset;let moved=voxelAuthored(q.xy);
     let draped=(q.z-moved.x)*min(max(moved.w,.015),n.z);
@@ -293,7 +372,7 @@ fn voxelDensity(p:vec3f)->f32 {
     if(u.rock[rs & rockMask].faceWholeLarge>0.0){blocks+=voxelWhole(p,r,broad.edge,max(24.0,u.rock[rs & rockMask].faceBlockSize*2.5),u.rock[rs & rockMask].faceWholeLarge);}
     // A whole block's faces carry the relief the draped face has: the blocks' own offsets and tilts (so two rock blocks side by side meet at a
     // step, a visible joint), pits, grit, grooves, chips and fragments, at half strength and up to 1 px, so the planes stay planes. Near a face the blocks' answer changes by about 3 a px.
-    let relief=clamp((faces+(pits+grit-runnel)*detail-spall+inclusion)*u.rock[rs & rockMask].rockFace*.25*voxelRelief(p.xy,slope),-1.0,1.0);
+    let relief=clamp((faces-spall+inclusion)*u.rock[rs & rockMask].rockFace*.25*voxelRelief(p.xy,slope),-1.0,1.0);
     // The fine layers run on across the blocks, so a layered rock's lines are cut only by its joints, not wiped from every whole block.
     let fine=clamp(lamina*u.rock[rs & rockMask].rockFace*.25*voxelRelief(p.xy,slope),-1.0,1.0);
     return draped*(1.0-share*min(blocks.y,1.0))+(8.0*blocks.x-3.0*(relief+fine)*min(blocks.y,1.0))*share;
@@ -338,8 +417,10 @@ fn voxelBuild(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) l
     let a=voxelDensity(p);let c=voxelDensity(p+vec3f(vs.step,0,0));
     densityOut[u32(b.w)*256u+local.z*32u+local.y*4u+local.x]=pack2x16float(vec2f(a,c));
 }
-fn voxelWear(p:vec3i)->f32 {
-    let d=voxelCell(p);if(abs(d)>6.0*vs.step){return d;}
+// One round of wear at p, whose cell is d. voxelWeather wears a voxel pair along x and reads each cell once: partner is the pair's other cell,
+// at p+x when after is true, else at p-x.
+fn voxelWear(p:vec3i,d:f32,partner:f32,after:bool)->f32 {
+    if(abs(d)>6.0*vs.step){return d;}
     let q=(vec3f(p)+.5)*vs.step;useRock(q.xy);
     let wear=clamp(4.0*u.rock[rs & rockMask].faceWear-vs.wearRound,0.0,1.0);
     if(wear<=0.0){return d;}
@@ -348,11 +429,14 @@ fn voxelWear(p:vec3i)->f32 {
     let authoredSlope=broadGradient(q.xy);
     let authoredNz=inverseSqrt(1.0+dot(authoredSlope,authoredSlope));
     let exposure=max(1.0-smoothstep(.75,.98,authoredNz),painted)*(1.0-routeProtection(q.xy))*heightGate;
-    // Unexposed ground wears by exactly nothing; skip its fourteen neighbour reads. Only an exposure of zero: a negative one (route protection
+    // Unexposed ground wears by exactly nothing; skip its neighbour reads. Only an exposure of zero: a negative one (route protection
     // above 1) sharpens, and the crystal tool's picture shows it.
     if(exposure==0.0){return d;}
-    let sum=voxelCell(p+vec3i(1,0,0))+voxelCell(p-vec3i(1,0,0))+voxelCell(p+vec3i(0,1,0))+voxelCell(p-vec3i(0,1,0))+voxelCell(p+vec3i(0,0,1))+voxelCell(p-vec3i(0,0,1));
-    let gradient=length(vec3f(voxelCell(p+vec3i(1,0,0))-voxelCell(p-vec3i(1,0,0)),voxelCell(p+vec3i(0,1,0))-voxelCell(p-vec3i(0,1,0)),voxelCell(p+vec3i(0,0,1))-voxelCell(p-vec3i(0,0,1))))/(2.0*vs.step);
+    var xp=partner;var xn=partner;
+    if(after){xn=voxelCell(p-vec3i(1,0,0));}else{xp=voxelCell(p+vec3i(1,0,0));}
+    let yp=voxelCell(p+vec3i(0,1,0));let yn=voxelCell(p-vec3i(0,1,0));let zp=voxelCell(p+vec3i(0,0,1));let zn=voxelCell(p-vec3i(0,0,1));
+    let sum=xp+xn+yp+yn+zp+zn;
+    let gradient=length(vec3f(xp-xn,yp-yn,zp-zn))/(2.0*vs.step);
     // The six-neighbor diffusion coefficient stays below 1/6 at every
     // exposed control value; erosion depth and rounding remain independent.
     // Fade in up to four full-strength rounds within the 40-pixel apron,
@@ -364,7 +448,8 @@ fn voxelWear(p:vec3i)->f32 {
 fn voxelWeather(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) local:vec3u){
     let brick=group.x+group.y*128u;if(vCount[2]>vs.capacity||brick>=vCount[0]){return;}
     let b=vb[brick];if(b.w<0){return;}let cell=vec3i(b.xyz)*8+vec3i(vec2i(round(vs.origin/vs.step)),0)+vec3i(i32(local.x)*2,i32(local.y),i32(local.z));
-    densityOut[u32(b.w)*256u+local.z*32u+local.y*4u+local.x]=pack2x16float(vec2f(voxelWear(cell),voxelWear(cell+vec3i(1,0,0))));
+    let first=voxelCell(cell);let second=voxelCell(cell+vec3i(1,0,0));
+    densityOut[u32(b.w)*256u+local.z*32u+local.y*4u+local.x]=pack2x16float(vec2f(voxelWear(cell,first,second,true),voxelWear(cell+vec3i(1,0,0),second,first,false)));
 }
 #endif
 #ifdef VOLUME_RENDER

@@ -98,7 +98,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const engine = await import('../sculpt-scene.js'), fieldsModule = await import('../sculpt-gpu-fields.js');
   const {configureMap} = await import('../sculpt-map.js'), {TerrainRenderer} = await import('../sculpt-renderer.js');
   const {withWorldMaterials, keepStrokeMaterials, materialsInUse} = await import('../sculpt-materials.js');
-  const {copyRockSettings, applyWorldRock, copyRocks, worldRocks, keepStrokeRocks, rocksInUse} = await import('../sculpt-rock-presets.js');
+  const {copyRockSettings, applyWorldRock, copyRocks, worldRocks, keepStrokeRocks, rocksInUse, giveRockMaterials} = await import('../sculpt-rock-presets.js');
   const {copyColumn} = await import('../sculpt-column.js'), {copyMapTools} = await import('../sculpt-tools.js');
   const settings = new URLSearchParams(search);
   for (const [key,value] of Object.entries(copyRockSettings(scene.rock) || {})) if (!settings.has(key)) settings.set(key,value);
@@ -110,6 +110,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const worldColumn = {column: config.column}, columnOverride = copyColumn(scene.column);
   let materials = withWorldMaterials(scene.materials, config), materialKey = '[]';   // the map's materials (sculpt.js mapMaterials): the scene's, else the world's
   let rocks = copyRocks(scene.rocks) ?? worldRocks(config), rockKey = '[]';   // the map's rock presets (sculpt.js mapRocks): the scene's, else the world's
+  if (!scene.rocks) ({rocks, materials} = giveRockMaterials(rocks, materials, rocks.map(r => r.slot), config));   // sculpt.js loadSketch: the world's rock types bring their rock materials
   const tools = copyMapTools(scene.tools) ?? [];   // the map's own tools (sculpt.js mapTools), which its strokes may name
   if (columnOverride) config.column = columnOverride;
   const catalog = await json('config/catalog.json');
@@ -121,7 +122,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   engine.borrowBeach(config, settings);   // sculpt.js boot: a beach another world lends (Colors & base pattern, Beach)
   const worldSize = config.worldSize ?? config.size, worldGrid = config.worldGrid ?? config.grid, spacing = (worldSize - 1) / (worldGrid - 1);
   // sculpt-canvas.js mountMapCanvas: the chunk renderer over the map, with the page's colors.
-  config.maskKeys = engine.MASK_KEYS; config.gpuBudgetBytes = 128 * MB;
+  config.maskKeys = engine.MASK_KEYS; config.gpuBudgetBytes = 256 * MB;   // every map now holds three materials or more (ground, water, rock): 22 MB fixed before a chunk
   const canvas = new HeadlessCanvas(), renderer = await TerrainRenderer.createChunked(canvas, config), errors = [];
   renderer.onerror = message => errors.push(message);   // WebGPU validation and device errors arrive after the call that caused them
   fieldsModule.setFailureHandler(error => errors.push('shape fields: ' + (error?.message ?? String(error))));   // a failed shape run leaves the base height
@@ -130,7 +131,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const seed = engine.DEFAULT_SEED, refinementSeed = seed;
   let nodes = [];
   const context = () => engine.shapeContext({config, settings, seed, talusAngle: renderer.variantNumber('talusAngle', 40), minH, maxH});
-  const gpuMB = Math.min(4096, Math.max(128, Number(settings.get('gpuMB')) || 512));
+  const gpuMB = Math.min(16384, Math.max(128, Number(settings.get('gpuMB')) || 512));   // sculpt-memory.js TERRAIN_BUDGET_MAX
   const common = {worldSize, worldGrid, baseHeight: config.baseHeight, maskKeys: engine.MASK_KEYS, nodes: () => nodes, device: () => renderer.device, context, gesture: () => false};
   const paged = worldGrid > 1168 || settings.get('gpuPages') === 'force';
   const fields = paged
@@ -138,7 +139,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
     : fieldsModule.createGpuFields(common);
   // sculpt.js scriptedScene: the scene's nodes replace the map's, and the fields evaluate them.
   // sculpt.js syncRocks: the renderer's rock table holds the presets strokes choose, and no other.
-  const syncMaterials = () => { const used = materialsInUse(nodes, materials), key = JSON.stringify(used); if (key !== materialKey) { renderer.setMaterials(new Map(used.map(m => [m.slot, m]))); materialKey = key; } };
+  const syncMaterials = () => { const used = materialsInUse(nodes, materials, rocks), key = JSON.stringify(used); if (key !== materialKey) { renderer.setMaterials(new Map(used.map(m => [m.slot, m]))); materialKey = key; } };
   const syncRocks = () => { const used = rocksInUse(nodes, rocks), key = JSON.stringify(used); if (key !== rockKey) { rockKey = key; renderer.setRocks(new Map(used.map(r => [r.slot, r]))); } };
   const play = (list, {ground = true} = {}) => { nodes = keepStrokeMaterials(keepStrokeRocks(engine.sceneNodes(config, list, {ground, seed, settings, tools}), rocks), materials); if (scene_) scene_.nodes = nodes; fields.changed(); syncRocks(); syncMaterials(); return nodes.length; };
   let scene_ = null;
@@ -195,13 +196,14 @@ async function feedFor(s, request, options) {
 
 // The picture of a window, in tiles of `tile` px as the canvas bakes them (sculpt-canvas.js bake: fed, at 1x): RGBA bytes, opaque.
 // exportArt bakes the export's art as sculpt-canvas.js exportChunks does (bake with exportArt: weathered, completed before it returns).
-export async function renderWindow(s, {x = 0, y = 0, width = 1024, height = 1024, tile = 256, options = s.drawOptions(), exportArt = false} = {}) {
-  const {renderer, canvas, config} = s, device = renderer.device, out = new Uint8Array(width * height * 4), reads = [];
+// digest: also take each tile's input checksum (TerrainRenderer.inputDigest), joined in out.digest.
+export async function renderWindow(s, {x = 0, y = 0, width = 1024, height = 1024, tile = 256, options = s.drawOptions(), exportArt = false, digest = false} = {}) {
+  const {renderer, canvas, config} = s, device = renderer.device, out = new Uint8Array(width * height * 4), reads = [], digests = [];
   for (let ty = 0; ty < height; ty += tile) for (let tx = 0; tx < width; tx += tile) {
     const w = Math.min(tile, width - tx), h = Math.min(tile, height - ty);
     const request = {x: x + tx, y: y + ty, width: w, height: h, exportArt, worldSize: config.worldSize ?? config.size, worldGrid: config.worldGrid ?? config.grid};
     const feed = await feedFor(s, request, options);
-    try { await renderer.renderChunk(request, {...options, feed, scale: 1, deferCompletion: !exportArt}); } finally { feed.release?.(); }
+    try { const result = await renderer.renderChunk(request, {...options, feed, scale: 1, deferCompletion: !exportArt, ...(digest ? {digest: {reuse: null}} : {})}); digests.push(await (result.digest ?? null)); } finally { feed.release?.(); }
     const row = Math.ceil(w * 4 / 256) * 256, buffer = device.createBuffer({label: 'headless readback', size: row * h, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ});
     const encoder = device.createCommandEncoder({label: 'headless readback'});
     encoder.copyTextureToBuffer({texture: canvas.gpu.texture}, {buffer, bytesPerRow: row}, [w, h]);
@@ -215,6 +217,7 @@ export async function renderWindow(s, {x = 0, y = 0, width = 1024, height = 1024
     buffer.unmap(); buffer.destroy();
   }
   for (let i = 3; i < out.length; i += 4) out[i] = 255;   // the canvas is opaque (alphaMode 'opaque'), as the page shows it
+  if (digest) out.digest = digests.includes(null) ? null : digests.join(' ');
   return out;
 }
 

@@ -6,19 +6,33 @@ import {MATERIAL_REPEAT, soloMaterial} from './sculpt-materials.js';
 import {MASK_KEYS} from './sculpt-scene.js';
 
 export const TILE = MATERIAL_REPEAT, TERRAIN = 384;
-// The terrain fixture's height across its width: sea bed, a beach ramp, a level plain, then a hill.
-function terrainHeight(x, sea, base) {
+// The terrain fixture's height across its width: sea bed, a beach ramp, a level plain, then a hill; for a rock material a cliff, so its
+// faces show the rock.
+function terrainHeight(x, sea, base, cliff = false) {
   const t = x / TERRAIN, mix = (a, b, f) => a + (b - a) * Math.max(0, Math.min(1, f));
   if (t < .3) return mix(sea - 46, base, t / .3);
   if (t < .58) return base;
-  return mix(base, base + 78, (t - .58) / .3);
+  return cliff ? mix(base, base + 120, (t - .58) / .14) : mix(base, base + 78, (t - .58) / .3);
+}
+// The terrain fixture's Time maps, so a material's Worn and Deposit colors show: water wore the hill's flank and laid sediment at its foot,
+// each from none at the top of the picture to all of it at the bottom, so the picture shows every level a From setting can pick.
+function terrainWeather(region, request) {
+  const count = region.gridWidth * region.gridHeight, wear = new Float32Array(count), deposit = new Float32Array(count), clamp = v => Math.max(0, Math.min(1, v));
+  const level = new Float32Array(count).fill(.5);   // the fall line's "none" (engine-common.wgsl timeMap3 without Time maps); every other map's is 0
+  for (let y = 0; y < region.gridHeight; y++) for (let x = 0; x < region.gridWidth; x++) {
+    const t = (region.gridOrigin[0] + x * region.gridSpacing - request.x) / TERRAIN, down = clamp((region.gridOrigin[1] + y * region.gridSpacing - request.y) / TERRAIN), i = y * region.gridWidth + x;
+    wear[i] = clamp((t - .6) / .04) * clamp((.86 - t) / .04) * down;
+    deposit[i] = clamp(1 - Math.abs(t - .56) / .04) * down;
+  }
+  return {wear, deposit, fx: level, fy: level};
 }
 export class MaterialPreview {
   constructor() { this.jobs = new Map(); this.serial = 0; this.pictureSerial = 0; this.running = false; this.renderer = null; this.timer = null; }
   // A picture of `material` beside `companion` (the map's water when the material is ground, its ground when it is water).
   // view: 'tile' (the whole repeat, level and lit) or 'terrain'. solo: a node id to show alone, unlit. done(error, {canvas, tiles, draft}).
-  picture(main, material, companion, {view = 'tile', solo = null} = {}, done) {
-    const job = {kind: 'picture', main, material: structuredClone(material), companion: structuredClone(companion), view, solo, done, serial: ++this.serial};
+  // ground: for a rock material, the map's ground, under which the terrain picture shows it as the rock.
+  picture(main, material, companion, {view = 'tile', solo = null, ground = null} = {}, done) {
+    const job = {kind: 'picture', main, material: structuredClone(material), companion: structuredClone(companion), ground: ground && structuredClone(ground), view, solo, done, serial: ++this.serial};
     const reduces = !solo && material.palette.length >= 2 && material.dither.amount > 0;
     this.pictureSerial = job.serial; clearTimeout(this.timer);
     // The first answer skips the palette reduction; the finished one follows once input settles.
@@ -50,14 +64,17 @@ export class MaterialPreview {
           if (job.draft) shown = {...shown, dither: {...shown.dither, amount: 0}};
           r.variant = new URLSearchParams(job.main.variant); r.applyKnobs(); r.setColors(job.main.colorOverrides);
           r.i('uDiagnosticView', job.solo ? 8 : 0);
-          r.setMaterials(new Map([[1, {...shown, worldGround: !water, worldWater: water}], [2, {...job.companion, worldGround: water, worldWater: !water}]]));
+          const asRock = job.ground && job.view === 'terrain' && !job.solo;
+          r.setMaterials(new Map(asRock ? [[1, {...job.ground, worldGround: true, worldWater: false}], [2, {...job.companion, worldGround: false, worldWater: true}], [3, {...shown, worldGround: false, worldWater: false, worldRock: true}]]
+            : [[1, {...shown, worldGround: !water, worldWater: water}], [2, {...job.companion, worldGround: water, worldWater: !water}]]));
           const size = job.view === 'terrain' ? TERRAIN : TILE, half = size / 2;
           const request = {x: pool * 1.5 - half, y: pool * 1.5 - half, width: size, height: size, worldSize: r.config.worldSize, worldGrid: r.config.worldGrid};
           const region = r.requiredRegion(request), count = region.gridWidth * region.gridHeight, h = new Float32Array(count);
           Object.assign(request, {gridWidth: region.gridWidth, gridHeight: region.gridHeight, gridOrigin: region.gridOrigin});
           for (let y = 0; y < region.gridHeight; y++) for (let x = 0; x < region.gridWidth; x++)
-            h[y * region.gridWidth + x] = job.view === 'terrain' ? terrainHeight(region.gridOrigin[0] + x * region.gridSpacing - request.x, sea, base) : water ? sea - 64 : base;
+            h[y * region.gridWidth + x] = job.view === 'terrain' ? terrainHeight(region.gridOrigin[0] + x * region.gridSpacing - request.x, sea, base, asRock) : water ? sea - 64 : base;
           request.fields = {h}; request.masks = {ground: new Int8Array(count)};
+          if (job.view === 'terrain') request.weather = terrainWeather(region, request);
           const rendered = await r.renderChunk(request, {clay: false, light: 'original'});
           if (this.disposed || (job.serial !== this.pictureSerial && !job.draft)) continue;
           const canvas = new OffscreenCanvas(size, size), ctx = canvas.getContext('2d', {willReadFrequently: true}); ctx.drawImage(rendered.canvas, 0, 0);

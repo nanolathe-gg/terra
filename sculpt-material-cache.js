@@ -1,22 +1,25 @@
 // The GPU side of materials (sculpt-materials.js): each material in use has one layer of a cached repeat holding its unlit color, art
-// height and shine, a layer of that color reduced to its game-palette colors, and one texel of its mean color. A graph is compiled to a
+// height and shine (and one more layer for each state it draws: Worn, Deposit), a layer of that color reduced to its game-palette colors, and one texel of its mean color. A graph is compiled to a
 // pipeline once per shape; its numbers are a buffer upload. A palette-only edit redoes the reduction, not the fields.
-import {compileMaterial, PROGRAM_BYTES, STEP_STRIDE, MAX_NODES, MAX_STAGES, materialRenderKey, programKey, programSource, stagePlan, materialCacheUsage, paletteRgb, THUMB, THUMB_STRIDE} from './sculpt-materials.js';
+import {compileMaterial, PROGRAM_BYTES, STEP_STRIDE, MAX_NODES, MAX_STAGES, materialRenderKey, programKey, programSource, stagePlan, materialCacheUsage, paletteRgb, THUMB, THUMB_STRIDE, materialStates, MATERIAL_STATES} from './sculpt-materials.js';
 
-const SCRATCH_ROW = 8;   // the materialGraphs row a thumbnail run borrows
+const SCRATCH_ROW = 16;   // the materialGraphs row a thumbnail run borrows (after one a slot)
 // A slot's row of the uniform table: its palette and how the reduction treats it.
 export function writeMaterialSlot(r, material, view, at) {
   const members = r.uniform.get('ground').members, d = material.dither, reduce = material.palette.length >= 2;
   const set = (key, value, int = false) => int ? view.setInt32(at + members.get(key).offset, value, true) : view.setFloat32(at + members.get(key).offset, value, true);
   set('paletteCount', material.palette.length, true); set('dither', reduce ? d.amount : 0); set('spread', d.spread); set('tone', d.tone);
   [d.red, d.green, d.blue].forEach((v, c) => view.setFloat32(at + members.get('weights').offset + c * 4, v, true));
+  const out = material.nodes.find(n => n.type === 'output').params;
+  [out.wornFrom, out.wornAmount, out.depositFrom, out.depositAmount].forEach((v, c) => view.setFloat32(at + members.get('states').offset + c * 4, v, true));
+  view.setFloat32(at + members.get('finish').offset, material.nodes.find(n => n.type === 'output').in.height ? out.relief : 0, true);
   material.palette.forEach((index, k) => paletteRgb(index).forEach((v, c) => view.setFloat32(at + members.get('palette').offset + k * 16 + c * 4, v / 255, true)));
 }
 function writeProgram(view, at, program) {
   view.setInt32(at, program.instructions.length, true);
   program.instructions.forEach((step, i) => {
     const base = at + 16 + i * STEP_STRIDE;
-    [...step.code, ...step.links].forEach((v, j) => view.setInt32(base + j * 4, v, true));
+    [...step.code, ...step.links.slice(0, 4)].forEach((v, j) => view.setInt32(base + j * 4, v, true));
     step.args.forEach((v, j) => view.setFloat32(base + 32 + j * 4, v, true));
   });
 }
@@ -26,6 +29,7 @@ export class MaterialCache {
     this.pipelines = new Map(); this.keys = new Map(); this.colorKeys = new Map(); this.layers = []; this.pool = 0; this.generations = 0;
     this.programBuffer = renderer.device.createBuffer({label: 'material graphs', size: PROGRAM_BYTES * (SCRATCH_ROW + 1), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
     renderer.track?.(this.programBuffer, 'material graphs', this.programBuffer.size, 'materials');
+    renderer.worldResource?.(this.programBuffer);   // the cache is world data: each write bumps the world version in the tile input checksum
     this.allocate(1, 1);
   }
   texture(old, label, size, format, usage, bytes) {
@@ -40,6 +44,7 @@ export class MaterialCache {
     this.colorTexture = this.texture(this.colorTexture, 'material palette color', [pool, pool, count], 'rgba8unorm', read | GPUTextureUsage.COPY_SRC, pool * pool * count * 4);
     this.shineTexture = this.texture(this.shineTexture, 'material shine', [pool, pool, count], 'rgba16float', read, pool * pool * count * 8);
     this.meanTexture = this.texture(this.meanTexture, 'material mean color', [1, 1, count], 'rgba32float', read, count * 16);
+    for (const t of [this.fieldTexture, this.colorTexture, this.shineTexture, this.meanTexture]) r.worldResource?.(t);
     if (r.resources) r.fixedBytes = [...r.resources.values()].filter(v => v.kind === 'materials' || v.kind === 'shared').reduce((n, v) => n + v.bytes, 0);
     r.bindGroups = {}; this.keys.clear(); this.colorKeys.clear();
   }
@@ -105,15 +110,21 @@ export class MaterialCache {
   }
   // The cache's shape for these materials (a Map of slot to material): which layer each slot reads. No GPU work is submitted.
   prepare(pool, materials) {
+    // One layer a slot's color, then one a state it draws; the slot's graph is one program row, which its state layers share.
+    const slots = [...materials.keys()].sort((a, b) => a - b), layers = slots.flatMap(slot => [`${slot}`, ...materialStates(materials.get(slot)).map(k => `${slot}:${k}`)]);
     const programs = new Map([...materials].map(([slot, m]) => [slot, compileMaterial(m)])), staged = [...programs.values()].some(p => stagePlan(p).stages.length);
-    const usage = materialCacheUsage(materials.size, pool, staged);
-    if (!usage.fits) throw Error(`These materials need ${(usage.bytes / 1048576).toFixed(0)} MiB; the cache budget is ${usage.budget / 1048576} MiB. Use fewer materials.`);
-    const layers = [...materials.keys()].sort((a, b) => a - b);
+    const usage = materialCacheUsage(layers.length, pool, staged);
+    if (!usage.fits) throw Error(`These materials need ${(usage.bytes / 1048576).toFixed(0)} MiB; the cache budget is ${usage.budget / 1048576} MiB. Use fewer materials or fewer Worn and Deposit colors.`);
     if (this.pool !== pool || String(this.layers) !== String(layers)) { this.allocate(layers.length ? pool : 1, Math.max(1, layers.length)); this.pool = pool; this.layers = layers; }
-    const r = this.renderer, table = r.uniform.get('ground');
-    for (let slot = 0; slot < table.count; slot++) for (const key of ['cacheLayer', 'colorLayer'])
-      r.uniformView.setInt32(table.offset + slot * table.stride + table.members.get(key).offset, layers.indexOf(slot), true);
-    this.entries = layers.map((slot, layer) => ({slot, layer, material: materials.get(slot), program: programs.get(slot)}));
+    const r = this.renderer, table = r.uniform.get('ground'), set = (slot, key, v) => r.uniformView.setInt32(table.offset + slot * table.stride + table.members.get(key).offset, v, true);
+    for (let slot = 0; slot < table.count; slot++) {
+      for (const key of ['cacheLayer', 'colorLayer']) set(slot, key, layers.indexOf(`${slot}`));
+      for (const k of MATERIAL_STATES) set(slot, k + 'Layer', layers.indexOf(`${slot}:${k}`));
+    }
+    this.entries = layers.map((key, layer) => {
+      const [slot, state = null] = key.split(':'), s = Number(slot);
+      return {slot: s, state, stateCode: state ? MATERIAL_STATES.indexOf(state) + 1 : 0, row: slots.indexOf(s), layer, material: materials.get(s), program: programs.get(s)};
+    });
     if (!staged) this.releaseStages();
   }
   // Generates what changed. Called inside the draw cycle, so a fast drag never queues more than one run a frame.
@@ -121,17 +132,18 @@ export class MaterialCache {
     this.prepare(pool, materials);
     const r = this.renderer, device = r.device, data = new ArrayBuffer(PROGRAM_BYTES * Math.max(1, this.entries.length)), view = new DataView(data), changed = [];
     for (const e of this.entries) {
-      writeProgram(view, e.layer * PROGRAM_BYTES, e.program);
+      if (!e.state) writeProgram(view, e.row * PROGRAM_BYTES, e.program);
       const key = JSON.stringify(e.program.instructions.map(i => [i.code, i.links, i.args]));
       if (this.keys.get(e.layer) !== key) changed.push([e, key]);
     }
     if (changed.length) {
+      r.worldResource?.(this.programBuffer);
       device.queue.writeBuffer(this.programBuffer, 0, data);
       const encoder = device.createCommandEncoder({label: 'material graphs'}), buffers = [];
       for (const [e, key] of changed) {
         const pipeline = this.pipeline(e.program), job = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}); buffers.push(job);
-        device.queue.writeBuffer(job, 0, new Uint32Array([e.slot, e.layer, e.layer, 0]));
-        this.runStages(encoder, e.program, e.layer, pool, buffers);
+        device.queue.writeBuffer(job, 0, new Uint32Array([e.slot, e.layer, e.row, e.stateCode]));
+        this.runStages(encoder, e.program, e.row, pool, buffers);
         const pass = encoder.beginComputePass({label: 'material graph'}); pass.setPipeline(pipeline);
         pass.setBindGroup(0, device.createBindGroup({layout: pipeline.getBindGroupLayout(0), entries: [{binding: 15, resource: {buffer: this.programBuffer}}]}));
         pass.setBindGroup(1, device.createBindGroup({layout: pipeline.getBindGroupLayout(1), entries: [
@@ -142,7 +154,7 @@ export class MaterialCache {
       }
       device.queue.submit([encoder.finish()]); buffers.forEach(b => b.destroy());
     }
-    this.reduce(pool, changed.map(([e]) => e.slot));
+    this.reduce(pool, changed.map(([e]) => e.layer));
   }
   // The mean color of each regenerated material, and the palette reduction of each whose fields or palette changed.
   reduce(pool, regenerated) {
@@ -150,9 +162,9 @@ export class MaterialCache {
     const stage = entryPoint => this[entryPoint] ??= device.createComputePipeline({label: entryPoint, layout: 'auto', compute: {module: this.reduceModule ??= device.createShaderModule({label: 'material reduction', code: this.reduceSource}), entryPoint}});
     const fields = this.fieldTexture.createView({dimension: '2d-array'});
     for (const e of this.entries) {
-      const fresh = regenerated.includes(e.slot), key = materialRenderKey(e.material), reduces = e.material.palette.length >= 2 && e.material.dither.amount > 0;
-      if (!fresh && (!reduces || this.colorKeys.get(e.slot) === key)) continue;
-      r.uniformsDirty = true; r.flushUniforms();
+      const fresh = regenerated.includes(e.layer), key = materialRenderKey(e.material), reduces = e.material.palette.length >= 2 && e.material.dither.amount > 0;
+      if (!fresh && (!reduces || this.colorKeys.get(e.layer) === key)) continue;
+      r.uniformsDirty = true; r.flushUniforms(); r.worldResource?.(this.colorTexture);
       const encoder = device.createCommandEncoder({label: 'material reduction'}), jobs = [];
       const job = values => { const b = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}); jobs.push(b); device.queue.writeBuffer(b, 0, new Uint32Array(values)); return b; };
       if (fresh) {
@@ -175,7 +187,7 @@ export class MaterialCache {
           pass.dispatchWorkgroups(1); pass.end();
         }
       }
-      device.queue.submit([encoder.finish()]); error?.destroy(); jobs.forEach(b => b.destroy()); this.colorKeys.set(e.slot, key);
+      device.queue.submit([encoder.finish()]); error?.destroy(); jobs.forEach(b => b.destroy()); this.colorKeys.set(e.layer, key);
     }
   }
   // Every node's own output as a small picture (THUMB px, one layer a node in evaluation order), for the graph's cards and the Levels

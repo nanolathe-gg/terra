@@ -1,27 +1,28 @@
 // Geological starting points are ordinary artist settings and Rock column beds.
 // No preset name reaches the renderer; the edited numbers are the saved result.
+import {LIBRARY,MATERIAL_SLOTS,addMaterial,materialCacheUsage,materialStaged,materialStates,roleOf} from './sculpt-materials.js';
 import {KNOBS} from './sculpt-knobs.js';
 import {copyColumn,columnRows,COLUMN_SLOTS} from './sculpt-column.js';
-const base={faceWhole:0,faceWholeLarge:0,faceRegular:0,faceJointWidth:1,faceSecondary:.35,faceContinuity:.8,faceDetailPatch:.6,faceFresh:.55,faceRind:.65,faceRindDepth:6,faceRindTone:-.22,faceRindWarmth:.25,faceRindRough:.7,bedCycleVary:.6,faceBedVary:1,faceBreak:.4,stoneRound:.15,stoneSlab:.25,faceJointTilt:12,faceScaleVary:.55,faceFold:0,faceSpall:.65,faceClast:0,faceClastSize:12,faceMineral:.3,runoff:.65,runoffScale:24,runoffConcentration:.65,runoffCut:2,runoffStain:.35,debrisAmount:1.1,debrisReach:80,debrisDepth:5,looseSize:7,stoneSort:.7,rockFace:2,faceRock:1,rockFaceFrom:.2,faceBed:5.5,faceLedge:2,faceRun:120,faceBlock:3,faceBlockSize:18,faceLean:0,faceWear:.25,faceCrease:.5,faceCreaseSize:6,faceScratch:.6,faceScratchSize:6,faceShade:.7,faceGrit:.15,faceGrass:.25,faceLayers:.3,faceMass:1,faceTone:.12,faceStrata:.08,faceWet:.2,
- faceStretch:1,faceBlockHeight:1,faceRound:0,faceJoint:.5,faceExtrude:0,faceLamina:0,faceLaminaSize:6,faceScratchLength:50,faceScratchAngle:0,faceGritSize:1.3,
+const base={faceWhole:0,faceWholeLarge:0,faceRegular:0,faceJointWidth:1,faceSecondary:.35,faceContinuity:.8,faceDetailPatch:.6,faceFresh:.55,faceRind:.65,faceRindDepth:6,faceRindTone:-.22,faceRindWarmth:.25,faceRindRough:.7,bedCycleVary:.6,faceBedVary:1,faceBreak:.4,stoneRound:.15,stoneSlab:.25,faceJointTilt:12,faceScaleVary:.55,faceFold:0,faceSpall:.65,faceClast:0,faceClastSize:12,faceMineral:.3,runoff:.65,runoffScale:24,runoffConcentration:.65,runoffCut:2,runoffStain:.35,debrisAmount:1.1,debrisReach:80,debrisDepth:5,looseSize:7,stoneSort:.7,rockFace:2,faceRock:1,rockFaceFrom:.2,faceBed:5.5,faceLedge:2,faceRun:120,faceBlock:3,faceBlockSize:18,faceLean:0,faceWear:.25,faceCrease:.5,faceCreaseSize:6,faceScratch:.6,faceScratchSize:6,faceShade:.7,faceGrass:.25,faceLayers:.3,faceMass:1,faceTone:.12,faceStrata:.08,faceWet:.2,
+ faceStretch:1,faceBlockHeight:1,faceRound:0,faceJoint:.5,faceExtrude:0,faceLamina:0,faceLaminaSize:6,faceScratchLength:50,faceScratchAngle:0,
  bedDip:0,bedDipDir:90,shineRock:.25,shineRockSharp:12,shineRockRough:.25,shineRockScale:3};
 const preset=(label,knobs,beds)=>({label,knobs:{...base,...knobs},sections:[{start:0,beds}]});
 export const ROCK_PRESETS={
  sandstone:preset('Layered sandstone',{faceWhole:.8,faceRegular:.55,faceRindWarmth:.45,faceRindDepth:5,rockFace:3,faceStretch:2.4,faceBlockHeight:1.6,faceBlock:5.2,faceBlockSize:26,faceBed:9,faceLedge:3.5,faceSpall:1.3,faceJoint:.65,faceExtrude:.3,faceLamina:1,faceLaminaSize:7,faceWear:.3,faceScratch:1.2,faceStrata:.18},[[7,.85,0],[3,.28,1],[4,.65,2]]),
  shale:preset('Thin shale',{faceSecondary:.3,faceBlock:1.2,faceSpall:.25,faceBreak:.2,faceContinuity:.9,faceRindWarmth:.1,faceRindTone:-.3,stoneSlab:.85,stoneRound:.05,faceStretch:3.2,faceBlockHeight:.4,faceBlockSize:24,faceBed:3,faceLedge:3.2,faceJoint:.9,faceLamina:1,faceLaminaSize:6,faceExtrude:.2,faceWear:.1,faceScratch:.3,faceStrata:.22,shineRock:.18},[[2,.85,0],[1,.2,1],[3,.7,2],[1,.3,1]]),
- granite:preset('Rounded granite',{faceWhole:.85,faceRegular:.15,faceSecondary:.2,faceContinuity:.65,faceFresh:.65,faceRindWarmth:.15,faceRindTone:.2,faceRindDepth:9,stoneRound:.8,stoneSlab:.1,faceSpall:.15,faceMineral:.8,faceScaleVary:.8,faceBlockSize:34,faceBlockHeight:4,faceRound:.85,faceBlock:4,faceBed:7,faceLedge:0,faceJoint:1.1,faceWear:.65,faceExtrude:.15,faceLayers:0,faceMass:1.8,faceCrease:.35,faceGrit:.6,faceGritSize:2,faceScratch:.2,faceStrata:0,shineRock:.4,shineRockSharp:34,shineRockRough:.5},[[12,.8,0]]),
- basalt:preset('Jointed basalt',{faceWhole:1,faceRegular:.7,faceSecondary:.15,faceContinuity:.95,faceFresh:.7,faceRindWarmth:.5,faceRindTone:.1,faceRindRough:.85,faceBlockSize:14,faceBlockHeight:5,faceBed:7,faceBlock:3.5,faceLedge:.2,faceJoint:1.3,faceWear:.12,faceExtrude:.1,faceLayers:0,faceScratch:1.6,faceScratchLength:120,faceCrease:.2,faceGrit:.3,faceStrata:0,shineRock:.3,shineRockSharp:28},[[12,.9,0]]),
- limestone:preset('Pitted limestone',{faceWhole:.6,faceRegular:.45,faceRindTone:.35,faceRindWarmth:.08,faceRindDepth:8,faceBlockSize:24,faceBlockHeight:1.8,faceRound:.55,faceBed:7,faceLedge:1.7,faceJoint:.8,faceWear:.8,faceCrease:3.5,faceCreaseSize:10,faceGrit:.25,faceScratch:1.8,faceScratchLength:90,faceLamina:.3,faceWet:.2,shineRock:.15,shineRockSharp:8},[[8,.75,0],[3,.4,1]]),
- gneiss:preset('Folded gneiss',{faceWhole:.5,faceWholeLarge:.5,faceRegular:.3,faceRindWarmth:.12,faceRindRough:.35,faceFold:22,faceRun:190,bedDipDir:25,faceBlockSize:32,faceBlockHeight:3,faceRound:.65,faceBlock:4.5,faceLedge:1.8,faceBed:8,faceLamina:.65,faceLaminaSize:6,faceStrata:.4,faceSpall:.35,faceJointTilt:30,faceGrit:.2,faceCrease:.2,faceMineral:.55,shineRock:.35},[[9,.9,0],[3,.3,1],[5,.75,2]]),
+ granite:preset('Rounded granite',{faceWhole:.85,faceRegular:.15,faceSecondary:.2,faceContinuity:.65,faceFresh:.65,faceRindWarmth:.15,faceRindTone:.2,faceRindDepth:9,stoneRound:.8,stoneSlab:.1,faceSpall:.15,faceMineral:.8,faceScaleVary:.8,faceBlockSize:34,faceBlockHeight:4,faceRound:.85,faceBlock:4,faceBed:7,faceLedge:0,faceJoint:1.1,faceWear:.65,faceExtrude:.15,faceLayers:0,faceMass:1.8,faceCrease:.35,faceScratch:.2,faceStrata:0,shineRock:.4,shineRockSharp:34,shineRockRough:.5},[[12,.8,0]]),
+ basalt:preset('Jointed basalt',{faceWhole:1,faceRegular:.7,faceSecondary:.15,faceContinuity:.95,faceFresh:.7,faceRindWarmth:.5,faceRindTone:.1,faceRindRough:.85,faceBlockSize:14,faceBlockHeight:5,faceBed:7,faceBlock:3.5,faceLedge:.2,faceJoint:1.3,faceWear:.12,faceExtrude:.1,faceLayers:0,faceScratch:1.6,faceScratchLength:120,faceCrease:.2,faceStrata:0,shineRock:.3,shineRockSharp:28},[[12,.9,0]]),
+ limestone:preset('Pitted limestone',{faceWhole:.6,faceRegular:.45,faceRindTone:.35,faceRindWarmth:.08,faceRindDepth:8,faceBlockSize:24,faceBlockHeight:1.8,faceRound:.55,faceBed:7,faceLedge:1.7,faceJoint:.8,faceWear:.8,faceCrease:3.5,faceCreaseSize:10,faceScratch:1.8,faceScratchLength:90,faceLamina:.3,faceWet:.2,shineRock:.15,shineRockSharp:8},[[8,.75,0],[3,.4,1]]),
+ gneiss:preset('Folded gneiss',{faceWhole:.5,faceWholeLarge:.5,faceRegular:.3,faceRindWarmth:.12,faceRindRough:.35,faceFold:22,faceRun:190,bedDipDir:25,faceBlockSize:32,faceBlockHeight:3,faceRound:.65,faceBlock:4.5,faceLedge:1.8,faceBed:8,faceLamina:.65,faceLaminaSize:6,faceStrata:.4,faceSpall:.35,faceJointTilt:30,faceCrease:.2,faceMineral:.55,shineRock:.35},[[9,.9,0],[3,.3,1],[5,.75,2]]),
  schist:preset('Flaky schist',{faceFresh:.75,faceRindRough:.3,faceRindWarmth:.12,stoneSlab:.9,stoneRound:.05,bedDip:.35,bedDipDir:20,faceFold:5,faceRun:110,faceStretch:3.5,faceBlockHeight:.5,faceBlockSize:24,faceBed:4,faceLedge:2.8,faceSpall:1.2,faceBlock:1.8,faceSecondary:.3,faceBreak:.2,faceJointTilt:-32,faceJoint:1.1,faceRound:.1,faceLamina:.9,faceLaminaSize:6,faceMineral:.7,faceStrata:.3,shineRock:.5,shineRockSharp:40,shineRockRough:.3},[[3,.9,0],[2,.2,1],[2,.6,2]]),
- conglomerate:preset('Rounded conglomerate',{faceRindDepth:10,faceRindTone:.1,stoneRound:.95,stoneSlab:.05,faceClast:2.2,faceClastSize:14,faceRound:.95,faceBlock:1.3,faceBlockSize:32,faceBlockHeight:3,faceLedge:.4,faceLamina:0,faceJoint:.25,faceSpall:.25,faceMineral:.8,faceCrease:.35,faceBed:12,faceWear:.55,faceGrit:.15},[[14,.55,0],[5,.4,1]]),
- breccia:preset('Angular breccia',{faceWhole:1,faceSecondary:.75,faceContinuity:.7,faceFresh:.8,faceRind:.5,faceRindDepth:4,stoneRound:.05,stoneSlab:.35,faceClast:3.5,faceClastSize:22,faceRound:.05,faceBlock:2.7,faceBlockSize:36,faceBlockHeight:3,faceLedge:.3,faceLamina:0,faceJoint:.8,faceSpall:.8,faceMineral:.75,faceCrease:.3,faceBed:14,faceWear:.15,faceGrit:.25,looseSize:10},[[16,.7,0]]),
+ conglomerate:preset('Rounded conglomerate',{faceRindDepth:10,faceRindTone:.1,stoneRound:.95,stoneSlab:.05,faceClast:2.2,faceClastSize:14,faceRound:.95,faceBlock:1.3,faceBlockSize:32,faceBlockHeight:3,faceLedge:.4,faceLamina:0,faceJoint:.25,faceSpall:.25,faceMineral:.8,faceCrease:.35,faceBed:12,faceWear:.55},[[14,.55,0],[5,.4,1]]),
+ breccia:preset('Angular breccia',{faceWhole:1,faceSecondary:.75,faceContinuity:.7,faceFresh:.8,faceRind:.5,faceRindDepth:4,stoneRound:.05,stoneSlab:.35,faceClast:3.5,faceClastSize:22,faceRound:.05,faceBlock:2.7,faceBlockSize:36,faceBlockHeight:3,faceLedge:.3,faceLamina:0,faceJoint:.8,faceSpall:.8,faceMineral:.75,faceCrease:.3,faceBed:14,faceWear:.15,looseSize:10},[[16,.7,0]]),
  // A wave-cut pavement: flat-lying siltstone cut into polygonal blocks by continuous joints (a tessellated pavement). Its blocks
  // stay low and smooth; the joints carry the relief, and it sheds no debris. With Rock at shores it is a jointed platform running from the shore
  // into the shallows. Its colour is the ground's own, a little darker: a pale warm crust (faceRindTone .35, faceRindWarmth .3), dry (faceWet 0),
  // with the generated rock's full hue grain (faceTone .5), so the game's palette mixes its maroon and olive entries into a brown instead of
  // landing on the maroon ones; the joints are narrow, half-deep shadowed lines (faceJointWidth 1.5, faceJoint 2), not open black trenches.
- siltstone:preset('Jointed siltstone',{debrisAmount:0,faceBed:7,faceLedge:0,faceRegular:.3,faceJointWidth:1.5,faceSecondary:.25,faceContinuity:1,faceFresh:.65,faceRindDepth:9,faceRindTone:.35,faceRindWarmth:.3,faceTone:.5,faceWet:0,faceBreak:0,stoneRound:.8,stoneSlab:.1,faceScaleVary:.3,faceSpall:0,faceMineral:.8,faceBlock:.5,faceBlockSize:18,faceWear:.8,faceCrease:.1,faceScratch:.2,faceGrit:.2,faceLayers:0,faceMass:.5,faceStrata:0,faceBlockHeight:4,faceRound:.85,faceJoint:2,faceExtrude:.15,faceGritSize:2,shineRock:.4,shineRockSharp:34,shineRockRough:.5},[[12,.8,0]])
+ siltstone:preset('Jointed siltstone',{debrisAmount:0,faceBed:7,faceLedge:0,faceRegular:.3,faceJointWidth:1.5,faceSecondary:.25,faceContinuity:1,faceFresh:.65,faceRindDepth:9,faceRindTone:.35,faceRindWarmth:.3,faceTone:.5,faceWet:0,faceBreak:0,stoneRound:.8,stoneSlab:.1,faceScaleVary:.3,faceSpall:0,faceMineral:.8,faceBlock:.5,faceBlockSize:18,faceWear:.8,faceCrease:.1,faceScratch:.2,faceLayers:0,faceMass:.5,faceStrata:0,faceBlockHeight:4,faceRound:.85,faceJoint:2,faceExtrude:.15,shineRock:.4,shineRockSharp:34,shineRockRough:.5},[[12,.8,0]])
 };
 // Rock surfaces a recipe may carry too (struct Rock): cracks, contour bands, moon pits and strokes, ice crystal strokes, crests, snow caps, fibres
 // and aprons, the crystal web and rock on level tops (Rock crown). A recipe that does not set one takes the world's.
@@ -94,6 +95,28 @@ export function recipeRock(key,config){
  const r=STARTING_RECIPES[key];if(!r)throw Error(`No starting recipe ${key}.`);
  return {knobs:{...r.knobs},column:r.sections?{sections:structuredClone(r.sections)}:null,colors:checkColors(ROCK_COLORS[key])};
 }
+// The rock material each starting recipe's faces show (library materials, materials/textures.json): its grain, grit and shine under the
+// recipe's colors. A world's own rock type takes its `from` recipe's; Smooth soil none (the world's rock material).
+export const ROCK_MATERIALS={sandstone:'rock-sandstone',conglomerate:'rock-sandstone',siltstone:'rock-shale',shale:'rock-shale',schist:'rock-shale',
+ granite:'rock-granite',gneiss:'rock-granite',breccia:'rock-granite',basalt:'rock-basalt',limestone:'rock-limestone'};
+export const recipeMaterial=(key,config)=>ROCK_MATERIALS[key]??ROCK_MATERIALS[config?.rock?.recipes?.[key]?.from]??null;
+// Rock types made from a starting recipe (those in `slots`) show its rock material (recipeMaterial): the map's copy of that library
+// material, added while the list and the material cache have room; a rock type that already names one keeps it. The editor (sculpt.js)
+// and the headless host give a map's world rock types theirs when the map has no rock list of its own, and a preset its own when added.
+export function giveRockMaterials(rocks, materials, slots, config) {
+  let list = materials; const layers = l => l.reduce((n, m) => n + 1 + materialStates(m).length, 0);
+  const out = rocks.map(r => {
+    if (!slots.includes(r.slot) || r.material > 0) return r;
+    const key = recipeMaterial(r.key, config), m = LIBRARY[key]; if (!m) return r;
+    let at = list.find(o => o.source === key && !roleOf(o));
+    if (!at) {
+      if (list.length >= MATERIAL_SLOTS - 1 || !materialCacheUsage(layers(list) + 1 + materialStates(m).length, undefined, [...list, m].some(materialStaged)).fits) return r;
+      const added = addMaterial(list, m, m.name); list = added.materials; at = list.find(o => o.slot === added.slot);
+    }
+    return {...r, material: at.slot};
+  });
+  return {rocks: out, materials: list};
+}
 // A world's own rock types (materials/<world>.json world.rock.recipes: {key: {label, from, knobs, beds, sections, colors}}): its numbers lie over the
 // starting recipe it names (`from`, else none: the world's own rock under them, as Smooth soil's), its beds ([[thickness, hardness, slot], ...]),
 // or its column sections by height ([{start, beds}, ...]), replace that recipe's, and its colors ({rock, beds, absorb}) that recipe's. A world's tools name them by key, as the built-in recipes.
@@ -124,7 +147,7 @@ export function rockByKey(rocks,key,worldKey=''){
  const rock=rocks.find(r=>r.key===key);
  return rock?rock.slot:key===worldKey?0:-1;
 }
-const NAME_MAX=40,ROCK_FIELDS=['slot','name','key','knobs','column','colors'],KEY=/^[a-z][a-z0-9_-]{0,39}$/;
+const NAME_MAX=40,ROCK_FIELDS=['slot','name','key','knobs','column','colors','material'],KEY=/^[a-z][a-z0-9_-]{0,39}$/;
 // A preset's key: null, or a short lowercase name ('soil', 'basalt').
 function checkKey(key){if(key==null)return null;if(typeof key!=='string'||!KEY.test(key))throw Error('A rock preset\'s key is a short lowercase name, such as soil or basalt.');return key;}
 // A key for a preset made now: `key`, unless another preset of the map carries it (keys name one preset each).
@@ -158,7 +181,9 @@ export function copyRocks(value){
   const key=checkKey(r.key);
   if(key&&keys.has(key))throw Error(`Two rock presets carry the key ${key}: a key names one preset.`);
   if(key)keys.add(key);
-  return {slot:r.slot,name:checkName(r.name),key,knobs:copyRockSettings(r.knobs??{}),column:checkColumn(r.column),colors:checkColors(r.colors)};
+  // Its surface material: a map material's slot (1 to 15), or none for the world's rock material.
+  if(r.material!=null&&(!Number.isInteger(r.material)||r.material<0||r.material>15))throw Error('A rock preset\'s material is a material slot, 1 to 15.');
+  return {slot:r.slot,name:checkName(r.name),key,knobs:copyRockSettings(r.knobs??{}),column:checkColumn(r.column),colors:checkColors(r.colors),...(r.material>0?{material:r.material}:{})};
  }).sort((a,b)=>a.slot-b.slot);
 }
 const freeSlot=rocks=>{for(let s=1;s<ROCK_SLOTS;s++)if(!rocks.some(r=>r.slot===s))return s;throw Error('A map holds at most 15 rock presets besides the world\'s own.');};
@@ -177,7 +202,7 @@ export function addRock(rocks,recipe,slot0Name='',config=null){
 export function duplicateRock(rocks,slot,world){
  const from=slot===0?world:rocks.find(r=>r.slot===slot);if(!from)throw Error(`No rock preset in slot ${slot}.`);
  const to=freeSlot(rocks);
- return {slot:to,rocks:[...rocks,{slot:to,name:uniqueRockName(rocks,`${from.name} copy`,world?.name),key:null,knobs:structuredClone(from.knobs),column:structuredClone(from.column??null),colors:checkColors(from.colors)}].sort((a,b)=>a.slot-b.slot)};
+ return {slot:to,rocks:[...rocks,{slot:to,name:uniqueRockName(rocks,`${from.name} copy`,world?.name),key:null,knobs:structuredClone(from.knobs),column:structuredClone(from.column??null),colors:checkColors(from.colors),...(from.material>0?{material:from.material}:{})}].sort((a,b)=>a.slot-b.slot)};
 }
 export function renameRock(rocks,slot,name){
  if(!rocks.some(r=>r.slot===slot))throw Error(`No rock preset in slot ${slot}.`);

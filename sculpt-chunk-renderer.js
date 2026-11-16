@@ -3,7 +3,7 @@ import {terrainAllocation,TerrainMemoryError} from './sculpt-memory.js';
 import {rockWeatherBytes} from './sculpt-rock-weather.js';
 // Card D: a bounded working set for the existing terrain shader. Materials
 // belong to this renderer once; callers own the LRU of copied output images.
-import {TerrainRenderer} from './sculpt-renderer.js';
+import {TerrainRenderer,INPUT_TEXTURES} from './sculpt-renderer.js';
 import {columnRows} from './sculpt-column.js';
 import {PLANT_REACH,groundCoverOn} from './sculpt-material-model.js';
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
@@ -25,7 +25,6 @@ export function alignedFieldRegion(region,scale=1){
   const width=endX-x+1,height=endY-y+1;
   return x===region.fieldsX&&y===region.fieldsY&&width===region.fieldsWidth&&height===region.fieldsHeight?region:{...region,fieldsX:x,fieldsY:y,fieldsWidth:width,fieldsHeight:height};
 }
-const INPUT_TEXTURES=['heightTexture','routeTexture','gridTexture','maskTexture'];
 const ROCK_WORKING=['owned','final','source','rim','key'];
 const COLOR_INPUT_PACK=`
 @group(0) @binding(0) var masks:texture_2d_array<f32>;
@@ -37,11 +36,11 @@ const COLOR_INPUT_PACK=`
   let p=vec2i(vec2u(id.x,id.y+band.x));let stride=((size.x+63u)/64u)*64u;let plane=stride*band.y;let i=id.y*stride+id.x;
   let a=textureLoad(masks,p,0,0);let b=textureLoad(masks,p,1,0);let c=textureLoad(masks,p,2,0);
   let d=textureLoad(masks,p,3,0);let e=textureLoad(masks,p,4,0);let f=textureLoad(masks,p,5,0);
-  packed[i]=pack4x8snorm(a);packed[plane+i]=pack4x8snorm(vec4f(b.g,c.b,d.a,e.r));// Rock and ground ids share one channel: rock (0 to 16) + 17 * ground (0 to 8), moved into SNORM's range.
-  let ids=(round(f.r*127.0)+17.0*round(f.g*127.0)-127.0)/127.0;
-  packed[2u*plane+i]=pack4x8snorm(vec4f(e.gba,ids));
+  packed[i]=pack4x8snorm(a);packed[plane+i]=pack4x8snorm(vec4f(b.g,c.b,d.a,e.r));// The rock id (0 to 16) moved into SNORM's range; the ground id (0 to 16) rides in the fall layer's spare channel.
+  let rockId=(round(f.r*127.0)-127.0)/127.0;let groundId=round(f.g*127.0)/255.0;
+  packed[2u*plane+i]=pack4x8snorm(vec4f(e.gba,rockId));
   let weather=textureLoad(grids,p,0,0);let material=textureLoad(grids,p,1,0);let time=textureLoad(grids,p,2,0);let fall=textureLoad(grids,p,3,0);
-  packed[3u*plane+i]=pack4x8unorm(vec4f(weather.rg,time.rg));packed[4u*plane+i]=pack4x8unorm(material);packed[5u*plane+i]=pack4x8unorm(vec4f(fall.rg,0,0));
+  packed[3u*plane+i]=pack4x8unorm(vec4f(weather.rg,time.rg));packed[4u*plane+i]=pack4x8unorm(material);packed[5u*plane+i]=pack4x8unorm(vec4f(fall.rg,groundId,0));
 }`;
 
 // Scissor cached native F work in raster pixels, retaining helper invocations
@@ -388,6 +387,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const offsets=ChunkTerrainRenderer.FLAGS.map(k=>this.layout.fields.get(k).offset);
     return this.flagsPass={pipe,out,offsets,ranges:[...offsets].sort((a,b)=>a-b)};
   }
+  gpuWrittenUniforms(){return new Set(this.gpuFlags?ChunkTerrainRenderer.FLAGS:[]);}   // the flag pass writes these on the GPU (flagPass)
   flushUniforms() {
     if(!this.gpuFlags)return super.flushUniforms();
     if(!this.uniformsDirty)return;
@@ -569,7 +569,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     try {
       // Bound live GPU work without delaying the preceding image snapshot.
       // A queued shape edit can arrive while this wait yields to input.
-      await this.previousChunk;
+      await this.olderChunk;
       const passes=feed?await feedPasses(this.device):null;   // nothing awaits between here and the feed pass's submit: the buffers it reads stay current
       this.size=request.worldSize??this.size;this.grid=request.worldGrid??this.grid;
       const region=this.requiredRegion(request),w=request.gridWidth??region.gridWidth,h=request.gridHeight??region.gridHeight;
@@ -584,13 +584,15 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       this.activeRegion=region;this.voxelScale=scale;
       const result=await this.withPipelines(()=>super.draw({...options,exact:options.exact||Boolean(request.exportArt)}),{preview,defer:deferPipelines});
       this.captureWorking();
+      if(result.check)return {check:result.check};   // a checksum only (draw's digest.check): nothing drawn
+      if(result.reused)return {reused:true,digest:result.digest,x:request.x,y:request.y,width:request.width,height:request.height,scale};   // the caller keeps its picture
       // A WebGPU presentation image expires at the next browser frame. Copy
       // synchronously before waiting for the queue, so the returned pixels live.
       const copy=this.outputCanvas.getContext('2d');copy.imageSmoothingEnabled=true;copy.imageSmoothingQuality='high';
       copy.drawImage(this.canvas,0,0,this.outputCanvas.width,this.outputCanvas.height);
       // Prepare the snapshot now; apply GPU backpressure at the next tile.
       // Canvas copying preserves command order and owns this image before reuse.
-      const completion=this.device.queue.onSubmittedWorkDone();this.previousChunk=completion;
+      const completion=this.device.queue.onSubmittedWorkDone();this.olderChunk=this.previousChunk;this.previousChunk=completion;
       completion.then(()=>{this.completedChunk=completion;},()=>{}); // Device errors are also reported by the renderer.
       if(!deferCompletion)await this.previousChunk;
       return {...result,canvas:this.outputCanvas,x:request.x,y:request.y,width:request.width,height:request.height,scale,outWidth:Math.ceil(request.width/scale),outHeight:Math.ceil(request.height/scale),exportArt:Boolean(request.exportArt),outputBytes:Math.ceil(request.width/scale)*Math.ceil(request.height/scale)*4,region,stats:{...this.stats(),busy:false}};

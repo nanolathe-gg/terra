@@ -40,7 +40,8 @@ export function extractGates(source, fields) {
     return `(${id} || (${id}_mixed && ${match}))`;
   });
   const out = text + '\n' + [...gates.keys()].map(id => `override ${id}: bool;`).join('\n') + '\n';
-  for (const [recipe, mask] of [['rock', 15], ['ground', 7]]) if (new RegExp(`\\b${recipe}Mask\\b`).test(text)) gates.set(`${recipe}Mask`, {id: `${recipe}Mask`, mask, recipe});
+  // A table's mask is its size less one (16 rock slots, 16 ground slots: 15), so every slot it holds is readable.
+  for (const recipe of ['rock', 'ground']) if (new RegExp(`\\b${recipe}Mask\\b`).test(text)) gates.set(`${recipe}Mask`, {id: `${recipe}Mask`, mask: (fields.get(recipe)?.count ?? 16) - 1, recipe});
   return {source: out, gates};
 }
 

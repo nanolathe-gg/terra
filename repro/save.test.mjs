@@ -9,7 +9,7 @@ test('a map world includes defaults, edited controls, URL overrides, disabled co
   assert.equal(value.name,'My world');assert.equal(value.base,'green');assert.equal('variant' in value,false);
   assert.deepEqual(value.colors,{slope:null,sky:'#ffffff',sun:'#ffaa22'});
   assert.deepEqual(value.materials.map(m=>[m.source,m.worldGround,m.worldWater]),[['green-ground',true,false],['green-water',false,true]]);
-  assert.equal(value.knobs.rainErode,'.8');assert.equal(value.knobs.faceWear,'0.2');assert.equal(value.knobs.groundFine,'1');assert.equal(value.knobs.beachFrom,'archipelago');assert.equal(value.knobs.materialFoot,'2');
+  assert.equal(value.knobs.rainErode,'.8');assert.equal(value.knobs.faceWear,'0.2');assert.equal(value.knobs.groundFine,'1');assert.equal(value.knobs.beachFrom,'archipelago');assert.equal(value.knobs.materialFoot,undefined,'the removed preview footprint is not saved');
   for(const key of ['map','pendingSketch','gpuMB'])assert.equal(key in value.knobs,false);
   assert.deepEqual(copySavedWorld(JSON.parse(JSON.stringify(value)),config),value);
   assert.equal(savedWorldId({biome:'green',world:'my-world-abcd'}),'my-world-abcd');

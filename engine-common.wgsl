@@ -38,7 +38,6 @@ struct Rock {
     faceScratchSize: f32, // scratch spacing, px
     faceBlock: f32,       // joint depth and block tilt, height units
     faceBlockSize: f32,   // px between joints along a bed
-    faceGrit: f32,        // fine grit, height units
     faceGrass: f32,       // how strongly grass takes the ledges, 0..1
     faceWear: f32,        // weathering: how far the blocks' edges round off and their partings open (0..1)
     faceLayers: f32,      // the layers' steps under grass (soil-covered terraces), 0: none
@@ -90,7 +89,6 @@ struct Rock {
     faceLaminaSize: f32, // Fine layer spacing (height units, 6 to 16)
     faceScratchLength: f32, // Groove length (px)
     faceScratchAngle: f32, // Groove tilt from vertical (deg)
-    faceGritSize: f32, // Grit size (px)
     looseSize: f32,       // px: the median stone diameter
     stoneRound: f32,      // world material data: 0 angular chips .. 1 rounded stones
     stoneSort: f32,       // world material data: 0 a mixed power-law gravel, 1 one size class sorted by the process (talus coarsens outward, fans and channels fine downslope)
@@ -106,7 +104,7 @@ struct Rock {
     // a cast shadow's sun the rock lets through, in its colour.
     absorbDepth: f32,
     shadowTint: f32,
-    pad1: f32,            // padding: a uniform array's element is a multiple of 16 bytes
+    material: i32,        // its surface material's slot (grain, art height, shine), 0 the world's rock material (u.rockGround)
     pad2: f32,
     pad3: f32,
     // Rock surfaces, per recipe (moved from the world uniforms so a shape's rock can carry them): cracks, contour bands, moon pits,
@@ -150,7 +148,11 @@ struct Ground {
     dither: f32,           // 0 leaves the color continuous; 1 is the full palette reduction
     spread: f32,           // how the diffusion shares its error: 0 Floyd-Steinberg, 1 a wider kernel
     tone: f32,             // the gamma colors are compared in
+    wornLayer: i32,        // the layer of its Worn color (cached and reduced like its own), -1 when it has none
+    depositLayer: i32,     // the layer of its Deposit color, -1 when it has none
     weights: vec4f,        // how much a red, green or blue difference counts when a palette color is chosen
+    states: vec4f,         // Worn from, Worn amount, Deposit from, Deposit amount (the Material node's)
+    finish: vec4f,         // x its Relief (px: the most its art height reaches); yzw free
     palette: array<vec4f, 32>,
 }
 // One node of a material graph (sculpt-materials.js compileMaterial).
@@ -180,7 +182,6 @@ struct Uniforms {
     light: vec3f,
     // Draw (engine-frag.wgsl).
     riverBed: vec4f,       // riverfix: the braided bed's gravel colour (materials/<world>.json water.riverBedRGB), a = 1 when the world gives one
-    rockMean: vec3f,
     clay: i32,
     slopeMaterial: i32,
     mineralMargins: i32,
@@ -203,9 +204,6 @@ struct Uniforms {
     sandBase: vec4f,
     beachBase: vec4f,
     shallowBase: vec4f,
-    slopeTexMean: vec3f,
-    rockTexMean: vec3f,
-    beachTexMean: vec3f,
     beach: i32,
     waterMid: vec4f,   // rgb mid-depth colour, a: its depth (0: two stops)
     beachHeight: f32,
@@ -244,7 +242,6 @@ struct Uniforms {
     waterSoft: f32,
     crispShore: f32,
     bankRock: f32,
-    beachLayer: i32,       // the generated layer that is the beach sand (the world's own, or one borrowed from another world's table), or -1
     sandGrain: f32,
     // Bake (engine-bake.wgsl).
     reliefScale: f32,     // wavelength of the first octave, world px
@@ -414,7 +411,6 @@ struct Uniforms {
     columnWander: f32,    // the wander the coordinate takes from value noise: its amplitude, height units
     columnTerrain: vec4f, // the wander it takes from three octaves of the terrain noise (height units): xyz their amplitudes (not in the Time pass)
     materialTable: array<vec4f, 206>,   // Green (H3 materialModel): four materials of 39 rows then six placement rows, from materials/green.json (material-model.wgsl); then the 44 rows of a world's ground-cover table (card P30, its plants' row 39 and flower palette rows 40 to 43, card P31; zeros: none)
-    materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
     weatherMaps: f32,     // H5: 1 when gridTex layers 2 and 3 hold the Time pass's maps (engine-weather.wgsl)
     // H5 item 3a, Green's retail marks (0: off). They read the Time pass's maps, so age, rain and hardness contrast move them.
     terraceBreak: f32,    // how far the terrace lines' phase wanders (band spacings), more where the ground is wet
@@ -441,10 +437,17 @@ struct Uniforms {
     groundIdOn: i32,
     groundDefault: i32,
     highGround: i32,    // the map's highland material slot (sculpt-materials.js worldHigh), -1 none
+    rockGround: i32,    // the world's rock material slot (worldRock): what a rock type with material 0 shows, -1 none
+    slopeGround: i32,   // the map's slope cover material slot (worldSlope), -1 none: slopes, moss and the margins' face read it
+    debrisGround: i32,  // its debris material (worldDebris): the fragments of loose stone and sand
+    beachGround: i32,   // its beach material (worldBeach): the beach sand (the slope cover's grain recolored where there is none)
+    fringeGround: i32,  // its mineral margins' fringe, body and ring materials (worldFringe, worldBody, worldRing)
+    bodyGround: i32,
+    ringGround: i32,
     waterGround: i32,
     groundAny: i32,
     groundShine: i32,      // 1 when a material in use puts out shine, so the shine pass runs for it
-    ground: array<Ground, 8>,
+    ground: array<Ground, 16>,
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -457,7 +460,7 @@ var<private> rs: u32 = 0u;
 // (heights identical, the same by eye, the same bytes every time; repro/rock-slots.mjs).
 override rockMask: u32 = 15u;
 var<private> gs: u32 = 0u;
-override groundMask: u32 = 7u;
+override groundMask: u32 = 15u;
 
 fn cellHash(c: vec2f) -> vec2f {
     let q = vec2f(dot(c, vec2f(127.1, 311.7)), dot(c, vec2f(269.5, 183.3)));
@@ -693,9 +696,9 @@ fn sampleMasks(uv:vec2f,layer:i32)->vec4f {
     }
 }
 fn maskDimensions()->vec2u{return textureDimensions(colorMasksTex);}
-fn maskIds(at:vec2i)->f32{return round(textureLoad(colorMasksTex,at,2,0).a*127.0)+127.0;}
-fn loadRockMask(at:vec2i)->f32{let id=maskIds(at);return (id-17.0*floor(id/17.0))/127.0;}
-fn loadGroundMask(at:vec2i)->f32{return floor(maskIds(at)/17.0)/127.0;}
+// The ids (sculpt-chunk-renderer.js COLOR_INPUT_PACK): the rock id in the third mask layer's alpha, the ground id in the fall layer's blue.
+fn loadRockMask(at:vec2i)->f32{return (round(textureLoad(colorMasksTex,at,2,0).a*127.0)+127.0)/127.0;}
+fn loadGroundMask(at:vec2i)->f32{return round(textureLoad(gridTex,at,2,0).b*255.0)/127.0;}
 #else
 fn sampleMasks(uv:vec2f,layer:i32)->vec4f{return sampleRegionalArray(masksTex,uv,layer);}
 fn maskDimensions()->vec2u{return textureDimensions(masksTex);}
@@ -751,7 +754,7 @@ fn styleEdge(p: vec2f, f: f32, slope: f32) -> f32 {
 }
 
 #ifdef COLOR_PASS
-// F retains exactly flow/deposit, wear/wetness, material RGBA and fall XY.
+// F retains exactly flow/deposit, wear/wetness, material RGBA, fall XY and the ground id (fall layer blue).
 fn weatherAt(uv:vec2f)->vec2f{return sampleRegionalArray(gridTex,regionalPoint(uv),0).rg;}
 fn timeMap2(uv:vec2f)->vec2f{if(u.weatherMaps<0.5){return vec2f(0);}return sampleRegionalArray(gridTex,regionalPoint(uv),0).ba;}
 fn timeMap3(uv:vec2f)->vec2f{if(u.weatherMaps<0.5){return vec2f(.5);}return sampleRegionalArray(gridTex,regionalPoint(uv),2).rg;}
@@ -999,7 +1002,7 @@ fn useRock(p:vec2f) { rs=rockSlotAt(p); }
 fn groundSlotAt(p:vec2f)->u32 {
     if(u.groundIdOn==0){return u32(u.groundDefault);}
     let cell=clamp(vec2i(floor(p/(u.size-1.0)*(u.grid-1.0)+.5-u.chunkGridOrigin)),vec2i(0),vec2i(maskDimensions())-1);
-    let id=round(loadGroundMask(cell)*127.0);return select(u32(clamp(id-1.0,0.0,7.0)),u32(u.groundDefault),id<1.5);
+    let id=round(loadGroundMask(cell)*127.0);return select(u32(clamp(id-1.0,0.0,15.0)),u32(u.groundDefault),id<1.5);
 }
 // Highland ground: level raised ground takes the world's highland material in place of its ground material, by the rise above the plain
 // (u.highFrom, over u.highReach, its edge ragged by 20-px noise), times u.highland. 0 where there is no highland material.
@@ -1021,7 +1024,7 @@ fn ownGroundRelief(p:vec2f,slot:u32)->f32 {
 // still chooses color and finish; no noise or gameplay height enters the edge.
 fn groundHeightFor(p:vec2f,cell:vec2i)->f32 {
     let c=clamp(cell,vec2i(0),vec2i(maskDimensions())-1);
-    let id=round(loadGroundMask(c)*127.0);let slot=select(u32(clamp(id-1.0,0.0,7.0)),u32(u.groundDefault),id<1.5);
+    let id=round(loadGroundMask(c)*127.0);let slot=select(u32(clamp(id-1.0,0.0,15.0)),u32(u.groundDefault),id<1.5);
     let layer=u.ground[slot & groundMask].cacheLayer;
     if(layer<0){return 0.0;}
     return ownGroundRelief(p,slot);
@@ -1036,8 +1039,23 @@ fn groundHeight(p:vec2f)->f32 {
 fn materialPixel(p:vec2f)->vec2f {return poolWrap(floor(p),f32(textureDimensions(groundTex).x));}
 
 // A material's cached repeat: unlit color and art height, its shine, and its color reduced to its palette.
-fn materialRaw(p:vec2f,slot:u32)->vec3f {
- return textureLoad(groundTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).rgb;
+// A rock slot's surface material (its rock type's, else the world's rock material), -1 none.
+fn rockMaterialOf(slot:u32)->i32 {
+ let m=u.rock[slot & rockMask].material;
+ if(m>0&&u.ground[u32(m) & groundMask].cacheLayer>=0){return m;}   // a slot the map no longer draws falls back to the world's rock material
+ if(u.rockGround>=0&&u.ground[u32(u.rockGround) & groundMask].cacheLayer>=0){return u.rockGround;}
+ return -1;
+}
+// A cache layer's art height at a native pixel q, bilinear between texels (the taps that light it read between pixels).
+fn materialReliefBilinear(q:vec2f,layer:i32)->f32 {
+ let size=f32(textureDimensions(groundTex).x);let b=floor(q-.5);let f=q-.5-b;
+ let a00=textureLoad(groundTex,vec2i(poolWrap(b,size)),layer,0).w;let a10=textureLoad(groundTex,vec2i(poolWrap(b+vec2f(1,0),size)),layer,0).w;
+ let a01=textureLoad(groundTex,vec2i(poolWrap(b+vec2f(0,1),size)),layer,0).w;let a11=textureLoad(groundTex,vec2i(poolWrap(b+vec2f(1,1),size)),layer,0).w;
+ return mix(mix(a00,a10,f.x),mix(a01,a11,f.x),f.y);
+}
+fn materialRaw(p:vec2f,slot:u32)->vec3f { return materialRawAt(p,u.ground[slot & groundMask].cacheLayer); }
+fn materialRawAt(p:vec2f,layer:i32)->vec3f {
+ return textureLoad(groundTex,vec2i(materialPixel(p)),layer,0).rgb;
 }
 fn materialRelief(p:vec2f,slot:u32)->f32 {
  return textureLoad(groundTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).w;
@@ -1048,10 +1066,22 @@ fn materialShine(p:vec2f,slot:u32)->f32 {
 fn materialMean(slot:u32)->vec3f {
  return textureLoad(materialMeanTex,vec2i(0),u.ground[slot & groundMask].cacheLayer,0).rgb;
 }
-fn materialPigment(p:vec2f,slot:u32)->vec3f {
- let r=u.ground[slot & groundMask];let raw=materialRaw(p,slot);
+fn materialPigment(p:vec2f,slot:u32)->vec3f { return materialPigmentAt(p,slot,u.ground[slot & groundMask].cacheLayer); }
+// A layer of slot's cache as the map draws it: its color, reduced to the slot's palette as far as its dither says (a state's layer shares
+// the slot's palette and its index in the reduced colors).
+fn materialPigmentAt(p:vec2f,slot:u32,layer:i32)->vec3f {
+ let r=u.ground[slot & groundMask];let raw=materialRawAt(p,layer);
  if(r.dither<=0.0){return raw;}
- return mix(raw,textureLoad(groundColorTex,vec2i(materialPixel(p)),r.colorLayer,0).rgb,r.dither);
+ return mix(raw,textureLoad(groundColorTex,vec2i(materialPixel(p)),layer,0).rgb,r.dither);
+}
+// The ground's color where Time's water wore it (wear) or laid sediment (deposit), both 0 to 1: the material's own color, then its Worn and
+// Deposit colors over it from each one's From level (over .35 of the map) as far as its Amount. The ground and high ground read it; snow,
+// moss and water keep the material's own color.
+fn groundPigment(p:vec2f,slot:u32,wear:f32,deposit:f32)->vec3f {
+ let r=u.ground[slot & groundMask];var c=materialPigment(p,slot);
+ if(r.wornLayer>=0){c=mix(c,materialPigmentAt(p,slot,r.wornLayer),r.states.y*smoothstep(r.states.x,r.states.x+.35,wear));}
+ if(r.depositLayer>=0){c=mix(c,materialPigmentAt(p,slot,r.depositLayer),r.states.w*smoothstep(r.states.z,r.states.z+.35,deposit));}
+ return c;
 }
 
 // The slot of the debris lying at p: rock weather's strongest source there (rockDeposit), read at the nearest 4-px cell.
@@ -1149,17 +1179,23 @@ fn voxelRelease(block:VoxelRock,hard:f32)->f32 {
     return u.rock[rs & rockMask].faceBreak*selected*smoothstep(.15,1.7,block.edge)*(.35+.65*(1.0-hard));
 }
 // The same cuts supply density and the depth exposed through the outer rind.
-fn voxelJoint(r:vec3f,c:VoxelRock,broad:VoxelRock)->f32 {
-    let width=(.65+u.rock[rs & rockMask].faceWear*1.2)*u.rock[rs & rockMask].faceJointWidth;
+fn voxelJoint(r:vec3f,c:VoxelRock,broad:VoxelRock,hard:f32)->f32 { let wear=voxelJointWear(hard);return voxelJointW(r,c,broad,voxelJointWidth(wear),voxelJointFine(wear)); }
+// Weathering at a joint (0 to 1): the rock's Wear, more where its bed is soft (hard .55 is the bed of a rock with no column). It opens the joints
+// wider and wears the hairlines away first; rockDetail also fills the floor of what the solid cannot hold.
+fn voxelJointWear(hard:f32)->f32 { return clamp(u.rock[rs & rockMask].faceWear*(1.45-hard),0.0,1.0); }
+fn voxelJointWidth(wear:f32)->f32 { return (.65+wear*1.2)*u.rock[rs & rockMask].faceJointWidth; }
+fn voxelJointFine(wear:f32)->f32 { return u.rock[rs & rockMask].faceSecondary*(1.0-.6*wear); }
+// The joints' opening (0 to 1.15) for joints width units wide, the fine joints at share secondary.
+fn voxelJointW(r:vec3f,c:VoxelRock,broad:VoxelRock,width:f32,secondary:f32)->f32 {
     // Coherent interruptions taper both depth and opening; they do not select
     // a different topology at zero. Fine joints subdivide the larger blocks.
     let size=max(8.0,u.rock[rs & rockMask].faceBlockSize);
-    var primary=1.0;var secondary=1.0;
+    var primary=1.0;var fine=1.0;
     if(u.rock[rs & rockMask].faceContinuity<1.0){
         primary=mix(smoothstep(.24,.64,voxelNoise(r/vec3f(size*2.1,size*2.1,size*1.1)+17.0)),1.0,u.rock[rs & rockMask].faceContinuity);
-        secondary=mix(smoothstep(.3,.66,voxelNoise(r/vec3f(size*.9,size*.9,size*.65)-29.0)),1.0,u.rock[rs & rockMask].faceContinuity);
+        fine=mix(smoothstep(.3,.66,voxelNoise(r/vec3f(size*.9,size*.9,size*.65)-29.0)),1.0,u.rock[rs & rockMask].faceContinuity);
     }
-    return (1.0-smoothstep(width*.25,width,c.edge))*u.rock[rs & rockMask].faceSecondary*secondary
+    return (1.0-smoothstep(width*.25,width,c.edge))*secondary*fine
         +(1.0-smoothstep(width*.15,width*.85,broad.edge))*1.15*primary;
 }
 fn voxelDetail(r:vec3f)->f32 {
@@ -1188,8 +1224,9 @@ fn voxelClasts(p:vec3f)->vec2f {
     return vec2f(best,tone);
 }
 // Unequal, deformed beds use the same hardness for rock shape and wear.
-fn voxelColumnCoord(p:vec3f)->f32 {
-    let r=voxelRockSpace(p);
+fn voxelColumnCoord(p:vec3f)->f32 {return voxelColumnAt(p,voxelRockSpace(p));}
+// voxelColumnCoord at p, whose rock space point (voxelRockSpace(p)) the caller already has.
+fn voxelColumnAt(p:vec3f,r:vec3f)->f32 {
     let drift=(voxelNoise(r/vec3f(max(8.0,u.rock[rs & rockMask].faceRun),max(8.0,u.rock[rs & rockMask].faceRun),140.0))-.5)*2.2;
     return (columnCoord(p.xy,p.z)+voxelFold(p))*(5.5/max(2.0,u.rock[rs & rockMask].faceBed))+drift*u.rock[rs & rockMask].faceBed*.2*u.rock[rs & rockMask].faceBedVary;
 }

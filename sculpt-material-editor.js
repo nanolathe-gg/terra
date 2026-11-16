@@ -3,7 +3,7 @@
 // colors it is reduced to). Every element is in index.html; this fills values and applies edits through the map's own undo and save.
 import {NODES, NODE_TYPES, accepts, snippetNodes, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
   nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb,
-  addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText} from './sculpt-materials.js';
+  addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText, MAP_ROLES, roleOf, roleName, materialStatesApply} from './sculpt-materials.js';
 import {mountMaterialGraph, graphPositions, CARD, cardHeight} from './sculpt-material-graph.js';
 import {MaterialPreview, TILE, TERRAIN} from './sculpt-material-preview.js';
 import gamePalette from './materials/palette.json' with {type: 'json'};
@@ -11,7 +11,7 @@ import gamePalette from './materials/palette.json' with {type: 'json'};
 const $ = id => document.getElementById(id);
 const hex = rgb => '#' + rgb.map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
 const rgbOf = value => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16));
-const PARAM_ROWS = 14, INPUT_ROWS = 4, CELL = 20;
+const PARAM_ROWS = 14, INPUT_ROWS = 5, CELL = 20;
 
 export function mountMaterialEditor(host) {
   const dialog = $('material-editor'), preview = new MaterialPreview();
@@ -208,6 +208,9 @@ export function mountMaterialEditor(host) {
       $('node-input-label-' + i).textContent = label;
       $('node-input-' + i).replaceChildren(new Option(want === 'coords' ? 'Plain coordinates' : 'Not connected', ''), ...m.nodes.filter(fits).map(o => new Option(o.name, o.id)));
       $('node-input-' + i).value = n.in[key] ?? ''; $('node-input-clear-' + i).disabled = !n.in[key];
+      // Worn and Deposit draw only on a ground: say so where this material is water or another of the world's surfaces.
+      const inert = n.type === 'output' && ['worn', 'deposit'].includes(key) && !materialStatesApply(m);
+      $('node-input-' + i).disabled = inert; $('node-input-' + i).title = inert ? 'Only a ground draws its Worn and Deposit colors: this material is the world’s water or another of its surfaces.' : '';
     }
     // A Constant's color shows the gradient's color fields for its one stop: no bar, position or Remove.
     const single = n.type === 'constant' && !!n.stops;
@@ -312,11 +315,13 @@ export function mountMaterialEditor(host) {
   function refreshPictures() {
     const m = material(); if (!dialog.open || !m) return;
     const r = host.renderer(), list = materials(), water = m.worldWater === true, companion = list.find(o => water ? o.worldGround : o.worldWater) ?? m;
+    // A rock material (the world's, or a rock type's) shows on terrain as the hill's rock, over the map's own ground.
+    const rock = m.worldRock === true || (host.rocks?.() ?? []).some(o => o.material === slot), ground = rock ? list.find(o => o.worldGround) ?? null : null;
     const context = [r.variant.toString(), r.colorOverrides], want = view === 'terrain' ? 'terrain' : 'tile', showing = solo && m.nodes.some(n => n.id === solo) ? solo : null;
-    const key = JSON.stringify([materialRenderKey(m), water, materialRenderKey(companion), context, want, showing]);
+    const key = JSON.stringify([materialRenderKey(m), water, materialRenderKey(companion), ground && materialRenderKey(ground), context, want, showing]);
     if (key !== pictureKey) {
       pictureKey = key; $('material-preview').setAttribute('aria-busy', 'true'); $('material-preview-note').textContent = 'Updating…';
-      preview.picture(r, m, companion, {view: want, solo: showing}, (error, result) => {
+      preview.picture(r, m, companion, {view: want, solo: showing, ground}, (error, result) => {
         if (error) { pictureKey = ''; $('material-preview-note').textContent = 'No preview: ' + error.message; $('material-preview').setAttribute('aria-busy', 'false'); return; }
         picture = result; drawPicture(); $('material-preview').setAttribute('aria-busy', String(result.draft));
         $('material-preview-note').textContent = result.draft ? 'Finishing the palette…' : showing ? 'The selected node alone, unlit.' : result.tiles ? `${result.tiles} different 32-px tiles in one repeat (256 at most).` : 'Under this world’s sun: sea, shore, a plain and a hill.';
@@ -337,7 +342,7 @@ export function mountMaterialEditor(host) {
   // The header: which material, where it is used, and the list's own actions.
   function refresh() {
     const list = materials(); if (!list.some(m => m.slot === slot)) { slot = (list.find(m => m.worldGround) ?? list[0])?.slot ?? 0; selection = new Set(); primary = null; frameAt = -1; solo = null; }
-    const m = material(), role = o => o.worldGround ? ' · world ground' : o.worldWater ? ' · world water' : o.worldHigh ? ' · highland ground' : '', full = list.length >= MATERIAL_SLOTS - 1;
+    const m = material(), role = o => roleOf(o) ? ` · world ${roleName(roleOf(o))}` : '', full = list.length >= MATERIAL_SLOTS - 1;
     refreshWorld();
     if (!dialog.open) return;   // the rest is the editor's own face
     $('material-select').replaceChildren(...list.map(o => new Option(o.name + role(o), String(o.slot)))); $('material-select').value = String(slot);
@@ -347,12 +352,13 @@ export function mountMaterialEditor(host) {
     if (solo && !m.nodes.some(n => n.id === solo)) solo = null;
     // The Node preview follows the selection; selecting the output node, a frame or nothing keeps the last node shown.
     if (solo && primary && node()?.type !== 'output') solo = primary;
-    const users = materialUsers(host.strokes(), list, slot), strokes = users.strokes ? `${users.strokes} stroke${users.strokes > 1 ? 's' : ''}` : '';
-    $('material-used').textContent = 'Used by: ' + ([users.world && 'the world’s ' + users.world, strokes].filter(Boolean).join(', ') || 'nothing yet');
+    const users = materialUsers(host.strokes(), list, slot, host.rocks?.() ?? []), strokes = users.strokes ? `${users.strokes} stroke${users.strokes > 1 ? 's' : ''}` : '';
+    const rocks = users.rocks.length ? `rock type${users.rocks.length > 1 ? 's' : ''} ${users.rocks.join(', ')}` : '';
+    $('material-used').textContent = 'Used by: ' + ([users.world && 'the world’s ' + users.world, rocks, strokes].filter(Boolean).join(', ') || 'nothing yet');
     if (document.activeElement !== $('material-name')) $('material-name').value = m.name;
-    $('material-use-ground').disabled = m.worldGround || m.worldWater; $('material-use-water').disabled = m.worldWater || m.worldGround; $('material-use-high').disabled = m.worldHigh || m.worldGround || m.worldWater;
+    $('material-use-ground').disabled = m.worldGround || m.worldWater; $('material-use-water').disabled = m.worldWater || m.worldGround; $('material-role').value = MAP_ROLES.some(([r]) => m[r]) ? roleOf(m) : ''; $('material-role').disabled = m.worldGround || m.worldWater; $('material-role').title = $('material-role').disabled ? 'The world’s ground and water draw nothing else.' : '';
     $('material-delete').disabled = m.worldGround || m.worldWater; $('material-delete').title = $('material-delete').disabled ? 'The world’s ground and water cannot be deleted. Assign another material first.' : '';
-    for (const id of ['material-duplicate', 'material-paste', 'material-add']) { $(id).disabled = full; $(id).title = full ? 'The map already has seven materials.' : ''; }
+    for (const id of ['material-duplicate', 'material-paste', 'material-add']) { $(id).disabled = full; $(id).title = full ? `The map already has ${MATERIAL_SLOTS - 1} materials.` : ''; }
     $('material-reset').disabled = !LIBRARY[m.source]; $('material-reset').title = LIBRARY[m.source] ? `Back to “${LIBRARY[m.source].name}” from the library. Undo brings your version back.` : 'This material did not come from the library.';
     for (const v of ['tile', 'repeat', 'terrain']) $('mview-' + v).setAttribute('aria-pressed', String(view === v));
     $('mview-zoom').setAttribute('aria-pressed', String(zoomed)); $('mview-zoom').disabled = view === 'repeat';
@@ -375,7 +381,8 @@ export function mountMaterialEditor(host) {
   $('material-delete').onclick = attempt(() => { host.delete(slot); $('material-menu').open = false; refresh(); });
   $('material-use-ground').onclick = attempt(() => { update(assignMaterial(materials(), slot, 'worldGround')); commit(); });
   $('material-use-water').onclick = attempt(() => { update(assignMaterial(materials(), slot, 'worldWater')); commit(); });
-  $('material-use-high').onclick = attempt(() => { update(assignMaterial(materials(), slot, 'worldHigh')); commit(); });
+  // Another surface of the world this material draws; choosing none leaves that surface to fall back (engine-frag.wgsl roleColor).
+  $('material-role').onchange = attempt(() => { const v = $('material-role').value, list = materials(); update(v ? assignMaterial(list, slot, v) : list.map(o => o.slot === slot ? Object.fromEntries(Object.entries(o).filter(([k]) => !MAP_ROLES.some(([r]) => r === k))) : o)); commit(); });
   $('material-copy').onclick = async () => { try { await navigator.clipboard.writeText(materialText(material())); host.status('Copied the material.'); note(''); } catch (e) { note(e.message); } };
   $('material-paste').onclick = async () => { try { const m = parseMaterialText(await navigator.clipboard.readText()); addToMap(m, m.name); } catch (e) { note(e.message); } };
   $('material-reseed').onclick = attempt(() => change(m => { m.seed = reseedMaterial(m).seed; }));

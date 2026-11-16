@@ -219,247 +219,6 @@
     ]
    ]
   },
-  "slopeGrass": {
-   "image": "red-slope-structured.png",
-   "draw": "cover on slopes (generated layer 0)",
-   "size": [
-    512,
-    512
-   ],
-   "meanRGB": [
-    80.61,
-    44.22,
-    35.53
-   ],
-   "lumaMean": 54.11,
-   "lumaSd": 17.34,
-   "sd5": 11.3,
-   "lumaQ": [
-    18.6,
-    19.7,
-    42.7,
-    51.6,
-    60.8,
-    88.0,
-    92.2
-   ],
-   "broad": 1.75,
-   "bands": [
-    6.534,
-    4.478,
-    4.871,
-    4.305,
-    3.001,
-    1.822,
-    1.347
-   ],
-   "stretch": 1.408,
-   "lag": {
-    "x1": 0.627,
-    "x2": 0.373,
-    "y1": 0.72,
-    "y2": 0.587
-   },
-   "chroma": [
-    9.3,
-    6.42,
-    8.98
-   ],
-   "chromaLeft": [
-    3.32,
-    3.18,
-    3.18
-   ],
-   "tintLag": -0.087,
-   "tint": [
-    [
-     -6.0,
-     4.0,
-     -0.0
-    ],
-    [
-     -8.2,
-     4.9,
-     -3.6
-    ],
-    [
-     0.0,
-     0.0,
-     0.0
-    ],
-    [
-     -12.8,
-     7.1,
-     -5.5
-    ],
-    [
-     -7.4,
-     8.4,
-     -14.0
-    ],
-    [
-     -7.8,
-     6.3,
-     -14.1
-    ],
-    [
-     0.0,
-     0.0,
-     0.0
-    ],
-    [
-     -13.9,
-     7.9,
-     -4.0
-    ],
-    [
-     -16.9,
-     4.8,
-     7.6
-    ],
-    [
-     -5.8,
-     3.9,
-     -9.7
-    ],
-    [
-     0.0,
-     0.0,
-     0.0
-    ],
-    [
-     -8.5,
-     4.9,
-     -2.4
-    ],
-    [
-     -10.9,
-     7.5,
-     -11.9
-    ],
-    [
-     0.0,
-     0.0,
-     0.0
-    ],
-    [
-     -3.6,
-     9.9,
-     -11.2
-    ],
-    [
-     -10.4,
-     4.2,
-     -15.8
-    ]
-   ],
-   "colours": 40,
-   "topShare": 0.177,
-   "ramp": [
-    [
-     28.2,
-     15.5,
-     15.0
-    ],
-    [
-     39.5,
-     27.2,
-     20.7
-    ],
-    [
-     59.0,
-     23.0,
-     31.0
-    ],
-    [
-     66.1,
-     31.5,
-     34.9
-    ],
-    [
-     65.5,
-     39.3,
-     16.9
-    ],
-    [
-     83.2,
-     38.0,
-     36.2
-    ],
-    [
-     87.0,
-     35.0,
-     43.0
-    ],
-    [
-     71.4,
-     43.9,
-     38.5
-    ],
-    [
-     74.8,
-     55.7,
-     15.7
-    ],
-    [
-     97.5,
-     44.0,
-     48.5
-    ],
-    [
-     99.0,
-     43.0,
-     51.0
-    ],
-    [
-     96.1,
-     44.6,
-     50.2
-    ],
-    [
-     86.5,
-     67.9,
-     20.3
-    ],
-    [
-     111.0,
-     51.0,
-     59.0
-    ],
-    [
-     112.2,
-     56.3,
-     58.2
-    ],
-    [
-     112.7,
-     91.5,
-     29.3
-    ]
-   ],
-   "lit": {
-    "gradAxis": 1.5,
-    "light": 0.504,
-    "coherence": 0.33,
-    "streak": 14.2,
-    "streakCoherence": 0.31,
-    "shear": 0,
-    "dark": 0.0741,
-    "seam": 0.0579,
-    "seamWidth": 1.55,
-    "seamLength": 0.0374,
-    "cell": 53.5,
-    "vein": 0.0081,
-    "veinWidth": 1.0,
-    "veinLength": 0.0081,
-    "veinSpacing": 123.7,
-    "veinRGB": [
-     135.9,
-     101.7,
-     31.0
-    ]
-   }
-  },
   "water": {
    "image": "red-water.png",
    "draw": "water grain (generated layer after the table's own)",
@@ -1030,12 +789,6 @@
    }
   }
  },
- "order": [
-  "slopeGrass",
-  "slopeGrass",
-  "slopeGrass",
-  "slopeGrass"
- ],
  "material": {
   "bedCycleVary": 1,
   "faceBedVary": 0,
@@ -1050,11 +803,6 @@
   "rockDetail": 1.0,
   "waterDetail": 1.0,
   "rockMeanRGB": [
-   87.77862548828125,
-   48.03517150878906,
-   37.822357177734375
-  ],
-  "hillRockMeanRGB": [
    87.77862548828125,
    48.03517150878906,
    37.822357177734375
@@ -1080,49 +828,6 @@
    1.0
   ]
  },
- "model": {
-  "slopeGrass": {
-   "amps": [
-    0.2535,
-    1.0243,
-    2.8968,
-    6.6565,
-    5.4915,
-    5.1293,
-    12.8172
-   ],
-   "stretch": 1.0,
-   "tintMix": 0.0,
-   "tintScale": 0.3,
-   "zq": [
-    -7.1907,
-    -6.4802,
-    -5.06,
-    -4.2878,
-    -3.0326,
-    -2.0878,
-    -1.588,
-    -1.0587,
-    -0.1136,
-    0.7413,
-    0.9618,
-    1.216,
-    1.3571
-   ],
-   "lit": {
-    "relief": 1.2,
-    "light": 0.504,
-    "shear": 0,
-    "cell": 24.0,
-    "tilt": 0.3846,
-    "ridged": 0.3,
-    "seamWidth": 3,
-    "seamDepth": 2.5,
-    "seamVary": 0.55,
-    "warp": 2.0
-   }
-  }
- },
  "features": {
   "note": "Round 9, the shared generators in Desert's colors (ramp measured from DryRock01-15 by luma octile: smooth pitted blue-grey boulders, often several in one feature). Shares from retail uses (features/desert/catalog.json), metal 25-100. Retail's deposits sit in a halo darker than the sand. Round 12: dryruin01-20 (40 uses, 5%) are the two ruin types (form blocks).",
   "rock": {"count": 8, "color": "#656f8c", "angular": 0.05, "shade": 0.6, "metal": [25, 100], "types": [
@@ -1139,7 +844,7 @@
   "vent": {"params": {"size": 1.8, "thick": 1.2, "rim": 0.4, "rimSat": 2.2, "spread": 3}}
  },
  "world": {
-    "materials": {"ground": "desert-ground", "water": "desert-water", "high": "desert-cap"},
+    "materials": {"ground": "desert-ground", "water": "desert-water", "rock": "desert-rock", "slope": "desert-slope", "debris": "desert-debris", "high": "desert-cap"},
     "knobDefaults": {
         "lightCap": 1.25,
         "sunTilt": 0.5,
