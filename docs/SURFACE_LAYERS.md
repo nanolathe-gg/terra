@@ -220,8 +220,11 @@ Built (each a commit; the measurements are in their messages):
   snows draw one snow.
 - **Engine surfaces draw materials**: soil, the base band, both mosses, painted snow, sand dust, sand and the ice snows draw the
   world's `@soil`, `@band`, `@moss`, `@snow`, `@sand` (world.materials), library entries that are another graph with the world's
-  Color (`like`/`color` in textures.json) at the color the engine derived; snow is the ice material as it is, and Green's sand the
-  Zhon beach (the owner's picks by eye). The engine's snow, moss, soil and sand colors are gone, with Moss from ground, Rock grain in
+  Color (`like`/`color` in textures.json) at the color the engine derived from the GPU's mean of the world's materials: moss is the
+  world's slope material darker and sand its debris material (as the engine drew them), soil a red earth, the band a desert grain,
+  snow the ice graph at the world's tint; Green's snow is the ice white and its sand the Zhon beach (the owner's picks by eye).
+  Per-world sheets (`~/terraform-assets/agent-surface-layers/sheets/worlds-*.png`, main against the branch): painted snow and moss
+  change 6 to 12% of the scene, deposited sand 2 to 5% (Ice 12%: its sand is lighter; Zhon 0%). The engine's snow, moss, soil and sand colors are gone, with Moss from ground, Rock grain in
   sand and the Colors panel's Slope cover, Sand and Beach rows. A new map's materials: 10 to 13 of 15 (Archipelago 13, 91 MiB of
   128), so the cache did not grow.
 - **Flowers**: a Flowers material (clumps of one species, the cover table's four colors) and a preset, Flowers in wet ground, that
