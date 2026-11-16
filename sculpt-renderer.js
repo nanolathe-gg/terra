@@ -644,8 +644,7 @@ export class TerrainRenderer {
   }
   // The output stage (engine-output.wgsl): the draw's lit color in `source` reduced to the game palette, 32 px art tile by tile, and drawn
   // into `target` at `offset`. `chunk` holds the raster's place and scale (a cached tile's own settings); the world's settings are current:
-  // palette off, Clay, a diagnostic view, or a raster coarser than art pixels pass the true color through, as does a raster the caller
-  // resamples (`resampled`).
+  // palette off, Clay, a diagnostic view, or a raster coarser than art pixels pass the true color through.
   async outputPipelines() {
     if (this.outputPipeline) return;
     const device = this.device, module = device.createShaderModule({label: 'engine-output.wgsl', code: this.outputSource});
@@ -655,11 +654,21 @@ export class TerrainRenderer {
       device.createComputePipelineAsync({label: 'output stage', layout: 'auto', compute: {module, entryPoint: 'diffuseTiles'}}),
       device.createRenderPipelineAsync({label: 'output blit', layout: 'auto', vertex: {module, entryPoint: 'blitVertex'}, fragment: {module, entryPoint: 'blitFragment', targets: [{format: this.format}]}, primitive: {topology: 'triangle-list'}})]);
   }
-  encodeOutput(encoder, source, target, {chunk = this.uniformData, place = this.outputPlace, offset = [0, 0], width = source.width, height = source.height, slot = 0, resampled = false} = {}) {
+  // The output stage's working texture, at least width x height. A batch sizes it once before its first pass: a release mid-encoder would
+  // take it from the passes already encoded. An eviction releases it with the other working textures.
+  outputSize(width, height) {
+    const kept = this.outputTexture && (!this.resources || this.resources.has(this.outputTexture)) ? this.outputTexture : null;
+    if (kept && kept.width >= width && kept.height >= height) return;
+    const w = Math.max(width, kept?.width ?? 0), h = Math.max(height, kept?.height ?? 0);
+    if (kept) { if (this.release) this.release(kept); else kept.destroy(); }
+    this.outputTexture = this.device.createTexture({label: 'output stage color', size: [w, h], format: 'rgba8unorm', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING});
+    this.track?.(this.outputTexture, 'output stage color', w * h * 4, 'working');
+  }
+  encodeOutput(encoder, source, target, {chunk = this.uniformData, place = this.outputPlace, offset = [0, 0], width = source.width, height = source.height, slot = 0} = {}) {
     const device = this.device, field = name => this.layout.fields.get(name), settings = new DataView(chunk);
     const int = name => this.uniformView.getInt32(field(name).offset, true), float = (name, k = 0) => settings.getFloat32(field(name).offset + 4 * k, true);
     const scale = float('chunkScale') || 1;
-    const enabled = int('quantize') !== 0 && int('clay') === 0 && int('diagnosticView') === 0 && scale <= 1 && !resampled;
+    const enabled = int('quantize') !== 0 && int('clay') === 0 && int('diagnosticView') === 0 && scale <= 1;
     // Tiles keyed to the raster's own rectangle (`place`, the chunk's x and y), in drawn pixels when the raster is finer: an export's are its
     // art pixels, so its tiles are the game's, and a preview's are its screen pixels, so neither depends on how the map is cut into chunks. A
     // preview's tiles therefore sit the base's half height above an export's: the same statistics, another phase.
@@ -668,12 +677,7 @@ export class TerrainRenderer {
     const job = this.outputJobs[slot] ??= device.createBuffer({label: 'output job', size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
     const words = new Int32Array([origin[0], origin[1], width, height, offset[0], offset[1], this.outputCount, enabled ? 1 : 0]);
     device.queue.writeBuffer(job, 0, words);
-    if (!this.outputTexture || this.outputTexture.width < width || this.outputTexture.height < height) {
-      if (this.outputTexture) this.release(this.outputTexture);
-      const w = Math.max(width, this.outputTexture?.width ?? 0), h = Math.max(height, this.outputTexture?.height ?? 0);
-      this.outputTexture = device.createTexture({label: 'output stage color', size: [w, h], format: 'rgba8unorm', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING});
-      this.track(this.outputTexture, 'output stage color', w * h * 4, 'working');
-    }
+    this.outputSize(width, height);
     const firstX = Math.floor(origin[0] / 32) * 32 - origin[0], firstY = Math.floor(origin[1] / 32) * 32 - origin[1];
     const tiles = Math.ceil((width - firstX) / 32) * Math.ceil((height - firstY) / 32);
     const compute = encoder.beginComputePass({label: 'output stage'});

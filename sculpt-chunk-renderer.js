@@ -52,6 +52,17 @@ export function colorScissor(tile,view){
   return [x,y,right-x,bottom-y];
 }
 
+// A color rerun's scissor rounded out to whole tiles of the output stage (engine-output.wgsl), which diffuses each 32 px tile alone: the
+// pass clears the target, so a tile the scissor cut would be diffused against cleared pixels. A raster coarser than art pixels has no tiles.
+export function outputScissor(scissor,tile,layout){
+  const view=new DataView(tile.cpu),scale=view.getFloat32(layout.fields.get('chunkScale').offset,true)||1;
+  if(scale>1||!tile.place)return scissor;
+  const o=tile.place.map(v=>((Math.round(v/scale)%32)+32)%32),[x,y,w,h]=scissor;
+  const x0=Math.max(0,Math.floor((x+o[0])/32)*32-o[0]),y0=Math.max(0,Math.floor((y+o[1])/32)*32-o[1]);
+  const x1=Math.min(tile.width,Math.ceil((x+w+o[0])/32)*32-o[0]),y1=Math.min(tile.height,Math.ceil((y+h+o[1])/32)*32-o[1]);
+  return [x0,y0,Math.max(0,x1-x0),Math.max(0,y1-y0)];
+}
+
 export class ChunkTerrainRenderer extends TerrainRenderer {
   static async create(canvas,config) {
     const self=new ChunkTerrainRenderer(canvas,config);
@@ -545,10 +556,11 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       this.outputBytes=atlasWidth*height*4+outWidth*outHeight*4;this.recordMemory();
       await this.outputPipelines();
       const encoder=this.device.createCommandEncoder({label:'cached tile colors'}),presentation=this.context.getCurrentTexture(),pipeline=this.genericPipelines[this.rockMask()].draw,regions=[];let x=0,outX=0,slot=0;
+      this.outputSize(width,height);
       for(const tile of tiles){
-        const scissor=colorScissor(tile,view),r=tile.rect;
+        const scissor=outputScissor(colorScissor(tile,view),tile,this.layout),r=tile.rect;
         this.encodeColor(encoder,pipeline,scissor,true,null,{record:tile.record,group:tile.group,masks:tile.source.colorMasks,target,geometryGroup:tile.geometryGroup});
-        this.encodeOutput(encoder,target,presentation,{chunk:tile.cpu,place:tile.place,offset:[x,0],width:tile.width,height:tile.height,slot:slot++,resampled:tile.width!==tile.outWidth||tile.height!==tile.outHeight});
+        this.encodeOutput(encoder,target,presentation,{chunk:tile.cpu,place:tile.place,offset:[x,0],width:tile.width,height:tile.height,slot:slot++});
         const fresh=r&&(scissor[2]!==tile.width||scissor[3]!==tile.height)?{x:r.x+scissor[0]*r.width/tile.width,y:r.y+scissor[1]*r.height/tile.height,width:scissor[2]*r.width/tile.width,height:scissor[3]*r.height/tile.height}:null;
         regions.push({x:outX,y:0,width:tile.outWidth,height:tile.outHeight,sourceX:x,tile,fresh});x+=tile.width;outX+=tile.outWidth;
       }
