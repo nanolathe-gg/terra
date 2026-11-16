@@ -2,7 +2,7 @@
 
 Status: phases 1-3 landed on local main (b89971fd, 2026-11-15); the rest of phase 3, phase 4 as an opt-in and phase 5's height
 contrast landed on local main from branch `surface-layers-2` (09c0cc52, 2026-11-16). Round 3 (branch `surface-layers-3`) landed on local main
-(2026-11-16): see "Round 3" below. Round 4 (branch `surface-layers-4`: rock and Crystal as materials, 23 material slots) landed on local main (2026-11-16): see "Round 4". Round 5 (branch `surface-layers-5`: the drawn color, strata as tones, Crystal's art) landed on local main (2026-11-16): see "Round 5". Not pushed; previews stale. Branch `surface-layers`. The research behind it is the prototype branch
+(2026-11-16): see "Round 3" below. Round 4 (branch `surface-layers-4`: rock and Crystal as materials, 23 material slots) landed on local main (2026-11-16): see "Round 4". Round 5 (branch `surface-layers-5`: the drawn color, strata as tones, Crystal's art) landed on local main (2026-11-16): see "Round 5". Round 6 (branch `surface-layers-6`: vegetation, plants on layers, the cover table retired) landed on local main (2026-11-16): see "Round 6". Not pushed; previews stale. Branch `surface-layers`. The research behind it is the prototype branch
 `prototype/surface-stack` (not for landing), summarized below.
 
 ## The model
@@ -293,7 +293,7 @@ Built (each a commit; the measurements are in their messages):
 - **Fix: every rock type's and the crystal material cached again.** Round 4's 84344e55 let a stroke's shape settings change the cached
   set, which rebuilt the cache inside a draw and failed the digest sweep. The smoke's 1024 MiB budget makes the saving unnecessary.
 
-## Round 6 (branch `surface-layers-6`, 2026-11-16): vegetation
+## Round 6 (branch `surface-layers-6`, 2026-11-16, landed): vegetation
 
 The owner: "Vegetation round". The seven-class ground cover (off in every world) is retired, and its plants grow on surface layers.
 
