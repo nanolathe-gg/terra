@@ -182,7 +182,6 @@ struct Uniforms {
     light: vec3f,
     // Draw (engine-frag.wgsl).
     riverBed: vec4f,       // riverfix: the braided bed's gravel colour (materials/<world>.json water.riverBedRGB), a = 1 when the world gives one
-    rockMean: vec3f,
     clay: i32,
     slopeMaterial: i32,
     mineralMargins: i32,
@@ -205,9 +204,6 @@ struct Uniforms {
     sandBase: vec4f,
     beachBase: vec4f,
     shallowBase: vec4f,
-    slopeTexMean: vec3f,
-    rockTexMean: vec3f,
-    beachTexMean: vec3f,
     beach: i32,
     waterMid: vec4f,   // rgb mid-depth colour, a: its depth (0: two stops)
     beachHeight: f32,
@@ -246,7 +242,6 @@ struct Uniforms {
     waterSoft: f32,
     crispShore: f32,
     bankRock: f32,
-    beachLayer: i32,       // the generated layer that is the beach sand (the world's own, or one borrowed from another world's table), or -1
     sandGrain: f32,
     // Bake (engine-bake.wgsl).
     reliefScale: f32,     // wavelength of the first octave, world px
@@ -414,7 +409,6 @@ struct Uniforms {
     columnWander: f32,    // the wander the coordinate takes from value noise: its amplitude, height units
     columnTerrain: vec4f, // the wander it takes from three octaves of the terrain noise (height units): xyz their amplitudes (not in the Time pass)
     materialTable: array<vec4f, 206>,   // Green (H3 materialModel): four materials of 39 rows then six placement rows, from materials/green.json (material-model.wgsl); then the 44 rows of a world's ground-cover table (card P30, its plants' row 39 and flower palette rows 40 to 43, card P31; zeros: none)
-    materialFoot: f32,    // Green (H3): world px one drawn pixel covers; above 1 the draw trials a coarse resolution
     weatherMaps: f32,     // H5: 1 when gridTex layers 2 and 3 hold the Time pass's maps (engine-weather.wgsl)
     // H5 item 3a, Green's retail marks (0: off). They read the Time pass's maps, so age, rain and hardness contrast move them.
     terraceBreak: f32,    // how far the terrace lines' phase wanders (band spacings), more where the ground is wet

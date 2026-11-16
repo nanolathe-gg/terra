@@ -79,7 +79,6 @@
     "engine-frag.wgsl",
     "engine-bake.wgsl",
     "engine-common.wgsl",
-    "engine-materials.wgsl",
     "engine-palette.wgsl",
     "engine-weather.wgsl",
     "engine-erosion.wgsl",

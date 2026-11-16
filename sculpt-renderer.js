@@ -3,9 +3,9 @@
 // sculpt-vert.wgsl and engine-frag.wgsl (the draw), engine-bake.wgsl (the
 // fields bake of a chunk, a compute pass).
 
-import {materialRows,tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
+import {tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {MaterialCache,writeMaterialSlot} from './sculpt-material-cache.js';
-import {copyMaterial,materialCacheUsage,materialTint,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES} from './sculpt-materials.js';
+import {copyMaterial,materialCacheUsage,materialTint,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES,LIBRARY} from './sculpt-materials.js';
 import {columnRows,columnColors} from './sculpt-column.js';
 import {LOW_GROUND_RGB} from './sculpt-knobs.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
@@ -112,7 +112,6 @@ const MIP_SHADER = `
 }`;
 
 // H4: the generated materials' level-0 size and level count (512 down to 8 px).
-const GENERATED_SIZE = 512, GENERATED_LEVELS = 7;
 
 class SpecializationMiss extends Error { constructor(state) { super('nanolathe: pipelines for these gates are not built yet'); this.state = state; } }
 class PipelinesPending extends Error { constructor(state,ready) { super('Terrain pipelines are compiling in the background.');this.name='PipelinesPending';this.key=state.key;this.ready=ready; } }
@@ -179,25 +178,24 @@ export class TerrainRenderer {
     // Every world's materials are numbers: the config names its table (config.materialTable).
     const tableUrl = this.config.materialTable;
     this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'engine-materials.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl', 'engine-ground.wgsl', 'engine-ground-dither.wgsl'];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', tableUrl, 'engine-palette.wgsl', 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl', 'engine-ground.wgsl', 'engine-ground-dither.wgsl'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch(name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
-    const modelTable = extra[1];
-    this.paletteSource = extra[2];
-    const palette = JSON.parse(extra[3]);
+    const modelTable = extra[0];
+    this.paletteSource = extra[1];
+    const palette = JSON.parse(extra[2]);
     this.paletteColours = palette.colours;
     this.paletteIndexed = palette.indexed;
     // Slots 0-9 and 246-254 of the game's palette are Windows' static system colours, which its map art does not draw with (255, white,
     // it does: snow and surf). A colour that only those slots hold stays out of the lookup unless a world's table picks it by entry.
     const art = new Set(palette.indexed.filter((_, i) => i >= 10 && (i < 246 || i === 255)).map(String));
     this.paletteArt = palette.colours.map((_, i) => i).filter(i => art.has(String(palette.colours[i])));
-    this.materialsSource = extra[0];
     this.commonSource = common;
-    this.volumeSource = extra[4];
-    this.timeSources={erosion:this.preprocessShader(extra[5]),maps:this.preprocessShader(extra[6])};
+    this.volumeSource = extra[3];
+    this.timeSources={erosion:this.preprocessShader(extra[4]),maps:this.preprocessShader(extra[5])};
     this.layout = uniformLayout(preprocess(common, '', new Set()));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
@@ -244,7 +242,7 @@ export class TerrainRenderer {
     // The engine draw (H4) binds the palette and the generated materials
     // (binding 19, read with textureLoad); no land image remains. Binding numbers are the shared draw's, with 2-13 left out.
     this.materialLayout = device.createBindGroupLayout({label: 'materials', entries: [
-      texture(18, F), texture(19, F, 'float', '2d-array')]});
+      texture(18, F)]});
     // The bake's group 1: the fields texture, and the loose-stone mask lattice (looseMain fills it, the bake reads it).
     const fieldsLayout = device.createBindGroupLayout({label: 'fields out', entries: [
       {binding: 0, visibility: GPUShaderStage.COMPUTE, storageTexture: {access: 'write-only', format: 'rgba16float'}},
@@ -279,18 +277,11 @@ export class TerrainRenderer {
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
     this.materialData = JSON.parse(modelTable);
-    // A borrowed beach (sculpt-scene.js borrowBeach names the lender's table): its beach material, generated as one more layer after the world's own,
-    // so every other layer keeps its place and its noise.
-    if (this.config.beachTable && !this.materialData.order.includes('beach')) {
-      const lender = await this.groundTable(this.config.beachTable);
-      this.materialData.measured.beach = lender.measured.beach; this.materialData.model.beach = lender.model.beach;
-      this.materialData.order.push('beach');
-    }
     // The startup generation: the materials and the palette lookup (GPU) are started first and the noise (CPU) is made while they build.
     this.textures = {};
-    this.groundCache = new MaterialCache(this, preprocess(extra[7], common, new Set()), preprocess(extra[8], common, new Set()));
+    this.groundCache = new MaterialCache(this, preprocess(extra[6], common, new Set()), preprocess(extra[7], common, new Set()));
     const generation = performance.now();
-    const gpu = Promise.all([this.makeMaterials(), this.paletteTexture()]);
+    const gpu = Promise.all([null, this.paletteTexture()]);
     this.textures.noise = this.noiseTexture();
     this.textures.palette = (await Promise.all([gpu,genericReady]))[0][1];
     this.generationMs = performance.now() - generation;
@@ -301,15 +292,14 @@ export class TerrainRenderer {
       if (!variant.has(key)) variant.set(key, value);
     this.variant = variant;
     this.means = {};
-    // The materials the table makes, by name: which optional stages the world has.
-    this.layers = new Set(this.materialData.order);
-    // Mean colour of each base material, so a world can move it to a new base colour while keeping the texture's grain.
-    this.means.slope = this.materialData.measured[this.materialData.order[0]].meanRGB.map(v => v / 255);
-    this.means.rock = this.materialData.measured[this.materialData.order[1]].meanRGB.map(v => v / 255);
+    // The world's surfaces (config.layers, from its world.materials): which optional stages it has (a beach, mineral margins' body).
+    this.layers = new Set(this.config.layers || []);
+    // The world's rock material's broad color (the strata's default tones and a rock with no color of its own read it before the map's
+    // materials are set; sculpt-materials.js materialTint).
+    this.means.rock = materialTint(LIBRARY[this.config.materials?.rock] ?? {nodes: [{type: 'output', in: {}}]});
     // The transition body is generated layer 5 and the transition (ring, body, contours) needs the flag; the ring is layer 7. The beach is the
     // table's `beach` layer (6 in a world's own table, the last when borrowed).
     this.transitionBody = this.layers.has('body');
-    if (this.layers.has('beach')) this.means.beach = this.materialData.measured.beach.meanRGB.map(v => v / 255);
     this.applyKnobs();
   }
 
@@ -532,7 +522,7 @@ export class TerrainRenderer {
   // Group 1: the plain's tiles, the waters, the palette and the generated materials.
   materialBindGroup() {
     return this.bindGroups.materials ??= this.device.createBindGroup({label: 'materials', layout: this.materialLayout, entries: [
-      {binding: 18, resource: this.textures.palette.view}, {binding: 19, resource: this.generated.view}]});
+      {binding: 18, resource: this.textures.palette.view}]});
   }
 
   // The six placement rows of a world whose table has no `placement` block (engine-frag.wgsl landPlace reads them), from the world's
@@ -553,86 +543,10 @@ export class TerrainRenderer {
     return [...Array.from({length: PLACEMENT_ROW}, () => [0, 0, 0, 0]), ...rows, ...groundCoverRows(this.config.material?.groundCover,variant,this.colorOverrides||{},this.means?.ground)];
   }
 
-  // H4 round 2: one generated layer at one level as RGBA bytes (a check of the pass against the images it replaced; not used by the draw).
-  async readGenerated(layer, level = 0) {
-    const size = GENERATED_SIZE >> level, row = Math.ceil(size * 4 / 256) * 256;
-    const buffer = this.device.createBuffer({size: row * size, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ});
-    const encoder = this.device.createCommandEncoder();
-    encoder.copyTextureToBuffer({texture: this.generated.texture, mipLevel: level, origin: [0, 0, layer]}, {buffer, bytesPerRow: row}, [size, size, 1]);
-    this.device.queue.submit([encoder.finish()]);
-    await buffer.mapAsync(GPUMapMode.READ);
-    const mapped = new Uint8Array(buffer.getMappedRange()), out = new Uint8Array(size * size * 4);
-    for (let y = 0; y < size; y++) out.set(mapped.subarray(y * row, y * row + size * 4), y * size * 4);
-    buffer.destroy();
-    return {size, data: Array.from(out)};
-  }
 
   // What the startup generation took, in ms: the noise (CPU), the palette lookup and the materials (GPU), and the wall time of all three.
   get startupParts() { return {noise: this.noiseMs, palette: this.paletteMs, materials: this.startupMs, total: this.generationMs}; }
 
-  // H4 item 2: the land materials of materials/green.json made on the GPU, once at startup and again when the table changes.
-  // One layer per material, GENERATED_SIZE px square, MIP levels halving down to 8 px; level L is made with a footprint of 2^L
-  // (engine-materials.wgsl). Returns the milliseconds from submit to the GPU finishing.  All four materials are always made.
-  async makeMaterials() {
-    const device = this.device, size = GENERATED_SIZE, levels = GENERATED_LEVELS, layers = this.materialData.order.length;
-    const start = performance.now();
-    if (!this.materialPipeline) {
-      const module = device.createShaderModule({label: 'engine-materials.wgsl', code: this.materialsSource});
-      const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
-      if (errors.length) throw new Error('nanolathe: engine-materials.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
-      this.materialPipeline = await device.createComputePipelineAsync({label: 'materials', layout: 'auto', compute: {module, entryPoint: 'makeMaterial'}});
-      this.ditherPipeline = await device.createComputePipelineAsync({label: 'material dither', layout: 'auto', compute: {module, entryPoint: 'makeDither'}});
-    }
-    if (!this.generated) {
-      const texture = device.createTexture({label: 'generated materials', size: [size, size, layers], format: 'rgba8unorm', mipLevelCount: levels,
-        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC});
-      this.generated = {texture, view: texture.createView({dimension: '2d-array'})};
-    }
-    const rows = Float32Array.from(materialRows(this.materialData).flat());
-    const table = device.createBuffer({size: rows.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
-    device.queue.writeBuffer(table, 0, rows);
-    const encoder = device.createCommandEncoder({label: 'materials'});
-    const params = [];
-    for (let level = 0; level < levels; level++) {
-      const buffer = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
-      device.queue.writeBuffer(buffer, 0, new Float32Array([size, 2 ** level, 0, 0]));
-      params.push(buffer);
-      const pass = encoder.beginComputePass({label: 'materials level ' + level});
-      pass.setPipeline(this.materialPipeline);
-      pass.setBindGroup(0, device.createBindGroup({layout: this.materialPipeline.getBindGroupLayout(0), entries: [
-        {binding: 0, resource: {buffer: table}},
-        {binding: 1, resource: this.generated.texture.createView({dimension: '2d-array', baseMipLevel: level, mipLevelCount: 1})},
-        {binding: 2, resource: {buffer: buffer}},
-        {binding: 3, resource: this.generated.texture.createView({dimension: '2d-array', baseMipLevel: level ? level - 1 : 1, mipLevelCount: 1})}]}));
-      const n = Math.ceil(size / 2 ** level / 8);
-      pass.dispatchWorkgroups(n, n, layers);
-      pass.end();
-      if (level === 0) {
-        // A dithered material's level 0 (engine-materials.wgsl makeDither): dot diffusion, one dispatch per class of the 8 x 8 matrix, in
-        // order; each pass gathers the errors the lower classes left in ditherErr. The levels above box-mean it.
-        const err = device.createBuffer({size: size * size * 16 * layers, usage: GPUBufferUsage.STORAGE});
-        const dither = encoder.beginComputePass({label: 'materials dither'});
-        dither.setPipeline(this.ditherPipeline);
-        const n = Math.ceil(size / 8 / 8);
-        for (let cls = 0; cls < 64; cls++) {
-          const pass = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
-          device.queue.writeBuffer(pass, 0, new Float32Array([size, 1, cls, 0]));
-          params.push(pass);
-          dither.setBindGroup(0, device.createBindGroup({layout: this.ditherPipeline.getBindGroupLayout(0), entries: [
-            {binding: 0, resource: {buffer: table}},
-            {binding: 1, resource: this.generated.texture.createView({dimension: '2d-array', baseMipLevel: 0, mipLevelCount: 1})},
-            {binding: 2, resource: {buffer: pass}}, {binding: 6, resource: {buffer: err}}]}));
-          dither.dispatchWorkgroups(n, n, layers);
-        }
-        dither.end();
-        params.push(err);
-      }
-    }
-    device.queue.submit([encoder.finish()]);
-    await device.queue.onSubmittedWorkDone();
-    table.destroy(); params.forEach(b => b.destroy());
-    return this.startupMs = performance.now() - start;
-  }
   // GPU time of one pass from timestamp queries, read back without
   // stalling; at most three in flight, as the WebGL timer queries were.
   timer() {
@@ -770,7 +684,6 @@ export class TerrainRenderer {
     // Placement is live state too: refreshing only scalar uniforms left these
     // controls frozen at startup in the generated materials.
     this.set('uMaterialTable', this.placementTable(variant));
-    this.f('uMaterialFoot', variant.has('materialFoot') ? Math.max(1, Number(variant.get('materialFoot'))) : 1);   // H3: ?materialFoot=4 trials a quarter-resolution draw
     this.f('uMossFromGround', variant.has('moss') ? Number(variant.get('moss')) : 0.0);
     this.f('uLightCap', variant.has('lightCap') ? Number(variant.get('lightCap')) : 1.13);
     this.f('uShadeDepth', variant.has('shadeDepth') ? Number(variant.get('shadeDepth')) : 1.0);
@@ -915,7 +828,6 @@ export class TerrainRenderer {
     this.fieldsDirty = true;
     {
     this.i('uBeach', this.layers.has('beach'));
-    this.i('uBeachLayer', this.materialData.order.indexOf('beach'));
     this.f('uBeachHeight',this.config.material?.beachHeight??6);
     const mid=this.config.water?.midRGB, midDepth=this.config.material?.midDepth;
     this.set('uWaterMid', mid && midDepth ? [...mid.map(v => v / 255), midDepth] : [0, 0, 0, 0]);
@@ -944,8 +856,6 @@ export class TerrainRenderer {
     this.set('uFringeRange', material.fringeRange || [.08, .28]);
     this.f('uWetBand', material.wetBand ?? 13);
     // E6: mineralDetail scales the rock art's contrast about its mean (1: as drawn).
-    const rockMean = material.hillRockMeanRGB || [85, 84, 79];
-    this.v('uRockMean', rockMean.map(v => v / 255));
     const bed = this.config.water?.riverBedRGB;   // riverfix: a braided bed's gravel, world data (absent: the draw darkens the world's rock)
     this.set('uRiverBed', bed ? [...bed.map(v => v / 255), 1] : [0, 0, 0, 0]);
     }
@@ -1074,8 +984,6 @@ export class TerrainRenderer {
     // colours of its own takes (writeRocks).
     // Row 6: the color it deepens toward with thickness (B4), the world's 'absorb' color where it chose one.
     this.set('uRockColors', [colors.rock ? [...colors.rock, 1] : [0, 0, 0, 0], ...strata, colors.absorb ? [...colors.absorb, 1] : [0, 0, 0, 0]]);
-    for (const key of ['slope', 'rock', 'beach'])
-      this.v('u' + key[0].toUpperCase() + key.slice(1) + 'TexMean', this.means[key] || [0.5, 0.5, 0.5]);
     }
     this.writeRocks();
     const channels={
@@ -1254,13 +1162,15 @@ export class TerrainRenderer {
     const field = this.uniform.get(name[1].toLowerCase() + name.slice(2));
     return field.kind === 'i' ? this.uniformView.getInt32(field.offset, true) : this.uniformView.getFloat32(field.offset, true);
   }
+  // The broad color of the map's world rock material (its own, else the world's library material's).
+  rockMaterialTint() { const slot = [...(this.grounds || new Map())].find(([, m]) => m.worldRock)?.[0]; return slot ? materialTint(this.grounds.get(slot)) : this.means.rock; }
   // A rock slot's colors as the draw reads them, '#rrggbb': {rock, beds}, the rock's (its own, else the rock material's mean, as rockFlat) and
   // its five bed slots'. The World pane shows a preset's effective colors with them, and starts its own from the world's.
   slotColors(slot) {
     const table = this.uniform.get('rock'), at = table.offset + slot * table.stride + table.members.get('rockColors').offset;
-    const row = k => [0, 1, 2, 3].map(c => this.uniformView.getFloat32(at + k * 16 + c * 4, true)), mean = this.uniform.get('rockMean');
+    const row = k => [0, 1, 2, 3].map(c => this.uniformView.getFloat32(at + k * 16 + c * 4, true)), mean = this.rockMaterialTint();
     const hex = rgb => '#' + rgb.slice(0, 3).map(v => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0')).join('');
-    const own = row(0), rock = own[3] > 0.5 ? own : [0, 1, 2].map(c => this.uniformView.getFloat32(mean.offset + c * 4, true));
+    const own = row(0), rock = own[3] > 0.5 ? own : mean;
     // The absorption color: row 6 where chosen, else the rock's own hue at full strength (engine-frag.wgsl absorbFilter).
     const absorb = row(6), top = Math.max(rock[0], rock[1], rock[2], 0.02);
     return {rock: hex(rock), beds: [1, 2, 3, 4, 5].map(k => hex(row(k))), absorb: hex(absorb[3] > 0.5 ? absorb : rock.slice(0, 3).map(v => v / top))};

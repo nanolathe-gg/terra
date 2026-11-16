@@ -8,7 +8,6 @@
 // ground, as the GLSL sampler pointed at the ground's unit).
 @group(1) @binding(18) var paletteTex: texture_2d<f32>;
 // H4: the land materials of materials/green.json, made at startup (engine-materials.wgsl): a layer per material, a mip level per footprint.
-@group(1) @binding(19) var generatedTex: texture_2d_array<f32>;
 
 // Above 1x a texel is one drawn pixel, not one world pixel: the pattern comes out smaller and keeps its grain and dither.
 fn grainPixel(pixel: vec2f) -> vec2f {
@@ -209,16 +208,8 @@ fn waterPigment(p:vec2f)->vec3f {
  let highlight=pow(max(0.0,dot(normal,normalize(u.light+vec3f(0,0,1)))),16.0)*materialShine(p,slot)*.35;
  return materialPigment(p,slot)*min(light,u.lightCap)+vec3f(highlight);
 }
-// Green's land materials come from images, or (materialModel, Card H3) from the numbers in
-// materials/green.json through material-model.wgsl. Every draw that wants one of them asks here.
+// The world's table rows (materials/<world>.json placement and cover: sculpt-material-model.js).
 fn matRow(i: u32) -> vec4f { return u.materialTable[i]; }
-// A generated material at a drawn pixel: the level is the footprint (materialFoot, 1 at final resolution), the texel wraps with a mask.
-fn genColor(layer: i32, world: vec2f) -> vec3f {
-    let pixel = grainPixel(world);
-    let level = clamp(i32(log2(max(u.materialFoot, 1.0)) + 0.5), 0, 6);
-    let mask = vec2i((512 >> u32(level)) - 1);
-    return textureLoad(generatedTex, vec2i(floor(pixel / f32(1 << u32(level)))) & mask, layer, level).rgb;
-}
 // A surface's material at a native pixel: its role's (u.slopeGround, u.debrisGround...), else the fallback role's, else the ground's mean.
 fn roleColor(slot: i32, fallback: i32, pixel: vec2f) -> vec3f {
     let s = select(fallback, slot, slot >= 0); if (s < 0) { return groundMean(); }
@@ -1168,9 +1159,8 @@ fn frostDry(near: f32, route: f32) -> f32 { return near * (1.0 - u.frostWet * sm
 
 // ---- The mineral margins and the sediment transition ----
 // Nearby fractured slopes feed outcrops into their level crown and foot (the mineral margins); a table with a fringe, a ring or a body
-// layer adds the fringe, the ring veins and the sediment transition. Each block is gated by a uniform, never by a world. The generated
-// layers it reads come from the table's `order`: 0 slope grass, 1 rock, 2 weathered, 3 fractured, 4 fringe, 5 transition body,
-// 6 beach, 7 mineral ring (fetched like the engine's own generated materials, genColor; layer 7 is the last).
+// layer adds the fringe, the ring veins and the sediment transition. Each block is gated by a uniform, never by a world. The materials
+// it reads are the map's in their roles (roleColor): the slope cover, the margin fringe, ring and body.
 // The state drawMineralMargins leaves for joinSedimentTransition to finish:
 var<private> transitionGround: vec3f;
 var<private> transitionFace: vec3f;
@@ -1401,7 +1391,7 @@ fn surfFoam(pixel: vec2f, p: vec2f, x: f32, q: vec2f, depth: f32, slope: f32, e:
 }
 // A rock slot's colour as the draw lays it flat (rockFlat): the recipe's own, else the rock material's mean.
 // A rock slot's surface material (its own, else the world's rock material), -1 none; and that material's mean color (the old fixed mean without one).
-fn rockMaterialMean(slot: u32) -> vec3f { let m = rockMaterialOf(slot); if (m < 0) { return u.rockMean; } return materialMean(u32(m)); }
+fn rockMaterialMean(slot: u32) -> vec3f { let m = rockMaterialOf(slot); if (m < 0) { return vec3f(0.33); } return materialMean(u32(m)); }
 // The rock's grain at a native pixel: its material's unlit color over the material's mean (1 where the rock has no material).
 fn rockGrain(slot: u32, pixel: vec2f) -> vec3f {
     let m = rockMaterialOf(slot); if (m < 0) { return vec3f(1.0); }

@@ -284,7 +284,16 @@ func (s *Site) configure() error {
 		base := value(world["baseHeight"], 24)
 		delete(world, "baseHeight")
 		material := merge(object{"groundCover": s.defaults["groundCover"]}, obj(table["material"]))
-		c := merge(object{"biome": names[w], "biomeId": w, "size": 1024, "grid": 512, "seaLevel": 0, "baseHeight": base, "materialTable": materialPath(w), "layers": table["order"], "material": material, "water": table["water"]}, world)
+		// The world's surfaces: the slope cover and the rock always, a beach and the mineral margins' body where its world.materials names one
+		// (sculpt-materials.js MAP_ROLES); the draw reads which optional stages it has from this list.
+		roles := obj(obj(table["world"])["materials"])
+		surfaces := []any{"slopeGrass", "rock"}
+		for _, k := range []string{"beach", "body"} {
+			if _, ok := roles[k]; ok {
+				surfaces = append(surfaces, k)
+			}
+		}
+		c := merge(object{"biome": names[w], "biomeId": w, "size": 1024, "grid": 512, "seaLevel": 0, "baseHeight": base, "materialTable": materialPath(w), "layers": surfaces, "material": material, "water": table["water"]}, world)
 		if river, ok := table["river"]; ok {
 			c["river"] = clone(river)
 		}
@@ -306,8 +315,8 @@ func (s *Site) configure() error {
 		c["defaults"] = merge(obj(c["defaults"]), stringsOf(knobs))
 		c["engineDefaults"] = stringsOf(engine)
 		c["knobs"] = keys(knobs)
-		for _, layer := range array(table["order"]) {
-			if layer == "beach" {
+		if _, ok := roles["beach"]; ok {
+			{
 				m := object{}
 				for _, k := range []string{"beachWidth", "beachHeight", "beachRGB"} {
 					if v, ok := obj(table["material"])[k]; ok {
