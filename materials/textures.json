@@ -1382,5 +1382,85 @@
   "controls": [{"label":"Colors","node":"colors","param":"stops"}],
   "palette": [68,67,177,178,19,66,20,179,18,21,180,176,65],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
+ },
+ "rock-granite": {
+  "name": "Granite crystals",
+  "seed": 0,
+  "nodes": [
+   {"id":"grain","name":"Fine grain","x":0,"y":0,"type":"noise","kind":"smooth","params":{"size":1.3,"detail":0.3,"layers":0,"seed":1},"in":{"in":null}},
+   {"id":"feldspar","name":"Light crystals","x":0,"y":100,"type":"scatter","params":{"spacing":6,"radius":1.9,"coverage":0.35,"jitter":1.5,"hardness":0.45,"profile":1,"sizeVariation":0.5,"toneVariation":0.4,"follow":1,"seed":2},"in":{"in":null,"density":null}},
+   {"id":"mica","name":"Dark crystals","x":0,"y":200,"type":"scatter","params":{"spacing":5,"radius":1.4,"coverage":0.3,"jitter":1.5,"hardness":0.55,"profile":1,"sizeVariation":0.5,"toneVariation":0.4,"follow":1,"seed":3},"in":{"in":null,"density":null}},
+   {"id":"light","name":"Add light crystals","x":240,"y":50,"type":"combine","kind":"add","params":{"amount":0.35,"offset":0},"in":{"a":"grain","b":"feldspar","mask":null}},
+   {"id":"dark","name":"Take dark crystals","x":480,"y":100,"type":"combine","kind":"subtract","params":{"amount":0.4,"offset":0},"in":{"a":"light","b":"mica","mask":null}},
+   {"id":"spread","name":"Spread","x":600,"y":0,"type":"levels","params":{"low":-0.1,"high":1.1,"gamma":1,"invert":0},"in":{"in":"dark"}},
+   {"id":"colors","name":"Colors","x":720,"y":0,"type":"gradient","stops":[[0,0.3,0.3,0.31],[0.5,0.53,0.52,0.51],[1,0.8,0.78,0.76]],"params":{"ease":0},"in":{"in":"spread"}},
+   {"id":"material","name":"Material","x":960,"y":0,"type":"output","params":{"relief":0.7},"in":{"color":"colors","height":"spread","shine":null}}
+  ],
+  "controls": [{"label":"Light crystals: coverage","node":"feldspar","param":"coverage","min":0,"max":1},{"label":"Dark crystals: coverage","node":"mica","param":"coverage","min":0,"max":1},{"label":"Colors","node":"colors","param":"stops"}],
+  "palette": [91,90,89,88,87,86,85,84,83],
+  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
+ },
+ "rock-sandstone": {
+  "name": "Sandstone grain",
+  "seed": 0,
+  "nodes": [
+   {"id":"grain","name":"Sand grains","x":0,"y":0,"type":"noise","kind":"smooth","params":{"size":1.2,"detail":0.5,"layers":0,"seed":11},"in":{"in":null}},
+   {"id":"mottle","name":"Mottling","x":0,"y":100,"type":"noise","kind":"smooth","params":{"size":7,"detail":0,"layers":1,"seed":12},"in":{"in":null}},
+   {"id":"mix","name":"Add mottling","x":240,"y":50,"type":"combine","kind":"add","params":{"amount":0.6,"offset":0.5},"in":{"a":"grain","b":"mottle","mask":null}},
+   {"id":"spread","name":"Spread","x":480,"y":50,"type":"levels","params":{"low":0.2,"high":0.8,"gamma":1,"invert":0},"in":{"in":"mix"}},
+   {"id":"height","name":"Grain height","x":480,"y":150,"type":"levels","params":{"low":0.1,"high":0.9,"gamma":1,"invert":0},"in":{"in":"grain"}},
+   {"id":"colors","name":"Colors","x":720,"y":0,"type":"gradient","stops":[[0,0.42,0.38,0.32],[0.5,0.55,0.5,0.42],[1,0.68,0.62,0.52]],"params":{"ease":0},"in":{"in":"spread"}},
+   {"id":"material","name":"Material","x":960,"y":0,"type":"output","params":{"relief":0.6},"in":{"color":"colors","height":"height","shine":null}}
+  ],
+  "controls": [{"label":"Mottling: size","node":"mottle","param":"size","min":2,"max":28},{"label":"Colors","node":"colors","param":"stops"}],
+  "palette": [55,69,68,67],
+  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
+ },
+ "rock-basalt": {
+  "name": "Basalt",
+  "seed": 0,
+  "nodes": [
+   {"id":"grain","name":"Fine grain","x":0,"y":0,"type":"noise","kind":"smooth","params":{"size":1.3,"detail":0,"layers":0,"seed":21},"in":{"in":null}},
+   {"id":"pits","name":"Gas pits","x":0,"y":100,"type":"scatter","params":{"spacing":9,"radius":1.2,"coverage":0.15,"jitter":1.5,"hardness":0.6,"profile":1,"sizeVariation":0.5,"toneVariation":0.2,"follow":1,"seed":22},"in":{"in":null,"density":null}},
+   {"id":"sunk","name":"Sink the pits","x":240,"y":50,"type":"combine","kind":"subtract","params":{"amount":0.4,"offset":0},"in":{"a":"grain","b":"pits","mask":null}},
+   {"id":"spread","name":"Spread","x":480,"y":50,"type":"levels","params":{"low":0,"high":1,"gamma":1,"invert":0},"in":{"in":"sunk"}},
+   {"id":"colors","name":"Colors","x":720,"y":0,"type":"gradient","stops":[[0,0.26,0.28,0.3],[0.5,0.35,0.37,0.4],[1,0.46,0.48,0.51]],"params":{"ease":0},"in":{"in":"spread"}},
+   {"id":"material","name":"Material","x":960,"y":0,"type":"output","params":{"relief":0.5},"in":{"color":"colors","height":"spread","shine":null}}
+  ],
+  "controls": [{"label":"Gas pits: coverage","node":"pits","param":"coverage","min":0,"max":1},{"label":"Colors","node":"colors","param":"stops"}],
+  "palette": [91,90,89,88],
+  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
+ },
+ "rock-limestone": {
+  "name": "Limestone",
+  "seed": 0,
+  "nodes": [
+   {"id":"grain","name":"Fine grain","x":0,"y":0,"type":"noise","kind":"smooth","params":{"size":2,"detail":0.3,"layers":0,"seed":31},"in":{"in":null}},
+   {"id":"mottle","name":"Mottling","x":0,"y":100,"type":"noise","kind":"smooth","params":{"size":16,"detail":0,"layers":1,"seed":32},"in":{"in":null}},
+   {"id":"pits","name":"Dissolution pits","x":0,"y":200,"type":"scatter","params":{"spacing":6,"radius":1.4,"coverage":0.4,"jitter":1.5,"hardness":0.3,"profile":1.5,"sizeVariation":0.5,"toneVariation":0.4,"follow":1,"seed":33},"in":{"in":null,"density":null}},
+   {"id":"mix","name":"Add mottling","x":240,"y":50,"type":"combine","kind":"add","params":{"amount":0.5,"offset":0.5},"in":{"a":"grain","b":"mottle","mask":null}},
+   {"id":"pitted","name":"Take the pits","x":480,"y":100,"type":"combine","kind":"subtract","params":{"amount":0.7,"offset":0},"in":{"a":"mix","b":"pits","mask":null}},
+   {"id":"spread","name":"Spread","x":600,"y":0,"type":"levels","params":{"low":0.15,"high":0.85,"gamma":1,"invert":0},"in":{"in":"pitted"}},
+   {"id":"colors","name":"Colors","x":720,"y":0,"type":"gradient","stops":[[0,0.55,0.55,0.5],[0.6,0.72,0.71,0.66],[1,0.86,0.85,0.8]],"params":{"ease":0},"in":{"in":"spread"}},
+   {"id":"material","name":"Material","x":960,"y":0,"type":"output","params":{"relief":1.2},"in":{"color":"colors","height":"spread","shine":null}}
+  ],
+  "controls": [{"label":"Dissolution pits: coverage","node":"pits","param":"coverage","min":0,"max":1},{"label":"Colors","node":"colors","param":"stops"}],
+  "palette": [87,86,85,84,83,82],
+  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
+ },
+ "rock-shale": {
+  "name": "Shale laminae",
+  "seed": 0,
+  "nodes": [
+   {"id":"laminae","name":"Laminae","x":0,"y":0,"type":"noise","kind":"waves","params":{"size":3,"detail":0,"layers":0,"seed":41,"length":40,"direction":90,"crests":0.3},"in":{"in":null}},
+   {"id":"grain","name":"Fine grain","x":0,"y":100,"type":"noise","kind":"smooth","params":{"size":1,"detail":0.2,"layers":0,"seed":42},"in":{"in":null}},
+   {"id":"mix","name":"Add laminae","x":240,"y":50,"type":"combine","kind":"add","params":{"amount":0.3,"offset":0.5},"in":{"a":"grain","b":"laminae","mask":null}},
+   {"id":"spread","name":"Spread","x":480,"y":50,"type":"levels","params":{"low":0.2,"high":0.8,"gamma":1,"invert":0},"in":{"in":"mix"}},
+   {"id":"colors","name":"Colors","x":720,"y":0,"type":"gradient","stops":[[0,0.3,0.31,0.31],[0.5,0.4,0.4,0.4],[1,0.5,0.5,0.49]],"params":{"ease":0},"in":{"in":"spread"}},
+   {"id":"material","name":"Material","x":960,"y":0,"type":"output","params":{"relief":0.6},"in":{"color":"colors","height":"spread","shine":null}}
+  ],
+  "controls": [{"label":"Laminae: size","node":"laminae","param":"size","min":1,"max":12},{"label":"Colors","node":"colors","param":"stops"}],
+  "palette": [91,90,89,88],
+  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  }
 }

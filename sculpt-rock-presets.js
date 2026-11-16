@@ -94,6 +94,11 @@ export function recipeRock(key,config){
  const r=STARTING_RECIPES[key];if(!r)throw Error(`No starting recipe ${key}.`);
  return {knobs:{...r.knobs},column:r.sections?{sections:structuredClone(r.sections)}:null,colors:checkColors(ROCK_COLORS[key])};
 }
+// The rock material each starting recipe's faces show (library materials, materials/textures.json): its grain, grit and shine under the
+// recipe's colors. A world's own rock type takes its `from` recipe's; Smooth soil none (the world's rock material).
+export const ROCK_MATERIALS={sandstone:'rock-sandstone',conglomerate:'rock-sandstone',siltstone:'rock-shale',shale:'rock-shale',schist:'rock-shale',
+ granite:'rock-granite',gneiss:'rock-granite',breccia:'rock-granite',basalt:'rock-basalt',limestone:'rock-limestone'};
+export const recipeMaterial=(key,config)=>ROCK_MATERIALS[key]??ROCK_MATERIALS[config?.rock?.recipes?.[key]?.from]??null;
 // A world's own rock types (materials/<world>.json world.rock.recipes: {key: {label, from, knobs, beds, sections, colors}}): its numbers lie over the
 // starting recipe it names (`from`, else none: the world's own rock under them, as Smooth soil's), its beds ([[thickness, hardness, slot], ...]),
 // or its column sections by height ([{start, beds}, ...]), replace that recipe's, and its colors ({rock, beds, absorb}) that recipe's. A world's tools name them by key, as the built-in recipes.

@@ -5,9 +5,9 @@ import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
-import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldPair,keepStrokeMaterials,materialsInUse,deleteMaterial,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf} from './sculpt-materials.js';
+import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldPair,keepStrokeMaterials,materialsInUse,deleteMaterial,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY,addMaterial,materialCacheUsage,materialStates} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
-import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe} from './sculpt-rock-presets.js';
+import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,recipeMaterial} from './sculpt-rock-presets.js';
 import {KNOBS,LOW_GROUND_RGB,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
@@ -1444,7 +1444,7 @@ function loadSketch(s,carry=false) {
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
   syncDrawInputs();
   restoreColumn(column);syncColumnPanel();
-  mapMaterials=adoptWorldMaterials(materials,config);syncMaterialChoices();materialEditor?.refresh(); mapRocks=rocks??worldRocks(config); rockSelected=0; syncRockChoices(); syncRockPanel(); nodes=keepStrokeMaterials(keepStrokeRocks(next,mapRocks),mapMaterials); selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
+  mapMaterials=adoptWorldMaterials(materials,config); mapRocks=rocks??worldRocks(config); if(!rocks){const given=giveRockMaterials(mapRocks,mapMaterials,mapRocks.map(r=>r.slot));mapRocks=given.rocks;mapMaterials=given.materials;} syncMaterialChoices();materialEditor?.refresh(); rockSelected=0; syncRockChoices(); syncRockPanel(); nodes=keepStrokeMaterials(keepStrokeRocks(next,mapRocks),mapMaterials); selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
   // The tools' cards still on a world's preset name their rock among this map's presets, now that the map's list is in.
   for (const id of ids) if (Object.hasOwn(config.worldShapes||{},toolSettings[id]?.preset)) toolSettings[id]=shapeCard(id,toolSettings[id].preset);
   showTool(toolSettings[tool]); updateControls();
@@ -1994,9 +1994,25 @@ function syncRockColors() {
 }
 // The selected rock type's surface material (grain, grit, shine): on the world's rock, the map's world rock material (choosing one assigns
 // that role); on another, the world's rock material or any of the map's other materials.
+// Rock types made from a starting recipe (those in `slots`) show its rock material (sculpt-rock-presets.js recipeMaterial): the map's copy of
+// that library material, added while the list and the material cache have room; a rock type that already names one keeps it.
+function giveRockMaterials(rocks,materials,slots){
+  let list=materials;const layers=l=>l.reduce((n,m)=>n+1+materialStates(m).length,0);
+  const out=rocks.map(r=>{
+    if(!slots.includes(r.slot)||r.material>0)return r;
+    const key=recipeMaterial(r.key,config),m=LIBRARY[key];if(!m)return r;
+    let at=list.find(o=>o.source===key&&!roleOf(o));
+    if(!at){
+      if(list.length>=MATERIAL_SLOTS-1||!materialCacheUsage(layers(list)+1).fits)return r;
+      const added=addMaterial(list,m,m.name);list=added.materials;at=list.find(o=>o.slot===added.slot);
+    }
+    return {...r,material:at.slot};
+  });
+  return {rocks:out,materials:list};
+}
 function syncRockMaterial() {
   const select=$('rock-material'),world=rockSelected===0,rock=mapRocks.find(r=>r.slot===rockSelected),own=mapMaterials.find(m=>m.worldRock);
-  const choices=mapMaterials.filter(m=>!m.worldGround&&!m.worldWater&&(world?!roleOf(m)||m.worldRock:!m.worldRock));   // the world's rock takes the role, so only a material with no other
+  const choices=mapMaterials.filter(m=>world?!roleOf(m)||m.worldRock:!roleOf(m));   // a material that draws another of the world's surfaces is not offered
   select.replaceChildren(...(world?[]:[new Option(own?`World rock material (${own.name})`:'World rock material (none)','0')]),...choices.map(m=>new Option(m.name,String(m.slot))));
   if(world&&!own)select.prepend(new Option('None (flat color)',''));
   select.value=world?(own?String(own.slot):''):String(rock?.material||0);
@@ -2033,7 +2049,7 @@ function mountRockPanel() {
   $('rock-absorb-world').onchange=()=>{const off=$('rock-absorb-world').checked;if(rockSelected===0){worldAbsorb(off?null:shown().absorb);worldInputQueue.end();}else setPresetColors({absorb:off?null:shown().absorb},true);};
   $('rock-add').onchange=()=>{
     const key=$('rock-add').value;$('rock-add').value='';if(!key)return;
-    try{const added=addRock(mapRocks,key,worldRockName(config),config);editRocks(added.rocks);selectRock(added.slot);checkpoint(true);status(`Added the rock preset ${mapRocks.find(r=>r.slot===added.slot).name}.`);}catch(err){rockNote(err.message);}
+    try{const added=addRock(mapRocks,key,worldRockName(config),config),given=giveRockMaterials(added.rocks,mapMaterials,[added.slot]);if(given.materials!==mapMaterials)editMaterials(given.materials);added.rocks=given.rocks;editRocks(added.rocks);selectRock(added.slot);checkpoint(true);status(`Added the rock preset ${mapRocks.find(r=>r.slot===added.slot).name}.`);}catch(err){rockNote(err.message);}
   };
   $('rock-duplicate').onclick=()=>{
     try{const copy=duplicateRock(mapRocks,rockSelected,selectedRock());editRocks(copy.rocks);selectRock(copy.slot);checkpoint(true);}catch(err){rockNote(err.message);}
@@ -2236,7 +2252,7 @@ async function boot() {
     if (worldId!==config.biomeId) $('world-title').textContent=worlds[worldId].name;
     addDefaults(experiment,config.defaults);
     borrowBeach(config,experiment);   // a beach another world lends (World, Ground): before the renderer and the panel read the world's layers
-    buildShapeOptions(); mapMaterials=worldMaterials(config);syncMaterialChoices(); mapRocks=worldRocks(config); syncRockChoices(); syncRockAdd(); buildToolbar();
+    buildShapeOptions(); mapMaterials=worldMaterials(config); mapRocks=worldRocks(config); {const given=giveRockMaterials(mapRocks,mapMaterials,mapRocks.map(r=>r.slot));mapRocks=given.rocks;mapMaterials=given.materials;} syncMaterialChoices(); syncRockChoices(); syncRockAdd(); buildToolbar();
     // A new map starts with the world's tools, on the first of them where the world has no Plateau.
     if (!toolIds().has(tool)) tool=firstTool();
     for (const id of toolIds()) toolSettings[id]=toolCard(id);
