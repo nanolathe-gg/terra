@@ -224,7 +224,7 @@ function instrument(path,source){
     // Scalars only; no extra stats walk or pixel read on the input path.
     replace('function configureChunks() {', 'function configureChunks() { const __lpCacheBefore=cache.size,__lpDisplayBefore=viewChunkSize(),__lpCanonicalBefore=canonicalSize;');
     replace('}finally{budgetUpdating=false;}', "}finally{__perf.mark('configure-chunks',{cacheBefore:__lpCacheBefore,cacheAfter:cache.size,displayBefore:__lpDisplayBefore,displayAfter:viewChunkSize(),canonicalBefore:__lpCanonicalBefore,canonicalAfter:canonicalSize});budgetUpdating=false;}");
-    if(native)replace('entry={...rect,bitmap','entry={...rect,__lpPrep,bitmap',2);
+    if(native)replace('entry={...rect,bitmap','entry={...rect,__lpPrep,bitmap',1);
     else {
     replace('const seq=changeSeq,result=await renderer.renderChunk', 'const __lpSerial=__lpInputSerial,seq=changeSeq,result=await renderer.renderChunk');
     replace('const result=await renderer.renderChunk(fields', 'const __lpSerial=__lpInputSerial,result=await renderer.renderChunk(fields');
