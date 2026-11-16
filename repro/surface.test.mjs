@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {surfaceRows, copySurface, SURFACE_BUILTINS, SURFACE_STAGES, SURFACE_FACTS, SURFACE_FLAGS_ROW} from '../sculpt-material-model.js';
-import {withWorldMaterials, materialsInUse, copyMaterials, roleOf, LIBRARY, surfaceMaterials, deleteMaterial, assignMaterial} from '../sculpt-materials.js';
+import {withWorldMaterials, materialsInUse, copyMaterials, roleOf, LIBRARY, surfaceMaterials, deleteMaterial, assignMaterial, worldMaterials, worldOwnMaterials, keptWorldMaterials, worldKept} from '../sculpt-materials.js';
 
 const defaults = JSON.parse(readFileSync(new URL('../materials/defaults.json', import.meta.url), 'utf8'));
 const world = name => JSON.parse(readFileSync(new URL(`../materials/${name}.json`, import.meta.url), 'utf8')).world;
@@ -137,4 +137,18 @@ test('surface: a hidden layer (the design view) draws nothing and keeps its plac
   assert.deepEqual(hidden.layerRows, shown.layerRows);
   for (const i of [0, 1]) assert.equal(hidden.rows[hidden.layerRows[i]][1], 0);
   assert.equal(shown.rows[shown.layerRows[1]][1], .4);
+});
+
+test('surface: the world keeps its role and layer materials, as it keeps its ground and water', () => {
+  const config = {materials: {ground: 'green-ground', water: 'green-water', slope: 'green-slope'}, surface: [{id: 'cap', name: 'Cap', material: 'ice-ground', stage: 'snow'}]};
+  const fresh = worldMaterials(config);
+  assert.deepEqual(worldOwnMaterials(fresh, config), [], 'nothing changed, nothing kept');
+  const edited = fresh.map(m => m.worldSlope || m.worldLayer === 'cap' ? {...m, seed: 9} : m), own = worldOwnMaterials(edited, config);
+  assert.deepEqual(own.map(m => [m.replaces, m.worldSlope === true, m.worldLayer ?? null, m.seed]), [['green-slope', true, null, 9], ['ice-ground', false, 'cap', 9]]);
+  // Another map in the world shows the world's copies; a look whose layer draws another library material does not take the cap's edit.
+  const other = worldMaterials({...config, worldMaterials: keptWorldMaterials(own, config)});
+  assert.deepEqual(other.filter(m => m.worldSlope || m.worldLayer).map(m => m.seed), [9, 9]);
+  const relooked = {...config, surface: [{id: 'cap', name: 'Cap', material: 'lush-ground', stage: 'snow'}]};
+  assert.deepEqual(keptWorldMaterials(own, relooked).map(m => m.worldSlope ? 'slope' : m.worldLayer), ['slope']);
+  assert.deepEqual(worldKept(edited).map(m => m.slot).length, 3 + 1, 'ground, water, slope and the cap go with the world');
 });

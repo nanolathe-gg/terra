@@ -583,43 +583,65 @@ export function adoptWorldMaterials(value, config, {carried = false} = {}) {
     const name = uniqueName(list.filter(m => m !== at), nameOf(source.name));
     list = list.map(m => m === at ? {...m, name, ...copyMaterial(source)} : m);
   }
-  // The world's other surfaces follow it too: a role still holding a library material unedited (another world's, as a map carried into this
-  // one has) takes this world's; one its artist edited, or made, stays theirs.
-  for (const [role, key] of MAP_ROLES.slice(1)) {
-    const want = LIBRARY[config.materials?.[key]], at = list.find(m => m[role]);
-    if (!want || !at || at.source === config.materials[key] || !LIBRARY[at.source]) continue;
+  // The world's other surfaces are world settings too (the owner's decision of 2026-11-16): its role materials and the materials its surface
+  // layers draw. A copy the world keeps (config.worldMaterials) replaces the map's; otherwise a role still holding a library material
+  // unedited (another world's, as a map carried into this one has) takes this world's library material.
+  for (const at of list.filter(m => worldKey(m) && !m.worldGround && !m.worldWater)) {
+    const key = worldKey(at), kept = config.worldMaterials?.find(m => worldKey(m) === key);
+    if (kept) { const name = uniqueName(list.filter(m => m !== at), nameOf(kept.name)); list = list.map(m => m === at ? {...m, name, ...copyMaterial(kept)} : m); continue; }
+    const role = MAP_ROLES.find(([r]) => at[r]); if (!role) continue;
+    const want = LIBRARY[config.materials?.[role[1]]];
+    if (!want || at.source === config.materials[role[1]] || !LIBRARY[at.source]) continue;
     if (JSON.stringify(copyMaterial(at)) !== JSON.stringify(copyMaterial(LIBRARY[at.source]))) continue;
     const name = uniqueName(list.filter(m => m !== at), want.name);
     list = list.map(m => m === at ? {...m, name, ...copyMaterial(want)} : m);
   }
   return list;
 }
-// What the world keeps of a map's list: its ground and its water where they differ from the library's, each marked with the library
-// material it replaces (`replaces`). A world nobody changed keeps nothing, so a later revision of the library reaches it; and an edit
-// follows the library material it replaces.
-const libraryKey = (config, which) => LIBRARY[config.materials?.[which]] ? config.materials[which] : `green-${which}`;
-export function worldOwnMaterials(list, config) {
-  return (list ?? []).filter(m => m.worldGround || m.worldWater).filter(m => {
-    const preset = libraryFor(config, m.worldGround ? 'ground' : 'water');
-    return m.name !== preset.name || JSON.stringify(copyMaterial(m)) !== JSON.stringify(copyMaterial(preset));
-  }).map(m => ({replaces: libraryKey(config, m.worldGround ? 'ground' : 'water'), name: m.name, worldGround: m.worldGround, worldWater: m.worldWater, ...copyMaterial(m)}));
+// What makes a material the world's: its role (ground, water, or one of MAP_ROLES) or the surface layer it draws ('layer:' and its key);
+// null for a map's own.
+export const worldKey = m => m?.worldGround ? 'worldGround' : m?.worldWater ? 'worldWater' : MAP_ROLES.find(([r]) => m?.[r] === true)?.[0] ?? (m?.worldLayer ? 'layer:' + m.worldLayer : null);
+// The library material this look of the world names for that key: ground and water always have one; a role or a layer may have none.
+function worldLibraryKey(config, key) {
+  if (key === 'worldGround' || key === 'worldWater') return libraryKey(config, key === 'worldGround' ? 'ground' : 'water');
+  const role = MAP_ROLES.find(([r]) => r === key);
+  if (role) return LIBRARY[config.materials?.[role[1]]] ? config.materials[role[1]] : null;
+  const layer = (config.surface || []).find(l => 'layer:' + layerKey(l) === key);
+  return layer?.material != null && LIBRARY[layer.material] ? layer.material : null;
 }
-// The kept materials that apply to this look of the world: for each role, the one that replaces the library material the look names.
+// What the world keeps of a map's list: each of its world materials (worldKey: ground, water, a role, a layer's) where it differs from the
+// library material that look names, marked with that library material (`replaces`; null where the look names none). A world nobody
+// changed keeps nothing, so a later revision of the library reaches it; and an edit follows the library material it replaces.
+const libraryKey = (config, which) => LIBRARY[config.materials?.[which]] ? config.materials[which] : `green-${which}`;
+const keyFields = key => key.startsWith('layer:') ? {worldLayer: key.slice(6)} : {[key]: true};
+export function worldOwnMaterials(list, config) {
+  return (list ?? []).filter(m => worldKey(m)).flatMap(m => {
+    const key = worldKey(m), replaces = worldLibraryKey(config, key), preset = replaces ? LIBRARY[replaces] : null;
+    // A renamed ground or water counts as changed; the others are named for their layer or made unique in the list, so their graph decides.
+    const named = key === 'worldGround' || key === 'worldWater' ? m.name === preset?.name : true;
+    if (preset && named && JSON.stringify(copyMaterial(m)) === JSON.stringify(copyMaterial(preset))) return [];
+    return [{replaces, name: m.name, ...keyFields(key), ...copyMaterial(m)}];
+  });
+}
+// The kept materials that apply to this look of the world: for each world key, the one that replaces the library material the look names.
 // One with no mark (a world file's, or an earlier store's) applies to any look. Damaged entries are dropped.
 export function keptWorldMaterials(stored, config) {
-  const kept = [];
-  for (const [role, which] of ROLES) {
-    const m = (Array.isArray(stored) ? stored : []).find(m => object(m) && m[role] === true && (m.replaces === undefined || m.replaces === libraryKey(config, which)));
-    try { if (m) kept.push({replaces: libraryKey(config, which), name: nameOf(m.name), worldGround: role === 'worldGround', worldWater: role === 'worldWater', ...copyMaterial(m)}); } catch (_) {}
+  const kept = [], seen = new Set();
+  for (const m of Array.isArray(stored) ? stored : []) {
+    const key = object(m) ? worldKey(m) : null; if (!key || seen.has(key)) continue;
+    const replaces = worldLibraryKey(config, key);
+    if (m.replaces !== undefined && m.replaces !== replaces) continue;
+    try { kept.push({replaces, name: nameOf(m.name), ...keyFields(key), ...copyMaterial(m)}); seen.add(key); } catch (_) {}
   }
   return kept;
 }
 // The store after an edit: this look's own, beside what the world keeps for the library materials its other looks name.
 export function mergeWorldMaterials(stored, own, config) {
-  const mine = new Set(ROLES.map(([, which]) => libraryKey(config, which)));
-  return [...(Array.isArray(stored) ? stored : []).filter(m => object(m) && typeof m.replaces === 'string' && !mine.has(m.replaces)), ...own];
+  const mine = m => { const key = worldKey(m); return key && m.replaces === worldLibraryKey(config, key); };
+  return [...(Array.isArray(stored) ? stored : []).filter(m => object(m) && 'replaces' in m && !mine(m)), ...own];
 }
-export const worldPair = list => (list ?? []).filter(m => m.worldGround || m.worldWater);
+// The materials a map hands its world (a save's world settings, a world file): every one with a world key.
+export const worldKept = list => (list ?? []).filter(m => worldKey(m));
 // A new map's materials: the world's two.
 export const worldMaterials = config => adoptWorldMaterials(null, config);
 export const duplicateMaterial = (list, slot) => { const m = find(list, slot); return addMaterial(list, m, `${m.name} copy`); };

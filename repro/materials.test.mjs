@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {NODES, LIBRARY, MAX_NODES, MATERIAL_SLOTS, copyMaterial, copyMaterials, blankMaterial, makeNode, orderNodes, nodeTypes, compileMaterial, programKey, programSource, stagePlan,
-  materialReliefBound, materialRenderKey, soloMaterial, controlSpec, controlRange, nodeParams, withWorldMaterials, worldMaterials, adoptWorldMaterials, worldOwnMaterials, keptWorldMaterials, mergeWorldMaterials, worldPair, addMaterial, duplicateMaterial, setMaterial,
+  materialReliefBound, materialRenderKey, soloMaterial, controlSpec, controlRange, nodeParams, withWorldMaterials, worldMaterials, adoptWorldMaterials, worldOwnMaterials, keptWorldMaterials, mergeWorldMaterials, worldKept, addMaterial, duplicateMaterial, setMaterial,
   assignMaterial, deleteMaterial, strokeMaterial, keepStrokeMaterials, materialsInUse, materialUsers, materialText, parseMaterialText, reseedMaterial, materialTint} from '../sculpt-materials.js';
 import {graphPositions, cardHeight, CARD} from '../sculpt-material-graph.js';
 import {savedWorld, copySavedWorld} from '../sculpt-save.js';
@@ -246,7 +246,7 @@ test('the world’s ground and water belong to the world: a map takes them, and 
   let full = fresh; while (full.length < MATERIAL_SLOTS - 1) full = addMaterial(full, blankMaterial(), 'More').materials;
   assert.equal(adoptWorldMaterials(full, mine).length, MATERIAL_SLOTS - 1);
   assert.deepEqual(worldOwnMaterials(fresh.map(m => m.worldWater ? {...m, name: 'My sea'} : m), config).map(m => m.name), ['My sea']);
-  assert.deepEqual(worldPair(taken).map(m => m.slot), [2, 4]);
+  assert.deepEqual(worldKept(taken).map(m => m.slot), [2, 4]);
 });
 
 test('what the world keeps follows the library material a look names, so looks that share one share the edit and others keep their own', () => {

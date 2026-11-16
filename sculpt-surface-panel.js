@@ -182,7 +182,7 @@ export function mountSurfacePanel(host) {
       // A built-in that already draws a role material or its rock type's rock takes it from there (sculpt-material-model.js SURFACE_DRAWABLE).
       const own = builtin && !SURFACE_DRAWABLE.includes(layer.builtin);
       const materialRow = own ? el('p', {className: 'small surface-wide', textContent: `Drawn with ${BUILTIN_SOURCES[layer.builtin]}: set it in ${ROCK_TYPED.includes(layer.builtin) ? 'Rock types' : 'the Materials panel'}.`}) : el('div', {className: 'surface-wide surface-line'}, materialSelect(layer, i));
-      if (material && !own) { const b = el('button', {type: 'button', textContent: 'Edit…', title: 'Open its material in the material editor (this map’s copy)'}); b.onclick = () => host.edit(layer, b); materialRow.append(b); }
+      if (material && !own) { const b = el('button', {type: 'button', textContent: 'Edit…', title: 'Open its material in the material editor (the world’s: every map in this world shows your edit)'}); b.onclick = () => host.edit(layer, b); materialRow.append(b); }
       // Its place in the stack (within its stage) and, for a material layer, removing it: in the open row, so the head keeps room for the name.
       const order = el('div', {className: 'surface-wide surface-line surface-order'}, el('span', {className: 'small', textContent: siblings.length > 1 ? 'Order in its group' : 'Alone in its group'}),
         move(1, '↑ Raise', 'Raise: over the layer above it'), move(-1, '↓ Lower', 'Lower: under the layer below it'));

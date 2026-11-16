@@ -1,4 +1,4 @@
-// The material editor: one full-screen dialog for the map's ground and water materials. The graph fills the screen; beside it sit one
+// The material editor: one full-screen dialog for the map's materials (the world's ground, water, role and surface layer materials, and the map's own). The graph fills the screen; beside it sit one
 // preview and three panes: Controls (what the material publishes, for adjusting it), Node (the selected node) and Palette (the game
 // colors it is reduced to). Every element is in index.html; this fills values and applies edits through the map's own undo and save.
 import {NODES, NODE_TYPES, accepts, snippetNodes, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
