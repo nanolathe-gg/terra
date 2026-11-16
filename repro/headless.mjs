@@ -138,7 +138,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
     : fieldsModule.createGpuFields(common);
   // sculpt.js scriptedScene: the scene's nodes replace the map's, and the fields evaluate them.
   // sculpt.js syncRocks: the renderer's rock table holds the presets strokes choose, and no other.
-  const syncMaterials = () => { const used = materialsInUse(nodes, materials), key = JSON.stringify(used); if (key !== materialKey) { renderer.setMaterials(new Map(used.map(m => [m.slot, m]))); materialKey = key; } };
+  const syncMaterials = () => { const used = materialsInUse(nodes, materials, rocks), key = JSON.stringify(used); if (key !== materialKey) { renderer.setMaterials(new Map(used.map(m => [m.slot, m]))); materialKey = key; } };
   const syncRocks = () => { const used = rocksInUse(nodes, rocks), key = JSON.stringify(used); if (key !== rockKey) { rockKey = key; renderer.setRocks(new Map(used.map(r => [r.slot, r]))); } };
   const play = (list, {ground = true} = {}) => { nodes = keepStrokeMaterials(keepStrokeRocks(engine.sceneNodes(config, list, {ground, seed, settings, tools}), rocks), materials); if (scene_) scene_.nodes = nodes; fields.changed(); syncRocks(); syncMaterials(); return nodes.length; };
   let scene_ = null;

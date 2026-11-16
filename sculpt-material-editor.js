@@ -298,11 +298,13 @@ export function mountMaterialEditor(host) {
   function refreshPictures() {
     const m = material(); if (!dialog.open || !m) return;
     const r = host.renderer(), list = materials(), water = m.worldWater === true, companion = list.find(o => water ? o.worldGround : o.worldWater) ?? m;
+    // A rock material (the world's, or a rock type's) shows on terrain as the hill's rock, over the map's own ground.
+    const rock = m.worldRock === true || (host.rocks?.() ?? []).some(o => o.material === slot), ground = rock ? list.find(o => o.worldGround) ?? null : null;
     const context = [r.variant.toString(), r.colorOverrides], want = view === 'terrain' ? 'terrain' : 'tile', showing = solo && m.nodes.some(n => n.id === solo) ? solo : null;
-    const key = JSON.stringify([materialRenderKey(m), water, materialRenderKey(companion), context, want, showing]);
+    const key = JSON.stringify([materialRenderKey(m), water, materialRenderKey(companion), ground && materialRenderKey(ground), context, want, showing]);
     if (key !== pictureKey) {
       pictureKey = key; $('material-preview').setAttribute('aria-busy', 'true'); $('material-preview-note').textContent = 'Updating…';
-      preview.picture(r, m, companion, {view: want, solo: showing}, (error, result) => {
+      preview.picture(r, m, companion, {view: want, solo: showing, ground}, (error, result) => {
         if (error) { pictureKey = ''; $('material-preview-note').textContent = 'No preview: ' + error.message; $('material-preview').setAttribute('aria-busy', 'false'); return; }
         picture = result; drawPicture(); $('material-preview').setAttribute('aria-busy', String(result.draft));
         $('material-preview-note').textContent = result.draft ? 'Finishing the palette…' : showing ? 'The selected node alone, unlit.' : result.tiles ? `${result.tiles} different 32-px tiles in one repeat (256 at most).` : 'Under this world’s sun: sea, shore, a plain and a hill.';
@@ -333,10 +335,11 @@ export function mountMaterialEditor(host) {
     if (solo && !m.nodes.some(n => n.id === solo)) solo = null;
     // The Node preview follows the selection; selecting the output node, a frame or nothing keeps the last node shown.
     if (solo && primary && node()?.type !== 'output') solo = primary;
-    const users = materialUsers(host.strokes(), list, slot), strokes = users.strokes ? `${users.strokes} stroke${users.strokes > 1 ? 's' : ''}` : '';
-    $('material-used').textContent = 'Used by: ' + ([users.world && 'the world’s ' + users.world, strokes].filter(Boolean).join(', ') || 'nothing yet');
+    const users = materialUsers(host.strokes(), list, slot, host.rocks?.() ?? []), strokes = users.strokes ? `${users.strokes} stroke${users.strokes > 1 ? 's' : ''}` : '';
+    const rocks = users.rocks.length ? `rock type${users.rocks.length > 1 ? 's' : ''} ${users.rocks.join(', ')}` : '';
+    $('material-used').textContent = 'Used by: ' + ([users.world && 'the world’s ' + users.world, rocks, strokes].filter(Boolean).join(', ') || 'nothing yet');
     if (document.activeElement !== $('material-name')) $('material-name').value = m.name;
-    $('material-use-ground').disabled = m.worldGround || m.worldWater; $('material-use-water').disabled = m.worldWater || m.worldGround; $('material-use-high').disabled = m.worldHigh || m.worldGround || m.worldWater;
+    $('material-use-ground').disabled = m.worldGround || m.worldWater; $('material-use-water').disabled = m.worldWater || m.worldGround; $('material-use-high').disabled = m.worldHigh || m.worldGround || m.worldWater || m.worldRock; $('material-use-rock').disabled = m.worldRock || m.worldGround || m.worldWater || m.worldHigh;
     $('material-delete').disabled = m.worldGround || m.worldWater; $('material-delete').title = $('material-delete').disabled ? 'The world’s ground and water cannot be deleted. Assign another material first.' : '';
     for (const id of ['material-duplicate', 'material-paste', 'material-add']) { $(id).disabled = full; $(id).title = full ? `The map already has ${MATERIAL_SLOTS - 1} materials.` : ''; }
     $('material-reset').disabled = !LIBRARY[m.source]; $('material-reset').title = LIBRARY[m.source] ? `Back to “${LIBRARY[m.source].name}” from the library. Undo brings your version back.` : 'This material did not come from the library.';
@@ -362,6 +365,7 @@ export function mountMaterialEditor(host) {
   $('material-use-ground').onclick = attempt(() => { update(assignMaterial(materials(), slot, 'worldGround')); commit(); });
   $('material-use-water').onclick = attempt(() => { update(assignMaterial(materials(), slot, 'worldWater')); commit(); });
   $('material-use-high').onclick = attempt(() => { update(assignMaterial(materials(), slot, 'worldHigh')); commit(); });
+  $('material-use-rock').onclick = attempt(() => { update(assignMaterial(materials(), slot, 'worldRock')); commit(); });
   $('material-copy').onclick = async () => { try { await navigator.clipboard.writeText(materialText(material())); host.status('Copied the material.'); note(''); } catch (e) { note(e.message); } };
   $('material-paste').onclick = async () => { try { const m = parseMaterialText(await navigator.clipboard.readText()); addToMap(m, m.name); } catch (e) { note(e.message); } };
   $('material-reseed').onclick = attempt(() => change(m => { m.seed = reseedMaterial(m).seed; }));

@@ -5,7 +5,7 @@ import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
-import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldPair,keepStrokeMaterials,materialsInUse,deleteMaterial,materialTint} from './sculpt-materials.js';
+import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldPair,keepStrokeMaterials,materialsInUse,deleteMaterial,materialTint,assignMaterial} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe} from './sculpt-rock-presets.js';
 import {KNOBS,LOW_GROUND_RGB,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
@@ -694,7 +694,7 @@ function evaluate(from=0,rect=null) {
 // The renderer holds the materials in use: the world's ground and water, and those a visible stroke chose.
 function syncMaterials() {
   if (!renderer) return;
-  const used=materialsInUse(nodes,mapMaterials),key=JSON.stringify(used);
+  const used=materialsInUse(nodes,mapMaterials,mapRocks),key=JSON.stringify(used);
   if (key===materialUseKey) return;
   renderer.setMaterials(new Map(used.map(m=>[m.slot,m]))); materialUseKey=key; worldChanged({stage:'C',world:false}); schedule();
 }
@@ -731,11 +731,11 @@ function syncGroundChips(kind=groundChipKind) {
 }
 for (let v=-1; v<MATERIAL_CHOICES; v++) $('lf-ground-chip-'+v).onclick=()=>{ const select=$('lf-ground'); if (select.value===String(v)) return; select.value=String(v); select.dispatchEvent(new Event('input',{bubbles:true})); select.dispatchEvent(new Event('change',{bubbles:true})); syncGroundChips(); };
 function editMaterials(materials) {
-  const used=materialsInUse(nodes,materials);renderer.setMaterials(new Map(used.map(m=>[m.slot,m])));
+  const used=materialsInUse(nodes,materials,mapRocks);renderer.setMaterials(new Map(used.map(m=>[m.slot,m])));
   mapMaterials=materials;materialUseKey=JSON.stringify(used);syncMaterialChoices();worldChanged({stage:'C',world:false});persistLater();schedule();
 }
 function removeMaterial(slot) {
-  const gone=deleteMaterial(mapMaterials,nodes,slot);cancelWeather();nodes=gone.nodes;editMaterials(gone.materials);evaluate(0);checkpoint();queueWeather();updateControls();
+  const gone=deleteMaterial(mapMaterials,nodes,slot,mapRocks);cancelWeather();nodes=gone.nodes;editMaterials(gone.materials);evaluate(0);checkpoint();queueWeather();updateControls();
 }
 let rockUseBounds=new Map();
 const mergeWorldRect=(a,b)=>!a?b:!b?a:{x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.max(a.x+a.width,b.x+b.width)-Math.min(a.x,b.x),height:Math.max(a.y+a.height,b.y+b.height)-Math.min(a.y,b.y)};
@@ -1906,7 +1906,7 @@ function buildKnobs() {
     syncColumnPanel();syncWorldControls();
   };
   mountRockPanel();
-  materialEditor?.dispose();materialEditor=mountMaterialEditor({suspend:on=>{if(!on&&materialTerrainDirty){materialTerrainDirty=false;evaluate(0);}mapCanvas?.setSuspended(on);if(!on&&materialWeatherPending)queueWeather();},materials:()=>mapMaterials,strokes:()=>nodes,renderer:()=>renderer,edit:editMaterials,delete:removeMaterial,checkpoint:()=>checkpoint(true),status});
+  materialEditor?.dispose();materialEditor=mountMaterialEditor({suspend:on=>{if(!on&&materialTerrainDirty){materialTerrainDirty=false;evaluate(0);}mapCanvas?.setSuspended(on);if(!on&&materialWeatherPending)queueWeather();},materials:()=>mapMaterials,strokes:()=>nodes,rocks:()=>mapRocks,renderer:()=>renderer,edit:editMaterials,delete:removeMaterial,checkpoint:()=>checkpoint(true),status});
 }
 // The facts the World panel enables a row by (sculpt-knobs.js worldPanelValues, which worldControlRequirement reads).
 const panelFacts=() => ({config,renderer,nodes,materials:mapMaterials,colors:worldColors(),weathering:weatherOn(),materialWeathering:surfaceValues()['material-weathering']});
@@ -1989,7 +1989,25 @@ function syncRockColors() {
   $('rock-colors-note').textContent=world?'The world\u2019s rock wears the world\u2019s colors: set its rock in Colors (Rock) and its beds in the Rock column\u2019s material slot colors, under Layers; Absorption here is the world\u2019s own.'
     :!own?.rock||!own?.beds||!own?.absorb?'A color under World\u2019s colors follows the world\u2019s: clear World\u2019s colors to choose this rock type\u2019s own.':'';
   $('rock-colors-note').hidden=!$('rock-colors-note').textContent;
+  syncRockMaterial();
 }
+// The selected rock type's surface material (grain, grit, shine): on the world's rock, the map's world rock material (choosing one assigns
+// that role); on another, the world's rock material or any of the map's other materials.
+function syncRockMaterial() {
+  const select=$('rock-material'),world=rockSelected===0,rock=mapRocks.find(r=>r.slot===rockSelected),own=mapMaterials.find(m=>m.worldRock);
+  const choices=mapMaterials.filter(m=>!m.worldGround&&!m.worldWater&&!m.worldHigh&&(world?true:!m.worldRock));
+  select.replaceChildren(...(world?[]:[new Option(own?`World rock material (${own.name})`:'World rock material (none)','0')]),...choices.map(m=>new Option(m.name,String(m.slot))));
+  if(world&&!own)select.prepend(new Option('None (flat color)',''));
+  select.value=world?(own?String(own.slot):''):String(rock?.material||0);
+  $('rock-material-note').textContent=world?'The world\u2019s rock material: what every rock type without its own shows. Edit it in Materials, in the top bar.':'';
+  $('rock-material-note').hidden=!$('rock-material-note').textContent;
+}
+$('rock-material').onchange=()=>{
+  const v=Number($('rock-material').value);
+  if(rockSelected===0){ if(v>0){editMaterials(assignMaterial(mapMaterials,v,'worldRock'));checkpoint();} }
+  else { mapRocks=mapRocks.map(r=>r.slot===rockSelected?(({material,...o})=>v>0?{...o,material:v}:o)(r):r); rockUseKey=''; syncRocks(); syncMaterials(); worldChanged({stage:'C',world:false}); persistLater(); checkpoint(); }
+  materialEditor?.refresh(); syncRockMaterial();
+};
 // A color of the selected preset changed (live while the picker moves; one undo step when it is let go).
 function setPresetColors(colors,commit) {
   if(rockSelected===0)return;

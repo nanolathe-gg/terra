@@ -124,7 +124,7 @@ export function rockByKey(rocks,key,worldKey=''){
  const rock=rocks.find(r=>r.key===key);
  return rock?rock.slot:key===worldKey?0:-1;
 }
-const NAME_MAX=40,ROCK_FIELDS=['slot','name','key','knobs','column','colors'],KEY=/^[a-z][a-z0-9_-]{0,39}$/;
+const NAME_MAX=40,ROCK_FIELDS=['slot','name','key','knobs','column','colors','material'],KEY=/^[a-z][a-z0-9_-]{0,39}$/;
 // A preset's key: null, or a short lowercase name ('soil', 'basalt').
 function checkKey(key){if(key==null)return null;if(typeof key!=='string'||!KEY.test(key))throw Error('A rock preset\'s key is a short lowercase name, such as soil or basalt.');return key;}
 // A key for a preset made now: `key`, unless another preset of the map carries it (keys name one preset each).
@@ -158,7 +158,9 @@ export function copyRocks(value){
   const key=checkKey(r.key);
   if(key&&keys.has(key))throw Error(`Two rock presets carry the key ${key}: a key names one preset.`);
   if(key)keys.add(key);
-  return {slot:r.slot,name:checkName(r.name),key,knobs:copyRockSettings(r.knobs??{}),column:checkColumn(r.column),colors:checkColors(r.colors)};
+  // Its surface material: a map material's slot (1 to 15), or none for the world's rock material.
+  if(r.material!=null&&(!Number.isInteger(r.material)||r.material<0||r.material>15))throw Error('A rock preset\'s material is a material slot, 1 to 15.');
+  return {slot:r.slot,name:checkName(r.name),key,knobs:copyRockSettings(r.knobs??{}),column:checkColumn(r.column),colors:checkColors(r.colors),...(r.material>0?{material:r.material}:{})};
  }).sort((a,b)=>a.slot-b.slot);
 }
 const freeSlot=rocks=>{for(let s=1;s<ROCK_SLOTS;s++)if(!rocks.some(r=>r.slot===s))return s;throw Error('A map holds at most 15 rock presets besides the world\'s own.');};

@@ -124,7 +124,7 @@ test('adding, assigning, deleting and what strokes keep', () => {
   const stroke = slot => ({kind: 'landform', params: {groundPreset: slot}}), nodes = [stroke(3), stroke(0), stroke(-1), stroke(2), stroke(6), {kind: 'ground'}];
   assert.deepEqual(nodes.map(n => strokeMaterial(n, list)), [3, 0, -1, -1, -1, -1], 'water and missing slots are not ground choices');
   assert.deepEqual(materialsInUse(nodes, list).map(m => m.slot), [1, 2, 3]);
-  assert.deepEqual(materialUsers(nodes, list, 3), {world: '', strokes: 1}); assert.equal(materialUsers(nodes, list, 1).world, 'ground');
+  assert.deepEqual(materialUsers(nodes, list, 3), {rocks: [], world: '', strokes: 1}); assert.deepEqual(materialUsers(nodes, list, 3, [{slot: 1, name: 'Granite', material: 3}]).rocks, ['Granite']); assert.throws(() => deleteMaterial(list, nodes, 3, [{slot: 1, name: 'Granite', material: 3}]), /surface of the rock type Granite/); assert.equal(materialUsers(nodes, list, 1).world, 'ground');
   assert.throws(() => deleteMaterial(list, nodes, 1), /world’s ground/);
   const gone = deleteMaterial(list, nodes, 3); assert.equal(gone.nodes[0].params.groundPreset, -1); assert.equal(gone.materials.length, 3);
   assert.equal(keepStrokeMaterials(nodes, list)[0], nodes[0], 'an unchanged stroke is the same object');

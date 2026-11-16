@@ -1176,6 +1176,8 @@ export class TerrainRenderer {
         const shine = SHINE_ROCK.indexOf(key), m = table.members.get(shine >= 0 ? 'shineRock' : key);
         if (m && m.kind === 'f' && Number.isFinite(Number(value))) this.uniformView.setFloat32(at + m.offset + Math.max(shine, 0) * 4, Number(value), true);
       }
+      // Its surface material (a material slot; 0 the world's rock material).
+      this.uniformView.setInt32(at + table.members.get('material').offset, Number.isInteger(rock.material) ? rock.material : 0, true);
       // Its own colors where it has them ('#rrggbb'): row 0 the rock's (a = 1, chosen), rows 1-5 its beds' slots; the rest stay slot 0's.
       const colors = table.members.get('rockColors'), row = (k, hex) => [1, 3, 5].forEach((i, c) => this.uniformView.setFloat32(at + colors.offset + k * 16 + c * 4, parseInt(hex.slice(i, i + 2), 16) / 255, true));
       if (rock.colors?.rock) { row(0, rock.colors.rock); this.uniformView.setFloat32(at + colors.offset + 12, 1, true); }
