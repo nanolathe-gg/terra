@@ -544,7 +544,7 @@
   "deposit": {"params": {"look": "blades", "blades": 5, "bladeLen": 15, "bladeWidth": 12, "fan": 1, "core": 11, "halo": 0.42, "haloSat": 1, "reach": 1.1, "rimDark": 0.3}, "vary": {"reach": [0.83, 1.65], "haloRough": [4, 10]}}
  },
  "world": {
-    "materials": {"ground": "moon-ground", "water": "moon-water", "rock": "moon-rock", "slope": "moon-slope", "debris": "moon-debris", "extra": ["moon-mare"], "soil": "moon-soil", "snow": "moon-snow", "moss": "moon-moss", "sand": "moon-sand", "band": "moon-band"},
+    "materials": {"ground": "moon-ground", "water": "moon-water", "rock": "moon-rock", "slope": "moon-slope", "debris": "moon-debris", "extra": ["moon-mare"], "soil": "moon-soil", "snow": "moon-snow", "moss": "moon-moss", "sand": "moon-sand", "band": "moon-band", "crystal": "crystals"},
     "knobDefaults": {
         "looseSupply": 0.1,
         "looseSize": 3.5,
@@ -606,87 +606,43 @@
    "recipes": {
 
     "pitted": {
-
      "label": "Pocked rubble",
-
+     "material": "moon-pitted",
      "knobs": {
-
       "faceCrease": 6,
-
       "faceCreaseSize": 5,
-
       "faceShade": 1,
-
       "faceRock": 1,
-
       "rockFaceFrom": 0.4,
-
       "pockmark": 1,
-
       "pockSize": 5,
-
       "moonCups": 0,
-
       "moonRibs": 0,
-
       "moonFolds": 0,
-
       "banding": 0.3
-
-     },
-
-     "colors": {
-
-      "rock": "#5b5b59"
-
      }
-
     },
 
     "cracked": {
-
      "label": "Streaked crater wall",
-
+     "material": "moon-cracked",
      "knobs": {
-
       "faceScratch": 6,
-
       "faceScratchSize": 4,
-
       "faceScratchLength": 100,
-
       "faceCrease": 1,
-
       "faceShade": 1,
-
       "shineRock": 0,
-
       "shineRockSharp": 24,
-
       "shineRockRough": 0,
-
       "shineRockScale": 6,
-
       "crackSeverity": 0.35,
-
       "moonCups": 0,
-
       "moonRibs": 0,
-
       "moonFolds": 0,
-
       "banding": 0.3,
-
       "pockmark": 0
-
-     },
-
-     "colors": {
-
-      "rock": "#747472"
-
      }
-
     }
 
    }

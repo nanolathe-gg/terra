@@ -5,7 +5,7 @@ import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
-import {materialColor,recolorMaterial,setMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
+import {materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
 import {KNOBS,LOW_GROUND_RGB,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
@@ -696,7 +696,8 @@ function evaluate(from=0,rect=null) {
 // The renderer holds the materials in use: the world's ground and water, and those a visible stroke chose.
 function syncMaterials() {
   if (!renderer) return;
-  const used=materialsInUse(nodes,mapMaterials,mapRocks),key=JSON.stringify(used);
+  // The cache holds what draws: the world's surfaces, the strokes' materials and those of the rock types a shown stroke chooses.
+  const used=materialsInUse(nodes,mapMaterials,rocksInUse(nodes,mapRocks)),key=JSON.stringify(used);
   if (key===materialUseKey) return;
   // Past the cache budget (sculpt-materials.js materialCacheUsage) the renderer keeps the materials it holds and the status line says why.
   try { renderer.setMaterials(new Map(used.map(m=>[m.slot,m]))); } catch (error) { status(error.message); return; }
@@ -789,7 +790,7 @@ function surfaceHost() {
   };
 }
 function editMaterials(materials) {
-  const used=materialsInUse(nodes,materials,mapRocks);renderer.setMaterials(new Map(used.map(m=>[m.slot,m])));
+  const used=materialsInUse(nodes,materials,rocksInUse(nodes,mapRocks));renderer.setMaterials(new Map(used.map(m=>[m.slot,m])));
   mapMaterials=materials;materialUseKey=JSON.stringify(used);syncMaterialChoices();surfacePanel?.refresh();worldChanged({stage:'C',world:false});persistLater();schedule();
 }
 function removeMaterial(slot) {
@@ -1504,7 +1505,7 @@ function loadSketch(s,carry=false) {
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
   syncDrawInputs();
   restoreColumn(column);syncColumnPanel();
-  mapRocks=rocks??worldRocks(config); mapMaterials=surfaceMaterials(config.surface,adoptWorldMaterials(materials,config,{carried:carry}),{config,nodes:next,rocks:mapRocks}); if(!rocks){const given=giveRockMaterials(mapRocks,mapMaterials,mapRocks.map(r=>r.slot),config);mapRocks=given.rocks;mapMaterials=given.materials;} syncMaterialChoices();materialEditor?.refresh(); rockSelected=0; syncRockChoices(); syncRockPanel(); nodes=keepStrokeMaterials(keepStrokeRocks(next,mapRocks),mapMaterials); selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
+  mapRocks=rocks??worldRocks(config); mapMaterials=surfaceMaterials(config.surface,adoptWorldMaterials(materials,config,{carried:carry}),{config,nodes:next,rocks:mapRocks}); if(!rocks){const given=giveRockMaterials(mapRocks,mapMaterials,mapRocks.map(r=>r.slot),config);mapRocks=given.rocks;mapMaterials=given.materials;noteMissedRocks(given);} syncMaterialChoices();materialEditor?.refresh(); rockSelected=0; syncRockChoices(); syncRockPanel(); nodes=keepStrokeMaterials(keepStrokeRocks(next,mapRocks),mapMaterials); selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
   // The tools' cards still on a world's preset name their rock among this map's presets, now that the map's list is in.
   for (const id of ids) if (Object.hasOwn(config.worldShapes||{},toolSettings[id]?.preset)) toolSettings[id]=shapeCard(id,toolSettings[id].preset);
   showTool(toolSettings[tool]); updateControls(); surfacePanel?.refresh();
@@ -1839,11 +1840,11 @@ function commitColumn(){if(!columnEditing)return;columnEditing=false;checkpoint(
 function defaultColor(key) {
   if(key==='vegetation')return (config.material?.groundCover?.color||[128,128,128]).map(v=>v/255);
   const flower=/^flower([1-4])$/.exec(key);if(flower)return (config.material?.groundCover?.plants?.flowers?.palette?.[Number(flower[1])-1]?.slice(0,3)||[255,255,255]).map(v=>v/255);
-  const m=renderer.means,w=config.water||{},mat=config.material||{};
+  const w=config.water||{};
   const rgb=v => v&&v.map(x => x/255);
   const strata=columnColors(config.column,renderer.means.rock).map(rgb);
-  return {ground:m.ground,slope:m.slope,rock:m.rock,sand:m.rock&&m.rock.map(v => v+(1-v)*.3),beach:rgb(mat.beachRGB),shallow:rgb(w.shallowRGB),
-    crystal:(config.material?.crystalRGB||[110,150,225]).map(v => v/255),low:rgb(LOW_GROUND_RGB),sun:[1,1,1],sky:[1,1,1],strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
+  return {shallow:rgb(w.shallowRGB),
+    low:rgb(LOW_GROUND_RGB),sun:[1,1,1],sky:[1,1,1],strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
 }
 function goToWorld(base,id,extra) {
   worldInputQueue.flush();
@@ -1971,7 +1972,13 @@ function buildKnobs() {
   syncWorldControls=()=>{sync();$('rock-preset').value=rockSelected>0?rockRecipeFor(mapRocks.find(r=>r.slot===rockSelected)):rockPresetFor(rockSettings(),config.column);syncRockColors();materialEditor?.refreshPreview();};
   $('rock-preset').onchange=()=>{
     const key=$('rock-preset').value;
-    if(rockSelected>0){if(!key)return;editRocks(setRock(mapRocks,rockSelected,recipeRock(key)));checkpoint(true);syncRockPanel();return;}
+    // A preset started from a recipe takes its numbers, beds and colors, and its rock material (the recipe's color): the map's copy of it.
+    if(rockSelected>0){
+      if(!key)return;
+      const slot=rockSelected,rocks=setRock(mapRocks,slot,recipeRock(key,config)).map(r=>r.slot===slot?(({material,...o})=>o)(r):r);
+      const given=giveRockMaterials(rocks,mapMaterials,[slot],config,()=>key);noteMissedRocks(given);
+      if(given.materials!==mapMaterials)editMaterials(given.materials);editRocks(given.rocks);checkpoint(true);syncRockPanel();return;
+    }
     const p=ROCK_PRESETS[key]||(key==='soil'?{knobs:recipeRock(key).knobs,sections:null}:null);if(!p)return;
     setRockSettings(p.knobs);
     if(p.sections)editColumn({...columnForEdit(),sections:structuredClone(p.sections)});   // Smooth soil keeps the world's beds
@@ -2040,7 +2047,6 @@ function syncRockPanel() {
   const list=$('rock-presets'),world=rockSelected===0,full=mapRocks.length>=ROCK_SLOTS-1;
   list.replaceChildren(new Option(`${worldRockName(config)} (the world's rock)`,'0'),...mapRocks.map(r=>new Option(r.name,String(r.slot))));
   list.value=String(rockSelected);
-  const rockHex=slot=>mapRocks.find(r=>r.slot===slot)?.colors?.rock||renderer.slotColors(0).rock;
   const focusedChip=$('rock-chips').contains(document.activeElement);
   $('rock-chips').replaceChildren(...[...list.options].map(option=>{
     const slot=Number(option.value),chip=document.createElement('button'),swatch=document.createElement('span'),name=slot===0?worldRockName(config):option.textContent;
@@ -2062,23 +2068,53 @@ function syncRockPanel() {
   for(const key of ROCK_KEYS){const input=$('knob-'+key);if(!input)continue;const v=values?values[key]:Number(renderer.variant.get(key)??config.defaults[key]);if(!Number.isFinite(v))continue;input.value=v;input.closest('[data-knob]').querySelector('output').textContent=+v.toFixed(3);}
   syncWorldControls();syncColumnPanel();syncRockColors();
 }
-// The selected preset's colors: its own, or the world's where it takes them (World's colors), each with the palette entry the game draws.
+// Rock types the map had no room to give their own material (giveRockMaterials): they show the world's rock material, and the status says so.
+function noteMissedRocks(given) { if(given.missed.length)status(`No room for the rock material of ${given.missed.join(', ')}: ${given.missed.length>1?'they show':'it shows'} the world\u2019s rock material. Remove a material to make room.`); }
+// A rock type's material: its own, else the world's rock material (slot 0's), or null when the world has none.
+function rockMaterialOf(slot) {
+  const own=slot>0?mapRocks.find(r=>r.slot===slot)?.material:0;
+  return (own>0&&mapMaterials.find(m=>m.slot===own))||mapMaterials.find(m=>m.worldRock)||null;
+}
+// A rock type's color as its faces wear it: its material's Color ('#rrggbb'), the draw's fixed gray without one.
+const hexOfRgb=rgb=>'#'+rgb.map(v=>Math.round(Math.min(1,Math.max(0,v))*255).toString(16).padStart(2,'0')).join('');
+function rockHex(slot) { const m=rockMaterialOf(slot); return m?hexOfRgb(materialColor(m)):'#545454'; }
+// The selected rock type's Color picked: its material's Color (recolorMaterial). The world's rock recolors the world's rock material; another
+// rock type recolors its own material, or first takes its own copy of the one it shares (the world's rock material, or one another rock type,
+// a world surface or a layer draws), so no other surface moves with it.
+function setRockColor(hex,commit) {
+  const slot=rockSelected,m=rockMaterialOf(slot);if(!m)return;
+  const rgb=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255),rock=mapRocks.find(r=>r.slot===slot);
+  const shared=slot>0&&(!(rock.material>0)||roleOf(m)||m.worldLayer||mapRocks.some(r=>r!==rock&&r.material===m.slot));
+  try{
+    if(!shared)editMaterials(setMaterial(mapMaterials,m.slot,recolorMaterial(m,rgb)));
+    else{
+      const added=addMaterial(mapMaterials,recolorMaterial(m,rgb),rock.name);
+      mapRocks=mapRocks.map(r=>r.slot===slot?{...r,material:added.slot}:r);editMaterials(added.materials);rockUseKey='';syncRocks();materialEditor?.refresh();
+    }
+  }catch(error){status(error.message);return;}
+  for(const swatch of [$('rock-current-swatch'),$('rock-chips').querySelector('[aria-checked="true"] .rock-swatch')])if(swatch)swatch.style.background=rockHex(slot);
+  const snap=renderer.paletteNearest(hex);$('rock-color-snap').style.background=snap;$('rock-color-snap').title=$('rock-color-snap').ariaLabel=`Palette entry ${snap}`;
+  if(commit){checkpoint(true);syncRockMaterial();}
+}
+// The selected preset's colors: its rock's (its material's Color), and its beds' and absorption's own, or the world's where it takes them
+// (World's colors), each with the palette entry the game draws.
 const BED_COLOR_IDS=[1,2,3,4,5].map(i=>'rock-bed-'+i);
 function syncRockColors() {
   if(!renderer||!$('rock-color'))return;
   const world=rockSelected===0,rock=mapRocks.find(r=>r.slot===rockSelected),own=rock?.colors,shown=renderer.slotColors(0);
   const paint=(id,hex,off)=>{$(id).value=hex;$(id).disabled=off;const snap=renderer.paletteNearest(hex);$(id+'-snap').style.background=snap;$(id+'-snap').title=$(id+'-snap').ariaLabel=`Palette entry ${snap}`;};
-  paint('rock-color',own?.rock||shown.rock,world||!own?.rock);
-  for(const swatch of [$('rock-current-swatch'),$('rock-chips').querySelector('[aria-checked="true"] .rock-swatch')])if(swatch)swatch.style.background=own?.rock||shown.rock;
+  if(document.activeElement!==$('rock-color'))paint('rock-color',rockHex(rockSelected),!rockMaterialOf(rockSelected));
+  for(const swatch of [$('rock-current-swatch'),$('rock-chips').querySelector('[aria-checked="true"] .rock-swatch')])if(swatch)swatch.style.background=rockHex(rockSelected);
   BED_COLOR_IDS.forEach((id,k)=>paint(id,own?.beds?.[k]||shown.beds[k],world||!own?.beds));
-  $('rock-color-world').checked=world||!own?.rock;$('rock-beds-world').checked=world||!own?.beds;
-  $('rock-color-world').disabled=$('rock-beds-world').disabled=world;
+  $('rock-beds-world').checked=world||!own?.beds;
+  $('rock-beds-world').disabled=world;
   // The absorption color (Rock translucency): a preset's own or the world's; on the world's rock, the world's choice (none: the rock's own hue).
   const worldAbsorb=mergedColors().absorb||null;
   paint('rock-absorb',world?worldAbsorb||shown.absorb:own?.absorb||shown.absorb,world?!worldAbsorb:!own?.absorb);
   $('rock-absorb-world').checked=world?!worldAbsorb:!own?.absorb;
-  $('rock-colors-note').textContent=world?'The world\u2019s rock wears the world\u2019s colors: set its rock in Colors (Rock) and its beds in the Rock column\u2019s material slot colors, under Layers; Absorption here is the world\u2019s own.'
-    :!own?.rock||!own?.beds||!own?.absorb?'A color under World\u2019s colors follows the world\u2019s: clear World\u2019s colors to choose this rock type\u2019s own.':'';
+  $('rock-colors-note').textContent=!rockMaterialOf(rockSelected)?'The world has no rock material, so its rock is a plain gray: choose a Surface material to give it a Color.'
+    :world?'The world\u2019s rock beds take the Rock column\u2019s material slot colors, under Layers; Absorption here is the world\u2019s own.'
+    :!own?.beds||!own?.absorb?'A color under World\u2019s colors follows the world\u2019s: clear World\u2019s colors to choose this rock type\u2019s own.':'';
   $('rock-colors-note').hidden=!$('rock-colors-note').textContent;
   syncRockMaterial();
 }
@@ -2088,7 +2124,7 @@ function syncRockMaterial() {
   const select=$('rock-material'),world=rockSelected===0,rock=mapRocks.find(r=>r.slot===rockSelected),own=mapMaterials.find(m=>m.worldRock);
   const choices=mapMaterials.filter(m=>world?!roleOf(m)||m.worldRock:!roleOf(m));   // a material that draws another of the world's surfaces is not offered
   select.replaceChildren(...(world?[]:[new Option(own?`World rock material (${own.name})`:'World rock material (none)','0')]),...choices.map(m=>new Option(m.name,String(m.slot))));
-  if(world&&!own)select.prepend(new Option('None (flat color)',''));
+  if(world&&!own)select.prepend(new Option('None (plain gray)',''));
   select.value=world?(own?String(own.slot):''):String(rock?.material||0);
   $('rock-material-note').textContent=world?'The world\u2019s rock material: what every rock type without its own shows. Edit it in Materials, in the top bar.':'';
   $('rock-material-note').hidden=!$('rock-material-note').textContent;
@@ -2097,7 +2133,7 @@ $('rock-material').onchange=()=>{
   const v=Number($('rock-material').value);
   if(rockSelected===0){ if(v>0){ try{editMaterials(assignMaterial(mapMaterials,v,'worldRock'));checkpoint();}catch(error){status(error.message);} } }
   else { mapRocks=mapRocks.map(r=>r.slot===rockSelected?(({material,...o})=>v>0?{...o,material:v}:o)(r):r); rockUseKey=''; syncRocks(); syncMaterials(); worldChanged({stage:'C',world:false}); persistLater(); checkpoint(); }
-  materialEditor?.refresh(); syncRockMaterial();
+  materialEditor?.refresh(); syncRockColors();
 };
 // A color of the selected preset changed (live while the picker moves; one undo step when it is let go).
 function setPresetColors(colors,commit) {
@@ -2110,10 +2146,8 @@ function mountRockPanel() {
   $('rock-presets').onchange=()=>selectRock(Number($('rock-presets').value));
   const shown=()=>renderer.slotColors(0);
   // World's colors cleared: the preset starts from the colors it shows (the world's), so nothing changes until one is moved.
-  $('rock-color-world').onchange=()=>setPresetColors({rock:$('rock-color-world').checked?null:shown().rock},true);
   $('rock-beds-world').onchange=()=>setPresetColors({beds:$('rock-beds-world').checked?null:shown().beds},true);
-  const rockColor=commit=>setPresetColors({rock:$('rock-color').value},commit);
-  $('rock-color').oninput=()=>rockColor(false);$('rock-color').onchange=()=>rockColor(true);
+  $('rock-color').oninput=()=>setRockColor($('rock-color').value,false);$('rock-color').onchange=()=>setRockColor($('rock-color').value,true);
   const bedColors=commit=>setPresetColors({beds:BED_COLOR_IDS.map(id=>$(id).value)},commit);
   for(const id of BED_COLOR_IDS){$(id).oninput=()=>bedColors(false);$(id).onchange=()=>bedColors(true);}
   // The absorption color: a preset's (as its other colors), or on the world's rock the world's own 'absorb' color (saved with the world's colors).
@@ -2123,7 +2157,7 @@ function mountRockPanel() {
   $('rock-absorb-world').onchange=()=>{const off=$('rock-absorb-world').checked;if(rockSelected===0){worldAbsorb(off?null:shown().absorb);worldInputQueue.end();}else setPresetColors({absorb:off?null:shown().absorb},true);};
   $('rock-add').onchange=()=>{
     const key=$('rock-add').value;$('rock-add').value='';if(!key)return;
-    try{const added=addRock(mapRocks,key,worldRockName(config),config),given=giveRockMaterials(added.rocks,mapMaterials,[added.slot],config);if(given.materials!==mapMaterials)editMaterials(given.materials);added.rocks=given.rocks;editRocks(added.rocks);selectRock(added.slot);checkpoint(true);status(`Added the rock preset ${mapRocks.find(r=>r.slot===added.slot).name}.`);}catch(err){rockNote(err.message);}
+    try{const added=addRock(mapRocks,key,worldRockName(config),config),given=giveRockMaterials(added.rocks,mapMaterials,[added.slot],config);noteMissedRocks(given);if(given.materials!==mapMaterials)editMaterials(given.materials);added.rocks=given.rocks;editRocks(added.rocks);selectRock(added.slot);checkpoint(true);status(`Added the rock preset ${mapRocks.find(r=>r.slot===added.slot).name}.`);}catch(err){rockNote(err.message);}
   };
   $('rock-duplicate').onclick=()=>{
     try{const copy=duplicateRock(mapRocks,rockSelected,selectedRock());editRocks(copy.rocks);selectRock(copy.slot);checkpoint(true);}catch(err){rockNote(err.message);}
@@ -2348,7 +2382,7 @@ async function boot() {
     if (worldId!==config.biomeId) $('world-title').textContent=worlds[worldId].name;
     addDefaults(experiment,config.defaults);
     borrowBeach(config,experiment);   // a beach another world lends (World, Ground): before the renderer and the panel read the world's layers
-    buildShapeOptions(); mapMaterials=worldMaterials(config); mapRocks=worldRocks(config); {const given=giveRockMaterials(mapRocks,mapMaterials,mapRocks.map(r=>r.slot),config);mapRocks=given.rocks;mapMaterials=given.materials;} syncMaterialChoices(); syncRockChoices(); syncRockAdd(); buildToolbar();
+    buildShapeOptions(); mapMaterials=worldMaterials(config); mapRocks=worldRocks(config); {const given=giveRockMaterials(mapRocks,mapMaterials,mapRocks.map(r=>r.slot),config);mapRocks=given.rocks;mapMaterials=given.materials;noteMissedRocks(given);} syncMaterialChoices(); syncRockChoices(); syncRockAdd(); buildToolbar();
     // A new map starts with the world's tools, on the first of them where the world has no Plateau.
     if (!toolIds().has(tool)) tool=firstTool();
     for (const id of toolIds()) toolSettings[id]=toolCard(id);

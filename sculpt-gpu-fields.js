@@ -1,4 +1,5 @@
 import {terrainAllocation} from './sculpt-memory.js';
+import {MATERIAL_SLOTS} from './sculpt-materials.js';
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {isRiver, isBraided, riverWidth, riverCurvature} from './sculpt-river.js';
@@ -93,7 +94,7 @@ const WATER_PLANES = [['waterDeep', 10]];
 export const ROCK_PLANE = 20;
 const rockClaim = q => { const k = Math.round(q.rockPreset ?? -1); return k >= 0 && k < 16 ? [[ROCK_PLANE, k + 1, 1, 1]] : []; };
 export const GROUND_PLANE = 21;
-const groundClaim = q => { const k = q.groundPreset ?? -1; return Number.isInteger(k) && k >= 0 && k < 16 ? [[GROUND_PLANE, k + 1, 1, 1]] : []; };
+const groundClaim = q => { const k = q.groundPreset ?? -1; return Number.isInteger(k) && k >= 0 && k < MATERIAL_SLOTS ? [[GROUND_PLANE, k + 1, 1, 1]] : []; };
 function shapeMaskWrites(kind, q, sat) {
   if (kind !== 'landform') return [];
   if (sat) return [...rockClaim(q), ...groundClaim(q)];

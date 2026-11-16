@@ -2,7 +2,7 @@
 
 Status: phases 1-3 landed on local main (b89971fd, 2026-11-15); the rest of phase 3, phase 4 as an opt-in and phase 5's height
 contrast landed on local main from branch `surface-layers-2` (09c0cc52, 2026-11-16). Round 3 (branch `surface-layers-3`) landed on local main
-(2026-11-16): see "Round 3" below. Not pushed; previews stale. Branch `surface-layers`. The research behind it is the prototype branch
+(2026-11-16): see "Round 3" below. Round 4 (branch `surface-layers-4`: rock and Crystal as materials, 23 material slots) landed on local main (2026-11-16): see "Round 4". Not pushed; previews stale. Branch `surface-layers`. The research behind it is the prototype branch
 `prototype/surface-stack` (not for landing), summarized below.
 
 ## The model
@@ -240,6 +240,41 @@ Not done, for the owner:
 - **The cover classes** stay as they are (off in every world): flowers are possible as a layer now; tufts and shrubs are placed by
   the bake from the classes, and a layer cannot drive them until the bake evaluates surface rules. Retiring the table waits for that.
 
+## Round 4 (branch `surface-layers-4`, 2026-11-16, landed)
+
+The owner's go-ahead for "the rock, strata and Crystal round", after round 3: rock colors into materials with the 24-slot cache if
+needed, Crystal a material, strata with them.
+
+Built (each a commit; the measurements are in their messages):
+- **23 materials**: `MATERIAL_SLOTS` 24 (slots 1 to 23), the GPU's ground table 32 entries (`groundMask` 31). Ice would have needed 16.
+  Strokes on slots 15 to 23 draw and export their materials. The cache holds only the materials in use, so its 128 MiB budget (about
+  18 materials at 7 MiB) limits those, and adding a material still checks the whole list against it.
+- **Rock colors are materials' Colors**: a rock is laid flat in its material's mean (slotRock); a colored rock type names a library
+  material `like` its old graph at its old color (the ten starting recipes and the worlds' 14 colored types), and Green's, Lush's and
+  Zhon's rock materials carry their old Colors › Rock. Each color is tuned on the GPU mean: 26 of 27 within 1 level (Ice's Crystal ice
+  falls 24 levels short in blue, its light pixels clipping). The Rock types pane's Rock color sets its material's Color; a rock type
+  that shares its material first takes its own copy. Colors › Rock and a rock type's own `rock` color are gone (old saves drop it).
+- **Crystal is a material**: the role `worldCrystal` (the world's crystal material, Crystal facets at the world's old color, within 1
+  level); the crystals take its mean, the rock material's without one. Colors › Crystal and `crystalRGB` are gone.
+
+A new map's materials: archipelago 15, crystal 12, desert 14, green 12, ice 16, lava 13, lush 14, moon 14, red 12, zhon 12 (of 23).
+
+**Memory.** Each material in use takes about 7 MiB of GPU cache, counted in the terrain budget. The renderer caches a rock type's
+material only while a shown stroke uses that rock type, and the crystal material only while a stroke may lay crystal. The browser smoke
+(`repro/smoke.mjs`) ran at `gpuMB=512`, below any budget the editor picks itself (2048 MiB, 1024 on devices reporting 4 GB or less):
+main's Green passed there with under 12 MiB to spare and its Ice failed, and the branch's Green failed once the escarpment rock type
+had a material of its own. At the owner's word ("Smoke at 1024 MiB") it runs at 1024 MiB, where Green and Ice pass. A smaller
+material cache (its color and height are 32-bit floats) remains a possible follow-up.
+
+**Strata are not converted** (the owner's choice, below). A rock type's column has five bed colors, read by the color pass (the beds'
+bands on faces and raised ground) and by rock weather (the color of debris from each bed). Three ways on:
+- **Beds as tones of the rock material** (recommended): each bed is the rock material's Color times a tone; setting the material's
+  Color moves every bed with it, and a bed's own color sets its tone, the owner's "set one color at the material level, or each step".
+  No slots; rock weather reads the same rows.
+- **Beds as materials of their own**: each bed shows a material's art. Up to five materials per bedded rock type: Desert would need
+  about 15 more, past 23, and 15 more cache layers.
+- **Keep the bed colors** as the column's palette, for now.
+
 ## Sources (phase 1)
 
 Built-in sources are the surfaces the engine draws today without a material: rock (the rock type's color and
@@ -256,6 +291,7 @@ Phase 4 turns them into materials one by one.
 
 ## Open questions for the owner
 
-- Rock colors into materials, with the 24-slot cache if needed (see Round 3).
+- Strata: beds as tones of the rock material, as materials, or kept (see Round 4).
+- Crystal's art: only its material's mean shows; the crystals could show its art instead (a look change).
 - The cover classes' plants (tufts and shrubs) following a layer: needs the bake to read surface rules.
 - Converting highland, base band and rock face into rules means their World rows move into the Surface section.

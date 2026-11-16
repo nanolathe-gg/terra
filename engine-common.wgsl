@@ -17,8 +17,8 @@
 // of the rock it belongs to (rs).
 struct Rock {
     shineRock: vec4f,     // the rock row of the shine table: x gloss, y sharpness, z roughness, w roughness scale (px)
-    // The recipe's colours: row 0 its rock (rgb; a = 1 when chosen, else the rock material's mean), rows 1-5 its beds' material slots (rgb).
-    // Row 6 is its absorption colour (rgb; a = 1 when chosen, else the rock's own hue); row 7 is free.
+    // The recipe's colours: rows 1-5 its beds' material slots (rgb). Row 6 is its absorption colour (rgb; a = 1 when chosen, else the rock's
+    // own hue); rows 0 and 7 are free (a rock's own colour is its material's Color).
     rockColors: array<vec4f, 8>,
     strata: f32,          // Strata: how much of the rock and the raised ground takes the column's bed colours
     strataContrast: f32,
@@ -210,8 +210,6 @@ struct Uniforms {
     grassSlopes: i32,     // 1 where the world's slopes are grass: Joined wrinkles (u.wrinkles) then draw terracettes in the bake, not Moon's dark lines in the draw
     shoreEdge: f32,   // lava coast rim, outline and lip (0: none)
     // Crystals: their own colour (world base colour 'crystal', else the world's).
-    crystalColor: vec3f,
-    crystalBase: vec4f,
     sandDust: f32,
     sandGrass: f32,
     bandWater: f32,
@@ -440,10 +438,11 @@ struct Uniforms {
     fringeGround: i32,  // its mineral margins' fringe, body and ring materials (worldFringe, worldBody, worldRing)
     bodyGround: i32,
     ringGround: i32,
+    crystalGround: i32, // its crystal material (worldCrystal): the crystals' color, -1 none (then the rock material's)
     waterGround: i32,
     groundAny: i32,
     groundShine: i32,      // 1 when a material in use puts out shine, so the shine pass runs for it
-    ground: array<Ground, 16>,
+    ground: array<Ground, 32>,
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -456,7 +455,7 @@ var<private> rs: u32 = 0u;
 // (heights identical, the same by eye, the same bytes every time; repro/rock-slots.mjs).
 override rockMask: u32 = 15u;
 var<private> gs: u32 = 0u;
-override groundMask: u32 = 15u;
+override groundMask: u32 = 31u;
 
 fn cellHash(c: vec2f) -> vec2f {
     let q = vec2f(dot(c, vec2f(127.1, 311.7)), dot(c, vec2f(269.5, 183.3)));
@@ -998,7 +997,7 @@ fn useRock(p:vec2f) { rs=rockSlotAt(p); }
 fn groundSlotAt(p:vec2f)->u32 {
     if(u.groundIdOn==0){return u32(u.groundDefault);}
     let cell=clamp(vec2i(floor(p/(u.size-1.0)*(u.grid-1.0)+.5-u.chunkGridOrigin)),vec2i(0),vec2i(maskDimensions())-1);
-    let id=round(loadGroundMask(cell)*127.0);return select(u32(clamp(id-1.0,0.0,15.0)),u32(u.groundDefault),id<1.5);
+    let id=round(loadGroundMask(cell)*127.0);return select(u32(clamp(id-1.0,0.0,31.0)),u32(u.groundDefault),id<1.5);
 }
 // Highland ground: level raised ground takes the world's highland material in place of its ground material, by the rise above the plain
 // (u.highFrom, over u.highReach, its edge ragged by 20-px noise), times u.highland. 0 where there is no highland material.

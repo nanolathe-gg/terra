@@ -1508,7 +1508,7 @@
    {"share": 1, "params": {"type": "stain"}, "vary": {"size": [0.6, 1.2]}}]}
  },
  "world": {
-    "materials": {"ground": "zhon-ground", "water": "zhon-water", "rock": "zhon-rock", "slope": "zhon-slope", "debris": "zhon-debris", "beach": "zhon-beach", "soil": "zhon-soil", "snow": "zhon-snow", "moss": "zhon-moss", "sand": "zhon-sand", "band": "zhon-band"},
+    "materials": {"ground": "zhon-ground", "water": "zhon-water", "rock": "zhon-rock", "slope": "zhon-slope", "debris": "zhon-debris", "beach": "zhon-beach", "soil": "zhon-soil", "snow": "zhon-snow", "moss": "zhon-moss", "sand": "zhon-sand", "band": "zhon-band", "crystal": "crystals"},
     "knobDefaults": {
         "crackSeverity": 0.4,
         "crackMajor": 0.6,
@@ -1565,9 +1565,6 @@
    "transition": "soil",
    "material": "single",
    "scree": "0"
-  },
-  "colors": {
-   "rock": "#3d5174"
   },
   "export": {
    "disabledReason": "Zhon has no retail planet or feature set; the owner must choose one before export"

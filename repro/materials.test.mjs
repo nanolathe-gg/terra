@@ -200,7 +200,7 @@ test('adding, assigning, deleting and what strokes keep', () => {
   const swapped = assignMaterial(list, 3, 'worldGround'); assert.deepEqual(swapped.filter(m => m.worldGround).map(m => m.slot), [3]);
   assert.throws(() => assignMaterial(list, 2, 'worldGround'), /world’s water/);
   let full = list; while (full.length < MATERIAL_SLOTS - 1) full = addMaterial(full, blankMaterial(), 'More').materials;
-  assert.throws(() => addMaterial(full, blankMaterial()), /at most 15 materials/);
+  assert.throws(() => addMaterial(full, blankMaterial()), new RegExp(`at most ${MATERIAL_SLOTS - 1} materials`));
   assert.equal(setMaterial(list, 3, LIBRARY['green-ground']).find(m => m.slot === 3).name, 'Sand', 'a new graph keeps the name and slot');
 });
 
@@ -372,4 +372,17 @@ test('a material’s own Color moves every color step together, not the steps th
   assert.deepEqual(red.nodes.find(n => n.id === 'shade').stops, m.nodes.find(n => n.id === 'shade').stops);
   assert.notDeepEqual(red.palette, m.palette, 'the palette moves with it');
   for (const key of Object.keys(LIBRARY)) assert.ok(colorSources(LIBRARY[key]).length, `${key} has a color to set`);
+});
+
+test('the world’s crystal material joins every map and is cached only while a stroke may lay crystal', async () => {
+  const {materialsInUse} = await import('../sculpt-materials.js');
+  const config = {materials: {ground: 'green-ground', water: 'green-water', crystal: 'crystals'}};
+  const list = withWorldMaterials(undefined, config), crystal = list.find(m => m.worldCrystal);
+  assert.equal(crystal?.source, 'crystals');
+  const cached = nodes => materialsInUse(nodes, list).some(m => m.worldCrystal);
+  assert.ok(!cached([]), 'no stroke: not cached');
+  assert.ok(!cached([{kind: 'landform', params: {iceFacets: 1, facetSurface: 0}}]), 'rock facets lay no crystal');
+  assert.ok(cached([{kind: 'landform', params: {iceFacets: 1, facetSurface: 1}}]), 'crystal facets');
+  assert.ok(cached([{kind: 'landform', params: {shorePlates: 1}}]), 'shore plates');
+  assert.ok(!cached([{kind: 'landform', hidden: true, params: {iceFacets: 1, facetSurface: 1}}]), 'a hidden stroke draws nothing');
 });

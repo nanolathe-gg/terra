@@ -6,7 +6,7 @@ import gamePalette from './materials/palette.json' with {type:'json'};
 import library from './materials/textures.json' with {type:'json'};
 import snippets from './materials/snippets.json' with {type:'json'};
 
-export const MATERIAL_SLOTS = 16;                  // slot 0 is "the world's ground" on a stroke; materials take slots 1 to 15
+export const MATERIAL_SLOTS = 24;                  // slot 0 is "the world's ground" on a stroke; materials take slots 1 to 23 (the GPU's ground table holds 32)
 export const MATERIAL_REPEAT = 512;
 export const MATERIAL_CACHE_BYTES = 128 * 1024 * 1024;
 export const MAX_NODES = 40, MAX_STOPS = 8, MAX_PALETTE = 32, MAX_CONTROLS = 12, MAX_FRAMES = 12, MAX_TAPPED = 4, MAX_STAGES = 4;
@@ -261,7 +261,8 @@ export const MATERIAL_STATES = ['worn', 'deposit'];
 // The roles a material of the map may hold besides the world's ground and water: [flag, world.materials key, what it is]. Each surface reads
 // its role's material (engine-frag.wgsl); a material holds one role at most.
 export const MAP_ROLES = [['worldHigh', 'high', 'highland ground'], ['worldRock', 'rock', 'rock'], ['worldSlope', 'slope', 'slope cover'], ['worldDebris', 'debris', 'debris'],
-  ['worldBeach', 'beach', 'beach'], ['worldFringe', 'fringe', 'margin fringe'], ['worldBody', 'body', 'margin body'], ['worldRing', 'ring', 'margin ring']];
+  ['worldBeach', 'beach', 'beach'], ['worldFringe', 'fringe', 'margin fringe'], ['worldBody', 'body', 'margin body'], ['worldRing', 'ring', 'margin ring'],
+  ['worldCrystal', 'crystal', 'crystal']];
 const ROLE_NAMES = {worldGround: 'ground', worldWater: 'water', ...Object.fromEntries(MAP_ROLES.map(([r, , what]) => [r, what]))};
 // A material may instead draw one of the world's surface layers (docs/SURFACE_LAYERS.md): its worldLayer is that layer's id.
 export const roleOf = m => Object.keys(ROLE_NAMES).find(r => m?.[r] === true) ?? (m?.worldLayer ? 'worldLayer' : null);
@@ -559,12 +560,14 @@ export function copyMaterials(value) {
   if (list.some(m => m.worldGround && m.worldWater)) throw Error('The world’s ground and its water are two materials.');
   return list;
 }
-// A library entry is a material, or one `like` another with its own Color (recolorMaterial): a world's soil, snow, moss, sand and base band
-// are its graphs with the world's color, so a revision of the graph reaches every world.
-const libraryEntry = (key, m) => {
-  if (m.like == null) return {name: nameOf(m.name), ...copyMaterial({...m, source: key})};
-  const base = library[m.like]; if (!base || base.like != null || !/^#[0-9a-f]{6}$/i.test(m.color ?? '')) throw Error(`Library material ${key}: like names a material of the library and color is #rrggbb.`);
-  return {name: nameOf(m.name), ...copyMaterial({...recolorMaterial(copyMaterial(base), [1, 3, 5].map(i => parseInt(m.color.slice(i, i + 2), 16) / 255)), source: key})};
+// A library entry is a material, or one `like` another, either with its own Color (`color`, recolorMaterial): a world's soil, snow, moss,
+// sand, base band and colored rock types are its graphs with the world's color, so a revision of the graph reaches every world.
+const libraryEntry = (key, {like, color, ...m}) => {
+  const hex = /^#[0-9a-f]{6}$/i.test(color ?? '');
+  if (like == null) { if (color != null && !hex) throw Error(`Library material ${key}: color is #rrggbb.`); }
+  else if (!library[like] || library[like].like != null || !hex) throw Error(`Library material ${key}: like names a material of the library and color is #rrggbb.`);
+  const {color: _, ...graph} = like == null ? m : library[like], base = copyMaterial({...graph, name: m.name ?? graph.name});
+  return {name: nameOf(m.name ?? graph.name), ...copyMaterial({...(hex ? recolorMaterial(base, [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16) / 255)) : base), source: key})};
 };
 export const LIBRARY = Object.fromEntries(Object.entries(library).map(([key, m]) => [key, libraryEntry(key, m)]));
 const freeSlot = list => { for (let slot = 1; slot < MATERIAL_SLOTS; slot++) if (!list.some(m => m.slot === slot)) return slot; throw Error(`A map holds at most ${MATERIAL_SLOTS - 1} materials.`); };
@@ -585,18 +588,19 @@ export function withWorldMaterials(value, config, {carried = false} = {}) {
     if (list.length >= MATERIAL_SLOTS - 1) { const taker = list.find(m => !m.worldGround && !m.worldWater); list = list.map(m => m === taker ? {...Object.fromEntries(Object.entries(m).filter(([k]) => !MAP_ROLES.some(([r]) => r === k))), [role]: true} : m); continue; }   // the taker gives up any other role
     const added = addMaterial(list, preset, preset.name); list = added.materials.map(m => m.slot === added.slot ? {...m, [role]: true} : m);
   }
-  // The world's other roles (MAP_ROLES: config.materials.high, .rock, .slope, .debris, .beach, .fringe, .body, .ring), each a library material
+  // The world's other roles (MAP_ROLES: config.materials.high, .rock, .slope, .debris, .beach, .fringe, .body, .ring, .crystal), each a library material
   // added while the list has room. Level raised ground takes the highland material; every rock face shows the rock material's grain, grit and
   // shine under its rock type's color (a rock type may name another, struct Rock material); the slope cover, the debris fragments, the beach
   // sand and a world's mineral margins read theirs. A map without one draws that surface from another (engine-frag.wgsl roleColor).
   // A list that already holds one of the world's surface roles (a map made with them, reopened in its world) keeps the ones its artist
   // cleared or deleted; a new map, a scene, a list saved before them and a map carried from another world (`carried`: its clears were made
-  // for that world's surfaces) take every one the world names. The highland material joins any list with room, and so does a beach another
-  // world lends (sculpt-scene.js borrowBeach sets config.beachTable): it is chosen on purpose, after the map was made.
+  // for that world's surfaces) take every one the world names. The highland and crystal materials join any list with room (the crystals'
+  // color is their material's: a map without one draws them in the rock material's), and so does a beach another world lends
+  // (sculpt-scene.js borrowBeach sets config.beachTable): it is chosen on purpose, after the map was made.
   const surfaced = !carried && list.some(o => MAP_ROLES.slice(1).some(([r]) => o[r]));
   for (const [role, key] of MAP_ROLES) {
     const m = LIBRARY[config.materials?.[key]];
-    if (m && (role === 'worldHigh' || (role === 'worldBeach' && config.beachTable) || !surfaced) && !list.some(o => o[role]) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, [role]: true} : o); }
+    if (m && (role === 'worldHigh' || role === 'worldCrystal' || (role === 'worldBeach' && config.beachTable) || !surfaced) && !list.some(o => o[role]) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, [role]: true} : o); }
   }
   // The world's surface layers that draw a material (config.surface, a layer with `material`, a library key): one copy of each library
   // material they draw, its key as the copy's worldLayer, shared by every layer that draws it (the three snows draw one snow), added
@@ -714,8 +718,12 @@ export function strokeMaterial(node, list) {
   return Number.isInteger(slot) && (slot === 0 || list.some(m => m.slot === slot && !m.worldWater)) ? slot : -1;
 }
 export const keepStrokeMaterials = (nodes, list) => nodes.map(n => n.params && n.params.groundPreset !== undefined && n.params.groundPreset !== strokeMaterial(n, list) ? {...n, params: {...n.params, groundPreset: strokeMaterial(n, list)}} : n);
+// Strokes that may lay crystal (engine-shape.wgsl writes the crystal plane for a landform's facets with Surface Crystal and for shore
+// plates): a superset of those that do, so the crystal material is cached wherever a crystal shows, and on no other map.
+const crystalStrokes = nodes => nodes.some(n => !n.hidden && ((n.params?.iceFacets > 0 && Math.round(n.params?.facetSurface || 0) >= 1) || n.params?.shorePlates > 0));
 export function materialsInUse(nodes, list, rocks = []) {
-  const used = new Set([...list.filter(m => roleOf(m)).map(m => m.slot), ...(rocks ?? []).map(r => r.material).filter(s => s > 0), ...nodes.filter(n => !n.hidden && (n.kind === 'landform' || n.kind === 'paint' && (n.params?.paintChannel === 26 || n.params?.paintChannel === undefined))).map(n => strokeMaterial(n, list))]);
+  const crystal = crystalStrokes(nodes);
+  const used = new Set([...list.filter(m => roleOf(m) && (crystal || !m.worldCrystal)).map(m => m.slot), ...(rocks ?? []).map(r => r.material).filter(s => s > 0), ...nodes.filter(n => !n.hidden && (n.kind === 'landform' || n.kind === 'paint' && (n.params?.paintChannel === 26 || n.params?.paintChannel === undefined))).map(n => strokeMaterial(n, list))]);
   return list.filter(m => used.has(m.slot));
 }
 // The map's materials as a world's surface list draws them (docs/SURFACE_LAYERS.md; layers bind copies by layerKey). A copy whose layer no

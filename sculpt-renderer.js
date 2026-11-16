@@ -5,7 +5,7 @@
 
 import {tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH,surfaceRows,SURFACE_FLAGS_ROW} from './sculpt-material-model.js';
 import {MaterialCache,writeMaterialSlot} from './sculpt-material-cache.js';
-import {copyMaterial,materialCacheUsage,materialStaged,materialTint,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES,LIBRARY,materialStates} from './sculpt-materials.js';
+import {copyMaterial,materialCacheUsage,materialStaged,materialTint,materialColor,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES,LIBRARY,materialStates} from './sculpt-materials.js';
 import {columnRows,columnColors} from './sculpt-column.js';
 import {LOW_GROUND_RGB} from './sculpt-knobs.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
@@ -971,7 +971,6 @@ export class TerrainRenderer {
     this.f('uRampMaterial', material.rampMaterial ?? 0);
     this.i('uSlopeSand', Boolean(material.slopeSand));
     this.i('uGrassSlopes', Boolean(material.grassSlopes));
-    this.v('uCrystalColor', (material.crystalRGB || [110, 150, 225]).map(v => v / 255));
     this.i('uGroundFringe', material.groundFringe === true);
     // A preset can retain coloured veins or dark neutral grain at its edge.
     // The blending algorithm does not choose a biome's material colour.
@@ -1093,10 +1092,7 @@ export class TerrainRenderer {
     }
     if(this.colorOverrides){const colors=this.colorOverrides;
     this.set('uMaterialTable', this.placementTable(this.variant));
-    for (const key of ['shallow', 'crystal']) {
-      const c = colors[key];
-      this.set('u' + key[0].toUpperCase() + key.slice(1) + 'Base', c ? [...c, 1] : [0, 0, 0, 0]);
-    }
+    this.set('uShallowBase', colors.shallow ? [...colors.shallow, 1] : [0, 0, 0, 0]);
     // The light's colours (card P12b): white is the grey light every world had.
     this.v('uSunColor', colors.sun || [1, 1, 1]);
     this.v('uSkyColor', colors.sky || [1, 1, 1]);
@@ -1105,10 +1101,10 @@ export class TerrainRenderer {
     // The authored slot palette, or tones of this world's own rock.
     const strataDefaults = columnColors(this.config.column,this.means.rock);
     const strata = strataDefaults.map((c, i) => colors['strata' + (i + 1)] || c.map(v => v / 255));
-    // The world's rock is slot 0 of the rock table: its colour (a = 1 when the world chose one) and its beds' slots, which a recipe without
-    // colours of its own takes (writeRocks).
+    // The world's rock is slot 0 of the rock table: its beds' slots, which a recipe without colours of its own takes (writeRocks). Row 0 is
+    // unused: a rock's color is its material's (engine-frag.wgsl slotRock).
     // Row 6: the color it deepens toward with thickness (B4), the world's 'absorb' color where it chose one.
-    this.set('uRockColors', [colors.rock ? [...colors.rock, 1] : [0, 0, 0, 0], ...strata, colors.absorb ? [...colors.absorb, 1] : [0, 0, 0, 0]]);
+    this.set('uRockColors', [[0, 0, 0, 0], ...strata, colors.absorb ? [...colors.absorb, 1] : [0, 0, 0, 0]]);
     }
     this.writeRocks();
     const channels={
@@ -1213,9 +1209,8 @@ export class TerrainRenderer {
       }
       // Its surface material (a material slot; 0 the world's rock material).
       this.uniformView.setInt32(at + table.members.get('material').offset, Number.isInteger(rock.material) ? rock.material : 0, true);
-      // Its own colors where it has them ('#rrggbb'): row 0 the rock's (a = 1, chosen), rows 1-5 its beds' slots; the rest stay slot 0's.
+      // Its own colors where it has them ('#rrggbb'): rows 1-5 its beds' slots, row 6 its absorption; the rest stay slot 0's.
       const colors = table.members.get('rockColors'), row = (k, hex) => [1, 3, 5].forEach((i, c) => this.uniformView.setFloat32(at + colors.offset + k * 16 + c * 4, parseInt(hex.slice(i, i + 2), 16) / 255, true));
-      if (rock.colors?.rock) { row(0, rock.colors.rock); this.uniformView.setFloat32(at + colors.offset + 12, 1, true); }
       rock.colors?.beds?.forEach((hex, k) => row(1 + k, hex));
       if (rock.colors?.absorb) { row(6, rock.colors.absorb); this.uniformView.setFloat32(at + colors.offset + 6 * 16 + 12, 1, true); }
       if (rock.column) {
@@ -1309,14 +1304,18 @@ export class TerrainRenderer {
     this.surfaceHidden = null; this.set('uMaterialTable', this.placementTable(this.variant)); this.setSurfacePreview(-1);
     return () => { this.surfaceHidden = hidden; this.set('uMaterialTable', this.placementTable(this.variant)); this.setSurfacePreview(preview); };
   }
-  rockMaterialTint() { const slot = [...(this.grounds || new Map())].find(([, m]) => m.worldRock)?.[0]; return slot ? materialTint(this.grounds.get(slot)) : this.means.rock; }
-  // A rock slot's colors as the draw reads them, '#rrggbb': {rock, beds}, the rock's (its own, else the rock material's mean, as rockFlat) and
-  // its five bed slots'. The World pane shows a preset's effective colors with them, and starts its own from the world's.
+  // A rock slot's material's Color (sculpt-materials.js materialColor): its own material, else the world's rock material's.
+  rockMaterialTint(slot = 0) {
+    const own = this.rocks?.get(slot)?.material, grounds = this.grounds || new Map();
+    const m = (own > 0 && grounds.get(own)) || [...grounds.values()].find(o => o.worldRock);
+    return m ? materialColor(m) : this.means.rock;
+  }
+  // A rock slot's colors as the draw reads them, '#rrggbb': {rock, beds, absorb}, the rock's (its material's Color, as rockFlat) and its five
+  // bed slots'. The World pane shows a preset's effective colors with them, and starts its own from the world's.
   slotColors(slot) {
     const table = this.uniform.get('rock'), at = table.offset + slot * table.stride + table.members.get('rockColors').offset;
-    const row = k => [0, 1, 2, 3].map(c => this.uniformView.getFloat32(at + k * 16 + c * 4, true)), mean = this.rockMaterialTint();
+    const row = k => [0, 1, 2, 3].map(c => this.uniformView.getFloat32(at + k * 16 + c * 4, true)), rock = this.rockMaterialTint(slot);
     const hex = rgb => '#' + rgb.slice(0, 3).map(v => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0')).join('');
-    const own = row(0), rock = own[3] > 0.5 ? own : mean;
     // The absorption color: row 6 where chosen, else the rock's own hue at full strength (engine-frag.wgsl absorbFilter).
     const absorb = row(6), top = Math.max(rock[0], rock[1], rock[2], 0.02);
     return {rock: hex(rock), beds: [1, 2, 3, 4, 5].map(k => hex(row(k))), absorb: hex(absorb[3] > 0.5 ? absorb : rock.slice(0, 3).map(v => v / top))};

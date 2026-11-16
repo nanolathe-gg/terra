@@ -741,12 +741,7 @@
   "slopeStart": 0.1,
   "slopeFull": 0.3,
   "slopeFloor": -4.0,
-  "slopeDry": 4.0,
-  "crystalRGB": [
-   205,
-   220,
-   245
-  ]
+  "slopeDry": 4.0
  },
  "water": {
   "meanRGB": [
@@ -797,7 +792,7 @@
   "vent": {"params": {"size": 1.7, "thick": 1.6, "rim": 0.5, "rimSat": 2.5, "spread": 6}}
  },
  "world": {
-    "materials": {"ground": "ice-ground", "water": "ice-water", "rock": "ice-rock", "slope": "ice-slope", "debris": "ice-debris", "extra": ["ice-bergs-ground"], "soil": "ice-soil", "snow": "ice-snow", "moss": "ice-moss", "sand": "ice-sand", "band": "ice-band"},
+    "materials": {"ground": "ice-ground", "water": "ice-water", "rock": "ice-rock", "slope": "ice-slope", "debris": "ice-debris", "extra": ["ice-bergs-ground"], "soil": "ice-soil", "snow": "ice-snow", "moss": "ice-moss", "sand": "ice-sand", "band": "ice-band", "crystal": "ice-crystals"},
     "knobDefaults": {
         "plainRelief": 0.6,
         "crackSeverity": 0,
@@ -867,201 +862,98 @@
    "recipes": {
 
     "slate": {
-
      "label": "Snow and slate",
-
+     "material": "ice-slate",
      "knobs": {
-
       "faceShade": 0.9,
-
       "faceRindTone": -0.3,
-
       "faceRind": 0.4,
-
       "faceStretch": 2,
-
       "faceScratch": 3,
-
       "faceScratchLength": 160,
-
       "faceScratchAngle": 0,
-
       "faceBlock": 2.5,
-
       "faceBlockSize": 20,
-
       "rockFace": 2.5,
-
       "faceRock": 1,
-
       "rockFaceFrom": 0.25,
-
       "stoneSlab": 0.8,
-
       "faceLamina": 1,
-
       "shineRock": 0.2,
-
       "debrisAmount": 0.2,
-
       "crackSeverity": 0.2,
-
       "iceSnow": 0,
-
       "iceFall": 0,
-
       "iceApron": 0
-
-     },
-
-     "colors": {
-
-      "rock": "#3f5f73"
-
      }
-
     },
 
     "streaked": {
-
      "label": "Crystal ice",
-
+     "material": "ice-streaked",
      "knobs": {
-
       "faceRindTone": 0.6,
-
       "faceRind": 1,
-
       "faceShade": 0.5,
-
       "faceScratch": 4,
-
       "faceScratchLength": 160,
-
       "faceScratchAngle": 90,
-
       "faceStretch": 4,
-
       "faceBlock": 1,
-
       "faceTone": 0.03,
-
       "rockFace": 1.2,
-
       "shineRock": 0.8,
-
       "shineRockSharp": 60,
-
       "iceCrystal": 1,
-
       "iceCrest": 0.3,
-
       "iceSnow": 0,
-
       "iceFall": 0,
-
       "iceApron": 0
-
-     },
-
-     "colors": {
-
-      "rock": "#c8e6ff"
-
      }
-
     },
 
     "blueice": {
-
      "label": "Glacier ice",
-
+     "material": "ice-blueice",
      "knobs": {
-
       "faceRindTone": 0.45,
-
       "faceRind": 0.8,
-
       "faceShade": 0.45,
-
       "faceTone": 0.05,
-
       "faceWet": 0.2,
-
       "faceScratch": 1.5,
-
       "faceScratchLength": 100,
-
       "faceBlock": 1.5,
-
       "faceBlockSize": 30,
-
       "faceRound": 0.3,
-
       "rockFace": 1.5,
-
       "absorbDepth": 0.4,
-
       "shadowTint": 0.5,
-
       "shineRock": 0.6,
-
       "shineRockSharp": 40,
-
       "crackSeverity": 0,
-
       "iceSnow": 0,
-
       "iceFall": 0,
-
       "iceApron": 0
-
-     },
-
-     "colors": {
-
-      "rock": "#b2cee4"
-
      }
-
     },
 
     "rubble": {
-
      "label": "Frost rubble",
-
+     "material": "ice-rubble",
      "knobs": {
-
       "faceShade": 0.8,
-
       "faceRindTone": -0.1,
-
       "faceRind": 0.5,
-
       "faceScratch": 3,
-
       "faceScratchLength": 60,
-
       "faceBlock": 2,
-
       "faceBlockSize": 16,
-
       "faceRound": 0.5,
-
       "rockFace": 2,
-
       "faceRock": 1,
-
       "shineRock": 0.3
-
-     },
-
-     "colors": {
-
-      "rock": "#6b7f9b"
-
      }
-
     },
 
     "scarp": {

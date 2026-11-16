@@ -844,7 +844,7 @@
   "vent": {"params": {"size": 1.8, "thick": 1.2, "rim": 0.4, "rimSat": 2.2, "spread": 3}}
  },
  "world": {
-    "materials": {"ground": "desert-ground", "water": "desert-water", "rock": "desert-rock", "slope": "desert-slope", "debris": "desert-debris", "high": "desert-cap", "soil": "desert-soil", "snow": "desert-snow", "moss": "desert-moss", "sand": "desert-sand", "band": "desert-band"},
+    "materials": {"ground": "desert-ground", "water": "desert-water", "rock": "desert-rock", "slope": "desert-slope", "debris": "desert-debris", "high": "desert-cap", "soil": "desert-soil", "snow": "desert-snow", "moss": "desert-moss", "sand": "desert-sand", "band": "desert-band", "crystal": "crystals"},
     "knobDefaults": {
         "lightCap": 1.25,
         "sunTilt": 0.5,
@@ -899,253 +899,130 @@
    "recipes": {
 
     "triad": {
-
      "label": "Gray caprock",
-
+     "material": "desert-triad",
      "knobs": {
-
       "strata": 1,
-
       "strataContrast": 1,
-
       "strataGrain": 0.25,
-
       "faceBlock": 1,
-
       "faceJoint": 0.15,
-
       "faceWear": 0.8,
-
       "faceCrease": 1,
-
       "banding": 0.9,
-
       "crackSeverity": 0.5,
-
       "crackMajor": 0.7,
-
       "crackMinor": 0.15,
-
       "crackBlocks": 0.15
-
      },
-
      "colors": {
-
-      "rock": "#8b8b8b",
-
       "beds": [
-
        "#bd8c6c",
-
        "#bec6b9",
-
        "#96907f",
-
        "#af6f5a",
-
        "#767370"
-
       ]
-
      },
-
      "sections": [
-
       {
-
        "start": 1,
-
        "beds": [
-
         [
-
          3,
-
          0.5,
-
          0
-
         ],
-
         [
-
          1,
-
          0.5,
-
          1
-
         ]
-
        ]
-
       },
-
       {
-
        "start": 14,
-
        "beds": [
-
         [
-
          8.4,
-
          0.5,
-
          2
-
         ],
-
         [
-
          3.6,
-
          0.5,
-
          3
-
         ]
-
        ]
-
       },
-
       {
-
        "start": 60,
-
        "beds": [
-
         [
-
          9.8,
-
          0.5,
-
          2
-
         ],
-
         [
-
          4.2,
-
          0.5,
-
          3
-
         ]
-
        ]
-
       },
-
       {
-
        "start": 95,
-
        "beds": [
-
         [
-
          9.1,
-
          0.5,
-
          1
-
         ],
-
         [
-
          4.9,
-
          0.5,
-
          2
-
         ]
-
        ]
-
       }
-
      ]
-
     },
 
     "outcroprock": {
-
      "label": "Dark outcrop",
-
+     "material": "desert-outcrop",
      "knobs": {
-
       "strata": 1,
-
       "strataContrast": 1,
-
       "faceBlock": 1,
-
       "faceWear": 0.8
-
      },
-
      "colors": {
-
-      "rock": "#5b5b5b",
-
       "beds": [
-
        "#5b5b5b",
-
        "#534333",
-
        "#777757",
-
        "#8b8b8b",
-
        "#4b4b4b"
-
       ]
-
      },
-
      "sections": [
-
       {
-
        "start": 1,
-
        "beds": [
-
         [
-
          1.6,
-
          0.5,
-
          0
-
         ],
-
         [
-
          1.0,
-
          0.5,
-
          1
-
         ]
-
        ]
-
       }
-
      ]
-
     }
 
    }

@@ -786,7 +786,7 @@
   "deposit": {"params": {"reach": 1, "round": 0.7}, "vary": {"reach": [0.8, 1.4], "haloRough": [4, 10]}}
  },
  "world": {
-    "materials": {"ground": "lush-ground", "water": "lush-water", "rock": "lush-rock", "slope": "lush-slope", "debris": "lush-debris", "high": "lush-highland", "extra": ["lush-swamp"], "soil": "lush-soil", "snow": "lush-snow", "moss": "lush-moss", "sand": "lush-sand", "band": "lush-band"},
+    "materials": {"ground": "lush-ground", "water": "lush-water", "rock": "lush-rock", "slope": "lush-slope", "debris": "lush-debris", "high": "lush-highland", "extra": ["lush-swamp"], "soil": "lush-soil", "snow": "lush-snow", "moss": "lush-moss", "sand": "lush-sand", "band": "lush-band", "crystal": "crystals"},
     "knobDefaults": {
         "coastRamp": 0.4,
         "looseSupply": 0.08,
@@ -882,29 +882,15 @@
     },
 
     "tanrock": {
-
      "label": "Bare tan rock",
-
+     "material": "lush-tanrock",
      "from": "granite",
-
      "knobs": {
-
       "faceRindTone": 0.35,
-
       "faceRindWarmth": 0.3,
-
       "faceRound": 0.4,
-
       "faceGrass": 0.2
-
-     },
-
-     "colors": {
-
-      "rock": "#93936f"
-
      }
-
     }
 
    }
@@ -956,7 +942,6 @@
    {"id": "braided", "label": "Braided river", "icon": "braided", "color": "#6fb1e0", "group": "water"}
   ],
   "baseHeight": 9,
-  "colors": {"rock": "#3a3222"},
   "defaults": {
    "surface": "slopes",
    "transition": "soil",

@@ -1487,7 +1487,6 @@ fn surfFoam(pixel: vec2f, p: vec2f, x: f32, q: vec2f, depth: f32, slope: f32, e:
     let front = (1.0 - smoothstep(0.3, 1.0, abs(surfCuspX(x, q, e) - xf))) * step(shelfHash(cell + 45.0), 0.7) * surfBeach(e) * smoothstep(-0.1, 0.25, valueNoise(q / 30.0 + vec2f(9.0, 1.0)));
     return front * 0.85;
 }
-// A rock slot's colour as the draw lays it flat (rockFlat): the recipe's own, else the rock material's mean.
 // A rock slot's surface material (its own, else the world's rock material), -1 none; and that material's mean color (the old fixed mean without one).
 fn rockMaterialMean(slot: u32) -> vec3f { let m = rockMaterialOf(slot); if (m < 0) { return vec3f(0.33); } return materialMean(u32(m)); }
 // The rock's grain at a native pixel: its material's unlit color over the material's mean (1 where the rock has no material).
@@ -1498,7 +1497,8 @@ fn rockGrain(slot: u32, pixel: vec2f) -> vec3f {
     let luma = dot(ratio * materialMean(u32(m)), vec3f(0.299, 0.587, 0.114)) / max(dot(materialMean(u32(m)), vec3f(0.299, 0.587, 0.114)), 0.01);
     return clamp(mix(vec3f(luma), ratio, 0.33), vec3f(0.5), vec3f(1.6));
 }
-fn slotRock(slot: u32) -> vec3f { let c = u.rock[slot & rockMask].rockColors[0]; return select(rockMaterialMean(slot), c.rgb, c.a > 0.5); }
+// A rock slot's colour as the draw lays it flat (rockFlat): its material's mean, so the material's Color is the rock's.
+fn slotRock(slot: u32) -> vec3f { return rockMaterialMean(slot); }
 // B4: a rock's thickness along the sun's line through a point of its surface, height units. From just inside the surface, away from the sun
 // on a lit face (the rock behind what the sun lights) and toward it on a shaded face (the rock the sun's light crosses to get there), the
 // length of that line lying under the heights and 3 units over the plain over 24 steps of 1.5 (36 at most: thick). Over the plain: the ground
@@ -1524,7 +1524,7 @@ fn absorbFilter(slot: u32, t: f32) -> vec3f {
 }
 // Weathered rock and its grains: a biome's sand, from the rock's own mean and the world's Sand row and colour. The deposits and the surf's beach draw it.
 fn sandWeathered() -> vec3f {
-    let rockAverage = select(rockMaterialMean(0u), u.rock[0].rockColors[0].rgb, u.rock[0].rockColors[0].a > 0.5);   // the world's rock (slot 0): a world's sand
+    let rockAverage = rockMaterialMean(0u);   // the world's rock (slot 0): a world's sand
     let weathered = mix(vec3f(mix(rockAverage, vec3f(dot(rockAverage, vec3f(0.299, 0.587, 0.114))), 0.25)), vec3f(1.0), u.sandLight * 0.55);
     return weathered;
 }
@@ -2136,7 +2136,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // (luma 26-40 against tops ~60-78); outlines are black ink where the
         // field marks a column edge (0.5) or a crystal's rim. No edge
         // highlights.
-        let crystalColor = select(u.crystalColor, u.crystalBase.rgb, u.crystalBase.a > 0.5);
+        let crystalColor = roleMean(u.crystalGround, u.rockGround);   // the crystal material's Color (else the rock material's)
         let jitter = clamp((crystalMask - 0.9) * 10.0, -1.0, 1.0);
         // Tops keep the ground's own grain (Crystal's streaks), moved
         // toward the crystal colour.
