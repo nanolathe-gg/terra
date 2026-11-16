@@ -772,6 +772,26 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     resize();viewport.scrollLeft=Math.max(0,cx*scale-canvas.width/2);viewport.scrollTop=Math.max(0,cy*scale-canvas.height/2);position();schedule();
   }
   $('fit').onclick=()=>zoom('overview');$('one').onclick=()=>zoom(1);$('zoom').onchange=e=>zoom(e.target.value==='overview'?'overview':Number(e.target.value));
+  // Pinch (Ctrl or Cmd with the wheel, which is how Chrome sends a trackpad pinch; Safari's gesture events) steps through the zoom
+  // menu's levels and keeps the point under the pointer where it is. A plain wheel or two-finger scroll still pans.
+  const ZOOM_LEVELS=[.25,.5,1,2,4];
+  function zoomStep(dir,event){
+    if(busy||gesture)return;
+    const at=screen(event),next=dir>0?(overview?ZOOM_LEVELS.find(v=>v>scale+.001)??ZOOM_LEVELS[0]:ZOOM_LEVELS.find(v=>v>scale+.001)):(overview?null:ZOOM_LEVELS.slice().reverse().find(v=>v<scale-.001)??'overview');
+    if(next==null||next===scale&&!overview)return;
+    zoom(next);if(next==='overview')return;
+    const r=overlay.getBoundingClientRect();viewport.scrollLeft=Math.max(0,at.x*scale-(event.clientX-r.left));viewport.scrollTop=Math.max(0,at.z*scale-(event.clientY-r.top));position();schedule();
+  }
+  let pinch=0,pinchAt=0;
+  viewport.addEventListener('wheel',event=>{
+    if(!event.ctrlKey&&!event.metaKey)return;
+    event.preventDefault();const now=performance.now();if(now-pinchAt>300)pinch=0;pinchAt=now;
+    pinch-=event.deltaMode===1?event.deltaY*16:event.deltaY;
+    if(Math.abs(pinch)>=40){zoomStep(Math.sign(pinch),event);pinch=0;pinchAt=now+180;}   // one level a step; a short pause before the next
+  },{passive:false});
+  let gestureScale=1;
+  viewport.addEventListener('gesturestart',event=>{event.preventDefault();gestureScale=1;});
+  viewport.addEventListener('gesturechange',event=>{event.preventDefault();const ratio=event.scale/gestureScale;if(ratio>1.25||ratio<.8){zoomStep(ratio>1?1:-1,event);gestureScale=event.scale;}});
   $('tile-grid').onchange=()=>schedule();
   $('weathered-view').onchange=()=>{
     weatheredView=$('weathered-view').checked;
