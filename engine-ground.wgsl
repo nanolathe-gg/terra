@@ -161,6 +161,13 @@ fn warpField(p:vec2f,size:f32,layers:f32,seed:f32)->vec2f{
 fn warpAxes(axis:f32)->vec2f{return vec2f(1.0-max(axis,0.0),1.0+min(axis,0.0));}
 // by: the By input (1 when open) scales every warp's move.
 fn nWarp(s:MaterialStep,q:vec2f,by:vec4f)->vec4f{return vec4f(q+warpField(q,arg(s,1u),arg(s,2u),arg(s,4u))*warpAxes(arg(s,3u))*arg(s,0u)*by.x,0,0);}
+// Snap: size, jitter, hex rows, seed. Moves the coordinates to the point of the cell they fall in (the lattice of Cells, Cracks and
+// Facets), so a pattern read through it takes one value a cell: its value at that point. By scales the move.
+fn nSnap(s:MaterialStep,q:vec2f,by:vec4f)->vec4f{
+ let n=max(1.0,round(graphPeriod/arg(s,0u)));let salt=seeded(709.0,arg(s,3u));var c:GraphCell;
+ if(arg(s,2u)>0.0){c=graphHexCell(graphPos(q),n,salt,arg(s,1u));}else{c=graphCell(graphPos(q)/graphPeriod*n,n,salt,arg(s,1u));}
+ return vec4f(q+c.toPoint*by.x,0,0);
+}
 // Push: distance, direction. Moves the coordinates along one direction (x right, y down) by By times the distance.
 fn nPush(s:MaterialStep,q:vec2f,by:vec4f)->vec4f{let a=arg(s,1u)*.01745329252;return vec4f(q+vec2f(cos(a),-sin(a))*arg(s,0u)*by.x,0,0);}
 // Curl flow follows the perpendicular gradient of a scalar potential, in two midpoint steps, so shapes bend without tearing.

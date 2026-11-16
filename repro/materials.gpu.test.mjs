@@ -115,7 +115,7 @@ test('a Slope blur carries a spot downhill along its slope, and uphill when its 
   } finally { s.dispose(); }
 });
 
-test('hex rows of Cells, Cracks and Facets join the repeat', async () => {
+test('hex rows of Cells, Cracks and Facets, and patterns through Warp Snap, join the repeat', async () => {
   await openHost();
   const s = await openScene({biome: 'green', ground: false, strokes: []}, 'biome=green&mapX=5&mapY=5');
   try {
@@ -123,6 +123,10 @@ test('hex rows of Cells, Cracks and Facets join the repeat', async () => {
     for (const kind of ['cells', 'cracks', 'facets']) {
       s.setMaterials(s.materials.map(m => m.worldGround ? {...m, nodes: [{id: 'c', type: 'noise', kind, params: {size: 23, jitter: .3, hex: 1}}, {id: 'o', type: 'output', in: {color: 'c'}}], palette: [], controls: [], frames: []} : m));
       const here = await win(); assert.ok(same(here, await win(640 + pool, 640)) && same(here, await win(640, 640 + pool)), `${kind} on hex rows joins itself`);
+    }
+    for (const hex of [0, 1]) {
+      s.setMaterials(s.materials.map(m => m.worldGround ? {...m, nodes: [{id: 'w', type: 'warp', kind: 'snap', params: {size: 19, hex}}, {id: 'c', type: 'noise', in: {in: 'w'}, params: {size: 60}}, {id: 'o', type: 'output', in: {color: 'c'}}], palette: [], controls: [], frames: []} : m));
+      const here = await win(); assert.ok(same(here, await win(640 + pool, 640)) && same(here, await win(640, 640 + pool)), `a pattern through Warp Snap (hex ${hex}) joins itself`);
     }
     assert.deepEqual(s.errors, []);
   } finally { s.dispose(); }
