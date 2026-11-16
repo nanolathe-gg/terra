@@ -94,7 +94,7 @@ Seven worlds moved toward retail or held; **Painted Desert moved slightly away**
 directions 0.19 / 0.35 against 0.19 / 0.33), so the gap is on the mesas: too many thin dark lines (0.050 against 0.019 in window 1), too
 much 2 px band energy, edges leaning vertical where retail's lean horizontal, and a pale cap twice retail's share in window 1 (0.152 against
 0.069). Highland from 55 or 70 and banding 0.5 (with strata contrast 0.6) were scored and did not move closeness (26-27 of 72); its shape
-score, the worst of the eight at 0.35, did not change in the round. Archipelago keeps thin dark lines at 3-7x retail's.
+score, the worst of the eight at 0.35, did not change in the round. Also scored without moving closeness off 26: a rust bed color (24-25), face creases 0.3 and 0 (no change at all), creases 0.3 with banding 0.5 (look 0.97 -> 0.89). Ten world-setting variants in all; Desert's gap is in its windows' stepped shapes and their light, so redrawing them with its Mesa and cap tools, or the owner's eye, is the next step. Archipelago keeps thin dark lines at 3-7x retail's.
 
 ### Blind A/B, one judge (2026-11-15)
 
@@ -114,6 +114,19 @@ Indistinguishable is 3 of 6; 0-1 or 5-6 means the judge separates them.
 The judge separated Red, Desert, Crystal and Archipelago in 5 of 6 pairs each, but took ours for the original, and all 11 of its
 confident picks were wrong. So these four still differ from retail in a consistent way a viewer can see; Green, Lava, Ice and Moon did not.
 One judge and six pairs a world is a small test: repeat it with more pairs or the owner's eye before treating a world as matched.
+
+Red after the Cracked bed (the same six pairs, a fresh judge): 4 of 6, but the judge answered B for every pair, so the result is a side
+bias and says nothing. On the windows, Cracked bed 0.55 at 42 px moved red-3's look gap from 0.99 to 0.88 and Red's mean from 0.49 to 0.44;
+closeness held at 50 of 75 (median distance 0.17 -> 0.16).
+
+Archipelago's fringe after the blind test (the judge saw crisp contour lines in retail): fringe reach 0.25 -> 0.8, contrast 0.6 -> 0.35.
+Measured on its windows: mean look gap 0.79 -> 0.53 (window 2 1.21 -> 0.45, window 3 0.70 -> 0.79), close to retail 44 -> 45 of 75. Ripple
+height 0 and Vegetation cover 0 changed nothing in these windows; contrast 0.5 scored worse (0.98), though retail's lines read crisper by eye.
+
+Archipelago re-judged after the fringe change (the same six pairs, plus the same pairs shuffled with sides flipped, a fresh judge): every
+answer flipped with its side, so no side bias, and the judge picked the original in 5 of 6 on both sheets. Archipelago is still told apart
+from retail, now the right way round. The judge's cue for ours: "wide even contour rings, rippled sand, banded shallows" (the fringe is now
+too even; the sand ripple is the one noted in the swap test; the shallows band where the depth steps).
 
 ## Cross-biome gaps, ranked by how much of the retail set they cover
 

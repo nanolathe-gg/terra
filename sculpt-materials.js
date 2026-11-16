@@ -8,35 +8,42 @@ import library from './materials/textures.json' with {type:'json'};
 export const MATERIAL_SLOTS = 16;                  // slot 0 is "the world's ground" on a stroke; materials take slots 1 to 15
 export const MATERIAL_REPEAT = 512;
 export const MATERIAL_CACHE_BYTES = 128 * 1024 * 1024;
-export const MAX_NODES = 40, MAX_STOPS = 8, MAX_PALETTE = 32, MAX_CONTROLS = 12, MAX_FRAMES = 12, MAX_TAPPED = 4;
+export const MAX_NODES = 40, MAX_STOPS = 8, MAX_PALETTE = 32, MAX_CONTROLS = 12, MAX_FRAMES = 12, MAX_TAPPED = 4, MAX_STAGES = 4;
 export const THUMB = 64, THUMB_STRIDE = 2;
 
 const P = (key, label, min, max, value, step = 0) => ({key, label, min, max, value, step});
 const SEED = P('seed', 'Seed', 0, 999, 0, 1);
 const NOISE = [P('size', 'Size (px)', 1, 256, 8), P('detail', 'Fine detail', 0, 1, 0), P('layers', 'Broad layers', 0, 5, 0), SEED];
+// Cells, Cracks and Facets read one lattice of scattered points; Jitter is how far each point strays from its cell's middle (0 a square grid).
+const CELLS = [...NOISE, P('jitter', 'Jitter', 0, 1, .8)];
 const NOISE_KIND = {
+  cells: CELLS, cracks: CELLS, facets: CELLS,
   waves: [...NOISE, P('length', 'Length (px)', 1, 256, 24), P('direction', 'Direction (°)', 0, 180, 45), P('crests', 'Crests', 0, 1, 0)],
   ridged: [P('size', 'Size (px)', 2, 256, 16), P('layers', 'Detail layers', 0, 5, 2), P('roughness', 'Detail strength', 0, 1, .5), P('sharpness', 'Sharpness', .25, 4, 1.5), SEED],
   pixel: [SEED],
 };
 // Each node type: its output type, inputs [key, label, accepted type], optional kinds, parameters and a line of help.
-// Types: coords (where a pattern is read), gray (one number a texel) and color. An input of type any takes gray or color.
+// Types: coords (where a pattern is read), gray (one number a texel) and color. An input of type any takes gray or color. A node's output
+// type is fixed, follows its inputs (any) or follows its kind (a function of the node).
 export const NODES = {
-  warp: {code: 1, label: 'Warp', out: 'coords', inputs: [['in', 'Coordinates', 'coords']], kinds: {turbulence: 'Turbulence', flow: 'Curl flow'},
-    params: () => [P('amount', 'Amount (px)', 0, 24, 2), P('size', 'Size (px)', 1, 128, 10), P('layers', 'Broad layers', 0, 4, 0), P('axis', 'Axis balance', -1, 1, 0), SEED],
-    help: 'Bends the coordinates a Noise or Scatter node reads, so its shapes lose their regular outlines.'},
+  warp: {code: 1, label: 'Warp', out: 'coords', inputs: [['in', 'Coordinates', 'coords'], ['by', 'By', 'gray']], kinds: {turbulence: 'Turbulence', flow: 'Curl flow', push: 'Push'},
+    params: kind => kind === 'push' ? [P('amount', 'Distance (px)', 0, 64, 8), P('direction', 'Direction (°)', 0, 360, 0)]
+      : [P('amount', 'Amount (px)', 0, 24, 2), P('size', 'Size (px)', 1, 128, 10), P('layers', 'Broad layers', 0, 4, 0), P('axis', 'Axis balance', -1, 1, 0), SEED],
+    help: 'Bends the coordinates a Noise or Scatter node reads, so its shapes lose their regular outlines; Push moves them along one Direction instead. A By input scales the move: all of it where white, none where black, so one pattern can shift or break another.'},
   noise: {code: 2, label: 'Noise', out: 'gray', inputs: [['in', 'Coordinates', 'coords']],
-    kinds: {smooth: 'Smooth', gradient: 'Gradient', billow: 'Billow', cells: 'Cells', waves: 'Waves', ridged: 'Ridged', pixel: 'Pixel'},
+    kinds: {smooth: 'Smooth', gradient: 'Gradient', billow: 'Billow', cells: 'Cells', cracks: 'Cracks', facets: 'Facets', waves: 'Waves', ridged: 'Ridged', pixel: 'Pixel'},
     params: kind => NOISE_KIND[kind] ?? NOISE,
-    help: 'A gray pattern. Color, height and masks can all read the same one.'},
+    help: 'A gray pattern. Color, height and masks can all read the same one. Cells is bright in each cell’s middle, Cracks is the distance to the nearest cell border (dark on the crack) and Facets gives each cell one flat value.'},
   scatter: {code: 3, label: 'Scatter', out: 'gray', inputs: [['in', 'Coordinates', 'coords'], ['density', 'Density', 'gray']],
     params: () => [P('spacing', 'Spacing (px)', 2, 64, 6), P('radius', 'Radius (px)', .25, 16, 2), P('coverage', 'Coverage', 0, 1, .5), P('jitter', 'Jitter', 0, 1.8, 1.5),
       P('hardness', 'Hardness', 0, .95, .1), P('profile', 'Profile', .25, 4, 1), P('sizeVariation', 'Size variation', 0, 1, .5), P('toneVariation', 'Tone variation', 0, 1, .3),
+      P('elongation', 'Elongation', 0, 1, 0), P('direction', 'Direction (°)', 0, 180, 0), P('directionVariation', 'Direction variation', 0, 1, 1), P('rim', 'Rim', 0, 1, 0),
       P('follow', 'Follow density', 0, 1, 1), SEED],
-    help: 'Scattered round shapes: dots, pits, clods, pebbles, glints. A Density input thins them where it is dark.'},
+    help: 'Scattered shapes: dots, pits, clods, pebbles, glints. Elongation narrows each into a streak (scratches, gouges, blades); Direction is measured as a Waves noise’s is, so the same number lies parallel to its streaks, and Direction variation turns each its own way. Rim hollows each shape into a bowl with a raised rim (craterlets, water-spot rings, pebble rims). A Density input thins them where it is dark.'},
   levels: {code: 4, label: 'Levels', out: 'gray', inputs: [['in', 'Input', 'gray']],
-    params: () => [P('low', 'Low', -.5, 1, 0), P('high', 'High', 0, 1.5, 1), P('gamma', 'Gamma', .2, 4, 1), P('invert', 'Invert', 0, 1, 0)],
-    help: 'Stretches a pattern between Low and High. The histogram shows where its values lie.'},
+    params: () => [P('low', 'Low', -.5, 1, 0), P('high', 'High', 0, 1.5, 1), P('gamma', 'Gamma', .2, 4, 1), P('steps', 'Steps', 2, 16, 4, 1), P('terracing', 'Terracing', 0, 1, 0),
+      P('invert', 'Invert', 0, 1, 0)],
+    help: 'Stretches a pattern between Low and High. Terracing turns it into even Steps, from smooth (0) to flat shelves with sharp risers (1): terraces, strata bands, posterized patches. The histogram shows where its values lie.'},
   combine: {code: 5, label: 'Combine', out: 'any', inputs: [['a', 'Base', 'any'], ['b', 'Layer', 'any'], ['mask', 'Mask', 'gray']],
     kinds: {mix: 'Mix', add: 'Add', multiply: 'Multiply', subtract: 'Subtract', min: 'Darker of the two', max: 'Lighter of the two', screen: 'Screen'},
     params: () => [P('amount', 'Amount', 0, 2, 1), P('offset', 'Layer offset', -1, 1, 0)],
@@ -47,18 +54,32 @@ export const NODES = {
   gradient: {code: 7, label: 'Gradient', out: 'color', inputs: [['in', 'Input', 'gray']],
     params: () => [P('ease', 'Softness', 0, 1, 0)],
     help: 'Colors a gray pattern, dark to light. A stop brighter than 1 lightens when the result multiplies another color.'},
+  adjust: {code: 12, label: 'Color adjust', out: 'color', inputs: [['in', 'Color', 'any'], ['mask', 'Mask', 'gray']],
+    params: () => [P('hue', 'Hue (°)', -180, 180, 0), P('saturation', 'Saturation', -1, 1, 0), P('value', 'Brightness', -1, 1, 0)],
+    help: 'Turns a color’s hue, and scales its saturation and brightness, through an optional Mask: drier or greener patches over every layer at once. The material’s palette limits what shows; after a large change, Pick from the material.'},
+  blur: {code: 13, label: 'Blur', out: 'any', inputs: [['in', 'Input', 'any']], params: () => [P('radius', 'Radius (px)', 0, 32, 2)],
+    help: 'Softens a gray or color pattern over Radius px (0 leaves it), wrapping at the repeat: soft halos from hard masks, dirt filling cracks, smoother heights. Its input is computed over the whole repeat first: a material may use four Blur, Slope blur and Stamp nodes in all.'},
+  slopeblur: {code: 14, label: 'Slope blur', out: 'any', inputs: [['in', 'Input', 'any'], ['slope', 'Slope', 'gray']], params: () => [P('distance', 'Distance (px)', -32, 32, 6)],
+    help: 'Smears a pattern along another pattern’s slope, downhill by Distance px (uphill when negative; 0 leaves it): melted or eroded rock, wind-swept sand, runnels. Level parts of the Slope stay put. Its inputs are computed over the whole repeat first, as a Blur’s are.'},
+  stamp: {code: 15, label: 'Stamp', out: 'any', inputs: [['base', 'Base', 'any'], ['shape', 'Shape', 'any'], ['in', 'Coordinates', 'coords'], ['density', 'Density', 'gray']],
+    params: () => [P('spacing', 'Spacing (px)', 4, 128, 24), P('radius', 'Radius (px)', 1, 64, 10), P('coverage', 'Coverage', 0, 1, .7), P('jitter', 'Jitter', 0, 1.8, 1),
+      P('hardness', 'Hardness', 0, .98, .8), P('sizeVariation', 'Size variation', 0, 1, .3), P('turn', 'Turn variation', 0, 1, 1), P('variety', 'Variety', 0, 1, 1), SEED],
+    help: 'Stamps copies of another pattern (Shape) over a Base: each a disc of Radius px cut from the Shape, turned and sized its own way, on a jittered lattice. Variety 0 cuts every copy from the Shape’s middle; 1 from anywhere in it. The topmost copy wins where two overlap; Hardness sharpens their edges; a Density input thins them where it is dark. For a color and a height that match, duplicate the node and change its inputs.'},
   light: {code: 8, label: 'Light', out: 'gray', inputs: [['in', 'Height', 'gray']],
     params: () => [P('direction', 'Direction (°)', 0, 360, 135), P('strength', 'Strength', 0, 8, 2)],
     help: 'How a height’s slopes face a light: .5 on the level, lighter toward the light. Tints color like a lit bump without real relief.'},
   cavity: {code: 9, label: 'Cavity', out: 'gray', inputs: [['in', 'Height', 'gray']],
     params: () => [P('radius', 'Radius (px)', 1, 8, 2), P('strength', 'Strength', 0, 8, 2)],
     help: 'Hollows and crests of a height: below .5 in hollows, above it on crests. Darkens crevices or lightens worn tops.'},
-  constant: {code: 10, label: 'Constant', out: 'gray', inputs: [], params: () => [P('value', 'Value', 0, 1, .5)], help: 'One gray value everywhere.'},
+  constant: {code: 10, label: 'Constant', out: n => n.kind === 'color' ? 'color' : 'gray', inputs: [], kinds: {gray: 'Gray', color: 'Color'},
+    params: kind => kind === 'color' ? [] : [P('value', 'Value', 0, 1, .5)], help: 'One gray value, or one color, everywhere.'},
   output: {code: 11, label: 'Material', out: null, inputs: [['color', 'Color', 'any'], ['height', 'Height', 'gray'], ['shine', 'Shine', 'gray'], ['worn', 'Worn color', 'any'], ['deposit', 'Deposit color', 'any']],
     params: () => [P('relief', 'Relief (px)', 0, 8, 0), P('wornFrom', 'Worn from', 0, 1, .2), P('wornAmount', 'Worn amount', 0, 1, 1), P('depositFrom', 'Deposit from', 0, 1, .2), P('depositAmount', 'Deposit amount', 0, 1, 1)],
     help: 'What the material is: its color, the art height the sun lights (Relief scales it; gameplay heights never change) and its shine. Where Time’s water wore the ground away, or laid sediment down, the map shows the Worn or Deposit color instead, from the erosion level set by From, as much as Amount.'},
 };
 export const NODE_TYPES = Object.keys(NODES);
+// Whether an input that wants one type takes an output of another: any takes gray or color, and a gray input reads a color's brightness.
+export const accepts = (want, got) => got != null && (want === 'any' ? got !== 'coords' : want === 'gray' ? got === 'gray' || got === 'color' : want === got);
 export const nodeParams = n => NODES[n.type].params(n.kind);
 export const nodeKinds = n => NODES[n.type].kinds ?? null;
 export const DITHER = [P('amount', 'Palette grain', 0, 1, 1), P('spread', 'Diffusion spread', 0, 1, 0), P('tone', 'Tone response', .5, 2, 1),
@@ -80,6 +101,11 @@ function copyStops(value) {
     return [clamp(number(s[0], 'stop position'), 0, 1), ...s.slice(1).map(v => clamp(number(v, 'stop color'), 0, 2))];
   }).sort((a, b) => a[0] - b[0]);
 }
+// A Constant's color: one stop, kept as a gradient's stops are so the same color fields and published controls serve both.
+function copyColor(value) {
+  const stop = Array.isArray(value?.[0]) && value[0].length === 4 ? value[0] : [0, .5, .5, .5];
+  return [[0, ...stop.slice(1).map(v => clamp(number(v, 'color'), 0, 2))]];
+}
 // The type each node puts out, in evaluation order, checking each connection on the way.
 function typeNodes(ordered) {
   const types = new Map();
@@ -89,9 +115,9 @@ function typeNodes(ordered) {
       const from = n.in[key]; if (from === null) continue;
       const got = types.get(from);
       if (got === null) throw Error('The Material node has no output to connect.');
-      if (want === 'any' ? got === 'coords' : got !== want) throw Error(`${n.name}: ${label} needs ${want === 'any' ? 'a gray or color' : want === 'coords' ? 'a Warp node’s coordinates' : 'a ' + want} input.`);
+      if (!accepts(want, got)) throw Error(`${n.name}: ${label} needs ${want === 'any' ? 'a gray or color' : want === 'coords' ? 'a Warp node’s coordinates' : want === 'gray' ? 'a gray or color' : 'a ' + want} input.`);
     }
-    types.set(n.id, spec.out === 'any' ? (['a', 'b'].some(k => types.get(n.in[k]) === 'color') ? 'color' : 'gray') : spec.out);
+    types.set(n.id, typeof spec.out === 'function' ? spec.out(n) : spec.out === 'any' ? (spec.inputs.some(([k, , want]) => want === 'any' && types.get(n.in[k]) === 'color') ? 'color' : 'gray') : spec.out);
   }
   return types;
 }
@@ -124,6 +150,7 @@ function copyNode(n, seen) {
   out.in = {};
   for (const [key] of spec.inputs) { const from = n.in?.[key] ?? null; if (from !== null && typeof from !== 'string') throw Error('Invalid node connection.'); out.in[key] = from; }
   if (n.type === 'gradient') out.stops = copyStops(n.stops);
+  if (n.type === 'constant' && out.kind === 'color') out.stops = copyColor(n.stops);
   if (n.x !== undefined || n.y !== undefined) { out.x = Math.round(clamp(number(n.x, 'node position'), -20000, 20000)); out.y = Math.round(clamp(number(n.y, 'node position'), -20000, 20000)); }
   return out;
 }
@@ -146,6 +173,7 @@ export function copyNodes(value) {
   };
   if (nodes.some(n => tapDepth(n) > 2) || nodes.filter(n => ['light', 'cavity'].includes(n.type) && n.enabled && n.in.in).length > MAX_TAPPED)
     throw Error(`A material can use ${MAX_TAPPED} Light or Cavity nodes, at most two in a chain.`);
+  if (nodes.filter(n => Object.hasOwn(STAGED, n.type)).length > MAX_STAGES) throw Error(`A material can use ${MAX_STAGES} Blur, Slope blur or Stamp nodes in all.`);
   return nodes;
 }
 const freeId = (nodes, stem) => { const taken = new Set(nodes.map(n => n.id)); if (!taken.has(stem)) return stem; for (let i = 2; ; i++) if (!taken.has(`${stem}-${i}`)) return `${stem}-${i}`; };
@@ -165,7 +193,7 @@ export function copyPalette(value = []) {
 // The controls a material publishes: a label over one number of one node, or over a gradient's colors (param 'stops').
 export function controlSpec(material, control) {
   const node = material.nodes.find(n => n.id === control.node); if (!node) return null;
-  if (control.param === 'stops') return node.type === 'gradient' ? {node, stops: true} : null;
+  if (control.param === 'stops') return node.stops ? {node, stops: true} : null;
   const spec = nodeParams(node).find(p => p.key === control.param); if (!spec) return null;
   // The control's own range, inside the node setting's: what its author thinks a map maker should reach.
   const min = clamp(Number.isFinite(control.min) ? control.min : spec.min, spec.min, spec.max), max = clamp(Number.isFinite(control.max) ? control.max : spec.max, spec.min, spec.max);
@@ -230,43 +258,83 @@ export function compileMaterial(material) {
     const links = spec.inputs.map(([key]) => index.get(n.in[key]) ?? -1); while (links.length < 4) links.push(-1);   // the Material node's fifth (Deposit) is read only by programSource
     const args = spec.params(n.kind).map(p => n.params[p.key] + (p.key === 'seed' ? material.seed : 0));
     if (n.type === 'gradient') args.push(n.stops.length, ...n.stops.flat());
+    if (n.type === 'constant' && n.kind === 'color') args.push(...n.stops[0].slice(1));
     return {type: n.type, kind: n.kind ?? '', code: [spec.code, n.enabled ? 1 : 0, Math.max(0, kinds.indexOf(n.kind)), types.get(n.id) === 'color' ? 1 : 0], links, args, out: types.get(n.id)};
   });
   return {nodes, instructions, index};
 }
 // Pipeline identity is the graph's shape and node types, never a number a control changes.
 export const programKey = program => JSON.stringify(program.instructions.map(i => [i.type, i.kind, i.code[1], i.links]));
+// Stages: a node that needs its input's values over the whole repeat (Blur, Slope blur, Stamp) has that input computed first, into a
+// stage of its own; its pass (a blur, a slope smear, a copy) writes the stage's layer, and the passes after it read the layer instead of the branch
+// behind it. STAGED lists the inputs each such node computes in its stage; it is staged once it is on and those are wired. A pass reads
+// earlier stages only where its own nodes reach one (auto layouts leave out a texture a pass never reads, so the cache binds it only then).
+const STAGED = {blur: ['in'], slopeblur: ['in', 'slope'], stamp: ['shape']};
+// Whether a material needs the stage textures: one of its staged nodes is on and wired.
+export const materialStaged = material => stagePlan(compileMaterial(material)).stages.length > 0;
+export function stagePlan(program) {
+  const list = program.instructions, keys = i => NODES[list[i].type].inputs.map(([key]) => key), staged = i => STAGED[list[i].type] ?? [];
+  const linksOf = i => staged(i).map(key => list[i].links[keys(i).indexOf(key)]);
+  const steps = list.map((_, i) => i).filter(i => staged(i).length && list[i].code[1] && linksOf(i).every(l => l >= 0)), stage = new Map(steps.map((i, k) => [i, k]));
+  // The nodes the values at one point need: a staged node's staged inputs come from its stage, so the walk stops there.
+  const closure = (...roots) => {
+    const seen = new Set(), visit = k => { if (k < 0 || seen.has(k)) return; seen.add(k); list[k].links.forEach((l, j) => { if (!stage.has(k) || !staged(k).includes(keys(k)[j])) visit(l); }); };
+    roots.forEach(visit); return [...seen].sort((a, b) => a - b);
+  };
+  const reads = indices => indices.some(k => stage.has(k)), out = list.findIndex(n => n.type === 'output');
+  return {stages: steps.map(i => ({step: i, type: list[i].type, links: linksOf(i)})), stage, closure, out, mainReads: reads(closure(out)), stageReads: steps.map(i => reads(closure(...linksOf(i))))};
+}
 // The WGSL for a compiled graph: one line a node, in order. A Light or Cavity node reads its height at four neighbors through a
-// function that evaluates that height's own branch at another point.
+// function that evaluates that height's own branch at another point. With Blurs, `stages` is the source of a third module: one entry
+// point a stage that computes its node's inputs (stageN), and the passes that make a stage's layer (blurPass, slopePass).
 export function programSource(program, thumbnails = false) {
-  const list = program.instructions;
+  const list = program.instructions, {stages, stage, closure, out} = stagePlan(program);
+  // A gray input wired to a color reads its brightness (graphGray); every other input reads its source as it is.
+  const read = (i, k) => { const from = list[i].links[k]; return NODES[list[i].type].inputs[k][2] === 'gray' && list[from].out === 'color' ? `graphGray(v${from})` : `v${from}`; };
   const call = (i, point) => {
-    const {type, kind, code, links} = list[i], s = `s${i}`, value = (k, fallback) => links[k] < 0 ? fallback : `v${links[k]}`;
+    const {type, kind, code, links} = list[i], s = `s${i}`, value = (k, fallback) => links[k] < 0 ? fallback : read(i, k);
     const coords = links[0] < 0 ? point : `v${links[0]}.xy`, tapped = links[0] >= 0;
     if (!code[1]) return type === 'warp' ? `vec4f(${coords},0,0)` : ['noise', 'scatter', 'constant', 'output'].includes(type) ? 'vec4f(0)' : ['light', 'cavity'].includes(type) ? 'vec4f(.5)' : value(0, 'vec4f(0)');
     const taps = step => ['+vec2f(' + step + ',0)', '-vec2f(' + step + ',0)', '+vec2f(0,' + step + ')', '-vec2f(0,' + step + ')'].map(d => `tap${i}(${point}${d})`).join(',');
     switch (type) {
-      case 'warp': return `${kind === 'flow' ? 'nFlow' : 'nWarp'}(${s},${coords})`;
+      case 'warp': return `${kind === 'flow' ? 'nFlow' : kind === 'push' ? 'nPush' : 'nWarp'}(${s},${coords},${value(1, 'vec4f(1)')})`;
       case 'noise': return `${kind === 'ridged' ? 'nRidged' : kind === 'pixel' ? 'nPixel' : 'nNoise'}(${s},${coords})`;
       case 'scatter': return `nScatter(${s},${coords},${value(1, 'vec4f(1)')},${links[1] >= 0})`;
       case 'levels': return `nLevels(${s},${value(0, 'vec4f(0)')})`;
       case 'combine': return `nCombine(${s},${value(0, 'vec4f(0)')},${value(1, 'vec4f(0)')},${value(2, 'vec4f(1)')})`;
       case 'heightblend': return `nHeightBlend(${s},${value(0, 'vec4f(0)')},${value(1, 'vec4f(0)')},${value(2, 'vec4f(0)')},${value(3, 'vec4f(0)')})`;
       case 'gradient': return `nGradient(${s},${value(0, 'vec4f(0)')})`;
+      case 'adjust': return `nAdjust(${s},${value(0, 'vec4f(0)')},${value(1, 'vec4f(1)')})`;
       case 'light': return tapped ? `nLight(${s},${taps('1.0')})` : 'vec4f(.5)';
-      case 'cavity': return tapped ? `nCavity(${s},v${links[0]}.x,${taps(`arg(${s},0u)`)})` : 'vec4f(.5)';
-      case 'constant': return `vec4f(arg(${s},0u))`;
+      case 'cavity': return tapped ? `nCavity(${s},${read(i, 0)}.x,${taps(`arg(${s},0u)`)})` : 'vec4f(.5)';
+      case 'blur': return stage.has(i) ? `stageAt(${stage.get(i)},${point})` : 'vec4f(0)';
+      case 'slopeblur': return stage.has(i) ? `stageAt(${stage.get(i)},${point})` : value(0, 'vec4f(0)');
+      case 'stamp': return stage.has(i) ? `nStamp(${s},${links[2] < 0 ? point : `v${links[2]}.xy`},${value(0, 'vec4f(0)')},${value(3, 'vec4f(1)')},${links[3] >= 0},${stage.get(i)})` : value(0, 'vec4f(0)');
+      case 'constant': return kind === 'color' ? `vec4f(arg(${s},0u),arg(${s},1u),arg(${s},2u),1)` : `vec4f(arg(${s},0u))`;
       default: return 'vec4f(0)';
     }
   };
   // Noise kinds share nNoise and tell it which by the instruction's third code, so the index must be the shader's (0 smooth, 1 gradient,
-  // 2 billow, 3 cells, 4 waves): the order of NODES.noise.kinds.
+  // 2 billow, 3 cells, 4 cracks, 5 facets, 6 waves): the order of NODES.noise.kinds.
   const lines = indices => indices.map(i => `let s${i}=node(${i}u);let v${i}=${call(i, 'point')};`).join('\n');
-  const closure = i => { const seen = new Set(), visit = k => { if (k < 0 || seen.has(k)) return; seen.add(k); list[k].links.forEach(visit); }; visit(i); return [...seen].sort((a, b) => a - b); };
-  const taps = list.map((n, i) => ['light', 'cavity'].includes(n.type) && n.code[1] && n.links[0] >= 0 ? `fn tap${i}(point:vec2f)->f32{\n${lines(closure(n.links[0]))}\nreturn v${n.links[0]}.x;\n}` : '').filter(Boolean).join('\n');
-  const all = lines(list.map((_, i) => i)), out = list.findIndex(n => n.type === 'output'), o = list[out].links;
+  const taps = (stages.length ? STAGE_READ : '') + (stages.some(st => st.type === 'stamp') ? STAMP : '') + list.map((n, i) => ['light', 'cavity'].includes(n.type) && n.code[1] && n.links[0] >= 0 ? `fn tap${i}(point:vec2f)->f32{\n${lines(closure(n.links[0]))}\nreturn ${read(i, 0)}.x;\n}` : '').filter(Boolean).join('\n');
+  const all = lines(list.map((_, i) => i)), o = list[out].links;
+  // A Slope blur's stage keeps its input's color and its slope's gray in one texel (alpha).
+  const stored = st => st.type === 'slopeblur' ? `vec4f(v${st.links[0]}.rgb,${read(st.step, 1)}.x)` : `v${st.links[0]}`;
+  const stageSource = stages.length ? `@group(1) @binding(1) var<uniform> groundJob:vec4u;
+@group(1) @binding(4) var stageOut:texture_storage_2d<rgba32float,write>;
+@group(1) @binding(5) var blurSrc:texture_2d<f32>;
+${stages.map((st, k) => `@compute @workgroup_size(8,8)
+fn stage${k}(@builtin(global_invocation_id) id:vec3u){
+ if(any(id.xy>=textureDimensions(stageOut))){return;}
+ graphPeriod=f32(textureDimensions(stageOut).x);graphRow=groundJob.z;let point=vec2f(id.xy);
+${lines(closure(...st.links))}
+ textureStore(stageOut,vec2i(id.xy),${stored(st)});
+}`).join('\n')}
+${BLUR_PASS}
+${SLOPE_PASS}` : null;
   if (thumbnails) {
-    const store = list.map((n, i) => n.type === 'output' ? '' : `textureStore(thumbOut,vec2i(id.xy),${i},vec4f(${n.out === 'coords' ? `vec3f(noiseBasis(3,v${i}.xy,24.0,379.0,vec3f(0)))` : n.out === 'color' ? `v${i}.rgb` : `vec3f(v${i}.x)`},1));`).join('\n');
+    const store = list.map((n, i) => n.type === 'output' ? '' : `textureStore(thumbOut,vec2i(id.xy),${i},vec4f(${n.out === 'coords' ? `vec3f(noiseBasis(3,v${i}.xy,24.0,379.0,vec3f(.8,0,0)))` : n.out === 'color' ? `v${i}.rgb` : `vec3f(v${i}.x)`},1));`).join('\n');
     return {taps, main: `@group(1) @binding(0) var thumbOut:texture_storage_2d_array<rgba8unorm,write>;
 @group(1) @binding(1) var<uniform> groundJob:vec4u;
 @compute @workgroup_size(8,8)
@@ -275,7 +343,7 @@ fn thumbMain(@builtin(global_invocation_id) id:vec3u){
  graphPeriod=f32(groundJob.x);graphRow=groundJob.z;let point=vec2f(id.xy*groundJob.y);
 ${all}
 ${store}
-}`};
+}`, stages: stageSource};
   }
   return {taps, main: `@group(1) @binding(0) var groundOut:texture_storage_2d_array<rgba32float,write>;
 @group(1) @binding(2) var maskOut:texture_storage_2d_array<rgba16float,write>;
@@ -284,12 +352,74 @@ ${store}
 fn groundMain(@builtin(global_invocation_id) id:vec3u){
  if(any(id.xy>=textureDimensions(groundOut))){return;}
  graphPeriod=f32(textureDimensions(groundOut).x);graphRow=groundJob.z;let point=vec2f(id.xy);
-${all}
- var color=${o[0] < 0 ? 'vec3f(.5)' : `v${o[0]}.rgb`};${o[3] >= 0 ? `if(groundJob.w==1u){color=v${o[3]}.rgb;}` : ''}${o[4] >= 0 ? `if(groundJob.w==2u){color=v${o[4]}.rgb;}` : ''}let height=${o[1] < 0 ? '0.0' : `v${o[1]}.x*arg(s${out},0u)`};let shine=${o[2] < 0 ? '0.0' : `clamp(v${o[2]}.x,0.0,1.0)`};
+${lines(closure(out))}
+ var color=${o[0] < 0 ? 'vec3f(.5)' : `v${o[0]}.rgb`};${o[3] >= 0 ? `if(groundJob.w==1u){color=v${o[3]}.rgb;}` : ''}${o[4] >= 0 ? `if(groundJob.w==2u){color=v${o[4]}.rgb;}` : ''}let height=${o[1] < 0 ? '0.0' : `${read(out, 1)}.x*arg(s${out},0u)`};let shine=${o[2] < 0 ? '0.0' : `clamp(${read(out, 2)}.x,0.0,1.0)`};
  textureStore(groundOut,vec2i(id.xy),i32(groundJob.y),vec4f(color,height));
  textureStore(maskOut,vec2i(id.xy),i32(groundJob.y),vec4f(shine,0,0,1));
-}`};
+}`, stages: stageSource};
 }
+// A stage's value at a point: its blurred repeat, wrapped, read between texels where a Light or Cavity asks at a fraction.
+const STAGE_READ = `@group(1) @binding(3) var stageIn:texture_2d_array<f32>;
+fn stageAt(k:i32,p:vec2f)->vec4f{
+ let n=vec2i(textureDimensions(stageIn).xy);let c=floor(p);let f=p-c;let i=vec2i(c);
+ let a=textureLoad(stageIn,(i%n+n)%n,k,0);if(all(f==vec2f(0))){return a;}
+ let b=textureLoad(stageIn,((i+vec2i(1,0))%n+n)%n,k,0);let d=textureLoad(stageIn,((i+vec2i(0,1))%n+n)%n,k,0);let e=textureLoad(stageIn,((i+vec2i(1,1))%n+n)%n,k,0);
+ return mix(mix(a,b,f.x),mix(d,e,f.x),f.y);
+}
+`;
+// One direction of a Gaussian blur (groundJob.x: 0 across, 1 down) of the Blur at step groundJob.w, wrapping at the repeat. Its Radius is
+// twice the Gaussian's sigma; below a twentieth of a pixel the input passes unchanged.
+const BLUR_PASS = `@compute @workgroup_size(8,8)
+fn blurPass(@builtin(global_invocation_id) id:vec3u){
+ let n=vec2i(textureDimensions(blurSrc));let p=vec2i(id.xy);if(any(p>=n)){return;}
+ graphRow=groundJob.z;let sigma=arg(node(groundJob.w),0u)*.5;
+ if(sigma<.05){textureStore(stageOut,p,textureLoad(blurSrc,p,0));return;}
+ let dir=select(vec2i(0,1),vec2i(1,0),groundJob.x==0u);let r=min(i32(ceil(sigma*3.0)),48);
+ var sum=vec4f(0);var total=0.0;
+ for(var k=-r;k<=r;k++){let w=exp(-f32(k*k)/(2.0*sigma*sigma));sum+=textureLoad(blurSrc,((p+dir*k)%n+n)%n,0)*w;total+=w;}
+ textureStore(stageOut,p,sum/total);
+}`;
+// Stamp: spacing, radius, coverage, jitter, hardness, size variation, turn variation, variety, seed; k is its stage. Each lattice cell may
+// hold one copy, kept by chance (coverage, times the density where one is wired): a disc of its radius cut from the stage (around the
+// repeat's middle at Variety 0, anywhere at 1), turned and scaled its own way. The two topmost copies over a texel are laid on the base
+// in order, each through its soft edge, so overlaps keep a clean order.
+const STAMP = `fn nStamp(s:MaterialStep,p:vec2f,base:vec4f,density:vec4f,linked:bool,k:i32)->vec4f{
+ let n=max(1.0,round(graphPeriod/arg(s,0u)));let size=graphPeriod/n;let q=graphPos(p)/size;let c=floor(q);let seed=37.0*arg(s,8u);
+ let reach=i32(min(3.0,ceil(arg(s,1u)*(1.0+.6*arg(s,5u))/size+.5*arg(s,3u))));let cover=arg(s,2u)*select(1.0,clamp(density.x,0.0,1.0),linked);
+ var v1=base;var w1=0.0;var p1=-1.0;var v2=base;var w2=0.0;var p2=-1.0;
+ for(var y=-reach;y<=reach;y++){for(var x=-reach;x<=reach;x++){
+  let cell=c+vec2f(f32(x),f32(y));let id=poolWrap(cell,n);let h=cellHash(id+907.0+seed);let v=cellHash(id+953.0+seed);
+  let keep=smoothstep(v.y-.04,v.y+.04,cover)*smoothstep(0.0,.04,cover);if(keep<=0.0){continue;}
+  let scale=1.0+arg(s,5u)*1.2*(v.x-.5);let radius=arg(s,1u)*scale;let o=(q-(cell+.5+(h-.5)*arg(s,3u)))*size;let d=length(o);if(d>=radius){continue;}
+  let w=keep*(1.0-smoothstep(radius*arg(s,4u),radius,d));let r=cellHash(id+983.0+seed);let t=arg(s,6u)*6.2831853*(r.x-.5);
+  let local=vec2f(cos(t)*o.x+sin(t)*o.y,cos(t)*o.y-sin(t)*o.x)/scale;
+  let value=stageAt(k,mix(vec2f(.5*graphPeriod),cellHash(id+1013.0+seed)*graphPeriod,arg(s,7u))+local);let rank=r.y;
+  if(rank>p1){p2=p1;w2=w1;v2=v1;p1=rank;w1=w;v1=value;}else if(rank>p2){p2=rank;w2=w;v2=value;}
+ }}
+ return mix(mix(base,v2,w2),v1,w1);
+}
+`;
+// A Slope blur's pass: from each texel, steps down its slope (the stage's alpha) by Distance in all, averaging its input (the stage's
+// color) along the way; uphill when Distance is negative. Where the slope is level the walk stays put. The layer keeps the same gray in
+// every channel, as a gray value does.
+const SLOPE_PASS = `fn slopeSrc(p:vec2f)->vec4f{
+ let n=vec2i(textureDimensions(blurSrc));let c=floor(p);let f=p-c;let i=vec2i(c);
+ let a=textureLoad(blurSrc,(i%n+n)%n,0);let b=textureLoad(blurSrc,((i+vec2i(1,0))%n+n)%n,0);
+ let d=textureLoad(blurSrc,((i+vec2i(0,1))%n+n)%n,0);let e=textureLoad(blurSrc,((i+vec2i(1,1))%n+n)%n,0);
+ return mix(mix(a,b,f.x),mix(d,e,f.x),f.y);
+}
+@compute @workgroup_size(8,8)
+fn slopePass(@builtin(global_invocation_id) id:vec3u){
+ let n=vec2i(textureDimensions(blurSrc));let p=vec2i(id.xy);if(any(p>=n)){return;}
+ graphRow=groundJob.z;let distance=arg(node(groundJob.w),0u);let here=textureLoad(blurSrc,p,0);
+ if(abs(distance)<.05){textureStore(stageOut,p,vec4f(here.rgb,here.r));return;}
+ let steps=24;let step=distance/f32(steps);var q=vec2f(p);var sum=here;
+ for(var k=0;k<steps;k++){
+  let g=.5*vec2f(slopeSrc(q+vec2f(1,0)).a-slopeSrc(q-vec2f(1,0)).a,slopeSrc(q+vec2f(0,1)).a-slopeSrc(q-vec2f(0,1)).a);let m=length(g);
+  q-=g/max(m,1e-6)*step*smoothstep(0.0,.01,m);sum+=slopeSrc(q);
+ }
+ let c=sum/f32(steps+1);textureStore(stageOut,p,vec4f(c.rgb,c.r));
+}`;
 // The most a material's art height can rise or fall, by interval arithmetic over its graph: the renderer reserves that much relief.
 export function materialReliefBound(material) {
   const values = new Map(), add = (a, b) => [a[0] + b[0], a[1] + b[1]], sub = (a, b) => [a[0] - b[1], a[1] - b[0]];
@@ -299,9 +429,12 @@ export function materialReliefBound(material) {
     const get = (key, fallback = [0, 0]) => values.get(n.in[key]) ?? fallback, p = n.params; let v = [0, 1];
     if (!n.enabled) v = ['noise', 'scatter', 'constant'].includes(n.type) ? [0, 0] : ['light', 'cavity'].includes(n.type) ? [.5, .5] : get(Object.keys(n.in)[0]);
     else switch (n.type) {
-      case 'constant': v = [p.value, p.value]; break;
+      case 'constant': v = n.kind === 'color' ? [Math.min(...n.stops[0].slice(1)), Math.max(...n.stops[0].slice(1))] : [p.value, p.value]; break;
       case 'gradient': { const all = n.stops.flatMap(s => s.slice(1)); v = [Math.min(...all), Math.max(...all)]; break; }
       case 'heightblend': { const a = get('a'), b = get('b'); v = [Math.min(a[0], b[0]), Math.max(a[1], b[1])]; break; }
+      case 'blur': case 'slopeblur': v = get('in'); break;
+      case 'stamp': { const a = get('base'), b = get('shape'); v = [Math.min(a[0], b[0]), Math.max(a[1], b[1])]; break; }
+      case 'adjust': { const a = get('in'); v = [Math.min(0, a[0]), Math.max(a[1], a[1] * (1 + Math.max(0, p.value)))]; break; }   // a turn keeps the brightest channel
       case 'combine': {
         const a = get('a'), q = sub(get('b'), [p.offset, p.offset]), w = mul([p.amount, p.amount], get('mask', [1, 1]));
         v = n.kind === 'add' ? add(a, mul(q, w)) : n.kind === 'subtract' ? sub(a, mul(q, w)) : n.kind === 'multiply' ? mul(a, mix([1, 1], q, w))
@@ -319,7 +452,7 @@ export function materialReliefBound(material) {
 export function materialTint(material) {
   const byId = new Map(material.nodes.map(n => [n.id, n]));
   let node = byId.get(material.nodes.find(n => n.type === 'output').in.color);
-  for (let hops = 0; node && node.type !== 'gradient' && hops < MAX_NODES; hops++) node = byId.get(node.in.a ?? node.in.in ?? node.in.b);
+  for (let hops = 0; node && !node.stops && hops < MAX_NODES; hops++) node = byId.get(node.in.a ?? node.in.in ?? node.in.b);
   if (!node?.stops) return [.5, .5, .5];
   return [1, 2, 3].map(c => Math.min(1, node.stops.reduce((sum, stop) => sum + stop[c], 0) / node.stops.length));
 }
@@ -484,7 +617,10 @@ export function parseMaterialText(value) {
   if (m?.format !== 'terraform-material') throw Error('The clipboard has no material.');
   return {name: nameOf(m.name), ...copyMaterial(m)};
 }
-export function materialCacheUsage(count, pool = MATERIAL_REPEAT) {
+// What the cache holds: 28 bytes a texel a layer (a material, or a Worn or Deposit color it draws), and while any material in use has a
+// staged node (stagePlan) the stage textures, MAX_STAGES layers and two scratch layers of rgba32float.
+export function materialCacheUsage(count, pool = MATERIAL_REPEAT, staged = false) {
   if (!Number.isInteger(count) || count < 0 || count > MATERIAL_SLOTS * (1 + MATERIAL_STATES.length)) throw Error('Invalid material cache size.');
-  const bytes = count * 28 * pool * pool; return {bytes, budget: MATERIAL_CACHE_BYTES, fits: bytes <= MATERIAL_CACHE_BYTES};
+  const stageBytes = staged ? (MAX_STAGES + 2) * 16 * pool * pool : 0, bytes = count * 28 * pool * pool + stageBytes;
+  return {bytes, stageBytes, budget: MATERIAL_CACHE_BYTES, fits: bytes <= MATERIAL_CACHE_BYTES};
 }

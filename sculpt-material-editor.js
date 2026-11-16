@@ -1,7 +1,7 @@
 // The material editor: one full-screen dialog for the map's ground and water materials. The graph fills the screen; beside it sit one
 // preview and three panes: Controls (what the material publishes, for adjusting it), Node (the selected node) and Palette (the game
 // colors it is reduced to). Every element is in index.html; this fills values and applies edits through the map's own undo and save.
-import {NODES, NODE_TYPES, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
+import {NODES, NODE_TYPES, accepts, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
   nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb,
   addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText, MAP_ROLES, roleOf, roleName, materialStatesApply} from './sculpt-materials.js';
 import {mountMaterialGraph, graphPositions, CARD, cardHeight} from './sculpt-material-graph.js';
@@ -11,7 +11,7 @@ import gamePalette from './materials/palette.json' with {type: 'json'};
 const $ = id => document.getElementById(id);
 const hex = rgb => '#' + rgb.map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
 const rgbOf = value => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16));
-const PARAM_ROWS = 10, INPUT_ROWS = 5, CELL = 20;
+const PARAM_ROWS = 14, INPUT_ROWS = 5, CELL = 20;
 
 export function mountMaterialEditor(host) {
   const dialog = $('material-editor'), preview = new MaterialPreview();
@@ -66,7 +66,7 @@ export function mountMaterialEditor(host) {
   function openMenu(screen, place, wire) {
     if (!material()) return;
     menuAt = {place, wire}; const menu = $('node-menu'), stage = menu.parentElement.getBoundingClientRect();
-    for (const b of menuItems) { const spec = NODES[b.dataset.type]; b.dataset.fits = String(!wire || spec.inputs.some(([, , want]) => want === 'any' ? wire.type !== 'coords' : want === wire.type)); }
+    for (const b of menuItems) { const spec = NODES[b.dataset.type]; b.dataset.fits = String(!wire || spec.inputs.some(([, , want]) => accepts(want, wire.type))); }
     menu.hidden = false; $('node-search').value = ''; filterMenu();
     menu.style.left = Math.max(8, Math.min(stage.width - menu.offsetWidth - 8, screen.x - stage.left)) + 'px';
     menu.style.top = Math.max(8, Math.min(stage.height - menu.offsetHeight - 8, screen.y - stage.top)) + 'px';
@@ -89,7 +89,7 @@ export function mountMaterialEditor(host) {
     change(m => {
       if (m.nodes.length >= MAX_NODES) throw Error(`A material has at most ${MAX_NODES} nodes.`);
       made = makeNode(button.dataset.type, m.nodes, {...(button.dataset.kind ? {kind: button.dataset.kind} : {}), x: Math.round(place.x - (wire ? 0 : CARD.width / 2)), y: Math.round(place.y - 30)});
-      if (wire) { const key = NODES[made.type].inputs.find(([, , want]) => want === 'any' ? wire.type !== 'coords' : want === wire.type)[0]; made.in[key] = wire.from; }
+      if (wire) { const inputs = NODES[made.type].inputs, key = (inputs.find(([, , want]) => want === wire.type || want === 'any' && wire.type !== 'coords') ?? inputs.find(([, , want]) => accepts(want, wire.type)))[0]; made.in[key] = wire.from; }
       const places = graph.places(); for (const n of m.nodes) if (n.x === undefined) { const p = places.get(n.id); n.x = p.x; n.y = p.y; }   // the rest keep their places
       m.nodes.push(made);
     });
@@ -194,7 +194,7 @@ export function mountMaterialEditor(host) {
     }
     for (let i = 0; i < INPUT_ROWS; i++) {
       const input = spec.inputs[i]; $('node-input-row-' + i).hidden = !input; if (!input) continue;
-      const [key, label, want] = input, fits = o => o.id !== n.id && o.type !== 'output' && (want === 'any' ? types.get(o.id) !== 'coords' : types.get(o.id) === want);
+      const [key, label, want] = input, fits = o => o.id !== n.id && o.type !== 'output' && accepts(want, types.get(o.id));
       $('node-input-label-' + i).textContent = label;
       $('node-input-' + i).replaceChildren(new Option(want === 'coords' ? 'Plain coordinates' : 'Not connected', ''), ...m.nodes.filter(fits).map(o => new Option(o.name, o.id)));
       $('node-input-' + i).value = n.in[key] ?? ''; $('node-input-clear-' + i).disabled = !n.in[key];
@@ -202,12 +202,16 @@ export function mountMaterialEditor(host) {
       const inert = n.type === 'output' && ['worn', 'deposit'].includes(key) && !materialStatesApply(m);
       $('node-input-' + i).disabled = inert; $('node-input-' + i).title = inert ? 'Only a ground draws its Worn and Deposit colors: this material is the world’s water or another of its surfaces.' : '';
     }
-    $('node-gradient').hidden = n.type !== 'gradient'; $('node-histogram').hidden = n.type !== 'levels';
-    if (n.type === 'gradient') {
+    // A Constant's color shows the gradient's color fields for its one stop: no bar, position or Remove.
+    const single = n.type === 'constant' && !!n.stops;
+    $('node-gradient').hidden = !n.stops; $('node-histogram').hidden = n.type !== 'levels';
+    for (const el of [$('gradient-bar'), $('stop-position'), document.querySelector('label[for="stop-position"]'), $('stop-remove')]) el.hidden = single;
+    if (single) stopAt = 0;
+    if (n.stops) {
       stopAt = Math.min(stopAt, n.stops.length - 1); const stop = n.stops[stopAt], gain = Math.max(1, ...stop.slice(1));
       $('stop-color').value = hex(stop.slice(1).map(v => v / gain * 255)); if (document.activeElement !== $('stop-gain')) $('stop-gain').value = +gain.toFixed(3); if (document.activeElement !== $('stop-position')) $('stop-position').value = +stop[0].toFixed(3);
-      $('stop-remove').disabled = n.stops.length <= 2; const on = published(m, n.id, 'stops') >= 0; $('gradient-pin').setAttribute('aria-pressed', String(on)); $('gradient-pin').textContent = on ? 'Colors are published' : 'Publish these colors';
-      drawGradient(n); drawPaletteGrid($('stop-palette'), 8, null);
+      $('stop-remove').disabled = n.stops.length <= 2; const on = published(m, n.id, 'stops') >= 0; $('gradient-pin').setAttribute('aria-pressed', String(on)); $('gradient-pin').textContent = single ? (on ? 'Color is published' : 'Publish this color') : on ? 'Colors are published' : 'Publish these colors';
+      if (!single) drawGradient(n); drawPaletteGrid($('stop-palette'), 8, null);
     }
     if (n.type === 'levels') drawHistogram(n);
     $('material-node-delete').disabled = $('node-duplicate').disabled = n.type === 'output'; $('node-solo').disabled = n.type === 'output'; $('node-solo').setAttribute('aria-pressed', String(solo === n.id));
@@ -255,7 +259,7 @@ export function mountMaterialEditor(host) {
   $('stop-gain').onchange = () => { setStop(stop => { const old = Math.max(1, ...stop.slice(1)), gain = Math.max(1, Math.min(2, Number($('stop-gain').value) || 1)); for (let j = 1; j < 4; j++) stop[j] = Math.min(2, stop[j] * gain / old); })(); commit(); };
   $('stop-position').onchange = () => { setStop((stop, g) => { stop[0] = Math.max(0, Math.min(1, Number($('stop-position').value) || 0)); const ref = stop; g.stops.sort((a, b) => a[0] - b[0]); stopAt = g.stops.indexOf(ref); })(); commit(); };
   $('stop-remove').onclick = () => { setStop((stop, g) => { g.stops.splice(stopAt, 1); stopAt = Math.max(0, stopAt - 1); })(); commit(); };
-  $('gradient-pin').onclick = () => { const n = node(); togglePublish(n.id, 'stops', `${n.name}: colors`.slice(0, 60)); };
+  $('gradient-pin').onclick = () => { const n = node(); togglePublish(n.id, 'stops', `${n.name}: ${n.type === 'constant' ? 'color' : 'colors'}`.slice(0, 60)); };
   const cellAt = (canvas, e, size) => { const r = canvas.getBoundingClientRect(), columns = canvas.width / size, x = Math.floor((e.clientX - r.left) * canvas.width / r.width / size), y = Math.floor((e.clientY - r.top) * canvas.height / r.height / size); return y * columns + x; };
   $('stop-palette').onclick = e => { const index = cellAt($('stop-palette'), e, 8); if (index < 0 || index > 255) return; setStop(stop => { paletteRgb(index).forEach((v, j) => { stop[j + 1] = v / 255; }); })(); commit(); };
 
@@ -263,7 +267,7 @@ export function mountMaterialEditor(host) {
   function drawHistogram(n) {
     const canvas = $('node-histogram'), ctx = canvas.getContext('2d'), w = canvas.width, h = canvas.height, pixels = thumbPixels.get(n.in.in), bins = new Array(64).fill(0);
     ctx.fillStyle = '#10171a'; ctx.fillRect(0, 0, w, h);
-    if (pixels) { for (let i = 0; i < pixels.length; i += 4) bins[Math.min(63, pixels[i] >> 2)]++; const top = Math.max(1, ...bins); ctx.fillStyle = '#8fa3a8'; bins.forEach((v, i) => ctx.fillRect(i * w / 64, h - v / top * (h - 4), w / 64 - .5, v / top * (h - 4))); }
+    if (pixels) { for (let i = 0; i < pixels.length; i += 4) bins[Math.min(63, Math.round(.2126 * pixels[i] + .7152 * pixels[i + 1] + .0722 * pixels[i + 2]) >> 2)]++; const top = Math.max(1, ...bins); ctx.fillStyle = '#8fa3a8'; bins.forEach((v, i) => ctx.fillRect(i * w / 64, h - v / top * (h - 4), w / 64 - .5, v / top * (h - 4))); }
     ctx.fillStyle = '#e8d38a'; for (const key of ['low', 'high']) ctx.fillRect(Math.max(0, Math.min(w - 2, n.params[key] * w)), 0, 2, h);
   }
 

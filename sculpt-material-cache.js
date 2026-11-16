@@ -1,7 +1,7 @@
 // The GPU side of materials (sculpt-materials.js): each material in use has one layer of a cached repeat holding its unlit color, art
 // height and shine (and one more layer for each state it draws: Worn, Deposit), a layer of that color reduced to its game-palette colors, and one texel of its mean color. A graph is compiled to a
 // pipeline once per shape; its numbers are a buffer upload. A palette-only edit redoes the reduction, not the fields.
-import {compileMaterial, PROGRAM_BYTES, STEP_STRIDE, MAX_NODES, materialRenderKey, programKey, programSource, materialCacheUsage, paletteRgb, THUMB, THUMB_STRIDE, materialStates, MATERIAL_STATES} from './sculpt-materials.js';
+import {compileMaterial, PROGRAM_BYTES, STEP_STRIDE, MAX_NODES, MAX_STAGES, materialRenderKey, programKey, programSource, stagePlan, materialCacheUsage, paletteRgb, THUMB, THUMB_STRIDE, materialStates, MATERIAL_STATES} from './sculpt-materials.js';
 
 const SCRATCH_ROW = 16;   // the materialGraphs row a thumbnail run borrows (after one a slot)
 // A slot's row of the uniform table: its palette and how the reduction treats it.
@@ -56,11 +56,61 @@ export class MaterialCache {
     }
     return this.pipelines.get(id);
   }
+  // Stages (sculpt-materials.js stagePlan): one layer a staged node (Blur, Slope blur, Stamp) for what the later passes read, and two scratch
+  // layers (a stage's inputs, then a blur's first direction). Made the first time a material in use has one, at the repeat's size; materials
+  // share them, since each material's stages run just before its own pass.
+  stageTextures(size) {
+    if (this.stageSize === size) return;
+    const usage = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING;
+    this.stageTexture = this.texture(this.stageTexture, 'material blur stages', [size, size, MAX_STAGES], 'rgba32float', usage | GPUTextureUsage.COPY_DST, size * size * MAX_STAGES * 16);
+    this.scratchTexture = this.texture(this.scratchTexture, 'material blur scratch', [size, size, 2], 'rgba32float', usage | GPUTextureUsage.COPY_SRC, size * size * 2 * 16);
+    const r = this.renderer; if (r.resources) r.fixedBytes = [...r.resources.values()].filter(v => v.kind === 'materials' || v.kind === 'shared').reduce((n, v) => n + v.bytes, 0);
+    this.stageSize = size;
+  }
+  // Once no material in use has a staged node, the stage textures go; the next one that needs them makes them again.
+  releaseStages() {
+    if (!this.stageTexture) return;
+    const r = this.renderer;
+    for (const texture of [this.stageTexture, this.scratchTexture]) { if (r.release) r.release(texture); else texture.destroy(); }
+    this.stageTexture = this.scratchTexture = null; this.stageSize = 0;
+    if (r.resources) r.fixedBytes = [...r.resources.values()].filter(v => v.kind === 'materials' || v.kind === 'shared').reduce((n, v) => n + v.bytes, 0);
+  }
+  stagePipelines(program) {
+    const id = 'stages ' + programKey(program);
+    if (!this.pipelines.has(id)) {
+      if (this.pipelines.size >= 24) this.pipelines.delete(this.pipelines.keys().next().value);
+      const {taps, stages} = programSource(program), r = this.renderer, plan = stagePlan(program);
+      const module = r.device.createShaderModule({label: 'material blur stages', code: this.source.replace('/*MATERIAL_TAPS*/', taps).replace('/*MATERIAL_MAIN*/', stages)});
+      const make = entryPoint => r.device.createComputePipeline({label: 'material ' + entryPoint, layout: 'auto', compute: {module, entryPoint}});
+      this.pipelines.set(id, {stages: plan.stages.map((_, k) => make('stage' + k)), blur: make('blurPass'), slope: make('slopePass')});
+    }
+    return this.pipelines.get(id);
+  }
+  // A program's stages into `encoder`, before its own pass: each staged node's inputs over the whole repeat, then its pass into its layer
+  // (a Blur across and down, a Slope blur's walk, a Stamp's copy of its shape).
+  runStages(encoder, program, row, size, buffers) {
+    const plan = stagePlan(program); if (!plan.stages.length) return;
+    this.stageTextures(size);
+    const device = this.renderer.device, {stages, blur, slope} = this.stagePipelines(program), groups = Math.ceil(size / 8);
+    const job = values => { const b = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}); buffers.push(b); device.queue.writeBuffer(b, 0, new Uint32Array(values)); return b; };
+    const layer = (texture, k) => texture.createView({dimension: '2d', baseArrayLayer: k, arrayLayerCount: 1});
+    const graphs = pipeline => device.createBindGroup({layout: pipeline.getBindGroupLayout(0), entries: [{binding: 15, resource: {buffer: this.programBuffer}}]});
+    const run = (pipeline, entries) => { const pass = encoder.beginComputePass({label: 'material blur stage'}); pass.setPipeline(pipeline); pass.setBindGroup(0, graphs(pipeline)); pass.setBindGroup(1, device.createBindGroup({layout: pipeline.getBindGroupLayout(1), entries})); pass.dispatchWorkgroups(groups, groups); pass.end(); };
+    plan.stages.forEach(({step, type}, k) => {
+      run(stages[k], [{binding: 1, resource: {buffer: job([0, 0, row, 0])}}, {binding: 4, resource: layer(this.scratchTexture, 0)},
+        ...(plan.stageReads[k] ? [{binding: 3, resource: this.stageTexture.createView({dimension: '2d-array'})}] : [])]);
+      if (type === 'stamp') { encoder.copyTextureToTexture({texture: this.scratchTexture}, {texture: this.stageTexture, origin: {x: 0, y: 0, z: k}}, [size, size, 1]); return; }
+      if (type === 'slopeblur') { run(slope, [{binding: 1, resource: {buffer: job([0, 0, row, step])}}, {binding: 5, resource: layer(this.scratchTexture, 0)}, {binding: 4, resource: layer(this.stageTexture, k)}]); return; }
+      run(blur, [{binding: 1, resource: {buffer: job([0, 0, row, step])}}, {binding: 5, resource: layer(this.scratchTexture, 0)}, {binding: 4, resource: layer(this.scratchTexture, 1)}]);
+      run(blur, [{binding: 1, resource: {buffer: job([1, 0, row, step])}}, {binding: 5, resource: layer(this.scratchTexture, 1)}, {binding: 4, resource: layer(this.stageTexture, k)}]);
+    });
+  }
   // The cache's shape for these materials (a Map of slot to material): which layer each slot reads. No GPU work is submitted.
   prepare(pool, materials) {
     // One layer a slot's color, then one a state it draws; the slot's graph is one program row, which its state layers share.
     const slots = [...materials.keys()].sort((a, b) => a - b), layers = slots.flatMap(slot => [`${slot}`, ...materialStates(materials.get(slot)).map(k => `${slot}:${k}`)]);
-    const usage = materialCacheUsage(layers.length, pool);
+    const programs = new Map([...materials].map(([slot, m]) => [slot, compileMaterial(m)])), staged = [...programs.values()].some(p => stagePlan(p).stages.length);
+    const usage = materialCacheUsage(layers.length, pool, staged);
     if (!usage.fits) throw Error(`These materials need ${(usage.bytes / 1048576).toFixed(0)} MiB; the cache budget is ${usage.budget / 1048576} MiB. Use fewer materials or fewer Worn and Deposit colors.`);
     if (this.pool !== pool || String(this.layers) !== String(layers)) { this.allocate(layers.length ? pool : 1, Math.max(1, layers.length)); this.pool = pool; this.layers = layers; }
     const r = this.renderer, table = r.uniform.get('ground'), set = (slot, key, v) => r.uniformView.setInt32(table.offset + slot * table.stride + table.members.get(key).offset, v, true);
@@ -70,8 +120,9 @@ export class MaterialCache {
     }
     this.entries = layers.map((key, layer) => {
       const [slot, state = null] = key.split(':'), s = Number(slot);
-      return {slot: s, state, stateCode: state ? MATERIAL_STATES.indexOf(state) + 1 : 0, row: slots.indexOf(s), layer, material: materials.get(s), program: compileMaterial(materials.get(s))};
+      return {slot: s, state, stateCode: state ? MATERIAL_STATES.indexOf(state) + 1 : 0, row: slots.indexOf(s), layer, material: materials.get(s), program: programs.get(s)};
     });
+    if (!staged) this.releaseStages();
   }
   // Generates what changed. Called inside the draw cycle, so a fast drag never queues more than one run a frame.
   sync(pool, materials) {
@@ -88,10 +139,12 @@ export class MaterialCache {
       for (const [e, key] of changed) {
         const pipeline = this.pipeline(e.program), job = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}); buffers.push(job);
         device.queue.writeBuffer(job, 0, new Uint32Array([e.slot, e.layer, e.row, e.stateCode]));
+        this.runStages(encoder, e.program, e.row, pool, buffers);
         const pass = encoder.beginComputePass({label: 'material graph'}); pass.setPipeline(pipeline);
         pass.setBindGroup(0, device.createBindGroup({layout: pipeline.getBindGroupLayout(0), entries: [{binding: 15, resource: {buffer: this.programBuffer}}]}));
         pass.setBindGroup(1, device.createBindGroup({layout: pipeline.getBindGroupLayout(1), entries: [
-          {binding: 0, resource: this.fieldTexture.createView({dimension: '2d-array'})}, {binding: 1, resource: {buffer: job}}, {binding: 2, resource: this.shineTexture.createView({dimension: '2d-array'})}]}));
+          {binding: 0, resource: this.fieldTexture.createView({dimension: '2d-array'})}, {binding: 1, resource: {buffer: job}}, {binding: 2, resource: this.shineTexture.createView({dimension: '2d-array'})},
+          ...(stagePlan(e.program).mainReads ? [{binding: 3, resource: this.stageTexture.createView({dimension: '2d-array'})}] : [])]}));
         pass.dispatchWorkgroups(Math.ceil(pool / 8), Math.ceil(pool / 8)); pass.end();
         this.keys.set(e.layer, key); this.generations++;
       }
@@ -143,13 +196,16 @@ export class MaterialCache {
     const pipeline = this.pipeline(program, true), job = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
     device.queue.writeBuffer(job, 0, new Uint32Array([period, THUMB_STRIDE, SCRATCH_ROW, 0]));
     const bytes = THUMB * THUMB * 4, buffer = device.createBuffer({size: bytes * count, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ});
-    const encoder = device.createCommandEncoder({label: 'material node thumbnails'}), pass = encoder.beginComputePass();
+    const encoder = device.createCommandEncoder({label: 'material node thumbnails'}), stageJobs = [];
+    this.runStages(encoder, program, SCRATCH_ROW, period, stageJobs);
+    const pass = encoder.beginComputePass();
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, device.createBindGroup({layout: pipeline.getBindGroupLayout(0), entries: [{binding: 15, resource: {buffer: this.programBuffer}}]}));
-    pass.setBindGroup(1, device.createBindGroup({layout: pipeline.getBindGroupLayout(1), entries: [{binding: 0, resource: this.thumbTexture.createView({dimension: '2d-array'})}, {binding: 1, resource: {buffer: job}}]}));
+    pass.setBindGroup(1, device.createBindGroup({layout: pipeline.getBindGroupLayout(1), entries: [{binding: 0, resource: this.thumbTexture.createView({dimension: '2d-array'})}, {binding: 1, resource: {buffer: job}},
+      ...(stagePlan(program).stages.length ? [{binding: 3, resource: this.stageTexture.createView({dimension: '2d-array'})}] : [])]}));
     pass.dispatchWorkgroups(THUMB / 8, THUMB / 8); pass.end();
     encoder.copyTextureToBuffer({texture: this.thumbTexture}, {buffer, bytesPerRow: THUMB * 4, rowsPerImage: THUMB}, [THUMB, THUMB, count]);
-    device.queue.submit([encoder.finish()]); job.destroy();
+    device.queue.submit([encoder.finish()]); job.destroy(); stageJobs.forEach(b => b.destroy());
     await buffer.mapAsync(GPUMapMode.READ);
     const pixels = new Uint8ClampedArray(buffer.getMappedRange()).slice(); buffer.unmap(); buffer.destroy();
     return new Map(program.nodes.map((n, i) => [n.id, pixels.subarray(i * bytes, (i + 1) * bytes)]));

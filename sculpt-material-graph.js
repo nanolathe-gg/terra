@@ -1,6 +1,6 @@
 // The material editor's graph canvas: node cards with a picture of what each makes, typed ports, wires and labeled frames.
 // It draws and reports gestures; the editor (sculpt-material-editor.js) owns the material and makes every change.
-import {NODES, nodeTypes, orderNodes} from './sculpt-materials.js';
+import {NODES, nodeTypes, orderNodes, accepts as fits} from './sculpt-materials.js';
 
 export const CARD = {width: 172, head: 38, row: 22, thumb: 72, port: 6, reach: 14};
 const COLORS = {coords: '#91b9df', gray: '#d9bf8c', color: '#9bd5ae'};
@@ -69,7 +69,7 @@ export function mountMaterialGraph(host) {
     for (const f of frames(list)) if (p.x >= f.x && p.x <= f.x + f.width && p.y >= f.y && p.y <= f.y + 24) return {frame: f};
     return null;
   }
-  const accepts = (c, key, type) => { const want = c.inputs.find(i => i[0] === key)?.[2]; return want === 'any' ? type !== 'coords' : want === type; };
+  const accepts = (c, key, type) => { const want = c.inputs.find(i => i[0] === key)?.[2]; return !!want && fits(want, type); };
   const schedule = () => { if (!frame && !disposed) frame = requestAnimationFrame(draw); };
   function fit() {
     const list = cards(), r = canvas.getBoundingClientRect();

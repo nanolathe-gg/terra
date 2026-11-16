@@ -989,6 +989,21 @@ fn bankGrad(p: vec2f) -> f32 { return 0.5 * length(vec2f(baseHeight(p + vec2f(1.
 
 // E11: value noise for the shelf's wander (smooth, 0..1, four lattice hashes).
 fn shelfHash(c: vec2f) -> f32 { return fract(sin(dot(c, vec2f(127.1, 311.7))) * 43758.5453); }
+// Cracked bed: 1 on the seams between dried-mud polygons about bedCrackSize px wide (a jittered cell grid, its outline bent by smooth
+// noise so no rows show), falling to 0 a pixel away.
+fn bedCrackLine(p: vec2f) -> f32 {
+    let S = max(u.bedCrackSize, 8.0);
+    let q = p / S + (vec2f(shelfNoise(p / 23.0 + 3.1), shelfNoise(p / 23.0 + 17.7)) - 0.5) * 0.35;
+    let c = floor(q);
+    var d1 = 9.0; var d2 = 9.0;
+    for (var j = -1; j <= 1; j++) { for (var i = -1; i <= 1; i++) {
+        let g = c + vec2f(f32(i), f32(j));
+        let d = length(q - g - (vec2f(shelfHash(g + 0.37), shelfHash(g + 91.3)) * 0.85 + 0.075));
+        if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
+    } }
+    let w = 1.0 / S;
+    return 1.0 - smoothstep(w, 2.2 * w, d2 - d1);
+}
 fn shelfNoise(q: vec2f) -> f32 {
     let i = floor(q);
     let f = fract(q);
@@ -2332,7 +2347,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 let lit = min((u.ambient * (1.0 - cav) + 0.95 * max(0.0, dot(ownRock, u.light)) * closeVis * faceSun * (1.0 - 0.45 * cav)) / flatLight, u.lightCap);
                 rockShade = mix(rockShade, mix(lit, 1.0, flatBank), u.bedFlat) / max(rockShade, 0.05);
             } else { rockShade = 1.0; }
-            let bed=mix(levelGround*bedShade,color/max(lightTint,vec3f(.02))*rockShade,rockBedShare);
+            var bed=mix(levelGround*bedShade,color/max(lightTint,vec3f(.02))*rockShade,rockBedShare);
+            // Cracked bed: the dried-mud seams darken the bed, so they read through the shallows and fade with them into the deep.
+            if (u.bedCracks > 0.0) { bed = bed * (1.0 - 0.6 * u.bedCracks * bedCrackLine(p)); }
             let shallow=litBed(bed,rockBedShare,dot(material,vec3f(0.299,0.587,0.114)));
             // Depth absorption under a hard step: the bed's tint deepens toward the deep colour as the water gets deeper, so a
             // lake reads paler at its rim and darker toward the step, not one flat tone (a ramp already does this by itself).

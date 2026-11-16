@@ -168,6 +168,7 @@ export function worldControlRequirement(key,v){
  if(key==='beachWidth'&&n('beachLayer')<=0)return 'This world has no beach of its own. Choose another world\'s Beach, above, to use this setting.';
  if(key==='ringShiftDir'||key==='ringScatter')return needs('ringShift','Offset between copies');
  if(key==='ringPatchSize')return needs('ringPatch','Reach variation');
+ if(key==='bedCrackSize')return needs('bedCracks','Cracked bed');
  return '';
 }
 
@@ -189,7 +190,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'looseSupply','looseSize','boulders','looseKnoll','sand','sandGrain','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing',
  'banding','sandBanding','strata','strataContrast',
- 'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedTint','bedBright','bedContrast','bedRelief','shoreEdge',
+ 'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedTint','bedBright','bedContrast','bedRelief','bedCracks','shoreEdge',
  'baseBand','desertCapFlat',
  'shelfWander','bedFlat',
  'ringContrast','ringCount','ringSize','ringShift','ringTone',

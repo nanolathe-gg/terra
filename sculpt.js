@@ -5,7 +5,7 @@ import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
-import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldPair,keepStrokeMaterials,materialsInUse,deleteMaterial,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY,addMaterial,materialCacheUsage,materialStates} from './sculpt-materials.js';
+import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldPair,keepStrokeMaterials,materialsInUse,deleteMaterial,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY,addMaterial,materialCacheUsage,materialStates,materialStaged} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,recipeMaterial} from './sculpt-rock-presets.js';
 import {KNOBS,LOW_GROUND_RGB,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
@@ -2003,7 +2003,7 @@ function giveRockMaterials(rocks,materials,slots){
     const key=recipeMaterial(r.key,config),m=LIBRARY[key];if(!m)return r;
     let at=list.find(o=>o.source===key&&!roleOf(o));
     if(!at){
-      if(list.length>=MATERIAL_SLOTS-1||!materialCacheUsage(layers(list)+1).fits)return r;
+      if(list.length>=MATERIAL_SLOTS-1||!materialCacheUsage(layers(list)+1+materialStates(m).length,undefined,[...list,m].some(materialStaged)).fits)return r;
       const added=addMaterial(list,m,m.name);list=added.materials;at=list.find(o=>o.slot===added.slot);
     }
     return {...r,material:at.slot};

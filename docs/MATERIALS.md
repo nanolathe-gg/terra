@@ -63,27 +63,35 @@ its art like everything else.
 
 Three types flow along wires: **coordinates** (where a pattern is read),
 **gray** (one number a texel) and **color**. Gray and color mix freely in
-Combine. Every pattern wraps at the 512-px repeat.
+Combine, and a gray input wired to a color reads its brightness: a Gradient
+with gray stops is a curve for a height or mask. Every pattern wraps at the
+512-px repeat.
 
 | Node | Makes | Use |
 | --- | --- | --- |
-| Noise | gray | One algorithm a type: Smooth, Gradient, Billow, Cells, Waves (directional: sixteen true directions from turns by small integer vectors, which keep the repeat; between two, a blend), Ridged, Pixel. Size in px, Fine detail, Broad layers, Seed. |
-| Scatter | gray | Round shapes on a jittered lattice: dots, pits, clods, glints. A Density input thins them where it is dark. |
-| Warp | coordinates | Bends what a Noise or Scatter reads: Turbulence or Curl flow. |
-| Levels | gray | Stretches between Low and High, with Gamma and Invert. Shows a histogram of its input. |
+| Noise | gray | One algorithm a type: Smooth, Gradient, Billow, Cells, Cracks, Facets, Waves (directional: sixteen true directions from turns by small integer vectors, which keep the repeat; between two, a blend), Ridged, Pixel. Size in px, Fine detail, Broad layers, Seed. Cells, Cracks and Facets read one lattice of scattered points: Cells is bright in each cell's middle, Cracks is the distance to the nearest cell border (dark on the crack; Levels gamma rounds it into cobbles) and Facets is one flat value a cell. Their Jitter is how far each point strays (0 a square grid, .8 by default). Cracks at two sizes are two Noise nodes joined by Combine, Darker. |
+| Scatter | gray | Shapes on a jittered lattice: dots, pits, clods, glints. Elongation narrows each across its length into a streak (scratches, gouges, blade marks), inside its radius and no thinner than about a pixel; Direction is measured as a Waves noise's is, so the same number lies parallel to its streaks, and Direction variation turns each its own way (0 aligned, 1 any way). Rim hollows each shape from a dome (0) into a bowl with a raised rim (1): craterlets, water-spot rings, pebble rims. A Density input thins them where it is dark. |
+| Warp | coordinates | Bends what a Noise or Scatter reads: Turbulence or Curl flow, or Push (moves it along one Direction). A By input scales the move, none where it is black: ripples shifted per Facet, bands broken along a mask. |
+| Levels | gray | Stretches between Low and High, with Gamma and Invert. Terracing turns the result into even Steps (2 to 16), from smooth (0) to flat shelves with sharp risers (1). Shows a histogram of its input. |
 | Combine | gray or color | Mix, Add, Multiply, Subtract, Darker, Lighter, Screen, through an optional Mask. Layer offset `.5` centers a noise. |
 | Height blend | gray or color | The layer shows where its height stands above the base's. |
 | Gradient | color | 2 to 8 stops. A stop brighter than 1 lightens when the result multiplies another color. |
+| Color adjust | color | Turns a color's hue and scales its saturation and brightness (0 leaves each), through an optional Mask: varies every layer at once. The material's palette limits what shows; after a large change, Pick from the material. |
+| Blur | gray or color | Softens its input over Radius px (0 leaves it exactly), wrapping at the repeat: soft halos from hard masks, dirt filling cracks, smoother heights. Gives what it reads. |
+| Slope blur | gray or color | Smears its Input along its Slope's downhill direction by Distance px (uphill when negative; 0 leaves it exactly), averaging along the way; level parts of the Slope stay put. Melted or eroded rock, wind-swept sand, runnels. |
+| Stamp | gray or color | Copies of its Shape over its Base: each a disc of Radius px cut from the Shape (from its middle at Variety 0, from anywhere at 1), turned and sized its own way on a jittered lattice; the topmost copy wins where two overlap, Hardness sharpens their edges, a Density input thins them and a Warp on Coordinates bends their outlines. Coverage 0 leaves the Base exactly. For a color and a height that match, duplicate the node and change its inputs. |
 | Light | gray | A height's slope toward a light: tints color like a lit bump. |
 | Cavity | gray | Hollows (below .5) and crests (above) of a height. |
-| Constant | gray | One value. |
+| Constant | gray or color | One value (Gray) or one color (Color), everywhere. A Color has the gradient's color fields for its one stop and publishes like a gradient's colors. |
 | Material | | The one output: Color, Height (Relief scales it, in px) and Shine. |
 
 Keep the set small: a new node type must do what no combination of these can.
 Height is art relief only; gameplay heights never change.
 
 A graph has at most 40 nodes. Light and Cavity evaluate their input again at
-four neighbors, so a material may use four of them, two in a chain.
+four neighbors, so a material may use four of them, two in a chain. A
+material may use four Blur, Slope blur and Stamp nodes in all (each needs
+an input over the whole repeat).
 
 ## The palette
 
@@ -136,6 +144,22 @@ node. A pipeline is built once per shape; node numbers sit in a storage
 buffer, so a dragged control regenerates the repeat without compiling.
 Light and Cavity read their height through a generated function that
 evaluates only that branch at another point.
+
+A Blur or Slope blur needs its input at every texel at once, so the graph
+runs in stages (`stagePlan`): before a material's pass, each such node's
+inputs are computed over the whole repeat into a scratch layer, then its pass
+writes that node's layer (a Blur across then down: Gaussian, sigma half the
+Radius, wrapping; a Slope blur 24 steps down its slope, kept in the stage's
+alpha, averaging its input; a Stamp's Shape copied as it is, to be cut into
+discs where the Stamp is read), and every later
+pass (another Blur's stage, the material's pass, the node thumbnails) reads
+the layer instead of the branch behind it. The stage textures
+(`rgba32float`, four layers and two scratch layers, 24 MiB at 512 px) are
+made the first time a material in use has a staged node, shared by all
+materials (each material's stages run just before its own pass), counted in
+the material cache's budget while held, and freed once no material in use
+needs them. The
+material's pass evaluates only the nodes its Material node reaches.
 
 Each material in use has a layer of the cached repeat (512 px: color and
 height in `rgba32float`, shine, the palette-reduced color) and one texel of

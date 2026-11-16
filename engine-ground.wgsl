@@ -11,6 +11,8 @@ fn node(i:u32)->MaterialStep{return materialGraphs[graphRow].steps[i];}
 fn arg(s:MaterialStep,index:u32)->f32{return s.args[index/4u][index%4u];}
 // A seed moves a field's lattice or its hash: 0 is the field the node always had.
 fn seeded(salt:f32,seed:f32)->f32{return salt+37.0*seed;}
+// A color read by a gray input: its brightness (Rec. 709 weights), the same number in every channel.
+fn graphGray(c:vec4f)->vec4f{return vec4f(dot(c.rgb,vec3f(.2126,.7152,.0722)));}
 
 // Smooth value noise on a lattice that divides the repeat. Neighboring lattice counts blend, so a size edit stays continuous.
 fn smoothCount(p:vec2f,n:f32,salt:f32)->f32{return wrapNoise(graphPos(p)*(n/graphPeriod)+salt,n);}
@@ -24,16 +26,17 @@ fn gradientNoise(p:vec2f,size:f32,salt:f32)->f32{
  return mix(mix(values[0],values[1],fade.x),mix(values[2],values[3],fade.x),fade.y)*1.41421356;
 }
 struct GraphCell{radius:f32,edge:f32,id:vec2f}
-// The nearest scattered point of a wrapped lattice and the distance to the border with its neighbor.
-fn graphCell(q:vec2f,n:f32,salt:f32)->GraphCell{
+// The nearest scattered point of a wrapped lattice and the distance to the border with its neighbor. Jitter is how far a point strays from
+// its cell's middle, up to .5 of a cell each way (0 a square grid).
+fn graphCell(q:vec2f,n:f32,salt:f32,jitter:f32)->GraphCell{
  let g=floor(q);let f=q-g;var mr=vec2f(0);var mb=vec2f(0);var md=8.0;
  for(var j=-1;j<=1;j++){for(var i=-1;i<=1;i++){
-  let b=vec2f(f32(i),f32(j));let r=b+.5+(cellHash(poolWrap(g+b,n)+salt)-.5)*.8-f;
+  let b=vec2f(f32(i),f32(j));let r=b+.5+(cellHash(poolWrap(g+b,n)+salt)-.5)*jitter-f;
   let d=dot(r,r);if(d<md){md=d;mr=r;mb=b;}
  }}
  var edge=8.0;
  for(var j=-2;j<=2;j++){for(var i=-2;i<=2;i++){
-  let b=mb+vec2f(f32(i),f32(j));let r=b+.5+(cellHash(poolWrap(g+b,n)+salt)-.5)*.8-f;let dr=r-mr;
+  let b=mb+vec2f(f32(i),f32(j));let r=b+.5+(cellHash(poolWrap(g+b,n)+salt)-.5)*jitter-f;let dr=r-mr;
   if(dot(dr,dr)>1e-6){edge=min(edge,dot(.5*(mr+r),normalize(dr)));}
  }}
  return GraphCell(sqrt(md),edge,poolWrap(g+mb,n));
@@ -58,18 +61,24 @@ fn waveBase(p:vec2f,size:f32,ratio:f32,direction:f32,salt:f32)->f32{
  if(f<=0.0){return waveAt(p,size,ratio,WAVE_DIRS[i],salt);}
  return mix(waveAt(p,size,ratio,WAVE_DIRS[i],salt),waveAt(p,size,ratio,WAVE_DIRS[i+1u],salt),f);
 }
-// One noise type at one size, in 0 to 1. kind: 0 smooth, 1 gradient, 2 billow, 3 cells, 4 waves.
-fn noiseBasis(kind:i32,p:vec2f,size:f32,salt:f32,wave:vec3f)->f32{
+// One noise type at one size, in 0 to 1. kind: 0 smooth, 1 gradient, 2 billow, 3 cells, 4 cracks, 5 facets, 6 waves. extra: jitter for the
+// cell types; length over the node's size, direction and crests for waves.
+fn noiseBasis(kind:i32,p:vec2f,size:f32,salt:f32,extra:vec3f)->f32{
  switch kind{
   case 1:{return clamp(.5+.65*gradientNoise(p,size,salt),0.0,1.0);}
   case 2:{return clamp(abs(gradientNoise(p,size,salt))*1.8,0.0,1.0);}
-  case 3:{let n=max(1.0,round(graphPeriod/size));return clamp(1.0-graphCell(graphPos(p)/graphPeriod*n,n,salt).radius,0.0,1.0);}
-  case 4:{
-   let ratio=wave.x;let angle=wave.y*.01745329252;let offset=vec2f(cos(angle),-sin(angle))*size*.35;
-   let base=waveBase(p,size,ratio,wave.y,salt);
-   if(wave.z<=0.0){return clamp(base,0.0,1.0);}
-   let slope=.5+(waveBase(p+offset,size,ratio,wave.y,salt)-waveBase(p-offset,size,ratio,wave.y,salt))/.7;
-   return clamp(mix(base,slope,wave.z),0.0,1.0);
+  case 3,4,5:{
+   let n=max(1.0,round(graphPeriod/size));let c=graphCell(graphPos(p)/graphPeriod*n,n,salt,extra.x);
+   if(kind==4){return clamp(c.edge*2.0,0.0,1.0);}
+   if(kind==5){return cellHash(c.id+salt+97.0).x;}
+   return clamp(1.0-c.radius,0.0,1.0);
+  }
+  case 6:{
+   let ratio=extra.x;let angle=extra.y*.01745329252;let offset=vec2f(cos(angle),-sin(angle))*size*.35;
+   let base=waveBase(p,size,ratio,extra.y,salt);
+   if(extra.z<=0.0){return clamp(base,0.0,1.0);}
+   let slope=.5+(waveBase(p+offset,size,ratio,extra.y,salt)-waveBase(p-offset,size,ratio,extra.y,salt))/.7;
+   return clamp(mix(base,slope,extra.z),0.0,1.0);
   }
   default:{return clamp(.5+.5*smoothNoise(p,size,salt),0.0,1.0);}
  }
@@ -81,9 +90,11 @@ fn noiseLayers(kind:i32,p:vec2f,size:f32,layers:f32,salt:f32,wave:vec3f)->f32{
   let scale=exp2(f32(i));let weight=scale*amount;sum+=noiseBasis(kind,p,size*scale,salt,wave)*weight;total+=weight;}
  return sum/total;
 }
-// Noise: size, detail, broad layers, seed, then for waves: length, direction, crests. Detail mixes in a layer at half the size.
+// Noise: size, detail, broad layers, seed, then jitter for the cell types, or length, direction and crests for waves. Detail mixes in a
+// layer at half the size.
 fn nNoise(s:MaterialStep,q:vec2f)->vec4f{
- let kind=s.code.z;let size=arg(s,0u);let salt=seeded(379.0,arg(s,3u));let wave=vec3f(arg(s,4u)/max(size,.001),arg(s,5u),arg(s,6u));
+ let kind=s.code.z;let size=arg(s,0u);let salt=seeded(379.0,arg(s,3u));
+ let wave=select(vec3f(arg(s,4u),0,0),vec3f(arg(s,4u)/max(size,.001),arg(s,5u),arg(s,6u)),kind==6);
  let a=noiseLayers(kind,q,size,arg(s,2u),salt,wave);
  if(arg(s,1u)<=0.0){return vec4f(a);}
  return vec4f(mix(a,noiseLayers(kind,q+vec2f(17,39),size/2.0,arg(s,2u),salt,wave),arg(s,1u)));
@@ -99,18 +110,25 @@ fn nRidged(s:MaterialStep,q:vec2f)->vec4f{
 }
 // Pixel: one random value a texel. seed.
 fn nPixel(s:MaterialStep,q:vec2f)->vec4f{return vec4f(cellHash(graphPixel(q)+vec2f(211.0,317.0)+37.0*arg(s,0u)).x);}
-// Scatter: spacing, radius, coverage, jitter, hardness, profile, size variation, tone variation, follow, seed. One shape a lattice
-// cell, kept by chance (coverage). A connected density field thins the shapes where it is dark (follow).
+// Scatter: spacing, radius, coverage, jitter, hardness, profile, size variation, tone variation, elongation, direction, direction variation, rim, follow,
+// seed. One shape a lattice cell, kept by chance (coverage). Elongation narrows a shape across its length, to no less than .6 px each side
+// so a small streak still covers texels, and it stays inside its radius and the cells searched. Direction is a Waves noise's (across its
+// crests), so a streak runs a quarter turn from it, parallel to that noise's streaks; each turns from it by its own share of Direction
+// variation. A connected density field thins the shapes where it
+// is dark (follow).
 fn nScatter(s:MaterialStep,p:vec2f,density:vec4f,linked:bool)->vec4f{
- let n=max(1.0,round(graphPeriod/arg(s,0u)));let size=graphPeriod/n;let q=graphPos(p)/size;let c=floor(q);var result=0.0;let seed=37.0*arg(s,9u);
+ let n=max(1.0,round(graphPeriod/arg(s,0u)));let size=graphPeriod/n;let q=graphPos(p)/size;let c=floor(q);var result=0.0;let seed=37.0*arg(s,13u);
  for(var y=-2;y<=2;y++){for(var x=-2;x<=2;x++){
   let cell=c+vec2f(f32(x),f32(y));let id=poolWrap(cell,n);let h=cellHash(id+643.0+seed);let v=cellHash(id+671.0+seed);
-  let point=cell+.5+(h-.5)*arg(s,3u);let radius=arg(s,1u)*(1.0+arg(s,6u)*1.2*(v.x-.5));let d=length(q-point)*size;
+  let point=cell+.5+(h-.5)*arg(s,3u);let radius=arg(s,1u)*(1.0+arg(s,6u)*1.2*(v.x-.5));
+  let angle=(arg(s,9u)+90.0+arg(s,10u)*180.0*(cellHash(id+811.0+seed).x-.5))*.01745329252;let along=vec2f(cos(angle),-sin(angle));
+  let width=min(1.0,max(1.0-.92*arg(s,8u),.6/radius));let o=(q-point)*size;let d=select(length(vec2f(dot(o,along),dot(o,vec2f(-along.y,along.x))/width)),length(q-point)*size,arg(s,8u)<=0.0);
   let keep=smoothstep(v.y-.04,v.y+.04,arg(s,2u))*smoothstep(0.0,.04,arg(s,2u));
-  let shape=pow(1.0-smoothstep(radius*arg(s,4u),radius,d),arg(s,5u));
+  // Rim lowers the middle toward 0, from a dome (0) to a bowl whose highest ring sits at four fifths of the radius (1).
+  let dome=pow(1.0-smoothstep(radius*arg(s,4u),radius,d),arg(s,5u));let shape=select(dome*mix(1.0,smoothstep(.1,.8,d/radius),arg(s,11u)),dome,arg(s,11u)<=0.0);
   result=max(result,keep*mix(1.0,.4+.6*cellHash(id+743.0+seed).x,arg(s,7u))*shape);
  }}
- if(linked){result*=mix(1.0,2.0*smoothstep(.2,.8,density.x),arg(s,8u));}
+ if(linked){result*=mix(1.0,2.0*smoothstep(.2,.8,density.x),arg(s,12u));}
  return vec4f(clamp(result,0.0,1.0));
 }
 // Warp: amount, size, broad layers, axis balance, seed. Moves the coordinates a later node reads.
@@ -122,7 +140,10 @@ fn warpField(p:vec2f,size:f32,layers:f32,seed:f32)->vec2f{
  return sum/total;
 }
 fn warpAxes(axis:f32)->vec2f{return vec2f(1.0-max(axis,0.0),1.0+min(axis,0.0));}
-fn nWarp(s:MaterialStep,q:vec2f)->vec4f{return vec4f(q+warpField(q,arg(s,1u),arg(s,2u),arg(s,4u))*warpAxes(arg(s,3u))*arg(s,0u),0,0);}
+// by: the By input (1 when open) scales every warp's move.
+fn nWarp(s:MaterialStep,q:vec2f,by:vec4f)->vec4f{return vec4f(q+warpField(q,arg(s,1u),arg(s,2u),arg(s,4u))*warpAxes(arg(s,3u))*arg(s,0u)*by.x,0,0);}
+// Push: distance, direction. Moves the coordinates along one direction (x right, y down) by By times the distance.
+fn nPush(s:MaterialStep,q:vec2f,by:vec4f)->vec4f{let a=arg(s,1u)*.01745329252;return vec4f(q+vec2f(cos(a),-sin(a))*arg(s,0u)*by.x,0,0);}
 // Curl flow follows the perpendicular gradient of a scalar potential, in two midpoint steps, so shapes bend without tearing.
 fn flowVelocity(p:vec2f,size:f32,layers:f32,salt:f32)->vec2f{
  var sum=vec2f(0);var total=0.0;
@@ -134,14 +155,20 @@ fn flowVelocity(p:vec2f,size:f32,layers:f32,salt:f32)->vec2f{
   sum+=vec2f(dy,-dx)*(scale/(2.0*e))*amount;total+=amount;
  }return sum/total;
 }
-fn nFlow(s:MaterialStep,q0:vec2f)->vec4f{
- var q=q0;let amount=arg(s,0u)*.5*warpAxes(arg(s,3u));let salt=seeded(617.0,arg(s,4u));
+fn nFlow(s:MaterialStep,q0:vec2f,by:vec4f)->vec4f{
+ var q=q0;let amount=arg(s,0u)*.5*warpAxes(arg(s,3u))*by.x;let salt=seeded(617.0,arg(s,4u));
  for(var i=0;i<2;i++){let mid=q+flowVelocity(q,arg(s,1u),arg(s,2u),salt)*amount*.5;q+=flowVelocity(mid,arg(s,1u),arg(s,2u),salt)*amount;}
  return vec4f(q,0,0);
 }
-// Levels: low, high, gamma, invert.
+// Levels: low, high, gamma, steps, terracing, invert. Terracing narrows each step's riser from the whole step (0, the value unchanged) to
+// nothing (1, flat shelves), so the slider is continuous.
 fn nLevels(s:MaterialStep,a:vec4f)->vec4f{
- let v=pow(smoothstep(arg(s,0u),arg(s,1u),clamp(a.x,0.0,1.0)),arg(s,2u));return vec4f(mix(v,1.0-v,arg(s,3u)));
+ var v=pow(smoothstep(arg(s,0u),arg(s,1u),clamp(a.x,0.0,1.0)),arg(s,2u));
+ if(arg(s,4u)>0.0){
+  let t=v*arg(s,3u);let k=floor(t);let rise=max(1.0-arg(s,4u),.0001);
+  v=min(1.0,(k+clamp((t-k-(1.0-rise))/rise,0.0,1.0))/arg(s,3u));
+ }
+ return vec4f(mix(v,1.0-v,arg(s,5u)));
 }
 // Combine: amount, layer offset. A gray input is the same number in every channel, so gray and color mix freely.
 fn nCombine(s:MaterialStep,a:vec4f,b:vec4f,mask:vec4f)->vec4f{
@@ -166,6 +193,18 @@ fn nGradient(s:MaterialStep,a:vec4f)->vec4f{
   let f=(t-lower)/max(upper-lower,.0001);rgb=mix(vec3f(arg(s,at-3u),arg(s,at-2u),arg(s,at-1u)),color,mix(f,smoothstep(0.0,1.0,f),arg(s,0u)));
  }
  return vec4f(rgb,1);
+}
+// Color adjust: hue turn (degrees), saturation and brightness scales (0 leaves each), through a mask. In HSV, so a turn keeps the brightest
+// channel; a color brightened above 1 keeps its gain.
+fn graphHsv(c:vec3f)->vec3f{
+ let hi=max(c.r,max(c.g,c.b));let d=hi-min(c.r,min(c.g,c.b));if(d<=1e-6){return vec3f(0,0,hi);}
+ var h=select(select(4.0+(c.r-c.g)/d,2.0+(c.b-c.r)/d,hi==c.g),(c.g-c.b)/d,hi==c.r);
+ return vec3f(fract(h/6.0),d/max(hi,1e-6),hi);
+}
+fn graphRgb(c:vec3f)->vec3f{return c.z*mix(vec3f(1),clamp(abs(fract(c.x+vec3f(1,2.0/3.0,1.0/3.0))*6.0-3.0)-1.0,vec3f(0),vec3f(1)),c.y);}
+fn nAdjust(s:MaterialStep,a:vec4f,mask:vec4f)->vec4f{
+ let hsv=graphHsv(a.rgb);let turned=graphRgb(vec3f(fract(hsv.x+arg(s,0u)/360.0),clamp(hsv.y*(1.0+arg(s,1u)),0.0,1.0),hsv.z*(1.0+arg(s,2u))));
+ return vec4f(mix(a.rgb,turned,clamp(mask.x,0.0,1.0)),1);
 }
 // Light: direction, strength. A height's slope toward a light, .5 on the level, so it can tint color the way a lit bump does.
 fn nLight(s:MaterialStep,east:f32,west:f32,south:f32,north:f32)->vec4f{

@@ -5,7 +5,7 @@
 
 import {tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH} from './sculpt-material-model.js';
 import {MaterialCache,writeMaterialSlot} from './sculpt-material-cache.js';
-import {copyMaterial,materialCacheUsage,materialTint,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES,LIBRARY,materialStates} from './sculpt-materials.js';
+import {copyMaterial,materialCacheUsage,materialStaged,materialTint,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES,LIBRARY,materialStates} from './sculpt-materials.js';
 import {columnRows,columnColors} from './sculpt-column.js';
 import {LOW_GROUND_RGB} from './sculpt-knobs.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
@@ -918,6 +918,8 @@ export class TerrainRenderer {
     set('uCrackSeverity', number('crackSeverity', 0.6));
     set('uPlainRelief', number('plainRelief', 1.2));
     set('uBedRelief', number('bedRelief', 0));
+    set('uBedCracks', number('bedCracks', 0));
+    set('uBedCrackSize', number('bedCrackSize', 36));
     set('uLumpRelief', number('lumpRelief', 4));
     set('uCrackSpacing', number('crackSpacing', 40));
     set('uCrackWidth', number('crackWidth', 1));
@@ -1030,7 +1032,7 @@ export class TerrainRenderer {
       if (!Number.isInteger(slot) || slot < 1 || slot >= MATERIAL_SLOTS) throw new Error(`Material slots are 1 to ${MATERIAL_SLOTS - 1}.`);
       checked.set(slot, {worldGround: material.worldGround === true, worldWater: material.worldWater === true, ...Object.fromEntries(MAP_ROLES.map(([r]) => [r, material[r] === true])), ...copyMaterial(material)});
     }
-    const usage = materialCacheUsage([...checked.values()].reduce((n, m) => n + 1 + materialStates(m).length, 0));   // layers: one a material and one a state
+    const usage = materialCacheUsage([...checked.values()].reduce((n, m) => n + 1 + materialStates(m).length, 0), MATERIAL_REPEAT, [...checked.values()].some(materialStaged));   // layers: one a material and one a state
     if (!usage.fits) throw Error(`These materials need ${(usage.bytes / 1048576).toFixed(0)} MiB; the cache budget is ${usage.budget / 1048576} MiB. Use fewer materials.`);
     const role = key => [...checked].find(([, m]) => m[key])?.[0];
     if (checked.size && (!role('worldGround') || !role('worldWater'))) throw new Error('A map needs a ground material and a water material.');
