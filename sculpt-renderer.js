@@ -971,7 +971,6 @@ export class TerrainRenderer {
     this.f('uRampMaterial', material.rampMaterial ?? 0);
     this.i('uSlopeSand', Boolean(material.slopeSand));
     this.i('uGrassSlopes', Boolean(material.grassSlopes));
-    this.v('uCrystalColor', (material.crystalRGB || [110, 150, 225]).map(v => v / 255));
     this.i('uGroundFringe', material.groundFringe === true);
     // A preset can retain coloured veins or dark neutral grain at its edge.
     // The blending algorithm does not choose a biome's material colour.
@@ -1093,10 +1092,7 @@ export class TerrainRenderer {
     }
     if(this.colorOverrides){const colors=this.colorOverrides;
     this.set('uMaterialTable', this.placementTable(this.variant));
-    for (const key of ['shallow', 'crystal']) {
-      const c = colors[key];
-      this.set('u' + key[0].toUpperCase() + key.slice(1) + 'Base', c ? [...c, 1] : [0, 0, 0, 0]);
-    }
+    this.set('uShallowBase', colors.shallow ? [...colors.shallow, 1] : [0, 0, 0, 0]);
     // The light's colours (card P12b): white is the grey light every world had.
     this.v('uSunColor', colors.sun || [1, 1, 1]);
     this.v('uSkyColor', colors.sky || [1, 1, 1]);

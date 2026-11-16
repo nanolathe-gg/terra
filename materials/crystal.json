@@ -1039,12 +1039,7 @@
   "slopeStart": 0.08,
   "slopeFull": 0.25,
   "slopeFloor": -4.0,
-  "slopeDry": 2.0,
-  "crystalRGB": [
-   74,
-   58,
-   90
-  ]
+  "slopeDry": 2.0
  },
  "water": {
   "meanRGB": [
@@ -1094,7 +1089,7 @@
   "vent": {"params": {"look": "pit", "hole": 8, "ring": 26, "cell": 10, "lumps": 0, "lumpTone": 0.55}}
  },
  "world": {
-    "materials": {"ground": "crystal-ground", "water": "crystal-water", "rock": "crystal-rock", "slope": "crystal-slope", "debris": "crystal-debris", "soil": "crystal-soil", "snow": "crystal-snow", "moss": "crystal-moss", "sand": "crystal-sand", "band": "crystal-band"},
+    "materials": {"ground": "crystal-ground", "water": "crystal-water", "rock": "crystal-rock", "slope": "crystal-slope", "debris": "crystal-debris", "soil": "crystal-soil", "snow": "crystal-snow", "moss": "crystal-moss", "sand": "crystal-sand", "band": "crystal-band", "crystal": "crystal-crystals"},
     "knobDefaults": {
         "gougeWeb": 1,
         "paletteMix": 1,

@@ -844,7 +844,7 @@
   "vent": {"params": {"size": 1.8, "thick": 1.2, "rim": 0.4, "rimSat": 2.2, "spread": 3}}
  },
  "world": {
-    "materials": {"ground": "desert-ground", "water": "desert-water", "rock": "desert-rock", "slope": "desert-slope", "debris": "desert-debris", "high": "desert-cap", "soil": "desert-soil", "snow": "desert-snow", "moss": "desert-moss", "sand": "desert-sand", "band": "desert-band"},
+    "materials": {"ground": "desert-ground", "water": "desert-water", "rock": "desert-rock", "slope": "desert-slope", "debris": "desert-debris", "high": "desert-cap", "soil": "desert-soil", "snow": "desert-snow", "moss": "desert-moss", "sand": "desert-sand", "band": "desert-band", "crystal": "crystals"},
     "knobDefaults": {
         "lightCap": 1.25,
         "sunTilt": 0.5,

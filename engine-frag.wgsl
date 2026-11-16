@@ -2136,7 +2136,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // (luma 26-40 against tops ~60-78); outlines are black ink where the
         // field marks a column edge (0.5) or a crystal's rim. No edge
         // highlights.
-        let crystalColor = select(u.crystalColor, u.crystalBase.rgb, u.crystalBase.a > 0.5);
+        let crystalColor = roleMean(u.crystalGround, u.rockGround);   // the crystal material's Color (else the rock material's)
         let jitter = clamp((crystalMask - 0.9) * 10.0, -1.0, 1.0);
         // Tops keep the ground's own grain (Crystal's streaks), moved
         // toward the crystal colour.

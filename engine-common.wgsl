@@ -210,8 +210,6 @@ struct Uniforms {
     grassSlopes: i32,     // 1 where the world's slopes are grass: Joined wrinkles (u.wrinkles) then draw terracettes in the bake, not Moon's dark lines in the draw
     shoreEdge: f32,   // lava coast rim, outline and lip (0: none)
     // Crystals: their own colour (world base colour 'crystal', else the world's).
-    crystalColor: vec3f,
-    crystalBase: vec4f,
     sandDust: f32,
     sandGrass: f32,
     bandWater: f32,
@@ -440,6 +438,7 @@ struct Uniforms {
     fringeGround: i32,  // its mineral margins' fringe, body and ring materials (worldFringe, worldBody, worldRing)
     bodyGround: i32,
     ringGround: i32,
+    crystalGround: i32, // its crystal material (worldCrystal): the crystals' color, -1 none (then the rock material's)
     waterGround: i32,
     groundAny: i32,
     groundShine: i32,      // 1 when a material in use puts out shine, so the shine pass runs for it

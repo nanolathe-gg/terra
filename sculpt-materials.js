@@ -261,7 +261,8 @@ export const MATERIAL_STATES = ['worn', 'deposit'];
 // The roles a material of the map may hold besides the world's ground and water: [flag, world.materials key, what it is]. Each surface reads
 // its role's material (engine-frag.wgsl); a material holds one role at most.
 export const MAP_ROLES = [['worldHigh', 'high', 'highland ground'], ['worldRock', 'rock', 'rock'], ['worldSlope', 'slope', 'slope cover'], ['worldDebris', 'debris', 'debris'],
-  ['worldBeach', 'beach', 'beach'], ['worldFringe', 'fringe', 'margin fringe'], ['worldBody', 'body', 'margin body'], ['worldRing', 'ring', 'margin ring']];
+  ['worldBeach', 'beach', 'beach'], ['worldFringe', 'fringe', 'margin fringe'], ['worldBody', 'body', 'margin body'], ['worldRing', 'ring', 'margin ring'],
+  ['worldCrystal', 'crystal', 'crystal']];
 const ROLE_NAMES = {worldGround: 'ground', worldWater: 'water', ...Object.fromEntries(MAP_ROLES.map(([r, , what]) => [r, what]))};
 // A material may instead draw one of the world's surface layers (docs/SURFACE_LAYERS.md): its worldLayer is that layer's id.
 export const roleOf = m => Object.keys(ROLE_NAMES).find(r => m?.[r] === true) ?? (m?.worldLayer ? 'worldLayer' : null);
@@ -587,18 +588,19 @@ export function withWorldMaterials(value, config, {carried = false} = {}) {
     if (list.length >= MATERIAL_SLOTS - 1) { const taker = list.find(m => !m.worldGround && !m.worldWater); list = list.map(m => m === taker ? {...Object.fromEntries(Object.entries(m).filter(([k]) => !MAP_ROLES.some(([r]) => r === k))), [role]: true} : m); continue; }   // the taker gives up any other role
     const added = addMaterial(list, preset, preset.name); list = added.materials.map(m => m.slot === added.slot ? {...m, [role]: true} : m);
   }
-  // The world's other roles (MAP_ROLES: config.materials.high, .rock, .slope, .debris, .beach, .fringe, .body, .ring), each a library material
+  // The world's other roles (MAP_ROLES: config.materials.high, .rock, .slope, .debris, .beach, .fringe, .body, .ring, .crystal), each a library material
   // added while the list has room. Level raised ground takes the highland material; every rock face shows the rock material's grain, grit and
   // shine under its rock type's color (a rock type may name another, struct Rock material); the slope cover, the debris fragments, the beach
   // sand and a world's mineral margins read theirs. A map without one draws that surface from another (engine-frag.wgsl roleColor).
   // A list that already holds one of the world's surface roles (a map made with them, reopened in its world) keeps the ones its artist
   // cleared or deleted; a new map, a scene, a list saved before them and a map carried from another world (`carried`: its clears were made
-  // for that world's surfaces) take every one the world names. The highland material joins any list with room, and so does a beach another
-  // world lends (sculpt-scene.js borrowBeach sets config.beachTable): it is chosen on purpose, after the map was made.
+  // for that world's surfaces) take every one the world names. The highland and crystal materials join any list with room (the crystals'
+  // color is their material's: a map without one draws them in the rock material's), and so does a beach another world lends
+  // (sculpt-scene.js borrowBeach sets config.beachTable): it is chosen on purpose, after the map was made.
   const surfaced = !carried && list.some(o => MAP_ROLES.slice(1).some(([r]) => o[r]));
   for (const [role, key] of MAP_ROLES) {
     const m = LIBRARY[config.materials?.[key]];
-    if (m && (role === 'worldHigh' || (role === 'worldBeach' && config.beachTable) || !surfaced) && !list.some(o => o[role]) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, [role]: true} : o); }
+    if (m && (role === 'worldHigh' || role === 'worldCrystal' || (role === 'worldBeach' && config.beachTable) || !surfaced) && !list.some(o => o[role]) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, [role]: true} : o); }
   }
   // The world's surface layers that draw a material (config.surface, a layer with `material`, a library key): one copy of each library
   // material they draw, its key as the copy's worldLayer, shared by every layer that draws it (the three snows draw one snow), added

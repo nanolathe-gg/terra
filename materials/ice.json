@@ -741,12 +741,7 @@
   "slopeStart": 0.1,
   "slopeFull": 0.3,
   "slopeFloor": -4.0,
-  "slopeDry": 4.0,
-  "crystalRGB": [
-   205,
-   220,
-   245
-  ]
+  "slopeDry": 4.0
  },
  "water": {
   "meanRGB": [
@@ -797,7 +792,7 @@
   "vent": {"params": {"size": 1.7, "thick": 1.6, "rim": 0.5, "rimSat": 2.5, "spread": 6}}
  },
  "world": {
-    "materials": {"ground": "ice-ground", "water": "ice-water", "rock": "ice-rock", "slope": "ice-slope", "debris": "ice-debris", "extra": ["ice-bergs-ground"], "soil": "ice-soil", "snow": "ice-snow", "moss": "ice-moss", "sand": "ice-sand", "band": "ice-band"},
+    "materials": {"ground": "ice-ground", "water": "ice-water", "rock": "ice-rock", "slope": "ice-slope", "debris": "ice-debris", "extra": ["ice-bergs-ground"], "soil": "ice-soil", "snow": "ice-snow", "moss": "ice-moss", "sand": "ice-sand", "band": "ice-band", "crystal": "ice-crystals"},
     "knobDefaults": {
         "plainRelief": 0.6,
         "crackSeverity": 0,

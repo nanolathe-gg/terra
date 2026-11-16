@@ -1842,7 +1842,7 @@ function defaultColor(key) {
   const rgb=v => v&&v.map(x => x/255);
   const strata=columnColors(config.column,renderer.means.rock).map(rgb);
   return {shallow:rgb(w.shallowRGB),
-    crystal:(config.material?.crystalRGB||[110,150,225]).map(v => v/255),low:rgb(LOW_GROUND_RGB),sun:[1,1,1],sky:[1,1,1],strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
+    low:rgb(LOW_GROUND_RGB),sun:[1,1,1],sky:[1,1,1],strata1:strata[0],strata2:strata[1],strata3:strata[2],strata4:strata[3],strata5:strata[4]}[key]||[.5,.5,.5];
 }
 function goToWorld(base,id,extra) {
   worldInputQueue.flush();
