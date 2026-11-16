@@ -8,7 +8,7 @@ import {columnHasCapBed,columnRows} from './sculpt-column.js';
 export const KNOBS = [
   ['Ground', [['groundPatch','Ground patches (damp and dusty tones)',0,1,.05,0],['groundPatchSize','Patch size (px)',60,400,10,200],['undulation','Undulation height',0,16,.5,0],['undulationScale','Undulation size (px)',48,400,8,200],['undulationCover','Undulating share of land',0,1,.05,.45],['undulationArt','Undulation in the art',0,1,.05,1],['faceSteep','Landform face steepness',1,4,.1,1]]],
   // Low ground: the ground from the sea up to Reach above it, and the shallows, take the Colors panel's Low ground color.
-  ['Low ground', [['lowTint','Tint (Colors: Low ground)',0,1,.05,0],['lowReach','Reach (height above the sea)',.5,40,.5,6],['lowGrain','Grain kept (low ground and water)',0,1,.05,1]]],
+  ['Low ground', [['lowReach','Reach (height above the sea)',.5,40,.5,6],['lowGrain','Grain kept (low ground and water)',0,1,.05,1]]],
   ['Ground detail', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Ground bumps',0,3,.05,1.2],['lumpRelief','Painted ground bumps',0,8,.1,4],['reliefOctaves','Octaves',1,6,1,5],['worms','Wormy relief on slopes',0,1,.05,0]]],
   ['Lighting', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13],['shadeDepth','Directional shading kept',0,1,.05,1],['sunTilt','Light from the south',-1,1,.05,1],['sunHeight','Sun height (degrees above the horizon)',20,75,1,45.2],['ambient','Ambient light',0,.8,.02,.42],['creaseShade','Shade in creases (gully and valley floors, any facing)',0,1,.05,0]]],
@@ -124,11 +124,10 @@ export function applyKnob({key,value,settings,renderer,nodes,seed,sync=true}) {
 }
 
 // Low ground's color where a world picks none (Colors: Low ground): a dark red-brown mud, as retail Zhon's lowland.
-export const LOW_GROUND_RGB=[80,52,42];
 // The Colors panel's rows, [key, label].
-export const COLOR_KEYS=[['shallow','Shallow water'],['low','Low ground'],['sun','Sun color'],['sky','Sky color']];
-// The rows this world shows: Low ground only while its Tint is above 0.
-export const colorRows=(config,settings) => COLOR_KEYS.filter(([key]) => !(key==='low'&&!(Number(settings.get('lowTint'))>0)));
+export const COLOR_KEYS=[['shallow','Shallow water'],['sun','Sun color'],['sky','Sky color']];
+// The rows this world shows.
+export const colorRows=(config,settings) => COLOR_KEYS;
 // A world's own base colors after a row is picked (a hex) or cleared (null): a color the server sets is then explicitly off (null, the
 // texture's own color), any other is dropped.
 export function pickWorldColor(config,own,key,hex) {

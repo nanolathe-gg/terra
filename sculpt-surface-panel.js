@@ -41,6 +41,8 @@ export const SURFACE_PRESETS = [
   {key: 'scree', name: 'Scree on steep ground', material: 'role:debris', stage: 'land', where: [{fact: 'slope', from: .9, fade: .2}], amount: .7, edge: {width: .1, noise: .8, noiseSize: 6}},
   {key: 'ledge', name: 'Rock on steep convex edges', material: 'role:rock', stage: 'land', score: {terms: [{fact: 'slope', weight: 1}, {fact: 'convexity', weight: 1.5}], from: 1.2, fade: .2}, edge: {width: .1, noise: .6, noiseSize: 4}},
   {key: 'dry', name: 'Dry ground on sunny slopes', material: 'desert-ground', stage: 'land', where: [{fact: 'light', from: 1.15, fade: .1}, {fact: 'moisture', to: .35, fade: .1}], amount: .3, edge: {width: .05, noise: 1, noiseSize: 22}},
+  // Low ground (the retired Low ground tint, as a layer): the ground from the sea's bed up to a few units above it, the lake beds too.
+  {key: 'lowland', name: 'Low ground by the water', material: 'red-ground', stage: 'ground', where: [{fact: 'aboveSea', to: 5, fade: 1.5}], edge: {width: .2, noise: .6, noiseSize: 20}},
   {key: 'mud', name: 'Mud in wet hollows', material: 'red-ground', stage: 'land', where: [{fact: 'wetness', from: .5, fade: .1}, {fact: 'top', to: -.1, fade: .1}], edge: {width: .2, noise: .6, noiseSize: 1}},
   // Flowers (the cover classes' flowers, as a layer): single pixels of the Flowers material, a clump of one species each, where the ground is wet.
   {key: 'flowers', name: 'Flowers in wet ground', material: 'flowers', stage: 'land', where: [{fact: 'wetness', from: .35, fade: .1}], amount: .1, edge: {width: .05, noise: 1, noiseSize: 1}},
@@ -338,7 +340,7 @@ export function mountSurfacePanel(host) {
       });
       out.push(el('ol', {className: 'surface-inspect-layers'}, ...items));
     }
-    const effects = [['low-ground tint', read.lowTint], ['wet band', read.wet], ['surf sand', read.surf]].filter(([, v]) => v > .005).map(([n, v]) => `${n} ${percent(Math.min(1, v))}`);
+    const effects = [['wet band', read.wet], ['surf sand', read.surf]].filter(([, v]) => v > .005).map(([n, v]) => `${n} ${percent(Math.min(1, v))}`);
     out.push(el('p', {textContent: (effects.length ? 'Laid after the layers here: ' + effects.join(', ') + '. ' : '') + 'Light, weather, cracks, stones and the palette come after the layers too.'}));
     const facts = el('details', {}, el('summary', {textContent: 'Facts here (what rules read)'}),
       el('dl', {className: 'surface-facts'}, ...SURFACE_FACTS.flatMap((f, k) => [el('dt', {textContent: FACT_LABELS[f][0]}), el('dd', {textContent: read.facts[k].toFixed(2)})])));

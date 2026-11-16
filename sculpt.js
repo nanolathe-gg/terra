@@ -8,7 +8,7 @@ import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-co
 import {materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
-import {KNOBS,LOW_GROUND_RGB,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
+import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
 import {strokeKind,shapeFrom,savedToolCard,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,borrowBeach,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
@@ -1860,7 +1860,7 @@ function defaultColor(key) {
   const w=config.water||{};
   const rgb=v => v&&v.map(x => x/255);
   return {shallow:rgb(w.shallowRGB),
-    low:rgb(LOW_GROUND_RGB),sun:[1,1,1],sky:[1,1,1]}[key]||[.5,.5,.5];
+    sun:[1,1,1],sky:[1,1,1]}[key]||[.5,.5,.5];
 }
 function goToWorld(base,id,extra) {
   worldInputQueue.flush();
@@ -2237,7 +2237,7 @@ function applyWorldInputs(batch) {
     }
     const next=applyKnob({key,value,settings:experiment,renderer,nodes,seed,sync:false});nexts.push(next);reload ||= Boolean(next.reload);
     activeWorld().knobs[key]=String(value);pendingWorldAddress.set(key,String(value));worldStoreDirty=true;
-    worldPanelDirty ||= key==='strata'||key==='lowTint';worldCheckpoint ||= !input.restore;
+    worldPanelDirty ||= key==='strata';worldCheckpoint ||= !input.restore;
   }
   if(reload){commitWorldInputs();location.reload();return;}
   const local=presets?syncRocks({defer:true}):null,onlyPresets=batch.every(input=>input.slot>0);

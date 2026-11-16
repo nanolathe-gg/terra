@@ -383,11 +383,9 @@ struct Uniforms {
     shoalRag: f32,        // the shallow-to-deep step's outline: pixel notches of up to this many px, whatever the bed's slope (0: as before)
     shoalStairs: f32,     // the hard waterline's stairs: runs of 1-3 px moving it up to this many px, whatever the bank's slope (0: as before)
     shoalShoreSoft: f32,  // Archipelago: the waterline the world draws (a stroke's Hard and Faded stay) is a dithered blend this many px wide (0: a clean line)
-    // Low ground (Zhon's mud lowland): the ground from the sea up to lowReach above it, and the shallows, take lowColor (0: none, as before).
-    lowTint: f32,         // 0..1: how far the low ground's color moves to lowColor (its grain stays)
+    // Low ground (Zhon's mud lowland): the ground from the sea up to lowReach above it, and the shallows, keep lowGrain of their grain.
     lowReach: f32,        // height above the sea where low ground ends (its ragged edge fades over the upper half)
     lowGrain: f32,        // 0..1: the share of its grain the low ground's pattern and the water's art and mottle keep (1: as drawn)
-    lowColor: vec3f,      // the low ground's color (Colors: Low ground)
     soilRim: f32,         // 0..1: bare soil where the plant cover thins against rock, and a ragged line (not a blend) for rock's edge off the faces (0: as before)
     wetGround: f32,       // 0..1: ground that water wets (the band above a waterline, hollows and channels, runoff off rock) is darker, more saturated and glossy (0: as before)
     boulders: f32,        // 0..1: blocks fallen from a wall and lying under it, up to 60 px and more across (0: none; the runout blocks as before)

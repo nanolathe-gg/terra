@@ -18,7 +18,7 @@ test('a knob goes into the address and the renderer, and says what else it needs
   assert.deepEqual(applyKnob({key: 'faceSteep', value: '2', settings, renderer: r, nodes, seed: 2701}), {evaluate: 0, weather: true});
   assert.deepEqual(applyKnob({key: 'sand', value: '1', settings, renderer: r, nodes, seed: 2701}), {weather: true});
   // The draw's rows (Low ground, Shade in creases) only re-read the renderer's uniforms.
-  for (const key of ['lowTint', 'lowGrain', 'creaseShade']) assert.deepEqual(applyKnob({key, value: '.5', settings, renderer: r, nodes, seed: 2701}), {});
+  for (const key of ['lowGrain', 'creaseShade']) assert.deepEqual(applyKnob({key, value: '.5', settings, renderer: r, nodes, seed: 2701}), {});
   // A borrowed beach is chosen when the renderer starts (sculpt-scene.js borrowBeach): the address changes, the renderer does not.
   const applied = r.applied;
   assert.deepEqual(applyKnob({key: 'beachFrom', value: 'zhon', settings, renderer: r, nodes, seed: 2701}), {reload: true});
@@ -59,9 +59,7 @@ test('the Colors panel shows the rows a world has, and a cleared row the server 
   const labels = colorRows(config, new URLSearchParams()).map(([, l]) => l);
   assert.ok(!labels.some(l => /Flower|Vegetation|Beach|Strata|Rock|Crystal/.test(l)), 'vegetation, flowers, rock, crystal and the beds are materials');
   assert.ok(!colorRows({...config, layers: ['beach']}, new URLSearchParams('strata=1')).some(([k]) => ['beach', 'slope', 'sand', 'strata1'].includes(k)), 'a beach, a slope cover and sand take their materials’ colors');
-  // Low ground's color shows while its Tint is above 0.
-  assert.ok(!labels.includes('Low ground'));
-  assert.ok(colorRows(config, new URLSearchParams('lowTint=.5')).some(([k, l]) => k === 'low' && l === 'Low ground'));
+  assert.ok(!labels.includes('Low ground'), 'low ground is a surface layer');
   assert.deepEqual(pickWorldColor(config, {ground: '#101010'}, 'shallow', '#c03030'), {ground: '#101010', shallow: '#c03030'});
   assert.deepEqual(pickWorldColor(config, {sun: '#ffc880'}, 'sun', null), {sun: null});
   assert.deepEqual(pickWorldColor(config, {shallow: '#c03030'}, 'shallow', null), {});

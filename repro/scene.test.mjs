@@ -122,6 +122,6 @@ test('a world without a beach borrows another world\'s: its layer, its numbers, 
 test('the address may try the light\'s and the low ground\'s colors without changing the world', async () => {
   const {worldHexColors, rendererColors} = await import('../sculpt-scene.js');
   const colors = worldHexColors({colors: {ground: '#102030'}}, new URLSearchParams('lowColor=5c322a&sunColor=%23ffd9a8&skyColor=nothex'));
-  assert.deepEqual(colors, {ground: '#102030', low: '#5c322a', sun: '#ffd9a8'});
-  assert.deepEqual(rendererColors(colors).low.map(v => Math.round(v * 255)), [92, 50, 42]);
+  assert.deepEqual(colors, {ground: '#102030', sun: '#ffd9a8'}, 'the low ground has no color of its own (a surface layer draws it)');
+  assert.deepEqual(rendererColors(colors).sun.map(v => Math.round(v * 255)), [255, 217, 168]);
 });

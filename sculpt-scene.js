@@ -409,11 +409,11 @@ export const materialKnobs=(s,seed,transition) => s['material-weathering']/100>0
 export const materialRequest=(config,material,{heightBuffer,heightOffset,grid,size,ox,oy}) => ({heightBuffer,heightOffset,grid,size,ox,oy,seaLevel:config.seaLevel,baseHeight:config.baseHeight,
   seed:material.seed,depositSpread:material.depositSpread,profile:{...config.material,mineral:material.mineral}});
 // A world's colors for the renderer ([r, g, b], 0..1): the world's hex colors (null is off: the texture's own), ?sunColor=ffd9a8&skyColor=8fb0ff
-// and ?lowColor=5c322a from the address (a light's or the low ground's colors tried on a page without changing the world: renders, review
+// from the address (a light's colors tried on a page without changing the world: renders, review
 // sheets).
 export function hexColors(colors,settings) {
   const out={...colors};
-  for (const key of ['sun','sky','low']) { const q=settings.get(key+'Color'); if (q && /^#?[0-9a-f]{6}$/i.test(q)) out[key]=q.startsWith('#')?q:'#'+q; }
+  for (const key of ['sun','sky']) { const q=settings.get(key+'Color'); if (q && /^#?[0-9a-f]{6}$/i.test(q)) out[key]=q.startsWith('#')?q:'#'+q; }
   return out;
 }
 export const rgbColor=h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255);
