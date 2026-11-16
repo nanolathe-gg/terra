@@ -417,5 +417,5 @@ export function mountMaterialEditor(host) {
   const locks = new MutationObserver(lock); for (const id of ['editor', 'undo', 'redo']) locks.observe($(id), {attributes: true, attributeFilter: ['disabled']}); lock();
   if (dialog.open) host.suspend(true);
   refresh();
-  return {refresh, refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (!dialog.open) host.suspend(false); clearTimeout(thumbTimer); locks.disconnect(); graph.dispose(); preview.dispose(); }};
+  return {refresh, open, refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (!dialog.open) host.suspend(false); clearTimeout(thumbTimer); locks.disconnect(); graph.dispose(); preview.dispose(); }};
 }

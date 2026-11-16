@@ -187,6 +187,7 @@ struct Uniforms {
     mineralMargins: i32,
     quantize: i32,
     diagnosticView: i32,   // GLSL uDiagnostic (diagnostic is a WGSL keyword)
+    surfacePreview: i32,  // the row of the surface layer the Surface section previews (diagnostic view 13), -1 none
     faceFill: f32,
     slopeProfile: vec4f,
     elevatedCover: vec3f,

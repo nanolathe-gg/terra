@@ -3,12 +3,14 @@ import {withWorldMaterials,worldPair} from './sculpt-materials.js';
 // Keep browser/session parameters out of the recipe; removed controls are dropped on load.
 import {KNOBS} from './sculpt-knobs.js';
 import {worldHexColors} from './sculpt-scene.js';
+import {copySurface} from './sculpt-material-model.js';
 
 const worldKeys=config => new Set([...Object.keys(config.defaults||{}),...Object.keys(config.engineDefaults||{}),...KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)),'beachFrom','sandEdge','view','fill','relief','palette','sun']);
 export function savedWorld(config,settings,world) {
   const knobs={};
   for(const key of worldKeys(config)){const value=settings.get(key)??world.knobs?.[key]??config.defaults?.[key]??config.engineDefaults?.[key];if(value!==undefined&&value!==null)knobs[key]=String(value);}
-  return {materials:worldPair(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs};
+  // The world's surface layers where the artist changed them (docs/SURFACE_LAYERS.md); a world that kept its own carries none.
+  return {materials:worldPair(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs,...(world.surface?{surface:copySurface(world.surface)}:{})};
 }
 export function copySavedWorld(value,config) {
   if(value===undefined)return null;
@@ -24,7 +26,8 @@ export function copySavedWorld(value,config) {
     if(v!==null&&(typeof v!=='string'||!/^#[0-9a-f]{6}$/i.test(v)))throw Error('The saved world color '+key+' is invalid.');
     colors[key]=v;
   }
-  return {materials:worldPair(withWorldMaterials(value.materials,config)),name:value.name.slice(0,120),base:value.base,colors,knobs};
+  const surface=value.surface===undefined?null:copySurface(value.surface);
+  return {materials:worldPair(withWorldMaterials(value.materials,config)),name:value.name.slice(0,120),base:value.base,colors,knobs,...(surface?{surface}:{})};
 }
 export function savedWorldId(s) {
   return typeof s.world==='string'&&/^[a-z0-9-]{1,80}$/.test(s.world)&&!['constructor','prototype'].includes(s.world)?s.world:s.biome;

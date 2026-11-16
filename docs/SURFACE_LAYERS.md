@@ -1,6 +1,6 @@
 # Surface layers: where each material shows
 
-Status: phase 1 landed on local main (c2243290); phase 2 built; phase 3 next (2026-11-15). Branch `surface-layers`. The research behind it is the prototype branch
+Status: phase 1 landed on local main (c2243290); phases 2 and 3 built on the branch (2026-11-15). Branch `surface-layers`. The research behind it is the prototype branch
 `prototype/surface-stack` (not for landing), summarized below.
 
 ## The model
@@ -112,11 +112,19 @@ Each phase lands on its own. Rule 7: a phase becomes every world's behavior or d
    - Not in phase 2: height contrast (relief is in pixels per material, so it needs normalizing and a fixture).
    - Measured: the shipped stack renders byte-identical to main (28 scenes, every world). Rules, material layers and each
      fact change pixels on a fixture. Computing the facts costs nothing measurable.
-3. **The editor** (needs phase 1's list, facts and material layers, not phase 2: the order of 2 and 3 is the
-   owner's choice). World → Surface: the list with a row per layer (material chip, Amount, the rule's
-   sliders with plain fact names, edge), reorder, add a layer from presets, remove, a mask preview on the map
-   while a row is hovered or open. Undo, world files and saves carry it. Every control continuous and visible
-   at 1x (rule 9).
+3. **The editor** (built). World › Surface lists the layers top first. Each row has its Amount, edge width, edge noise and
+   noise size, and its rule's conditions (a fact by its plain name, from, to, fade; up to four). Rows move up and down among
+   the layers they are drawn with. A material layer is named, shows its material's chip, opens its material in the
+   material editor, and can be removed (its map material stays as an ordinary one). Add a layer starts one from a preset:
+   snow above a height, moss in damp shade, scree on steep ground, dry ground on sunny slopes, mud in wet hollows, or a
+   blank material layer. Pointing at or focusing a row previews where that layer lies, in magenta over the dimmed map
+   (diagnostic view 13). Restore returns to the world's own surface.
+   - The list is a world setting, kept in this browser's world store as the sliders are. Undo, a save's embedded world
+     (only when edited), New world and world files carry it.
+   - Not yet:
+     - a score rule is shown but edited only in the world file;
+     - a layer's library material is chosen by its preset (the material editor changes the map's copy);
+     - the conversions moved from phase 2 (highland, base band, rock face as rules replacing their World rows).
 4. **Engine surfaces become materials.** Bare soil, sand, debris fines, snow, moss, slope cover: each its
    own library material per world, so the editor can swap them. Look changes, per world, judged by eye.
    Budget: Archipelago already holds 8 role materials of 15 slots; six more is 14, about 103 MiB of 128,
@@ -142,6 +150,5 @@ Phase 4 turns them into materials one by one.
 
 ## Open questions for the owner
 
-- The stack as a world setting, not per map: right?
-- Phase 3's place: a new World → Surface section (the task asks for it), replacing the World rows whose
-  placement it takes over.
+- The stack as a world setting, not per map: built that way; right?
+- Converting highland, base band and rock face into rules means their World rows move into the Surface section.

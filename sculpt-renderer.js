@@ -123,6 +123,8 @@ class PipelinesPending extends Error { constructor(state,ready) { super('Terrain
 
 // The engine's materials, uniforms and passes. ChunkTerrainRenderer (sculpt-chunk-renderer.js) is the renderer that is constructed: it adds
 // the per-chunk textures, the memory accounting and renderChunk.
+// The diagnostic views (engine-frag.wgsl u.diagnosticView, from 1): the page's `view`, and the Surface section's layer preview (setSurfacePreview).
+const DIAGNOSTIC_VIEWS = ['diffuse','occlusion','shadow','exposure','shading','material','cracks','color','relief','roughness','wetness','palette-color','surface-layer'];
 export class TerrainRenderer {
   static async createChunked(canvas, config) {
     const {ChunkTerrainRenderer} = await import('./sculpt-chunk-renderer.js');
@@ -947,7 +949,8 @@ export class TerrainRenderer {
     this.f('uDetail', this.config.material?.surfaceRelief ?? 1.0);
     this.i('uSlopeMaterial', ['slopes', 'structured'].includes(variant.get('surface')));
     this.i('uMineralMargins', variant.get('transition') === 'mineral');
-    this.i('uDiagnosticView', ['diffuse','occlusion','shadow','exposure','shading','material','cracks','color','relief','roughness','wetness','palette-color'].indexOf(variant.get('view')) + 1);
+    this.i('uDiagnosticView', this.surfacePreview >= 0 ? DIAGNOSTIC_VIEWS.indexOf('surface-layer') + 1 : DIAGNOSTIC_VIEWS.indexOf(variant.get('view')) + 1);
+    this.i('uSurfacePreview', this.surfacePreview ?? -1);
     this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
     const material = this.config.material || {};
     this.set('uSlopeProfile', [material.slopeStart ?? .10,
@@ -1276,6 +1279,15 @@ export class TerrainRenderer {
     return field.kind === 'i' ? this.uniformView.getInt32(field.offset, true) : this.uniformView.getFloat32(field.offset, true);
   }
   // The broad color of the map's world rock material (its own, else the world's library material's).
+  // The world's surface layers changed (docs/SURFACE_LAYERS.md): their rows go to the table. A material layer's material reaches the cache
+  // through setMaterials (the map's list carries it).
+  setSurface(surface) { this.config.surface = surface; this.set('uMaterialTable', this.placementTable(this.variant)); }
+  // The Surface section's preview of one layer (its first row, surfaceRows layerRows), or none (-1): the draw shows where that layer lies.
+  setSurfacePreview(row = -1) {
+    this.surfacePreview = row;
+    this.i('uSurfacePreview', row);
+    this.i('uDiagnosticView', row >= 0 ? DIAGNOSTIC_VIEWS.indexOf('surface-layer') + 1 : DIAGNOSTIC_VIEWS.indexOf(this.variant?.get('view')) + 1);
+  }
   rockMaterialTint() { const slot = [...(this.grounds || new Map())].find(([, m]) => m.worldRock)?.[0]; return slot ? materialTint(this.grounds.get(slot)) : this.means.rock; }
   // A rock slot's colors as the draw reads them, '#rrggbb': {rock, beds}, the rock's (its own, else the rock material's mean, as rockFlat) and
   // its five bed slots'. The World pane shows a preset's effective colors with them, and starts its own from the world's.

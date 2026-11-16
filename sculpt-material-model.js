@@ -96,12 +96,36 @@ export function surfaceRows(surface, slotOf = () => -1) {
     else if (layer.where?.length) rule = [[1, 0, 0, 0], ...layer.where.slice(0, SURFACE_RULE_TERMS).map(w => [fact(w.fact), number(w.from, -1e9), number(w.to, 1e9), Math.max(number(w.fade, .05), 1e-4)])];
     if (rule.length || material) facts = true;
     const slot = material ? slotOf(layer.id) : -1;
-    return {stage, rows: [[material ? -1 : at[1], number(layer.amount, 1), slot, rule.length], [number(edge.width, 1), number(edge.noise, 0), number(edge.noiseSize, 8), layerSalt(layerKey(layer))], ...rule]};
+    return {index: i, stage, rows: [[material ? -1 : at[1], number(layer.amount, 1), slot, rule.length], [number(edge.width, 1), number(edge.noise, 0), number(edge.noiseSize, 8), layerSalt(layerKey(layer))], ...rule]};
   });
   // Stable by stage: the list's order within a stage is kept.
   const sorted = layers.map((l, i) => [l, i]).sort((a, b) => a[0].stage - b[0].stage || a[1] - b[1]).map(([l]) => l);
-  const rows = [], heads = Array.from({length: SURFACE_STAGES}, () => [0, 0]);
-  for (const l of sorted) { if (!heads[l.stage][1]) heads[l.stage][0] = rows.length; heads[l.stage][1]++; rows.push(...l.rows); }
+  const rows = [], heads = Array.from({length: SURFACE_STAGES}, () => [0, 0]), layerRows = new Array(layers.length);
+  for (const l of sorted) { if (!heads[l.stage][1]) heads[l.stage][0] = rows.length; heads[l.stage][1]++; layerRows[l.index] = rows.length; rows.push(...l.rows); }
   if (rows.length > SURFACE_FLAGS_ROW) throw Error(`A world's surface needs ${rows.length} rows; the draw holds ${SURFACE_FLAGS_ROW}. Use fewer layers or simpler rules.`);
-  return {rows, flags: [facts ? 1 : 0, 0, 0, 0], head: [0, 2, 4, 6].map(k => [...heads[k], ...heads[k + 1]])};
+  return {rows, flags: [facts ? 1 : 0, 0, 0, 0], head: [0, 2, 4, 6].map(k => [...heads[k], ...heads[k + 1]]), layerRows};
+}
+// A surface read from a save, a world file or this browser's world store: only the fields a layer has, numbers checked, and the draw's
+// row limits (surfaceRows throws on anything it cannot draw). Returns a fresh list.
+const SURFACE_ID = /^[A-Za-z0-9_-]{1,40}$/;
+export function copySurface(value) {
+  if (!Array.isArray(value)) throw Error('A surface is a list of layers.');
+  const finite = v => Number.isFinite(Number(v)) ? Number(v) : undefined, clean = o => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+  const ids = new Set();
+  const list = value.map((l, i) => {
+    if (!l || typeof l !== 'object') throw Error(`Surface layer ${i + 1} is not a layer.`);
+    const name = typeof l.name === 'string' ? l.name.slice(0, 80) : undefined;
+    const edge = l.edge && typeof l.edge === 'object' ? clean({width: finite(l.edge.width), noise: finite(l.edge.noise), noiseSize: finite(l.edge.noiseSize)}) : undefined;
+    const where = Array.isArray(l.where) ? l.where.slice(0, SURFACE_RULE_TERMS).map(w => clean({fact: String(w?.fact), from: finite(w?.from), to: finite(w?.to), fade: finite(w?.fade)})) : undefined;
+    const score = l.score && typeof l.score === 'object' ? clean({from: finite(l.score.from), fade: finite(l.score.fade), terms: (Array.isArray(l.score.terms) ? l.score.terms : []).slice(0, SURFACE_RULE_TERMS).map(t => clean({fact: String(t?.fact), weight: finite(t?.weight)}))}) : undefined;
+    const base = clean({name, amount: finite(l.amount), edge, ...(where?.length ? {where} : {}), ...(score ? {score} : {})});
+    if (l.material != null) {
+      if (typeof l.material !== 'string' || !SURFACE_ID.test(String(l.id)) || ids.has(l.id)) throw Error(`Surface layer ${i + 1} needs a material and an id of its own.`);
+      ids.add(l.id);
+      return clean({id: l.id, ...base, material: l.material.slice(0, 80), stage: typeof l.stage === 'string' ? l.stage : undefined});
+    }
+    return {builtin: String(l.builtin), ...base};
+  });
+  surfaceRows(list);
+  return list;
 }

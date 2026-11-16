@@ -381,6 +381,7 @@ const SURFACE_FLAGS = 151u;
 // exist from their stage on (0 before it).
 const SURFACE_FACTS = 14u;
 var<private> surfaceFacts: array<f32, 14>;
+var<private> surfacePreviewCover: f32 = 0.0;   // the previewed layer's coverage (diagnostic view 13)
 fn surfaceNoise(e: vec4f, p: vec2f, pixel: vec2f) -> f32 {
     if (e.y == 0.0) { return 0.0; }
     let px = shelfHash(poolPixel(grainPixel(pixel)) + e.w) - 0.5;
@@ -404,6 +405,7 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
     *cover = array<f32, 7>();
     *over = 0.0;
     for (var i = 0u; i < count; i++) {
+        let layerRow = row;
         let r0 = u.materialTable[row];
         let e = u.materialTable[row + 1u];
         let ruleAt = row + 2u;
@@ -429,6 +431,7 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
                 if (c == 0.0) { continue; }
             }
         }
+        if (i32(layerRow) == u.surfacePreview) { surfacePreviewCover = c; }
         if (builtin) {
             *color = mix(*color, (*src)[k], c);
             (*cover)[k] = select(1.0 - (1.0 - (*cover)[k]) * (1.0 - c), c, (*cover)[k] == 0.0);   // layers of one slot join as a union
@@ -2581,6 +2584,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.diagnosticView == 4) { color = vec3f(exposed); }
     if (u.diagnosticView == 5) { color = vec3f(lighting, ao, shadow); }
     if (u.diagnosticView == 6) { color = material; }
+    // The Surface section's preview: where the layer it names shows, magenta over the picture dimmed to gray.
+    if (u.diagnosticView == 13) { color = mix(vec3f(dot(color, vec3f(0.299, 0.587, 0.114)) * 0.6), vec3f(1.0, 0.1, 0.9), clamp(surfacePreviewCover, 0.0, 1.0)); }
     if (u.diagnosticView >= 8 && u.diagnosticView <= 12) {
         let slot=select(gs,u32(max(0,u.waterGround)),h<u.sea && u.waterGround>0);
         if(u.diagnosticView==8){color=materialRaw(p,slot);}

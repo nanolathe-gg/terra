@@ -67,3 +67,18 @@ test('a world whose surface draws a material gives a new map that material, boun
   assert.throws(() => copyMaterials([{...m, worldRock: true}]), /material of its own/);
   assert.ok(LIBRARY['green-debris']);
 });
+
+test('a surface from a save or a world file is checked and copied; a save carries an edited one only', async () => {
+  const {copySurface} = await import('../sculpt-material-model.js');
+  const {savedWorld, copySavedWorld} = await import('../sculpt-save.js');
+  const layers = [...defaults.surface, {id: 'snow-1', name: 'Snow', material: 'ice-ground', stage: 'snow', amount: .6, where: [{fact: 'abovePlain', from: 40, fade: 6, extra: 1}], junk: true}];
+  const copy = copySurface(layers);
+  assert.deepEqual(copy.at(-1), {id: 'snow-1', name: 'Snow', amount: .6, where: [{fact: 'abovePlain', from: 40, fade: 6}], material: 'ice-ground', stage: 'snow'}, 'only the fields a layer has');
+  assert.throws(() => copySurface([{id: 'bad id!', material: 'ice-ground'}]), /id of its own/);
+  assert.throws(() => copySurface([{builtin: 'rock', where: [{fact: 'nope'}]}]), /unknown fact/);
+  const w = world('green'), config = {biome: 'Green Planet', biomeId: 'green', materials: w.materials, surface: defaults.surface, defaults: {}, engineDefaults: {}};
+  const plain = savedWorld(config, new URLSearchParams(), {name: 'Green Planet', colors: {}, knobs: {}});
+  assert.equal(plain.surface, undefined, 'a world that kept its own surface saves none');
+  const edited = savedWorld(config, new URLSearchParams(), {name: 'Green Planet', colors: {}, knobs: {}, surface: copy});
+  assert.deepEqual(copySavedWorld(JSON.parse(JSON.stringify(edited)), config).surface, copy, 'an edited surface round-trips');
+});
