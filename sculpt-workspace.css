@@ -269,7 +269,7 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 @media(max-width:700px){.material-layout{grid-template-columns:1fr;grid-template-rows:minmax(220px,45dvh) minmax(0,1fr)}.material-side{border-left:0;border-top:1px solid var(--line)}.material-header{flex-wrap:wrap;gap:8px}.material-header h2{display:none}#graph-help{display:none}}
 /* World › Surface (sculpt-surface-panel.js): one row a layer, top first; a row opens to its settings. */
 .surface-layers{list-style:none;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:3px;overflow-y:auto;min-height:0}
-.surface-layer{border:1px solid var(--line,#3a3a3a);border-radius:6px;padding:3px 6px}
+.surface-layer{border:1px solid var(--line,#3a3a3a);border-radius:6px;padding:3px 6px;min-width:0}
 .surface-layer.open{padding-bottom:6px}
 .surface-layer:hover,.surface-layer:focus-within{border-color:var(--accent,#c43bd1)}
 .surface-head{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}
@@ -280,22 +280,24 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .surface-head .surface-toggle{border:0;background:none;width:1.4em;padding:0}
 .surface-head .surface-stage{opacity:.75;white-space:nowrap}
 .material-chip.own{background:repeating-linear-gradient(45deg,#777 0 2px,#444 2px 4px)}
-.surface-body{display:grid;grid-template-columns:1fr;gap:4px;margin-top:6px}
+.surface-body{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;margin-top:6px}
 .surface-wide,.surface-rule{grid-column:1/-1}
 .surface-line{display:flex;gap:6px;align-items:center}
 .surface-group{margin:8px 0 0;opacity:.7;text-transform:uppercase;letter-spacing:.04em;font-size:10px}
 .surface-group:first-child{margin-top:0}
 .surface-material-row{flex:1;min-width:0}
-.surface-material-row select{flex:1;min-width:0;max-width:100%}
+.surface-material-row select{flex:1;min-width:0;width:0}
 .surface-body button.link{justify-self:start;border:0;background:none;padding:0;text-decoration:underline;cursor:pointer;font-size:12px}
-.surface-slider{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:4px;font-size:12px}
+.surface-slider{display:grid;grid-template-columns:7.4em minmax(0,1fr) 2.6em;align-items:center;gap:4px;font-size:12px}
+.surface-slider output{text-align:right}
 .surface-slider input{min-width:0}
 .surface-rule{display:flex;flex-direction:column;gap:4px;border-top:1px dashed var(--line,#3a3a3a);padding-top:4px;font-size:12px}
 .surface-rule > button{align-self:start}
 .surface-term{display:flex;gap:4px 8px;align-items:center;flex-wrap:wrap}
-.surface-term select{flex:1 1 9em;min-width:0}
+.surface-term select{flex:1 1 100%;min-width:0;width:0}
 .surface-number{display:flex;align-items:center;gap:4px}
-.surface-number input{width:5em}
-.surface-rule-kind select{flex:1}
+.surface-number input{width:4.4em}
+.surface-rule-kind select{flex:1;min-width:0;width:0}
 .surface-settings-title{margin-top:14px}
 .surface-head .material-chip{width:14px;height:14px}
+.surface-term .surface-number input{width:3.8em}

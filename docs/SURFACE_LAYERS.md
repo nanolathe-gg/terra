@@ -1,6 +1,7 @@
 # Surface layers: where each material shows
 
-Status: phase 1 landed on local main (c2243290); phases 2 and 3 built on the branch (2026-11-15). Branch `surface-layers`. The research behind it is the prototype branch
+Status: phases 1-3 landed on local main (b89971fd, 2026-11-15). On branch `surface-layers-2` (2026-11-16, not landed): the rest of
+phase 3, phase 4 as an opt-in, and phase 5's height contrast. Branch `surface-layers`. The research behind it is the prototype branch
 `prototype/surface-stack` (not for landing), summarized below.
 
 ## The model
@@ -121,18 +122,56 @@ Each phase lands on its own. Rule 7: a phase becomes every world's behavior or d
    (diagnostic view 13). Restore returns to the world's own surface.
    - The list is a world setting, kept in this browser's world store as the sliders are. Undo, a save's embedded world
      (only when edited), New world and world files carry it.
-   - Not yet:
-     - a score rule is shown but edited only in the world file;
-     - a layer's library material is chosen by its preset (the material editor changes the map's copy);
-     - the conversions moved from phase 2 (highland, base band, rock face as rules replacing their World rows).
+   - Branch `surface-layers-2`:
+     - Rows are one line (chip, name, what differs from the default, raise and lower) that opens to the settings, under a heading
+       per stage, so where a layer may move reads from the list.
+     - A row's rule is Everywhere, where all conditions hold, or where a score passes (weighted facts, threshold, fade), all
+       edited in the row. A new preset uses a score: rock on steep convex edges.
+     - A row chooses its library material (a built-in may also keep its own color). Changing it gives up the map's old copy, which
+       leaves the map unless a stroke uses it.
+     - The Highland ground and Base band World rows (strength, height window) moved from Ground › Pattern and Cliffs & stones ›
+       Bands into this section's Built-in settings. Their layer rows show no Amount, which would repeat the strength.
+   - Not done, on purpose: turning the highland ground and base band into rules. `highShare` also sets the ground's art relief
+     and caps the beds outside the layer stages, where facts are not computed, so a rule would split one surface into two
+     placements. The rock face's rule belongs to each rock type (Rock types › Exposure & relief), not to the world: a world rule
+     would override every rock type's. Moving their rows next to their layers gives the artist one place without that split.
 4. **Engine surfaces become materials.** Bare soil, sand, debris fines, snow, moss, slope cover: each its
    own library material per world, so the editor can swap them. Look changes, per world, judged by eye.
+   - Built as an opt-in (branch `surface-layers-2`): any built-in may name a library material (`{"builtin": "sand",
+     "material": "desert-ground"}`); the draw lays that material's pigment by the built-in's own share. It binds the map's copy by
+     the built-in's name, so a list draws one material per built-in. Without one, a built-in draws the engine's color, so no
+     world's look changed and no world spends cache slots on a surface it does not swap.
+   - Not done: shipping a material per surface per world as the default. That changes every world's look and needs the owner's
+     eye, and the budget below.
    Budget: Archipelago already holds 8 role materials of 15 slots; six more is 14, about 103 MiB of 128,
    before Worn/Deposit layers or strokes. Shared materials across worlds, or a larger cache, may be needed.
 5. **Edges and cover.** Each world's boundaries get their edge settings (looks, judged). The seven-class
    cover becomes material layers or material states (Dry, Wet, Shaded), and the plants follow the layers.
+   - Built (branch `surface-layers-2`): **height contrast**, an edge setting of a layer that draws a material. Where the layer meets
+     the ground it covers, the taller art height wins: the layer's share moves by contrast x (its relief - the ground's) / 4,
+     inside its edge only (4 share (1 - share)) for windows, and at the threshold for a score. 0 is today's edge. It rides in the
+     rule head's w, so a layer with it and no rule gets an empty rule.
+   - Not done: per-world edge settings (looks, for the owner) and the cover conversion; see "Cover classes" below.
 
 Later, only if a real biome needs it: a layer's rule opened as nodes in the existing node editor.
+
+### Cover classes (phase 5, measured 2026-11-16)
+
+The seven-class ground cover (`material.groundCover`: bare soil, dry grass, turf, meadow, scrub, moss, wet rush; its recolor,
+flowers and plants) is **off in every shipped world**: `vegetationCover` is 0 in `materials/defaults.json` and no world sets it.
+Measured: with the cover table removed from every world's config, the 27 identity scenes render byte-identical; with every
+class painted pure red on Green, Green's scene is byte-identical too. It draws only when an artist raises Vegetation ›
+Vegetation cover.
+
+So converting it has no shipped look to preserve. Two ways on, for the owner:
+
+- **Retire it into layers.** Its classes are windows over moisture, soil depth and light, which are surface facts already; the
+  presets cover two of them (moss in damp shade, dry ground on sunny slopes). Each class needs a library material to be a
+  layer, and the plants would then follow a layer's coverage (a layer `plants` amount the bake reads), which needs the bake to
+  evaluate the surface rows. Removes the recolor step (an effect between stages 1 and 2) and its table.
+- **Keep it as the Vegetation effect** it is, opt-in, and leave the plants on the classes.
+
+Not done tonight: either needs the owner's choice, and the first needs class materials judged by eye.
 
 ## Sources (phase 1)
 
