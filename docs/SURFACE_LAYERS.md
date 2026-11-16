@@ -1,7 +1,8 @@
 # Surface layers: where each material shows
 
 Status: phases 1-3 landed on local main (b89971fd, 2026-11-15); the rest of phase 3, phase 4 as an opt-in and phase 5's height
-contrast landed on local main from branch `surface-layers-2` (09c0cc52, 2026-11-16). Not pushed; previews stale. Branch `surface-layers`. The research behind it is the prototype branch
+contrast landed on local main from branch `surface-layers-2` (09c0cc52, 2026-11-16). Round 3 (branch `surface-layers-3`, not landed): see
+"Round 3" below. Not pushed; previews stale. Branch `surface-layers`. The research behind it is the prototype branch
 `prototype/surface-stack` (not for landing), summarized below.
 
 ## The model
@@ -10,8 +11,8 @@ A world's **surface** is an ordered list of layers, bottom to top, over its grou
 
 | Part | What it is |
 | --- | --- |
-| Material | What it draws: a library material (a map's copy), or for now one of the engine's own surfaces (see Sources). |
-| Amount | The share of pixels it takes where its rule allows it, 0 to 1. |
+| Material | What it draws: a library material (the world's copy, shared by every layer that draws it), or, for a built-in that draws a role or a rock type's rock, that material. |
+| Coverage | (stored as `amount`) The share of its area it covers, 0 to 1, each covered pixel at full strength (TA's look), by its edge's pattern. |
 | Rule | Where it may show. **Windows**: up to four facts, each with a from–to range and a fade, all of which must hold (multiplied). **Score**: up to four facts with weights, summed, past one threshold with a fade (additive rules: steep *plus* convex). |
 | Edge | How it meets what is below: width (1 a soft mix, near 0 one material a pixel), noise and its size (speckle at 1 px, patches above, the rock's own patches for faces), height contrast (the taller material wins at the edge). |
 
@@ -139,6 +140,7 @@ Each phase lands on its own. Rule 7: a phase becomes every world's behavior or d
      would override every rock type's. Moving their rows next to their layers gives the artist one place without that split.
 4. **Engine surfaces become materials.** Bare soil, sand, debris fines, snow, moss, slope cover: each its
    own library material per world, so the editor can swap them. Look changes, per world, judged by eye.
+   - Round 3 replaced the opt-in: every engine surface draws a material, and the engine's colors for them are gone (see Round 3).
    - Built as an opt-in (branch `surface-layers-2`): an engine-colored built-in (`SURFACE_DRAWABLE`: bare soil, base band, moss on
      regrown debris, painted snow and moss, sand dust, sand, the ice snows) may name a library material (`{"builtin": "sand",
      "material": "zhon-beach"}`); the draw lays that material's pigment by the built-in's own share. It binds the map's copy by
@@ -186,6 +188,55 @@ So converting it has no shipped look to preserve. Two ways on, for the owner:
 
 Not done tonight: either needs the owner's choice, and the first needs class materials judged by eye.
 
+## Round 3 (branch `surface-layers-3`, 2026-11-16)
+
+The owner's decisions of 2026-11-16, after testing round 2:
+1. One way: everything is a material, no simple colors; a material has a Color an artist sets in one go, or each step.
+2. The cover classes become possible with materials: an artist may, say, grow flowers around wet ground.
+3. Per-world edges wait for the next full biome tuning round.
+4. Layer and role materials stay with the world.
+5. The surface list is a world setting (confirmed).
+6. Scope of "no simple colors" (asked): the surfaces and the role tints (Colors › Slope cover, Sand, Beach; Rock and Crystal
+   too); low ground, strata, vegetation, flowers and shallow water later, one at a time; Sun and Sky stay. If slots run out, the
+   material cache may grow to 24 slots.
+
+And their notes on the panel: why a pixel has its color; seeing the effect while editing and where a later layer overrides one;
+isolating layers; which material belongs to which layer; full opacity with coverage, not a fade.
+
+Built (each a commit; the measurements are in their messages):
+- **Coverage**: Amount is the share of a layer's area it covers at full strength, by the edge's pattern (single pixels at Noise size
+  1, patches above), and height contrast moves that threshold. Measured: .3 covers 29.7% (1 px), 31.7% (8 px), 29.9% (22 px); .7
+  covers 70%, 66.5%, 65.4% (the pattern is near even, a little under at patch sizes).
+- **Design view**: the layer preview is stripes over the finished picture, magenta where the layer shows and cyan where a later layer
+  covers it, with a checkbox; each row can be hidden or shown alone (Solo), a view of the page only that an export sets aside.
+- **Inspector**: Inspect a pixel, then click the map: the color pass records the layers that drew that pixel (row, coverage, in
+  order), its color, its ground and the facts; the panel lists them top first with their materials and what of each shows.
+- **Naming**: each row shows its material; the material editor names the layers a copy draws.
+- **World-kept materials**: the world keeps every role material and layer material it changed, as its ground and water.
+- **A material's Color** (`recolorMaterial`): moves every color step (the gradients and color constants the color is made of,
+  not a Multiply's or Add's layer) by one amount, and its palette with it. In the editor's Controls, the World ground and water
+  panes and each Surface row.
+- **Shared copies**: a layer binds the world's copy of its library material (its `worldLayer` is the library key), so the three
+  snows draw one snow.
+- **Engine surfaces draw materials**: soil, the base band, both mosses, painted snow, sand dust, sand and the ice snows draw the
+  world's `@soil`, `@band`, `@moss`, `@snow`, `@sand` (world.materials), library entries that are another graph with the world's
+  Color (`like`/`color` in textures.json) at the color the engine derived; snow is the ice material as it is, and Green's sand the
+  Zhon beach (the owner's picks by eye). The engine's snow, moss, soil and sand colors are gone, with Moss from ground, Rock grain in
+  sand and the Colors panel's Slope cover, Sand and Beach rows. A new map's materials: 10 to 13 of 15 (Archipelago 13, 91 MiB of
+  128), so the cache did not grow.
+- **Flowers**: a Flowers material (clumps of one species, the cover table's four colors) and a preset, Flowers in wet ground, that
+  lays it as single pixels where Wetness passes .35. Wetness comes from the Time pass. On a shore scene with Time, 0.93% of the
+  picture took flowers, as 1-px dots of each clump's species, through the palette.
+
+Not done, for the owner:
+- **Rock colors.** A rock type's flat color (its own, or the world's Colors › Rock, which every rock type inherits through slot 0's
+  row) overrides its material's mean; Green, Lush and Zhon set one, 16 world recipes and 10 presets set their own. Turning them into
+  materials gives each colored rock type its own copy of its material (slots: Archipelago has 2 free), so it belongs with the beds'
+  colors (strata, deferred) and may need the 24-slot cache. The Surface rows for rock show no Color until then.
+- **Crystal** has no material to carry a Color; its row stays.
+- **The cover classes** stay as they are (off in every world): flowers are possible as a layer now; tufts and shrubs are placed by
+  the bake from the classes, and a layer cannot drive them until the bake evaluates surface rules. Retiring the table waits for that.
+
 ## Sources (phase 1)
 
 Built-in sources are the surfaces the engine draws today without a material: rock (the rock type's color and
@@ -202,5 +253,6 @@ Phase 4 turns them into materials one by one.
 
 ## Open questions for the owner
 
-- The stack as a world setting, not per map: built that way; right?
+- Rock colors into materials, with the 24-slot cache if needed (see Round 3).
+- The cover classes' plants (tufts and shrubs) following a layer: needs the bake to read surface rules.
 - Converting highland, base band and rock face into rules means their World rows move into the Surface section.
