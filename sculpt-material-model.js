@@ -71,6 +71,13 @@ export const SURFACE_BUILTINS = {
   regrownMoss: [5, 0], fines: [5, 1], paintedRock: [5, 2], paintedSnow: [5, 3], paintedMoss: [5, 4], sandDust: [5, 5], sand: [5, 6],
   chips: [6, 0], iceCrest: [7, 0], iceCap: [7, 1],
 };
+// The built-ins that may draw a library material (phase 4): those the engine colors itself. The others already draw a material set in the
+// Materials panel (highland ground, slope cover, beach and debris fines take the world's role materials) or each rock type's rock (rock,
+// crown rock, painted rock, chips); a material for them here would be a second, partial way to set those (CLAUDE.md rule 9).
+export const SURFACE_DRAWABLE = ['soil', 'baseBand', 'regrownMoss', 'paintedSnow', 'paintedMoss', 'sandDust', 'sand', 'iceCrest', 'iceCap'];
+// Built-ins whose strength is a World setting of their own (World › Surface's Built-in settings): no Amount. Highland ground's share also sets
+// the ground's art relief and caps the beds outside the layer stages, so it takes no rule or edge either: those would move its color alone.
+export const SURFACE_OWN_AMOUNT = ['highland', 'baseBand'], SURFACE_FIXED = ['highland'];
 export const SURFACE_STAGE_NAMES = ['ground', 'slope', 'land', 'crown', 'band', 'loose', 'chips', 'snow'];
 // Facts a rule reads (engine-frag.wgsl surfaceFacts), in their order there. The shares exist from their own stage on.
 export const SURFACE_FACTS = ['slope', 'aboveSea', 'abovePlain', 'wear', 'deposit', 'wetness', 'moisture', 'soilDepth', 'light', 'top', 'convexity',
@@ -91,6 +98,7 @@ export function surfaceRows(surface, slotOf = () => -1) {
     if (!material && !at) throw Error(`Surface layer ${i + 1}: unknown built-in "${layer?.builtin}".`);
     if (material && !draws) throw Error(`Surface layer ${i + 1}: a layer is a built-in or draws a material.`);
     if (material && !layer.id) throw Error(`Surface layer ${i + 1}: a material layer needs an id.`);
+    if (draws && !material && !SURFACE_DRAWABLE.includes(layer.builtin)) throw Error(`Surface layer ${i + 1}: ${layer.builtin} draws a material set in the Materials panel or Rock types, not a material of its own.`);
     if (material && SURFACE_BUILTINS[layer.id]) throw Error(`Surface layer ${i + 1}: "${layer.id}" is a built-in's name; a material layer needs another id.`);
     const stage = material ? SURFACE_STAGE_NAMES.indexOf(layer.stage ?? 'land') : at[0];
     if (stage < 0) throw Error(`Surface layer ${i + 1}: unknown stage "${layer.stage}".`);
@@ -98,14 +106,17 @@ export function surfaceRows(surface, slotOf = () => -1) {
       const k = SURFACE_FACTS.indexOf(name); if (k < 0) throw Error(`Surface layer ${i + 1}: unknown fact "${name}".`); return k;
     };
     let rule = [];
-    if (layer.score) rule = [[2, number(layer.score.from, .5), Math.max(number(layer.score.fade, .05), 1e-4), 0], ...(layer.score.terms || []).slice(0, SURFACE_RULE_TERMS).map(t => [fact(t.fact), number(t.weight, 1), 0, 0])];
+    const fixed = !material && SURFACE_FIXED.includes(layer.builtin);
+    if (fixed) { /* no rule, edge or Amount: its World settings place it */ }
+    else if (layer.score) rule = [[2, number(layer.score.from, .5), Math.max(number(layer.score.fade, .05), 1e-4), 0], ...(layer.score.terms || []).slice(0, SURFACE_RULE_TERMS).map(t => [fact(t.fact), number(t.weight, 1), 0, 0])];
     else if (layer.where?.length) rule = [[1, 0, 0, 0], ...layer.where.slice(0, SURFACE_RULE_TERMS).map(w => [fact(w.fact), number(w.from, -1e9), number(w.to, 1e9), Math.max(number(w.fade, .05), 1e-4)])];
     // Height contrast (edge.height, a layer that draws a material): the rule head's w; a layer without a rule gets an empty windows rule.
     const height = Math.max(0, Math.min(1, number(edge.height, 0)));
     if (height > 0 && draws) { if (!rule.length) rule = [[1, 0, 0, 0]]; rule[0][3] = height; }
     if (rule.length > 1 || layer.score || draws) facts = true;
     const slot = draws ? slotOf(layerKey(layer)) : -1;
-    return {index: i, stage, rows: [[material ? -1 : at[1], number(layer.amount, 1), slot, rule.length], [number(edge.width, 1), number(edge.noise, 0), number(edge.noiseSize, 8), layerSalt(layerKey(layer))], ...rule]};
+    const amount = !material && SURFACE_OWN_AMOUNT.includes(layer.builtin) ? 1 : number(layer.amount, 1);
+    return {index: i, stage, rows: [[material ? -1 : at[1], amount, slot, rule.length], fixed ? [1, 0, 8, layerSalt(layerKey(layer))] : [number(edge.width, 1), number(edge.noise, 0), number(edge.noiseSize, 8), layerSalt(layerKey(layer))], ...rule]};
   });
   // Stable by stage: the list's order within a stage is kept.
   const sorted = layers.map((l, i) => [l, i]).sort((a, b) => a[0].stage - b[0].stage || a[1] - b[1]).map(([l]) => l);
@@ -133,13 +144,17 @@ export function copySurface(value) {
       ids.add(l.id);
       return clean({id: l.id, ...base, material: l.material.slice(0, 80), stage: typeof l.stage === 'string' ? l.stage : undefined});
     }
-    // A built-in that draws a material binds by its built-in's name, so one built-in a list draws a material at most once.
+    // A built-in that draws a material binds by its built-in's name, so one built-in a list draws a material at most once. A built-in keeps
+    // only the fields it has: Highland ground and Base band no Amount, Highland ground no rule or edge (SURFACE_OWN_AMOUNT, SURFACE_FIXED).
+    const builtin = String(l.builtin), own = clean({...base, amount: SURFACE_OWN_AMOUNT.includes(builtin) ? undefined : base.amount});
+    if (SURFACE_FIXED.includes(builtin)) { delete own.where; delete own.score; delete own.edge; }
     if (l.material != null) {
-      if (typeof l.material !== 'string' || ids.has(String(l.builtin))) throw Error(`Surface layer ${i + 1}: a built-in draws one material, once in a list.`);
-      ids.add(String(l.builtin));
-      return {builtin: String(l.builtin), ...base, material: l.material.slice(0, 80)};
+      if (typeof l.material !== 'string' || ids.has(builtin)) throw Error(`Surface layer ${i + 1}: a built-in draws one material, once in a list.`);
+      if (!SURFACE_DRAWABLE.includes(builtin)) throw Error(`Surface layer ${i + 1}: ${builtin} draws a material set in the Materials panel or Rock types, not a material of its own.`);
+      ids.add(builtin);
+      return {builtin, ...own, material: l.material.slice(0, 80)};
     }
-    return {builtin: String(l.builtin), ...base};
+    return {builtin, ...own};
   });
   surfaceRows(list);
   return list;

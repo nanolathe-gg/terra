@@ -131,16 +131,29 @@ Each phase lands on its own. Rule 7: a phase becomes every world's behavior or d
        leaves the map unless a stroke uses it.
      - The Highland ground and Base band World rows (strength, height window) moved from Ground › Pattern and Cliffs & stones ›
        Bands into this section's Built-in settings. Their layer rows show no Amount, which would repeat the strength.
+       Highland ground also takes no rule or edge (they would move its color but not the relief and bed cap its share sets);
+       a list's stored Amount, rule or edge for them is dropped.
    - Not done, on purpose: turning the highland ground and base band into rules. `highShare` also sets the ground's art relief
      and caps the beds outside the layer stages, where facts are not computed, so a rule would split one surface into two
      placements. The rock face's rule belongs to each rock type (Rock types › Exposure & relief), not to the world: a world rule
      would override every rock type's. Moving their rows next to their layers gives the artist one place without that split.
 4. **Engine surfaces become materials.** Bare soil, sand, debris fines, snow, moss, slope cover: each its
    own library material per world, so the editor can swap them. Look changes, per world, judged by eye.
-   - Built as an opt-in (branch `surface-layers-2`): any built-in may name a library material (`{"builtin": "sand",
-     "material": "desert-ground"}`); the draw lays that material's pigment by the built-in's own share. It binds the map's copy by
+   - Built as an opt-in (branch `surface-layers-2`): an engine-colored built-in (`SURFACE_DRAWABLE`: bare soil, base band, moss on
+     regrown debris, painted snow and moss, sand dust, sand, the ice snows) may name a library material (`{"builtin": "sand",
+     "material": "zhon-beach"}`); the draw lays that material's pigment by the built-in's own share. It binds the map's copy by
      the built-in's name, so a list draws one material per built-in. Without one, a built-in draws the engine's color, so no
      world's look changed and no world spends cache slots on a surface it does not swap.
+   - The other built-ins already draw a material: highland ground, slope cover, beach and debris fines their role materials
+     (Materials panel), rock, crown rock, painted rock and chips each rock type's rock (Rock types). A picker on their rows would be
+     a second, partial way to set those (Fable's review: the slope cover's margins and the crown would keep the old look), so their
+     rows say where their material is set instead.
+   - Reconciliation (`sculpt-materials.js surfaceMaterials`, pure and unit-tested): a copy whose layer no longer draws it leaves the
+     map unless a stroke (hidden too) or a rock type uses it; it runs on each surface edit and on loading a map, with that map's
+     strokes. A bound copy cannot be deleted in Materials, and one made the world's ground or water stops drawing its layer.
+   - Look study (2026-11-16, by eye, Green and Ice fixtures): Ice ground reads as snow far better than the engine's grayish painted
+     snow; Zhon beach reads as sand better than the engine sand on Green; the Lush materials make moss too teal; soil and regrown
+     moss barely change. Pictures in the explainer artifact.
    - Not done: shipping a material per surface per world as the default. That changes every world's look and needs the owner's
      eye, and the budget below.
    Budget: Archipelago already holds 8 role materials of 15 slots; six more is 14, about 103 MiB of 128,

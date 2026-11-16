@@ -5,7 +5,7 @@ import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnColors} from './sculpt-column.js';
-import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldPair,keepStrokeMaterials,materialsInUse,deleteMaterial,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
+import {copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldPair,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
 import {KNOBS,LOW_GROUND_RGB,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf} from './sculpt-knobs.js';
@@ -703,7 +703,7 @@ function syncMaterials() {
   materialUseKey=key; worldChanged({stage:'C',world:false}); schedule();
 }
 function restoreMaterials(materials) {
-  mapMaterials=structuredClone(materials); nodes=keepStrokeMaterials(nodes,mapMaterials); syncMaterialChoices(); syncMaterials(); materialEditor?.refresh(); keepWorldMaterials();
+  mapMaterials=structuredClone(materials); nodes=keepStrokeMaterials(nodes,mapMaterials); syncMaterialChoices(); syncMaterials(); materialEditor?.refresh(); keepWorldMaterials(); surfacePanel?.refresh();
 }
 // The world's ground and water are world settings: where the artist changed them from the library's, the world keeps them (this
 // browser's world store) for every map drawn in it, as it keeps its sliders. Called once an edit is complete, not on every drag step.
@@ -742,19 +742,9 @@ function setSurfaceList(list,keep) {
   config.surface=list;
   if(keep)activeWorld().surface=list; else delete activeWorld().surface;
   renderer?.setSurface(list);
-  const next=surfaceMaterials(list,mapMaterials,true);
-  if(JSON.stringify(next)!==JSON.stringify(mapMaterials)){try{editMaterials(next);}catch(err){status(err.message);}syncWorldControls?.();}   // a layer's material may enable a row (Highland ground)
+  // A layer's material joins the map; a copy no layer draws leaves it unless a stroke uses it (sculpt-materials.js surfaceMaterials).
+  try{const next=surfaceMaterials(list,mapMaterials,{config,nodes,rocks:mapRocks});if(JSON.stringify(next)!==JSON.stringify(mapMaterials))editMaterials(next);}catch(err){status(err.message);}   // a layer's material may enable a row (Highland ground)
   worldChanged({stage:'C',world:false}); schedule();
-}
-// The map's materials as a surface list draws them (bound by layer key, sculpt-material-model.js layerKey). A copy whose layer no longer
-// draws it (the layer was removed, cleared to its own color or set to another material, or the list is another world's or another map's)
-// gives up its binding and leaves the map unless a stroke uses it, hidden strokes included; `add`: each layer that draws a material and
-// lacks a copy gets one (withWorldMaterials).
-function surfaceMaterials(list,materials,add) {
-  const drawn=new Map((list||[]).filter(l=>l.material!=null).map(l=>[layerKey(l),l.material])),loose=new Set();
-  let next=materials.map(m=>{if(!m.worldLayer)return m;const want=drawn.get(m.worldLayer);if(want&&(!m.source||m.source===want))return m;loose.add(m.slot);return (({worldLayer,...o})=>o)(m);});
-  if(loose.size){const used=new Set(materialsInUse(nodes.map(n=>n.hidden?{...n,hidden:false}:n),next,mapRocks).map(m=>m.slot));next=next.filter(m=>!loose.has(m.slot)||used.has(m.slot));}
-  return add?withWorldMaterials(next,config):next;
 }
 function applySurface(next,{commit=false}={}) {
   let list; try { list=copySurface(next); } catch (err) { status(err.message); return false; }
@@ -784,7 +774,7 @@ function surfaceHost() {
 }
 function editMaterials(materials) {
   const used=materialsInUse(nodes,materials,mapRocks);renderer.setMaterials(new Map(used.map(m=>[m.slot,m])));
-  mapMaterials=materials;materialUseKey=JSON.stringify(used);syncMaterialChoices();worldChanged({stage:'C',world:false});persistLater();schedule();
+  mapMaterials=materials;materialUseKey=JSON.stringify(used);syncMaterialChoices();surfacePanel?.refresh();worldChanged({stage:'C',world:false});persistLater();schedule();
 }
 function removeMaterial(slot) {
   const gone=deleteMaterial(mapMaterials,nodes,slot,mapRocks);cancelWeather();nodes=gone.nodes;editMaterials(gone.materials);evaluate(0);checkpoint();queueWeather();updateControls();
@@ -1497,10 +1487,10 @@ function loadSketch(s,carry=false) {
   if (['original','alternate'].includes(s.light)) $('light').value=s.light;
   syncDrawInputs();
   restoreColumn(column);syncColumnPanel();
-  mapRocks=rocks??worldRocks(config); mapMaterials=surfaceMaterials(config.surface,adoptWorldMaterials(materials,config,{carried:carry}),false); if(!rocks){const given=giveRockMaterials(mapRocks,mapMaterials,mapRocks.map(r=>r.slot),config);mapRocks=given.rocks;mapMaterials=given.materials;} syncMaterialChoices();materialEditor?.refresh(); rockSelected=0; syncRockChoices(); syncRockPanel(); nodes=keepStrokeMaterials(keepStrokeRocks(next,mapRocks),mapMaterials); selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
+  mapRocks=rocks??worldRocks(config); mapMaterials=surfaceMaterials(config.surface,adoptWorldMaterials(materials,config,{carried:carry}),{config,nodes:next,rocks:mapRocks}); if(!rocks){const given=giveRockMaterials(mapRocks,mapMaterials,mapRocks.map(r=>r.slot),config);mapRocks=given.rocks;mapMaterials=given.materials;} syncMaterialChoices();materialEditor?.refresh(); rockSelected=0; syncRockChoices(); syncRockPanel(); nodes=keepStrokeMaterials(keepStrokeRocks(next,mapRocks),mapMaterials); selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); restoreMapData(s.mapData);renderLayers(); updateControls(); queueWeather();
   // The tools' cards still on a world's preset name their rock among this map's presets, now that the map's list is in.
   for (const id of ids) if (Object.hasOwn(config.worldShapes||{},toolSettings[id]?.preset)) toolSettings[id]=shapeCard(id,toolSettings[id].preset);
-  showTool(toolSettings[tool]); updateControls();
+  showTool(toolSettings[tool]); updateControls(); surfacePanel?.refresh();
 }
 // A sketch remembers the world it was drawn in. Loading one in another world
 // reloads the recorded world first, then plays the sketch there. The file is

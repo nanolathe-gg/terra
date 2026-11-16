@@ -636,8 +636,9 @@ export function assignMaterial(list, slot, role) {
   }
   const other = role === 'worldGround' ? 'worldWater' : 'worldGround';
   if (m[other]) throw Error(role === 'worldGround' ? 'This material is the world’s water. Duplicate it to use it as ground too.' : 'This material is the world’s ground. Duplicate it to use it as water too.');
-  // A material that becomes the ground or water stops being the highland ground or the rock.
-  return list.map(o => { const kept = o.slot === slot ? Object.fromEntries(Object.entries(o).filter(([k]) => !MAP_ROLES.some(([r]) => r === k))) : o; return {...kept, [role]: o.slot === slot}; });
+  // A material that becomes the ground or water stops being the highland ground or the rock, and stops drawing a surface layer (which takes
+  // a fresh copy of its library material).
+  return list.map(o => { const kept = o.slot === slot ? Object.fromEntries(Object.entries(o).filter(([k]) => k !== 'worldLayer' && !MAP_ROLES.some(([r]) => r === k))) : o; return {...kept, [role]: o.slot === slot}; });
 }
 // A stroke's material: -1 for the ground beneath, 0 for the world's ground, else a slot the map still has.
 export function strokeMaterial(node, list) {
@@ -649,8 +650,24 @@ export function materialsInUse(nodes, list, rocks = []) {
   const used = new Set([...list.filter(m => roleOf(m)).map(m => m.slot), ...(rocks ?? []).map(r => r.material).filter(s => s > 0), ...nodes.filter(n => !n.hidden && (n.kind === 'landform' || n.kind === 'paint' && (n.params?.paintChannel === 26 || n.params?.paintChannel === undefined))).map(n => strokeMaterial(n, list))]);
   return list.filter(m => used.has(m.slot));
 }
+// The map's materials as a world's surface list draws them (docs/SURFACE_LAYERS.md; layers bind copies by layerKey). A copy whose layer no
+// longer draws it (removed, cleared to its own color, set to another library material, or a list of another world or map) gives up its
+// binding and leaves the list unless a stroke (hidden ones too) or a rock type uses it; then each layer that draws a material and lacks a
+// copy gets one (withWorldMaterials). Pure: the editor calls it on each surface edit and on loading a map, with that map's strokes.
+export function surfaceMaterials(surface, materials, {config, nodes = [], rocks = []}) {
+  const drawn = new Map((surface || []).filter(l => l?.material != null).map(l => [layerKey(l), l.material])), loose = new Set();
+  let next = (materials || []).map(m => {
+    if (!m.worldLayer) return m;
+    const want = drawn.get(m.worldLayer);
+    if (want && (!m.source || m.source === want)) return m;
+    loose.add(m.slot); const {worldLayer, ...rest} = m; return rest;
+  });
+  if (loose.size) { const used = new Set(materialsInUse(nodes.map(n => n.hidden ? {...n, hidden: false} : n), next, rocks).map(m => m.slot)); next = next.filter(m => !loose.has(m.slot) || used.has(m.slot)); }
+  return withWorldMaterials(next, {...config, surface});
+}
 export function deleteMaterial(list, nodes, slot, rocks = []) {
   const m = find(list, slot);
+  if (m.worldLayer) throw Error(`This material draws the surface layer “${m.worldLayer}”. In World › Surface, choose another material for that layer or remove it first.`);
   const rock = (rocks ?? []).find(r => r.material === slot);
   if (rock) throw Error(`This is the surface of the rock type ${rock.name}. Choose another material for it first.`);
   if (m.worldGround || m.worldWater) throw Error(`This is the world’s ${m.worldGround ? 'ground' : 'water'}. Assign another material first.`);

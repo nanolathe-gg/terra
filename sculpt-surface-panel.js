@@ -2,7 +2,7 @@
 // Amount, its edge and its rule (conditions that must all hold, or a score); a row moves within its stage, a material layer can be removed,
 // and a layer is added from a preset. Hovering or focusing a row previews where that layer lies on the map. The list is a world setting:
 // `host.apply(next, {commit})` stores it.
-import {SURFACE_BUILTINS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, surfaceRows, isMaterialLayer, layerKey} from './sculpt-material-model.js';
+import {SURFACE_BUILTINS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, surfaceRows, isMaterialLayer, layerKey} from './sculpt-material-model.js';
 
 const $ = id => document.getElementById(id);
 // Plain names for the facts a rule reads, with the range a window's sliders cover.
@@ -45,8 +45,12 @@ export const SURFACE_PRESETS = [
 const stageOf = layer => isMaterialLayer(layer) ? Math.max(0, SURFACE_STAGE_NAMES.indexOf(layer.stage ?? 'land')) : SURFACE_BUILTINS[layer.builtin]?.[0] ?? 0;
 const nameOf = layer => layer.name || (isMaterialLayer(layer) ? 'Material layer' : BUILTIN_LABELS[layer.builtin] ?? layer.builtin);
 const el = (tag, props = {}, ...children) => { const e = Object.assign(document.createElement(tag), props); for (const c of children) e.append(c); return e; };
-const factSelect = (value, onChange) => {
-  const select = el('select', {title: 'What it reads'}, ...SURFACE_FACTS.map(f => el('option', {value: f, textContent: FACT_LABELS[f][0], selected: f === value})));
+// Controls get ids from their layer and part (uid), so a rebuilt list can give focus back to the control that had it.
+let rowKey = '';
+const uid = part => `surface-${rowKey}-${part}`.replace(/[^A-Za-z0-9_-]/g, '_');
+const ROCK_TYPED = ['rock', 'crown', 'paintedRock', 'chips'];
+const factSelect = (value, onChange, part) => {
+  const select = el('select', {title: 'What it reads', id: uid(part)}, ...SURFACE_FACTS.map(f => el('option', {value: f, textContent: FACT_LABELS[f][0], selected: f === value})));
   select.onchange = () => onChange(select.value);
   return select;
 };
@@ -68,35 +72,36 @@ export function mountSurfacePanel(host) {
   let editing = null;   // the list while a slider moves; committed on change
   const current = () => editing ?? host.surface();
   const put = (next, commit) => { editing = commit ? null : next; host.apply(next, {commit}); if (commit) build(); };
+  const refresh = () => { if (!editing) build(); };   // after a material edit, an undo or a load; not while a slider moves
   const edit = (i, change, commit) => { const next = structuredClone(current()); change(next[i], next); put(next, commit); };
   const slider = (label, value, min, max, step, onInput, title = '') => {
-    const id = 'surface-' + Math.random().toString(36).slice(2, 9), out = el('output', {htmlFor: id, value: String(value)});
+    const id = uid(label), out = el('output', {htmlFor: id, value: String(value)});
     const input = el('input', {type: 'range', id, min, max, step, value, title});
     input.oninput = () => { out.value = input.value; onInput(Number(input.value), false); };
     input.onchange = () => onInput(Number(input.value), true);
     return el('label', {className: 'surface-slider', title}, el('span', {textContent: label}), input, out);
   };
-  const number = (label, value, onSet, title = label + ' (empty: no limit)', placeholder = 'open') => {
-    const input = el('input', {type: 'number', step: 'any', value: value ?? '', placeholder, title});
+  const number = (label, value, onSet, title = label + ' (empty: no limit)', placeholder = 'open', part = label) => {
+    const input = el('input', {type: 'number', step: 'any', value: value ?? '', placeholder, title, id: uid(part)});
     input.onchange = () => onSet(input.value === '' ? undefined : Number(input.value));
     return el('label', {className: 'surface-number'}, el('span', {textContent: label}), input);
   };
   const remover = (title, onClick) => { const b = el('button', {type: 'button', textContent: '×', title, ariaLabel: title}); b.onclick = onClick; return b; };
   function windowRow(i, k, w) {
     const set = (field, v) => edit(i, l => { if (v === undefined) delete l.where[k][field]; else l.where[k][field] = v; }, true);
-    return el('div', {className: 'surface-term'}, factSelect(w.fact, f => edit(i, l => { l.where[k].fact = f; }, true)),
-      number('from', w.from, v => set('from', v)), number('to', w.to, v => set('to', v)),
-      number('fade', w.fade ?? .05, v => edit(i, l => { l.where[k].fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts and stops', ''),
+    return el('div', {className: 'surface-term'}, factSelect(w.fact, f => edit(i, l => { l.where[k].fact = f; }, true), `w${k}-fact`),
+      number('from', w.from, v => set('from', v), undefined, undefined, `w${k}-from`), number('to', w.to, v => set('to', v), undefined, undefined, `w${k}-to`),
+      number('fade', w.fade ?? .05, v => edit(i, l => { l.where[k].fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts and stops', '', `w${k}-fade`),
       remover('Remove this condition', () => edit(i, l => { l.where.splice(k, 1); if (!l.where.length) delete l.where; }, true)));
   }
   function termRow(i, k, t) {
-    return el('div', {className: 'surface-term'}, factSelect(t.fact, f => edit(i, l => { l.score.terms[k].fact = f; }, true)),
-      number('×', t.weight ?? 1, v => edit(i, l => { l.score.terms[k].weight = v ?? 1; }, true), 'Its weight in the sum (negative: it counts against)', '1'),
+    return el('div', {className: 'surface-term'}, factSelect(t.fact, f => edit(i, l => { l.score.terms[k].fact = f; }, true), `t${k}-fact`),
+      number('×', t.weight ?? 1, v => edit(i, l => { l.score.terms[k].weight = v ?? 1; }, true), 'Its weight in the sum (negative: it counts against)', '1', `t${k}-weight`),
       remover('Remove this term', () => edit(i, l => { l.score.terms.splice(k, 1); if (!l.score.terms.length) delete l.score; }, true)));
   }
   function ruleBlock(layer, i) {
     const kind = ruleKind(layer), block = el('div', {className: 'surface-rule'});
-    const select = el('select', {title: 'Where the layer may show'},
+    const select = el('select', {title: 'Where the layer may show', id: uid('rule')},
       el('option', {value: 'none', textContent: 'Everywhere', selected: kind === 'none'}),
       el('option', {value: 'where', textContent: 'Where all of these hold', selected: kind === 'where'}),
       el('option', {value: 'score', textContent: 'Where a score passes (a weighted sum)', selected: kind === 'score'}));
@@ -106,8 +111,8 @@ export function mountSurfacePanel(host) {
     if (kind === 'score') {
       layer.score.terms.forEach((t, k) => block.append(termRow(i, k, t)));
       block.append(el('div', {className: 'surface-term'}, el('span', {className: 'small', textContent: 'The sum, with the edge noise, passes'}),
-        number('at', layer.score.from ?? .5, v => edit(i, l => { l.score.from = v ?? .5; }, true), 'The sum it shows from', '.5'),
-        number('fade', layer.score.fade ?? .05, v => edit(i, l => { l.score.fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts', '')));
+        number('at', layer.score.from ?? .5, v => edit(i, l => { l.score.from = v ?? .5; }, true), 'The sum it shows from', '.5', 'score-at'),
+        number('fade', layer.score.fade ?? .05, v => edit(i, l => { l.score.fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts', '', 'score-fade')));
     }
     const terms = kind === 'where' ? layer.where.length : kind === 'score' ? layer.score.terms.length : 0;
     if (kind !== 'none' && terms < SURFACE_RULE_TERMS) {
@@ -119,7 +124,7 @@ export function mountSurfacePanel(host) {
   }
   function materialSelect(layer, i) {
     const builtin = !isMaterialLayer(layer), options = host.library();
-    const select = el('select', {className: 'surface-material', title: builtin ? 'Draw this surface with a material of the library, in place of ' + BUILTIN_SOURCES[layer.builtin] : 'The library material this layer draws'});
+    const select = el('select', {className: 'surface-material', id: uid('material'), title: builtin ? 'Draw this surface with a material of the library, in place of ' + BUILTIN_SOURCES[layer.builtin] : 'The library material this layer draws'});
     if (builtin) select.append(el('option', {value: '', textContent: 'Its own: ' + BUILTIN_SOURCES[layer.builtin], selected: layer.material == null}));
     const groups = new Map();
     for (const m of options) { const g = m.key.split('-')[0]; if (!groups.has(g)) groups.set(g, el('optgroup', {label: g[0].toUpperCase() + g.slice(1)})); groups.get(g).append(el('option', {value: m.key, textContent: m.name, selected: m.key === layer.material})); }
@@ -129,7 +134,8 @@ export function mountSurfacePanel(host) {
     return el('label', {className: 'surface-number surface-material-row'}, el('span', {textContent: 'Material'}), select);
   }
   function row(layer, i, layers, layerRows) {
-    const key = layerKey(layer), builtin = !isMaterialLayer(layer), stage = stageOf(layer);
+    const key = layerKey(layer), builtin = !isMaterialLayer(layer), stage = stageOf(layer), fixed = builtin && SURFACE_FIXED.includes(layer.builtin);
+    rowKey = key;
     const siblings = layers.map((l, j) => [l, j]).filter(([l]) => stageOf(l) === stage).map(([, j]) => j), at = siblings.indexOf(i);
     const material = layer.material != null ? host.material(layer) : null, isOpen = open.has(key);
     const head = el('div', {className: 'surface-head'});
@@ -139,7 +145,7 @@ export function mountSurfacePanel(host) {
     if (material) chip.style.background = material.color; else if (layer.material == null) chip.classList.add('own');
     head.append(toggle, chip);
     if (!builtin) {
-      const name = el('input', {type: 'text', value: nameOf(layer), maxLength: 80, className: 'surface-name', title: 'The layer’s name'});
+      const name = el('input', {type: 'text', value: nameOf(layer), maxLength: 80, className: 'surface-name', title: 'The layer’s name', id: uid('name')});
       name.onchange = () => edit(i, l => { l.name = name.value.trim() || 'Material layer'; }, true);
       head.append(name);
     } else {
@@ -154,22 +160,25 @@ export function mountSurfacePanel(host) {
     item.dataset.key = key;
     if (isOpen) {
       const edge = layer.edge ?? {}, body = el('div', {className: 'surface-body'});
-      const materialRow = el('div', {className: 'surface-wide surface-line'}, materialSelect(layer, i));
-      if (material) { const b = el('button', {type: 'button', textContent: 'Edit…', title: 'Open its material in the material editor (this map’s copy)'}); b.onclick = () => host.edit(layer, b); materialRow.append(b); }
+      // A built-in that already draws a role material or its rock type's rock takes it from there (sculpt-material-model.js SURFACE_DRAWABLE).
+      const own = builtin && !SURFACE_DRAWABLE.includes(layer.builtin);
+      const materialRow = own ? el('p', {className: 'small surface-wide', textContent: `Drawn with ${BUILTIN_SOURCES[layer.builtin]}: set it in ${ROCK_TYPED.includes(layer.builtin) ? 'Rock types' : 'the Materials panel'}.`}) : el('div', {className: 'surface-wide surface-line'}, materialSelect(layer, i));
+      if (material && !own) { const b = el('button', {type: 'button', textContent: 'Edit…', title: 'Open its material in the material editor (this map’s copy)'}); b.onclick = () => host.edit(layer, b); materialRow.append(b); }
       body.append(materialRow);
       if (builtin && BUILTIN_SETTINGS[layer.builtin]) {
         const b = el('button', {type: 'button', className: 'surface-wide link', textContent: 'Its strength and height: Built-in settings below'}); b.onclick = () => host.settings(BUILTIN_SETTINGS[layer.builtin]);
         body.append(b);
         const note = host.settingNote(BUILTIN_SETTINGS[layer.builtin]); if (note) body.append(el('p', {className: 'small surface-wide', textContent: note}));
       } else body.append(slider('Amount', layer.amount ?? 1, 0, 1, .01, (v, c) => edit(i, l => { l.amount = v; }, c), 'The share of pixels it takes where its rule allows it'));
-      body.append(
+      if (fixed) body.append(el('p', {className: 'small surface-wide', textContent: 'Its settings place it: it also sets the ground’s relief and caps the beds, so it takes no rule or edge here.'}));
+      else body.append(
         slider('Edge width', edge.width ?? 1, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, width: v}; }, c), '1 blends into what is below; near 0 each pixel is one or the other'),
         slider('Edge noise', edge.noise ?? 0, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, noise: v}; }, c), 'How ragged its edge is'),
         slider('Noise size (px)', edge.noiseSize ?? 8, 1, 64, 1, (v, c) => edit(i, l => { l.edge = {...l.edge, noiseSize: v}; }, c), '1 speckles by the pixel; larger makes patches'));
-      if (layer.material != null) body.append(slider('Height contrast', edge.height ?? 0, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, height: v}; }, c), 'At its edge the taller wins: its material’s art height against the ground’s (stones stand out of sand, grass fills the gaps)'));
-      if (layer.material != null && !layer.where?.length && !layer.score && (layer.amount ?? 1) >= 1 && (edge.noise ?? 0) === 0) body.append(el('p', {className: 'small', textContent: 'It covers everywhere with no edge, so Height contrast has no edge to work on: give it a rule, an Amount under 1 or edge noise.'}));
-      if (material && !material.height) body.append(el('p', {className: 'small', textContent: 'This material has no art height, so Height contrast has nothing to compare: choose one with height (a rock material, for one) or give it a height in the material editor.'}));
-      body.append(ruleBlock(layer, i));
+      if (layer.material != null) body.append(slider('Height contrast', edge.height ?? 0, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, height: v}; }, c), 'At its edge the taller wins: its material’s art height against the ground material’s, so a blocky material keeps its high points and the ground takes its gaps'));
+      if (!builtin && !layer.where?.length && !layer.score && (layer.amount ?? 1) >= 1) body.append(el('p', {className: 'small', textContent: 'At full Amount everywhere it has no edge, so Height contrast does nothing: give it a rule or an Amount under 1.'}));
+      if (material && !material.height && (edge.height ?? 0) > 0) body.append(el('p', {className: 'small', textContent: 'This material has no art height, so Height contrast only lets a ground with height push it back: choose one with height (a rock material, for one) for blocks that stand out.'}));
+      if (!fixed) body.append(ruleBlock(layer, i));
       item.append(body);
     }
     item.onpointerenter = item.onfocusin = () => host.preview(layerRows[i]);
@@ -178,6 +187,7 @@ export function mountSurfacePanel(host) {
     return item;
   }
   function build() {
+    const focused = document.activeElement?.id?.startsWith('surface-') ? document.activeElement.id : '';
     const layers = host.surface();
     let layerRows = [];
     try { layerRows = surfaceRows(layers).layerRows; } catch (_) {}
@@ -190,6 +200,7 @@ export function mountSurfacePanel(host) {
       last = stage; items.push(row(layers[i], i, layers, layerRows));
     }
     list.replaceChildren(...items);
+    if (focused) $(focused)?.focus({preventScroll: true});
   }
   const add = $('surface-add');
   add.replaceChildren(el('option', {value: '', textContent: 'Add a layer…'}), ...SURFACE_PRESETS.map(p => el('option', {value: p.key, textContent: p.name})));
@@ -203,5 +214,5 @@ export function mountSurfacePanel(host) {
   };
   $('surface-reset').onclick = () => { host.restore(); build(); };
   build();
-  return {refresh: build};
+  return {refresh};
 }
