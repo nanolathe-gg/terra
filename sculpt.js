@@ -1,5 +1,5 @@
 import {requestAdapter} from './sculpt-webgpu.js';
-import {savedWorld,copySavedWorld,savedWorldId,sameSavedWorld} from './sculpt-save.js';
+import {savedWorld,copySavedWorld,savedWorldId,sameSavedWorld,worldKeys} from './sculpt-save.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
@@ -2405,7 +2405,9 @@ async function boot() {
     // layers draw (which needs the layers above); the rest are the library's.
     config.worldMaterials=keptWorldMaterials(worlds[worldId]?.materials,config);
     config.presetDefaults={...config.defaults};
-    const worldKnobs=worlds[worldId]?.knobs||{};
+    // Only the rows this build has: a stored world keeps a removed option's value (lowTint) until it is saved again, and it must not reach
+    // the defaults, where a map save would carry it (sculpt-save.js savedWorld) and the open would drop it.
+    const known=worldKeys(config),worldKnobs=Object.fromEntries(Object.entries(worlds[worldId]?.knobs||{}).filter(([key])=>known.has(key)));
     config.defaults={...config.defaults,...worldKnobs};
     config.engineDefaults=Object.fromEntries(Object.entries(config.engineDefaults||{}).map(([key,value])=>[key,worldKnobs[key]??value]));
     if (worldId!==config.biomeId) $('world-title').textContent=worlds[worldId].name;
