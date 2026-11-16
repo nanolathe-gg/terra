@@ -782,6 +782,30 @@ fn timeMapsAt(p: vec2f) -> TimeMaps {
 }
 #endif
 
+// The surface layers' rows (engine-frag.wgsl surfaceStage; sculpt-material-model.js surfaceRows): the stages' heads and the flags row.
+const SURFACE_HEAD = 152u;
+const SURFACE_FLAGS = 151u;
+// Facts (surfaceFacts): 0 slope, 1 height above the sea, 2 above the plain, 3 wear, 4 deposit, 5 wetness, 6 moisture, 7 soil depth, 8 light
+// (level 1, sunward slopes more), 9 top (a lump 1, a hollow -1), 10 convexity, 11 the rock's share, 12 the debris', 13 the sand's. The shares
+// exist from their stage on (0 before it).
+const SURFACE_FACTS = 14u;
+fn surfaceWindow(v: f32, lo: f32, hi: f32, fade: f32) -> f32 {
+    let f = max(fade, 0.0001);
+    return smoothstep(lo - f, lo + f, v) * (1.0 - smoothstep(hi - f, hi + f, v));
+}
+// A layer's rule over the facts, its rows from ruleAt (the head, then rules - 1 terms), one evaluator for the color pass and the bake: a
+// windows rule multiplies `share` by each window in turn; a score rule adds each weighted fact to `score` (the caller's noise and lift).
+fn surfaceWindows(ruleAt: u32, rules: u32, facts: array<f32, 14>, share: f32) -> f32 {
+    var s = share;
+    for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; s *= surfaceWindow(facts[min(u32(w.x), SURFACE_FACTS - 1u)], w.y, w.z, w.w); }
+    return s;
+}
+fn surfaceScore(ruleAt: u32, rules: u32, facts: array<f32, 14>, score: f32) -> f32 {
+    var s = score;
+    for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; s += w.y * facts[min(u32(w.x), SURFACE_FACTS - 1u)]; }
+    return s;
+}
+
 const MM_COVER = 162u;
 fn cvr(i: u32) -> vec4f { return u.materialTable[MM_COVER + i]; }
 fn coverWin(v: f32, w: vec4f) -> f32 { return smoothstep(w.x, w.y, v) * (1.0 - smoothstep(w.z, w.w, v)); }

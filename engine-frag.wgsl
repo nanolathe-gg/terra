@@ -373,12 +373,6 @@ fn flowersAt(p: vec2f, cover: array<f32, 7>, total: f32, light: f32, vegetation:
 // is Amount times its rule. Coverage: with an edge of width under 1 or noise, clamp((share + noise - .5) / width + .5); a score's coverage is
 // its smoothstep. Noise is Noise times an even value from -.5 to .5, by the art pixel at a size of 1 or less and in patches of that size above
 // (the cover classes' pick), both repeating with the ground's pool. Width 1 and no noise lay the share itself, as the draw always has.
-const SURFACE_HEAD = 152u;
-const SURFACE_FLAGS = 151u;
-// Facts (surfaceFacts): 0 slope, 1 height above the sea, 2 above the plain, 3 wear, 4 deposit, 5 wetness, 6 moisture, 7 soil depth, 8 light
-// (level 1, sunward slopes more), 9 top (a lump 1, a hollow -1), 10 convexity, 11 the rock's share, 12 the debris', 13 the sand's. The shares
-// exist from their stage on (0 before it).
-const SURFACE_FACTS = 14u;
 var<private> surfaceFacts: array<f32, 14>;
 var<private> surfacePreviewCover: f32 = 0.0;   // the previewed layer's coverage (diagnostic view 13)
 var<private> surfacePreviewSeen: f32 = -1.0;   // what of it the layers after it leave showing (-1 until it is drawn)
@@ -399,10 +393,6 @@ fn surfaceNoise(e: vec4f, p: vec2f, pixel: vec2f) -> f32 {
 fn surfaceEdge(share: f32, e: vec4f, p: vec2f, pixel: vec2f) -> f32 {
     if (e.x >= 1.0 && e.y == 0.0) { return share; }
     return clamp((share + surfaceNoise(e, p, pixel) - 0.5) / max(e.x, 0.001) + 0.5, 0.0, 1.0);
-}
-fn surfaceWindow(v: f32, lo: f32, hi: f32, fade: f32) -> f32 {
-    let f = max(fade, 0.0001);
-    return smoothstep(lo - f, lo + f, v) * (1.0 - smoothstep(hi - f, hi + f, v));
 }
 // The stage's layers over `color` in place; `cover` gets each built-in slot's coverage (a union where several layers draw one slot), and
 // `over` the share material layers cover (they lie over what is below, so the built-ins' coverage under them shrinks).
@@ -438,13 +428,12 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
             // a partial Amount where its coverage pattern decides.
             if (rule.w > 0.0 && r0.z >= 0.0) { lift = rule.w * 0.25 * (materialRelief(p, u32(r0.z)) - ownGroundRelief(p, gs)); }
             if (rule.x < 1.5) {
-                for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; share *= surfaceWindow(surfaceFacts[min(u32(w.x), SURFACE_FACTS - 1u)], w.y, w.z, w.w); }
+                share = surfaceWindows(ruleAt, rules, surfaceFacts, share);
                 if (share == 0.0) { continue; }
                 if (lift != 0.0) { share = clamp(share + lift * 4.0 * share * (1.0 - share), 0.0, 1.0); }
                 c = surfaceEdge(share, e, p, pixel);
             } else {
-                var score = surfaceNoise(e, p, pixel) + lift;
-                for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; score += w.y * surfaceFacts[min(u32(w.x), SURFACE_FACTS - 1u)]; }
+                let score = surfaceScore(ruleAt, rules, surfaceFacts, surfaceNoise(e, p, pixel) + lift);
                 c = share * smoothstep(rule.y - rule.z, rule.y + rule.z, score);
                 if (c == 0.0) { continue; }
             }
