@@ -1,4 +1,3 @@
-import {PLACEMENT_ROW} from './sculpt-material-model.js';
 // P6: gates. The draw and the bake test many uniforms against a constant (`u.layered != 0`, `u.rillDepth <= 0.0`, `u.columnTerrain.x != 0.0`). A
 // world fixes most of them, so each test becomes a WGSL `override` bool and the pipeline is built with the values it has now, cached by the
 // string of those bools. Every other read of a uniform stays a uniform read: the continuous values do not make a new pipeline.
@@ -68,8 +67,12 @@ export const gateKey = (values, order) => { let key = ''; for (const id of order
 // The earliest shader stage that can read each uniform. Walk the actual
 // preprocessed WGSL call graph; a static read stays a dependency behind a gate.
 // Modules supply their entry stage, with explicit roots for fragment geometry.
+// Functions that run only while a gate uniform is on (their first statement returns when it is 0): the material table's rows they read count
+// as `materialTable.<gate>`, which worldUniformDelta counts only while the gate is on. engine-bake.wgsl plantMask: plants that follow surface
+// layers, read only when a layer grows plants.
+const GATED_TABLE_READS={plantMask:'plantsOn'};
 export function uniformStages(modules) {
-  const result=new Map(),order='ABCDEF';
+  const result=new Map(),order='ABCDEF';let coverRow=null;
   const uncomment=source=>{
     let out='',depth=0,line=false;
     for(let i=0;i<source.length;i++){
@@ -84,6 +87,7 @@ export function uniformStages(modules) {
   for(const {source,stage,roots} of modules){
     if(!order.includes(stage)||stage.length!==1)throw Error('Unknown shader stage '+stage);
     const text=uncomment(source),functions=new Map(),pattern=/\bfn\s+(\w+)\s*\(/g;
+    const cover=/\bconst\s+MM_COVER\s*=\s*(\d+)u?\s*;/.exec(text);if(cover)coverRow??=Number(cover[1]);
     let previous=0,match;
     while((match=pattern.exec(text))){
       const name=match[1],start=text.indexOf('{',pattern.lastIndex);
@@ -112,27 +116,31 @@ export function uniformStages(modules) {
     const entryPoints=roots??[...functions].filter(([,fn])=>fn.entry).map(([name])=>name);
     for(const root of entryPoints){
       if(!functions.has(root))throw Error('Missing stage root '+root);
-      const seen=new Set(),visit=name=>{
-        if(seen.has(name)||!functions.has(name))return;seen.add(name);
+      const seen=new Set(),visit=(name,gate=null)=>{
+        gate??=GATED_TABLE_READS[name]??null;
+        if(seen.has(name+':'+gate)||!functions.has(name))return;seen.add(name+':'+gate);
         const fn=functions.get(name);
-        for(const field of fn.fields){
+        for(const read of fn.fields){
+          const field=gate&&read==='materialTable'?'materialTable.'+gate:read;
           const prior=result.get(field)??{stage,entries:[]};
           if(order.indexOf(stage)<order.indexOf(prior.stage))prior.stage=stage;
           if(!prior.entries.includes(root))prior.entries.push(root);
           result.set(field,prior);
         }
-        for(const callee of fn.calls)visit(callee);
+        for(const callee of fn.calls)visit(callee,gate);
       };
       visit(root);
     }
   }
+  // The table's split needs its first cover row; without it every read counts for the whole table.
+  const split=result.get('materialTable.cover');
+  if(split&&coverRow!==null)split.row=coverRow;
+  else if(split){const whole=result.get('materialTable')??{stage:split.stage,entries:[]};if(order.indexOf(split.stage)<order.indexOf(whole.stage))whole.stage=split.stage;result.set('materialTable',whole);result.delete('materialTable.cover');}
   return result;
 }
 
 // Compare only CPU-owned world fields. GPU-written flags and per-chunk
 // coordinates are absent, including the aliases of slot 0 in the Rock table.
-// The material table's first ground-cover row (engine-common.wgsl MM_COVER): six placement rows after PLACEMENT_ROW.
-export const TABLE_COVER_ROW=PLACEMENT_ROW+6;
 export function worldUniformDelta(before,after,layout,stages) {
   const previous=before??new Uint32Array(after.byteLength/4),next=new Uint32Array(after),table=layout.fields.get('rock'),fields=[],slots=new Set();let stage=null;
   const perChunk=new Set([...PER_CHUNK_UNIFORMS,'weatherMaps','materialReady','transitionBody','rockWeatherGrid']);
@@ -143,11 +151,15 @@ export function worldUniformDelta(before,after,layout,stages) {
   for(const [name,f]of layout.fields){
     if(name==='rock'){
       for(let slot=0;slot<f.count;slot++)for(const [member,m]of f.members)if(differs(m,f.offset+slot*f.stride+m.offset))add(`rock[${slot}].${member}`,member,slot);
-    }else if(name==='materialTable'&&stages.has('materialTable.cover')){
-      // Rows below the cover rows are read where the table is read directly; the cover rows also where cvr reads them (uniformStages).
-      const head={...f,count:Math.min(TABLE_COVER_ROW,f.count)},tail={...f,count:Math.max(0,f.count-TABLE_COVER_ROW)},direct=stages.get(name)?.stage,cover=stages.get('materialTable.cover').stage;
-      if(differs(head))add(name,name);
-      if(tail.count&&differs(tail,f.offset+TABLE_COVER_ROW*f.stride)){const s=!direct||cover<direct?cover:direct;fields.push({name:'materialTable.cover',stage:s});if(!stage||s<stage)stage=s;}
+    }else if(name==='materialTable'&&stages.get('materialTable.cover')?.row!==undefined){
+      // Rows below the cover rows are read where the table is read directly, and where a gated function reads it while its gate is on
+      // (before or after the change); the cover rows also where cvr reads them (uniformStages).
+      const row=stages.get('materialTable.cover').row,head={...f,count:Math.min(row,f.count)},tail={...f,count:Math.max(0,f.count-row)},earliest=(...s)=>s.filter(Boolean).sort()[0]??null;
+      const gateOn=gate=>{const g=layout.fields.get(gate);return Boolean(g)&&(previous[g.offset/4]!==0||next[g.offset/4]!==0);};
+      const gated=[...stages.keys()].filter(k=>k.startsWith('materialTable.')&&k!=='materialTable.cover'&&gateOn(k.slice(14))).map(k=>stages.get(k).stage);
+      const direct=earliest(stages.get(name)?.stage,...gated);
+      if(differs(head)&&direct){fields.push({name,stage:direct});if(!stage||direct<stage)stage=direct;}
+      if(tail.count&&differs(tail,f.offset+row*f.stride)){const s=earliest(stages.get('materialTable.cover').stage,direct);fields.push({name:'materialTable.cover',stage:s});if(!stage||s<stage)stage=s;}
     }else if(!(table&&f.offset>=table.offset&&f.offset<table.offset+table.count*table.stride)&&!perChunk.has(name)&&!name.startsWith('chunk')&&differs(f))add(name,name);
   }
   return {fields,stage,rockSlots:[...slots]};
