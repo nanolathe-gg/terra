@@ -2,7 +2,7 @@
 
 Status: phases 1-3 landed on local main (b89971fd, 2026-11-15); the rest of phase 3, phase 4 as an opt-in and phase 5's height
 contrast landed on local main from branch `surface-layers-2` (09c0cc52, 2026-11-16). Round 3 (branch `surface-layers-3`) landed on local main
-(2026-11-16): see "Round 3" below. Not pushed; previews stale. Branch `surface-layers`. The research behind it is the prototype branch
+(2026-11-16): see "Round 3" below. Round 4 (branch `surface-layers-4`: rock and Crystal as materials, 23 material slots) landed on local main (2026-11-16): see "Round 4". Not pushed; previews stale. Branch `surface-layers`. The research behind it is the prototype branch
 `prototype/surface-stack` (not for landing), summarized below.
 
 ## The model
@@ -240,7 +240,7 @@ Not done, for the owner:
 - **The cover classes** stay as they are (off in every world): flowers are possible as a layer now; tufts and shrubs are placed by
   the bake from the classes, and a layer cannot drive them until the bake evaluates surface rules. Retiring the table waits for that.
 
-## Round 4 (branch `surface-layers-4`, 2026-11-16)
+## Round 4 (branch `surface-layers-4`, 2026-11-16, landed)
 
 The owner's go-ahead for "the rock, strata and Crystal round", after round 3: rock colors into materials with the 24-slot cache if
 needed, Crystal a material, strata with them.
