@@ -297,69 +297,14 @@ fn landPlace(p: vec2f, h: f32, g: vec2f, broad: vec2f, slope: f32, n: vec4f, wea
     return out;
 }
 
-// Card P30: ground cover placed by ecosystem rules. A world whose material data carries a ground-cover table (row 0, x = 1) draws its
-// grass from seven classes (0 bare soil, 1 dry grass, 2 turf, 3 meadow, 4 scrub, 5 moss, 6 wet rush) in place of the slope-only
-// ramp. Each pixel has three site values from maps the Time pass already writes: moisture (wetness, with the wet swaths' control as its bias, and
-// the sun's shade), soil depth (thin on steep and convex ground, deep in hollows and where water laid deposit) and light (the sun on the
-// broad face, level ground 1). A class is viable inside a window of each (Cordonnier et al. 2017; Gain et al. 2017); its cover is the
-// viability squared times a strength that follows Lushness (succession: grazed turf and bare ground below 1, meadow, scrub and rush above);
-// a pixel draws its class from the covers by a coherent uniform that mixes patches with per-pixel noise (COVER_PATCHINESS).
-// Table (MM_COVER rows): 0 x on, y wetness at which moisture starts to rise, z wetness at which it is full, w moisture of dry level ground;
-// 1 x slope where soil thins, y slope where it is gone, z convex ground's loss, w deposit's gain; 2 x patch px, y moisture per unit of
-// wetSwath, z wetSwath that leaves moisture as it is, w the shade's gain; 3 xyz the ground colour the class colours are measured against, w unused;
-// then per class five rows: colour (rgb) and its grain, strength and Lushness exponent, and the windows of moisture, soil and light; the last row (39) holds the plants
-// (card P31, engine-bake looseStones): x tuft height scale, y shrub height scale, z shrub density; zeros: no plants.
-// Patchiness is a constant: 0 to 1 moves under 4% of any class's blocks on modern Green (measure/impact.py, card P30), below what a control must move.
+// A coherent value for a surface layer's patches (surfacePattern): a uniform that mixes patches of `scale` px with per-pixel noise
+// (COVER_PATCHINESS), repeating with the ground's pool. Patchiness is a constant: 0 to 1 moved under 4% of the blocks (card P30).
 const COVER_PATCHINESS = 0.8;
 fn coverZ(p: vec2f, scale: f32) -> f32 {
     let zp = (poolNoise(p, scale, 17.0) + 0.5 * poolNoise(p, 0.45 * scale, 31.0) + 0.25 * poolNoise(p, 0.2 * scale, 47.0)) / 0.46;
     let c = poolPixel(p);
     let pixel = (cellHash(c).x + cellHash(c + 7.3).x + cellHash(c + 19.1).y - 1.5) * 2.0;
     return sqrt(COVER_PATCHINESS) * zp + sqrt(1.0 - COVER_PATCHINESS) * pixel;
-}
-// The grass with the class this pixel draws: the class colour carries the grass art's light and dark, and keeps its chroma only within
-// +-30% of that (the art's blue and red grain would otherwise swing a tan or a dark green to pink or teal).
-// Card P31, flowers: dots of colour on the meadow and scrub, 1 to 2 px, in clumps of one species, drawn from the position alone (no channel through the
-// bake: the draw already holds the covers, the sun and Lushness here, and a dot is a function of its pixel). The palette is the world's own: rows
-// MM_COVER + 40..43 (rgb, weight; weight 0 is unused), and the density is row 39's w; none, none drawn. A pixel pair block (2 x 2 px) holds at most one dot,
-// 1 px or 2 px wide; the chance of one is the density times the share of meadow and scrub here (more of both on lush ground, by their own Lushness
-// exponents, and again by Lushness here), the sun on the face, and a clump field of about 10 px. A clump is one palette colour (a cell of 22 px).
-// They fade out between 1 and 2 world px per pixel (chunk previews): finer than a pixel the dots would alias.
-// Returns (rgb, weight). The gate is the share of open ground (no path, above the water).
-fn flowersAt(p: vec2f, cover: array<f32, 7>, total: f32, light: f32, vegetation: f32, gate: f32) -> vec4f {
-    let dens = cvr(39u).w;
-    if (dens <= 0.0 || gate <= 0.0) { return vec4f(0.0); }
-    let fade = 1.0 - smoothstep(1.0, 2.0, u.chunkScale);
-    let px = poolPixel(p);
-    let blk = floor(px * 0.5);
-    let hb = poolCellHash(blk, u.pool * 0.5, 0x83u);   // card tilepool: by the block's Latin index (the same dots in every row and column of a repeat)
-    if (hb.x >= dens * 4.0) { return vec4f(0.0); }
-    let share = (cover[3] + 0.7 * cover[4] + 0.15 * cover[6] + 0.1 * cover[2]) / max(total, 1e-4);
-    let sun = mix(0.15, 1.0, smoothstep(0.6, 1.0, light));
-    let lush = clamp(1.0 + 0.5 * (vegetation - 1.0), 0.2, 1.8);
-    let clump = smoothstep(0.35, 0.85, poolNoise(p, 9.0, 7.0) * 0.5 + 0.5);
-    let chance = dens * 4.0 * clump * clump * clump * share * sun * lush * gate * fade;
-    if (hb.x >= chance) { return vec4f(0.0); }
-    // The dot: one pixel of the block, or two side by side.
-    let ho = poolCellHash(blk, u.pool * 0.5, 0x53u);
-    let o = floor(ho * 2.0);
-    let at = px - 2.0 * blk;
-    let wide = hb.y < 0.4;
-    if (!(all(at == o) || (wide && at.y == o.y))) { return vec4f(0.0); }
-    // Its colour: one species to a clump, by the palette's weights.
-    let pick = poolCellHash(floor(poolPos(p) * (poolCells(22.0) / u.pool)), poolCells(22.0), 0x41u).x;
-    var wsum = 0.0;
-    for (var k = 0u; k < 4u; k++) { wsum += cvr(40u + k).w; }
-    var acc = 0.0;
-    var col = cvr(40u).rgb;
-    for (var k = 0u; k < 4u; k++) {
-        let c = cvr(40u + k);
-        if (c.w <= 0.0) { continue; }
-        acc += c.w / wsum;
-        col = c.rgb;
-        if (pick < acc) { break; }
-    }
-    return vec4f(col * (1.1 + 0.25 * ho.x), 1.0);
 }
 // The world's surface layers (docs/SURFACE_LAYERS.md): an ordered list, each laid over what is below. A layer draws one of the draw's own
 // surfaces (a built-in: its color and share are the draw's) or a material of the map (bound to the layer by the material's worldLayer); a
@@ -457,26 +402,6 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
             *over = 1.0 - (1.0 - *over) * (1.0 - c);
         }
     }
-}
-fn groundCover(p: vec2f, slope: f32, broad: vec2f, top: f32, tm: TimeMaps, vegetation: f32, grass: vec3f, gate: f32) -> vec3f {
-    let c2 = cvr(2u);
-    let cover = coverAt(slope, broad, top, tm, vegetation);
-    var total = 0.0;
-    for (var k = 0u; k < 7u; k++) { total += cover[k]; }
-    let z = coverZ(p, c2.x);
-    let pick = 1.0 / (1.0 + exp(-1.702 * z)) * total;
-    var acc = 0.0;
-    var klass = 6u;
-    for (var k = 0u; k < 7u; k++) { acc += cover[k]; if (pick < acc) { klass = k; break; } }
-    var col = cvr(4u + 5u * klass);
-    // A table without a ground color of its own, and a class without one (bare soil), take the ground material's mean.
-    if (cvr(5u + 5u * klass).z > 0.5) { col = vec4f(groundMean(), col.w); }
-    let grain = (cellHash(poolPixel(p) + 3.7).y - 0.5) * 2.0 * col.w;
-    let ratio = grass / max(select(groundMean(), cvr(3u).rgb, cvr(3u).a > 0.5), vec3f(0.01));
-    let tl = dot(ratio, vec3f(0.299, 0.587, 0.114));
-    let ground = col.rgb * clamp(ratio, vec3f(0.7 * tl), vec3f(1.3 * tl)) * (1.0 + grain);
-    let flower = flowersAt(p, cover, total, coverSite(broad, tm).y, vegetation, gate);
-    return mix(ground, flower.rgb, flower.a);
 }
 
 // Moon slope marks, measured on the retail Lunar sections and the cc21
@@ -1816,10 +1741,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // The model's slope grass costs noise taps, so the slope and face blocks share one read.
     // Level ground (slope under the cover ramp's start, no painted rock) never mixes it in, so it skips the taps.
     var slopeBased = vec3f(0.0);
-    // A world with a ground-cover table has no slope ramp and no Sampled slope texture: the table decides its slope cover (groundCover below),
-    // so it reads the slope texture only for the mineral margins.
-    let tabled = cvr(0u).x > 0.5;
-    let slopeTexWanted = slope > u.slopeProfile.x && !tabled;
+    let slopeTexWanted = slope > u.slopeProfile.x;
     if (slopeTexWanted || u.mineralMargins != 0) { slopeBased = slopeGrassSource(pixel); }
     // The level ground before any slope cover, for crystal tops (crystalGrain).
     let levelGround = grass;
@@ -1828,7 +1750,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Small native slope interiors retain moss ribs and scattered stone.
         // This is an appearance material, not recovered albedo or geometry.
         var slopeGrass = slopeBased;
-        var slopeCover = select(smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, baseHeight(p)), 0.0, tabled);
+        var slopeCover = smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, baseHeight(p));
         drawMineralMargins(p, h, slope, n, pixel, grass, sediments, brokenSediments, materialWeather, fringeVariation, &slopeGrass, &slopeCover);
         // Level dry ground can receive mineral tails from a nearby hill.
         // Only banks below that plane need the high-coast admission check.
@@ -1853,8 +1775,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         surfaceStage(1u, &grass, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 1: slope cover
         slopeShare = layerCover[0];
     }
-    // Card P30: a world with a ground-cover table colours its grass by class (the slope-only ramp above still gates the slope texture).
-    if (cvr(0u).x > 0.5 && ownGround) { grass = groundCover(p, slope, broad, place.top, timeMaps, place.vegetation, grass, (1.0 - route) * step(u.sea + 1.0, h)); }
     // The one rock's colour, wherever rock shows (a face, a bare top, a crown): even (its relief's light makes the pattern), each block a
     // little lighter or darker (Color variation), each layer its own tint (Layer tint), its runnels and open partings wet (Wet streaks).
     let rockFlat = slotRock(rs);

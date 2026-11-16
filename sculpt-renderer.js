@@ -3,7 +3,7 @@
 // sculpt-vert.wgsl and engine-frag.wgsl (the draw), engine-bake.wgsl (the
 // fields bake of a chunk, a compute pass).
 
-import {tablePlacementRows,groundCoverRows,groundCoverOn,groundPool,PLACEMENT_ROW,PLANT_REACH,surfaceRows,SURFACE_FLAGS_ROW} from './sculpt-material-model.js';
+import {tablePlacementRows,coverRows,groundPool,PLACEMENT_ROW,PLANT_REACH,surfaceRows,SURFACE_FLAGS_ROW} from './sculpt-material-model.js';
 import {MaterialCache,writeMaterialSlot} from './sculpt-material-cache.js';
 import {copyMaterial,materialCacheUsage,materialStaged,materialTint,materialColor,materialRenderKey,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES,LIBRARY,materialStates} from './sculpt-materials.js';
 import {columnRows,columnTones,toneColor} from './sculpt-column.js';
@@ -557,7 +557,7 @@ export class TerrainRenderer {
     const slotOf = id => [...(this.grounds || new Map())].find(([, m]) => m.worldLayer === id)?.[0] ?? -1;
     const surface = surfaceRows(this.config.surface, slotOf, this.surfaceHidden);
     const head = [...surface.rows, ...Array.from({length: SURFACE_FLAGS_ROW - surface.rows.length}, () => [0, 0, 0, 0]), surface.flags, ...surface.head];
-    return [...head, ...rows, ...groundCoverRows(this.config.material?.groundCover,variant,this.colorOverrides||{},this.means?.ground)];
+    return [...head, ...rows, ...coverRows()];
   }
 
 
@@ -821,7 +821,7 @@ export class TerrainRenderer {
       return [knob('', 0), knob('Sharp', 24), knob('Rough', 0), knob('Scale', 6)];
     });
     // With no slope cover the slope group has no share, so its gloss does not wake the pass (worldControlRequirement says the same).
-    const slopeShare = (!groundCoverOn(this.config.material?.groundCover, variant) && Number(variant.get('slopeTexture') ?? 0.3) > 0) || Boolean(this.config.material?.slopeSand);
+    const slopeShare = Number(variant.get('slopeTexture') ?? 0.3) > 0 || Boolean(this.config.material?.slopeSand);
     this.i('uShineOn', Number(variant.get('faceWet')??0)>0 || Number(variant.get('wetGround')??0)>0 || shine.some((m, i) => (i !== 1 || slopeShare) && (m[0] > 0 || m[2] > 0)));
     this.f('uShineStretch', variant.has('shineStretch') ? Number(variant.get('shineStretch')) : 1);
     this.f('uShineWhite', variant.has('shineWhite') ? Number(variant.get('shineWhite')) : 0.35);
@@ -1063,7 +1063,7 @@ export class TerrainRenderer {
     set('uSoilRim', number('soilRim', 0));
     set('uWetGround', number('wetGround', 0));
     set('uLooseSize', number('looseSize', 6));
-    set('uPlantsOn', groundCoverOn(this.config.material?.groundCover, this.variant) && this.config.material.groundCover.plants ? 1 : 0);
+    set('uPlantsOn', 0);
     set('uStoneRound', number('stoneRound',this.config.material?.stoneRound ?? 0));
     set('uStoneSort', number('stoneSort',this.config.material?.stoneSort ?? 0.6));
     set('uStoneSlab', number('stoneSlab',this.config.material?.stoneSlab ?? 0.05));

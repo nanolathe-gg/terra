@@ -141,21 +141,9 @@ fn lsMaskCompute(c: vec2f) -> vec4f {
     return vec4f(min(share, 0.98), size*mix(1.0,mix(1.5,.4,accumulated.z),clamp(accumulated.y*sort,0.0,1.0)),mix(fines,accumulated.z,clamp(accumulated.y,0.0,1.0)), 0.35 * sort * (foot*supply*LS_BASE+debris*.35) * smoothstep(0.5, 1.0, travelled) + fallen);
 }
 
-// Card P31: where plants grow, at c: the covers of the ground-cover classes that grow them (coverAt, the draw's own site maps and windows) as shares of
-// the ground: grass (turf and dry grass), meadow (and wet rush), scrub, moss. A path, water and what the draw reads as no ground give none.
+// Where plants grow, at c (the surface layers that carry plants, below): none yet.
 fn plantMask(c: vec2f) -> vec4f {
-    if (u.plantsOn < 0.5) { return vec4f(0.0); }
-    let h0 = baseHeight(c);
-    if (routeProtection(c) > 0.05 || h0 < u.sea + 1.0) { return vec4f(0.0); }
-    let tm = timeMapsAt(c);
-    let broad = broadGradient(c);
-    let around = 0.25 * (baseHeight(c - vec2f(3.0, 0.0)) + baseHeight(c + vec2f(3.0, 0.0)) + baseHeight(c - vec2f(0.0, 3.0)) + baseHeight(c + vec2f(0.0, 3.0)));
-    var vegetation = 1.0 + u.lushness;
-    if (u.overrideOn != 0) { vegetation += sampleRegionalArray(masksTex,maskPoint(c),4).r; }
-    let cover = coverAt(length(broad), broad, clamp((h0 - around) / 1.5, -1.0, 1.0), tm, vegetation);
-    var total = 0.0;
-    for (var k = 0u; k < 7u; k++) { total += cover[k]; }
-    return vec4f(cover[2] + 0.6 * cover[1], cover[3] + cover[6], cover[4] + 0.3 * cover[3] + 0.2 * cover[6], cover[5]) / max(total, 1e-4);
+    return vec4f(0.0);
 }
 
 // The mask is computed once on a lattice of LS_CELL-px cells over the bake's window and its margin (looseMain, a pass before the bake) and read

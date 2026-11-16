@@ -109,13 +109,8 @@ export function worldControlRequirement(key,v){
  if(['faceBedVary','bedCycleVary'].includes(key))return n('column')<=0?NO_COLUMN:(Math.max(n('rockFace'),n('strata'),n('faceStrata'),n('faceWet'),n('debrisAmount'))>0?'':'Raise rock relief or layer color coverage to vary the beds.');
  if(key==='faceRun'&&n('faceFold')>0)return '';
  if(['faceBed','faceRun'].includes(key))return n('debrisAmount')>0||n('strata')>0||n('rockFace')>0||(n('column')>0&&(n('faceStrata')>0||n('faceWet')>0))?'':'Raise Rock relief: Depth, Layer tint, or Wetness to use this setting.';
- // Every world has a ground-cover table (materials/defaults.json groundCover): Vegetation cover above 0 turns it on.
- const cover=n('vegetationCover')>0;
- if(['plantRelief','flowerDensity'].includes(key)&&!cover)return 'Raise Vegetation cover to use this setting.';
- // The sediment transition, at 100 percent Material weathering, replaces the ground's color outright (worldPanelValues' slopeReplaced), and the
- // flowers are dots in that color; the plants' relief is baked into the height and still shows.
- if(key==='flowerDensity'&&n('slopeReplaced')>0)return 'The sediment transition replaces the ground\'s color at 100 percent Material weathering, so no flower shows. Lower Material weathering to use this setting.';
- if(['plantRelief','flowerDensity'].includes(key))return '';
+ // Plants grow only on surface layers that carry them (World › Surface; worldPanelValues' plants).
+ if(key==='plantRelief')return n('plants')>0?'':'No surface layer grows plants: give one plants in World › Surface to use this setting.';
  if(['undulationScale','undulationCover','undulationArt'].includes(key))return needs('undulation','Undulation height');
  if(key==='lowReach')return n('lowTint')>0||Number(v.lowGrain??1)<1?'':'Raise Tint or lower Grain kept in Low ground to use this setting.';
  // Strata, the foot band and the cap color the beds of a rock column: the world's own, or one the map adds (the Rock column panel; worldPanelValues passes the active one).
@@ -138,8 +133,8 @@ export function worldControlRequirement(key,v){
  // Shine: a lobe needs its material's gloss, a grain its roughness; the shared rows need some material shining.
  // The slope group's weight is the slope cover scaled by Sampled slope texture (a sandy slope scales it by its own sand instead). With none it
  // has no share, and its gloss does not wake the pass (uShineOn, sculpt-renderer.js).
- const noSlopeShare=(n('slopeTexture')<=0||cover)&&n('slopeSand')<=0;
- if(noSlopeShare&&/^shineSlope(Sharp|Scale|Rough)?$/.test(key))return cover?'The ground cover decides the slope cover while Vegetation cover is above 0, so the slope cover has no share to shine.':'Sampled slope texture is 0, so the slope cover has no share to shine. Raise Sampled slope texture to use this setting.';
+ const noSlopeShare=n('slopeTexture')<=0&&n('slopeSand')<=0;
+ if(noSlopeShare&&/^shineSlope(Sharp|Scale|Rough)?$/.test(key))return 'Sampled slope texture is 0, so the slope cover has no share to shine. Raise Sampled slope texture to use this setting.';
  const shine=['Ground','Slope','Rock','Sand','Crystal'].filter(m=>m!=='Slope'||!noSlopeShare),shiny=shine.some(m=>n('shine'+m)>0),rough=shine.some(m=>n('shine'+m+'Rough')>0);
  const lobe=/^shine(Ground|Slope|Rock|Sand|Crystal)(Sharp|Scale)$/.exec(key);
  if(lobe)return needs('shine'+lobe[1]+(lobe[2]==='Sharp'?'':'Rough'),(lobe[2]==='Sharp'?'Gloss':'Roughness')+' in Shine: '+({Ground:'ground',Slope:'slope cover',Rock:'rock',Sand:'sand',Crystal:'crystal'})[lobe[1]]);
@@ -151,7 +146,6 @@ export function worldControlRequirement(key,v){
  if(['wind','ripple','rippleHeight','sandDust','sandGrass','sandLight'].includes(key)&&n('beachLayer')>0)return needs('sand','Weathering supply in Sand');
  // Water wets the ground only where the Time pass has rain; the worlds that run it with rain off have no wetness map to read.
  if(key==='wetSwath'&&n('erosionRain')<=0)return 'With no rain no ground is wet, so Moisture has nothing to move. Raise Rain to use this setting.';
- if(key==='slopeTexture'&&cover)return 'The ground cover decides the slope cover while Vegetation cover is above 0.';
  if(key==='slopeTexture'&&n('slopeSand')>0)return 'The slopes of this world are sand, which has no texture to scale.';
  // The sediment transition is built from the ground and replaces the slope cover's color outright at 100 percent Material weathering (worldPanelValues passes slopeReplaced); the texture then scales only the slope's share of the shine.
  // (A slope gloss counts here even while the texture is 0: raising the texture gives the slope its share.)
@@ -177,7 +171,7 @@ export function worldControlRequirement(key,v){
 export const WORLD_PRIMARY_CONTROLS=new Set([
  'faceWhole','faceWholeLarge','faceRegular','sandLee','faceJointWidth','faceSecondary','faceContinuity','faceDetailPatch','faceFresh','faceRind','faceRindDepth','faceRindTone','faceRindWarmth','faceRindRough','faceBreak','faceBedVary','bedCycleVary','faceJointTilt','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
  'runoff','runoffScale','runoffConcentration','runoffCut','runoffStain','debrisAmount','debrisReach','debrisDepth','stoneSort','stoneRound','stoneSlab',
- 'vegetationCover','plantRelief','flowerDensity',
+ 'plantRelief',
  'bedDip','bedDipDir','faceStretch','faceBlockHeight','faceRound','faceJoint','faceExtrude','faceLamina','faceLaminaSize','faceScratchLength','faceScratchAngle',
  'rockFace','faceRock','rockFaceFrom','rimReach','faceCreaseSize','faceCrease','faceBlock','faceBlockSize','faceBed','faceLedge','faceRun','faceScratch','faceScratchSize','faceLean','faceGrass','faceWear','faceShade','faceLayers','faceMass','faceTone','faceStrata','faceWet',
  'groundPatch','groundPatchSize','undulation','undulationScale','undulationCover','undulationArt','coastRamp','faceSteep','lowTint','lowReach','lowGrain',

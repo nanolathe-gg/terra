@@ -1852,8 +1852,6 @@ function editColumn(value){
 }
 function commitColumn(){if(!columnEditing)return;columnEditing=false;checkpoint();queueWeather();}
 function defaultColor(key) {
-  if(key==='vegetation')return (config.material?.groundCover?.color||[128,128,128]).map(v=>v/255);
-  const flower=/^flower([1-4])$/.exec(key);if(flower)return (config.material?.groundCover?.plants?.flowers?.palette?.[Number(flower[1])-1]?.slice(0,3)||[255,255,255]).map(v=>v/255);
   const w=config.water||{};
   const rgb=v => v&&v.map(x => x/255);
   return {shallow:rgb(w.shallowRGB),
