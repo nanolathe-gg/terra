@@ -323,7 +323,7 @@ export function mountMaterialEditor(host) {
   // The header: which material, where it is used, and the list's own actions.
   function refresh() {
     const list = materials(); if (!list.some(m => m.slot === slot)) { slot = (list.find(m => m.worldGround) ?? list[0])?.slot ?? 0; selection = new Set(); primary = null; frameAt = -1; solo = null; }
-    const m = material(), role = o => o.worldGround ? ' · world ground' : o.worldWater ? ' · world water' : o.worldHigh ? ' · highland ground' : '', full = list.length >= MATERIAL_SLOTS - 1;
+    const m = material(), role = o => o.worldGround ? ' · world ground' : o.worldWater ? ' · world water' : o.worldHigh ? ' · highland ground' : o.worldRock ? ' · world rock' : '', full = list.length >= MATERIAL_SLOTS - 1;
     refreshWorld();
     if (!dialog.open) return;   // the rest is the editor's own face
     $('material-select').replaceChildren(...list.map(o => new Option(o.name + role(o), String(o.slot)))); $('material-select').value = String(slot);

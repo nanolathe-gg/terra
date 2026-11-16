@@ -336,10 +336,11 @@ export function copyMaterials(value) {
     slots.add(m.slot); const key = m.key ?? null;
     if (key !== null && (typeof key !== 'string' || !key.trim() || key.length > 80 || keys.has(key))) throw Error('Material keys must be unique nonempty strings.');
     if (key) keys.add(key);
-    return {slot: m.slot, name: nameOf(m.name), key, worldGround: m.worldGround === true, worldWater: m.worldWater === true, ...(m.worldHigh === true ? {worldHigh: true} : {}), ...copyMaterial(m)};
+    return {slot: m.slot, name: nameOf(m.name), key, worldGround: m.worldGround === true, worldWater: m.worldWater === true, ...(m.worldHigh === true ? {worldHigh: true} : {}), ...(m.worldRock === true ? {worldRock: true} : {}), ...copyMaterial(m)};
   }).sort((a, b) => a.slot - b.slot);
-  for (const role of ['worldGround', 'worldWater', 'worldHigh']) if (list.filter(m => m[role]).length > 1) throw Error('Only one material can be the ' + ({worldGround: 'world’s ground.', worldWater: 'world’s water.', worldHigh: 'world’s highland ground.'})[role]);
+  for (const role of ['worldGround', 'worldWater', 'worldHigh', 'worldRock']) if (list.filter(m => m[role]).length > 1) throw Error('Only one material can be the ' + ({worldGround: 'world’s ground.', worldWater: 'world’s water.', worldHigh: 'world’s highland ground.'})[role]);
   if (list.some(m => m.worldHigh && (m.worldGround || m.worldWater))) throw Error('The world’s highland ground is a material of its own.');
+  if (list.some(m => m.worldRock && (m.worldGround || m.worldWater || m.worldHigh))) throw Error('The world’s rock is a material of its own.');
   if (list.some(m => m.worldGround && m.worldWater)) throw Error('The world’s ground and its water are two materials.');
   return list;
 }
@@ -367,6 +368,12 @@ export function withWorldMaterials(value, config) {
   const high = LIBRARY[config.materials?.high];
   if (high && !list.some(m => m.worldHigh) && list.length < MATERIAL_SLOTS - 1) {
     const added = addMaterial(list, high, high.name); list = added.materials.map(m => m.slot === added.slot ? {...m, worldHigh: true} : m);
+  }
+  // A world names its rock material (config.materials.rock): the grain, art height and shine every rock face shows under its rock type's
+  // color (a rock type may name another, struct Rock material). It is added while the list has room; without one rock is its flat color.
+  const rock = LIBRARY[config.materials?.rock];
+  if (rock && !list.some(m => m.worldRock) && list.length < MATERIAL_SLOTS - 1) {
+    const added = addMaterial(list, rock, rock.name); list = added.materials.map(m => m.slot === added.slot ? {...m, worldRock: true} : m);
   }
   // A world may name more materials its tools lay down (config.materials.extra: library keys; a tool's `material`, sculpt-tools.js
   // toolMaterialSlot). Each the list lacks is added while it has room.
@@ -422,14 +429,16 @@ export const renameMaterial = (list, slot, name) => { find(list, slot); return l
 export const setMaterial = (list, slot, material) => { find(list, slot); const copy = copyMaterial(material); return list.map(m => m.slot === slot ? {...m, ...copy} : m); };
 export function assignMaterial(list, slot, role) {
   const m = find(list, slot);
-  if (role === 'worldHigh') {
-    if (m.worldGround || m.worldWater) throw Error('This material is the world’s ' + (m.worldGround ? 'ground' : 'water') + '. Duplicate it to use it as highland ground too.');
-    return list.map(({worldHigh, ...o}) => o.slot === slot ? {...o, worldHigh: true} : o);
+  if (role === 'worldHigh' || role === 'worldRock') {
+    const what = role === 'worldHigh' ? 'highland ground' : 'rock', other = role === 'worldHigh' ? 'worldRock' : 'worldHigh';
+    if (m.worldGround || m.worldWater) throw Error('This material is the world’s ' + (m.worldGround ? 'ground' : 'water') + `. Duplicate it to use it as ${what} too.`);
+    if (m[other]) throw Error(`This material is the world’s ${role === 'worldHigh' ? 'rock' : 'highland ground'}. Duplicate it to use it as ${what} too.`);
+    return list.map(({[role]: _, ...o}) => o.slot === slot ? {...o, [role]: true} : o);
   }
   const other = role === 'worldGround' ? 'worldWater' : 'worldGround';
   if (m[other]) throw Error(role === 'worldGround' ? 'This material is the world’s water. Duplicate it to use it as ground too.' : 'This material is the world’s ground. Duplicate it to use it as water too.');
-  // A material that becomes the ground or water stops being the highland ground.
-  return list.map(({worldHigh, ...o}) => ({...o, ...(worldHigh && o.slot !== slot ? {worldHigh} : {}), [role]: o.slot === slot}));
+  // A material that becomes the ground or water stops being the highland ground or the rock.
+  return list.map(({worldHigh, worldRock, ...o}) => ({...o, ...(worldHigh && o.slot !== slot ? {worldHigh} : {}), ...(worldRock && o.slot !== slot ? {worldRock} : {}), [role]: o.slot === slot}));
 }
 // A stroke's material: -1 for the ground beneath, 0 for the world's ground, else a slot the map still has.
 export function strokeMaterial(node, list) {

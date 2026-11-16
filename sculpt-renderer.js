@@ -1120,13 +1120,13 @@ export class TerrainRenderer {
     const table = this.uniform.get('ground'), checked = new Map();
     for (const [slot, material] of materials) {
       if (!Number.isInteger(slot) || slot < 1 || slot >= MATERIAL_SLOTS) throw new Error(`Material slots are 1 to ${MATERIAL_SLOTS - 1}.`);
-      checked.set(slot, {worldGround: material.worldGround === true, worldWater: material.worldWater === true, worldHigh: material.worldHigh === true, ...copyMaterial(material)});
+      checked.set(slot, {worldGround: material.worldGround === true, worldWater: material.worldWater === true, worldHigh: material.worldHigh === true, worldRock: material.worldRock === true, ...copyMaterial(material)});
     }
     const usage = materialCacheUsage(checked.size);
     if (!usage.fits) throw Error(`These materials need ${(usage.bytes / 1048576).toFixed(0)} MiB; the cache budget is ${usage.budget / 1048576} MiB. Use fewer materials.`);
     const role = key => [...checked].find(([, m]) => m[key])?.[0];
     if (checked.size && (!role('worldGround') || !role('worldWater'))) throw new Error('A map needs a ground material and a water material.');
-    this.i('uGroundDefault', role('worldGround') ?? 0); this.i('uWaterGround', role('worldWater') ?? 0); this.i('uHighGround', role('worldHigh') ?? -1);
+    this.i('uGroundDefault', role('worldGround') ?? 0); this.i('uWaterGround', role('worldWater') ?? 0); this.i('uHighGround', role('worldHigh') ?? -1); this.i('uRockGround', role('worldRock') ?? -1);
     this.i('uGroundAny', checked.size ? 1 : 0);
     this.i('uGroundShine', [...checked.values()].some(m => m.nodes.find(n => n.type === 'output').in.shine) ? 1 : 0);
     this.grounds = checked;

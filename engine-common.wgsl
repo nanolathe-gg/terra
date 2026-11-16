@@ -106,7 +106,7 @@ struct Rock {
     // a cast shadow's sun the rock lets through, in its colour.
     absorbDepth: f32,
     shadowTint: f32,
-    pad1: f32,            // padding: a uniform array's element is a multiple of 16 bytes
+    material: i32,        // its surface material's slot (grain, art height, shine), 0 the world's rock material (u.rockGround)
     pad2: f32,
     pad3: f32,
     // Rock surfaces, per recipe (moved from the world uniforms so a shape's rock can carry them): cracks, contour bands, moon pits,
@@ -442,6 +442,7 @@ struct Uniforms {
     groundIdOn: i32,
     groundDefault: i32,
     highGround: i32,    // the map's highland material slot (sculpt-materials.js worldHigh), -1 none
+    rockGround: i32,    // the world's rock material slot (worldRock): what a rock type with material 0 shows, -1 none
     waterGround: i32,
     groundAny: i32,
     groundShine: i32,      // 1 when a material in use puts out shine, so the shine pass runs for it
