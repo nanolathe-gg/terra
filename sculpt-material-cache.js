@@ -3,7 +3,7 @@
 // pipeline once per shape; its numbers are a buffer upload. A palette-only edit redoes the reduction, not the fields.
 import {compileMaterial, PROGRAM_BYTES, STEP_STRIDE, MAX_NODES, materialRenderKey, programKey, programSource, materialCacheUsage, paletteRgb, THUMB, THUMB_STRIDE, materialStates, MATERIAL_STATES} from './sculpt-materials.js';
 
-const SCRATCH_ROW = 8;   // the materialGraphs row a thumbnail run borrows
+const SCRATCH_ROW = 16;   // the materialGraphs row a thumbnail run borrows (after one a slot)
 // A slot's row of the uniform table: its palette and how the reduction treats it.
 export function writeMaterialSlot(r, material, view, at) {
   const members = r.uniform.get('ground').members, d = material.dither, reduce = material.palette.length >= 2;

@@ -1119,7 +1119,7 @@ export class TerrainRenderer {
   setMaterials(materials = new Map()) {
     const table = this.uniform.get('ground'), checked = new Map();
     for (const [slot, material] of materials) {
-      if (!Number.isInteger(slot) || slot < 1 || slot >= MATERIAL_SLOTS) throw new Error('Material slots are 1 to 7.');
+      if (!Number.isInteger(slot) || slot < 1 || slot >= MATERIAL_SLOTS) throw new Error(`Material slots are 1 to ${MATERIAL_SLOTS - 1}.`);
       checked.set(slot, {worldGround: material.worldGround === true, worldWater: material.worldWater === true, worldHigh: material.worldHigh === true, ...copyMaterial(material)});
     }
     const usage = materialCacheUsage(checked.size);

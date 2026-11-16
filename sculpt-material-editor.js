@@ -338,7 +338,7 @@ export function mountMaterialEditor(host) {
     if (document.activeElement !== $('material-name')) $('material-name').value = m.name;
     $('material-use-ground').disabled = m.worldGround || m.worldWater; $('material-use-water').disabled = m.worldWater || m.worldGround; $('material-use-high').disabled = m.worldHigh || m.worldGround || m.worldWater;
     $('material-delete').disabled = m.worldGround || m.worldWater; $('material-delete').title = $('material-delete').disabled ? 'The world’s ground and water cannot be deleted. Assign another material first.' : '';
-    for (const id of ['material-duplicate', 'material-paste', 'material-add']) { $(id).disabled = full; $(id).title = full ? 'The map already has seven materials.' : ''; }
+    for (const id of ['material-duplicate', 'material-paste', 'material-add']) { $(id).disabled = full; $(id).title = full ? `The map already has ${MATERIAL_SLOTS - 1} materials.` : ''; }
     $('material-reset').disabled = !LIBRARY[m.source]; $('material-reset').title = LIBRARY[m.source] ? `Back to “${LIBRARY[m.source].name}” from the library. Undo brings your version back.` : 'This material did not come from the library.';
     for (const v of ['tile', 'repeat', 'terrain']) $('mview-' + v).setAttribute('aria-pressed', String(view === v));
     $('mview-zoom').setAttribute('aria-pressed', String(zoomed)); $('mview-zoom').disabled = view === 'repeat';

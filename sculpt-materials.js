@@ -5,7 +5,7 @@
 import gamePalette from './materials/palette.json' with {type:'json'};
 import library from './materials/textures.json' with {type:'json'};
 
-export const MATERIAL_SLOTS = 8;                   // slot 0 is "the world's ground" on a stroke; materials take slots 1 to 7
+export const MATERIAL_SLOTS = 16;                  // slot 0 is "the world's ground" on a stroke; materials take slots 1 to 15
 export const MATERIAL_REPEAT = 512;
 export const MATERIAL_CACHE_BYTES = 128 * 1024 * 1024;
 export const MAX_NODES = 40, MAX_STOPS = 8, MAX_PALETTE = 32, MAX_CONTROLS = 12, MAX_FRAMES = 12, MAX_TAPPED = 4;
@@ -325,14 +325,14 @@ export function soloMaterial(material, id) {
   return {...copyMaterial({...material, nodes, palette: [], controls: [], frames: []}), dither: {...material.dither, amount: 0}};
 }
 
-// A map's materials: each in a slot 1 to 7, one of them the world's ground and one its water.
+// A map's materials: each in a slot 1 to 15, one of them the world's ground and one its water.
 const nameOf = name => text(name, null, 'A material name', 80);
 export function copyMaterials(value) {
   if (value == null) return null;
-  if (!Array.isArray(value) || value.length >= MATERIAL_SLOTS) throw Error('A map holds at most seven materials.');
+  if (!Array.isArray(value) || value.length >= MATERIAL_SLOTS) throw Error(`A map holds at most ${MATERIAL_SLOTS - 1} materials.`);
   const slots = new Set(), keys = new Set();
   const list = value.map(m => {
-    if (!object(m) || !Number.isInteger(m.slot) || m.slot < 1 || m.slot >= MATERIAL_SLOTS || slots.has(m.slot)) throw Error('A material needs its own slot, 1 to 7.');
+    if (!object(m) || !Number.isInteger(m.slot) || m.slot < 1 || m.slot >= MATERIAL_SLOTS || slots.has(m.slot)) throw Error(`A material needs its own slot, 1 to ${MATERIAL_SLOTS - 1}.`);
     slots.add(m.slot); const key = m.key ?? null;
     if (key !== null && (typeof key !== 'string' || !key.trim() || key.length > 80 || keys.has(key))) throw Error('Material keys must be unique nonempty strings.');
     if (key) keys.add(key);
@@ -344,7 +344,7 @@ export function copyMaterials(value) {
   return list;
 }
 export const LIBRARY = Object.fromEntries(Object.entries(library).map(([key, m]) => [key, {name: nameOf(m.name), ...copyMaterial({...m, source: key})}]));
-const freeSlot = list => { for (let slot = 1; slot < MATERIAL_SLOTS; slot++) if (!list.some(m => m.slot === slot)) return slot; throw Error('A map holds at most seven materials.'); };
+const freeSlot = list => { for (let slot = 1; slot < MATERIAL_SLOTS; slot++) if (!list.some(m => m.slot === slot)) return slot; throw Error(`A map holds at most ${MATERIAL_SLOTS - 1} materials.`); };
 const uniqueName = (list, name) => { const taken = new Set(list.map(m => m.name)); if (!taken.has(name)) return name; for (let n = 2; ; n++) if (!taken.has(`${name} ${n}`)) return `${name} ${n}`; };
 export function addMaterial(list, material, name = 'Material') {
   const slot = freeSlot(list), added = {slot, name: uniqueName(list, nameOf(name)), key: null, worldGround: false, worldWater: false, ...copyMaterial(material)};
