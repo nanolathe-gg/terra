@@ -1299,12 +1299,13 @@ function flushEval() {
 }
 function checkpoint(mapOnly=false) {
   flushEval(); keepWorldMaterials();
-  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); if (history.length>48) history.shift(); historyIndex=history.length-1;
+  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); if (history.length>48) history.shift(); historyIndex=history.length-1;
   renderLayers(); updateControls(); persistLater();
 }
 function moveHistory(delta) {
   const next=historyIndex+delta; if (!ready || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
   if(history[next].rock)setRockSettings(history[next].rock);
+  if(history[next].world)restoreWorldState(history[next].world);
   if(history[next].rocks&&JSON.stringify(history[next].rocks)!==JSON.stringify(mapRocks))restoreRocks(history[next].rocks);
   // Materials first: the surface then finds its copies bound as they were and changes none.
   if(history[next].materials&&JSON.stringify(history[next].materials)!==JSON.stringify(mapMaterials))restoreMaterials(history[next].materials);
@@ -1880,7 +1881,7 @@ function buildWorldPanel() {
     $('beach-from').value=config.beachSources[experiment.get('beachFrom')]?experiment.get('beachFrom'):'';
     $('beach-from').onchange=() => setKnob('beachFrom',$('beach-from').value);
   }
-  $('world-reset').onclick=() => { world.colors={...(config.colors||{})}; saveWorlds(); buildWorldPanel(); worldChanged(renderer.setColors(worldColors())); syncWorldControls(); updateControls(); };
+  $('world-reset').onclick=() => { world.colors={...(config.colors||{})}; saveWorlds(); buildWorldPanel(); worldChanged(renderer.setColors(worldColors())); syncWorldControls(); updateControls(); checkpoint(true); };
   $('world-new').onclick=() => {
     const name=$('world-new-name').value.trim(); if (!name) { $('world-new-name').focus(); status('Name the new world first.'); return; }
     const id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
@@ -1979,6 +1980,22 @@ function worldPanelValues() {
 // Rock changes share the editor's history and recipe, including the existing
 // material controls used by the geological starting points.
 function rockSettings(){return Object.fromEntries(ROCK_KEYS.map(k=>[k,Number(renderer.variant.get(k)??config.defaults[k])]));}
+// The rest of the World panel an undo step restores (the rock rows ride in `rock`): every other World row as drawn, and the world's colors.
+function worldUndoState(){
+  const knobs={};
+  for(const [,rows] of KNOBS)for(const [key] of rows){if(key==='beachFrom'||ROCK_KEYS.includes(key))continue;const v=renderer.variant.get(key)??config.defaults?.[key];if(v!==undefined&&v!==null)knobs[key]=String(v);}
+  return {knobs,colors:structuredClone(activeWorld().colors||{})};
+}
+// Back to a step's World rows and colors, through the same queue the sliders use; a restore adds no undo step of its own.
+function restoreWorldState(w){
+  let any=false;
+  for(const [key,value] of Object.entries(w.knobs||{}))if(String(renderer.variant.get(key)??config.defaults?.[key])!==value){
+    worldInputQueue.put('knob:0:'+key,{type:'knob',slot:0,key,value,restore:true});any=true;
+    const input=$('knob-'+key);if(input){input.value=value;const out=input.closest('[data-knob]')?.querySelector('output');if(out)out.textContent=value;}   // the row shows it, as a rock row's undo does
+  }
+  if(w.colors&&JSON.stringify(activeWorld().colors||{})!==JSON.stringify(w.colors)){worldInputQueue.put('colors',{type:'colors',value:w.colors,restore:true});any=true;}
+  if(any)worldInputQueue.flush();
+}
 function setRockSettings(values){
   worldInputQueue.flush();
   const url=new URL(location.href);let changed=false;
@@ -2137,8 +2154,9 @@ function applyWorldInputs(batch) {
   for(const input of batch){
     if(input.type==='surface'){syncDrawInputs();continue;}
     if(input.type==='color'){
-      const world=activeWorld();world.colors=pickWorldColor(config,world.colors,input.key,input.value);colors=worldStoreDirty=true;continue;
+      const world=activeWorld();world.colors=pickWorldColor(config,world.colors,input.key,input.value);colors=worldStoreDirty=worldCheckpoint=true;continue;
     }
+    if(input.type==='colors'){activeWorld().colors=structuredClone(input.value);colors=worldStoreDirty=worldPanelDirty=true;continue;}   // an undo step's colors
     const {key,value,slot}=input;
     if(input.type==='presetColor'){
       const rock=mapRocks.find(r=>r.slot===slot);if(!rock)continue;
@@ -2150,7 +2168,7 @@ function applyWorldInputs(batch) {
     }
     const next=applyKnob({key,value,settings:experiment,renderer,nodes,seed,sync:false});nexts.push(next);reload ||= Boolean(next.reload);
     activeWorld().knobs[key]=String(value);pendingWorldAddress.set(key,String(value));worldStoreDirty=true;
-    worldPanelDirty ||= key==='strata'||key==='lowTint';worldCheckpoint ||= ROCK_KEYS.includes(key)||Boolean(next.checkpoint);
+    worldPanelDirty ||= key==='strata'||key==='lowTint';worldCheckpoint ||= !input.restore;
   }
   if(reload){commitWorldInputs();location.reload();return;}
   const local=presets?syncRocks({defer:true}):null,onlyPresets=batch.every(input=>input.slot>0);
@@ -2214,7 +2232,7 @@ async function bootMap(pending=null) {
   }
   else status('Blank map ready · draw terrain with the existing tools.');
   ready=true; $('editor').disabled=false; $('world-editor').disabled=false;
-  history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
+  history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
   if (pending) { try {
     loadSketch(pending);
     // The one-use handoff is consumed. A refresh must restore the imported working map.
