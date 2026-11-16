@@ -2292,7 +2292,7 @@ async function bootMap(pending=null) {
   } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
   updateControls(); resize(); schedule(); queueWeather();
-  $('one').click();   // every page load starts at 1x, centered on the map
+  $(experiment.has('newMap')?'fit':'one').click();   // a new map opens at Fit, to see all of it; every other load at 1x, centered on the map
   await openSharedMap();
   $('new-map').disabled=false;showPrevious();
   if(experiment.has('newMap')){const url=new URL(location.href);url.searchParams.delete('newMap');$('map-name').value=url.searchParams.get('mapName')||'Untitled map';$('map-name').dispatchEvent(new Event('input'));url.searchParams.delete('mapName');window.history.replaceState(null,'',url);saveWorking();}
