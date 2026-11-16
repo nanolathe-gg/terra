@@ -302,7 +302,7 @@ export const groundDefaults=settings => ({amplitude:settings.has('undulation')?N
 export const DEFAULT_SEED=2701;
 // A page's settings: its address over the world's own defaults (boot() in sculpt.js does this to its address once the config is in).
 // A world with no beach of its own may take another world's (Colors & base pattern, Beach: the setting beachFrom names a world of config.beachSources,
-// the Go config generator): the lender's beach layer (the renderer generates it after the world's own, from the table this names) and its beach
+// the Go config generator): the lender's beach material (the map's beach role) and its beach
 // width, height and color, so every reader of config.layers and config.material (the panel's facts and rows, the chunk margins, the renderer)
 // sees a beach. The page's boot and the headless host call this once the settings hold the world's defaults.
 export function borrowBeach(config,settings) {

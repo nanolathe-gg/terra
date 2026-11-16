@@ -292,9 +292,9 @@ export class TerrainRenderer {
     this.textures = {};
     this.groundCache = new MaterialCache(this, preprocess(extra[6], common, new Set()), preprocess(extra[7], common, new Set()));
     const generation = performance.now();
-    const gpu = Promise.all([null, this.paletteTexture()]);
+    const gpu = this.paletteTexture();
     this.textures.noise = this.noiseTexture();
-    this.textures.palette = (await Promise.all([gpu,genericReady]))[0][1];
+    this.textures.palette = (await Promise.all([gpu,genericReady]))[0];
     this.generationMs = performance.now() - generation;
     const variant = new URLSearchParams(location.search);
     // H4: the engine's own knob values go in first, over the world's, under the page's query.
@@ -391,13 +391,6 @@ export class TerrainRenderer {
     this.device.queue.submit([encoder.finish()]);
   }
 
-  // A world's table by URL (a borrowed beach): this world's own is already loaded.
-  async groundTable(url) {
-    if (url === this.config.materialTable) return this.materialData;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Cannot load ${url}`);
-    return response.json();
-  }
 
   setColors(colors = {}, options) { this.colorOverrides={...colors};this.worldDirty=true;return this.syncWorld(options); }
 
@@ -559,7 +552,7 @@ export class TerrainRenderer {
 
 
   // What the startup generation took, in ms: the noise (CPU), the palette lookup and the materials (GPU), and the wall time of all three.
-  get startupParts() { return {noise: this.noiseMs, palette: this.paletteMs, materials: this.startupMs, total: this.generationMs}; }
+  get startupParts() { return {noise: this.noiseMs, palette: this.paletteMs, total: this.generationMs}; }
 
   // GPU time of one pass from timestamp queries, read back without
   // stalling; at most three in flight, as the WebGL timer queries were.

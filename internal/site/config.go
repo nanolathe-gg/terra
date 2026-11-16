@@ -316,15 +316,13 @@ func (s *Site) configure() error {
 		c["engineDefaults"] = stringsOf(engine)
 		c["knobs"] = keys(knobs)
 		if _, ok := roles["beach"]; ok {
-			{
-				m := object{}
-				for _, k := range []string{"beachWidth", "beachHeight", "beachRGB"} {
-					if v, ok := obj(table["material"])[k]; ok {
-						m[k] = v
-					}
+			m := object{}
+			for _, k := range []string{"beachWidth", "beachHeight", "beachRGB"} {
+				if v, ok := obj(table["material"])[k]; ok {
+					m[k] = v
 				}
-				beaches[w] = object{"name": names[w], "table": materialPath(w), "material": m, "beachMaterial": roles["beach"]}
 			}
+			beaches[w] = object{"name": names[w], "table": materialPath(w), "material": m, "beachMaterial": roles["beach"]}
 		}
 		shapes[w] = value(c["shapes"], object{})
 		delete(c, "shapes")

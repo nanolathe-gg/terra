@@ -75,9 +75,9 @@ export function worldControlRequirement(key,v){
  if(['faceWhole','faceWholeLarge'].includes(key))return needs('rockFace','Rock relief: Depth');
  if(key==='sandLee')return needs('sand','Deposit supply in Sand');
  if(key==='groundPatchSize')return needs('groundPatch','Ground patches');
- // Highland ground needs a highland material in the map (Materials, Manage: Use as highland ground); its height rows need Highland ground.
+ // Highland ground needs a highland material in the map (Materials, Manage: Also the world’s highland ground); its height rows need Highland ground.
  if(key==='highland')return n('highMaterial')<=0?'The map has no highland material. In Materials, choose one and set Also the world’s to highland ground.':'';
- if(key==='faceMineral')return n('faceClast')>0?'':'Raise Embedded fragments to use Mineral contrast: it tints the fragments (the grain\u2019s minerals are the rock material\u2019s).';
+ if(key==='faceMineral')return n('faceClast')>0?'':'Raise Embedded fragment relief to use Mineral contrast: it tints the fragments (the grain\u2019s minerals are the rock material\u2019s).';
  if(['highFrom','highReach'].includes(key))return needs('highland','Highland ground');
  if(key==='faceRegular')return worldControlRequirement('faceBlockSize',v);   // it moves every block and joint, as Joint spacing does
  if(key==='faceDetailPatch')return needs('rockFace','Rock relief: Depth')||(Math.max(n('faceCrease'),n('faceScratch'))>0?'':'Raise Pitting, or Scratches and water grooves, to cluster fine detail.');

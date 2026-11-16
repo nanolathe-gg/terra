@@ -7,7 +7,6 @@
 // bind one texture to several of these (an absent slope material reads the
 // ground, as the GLSL sampler pointed at the ground's unit).
 @group(1) @binding(18) var paletteTex: texture_2d<f32>;
-// H4: the land materials of materials/green.json, made at startup (engine-materials.wgsl): a layer per material, a mip level per footprint.
 
 // Above 1x a texel is one drawn pixel, not one world pixel: the pattern comes out smaller and keeps its grain and dither.
 fn grainPixel(pixel: vec2f) -> vec2f {
