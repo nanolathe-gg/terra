@@ -362,9 +362,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(hoveredNode>=0&&hoveredNode!==api.selection()&&!members.includes(hoveredNode))drawSelection(ink,geometry(hoveredNode),{label:api.selectionLabel(hoveredNode),hover:true});
       for(const i of members)if(i!==api.selection())drawSelection(ink,geometry(i),{member:true});
       drawSelection(ink,geometry(api.selection()),{label:api.selectionLabel(api.selection()),pathMode:api.pathEditing?.()||api.drawMode?.()==='add',point:api.pathSelection?.(),activePath:api.pathIndex?.()});
-      // H27: a landform's section picked on its along-the-path canvas, marked across the path.
-      const mark=api.sectionMark?.();if(mark){const a=project(mark.a),b=project(mark.b);ink.save();ink.strokeStyle='#ffd27a';ink.lineWidth=2.5/scale;ink.beginPath();ink.moveTo(a.x,a.y);ink.lineTo(b.x,b.y);ink.stroke();ink.restore();}
     }
+    // H27: a landform's section picked on its along-the-path canvas, marked across the path (also while the drawing tool keeps the shape just drawn).
+    if(!navigating()&&!features?.active){const mark=api.sectionMark?.();if(mark){const a=project(mark.a),b=project(mark.b);ink.save();ink.strokeStyle='#ffd27a';ink.lineWidth=2.5/scale;ink.beginPath();ink.moveTo(a.x,a.y);ink.lineTo(b.x,b.y);ink.stroke();ink.restore();}}
     if (!navigating() && hover && !features?.active && (api.currentTool()!=='move'||api.drawMode?.()==='add')) { ink.strokeStyle='#b8eef3'; ink.lineWidth=1/scale; ink.beginPath(); ink.arc(hover[0],hover[1]-(Math.max(config.seaLevel,visibleSample(...hover))-config.baseHeight)/2,Number($('diameter').value)/2,0,Math.PI*2); ink.stroke(); }
     // H7b: ?levelsOverlay=1 marks each shown chunk with its level: orange Q for a quarter image, green F for a final one.
     if(levelsOverlay)for(const e of cache.values())if(intersects(e,v)){const q=(e.scale??1)>1;ink.strokeStyle=q?'#ff9a3c':'#7dff7d';ink.lineWidth=2/scale;ink.strokeRect(e.x+1/scale,e.y+1/scale,e.width-2/scale,e.height-2/scale);ink.fillStyle=ink.strokeStyle;ink.font=`${16/scale}px monospace`;ink.fillText(q?'Q':'F',e.x+8/scale,e.y+20/scale);}
@@ -772,6 +772,26 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     resize();viewport.scrollLeft=Math.max(0,cx*scale-canvas.width/2);viewport.scrollTop=Math.max(0,cy*scale-canvas.height/2);position();schedule();
   }
   $('fit').onclick=()=>zoom('overview');$('one').onclick=()=>zoom(1);$('zoom').onchange=e=>zoom(e.target.value==='overview'?'overview':Number(e.target.value));
+  // Pinch (Ctrl or Cmd with the wheel, which is how Chrome sends a trackpad pinch; Safari's gesture events) steps through the zoom
+  // menu's levels and keeps the point under the pointer where it is. A plain wheel or two-finger scroll still pans.
+  const ZOOM_LEVELS=[.25,.5,1,2,4];
+  function zoomStep(dir,event){
+    if(busy||gesture)return;
+    const at=screen(event),next=dir>0?(overview?ZOOM_LEVELS.find(v=>v>scale+.001)??ZOOM_LEVELS[0]:ZOOM_LEVELS.find(v=>v>scale+.001)):(overview?null:ZOOM_LEVELS.slice().reverse().find(v=>v<scale-.001)??'overview');
+    if(next==null||next===scale&&!overview)return;
+    zoom(next);if(next==='overview')return;
+    const r=overlay.getBoundingClientRect();viewport.scrollLeft=Math.max(0,at.x*scale-(event.clientX-r.left));viewport.scrollTop=Math.max(0,at.z*scale-(event.clientY-r.top));position();schedule();
+  }
+  let pinch=0,pinchAt=0;
+  viewport.addEventListener('wheel',event=>{
+    if(!event.ctrlKey&&!event.metaKey)return;
+    event.preventDefault();const now=performance.now();if(now-pinchAt>300)pinch=0;pinchAt=now;
+    pinch-=event.deltaMode===1?event.deltaY*16:event.deltaY;
+    if(Math.abs(pinch)>=40){zoomStep(Math.sign(pinch),event);pinch=0;pinchAt=now+180;}   // one level a step; a short pause before the next
+  },{passive:false});
+  let gestureScale=1;
+  viewport.addEventListener('gesturestart',event=>{event.preventDefault();gestureScale=1;});
+  viewport.addEventListener('gesturechange',event=>{event.preventDefault();const ratio=event.scale/gestureScale;if(ratio>1.25||ratio<.8){zoomStep(ratio>1?1:-1,event);gestureScale=event.scale;}});
   $('tile-grid').onchange=()=>schedule();
   $('weathered-view').onchange=()=>{
     weatheredView=$('weathered-view').checked;

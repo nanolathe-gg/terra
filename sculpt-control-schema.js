@@ -116,7 +116,7 @@ export function worldControlRequirement(key,v){
  // Strata, the foot band and the cap color the beds of a rock column: the world's own, or one the map adds (the Rock column panel; worldPanelValues passes the active one).
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return NO_COLUMN;
  // Tilt deforms the voxel rock and its mineral coordinates as well as the column's colored beds.
- if(['bedDip','bedDipDir'].includes(key)&&Math.max(n('rockFace'),n('faceTone'),n('faceStrata'),n('faceWet'),n('debrisAmount'))<=0){const r=n('column')<=0?NO_COLUMN:needs('strata','Layer color coverage in Strata');if(r)return r;}
+ if(['bedDip','bedDipDir'].includes(key)&&Math.max(n('rockFace'),n('faceTone'),n('faceStrata'),n('faceWet'),n('debrisAmount'))<=0){const r=n('column')<=0?NO_COLUMN:needs('strata','Layer color coverage in Rock types › Layers');if(r)return r;}
  if(key==='bedDipDir')return n('bedDip')===0&&n('faceFold')<=0?'Set Bed tilt above or below zero, or raise Fold amplitude, to choose its direction.':'';
  if(key==='sandBandSpacing')return needs('sandBanding','Streaks on sand and ramps');
  if(key==='pockSize')return needs('pockmark','Surface pits');
@@ -126,9 +126,9 @@ export function worldControlRequirement(key,v){
  if(['lavaPillow','lavaChip','lavaVeins','lavaCalm'].includes(key))return needs('lavaCrust','Pillow crust strength');
  if(['frostGapReach','frostGapSize','frostGapDepth'].includes(key))return needs('frostGaps','Shore pockets');
  // Colour beds and the bands on them need the strata switch, and the band and cap rows a rock column to bed.
- if(['strataContrast','strataGrain'].includes(key))return needs('strata','Layer color coverage in Strata');
+ if(['strataContrast','strataGrain'].includes(key))return needs('strata','Layer color coverage in Rock types › Layers');
  // Cap color holds level ground to one bed only in a section of two beds where one fills over 88 percent of the cycle (worldPanelValues passes capBed in).
- if(['baseBand','desertCapFlat'].includes(key)){const r=n('column')<=0?NO_COLUMN:needs('strata','Layer color coverage in Strata');return r||(key==='desertCapFlat'&&n('capBed')<=0?'The rock column has no cap bed: a section of two beds where one fills over 88 percent of the cycle. Add or edit one in the Rock column panel to use this setting.':'');}
+ if(['baseBand','desertCapFlat'].includes(key)){const r=n('column')<=0?NO_COLUMN:needs('strata','Layer color coverage in Rock types › Layers');return r||(key==='desertCapFlat'&&n('capBed')<=0?'The rock column has no cap bed: a section of two beds where one fills over 88 percent of the cycle. Add or edit one in the Rock column panel to use this setting.':'');}
  if(['baseBandLow','baseBandHigh','baseBandWander','baseBandGaps'].includes(key))return needs('baseBand','Gray band strength');
  // Shine: a lobe needs its material's gloss, a grain its roughness; the shared rows need some material shining.
  // The slope group's weight is the slope cover scaled by Sampled slope texture (a sandy slope scales it by its own sand instead). With none it

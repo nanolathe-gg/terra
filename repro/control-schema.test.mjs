@@ -68,7 +68,7 @@ test('world dependencies explain bypasses without biome gates',async()=>{
  const {worldControlRequirement:requirement}=await import('../sculpt-control-schema.js');
  // The column's tilt moves its beds, which the draw shows as the strata colours: it needs a column and Strata; its direction needs a tilt.
  for(const key of ['bedDip','bedDipDir'])assert.match(requirement(key,{column:0,bedDip:1,strata:1}),/Add a rock column in the Rock column panel/,key);
- for(const key of ['bedDip','bedDipDir'])assert.match(requirement(key,{column:1,bedDip:1,strata:0}),/Layer color coverage in Strata/,key);
+ for(const key of ['bedDip','bedDipDir'])assert.match(requirement(key,{column:1,bedDip:1,strata:0}),/Layer color coverage in Rock types/,key);
  assert.equal(requirement('bedDip',{column:1,strata:1}),'');
  assert.match(requirement('bedDipDir',{column:1,strata:1,bedDip:0}),/Set Bed tilt/);
  assert.equal(requirement('bedDipDir',{column:1,strata:1,bedDip:.5}),'');
@@ -111,18 +111,18 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  // a world without a column of its own: the reason names the panel that adds one
  for(const key of ['strata','strataContrast','strataGrain','baseBand','desertCapFlat'])assert.match(requirement(key,{column:0,strata:1}),/Add a rock column in the Rock column panel/,key);
  assert.match(requirement('desertCapFlat',{column:1,strata:1,capBed:0}),/Rock column panel/);
- assert.match(requirement('baseBand',{column:1,strata:0}),/Strata/);
+ assert.match(requirement('baseBand',{column:1,strata:0}),/Rock types › Layers/);
  shows('baseBand',{column:1,strata:.5});
  assert.match(requirement('desertCapFlat',{column:1,strata:.5,capBed:0}),/no cap bed/);   // Green's column has eight beds in one section, so its caps hold nothing
  shows('desertCapFlat',{column:1,strata:.5,capBed:1});
  assert.match(requirement('baseBandGaps',{column:1,strata:1,baseBand:0}),/Gray band/);
  shows('baseBandGaps',{column:1,strata:1,baseBand:.5});
- assert.match(requirement('baseBandGaps',{column:1,strata:0,baseBand:.5}),/Strata/);
+ assert.match(requirement('baseBandGaps',{column:1,strata:0,baseBand:.5}),/Rock types › Layers/);
  assert.equal(requirement('lavaDusk',{lavaCrust:0}),'','the dusk darkens any rock turned from the sun, crust or none');
  assert.match(requirement('ripple',{beachLayer:1,sand:0}),/Weathering supply/);
  shows('ripple',{beachLayer:1,sand:.5});
  shows('ripple',{beachLayer:0,sand:0});   // the Sand brush feeds it where there is no beach
- assert.match(requirement('strataContrast',{column:1,strata:0}),/Strata/);
+ assert.match(requirement('strataContrast',{column:1,strata:0}),/Rock types › Layers/);
  shows('strataContrast',{column:1,strata:.4});
  // water: the hard step, the threshold step
  assert.match(requirement('shelfWander',{deepEdge:0}),/Hard shallow-to-deep step/);
