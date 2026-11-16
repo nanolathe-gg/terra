@@ -77,14 +77,18 @@ export const SURFACE_FACTS = ['slope', 'aboveSea', 'abovePlain', 'wear', 'deposi
 // A layer's salt for its edge noise, from its id (or its built-in), so adding a layer does not reshuffle another's speckle.
 const layerSalt = key => { let h = 17; for (const c of String(key)) h = (h * 31 + c.charCodeAt(0)) % 9973; return 17 + h; };
 export const layerKey = layer => layer?.id ?? layer?.builtin ?? '';
+// A material layer is any layer that is not a built-in; a built-in may also draw a material (`material`, docs/SURFACE_LAYERS.md phase 4)
+// in place of the engine's own color, keeping its own share. Either binds the map's copy that carries its key (layerKey) as worldLayer.
+export const isMaterialLayer = layer => layer?.builtin == null;
 // `slotOf(id)`: the map's slot of the material that carries this layer's id (-1 when the map lacks it).
 export function surfaceRows(surface, slotOf = () => -1) {
   const list = Array.isArray(surface) ? surface : [];
   if (list.length > SURFACE_MAX) throw Error(`A world's surface holds at most ${SURFACE_MAX} layers.`);
   let facts = false;
   const layers = list.map((layer, i) => {
-    const material = layer?.material != null, at = material ? null : SURFACE_BUILTINS[layer?.builtin];
+    const material = isMaterialLayer(layer), draws = layer?.material != null, at = material ? null : SURFACE_BUILTINS[layer?.builtin];
     if (!material && !at) throw Error(`Surface layer ${i + 1}: unknown built-in "${layer?.builtin}".`);
+    if (material && !draws) throw Error(`Surface layer ${i + 1}: a layer is a built-in or draws a material.`);
     if (material && !layer.id) throw Error(`Surface layer ${i + 1}: a material layer needs an id.`);
     const stage = material ? SURFACE_STAGE_NAMES.indexOf(layer.stage ?? 'land') : at[0];
     if (stage < 0) throw Error(`Surface layer ${i + 1}: unknown stage "${layer.stage}".`);
@@ -94,8 +98,8 @@ export function surfaceRows(surface, slotOf = () => -1) {
     let rule = [];
     if (layer.score) rule = [[2, number(layer.score.from, .5), Math.max(number(layer.score.fade, .05), 1e-4), 0], ...(layer.score.terms || []).slice(0, SURFACE_RULE_TERMS).map(t => [fact(t.fact), number(t.weight, 1), 0, 0])];
     else if (layer.where?.length) rule = [[1, 0, 0, 0], ...layer.where.slice(0, SURFACE_RULE_TERMS).map(w => [fact(w.fact), number(w.from, -1e9), number(w.to, 1e9), Math.max(number(w.fade, .05), 1e-4)])];
-    if (rule.length || material) facts = true;
-    const slot = material ? slotOf(layer.id) : -1;
+    if (rule.length || draws) facts = true;
+    const slot = draws ? slotOf(layerKey(layer)) : -1;
     return {index: i, stage, rows: [[material ? -1 : at[1], number(layer.amount, 1), slot, rule.length], [number(edge.width, 1), number(edge.noise, 0), number(edge.noiseSize, 8), layerSalt(layerKey(layer))], ...rule]};
   });
   // Stable by stage: the list's order within a stage is kept.
@@ -119,10 +123,16 @@ export function copySurface(value) {
     const where = Array.isArray(l.where) ? l.where.slice(0, SURFACE_RULE_TERMS).map(w => clean({fact: String(w?.fact), from: finite(w?.from), to: finite(w?.to), fade: finite(w?.fade)})) : undefined;
     const score = l.score && typeof l.score === 'object' ? clean({from: finite(l.score.from), fade: finite(l.score.fade), terms: (Array.isArray(l.score.terms) ? l.score.terms : []).slice(0, SURFACE_RULE_TERMS).map(t => clean({fact: String(t?.fact), weight: finite(t?.weight)}))}) : undefined;
     const base = clean({name, amount: finite(l.amount), edge, ...(where?.length ? {where} : {}), ...(score ? {score} : {})});
-    if (l.material != null) {
+    if (l.builtin == null) {
       if (typeof l.material !== 'string' || !SURFACE_ID.test(String(l.id)) || ids.has(l.id)) throw Error(`Surface layer ${i + 1} needs a material and an id of its own.`);
       ids.add(l.id);
       return clean({id: l.id, ...base, material: l.material.slice(0, 80), stage: typeof l.stage === 'string' ? l.stage : undefined});
+    }
+    // A built-in that draws a material binds by its built-in's name, so one built-in a list draws a material at most once.
+    if (l.material != null) {
+      if (typeof l.material !== 'string' || ids.has(String(l.builtin))) throw Error(`Surface layer ${i + 1}: a built-in draws one material, once in a list.`);
+      ids.add(String(l.builtin));
+      return {builtin: String(l.builtin), ...base, material: l.material.slice(0, 80)};
     }
     return {builtin: String(l.builtin), ...base};
   });

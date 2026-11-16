@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {surfaceRows, SURFACE_BUILTINS, SURFACE_STAGES, SURFACE_FACTS, SURFACE_FLAGS_ROW} from '../sculpt-material-model.js';
+import {surfaceRows, copySurface, SURFACE_BUILTINS, SURFACE_STAGES, SURFACE_FACTS, SURFACE_FLAGS_ROW} from '../sculpt-material-model.js';
 import {withWorldMaterials, materialsInUse, copyMaterials, roleOf, LIBRARY} from '../sculpt-materials.js';
 
 const defaults = JSON.parse(readFileSync(new URL('../materials/defaults.json', import.meta.url), 'utf8'));
@@ -81,4 +81,18 @@ test('a surface from a save or a world file is checked and copied; a save carrie
   assert.equal(plain.surface, undefined, 'a world that kept its own surface saves none');
   const edited = savedWorld(config, new URLSearchParams(), {name: 'Green Planet', colors: {}, knobs: {}, surface: copy});
   assert.deepEqual(copySavedWorld(JSON.parse(JSON.stringify(edited)), config).surface, copy, 'an edited surface round-trips');
+});
+
+test('a built-in may draw a library material in place of its own color, bound by its name, once in a list', () => {
+  const surface = defaults.surface.map(l => l.builtin === 'rock' ? {...l, material: 'rock-basalt'} : l);
+  const {rows, flags} = surfaceRows(surface, key => key === 'rock' ? 7 : -1);
+  const at = rows.findIndex((r, i) => i % 2 === 0 && r[0] === SURFACE_BUILTINS.rock[1] && r[2] === 7);
+  assert.ok(at >= 0, 'the rock row carries its material slot');
+  assert.equal(flags[0], 1, 'a material needs the facts (wear and deposit for its pigment)');
+  const w = world('green'), list = withWorldMaterials(null, {materials: w.materials, surface}), m = list.find(o => o.worldLayer === 'rock');
+  assert.equal(m?.source, 'rock-basalt');
+  assert.match(m.name, /^Rock: /);
+  assert.deepEqual(copySurface(surface).find(l => l.builtin === 'rock'), {builtin: 'rock', name: 'Rock', material: 'rock-basalt'});
+  assert.throws(() => copySurface([...surface, {builtin: 'rock', material: 'rock-granite'}]), /once in a list/);
+  assert.throws(() => surfaceRows([{id: 'x'}]), /built-in or draws a material/);
 });

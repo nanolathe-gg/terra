@@ -5,6 +5,7 @@
 import gamePalette from './materials/palette.json' with {type:'json'};
 import library from './materials/textures.json' with {type:'json'};
 import snippets from './materials/snippets.json' with {type:'json'};
+import {layerKey} from './sculpt-material-model.js';
 
 export const MATERIAL_SLOTS = 16;                  // slot 0 is "the world's ground" on a stroke; materials take slots 1 to 15
 export const MATERIAL_REPEAT = 512;
@@ -559,9 +560,10 @@ export function withWorldMaterials(value, config, {carried = false} = {}) {
   }
   // The world's surface layers that draw a material (config.surface, a layer with `material`: a library key and an `id`): each the list
   // lacks is added with the layer's id as its worldLayer, while the list has room.
+  // A built-in that draws a material binds by its built-in's name (sculpt-material-model.js layerKey).
   for (const layer of config.surface || []) {
-    const m = layer?.material != null && layer.id ? LIBRARY[layer.material] : null;
-    if (m && !list.some(o => o.worldLayer === layer.id) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, layer.name || m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, worldLayer: layer.id} : o); }
+    const key = layerKey(layer), m = layer?.material != null && key ? LIBRARY[layer.material] : null;
+    if (m && !list.some(o => o.worldLayer === key) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, layer.builtin == null ? layer.name || m.name : `${layer.name || layer.builtin}: ${m.name}`); list = added.materials.map(o => o.slot === added.slot ? {...o, worldLayer: key} : o); }
   }
   // A world may name more materials its tools lay down (config.materials.extra: library keys; a tool's `material`, sculpt-tools.js
   // toolMaterialSlot). Each the list lacks is added while it has room.

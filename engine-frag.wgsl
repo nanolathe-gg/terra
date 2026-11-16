@@ -433,7 +433,10 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
         }
         if (i32(layerRow) == u.surfacePreview) { surfacePreviewCover = c; }
         if (builtin) {
-            *color = mix(*color, (*src)[k], c);
+            // A built-in that draws a material (docs/SURFACE_LAYERS.md phase 4) lays that material's color by its own share.
+            var source = (*src)[k];
+            if (r0.z >= 0.0) { source = groundPigment(p, u32(r0.z), surfaceFacts[3], surfaceFacts[4]); }
+            *color = mix(*color, source, c);
             (*cover)[k] = select(1.0 - (1.0 - (*cover)[k]) * (1.0 - c), c, (*cover)[k] == 0.0);   // layers of one slot join as a union
         } else {
             *color = mix(*color, groundPigment(p, u32(r0.z), surfaceFacts[3], surfaceFacts[4]), c);

@@ -13,7 +13,7 @@ const scene = {biome: 'green', ground: true, query: '', strokes: [['landform', [
 const changed = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) n++; return n / (a.length / 4); };
 const view = async () => { const s = await openScene(scene, 'biome=green&mapX=4&mapY=4'); try { await s.fields.ready(); return {pixels: await renderWindow(s, {x: 0, y: 0, width: 512, height: 512}), errors: s.errors}; } finally { s.dispose(); } };
 
-test('surface layers: a rule limits a built-in; a material layer draws where its rule holds; a missing material draws nothing', {timeout: 600000}, async () => {
+test('surface layers: a rule limits a built-in; a material layer draws where its rule holds; a built-in draws a material; a missing material draws nothing', {timeout: 600000}, async () => {
   await openHost({configs});
   try {
     withSurface(s => s);
@@ -26,6 +26,10 @@ test('surface layers: a rule limits a built-in; a material layer draws where its
     const capped = await view();
     const share = changed(base.pixels, capped.pixels);
     assert.ok(share > .03 && share < .6, `the cap covers the mesa's top and nothing else (${(share * 100).toFixed(1)}%)`);
+    withSurface(s => s.map(l => l.builtin === 'rock' ? {...l, material: 'lush-ground'} : l));
+    const drawn = await view();
+    const swapped = changed(base.pixels, drawn.pixels);
+    assert.ok(swapped > .01 && swapped < .6, `the rock draws its material where the rock lies (${(swapped * 100).toFixed(1)}%)`);
     withSurface(s => [...s, {id: 'ghost', name: 'Ghost', material: 'no-such-material', where: [{fact: 'slope', from: -1}]}]);
     const ghost = await view();
     assert.equal(changed(base.pixels, ghost.pixels), 0, 'a layer whose material the map lacks draws nothing');
