@@ -77,6 +77,7 @@ with gray stops is a curve for a height or mask. Every pattern wraps at the
 | Height blend | gray or color | The layer shows where its height stands above the base's. |
 | Gradient | color | 2 to 8 stops. A stop brighter than 1 lightens when the result multiplies another color. |
 | Color adjust | color | Turns a color's hue and scales its saturation and brightness (0 leaves each), through an optional Mask: varies every layer at once. The material's palette limits what shows; after a large change, Pick from the material. |
+| Blur | gray or color | Softens its input over Radius px (0 leaves it exactly), wrapping at the repeat: soft halos from hard masks, dirt filling cracks, smoother heights. Gives what it reads. |
 | Light | gray | A height's slope toward a light: tints color like a lit bump. |
 | Cavity | gray | Hollows (below .5) and crests (above) of a height. |
 | Constant | gray or color | One value (Gray) or one color (Color), everywhere. A Color has the gradient's color fields for its one stop and publishes like a gradient's colors. |
@@ -86,7 +87,8 @@ Keep the set small: a new node type must do what no combination of these can.
 Height is art relief only; gameplay heights never change.
 
 A graph has at most 40 nodes. Light and Cavity evaluate their input again at
-four neighbors, so a material may use four of them, two in a chain.
+four neighbors, so a material may use four of them, two in a chain. A
+material may use four Blurs (each needs its input over the whole repeat).
 
 ## The palette
 
@@ -139,6 +141,17 @@ node. A pipeline is built once per shape; node numbers sit in a storage
 buffer, so a dragged control regenerates the repeat without compiling.
 Light and Cavity read their height through a generated function that
 evaluates only that branch at another point.
+
+A Blur needs its input at every texel at once, so the graph runs in stages
+(`stagePlan`): before a material's pass, each Blur's input is computed over
+the whole repeat into a scratch layer, blurred across then down (Gaussian,
+sigma half the Radius, wrapping) into that Blur's layer, and every later
+pass (another Blur's stage, the material's pass, the node thumbnails) reads
+the layer instead of the branch behind it. The stage textures
+(`rgba32float`, four Blur layers and two scratch layers, 24 MiB at 512 px)
+are made the first time a material in use has a Blur and are shared by all
+materials, since each material's stages run just before its own pass. The
+material's pass evaluates only the nodes its Material node reaches.
 
 Each material in use has a layer of the cached repeat (512 px: color and
 height in `rgba32float`, shine, the palette-reduced color) and one texel of

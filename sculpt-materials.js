@@ -8,7 +8,7 @@ import library from './materials/textures.json' with {type:'json'};
 export const MATERIAL_SLOTS = 8;                   // slot 0 is "the world's ground" on a stroke; materials take slots 1 to 7
 export const MATERIAL_REPEAT = 512;
 export const MATERIAL_CACHE_BYTES = 128 * 1024 * 1024;
-export const MAX_NODES = 40, MAX_STOPS = 8, MAX_PALETTE = 32, MAX_CONTROLS = 12, MAX_FRAMES = 12, MAX_TAPPED = 4;
+export const MAX_NODES = 40, MAX_STOPS = 8, MAX_PALETTE = 32, MAX_CONTROLS = 12, MAX_FRAMES = 12, MAX_TAPPED = 4, MAX_BLURS = 4;
 export const THUMB = 64, THUMB_STRIDE = 2;
 
 const P = (key, label, min, max, value, step = 0) => ({key, label, min, max, value, step});
@@ -56,6 +56,8 @@ export const NODES = {
   adjust: {code: 12, label: 'Color adjust', out: 'color', inputs: [['in', 'Color', 'any'], ['mask', 'Mask', 'gray']],
     params: () => [P('hue', 'Hue (°)', -180, 180, 0), P('saturation', 'Saturation', -1, 1, 0), P('value', 'Brightness', -1, 1, 0)],
     help: 'Turns a color’s hue, and scales its saturation and brightness, through an optional Mask: drier or greener patches over every layer at once. The material’s palette limits what shows; after a large change, Pick from the material.'},
+  blur: {code: 13, label: 'Blur', out: 'any', inputs: [['in', 'Input', 'any']], params: () => [P('radius', 'Radius (px)', 0, 32, 2)],
+    help: 'Softens a gray or color pattern over Radius px (0 leaves it), wrapping at the repeat: soft halos from hard masks, dirt filling cracks, smoother heights. Its input is computed over the whole repeat first, so a material may use four.'},
   light: {code: 8, label: 'Light', out: 'gray', inputs: [['in', 'Height', 'gray']],
     params: () => [P('direction', 'Direction (°)', 0, 360, 135), P('strength', 'Strength', 0, 8, 2)],
     help: 'How a height’s slopes face a light: .5 on the level, lighter toward the light. Tints color like a lit bump without real relief.'},
@@ -108,7 +110,7 @@ function typeNodes(ordered) {
       if (got === null) throw Error('The Material node has no output to connect.');
       if (!accepts(want, got)) throw Error(`${n.name}: ${label} needs ${want === 'any' ? 'a gray or color' : want === 'coords' ? 'a Warp node’s coordinates' : want === 'gray' ? 'a gray or color' : 'a ' + want} input.`);
     }
-    types.set(n.id, typeof spec.out === 'function' ? spec.out(n) : spec.out === 'any' ? (['a', 'b'].some(k => types.get(n.in[k]) === 'color') ? 'color' : 'gray') : spec.out);
+    types.set(n.id, typeof spec.out === 'function' ? spec.out(n) : spec.out === 'any' ? (spec.inputs.some(([k, , want]) => want === 'any' && types.get(n.in[k]) === 'color') ? 'color' : 'gray') : spec.out);
   }
   return types;
 }
@@ -164,6 +166,7 @@ export function copyNodes(value) {
   };
   if (nodes.some(n => tapDepth(n) > 2) || nodes.filter(n => ['light', 'cavity'].includes(n.type) && n.enabled && n.in.in).length > MAX_TAPPED)
     throw Error(`A material can use ${MAX_TAPPED} Light or Cavity nodes, at most two in a chain.`);
+  if (nodes.filter(n => n.type === 'blur').length > MAX_BLURS) throw Error(`A material can use ${MAX_BLURS} Blur nodes.`);
   return nodes;
 }
 const freeId = (nodes, stem) => { const taken = new Set(nodes.map(n => n.id)); if (!taken.has(stem)) return stem; for (let i = 2; ; i++) if (!taken.has(`${stem}-${i}`)) return `${stem}-${i}`; };
@@ -242,10 +245,22 @@ export function compileMaterial(material) {
 }
 // Pipeline identity is the graph's shape and node types, never a number a control changes.
 export const programKey = program => JSON.stringify(program.instructions.map(i => [i.type, i.kind, i.code[1], i.links]));
+// Blur stages: each Blur that is on and wired has its input computed over the whole repeat first (a stage), blurred, and read by the
+// passes after it. `blurs` are their steps in order; a pass reads earlier stages only where its own nodes reach a Blur (auto layouts
+// leave out a texture a pass never reads, so the cache binds it only then).
+export function stagePlan(program) {
+  const list = program.instructions, blurs = list.map((n, i) => n.type === 'blur' && n.code[1] && n.links[0] >= 0 ? i : -1).filter(i => i >= 0);
+  const stage = new Map(blurs.map((i, k) => [i, k]));
+  // The nodes a value needs at one point, stopping at Blurs, whose values come from their stage.
+  const closure = i => { const seen = new Set(), visit = k => { if (k < 0 || seen.has(k)) return; seen.add(k); if (!stage.has(k)) list[k].links.forEach(visit); }; visit(i); return [...seen].sort((a, b) => a - b); };
+  const reads = indices => indices.some(k => stage.has(k)), out = list.findIndex(n => n.type === 'output');
+  return {blurs, stage, closure, out, mainReads: reads(closure(out)), stageReads: blurs.map(b => reads(closure(list[b].links[0])))};
+}
 // The WGSL for a compiled graph: one line a node, in order. A Light or Cavity node reads its height at four neighbors through a
-// function that evaluates that height's own branch at another point.
+// function that evaluates that height's own branch at another point. With Blurs, `stages` is the source of a third module: one entry
+// point a Blur that computes its input (stageN) and the two blur passes (blurPass).
 export function programSource(program, thumbnails = false) {
-  const list = program.instructions;
+  const list = program.instructions, {blurs, stage, closure, out} = stagePlan(program);
   // A gray input wired to a color reads its brightness (graphGray); every other input reads its source as it is.
   const read = (i, k) => { const from = list[i].links[k]; return NODES[list[i].type].inputs[k][2] === 'gray' && list[from].out === 'color' ? `graphGray(v${from})` : `v${from}`; };
   const call = (i, point) => {
@@ -264,6 +279,7 @@ export function programSource(program, thumbnails = false) {
       case 'adjust': return `nAdjust(${s},${value(0, 'vec4f(0)')},${value(1, 'vec4f(1)')})`;
       case 'light': return tapped ? `nLight(${s},${taps('1.0')})` : 'vec4f(.5)';
       case 'cavity': return tapped ? `nCavity(${s},${read(i, 0)}.x,${taps(`arg(${s},0u)`)})` : 'vec4f(.5)';
+      case 'blur': return stage.has(i) ? `stageAt(${stage.get(i)},${point})` : 'vec4f(0)';
       case 'constant': return kind === 'color' ? `vec4f(arg(${s},0u),arg(${s},1u),arg(${s},2u),1)` : `vec4f(arg(${s},0u))`;
       default: return 'vec4f(0)';
     }
@@ -271,9 +287,19 @@ export function programSource(program, thumbnails = false) {
   // Noise kinds share nNoise and tell it which by the instruction's third code, so the index must be the shader's (0 smooth, 1 gradient,
   // 2 billow, 3 cells, 4 cracks, 5 facets, 6 waves): the order of NODES.noise.kinds.
   const lines = indices => indices.map(i => `let s${i}=node(${i}u);let v${i}=${call(i, 'point')};`).join('\n');
-  const closure = i => { const seen = new Set(), visit = k => { if (k < 0 || seen.has(k)) return; seen.add(k); list[k].links.forEach(visit); }; visit(i); return [...seen].sort((a, b) => a - b); };
-  const taps = list.map((n, i) => ['light', 'cavity'].includes(n.type) && n.code[1] && n.links[0] >= 0 ? `fn tap${i}(point:vec2f)->f32{\n${lines(closure(n.links[0]))}\nreturn ${read(i, 0)}.x;\n}` : '').filter(Boolean).join('\n');
-  const all = lines(list.map((_, i) => i)), out = list.findIndex(n => n.type === 'output'), o = list[out].links;
+  const taps = (blurs.length ? STAGE_READ : '') + list.map((n, i) => ['light', 'cavity'].includes(n.type) && n.code[1] && n.links[0] >= 0 ? `fn tap${i}(point:vec2f)->f32{\n${lines(closure(n.links[0]))}\nreturn ${read(i, 0)}.x;\n}` : '').filter(Boolean).join('\n');
+  const all = lines(list.map((_, i) => i)), o = list[out].links;
+  const stages = blurs.length ? `@group(1) @binding(1) var<uniform> groundJob:vec4u;
+@group(1) @binding(4) var stageOut:texture_storage_2d<rgba32float,write>;
+@group(1) @binding(5) var blurSrc:texture_2d<f32>;
+${blurs.map((b, k) => `@compute @workgroup_size(8,8)
+fn stage${k}(@builtin(global_invocation_id) id:vec3u){
+ if(any(id.xy>=textureDimensions(stageOut))){return;}
+ graphPeriod=f32(textureDimensions(stageOut).x);graphRow=groundJob.z;let point=vec2f(id.xy);
+${lines(closure(list[b].links[0]))}
+ textureStore(stageOut,vec2i(id.xy),v${list[b].links[0]});
+}`).join('\n')}
+${BLUR_PASS}` : null;
   if (thumbnails) {
     const store = list.map((n, i) => n.type === 'output' ? '' : `textureStore(thumbOut,vec2i(id.xy),${i},vec4f(${n.out === 'coords' ? `vec3f(noiseBasis(3,v${i}.xy,24.0,379.0,vec3f(.8,0,0)))` : n.out === 'color' ? `v${i}.rgb` : `vec3f(v${i}.x)`},1));`).join('\n');
     return {taps, main: `@group(1) @binding(0) var thumbOut:texture_storage_2d_array<rgba8unorm,write>;
@@ -284,7 +310,7 @@ fn thumbMain(@builtin(global_invocation_id) id:vec3u){
  graphPeriod=f32(groundJob.x);graphRow=groundJob.z;let point=vec2f(id.xy*groundJob.y);
 ${all}
 ${store}
-}`};
+}`, stages};
   }
   return {taps, main: `@group(1) @binding(0) var groundOut:texture_storage_2d_array<rgba32float,write>;
 @group(1) @binding(2) var maskOut:texture_storage_2d_array<rgba16float,write>;
@@ -293,12 +319,33 @@ ${store}
 fn groundMain(@builtin(global_invocation_id) id:vec3u){
  if(any(id.xy>=textureDimensions(groundOut))){return;}
  graphPeriod=f32(textureDimensions(groundOut).x);graphRow=groundJob.z;let point=vec2f(id.xy);
-${all}
+${lines(closure(out))}
  let color=${o[0] < 0 ? 'vec3f(.5)' : `v${o[0]}.rgb`};let height=${o[1] < 0 ? '0.0' : `${read(out, 1)}.x*arg(s${out},0u)`};let shine=${o[2] < 0 ? '0.0' : `clamp(${read(out, 2)}.x,0.0,1.0)`};
  textureStore(groundOut,vec2i(id.xy),i32(groundJob.y),vec4f(color,height));
  textureStore(maskOut,vec2i(id.xy),i32(groundJob.y),vec4f(shine,0,0,1));
-}`};
+}`, stages};
 }
+// A stage's value at a point: its blurred repeat, wrapped, read between texels where a Light or Cavity asks at a fraction.
+const STAGE_READ = `@group(1) @binding(3) var stageIn:texture_2d_array<f32>;
+fn stageAt(k:i32,p:vec2f)->vec4f{
+ let n=vec2i(textureDimensions(stageIn).xy);let c=floor(p);let f=p-c;let i=vec2i(c);
+ let a=textureLoad(stageIn,(i%n+n)%n,k,0);if(all(f==vec2f(0))){return a;}
+ let b=textureLoad(stageIn,((i+vec2i(1,0))%n+n)%n,k,0);let d=textureLoad(stageIn,((i+vec2i(0,1))%n+n)%n,k,0);let e=textureLoad(stageIn,((i+vec2i(1,1))%n+n)%n,k,0);
+ return mix(mix(a,b,f.x),mix(d,e,f.x),f.y);
+}
+`;
+// One direction of a Gaussian blur (groundJob.x: 0 across, 1 down) of the Blur at step groundJob.w, wrapping at the repeat. Its Radius is
+// twice the Gaussian's sigma; below a twentieth of a pixel the input passes unchanged.
+const BLUR_PASS = `@compute @workgroup_size(8,8)
+fn blurPass(@builtin(global_invocation_id) id:vec3u){
+ let n=vec2i(textureDimensions(blurSrc));let p=vec2i(id.xy);if(any(p>=n)){return;}
+ graphRow=groundJob.z;let sigma=arg(node(groundJob.w),0u)*.5;
+ if(sigma<.05){textureStore(stageOut,p,textureLoad(blurSrc,p,0));return;}
+ let dir=select(vec2i(0,1),vec2i(1,0),groundJob.x==0u);let r=min(i32(ceil(sigma*3.0)),48);
+ var sum=vec4f(0);var total=0.0;
+ for(var k=-r;k<=r;k++){let w=exp(-f32(k*k)/(2.0*sigma*sigma));sum+=textureLoad(blurSrc,((p+dir*k)%n+n)%n,0)*w;total+=w;}
+ textureStore(stageOut,p,sum/total);
+}`;
 // The most a material's art height can rise or fall, by interval arithmetic over its graph: the renderer reserves that much relief.
 export function materialReliefBound(material) {
   const values = new Map(), add = (a, b) => [a[0] + b[0], a[1] + b[1]], sub = (a, b) => [a[0] - b[1], a[1] - b[0]];
@@ -311,6 +358,7 @@ export function materialReliefBound(material) {
       case 'constant': v = n.kind === 'color' ? [Math.min(...n.stops[0].slice(1)), Math.max(...n.stops[0].slice(1))] : [p.value, p.value]; break;
       case 'gradient': { const all = n.stops.flatMap(s => s.slice(1)); v = [Math.min(...all), Math.max(...all)]; break; }
       case 'heightblend': { const a = get('a'), b = get('b'); v = [Math.min(a[0], b[0]), Math.max(a[1], b[1])]; break; }
+      case 'blur': v = get('in'); break;
       case 'adjust': { const a = get('in'); v = [Math.min(0, a[0]), Math.max(a[1], a[1] * (1 + Math.max(0, p.value)))]; break; }   // a turn keeps the brightest channel
       case 'combine': {
         const a = get('a'), q = sub(get('b'), [p.offset, p.offset]), w = mul([p.amount, p.amount], get('mask', [1, 1]));

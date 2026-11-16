@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {NODES, LIBRARY, MAX_NODES, MATERIAL_SLOTS, copyMaterial, copyMaterials, blankMaterial, makeNode, orderNodes, nodeTypes, compileMaterial, programKey, programSource,
+import {NODES, LIBRARY, MAX_NODES, MATERIAL_SLOTS, copyMaterial, copyMaterials, blankMaterial, makeNode, orderNodes, nodeTypes, compileMaterial, programKey, programSource, stagePlan,
   materialReliefBound, materialRenderKey, soloMaterial, controlSpec, controlRange, nodeParams, withWorldMaterials, worldMaterials, adoptWorldMaterials, worldOwnMaterials, keptWorldMaterials, mergeWorldMaterials, worldPair, addMaterial, duplicateMaterial, setMaterial,
   assignMaterial, deleteMaterial, strokeMaterial, keepStrokeMaterials, materialsInUse, materialUsers, materialText, parseMaterialText, reseedMaterial, materialTint} from '../sculpt-materials.js';
 import {graphPositions, cardHeight, CARD} from '../sculpt-material-graph.js';
@@ -34,7 +34,7 @@ test('connections are typed, loops are refused, and a deleted source leaves its 
   // A gray input wired to a color reads its brightness: a Gradient with gray stops is a curve for a height.
   const curved = graph([node('n', 'noise'), node('g', 'gradient', {in: {in: 'n'}}), node('l', 'levels', {in: {in: 'g'}}), node('o', 'output', {in: {color: 'g', height: 'g'}})]);
   const at = id => curved.nodes.findIndex(n => n.id === id), main = programSource(compileMaterial(curved)).main;
-  assert.match(main, new RegExp(`nLevels\\(s${at('l')},graphGray\\(v${at('g')}\\)\\)`)); assert.match(main, new RegExp(`let height=graphGray\\(v${at('g')}\\)\\.x`));
+  assert.match(programSource(compileMaterial(curved), true).main, new RegExp(`nLevels\\(s${at('l')},graphGray\\(v${at('g')}\\)\\)`)); assert.match(main, new RegExp(`let height=graphGray\\(v${at('g')}\\)\\.x`));
   assert.match(main, new RegExp(`let color=v${at('g')}\\.rgb`), 'a color input reads the color itself');
   const m = graph([node('n', 'noise'), node('g', 'gradient', {in: {in: 'gone'}}), node('o', 'output', {in: {color: 'g'}})]);
   assert.equal(m.nodes.find(n => n.id === 'g').in.in, null);
@@ -91,6 +91,22 @@ test('the compiled program follows evaluation order and its pipeline key ignores
   const seeded = compileMaterial({...m, seed: 5}).instructions.find(i => i.type === 'noise'), plain = program.instructions.find(i => i.type === 'noise');
   assert.equal(seeded.args[3], plain.args[3] + 5);
   assert.notEqual(reseedMaterial(m).seed, m.seed);
+});
+
+test('a Blur computes its input in a stage of its own; later passes read the stage, never the branch behind it', () => {
+  const m = graph([node('n', 'noise'), node('b1', 'blur', {in: {in: 'n'}}), node('b2', 'blur', {in: {in: 'b1'}}), node('g', 'gradient', {in: {in: 'b2'}}),
+    node('cav', 'cavity', {in: {in: 'b2'}}), node('soft', 'blur', {in: {in: 'g'}}), node('o', 'output', {in: {color: 'soft', height: 'cav'}})]);
+  const program = compileMaterial(m), at = id => program.nodes.findIndex(n => n.id === id), plan = stagePlan(program), source = programSource(program);
+  assert.deepEqual(plan.blurs, [at('b1'), at('b2'), at('soft')]); assert.deepEqual(plan.stageReads, [false, true, true]); assert.ok(plan.mainReads);
+  assert.equal(nodeTypes(m.nodes).get('soft'), 'color', 'a Blur gives what it reads'); assert.equal(nodeTypes(m.nodes).get('b1'), 'gray');
+  assert.match(source.stages, /fn stage0/); assert.match(source.stages, /fn stage2/); assert.match(source.stages, /fn blurPass/);
+  assert.doesNotMatch(source.main, new RegExp(`let v${at('n')}=`), 'the main pass leaves the blurred branch to its stage');
+  assert.match(source.main, new RegExp(`let v${at('soft')}=stageAt\\(2,point\\)`)); assert.match(source.taps, /fn stageAt/);
+  assert.equal(programSource(compileMaterial(graph([node('n', 'noise'), node('o', 'output', {in: {color: 'n'}})]))).stages, null, 'no Blur, no stages');
+  const off = graph([node('n', 'noise'), node('b', 'blur', {enabled: false, in: {in: 'n'}}), node('o', 'output', {in: {color: 'b'}})]);
+  assert.deepEqual(stagePlan(compileMaterial(off)).blurs, [], 'a Blur that is off passes its input through');
+  assert.throws(() => graph([node('n', 'noise'), ...Array.from({length: 5}, (_, i) => node('b' + i, 'blur', {in: {in: 'n'}}))]), /4 Blur nodes/);
+  assert.equal(materialReliefBound(copyMaterial({nodes: [node('k', 'constant', {params: {value: .5}}), node('b', 'blur', {in: {in: 'k'}}), node('o', 'output', {in: {height: 'b'}, params: {relief: 4}})]})), 2);
 });
 
 test('Light and Cavity read their height at neighbors through a function of that branch only, with limits on chains', () => {

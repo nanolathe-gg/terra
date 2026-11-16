@@ -48,3 +48,19 @@ test('every library material compiles on the GPU and draws a picture that is not
     }
   } finally { s.dispose(); }
 });
+
+test('a Blur at radius 0 leaves its input exactly; a wider one softens it, and the repeat still joins', async () => {
+  await openHost();
+  const s = await openScene({biome: 'green', ground: false, strokes: []}, 'biome=green&mapX=5&mapY=5');
+  try {
+    const dots = {id: 's', type: 'scatter', params: {spacing: 24, radius: 5, coverage: .7, hardness: .9}};
+    const use = nodes => s.setMaterials(s.materials.map(m => m.worldGround ? {...m, nodes, palette: [], controls: [], frames: []} : m));
+    const win = (x = 640, y = 640) => renderWindow(s, {x, y, width: 128, height: 128, exportArt: true}), pool = groundPool(s.config.material);
+    use([dots, {id: 'o', type: 'output', in: {color: 's', height: 's'}, params: {relief: 2}}]); const plain = await win();
+    const blurred = radius => use([dots, {id: 'b', type: 'blur', in: {in: 's'}, params: {radius}}, {id: 'o', type: 'output', in: {color: 'b', height: 'b'}, params: {relief: 2}}]);
+    blurred(0); assert.ok(same(plain, await win()), 'radius 0 is the input itself');
+    blurred(8); const soft = await win(); assert.ok(!same(plain, soft), 'radius 8 changes it');
+    assert.ok(same(soft, await win(640 + pool, 640)) && same(soft, await win(640, 640 + pool)), 'the blurred repeat joins itself');
+    assert.deepEqual(s.errors, []);
+  } finally { s.dispose(); }
+});
