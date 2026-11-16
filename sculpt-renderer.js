@@ -557,7 +557,7 @@ export class TerrainRenderer {
     const slotOf = id => [...(this.grounds || new Map())].find(([, m]) => m.worldLayer === id)?.[0] ?? -1;
     const surface = surfaceRows(this.config.surface, slotOf, this.surfaceHidden);
     const head = [...surface.rows, ...Array.from({length: SURFACE_FLAGS_ROW - surface.rows.length}, () => [0, 0, 0, 0]), surface.flags, ...surface.head];
-    return [...head, ...rows, ...coverRows()];
+    return [...head, ...rows, ...coverRows(this.config.material?.site)];
   }
 
 

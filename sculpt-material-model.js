@@ -15,9 +15,16 @@ export function tablePlacementRows(table) {
     [s.slopeGate, s.heightGate, s.fadeFrom, s.fadeTo], [q.lowBank.from, q.lowBank.to, 0, 0], [q.route.from, q.route.to, 0, 0]];
 }
 
-// The rows from MM_COVER (engine-common.wgsl): the world's site rows, then the plants' (the surface layers that carry plants). None yet.
-export function coverRows() {
-  return Array.from({length: COVER_ROWS}, () => [0, 0, 0, 0]);
+// The rows from MM_COVER (engine-common.wgsl): the world's site rows (`site`, materials/defaults.json: the numbers the Moisture and Soil depth
+// facts read), then the plants' (the surface layers that carry plants). A world without `site` gives zeros.
+export function coverRows(site = null) {
+  const rows = Array.from({length: COVER_ROWS}, () => [0, 0, 0, 0]);
+  if (site) {
+    rows[0] = [0, site.wet[0], site.wet[1], site.dry];
+    rows[1] = [site.soil.slope[0], site.soil.slope[1], site.soil.convex, site.soil.deposit];
+    rows[2] = [0, site.moisture.perSwath, site.moisture.swathRef, site.moisture.shade];
+  }
+  return rows;
 }
 // A world's surface layers (docs/SURFACE_LAYERS.md; config.surface, from world.surface or materials/defaults.json) as the draw's rows
 // (engine-frag.wgsl surfaceStage). A layer is a built-in (one of the draw's own surfaces: its color and share are the draw's, and its stage, the
