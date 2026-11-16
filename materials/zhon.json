@@ -2475,7 +2475,7 @@
    {"share": 1, "params": {"type": "stain"}, "vary": {"size": [0.6, 1.2]}}]}
  },
  "world": {
-    "materials": {"ground": "zhon-ground", "water": "zhon-water", "rock": "zhon-rock"},
+    "materials": {"ground": "zhon-ground", "water": "zhon-water", "rock": "zhon-rock", "slope": "zhon-slope", "debris": "zhon-debris", "beach": "zhon-beach"},
     "knobDefaults": {
         "crackSeverity": 0.4,
         "crackMajor": 0.6,

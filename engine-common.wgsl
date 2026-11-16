@@ -442,6 +442,12 @@ struct Uniforms {
     groundDefault: i32,
     highGround: i32,    // the map's highland material slot (sculpt-materials.js worldHigh), -1 none
     rockGround: i32,    // the world's rock material slot (worldRock): what a rock type with material 0 shows, -1 none
+    slopeGround: i32,   // the map's slope cover material slot (worldSlope), -1 none: slopes, moss and the margins' face read it
+    debrisGround: i32,  // its debris material (worldDebris): the fragments of loose stone and sand
+    beachGround: i32,   // its beach material (worldBeach): the beach sand (the slope cover's grain recolored where there is none)
+    fringeGround: i32,  // its mineral margins' fringe, body and ring materials (worldFringe, worldBody, worldRing)
+    bodyGround: i32,
+    ringGround: i32,
     waterGround: i32,
     groundAny: i32,
     groundShine: i32,      // 1 when a material in use puts out shine, so the shine pass runs for it

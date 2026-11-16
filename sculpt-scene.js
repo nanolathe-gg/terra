@@ -309,6 +309,7 @@ export function borrowBeach(config,settings) {
   const lender=config.beachSources?.[settings.get('beachFrom')];
   if (!lender || config.layers.includes('beach')) return config;
   config.layers=[...config.layers,'beach']; config.material={...config.material,...lender.material}; config.beachTable=lender.table;
+  config.materials={...config.materials,beach:`${settings.get('beachFrom')}-beach`};   // its sand is the lender's beach material (the map's beach role)
   return config;
 }
 export function addDefaults(settings,defaults={}) { for (const [key,value] of Object.entries(defaults||{})) if (!settings.has(key)) settings.set(key,value); return settings; }

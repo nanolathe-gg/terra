@@ -3,7 +3,7 @@
 // colors it is reduced to). Every element is in index.html; this fills values and applies edits through the map's own undo and save.
 import {NODES, NODE_TYPES, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
   nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb,
-  addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText} from './sculpt-materials.js';
+  addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText, MAP_ROLES, roleOf, roleName} from './sculpt-materials.js';
 import {mountMaterialGraph, graphPositions, CARD, cardHeight} from './sculpt-material-graph.js';
 import {MaterialPreview, TILE, TERRAIN} from './sculpt-material-preview.js';
 import gamePalette from './materials/palette.json' with {type: 'json'};
@@ -325,7 +325,7 @@ export function mountMaterialEditor(host) {
   // The header: which material, where it is used, and the list's own actions.
   function refresh() {
     const list = materials(); if (!list.some(m => m.slot === slot)) { slot = (list.find(m => m.worldGround) ?? list[0])?.slot ?? 0; selection = new Set(); primary = null; frameAt = -1; solo = null; }
-    const m = material(), role = o => o.worldGround ? ' · world ground' : o.worldWater ? ' · world water' : o.worldHigh ? ' · highland ground' : o.worldRock ? ' · world rock' : '', full = list.length >= MATERIAL_SLOTS - 1;
+    const m = material(), role = o => roleOf(o) ? ` · world ${roleName(roleOf(o))}` : '', full = list.length >= MATERIAL_SLOTS - 1;
     refreshWorld();
     if (!dialog.open) return;   // the rest is the editor's own face
     $('material-select').replaceChildren(...list.map(o => new Option(o.name + role(o), String(o.slot)))); $('material-select').value = String(slot);
@@ -339,7 +339,7 @@ export function mountMaterialEditor(host) {
     const rocks = users.rocks.length ? `rock type${users.rocks.length > 1 ? 's' : ''} ${users.rocks.join(', ')}` : '';
     $('material-used').textContent = 'Used by: ' + ([users.world && 'the world’s ' + users.world, rocks, strokes].filter(Boolean).join(', ') || 'nothing yet');
     if (document.activeElement !== $('material-name')) $('material-name').value = m.name;
-    $('material-use-ground').disabled = m.worldGround || m.worldWater; $('material-use-water').disabled = m.worldWater || m.worldGround; $('material-use-high').disabled = m.worldHigh || m.worldGround || m.worldWater || m.worldRock; $('material-use-rock').disabled = m.worldRock || m.worldGround || m.worldWater || m.worldHigh;
+    $('material-use-ground').disabled = m.worldGround || m.worldWater; $('material-use-water').disabled = m.worldWater || m.worldGround; $('material-role').value = MAP_ROLES.some(([r]) => m[r]) ? roleOf(m) : ''; $('material-role').disabled = m.worldGround || m.worldWater; $('material-role').title = $('material-role').disabled ? 'The world’s ground and water draw nothing else.' : '';
     $('material-delete').disabled = m.worldGround || m.worldWater; $('material-delete').title = $('material-delete').disabled ? 'The world’s ground and water cannot be deleted. Assign another material first.' : '';
     for (const id of ['material-duplicate', 'material-paste', 'material-add']) { $(id).disabled = full; $(id).title = full ? `The map already has ${MATERIAL_SLOTS - 1} materials.` : ''; }
     $('material-reset').disabled = !LIBRARY[m.source]; $('material-reset').title = LIBRARY[m.source] ? `Back to “${LIBRARY[m.source].name}” from the library. Undo brings your version back.` : 'This material did not come from the library.';
@@ -364,8 +364,8 @@ export function mountMaterialEditor(host) {
   $('material-delete').onclick = attempt(() => { host.delete(slot); $('material-menu').open = false; refresh(); });
   $('material-use-ground').onclick = attempt(() => { update(assignMaterial(materials(), slot, 'worldGround')); commit(); });
   $('material-use-water').onclick = attempt(() => { update(assignMaterial(materials(), slot, 'worldWater')); commit(); });
-  $('material-use-high').onclick = attempt(() => { update(assignMaterial(materials(), slot, 'worldHigh')); commit(); });
-  $('material-use-rock').onclick = attempt(() => { update(assignMaterial(materials(), slot, 'worldRock')); commit(); });
+  // Another surface of the world this material draws; choosing none leaves that surface to fall back (engine-frag.wgsl roleColor).
+  $('material-role').onchange = attempt(() => { const v = $('material-role').value, list = materials(); update(v ? assignMaterial(list, slot, v) : list.map(o => o.slot === slot ? Object.fromEntries(Object.entries(o).filter(([k]) => !MAP_ROLES.some(([r]) => r === k))) : o)); commit(); });
   $('material-copy').onclick = async () => { try { await navigator.clipboard.writeText(materialText(material())); host.status('Copied the material.'); note(''); } catch (e) { note(e.message); } };
   $('material-paste').onclick = async () => { try { const m = parseMaterialText(await navigator.clipboard.readText()); addToMap(m, m.name); } catch (e) { note(e.message); } };
   $('material-reseed').onclick = attempt(() => change(m => { m.seed = reseedMaterial(m).seed; }));

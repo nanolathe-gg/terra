@@ -1357,7 +1357,7 @@
   "vent": {"params": {"size": 1.7, "thick": 1.6, "rim": 0.5, "rimSat": 2.5, "spread": 6}}
  },
  "world": {
-    "materials": {"ground": "ice-ground", "water": "ice-water", "rock": "ice-rock", "extra": ["ice-bergs-ground"]},
+    "materials": {"ground": "ice-ground", "water": "ice-water", "rock": "ice-rock", "slope": "ice-slope", "debris": "ice-debris", "extra": ["ice-bergs-ground"]},
     "knobDefaults": {
         "plainRelief": 0.6,
         "crackSeverity": 0,
