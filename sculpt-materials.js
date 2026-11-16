@@ -447,17 +447,18 @@ export function strokeMaterial(node, list) {
 }
 export const keepStrokeMaterials = (nodes, list) => nodes.map(n => n.params && n.params.groundPreset !== undefined && n.params.groundPreset !== strokeMaterial(n, list) ? {...n, params: {...n.params, groundPreset: strokeMaterial(n, list)}} : n);
 export function materialsInUse(nodes, list) {
-  const used = new Set([...list.filter(m => m.worldGround || m.worldWater || m.worldHigh).map(m => m.slot), ...nodes.filter(n => !n.hidden && (n.kind === 'landform' || n.kind === 'paint' && (n.params?.paintChannel === 26 || n.params?.paintChannel === undefined))).map(n => strokeMaterial(n, list))]);
+  const used = new Set([...list.filter(m => m.worldGround || m.worldWater || m.worldHigh || m.worldRock).map(m => m.slot), ...nodes.filter(n => !n.hidden && (n.kind === 'landform' || n.kind === 'paint' && (n.params?.paintChannel === 26 || n.params?.paintChannel === undefined))).map(n => strokeMaterial(n, list))]);
   return list.filter(m => used.has(m.slot));
 }
 export function deleteMaterial(list, nodes, slot) {
   const m = find(list, slot);
   if (m.worldGround || m.worldWater) throw Error(`This is the world’s ${m.worldGround ? 'ground' : 'water'}. Assign another material first.`);
-  // Deleting the highland material leaves the map without one: raised ground draws the ground.
+  // Deleting the highland material leaves the map without one: raised ground draws the ground. Deleting the rock material leaves rock its
+  // flat color, with no grain or grit.
   const next = list.filter(o => o.slot !== slot); return {materials: next, nodes: keepStrokeMaterials(nodes, next)};
 }
 // Where a material is used: as the world's ground or water, and by how many visible strokes.
-export const materialUsers = (nodes, list, slot) => { const m = find(list, slot); return {world: m.worldGround ? 'ground' : m.worldWater ? 'water' : '', strokes: nodes.filter(n => !n.hidden && n.params?.groundPreset === slot).length}; };
+export const materialUsers = (nodes, list, slot) => { const m = find(list, slot); return {world: m.worldGround ? 'ground' : m.worldWater ? 'water' : m.worldRock ? 'rock' : m.worldHigh ? 'highland ground' : '', strokes: nodes.filter(n => !n.hidden && n.params?.groundPreset === slot).length}; };
 export const materialText = m => JSON.stringify({format: 'terraform-material', name: m.name, ...copyMaterial(m)});
 export function parseMaterialText(value) {
   let m; try { m = JSON.parse(value); } catch { throw Error('The clipboard has no material.'); }

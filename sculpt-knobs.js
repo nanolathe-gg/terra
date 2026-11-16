@@ -59,7 +59,7 @@ export const KNOBS = [
     ['faceScratch','Scratches and water grooves',0,6,.1,2.5],['faceScratchSize','Groove spacing (px)',3,20,.5,7],
     ['faceScratchLength','Groove length (px)',4,160,2,50],['faceScratchAngle','Groove tilt from vertical (deg)',-90,90,5,0],
     ['faceClast','Embedded fragment relief',0,4,.1,0],['faceClastSize','Embedded fragment size (px)',3,32,1,12],
-    ['faceDetailPatch','Fine detail clustering',0,1,.05,0],['faceGrit','Grit relief',0,2,.05,0],['faceGritSize','Grit size (px)',1,6,.1,1.3]]],
+    ['faceDetailPatch','Fine detail clustering',0,1,.05,0]]],
   ['Rock runoff', [['runoff','Runoff exposure',0,2,.05,0],['runoffScale','Catchment variation size (px)',8,80,2,24],
     ['runoffConcentration','Channel concentration',0,1,.05,.65],['runoffCut','Channel incision',0,8,.1,2],['runoffStain','Mineral staining',0,1,.05,.5]]],
   ['Rock debris', [['debrisAmount','Cliff debris accumulation',0,2,.05,0],['debrisReach','Rockfall reach (px)',8,96,2,56],['debrisDepth','Accumulated bed thickness',0,12,.25,4]]],

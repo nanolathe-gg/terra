@@ -12,6 +12,7 @@ export function writeMaterialSlot(r, material, view, at) {
   [d.red, d.green, d.blue].forEach((v, c) => view.setFloat32(at + members.get('weights').offset + c * 4, v, true));
   const out = material.nodes.find(n => n.type === 'output').params;
   [out.wornFrom, out.wornAmount, out.depositFrom, out.depositAmount].forEach((v, c) => view.setFloat32(at + members.get('states').offset + c * 4, v, true));
+  view.setFloat32(at + members.get('finish').offset, material.nodes.find(n => n.type === 'output').in.height ? out.relief : 0, true);
   material.palette.forEach((index, k) => paletteRgb(index).forEach((v, c) => view.setFloat32(at + members.get('palette').offset + k * 16 + c * 4, v / 255, true)));
 }
 function writeProgram(view, at, program) {

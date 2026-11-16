@@ -38,7 +38,6 @@ struct Rock {
     faceScratchSize: f32, // scratch spacing, px
     faceBlock: f32,       // joint depth and block tilt, height units
     faceBlockSize: f32,   // px between joints along a bed
-    faceGrit: f32,        // fine grit, height units
     faceGrass: f32,       // how strongly grass takes the ledges, 0..1
     faceWear: f32,        // weathering: how far the blocks' edges round off and their partings open (0..1)
     faceLayers: f32,      // the layers' steps under grass (soil-covered terraces), 0: none
@@ -90,7 +89,6 @@ struct Rock {
     faceLaminaSize: f32, // Fine layer spacing (height units, 6 to 16)
     faceScratchLength: f32, // Groove length (px)
     faceScratchAngle: f32, // Groove tilt from vertical (deg)
-    faceGritSize: f32, // Grit size (px)
     looseSize: f32,       // px: the median stone diameter
     stoneRound: f32,      // world material data: 0 angular chips .. 1 rounded stones
     stoneSort: f32,       // world material data: 0 a mixed power-law gravel, 1 one size class sorted by the process (talus coarsens outward, fans and channels fine downslope)
@@ -154,6 +152,7 @@ struct Ground {
     depositLayer: i32,     // the layer of its Deposit color, -1 when it has none
     weights: vec4f,        // how much a red, green or blue difference counts when a palette color is chosen
     states: vec4f,         // Worn from, Worn amount, Deposit from, Deposit amount (the Material node's)
+    finish: vec4f,         // x its Relief (px: the most its art height reaches); yzw free
     palette: array<vec4f, 32>,
 }
 // One node of a material graph (sculpt-materials.js compileMaterial).
@@ -1038,6 +1037,15 @@ fn groundHeight(p:vec2f)->f32 {
 fn materialPixel(p:vec2f)->vec2f {return poolWrap(floor(p),f32(textureDimensions(groundTex).x));}
 
 // A material's cached repeat: unlit color and art height, its shine, and its color reduced to its palette.
+// A rock slot's surface material (its rock type's, else the world's rock material), -1 none.
+fn rockMaterialOf(slot:u32)->i32 { let m=u.rock[slot & rockMask].material; return select(m,u.rockGround,m<=0); }
+// A cache layer's art height at a native pixel q, bilinear between texels (the taps that light it read between pixels).
+fn materialReliefBilinear(q:vec2f,layer:i32)->f32 {
+ let size=f32(textureDimensions(groundTex).x);let b=floor(q-.5);let f=q-.5-b;
+ let a00=textureLoad(groundTex,vec2i(poolWrap(b,size)),layer,0).w;let a10=textureLoad(groundTex,vec2i(poolWrap(b+vec2f(1,0),size)),layer,0).w;
+ let a01=textureLoad(groundTex,vec2i(poolWrap(b+vec2f(0,1),size)),layer,0).w;let a11=textureLoad(groundTex,vec2i(poolWrap(b+vec2f(1,1),size)),layer,0).w;
+ return mix(mix(a00,a10,f.x),mix(a01,a11,f.x),f.y);
+}
 fn materialRaw(p:vec2f,slot:u32)->vec3f { return materialRawAt(p,u.ground[slot & groundMask].cacheLayer); }
 fn materialRawAt(p:vec2f,layer:i32)->vec3f {
  return textureLoad(groundTex,vec2i(materialPixel(p)),layer,0).rgb;

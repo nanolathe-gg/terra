@@ -1201,8 +1201,6 @@
 
       "faceScratch": 0.2,
 
-      "faceGrit": 0.5,
-
       "rockCrown": 1
 
      },
@@ -1230,8 +1228,6 @@
       "faceRun": 150,
 
       "faceSpall": 1.5,
-
-      "faceGrit": 1,
 
       "faceWear": 0.4,
 

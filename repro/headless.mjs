@@ -121,7 +121,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   engine.borrowBeach(config, settings);   // sculpt.js boot: a beach another world lends (Colors & base pattern, Beach)
   const worldSize = config.worldSize ?? config.size, worldGrid = config.worldGrid ?? config.grid, spacing = (worldSize - 1) / (worldGrid - 1);
   // sculpt-canvas.js mountMapCanvas: the chunk renderer over the map, with the page's colors.
-  config.maskKeys = engine.MASK_KEYS; config.gpuBudgetBytes = 128 * MB;
+  config.maskKeys = engine.MASK_KEYS; config.gpuBudgetBytes = 256 * MB;   // every map now holds three materials or more (ground, water, rock): 22 MB fixed before a chunk
   const canvas = new HeadlessCanvas(), renderer = await TerrainRenderer.createChunked(canvas, config), errors = [];
   renderer.onerror = message => errors.push(message);   // WebGPU validation and device errors arrive after the call that caused them
   fieldsModule.setFailureHandler(error => errors.push('shape fields: ' + (error?.message ?? String(error))));   // a failed shape run leaves the base height

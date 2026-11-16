@@ -931,7 +931,7 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     let rind=skin.y*rock;
     focus*=mix(1.0,mix(3.5,.12,u.rock[rs & rockMask].faceRindRough),rind)*(1.0+skin.x*rock*.8);
     rough=mix(rough,rough*.3+.35*u.rock[rs & rockMask].faceRindRough*(1.0-damp*.85),rind);
-    scale=mix(scale,max(1.0,u.rock[rs & rockMask].faceGritSize),rind);
+    scale=mix(scale,1.3,rind);   // the crust's sheen breaks at grit scale
     // Card E6: the sheen and its grain only sit on raised ground and slopes (Moon's plain keeps its own
     // grain); shineGate 0 is every world's earlier shine.
     let reach = mix(1.0, landform, u.shineGate);
@@ -1397,12 +1397,14 @@ fn surfFoam(pixel: vec2f, p: vec2f, x: f32, q: vec2f, depth: f32, slope: f32, e:
 }
 // A rock slot's colour as the draw lays it flat (rockFlat): the recipe's own, else the rock material's mean.
 // A rock slot's surface material (its own, else the world's rock material), -1 none; and that material's mean color (the old fixed mean without one).
-fn rockMaterialOf(slot: u32) -> i32 { let m = u.rock[slot & rockMask].material; return select(m, u.rockGround, m <= 0); }
 fn rockMaterialMean(slot: u32) -> vec3f { let m = rockMaterialOf(slot); if (m < 0) { return u.rockMean; } return materialMean(u32(m)); }
 // The rock's grain at a native pixel: its material's unlit color over the material's mean (1 where the rock has no material).
 fn rockGrain(slot: u32, pixel: vec2f) -> vec3f {
     let m = rockMaterialOf(slot); if (m < 0) { return vec3f(1.0); }
-    return clamp(materialRawAt(grainPixel(pixel), u.ground[u32(m) & groundMask].cacheLayer) / max(materialMean(u32(m)), vec3f(0.01)), vec3f(0.5), vec3f(1.6));
+    // Mostly its brightness: the rock type keeps the hue (a palette ramp), the material's own hue shows at a third.
+    let ratio = materialRawAt(grainPixel(pixel), u.ground[u32(m) & groundMask].cacheLayer) / max(materialMean(u32(m)), vec3f(0.01));
+    let luma = dot(ratio * materialMean(u32(m)), vec3f(0.299, 0.587, 0.114)) / max(dot(materialMean(u32(m)), vec3f(0.299, 0.587, 0.114)), 0.01);
+    return clamp(mix(vec3f(luma), ratio, 0.33), vec3f(0.5), vec3f(1.6));
 }
 fn slotRock(slot: u32) -> vec3f { let c = u.rock[slot & rockMask].rockColors[0]; return select(rockMaterialMean(slot), c.rgb, c.a > 0.5); }
 // B4: a rock's thickness along the sun's line through a point of its surface, height units. From just inside the surface, away from the sun
@@ -1767,8 +1769,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     // The grain is the rock material's, read one texel a native pixel (a 2D repeat at TA's fixed camera: 1:1 on every face).
     let grain=rockGrain(rs,pixel);
     let clasts=voxelClasts(hit);
-    let mineralPatch=u.rock[rs & rockMask].faceMineral*((voxelNoise(hit/max(1.0,u.rock[rs & rockMask].faceGritSize))-.5)*1.7+clasts.x*clasts.y*clamp(u.rock[rs & rockMask].faceClast,0.0,1.0));
-    var rock=rockFlat*mix(vec3f(1),grain,.3+u.rock[rs & rockMask].faceTone)* (1.0+u.rock[rs & rockMask].faceTone*rockTone+u.rock[rs & rockMask].faceStrata*(hard*2.0-1.0+fineTone))*(1.0-.6*u.rock[rs & rockMask].faceWet*rockWet);
+    let mineralPatch=u.rock[rs & rockMask].faceMineral*clasts.x*clasts.y*clamp(u.rock[rs & rockMask].faceClast,0.0,1.0);   // the clasts' minerals (the grain's are the rock material's)
+    var rock=rockFlat*grain*(1.0+u.rock[rs & rockMask].faceTone*rockTone+u.rock[rs & rockMask].faceStrata*(hard*2.0-1.0+fineTone))*(1.0-.6*u.rock[rs & rockMask].faceWet*rockWet);
     // Different minerals share the rock's chosen hue while varying albedo
     // and polish together. Embedded clasts read the same field as the solid.
     rock*=1.0+mineralPatch*.65;
