@@ -259,6 +259,14 @@ Built (each a commit; the measurements are in their messages):
 
 A new map's materials: archipelago 15, crystal 12, desert 14, green 12, ice 16, lava 13, lush 14, moon 14, red 12, zhon 12 (of 23).
 
+**Memory (open, for the owner).** Each material in use takes about 7 MiB of GPU cache, counted in the terrain budget. The renderer now
+caches a rock type's material only while a shown stroke uses that rock type, and the crystal material only while a stroke may lay
+crystal. Even so, the browser smoke (`repro/smoke.mjs`, at `gpuMB=512`) fails on Green: its brushes use the escarpment rock type, whose
+color is now a material of its own. Main has little room there: its Green smoke passes at 512 MiB and fails at 500 and 490, and its Ice
+smoke already fails at 512. The editor's own budget is 2048 MiB (1024 on devices reporting 4 GB or less). Ways on: run the smoke at a
+budget the editor uses, make the material cache smaller (its color and height are 32-bit floats), or let copies that differ only in
+Color share their base's cache.
+
 **Strata are not converted** (the owner's choice, below). A rock type's column has five bed colors, read by the color pass (the beds'
 bands on faces and raised ground) and by rock weather (the color of debris from each bed). Three ways on:
 - **Beds as tones of the rock material** (recommended): each bed is the rock material's Color times a tone; setting the material's
@@ -285,6 +293,7 @@ Phase 4 turns them into materials one by one.
 ## Open questions for the owner
 
 - Strata: beds as tones of the rock material, as materials, or kept (see Round 4).
+- Memory: the smoke's 512 MiB budget against rock types' own materials (see Round 4).
 - Crystal's art: only its material's mean shows; the crystals could show its art instead (a look change).
 - The cover classes' plants (tufts and shrubs) following a layer: needs the bake to read surface rules.
 - Converting highland, base band and rock face into rules means their World rows move into the Surface section.
