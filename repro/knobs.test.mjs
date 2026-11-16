@@ -55,9 +55,9 @@ test('every knob row has a label, a range and a default', () => {
 });
 
 test('the Colors panel shows the rows a world has, and a cleared row the server sets stays off', () => {
-  const config = {layers: ['body'], material: {groundCover: {plants: {flowers: {palette: [[1, 2, 3, 1]]}}}}, colors: {sun: '#ffffff'}};
+  const config = {layers: ['body'], material: {}, colors: {sun: '#ffffff'}};
   const labels = colorRows(config, new URLSearchParams()).map(([, l]) => l);
-  assert.ok(labels.includes('Flower 1') && !labels.includes('Flower 2') && !labels.includes('Beach') && !labels.includes('Strata 1'));
+  assert.ok(!labels.some(l => /Flower|Vegetation|Beach|Strata|Rock|Crystal/.test(l)), 'vegetation, flowers, rock, crystal and the beds are materials');
   assert.ok(!colorRows({...config, layers: ['beach']}, new URLSearchParams('strata=1')).some(([k]) => ['beach', 'slope', 'sand', 'strata1'].includes(k)), 'a beach, a slope cover and sand take their materials’ colors');
   // Low ground's color shows while its Tint is above 0.
   assert.ok(!labels.includes('Low ground'));

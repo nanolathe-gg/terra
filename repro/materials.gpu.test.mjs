@@ -14,8 +14,11 @@ test('a world’s ground repeats, a material edit reaches export art and reverts
   const s = await openScene({biome: 'red', ground: false, strokes: []}, 'biome=red&mapX=5&mapY=5');
   try {
     const win = (x, y, options = {}) => renderWindow(s, {x, y, width: 256, height: 256, ...options}), own = s.materials;
-    // The world's pair, then the extra materials Red's tools lay down (world.materials.extra).
-    assert.deepEqual(own.map(m => [m.source, m.worldGround, m.worldWater]), [['red-ground', true, false], ['red-water', false, true], ...['rock', 'slope', 'debris'].map(k => [s.config.materials[k], false, false]), ...s.config.materials.extra.map(k => [k, false, false])]);   // the world's surfaces (MAP_ROLES) join in their order
+    // The world's pair, its surfaces (MAP_ROLES) in their order, the materials its surface layers draw (each layer's library key, its
+    // worldLayer, in the list's order), then the extra materials Red's tools lay down (world.materials.extra).
+    const layers = [...new Set((s.config.surface || []).map(l => l.material).filter(k => k != null))];
+    assert.deepEqual(own.map(m => [m.source, m.worldGround, m.worldWater, m.worldLayer ?? null]), [['red-ground', true, false, null], ['red-water', false, true, null],
+      ...['rock', 'slope', 'debris', 'crystal'].map(k => [s.config.materials[k], false, false, null]), ...layers.map(k => [k, false, false, k]), ...s.config.materials.extra.map(k => [k, false, false, null])]);
     // The material repeats every 512 px; the world's own level-ground settings repeat with its pool, a multiple of that.
     const here = await win(640, 640), pool = groundPool(s.config.material);
     assert.ok(same(here, await win(640 + pool, 640)), 'the plain repeats a pool to the right');

@@ -2,9 +2,7 @@ import {HELP_TOOLS,HELP_CONTROLS,HELP_FRAME,helpFrames,helpTimeline,helpImage} f
 const element=(tag,cls,html='')=>{const e=document.createElement(tag);e.className=cls;e.innerHTML=html;return e;};
 const controlHelp={
   'knob-plainRelief':'Fine bumps across level ground. These change the rendered surface, not the map heights used by units.',
-  'knob-vegetationCover':'Scales vegetation against bare soil, including the density of shrubs. Lushness and Moisture still determine which kinds of vegetation grow.',
-  'knob-plantRelief':'Scales the height of grass tufts, moss cushions and shrubs in the art. One uses the material preset; zero removes their relief without removing flowers.',
-  'knob-flowerDensity':'Scales flower coverage where the ground supports it. One uses the material preset; zero removes flowers. Set flower colors in Colors.',
+  'knob-plantRelief':'Scales the height of grass tufts, moss cushions and shrubs in the art, wherever a surface layer grows them. Zero lays them flat.',
   'knob-sunTilt':'Moves the light north or south of due west. Zero is west; positive values move it south.',
   'knob-sunHeight':'How high the sun stands above the horizon. A low sun lights the faces turned to it, darkens the others and casts long shadows; a wall casts a shadow its height divided by the tangent of this angle. Set Cast shadow on level ground to let the shadows reach level ground.',
   'knob-ambient':'Sets the share of light that reaches faces pointing away from the sun.',

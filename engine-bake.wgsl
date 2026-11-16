@@ -141,8 +141,12 @@ fn lsMaskCompute(c: vec2f) -> vec4f {
     return vec4f(min(share, 0.98), size*mix(1.0,mix(1.5,.4,accumulated.z),clamp(accumulated.y*sort,0.0,1.0)),mix(fines,accumulated.z,clamp(accumulated.y,0.0,1.0)), 0.35 * sort * (foot*supply*LS_BASE+debris*.35) * smoothstep(0.5, 1.0, travelled) + fallen);
 }
 
-// Card P31: where plants grow, at c: the covers of the ground-cover classes that grow them (coverAt, the draw's own site maps and windows) as shares of
-// the ground: grass (turf and dry grass), meadow (and wet rush), scrub, moss. A path, water and what the draw reads as no ground give none.
+// Where plants grow, at c: the surface layers that carry plants (sculpt-material-model.js coverRows: row 3's w entries from MM_COVER + 4,
+// each its layer's first row, its kind and amount), as shares of the ground per kind: x grass tufts, y meadow tufts, z shrubs, w moss
+// cushions. The material layers are walked in draw order with the color pass's own rule (surfaceWindows, surfaceScore) on the facts the bake
+// knows (PLANT_FACTS: no shares, no convexity); a layer covers by its share (its rule times its Amount, not its pixel pattern: one value a
+// cell), so a later layer covers the plants under it. Lushness and a stroke's Local vegetation thin or thicken them. A path, water and what
+// the draw reads as no ground give none.
 fn plantMask(c: vec2f) -> vec4f {
     if (u.plantsOn < 0.5) { return vec4f(0.0); }
     let h0 = baseHeight(c);
@@ -152,10 +156,44 @@ fn plantMask(c: vec2f) -> vec4f {
     let around = 0.25 * (baseHeight(c - vec2f(3.0, 0.0)) + baseHeight(c + vec2f(3.0, 0.0)) + baseHeight(c - vec2f(0.0, 3.0)) + baseHeight(c + vec2f(0.0, 3.0)));
     var vegetation = 1.0 + u.lushness;
     if (u.overrideOn != 0) { vegetation += sampleRegionalArray(masksTex,maskPoint(c),4).r; }
-    let cover = coverAt(length(broad), broad, clamp((h0 - around) / 1.5, -1.0, 1.0), tm, vegetation);
-    var total = 0.0;
-    for (var k = 0u; k < 7u; k++) { total += cover[k]; }
-    return vec4f(cover[2] + 0.6 * cover[1], cover[3] + cover[6], cover[4] + 0.3 * cover[3] + 0.2 * cover[6], cover[5]) / max(total, 1e-4);
+    let slope = length(broad);
+    let site = coverSite(broad, tm);
+    let facts = array<f32, 14>(slope, h0 - u.sea, h0 - u.base, tm.wear, tm.deposit, tm.wet, site.x, coverSoil(slope, clamp((h0 - around) / 1.5, -1.0, 1.0), tm, site.x),
+        site.y, clamp((h0 - around) / 1.5, -1.0, 1.0), 0.0, 0.0, 0.0, 0.0);
+    let entries = u32(cvr(3u).w);
+    var mask = vec4f(0.0);
+    for (var stage = 0u; stage < 8u; stage++) {
+        let head = u.materialTable[SURFACE_HEAD + stage / 2u];
+        let odd = (stage & 1u) == 1u;
+        var row = u32(select(head.x, head.z, odd));
+        let count = u32(select(head.y, head.w, odd));
+        for (var i = 0u; i < count; i++) {
+            let layerRow = row;
+            let r0 = u.materialTable[row];
+            let ruleAt = row + 2u;
+            let rules = u32(r0.w);
+            row += 2u + rules;
+            // Built-ins hold no plants and are not known here; a layer whose material the map lacks (-2) draws nothing; a plants-only layer (-3)
+            // grows its plants and covers none below.
+            if (r0.x >= 0.0 || (r0.z < -1.5 && r0.z > -2.5) || r0.y == 0.0) { continue; }
+            var share = r0.y;
+            if (rules > 0u) {
+                let rule = u.materialTable[ruleAt];
+                if (rule.x < 1.5) { share = surfaceWindows(ruleAt, rules, facts, share); }
+                else { share *= smoothstep(rule.y - rule.z, rule.y + rule.z, surfaceScore(ruleAt, rules, facts, 0.0)); }
+            }
+            if (share <= 0.0) { continue; }
+            if (r0.z > -2.5) { mask *= 1.0 - share; }
+            for (var k = 0u; k < min(entries, 8u); k++) {
+                let e = cvr(4u + k);
+                if (u32(e.x) != layerRow) { continue; }
+                let add = share * e.z;
+                let kind = u32(e.y);
+                if (kind == 0u) { mask.x += add; } else if (kind == 1u) { mask.y += add; } else if (kind == 3u) { mask.z += add; } else { mask.w += add; }
+            }
+        }
+    }
+    return clamp(mask * clamp(vegetation, 0.0, 2.0), vec4f(0.0), vec4f(1.0));
 }
 
 // The mask is computed once on a lattice of LS_CELL-px cells over the bake's window and its margin (looseMain, a pass before the bake) and read
@@ -428,7 +466,7 @@ fn plantShrub(p: vec2f, scale: f32) -> vec2f {
             let sc = looseMask[lsCell(c + home) + 1u].z;
             if (sc <= 0.0) { continue; }
             let clump = smoothstep(-0.35, 0.55, poolNoise(c, 75.0, 11.0));
-            let lam = sc * mix(1.0, 2.6 * clump * clump, 0.8) * cvr(39u).z;
+            let lam = sc * mix(1.0, 2.6 * clump * clump, 0.8) * cvr(3u).z;
             if (lsU(lsPcg(h2 ^ 0x2545f491u)) >= lam) { continue; }
             let R = mix(2.4, 4.4, lsU(h3)) * (0.75 + 0.4 * sc);
             let a = atan2(d.y, d.x);
@@ -444,7 +482,7 @@ fn plantShrub(p: vec2f, scale: f32) -> vec2f {
     return vec2f(best, tone);
 }
 fn plantsAt(p: vec2f) -> vec3f {
-    let t = cvr(39u);
+    let t = cvr(3u);   // tuft height, shrub height, shrub density (coverRows)
     let zoom = max(1.0, fieldScale());
     let fadeTuft = 1.0 - smoothstep(1.0, 2.0, zoom);
     let fadeShrub = 1.0 - smoothstep(2.0, 4.0, zoom);

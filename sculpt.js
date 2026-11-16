@@ -746,7 +746,10 @@ function setSurfaceList(list,keep) {
   // A layer's material joins the map; a copy no layer draws leaves it unless a stroke uses it (sculpt-materials.js surfaceMaterials).
   try{const next=surfaceMaterials(list,mapMaterials,{config,nodes,rocks:mapRocks});if(JSON.stringify(next)!==JSON.stringify(mapMaterials))editMaterials(next);}catch(err){status(err.message);}   // a layer's material may enable a row (Highland ground)
   worldChanged({stage:stage??'F',world:false}); schedule();   // the surface rows alone: the color pass (a material it brings: editMaterials)
+  // The World rows whose requirement reads the list (Vegetation relief needs a layer that grows plants).
+  const plants=list.filter(l=>l?.plants?.amount>0).length;if(plants!==surfacePlants){surfacePlants=plants;syncWorldControls();}
 }
+let surfacePlants=-1;   // the surface layers that grow plants, last seen (setSurfaceList)
 function applySurface(next,{commit=false}={}) {
   let list; try { list=copySurface(next); } catch (err) { status(err.message); return false; }
   setSurfaceList(list,true);
@@ -1854,8 +1857,6 @@ function editColumn(value){
 }
 function commitColumn(){if(!columnEditing)return;columnEditing=false;checkpoint();queueWeather();}
 function defaultColor(key) {
-  if(key==='vegetation')return (config.material?.groundCover?.color||[128,128,128]).map(v=>v/255);
-  const flower=/^flower([1-4])$/.exec(key);if(flower)return (config.material?.groundCover?.plants?.flowers?.palette?.[Number(flower[1])-1]?.slice(0,3)||[255,255,255]).map(v=>v/255);
   const w=config.water||{};
   const rgb=v => v&&v.map(x => x/255);
   return {shallow:rgb(w.shallowRGB),

@@ -12,7 +12,7 @@ export const KNOBS = [
   ['Ground detail', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Ground bumps',0,3,.05,1.2],['lumpRelief','Painted ground bumps',0,8,.1,4],['reliefOctaves','Octaves',1,6,1,5],['worms','Wormy relief on slopes',0,1,.05,0]]],
   ['Lighting', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13],['shadeDepth','Directional shading kept',0,1,.05,1],['sunTilt','Light from the south',-1,1,.05,1],['sunHeight','Sun height (degrees above the horizon)',20,75,1,45.2],['ambient','Ambient light',0,.8,.02,.42],['creaseShade','Shade in creases (gully and valley floors, any facing)',0,1,.05,0]]],
-  ['Vegetation & flowers', [['vegetationCover','Vegetation cover (0 off)',0,2,.05,1],['lushness','Lushness',-1,1,.05,0],['soilRim','Bare soil where cover thins',0,1,.05,0],['erosionRain','Rain (wets channels and hollows, and wears the ground)',0,2,.05,1],['wetSwath','Moisture',0,1,.05,0],['wetGround','Wet ground: darker and glossy where water lies',0,1,.05,0],['plantRelief','Vegetation relief',0,2,.05,1],['flowerDensity','Flower density',0,4,.05,1]]],
+  ['Vegetation & flowers', [['lushness','Lushness',-1,1,.05,0],['soilRim','Bare soil where cover thins',0,1,.05,0],['erosionRain','Rain (wets channels and hollows, and wears the ground)',0,2,.05,1],['wetSwath','Moisture',0,1,.05,0],['wetGround','Wet ground: darker and glossy where water lies',0,1,.05,0],['plantRelief','Vegetation relief',0,2,.05,1]]],
   ['Material coverage', [['hillLight','Slope-cover brightness',.6,1.6,.01,1],['ringFade','Fringe fade length',0,2,.05,0],['faceFill','Fill light on shaded faces',0,.5,.02,0],['rockCrown','Bare rock to the crown',0,1,.05,0],['sandCrown','Painted sand to the crown (sand bars)',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['slopeMarks','Dark slope marks',0,1,.05,0],['wrinkles','Joined slope wrinkles',0,1,.05,0]]],
   ['Shine', [['shineStretch','Grain streak length (x its width)',1,8,.25,1],['shineWhite','Highlight whiteness (0 material hue, 1 white)',0,1,.05,.35]]],
   ['Shine: ground', [['shineGround','Gloss (highlight strength)',0,2,.05,0],['shineGroundSharp','Reflection sharpness (polish)',2,200,2,24],['shineGroundRough','Micro roughness (grain slope)',0,2,.05,0],['shineGroundScale','Grain width (px)',1,24,.5,6]]],
@@ -126,12 +126,9 @@ export function applyKnob({key,value,settings,renderer,nodes,seed,sync=true}) {
 // Low ground's color where a world picks none (Colors: Low ground): a dark red-brown mud, as retail Zhon's lowland.
 export const LOW_GROUND_RGB=[80,52,42];
 // The Colors panel's rows, [key, label].
-export const COLOR_KEYS=[['shallow','Shallow water'],['low','Low ground'],['vegetation','Vegetation'],...Array.from({length:4},(_,i)=>['flower'+(i+1),'Flower '+(i+1)]),['sun','Sun color'],['sky','Sky color']];
-// The rows this world shows: Vegetation and a flower's where the world's ground-cover table has them (every world's has; they act once
-// Vegetation cover is above 0), Beach only with a beach layer, Low ground only
-// while its Tint is above 0. Layer colors live in the existing Rock column.
-export const colorRows=(config,settings) => COLOR_KEYS.filter(([key]) => !(key.startsWith('flower')&&!config.material?.groundCover?.plants?.flowers?.palette?.[Number(key.slice(6))-1]) && !(key==='vegetation'&&!config.material?.groundCover?.color)
-  && !(key==='low'&&!(Number(settings.get('lowTint'))>0)));
+export const COLOR_KEYS=[['shallow','Shallow water'],['low','Low ground'],['sun','Sun color'],['sky','Sky color']];
+// The rows this world shows: Low ground only while its Tint is above 0.
+export const colorRows=(config,settings) => COLOR_KEYS.filter(([key]) => !(key==='low'&&!(Number(settings.get('lowTint'))>0)));
 // A world's own base colors after a row is picked (a hex) or cleared (null): a color the server sets is then explicitly off (null, the
 // texture's own color), any other is dropped.
 export function pickWorldColor(config,own,key,hex) {
@@ -161,7 +158,8 @@ export function slopeReplaced({config,renderer,weathering,materialWeathering}) {
 // The column facts read the active column (config.column: the map's own from the Rock column panel, else the world's).
 export function worldPanelValues(facts) {
   const {config,renderer,nodes,colors}=facts,layers=config.layers||[],own=Object.fromEntries(renderer.variant),picks=strokeWaterPicks(nodes);
-  return {...own,highMaterial:(facts.materials||[]).some(m=>m.worldHigh)?1:0,stonePaint:nodes.some(n=>n.kind==='paint'&&[5,6].includes(n.params?.paintChannel))?1:0,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:columnRows(config.column).starts.length?1:0,repeatBeds:Math.max(0,...columnRows(config.column).starts.map(s=>s[2])),capBed:columnHasCapBed(config.column)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,slopeSand:config.material?.slopeSand?1:0};
+  // plants: the surface layers that grow plants (a layer's `plants`, docs/SURFACE_LAYERS.md), which Vegetation relief scales.
+  return {...own,plants:(config.surface||[]).filter(l=>l?.plants?.amount>0).length,highMaterial:(facts.materials||[]).some(m=>m.worldHigh)?1:0,stonePaint:nodes.some(n=>n.kind==='paint'&&[5,6].includes(n.params?.paintChannel))?1:0,deepEdge:Math.max(Number(own.deepEdge)||0,picks.deepEdge),rampWater:Number(own.deepEdge)>0?picks.fadedEdge:1,waterTones:waterTones(config,colors),waterColored:waterColored(colors)?1:0,slopeReplaced:slopeReplaced(facts)?1:0,column:columnRows(config.column).starts.length?1:0,repeatBeds:Math.max(0,...columnRows(config.column).starts.map(s=>s[2])),capBed:columnHasCapBed(config.column)?1:0,ringLayer:layers.includes('ring')?1:0,beachLayer:layers.includes('beach')?1:0,slopeSand:config.material?.slopeSand?1:0};
 }
 
 // Latest values are applied together once per animation frame. Persistence

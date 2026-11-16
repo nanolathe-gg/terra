@@ -100,7 +100,7 @@ test('an engine-colored built-in may draw a library material, bound by that mate
     assert.throws(() => copySurface([{builtin: b, material: 'zhon-beach'}]), /Materials panel or Rock types/, b + ' takes its material from a role or its rock type');
   assert.deepEqual(copySurface([{builtin: 'highland', amount: .5, where: [{fact: 'slope'}], edge: {width: .2}}, {builtin: 'baseBand', amount: .3, edge: {width: .4}}]),
     [{builtin: 'highland'}, {builtin: 'baseBand', edge: {width: .4}}], 'Highland keeps no Amount, rule or edge; Base band no Amount');
-  assert.throws(() => surfaceRows([{id: 'x'}]), /built-in or draws a material/);
+  assert.throws(() => surfaceRows([{id: 'x'}]), /built-in, draws a material or grows plants/);
   assert.throws(() => copySurface([{id: 'highland', material: 'red-ground'}]), /id of its own/, 'a material layer cannot take a built-in’s name');
   assert.throws(() => surfaceRows([{id: 'rock', material: 'red-ground'}]), /built-in's name/);
 });
@@ -158,4 +158,28 @@ test('surface: a stored list from before the engine surfaces drew materials take
   const {withSurfaceMaterials} = await import('../sculpt-material-model.js');
   const base = [{builtin: 'sand', material: 'green-sand'}, {builtin: 'rock'}], old = [{builtin: 'sand', amount: .5}, {builtin: 'rock'}, {builtin: 'soil'}];
   assert.deepEqual(withSurfaceMaterials(old, base), [{builtin: 'sand', amount: .5, material: 'green-sand'}, {builtin: 'rock'}, {builtin: 'soil'}]);
+});
+
+test('plants grow on material layers: one kind each, a plants-only layer draws no material, and the bake gets each one\'s first row', async () => {
+  const {surfaceRows, copySurface, coverRows, PLANT_MAX} = await import('../sculpt-material-model.js');
+  const list = [
+    {builtin: 'soil'},
+    {id: 'moss-1', material: 'lush-ground', stage: 'land', where: [{fact: 'moisture', from: .4}], plants: {kind: 'moss', amount: .5}},
+    {id: 'tufts-1', stage: 'ground', plants: {kind: 'grass', amount: 2}},
+  ];
+  const copied = copySurface(list);
+  assert.equal(copied[2].material, undefined, 'a plants-only layer keeps no material');
+  assert.equal(copied[2].plants.amount, 1, 'a density over 1 is held to 1');
+  const out = surfaceRows(copied, key => key === 'lush-ground' ? 4 : -1);
+  assert.deepEqual(out.plants.map(p => [p.kind, p.amount]).sort(), [[0, 1], [2, .5]]);
+  for (const p of out.plants) assert.equal(out.rows[p.row][0], -1, 'an entry points at its layer\'s first row');
+  const tufts = out.plants.find(p => p.kind === 0); assert.equal(out.rows[tufts.row][2], -3, 'plants only: the color pass skips it');
+  assert.throws(() => surfaceRows([{builtin: 'soil', plants: {kind: 'grass', amount: 1}}]), /plants grow on a material layer/);
+  assert.throws(() => copySurface([{id: 'x-1', stage: 'land'}]), /a material or plants/);
+  assert.throws(() => surfaceRows(Array.from({length: PLANT_MAX + 1}, (_, i) => ({id: `p-${i}`, plants: {kind: 'grass', amount: 1}}))), /at most/);
+  const site = {wet: [.25, .9], dry: .4, soil: {slope: [.6, 1.6], convex: .5, deposit: .3}, moisture: {perSwath: .5, swathRef: .35, shade: .28}, plants: {tuft: 4, shrub: 2, shrubs: 1.5}};
+  const rows = coverRows(site, out.plants, .5);
+  assert.deepEqual(rows[3], [2, 1, 1.5, 2], 'heights times Vegetation relief, then the entries');
+  assert.deepEqual(rows[4], [out.plants[0].row, out.plants[0].kind, out.plants[0].amount, 0]);
+  assert.deepEqual(coverRows(site, [], 1)[3], [0, 0, 0, 0], 'no plants: no plant rows');
 });

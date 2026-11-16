@@ -404,7 +404,7 @@ struct Uniforms {
     columnSections: array<vec4f, 32>,   // per section, from low to high: x the coordinate it starts at, y its first bed, z its bed count, w its period
     columnWander: f32,    // the wander the coordinate takes from value noise: its amplitude, height units
     columnTerrain: vec4f, // the wander it takes from three octaves of the terrain noise (height units): xyz their amplitudes (not in the Time pass)
-    materialTable: array<vec4f, 206>,   // Green (H3 materialModel): four materials of 39 rows then six placement rows, from materials/green.json (material-model.wgsl); then the 44 rows of a world's ground-cover table (card P30, its plants' row 39 and flower palette rows 40 to 43, card P31; zeros: none)
+    materialTable: array<vec4f, 206>,   // Green (H3 materialModel): four materials of 39 rows then six placement rows, from materials/green.json (material-model.wgsl); then from MM_COVER the world's site rows and the plants' rows (sculpt-material-model.js coverRows)
     weatherMaps: f32,     // H5: 1 when gridTex layers 2 and 3 hold the Time pass's maps (engine-weather.wgsl)
     // H5 item 3a, Green's retail marks (0: off). They read the Time pass's maps, so age, rain and hardness contrast move them.
     terraceBreak: f32,    // how far the terrace lines' phase wanders (band spacings), more where the ground is wet
@@ -782,11 +782,38 @@ fn timeMapsAt(p: vec2f) -> TimeMaps {
 }
 #endif
 
+// The surface layers' rows (engine-frag.wgsl surfaceStage; sculpt-material-model.js surfaceRows): the stages' heads and the flags row.
+const SURFACE_HEAD = 152u;
+const SURFACE_FLAGS = 151u;
+// Facts (surfaceFacts): 0 slope, 1 height above the sea, 2 above the plain, 3 wear, 4 deposit, 5 wetness, 6 moisture, 7 soil depth, 8 light
+// (level 1, sunward slopes more), 9 top (a lump 1, a hollow -1), 10 convexity, 11 the rock's share, 12 the debris', 13 the sand's. The shares
+// exist from their stage on (0 before it).
+const SURFACE_FACTS = 14u;
+fn surfaceWindow(v: f32, lo: f32, hi: f32, fade: f32) -> f32 {
+    let f = max(fade, 0.0001);
+    return smoothstep(lo - f, lo + f, v) * (1.0 - smoothstep(hi - f, hi + f, v));
+}
+// A layer's rule over the facts, its rows from ruleAt (the head, then rules - 1 terms), one evaluator for the color pass and the bake: a
+// windows rule multiplies `share` by each window in turn; a score rule adds each weighted fact to `score` (the caller's noise and lift).
+fn surfaceWindows(ruleAt: u32, rules: u32, facts: array<f32, 14>, share: f32) -> f32 {
+    var s = share;
+    for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; s *= surfaceWindow(facts[min(u32(w.x), SURFACE_FACTS - 1u)], w.y, w.z, w.w); }
+    return s;
+}
+fn surfaceScore(ruleAt: u32, rules: u32, facts: array<f32, 14>, score: f32) -> f32 {
+    var s = score;
+    for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; s += w.y * facts[min(u32(w.x), SURFACE_FACTS - 1u)]; }
+    return s;
+}
+
+// The world's site rows (sculpt-material-model.js siteRows; materials/defaults.json `site`), from MM_COVER: 0 y wetness at which moisture
+// starts to rise, z wetness at which it is full, w moisture of dry level ground; 1 x slope where soil thins, y slope where it is gone, z convex
+// ground's loss, w deposit's gain; 2 y moisture per unit of wetSwath, z wetSwath that leaves moisture as it is, w the shade's gain. Then the
+// plants' rows (PLANT_ROWS).
 const MM_COVER = 162u;
 fn cvr(i: u32) -> vec4f { return u.materialTable[MM_COVER + i]; }
-fn coverWin(v: f32, w: vec4f) -> f32 { return smoothstep(w.x, w.y, v) * (1.0 - smoothstep(w.z, w.w, v)); }
-// The two site values every class reads, moisture and light, at a point: wetness (with the wet swaths' control as its bias, and the sun's shade) and the
-// sun on the broad face (level ground 1). Rock moss (engine-frag.wgsl) reads them too, so it grows where the table's moss class does.
+// The two site values the surface layers' facts read, moisture and light, at a point: wetness (with the wet swaths' control as its bias, and the
+// sun's shade) and the sun on the broad face (level ground 1).
 fn coverSite(broad: vec2f, tm: TimeMaps) -> vec2f {
     let c0 = cvr(0u); let c2 = cvr(2u);
     let wn = smoothstep(c0.y, c0.z, tm.wet);
@@ -796,32 +823,10 @@ fn coverSite(broad: vec2f, tm: TimeMaps) -> vec2f {
     return vec2f(clamp(mix(c0.w, 1.0, wn) + c2.w * shade + c2.y * (u.wetSwath - c2.z), 0.0, 1.0), light);
 }
 // Soil depth at a point (0 bare, 1 deep): thin on steep and convex ground and where water wore the rock, deep in hollows and where water laid deposit.
-// The seven classes read it as a window, and a tabled world's slope cover reads it as the share of thin soil (engine-frag.wgsl).
 fn coverSoil(slope: f32, top: f32, tm: TimeMaps, moist: f32) -> f32 {
     let c1 = cvr(1u);
     return clamp(1.0 - smoothstep(c1.x, c1.y, slope) - c1.z * smoothstep(0.25, 0.8, top) + 0.5 * smoothstep(0.25, 0.8, -top) * c1.z + c1.w * tm.deposit + 0.2 * moist - 0.4 * tm.wear, 0.0, 1.0);
 }
-// The seven classes' covers at a point (groundCover in engine-frag.wgsl draws from them; looseStones in engine-bake places plants by them).
-fn coverAt(slope: f32, broad: vec2f, top: f32, tm: TimeMaps, vegetation: f32) -> array<f32, 7> {
-    let site = coverSite(broad, tm);
-    let moist = site.x;
-    let light = site.y;
-    let soil = coverSoil(slope, top, tm, moist);
-    let lush = clamp(1.0 + 0.5 * (vegetation - 1.0), 0.2, 1.8);
-    var cover: array<f32, 7>;
-    for (var k = 0u; k < 7u; k++) {
-        let b = 4u + 5u * k;
-        let st = cvr(b + 1u);
-        var v = st.x * pow(lush, st.y);
-        if (k > 0u) {
-            v *= coverWin(moist, cvr(b + 2u)) * coverWin(soil, cvr(b + 3u)) * coverWin(light, cvr(b + 4u));
-            v *= v;
-        }
-        cover[k] = v;
-    }
-    return cover;
-}
-
 #ifndef BAKE
 struct VertexOut {
     @builtin(position) position: vec4f,

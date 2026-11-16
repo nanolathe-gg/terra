@@ -58,14 +58,10 @@ test('labels and group names name no world',()=>{
  for(const [key,,label] of SHAPE_FIELDS)assert.ok(!named.test(label),`${key}: ${label}`);
 });
 
-test('every world can turn vegetation on, and flowers stay independent of relief',async()=>{
+test('Vegetation relief acts where a surface layer grows plants',async()=>{
  const {worldControlRequirement:requirement}=await import('../sculpt-control-schema.js');
- // Vegetation cover above 0 is the switch; every world has a table, so Vegetation cover itself is never idle.
- for(const v of [{},{vegetationCover:0},{vegetationCover:1}])assert.equal(requirement('vegetationCover',v),'');
- for(const key of ['plantRelief','flowerDensity']){assert.match(requirement(key,{vegetationCover:0}),/Raise Vegetation cover/);assert.equal(requirement(key,{vegetationCover:1}),'');}
- assert.equal(requirement('flowerDensity',{vegetationCover:1,plantRelief:0}),'');
- // Flowers are dots in the ground's color, which the sediment transition replaces at 100 percent Material weathering; the plants' relief still shows.
- assert.match(requirement('flowerDensity',{vegetationCover:1,slopeReplaced:1}),/Lower Material weathering/);assert.equal(requirement('plantRelief',{vegetationCover:1,slopeReplaced:1}),'');
+ assert.match(requirement('plantRelief',{plants:0}),/No surface layer grows plants/);
+ assert.equal(requirement('plantRelief',{plants:1}),'');
 });
 
 test('world dependencies explain bypasses without biome gates',async()=>{
@@ -139,7 +135,6 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('slopeTexture',{slopeReplaced:1,shineSlope:.5});
  shows('slopeTexture',{slopeReplaced:0});
  for(const k of ['shineSlope','shineSlopeRough','shineSlopeSharp','shineSlopeScale'])assert.match(requirement(k,{shineSlope:1,shineSlopeRough:1,slopeTexture:0}),/Sampled slope texture/);
- for(const k of ['shineSlope','shineSlopeSharp'])assert.match(requirement(k,{shineSlope:1,slopeTexture:.3,vegetationCover:1}),/ground cover decides the slope cover/);
  assert.equal(requirement('shineSlopeGate',{shineSlope:1,slopeTexture:0}),requirement('shineSlopeGate',{}),'a slope group with no share is not a material shining');
  shows('shineSlopeGate',{shineSlope:1,slopeTexture:.3});
  shows('shineSlopeSharp',{shineSlope:1,slopeTexture:.3});
@@ -169,8 +164,6 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('beachWidth',{beachLayer:0}),/no beach of its own. Choose another world's Beach, above,/);
  shows('beachWidth',{beachLayer:1});
  assert.match(requirement('slopeTexture',{slopeSand:1}),/sand/);
- assert.match(requirement('slopeTexture',{vegetationCover:1}),/ground cover decides the slope cover/);
- shows('slopeTexture',{vegetationCover:0});
  shows('slopeTexture',{slopeSand:0});
  assert.match(requirement('dither',{paletteMix:1}),/Nearest color/);
  shows('dither',{paletteMix:0});
