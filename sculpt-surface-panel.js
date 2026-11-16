@@ -1,5 +1,5 @@
 // World › Surface (docs/SURFACE_LAYERS.md): the world's surface layers as a list, top first. Each row opens to set a layer's material, its
-// Amount, its edge and its rule (conditions that must all hold, or a score); a row moves within its stage, a material layer can be removed,
+// Coverage (stored as amount), its edge and its rule (conditions that must all hold, or a score); a row moves within its stage, a material layer can be removed,
 // and a layer is added from a preset. Hovering or focusing a row previews where that layer lies on the map. The list is a world setting:
 // `host.apply(next, {commit})` stores it.
 import {SURFACE_BUILTINS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, surfaceRows, isMaterialLayer, layerKey} from './sculpt-material-model.js';
@@ -25,7 +25,7 @@ const BUILTIN_SOURCES = {
   chips: 'the rock type’s chips', iceCrest: 'the snow color', iceCap: 'the snow color',
 };
 // Built-ins whose strength and placement are World settings of their own (the rows under the list, in this section's "Built-in settings"):
-// their row shows no Amount, which would only repeat the strength.
+// their row shows no Coverage, which would only repeat the strength.
 const BUILTIN_SETTINGS = {highland: 'highland', baseBand: 'baseBand'};
 // The stages as the list's group headings, top first in the list; a layer moves only within its group (the engine's effects lie between them).
 const STAGE_TITLES = ['Ground', 'Slope cover', 'Soil, rock and beach', 'Crown rock', 'Bands', 'Loose ground: debris, paint, sand', 'Chips', 'Snow'];
@@ -169,14 +169,14 @@ export function mountSurfacePanel(host) {
         const b = el('button', {type: 'button', className: 'surface-wide link', textContent: 'Its strength and height: Built-in settings below'}); b.onclick = () => host.settings(BUILTIN_SETTINGS[layer.builtin]);
         body.append(b);
         const note = host.settingNote(BUILTIN_SETTINGS[layer.builtin]); if (note) body.append(el('p', {className: 'small surface-wide', textContent: note}));
-      } else body.append(slider('Amount', layer.amount ?? 1, 0, 1, .01, (v, c) => edit(i, l => { l.amount = v; }, c), 'The share of pixels it takes where its rule allows it'));
+      } else body.append(slider('Coverage', layer.amount ?? 1, 0, 1, .01, (v, c) => edit(i, l => { l.amount = v; }, c), 'The share of its area it covers, each covered pixel at full strength; Noise size sets whether it is single pixels or patches'));
       if (fixed) body.append(el('p', {className: 'small surface-wide', textContent: 'Its settings place it: it also sets the ground’s relief and caps the beds, so it takes no rule or edge here.'}));
       else body.append(
         slider('Edge width', edge.width ?? 1, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, width: v}; }, c), '1 blends into what is below; near 0 each pixel is one or the other'),
         slider('Edge noise', edge.noise ?? 0, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, noise: v}; }, c), 'How ragged its edge is'),
         slider('Noise size (px)', edge.noiseSize ?? 8, 1, 64, 1, (v, c) => edit(i, l => { l.edge = {...l.edge, noiseSize: v}; }, c), '1 speckles by the pixel; larger makes patches'));
       if (layer.material != null) body.append(slider('Height contrast', edge.height ?? 0, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, height: v}; }, c), 'At its edge the taller wins: its material’s art height against the ground material’s, so a blocky material keeps its high points and the ground takes its gaps'));
-      if (!builtin && !layer.where?.length && !layer.score && (layer.amount ?? 1) >= 1) body.append(el('p', {className: 'small', textContent: 'At full Amount everywhere it has no edge, so Height contrast does nothing: give it a rule or an Amount under 1.'}));
+      if (!builtin && !layer.where?.length && !layer.score && (layer.amount ?? 1) >= 1) body.append(el('p', {className: 'small', textContent: 'At full Coverage everywhere it has no edge, so Height contrast does nothing: give it a rule or a Coverage under 1.'}));
       if (material && !material.height && (edge.height ?? 0) > 0) body.append(el('p', {className: 'small', textContent: 'This material has no art height, so Height contrast only lets a ground with height push it back: choose one with height (a rock material, for one) for blocks that stand out.'}));
       if (!fixed) body.append(ruleBlock(layer, i));
       item.append(body);

@@ -382,10 +382,14 @@ const SURFACE_FLAGS = 151u;
 const SURFACE_FACTS = 14u;
 var<private> surfaceFacts: array<f32, 14>;
 var<private> surfacePreviewCover: f32 = 0.0;   // the previewed layer's coverage (diagnostic view 13)
+// A layer's pattern, about evenly spread over 0 to 1: by the art pixel at Noise size 1, else smooth patches that size. Its edge noise and its
+// coverage read the same pattern, so the pixels a ragged edge reaches first are the ones a partial Amount keeps.
+fn surfacePattern(e: vec4f, p: vec2f, pixel: vec2f) -> f32 {
+    return select(1.0 / (1.0 + exp(-1.702 * coverZ(p, max(e.z, 2.0)))), shelfHash(poolPixel(grainPixel(pixel)) + e.w), e.z <= 1.0);
+}
 fn surfaceNoise(e: vec4f, p: vec2f, pixel: vec2f) -> f32 {
     if (e.y == 0.0) { return 0.0; }
-    let px = shelfHash(poolPixel(grainPixel(pixel)) + e.w) - 0.5;
-    return e.y * select(1.0 / (1.0 + exp(-1.702 * coverZ(p, max(e.z, 2.0)))) - 0.5, px, e.z <= 1.0);
+    return e.y * (surfacePattern(e, p, pixel) - 0.5);
 }
 fn surfaceEdge(share: f32, e: vec4f, p: vec2f, pixel: vec2f) -> f32 {
     if (e.x >= 1.0 && e.y == 0.0) { return share; }
@@ -414,15 +418,19 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
         let builtin = r0.x >= 0.0;
         if (!builtin && r0.z < 0.0) { continue; }   // a material layer whose material the map lacks draws nothing
         let k = min(u32(max(r0.x, 0.0)), 6u);
-        var share = select(r0.y, select((*mask)[k] * r0.y, (*mask)[k], r0.y == 1.0), builtin);
+        // Amount is coverage: the share of the layer's area it covers, each covered pixel at full strength (TA's look), not an opacity.
+        let amount = r0.y;
+        if (amount == 0.0) { continue; }
+        var share = select(1.0, (*mask)[k], builtin);
         if (share == 0.0) { continue; }   // only an exact 0: some draw shares run a little outside 0 to 1, and the mix keeps them as it always has
         var c = 0.0;
+        var lift = 0.0;
         if (rules == 0u) { c = surfaceEdge(share, e, p, pixel); }
         else {
             let rule = u.materialTable[ruleAt];
             // Height contrast (the rule head's w): the layer's material against the ground below, art height in units of 4, so the taller
-            // wins where the layer meets what it covers. Windows feel it only inside their edge (4 share (1 - share)); a score at its threshold.
-            var lift = 0.0;
+            // wins where the layer meets what it covers. Windows feel it only inside their edge (4 share (1 - share)); a score at its threshold;
+            // a partial Amount where its coverage pattern decides.
             if (rule.w > 0.0 && r0.z >= 0.0) { lift = rule.w * 0.25 * (materialRelief(p, u32(r0.z)) - ownGroundRelief(p, gs)); }
             if (rule.x < 1.5) {
                 for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; share *= surfaceWindow(surfaceFacts[min(u32(w.x), SURFACE_FACTS - 1u)], w.y, w.z, w.w); }
@@ -436,6 +444,7 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
                 if (c == 0.0) { continue; }
             }
         }
+        if (amount < 1.0) { c *= step(1.0 - amount, surfacePattern(e, p, pixel) + lift); if (c == 0.0) { continue; } }
         if (i32(layerRow) == u.surfacePreview) { surfacePreviewCover = c; }
         if (builtin) {
             // A built-in that draws a material (docs/SURFACE_LAYERS.md phase 4) lays that material's color by its own share.

@@ -13,7 +13,7 @@ const scene = {biome: 'green', ground: true, query: '', strokes: [['landform', [
 const changed = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) n++; return n / (a.length / 4); };
 const view = async (extra = '') => { const s = await openScene(scene, 'biome=green&mapX=4&mapY=4' + extra); try { await s.fields.ready(); return {pixels: await renderWindow(s, {x: 0, y: 0, width: 512, height: 512}), errors: s.errors}; } finally { s.dispose(); } };
 
-test('surface layers: a rule limits a built-in; a material layer draws where its rule holds; an engine-colored built-in draws a material; a missing material draws nothing', {timeout: 600000}, async () => {
+test('surface layers: a rule limits a built-in; a material layer draws where its rule holds; an engine-colored built-in draws a material; amount is coverage; a missing material draws nothing', {timeout: 600000}, async () => {
   await openHost({configs});
   try {
     withSurface(s => s);
@@ -35,6 +35,21 @@ test('surface layers: a rule limits a built-in; a material layer draws where its
     withSurface(s => s.map(l => l.builtin === 'soil' ? {...l, material: 'red-ground'} : l));
     const swapped = changed(soil.pixels, (await view('&soilRim=1')).pixels);
     assert.ok(swapped > .002 && swapped < .6, `the soil draws its material where the soil lies (${(swapped * 100).toFixed(2)}%)`);
+    // Coverage (amount): a partial amount covers about that share of the area, each covered pixel as the full layer draws it.
+    const everywhere = amount => withSurface(s => [...s, {id: 'all', name: 'All', material: 'ice-ground', stage: 'snow', amount, edge: {noiseSize: 1}}]);
+    everywhere(1);
+    const full = (await view()).pixels;
+    everywhere(.3);
+    const part = (await view()).pixels;
+    let covered = 0, same = 0;
+    for (let i = 0; i < part.length; i += 4) {
+      if (part[i] === base.pixels[i] && part[i + 1] === base.pixels[i + 1] && part[i + 2] === base.pixels[i + 2]) continue;
+      covered++;
+      if (part[i] === full[i] && part[i + 1] === full[i + 1] && part[i + 2] === full[i + 2]) same++;
+    }
+    const fraction = covered / (part.length / 4);
+    assert.ok(fraction > .25 && fraction < .35, `amount .3 covers about 30% of the map (${(fraction * 100).toFixed(1)}%)`);
+    assert.ok(same / covered > .95, `a covered pixel is the full layer’s color, not a blend (${(same / covered * 100).toFixed(1)}%)`);
     withSurface(s => [...s, {id: 'ghost', name: 'Ghost', material: 'no-such-material', where: [{fact: 'slope', from: -1}]}]);
     const ghost = await view();
     assert.equal(changed(base.pixels, ghost.pixels), 0, 'a layer whose material the map lacks draws nothing');
