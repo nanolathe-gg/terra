@@ -129,7 +129,8 @@ export function groupToolControls(fields,buildRow){
 // Where each World setting sits: "Section/Tab" (a section without tabs ends in "/"). index.html holds one container per home
 // (data-home); a row is created straight into its home, under the name of its group. repro/world-homes.test.mjs holds every key to one home.
 export const WORLD_HOMES={
- 'Ground/Pattern':'groundPatch groundPatchSize highland highFrom highReach',
+ 'Ground/Pattern':'groundPatch groundPatchSize',
+ 'Surface/':'highland highFrom highReach baseBand baseBandLow baseBandHigh baseBandWander baseBandGaps',
  'Ground/Bumps & relief':'reliefScale reliefAmount reliefLumps reliefBranch reliefWarp reliefPatchy reliefJitter gentleRelief plainRelief lumpRelief reliefOctaves worms',
  'Ground/Terrain shape':'undulation undulationScale undulationCover undulationArt faceSteep',
  'Ground/Slope cover':'hillLight slopeTexture slopeMarks wrinkles',
@@ -146,7 +147,7 @@ export const WORLD_HOMES={
  'Rock types/Special surfaces':'pockmark pockSize moonCups moonCupSize moonCupDepth cupStretch moonRibs moonRibDepth moonRibDark moonFolds moonFoldSpacing iceCrystal iceCrest iceSnow iceFall iceApron gougeWeb',
  'Cliffs & stones/Where rock shows':'rimReach shoreRock shoreShelf',
  'Cliffs & stones/Loose stones':'looseSupply boulders looseKnoll',
- 'Cliffs & stones/Bands':'bandSoftness bandWater sandBanding sandBandSpacing layerCrease baseBand baseBandLow baseBandHigh baseBandWander baseBandGaps desertCapFlat',
+ 'Cliffs & stones/Bands':'bandSoftness bandWater sandBanding sandBandSpacing layerCrease desertCapFlat',
  'Cliffs & stones/Special surfaces':'iceFrost lavaCrust lavaPillow lavaChip lavaVeins lavaCalm lavaDusk iceSoft',
  'Sand/':'sandCrown sand sandLee wind sandDust sandGrass sandLight sandGrain ripple rippleHeight',
  'Water & shores/Depths & edges':'shallowDepth deepDepth waterSoft crispShore deepEdge stepSoftPx shelfWander shoalRag shoalStairs shoalShoreSoft',
@@ -239,7 +240,7 @@ export function mountColumnPanel(read,change,commit,reset){
 
   const edit=fn=>()=>reshape(c=>{const parent=at(c,path.slice(0,-1));parent[path.at(-1)]??=[];fn(parent[path.at(-1)]);});
   if(!sections.length){
-   const p=document.createElement('p');p.className='small';p.textContent='This map has no rock column. Strata, the Foot color band and Cap color paint its beds: add one to use them.';body.append(p);
+   const p=document.createElement('p');p.className='small';p.textContent='This map has no rock column. Strata, the Base band (in Surface) and Cap color paint its beds: add one to use them.';body.append(p);
    button(body,'Add a rock column','',edit(list=>list.push(structuredClone(FIRST_SECTION))));
   }
   for(const [s,section] of sections.entries()){

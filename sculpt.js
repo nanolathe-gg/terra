@@ -20,7 +20,7 @@ import {selectionTransform,toggleSelection} from './sculpt-selection.js';
 import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap,keepPrevious,takePrevious,dropPrevious} from './sculpt-share.js';
 import {isRiver,pointsSignature} from './sculpt-river.js';
 import {HELP_TOOLS} from './sculpt-help-examples.js';
-import {copySurface} from './sculpt-material-model.js';
+import {copySurface,layerKey} from './sculpt-material-model.js';
 import {mountSurfacePanel} from './sculpt-surface-panel.js';
 import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,toolMaterialSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
 const editorUI=mountEditorUI();
@@ -742,9 +742,11 @@ function setSurfaceList(list,keep) {
   config.surface=list;
   if(keep)activeWorld().surface=list; else delete activeWorld().surface;
   renderer?.setSurface(list);
-  // A material layer's material joins the map (bound by its id); a removed layer's material stays in the map as an ordinary one.
-  const ids=new Set(list.filter(l=>l.material!=null).map(l=>l.id));
-  let next=mapMaterials.map(m=>m.worldLayer&&!ids.has(m.worldLayer)?(({worldLayer,...o})=>o)(m):m);
+  // A layer's material joins the map (bound by its key, sculpt-material-model.js layerKey); a removed layer's material stays in the map as
+  // an ordinary one. A layer that now draws another library material gives up its copy, which leaves the map unless a stroke uses it.
+  const drawn=new Map(list.filter(l=>l.material!=null).map(l=>[layerKey(l),l.material])),swapped=new Set();
+  let next=mapMaterials.map(m=>{if(!m.worldLayer)return m;const want=drawn.get(m.worldLayer);if(want&&(!m.source||m.source===want))return m;if(want)swapped.add(m.slot);return (({worldLayer,...o})=>o)(m);});
+  if(swapped.size){const used=new Set(materialsInUse(nodes,next,mapRocks).map(m=>m.slot));next=next.filter(m=>!swapped.has(m.slot)||used.has(m.slot));}
   next=withWorldMaterials(next,config);
   if(JSON.stringify(next)!==JSON.stringify(mapMaterials)){try{editMaterials(next);}catch(err){status(err.message);}}
   worldChanged({stage:'C',world:false}); schedule();
@@ -757,7 +759,7 @@ function applySurface(next,{commit=false}={}) {
 }
 function surfaceHost() {
   const hex=m=>'#'+materialTint(m).map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');
-  const layerMaterial=layer=>mapMaterials.find(m=>m.worldLayer===layer.id);
+  const layerMaterial=layer=>mapMaterials.find(m=>m.worldLayer===layerKey(layer));
   return {
     surface:()=>config.surface,
     apply:applySurface,
@@ -765,6 +767,13 @@ function surfaceHost() {
     preview:row=>{if(!renderer||renderer.surfacePreview===row)return;renderer.setSurfacePreview(row);worldChanged({stage:'C',world:false});schedule();},
     material:layer=>{const m=layerMaterial(layer);return m?{name:m.name,color:hex(m)}:null;},
     edit:(layer,button)=>{const m=layerMaterial(layer);if(m)materialEditor?.open(m.slot,button);},
+    library:()=>Object.entries(LIBRARY).filter(([key])=>!key.endsWith('-water')).map(([key,m])=>({key,name:m.name,color:hex(m)})),
+    // A built-in's World setting (the Surface section's Built-in settings): show its block, reveal the row if the panel folded it away as
+    // unavailable, and focus it; settingNote says why it is unavailable ('' when it is not).
+    settings:key=>{const row=document.querySelector(`#wpane-surface [data-knob="${key}"]`),block=row?.closest('.world-subsection');if(!row)return;
+      if(row.hidden)block?.querySelector('.unavailable-summary button[aria-expanded="false"]')?.click();
+      (block??row).scrollIntoView({block:'center',behavior:'smooth'});row.querySelector('input,select')?.focus({preventScroll:true});},
+    settingNote:key=>document.querySelector(`#wpane-surface [data-knob="${key}"] .control-requirement`)?.textContent??'',
     materialKey:preset=>{const key=preset.material.startsWith('role:')?config.materials?.[preset.material.slice(5)]:preset.material;return LIBRARY[key]?key:config.materials?.ground??'green-ground';},
   };
 }

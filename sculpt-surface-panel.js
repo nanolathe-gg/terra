@@ -1,7 +1,8 @@
-// World › Surface (docs/SURFACE_LAYERS.md, phase 3): the world's surface layers as a list, bottom to top. Each row sets a layer's Amount,
-// its edge and its rule; a row moves within its stage, a material layer can be removed, and a layer is added from a preset. Hovering or
-// focusing a row previews where that layer lies on the map. The list is a world setting: `host.apply(next, {commit})` stores it.
-import {SURFACE_BUILTINS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, surfaceRows} from './sculpt-material-model.js';
+// World › Surface (docs/SURFACE_LAYERS.md): the world's surface layers as a list, top first. Each row opens to set a layer's material, its
+// Amount, its edge and its rule (conditions that must all hold, or a score); a row moves within its stage, a material layer can be removed,
+// and a layer is added from a preset. Hovering or focusing a row previews where that layer lies on the map. The list is a world setting:
+// `host.apply(next, {commit})` stores it.
+import {SURFACE_BUILTINS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, surfaceRows, isMaterialLayer, layerKey} from './sculpt-material-model.js';
 
 const $ = id => document.getElementById(id);
 // Plain names for the facts a rule reads, with the range a window's sliders cover.
@@ -11,30 +12,59 @@ export const FACT_LABELS = {
   soilDepth: ['Soil depth', 0, 1, .01], light: ['Sunlight', 0, 1.6, .01], top: ['Lumps (1) and hollows (-1)', -1, 1, .02], convexity: ['Convexity', -1, 1, .02],
   rockShare: ['Rock', 0, 1, .01], debrisShare: ['Debris', 0, 1, .01], sandShare: ['Sand', 0, 1, .01],
 };
-const BUILTIN_LABELS = {
+export const BUILTIN_LABELS = {
   highland: 'Highland ground', slopeCover: 'Slope cover', soil: 'Bare soil', rock: 'Rock', beach: 'Beach', crown: 'Crown rock', baseBand: 'Base band',
   regrownMoss: 'Moss on regrown debris', fines: 'Debris fines', paintedRock: 'Painted rock', paintedSnow: 'Painted snow', paintedMoss: 'Painted moss',
   sandDust: 'Sand dust', sand: 'Sand', chips: 'Chips', iceCrest: 'Snow on ice crests', iceCap: 'Snow on ice tops',
 };
-const STAGE_LABELS = ['on the ground', 'with the slope cover', 'with the rock', 'with the crown rock', 'with the beds', 'with the loose ground', 'with the chips', 'with the snow'];
+// What draws each built-in today, so a row can say where its look comes from before a material replaces it.
+const BUILTIN_SOURCES = {
+  highland: 'the world’s highland material', slopeCover: 'the world’s slope material', soil: 'the soil color', rock: 'each rock type’s rock',
+  beach: 'the world’s beach material', crown: 'the rock type’s rock', baseBand: 'the band color', regrownMoss: 'the moss color', fines: 'the debris material',
+  paintedRock: 'the rock type’s rock', paintedSnow: 'the snow color', paintedMoss: 'the moss color', sandDust: 'the sand color', sand: 'the sand color',
+  chips: 'the rock type’s chips', iceCrest: 'the snow color', iceCap: 'the snow color',
+};
+// Built-ins whose strength and placement are World settings of their own (the rows under the list, in this section's "Built-in settings"):
+// their row shows no Amount, which would only repeat the strength.
+const BUILTIN_SETTINGS = {highland: 'highland', baseBand: 'baseBand'};
+// The stages as the list's group headings, top first in the list; a layer moves only within its group (the engine's effects lie between them).
+const STAGE_TITLES = ['Ground', 'Slope cover', 'Soil, rock and beach', 'Crown rock', 'Bands', 'Loose ground: debris, paint, sand', 'Chips', 'Snow'];
+const STAGE_HELP = ['Over the ground material, under the low-ground tint.', 'Under the cover classes.', 'Under the margin join.', 'Under the beds.',
+  'Under the ground patches and the rock skin.', 'Under the boulders and cracks.', 'Under the weather, crystals and hill light.', 'Over everything but surf and water.'];
 // Presets a new layer starts from: a material (a library key, or a role of the world's own list) and a rule.
 export const SURFACE_PRESETS = [
   {key: 'snow', name: 'Snow above a height', material: 'ice-ground', stage: 'snow', where: [{fact: 'abovePlain', from: 40, fade: 6}], edge: {width: .2, noise: .6, noiseSize: 1}},
   {key: 'moss', name: 'Moss in damp shade', material: 'lush-ground', stage: 'land', where: [{fact: 'moisture', from: .4, fade: .1}, {fact: 'light', to: .8, fade: .1}], amount: .6, edge: {width: .05, noise: 1, noiseSize: 22}},
   {key: 'scree', name: 'Scree on steep ground', material: 'role:debris', stage: 'land', where: [{fact: 'slope', from: .9, fade: .2}], amount: .7, edge: {width: .1, noise: .8, noiseSize: 6}},
+  {key: 'ledge', name: 'Rock on steep convex edges', material: 'role:rock', stage: 'land', score: {terms: [{fact: 'slope', weight: 1}, {fact: 'convexity', weight: 1.5}], from: 1.2, fade: .2}, edge: {width: .1, noise: .6, noiseSize: 4}},
   {key: 'dry', name: 'Dry ground on sunny slopes', material: 'desert-ground', stage: 'land', where: [{fact: 'light', from: 1.15, fade: .1}, {fact: 'moisture', to: .35, fade: .1}], amount: .3, edge: {width: .05, noise: 1, noiseSize: 22}},
   {key: 'mud', name: 'Mud in wet hollows', material: 'red-ground', stage: 'land', where: [{fact: 'wetness', from: .5, fade: .1}, {fact: 'top', to: -.1, fade: .1}], edge: {width: .2, noise: .6, noiseSize: 1}},
   {key: 'blank', name: 'Material layer', material: 'role:ground', stage: 'land', where: [{fact: 'slope', from: 0, fade: .05}], amount: .5},
 ];
 
-const stageOf = layer => layer.material != null ? Math.max(0, SURFACE_STAGE_NAMES.indexOf(layer.stage ?? 'land')) : SURFACE_BUILTINS[layer.builtin]?.[0] ?? 0;
-const nameOf = layer => layer.name || (layer.material != null ? 'Material layer' : BUILTIN_LABELS[layer.builtin] ?? layer.builtin);
+const stageOf = layer => isMaterialLayer(layer) ? Math.max(0, SURFACE_STAGE_NAMES.indexOf(layer.stage ?? 'land')) : SURFACE_BUILTINS[layer.builtin]?.[0] ?? 0;
+const nameOf = layer => layer.name || (isMaterialLayer(layer) ? 'Material layer' : BUILTIN_LABELS[layer.builtin] ?? layer.builtin);
 const el = (tag, props = {}, ...children) => { const e = Object.assign(document.createElement(tag), props); for (const c of children) e.append(c); return e; };
+const factSelect = (value, onChange) => {
+  const select = el('select', {title: 'What it reads'}, ...SURFACE_FACTS.map(f => el('option', {value: f, textContent: FACT_LABELS[f][0], selected: f === value})));
+  select.onchange = () => onChange(select.value);
+  return select;
+};
+// A rule's kind: everywhere (none), conditions that all hold (windows), or a score (weighted facts summed past a threshold).
+const ruleKind = layer => layer.score ? 'score' : layer.where?.length ? 'where' : 'none';
+function switchRule(layer, kind) {
+  const facts = layer.score ? layer.score.terms.map(t => t.fact) : (layer.where ?? []).map(w => w.fact);
+  delete layer.where; delete layer.score;
+  if (kind === 'where') layer.where = (facts.length ? facts : ['slope']).map(fact => ({fact, from: .5, fade: .1}));
+  if (kind === 'score') layer.score = {terms: (facts.length ? facts : ['slope']).map(fact => ({fact, weight: 1})), from: .5, fade: .1};
+}
 
 // `host`: surface() the list now, apply(next, {commit}), restore() the world's own, preview(row or -1), material(layer) → {name, color} or
-// null, edit(layer, button) to open its material, materialKey(preset) → a library key for a preset's material.
+// null, edit(layer, button) to open its material, materialKey(preset) → a library key for a preset's material, library() → the materials a
+// layer may draw [{key, name, color}], settings(key) to show a World setting's row and settingNote(key) why it is unavailable ('' if not).
 export function mountSurfacePanel(host) {
   const list = $('surface-layers');
+  const open = new Set();   // the layers whose rows are open, by key
   let editing = null;   // the list while a slider moves; committed on change
   const current = () => editing ?? host.surface();
   const put = (next, commit) => { editing = commit ? null : next; host.apply(next, {commit}); if (commit) build(); };
@@ -46,55 +76,99 @@ export function mountSurfacePanel(host) {
     input.onchange = () => onInput(Number(input.value), true);
     return el('label', {className: 'surface-slider', title}, el('span', {textContent: label}), input, out);
   };
-  const number = (label, value, onSet) => {
-    const input = el('input', {type: 'number', step: 'any', value: value ?? '', placeholder: 'open', title: label + ' (empty: no limit)'});
+  const number = (label, value, onSet, title = label + ' (empty: no limit)', placeholder = 'open') => {
+    const input = el('input', {type: 'number', step: 'any', value: value ?? '', placeholder, title});
     input.onchange = () => onSet(input.value === '' ? undefined : Number(input.value));
     return el('label', {className: 'surface-number'}, el('span', {textContent: label}), input);
   };
+  const remover = (title, onClick) => { const b = el('button', {type: 'button', textContent: '×', title, ariaLabel: title}); b.onclick = onClick; return b; };
   function windowRow(i, k, w) {
-    const select = el('select', {title: 'What the condition reads'}, ...SURFACE_FACTS.map(f => el('option', {value: f, textContent: FACT_LABELS[f][0], selected: f === w.fact})));
-    select.onchange = () => edit(i, l => { l.where[k].fact = select.value; }, true);
-    const remove = el('button', {type: 'button', textContent: '×', title: 'Remove this condition'});
-    remove.onclick = () => edit(i, l => { l.where.splice(k, 1); if (!l.where.length) delete l.where; }, true);
-    return el('div', {className: 'surface-window row'}, select,
-      number('from', w.from, v => edit(i, l => { if (v === undefined) delete l.where[k].from; else l.where[k].from = v; }, true)),
-      number('to', w.to, v => edit(i, l => { if (v === undefined) delete l.where[k].to; else l.where[k].to = v; }, true)),
-      number('fade', w.fade ?? .05, v => edit(i, l => { l.where[k].fade = Math.max(v ?? .05, .0001); }, true)), remove);
+    const set = (field, v) => edit(i, l => { if (v === undefined) delete l.where[k][field]; else l.where[k][field] = v; }, true);
+    return el('div', {className: 'surface-term'}, factSelect(w.fact, f => edit(i, l => { l.where[k].fact = f; }, true)),
+      number('from', w.from, v => set('from', v)), number('to', w.to, v => set('to', v)),
+      number('fade', w.fade ?? .05, v => edit(i, l => { l.where[k].fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts and stops', ''),
+      remover('Remove this condition', () => edit(i, l => { l.where.splice(k, 1); if (!l.where.length) delete l.where; }, true)));
+  }
+  function termRow(i, k, t) {
+    return el('div', {className: 'surface-term'}, factSelect(t.fact, f => edit(i, l => { l.score.terms[k].fact = f; }, true)),
+      number('×', t.weight ?? 1, v => edit(i, l => { l.score.terms[k].weight = v ?? 1; }, true), 'Its weight in the sum (negative: it counts against)', '1'),
+      remover('Remove this term', () => edit(i, l => { l.score.terms.splice(k, 1); if (!l.score.terms.length) delete l.score; }, true)));
+  }
+  function ruleBlock(layer, i) {
+    const kind = ruleKind(layer), block = el('div', {className: 'surface-rule'});
+    const select = el('select', {title: 'Where the layer may show'},
+      el('option', {value: 'none', textContent: 'Everywhere', selected: kind === 'none'}),
+      el('option', {value: 'where', textContent: 'Where all of these hold', selected: kind === 'where'}),
+      el('option', {value: 'score', textContent: 'Where a score passes (a weighted sum)', selected: kind === 'score'}));
+    select.onchange = () => edit(i, l => switchRule(l, select.value), true);
+    block.append(el('label', {className: 'surface-number surface-rule-kind'}, el('span', {textContent: 'Shows'}), select));
+    if (kind === 'where') layer.where.forEach((w, k) => block.append(windowRow(i, k, w)));
+    if (kind === 'score') {
+      layer.score.terms.forEach((t, k) => block.append(termRow(i, k, t)));
+      block.append(el('div', {className: 'surface-term'}, el('span', {className: 'small', textContent: 'The sum, with the edge noise, passes'}),
+        number('at', layer.score.from ?? .5, v => edit(i, l => { l.score.from = v ?? .5; }, true), 'The sum it shows from', '.5'),
+        number('fade', layer.score.fade ?? .05, v => edit(i, l => { l.score.fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts', '')));
+    }
+    const terms = kind === 'where' ? layer.where.length : kind === 'score' ? layer.score.terms.length : 0;
+    if (kind !== 'none' && terms < SURFACE_RULE_TERMS) {
+      const add = el('button', {type: 'button', textContent: kind === 'where' ? '+ Condition' : '+ Term', title: 'Read another fact of the site'});
+      add.onclick = () => edit(i, l => { if (kind === 'where') l.where.push({fact: 'slope', from: .5, fade: .1}); else l.score.terms.push({fact: 'slope', weight: 1}); }, true);
+      block.append(add);
+    }
+    return block;
+  }
+  function materialSelect(layer, i) {
+    const builtin = !isMaterialLayer(layer), options = host.library();
+    const select = el('select', {className: 'surface-material', title: builtin ? 'Draw this surface with a material of the library, in place of ' + BUILTIN_SOURCES[layer.builtin] : 'The library material this layer draws'});
+    if (builtin) select.append(el('option', {value: '', textContent: 'Its own: ' + BUILTIN_SOURCES[layer.builtin], selected: layer.material == null}));
+    const groups = new Map();
+    for (const m of options) { const g = m.key.split('-')[0]; if (!groups.has(g)) groups.set(g, el('optgroup', {label: g[0].toUpperCase() + g.slice(1)})); groups.get(g).append(el('option', {value: m.key, textContent: m.name, selected: m.key === layer.material})); }
+    if (layer.material != null && !options.some(m => m.key === layer.material)) select.append(el('option', {value: layer.material, textContent: layer.material + ' (not in the library)', selected: true}));
+    select.append(...groups.values());
+    select.onchange = () => edit(i, l => { if (select.value) l.material = select.value; else delete l.material; }, true);
+    return el('label', {className: 'surface-number surface-material-row'}, el('span', {textContent: 'Material'}), select);
   }
   function row(layer, i, layers, layerRows) {
-    const stage = stageOf(layer), siblings = layers.map((l, j) => [l, j]).filter(([l]) => stageOf(l) === stage).map(([, j]) => j), at = siblings.indexOf(i);
-    const material = layer.material != null ? host.material(layer) : null;
-    const head = el('div', {className: 'surface-head row'});
-    if (layer.material != null) {
-      const chip = el('span', {className: 'material-chip', title: material?.name ?? 'The map lacks this layer’s material'}); if (material) chip.style.background = material.color;
+    const key = layerKey(layer), builtin = !isMaterialLayer(layer), stage = stageOf(layer);
+    const siblings = layers.map((l, j) => [l, j]).filter(([l]) => stageOf(l) === stage).map(([, j]) => j), at = siblings.indexOf(i);
+    const material = layer.material != null ? host.material(layer) : null, isOpen = open.has(key);
+    const head = el('div', {className: 'surface-head'});
+    const toggle = el('button', {type: 'button', className: 'surface-toggle', textContent: isOpen ? '▾' : '▸', title: isOpen ? 'Close this layer' : 'Open this layer’s settings', ariaExpanded: String(isOpen)});
+    toggle.onclick = () => { if (open.has(key)) open.delete(key); else open.add(key); build(); list.querySelector(`[data-key="${CSS.escape(key)}"] .surface-toggle`)?.focus(); };
+    const chip = el('span', {className: 'material-chip', title: material?.name ?? (layer.material != null ? 'The map lacks this layer’s material' : 'Its own color')});
+    if (material) chip.style.background = material.color; else if (layer.material == null) chip.classList.add('own');
+    head.append(toggle, chip);
+    if (!builtin) {
       const name = el('input', {type: 'text', value: nameOf(layer), maxLength: 80, className: 'surface-name', title: 'The layer’s name'});
       name.onchange = () => edit(i, l => { l.name = name.value.trim() || 'Material layer'; }, true);
-      head.append(chip, name);
-    } else head.append(el('strong', {className: 'surface-name', textContent: nameOf(layer)}));
-    head.append(el('span', {className: 'small surface-stage', textContent: STAGE_LABELS[stage]}));
-    const move = (d, text, title) => { const b = el('button', {type: 'button', textContent: text, title, disabled: at + d < 0 || at + d >= siblings.length}); b.onclick = () => { const next = structuredClone(layers), j = siblings[at + d]; [next[i], next[j]] = [next[j], next[i]]; put(next, true); }; return b; };
-    head.append(move(-1, '↓', 'Lower: under the layer below it'), move(1, '↑', 'Higher: over the layer above it'));
-    if (layer.material != null) {
-      const open = el('button', {type: 'button', textContent: 'Edit material…', disabled: !material}); open.onclick = () => host.edit(layer, open);
-      const remove = el('button', {type: 'button', textContent: '×', title: 'Remove this layer'}); remove.onclick = () => { const next = structuredClone(layers); next.splice(i, 1); put(next, true); };
-      head.append(open, remove);
+      head.append(name);
+    } else {
+      const name = el('span', {className: 'surface-name', textContent: nameOf(layer)}); name.onclick = () => toggle.click(); head.append(name);
     }
-    const edge = layer.edge ?? {};
-    const body = el('div', {className: 'surface-body'},
-      slider('Amount', layer.amount ?? 1, 0, 1, .01, (v, c) => edit(i, l => { l.amount = v; }, c), 'The share of pixels it takes where its rule allows it'),
-      slider('Edge width', edge.width ?? 1, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, width: v}; }, c), '1 blends into what is below; near 0 each pixel is one or the other'),
-      slider('Edge noise', edge.noise ?? 0, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, noise: v}; }, c), 'How ragged its edge is'),
-      slider('Noise size (px)', edge.noiseSize ?? 8, 1, 64, 1, (v, c) => edit(i, l => { l.edge = {...l.edge, noiseSize: v}; }, c), '1 speckles by the pixel; larger makes patches'));
-    if (layer.score) body.append(el('p', {className: 'small', textContent: 'Its rule is a score (a sum of facts past a threshold), set in the world file.'}));
-    else {
-      (layer.where ?? []).forEach((w, k) => body.append(windowRow(i, k, w)));
-      if ((layer.where?.length ?? 0) < SURFACE_RULE_TERMS) {
-        const add = el('button', {type: 'button', textContent: layer.where?.length ? '+ Condition' : '+ Where…', title: 'Limit where it shows by a fact of the site'});
-        add.onclick = () => edit(i, l => { l.where = [...(l.where ?? []), {fact: 'slope', from: .5, fade: .1}]; }, true);
-        body.append(add);
-      }
+    const summary = [layer.amount != null && layer.amount !== 1 ? Math.round(layer.amount * 100) + '%' : '', ruleKind(layer) !== 'none' ? 'ruled' : '', layer.material != null && builtin ? 'material' : ''].filter(Boolean).join(' · ');
+    if (summary) head.append(el('span', {className: 'small surface-stage', textContent: summary}));
+    const move = (d, text, title) => { const b = el('button', {type: 'button', textContent: text, title, ariaLabel: title, disabled: at + d < 0 || at + d >= siblings.length}); b.onclick = () => { const next = structuredClone(layers), j = siblings[at + d]; [next[i], next[j]] = [next[j], next[i]]; put(next, true); }; return b; };
+    head.append(move(1, '↑', 'Raise: over the layer above it'), move(-1, '↓', 'Lower: under the layer below it'));
+    if (!builtin) head.append(remover('Remove this layer (its material stays in the map)', () => { const next = structuredClone(layers); next.splice(i, 1); put(next, true); }));
+    const item = el('li', {className: 'surface-layer' + (isOpen ? ' open' : ''), tabIndex: -1}, head);
+    item.dataset.key = key;
+    if (isOpen) {
+      const edge = layer.edge ?? {}, body = el('div', {className: 'surface-body'});
+      const materialRow = el('div', {className: 'surface-wide surface-line'}, materialSelect(layer, i));
+      if (material) { const b = el('button', {type: 'button', textContent: 'Edit…', title: 'Open its material in the material editor (this map’s copy)'}); b.onclick = () => host.edit(layer, b); materialRow.append(b); }
+      body.append(materialRow);
+      if (builtin && BUILTIN_SETTINGS[layer.builtin]) {
+        const b = el('button', {type: 'button', className: 'surface-wide link', textContent: 'Its strength and height: Built-in settings below'}); b.onclick = () => host.settings(BUILTIN_SETTINGS[layer.builtin]);
+        body.append(b);
+        const note = host.settingNote(BUILTIN_SETTINGS[layer.builtin]); if (note) body.append(el('p', {className: 'small surface-wide', textContent: note}));
+      } else body.append(slider('Amount', layer.amount ?? 1, 0, 1, .01, (v, c) => edit(i, l => { l.amount = v; }, c), 'The share of pixels it takes where its rule allows it'));
+      body.append(
+        slider('Edge width', edge.width ?? 1, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, width: v}; }, c), '1 blends into what is below; near 0 each pixel is one or the other'),
+        slider('Edge noise', edge.noise ?? 0, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, noise: v}; }, c), 'How ragged its edge is'),
+        slider('Noise size (px)', edge.noiseSize ?? 8, 1, 64, 1, (v, c) => edit(i, l => { l.edge = {...l.edge, noiseSize: v}; }, c), '1 speckles by the pixel; larger makes patches'),
+        ruleBlock(layer, i));
+      item.append(body);
     }
-    const item = el('li', {className: 'surface-layer', tabIndex: -1}, head, body);
     item.onpointerenter = item.onfocusin = () => host.preview(layerRows[i]);
     item.onpointerleave = () => { if (!item.contains(document.activeElement)) host.preview(-1); };
     item.onfocusout = event => { if (!item.contains(event.relatedTarget)) host.preview(-1); };
@@ -104,9 +178,15 @@ export function mountSurfacePanel(host) {
     const layers = host.surface();
     let layerRows = [];
     try { layerRows = surfaceRows(layers).layerRows; } catch (_) {}
-    // Shown top first (the topmost layer first), as the map stacks them.
-    const items = layers.map((l, i) => row(l, i, layers, layerRows));
-    list.replaceChildren(...items.reverse());
+    // Shown top first (the topmost layer first), as the map stacks them: the last stage's last layer first.
+    const order = layers.map((l, i) => i).sort((a, b) => stageOf(layers[b]) - stageOf(layers[a]) || b - a), items = [];
+    let last = -1;
+    for (const i of order) {
+      const stage = stageOf(layers[i]);
+      if (stage !== last) items.push(el('li', {className: 'surface-group small', textContent: STAGE_TITLES[stage], title: STAGE_HELP[stage]}));
+      last = stage; items.push(row(layers[i], i, layers, layerRows));
+    }
+    list.replaceChildren(...items);
   }
   const add = $('surface-add');
   add.replaceChildren(el('option', {value: '', textContent: 'Add a layer…'}), ...SURFACE_PRESETS.map(p => el('option', {value: p.key, textContent: p.name})));
@@ -114,9 +194,9 @@ export function mountSurfacePanel(host) {
     const preset = SURFACE_PRESETS.find(p => p.key === add.value); add.value = ''; if (!preset) return;
     const layers = host.surface(), taken = new Set(layers.map(l => l.id)); let n = 1; while (taken.has(`${preset.key}-${n}`)) n++;
     const {key, ...rest} = preset, layer = {...structuredClone(rest), id: `${key}-${n}`, material: host.materialKey(preset)};
-    // A new layer goes on top of its stage.
-    const stage = stageOf(layer), next = [...layers]; let at = next.length; for (let j = next.length - 1; j >= 0; j--) { if (stageOf(next[j]) <= stage) { at = j + 1; break; } if (j === 0) at = 0; }
-    next.splice(at, 0, layer); put(next, true);
+    // A new layer goes on top of its stage, and opens.
+    const stage = stageOf(layer), next = [...layers]; let at = 0; for (let j = next.length - 1; j >= 0; j--) if (stageOf(next[j]) <= stage) { at = j + 1; break; }
+    next.splice(at, 0, layer); open.add(layer.id); put(next, true);
   };
   $('surface-reset').onclick = () => { host.restore(); build(); };
   build();
