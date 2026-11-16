@@ -1,13 +1,13 @@
 // The World panel's rows and what moving one does, without the DOM. The page (sculpt.js buildKnobs, setKnob, buildWorldPanel) and the headless
 // host (repro/headless.mjs, which measure/world_controls.mjs sweeps under Node) apply a world knob and pick a world color with the same code, and
 // read the facts the panel enables a row by (worldPanelValues, which sculpt-control-schema.js worldControlRequirement reads) from one function.
-import {columnHasCapBed,columnRows} from './sculpt-column.js';
+import {columnHasCapBed,columnRows,colorTone} from './sculpt-column.js';
 
 // Surface knobs: each writes the page address and the renderer's variant,
 // then the renderer re-reads its uniforms and re-bakes its fields.
 export const KNOBS = [
   ['Ground', [['groundPatch','Ground patches (damp and dusty tones)',0,1,.05,0],['groundPatchSize','Patch size (px)',60,400,10,200],['undulation','Undulation height',0,16,.5,0],['undulationScale','Undulation size (px)',48,400,8,200],['undulationCover','Undulating share of land',0,1,.05,.45],['undulationArt','Undulation in the art',0,1,.05,1],['faceSteep','Landform face steepness',1,4,.1,1]]],
-  // Low ground: the ground from the sea up to Reach above it, and the shallows, take the Colors panel's Low ground color.
+  // Low ground: the ground from the sea up to Reach above it, and the shallows, keep Grain kept of their grain (its color is a surface layer).
   ['Low ground', [['lowReach','Reach (height above the sea)',.5,40,.5,6],['lowGrain','Grain kept (low ground and water)',0,1,.05,1]]],
   ['Ground detail', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
     ['reliefBranch','Branching',0,4,.1,2],['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['reliefJitter','Rib irregularity',0,1,.05,.8],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Ground bumps',0,3,.05,1.2],['lumpRelief','Painted ground bumps',0,8,.1,4],['reliefOctaves','Octaves',1,6,1,5],['worms','Wormy relief on slopes',0,1,.05,0]]],
@@ -123,13 +123,12 @@ export function applyKnob({key,value,settings,renderer,nodes,seed,sync=true}) {
   return result({});
 }
 
-// Low ground's color where a world picks none (Colors: Low ground): a dark red-brown mud, as retail Zhon's lowland.
-// The Colors panel's rows, [key, label].
-export const COLOR_KEYS=[['shallow','Shallow water'],['sun','Sun color'],['sky','Sky color']];
+// The Colors panel's rows, [key, label]. Shallow water is a tone of the world's water material (waterTone), the lights are colors.
+export const COLOR_KEYS=[['shallowTone','Shallow water'],['sun','Sun color'],['sky','Sky color']];
 // The rows this world shows.
 export const colorRows=(config,settings) => COLOR_KEYS;
-// A world's own base colors after a row is picked (a hex) or cleared (null): a color the server sets is then explicitly off (null, the
-// texture's own color), any other is dropped.
+// A world's own base colors after a row is picked (a hex, or Shallow water's tone) or cleared (null): a color the server sets is then
+// explicitly off (null, the texture's own color), any other is dropped.
 export function pickWorldColor(config,own,key,hex) {
   if (hex) return {...own,[key]:hex};
   if (config.colors?.[key]) return {...own,[key]:null};
@@ -141,9 +140,19 @@ export function strokeWaterPicks(nodes) {
   const water=nodes.filter(n=>n.kind==='landform'),picked=(key,...choices)=>water.some(n=>choices.includes(Math.round(n.params?.[key]||0)))?1:0;
   return {deepEdge:picked('waterDeep',1),fadedEdge:picked('waterDeep',2)};
 }
-// A chosen shallow-water color replaces the bed's tint, retaining the lit bed, and uses two depth tones rather than the optional third.
+// A world's water tone, a shift of its water material's mean (sculpt-column.js colorTone) that the draw adds to that mean, so it follows
+// the material: `shallow`, the shallows' tint, or `mid`, the third color. The world's data holds it (materials/<world>.json water:
+// shallowTone, midTone: the measured color less the material's drawn mean); data without one gives its color less its table mean
+// (shallowMeanRGB or shallowRGB, midRGB, against meanRGB). Null where the world has no such color.
+export function waterTone(config,which) {
+  const w=config.water||{},own=w[which+'Tone'];
+  if(own)return [...own];
+  const color=which==='shallow'?w.shallowMeanRGB||w.shallowRGB:w.midRGB,mean=w.meanRGB||w.deepRGB;
+  return color&&mean?colorTone(mean.map(v=>v/255),color.map(v=>v/255)):null;
+}
+// A chosen shallow-water tone replaces the data's, retaining the lit bed, and uses two depth tones rather than the optional third.
 // Deep water has no color of its own here: it is the world's water material.
-export const waterColored=colors => Boolean(colors.shallow);
+export const waterColored=colors => Boolean(colors.shallowTone);
 // How many tones the world's water has: 1 where shallow and deep are one colour, 3 where a third colour follows the depth, else 2; a picked base color makes it 2.
 export function waterTones(config,colors) {
   const w=config.water||{};

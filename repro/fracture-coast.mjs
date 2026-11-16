@@ -28,8 +28,8 @@ for(const world of worlds){
    await knob(s,key,lo);const zero=await render(false);await knob(s,key,lo+.0001);r.controls[key].continuity=diff(zero,await render(false));assert.ok(r.controls[key].continuity.mean<.1,key+' low-end continuity');await knob(s,key,fixture.rock[key]);
   }
   const waterMask=mask.map((v,i)=>v&&Math.floor(i/512)>260);
-  // Color choices must retain bed lighting, including on submerged rock.
-  const colors={...s.renderer.colorOverrides};s.renderer.setColors({...colors,shallow:[.32,.53,.6],deep:[.06,.16,.24]});
+  // A chosen Shallow water tone (a shift of the water material's color) must retain bed lighting, including on submerged rock.
+  const colors={...s.renderer.colorOverrides};s.renderer.setColors({...colors,shallowTone:[.12,.1,-.05]});
   for(const[key,lo,hi]of [['bedTint',0,1],['bedContrast',0,1.3],['bedBright',.6,1.5]]){
    await knob(s,key,lo);const a=await render(false);await knob(s,key,hi);const b=await render(false);r.water[key]=diff(a,b,waterMask);assert.ok(r.water[key].percent>5,key+' with chosen water colors');await knob(s,key,Number(query.get(key)));assert.equal(diff(await render(true),clay).pixels,0,key+' cannot alter the solid');
   }

@@ -200,10 +200,10 @@ struct Uniforms {
     fringeSignal: vec4f,
     fringeRange: vec2f,
     transitionBody: i32,
-    // A world's chosen base colours (a = 1 when set) and its textures' means.
-    shallowBase: vec4f,
+    // The shallows' tint: a tone, a shift of the water material's mean (a = 1 where the world chose its own, else its data's).
+    shallowTone: vec4f,
     beach: i32,
-    waterMid: vec4f,   // rgb mid-depth colour, a: its depth (0: two stops)
+    waterMid: vec4f,   // rgb the mid-depth colour's tone on the water material's mean, a: its depth (0: two stops)
     beachHeight: f32,
     beachWidth: f32,
     slopeSand: i32,
@@ -309,7 +309,6 @@ struct Uniforms {
     waterOn: i32,         // 1 once any cell carries a painted water shore or edge choice (planes 9-10) or a Surf (plane 18)
     lumpOn: i32,          // 1 once any cell carries painted ground lumps (plane 12)
     lumpRelief: f32,      // height of a fully painted lump field, in the units of plainRelief
-    shallowMean: vec3f,   // mean colour of the shallow water art: the lit bed's tint
     bedBright: f32,       // brightness of the tinted bed (1: the tint as it is)
     bedContrast: f32,     // how much of the bed's light carries through the tint (1: all, 0: flat tint)
     hillLight: f32,       // brightness of the hill cover's material (Archipelago; 1: as drawn)

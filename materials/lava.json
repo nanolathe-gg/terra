@@ -531,7 +531,8 @@
    1.0,
    1.0,
    1.0
-  ]
+  ],
+  "shallowTone": [-0.003375, 8.5e-05, 0.0]
  },
  "features": {
   "note": "Round 9, the shared generators in Lava's colors (ramps measured from LavaRock and LavaSpire by luma octile). Shares from retail uses (features/lava/catalog.json): spires 2,218 of about 3,600 rock-like uses (5x4-7x7, no metal, not reclaimable), round boulders the rest (2x2-4x4, metal 75-150). Retail's deposits sit in a dark rim. Lava's crystal nodes are not generated yet.",

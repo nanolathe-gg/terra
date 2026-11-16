@@ -1145,7 +1145,8 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
 }
 
 // Shallow water as the bed under it (card E1): the ground colour already lit at
-// this pixel, moved toward the water's own hue. The tint keeps the bed's light
+// this pixel, moved toward the shallows' tint: the water material's mean plus the world's shallow tone (Colors: Shallow water),
+// so recoloring the water moves its shallows with it. The tint keeps the bed's light
 // (its brightness against flat ground), so lumps, shade and grain carry through;
 // bedTint is how much of the bed's own colour the tint replaces.
 fn litBed(bed: vec3f, rockShare: f32, rockLevel: f32) -> vec3f {
@@ -1160,7 +1161,7 @@ fn litBed(bed: vec3f, rockShare: f32, rockLevel: f32) -> vec3f {
     let ratio = clamp(dot(bed, luma) / level, 0.25, 2.0);
     let contrast = u.bedContrast;
     let light = pow(ratio, select(contrast * 0.6, contrast, ratio >= 1.0));
-    let tint = select(u.shallowMean,u.shallowBase.rgb,u.shallowBase.a>.5) * light * u.bedBright;
+    let tint = saturate(waterMean() + u.shallowTone.rgb) * light * u.bedBright;
     return saturate(mix(bed, tint, u.bedTint));
 }
 // Ice frost band (card E5): the frost stroke marks every cell of its band with a
@@ -2369,12 +2370,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             water = mix(absorbed, deepWater, deep);
             // Some worlds' water passes through a third colour; a straight
             // blend of the two textures lands on colours the art never uses.
-            if (u.waterMid.a > 0.0 && u.shallowBase.a < .5) {
+            if (u.waterMid.a > 0.0 && u.shallowTone.a < .5) {
                 // A Shallow until depth past the third colour's depth runs this ramp down: the third colour at the waterline,
                 // the lit bed between the two depths (a submerged shelf), deep beyond. smoothstep leaves reversed edges undefined.
                 let toMid = waterRamp(u.shallowDepth, u.waterMid.a, colorDepth);
                 let toDeep = smoothstep(u.waterMid.a, u.deepDepth, colorDepth);
-                var mid = u.waterMid.rgb + (deepWater - waterMean()) * 0.9;
+                var mid = waterMean() + u.waterMid.rgb + (deepWater - waterMean()) * 0.9;
                 water = mix(mix(shallow, mid, toMid), deepWater, toDeep);
             }
         }

@@ -763,7 +763,8 @@
    1.0,
    1.0,
    1.0
-  ]
+  ],
+  "shallowTone": [0.06576, 0.118199, 0.119579]
  },
  "features": {
   "note": "Retail Lush (22 maps, uses counted from their TNT feature tables): jungle trees Lush01-09 and LushTree01 about 27,000 uses, foliage clumps lushfoliage* about 35,000, vines lushvine01-03 about 8,900, rocks and metal few. Trees are dark emerald broadleaves, most with clustered crowns, a few palms; vines are left out (the tendril plant reads as a bulb with legs, not a vine); foliage is dense, low clumps.",

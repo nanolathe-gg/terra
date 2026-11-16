@@ -7,6 +7,7 @@ import {tablePlacementRows,coverRows,groundPool,PLACEMENT_ROW,PLANT_REACH,surfac
 import {MaterialCache,writeMaterialSlot} from './sculpt-material-cache.js';
 import {copyMaterial,materialCacheUsage,materialStaged,materialTint,materialColor,materialRenderKey,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES,LIBRARY,materialStates} from './sculpt-materials.js';
 import {columnRows,columnTones,toneColor} from './sculpt-column.js';
+import {waterTone} from './sculpt-knobs.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
 import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
 import {RockWeather} from './sculpt-rock-weather.js';
@@ -889,7 +890,6 @@ export class TerrainRenderer {
     this.f('uDeepDepth', variant.has('deepDepth') ? Number(variant.get('deepDepth')) : this.config.material?.deepDepth ?? 42);
     // Water looks (card E1): every default is the earlier water.
     this.f('uBedTint', variant.has('bedTint') ? Number(variant.get('bedTint')) : 0.85);
-    this.v('uShallowMean', (this.config.water?.shallowMeanRGB || this.config.water?.shallowRGB || [60, 115, 163]).map(v => v / 255));
     this.f('uBedBright', variant.has('bedBright') ? Number(variant.get('bedBright')) : 1);
     this.f('uRingFade', variant.has('ringFade') ? Number(variant.get('ringFade')) : 0);
     this.f('uHillLight', variant.has('hillLight') ? Number(variant.get('hillLight')) : 1);
@@ -952,8 +952,9 @@ export class TerrainRenderer {
     {
     this.i('uBeach', this.layers.has('beach'));
     this.f('uBeachHeight',this.config.material?.beachHeight??6);
-    const mid=this.config.water?.midRGB, midDepth=this.config.material?.midDepth;
-    this.set('uWaterMid', mid && midDepth ? [...mid.map(v => v / 255), midDepth] : [0, 0, 0, 0]);
+    // The third colour is a tone on the water material's mean, as the shallows' is (sculpt-knobs.js waterTone).
+    const mid=waterTone(this.config,'mid'), midDepth=this.config.material?.midDepth;
+    this.set('uWaterMid', mid && midDepth ? [...mid, midDepth] : [0, 0, 0, 0]);
     this.f('uGrid', this.grid);
     this.f('uSize', this.size);
     this.f('uBase', this.config.baseHeight - this.config.seaLevel);
@@ -1093,7 +1094,8 @@ export class TerrainRenderer {
     }
     if(this.colorOverrides){const colors=this.colorOverrides;
     this.set('uMaterialTable', this.placementTable(this.variant));
-    this.set('uShallowBase', colors.shallow ? [...colors.shallow, 1] : [0, 0, 0, 0]);
+    // The shallows' tint: the world's own tone (Colors: Shallow water) or its data's, on the water material's mean.
+    this.set('uShallowTone', colors.shallowTone ? [...colors.shallowTone, 1] : [...(waterTone(this.config,'shallow') || [0, 0, 0]), 0]);
     // The light's colours (card P12b): white is the grey light every world had.
     this.v('uSunColor', colors.sun || [1, 1, 1]);
     this.v('uSkyColor', colors.sky || [1, 1, 1]);

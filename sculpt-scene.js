@@ -408,7 +408,8 @@ export const drawOptions=(s,{clay=false,light='original'}={}) => ({clay,light,de
 export const materialKnobs=(s,seed,transition) => s['material-weathering']/100>0?{depositSpread:s['deposit-spread']/100,seed,mineral:transition==='mineral'}:null;
 export const materialRequest=(config,material,{heightBuffer,heightOffset,grid,size,ox,oy}) => ({heightBuffer,heightOffset,grid,size,ox,oy,seaLevel:config.seaLevel,baseHeight:config.baseHeight,
   seed:material.seed,depositSpread:material.depositSpread,profile:{...config.material,mineral:material.mineral}});
-// A world's colors for the renderer ([r, g, b], 0..1): the world's hex colors (null is off: the texture's own), ?sunColor=ffd9a8&skyColor=8fb0ff
+// A world's colors for the renderer ([r, g, b], 0..1): the world's hex colors (null is off: the texture's own) and Shallow water's tone
+// (shallowTone, three shifts of the water material's mean, sculpt-knobs.js waterTone), ?sunColor=ffd9a8&skyColor=8fb0ff
 // from the address (a light's colors tried on a page without changing the world: renders, review
 // sheets).
 export function hexColors(colors,settings) {
@@ -417,10 +418,12 @@ export function hexColors(colors,settings) {
   return out;
 }
 export const rgbColor=h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255);
-export function rendererColors(hex) { const out={}; for (const [k,v] of Object.entries(hex)) if (typeof v==='string' && /^#[0-9a-f]{6}$/i.test(v)) out[k]=rgbColor(v); return out; }
+export const isTone=v => Array.isArray(v) && v.length===3 && v.every(x => typeof x==='number' && Number.isFinite(x) && Math.abs(x)<=1);
+export function rendererColors(hex) { const out={}; for (const [k,v] of Object.entries(hex)) if (typeof v==='string' && /^#[0-9a-f]{6}$/i.test(v)) out[k]=rgbColor(v); else if (k==='shallowTone' && isTone(v)) out[k]=[...v]; return out; }
 // A world's hex colors (sculpt.js mergedColors): the server's defaults for its base world, then the world's own choices (`own`; a world that
-// opens with no choices of its own, sculpt.js activeWorld, starts from its base colors), then the address.
-export const worldHexColors=(config,settings,own=config.colors||{}) => hexColors({...(config.colors||{}),...own},settings);
+// opens with no choices of its own, sculpt.js activeWorld, starts from its base colors), then the address. Shallow water's old color
+// (`shallow`, a hex; now its tone) is dropped.
+export const worldHexColors=(config,settings,own=config.colors||{}) => { const {shallow:_,...colors}={...(config.colors||{}),...own}; return hexColors(colors,settings); };
 
 // The weathered height the page shows and samples (sculpt.js sampleRegional; render.mjs's heights): a cell's authored height h plus the Time pass's
 // change there (refined - refinedBase at cell i), faded where h has moved off the height the pass started from and on protected cells (r), and

@@ -23,3 +23,10 @@ test('older maps remain loadable; removed controls are dropped and invalid embed
   assert.throws(()=>copySavedWorld({...value,colors:{slope:'red'}},config),/invalid/);
   assert.throws(()=>copySavedWorld({...value,knobs:{rainErode:'NaN'}},config),/invalid/);
 });
+test('Shallow water is saved as a tone of the water; its old color is dropped and a bad tone rejected',()=>{
+  const value=savedWorld(config,new URLSearchParams(),{name:'Test',colors:{shallow:'#c03030',shallowTone:[.1,-.05,0]},knobs:{}});
+  assert.deepEqual(value.colors.shallowTone,[.1,-.05,0]);assert.equal('shallow' in value.colors,false);
+  assert.deepEqual(copySavedWorld(JSON.parse(JSON.stringify(value)),config),value);
+  assert.equal('shallow' in copySavedWorld({...value,colors:{...value.colors,shallow:'#c03030'}},config).colors,false);
+  for(const bad of ['#c03030',[.1,0],[2,0,0],['a',0,0]])assert.throws(()=>copySavedWorld({...value,colors:{shallowTone:bad}},config),/invalid/);
+});
