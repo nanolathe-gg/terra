@@ -14,10 +14,10 @@ export class RockWeather {
     self.layout=d.createBindGroupLayout({entries:[0,1].map(binding=>({binding,visibility:GPUShaderStage.COMPUTE,texture:{sampleType:'unfilterable-float'}})).concat([{binding:2,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:'write-only',format:'rgba32float'}},{binding:3,visibility:GPUShaderStage.COMPUTE,texture:{sampleType:'unfilterable-float'}},{binding:4,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:'write-only',format:'rgba32float'}},{binding:5,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:'write-only',format:'rgba32float'}}])});
     self.module=module;self.pipelineLayout=d.createPipelineLayout({bindGroupLayouts:[renderer.commonLayout,self.layout]});self.built=new Map();
     await Promise.all([self.build(0),self.build(15)]);
-    self.empty=d.createTexture({label:'empty rock weather',size:[1,1],format:'rgba32float',usage:GPUTextureUsage.TEXTURE_BINDING});renderer.track(self.empty,'empty rock weather',16,'shared');
+    self.empty=d.createTexture({label:'empty rock weather',size:[1,1],format:'rgba32float',usage:GPUTextureUsage.TEXTURE_BINDING});renderer.track(self.empty,'empty rock weather',16,'shared');renderer.worldResource(self.empty);
     return self;
   }
-  constructor(renderer){this.renderer=renderer;this.owned=[];this.final=null;this.source=null;this.rim=null;}
+  constructor(renderer){this.renderer=renderer;this.owned=[];this.made=new WeakSet();this.final=null;this.source=null;this.rim=null;}
   // Both allowed rock masks are ready at startup: fixed slot 0, and the recipe table.
   build(mask){
     if(!this.built.has(mask))this.built.set(mask,Promise.all(['rockTerrain','rockRain','rockFlow','rockDeposit'].map(async entryPoint=>[entryPoint,await this.renderer.device.createComputePipelineAsync({label:entryPoint,layout:this.pipelineLayout,compute:{module:this.module,entryPoint,constants:{rockMask:mask}}})]))
@@ -33,7 +33,7 @@ export class RockWeather {
     const [x,y,w,h]=r.bakeWindow;
     const ox=Math.floor((x-HALO)/STEP)*STEP,oy=Math.floor((y-HALO)/STEP)*STEP;
     const width=Math.ceil((x+w+HALO-ox)/STEP)+1,height=Math.ceil((y+h+HALO-oy)/STEP)+1,key=[width,height].join(',');
-    if(key!==this.key){this.clear();this.key=key;for(const label of ['rock flow terrain','rock flow A','rock flow B','rock weather field','rock source beds','rock debris provenance']){const t=d.createTexture({label,size:[width,height],format:'rgba32float',usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.TEXTURE_BINDING});r.track(t,label,width*height*16,'working');this.owned.push(t);}this.final=this.owned[3];this.source=this.owned[5];
+    if(key!==this.key){this.clear();this.key=key;for(const label of ['rock flow terrain','rock flow A','rock flow B','rock weather field','rock source beds','rock debris provenance']){const t=d.createTexture({label,size:[width,height],format:'rgba32float',usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.TEXTURE_BINDING});r.track(t,label,width*height*16,'working');this.owned.push(t);this.made.add(t);}this.final=this.owned[3];this.source=this.owned[5];
       // How near a drop each cell of level ground stands (Bare rock at rims): rockDeposit writes it into flow B, which the flow rounds have
       // finished with by then (the last round leaves the flow in A), so the rim takes no memory of its own.
       this.rim=this.owned[2];r.bindGroups={};}

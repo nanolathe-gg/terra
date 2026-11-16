@@ -29,6 +29,7 @@ export class MaterialCache {
     this.pipelines = new Map(); this.keys = new Map(); this.colorKeys = new Map(); this.layers = []; this.pool = 0; this.generations = 0;
     this.programBuffer = renderer.device.createBuffer({label: 'material graphs', size: PROGRAM_BYTES * (SCRATCH_ROW + 1), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
     renderer.track?.(this.programBuffer, 'material graphs', this.programBuffer.size, 'materials');
+    renderer.worldResource?.(this.programBuffer);   // the cache is world data: each write bumps the world version in the tile input checksum
     this.allocate(1, 1);
   }
   texture(old, label, size, format, usage, bytes) {
@@ -43,6 +44,7 @@ export class MaterialCache {
     this.colorTexture = this.texture(this.colorTexture, 'material palette color', [pool, pool, count], 'rgba8unorm', read | GPUTextureUsage.COPY_SRC, pool * pool * count * 4);
     this.shineTexture = this.texture(this.shineTexture, 'material shine', [pool, pool, count], 'rgba16float', read, pool * pool * count * 8);
     this.meanTexture = this.texture(this.meanTexture, 'material mean color', [1, 1, count], 'rgba32float', read, count * 16);
+    for (const t of [this.fieldTexture, this.colorTexture, this.shineTexture, this.meanTexture]) r.worldResource?.(t);
     if (r.resources) r.fixedBytes = [...r.resources.values()].filter(v => v.kind === 'materials' || v.kind === 'shared').reduce((n, v) => n + v.bytes, 0);
     r.bindGroups = {}; this.keys.clear(); this.colorKeys.clear();
   }
@@ -134,6 +136,7 @@ export class MaterialCache {
       if (this.keys.get(e.layer) !== key) changed.push([e, key]);
     }
     if (changed.length) {
+      r.worldResource?.(this.programBuffer);
       device.queue.writeBuffer(this.programBuffer, 0, data);
       const encoder = device.createCommandEncoder({label: 'material graphs'}), buffers = [];
       for (const [e, key] of changed) {
@@ -160,7 +163,7 @@ export class MaterialCache {
     for (const e of this.entries) {
       const fresh = regenerated.includes(e.layer), key = materialRenderKey(e.material), reduces = e.material.palette.length >= 2 && e.material.dither.amount > 0;
       if (!fresh && (!reduces || this.colorKeys.get(e.layer) === key)) continue;
-      r.uniformsDirty = true; r.flushUniforms();
+      r.uniformsDirty = true; r.flushUniforms(); r.worldResource?.(this.colorTexture);
       const encoder = device.createCommandEncoder({label: 'material reduction'}), jobs = [];
       const job = values => { const b = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}); jobs.push(b); device.queue.writeBuffer(b, 0, new Uint32Array(values)); return b; };
       if (fresh) {

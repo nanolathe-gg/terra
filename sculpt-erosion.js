@@ -46,6 +46,9 @@ export class GpuErosion {
     });
   }
 
+  // Resolves when no Time pass is running (the paged fields start a page's pass in the background only then).
+  quiet() { return this.running ? new Promise(r => (this.quietWaiters ??= []).push(r)) : Promise.resolve(); }
+
   // H5: the maps pass (engine-weather.wgsl) on the erosion's own device and common source, built on first use.
   async mapsPipeline() {
     if (this.maps) return this.maps;
@@ -67,6 +70,7 @@ export class GpuErosion {
   async runGpu(request) {
     const owned=[],keep=new Set();let complete=false;
     const current=()=>{if(request.stale?.())throw new DOMException('The Time request was superseded.','AbortError');};
+    this.running=(this.running||0)+1;
     try {
       current();await this.ready;current();
       window.erodeRuns=(window.erodeRuns||0)+1;
@@ -142,10 +146,13 @@ export class GpuErosion {
       await submitSlice(encoder,0,()=>{mapped=countRead.mapAsync(GPUMapMode.READ);mapped.catch(()=>{});});
       await mapped;current();active=new Uint32Array(countRead.getMappedRange(0,4))[0];countRead.unmap();
       await yieldWork();
-      // Start conservatively, then target 25 ms of queue wait. Small regional
-      // passes need more than eight iterations to amortize submission overhead;
-      // cap at 256 and let measured contention reduce the next batch.
-      let batch=1;
+      // A slice is sized to about 25 ms of the pass's own GPU work, so input and visible chunks get the queue between slices. A slice's wait
+      // also holds whatever else was queued ahead of it (tiles, another Time pass), so it only bounds the pass's own cost: the lowest cost an
+      // iteration a million cells has shown (this.rate, per wet or dry pass, drifting up 2% a slice) sizes the batch, and a busy queue no
+      // longer shrinks the slices into many more round trips. The first pass starts at one iteration. Slicing does not change the result.
+      const rateKey=rain!==0?'wet':'dry',mcells=n/1e6;this.rate??={};
+      const sized=()=>clamp(Math.floor(25/(this.rate[rateKey]*mcells)),1,256);
+      let batch=this.rate[rateKey]?sized():1;
       for(let it=0;it<age;){
         current();const count=Math.min(batch,age-it);
         encoder=device.createCommandEncoder({label:'erosion gpu slice'});
@@ -155,7 +162,8 @@ export class GpuErosion {
           step('thermalMain',thermalA);step('thermalMain',thermalB);
         }
         pass.end();const wait=await submitSlice(encoder,count);it+=count;
-        batch=clamp(Math.floor(count*25/Math.max(wait,1)),1,256);
+        const cost=Math.max(wait,.01)/(count*mcells),known=this.rate[rateKey];
+        this.rate[rateKey]=known?Math.min(cost,known*1.02):cost;batch=sized();
         await yieldWork();
       }
       encoder=device.createCommandEncoder({label:'erosion output'});
@@ -173,6 +181,7 @@ export class GpuErosion {
       return {weather,maps,grid,bytes:n*20,milliseconds:performance.now()-started,parts:{...parts,tiles:null,activeTiles:active,windowTiles:tw*tw,gpuFed:true}};
     } finally {
       for(const b of owned)if(!complete||!keep.has(b))b.destroy();
+      if(!--this.running&&this.quietWaiters?.length){const w=this.quietWaiters;this.quietWaiters=[];w.forEach(r=>r());}
     }
   }
 

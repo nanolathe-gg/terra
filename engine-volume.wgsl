@@ -64,9 +64,33 @@ fn voxelCell(i:vec3i)->f32 {
     let index=u32(dense)*512u+u32(cell.z)*64u+u32(cell.y)*8u+u32(cell.x);
     let pair=unpack2x16float(vd[index/2u]);return select(pair.x,pair.y,(index&1u)!=0u);
 }
+// voxelCell of i and of the voxel above it: one column read and at most one authored-surface read for both. Each value is the arithmetic
+// voxelCell does (the analytic one at the voxel's own height over the same surface sample), so the field is bit for bit the same.
+fn voxelCellPair(i:vec3i)->vec2f {
+    let xy=i.xy-vec2i(round(vs.origin/vs.step));var out=vec2f(0);var analytic=vec2<bool>(true,true);
+    if(all(xy>=vec2i(0))&&all(xy<vec2i(i32(vs.width),i32(vs.height)))){
+        let c=vc[u32(xy.y/8)*vs.columnsX+u32(xy.x/8)];
+        for(var k=0;k<2;k++){
+            let z=i.z+k-c.x*8;
+            if(z>=0&&z<c.y*8){
+                let brick=u32(c.z)+u32(z/8);let dense=vb[brick].w;let cell=vec3i(xy.x%8,xy.y%8,z%8);
+                if(dense<0){out[k]=voxelCoarseCell(brick,cell);}
+                else{let index=u32(dense)*512u+u32(cell.z)*64u+u32(cell.y)*8u+u32(cell.x);let pair=unpack2x16float(vd[index/2u]);out[k]=select(pair.x,pair.y,(index&1u)!=0u);}
+                analytic[k]=false;
+            }
+        }
+    }
+    if(any(analytic)){
+        let p=(vec3f(i)+.5)*vs.step;let h=voxelAuthored(p.xy);
+        if(analytic.x){out.x=(p.z-h.x)*max(h.w,.02);}
+        if(analytic.y){out.y=((f32(i.z+1)+.5)*vs.step-h.x)*max(h.w,.02);}
+    }
+    return out;
+}
 fn voxelField(p:vec3f)->f32 {
     let q=p/vs.step-.5;let i=vec3i(floor(q));let f=fract(q);
-    return mix(mix(mix(voxelCell(i),voxelCell(i+vec3i(1,0,0)),f.x),mix(voxelCell(i+vec3i(0,1,0)),voxelCell(i+vec3i(1,1,0)),f.x),f.y),mix(mix(voxelCell(i+vec3i(0,0,1)),voxelCell(i+vec3i(1,0,1)),f.x),mix(voxelCell(i+vec3i(0,1,1)),voxelCell(i+vec3i(1,1,1)),f.x),f.y),f.z);
+    let a=voxelCellPair(i);let b=voxelCellPair(i+vec3i(1,0,0));let c=voxelCellPair(i+vec3i(0,1,0));let d=voxelCellPair(i+vec3i(1,1,0));
+    return mix(mix(mix(a.x,b.x,f.x),mix(c.x,d.x,f.x),f.y),mix(mix(a.y,b.y,f.x),mix(c.y,d.y,f.x),f.y),f.z);
 }
 fn voxelGradient(p:vec3f)->vec3f {
     let e=vs.step*.75;
@@ -308,7 +332,7 @@ fn voxelDensity(p:vec3f)->f32 {
     let mass=course*u.rock[rs & rockMask].faceMass*2.2;
     // The beds as the face can draw them on this slope (columnGather, voxelHardness): beds too thin gathered, their lost ledges drawn as fine layers.
     let drawSlope=length(source.yz)/max(source.w,.015);   // voxelFaceSlope(p.xy)
-    let column=voxelColumnCoord(p);var gathered=0.0;var hard=.55;
+    let column=voxelColumnAt(p,r);var gathered=0.0;var hard=.55;
     if(u.rock[rs & rockMask].columnCount>0){let gg=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary),drawSlope);gathered=gg.y;hard=gg.x;}
     let wear=voxelJointWear(hard);let jw=voxelJointWidth(wear);let js=voxelJointResolved(jw,vs.step);
     let joint=voxelJointW(r,c,broad,js,voxelJointFine(wear))*jw/js;   // the share this solid holds (rockDetail draws the rest)
@@ -393,8 +417,10 @@ fn voxelBuild(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) l
     let a=voxelDensity(p);let c=voxelDensity(p+vec3f(vs.step,0,0));
     densityOut[u32(b.w)*256u+local.z*32u+local.y*4u+local.x]=pack2x16float(vec2f(a,c));
 }
-fn voxelWear(p:vec3i)->f32 {
-    let d=voxelCell(p);if(abs(d)>6.0*vs.step){return d;}
+// One round of wear at p, whose cell is d. voxelWeather wears a voxel pair along x and reads each cell once: partner is the pair's other cell,
+// at p+x when after is true, else at p-x.
+fn voxelWear(p:vec3i,d:f32,partner:f32,after:bool)->f32 {
+    if(abs(d)>6.0*vs.step){return d;}
     let q=(vec3f(p)+.5)*vs.step;useRock(q.xy);
     let wear=clamp(4.0*u.rock[rs & rockMask].faceWear-vs.wearRound,0.0,1.0);
     if(wear<=0.0){return d;}
@@ -403,11 +429,14 @@ fn voxelWear(p:vec3i)->f32 {
     let authoredSlope=broadGradient(q.xy);
     let authoredNz=inverseSqrt(1.0+dot(authoredSlope,authoredSlope));
     let exposure=max(1.0-smoothstep(.75,.98,authoredNz),painted)*(1.0-routeProtection(q.xy))*heightGate;
-    // Unexposed ground wears by exactly nothing; skip its fourteen neighbour reads. Only an exposure of zero: a negative one (route protection
+    // Unexposed ground wears by exactly nothing; skip its neighbour reads. Only an exposure of zero: a negative one (route protection
     // above 1) sharpens, and the crystal tool's picture shows it.
     if(exposure==0.0){return d;}
-    let sum=voxelCell(p+vec3i(1,0,0))+voxelCell(p-vec3i(1,0,0))+voxelCell(p+vec3i(0,1,0))+voxelCell(p-vec3i(0,1,0))+voxelCell(p+vec3i(0,0,1))+voxelCell(p-vec3i(0,0,1));
-    let gradient=length(vec3f(voxelCell(p+vec3i(1,0,0))-voxelCell(p-vec3i(1,0,0)),voxelCell(p+vec3i(0,1,0))-voxelCell(p-vec3i(0,1,0)),voxelCell(p+vec3i(0,0,1))-voxelCell(p-vec3i(0,0,1))))/(2.0*vs.step);
+    var xp=partner;var xn=partner;
+    if(after){xn=voxelCell(p-vec3i(1,0,0));}else{xp=voxelCell(p+vec3i(1,0,0));}
+    let yp=voxelCell(p+vec3i(0,1,0));let yn=voxelCell(p-vec3i(0,1,0));let zp=voxelCell(p+vec3i(0,0,1));let zn=voxelCell(p-vec3i(0,0,1));
+    let sum=xp+xn+yp+yn+zp+zn;
+    let gradient=length(vec3f(xp-xn,yp-yn,zp-zn))/(2.0*vs.step);
     // The six-neighbor diffusion coefficient stays below 1/6 at every
     // exposed control value; erosion depth and rounding remain independent.
     // Fade in up to four full-strength rounds within the 40-pixel apron,
@@ -419,7 +448,8 @@ fn voxelWear(p:vec3i)->f32 {
 fn voxelWeather(@builtin(workgroup_id) group:vec3u,@builtin(local_invocation_id) local:vec3u){
     let brick=group.x+group.y*128u;if(vCount[2]>vs.capacity||brick>=vCount[0]){return;}
     let b=vb[brick];if(b.w<0){return;}let cell=vec3i(b.xyz)*8+vec3i(vec2i(round(vs.origin/vs.step)),0)+vec3i(i32(local.x)*2,i32(local.y),i32(local.z));
-    densityOut[u32(b.w)*256u+local.z*32u+local.y*4u+local.x]=pack2x16float(vec2f(voxelWear(cell),voxelWear(cell+vec3i(1,0,0))));
+    let first=voxelCell(cell);let second=voxelCell(cell+vec3i(1,0,0));
+    densityOut[u32(b.w)*256u+local.z*32u+local.y*4u+local.x]=pack2x16float(vec2f(voxelWear(cell,first,second,true),voxelWear(cell+vec3i(1,0,0),second,first,false)));
 }
 #endif
 #ifdef VOLUME_RENDER
