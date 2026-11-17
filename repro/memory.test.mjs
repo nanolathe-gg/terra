@@ -39,9 +39,9 @@ test('the page caches grow with a budget above 2 GiB and keep their caps at 2 Gi
  const MB=1048576,caps=gpuMB=>{const fields=createPagedFields({worldSize:16385,worldGrid:8193,baseHeight:24,maskKeys:[],nodes:()=>[],device:()=>null,context:()=>({}),forceRing:4,budget:()=>({total:gpuMB*MB,minimum:300*MB})});
   try{fields.refit();return fields.stats().budget;}finally{fields.destroy();}};
  const side=512+8,shape=side*side*56,weather=512*512*20;
- assert.equal(caps(2048),64*shape+24*weather);
- assert.equal(caps(8192),256*shape+96*weather);
- assert(caps(1024)<caps(2048));
+ assert.equal(caps(2048),24*shape+24*weather);
+ assert.equal(caps(8192),96*shape+96*weather);
+ assert(caps(768)<caps(2048),"a budget whose room is smaller than the caps holds fewer pages");
 });
 test('reserving preview memory reduces page counts without shrinking the shape ring',t=>{
  t.mock.timers.enable({apis:['setTimeout']});

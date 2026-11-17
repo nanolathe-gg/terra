@@ -1210,12 +1210,14 @@ export function createPagedFields(opts) {
   const residentSet = ring => FEED_PAGES * (CORE + 2 * ring) ** 2 * PAGE_CELL + FEED_PAGES * PAGE_FIELD + STAGING_BYTES + engineEstimate(ring);
   // Time results first (a page's Time pass costs far more than evaluating its shape), then as many shape pages as the rest holds: after an edit a
   // view's tiles gather from 20-odd pages, and a cap of 9 had them evict each other tile after tile (24 pages evaluated 144 times in one settle).
-  // At most 24 weather and 64 shape pages for each 2 GiB of the budget: at the default 2 GiB the pages hold about 1.2 GB (the smallest ring) and the rest of the room
-  // stays with the renderer's caches, and a larger budget keeps proportionally more pages resident (96 and 256 at 8 GiB).
+  // At most 24 weather and 24 shape pages for each 2 GiB of the budget (96 and 96 at 8 GiB). A shape page evicted is evaluated again when read (2-11 ms
+  // a page, about what restoring a CPU copy cost), so keeping more than a view's tiles gather buys little: on a busy 16x16 map (eight-view tour, a
+  // pan back, a hill stroke) a cap of 24 against the 35-38 the room held evaluated 96/18/10 pages against 91/16/0 at a 1352x962 view and 119/30/16
+  // against 108/24/14 at 2184x1285; 16 evaluated 170/69/27 at the larger view, and 12 moved a stroke's pixels.
   function fitCaps() {
     const room = 0.92 * available(true) - STAGING_BYTES - engineEstimate(RING), per = Math.max(1, (opts.budget?.()?.total || 0) / 2 ** 31);
     WEATHER_PAGES = clamp(Math.floor(0.4 * room / PAGE_FIELD), FEED_PAGES, Math.round(24 * per));
-    SHAPE_PAGES = clamp(Math.floor((room - WEATHER_PAGES * PAGE_FIELD) / SHAPE_BYTES), FEED_PAGES, Math.round(64 * per));
+    SHAPE_PAGES = clamp(Math.floor((room - WEATHER_PAGES * PAGE_FIELD) / SHAPE_BYTES), FEED_PAGES, Math.round(24 * per));
     if (!(room > 0)) SHAPE_PAGES = WEATHER_PAGES = FEED_PAGES;
   }
   function setRing(need) {
