@@ -630,7 +630,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       // drain it before recycling the working set, just as on success.
       const completion=this.device.queue.onSubmittedWorkDone();this.previousChunk=completion;
       completion.then(()=>{this.completedChunk=completion;},()=>{});throw error;
-    } finally { this._busy=false;this.cpuWorkingBytes=0; }
+    } finally { this._busy=false;this.cpuWorkingBytes=0;this.fastRaster=false; }   // a bake outside a chunk (timeBake, timeDraw) is never a gesture's
   }
   evict() {
     this.trimColorTiles();this.colorTargets.clear();this.voxel?.release();this.rockWeather?.clear();
