@@ -1,4 +1,5 @@
-import {withWorldMaterials,worldOwnMaterials,worldKept,worldOwnFor} from './sculpt-materials.js';
+import {worldKit,optionalWorldKit,instantiateWorldKit} from './sculpt-world-kit.js';
+import {withWorldMaterials,worldOwnMaterials,worldKept,worldOwnFor,keptWorldMaterials} from './sculpt-materials.js';
 // The map carries its effective world settings, including defaults, URL overrides and the world's ground and water materials.
 // Keep browser/session parameters out of the recipe; removed controls are dropped on load.
 import {KNOBS} from './sculpt-knobs.js';
@@ -11,7 +12,7 @@ export function savedWorld(config,settings,world) {
   const knobs={};
   for(const key of worldKeys(config)){const value=settings.get(key)??world.knobs?.[key]??config.defaults?.[key]??config.engineDefaults?.[key];if(value!==undefined&&value!==null)knobs[key]=String(value);}
   // The world's surface layers where the artist changed them (docs/SURFACE_LAYERS.md); a world that kept its own carries none.
-  return {materials:worldKept(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs,...(world.surface?{surface:copySurface(world.surface)}:{})};
+  return {...worldKit(config,world),materials:worldKept(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs,...(world.surface?{surface:copySurface(world.surface)}:{})};
 }
 export function copySavedWorld(value,config) {
   if(value===undefined)return null;
@@ -30,7 +31,9 @@ export function copySavedWorld(value,config) {
     colors[key]=key==='shallowTone'&&v?[...v]:v;
   }
   const surface=value.surface===undefined?null:copySurface(value.surface);
-  return {materials:worldKept(withWorldMaterials(value.materials,config)),name:value.name.slice(0,120),base:value.base,colors,knobs,...(surface?{surface}:{})};
+  const result={...optionalWorldKit(value,config),materials:worldKept(withWorldMaterials(value.materials,config)),name:value.name.slice(0,120),base:value.base,colors,knobs,...(value.featureSet?{featureSet:normalizeSet(value.featureSet,config)}:{}),...(surface?{surface}:{})};
+  if(value.tools!==undefined||value.rocks!==undefined)instantiateWorldKit({...config,surface:surface??config.surface,worldMaterials:keptWorldMaterials(result.materials,config)},result);
+  return result;
 }
 export function savedWorldId(s) {
   return typeof s.world==='string'&&/^[a-z0-9-]{1,80}$/.test(s.world)&&!['constructor','prototype'].includes(s.world)?s.world:s.biome;
@@ -52,6 +55,7 @@ export function sameSavedWorld(theirs,mine,config) {
   const colors=own=>JSON.stringify(Object.entries(worldHexColors(config,new Map(),own||{})).map(([k,v])=>[k,typeof v==='string'?v.toLowerCase():v]).sort(([a],[b])=>a<b?-1:1));
   if(colors(theirs.colors)!==colors(mine.colors))return false;
   if(JSON.stringify(theirs.surface??null)!==JSON.stringify(mine.surface??null))return false;
+  if(JSON.stringify(worldKit(config,theirs))!==JSON.stringify(worldKit(config,mine)))return false;
   const a=worldOwnFor(theirs.materials,config),b=worldOwnFor(mine.materials,config,{stored:true});
   return JSON.stringify(Object.entries(a).sort())===JSON.stringify(Object.entries(b).sort());
 }
@@ -72,6 +76,8 @@ export function worldOverrideCount(world,config) {
   n+=worldOwnMaterials(world.materials,config).length;
   if(world.surface&&!equal(world.surface,config.surface))n++;
   if(world.featureSet&&!equal(normalizeSet(world.featureSet,config),normalizeSet(config.featureSet,config)))n++;
+  const kit=worldKit(config,world),baseKit=worldKit(config),changed=(a,b,id)=>{const left=new Map(a.map(v=>[v[id],v])),right=new Map(b.map(v=>[v[id],v]));return [...new Set([...left.keys(),...right.keys()])].filter(k=>!equal(left.get(k),right.get(k))).length;};
+  n+=changed(kit.tools,baseKit.tools,'id')+changed(kit.rocks,baseKit.rocks,'key');
   return n;
 }
 export const resetWorldOverrides=world=>({name:world.name,base:world.base,colors:{},knobs:{},...(world.openedFrom?{openedFrom:world.openedFrom}:{})});

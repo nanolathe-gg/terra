@@ -151,7 +151,7 @@ export function rockByKey(rocks,key,worldKey=''){
  const rock=rocks.find(r=>r.key===key);
  return rock?rock.slot:key===worldKey?0:-1;
 }
-const NAME_MAX=40,ROCK_FIELDS=['slot','name','key','knobs','column','colors','material'],KEY=/^[a-z][a-z0-9_-]{0,39}$/;
+const NAME_MAX=40,ROCK_FIELDS=['slot','name','key','knobs','column','colors','material','worldKey'],KEY=/^[a-z][a-z0-9_-]{0,39}$/;
 // A preset's key: null, or a short lowercase name ('soil', 'basalt').
 function checkKey(key){if(key==null)return null;if(typeof key!=='string'||!KEY.test(key))throw Error('A rock preset\'s key is a short lowercase name, such as soil or basalt.');return key;}
 // A key for a preset made now: `key`, unless another preset of the map carries it (keys name one preset each).
@@ -178,17 +178,17 @@ export function checkColors(colors){
 export function copyRocks(value){
  if(value==null)return null;
  if(!Array.isArray(value)||value.length>=ROCK_SLOTS)throw Error('Invalid rock presets.');
- const seen=new Set(),keys=new Set();
+ const seen=new Set(),keys=new Set(),worldKeys=new Set();
  return value.map(r=>{
   if(!r||typeof r!=='object'||Array.isArray(r)||Object.keys(r).some(k=>!ROCK_FIELDS.includes(k)))throw Error('Invalid rock preset.');
   if(!Number.isInteger(r.slot)||r.slot<1||r.slot>=ROCK_SLOTS||seen.has(r.slot))throw Error('A rock preset needs its own slot, 1 to 15.');
   seen.add(r.slot);
-  const key=checkKey(r.key);
+  const key=checkKey(r.key);if(r.worldKey!==undefined){if(!checkKey(r.worldKey)||worldKeys.has(r.worldKey))throw Error('A world rock needs its own catalog key.');worldKeys.add(r.worldKey);}
   if(key&&keys.has(key))throw Error(`Two rock presets carry the key ${key}: a key names one preset.`);
   if(key)keys.add(key);
   // Its surface material: a map material's slot (1 to MATERIAL_SLOTS - 1), or none for the world's rock material.
   if(r.material!=null&&(!Number.isInteger(r.material)||r.material<0||r.material>=MATERIAL_SLOTS))throw Error(`A rock preset's material is a material slot, 1 to ${MATERIAL_SLOTS-1}.`);
-  return {slot:r.slot,name:checkName(r.name),key,knobs:copyRockSettings(r.knobs??{}),column:checkColumn(r.column),colors:checkColors(r.colors),...(r.material>0?{material:r.material}:{})};
+  return {slot:r.slot,name:checkName(r.name),key,...(r.worldKey?{worldKey:r.worldKey}:{}),knobs:copyRockSettings(r.knobs??{}),column:checkColumn(r.column),colors:checkColors(r.colors),...(r.material>0?{material:r.material}:{})};
  }).sort((a,b)=>a.slot-b.slot);
 }
 const freeSlot=rocks=>{for(let s=1;s<ROCK_SLOTS;s++)if(!rocks.some(r=>r.slot===s))return s;throw Error('A map holds at most 15 rock presets besides the world\'s own.');};

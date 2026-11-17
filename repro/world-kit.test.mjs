@@ -1,0 +1,89 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {blankMaterial,copyMaterial,worldMaterials,addMaterial} from '../sculpt-materials.js';
+import {copyRocks,duplicateRock} from '../sculpt-rock-presets.js';
+import {worldKit,copyMaterialRef,instantiateWorldKit,validateWorldRocks,captureWorldKit,publishWorldRock,publishWorldTool,resolvedWorldCard,worldToolUnavailable,authoredWorldTool} from '../sculpt-world-kit.js';
+const config={biomeId:'fixture',materials:{ground:'green-ground',water:'green-water',rock:'green-rock'},tools:[{id:'hill',label:'Hill',icon:'hill',color:'#778899',group:'shape',rock:'soil'}]};
+const graph=blankMaterial();
+const template=(key='wrock-stone',extra={})=>({key,name:'Stone',knobs:{faceWhole:.8},column:null,colors:null,material:{key:'wmat-stone',name:'Stone grain',graph:copyMaterial(graph)},...extra});
+const tool=(extra={})=>({id:'world-ridge',label:'Ridge',icon:'mountain',color:'#778899',group:'shape',shape:'mountain',family:'Highlands',card:{preset:'custom',diameter:320,curve:{form:'knots',knots:[[0,0],[.5,1],[1,0]]}},...extra});
+const world=()=>({tools:[...config.tools,tool({rock:'wrock-stone',ground:{world:'worldGround'}})],rocks:[template()]});
+
+test('portable kit references become ordinary slots without moving existing map slots',()=>{
+ const w=world(),fresh=instantiateWorldKit(config,w);
+ assert.equal(fresh.rocks[0].worldKey,'wrock-stone');
+ const card=resolvedWorldCard(fresh.kit.tools[1],fresh.rocks,fresh.materials,config);
+ assert.equal(card.rockPreset,1);assert.equal(card.groundPreset,0);assert.deepEqual(card.curve,w.tools[1].card.curve);
+ const local={slot:1,key:'wrock-stone',name:'Map Stone',knobs:{faceWhole:.1},column:null,colors:null};
+ const existing=instantiateWorldKit(config,w,{rocks:[local],materials:worldMaterials(config),source:{}});
+ assert.deepEqual(existing.rocks[0],local);assert.equal(existing.rocks[1].slot,2);assert.equal(existing.rocks[1].key,null);assert.equal(existing.rocks[1].worldKey,'wrock-stone');
+ assert.equal(resolvedWorldCard(w.tools[1],existing.rocks,existing.materials,config).rockPreset,2);
+});
+test('legacy edited inherited recipe keys and omitted base types stay map-local and unchanged',()=>{
+ const legacy=[{slot:7,key:'soil',name:'My soil',knobs:{faceRock:.9},column:null,colors:null}],materials=worldMaterials(config),before=JSON.stringify([legacy,materials]);
+ const result=instantiateWorldKit(config,{}, {rocks:legacy,materials,source:{}});
+ assert.deepEqual(result.rocks,legacy);assert.equal(result.rocks.length,1);assert.equal(result.rocks[0].worldKey,undefined);
+ assert.equal(JSON.stringify([legacy,materials]),before);
+ const captured=captureWorldKit(worldKit(config),result.rocks,result.materials);
+ assert.equal(captured.kit.rocks.find(r=>r.key==='soil').knobs.faceRock,0,'a checkpoint never publishes the legacy copy');
+});
+test('load provenance requires exact recipe and material snapshot, not a matching source name',()=>{
+ const w=world(),fresh=instantiateWorldKit(config,w),r=fresh.rocks[0];
+ assert.equal(validateWorldRocks([r],fresh.materials,fresh.kit)[0].worldKey,r.worldKey);
+ assert.equal(validateWorldRocks([{...r,knobs:{faceWhole:.2}}],fresh.materials,fresh.kit)[0].worldKey,undefined);
+ const changed=fresh.materials.map(m=>m.slot===r.material?{...m,seed:33}:m);
+ assert.equal(validateWorldRocks([r],changed,fresh.kit)[0].worldKey,undefined);
+ assert.throws(()=>validateWorldRocks([r,{...r,slot:2,key:null}],fresh.materials,fresh.kit),/catalog key/);
+ assert.throws(()=>copyRocks([{...r,worldKey:7}]),/key/);
+});
+test('dirty artist edits retain ownership and are captured in one portable snapshot',()=>{
+ const fresh=instantiateWorldKit(config,world()),rocks=fresh.rocks.map(r=>({...r,knobs:{faceWhole:.3}})),materials=fresh.materials.map(m=>m.key==='wmat-stone'?{...m,seed:42,palette:[1,2]}:m);
+ const captured=captureWorldKit(fresh.kit,rocks,materials);
+ assert.equal(captured.kit.rocks[0].knobs.faceWhole,.3);assert.equal(captured.kit.rocks[0].material.graph.seed,42);assert.deepEqual(captured.kit.rocks[0].material.graph.palette,[1,2]);
+ assert.equal(rocks[0].worldKey,'wrock-stone');
+ const snapshot=JSON.parse(JSON.stringify({rocks,materials,kit:captured.kit}));
+ assert.deepEqual(copyRocks(snapshot.rocks),rocks);assert.deepEqual(snapshot.kit,captured.kit);
+});
+test('map duplicate clears provenance; explicit world promotion preserves numeric slot and carries material graph',()=>{
+ const fresh=instantiateWorldKit(config,world()),duplicate=duplicateRock(fresh.rocks,1,null),local=duplicate.rocks.find(r=>r.slot===duplicate.slot);
+ assert.equal(local.worldKey,undefined);assert.equal(local.key,null);
+ const result=publishWorldRock(fresh.kit,duplicate.rocks,fresh.materials,duplicate.slot);
+ assert.equal(result.rocks.find(r=>r.worldKey===result.key).slot,duplicate.slot);assert.equal(result.kit.rocks.at(-1).material.graph.seed,graph.seed);
+ assert.notEqual(result.key,'wrock-stone');assert.equal(local.worldKey,undefined,'arguments are untouched');
+});
+test('saving a world tool atomically promotes its map-only rock and inline ground dependencies',()=>{
+ const base=worldKit(config),rocks=[{slot:8,key:null,name:'Local',knobs:{faceWhole:.6},column:null,colors:null}],added=addMaterial(worldMaterials(config),graph,'Local ground');
+ const before=JSON.stringify([base,rocks,added.materials]),result=publishWorldTool(base,rocks,added.materials,{...tool(),id:'unused',card:{preset:'custom',rockPreset:8,groundPreset:added.slot,along:[[0,1],[1,.5]]}});
+ const copied=worldKit(config,result.kit),t=copied.tools.at(-1);
+ assert(authoredWorldTool(t));assert.equal(t.card.rockPreset,undefined);assert.equal(t.card.groundPreset,undefined);assert.equal(result.rocks[0].slot,8);assert.equal(t.rock,result.rocks[0].worldKey);assert.equal(t.ground.graph.seed,graph.seed);
+ assert.deepEqual(t.card.along,[[0,1],[1,.5]]);assert.equal(JSON.stringify([base,rocks,added.materials]),before);
+ const newMap=instantiateWorldKit(config,result.kit);assert.equal(worldToolUnavailable(t,newMap.rocks,newMap.materials,config),'');
+});
+test('full runtime and material tables fail adoption without any partial writes or replacement',()=>{
+ const full=Array.from({length:15},(_,i)=>({slot:i+1,key:null,name:'Local '+i,knobs:{faceWhole:i/20},column:null,colors:null})),materials=worldMaterials(config),before=JSON.stringify([full,materials]);
+ const result=instantiateWorldKit(config,world(),{rocks:full,materials,source:{}});
+ assert.deepEqual(result.rocks,full);assert.deepEqual(result.materials,materials);assert.deepEqual(result.unbound,['wrock-stone']);assert.match(worldToolUnavailable(result.kit.tools[1],result.rocks,result.materials,config),/slot/);
+ assert.equal(JSON.stringify([full,materials]),before);
+ let crowded=materials;while(crowded.length<23)crowded=addMaterial(crowded,graph,'Map material').materials;
+ const blocked=instantiateWorldKit(config,world(),{rocks:[],materials:crowded,source:{}});
+ assert.deepEqual(blocked.materials,crowded);assert.deepEqual(blocked.rocks,[]);assert.match(blocked.reason,/23 materials/);
+ assert.throws(()=>instantiateWorldKit(config,{...world(),rocks:Array.from({length:16},(_,i)=>template('wrock-'+i))}),/15 rock/);
+});
+test('malformed portable references/cards and conflicting inline identities reject before mutation',()=>{
+ assert.throws(()=>copyMaterialRef({world:'not-a-role'}),/Unknown/);
+ assert.throws(()=>worldKit(config,{...world(),tools:[tool({card:{rockPreset:3}})]}),/not map slots/);
+ assert.throws(()=>worldKit(config,{...world(),tools:[tool({rock:'missing'})]}),/does not carry/);
+ assert.throws(()=>worldKit(config,{...world(),rocks:[template(),template()]}),/unique permanent/);
+ assert.throws(()=>worldKit(config,{...world(),rocks:[template(),template('wrock-other',{material:{key:'wmat-stone',name:'Other',graph}})]}),/disagree/);
+ assert.throws(()=>worldKit(config,{tools:[tool({extra:true})]}),/Invalid world tool/);
+ assert.throws(()=>worldKit(config,{tools:[{...tool(),id:'map-1'}]}),/separate/);
+});
+
+test('supplied null catalogs and false material refs reject; missing optional roles leave types unbound',()=>{
+ for(const key of ['tools','rocks'])assert.throws(()=>worldKit(config,{[key]:null}),/list|rock types/);
+ for(const value of [null,false,0,'']){assert.throws(()=>worldKit(config,{rocks:[template('wrock-test',{material:value})]}));assert.throws(()=>worldKit(config,{tools:[tool({ground:value})]}));}
+ assert.throws(()=>worldKit(config,{tools:[{id:'unknown',label:'Unknown',icon:'hill',color:'#778899',group:'shape',shape:'hill'}]}),/complete card/);
+ assert.throws(()=>worldKit(config,{tools:[tool({id:'hill'})]}),/world- ids/);
+ const missing=instantiateWorldKit(config,{rocks:[template('wrock-test',{material:{world:'worldSlope'}})]});
+ assert.deepEqual(missing.rocks,[]);assert.deepEqual(missing.unbound,['wrock-test']);assert.match(missing.reason,/material role/);
+});
