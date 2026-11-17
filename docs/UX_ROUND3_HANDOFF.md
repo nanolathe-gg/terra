@@ -1,7 +1,8 @@
 # UX round 3: handoff
 
 Written 2026-11-16 22:05 PST by the session that orchestrated this round, for the agent that finishes it and lands it on local `main`.
-Delete this file in the last commit before landing: it is a working note, not documentation.
+**This file must not reach main.** Remove it from the branch (`git rm`) in a commit before the first landing; a copy lives outside
+the repository at `/private/tmp/nanolathe-map-editor/agent-ux3/UX_ROUND3_HANDOFF.md` (that is `~/terraform-assets/agent-ux3/`): keep working from that copy.
 
 ## 1. What this is
 
@@ -39,6 +40,12 @@ deploys, the pre-push hook will refuse (previews are stale; publishing them is t
 
 Both worktrees are handed to you with this note: you may work in them. Every other worktree belongs to someone else.
 
+**Leftover processes are yours too.** An implementer cut off by the usage limit leaves its server and Chrome running. These belong
+to this round and you may stop them: a `go run ./cmd/terraform` server on port 8993 or 8994 (and a comparison server on 8995), a
+headless Chrome on CDP 9493-9498 with its profile under either assets root, and the server of a temporary worktree of main that
+the step 2b implementer may have made for the Zhon timing. Nothing else. Before touching a worktree, confirm nothing is still
+writing in it: no such process running, and `git status` unchanged over a minute.
+
 Server: `go run ./cmd/terraform --port <port> --assets-root <root>` from the worktree. Chrome:
 `--headless=new --enable-gpu --use-angle=metal --remote-debugging-port=<cdp> --user-data-dir=<under your assets root>`.
 Scene URL for scripted checks: `/?biome=green&mapX=4&mapY=4&gpuMB=512&heapMB=1536&scratch` (the `scratch` parameter keeps the
@@ -50,7 +57,13 @@ map out of the saved slot; it is dropped on reload). Page hooks: `sculptCanvas.i
 `main` was at 4cef1a1c. `ux-round3` contains main up to efda1e06; **main has two newer commits** (9987ce58 renderer releases,
 4cef1a1c fields: an edit's cells on a page) that are not merged yet.
 
-### Done, reviewed and on `ux-round3` (tip 12170ed6)
+**How far "reviewed" goes.** Steps 1, 2a and step 5's first three commits: I read the diffs and the screenshots and ran checks.
+Step 5's later commits (f9849add … c14af79d, 8f3e160e, d57436c5), step 2b and step 6: accepted on the implementer's report and the
+screenshots only; **their diffs were not read**. Step 6 in particular changed when a covered map is suspended, what the shape and
+Time deferrals depend on (Full size instead of the dialog being open), and `sculpt-workspace.js`. Reading those diffs is the first
+item of 4.2.
+
+### Done and accepted on `ux-round3` (tip 12170ed6, then this note)
 
 | Step | What | Key commits |
 | --- | --- | --- |
@@ -66,7 +79,7 @@ cliff/grass/plateau, Escape order with the Map and View menus, overlapping reads
 Mountain, the Surface door, Find "pick"/"share"/"grid"). Step 2b's checks are its implementer's runs: quick, smoke, `workspace`,
 `tools-ui`, a 0-pixel byte check.
 
-### Done and reviewed on `ux-round3-materials`, not merged into `ux-round3`
+### Done and accepted (report and screenshots only) on `ux-round3-materials`, not merged into `ux-round3`
 
 Step 6, the material editor beside the map: it docks in the side panel's column and the map stays live (`show()`, not modal),
 Full size toggle, one Escape chain; New material button and a library drawer with lazy swatches (the select is gone); publishing
@@ -94,8 +107,9 @@ uncommitted edits. Look at `git status` and `git log 12170ed6..HEAD` first.
 - A temporary worktree of main may have been left under `/Users/daniel/src/` by that implementer: `git worktree list`, and
   remove it with `git worktree remove` only if it is clearly that one (created 2026-11-16 evening, at main's tip, no branch work).
 
-**B. `ux-round3-materials` worktree: five review fixes.** Two were committed (df330f7f the Manage note's limit; 464cd000 Escape in
-a text field leaves the field). Three remained; check `git log 464cd000..HEAD` and `git status`:
+**B. `ux-round3-materials` worktree: five review fixes.** Three were committed by 22:10 (df330f7f the Manage note's limit; 464cd000
+Escape in a text field leaves the field; 86936dac the preview shows true 1× pixels, item 2 below). Check `git log 86936dac..HEAD`
+and `git status` for the other two:
 
 1. Docked, the in-editor preview waits for a pause in input (about 90 ms, as the thumbnails do); at Full size it stays immediate.
    Measured cost today: the map gets 5-7 bakes a second during a color drag with the preview running, 9-11 without. Report
@@ -117,6 +131,9 @@ Then: quick, `repro/workspace.mjs`, the browser smoke; retake screenshots 1, 3 a
 
 Landing the reviewed work first keeps the remaining two steps small and gives the owner something to try.
 
+0. Read the diffs that were accepted unread (above): `git diff 43f85589..ux-round3-materials` (step 6), `git diff 63159aae..12170ed6`
+   (step 2b), and step 5's later commits. Look for: a second Escape listener, script moving page elements at load, a branch on a
+   world's name, a control nobody asked for, anything that changes an ordinary draw. Send problems back to an Opus implementer.
 1. Merge `ux-round3-materials` into `ux-round3`. Expect conflicts or near-conflicts in `sculpt-ui.js` (`closeTop`: the Surface
    gallery joined it on one side, the material editor's menus, drawer and Full size on the other; Pick's card and the docked
    editor close after it in `sculpt.js`'s keydown chain), `sculpt-find.js`, `sculpt-workspace.css`, `index.html`, `sculpt.js`,
@@ -140,17 +157,22 @@ Landing the reviewed work first keeps the remaining two steps small and gives th
      each open; Find for "pick", "share", "grid", "snow", "materials"; every door into the material editor).
    - Known to fail the same way before this round, so not yours: `repro/check.sh site` (stops at the stale-previews gate),
      `repro/features.mjs` at its line 112, `repro/ui-create-curves.mjs` (hangs clicking Hill after its first-run step).
-5. Look at the editor yourself at 1440 × 900 and 1280 × 720 on Green and one other world: first visit, draw a mountain and a lake,
+5. The label renames against old browser data (never run, only reasoned from code): on the merged build, open a map file and a
+   stored world that were saved **before** 73200ecb (make them on main in a fresh profile, then load the branch in that profile).
+   Confirm the picture is the same, and report what the world store writes on load: the expectation is that those materials now
+   read as edited copies. The owner's own browser on 8801 will go through this on its first reload after landing, so say what
+   you saw in the report.
+5b. Look at the editor yourself at 1440 × 900 and 1280 × 720 on Green and one other world: first visit, draw a mountain and a lake,
    Pick the cliff, recolor from the card, undo, open World › Surface, add a layer from the gallery, open the material editor from
    the card and drag a color. The owner judges looks; you judge that nothing is broken or unreadable.
-6. Remove this file if nothing else is going to land from the branch (otherwise keep it until the last landing), then land:
+6. Remove this file from the branch (`git rm docs/UX_ROUND3_HANDOFF.md`, its own commit; the copy outside the repository stays), then land:
    `git -C /Users/daniel/src/terraform status` must be clean and on `main`; `git -C /Users/daniel/src/terraform merge --no-ff ux-round3`.
    If main moved again since step 3, merge it into the branch first and rerun what the new commits could affect.
 7. Restart the owner's editor on 8801 (standing instruction; the command and log are in memory `owner-editor-port-8801.md`:
    stop the process listening on 8801, then from `~/src/terraform` run
    `go run ./cmd/terraform --port 8801 --assets-root /private/tmp/nanolathe-map-editor` detached, output appended to
-   `~/terraform-assets/server-8801.log`; run `go run ./cmd/previews fetch --replace` first only if the landing moved the preview
-   pin, which this one does not). Confirm it answers. Do not push.
+   `~/terraform-assets/server-8801.log`; this landing does not move the preview pin, but another session's may have: if the server
+   refuses to start, run `go run ./cmd/previews fetch --replace` in the main checkout and start it again). Confirm it answers. Do not push.
 8. Update the memory files (section 8) and tell the owner what landed, with the decisions in section 7.
 
 ### 4.3 Step 3: World home, and the rock type page headline-first (one implementer, three commits, on a branch cut from the landed main)
@@ -232,7 +254,7 @@ make a world, save a tool and a rock type to it, open a new map in it, export th
 ### 4.5 Final
 
 Land steps 3 and 4 the same way as 4.2 (merge main, the checks their changes can break, look yourself, merge into local main,
-restart 8801, no push), delete this file, update memory, report.
+restart 8801, no push), update memory, report.
 
 ## 5. Briefing an implementer
 
