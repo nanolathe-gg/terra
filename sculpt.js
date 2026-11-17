@@ -3018,7 +3018,9 @@ async function boot() {
     if (worldId!==config.biomeId) $('world-title').textContent=worlds[worldId].name;
     addDefaults(experiment,config.defaults);
     borrowBeach(config,experiment);   // a beach another world lends (World, Ground): before the renderer and the panel read the world's layers
-    refreshWorldKit();brushWorldDefinitions=structuredClone(worldToolList);buildShapeOptions();{const kit=instantiateWorldKit(config,activeWorld(),{builtIn:builtInWorld()});mapMaterials=kit.materials;mapRocks=kit.rocks;if(kit.reason)status(kit.reason);}syncMaterialChoices();syncRockAdd();syncRockChoices();buildToolbar();
+    // A world whose saved tools or rock types cannot be read opens with its base's own (the store keeps them until this world is next saved).
+    try{refreshWorldKit();}catch(err){const w=activeWorld();delete w.tools;delete w.rocks;refreshWorldKit();error(`${w.name||config.biome}’s saved tools and rock types could not be read (${err.message}). It opens with ${config.biome}’s own.`);}
+    brushWorldDefinitions=structuredClone(worldToolList);buildShapeOptions();{const kit=instantiateWorldKit(config,activeWorld(),{builtIn:builtInWorld()});mapMaterials=kit.materials;mapRocks=kit.rocks;if(kit.reason)status(kit.reason);}syncMaterialChoices();syncRockAdd();syncRockChoices();buildToolbar();
     $('rock-save-to').value=worldId in (config.biomes??{})?'map':'world';
     // A new map starts with the world's tools, on the first of them where the world has no Plateau.
     if (!toolIds().has(tool)) tool=firstTool();
