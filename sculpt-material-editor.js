@@ -1,22 +1,26 @@
-// The material editor: one full-screen dialog for the map's materials (the world's ground, water, role and surface layer materials, and the map's own). The graph fills the screen; beside it sit one
-// preview and three panes: Controls (what the material publishes, for adjusting it), Node (the selected node) and Palette (the game
-// colors it is reduced to). Every element is in index.html; this fills values and applies edits through the map's own undo and save.
+// The material editor: one panel for the map's materials (the world's ground, water, role and surface layer materials, and the map's own),
+// docked beside the map in the side panel's place, so the map stays live and shows every edit on its own terrain; Full size spreads it over
+// the whole window as before. The graph fills the panel; beside it sit one preview and three panes: Controls (what the material publishes,
+// for adjusting it), Node (the selected node) and Palette (the game colors it is reduced to). Every element is in index.html; this fills
+// values and applies edits through the map's own undo and save.
 import {NODES, NODE_TYPES, accepts, snippetNodes, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
   nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb, materialColor, recolorMaterial,
   addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText, MAP_ROLES, roleOf, roleName, materialStatesApply} from './sculpt-materials.js';
 import {mountMaterialGraph, graphPositions, CARD, cardHeight} from './sculpt-material-graph.js';
-import {MaterialPreview, TILE, TERRAIN} from './sculpt-material-preview.js';
+import {MaterialPreview, TILE, TERRAIN, SWATCH} from './sculpt-material-preview.js';
 import gamePalette from './materials/palette.json' with {type: 'json'};
 
 const $ = id => document.getElementById(id);
 const hex = rgb => '#' + rgb.map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
 const rgbOf = value => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16));
 const PARAM_ROWS = 14, INPUT_ROWS = 5, CELL = 20;
+// The pause in input the graph's thumbnails wait for, and docked the preview picture too (the map beside it is the live preview).
+const PAUSE = 90;
 
 export function mountMaterialEditor(host) {
   const dialog = $('material-editor'), preview = new MaterialPreview();
   let slot = 0, selection = new Set(), primary = null, frameAt = -1, solo = null, view = 'tile', zoomed = false, stopAt = 0, editingControls = false;
-  let pictureKey = '', thumbKey = '', picture = null, thumbs = new Map(), thumbPixels = new Map(), opener = null, menuAt = null, thumbTimer = null;
+  let pictureKey = '', thumbKey = '', picture = null, thumbs = new Map(), thumbPixels = new Map(), opener = null, menuAt = null, thumbTimer = null, pictureTimer = null, pictureMaterial = '', full = false;
   const materials = () => host.materials(), material = () => materials().find(m => m.slot === slot) ?? null;
   const node = () => material()?.nodes.find(n => n.id === primary) ?? null;
   const note = text => { $('material-note').textContent = text; $('material-note').hidden = !text; };
@@ -130,6 +134,25 @@ export function mountMaterialEditor(host) {
     if (at >= 0) m.controls.splice(at, 1);
     else { if (m.controls.length >= MAX_CONTROLS) throw Error(`A material publishes at most ${MAX_CONTROLS} controls.`); const control = {label, node: id, param}, n = m.nodes.find(n => n.id === id); if (param !== 'stops') Object.assign(control, controlRange(nodeParams(n).find(p => p.key === param), n.params[param])); m.controls.push(control); }
   }));
+  // Publishing asks for the control's name once, in place under the setting (or the colors), starting from the node's name and the setting:
+  // Enter or Publish accepts and publishes it named, as one undo step; Escape, ◆ again or leaving the field cancels. Map makers meet this name
+  // in World; Edit controls renames it later.
+  let naming = null;   // {row, input, pin, id, param}
+  function askName(row, input, pin, id, param, suggestion) {
+    cancelName(); naming = {row, input, pin, id, param}; row.hidden = false; pin.setAttribute('aria-expanded', 'true'); input.value = suggestion; input.focus(); input.select();
+  }
+  function cancelName() { if (!naming) return false; naming.row.hidden = true; naming.pin.setAttribute('aria-expanded', 'false'); naming = null; return true; }
+  function acceptName() { if (!naming) return; const {id, param, input, pin} = naming, label = input.value.trim().slice(0, 60); if (!label) { input.focus(); return; } cancelName(); togglePublish(id, param, label); pin.focus(); }
+  function namePrompt(row, input, ok) {
+    input.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); acceptName(); } };
+    ok.onpointerdown = e => e.preventDefault();   // the field keeps the focus, so leaving it means leaving the prompt
+    ok.onclick = acceptName;
+    row.addEventListener('focusout', e => { if (naming?.row === row && !row.contains(e.relatedTarget) && e.relatedTarget !== naming.pin) cancelName(); });   // ◆ again cancels by its click
+  }
+  const askOrUnpublish = (row, input, pin, n, param, suggestion) => {
+    if (naming?.row === row) { cancelName(); return; }
+    if (published(material(), n.id, param) >= 0) { cancelName(); togglePublish(n.id, param); } else askName(row, input, pin, n.id, param, suggestion.slice(0, 60));
+  };
 
   // A material's published controls, in the fixed rows the page declares under `prefix`: the editor's Controls pane ("ctl") and the
   // World pane's ground ("wg") and water ("ww"). `of()` is the material the rows act on. Names and Remove exist only in the editor.
@@ -198,6 +221,7 @@ export function mountMaterialEditor(host) {
   function refreshNode(m) {
     const n = node(), f = frameAt >= 0 ? m.frames[frameAt] : null;
     $('node-none').hidden = !!(n || f); $('node-fields').hidden = !n; $('frame-fields').hidden = !f;
+    if (naming && (naming.id !== n?.id || published(m, naming.id, naming.param) >= 0)) cancelName();   // another node, or already published
     if (f && document.activeElement !== $('frame-name')) $('frame-name').value = f.name;
     if (!n) return;
     const spec = NODES[n.type], kinds = nodeKinds(n), params = nodeParams(n), types = nodeTypes(m.nodes);
@@ -239,7 +263,8 @@ export function mountMaterialEditor(host) {
   for (let i = 0; i < PARAM_ROWS; i++) {
     $('node-param-' + i).oninput = attempt(() => editNode(n => { n.params[nodeParams(n)[i].key] = Number($('node-param-' + i).value); }));
     $('node-param-' + i).onchange = commit;
-    $('node-param-pin-' + i).onclick = () => { const n = node(), p = nodeParams(n)[i]; togglePublish(n.id, p.key, `${n.name}: ${p.label.replace(/ \(.*\)$/, '').toLowerCase()}`.slice(0, 60)); };
+    namePrompt($('node-param-name-row-' + i), $('node-param-name-' + i), $('node-param-name-ok-' + i));
+    $('node-param-pin-' + i).onclick = () => { const n = node(), p = nodeParams(n)[i]; askOrUnpublish($('node-param-name-row-' + i), $('node-param-name-' + i), $('node-param-pin-' + i), n, p.key, `${n.name}: ${p.label.replace(/ \(.*\)$/, '').toLowerCase()}`); };
   }
   for (let i = 0; i < INPUT_ROWS; i++) {
     const set = value => attempt(() => change(m => { const n = m.nodes.find(n => n.id === primary); n.in[NODES[n.type].inputs[i][0]] = value; }))();
@@ -276,7 +301,8 @@ export function mountMaterialEditor(host) {
   $('stop-gain').onchange = () => { setStop(stop => { const old = Math.max(1, ...stop.slice(1)), gain = Math.max(1, Math.min(2, Number($('stop-gain').value) || 1)); for (let j = 1; j < 4; j++) stop[j] = Math.min(2, stop[j] * gain / old); })(); commit(); };
   $('stop-position').onchange = () => { setStop((stop, g) => { stop[0] = Math.max(0, Math.min(1, Number($('stop-position').value) || 0)); const ref = stop; g.stops.sort((a, b) => a[0] - b[0]); stopAt = g.stops.indexOf(ref); })(); commit(); };
   $('stop-remove').onclick = () => { setStop((stop, g) => { g.stops.splice(stopAt, 1); stopAt = Math.max(0, stopAt - 1); })(); commit(); };
-  $('gradient-pin').onclick = () => { const n = node(); togglePublish(n.id, 'stops', `${n.name}: ${n.type === 'constant' ? 'color' : 'colors'}`.slice(0, 60)); };
+  namePrompt($('gradient-name-row'), $('gradient-name'), $('gradient-name-ok'));
+  $('gradient-pin').onclick = () => { const n = node(); askOrUnpublish($('gradient-name-row'), $('gradient-name'), $('gradient-pin'), n, 'stops', `${n.name}: ${n.type === 'constant' ? 'color' : 'colors'}`); };
   const cellAt = (canvas, e, size) => { const r = canvas.getBoundingClientRect(), columns = canvas.width / size, x = Math.floor((e.clientX - r.left) * canvas.width / r.width / size), y = Math.floor((e.clientY - r.top) * canvas.height / r.height / size); return y * columns + x; };
   $('stop-palette').onclick = e => { const index = cellAt($('stop-palette'), e, 8); if (index < 0 || index > 255) return; setStop(stop => { paletteRgb(index).forEach((v, j) => { stop[j + 1] = v / 255; }); })(); commit(); };
 
@@ -312,13 +338,18 @@ export function mountMaterialEditor(host) {
   });
   for (const p of DITHER) { $('dither-' + p.key).oninput = attempt(() => edit(m => { m.dither[p.key] = Number($('dither-' + p.key).value); })); $('dither-' + p.key).onchange = commit; }
 
-  // The preview: one picture, shown as the tile, a 3 by 3 repeat or on a small piece of terrain.
+  // The preview: one picture, shown as the tile, a 3 by 3 repeat or on a small piece of terrain. The canvas takes its box's own pixel size
+  // (a whole number of tiles, sculpt-workspace.css), and every view but Repeat draws the middle of the picture unscaled: one art pixel a
+  // pixel, or two at 2x.
   function drawPicture() {
-    const canvas = $('material-preview'), ctx = canvas.getContext('2d'), size = canvas.width; if (!picture) { ctx.clearRect(0, 0, size, size); return; }
+    const canvas = $('material-preview'), size = canvas.clientWidth || canvas.width; if (canvas.width !== size) canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, size, size); if (!picture) return;
     const source = picture.canvas, s = source.width;
     if (view === 'repeat' && picture.view === 'tile') { ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) ctx.drawImage(source, x * size / 3, y * size / 3, size / 3, size / 3); return; }
-    const crop = zoomed ? size / 2 : Math.min(size, s); ctx.imageSmoothingEnabled = false; ctx.drawImage(source, (s - crop) / 2, (s - crop) / 2, crop, crop, 0, 0, size, size);
+    const scale = zoomed ? 2 : 1, crop = Math.min(s, size / scale), shown = crop * scale, at = (size - shown) / 2;
+    ctx.imageSmoothingEnabled = false; ctx.drawImage(source, (s - crop) / 2, (s - crop) / 2, crop, crop, at, at, shown, shown);
   }
+  const previewBox = new ResizeObserver(() => { if (dialog.open) drawPicture(); }); previewBox.observe($('material-preview'));
   function refreshPictures() {
     const m = material(); if (!dialog.open || !m) return;
     const r = host.renderer(), list = materials(), water = m.worldWater === true, companion = list.find(o => water ? o.worldGround : o.worldWater) ?? m;
@@ -326,13 +357,17 @@ export function mountMaterialEditor(host) {
     const rock = m.worldRock === true || (host.rocks?.() ?? []).some(o => o.material === slot), ground = rock ? list.find(o => o.worldGround) ?? null : null;
     const context = [r.variant.toString(), r.colorOverrides], want = view === 'terrain' ? 'terrain' : 'tile', showing = solo && m.nodes.some(n => n.id === solo) ? solo : null;
     const key = JSON.stringify([materialRenderKey(m), water, materialRenderKey(companion), ground && materialRenderKey(ground), context, want, showing]);
+    // Docked, an edit's picture waits for a pause in input, so a drag leaves the GPU to the map, which shows every step; a new view, node or
+    // material, and every edit at Full size (the map covered), draws at once.
     if (key !== pictureKey) {
       pictureKey = key; $('material-preview').setAttribute('aria-busy', 'true'); $('material-preview-note').textContent = 'Updating…';
-      preview.picture(r, m, companion, {view: want, solo: showing, ground}, (error, result) => {
+      const ask = () => preview.picture(r, m, companion, {view: want, solo: showing, ground}, (error, result) => {
         if (error) { pictureKey = ''; $('material-preview-note').textContent = 'No preview: ' + error.message; $('material-preview').setAttribute('aria-busy', 'false'); return; }
         picture = result; drawPicture(); $('material-preview').setAttribute('aria-busy', String(result.draft));
         $('material-preview-note').textContent = result.draft ? 'Finishing the palette…' : showing ? 'The selected node alone, unlit.' : result.tiles ? `${result.tiles} different 32-px tiles in one repeat (256 at most).` : 'Under this world’s sun: sea, shore, a plain and a hill.';
       });
+      const edited = picture && pictureMaterial !== '' && pictureMaterial !== materialRenderKey(m); pictureMaterial = materialRenderKey(m);
+      clearTimeout(pictureTimer); if (edited && !full) pictureTimer = setTimeout(ask, PAUSE); else ask();
     }
     // Thumbnails wait for a pause: they are a second run of the graph, and a drag changes them on every move.
     const tk = JSON.stringify([materialRenderKey({...m, palette: [], dither: m.dither}), slot]);
@@ -340,21 +375,90 @@ export function mountMaterialEditor(host) {
       if (error || !pictures) return;
       const made = new Map(); for (const [id, pixels] of pictures) made.set(id, await createImageBitmap(new ImageData(new Uint8ClampedArray(pixels), THUMB, THUMB)));
       thumbs = made; thumbPixels = pictures; graph.redraw(); const n = node(); if (n?.type === 'levels' && !$('material-pane-node').hidden) drawHistogram(n);
-    }), 90); }
+    }), PAUSE); }
   }
   for (const v of ['tile', 'repeat', 'terrain']) $('mview-' + v).onclick = () => { view = v; refresh(); };
   $('mview-zoom').onclick = () => { zoomed = !zoomed; refresh(); };
   $('mview-solo').onclick = () => { solo = solo ? null : primary; refresh(); };
 
+  // The library drawer, opened from the material's name in the header: "In this map" (the map's and the world's materials; choosing one
+  // switches the editor to it) and "Library" (the shipped materials by world; choosing one adds a copy to the map). One search filters both
+  // by name. Each tile's swatch is the preview's own (MaterialPreview.swatch), made only once the tile scrolls into view and kept by what it
+  // draws, so opening the editor costs nothing and the drawer fills as it is looked at.
+  // A copy a surface layer draws names that layer (World › Surface), as a world role names its role.
+  const layerOf = o => o.worldLayer ? host.layerName?.(o.worldLayer) ?? o.worldLayer : null;
+  const roleText = o => layerOf(o) ? `surface layer ${layerOf(o)}` : roleOf(o) ? `world ${roleName(roleOf(o))}` : '';
+  const drawer = $('material-library'), swatches = new Map(), waiting = new Map(), inView = new Set();
+  let mapTilesKey = '', libraryBuilt = false, libraryFull = null;
+  const swatchKey = m => { const r = host.renderer(); return JSON.stringify([materialRenderKey(m), m.worldWater === true, r ? [r.variant.toString(), r.colorOverrides] : null]); };
+  const tileMaterial = t => t.dataset.slot ? materials().find(o => o.slot === Number(t.dataset.slot)) : LIBRARY[t.dataset.key];
+  const seen = new IntersectionObserver(entries => { for (const e of entries) { if (e.isIntersecting) { inView.add(e.target); paintSwatch(e.target); } else inView.delete(e.target); } }, {root: $('library-scroll'), rootMargin: '96px 0px'});
+  function paintSwatch(t) {
+    const m = tileMaterial(t), canvas = t.querySelector('canvas'); if (!m || drawer.hidden) return;
+    const key = swatchKey(m); if (canvas.dataset.key === key) return;
+    canvas.dataset.want = key;
+    const made = swatches.get(key); if (made) { canvas.getContext('2d').drawImage(made, 0, 0); canvas.dataset.key = key; return; }
+    if (waiting.has(key)) { waiting.get(key).add(canvas); return; }
+    waiting.set(key, new Set([canvas]));
+    preview.swatch(host.renderer(), m, (error, picture) => {
+      const canvases = waiting.get(key) ?? []; waiting.delete(key); if (error || !picture) return;
+      swatches.set(key, picture); if (swatches.size > 320) swatches.delete(swatches.keys().next().value);
+      for (const c of canvases) if (c.dataset.want === key) { c.getContext('2d').drawImage(picture, 0, 0); c.dataset.key = key; }
+    });
+  }
+  function tile(data, name, role, onclick) {
+    const b = document.createElement('button'), c = document.createElement('canvas'), n = document.createElement('span');
+    b.type = 'button'; b.className = 'library-tile'; Object.assign(b.dataset, data, {name: name.toLowerCase()}); b.onclick = onclick;
+    c.className = 'library-swatch'; c.width = c.height = SWATCH; c.setAttribute('aria-hidden', 'true');
+    n.className = 'library-name'; n.textContent = name; b.append(c, n);
+    if (role) { const r = document.createElement('span'); r.className = 'library-role'; r.textContent = role; b.append(r); }
+    seen.observe(b); return b;
+  }
+  const chooseTile = next => { setDrawer(false); choose(next); $('material-choose').focus(); };
+  // The map's tiles follow its list; they are made again only when a name, a role or the list changes.
+  function buildMapTiles() {
+    const list = materials(), key = JSON.stringify(list.map(o => [o.slot, o.name, roleText(o)]));
+    if (key !== mapTilesKey) { mapTilesKey = key; for (const t of $('library-map').children) { seen.unobserve(t); inView.delete(t); } $('library-map').replaceChildren(...list.map(o => tile({slot: String(o.slot)}, o.name, roleText(o), () => chooseTile(o.slot)))); if (!drawer.hidden) filterDrawer(); }
+    for (const t of $('library-map').children) { const on = Number(t.dataset.slot) === slot; t.classList.toggle('current', on); if (on) t.setAttribute('aria-current', 'true'); else t.removeAttribute('aria-current'); }
+    if (!drawer.hidden) for (const t of inView) if (t.dataset.slot) paintSwatch(t);
+  }
+  // The library by world (the key's world, named as the world list names it; the current world first), then the materials every world shares.
+  function buildLibrary() {
+    const worlds = host.worlds?.() ?? {}, order = Object.keys(worlds), here = host.world?.(), groups = new Map();
+    for (const [key, m] of Object.entries(LIBRARY)) { const world = key.includes('-') && worlds[key.split('-')[0]] ? key.split('-')[0] : ''; if (!groups.has(world)) groups.set(world, []); groups.get(world).push(tile({key}, m.name, '', () => addFromLibrary(key))); }
+    const rank = world => world === here ? -1 : world === '' ? order.length : order.indexOf(world);
+    $('library-shipped').replaceChildren(...[...groups].sort(([a], [b]) => rank(a) - rank(b)).map(([world, tiles]) => {
+      const group = document.createElement('section'), head = document.createElement('h4'), list = document.createElement('div');
+      group.className = 'library-group'; head.textContent = world ? worlds[world] : 'Every world'; list.className = 'library-tiles'; list.append(...tiles); group.append(head, list); return group;
+    }));
+    libraryBuilt = true; libraryFull = null;
+  }
+  function filterDrawer() {
+    const q = $('library-search').value.trim().toLowerCase(); let any = false;
+    for (const t of drawer.querySelectorAll('.library-tile')) { t.hidden = !!q && !t.dataset.name.includes(q); any ||= !t.hidden; }
+    for (const g of drawer.querySelectorAll('.library-group')) g.hidden = !g.querySelector('.library-tile:not([hidden])');
+    $('library-empty').hidden = any;
+  }
+  function setDrawer(on) {
+    if (drawer.hidden !== on) return false;
+    drawer.hidden = !on; $('material-choose').setAttribute('aria-expanded', String(on));
+    if (on) { if (!libraryBuilt) buildLibrary(); refresh(); filterDrawer(); $('library-search').focus(); }
+    else { preview.cancelSwatches(); waiting.clear(); }
+    return true;
+  }
+  $('material-choose').onclick = () => setDrawer(drawer.hidden);
+  $('library-search').oninput = filterDrawer;
+  $('library-search').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); drawer.querySelector('.library-tile:not([hidden]):not(:disabled)')?.click(); } else if (e.key === 'ArrowDown') { e.preventDefault(); drawer.querySelector('.library-tile:not([hidden])')?.focus(); } };
+
   // The header: which material, where it is used, and the list's own actions.
   function refresh() {
     const list = materials(); if (!list.some(m => m.slot === slot)) { slot = (list.find(m => m.worldGround) ?? list[0])?.slot ?? 0; selection = new Set(); primary = null; frameAt = -1; solo = null; }
-    // A copy a surface layer draws names that layer (World › Surface), as a world role names its role.
-    const layerOf = o => o.worldLayer ? host.layerName?.(o.worldLayer) ?? o.worldLayer : null;
-    const m = material(), role = o => layerOf(o) ? ` · surface layer ${layerOf(o)}` : roleOf(o) ? ` · world ${roleName(roleOf(o))}` : '', full = list.length >= MATERIAL_SLOTS - 1;
+    const m = material(), full = list.length >= MATERIAL_SLOTS - 1;
     refreshWorld();
     if (!dialog.open) return;   // the rest is the editor's own face
-    $('material-select').replaceChildren(...list.map(o => new Option(o.name + role(o), String(o.slot)))); $('material-select').value = String(slot);
+    buildMapTiles();
+    $('material-choose-name').textContent = m?.name ?? ''; $('material-choose-role').textContent = m && roleText(m) ? '· ' + roleText(m) : '';
+    if (libraryBuilt && libraryFull !== full) { libraryFull = full; for (const t of $('library-shipped').querySelectorAll('.library-tile')) { t.disabled = full; t.title = full ? `The map already has ${MATERIAL_SLOTS - 1} materials.` : 'Add a copy to the map'; } }
     if (!m) return;
     if (m.nodes.every(n => n.id !== primary)) { primary = null; selection = new Set([...selection].filter(id => m.nodes.some(n => n.id === id))); }
     if (frameAt >= m.frames.length) frameAt = -1;
@@ -367,7 +471,7 @@ export function mountMaterialEditor(host) {
     if (document.activeElement !== $('material-name')) $('material-name').value = m.name;
     $('material-use-ground').disabled = m.worldGround || m.worldWater; $('material-use-water').disabled = m.worldWater || m.worldGround; $('material-role').value = MAP_ROLES.some(([r]) => m[r]) ? roleOf(m) : ''; $('material-role').disabled = m.worldGround || m.worldWater; $('material-role').title = $('material-role').disabled ? 'The world’s ground and water draw nothing else.' : '';
     $('material-delete').disabled = m.worldGround || m.worldWater; $('material-delete').title = $('material-delete').disabled ? 'The world’s ground and water cannot be deleted. Assign another material first.' : '';
-    for (const id of ['material-duplicate', 'material-paste', 'material-add']) { $(id).disabled = full; $(id).title = full ? `The map already has ${MATERIAL_SLOTS - 1} materials.` : ''; }
+    for (const id of ['material-duplicate', 'material-paste', 'material-new']) { $(id).disabled = full; $(id).title = full ? `The map already has ${MATERIAL_SLOTS - 1} materials.` : ''; }
     $('material-reset').disabled = !LIBRARY[m.source]; $('material-reset').title = LIBRARY[m.source] ? `Back to “${LIBRARY[m.source].name}” from the library. Undo brings your version back.` : 'This material did not come from the library.';
     for (const v of ['tile', 'repeat', 'terrain']) $('mview-' + v).setAttribute('aria-pressed', String(view === v));
     $('mview-zoom').setAttribute('aria-pressed', String(zoomed)); $('mview-zoom').disabled = view === 'repeat';
@@ -380,10 +484,9 @@ export function mountMaterialEditor(host) {
     graph.refresh(slot); drawPicture(); refreshPictures();
   }
   const choose = next => { slot = next; selection = new Set(); primary = null; frameAt = -1; solo = null; picture = null; thumbs = new Map(); thumbPixels = new Map(); pick('controls'); refresh(); };
-  $('material-select').onchange = () => choose(Number($('material-select').value));
   const addToMap = attempt((source, name) => { const added = addMaterial(materials(), source, name); update(added.materials); commit(); $('material-menu').open = false; choose(added.slot); });
-  $('material-add').onchange = () => { const key = $('material-add').value; $('material-add').value = ''; if (key === 'blank') addToMap(blankMaterial(), 'New material'); else if (LIBRARY[key]) addToMap(LIBRARY[key], LIBRARY[key].name); };
-  $('material-add').replaceChildren(new Option('Add a material…', ''), new Option('Blank material', 'blank'), ...Object.entries(LIBRARY).map(([key, m]) => new Option(m.name, key)));
+  const addFromLibrary = key => { setDrawer(false); addToMap(LIBRARY[key], LIBRARY[key].name); $('material-choose').focus(); };
+  $('material-new').onclick = () => addToMap(blankMaterial(), 'New material');
   $('material-duplicate').onclick = attempt(() => { const added = duplicateMaterial(materials(), slot); update(added.materials); commit(); $('material-menu').open = false; choose(added.slot); });
   $('material-rename').onclick = attempt(() => { update(renameMaterial(materials(), slot, $('material-name').value)); commit(); });
   $('material-name').onkeydown = e => { if (e.key === 'Enter') $('material-rename').click(); };
@@ -398,35 +501,75 @@ export function mountMaterialEditor(host) {
   $('material-reset').onclick = attempt(() => { const source = LIBRARY[material().source]; if (!source) return; update(setMaterial(materials(), slot, source)); commit(); selection = new Set(); primary = null; frameAt = -1; refresh(); });
   for (const [id, role] of [['ground-world-default', 'worldGround'], ['water-material', 'worldWater']]) $(id).onchange = attempt(() => { update(assignMaterial(materials(), Number($(id).value), role)); commit(); });
 
+  // Docked, the editor is not modal: the map beside it can be drawn on, panned, zoomed and picked while it is open. The side panel gives
+  // way to it (sculpt-ui.js dock) and comes back when it closes. Full size covers the map, which then waits (host.suspend).
+  function setFull(on) {
+    if (full === on) return; full = on; document.querySelector('.app').classList.toggle('material-full', on); host.suspend(on); requestAnimationFrame(() => graph.fit());
+    $('material-full').setAttribute('aria-pressed', String(on)); $('material-full').textContent = on ? '⤡ Beside the map' : '⤢ Full size';
+    $('material-full').title = on ? 'Back beside the map, which shows every change' : 'Spread the editor over the whole window';
+  }
   function open(which, from) {
     opener = from; if (which !== undefined) slot = which; pick('controls');
-    if (!dialog.open) { host.suspend(true); dialog.showModal(); }
+    if (!dialog.open) { dialog.show(); host.dock({close, inner}); $('materials-toolbar').setAttribute('aria-expanded', 'true'); $('material-graph').focus({preventScroll: true}); }
     pictureKey = thumbKey = ''; refresh(); graph.fit();
   }
-  const close = () => { closeMenu(); dialog.close(); preview.cancel(); pictureKey = thumbKey = ''; host.suspend(false); opener?.focus(); };
+  // The side panel comes back before the focus returns, so a button inside it can take the focus. A door its panel built again meanwhile
+  // is found by its id (a Surface row's Edit, say); without one the focus goes to Materials. Closed because the side panel was asked for
+  // (its Build or World tab), the focus stays where that click put it.
+  function close(returnFocus = true) {
+    if (!dialog.open) return;
+    closeMenu(); setDrawer(false); setFull(false); dialog.close(); clearTimeout(pictureTimer); preview.cancel(); pictureKey = thumbKey = pictureMaterial = ''; host.dock(null); $('materials-toolbar').setAttribute('aria-expanded', 'false');
+    const door = opener?.isConnected ? opener : opener?.id ? document.getElementById(opener.id) : null;
+    if (returnFocus) (door && !door.closest('[hidden]') ? door : $('materials-toolbar')).focus({preventScroll: true});
+  }
+  // A text field of the editor (a node's, frame's or control's name, a range, the material's name, the drawer's search) is left first:
+  // Escape puts back what a name field held when it took the focus and moves the focus out, and the editor stays open.
+  const TEXT = 'input:not([type]),input[type=text],input[type=search],input[type=number],textarea';
+  let fieldWas = null;
+  dialog.addEventListener('focusin', e => { if (e.target.matches?.(TEXT)) fieldWas = {field: e.target, value: e.target.value}; });
+  function leaveField() {
+    const field = document.activeElement; if (!dialog.contains(field) || !field.matches(TEXT) || field.closest('.publish-name, #node-menu')) return false;
+    if (field === $('library-search')) { $('material-choose').focus(); return true; }   // the filter stays; the next Escape closes the drawer
+    if (fieldWas?.field === field) field.value = fieldWas.value;
+    (field.closest('#material-menu')?.querySelector('summary') ?? $('material-graph')).focus();
+    return true;
+  }
+  // Escape inside the editor (sculpt-ui.js closeTop), one thing a press: a control's name being asked, a text field, the add menu, Manage or
+  // the library drawer, then Full size back to docked. Then Pick's card, and then the editor itself (closeDocked).
+  function inner() {
+    if (naming) { const pin = naming.pin; cancelName(); pin.focus(); return true; }
+    if (leaveField()) return true;
+    if (closeMenu()) { $('material-graph').focus(); return true; }
+    if ($('material-menu').open) { $('material-menu').open = false; $('material-menu').querySelector('summary').focus(); return true; }
+    if (setDrawer(false)) { $('material-choose').focus(); return true; }
+    if (full) { setFull(false); return true; }
+    return false;
+  }
   const roleSlot = key => materials().find(m => m[key])?.slot;
-  $('materials-toolbar').onclick = () => open(undefined, $('materials-toolbar'));
+  $('materials-toolbar').onclick = () => dialog.open ? close(false) : open(undefined, $('materials-toolbar'));
   $('material-open').onclick = () => open(roleSlot('worldGround'), $('material-open'));
   $('water-material-edit').onclick = () => open(roleSlot('worldWater'), $('water-material-edit'));
-  $('material-done').onclick = close;
+  $('material-done').onclick = () => close();
+  $('material-full').onclick = () => setFull(!full);
   dialog.oncancel = e => e.preventDefault();
-  dialog.onpointerdown = e => { if (!$('node-menu').contains(e.target) && e.target !== $('graph-add')) closeMenu(); if ($('material-menu').open && !$('material-menu').contains(e.target)) $('material-menu').open = false; };
-  // Escape steps back one thing at a time: an open menu, then the selection, then the editor. Shortcuts never reach the map beneath.
+  // A press anywhere else, on the map too, closes the add menu, Manage and the library drawer.
+  const outside = e => {
+    if (!dialog.open) return; if (!$('node-menu').contains(e.target) && e.target !== $('graph-add')) closeMenu(); if ($('material-menu').open && !$('material-menu').contains(e.target)) $('material-menu').open = false;
+    if (!drawer.hidden && !drawer.contains(e.target) && !$('material-choose').contains(e.target)) setDrawer(false);
+  };
+  document.addEventListener('pointerdown', outside, true);
+  // Keys typed in the editor stay in it, so the map's shortcuts (Delete, V, arrows ...) never act on a shape meanwhile. Escape goes on to the
+  // editor's one Escape chain (sculpt-ui.js closeTop).
   dialog.onkeydown = e => {
-    if (e.defaultPrevented) return;
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      if (closeMenu()) $('material-graph').focus(); else if ($('material-menu').open) { $('material-menu').open = false; $('material-menu').querySelector('summary').focus(); }
-      else if (selection.size || frameAt >= 0 || solo) { selection = new Set(); primary = null; frameAt = -1; solo = null; refresh(); } else close();
-    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.target.matches('input:not([type=range]),textarea')) { e.preventDefault(); $(e.shiftKey ? 'redo' : 'undo').click(); }
+    if (e.defaultPrevented || e.key === 'Escape') return;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.target.matches('input:not([type=range]),textarea')) { e.preventDefault(); $(e.shiftKey ? 'redo' : 'undo').click(); }
     e.stopPropagation();
   };
   $('material-undo').onclick = () => $('undo').click(); $('material-redo').onclick = () => $('redo').click();
   const lock = () => { $('materials-toolbar').disabled = $('editor').disabled; $('material-editor-fields').disabled = $('editor').disabled; $('material-undo').disabled = $('undo').disabled; $('material-redo').disabled = $('redo').disabled; };
   const locks = new MutationObserver(lock); for (const id of ['editor', 'undo', 'redo']) locks.observe($(id), {attributes: true, attributeFilter: ['disabled']}); lock();
-  if (dialog.open) host.suspend(true);
   refresh();
   // The Color rows again, once the renderer has read back what the materials are drawn in (sculpt.js renderer.onmeans).
   const refreshColors = () => { for (const [prefix, m] of [['ctl', material()], ...worldRows.map(w => [w.prefix, materials().find(o => o[w.role]) ?? null])]) { const own = $(`${prefix}-matcolor`); if (m && document.activeElement !== own) own.value = hex(drawn(m).map(v => v * 255)); } };
-  return {refresh, refreshColors, open, refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (!dialog.open) host.suspend(false); clearTimeout(thumbTimer); locks.disconnect(); graph.dispose(); preview.dispose(); }};
+  return {refresh, refreshColors, open, refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { setFull(false); dialog.close(); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); clearTimeout(pictureTimer); locks.disconnect(); previewBox.disconnect(); graph.dispose(); preview.dispose(); }};
 }

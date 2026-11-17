@@ -11,8 +11,11 @@ export function mountEditorUI(){
  try{panels={...panels,...JSON.parse(localStorage.getItem('terraform-editor-panels')||'{}')};}catch{}
  const savePanels=()=>{try{localStorage.setItem('terraform-editor-panels',JSON.stringify(panels));}catch{}};
  const focused=()=>beforeFocus!==null;
+ // The material editor docked beside the map takes the side panel's column while it is open ({close, inner}: its own close, and the
+ // step Escape takes inside it). It is not one of the remembered panels: the side panel comes back as it was when the editor closes.
+ let docked=null;
  function updateLayout(){
-  const showTools=!focused()&&panels.tools,showInspector=!focused()&&panels.inspector;
+  const showTools=!focused()&&panels.tools,showInspector=!focused()&&panels.inspector&&!docked;
   app.classList.toggle('tools-collapsed',!showTools);app.classList.toggle('inspector-collapsed',!showInspector);app.classList.toggle('palette-open',Boolean(panels.palette));
   $('tools-sidebar').hidden=!showTools;$('inspector-sidebar').hidden=!showInspector;
   for(const [id,on,label] of [['toggle-tools',showTools,'tools'],['toggle-inspector',showInspector,'side panel']]){const b=$(id);b.setAttribute('aria-expanded',String(on));b.title=`${on?'Hide':'Show'} ${label}`;}
@@ -23,7 +26,9 @@ export function mountEditorUI(){
   if(!showInspector)setLarge(false);
   savePanels();
  }
- function togglePanel(name){if(focused()){panels={...panels,tools:false,inspector:false};beforeFocus=null;}panels[name]=!panels[name];updateLayout();}
+ // Asking for the side panel while the material editor stands in its place closes the editor and shows the panel.
+ function togglePanel(name){if(name==='inspector'&&docked){docked.close(false);if(!focused()&&panels.inspector)return;}if(focused()){panels={...panels,tools:false,inspector:false};beforeFocus=null;}panels[name]=!panels[name];updateLayout();}
+ function dock(editor){docked=editor;app.classList.toggle('material-docked',Boolean(editor));if(editor)setLarge(false);updateLayout();}
  function exitFocus(){if(!focused())return false;panels=beforeFocus;beforeFocus=null;updateLayout();return true;}
  function toggleFocus(){if(!exitFocus()){beforeFocus={...panels};closeSurfaces();updateLayout();}}
  $('toggle-tools').onclick=()=>togglePanel('tools');$('toggle-inspector').onclick=()=>togglePanel('inspector');$('focus-canvas').onclick=toggleFocus;
@@ -71,14 +76,15 @@ export function mountEditorUI(){
  new MutationObserver(()=>{if($('section-preview-control').hidden)setLarge(false);}).observe($('section-preview-control'),{attributes:true,attributeFilter:['hidden']});
  // The curves are rows of the card's Profile section: folding it away closes them at full size too.
  $('card-profile').addEventListener('toggle',()=>{if(!$('card-profile').open)setLarge(false);});
- // Escape closes what is open on top of the editor, one thing a press, innermost first: Find, World › Surface's Add a layer gallery (its
- // button folds it, sculpt-surface-panel.js), a tool flyout, a folded menu (Share link inside the Map menu, say), a menu, the full-size curves.
+ // Escape closes one thing per press: Find, the visible Surface gallery, tool flyouts, menus and full-size curves, then the material editor's
+ // text field, menu, library drawer or Full size. Pick's card comes next (sculpt.js), then closeDocked closes the material editor itself.
  const find=mountFind();
  const closeGallery=()=>{const b=$('surface-add');if(b?.getAttribute('aria-expanded')!=='true'||!b.getClientRects().length)return false;b.click();return true;};   // left open behind another tab, it waits
- const closeTop=()=>find.close()||closeGallery()||closeFlyouts()||[...document.querySelectorAll('details.top-menu[open],details.share-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||closeSurfaces(true)||setLarge(false);
+ const closeTop=()=>find.close()||closeGallery()||closeFlyouts()||[...document.querySelectorAll('details.top-menu[open],details.share-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||closeSurfaces(true)||setLarge(false)||Boolean(docked?.inner());
+ const closeDocked=()=>{if(!docked)return false;docked.close();return true;};
  for(const [id,on] of [['view-rendered',false],['view-clay',true]])$(id).onclick=()=>{$('clay').checked=on;$('clay').dispatchEvent(new Event('change'));};
  updateLayout();
- return {toggleFocus,exitFocus,syncTools,closeTop,focused,get terrainBudget(){return panels.terrainBudget;},setTerrainBudget(value){panels.terrainBudget=value;if(beforeFocus)beforeFocus.terrainBudget=value;savePanels();}};
+ return {toggleFocus,exitFocus,syncTools,closeTop,closeDocked,dock,focused,get terrainBudget(){return panels.terrainBudget;},setTerrainBudget(value){panels.terrainBudget=value;if(beforeFocus)beforeFocus.terrainBudget=value;savePanels();}};
 }
 // Each effect owns its controlling value and its dependent parameters. Zero
 // means off; switching back on restores the last value for this tool/selection.

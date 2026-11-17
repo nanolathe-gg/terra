@@ -694,7 +694,9 @@ let nodes=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
 // reorder, delete, undo, load and new stroke clears it.
 let alsoSelected=[];
 const selectedShapes=() => selected<0||!nodes[selected]?.points?[]:[selected,...alsoSelected.filter(i => nodes[i]?.points&&i!==selected)].sort((a,b) => a-b);
-let materialTerrainDirty=false;
+// The material editor at Full size covers the map, which then waits (canvas suspended, shape and Time work deferred) until it is uncovered;
+// docked beside the map, the editor leaves it live.
+let materialCovers=false,materialTerrainDirty=false;
 const NODE_NAMES={landform:'Landform',sand:'Sand',paint:'Surface paint',grass:'Vegetation',erase:'Reset ground',ground:'Ground undulation',fissure:'Fissure',smooth:'Smooth',heights:'Height image'};
 // A shape's name, the same on its card, the bar on the map, the Shapes list, the map's own label and the status line: its tool's name
 // (a stroke whose tool the world lacks shows as Landform) and its place in the list, as in "Plateau 3".
@@ -746,7 +748,7 @@ const shapeLines=n => shapePaths(n).map(path => path.map(i => n.points[i]));
 const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1)};
 const overlaps=(a,b) => a.x0<=b.x1 && b.x0<=a.x1 && a.y0<=b.y1 && b.y0<=a.y1;
 function evaluate(from=0,rect=null) {
-  if($('material-editor')?.open){materialTerrainDirty=true;markChanged();return;}
+  if(materialCovers){materialTerrainDirty=true;markChanged();return;}
   regionalFields.changed(regionalDirtyRect(from,rect)); markChanged();
 }
 // The renderer holds the materials in use: the world's ground and water, and those a visible stroke chose.
@@ -1562,7 +1564,7 @@ function cancelWeather() {
 let materialWeatherPending=false;
 function queueWeather() {
   controlsEditing=false;
-  if($('material-editor')?.open){materialWeatherPending=true;return;}
+  if(materialCovers){materialWeatherPending=true;return;}
   materialWeatherPending=false;
   flushEval();
   if (pagedOn()) { queuePagedWeather(); return; }
@@ -2022,9 +2024,9 @@ $('export').addEventListener('click',async () => {
 const typing=target => target instanceof HTMLElement && (['INPUT','SELECT','TEXTAREA'].includes(target.tagName) || target.isContentEditable);
 window.addEventListener('keydown',event => {
   if(event.defaultPrevented)return;
-  // Escape first closes what is open on top of the editor (a tool flyout, a menu, the full-size curves), wherever the focus is.
-  // Then Pick's card; once it is closed, Escape leaves Pick (below).
-  if(event.key==='Escape'&&!stroke&&!moving&&(editorUI.closeTop()||pickCard?.close())){event.preventDefault();return;}
+  // Escape first closes what is open on top of the editor (a tool flyout, a menu, the full-size curves, a menu inside the material editor),
+  // wherever the focus is. Then Pick's card, then the docked material editor; once they are closed, Escape leaves Pick (below).
+  if(event.key==='Escape'&&!stroke&&!moving&&(editorUI.closeTop()||pickCard?.close()||editorUI.closeDocked())){event.preventDefault();return;}
   if(!typing(event.target)&&!loading&&!stroke&&!moving&&!event.ctrlKey&&!event.metaKey&&!event.altKey){
     if(event.code==='KeyF'&&event.shiftKey){event.preventDefault();editorUI.toggleFocus();return;}
     if(event.key==='Escape'&&editorUI.exitFocus()){event.preventDefault();return;}
@@ -2271,7 +2273,7 @@ function buildKnobs() {
     syncColumnPanel();syncWorldControls();
   };
   mountRockPanel();
-  materialEditor?.dispose();materialEditor=mountMaterialEditor({suspend:on=>{if(!on&&materialTerrainDirty){materialTerrainDirty=false;evaluate(0);}mapCanvas?.setSuspended(on);if(!on&&materialWeatherPending)queueWeather();},materials:()=>mapMaterials,strokes:()=>nodes,rocks:()=>mapRocks,renderer:()=>renderer,edit:editMaterials,delete:removeMaterial,checkpoint:()=>checkpoint(true),status,
+  materialEditor?.dispose();materialEditor=mountMaterialEditor({suspend:on=>{materialCovers=on;if(!on&&materialTerrainDirty){materialTerrainDirty=false;evaluate(0);}mapCanvas?.setSuspended(on);if(!on&&materialWeatherPending)queueWeather();},dock:editor=>editorUI.dock(editor),worlds:()=>config.biomes||{},world:()=>config.biomeId,materials:()=>mapMaterials,strokes:()=>nodes,rocks:()=>mapRocks,renderer:()=>renderer,edit:editMaterials,delete:removeMaterial,checkpoint:()=>checkpoint(true),status,
     layerName:key=>{const names=(config.surface||[]).filter(l=>l.material===key).map(l=>l.name||BUILTIN_LABELS[l.builtin]||l.builtin);return names.length?names.join(', '):null;}});
   surfacePanel=mountSurfacePanel(surfaceHost());
 }
@@ -2624,7 +2626,9 @@ function openNewMap(first=false, dimensionsFromMap=null) {
   const pick=id => { picked=id; for (const b of $('new-map-worlds').children) b.setAttribute('aria-pressed',String(b.dataset.world===id)); $('new-map-world-from').textContent=choices().find(c => c.id===id)?.name||''; };
   const cards=() => { $('new-map-worlds').replaceChildren(...choices().map(({id,name,line,picture}) => {
     const b=document.createElement('button'); b.type='button'; b.dataset.world=id;
-    if (picture) { const image=document.createElement('img'); image.src=picture; image.alt=''; image.width=260; image.height=190; b.append(image); }
+    // Every card has the same picture box: a world without a picture (one of your own, or a missing file) shows a plain one that says so.
+    const none=() => { const box=document.createElement('span'); box.className='new-map-no-picture'; box.textContent='No picture yet'; return box; };
+    if (picture) { const image=document.createElement('img'); image.onerror=() => image.replaceWith(none()); image.src=picture; image.alt=''; image.width=260; image.height=190; b.append(image); } else b.append(none());
     const title=document.createElement('span'); title.className='new-map-world-name'; title.textContent=name;
     const note=document.createElement('span'); note.className='new-map-world-line'; note.textContent=line;
     b.append(title,note); b.onclick=() => pick(id); return b;
