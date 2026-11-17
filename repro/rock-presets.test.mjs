@@ -3,7 +3,7 @@ import test from 'node:test';
 import {pathsWithin} from '../sculpt-paths.js';
 import assert from 'node:assert/strict';
 import {ROCK_PRESETS,SMOOTH_SOIL,STARTING_RECIPES,worldRocks,worldRockName,copyRocks,addRock,duplicateRock,renameRock,setRock,deleteRock,strokeRock,keepStrokeRocks,
-  rocksInUse,rocksBeneath,rockRecipeText,parseRockRecipe,rockRecipeFor,recipeRock,worldRock,checkColors,setRockColors,ROCK_COLORS,rockByKey,recipeMaterial,ROCK_MATERIALS,giveRockMaterials} from '../sculpt-rock-presets.js';
+  rocksInUse,rocksBeneath,rockRecipeText,parseRockRecipe,rockRecipeFor,recipeRock,worldRock,checkColors,setRockColors,ROCK_COLORS,rockByKey,recipeMaterial,ROCK_MATERIALS,giveRockMaterials,dropRockMaterials} from '../sculpt-rock-presets.js';
 
 const stroke = (rockPreset, extra = {}) => ({kind: 'landform', points: [{x: 0, y: 0}], params: {rockPreset}, ...extra});
 
@@ -156,6 +156,44 @@ test('a rock type\'s color is its material\'s: each starting recipe names a libr
   const full = Array.from({length: 23}, (_, i) => ({...LIBRARY['green-ground'], slot: i + 1, name: 'Full'}));
   assert.deepEqual(giveRockMaterials(worldRocks(config), full, [2], config).missed, ['Tan'], 'no room: the rock type is named');
   assert.ok(materialColor(LIBRARY['lush-tanrock']).every(Number.isFinite));
+});
+
+test('a rock type shares only an unedited copy of its recipe\'s material, and one it gives up leaves the map when nothing else uses it', async () => {
+  const {withWorldMaterials, setMaterial, recolorMaterial, materialColor, LIBRARY} = await import('../sculpt-materials.js');
+  const config = {materials: {ground: 'green-ground', water: 'green-water'}};
+  let materials = withWorldMaterials(null, config), rocks = [];
+  const a = addRock(rocks, 'basalt', 'World rock', config); rocks = a.rocks;
+  let g = giveRockMaterials(rocks, materials, [a.slot], config); rocks = g.rocks; materials = g.materials;
+  const x = rocks[0].material;
+  const b = addRock(rocks, 'basalt', 'World rock', config), basalt = r => r.slot === b.slot ? 'basalt' : r.key;
+  assert.equal(giveRockMaterials(b.rocks, materials, [b.slot], config, basalt).rocks.find(r => r.slot === b.slot).material, x, 'an unedited copy is shared');
+  // A's Rock color recolors its copy; a new basalt rock type then takes a fresh library copy, not A's red.
+  materials = setMaterial(materials, x, recolorMaterial(materials.find(m => m.slot === x), [.8, .1, .1]));
+  g = giveRockMaterials(b.rocks, materials, [b.slot], config, basalt);
+  const fresh = g.materials.find(m => m.slot === g.rocks.find(r => r.slot === b.slot).material);
+  assert.notEqual(fresh.slot, x);
+  assert.deepEqual(materialColor(fresh).map(v => v.toFixed(3)), materialColor(LIBRARY[ROCK_MATERIALS.basalt]).map(v => v.toFixed(3)));
+  // Given up (Start from, delete): it goes unless another rock type, a stroke (hidden too), a world role, the kit or a tool still uses it.
+  const without = rocks.map(r => r.slot === a.slot ? (({material, ...o}) => o)(r) : r);
+  assert.equal(dropRockMaterials(materials, [x], {rocks: without, config}).some(m => m.slot === x), false, 'unused: it leaves');
+  assert.ok(dropRockMaterials(materials, [x], {rocks: [...without, {slot: 9, material: x}], config}).some(m => m.slot === x), 'another rock type shows it');
+  assert.ok(dropRockMaterials(materials, [x], {rocks: without, nodes: [{kind: 'landform', hidden: true, params: {groundPreset: x}}], config}).some(m => m.slot === x), 'a hidden stroke chose it');
+  assert.ok(dropRockMaterials(materials, [x], {rocks: without, config, keep: m => m.source === ROCK_MATERIALS.basalt}).some(m => m.slot === x), 'a tool lays it down');
+  assert.ok(dropRockMaterials(materials.map(m => m.slot === x ? {...m, key: 'kit-basalt'} : m), [x], {rocks: without, config}).some(m => m.slot === x), 'the world kit holds it');
+  const ground = materials.find(m => m.worldGround).slot;
+  assert.ok(dropRockMaterials(materials, [ground], {rocks: without, config}).some(m => m.slot === ground), 'a world surface stays');
+  // A material the artist made and gave the rock type is not a rock's own copy: it stays.
+  const mine = materials.map(m => m.slot === x ? {...m, source: null} : m);
+  assert.ok(dropRockMaterials(mine, [x], {rocks: without, config}).some(m => m.slot === x));
+  // Cycling Start from through every recipe leaves no copies behind.
+  let list = withWorldMaterials(null, config), cycle = addRock([], 'basalt', 'World rock', config).rocks;
+  g = giveRockMaterials(cycle, list, [1], config); cycle = g.rocks; list = g.materials;
+  for (const key of [...Object.keys(ROCK_MATERIALS), ...Object.keys(ROCK_MATERIALS)]) {
+    const old = [cycle[0].material], next = setRock(cycle, 1, recipeRock(key, config)).map(r => (({material, ...o}) => o)(r));
+    g = giveRockMaterials(next, list, [1], config, () => key); cycle = g.rocks; list = dropRockMaterials(g.materials, old, {rocks: cycle, config});
+    assert.deepEqual(g.missed, [], key);
+  }
+  assert.equal(list.length, withWorldMaterials(null, config).length + 1, 'the world\'s two and the rock type\'s one');
 });
 
 test('a preset carries a stable key: the recipe a world ships it from, unique in the map, kept by a rename; a world\'s tool resolves it to a slot', async () => {
