@@ -90,7 +90,10 @@ const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',16,1200],amount:
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldSetting=key => worldSettingIn(config,experiment,key);
 const worldDefault=key => worldDefaultIn(config,key);
-const shapeDefaults=() => shapeDefaultsIn(config);
+// The world's shape option defaults, built once per config.defaults: every replacement of the defaults (a stored world, an undo's world) is a new
+// object, and applyWorldRock writes its recipe's numbers before any shape reads them. nodeShapeParams runs for every later shape on each preview move.
+let shapeDefaultsFor=null,shapeDefaultsKept=null;
+const shapeDefaults=() => { if (shapeDefaultsFor!==config?.defaults || !shapeDefaultsKept) { shapeDefaultsFor=config?.defaults; shapeDefaultsKept=Object.freeze(shapeDefaultsIn(config)); } return shapeDefaultsKept; };
 const nodeShapeParams=n => {const q={...shapeDefaults(),...n.params};return n.kind==='landform'?landformSteps(q):q;};
 const shapeValue=key => { const f=SHAPE_FIELDS.find(f => f[0]===key); return Number($(f[1]).value)/f[7]; };
 // A shape control set from a tool's or a stroke's numbers. A choice its list no longer holds (a rock preset deleted since the tool last used it)
