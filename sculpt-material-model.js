@@ -49,6 +49,30 @@ export const SURFACE_BUILTINS = {
   regrownMoss: [5, 0], fines: [5, 1], paintedRock: [5, 2], paintedSnow: [5, 3], paintedMoss: [5, 4], sandDust: [5, 5], sand: [5, 6],
   chips: [6, 0], iceCrest: [7, 0], iceCap: [7, 1],
 };
+// What each built-in needs to draw anything at all, as the draw gates it (engine-frag.wgsl, the masks each surfaceStage call is given, and the
+// uniforms sculpt-renderer.js sets them from). World › Surface lists a built-in under "Cannot draw" while one of these fails, and under "Only
+// where painted" when it draws only where Surface paint has painted. A need: `control`, a World setting that must be above 0 (a rock type's
+// setting counts for the world's rock and every rock type in use on the map, as the draw reads each pixel's own); `unless`, a world fact
+// (sculpt-knobs.js worldPanelValues) under which that need does not hold; `role`, a map material in that role (sculpt-materials.js MAP_ROLES)
+// that the draw has no fallback for; `layer`, a surface the world draws (config.layers: its own beach, or one another world lends); `painted`,
+// the mask Surface paint lays. An empty list claims nothing: the sand's sources and the chips' weathering are not read here, and a false
+// "cannot draw" is worse than none.
+export const SURFACE_NEEDS = {
+  highland: [{role: 'worldHigh'}, {control: 'highland'}],   // highShare: 0 with no highland material (u.highGround < 0) or Strength 0
+  slopeCover: [{control: 'slopeTexture', unless: 'slopeSand'}],   // its mask times Sampled slope texture, unless the world's slopes are sand
+  soil: [{control: 'soilRim'}],   // the thinning cover's soil, only when u.soilRim > 0
+  rock: [],
+  beach: [{layer: 'beach'}],   // u.beach: the world's layers hold a beach; without its role material it falls back to the slope's or the ground's
+  crown: [{control: 'rockCrown'}],   // a rock type's rockCrown > 0
+  baseBand: [{control: 'baseBand'}, {control: 'strata'}],   // u.baseBand > 0 on bedded rock (a rock type's strata > 0, and a column)
+  regrownMoss: [{control: 'debrisAmount'}], fines: [{control: 'debrisAmount'}],   // u.debrisAny: the largest debrisAmount of the rocks in use
+  paintedRock: [{painted: 'rock'}], paintedSnow: [{painted: 'snow'}], paintedMoss: [{painted: 'moss'}],   // inside u.paintOn: the painted masks
+  sandDust: [{control: 'sandDust'}],   // sand's dusting, times u.sandDust
+  sand: [],
+  chips: [],
+  iceCrest: [{control: 'iceCrest'}],   // a rock type's iceCrest > 0
+  iceCap: [{control: 'iceSnow'}],   // a rock type's iceSnow > 0 (Snow on level caps)
+};
 // The built-ins that may draw a library material (phase 4): those the engine colors itself. The others already draw a material set in the
 // Materials panel (highland ground, slope cover, beach and debris fines take the world's role materials) or each rock type's rock (rock,
 // crown rock, painted rock, chips); a material for them here would be a second, partial way to set those (CLAUDE.md rule 9).

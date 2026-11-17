@@ -6,8 +6,9 @@ export function mountWorkspace(){
   const palette=document.querySelector('.tool-palette');
   const zoomBy=factor=>{const camera=window.sculptCanvas;if(!camera)return;const s=camera.view().scale,levels=[.25,.5,1,2,4];camera.zoom(factor>1?(levels.find(v=>v>s+.001)??4):([...levels].reverse().find(v=>v<s-.001)??.25));};
   $('zoom-out').onclick=()=>zoomBy(.5);$('zoom-in').onclick=()=>zoomBy(2);
-  // Picking a tool shows its settings: the side panel opens on Build.
-  palette.addEventListener('click',e=>{if(e.target.closest('[data-tool],#feature-tool,#starts-tool'))$('tab-tool').click();});
+  // Picking a tool shows its settings: the side panel opens on Build. While the material editor stands in the side panel's place, the tool is
+  // taken up without closing it (drawing stays live beside the editor).
+  palette.addEventListener('click',e=>{if(e.target.closest('[data-tool],#feature-tool,#starts-tool')&&!document.querySelector('.app').classList.contains('material-docked'))$('tab-tool').click();});
   // The palette and the selection bar on the map sit outside the #editor fieldset, so they follow the editor's lock here. (The curve
   // editors are inside it; their canvases lock by the stylesheet.)
   let lastLock;

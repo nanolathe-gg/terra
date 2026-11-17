@@ -15,7 +15,7 @@ editor state.
 
 | Area | Current contents and behavior |
 | --- | --- |
-| Top bar | New, map name and dimensions (Map menu), Open, Save, Undo/Redo; Build/World; current-world badge; Art/Clay/Passability, View, Settings, panel toggles, Focus, Export. Long map names truncate visually and keep the full name in the hover title. |
+| Top bar | Map menu (its button shows the map's name and size; New, Open, Save and Share link above the map's own settings), Undo/Redo; Build/World (the World tab names the world); Materials; Find; View menu (Art/Clay/Passability, tile grid, weathered detail, panel toggles, Focus, then the editor settings: drawing, memory budgets, TA palette); Export. Long map and world names truncate visually; the map's full name stays in the hover title. |
 | Tool rail | Select, Land, Water, Brushes, Features, Starts, Shapes, Expand. Land/Water/Brushes flyouts show tool names and existing rendered examples; Expand keeps the full palette visible. |
 | Build side panel | Tool or selected-shape card with Profile, Size & height, Rock & cover, Outline & variation, Details and Advanced groups; features use their existing Place/Erase/Fill modes and kind tabs. Starts has its own rail entry into the same feature state. |
 | Shape profile | Cross-section and height-along-path canvases beside the selected-point and bulk numeric editors in Full size. Live terrain preview uses the same renderer. |
@@ -191,24 +191,24 @@ appear on hover.
 
 | Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown at the baseline | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Save | `save` | button | Download the map recipe | editor | default view |  | Top bar › File › Save map file |
-| Load | `load` | button | Open a saved map recipe | editor | default view |  | Top bar › File › Open map file |
-| Share link | `share-url` | text |  | editor | hidden until needed |  | Top bar › Export dialog › Share link |
-| Copy | `share-copy` | button |  | editor | hidden until needed |  | Top bar › Export dialog › Share link |
+| Save | `save` | button | Download the map recipe | editor | default view |  | Top bar › Map menu › Save |
+| Load | `load` | button | Open a saved map recipe | editor | default view |  | Top bar › Map menu › Open |
+| Share link | `share-url` | text |  | editor | hidden until needed |  | Top bar › Map menu › Share link |
+| Copy | `share-copy` | button |  | editor | hidden until needed |  | Top bar › Map menu › Share link |
 | Restore my previous map | `share-restore` | button | Your own map was kept when this one opened. | editor | hidden until needed |  | Top bar › Map menu › Restore my previous map (after a shared map opens) |
 | ↶ Undo | `undo` | button | Undo · ⌘ / Ctrl Z | map file | default view |  | Top bar › Undo / Redo |
 | ↷ Redo | `redo` | button | Redo · ⌘ / Ctrl Shift Z | map file | default view |  | Top bar › Undo / Redo |
 | Export | `open-export` | button |  | editor | default view |  | Top bar › Export button |
-| Settings | `open-graphics` | button |  | editor | default view |  | Top bar › Settings |
+| View | `open-graphics` | button | Names the view in use (View: Art) | editor | default view |  | Top bar › View |
 | Fit | `fit` | button |  | editor | default view |  | Canvas › Zoom cluster |
 | 1× | `one` | button |  | editor | default view |  | Canvas › Zoom cluster |
 | − | `zoom-out` | button |  | editor | default view |  | Canvas › Zoom cluster |
 | Zoom | `zoom` | choice; Fit map / 25% / 50% / 100% / 200% / 400%; Green: 1 |  | editor | default view |  | Canvas › Zoom cluster |
 | + | `zoom-in` | button |  | editor | default view |  | Canvas › Zoom cluster |
-| Art | `view-rendered` | button |  | map file | default view |  | Top bar › View switch › Art |
-| Clay | `view-clay` | button |  | map file | default view |  | Top bar › View switch › Clay |
-| Passability | `view-passability` | button |  | not saved | default view |  | Top bar › View switch › Passability |
-| clay | `clay` | switch; Green: false |  | map file | hidden until needed |  | Top bar › View switch › hidden checkbox behind Clay |
+| Art | `view-rendered` | button |  | map file | default view |  | Top bar › View menu › Art |
+| Clay | `view-clay` | button |  | map file | default view |  | Top bar › View menu › Clay |
+| Passability | `view-passability` | button |  | not saved | default view |  | Top bar › View menu › Passability |
+| clay | `clay` | switch; Green: false |  | map file | hidden until needed |  | Top bar › View menu › hidden checkbox behind Clay |
 | Tile grid | `tile-grid` | switch; Green: false | 16 px height-cell grid in map coordinates; heavier lines every 128 px. | not saved | default view |  | Top bar › View menu › Tile grid |
 | Weathering | `weather` | switch; Green: true | Apply terrain weathering to this map, including export. | map file | default view |  | World › Rain & erosion › Erosion switch |
 

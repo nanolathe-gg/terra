@@ -1,7 +1,7 @@
 // A world's shape tools and a map's own (T1) through the editor, in Chrome on your own server.
 //   node repro/tools-ui.mjs --server http://127.0.0.1:<yours> --port <cdp> [--out DIR]
-// Green's toolbar (Landform first, the world's thirteen, Fissure last in Shape; four in Water); draw with Hill; Save the selected hill as a tool
-// (its own name, icon and color: it joins the Shape group after the world's tools); draw with it (the same numbers as the hill it came from);
+// Green's toolbar (in Shape the world's tools by family, then Landform and Fissure, then the map's own; four in Water); draw with Hill; Save the
+// selected hill as a tool (its own name, icon and color: it joins the Shape group under This map's tools); draw with it (the same numbers as the hill it came from);
 // undo and redo both; reload (the autosave) to the same tools, strokes and pixels; load a save whose strokes name no tool (each takes the one
 // its section form belongs to); switch to Red Planet: its toolbar, the map's tool carried with the map, the hill taking Red's numbers where it
 // was not edited, and a stroke whose tool Red lacks showing as Landform with every number kept, and kept again on to Desert (no world lacks a
@@ -21,10 +21,12 @@ await cdpPortFree(port); mkdirSync(out, {recursive: true});
 const browser = spawn(chromePath, ['--headless=new', ...chromeGpuFlags, `--remote-debugging-port=${port}`,
   `--user-data-dir=${join(out, 'profile-' + Date.now())}`, '--window-size=1440,900', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-// Each world's toolbar as its config lists it: Landform, its shape tools (then any map tool), Fissure; its water tools.
+// Each world's toolbar as its config lists it: its shape tools by family (families in the order they first come, a tool without one last),
+// Landform and Fissure, then any map tool; its water tools.
+const byFamily = list => { const groups = new Map(); for (const t of list) { const f = t.family ?? ''; if (!groups.has(f)) groups.set(f, []); groups.get(f).push(t.id); } return [...groups].sort(([a], [b]) => (a === '') - (b === '')).flatMap(([, ids]) => ids); };
 const lists = {};
 for (const w of ['green', 'red']) lists[w] = (await (await fetch(`${server}/config/${w}.json`)).json()).tools;
-const bar = (w, mine = []) => ({Shape: ['landform', ...lists[w].filter(t => t.group === 'shape').map(t => t.id), ...mine, 'fissure'], Water: lists[w].filter(t => t.group === 'water').map(t => t.id)});
+const bar = (w, mine = []) => ({Shape: [...byFamily(lists[w].filter(t => t.group === 'shape')), 'landform', 'fissure', ...mine], Water: lists[w].filter(t => t.group === 'water').map(t => t.id)});
 let ws; const report = {};
 try {
   for (let i = 0; i < 100 && !ws; i++) { try { const tab = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(t => t.type === 'page'); if (tab) ws = new WebSocket(tab.webSocketDebuggerUrl); } catch {} if (!ws) await sleep(150); }
@@ -94,7 +96,7 @@ try {
   const saved = await ev('sculptDebug.sketch().tools');
   assert.deepEqual(saved.map(t => [t.id, t.label, t.icon, t.color, t.group, t.shape]), [['map-1', 'Broad hill', 'mountain', '#d08050', 'shape', 'hill']]);
   report.withTool = await toolbar();
-  assert.deepEqual(report.withTool, bar('green', ['map-1']), 'the map\'s tool joins its group after the world\'s tools');
+  assert.deepEqual(report.withTool, bar('green', ['map-1']), 'the map\'s tool joins its group under This map\'s tools');
   assert.equal((await nodes())[hill].tool, 'hill', 'saving a tool changes no stroke');
   await shot('.tool-groups', 'map-tool.png'); await tool('map-1'); await shot('#brush-title', 'map-tool-window.png', true);
   // Draw with it: its stroke has the hill's numbers and curves.

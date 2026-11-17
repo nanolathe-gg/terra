@@ -1,6 +1,7 @@
 import {worldControlRequirement,WORLD_PRIMARY_CONTROLS} from './sculpt-control-schema.js';
 import {mountWorkspace} from './sculpt-workspace.js';
 import {COLUMN_BEDS,COLUMN_SECTIONS,COLUMN_SLOTS,FIRST_SECTION} from './sculpt-column.js';
+import {mountFind} from './sculpt-find.js';
 // Presentation helpers; terrain state and history stay in sculpt.js.
 const $=id=>document.getElementById(id);
 export function mountEditorUI(){
@@ -10,8 +11,11 @@ export function mountEditorUI(){
  try{panels={...panels,...JSON.parse(localStorage.getItem('terraform-editor-panels')||'{}')};}catch{}
  const savePanels=()=>{try{localStorage.setItem('terraform-editor-panels',JSON.stringify(panels));}catch{}};
  const focused=()=>beforeFocus!==null;
+ // The material editor docked beside the map takes the side panel's column while it is open ({close, inner}: its own close, and the
+ // step Escape takes inside it). It is not one of the remembered panels: the side panel comes back as it was when the editor closes.
+ let docked=null;
  function updateLayout(){
-  const showTools=!focused()&&panels.tools,showInspector=!focused()&&panels.inspector;
+  const showTools=!focused()&&panels.tools,showInspector=!focused()&&panels.inspector&&!docked;
   app.classList.toggle('tools-collapsed',!showTools);app.classList.toggle('inspector-collapsed',!showInspector);app.classList.toggle('palette-open',Boolean(panels.palette));
   $('tools-sidebar').hidden=!showTools;$('inspector-sidebar').hidden=!showInspector;
   for(const [id,on,label] of [['toggle-tools',showTools,'tools'],['toggle-inspector',showInspector,'side panel']]){const b=$(id);b.setAttribute('aria-expanded',String(on));b.title=`${on?'Hide':'Show'} ${label}`;}
@@ -22,7 +26,9 @@ export function mountEditorUI(){
   if(!showInspector)setLarge(false);
   savePanels();
  }
- function togglePanel(name){if(focused()){panels={...panels,tools:false,inspector:false};beforeFocus=null;}panels[name]=!panels[name];updateLayout();}
+ // Asking for the side panel while the material editor stands in its place closes the editor and shows the panel.
+ function togglePanel(name){if(name==='inspector'&&docked){docked.close(false);if(!focused()&&panels.inspector)return;}if(focused()){panels={...panels,tools:false,inspector:false};beforeFocus=null;}panels[name]=!panels[name];updateLayout();}
+ function dock(editor){docked=editor;app.classList.toggle('material-docked',Boolean(editor));if(editor)setLarge(false);updateLayout();}
  function exitFocus(){if(!focused())return false;panels=beforeFocus;beforeFocus=null;updateLayout();return true;}
  function toggleFocus(){if(!exitFocus()){beforeFocus={...panels};closeSurfaces();updateLayout();}}
  $('toggle-tools').onclick=()=>togglePanel('tools');$('toggle-inspector').onclick=()=>togglePanel('inspector');$('focus-canvas').onclick=toggleFocus;
@@ -32,25 +38,32 @@ export function mountEditorUI(){
  function closeFlyouts(){let any=false;for(const r of rails){if(r.getAttribute('aria-expanded')==='true')any=true;r.setAttribute('aria-expanded','false');}return any;}
  for(const r of rails)r.onclick=()=>{if(panels.palette)return;const open=r.getAttribute('aria-expanded')==='true';closeFlyouts();closeSurfaces();r.setAttribute('aria-expanded',String(!open));};
  grouped.addEventListener('click',e=>{if(e.target.closest('.tool-flyout button'))closeFlyouts();});
- const syncTools=(active,selected,locked,features)=>{
+ // Pick (picking) and Features or Starts (features) stand in for the tool in hand while they are on.
+ const syncTools=(active,selected,locked,features,picking=false)=>{
   for(const b of grouped.querySelectorAll('button')){
    b.disabled=locked;if(b.classList.contains('rail-button'))continue;
-   b.setAttribute('aria-pressed',String(features?b.id===(features==='starts'?'starts-tool':'feature-tool'):b.dataset.tool===active));
+   b.setAttribute('aria-pressed',String(picking?b.id==='pick-tool':features?b.id===(features==='starts'?'starts-tool':'feature-tool'):b.dataset.tool===active));
   }
   // A rail button is lit while the tool in hand is one of its group.
-  for(const r of rails)r.classList.toggle('has-current',!features&&Boolean(r.parentElement.querySelector(`[data-tool="${CSS.escape(active||'')}"]`)));
+  for(const r of rails)r.classList.toggle('has-current',!features&&!picking&&Boolean(r.parentElement.querySelector(`[data-tool="${CSS.escape(active||'')}"]`)));
  };
  mountWorkspace();
  // The side panel: Build (the tool or the selection) or World.
  const tabs=[...document.querySelectorAll('.mode-switch [role="tab"]')];
  function activate(tab){for(const t of tabs){const active=t===tab;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).hidden=!active;}app.classList.toggle('world-mode',tab.id==='tab-world');if(tab.id!=='tab-tool')setLarge(false);}
  for(const t of tabs){t.onclick=()=>{if($('inspector-sidebar').hidden)togglePanel('inspector');activate(t);};t.onkeydown=e=>{const i=tabs.indexOf(t);let j;if(e.key==='ArrowRight')j=(i+1)%tabs.length;if(e.key==='ArrowLeft')j=(i+tabs.length-1)%tabs.length;if(e.key==='Home')j=0;if(e.key==='End')j=tabs.length-1;if(j!==undefined){e.preventDefault();activate(tabs[j]);tabs[j].focus();}};}
- // The surfaces: the Map menu, Settings, Export and the Shapes list each open from their own button, in a fixed place. The three menus
- // close when another opens or the pointer goes down elsewhere; the Shapes list stays while you work on the map.
+ // The surfaces: the Map menu, View, Export and the Shapes list each open from their own button, in a fixed place. The three menus
+ // close when another opens or the pointer goes down elsewhere; the Shapes list stays while you work on the map. A menu closes with
+ // the Share link folded inside it, so the next opening makes a new link.
  const surfaces=[['tab-map','pane-map',true],['open-graphics','pane-graphics',true],['open-export','pane-export',true],['tab-objects','pane-objects',false]];
- function setSurface(button,pane,open){$(pane).hidden=!open;$(button).setAttribute('aria-expanded',String(open));}
+ function setSurface(button,pane,open){$(pane).hidden=!open;$(button).setAttribute('aria-expanded',String(open));if(!open)for(const d of $(pane).querySelectorAll('details.share-menu[open]'))d.open=false;}
  function closeSurfaces(menusOnly=false){let any=false;for(const [button,pane,menu] of surfaces)if(!$(pane).hidden&&(menu||!menusOnly)){setSurface(button,pane,false);any=true;}return any;}
  for(const [button,pane,menu] of surfaces)$(button).onclick=()=>{const open=$(pane).hidden;if(menu)closeSurfaces(true);closeFlyouts();setSurface(button,pane,open);};
+ // The Map menu's file actions close it: New opens its dialog, Open a file picker, Save a download.
+ $('pane-map').addEventListener('click',e=>{if(e.target.closest('#new-map,#load,#save'))setSurface('tab-map','pane-map',false);});
+ // The View button names the view in use (Art, Clay or Passability), whichever script presses it.
+ const views=['view-rendered','view-clay','view-passability'].map($),showView=()=>{$('view-name').textContent=(views.find(b=>b.getAttribute('aria-pressed')==='true')||views[0]).textContent;};
+ new MutationObserver(showView).observe($('pane-graphics').querySelector('.view-switch'),{attributes:true,subtree:true,attributeFilter:['aria-pressed']});showView();
  document.addEventListener('pointerdown',e=>{
   const t=e.target instanceof Element?e.target:null;if(!t)return;
   if(!t.closest('.tool-group'))closeFlyouts();
@@ -63,11 +76,15 @@ export function mountEditorUI(){
  new MutationObserver(()=>{if($('section-preview-control').hidden)setLarge(false);}).observe($('section-preview-control'),{attributes:true,attributeFilter:['hidden']});
  // The curves are rows of the card's Profile section: folding it away closes them at full size too.
  $('card-profile').addEventListener('toggle',()=>{if(!$('card-profile').open)setLarge(false);});
- // Escape closes what is open on top of the editor, one thing a press: a tool flyout, a menu, the full-size curves.
- const closeTop=()=>closeFlyouts()||closeSurfaces(true)||[...document.querySelectorAll('details.top-menu[open],details.share-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||setLarge(false);
+ // Escape closes one thing per press: Find, the visible Surface gallery, tool flyouts, menus and full-size curves, then the material editor's
+ // text field, menu, library drawer or Full size. Pick's card comes next (sculpt.js), then closeDocked closes the material editor itself.
+ const find=mountFind();
+ const closeGallery=()=>{const b=$('surface-add');if(b?.getAttribute('aria-expanded')!=='true'||!b.getClientRects().length)return false;b.click();return true;};   // left open behind another tab, it waits
+ const closeTop=()=>find.close()||closeGallery()||closeFlyouts()||[...document.querySelectorAll('details.top-menu[open],details.share-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||closeSurfaces(true)||setLarge(false)||Boolean(docked?.inner());
+ const closeDocked=()=>{if(!docked)return false;docked.close();return true;};
  for(const [id,on] of [['view-rendered',false],['view-clay',true]])$(id).onclick=()=>{$('clay').checked=on;$('clay').dispatchEvent(new Event('change'));};
  updateLayout();
- return {toggleFocus,exitFocus,syncTools,closeTop,focused,get previewQuality(){return panels.previewQuality;},setPreviewQuality(value){panels.previewQuality=value;if(beforeFocus)beforeFocus.previewQuality=value;savePanels();},get terrainBudget(){return panels.terrainBudget;},setTerrainBudget(value){panels.terrainBudget=value;if(beforeFocus)beforeFocus.terrainBudget=value;savePanels();}};
+ return {toggleFocus,exitFocus,syncTools,closeTop,closeDocked,dock,focused,get previewQuality(){return panels.previewQuality;},setPreviewQuality(value){panels.previewQuality=value;if(beforeFocus)beforeFocus.previewQuality=value;savePanels();},get terrainBudget(){return panels.terrainBudget;},setTerrainBudget(value){panels.terrainBudget=value;if(beforeFocus)beforeFocus.terrainBudget=value;savePanels();}};
 }
 // Each effect owns its controlling value and its dependent parameters. Zero
 // means off; switching back on restores the last value for this tool/selection.
