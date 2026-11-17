@@ -45,3 +45,19 @@ test('held paged feeds reuse old Time until still, then refine it before release
 });
 
 
+test('a preview feed can enqueue its readers immediately and matches fresh shape replay',{timeout:120000},async()=>{
+ const s=await openScene(scene,'biome=green&mapX=2&mapY=2&gpuMB=2048');
+ const {createPreviewLattice}=await import('../sculpt-preview.js');let revision=1,nodes=s.nodes.slice();
+ const source=()=>({size:s.worldSize,grid:s.worldGrid,spacing:s.spacing,baseHeight:s.config.baseHeight,sea:s.config.seaLevel,minH:s.minH,maxH:s.maxH,nodes,context:s.context(),maskCount:s.engine.MASK_KEYS.length,revision,revB:0,fail:e=>{throw e;}});
+ const a=createPreviewLattice(s.renderer.device,source),b=createPreviewLattice(s.renderer.device,source);
+ const read=async feed=>{
+  const h=createHash('sha256');for(const buffer of [feed.planes,feed.masks])h.update(new Uint8Array(await s.fieldsModule.readBuffer(s.renderer.device,buffer,0,buffer.size)));return h.digest('hex');
+ };
+ try{
+  const region=s.renderer.requiredRegion({x:0,y:0,width:256,height:256,worldSize:s.worldSize,worldGrid:a.grid(4)});
+  const before=await read(await a.feed(region,{weather:false}));
+  const added=s.engine.sceneNodes(s.config,[['landform',[[120,160],[220,160]],{card:{diameter:100,elevation:110}}]],{ground:false,seed:s.seed,settings:s.settings});nodes=[...s.nodes,...added];revision++;
+  const after=await read(await a.feed(region,{weather:false}));
+  assert.notEqual(after,before);assert.equal(after,await read(await b.feed(region,{weather:false})));assert.deepEqual(s.errors,[]);
+ }finally{a.clear();b.clear();s.dispose();}
+});

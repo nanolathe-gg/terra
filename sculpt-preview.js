@@ -121,7 +121,9 @@ export function createPreviewLattice(device,scene,memoryChanged=()=>{}){
             if(!target||target.ox!==p.x||target.oy!==p.y||target.pw!==p.side){target?.destroy();target=engine.makeTarget(p.x,p.y,p.side,p.side);}
             submitted=engine.submit(p.nodes,s.context,null,{readback:false,target,prepare:n=>p.recipe.get(n)});
           });
-          await submitted.done;current();shapeKey=p.sk;runs++;
+          // The feed and Time pass use this same queue. Their reads follow shape
+          // without a GPU-to-page round trip; the engine retires its scratch.
+          submitted.done.catch(s.fail);current();shapeKey=p.sk;runs++;
         }
         if(key!==p.held){
           if(!p.reuse)dropWeather();else weatherReuses++;key='';
