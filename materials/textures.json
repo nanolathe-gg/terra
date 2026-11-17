@@ -12,7 +12,7 @@
    {"id":"step-7","type":"combine","kind":"multiply","name":"Multiply grain","params":{"amount":1,"offset":0},"in":{"a":"step-5","b":"step-6","mask":null},"x":944,"y":0},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"step-7","height":null,"shine":null},"x":1180,"y":0}
   ],
-  "controls": [{"label":"Mottling / streaks: size","node":"step-2","param":"size","min":1,"max":14},{"label":"Pattern colors: colors","node":"step-5","param":"stops"}],
+  "controls": [{"label":"Mottling size","node":"step-2","param":"size","min":1,"max":14},{"label":"Grass colors","node":"step-5","param":"stops"}],
   "palette": [43,42,41,40,39,38,238,37,172,170,61,74,169,93,168,60,167,73,166,59,92,72,165,58,184,71,55,70,182,181],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -31,7 +31,7 @@
    {"id":"step-7","type":"combine","kind":"multiply","name":"Multiply grain","params":{"amount":1,"offset":0},"in":{"a":"step-5","b":"step-6","mask":null},"x":1180,"y":38},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"step-7","height":null,"shine":null},"x":1416,"y":38}
   ],
-  "controls": [{"label":"Broad variation: size","node":"step-2-broad","param":"size","min":4,"max":64},{"label":"Pattern colors: colors","node":"step-5","param":"stops"}],
+  "controls": [{"label":"Patch size","node":"step-2-broad","param":"size","min":4,"max":64},{"label":"Water colors","node":"step-5","param":"stops"}],
   "palette": [227,104,103,226,102,101],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -143,7 +143,7 @@
    {"id":"step-11","type":"combine","kind":"multiply","name":"Multiply spots","params":{"amount":1,"offset":0},"in":{"a":"step-6","b":"step-10","mask":null},"x":1180,"y":75},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"step-11","height":null,"shine":null},"x":1416,"y":75}
   ],
-  "controls": [{"label":"Mottling / streaks: size","node":"step-2","param":"size","min":1.6,"max":26},{"label":"Pattern colors: colors","node":"step-6","param":"stops"}],
+  "controls": [{"label":"Mottling size","node":"step-2","param":"size","min":1.6,"max":26},{"label":"Ground colors","node":"step-6","param":"stops"}],
   "palette": [61,189,29,188,60,187,28,186,59,185,58,27,184,207,57,183,71,26,56,206,25,70,182,24,205,23,181,22,204,203],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -165,7 +165,7 @@
    {"id":"step-10","type":"combine","kind":"mix","name":"Blend spot color","params":{"amount":0.525,"offset":0},"in":{"a":"step-7","b":"step-9","mask":"step-8"},"x":1416,"y":150},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"step-10","height":null,"shine":null},"x":1652,"y":150}
   ],
-  "controls": [{"label":"Broad variation: size","node":"step-2-broad","param":"size","min":4,"max":64},{"label":"Pattern colors: colors","node":"step-5","param":"stops"}],
+  "controls": [{"label":"Patch size","node":"step-2-broad","param":"size","min":4,"max":64},{"label":"Water colors","node":"step-5","param":"stops"}],
   "palette": [109,108,139,107,138,106,137,121,120,119,154,153,221,152,151],
   "dither": {"amount":1,"spread":1,"tone":1.1,"red":1,"green":0.95,"blue":0.75}
  },
@@ -189,7 +189,7 @@
    {"id":"rough","type":"combine","kind":"multiply","name":"Crumpled","params":{"amount":1,"offset":0},"in":{"a":"step-11","b":"cg","mask":null},"x":944,"y":250},
    {"id":"material","type":"output","name":"Material","params":{"relief":2.2},"in":{"color":"rough","height":"crumple","shine":null},"x":1416,"y":75}
   ],
-  "controls": [{"label":"Mottling / streaks: size","node":"step-2","param":"size","min":1.6,"max":26},{"label":"Pattern colors: colors","node":"step-6","param":"stops"}],
+  "controls": [{"label":"Mottling size","node":"step-2","param":"size","min":1.6,"max":26},{"label":"Ground colors","node":"step-6","param":"stops"}],
   "palette": [61,189,29,188,60,187,28,186,59,185,58,27,184,207,57,183,71,26,56,206,25,70,182,24,205,23,181,22,204,203],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -204,7 +204,7 @@
    {"id":"mix","type":"combine","kind":"multiply","name":"Flecks over sand","params":{"amount":1,"offset":0},"in":{"a":"sand","b":"fleckc","mask":null},"x":472,"y":75},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"mix","height":null,"shine":null},"x":708,"y":75}
   ],
-  "controls": [{"label":"Very fine grain: size","node":"fine","param":"size","min":1,"max":4},{"label":"Cream sand tone: colors","node":"sand","param":"stops"}],
+  "controls": [{"label":"Grain size","node":"fine","param":"size","min":1,"max":4},{"label":"Sand colors","node":"sand","param":"stops"}],
   "palette": [65,64,17,81,82,66,18,83,80,84,255],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -223,7 +223,7 @@
    {"id":"step-7","type":"combine","kind":"multiply","name":"Multiply grain","params":{"amount":1,"offset":0},"in":{"a":"step-5","b":"step-6","mask":null},"x":1180,"y":38},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"step-7","height":null,"shine":null},"x":1416,"y":38}
   ],
-  "controls": [{"label":"Broad variation: size","node":"step-2-broad","param":"size","min":4,"max":64},{"label":"Pattern colors: colors","node":"step-5","param":"stops"}],
+  "controls": [{"label":"Patch size","node":"step-2-broad","param":"size","min":4,"max":64},{"label":"Water colors","node":"step-5","param":"stops"}],
   "palette": [137,138,135,136,134,133,139,140],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -239,7 +239,7 @@
    {"id":"dust","type":"gradient","name":"Light dust to olive gray","params":{"ease":0},"in":{"in":"blotch-mask"},"stops":[[0,0.74,0.74,0.73],[0.15,0.74,0.74,0.7],[0.5,0.69,0.69,0.62],[1,0.58,0.58,0.51]],"x":944,"y":75},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"dust","height":null,"shine":null},"x":1180,"y":75}
   ],
-  "controls": [{"label":"Blotches, stretched sideways: size","node":"blotches","param":"size","min":1,"max":10},{"label":"Light dust to olive gray: colors","node":"dust","param":"stops"}],
+  "controls": [{"label":"Blotch size","node":"blotches","param":"size","min":1,"max":10},{"label":"Dust colors","node":"dust","param":"stops"}],
   "palette": [84,85,67,86,87,68,66,88,83],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -253,7 +253,7 @@
    {"id":"grays","type":"gradient","name":"Dark to mid gray","params":{"ease":0},"in":{"in":"speckled"},"stops":[[0.15,0.195,0.195,0.195],[0.5,0.3,0.3,0.3],[0.85,0.51,0.51,0.51]],"x":472,"y":75},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"grays","height":null,"shine":null},"x":708,"y":75}
   ],
-  "controls": [{"label":"Soft gray mottles: size","node":"mottle","param":"size","min":1,"max":14},{"label":"Dark to mid gray: colors","node":"grays","param":"stops"}],
+  "controls": [{"label":"Mottling size","node":"mottle","param":"size","min":1,"max":14},{"label":"Water colors","node":"grays","param":"stops"}],
   "palette": [91,92,90,89,88,93,87,55,54,86,94],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -273,7 +273,7 @@
    {"id":"flecked","type":"combine","kind":"mix","name":"Olive flecks over the grays","params":{"amount":1,"offset":0},"in":{"a":"dust","b":"olive","mask":"fleck-mask"},"x":1180,"y":75},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"flecked","height":null,"shine":null},"x":1180,"y":75}
   ],
-  "controls": [{"label":"Blotches, stretched sideways: size","node":"blotches","param":"size"},{"label":"Dark mare grays: colors","node":"dust","param":"stops"}],
+  "controls": [{"label":"Blotch size","node":"blotches","param":"size"},{"label":"Mare colors","node":"dust","param":"stops"}],
   "palette": [87,88,89,90,91,92,93,55],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -289,7 +289,7 @@
    {"id":"soilgrain","type":"combine","kind":"multiply","name":"Grain into soil","params":{"amount":1,"offset":0},"in":{"a":"soil","b":"graincol","mask":null},"x":708,"y":75},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"soilgrain","height":null,"shine":null},"x":944,"y":75}
   ],
-  "controls": [{"label":"Mottles a few pixels across: size","node":"mottle","param":"size","min":1,"max":13},{"label":"Olive to warm brown soil: colors","node":"soil","param":"stops"}],
+  "controls": [{"label":"Mottling size","node":"mottle","param":"size","min":1,"max":13},{"label":"Soil colors","node":"soil","param":"stops"}],
   "palette": [72,57,73,58,184,186,59,183,185,74,187,26,56,71,25,182,24,188,189,60],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -303,7 +303,7 @@
    {"id":"water","type":"gradient","name":"Dark blue green","params":{"ease":0},"in":{"in":"mixed"},"stops":[[0.2,0,0.12,0.11],[0.5,0.02,0.15,0.15],[0.8,0.07,0.18,0.2]],"x":472,"y":75},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"water","height":null,"shine":null},"x":708,"y":75}
   ],
-  "controls": [{"label":"Faint broad swell: size","node":"swell","param":"size","min":10,"max":160},{"label":"Dark blue green: colors","node":"water","param":"stops"}],
+  "controls": [{"label":"Swell size","node":"swell","param":"size","min":10,"max":160},{"label":"Water colors","node":"water","param":"stops"}],
   "palette": [44,45,125,124,123,141,43,142],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -330,7 +330,7 @@
    {"id":"m1","type":"combine","kind":"multiply","name":"Mottling over crust","params":{"amount":1,"offset":0},"in":{"a":"flecked","b":"mottg","mask":null},"x":1416,"y":-75},
    {"id":"m2","type":"combine","kind":"multiply","name":"Cracks over crust","params":{"amount":1,"offset":0},"in":{"a":"m1","b":"crackg","mask":null},"x":1652,"y":0}
   ],
-  "controls": [{"label":"Crust relief","node":"material","param":"relief"},{"label":"Gray-brown crust: colors","node":"crust","param":"stops"}],
+  "controls": [{"label":"Crust relief","node":"material","param":"relief"},{"label":"Crust colors","node":"crust","param":"stops"}],
   "palette": [58,57,56,59,70,26,60,28,74,91],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -347,7 +347,7 @@
    {"id":"lava","type":"gradient","name":"Dark red to orange","params":{"ease":0},"in":{"in":"lv"},"stops":[[0.05,0.48,0.03,0],[0.3,0.6,0.08,0],[0.5,0.72,0.11,0],[0.75,0.8,0.12,0],[1.0,1.0,0.28,0]],"x":944,"y":38},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"lava","height":null,"shine":null},"x":1180,"y":38}
   ],
-  "controls": [{"label":"Dark red clouds: size","node":"clouds","param":"size","min":1.5,"max":24},{"label":"Dark red to orange: colors","node":"lava","param":"stops"}],
+  "controls": [{"label":"Cloud size","node":"clouds","param":"size","min":1.5,"max":24},{"label":"Lava colors","node":"lava","param":"stops"}],
   "palette": [202,201,213,204,203,214,205,211,206,215,207],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -394,7 +394,7 @@
    {"id":"pebble-height","type":"combine","kind":"add","name":"Raise pebbles","params":{"amount":0.6,"offset":0},"in":{"a":"crease-height","b":"pebble","mask":null},"x":0,"y":0},
    {"id":"material","type":"output","name":"Material","params":{"relief":2.4},"in":{"color":"with-patches","height":"pebble-height","shine":null},"x":1652,"y":315}
   ],
-  "controls": [{"label":"Clod variation: size","node":"clod-variation","param":"size","min":2.3,"max":36},{"label":"Orange sand → beige clods: colors","node":"sand","param":"stops"},{"label":"Relief","node":"material","param":"relief","min":0,"max":8},{"label":"Pebble spacing","node":"pebble","param":"spacing"},{"label":"Pale patches: size","node":"patch-field","param":"size"}],
+  "controls": [{"label":"Clod size","node":"clod-variation","param":"size","min":2.3,"max":36},{"label":"Ground colors","node":"sand","param":"stops"},{"label":"Relief","node":"material","param":"relief","min":0,"max":8},{"label":"Pebble spacing","node":"pebble","param":"spacing"},{"label":"Pale patch size","node":"patch-field","param":"size"}],
   "palette": [67,66,19,20,68,178,21,18,177,69,179,65,22,86,88,89,87,23,70,90,57,56,85,24,91,180,181,53,17,25,84,92],
   "dither": {"amount":1,"spread":1,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -413,7 +413,7 @@
    {"id":"step-7","type":"combine","kind":"multiply","name":"Multiply grain","params":{"amount":1,"offset":0},"in":{"a":"step-5","b":"step-6","mask":null},"x":1180,"y":0},
    {"id":"material","type":"output","name":"Material","params":{"relief":0.8},"in":{"color":"step-7","height":"step-4","shine":null},"x":1652,"y":150}
   ],
-  "controls": [{"label":"Ripple: size","node":"step-2-pattern","param":"size"},{"label":"Water colors: colors","node":"step-5","param":"stops"}],
+  "controls": [{"label":"Ripple size","node":"step-2-pattern","param":"size"},{"label":"Water colors","node":"step-5","param":"stops"}],
   "palette": [138,139,137,140,136],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -429,7 +429,7 @@
    {"id":"dust","type":"gradient","name":"Caprock grays, cream and pale cyan","params":{"ease":0},"in":{"in":"blotch-mask"},"stops":[[0,0.6902,0.6902,0.6902],[0.35,0.7333,0.7333,0.7333],[0.55,0.6863,0.8118,0.7961],[0.78,0.8745,0.8745,0.7176],[1,0.749,0.8588,0.9059]],"x":944,"y":75},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"dust","height":null,"shine":null},"x":1180,"y":75}
   ],
-  "controls": [{"label":"Caprock grays, cream and pale cyan: colors","node":"dust","param":"stops"}],
+  "controls": [{"label":"Caprock colors","node":"dust","param":"stops"}],
   "palette": [50,51,65,66,84,85,113],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -450,7 +450,7 @@
    {"id":"tex","type":"combine","name":"Multiply grit","params":{"amount":1,"offset":0},"in":{"a":"col","b":"gritc","mask":null},"x":0,"y":0,"kind":"multiply"},
    {"id":"material","type":"output","name":"Material","params":{"relief":1.4},"in":{"color":"tex","height":"lv","shine":null},"x":0,"y":0}
   ],
-  "controls": [{"label":"Broad fibers: size","node":"broad","param":"size"},{"label":"Violet fibers: colors","node":"col","param":"stops"}],
+  "controls": [{"label":"Fiber size","node":"broad","param":"size"},{"label":"Fiber colors","node":"col","param":"stops"}],
   "palette": [220,90,152,221,91,89,150,120,121,92,88,153,154,118,149,219,119,222,87,122,117,86,148,93],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -467,7 +467,7 @@
    {"id":"tex","type":"combine","name":"Multiply grit","params":{"amount":1,"offset":0},"in":{"a":"col","b":"gritc","mask":null},"x":0,"y":0,"kind":"multiply"},
    {"id":"material","type":"output","name":"Material","params":{"relief":3.0},"in":{"color":"tex","height":"lv","shine":null},"x":0,"y":0}
   ],
-  "controls": [{"label":"Fine ripple: size","node":"rip","param":"size"},{"label":"Deep navy: colors","node":"col","param":"stops"}],
+  "controls": [{"label":"Ripple size","node":"rip","param":"size"},{"label":"Water colors","node":"col","param":"stops"}],
   "palette": [125,126,124,223,93,222,157,127,94,123,155,156],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -486,7 +486,7 @@
    {"id":"col","type":"combine","name":"Multiply flecks","params":{"amount":1,"offset":0},"in":{"a":"tone","b":"fleck-tint","mask":null},"x":0,"y":0,"kind":"multiply"},
    {"id":"material","type":"output","name":"Material","params":{"relief":1.05},"in":{"color":"col","height":"hl","shine":null},"x":0,"y":0}
   ],
-  "controls": [{"label":"Crinkle size","node":"bumps","param":"size"},{"label":"Relief","node":"material","param":"relief"},{"label":"Snow tone: colors","node":"tone","param":"stops"}],
+  "controls": [{"label":"Crinkle size","node":"bumps","param":"size"},{"label":"Relief","node":"material","param":"relief"},{"label":"Snow colors","node":"tone","param":"stops"}],
   "palette": [224,112,128,97,96,48,98,49,255,216,129,145,81,113,217,130],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -506,7 +506,7 @@
    {"id":"flecked","type":"combine","kind":"multiply","name":"Multiply lilac flecks","params":{"amount":1,"offset":0},"in":{"a":"frosted","b":"fleck-tint","mask":null},"x":1180,"y":238},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"flecked","height":null,"shine":null},"x":1416,"y":238}
   ],
-  "controls": [{"label":"Sparse lilac flecks: spacing","node":"flecks","param":"spacing","min":2,"max":20},{"label":"Periwinkle to pale blue: colors","node":"ice","param":"stops"}],
+  "controls": [{"label":"Fleck spacing","node":"flecks","param":"spacing","min":2,"max":20},{"label":"Ice colors","node":"ice","param":"stops"}],
   "palette": [99,98,225,131,224,100,217,101,133,218,132,219,114,102,113],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -523,7 +523,7 @@
    {"id":"grained","type":"combine","kind":"multiply","name":"Multiply grain","params":{"amount":1,"offset":0},"in":{"a":"blue","b":"grain-tint","mask":null},"x":944,"y":75},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"grained","height":null,"shine":null},"x":1180,"y":75}
   ],
-  "controls": [{"label":"Steep diagonal streaks: size","node":"streaks","param":"size","min":1,"max":14},{"label":"Deep blue to lighter streak: colors","node":"blue","param":"stops"}],
+  "controls": [{"label":"Streak size","node":"streaks","param":"size","min":1,"max":14},{"label":"Water colors","node":"blue","param":"stops"}],
   "palette": [227,103,104,105,226,102,101],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -1399,7 +1399,7 @@
    {"id":"colors","name":"Colors","x":720,"y":0,"type":"gradient","stops":[[0,0.3,0.3,0.31],[0.5,0.53,0.52,0.51],[1,0.8,0.78,0.76]],"params":{"ease":0},"in":{"in":"spread"}},
    {"id":"material","name":"Material","x":960,"y":0,"type":"output","params":{"relief":0.7},"in":{"color":"colors","height":"spread","shine":null}}
   ],
-  "controls": [{"label":"Light crystals: coverage","node":"feldspar","param":"coverage","min":0,"max":1},{"label":"Dark crystals: coverage","node":"mica","param":"coverage","min":0,"max":1},{"label":"Colors","node":"colors","param":"stops"}],
+  "controls": [{"label":"Light crystals","node":"feldspar","param":"coverage","min":0,"max":1},{"label":"Dark crystals","node":"mica","param":"coverage","min":0,"max":1},{"label":"Colors","node":"colors","param":"stops"}],
   "palette": [91,90,89,88,87,86,85,84,83],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -1415,7 +1415,7 @@
    {"id":"colors","name":"Colors","x":720,"y":0,"type":"gradient","stops":[[0,0.42,0.38,0.32],[0.5,0.55,0.5,0.42],[1,0.68,0.62,0.52]],"params":{"ease":0},"in":{"in":"spread"}},
    {"id":"material","name":"Material","x":960,"y":0,"type":"output","params":{"relief":0.6},"in":{"color":"colors","height":"height","shine":null}}
   ],
-  "controls": [{"label":"Mottling: size","node":"mottle","param":"size","min":2,"max":28},{"label":"Colors","node":"colors","param":"stops"}],
+  "controls": [{"label":"Mottling size","node":"mottle","param":"size","min":2,"max":28},{"label":"Colors","node":"colors","param":"stops"}],
   "palette": [55,69,68,67],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -1430,7 +1430,7 @@
    {"id":"colors","name":"Colors","x":720,"y":0,"type":"gradient","stops":[[0,0.26,0.28,0.3],[0.5,0.35,0.37,0.4],[1,0.46,0.48,0.51]],"params":{"ease":0},"in":{"in":"spread"}},
    {"id":"material","name":"Material","x":960,"y":0,"type":"output","params":{"relief":0.5},"in":{"color":"colors","height":"spread","shine":null}}
   ],
-  "controls": [{"label":"Gas pits: coverage","node":"pits","param":"coverage","min":0,"max":1},{"label":"Colors","node":"colors","param":"stops"}],
+  "controls": [{"label":"Gas pits","node":"pits","param":"coverage","min":0,"max":1},{"label":"Colors","node":"colors","param":"stops"}],
   "palette": [91,90,89,88],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -1447,7 +1447,7 @@
    {"id":"colors","name":"Colors","x":720,"y":0,"type":"gradient","stops":[[0,0.55,0.55,0.5],[0.6,0.72,0.71,0.66],[1,0.86,0.85,0.8]],"params":{"ease":0},"in":{"in":"spread"}},
    {"id":"material","name":"Material","x":960,"y":0,"type":"output","params":{"relief":1.2},"in":{"color":"colors","height":"spread","shine":null}}
   ],
-  "controls": [{"label":"Dissolution pits: coverage","node":"pits","param":"coverage","min":0,"max":1},{"label":"Colors","node":"colors","param":"stops"}],
+  "controls": [{"label":"Dissolution pits","node":"pits","param":"coverage","min":0,"max":1},{"label":"Colors","node":"colors","param":"stops"}],
   "palette": [87,86,85,84,83,82],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -1462,7 +1462,7 @@
    {"id":"colors","name":"Colors","x":720,"y":0,"type":"gradient","stops":[[0,0.3,0.31,0.31],[0.5,0.4,0.4,0.4],[1,0.5,0.5,0.49]],"params":{"ease":0},"in":{"in":"spread"}},
    {"id":"material","name":"Material","x":960,"y":0,"type":"output","params":{"relief":0.6},"in":{"color":"colors","height":"spread","shine":null}}
   ],
-  "controls": [{"label":"Laminae: size","node":"laminae","param":"size","min":1,"max":12},{"label":"Colors","node":"colors","param":"stops"}],
+  "controls": [{"label":"Layer size","node":"laminae","param":"size","min":1,"max":12},{"label":"Colors","node":"colors","param":"stops"}],
   "palette": [91,90,89,88],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
