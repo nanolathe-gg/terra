@@ -76,21 +76,24 @@
    The navigator and the zoom buttons sit on the map. The Map menu, Settings, Export and the Shapes list are surfaces in fixed places. */
 .app{--tools-width:56px;--inspector-width:320px;grid-template-columns:var(--tools-width) minmax(240px,1fr) var(--inspector-width);grid-template-rows:44px minmax(0,1fr) 24px}
 .app.palette-open{--tools-width:176px}.app.tools-collapsed{--tools-width:0px}.app.inspector-collapsed{--inspector-width:0px}
+/* Left to right: the brand, the Map menu, Undo and Redo; Build | World (with the world's name) and Materials; Find, View and Export. */
 .topbar{gap:10px;padding:0 10px}.top-actions,.view-tools{gap:4px}
-.mode-switch{display:flex;margin-left:auto;border:1px solid var(--line);border-radius:7px;overflow:hidden;flex:none}
-.mode-switch button{border:0;border-radius:0;background:transparent;padding:6px 16px;font-size:12px;font-weight:600;color:var(--muted)}
+.mode-switch{display:flex;margin-left:auto;border:1px solid var(--line);border-radius:7px;overflow:hidden;flex:none;min-width:0}
+.mode-switch button{border:0;border-radius:0;background:transparent;padding:6px 16px;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;display:flex;align-items:baseline;min-width:0}
 .mode-switch button[aria-selected=true]{background:#344c42;color:#d9ffe5}
-.world-title{font-size:11px;font-weight:500;color:#b3c0c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;padding:4px 10px;border:1px solid var(--line);border-radius:12px;flex:0 1 auto}
+.world-sep{margin:0 5px;opacity:.6}
+.world-title{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
 .topbar .primary{background:#3f6b4c;border-color:#78ae8d;color:#f1ffe9;font-weight:600;padding-left:14px;padding-right:14px}.topbar .primary:hover:not(:disabled){background:#4a7d59}
-.topbar #toggle-tools,.topbar #toggle-inspector{padding:5px 6px}.topbar button[aria-expanded=false]#toggle-tools,.topbar button[aria-expanded=false]#toggle-inspector{color:var(--accent);border-color:#597a69}
-/* Find (sculpt-find.js): small at rest, it grows only into the bar's free room, so it gives way before anything else shrinks; in use it
-   widens over its neighbors, its results under it. */
-.find{position:relative;flex:1 1 0;min-width:32px;max-width:64px;height:28px}
+#open-graphics{white-space:nowrap}
+/* Find (sculpt-find.js): it takes the bar's free room up to a point, so it gives way before anything else shrinks; a box too narrow for its
+   word rests as the magnifier alone. In use it widens leftward over its neighbors, its results under it. */
+.find{position:relative;flex:1 1 0;min-width:28px;max-width:280px;height:28px;margin-left:auto;container-type:inline-size}
 .find-icon{position:absolute;left:7px;top:7px;width:14px;height:14px;color:var(--muted);pointer-events:none;z-index:31}
 #find-input{width:100%;height:28px;padding:4px 4px 4px 26px;font-size:11px;color:inherit;background:#141c20;border:1px solid var(--line);border-radius:5px}
 #find-input::placeholder{color:var(--muted)}#find-input:not(:focus)::-webkit-search-cancel-button{display:none}
-#find-input:focus{position:absolute;left:0;top:0;width:min(420px,calc(100vw - 24px));z-index:30;border-color:#597a69}
-.find-results{position:absolute;top:34px;left:0;width:min(440px,calc(100vw - 24px));max-height:min(70vh,560px);overflow:auto;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 12px 40px #0008;z-index:30}
+@container (max-width:64px){#find-input:not(:focus){padding:4px 0 4px 26px}#find-input:not(:focus)::placeholder{color:transparent}}
+#find-input:focus{position:absolute;right:0;top:0;width:max(100%,min(420px,calc(100vw - 24px)));z-index:30;border-color:#597a69}
+.find-results{position:absolute;top:34px;right:0;width:min(440px,calc(100vw - 24px));max-height:min(70vh,560px);overflow:auto;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 12px 40px #0008;z-index:30}
 .find-group+.find-group{margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}
 .find-group-name{padding:4px 8px 2px;font-size:10px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
 .find-option{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;align-items:center;padding:4px 8px;border-radius:5px;cursor:pointer}.find-option>.scope-tag{grid-column:2;grid-row:1}.find-path,.find-why{grid-column:1/-1}.find-option[aria-selected=true]{background:#344c42;color:#d9ffe5}
@@ -100,9 +103,8 @@
 .find-hint{padding:6px 8px;color:var(--muted);font-size:11px}
 .find-flash{animation:find-flash 1.6s ease-out}
 @keyframes find-flash{0%,35%{box-shadow:inset 0 0 0 2px var(--accent);background-color:#9fd7b322}100%{box-shadow:inset 0 0 0 2px transparent;background-color:transparent}}
-/* Its room below 1440 px is the brand's subtitle; below 1250 px it rests as the magnifier alone, in the room of the brand's name (the mark stays). */
+/* Below 1440 px the brand's subtitle gives way. */
 @media(max-width:1439px){.version{display:none}}
-@media(max-width:1250px){.find{min-width:28px;max-width:28px}#find-input:not(:focus){padding:4px 0 4px 26px}#find-input:not(:focus)::placeholder{color:transparent}.topbar .brand{font-size:0;gap:0}.topbar .brand-mark{font-size:22px}}
 .top-menu{position:relative}.top-menu>summary{list-style:none;color:inherit;background:var(--raised);border:1px solid var(--line);border-radius:5px;padding:5px 8px;font-size:11px;white-space:nowrap}.top-menu>summary::-webkit-details-marker{display:none}.top-menu>summary:hover{background:#344047}
 .top-menu .popover{top:34px;right:0;width:230px;padding:10px 12px;display:flex;flex-direction:column;gap:9px}.top-menu .view-toggle{margin:0}
 .erosion-toggle{margin:10px 0 0}
@@ -212,8 +214,20 @@
 
 /* The surfaces. */
 .surface{position:fixed;z-index:15;background:var(--panel);border:1px solid #5a7465;border-radius:9px;box-shadow:0 14px 60px #000b;padding:12px 14px;overflow:auto;scrollbar-width:thin;max-height:calc(100dvh - 84px)}
-.surface-map{top:48px;left:118px;width:340px}
+.surface-map{top:48px;left:var(--map-menu-left,156px);width:340px}
 .surface-settings{top:48px;right:10px;width:330px}
+/* The Map menu: the map's file actions and Share link above its own settings. */
+.map-file-actions{display:flex;gap:5px}.map-file-actions button{flex:1}
+#pane-map .share-menu{margin-top:6px}#pane-map .share-menu>summary{text-align:center;padding:6px 9px}
+#pane-map .share-menu .popover{position:static;width:auto;margin-top:6px;padding:10px;box-shadow:none}
+#map-settings-host{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+/* The View menu: how the map shows, the panels, then the editor's settings. */
+.surface-settings .view-switch{display:flex;gap:0}.surface-settings .view-switch button{flex:1;border-radius:0;padding:5px 8px;font-size:11px}
+.surface-settings .view-switch button:first-child{border-radius:5px 0 0 5px}.surface-settings .view-switch button:last-child{border-radius:0 5px 5px 0}.surface-settings .view-switch button+button{border-left:0}
+.surface-settings .view-toggle{margin:10px 0 0}.surface-settings>h3{margin:16px 0 6px}
+.view-panels{display:flex;gap:4px}.view-panels button{flex:1;padding:5px 6px;font-size:11px;white-space:nowrap}
+.view-panels button[aria-expanded=true]{background:#344c42;border-color:#78ae8d;color:#d9ffe5}
+.surface-settings .editor-preferences{margin:16px 0 14px}.surface-settings>h2{padding-top:12px;margin-bottom:8px;border-top:1px solid var(--line)}
 .surface-export{top:60px;left:50%;transform:translateX(-50%);width:min(520px,calc(100vw - 40px))}
 /* The Shapes list ends above the navigator, which stays in reach under it. */
 .surface-shapes{top:52px;left:calc(var(--tools-width) + 8px);bottom:178px;width:244px;max-height:none;display:flex;flex-direction:column;padding:10px}
@@ -225,8 +239,9 @@ footer{grid-row:3;font-size:10px;gap:14px}
 .status-line{color:#cfe0d2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:32%;flex:0 1 auto}
 footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:nowrap}.status-details .popover{right:8px;bottom:28px}
 
-@media(max-width:1250px){.app{--inspector-width:290px}.version{display:none}.topbar{gap:6px}.brand{font-size:12px}.topbar button,.topbar select{padding:5px 6px}.top-actions{gap:3px}.share-menu>summary,.top-menu>summary{font-size:10px;padding:5px}.world-title{max-width:120px}footer #levels{display:none}}
-@media(max-width:1050px){.brand{font-size:0;gap:0}.brand-mark{font-size:22px}.topbar{padding:0 7px;gap:5px}.top-actions .divider,.view-tools .divider{display:none}.topbar #undo,.topbar #redo{font-size:0}.topbar #undo:first-letter,.topbar #redo:first-letter{font-size:13px}.world-title{display:none}.mode-switch button{padding:6px 9px}#focus-canvas span{display:none}.status-line{display:none}}
+@media(max-width:1439px){.app{--map-menu-left:104px}}
+@media(max-width:1250px){.app{--inspector-width:290px}.version{display:none}.topbar{gap:6px}.brand{font-size:12px}.topbar button,.topbar select{padding:5px 6px}.top-actions{gap:3px}.top-menu>summary{font-size:10px;padding:5px}.mode-switch button{padding:6px 10px}.world-title{max-width:120px}footer #levels{display:none}}
+@media(max-width:1050px){.app{--map-menu-left:36px}.brand{font-size:0;gap:0}.brand-mark{font-size:22px}.topbar{padding:0 7px;gap:5px}.topbar #undo,.topbar #redo{font-size:0}.topbar #undo:first-letter,.topbar #redo:first-letter{font-size:13px}.mode-switch button{padding:6px 9px}.world-title{max-width:96px}.status-line{display:none}}
 /* Features and Starts: one tool behind two rail entries. The card's switch sits in its header; kinds are tabs over the list behind them. */
 .feature-head{margin:0 0 6px}.feature-head h3{flex:1;min-width:0;margin:0}
 .feature-head .feature-modes{display:flex;gap:2px;margin:0}.feature-head .feature-modes[hidden]{display:none}.feature-head .feature-modes button{width:auto;height:auto;padding:3px 9px;font-size:10.5px}
