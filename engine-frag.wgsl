@@ -1511,8 +1511,13 @@ fn geometryMain(v:VertexOut)->@location(0) vec4f {
         }
     }
     useRock(p);
+    // The rain's shelter (voxelRain: a march up to the column's top) and the solid's own occlusion (voxelOcclusion: up to 16 taps) are read
+    // where a pixel is finer than a voxel. A gesture's own previews (pixels a voxel wide) take open sky on every face that looks up and no
+    // occlusion: they differ only under overhangs and in the darkest few levels of a crevice, and the two were a quarter of the pass.
+    var rain=select(0.0,1.0,normal.z>.1);var near=1.0;
+    if(vs.step>u.chunkScale){rain=voxelRain(hit,normal);near=voxelOcclusion(hit,normal);}
     geometryOut[geometryIndex(vec2i(floor(v.position.xy)))]=SurfaceRecord(hit.y,hit.z,lit.x,lit.y,lit.z,
-        voxelRain(hit,normal),sun,voxelOcclusion(hit,normal),cavity,
+        rain,sun,near,cavity,
         soft.x,soft.y,voxelFaceSlope(hit.xy),occlusion(p,hit.z),visibility(p,max(hit.z,u.sea)));
     return vec4f(0);
 }
