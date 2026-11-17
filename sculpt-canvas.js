@@ -308,9 +308,15 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       trimTo(room,block);
       renderer.setBudget(gpuBudget,steadyGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
       const measureFinal=!exportArt&&!block&&!fit&&scale===detailLevel()&&!api.previewActive?.()&&(!api.canExport||api.canExport());
-      const view=!exportArt&&!block&&!fit,reuse=view?keepable(prior,scale,readWeather):null;
+      // prior's picture is kept only while prior is still a cached entry: trimTo (just above, or from an input while the draw waits) and
+      // remove() close the bitmap of an entry they drop.
+      const cached=()=>[...cache.values()].includes(prior);
+      const view=!exportArt&&!block&&!fit,reuse=view&&cached()?keepable(prior,scale,readWeather):null;
       if(check&&!reuse)return null;
-      const atSerial=lattice?sourceSerial:serial,atRev=lattice?sourceRev:{...rev},result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale,signal,stale,preview:block,...raster,deferPipelines:!exportArt,deferCompletion:!fit&&!exportArt,digest:view?{reuse,check}:null});
+      const drawTile=digest=>renderer.renderChunk(request,{...options,quality:'full',feed,scale,signal,stale,preview:block,...raster,deferPipelines:!exportArt,deferCompletion:!fit&&!exportArt,digest});
+      const atSerial=lattice?sourceSerial:serial,atRev=lattice?sourceRev:{...rev};
+      let result=await drawTile(view?{reuse,check}:null);
+      if(result.reused&&!cached())result=await drawTile({reuse:null});   // prior was dropped while the check ran: the tile is drawn after all
       const entryFor=bitmap=>({...rect,bitmap,bytes:ow*oh*4,digest:null,kept:false,scale,pixel,fit,lattice:Boolean(lattice),weathered:readWeather,fed:true,serial:atSerial,rev:atRev,shapeRev:feed.revision,pipelineKey:result.pipelineKey,weatherRevB:fit?null:feed.weatherRevB,level:scale,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null});
       const kept=entry=>{entry.digest=reuse;entry.kept=true;entry.pipelineKey=prior.pipelineKey;entry.finalCostMs=prior.finalCostMs;entry.finalCostBudget=prior.finalCostBudget;return entry;};
       // A kept picture is prior's bitmap; the caller replaces prior with it only while prior is still the cached entry.
