@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {blankMaterial,copyMaterial,worldMaterials,addMaterial} from '../sculpt-materials.js';
 import {copyRocks,duplicateRock,rockByKey} from '../sculpt-rock-presets.js';
-import {worldKit,storedWorldKit,copyMaterialRef,instantiateWorldKit,validateWorldRocks,captureWorldKit,publishWorldRock,publishWorldTool,resolvedWorldCard,worldToolUnavailable,authoredWorldTool,sameKitData,resetWorldKitInstances,addWorldRockInstance,stageWorldKitEdit} from '../sculpt-world-kit.js';
+import {worldKit,storedWorldKit,baseRockKeys,copyMaterialRef,instantiateWorldKit,validateWorldRocks,captureWorldKit,publishWorldRock,publishWorldTool,resolvedWorldCard,worldToolUnavailable,authoredWorldTool,sameKitData,resetWorldKitInstances,addWorldRockInstance,stageWorldKitEdit} from '../sculpt-world-kit.js';
 const config={biomeId:'fixture',materials:{ground:'green-ground',water:'green-water',rock:'green-rock'},tools:[{id:'hill',label:'Hill',icon:'hill',color:'#778899',group:'shape',rock:'soil'}]};
 const graph=blankMaterial();
 const template=(key='wrock-stone',extra={})=>({key,name:'Stone',knobs:{faceWhole:.8},column:null,colors:null,material:{key:'wmat-stone',name:'Stone grain',graph:copyMaterial(graph)},...extra});
@@ -172,4 +172,27 @@ test('a world stores only what its artist made',()=>{
  assert.deepEqual(storedWorldKit(config,{}),{});
  const derived=worldKit(config);assert.deepEqual(storedWorldKit(config,{tools:derived.tools,rocks:derived.rocks}),{},'the built-in tools and the derived catalog stay derived');
  const own=storedWorldKit(config,world());assert.deepEqual(own.tools.map(t=>t.id),['world-ridge']);assert.deepEqual(own.rocks.map(r=>r.key),['wrock-stone']);
+});
+test('a built-in world’s own rock types stay each map’s',()=>{
+ const base=[...baseRockKeys(config)];assert.ok(base.length,'the fixture has a built-in type');
+ const fresh=instantiateWorldKit(config,{},{builtIn:true});
+ assert.deepEqual(fresh.rocks.map(r=>[r.key,r.worldKey]),base.map(k=>[k,undefined]),'a new map’s built-in types carry no world ownership');
+ const own=instantiateWorldKit(config,{});assert.deepEqual(own.rocks.map(r=>r.worldKey),base,'a world of your own owns them');
+ const loaded=instantiateWorldKit(config,{},{rocks:own.rocks,materials:own.materials,source:{},builtIn:true});
+ assert.deepEqual(loaded.rocks.map(r=>r.worldKey),base.map(()=>undefined),'a map saved with them owned loads them as the map’s');
+ const carried=instantiateWorldKit(config,{},{rocks:fresh.rocks,materials:fresh.materials,source:{}});
+ assert.deepEqual(carried.rocks.map(r=>r.worldKey),base,'carried into a world of your own, the agreeing copies become its instances');
+ const edited0=fresh.rocks.map((r,i)=>i?r:{...r,knobs:{...r.knobs,faceWhole:.93}});
+ assert.equal(instantiateWorldKit(config,{},{rocks:edited0,materials:fresh.materials,source:{}}).rocks[0].worldKey,undefined,'an edited copy stays the map’s');
+ // A tool saved to the built-in world on an unedited built-in type names it by key and draws on the map's type of that key.
+ const card={preset:'custom',diameter:320,rockPreset:fresh.rocks[0].slot};
+ const published=publishWorldTool(worldKit(config),fresh.rocks,fresh.materials,{label:'Ridge',icon:'mountain',color:'#778899',group:'shape',shape:'mountain',card},{config,builtIn:true});
+ const entry=published.kit.tools.find(authoredWorldTool);assert.equal(entry.rock,base[0]);assert.deepEqual(published.kit.rocks,worldKit(config).rocks,'nothing is copied into the world');
+ assert.equal(resolvedWorldCard(entry,fresh.rocks,fresh.materials,config).rockPreset,fresh.rocks[0].slot);
+ assert.equal(worldToolUnavailable(entry,fresh.rocks,fresh.materials,config),'');
+ assert.equal(resolvedWorldCard(entry,[],fresh.materials,config).rockPreset,-1,'without it on the map, the rock beneath');
+ // An edited one is copied into the world under a key of its own.
+ const edited=fresh.rocks.map((r,i)=>i?r:{...r,knobs:{...r.knobs,faceWhole:.93}});
+ const copied=publishWorldTool(worldKit(config),edited,fresh.materials,{label:'Ridge',icon:'mountain',color:'#778899',group:'shape',shape:'mountain',card},{config,builtIn:true});
+ assert.match(copied.kit.tools.find(authoredWorldTool).rock,/^wrock-/);
 });
