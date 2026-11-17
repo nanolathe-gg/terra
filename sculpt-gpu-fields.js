@@ -1063,7 +1063,7 @@ export function createGpuFields(opts) {
   };
 }
 
-// The CPU copies of pages evicted from VRAM (createPagedFields' spill), an LRU by bytes under cap(). An entry is reserved at eviction with the stamp
+// The CPU copies of page Time results evicted from VRAM (createPagedFields' spill), an LRU by bytes under cap(). An entry is reserved at eviction with the stamp
 // of its inputs (begin) and holds its bytes once the GPU copy is read back (fill). take() gives the bytes only to a caller with the same stamp, and only
 // once: the page is resident again and its copy is let go. A stale or unfinished copy is dropped where it is found, never returned.
 export function createPageSpill(cap) {
@@ -1143,7 +1143,7 @@ export function createPagedFields(opts) {
     let pg = pagesMap.get(key(px, py));
     if (!pg) {
       const x0 = px * CORE, y0 = py * CORE;
-      pg = {px, py, x0, y0, cw: Math.min(CORE, worldGrid - x0), ch: Math.min(CORE, worldGrid - y0), target: null, rev: 0, shapeSeq: 0, weatherSeq: 0, cpu: null, cpuW: null, cpuBusy: false, cpuRev: -1, weather: null, stale: false, staleSeq: 0, weatherJob: null, used: 0, pins: 0, key: key(px, py)};
+      pg = {px, py, x0, y0, cw: Math.min(CORE, worldGrid - x0), ch: Math.min(CORE, worldGrid - y0), target: null, rev: 0, weatherSeq: 0, cpu: null, cpuW: null, cpuBusy: false, cpuRev: -1, weather: null, stale: false, staleSeq: 0, weatherJob: null, used: 0, pins: 0, key: key(px, py)};
       pagesMap.set(pg.key, pg);
     }
     return pg;
@@ -1231,7 +1231,6 @@ export function createPagedFields(opts) {
     if (ring !== RING) {
       RING = ring; SIDE = CORE + 2 * RING; SHAPE_BYTES = SIDE * SIDE * PAGE_CELL; ringChanges++;
       for (const pg of pagesMap.values()) dropShape(pg);
-      spill.clear(k => k[0] === 's');
       scratchT?.destroy(); scratchT = null;
     }
     fitCaps(); trim();
@@ -1261,16 +1260,16 @@ export function createPagedFields(opts) {
   function unpin(pg) { pg.pins--; if (!pg.pins && pg.zombies?.length) { for (const t of pg.zombies) t.destroy(); pg.zombies = []; } }
   function dropWeather(pg) { if (pg.weather) { pg.weather.weather.destroy(); pg.weather.maps.forEach(b => b.destroy()); pg.weather.field?.destroy(); pg.weather = null; pg.cpuW = null; } }
 
-  // ---- the spill: a CPU copy of each page the LRU evicts, its buffers' bytes in their GPU layout, so the page comes back with writeBuffer instead of
-  // its shape evaluation or its Time pass. A copy is stamped with the inputs it holds: the ring and the page's shapeSeq (shape), the weather's own
-  // weatherSeq and the Time key (weather). changed() bumps those for every page an edit reaches (resident or not) and drops the copies there, a ring or
-  // Time key change drops them all, and take() returns a copy only under the stamp it was made with. The cap: a quarter of the device memory the
-  // browser reports (navigator.deviceMemory, at most 8 GB), at most 2 GiB: about 130 shape pages or 210 weather pages, more than the default GPU
-  // budget holds resident, while a 4 GB machine keeps 1 GiB.
+  // ---- the spill: a CPU copy of each Time result the LRU evicts, its buffers' bytes in their GPU layout, so the page's weather comes back with
+  // writeBuffer instead of its Time pass. A copy is stamped with the inputs it holds: the weather's own weatherSeq and the Time key. changed() bumps
+  // the seq of every page an edit reaches (resident or not) and drops the copies there, a Time key change drops them all, and take() returns a copy
+  // only under the stamp it was made with. A shape page keeps no copy: evaluating it again costs no more than restoring a copy did (Chrome on Metal,
+  // 16x16 Green, page medians: 3 ms against 2 at ring 4, 5 against 9 at ring 128, 11 against 18 at ring 320), and the copy added a read-back of
+  // 15 MiB or more at every eviction (5-17 ms). A page's Time pass costs 8-210 ms (74 on busy ground) against 2-3 ms to restore its weather.
   const SPILL_BYTES = Math.min(2, (globalThis.navigator?.deviceMemory || 8) / 4) * 1024 ** 3;
   const spill = createPageSpill(() => opts.spillBytes ?? SPILL_BYTES), spilling = new Set();
-  const shapeStamp = pg => `${RING} ${pg.shapeSeq}`, weatherStamp = seq => `${seq} ${timeKey}`;
-  let shapeRestores = 0, weatherRestores = 0;
+  const weatherStamp = seq => `${seq} ${timeKey}`;
+  let weatherRestores = 0, shapeEvaluations = 0;
   // The copy is submitted now, ahead of the buffers' destruction (WebGPU keeps them until the copy has run), and read back without waiting: the copy
   // becomes usable when its map completes. A staging buffer that cannot be made (out of memory) leaves the page without a copy, never an error.
   function spillOut(key, stamp, meta, sources) {
@@ -1294,29 +1293,18 @@ export function createPagedFields(opts) {
       spill.fill(key, entry, data);
     }).catch(() => spill.fill(key, entry, null)).finally(() => { spilling.delete(stage); stage.destroy(); });
   }
-  // Eviction (the LRU in trim): the page's buffers go to the spill first. A resident shape page always holds its current inputs (changed() evaluates
-  // it again where an edit reaches); a weather result only while no edit reached its window since its pass read the shape (w.seq) and it is not stale.
-  function evictShape(pg) { const t = pg.target; if (t && !pg.pins) spillOut('s' + pg.key, shapeStamp(pg), null, [t.F, t.Mk]); dropShape(pg); }
+  // Eviction (the LRU in trim): a weather result goes to the spill first, while no edit reached its window since its pass read the shape (w.seq)
+  // and it is not stale. A shape page is let go.
   function evictWeather(pg) {
     const w = pg.weather;
     if (w && time && !pg.pins && !pg.stale && !w.invalidRect && !pg.weatherJob && w.seq === pg.weatherSeq)
-      spillOut('w' + pg.key, weatherStamp(w.seq), {seq: w.seq, field: Boolean(w.field)}, [w.weather, ...w.maps, ...(w.field ? [w.field] : [])]);
+      spillOut(pg.key, weatherStamp(w.seq), {seq: w.seq, field: Boolean(w.field)}, [w.weather, ...w.maps, ...(w.field ? [w.field] : [])]);
     dropWeather(pg);
   }
-  // A page's shape or weather from its copy, when one holds its current stamp: the same bytes in new buffers, and the CPU copies the sync reads use.
+  // A page's weather from its copy, when one holds its current stamp: the same bytes in new buffers, and the CPU copy the sync reads use.
   // Restored weather carries the current Time revision (revB), as a pass run now would: its inputs are the same as when the pass ran.
-  function restoreShape(pg) {
-    const got = spill.take('s' + pg.key, shapeStamp(pg));
-    if (!got) return false;
-    const t = engine.makeTarget(pg.x0 - RING, pg.y0 - RING, SIDE, SIDE), q = device().queue, n = SIDE * SIDE;
-    if (t.F.size + t.Mk.size !== got.data.byteLength) { t.destroy(); return false; }
-    q.writeBuffer(t.F, 0, got.data, 0, t.F.size); q.writeBuffer(t.Mk, 0, got.data, t.F.size, t.Mk.size);
-    pg.target = t; pg.rev++; shapeRestores++;
-    pg.cpu = {h: new Float32Array(got.data.slice(0, n * 4)), r: new Float32Array(got.data.slice(2 * n * 4, 3 * n * 4))}; pg.cpuRev = pg.rev;
-    return true;
-  }
   function restoreWeather(pg) {
-    const got = spill.take('w' + pg.key, weatherStamp(pg.weatherSeq));
+    const got = spill.take(pg.key, weatherStamp(pg.weatherSeq));
     if (!got) return false;
     const d = device(), w = {revB: time.revB, seq: got.meta.seq, ...weatherBuffers(d, got.meta.field)}, parts = [w.weather, ...w.maps, ...(w.field ? [w.field] : [])], n = CORE * CORE;
     if (parts.reduce((s, b) => s + b.size, 0) !== got.data.byteLength) { parts.forEach(b => b.destroy()); return false; }
@@ -1338,7 +1326,7 @@ export function createPagedFields(opts) {
         if (!victim) break; free(victim); total -= size;
       }
     };
-    lru(pg => pg.target, evictShape, shapeBudget(), SHAPE_BYTES);
+    lru(pg => pg.target, dropShape, shapeBudget(), SHAPE_BYTES);
     lru(pg => pg.weather, evictWeather, weatherBudget(), WEATHER_BYTES);
     spill.trim();
     let withCpu = 0; for (const pg of pagesMap.values()) if (pg.cpu) withCpu++;
@@ -1349,9 +1337,9 @@ export function createPagedFields(opts) {
   function evalPage(pg, rect = null) {
     if (!pg.target) { pg.target = engine.makeTarget(pg.x0 - RING, pg.y0 - RING, SIDE, SIDE); rect = null; }
     engine.submit(nodes(), context(), rect, {readback: false, target: pg.target, prepare});
-    pg.rev++; touch(pg);
+    pg.rev++; touch(pg); if (!rect) shapeEvaluations++;
   }
-  const ensureShape = pg => { if (!pg.target && !restoreShape(pg)) { evalPage(pg); wantCpu(pg); } touch(pg); };
+  const ensureShape = pg => { if (!pg.target) { evalPage(pg); wantCpu(pg); } touch(pg); };
 
   // ---- CPU copies of resident pages: h and r (shape), the authored and eroded height (weather)
   const cpuWanted = new Set(); let cpuTimer = 0;
@@ -1425,7 +1413,7 @@ export function createPagedFields(opts) {
     if (k === timeKey && !!t === !!time) { time = t; return false; }
     time = t; timeKey = k;
     for (const pg of pagesMap.values()) { dropWeather(pg); pg.stale = false; pg.staleSeq++; }
-    spill.clear(k => k[0] === 'w');
+    spill.clear();
     return true;
   }
   let weatherChain = Promise.resolve();
@@ -1604,7 +1592,7 @@ export function createPagedFields(opts) {
     const announce = event.rect;
     for (const pg of pagesMap.values()) {
       if (!r) {
-        dropShape(pg);pg.staleSeq++;pg.shapeSeq++;pg.weatherSeq++;
+        dropShape(pg);pg.staleSeq++;pg.weatherSeq++;
         // A held whole-map shape row uses the same authored-first behavior as
         // a local stroke. Keep the weather allocation, invalidate its contents
         // for the gather, and refine once input is quiet.
@@ -1613,9 +1601,9 @@ export function createPagedFields(opts) {
         continue;
       }
       if ((pg.weather||pg.weatherJob) && hits(windowRect(pg), {x0: r.x0 - 6, y0: r.y0 - 6, x1: r.x1 + 6, y1: r.y1 + 6})) { if(pg.weather)pg.weather.invalidRect=invalidateRefinement(pg.weather.invalidRect,r,worldGrid);pg.stale = true; pg.staleSeq++; pendingStale = pendingStale ? joinWorld(pendingStale, worldRect(r)) : worldRect(r); }
-      // The spill's stamps: the window the Time pass actually reads (windowRect moved inside the world), and the shape page's whole buffer.
-      if (hits(grow(weatherWindow(pg), 6), r)) { pg.weatherSeq++; spill.drop('w' + pg.key); }
-      if (hits(bufRect(pg), r)) { pg.shapeSeq++; spill.drop('s' + pg.key); if (pg.target && engine) { evalPage(pg, r); wantCpu(pg); } }
+      // The spill's stamp: the window the Time pass actually reads (windowRect moved inside the world).
+      if (hits(grow(weatherWindow(pg), 6), r)) { pg.weatherSeq++; spill.drop(pg.key); }
+      if (hits(bufRect(pg), r) && pg.target && engine) { evalPage(pg, r); wantCpu(pg); }
     }
     if (!r) spill.clear();
     if (!r) { pendingStale = gesture()?{x:0,y:0,width:worldSize-1,height:worldSize-1}:null; for (let py = 0; py < np; py++) for (let px = 0; px < np; px++) coarseAdd(page(px, py), null); }
@@ -1662,7 +1650,7 @@ export function createPagedFields(opts) {
     return {revision, residentBytes: cpuBytes() + coarse.byteLength, cacheBytes: cpuBytes(), cacheEntries: resident, lastWorkingBytes: 0, peakBytes: cpuBytes(), budget: shapeBudget() + weatherBudget(), hits: 0, misses: 0, replays: 0, evictions: 0,
       chunkCells: CORE, worldSize, worldGrid, gridSpacing: spacing, bytesPerCell: PAGE_CELL, workspaceBytesPerCell: 0, maxWorkingCells: 0, pointSamples: 0, connectionTiles: 0, connectionCells: 0,
       gpuShape: {...g, gpuBytes: gpuBytes(), paged: true, core: CORE, ring: RING, ringChanges, apron: APRON, shapePages: resident, weatherPages: weathers, pagesTotal: np * np, shapeBytes: shapeBytes(), weatherBytes: weatherBytes(), stagingBytes: stagingBytes(), stagingDrops, cpuCopyBytes: cpuBytes(),
-        coarse: {points: coarse.length, filled: coarseFilled, done: coarseDone, queued: coarseQueue.size, fullAt: coarseFullAt}, weatherRuns, weatherMsTotal, spill: {...spill.stats(), inFlight: spilling.size, shapeRestores, weatherRestores}, error: (error || firstError)?.message || null}};
+        coarse: {points: coarse.length, filled: coarseFilled, done: coarseDone, queued: coarseQueue.size, fullAt: coarseFullAt}, weatherRuns, weatherMsTotal, spill: {...spill.stats(), inFlight: spilling.size, weatherRestores}, shapeEvaluations, error: (error || firstError)?.message || null}};
   };
 
   return {
