@@ -17,6 +17,13 @@ export const SYNONYMS = [
   ['colour',                            'color'],
   ['plant plants grass',                'vegetation grass moss shrub'],
   ['lake sea ocean',                    'water sea'],
+  // Artists' words for the review's tasks (2026-11-17) and the outputs' older names.
+  ['crossing ford pass',                'shallow ramp passability'],
+  ['grain texture pattern',             'grain material pattern'],
+  ['png screenshot picture image',      'view image'],
+  ['share link url',                    'map link'],
+  ['ufo export game archive',           'export game map'],
+  ['save download file',                'save editable map'],
 ];
 
 // A word in plain form: lower case, no accents, "&" read as "and", camelCase split.

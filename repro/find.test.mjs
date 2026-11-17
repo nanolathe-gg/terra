@@ -112,3 +112,13 @@ test('each menu action names a button the page has, once', () => {
     if (how.startsWith('go:')) assert.ok(page.includes(`id="${how.slice(3)}"`), `no element has the id ${how.slice(3)}`);
   }
 });
+
+test('an artist’s words and the outputs’ older names reach the renamed outputs', () => {
+  const entries = [{group: 'A', name: 'Save view image', path: ['View']}, {group: 'A', name: 'Copy map link', path: ['Map']},
+    {group: 'A', name: 'Build game map (.ufo)', path: ['Export']}, {group: 'A', name: 'Save editable map', path: ['Map']}, {group: 'B', name: 'Shallow water', path: ['Land']}];
+  const first = q => search(entries, q, 3)[0]?.items[0]?.name;
+  assert.equal(first('png'), 'Save view image');
+  assert.equal(first('share'), 'Copy map link');
+  assert.equal(first('ufo'), 'Build game map (.ufo)');
+  assert.equal(first('crossing'), 'Shallow water');
+});
