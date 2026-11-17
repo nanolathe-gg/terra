@@ -1488,21 +1488,25 @@ fn geometryMain(v:VertexOut)->@location(0) vec4f {
     var lit=normal;var sun=voxelShadow(hit,normal);var cavity=voxelCavity(hit,normal);
     // Rock finer than the solid's voxels (rockDetail, a height outward), read as a 1 px solid's normal reads its field: it bends the normal the light reads,
     // deepens the cavity where it hollows (voxelCavity's first ring: its weight and its reach) and casts its own short shadow.
-    let site=rockSite(hit);
-    if(site.on){
-        let ax=select(vec3f(0,0,1),vec3f(1,0,0),abs(normal.z)>.9);let t=normalize(cross(normal,ax));let b=cross(normal,t);
-        let e=.75*max(u.chunkScale,1.0);   // voxelGradient's spacing in a 1 px solid
-        let d0=rockDetail(hit,site);let d1=rockDetail(voxelOffset(hit,t*e),site);let d2=rockDetail(voxelOffset(hit,-t*e),site);
-        let d3=rockDetail(voxelOffset(hit,b*e),site);let d4=rockDetail(voxelOffset(hit,-b*e),site);
-        if(abs(d0)+abs(d1)+abs(d2)+abs(d3)+abs(d4)>0.0){
-            lit=normalize(normal-(t*(d1-d2)+b*(d3-d4))/(2.0*e));
-            let k=.5*(.25*(d1+d2+d3+d4)-d0)/max(e,1.0);
-            cavity=clamp(max(cavity,smoothstep(.02,.5,k))-.15*smoothstep(.08,.8,-k),-.15,1.0);
-            let lt=u.light-normal*dot(u.light,normal);let lw=length(lt);
-            if(lw>.05&&sun>0.0){
-                let dir=lt/lw;let rise=dot(u.light,normal)/lw;var over=0.0;
-                for(var i=1;i<=3;i++){let s=f32(i)*.8;over=max(over,rockDetail(voxelOffset(hit,dir*s),site)-d0-s*rise);}
-                sun*=1.0-smoothstep(.2,1.0,over);
+    // Only where a pixel is finer than a voxel: where the two are the same size (a gesture's own previews, one sample a pixel: sculpt-chunk-renderer.js
+    // fastRaster) the solid already holds all a pixel can show, and the finer rock was noise a pixel wide.
+    if(vs.step>u.chunkScale){
+        let site=rockSite(hit);
+        if(site.on){
+            let ax=select(vec3f(0,0,1),vec3f(1,0,0),abs(normal.z)>.9);let t=normalize(cross(normal,ax));let b=cross(normal,t);
+            let e=.75*max(u.chunkScale,1.0);   // voxelGradient's spacing in a 1 px solid
+            let d0=rockDetail(hit,site);let d1=rockDetail(voxelOffset(hit,t*e),site);let d2=rockDetail(voxelOffset(hit,-t*e),site);
+            let d3=rockDetail(voxelOffset(hit,b*e),site);let d4=rockDetail(voxelOffset(hit,-b*e),site);
+            if(abs(d0)+abs(d1)+abs(d2)+abs(d3)+abs(d4)>0.0){
+                lit=normalize(normal-(t*(d1-d2)+b*(d3-d4))/(2.0*e));
+                let k=.5*(.25*(d1+d2+d3+d4)-d0)/max(e,1.0);
+                cavity=clamp(max(cavity,smoothstep(.02,.5,k))-.15*smoothstep(.08,.8,-k),-.15,1.0);
+                let lt=u.light-normal*dot(u.light,normal);let lw=length(lt);
+                if(lw>.05&&sun>0.0){
+                    let dir=lt/lw;let rise=dot(u.light,normal)/lw;var over=0.0;
+                    for(var i=1;i<=3;i++){let s=f32(i)*.8;over=max(over,rockDetail(voxelOffset(hit,dir*s),site)-d0-s*rise);}
+                    sun*=1.0-smoothstep(.2,1.0,over);
+                }
             }
         }
     }
