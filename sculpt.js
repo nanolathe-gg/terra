@@ -2253,6 +2253,9 @@ function mountRockPanel() {
   $('rock-copy').onclick=async()=>{
     try{await navigator.clipboard.writeText(rockRecipeText(selectedRock()));rockNote('');status('Copied the rock recipe to the clipboard.');}catch(err){rockNote('The clipboard could not be written: '+err.message);}
   };
+  $('rock-paste-new').onclick=async()=>{
+    try{const recipe=parseRockRecipe(await navigator.clipboard.readText()),slot=addRockType(recipe.key,recipe);selectRock(slot);checkpoint(true);rockNote('');}catch(err){rockNote(err.message);}
+  };
   $('rock-paste').onclick=async()=>{
     try{
       const recipe=parseRockRecipe(await navigator.clipboard.readText());
