@@ -2193,14 +2193,17 @@ function makeWorld(name,from=worldId) {
   }
   saveWorlds(); return id;
 }
+// Only the rows this build has: a stored world keeps a removed option's value (lowTint) until it is saved again, and it must not reach
+// the defaults, where a map save would carry it (sculpt-save.js savedWorld) and the open would drop it. Boot, Undo and Reset all filter here.
+const knownWorldKnobs=(knobs,base)=>{const known=worldKeys(base);return Object.fromEntries(Object.entries(knobs||{}).filter(([key])=>known.has(key)));};
 // Reset and history share one persistence boundary: intermediate material/surface restores never become saved defaults.
 function configureStoredWorld(world,beach=world.knobs?.beachFrom){
   for(const key of ['defaults','engineDefaults','layers','material','materials','beachTable','featureSet']){
     if(baseWorldConfig[key]===undefined)delete config[key];else config[key]=structuredClone(baseWorldConfig[key]);
   }
-  config.defaults={...config.defaults,...world.knobs};
+  const knobs=knownWorldKnobs(world.knobs,baseWorldConfig);config.defaults={...config.defaults,...knobs};
   refreshWorldTools(world);
-  for(const key of Object.keys(config.engineDefaults||{}))if(world.knobs?.[key]!==undefined)config.engineDefaults[key]=world.knobs[key];
+  for(const key of Object.keys(config.engineDefaults||{}))if(knobs[key]!==undefined)config.engineDefaults[key]=knobs[key];
   if(world.featureSet)config.featureSet=structuredClone(world.featureSet);
   const settings=new Map(beach?[['beachFrom',beach]]:[]);borrowBeach(config,settings);renderer.layers=new Set(config.layers);
 }
@@ -2856,9 +2859,7 @@ async function boot() {
     // layers draw (which needs the layers above); the rest are the library's.
     config.worldMaterials=keptWorldMaterials(worlds[worldId]?.materials,config);
     config.presetDefaults={...config.defaults};
-    // Only the rows this build has: a stored world keeps a removed option's value (lowTint) until it is saved again, and it must not reach
-    // the defaults, where a map save would carry it (sculpt-save.js savedWorld) and the open would drop it.
-    const known=worldKeys(config),worldKnobs=Object.fromEntries(Object.entries(worlds[worldId]?.knobs||{}).filter(([key])=>known.has(key)));
+    const worldKnobs=knownWorldKnobs(worlds[worldId]?.knobs,config);
     config.defaults={...config.defaults,...worldKnobs};
     config.engineDefaults=Object.fromEntries(Object.entries(config.engineDefaults||{}).map(([key,value])=>[key,worldKnobs[key]??value]));
     if (worldId!==config.biomeId) $('world-title').textContent=worlds[worldId].name;
