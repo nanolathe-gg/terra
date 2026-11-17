@@ -874,7 +874,7 @@ function surfaceHost() {
     preview:row=>{if(!renderer||renderer.surfacePreview===row)return;const stage=renderer.uniformStage(()=>renderer.setSurfacePreview(row));worldChanged({stage:stage??'F',world:false});schedule();},
     // Pick on the map: the inspector's pixels come from the Pick tool (its card's Surface door, pickHost openSurface).
     pick:()=>{if(!stroke&&!moving)setPicking(true);},
-    inspect:at=>mapCanvas?mapCanvas.inspect(at):Promise.resolve(null),
+    inspect:(at,current)=>mapCanvas?mapCanvas.inspect(at,current):Promise.resolve(null),
     // The material a built-in that draws a world role takes (Materials panel; the rock built-ins the world's rock): its name, or null.
     roleMaterial:builtin=>{const m=roleCopy(builtin);return m?{name:m.name,color:hex(m),own:own(m)}:null;},
     // A layer's material's own Color (sculpt-materials.js recolorMaterial): its copy, or for a built-in that draws a role, the role's.
@@ -965,7 +965,7 @@ function pickHost() {
   const info=m => ({slot:m.slot,name:m.name,color:hexOfRgb(drawnColor(m)),...scopeOf(materialIsWorld(m)),reach:materialReach(m)});
   return {
     offMap:at => !mapCanvas||mapCanvas.offMap(at),
-    inspect:at => mapCanvas?mapCanvas.inspect(at):Promise.resolve(null),
+    inspect:(at,current) => mapCanvas?mapCanvas.inspect(at,current):Promise.resolve(null),
     client:at => mapCanvas.client(at),
     focusMap:() => overlay.focus({preventScroll:true}),
     shapeAt:p => pickNode(p),

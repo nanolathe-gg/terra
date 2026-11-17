@@ -873,7 +873,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // after that work ends; one that needs pipelines still compiling lets the frames run while it waits for them.
   const offMap=at=>{const x=Math.floor(at.x),y=Math.floor(at.y);return x<0||y<0||x>=Math.floor(map.width)||y>=Math.floor(map.height);};
   let inspecting=Promise.resolve(),readWaiting=0;
-  function inspect(at){const run=inspecting.then(()=>inspectNow(at));inspecting=run.catch(()=>{});return run;}
+  // `current`: whether the asker still wants this read; one superseded while queued (another pick, an undo's refresh, the card closed) is
+  // dropped before it takes the renderer, so a run of reads cannot hold the map's frames off.
+  function inspect(at,current=()=>true){const run=inspecting.then(()=>current()?inspectNow(at):{superseded:true});inspecting=run.catch(()=>{});return run;}
   async function holdForRead(){readWaiting++;try{while(drawing||renderer.busy||api.pendingInputs?.())await tick();}finally{readWaiting--;}drawing=true;}
   function releaseRead(){drawing=false;schedule();}
   async function inspectNow(at){
@@ -884,8 +886,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       await holdForRead();
       let held=true;   // while a retry awaits, a frame can take drawing: release only this attempt's hold
       const release=()=>{if(!held)return;held=false;renderer.setProbe(null);releaseRead();};
-      renderer.setProbe({x,y});
-      try{const e=await bake(rect,false,undefined,null,1,false,false,null,false,{pixelScale:1,fastRaster:false},true);e?.bitmap?.close?.();return await renderer.readProbe()??{unread:true};}
+      try{renderer.setProbe({x,y});const e=await bake(rect,false,undefined,null,1,false,false,null,false,{pixelScale:1,fastRaster:false},true);e?.bitmap?.close?.();return await renderer.readProbe()??{unread:true};}
       catch(error){
         if(error.name==='PipelinesPending'&&compiles++<3){release();await error.ready;continue;}
         if(/already rendering/.test(error.message)&&!retried){retried=true;release();while(renderer.busy)await tick();continue;}
