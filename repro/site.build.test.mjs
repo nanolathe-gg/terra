@@ -54,10 +54,16 @@ test('the diagnostic view ships its reference classifier and presentation module
   for (const name of ['sculpt-passability.js', 'sculpt-passability-view.js']) assert.ok(existsSync(join(folder, name)), name);
 });
 
-// Authored default-world pictures travel with the same static build as the picker.
-test('the New map picker has every authored world thumbnail',()=>{
+// Available authored pictures travel with the picker. Worlds without a picture use
+// its "No picture yet" fallback; adding a world does not require new preview art.
+test('the New map picker ships every available authored world thumbnail',()=>{
   const manifest=JSON.parse(read('ui-previews/manifest.json'));
   const worlds=JSON.parse(read('services.json')).worlds;
-  assert.deepEqual(Object.keys(manifest.worlds.images).sort(),[...worlds].sort());
-  for(const world of worlds){const bytes=readFileSync(join(folder,'ui-previews',manifest.worlds.images[world]));assert.deepEqual([...bytes.subarray(0,8)],[137,80,78,71,13,10,26,10]);}
+  const images=Object.entries(manifest.worlds.images);
+  assert.ok(images.length,'the preview bundle has authored world pictures');
+  for(const [world,image] of images){
+    assert.ok(worlds.includes(world),`${world}: preview belongs to a shipped world`);
+    const bytes=readFileSync(join(folder,'ui-previews',image));
+    assert.deepEqual([...bytes.subarray(0,8)],[137,80,78,71,13,10,26,10],`${world}: thumbnail is a PNG`);
+  }
 });
