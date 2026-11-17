@@ -145,14 +145,7 @@ Two machines may place dither dots differently (rule 12).
 
 **Materials** in the top bar opens it; the World pane's Ground and Water
 sections, Surface rows, the shape card's ground and Pick's card open it on
-that material. It docks beside the map in the side panel's place: the map
-stays in view and keeps drawing every change on its own terrain, and can be
-panned, zoomed, picked (Alt-click) and drawn on meanwhile. The Build or World
-tab closes it and brings the side panel back. **Full size** spreads it over
-the whole window; the map then waits until it is uncovered. Escape leaves a
-text field inside it first (a name field takes back what it held), then
-closes a menu or the drawer, then leaves Full size, then (after Pick's card)
-closes it.
+that material. The workspace gives the graph the upper-left two thirds, the live map the lower-left third, the material's texture the lower-middle third, and its settings the right third. The top bar and tool rail remain available. Build, World or the side-panel toggle closes Materials and brings the side panel back. **Focus graph** uses the two preview cells for the graph and pauses the covered map; **Show map & texture**, or Escape, restores them. The hidden texture waits for the split to return; the visible graph thumbnails keep updating. Escape first leaves a text field or closes a menu or drawer, then restores the previews, then closes Pick's card and Materials.
 
 - The material's name in the editor's bar opens the library drawer: **In
   this map** (the map's and the world's materials, each with its role;
@@ -161,7 +154,7 @@ closes it.
   filters both by name. Each tile's swatch is the editor's own preview of
   the material's repeat, made once its tile scrolls into view. **New
   material** adds a blank one.
-- The graph fills the panel. Each card shows what its node makes.
+- Each graph card shows what its node makes. Fit includes every card and frame below the toolbar. Arrange uses the graph cell’s aspect; saved node positions stay put until you ask for it. While the view is still fitted, resizing and Focus graph fit it to the space available. After you pan or zoom, edits, reopening the same material, resizing and Focus graph keep your zoom and the graph point at the center. A different material, Restore from library or a newly loaded map fits its graph again.
 - Add a node from its menu: it lists every node and type by name, and a search
   also matches the names other editors use (Perlin, Voronoi, Worley, fBm,
   terrace, posterize, HSL, displace, tile sampler, bomber, motion blur ...).
@@ -181,7 +174,7 @@ closes it.
 - The preview shows the middle of the repeat at 1× under the world's sun
   (Tile), three repeats each way (Repeat), or a shore, a plain and a hill (On
   terrain); 2× magnifies, Node shows the selected node alone. Its box is a
-  whole number of 32 px tiles (9 docked, 12 at Full size) and every view but
+  whole number of 32 px tiles that fits the texture cell and every view but
   Repeat draws unscaled.
 - **Controls**: the published settings. In the Node pane, ◆ beside a setting
   publishes it; a gradient publishes its colors. Publishing asks for the

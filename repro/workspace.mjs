@@ -127,14 +127,17 @@ try{
   await selectLast();await click('#tab-objects');assert.equal(await shown('#pane-objects'),false);
   await click('#open-graphics');await click('#focus-canvas');assert.equal(await shown('#pane-graphics'),false,'Focus closes the menu');report.focus={map:await rect('#viewport')};assert.deepEqual(report.focus.map,{x:0,y:44,width:1440,height:832});await key('Escape');assert.equal((await rect('#viewport')).width,1064);
   await ready();await ev('document.getElementById("overlay").focus()');await key('Tab');assert.equal((await rect('#viewport')).width,1440);await ready();await key('Tab');assert.equal((await rect('#viewport')).width,1064);await ready();await ev(`document.querySelector('${scrub}').focus()`);assert.equal(await ev('document.activeElement.dataset.source'),'diameter');await key('Tab');assert.equal((await rect('#viewport')).width,1064);report.focus.keys='Escape restores; Tab on the map toggles; Tab in the panel does not';
-  // The material editor docks beside the map in the side panel's place, so the map stays in view; Full size covers the window. Escape steps
-  // back from Full size to docked to closed, and the focus returns to Materials with the side panel back at its width.
-  await click('#materials-toolbar');report.materials={map:await rect('#viewport'),editor:await rect('#material-editor'),graph:(await rect('#material-graph')).width};
-  assert.equal(await ev('document.getElementById("inspector-sidebar").hidden'),true);assert.equal(report.materials.map.x+report.materials.map.width,report.materials.editor.x);assert.equal(report.materials.editor.x+report.materials.editor.width,1440);
-  assert(report.materials.map.width>=480&&report.materials.graph>=480,'the map and the graph both keep room at 1440 px');assert.equal(await ev('sculptCanvas.suspended'),false,'the map stays live beside the editor');
-  await click('#material-full');assert.deepEqual(await rect('#material-editor'),{x:0,y:0,width:1440,height:900});assert.equal(await ev('sculptCanvas.suspended'),true);
-  await key('Escape');assert.deepEqual(await rect('#material-editor'),report.materials.editor);await key('Escape');assert.equal(await shown('#material-editor'),false);
-  assert.equal(await ev('document.activeElement.id'),'materials-toolbar');assert.equal((await rect('#inspector-sidebar')).width,320);await ready();report.materials.keys='docked beside the map; Full size; Escape to docked, then closed; focus back to Materials';
+  // Materials share one workspace: graph above map and texture, settings at the right. Focus graph covers the two previews;
+  // Escape restores them, then closes Materials and returns focus to its door.
+  await click('#materials-toolbar');report.materials={map:await rect('#viewport'),editor:await rect('#material-editor'),graph:await rect('.material-graph-stage'),texture:await rect('.material-preview'),settings:await rect('.material-side')};
+  const near=(a,b)=>assert(Math.abs(a-b)<=1,`${a} is beside ${b}`),m=report.materials;
+  assert.equal(await ev('document.getElementById("inspector-sidebar").hidden'),true);
+  near(m.graph.x,m.map.x);near(m.graph.x+m.graph.width,m.settings.x);near(m.graph.y+m.graph.height,m.map.y);
+  near(m.map.x+m.map.width,m.texture.x);near(m.texture.x+m.texture.width,m.settings.x);near(m.settings.y,m.graph.y);near(m.settings.y+m.settings.height,m.map.y+m.map.height);
+  near(m.map.width,m.texture.width);near(m.texture.width,m.settings.width);assert.equal(await ev('sculptCanvas.suspended'),false,'the lower-left map stays live');
+  await click('#material-full');assert((await rect('.material-graph-stage')).height>m.graph.height*1.9);assert.equal(await ev('getComputedStyle(document.querySelector(".material-preview")).display'),'none');assert.equal(await ev('sculptCanvas.suspended'),true);
+  await key('Escape');assert.deepEqual(await rect('#material-editor'),m.editor);assert.equal(await ev('sculptCanvas.suspended'),false);await key('Escape');assert.equal(await shown('#material-editor'),false);
+  assert.equal(await ev('document.activeElement.id'),'materials-toolbar');assert.equal((await rect('#inspector-sidebar')).width,320);await ready();report.materials.keys='graph above map and texture; parameters at right; Focus graph; Escape restores previews, then closes; focus back to Materials';
   // The surfaces: each opens from its button in a fixed place. A menu closes on Escape, on a press elsewhere and when another opens.
   await click('#tab-map');assert(await shown('#pane-map')&&await shown('#blank'));await key('Escape');assert.equal(await shown('#pane-map'),false);
   await click('#tab-map');await click('#open-graphics');assert.equal(await shown('#pane-map'),false);assert(await shown('#pane-graphics')&&await shown('#seed-vary'));await click('#open-export');assert.equal(await shown('#pane-graphics'),false);assert(await shown('#map-export')&&await shown('#export'));

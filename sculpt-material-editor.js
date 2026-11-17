@@ -1,12 +1,9 @@
-// The material editor: one panel for the map's materials (the world's ground, water, role and surface layer materials, and the map's own),
-// docked beside the map in the side panel's place, so the map stays live and shows every edit on its own terrain; Full size spreads it over
-// the whole window as before. The graph fills the panel; beside it sit one preview and three panes: Controls (what the material publishes,
-// for adjusting it), Node (the selected node) and Palette (the game colors it is reduced to). Every element is in index.html; this fills
-// values and applies edits through the map's own undo and save.
+// The material workspace: the graph above the live map and the material's own texture, with Controls, Node and Palette at the right.
+// Focus graph covers the two previews while settings stay in view. Every element is in index.html; edits use the map's own undo and save.
 import {NODES, NODE_TYPES, accepts, snippetNodes, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
   nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb, materialColor, recolorMaterial,
   addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText, MAP_ROLES, roleOf, roleName, materialStatesApply} from './sculpt-materials.js';
-import {mountMaterialGraph, graphPositions, CARD, cardHeight} from './sculpt-material-graph.js';
+import {mountMaterialGraph, CARD, cardHeight} from './sculpt-material-graph.js';
 import {MaterialPreview, TILE, TERRAIN, SWATCH} from './sculpt-material-preview.js';
 import gamePalette from './materials/palette.json' with {type: 'json'};
 
@@ -114,7 +111,7 @@ export function mountMaterialEditor(host) {
   $('graph-fit').onclick = () => graph.fit();
   // The same selection without a pointer: every node by name.
   $('graph-node-select').onchange = () => { const id = $('graph-node-select').value; selection = new Set(id ? [id] : []); primary = id || null; frameAt = -1; stopAt = 0; if (id) pick('node'); refresh(); };
-  $('graph-arrange').onclick = attempt(() => { change(m => { const places = graphPositions(m.nodes); for (const n of m.nodes) Object.assign(n, places.get(n.id)); }); graph.fit(); });
+  $('graph-arrange').onclick = attempt(() => { change(m => { const places = graph.arrangement(); for (const n of m.nodes) Object.assign(n, places.get(n.id)); }); graph.fit(); });
   $('graph-frame').onclick = attempt(() => {
     const ids = [...selection]; if (!ids.length) throw Error('Select the nodes to frame first (Shift-click adds to the selection).');
     if (material().frames.length >= MAX_FRAMES) throw Error(`A material has at most ${MAX_FRAMES} frames.`);
@@ -357,9 +354,9 @@ export function mountMaterialEditor(host) {
     const rock = m.worldRock === true || (host.rocks?.() ?? []).some(o => o.material === slot), ground = rock ? list.find(o => o.worldGround) ?? null : null;
     const context = [r.variant.toString(), r.colorOverrides], want = view === 'terrain' ? 'terrain' : 'tile', showing = solo && m.nodes.some(n => n.id === solo) ? solo : null;
     const key = JSON.stringify([materialRenderKey(m), water, materialRenderKey(companion), ground && materialRenderKey(ground), context, want, showing]);
-    // Docked, an edit's picture waits for a pause in input, so a drag leaves the GPU to the map, which shows every step; a new view, node or
-    // material, and every edit at Full size (the map covered), draws at once.
-    if (key !== pictureKey) {
+    // An edit's picture waits for a pause in input, leaving the GPU to the live map. A new view, node or material draws at once.
+    // Focus graph hides the picture, so only thumbnails continue until the split is restored.
+    if (!full && key !== pictureKey) {
       pictureKey = key; $('material-preview').setAttribute('aria-busy', 'true'); $('material-preview-note').textContent = 'Updating…';
       const ask = () => preview.picture(r, m, companion, {view: want, solo: showing, ground}, (error, result) => {
         if (error) { pictureKey = ''; $('material-preview-note').textContent = 'No preview: ' + error.message; $('material-preview').setAttribute('aria-busy', 'false'); return; }
@@ -498,27 +495,29 @@ export function mountMaterialEditor(host) {
   $('material-copy').onclick = async () => { try { await navigator.clipboard.writeText(materialText(material())); host.status('Copied the material.'); note(''); } catch (e) { note(e.message); } };
   $('material-paste').onclick = async () => { try { const m = parseMaterialText(await navigator.clipboard.readText()); addToMap(m, m.name); } catch (e) { note(e.message); } };
   $('material-reseed').onclick = attempt(() => change(m => { m.seed = reseedMaterial(m).seed; }));
-  $('material-reset').onclick = attempt(() => { const source = LIBRARY[material().source]; if (!source) return; update(setMaterial(materials(), slot, source)); commit(); selection = new Set(); primary = null; frameAt = -1; refresh(); });
+  $('material-reset').onclick = attempt(() => { const source = LIBRARY[material().source]; if (!source) return; update(setMaterial(materials(), slot, source)); commit(); selection = new Set(); primary = null; frameAt = -1; refresh(); graph.fit(); });
   for (const [id, role] of [['ground-world-default', 'worldGround'], ['water-material', 'worldWater']]) $(id).onchange = attempt(() => { update(assignMaterial(materials(), Number($(id).value), role)); commit(); });
 
-  // Docked, the editor is not modal: the map beside it can be drawn on, panned, zoomed and picked while it is open. The side panel gives
-  // way to it (sculpt-ui.js dock) and comes back when it closes. Full size covers the map, which then waits (host.suspend).
+  // The workspace is not modal: its lower-left map can be drawn on, panned, zoomed and picked. The side panel gives way to the
+  // material settings (sculpt-ui.js dock) and comes back on close. Focus graph covers the map, which then waits (host.suspend).
   function setFull(on) {
-    if (full === on) return; full = on; document.querySelector('.app').classList.toggle('material-full', on); host.suspend(on); requestAnimationFrame(() => graph.fit());
-    $('material-full').setAttribute('aria-pressed', String(on)); $('material-full').textContent = on ? '⤡ Beside the map' : '⤢ Full size';
-    $('material-full').title = on ? 'Back beside the map, which shows every change' : 'Spread the editor over the whole window';
+    if (full === on) return; full = on; document.querySelector('.app').classList.toggle('material-full', on); host.suspend(on);
+    $('material-full').setAttribute('aria-pressed', String(on)); $('material-full').textContent = on ? 'Show map & texture' : 'Focus graph';
+    $('material-full').title = on ? 'Restore the live map and texture below the graph' : 'Give the graph the map and texture preview space';
+    if (on) { clearTimeout(pictureTimer); pictureTimer = null; pictureKey = pictureMaterial = ''; preview.cancelPicture(); }
+    else refreshPictures();
   }
   function open(which, from) {
     opener = from; if (which !== undefined) slot = which; pick('controls');
     if (!dialog.open) { dialog.show(); host.dock({close, inner}); $('materials-toolbar').setAttribute('aria-expanded', 'true'); $('material-graph').focus({preventScroll: true}); }
-    pictureKey = thumbKey = ''; refresh(); graph.fit();
+    pictureKey = thumbKey = ''; refresh();
   }
   // The side panel comes back before the focus returns, so a button inside it can take the focus. A door its panel built again meanwhile
   // is found by its id (a Surface row's Edit, say); without one the focus goes to Materials. Closed because the side panel was asked for
   // (its Build or World tab), the focus stays where that click put it.
   function close(returnFocus = true) {
     if (!dialog.open) return;
-    closeMenu(); setDrawer(false); setFull(false); dialog.close(); clearTimeout(pictureTimer); preview.cancel(); pictureKey = thumbKey = pictureMaterial = ''; host.dock(null); $('materials-toolbar').setAttribute('aria-expanded', 'false');
+    closeMenu(); setDrawer(false); dialog.close(); setFull(false); clearTimeout(pictureTimer); preview.cancel(); pictureKey = thumbKey = pictureMaterial = ''; host.dock(null); $('materials-toolbar').setAttribute('aria-expanded', 'false');
     const door = opener?.isConnected ? opener : opener?.id ? document.getElementById(opener.id) : null;
     if (returnFocus) (door && !door.closest('[hidden]') ? door : $('materials-toolbar')).focus({preventScroll: true});
   }
@@ -535,7 +534,7 @@ export function mountMaterialEditor(host) {
     return true;
   }
   // Escape inside the editor (sculpt-ui.js closeTop), one thing a press: a control's name being asked, a text field, the add menu, Manage or
-  // the library drawer, then Full size back to docked. Then Pick's card, and then the editor itself (closeDocked).
+  // the library drawer, then Focus graph back to the split workspace. Then Pick's card, and then the editor itself (closeDocked).
   function inner() {
     if (naming) { const pin = naming.pin; cancelName(); pin.focus(); return true; }
     if (leaveField()) return true;
@@ -571,5 +570,5 @@ export function mountMaterialEditor(host) {
   refresh();
   // The Color rows again, once the renderer has read back what the materials are drawn in (sculpt.js renderer.onmeans).
   const refreshColors = () => { for (const [prefix, m] of [['ctl', material()], ...worldRows.map(w => [w.prefix, materials().find(o => o[w.role]) ?? null])]) { const own = $(`${prefix}-matcolor`); if (m && document.activeElement !== own) own.value = hex(drawn(m).map(v => v * 255)); } };
-  return {refresh, refreshColors, open, refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { setFull(false); dialog.close(); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); clearTimeout(pictureTimer); locks.disconnect(); previewBox.disconnect(); graph.dispose(); preview.dispose(); }};
+  return {refresh, refreshColors, open, resetView: () => graph.fit(), refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { dialog.close(); setFull(false); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); clearTimeout(pictureTimer); locks.disconnect(); previewBox.disconnect(); graph.dispose(); preview.dispose(); }};
 }
