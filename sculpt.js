@@ -384,6 +384,7 @@ function updateControls() {
   { const can=ready && resettable(); $('reset-strokes').disabled=!can; $('reset-strokes').title=can?'':'Draw a shape first: there is nothing to reset.'; }
   $('undo').disabled=!ready || Boolean(stroke||moving) || historyIndex<=0;
   $('redo').disabled=!ready || Boolean(stroke||moving) || historyIndex>=history.length-1;
+  syncHistoryNames();
   $('export').disabled=!canExport(); mapUpdate();
   const view=mapCanvas?.view();$('fit').setAttribute('aria-pressed',String(view?view.overview:true));$('one').setAttribute('aria-pressed',String(view?!view.overview&&view.scale===1:false));
   }
@@ -1564,9 +1565,27 @@ function flushEval() {
   const from=pendingEval,rect=pendingRect; pendingEval=-1; pendingRect=null;
   evaluate(from,rect);
 }
+// What a history entry changed against the one before it, in the editor's words, for Undo and Redo ("Undo change to Plateau 1").
+function changeName(prev,next) {
+  if (!prev) return '';
+  const same=k => JSON.stringify(prev[k])===JSON.stringify(next[k]),parts=[];
+  if (!same('nodes')) {
+    const a=prev.nodes,b=next.nodes,i=b.findIndex((n,j) => JSON.stringify(n)!==JSON.stringify(a[j]));
+    parts.push(b.length<a.length?'deleted shapes':i>=0?shapeName(i):'the shapes');
+  }
+  if (!same('world')||!same('surface')||!same('rock')) parts.push(`${activeWorld().name} (every map in it)`);
+  else if (!same('materials')||!same('rocks')||!same('column')) parts.push('this map’s materials and rock types');
+  if (!same('mapData')) parts.push('features and starts');
+  if (!same('tools')) parts.push('this map’s tools');
+  return parts.join(' and ');
+}
+function syncHistoryNames() {
+  const back=historyIndex>0?history[historyIndex].name:'',ahead=history[historyIndex+1]?.name??'';
+  $('undo').title=`Undo${back?' change to '+back:''} · ⌘ / Ctrl Z`;$('redo').title=`Redo${ahead?' change to '+ahead:''} · ⌘ / Ctrl Shift Z`;
+}
 function checkpoint(mapOnly=false) {
   flushEval(); keepWorldMaterials();
-  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); if (history.length>48) history.shift(); historyIndex=history.length-1;
+  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); history.at(-1).name=changeName(history.at(-2),history.at(-1)); if (history.length>48) history.shift(); historyIndex=history.length-1;
   renderLayers(); updateControls(); persistLater();
 }
 function moveHistory(delta) {
@@ -1581,10 +1600,11 @@ function moveHistory(delta) {
   if(history[next].materials&&JSON.stringify(history[next].materials)!==JSON.stringify(mapMaterials))restoreMaterials(history[next].materials);
   if(history[next].surface&&JSON.stringify(history[next].surface)!==JSON.stringify(config.surface)){setSurfaceList(structuredClone(history[next].surface),JSON.stringify(history[next].surface)!==JSON.stringify(baseSurface));saveWorlds();surfacePanel?.refresh();}
   if(history[next].tools&&JSON.stringify(history[next].tools)!==JSON.stringify(mapTools))restoreMapTools(history[next].tools);
-  if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); pickCard?.refresh(); return; }
+  const named=history[delta<0?historyIndex:next].name,said=named?`${delta<0?'Undid':'Redid'} the change to ${named}.`:delta<0?'Undid the last change.':'Restored the change.';
+  if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); pickCard?.refresh(); status(said); return; }
   cancelWeather(); nodes=cloneNodes(history[next].nodes); selected=-1;alsoSelected=[];pathAdding=false;drawMode='select';pathPoint=-1;pathIndex=0; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
   if (JSON.stringify(history[next].column)!==JSON.stringify(columnOverride)) { restoreColumn(history[next].column); syncColumnPanel(); }
-  evaluate(0); renderLayers(); updateControls(); persistLater(); status(delta<0?'Undid the last change.':'Restored the change.'); schedule(); queueWeather(); pickCard?.refresh();
+  evaluate(0); renderLayers(); updateControls(); persistLater(); status(said); schedule(); queueWeather(); pickCard?.refresh();
   }finally{if(saved)worlds[worldId]=structuredClone(saved);refreshWorldTools();worldStoreDirty=false;worldStoreTransaction--;saveWorlds();const change=worldChanged(renderer.setColors(worldColors(),currentDrawOptions()));if(change.timeChanged)queueWeather();buildWorldPanel();syncWorldControls();updateControls();}
 }
 
