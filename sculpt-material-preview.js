@@ -97,6 +97,8 @@ export class MaterialPreview {
       }
     } finally { this.running = false; }
   }
-  cancel() { this.jobs.clear(); this.swatches.length = 0; clearTimeout(this.timer); this.pictureSerial = ++this.serial; }
+  // Focus graph hides only the picture: drop its queued work and palette finish, while visible node thumbnails and library swatches continue.
+  cancelPicture() { this.jobs.delete('picture'); clearTimeout(this.timer); this.pictureSerial = ++this.serial; }
+  cancel() { this.cancelPicture(); this.jobs.clear(); this.swatches.length = 0; }
   dispose() { this.cancel(); this.disposed = true; this.renderer?.dispose(); this.renderer = null; }
 }
