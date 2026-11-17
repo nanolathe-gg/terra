@@ -384,7 +384,7 @@ export function mountMaterialEditor(host) {
   // draws, so opening the editor costs nothing and the drawer fills as it is looked at.
   // A copy a surface layer draws names that layer (World › Surface), as a world role names its role.
   const layerOf = o => o.worldLayer ? host.layerName?.(o.worldLayer) ?? o.worldLayer : null;
-  const roleText = o => layerOf(o) ? `surface layer ${layerOf(o)}` : roleOf(o) ? `world ${roleName(roleOf(o))}` : '';
+  const roleText = o => [layerOf(o) ? `surface layer ${layerOf(o)}` : roleOf(o) ? `world ${roleName(roleOf(o))}` : '',host.scope?.(o)].filter(Boolean).join(' · ');
   const drawer = $('material-library'), swatches = new Map(), waiting = new Map(), inView = new Set();
   let mapTilesKey = '', libraryBuilt = false, libraryFull = null;
   const swatchKey = m => { const r = host.renderer(); return JSON.stringify([materialRenderKey(m), m.worldWater === true, r ? [r.variant.toString(), r.colorOverrides] : null]); };
@@ -454,7 +454,7 @@ export function mountMaterialEditor(host) {
     refreshWorld();
     if (!dialog.open) return;   // the rest is the editor's own face
     buildMapTiles();
-    $('material-choose-name').textContent = m?.name ?? ''; $('material-choose-role').textContent = m && roleText(m) ? '· ' + roleText(m) : '';
+    $('material-choose-name').textContent = m?.name ?? ''; $('material-choose-role').textContent = m && roleText(m) ? '· ' + roleText(m) : '';$('material-choose-role').title=m?host.scope?.(m)??'':'';
     if (libraryBuilt && libraryFull !== full) { libraryFull = full; for (const t of $('library-shipped').querySelectorAll('.library-tile')) { t.disabled = full; t.title = full ? `The map already has ${MATERIAL_SLOTS - 1} materials.` : 'Add a copy to the map'; } }
     if (!m) return;
     if (m.nodes.every(n => n.id !== primary)) { primary = null; selection = new Set([...selection].filter(id => m.nodes.some(n => n.id === id))); }

@@ -40,9 +40,9 @@ export function mountEditorUI(){
  for(const r of rails)r.onclick=()=>{if(panels.palette)return;const open=r.getAttribute('aria-expanded')==='true';closeFlyouts();closeSurfaces();r.setAttribute('aria-expanded',String(!open));};
  grouped.addEventListener('click',e=>{if(e.target.closest('.tool-flyout button'))closeFlyouts();});
  // Pick (picking) and Features or Starts (features) stand in for the tool in hand while they are on.
- const syncTools=(active,selected,locked,features,picking=false)=>{
+ const syncTools=(active,selected,locked,features,picking=false,unavailable=()=>'')=>{
   for(const b of grouped.querySelectorAll('button')){
-   b.disabled=locked;if(b.classList.contains('rail-button'))continue;
+   const reason=b.dataset.tool?unavailable(b.dataset.tool):'';b.disabled=locked||Boolean(reason);if(b.dataset.tool)b.title=reason||b.getAttribute('aria-label')||'';if(b.classList.contains('rail-button'))continue;
    b.setAttribute('aria-pressed',String(picking?b.id==='pick-tool':features?b.id===(features==='starts'?'starts-tool':'feature-tool'):b.dataset.tool===active));
   }
   // A rail button is lit while the tool in hand is one of its group.
