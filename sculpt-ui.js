@@ -147,10 +147,10 @@ export function groupToolControls(fields,buildRow){
 // Where each World setting sits: "Section/Tab" (a section without tabs ends in "/"). index.html holds one container per home
 // (data-home); a row is created straight into its home, under the name of its group. repro/world-homes.test.mjs holds every key to one home.
 export const WORLD_HOMES={
- 'World/Ground':'groundPatchSize reliefAmount',
+ 'World/Ground':'groundPatch reliefAmount',
  'World/Water':'shallowDepth',
  'World/Light & weather':'sunHeight erosionRain',
- 'Ground/Pattern':'groundPatch',
+ 'Ground/Pattern':'groundPatchSize',
  'Surface/':'highland highFrom highReach baseBand baseBandLow baseBandHigh baseBandWander baseBandGaps',
  'Ground/Bumps & relief':'reliefScale reliefLumps reliefBranch reliefWarp reliefPatchy reliefJitter gentleRelief plainRelief lumpRelief reliefOctaves worms',
  'Ground/Terrain shape':'undulation undulationScale undulationCover undulationArt faceSteep',
