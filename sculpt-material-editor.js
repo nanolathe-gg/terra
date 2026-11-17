@@ -132,6 +132,25 @@ export function mountMaterialEditor(host) {
     if (at >= 0) m.controls.splice(at, 1);
     else { if (m.controls.length >= MAX_CONTROLS) throw Error(`A material publishes at most ${MAX_CONTROLS} controls.`); const control = {label, node: id, param}, n = m.nodes.find(n => n.id === id); if (param !== 'stops') Object.assign(control, controlRange(nodeParams(n).find(p => p.key === param), n.params[param])); m.controls.push(control); }
   }));
+  // Publishing asks for the control's name once, in place under the setting (or the colors), starting from the node's name and the setting:
+  // Enter or Publish accepts and publishes it named, as one undo step; Escape, ◆ again or leaving the field cancels. Map makers meet this name
+  // in World; Edit controls renames it later.
+  let naming = null;   // {row, input, pin, id, param}
+  function askName(row, input, pin, id, param, suggestion) {
+    cancelName(); naming = {row, input, pin, id, param}; row.hidden = false; pin.setAttribute('aria-expanded', 'true'); input.value = suggestion; input.focus(); input.select();
+  }
+  function cancelName() { if (!naming) return false; naming.row.hidden = true; naming.pin.setAttribute('aria-expanded', 'false'); naming = null; return true; }
+  function acceptName() { if (!naming) return; const {id, param, input, pin} = naming, label = input.value.trim().slice(0, 60); if (!label) { input.focus(); return; } cancelName(); togglePublish(id, param, label); pin.focus(); }
+  function namePrompt(row, input, ok) {
+    input.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); acceptName(); } };
+    ok.onpointerdown = e => e.preventDefault();   // the field keeps the focus, so leaving it means leaving the prompt
+    ok.onclick = acceptName;
+    row.addEventListener('focusout', e => { if (naming?.row === row && !row.contains(e.relatedTarget) && e.relatedTarget !== naming.pin) cancelName(); });   // ◆ again cancels by its click
+  }
+  const askOrUnpublish = (row, input, pin, n, param, suggestion) => {
+    if (naming?.row === row) { cancelName(); return; }
+    if (published(material(), n.id, param) >= 0) { cancelName(); togglePublish(n.id, param); } else askName(row, input, pin, n.id, param, suggestion.slice(0, 60));
+  };
 
   // A material's published controls, in the fixed rows the page declares under `prefix`: the editor's Controls pane ("ctl") and the
   // World pane's ground ("wg") and water ("ww"). `of()` is the material the rows act on. Names and Remove exist only in the editor.
@@ -200,6 +219,7 @@ export function mountMaterialEditor(host) {
   function refreshNode(m) {
     const n = node(), f = frameAt >= 0 ? m.frames[frameAt] : null;
     $('node-none').hidden = !!(n || f); $('node-fields').hidden = !n; $('frame-fields').hidden = !f;
+    if (naming && (naming.id !== n?.id || published(m, naming.id, naming.param) >= 0)) cancelName();   // another node, or already published
     if (f && document.activeElement !== $('frame-name')) $('frame-name').value = f.name;
     if (!n) return;
     const spec = NODES[n.type], kinds = nodeKinds(n), params = nodeParams(n), types = nodeTypes(m.nodes);
@@ -241,7 +261,8 @@ export function mountMaterialEditor(host) {
   for (let i = 0; i < PARAM_ROWS; i++) {
     $('node-param-' + i).oninput = attempt(() => editNode(n => { n.params[nodeParams(n)[i].key] = Number($('node-param-' + i).value); }));
     $('node-param-' + i).onchange = commit;
-    $('node-param-pin-' + i).onclick = () => { const n = node(), p = nodeParams(n)[i]; togglePublish(n.id, p.key, `${n.name}: ${p.label.replace(/ \(.*\)$/, '').toLowerCase()}`.slice(0, 60)); };
+    namePrompt($('node-param-name-row-' + i), $('node-param-name-' + i), $('node-param-name-ok-' + i));
+    $('node-param-pin-' + i).onclick = () => { const n = node(), p = nodeParams(n)[i]; askOrUnpublish($('node-param-name-row-' + i), $('node-param-name-' + i), $('node-param-pin-' + i), n, p.key, `${n.name}: ${p.label.replace(/ \(.*\)$/, '').toLowerCase()}`); };
   }
   for (let i = 0; i < INPUT_ROWS; i++) {
     const set = value => attempt(() => change(m => { const n = m.nodes.find(n => n.id === primary); n.in[NODES[n.type].inputs[i][0]] = value; }))();
@@ -278,7 +299,8 @@ export function mountMaterialEditor(host) {
   $('stop-gain').onchange = () => { setStop(stop => { const old = Math.max(1, ...stop.slice(1)), gain = Math.max(1, Math.min(2, Number($('stop-gain').value) || 1)); for (let j = 1; j < 4; j++) stop[j] = Math.min(2, stop[j] * gain / old); })(); commit(); };
   $('stop-position').onchange = () => { setStop((stop, g) => { stop[0] = Math.max(0, Math.min(1, Number($('stop-position').value) || 0)); const ref = stop; g.stops.sort((a, b) => a[0] - b[0]); stopAt = g.stops.indexOf(ref); })(); commit(); };
   $('stop-remove').onclick = () => { setStop((stop, g) => { g.stops.splice(stopAt, 1); stopAt = Math.max(0, stopAt - 1); })(); commit(); };
-  $('gradient-pin').onclick = () => { const n = node(); togglePublish(n.id, 'stops', `${n.name}: ${n.type === 'constant' ? 'color' : 'colors'}`.slice(0, 60)); };
+  namePrompt($('gradient-name-row'), $('gradient-name'), $('gradient-name-ok'));
+  $('gradient-pin').onclick = () => { const n = node(); askOrUnpublish($('gradient-name-row'), $('gradient-name'), $('gradient-pin'), n, 'stops', `${n.name}: ${n.type === 'constant' ? 'color' : 'colors'}`); };
   const cellAt = (canvas, e, size) => { const r = canvas.getBoundingClientRect(), columns = canvas.width / size, x = Math.floor((e.clientX - r.left) * canvas.width / r.width / size), y = Math.floor((e.clientY - r.top) * canvas.height / r.height / size); return y * columns + x; };
   $('stop-palette').onclick = e => { const index = cellAt($('stop-palette'), e, 8); if (index < 0 || index > 255) return; setStop(stop => { paletteRgb(index).forEach((v, j) => { stop[j + 1] = v / 255; }); })(); commit(); };
 
@@ -487,9 +509,10 @@ export function mountMaterialEditor(host) {
     closeMenu(); setDrawer(false); setFull(false); dialog.close(); preview.cancel(); pictureKey = thumbKey = ''; host.dock(null); $('materials-toolbar').setAttribute('aria-expanded', 'false');
     if (returnFocus) (opener?.isConnected && !opener.closest('[hidden]') ? opener : $('materials-toolbar')).focus({preventScroll: true});
   }
-  // Escape inside the editor (sculpt-ui.js closeTop), one thing a press: the add menu, Manage or the library drawer, then Full size back to
-  // docked. Then Pick's card, and then the editor itself (closeDocked).
+  // Escape inside the editor (sculpt-ui.js closeTop), one thing a press: a control's name being asked, the add menu, Manage or the library
+  // drawer, then Full size back to docked. Then Pick's card, and then the editor itself (closeDocked).
   function inner() {
+    if (naming) { const pin = naming.pin; cancelName(); pin.focus(); return true; }
     if (closeMenu()) { $('material-graph').focus(); return true; }
     if ($('material-menu').open) { $('material-menu').open = false; $('material-menu').querySelector('summary').focus(); return true; }
     if (setDrawer(false)) { $('material-choose').focus(); return true; }

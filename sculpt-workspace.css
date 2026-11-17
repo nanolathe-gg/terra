@@ -350,6 +350,8 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 #controls-edit{margin-top:12px}
 .node-title{gap:8px}.node-title input[type=text],#node-name{flex:1;min-width:0}.check{display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap}
 .node-param{display:grid;grid-template-columns:minmax(0,1fr) 26px;gap:5px;align-items:center;margin-top:7px}.node-param .control{margin:0}
+/* Publishing asks for the control's name in place, under the setting or the colors it publishes. */
+.publish-name{grid-column:1/-1;display:flex;gap:6px;margin-top:2px}.publish-name[hidden]{display:none}.publish-name input{flex:1;min-width:0}.publish-name button{flex:none}#gradient-name-row{margin-top:6px}
 .pin{padding:0;width:26px;height:26px;color:#5d7178;font-size:11px}.pin[aria-pressed=true]{color:#e8d38a;border-color:#a8975a;background:#3a3620}.pin-wide{margin-top:8px}.pin-wide[aria-pressed=true]{color:#e8d38a;border-color:#a8975a}
 #node-histogram,#gradient-bar{display:block;width:100%;margin-top:8px;border-radius:4px}#gradient-bar{cursor:pointer;touch-action:none;height:40px}#node-histogram{height:56px}
 .stop-row{gap:6px;margin-top:8px;align-items:center;font-size:11px}.stop-row input[type=number]{width:58px}.stop-row label{margin:0;color:var(--muted)}

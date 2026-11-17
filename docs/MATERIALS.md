@@ -181,7 +181,11 @@ it.
   repeats each way (Repeat), or a shore, a plain and a hill (On terrain); 2×
   magnifies, Node shows the selected node alone.
 - **Controls**: the published settings. In the Node pane, ◆ beside a setting
-  publishes it; a gradient publishes its colors. A control has its own range
+  publishes it; a gradient publishes its colors. Publishing asks for the
+  control's name in place, starting from the node's name and the setting:
+  Enter publishes it under that name (one undo step), Escape cancels. A map
+  maker meets that name in World, so name it as they would ("Grass colors",
+  "Mottling size"). A control has its own range
   inside the node setting's: a newly published scale (a size in px) starts
   with a quarter to four times its value, and Edit controls sets a control's
   name and range or removes it.
