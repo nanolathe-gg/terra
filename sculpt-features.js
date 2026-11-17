@@ -168,7 +168,7 @@ export async function mountMapFeatures(api) {
     for (const [k,s] of stamps) if (!live.has(k)) { stamps.delete(k); release(s); }
     for (const p of placements) if (GROUND_KINDS.includes(p.kind)) { const o=exactOrigin(p); if (o) origins.add(o.ox+','+o.oy); }
     for (const [k,g] of grounds) if (!origins.has(k) && !g.pending) grounds.delete(k);
-    for (const kind of GROUND_KINDS) for (const v of variantList(kind)) keep.add('ground|'+kind+'|'+v.seed+'|'+JSON.stringify(kind==='deposit'?{...v.params,metal:depositMetal()}:v.params));
+    for (const kind of GROUND_KINDS) for (const v of variantList(kind)) keep.add('ground|'+kind+'|'+v.seed+'|'+JSON.stringify(kind==='deposit'?{...v.params,metal:depositMetal()}:v.params)+'|'+lightKey(sun));   // as thumbnail() keys them
     for (const k of thumbs.keys()) if (!keep.has(k)) thumbs.delete(k);
   }
 
