@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"fmt"
 	"math"
+	"runtime"
 	"sort"
 	"time"
 )
@@ -271,7 +272,10 @@ func (s *terrainStream) mergeTiles() (*mergeSummary, error) {
 			rep[id] = bestID
 		}
 	}
-	m.desc = nil // its memory serves the cache below
+	// The descriptors' memory serves the cache below: collected now, before
+	// the heap would next grow, as WebAssembly's memory never shrinks.
+	m.desc = nil
+	runtime.GC()
 	// The loss pass compares each merged tile with its replacement. Reading
 	// the two in turn would scatter calls through the spill file between the
 	// merged tiles' forward reads and defeat the store's read-ahead, so the

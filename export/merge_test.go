@@ -268,6 +268,35 @@ func TestMergeTilesReadsSpilledTilesInFileOrder(t *testing.T) {
 	}
 }
 
+// After a merge, a spilled store's kept tiles are gathered into memory in their final order, with the same art in every slot.
+func TestRenumberGathersKeptTilesFromTheSpillFile(t *testing.T) {
+	a, b := noisyStream(t, 600, 40, 30, 100), noisyStream(t, 600, 40, 30, 100)
+	spilled(t, b, 128<<10)
+	for _, s := range []*terrainStream{a, b} {
+		if _, err := s.mergeTiles(); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.renumber(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if b.store.file != nil || b.store.count != len(b.order) || !reflect.DeepEqual(a.indices, b.indices) {
+		t.Fatalf("the kept tiles were not gathered: file %v, %d stored for %d kept", b.store.file != nil, b.store.count, len(b.order))
+	}
+	var x, y [1024]byte
+	for i := range a.order {
+		if err := a.store.read(a.order[i], x[:]); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.store.read(b.order[i], y[:]); err != nil {
+			t.Fatal(err)
+		}
+		if x != y {
+			t.Fatalf("kept tile %d differs after gathering", i)
+		}
+	}
+}
+
 // TILECAP_READS=1 go test -run MergeReadsScale -v: the reads of merging a noisy 40x40-unit map (412,804 distinct
 // tiles in 512 px chunks, 64 MiB of them in memory, the rest spilled) and of the TNT's passes over the kept tiles.
 func TestMergeReadsScale(t *testing.T) {
@@ -304,6 +333,20 @@ func TestMergeReadsScale(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("%d tiles (%d spilled) merged to %d in %v: %d file reads, %.0f MiB", s.store.count, s.store.count-s.store.held/1024, summary.KeptTiles, time.Since(begin), s.store.fileReads, float64(s.store.fileBytes)/(1<<20))
+	reads, bytes, begin := s.store.fileReads, s.store.fileBytes, time.Now()
+	if err := s.renumber(); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("renumbering %d kept tiles in %v: %d file reads, %.0f MiB", len(s.order), time.Since(begin), s.store.fileReads-reads, float64(s.store.fileBytes-bytes)/(1<<20))
+	reads, bytes, begin = s.store.fileReads, s.store.fileBytes, time.Now()
+	for pass := 0; pass < 3; pass++ { // the TNT's write and self-check and the indexed picture
+		for _, id := range s.order {
+			if err := s.store.read(id, tile[:]); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	t.Logf("three passes in TNT order in %v: %d file reads, %.0f MiB", time.Since(begin), s.store.fileReads-reads, float64(s.store.fileBytes-bytes)/(1<<20))
 }
 
 // The merge's result is pinned: the native exporter and the browser's (this
