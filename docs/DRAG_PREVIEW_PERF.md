@@ -60,11 +60,16 @@ material-workspace landing. **Measured:** the numeric-reach microbenchmark
 returned identical values and took 85–91 ms instead of 113–122 ms for 20,000
 calls, alternating implementations over three rounds.
 
-Automatic feedback averages four completion intervals because Chrome can
-return multiple completion callbacks together. Three sustained observations
-above 40 ms lower quality one step. Recovery requires a sustained fast run
-and at least 500 ms of dwell. Idle time and a rebuilt preview Time source
-restart the cadence window. Manual choices do not feed or obey adaptation.
+Automatic feedback averages four picture intervals because Chrome can
+return multiple completion callbacks together. A picture's interval runs
+from its start, or from the previous completion when it queued behind that
+one, so time spent waiting for input (a slow pointer) is not counted as load;
+pictures queued back to back measure the completion cadence as before. Three
+sustained observations above 40 ms lower quality one step. Recovery requires
+a sustained fast run and at least 500 ms of dwell. Each gesture starts at full
+Automatic detail, and control edits outside a gesture never take the backoff.
+A rebuilt preview Time source restarts the window. Manual choices do not feed
+or obey adaptation.
 **By eye:** the first Auto solid is visibly rougher but usable as a first
 picture; subsequent pictures and final art refine it.
 

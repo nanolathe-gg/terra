@@ -47,7 +47,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const previewLoad=createPreviewLoad();
   const previewRaster=level=>{
     const fastRaster=interacting()&&level>=4*detailLevel(),automatic=(gesture?.previewQuality??quality)==='auto';
-    const load=fastRaster&&automatic&&level<=4*detailLevel()?previewLoad.scale:1;
+    const load=gesture&&fastRaster&&automatic&&level<=4*detailLevel()?previewLoad.scale:1;   // a gesture's own backoff; control edits stay sharp
     // A first Auto picture uses a coarser solid, then the normal one. Under
     // load both raster and solid back off without replacing the source lattice.
     const solid=fastRaster&&automatic?Math.max(load,gesture&&!(gesture.previewPictures>0)?2:1):1;
@@ -558,7 +558,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           const retained=e=>e&&e.bitmap&&!e.fit&&!offLevel(e,detailLevel())&&e.weathered===weatheredView;
           const previewArea=nearArea&&nearArea.width>0&&nearArea.height>0&&stale.every(r=>intersects(r,nearArea)||retained(cache.get(cacheKey(r,size))))?nearArea:clipped;
           // Lock the unsplit edit's resolution before budgeting or awaiting GPU work.
-          if(gesture&&gesture.previewPixels==null){gesture.previewQuality=quality;gesture.previewPixels=previewPixels(quality,previewArea,detailLevel());gesture.previewPictures=0;previewLoad.resetCadence();}
+          if(gesture&&gesture.previewPixels==null){gesture.previewQuality=quality;gesture.previewPixels=previewPixels(quality,previewArea,detailLevel());gesture.previewPictures=0;previewLoad.reset();}
           const coarse=previewPlan(previewArea,coarseLevel).sort((a,b)=>dist(a)-dist(b));
           const coarseReady=coarse.every(r=>blockCurrent(blocks.get(blockKey(r,coarseLevel))));
           // F leaves geometry and Time unchanged. Reuse only measured costs
@@ -673,9 +673,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
               renderer.previousChunk.then(()=>{
                 if(gesture!==owner)return;
                 const now=performance.now(),last=owner.previewCompletion;
-                // Ignore the cold source/Time pass and time when no input was
-                // waiting. Completion gaps measure cadence, including GPU load.
-                if(previewLoad.complete(now,!last||startedAt-last.at>=33||last.timeRuns!==timeRuns))schedule();
+                // Ignore the cold source/Time pass. Waiting for input is not
+                // counted (sculpt-preview.js createPreviewLoad complete).
+                if(previewLoad.complete(now,startedAt,!last||last.timeRuns!==timeRuns))schedule();
                 owner.previewCompletion={at:now,timeRuns};
               },()=>{});
             }

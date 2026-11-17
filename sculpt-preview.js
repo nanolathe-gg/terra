@@ -8,8 +8,9 @@ export function previewPixels(preference,area,detail=1){
 }
 // Three slow pictures lower Auto by one level. Recovery needs a sustained
 // fast run and a minimum dwell, so a busy shared GPU cannot make it oscillate.
+// Each gesture starts sharp (reset): one heavy drag does not coarsen the next.
 export function createPreviewLoad(){
- let scale=1,slow=0,fast=0,changedAt=-Infinity,changes=0,lastMs=null,samples=0,times=[];
+ let scale=1,slow=0,fast=0,changedAt=-Infinity,changes=0,lastMs=null,samples=0,gaps=[],last=null;
  const observe=(ms,now)=>{
   if(!Number.isFinite(ms)||ms<=0||!Number.isFinite(now))return false;
   lastMs=ms;samples++;slow=ms>40?slow+1:0;fast=ms<18?fast+1:ms>28?0:Math.max(0,fast-1);
@@ -18,13 +19,16 @@ export function createPreviewLoad(){
   scale=next;slow=fast=0;changedAt=now;changes++;return true;
  };
  return {get scale(){return scale;},stats:()=>({scale,slow,fast,changes,lastMs,samples}),observe,
-  resetCadence(){times=[];},
-  complete(now,reset=false){
-   if(reset)times=[];times.push(now);if(times.length>5)times.shift();
+  reset(){scale=1;slow=fast=0;changedAt=-Infinity;gaps=[];last=null;},
+  // A picture's interval runs from its start, or from the previous completion when it queued behind that one: time the GPU spent
+  // waiting for input (a slow pointer) is not load. Pictures that queue back to back measure the completion cadence.
+  complete(now,start=-Infinity,reset=false){
+   if(reset){gaps=[];last=null;}
+   if(last!==null)gaps.push(now-Math.max(start,last));last=now;if(gaps.length>4)gaps.shift();
    // Browsers may deliver two queue-completion callbacks together. Four
    // intervals include those zero gaps rather than treating the batch as one
    // slow picture, and still respond within a few pictures under real load.
-   return times.length===5?observe((now-times[0])/4,now):false;
+   return gaps.length===4?observe(gaps.reduce((a,b)=>a+b,0)/4,now):false;
   }
  };
 }
