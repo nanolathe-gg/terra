@@ -94,7 +94,7 @@ export function search(entries, query, limit = 60) {
 const $ = id => document.getElementById(id);
 const clean = text => String(text ?? '').replace(/[▾▸▴▶…]/g, '').replace(/\s+/g, ' ').trim();
 // Where generic rows are read from, and the name each starts its path with.
-const SCOPES = [['pane-world', 'World'], ['brush-panel', 'Shape card'], ['pane-map', 'Map'], ['pane-graphics', 'Settings']];
+const SCOPES = [['pane-world', 'World'], ['brush-panel', 'Shape card'], ['pane-map', 'Map'], ['pane-graphics', 'View']];
 const FIELDS = 'input, select, textarea, .scrub';
 // Not rows of their own: the World panel's own search, a part's switch (its row is found), a slider's typed entry and native range,
 // the Surface list's heads and Add a layer (found by name below), file pickers.
@@ -105,7 +105,7 @@ const KIND_WORDS = {color: 'color', choice: 'choice', switch: 'switch', slider: 
 // puts the focus on it, or on the element named after the colon. The name defaults to the button's own words.
 export const ACTIONS = [
   ['new-map', 'run'], ['tab-map', 'run', 'Map'], ['load', 'run'], ['save', 'run'], ['open-export', 'run'], ['map-export', 'go'], ['export', 'go'],
-  ['share-link', 'go'], ['open-graphics', 'run'], ['view-rendered', 'run'], ['view-clay', 'run'], ['view-passability', 'run'], ['fit', 'run'],
+  ['share-link', 'go'], ['open-graphics', 'run', 'View'], ['view-rendered', 'run'], ['view-clay', 'run'], ['view-passability', 'run'], ['focus-canvas', 'run', 'Focus'], ['fit', 'run'],
   ['zoom-in', 'run', 'Zoom in'], ['zoom-out', 'run', 'Zoom out'], ['materials-toolbar', 'run'], ['tab-objects', 'run', 'Shapes'],
   ['world-new', 'go:world-new-name'], ['world-export', 'run'], ['world-import', 'run'],
 ];
@@ -228,7 +228,7 @@ function tools(entries) {
   const features = scopeOf(document.querySelector('.feature-kinds'));
   for (const b of document.querySelectorAll('.tool-palette [data-tool], #feature-tool, #starts-tool, #pick-tool')) {
     const rail = b.closest('.tool-group')?.querySelector('.rail-button'), name = clean(b.getAttribute('aria-label') || b.textContent);
-    entries.push({group: 'Tools', name, path: ['Tool', ownText(rail)].filter(Boolean), kind: 'tool', words: ['tool', b.title, b.dataset.shape].filter(Boolean).join(' '), unavailable: b.disabled,
+    entries.push({group: 'Tools', name, path: ['Tool', ownText(rail), b.closest('.tool-family')?.getAttribute('aria-label')].filter(Boolean), kind: 'tool', words: ['tool', b.title, b.dataset.shape].filter(Boolean).join(' '), unavailable: b.disabled,
       scope: b.matches('#feature-tool, #starts-tool') ? features : null, go: () => { if (b.disabled) return; b.click(); land(null, shown(b) ? b : rail || b); }});
   }
   for (const b of document.querySelectorAll('.feature-kinds [data-feature-kind]'))

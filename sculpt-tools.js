@@ -1,5 +1,5 @@
 // The toolbar's shape tools. A world defines its own (config.tools, its table's world.tools), in order: each {id, label, icon, color, group, shape,
-// rock?} draws its shape (sculpt-scene.js LANDFORM_SHAPES) as the world makes it (toolDefaults, config.worldShapes). index.html holds the fixed
+// rock?, family?} draws its shape (sculpt-scene.js LANDFORM_SHAPES) as the world makes it (toolDefaults, config.worldShapes). index.html holds the fixed
 // buttons (Select, the generic Landform, Fissure and the paint tools) and the icon set (Save as tool's icon choices); the page builds only the shape buttons, from this list, into
 // #shape-tools and #water-tools. A stroke names the tool it was drawn with (node.tool), and shows as the generic landform when the toolbar lacks
 // it (another world's tool). No DOM here: the page and the tests share it.
@@ -40,6 +40,8 @@ export function worldTools(config) {
   return tools.map((t,i) => {
     checkTool(t,`The world's tool ${i+1}`,shape => shapeFrom(config,shape));
     if (t.help!==undefined && (typeof t.help!=='string' || !t.help.trim() || t.help.length>HELP_MAX)) throw Error(`The world's tool ${t.id}: its help is a line of at most ${HELP_MAX} characters.`);
+    // Its family: the heading it sits under in the Land flyout (Highlands, Hills, Cuts…); a Land tool without one goes in a last group.
+    if (t.family!==undefined && (!label(t.family) || t.group!=='shape')) throw Error(`The world's tool ${t.id}: a family is a Land tool's heading, a name of 1 to ${LABEL_MAX} characters.`);
     if (/^map-\d/.test(t.id)) throw Error(`The world's tool ${t.id}: map-1, map-2, ... are a map's own tools' ids.`);
     if (seen.has(t.id)) throw Error(`The world's tool ${t.id} is listed twice.`);
     seen.add(t.id); return {...t,label:t.label.trim()};

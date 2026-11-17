@@ -2,43 +2,53 @@
   "worlds": [
     {
       "id": "green",
-      "name": "Green Planet"
+      "name": "Green Planet",
+      "description": "Grass, gray cliffs, blue lakes"
     },
     {
       "id": "red",
-      "name": "Red Planet"
+      "name": "Red Planet",
+      "description": "Rust-red plains, dark cracked rock, violet water"
     },
     {
       "id": "archipelago",
-      "name": "Archipelago"
+      "name": "Archipelago",
+      "description": "Pale coral sand, olive rock, blue sea"
     },
     {
       "id": "moon",
-      "name": "Moon"
+      "name": "Moon",
+      "description": "Pale gray dust, darker rock, no water"
     },
     {
       "id": "zhon",
-      "name": "Zhon"
+      "name": "Zhon",
+      "description": "Olive soil, blue rock, dark teal water"
     },
     {
       "id": "lush",
-      "name": "Lush"
+      "name": "Lush",
+      "description": "Deep green jungle, brown cliffs, blue water"
     },
     {
       "id": "lava",
-      "name": "Lava"
+      "name": "Lava",
+      "description": "Dark crust, black rock, red lava lakes"
     },
     {
       "id": "desert",
-      "name": "Painted Desert"
+      "name": "Painted Desert",
+      "description": "Tan sand, banded cliffs, pale caprock"
     },
     {
       "id": "crystal",
-      "name": "Crystal"
+      "name": "Crystal",
+      "description": "Violet crystal ground, dark indigo water"
     },
     {
       "id": "ice",
-      "name": "Ice"
+      "name": "Ice",
+      "description": "White ice, blue-gray cliffs, blue water"
     }
   ],
   "featureWorlds": [

@@ -185,7 +185,7 @@ const firstTool=() => shapeTools()[1]?.id??LANDFORM_TOOL.id;
 // from the set (Save as tool's icon choices in index.html, #tool-save-icons), its id in data-tool as every check clicks it, its shape in data-shape for the hover help.
 function buildToolbar() {
   const icon=name => $('tool-save-icons').querySelector(`[data-icon-choice="${name}"] svg`).cloneNode(true);
-  for (const [group,box] of [['shape','shape-tools'],['water','water-tools']]) $(box).replaceChildren(...shapeTools().slice(1).filter(t => t.group===group).map(t => {
+  const button=t => {
     const b=document.createElement('button');
     b.dataset.tool=t.id; b.dataset.shape=shapeFrom(config,toolShape(t)); if (t.help) b.dataset.help=t.help; b.setAttribute('aria-pressed','false'); b.setAttribute('aria-label',t.label); b.title=t.label;
     b.style.setProperty('--tool-color',t.color); b.disabled=true;
@@ -193,7 +193,18 @@ function buildToolbar() {
     const name=document.createElement('span'); name.className='tool-name'; name.textContent=t.label; b.append(icon(t.icon),name);
     if (t.card) b.dataset.mapTool='';   // a map's own: its hover shows its shape's sketch, not the shape's rendered example
     return b;
+  };
+  // Land: the world's tools under their families' headings (each tool's family), the families in the order they first come in the world's
+  // list and a tool without one in a last group; then index.html's Generic group (Landform, Fissure); then this map's own tools under theirs.
+  const land=shapeTools().slice(1).filter(t => t.group==='shape'),families=new Map();
+  for (const t of land.filter(t => !t.card)) { const f=t.family??''; if (!families.has(f)) families.set(f,[]); families.get(f).push(t); }
+  $('shape-tools').replaceChildren(...[...families.keys()].sort((a,b) => (a==='')-(b==='')).map(f => {
+    const g=document.createElement('div'),head=document.createElement('span'); g.className='tool-family'; g.setAttribute('role','group'); g.setAttribute('aria-label',f||'Other');
+    head.className='tool-family-label'; head.setAttribute('aria-hidden','true'); head.textContent=f||'Other'; g.append(head,...families.get(f).map(button)); return g;
   }));
+  $('map-shape-tools').replaceChildren(...land.filter(t => t.card).map(button));
+  $('map-shape-tools').closest('.tool-family').hidden=!land.some(t => t.card);
+  $('water-tools').replaceChildren(...shapeTools().slice(1).filter(t => t.group==='water').map(button));
   // A toolbar with no water tool (a world without water) shows no Water group.
   $('water-tools').closest('.tool-group').hidden=!shapeTools().some(t => t.group==='water');
   // The shape card's Look: the same tools, by group (#tool-look).
@@ -2086,13 +2097,30 @@ function goToWorld(base,id,extra) {
   for (const [key,value] of Object.entries(extra||{})) if (value!=='' && value!==null && value!==undefined) url.searchParams.set(key,value); else url.searchParams.delete(key);
   location.href=url.toString();
 }
+// Your own worlds in this browser's store: each on a built-in world this server has.
+const ownWorlds=() => Object.entries(worlds).filter(([id,w]) => !(id in (config.biomes||{})) && w.base in (config.biomes||{}));
+// A new world of your own named `name`, made from the world `from` (World › New world, and Start a map's New world); returns its id, kept in
+// the store. The world this page is in starts from its settings as they are now: its colors, the rows' values, its own materials, the map's
+// feature set and its surface layers. Another world starts from what this browser keeps of it (a built-in nobody changed: nothing, so its
+// defaults), as it would open.
+function makeWorld(name,from=worldId) {
+  const id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
+  if (from===worldId) {
+    const world=activeWorld(),knobs={...world.knobs}; for (const [,list] of KNOBS) for (const [key] of list) if (experiment.has(key)) knobs[key]=experiment.get(key);
+    worlds[id]={name,materials:worldOwnMaterials(mapMaterials,config),base:config.biomeId,colors:{...world.colors},knobs,featureSet:mapFeatures?.serialize().featureSet,...(world.surface?{surface:structuredClone(world.surface)}:{})};
+  } else {
+    const {openedFrom,...kept}=structuredClone(worlds[from]??{});
+    worlds[id]={colors:{},knobs:{},...kept,name,base:worlds[from]?.base??from};
+  }
+  saveWorlds(); return id;
+}
 function buildWorldPanel() {
   const world=activeWorld();
   $('world-name').textContent=world.name;
   $('world-scope-tag').textContent=`Every map in ${world.name}`;$('world-scope-tag').title=`World settings: every map drawn in ${world.name} shows them. Rows tagged This map are saved with the map.`;
   const select=$('biome-select');
   const builtIn=Object.entries(config.biomes||{}).map(([id,name]) => new Option(name,'biome:'+id,false,worldId===id));
-  const custom=Object.entries(worlds).filter(([id,w]) => !(id in (config.biomes||{})) && w.base in (config.biomes||{})).map(([id,w]) => new Option(w.name+' (custom)','world:'+id,false,worldId===id));
+  const custom=ownWorlds().map(([id,w]) => new Option(w.name+' (custom)','world:'+id,false,worldId===id));
   select.replaceChildren(...builtIn,...custom);
   select.onchange=() => { const [kind,id]=select.value.split(':'); if (kind==='biome') goToWorld(id); else goToWorld(worlds[id].base,id); };
   const rows=$('world-colors'); rows.replaceChildren();
@@ -2121,9 +2149,7 @@ function buildWorldPanel() {
   $('world-reset').onclick=() => { world.colors={...(config.colors||{})}; saveWorlds(); buildWorldPanel(); worldChanged(renderer.setColors(worldColors())); syncWorldControls(); updateControls(); checkpoint(true); };
   $('world-new').onclick=() => {
     const name=$('world-new-name').value.trim(); if (!name) { $('world-new-name').focus(); status('Name the new world first.'); return; }
-    const id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
-    const knobs={...world.knobs}; for (const [,list] of KNOBS) for (const [key] of list) if (experiment.has(key)) knobs[key]=experiment.get(key);
-    worlds[id]={name,materials:worldOwnMaterials(mapMaterials,config),base:config.biomeId,colors:{...world.colors},knobs,featureSet:mapFeatures?.serialize().featureSet,...(world.surface?{surface:structuredClone(world.surface)}:{})}; saveWorlds(); goToWorld(config.biomeId,id);
+    goToWorld(config.biomeId,makeWorld(name));
   };
   $('world-export').onclick=() => download(new Blob([JSON.stringify({format:'nanolathe-map-world',version:1,world:{...world,materials:structuredClone(worldKept(mapMaterials)),knobs:{...world.knobs},featureSet:mapFeatures?.serialize().featureSet}},null,1)],{type:'application/json'}),(world.name||'world').replace(/[^\w-]+/g,'_')+'.world.json');
   $('world-import').onclick=() => $('world-file').click();
@@ -2557,27 +2583,53 @@ async function bootMap(pending=null) {
   await openSharedMap();
   $('new-map').disabled=false;showPrevious();
   if(experiment.has('newMap')){const url=new URL(location.href);url.searchParams.delete('newMap');$('map-name').value=url.searchParams.get('mapName')||'Untitled map';$('map-name').dispatchEvent(new Event('input'));url.searchParams.delete('mapName');window.history.replaceState(null,'',url);saveWorking();}
-  else if(!saved&&!location.search)openNewMap(true);
+  else if(!saved&&!location.search&&!$('new-map-dialog').open)openNewMap(true);
+  newMapReady();
 }
-// New and first run share one picker and the existing previous-map slot.
+// New and first run share one picker and the existing previous-map slot. The picker needs no GPU: a first visit opens it as soon as the
+// world list is read (boot), and Create only goes to the new map's address. Open a map file and New world wait for the editor (newMapReady).
+const firstVisit=() => { if (location.search) return false; try { return !LOCAL_KEY || !localStorage.getItem(LOCAL_KEY); } catch (_) { return true; } };
+function newMapReady() { for (const id of ['new-map-open','new-map-world','new-map-world-make']) $(id).disabled=!ready; }
 function openNewMap(first=false, dimensionsFromMap=null) {
-  const dialog=$('new-map-dialog'); let picked=config.biomeId;
+  const dialog=$('new-map-dialog'); let picked=worldId;   // a built-in world's id, or one of your own worlds'
   $('new-map-title').textContent=first?'Start a map':'New map';
   $('new-map-cancel').hidden=$('new-map-previous').hidden=first;
   $('new-map-error').textContent='';
-  const choices=Object.entries(config.biomes||{});
-  $('new-map-worlds').replaceChildren(...choices.map(([id,name])=>{const b=document.createElement('button');b.type='button';const image=document.createElement('img');image.src=`ui-previews/world-${id}.png`;image.alt='';image.width=260;image.height=190;const label=document.createElement('span');label.textContent=name;b.append(image,label);b.dataset.world=id;b.setAttribute('aria-pressed',String(id===picked));b.onclick=()=>{picked=id;for(const button of $('new-map-worlds').children)button.setAttribute('aria-pressed',String(button===b));};return b;}));
+  // The cards: the built-in worlds, each with its picture and its line (site.json), then your own worlds, each from its built-in one.
+  const choices=() => [...Object.entries(config.biomes||{}).map(([id,name]) => ({id,name,line:config.biomeDescriptions?.[id]||'',picture:`ui-previews/world-${id}.png`})),
+    ...ownWorlds().map(([id,w]) => ({id,name:w.name,line:`Yours · from ${config.biomes[w.base]}`}))];
+  const pick=id => { picked=id; for (const b of $('new-map-worlds').children) b.setAttribute('aria-pressed',String(b.dataset.world===id)); $('new-map-world-from').textContent=choices().find(c => c.id===id)?.name||''; };
+  const cards=() => { $('new-map-worlds').replaceChildren(...choices().map(({id,name,line,picture}) => {
+    const b=document.createElement('button'); b.type='button'; b.dataset.world=id;
+    if (picture) { const image=document.createElement('img'); image.src=picture; image.alt=''; image.width=260; image.height=190; b.append(image); }
+    const title=document.createElement('span'); title.className='new-map-world-name'; title.textContent=name;
+    const note=document.createElement('span'); note.className='new-map-world-line'; note.textContent=line;
+    b.append(title,note); b.onclick=() => pick(id); return b;
+  })); pick(choices().some(c => c.id===picked)?picked:config.biomeId); };
+  cards();
+  // New world: named here, made as World › New world makes one (makeWorld), from the world picked; its card is picked. The page stays.
+  const row=$('new-map-world-row'),showRow=on => { row.hidden=!on; $('new-map-world').setAttribute('aria-expanded',String(on)); };
+  showRow(false); $('new-map-world-name').value='';
+  $('new-map-world').onclick=() => { showRow(row.hidden); if (!row.hidden) $('new-map-world-name').focus(); };
+  const make=() => { const name=$('new-map-world-name').value.trim(); if (!name) { $('new-map-world-name').focus(); return; } if (!ready) return; picked=makeWorld(name,picked); showRow(false); $('new-map-world-name').value=''; cards(); };
+  $('new-map-world-make').onclick=make;
+  $('new-map-world-name').onkeydown=e => { if (e.key==='Enter') { e.preventDefault(); make(); } };   // not the form's Create
+  newMapReady();
+  // The sizes: four squares, each named, or Custom, which alone shows Width and Height.
   $('new-map-width').value=dimensionsFromMap?.x??config.map?.unitsX??4;$('new-map-height').value=dimensionsFromMap?.y??config.map?.unitsY??4;
-  const dimensions=()=>{const m=mapGeometry(Number($('new-map-width').value),Number($('new-map-height').value));$('new-map-pixels').textContent=`${m.width} × ${m.height} pixels`;for(const b of $('new-map-sizes').children)b.setAttribute('aria-pressed',String(Number(b.dataset.size)===m.unitsX&&m.unitsX===m.unitsY||b.dataset.size==='custom'&&(![4,8,12,16].includes(m.unitsX)||m.unitsX!==m.unitsY)));};
+  const square=n => [4,8,12,16].includes(n);
+  let custom=!(square(Number($('new-map-width').value))&&$('new-map-width').value===$('new-map-height').value);
+  const dimensions=()=>{const m=mapGeometry(Number($('new-map-width').value),Number($('new-map-height').value));$('new-map-pixels').textContent=`${m.width} × ${m.height} pixels`;$('new-map-custom').hidden=!custom;for(const b of $('new-map-sizes').children)b.setAttribute('aria-pressed',String(custom?b.dataset.size==='custom':Number(b.dataset.size)===m.unitsX&&m.unitsX===m.unitsY));};
   $('new-map-name').value='Untitled map';
-  for(const b of $('new-map-sizes').children)b.onclick=()=>{if(b.dataset.size==='custom'){$('new-map-width').focus();return;}$('new-map-width').value=$('new-map-height').value=b.dataset.size;dimensions();};
-  $('new-map-open').onclick=()=>{dialog.close();$('load').click();};
+  for(const b of $('new-map-sizes').children)b.onclick=()=>{custom=b.dataset.size==='custom';if(!custom)$('new-map-width').value=$('new-map-height').value=b.dataset.size;dimensions();if(custom)$('new-map-width').focus();};
+  $('new-map-open').onclick=()=>{if(!ready)return;dialog.close();$('load').click();};
   $('new-map-width').oninput=$('new-map-height').oninput=dimensions;dimensions();
   dialog.oncancel=e=>{if(first)e.preventDefault();};$('new-map-cancel').onclick=()=>dialog.close();
   $('new-map-form').onsubmit=e=>{e.preventDefault();if(!e.target.reportValidity())return;
     if(!first&&!keepPrevious(localStorage,JSON.stringify(workingCopy()))){$('new-map-error').textContent='Your previous map could not be kept. Save it as a file before starting a new map.';return;}
     clearTimeout(autosaveTimer);keepSaved=true;
-    const url=new URL(location.origin+location.pathname);url.searchParams.set('biome',picked);if(picked===config.biomeId){if(worldId!==config.biomeId)url.searchParams.set('world',worldId);}url.searchParams.set('mapName',$('new-map-name').value.trim()||'Untitled map');url.searchParams.set('mapX',$('new-map-width').value);url.searchParams.set('mapY',$('new-map-height').value);url.searchParams.set('newMap','1');if(dimensionsFromMap)url.searchParams.set('sea',dimensionsFromMap.sea);location.href=url;
+    const own=!(picked in (config.biomes||{}))&&worlds[picked];
+    const url=new URL(location.origin+location.pathname);url.searchParams.set('biome',own?own.base:picked);if(own)url.searchParams.set('world',picked);url.searchParams.set('mapName',$('new-map-name').value.trim()||'Untitled map');url.searchParams.set('mapX',$('new-map-width').value);url.searchParams.set('mapY',$('new-map-height').value);url.searchParams.set('newMap','1');if(dimensionsFromMap)url.searchParams.set('sea',dimensionsFromMap.sea);location.href=url;
   };
   dialog.showModal();
 }
@@ -2630,6 +2682,7 @@ async function boot() {
     // Its remembered settings come before the biome's own defaults.
     worldId=experiment.has('world') && worlds[experiment.get('world')]?.base===config.biomeId?experiment.get('world'):config.biomeId;
     config.featureSet=worlds[worldId]?.featureSet;
+    if (firstVisit()) openNewMap(true);   // the picker before the renderer starts: Create waits for nothing (newMapReady)
     // The world's surface layers where the artist changed them (the Surface section); a damaged one falls back to the world's own.
     baseSurface=structuredClone(config.surface);
     if (worlds[worldId]?.surface) { try { config.surface=withSurfaceMaterials(copySurface(worlds[worldId].surface),baseSurface); } catch (err) { delete worlds[worldId].surface; } }
@@ -2656,7 +2709,7 @@ async function boot() {
     for (const [id,hidden] of Object.entries(surfaceGroupsHidden(config))) $(id).hidden=hidden;
     $('world-surface-detail').hidden=Object.values(surfaceGroupsHidden(config)).every(Boolean);   // its heading (and This map tag) goes with its rows
     await bootMap(pending);
-  } catch (err) { error(err.message); status('The experimental renderer could not start.'); }
+  } catch (err) { if ($('new-map-dialog').open) $('new-map-dialog').close(); error(err.message); status('The experimental renderer could not start.'); }
 }
 // Read-only hook for capture tools: the displayed (refined) heights.
 // bakeMs and drawMs resolve to milliseconds from submit to GPU completion;

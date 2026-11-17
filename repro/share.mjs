@@ -64,10 +64,10 @@ const strokes = json => JSON.parse(json).nodes.map(n => canon({...n, hidden: Boo
 const nodesOf = json => JSON.stringify(strokes(json));
 const differs = (a, b) => { const x = strokes(a), y = strokes(b); if (x.length !== y.length) return `${x.length} vs ${y.length} strokes`; for (let i = 0; i < x.length; i++) for (const k of new Set([...Object.keys(x[i]), ...Object.keys(y[i])])) if (JSON.stringify(x[i][k]) !== JSON.stringify(y[i][k])) return `stroke ${i}.${k}: ${JSON.stringify(x[i][k])?.slice(0, 80)} vs ${JSON.stringify(y[i][k])?.slice(0, 80)}`; return ''; };
 
-// Sharing lives in Export; the previous-map notice lives in Map. Start each share
+// Sharing and the previous-map notice both live in the Map menu. Start each share
 // from a known closed state so the details toggle fires exactly one new request.
 const openShare=async ev=>{
-  await ev(`if(document.getElementById('pane-export').hidden)document.getElementById('open-export').click();document.getElementById('share-menu').open=false;true`);await sleep(100);
+  await ev(`if(document.getElementById('pane-map').hidden)document.getElementById('tab-map').click();document.getElementById('share-menu').open=false;true`);await sleep(100);
   await ev(`document.getElementById('share-result').hidden=true;document.getElementById('share-url').value='';document.getElementById('share-menu').open=true;true`);
 };
 const openMap=ev=>ev(`if(document.getElementById('pane-map').hidden)document.getElementById('tab-map').click();true`);
