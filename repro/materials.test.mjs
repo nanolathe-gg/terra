@@ -50,7 +50,7 @@ test('numbers are held in range, kinds choose their settings, and a new node has
   assert.equal(waves.params.size, 256); assert.equal(waves.params.direction, 30); assert.ok('crests' in waves.params);
   assert.deepEqual(Object.keys(ridged.params), ['size', 'layers', 'roughness', 'sharpness', 'seed']);
   assert.ok(m.nodes[2].params.high > m.nodes[2].params.low, 'Levels keeps High above Low');
-  assert.throws(() => graph([node('n', 'noise', {kind: 'plasma'})]), /Invalid Noise type/);
+  assert.deepEqual(graph([node('n', 'noise', {kind: 'plasma'})]).nodes.map(n => n.type), ['output'], 'a kind this build lacks: the node is dropped, the material loads');
   assert.throws(() => graph([node('n', 'noise', {params: {size: NaN}})]), /Invalid Size/);
   const next = makeNode('noise', m.nodes); assert.notEqual(next.params.seed, 0); assert.equal(makeNode('scatter', m.nodes).id, 'scatter');
   assert.throws(() => graph(Array.from({length: MAX_NODES + 1}, (_, i) => node('n' + i, 'constant'))), /at most 40/);
@@ -410,4 +410,19 @@ test('the world’s crystal material joins every map and is cached with the worl
   const list = withWorldMaterials(undefined, config), crystal = list.find(m => m.worldCrystal);
   assert.equal(crystal?.source, 'crystals');
   assert.ok(materialsInUse([], list).some(m => m.worldCrystal), 'no stroke needed: a stroke\'s shape settings never change the cached set');
+});
+
+test('a node of a removed type or kind is dropped with the connections that read it, and the material still loads', () => {
+  const saved = {nodes: [node('n', 'noise'), node('old', 'retired-node', {in: {in: 'n'}}), node('w', 'warp', {kind: 'retired-kind'}),
+    node('mix', 'combine', {in: {a: 'old', b: 'n'}}), node('g', 'gradient', {in: {in: 'mix'}}), node('n2', 'noise', {in: {in: 'mix'}}),
+    node('material', 'output', {in: {color: 'g', height: 'old'}})], controls: [{label: 'Gone', node: 'old', param: 'x'}], frames: [{name: 'F', nodes: ['old', 'n']}]};
+  const m = copyMaterial(saved);
+  assert.deepEqual(m.nodes.map(n => n.id), ['n', 'mix', 'g', 'n2', 'material']);
+  assert.equal(m.nodes.find(n => n.id === 'mix').in.a, null);
+  assert.equal(m.nodes.find(n => n.type === 'output').in.height, null);
+  assert.equal(m.nodes.find(n => n.id === 'n2').in.in, null, 'a connection left of the wrong type (gray into coordinates) is opened');
+  assert.deepEqual(m.controls, []); assert.deepEqual(m.frames, [{name: 'F', nodes: ['n']}]);
+  assert.doesNotThrow(() => copyMaterials([{slot: 1, name: 'Old', ...saved}]));
+  assert.throws(() => makeNode('retired-node', []), /Invalid/, 'the editor still refuses a type it does not have');
+  assert.throws(() => copyMaterial({nodes: [node('n', 'noise', {in: {in: 'n2'}}), node('n2', 'gradient', {in: {in: 'n'}})]}), /loop|needs/, 'a graph that lost nothing is checked as before');
 });

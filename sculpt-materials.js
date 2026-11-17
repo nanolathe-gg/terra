@@ -111,14 +111,16 @@ function copyColor(value) {
   const stop = Array.isArray(value?.[0]) && value[0].length === 4 ? value[0] : [0, .5, .5, .5];
   return [[0, ...stop.slice(1).map(v => clamp(number(v, 'color'), 0, 2))]];
 }
-// The type each node puts out, in evaluation order, checking each connection on the way.
-function typeNodes(ordered) {
+// The type each node puts out, in evaluation order, checking each connection on the way. `open`: a connection that does not fit is
+// opened instead of refused (a graph that lost a node, copyNodes).
+function typeNodes(ordered, {open = false} = {}) {
   const types = new Map();
   for (const n of ordered) {
     const spec = NODES[n.type];
     for (const [key, label, want] of spec.inputs) {
       const from = n.in[key]; if (from === null) continue;
       const got = types.get(from);
+      if (open && (got === null || !accepts(want, got))) { n.in[key] = null; continue; }
       if (got === null) throw Error('The Material node has no output to connect.');
       if (!accepts(want, got)) throw Error(`${n.name}: ${label} needs ${want === 'any' ? 'a gray or color' : want === 'coords' ? 'a Warp node’s coordinates' : want === 'gray' ? 'a gray or color' : 'a ' + want} input.`);
     }
@@ -159,16 +161,20 @@ function copyNode(n, seen) {
   if (n.x !== undefined || n.y !== undefined) { out.x = Math.round(clamp(number(n.x, 'node position'), -20000, 20000)); out.y = Math.round(clamp(number(n.y, 'node position'), -20000, 20000)); }
   return out;
 }
+// A node of a type or kind this build no longer has (a removed node type) is dropped, with the connections that read it, and the material
+// loads without it; a connection the loss leaves of the wrong type is opened.
+const removedNode = n => object(n) && typeof n.type === 'string' && (!Object.hasOwn(NODES, n.type) || (NODES[n.type].kinds && n.kind != null && !Object.hasOwn(NODES[n.type].kinds, n.kind)));
 export function copyNodes(value) {
   if (!Array.isArray(value) || value.length > MAX_NODES) throw Error(`A material has at most ${MAX_NODES} nodes.`);
-  const seen = new Set(), nodes = value.map(n => copyNode(n, seen));
+  const kept = value.filter(n => !removedNode(n)), dropped = kept.length < value.length;
+  const seen = new Set(), nodes = kept.map(n => copyNode(n, seen));
   if (nodes.filter(n => n.type === 'output').length > 1) throw Error('A material has one Material node.');
   if (!nodes.some(n => n.type === 'output')) {
     if (nodes.length >= MAX_NODES) throw Error(`A material has at most ${MAX_NODES} nodes.`);
     nodes.push(copyNode({id: freeId(nodes, 'material'), type: 'output'}, seen));
   }
   for (const n of nodes) for (const key of Object.keys(n.in)) if (n.in[key] !== null && (!seen.has(n.in[key]) || n.in[key] === n.id)) n.in[key] = null;   // a deleted source leaves the input open
-  typeNodes(orderNodes(nodes));
+  typeNodes(orderNodes(nodes), {open: dropped});
   // A Light or Cavity node evaluates its input again at each neighbor, so chains of them multiply the work.
   const byId = new Map(nodes.map(n => [n.id, n])), depth = new Map();
   const tapDepth = n => {
