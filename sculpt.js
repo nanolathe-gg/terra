@@ -5,7 +5,7 @@ import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,worldHome,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
-import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,roleName,worldKey,LIBRARY} from './sculpt-materials.js';
+import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,layerCopyMissing,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,roleName,worldKey,LIBRARY} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_HEADLINES,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
 import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
@@ -1005,6 +1005,8 @@ $('pick-tool').onclick=() => { if (!stroke && !moving) setPicking(true); };
 // Beside the map's picture (the view at Fit shows the map with room around it), a pick says the point is off the map.
 $('viewport').addEventListener('pointerdown',e => { if (e.target!==$('viewport') || e.button!==0 || !mapCanvas || stroke || moving || (!picking && !e.altKey)) return; e.preventDefault(); pickCard.pick(mapCanvas.artPoint(e),null); });
 function editMaterials(materials,rocks=mapRocks) {
+  // A surface layer whose copy left it (Use as world ground or water: assignMaterial) takes a fresh copy of its library material at once.
+  if(layerCopyMissing(config.surface,materials)&&materials.length<MATERIAL_SLOTS-1)materials=surfaceMaterials(config.surface,materials,{config,nodes,rocks});
   const captured=worldStoreTransaction?null:stageWorldKitEdit(config,currentWorldKit,rocks,materials,{before:mapMaterials});
   materials=captured?.materials??materials;const used=materialsInUse(nodes,materials,rocks),stage=setRendererMaterials(new Map(used.map(m=>[m.slot,m])));
   mapRocks=rocks;mapMaterials=materials;if(captured&&!sameKitData(captured.kit,currentWorldKit))installWorldKit(captured.kit);materialUseKey=JSON.stringify(used);syncMaterialChoices();surfacePanel?.refresh();worldChanged({stage,world:false});persistLater();schedule();

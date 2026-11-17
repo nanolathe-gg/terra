@@ -618,6 +618,8 @@ function withLayerCopies(list, config) {
   }
   return list;
 }
+// Whether a layer that draws a library material has no copy in the list (one that became the world's ground or water: assignMaterial).
+export const layerCopyMissing = (surface, list) => (surface || []).some(l => l?.material != null && LIBRARY[l.material] && !(list || []).some(m => m.worldLayer === l.material));
 export function withWorldMaterials(value, config, {carried = false} = {}) {
   let list = withGroundAndWater(copyMaterials(value) ?? [], config);
   // The world's other roles (MAP_ROLES: config.materials.high, .rock, .slope, .debris, .beach, .fringe, .body, .ring, .crystal), each a library material
@@ -740,7 +742,8 @@ export function assignMaterial(list, slot, role) {
   const other = role === 'worldGround' ? 'worldWater' : 'worldGround';
   if (m[other]) throw Error(role === 'worldGround' ? 'This material is the world’s water. Duplicate it to use it as ground too.' : 'This material is the world’s ground. Duplicate it to use it as water too.');
   // A material that becomes the ground or water stops being the highland ground or the rock, and stops drawing a surface layer (which takes
-  // a fresh copy of its library material).
+  // a fresh copy of its library material: the editor's editMaterials, layerCopyMissing), so a full list refuses a layer's copy.
+  if (m.worldLayer && LIBRARY[m.worldLayer] && list.length >= MATERIAL_SLOTS - 1) throw Error(`This material draws surface layers, which would need a fresh copy of ${LIBRARY[m.worldLayer].name}, and the map already has ${MATERIAL_SLOTS - 1} materials. Remove a material first.`);
   return list.map(o => { const kept = o.slot === slot ? Object.fromEntries(Object.entries(o).filter(([k]) => k !== 'worldLayer' && !MAP_ROLES.some(([r]) => r === k))) : o; return {...kept, [role]: o.slot === slot}; });
 }
 // A stroke's material: -1 for the ground beneath, 0 for the world's ground, else a slot the map still has.

@@ -457,3 +457,18 @@ test('the role select moves a material from one of the world’s surfaces to ano
   assert.throws(() => assignMaterial(list, list.find(m => m.worldLayer).slot, 'worldDebris'), /Duplicate/);
 });
 const roleOfSlot = (list, slot) => { const m = list.find(o => o.slot === slot); return Object.keys(m).find(k => /^world[A-Z]/.test(k) && m[k] === true) ?? (m.worldLayer ? 'worldLayer' : null); };
+
+test('Use as world ground on a layer’s copy: the layer takes a fresh copy of its library material; a full map refuses', async () => {
+  const {surfaceMaterials, layerCopyMissing} = await import('../sculpt-materials.js');
+  const config = {materials: {ground: 'green-ground', water: 'green-water'}, surface: [{id: 'snow-1', material: 'ice-ground'}]};
+  const list = withWorldMaterials(null, config), snow = list.find(m => m.worldLayer === 'ice-ground');
+  const assigned = assignMaterial(list, snow.slot, 'worldGround');
+  assert.ok(layerCopyMissing(config.surface, assigned), 'the layer lost its copy');
+  const bound = surfaceMaterials(config.surface, assigned, {config});   // what sculpt.js editMaterials runs at once
+  const copy = bound.find(m => m.worldLayer === 'ice-ground');
+  assert.ok(copy && copy.slot !== snow.slot && bound.find(m => m.slot === snow.slot).worldGround);
+  assert.equal(JSON.stringify(copyMaterial(copy)), JSON.stringify(copyMaterial(LIBRARY['ice-ground'])), 'a fresh library copy');
+  assert.equal(layerCopyMissing(config.surface, bound), false);
+  let full = list; while (full.length < MATERIAL_SLOTS - 1) full = addMaterial(full, LIBRARY['green-ground'], 'Filler').materials;
+  assert.throws(() => assignMaterial(full, snow.slot, 'worldGround'), /surface layers/);
+});
