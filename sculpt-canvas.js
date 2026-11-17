@@ -25,12 +25,13 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(restarting)return true;
     // Never discard a live recipe when local saving is unavailable. During
     // startup there is no editable recipe yet; the existing save is retained.
-    if(!api.saveForGpuRestart?.())return false;
+    // The save may be a write still in flight (saved maps are in IndexedDB): the page reloads once it is done.
+    const saved=api.saveForGpuRestart?.();if(!saved)return false;
     const failed=terrainBudget.mb;if(!decide())return false;
     restarting=true;
     const url=new URL(location.href);if(url.searchParams.has('gpuMB'))url.searchParams.set('gpuMB',failed);
     api.renderProgress?.(terrainBudget.mb<failed?'Restarting terrain with a smaller memory budget…':'Restarting terrain after the GPU was lost…');
-    location.replace(url);return true;
+    Promise.resolve(saved).then(ok=>{if(ok!==false)location.replace(url);else api.renderProgress?.('The GPU was lost and your map could not be saved in this browser. Use Save to keep it as a file, then reload.');});return true;
   };
   config.onDeviceLost=info=>restartForMemory('a lost GPU device',()=>terrainBudget.lost('a lost GPU device',{memory:/out of memory|\boom\b/i.test(info?.message??'')}));
   config.onMemoryPressure=()=>restartForMemory('a GPU allocation failure');
@@ -984,7 +985,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   for(const name of ['pointerup','pointercancel','lostpointercapture'])overlay.addEventListener(name,end);
   document.addEventListener('keydown',event=>{if(event.code==='Space'&&!['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName)){space=true;event.preventDefault();}if(event.key==='Escape'&&gesture){event.preventDefault();end({pointerId:gesture.id,type:'pointercancel'});}});document.addEventListener('keyup',event=>{if(event.code==='Space')space=false;});
   window.addEventListener('blur',()=>{space=false;pan=null;navigationPointer=null;if(gesture)end({pointerId:gesture.id,type:'pointercancel'});schedule();});
-  function budgets(event){if(event?.target===find('[data-gpu]')){terrainBudget.choose(clamp(Number(find('[data-gpu]').value)||terrainBudget.mb,128,TERRAIN_BUDGET_MAX));const url=new URL(location.href);url.searchParams.set('gpuMB',terrainBudget.mb);history.replaceState(null,'',url);}gpuBudget=terrainBudget.mb*MB;heapBudget=clamp(Number(find('[data-heap]').value)||1024,128,8192)*MB;renderer.trimColorTiles(()=>renderer.colorBytes<=colorReserve());api.setBudget?.(heapBudget*.65);api.fitGpuBudget?.();configureChunks();metrics();schedule();}
+  function budgets(event){if(event?.target===find('[data-gpu]')){terrainBudget.choose(clamp(Number(find('[data-gpu]').value)||terrainBudget.mb,128,TERRAIN_BUDGET_MAX));/* remembered with the budget (sculpt-memory.js), not in the address */}gpuBudget=terrainBudget.mb*MB;heapBudget=clamp(Number(find('[data-heap]').value)||1024,128,8192)*MB;renderer.trimColorTiles(()=>renderer.colorBytes<=colorReserve());api.setBudget?.(heapBudget*.65);api.fitGpuBudget?.();configureChunks();metrics();schedule();}
   find('[data-gpu]').onchange=budgets;find('[data-heap]').onchange=budgets;
   async function idle(){do{while(overlayFrame!==null||drawing||pending||renderer.busy||pipelineWaits.size||navigationTimer||navigating()||api.pendingInputs?.()||ladderTimer&&foregroundPending())await tick();await renderer.previousChunk;}while(overlayFrame!==null||drawing||pending||renderer.busy||pipelineWaits.size||navigationTimer||navigating()||api.pendingInputs?.()||ladderTimer&&foregroundPending());}
   // Each corner is sampled from an awaited canonical weather field (sculpt-map.js cellHeights). No uncached preview height may enter the TNT

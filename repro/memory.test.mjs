@@ -66,3 +66,15 @@ test('reserving preview memory reduces page counts without shrinking the shape r
  try{fields.refit();const before=fields.stats();assert.equal(before.gpuShape.ring,320);previewMinimum=1900*MB;fields.refit();const after=fields.stats();assert.equal(after.gpuShape.ring,before.gpuShape.ring);assert(after.budget<before.budget);}
  finally{fields.destroy();}
 });
+
+test('the artist\'s budget choice is remembered without the address; an address gpuMB is not', async () => {
+  const {createTerrainBudget} = await import('../sculpt-memory.js');
+  let saved = null; const save = v => { saved = v; };
+  const a = createTerrainBudget({save}); a.choose(4096); a.settled();
+  assert.equal(saved.chosen, 4096);
+  const b = createTerrainBudget({preference: saved, save});
+  assert.equal(b.mb, 4096, 'the next load uses the choice');
+  const c = createTerrainBudget({explicit: 768, save}); c.begin(); c.settled();
+  assert.equal(saved.chosen, undefined, 'an address budget is used, never remembered');
+  assert.equal(c.mb, 768);
+});

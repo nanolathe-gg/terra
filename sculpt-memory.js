@@ -10,6 +10,9 @@ const valid=mb=>Number.isFinite(mb)&&mb>=128&&mb<=TERRAIN_BUDGET_MAX;
 // A lost device within this long of an allocation failure is taken as that failure's.
 const FAILURE_LOSS_MS=10000;
 export function createTerrainBudget({explicit,deviceMemory,preference,save=()=>{},now=()=>Date.now()}={}){
+  // The artist's choice (the GPU memory field) is remembered with the budget: an address's gpuMB (the checks') is used, never remembered.
+  let chosen=valid(preference?.chosen)?preference.chosen:null;
+  if(!valid(explicit)&&chosen!==null)explicit=chosen;
   const automatic=Number.isFinite(deviceMemory)&&deviceMemory<=4?1024:2048;
   let mb=valid(explicit)?explicit:Math.min(automatic,TERRAIN_BUDGETS.includes(preference?.mb)?preference.mb:automatic),reason='';
   let choice=valid(explicit)?explicit:null,failedChoice=preference?.failedChoice??null;
@@ -19,7 +22,7 @@ export function createTerrainBudget({explicit,deviceMemory,preference,save=()=>{
     mb=Math.min(mb,lowerTerrainBudget(previous)??512);reason=preference?.mb<previous&&preference.reason?preference.reason:'lowered after an interrupted memory trial';
   }else if(!valid(explicit)&&mb<2048)reason=mb<automatic?(preference?.reason||'remembered memory budget'):'smaller device memory signal';
   let trying=false,restarting=false,remembered=TERRAIN_BUDGETS.includes(preference?.mb)?preference.mb:automatic,failure=null;
-  const write=()=>save({mb:remembered,trying:trying?mb:null,reason,failedChoice});
+  const store=value=>save({...value,...(chosen!==null?{chosen}:{})}),write=()=>store({mb:remembered,trying:trying?mb:null,reason,failedChoice});
   return {
     get mb(){return mb;},get reason(){return reason;},
     begin(){if(trying)return;trying=true;write();},
@@ -27,9 +30,9 @@ export function createTerrainBudget({explicit,deviceMemory,preference,save=()=>{
     // this event (a crash, or the browser discarding it) leaves the note that starts the next load lower.
     leave(){if(!trying||restarting)return;trying=false;write();},
     settled(){if(!trying)return;trying=false;remembered=Math.min(2048,Math.max(512,mb));write();},
-    choose(value){if(!valid(value))throw Error('Invalid terrain memory budget.');mb=value;choice=value;failedChoice=null;reason='';trying=false;this.begin();},
+    choose(value){if(!valid(value))throw Error('Invalid terrain memory budget.');mb=value;choice=chosen=value;failedChoice=null;reason='';trying=false;this.begin();},
     lower(why){const next=lowerTerrainBudget(mb);failure={at:now(),lowered:next!==null};if(next===null)return false;failedChoice=choice;mb=next;reason='lowered after '+why;remembered=next;trying=true;write();return true;},
-    restart(why){const failed=mb;if(!this.lower(why))return false;restarting=true;save({mb:remembered,trying:failed,reason,failedChoice});return true;},
+    restart(why){const failed=mb;if(!this.lower(why))return false;restarting=true;store({mb:remembered,trying:failed,reason,failedChoice});return true;},
     // A reload at the same budget: no trial note, so the next load starts where this one is.
     reload(){restarting=true;trying=false;write();return true;},
     // A lost GPU device (sleep and wake, a driver reset, a GPU process crash) is not a memory verdict by itself. It lowers the budget one
