@@ -106,8 +106,8 @@ export function validateWorldRocks(rocks,materials,sourceKit){
 export function instantiateWorldKit(config,world={}, {rocks=null,materials=null,source=world,append=true}={}){
   const kit=worldKit(config,world),fresh=rocks==null;
   let nextMaterials=materials==null?worldMaterials(config):copyMaterials(materials),nextRocks=fresh?[]:validateWorldRocks(rocks,nextMaterials,worldKit(config,source));
-  const missing=kit.rocks.filter(t=>!nextRocks.some(r=>r.worldKey===t.key));
-  if(!fresh&&(!append||world.rocks===undefined))return {kit,rocks:nextRocks,materials:nextMaterials,unbound:[]};
+  if(!fresh)nextRocks=validateWorldRocks(nextRocks,nextMaterials,kit);   // carrying to another world may turn a source-owned type into a local copy
+  const missing=(fresh||append&&world.rocks!==undefined)?kit.rocks.filter(t=>!nextRocks.some(r=>r.worldKey===t.key)):[];
   const candidate=structuredClone(nextRocks),unbound=[];let staged=nextMaterials;
   try{
     for(const t of missing){let slot=1;while(candidate.some(r=>r.slot===slot))slot++;if(slot>=ROCK_SLOTS)throw Error('This map’s 15 rock slots are full.');
@@ -133,9 +133,13 @@ export function worldToolUnavailable(tool,rocks,materials,config){
   return '';
 }
 // Capture only explicit world-owned instances. Unbound catalog entries survive; no recipe-key lookup publishes a local map copy.
-export function captureWorldKit(kit,rocks,materials){
-  let next=materials;const catalog=kit.rocks.map(t=>{const r=rocks.find(r=>r.worldKey===t.key);if(!r)return structuredClone(t);const captured=templateOf(r,next,t.key);next=captured.materials;return captured.rock;});
-  const refresh=ref=>{if(!ref||ref.world)return ref;const m=next.find(m=>m.key===ref.key);return m?{key:ref.key,name:m.name,graph:copyMaterial(m)}:ref;};
+export function captureWorldKit(kit,rocks,materials,{before=materials}={}){
+  let next=materials;const bound=new Set();
+  const catalog=kit.rocks.map(t=>{const r=rocks.find(r=>r.worldKey===t.key);if(!r)return structuredClone(t);const captured=templateOf(r,next,t.key);next=captured.materials;if(captured.rock.material?.key)bound.add(captured.rock.material.key);return captured.rock;});
+  // A prior binding proves a tool's inline ground is world-owned before an artist's graph edit. Rejected adoption/key collisions prove
+  // nothing, so an unrelated map graph can never be published merely because its key is the same. No persistent binding registry is kept.
+  for(const t of kit.tools)if(t.ground?.key&&materialRefSlot(t.ground,before))bound.add(t.ground.key);
+  const refresh=ref=>{if(!ref?.key||!bound.has(ref.key))return ref;const m=next.find(m=>m.key===ref.key);return m?{key:ref.key,name:m.name,graph:copyMaterial(m)}:ref;};
   return {kit:{rocks:catalog.map(r=>({...r,...(r.material?{material:refresh(r.material)}:{})})),tools:kit.tools.map(t=>({...structuredClone(t),...(t.ground?{ground:refresh(t.ground)}:{})}))},materials:next};
 }
 export function publishWorldRock(kit,rocks,materials,slot){

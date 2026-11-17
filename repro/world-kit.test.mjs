@@ -87,3 +87,28 @@ test('supplied null catalogs and false material refs reject; missing optional ro
  const missing=instantiateWorldKit(config,{rocks:[template('wrock-test',{material:{world:'worldSlope'}})]});
  assert.deepEqual(missing.rocks,[]);assert.deepEqual(missing.unbound,['wrock-test']);assert.match(missing.reason,/material role/);
 });
+
+test('carried source ownership cannot overwrite a disagreeing destination catalog',()=>{
+ const source=world(),fresh=instantiateWorldKit(config,source),destination={...source,rocks:[template('wrock-stone',{knobs:{faceWhole:.2}})]};
+ const carried=instantiateWorldKit(config,destination,{rocks:fresh.rocks,materials:fresh.materials,source});
+ assert.equal(carried.rocks[0].knobs.faceWhole,.8);assert.equal(carried.rocks[0].worldKey,undefined);
+ assert.equal(carried.rocks[1].worldKey,'wrock-stone');assert.equal(carried.rocks[1].knobs.faceWhole,.2);
+ assert.equal(captureWorldKit(carried.kit,carried.rocks,carried.materials).kit.rocks[0].knobs.faceWhole,.2);
+});
+test('a rejected inline graph binding never publishes the colliding map graph',()=>{
+ const w=world(),added=addMaterial(worldMaterials(config),{...graph,seed:42},'Stone grain'),materials=added.materials.map(m=>m.slot===added.slot?{...m,key:'wmat-stone'}:m);
+ const rejected=instantiateWorldKit(config,w,{rocks:[],materials,source:{}});
+ assert.deepEqual(rejected.unbound,['wrock-stone']);
+ const captured=captureWorldKit(rejected.kit,rejected.rocks,rejected.materials);
+ assert.equal(captured.kit.rocks[0].material.graph.seed,0);assert.equal(materials.at(-1).seed,42);
+});
+test('tools-only kits bind their ground on a legacy map and preserve dirty graph edits without a registry',()=>{
+ const ref={key:'wmat-ground',name:'Ground grain',graph},w={tools:[tool({ground:ref})]},materials=worldMaterials(config);
+ const result=instantiateWorldKit(config,w,{rocks:[],materials,source:{}});
+ const added=result.materials.find(m=>m.key===ref.key);assert(added);assert.deepEqual(result.rocks,[]);
+ const changed=result.materials.map(m=>m===added?{...m,seed:27}:m),dirty=captureWorldKit(result.kit,result.rocks,changed,{before:result.materials});
+ assert.equal(dirty.kit.tools[0].ground.graph.seed,27);
+ assert.equal(captureWorldKit(dirty.kit,result.rocks,changed).kit.tools[0].ground.graph.seed,27);
+ const collision=result.materials.map(m=>m===added?{...m,seed:39}:m),rejected=instantiateWorldKit(config,w,{rocks:[],materials:collision,source:{}});
+ assert.match(rejected.reason,/edited material/);assert.equal(captureWorldKit(rejected.kit,[],collision).kit.tools[0].ground.graph.seed,0);
+});
