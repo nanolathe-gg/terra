@@ -13,6 +13,7 @@ const rgbOf = value => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16));
 const PARAM_ROWS = 14, INPUT_ROWS = 5, CELL = 20;
 // A select's options ([label, value] pairs), made again only when they change: an input tick of a slider leaves them as they are.
 const optionsShown = new WeakMap();
+const DITHER_DEFAULTS = Object.fromEntries(DITHER.map(p => [p.key, p.value]));
 const setOptions = (select, pairs) => { const key = JSON.stringify(pairs); if (optionsShown.get(select) === key) return; optionsShown.set(select, key); select.replaceChildren(...pairs.map(([label, value]) => new Option(label, value))); };
 // The pause in input the graph's thumbnails wait for, and docked the preview picture too (the map beside it is the live preview).
 const PAUSE = 90;
@@ -371,7 +372,7 @@ export function mountMaterialEditor(host) {
       clearTimeout(pictureTimer); if (edited && !full) pictureTimer = setTimeout(ask, PAUSE); else ask();
     }
     // Thumbnails wait for a pause: they are a second run of the graph, and a drag changes them on every move.
-    const tk = JSON.stringify([materialRenderKey({...m, palette: [], dither: m.dither}), slot]);
+    const tk = JSON.stringify([materialRenderKey({...m, palette: [], dither: DITHER_DEFAULTS}), slot]);   // thumbnails read neither the palette nor its dither
     if (tk !== thumbKey) { thumbKey = tk; clearTimeout(thumbTimer); thumbTimer = setTimeout(() => preview.thumbnails(r, m, async (error, pictures) => {
       if (error || !pictures) return;
       const made = new Map(); for (const [id, pixels] of pictures) made.set(id, await createImageBitmap(new ImageData(new Uint8ClampedArray(pixels), THUMB, THUMB)));
