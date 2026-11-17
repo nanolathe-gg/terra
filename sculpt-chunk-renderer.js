@@ -12,6 +12,11 @@ import {MASK_KEYS} from './sculpt-scene.js';
 
 const MB=1024*1024;
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+// An input set's size is its tile's exact lattice, which follows the tile's size (a final tile, a preview block, a strip beside an edit)
+// and how near the map's edge it lies, and rounds a cell either way with its place. So the sets piled up as the view moved (42 of them,
+// 573 MiB, after one pass over a 16x16 map), and they hold capacity, never content. Keep the newest three: a view draws at up to three
+// levels at once (coarse preview, draft, final). Three is a choice from that, not a measured best.
+const INPUT_SETS=3;
 const mipBytes=(w,h,layers,levels,bytes)=>{let total=0;for(let i=0;i<levels;i++)total+=Math.max(1,w>>i)*Math.max(1,h>>i)*layers*bytes;return total;};
 
 // The relief fields stop at 2x: their memory grows with the square of the level, and 4x's grain is drawn, not baked.
@@ -242,6 +247,10 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     }
     this.bindGroups={};
   }
+  capInputSets(keep,limit=INPUT_SETS){
+    const idle=[...this.inputSets].filter(([,state])=>state!==keep).sort((a,b)=>b[1].used-a[1].used);
+    for(const [key,state] of idle.slice(Math.max(0,limit-1)))this.dropWorking({kind:'input',key,state});
+  }
   trimWorking(keep,enough){
     for(const group of this.workingGroups().filter(g=>!keep.has(g.state)).sort((a,b)=>a.state.used-b.state.used)){
       if(enough())break;this.dropWorking(group);
@@ -272,6 +281,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     let input=this.inputSets.get(inputKey),level=this.levelSets.get(scale);
     if(level&&level.key!==levelKey){this.dropWorking({kind:'level',key:scale,state:level});level=null;}
     if(!input){input={used:0,textures:[]};this.inputSets.set(inputKey,input);}
+    this.capInputSets(input);
     if(!level){level={key:levelKey,used:0,rock:this.emptyRock(),fieldsTexture:null,voxelColor:null};this.levelSets.set(scale,level);}
     if(level.voxelColor&&(level.voxelColor.width!==width||level.voxelColor.height!==height)){this.release(level.voxelColor);level.voxelColor=null;}
     const rockBytes=level.rock.owned.reduce((n,r)=>n+(this.resources.get(r)?.bytes??0),0);
