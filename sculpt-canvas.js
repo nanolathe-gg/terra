@@ -581,8 +581,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             const count=blocks.size;dropBlocks(e=>!(colorInputCurrent(e)&&e.level===4*detailLevel()&&coversView(e,v)));
             if(blocks.size!==count){paintedView=-1;presentView();}
           }
-          if(!previewing&&!navigating()&&quiet>=1000)for(const rect of jobs)if(!intersects(rect,v))plan.push({rect,want:detailLevel()});
-          else if(quiet<1000)wakeLadder(1000-quiet);
+          // The ring around the view is baked after a second without input.
+          if(quiet<1000)wakeLadder(1000-quiet);
+          else if(!previewing&&!navigating())for(const rect of jobs)if(!intersects(rect,v))plan.push({rect,want:detailLevel()});
         }
         // 2c: the dirty final tiles that may keep their pictures are checked first. Each one's inputs are fed and its checksum submitted without
         // waiting for the GPU, and one wait answers them all. A tile whose checksum differs bakes below without being checked again (missed).
