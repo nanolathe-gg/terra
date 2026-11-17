@@ -111,14 +111,16 @@ function copyColor(value) {
   const stop = Array.isArray(value?.[0]) && value[0].length === 4 ? value[0] : [0, .5, .5, .5];
   return [[0, ...stop.slice(1).map(v => clamp(number(v, 'color'), 0, 2))]];
 }
-// The type each node puts out, in evaluation order, checking each connection on the way.
-function typeNodes(ordered) {
+// The type each node puts out, in evaluation order, checking each connection on the way. `open`: a connection that does not fit is
+// opened instead of refused (a graph that lost a node, copyNodes).
+function typeNodes(ordered, {open = false} = {}) {
   const types = new Map();
   for (const n of ordered) {
     const spec = NODES[n.type];
     for (const [key, label, want] of spec.inputs) {
       const from = n.in[key]; if (from === null) continue;
       const got = types.get(from);
+      if (open && (got === null || !accepts(want, got))) { n.in[key] = null; continue; }
       if (got === null) throw Error('The Material node has no output to connect.');
       if (!accepts(want, got)) throw Error(`${n.name}: ${label} needs ${want === 'any' ? 'a gray or color' : want === 'coords' ? 'a Warp node’s coordinates' : want === 'gray' ? 'a gray or color' : 'a ' + want} input.`);
     }
@@ -144,7 +146,8 @@ export const nodeTypes = nodes => typeNodes(orderNodes(nodes));
 function copyNode(n, seen) {
   if (!object(n) || !Object.hasOwn(NODES, n.type) || typeof n.id !== 'string' || !n.id || n.id.length > 40 || seen.has(n.id)) throw Error('Invalid or duplicate material node.');
   seen.add(n.id);
-  const spec = NODES[n.type], out = {id: n.id, type: n.type, name: text(n.name, spec.label, 'A node name'), enabled: n.enabled !== false};
+  // The Material node is always on: the material is what it takes (a save from when it could be turned off loads with it on).
+  const spec = NODES[n.type], out = {id: n.id, type: n.type, name: text(n.name, spec.label, 'A node name'), enabled: n.type === 'output' || n.enabled !== false};
   if (spec.kinds) { out.kind = n.kind ?? Object.keys(spec.kinds)[0]; if (!Object.hasOwn(spec.kinds, out.kind)) throw Error(`Invalid ${spec.label} type.`); }
   out.params = {};
   for (const p of spec.params(out.kind)) {
@@ -159,16 +162,20 @@ function copyNode(n, seen) {
   if (n.x !== undefined || n.y !== undefined) { out.x = Math.round(clamp(number(n.x, 'node position'), -20000, 20000)); out.y = Math.round(clamp(number(n.y, 'node position'), -20000, 20000)); }
   return out;
 }
+// A node of a type or kind this build no longer has (a removed node type) is dropped, with the connections that read it, and the material
+// loads without it; a connection the loss leaves of the wrong type is opened.
+const removedNode = n => object(n) && typeof n.type === 'string' && (!Object.hasOwn(NODES, n.type) || (NODES[n.type].kinds && n.kind != null && !Object.hasOwn(NODES[n.type].kinds, n.kind)));
 export function copyNodes(value) {
   if (!Array.isArray(value) || value.length > MAX_NODES) throw Error(`A material has at most ${MAX_NODES} nodes.`);
-  const seen = new Set(), nodes = value.map(n => copyNode(n, seen));
+  const kept = value.filter(n => !removedNode(n)), dropped = kept.length < value.length;
+  const seen = new Set(), nodes = kept.map(n => copyNode(n, seen));
   if (nodes.filter(n => n.type === 'output').length > 1) throw Error('A material has one Material node.');
   if (!nodes.some(n => n.type === 'output')) {
     if (nodes.length >= MAX_NODES) throw Error(`A material has at most ${MAX_NODES} nodes.`);
     nodes.push(copyNode({id: freeId(nodes, 'material'), type: 'output'}, seen));
   }
   for (const n of nodes) for (const key of Object.keys(n.in)) if (n.in[key] !== null && (!seen.has(n.in[key]) || n.in[key] === n.id)) n.in[key] = null;   // a deleted source leaves the input open
-  typeNodes(orderNodes(nodes));
+  typeNodes(orderNodes(nodes), {open: dropped});
   // A Light or Cavity node evaluates its input again at each neighbor, so chains of them multiply the work.
   const byId = new Map(nodes.map(n => [n.id, n])), depth = new Map();
   const tapDepth = n => {
@@ -592,14 +599,29 @@ export function addMaterial(list, material, name = 'Material') {
 // is full, the first material that is not the other role takes it.
 const ROLES = [['worldGround', 'ground'], ['worldWater', 'water']];
 const libraryFor = (config, which) => LIBRARY[config.materials?.[which]] ?? LIBRARY[`green-${which}`];
-export function withWorldMaterials(value, config, {carried = false} = {}) {
-  let list = copyMaterials(value) ?? [];
+function withGroundAndWater(list, config) {
   for (const [role, which] of ROLES) {
     if (list.some(m => m[role])) continue;
     const preset = libraryFor(config, which);
     if (list.length >= MATERIAL_SLOTS - 1) { const taker = list.find(m => !m.worldGround && !m.worldWater); list = list.map(m => m === taker ? {...Object.fromEntries(Object.entries(m).filter(([k]) => !MAP_ROLES.some(([r]) => r === k))), [role]: true} : m); continue; }   // the taker gives up any other role
     const added = addMaterial(list, preset, preset.name); list = added.materials.map(m => m.slot === added.slot ? {...m, [role]: true} : m);
   }
+  return list;
+}
+// The world's surface layers that draw a material (config.surface, a layer with `material`, a library key): one copy of each library
+// material they draw, its key as the copy's worldLayer, shared by every layer that draws it (the three snows draw one snow), added
+// while the list has room.
+function withLayerCopies(list, config) {
+  for (const key of new Set((config.surface || []).map(l => l?.material).filter(k => k != null))) {
+    const m = LIBRARY[key];
+    if (m && !list.some(o => o.worldLayer === key) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, worldLayer: key} : o); }
+  }
+  return list;
+}
+// Whether a layer that draws a library material has no copy in the list (one that became the world's ground or water: assignMaterial).
+export const layerCopyMissing = (surface, list) => (surface || []).some(l => l?.material != null && LIBRARY[l.material] && !(list || []).some(m => m.worldLayer === l.material));
+export function withWorldMaterials(value, config, {carried = false} = {}) {
+  let list = withGroundAndWater(copyMaterials(value) ?? [], config);
   // The world's other roles (MAP_ROLES: config.materials.high, .rock, .slope, .debris, .beach, .fringe, .body, .ring, .crystal), each a library material
   // added while the list has room. Level raised ground takes the highland material; every rock face shows the rock material's grain, grit and
   // shine under its rock type's color (a rock type may name another, struct Rock material); the slope cover, the debris fragments, the beach
@@ -614,13 +636,7 @@ export function withWorldMaterials(value, config, {carried = false} = {}) {
     const m = LIBRARY[config.materials?.[key]];
     if (m && (role === 'worldHigh' || role === 'worldCrystal' || (role === 'worldBeach' && config.beachTable) || !surfaced) && !list.some(o => o[role]) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, [role]: true} : o); }
   }
-  // The world's surface layers that draw a material (config.surface, a layer with `material`, a library key): one copy of each library
-  // material they draw, its key as the copy's worldLayer, shared by every layer that draws it (the three snows draw one snow), added
-  // while the list has room.
-  for (const key of new Set((config.surface || []).map(l => l?.material).filter(k => k != null))) {
-    const m = LIBRARY[key];
-    if (m && !list.some(o => o.worldLayer === key) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, worldLayer: key} : o); }
-  }
+  list = withLayerCopies(list, config);   // each surface layer's material
   // A world may name more materials its tools lay down (config.materials.extra: library keys; a tool's `material`, sculpt-tools.js
   // toolMaterialSlot). Each the list lacks is added while it has room.
   for (const key of config.materials?.extra || []) {
@@ -712,18 +728,22 @@ export const duplicateMaterial = (list, slot) => { const m = find(list, slot); r
 const find = (list, slot) => { const m = list.find(m => m.slot === slot); if (!m) throw Error(`No material in slot ${slot}.`); return m; };
 export const renameMaterial = (list, slot, name) => { find(list, slot); return list.map(m => m.slot === slot ? {...m, name: nameOf(name)} : m); };
 export const setMaterial = (list, slot, material) => { find(list, slot); const copy = copyMaterial(material); return list.map(m => m.slot === slot ? {...m, ...copy} : m); };
+const withoutMapRoles = o => Object.fromEntries(Object.entries(o).filter(([k]) => !MAP_ROLES.some(([r]) => r === k)));
 export function assignMaterial(list, slot, role) {
   const m = find(list, slot);
   const mapRole = MAP_ROLES.find(([r]) => r === role);
   if (mapRole) {
-    const held = roleOf(m);
-    if (held && held !== role) throw Error(`This material is the world’s ${roleName(held)}. Duplicate it to use it as ${mapRole[2]} too.`);
-    return list.map(({[role]: _, ...o}) => o.slot === slot ? {...o, [role]: true} : o);
+    // A material holds one of these roles at most, so choosing another moves it there: the surface it drew falls back (engine-frag.wgsl
+    // roleColor), as when its role is cleared. The ground, the water and a layer's copy draw nothing else.
+    const held = roleOf(m), switching = MAP_ROLES.some(([r]) => r === held);
+    if (held && held !== role && !switching) throw Error(`This material is the world’s ${roleName(held)}. Duplicate it to use it as ${mapRole[2]} too.`);
+    return list.map(({[role]: _, ...o}) => o.slot === slot ? {...withoutMapRoles(o), [role]: true} : o);
   }
   const other = role === 'worldGround' ? 'worldWater' : 'worldGround';
   if (m[other]) throw Error(role === 'worldGround' ? 'This material is the world’s water. Duplicate it to use it as ground too.' : 'This material is the world’s ground. Duplicate it to use it as water too.');
   // A material that becomes the ground or water stops being the highland ground or the rock, and stops drawing a surface layer (which takes
-  // a fresh copy of its library material).
+  // a fresh copy of its library material: the editor's editMaterials, layerCopyMissing), so a full list refuses a layer's copy.
+  if (m.worldLayer && LIBRARY[m.worldLayer] && list.length >= MATERIAL_SLOTS - 1) throw Error(`This material draws surface layers, which would need a fresh copy of ${LIBRARY[m.worldLayer].name}, and the map already has ${MATERIAL_SLOTS - 1} materials. Remove a material first.`);
   return list.map(o => { const kept = o.slot === slot ? Object.fromEntries(Object.entries(o).filter(([k]) => k !== 'worldLayer' && !MAP_ROLES.some(([r]) => r === k))) : o; return {...kept, [role]: o.slot === slot}; });
 }
 // A stroke's material: -1 for the ground beneath, 0 for the world's ground, else a slot the map still has.
@@ -741,7 +761,9 @@ export function materialsInUse(nodes, list, rocks = []) {
 // The map's materials as a world's surface list draws them (docs/SURFACE_LAYERS.md; layers bind copies by layerKey). A copy whose layer no
 // longer draws it (removed, cleared to its own color, set to another library material, or a list of another world or map) gives up its
 // binding and leaves the list unless a stroke (hidden ones too) or a rock type uses it; then each layer that draws a material and lacks a
-// copy gets one (withWorldMaterials). Pure: the editor calls it on each surface edit and on loading a map, with that map's strokes.
+// copy gets one. Pure: the editor calls it on each surface edit and on loading a map, with that map's strokes. It adds the layers' copies
+// alone (and a ground and water where a list has none): the world's other roles and extra materials join a map when it loads
+// (withWorldMaterials), so one the artist cleared or deleted stays gone through later surface edits.
 export function surfaceMaterials(surface, materials, {config, nodes = [], rocks = []}) {
   const drawn = new Set((surface || []).map(l => l?.material).filter(k => k != null)), loose = new Set();
   let next = (materials || []).map(m => {
@@ -749,7 +771,7 @@ export function surfaceMaterials(surface, materials, {config, nodes = [], rocks 
     loose.add(m.slot); const {worldLayer, ...rest} = m; return rest;
   });
   if (loose.size) { const used = new Set(materialsInUse(nodes.map(n => n.hidden ? {...n, hidden: false} : n), next, rocks).map(m => m.slot)); next = next.filter(m => !loose.has(m.slot) || used.has(m.slot)); }
-  return withWorldMaterials(next, {...config, surface});
+  return copyMaterials(withLayerCopies(withGroundAndWater(copyMaterials(next) ?? [], config), {...config, surface}));
 }
 export function deleteMaterial(list, nodes, slot, rocks = []) {
   const m = find(list, slot);

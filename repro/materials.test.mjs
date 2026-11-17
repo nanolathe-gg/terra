@@ -50,7 +50,7 @@ test('numbers are held in range, kinds choose their settings, and a new node has
   assert.equal(waves.params.size, 256); assert.equal(waves.params.direction, 30); assert.ok('crests' in waves.params);
   assert.deepEqual(Object.keys(ridged.params), ['size', 'layers', 'roughness', 'sharpness', 'seed']);
   assert.ok(m.nodes[2].params.high > m.nodes[2].params.low, 'Levels keeps High above Low');
-  assert.throws(() => graph([node('n', 'noise', {kind: 'plasma'})]), /Invalid Noise type/);
+  assert.deepEqual(graph([node('n', 'noise', {kind: 'plasma'})]).nodes.map(n => n.type), ['output'], 'a kind this build lacks: the node is dropped, the material loads');
   assert.throws(() => graph([node('n', 'noise', {params: {size: NaN}})]), /Invalid Size/);
   const next = makeNode('noise', m.nodes); assert.notEqual(next.params.seed, 0); assert.equal(makeNode('scatter', m.nodes).id, 'scatter');
   assert.throws(() => graph(Array.from({length: MAX_NODES + 1}, (_, i) => node('n' + i, 'constant'))), /at most 40/);
@@ -410,4 +410,65 @@ test('the world’s crystal material joins every map and is cached with the worl
   const list = withWorldMaterials(undefined, config), crystal = list.find(m => m.worldCrystal);
   assert.equal(crystal?.source, 'crystals');
   assert.ok(materialsInUse([], list).some(m => m.worldCrystal), 'no stroke needed: a stroke\'s shape settings never change the cached set');
+});
+
+test('a node of a removed type or kind is dropped with the connections that read it, and the material still loads', () => {
+  const saved = {nodes: [node('n', 'noise'), node('old', 'retired-node', {in: {in: 'n'}}), node('w', 'warp', {kind: 'retired-kind'}),
+    node('mix', 'combine', {in: {a: 'old', b: 'n'}}), node('g', 'gradient', {in: {in: 'mix'}}), node('n2', 'noise', {in: {in: 'mix'}}),
+    node('material', 'output', {in: {color: 'g', height: 'old'}})], controls: [{label: 'Gone', node: 'old', param: 'x'}], frames: [{name: 'F', nodes: ['old', 'n']}]};
+  const m = copyMaterial(saved);
+  assert.deepEqual(m.nodes.map(n => n.id), ['n', 'mix', 'g', 'n2', 'material']);
+  assert.equal(m.nodes.find(n => n.id === 'mix').in.a, null);
+  assert.equal(m.nodes.find(n => n.type === 'output').in.height, null);
+  assert.equal(m.nodes.find(n => n.id === 'n2').in.in, null, 'a connection left of the wrong type (gray into coordinates) is opened');
+  assert.deepEqual(m.controls, []); assert.deepEqual(m.frames, [{name: 'F', nodes: ['n']}]);
+  assert.doesNotThrow(() => copyMaterials([{slot: 1, name: 'Old', ...saved}]));
+  assert.throws(() => makeNode('retired-node', []), /Invalid/, 'the editor still refuses a type it does not have');
+  assert.throws(() => copyMaterial({nodes: [node('n', 'noise', {in: {in: 'n2'}}), node('n2', 'gradient', {in: {in: 'n'}})]}), /loop|needs/, 'a graph that lost nothing is checked as before');
+});
+
+test('the Material node is always on: one saved off loads on, and its height and states count', () => {
+  const m = copyMaterial({nodes: [node('n', 'noise'), node('g', 'gradient', {in: {in: 'n'}}), node('material', 'output', {enabled: false, in: {color: 'g', height: 'n'}, params: {relief: 6}})]});
+  assert.equal(m.nodes.find(n => n.type === 'output').enabled, true);
+  assert.equal(materialReliefBound(m), 6);
+});
+
+test('a surface edit adds only the layers’ copies: a cleared or deleted crystal or highland material stays gone until the map loads again', async () => {
+  const {surfaceMaterials, deleteMaterial, MAP_ROLES} = await import('../sculpt-materials.js');
+  const config = {materials: {ground: 'green-ground', water: 'green-water', high: 'crystal-ground', crystal: 'crystals'}, surface: [{id: 'snow-1', material: 'green-snow'}]};
+  const list = withWorldMaterials(null, config), crystal = list.find(m => m.worldCrystal);
+  const deleted = deleteMaterial(list, [], crystal.slot).materials;
+  assert.equal(surfaceMaterials(config.surface.map(l => ({...l, amount: .9})), deleted, {config}).some(m => m.worldCrystal), false, 'deleted: a Surface slider tick brings no crystal back');
+  const cleared = list.map(m => m.worldCrystal || m.worldHigh ? Object.fromEntries(Object.entries(m).filter(([k]) => !MAP_ROLES.some(([r]) => r === k))) : m);
+  const after = surfaceMaterials(config.surface, cleared, {config});
+  assert.deepEqual(after.map(m => m.slot), cleared.map(m => m.slot), 'cleared: no second copy');
+  assert.ok(withWorldMaterials(cleared, config).some(m => m.worldCrystal), 'on load the world’s crystal and highland materials join again (withWorldMaterials)');
+});
+
+test('the role select moves a material from one of the world’s surfaces to another; ground, water and a layer’s copy draw nothing else', () => {
+  const config = {materials: {ground: 'green-ground', water: 'green-water', slope: 'green-slope', debris: 'green-debris'}, surface: [{id: 'snow-1', material: 'green-snow'}]};
+  const list = withWorldMaterials(null, config), slope = list.find(m => m.worldSlope), debris = list.find(m => m.worldDebris);
+  const moved = assignMaterial(list, slope.slot, 'worldDebris');
+  assert.deepEqual(moved.filter(m => m.worldDebris).map(m => m.slot), [slope.slot]);
+  assert.equal(moved.some(m => m.worldSlope), false, 'the slope cover falls back');
+  assert.equal(roleOfSlot(moved, debris.slot), null, 'the old debris material is a map material now');
+  assert.doesNotThrow(() => copyMaterials(moved));
+  assert.throws(() => assignMaterial(list, list.find(m => m.worldGround).slot, 'worldDebris'), /Duplicate/);
+  assert.throws(() => assignMaterial(list, list.find(m => m.worldLayer).slot, 'worldDebris'), /Duplicate/);
+});
+const roleOfSlot = (list, slot) => { const m = list.find(o => o.slot === slot); return Object.keys(m).find(k => /^world[A-Z]/.test(k) && m[k] === true) ?? (m.worldLayer ? 'worldLayer' : null); };
+
+test('Use as world ground on a layer’s copy: the layer takes a fresh copy of its library material; a full map refuses', async () => {
+  const {surfaceMaterials, layerCopyMissing} = await import('../sculpt-materials.js');
+  const config = {materials: {ground: 'green-ground', water: 'green-water'}, surface: [{id: 'snow-1', material: 'ice-ground'}]};
+  const list = withWorldMaterials(null, config), snow = list.find(m => m.worldLayer === 'ice-ground');
+  const assigned = assignMaterial(list, snow.slot, 'worldGround');
+  assert.ok(layerCopyMissing(config.surface, assigned), 'the layer lost its copy');
+  const bound = surfaceMaterials(config.surface, assigned, {config});   // what sculpt.js editMaterials runs at once
+  const copy = bound.find(m => m.worldLayer === 'ice-ground');
+  assert.ok(copy && copy.slot !== snow.slot && bound.find(m => m.slot === snow.slot).worldGround);
+  assert.equal(JSON.stringify(copyMaterial(copy)), JSON.stringify(copyMaterial(LIBRARY['ice-ground'])), 'a fresh library copy');
+  assert.equal(layerCopyMissing(config.surface, bound), false);
+  let full = list; while (full.length < MATERIAL_SLOTS - 1) full = addMaterial(full, LIBRARY['green-ground'], 'Filler').materials;
+  assert.throws(() => assignMaterial(full, snow.slot, 'worldGround'), /surface layers/);
 });

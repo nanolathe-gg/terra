@@ -1,6 +1,6 @@
 // Geological starting points are ordinary artist settings and Rock column beds.
 // No preset name reaches the renderer; the edited numbers are the saved result.
-import {LIBRARY,MATERIAL_SLOTS,addMaterial,materialCacheUsage,materialStaged,materialStates,roleOf} from './sculpt-materials.js';
+import {LIBRARY,MATERIAL_SLOTS,addMaterial,copyMaterial,materialCacheUsage,materialStaged,materialStates,roleOf} from './sculpt-materials.js';
 import {KNOBS} from './sculpt-knobs.js';
 import {copyColumn,columnRows,COLUMN_SLOTS} from './sculpt-column.js';
 const base={faceWhole:0,faceWholeLarge:0,faceRegular:0,faceJointWidth:1,faceSecondary:.35,faceContinuity:.8,faceDetailPatch:.6,faceFresh:.55,faceRind:.65,faceRindDepth:6,faceRindTone:-.22,faceRindWarmth:.25,faceRindRough:.7,bedCycleVary:.6,faceBedVary:1,faceBreak:.4,stoneRound:.15,stoneSlab:.25,faceJointTilt:12,faceScaleVary:.55,faceFold:0,faceSpall:.65,faceClast:0,faceClastSize:12,faceMineral:.3,runoff:.65,runoffScale:24,runoffConcentration:.65,runoffCut:2,runoffStain:.35,debrisAmount:1.1,debrisReach:80,debrisDepth:5,looseSize:7,stoneSort:.7,rockFace:2,faceRock:1,rockFaceFrom:.2,faceBed:5.5,faceLedge:2,faceRun:120,faceBlock:3,faceBlockSize:18,faceLean:0,faceWear:.25,faceCrease:.5,faceCreaseSize:6,faceScratch:.6,faceScratchSize:6,faceShade:.7,faceGrass:.25,faceLayers:.3,faceMass:1,faceTone:.12,faceStrata:.08,faceWet:.2,
@@ -105,13 +105,15 @@ export const recipeMaterial=(key,config)=>config?.rock?.recipes?.[key]?.material
 // Rock types made from a starting recipe or a world's rock type that names a material (those in `slots`) show it (recipeMaterial): the map's copy of that library
 // material, added while the list and the material cache have room; a rock type that already names one keeps it. The editor (sculpt.js)
 // and the headless host give a map's world rock types theirs when the map has no rock list of its own, and a preset its own when added or
-// started again from a recipe (`keyOf`: the recipe each rock type is made from, its key by default).
+// started again from a recipe (`keyOf`: the recipe each rock type is made from, its key by default). A copy already in the map is shared only
+// while it is the library's unedited (as adoptWorldMaterials compares): one another rock type's Rock color recolored stays that rock type's.
 export function giveRockMaterials(rocks, materials, slots, config, keyOf = r => r.key) {
   let list = materials; const layers = l => l.reduce((n, m) => n + 1 + materialStates(m).length, 0), missed = [];
   const out = rocks.map(r => {
     if (!slots.includes(r.slot) || r.material > 0) return r;
     const key = recipeMaterial(keyOf(r), config), m = LIBRARY[key]; if (!m) return r;
-    let at = list.find(o => o.source === key && !roleOf(o));
+    const library = JSON.stringify(copyMaterial(m));
+    let at = list.find(o => o.source === key && !roleOf(o) && JSON.stringify(copyMaterial(o)) === library);
     if (!at) {
       // No room: the rock type shows the world's rock material, and the caller says so (`missed`, the rock types' names).
       if (list.length >= MATERIAL_SLOTS - 1 || !materialCacheUsage(layers(list) + 1 + materialStates(m).length, undefined, [...list, m].some(materialStaged)).fits) { missed.push(r.name); return r; }
@@ -120,6 +122,16 @@ export function giveRockMaterials(rocks, materials, slots, config, keyOf = r => 
     return {...r, material: at.slot};
   });
   return {rocks: out, materials: list, missed};
+}
+// The materials rock types gave up (`slots`: those they showed before a Start from or a delete) leave the map when nothing else uses them:
+// no world surface or layer draws it, no other rock type shows it, no stroke chose it (hidden ones too), the world kit does not hold it
+// (`key`) and no tool lays it down (`keep`). Only a rock's own copy goes, of a recipe's material or of the world's rock material
+// (giveRockMaterials, sculpt.js setRockColor); a material the artist made and gave a rock type stays in the map.
+export function dropRockMaterials(materials, slots, {rocks = [], nodes = [], config = null, keep = () => false} = {}) {
+  const sources = new Set([...Object.values(ROCK_MATERIALS), ...Object.values(config?.rock?.recipes ?? {}).map(w => w?.material), config?.materials?.rock].filter(Boolean));
+  const unused = m => m && sources.has(m.source) && !roleOf(m) && !m.key && !rocks.some(r => r.material === m.slot) && !nodes.some(n => n.params?.groundPreset === m.slot) && !keep(m);
+  const gone = new Set(slots.filter(slot => unused(materials.find(m => m.slot === slot))));
+  return gone.size ? materials.filter(m => !gone.has(m.slot)) : materials;
 }
 // A world's own rock types (materials/<world>.json world.rock.recipes: {key: {label, material, from, knobs, beds, sections, colors}}): its numbers lie over the
 // starting recipe it names (`from`, else none: the world's own rock under them, as Smooth soil's), its beds ([[thickness, hardness, slot], ...]),

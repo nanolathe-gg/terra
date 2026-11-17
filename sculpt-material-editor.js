@@ -11,6 +11,10 @@ const $ = id => document.getElementById(id);
 const hex = rgb => '#' + rgb.map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
 const rgbOf = value => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16));
 const PARAM_ROWS = 14, INPUT_ROWS = 5, CELL = 20;
+// A select's options ([label, value] pairs), made again only when they change: an input tick of a slider leaves them as they are.
+const optionsShown = new WeakMap();
+const DITHER_DEFAULTS = Object.fromEntries(DITHER.map(p => [p.key, p.value]));
+const setOptions = (select, pairs) => { const key = JSON.stringify(pairs); if (optionsShown.get(select) === key) return; optionsShown.set(select, key); select.replaceChildren(...pairs.map(([label, value]) => new Option(label, value))); };
 // The pause in input the graph's thumbnails wait for, and docked the preview picture too (the map beside it is the live preview).
 const PAUSE = 90;
 
@@ -34,7 +38,7 @@ export function mountMaterialEditor(host) {
     material, selection: () => selection, frame: () => frameAt, solo: () => solo, thumbnails: () => thumbs,
     select: ids => { selection = new Set(ids); primary = ids.at(-1) ?? null; frameAt = -1; stopAt = 0; if (primary) pick('node'); refresh(); },
     selectFrame: index => { frameAt = index; selection = new Set(); primary = null; pick('node'); refresh(); },
-    toggle: attempt(id => change(m => { const n = m.nodes.find(n => n.id === id); n.enabled = !n.enabled; })),
+    toggle: attempt(id => change(m => { const n = m.nodes.find(n => n.id === id); if (n.type !== 'output') n.enabled = !n.enabled; })),
     viewAlone: id => { solo = primary = id; if (!selection.has(id)) selection = new Set([id]); refresh(); },
     move: attempt(positions => change(m => { const places = graph.places(); for (const n of m.nodes) { const p = positions.get(n.id) ?? places.get(n.id); n.x = p.x; n.y = p.y; } })),
     connect: attempt((from, to, key, detached) => change(m => {
@@ -207,7 +211,7 @@ export function mountMaterialEditor(host) {
     const list = materials();
     for (const {prefix, role, select, open, show} of worldRows) {
       const m = list.find(o => o[role]) ?? null;
-      $(select).replaceChildren(...list.filter(o => !o[role === 'worldGround' ? 'worldWater' : 'worldGround']).map(o => new Option(o.name, String(o.slot)))); $(select).value = String(m?.slot ?? ''); $(open).disabled = !list.length;
+      setOptions($(select), list.filter(o => !o[role === 'worldGround' ? 'worldWater' : 'worldGround']).map(o => [o.name, String(o.slot)])); $(select).value = String(m?.slot ?? ''); $(open).disabled = !list.length;
       $(prefix + '-chip').style.background = m ? hex(materialTint(m).map(v => v * 255)) : '';
       show(m); $(prefix + '-empty').hidden = !m || m.controls.some(c => controlSpec(m, c));
     }
@@ -223,8 +227,9 @@ export function mountMaterialEditor(host) {
     if (!n) return;
     const spec = NODES[n.type], kinds = nodeKinds(n), params = nodeParams(n), types = nodeTypes(m.nodes);
     if (document.activeElement !== $('node-name')) $('node-name').value = n.name;
-    $('node-enabled').checked = n.enabled; $('node-help').textContent = spec.help + (n.enabled ? '' : ' This node is off: it passes its first input through, or gives nothing.');
-    $('node-kind-row').hidden = !kinds; if (kinds) { $('node-kind-label').textContent = n.type === 'combine' ? 'Operation' : 'Type'; $('node-kind').replaceChildren(...Object.entries(kinds).map(([k, label]) => new Option(label, k))); $('node-kind').value = n.kind; }
+    $('node-enabled').checked = n.enabled; $('node-enabled').parentElement.hidden = n.type === 'output';   // the Material node is always on
+    $('node-help').textContent = spec.help + (n.enabled ? '' : ' This node is off: it passes its first input through, or gives nothing.');
+    $('node-kind-row').hidden = !kinds; if (kinds) { $('node-kind-label').textContent = n.type === 'combine' ? 'Operation' : 'Type'; setOptions($('node-kind'), Object.entries(kinds).map(([k, label]) => [label, k])); $('node-kind').value = n.kind; }
     for (let i = 0; i < PARAM_ROWS; i++) {
       const p = params[i]; $('node-param-row-' + i).hidden = !p; if (!p) continue;
       $('node-param-label-' + i).textContent = p.label; setScrub('node-param-' + i, p, n.params[p.key]);
@@ -234,7 +239,7 @@ export function mountMaterialEditor(host) {
       const input = spec.inputs[i]; $('node-input-row-' + i).hidden = !input; if (!input) continue;
       const [key, label, want] = input, fits = o => o.id !== n.id && o.type !== 'output' && accepts(want, types.get(o.id));
       $('node-input-label-' + i).textContent = label;
-      $('node-input-' + i).replaceChildren(new Option(want === 'coords' ? 'Plain coordinates' : 'Not connected', ''), ...m.nodes.filter(fits).map(o => new Option(o.name, o.id)));
+      setOptions($('node-input-' + i), [[want === 'coords' ? 'Plain coordinates' : 'Not connected', ''], ...m.nodes.filter(fits).map(o => [o.name, o.id])]);
       $('node-input-' + i).value = n.in[key] ?? ''; $('node-input-clear-' + i).disabled = !n.in[key];
       // Worn and Deposit draw only on a ground: say so where this material is water or another of the world's surfaces.
       const inert = n.type === 'output' && ['worn', 'deposit'].includes(key) && !materialStatesApply(m);
@@ -367,7 +372,7 @@ export function mountMaterialEditor(host) {
       clearTimeout(pictureTimer); if (edited && !full) pictureTimer = setTimeout(ask, PAUSE); else ask();
     }
     // Thumbnails wait for a pause: they are a second run of the graph, and a drag changes them on every move.
-    const tk = JSON.stringify([materialRenderKey({...m, palette: [], dither: m.dither}), slot]);
+    const tk = JSON.stringify([materialRenderKey({...m, palette: [], dither: DITHER_DEFAULTS}), slot]);   // thumbnails read neither the palette nor its dither
     if (tk !== thumbKey) { thumbKey = tk; clearTimeout(thumbTimer); thumbTimer = setTimeout(() => preview.thumbnails(r, m, async (error, pictures) => {
       if (error || !pictures) return;
       const made = new Map(); for (const [id, pixels] of pictures) made.set(id, await createImageBitmap(new ImageData(new Uint8ClampedArray(pixels), THUMB, THUMB)));
@@ -474,7 +479,7 @@ export function mountMaterialEditor(host) {
     $('mview-zoom').setAttribute('aria-pressed', String(zoomed)); $('mview-zoom').disabled = view === 'repeat';
     $('mview-solo').setAttribute('aria-pressed', String(!!solo)); $('mview-solo').disabled = !solo && (!primary || node()?.type === 'output');
     $('graph-frame').disabled = !selection.size;
-    $('graph-node-select').replaceChildren(new Option('Select a node…', ''), ...m.nodes.map(n => new Option(n.name, n.id))); $('graph-node-select').value = primary ?? '';
+    setOptions($('graph-node-select'), [['Select a node…', ''], ...m.nodes.map(n => [n.name, n.id])]); $('graph-node-select').value = primary ?? '';
     if (!$('material-pane-controls').hidden) refreshControls(m);
     if (!$('material-pane-node').hidden) refreshNode(m);
     if (!$('material-pane-palette').hidden) refreshPalette(m);

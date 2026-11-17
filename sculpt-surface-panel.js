@@ -160,6 +160,8 @@ function switchRule(layer, kind) {
 // roleMaterial(builtin) and slotMaterial(slot) → {name, color} or null, pick() to take the Pick tool, inspect(at) → what the draw laid there;
 // for the sections (layerSection's facts): control(key), role(key), hasLayer(name), fact(name), worldName(), and place(go) → where the control
 // that turns a layer on lives ("Rock types › Exposure & relief"), open(go) to show and focus it.
+// The list's view watch and pending rebuild, kept by the newest mount of the panel (sculpt.js mounts it once a page, in buildKnobs), so only it draws the rows.
+let viewWatch = null, staleTimer = 0;
 export function mountSurfacePanel(host) {
   const list = $('surface-layers');
   const SECTIONS = ['drawing', 'painted', 'idle'];
@@ -170,15 +172,33 @@ export function mountSurfacePanel(host) {
   const hidden = new Set();
   let solo = null, sent = '';
   const shown = key => solo ? key === solo : !hidden.has(key);
-  const sendView = (force = false) => {
+  // The renderer keeps the keys it was sent (sculpt-renderer.js setSurfaceHidden), so they go only when they change.
+  const sendView = () => {
     const keys = host.surface().map(layerKey).filter(k => !shown(k)), text = keys.join('\n');
-    if (force ? text || sent : text !== sent) { sent = text; host.hide(keys); }
+    if (text !== sent) { sent = text; host.hide(keys); }
+  };
+  // A layer gone takes its hidden mark with it, and a Solo of it ends (the others show again).
+  const prune = () => {
+    const keys = new Set(host.surface().map(layerKey));
+    for (const k of hidden) if (!keys.has(k)) hidden.delete(k);
+    if (solo && !keys.has(solo)) solo = null;
   };
   let editing = null;   // the list while a slider moves; committed on change
   const current = () => editing ?? host.surface();
-  const put = (next, commit) => { editing = commit ? null : next; host.apply(next, {commit}); if (commit) { build(); reinspect(); } };
+  const put = (next, commit) => { editing = commit ? null : next; host.apply(next, {commit}); if (commit) { build(); sendView(); reinspect(); } };
   let picking = false;   // a Color picker is open: a rebuild would close it
-  const refresh = () => { if (!editing && !picking) { build(); sendView(true); } };   // after a material edit, an undo or a load; not while a slider moves
+  // While World › Surface is out of sight (another tab, the material editor docked over the panel) its rows wait: a material edit, an undo
+  // or a GPU color read marks them stale, and they are made again when the list shows, or after a pause in edits (Find reads the rows).
+  let stale = false;
+  const visible = () => list.checkVisibility();
+  const later = () => { stale = true; clearTimeout(staleTimer); staleTimer = setTimeout(() => { if (stale && !editing && !picking) build(); }, 400); };
+  clearTimeout(staleTimer); viewWatch?.disconnect();
+  viewWatch = new ResizeObserver(() => { if (stale && !editing && !picking && visible()) build(); }); viewWatch.observe(list);
+  const refresh = () => {   // after a material edit, an undo or a load; not while a slider moves
+    if (editing || picking) return;
+    if (visible()) build(); else { prune(); later(); }
+    sendView();
+  };
   const edit = (i, change, commit) => { const next = structuredClone(current()); change(next[i], next); put(next, commit); };
   // The editor's own slider (sculpt-workspace.js controlRow, as the World rows and the shape card): a drag or a key moves the layer live, its
   // release is one undo step. `show` writes the value its label shows.
@@ -370,12 +390,11 @@ export function mountSurfacePanel(host) {
   // focus across the rebuild (by its id, or a slider by its range's), and a section that receives it opens.
   let revealNext = null;   // a layer the next build reveals (one just added)
   function build({reveal = revealNext} = {}) {
-    revealNext = null;
+    revealNext = null; stale = false; clearTimeout(staleTimer);
     const active = document.activeElement, scrub = active?.matches?.('.scrub') ? active.dataset.source : '';
     const focused = scrub?.startsWith('surface-') ? '' : active?.id?.startsWith('surface-') && list.contains(active) ? active.id : '';
-    const layers = host.surface(), keys = new Set(layers.map(layerKey));
-    for (const k of hidden) if (!keys.has(k)) hidden.delete(k);
-    if (solo && !keys.has(solo)) solo = null;
+    const layers = host.surface();
+    prune();
     let layerRows = [];
     try { layerRows = surfaceRows(layers).layerRows; } catch (_) {}
     const placed = placeAll(layers);
@@ -398,9 +417,10 @@ export function mountSurfacePanel(host) {
     for (const e of [back, shownRow]) { const section = e?.closest('details.surface-section'); if (section && !section.open) { section.open = true; moved ||= e === back; } }
     back?.focus({preventScroll: true});
     if (moved) back.closest('.surface-layer')?.scrollIntoView({block: 'nearest'});   // its row left for a folded section: follow it
+    sendView();   // a Solo or a hidden layer that is gone (prune) shows the others again
   }
   // After a World setting, a rock type in use or a role material changed: rebuild if a layer has changed section or reason.
-  const sync = () => { if (!editing && !picking && JSON.stringify(placeAll(host.surface())) !== placedText) build(); };
+  const sync = () => { if (!editing && !picking && JSON.stringify(placeAll(host.surface())) !== placedText) { if (visible()) build(); else later(); } };
   $('surface-show-all').onclick = () => { hidden.clear(); solo = null; build(); sendView(); };
   // Add a layer: a small gallery of the presets (one tile each: its material's swatch, or a plant mark for a layer that grows plants only, and
   // its name), opened in place by its button; Escape folds it back (sculpt-ui.js closeTop presses the button). Choosing one adds the layer on

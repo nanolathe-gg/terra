@@ -5,9 +5,9 @@ import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,worldHome,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
-import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,roleName,worldKey,LIBRARY} from './sculpt-materials.js';
+import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,layerCopyMissing,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,roleName,worldKey,LIBRARY} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
-import {ROCK_PRESETS,ROCK_HEADLINES,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
+import {ROCK_PRESETS,ROCK_HEADLINES,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials,dropRockMaterials} from './sculpt-rock-presets.js';
 import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
@@ -1010,6 +1010,8 @@ $('pick-tool').onclick=() => { if (!stroke && !moving) setPicking(true); };
 // Beside the map's picture (the view at Fit shows the map with room around it), a pick says the point is off the map.
 $('viewport').addEventListener('pointerdown',e => { if (e.target!==$('viewport') || e.button!==0 || !mapCanvas || stroke || moving || (!picking && !e.altKey)) return; e.preventDefault(); pickCard.pick(mapCanvas.artPoint(e),null); });
 function editMaterials(materials,rocks=mapRocks) {
+  // A surface layer whose copy left it (Use as world ground or water: assignMaterial) takes a fresh copy of its library material at once.
+  if(layerCopyMissing(config.surface,materials)&&materials.length<MATERIAL_SLOTS-1)materials=surfaceMaterials(config.surface,materials,{config,nodes,rocks});
   const captured=worldStoreTransaction?null:stageWorldKitEdit(config,currentWorldKit,rocks,materials,{before:mapMaterials});
   materials=captured?.materials??materials;const used=materialsInUse(nodes,materials,rocks),stage=setRendererMaterials(new Map(used.map(m=>[m.slot,m])));
   mapRocks=rocks;mapMaterials=materials;if(captured&&!sameKitData(captured.kit,currentWorldKit))installWorldKit(captured.kit);materialUseKey=JSON.stringify(used);syncMaterialChoices();surfacePanel?.refresh();worldChanged({stage,world:false});persistLater();schedule();
@@ -2398,9 +2400,13 @@ function buildKnobs() {
     // A preset started from a recipe takes its numbers, beds and colors, and its rock material (the recipe's color): the map's copy of it.
     if(rockSelected>0){
       if(!key)return;
-      const slot=rockSelected,rocks=setRock(mapRocks,slot,recipeRock(key,config)).map(r=>r.slot===slot?(({material,...o})=>o)(r):r);
-      try{const given=giveRockMaterials(rocks,mapMaterials,[slot],config,()=>key);assertLocalRockAddition(given);
-      editMaterials(given.materials,given.rocks);rockUseKey='';syncRocks();syncRockChoices();checkpoint(true);}catch(error){status(error.message);}syncRockPanel();return;
+      // Its old material leaves the map when nothing else uses it (dropRockMaterials); with no room for the new one, it makes room first.
+      const slot=rockSelected,old=[mapRocks.find(r=>r.slot===slot)?.material].filter(m=>m>0),rocks=setRock(mapRocks,slot,recipeRock(key,config)).map(r=>r.slot===slot?(({material,...o})=>o)(r):r);
+      const drop=(list,shown)=>dropRockMaterials(list,old,{rocks:shown,nodes,config,keep:toolLays});
+      try{let given=giveRockMaterials(rocks,mapMaterials,[slot],config,()=>key);
+      if(given.missed.length&&old.length)given=giveRockMaterials(rocks,drop(mapMaterials,rocks),[slot],config,()=>key);
+      assertLocalRockAddition(given);
+      editMaterials(drop(given.materials,given.rocks),given.rocks);rockUseKey='';syncRocks();syncRockChoices();checkpoint(true);}catch(error){status(error.message);}syncRockPanel();return;
     }
     const p=ROCK_PRESETS[key]||(key==='soil'?{knobs:recipeRock(key).knobs,sections:null}:null);if(!p)return;
     setRockSettings(p.knobs);
@@ -2498,6 +2504,8 @@ function syncRockPanel() {
 // The color a material is drawn in (sculpt-renderer.js drawnColor: the GPU's mean of it), what the Color pickers show and move.
 const drawnColor=m=>renderer?.drawnColor?renderer.drawnColor(m):materialColor(m);
 // Rock types the map had no room to give their own material (giveRockMaterials): they show the world's rock material, and the status says so.
+// A material a tool lays down (its `material`, a library key: sculpt-tools.js toolMaterialSlot): a rock type giving it up leaves it in the map.
+const toolLays=m=>[...(worldToolList??[]),...mapTools].some(t=>t?.material!=null&&t.material===m.source);
 function noteMissedRocks(given) { if(given.missed.length)status(`No room for the rock material of ${given.missed.join(', ')}: ${given.missed.length>1?'they show':'it shows'} the world\u2019s rock material. Remove a material to make room.`); }
 // A rock type's material: its own, else the world's rock material (slot 0's), or null when the world has none.
 function rockMaterialOf(slot) {
@@ -2627,10 +2635,12 @@ function mountRockPanel() {
   // Deleting a preset sends its strokes to Rock beneath in the same undo step: the shapes claim again, so the terrain is evaluated.
   $('rock-delete').onclick=()=>{
     if(rockSelected===0)return;
-    const name=mapRocks.find(r=>r.slot===rockSelected).name,gone=deleteRock(mapRocks,nodes,rockSelected),moved=nodes.filter((n,i)=>n!==gone.nodes[i]).length;
+    const name=mapRocks.find(r=>r.slot===rockSelected).name,old=[mapRocks.find(r=>r.slot===rockSelected).material].filter(m=>m>0),gone=deleteRock(mapRocks,nodes,rockSelected),moved=nodes.filter((n,i)=>n!==gone.nodes[i]).length;
     const owned=mapRocks.find(r=>r.slot===rockSelected)?.worldKey;
     if(owned){const tools=currentWorldKit.tools.map(t=>{if(!authoredWorldTool(t)||t.rock!==owned)return t;const {rock:_,...rest}=t;return {...rest,card:{...rest.card,rockPreset:-1}};});installWorldKit({tools,rocks:currentWorldKit.rocks.filter(r=>r.key!==owned)});refreshWorldTools();}
-    cancelWeather();nodes=gone.nodes;editRocks(gone.rocks);selectRock(0);evaluate(0);checkpoint();queueWeather();
+    cancelWeather();nodes=gone.nodes;editRocks(gone.rocks);
+    {const left=dropRockMaterials(mapMaterials,old,{rocks:mapRocks,nodes,config,keep:toolLays});if(left!==mapMaterials)editMaterials(left);}   // its material, when nothing else uses it
+    selectRock(0);evaluate(0);checkpoint();queueWeather();
     status(`Deleted the rock preset ${name}${moved?`; ${moved} shape${moved===1?'':'s'} now keep the rock beneath`:''}.`);
   };
   // Copy and Paste a recipe (JSON on the clipboard): its name, numbers and beds, to compare two sets of numbers or move one between maps and worlds.
