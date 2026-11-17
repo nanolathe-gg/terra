@@ -178,7 +178,7 @@ export function mountSurfacePanel(host) {
     const summary = [layer.amount != null && layer.amount !== 1 ? Math.round(layer.amount * 100) + '%' : '', ruleKind(layer) !== 'none' ? 'has a rule' : ''].filter(Boolean).join(' · ');
     if (summary) head.append(el('span', {className: 'small surface-stage', textContent: summary}));
     const move = (d, text, title) => { const b = el('button', {type: 'button', textContent: text, title, ariaLabel: title, disabled: at + d < 0 || at + d >= siblings.length}); b.onclick = () => { const next = structuredClone(layers), j = siblings[at + d]; [next[i], next[j]] = [next[j], next[i]]; put(next, true); }; return b; };
-    const eye = el('button', {type: 'button', className: 'surface-eye', textContent: hidden.has(key) ? 'Show' : 'Hide', ariaPressed: String(!hidden.has(key)),
+    const eye = el('button', {type: 'button', className: 'surface-eye', textContent: hidden.has(key) ? 'Show' : 'Hide',
       title: hidden.has(key) ? 'Show this layer again' : 'Hide this layer while you design (not saved; an export draws it)', disabled: Boolean(solo)});
     eye.onclick = () => { if (hidden.has(key)) hidden.delete(key); else hidden.add(key); build(); sendView(); list.querySelector(`[data-key="${CSS.escape(key)}"] .surface-eye`)?.focus(); };
     const alone = el('button', {type: 'button', className: 'surface-solo', textContent: 'Solo', ariaPressed: String(solo === key),
