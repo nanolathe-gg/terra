@@ -50,7 +50,7 @@ try {
   await send('Page.navigate', {url: `${server}/?biome=green&mapX=4&mapY=4&gpuMB=512&heapMB=1536&sunHeight=25&flatShadow=1`}); await ready();
   // A wall, a dome and a hill, all on the rock beneath.
   await ev(`sculptDebug.scene([['plateau',[[260,330],[560,300]],{card:{diameter:420}}],['mountain',[[700,620]],{card:{diameter:260,elevation:120}}],['hill',[[420,700],[560,720]]]],{ground:true}); true`); await ready();
-  await click('tab-world');
+  await click('tab-world');await click('wsec-rock-types');assert.deepEqual(await ev(`[...document.querySelectorAll('#rock-headlines [data-knob]')].map(e=>e.dataset.knob)`),headlineKeys);
   // The list: the world's rock first (named after its recipe), then what the world ships.
   report.list = await ev(`[...document.getElementById('rock-presets').options].map(o=>o.textContent)`);
   assert.deepEqual(report.list, ["World rock (the world's rock)", 'Smooth soil', 'Broken slopes', 'Greenstone', 'Dark escarpment']);

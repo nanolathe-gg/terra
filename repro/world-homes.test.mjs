@@ -21,3 +21,7 @@ test('each tab shows something before All is on', () => {
 });
 
 test('rock headlines share one ordered home with Pick', () => { assert.deepEqual(WORLD_HOMES['Rock types/Headline'].split(' '), ROCK_HEADLINES); assert.equal(worldHome('faceBlockSize'),'Rock types/Headline'); assert.equal(worldHome('crackSpacing'),'Rock types/Cracks & bands'); });
+
+test('World home headline rows each leave their former tab',()=>{
+  for(const [key,home]of [['groundPatchSize','World/Ground'],['reliefAmount','World/Ground'],['shallowDepth','World/Water'],['sunHeight','World/Light & weather'],['erosionRain','World/Light & weather']])assert.equal(worldHome(key),home);
+});

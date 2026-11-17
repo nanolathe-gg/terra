@@ -180,7 +180,8 @@ function scopeOf(el) {
     const tag = a.querySelector(SCOPE_HEADS), text = clean(tag?.textContent);
     if (text) return {text, variant: [...tag.classList].find(c => c !== 'scope-tag' && c.startsWith('scope-')) || ''};
   }
-  return null;
+  const tag=el?.closest('#pane-world')&&$('world-scope-tag');
+  return tag?{text:clean(tag.textContent),variant:'scope-world'}:null;
 }
 
 function rows(entries) {
@@ -293,6 +294,8 @@ function showWorldRow(el) {
 }
 // Open everything between the page and an element, outermost first: side panel, tab, section, tab of the section, row group, folded group.
 function reveal(el) {
+  const section=el.closest('.world-section'),nav=section&&$(section.getAttribute('aria-labelledby')),fine=$('world-fine');
+  if(nav?.hasAttribute('data-advanced')&&fine&&!fine.checked){fine.checked=true;fine.dispatchEvent(new Event('change',{bubbles:true}));}
   const chain = [];
   controllers = null;
   for (let a = el; a && a !== document.body; a = a.parentElement) chain.unshift(a);
