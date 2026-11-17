@@ -354,9 +354,9 @@ export function mountMaterialEditor(host) {
     const rock = m.worldRock === true || (host.rocks?.() ?? []).some(o => o.material === slot), ground = rock ? list.find(o => o.worldGround) ?? null : null;
     const context = [r.variant.toString(), r.colorOverrides], want = view === 'terrain' ? 'terrain' : 'tile', showing = solo && m.nodes.some(n => n.id === solo) ? solo : null;
     const key = JSON.stringify([materialRenderKey(m), water, materialRenderKey(companion), ground && materialRenderKey(ground), context, want, showing]);
-    // Docked, an edit's picture waits for a pause in input, so a drag leaves the GPU to the map, which shows every step; a new view, node or
-    // material, and every edit with the graph focused (the map covered), draws at once.
-    if (key !== pictureKey) {
+    // An edit's picture waits for a pause in input, leaving the GPU to the live map. A new view, node or material draws at once.
+    // Focus graph hides the picture, so only thumbnails continue until the split is restored.
+    if (!full && key !== pictureKey) {
       pictureKey = key; $('material-preview').setAttribute('aria-busy', 'true'); $('material-preview-note').textContent = 'Updating…';
       const ask = () => preview.picture(r, m, companion, {view: want, solo: showing, ground}, (error, result) => {
         if (error) { pictureKey = ''; $('material-preview-note').textContent = 'No preview: ' + error.message; $('material-preview').setAttribute('aria-busy', 'false'); return; }
@@ -504,6 +504,8 @@ export function mountMaterialEditor(host) {
     if (full === on) return; full = on; document.querySelector('.app').classList.toggle('material-full', on); host.suspend(on);
     $('material-full').setAttribute('aria-pressed', String(on)); $('material-full').textContent = on ? 'Show map & texture' : 'Focus graph';
     $('material-full').title = on ? 'Restore the live map and texture below the graph' : 'Give the graph the map and texture preview space';
+    if (on) { clearTimeout(pictureTimer); pictureTimer = null; pictureKey = pictureMaterial = ''; preview.cancelPicture(); }
+    else refreshPictures();
   }
   function open(which, from) {
     opener = from; if (which !== undefined) slot = which; pick('controls');
@@ -515,7 +517,7 @@ export function mountMaterialEditor(host) {
   // (its Build or World tab), the focus stays where that click put it.
   function close(returnFocus = true) {
     if (!dialog.open) return;
-    closeMenu(); setDrawer(false); setFull(false); dialog.close(); clearTimeout(pictureTimer); preview.cancel(); pictureKey = thumbKey = pictureMaterial = ''; host.dock(null); $('materials-toolbar').setAttribute('aria-expanded', 'false');
+    closeMenu(); setDrawer(false); dialog.close(); setFull(false); clearTimeout(pictureTimer); preview.cancel(); pictureKey = thumbKey = pictureMaterial = ''; host.dock(null); $('materials-toolbar').setAttribute('aria-expanded', 'false');
     const door = opener?.isConnected ? opener : opener?.id ? document.getElementById(opener.id) : null;
     if (returnFocus) (door && !door.closest('[hidden]') ? door : $('materials-toolbar')).focus({preventScroll: true});
   }
@@ -568,5 +570,5 @@ export function mountMaterialEditor(host) {
   refresh();
   // The Color rows again, once the renderer has read back what the materials are drawn in (sculpt.js renderer.onmeans).
   const refreshColors = () => { for (const [prefix, m] of [['ctl', material()], ...worldRows.map(w => [w.prefix, materials().find(o => o[w.role]) ?? null])]) { const own = $(`${prefix}-matcolor`); if (m && document.activeElement !== own) own.value = hex(drawn(m).map(v => v * 255)); } };
-  return {refresh, refreshColors, open, resetView: () => graph.fit(), refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { setFull(false); dialog.close(); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); clearTimeout(pictureTimer); locks.disconnect(); previewBox.disconnect(); graph.dispose(); preview.dispose(); }};
+  return {refresh, refreshColors, open, resetView: () => graph.fit(), refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { dialog.close(); setFull(false); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); clearTimeout(pictureTimer); locks.disconnect(); previewBox.disconnect(); graph.dispose(); preview.dispose(); }};
 }

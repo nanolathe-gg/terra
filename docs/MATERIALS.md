@@ -145,7 +145,7 @@ Two machines may place dither dots differently (rule 12).
 
 **Materials** in the top bar opens it; the World pane's Ground and Water
 sections, Surface rows, the shape card's ground and Pick's card open it on
-that material. The workspace gives the graph the upper-left two thirds, the live map the lower-left third, the material's texture the lower-middle third, and its settings the right third. The top bar and tool rail remain available. Build, World or the side-panel toggle closes Materials and brings the side panel back. **Focus graph** uses the two preview cells for the graph and pauses the covered map; **Show map & texture**, or Escape, restores them. Escape first leaves a text field or closes a menu or drawer, then restores the previews, then closes Pick's card and Materials.
+that material. The workspace gives the graph the upper-left two thirds, the live map the lower-left third, the material's texture the lower-middle third, and its settings the right third. The top bar and tool rail remain available. Build, World or the side-panel toggle closes Materials and brings the side panel back. **Focus graph** uses the two preview cells for the graph and pauses the covered map; **Show map & texture**, or Escape, restores them. The hidden texture waits for the split to return; the visible graph thumbnails keep updating. Escape first leaves a text field or closes a menu or drawer, then restores the previews, then closes Pick's card and Materials.
 
 - The material's name in the editor's bar opens the library drawer: **In
   this map** (the map's and the world's materials, each with its role;
