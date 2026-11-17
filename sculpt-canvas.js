@@ -644,6 +644,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
               const k=await pending;
               if(!k||cache.get(key)!==e){missed.add(key);continue;}
               if(changedSince(k.serial,k.input))k.dirty=true;
+              // The kept entry is new and holds no color record: e's is released, as the main loop does for the entry a bake replaces.
+              renderer.releaseColorTile(e.color);
               k.bakedAt=performance.now();cache.delete(key);cache.set(key,k);cacheBytes+=k.bytes-e.bytes;any=true;
             }
             if(any){paintedView=-1;presentView();overlays();rerun=true;}
