@@ -131,7 +131,7 @@ function buildShapeOptions() {
     rememberTool(true); updateControls(); schedule(); persistLater();
     // A reference switch changes the representation, not the other authored
     // values (which may be between the inspector sliders' ticks).
-    if (selected>=0) editSelectedFromControls(key==='heightReference'?{...nodes[selected].params,heightReference:shapeValue('heightReference'),elevation:shapeValue('elevation')}:key==='stepReference'?{...nodes[selected].params,stepReference:shapeValue('stepReference'),terraces:shapeValue('terraces'),ledge:shapeValue('ledge')}:{});
+    if (selected>=0) editSelectedFromControls(key==='heightReference'?{...nodes[selected].params,heightReference:shapeValue('heightReference'),elevation:shapeValue('elevation')}:key==='stepReference'?{...nodes[selected].params,stepReference:shapeValue('stepReference'),terraces:shapeValue('terraces'),ledge:shapeValue('ledge')}:{},[key]);
   });
   // Releasing a shape option finalizes the edit like the ordinary sliders
   // below: snapshot it for Undo and restart the refinement the input handler
@@ -440,7 +440,7 @@ function curveContext() {
 function setCurve(curve,key='curve') {
   if (selected>=0 && nodes[selected]?.params) {
     const n=nodes[selected],p={...n.params}; if (curve) p[key]=curve; else delete p[key]; n.params=p;
-    updateControls(); editSelectedFromControls(); persistLater(); return;
+    updateControls(); editSelectedFromControls({},[]); persistLater(); return;
   }
   const t={...toolSettings[tool],preset:'custom'}; if (curve) t[key]=curve; else delete t[key]; toolSettings[tool]=t;
   updateControls(); schedule(); persistLater();
@@ -1543,13 +1543,17 @@ function toggleShape(i) {
   if (next.primary<0) status('Deselected the shape.');
   return next.primary===i || next.others.includes(i);
 }
-function editSelectedFromControls(overrides={}) {
+// The card's five basic rows: the setting each writes and how.
+const BASIC_ROWS={diameter:['radius',v => v/2],amount:['amount',v => v],roughness:['rough',v => v/100],softness:['softness',v => v/100],cracks:['cracks',v => v/100]};
+// A card edit on the selected shape. `only` names the rows that changed (a basic row's id or a shape option's key): only they are written, so a value the
+// sliders cannot hold (a radius scaled below the Size slider's end, a number between its steps) stays as it is when another row moves. Without `only`
+// every row is written: Look and Defaults from world show a whole card. `overrides` are written as given.
+function editSelectedFromControls(overrides={},only=null) {
   const n=nodes[selected]; if (!n || !n.params) return;
   controlsEditing=true;
-  const before=nodeBounds(n);
-  n.params={...n.params,radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,
-    softness:Number($('softness').value)/100,cracks:Number($('cracks').value)/100,
-    ...Object.fromEntries(SHAPE_FIELDS.filter(f => f[3].includes(n.kind)).map(([key]) => [key,shapeValue(key)])),...overrides};
+  const before=nodeBounds(n),take=key => !only || only.includes(key);
+  n.params={...n.params,...Object.fromEntries(Object.entries(BASIC_ROWS).filter(([id]) => take(id)).map(([id,[key,of]]) => [key,of(Number($(id).value))])),
+    ...Object.fromEntries(SHAPE_FIELDS.filter(f => f[3].includes(n.kind) && take(f[0])).map(([key]) => [key,shapeValue(key)])),...overrides};
   // A stroke that has just become a river takes its path as the line drawn, and is migrated (sculpt-river.js seedRiverLine).
   if (seedRiverLine(n)) { pathPoint=-1; pathIndex=0; }
   if (migrateRiverNode(n)) { pathPoint=-1; pathIndex=0; }
@@ -1897,7 +1901,7 @@ document.querySelector('.tool-groups').addEventListener('click',event => {
   else{selected=-1;alsoSelected=[];pathPoint=-1;renderLayers();showTool(toolSettings[tool]);}
   updateControls();schedule();persistLater();
 });
-for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
+for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls({},[id]); });
 for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
 for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up','up'],['node-down','down'],['node-hide','hide']]) $(id).addEventListener('click',() => nodeAction(kind));
 // Features and Starts are two entries on the rail for the one tool (sculpt-features.js): Features opens it to place, Starts in its starts mode.
