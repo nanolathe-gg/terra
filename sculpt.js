@@ -1,13 +1,13 @@
 import {requestAdapter} from './sculpt-webgpu.js';
-import {savedWorld,copySavedWorld,savedWorldId,sameSavedWorld,worldKeys} from './sculpt-save.js';
+import {savedWorld,worldOverrideCount,resetWorldOverrides,copySavedWorld,savedWorldId,sameSavedWorld,worldKeys} from './sculpt-save.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
-import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
+import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,worldHome,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
 import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,roleName,worldKey,LIBRARY} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
-import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
+import {ROCK_PRESETS,ROCK_HEADLINES,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
 import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
@@ -256,6 +256,7 @@ const firstSentence=text => /^[\s\S]*?[.!?](?=\s+[A-Z(]|$)/.exec(text)?.[0]??tex
 function setToolHelp(text,first=false) { const line=$('tool-help'); line.textContent=first?firstSentence(text):text; line.title=text; }
 function updateControls() {
   const picks=JSON.stringify([strokeWaterPicks(nodes),slopeReplaced(panelFacts())]);if(picks!==panelPicks){panelPicks=picks;syncWorldControls();}   // a stroke's water choice, or the transition replacing the slope color, wakes or idles world rows
+  syncWorldHome();
   const featureActive=Boolean(mapFeatures?.active);
   for (const b of document.querySelectorAll('[data-tool]')) b.setAttribute('aria-pressed',String(!featureActive&&!picking&&b.dataset.tool===tool));
   $('feature-tool').setAttribute('aria-pressed',String(featureActive&&mapFeatures.mode!=='starts'));$('starts-tool').setAttribute('aria-pressed',String(featureActive&&mapFeatures.mode==='starts'));
@@ -918,7 +919,6 @@ function rockReach(slot) {
   return `Recolors ${m.name}: ${rock.name}${more?` and ${more}`:''}, on this map.`;
 }
 // A rock type's headline rows, as World › Rock types shows them for it: the rows the page holds, by their own names.
-const ROCK_HEADLINES=['faceWhole','faceBlockSize','crackSeverity'];
 function rockValues(slot) {
   const own=slot>0?mapRocks.find(r => r.slot===slot)?.knobs:null;
   return ROCK_HEADLINES.filter(key => $('knob-'+key)).map(key => {
@@ -967,7 +967,7 @@ function pickHost() {
     openSurface:(at,read) => { surfacePanel?.show(at,read); openWorldSection('wsec-surface'); $('surface-inspect-result').scrollIntoView({block:'nearest',behavior:'smooth'}); },
     // World › Surface's detail, once open, follows each new pick, so it never describes another pixel than the card.
     read:(at,read) => { if (!$('surface-inspect-result').hidden) surfacePanel?.show(at,read); },
-    openColors:() => { openWorldSection('wsec-colors'); $('world-colors').querySelector('input[type=color][aria-label^="Shallow water"]')?.focus({preventScroll:true}); },
+    openColors:() => { openWorldHome('water'); document.querySelector('[data-world-color=shallowTone]').querySelector('input[type=color][aria-label^="Shallow water"]')?.focus({preventScroll:true}); },
     surface:() => config.surface||[],
   };
 }
@@ -1385,7 +1385,7 @@ const sculptRegion={
     previewTime:({size:windowSize,spacing:windowSpacing})=>weatherOn()?{...pagedTime({config,renderer,size:windowSize,spacing:windowSpacing,material:materialKnobs()}),revB:mapCanvas?.rev.B??0}:null,fail:error}),
   fitGpuBudget:() => regionalFields?.refit?.(),
   releaseGpuStaging:()=>regionalFields?.releaseStaging?.()??0,
-  setViewFocus:v=>{regionalFields?.setFocus?.({x:(v.x+v.width/2)/spacing,y:(v.y+v.height/2)/spacing});pickCard?.place();},
+  setViewFocus:v=>{regionalFields?.setFocus?.({x:(v.x+v.width/2)/spacing,y:(v.y+v.height/2)/spacing});pickCard?.place();syncWorldHome();},
   read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:n.frame?.slice()}:undefined; },
   loadGraph:list => { if (!Array.isArray(list)) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); cancelWeather(); nodes=next; selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch:s=>loadSketchFile(s,false),maskKeys:MASK_KEYS,stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
@@ -1542,6 +1542,9 @@ function checkpoint(mapOnly=false) {
 }
 function moveHistory(delta) {
   const next=historyIndex+delta; if (!ready || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
+  const saved=history[next].world?.stored;worldStoreTransaction++;
+  try{
+  if(saved)configureStoredWorld(saved,history[next].world.beachFrom);
   if(history[next].rock)setRockSettings(history[next].rock);
   if(history[next].world)restoreWorldState(history[next].world);
   if(history[next].rocks&&JSON.stringify(history[next].rocks)!==JSON.stringify(mapRocks))restoreRocks(history[next].rocks);
@@ -1553,6 +1556,7 @@ function moveHistory(delta) {
   cancelWeather(); nodes=cloneNodes(history[next].nodes); selected=-1;alsoSelected=[];pathAdding=false;drawMode='select';pathPoint=-1;pathIndex=0; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
   if (JSON.stringify(history[next].column)!==JSON.stringify(columnOverride)) { restoreColumn(history[next].column); syncColumnPanel(); }
   evaluate(0); renderLayers(); updateControls(); persistLater(); status(delta<0?'Undid the last change.':'Restored the change.'); schedule(); queueWeather(); pickCard?.refresh();
+  }finally{if(saved)worlds[worldId]=structuredClone(saved);worldStoreTransaction--;saveWorlds();const change=worldChanged(renderer.setColors(worldColors(),currentDrawOptions()));if(change.timeChanged)queueWeather();buildWorldPanel();syncWorldControls();updateControls();}
 }
 
 function clearRendererWeather() { regionalWeather=null; if (gpuWeather) gpuWeather.mapsOn=false; }
@@ -2070,9 +2074,10 @@ const WORLD_STORE='nanolathe-map-editor-worlds';
 // Card P12b: the light's two colors ride with the world's colors; white (off) is the grey light. Help for each row is shown under it.
 const COLOR_HELP={shallowTone:'The tint of the shallows, kept as a shift of the water material\'s color, so recoloring the water moves its shallows too. Off: the world\'s own tint.',
   sun:'The direct light and the glints it mirrors. A warm sun lights slopes that face it.',sky:'The ambient light that fills the shade. A cool sky keeps shaded ground and the lee of hills blue.'};
+let baseWorldConfig=null,worldStoreTransaction=0;
 let worlds={},worldId=null,openedAsOwnWorld=null;   // the last: set when a map's world opened as a world of its own
 function loadWorlds() { try { worlds=JSON.parse(localStorage.getItem(WORLD_STORE)||'{}')||{}; } catch (_) { worlds={}; } }
-function saveWorlds() { try { localStorage.setItem(WORLD_STORE,JSON.stringify(worlds)); } catch (_) {} }
+function saveWorlds() { if(worldStoreTransaction)return;try { localStorage.setItem(WORLD_STORE,JSON.stringify(worlds)); } catch (_) {} }
 function activeWorld() { return worlds[worldId] ??= {name:config.biome,base:config.biomeId,colors:{...(config.colors||{})},knobs:{}}; }
 const hexColor=c => '#'+c.map(v => Math.round(clamp(v,0,1)*255).toString(16).padStart(2,'0')).join('');
 // A world's colors: the server's defaults for its base world, then the
@@ -2140,17 +2145,77 @@ function makeWorld(name,from=worldId) {
   }
   saveWorlds(); return id;
 }
+// Reset and history share one persistence boundary: intermediate material/surface restores never become saved defaults.
+function configureStoredWorld(world,beach=world.knobs?.beachFrom){
+  for(const key of ['defaults','engineDefaults','layers','material','materials','beachTable','featureSet']){
+    if(baseWorldConfig[key]===undefined)delete config[key];else config[key]=structuredClone(baseWorldConfig[key]);
+  }
+  config.defaults={...config.defaults,...world.knobs};
+  for(const key of Object.keys(config.engineDefaults||{}))if(world.knobs?.[key]!==undefined)config.engineDefaults[key]=world.knobs[key];
+  if(world.featureSet)config.featureSet=structuredClone(world.featureSet);
+  const settings=new Map(beach?[['beachFrom',beach]]:[]);borrowBeach(config,settings);renderer.layers=new Set(config.layers);
+}
+function resetWorld(){
+  worldInputQueue.flush();const reset=resetWorldOverrides(activeWorld());
+  const base=worldMaterials(baseWorldConfig);let next=mapMaterials;
+    for(const m of next.filter(worldKey)){
+      const key=worldKey(m),source=base.find(b=>worldKey(b)===key);
+      if(source)next=setMaterial(next,m.slot,source).map(x=>x.slot===m.slot?{...x,name:source.name}:x);
+      else next=next.map(x=>{if(x.slot!==m.slot)return x;const own={...x};delete own[key.startsWith('layer:')?'worldLayer':key];return own;});
+    }
+  try{for(const source of base){const key=worldKey(source);if(!key||next.some(m=>worldKey(m)===key))continue;const added=addMaterial(next,source,source.name);next=added.materials.map(m=>m.slot===added.slot?{...m,[key.startsWith('layer:')?'worldLayer':key]:key.startsWith('layer:')?key.slice(6):true}:m);}}
+  catch(err){status('Reset needs room for the built-in materials: '+err.message);return;}
+  worldStoreTransaction++;
+  try{
+    configureStoredWorld(reset);worlds[worldId]=reset;
+    const defaults=Object.fromEntries(KNOBS.flatMap(([,rows])=>rows.map(([key,,,,,value])=>[key,value])));
+    for(const key of worldKeys(baseWorldConfig)){
+      const value=baseWorldConfig.defaults?.[key]??baseWorldConfig.engineDefaults?.[key]??defaults[key];
+      if(value===undefined){experiment.delete(key);renderer.variant.delete(key);}else if(key==='beachFrom'){experiment.set(key,String(value));}else applyKnob({key,value:String(value),settings:experiment,renderer,nodes,seed,sync:false});
+      const input=$('knob-'+key);if(input&&value!==undefined){input.value=String(value);input.closest('[data-knob]').querySelector('output').textContent=String(value);}
+    }
+    restoreMaterials(next);setSurfaceList(structuredClone(baseSurface),false);
+    worldChanged(renderer.setColors(worldColors(),currentDrawOptions()));cancelWeather();evaluate(0);queueWeather();
+    const url=new URL(location.href);for(const key of worldKeys(baseWorldConfig)){const value=experiment.get(key);if(value==null)url.searchParams.delete(key);else url.searchParams.set(key,value);}window.history.replaceState(null,'',url);
+    worlds[worldId]=reset;checkpoint();
+  }finally{worldStoreTransaction--;saveWorlds();}
+  buildWorldPanel();syncRockPanel();syncWorldControls();surfacePanel?.refresh();updateControls();status('Reset world settings to '+baseWorldConfig.biome+'.');
+}
+function openWorldHome(card){openWorldSection('wsec-world');const el=$('world-home-'+card);el?.scrollIntoView({block:'start'});el?.querySelector('button,input,select')?.focus({preventScroll:true});}
+let worldHomeSummary='';
+function syncWorldHome(){
+  if(!baseWorldConfig||!renderer||!worldId||!$('world-home-rock-list'))return;
+  const count=worldOverrideCount(activeWorld(),baseWorldConfig);$('world-override-count').textContent=`${count} change${count===1?'':'s'} from ${baseWorldConfig.biome}`;
+  const view=mapCanvas?.view(),used=new Set(),boxes=new Map();
+  const box=n=>{if(boxes.has(n))return boxes.get(n);const p=shapeLines(n).flat(),r=claimReach(n),b={x0:Math.min(...p.map(p=>p.x))-r,x1:Math.max(...p.map(p=>p.x))+r,y0:Math.min(...p.map(p=>p.y))-r,y1:Math.max(...p.map(p=>p.y))+r};boxes.set(n,b);return b;};
+  const intersects=(a,b)=>a.x0<=b.x1&&a.x1>=b.x0&&a.y0<=b.y1&&a.y1>=b.y0;
+  const rect=view?{x0:view.x,x1:view.x+view.width,y0:view.y,y1:view.y+view.height}:null;
+  for(let i=0;i<nodes.length;i++){const n=nodes[i];if(n.kind!=='landform'||n.hidden||!n.points?.length||!rect||!intersects(box(n),rect))continue;
+    const slot=strokeRock(n,mapRocks);for(const k of slot<0?rocksBeneath(nodes,i,mapRocks,m=>intersects(box(m),rect)&&intersects(box(m),box(n))):[slot])used.add(k);
+  }
+  const rocks=[{slot:0,name:worldRockName(config)},...mapRocks].map(r=>({slot:r.slot,name:r.name,used:used.has(r.slot),color:hexColor(rockDrawn(r.slot))}));
+  const layers=surfacePanel?.summary()??[],state=JSON.stringify([rocks,layers]);if(state===worldHomeSummary)return;worldHomeSummary=state;
+  const list=$('world-home-rock-list');list.replaceChildren();
+  for(const rock of rocks){const line=document.createElement('div'),b=document.createElement('button');b.type='button';b.className='world-home-rock';b.dataset.slot=rock.slot;b.innerHTML='<span class="material-chip" aria-hidden="true"></span><span></span><span class="world-use-dot" aria-label="Used by a shape in view"></span>';b.children[0].style.background=rock.color;b.children[1].textContent=rock.name;b.children[2].hidden=!rock.used;b.onclick=()=>{openWorldSection('wsec-rock-types');selectRock(rock.slot);};line.append(b);if(!rock.used){const note=document.createElement('p');note.className='small';note.textContent=`Nothing in view uses ${rock.name}.`;line.append(note);}list.append(line);}
+  const surface=$('world-home-layers');surface.replaceChildren();
+  for(const layer of layers.filter(l=>l.section==='drawing')){const b=document.createElement('button');b.type='button';b.className='link world-home-layer';b.textContent=`${layer.name} · Coverage: ${layer.coverage}`;b.onclick=()=>{openWorldSection('wsec-surface');surfacePanel.open(layer.key);};surface.append(b);}
+  const drawing=layers.filter(l=>l.section==='drawing').length;$('world-home-layer-count').textContent=`${drawing} draw here · ${layers.length-drawing} more`;
+}
 function buildWorldPanel() {
   const world=activeWorld();
   $('world-name').textContent=world.name;
+  for(const b of document.querySelectorAll('[data-world-card]'))b.onclick=()=>openWorldHome(b.dataset.worldCard);
+  for(const b of document.querySelectorAll('[data-world-section]'))b.onclick=()=>openWorldSection('wsec-'+b.dataset.worldSection);
+  $('world-home-layer-add').onclick=()=>{openWorldSection('wsec-surface');$('surface-add').click();};
   $('world-scope-tag').textContent=`Every map in ${world.name}`;$('world-scope-tag').title=`World settings: every map drawn in ${world.name} shows them. Rows tagged This map are saved with the map.`;
   const select=$('biome-select');
   const builtIn=Object.entries(config.biomes||{}).map(([id,name]) => new Option(name,'biome:'+id,false,worldId===id));
   const custom=ownWorlds().map(([id,w]) => new Option(w.name+' (custom)','world:'+id,false,worldId===id));
   select.replaceChildren(...builtIn,...custom);
   select.onchange=() => { const [kind,id]=select.value.split(':'); if (kind==='biome') goToWorld(id); else goToWorld(worlds[id].base,id); };
-  const rows=$('world-colors'); rows.replaceChildren();
+  for(const home of document.querySelectorAll('[data-world-color]'))home.replaceChildren();
   for (const [key,label] of colorRows(config,experiment)) {
+    const rows=document.querySelector(`[data-world-color="${key}"]`);
     const row=document.createElement('div'); row.className='color-row';
     const set=mergedColors()[key];
     row.innerHTML=`<span>${label}</span><input type="checkbox" aria-label="Use a base color for ${label}"${set?' checked':''}><input type="color" aria-label="${label} base color" value="${shownColor(key,set)}">`;
@@ -2172,7 +2237,8 @@ function buildWorldPanel() {
     $('beach-from').value=config.beachSources[experiment.get('beachFrom')]?experiment.get('beachFrom'):'';
     $('beach-from').onchange=() => setKnob('beachFrom',$('beach-from').value);
   }
-  $('world-reset').onclick=() => { world.colors={...(config.colors||{})}; saveWorlds(); buildWorldPanel(); worldChanged(renderer.setColors(worldColors())); syncWorldControls(); updateControls(); checkpoint(true); };
+  $('world-reset').onclick=resetWorld;
+  $('world-save-as').onclick=()=>{const row=$('world-save-row');row.hidden=!row.hidden;$('world-save-as').setAttribute('aria-expanded',String(!row.hidden));if(!row.hidden)$('world-new-name').focus();};
   $('world-new').onclick=() => {
     const name=$('world-new-name').value.trim(); if (!name) { $('world-new-name').focus(); status('Name the new world first.'); return; }
     goToWorld(config.biomeId,makeWorld(name));
@@ -2189,7 +2255,7 @@ function buildWorldPanel() {
     } catch (err) { error(err.message); }
   };
   const isCustom=!(worldId in (config.biomes||{}));
-  $('world-delete').textContent=isCustom?'Delete this world':'Restore built-in settings';
+  $('world-delete').hidden=!isCustom;$('world-delete').textContent='Delete this world';
   $('world-delete').onclick=() => { delete worlds[worldId]; saveWorlds(); goToWorld(config.biomeId); };
   // A world a map brought (its world differed from yours): say so, and offer to make it yours. Your earlier one stays, renamed.
   const from=worlds[worldId]?.openedFrom,target=from?(worlds[from.world]?.name||config.biomes?.[from.world]||from.world):'';
@@ -2227,9 +2293,24 @@ function buildKnobs() {
   // Every knob needs a world default (materials/defaults.json knobs).
   const missing = [...KNOBS.flatMap(([, list]) => list.map(k => k[0])), ...SHAPE_FIELDS.map(f => f[0])].filter(k => !(k in (config.defaults || {})));
   if (missing.length) console.warn('Knobs without a world default:', missing.join(', '));
+  const addKnob=(title,[key,label,min,max,step,value])=>{
+      const id = 'knob-' + key, current = params.has(key) ? Number(params.get(key)) : value, choices = WORLD_CHOICES[key];
+      // A value shows at most three decimals (Sun height's defaults are the old light's height, 45.20597821393736 degrees on most worlds).
+      const cleanLabel=label.replace(/\s*\([^)]*\)/g,'');
+      const wrap = controlRow({id,label:`${cleanLabel} <output${choices?' hidden':''}>${+current.toFixed(3)}</output>`,range:`min="${min}" max="${max}" step="${step}" value="${current}"`,choices});
+      const home=worldHome(key),direct=home==='Rock types/Headline'||home.startsWith('World/');
+      const {block:box,search}=direct?{block:document.querySelector(`[data-home="${home}"] .world-rows`),search:title}:worldGroup(title,key);
+      wrap.dataset.knob=key;wrap.dataset.searchGroup=search+' '+label;wrap.querySelector('label').title=label;(wrap.querySelector('.scrub')||wrap).title=label;
+      const input = wrap.querySelector('#'+id), out = wrap.querySelector('output');
+      if(choices)input.value=String(current);
+      input.addEventListener('input', () => { out.textContent = input.value; if (rockSelected>0 && ROCK_KEYS.includes(key)) setPresetKnob(key, Number(input.value)); else setKnob(key, input.value); });
+      input.addEventListener('change',()=>worldInputQueue.end());
+      if(key==='faceBlockSize'){const note=document.createElement('p');note.className='small rock-headline-note';note.textContent='Block size reads most clearly once Whole blocks are high.';wrap.append(note);}
+      box.append(wrap);
+  };
   for (const [title, knobs] of KNOBS) {
     if (title === 'Cracks') {
-      const box=worldGroup(title,knobs[0][0]).block;
+      const box=worldGroup(title,'crackSpacing').block;
       const wrap = document.createElement('div'); wrap.className = 'control';
       wrap.innerHTML = `<label for="crack-style">Style</label><select id="crack-style" style="width:100%"><option value="">Choose a style…</option>${Object.keys(CRACK_STYLES).map(k => `<option>${k}</option>`).join('')}</select><p class="small">How much each shape cracks is its own Cracks row, in the shape’s card.</p>`;
       wrap.querySelector('select').addEventListener('change', event => {
@@ -2242,20 +2323,9 @@ function buildKnobs() {
       });
       box.append(wrap);
     }
-    for (const [key, label, min, max, step, value] of knobs) {
-      const id = 'knob-' + key, current = params.has(key) ? Number(params.get(key)) : value, choices = WORLD_CHOICES[key];
-      // A value shows at most three decimals (Sun height's defaults are the old light's height, 45.20597821393736 degrees on most worlds).
-      const cleanLabel=label.replace(/\s*\([^)]*\)/g,'');
-      const wrap = controlRow({id,label:`${cleanLabel} <output${choices?' hidden':''}>${+current.toFixed(3)}</output>`,range:`min="${min}" max="${max}" step="${step}" value="${current}"`,choices});
-      const {block:box,search}=worldGroup(title,key);
-      wrap.dataset.knob=key;wrap.dataset.searchGroup=search+' '+label;wrap.querySelector('label').title=label;(wrap.querySelector('.scrub')||wrap).title=label;
-      const input = wrap.querySelector('#'+id), out = wrap.querySelector('output');
-      if(choices)input.value=String(current);
-      input.addEventListener('input', () => { out.textContent = input.value; if (rockSelected>0 && ROCK_KEYS.includes(key)) setPresetKnob(key, Number(input.value)); else setKnob(key, input.value); });
-      input.addEventListener('change',()=>worldInputQueue.end());
-      box.append(wrap);
-    }
+    for (const row of knobs) if(!ROCK_HEADLINES.includes(row[0])) addKnob(title,row);
   }
+  for(const key of ROCK_HEADLINES){const [title,rows]=KNOBS.find(([,rows])=>rows.some(row=>row[0]===key));addKnob(title,rows.find(row=>row[0]===key));}
   const sync=mountWorldControlIndex(root,worldPanelValues);
   syncWorldControls=()=>{sync();$('rock-preset').value=rockSelected>0?rockRecipeFor(mapRocks.find(r=>r.slot===rockSelected)):rockPresetFor(rockSettings(),config.column);syncRockColors();materialEditor?.refreshPreview();};
   $('rock-preset').onchange=()=>{
@@ -2291,10 +2361,11 @@ function rockSettings(){return Object.fromEntries(ROCK_KEYS.map(k=>[k,Number(ren
 function worldUndoState(){
   const knobs={};
   for(const [,rows] of KNOBS)for(const [key] of rows){if(key==='beachFrom'||ROCK_KEYS.includes(key))continue;const v=renderer.variant.get(key)??config.defaults?.[key];if(v!==undefined&&v!==null)knobs[key]=String(v);}
-  return {knobs,colors:structuredClone(activeWorld().colors||{})};
+  return {knobs,colors:structuredClone(activeWorld().colors||{}),stored:structuredClone(activeWorld()),beachFrom:experiment.get('beachFrom')};
 }
 // Back to a step's World rows and colors, through the same queue the sliders use; a restore adds no undo step of its own.
 function restoreWorldState(w){
+  if(w.stored){configureStoredWorld(w.stored,w.beachFrom);if(w.beachFrom==null)experiment.delete('beachFrom');else experiment.set('beachFrom',w.beachFrom);const url=new URL(location.href);if(w.beachFrom==null)url.searchParams.delete('beachFrom');else url.searchParams.set('beachFrom',w.beachFrom);window.history.replaceState(null,'',url);}
   let any=false;
   for(const [key,value] of Object.entries(w.knobs||{}))if(String(renderer.variant.get(key)??config.defaults?.[key])!==value){
     worldInputQueue.put('knob:0:'+key,{type:'knob',slot:0,key,value,restore:true});any=true;
@@ -2550,7 +2621,7 @@ function commitWorldInputs() {
   persistLater();
 }
 // Values must reach the model before a different action reads its recipe.
-document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-knob],#world-colors'))worldInputQueue.flush();},true);
+document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-knob],.world-colors'))worldInputQueue.flush();},true);
 document.addEventListener('click',e=>{if(e.target.closest('button'))worldInputQueue.flush();},true);
 document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&['z','y','s'].includes(e.key.toLowerCase()))worldInputQueue.flush();},true);
 
@@ -2668,7 +2739,7 @@ async function boot() {
     await requestAdapter();   // a browser without WebGPU, or an adapter below the engine's limits, gets a plain message before anything loads
     services=await (await fetch('services.json')).json();   // which server-side services this host has (export, features, saving to a server)
     const response=await fetch(configUrl(experiment.get('biome')||services.defaultWorld)); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=applyWorldRock(await response.json()); config.services=services;
-    defaultColumn=config.column;
+    defaultColumn=config.column;baseWorldConfig=structuredClone(config);
     const pending=await takePendingSketch(experiment.get('pendingSketch'));
     const embedded=copySavedWorld(pending?.worldSettings,config);
     loadWorlds();

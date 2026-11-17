@@ -85,13 +85,13 @@ try{
   const coastCapture=()=>ev(`(async()=>{const b=await sculptCanvas.debugBake({x:384,y:500,width:512,height:512}),c=document.createElement('canvas');c.width=c.height=512;c.getContext('2d').drawImage(b,0,0);return c.toDataURL();})()`);
   const coastArt=await coastCapture(),coastSave=await ev('sculptDebug.sketch()');writeFileSync(join(out,'red-coast-demo.json'),JSON.stringify(coastSave,null,2));
   await click('#tab-world');
-  const pickWater=async(label,color)=>{await ev(`(()=>{const row=[...document.querySelectorAll('#world-colors .color-row')].find(r=>r.firstElementChild.textContent===${JSON.stringify(label)});const pick=row.querySelector('input[type=color]');pick.value=${JSON.stringify(color)};pick.dispatchEvent(new Event('input',{bubbles:true}));pick.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);await ready();};
+  const pickWater=async(label,color)=>{await ev(`(()=>{const row=[...document.querySelectorAll('.world-colors .color-row')].find(r=>r.firstElementChild.textContent===${JSON.stringify(label)});const pick=row.querySelector('input[type=color]');pick.value=${JSON.stringify(color)};pick.dispatchEvent(new Event('input',{bubbles:true}));pick.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);await ready();};
   await pickWater('Shallow water','#528799');await pickWater('Deep water','#102938');const coloredCoast=await coastCapture();assert.notEqual(coloredCoast,coastArt);
   for(const k of ['bedTint','bedBright','bedContrast'])assert.equal(await ev(`document.getElementById('knob-${k}').disabled`),false,k+' remains enabled with picked colors');
   await set('knob-bedTint',0);assert.notEqual(await coastCapture(),coloredCoast);await set('knob-bedTint',.95);assert.equal(await coastCapture(),coloredCoast);
   // Water colors and existing bed settings belong to the world, not the map's
   // rock recipe. Restore the two overrides explicitly before testing that recipe.
-  await ev(`(()=>{for(const label of ['Shallow water','Deep water']){const row=[...document.querySelectorAll('#world-colors .color-row')].find(r=>r.firstElementChild.textContent===label);const box=row.querySelector('input[type=checkbox]');box.checked=false;box.dispatchEvent(new Event('change',{bubbles:true}));}return true;})()`);await ready();
+  await ev(`(()=>{for(const label of ['Shallow water','Deep water']){const row=[...document.querySelectorAll('.world-colors .color-row')].find(r=>r.firstElementChild.textContent===label);const box=row.querySelector('input[type=checkbox]');box.checked=false;box.dispatchEvent(new Event('change',{bubbles:true}));}return true;})()`);await ready();
   await ev(`sculptDebug.loadSketch(${JSON.stringify(coastSave)});true`);await ready();assert.equal(await coastCapture(),coastArt);
   await sleep(900);await send('Page.reload',{ignoreCache:true});await ready();assert.equal(await coastCapture(),coastArt);
   report.coast='coastal fracture recipe reloads exactly; chosen water colors keep bed controls live; restoring tint restores exact pixels; zero erosion keeps export ready';

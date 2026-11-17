@@ -1,3 +1,4 @@
+import {ROCK_HEADLINES} from './sculpt-rock-presets.js';
 import {worldControlRequirement,WORLD_PRIMARY_CONTROLS} from './sculpt-control-schema.js';
 import {mountWorkspace} from './sculpt-workspace.js';
 import {COLUMN_BEDS,COLUMN_SECTIONS,COLUMN_SLOTS,FIRST_SECTION} from './sculpt-column.js';
@@ -146,33 +147,37 @@ export function groupToolControls(fields,buildRow){
 // Where each World setting sits: "Section/Tab" (a section without tabs ends in "/"). index.html holds one container per home
 // (data-home); a row is created straight into its home, under the name of its group. repro/world-homes.test.mjs holds every key to one home.
 export const WORLD_HOMES={
- 'Ground/Pattern':'groundPatch groundPatchSize',
+ 'World/Ground':'groundPatchSize reliefAmount',
+ 'World/Water':'shallowDepth',
+ 'World/Light & weather':'sunHeight erosionRain',
+ 'Ground/Pattern':'groundPatch',
  'Surface/':'highland highFrom highReach baseBand baseBandLow baseBandHigh baseBandWander baseBandGaps',
- 'Ground/Bumps & relief':'reliefScale reliefAmount reliefLumps reliefBranch reliefWarp reliefPatchy reliefJitter gentleRelief plainRelief lumpRelief reliefOctaves worms',
+ 'Ground/Bumps & relief':'reliefScale reliefLumps reliefBranch reliefWarp reliefPatchy reliefJitter gentleRelief plainRelief lumpRelief reliefOctaves worms',
  'Ground/Terrain shape':'undulation undulationScale undulationCover undulationArt faceSteep',
  'Ground/Slope cover':'hillLight slopeTexture slopeMarks wrinkles',
  'Ground/Low ground':'lowReach lowGrain',
  'Vegetation/':'lushness soilRim plantRelief',
+ 'Rock types/Headline':ROCK_HEADLINES.join(' '),
  'Rock types/Colors & recipe':'absorbDepth shadowTint',
  'Rock types/Exposure & relief':'rockFace faceRock rockFaceFrom faceExtrude faceMass rockCrown',
- 'Rock types/Blocks & joints':'faceWhole faceWholeLarge faceRegular faceBlock faceBlockSize faceStretch faceBlockHeight faceJointTilt faceScaleVary faceBreak faceRound faceJoint faceJointWidth faceSecondary faceContinuity faceLean',
- 'Rock types/Layers':'strata strataContrast strataGrain bedDip bedDipDir bedCycleVary faceBedVary faceBed faceLedge faceRun faceFold faceSpall faceLamina faceLaminaSize faceLayers faceGrass',
- 'Rock types/Weathering':'faceWear faceCrease faceCreaseSize faceScratch faceScratchSize faceScratchLength faceScratchAngle faceClast faceClastSize faceDetailPatch runoff runoffScale runoffConcentration runoffCut runoffStain',
+ 'Rock types/Blocks & joints':'faceWholeLarge faceRegular faceBlock faceStretch faceBlockHeight faceJointTilt faceScaleVary faceBreak faceRound faceJoint faceJointWidth faceSecondary faceContinuity faceLean',
+ 'Rock types/Layers':'strata strataContrast strataGrain bedDip bedDipDir bedCycleVary faceBedVary faceLedge faceRun faceFold faceSpall faceLamina faceLaminaSize faceLayers faceGrass',
+ 'Rock types/Weathering':'faceCrease faceCreaseSize faceScratchSize faceScratchLength faceScratchAngle faceClast faceClastSize faceDetailPatch runoffScale runoffConcentration runoffCut runoffStain',
  'Rock types/Surface & crust':'shineRock shineRockSharp shineRockRough shineRockScale faceShade faceTone faceFresh faceRind faceRindDepth faceRindTone faceRindWarmth faceRindRough faceMineral faceStrata faceWet',
  'Rock types/Stones & debris':'looseSize stoneSort stoneRound stoneSlab debrisAmount debrisReach debrisDepth',
- 'Rock types/Cracks & bands':'crackSeverity crackSpacing crackMajor crackMinor crackHairline crackBlocks crackWidth crackNetwork crackDark banding',
+ 'Rock types/Cracks & bands':'crackSpacing crackMajor crackMinor crackHairline crackBlocks crackWidth crackNetwork crackDark banding',
  'Rock types/Special surfaces':'pockmark pockSize moonCups moonCupSize moonCupDepth cupStretch moonRibs moonRibDepth moonRibDark moonFolds moonFoldSpacing iceCrystal iceCrest iceSnow iceFall iceApron gougeWeb',
  'Cliffs & stones/Where rock shows':'rimReach shoreRock shoreShelf',
  'Cliffs & stones/Loose stones':'looseSupply boulders looseKnoll',
  'Cliffs & stones/Bands':'bandSoftness bandWater sandBanding sandBandSpacing layerCrease desertCapFlat',
  'Cliffs & stones/Special surfaces':'iceFrost lavaCrust lavaPillow lavaChip lavaVeins lavaCalm lavaDusk iceSoft',
  'Sand/':'sandCrown sand sandLee wind sandDust sandGrass sandLight ripple rippleHeight',
- 'Water & shores/Depths & edges':'shallowDepth deepDepth waterSoft crispShore deepEdge stepSoftPx shelfWander shoalRag shoalStairs shoalShoreSoft',
+ 'Water & shores/Depths & edges':'deepDepth waterSoft crispShore deepEdge stepSoftPx shelfWander shoalRag shoalStairs shoalShoreSoft',
  'Water & shores/Shore & beach':'coastRamp beachWidth apron shoreEdge bankRock frostGaps frostGapReach frostGapSize frostGapDepth',
  'Water & shores/Water bed':'bedTint bedBright bedContrast bedRelief bedCracks bedCrackSize bedFlat',
  'Water & shores/Mineral fringe':'ringFade ringContrast ringCount ringSize ringShift ringShiftDir ringScatter ringWobble ringLobe ringFill ringPatch ringPatchSize ringTone',
- 'Rain & erosion/':'erosionRain wetSwath wetGround',
- 'Light & shine/Sun & shade':'faceFill flatShadow flatOcclusion lightCap shadeDepth sunTilt sunHeight ambient creaseShade',
+ 'Rain & erosion/':'wetSwath wetGround',
+ 'Light & shine/Sun & shade':'faceFill flatShadow flatOcclusion lightCap shadeDepth sunTilt ambient creaseShade',
  'Light & shine/Shine':'shineOutside shineSlopeGate shineStretch shineWhite shineGround shineGroundSharp shineGroundRough shineGroundScale shineSlope shineSlopeSharp shineSlopeRough shineSlopeScale shineSand shineSandSharp shineSandRough shineSandScale shineCrystal shineCrystalSharp shineCrystalRough shineCrystalScale shineGate shineHeadroom',
 };
 const homeOf=new Map(Object.entries(WORLD_HOMES).flatMap(([home,keys])=>keys.split(' ').map(key=>[key,home])));
@@ -205,17 +210,20 @@ export function mountWorldControlIndex(root,values=()=>({})){
    if(!query)for(const [reason,group] of groups){const key=block.querySelector('h3').textContent+'|'+reason,open=revealed.has(key),summary=document.createElement('div'),button=document.createElement('button');summary.className='unavailable-summary';button.type='button';button.textContent=`${open?'Hide':'Show'} ${group.length} unavailable setting${group.length===1?'':'s'}`;button.setAttribute('aria-expanded',String(open));button.setAttribute('aria-controls',group.map(row=>'knob-'+row.dataset.knob+'-row').join(' '));button.onclick=()=>{if(open)revealed.delete(key);else revealed.add(key);sync();[...block.querySelectorAll('.unavailable-summary button')].find(b=>b.dataset.reason===reason)?.focus();};button.dataset.reason=reason;summary.append(button,document.createTextNode(reason));block.append(summary);for(const row of group){row.id='knob-'+row.dataset.knob+'-row';row.hidden=!open;}}
   }
   for(const block of root.querySelectorAll('.world-subsection'))block.hidden=![...block.querySelectorAll('[data-knob]')].some(r=>r.dataset.eligible==='true');
-  studio.classList.toggle('searching',Boolean(query));
+  studio.classList.toggle('searching',Boolean(query));studio.classList.toggle('world-all',fine.checked);
+  for(const el of studio.querySelectorAll('[data-world-advanced-content]'))el.hidden=!fine.checked;
   // A tab or a section shows when it is the chosen one; in a search, when it holds a match.
+  if(!fine.checked&&!query&&studio.querySelector('.world-nav [data-advanced][aria-selected=true]'))for(const tab of studio.querySelectorAll('.world-nav [role=tab]')){const on=tab.id==='wsec-world';tab.setAttribute('aria-selected',String(on));tab.tabIndex=on?0:-1;}
   const chosen=el=>$(el.getAttribute('aria-labelledby'))?.getAttribute('aria-selected')!=='false',matches=el=>[...el.querySelectorAll('[data-knob]')].some(r=>!r.hidden);
   for(const panel of panels){if(panel.id)panel.hidden=query?!matches(panel):!chosen(panel);panel.classList.toggle('no-match',Boolean(query)&&!matches(panel));}
   for(const section of sections)section.hidden=query?!matches(section):!chosen(section);
+  for(const block of root.querySelectorAll('.world-home-card,.rock-headlines'))block.hidden=Boolean(query)&&!matches(block);
   $('world-control-count').textContent=query?`${visible} matching settings`:fine.checked?`${rows.length} settings`:`${visible} main settings of ${rows.length}`;
  };
  for(const list of lists){const tabs=[...list.querySelectorAll(':scope > [role="tab"]')];
   const pick=tab=>{for(const t of tabs){const on=t===tab;t.setAttribute('aria-selected',String(on));t.tabIndex=on?0:-1;}sync();};
   list.addEventListener('click',e=>{const tab=e.target.closest('[role="tab"]');if(tab&&list.contains(tab))pick(tab);});
-  list.addEventListener('keydown',e=>{const k={ArrowDown:1,ArrowRight:1,ArrowUp:-1,ArrowLeft:-1}[e.key];if(!k)return;const at=tabs.indexOf(document.activeElement);if(at<0)return;e.preventDefault();const next=tabs[(at+k+tabs.length)%tabs.length];pick(next);next.focus();});
+  list.addEventListener('keydown',e=>{const k={ArrowDown:1,ArrowRight:1,ArrowUp:-1,ArrowLeft:-1}[e.key];if(!k)return;const at=tabs.indexOf(document.activeElement);if(at<0)return;e.preventDefault();const visible=tabs.filter(t=>t.getClientRects().length),i=visible.indexOf(document.activeElement),next=visible[(i+k+visible.length)%visible.length];pick(next);next.focus();});
  }
  input.addEventListener('input',sync);fine.addEventListener('change',sync);sync();return sync;
 }

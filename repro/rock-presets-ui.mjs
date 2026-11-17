@@ -30,6 +30,7 @@ try {
   const ready = async () => { for (let i = 0; i < 480; i++) { if (await ev('!!window.sculptCanvas&&!document.getElementById("map-export").disabled')) { await ev('sculptCanvas.idle()'); return; } await sleep(150); } throw Error('Editor did not become ready: ' + errors.join('\n')); };
   const set = async (elementId, value) => { await ev(`(()=>{const e=document.getElementById(${JSON.stringify(elementId)});e.value=${JSON.stringify(String(value))};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`); await ready(); };
   const click = async elementId => { await ev(`document.getElementById(${JSON.stringify(elementId)}).click()`); await sleep(50); await ready(); };
+  const headlineKeys=['faceWhole','faceBlockSize','faceBed','faceWear','crackSeverity','faceScratch','runoff'];
   const rocks = () => ev('sculptDebug.sketch().rocks');
   const nodes = () => ev('sculptDebug.nodes()');
   const capture = () => ev(`(async()=>{const b=await sculptCanvas.debugBake({x:300,y:240,width:512,height:512}),c=document.createElement('canvas');c.width=c.height=512;c.getContext('2d').drawImage(b,0,0);return c.toDataURL();})()`);
@@ -49,7 +50,7 @@ try {
   await send('Page.navigate', {url: `${server}/?biome=green&mapX=4&mapY=4&gpuMB=512&heapMB=1536&sunHeight=25&flatShadow=1`}); await ready();
   // A wall, a dome and a hill, all on the rock beneath.
   await ev(`sculptDebug.scene([['plateau',[[260,330],[560,300]],{card:{diameter:420}}],['mountain',[[700,620]],{card:{diameter:260,elevation:120}}],['hill',[[420,700],[560,720]]]],{ground:true}); true`); await ready();
-  await click('tab-world');
+  await click('tab-world');await click('wsec-rock-types');assert.deepEqual(await ev(`[...document.querySelectorAll('#rock-headlines [data-knob]')].map(e=>e.dataset.knob)`),headlineKeys);
   // The list: the world's rock first (named after its recipe), then what the world ships.
   report.list = await ev(`[...document.getElementById('rock-presets').options].map(o=>o.textContent)`);
   assert.deepEqual(report.list, ["World rock (the world's rock)", 'Smooth soil', 'Broken slopes', 'Greenstone', 'Dark escarpment']);

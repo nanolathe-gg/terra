@@ -1,8 +1,9 @@
-import {withWorldMaterials,worldKept,worldOwnFor} from './sculpt-materials.js';
+import {withWorldMaterials,worldOwnMaterials,worldKept,worldOwnFor} from './sculpt-materials.js';
 // The map carries its effective world settings, including defaults, URL overrides and the world's ground and water materials.
 // Keep browser/session parameters out of the recipe; removed controls are dropped on load.
 import {KNOBS} from './sculpt-knobs.js';
 import {worldHexColors,isTone} from './sculpt-scene.js';
+import {normalizeSet} from './sculpt-feature-set.js';
 import {copySurface} from './sculpt-material-model.js';
 
 export const worldKeys=config => new Set([...Object.keys(config.defaults||{}),...Object.keys(config.engineDefaults||{}),...KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)),'beachFrom','sandEdge','view','fill','relief','palette','sun']);
@@ -54,3 +55,23 @@ export function sameSavedWorld(theirs,mine,config) {
   const a=worldOwnFor(theirs.materials,config),b=worldOwnFor(mine.materials,config,{stored:true});
   return JSON.stringify(Object.entries(a).sort())===JSON.stringify(Object.entries(b).sort());
 }
+
+// Count the overrides the existing world store already holds, compared with its built-in data.
+// Copied defaults in an imported world are not changes; one material/list is one stored override.
+export function worldOverrideCount(world,config) {
+  const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+  const defaults=Object.fromEntries(KNOBS.flatMap(([,rows])=>rows.map(([key,,,,,value])=>[key,value])));
+  let n=0;const known=worldKeys(config);
+  for(const [key,value] of Object.entries(world.knobs||{})){
+    if(!known.has(key))continue;
+    const base=config.defaults?.[key]??config.engineDefaults?.[key]??defaults[key];
+    const a=Number(value),b=Number(base);if(Number.isFinite(a)&&Number.isFinite(b)?a!==b:String(value)!==String(base))n++;
+  }
+  const baseColors=worldHexColors(config,new Map(),{}),colors=worldHexColors(config,new Map(),world.colors||{});
+  for(const key of new Set([...Object.keys(baseColors),...Object.keys(colors)]))if(!equal(baseColors[key],colors[key]))n++;
+  n+=worldOwnMaterials(world.materials,config).length;
+  if(world.surface&&!equal(world.surface,config.surface))n++;
+  if(world.featureSet&&!equal(normalizeSet(world.featureSet,config),normalizeSet(config.featureSet,config)))n++;
+  return n;
+}
+export const resetWorldOverrides=world=>({name:world.name,base:world.base,colors:{},knobs:{},...(world.openedFrom?{openedFrom:world.openedFrom}:{})});
