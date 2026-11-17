@@ -339,9 +339,11 @@ export function mountSurfacePanel(host) {
       if (!fixed) body.append(ruleBlock(layer, i));
       item.append(body);
     }
-    item.onpointerenter = item.onfocusin = () => host.preview($('surface-show').checked ? layerRows[i] : -1);
+    // Chrome has no onfocusin/onfocusout properties: the focus events are listened for.
+    const preview = () => host.preview($('surface-show').checked ? layerRows[i] : -1);
+    item.onpointerenter = preview; item.addEventListener('focusin', preview);
     item.onpointerleave = () => { if (!item.contains(document.activeElement)) host.preview(-1); };
-    item.onfocusout = event => { if (!item.contains(event.relatedTarget)) host.preview(-1); };
+    item.addEventListener('focusout', event => { if (!item.contains(event.relatedTarget)) host.preview(-1); });
     return item;
   }
   // A material layer's plants (sculpt-material-model.js PLANT_KINDS): one kind, grown where the layer shows, as dense as its Plants amount.
