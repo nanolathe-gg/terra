@@ -170,15 +170,22 @@ export function mountSurfacePanel(host) {
   const hidden = new Set();
   let solo = null, sent = '';
   const shown = key => solo ? key === solo : !hidden.has(key);
-  const sendView = (force = false) => {
+  // The renderer keeps the keys it was sent (sculpt-renderer.js setSurfaceHidden), so they go only when they change.
+  const sendView = () => {
     const keys = host.surface().map(layerKey).filter(k => !shown(k)), text = keys.join('\n');
-    if (force ? text || sent : text !== sent) { sent = text; host.hide(keys); }
+    if (text !== sent) { sent = text; host.hide(keys); }
+  };
+  // A layer gone takes its hidden mark with it, and a Solo of it ends (the others show again).
+  const prune = () => {
+    const keys = new Set(host.surface().map(layerKey));
+    for (const k of hidden) if (!keys.has(k)) hidden.delete(k);
+    if (solo && !keys.has(solo)) solo = null;
   };
   let editing = null;   // the list while a slider moves; committed on change
   const current = () => editing ?? host.surface();
-  const put = (next, commit) => { editing = commit ? null : next; host.apply(next, {commit}); if (commit) { build(); reinspect(); } };
+  const put = (next, commit) => { editing = commit ? null : next; host.apply(next, {commit}); if (commit) { build(); sendView(); reinspect(); } };
   let picking = false;   // a Color picker is open: a rebuild would close it
-  const refresh = () => { if (!editing && !picking) { build(); sendView(true); } };   // after a material edit, an undo or a load; not while a slider moves
+  const refresh = () => { if (!editing && !picking) { build(); sendView(); } };   // after a material edit, an undo or a load; not while a slider moves
   const edit = (i, change, commit) => { const next = structuredClone(current()); change(next[i], next); put(next, commit); };
   // The editor's own slider (sculpt-workspace.js controlRow, as the World rows and the shape card): a drag or a key moves the layer live, its
   // release is one undo step. `show` writes the value its label shows.
@@ -373,9 +380,8 @@ export function mountSurfacePanel(host) {
     revealNext = null;
     const active = document.activeElement, scrub = active?.matches?.('.scrub') ? active.dataset.source : '';
     const focused = scrub?.startsWith('surface-') ? '' : active?.id?.startsWith('surface-') && list.contains(active) ? active.id : '';
-    const layers = host.surface(), keys = new Set(layers.map(layerKey));
-    for (const k of hidden) if (!keys.has(k)) hidden.delete(k);
-    if (solo && !keys.has(solo)) solo = null;
+    const layers = host.surface();
+    prune();
     let layerRows = [];
     try { layerRows = surfaceRows(layers).layerRows; } catch (_) {}
     const placed = placeAll(layers);
