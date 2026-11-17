@@ -166,3 +166,10 @@ export function publishWorldTool(kit,rocks,materials,tool){
   nextKit.tools.push(entry);
   return {kit:nextKit,rocks:nextRocks,materials:nextMaterials,id:entry.id};
 }
+// An explicit Add/Clone uses the same portable template but allocates only its requested instance; it does not adopt other catalog entries.
+export function addWorldRockInstance(template,rocks,materials){
+  const [t]=copyWorldRocks([template]);let slot=1;while(rocks.some(r=>r.slot===slot))slot++;if(slot>=ROCK_SLOTS)throw Error('This map’s 15 rock slots are full.');
+  const bound=bindMaterial(t.material,materials);if(bound.missing)throw Error('The world material this rock type needs is missing.');assertKitMaterials(bound.materials);
+  const r={slot,key:rocks.some(r=>r.key===t.key)?null:t.key,name:t.name,knobs:t.knobs,column:t.column,colors:t.colors,...(bound.slot?{material:bound.slot}:{})};
+  return {slot,rocks:[...rocks,r],materials:bound.materials};
+}
