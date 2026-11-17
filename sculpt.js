@@ -15,7 +15,7 @@ import {strokeKind,shapeFrom,savedToolCard,MASK_KEYS,SHAPE_FIELDS,isCover,stroke
   shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,rgbColor,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,regionalCheck,repeatCheck,pagedTime,heightsNode} from './sculpt-scene.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER,lfcWidth,heightsBounds} from './sculpt-gpu-fields.js';
 
-import {shapePaths,clonePaths,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
+import {shapePaths,clonePaths,pathsWithin,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
 import {selectionTransform,toggleSelection} from './sculpt-selection.js';
 import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap,keepPrevious,takePrevious,dropPrevious} from './sculpt-share.js';
 import {isRiver,pointsSignature} from './sculpt-river.js';
@@ -697,22 +697,35 @@ function nodeBounds(n) {
   const reach={erase:Math.min(1.7,1+rough*1.3)+1.9*rough,sand:Math.min(1.7,1+rough*1.3)+1.9*rough,grass:Math.min(1.7,1+rough*1.3)+1.9*rough,paint:Math.min(1.7,1+rough*1.3)+1.9*rough}[n.kind] ?? 1+.4*rough;
   let r=radius*reach+12*spacing;
   // A landform reaches its widest side grown by the width variation, the wander and the spurs (the same reach its segment boxes use).
-  if(n.kind==='landform'){
-    r=landformReach({...q,radius},n.frame?Math.hypot(n.frame[0],n.frame[1]):1)+12*spacing;
+  const extent=n.kind==='landform'?landformExtent(n,q):null;
+  if(extent){
+    r=extent.reach+12*spacing;
     // Match the shared coast pass's expanded box as well as the swept profile's reach.
-    if(q.fingers>0||q.shoreLayers>=1||q.shorePlates>0)r+=Math.max(q.fingers>0?.5*radius+3*spacing:0,q.shoreLayers>=1?coastLayerReach(q):0,q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0)+2*spacing:0)+12*spacing;
-    // Prisms stand past the footprint by up to their own width.
-    if(q.iceFacets>0&&facetShape(q)===2)r+=lfcWidth(q)*(n.frame?Math.hypot(n.frame[0],n.frame[1]):1)+2*spacing;
+    if(extent.coast!==null)r+=extent.coast+12*spacing;
+    if(extent.prism!==null)r+=extent.prism;
   }
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
   for (const p of n.points) { ax=Math.min(ax,p.x); ay=Math.min(ay,p.y); bx=Math.max(bx,p.x); by=Math.max(by,p.y); }
   // A fissure reaches its branches (and their forks) and, in network mode, its footprint.
   if (n.kind==='fissure') { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r=(q.fissureNetwork>=.5?radius*1.1:0)+(Math.round(q.fissureBranches)>=1?(q.fissureBranchLen||0)*2.4*k:0)+(q.fissureWidth||5)*3*k+24+12*spacing; }
-  // Spurs (card C4) reach up to one and a half spur lengths past the ridge, plus their own width.
-  // A spur's root flares to about 1.7 times Spur width.
-  if (Math.round(q.spurCount)>=1 && n.kind==='landform') { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r+=(q.spurLength||0)*(q.spurForks>0?2.1:1.6)*k+radius*Math.max(1,((q.spurWidth||.8)+(q.spurBulb||0)*.7)*1.7); }
+  if (extent?.spur!=null) r+=extent.spur;
   return {x0:clamp(Math.floor((ax-r)/spacing-originCellX),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing-originCellY),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing-originCellX),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing-originCellY),0,grid-1)};
 }
+// How far past its path a landform's brush reaches, term by term (the extents its segment boxes use): `reach`, its section grown by the width
+// variation, wander, talus, copies and impact (landformReach); `coast`, its shore features (null without any); `prism`, prisms standing past the
+// footprint by up to their own width; `spur`, spurs reaching up to one and a half spur lengths past the ridge plus their root, which flares to
+// about 1.7 times Spur width. nodeBounds adds the regional aprons to these; claimReach sums them alone.
+function landformExtent(n,q=nodeShapeParams(n)) {
+  const radius=q.radius||40,k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1;
+  return {reach:landformReach({...q,radius},k),
+    coast:q.fingers>0||q.shoreLayers>=1||q.shorePlates>0?Math.max(q.fingers>0?.5*radius+3*spacing:0,q.shoreLayers>=1?coastLayerReach(q):0,q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0)+2*spacing:0):null,
+    prism:q.iceFacets>0&&facetShape(q)===2?lfcWidth(q)*k+2*spacing:null,
+    spur:Math.round(q.spurCount)>=1?(q.spurLength||0)*(q.spurForks>0?2.1:1.6)*k+radius*Math.max(1,((q.spurWidth||.8)+(q.spurBulb||0)*.7)*1.7):null};
+}
+// How far from its path a landform may claim its rock in mask plane 20: where it moves the height, on its talus and its shore features
+// (engine-shape.wgsl shapeMasks and claimRock), all inside its brush's reach. The regional aprons of nodeBounds are not part of it.
+function claimReach(n) { const e=landformExtent(n); return e.reach+(e.coast??0)+(e.prism??0)+(e.spur??0); }
+const shapeLines=n => shapePaths(n).map(path => path.map(i => n.points[i]));
 const unionRect=(a,b) => !a?b:!b?a:{x0:Math.min(a.x0,b.x0),y0:Math.min(a.y0,b.y0),x1:Math.max(a.x1,b.x1),y1:Math.max(a.y1,b.y1)};
 const overlaps=(a,b) => a.x0<=b.x1 && b.x0<=a.x1 && a.y0<=b.y1 && b.y0<=a.y1;
 function evaluate(from=0,rect=null) {
@@ -873,14 +886,15 @@ function syncRockChoices() {
   if (recipes.length && mapRocks.length<ROCK_SLOTS-1) { const g=document.createElement('optgroup'); g.label=`Add a rock type (${mapRocks.length} of ${ROCK_SLOTS-1})`; g.append(...recipes.map(o => new Option(o.textContent,'add:'+o.value))); select.append(g); }
   select.value=[...select.options].some(o => o.value===value)?value:'-1';
 }
-// The rock the card's shape is drawn in: its Rock choice, or on Rock beneath what the shapes under it claim (rocksBeneath): earlier shown
-// landforms whose reach (nodeBounds, the box the regional passes trust) meets this shape's, the world's rock where none does. A new shape
+// The rock the card's shape is drawn in: its Rock choice, or on Rock beneath what the shapes under it claim (rocksBeneath): an earlier shown
+// landform may show in this one where their paths come within both claim reaches, plus the rock read's 4 px of noise and a cell each way (a
+// claim is held per cell: engine-common.wgsl rockSlotAt), so a doubt counts as a yes; the world's rock shows where none does. A new shape
 // lands anywhere, so every rock the map's shapes claim may be under it. `slots` holds one slot, or several when the rock varies.
 function cardRock() {
   const n=selected>=0&&nodes[selected]?.params&&nodes[selected].kind==='landform'?nodes[selected]:null,value=Number($('lf-rock').value),choice=Number.isInteger(value)?value:-1;
   if (choice>=0) return {choice,slots:[choice],shape:n};
-  const box=n?nodeBounds(n):null;
-  return {choice,slots:rocksBeneath(nodes,n?selected:nodes.length,mapRocks,m => !box||overlaps(box,nodeBounds(m))),shape:n};
+  const reach=n?claimReach(n):0,lines=n?shapeLines(n):null,margin=4+2*spacing;
+  return {choice,slots:rocksBeneath(nodes,n?selected:nodes.length,mapRocks,m => !n||pathsWithin(lines,shapeLines(m),reach+claimReach(m)+margin)),shape:n};
 }
 const rockName=slot => slot===0?worldRockName(config):mapRocks.find(r => r.slot===slot)?.name??'';
 const orList=words => words.length<2?words.join(''):`${words.slice(0,-1).join(', ')} or ${words.at(-1)}`;

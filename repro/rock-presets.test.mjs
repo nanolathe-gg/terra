@@ -1,5 +1,6 @@
 // Rock presets (B2): a map's list of rock recipes in slots 1-15 beside the world's own (slot 0), and the strokes that choose them.
 import test from 'node:test';
+import {pathsWithin} from '../sculpt-paths.js';
 import assert from 'node:assert/strict';
 import {ROCK_PRESETS,SMOOTH_SOIL,STARTING_RECIPES,worldRocks,worldRockName,copyRocks,addRock,duplicateRock,renameRock,setRock,deleteRock,strokeRock,keepStrokeRocks,
   rocksInUse,rocksBeneath,rockRecipeText,parseRockRecipe,rockRecipeFor,recipeRock,worldRock,checkColors,setRockColors,ROCK_COLORS,rockByKey,recipeMaterial,ROCK_MATERIALS,giveRockMaterials} from '../sculpt-rock-presets.js';
@@ -65,6 +66,20 @@ test('Rock beneath shows the world\'s rock unless an earlier shown landform with
   assert.deepEqual(rocksBeneath([stroke(-1), stroke(2)], 0, rocks, near), [0], 'a later shape is not beneath');
   assert.deepEqual(rocksBeneath([stroke(2, {hidden: true}), stroke(9), {kind: 'paint', params: {rockPreset: 3}}, stroke(-1)], 3, rocks, near), [0], 'hidden, unknown and other kinds claim nothing');
   assert.deepEqual(rocksBeneath([stroke(2), stroke(3), stroke(2)], 3, rocks, () => true), [0, 2, 3], 'a new shape: every rock the map\'s shapes claim');
+});
+
+test('Rock beneath by footprint: a shape near but not touching an earlier rock type shows the world\'s rock, an overlapping one varies', () => {
+  const rocks = worldRocks({rock: {presets: ['basalt']}});
+  // Each shape's claim reach is its own radius here; a doubt of a few px counts as a yes (margin).
+  const shape = (rockPreset, points, reach) => stroke(rockPreset, {points: points.map(([x, y]) => ({x, y})), reach});
+  const meets = (n, margin = 8) => m => pathsWithin([n.points], [m.points], n.reach + m.reach + margin);
+  const mountain = shape(2, [[900, 620]], 220);
+  const clear = shape(-1, [[2100, 620], [2200, 620]], 966), touching = shape(-1, [[2080, 620], [2180, 620]], 966), over = shape(-1, [[1000, 620], [1100, 620]], 300);
+  assert.deepEqual(rocksBeneath([mountain, clear], 1, rocks, meets(clear)), [0], '1200 px apart, reaches 966 + 220 + 8: near but not touching');
+  assert.deepEqual(rocksBeneath([mountain, touching], 1, rocks, meets(touching)), [0, 2], '1180 px apart: the reaches may meet');
+  assert.deepEqual(rocksBeneath([mountain, over], 1, rocks, meets(over)), [0, 2], 'overlapping shapes');
+  const range = shape(2, [[600, 600], [1800, 1800]], 220), beside = shape(-1, [[1500, 700], [1600, 700]], 250);
+  assert.deepEqual(rocksBeneath([range, beside], 1, rocks, meets(beside)), [0], 'beside a diagonal range: inside its box, clear of its line');
 });
 
 test('a recipe goes to the clipboard and back; bad lists and recipes are refused before they touch the map', () => {
