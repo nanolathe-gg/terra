@@ -480,7 +480,8 @@ export function mountMaterialEditor(host) {
     if (!$('material-pane-palette').hidden) refreshPalette(m);
     graph.refresh(slot); drawPicture(); refreshPictures();
   }
-  const choose = next => { slot = next; selection = new Set(); primary = null; frameAt = -1; solo = null; picture = null; thumbs = new Map(); thumbPixels = new Map(); pick('controls'); refresh(); };
+  // Choosing a material (the open one too) starts its pictures again: they were cleared, so their keys must be.
+  const choose = next => { slot = next; selection = new Set(); primary = null; frameAt = -1; solo = null; picture = null; thumbs = new Map(); thumbPixels = new Map(); pictureKey = thumbKey = pictureMaterial = ''; pick('controls'); refresh(); };
   const addToMap = attempt((source, name) => { const added = addMaterial(materials(), source, name); update(added.materials); commit(); $('material-menu').open = false; choose(added.slot); });
   const addFromLibrary = key => { setDrawer(false); addToMap(LIBRARY[key], LIBRARY[key].name); $('material-choose').focus(); };
   $('material-new').onclick = () => addToMap(blankMaterial(), 'New material');
@@ -508,7 +509,7 @@ export function mountMaterialEditor(host) {
     else refreshPictures();
   }
   function open(which, from) {
-    opener = from; if (which !== undefined) slot = which; pick('controls');
+    opener = from; if (which !== undefined && which !== slot) choose(which); pick('controls');   // another material: not the last one's selection, frame or solo node
     if (!dialog.open) { dialog.show(); host.dock({close, inner}); $('materials-toolbar').setAttribute('aria-expanded', 'true'); $('material-graph').focus({preventScroll: true}); }
     pictureKey = thumbKey = ''; refresh();
   }
@@ -526,6 +527,9 @@ export function mountMaterialEditor(host) {
   const TEXT = 'input:not([type]),input[type=text],input[type=search],input[type=number],textarea';
   let fieldWas = null;
   dialog.addEventListener('focusin', e => { if (e.target.matches?.(TEXT)) fieldWas = {field: e.target, value: e.target.value}; });
+  // A value the field committed (Enter applies a name; change ends an edit) is what Escape returns to.
+  const committed = e => { if (fieldWas?.field === e.target) fieldWas.value = e.target.value; };
+  dialog.addEventListener('change', committed); dialog.addEventListener('keydown', e => { if (e.key === 'Enter') committed(e); });
   function leaveField() {
     const field = document.activeElement; if (!dialog.contains(field) || !field.matches(TEXT) || field.closest('.publish-name, #node-menu')) return false;
     if (field === $('library-search')) { $('material-choose').focus(); return true; }   // the filter stays; the next Escape closes the drawer
