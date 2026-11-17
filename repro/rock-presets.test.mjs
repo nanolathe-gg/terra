@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {ROCK_PRESETS,SMOOTH_SOIL,STARTING_RECIPES,worldRocks,worldRockName,copyRocks,addRock,duplicateRock,renameRock,setRock,deleteRock,strokeRock,keepStrokeRocks,
-  rocksInUse,rockRecipeText,parseRockRecipe,rockRecipeFor,recipeRock,worldRock,checkColors,setRockColors,ROCK_COLORS,rockByKey,recipeMaterial,ROCK_MATERIALS,giveRockMaterials} from '../sculpt-rock-presets.js';
+  rocksInUse,rocksBeneath,rockRecipeText,parseRockRecipe,rockRecipeFor,recipeRock,worldRock,checkColors,setRockColors,ROCK_COLORS,rockByKey,recipeMaterial,ROCK_MATERIALS,giveRockMaterials} from '../sculpt-rock-presets.js';
 
 const stroke = (rockPreset, extra = {}) => ({kind: 'landform', points: [{x: 0, y: 0}], params: {rockPreset}, ...extra});
 
@@ -54,6 +54,17 @@ test('only the presets a shown landform stroke chooses are in use; an unknown ch
   assert.deepEqual(rocksInUse([stroke(2), stroke(2), stroke(1, {hidden: true})], rocks).map(r => r.slot), [2]);
   assert.equal(strokeRock(stroke(7), rocks), -1);
   assert.deepEqual(keepStrokeRocks([stroke(7), stroke(2), {kind: 'paint', params: {}}], rocks).map(n => n.params.rockPreset), [-1, 2, undefined]);
+});
+
+test('Rock beneath shows the world\'s rock unless an earlier shown landform with a rock of its own may reach it', () => {
+  const rocks = worldRocks({rock: {presets: ['basalt', 'shale']}}), near = n => !n.far;
+  assert.deepEqual(rocksBeneath([stroke(-1)], 0, rocks, near), [0], 'nothing beneath: the world\'s rock');
+  assert.deepEqual(rocksBeneath([stroke(0), stroke(-1)], 1, rocks, near), [0], 'an earlier shape on the world\'s rock claims slot 0');
+  assert.deepEqual(rocksBeneath([stroke(2), stroke(-1)], 1, rocks, near), [0, 2], 'an earlier rock type that may reach it: it varies');
+  assert.deepEqual(rocksBeneath([stroke(2, {far: true}), stroke(-1)], 1, rocks, near), [0], 'one that cannot reach it does not count');
+  assert.deepEqual(rocksBeneath([stroke(-1), stroke(2)], 0, rocks, near), [0], 'a later shape is not beneath');
+  assert.deepEqual(rocksBeneath([stroke(2, {hidden: true}), stroke(9), {kind: 'paint', params: {rockPreset: 3}}, stroke(-1)], 3, rocks, near), [0], 'hidden, unknown and other kinds claim nothing');
+  assert.deepEqual(rocksBeneath([stroke(2), stroke(3), stroke(2)], 3, rocks, () => true), [0, 2, 3], 'a new shape: every rock the map\'s shapes claim');
 });
 
 test('a recipe goes to the clipboard and back; bad lists and recipes are refused before they touch the map', () => {

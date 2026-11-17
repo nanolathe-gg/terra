@@ -7,7 +7,7 @@ import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
 import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
-import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
+import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
 import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
@@ -100,8 +100,14 @@ function buildShapeOptions() {
     // A label's parenthetical (its unit, or what it measures) is said by the hover help, not the row.
     const note=/ \(([^)]*)\)$/.exec(label),words=note?label.slice(0,note.index):label;
     const wrap=controlRow({id,label:`${words} <output id="${id}-value"${choices?' hidden':''}></output>`,range:`min="${lo}" max="${hi}" step="${step}"`,choices,select:' style="width:100%"',help});
-    wrap.id=id+'-control'; if(note)wrap.dataset.note=note[1]; return wrap;
+    wrap.id=id+'-control'; if(note)wrap.dataset.note=note[1];
+    // The Rock row names the rock type the shape is drawn in, with its color, and opens its settings (syncCardRock).
+    if(key==='rockPreset'){const drawn=document.createElement('div');drawn.className='card-partner rock-drawn';drawn.id='lf-rock-drawn';
+      drawn.innerHTML='<span class="rock-swatch" id="lf-rock-swatch"></span><span class="card-partner-text"><b id="lf-rock-name"></b> <span id="lf-rock-note"></span></span><button type="button" class="card-link" id="lf-rock-edit">Edit</button>';wrap.append(drawn);}
+    return wrap;
   });
+  $('lf-rock-edit').onclick=() => { const {slots}=cardRock(); openRockType(slots.length===1?slots[0]:null); };
+  $('cracks-look').onclick=() => { const {slots}=cardRock(); openRockType(slots.length===1?slots[0]:null,'cracks-bands'); };
   $('curve-form').addEventListener('change',() => { const f=$('curve-form').value; setCurve(f?{form:f}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
   $('curve-reset').addEventListener('click',() => { const c=currentCurve(); setCurve(c?.form?{form:c.form}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
   $('along-reset').addEventListener('click',() => { setCurve(null,'along'); if (selected>=0) { checkpoint(); queueWeather(); } });
@@ -299,6 +305,7 @@ function updateControls() {
   $('softness-control').hidden=!['erase','sand','grass','paint'].includes(kind);
   $('cracks-control').hidden=kind!=='landform';
   $('cracks-value').textContent=$('cracks').value+'%';
+  syncCardRock(kind);
   // Spur and gully details show once their switch (spurs, gullies) is on.
   const gate={gullySize:'gullies',talus:'gullies',layerPx:'shoreLayers',layerRiser:'shoreLayers',layerLedge:'shoreLayers',layerRough:'shoreLayers',layerStyle:'shoreLayers',layerVary:'shoreLayers',layerJag:'shoreLayers',layerCircle:'shoreLayers',iceFacetSize:'iceFacets',fingerSize:'fingers',spurLength:'spurCount',spurSpread:'spurCount',spurWidth:'spurCount',spurTaper:'spurCount',spurHeight:'spurCount',spurForks:'spurCount',spurBulb:'spurCount',crestVary:'spurCount',fissureBranchLen:'fissureBranches',fissureBranchSpread:'fissureBranches',lavaSpread:'shoreLayers',lavaCircleVary:'shoreLayers'};
   if(kind==='landform')for(const key of Object.keys(gate))if(gate[key]==='shoreLayers')delete gate[key];
@@ -744,19 +751,30 @@ function syncMaterialChoices() {
   if($('rock-material'))syncRockMaterial();
 }
 // The Ground choice as chips: each of the select's choices with its material's color, the chosen one pressed. The Paint brush has
-// nothing to paint with "Ground beneath", so it does not offer it.
+// nothing to paint with "Ground beneath", so it does not offer it. Grounds come first: a material whose only use is one of the world's
+// surfaces (its rock, slope cover, debris…), a surface layer or a rock type's rock waits behind More… (CSS orders those chips after the
+// grounds), unless a stroke already lays it down or it is the choice. Edit opens the chosen material in the material editor.
 const MATERIAL_CHOICES=MATERIAL_SLOTS;
-let groundChipKind='landform';
+let groundChipKind='landform',groundMore=false;
+const groundExtra=m=>Boolean(m&&(roleOf(m)||mapRocks.some(r=>r.material===m.slot))&&!nodes.some(n=>n.params?.groundPreset===m.slot));
+const groundMaterial=v=>v===0?mapMaterials.find(m=>m.worldGround):v>0?mapMaterials.find(m=>m.slot===v):null;
 function syncGroundChips(kind=groundChipKind) {
   groundChipKind=kind; const select=$('lf-ground'),hex=m=>'#'+materialTint(m).map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');
+  let behind=0;
   for (let v=-1; v<MATERIAL_CHOICES; v++) {
-    const chip=$('lf-ground-chip-'+v),option=[...select.options].find(o=>o.value===String(v)),m=v===0?mapMaterials.find(m=>m.worldGround):mapMaterials.find(m=>m.slot===v);
-    chip.hidden=!option||(v===-1&&kind==='paint'); if (chip.hidden) continue;
+    const chip=$('lf-ground-chip-'+v),option=[...select.options].find(o=>o.value===String(v)),m=groundMaterial(v)??mapMaterials.find(m=>m.slot===v),extra=v>0&&groundExtra(m),chosen=select.value===String(v);
+    chip.classList.toggle('material-extra',extra);
+    chip.hidden=!option||(v===-1&&kind==='paint')||(extra&&!groundMore&&!chosen); if (option&&extra&&!chosen) behind++; if (chip.hidden) continue;
     chip.querySelector('.material-choice-name').textContent=option.textContent; chip.title=v===-1?'Leave the surface that is already there.':v===0?'The world’s ground: '+(m?.name??''):option.textContent;
-    chip.querySelector('.material-chip').style.background=v>=0&&m?hex(m):''; chip.setAttribute('aria-checked',String(select.value===String(v))); chip.disabled=select.disabled;
+    chip.querySelector('.material-chip').style.background=v>=0&&m?hex(m):''; chip.setAttribute('aria-checked',String(chosen)); chip.disabled=select.disabled;
   }
+  const more=$('lf-ground-more');more.hidden=!behind;more.disabled=select.disabled;more.setAttribute('aria-expanded',String(groundMore));more.textContent=groundMore?'Fewer':`More… (${behind})`;
+  const m=groundMaterial(Number(select.value)),edit=$('lf-ground-edit');edit.hidden=!m;edit.disabled=select.disabled;
+  if(m)edit.title=`Open ${m.name} in the material editor`+(roleOf(m)?' (the world’s: every map in this world shows your edit)':'');
 }
 for (let v=-1; v<MATERIAL_CHOICES; v++) $('lf-ground-chip-'+v).onclick=()=>{ const select=$('lf-ground'); if (select.value===String(v)) return; select.value=String(v); select.dispatchEvent(new Event('input',{bubbles:true})); select.dispatchEvent(new Event('change',{bubbles:true})); syncGroundChips(); };
+$('lf-ground-more').onclick=()=>{ groundMore=!groundMore; syncGroundChips(); };
+$('lf-ground-edit').onclick=()=>{ const m=groundMaterial(Number($('lf-ground').value)); if (m) materialEditor?.open(m.slot,$('lf-ground-edit')); };
 // World › Surface (sculpt-surface-panel.js, docs/SURFACE_LAYERS.md): the world's surface layers, a world setting kept in this browser's
 // world store, as its sliders are; every map drawn in the world shows them. baseSurface is the world's own (its config), which Restore returns to.
 let baseSurface=null,surfacePanel=null;
@@ -846,6 +864,41 @@ function syncRockChoices() {
   const held=new Set(mapRocks.map(r => r.key)),recipes=[...$('rock-add').options].filter(o => o.value && !o.hidden && !o.parentElement.hidden && !held.has(o.value));
   if (recipes.length && mapRocks.length<ROCK_SLOTS-1) { const g=document.createElement('optgroup'); g.label=`Add a rock type (${mapRocks.length} of ${ROCK_SLOTS-1})`; g.append(...recipes.map(o => new Option(o.textContent,'add:'+o.value))); select.append(g); }
   select.value=[...select.options].some(o => o.value===value)?value:'-1';
+}
+// The rock the card's shape is drawn in: its Rock choice, or on Rock beneath what the shapes under it claim (rocksBeneath): earlier shown
+// landforms whose reach (nodeBounds, the box the regional passes trust) meets this shape's, the world's rock where none does. A new shape
+// lands anywhere, so every rock the map's shapes claim may be under it. `slots` holds one slot, or several when the rock varies.
+function cardRock() {
+  const n=selected>=0&&nodes[selected]?.params&&nodes[selected].kind==='landform'?nodes[selected]:null,value=Number($('lf-rock').value),choice=Number.isInteger(value)?value:-1;
+  if (choice>=0) return {choice,slots:[choice],shape:n};
+  const box=n?nodeBounds(n):null;
+  return {choice,slots:rocksBeneath(nodes,n?selected:nodes.length,mapRocks,m => !box||overlaps(box,nodeBounds(m))),shape:n};
+}
+const rockName=slot => slot===0?worldRockName(config):mapRocks.find(r => r.slot===slot)?.name??'';
+const orList=words => words.length<2?words.join(''):`${words.slice(0,-1).join(', ')} or ${words.at(-1)}`;
+// The card's Rock row says which rock type the shape shows, with its color and an Edit that opens it in World; the Cracks row's line links to
+// that rock type's Cracks & bands. A selected shape's rock type is the one World's rock type picker shows: it follows when the selection or the
+// shape's Rock choice changes (another picked in World stays until then), and stays put when the rock varies.
+let rockFollow=null;
+function syncCardRock(kind) {
+  if (!$('lf-rock-drawn')) return;
+  if (kind!=='landform') { rockFollow=null; return; }
+  const {choice,slots,shape}=cardRock(),one=slots.length===1?slots[0]:null,more=orList(slots.filter(s => s>0).map(rockName));
+  $('lf-rock-swatch').style.background=one===null?'':rockHex(one); $('lf-rock-swatch').classList.toggle('varies',one===null);
+  $('lf-rock-name').textContent=one===null?'Varies':rockName(one);
+  $('lf-rock-note').textContent=choice===0?'· the world’s rock type':choice>0?'· this map’s rock type':one!==null?'· the rock beneath'
+    :shape?`· ${more} where earlier shapes reach it, else ${rockName(0)}`:`· ${more} over shapes made of ${slots.length>2?'them':'it'}, else ${rockName(0)}`;
+  $('lf-rock-edit').title=one===null?'Open World › Rock types (this shape’s rock varies, so the picker keeps its choice)':`Open ${rockName(one)} in World › Rock types`;
+  $('cracks-look').textContent=`${one===null?'Rock types':rockName(one)} › Cracks & bands`;
+  const follow=shape?`${selected}:${choice}`:null;
+  if (follow!==rockFollow) { rockFollow=follow; if (shape && one!==null && one!==rockSelected) selectRock(one); }
+}
+// World › Rock types (and one of its tabs) on rock type `slot`; null keeps the picker's choice. A search in World would hide the section.
+function openRockType(slot,tab='') {
+  if (slot!==null && slot!==rockSelected) selectRock(slot);
+  const search=$('world-search'); if (search.value) { search.value=''; search.dispatchEvent(new Event('input')); }
+  $('tab-world').click(); $('wsec-rock-types').click(); if (tab) $('wtab-rock-types-'+tab).click();
+  $('rock-chips').querySelector('[aria-checked="true"]')?.focus({preventScroll:true});
 }
 // The map's rock presets replaced (a load, an undo, a preset edited): strokes keep only choices the list holds, and the renderer and the Rock option follow.
 function restoreRocks(rocks) {
