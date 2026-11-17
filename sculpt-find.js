@@ -98,7 +98,7 @@ const SCOPES = [['pane-world', 'World'], ['brush-panel', 'Shape card'], ['pane-m
 const FIELDS = 'input, select, textarea, .scrub';
 // Not rows of their own: the World panel's own search, a part's switch (its row is found), a slider's typed entry and native range,
 // the Surface list's heads, a closed row's Coverage and Add a layer (found by name below), file pickers.
-const SKIP = '#world-control-search, summary, .scrub-entry, .scrub-native, .surface-head, .surface-layer:not(.open) .surface-cover, #surface-add, [type=file], [type=hidden], [type=button], [type=submit]';
+const SKIP = '#world-control-search, summary, .scrub-entry, .scrub-native, .surface-head, .surface-layer:not(.open) .surface-cover, #surface-gallery, [type=file], [type=hidden], [type=button], [type=submit]';
 const MARK = '.control, .color-row, .surface-layer, label';
 const KIND_WORDS = {color: 'color', choice: 'choice', switch: 'switch', slider: '', field: '', tool: 'tool', layer: 'layer', feature: 'feature', material: 'material', action: ''};
 // The menu actions: [button id, how, name]. "run" presses the button (a file dialog or New opens just as it would); "go" opens its panel and
@@ -218,9 +218,9 @@ function surface(entries) {
     }
   }
   const add = $('surface-add');
-  if (add && reachable(add)) for (const o of add.options) if (o.value)
+  if (add && reachable(add)) for (const tile of $('surface-gallery')?.querySelectorAll('[data-preset]') ?? [])
     // Going adds the layer (one undo step), so a preset ranks under what the world already has.
-    entries.push({group: 'Surface layers', name: clean(o.text), path: ['Add a layer'], kind: 'action', words: 'add layer new', unavailable: add.disabled, bias: -4, scope: scopeOf(add), go: () => addLayer(o.value)});
+    entries.push({group: 'Surface layers', name: clean(tile.textContent), path: ['Add a layer'], kind: 'action', words: 'add layer new', unavailable: add.disabled, bias: -4, scope: scopeOf(add), go: () => addLayer(tile.dataset.preset)});
 }
 function tools(entries) {
   // Features and Starts edit the map: their card says so (its head's tag).
@@ -331,12 +331,12 @@ function openLayer(key, inner) {
   if (!li.classList.contains('open')) li.querySelector('.surface-toggle')?.click();
   landLayer(key, inner);
 }
-function addLayer(value) {
-  const add = $('surface-add'), list = $('surface-layers');
-  if (!add || add.disabled) return;
+function addLayer(preset) {
+  const add = $('surface-add'), list = $('surface-layers'), tile = $('surface-gallery')?.querySelector(`[data-preset="${CSS.escape(preset)}"]`);
+  if (!add || add.disabled || !tile) return;
   const before = new Set([...list.querySelectorAll('.surface-layer')].map(li => li.dataset.key));
   reveal(add);
-  add.value = value; add.dispatchEvent(new Event('change', {bubbles: true}));
+  tile.click();
   // The new layer opens on top of its group.
   const li = [...list.querySelectorAll('.surface-layer')].find(li => !before.has(li.dataset.key));
   if (li) landLayer(li.dataset.key); else land(add);

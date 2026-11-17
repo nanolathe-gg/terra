@@ -71,10 +71,11 @@ export function mountEditorUI(){
  new MutationObserver(()=>{if($('section-preview-control').hidden)setLarge(false);}).observe($('section-preview-control'),{attributes:true,attributeFilter:['hidden']});
  // The curves are rows of the card's Profile section: folding it away closes them at full size too.
  $('card-profile').addEventListener('toggle',()=>{if(!$('card-profile').open)setLarge(false);});
- // Escape closes what is open on top of the editor, one thing a press, innermost first: Find, a tool flyout, a folded menu (Share link
- // inside the Map menu, say), a menu, the full-size curves.
+ // Escape closes what is open on top of the editor, one thing a press, innermost first: Find, World › Surface's Add a layer gallery (its
+ // button folds it, sculpt-surface-panel.js), a tool flyout, a folded menu (Share link inside the Map menu, say), a menu, the full-size curves.
  const find=mountFind();
- const closeTop=()=>find.close()||closeFlyouts()||[...document.querySelectorAll('details.top-menu[open],details.share-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||closeSurfaces(true)||setLarge(false);
+ const closeGallery=()=>{const b=$('surface-add');if(b?.getAttribute('aria-expanded')!=='true')return false;b.click();return true;};
+ const closeTop=()=>find.close()||closeGallery()||closeFlyouts()||[...document.querySelectorAll('details.top-menu[open],details.share-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||closeSurfaces(true)||setLarge(false);
  for(const [id,on] of [['view-rendered',false],['view-clay',true]])$(id).onclick=()=>{$('clay').checked=on;$('clay').dispatchEvent(new Event('change'));};
  updateLayout();
  return {toggleFocus,exitFocus,syncTools,closeTop,focused,get terrainBudget(){return panels.terrainBudget;},setTerrainBudget(value){panels.terrainBudget=value;if(beforeFocus)beforeFocus.terrainBudget=value;savePanels();}};

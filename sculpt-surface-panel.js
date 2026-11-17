@@ -247,20 +247,23 @@ export function mountSurfacePanel(host) {
   }
   function row(layer, i, layers, layerRows, placedAll) {
     const placed = placedAll[i];
+    // Its controls take ids from it (uid), so a rebuild of the list (an edit, a material measured, the world changed) gives the focus back.
     const key = layerKey(layer), builtin = !isMaterialLayer(layer), stage = stageOf(layer), fixed = builtin && SURFACE_FIXED.includes(layer.builtin);
     rowKey = key;
     // The layers it moves among: its stage's, in its section (moveLayer).
     const peers = layers.map((l, j) => j).filter(j => stageOf(layers[j]) === stage && placedAll[j].section === placed.section);
     const material = layer.material != null ? host.material(layer) : null, isOpen = open.has(key);
     const head = el('div', {className: 'surface-head'});
-    const toggle = el('button', {type: 'button', className: 'surface-toggle', textContent: isOpen ? '▾' : '▸', title: isOpen ? 'Close this layer' : 'Open this layer’s settings', ariaExpanded: String(isOpen)});
+    const toggle = el('button', {type: 'button', id: uid('toggle'), className: 'surface-toggle', textContent: isOpen ? '▾' : '▸', title: isOpen ? 'Close this layer' : 'Open this layer’s settings', ariaExpanded: String(isOpen)});
     toggle.onclick = () => { if (open.has(key)) open.delete(key); else open.add(key); build(); list.querySelector(`[data-key="${CSS.escape(key)}"] .surface-toggle`)?.focus(); };
     const chip = el('span', {className: 'material-chip', title: material?.name ?? (layer.material != null ? 'The map lacks this layer’s material' : 'Its own color')});
     if (material) chip.style.background = material.color; else if (layer.material == null) chip.classList.add('own');
     head.append(toggle, chip);
     // The layer's name over what it draws: its material's name, or where a built-in's look comes from.
     const role = builtin && layer.material == null ? host.roleMaterial?.(layer.builtin) : null;
-    const drawn = el('span', {className: 'surface-drawn', textContent: material?.name ?? role?.name ?? (layer.material != null ? 'its material is missing from this map' : BUILTIN_SOURCES[layer.builtin] ?? 'no material: it draws nothing')});
+    const plants = layer.plants ? PLANT_LABELS[layer.plants.kind] ?? '' : '';
+    const drawn = el('span', {className: 'surface-drawn', textContent: (material?.name ?? role?.name ?? (layer.material != null ? 'its material is missing from this map' : plants ? `${plants} only` : BUILTIN_SOURCES[layer.builtin] ?? 'no material: it draws nothing'))
+      + (plants && layer.material != null ? `, with ${plants.toLowerCase()}` : '')});
     // Where it lies, in words from its own rule (whereWords), then what it draws.
     const line = el('span', {className: 'small surface-where'}, whereWords(layer) + ' · ', drawn);
     if (role) { chip.style.background = role.color; chip.classList.remove('own'); chip.title = role.name; }
@@ -277,12 +280,12 @@ export function mountSurfacePanel(host) {
     const move = (d, text) => {
       const next = moveLayer(layers, i, d, peers), past = next && nameOf(layers[d > 0 ? Math.min(...peers.filter(k => k > i)) : Math.max(...peers.filter(k => k < i))]);
       const title = next ? `${d > 0 ? 'Raise: over' : 'Lower: under'} ${past}` : d > 0 ? 'Already the top of the layers it moves among' : 'Already the bottom of the layers it moves among';
-      const b = el('button', {type: 'button', textContent: text, title, ariaLabel: title, disabled: !next}); b.onclick = () => put(structuredClone(next), true); return b;
+      const b = el('button', {type: 'button', id: uid(d > 0 ? 'raise' : 'lower'), textContent: text, title, ariaLabel: title, disabled: !next}); b.onclick = () => put(structuredClone(next), true); return b;
     };
-    const eye = el('button', {type: 'button', className: 'surface-eye', textContent: hidden.has(key) ? 'Show' : 'Hide',
+    const eye = el('button', {type: 'button', id: uid('eye'), className: 'surface-eye', textContent: hidden.has(key) ? 'Show' : 'Hide',
       title: hidden.has(key) ? 'Show this layer again' : 'Hide this layer while you design (not saved; an export draws it)', disabled: Boolean(solo)});
     eye.onclick = () => { if (hidden.has(key)) hidden.delete(key); else hidden.add(key); build(); sendView(); list.querySelector(`[data-key="${CSS.escape(key)}"] .surface-eye`)?.focus(); };
-    const alone = el('button', {type: 'button', className: 'surface-solo', textContent: 'Solo', ariaPressed: String(solo === key),
+    const alone = el('button', {type: 'button', id: uid('solo'), className: 'surface-solo', textContent: 'Solo', ariaPressed: String(solo === key),
       title: solo === key ? 'Show every layer again' : 'Show this layer alone over the ground while you design (not saved; an export draws every layer)'});
     alone.onclick = () => { solo = solo === key ? null : key; build(); sendView(); list.querySelector(`[data-key="${CSS.escape(key)}"] .surface-solo`)?.focus(); };
     head.append(eye, alone);
@@ -396,17 +399,36 @@ export function mountSurfacePanel(host) {
   // After a World setting, a rock type in use or a role material changed: rebuild if a layer has changed section or reason.
   const sync = () => { if (!editing && !picking && JSON.stringify(placeAll(host.surface())) !== placedText) build(); };
   $('surface-show-all').onclick = () => { hidden.clear(); solo = null; build(); sendView(); };
-  const add = $('surface-add');
-  add.replaceChildren(el('option', {value: '', textContent: 'Add a layer…'}), ...SURFACE_PRESETS.map(p => el('option', {value: p.key, textContent: p.name})));
-  add.onchange = () => {
-    const preset = SURFACE_PRESETS.find(p => p.key === add.value); add.value = ''; if (!preset) return;
+  // Add a layer: a small gallery of the presets (one tile each: its material's swatch, or a plant mark for a layer that grows plants only, and
+  // its name), opened in place by its button; Escape folds it back (sculpt-ui.js closeTop presses the button). Choosing one adds the layer on
+  // top of its stage, opens its row and brings it into view. The tiles are made once (Find reads them); their swatches follow the world's
+  // materials each time it opens.
+  const add = $('surface-add'), gallery = $('surface-gallery');
+  const SPROUT = '<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M7 13V7M7 8C7 5 5 3.5 2 3.5 2 6.5 4 8 7 8ZM7 7C7 4.5 9 2.5 12 2.5 12 5 10 7 7 7Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
+  gallery.replaceChildren(...SURFACE_PRESETS.map(p => {
+    const mark = el('span', {className: 'material-chip' + (p.material == null ? ' surface-plant' : '')}); if (p.material == null) mark.innerHTML = SPROUT;
+    const tile = el('button', {type: 'button', className: 'surface-tile', title: `Add “${p.name}”: ${whereWords(p).replace(/^W/, 'w')}`}, mark, el('span', {textContent: p.name}));
+    tile.dataset.preset = p.key; tile.onclick = () => addLayer(p); return tile;
+  }));
+  const swatches = () => { const library = new Map(host.library().map(m => [m.key, m.color])); for (const tile of gallery.children) { const p = SURFACE_PRESETS.find(q => q.key === tile.dataset.preset); if (p.material != null) tile.firstChild.style.background = library.get(host.materialKey(p)) ?? ''; } };
+  const showGallery = on => {
+    const back = !on && gallery.contains(document.activeElement);
+    if (on) swatches();
+    gallery.hidden = !on; add.setAttribute('aria-expanded', String(on));
+    if (on) gallery.firstElementChild?.focus({preventScroll: true}); else if (back) add.focus({preventScroll: true});
+  };
+  add.onclick = () => showGallery(gallery.hidden);
+  function addLayer(preset) {
     const layers = host.surface(), taken = new Set(layers.map(l => l.id)); let n = 1; while (taken.has(`${preset.key}-${n}`)) n++;
     const {key, ...rest} = preset, layer = {...structuredClone(rest), id: `${key}-${n}`, ...(preset.material == null ? {} : {material: host.materialKey(preset)})};
     if (layer.material == null) delete layer.material;
+    showGallery(false);
     // A new layer goes on top of its stage, and opens.
     const stage = stageOf(layer), next = [...layers]; let at = 0; for (let j = next.length - 1; j >= 0; j--) if (stageOf(next[j]) <= stage) { at = j + 1; break; }
     next.splice(at, 0, layer); open.add(layer.id); revealNext = layer.id; put(next, true);
-  };
+    const row = list.querySelector(`[data-key="${CSS.escape(layer.id)}"]`);
+    row?.scrollIntoView({block: 'nearest', behavior: 'smooth'}); row?.querySelector('.surface-toggle')?.focus({preventScroll: true});
+  }
   // The inspector (show, host.inspect): the layers that drew one pixel, top first, with what each covers and what of it shows, the effects
   // laid after them, and the facts rules read there. A pixel comes from Pick (Pick on the map starts it: host.pick; its card's Surface door
   // shows the pixel here); it reads again after each committed edit.
