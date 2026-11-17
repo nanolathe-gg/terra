@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {planPreviewBlocks,previewGrid,previewWindow,previewQuality,previewPixels} from '../sculpt-preview.js';
+import {planPreviewBlocks,previewGrid,previewWindow,previewQuality,previewPixels,createPreviewLoad} from '../sculpt-preview.js';
 import {createCoverage} from './perf-coverage.mjs';
 const map={width:8192,height:8192},view={x:2048,y:2048,width:1728,height:1024};
 test('a whole-view preview is one block when it fits',()=>{
@@ -65,4 +65,27 @@ test('automatic preview resolution uses edit size at the current zoom; manual ch
  assert.equal(previewPixels('auto',{width:256,height:352},.5),2);
  for(const choice of ['2','3','4','8'])for(const area of [small,large])assert.equal(previewPixels(choice,area),Number(choice));
  for(const invalid of [undefined,null,'bad','0','1','9'])assert.equal(previewQuality(invalid),'auto');
+});
+
+
+test('Auto load backoff rejects isolated slow frames and requires stable recovery',()=>{
+ const load=createPreviewLoad();
+ load.observe(60,0);load.observe(15,20);load.observe(60,40);assert.equal(load.scale,1);
+ load.observe(60,100);assert.equal(load.observe(60,160),true);assert.equal(load.scale,2);
+ for(let i=0;i<8;i++)load.observe(8,180+i*20);assert.equal(load.scale,2,'minimum dwell prevents oscillation');
+ assert.equal(load.observe(8,700),true);assert.equal(load.scale,1);
+ for(const ms of [NaN,Infinity,0,-1])assert.equal(load.observe(ms,800),false);
+ assert.equal(load.stats().changes,2);
+});
+
+
+test('batched GPU completion callbacks measure cadence across every picture',()=>{
+ const load=createPreviewLoad();let at=0;
+ for(let i=0;i<30;i++){at+=i%2?30:0;load.complete(at);}
+ assert.equal(load.scale,1);assert.equal(load.stats().lastMs,15);
+ for(let i=0;i<16;i++){at+=i%2?100:0;load.complete(at);}
+ assert.equal(load.scale,2);
+ for(let i=0;i<80;i++){at+=i%2?20:0;load.complete(at);}
+ assert.equal(load.scale,1);assert.equal(load.stats().lastMs,10);
+ const n=load.stats().samples;load.complete(at+500,true);assert.equal(load.stats().samples,n,'idle time restarts the cadence window');
 });
