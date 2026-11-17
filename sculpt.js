@@ -2229,7 +2229,8 @@ function resetWorld(){
     }
     restoreMaterials(next);setSurfaceList(structuredClone(baseSurface),false);
     worldChanged(renderer.setColors(worldColors(),currentDrawOptions()));cancelWeather();evaluate(0);queueWeather();
-    const url=new URL(location.href);for(const key of worldKeys(baseWorldConfig)){const value=experiment.get(key);if(value==null)url.searchParams.delete(key);else url.searchParams.set(key,value);}window.history.replaceState(null,'',url);
+    // The world now draws as the built-in one, so the address names none of its settings (a reload gives the same defaults).
+    const url=new URL(location.href);for(const key of worldKeys(baseWorldConfig))url.searchParams.delete(key);window.history.replaceState(null,'',url);
     worlds[worldId]=reset;checkpoint();
   }finally{worldStoreDirty=false;worldStoreTransaction--;saveWorlds();}
   buildWorldPanel();syncRockChoices();syncRocks();syncRockPanel();syncWorldControls();surfacePanel?.refresh();updateControls();status('Reset world settings to '+baseWorldConfig.biome+'.');
