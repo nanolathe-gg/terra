@@ -171,7 +171,7 @@ export function mountSurfacePanel(host) {
   const shown = key => solo ? key === solo : !hidden.has(key);
   const sendView = (force = false) => {
     const keys = host.surface().map(layerKey).filter(k => !shown(k)), text = keys.join('\n');
-    if (force ? text || sent : text !== sent) { sent = text; host.hide(keys); }
+    if (force ? text || sent : text !== sent) { sent = text; const one = solo && host.surface().find(l => layerKey(l) === solo); host.hide(keys, {solo: one ? nameOf(one) : null}); }
   };
   let editing = null;   // the list while a slider moves; committed on change
   const current = () => editing ?? host.surface();
@@ -486,7 +486,9 @@ export function mountSurfacePanel(host) {
   build();
   // show(at, read): the inspector's detail for a pixel already read (the Pick card's Surface door); it reads again after each committed edit.
   // sync(): after a World setting or the map's rock types in use change, the sections follow.
-  return {refresh, sync, open:openLayer, summary:()=>{
+  // showAll(): the design view back to every layer (the map's label for it, sculpt.js).
+  const showAll = () => { if (!hidden.size && !solo) return; hidden.clear(); solo = null; build(); sendView(); };
+  return {refresh, sync, showAll, open:openLayer, summary:()=>{
     const layers=host.surface(),placed=placeAll(layers);
     return layers.map((layer,i)=>({key:layerKey(layer),name:nameOf(layer),section:placed[i].section,coverage:layer.amount==null&&BUILTIN_SETTINGS[layer.builtin]?'World setting':percent(layer.amount??1),stage:stageOf(layer),index:i})).sort((a,b)=>b.stage-a.stage||b.index-a.index);
   }, show: (at, read) => { reading++; lastAt = at; result.hidden = false; showInspect(read); }};

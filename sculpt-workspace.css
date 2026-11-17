@@ -18,7 +18,6 @@
 #pane-world:not([hidden]){flex:1;min-width:0;min-height:0;display:flex}
 #world-editor{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;border:0;margin:0;padding:0}
 #world-control-search{position:static;display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line)}
-#world-control-search>label:first-child{display:none}#world-search{flex:1;min-width:0;padding:5px 7px;font-size:11px}
 #world-control-search .fine-controls{font-size:11px;margin:0;white-space:nowrap}#world-control-count{margin:0;font-size:10px;white-space:nowrap}
 .world-studio{flex:1;min-height:0;display:grid;grid-template-columns:118px minmax(0,1fr)}
 .world-nav{display:flex;flex-direction:column;gap:1px;padding:6px 4px;border-right:1px solid var(--line);overflow-y:auto;scrollbar-width:thin}
@@ -35,11 +34,6 @@
 .world-tab:not(:has([data-knob]:not([hidden]),.world-fixed))::after{content:"Only fine settings here. Turn on All to see them.";font-size:11px;color:var(--muted)}
 .world-tab #column-panel{margin:0 0 8px;padding:0;border:0}.world-tab details.panel[hidden]{display:none}
 /* A search lists every tab that holds a match under its name; the section list, the tabs and the fixed blocks step aside. */
-.world-studio.searching{grid-template-columns:minmax(0,1fr)}
-.searching .world-nav,.searching .world-tabs,.searching .world-fixed,.searching .world-tab.no-match{display:none}
-.searching .world-sections{display:block;overflow-y:auto;scrollbar-width:thin}.searching .world-section:not([hidden]){display:block}
-.searching .world-tab:not([hidden]){overflow:visible;padding-bottom:2px}.searching .world-tab::after{content:none}
-.searching .world-where{display:block;font-size:11px;font-weight:600;color:#c3d7ce;margin:4px 0}
 /* Rock types: the picker stays above the tabs, so the rock type being edited is always in view. */
 .rock-picker{margin:0;padding:8px 10px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px;position:relative}
 .rock-current{display:flex;align-items:center;gap:8px}.rock-current-text{flex:1;min-width:0}.rock-current-text b{font-size:12px}.rock-current-text p{margin:1px 0 0}
@@ -229,11 +223,14 @@
 #along-preview{height:64px!important;width:100%!important;margin:0!important;border:1px solid #394d40!important;background:#17241d!important;border-radius:3px!important}
 .curve-actions{flex-wrap:nowrap}.curve-editors #curve-lean{display:none}.curve-editors #along-block .curve-actions span{display:none}
 #editor:disabled .curve-editors canvas{pointer-events:none;opacity:.5}
-.app.curves-large .curve-editors{position:fixed;z-index:7;left:calc(var(--tools-width) + 12px);right:calc(var(--inspector-width) + 12px);top:56px;bottom:36px;margin:0;padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:#10171bf7;border:1px solid #5a7465;border-radius:9px;box-shadow:0 14px 60px #000b}
-.app.curves-large .curve-pane{display:flex;flex-direction:column;min-height:0}.app.curves-large .curve-pane:first-child{flex:2}.app.curves-large #along-block:not([hidden]){flex:1;display:flex}
+/* Full size: the curves take the workspace beside the tool rail, as the material editor does, under a header that names the shape and closes. */
+.curve-large-head{display:none}
+.app.curves-large .curve-editors{position:fixed;z-index:7;left:var(--tools-width);right:0;top:44px;bottom:24px;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr) 240px;grid-template-rows:auto minmax(0,2fr) minmax(0,1fr);background:var(--panel);border:0;border-radius:0;box-shadow:none}
+.app.curves-large .curve-large-head{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--line)}.curve-large-head h2{font-size:14px;margin:0}.curve-large-head #curve-close{margin-left:auto}.app.curves-large #curve-large{display:none}
+.app.curves-large .curve-pane{display:flex;flex-direction:column;min-height:0;grid-column:1;padding:10px 14px}.app.curves-large #along-block:not([hidden]){display:flex;border-top:1px solid var(--line)}.app.curves-large #along-block[hidden]+.curve-numbers{grid-row:2/3}
 .app.curves-large #section-preview,.app.curves-large #along-preview{flex:1;height:auto!important;min-height:0}
 .app.curves-large .curve-editors #curve-lean,.app.curves-large .curve-editors #along-block .curve-actions span{display:inline}
-.app.curves-large .curve-actions button{padding:4px 9px;font-size:11px}.app.curves-large .curve-heading h2{font-size:13px}
+.app.curves-large .curve-heading h2{font-size:13px}
 
 /* The surfaces. */
 .surface{position:fixed;z-index:15;background:var(--panel);border:1px solid #5a7465;border-radius:9px;box-shadow:0 14px 60px #000b;padding:12px 14px;overflow:auto;scrollbar-width:thin;max-height:calc(100dvh - 84px)}
@@ -247,7 +244,7 @@
 /* The View menu: how the map shows, the panels, then the editor's settings. */
 .surface-settings .view-switch{display:flex;gap:0}.surface-settings .view-switch button{flex:1;border-radius:0;padding:5px 8px;font-size:11px}
 .surface-settings .view-switch button:first-child{border-radius:5px 0 0 5px}.surface-settings .view-switch button:last-child{border-radius:0 5px 5px 0}.surface-settings .view-switch button+button{border-left:0}
-.surface-settings .view-toggle{margin:10px 0 0}.surface-settings>h3{margin:16px 0 6px}
+.surface-settings .view-toggle{margin:10px 0 0}.surface-settings .view-image{display:block;width:100%;margin-top:12px}.surface-settings>h3{margin:16px 0 6px}
 .view-panels{display:flex;gap:4px}.view-panels button{flex:1;padding:5px 6px;font-size:11px;white-space:nowrap}
 .view-panels button[aria-expanded=true]{background:#344c42;border-color:#78ae8d;color:#d9ffe5}
 .surface-settings .editor-preferences{margin:16px 0 14px}.surface-settings>h2{padding-top:12px;margin-bottom:8px;border-top:1px solid var(--line)}
@@ -285,7 +282,7 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 #new-map-world-row{justify-content:flex-start!important;max-width:360px}#new-map-world-row input{flex:2}#new-map-world-row button{flex:1}
 #new-map-sizes button{white-space:nowrap;font-size:11px}.new-map-name{display:block;margin-top:10px}.new-map-name input{margin-top:4px}
 
-.curve-numbers{display:none}.app.curves-large .curve-editors{display:grid;grid-template-columns:minmax(0,1fr) 210px;grid-template-rows:minmax(0,2fr) minmax(0,1fr);right:12px;background:#10171b}.app.curves-large .curve-pane{grid-column:1}.app.curves-large .curve-numbers{display:flex;flex-direction:column;gap:8px;grid-column:2;grid-row:1/3;overflow:auto;border-left:1px solid #3e5047;padding-left:12px}.curve-numbers h3{margin:8px 0 0}.curve-numbers label{display:flex;justify-content:space-between;align-items:center;gap:6px}.curve-numbers input{width:74px}.curve-numbers select{max-width:142px}#curve-shape-preview{width:100%;height:auto;background:#10171b;border:1px solid #3e5047}#map-progress{position:absolute;left:0;right:0;top:0;height:3px;z-index:8;overflow:hidden;background:#57745a55}#map-progress:after{content:'';display:block;width:35%;height:100%;background:#b4d589;animation:terrain-progress 1.4s ease-in-out infinite}@keyframes terrain-progress{from{transform:translateX(-100%)}to{transform:translateX(390%)}}.render-pending{position:relative}#render-stage{color:#e8bf72;white-space:nowrap}
+.curve-numbers{display:none}.app.curves-large .curve-numbers{display:flex;flex-direction:column;gap:8px;grid-column:2;grid-row:2/4;overflow:auto;border-left:1px solid var(--line);padding:10px 14px}.curve-numbers h3{margin:8px 0 0}.curve-numbers label{display:flex;justify-content:space-between;align-items:center;gap:6px}.curve-numbers input{width:74px}.curve-numbers select{max-width:142px}#curve-shape-preview{width:100%;height:auto;background:#10171b;border:1px solid #3e5047}#map-progress{position:absolute;left:0;right:0;top:0;height:3px;z-index:8;overflow:hidden;background:#57745a55}#map-progress:after{content:'';display:block;width:35%;height:100%;background:#b4d589;animation:terrain-progress 1.4s ease-in-out infinite}@keyframes terrain-progress{from{transform:translateX(-100%)}to{transform:translateX(390%)}}.render-pending{position:relative}#render-stage{color:#e8bf72;white-space:nowrap}
 
 .render-pending:after{content:'●';color:#e8bf72;position:absolute;right:3px;top:4px;font-size:8px}
 
@@ -446,4 +443,6 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .world-home-head{display:flex;flex-wrap:wrap;gap:7px;align-items:center}.world-home-head .world-name{display:block;width:100%;margin:0;font-size:17px}.world-home-head #biome-select{width:100%}.world-home-head .scope-tag{max-width:100%;white-space:normal}.world-home-head .row{width:100%}
 .world-home-cards{display:flex;flex-direction:column;gap:10px;margin-top:10px}.world-home-card{border:1px solid var(--line);border-radius:7px;padding:9px;min-width:0}.world-home-card>h3{font-size:13px;margin:0 0 7px;color:var(--text)}.world-home-card .control{margin:6px 0}.world-home-card .material-pick{display:flex;gap:5px;align-items:center;flex-wrap:wrap}.world-home-card select{min-width:0;max-width:100%;flex:1}.world-home-card .small{font-size:10px;margin:4px 0}.world-home-card .link{font-size:11px}.world-all-settings{margin-top:7px}.world-home-layer{display:block;text-align:left;margin:5px 0}.world-home-rock{display:flex;gap:6px;align-items:center;border:0;background:transparent;padding:4px 0;text-align:left}.world-use-dot{width:6px;height:6px;border-radius:50%;background:#9cdda6}.world-home-foot{margin-top:12px;flex-wrap:wrap}.world-home-back{margin:0 0 8px}.world-home .world-rows:empty{display:none}
 
-.searching .world-home-back,.searching .world-all-settings{display:none}
+
+/* The design view's label on the map (World › Surface Hide and Solo): what is hidden, that it is temporary, and the way back. */
+.map-view-note{position:absolute;z-index:6;top:10px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:5px 6px 5px 12px;border:1px solid #6f6136;border-radius:8px;background:#2d281bf0;color:#f1d58c;font-size:12px;font-weight:600;white-space:nowrap;box-shadow:0 6px 24px #0008}.map-view-note .small{color:#d6c9a3;font-weight:400}.map-view-note[hidden]{display:none}

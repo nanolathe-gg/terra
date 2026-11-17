@@ -392,7 +392,7 @@ function updateControls() {
   const editing=selected>=0 && nodes[selected]?.params;
   $('brush-panel').classList.toggle('editing',Boolean(editing));
   // A selected shape's card carries its name; a drawing tool's says what the next stroke makes; a brush's is the brush.
-  $('brush-title').textContent=editing?shapeName(selected):tool==='move'?'Select':['landform','fissure'].includes(toolKind(tool))?`New ${toolLabel(tool)||NODE_NAMES[toolKind(tool)]}`:toolLabel(tool)||NODE_NAMES[tool]||tool;
+  $('brush-title').textContent=editing?'Editing '+shapeName(selected):tool==='move'?'Select':['landform','fissure'].includes(toolKind(tool))?`New ${toolLabel(tool)||NODE_NAMES[toolKind(tool)]}`:toolLabel(tool)||NODE_NAMES[tool]||tool;
   $('brush-scope').textContent=editing?'Shared settings for every path in this shape.':tool==='move'?'Click a shape to select and edit it.':'Settings for your new shape.';
   // The scope tag says what an edit here changes: the selected shape, or the shapes the tool draws next.
   $('brush-scope-tag').textContent=editing?'This shape':'New shapes';$('brush-scope-tag').title=editing?'Edits here change this shape only':'Edits here set up the next shapes this tool draws';
@@ -879,7 +879,11 @@ function surfaceHost() {
     recolor:(layer,rgb,commit)=>{const m=layer.material!=null?layerMaterial(layer):roleCopy(layer.builtin);if(!m)return;editMaterials(setMaterial(mapMaterials,m.slot,recolorMaterial(m,rgb,drawnColor(m))));if(commit)checkpoint(true);},
     slotMaterial:slot=>{const m=mapMaterials.find(m=>m.slot===slot);return m?{name:m.name,color:hex(m)}:null;},
     // Layers hidden while the artist designs (their keys): a view of this page only, never saved, undone or exported.
-    hide:keys=>{if(!renderer)return;const stage=renderer.uniformStage(()=>renderer.setSurfaceHidden(keys));worldChanged({stage:stage??'F',world:false});schedule();},
+    // The design view (Hide and Solo in World › Surface): the map says it is on and that an export still draws every layer.
+    hide:(keys,{solo=null}={})=>{
+      $('map-view-note').hidden=!keys.length;
+      $('map-view-text').textContent=solo?`Showing ${solo} alone`:`${keys.length} surface layer${keys.length===1?'':'s'} hidden`;
+      if(!renderer)return;const stage=renderer.uniformStage(()=>renderer.setSurfaceHidden(keys));worldChanged({stage:stage??'F',world:false});schedule();},
     material:layer=>{const m=layerMaterial(layer);return m?{name:m.name,color:hex(m),own:own(m),height:Boolean(m.nodes?.find(n=>n.type==='output')?.in?.height)}:null;},
     edit:(layer,button)=>{const m=layerMaterial(layer);if(m)materialEditor?.open(m.slot,button);},
     library:()=>Object.entries(LIBRARY).filter(([key])=>!key.endsWith('-water')).map(([key,m])=>({key,name:m.name,color:hex(m)})),
@@ -954,7 +958,6 @@ function rockValues(slot) {
 }
 // World on one section, with no search hiding it (as openRockType).
 function openWorldSection(id) {
-  const search=$('world-search'); if (search.value) { search.value=''; search.dispatchEvent(new Event('input')); }
   $('tab-world').click(); $(id).click();
 }
 function pickHost() {
@@ -1072,7 +1075,6 @@ function followCardRock() {
 // World › Rock types (and one of its tabs) on rock type `slot`; null keeps the picker's choice. A search in World would hide the section.
 function openRockType(slot,tab='') {
   if (slot!==null && slot!==rockSelected) selectRock(slot);
-  const search=$('world-search'); if (search.value) { search.value=''; search.dispatchEvent(new Event('input')); }
   $('tab-world').click(); $('wsec-rock-types').click(); if (tab) $('wtab-rock-types-'+tab).click();
   $('rock-chips').querySelector('[aria-checked="true"]')?.focus({preventScroll:true});
 }
@@ -2390,7 +2392,7 @@ function buildKnobs() {
   materialEditor?.dispose();materialEditor=mountMaterialEditor({suspend:on=>{materialCovers=on;if(!on&&materialTerrainDirty){materialTerrainDirty=false;evaluate(0);}mapCanvas?.setSuspended(on);if(!on&&materialWeatherPending)queueWeather();},dock:editor=>editorUI.dock(editor),worlds:()=>config.biomes||{},world:()=>config.biomeId,materials:()=>mapMaterials,strokes:()=>nodes,rocks:()=>mapRocks,renderer:()=>renderer,edit:editMaterials,delete:removeMaterial,checkpoint:()=>checkpoint(true),status,
     scope:m=>materialIsWorld(m)?`Every map in ${activeWorld().name}`:'This map',
     layerName:key=>{const names=(config.surface||[]).filter(l=>l.material===key).map(l=>l.name||BUILTIN_LABELS[l.builtin]||l.builtin);return names.length?names.join(', '):null;}});
-  surfacePanel=mountSurfacePanel(surfaceHost());
+  surfacePanel=mountSurfacePanel(surfaceHost());$('map-view-show').onclick=()=>surfacePanel?.showAll();
 }
 // The facts the World panel enables a row by (sculpt-knobs.js worldPanelValues, which worldControlRequirement reads).
 const panelFacts=() => ({config,renderer,nodes,materials:mapMaterials,colors:worldColors(),weathering:weatherOn(),materialWeathering:surfaceValues()['material-weathering']});
@@ -2701,7 +2703,7 @@ async function bootMap(pending=null) {
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); materialUseKey='[]'; syncMaterials();
   // A material's drawn color read back (sculpt-material-cache.js readMeans): the Color pickers show it.
   renderer.onmeans=()=>{syncRockColors();refreshShallowRow();surfacePanel?.refresh();materialEditor?.refreshColors?.();pickCard?.colors();};   // the world's ground and water are materials: a renderer has none until told
-  worldChanged(renderer.setColors(worldColors()));$('export').textContent='Export view PNG';
+  worldChanged(renderer.setColors(worldColors()));$('export').textContent='Save view image';
   buildKnobs(); buildWorldPanel();
   // The Rock column panel edits the selected preset's beds: the world's column for slot 0, a preset's own sections (its copy of the world's
   // until edited; Restore gives it the world's again).

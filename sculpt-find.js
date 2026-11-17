@@ -280,13 +280,12 @@ function land(target, mark = target) {
   else if (mark) bringIntoView(mark, false);
   flash(mark);
 }
-// A World row the panel hides: by its search, by "All" (a fine setting), by the Shine tab's material, or in "Show N unavailable settings".
+// A World row the panel hides: by "All" (a fine setting), by the Shine tab's material, or in "Show N unavailable settings".
 // A control of a World group that is not a row of its own (Cracks' Style) shows when its group does, with "All".
 function showWorldRow(el) {
-  const row = el.closest('[data-knob]'), group = el.closest('.world-subsection'), search = $('world-search'), fine = $('world-fine');
+  const row = el.closest('[data-knob]'), group = el.closest('.world-subsection'), fine = $('world-fine');
   const hidden = () => row ? row.hidden : Boolean(group?.hidden), eligible = () => row ? row.dataset.eligible === 'true' : !group?.hidden;
   if (!hidden()) return;
-  if (search?.value) { search.value = ''; search.dispatchEvent(new Event('input', {bubbles: true})); }
   if (hidden() && !eligible() && fine && !fine.checked) { fine.checked = true; fine.dispatchEvent(new Event('change', {bubbles: true})); }
   if (!row) return;
   if (row.hidden && !eligible()) for (const b of row.closest('.world-tab')?.querySelectorAll('[data-shine-material]') ?? []) { b.click(); if (eligible()) break; }
@@ -309,8 +308,6 @@ function reveal(el) {
 export function goTo(el, mark) {
   if (!el) return;
   reveal(el);
-  const search = $('world-search');
-  if (!shown(el) && el.closest('#pane-world') && search?.value) { search.value = ''; search.dispatchEvent(new Event('input', {bubbles: true})); reveal(el); }
   land(el, mark || el.closest(MARK) || el);
 }
 const layerRow = key => $('surface-layers')?.querySelector(`.surface-layer[data-key="${CSS.escape(key)}"]`);
@@ -355,7 +352,7 @@ function pickFeature(button) {
 function openMaterial(slot) {
   const open = $('materials-toolbar');
   if (!open || open.disabled) return;
-  if (!$('material-editor').open) open.click();   // Materials closes the editor when it is already open
+  if (!$('material-editor').open) open.click();
   document.querySelector(`#library-map [data-slot="${CSS.escape(slot)}"]:not(.current)`)?.click();
 }
 
