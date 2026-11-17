@@ -23,6 +23,8 @@ const uniformSpan = f => f.stride ? f.stride * f.count : (f.width || 1) * 4;
 
 // The mask planes when the config names none: as many as MASK_KEYS (sculpt-scene.js, which says what each holds). The masks texture array has a layer per 4 planes.
 const MASK_PLANE_COUNT = 25;
+// The output stage's candidate table (engine-output.wgsl): CELLS^3 grid points, N = 8 one-byte palette indices each.
+const OUTPUT_TABLE_CELLS = 64 ** 3, OUTPUT_TABLE_BYTES = OUTPUT_TABLE_CELLS * 8;
 
 // The shaders keep their GLSL origins' structure: the common source is
 // pasted at /*COMMON*/, and #ifdef / #ifndef / #else / #endif keep or drop
@@ -351,6 +353,11 @@ export class TerrainRenderer {
     this.outputPalette = this.worldResource(this.device.createBuffer({label: 'output palette', size: Math.max(16, colours.length * 16), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST}));
     this.device.queue.writeBuffer(this.outputPalette, 0, new Float32Array(colours.flatMap(c => [c[0], c[1], c[2], 0])));
     this.outputCount = colours.length;
+    // Its candidate table (engine-output.wgsl buildTable, 64^3 grid points x 8 indices, 2 MiB), built before the next output pass reads it.
+    if (this.outputTable) { this.worldTextures.delete(this.outputTable); this.outputTable.destroy(); }
+    this.outputTable = this.worldResource(this.device.createBuffer({label: 'output palette table', size: OUTPUT_TABLE_BYTES, usage: GPUBufferUsage.STORAGE}));
+    this.track?.(this.outputTable, 'output palette table', OUTPUT_TABLE_BYTES, 'shared');
+    this.outputTableBuilt = false;
   }
 
 
@@ -610,14 +617,32 @@ export class TerrainRenderer {
   // The output stage (engine-output.wgsl): the draw's lit color in `source` reduced to the game palette, pixel by pixel, and drawn
   // into `target` at `offset`. `chunk` holds the raster's place and scale (a cached tile's own settings); the world's settings are current:
   // palette off, Clay, a diagnostic view, or a raster coarser than art pixels pass the true color through.
+  // The palette's candidate table is built here, in its own submission: the queue runs in order, so every output pass encoded after this
+  // call reads the finished table.
   async outputPipelines() {
-    if (this.outputPipeline) return;
-    const device = this.device, module = device.createShaderModule({label: 'engine-output.wgsl', code: this.outputSource});
-    const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
-    if (errors.length) throw new Error('nanolathe: engine-output.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
-    [this.outputPipeline, this.outputBlit] = await Promise.all([
-      device.createComputePipelineAsync({label: 'output stage', layout: 'auto', compute: {module, entryPoint: 'patternPixels'}}),
-      device.createRenderPipelineAsync({label: 'output blit', layout: 'auto', vertex: {module, entryPoint: 'blitVertex'}, fragment: {module, entryPoint: 'blitFragment', targets: [{format: this.format}]}, primitive: {topology: 'triangle-list'}})]);
+    if (!this.outputPipeline) {
+      const device = this.device, module = device.createShaderModule({label: 'engine-output.wgsl', code: this.outputSource});
+      const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
+      if (errors.length) throw new Error('nanolathe: engine-output.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
+      const [pipeline, blit, build] = await Promise.all([
+        device.createComputePipelineAsync({label: 'output stage', layout: 'auto', compute: {module, entryPoint: 'patternPixels'}}),
+        device.createRenderPipelineAsync({label: 'output blit', layout: 'auto', vertex: {module, entryPoint: 'blitVertex'}, fragment: {module, entryPoint: 'blitFragment', targets: [{format: this.format}]}, primitive: {topology: 'triangle-list'}}),
+        device.createComputePipelineAsync({label: 'output palette table', layout: 'auto', compute: {module, entryPoint: 'buildTable'}})]);
+      this.outputTableBuild = build; this.outputBlit = blit; this.outputPipeline = pipeline;
+    }
+    if (!this.outputTableBuilt) this.buildOutputTable();
+  }
+  buildOutputTable() {
+    const device = this.device, count = device.createBuffer({label: 'output palette count', size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
+    device.queue.writeBuffer(count, 0, new Uint32Array([this.outputCount, 0, 0, 0]));
+    const encoder = device.createCommandEncoder({label: 'output palette table'}), pass = encoder.beginComputePass({label: 'output palette table'});
+    pass.setPipeline(this.outputTableBuild);
+    pass.setBindGroup(0, device.createBindGroup({layout: this.outputTableBuild.getBindGroupLayout(0), entries: [{binding: 2, resource: {buffer: this.outputPalette}}, {binding: 6, resource: {buffer: this.outputTable}}, {binding: 7, resource: {buffer: count}}]}));
+    pass.dispatchWorkgroups(OUTPUT_TABLE_CELLS / 64);
+    pass.end();
+    device.queue.submit([encoder.finish()]);
+    count.destroy();
+    this.outputTableBuilt = true;
   }
   // The output stage's working texture, at least width x height. A batch sizes it once before its first pass: a release mid-encoder would
   // take it from the passes already encoded. An eviction releases it with the other working textures.
@@ -646,7 +671,7 @@ export class TerrainRenderer {
     const compute = encoder.beginComputePass({label: 'output stage'});
     compute.setPipeline(this.outputPipeline);
     compute.setBindGroup(0, device.createBindGroup({layout: this.outputPipeline.getBindGroupLayout(0), entries: [
-      {binding: 0, resource: source.createView()}, {binding: 1, resource: this.outputTexture.createView()}, {binding: 2, resource: {buffer: this.outputPalette}}, {binding: 3, resource: {buffer: job}}]}));
+      {binding: 0, resource: source.createView()}, {binding: 1, resource: this.outputTexture.createView()}, {binding: 2, resource: {buffer: this.outputPalette}}, {binding: 3, resource: {buffer: job}}, {binding: 5, resource: {buffer: this.outputTable}}]}));
     compute.dispatchWorkgroups(Math.ceil(width / 8), Math.ceil(height / 8));
     compute.end();
     const blit = encoder.beginRenderPass({label: 'output blit', colorAttachments: [{view: target.createView(), loadOp: 'load', storeOp: 'store'}]});
@@ -802,7 +827,7 @@ export class TerrainRenderer {
     // Also the color pass's geometry record and frame (allocateGeometry; the frame holds the canvas size) and its mask staging (packColorMasks).
     // The inspector's record (probeBuffer) is written by the color pass and read only by the page.
     // The output stage (encodeOutput) reads the color pass's picture (voxelColor), writes its working texture and takes its job from the
-    // chunk's settings and the palette's length; the palette itself is a world resource (outputPaletteBuffer).
+    // chunk's settings and the palette's length; the palette and its candidate table are world resources (outputPaletteBuffer).
     const own = new Set([this.fieldsTexture, this.looseBuffer, voxel?.uniform, this.geometryRecord, this.geometrySettings, this.maskPackBuffer, this.maskPackSettings, this.probeBuffer, this.voxelColor, this.outputTexture, ...(this.outputJobs ?? [])].filter(Boolean));
     const produced = {has: r => own.has(r) || Boolean(voxel?.made?.has(r) || rock?.made?.has(r))};
     // volatile: produced resources whose bytes may differ between two draws of the same checksum without changing the picture. The voxel

@@ -1,9 +1,12 @@
 // The output stage: the draw's lit color (true color) reduced to the game palette, the last step of every picture.
-// Pattern dithering (Knoll): for each pixel, N candidate palette colors by error accumulation (each picks the color nearest the lit color
+// Pattern dithering (Knoll): for each color, N candidate palette colors by error accumulation (each picks the color nearest the lit color
 // plus K of the error so far), sorted dark to light; a 32 x 32 blue-noise threshold (RANKS) picks one. A flat area is then an even,
 // irregular mix whose mean is near the lit color. Each pixel depends only on its own lit color and its place, so an edit changes only the
 // pixels whose lit color moved, and the threshold, keyed to art pixels and repeating with the game's 32 px tile, keeps a repeating lit tile
 // repeating, and makes a preview's pixels an export's.
+// The candidates come from a table (buildTable, once for each palette): a CELLS^3 grid over the 0..255 color cube, each point's N palette
+// indices. A pixel reads the candidates of the grid point nearest its lit color. Searching the palette N times for every pixel cost about
+// ten times the lookup (Chrome, Metal, 256 x 256 crops: 1.50 against 0.13 ms); the grid moves about an eighth of the dots, by eye the same.
 // N = 8 and K = 0.5 (prototype, measured on four crops): K = 1 keeps the mean closer but picks far hues (cyan flecks in Green's water, red
 // in its grass); 16 candidates changed little.
 // A job that is not enabled (palette off, Clay, a diagnostic view, a raster coarser than art pixels) passes the true color through.
@@ -19,9 +22,13 @@ struct Job {
 @group(0) @binding(2) var<storage, read> palette: array<vec4f>;   // rgb in 0..255
 @group(0) @binding(3) var<uniform> job: Job;
 @group(0) @binding(4) var shown: texture_2d<f32>;
+@group(0) @binding(5) var<storage, read> table: array<u32>;          // patternPixels: N palette indices a grid point, 4 to a word
+@group(0) @binding(6) var<storage, read_write> built: array<u32>;    // buildTable writes it
+@group(0) @binding(7) var<uniform> paletteCount: vec4u;              // buildTable: x the palette's colors
 
 const N = 8;
 const K = 0.5;
+const CELLS = 64u;
 var<workgroup> colors: array<vec3f, 256>;
 
 // The threshold, by rank: python3 measure/blue_noise.py (void-and-cluster, sigma 1.5, fixed seed), committed as numbers.
@@ -70,38 +77,59 @@ fn before(a: vec3f, b: vec3f) -> bool {
     return a.b < b.b;
 }
 
-@compute @workgroup_size(8, 8)
-fn patternPixels(@builtin(global_invocation_id) id: vec3u, @builtin(local_invocation_index) lane: u32) {
-    for (var i = lane; i < min(job.count, 256u); i += 64u) { colors[i] = palette[i].rgb; }
+// The grid point nearest a lit color (whole numbers 0..255), and the color of a grid point: in whole numbers, so every GPU agrees.
+fn cellOf(lit: vec3u) -> vec3u { return (lit * (2u * (CELLS - 1u)) + 255u) / 510u; }
+fn cellColor(cell: vec3u) -> vec3f { return vec3f((cell * 510u + (CELLS - 1u)) / (2u * (CELLS - 1u))); }
+fn cellIndex(cell: vec3u) -> u32 { return cell.x + CELLS * (cell.y + CELLS * cell.z); }
+
+// Each grid point's candidates: N palette indices, dark to light, packed 4 to a word. The palette's colors are whole numbers (0..255),
+// so the distances are exact on every GPU and the table is the same everywhere.
+@compute @workgroup_size(64)
+fn buildTable(@builtin(global_invocation_id) id: vec3u, @builtin(local_invocation_index) lane: u32) {
+    let count = min(paletteCount.x, 256u);
+    for (var i = lane; i < count; i += 64u) { colors[i] = palette[i].rgb; }
     workgroupBarrier();
-    let p = vec2i(id.xy);
-    if (any(p >= vec2i(job.size))) { return; }
-    let raw = textureLoad(source, p, 0).rgb;
-    if (job.enabled == 0u) { textureStore(reduced, p, vec4f(raw, 1.0)); return; }
-    let lit = round(raw * 255.0);
-    var cand: array<vec3f, N>;
+    if (id.x >= CELLS * CELLS * CELLS) { return; }
+    let cell = vec3u(id.x % CELLS, (id.x / CELLS) % CELLS, id.x / (CELLS * CELLS));
+    let lit = cellColor(cell);
+    var cand: array<u32, N>;
     var error = vec3f(0.0);
     for (var c = 0; c < N; c++) {
         let want = lit + error * K;
-        var best = colors[0];
+        var best = 0u;
         var distance = 1e20;
-        for (var i = 0u; i < job.count; i++) {
+        for (var i = 0u; i < count; i++) {
             let delta = colors[i] - want;
             let e = dot(delta, delta);
-            if (e < distance) { distance = e; best = colors[i]; }
+            if (e < distance) { distance = e; best = i; }
         }
         cand[c] = best;
-        error += lit - best;
+        error += lit - colors[best];
     }
     for (var i = 1; i < N; i++) {
         let v = cand[i];
         var j = i - 1;
-        while (j >= 0 && before(v, cand[j])) { cand[j + 1] = cand[j]; j--; }
+        while (j >= 0 && before(colors[v], colors[cand[j]])) { cand[j + 1] = cand[j]; j--; }
         cand[j + 1] = v;
     }
+    let at = cellIndex(cell) * (N / 4);
+    for (var w = 0; w < N / 4; w++) {
+        built[at + u32(w)] = cand[w * 4] | (cand[w * 4 + 1] << 8u) | (cand[w * 4 + 2] << 16u) | (cand[w * 4 + 3] << 24u);
+    }
+}
+
+@compute @workgroup_size(8, 8)
+fn patternPixels(@builtin(global_invocation_id) id: vec3u) {
+    let p = vec2i(id.xy);
+    if (any(p >= vec2i(job.size))) { return; }
+    let raw = textureLoad(source, p, 0).rgb;
+    if (job.enabled == 0u) { textureStore(reduced, p, vec4f(raw, 1.0)); return; }
+    let lit = vec3u(round(clamp(raw, vec3f(0.0), vec3f(1.0)) * 255.0));
     let at = ((job.origin + p) % 32 + vec2i(32)) % 32;
     let threshold = (f32(RANKS[at.y * 32 + at.x]) + 0.5) / 1024.0;
-    textureStore(reduced, p, vec4f(cand[min(N - 1, i32(threshold * f32(N)))] / 255.0, 1.0));
+    let k = u32(min(N - 1, i32(threshold * f32(N))));
+    let index = (table[cellIndex(cellOf(lit)) * (N / 4) + k / 4u] >> ((k % 4u) * 8u)) & 255u;
+    textureStore(reduced, p, vec4f(palette[index].rgb / 255.0, 1.0));
 }
 
 // The reduced picture into the presentation target (the canvas's format, which a storage texture may not have), at job.offset.
