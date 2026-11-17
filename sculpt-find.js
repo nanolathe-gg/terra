@@ -97,8 +97,8 @@ const clean = text => String(text ?? '').replace(/[▾▸▴▶…]/g, '').repla
 const SCOPES = [['pane-world', 'World'], ['brush-panel', 'Shape card'], ['pane-map', 'Map'], ['pane-graphics', 'View']];
 const FIELDS = 'input, select, textarea, .scrub';
 // Not rows of their own: the World panel's own search, a part's switch (its row is found), a slider's typed entry and native range,
-// the Surface list's heads and Add a layer (found by name below), file pickers.
-const SKIP = '#world-control-search, summary, .scrub-entry, .scrub-native, .surface-head, #surface-add, [type=file], [type=hidden], [type=button], [type=submit]';
+// the Surface list's heads, a closed row's Coverage and Add a layer (found by name below), file pickers.
+const SKIP = '#world-control-search, summary, .scrub-entry, .scrub-native, .surface-head, .surface-layer:not(.open) .surface-cover, #surface-add, [type=file], [type=hidden], [type=button], [type=submit]';
 const MARK = '.control, .color-row, .surface-layer, label';
 const KIND_WORDS = {color: 'color', choice: 'choice', switch: 'switch', slider: '', field: '', tool: 'tool', layer: 'layer', feature: 'feature', material: 'material', action: ''};
 // The menu actions: [button id, how, name]. "run" presses the button (a file dialog or New opens just as it would); "go" opens its panel and

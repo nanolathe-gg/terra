@@ -1,7 +1,8 @@
 // World › Surface's list without the DOM (sculpt-surface-panel.js): which section a layer is in, from facts read directly.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {layerSection, moveLayer} from '../sculpt-surface-panel.js';
+import {layerSection, moveLayer, whereWords, BUILTIN_WHERE, SURFACE_PRESETS} from '../sculpt-surface-panel.js';
+import {SURFACE_BUILTINS} from '../sculpt-material-model.js';
 
 // A world as the panel's host reads it: World settings by key (rock: a rock type's setting), roles, surfaces and facts.
 const world = ({controls = {}, roles = [], layers = [], facts = {}, materials = true, rocks = 0} = {}) => ({
@@ -68,4 +69,18 @@ test('a move steps past the nearest layer it moves among and lands beside it, pa
   assert.deepEqual(keys(layers), ['soil', 'rock', 'beach', 'moss'], 'the list itself is left as it was');
   const swap = moveLayer(layers, 1, 1, [1, 2]);
   assert.deepEqual(keys(swap), ['soil', 'beach', 'rock', 'moss'], 'neighbors swap');
+});
+
+test('a closed row says where the layer lies, in words from its own rule', () => {
+  assert.equal(whereWords({id: 'a', material: 'x'}), 'Everywhere');
+  assert.equal(whereWords({id: 'moss', where: [{fact: 'moisture', from: .4, fade: .1}, {fact: 'light', to: .8, fade: .1}]}), 'Where Moisture is above 0.4 and Sunlight is below 0.8');
+  assert.equal(whereWords({id: 'b', where: [{fact: 'aboveSea', from: -2, to: 5.125}]}), 'Where Height above the sea is -2 to 5.13');
+  assert.equal(whereWords({id: 'c', where: [{fact: 'top', to: -.1}]}), 'Where Lumps and hollows is below -0.1', 'a label’s parenthesis stays in the rule editor');
+  assert.equal(whereWords({id: 'd', score: {terms: [{fact: 'slope', weight: 1}, {fact: 'convexity', weight: 1.5}], from: 1.2, fade: .2}}), 'Where a score of Steepness and Convexity passes 1.2');
+  assert.equal(whereWords({id: 'e', score: {terms: [{fact: 'abovePlain', weight: 1}, {fact: 'light', weight: -2}, {fact: 'wetness'}], from: 40}}), 'Where a score of Height above the plain, less Sunlight and Wetness passes 40');
+  assert.equal(whereWords({builtin: 'sand'}), 'Where sand is painted or deposited', 'a built-in by its own line');
+  assert.equal(whereWords({builtin: 'rock', where: [{fact: 'slope', from: .2}]}), 'Where rock is bare: its faces and exposed ground, where Steepness is above 0.2', 'narrowed by its rule');
+  assert.equal(whereWords({builtin: 'highland', where: [{fact: 'slope', from: .2}]}), BUILTIN_WHERE.highland, 'Highland ground takes no rule');
+  assert.deepEqual(Object.keys(BUILTIN_WHERE).sort(), Object.keys(SURFACE_BUILTINS).sort(), 'one line for every built-in');
+  for (const p of SURFACE_PRESETS) assert.ok(whereWords(p).length > 0, p.key);
 });

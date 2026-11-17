@@ -4,6 +4,7 @@
 // hold, or a score); a row moves within its stage, a material layer can be removed, and a layer is added from a preset. Hovering or focusing a
 // row previews where that layer lies on the map. The list is a world setting: `host.apply(next, {commit})` stores it.
 import {SURFACE_BUILTINS, SURFACE_NEEDS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, SURFACE_OWN_AMOUNT, PLANT_KINDS, PLANT_LABELS, PLANT_FACTS, surfaceRows, isMaterialLayer, layerKey} from './sculpt-material-model.js';
+import {controlRow} from './sculpt-workspace.js';
 
 const $ = id => document.getElementById(id);
 // Plain names for the facts a rule reads, with the range a window's sliders cover.
@@ -18,6 +19,29 @@ export const BUILTIN_LABELS = {
   regrownMoss: 'Moss on regrown debris', fines: 'Debris fines', paintedRock: 'Painted rock', paintedSnow: 'Painted snow', paintedMoss: 'Painted moss',
   sandDust: 'Sand dust', sand: 'Sand', chips: 'Chips', iceCrest: 'Snow on ice crests', iceCap: 'Snow on ice tops',
 };
+// Where each built-in lies by its own placement (the masks engine-frag.wgsl gives each surfaceStage), in one plain line for its closed row.
+export const BUILTIN_WHERE = {
+  highland: 'On ground raised past Highland ground’s height', slopeCover: 'On slopes, above the low ground by the water', soil: 'Where the cover thins beside bare rock',
+  rock: 'Where rock is bare: its faces and exposed ground', beach: 'Along the shore, within reach of the water', crown: 'On raised ground, bare rock up to its crown',
+  baseBand: 'In a band just above the plain, on bedded rock', regrownMoss: 'Where plants grow back over cliff debris', fines: 'In cliff debris: its sand and grit',
+  paintedRock: 'Where Rock is painted, and rims and shores near paint', paintedSnow: 'Where Snow or ice is painted', paintedMoss: 'Where Moss is painted',
+  sandDust: 'A tint of sand where sand thins out', sand: 'Where sand is painted or deposited', chips: 'Small rock chips on weathered ground',
+  iceCrest: 'In lumps on high ground', iceCap: 'On the level tops of raised ground',
+};
+const fmt = v => String(+Number(v).toFixed(2));
+const factName = fact => (FACT_LABELS[fact]?.[0] ?? fact).replace(/\s*\([^)]*\)/g, '');
+const andList = words => words.length < 2 ? words.join('') : `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`;
+// Where a layer lies, in words, from its own rule ("Where Moisture is above 0.4 and Sunlight is below 0.8"; a score by its facts and threshold);
+// a built-in by its own line, narrowed by its rule if it has one.
+export function whereWords(layer) {
+  const window = w => { const name = factName(w.fact), from = w.from != null, to = w.to != null;
+    return from && to ? `${name} is ${fmt(w.from)} to ${fmt(w.to)}` : from ? `${name} is above ${fmt(w.from)}` : to ? `${name} is below ${fmt(w.to)}` : `${name} is anything`; };
+  const rule = layer?.score?.terms?.length ? `Where a score of ${andList(layer.score.terms.map(t => (Number(t.weight ?? 1) < 0 ? 'less ' : '') + factName(t.fact)))} passes ${fmt(layer.score.from ?? .5)}`
+    : layer?.where?.length ? `Where ${layer.where.map(window).join(' and ')}` : '';
+  const own = layer?.builtin != null ? BUILTIN_WHERE[layer.builtin] : '';
+  if (own) return rule && !SURFACE_FIXED.includes(layer.builtin) ? `${own}, ${rule[0].toLowerCase()}${rule.slice(1)}` : own;
+  return rule || 'Everywhere';
+}
 // Where a built-in's material comes from when the row has no material of its own to name: a role of the Materials panel or the rock types.
 // The others (SURFACE_DRAWABLE) each draw a material the row chooses.
 const BUILTIN_SOURCES = {
@@ -155,13 +179,18 @@ export function mountSurfacePanel(host) {
   let picking = false;   // a Color picker is open: a rebuild would close it
   const refresh = () => { if (!editing && !picking) { build(); sendView(true); } };   // after a material edit, an undo or a load; not while a slider moves
   const edit = (i, change, commit) => { const next = structuredClone(current()); change(next[i], next); put(next, commit); };
-  const slider = (label, value, min, max, step, onInput, title = '') => {
-    const id = uid(label), out = el('output', {htmlFor: id, value: String(value)});
-    const input = el('input', {type: 'range', id, min, max, step, value, title});
-    input.oninput = () => { out.value = input.value; onInput(Number(input.value), false); };
+  // The editor's own slider (sculpt-workspace.js controlRow, as the World rows and the shape card): a drag or a key moves the layer live, its
+  // release is one undo step. `show` writes the value its label shows.
+  const slider = (label, value, min, max, step, onInput, title = '', show = v => fmt(v)) => {
+    const id = uid(label), row = controlRow({id, label: `${label} <output></output>`, range: `min="${min}" max="${max}" step="${step}" value="${value}"`});
+    const input = row.querySelector('input[type=range]'), out = row.querySelector('output');
+    out.textContent = show(value); row.classList.add('surface-slider');
+    if (title) row.querySelector('.scrub').title = title;
+    input.oninput = () => { out.textContent = show(Number(input.value)); onInput(Number(input.value), false); };
     input.onchange = () => onInput(Number(input.value), true);
-    return el('label', {className: 'surface-slider', title}, el('span', {textContent: label}), input, out);
+    return row;
   };
+  const percent = v => Math.round(v * 100) + '%';
   const number = (label, value, onSet, title = label + ' (empty: no limit)', placeholder = 'open', part = label) => {
     const input = el('input', {type: 'number', step: 'any', value: value ?? '', placeholder, title, id: uid(part)});
     input.onchange = () => onSet(input.value === '' ? undefined : Number(input.value));
@@ -231,20 +260,20 @@ export function mountSurfacePanel(host) {
     head.append(toggle, chip);
     // The layer's name over what it draws: its material's name, or where a built-in's look comes from.
     const role = builtin && layer.material == null ? host.roleMaterial?.(layer.builtin) : null;
-    const drawn = el('span', {className: 'small surface-drawn', textContent: material?.name ?? role?.name ?? (layer.material != null ? 'its material is missing from this map' : BUILTIN_SOURCES[layer.builtin] ?? 'no material: it draws nothing')});
+    const drawn = el('span', {className: 'surface-drawn', textContent: material?.name ?? role?.name ?? (layer.material != null ? 'its material is missing from this map' : BUILTIN_SOURCES[layer.builtin] ?? 'no material: it draws nothing')});
+    // Where it lies, in words from its own rule (whereWords), then what it draws.
+    const line = el('span', {className: 'small surface-where'}, whereWords(layer) + ' · ', drawn);
     if (role) { chip.style.background = role.color; chip.classList.remove('own'); chip.title = role.name; }
     // Its place, where the stage says something an artist needs (snow lies over everything else).
     const place = CLOSED_PLACE[stage] ? [el('span', {className: 'small surface-place', textContent: CLOSED_PLACE[stage][0].toUpperCase() + CLOSED_PLACE[stage].slice(1)})] : [];
     if (!builtin) {
       const name = el('input', {type: 'text', value: nameOf(layer), maxLength: 80, className: 'surface-name', title: 'The layer’s name', id: uid('name')});
       name.onchange = () => edit(i, l => { l.name = name.value.trim() || 'Material layer'; }, true);
-      head.append(el('div', {className: 'surface-label'}, name, drawn, ...place));
+      head.append(el('div', {className: 'surface-label'}, name, line, ...place));
     } else {
       const name = el('span', {className: 'surface-name', textContent: nameOf(layer)}); name.onclick = () => toggle.click();
-      const label = el('div', {className: 'surface-label'}, name, drawn, ...place); label.onclick = () => toggle.click(); head.append(label);
+      const label = el('div', {className: 'surface-label'}, name, line, ...place); label.onclick = () => toggle.click(); head.append(label);
     }
-    const summary = [layer.amount != null && layer.amount !== 1 ? Math.round(layer.amount * 100) + '%' : '', ruleKind(layer) !== 'none' ? 'has a rule' : ''].filter(Boolean).join(' · ');
-    if (summary) head.append(el('span', {className: 'small surface-stage', textContent: summary}));
     const move = (d, text) => {
       const next = moveLayer(layers, i, d, peers), past = next && nameOf(layers[d > 0 ? Math.min(...peers.filter(k => k > i)) : Math.max(...peers.filter(k => k < i))]);
       const title = next ? `${d > 0 ? 'Raise: over' : 'Lower: under'} ${past}` : d > 0 ? 'Already the top of the layers it moves among' : 'Already the bottom of the layers it moves among';
@@ -259,6 +288,9 @@ export function mountSurfacePanel(host) {
     head.append(eye, alone);
     const item = el('li', {className: 'surface-layer' + (isOpen ? ' open' : '') + (shown(key) ? '' : ' unshown'), tabIndex: -1}, head);
     item.dataset.key = key;
+    // Its Coverage, on the row whether open or closed (Highland ground and Base band take their strength from their World settings).
+    if (!(builtin && BUILTIN_SETTINGS[layer.builtin])) item.append(el('div', {className: 'surface-cover'}, slider('Coverage', layer.amount ?? 1, 0, 1, .01, (v, c) => edit(i, l => { l.amount = v; }, c),
+      'The share of its area it covers, each covered pixel at full strength; Noise size sets whether it is single pixels or patches', percent)));
     // Why it draws nothing now, each reason with a door to the control that turns it on (as Pick's doors and the shape card's Edit).
     if (placed.reasons.length) item.append(el('div', {className: 'small surface-why'}, ...placed.reasons.map(r => {
       const line = el('p', {textContent: r.text + ' '}), where = r.go && host.place?.(r.go);
@@ -291,7 +323,7 @@ export function mountSurfacePanel(host) {
         const b = el('button', {type: 'button', className: 'surface-wide link', textContent: 'Its strength and height: Built-in settings below'}); b.onclick = () => host.settings(BUILTIN_SETTINGS[layer.builtin]);
         body.append(b);
         const note = host.settingNote(BUILTIN_SETTINGS[layer.builtin]); if (note) body.append(el('p', {className: 'small surface-wide', textContent: note}));
-      } else body.append(slider('Coverage', layer.amount ?? 1, 0, 1, .01, (v, c) => edit(i, l => { l.amount = v; }, c), 'The share of its area it covers, each covered pixel at full strength; Noise size sets whether it is single pixels or patches'));
+      }
       if (fixed) body.append(el('p', {className: 'small surface-wide', textContent: 'Its settings place it: it also sets the ground’s relief and caps the beds, so it takes no rule or edge here.'}));
       else body.append(
         slider('Edge width', edge.width ?? 1, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, width: v}; }, c), '1 blends into what is below; near 0 each pixel is one or the other'),
@@ -356,8 +388,10 @@ export function mountSurfacePanel(host) {
     $('surface-view-text').textContent = solo ? `Showing “${nameOf(layers.find(l => layerKey(l) === solo))}” alone.` : `${unshown} hidden while you design.`;
     const back = scrub ? list.querySelector(`.scrub[data-source="${CSS.escape(scrub)}"]`) : focused ? $(focused) : null;
     const shownRow = reveal != null ? list.querySelector(`[data-key="${CSS.escape(reveal)}"]`) : null;
-    for (const e of [back, shownRow]) { const section = e?.closest('details.surface-section'); if (section && !section.open) section.open = true; }
+    let moved = false;
+    for (const e of [back, shownRow]) { const section = e?.closest('details.surface-section'); if (section && !section.open) { section.open = true; moved ||= e === back; } }
     back?.focus({preventScroll: true});
+    if (moved) back.closest('.surface-layer')?.scrollIntoView({block: 'nearest'});   // its row left for a folded section: follow it
   }
   // After a World setting, a rock type in use or a role material changed: rebuild if a layer has changed section or reason.
   const sync = () => { if (!editing && !picking && JSON.stringify(placeAll(host.surface())) !== placedText) build(); };
@@ -388,7 +422,6 @@ export function mountSurfacePanel(host) {
     if (ticket === reading) showInspect(read);
   }
   function reinspect() { if (lastAt && !result.hidden) inspect(); }
-  const percent = v => Math.round(v * 100) + '%';
   function openLayer(key) {
     open.add(key); build({reveal: key});
     const row = list.querySelector(`[data-key="${CSS.escape(key)}"]`); row?.scrollIntoView({block: 'nearest', behavior: 'smooth'}); row?.querySelector('.surface-toggle')?.focus({preventScroll: true});

@@ -353,7 +353,7 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .surface-layer:hover,.surface-layer:focus-within{border-color:var(--accent,#c43bd1)}
 .surface-head{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}
 .surface-label{flex:1;min-width:0;display:flex;flex-direction:column;cursor:pointer}
-.surface-label .surface-drawn{opacity:.65;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.surface-label .surface-where{opacity:.7;line-height:1.3}
 .surface-label .surface-place{opacity:.65;font-style:italic}
 .surface-head .surface-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:default}
 .surface-head span.surface-name{cursor:pointer}
@@ -376,7 +376,6 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .surface-facts dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
 .surface-view{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;padding:4px 6px;margin:4px 0;border:1px dashed var(--accent,#c43b3b);border-radius:6px}.surface-view[hidden]{display:none}
 .surface-view button{margin-left:auto}
-.surface-head .surface-stage{opacity:.75;white-space:nowrap}
 .material-chip.own{background:repeating-linear-gradient(45deg,#777 0 2px,#444 2px 4px)}
 .surface-body{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;margin-top:6px}
 .surface-wide,.surface-rule{grid-column:1/-1}
@@ -384,9 +383,11 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .surface-material-row{flex:1;min-width:0}
 .surface-material-row select{flex:1;min-width:0;width:0}
 .surface-body button.link{justify-self:start;border:0;background:none;padding:0;text-decoration:underline;cursor:pointer;font-size:12px}
-.surface-slider{display:grid;grid-template-columns:7.4em minmax(0,1fr) 2.6em;align-items:center;gap:4px;font-size:12px}
-.surface-slider output{text-align:right}
-.surface-slider input{min-width:0}
+/* A row's sliders are the editor's own (controlRow), a little lower; a closed row's Coverage sits under its name. */
+.surface-layer .control.surface-slider{margin:0}
+.surface-layer .surface-slider .scrub,.surface-layer .surface-slider .scrub label{min-height:20px}
+.surface-layer .surface-slider .scrub label{padding:1px 6px}
+.surface-cover{margin:3px 0 1px 1.6em}
 .surface-rule{display:flex;flex-direction:column;gap:4px;border-top:1px dashed var(--line,#3a3a3a);padding-top:4px;font-size:12px}
 .surface-rule > button{align-self:start}
 .surface-term{display:flex;gap:4px 8px;align-items:center;flex-wrap:wrap}
