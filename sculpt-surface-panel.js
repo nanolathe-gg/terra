@@ -490,6 +490,6 @@ export function mountSurfacePanel(host) {
   const showAll = () => { if (!hidden.size && !solo) return; hidden.clear(); solo = null; build(); sendView(); };
   return {refresh, sync, showAll, open:openLayer, summary:()=>{
     const layers=host.surface(),placed=placeAll(layers);
-    return layers.map((layer,i)=>({key:layerKey(layer),name:nameOf(layer),section:placed[i].section,coverage:layer.amount==null&&BUILTIN_SETTINGS[layer.builtin]?'World setting':percent(layer.amount??1),stage:stageOf(layer),index:i})).sort((a,b)=>b.stage-a.stage||b.index-a.index);
+    return layers.map((layer,i)=>({key:layerKey(layer),name:nameOf(layer),section:placed[i].section,reasons:placed[i].reasons.map(r=>r.text),hidden:!shown(layerKey(layer)),coverage:layer.amount==null&&BUILTIN_SETTINGS[layer.builtin]?'World setting':percent(layer.amount??1),stage:stageOf(layer),index:i})).sort((a,b)=>b.stage-a.stage||b.index-a.index);
   }, show: (at, read) => { reading++; lastAt = at; result.hidden = false; showInspect(read); }};
 }

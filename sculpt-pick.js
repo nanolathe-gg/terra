@@ -3,13 +3,33 @@
 // shows (sculpt-renderer.js readProbe rock), that rock's material, the layers that drew (World › Surface keeps the detail), the ground and, on
 // water, the water. A swatch is the Color of what its line names, changed through the same path as that thing's own control, one undo step a
 // change; the line under it says what the change reaches. index.html holds the card (#pick); this fills it and keeps it beside its pixel.
-import {layersAt} from './sculpt-surface-panel.js';
+import {layersAt, FACT_LABELS} from './sculpt-surface-panel.js';
+import {ruleHere, layerKey as layerKeyOf} from './sculpt-material-model.js';
+import {controlRow} from './sculpt-workspace.js';
 
 const $ = id => document.getElementById(id);
 const percent = v => Math.round(v * 100) + '%';
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 // Rock shows at a pixel once its share passes this (the exposure view's gray, 0-1): a speck of rock at a face's foot is not the rock's pixel.
 const ROCK_SHOWN = .02;
+
+const html = text => String(text).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
+const NO_BOUND = 1e8, fact = (name, v) => `${FACT_LABELS[name]?.[0] ?? name} ${Number(v).toFixed(2)}`;
+// Why a layer of the world's list did not draw at the pixel: what World › Surface says of it (hidden while designing, cannot draw yet, only
+// where painted), else what its rule says there (ruleHere: the window that is 0, or the score short of its threshold), else its edge noise
+// or Coverage pattern. `state`: the layer as World › Surface places it (summary()).
+export function absentReason(layer, state, facts) {
+  if (state?.hidden) return 'Hidden while you design.';
+  if (state?.section === 'idle') return state.reasons?.join(' ') || 'It cannot draw with the world as it is.';
+  if (state?.section === 'painted') return 'It draws only where Surface paint has painted.';
+  const rule = ruleHere(layer, facts), late = t => t.late ? ' (the final share: this layer may have seen less)' : '';
+  if (rule.kind === 'none') return 'Its World settings place it, and they leave this pixel out.';
+  if (rule.kind === 'where') {
+    const out = rule.terms.filter(t => t.share === 0).map(t => `${fact(t.fact, t.value)} here${late(t)}; the rule needs ${t.from <= -NO_BOUND ? `below ${t.to}` : t.to >= NO_BOUND ? `above ${t.from}` : `${t.from} to ${t.to}`}`);
+    if (out.length) return out.join('. ') + '.';
+  } else if (rule.share === 0) return `Its score here is ${rule.score.toFixed(2)}; it needs about ${rule.from} (${rule.terms.map(t => `${t.weight} × ${fact(t.fact, t.value)}${late(t)}`).join(' + ')}).`;
+  return 'Its rule matches here; its edge noise or Coverage leaves this pixel out.';
+}
 
 // `host`: offMap(at); inspect(at) → the probe's read, or {unread: true} when the draw recorded nothing; shapeAt(world) → a shape's index or -1;
 // shape(i) → {name, values} or null; selectShape(i); shapeSettings(i); rock(slot) → {name, color, tag, scope, values, material: {slot, name},
@@ -48,6 +68,34 @@ export function mountPick(host) {
   // A swatch shows its thing's color unless the artist is choosing one in it (a rebuilt value would close the picker).
   const swatch = (id, color) => { const input = $(id); input.disabled = !color; if (color && document.activeElement !== input) input.value = color; };
   const tag = (id, info) => { const e = $(id); e.textContent = info.tag; e.className = 'scope-tag scope-' + info.scope; };
+  // Settings rows (host.settings): sliders that edit through the World row's own range (host.setSetting), one undo step a release. A list
+  // with the same rows keeps its elements and takes new values, except in the row being used, so a read after a release never replaces it.
+  function fillRows(box, rows, slot) {
+    const keys = rows.map(r => r.key).join(' ') + '|' + slot;
+    if (box.dataset.keys === keys) {
+      for (const r of rows) {
+        const range = box.querySelector(`input[data-pick-key="${CSS.escape(r.key)}"]`), row = range?.closest('.control');
+        if (!range || row.contains(document.activeElement)) continue;
+        range.value = String(r.value); row.querySelector('output').textContent = range.value;
+      }
+      return;
+    }
+    box.dataset.keys = keys;
+    box.replaceChildren(...rows.map(r => {
+      const row = controlRow({id: 'pick-k-' + r.key, label: `${html(r.label)} <output>${html(r.value)}</output>`, range: `min="${r.min}" max="${r.max}" step="${r.step}" value="${r.value}"`});
+      const range = row.querySelector('input[type=range]'); range.dataset.pickKey = r.key;
+      range.addEventListener('input', () => { row.querySelector('output').textContent = range.value; host.setSetting(r.key, range.value, false, slot); });
+      range.addEventListener('change', () => host.setSetting(r.key, range.value, true, slot));
+      return row;
+    }));
+  }
+  // A folded group of rows: hidden when it has none, its summary saying how many and of what.
+  function group(id, rows, slot, label) {
+    $(id).hidden = !rows.length; if (!rows.length) return;
+    $(id + '-label').textContent = label(rows.length); fillRows($(id + '-rows'), rows, slot);
+  }
+  const acting = rows => rows.filter(r => r.active);
+  const count = (n, what) => `${n} ${what}${n === 1 ? '' : 's'}`;
   function show() {
     if (layer.hidden) return;
     $('pick-where').textContent = `Pixel ${at.x}, ${at.y}`;
@@ -66,27 +114,41 @@ export function mountPick(host) {
       swatch('pick-water-color', water.color); $('pick-water-name').textContent = water.name; tag('pick-water-tag', water);
       $('pick-water-depth').textContent = `${(-r.aboveSea).toFixed(1)} below the sea ·`; $('pick-shallow-chip').style.background = water.shallow;
       $('pick-water-reach').textContent = water.reach;
+      group('pick-water-more', acting(host.settings(['Water & shores'])), null, n => `${count(n, 'water setting')} acting here`);
     }
     const rock = r && r.rock.share >= ROCK_SHOWN ? host.rock(r.rock.slot) : null;
     $('pick-rock').hidden = !rock; rockSlot = rock ? r.rock.slot : null; rockMaterial = rock?.material?.slot ?? null;
     if (rock) {
       swatch('pick-rock-color', rock.color); $('pick-rock-name').textContent = rock.name; tag('pick-rock-tag', rock);
       $('pick-rock-kind').textContent = 'rock type' + (wet ? ' on the bed' : '') + (r.rock.share < .95 ? ` · shows ${percent(r.rock.share)}` : '');
-      $('pick-rock-values').textContent = rock.values;
+      // This rock type's own settings that act (its headlines in view, the rest folded), then the world's settings for every rock type.
+      const own = acting(host.settings(['Rock types'], r.rock.slot)).filter(row => !row.home.endsWith('/Colors & recipe'));
+      fillRows($('pick-rock-rows'), own.filter(row => row.headline), r.rock.slot);
+      group('pick-rock-more', own.filter(row => !row.headline), r.rock.slot, n => `${count(n, 'more setting')} of ${rock.name}`);
+      group('pick-cliffs', acting(host.settings(['Cliffs & stones'])), null, n => `${count(n, 'setting')} for every rock type`);
+      $('pick-cliffs-tag').textContent = 'World';
       $('pick-rock-material').textContent = rock.material?.name ?? 'No material: a plain gray'; $('pick-rock-edit').disabled = !rock.material;
       $('pick-rock-reach').textContent = rock.reach;
     }
     $('pick-layers').hidden = !r;
     if (r) {
-      const here = layersAt(r, host.surface());
-      $('pick-layers-text').textContent = here.length ? 'Layers here: ' + here.map(e => `${e.name} ${e.seen >= .995 ? 'shows' : e.seen < .005 ? 'covered' : percent(e.seen) + ' shows'}`).join(' · ')
-        : 'No layer drew here: the ground shows.';
+      // The layers that drew here, top first, with what of each shows; then why each other layer of the world did not draw.
+      const layers = host.surface(), here = layersAt(r, layers), drew = new Set(here.map(e => e.key)), states = new Map(host.layerStates().map(l => [l.key, l]));
+      $('pick-layers-text').textContent = here.length ? 'Surface layers here, top first' : 'No surface layer drew here: the ground shows.';
+      const door = (key, name) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'link'; b.textContent = name; b.title = 'Open this layer in World › Surface'; b.onclick = () => host.openLayer(key); return b; };
+      const item = (key, name, text) => { const li = document.createElement('li'), span = document.createElement('span'); span.textContent = text; li.append(door(key, name), span); return li; };
+      $('pick-layers-list').replaceChildren(...here.map(e => item(e.key, e.name, e.seen >= .995 ? 'shows' : e.seen < .005 ? 'covered by a later layer' : `${percent(e.seen)} shows`)));
+      const absent = layers.filter(l => !drew.has(layerKeyOf(l)));
+      $('pick-layers-absent').hidden = !absent.length;
+      $('pick-layers-absent-label').textContent = `Why ${count(absent.length, 'other layer')} ${absent.length === 1 ? 'is' : 'are'} not here`;
+      $('pick-layers-absent-list').replaceChildren(...absent.map(l => { const st = states.get(layerKeyOf(l)); return item(layerKeyOf(l), st?.name ?? layerKeyOf(l), absentReason(l, st, r.facts)); }));
     }
     const ground = r ? host.ground(r.slot) : null;
     $('pick-ground').hidden = !ground; groundSlot = ground?.slot ?? null;
     if (ground) {
       swatch('pick-ground-color', ground.color); $('pick-ground-name').textContent = ground.name; tag('pick-ground-tag', ground);
       $('pick-ground-kind').textContent = wet ? 'ground under the water' : 'ground'; $('pick-ground-reach').textContent = ground.reach;
+      group('pick-ground-more', wet ? [] : acting(host.settings(['Ground'])), null, n => `${count(n, 'ground setting')} acting here`);
     }
     place();
   }

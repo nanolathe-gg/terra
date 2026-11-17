@@ -9,7 +9,7 @@ import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMateri
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_HEADLINES,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
 import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
-import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
+import {shapeControlAvailable,WORLD_CHOICES,worldControlRequirement,WORLD_PRIMARY_CONTROLS} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
 import {strokeKind,shapeFrom,savedToolCard,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,borrowBeach,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
   shapeContext as shapeContextIn,worldShapeKey,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,rgbColor,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,regionalCheck,repeatCheck,pagedTime,heightsNode} from './sculpt-scene.js';
@@ -961,6 +961,32 @@ function rockValues(slot) {
 function openWorldSection(id) {
   $('tab-world').click(); $(id).click();
 }
+// Pick's settings rows: the World sliders under `homes` (World panel homes, as index.html's data-home) that act where the picked pixel is,
+// with the numbers of rock type `slot` for the rock types' own rows (the World panel shows the selected rock type's; these read the picked
+// one's, as rockValues does). Each row: its key, name, range, value, and whether it is acting (the panel would enable it and it is not 0),
+// a main setting, or a headline. Selects and rows that may be left unset stay with their panel (a door, not a row here).
+function pickSettings(homes,slot=null) {
+  const base=worldPanelValuesOf(panelFacts()),own=slot>0?mapRocks.find(r=>r.slot===slot)?.knobs:null,values=own?{...base,...own}:slot===0?{...base,...rockSettings()}:base;
+  const out=[];
+  for (const home of document.querySelectorAll('#knobs [data-home]')) {
+    if (!homes.some(h => home.dataset.home===h||home.dataset.home.startsWith(h+'/'))) continue;
+    for (const row of home.querySelectorAll('[data-knob]')) {
+      const key=row.dataset.knob,input=$('knob-'+key);
+      if (!input||input.type!=='range'||input.dataset.allowEmpty==='true') continue;
+      const value=Number(values[key]??input.value),label=(row.querySelector('label')?.title||key).replace(/\s*\([^)]*\)/g,'');
+      out.push({key,label,min:input.min,max:input.max,step:input.step,value,active:!worldControlRequirement(key,values)&&value!==0,primary:WORLD_PRIMARY_CONTROLS.has(key),headline:ROCK_HEADLINES.includes(key),home:home.dataset.home});
+    }
+  }
+  return out;
+}
+// A Pick row's edit, through the World row's own range and its events (one undo step a release, as a drag there): a rock type's row edits
+// the rock type World › Rock types has selected, so the picked one is selected first.
+function pickSetting(key,value,commit,slot=null) {
+  if (slot!==null && ROCK_KEYS.includes(key) && slot!==rockSelected) selectRock(slot);
+  const input=$('knob-'+key); if (!input) return;
+  input.value=String(value); input.dispatchEvent(new Event('input',{bubbles:true}));
+  if (commit) input.dispatchEvent(new Event('change',{bubbles:true}));
+}
 function pickHost() {
   const material=slot => mapMaterials.find(m => m.slot===slot);
   const info=m => ({slot:m.slot,name:m.name,color:hexOfRgb(drawnColor(m)),...scopeOf(materialIsWorld(m)),reach:materialReach(m)});
@@ -999,6 +1025,10 @@ function pickHost() {
     read:(at,read) => { if (!$('surface-inspect-result').hidden) surfacePanel?.show(at,read); },
     openColors:() => { openWorldHome('water'); document.querySelector('[data-world-color=shallowTone]').querySelector('input[type=color][aria-label^="Shallow water"]')?.focus({preventScroll:true}); },
     surface:() => config.surface||[],
+    settings:pickSettings,setSetting:pickSetting,
+    // The world's layers as World › Surface places them (section, reasons, hidden while designing), and a door to one layer's row.
+    layerStates:() => surfacePanel?.summary()??[],
+    openLayer:key => { openWorldSection('wsec-surface'); surfacePanel?.open(key); },
   };
 }
 pickCard=mountPick(pickHost());
@@ -1586,7 +1616,7 @@ function syncHistoryNames() {
 function checkpoint(mapOnly=false) {
   flushEval(); keepWorldMaterials();
   history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); history.at(-1).name=changeName(history.at(-2),history.at(-1)); if (history.length>48) history.shift(); historyIndex=history.length-1;
-  renderLayers(); updateControls(); persistLater();
+  renderLayers(); updateControls(); persistLater(); pickCard?.refresh();   // a pinned pixel reads again after every committed change
 }
 function moveHistory(delta) {
   const next=historyIndex+delta; if (!ready || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
@@ -2091,8 +2121,9 @@ const typing=target => target instanceof HTMLElement && (['INPUT','SELECT','TEXT
 window.addEventListener('keydown',event => {
   if(event.defaultPrevented)return;
   // Escape first closes what is open on top of the editor (a tool flyout, a menu, the full-size curves, a menu inside the material editor),
-  // wherever the focus is. Then Pick's card, then the docked material editor; once they are closed, Escape leaves Pick (below).
-  if(event.key==='Escape'&&!stroke&&!moving&&(editorUI.closeTop()||pickCard?.close()||editorUI.closeDocked())){event.preventDefault();return;}
+  // wherever the focus is. Then the docked material editor, then Pick's card; once they are closed, Escape leaves Pick (below).
+  // The docked material editor closes before Pick's card, so Pick › Edit material › Escape comes back to the picked pixel.
+  if(event.key==='Escape'&&!stroke&&!moving&&(editorUI.closeTop()||editorUI.closeDocked()||pickCard?.close())){event.preventDefault();return;}
   if(!typing(event.target)&&!loading&&!stroke&&!moving&&!event.ctrlKey&&!event.metaKey&&!event.altKey){
     if(event.code==='KeyF'&&event.shiftKey){event.preventDefault();editorUI.toggleFocus();return;}
     if(event.key==='Escape'&&editorUI.exitFocus()){event.preventDefault();return;}
