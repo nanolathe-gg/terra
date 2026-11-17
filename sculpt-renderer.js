@@ -1149,7 +1149,7 @@ export class TerrainRenderer {
 
   applyKnobs(options) { this.worldDirty=true;return this.syncWorld(options); }
 
-  variantNumber(key, fallback) { const x = Number(this.variant.get(key)); return Number.isFinite(x) && this.variant.has(key) ? x : fallback; }
+  variantNumber(key, fallback) { const value=this.variant.get(key);if(value==null)return fallback;const x=Number(value);return Number.isFinite(x)?x:fallback; }
 
   // H5: a shader that pastes the common source under EROSION, as erosion.wgsl does.
   preprocessShader(source) { return preprocess(source, this.commonSource, new Set(['EROSION'])); }
@@ -1206,7 +1206,7 @@ export class TerrainRenderer {
     return m.kind === 'i' ? this.uniformView.getInt32(at, true) : this.uniformView.getFloat32(at, true);
   }
   // The largest of slot 0's number `own` (a knob's value) and the other slots' own settings of it: a reach over the rocks in use.
-  rockMax(key, own) { return Math.max(own, ...[...this.rocks.values()].map(r => Number(r.knobs?.[key])).filter(Number.isFinite)); }
+  rockMax(key, own) { let out=Math.max(own);for(const rock of this.rocks.values()){const value=Number(rock.knobs?.[key]);if(Number.isFinite(value))out=Math.max(out,value);}return out; }
   // Slots 1-15 as copies of slot 0 (the world's rock, as applyKnobs, bakeFields and setColumn set it) under their own numbers; the pool of every
   // slot's rock column; and the maxima the passes that gather from other points read (debrisAny, runoffAny, debrisReachMax).
   writeRocks() {
