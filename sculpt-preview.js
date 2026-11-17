@@ -1,4 +1,4 @@
-import {createShapeEngine,prepareNode,shapeScratchBytes,shapeRequestBytes} from './sculpt-gpu-fields.js';
+import {createShapeEngine,createNodePreparer,nodeContextKey,shapeScratchBytes,shapeRequestBytes} from './sculpt-gpu-fields.js';
 import {terrainAllocation} from './sculpt-memory.js';
 const union=(a,b)=>!a||!b?null:{x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.max(a.x+a.width,b.x+b.width)-Math.min(a.x,b.x),height:Math.max(a.y+a.height,b.y+b.height)-Math.min(a.y,b.y)};
 // A bounded, display-only lattice for zoomed-out views. It evaluates the same
@@ -42,18 +42,27 @@ export function previewWindow(region,grid,size,apron,retained=null){
 // The same shape and Time kernels over a display-only window. Canonical pages,
 // picking and export do not read these buffers. Only one window is retained.
 export function createPreviewLattice(device,scene,memoryChanged=()=>{}){
-  let engine=null,target=null,weather=null,starting=null,shapeKey='',key='',weatherKey='',weatherWindow=null,recipeKey='',recipe=null,working=0,runs=0,timeRuns=0,weatherReuses=0,peak=0;
+  let engine=null,target=null,weather=null,starting=null,shapeKey='',key='',weatherKey='',weatherWindow=null,working=0,runs=0,timeRuns=0,weatherReuses=0,peak=0;
   const bytes=()=> (engine?.bytes()??0)+(target?.bytes??0)+(weather?.bytes??0)+(weather?.field?.size??0)+working;
   const dropWeather=()=>{weather?.weather.destroy();weather?.maps.forEach(b=>b.destroy());weather?.field?.destroy();weather=null;weatherKey='';weatherWindow=null;};
   const trim=()=>{target?.destroy();engine?.destroy();engine=target=starting=null;shapeKey=key='';working=0;};
   const clear=()=>{dropWeather();trim();};
+  // The prepared nodes of each lattice in use. The budget estimate plans the 8 px and 4 px lattices on every input, so one recipe per lattice
+  // is kept, and a recipe made again prepares only the nodes that changed (createNodePreparer).
+  const recipes=new Map(),prepare=createNodePreparer();
+  const recipeFor=(s,w)=>{
+    const rk=[s.revision,JSON.stringify(s.context)].join('|'),held=recipes.get(w.grid);
+    if(held?.key===rk)return held.recipe;
+    const geom={grid:w.grid,spacing:w.spacing,refSpacing:s.spacing},ck=nodeContextKey(s.context),recipe=new Map(s.nodes.map(n=>[n,prepare(n,geom,s.context,ck)]));
+    if(!held&&recipes.size>=4)recipes.delete(recipes.keys().next().value);
+    recipes.set(w.grid,{key:rk,recipe});return recipe;
+  };
   const plan=(region,on=true,deferTime=false)=>{
     const s=scene(),w=previewWindow(region,region.worldGrid,s.size,s.timeApron??128*s.spacing,deferTime?weatherWindow:null);
     const tm=on?s.previewTime?.({size:w.spacing*(w.side-1)+1,spacing:w.spacing}):null;
     const geometry=[w.grid,w.x,w.y,w.side].join(','),sk=[geometry,s.revision].join('|'),wk=[geometry,tm?.key??'',tm?.revB??s.revB].join('|'),cache=sk+'|'+wk;
     const reuse=Boolean(tm&&deferTime&&weather&&weatherKey===wk),runTime=tm&&!reuse&&key!==cache;
-    const rk=[w.grid,s.revision,JSON.stringify(s.context)].join('|');
-    if(recipeKey!==rk){recipe=new Map(s.nodes.map(n=>[n,prepareNode(n,{grid:w.grid,spacing:w.spacing,refSpacing:s.spacing},s.context)]));recipeKey=rk;}
+    const recipe=recipeFor(s,w);
     const prepared=[...recipe.values()].flatMap(p=>p.multi??[p]),scratch=shapeScratchBytes(w.cells,prepared);
     const shapeBytes=w.cells*56+Math.max(scratch,engine?.bytes()??0)+shapeRequestBytes(prepared);
     const peakBytes=shapeBytes+(tm?w.cells*144+65536:0);

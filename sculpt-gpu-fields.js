@@ -327,6 +327,25 @@ function prepareHeights(n, {grid, spacing}) {
 
 // The smooth brush's box blur radius in cells: sculpt.js's clamp(round(radius / (7 spacing)), 1, 24) at the final grid, scaled to this level's spacing.
 export const smoothRadius = (radius, {spacing, refSpacing = spacing}) => Math.max(1, Math.round(clamp(Math.round(radius / (refSpacing * 7)), 1, 24) * refSpacing / spacing));
+// prepareNode's result, kept while the node, the lattice and the context read the same. A gesture edits one node of many and every input
+// plans the preview's lattices again, so the others' preparations are reused. Nodes are edited in place: a node is known by its text, and the
+// context by its settings and the world's shape defaults (the params of a node with none). A height image is prepared each time: its samples
+// are its own arrays and the preparation only points at them.
+export const nodeContextKey = c => JSON.stringify(c) + '|' + JSON.stringify(c.params({params: {}}));
+export function createNodePreparer(limit = 4) {
+  const kept = new Map();   // lattice and context -> WeakMap(node -> {text, prepared})
+  return (n, geom, c, contextKey = nodeContextKey(c)) => {
+    if (n.kind === 'heights') return prepareNode(n, geom, c);
+    const key = [geom.grid, geom.spacing, geom.refSpacing ?? '', contextKey].join('|');
+    let nodes = kept.get(key);
+    if (!nodes) { if (kept.size >= limit) kept.delete(kept.keys().next().value); kept.set(key, nodes = new WeakMap()); }
+    const text = JSON.stringify(n), hit = nodes.get(n);
+    if (hit?.text === text) return hit.prepared;
+    const prepared = prepareNode(n, geom, c);
+    nodes.set(n, {text, prepared});
+    return prepared;
+  };
+}
 export function prepareNode(n, geom, c) {
   if (n.kind === 'heights' && !n.hidden) return prepareHeights(n, geom);
   if (n.hidden || (n.kind !== 'ground' && (!(n.kind in KIND) || !n.points?.length))) return {skip: true};
@@ -1111,7 +1130,7 @@ export function createPagedFields(opts) {
   const clip = r => ({x0: clamp(r.x0, 0, worldGrid - 1), y0: clamp(r.y0, 0, worldGrid - 1), x1: clamp(r.x1, 0, worldGrid - 1), y1: clamp(r.y1, 0, worldGrid - 1)});
   const worldRect = r => ({x: r.x0 * spacing, y: r.y0 * spacing, width: (r.x1 - r.x0) * spacing, height: (r.y1 - r.y0) * spacing});
   const hits = (a, b) => a.x0 <= b.x1 && b.x0 <= a.x1 && a.y0 <= b.y1 && b.y0 <= a.y1;
-  let revision = 0, engine = null, enginePromise = null, error = null, tick = 0, prep = new Map(), time = null, timeKey = '', staging = null, scratchT = null, firstError = null;
+  let revision = 0, engine = null, enginePromise = null, error = null, tick = 0, prep = new Map(), prepContext = null, time = null, timeKey = '', staging = null, scratchT = null, firstError = null;
   let coarseFilled = 0;
   let pendingStale = null, coarseDone = 0, coarseStart = 0, coarseFirstView = 0, focus = null;
   const coarseW = Math.floor((worldGrid - 1) / COARSE) + 1, coarse = new Float32Array(coarseW * coarseW).fill(baseHeight), coarseHave = new Uint8Array(coarseW * coarseW);
@@ -1227,7 +1246,9 @@ export function createPagedFields(opts) {
     const c = context();
     return engine = await createShapeEngine({device: d, grid: worldGrid, spacing, baseHeight, sea: c.sea, minH: c.minH, maxH: c.maxH, pages: true});
   })();
-  const prepare = (n, geom, c) => { let p = prep.get(n); if (!p) { p = prepareNode(n, geom, c); prep.set(n, p); } return p; };
+  // One preparation of each node for a revision; a node the revision did not change keeps the last one's (createNodePreparer).
+  const keptPrepare = createNodePreparer();
+  const prepare = (n, geom, c) => { let p = prep.get(n); if (!p) { p = keptPrepare(n, geom, c, prepContext ??= nodeContextKey(c)); prep.set(n, p); } return p; };
 
   // ---- resources
   const shapeBytes = () => { let n = 0; for (const pg of pagesMap.values()) if (pg.target) n += pg.target.bytes; return n; };
@@ -1577,7 +1598,7 @@ export function createPagedFields(opts) {
 
   // ---- changes
   function changed(rect = null, keepPrefix = 0) {
-    revision++; prep = new Map();
+    revision++; prep = new Map(); prepContext = null;
     check();
     const cr = rect ? clip(rect) : null, r = cr ? clip({x0: cr.x0 - 6, y0: cr.y0 - 6, x1: cr.x1 + 6, y1: cr.y1 + 6}) : null, event = {revision, rect: cr ? worldRect(cr) : null};
     const announce = event.rect;
