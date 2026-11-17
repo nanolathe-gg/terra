@@ -1468,6 +1468,21 @@ struct SurfaceRecord {
     y:f32,z:f32,nx:f32,ny:f32,nz:f32,rain:f32,sun:f32,sky:f32,
     cavity:f32,gx:f32,gy:f32,faceSlope:f32,ao:f32,shadow:f32,
 }
+// Hit coordinates keep f32 precision: rounding them moves procedural grain and tile seams.
+// The local normals, gradients and light factors use packed half pairs (32 bytes per pixel).
+struct PackedSurfaceRecord {
+    y:f32,z:f32,normalXY:u32,normalZRain:u32,sunSky:u32,cavitySlope:u32,gradient:u32,aoShadow:u32,
+}
+fn packSurface(g:SurfaceRecord)->PackedSurfaceRecord {
+    return PackedSurfaceRecord(g.y,g.z,pack2x16float(vec2f(g.nx,g.ny)),pack2x16float(vec2f(g.nz,g.rain)),
+        pack2x16float(vec2f(g.sun,g.sky)),pack2x16float(vec2f(g.cavity,g.faceSlope)),
+        pack2x16float(vec2f(g.gx,g.gy)),pack2x16float(vec2f(g.ao,g.shadow)));
+}
+fn unpackSurface(g:PackedSurfaceRecord)->SurfaceRecord {
+    let xy=unpack2x16float(g.normalXY);let zr=unpack2x16float(g.normalZRain);let light=unpack2x16float(g.sunSky);
+    let cavity=unpack2x16float(g.cavitySlope);let gradient=unpack2x16float(g.gradient);let shade=unpack2x16float(g.aoShadow);
+    return SurfaceRecord(g.y,g.z,xy.x,xy.y,zr.x,zr.y,light.x,light.y,cavity.x,gradient.x,gradient.y,cavity.y,shade.x,shade.y);
+}
 // probe: the art pixel the Surface section's inspector asks about, plus one (0: none); the color pass writes what it drew there (probeOut).
 struct GeometryFrame {width:u32,height:u32,probe:vec2u}
 @group(3) @binding(1) var<uniform> geometryFrame:GeometryFrame;
@@ -1476,7 +1491,7 @@ fn geometryIndex(p:vec2i)->u32 {
     return u32(q.y)*geometryFrame.width+u32(q.x);
 }
 #ifdef GEOMETRY_PASS
-@group(3) @binding(0) var<storage,read_write> geometryOut:array<SurfaceRecord>;
+@group(3) @binding(0) var<storage,read_write> geometryOut:array<PackedSurfaceRecord>;
 @fragment
 fn geometryMain(v:VertexOut)->@location(0) vec4f {
     if(vCount[2]>vs.capacity){discard;}
@@ -1515,14 +1530,14 @@ fn geometryMain(v:VertexOut)->@location(0) vec4f {
     // occlusion: they differ only under overhangs and in the darkest few levels of a crevice, and the two were a quarter of the pass.
     var rain=select(0.0,1.0,normal.z>.1);var near=1.0;
     if(vs.step>1.5*u.chunkScale){rain=voxelRain(hit,normal);near=voxelOcclusion(hit,normal);}
-    geometryOut[geometryIndex(vec2i(floor(v.position.xy)))]=SurfaceRecord(hit.y,hit.z,lit.x,lit.y,lit.z,
+    geometryOut[geometryIndex(vec2i(floor(v.position.xy)))]=packSurface(SurfaceRecord(hit.y,hit.z,lit.x,lit.y,lit.z,
         rain,sun,near,cavity,
-        soft.x,soft.y,voxelFaceSlope(hit.xy),occlusion(p,hit.z),visibility(p,max(hit.z,u.sea)));
+        soft.x,soft.y,voxelFaceSlope(hit.xy),occlusion(p,hit.z),visibility(p,max(hit.z,u.sea))));
     return vec4f(0);
 }
 #endif
 #ifdef COLOR_PASS
-@group(3) @binding(0) var<storage,read> geometryIn:array<SurfaceRecord>;
+@group(3) @binding(0) var<storage,read> geometryIn:array<PackedSurfaceRecord>;
 // The inspector's record of its pixel (sculpt-renderer.js readProbe): 0 set, 1-3 the final color, 4 the ground's slot, 5 the height above the
 // sea, 6-19 the surface facts, 20 the rock slot whose numbers it read (rockSlotAt, held for the whole pass), 21 the wet band's share, 22 the surf
 // sand's, 23 whether it is the world's own ground, 24 how many layers drew, then each layer's (row, coverage) in draw order (25-88), and 89 the
@@ -1531,7 +1546,7 @@ const PROBE_LAYERS = 25u;
 @group(3) @binding(3) var<storage,read_write> probeOut:array<f32,96>;
 @fragment
 fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
-    let geometry=geometryIn[geometryIndex(vec2i(floor(v.position.xy))+vec2i(1))];
+    let geometry=unpackSurface(geometryIn[geometryIndex(vec2i(floor(v.position.xy))+vec2i(1))]);
     if(dot(vec3f(geometry.nx,geometry.ny,geometry.nz),vec3f(geometry.nx,geometry.ny,geometry.nz))<.5){discard;}
     colorFaceSlope=geometry.faceSlope;
     // GLSL's gl_FragCoord (origin bottom left; the canvas is u.size high).

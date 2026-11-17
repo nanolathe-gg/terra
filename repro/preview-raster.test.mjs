@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {SURFACE_RECORD_BYTES} from '../sculpt-renderer.js';
 import {ChunkTerrainRenderer} from '../sculpt-chunk-renderer.js';
 const fixture=()=>Object.assign(Object.create(ChunkTerrainRenderer.prototype),{
  budgetBytes:2048*1024**2,reservedBytes:0,fixedBytes:0,colorTiles:new Set(),
@@ -11,7 +12,7 @@ test('preview estimates include the selected raster, copied image and padded geo
  for(const pixelScale of [2,3,4,8]){
   const e=r.estimate(region,width,height,4,4,{pixelScale,fastRaster:true});
   const w=Math.ceil(width/pixelScale),h=Math.ceil(height/pixelScale);
-  assert.equal(e.output,w*h*12);assert.equal(e.geometryRecord,(w+2)*(h+2)*56);
+  assert.equal(e.output,w*h*12);assert.equal(e.geometryRecord,(w+2)*(h+2)*SURFACE_RECORD_BYTES);
  }
  const normal=r.estimate(region,width,height,4,4);
  assert.equal(normal.output,Math.ceil(width/2)*Math.ceil(height/2)*8+Math.ceil(width/4)*Math.ceil(height/4)*4);

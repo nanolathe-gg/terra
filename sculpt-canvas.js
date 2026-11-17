@@ -154,7 +154,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       coarseColour=true;features?.groundChanged?.(rect);schedule();
     }
     const record={serial,rev:{...rev},stage,rect:rect?{...rect}:null,fields,channels,tiles,kind};
-    if(input)lastInput=record;
+    // A repeated value still returns a no-op for the input bench. Keep the last
+    // actual edit for the pending bake plan: clearing F here forces full bakes.
+    if(input&&stage)lastInput=record;
     return record;
   }
   function trimTo(limit,protectVisible=false){limit=Math.max(0,limit);const v=state();for(const[key,e]of cache)if(cacheBytes>limit&&!intersects(e,v))remove(key);if(protectVisible&&cacheBytes>limit)throw Error("The preview cannot fit beside the visible final images.");while(cacheBytes>limit&&cache.size)remove(cache.keys().next().value);}

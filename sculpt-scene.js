@@ -356,6 +356,13 @@ export const shapeContext=({config,settings,seed,talusAngle=40,minH,maxH}) => ({
   frost:{gapSize:worldSetting(config,settings,'frostGapSize'),gapDepth:worldSetting(config,settings,'frostGapDepth'),gaps:worldSetting(config,settings,'frostGaps'),gapReach:worldSetting(config,settings,'frostGapReach')},
   coastRamp:settings.has('coastRamp')||Number.isFinite(Number(config?.defaults?.coastRamp))?worldSetting(config,settings,'coastRamp'):1,
   faceSteep:settings.has('faceSteep')||Number.isFinite(Number(config?.defaults?.faceSteep))?worldSetting(config,settings,'faceSteep'):1});
+// World inputs compare the context actually read by existing nodes. Advancing the
+// brush seed after a stroke only affects the next stroke: authored nodes own seeds.
+// Keep the context seed as a dependency for a node that still uses its fallback.
+export function worldShapeKey(context,nodes){
+  const {params,seed,...world}=context;
+  return JSON.stringify([world,nodes.filter(n=>n.kind==='ground'),nodes.some(n=>n.points&&n.seed==null)?seed:null]);
+}
 // The Time pass's knobs (sculpt-erosion.js runGpu), from the renderer's settings: the engine's, the world's, then the address.
 export const timeKnobs=renderer => ({age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
   envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)});

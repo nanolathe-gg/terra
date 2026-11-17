@@ -3,7 +3,7 @@ import {terrainAllocation,TerrainMemoryError} from './sculpt-memory.js';
 import {rockWeatherBytes} from './sculpt-rock-weather.js';
 // Card D: a bounded working set for the existing terrain shader. Materials
 // belong to this renderer once; callers own the LRU of copied output images.
-import {TerrainRenderer,INPUT_TEXTURES} from './sculpt-renderer.js';
+import {TerrainRenderer,INPUT_TEXTURES,SURFACE_RECORD_BYTES} from './sculpt-renderer.js';
 import {columnRows} from './sculpt-column.js';
 import {PLANT_REACH} from './sculpt-material-model.js';
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
@@ -203,7 +203,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const loose=Math.max(this.looseBuffer?.size??16,(Math.ceil((region.fieldsWidth+2*fieldScale+2*margin)/4)+2)*(Math.ceil((region.fieldsHeight+2*fieldScale+2*margin)/4)+2)*32);
     const rockWeather=this.rockMax('runoff',this.number('runoff',0))>0||this.rockMax('debrisAmount',this.number('debrisAmount',0))>0||this.number('rimReach',0)>0||this.number('shoreRock',0)>0||this.number('shoreShelf',0)>0?rockWeatherBytes(region.fieldsWidth+2*fieldScale,region.fieldsHeight+2*fieldScale):0;
     // D is released before mask packing, so their scratch reservations overlap.
-    const voxel=Math.min(64*MB,budgetBytes*.35),geometryPixels=(Math.ceil(width/rasterScale)+2)*(Math.ceil(height/rasterScale)+2),geometryRecord=geometryPixels*56,geometry=geometryPixels*60;
+    const voxel=Math.min(64*MB,budgetBytes*.35),geometryPixels=(Math.ceil(width/rasterScale)+2)*(Math.ceil(height/rasterScale)+2),geometryRecord=geometryPixels*SURFACE_RECORD_BYTES,geometry=geometryPixels*(SURFACE_RECORD_BYTES+4);
     return {field,input,output,loose,rockWeather,maskPlaneCount,maskLayers,voxel,geometry,geometryRecord,maskPack,colorCacheBytes:this.colorBytes,workingBytes:field+input+output+loose+Math.max(voxel,maskPack)+rockWeather+geometry,
       retainedBytes:this.fixedBytes,reservedBytes,gpuBytes:this.fixedBytes+reservedBytes+this.colorBytes+field+input+output+loose+Math.max(voxel,maskPack)+rockWeather+geometry,
       cpuRetainedBytes:this.cpuRetainedBytes,cpuUploadBytes:input,cpuPeakBytes:this.cpuRetainedBytes+input};
@@ -304,14 +304,14 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       await terrainAllocation(this.device,()=>{
       if(this.failWorkingAllocation){this.failWorkingAllocation=false;throw new TerrainMemoryError('Forced working-set allocation failure.');}
       if(!input.textures.length){
-        const make=(key,label,layers,format,bytes)=>{input[key]=this.texture(label,gw,gh,layers,format,bytes,read);input.textures.push(input[key]);};
+        const make=(key,label,layers,format,bytes)=>{input[key]=this.texture(label,gw,gh,layers,format,bytes,read|(key==='heightTexture'?T.COPY_SRC:0));input.textures.push(input[key]);};
         make('heightTexture','chunk height',1,'r32float',4);make('routeTexture','chunk routes',1,'rgba8unorm',4);
         input.gridTexture=this.texture('chunk weather and material',gw,gh,4,'rgba8unorm',4,read|T.COPY_SRC);input.textures.push(input.gridTexture);input.maskTexture=this.texture('chunk masks',gw,gh,this.maskLayers,'rgba8snorm',4,read|T.COPY_SRC);input.textures.push(input.maskTexture);
       }
       if(!level.fieldsTexture)level.fieldsTexture=this.texture('chunk fields',fw,fh,1,'rgba16float',8,T.STORAGE_BINDING|T.TEXTURE_BINDING);
       });
     }catch(error){this.dropWorking({kind:'input',key:inputKey,state:input});this.dropWorking({kind:'level',key:scale,state:level});throw error;}
-    this.activeInput=input;this.activeLevel=level;input.used=level.used=++this.workingTick;
+    this.activeInput=input;this.activeLevel=level;this.colorRegion=region;input.used=level.used=++this.workingTick;
     for(const k of INPUT_TEXTURES)this[k]=input[k];this.colorMaskTexture=this.maskTexture;
     this.fieldsTexture=level.fieldsTexture;this.voxelColor=level.voxelColor;Object.assign(this.rockWeather,level.rock);
     // The loose buffer can grow on another level, so its output bind group is fresh.
@@ -478,24 +478,40 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   }
 
   // Geometry and surface textures transfer from the mutable workspace; only
-  // the packed mask and weather/material prefixes are copied. Evict these before reusable work.
-  colorResources(){return [...new Set([this.geometryRecord,this.heightTexture,this.fieldsTexture,this.rockWeather.final,this.rockWeather.source,this.rockWeather.rim].filter(r=>this.resources.get(r)?.kind==='working'))];}
-  colorTileBytes(){return this.colorResources().reduce((n,r)=>n+this.resources.get(r).bytes,0)+this.maskTexture.width*this.maskTexture.height*24+this.layout.size+16;}
+  // cropped height, packed masks and weather/material are copied. Evict these before reusable work.
+  colorResources(){return [...new Set([this.geometryRecord,this.fieldsTexture,this.rockWeather.final,this.rockWeather.source,this.rockWeather.rim].filter(r=>this.resources.get(r)?.kind==='working'))];}
+  // Color still needs the field window and its direct sampling reach, but none of the extra
+  // lattice apron used to bake it or march distant shadows (those are in the geometry record).
+  colorLattice(){
+    const r=this.colorRegion,spacing=r.gridSpacing,ox=Math.round(r.gridOrigin[0]/spacing),oy=Math.round(r.gridOrigin[1]/spacing),apron=Math.max(5,r.reach.direct-r.reach.draw);
+    const first=(p,o,n)=>clamp(Math.floor((p-apron)/spacing)-1-o,0,n-1),last=(p,o,n)=>clamp(Math.ceil((p+apron)/spacing)+1-o,0,n-1);
+    const x=first(r.fieldsX,ox,r.gridWidth),y=first(r.fieldsY,oy,r.gridHeight),width=last(r.fieldsX+r.fieldsWidth-1,ox,r.gridWidth)-x+1,height=last(r.fieldsY+r.fieldsHeight-1,oy,r.gridHeight)-y+1;
+    return {x,y,width,height,origin:[ox+x,oy+y],bytes:width*height*28+this.layout.size+16};
+  }
+  colorTileBytes(){return this.colorResources().reduce((n,r)=>n+this.resources.get(r).bytes,0)+this.colorLattice().bytes;}
   async retainColorTile(){
     if(this.busy||!this.geometryValid||!this.activeInput||!this.activeLevel)return null;
-    if(!this.makeWorkingRoom(this.maskTexture.width*this.maskTexture.height*24+this.layout.size+16))return null;
+    const lattice=this.colorLattice();if(!this.makeWorkingRoom(lattice.bytes))return null;
     this._busy=true;try {
-      const owned=this.colorResources(),source={heightTexture:this.heightTexture,gridTexture:null,maskTexture:this.emptyColorMasks,colorMasks:null,fieldsTexture:this.fieldsTexture,rockWeather:{empty:this.rockWeather.empty,final:this.rockWeather.final,source:this.rockWeather.source,rim:this.rockWeather.rim}};
+      const owned=this.colorResources(),source={heightTexture:null,gridTexture:null,maskTexture:this.emptyColorMasks,colorMasks:null,fieldsTexture:this.fieldsTexture,rockWeather:{empty:this.rockWeather.empty,final:this.rockWeather.final,source:this.rockWeather.source,rim:this.rockWeather.rim}};
       const tile={owned,source,world:this.geometryUniformSnapshot.slice(),cpu:this.uniformData.slice(0),width:this.canvas.width,height:this.canvas.height,outWidth:this.outputCanvas.width,outHeight:this.outputCanvas.height,record:this.geometryRecord,gpuFlags:this.gpuFlags,users:0,retired:false};
       try{await terrainAllocation(this.device,()=>{
-        source.gridTexture=this.texture('retained color weather and material',this.gridTexture.width,this.gridTexture.height,3,'rgba8unorm',4,GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST,'color-cache');
-        source.colorMasks=this.texture('retained color masks',this.maskTexture.width,this.maskTexture.height,3,'rgba8snorm',4,GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST,'color-cache');
+        source.heightTexture=this.texture('retained color height',lattice.width,lattice.height,1,'r32float',4,GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST,'color-cache');
+        source.gridTexture=this.texture('retained color weather and material',lattice.width,lattice.height,3,'rgba8unorm',4,GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST,'color-cache');
+        source.colorMasks=this.texture('retained color masks',lattice.width,lattice.height,3,'rgba8snorm',4,GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST,'color-cache');
         tile.uniform=this.device.createBuffer({label:'retained color uniforms',size:this.layout.size,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});this.track(tile.uniform,'retained color uniforms',this.layout.size,'color-cache');
         tile.frame=this.device.createBuffer({label:'retained color frame',size:16,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});this.track(tile.frame,'retained color frame',16,'color-cache');
-      });}catch(error){this.release(tile.uniform);this.release(tile.frame);this.release(source.colorMasks);this.release(source.gridTexture);throw error;}
+      });}catch(error){this.release(tile.uniform);this.release(tile.frame);this.release(source.colorMasks);this.release(source.gridTexture);this.release(source.heightTexture);throw error;}
       this.device.queue.writeBuffer(tile.frame,0,new Uint32Array([tile.width+2,tile.height+2,0,0]));
-      const encoder=this.device.createCommandEncoder({label:'retain color flags'});encoder.copyBufferToBuffer(this.uniformBuffer,0,tile.uniform,0,this.layout.size);encoder.copyTextureToTexture({texture:this.maskTexture},{texture:source.colorMasks},[this.maskTexture.width,this.maskTexture.height,3]);encoder.copyTextureToTexture({texture:this.gridTexture},{texture:source.gridTexture},[this.gridTexture.width,this.gridTexture.height,3]);this.device.queue.submit([encoder.finish()]);
-      tile.owned.push(tile.uniform,tile.frame,source.colorMasks,source.gridTexture);tile.bytes=tile.owned.reduce((n,r)=>n+this.resources.get(r).bytes,0);for(const r of tile.owned)this.resources.get(r).kind='color-cache';
+      const encoder=this.device.createCommandEncoder({label:'retain color flags'});encoder.copyBufferToBuffer(this.uniformBuffer,0,tile.uniform,0,this.layout.size);
+      for(const [from,to,layers]of [[this.heightTexture,source.heightTexture,1],[this.maskTexture,source.colorMasks,3],[this.gridTexture,source.gridTexture,3]])encoder.copyTextureToTexture({texture:from,origin:[lattice.x,lattice.y,0]},{texture:to},[lattice.width,lattice.height,layers]);
+      this.device.queue.submit([encoder.finish()]);
+      // Keep the global sample phase. Only the regional origin/count change; fields and the
+      // geometry keep their original coordinates. Copy GPU-written availability flags first.
+      for(const [name,value]of [['chunkGridOrigin',lattice.origin],['chunkGridSize',[lattice.width,lattice.height]],['chunkGridCount',[lattice.width,lattice.height]]]){
+        const offset=this.layout.fields.get(name).offset;new Float32Array(tile.cpu,offset,2).set(value);this.device.queue.writeBuffer(tile.uniform,offset,tile.cpu,offset,8);
+      }
+      tile.owned.push(tile.uniform,tile.frame,source.colorMasks,source.gridTexture,source.heightTexture);tile.bytes=tile.owned.reduce((n,r)=>n+this.resources.get(r).bytes,0);for(const r of tile.owned)this.resources.get(r).kind='color-cache';
       tile.group=this.commonBindGroup('draw',source,tile.uniform);tile.geometryGroup=this.geometryBinding(this.geometryInLayout,tile.record,source.colorMasks,tile.frame);this.colorTiles.add(tile);
       // Remove transferred textures from the workspace owners before reuse.
       const keep=new Set(tile.owned),input=this.activeInput,level=this.activeLevel;

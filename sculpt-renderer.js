@@ -16,6 +16,7 @@ import {terrainAllocation} from './sculpt-memory.js';
 import {extractGates, gateValues, gateKey, uniformStages, worldUniformDelta, PER_CHUNK_UNIFORMS} from './sculpt-gates.js';
 import {digestGuardRequested, installDigestGuard} from './sculpt-digest-guard.js';
 // The textures a chunk's feed fills, which the input checksum hashes texel by texel (inputDigest).
+export const SURFACE_RECORD_BYTES = 32; // PackedSurfaceRecord in engine-frag.wgsl
 export const INPUT_TEXTURES = ['heightTexture', 'routeTexture', 'gridTexture', 'maskTexture'];
 // A uniform field's bytes in uniformData (sculpt-renderer.js uniformLayout).
 const uniformSpan = f => f.stride ? f.stride * f.count : (f.width || 1) * 4;
@@ -579,7 +580,7 @@ export class TerrainRenderer {
   }
 
   async allocateGeometry(){
-    const width=this.canvas.width+2,height=this.canvas.height+2,bytes=width*height*56;
+    const width=this.canvas.width+2,height=this.canvas.height+2,bytes=width*height*SURFACE_RECORD_BYTES;
     if(bytes>this.device.limits.maxStorageBufferBindingSize)throw Error('The geometry record exceeds the GPU memory storage binding limit.');
     if(this.geometryRecord&&(!this.resources.has(this.geometryRecord)||this.geometryRecord.size!==bytes)){this.release(this.geometryRecord);this.geometryRecord=null;}
     if(this.geometryTarget&&(!this.resources.has(this.geometryTarget)||this.geometryTarget.width!==width||this.geometryTarget.height!==height)){this.release(this.geometryTarget);this.geometryTarget=null;}

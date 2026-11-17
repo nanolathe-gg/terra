@@ -12,7 +12,7 @@ import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWat
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
 import {strokeKind,shapeFrom,savedToolCard,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,borrowBeach,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
-  shapeContext as shapeContextIn,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,rgbColor,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,regionalCheck,repeatCheck,pagedTime,heightsNode} from './sculpt-scene.js';
+  shapeContext as shapeContextIn,worldShapeKey,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,rgbColor,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,regionalCheck,repeatCheck,pagedTime,heightsNode} from './sculpt-scene.js';
 import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER,lfcWidth,heightsBounds} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,pathsWithin,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
@@ -689,8 +689,7 @@ const coastLayerReach=s => {
 function markViewChanged() { revision++; $('export').disabled=true; }
 let worldInputs=null;
 function worldInputChannels() {
-  const {params,...context}=shapeContext();
-  return {shape:JSON.stringify([context,nodes.filter(n=>n.kind==='ground')]),time:JSON.stringify([timeKnobs(renderer),materialKnobs(),weatherOn()])};
+  return {shape:worldShapeKey(shapeContext(),nodes),time:JSON.stringify([timeKnobs(renderer),materialKnobs(),weatherOn()])};
 }
 // Uniform deltas and the few inputs outside the uniform block meet here.
 // A no-op is recorded for the bench, but never advances or schedules the canvas.
