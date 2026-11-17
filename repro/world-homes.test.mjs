@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {WORLD_HOMES, worldHome} from '../sculpt-ui.js';
 import {KNOBS} from '../sculpt-knobs.js';
-import {ROCK_KEYS} from '../sculpt-rock-presets.js';
+import {ROCK_KEYS,ROCK_HEADLINES} from '../sculpt-rock-presets.js';
 import {WORLD_PRIMARY_CONTROLS} from '../sculpt-control-schema.js';
 const homes = Object.entries(WORLD_HOMES).map(([home, keys]) => [home, keys.split(' ')]);
 test('every World setting has exactly one home', () => {
@@ -19,3 +19,5 @@ test('Rock types holds the settings of the selected rock type, and only those', 
 test('each tab shows something before All is on', () => {
   for (const [home, list] of homes) if (!['Rock types/Colors & recipe'].includes(home)) assert(list.some(k => WORLD_PRIMARY_CONTROLS.has(k)), home + ' has a main setting');
 });
+
+test('rock headlines share one ordered home with Pick', () => { assert.deepEqual(WORLD_HOMES['Rock types/Headline'].split(' '), ROCK_HEADLINES); assert.equal(worldHome('faceBlockSize'),'Rock types/Headline'); assert.equal(worldHome('crackSpacing'),'Rock types/Cracks & bands'); });

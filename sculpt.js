@@ -2,12 +2,12 @@ import {requestAdapter} from './sculpt-webgpu.js';
 import {savedWorld,copySavedWorld,savedWorldId,sameSavedWorld,worldKeys} from './sculpt-save.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
-import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
+import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,worldHome,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
 import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,roleName,worldKey,LIBRARY} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
-import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
+import {ROCK_PRESETS,ROCK_HEADLINES,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
 import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
@@ -918,7 +918,6 @@ function rockReach(slot) {
   return `Recolors ${m.name}: ${rock.name}${more?` and ${more}`:''}, on this map.`;
 }
 // A rock type's headline rows, as World › Rock types shows them for it: the rows the page holds, by their own names.
-const ROCK_HEADLINES=['faceWhole','faceBlockSize','crackSeverity'];
 function rockValues(slot) {
   const own=slot>0?mapRocks.find(r => r.slot===slot)?.knobs:null;
   return ROCK_HEADLINES.filter(key => $('knob-'+key)).map(key => {
@@ -2227,9 +2226,24 @@ function buildKnobs() {
   // Every knob needs a world default (materials/defaults.json knobs).
   const missing = [...KNOBS.flatMap(([, list]) => list.map(k => k[0])), ...SHAPE_FIELDS.map(f => f[0])].filter(k => !(k in (config.defaults || {})));
   if (missing.length) console.warn('Knobs without a world default:', missing.join(', '));
+  const addKnob=(title,[key,label,min,max,step,value])=>{
+      const id = 'knob-' + key, current = params.has(key) ? Number(params.get(key)) : value, choices = WORLD_CHOICES[key];
+      // A value shows at most three decimals (Sun height's defaults are the old light's height, 45.20597821393736 degrees on most worlds).
+      const cleanLabel=label.replace(/\s*\([^)]*\)/g,'');
+      const wrap = controlRow({id,label:`${cleanLabel} <output${choices?' hidden':''}>${+current.toFixed(3)}</output>`,range:`min="${min}" max="${max}" step="${step}" value="${current}"`,choices});
+      const home=worldHome(key),direct=home==='Rock types/Headline'||home.startsWith('World/');
+      const {block:box,search}=direct?{block:document.querySelector(`[data-home="${home}"] .world-rows`),search:title}:worldGroup(title,key);
+      wrap.dataset.knob=key;wrap.dataset.searchGroup=search+' '+label;wrap.querySelector('label').title=label;(wrap.querySelector('.scrub')||wrap).title=label;
+      const input = wrap.querySelector('#'+id), out = wrap.querySelector('output');
+      if(choices)input.value=String(current);
+      input.addEventListener('input', () => { out.textContent = input.value; if (rockSelected>0 && ROCK_KEYS.includes(key)) setPresetKnob(key, Number(input.value)); else setKnob(key, input.value); });
+      input.addEventListener('change',()=>worldInputQueue.end());
+      if(key==='faceBlockSize'){const note=document.createElement('p');note.className='small rock-headline-note';note.textContent='Block size reads most clearly once Whole blocks are high.';wrap.append(note);}
+      box.append(wrap);
+  };
   for (const [title, knobs] of KNOBS) {
     if (title === 'Cracks') {
-      const box=worldGroup(title,knobs[0][0]).block;
+      const box=worldGroup(title,'crackSpacing').block;
       const wrap = document.createElement('div'); wrap.className = 'control';
       wrap.innerHTML = `<label for="crack-style">Style</label><select id="crack-style" style="width:100%"><option value="">Choose a style…</option>${Object.keys(CRACK_STYLES).map(k => `<option>${k}</option>`).join('')}</select><p class="small">How much each shape cracks is its own Cracks row, in the shape’s card.</p>`;
       wrap.querySelector('select').addEventListener('change', event => {
@@ -2242,20 +2256,9 @@ function buildKnobs() {
       });
       box.append(wrap);
     }
-    for (const [key, label, min, max, step, value] of knobs) {
-      const id = 'knob-' + key, current = params.has(key) ? Number(params.get(key)) : value, choices = WORLD_CHOICES[key];
-      // A value shows at most three decimals (Sun height's defaults are the old light's height, 45.20597821393736 degrees on most worlds).
-      const cleanLabel=label.replace(/\s*\([^)]*\)/g,'');
-      const wrap = controlRow({id,label:`${cleanLabel} <output${choices?' hidden':''}>${+current.toFixed(3)}</output>`,range:`min="${min}" max="${max}" step="${step}" value="${current}"`,choices});
-      const {block:box,search}=worldGroup(title,key);
-      wrap.dataset.knob=key;wrap.dataset.searchGroup=search+' '+label;wrap.querySelector('label').title=label;(wrap.querySelector('.scrub')||wrap).title=label;
-      const input = wrap.querySelector('#'+id), out = wrap.querySelector('output');
-      if(choices)input.value=String(current);
-      input.addEventListener('input', () => { out.textContent = input.value; if (rockSelected>0 && ROCK_KEYS.includes(key)) setPresetKnob(key, Number(input.value)); else setKnob(key, input.value); });
-      input.addEventListener('change',()=>worldInputQueue.end());
-      box.append(wrap);
-    }
+    for (const row of knobs) if(!ROCK_HEADLINES.includes(row[0])) addKnob(title,row);
   }
+  for(const key of ROCK_HEADLINES){const [title,rows]=KNOBS.find(([,rows])=>rows.some(row=>row[0]===key));addKnob(title,rows.find(row=>row[0]===key));}
   const sync=mountWorldControlIndex(root,worldPanelValues);
   syncWorldControls=()=>{sync();$('rock-preset').value=rockSelected>0?rockRecipeFor(mapRocks.find(r=>r.slot===rockSelected)):rockPresetFor(rockSettings(),config.column);syncRockColors();materialEditor?.refreshPreview();};
   $('rock-preset').onchange=()=>{

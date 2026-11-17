@@ -30,6 +30,7 @@ try {
   const ready = async () => { for (let i = 0; i < 480; i++) { if (await ev('!!window.sculptCanvas&&!document.getElementById("map-export").disabled')) { await ev('sculptCanvas.idle()'); return; } await sleep(150); } throw Error('Editor did not become ready: ' + errors.join('\n')); };
   const set = async (elementId, value) => { await ev(`(()=>{const e=document.getElementById(${JSON.stringify(elementId)});e.value=${JSON.stringify(String(value))};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`); await ready(); };
   const click = async elementId => { await ev(`document.getElementById(${JSON.stringify(elementId)}).click()`); await sleep(50); await ready(); };
+  const headlineKeys=['faceWhole','faceBlockSize','faceBed','faceWear','crackSeverity','faceScratch','runoff'];
   const rocks = () => ev('sculptDebug.sketch().rocks');
   const nodes = () => ev('sculptDebug.nodes()');
   const capture = () => ev(`(async()=>{const b=await sculptCanvas.debugBake({x:300,y:240,width:512,height:512}),c=document.createElement('canvas');c.width=c.height=512;c.getContext('2d').drawImage(b,0,0);return c.toDataURL();})()`);

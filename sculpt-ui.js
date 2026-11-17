@@ -1,3 +1,4 @@
+import {ROCK_HEADLINES} from './sculpt-rock-presets.js';
 import {worldControlRequirement,WORLD_PRIMARY_CONTROLS} from './sculpt-control-schema.js';
 import {mountWorkspace} from './sculpt-workspace.js';
 import {COLUMN_BEDS,COLUMN_SECTIONS,COLUMN_SLOTS,FIRST_SECTION} from './sculpt-column.js';
@@ -153,14 +154,15 @@ export const WORLD_HOMES={
  'Ground/Slope cover':'hillLight slopeTexture slopeMarks wrinkles',
  'Ground/Low ground':'lowReach lowGrain',
  'Vegetation/':'lushness soilRim plantRelief',
+ 'Rock types/Headline':ROCK_HEADLINES.join(' '),
  'Rock types/Colors & recipe':'absorbDepth shadowTint',
  'Rock types/Exposure & relief':'rockFace faceRock rockFaceFrom faceExtrude faceMass rockCrown',
- 'Rock types/Blocks & joints':'faceWhole faceWholeLarge faceRegular faceBlock faceBlockSize faceStretch faceBlockHeight faceJointTilt faceScaleVary faceBreak faceRound faceJoint faceJointWidth faceSecondary faceContinuity faceLean',
- 'Rock types/Layers':'strata strataContrast strataGrain bedDip bedDipDir bedCycleVary faceBedVary faceBed faceLedge faceRun faceFold faceSpall faceLamina faceLaminaSize faceLayers faceGrass',
- 'Rock types/Weathering':'faceWear faceCrease faceCreaseSize faceScratch faceScratchSize faceScratchLength faceScratchAngle faceClast faceClastSize faceDetailPatch runoff runoffScale runoffConcentration runoffCut runoffStain',
+ 'Rock types/Blocks & joints':'faceWholeLarge faceRegular faceBlock faceStretch faceBlockHeight faceJointTilt faceScaleVary faceBreak faceRound faceJoint faceJointWidth faceSecondary faceContinuity faceLean',
+ 'Rock types/Layers':'strata strataContrast strataGrain bedDip bedDipDir bedCycleVary faceBedVary faceLedge faceRun faceFold faceSpall faceLamina faceLaminaSize faceLayers faceGrass',
+ 'Rock types/Weathering':'faceCrease faceCreaseSize faceScratchSize faceScratchLength faceScratchAngle faceClast faceClastSize faceDetailPatch runoffScale runoffConcentration runoffCut runoffStain',
  'Rock types/Surface & crust':'shineRock shineRockSharp shineRockRough shineRockScale faceShade faceTone faceFresh faceRind faceRindDepth faceRindTone faceRindWarmth faceRindRough faceMineral faceStrata faceWet',
  'Rock types/Stones & debris':'looseSize stoneSort stoneRound stoneSlab debrisAmount debrisReach debrisDepth',
- 'Rock types/Cracks & bands':'crackSeverity crackSpacing crackMajor crackMinor crackHairline crackBlocks crackWidth crackNetwork crackDark banding',
+ 'Rock types/Cracks & bands':'crackSpacing crackMajor crackMinor crackHairline crackBlocks crackWidth crackNetwork crackDark banding',
  'Rock types/Special surfaces':'pockmark pockSize moonCups moonCupSize moonCupDepth cupStretch moonRibs moonRibDepth moonRibDark moonFolds moonFoldSpacing iceCrystal iceCrest iceSnow iceFall iceApron gougeWeb',
  'Cliffs & stones/Where rock shows':'rimReach shoreRock shoreShelf',
  'Cliffs & stones/Loose stones':'looseSupply boulders looseKnoll',

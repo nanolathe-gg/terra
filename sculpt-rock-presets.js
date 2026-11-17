@@ -27,6 +27,8 @@ export const ROCK_PRESETS={
 // Rock surfaces a recipe may carry too (struct Rock): cracks, contour bands, moon pits and strokes, ice crystal strokes, crests, snow caps, fibres
 // and aprons, the crystal web and rock on level tops (Rock crown). A recipe that does not set one takes the world's.
 export const ROCK_SURFACE_KEYS=['crackSeverity','crackMajor','crackMinor','crackHairline','crackBlocks','crackSpacing','crackWidth','crackDark','crackNetwork','banding','pockmark','pockSize','moonCups','moonCupSize','moonCupDepth','cupStretch','moonRibs','moonRibDepth','moonRibDark','moonFolds','moonFoldSpacing','iceCrystal','iceCrest','iceSnow','iceFall','iceApron','gougeWeb','rockCrown'];
+// One ordered headline list for the rock page and Pick.
+export const ROCK_HEADLINES=['faceWhole','faceBlockSize','faceBed','faceWear','crackSeverity','faceScratch','runoff'];
 export const ROCK_KEYS=[...Object.keys(base),'strata','strataContrast','strataGrain','absorbDepth','shadowTint',...ROCK_SURFACE_KEYS];
 // The starting recipes' bed tones ({beds}, checkColors: shifts of the recipe's rock material's color): a preset made from one takes them. A world that names a recipe as its rock
 // keeps its own colors (applyWorldRock takes the numbers and beds only), so its slot 0 looks as it did. Each color is an entry of the game's
