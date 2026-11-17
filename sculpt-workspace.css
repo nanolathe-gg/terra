@@ -83,6 +83,26 @@
 .world-title{font-size:11px;font-weight:500;color:#b3c0c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;padding:4px 10px;border:1px solid var(--line);border-radius:12px;flex:0 1 auto}
 .topbar .primary{background:#3f6b4c;border-color:#78ae8d;color:#f1ffe9;font-weight:600;padding-left:14px;padding-right:14px}.topbar .primary:hover:not(:disabled){background:#4a7d59}
 .topbar #toggle-tools,.topbar #toggle-inspector{padding:5px 6px}.topbar button[aria-expanded=false]#toggle-tools,.topbar button[aria-expanded=false]#toggle-inspector{color:var(--accent);border-color:#597a69}
+/* Find (sculpt-find.js): small at rest, it grows only into the bar's free room, so it gives way before anything else shrinks; in use it
+   widens over its neighbors, its results under it. */
+.find{position:relative;flex:1 1 0;min-width:32px;max-width:64px;height:28px}
+.find-icon{position:absolute;left:7px;top:7px;width:14px;height:14px;color:var(--muted);pointer-events:none;z-index:31}
+#find-input{width:100%;height:28px;padding:4px 4px 4px 26px;font-size:11px;color:inherit;background:#141c20;border:1px solid var(--line);border-radius:5px}
+#find-input::placeholder{color:var(--muted)}#find-input:not(:focus)::-webkit-search-cancel-button{display:none}
+#find-input:focus{position:absolute;left:0;top:0;width:min(420px,calc(100vw - 24px));z-index:30;border-color:#597a69}
+.find-results{position:absolute;top:34px;left:0;width:min(440px,calc(100vw - 24px));max-height:min(70vh,560px);overflow:auto;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 12px 40px #0008;z-index:30}
+.find-group+.find-group{margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}
+.find-group-name{padding:4px 8px 2px;font-size:10px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+.find-option{display:block;padding:4px 8px;border-radius:5px;cursor:pointer}.find-option[aria-selected=true]{background:#344c42;color:#d9ffe5}
+.find-name,.find-path{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.find-path{font-size:10.5px;color:var(--muted)}.find-option[aria-selected=true] .find-path{color:#b9dcc6}
+.find-option.unavailable .find-name{color:var(--muted)}.find-why{display:block;font-size:10.5px;color:#b6adb5}
+.find-swatch{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:-1px;border-radius:3px;border:1px solid #0008}
+.find-hint{padding:6px 8px;color:var(--muted);font-size:11px}
+.find-flash{animation:find-flash 1.6s ease-out}
+@keyframes find-flash{0%,35%{box-shadow:inset 0 0 0 2px var(--accent);background-color:#9fd7b322}100%{box-shadow:inset 0 0 0 2px transparent;background-color:transparent}}
+/* Its room below 1440 px is the brand's subtitle; below 1250 px it rests as the magnifier alone, in the room of the brand's name (the mark stays). */
+@media(max-width:1439px){.version{display:none}}
+@media(max-width:1250px){.find{min-width:28px;max-width:28px}#find-input:not(:focus){padding:4px 0 4px 26px}#find-input:not(:focus)::placeholder{color:transparent}.topbar .brand{font-size:0;gap:0}.topbar .brand-mark{font-size:22px}}
 .top-menu{position:relative}.top-menu>summary{list-style:none;color:inherit;background:var(--raised);border:1px solid var(--line);border-radius:5px;padding:5px 8px;font-size:11px;white-space:nowrap}.top-menu>summary::-webkit-details-marker{display:none}.top-menu>summary:hover{background:#344047}
 .top-menu .popover{top:34px;right:0;width:230px;padding:10px 12px;display:flex;flex-direction:column;gap:9px}.top-menu .view-toggle{margin:0}
 .erosion-toggle{margin:10px 0 0}
