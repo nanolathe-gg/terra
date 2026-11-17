@@ -138,6 +138,11 @@ Each phase lands on its own. Rule 7: a phase becomes every world's behavior or d
        Bands into this section's Built-in settings. Their layer rows show no Amount, which would repeat the strength.
        Highland ground also takes no rule or edge (they would move its color but not the relief and bed cap its share sets);
        a list's stored Amount, rule or edge for them is dropped.
+   - Branch `ux-round3` (replaces the stage headings): the list is three sections by what draws, from facts read directly
+     (`SURFACE_NEEDS`, a layer's Coverage and material): Drawing in this world, Only where painted (Surface paint's rock, snow and
+     moss) and Cannot draw in the world yet, each idle layer with its reason and a door to the setting that turns it on. Rows keep
+     draw order; a row moves among its stage's layers in its section, landing beside the one it passes. A closed row says where
+     the layer lies in words from its rule, with its Coverage as the editor's slider; Add a layer is a gallery of the presets.
    - Not done, on purpose: turning the highland ground and base band into rules. `highShare` also sets the ground's art relief
      and caps the beds outside the layer stages, where facts are not computed, so a rule would split one surface into two
      placements. The rock face's rule belongs to each rock type (Rock types › Exposure & relief), not to the world: a world rule
