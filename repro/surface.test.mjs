@@ -19,6 +19,27 @@ test('the default surface draws every built-in once, in a stage order the draw c
   assert.ok(surfaceRows([{builtin: 'soil'}]).rows[0][2] === -2, 'an engine surface without a material draws nothing');
 });
 
+test('each built-in’s needs name real World settings, roles, world facts and surfaces', async () => {
+  const {SURFACE_NEEDS} = await import('../sculpt-material-model.js');
+  const {KNOBS, worldPanelValues} = await import('../sculpt-knobs.js');
+  const {ROCK_KEYS} = await import('../sculpt-rock-presets.js');
+  const {MAP_ROLES} = await import('../sculpt-materials.js');
+  const {MASK_CHOICES} = await import('../sculpt-scene.js');
+  const knobs = new Set([...KNOBS.flatMap(([, rows]) => rows.map(r => r[0])), ...ROCK_KEYS]);
+  const facts = Object.keys(worldPanelValues({config: {surface: []}, renderer: {variant: new Map()}, nodes: [], colors: {}, materials: []}));
+  const renderer = readFileSync(new URL('../sculpt-renderer.js', import.meta.url), 'utf8');
+  assert.deepEqual(Object.keys(SURFACE_NEEDS).sort(), Object.keys(SURFACE_BUILTINS).sort(), 'every built-in has an entry');
+  for (const [builtin, needs] of Object.entries(SURFACE_NEEDS)) for (const need of needs) {
+    const kinds = ['control', 'role', 'layer', 'painted'].filter(k => need[k] !== undefined);
+    assert.equal(kinds.length, 1, `${builtin}: one kind a need`);
+    if (need.control) assert.ok(knobs.has(need.control), `${builtin}: ${need.control} is a World setting`);
+    if (need.unless) assert.ok(facts.includes(need.unless), `${builtin}: ${need.unless} is a world fact`);
+    if (need.role) assert.ok(MAP_ROLES.some(([r]) => r === need.role), `${builtin}: ${need.role} is a map role`);
+    if (need.layer) assert.ok(renderer.includes(`this.layers.has('${need.layer}')`), `${builtin}: the renderer reads the world’s ${need.layer}`);
+    if (need.painted) assert.ok(MASK_CHOICES.some(([, name]) => name.toLowerCase().startsWith(need.painted)), `${builtin}: Surface paint lays ${need.painted}`);
+  }
+});
+
 test('rows sort by stage, keep the list order within a stage, and head each stage with its first row and count', () => {
   const {rows, head} = surfaceRows([{builtin: 'sand'}, {builtin: 'highland', amount: .5}, {builtin: 'fines', edge: {width: .2, noise: .6, noiseSize: 1}}, {builtin: 'rock'}]);
   assert.equal(rows.length, 8);

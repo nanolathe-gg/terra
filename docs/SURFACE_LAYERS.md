@@ -48,6 +48,10 @@ the color below (a tint, a recolor, a darkening): they cannot be byte-identical 
 at fixed points between layers until a later phase replaces them. **Reads** lists what later steps take
 from a step.
 
+The **Worlds (gate)** column is the phase-1 account. What each built-in layer needs to draw today (a World setting above 0, a role material,
+the world's beach, or Surface paint) is data, `SURFACE_NEEDS` in `sculpt-material-model.js`, checked against `engine-frag.wgsl` and
+`sculpt-renderer.js`; World › Surface sorts its list by it ("Drawing in this world", "Only where painted", "Cannot draw … yet").
+
 | # | Step | Kind | Worlds (gate) | Reads |
 | --- | --- | --- | --- | --- |
 | 1 | Ground material (own or a stroke's) | base | all | |
