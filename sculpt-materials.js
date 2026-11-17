@@ -664,9 +664,11 @@ export function adoptWorldMaterials(value, config, {carried = false} = {}) {
     const key = worldKey(at), kept = config.worldMaterials?.find(m => worldKey(m) === key);
     if (kept) { const name = uniqueName(list.filter(m => m !== at), nameOf(kept.name)); list = list.map(m => m === at ? {...m, name, ...copyMaterial(kept)} : m); continue; }
     const role = MAP_ROLES.find(([r]) => at[r]); if (!role) continue;
-    const want = LIBRARY[config.materials?.[role[1]]];
-    if (!want || at.source === config.materials[role[1]] || !LIBRARY[at.source]) continue;
-    if (JSON.stringify(copyMaterial(at)) !== JSON.stringify(copyMaterial(LIBRARY[at.source]))) continue;
+    const want = LIBRARY[config.materials?.[role[1]]], unedited = LIBRARY[at.source] && JSON.stringify(copyMaterial(at)) === JSON.stringify(copyMaterial(LIBRARY[at.source]));
+    // A carried map's surface this world does not name (Desert's highland in Green): another world's, so it stops being one of this world's.
+    // It stays in the list as the map's own (slots are positions), and the map's world matches this one's (a refresh opens it in place).
+    if (!want) { if (carried && unedited) list = list.map(m => m === at ? Object.fromEntries(Object.entries(m).filter(([k]) => k !== role[0])) : m); continue; }
+    if (at.source === config.materials[role[1]] || !unedited) continue;
     const name = uniqueName(list.filter(m => m !== at), want.name);
     list = list.map(m => m === at ? {...m, name, ...copyMaterial(want)} : m);
   }
