@@ -74,7 +74,7 @@ export function mountEditorUI(){
  // Escape closes what is open on top of the editor, one thing a press, innermost first: Find, World › Surface's Add a layer gallery (its
  // button folds it, sculpt-surface-panel.js), a tool flyout, a folded menu (Share link inside the Map menu, say), a menu, the full-size curves.
  const find=mountFind();
- const closeGallery=()=>{const b=$('surface-add');if(b?.getAttribute('aria-expanded')!=='true')return false;b.click();return true;};
+ const closeGallery=()=>{const b=$('surface-add');if(b?.getAttribute('aria-expanded')!=='true'||!b.getClientRects().length)return false;b.click();return true;};   // left open behind another tab, it waits
  const closeTop=()=>find.close()||closeGallery()||closeFlyouts()||[...document.querySelectorAll('details.top-menu[open],details.share-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||closeSurfaces(true)||setLarge(false);
  for(const [id,on] of [['view-rendered',false],['view-clay',true]])$(id).onclick=()=>{$('clay').checked=on;$('clay').dispatchEvent(new Event('change'));};
  updateLayout();

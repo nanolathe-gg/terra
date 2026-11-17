@@ -867,7 +867,7 @@ function surfaceHost() {
     // world's rock and the rock types in use), its row's words and requirement; a role, a world surface (config.layers), a world fact.
     control:key=>{
       const row=document.querySelector(`#knobs [data-knob="${key}"]`);if(!row||!renderer)return null;
-      const own=Number(renderer.variant.get(key)??config.defaults?.[key]??0),rock=ROCK_KEYS.includes(key);
+      const own=Number(renderer.variant.get(key)??config.defaults?.[key]),rock=ROCK_KEYS.includes(key);   // a setting with no value is no claim (NaN)
       const label=(row.querySelector('label')?.title??key).replace(/\s*\([^)]*\)/g,''),group=row.closest('.world-subsection')?.querySelector('h3')?.textContent??'';
       return {value:rock?renderer.rockMax(key,own):own,rock,rocks:renderer.rocks.size,label:/\s/.test(label)?label:`${group} ${label.toLowerCase()}`,note:row.querySelector('.control-requirement')?.textContent??''};
     },
