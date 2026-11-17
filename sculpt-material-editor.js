@@ -336,13 +336,18 @@ export function mountMaterialEditor(host) {
   });
   for (const p of DITHER) { $('dither-' + p.key).oninput = attempt(() => edit(m => { m.dither[p.key] = Number($('dither-' + p.key).value); })); $('dither-' + p.key).onchange = commit; }
 
-  // The preview: one picture, shown as the tile, a 3 by 3 repeat or on a small piece of terrain.
+  // The preview: one picture, shown as the tile, a 3 by 3 repeat or on a small piece of terrain. The canvas takes its box's own pixel size
+  // (a whole number of tiles, sculpt-workspace.css), and every view but Repeat draws the middle of the picture unscaled: one art pixel a
+  // pixel, or two at 2x.
   function drawPicture() {
-    const canvas = $('material-preview'), ctx = canvas.getContext('2d'), size = canvas.width; if (!picture) { ctx.clearRect(0, 0, size, size); return; }
+    const canvas = $('material-preview'), size = canvas.clientWidth || canvas.width; if (canvas.width !== size) canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, size, size); if (!picture) return;
     const source = picture.canvas, s = source.width;
     if (view === 'repeat' && picture.view === 'tile') { ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) ctx.drawImage(source, x * size / 3, y * size / 3, size / 3, size / 3); return; }
-    const crop = zoomed ? size / 2 : Math.min(size, s); ctx.imageSmoothingEnabled = false; ctx.drawImage(source, (s - crop) / 2, (s - crop) / 2, crop, crop, 0, 0, size, size);
+    const scale = zoomed ? 2 : 1, crop = Math.min(s, size / scale), shown = crop * scale, at = (size - shown) / 2;
+    ctx.imageSmoothingEnabled = false; ctx.drawImage(source, (s - crop) / 2, (s - crop) / 2, crop, crop, at, at, shown, shown);
   }
+  const previewBox = new ResizeObserver(() => { if (dialog.open) drawPicture(); }); previewBox.observe($('material-preview'));
   function refreshPictures() {
     const m = material(); if (!dialog.open || !m) return;
     const r = host.renderer(), list = materials(), water = m.worldWater === true, companion = list.find(o => water ? o.worldGround : o.worldWater) ?? m;
@@ -558,5 +563,5 @@ export function mountMaterialEditor(host) {
   refresh();
   // The Color rows again, once the renderer has read back what the materials are drawn in (sculpt.js renderer.onmeans).
   const refreshColors = () => { for (const [prefix, m] of [['ctl', material()], ...worldRows.map(w => [w.prefix, materials().find(o => o[w.role]) ?? null])]) { const own = $(`${prefix}-matcolor`); if (m && document.activeElement !== own) own.value = hex(drawn(m).map(v => v * 255)); } };
-  return {refresh, refreshColors, open, refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { setFull(false); dialog.close(); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); locks.disconnect(); graph.dispose(); preview.dispose(); }};
+  return {refresh, refreshColors, open, refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { setFull(false); dialog.close(); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); locks.disconnect(); previewBox.disconnect(); graph.dispose(); preview.dispose(); }};
 }

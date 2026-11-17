@@ -178,9 +178,11 @@ closes it.
 - Shift-click selects several; Frame puts them in a labeled frame. Delete
   removes, Ctrl/Cmd+D duplicates, F fits. Nodes move only when you move them
   or press Arrange.
-- The preview shows the whole repeat under the world's sun (Tile), three
-  repeats each way (Repeat), or a shore, a plain and a hill (On terrain); 2×
-  magnifies, Node shows the selected node alone.
+- The preview shows the middle of the repeat at 1× under the world's sun
+  (Tile), three repeats each way (Repeat), or a shore, a plain and a hill (On
+  terrain); 2× magnifies, Node shows the selected node alone. Its box is a
+  whole number of 32 px tiles (9 docked, 12 at Full size) and every view but
+  Repeat draws unscaled.
 - **Controls**: the published settings. In the Node pane, ◆ beside a setting
   publishes it; a gradient publishes its colors. Publishing asks for the
   control's name in place, starting from the node's name and the setting:

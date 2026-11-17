@@ -332,7 +332,10 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 #node-list{display:flex;flex-direction:column;max-height:300px;overflow:auto}#node-list button{text-align:left;border:0;background:none;padding:5px 8px;border-radius:4px;font-size:12px}#node-list button:hover,#node-list button:focus{background:#344c42;outline:0}
 .material-side{display:flex;flex-direction:column;min-height:0;overflow:auto;border-left:1px solid var(--line);background:var(--panel);padding:10px 14px 16px}
 .material-preview{flex:none}.material-view{display:flex;gap:4px;margin-bottom:8px}.material-view .spacer{flex:1}.material-view button{padding:5px 9px;font-size:11px;white-space:nowrap}.material-view [aria-pressed=true],.material-tabs [aria-selected=true]{background:#344c42;border-color:#78ae8d}
-#material-preview{display:block;width:min(384px,100%,42dvh);aspect-ratio:1;height:auto;background:#10171a;image-rendering:pixelated;border:1px solid var(--line)}#material-preview[aria-busy=true]{border-color:#6f8f7b}
+/* The preview box is a whole number of 32 px tiles inside its 1 px border (9 docked, 12 at Full size, 8 when narrow), and the picture is drawn
+   in it unscaled, so Tile, On terrain and Node show true 1x pixels and 2x a true 2x (sculpt-material-editor.js drawPicture). */
+#material-preview{display:block;width:290px;aspect-ratio:1;height:auto;background:#10171a;image-rendering:pixelated;border:1px solid var(--line)}
+@container (min-width:1100px){#material-preview{width:386px}}#material-preview[aria-busy=true]{border-color:#6f8f7b}
 #material-preview-note{margin:6px 0 0;min-height:16px}
 .material-tabs{display:flex;gap:5px;padding:12px 0 10px;position:sticky;top:-10px;background:var(--panel);z-index:1}.material-tabs button{padding:6px 12px}
 .material-pane .control{margin-top:7px}.material-pane p.small{line-height:1.55;margin:0 0 10px}
@@ -361,7 +364,7 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 #palette-grid{display:block;width:100%;max-width:320px;aspect-ratio:1;height:auto;cursor:pointer;image-rendering:pixelated}
 .material-fine{margin-top:10px}.material-fine>summary{cursor:pointer;font-size:11px;color:var(--muted)}
 @container (max-width:1000px){#material-used{display:none}}
-@container (max-width:700px){.material-layout{grid-template-columns:minmax(0,1fr) 288px}.material-header h2{display:none}}
+@container (max-width:700px){.material-layout{grid-template-columns:minmax(0,1fr) 288px}.material-header h2{display:none}#material-preview{width:258px}}
 @container (max-width:560px){.material-layout{grid-template-columns:1fr;grid-template-rows:minmax(220px,45dvh) minmax(0,1fr)}.material-side{border-left:0;border-top:1px solid var(--line)}.material-header{flex-wrap:wrap;gap:8px}#graph-help{display:none}}
 /* World › Surface (sculpt-surface-panel.js): one row a layer, top first; a row opens to its settings. */
 .surface-show{display:flex;gap:6px;align-items:flex-start;margin:4px 0}
