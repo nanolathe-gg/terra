@@ -34,6 +34,22 @@ test('a device restart records the failed notch and reloads only one step lower'
  const floor=createTerrainBudget({explicit:512});assert.equal(floor.restart('a lost GPU device'),false);assert.equal(floor.mb,512);
 });
 
+test('a lost device lowers the budget only when memory caused it',()=>{
+ let clock=0;const now=()=>clock,load=preference=>{let saved=preference;const b=createTerrainBudget({preference,now,save:v=>saved=v});return {b,saved:()=>saved};};
+ // After the view settled, a loss (sleep and wake, a driver reset) reloads at the same budget, the floor included, with no trial note.
+ for(const mb of [2048,512]){const {b,saved}=load({mb});b.begin();b.settled();assert.equal(b.lost('a lost GPU device'),true);b.leave();assert.equal(saved().trying,null);assert.equal(createTerrainBudget({preference:saved()}).mb,mb);}
+ // The browser says memory: one notch lower.
+ {const {b,saved}=load({mb:2048});b.begin();b.settled();assert(b.lost('a lost GPU device',{memory:true}));assert.equal(createTerrainBudget({preference:saved()}).mb,1536);}
+ // During a trial (before the view settled) it counts as the budget failing, and stops at the floor.
+ {const {b,saved}=load({mb:2048});b.begin();assert(b.lost('a lost GPU device'));assert.equal(createTerrainBudget({preference:saved()}).mb,1536);}
+ {const {b}=load({mb:512});b.begin();assert.equal(b.lost('a lost GPU device'),false);}
+ // Right after an allocation failure lowered the budget in place, it reloads at that budget, not a second notch lower.
+ {const {b,saved}=load({mb:2048});b.begin();b.settled();clock=1000;assert(b.lower('a GPU allocation failure'));clock=2000;assert(b.lost('a lost GPU device'));b.leave();
+  assert.equal(saved().trying,null);assert.equal(createTerrainBudget({preference:saved()}).mb,1536);}
+ // After one at the floor, it gives up rather than reload into the same failure; long after, it is any other loss.
+ {const {b}=load({mb:512});b.begin();b.settled();clock=50000;assert.equal(b.lower('a GPU allocation failure'),false);clock=51000;assert.equal(b.lost('a lost GPU device'),false);clock=90000;assert.equal(b.lost('a lost GPU device'),true);}
+});
+
 test('the page caches grow with a budget above 2 GiB and keep their caps at 2 GiB',t=>{
  t.mock.timers.enable({apis:['setTimeout']});
  const MB=1048576,caps=gpuMB=>{const fields=createPagedFields({worldSize:16385,worldGrid:8193,baseHeight:24,maskKeys:[],nodes:()=>[],device:()=>null,context:()=>({}),forceRing:4,budget:()=>({total:gpuMB*MB,minimum:300*MB})});
