@@ -20,18 +20,19 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   config.maskKeys=api.maskKeys; config.gpuBudgetBytes=128*MB;
   const terrainBudget=createTerrainBudget({explicit:query.has('gpuMB')?number(query,'gpuMB',2048,128,TERRAIN_BUDGET_MAX):undefined,deviceMemory:navigator.deviceMemory,preference:api.terrainBudgetPreference?.(),save:value=>api.saveTerrainBudget?.(value)});terrainBudget.begin();addEventListener('pagehide',()=>terrainBudget.leave());
   let restarting=false, suspended=false;
-  const restartForMemory=why=>{
+  // decide: the budget's verdict (restart: one notch lower; lost: lower only when memory caused the loss), true when the page reloads.
+  const restartForMemory=(why,decide=()=>terrainBudget.restart(why))=>{
     if(restarting)return true;
     // Never discard a live recipe when local saving is unavailable. During
     // startup there is no editable recipe yet; the existing save is retained.
     if(!api.saveForGpuRestart?.())return false;
-    const failed=terrainBudget.mb;if(!terrainBudget.restart(why))return false;
+    const failed=terrainBudget.mb;if(!decide())return false;
     restarting=true;
     const url=new URL(location.href);if(url.searchParams.has('gpuMB'))url.searchParams.set('gpuMB',failed);
-    api.renderProgress?.('Restarting terrain with a smaller memory budget…');
+    api.renderProgress?.(terrainBudget.mb<failed?'Restarting terrain with a smaller memory budget…':'Restarting terrain after the GPU was lost…');
     location.replace(url);return true;
   };
-  config.onDeviceLost=()=>restartForMemory('a lost GPU device');
+  config.onDeviceLost=info=>restartForMemory('a lost GPU device',()=>terrainBudget.lost('a lost GPU device',{memory:/out of memory|\boom\b/i.test(info?.message??'')}));
   config.onMemoryPressure=()=>restartForMemory('a GPU allocation failure');
   const output=document.createElement('canvas'),renderer=await TerrainRenderer.createChunked(output,config);
   const g=canvas.getContext('2d'),ink=overlay.getContext('2d'),cache=new Map();
