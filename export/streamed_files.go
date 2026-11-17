@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -50,19 +51,9 @@ func (s *terrainStream) finish() (*exportResult, error) {
 		}
 		s.merge = summary
 	}
-	// First appearances in the global tile grid define the final numbering.
-	// Browser chunk dimensions and the tile-byte spill budget affect neither
-	// the TNT index map nor the order of unique tile graphics.
-	remap := make([]int32, s.store.count)
-	for i := range remap {
-		remap[i] = -1
-	}
-	for i, old := range s.indices {
-		if remap[old] < 0 {
-			remap[old] = int32(len(s.order))
-			s.order = append(s.order, old)
-		}
-		s.indices[i] = uint32(remap[old])
+	unique := s.store.count
+	if err := s.renumber(); err != nil {
+		return nil, err
 	}
 	ota, err := encodeOTA(s.req, s.world, s.starts)
 	if err != nil {
@@ -163,8 +154,60 @@ func (s *terrainStream) finish() (*exportResult, error) {
 	s.metrics.ExportMilliseconds = time.Since(s.begin).Milliseconds()
 	complete = true
 	return &exportResult{Name: s.req.Name, Archive: archiveName, Indexed: indexedName, WidthCells: s.width, HeightCells: s.height,
-		UniqueTiles: s.store.count, Merge: s.merge, TileSlots: len(s.indices), ExactPixels: s.exact, NearestPixels: s.nearest, FeatureCount: len(s.req.Features), Starts: s.starts,
+		UniqueTiles: unique, Merge: s.merge, TileSlots: len(s.indices), ExactPixels: s.exact, NearestPixels: s.nearest, FeatureCount: len(s.req.Features), Starts: s.starts,
 		SelfCheck: selfCheck{TNT: true, OTA: true, Archive: true}, Metrics: s.metrics}, nil
+}
+
+// renumber gives the tiles their final numbers: first appearances in the
+// global tile grid. Browser chunk dimensions and the tile-byte spill budget
+// affect neither the TNT index map nor the order of unique tile graphics.
+func (s *terrainStream) renumber() error {
+	remap := make([]int32, s.store.count)
+	for i := range remap {
+		remap[i] = -1
+	}
+	for i, old := range s.indices {
+		if remap[old] < 0 {
+			remap[old] = int32(len(s.order))
+			s.order = append(s.order, old)
+		}
+		s.indices[i] = uint32(remap[old])
+	}
+	// After a merge the kept tiles lie scattered through the spill file, and
+	// the TNT's three passes over them (write, self-check, indexed picture)
+	// read them in their final order, a call into the file for most. When
+	// they fit the memory budget, as a merged map's 65,536 do the browser's
+	// 64 MiB, they are gathered into memory first, reading the file forward.
+	if s.store.file == nil || len(s.order)*1024 > s.store.budget {
+		return nil
+	}
+	runtime.GC() // the merge's memory, free now, holds the gathered tiles
+	total := len(s.order) * 1024
+	kept := tileStore{budget: s.store.budget, dir: s.store.dir, held: total, count: len(s.order)}
+	for left := total; left > 0; left -= memoryBlock {
+		kept.memory = append(kept.memory, make([]byte, min(memoryBlock, left)))
+	}
+	for old, final := range remap {
+		if old&1023 == 0 {
+			if err := s.ctx.Err(); err != nil {
+				return err
+			}
+		}
+		if final < 0 {
+			continue
+		}
+		at := int(final) * 1024
+		if err := s.store.read(uint32(old), kept.memory[at/memoryBlock][at%memoryBlock:][:1024]); err != nil {
+			return err
+		}
+	}
+	kept.fileReads, kept.fileBytes = s.store.fileReads, s.store.fileBytes
+	s.store.close()
+	s.store = kept
+	for i := range s.order {
+		s.order[i] = uint32(i)
+	}
+	return nil
 }
 
 type contextWriter struct {

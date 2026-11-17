@@ -148,20 +148,42 @@ func run() error {
 	return json.NewEncoder(os.Stdout).Encode(result)
 }
 
-func readRequest(name string) (exportRequest, error) {
+// A map has at most maxUnits units on each side.
+const maxUnits = 40
+
+// The largest valid manifest: the largest map's corner heights and a feature
+// on every play cell (footprints never overlap), as JSON of at most 5 bytes a
+// height ("255, ") and 80 a placement (a name of at most 31 characters, two
+// four-digit coordinates and spacing), plus 1 MiB for the name, description,
+// settings and starts: about 134 MiB.
+const maxManifestBytes = (maxUnits*32+2)*(maxUnits*32+8)*5 + (maxUnits*32)*(maxUnits*32)*80 + 1<<20
+
+func readRequest(name string) (exportRequest, error) { return readManifest(name, maxManifestBytes) }
+
+func readManifest(name string, limit int64) (exportRequest, error) {
 	var req exportRequest
 	f, err := os.Open(name)
 	if err != nil {
 		return req, err
 	}
 	defer f.Close()
-	decoder := json.NewDecoder(io.LimitReader(f, 16<<20))
+	in := &io.LimitedReader{R: f, N: limit + 1}
+	tooLarge := func() error {
+		return fmt.Errorf("manifest %s is larger than %d MiB, more than a %dx%d-unit map with a feature on every cell needs", name, limit>>20, maxUnits, maxUnits)
+	}
+	decoder := json.NewDecoder(in)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&req); err != nil {
+		if in.N == 0 {
+			return req, tooLarge()
+		}
 		return req, fmt.Errorf("manifest %s: %w", name, err)
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
+		if in.N == 0 {
+			return req, tooLarge()
+		}
 		return req, fmt.Errorf("manifest %s: expected one JSON object", name)
 	}
 	return req, nil
@@ -186,8 +208,11 @@ func validateRequest(req exportRequest, catalog catalog) (worldInfo, error) {
 	if world.DisabledReason != "" {
 		return worldInfo{}, fmt.Errorf("world %s cannot export: %s", req.World, world.DisabledReason)
 	}
-	if req.UnitsX < 1 || req.UnitsX > 40 || req.UnitsY < 1 || req.UnitsY > 40 {
-		return worldInfo{}, fmt.Errorf("expected 1..40 units on each axis, got %dx%d", req.UnitsX, req.UnitsY)
+	if req.UnitsX < 1 || req.UnitsX > maxUnits || req.UnitsY < 1 || req.UnitsY > maxUnits {
+		return worldInfo{}, fmt.Errorf("expected 1..%d units on each axis, got %dx%d", maxUnits, req.UnitsX, req.UnitsY)
+	}
+	if cells := req.UnitsX * 32 * req.UnitsY * 32; len(req.Features) > cells {
+		return worldInfo{}, fmt.Errorf("%d features for %d play cells; feature footprints cannot overlap", len(req.Features), cells)
 	}
 	if req.SeaLevel == nil || *req.SeaLevel < 0 || *req.SeaLevel > 255 {
 		return worldInfo{}, fmt.Errorf("seaLevel must be an integer byte (0..255)")
@@ -234,6 +259,10 @@ func validateText(field, value string) error {
 	for _, r := range value {
 		if r < 32 || r == 127 {
 			return fmt.Errorf("%s contains a control character", field)
+		}
+		// The game reads the OTA as single-byte text.
+		if r > 126 {
+			return fmt.Errorf("%s contains %q; the game reads map text as plain ASCII: use English letters, digits, spaces and keyboard punctuation", field, r)
 		}
 	}
 	return nil

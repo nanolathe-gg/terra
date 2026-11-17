@@ -44,7 +44,7 @@ export function mountMapExport(api) {
   let catalogue=null,busy=false,loadedSettings=false,abort=null,job=null;
   const defaults=() => catalogue?.worlds?.[config.biomeId]?.climate||config.exportCatalog?.worlds?.[config.biomeId]?.climate;
   function setSettings(data) { if (!data) return; for (const [key] of SETTINGS) if (Number.isFinite(data[key])) $('map-'+key).value=data[key]; else if (Object.hasOwn(data,key) && (data[key]===null || Number.isNaN(data[key]))) $('map-'+key).value=''; if (typeof data.lava==='boolean') $('map-lava').checked=data.lava; }
-  function serialize() { return {name:$('map-name').value,description:$('map-description').value,settings:{...Object.fromEntries(SETTINGS.map(([key]) => [key,$('map-'+key).valueAsNumber])),lava:$('map-lava').checked}}; }
+  function serialize() { return {name:$('map-name').value.trim(),description:$('map-description').value,settings:{...Object.fromEntries(SETTINGS.map(([key]) => [key,$('map-'+key).valueAsNumber])),lava:$('map-lava').checked}}; }
   const syncMapTitle=()=>{const name=$('map-name').value.trim()||'Untitled map',size=map?`${map.unitsX} × ${map.unitsY}`:'Study';$('tab-map').textContent=`${name} · ${size} ▾`;$('tab-map').title=`Map: ${name} · ${size} — new, open, save, share link, name, size, sea level and game settings`;};
   $('map-name').addEventListener('input',syncMapTitle);syncMapTitle();
   function load(data={}) { $('map-name').value=typeof data.name==='string'?data.name:'Sculpt map'; $('map-description').value=typeof data.description==='string'?data.description:DEFAULT_DESCRIPTION; setSettings(defaults()); loadedSettings=Boolean(data.settings); if (data.settings) setSettings(data.settings); syncMapTitle(); }
@@ -98,13 +98,15 @@ export function mountMapExport(api) {
       return {...result,archiveBytes:archive.size,indexedBytes:indexed.size,files:{archive,indexed},clampedCells:sampled.clipped};
     } finally { signal.removeEventListener('abort',worker.stop); worker.stop(); }
   }
-  async function exportMap(name=$('map-name').value,description=$('map-description').value) {
+  async function exportMap(name=$('map-name').value.trim(),description=$('map-description').value) {
     if (UNSUPPORTED) throw new Error(UNSUPPORTED);
     if (!map || !catalogue?.worlds?.[config.biomeId]?.climate) throw new Error('Export is unavailable for this canvas or world.');
     if (busy || !api.ready()) throw new Error('Wait for the finished terrain before exporting.');
     const {settings}=serialize(),placements=api.mapData?.()||{};
-    for (const [key] of SETTINGS) if (!Number.isInteger(settings[key]) || settings[key]<0 || settings[key]>(key==='surfaceMetal'?255:2147483647)) throw new Error('Use nonnegative integer OTA settings within the displayed bounds.');
-    if (settings.minWind>settings.maxWind) throw new Error('Minimum wind must not exceed maximum wind.');
+    // The OTA settings are refused in the Export pane too: the button's handler drops the rejection.
+    const refuse=message => { $('map-export-state').textContent=message; throw new Error(message); };
+    for (const [key] of SETTINGS) if (!Number.isInteger(settings[key]) || settings[key]<0 || settings[key]>(key==='surfaceMetal'?255:2147483647)) refuse('Use nonnegative integer OTA settings within the displayed bounds.');
+    if (settings.minWind>settings.maxWind) refuse('Minimum wind must not exceed maximum wind.');
     const token=api.revision();
     busy=true; abort=new AbortController(); $('map-cancel').hidden=false; $('map-cancel').disabled=false; update(); $('map-controls').disabled=true; api.busy(true); $('map-download').replaceChildren(); endJob();
     try {

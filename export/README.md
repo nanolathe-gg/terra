@@ -53,6 +53,8 @@ positions and dimensions are multiples of 32, and the chunks must cover that
 extent exactly once. Each chunk is at most 4096 px on either side. Paths are local files, relative to the manifest or
 absolute; images must be opaque PNGs. Supply final engine-projected art in
 screen coordinates (`worldY-height/2`); the exporter adds no projection shift.
+A manifest may be as large as a 40×40 map with a feature on every play cell
+needs (about 134 MiB of JSON); a larger one is refused with that reason.
 
 Palette conversion uses exact RGB matches, then squared Euclidean RGB
 distance, with the lowest index winning ties. There is no noise or dithering.
@@ -62,7 +64,10 @@ dimensions, the browser's GPU budget or the exporter's spill budget does not
 change TNT bytes. A map with at most 65536 unique tiles is exact. With more,
 the exporter merges tiles before numbering them (`merge.go`): weighted median
 cut over each tile's 8x8 grid of mean palette colors (one per 4x4 pixel block), at most 65536 clusters,
-each drawn with its member nearest the cluster centroid. A tile used by many
+each drawn with its member nearest the cluster centroid. When the clusters left
+cannot be split (their tiles differ only inside 4x4 blocks) before the limit,
+the merged tiles that cost most (use count times squared pixel error) are kept
+until it is reached. A tile used by many
 slots resists merging, one-off grit merges first, and the result is
 deterministic. The export result then carries a `merge` object (distinct tiles
 before, kept, merged, slots changed, mean, 99th percentile and worst per-tile

@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"fmt"
 	"math"
+	"runtime"
 	"sort"
 	"time"
 )
@@ -271,15 +272,47 @@ func (s *terrainStream) mergeTiles() (*mergeSummary, error) {
 			rep[id] = bestID
 		}
 	}
+	// The descriptors' memory serves the cache below: collected now, before
+	// the heap would next grow, as WebAssembly's memory never shrinks.
+	m.desc = nil
+	runtime.GC()
+	// The loss pass compares each merged tile with its replacement. Reading
+	// the two in turn would scatter calls through the spill file between the
+	// merged tiles' forward reads and defeat the store's read-ahead, so the
+	// replacements held only on disk (at most tileLimit tiles) are first
+	// copied in file order into a cache, and then the merged tiles are read in
+	// file order.
+	cached := make(map[uint32]int)
+	for id := 0; id < n; id++ {
+		if r := rep[id]; r != uint32(id) && !s.store.resident(r) {
+			cached[r] = -1
+		}
+	}
+	cache := make([]byte, 0, len(cached)*1024)
+	for r := 0; r < n && len(cache) < cap(cache); r++ {
+		if _, ok := cached[uint32(r)]; !ok {
+			continue
+		}
+		cached[uint32(r)] = len(cache)
+		cache = cache[:len(cache)+1024]
+		if err := s.store.read(uint32(r), cache[len(cache)-1024:]); err != nil {
+			return nil, err
+		}
+	}
 	summary := &mergeSummary{DistinctTiles: n, KeptTiles: len(leaves), TileSlots: len(s.indices)}
 	type loss struct {
 		id  uint32
+		sse int
 		rms float64
 	}
 	var losses []loss
 	var a, b [1024]byte
-	var sumRMS float64
 	for id := 0; id < n; id++ {
+		if id&1023 == 0 {
+			if err := s.ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
 		r := rep[id]
 		if r == uint32(id) {
 			continue
@@ -287,7 +320,9 @@ func (s *terrainStream) mergeTiles() (*mergeSummary, error) {
 		if err := s.store.read(uint32(id), a[:]); err != nil {
 			return nil, err
 		}
-		if err := s.store.read(r, b[:]); err != nil {
+		if at, ok := cached[r]; ok {
+			copy(b[:], cache[at:])
+		} else if err := s.store.read(r, b[:]); err != nil {
 			return nil, err
 		}
 		var sse int
@@ -298,11 +333,44 @@ func (s *terrainStream) mergeTiles() (*mergeSummary, error) {
 				sse += d * d
 			}
 		}
-		rms := math.Sqrt(float64(sse) / 1024)
-		losses = append(losses, loss{uint32(id), rms})
+		losses = append(losses, loss{uint32(id), sse, math.Sqrt(float64(sse) / 1024)})
+	}
+	// The split stops early when every cluster left has one descriptor: its
+	// tiles differ only inside their 4x4 blocks. Budget still left keeps the
+	// merged tiles that would cost most, use count times summed squared pixel
+	// error from their replacement (integers; ties by first appearance), each
+	// a cluster of its own. A replacement stays: it is the lowest-ranked
+	// member of an equal-descriptor cluster, and never one of those kept.
+	if spare := s.tileLimit - len(leaves); spare > 0 && len(losses) > 0 {
+		cost := func(l loss) uint64 { return uint64(m.weight[l.id]) * uint64(l.sse) }
+		byCost := make([]int, len(losses))
+		for i := range byCost {
+			byCost[i] = i
+		}
+		sort.Slice(byCost, func(i, j int) bool {
+			a, b := losses[byCost[i]], losses[byCost[j]]
+			if ca, cb := cost(a), cost(b); ca != cb {
+				return ca > cb
+			}
+			return m.rank[a.id] < m.rank[b.id]
+		})
+		for _, i := range byCost[:min(spare, len(byCost))] {
+			rep[losses[i].id] = losses[i].id
+		}
+		summary.KeptTiles += min(spare, len(byCost))
+		left := losses[:0]
+		for _, l := range losses {
+			if rep[l.id] != l.id {
+				left = append(left, l)
+			}
+		}
+		losses = left
+	}
+	var sumRMS float64
+	for _, l := range losses {
 		summary.MergedTiles++
-		summary.ReplacedSlots += int(m.weight[id])
-		sumRMS += float64(rms * float64(m.weight[id])) // unfused, as above
+		summary.ReplacedSlots += int(m.weight[l.id])
+		sumRMS += float64(l.rms * float64(m.weight[l.id])) // unfused, as above
 	}
 	if summary.ReplacedSlots > 0 {
 		summary.MeanRMS = sumRMS / float64(summary.ReplacedSlots)
