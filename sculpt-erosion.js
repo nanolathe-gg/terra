@@ -12,12 +12,16 @@ import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
 const TIME_ROCK = {rockMask: 0};
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+// The Time pass's cell, world px: a lattice finer than this is simulated on cells this size and gets the result as a change of its own
+// heights (runCoarse). The game keeps one height per 16 px, so the finer half was art; a pass on 4 px cells costs a quarter of one on 2.
+const TIME_CELL = 4;
 // Constants of the model. Each comment says what it trades; the four knobs a user sees are
 // erosionAge, erosionRain, columnContrast and talusAngle.
 const BASE_RAIN = 0.006;   // height units a dry sample gains per iteration (times erosionRain)
 const K_FLUX = 0.12;       // pipe flow per unit of surface difference: stable below .25 with four pipes
 const DAMP = 0.85;         // flow a pipe keeps from the last iteration: sheets spread instead of ringing
 const K_CAP = 0.3;         // sediment capacity per unit of sin(slope) * speed
+const CAP_SPACING = 2;     // the lattice spacing, px, that K_CAP is the capacity at (runGpu scales it for a coarser lattice)
 const K_DISSOLVE = 0.5;    // share of the shortfall dissolved per iteration
 const K_DEPOSIT = 0.3;     // share of the excess dropped per iteration (lower than dissolve: sediment travels)
 const EVAPORATION = 0.01;  // standing water dries slowly, so pits fill and settle their sediment
@@ -72,6 +76,9 @@ export class GpuErosion {
     const current=()=>{if(request.stale?.())throw new DOMException('The Time request was superseded.','AbortError');};
     this.running=(this.running||0)+1;
     try {
+      // A lattice finer than the pass's cell is simulated on the pass's cells (runCoarse), inside this pass's own accounting.
+      const step=Math.round(TIME_CELL/(request.spacing??(request.size-1)/(request.grid-1)));
+      if(step>1){const result=await this.runCoarse(request,step);complete=true;return result;}
       current();await this.ready;current();
       window.erodeRuns=(window.erodeRuns||0)+1;
       const feed = await feedPasses(this.device), mp = await this.mapsPipeline();
@@ -79,7 +86,11 @@ export class GpuErosion {
       const {device} = this, {grid, size, seaLevel} = request, n = grid * grid, spacing = request.spacing ?? (size - 1) / (grid - 1);   // H5b: a window of a larger map passes the map's spacing and its own origin
       const age = Math.max(1, Math.round(request.age)), rain = BASE_RAIN * request.rain, started = performance.now();
       const talus = Math.tan(request.talusAngle * Math.PI / 180);
-      const params = new Float32Array([grid, spacing, rain, K_FLUX, DAMP, K_CAP, K_DISSOLVE, K_DEPOSIT, EVAPORATION, WET_FULL,
+      // Water cuts lines a cell wide, so a coarser lattice's are wider: the capacity falls with the root of the spacing, which keeps the
+      // material moved the same from 2 px cells (where the constants were set) to 8 (measured on Green: within 8% at 4 px, 15% at 8 px;
+      // without it 40% and 80% more).
+      const capacity = K_CAP * Math.sqrt(CAP_SPACING / spacing);
+      const params = new Float32Array([grid, spacing, rain, K_FLUX, DAMP, capacity, K_DISSOLVE, K_DEPOSIT, EVAPORATION, WET_FULL,
         this.renderer.variantNumber('columnContrast', 1), ROCK_WEAR, talus, Math.min(request.talusAngle + SOFT_EXTRA, 85) * Math.PI / 180, HARD_ANGLE * Math.PI / 180, THERMAL, request.ox ?? 0, request.oy ?? 0]);
       const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
       const make = (label, bytes, usage = S) => { const b=device.createBuffer({label, size:Math.max(16,bytes),usage});owned.push(b);return b; };
@@ -182,6 +193,49 @@ export class GpuErosion {
     } finally {
       for(const b of owned)if(!complete||!keep.has(b))b.destroy();
       if(!--this.running&&this.quietWaiters?.length){const w=this.quietWaiters;this.quietWaiters=[];w.forEach(r=>r());}
+    }
+  }
+
+  // A lattice finer than the Time pass's cell (TIME_CELL): its height, protection and masks are read down to the pass's cells
+  // (engine-feed.wgsl timeDownMain), the pass runs on those, and its change of height and its maps come back on the lattice
+  // (timeUpHeightMain, timeUpMapsMain). The coarse cells sit on the world cells that divide by `step`, whatever the window's origin, so the
+  // windows of one map sample the same cells. The result has the shape runGpu's has: plane 0 is the lattice's authored height, exactly.
+  async runCoarse(request,step) {
+    const {device}=this,{grid}=request,n=grid*grid,spacing=request.spacing??(request.size-1)/(grid-1),ox=request.ox??0,oy=request.oy??0,started=performance.now();
+    const current=()=>{if(request.stale?.())throw new DOMException('The Time request was superseded.','AbortError');};
+    const first=o=>(step-(o%step+step)%step)%step,sx=first(ox),sy=first(oy),gc=Math.floor((grid-1-Math.min(sx,sy))/step)+1,nc=gc*gc;
+    const S=GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST,owned=[],kept=[];
+    const make=(label,bytes,list=owned)=>{const b=device.createBuffer({label,size:Math.max(16,bytes),usage:S});list.push(b);return b;};
+    let complete=false,coarse=null;
+    try {
+      current();await this.ready;const feed=await feedPasses(device);current();
+      let planes,masks,weather,maps;
+      await terrainAllocation(device,()=>{
+        planes=make('time cells height',nc*8);masks=make('time cells masks',nc*28);
+        weather=make('time pass height',n*8,kept);maps=[0,1,2].map(k=>make('time pass map '+k,n*4,kept));
+      });current();
+      const uniform=feedUniform(device,{grid,cells:n,ox:sx,oy:sy,gw:gc,gh:step,sea:request.seaLevel});owned.push(uniform);
+      const res={'0.0':{buffer:uniform},'0.1':{buffer:request.planes},'0.2':{buffer:request.masks},'3.15':{buffer:planes},'3.16':{buffer:masks},
+        '3.21':{buffer:weather},'3.22':{buffer:weather},'3.23':{buffer:maps[0]},'3.24':{buffer:maps[1]},'3.25':{buffer:maps[2]}};
+      const pass=(encoder,entry,side)=>{const p=encoder.beginComputePass({label:entry});p.setPipeline(feed.pipes[entry]);for(const [g,bg] of feed.groups(entry,res))p.setBindGroup(g,bg);p.dispatchWorkgroups(Math.ceil(side/8),Math.ceil(side/8));p.end();};
+      // The lattice's height and protection are taken now, with the cells the pass reads: an edit during the pass cannot reach its result.
+      // Like every submission of the pass, these two wait their turn first (beforeSlice) and are not made for a superseded request.
+      if(request.beforeSlice)await request.beforeSlice();current();
+      let encoder=device.createCommandEncoder({label:'erosion cells input'});
+      encoder.copyBufferToBuffer(request.planes,0,weather,0,n*8);pass(encoder,'timeDownMain',gc);
+      device.queue.submit([encoder.finish()]);
+      coarse=await this.runGpu({...request,planes,masks,grid:gc,spacing:spacing*step,ox:(ox+sx)/step,oy:(oy+sy)/step});
+      current();if(request.beforeSlice)await request.beforeSlice();current();
+      Object.assign(res,{'3.17':{buffer:coarse.weather},'3.18':{buffer:coarse.maps[0]},'3.19':{buffer:coarse.maps[1]},'3.20':{buffer:coarse.maps[2]}});
+      encoder=device.createCommandEncoder({label:'erosion cells output'});
+      pass(encoder,'timeUpMapsMain',grid);pass(encoder,'timeUpHeightMain',grid);   // the maps read the protection plane's neighbour, the height, before the height pass writes beside it
+      device.queue.submit([encoder.finish()]);await device.queue.onSubmittedWorkDone();current();
+      complete=true;
+      return {weather,maps,grid,bytes:n*20,milliseconds:performance.now()-started,parts:{...coarse.parts,cells:gc,step}};
+    } finally {
+      for(const b of owned)b.destroy();
+      if(coarse){coarse.weather.destroy();coarse.maps.forEach(b=>b.destroy());}
+      if(!complete)for(const b of kept)b.destroy();
     }
   }
 

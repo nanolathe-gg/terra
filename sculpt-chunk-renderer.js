@@ -12,6 +12,11 @@ import {MASK_KEYS} from './sculpt-scene.js';
 
 const MB=1024*1024;
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+// An input set's size is its tile's exact lattice, which follows the tile's size (a final tile, a preview block, a strip beside an edit)
+// and how near the map's edge it lies, and rounds a cell either way with its place. So the sets piled up as the view moved (42 of them,
+// 573 MiB, after one pass over a 16x16 map), and they hold capacity, never content. Keep the newest three: a view draws at up to three
+// levels at once (coarse preview, draft, final). Three is a choice from that, not a measured best.
+const INPUT_SETS=3;
 const mipBytes=(w,h,layers,levels,bytes)=>{let total=0;for(let i=0;i<levels;i++)total+=Math.max(1,w>>i)*Math.max(1,h>>i)*layers*bytes;return total;};
 
 // The relief fields stop at 2x: their memory grows with the square of the level, and 4x's grain is drawn, not baked.
@@ -117,6 +122,11 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   // The shaders bound all neighbourhoods. Bake relief noise is a
   // function of the queried point, not walks through adjacent baked pixels.
   // Only height/mask/weather support extends the bake's field input apron.
+  // The most the materials in use add to the relief. setMaterials replaces the map of them, so the bound is found once for each set.
+  groundRelief() {
+    if(this.groundReliefOf!==this.grounds){this.groundReliefBound=Math.max(0,...[...(this.grounds?.values()??[])].map(materialReliefBound));this.groundReliefOf=this.grounds;}
+    return this.groundReliefBound;
+  }
   reaches(heightBounds=this.config.heightBounds??[-90,300]) {
     const n=(k,f)=>this.number(k,f),rock=(k,f)=>this.rockMax(k,n(k,f));   // rock: a recipe number's largest over the rocks in use
     // H1: the close shadow march (6 px) and the cavity rings (4 px) plus the gradient's 1.4 sit inside the far taps' reach.
@@ -143,7 +153,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     // The bed's lumps (bedRelief) stay under the water plane, but the pictures are sensitive to this reach (Green's hills shade differently by about one unit of it), so it keeps counting them.
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
     const extra=relief+blocks+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(rock('looseSize',6))+Math.abs(n('rippleHeight',1.4))+(rock('debrisAmount',0)>0?1.5*rock('debrisDepth',4):0);
-    const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4+Math.max(0,...[...(this.grounds?.values()??[])].map(materialReliefBound)));
+    const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4+this.groundRelief());
     return {draw,bake,direct,far,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};
   }
   requiredRegion(request) {
@@ -237,6 +247,10 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     }
     this.bindGroups={};
   }
+  capInputSets(keep,limit=INPUT_SETS){
+    const idle=[...this.inputSets].filter(([,state])=>state!==keep).sort((a,b)=>b[1].used-a[1].used);
+    for(const [key,state] of idle.slice(Math.max(0,limit-1)))this.dropWorking({kind:'input',key,state});
+  }
   trimWorking(keep,enough){
     for(const group of this.workingGroups().filter(g=>!keep.has(g.state)).sort((a,b)=>a.state.used-b.state.used)){
       if(enough())break;this.dropWorking(group);
@@ -267,6 +281,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     let input=this.inputSets.get(inputKey),level=this.levelSets.get(scale);
     if(level&&level.key!==levelKey){this.dropWorking({kind:'level',key:scale,state:level});level=null;}
     if(!input){input={used:0,textures:[]};this.inputSets.set(inputKey,input);}
+    this.capInputSets(input);
     if(!level){level={key:levelKey,used:0,rock:this.emptyRock(),fieldsTexture:null,voxelColor:null};this.levelSets.set(scale,level);}
     if(level.voxelColor&&(level.voxelColor.width!==width||level.voxelColor.height!==height)){this.release(level.voxelColor);level.voxelColor=null;}
     const rockBytes=level.rock.owned.reduce((n,r)=>n+(this.resources.get(r)?.bytes??0),0);

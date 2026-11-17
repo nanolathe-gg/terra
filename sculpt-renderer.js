@@ -346,8 +346,8 @@ export class TerrainRenderer {
   // 0..255.
   outputPaletteBuffer() {
     const colours = (this.materialData.palette?.entries ?? this.paletteArt).map(i => this.paletteColours[i]);
-    if (this.outputPalette) this.outputPalette.destroy();
-    this.outputPalette = this.device.createBuffer({label: 'output palette', size: Math.max(16, colours.length * 16), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
+    if (this.outputPalette) { this.worldTextures.delete(this.outputPalette); this.outputPalette.destroy(); }
+    this.outputPalette = this.worldResource(this.device.createBuffer({label: 'output palette', size: Math.max(16, colours.length * 16), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST}));
     this.device.queue.writeBuffer(this.outputPalette, 0, new Float32Array(colours.flatMap(c => [c[0], c[1], c[2], 0])));
     this.outputCount = colours.length;
   }
@@ -798,7 +798,9 @@ export class TerrainRenderer {
     // made, not what they hold: a large tile draws in pieces and hands a piece's resources back before the draw ends.
     // Also the color pass's geometry record and frame (allocateGeometry; the frame holds the canvas size) and its mask staging (packColorMasks).
     // The inspector's record (probeBuffer) is written by the color pass and read only by the page.
-    const own = new Set([this.fieldsTexture, this.looseBuffer, voxel?.uniform, this.geometryRecord, this.geometrySettings, this.maskPackBuffer, this.maskPackSettings, this.probeBuffer].filter(Boolean));
+    // The output stage (encodeOutput) reads the color pass's picture (voxelColor), writes its working texture and takes its job from the
+    // chunk's settings and the palette's length; the palette itself is a world resource (outputPaletteBuffer).
+    const own = new Set([this.fieldsTexture, this.looseBuffer, voxel?.uniform, this.geometryRecord, this.geometrySettings, this.maskPackBuffer, this.maskPackSettings, this.probeBuffer, this.voxelColor, this.outputTexture, ...(this.outputJobs ?? [])].filter(Boolean));
     const produced = {has: r => own.has(r) || Boolean(voxel?.made?.has(r) || rock?.made?.has(r))};
     // volatile: produced resources whose bytes may differ between two draws of the same checksum without changing the picture. The voxel
     // settings hold the solid's pool capacity, predicted from the last count; a piece that overflows builds again at its count.

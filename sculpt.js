@@ -1076,7 +1076,8 @@ const gpuPagesForced=() => new URLSearchParams(location.search).get('gpuPages')=
 const pagedWanted=() => worldGrid>1168 || gpuPagesForced();
 const pagedOn=() => Boolean(regionalFields?.paged && regionalFields.active());
 // H12: the paged fields fit their ring and page caps to the terrain GPU budget the canvas holds (gpuMB, or its field), less the canvas's minimum.
-const gpuBudget=() => ({total:(Number(document.querySelector('[data-gpu]')?.value)||Number(new URLSearchParams(location.search).get('gpuMB'))||2048)*1048576,minimum:mapCanvas?.minimumBytes?.()??96*1048576,previewMinimum:mapCanvas?.minimumBytes?.({previews:true})??96*1048576});
+// Each minimum is worked out when it is read: the paged fields ask on every input, for one of the two.
+const gpuBudget=() => ({total:(Number(document.querySelector('[data-gpu]')?.value)||Number(new URLSearchParams(location.search).get('gpuMB'))||2048)*1048576,get minimum(){return mapCanvas?.minimumBytes?.()??96*1048576;},get previewMinimum(){return mapCanvas?.minimumBytes?.({previews:true})??96*1048576;}});
 function makeRegionalFields() {
   const common={worldSize,worldGrid,baseHeight:config.baseHeight,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving||controlsEditing||worldInputQueue.active)};
   // pageRing (a ring by hand) and timeApron are test hooks of the page ring rule and the Time pass's window; no page needs them.
