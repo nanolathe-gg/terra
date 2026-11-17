@@ -274,11 +274,11 @@ func (s *terrainStream) mergeTiles() (*mergeSummary, error) {
 	summary := &mergeSummary{DistinctTiles: n, KeptTiles: len(leaves), TileSlots: len(s.indices)}
 	type loss struct {
 		id  uint32
+		sse int
 		rms float64
 	}
 	var losses []loss
 	var a, b [1024]byte
-	var sumRMS float64
 	for id := 0; id < n; id++ {
 		r := rep[id]
 		if r == uint32(id) {
@@ -298,11 +298,44 @@ func (s *terrainStream) mergeTiles() (*mergeSummary, error) {
 				sse += d * d
 			}
 		}
-		rms := math.Sqrt(float64(sse) / 1024)
-		losses = append(losses, loss{uint32(id), rms})
+		losses = append(losses, loss{uint32(id), sse, math.Sqrt(float64(sse) / 1024)})
+	}
+	// The split stops early when every cluster left has one descriptor: its
+	// tiles differ only inside their 4x4 blocks. Budget still left keeps the
+	// merged tiles that would cost most, use count times summed squared pixel
+	// error from their replacement (integers; ties by first appearance), each
+	// a cluster of its own. A replacement stays: it is the lowest-ranked
+	// member of an equal-descriptor cluster, and never one of those kept.
+	if spare := s.tileLimit - len(leaves); spare > 0 && len(losses) > 0 {
+		cost := func(l loss) uint64 { return uint64(m.weight[l.id]) * uint64(l.sse) }
+		byCost := make([]int, len(losses))
+		for i := range byCost {
+			byCost[i] = i
+		}
+		sort.Slice(byCost, func(i, j int) bool {
+			a, b := losses[byCost[i]], losses[byCost[j]]
+			if ca, cb := cost(a), cost(b); ca != cb {
+				return ca > cb
+			}
+			return m.rank[a.id] < m.rank[b.id]
+		})
+		for _, i := range byCost[:min(spare, len(byCost))] {
+			rep[losses[i].id] = losses[i].id
+		}
+		summary.KeptTiles += min(spare, len(byCost))
+		left := losses[:0]
+		for _, l := range losses {
+			if rep[l.id] != l.id {
+				left = append(left, l)
+			}
+		}
+		losses = left
+	}
+	var sumRMS float64
+	for _, l := range losses {
 		summary.MergedTiles++
-		summary.ReplacedSlots += int(m.weight[id])
-		sumRMS += float64(rms * float64(m.weight[id])) // unfused, as above
+		summary.ReplacedSlots += int(m.weight[l.id])
+		sumRMS += float64(l.rms * float64(m.weight[l.id])) // unfused, as above
 	}
 	if summary.ReplacedSlots > 0 {
 		summary.MeanRMS = sumRMS / float64(summary.ReplacedSlots)

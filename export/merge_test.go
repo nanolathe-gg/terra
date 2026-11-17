@@ -158,6 +158,75 @@ func TestMergeTilesIgnoresTheOrderTilesWereDiscovered(t *testing.T) {
 	}
 }
 
+// equalBlockStream stores groups x variants distinct tiles, each used once in that order: within a
+// group the tiles differ in their pixels but every 4x4 block holds the same colors, so they share
+// one descriptor. reverse stores them in the opposite order, as another chunking might discover them.
+func equalBlockStream(t *testing.T, groups, variants, limit int, reverse bool) *terrainStream {
+	t.Helper()
+	n := groups * variants
+	s := &terrainStream{ctx: context.Background(), width: 2 * n, tileLimit: limit, store: tileStore{budget: 1 << 30}, indices: make([]uint32, n)}
+	for i := range s.palette {
+		s.palette[i] = [3]byte{byte(i), byte(i * 3), byte(255 - i)}
+	}
+	for k := 0; k < n; k++ {
+		id := k
+		if reverse {
+			id = n - 1 - k
+		}
+		g, v := id/variants, id%variants
+		var tile [1024]byte
+		for y := 0; y < 32; y++ {
+			for x := 0; x < 32; x++ {
+				tile[y*32+x] = byte(2 * g)
+				if (x%4+y%4*4+v*5)%16 >= 8 {
+					tile[y*32+x]++
+				}
+			}
+		}
+		if err := s.store.append(tile[:]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := range s.indices {
+		s.indices[i] = uint32(i)
+		if reverse {
+			s.indices[i] = uint32(n - 1 - i)
+		}
+	}
+	return s
+}
+
+// Tiles that differ only inside their 4x4 blocks are kept while the budget lasts.
+func TestMergeTilesFillsTheBudgetWhenDescriptorsTie(t *testing.T) {
+	a, b := equalBlockStream(t, 50, 3, 100, false), equalBlockStream(t, 50, 3, 100, true)
+	sa, err := a.mergeTiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.mergeTiles(); err != nil {
+		t.Fatal(err)
+	}
+	kept := map[uint32]bool{}
+	for _, id := range a.indices {
+		kept[id] = true
+	}
+	if len(kept) != 100 || sa.KeptTiles != 100 || sa.MergedTiles != 50 || sa.ReplacedSlots != 50 {
+		t.Fatalf("150 distinct tiles, limit 100: %d kept (summary kept %d, merged %d, replaced %d slots), want 100 kept and 50 merged", len(kept), sa.KeptTiles, sa.MergedTiles, sa.ReplacedSlots)
+	}
+	var x, y [1024]byte
+	for i := range a.indices {
+		if err := a.store.read(a.indices[i], x[:]); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.store.read(b.indices[i], y[:]); err != nil {
+			t.Fatal(err)
+		}
+		if x != y {
+			t.Fatalf("slot %d draws different art when the tiles were discovered in another order", i)
+		}
+	}
+}
+
 // The merge's result is pinned: the native exporter and the browser's (this
 // package built for WebAssembly) must choose the same tiles and report the
 // same errors. Go may fuse x*y+z into one rounding on arm64, which
