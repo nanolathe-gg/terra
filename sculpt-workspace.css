@@ -439,7 +439,7 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 /* Rock appearance is one ordered set above the tabs; the page scrolls as a whole so its rows never squeeze the tabs away. */
 #wpane-rock-types:not([hidden]){display:block;overflow-y:auto;scrollbar-width:thin}
 .rock-headlines{padding:8px 10px;border-bottom:1px solid var(--line)}.rock-headlines h3{margin:0 0 6px;font-size:12px}
-.rock-headlines .control .rock-headline-note{display:block;margin:3px 0 6px;font-size:10px;color:var(--muted)}
+.rock-headlines .control>p.rock-headline-note{display:block;margin:3px 0 6px;font-size:10px;color:var(--muted)}
 
 /* Existing controls have one fixed home. The home scrolls as a single page. */
 .world-studio:not(.world-all) .world-nav [data-advanced]{display:none}
