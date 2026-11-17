@@ -107,6 +107,7 @@ function buildShapeOptions() {
     return wrap;
   });
   $('lf-rock-edit').onclick=() => { const {slots}=cardRock(); openRockType(slots.length===1?slots[0]:null); };
+  $('lf-rock').addEventListener('change',followCardRock);
   $('cracks-look').onclick=() => { const {slots}=cardRock(); openRockType(slots.length===1?slots[0]:null,'cracks-bands'); };
   $('curve-form').addEventListener('change',() => { const f=$('curve-form').value; setCurve(f?{form:f}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
   $('curve-reset').addEventListener('click',() => { const c=currentCurve(); setCurve(c?.form?{form:c.form}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
@@ -884,12 +885,9 @@ function cardRock() {
 const rockName=slot => slot===0?worldRockName(config):mapRocks.find(r => r.slot===slot)?.name??'';
 const orList=words => words.length<2?words.join(''):`${words.slice(0,-1).join(', ')} or ${words.at(-1)}`;
 // The card's Rock row says which rock type the shape shows, with its color and an Edit that opens it in World; the Cracks row's line links to
-// that rock type's Cracks & bands. A selected shape's rock type is the one World's rock type picker shows: it follows when the selection or the
-// shape's Rock choice changes (another picked in World stays until then), and stays put when the rock varies.
-let rockFollow=null;
+// that rock type's Cracks & bands.
 function syncCardRock(kind) {
-  if (!$('lf-rock-drawn')) return;
-  if (kind!=='landform') { rockFollow=null; return; }
+  if (!$('lf-rock-drawn') || kind!=='landform') return;
   const {choice,slots,shape}=cardRock(),one=slots.length===1?slots[0]:null,more=orList(slots.filter(s => s>0).map(rockName));
   $('lf-rock-swatch').style.background=one===null?'':rockHex(one); $('lf-rock-swatch').classList.toggle('varies',one===null);
   $('lf-rock-name').textContent=one===null?'Varies':rockName(one);
@@ -897,8 +895,14 @@ function syncCardRock(kind) {
     :shape?`· ${more} where earlier shapes reach it, else ${rockName(0)}`:`· ${more} over shapes made of ${slots.length>2?'them':'it'}, else ${rockName(0)}`;
   $('lf-rock-edit').title=one===null?'Open World › Rock types (this shape’s rock varies, so the picker keeps its choice)':`Open ${rockName(one)} in World › Rock types`;
   $('cracks-look').textContent=`${one===null?'Rock types':rockName(one)} › Cracks & bands`;
-  const follow=shape?`${selected}:${choice}`:null;
-  if (follow!==rockFollow) { rockFollow=follow; if (shape && one!==null && one!==rockSelected) selectRock(one); }
+}
+// World follows what the artist picks: selecting another shape (selectNode) or choosing a Rock on the card selects that rock type in World's
+// picker. A stroke just drawn (it is selected without selectNode changing the selection), an undo, a redo or a load leave the picker alone, so a
+// rock type being tuned in World stays chosen while test shapes are drawn; so does a shape whose rock varies.
+function followCardRock() {
+  if (curveKind()!=='landform') return;
+  const {slots}=cardRock();
+  if (slots.length===1 && slots[0]!==rockSelected) selectRock(slots[0]);
 }
 // World › Rock types (and one of its tabs) on rock type `slot`; null keeps the picker's choice. A search in World would hide the section.
 function openRockType(slot,tab='') {
@@ -1304,7 +1308,8 @@ function pickNode(p) {
 }
 function selectNode(i,keepOthers=false) {
   if(!keepOthers)alsoSelected=[];
-  if(selected!==i){pathPoint=-1;pathIndex=0;}
+  const another=selected!==i;
+  if(another){pathPoint=-1;pathIndex=0;}
   pathAdding=false;drawMode='select';selected=i;
   const n=nodes[i];if(n)mapFeatures?.clearSelection?.(false);
   if (n && n.params && (HELP[n.kind]||n.kind==='landform')) {
@@ -1318,6 +1323,7 @@ function selectNode(i,keepOthers=false) {
     for (const [key,id,,,lo,hi,,scale] of SHAPE_FIELDS) setShapeControl(id,clamp(Math.round((p[key]??worldDefault(key))*scale),lo,hi));
   }
   renderLayers(); updateControls(); schedule(false);
+  if (another && n?.kind==='landform' && n.params) followCardRock();
   if (n) status(alsoSelected.length?`${selectedShapes().length} shapes selected. Drag one to move them together; Shift-click adds or removes.`:`Selected ${shapeName(i)}. Drag to transform or edit its settings.`);
 }
 // Shift-click on the map or in the Shapes list. Answers whether the shape is now selected.
