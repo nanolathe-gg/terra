@@ -230,7 +230,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // world change regenerates.
   const keepable=(prior,scale,weathered)=>prior?.fed&&prior.bitmap&&typeof prior.digest==='string'&&prior.scale===scale&&prior.weathered===weathered&&!prior.block&&['C','D','E','F'].every(k=>prior.rev?.[k]===rev[k])?prior.digest:null;
   // check: only prior's checksum is compared (prior kept), and {pending} comes back without waiting for the GPU: a promise of the kept entry, or null.
-  async function bake(rect,exportArt=false,signal,stale=null,scale=1,fit=false,block=false,prior=null,check=false) {
+  // read: a pixel read's bake (inspectNow), which may come between a frame's previews without starting the view's final refinement.
+  async function bake(rect,exportArt=false,signal,stale=null,scale=1,fit=false,block=false,prior=null,check=false,read=false) {
     // Wait before preparing fields, too: a queued tile must not start a costly
     // paged replay for a viewport that has moved while the GPU was occupied.
     // One tile's GPU work may still run: this tile prepares beside it (the queue keeps their order), and the wait bounds the GPU work in flight.
@@ -238,7 +239,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     // The completed voxel solid is rebuilt every draw. Release it before page
     // preparation and Time allocate their working sets, rather than afterward.
     renderer.voxel.clear();
-    if(previewLattice&&!exportArt&&!block&&!fit&&!interacting()&&!finalizing){
+    if(previewLattice&&!exportArt&&!block&&!fit&&!read&&!interacting()&&!finalizing){
       // The immutable preview picture remains visible; its source and future
       // refinement working sets no longer need to displace canonical pages.
       // The lattice's Time result is kept (trim): the next gesture begins with it instead of running the lattice's Time before its first picture.
@@ -610,7 +611,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           const checks=[];
           try{
             for(const {rect,want,block=false,color=false,ready=null} of plan){
-              if(suspended||token!==serial||viewToken!==viewEpoch||busy||previewing!==interacting())break;
+              if(suspended||token!==serial||viewToken!==viewEpoch||busy||readWaiting||previewing!==interacting())break;   // a pixel read waits: it goes next (inspectNow)
               const key=cacheKey(rect,size),e=cache.get(key);
               if(block||color||ready||holding||!intersects(rect,v)||!e?.dirty||!keepable(e,want,weatheredView))continue;
               const controller=new AbortController();activeBake={controller,rect};
@@ -634,7 +635,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         const canContinueColor=color=>color&&allColor&&lastInput?.stage==='F'&&jobs.every(r=>!intersects(r,v)||colorCurrent(cache.get(cacheKey(r,size))));
         const colorResults=new Map();
         try{for(const [jobIndex,{rect,want,block=false,fineTurn=false,color=false,ready=null,readyKey=''}] of plan.entries()){
-          if(suspended||(token!==serial&&!canContinueColor(color))||viewToken!==viewEpoch||busy||previewing!==interacting()){rerun=true;break;}
+          if(suspended||(token!==serial&&!canContinueColor(color))||viewToken!==viewEpoch||busy||readWaiting||previewing!==interacting()){rerun=true;break;}
           if((previewing||navigating()||want<1)&&!intersects(rect,v))continue;   // a detail level bakes only what is seen: its ring would evict itself
           if(block){
             const key=blockKey(rect,want),prior=blocks.get(key);if(blockCurrent(prior))continue;
@@ -723,7 +724,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         // Generated deposits and vents sit where the export puts them and take their colors from the export art under them
         // (sculpt-features.js): one anchor read or one 128 px patch per idle frame, after the view's own images and only once the
         // weather the export reads is in.
-        if(!suspended&&!rerun&&token===serial&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&quiet>=1000&&(!api.canExport||api.canExport())&&await features?.fitGround?.(state()))rerun=true;
+        if(!suspended&&!rerun&&!readWaiting&&token===serial&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&quiet>=1000&&(!api.canExport||api.canExport())&&await features?.fitGround?.(state()))rerun=true;
       }
       if(!rerun&&!interacting()&&!foregroundPending()&&(!api.canExport||api.canExport()))api.renderProgress?.(null);
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
@@ -836,14 +837,32 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // Pick and the Surface section's inspector: what the draw laid at one art pixel ({x, y}: screen(event)), from a small final-scale draw around
   // it that records that pixel (renderer.setProbe); null when the pixel is off the map, {unread: true} when the draw recorded nothing there.
   // One read at a time: they share the probe and the chunk renderer, so a second click's read waits for the first's.
+  // A read goes between the canvas's own draws, not after the whole view is final: it waits for the draw in flight (a frame lets it in at its
+  // next tile: readWaiting) and for queued World inputs, then holds the renderer as a frame does (drawing), so no frame, ring bake or final
+  // starts under it; the frame it held off runs after it. A read that still meets the renderer busy (work outside the frames) tries once more
+  // after that work ends; one that needs pipelines still compiling lets the frames run while it waits for them.
   const offMap=at=>{const x=Math.floor(at.x),y=Math.floor(at.y);return x<0||y<0||x>=Math.floor(map.width)||y>=Math.floor(map.height);};
-  let inspecting=Promise.resolve();
+  let inspecting=Promise.resolve(),readWaiting=0;
   function inspect(at){const run=inspecting.then(()=>inspectNow(at));inspecting=run.catch(()=>{});return run;}
+  async function holdForRead(){readWaiting++;try{while(drawing||renderer.busy||api.pendingInputs?.())await tick();}finally{readWaiting--;}drawing=true;}
+  function releaseRead(){drawing=false;schedule();}
   async function inspectNow(at){
     if(offMap(at))return null;
     const x=Math.floor(at.x),y=Math.floor(at.y),W=Math.floor(map.width),H=Math.floor(map.height),size=Math.min(32,W,H),rect={x:clamp(x-16,0,W-size),y:clamp(y-16,0,H-size),width:size,height:size};
-    await idle();renderer.setProbe({x,y});
-    try{const e=await bake(rect,false,undefined,null,1);e?.bitmap?.close?.();return await renderer.readProbe()??{unread:true};}finally{renderer.setProbe(null);}
+    let retried=false,compiles=0;
+    for(;;){
+      await holdForRead();
+      let held=true;   // while a retry awaits, a frame can take drawing: release only this attempt's hold
+      const release=()=>{if(!held)return;held=false;renderer.setProbe(null);releaseRead();};
+      renderer.setProbe({x,y});
+      try{const e=await bake(rect,false,undefined,null,1,false,false,null,false,true);e?.bitmap?.close?.();return await renderer.readProbe()??{unread:true};}
+      catch(error){
+        if(error.name==='PipelinesPending'&&compiles++<3){release();await error.ready;continue;}
+        if(/already rendering/.test(error.message)&&!retried){retried=true;release();while(renderer.busy)await tick();continue;}
+        throw error;
+      }
+      finally{release();}
+    }
   }
   // Where an art pixel's center is on the page now (Pick's card follows it as the view moves).
   function client(at){const r=overlay.getBoundingClientRect(),v=state();return {x:r.left+(Math.floor(at.x)+.5-v.x)*scale,y:r.top+(Math.floor(at.y)+.5-v.y)*scale};}
