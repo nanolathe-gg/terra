@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {blankMaterial,copyMaterial,worldMaterials,addMaterial} from '../sculpt-materials.js';
 import {copyRocks,duplicateRock,rockByKey} from '../sculpt-rock-presets.js';
-import {worldKit,copyMaterialRef,instantiateWorldKit,validateWorldRocks,captureWorldKit,publishWorldRock,publishWorldTool,resolvedWorldCard,worldToolUnavailable,authoredWorldTool,sameKitData} from '../sculpt-world-kit.js';
+import {worldKit,copyMaterialRef,instantiateWorldKit,validateWorldRocks,captureWorldKit,publishWorldRock,publishWorldTool,resolvedWorldCard,worldToolUnavailable,authoredWorldTool,sameKitData,resetWorldKitInstances,addWorldRockInstance} from '../sculpt-world-kit.js';
 const config={biomeId:'fixture',materials:{ground:'green-ground',water:'green-water',rock:'green-rock'},tools:[{id:'hill',label:'Hill',icon:'hill',color:'#778899',group:'shape',rock:'soil'}]};
 const graph=blankMaterial();
 const template=(key='wrock-stone',extra={})=>({key,name:'Stone',knobs:{faceWhole:.8},column:null,colors:null,material:{key:'wmat-stone',name:'Stone grain',graph:copyMaterial(graph)},...extra});
@@ -126,4 +126,22 @@ test('a positive world catalog reference never aliases slot0 through a default-r
  const c={...config,rock:{recipe:'wrock-stone'}},w=world(),full=Array.from({length:15},(_,i)=>({slot:i+1,key:null,name:'Local '+i,knobs:{},column:null,colors:null}));
  const result=instantiateWorldKit(c,w,{rocks:full,materials:worldMaterials(c),source:{}}),t=result.kit.tools[1];
  assert.match(worldToolUnavailable(t,result.rocks,result.materials,c,result.kit),/15 rock slots/);assert.equal(resolvedWorldCard(t,result.rocks,result.materials,c).rockPreset,-1);
+});
+
+test('foreign source native tools are not reinterpreted as destination native tools during carry',()=>{
+ const source=world(),fresh=instantiateWorldKit(config,source);source.tools.push({id:'foreignKnoll',shape:'foreign-shape',label:'Foreign knoll',icon:'hill',color:'#778899',group:'shape'});
+ const result=instantiateWorldKit(config,world(),{rocks:fresh.rocks,materials:fresh.materials,source});assert.equal(result.rocks[0].worldKey,'wrock-stone');
+});
+test('Reset restores marked base types at their slots and leaves custom/local map content intact',()=>{
+ const base=instantiateWorldKit(config),soil=base.rocks.find(r=>r.worldKey==='soil'),custom={slot:8,key:'wrock-custom',worldKey:'wrock-custom',name:'Custom',knobs:{faceWhole:.3},column:null,colors:null},local={slot:9,key:'greenstone',name:'Local greenstone',knobs:{faceWhole:.6},column:null,colors:null};
+ const rocks=[{...soil,slot:7,knobs:{faceRock:.9}},custom,local],kit={tools:base.kit.tools,rocks:[...base.kit.rocks,{...template('wrock-custom'),name:'Custom',knobs:custom.knobs,material:{world:'worldRock'}}]},before=JSON.stringify([rocks,base.materials]);
+ const reset=resetWorldKitInstances(config,kit,rocks,base.materials);
+ assert.equal(reset.rocks[0].slot,7);assert.equal(reset.rocks[0].worldKey,'soil');assert.equal(reset.rocks[0].knobs.faceRock,0);
+ assert.equal(reset.rocks[1].worldKey,undefined);assert.equal(reset.rocks[1].knobs.faceWhole,.3);assert.deepEqual(reset.rocks[2],local);assert.equal(JSON.stringify([rocks,base.materials]),before);
+});
+test('an explicit instance can recover its original world identity after capacity is freed',()=>{
+ const w=world(),full=Array.from({length:15},(_,i)=>({slot:i+1,key:null,name:'Local '+i,knobs:{},column:null,colors:null})),rejected=instantiateWorldKit(config,w,{rocks:full,materials:worldMaterials(config),source:{}});
+ assert.deepEqual(rejected.unbound,['wrock-stone']);
+ const added=addWorldRockInstance(w.rocks[0],full.slice(0,-1),rejected.materials),bound=added.rocks.map(r=>r.slot===added.slot?{...r,worldKey:w.rocks[0].key}:r);
+ assert.equal(worldToolUnavailable(w.tools[1],bound,added.materials,config,worldKit(config,w)),'');assert.equal(resolvedWorldCard(w.tools[1],bound,added.materials,config).rockPreset,15);
 });

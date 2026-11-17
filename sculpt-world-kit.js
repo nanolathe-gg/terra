@@ -3,7 +3,7 @@
 import {checkTool,checkCard,worldTools,MAP_TOOLS_MAX} from './sculpt-tools.js';
 import {shapeFrom} from './sculpt-scene.js';
 import {copyRocks,worldRocks,giveRockMaterials,ROCK_SLOTS} from './sculpt-rock-presets.js';
-import {copyMaterial,copyMaterials,addMaterial,worldMaterials,worldKey,roleName,MAP_ROLES,MATERIAL_SLOTS,materialStates,materialStaged,materialCacheUsage} from './sculpt-materials.js';
+import {copyMaterial,copyMaterials,addMaterial,setMaterial,worldMaterials,worldKey,roleName,MAP_ROLES,MATERIAL_SLOTS,materialStates,materialStaged,materialCacheUsage} from './sculpt-materials.js';
 
 const ordered=v=>Array.isArray(v)?v.map(ordered):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,ordered(v[k])])):v;
 export const sameKitData=(a,b)=>JSON.stringify(ordered(a))===JSON.stringify(ordered(b));
@@ -107,7 +107,7 @@ export function validateWorldRocks(rocks,materials,sourceKit){
 }
 export function instantiateWorldKit(config,world={}, {rocks=null,materials=null,source=world,append=true}={}){
   const kit=worldKit(config,world),fresh=rocks==null;
-  let nextMaterials=materials==null?worldMaterials(config):copyMaterials(materials),nextRocks=fresh?[]:validateWorldRocks(rocks,nextMaterials,worldKit(config,source));
+  let nextMaterials=materials==null?worldMaterials(config):copyMaterials(materials),nextRocks=fresh?[]:validateWorldRocks(rocks,nextMaterials,{rocks:copyWorldRocks(source.rocks===undefined?baseRocks(config):source.rocks)});
   if(!fresh)nextRocks=validateWorldRocks(nextRocks,nextMaterials,kit);   // carrying to another world may turn a source-owned type into a local copy
   const missing=(fresh||append&&world.rocks!==undefined)?kit.rocks.filter(t=>!nextRocks.some(r=>r.worldKey===t.key)):[];
   const candidate=structuredClone(nextRocks),unbound=[];let staged=nextMaterials;
@@ -155,7 +155,7 @@ export function captureWorldKit(kit,rocks,materials,{before=materials}={}){
 export function publishWorldRock(kit,rocks,materials,slot){
   const from=rocks.find(r=>r.slot===slot);if(!from)throw Error('Choose a rock type to save.');
   const key=from.worldKey&&kit.rocks.some(r=>r.key===from.worldKey)?from.worldKey:newWorldKey('wrock');
-  const captured=templateOf(from,materials,key),next=kit.rocks.filter(r=>r.key!==key);next.push(captured.rock);copyWorldRocks(next);
+  const captured=templateOf(from,materials,key),held=kit.rocks.some(r=>r.key===key),next=held?kit.rocks.map(r=>r.key===key?captured.rock:r):[...kit.rocks,captured.rock];copyWorldRocks(next);
   return {kit:{...kit,rocks:next},rocks:rocks.map(r=>r===from?{...r,worldKey:key}:r),materials:captured.materials,key};
 }
 export function publishWorldTool(kit,rocks,materials,tool){
@@ -172,4 +172,19 @@ export function addWorldRockInstance(template,rocks,materials){
   const bound=bindMaterial(t.material,materials);if(bound.missing)throw Error('The world material this rock type needs is missing.');assertKitMaterials(bound.materials);
   const r={slot,key:rocks.some(r=>r.key===t.key)?null:t.key,name:t.name,knobs:t.knobs,column:t.column,colors:t.colors,...(bound.slot?{material:bound.slot}:{})};
   return {slot,rocks:[...rocks,r],materials:bound.materials};
+}
+
+// Reset changes only explicitly World-owned base instances, at their existing slots. Custom types become local copies so map content survives.
+export function resetWorldKitInstances(config,kit,rocks,materials){
+  const base=worldKit(config),catalog=new Map(base.rocks.map(r=>[r.key,r])),owned=new Set();let next=copyMaterials(materials);
+  for(const r of rocks)if(r.worldKey){const ref=kit.rocks.find(t=>t.key===r.worldKey)?.material;if(ref?.key&&r.material>0&&next.find(m=>m.slot===r.material)?.key===ref.key)owned.add(ref.key);}
+  const result=copyRocks(rocks).map(r=>{
+    if(!r.worldKey)return r;const t=catalog.get(r.worldKey);if(!t){const {worldKey:_,...local}=r;return local;}
+    if(t.material?.key){const held=next.find(m=>m.key===t.material.key);if(held&&!materialRefSlot(t.material,next)){
+      if(!owned.has(t.material.key))throw Error(`Reset kept this map’s different copy of ${t.material.name}; remove the conflicting map material before resetting.`);
+      next=setMaterial(next,held.slot,t.material.graph).map(m=>m.slot===held.slot?{...m,name:t.material.name}:m);
+    }}
+    const bound=bindMaterial(t.material,next);if(bound.missing)throw Error('A base world rock needs a missing material.');next=bound.materials;
+    const {material:_,...rest}=r;return {...rest,name:t.name,knobs:structuredClone(t.knobs),column:structuredClone(t.column),colors:structuredClone(t.colors),...(bound.slot?{material:bound.slot}:{})};
+  });assertKitMaterials(next);return {kit:base,rocks:result,materials:next};
 }
