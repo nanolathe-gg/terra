@@ -14,11 +14,13 @@ const $ = id => document.getElementById(id);
 const hex = rgb => '#' + rgb.map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
 const rgbOf = value => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16));
 const PARAM_ROWS = 14, INPUT_ROWS = 5, CELL = 20;
+// The pause in input the graph's thumbnails wait for, and docked the preview picture too (the map beside it is the live preview).
+const PAUSE = 90;
 
 export function mountMaterialEditor(host) {
   const dialog = $('material-editor'), preview = new MaterialPreview();
   let slot = 0, selection = new Set(), primary = null, frameAt = -1, solo = null, view = 'tile', zoomed = false, stopAt = 0, editingControls = false;
-  let pictureKey = '', thumbKey = '', picture = null, thumbs = new Map(), thumbPixels = new Map(), opener = null, menuAt = null, thumbTimer = null, full = false;
+  let pictureKey = '', thumbKey = '', picture = null, thumbs = new Map(), thumbPixels = new Map(), opener = null, menuAt = null, thumbTimer = null, pictureTimer = null, pictureMaterial = '', full = false;
   const materials = () => host.materials(), material = () => materials().find(m => m.slot === slot) ?? null;
   const node = () => material()?.nodes.find(n => n.id === primary) ?? null;
   const note = text => { $('material-note').textContent = text; $('material-note').hidden = !text; };
@@ -355,13 +357,17 @@ export function mountMaterialEditor(host) {
     const rock = m.worldRock === true || (host.rocks?.() ?? []).some(o => o.material === slot), ground = rock ? list.find(o => o.worldGround) ?? null : null;
     const context = [r.variant.toString(), r.colorOverrides], want = view === 'terrain' ? 'terrain' : 'tile', showing = solo && m.nodes.some(n => n.id === solo) ? solo : null;
     const key = JSON.stringify([materialRenderKey(m), water, materialRenderKey(companion), ground && materialRenderKey(ground), context, want, showing]);
+    // Docked, an edit's picture waits for a pause in input, so a drag leaves the GPU to the map, which shows every step; a new view, node or
+    // material, and every edit at Full size (the map covered), draws at once.
     if (key !== pictureKey) {
       pictureKey = key; $('material-preview').setAttribute('aria-busy', 'true'); $('material-preview-note').textContent = 'Updating…';
-      preview.picture(r, m, companion, {view: want, solo: showing, ground}, (error, result) => {
+      const ask = () => preview.picture(r, m, companion, {view: want, solo: showing, ground}, (error, result) => {
         if (error) { pictureKey = ''; $('material-preview-note').textContent = 'No preview: ' + error.message; $('material-preview').setAttribute('aria-busy', 'false'); return; }
         picture = result; drawPicture(); $('material-preview').setAttribute('aria-busy', String(result.draft));
         $('material-preview-note').textContent = result.draft ? 'Finishing the palette…' : showing ? 'The selected node alone, unlit.' : result.tiles ? `${result.tiles} different 32-px tiles in one repeat (256 at most).` : 'Under this world’s sun: sea, shore, a plain and a hill.';
       });
+      const edited = picture && pictureMaterial !== '' && pictureMaterial !== materialRenderKey(m); pictureMaterial = materialRenderKey(m);
+      clearTimeout(pictureTimer); if (edited && !full) pictureTimer = setTimeout(ask, PAUSE); else ask();
     }
     // Thumbnails wait for a pause: they are a second run of the graph, and a drag changes them on every move.
     const tk = JSON.stringify([materialRenderKey({...m, palette: [], dither: m.dither}), slot]);
@@ -369,7 +375,7 @@ export function mountMaterialEditor(host) {
       if (error || !pictures) return;
       const made = new Map(); for (const [id, pixels] of pictures) made.set(id, await createImageBitmap(new ImageData(new Uint8ClampedArray(pixels), THUMB, THUMB)));
       thumbs = made; thumbPixels = pictures; graph.redraw(); const n = node(); if (n?.type === 'levels' && !$('material-pane-node').hidden) drawHistogram(n);
-    }), 90); }
+    }), PAUSE); }
   }
   for (const v of ['tile', 'repeat', 'terrain']) $('mview-' + v).onclick = () => { view = v; refresh(); };
   $('mview-zoom').onclick = () => { zoomed = !zoomed; refresh(); };
@@ -512,7 +518,7 @@ export function mountMaterialEditor(host) {
   // (its Build or World tab), the focus stays where that click put it.
   function close(returnFocus = true) {
     if (!dialog.open) return;
-    closeMenu(); setDrawer(false); setFull(false); dialog.close(); preview.cancel(); pictureKey = thumbKey = ''; host.dock(null); $('materials-toolbar').setAttribute('aria-expanded', 'false');
+    closeMenu(); setDrawer(false); setFull(false); dialog.close(); clearTimeout(pictureTimer); preview.cancel(); pictureKey = thumbKey = pictureMaterial = ''; host.dock(null); $('materials-toolbar').setAttribute('aria-expanded', 'false');
     const door = opener?.isConnected ? opener : opener?.id ? document.getElementById(opener.id) : null;
     if (returnFocus) (door && !door.closest('[hidden]') ? door : $('materials-toolbar')).focus({preventScroll: true});
   }
@@ -565,5 +571,5 @@ export function mountMaterialEditor(host) {
   refresh();
   // The Color rows again, once the renderer has read back what the materials are drawn in (sculpt.js renderer.onmeans).
   const refreshColors = () => { for (const [prefix, m] of [['ctl', material()], ...worldRows.map(w => [w.prefix, materials().find(o => o[w.role]) ?? null])]) { const own = $(`${prefix}-matcolor`); if (m && document.activeElement !== own) own.value = hex(drawn(m).map(v => v * 255)); } };
-  return {refresh, refreshColors, open, refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { setFull(false); dialog.close(); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); locks.disconnect(); previewBox.disconnect(); graph.dispose(); preview.dispose(); }};
+  return {refresh, refreshColors, open, refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { setFull(false); dialog.close(); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); clearTimeout(pictureTimer); locks.disconnect(); previewBox.disconnect(); graph.dispose(); preview.dispose(); }};
 }
