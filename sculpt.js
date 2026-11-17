@@ -182,7 +182,7 @@ const firstTool=() => shapeTools()[1]?.id??LANDFORM_TOOL.id;
 // from the set (Save as tool's icon choices in index.html, #tool-save-icons), its id in data-tool as every check clicks it, its shape in data-shape for the hover help.
 function buildToolbar() {
   const icon=name => $('tool-save-icons').querySelector(`[data-icon-choice="${name}"] svg`).cloneNode(true);
-  for (const [group,box] of [['shape','shape-tools'],['water','water-tools']]) $(box).replaceChildren(...shapeTools().slice(1).filter(t => t.group===group).map(t => {
+  const button=t => {
     const b=document.createElement('button');
     b.dataset.tool=t.id; b.dataset.shape=shapeFrom(config,toolShape(t)); if (t.help) b.dataset.help=t.help; b.setAttribute('aria-pressed','false'); b.setAttribute('aria-label',t.label); b.title=t.label;
     b.style.setProperty('--tool-color',t.color); b.disabled=true;
@@ -190,7 +190,18 @@ function buildToolbar() {
     const name=document.createElement('span'); name.className='tool-name'; name.textContent=t.label; b.append(icon(t.icon),name);
     if (t.card) b.dataset.mapTool='';   // a map's own: its hover shows its shape's sketch, not the shape's rendered example
     return b;
+  };
+  // Land: the world's tools under their families' headings (each tool's family), the families in the order they first come in the world's
+  // list and a tool without one in a last group; then index.html's Generic group (Landform, Fissure); then this map's own tools under theirs.
+  const land=shapeTools().slice(1).filter(t => t.group==='shape'),families=new Map();
+  for (const t of land.filter(t => !t.card)) { const f=t.family??''; if (!families.has(f)) families.set(f,[]); families.get(f).push(t); }
+  $('shape-tools').replaceChildren(...[...families.keys()].sort((a,b) => (a==='')-(b==='')).map(f => {
+    const g=document.createElement('div'),head=document.createElement('span'); g.className='tool-family'; g.setAttribute('role','group'); g.setAttribute('aria-label',f||'Other');
+    head.className='tool-family-label'; head.setAttribute('aria-hidden','true'); head.textContent=f||'Other'; g.append(head,...families.get(f).map(button)); return g;
   }));
+  $('map-shape-tools').replaceChildren(...land.filter(t => t.card).map(button));
+  $('map-shape-tools').closest('.tool-family').hidden=!land.some(t => t.card);
+  $('water-tools').replaceChildren(...shapeTools().slice(1).filter(t => t.group==='water').map(button));
   // A toolbar with no water tool (a world without water) shows no Water group.
   $('water-tools').closest('.tool-group').hidden=!shapeTools().some(t => t.group==='water');
   // The shape card's Look: the same tools, by group (#tool-look).
