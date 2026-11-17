@@ -20,6 +20,7 @@ test('every world defines valid library shapes and cards', async () => {
   const {shapeFrom} = await import('../sculpt-scene.js');
   for (const [name, config] of Object.entries(configs)) {
     assert.deepEqual(Object.keys(config.worldShapes), WORLDS, name);
+    assert.deepEqual(Object.keys(config.biomeDescriptions), WORLDS, `${name}: a line per world for Start a map (site.json), in the picker's order`);
     for (const w of WORLDS) {
       const keys = Object.keys(config.worldShapes[w]);
       assert.ok(Object.keys(LANDFORM_SHAPES).every(k => keys.includes(k)), `${name}: ${w} defines every library shape`);
@@ -38,9 +39,10 @@ test('every world\'s toolbar is valid, its rocks are presets it ships', () => {
     for (const t of tools.filter(t => t.material)) assert.ok([config.materials?.ground, config.materials?.high, ...(config.materials?.extra || [])].includes(t.material), `${name}: ${t.id} lays ${t.material}, which the world adds to a map`);
   }
   const today = {id: 'plateau', label: 'Plateau', icon: 'plateau', color: '#e6bb82', group: 'shape'};
-  for (const bad of [{...today, id: 'fissure'}, {...today, id: 'a b'}, {...today, icon: 'star'}, {...today, color: 'red'}, {...today, group: 'paint'}, {...today, shape: 'mesa'}, {...today, label: ''}, {...today, id: 'map-1'}])
+  for (const bad of [{...today, id: 'fissure'}, {...today, id: 'a b'}, {...today, icon: 'star'}, {...today, color: 'red'}, {...today, group: 'paint'}, {...today, shape: 'mesa'}, {...today, label: ''}, {...today, id: 'map-1'}, {...today, family: ''}, {...today, family: 7}, {id: 'deep', label: 'Deep', icon: 'deep', color: '#7cb8e8', group: 'water', family: 'Hills'}])
     assert.throws(() => worldTools({tools: [bad]}), undefined, JSON.stringify(bad));
   assert.throws(() => worldTools({tools: [today, today]}), /twice/);
+  assert.equal(worldTools({tools: [{...today, family: 'Highlands'}]})[0].family, 'Highlands', 'a Land tool may name its family');
   assert.equal(toolShape({id: 'soilHill', shape: 'hill'}), 'hill');
   assert.equal(toolShape(today), 'plateau');
 });
