@@ -2602,7 +2602,9 @@ function openNewMap(first=false, dimensionsFromMap=null) {
   const pick=id => { picked=id; for (const b of $('new-map-worlds').children) b.setAttribute('aria-pressed',String(b.dataset.world===id)); $('new-map-world-from').textContent=choices().find(c => c.id===id)?.name||''; };
   const cards=() => { $('new-map-worlds').replaceChildren(...choices().map(({id,name,line,picture}) => {
     const b=document.createElement('button'); b.type='button'; b.dataset.world=id;
-    if (picture) { const image=document.createElement('img'); image.src=picture; image.alt=''; image.width=260; image.height=190; b.append(image); }
+    // Every card has the same picture box: a world without a picture (one of your own, or a missing file) shows a plain one that says so.
+    const none=() => { const box=document.createElement('span'); box.className='new-map-no-picture'; box.textContent='No picture yet'; return box; };
+    if (picture) { const image=document.createElement('img'); image.onerror=() => image.replaceWith(none()); image.src=picture; image.alt=''; image.width=260; image.height=190; b.append(image); } else b.append(none());
     const title=document.createElement('span'); title.className='new-map-world-name'; title.textContent=name;
     const note=document.createElement('span'); note.className='new-map-world-line'; note.textContent=line;
     b.append(title,note); b.onclick=() => pick(id); return b;
