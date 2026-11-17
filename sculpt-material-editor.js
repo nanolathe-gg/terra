@@ -1,6 +1,8 @@
-// The material editor: one full-screen dialog for the map's materials (the world's ground, water, role and surface layer materials, and the map's own). The graph fills the screen; beside it sit one
-// preview and three panes: Controls (what the material publishes, for adjusting it), Node (the selected node) and Palette (the game
-// colors it is reduced to). Every element is in index.html; this fills values and applies edits through the map's own undo and save.
+// The material editor: one panel for the map's materials (the world's ground, water, role and surface layer materials, and the map's own),
+// docked beside the map in the side panel's place, so the map stays live and shows every edit on its own terrain; Full size spreads it over
+// the whole window as before. The graph fills the panel; beside it sit one preview and three panes: Controls (what the material publishes,
+// for adjusting it), Node (the selected node) and Palette (the game colors it is reduced to). Every element is in index.html; this fills
+// values and applies edits through the map's own undo and save.
 import {NODES, NODE_TYPES, accepts, snippetNodes, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
   nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb, materialColor, recolorMaterial,
   addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText, MAP_ROLES, roleOf, roleName, materialStatesApply} from './sculpt-materials.js';
@@ -16,7 +18,7 @@ const PARAM_ROWS = 14, INPUT_ROWS = 5, CELL = 20;
 export function mountMaterialEditor(host) {
   const dialog = $('material-editor'), preview = new MaterialPreview();
   let slot = 0, selection = new Set(), primary = null, frameAt = -1, solo = null, view = 'tile', zoomed = false, stopAt = 0, editingControls = false;
-  let pictureKey = '', thumbKey = '', picture = null, thumbs = new Map(), thumbPixels = new Map(), opener = null, menuAt = null, thumbTimer = null;
+  let pictureKey = '', thumbKey = '', picture = null, thumbs = new Map(), thumbPixels = new Map(), opener = null, menuAt = null, thumbTimer = null, full = false;
   const materials = () => host.materials(), material = () => materials().find(m => m.slot === slot) ?? null;
   const node = () => material()?.nodes.find(n => n.id === primary) ?? null;
   const note = text => { $('material-note').textContent = text; $('material-note').hidden = !text; };
@@ -398,35 +400,55 @@ export function mountMaterialEditor(host) {
   $('material-reset').onclick = attempt(() => { const source = LIBRARY[material().source]; if (!source) return; update(setMaterial(materials(), slot, source)); commit(); selection = new Set(); primary = null; frameAt = -1; refresh(); });
   for (const [id, role] of [['ground-world-default', 'worldGround'], ['water-material', 'worldWater']]) $(id).onchange = attempt(() => { update(assignMaterial(materials(), Number($(id).value), role)); commit(); });
 
+  // Docked, the editor is not modal: the map beside it can be drawn on, panned, zoomed and picked while it is open. The side panel gives
+  // way to it (sculpt-ui.js dock) and comes back when it closes. Full size covers the map, which then waits (host.suspend).
+  function setFull(on) {
+    if (full === on) return; full = on; document.querySelector('.app').classList.toggle('material-full', on); host.suspend(on);
+    $('material-full').setAttribute('aria-pressed', String(on)); $('material-full').textContent = on ? '⤡ Beside the map' : '⤢ Full size';
+    $('material-full').title = on ? 'Back beside the map, which shows every change' : 'Spread the editor over the whole window';
+  }
   function open(which, from) {
     opener = from; if (which !== undefined) slot = which; pick('controls');
-    if (!dialog.open) { host.suspend(true); dialog.showModal(); }
+    if (!dialog.open) { dialog.show(); host.dock({close, inner}); $('materials-toolbar').setAttribute('aria-expanded', 'true'); $('material-graph').focus({preventScroll: true}); }
     pictureKey = thumbKey = ''; refresh(); graph.fit();
   }
-  const close = () => { closeMenu(); dialog.close(); preview.cancel(); pictureKey = thumbKey = ''; host.suspend(false); opener?.focus(); };
+  // The side panel comes back before the focus returns, so a button inside it can take the focus. Closed because the side panel was asked
+  // for (its Build or World tab), the focus stays where that click put it.
+  function close(returnFocus = true) {
+    if (!dialog.open) return;
+    closeMenu(); setFull(false); dialog.close(); preview.cancel(); pictureKey = thumbKey = ''; host.dock(null); $('materials-toolbar').setAttribute('aria-expanded', 'false');
+    if (returnFocus) (opener?.isConnected && !opener.closest('[hidden]') ? opener : $('materials-toolbar')).focus({preventScroll: true});
+  }
+  // Escape inside the editor (sculpt-ui.js closeTop), one thing a press: the add menu or Manage, then Full size back to docked. Then Pick's
+  // card, and then the editor itself (closeDocked).
+  function inner() {
+    if (closeMenu()) { $('material-graph').focus(); return true; }
+    if ($('material-menu').open) { $('material-menu').open = false; $('material-menu').querySelector('summary').focus(); return true; }
+    if (full) { setFull(false); return true; }
+    return false;
+  }
   const roleSlot = key => materials().find(m => m[key])?.slot;
-  $('materials-toolbar').onclick = () => open(undefined, $('materials-toolbar'));
+  $('materials-toolbar').onclick = () => dialog.open ? close(false) : open(undefined, $('materials-toolbar'));
   $('material-open').onclick = () => open(roleSlot('worldGround'), $('material-open'));
   $('water-material-edit').onclick = () => open(roleSlot('worldWater'), $('water-material-edit'));
-  $('material-done').onclick = close;
+  $('material-done').onclick = () => close();
+  $('material-full').onclick = () => setFull(!full);
   dialog.oncancel = e => e.preventDefault();
-  dialog.onpointerdown = e => { if (!$('node-menu').contains(e.target) && e.target !== $('graph-add')) closeMenu(); if ($('material-menu').open && !$('material-menu').contains(e.target)) $('material-menu').open = false; };
-  // Escape steps back one thing at a time: an open menu, then the selection, then the editor. Shortcuts never reach the map beneath.
+  // A press anywhere else, on the map too, closes the add menu and Manage.
+  const outside = e => { if (!dialog.open) return; if (!$('node-menu').contains(e.target) && e.target !== $('graph-add')) closeMenu(); if ($('material-menu').open && !$('material-menu').contains(e.target)) $('material-menu').open = false; };
+  document.addEventListener('pointerdown', outside, true);
+  // Keys typed in the editor stay in it, so the map's shortcuts (Delete, V, arrows ...) never act on a shape meanwhile. Escape goes on to the
+  // editor's one Escape chain (sculpt-ui.js closeTop).
   dialog.onkeydown = e => {
-    if (e.defaultPrevented) return;
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      if (closeMenu()) $('material-graph').focus(); else if ($('material-menu').open) { $('material-menu').open = false; $('material-menu').querySelector('summary').focus(); }
-      else if (selection.size || frameAt >= 0 || solo) { selection = new Set(); primary = null; frameAt = -1; solo = null; refresh(); } else close();
-    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.target.matches('input:not([type=range]),textarea')) { e.preventDefault(); $(e.shiftKey ? 'redo' : 'undo').click(); }
+    if (e.defaultPrevented || e.key === 'Escape') return;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.target.matches('input:not([type=range]),textarea')) { e.preventDefault(); $(e.shiftKey ? 'redo' : 'undo').click(); }
     e.stopPropagation();
   };
   $('material-undo').onclick = () => $('undo').click(); $('material-redo').onclick = () => $('redo').click();
   const lock = () => { $('materials-toolbar').disabled = $('editor').disabled; $('material-editor-fields').disabled = $('editor').disabled; $('material-undo').disabled = $('undo').disabled; $('material-redo').disabled = $('redo').disabled; };
   const locks = new MutationObserver(lock); for (const id of ['editor', 'undo', 'redo']) locks.observe($(id), {attributes: true, attributeFilter: ['disabled']}); lock();
-  if (dialog.open) host.suspend(true);
   refresh();
   // The Color rows again, once the renderer has read back what the materials are drawn in (sculpt.js renderer.onmeans).
   const refreshColors = () => { for (const [prefix, m] of [['ctl', material()], ...worldRows.map(w => [w.prefix, materials().find(o => o[w.role]) ?? null])]) { const own = $(`${prefix}-matcolor`); if (m && document.activeElement !== own) own.value = hex(drawn(m).map(v => v * 255)); } };
-  return {refresh, refreshColors, open, refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (!dialog.open) host.suspend(false); clearTimeout(thumbTimer); locks.disconnect(); graph.dispose(); preview.dispose(); }};
+  return {refresh, refreshColors, open, refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { setFull(false); dialog.close(); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); locks.disconnect(); graph.dispose(); preview.dispose(); }};
 }

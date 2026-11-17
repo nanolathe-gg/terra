@@ -144,9 +144,16 @@ Two machines may place dither dots differently (rule 12).
 ## The editor
 
 **Materials** in the top bar opens it; the World pane's Ground and Water
-sections open it on that material. The map stops rendering while it is open.
+sections, Surface rows, the shape card's ground and Pick's card open it on
+that material. It docks beside the map in the side panel's place: the map
+stays in view and keeps drawing every change on its own terrain, and can be
+panned, zoomed, picked (Alt-click) and drawn on meanwhile. The Build or World
+tab closes it and brings the side panel back. **Full size** spreads it over
+the whole window; the map then waits until it is uncovered. Escape closes a
+menu inside it first, then leaves Full size, then (after Pick's card) closes
+it.
 
-- The graph fills the screen. Each card shows what its node makes.
+- The graph fills the panel. Each card shows what its node makes.
 - Add a node from its menu: it lists every node and type by name, and a search
   also matches the names other editors use (Perlin, Voronoi, Worley, fBm,
   terrace, posterize, HSL, displace, tile sampler, bomber, motion blur ...).

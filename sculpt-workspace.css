@@ -291,18 +291,24 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 
 @media(max-width:850px){.topbar{gap:3px;padding:0 4px}.topbar button{padding:5px 4px;font-size:10px}.top-actions,.view-tools{gap:2px}.topbar .primary{padding-left:6px;padding-right:6px}.mode-switch button{padding:6px}.brand-mark{font-size:18px}#tab-map{max-width:135px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 
-/* Material design: graph first, persistent previews, shared inspector controls. */
-#material-editor{color:var(--text);background:var(--panel);border:0;border-radius:0;padding:0;width:100vw;max-width:none;height:100dvh;margin:0;max-height:none;overflow:hidden}
-#material-editor[open]{display:flex;flex-direction:column}#material-editor::backdrop{background:#05090b9e}
+/* Material design: graph first, persistent previews, shared inspector controls. The editor docks beside the map in the side panel's column
+   (sculpt-ui.js dock), so the map stays in view as its live preview; Full size spreads it over the whole window. Its own layout follows its
+   width (a size container), not the window's. */
+.app{--material-width:clamp(600px,58vw,1000px)}
+.app.material-docked{grid-template-columns:var(--tools-width) minmax(240px,1fr) var(--material-width)}
+#material-editor{color:var(--text);background:var(--panel);border:0;border-left:1px solid var(--line);border-radius:0;padding:0;margin:0;position:static;grid-column:3;grid-row:2;width:auto;height:auto;max-width:none;max-height:none;min-width:0;min-height:0;overflow:hidden;container-type:inline-size}
+#material-editor[open]{display:flex;flex-direction:column}
+.app.material-full #material-editor{position:fixed;inset:0;width:100vw;height:100dvh;border-left:0;z-index:20}
 .material-header{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--line);flex:none}.material-header h2{font-size:14px;margin:0}
-#material-select{width:230px;max-width:30vw}#material-used{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.material-note{margin:0 0 0 auto;color:#f0c98a;max-width:38vw;text-align:right}.material-actions{margin-left:auto;flex:none}.material-note:not([hidden])+.material-actions{margin-left:0}
+#material-select{width:230px;max-width:30cqw}#material-used{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.material-note{margin:0 0 0 auto;color:#f0c98a;max-width:38cqw;text-align:right}.material-actions{margin-left:auto;flex:none}.material-actions>*{flex:none;white-space:nowrap}.material-note:not([hidden])+.material-actions{margin-left:0}
 .material-menu{position:relative}.material-menu>summary{cursor:pointer;border:1px solid var(--line);border-radius:5px;padding:6px 10px;font-size:12px;list-style:none;user-select:none}.material-menu>summary::-webkit-details-marker{display:none}.material-menu>summary::after{content:" ▾";color:var(--muted)}
 .material-menu[open]>summary{background:#344c42;border-color:#78ae8d}
-.material-menu-body{position:absolute;z-index:12;top:calc(100% + 6px);left:0;width:320px;max-width:calc(100vw - 24px);max-height:70dvh;overflow:auto;padding:12px;border:1px solid #587265;border-radius:8px;background:var(--panel);box-shadow:0 10px 30px #0009}
+.material-menu-body{position:absolute;z-index:12;top:calc(100% + 6px);left:0;width:320px;max-width:calc(100cqw - 24px);max-height:70dvh;overflow:auto;padding:12px;border:1px solid #587265;border-radius:8px;background:var(--panel);box-shadow:0 10px 30px #0009}
 .material-menu-body>.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:0 0 8px}.material-menu-body input,.material-menu-body select{width:100%;min-width:0}.material-menu-body p{margin:10px 0 0;line-height:1.5}
 #material-editor-fields{display:flex;flex:1;min-height:0;overflow:hidden;padding:0;border:0;margin:0}
-.material-layout{flex:1;min-width:0;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 412px}
+.material-layout{flex:1;min-width:0;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 320px}
+@container (min-width:1100px){.material-layout{grid-template-columns:minmax(0,1fr) 412px}}
 .material-graph-stage{position:relative;min-width:0;min-height:0;background:#141d20;overflow:hidden}
 #material-graph{display:block;width:100%;height:100%;touch-action:none;outline-offset:-3px}
 .material-graph-tools{position:absolute;top:10px;left:12px;display:flex;gap:6px}.material-graph-tools button{padding:6px 10px;background:#202c30ee}#graph-node-select{max-width:170px;font-size:11px;background:#202c30ee}
@@ -337,8 +343,8 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .node-actions{gap:6px;margin-top:14px}.node-actions button{flex:1}
 #palette-grid{display:block;width:100%;max-width:320px;aspect-ratio:1;height:auto;cursor:pointer;image-rendering:pixelated}
 .material-fine{margin-top:10px}.material-fine>summary{cursor:pointer;font-size:11px;color:var(--muted)}
-@media(max-width:1000px){.material-layout{grid-template-columns:minmax(0,1fr) 320px}#material-used{display:none}}
-@media(max-width:700px){.material-layout{grid-template-columns:1fr;grid-template-rows:minmax(220px,45dvh) minmax(0,1fr)}.material-side{border-left:0;border-top:1px solid var(--line)}.material-header{flex-wrap:wrap;gap:8px}.material-header h2{display:none}#graph-help{display:none}}
+@container (max-width:1000px){#material-used{display:none}}
+@container (max-width:660px){.material-layout{grid-template-columns:1fr;grid-template-rows:minmax(220px,45dvh) minmax(0,1fr)}.material-side{border-left:0;border-top:1px solid var(--line)}.material-header{flex-wrap:wrap;gap:8px}.material-header h2{display:none}#graph-help{display:none}}
 /* World › Surface (sculpt-surface-panel.js): one row a layer, top first; a row opens to its settings. */
 .surface-show{display:flex;gap:6px;align-items:flex-start;margin:4px 0}
 .surface-layers{list-style:none;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:3px;overflow-y:auto;min-height:0}

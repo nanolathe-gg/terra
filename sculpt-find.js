@@ -350,7 +350,7 @@ function pickFeature(button) {
 function openMaterial(slot) {
   const open = $('materials-toolbar'), select = $('material-select');
   if (!open || open.disabled) return;
-  open.click();
+  if (!$('material-editor').open) open.click();   // Materials closes the editor when it is already open
   if (select && select.value !== slot && [...select.options].some(o => o.value === slot)) { select.value = slot; select.dispatchEvent(new Event('change', {bubbles: true})); }
 }
 
@@ -417,7 +417,7 @@ export function mountFind() {
     if (document.activeElement !== input) { back = document.activeElement; input.focus(); }
     input.select();
   }
-  // ⌘ / Ctrl K anywhere, and / outside a text field. A modal dialog (the material editor) keeps its keys.
+  // ⌘ / Ctrl K anywhere, and / outside a text field. A modal dialog (Start a map) keeps its keys, and so does the material editor (its own keydown).
   window.addEventListener('keydown', e => {
     if (e.defaultPrevented || e.isComposing || document.querySelector('dialog:modal')) return;
     const command = e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey;
