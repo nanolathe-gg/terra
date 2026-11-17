@@ -2555,6 +2555,7 @@ async function boot() {
     for (const [id,value] of Object.entries(surfaceSliders(config,experiment))) $(id).value=value;
     syncDrawInputs();
     for (const [id,hidden] of Object.entries(surfaceGroupsHidden(config))) $(id).hidden=hidden;
+    $('world-surface-detail').hidden=Object.values(surfaceGroupsHidden(config)).every(Boolean);   // its heading (and This map tag) goes with its rows
     await bootMap(pending);
   } catch (err) { error(err.message); status('The experimental renderer could not start.'); }
 }
