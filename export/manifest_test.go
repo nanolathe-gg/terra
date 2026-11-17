@@ -55,3 +55,19 @@ func TestReadRequestNamesAnOversizedManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// The game reads the OTA as single-byte text: a description outside printable ASCII is refused, naming the character.
+func TestValidateTextTakesPrintableASCIIOnly(t *testing.T) {
+	if err := validateText("description", "Two shores, one ford (4 players) - easy!"); err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"Café rivers", "Snow — deep", "Fire \U0001F525"} {
+		err := validateText("description", text)
+		if err == nil || !strings.Contains(err.Error(), "ASCII") {
+			t.Fatalf("%q: got %v, want an error naming plain ASCII", text, err)
+		}
+	}
+	if err := validateText("description", "tab\there"); err == nil {
+		t.Fatal("a control character passed")
+	}
+}

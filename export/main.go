@@ -260,6 +260,10 @@ func validateText(field, value string) error {
 		if r < 32 || r == 127 {
 			return fmt.Errorf("%s contains a control character", field)
 		}
+		// The game reads the OTA as single-byte text.
+		if r > 126 {
+			return fmt.Errorf("%s contains %q; the game reads map text as plain ASCII: use English letters, digits, spaces and keyboard punctuation", field, r)
+		}
 	}
 	return nil
 }
