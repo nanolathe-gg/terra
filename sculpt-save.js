@@ -1,4 +1,4 @@
-import {worldKit,optionalWorldKit,instantiateWorldKit} from './sculpt-world-kit.js';
+import {worldKit,optionalWorldKit,instantiateWorldKit,sameKitData} from './sculpt-world-kit.js';
 import {withWorldMaterials,worldOwnMaterials,worldKept,worldOwnFor,keptWorldMaterials} from './sculpt-materials.js';
 // The map carries its effective world settings, including defaults, URL overrides and the world's ground and water materials.
 // Keep browser/session parameters out of the recipe; removed controls are dropped on load.
@@ -55,7 +55,7 @@ export function sameSavedWorld(theirs,mine,config) {
   const colors=own=>JSON.stringify(Object.entries(worldHexColors(config,new Map(),own||{})).map(([k,v])=>[k,typeof v==='string'?v.toLowerCase():v]).sort(([a],[b])=>a<b?-1:1));
   if(colors(theirs.colors)!==colors(mine.colors))return false;
   if(JSON.stringify(theirs.surface??null)!==JSON.stringify(mine.surface??null))return false;
-  if(JSON.stringify(worldKit(config,theirs))!==JSON.stringify(worldKit(config,mine)))return false;
+  if(!sameKitData(worldKit(config,theirs),worldKit(config,mine)))return false;
   const a=worldOwnFor(theirs.materials,config),b=worldOwnFor(mine.materials,config,{stored:true});
   return JSON.stringify(Object.entries(a).sort())===JSON.stringify(Object.entries(b).sort());
 }
@@ -63,7 +63,7 @@ export function sameSavedWorld(theirs,mine,config) {
 // Count the overrides the existing world store already holds, compared with its built-in data.
 // Copied defaults in an imported world are not changes; one material/list is one stored override.
 export function worldOverrideCount(world,config) {
-  const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+  const equal=sameKitData;
   const defaults=Object.fromEntries(KNOBS.flatMap(([,rows])=>rows.map(([key,,,,,value])=>[key,value])));
   let n=0;const known=worldKeys(config);
   for(const [key,value] of Object.entries(world.knobs||{})){

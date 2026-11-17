@@ -148,7 +148,7 @@ export function worldRocks(config){
 // recipe: config.rock.recipe), else -1, Rock beneath (a world's tool that names a rock the map does not hold draws on the rock beneath).
 export function rockByKey(rocks,key,worldKey=''){
  if(!key)return -1;
- const rock=rocks.find(r=>r.key===key);
+ const rock=rocks.find(r=>r.worldKey===key)??rocks.find(r=>r.key===key);
  return rock?rock.slot:key===worldKey?0:-1;
 }
 const NAME_MAX=40,ROCK_FIELDS=['slot','name','key','knobs','column','colors','material','worldKey'],KEY=/^[a-z][a-z0-9_-]{0,39}$/;

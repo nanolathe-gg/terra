@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {blankMaterial,copyMaterial,worldMaterials,addMaterial} from '../sculpt-materials.js';
-import {copyRocks,duplicateRock} from '../sculpt-rock-presets.js';
-import {worldKit,copyMaterialRef,instantiateWorldKit,validateWorldRocks,captureWorldKit,publishWorldRock,publishWorldTool,resolvedWorldCard,worldToolUnavailable,authoredWorldTool} from '../sculpt-world-kit.js';
+import {copyRocks,duplicateRock,rockByKey} from '../sculpt-rock-presets.js';
+import {worldKit,copyMaterialRef,instantiateWorldKit,validateWorldRocks,captureWorldKit,publishWorldRock,publishWorldTool,resolvedWorldCard,worldToolUnavailable,authoredWorldTool,sameKitData} from '../sculpt-world-kit.js';
 const config={biomeId:'fixture',materials:{ground:'green-ground',water:'green-water',rock:'green-rock'},tools:[{id:'hill',label:'Hill',icon:'hill',color:'#778899',group:'shape',rock:'soil'}]};
 const graph=blankMaterial();
 const template=(key='wrock-stone',extra={})=>({key,name:'Stone',knobs:{faceWhole:.8},column:null,colors:null,material:{key:'wmat-stone',name:'Stone grain',graph:copyMaterial(graph)},...extra});
@@ -17,7 +17,7 @@ test('portable kit references become ordinary slots without moving existing map 
  const local={slot:1,key:'wrock-stone',name:'Map Stone',knobs:{faceWhole:.1},column:null,colors:null};
  const existing=instantiateWorldKit(config,w,{rocks:[local],materials:worldMaterials(config),source:{}});
  assert.deepEqual(existing.rocks[0],local);assert.equal(existing.rocks[1].slot,2);assert.equal(existing.rocks[1].key,null);assert.equal(existing.rocks[1].worldKey,'wrock-stone');
- assert.equal(resolvedWorldCard(w.tools[1],existing.rocks,existing.materials,config).rockPreset,2);
+ assert.equal(resolvedWorldCard(w.tools[1],existing.rocks,existing.materials,config).rockPreset,2);assert.equal(rockByKey(existing.rocks,'wrock-stone'),2,'native world tool lookup prefers world instance over local recipe key');
 });
 test('legacy edited inherited recipe keys and omitted base types stay map-local and unchanged',()=>{
  const legacy=[{slot:7,key:'soil',name:'My soil',knobs:{faceRock:.9},column:null,colors:null}],materials=worldMaterials(config),before=JSON.stringify([legacy,materials]);
@@ -111,4 +111,19 @@ test('tools-only kits bind their ground on a legacy map and preserve dirty graph
  assert.equal(captureWorldKit(dirty.kit,result.rocks,changed).kit.tools[0].ground.graph.seed,27);
  const collision=result.materials.map(m=>m===added?{...m,seed:39}:m),rejected=instantiateWorldKit(config,w,{rocks:[],materials:collision,source:{}});
  assert.match(rejected.reason,/edited material/);assert.equal(captureWorldKit(rejected.kit,[],collision).kit.tools[0].ground.graph.seed,0);
+});
+
+test('kit object/card key order is canonical, while toolbar order remains meaningful',()=>{
+ const w=world(),reorder=v=>Array.isArray(v)?v.map(reorder):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).reverse().map(k=>[k,reorder(v[k])])):v;
+ assert(sameKitData(worldKit(config,w),worldKit(config,reorder(w))));
+ assert(!sameKitData(worldKit(config,w),worldKit(config,{...w,tools:[...w.tools].reverse()})));
+ const absent=instantiateWorldKit(config,{tools:[tool({rock:'wrock-test'})],rocks:[template('wrock-test',{material:{world:'worldSlope'}})]});
+ assert.match(worldToolUnavailable(absent.kit.tools[0],absent.rocks,absent.materials,config,absent.kit),/slope cover material is missing/);
+ assert.match(worldToolUnavailable(tool({ground:{world:'worldSlope'}}),[],worldMaterials(config),config),/slope cover material is missing/);
+});
+
+test('a positive world catalog reference never aliases slot0 through a default-recipe name collision',()=>{
+ const c={...config,rock:{recipe:'wrock-stone'}},w=world(),full=Array.from({length:15},(_,i)=>({slot:i+1,key:null,name:'Local '+i,knobs:{},column:null,colors:null}));
+ const result=instantiateWorldKit(c,w,{rocks:full,materials:worldMaterials(c),source:{}}),t=result.kit.tools[1];
+ assert.match(worldToolUnavailable(t,result.rocks,result.materials,c,result.kit),/15 rock slots/);assert.equal(resolvedWorldCard(t,result.rocks,result.materials,c).rockPreset,-1);
 });

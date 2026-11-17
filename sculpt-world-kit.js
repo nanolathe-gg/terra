@@ -3,9 +3,11 @@
 import {checkTool,checkCard,worldTools,MAP_TOOLS_MAX} from './sculpt-tools.js';
 import {shapeFrom} from './sculpt-scene.js';
 import {copyRocks,worldRocks,giveRockMaterials,ROCK_SLOTS} from './sculpt-rock-presets.js';
-import {copyMaterial,copyMaterials,addMaterial,worldMaterials,worldKey,MAP_ROLES,MATERIAL_SLOTS,materialStates,materialStaged,materialCacheUsage} from './sculpt-materials.js';
+import {copyMaterial,copyMaterials,addMaterial,worldMaterials,worldKey,roleName,MAP_ROLES,MATERIAL_SLOTS,materialStates,materialStaged,materialCacheUsage} from './sculpt-materials.js';
 
-const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b),object=v=>v&&typeof v==='object'&&!Array.isArray(v);
+const ordered=v=>Array.isArray(v)?v.map(ordered):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,ordered(v[k])])):v;
+export const sameKitData=(a,b)=>JSON.stringify(ordered(a))===JSON.stringify(ordered(b));
+const same=sameKitData,object=v=>v&&typeof v==='object'&&!Array.isArray(v);
 const KEY=/^[a-z][a-z0-9_-]{0,39}$/,roles=new Set(['worldGround','worldWater',...MAP_ROLES.map(([r])=>r)]);
 const fields=(v,allowed,what)=>{if(!object(v)||Object.keys(v).some(k=>!allowed.includes(k)))throw Error(`Invalid ${what}.`);};
 const name=(v,what,max=40)=>{if(typeof v!=='string'||!v.trim()||v.trim().length>max)throw Error(`${what} needs a name of 1 to ${max} characters.`);return v.trim();};
@@ -62,7 +64,7 @@ export function worldKit(config,world={}){
   if(!object(world))throw Error('Invalid world kit.');
   const kit={tools:copyWorldTools(world.tools===undefined?(config.tools??[]):world.tools,config),rocks:copyWorldRocks(world.rocks===undefined?baseRocks(config):world.rocks)};
   const keys=new Set(kit.rocks.map(r=>r.key)),inline=new Map();
-  for(const tool of kit.tools)if(authoredWorldTool(tool)&&tool.rock&&!keys.has(tool.rock)&&tool.rock!==config.rock?.recipe)throw Error(`The world tool ${tool.label} names a rock type its world does not carry.`);
+  for(const tool of kit.tools)if(authoredWorldTool(tool)&&tool.rock&&!keys.has(tool.rock))throw Error(`The world tool ${tool.label} names a rock type its world does not carry.`);
   for(const ref of [...kit.rocks.map(r=>r.material),...kit.tools.map(t=>t.ground)].filter(Boolean))if(!ref.world){const text=JSON.stringify([ref.name,ref.graph]);if(inline.has(ref.key)&&inline.get(ref.key)!==text)throw Error('Two material dependencies disagree about the same key.');inline.set(ref.key,text);}
   return kit;
 }
@@ -122,14 +124,22 @@ export function instantiateWorldKit(config,world={}, {rocks=null,materials=null,
 }
 export function resolvedWorldCard(tool,rocks,materials,config){
   const card=structuredClone(tool.card),rock=tool.rock;
-  if(rock!==undefined){const r=rocks.find(r=>r.worldKey===rock);card.rockPreset=r?.slot??(rock===config.rock?.recipe?0:-1);}
+  if(rock!==undefined){const r=rocks.find(r=>r.worldKey===rock);card.rockPreset=r?.slot??-1;}
   if(tool.ground){const slot=materialRefSlot(tool.ground,materials);card.groundPreset=slot?(materials.find(m=>m.slot===slot)?.worldGround?0:slot):-1;}
   return card;
 }
-export function worldToolUnavailable(tool,rocks,materials,config){
+export function worldToolUnavailable(tool,rocks,materials,config,kit={rocks:[]}){
   if(!authoredWorldTool(tool))return '';
-  if(tool.rock&&tool.rock!==config.rock?.recipe&&!rocks.some(r=>r.worldKey===tool.rock))return 'This map has no free slot for this tool’s world rock type.';
-  if(tool.ground&&!materialRefSlot(tool.ground,materials))return 'This map has no room for this tool’s material.';
+  const refReason=ref=>{
+    if(ref?.world&&!materialRefSlot(ref,materials)&&ref.world!=='worldRock')return `The world’s ${ref.world.startsWith('layer:')?'surface layer':roleName(ref.world)} material is missing.`;
+    if(ref?.key){const held=materials.find(m=>m.key===ref.key);if(held&&!materialRefSlot(ref,materials))return `This map keeps a different copy of ${ref.name}.`;}
+    return '';
+  };
+  if(tool.rock&&!rocks.some(r=>r.worldKey===tool.rock)){
+    const reason=refReason(kit.rocks.find(r=>r.key===tool.rock)?.material);if(reason)return reason;
+    return rocks.length>=ROCK_SLOTS-1?'This map’s 15 rock slots are full.':'Add this tool’s world rock type to this map before drawing with it.';
+  }
+  if(tool.ground&&!materialRefSlot(tool.ground,materials))return refReason(tool.ground)||'This map cannot allocate this tool’s material within its material budget.';
   return '';
 }
 // Capture only explicit world-owned instances. Unbound catalog entries survive; no recipe-key lookup publishes a local map copy.
