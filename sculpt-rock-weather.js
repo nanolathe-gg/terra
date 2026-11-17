@@ -42,7 +42,7 @@ export class RockWeather {
     const [terrain,a,b,final,source,provenance]=this.owned;
     pass('rockTerrain',this.empty,this.empty,terrain);pass('rockRain',terrain,this.empty,a);
     // The flow rounds carry runoff alone; with Runoff exposure at 0 every reader multiplies their result by 0, so they are not run.
-    // A gesture's own previews (one sample a pixel: sculpt-chunk-renderer.js fastRaster) carry it half as far, in half the rounds: the runoff
+    // A gesture's own previews (sculpt-chunk-renderer.js fastRaster) carry it half as far, in half the rounds: the runoff
     // from the 32 px above a point rather than 64. The count stays even, so the flow ends in A as rockDeposit reads it.
     const rounds=r.fastRaster?ROUNDS/2:ROUNDS;
     if(r.uniformValue('uRunoffAny')>0)for(let i=0;i<rounds;i++)pass('rockFlow',terrain,i%2?b:a,i%2?a:b);

@@ -1488,9 +1488,8 @@ fn geometryMain(v:VertexOut)->@location(0) vec4f {
     var lit=normal;var sun=voxelShadow(hit,normal);var cavity=voxelCavity(hit,normal);
     // Rock finer than the solid's voxels (rockDetail, a height outward), read as a 1 px solid's normal reads its field: it bends the normal the light reads,
     // deepens the cavity where it hollows (voxelCavity's first ring: its weight and its reach) and casts its own short shadow.
-    // Only where a pixel is finer than a voxel: where the two are the same size (a gesture's own previews, one sample a pixel: sculpt-chunk-renderer.js
-    // fastRaster) the solid already holds all a pixel can show, and the finer rock was noise a pixel wide.
-    if(vs.step>u.chunkScale){
+    // Keep fine rock when a pixel is at most half a voxel wide. At 3 px or coarser in a 4 px solid, it reads as single-pixel noise.
+    if(vs.step>1.5*u.chunkScale){
         let site=rockSite(hit);
         if(site.on){
             let ax=select(vec3f(0,0,1),vec3f(1,0,0),abs(normal.z)>.9);let t=normalize(cross(normal,ax));let b=cross(normal,t);
@@ -1512,10 +1511,10 @@ fn geometryMain(v:VertexOut)->@location(0) vec4f {
     }
     useRock(p);
     // The rain's shelter (voxelRain: a march up to the column's top) and the solid's own occlusion (voxelOcclusion: up to 16 taps) are read
-    // where a pixel is finer than a voxel. A gesture's own previews (pixels a voxel wide) take open sky on every face that looks up and no
+    // where a pixel is at most half a voxel wide. Coarser previews take open sky on every face that looks up and no
     // occlusion: they differ only under overhangs and in the darkest few levels of a crevice, and the two were a quarter of the pass.
     var rain=select(0.0,1.0,normal.z>.1);var near=1.0;
-    if(vs.step>u.chunkScale){rain=voxelRain(hit,normal);near=voxelOcclusion(hit,normal);}
+    if(vs.step>1.5*u.chunkScale){rain=voxelRain(hit,normal);near=voxelOcclusion(hit,normal);}
     geometryOut[geometryIndex(vec2i(floor(v.position.xy)))]=SurfaceRecord(hit.y,hit.z,lit.x,lit.y,lit.z,
         rain,sun,near,cavity,
         soft.x,soft.y,voxelFaceSlope(hit.xy),occlusion(p,hit.z),visibility(p,max(hit.z,u.sea)));

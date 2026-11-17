@@ -1175,6 +1175,7 @@ function regionalStats() {
   return {...stats,residentBytes:stats.residentBytes+weatherBytes,weatherBytes,peakBytes:stats.peakBytes+weatherBytes};
 }
 const sculptRegion={
+  previewQualityPreference:()=>editorUI.previewQuality,savePreviewQuality:value=>editorUI.setPreviewQuality(value),
   terrainBudgetPreference:()=>editorUI.terrainBudget,saveTerrainBudget:value=>editorUI.setTerrainBudget(value),
   // A saved copy that failed to load is retained until the artist edits (keepSaved): a restart must not replace it with the blank map.
   saveForGpuRestart:()=>!ready||keepSaved||saveWorking(),

@@ -1,5 +1,11 @@
 import {createShapeEngine,createNodePreparer,nodeContextKey,shapeScratchBytes,shapeRequestBytes} from './sculpt-gpu-fields.js';
 import {terrainAllocation} from './sculpt-memory.js';
+// Resolution is a display preference, separate from shape/voxel levels. Choose
+// from the unsplit edit area, then hold that choice for the whole gesture.
+export const previewQuality=value=>['2','3','4','8'].includes(String(value))?String(value):'auto';
+export function previewPixels(preference,area,detail=1){
+  return previewQuality(preference)==='auto'?(area.width*area.height<=(768*detail)**2?2:4):Number(preference);
+}
 const union=(a,b)=>!a||!b?null:{x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.max(a.x+a.width,b.x+b.width)-Math.min(a.x,b.x),height:Math.max(a.y+a.height,b.y+b.height)-Math.min(a.y,b.y)};
 // A bounded, display-only lattice for zoomed-out views. It evaluates the same
 // shape graph and masks; exports and picking continue to use canonical fields.
