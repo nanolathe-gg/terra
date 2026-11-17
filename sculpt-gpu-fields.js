@@ -918,14 +918,14 @@ export function createGpuFields(opts) {
   const worldRect = r => ({x: r.x0 * spacing, y: r.y0 * spacing, width: (r.x1 - r.x0) * spacing, height: (r.y1 - r.y0) * spacing});
   let revision = 0, planes = null, engine = null, enginePromise = null, valid = false, gpuValid = false, error = null;
   let lastEval = {}, firstReady = 0;
-  // H6b: a change is requested (queued), submitted to the GPU at once unless two runs are still unfinished, and its rectangle read
-  // back into the CPU copy only when nothing is being edited: during a gesture (opts.gesture) the copy is left, and one read of everything changed
-  // since covers the release. A request that arrives while a run is in flight merges into the one waiting (union rectangle; the newest node list is
-  // read when it starts). Two kinds of listener: submit listeners (the canvas rebakes from the GPU buffers) hear of a change as it is submitted;
-  // the others (overview sampling, saving, the CPU readers) only once the CPU copy holds it, as before (1a1a85f).
+  // H6b: announce a requested change immediately, then merge its rectangle
+  // while a gesture uses the preview lattice. A canonical reader or release
+  // submits the merged request; at most two runs remain in flight. The newest
+  // node list is read when a run starts. CPU copies wait for release or an
+  // explicit reader, and overview/saving listeners hear only after that copy.
   const gesture = opts.gesture || (() => false);
   let submittedRevision = 0, outstanding = 0, starting = null, waiters = [], queued = null, copyDirty = false, copyRect = null, landing = 0, landChain = Promise.resolve(), reported = null, generation = 0, flushWanted = false;
-  const submitListeners = new Set(), runLog = [];
+  const submitListeners = new Set(), runLog = [];let gpuReaders=0;
   const joinRect = (a, b) => !a || !b ? null : {x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1)};
   const joinWorld = (a, b) => !a || !b ? null : (() => { const x0 = Math.min(a.x, b.x), y0 = Math.min(a.y, b.y); return {x: x0, y: y0, width: Math.max(a.x + a.width, b.x + b.width) - x0, height: Math.max(a.y + a.height, b.y + b.height) - y0}; })();
   const joinEvent = (a, b) => !a ? b : !b ? a : {revision: Math.max(a.revision, b.revision), rect: joinWorld(a.rect, b.rect)};
@@ -958,6 +958,9 @@ export function createGpuFields(opts) {
   const progress = () => { const w = waiters; waiters = []; for (const fn of w) fn(); };
   function pump() {
     if (!queued) { progress(); return; }
+    // Drag pictures read their own preview lattice. Do not queue whole-map
+    // work for every pointer event ahead of those pictures.
+    if(gpuValid&&gesture()&&!gpuReaders){progress();return;}
     if (!engine) {
       if (!starting) starting = getEngine().catch(err => { error = err; fail(err); queued = null; }).then(() => { starting = null; pump(); });
       return;
@@ -974,7 +977,7 @@ export function createGpuFields(opts) {
       reported = joinEvent(reported, q.event); copyRect = nextCopyRect; copyDirty = true;
       const entry = {t: performance.now(), whole, readNow}; runLog.push(entry); if (runLog.length > 400) runLog.shift();
       submittedRevision = Math.max(submittedRevision, q.event?.revision ?? 0); gpuValid = true;
-      if (q.event || !wasGpu) { const ev = {revision: q.event?.revision ?? revision, rect: whole ? null : q.event?.rect ?? null}; for (const fn of submitListeners) fn(ev); }
+      if (!q.event && !wasGpu) { const ev = {revision, rect:null}; for (const fn of submitListeners) fn(ev); }
       if (readNow) { const report = reported; reported = null; copyDirty = false; copyRect = null; land(h, whole, report, wasValid, gen); }
       outstanding++;
       h.done.catch(err => { error = err; fail(err); }).then(() => { entry.doneAt = performance.now(); outstanding--; pump(); if (!outstanding && !queued) flushIfDue(); });
@@ -996,6 +999,7 @@ export function createGpuFields(opts) {
   function changed(rect = null, keepPrefix = 0) {
     revision++;
     const cr = rect ? clip(rect) : null, r = cr ? clip({x0: cr.x0 - 6, y0: cr.y0 - 6, x1: cr.x1 + 6, y1: cr.y1 + 6}) : null, event = {revision, rect: cr ? worldRect(cr) : null};
+    for(const fn of submitListeners)fn(event);
     evaluate(r, event);
     return event;
   }
@@ -1004,9 +1008,11 @@ export function createGpuFields(opts) {
   // The GPU buffers are current once every requested run has been submitted (the queue is in order on one device, so a bake that records its own
   // work next sees them): it does not wait for the work to finish.
   // A failed run leaves the fields invalid; asking again would fail again at once and spin the page in a loop of resolved promises, so a waiter gets the error.
-  const gpuReady = async () => { if (!gpuValid && !queued && !starting) { if (error) throw error; evaluate(null); } await settled(); if (!gpuValid && error) throw error; };
+  const demand=async wait=>{gpuReaders++;try{pump();await wait();}finally{gpuReaders--;}};
+  const gpuReady = async () => { if (!gpuValid && !queued && !starting) { if (error) throw error; evaluate(null); } await demand(settled); if (!gpuValid && error) throw error; };
   // The CPU copy is current: also waits for the reads. A CPU reader forces the read that a gesture left out.
   const whenReady = async () => {
+    gpuReaders++;try{pump();
     if (!valid && !queued && !starting && landing === 0) { if (error) throw error; evaluate(null); }
     for (;;) {
       if (!valid && error && !queued && !starting) throw error;
@@ -1015,6 +1021,7 @@ export function createGpuFields(opts) {
       if (landing > 0) { await landChain; continue; }
       break;
     }
+    }finally{gpuReaders--;}
   };
   function crop(request) {
     const rect = clip({x0: Math.floor(request.x0), y0: Math.floor(request.y0), x1: Math.ceil(request.x1), y1: Math.ceil(request.y1)});
@@ -1057,9 +1064,9 @@ export function createGpuFields(opts) {
     // H6b: the engine's whole-map buffers (the h p r c v x planes, the packed masks) for the passes that read them in place. Await ready() first.
     gpuBuffers: () => gpuValid && engine ? {planes: engine.planes, masks: engine.masks, grid: worldGrid, spacing, revision: submittedRevision} : null,
     subscribeSubmit(fn) { submitListeners.add(fn); return () => submitListeners.delete(fn); },
-    gpuReady: () => gpuReady(), gpuQuiet: () => quiet(), gpuPending: () => (queued !== null || starting !== null || !gpuValid),
+    gpuReady: () => gpuReady(), gpuQuiet: () => demand(quiet), gpuPending: () => (queued !== null || starting !== null || !gpuValid),
     // Start the read of what a gesture left out, once the gesture is over (the weather glue calls this on release).
-    settle: () => { flushIfDue(); },
+    settle: () => { pump();flushIfDue(); },
   };
 }
 
@@ -1491,7 +1498,7 @@ export function createPagedFields(opts) {
         signal?.throwIfAborted();
         // A superseded page releases its working set and retries at the current
         // Time key/revision. A retained stale page still serves a held gesture.
-        while(time&&(!pg.weather||(pg.stale&&!gesture()))){await ensureWeather(pg);signal?.throwIfAborted();}
+        while(time&&(!pg.weather||(pg.stale&&(!gesture()||opts.gestureSettled?.())))){await ensureWeather(pg);signal?.throwIfAborted();}
         // The submitted slice drains, but a canceled camera must not enqueue
         // the remaining pages while the new camera is waiting.
         signal?.throwIfAborted();touch(pg);

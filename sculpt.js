@@ -1103,7 +1103,7 @@ const pagedOn=() => Boolean(regionalFields?.paged && regionalFields.active());
 // Each minimum is worked out when it is read: the paged fields ask on every input, for one of the two.
 const gpuBudget=() => ({total:(Number(document.querySelector('[data-gpu]')?.value)||Number(new URLSearchParams(location.search).get('gpuMB'))||2048)*1048576,get minimum(){return mapCanvas?.minimumBytes?.()??96*1048576;},get previewMinimum(){return mapCanvas?.minimumBytes?.({previews:true})??96*1048576;}});
 function makeRegionalFields() {
-  const common={worldSize,worldGrid,baseHeight:config.baseHeight,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving||controlsEditing||worldInputQueue.active)};
+  const common={worldSize,worldGrid,baseHeight:config.baseHeight,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving||controlsEditing||worldInputQueue.active),gestureSettled:()=>mapCanvas?.refineWhileHeld?.()??false};
   // pageRing (a ring by hand) and timeApron are test hooks of the page ring rule and the Time pass's window; no page needs them.
   const query=new URLSearchParams(location.search);
   return pagedWanted()?createPagedFields({...common,budget:gpuBudget,foregroundPending:()=>Boolean(mapCanvas?.gpuWorkPending?.()||mapCanvas?.foregroundPending?.()),prepareBackground:bytes=>mapCanvas?.prepareBackground?.(bytes)??true,apron:Number(query.get('timeApron')||128),forceRing:Number(query.get('pageRing')||0)}):createGpuFields(common);

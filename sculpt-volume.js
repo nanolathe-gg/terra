@@ -103,7 +103,7 @@ export class VoxelSurface {
     // relief allowance's (high), which every relief term moves. The march can step past thin rock, so a ray from another start finds
     // another face, and a term that only moved the allowance re-rolled a tenth of a picture's steep faces (green-2 10%, Bed lumps .6 to 2).
     const top=h[1]+104;
-    this.stats.pieces=this.stats.bricks=this.stats.candidateBricks=this.stats.peakBytes=0;const start=performance.now();
+    this.stats.step=step;this.stats.pieces=this.stats.bricks=this.stats.candidateBricks=this.stats.peakBytes=0;const start=performance.now();
     let first=true;
     const piece=async rect=>{
       current();this.clear();

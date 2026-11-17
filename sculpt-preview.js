@@ -6,6 +6,28 @@ export const previewQuality=value=>['2','3','4','8'].includes(String(value))?Str
 export function previewPixels(preference,area,detail=1){
   return previewQuality(preference)==='auto'?(area.width*area.height<=(768*detail)**2?2:4):Number(preference);
 }
+// Three slow pictures lower Auto by one level. Recovery needs a sustained
+// fast run and a minimum dwell, so a busy shared GPU cannot make it oscillate.
+export function createPreviewLoad(){
+ let scale=1,slow=0,fast=0,changedAt=-Infinity,changes=0,lastMs=null,samples=0,times=[];
+ const observe=(ms,now)=>{
+  if(!Number.isFinite(ms)||ms<=0||!Number.isFinite(now))return false;
+  lastMs=ms;samples++;slow=ms>40?slow+1:0;fast=ms<18?fast+1:ms>28?0:Math.max(0,fast-1);
+  const next=scale===1&&slow>=3?2:scale===2&&fast>=8?1:scale;
+  if(next===scale||now-changedAt<500)return false;
+  scale=next;slow=fast=0;changedAt=now;changes++;return true;
+ };
+ return {get scale(){return scale;},stats:()=>({scale,slow,fast,changes,lastMs,samples}),observe,
+  resetCadence(){times=[];},
+  complete(now,reset=false){
+   if(reset)times=[];times.push(now);if(times.length>5)times.shift();
+   // Browsers may deliver two queue-completion callbacks together. Four
+   // intervals include those zero gaps rather than treating the batch as one
+   // slow picture, and still respond within a few pictures under real load.
+   return times.length===5?observe((now-times[0])/4,now):false;
+  }
+ };
+}
 const union=(a,b)=>!a||!b?null:{x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.max(a.x+a.width,b.x+b.width)-Math.min(a.x,b.x),height:Math.max(a.y+a.height,b.y+b.height)-Math.min(a.y,b.y)};
 // A bounded, display-only lattice for zoomed-out views. It evaluates the same
 // shape graph and masks; exports and picking continue to use canonical fields.
@@ -99,7 +121,9 @@ export function createPreviewLattice(device,scene,memoryChanged=()=>{}){
             if(!target||target.ox!==p.x||target.oy!==p.y||target.pw!==p.side){target?.destroy();target=engine.makeTarget(p.x,p.y,p.side,p.side);}
             submitted=engine.submit(p.nodes,s.context,null,{readback:false,target,prepare:n=>p.recipe.get(n)});
           });
-          await submitted.done;current();shapeKey=p.sk;runs++;
+          // The feed and Time pass use this same queue. Their reads follow shape
+          // without a GPU-to-page round trip; the engine retires its scratch.
+          submitted.done.catch(s.fail);current();shapeKey=p.sk;runs++;
         }
         if(key!==p.held){
           if(!p.reuse)dropWeather();else weatherReuses++;key='';

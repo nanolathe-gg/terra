@@ -21,21 +21,27 @@ export function mapGeometry(unitsX,unitsY) {
   return {unitsX,unitsY,widthCells,heightCells,width:widthCells*16,height:heightCells*16,playRight:unitsX*512,playBottom:unitsY*512};
 }
 
-export function drawMapBounds(ink,map,config,sample) {
+export function drawMapBounds(ink,map,config,sample,view=null) {
   if (!map) return;
   // The camera/play rectangle is in projected pixels; the north and south
   // height-dependent void cells are outlined separately [03 R-TERR-01 §2].
   ink.save(); ink.lineWidth=1; ink.setLineDash([8,6]); ink.strokeStyle='#ffe69c';
   ink.strokeRect(.5,config.baseHeight/2+.5,map.playRight-1,map.playBottom-1);
   ink.setLineDash([]); ink.strokeStyle='#ffbf7590';
+  // Only the grid vertices that can draw into this view need height reads.
+  const x0=view?Math.max(0,Math.floor(view.x/16)*16):0,x1=view?Math.min(map.playRight,Math.ceil((view.x+view.width)/16)*16):map.playRight;
+  const [minH,maxH]=config.heightBounds??[-90,300],lift=(Math.max(config.seaLevel,maxH)-config.baseHeight)/2;
   for (const south of [false,true]) {
+    const low=south?Math.max(0,map.playBottom+minH/2-16)-lift:-lift;
+    const high=(south?map.height-16:128)-(config.seaLevel-config.baseHeight)/2;
+    if(x1<x0||view&&(view.y>high+1||view.y+view.height<low-1))continue;
     ink.beginPath();
-    for (let x=0;x<=map.playRight;x+=16) {
+    for (let x=x0;x<=x1;x+=16) {
       let y=south?map.height-16:0;
       if (south) { while (y>0 && y-Math.floor(sample(x,y)/2)>map.playBottom) y-=16; }
       else { while (y<128 && y-Math.floor(sample(x,y)/2)<0) y+=16; }
       const sy=y-(Math.max(config.seaLevel,sample(x,y))-config.baseHeight)/2;
-      if (x===0) ink.moveTo(x,sy); else ink.lineTo(x,sy);
+      if (x===x0) ink.moveTo(x,sy); else ink.lineTo(x,sy);
     }
     ink.stroke();
   }

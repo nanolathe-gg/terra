@@ -1,5 +1,5 @@
 import {createTerrainBudget,TerrainMemoryError,TERRAIN_BUDGET_MAX} from './sculpt-memory.js';
-import {createPreviewFields,createPreviewLattice,planPreviewBlocks,previewQuality,previewPixels} from './sculpt-preview.js';
+import {createPreviewFields,createPreviewLattice,planPreviewBlocks,previewQuality,previewPixels,createPreviewLoad} from './sculpt-preview.js';
 import {selectionGeometry,hitSelection,drawSelection} from './sculpt-selection.js';
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {drawMapBounds,sampleField,cellHeights,cellHeightTiles} from './sculpt-map.js';
@@ -44,7 +44,15 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   let quality=previewQuality(api.previewQualityPreference?.());
   const qualityControl=$('preview-quality');qualityControl.value=quality;
   qualityControl.addEventListener('change',()=>{quality=previewQuality(qualityControl.value);api.savePreviewQuality?.(quality);previewRejects.clear();schedule();});
-  const previewRaster=level=>{const fastRaster=interacting()&&level>=4*detailLevel();return {fastRaster,pixelScale:fastRaster?level/4*(gesture?.previewPixels??(quality==='auto'?4:Number(quality))):level};};
+  const previewLoad=createPreviewLoad();
+  const previewRaster=level=>{
+    const fastRaster=interacting()&&level>=4*detailLevel(),automatic=(gesture?.previewQuality??quality)==='auto';
+    const load=fastRaster&&automatic&&level<=4*detailLevel()?previewLoad.scale:1;
+    // A first Auto picture uses a coarser solid, then the normal one. Under
+    // load both raster and solid back off without replacing the source lattice.
+    const solid=fastRaster&&automatic?Math.max(load,gesture&&!(gesture.previewPictures>0)?2:1):1;
+    return {fastRaster,pixelScale:fastRaster?level/4*(gesture?.previewPixels??(quality==='auto'?4:Number(quality)))*load:level,voxelScale:level*solid};
+  };
   let weatheredView=true;
   try{weatheredView=localStorage.getItem('terraform-weathered-view')!=='false';}catch{}
   if(query.has('weatheredView'))weatheredView=query.get('weatheredView')!=='0';
@@ -103,7 +111,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const heightBytes=[...new Set([...cache.values()].map(e=>e.heightPatch?.fields.h.buffer).filter(Boolean))].reduce((n,b)=>n+b.byteLength,0),owned=ownedBytes()+(passability?.stats().bytes||0),accounted=heap+owned;
     peakGPU=Math.max(peakGPU,gpu);peakHeap=Math.max(peakHeap,heap);peakAccountedHeap=Math.max(peakAccountedHeap,accounted);
     find('[data-memory]').textContent=`Terrain ${(gpu/MB).toFixed(1)} / ${gpuBudget/MB} MiB · heap ${(accounted/MB).toFixed(1)} / ${heapBudget/MB} MiB · ${cache.size} cached · ${evictions} evictions · ${canonicalSize}px bake${terrainBudget.reason?' · '+terrainBudget.reason:''}`;
-    return {reusedBakes:reused,gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,gpuBudget,budgetReason:terrainBudget.reason,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,previewQuality:quality,previewPixels:gesture?.previewPixels??null,previewBlocks:blocks.size,previewBlockBytes:blockBytes,preview:previewFields.stats(),previewLattice:previewLattice?.stats()??null,finalizing,dirtyChunks:[...cache.values()].filter(e=>e.dirty).length,dirtyMarks,retainedInvalidations,evictions,bakes,hits,rebakes,levels:{quarter:[...cache.values()].filter(e=>(e.scale??1)>1).length,final:[...cache.values()].filter(e=>(e.scale??1)===1).length,quarterBytes:[...cache.values()].filter(e=>(e.scale??1)>1).reduce((n,e)=>n+e.bytes,0)},canonicalChunkSize:canonicalSize,displayChunkSize:viewChunkSize(),field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
+    return {reusedBakes:reused,gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,gpuBudget,budgetReason:terrainBudget.reason,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,previewQuality:quality,previewPixels:gesture?.previewPixels??null,previewLoad:previewLoad.stats(),previewBlocks:blocks.size,previewBlockBytes:blockBytes,preview:previewFields.stats(),previewLattice:previewLattice?.stats()??null,finalizing,dirtyChunks:[...cache.values()].filter(e=>e.dirty).length,dirtyMarks,retainedInvalidations,evictions,bakes,hits,rebakes,levels:{quarter:[...cache.values()].filter(e=>(e.scale??1)>1).length,final:[...cache.values()].filter(e=>(e.scale??1)===1).length,quarterBytes:[...cache.values()].filter(e=>(e.scale??1)>1).reduce((n,e)=>n+e.bytes,0)},canonicalChunkSize:canonicalSize,displayChunkSize:viewChunkSize(),field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
   }
   function remove(key) { const e=cache.get(key);if(!e)return;renderer.releaseColorTile(e.color);e.bitmap.close?.();cacheBytes-=e.bytes;cache.delete(key);evictions++; }
   // H6b: a bake from the GPU buffers records how many changes had been announced when it took them; it is still good if none announced since touched
@@ -366,7 +374,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const v=state(); if(terrain){g.imageSmoothingEnabled=false;g.drawImage(coarse,v.x/map.width*coarse.width,v.y/map.height*coarse.height,v.width/map.width*coarse.width,v.height/map.height*coarse.height,0,0,canvas.width,canvas.height);}
     ng.imageSmoothingEnabled=false; ng.drawImage(coarse,0,0,navigatorCanvas.width,navigatorCanvas.height); ng.strokeStyle='#fff0a0'; ng.lineWidth=1; ng.strokeRect(v.x/map.width*200+.5,v.y/map.height*200+.5,Math.min(200,v.width/map.width*200),Math.min(200,v.height/map.height*200));
   }
+  let overlayFrame=null;
+  function requestOverlay(){if(overlayFrame===null)overlayFrame=requestAnimationFrame(()=>{overlayFrame=null;overlays();});}
   function overlays() {
+    if(overlayFrame!==null){cancelAnimationFrame(overlayFrame);overlayFrame=null;}
     const v=state(); ink.setTransform(1,0,0,1,0,0); ink.clearRect(0,0,overlay.width,overlay.height); ink.save(); ink.scale(scale,scale); ink.translate(-v.x,-v.y);
     passability?.draw(ink,v,scale);
     // Map-coordinate height cells; this guide is only an overlay, never art.
@@ -376,7 +387,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       for(let x=x0;x<=x1;x+=step){ink.strokeStyle=x%128===0?'#d4ebd45c':'#c1dfcd24';ink.beginPath();ink.moveTo(x,y0);ink.lineTo(x,y1);ink.stroke();}
       for(let y=y0;y<=y1;y+=step){ink.strokeStyle=y%128===0?'#d4ebd45c':'#c1dfcd24';ink.beginPath();ink.moveTo(x0,y);ink.lineTo(x1,y);ink.stroke();}
     }
-    drawMapBounds(ink,map,config,navigating()?coarseSample:api.sampleAuthored??sourceSample); features?.draw(ink,v);
+    drawMapBounds(ink,map,config,navigating()?coarseSample:api.sampleAuthored??sourceSample,v); features?.draw(ink,v);
     if(!navigating()&&api.currentTool()==='move'&&!features?.active){
       const members=api.selectedShapes?.()||[];
       if(hoveredNode>=0&&hoveredNode!==api.selection()&&!members.includes(hoveredNode))drawSelection(ink,geometry(hoveredNode),{label:api.selectionLabel(hoveredNode),hover:true});
@@ -545,7 +556,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           const retained=e=>e&&e.bitmap&&!e.fit&&!offLevel(e,detailLevel())&&e.weathered===weatheredView;
           const previewArea=nearArea&&nearArea.width>0&&nearArea.height>0&&stale.every(r=>intersects(r,nearArea)||retained(cache.get(cacheKey(r,size))))?nearArea:clipped;
           // Lock the unsplit edit's resolution before budgeting or awaiting GPU work.
-          if(gesture&&gesture.previewPixels==null)gesture.previewPixels=previewPixels(quality,previewArea,detailLevel());
+          if(gesture&&gesture.previewPixels==null){gesture.previewQuality=quality;gesture.previewPixels=previewPixels(quality,previewArea,detailLevel());gesture.previewPictures=0;previewLoad.resetCadence();}
           const coarse=previewPlan(previewArea,coarseLevel).sort((a,b)=>dist(a)-dist(b));
           const coarseReady=coarse.every(r=>blockCurrent(blocks.get(blockKey(r,coarseLevel))));
           // F leaves geometry and Time unchanged. Reuse only measured costs
@@ -650,11 +661,22 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             if(prior&&!prior.dirty&&!changedSince(prior.serial,prior.input,'F',prior.lattice)&&prior.weatherRevB<rev.B&&!api.canExport?.()){wakeLadder(100);continue;}
             // Finish a small coarse refresh even if newer input arrives. Its
             // source revision stays old; the next turn picks up the newest edit.
-            const finishOnInput=Boolean(previewLattice&&want>=4&&want===coarseLevel),controller=new AbortController();activeBake={controller,rect,finishOnInput,preview:want>=4};const raster=previewRaster(want);let e;
+            const finishOnInput=Boolean(previewLattice&&want>=4&&want===coarseLevel),controller=new AbortController();activeBake={controller,rect,finishOnInput,preview:want>=4};const raster=previewRaster(want),owner=gesture,startedAt=performance.now();let e;
             try{if(lastInput?.stage==='F'&&colorInputCurrent(prior)){
               const result=await renderer.renderColorTile(prior.color,drawOptions?.()??api.drawOptions?.()??{}),bitmap=new OffscreenCanvas(Math.ceil(rect.width/(prior.pixel??want)),Math.ceil(rect.height/(prior.pixel??want)));bitmap.getContext('2d').drawImage(result.canvas,0,0);e={...prior,bitmap,serial:token,rev:{...rev}};
             }else e=await bake(rect,false,controller.signal,()=>!finishOnInput&&token!==serial||busy||viewToken!==viewEpoch,want,false,true,null,false,raster);}
             finally{if(activeBake?.controller===controller)activeBake=null;}
+            if(raster.fastRaster&&owner&&owner.previewQuality==='auto'){
+              owner.previewPictures++;const timeRuns=previewLattice?.stats().timeRuns;
+              renderer.previousChunk.then(()=>{
+                if(gesture!==owner)return;
+                const now=performance.now(),last=owner.previewCompletion;
+                // Ignore the cold source/Time pass and time when no input was
+                // waiting. Completion gaps measure cadence, including GPU load.
+                if(previewLoad.complete(now,!last||startedAt-last.at>=33||last.timeRuns!==timeRuns))schedule();
+                owner.previewCompletion={at:now,timeRuns};
+              },()=>{});
+            }
             e.block=true;e.dirty=changedSince(e.serial,e.input,'F',e.lattice);e.bakedAt=performance.now();if(!e.color)await retainColor(e);
             if(want===coarseLevel){fineSinceCoarse=false;}
             if(prior){if(prior.color!==e.color)renderer.releaseColorTile(prior.color);blockBytes-=prior.bytes;}blocks.set(key,e);blockBytes+=e.bytes;
@@ -920,9 +942,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     pendingStrokeTime=start;metadata?.update?.();schedule();
   });
   function preview(event,final=false){
-    hover=pickWorld(screen(event));
-    // A stationary release must not pick the newly raised surface again.
-    if(gesture?.id!==event.pointerId||gesture.clientX===event.clientX&&gesture.clientY===event.clientY)return;
+    // A held transform uses projected coordinates directly. Picking terrain
+    // again costs many authored-height samples and does not enter its edit.
+    if(gesture?.id===event.pointerId&&gesture.clientX===event.clientX&&gesture.clientY===event.clientY)return;
+    if(api.currentTool()!=='move'||api.drawMode?.()==='add')hover=pickWorld(screen(event));
+    if(gesture?.id!==event.pointerId)return;
     if(gesture.type==='stroke'&&Math.hypot(hover[0]-gesture.points.at(-1).x,hover[1]-gesture.points.at(-1).y)>(final?0:3)){gesture.clientX=event.clientX;gesture.clientY=event.clientY;gesture.points.push({x:hover[0],y:hover[1]});pendingStrokeTime=performance.now();api.previewStroke(gesture.points);}
     else if(gesture.type==='move'){
       gesture.clientX=event.clientX;gesture.clientY=event.clientY;const q=screen(event),h=gesture.handles,c=h.pivot,around=(a,b,c1,d)=>[a,b,c1,d,c.x-a*c.x-c1*c.y,c.y-b*c.x-d*c.y];let edit;
@@ -936,7 +960,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   overlay.addEventListener('pointermove',event=>{const q=screen(event);focus=[q.x,q.z];
     if(pan?.id===event.pointerId){viewport.scrollLeft=pan.left-event.clientX+pan.x;viewport.scrollTop=pan.top-event.clientY+pan.y;navigationChanged();return;}
     if(navigating()&&!gesture)return;
-    preview(event);refreshHover(event);if(passability?.active){const p=pickWorld(screen(event));passability.inspect(...p);}if(gesture?.id===event.pointerId)schedule();overlays();
+    preview(event);refreshHover(event);if(passability?.active){const p=pickWorld(screen(event));passability.inspect(...p);}if(gesture?.id===event.pointerId)schedule();requestOverlay();
   });
   overlay.addEventListener('pointerleave',()=>{hoveredNode=-1;hover=null;overlays();});
   const end=event=>{if(pan?.id===event.pointerId){pan=null;navigationChanged();}if(gesture?.id===event.pointerId){const commit=event.type==='pointerup';released=commit;if(commit)preview(event,true);const s=gesture;gesture=null;if(s.type==='move')api.endMove(commit);else api.endStroke(commit);released=commit;if(commit)pendingStrokeTime=performance.now();}if(overlay.hasPointerCapture(event.pointerId))overlay.releasePointerCapture(event.pointerId);schedule();};
@@ -945,7 +969,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   window.addEventListener('blur',()=>{space=false;pan=null;navigationPointer=null;if(gesture)end({pointerId:gesture.id,type:'pointercancel'});schedule();});
   function budgets(event){if(event?.target===find('[data-gpu]')){terrainBudget.choose(clamp(Number(find('[data-gpu]').value)||terrainBudget.mb,128,TERRAIN_BUDGET_MAX));const url=new URL(location.href);url.searchParams.set('gpuMB',terrainBudget.mb);history.replaceState(null,'',url);}gpuBudget=terrainBudget.mb*MB;heapBudget=clamp(Number(find('[data-heap]').value)||1024,128,8192)*MB;renderer.trimColorTiles(()=>renderer.colorBytes<=colorReserve());api.setBudget?.(heapBudget*.65);api.fitGpuBudget?.();configureChunks();metrics();schedule();}
   find('[data-gpu]').onchange=budgets;find('[data-heap]').onchange=budgets;
-  async function idle(){do{while(drawing||pending||renderer.busy||pipelineWaits.size||navigationTimer||navigating()||api.pendingInputs?.()||ladderTimer&&foregroundPending())await tick();await renderer.previousChunk;}while(drawing||pending||renderer.busy||pipelineWaits.size||navigationTimer||navigating()||api.pendingInputs?.()||ladderTimer&&foregroundPending());}
+  async function idle(){do{while(overlayFrame!==null||drawing||pending||renderer.busy||pipelineWaits.size||navigationTimer||navigating()||api.pendingInputs?.()||ladderTimer&&foregroundPending())await tick();await renderer.previousChunk;}while(overlayFrame!==null||drawing||pending||renderer.busy||pipelineWaits.size||navigationTimer||navigating()||api.pendingInputs?.()||ladderTimer&&foregroundPending());}
   // Each corner is sampled from an awaited canonical weather field (sculpt-map.js cellHeights). No uncached preview height may enter the TNT
   // while lazy tiles are refining.
   async function sampleHeights(signal){
@@ -966,7 +990,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     await idle();const size=chunkSize(),total=Math.ceil(map.width/size)*Math.ceil(map.height/size);let index=0;
     for(let y=0;y<map.height;y+=size)for(let x=0;x<map.width;x+=size){signal?.throwIfAborted();const rect={x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)},entry=await bake(rect,true,signal),tile=new OffscreenCanvas(rect.width,rect.height),c=tile.getContext('2d');c.drawImage(entry.bitmap,0,0);entry.bitmap.close?.();paint?.(c,rect);const png=await tile.convertToBlob({type:'image/png'});await accept({...rect,png},index++,total);tile.width=tile.height=1;metrics();}
   }
-  // H6b: with the GPU feed the chunks rebake as a change is submitted (they read the GPU buffers); the overview and the save wait until the CPU copy holds it.
+  // H6b: display invalidations arrive when fields change. Preview lattices can answer immediately; canonical feeds prepare their own current buffers. The overview and save wait for the CPU copy.
   const invalidate=change=>changed({stage:'A',rect:api.expandDirty?.(change?.rect??null)??change?.rect??null,world:false,channels:[{name:'shape',stage:'A'}]});
   api.subscribeSubmit?.(change=>{if(api.gpuFeedActive?.()){pendingStrokeTime ||= performance.now();invalidate(change);}});
   api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();markCoarse(change?.rect??null);if(!api.gpuFeedActive?.())invalidate(change);});
@@ -1014,6 +1038,6 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(gpuResident()+bytes>gpuBudget)previewLattice.clear();
     return true;
   }
-  const result={inspect,offMap,client,artPoint:event=>{const p=screen(event);return {x:p.x,y:p.z};},setSuspended,get suspended(){return suspended;},renderer,passability,minimumBytes,prepareTime,foregroundPending,previewWorkPending:()=>Boolean(activeBake?.preview)||draftDue&&performance.now()-lastInputAt<DRAFT_LEAD,gpuWorkPending:()=>drawing||renderer.busy,prepareBackground:bytes=>{if(suspended||drawing||renderer.busy||foregroundPending())return false;if(gpuResident()+bytes>gpuBudget)renderer.evict();return gpuResident()+bytes<=gpuBudget;},schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty||e.weathered&&!(e.weatherRevB>=rev.B)||!colorCovers(e)),colorRect:e.colorRect,serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
+  const result={inspect,offMap,client,refineWhileHeld:()=>interacting()&&gesture?.type!=='stroke'&&performance.now()-lastInputAt>=250,artPoint:event=>{const p=screen(event);return {x:p.x,y:p.z};},setSuspended,get suspended(){return suspended;},renderer,passability,minimumBytes,prepareTime,foregroundPending,previewWorkPending:()=>Boolean(activeBake?.preview)||draftDue&&performance.now()-lastInputAt<DRAFT_LEAD,gpuWorkPending:()=>drawing||renderer.busy,prepareBackground:bytes=>{if(suspended||drawing||renderer.busy||foregroundPending())return false;if(gpuResident()+bytes>gpuBudget)renderer.evict();return gpuResident()+bytes<=gpuBudget;},schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty||e.weathered&&!(e.weatherRevB>=rev.B)||!colorCovers(e)),colorRect:e.colorRect,serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
   window.sculptCanvas=result;resize();budgets();return result;
 }
