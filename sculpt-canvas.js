@@ -69,7 +69,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const previewRejects=new Set();let previewRejectScope='';
   const DRAFT_LEAD=900;   // ms the whole map's Time pass yields to a shape edit's half-level draft
   const DRAFT_WAIT=3600;   // ms without input after which the finals start although the half-level draft has not arrived
-  const blocks=new Map();let blockBytes=0,focus=null,lastInputAt=performance.now(),released=false,ladderTimer=null,fineSinceCoarse=false,finalizing=false,draftDue=false;
+  const blocks=new Map();let blockBytes=0,focus=null,lastInputAt=performance.now(),released=false,ladderTimer=null,fineSinceCoarse=false,finalizing=false,draftDue=false,gestureReady='';
   let hoveredNode=-1;
   let lastFrame=0,frameTimes=[],strokeTimes=[],resizePending=false;
   const coarse=new OffscreenCanvas(VIEW_CANVASES.overview,VIEW_CANVASES.overview),cg=coarse.getContext('2d');
@@ -202,14 +202,27 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   // Display levels use the same chunk pipeline; blocks copy its reusable output
   // synchronously, while final tiles and export keep immutable bitmaps.
-  // The inputs of the whole visible view on a block's lattice, joined with the block's own: the lattice window of a gesture (bake()).
+  // The inputs of the whole visible view on a block's lattice, joined with the block's own: the preview lattice's window (bake()).
   function latticeWindow(planned,request,options){
-    if(!interacting())return planned;
     const v=state(),x=Math.max(0,Math.floor(v.x/64)*64),y=Math.max(0,Math.floor(v.y/64)*64),x1=Math.min(map.width,Math.ceil((v.x+v.width)/64)*64),y1=Math.min(map.height,Math.ceil((v.y+v.height)/64)*64);
     if(x1<=x||y1<=y)return planned;
     const c=renderer.requiredRegion({...request,x,y,width:x1-x,height:y1-y},options),sp=planned.gridSpacing,end=r=>[r.gridOrigin[0]+(r.gridWidth-1)*sp,r.gridOrigin[1]+(r.gridHeight-1)*sp],a=end(planned),b=end(c);
     const gx=Math.min(planned.gridOrigin[0],c.gridOrigin[0]),gy=Math.min(planned.gridOrigin[1],c.gridOrigin[1]);
     return {...planned,gridOrigin:[gx,gy],gridWidth:Math.round((Math.max(a[0],b[0])-gx)/sp)+1,gridHeight:Math.round((Math.max(a[1],b[1])-gy)/sp)+1};
+  }
+  // The lattice window a gesture in this view begins with (latticeWindow of the view's own rectangle, at the gesture's preview level).
+  function gestureWindow(){
+    const v=state(),x=Math.max(0,Math.floor(v.x/64)*64),y=Math.max(0,Math.floor(v.y/64)*64),x1=Math.min(map.width,Math.ceil((v.x+v.width)/64)*64),y1=Math.min(map.height,Math.ceil((v.y+v.height)/64)*64);
+    if(x1<=x||y1<=y)return null;
+    const options=drawOptions?.()??api.drawOptions?.()??{},request={x,y,width:x1-x,height:y1-y,exportArt:false,worldSize:config.worldSize??config.size,worldGrid:previewGridFor(4*detailLevel(),true)};
+    return latticeWindow(renderer.requiredRegion(request,options),request,options);
+  }
+  // A gesture's first picture reads the lattice's Time result for its view. At rest after an edit or on new ground that result is the
+  // resting picture's own; over ground whose final tiles were kept nothing has made it, so it is made here once the view is quiet,
+  // and the press does not wait for it (155 ms on an 8x8 map's view). The shape buffers go back afterwards (trim).
+  async function readyGesture(region,signal,stale){
+    try{await previewLattice.feed(region,{weather:true,signal,stale});}
+    finally{if(finalizing&&!interacting())previewLattice.trim();}
   }
   // prior: the cached picture this bake replaces. A final view tile whose inputs check the same as prior's (digest) keeps prior's picture.
   // The checksum a final view tile's picture can be kept under: prior's, when nothing world-wide changed since prior's bake in the stages after
@@ -228,7 +241,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(previewLattice&&!exportArt&&!block&&!fit&&!interacting()&&!finalizing){
       // The immutable preview picture remains visible; its source and future
       // refinement working sets no longer need to displace canonical pages.
-      finalizing=true;previewLattice.clear();api.fitGpuBudget?.();
+      // The lattice's Time result is kept (trim): the next gesture begins with it instead of running the lattice's Time before its first picture.
+      finalizing=true;previewLattice.trim();api.fitGpuBudget?.();
     }
     const costAt=performance.now(),costBudget=gpuBudget;
     signal?.throwIfAborted();
@@ -240,9 +254,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const planned=renderer.requiredRegion(request,options),estimateBefore=renderer.estimate(planned,rect.width,rect.height,api.maskKeys.length,scale);let latticeRegion=planned;
     if(lattice){
       const copyBytes=Math.ceil(rect.width/scale)*Math.ceil(rect.height/scale)*8,visible=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0);
-      // During a gesture the lattice's window covers the whole view's inputs, not this block's: the block grows with the gesture, and each
-      // new window ran the lattice's Time again in the middle of the drag (40-50 ms, six times in a 40-move stroke). The view's window
-      // is made once. Where it does not fit beside the visible tiles, the block's own window serves as before.
+      // The lattice's window covers the whole view's inputs, not this block's: the block grows with a gesture, and each new window ran
+      // the lattice's Time again in the middle of the drag (40-50 ms, six times in a 40-move stroke). At rest it is the same window, so the
+      // Time result made for the resting picture is the one the next gesture begins with. Where it does not fit beside the visible tiles,
+      // the block's own window serves.
       const wide=latticeWindow(planned,request,options),wideExtra=wide===planned?0:lattice.plan(wide,readWeather,true).additionalBytes;
       latticeRegion=wide!==planned&&visible<=gpuBudget-steadyGPU()-estimateBefore.retainedBytes-estimateBefore.workingBytes-wideExtra-copyBytes?wide:planned;
       const extra=lattice.plan(latticeRegion,readWeather,interacting()).additionalBytes,room=()=>gpuBudget-steadyGPU()-estimateBefore.retainedBytes-estimateBefore.workingBytes-extra-copyBytes;
@@ -464,6 +479,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   async function frame() {
     pending=false;if(suspended)return;let rendering=false;const renderStart=performance.now();
+    if(!interacting())previewLattice?.rest();
     try {
       // Presentation never waits for terrain generation. This path only copies
       // retained images while a chunk's fields, GPU work or snapshot are pending.
@@ -576,8 +592,15 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             const count=blocks.size;dropBlocks(e=>!(colorInputCurrent(e)&&e.level===4*detailLevel()&&coversView(e,v)));
             if(blocks.size!==count){paintedView=-1;presentView();}
           }
+          // The Time result the next gesture begins with, once the view has been quiet for a quarter second (readyGesture).
+          const readyKey=[serial,viewEpoch,rev.B,gpuBudget].join(',');
+          if(previewLattice&&levelsOn&&weatheredView&&!previewing&&!navigating()&&!holding&&quiet>=250&&gestureReady!==readyKey){
+            const region=gestureWindow(),p=region?previewLattice.plan(region,true,true):null;
+            if(p?.tm&&!p.reuse&&gpuResident()+p.additionalBytes<=gpuBudget)plan.push({rect:v,want:4*detailLevel(),ready:region,readyKey});
+            else gestureReady=readyKey;
+          }
           // The ring around the view is baked after a second without input.
-          if(quiet<1000)wakeLadder(1000-quiet);
+          if(quiet<1000)wakeLadder((quiet<250?250:1000)-quiet);
           else if(!previewing&&!navigating())for(const rect of jobs)if(!intersects(rect,v))plan.push({rect,want:detailLevel()});
         }
         // 2c: the dirty final tiles that may keep their pictures are checked first. Each one's inputs are fed and its checksum submitted without
@@ -586,10 +609,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         if(!overview&&!previewing){
           const checks=[];
           try{
-            for(const {rect,want,block=false,color=false} of plan){
+            for(const {rect,want,block=false,color=false,ready=null} of plan){
               if(suspended||token!==serial||viewToken!==viewEpoch||busy||previewing!==interacting())break;
               const key=cacheKey(rect,size),e=cache.get(key);
-              if(block||color||holding||!intersects(rect,v)||!e?.dirty||!keepable(e,want,weatheredView))continue;
+              if(block||color||ready||holding||!intersects(rect,v)||!e?.dirty||!keepable(e,want,weatheredView))continue;
               const controller=new AbortController();activeBake={controller,rect};
               try{const got=await bake(rect,false,controller.signal,()=>token!==serial||busy||viewToken!==viewEpoch&&!intersects(rect,state()),want,false,false,e,true);if(got)checks.push([key,e,got.pending]);else missed.add(key);}
               finally{if(activeBake?.controller===controller)activeBake=null;}
@@ -610,7 +633,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         // cache, geometry/Time edit or navigation still replans immediately.
         const canContinueColor=color=>color&&allColor&&lastInput?.stage==='F'&&jobs.every(r=>!intersects(r,v)||colorCurrent(cache.get(cacheKey(r,size))));
         const colorResults=new Map();
-        try{for(const [jobIndex,{rect,want,block=false,fineTurn=false,color=false}] of plan.entries()){
+        try{for(const [jobIndex,{rect,want,block=false,fineTurn=false,color=false,ready=null,readyKey=''}] of plan.entries()){
           if(suspended||(token!==serial&&!canContinueColor(color))||viewToken!==viewEpoch||busy||previewing!==interacting()){rerun=true;break;}
           if((previewing||navigating()||want<1)&&!intersects(rect,v))continue;   // a detail level bakes only what is seen: its ring would evict itself
           if(block){
@@ -634,6 +657,13 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             const state=renderer.specKey();
             if(e.pipelineKey===state.key&&!renderer.specCache.has(state.key)&&!pipelineWaits.has(state.key))watchPipelines(state.key,renderer.specialize(state));
             if(token!==serial||viewToken!==viewEpoch){rerun=true;break;}continue;
+          }
+          if(ready){
+            const controller=new AbortController();activeBake={controller,rect};
+            try{await readyGesture(ready,controller.signal,()=>token!==serial||busy||viewToken!==viewEpoch||interacting());gestureReady=readyKey;}
+            catch(error){if(error.name==='TerrainMemoryError')gestureReady=readyKey;else if(error.name!=='AbortError')throw error;}
+            finally{if(activeBake?.controller===controller)activeBake=null;}
+            continue;
           }
           if(fineTurn){fineSinceCoarse=true;}
           const key=cacheKey(rect,size);let e=cache.get(key);let baked=false;
@@ -928,7 +958,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // The terrain canvas and its overlay share the view's size (resize); the paged fields' budget is the shared one (sculpt-scene.js pagedBudget).
   function colorReserve(){return overview?0:Math.max(0,Math.min(gpuBudget*.4,gpuBudget-512*MB));}
   function minimumBytes({previews=false}={}){
-    let previewWorking=finalizing?cacheBytes+blockBytes:0;
+    let previewWorking=finalizing?cacheBytes+blockBytes+(previewLattice?.bytes()??0):0;
     if(previews&&!finalizing&&!overview&&levels&&api.gpuFeedActive?.()){
       const v=state(),width=Math.min(map.width,Math.ceil(v.width/64)*64),height=Math.min(map.height,Math.ceil(v.height/64)*64),options=drawOptions?.()??api.drawOptions?.()??{};
       const request={x:Math.floor((map.width-width)/2),y:Math.floor((map.height-height)/2),width,height,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid};

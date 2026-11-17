@@ -41,8 +41,9 @@ export function previewWindow(region,grid,size,apron,retained=null){
 }
 // The same shape and Time kernels over a display-only window. Canonical pages,
 // picking and export do not read these buffers. Only one window is retained.
+// trim() gives back the shape engine and its target and keeps the window's Time result, which the next gesture begins with.
 export function createPreviewLattice(device,scene,memoryChanged=()=>{}){
-  let engine=null,target=null,weather=null,starting=null,shapeKey='',key='',weatherKey='',weatherWindow=null,working=0,runs=0,timeRuns=0,weatherReuses=0,peak=0;
+  let engine=null,target=null,weather=null,starting=null,shapeKey='',key='',weatherKey='',weatherWindow=null,weatherRevision=-1,weatherAtRest=false,restRevision=-1,working=0,runs=0,timeRuns=0,weatherReuses=0,peak=0;
   const bytes=()=> (engine?.bytes()??0)+(target?.bytes??0)+(weather?.bytes??0)+(weather?.field?.size??0)+working;
   const dropWeather=()=>{weather?.weather.destroy();weather?.maps.forEach(b=>b.destroy());weather?.field?.destroy();weather=null;weatherKey='';weatherWindow=null;};
   const trim=()=>{target?.destroy();engine?.destroy();engine=target=starting=null;shapeKey=key='';working=0;};
@@ -61,17 +62,22 @@ export function createPreviewLattice(device,scene,memoryChanged=()=>{}){
     const s=scene(),w=previewWindow(region,region.worldGrid,s.size,s.timeApron??128*s.spacing,deferTime?weatherWindow:null);
     const tm=on?s.previewTime?.({size:w.spacing*(w.side-1)+1,spacing:w.spacing}):null;
     const geometry=[w.grid,w.x,w.y,w.side].join(','),sk=[geometry,s.revision].join('|'),wk=[geometry,tm?.key??'',tm?.revB??s.revB].join('|'),cache=sk+'|'+wk;
-    const reuse=Boolean(tm&&deferTime&&weather&&weatherKey===wk),runTime=tm&&!reuse&&key!==cache;
+    // A gesture reuses the Time result it began with. One held while the scene was at rest (rest()) serves only if it was made for
+    // that scene: any other is older, and the gesture begins with its own. `held` names what the buffers hold: a reused result is not
+    // the current one, so a picture at rest runs Time again though the window and the shape are the same.
+    const reuse=Boolean(tm&&deferTime&&weather&&weatherKey===wk&&(!weatherAtRest||weatherRevision===restRevision)),held=reuse?cache+'|kept':cache,runTime=tm&&!reuse&&key!==held;
     const recipe=recipeFor(s,w);
     const prepared=[...recipe.values()].flatMap(p=>p.multi??[p]),scratch=shapeScratchBytes(w.cells,prepared);
     const shapeBytes=w.cells*56+Math.max(scratch,engine?.bytes()??0)+shapeRequestBytes(prepared);
     const peakBytes=shapeBytes+(tm?w.cells*144+65536:0);
     const requestPeak=runTime?peakBytes:shapeBytes+(weather?.bytes??0)+(weather?.field?.size??0);
-    return {...w,s,tm,sk,wk,reuse,cache,recipe,nodes:[...recipe.keys()],peakBytes,additionalBytes:key===cache&&target?0:Math.max(0,requestPeak-bytes())};
+    return {...w,s,tm,sk,wk,reuse,held,recipe,nodes:[...recipe.keys()],peakBytes,additionalBytes:key===held&&target?0:Math.max(0,requestPeak-bytes())};
   };
   return {
     grid:level=>{const s=scene();return previewGrid(s.size,s.grid,level);},plan,bytes,
     stats:()=>({runs,timeRuns,weatherReuses,bytes:bytes(),peakBytes:peak,grid:engine?.grid??null,side:target?.pw??null}),clear,trim,
+    // The scene's revision while no gesture is under way (the canvas says so each frame).
+    rest(){restRevision=scene().revision;weatherAtRest=true;},
     async feed(region,{weather:on=true,signal,stale=()=>false,deferTime=false}={}){
       const current=()=>{signal?.throwIfAborted();if(stale?.())throw new DOMException('The preview lattice was superseded.','AbortError');};
       current();const p=plan(region,on,deferTime),{s,tm}=p;
@@ -89,15 +95,15 @@ export function createPreviewLattice(device,scene,memoryChanged=()=>{}){
           });
           await submitted.done;current();shapeKey=p.sk;runs++;
         }
-        if(key!==p.cache){
+        if(key!==p.held){
           if(!p.reuse)dropWeather();else weatherReuses++;key='';
           if(tm&&!p.reuse){
             working=p.cells*144+65536;peak=Math.max(peak,bytes());memoryChanged();
             try{weather=await tm.run({planes:target.F,masks:target.Mk,grid:p.side,ox:p.x,oy:p.y,stale:()=>Boolean(signal?.aborted)||Boolean(stale?.())});timeRuns++;}
             finally{working=0;}
-            current();weatherKey=p.wk;weatherWindow={x:p.x,y:p.y,side:p.side,spacing:p.spacing,grid:p.grid,cells:p.cells};
+            current();weatherKey=p.wk;weatherWindow={x:p.x,y:p.y,side:p.side,spacing:p.spacing,grid:p.grid,cells:p.cells};weatherRevision=s.revision;weatherAtRest=!deferTime;
           }
-          key=p.cache;
+          key=p.held;
         }
         peak=Math.max(peak,bytes());current();
         return {planes:target.F,masks:target.Mk,maskCount:s.maskCount,grid:p.side,origin:[p.x,p.y],spacing:p.spacing,revision:s.revision,weatherRevB:tm?.revB??s.revB,weather:weather?.weather??null,maps:weather?.maps??null,field:weather?.field??null,release:()=>{}};
