@@ -1516,8 +1516,9 @@ fn geometryMain(v:VertexOut)->@location(0) vec4f {
 #ifdef COLOR_PASS
 @group(3) @binding(0) var<storage,read> geometryIn:array<SurfaceRecord>;
 // The inspector's record of its pixel (sculpt-renderer.js readProbe): 0 set, 1-3 the final color, 4 the ground's slot, 5 the height above the
-// sea, 6-19 the surface facts, 20 the low-ground tint's share, 21 the wet band's, 22 the surf sand's, 23 whether it is the world's own ground,
-// 24 how many layers drew, then each layer's (row, coverage) in draw order.
+// sea, 6-19 the surface facts, 20 the rock slot whose numbers it read (rockSlotAt, held for the whole pass), 21 the wet band's share, 22 the surf
+// sand's, 23 whether it is the world's own ground, 24 how many layers drew, then each layer's (row, coverage) in draw order (25-88), and 89 the
+// rock's share where the draw ended (exposed: what diagnostic view 4 shows).
 const PROBE_LAYERS = 25u;
 @group(3) @binding(3) var<storage,read_write> probeOut:array<f32,96>;
 @fragment
@@ -2445,6 +2446,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         probeOut[0] = 1.0; probeOut[1] = color.r; probeOut[2] = color.g; probeOut[3] = color.b; probeOut[4] = f32(gs); probeOut[5] = h - u.sea;
         for (var k = 0u; k < SURFACE_FACTS; k++) { probeOut[6u + k] = surfaceFacts[k]; }
         probeOut[21] = nearWater; probeOut[22] = surfCover; probeOut[23] = select(0.0, 1.0, ownGround); probeOut[24] = f32(probeCount);
+        probeOut[20] = f32(rs & rockMask); probeOut[89] = exposed;   // the rock type drawn here, and how much of its rock shows
     }
     return vec4f(color, 1.0);
 }
