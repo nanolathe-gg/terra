@@ -84,3 +84,12 @@ test('a closed row says where the layer lies, in words from its own rule', () =>
   assert.deepEqual(Object.keys(BUILTIN_WHERE).sort(), Object.keys(SURFACE_BUILTINS).sort(), 'one line for every built-in');
   for (const p of SURFACE_PRESETS) assert.ok(whereWords(p).length > 0, p.key);
 });
+
+test('Base band without a rock column says so',async()=>{
+  const {layerSection}=await import('../sculpt-surface-panel.js');
+  const facts=column=>({material:()=>true,control:key=>({value:1,label:key}),role:()=>({present:true}),layer:()=>true,fact:()=>0,column:()=>column});
+  const band={id:'b',builtin:'baseBand',material:'desert-band'};
+  assert.equal(layerSection(band,facts(true)).section,'drawing');
+  assert.equal(layerSection(band,{...facts(true),column:undefined}).section,'drawing','unknown is no claim');
+  const none=layerSection(band,facts(false));assert.equal(none.section,'idle');assert.match(none.reasons[0].text,/column of beds/);
+});

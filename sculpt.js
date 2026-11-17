@@ -903,6 +903,7 @@ function surfaceHost() {
     role:key=>({present:mapMaterials.some(m=>m[key]),name:roleName(key)}),
     hasLayer:name=>(config.layers||[]).includes(name),
     fact:name=>Number(worldPanelValuesOf(panelFacts())[name])||0,
+    hasColumn:()=>Boolean(config.column?.sections?.length||mapRocks.some(r=>r.column?.sections?.length)),   // beds Base band draws on
     worldName:()=>activeWorld().name,
     // Where the control that turns a layer on lives, and going there: its World section and tab opened, its row shown, the focus on it (Find's
     // goTo). A rock type's setting opens the world's rock, which the list's reason speaks of.

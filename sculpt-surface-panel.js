@@ -128,7 +128,8 @@ export function layerSection(layer, facts) {
       const r = facts.role(need.role);
       if (!r || r.present) continue;
       reasons.push({text: `The map has no ${r.name} material: in Materials, choose one and set Also the world’s to ${r.name}.`});
-    } else if (need.layer && !facts.layer(need.layer)) reasons.push(LAYER_REASONS[need.layer] ?? {text: `This world draws no ${need.layer}.`});
+    } else if (need.column) { if (facts.column?.() === false) reasons.push({text: 'No rock has a column of beds: give the world’s rock or a rock type a Rock column.'}); }
+    else if (need.layer && !facts.layer(need.layer)) reasons.push(LAYER_REASONS[need.layer] ?? {text: `This world draws no ${need.layer}.`});
   }
   // A lone setting's own requirement says what else it waits for (with more reasons, those already say it).
   const out = reasons.map(({note, ...r}) => reasons.length === 1 && note ? {...r, text: `${r.text} ${note}`} : r);
@@ -163,7 +164,7 @@ export function mountSurfacePanel(host) {
   const list = $('surface-layers');
   const SECTIONS = ['drawing', 'painted', 'idle'];
   const facts = {material: layer => Boolean(host.material(layer)), control: key => host.control?.(key) ?? null, role: key => host.role?.(key) ?? null,
-    layer: name => host.hasLayer?.(name) ?? true, fact: name => host.fact?.(name) ?? 0};
+    layer: name => host.hasLayer?.(name) ?? true, fact: name => host.fact?.(name) ?? 0, column: () => host.hasColumn?.()};
   const open = new Set();   // the layers whose rows are open, by key
   // The design view, by key: layers hidden for now, or the one layer shown alone (solo). Never saved, undone or exported (host.hide).
   const hidden = new Set();

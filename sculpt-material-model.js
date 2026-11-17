@@ -64,7 +64,7 @@ export const SURFACE_NEEDS = {
   rock: [],
   beach: [{layer: 'beach'}],   // u.beach: the world's layers hold a beach; without its role material it falls back to the slope's or the ground's
   crown: [{control: 'rockCrown'}],   // a rock type's rockCrown > 0
-  baseBand: [{control: 'baseBand'}, {control: 'strata'}],   // u.baseBand > 0 on bedded rock (a rock type's strata > 0, and a column)
+  baseBand: [{control: 'baseBand'}, {control: 'strata'}, {column: true}],   // u.baseBand > 0 on bedded rock (a rock type's strata > 0, and a column)
   regrownMoss: [{control: 'debrisAmount'}], fines: [{control: 'debrisAmount'}],   // u.debrisAny: the largest debrisAmount of the rocks in use
   paintedRock: [{painted: 'rock'}], paintedSnow: [{painted: 'snow'}], paintedMoss: [{painted: 'moss'}],   // inside u.paintOn: the painted masks
   sandDust: [{control: 'sandDust'}],   // sand's dusting, times u.sandDust

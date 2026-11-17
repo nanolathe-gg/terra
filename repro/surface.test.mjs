@@ -30,7 +30,7 @@ test('each built-in’s needs name real World settings, roles, world facts and s
   const renderer = readFileSync(new URL('../sculpt-renderer.js', import.meta.url), 'utf8');
   assert.deepEqual(Object.keys(SURFACE_NEEDS).sort(), Object.keys(SURFACE_BUILTINS).sort(), 'every built-in has an entry');
   for (const [builtin, needs] of Object.entries(SURFACE_NEEDS)) for (const need of needs) {
-    const kinds = ['control', 'role', 'layer', 'painted'].filter(k => need[k] !== undefined);
+    const kinds = ['control', 'role', 'layer', 'painted', 'column'].filter(k => need[k] !== undefined);
     assert.equal(kinds.length, 1, `${builtin}: one kind a need`);
     if (need.control) assert.ok(knobs.has(need.control), `${builtin}: ${need.control} is a World setting`);
     if (need.unless) assert.ok(facts.includes(need.unless), `${builtin}: ${need.unless} is a world fact`);
