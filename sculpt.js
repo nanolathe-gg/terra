@@ -966,7 +966,7 @@ function pickHost() {
     openSurface:(at,read) => { surfacePanel?.show(at,read); openWorldSection('wsec-surface'); $('surface-inspect-result').scrollIntoView({block:'nearest',behavior:'smooth'}); },
     // World › Surface's detail, once open, follows each new pick, so it never describes another pixel than the card.
     read:(at,read) => { if (!$('surface-inspect-result').hidden) surfacePanel?.show(at,read); },
-    openColors:() => { openWorldSection('wsec-colors'); $('world-colors').querySelector('input[type=color][aria-label^="Shallow water"]')?.focus({preventScroll:true}); },
+    openColors:() => { openWorldSection('wsec-water-shores'); $('wtab-water-shores-depths-edges').click(); document.querySelector('[data-world-color=shallowTone]').querySelector('input[type=color][aria-label^="Shallow water"]')?.focus({preventScroll:true}); },
     surface:() => config.surface||[],
   };
 }
@@ -2148,8 +2148,9 @@ function buildWorldPanel() {
   const custom=ownWorlds().map(([id,w]) => new Option(w.name+' (custom)','world:'+id,false,worldId===id));
   select.replaceChildren(...builtIn,...custom);
   select.onchange=() => { const [kind,id]=select.value.split(':'); if (kind==='biome') goToWorld(id); else goToWorld(worlds[id].base,id); };
-  const rows=$('world-colors'); rows.replaceChildren();
+  for(const home of document.querySelectorAll('[data-world-color]'))home.replaceChildren();
   for (const [key,label] of colorRows(config,experiment)) {
+    const rows=document.querySelector(`[data-world-color="${key}"]`);
     const row=document.createElement('div'); row.className='color-row';
     const set=mergedColors()[key];
     row.innerHTML=`<span>${label}</span><input type="checkbox" aria-label="Use a base color for ${label}"${set?' checked':''}><input type="color" aria-label="${label} base color" value="${shownColor(key,set)}">`;
@@ -2553,7 +2554,7 @@ function commitWorldInputs() {
   persistLater();
 }
 // Values must reach the model before a different action reads its recipe.
-document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-knob],#world-colors'))worldInputQueue.flush();},true);
+document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-knob],.world-colors'))worldInputQueue.flush();},true);
 document.addEventListener('click',e=>{if(e.target.closest('button'))worldInputQueue.flush();},true);
 document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&['z','y','s'].includes(e.key.toLowerCase()))worldInputQueue.flush();},true);
 
