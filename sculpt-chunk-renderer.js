@@ -459,7 +459,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const row=Math.ceil(width/64)*64,limit=Math.min(64*MB,budgetBytes*.35,this.device.limits.maxStorageBufferBindingSize),rows=Math.min(height,Math.max(1,Math.floor(limit/(row*24)))),bands=Math.ceil(height/rows);
     return {row,rows,bands,bytes:row*rows*24,settingsBytes:bands*this.device.limits.minUniformBufferOffsetAlignment};
   }
-  async packColorMasks(){
+  async packColorMasks(encoder){
     const texture=this.maskTexture,d=this.device,width=texture.width,height=texture.height,stride=d.limits.minUniformBufferOffsetAlignment,{row,rows:bandRows,bands,bytes,settingsBytes}=this.maskPacking(width,height);
     if(!this.maskPackBuffer||!this.resources.has(this.maskPackBuffer)||this.maskPackBuffer.size!==bytes||!this.resources.has(this.maskPackSettings)||this.maskPackSettings.size!==settingsBytes){
       this.release(this.maskPackBuffer);this.release(this.maskPackSettings);
@@ -469,13 +469,12 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       });
     }
     const settings=new Uint32Array(settingsBytes/4);for(let band=0;band<bands;band++){settings[band*stride/4]=band*bandRows;settings[band*stride/4+1]=Math.min(bandRows,height-band*bandRows);}d.queue.writeBuffer(this.maskPackSettings,0,settings);
-    const encoder=d.createCommandEncoder({label:'color mask pack'}),group=d.createBindGroup({layout:this.colorMaskLayout,entries:[{binding:0,resource:texture.createView({dimension:'2d-array'})},{binding:1,resource:{buffer:this.maskPackBuffer}},{binding:2,resource:{buffer:this.maskPackSettings,size:16}},{binding:3,resource:this.gridTexture.createView({dimension:'2d-array'})}]});
+    const group=d.createBindGroup({layout:this.colorMaskLayout,entries:[{binding:0,resource:texture.createView({dimension:'2d-array'})},{binding:1,resource:{buffer:this.maskPackBuffer}},{binding:2,resource:{buffer:this.maskPackSettings,size:16}},{binding:3,resource:this.gridTexture.createView({dimension:'2d-array'})}]});
     for(let band=0;band<bands;band++){
       const y=band*bandRows,rows=Math.min(bandRows,height-y),pass=encoder.beginComputePass({label:'color mask pack'});pass.setPipeline(this.colorMaskPipeline);pass.setBindGroup(0,group,[band*stride]);pass.dispatchWorkgroups(Math.ceil(width/8),Math.ceil(rows/8));pass.end();
       encoder.copyBufferToTexture({buffer:this.maskPackBuffer,bytesPerRow:row*4,rowsPerImage:rows},{texture:this.colorMaskTexture,origin:[0,y,0]},[width,rows,3]);
       encoder.copyBufferToTexture({buffer:this.maskPackBuffer,offset:row*rows*12,bytesPerRow:row*4,rowsPerImage:rows},{texture:this.gridTexture,origin:[0,y,0]},[width,rows,3]);
     }
-    d.queue.submit([encoder.finish()]);
   }
 
   // Geometry and surface textures transfer from the mutable workspace; only

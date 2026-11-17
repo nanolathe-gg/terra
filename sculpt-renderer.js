@@ -706,9 +706,11 @@ export class TerrainRenderer {
     }
     this.geometryValid=false;await this.allocateGeometry();current();
     this.release(this.maskPackBuffer);this.release(this.maskPackSettings);this.maskPackBuffer=this.maskPackSettings=null;
-    const timers=[];
-    const reset=device.createCommandEncoder({label:'clear geometry record'});reset.clearBuffer(this.geometryRecord);device.queue.submit([reset.finish()]);
+    const timers=[];let clearGeometry=true;
     await this.voxel.render((commands,volume,rect,first)=>{
+      // Clear once in the first solid/draw submission, preserving earlier pieces
+      // if the voxel allocator splits or retries a later piece.
+      if(clearGeometry){commands.clearBuffer(this.geometryRecord);clearGeometry=false;}
       const timer=this.timer();if(timer)timers.push(timer);
       const pass=commands.beginRenderPass({label:'terrain geometry',colorAttachments:[{view:this.geometryTarget.createView(),clearValue:{r:0,g:0,b:0,a:0},loadOp:first?'clear':'load',storeOp:'store'}],timestampWrites:timer?.timestampWrites});
       const [x,y,w,h]=rect.map(Math.round);pass.setPipeline(this.genericPipelines[this.rockMask()].geometry);pass.setScissorRect(x,y,w+2,h+2);
@@ -716,14 +718,14 @@ export class TerrainRenderer {
     },current);
     // E is complete for every piece. F has no solid dependency, so its
     // bounded mask staging replaces D instead of adding to the terrain peak.
-    this.voxel.clear();current();await this.packColorMasks();current();
-    const color=device.createCommandEncoder({label:'terrain color'}),colorTimer=this.timer();if(colorTimer)timers.push(colorTimer);
-    this.encodeColor(color,drawPipeline,[0,0,this.canvas.width,this.canvas.height],true,colorTimer);device.queue.submit([color.finish()]);
+    this.voxel.clear();current();await this.outputPipelines();current();
+    // Packing, color and presentation have no readback between them. One submit
+    // keeps the GPU running across all three instead of waiting on the page.
+    const color=device.createCommandEncoder({label:'terrain color'});await this.packColorMasks(color);current();
+    const colorTimer=this.timer();if(colorTimer)timers.push(colorTimer);
+    this.encodeColor(color,drawPipeline,[0,0,this.canvas.width,this.canvas.height],true,colorTimer);
     this.geometryUniformSnapshot=new Uint32Array(this.uniformData.slice(0));this.geometryValid=true;
-    // Keep intermediate pieces in a persistent texture: a canvas presentation
-    // image expires at the next browser frame while allocation readback yields.
-    const present=device.createCommandEncoder({label:'present voxel terrain'});
-    await this.outputPipelines();this.encodeOutput(present,this.voxelColor,this.context.getCurrentTexture());device.queue.submit([present.finish()]);
+    this.encodeOutput(color,this.voxelColor,this.context.getCurrentTexture());device.queue.submit([color.finish()]);
     this.gpuResult=Promise.all(timers.map(t=>t.result())).then(values=>{const ms=values.reduce((a,b)=>a+(b??0),0);this.lastGPU=ms;return ms;});
     if (this.guard && !await this.guard.check(this, await inputDigest)) inputDigest = null;   // after a violation, no tile is kept
     return {milliseconds:performance.now()-start,gpuMilliseconds:this.lastGPU,pipelineKey,digest:inputDigest};
