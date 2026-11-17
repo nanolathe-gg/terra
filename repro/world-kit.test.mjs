@@ -196,3 +196,11 @@ test('a built-in world’s own rock types stay each map’s',()=>{
  const copied=publishWorldTool(worldKit(config),edited,fresh.materials,{label:'Ridge',icon:'mountain',color:'#778899',group:'shape',shape:'mountain',card},{config,builtIn:true});
  assert.match(copied.kit.tools.find(authoredWorldTool).rock,/^wrock-/);
 });
+test('a saved tool whose library shape is gone is left out, not fatal',()=>{
+ assert.deepEqual(worldKit(config,{tools:[tool(),tool({id:'world-gone',shape:'retired-shape'})]}).tools.map(t=>t.id),['hill','world-ridge']);
+});
+test('a map tool whose library shape is gone is left out of the save it loads from',async()=>{
+ const {copyMapTools}=await import('../sculpt-tools.js');
+ const mapTool=(id,shape)=>({id,label:'Mine '+id,icon:'hill',color:'#778899',group:'shape',shape,card:{preset:'custom',diameter:300}});
+ assert.deepEqual(copyMapTools([mapTool('map-1','hill'),mapTool('map-2','retired-shape')]).map(t=>t.id),['map-1']);
+});

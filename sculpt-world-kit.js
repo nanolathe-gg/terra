@@ -1,6 +1,6 @@
 // A world's tool and rock kit is portable data. Maps keep their own numeric slots; only explicit worldKey provenance makes a runtime
 // rock a World edit. Material dependencies are ordinary validated graphs inline, or references to the existing world roles/layers.
-import {checkTool,checkCard,worldTools,MAP_TOOLS_MAX} from './sculpt-tools.js';
+import {checkTool,checkCard,worldTools,shapeGone,MAP_TOOLS_MAX} from './sculpt-tools.js';
 import {shapeFrom} from './sculpt-scene.js';
 import {copyRocks,worldRocks,giveRockMaterials,ROCK_SLOTS} from './sculpt-rock-presets.js';
 import {copyMaterial,copyMaterials,addMaterial,setMaterial,worldMaterials,worldOwnMaterials,worldKey,roleName,MAP_ROLES,MATERIAL_SLOTS,materialStates,materialStaged,materialCacheUsage} from './sculpt-materials.js';
@@ -68,7 +68,7 @@ function baseRocks(config){
 export function worldKit(config,world={}){
   if(!object(world))throw Error('Invalid world kit.');
   if(world.tools!==undefined&&!Array.isArray(world.tools))throw Error('A world’s tools are a list.');
-  const authored=(world.tools??[]).filter(t=>object(t)&&t.card!==undefined);
+  const authored=(world.tools??[]).filter(t=>object(t)&&t.card!==undefined&&!shapeGone(t,s=>shapeFrom(config,s)));   // a removed library shape drops the tool
   const kit={tools:copyWorldTools([...(config.tools??[]),...authored],config),rocks:copyWorldRocks(world.rocks===undefined?baseRocks(config):world.rocks)};
   const keys=new Set(kit.rocks.map(r=>r.key)),inline=new Map();
   for(const tool of kit.tools)if(authoredWorldTool(tool)&&tool.rock&&!keys.has(tool.rock))throw Error(`The world tool ${tool.label} names a rock type its world does not carry.`);
