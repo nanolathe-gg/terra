@@ -831,7 +831,8 @@ export class TerrainRenderer {
   syncWorld(options=this.worldOptions??{}) {
     const {clay=false,light='original',detail=this.config.material?.surfaceRelief??1,ring=.85,ringSpread=.65,ringVariation=.7,materialWeathering=this.config.material?.materialWeathering??0,transitionDetail=this.config.material?.transitionDetail??.65,exact=false}=options;
     const values={clay,light,detail,ring,ringSpread,ringVariation,materialWeathering,transitionDetail,exact};
-    const key=JSON.stringify([values,this.grid,this.size]);
+    // exact changes only the review sun: without one, an export's options are the view's and its draw reuses the view's sync.
+    const key=JSON.stringify([{...values,exact:exact&&Boolean(this.reviewSun())},this.grid,this.size]);
     if(!this.worldDirty&&this.worldSyncKey===key)return {fields:[],stage:null,rockSlots:[],channels:[]};
     const wasDirty=this.fieldsDirty;
     this.worldOptions=values;
@@ -1028,7 +1029,7 @@ export class TerrainRenderer {
     this.worldSun = sun.map(v => v / Math.hypot(...sun));   // the map's own sun, as exports draw it (sculpt-features.js lights the features by it)
     // Review sun (card H1): the page's ?sun=<azimuth> turns the light about the vertical by that many degrees, for looking at the relief
     // from other directions (ink keeps its shade, geometry does not); its height stays Sun height's. Exports never take it (exact).
-    const review = exact ? null : /^\s*(-?[\d.]+)\s*$/.exec(this.variant.get('sun') || '');
+    const review = exact ? null : this.reviewSun();
     if (review) {
       const turn = Math.atan2(sun[1], sun[0]) + (Number(review[1]) || 0) * Math.PI / 180, flat = Math.hypot(sun[0], sun[1]);
       sun = [Math.cos(turn) * flat, Math.sin(turn) * flat, sun[2]];
@@ -1153,6 +1154,8 @@ export class TerrainRenderer {
   }
 
   applyKnobs(options) { this.worldDirty=true;return this.syncWorld(options); }
+  // The page's review sun (?sun=<azimuth>, syncWorld), a match of its number or null.
+  reviewSun() { return /^\s*(-?[\d.]+)\s*$/.exec(this.variant?.get('sun') || ''); }
 
   variantNumber(key, fallback) { const value=this.variant.get(key);if(value==null)return fallback;const x=Number(value);return Number.isFinite(x)?x:fallback; }
 
@@ -1331,6 +1334,23 @@ export class TerrainRenderer {
     if (!hidden && preview < 0) return null;
     this.surfaceHidden = null; this.set('uMaterialTable', this.placementTable(this.variant)); this.setSurfacePreview(-1);
     return () => { this.surfaceHidden = hidden; this.set('uMaterialTable', this.placementTable(this.variant)); this.setSurfacePreview(preview); };
+  }
+  // An export tile draws the world as saved and leaves the view's state as it found it; returns the function that puts the view back.
+  // The design view is set aside for the draw (suspendDesignView). When the draw's own sync rewrote the world (the review sun, which exports
+  // never take, or a change not yet synced), the snapshot and key the view's frames compare against are put back and the world is marked
+  // for a rewrite: the next frame writes the view's values again and reports only what changed since the view's own last sync. Left at
+  // the export's snapshot, every export-art draw under a design view read as a world change with no rectangle (stage F), which
+  // invalidated the whole map, whose idle deposit and vent fits drew export art again.
+  exportView() {
+    // The uniforms the view drew with: a synced view compares the rewrite with them, as edits written directly since its sync (uniformStage)
+    // reported their own stages. A world left dirty compares with its last sync, so the change it waits for is still reported.
+    const view = new Uint32Array(this.uniformData.slice(0)), dirty = this.worldDirty;
+    const design = this.suspendDesignView(), snapshot = this.worldUniformSnapshot, channels = this.worldChannelSnapshot, key = this.worldSyncKey, options = this.worldOptions;
+    return () => {
+      design?.();
+      if (this.worldUniformSnapshot === snapshot) return;
+      this.worldUniformSnapshot = dirty ? snapshot : view; this.worldChannelSnapshot = channels; this.worldSyncKey = key; this.worldOptions = options; this.worldDirty = true;
+    };
   }
   // The color a material is drawn in: its slot's mean as the GPU computed it (sculpt-material-cache.js readMeans) when that read is of this
   // graph; else its graph's Color (materialColor) moved by the slot's last measured difference between the two, which recoloring keeps.
