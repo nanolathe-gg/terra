@@ -54,11 +54,12 @@ export function mountPick(host) {
     const note = state === 'off' ? 'That point is off the map.' : state === 'failed' ? `The pixel could not be read: ${failure}`
       : state === 'unread' ? 'The pixel could not be read yet: the renderer may still be preparing its pipelines.' : state === 'reading' && !read ? 'Reading the pixel…' : '';
     $('pick-note').hidden = !note; $('pick-note-text').textContent = note; $('pick-again').hidden = state !== 'failed' && state !== 'unread';
-    // The shape is known at once (the hit test); the rest waits for the draw's record of the pixel.
+    // The shape is known at once (the hit test); the rest waits for the draw's record of the pixel. Its rock settings (Cracks, Gullies) show
+    // once the read says rock shows here: on water or grass they would describe nothing at the pixel.
+    const r = state === 'off' ? null : read, wet = Boolean(r && r.aboveSea < 0);
     const s = state === 'off' || shape < 0 ? null : host.shape(shape);
     $('pick-shape').hidden = !s;
-    if (s) { $('pick-shape-name').textContent = s.name; $('pick-shape-values').textContent = s.values; }
-    const r = state === 'off' ? null : read, wet = Boolean(r && r.aboveSea < 0);
+    if (s) { $('pick-shape-name').textContent = s.name; $('pick-shape-values').textContent = r && r.rock.share >= ROCK_SHOWN ? s.values : ''; }
     const water = wet ? host.water() : null;
     $('pick-water').hidden = !water; waterSlot = water?.slot ?? null;
     if (water) {
