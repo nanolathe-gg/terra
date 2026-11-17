@@ -21,15 +21,17 @@ test('older maps remain loadable; removed controls are dropped and invalid embed
   const value=savedWorld(config,new URLSearchParams(),{name:'Test',colors:{},knobs:{}});
   assert.equal(copySavedWorld({...value,knobs:{...value.knobs,removedControl:'9'}},config).knobs.removedControl,undefined);
   assert.throws(()=>copySavedWorld({...value,base:'lava'},config),/invalid/);
-  assert.throws(()=>copySavedWorld({...value,colors:{slope:'red'}},config),/invalid/);
-  assert.throws(()=>copySavedWorld({...value,knobs:{rainErode:'NaN'}},config),/invalid/);
+  // A setting or color of the wrong kind is dropped (the world's default stands), not the whole world (AGENTS.md rule 7).
+  const loaded=copySavedWorld({...value,colors:{slope:'red',sky:'#00ff00'},knobs:{rainErode:'NaN',faceWear:'.3'}},config);
+  assert.deepEqual(loaded.colors,{sky:'#00ff00'});assert.deepEqual(loaded.knobs,{faceWear:'.3'});
+  assert.throws(()=>copySavedWorld({...value,colors:'red'},config),/invalid/);
 });
-test('Shallow water is saved as a tone of the water; its old color is dropped and a bad tone rejected',()=>{
+test('Shallow water is saved as a tone of the water; its old color and a bad tone are dropped',()=>{
   const value=savedWorld(config,new URLSearchParams(),{name:'Test',colors:{shallow:'#c03030',shallowTone:[.1,-.05,0]},knobs:{}});
   assert.deepEqual(value.colors.shallowTone,[.1,-.05,0]);assert.equal('shallow' in value.colors,false);
   assert.deepEqual(copySavedWorld(JSON.parse(JSON.stringify(value)),config),value);
   assert.equal('shallow' in copySavedWorld({...value,colors:{...value.colors,shallow:'#c03030'}},config).colors,false);
-  for(const bad of ['#c03030',[.1,0],[2,0,0],['a',0,0]])assert.throws(()=>copySavedWorld({...value,colors:{shallowTone:bad}},config),/invalid/);
+  for(const bad of ['#c03030',[.1,0],[2,0,0],['a',0,0]])assert.equal('shallowTone' in copySavedWorld({...value,colors:{shallowTone:bad}},config).colors,false,JSON.stringify(bad));
 });
 
 test('World home counts stored differences from pristine data and Reset preserves identity',()=>{

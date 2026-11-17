@@ -1,6 +1,6 @@
 // A world's tool and rock kit is portable data. Maps keep their own numeric slots; only explicit worldKey provenance makes a runtime
 // rock a World edit. Material dependencies are ordinary validated graphs inline, or references to the existing world roles/layers.
-import {checkTool,checkCard,worldTools,shapeGone,MAP_TOOLS_MAX} from './sculpt-tools.js';
+import {checkTool,checkCard,storedCard,worldTools,shapeGone,MAP_TOOLS_MAX} from './sculpt-tools.js';
 import {shapeFrom} from './sculpt-scene.js';
 import {copyRocks,worldRocks,giveRockMaterials,ROCK_SLOTS} from './sculpt-rock-presets.js';
 import {copyMaterial,copyMaterials,addMaterial,setMaterial,worldMaterials,worldOwnMaterials,worldKey,roleName,MAP_ROLES,MATERIAL_SLOTS,materialStates,materialStaged,materialCacheUsage} from './sculpt-materials.js';
@@ -42,20 +42,21 @@ export function copyWorldRocks(value){
 export function copyWorldTools(value,config){
   if(!Array.isArray(value))throw Error('A world’s tools are a list.');
   const ids=new Set(),native=new Set((config.tools??[]).map(t=>t.id));let own=0;
-  return value.map(t=>{
+  // An authored tool whose card holds a setting of the wrong kind is left out (storedCard), not the whole world.
+  return value.flatMap(t=>{
     fields(t,['id','label','icon','color','group','shape','help','family','rock','material','card','ground'],'world tool');
     checkTool(t,'The world’s tool',s=>shapeFrom(config,s));
     if(ids.has(t.id)||/^map-/.test(t.id))throw Error('World tools need unique ids, separate from map tools.');ids.add(t.id);
     const [base]=worldTools({...config,tools:[t]});
     if(t.card!==undefined){
       if(native.has(t.id)||!/^world-[a-z0-9_-]+$/.test(t.id)||++own>MAP_TOOLS_MAX)throw Error(`A world holds at most ${MAP_TOOLS_MAX} authored tools, with world- ids.`);
-      const card=checkCard(t.card,'The world’s tool');
+      const card=storedCard(t.card,'The world’s tool');if(!card)return [];
       if(card.rockPreset>0||card.groundPreset>0)throw Error('A world tool carries rock and material references, not map slots.');
-      return {...base,card,...(t.ground!==undefined?{ground:copyMaterialRef(t.ground)}:{})};
+      return [{...base,card,...(t.ground!==undefined?{ground:copyMaterialRef(t.ground)}:{})}];
     }
     if(!native.has(t.id))throw Error('An authored world tool needs a world- id and its complete card.');
     if(t.ground!==undefined)throw Error('A portable ground reference belongs to an authored world tool.');
-    return base;
+    return [base];
   });
 }
 function baseRocks(config){

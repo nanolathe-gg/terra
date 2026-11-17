@@ -95,30 +95,37 @@ const MAP_ID=/^map-[1-9][0-9]{0,5}$/,MAP_FIELDS=['id','label','icon','color','gr
 // The settings a card may hold: a brush card's (the shape options and the five basics), the model's defaults and the library's shapes.
 export const CARD_KEYS=new Set([...SHAPE_FIELDS.map(([key]) => key),...Object.keys(LANDFORM_DEFAULTS),...Object.values(LANDFORM_SHAPES).flatMap(Object.keys),'cracks','diameter','amount','roughness','softness','preset','curve','along']);
 const knotList=v => Array.isArray(v) && v.length>=1 && v.length<=128 && v.every(k => Array.isArray(k) && k.length===2 && k.every(Number.isFinite));
-// A card checked as a map's tool holds it: the settings a brush card has, finite numbers, and curves of knots.
+// A card checked as a map's tool holds it: the settings a brush card has, finite numbers, and curves of knots. A setting no card has any more (a removed
+// option) is dropped, so a saved tool loads without it (AGENTS.md rule 7); a setting of the wrong kind is an error.
 export function checkCard(card,what) {
   if (!card || typeof card!=='object' || Array.isArray(card)) throw Error(`${what} needs its settings.`);
+  const out={};
   for (const [key,v] of Object.entries(card)) {
-    if (!CARD_KEYS.has(key)) throw Error(`${what}: no setting ${JSON.stringify(key)}.`);
+    if (!CARD_KEYS.has(key)) continue;
+    out[key]=v;
     if (key==='preset') { if (typeof v!=='string') throw Error(`${what}: its preset is a name.`); continue; }
     if (key==='curve') { if (v!=null && (typeof v!=='object' || typeof v.form!=='string' || (v.knots!==undefined && !knotList(v.knots)) || (v.back!==undefined && !knotList(v.back)) || Object.keys(v).some(k => !['form','knots','back'].includes(k)))) throw Error(`${what}: its section curve is not one.`); continue; }
     if (key==='along') { if (v!=null && !knotList(v)) throw Error(`${what}: its length vs. height curve is not one.`); continue; }
     if (typeof v!=='number' || !Number.isFinite(v)) throw Error(`${what}: ${key} is not a number.`);
   }
-  return structuredClone(card);
+  return structuredClone(out);
 }
+// A stored tool's card (a save, a share link, a world record): checked, or null where a setting is of the wrong kind, so the caller drops that one
+// tool (its strokes show as the generic landform, numbers kept) instead of refusing the map or the world.
+export function storedCard(card,what) { try { return checkCard(card,what); } catch (_) { return null; } }
 // A map's tools checked before they touch the open map (a save, a share link, a scene): ids map-1, map-2, ... each once, the presentation a world's
-// tool has, and a card. No list is null (a map without its own tools).
+// tool has, and a card. No list is null (a map without its own tools). A tool whose card holds a setting of the wrong kind is left out (storedCard).
 export function copyMapTools(value) {
   if (value==null) return null;
   if (!Array.isArray(value) || value.length>MAP_TOOLS_MAX) throw Error(`A map holds at most ${MAP_TOOLS_MAX} tools of its own.`);
   const seen=new Set();
-  return value.filter(t => !shapeGone(t)).map((t,i) => {
+  return value.filter(t => !shapeGone(t)).flatMap((t,i) => {
     const what=`The map's tool ${i+1}`;
     if (!t || typeof t!=='object' || Object.keys(t).some(k => !MAP_FIELDS.includes(k))) throw Error(`${what} is not a tool.`);
     if (typeof t.id!=='string' || !MAP_ID.test(t.id) || seen.has(t.id)) throw Error(`${what} needs an id of its own, map-1 to map-999999.`);
     checkTool(t,what); seen.add(t.id);
-    return {id:t.id,label:t.label.trim(),icon:t.icon,color:t.color.toLowerCase(),group:t.group,shape:t.shape,card:checkCard(t.card,what)};
+    const card=storedCard(t.card,what); if (!card) return [];
+    return [{id:t.id,label:t.label.trim(),icon:t.icon,color:t.color.toLowerCase(),group:t.group,shape:t.shape,card}];
   });
 }
 // The next map tool's id: one no tool and no stroke of the map has used, so a stroke of a deleted tool never shows as a later one.
@@ -131,6 +138,7 @@ export function nextMapToolId(tools,nodes=[]) {
 // undo brings it back. Saved and loaded, or carried to another world, without it, they fall back to the generic landform for good (keepStrokeTools, carryStrokes).
 export function addMapTool(tools,nodes,{label,icon,color,group,shape,card}) {
   if (tools.length>=MAP_TOOLS_MAX) throw Error(`A map holds at most ${MAP_TOOLS_MAX} tools of its own.`);
+  checkCard(card,'The new tool');   // a card of the wrong kind is refused here, not left out
   const id=nextMapToolId(tools,nodes),[tool]=copyMapTools([{id,label,icon,color,group,shape,card:{...card,preset:'custom'}}]);
   return {id,tools:[...tools,tool]};
 }

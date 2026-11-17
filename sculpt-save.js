@@ -17,17 +17,18 @@ export function savedWorld(config,settings,world) {
 export function copySavedWorld(value,config) {
   if(value===undefined)return null;
   if(!value||value.base!==config.biomeId||typeof value.name!=='string'||!value.colors||Array.isArray(value.colors)||typeof value.colors!=='object'||!value.knobs||Array.isArray(value.knobs)||typeof value.knobs!=='object')throw Error('The saved world settings are invalid.');
+  // A setting or color this world no longer has, or one of the wrong kind, is dropped: the world loads with its default there (AGENTS.md rule 7).
   const keys=worldKeys(config),knobs={};
   for(const [key,v]of Object.entries(value.knobs)){
     if(!keys.has(key))continue;
-    if((typeof v!=='string'&&typeof v!=='number')||String(v).length>128||(typeof (config.defaults?.[key]??config.engineDefaults?.[key])==='number'&&!Number.isFinite(Number(v))))throw Error('The saved world setting '+key+' is invalid.');
+    if((typeof v!=='string'&&typeof v!=='number')||String(v).length>128||(typeof (config.defaults?.[key]??config.engineDefaults?.[key])==='number'&&!Number.isFinite(Number(v))))continue;
     knobs[key]=String(v);
   }
   const colors={};
   // Every color is a hex or null (off), but Shallow water's tone (sculpt-knobs.js waterTone); its old color (`shallow`) is dropped.
   for(const [key,v]of Object.entries(value.colors)){
     if(key==='shallow')continue;
-    if(key==='shallowTone'?v!==null&&!isTone(v):v!==null&&(typeof v!=='string'||!/^#[0-9a-f]{6}$/i.test(v)))throw Error('The saved world color '+key+' is invalid.');
+    if(key==='shallowTone'?v!==null&&!isTone(v):v!==null&&(typeof v!=='string'||!/^#[0-9a-f]{6}$/i.test(v)))continue;
     colors[key]=key==='shallowTone'&&v?[...v]:v;
   }
   const surface=value.surface===undefined?null:copySurface(value.surface);
