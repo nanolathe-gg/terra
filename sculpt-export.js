@@ -103,8 +103,10 @@ export function mountMapExport(api) {
     if (!map || !catalogue?.worlds?.[config.biomeId]?.climate) throw new Error('Export is unavailable for this canvas or world.');
     if (busy || !api.ready()) throw new Error('Wait for the finished terrain before exporting.');
     const {settings}=serialize(),placements=api.mapData?.()||{};
-    for (const [key] of SETTINGS) if (!Number.isInteger(settings[key]) || settings[key]<0 || settings[key]>(key==='surfaceMetal'?255:2147483647)) throw new Error('Use nonnegative integer OTA settings within the displayed bounds.');
-    if (settings.minWind>settings.maxWind) throw new Error('Minimum wind must not exceed maximum wind.');
+    // The OTA settings are refused in the Export pane too: the button's handler drops the rejection.
+    const refuse=message => { $('map-export-state').textContent=message; throw new Error(message); };
+    for (const [key] of SETTINGS) if (!Number.isInteger(settings[key]) || settings[key]<0 || settings[key]>(key==='surfaceMetal'?255:2147483647)) refuse('Use nonnegative integer OTA settings within the displayed bounds.');
+    if (settings.minWind>settings.maxWind) refuse('Minimum wind must not exceed maximum wind.');
     const token=api.revision();
     busy=true; abort=new AbortController(); $('map-cancel').hidden=false; $('map-cancel').disabled=false; update(); $('map-controls').disabled=true; api.busy(true); $('map-download').replaceChildren(); endJob();
     try {
