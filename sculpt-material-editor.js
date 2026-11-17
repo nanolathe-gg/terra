@@ -34,7 +34,7 @@ export function mountMaterialEditor(host) {
     material, selection: () => selection, frame: () => frameAt, solo: () => solo, thumbnails: () => thumbs,
     select: ids => { selection = new Set(ids); primary = ids.at(-1) ?? null; frameAt = -1; stopAt = 0; if (primary) pick('node'); refresh(); },
     selectFrame: index => { frameAt = index; selection = new Set(); primary = null; pick('node'); refresh(); },
-    toggle: attempt(id => change(m => { const n = m.nodes.find(n => n.id === id); n.enabled = !n.enabled; })),
+    toggle: attempt(id => change(m => { const n = m.nodes.find(n => n.id === id); if (n.type !== 'output') n.enabled = !n.enabled; })),
     viewAlone: id => { solo = primary = id; if (!selection.has(id)) selection = new Set([id]); refresh(); },
     move: attempt(positions => change(m => { const places = graph.places(); for (const n of m.nodes) { const p = positions.get(n.id) ?? places.get(n.id); n.x = p.x; n.y = p.y; } })),
     connect: attempt((from, to, key, detached) => change(m => {
@@ -223,7 +223,8 @@ export function mountMaterialEditor(host) {
     if (!n) return;
     const spec = NODES[n.type], kinds = nodeKinds(n), params = nodeParams(n), types = nodeTypes(m.nodes);
     if (document.activeElement !== $('node-name')) $('node-name').value = n.name;
-    $('node-enabled').checked = n.enabled; $('node-help').textContent = spec.help + (n.enabled ? '' : ' This node is off: it passes its first input through, or gives nothing.');
+    $('node-enabled').checked = n.enabled; $('node-enabled').parentElement.hidden = n.type === 'output';   // the Material node is always on
+    $('node-help').textContent = spec.help + (n.enabled ? '' : ' This node is off: it passes its first input through, or gives nothing.');
     $('node-kind-row').hidden = !kinds; if (kinds) { $('node-kind-label').textContent = n.type === 'combine' ? 'Operation' : 'Type'; $('node-kind').replaceChildren(...Object.entries(kinds).map(([k, label]) => new Option(label, k))); $('node-kind').value = n.kind; }
     for (let i = 0; i < PARAM_ROWS; i++) {
       const p = params[i]; $('node-param-row-' + i).hidden = !p; if (!p) continue;

@@ -146,7 +146,8 @@ export const nodeTypes = nodes => typeNodes(orderNodes(nodes));
 function copyNode(n, seen) {
   if (!object(n) || !Object.hasOwn(NODES, n.type) || typeof n.id !== 'string' || !n.id || n.id.length > 40 || seen.has(n.id)) throw Error('Invalid or duplicate material node.');
   seen.add(n.id);
-  const spec = NODES[n.type], out = {id: n.id, type: n.type, name: text(n.name, spec.label, 'A node name'), enabled: n.enabled !== false};
+  // The Material node is always on: the material is what it takes (a save from when it could be turned off loads with it on).
+  const spec = NODES[n.type], out = {id: n.id, type: n.type, name: text(n.name, spec.label, 'A node name'), enabled: n.type === 'output' || n.enabled !== false};
   if (spec.kinds) { out.kind = n.kind ?? Object.keys(spec.kinds)[0]; if (!Object.hasOwn(spec.kinds, out.kind)) throw Error(`Invalid ${spec.label} type.`); }
   out.params = {};
   for (const p of spec.params(out.kind)) {

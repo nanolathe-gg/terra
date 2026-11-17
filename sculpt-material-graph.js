@@ -90,7 +90,7 @@ export function mountMaterialGraph(host) {
       for (const [port, q] of ports) { const d = Math.hypot(p.x - q.x, p.y - q.y); if (d < nearest) { nearest = d; best = {c, port}; } }
     }
     if (best) return best;
-    for (const c of [...list].reverse()) if (p.x >= c.x && p.x <= c.x + CARD.width && p.y >= c.y && p.y <= c.y + c.height) return {c, toggle: p.x < c.x + 24 && p.y < c.y + 26};
+    for (const c of [...list].reverse()) if (p.x >= c.x && p.x <= c.x + CARD.width && p.y >= c.y && p.y <= c.y + c.height) return {c, toggle: c.n.type !== 'output' && p.x < c.x + 24 && p.y < c.y + 26};   // the Material node is always on
     for (const f of frames(list)) if (p.x >= f.x && p.x <= f.x + f.width && p.y >= f.y && p.y <= f.y + 24) return {frame: f};
     return null;
   }

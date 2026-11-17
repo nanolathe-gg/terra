@@ -426,3 +426,9 @@ test('a node of a removed type or kind is dropped with the connections that read
   assert.throws(() => makeNode('retired-node', []), /Invalid/, 'the editor still refuses a type it does not have');
   assert.throws(() => copyMaterial({nodes: [node('n', 'noise', {in: {in: 'n2'}}), node('n2', 'gradient', {in: {in: 'n'}})]}), /loop|needs/, 'a graph that lost nothing is checked as before');
 });
+
+test('the Material node is always on: one saved off loads on, and its height and states count', () => {
+  const m = copyMaterial({nodes: [node('n', 'noise'), node('g', 'gradient', {in: {in: 'n'}}), node('material', 'output', {enabled: false, in: {color: 'g', height: 'n'}, params: {relief: 6}})]});
+  assert.equal(m.nodes.find(n => n.type === 'output').enabled, true);
+  assert.equal(materialReliefBound(m), 6);
+});
