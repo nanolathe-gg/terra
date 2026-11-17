@@ -117,6 +117,11 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   // The shaders bound all neighbourhoods. Bake relief noise is a
   // function of the queried point, not walks through adjacent baked pixels.
   // Only height/mask/weather support extends the bake's field input apron.
+  // The most the materials in use add to the relief. setMaterials replaces the map of them, so the bound is found once for each set.
+  groundRelief() {
+    if(this.groundReliefOf!==this.grounds){this.groundReliefBound=Math.max(0,...[...(this.grounds?.values()??[])].map(materialReliefBound));this.groundReliefOf=this.grounds;}
+    return this.groundReliefBound;
+  }
   reaches(heightBounds=this.config.heightBounds??[-90,300]) {
     const n=(k,f)=>this.number(k,f),rock=(k,f)=>this.rockMax(k,n(k,f));   // rock: a recipe number's largest over the rocks in use
     // H1: the close shadow march (6 px) and the cavity rings (4 px) plus the gradient's 1.4 sit inside the far taps' reach.
@@ -143,7 +148,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     // The bed's lumps (bedRelief) stay under the water plane, but the pictures are sensitive to this reach (Green's hills shade differently by about one unit of it), so it keeps counting them.
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
     const extra=relief+blocks+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(rock('looseSize',6))+Math.abs(n('rippleHeight',1.4))+(rock('debrisAmount',0)>0?1.5*rock('debrisDepth',4):0);
-    const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4+Math.max(0,...[...(this.grounds?.values()??[])].map(materialReliefBound)));
+    const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4+this.groundRelief());
     return {draw,bake,direct,far,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};
   }
   requiredRegion(request) {
