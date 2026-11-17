@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {planPreviewBlocks,previewGrid,previewWindow} from '../sculpt-preview.js';
+import {planPreviewBlocks,previewGrid,previewWindow,previewQuality,previewPixels} from '../sculpt-preview.js';
 import {createCoverage} from './perf-coverage.mjs';
 const map={width:8192,height:8192},view={x:2048,y:2048,width:1728,height:1024};
 test('a whole-view preview is one block when it fits',()=>{
@@ -56,4 +56,13 @@ test('the 8 px first Time view keeps map edges and its full world-space apron',(
    assert(origin+w.side===grid||(origin+w.side-start-count)*sp>=apron);
   }
  }
+});
+
+
+test('automatic preview resolution uses edit size at the current zoom; manual choices override it',()=>{
+ const small={width:512,height:704},large={width:1280,height:1152};
+ assert.equal(previewPixels('auto',small),2);assert.equal(previewPixels('auto',large),4);
+ assert.equal(previewPixels('auto',{width:256,height:352},.5),2);
+ for(const choice of ['2','3','4','8'])for(const area of [small,large])assert.equal(previewPixels(choice,area),Number(choice));
+ for(const invalid of [undefined,null,'bad','0','1','9'])assert.equal(previewQuality(invalid),'auto');
 });

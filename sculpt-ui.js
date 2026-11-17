@@ -84,7 +84,7 @@ export function mountEditorUI(){
  const closeDocked=()=>{if(!docked)return false;docked.close();return true;};
  for(const [id,on] of [['view-rendered',false],['view-clay',true]])$(id).onclick=()=>{$('clay').checked=on;$('clay').dispatchEvent(new Event('change'));};
  updateLayout();
- return {toggleFocus,exitFocus,syncTools,closeTop,closeDocked,dock,focused,get terrainBudget(){return panels.terrainBudget;},setTerrainBudget(value){panels.terrainBudget=value;if(beforeFocus)beforeFocus.terrainBudget=value;savePanels();}};
+ return {toggleFocus,exitFocus,syncTools,closeTop,closeDocked,dock,focused,get previewQuality(){return panels.previewQuality;},setPreviewQuality(value){panels.previewQuality=value;if(beforeFocus)beforeFocus.previewQuality=value;savePanels();},get terrainBudget(){return panels.terrainBudget;},setTerrainBudget(value){panels.terrainBudget=value;if(beforeFocus)beforeFocus.terrainBudget=value;savePanels();}};
 }
 // Each effect owns its controlling value and its dependent parameters. Zero
 // means off; switching back on restores the last value for this tool/selection.
