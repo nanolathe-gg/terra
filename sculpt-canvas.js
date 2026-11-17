@@ -95,11 +95,14 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // The page heap counts each byte once: our own arrays (ownedBytes), and the rest of the JS heap where the browser reports one. Chrome's usedJSHeapSize
   // already holds ArrayBuffers (measured in Chrome 157, with and without --enable-precise-memory-info; without it the figure lags by up to about two
   // seconds), so the rest is what it reports beyond our arrays. Safari and Firefox report none: the figure is our arrays alone.
-  const otherHeap=owned=>{const used=performance.memory?.usedJSHeapSize;return Number.isFinite(used)?Math.max(0,used-owned):0;};
-  // Over the budget, the fields let go of what they can (api.evict) and the tiles their height patches. The rest of the heap is the figure from before:
-  // arrays let go leave usedJSHeapSize only once they are collected.
-  function checkHeap(r,upload=0){const arrays=fieldArrays(r),owned=ownedBytes(arrays),other=otherHeap(owned);if(owned+other+upload>heapBudget){api.evict?.();for(const e of cache.values())e.heightPatch=null;if(ownedBytes(arrays)+other+upload>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}}
-  api.checkMemory=(extra=0)=>{const m=metrics();if(m.accountedHeapBytes+extra>heapBudget){api.evict?.();for(const e of cache.values())e.heightPatch=null;if(ownedBytes()+(passability?.stats().bytes||0)+m.otherHeapBytes+extra>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}};
+  // Arrays let go under pressure (relieve) leave usedJSHeapSize only once they are collected; until then (a FinalizationRegistry says when) they are
+  // not counted as the rest of the heap. Without that, the next check after an eviction saw them there and threw (measured, heapMB=256).
+  let unreclaimed=0;const reclaimed=typeof FinalizationRegistry==='function'?new FinalizationRegistry(bytes=>{unreclaimed-=bytes;}):null;
+  const otherHeap=owned=>{const used=performance.memory?.usedJSHeapSize;return Number.isFinite(used)?Math.max(0,used-owned-unreclaimed):0;};
+  // Over the budget, the fields let go of what they can (api.evict: the spill's copies) and the tiles their height patches.
+  function relieve(){const gone=new Set(api.evict?.()||[]);for(const e of cache.values()){if(e.heightPatch)gone.add(e.heightPatch.fields.h.buffer);e.heightPatch=null;}if(reclaimed)for(const b of gone){unreclaimed+=b.byteLength;reclaimed.register(b,b.byteLength);}}
+  function checkHeap(r,upload=0){const arrays=fieldArrays(r),owned=ownedBytes(arrays),other=otherHeap(owned);if(owned+other+upload>heapBudget){relieve();if(ownedBytes(arrays)+other+upload>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}}
+  api.checkMemory=(extra=0)=>{const m=metrics();if(m.accountedHeapBytes+extra>heapBudget){relieve();if(ownedBytes()+(passability?.stats().bytes||0)+m.otherHeapBytes+extra>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}};
   function metrics() {
     const fields=api.stats?.()??{},render=renderer.stats(),heap=performance.memory?.usedJSHeapSize??0,gpu=gpuResident();
     const heightBytes=[...new Set([...cache.values()].map(e=>e.heightPatch?.fields.h.buffer).filter(Boolean))].reduce((n,b)=>n+b.byteLength,0),owned=ownedBytes()+(passability?.stats().bytes||0),other=otherHeap(owned),accounted=owned+other;

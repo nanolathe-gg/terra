@@ -50,3 +50,14 @@ test('reserving preview memory reduces page counts without shrinking the shape r
  try{fields.refit();const before=fields.stats();assert.equal(before.gpuShape.ring,320);previewMinimum=1900*MB;fields.refit();const after=fields.stats();assert.equal(after.gpuShape.ring,before.gpuShape.ring);assert(after.budget<before.budget);}
  finally{fields.destroy();}
 });
+test('the spill stays within the share of the page heap budget the fields are given, and lets go under pressure',t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const MB=1048576;let heap=Infinity;
+ const fields=createPagedFields({worldSize:1025,worldGrid:513,baseHeight:24,maskKeys:[],nodes:()=>[],device:()=>null,context:()=>({}),forceRing:4,heapBudget:()=>heap});
+ try{
+  assert.equal(fields.stats().gpuShape.spill.cap,256*MB,'1/32 of the 8 GB assumed where the browser reports no device memory');
+  heap=100*MB;assert.equal(fields.stats().gpuShape.spill.cap,100*MB);
+  assert.deepEqual(fields.evict(),[]);
+  assert.equal(fields.buffers().length,1,'the coarse lattice, before any page is read');
+ }finally{fields.destroy();}
+});

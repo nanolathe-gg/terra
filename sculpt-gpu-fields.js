@@ -1099,6 +1099,8 @@ export function createPageSpill(cap) {
     drop: key => remove(key),
     clear(match = null) { for (const k of [...entries.keys()]) if (!match || match(k)) remove(k); },
     trim,
+    // The copies' bytes (the page heap counts them: sculpt-canvas.js ownedBytes).
+    buffers: () => [...entries.values()].filter(e => e.data).map(e => e.data),
     stats: () => ({bytes, entries: entries.size, ready: [...entries.values()].filter(e => e.data).length, cap: cap(), hits, misses, stale, unfinished, dropped}),
   };
 }
@@ -1266,8 +1268,11 @@ export function createPagedFields(opts) {
   // only under the stamp it was made with. A shape page keeps no copy: evaluating it again costs no more than restoring a copy did (Chrome on Metal,
   // 16x16 Green, page medians: 3 ms against 2 at ring 4, 5 against 9 at ring 128, 11 against 18 at ring 320), and the copy added a read-back of
   // 15 MiB or more at every eviction (5-17 ms). A page's Time pass costs 8-210 ms (74 on busy ground) against 2-3 ms to restore its weather.
-  const SPILL_BYTES = Math.min(2, (globalThis.navigator?.deviceMemory || 8) / 4) * 1024 ** 3;
-  const spill = createPageSpill(() => opts.spillBytes ?? SPILL_BYTES), spilling = new Set();
+  // The cap: 1/32 of the device memory the browser reports (navigator.deviceMemory, at most 8 GB), so 256 MiB, 51 results of 5 MiB (27 with a material
+  // field), at most; and no more than the share of the page heap budget the canvas gives the fields (opts.heapBudget). A tour of a busy 16x16 map
+  // (eight views) left 42 copies, 210 MiB. Under heap pressure the canvas lets the copies go (evict).
+  const SPILL_BYTES = Math.min(8, globalThis.navigator?.deviceMemory || 8) / 32 * 1024 ** 3;
+  const spill = createPageSpill(() => opts.spillBytes ?? Math.min(SPILL_BYTES, opts.heapBudget?.() ?? Infinity)), spilling = new Set();
   const weatherStamp = seq => `${seq} ${timeKey}`;
   let weatherRestores = 0, shapeEvaluations = 0;
   // The copy is submitted now, ahead of the buffers' destruction (WebGPU keeps them until the copy has run), and read back without waiting: the copy
@@ -1655,7 +1660,10 @@ export function createPagedFields(opts) {
 
   return {
     paged: true, core: CORE, apron: APRON, ring: RING,
-    buffers: () => [],
+    // The CPU memory the fields hold (the page heap counts it): the spill's copies, the resident pages' CPU copies and the coarse lattice.
+    buffers: () => { const out = new Set([...spill.buffers(), coarse.buffer]); for (const pg of pagesMap.values()) for (const a of [pg.cpu?.h, pg.cpu?.r, pg.cpuW?.base, pg.cpuW?.e]) if (a) out.add(a.buffer); return [...out]; },
+    // Heap pressure: the spill's copies go (their pages run their Time pass again when next read); the buffers let go, for the canvas's accounting.
+    evict: () => { const out = spill.buffers(); spill.clear(); return out; },
     read: () => { throw new Error('nanolathe: a paged map is read with readAsync'); }, readCells: () => { throw new Error('nanolathe: a paged map is read with readAsync'); },
     sample: (x, y, k = 'h') => bilinear(x, y, (ix, iy) => cell(ix, iy, k)), cell: (ix, iy, k) => cell(ix, iy, k),
     sampleEroded: (x, y) => bilinear(x, y, erodedCell),
