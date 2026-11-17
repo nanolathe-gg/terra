@@ -458,7 +458,7 @@ try{
       if(!fits)throw Error('Requested terrain view is clipped by the World layout');
     }
     if(await ev(`(()=>{const e=document.getElementById('world-fine');return e&&!e.checked;})()`))await clickElement('#world-fine');
-    const selector=control==='colors'?'#world-colors input[type=color]':'#'+control;
+    const selector=control==='colors'?'.world-colors input[type=color]':'#'+control;
     const tabs=await ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Missing row');const tabs=[];for(let p=e.parentElement;p;p=p.parentElement){if(p.tagName==='DETAILS')p.open=true;if(p.getAttribute('role')==='tabpanel'&&p.hasAttribute('aria-labelledby'))tabs.push(p.getAttribute('aria-labelledby'));}return tabs.reverse();})()`);
     for(const id of tabs)if(await ev(`document.getElementById(${JSON.stringify(id)})?.getAttribute('aria-selected')==='false'`))await clickElement('#'+id);
     if(!await ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)}),r=e.closest('[data-knob]')?.querySelector('.scrub')??e;return r.getClientRects().length>0&&getComputedStyle(r).visibility!=='hidden';})()`))throw Error('Row remained hidden: '+control);
@@ -531,9 +531,9 @@ process.exitCode=result.error?1:result.slider?.some(p=>p.status==='blocked')?2:0
 async function colorDrag(paused){
   if(colorsMode==='scripted')return scriptedColor(paused);
   await clickElement('#tab-world');
-  await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');for(let p=e.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;})()`);
-  const original=await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');return {value:e.value,checked:e.previousElementSibling.checked};})()`);
-  await clickElement('#world-colors input[type=color]');await sleep(250);
+  await ev(`(()=>{const e=document.querySelector('.world-colors input[type=color]');for(let p=e.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;})()`);
+  const original=await ev(`(()=>{const e=document.querySelector('.world-colors input[type=color]');return {value:e.value,checked:e.previousElementSibling.checked};})()`);
+  await clickElement('.world-colors input[type=color]');await sleep(250);
   const screenshot=await send('Page.captureScreenshot',{format:'png'});
   const bar=await ev(`new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>{const c=document.createElement('canvas');c.width=img.width;c.height=img.height;const g=c.getContext('2d');g.drawImage(img,0,0);const d=g.getImageData(0,0,c.width,c.height).data;
     for(let y=0;y<c.height;y++){let xs=[],bins=new Set();const check=()=>{if(xs.length<75||xs.at(-1)-xs[0]<100||xs.at(-1)-xs[0]>180||bins.size<5)return null;return {x:xs[0],y,width:xs.at(-1)-xs[0],screenshotWidth:c.width,screenshotHeight:c.height};};for(let x=0;x<c.width;x++){const i=(y*c.width+x)*4,r=d[i]/255,g=d[i+1]/255,b=d[i+2]/255,hi=Math.max(r,g,b),lo=Math.min(r,g,b);if(hi<.8||hi-lo<.7)continue;if(xs.length&&x-xs.at(-1)>20){const found=check();if(found)return resolve(found);xs=[];bins=new Set();}let h=hi===r?((g-b)/(hi-lo)+6)%6:hi===g?(b-r)/(hi-lo)+2:(r-g)/(hi-lo)+4;xs.push(x);bins.add(Math.floor(h));}const found=check();if(found)return resolve(found);}reject(Error('Native color spectrum not found'));};img.onerror=reject;img.src='data:image/png;base64,${screenshot.data}';})`);
@@ -543,7 +543,7 @@ async function colorDrag(paused){
   anchors.push(await anchor());await mouse('mouseReleased',x+bar.width-6,y);await key('Escape');await settle();
   const p=await capture(t0,anchors,{control:'colors',scenario:paused?'pause':'continuous',nativeSpectrum:bar,pauseRequestedMs:paused?1000:0});p.valuesDelivered=p.handlers.length;p.distinctValues=new Set(p.handlers.map(h=>h.value)).size;
   if(p.valuesDelivered<30){p.samples={first:[],firstTile:[],pointer:[],all:[],final:[],focus:[]};p.sampleTotals={first:36,pointer:0,all:36,final:anchors.length,focus:anchors.length};p.latencyChanged=distribution([],36);p.latency=distribution([],36);p.latencyPointer=distribution([],0);p.latencyAll=distribution([],36);p.final=distribution([],anchors.length);p.status='blocked';p.reason='Chrome native popup ignores CDP mouse events; no scripted substitute used';console.error('Colors gap:',p.reason);}
-  if(p.valuesDelivered){await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');e.value=${JSON.stringify(original.value)};e.dispatchEvent(new Event('input',{bubbles:true}));if(!${original.checked}){e.previousElementSibling.checked=false;e.previousElementSibling.dispatchEvent(new Event('change',{bubbles:true}));}})()`);await settle();}
+  if(p.valuesDelivered){await ev(`(()=>{const e=document.querySelector('.world-colors input[type=color]');e.value=${JSON.stringify(original.value)};e.dispatchEvent(new Event('input',{bubbles:true}));if(!${original.checked}){e.previousElementSibling.checked=false;e.previousElementSibling.dispatchEvent(new Event('change',{bubbles:true}));}})()`);await settle();}
   return p;
 }
 
@@ -552,19 +552,19 @@ async function colorDrag(paused){
 // the workload driver is scripted; no replacement control or render path.
 async function scriptedColor(paused){
   await clickElement('#tab-world');
-  const original=await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');for(let p=e.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;e.scrollIntoView({block:'center'});return {value:e.value,checked:e.previousElementSibling.checked,label:e.getAttribute('aria-label')};})()`);
+  const original=await ev(`(()=>{const e=document.querySelector('.world-colors input[type=color]');for(let p=e.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;e.scrollIntoView({block:'center'});return {value:e.value,checked:e.previousElementSibling.checked,label:e.getAttribute('aria-label')};})()`);
   // A full hue sweep at fixed saturation/value: 36 distinct legal colors.
   const values=Array.from({length:36},(_,i)=>{const h=i/6,c=.65*.65,x=c*(1-Math.abs(h%2-1)),m=.65-c,rgb=h<1?[c,x,0]:h<2?[x,c,0]:h<3?[0,c,x]:h<4?[0,x,c]:h<5?[x,0,c]:[c,0,x];return '#'+rgb.map(v=>Math.round((v+m)*255).toString(16).padStart(2,'0')).join('');});
   const t0=await begin(),anchors=[];
   for(let i=0;i<values.length;i++){
-    await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');e.value=${JSON.stringify(values[i])};e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await ev(`(()=>{const e=document.querySelector('.world-colors input[type=color]');e.value=${JSON.stringify(values[i])};e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     await sleep(30);
     if(paused&&i===17){anchors.push(await anchor());await sleep(1000);}
   }
   anchors.push(await anchor());await settle();
   const p=await capture(t0,anchors,{control:'colors',scenario:paused?'pause':'continuous',driver:'scripted Colors value/input sequence (not native mouse)',picker:original.label,requestedValues:values,pauseRequestedMs:paused?1000:0});
   p.valuesDelivered=p.handlers.length;p.distinctValues=new Set(p.handlers.map(h=>h.value)).size;
-  await ev(`(()=>{const e=document.querySelector('#world-colors input[type=color]');e.value=${JSON.stringify(original.value)};e.dispatchEvent(new Event('input',{bubbles:true}));if(!${original.checked}){e.previousElementSibling.checked=false;e.previousElementSibling.dispatchEvent(new Event('change',{bubbles:true}));}})()`);await settle();
+  await ev(`(()=>{const e=document.querySelector('.world-colors input[type=color]');e.value=${JSON.stringify(original.value)};e.dispatchEvent(new Event('input',{bubbles:true}));if(!${original.checked}){e.previousElementSibling.checked=false;e.previousElementSibling.dispatchEvent(new Event('change',{bubbles:true}));}})()`);await settle();
   if(p.valuesDelivered!==36||p.distinctValues!==36||p.handlers.some(h=>h.isTrusted!==false))throw Error('Scripted Colors did not deliver 36 distinct, explicitly untrusted input events');
   return p;
 }

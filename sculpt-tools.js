@@ -21,7 +21,7 @@ const ID=/^[A-Za-z][A-Za-z0-9_-]{0,39}$/,COLOR=/^#[0-9a-f]{6}$/i,LABEL_MAX=40,HE
 const label=v => typeof v==='string' && v.trim() && v.trim().length<=LABEL_MAX;
 // A tool's presentation and shape, checked (`what` starts the error): an id no fixed button has, a label, an icon of the set, a color, a group,
 // and a shape of the library (`base`: the library shape a world's own shape draws, sculpt-scene.js shapeFrom).
-function checkTool(t,what,base=s => s) {
+export function checkTool(t,what,base=s => s) {
   if (!t || typeof t!=='object' || Array.isArray(t)) throw Error(`${what} is not a tool.`);
   if (typeof t.id!=='string' || !ID.test(t.id) || FIXED_TOOLS.includes(t.id) || t.id===LANDFORM_TOOL.id) throw Error(`${what} needs an id of its own (letters, digits, - and _).`);
   if (!label(t.label)) throw Error(`${what} needs a name of 1 to ${LABEL_MAX} characters.`);
@@ -93,7 +93,7 @@ const MAP_ID=/^map-[1-9][0-9]{0,5}$/,MAP_FIELDS=['id','label','icon','color','gr
 export const CARD_KEYS=new Set([...SHAPE_FIELDS.map(([key]) => key),...Object.keys(LANDFORM_DEFAULTS),...Object.values(LANDFORM_SHAPES).flatMap(Object.keys),'cracks','diameter','amount','roughness','softness','preset','curve','along']);
 const knotList=v => Array.isArray(v) && v.length>=1 && v.length<=128 && v.every(k => Array.isArray(k) && k.length===2 && k.every(Number.isFinite));
 // A card checked as a map's tool holds it: the settings a brush card has, finite numbers, and curves of knots.
-function checkCard(card,what) {
+export function checkCard(card,what) {
   if (!card || typeof card!=='object' || Array.isArray(card)) throw Error(`${what} needs its settings.`);
   for (const [key,v] of Object.entries(card)) {
     if (!CARD_KEYS.has(key)) throw Error(`${what}: no setting ${JSON.stringify(key)}.`);

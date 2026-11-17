@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {NODES, LIBRARY, MAX_NODES, MATERIAL_SLOTS, copyMaterial, copyMaterials, blankMaterial, makeNode, orderNodes, nodeTypes, compileMaterial, programKey, programSource, stagePlan,
   materialReliefBound, materialRenderKey, soloMaterial, colorSources, materialColor, recolorMaterial, controlSpec, controlRange, nodeParams, withWorldMaterials, worldMaterials, adoptWorldMaterials, worldOwnMaterials, keptWorldMaterials, mergeWorldMaterials, worldKept, addMaterial, duplicateMaterial, setMaterial,
   assignMaterial, deleteMaterial, strokeMaterial, keepStrokeMaterials, materialsInUse, materialUsers, materialText, parseMaterialText, reseedMaterial, materialTint} from '../sculpt-materials.js';
-import {graphPositions, cardHeight, CARD} from '../sculpt-material-graph.js';
+import {graphPositions, fitGraph, graphGrid, cardHeight, CARD} from '../sculpt-material-graph.js';
 import {savedWorld, copySavedWorld} from '../sculpt-save.js';
 
 const config = {biomeId: 'red', biome: 'Red Planet', materials: {ground: 'red-ground', water: 'red-water'}, defaults: {}, engineDefaults: {}, colors: {}};
@@ -292,6 +292,36 @@ test('Arrange places every node once, sources left of their readers, without ove
     assert.deepEqual(graphPositions(m.nodes), places, 'the layout is deterministic');
   }
   assert.ok(CARD.reach >= 12, 'ports are easy to grab');
+});
+
+test('Arrange adapts to wide and tall canvases without overlaps or changing material rendering', () => {
+  for (const m of Object.values(LIBRARY)) for (const aspect of [.8, 3]) {
+    const places = graphPositions(m.nodes, {aspect}), boxes = m.nodes.map(n => ({...places.get(n.id), width: CARD.width, height: cardHeight(n)}));
+    assert.deepEqual(graphPositions(m.nodes, {aspect}), places, 'deterministic at the same aspect');
+    for (const a of boxes) for (const b of boxes) if (a !== b) assert(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y, 'cards do not overlap');
+    const arranged = {...m, nodes: m.nodes.map(n => ({...n, ...places.get(n.id)}))};
+    assert.equal(materialRenderKey(arranged), materialRenderKey(m), 'positions do not change rendering');
+  }
+});
+
+test('Fit includes distant cards and frames inside the usable rectangle, without covering the toolbar', () => {
+  const boxes = [{x: -20000, y: -40, width: CARD.width, height: 180}, {x: 20000, y: 300, width: CARD.width, height: 120}, {x: -20014, y: -70, width: 20200, height: 240}];
+  for (const view of [{x: 20, y: 54, width: 880, height: 290}, {x: 20, y: 54, width: 250, height: 600}]) {
+    const {zoom, pan} = fitGraph(boxes, view);
+    for (const b of boxes) {
+      assert(b.x * zoom + pan.x >= view.x - 1e-7); assert((b.x + b.width) * zoom + pan.x <= view.x + view.width + 1e-7);
+      assert(b.y * zoom + pan.y >= view.y - 1e-7); assert((b.y + b.height) * zoom + pan.y <= view.y + view.height + 1e-7);
+    }
+  }
+  assert.equal(fitGraph([], {x: 0, y: 0, width: 100, height: 100}), null);
+});
+
+test('a zoomed-out graph grid stays sparse enough to bound canvas work', () => {
+  for (const zoom of [1, .5, .02, .007, 1e-6]) {
+    const step = graphGrid(zoom); assert(step >= 16);
+    const dots = (Math.ceil(1440 / step) + 1) * (Math.ceil(900 / step) + 1);
+    assert(dots <= 91 * 58, 'a distant graph does not produce millions of dot draws');
+  }
 });
 
 test('the page declares every row the editor fills', () => {

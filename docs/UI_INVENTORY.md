@@ -450,14 +450,14 @@ default on Green; the others appear when their parent is on.
 | Unique ground tiles | `knob-groundTiles` | slider; 1 to 16, step 1; Green: 16 |  | world (this browser) | default view | disabled on 3 of 19: This world's ground is one texture, not tiles. Choose another world's Ground pattern to use this setting. | World › Ground › Pattern |
 | Pattern contrast | `knob-groundContrast` | slider; 0 to 2, step 0.05; Green: 1 |  | world (this browser) | default view | active on all 19 | World › Ground › Pattern |
 | Ground patches (damp and dusty tones) | `knob-groundPatch` | slider; 0 to 1, step 0.05; Green: 0 |  | world (this browser) | default view | active on all 19 | World › Ground › Pattern |
-| Patch size (px) | `knob-groundPatchSize` | slider; 60 to 400, step 10; Green: 200 |  | world (this browser) | default view (needs: Ground patches) | disabled on 19 of 19: Enable Ground patches to use this setting. | World › Ground › Pattern |
+| Patch size (px) | `knob-groundPatchSize` | slider; 60 to 400, step 10; Green: 200 |  | world (this browser) | default view (needs: Ground patches) | disabled on 19 of 19: Enable Ground patches to use this setting. | World › World home › Ground |
 | Undulation height | `knob-undulation` | slider; 0 to 16, step 0.5; Green: 0 |  | world (this browser) | default view | active on all 19 | World › Ground › Terrain shape |
 | Undulation size (px) | `knob-undulationScale` | slider; 48 to 400, step 8; Green: 48 |  | world (this browser) | default view (needs: Undulation height) | disabled on 19 of 19: Enable Undulation height to use this setting. | World › Ground › Terrain shape |
 | Undulating share of land | `knob-undulationCover` | slider; 0 to 1, step 0.05; Green: 0.4 |  | world (this browser) | default view (needs: Undulation height) | disabled on 19 of 19: Enable Undulation height to use this setting. | World › Ground › Terrain shape |
 | Undulation in the art | `knob-undulationArt` | slider; 0 to 1, step 0.05; Green: 1 |  | world (this browser) | default view (needs: Undulation height) | disabled on 19 of 19: Enable Undulation height to use this setting. | World › Ground › Terrain shape |
 | Landform face steepness | `knob-faceSteep` | slider; 1 to 4, step 0.1; Green: 1 |  | world (this browser) | default view | active on all 19 | World › Ground › Terrain shape |
 | Scale (px) | `knob-reliefScale` | slider; 8 to 64, step 1; Green: 28 |  | world (this browser) | default view | active on all 19 | World › Ground › Bumps & relief |
-| Strength | `knob-reliefAmount` | slider; 0 to 1.2, step 0.05; Green: 0.25 |  | world (this browser) | default view | active on all 19 | World › Ground › Bumps & relief |
+| Relief strength | `knob-reliefAmount` | slider; 0 to 1.2, step 0.05; Green: 0.25 |  | world (this browser) | default view | active on all 19 | World › World home › Ground |
 | Lumps | `knob-reliefLumps` | slider; 0 to 1, step 0.05; Green: 0.7 |  | world (this browser) | default view | active on all 19 | World › Ground › Bumps & relief |
 | Branching | `knob-reliefBranch` | slider; 0 to 4, step 0.1; Green: 2 |  | world (this browser) | only with "Show fine controls" | active on all 19 | World › Ground › Bumps & relief |
 | Warp (px) | `knob-reliefWarp` | slider; 0 to 24, step 1; Green: 10 |  | world (this browser) | only with "Show fine controls" | active on all 19 | World › Ground › Bumps & relief |
@@ -471,7 +471,7 @@ default on Green; the others appear when their parent is on.
 | Vegetation cover (0 off) | `knob-vegetationCover` | slider; 0 to 2, step 0.05; Green: 0 |  | world (this browser) | default view | active on all 19 | World › Vegetation › Cover |
 | Lushness | `knob-lushness` | slider; -1 to 1, step 0.05; Green: 0 |  | world (this browser) | default view | active on all 19 | World › Vegetation › Cover |
 | Bare soil where cover thins | `knob-soilRim` | slider; 0 to 1, step 0.05; Green: 0 |  | world (this browser) | default view | active on all 19 | World › Vegetation › Cover |
-| Rain (wets channels and hollows, and wears the ground) | `knob-erosionRain` | slider; 0 to 2, step 0.05; Green: 1 |  | world (this browser) | default view | active on all 19 | World › Rain & erosion › Rain & erosion |
+| Rain (wets channels and hollows, and wears the ground) | `knob-erosionRain` | slider; 0 to 2, step 0.05; Green: 1 |  | world (this browser) | default view | active on all 19 | World › World home › Light & weather |
 | Moisture | `knob-wetSwath` | slider; 0 to 1, step 0.05; Green: 0.35 |  | world (this browser) | default view | disabled on 16 of 19: With no rain no ground is wet, so Moisture has nothing to move. Raise Rain to use this setting. | World › Rain & erosion › Rain & erosion |
 | Wet ground: darker and glossy where water lies | `knob-wetGround` | slider; 0 to 1, step 0.05; Green: 0 |  | world (this browser) | default view | active on all 19 | World › Rain & erosion › Rain & erosion |
 | Vegetation relief | `knob-plantRelief` | slider; 0 to 2, step 0.05; Green: 1 |  | world (this browser) | default view (needs: Vegetation cover) | disabled on 18 of 19: Raise Vegetation cover to use this setting. | World › Vegetation › Cover |
@@ -497,8 +497,8 @@ default on Green; the others appear when their parent is on.
 | Rounded fragments (share) | `knob-stoneRound` | slider; 0 to 1, step 0.05; Green: 0 |  | rock type (map file), and the world in this browser | default view (needs: loose-stone Supply, Boulders) | disabled on 12 of 19: Raise loose-stone Supply, Boulders or Cliff debris accumulation, or paint Denser scatter, to shape the stones. | World › Rock types › Stones & debris |
 | Flat fragments (share) | `knob-stoneSlab` | slider; 0 to 1, step 0.05; Green: 0.05 |  | rock type (map file), and the world in this browser | default view (needs: loose-stone Supply, Boulders) | disabled on 12 of 19: Raise loose-stone Supply, Boulders or Cliff debris accumulation, or paint Denser scatter, to shape the stones. | World › Rock types › Stones & debris |
 | Knolls (share of stones that are ground rings around a hollow) | `knob-looseKnoll` | slider; 0 to 1, step 0.05; Green: 0 |  | world (this browser) | default view | active on all 19 | World › Cliffs & stones › Loose stones |
-| Frost (crack depth; above 1 the fine fractures fill in) | `knob-crackSeverity` | slider; 0 to 1.5, step 0.05; Green: 0.6 |  | world (this browser) | default view | active on all 19 | World › Cliffs & stones › Cracks |
-| Block size (px) | `knob-crackSpacing` | slider; 16 to 96, step 2; Green: 40 |  | world (this browser) | default view | active on all 19 | World › Cliffs & stones › Cracks |
+| Crack depth (above 1 the fine fractures fill in) | `knob-crackSeverity` | slider; 0 to 1.5, step 0.05; Green: 0.6 |  | world (this browser) | default view | active on all 19 | World › Rock types › Rock appearance |
+| Crack spacing (px) | `knob-crackSpacing` | slider; 16 to 96, step 2; Green: 40 |  | world (this browser) | default view | active on all 19 | World › Rock types › Cracks & bands |
 | Major cracks | `knob-crackMajor` | slider; 0 to 1, step 0.05; Green: 0.8 |  | world (this browser) | only with "Show fine controls" | active on all 19 | World › Cliffs & stones › Cracks |
 | Minor cracks | `knob-crackMinor` | slider; 0 to 1, step 0.05; Green: 0.75 |  | world (this browser) | only with "Show fine controls" | active on all 19 | World › Cliffs & stones › Cracks |
 | Hairline crazing | `knob-crackHairline` | slider; 0 to 1, step 0.05; Green: 0.6 |  | world (this browser) | only with "Show fine controls" | active on all 19 | World › Cliffs & stones › Cracks |
@@ -524,11 +524,11 @@ default on Green; the others appear when their parent is on.
 | Rock shelf under water (px out) | `knob-shoreShelf` | slider; 0 to 96, step 2; Green: 0 |  | world (this browser) | only with "Show fine controls" | active on all 19 | World › Cliffs & stones › Where rock shows |
 | Extrusion bias: inset to projecting | `knob-faceExtrude` | slider; -1 to 1, step 0.05; Green: 0 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Exposure & relief |
 | Broad bulges and alcoves | `knob-faceMass` | slider; 0 to 3, step 0.05; Green: 2.6 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Exposure & relief |
-| Whole blocks (share of blocks) | `knob-faceWhole` | slider; 0 to 1, step 0.05; Green: 0 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Blocks & joints |
+| Whole blocks (share of blocks) | `knob-faceWhole` | slider; 0 to 1, step 0.05; Green: 0 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Rock appearance |
 | Whole large blocks (share of blocks) | `knob-faceWholeLarge` | slider; 0 to 1, step 0.05; Green: 0 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Blocks & joints |
 | Block regularity (0 scattered, 1 a grid) | `knob-faceRegular` | slider; 0 to 1, step 0.05; Green: 0 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Blocks & joints |
 | Block offsets and tilts | `knob-faceBlock` | slider; 0 to 6, step 0.1; Green: 3 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Blocks & joints |
-| Joint spacing (px) | `knob-faceBlockSize` | slider; 4 to 48, step 1; Green: 7 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Blocks & joints |
+| Block size (px) | `knob-faceBlockSize` | slider; 4 to 48, step 1; Green: 7 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Rock appearance |
 | Block length / width | `knob-faceStretch` | slider; 0.25 to 4, step 0.05; Green: 1 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Blocks & joints |
 | Block height / layer height (blocks are never under 3.5 units tall) | `knob-faceBlockHeight` | slider; 0.25 to 6, step 0.05; Green: 1 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Blocks & joints |
 | Joint tilt from vertical (deg) | `knob-faceJointTilt` | slider; -65 to 65, step 1; Green: 0 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Blocks & joints |
@@ -542,7 +542,7 @@ default on Green; the others appear when their parent is on.
 | Joint orientation from north-south (deg) | `knob-faceLean` | slider; -45 to 45, step 1; Green: 28 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Blocks & joints |
 | Variation between repeated beds | `knob-bedCycleVary` | slider; 0 to 1, step 0.05; Green: 0 |  | rock type (map file), and the world in this browser | default view | disabled on 14 of 19: Add at least two beds to a Rock column section to vary their repetition. | World › Rock types › Layers |
 | Layer waviness | `knob-faceBedVary` | slider; 0 to 3, step 0.05; Green: 1 |  | rock type (map file), and the world in this browser | default view (needs: a rock column) | disabled on 13 of 19: Add a rock column in the Rock column panel to use this setting. | World › Rock types › Layers |
-| Layer thickness (height) | `knob-faceBed` | slider; 2 to 30, step 0.5; Green: 2.5 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Layers |
+| Layer thickness (height) | `knob-faceBed` | slider; 2 to 30, step 0.5; Green: 2.5 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Rock appearance |
 | Hard-layer ledges | `knob-faceLedge` | slider; 0 to 4, step 0.05; Green: 1.2 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Layers |
 | Layer variation length (px) | `knob-faceRun` | slider; 20 to 300, step 5; Green: 90 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Layers |
 | Fold amplitude (height) | `knob-faceFold` | slider; 0 to 48, step 1; Green: 0 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Layers |
@@ -551,10 +551,10 @@ default on Green; the others appear when their parent is on.
 | Fine layer spacing (height units) | `knob-faceLaminaSize` | slider; 6 to 16, step 0.5; Green: 6 |  | rock type (map file), and the world in this browser | default view (needs: Fine layer relief) | disabled on 18 of 19: Enable Fine layer relief to use this setting. | World › Rock types › Layers |
 | Soil-covered terraces | `knob-faceLayers` | slider; 0 to 2, step 0.05; Green: 1 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Layers |
 | Grass on ledges and flat tops | `knob-faceGrass` | slider; 0 to 1, step 0.05; Green: 0.4 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Layers |
-| Weathering: rounded edges, open joints | `knob-faceWear` | slider; 0 to 1, step 0.05; Green: 0.15 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Weathering |
+| Weathering: rounded edges, open joints | `knob-faceWear` | slider; 0 to 1, step 0.05; Green: 0.15 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Rock appearance |
 | Pitting | `knob-faceCrease` | slider; 0 to 6, step 0.1; Green: 1 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Weathering |
 | Pit size (px) | `knob-faceCreaseSize` | slider; 3 to 24, step 1; Green: 6 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Weathering |
-| Scratches and water grooves | `knob-faceScratch` | slider; 0 to 6, step 0.1; Green: 1 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Weathering |
+| Scratches and water grooves | `knob-faceScratch` | slider; 0 to 6, step 0.1; Green: 1 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Rock appearance |
 | Groove spacing (px) | `knob-faceScratchSize` | slider; 3 to 20, step 0.5; Green: 7 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Weathering |
 | Groove length (px) | `knob-faceScratchLength` | slider; 4 to 160, step 2; Green: 50 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Weathering |
 | Groove tilt from vertical (deg) | `knob-faceScratchAngle` | slider; -90 to 90, step 5; Green: 0 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Weathering |
@@ -563,7 +563,7 @@ default on Green; the others appear when their parent is on.
 | Fine detail clustering | `knob-faceDetailPatch` | slider; 0 to 1, step 0.05; Green: 0 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Weathering |
 | Grit relief | `knob-faceGrit` | slider; 0 to 2, step 0.05; Green: 0.5 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Weathering |
 | Grit size (px) | `knob-faceGritSize` | slider; 1 to 6, step 0.1; Green: 1.3 |  | rock type (map file), and the world in this browser | default view (needs: Grit relief, Mineral contrast,) | disabled on 14 of 19: Raise Grit relief, Mineral contrast, or a lit weathered crust to use Grit size. | World › Rock types › Weathering |
-| Runoff exposure | `knob-runoff` | slider; 0 to 2, step 0.05; Green: 0 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Weathering |
+| Runoff exposure | `knob-runoff` | slider; 0 to 2, step 0.05; Green: 0 |  | rock type (map file), and the world in this browser | default view | active on all 19 | World › Rock types › Rock appearance |
 | Catchment variation size (px) | `knob-runoffScale` | slider; 8 to 80, step 2; Green: 24 |  | rock type (map file), and the world in this browser | default view (needs: Runoff exposure) | disabled on 16 of 19: Enable Runoff exposure to use this setting. | World › Rock types › Weathering |
 | Channel concentration | `knob-runoffConcentration` | slider; 0 to 1, step 0.05; Green: 0.65 |  | rock type (map file), and the world in this browser | default view (needs: Runoff exposure) | disabled on 16 of 19: Enable Runoff exposure to use this setting. | World › Rock types › Weathering |
 | Channel incision | `knob-runoffCut` | slider; 0 to 8, step 0.1; Green: 2 |  | rock type (map file), and the world in this browser | default view (needs: Runoff exposure) | disabled on 16 of 19: Enable Runoff exposure to use this setting. | World › Rock types › Weathering |
@@ -587,7 +587,7 @@ default on Green; the others appear when their parent is on.
 | Coast ramp (share of the drawn slope kept) | `knob-coastRamp` | slider; 0.05 to 1, step 0.05; Green: 0.75 |  | world (this browser) | default view | active on all 19 | World › Water & shores › Shore & beach |
 | Beach width (worlds with beaches) | `knob-beachWidth` | slider; 0 to 2, step 0.05; Green: 0.6 |  | world (this browser) | default view | disabled on 17 of 19: This world has no beach of its own. Choose another world's Beach in Colors & base pattern to use this setting. | World › Water & shores › Shore & beach |
 | Sand apron round raised rock (px) | `knob-apron` | slider; 0 to 120, step 2; Green: 0 |  | world (this browser) | default view | active on all 19 | World › Water & shores › Shore & beach |
-| Shallow until depth | `knob-shallowDepth` | slider; 0 to 60, step 1; Green: 24 |  | world (this browser) | default view | active on all 19 | World › Water & shores › Depths & edges |
+| Shallow until depth | `knob-shallowDepth` | slider; 0 to 60, step 1; Green: 24 |  | world (this browser) | default view | active on all 19 | World › World home › Water |
 | Deep from depth | `knob-deepDepth` | slider; 10 to 100, step 1; Green: 60 |  | world (this browser) | default view | active on all 19 | World › Water & shores › Depths & edges |
 | Color depth averaging (px) | `knob-waterSoft` | slider; 0 to 64, step 2; Green: 32 |  | world (this browser) | only with "Show fine controls" | disabled on 4 of 19: The ramp is drawn only where the step is off: choose Ramp in Hard shallow-to-deep step, or give a water stroke a Faded edge, to use this setting. | World › Water & shores › Depths & edges |
 | Crisp waterline (shore to shallow) | `knob-crispShore` | slider; 0 to 1, step 0.05; Green: 1 |  | world (this browser) | default view | active on all 19 | World › Water & shores › Depths & edges |
@@ -670,7 +670,7 @@ default on Green; the others appear when their parent is on.
 | Highlight cap | `knob-lightCap` | slider; 1 to 1.6, step 0.01; Green: 1.13 |  | world (this browser) | default view | active on all 19 | World › Light & shine › Sun & shade |
 | Directional shading kept | `knob-shadeDepth` | slider; 0 to 1, step 0.05; Green: 1 |  | world (this browser) | default view | active on all 19 | World › Light & shine › Sun & shade |
 | Light from the south | `knob-sunTilt` | slider; -1 to 1, step 0.05; Green: 1 |  | world (this browser) | default view | active on all 19 | World › Light & shine › Sun & shade |
-| Sun height (degrees above the horizon) | `knob-sunHeight` | slider; 20 to 75, step 1; Green: 45 |  | world (this browser) | default view | active on all 19 | World › Light & shine › Sun & shade |
+| Sun height (degrees above the horizon) | `knob-sunHeight` | slider; 20 to 75, step 1; Green: 45 |  | world (this browser) | default view | active on all 19 | World › World home › Light & weather |
 | Ambient light | `knob-ambient` | slider; 0 to 0.8, step 0.02; Green: 0.42 |  | world (this browser) | default view | active on all 19 | World › Light & shine › Sun & shade |
 | Shade in creases (gully and valley floors, any facing) | `knob-creaseShade` | slider; 0 to 1, step 0.05; Green: 0 |  | world (this browser) | default view | active on all 19 | World › Light & shine › Sun & shade |
 | Grain streak length (x its width) | `knob-shineStretch` | slider; 1 to 8, step 0.25; Green: 1 |  | world (this browser) | only with "Show fine controls" (needs: a Roughness) | disabled on 9 of 19: Set a Roughness above zero in one of the Shine groups to use this setting. | World › Light & shine › Shine |
@@ -705,8 +705,8 @@ default on Green; the others appear when their parent is on.
 | Rock base color | `` | color; Green: #747474 |  | world (this browser) | default view | all 19 | World › Colors › Colors |
 | Use a base color for Sand | `` | switch; Green: false |  | world (this browser) | default view | all 19 | World › Colors › Colors |
 | Sand base color | `` | color; Green: #757773 |  | world (this browser) | default view | all 19 | World › Colors › Colors |
-| Use a base color for Shallow water | `` | switch; Green: false |  | world (this browser) | default view | all 19 | World › Colors › Colors |
-| Shallow water base color | `` | color; Green: #608afc |  | world (this browser) | default view | all 19 | World › Colors › Colors |
+| Use a base color for Shallow water | `` | switch; Green: false |  | world (this browser) | default view | all 19 | World › World home › Water |
+| Shallow water base color | `` | color; Green: #608afc |  | world (this browser) | default view | all 19 | World › World home › Water |
 | Use a base color for Deep water | `` | switch; Green: false |  | world (this browser) | default view | all 19 | World › Colors › Colors |
 | Deep water base color | `` | color; Green: #264ce2 |  | world (this browser) | default view | all 19 | World › Colors › Colors |
 | Use a base color for Crystal | `` | switch; Green: false |  | world (this browser) | default view | all 19 | World › Colors › Colors |
@@ -721,11 +721,11 @@ default on Green; the others appear when their parent is on.
 | Flower 3 base color | `` | color; Green: #aa78d7 |  | world (this browser) | default view | all 19 | World › Colors › Colors |
 | Use a base color for Flower 4 | `` | switch; Green: false |  | world (this browser) | default view | all 19 | World › Colors › Colors |
 | Flower 4 base color | `` | color; Green: #e1503c |  | world (this browser) | default view | all 19 | World › Colors › Colors |
-| Use a base color for Sun color | `` | switch; Green: false |  | world (this browser) | default view | all 19 | World › Colors › Colors |
-| Sun color base color | `` | color; Green: #ffffff |  | world (this browser) | default view | all 19 | World › Colors › Colors |
-| Use a base color for Sky color | `` | switch; Green: false |  | world (this browser) | default view | all 19 | World › Colors › Colors |
-| Sky color base color | `` | color; Green: #ffffff |  | world (this browser) | default view | all 19 | World › Colors › Colors |
-| Reset colors | `world-reset` | button |  | world (this browser) | default view |  | World › Colors › Colors |
+| Use a base color for Sun color | `` | switch; Green: false |  | world (this browser) | default view | all 19 | World › World home › Light & weather |
+| Sun color base color | `` | color; Green: #ffffff |  | world (this browser) | default view | all 19 | World › World home › Light & weather |
+| Use a base color for Sky color | `` | switch; Green: false |  | world (this browser) | default view | all 19 | World › World home › Light & weather |
+| Sky color base color | `` | color; Green: #ffffff |  | world (this browser) | default view | all 19 | World › World home › Light & weather |
+| Reset | `world-reset` | button |  | world (this browser) | default view |  | World › World home |
 | Material weathering | `material-weathering` | slider; 0 to 100, step 1; Green: 0 | Broken material edges, buried pockets and deposits. Refines after painting. | map file | hidden |  | World › Ground › Legacy (stays hidden) |
 | Deposit spread | `deposit-spread` | slider; 0 to 100, step 1; Green: 65 |  | map file | hidden |  | World › Ground › Legacy (stays hidden) |
 | Find a setting | `world-search` | text | 246 settings · including fine controls | not saved | default view |  | World › World panel header |

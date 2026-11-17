@@ -486,5 +486,8 @@ export function mountSurfacePanel(host) {
   build();
   // show(at, read): the inspector's detail for a pixel already read (the Pick card's Surface door); it reads again after each committed edit.
   // sync(): after a World setting or the map's rock types in use change, the sections follow.
-  return {refresh, sync, show: (at, read) => { reading++; lastAt = at; result.hidden = false; showInspect(read); }};
+  return {refresh, sync, open:openLayer, summary:()=>{
+    const layers=host.surface(),placed=placeAll(layers);
+    return layers.map((layer,i)=>({key:layerKey(layer),name:nameOf(layer),section:placed[i].section,coverage:layer.amount==null&&BUILTIN_SETTINGS[layer.builtin]?'World setting':percent(layer.amount??1),stage:stageOf(layer),index:i})).sort((a,b)=>b.stage-a.stage||b.index-a.index);
+  }, show: (at, read) => { reading++; lastAt = at; result.hidden = false; showInspect(read); }};
 }

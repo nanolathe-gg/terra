@@ -821,7 +821,11 @@ export async function mountMapFeatures(api) {
       outline(p,inBounds(p) && !placements.some(q => overlaps(p,q))?'#b8eef3':'#ff877e');
     }
     starts.forEach((s,i) => {
-      const at=project(gesture?.type==='start' && gesture.index===i && gesture.target?gesture.target:s);
+      const p=gesture?.type==='start' && gesture.index===i && gesture.target?gesture.target:s;
+      // Start positions use clamped TA height bytes: no terrain query is needed
+      // when even the full 0–255 projection cannot put the marker in view.
+      if(view&&(p.x+16<view.x||p.x-16>view.x+view.width||p.z+config.baseHeight/2+16<view.y||p.z-127+config.baseHeight/2-16>view.y+view.height))return;
+      const at=project(p);
       ink.beginPath(); ink.arc(at.x,at.z,12,0,Math.PI*2); ink.fillStyle=mode==='starts' && selectedStart===i?'#ffe69c':'#163240dd'; ink.fill(); ink.lineWidth=2; ink.strokeStyle='#b8eef3'; ink.stroke();
       ink.fillStyle=mode==='starts' && selectedStart===i?'#18221a':'#ffffff'; ink.font='bold 12px sans-serif'; ink.textAlign='center'; ink.textBaseline='middle'; ink.fillText(String(i+1),at.x,at.z);
     });

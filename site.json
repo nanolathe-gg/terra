@@ -68,6 +68,7 @@
     "index.html",
     "sculpt.js",
     "sculpt-save.js",
+    "sculpt-world-kit.js",
     "sculpt-ui.js",
     "sculpt-find.js",
     "sculpt-workspace.js",

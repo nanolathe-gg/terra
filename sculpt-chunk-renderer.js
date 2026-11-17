@@ -125,7 +125,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const levels=options.mipmaps?Math.floor(Math.log2(Math.max(width,height)))+1:1;
     this.track(loaded.texture,label,mipBytes(width,height,images.length,levels,4),'materials');return loaded;
   }
-  number(key,fallback) { return this.variant?.has(key)?Number(this.variant.get(key)):fallback; }
+  number(key,fallback) { const value=this.variant?.get(key);return value==null?fallback:Number(value); }
   // The shaders bound all neighbourhoods. Bake relief noise is a
   // function of the queried point, not walks through adjacent baked pixels.
   // Only height/mask/weather support extends the bake's field input apron.
@@ -603,7 +603,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   // caller must count its retained bitmap/canvas bytes separately from stats.
   // H6b: options.feed (the GPU shape fields' buffers and the Time pass's, see sculpt.js gpuFeedSource) makes the chunk's textures by a compute pass
   // in place of the CPU read and `upload`; the request then carries no fields, only the chunk's rectangle.
-  async renderChunk(request,{feed=null,scale=1,deferCompletion=false,preview=false,deferPipelines=false,fastRaster=false,pixelScale=scale,...options}={}) {   // feed rides in the options so wrappers that forward (request, options) keep it
+  async renderChunk(request,{feed=null,scale=1,deferCompletion=false,preview=false,deferPipelines=false,fastRaster=false,pixelScale=scale,voxelScale=scale,...options}={}) {   // feed rides in the options so wrappers that forward (request, options) keep it
     if(this.disposed)throw new Error('nanolathe: chunk renderer is disposed');
     if(this.busy)throw new Error('nanolathe: chunk renderer is already rendering');
     this._busy=true;this.gpuFlags=false;   // set by a fed bake whose flags the GPU writes
@@ -622,7 +622,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       this.fastRaster=Boolean(fastRaster);
       const dimensions=await this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale,pixelScale);
       if(feed)await this.feedFromGpu(request,region,dimensions,feed,passes);else this.upload(request,region,dimensions,planes);
-      this.activeRegion=region;this.voxelScale=scale;
+      this.activeRegion=region;this.voxelScale=voxelScale;
       // An export draws the world as saved: the Surface section's design view (hidden layers, its coverage preview) is set aside for its tiles.
       const design=request.exportArt?this.suspendDesignView():null;
       let result;
