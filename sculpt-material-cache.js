@@ -46,7 +46,7 @@ export class MaterialCache {
     this.meanTexture = this.texture(this.meanTexture, 'material mean color', [1, 1, count], 'rgba32float', read | GPUTextureUsage.COPY_SRC, count * 16);
     for (const t of [this.fieldTexture, this.colorTexture, this.shineTexture, this.meanTexture]) r.worldResource?.(t);
     if (r.resources) r.fixedBytes = [...r.resources.values()].filter(v => v.kind === 'materials' || v.kind === 'shared').reduce((n, v) => n + v.bytes, 0);
-    r.bindGroups = {}; this.keys.clear(); this.colorKeys.clear();
+    r.bindGroups = {}; this.keys.clear(); this.colorKeys.clear(); this.synced = null;
   }
   pipeline(program, thumbnails = false) {
     const id = (thumbnails ? 'thumbnails ' : '') + programKey(program);
@@ -128,7 +128,10 @@ export class MaterialCache {
     if (!staged) this.releaseStages();
   }
   // Generates what changed. Called inside the draw cycle, so a fast drag never queues more than one run a frame.
+  // Every tile draw and color batch calls it: the same materials (the renderer's list is replaced, never changed in place, by setMaterials)
+  // at the same pool on an unchanged cache have nothing to generate, so that call returns at once (0.4-0.5 ms a call with Green's 12).
   sync(pool, materials) {
+    if (this.synced === materials && this.pool === pool) return;
     this.prepare(pool, materials);
     const r = this.renderer, device = r.device, data = new ArrayBuffer(PROGRAM_BYTES * Math.max(1, this.entries.length)), view = new DataView(data), changed = [];
     for (const e of this.entries) {
@@ -156,6 +159,7 @@ export class MaterialCache {
     }
     this.reduce(pool, changed.map(([e]) => e.layer));
     if (changed.length) this.readMeans();
+    this.synced = materials;   // only once the whole sync ran: a throw leaves the next call to try again
   }
   // The mean color each slot's material is drawn in, read back after a regeneration (the renderer's drawnMeans; the editor's color pickers
   // show it). Asynchronous: a read overtaken by a newer one is dropped.
