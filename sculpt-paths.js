@@ -2,6 +2,30 @@
 // root moves, while separate paths never acquire an implicit connecting edge.
 export const shapePaths=n=>n.paths??(n.points?.length?[n.points.map((_,i)=>i)]:[]);
 export const clonePaths=n=>n.paths?.map(path=>path.slice());
+// Whether two shapes' paths come within `gap` of each other. Each argument is a list of polylines ([{x, y}, ...]; one point is a click). The
+// nearest points of every two segments count, so paths that cross are 0 apart and a near miss is as far apart as it looks.
+export function pathsWithin(a, b, gap) {
+  const box = path => path.reduce((r, p) => ({x0: Math.min(r.x0, p.x), y0: Math.min(r.y0, p.y), x1: Math.max(r.x1, p.x), y1: Math.max(r.y1, p.y)}), {x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity});
+  for (const pa of a) {
+    if (!pa.length) continue;
+    const ba = box(pa);
+    for (const pb of b) {
+      if (!pb.length) continue;
+      const bb = box(pb);
+      if (ba.x0 - gap > bb.x1 || bb.x0 - gap > ba.x1 || ba.y0 - gap > bb.y1 || bb.y0 - gap > ba.y1) continue;
+      for (let i = 0; i < Math.max(1, pa.length - 1); i++) for (let j = 0; j < Math.max(1, pb.length - 1); j++)
+        if (segmentGap(pa[i], pa[Math.min(i + 1, pa.length - 1)], pb[j], pb[Math.min(j + 1, pb.length - 1)]) <= gap) return true;
+    }
+  }
+  return false;
+}
+const pointToSegment = (p, a, b) => { const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy, t = l2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0; return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t); };
+const turn = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+function segmentGap(a, b, c, d) {
+  const d1 = turn(c, d, a), d2 = turn(c, d, b), d3 = turn(a, b, c), d4 = turn(a, b, d);
+  if (d1 * d2 < 0 && d3 * d4 < 0) return 0;
+  return Math.min(pointToSegment(a, c, d), pointToSegment(b, c, d), pointToSegment(c, a, b), pointToSegment(d, a, b));
+}
 // Ramer–Douglas–Peucker: keep endpoints and bends within tolerance of the
 // sampled polyline. Return original vertices without changing the input.
 // The iterative stack also handles long strokes without recursive calls.

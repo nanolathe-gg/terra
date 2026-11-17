@@ -230,6 +230,16 @@ export function strokeRock(n,rocks){
  const k=Math.round(n?.params?.rockPreset??-1);
  return k===0||rocks.some(r=>r.slot===k)?k:-1;
 }
+// The rock types a stroke on Rock beneath (at `index`; nodes.length for one not yet drawn) can show: a stroke claims its slot on the cells
+// it shapes and Rock beneath claims nothing, so each cell keeps the claim of the last shown landform before it that reached the cell, and an
+// unclaimed cell is the world's rock (engine-common.wgsl rockSlotAt). `reaches(n)` says whether an earlier stroke may reach this one's
+// cells; a box test that errs toward yes keeps the answer honest. One slot is what the stroke shows everywhere; more than one, it varies.
+// (Reset ground returns a cell to the world's rock, which is always in the list.)
+export function rocksBeneath(nodes,index,rocks,reaches){
+ const slots=new Set([0]);
+ for(let i=0;i<Math.min(index,nodes.length);i++){const n=nodes[i];if(n?.kind!=='landform'||n.hidden)continue;const k=strokeRock(n,rocks);if(k>0&&reaches(n))slots.add(k);}
+ return [...slots];
+}
 // Strokes whose choice the list does not hold go to Rock beneath (a stroke carried from another map, a preset deleted elsewhere).
 export const keepStrokeRocks=(nodes,rocks)=>nodes.map(n=>n.params&&n.params.rockPreset!==undefined&&strokeRock(n,rocks)!==Math.round(n.params.rockPreset)?{...n,params:{...n.params,rockPreset:-1}}:n);
 // The slots in use: those a shown landform stroke chooses (slot 0 needs no slot of the table). Only these reach the renderer (setRocks): a

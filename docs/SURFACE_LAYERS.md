@@ -48,6 +48,10 @@ the color below (a tint, a recolor, a darkening): they cannot be byte-identical 
 at fixed points between layers until a later phase replaces them. **Reads** lists what later steps take
 from a step.
 
+The **Worlds (gate)** column is the phase-1 account. What each built-in layer needs to draw today (a World setting above 0, a role material,
+the world's beach, or Surface paint) is data, `SURFACE_NEEDS` in `sculpt-material-model.js`, checked against `engine-frag.wgsl` and
+`sculpt-renderer.js`; World › Surface sorts its list by it ("Drawing in this world", "Only where painted", "Cannot draw … yet").
+
 | # | Step | Kind | Worlds (gate) | Reads |
 | --- | --- | --- | --- | --- |
 | 1 | Ground material (own or a stroke's) | base | all | |
@@ -134,6 +138,11 @@ Each phase lands on its own. Rule 7: a phase becomes every world's behavior or d
        Bands into this section's Built-in settings. Their layer rows show no Amount, which would repeat the strength.
        Highland ground also takes no rule or edge (they would move its color but not the relief and bed cap its share sets);
        a list's stored Amount, rule or edge for them is dropped.
+   - Branch `ux-round3` (replaces the stage headings): the list is three sections by what draws, from facts read directly
+     (`SURFACE_NEEDS`, a layer's Coverage and material): Drawing in this world, Only where painted (Surface paint's rock, snow and
+     moss) and Cannot draw in the world yet, each idle layer with its reason and a door to the setting that turns it on. Rows keep
+     draw order; a row moves among its stage's layers in its section, landing beside the one it passes. A closed row says where
+     the layer lies in words from its rule, with its Coverage as the editor's slider; Add a layer is a gallery of the presets.
    - Not done, on purpose: turning the highland ground and base band into rules. `highShare` also sets the ground's art relief
      and caps the beds outside the layer stages, where facts are not computed, so a rule would split one surface into two
      placements. The rock face's rule belongs to each rock type (Rock types › Exposure & relief), not to the world: a world rule
@@ -209,8 +218,9 @@ Built (each a commit; the measurements are in their messages):
   covers 70%, 66.5%, 65.4% (the pattern is near even, a little under at patch sizes).
 - **Design view**: the layer preview is stripes over the finished picture, magenta where the layer shows and cyan where a later layer
   covers it, with a checkbox; each row can be hidden or shown alone (Solo), a view of the page only that an export sets aside.
-- **Inspector**: Inspect a pixel, then click the map: the color pass records the layers that drew that pixel (row, coverage, in
-  order), its color, its ground and the facts; the panel lists them top first with their materials and what of each shows.
+- **Inspector**: Pick on the map (the Pick tool, key I) and Surface in its card: the color pass records the layers that drew that
+  pixel (row, coverage, in order), its color, its ground, its rock type and how much rock shows, and the facts; the panel lists them
+  top first with their materials and what of each shows. The Pick card itself names the shape, rock type and materials there.
 - **Naming**: each row shows its material; the material editor names the layers a copy draws.
 - **World-kept materials**: the world keeps every role material and layer material it changed, as its ground and water.
 - **A material's Color** (`recolorMaterial`): moves every color step (the gradients and color constants the color is made of,

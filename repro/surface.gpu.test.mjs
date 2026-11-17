@@ -69,3 +69,28 @@ test('surface layers: a rule limits a built-in; a material layer draws where its
     assert.equal(changed(base.pixels, ghost.pixels), 0, 'a layer whose material the map lacks draws nothing');
   } finally { writeFileSync(file, original); }
 });
+
+// The inspector's rock (readProbe rock): the rock type whose numbers a pixel read, and how much of its rock shows there, which the exposure
+// view draws as gray. Two mesas: the left on the world's rock, the right on Greenstone (Green's map rock type in slot 3).
+test('the inspector reads the rock type a pixel drew and how much of its rock shows', {timeout: 600000}, async () => {
+  await openHost({configs});
+  writeFileSync(file, original);
+  const two = {biome: 'green', ground: true, query: '', strokes: [['landform', [[90, 256], [170, 256]], {card: {diameter: 200, elevation: 160}}],
+    ['landform', [[340, 256], [420, 256]], {card: {diameter: 200, elevation: 160, rockPreset: 3}}]]};
+  const s = await openScene(two, 'biome=green&mapX=4&mapY=4&view=exposure');
+  try {
+    await s.fields.ready();
+    const shown = await renderWindow(s, {x: 0, y: 0, width: 512, height: 512});
+    const find = (x0, x1, fits) => { for (let y = 0; y < 512; y++) for (let x = x0; x < x1; x++) if (fits(shown[(y * 512 + x) * 4])) return {x, y, v: shown[(y * 512 + x) * 4] / 255}; return null; };
+    // The probe is drawn in the same 256 px tile the window drew the pixel in.
+    const read = async at => { s.renderer.setProbe(at); try { await renderWindow(s, {x: at.x & ~255, y: at.y & ~255, width: 256, height: 256}); return await s.renderer.readProbe(); } finally { s.renderer.setProbe(null); } };
+    for (const [x0, x1, slot] of [[0, 256, 0], [256, 512, 3]]) {
+      const face = find(x0, x1, v => v >= 250), plain = find(x0, x1, v => v === 0);
+      assert.ok(face && plain, 'each half holds a rock face and level ground');
+      const onFace = await read(face), onPlain = await read(plain);
+      assert.equal(onFace.rock.slot, slot, `the face at ${face.x}, ${face.y} reads rock type ${slot}`);
+      assert.ok(Math.abs(onFace.rock.share - face.v) <= 1 / 255, `its rock's share is what the exposure view draws (${onFace.rock.share} against ${face.v})`);
+      assert.ok(onPlain.rock.share < .01, `no rock shows on level ground at ${plain.x}, ${plain.y} (${onPlain.rock.share})`);
+    }
+  } finally { s.dispose(); }
+});

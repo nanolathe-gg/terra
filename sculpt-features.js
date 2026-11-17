@@ -712,6 +712,7 @@ export async function mountMapFeatures(api) {
   canvas.addEventListener('pointerdown',event => {
     if (!mode) return;
     if (gesture) { stop(event); return; }
+    if (event.altKey && event.button===0) return;   // Alt-click is Pick's, from any tool (sculpt-canvas.js passes it to sculpt.js pickHere)
     // A pan that starts in the terrain handler stays there through release,
     // even if Space is released before the pointer. Do not strand its capture.
     if (space || event.button===1) { panPointers.add(event.pointerId); return; }
