@@ -2646,7 +2646,8 @@ function mountRockPanel() {
 }
 // A world row's change: address, world store, panel and renderer settings, then
 // the shape or Time work requested by the shared applyKnob operation.
-const pendingWorldAddress=new Map();let worldStoreDirty=false,worldPanelDirty=false,worldCheckpoint=false;
+// worldNodesChanged: an undulation row edited the node list (its ground node), so the undo step holds the nodes, not only the map's data.
+const pendingWorldAddress=new Map();let worldStoreDirty=false,worldPanelDirty=false,worldCheckpoint=false,worldNodesChanged=false;
 const worldInputQueue=createWorldInputQueue({apply:applyWorldInputs,commit:commitWorldInputs});
 function setKnob(key,value) { worldInputQueue.put('knob:0:'+key,{type:'knob',slot:0,key,value}); }
 function setWorldColor(key,value) { worldInputQueue.put('color:'+key,{type:'color',key,value}); }
@@ -2668,8 +2669,9 @@ function applyWorldInputs(batch) {
       mapRocks=setRock(mapRocks,slot,{knobs:{...rock.knobs,[key]:Number(value)},column:rock.column});presets=worldCheckpoint=true;continue;
     }
     const next=applyKnob({key,value,settings:experiment,renderer,nodes,seed,sync:false});nexts.push(next);reload ||= Boolean(next.reload);
+    if(next.inserted!==undefined)nodesInserted(next.inserted);
     activeWorld().knobs[key]=String(value);pendingWorldAddress.set(key,String(value));worldStoreDirty=true;
-    worldPanelDirty ||= key==='strata';worldCheckpoint ||= !input.restore;
+    worldPanelDirty ||= key==='strata';worldCheckpoint ||= !input.restore;worldNodesChanged ||= !input.restore&&Boolean(next.checkpoint);
   }
   if(reload){commitWorldInputs();location.reload();return;}
   const local=presets?syncRocks({defer:true}):null,onlyPresets=batch.every(input=>input.slot>0);
@@ -2690,8 +2692,17 @@ function commitWorldInputs() {
   if(worldStoreDirty){worldStoreDirty=false;saveWorlds();}
   if(worldPanelDirty){worldPanelDirty=false;buildWorldPanel();}
   syncWorldControls();updateControls();surfacePanel?.sync();   // World › Surface's sections follow the settings that turn layers on
-  if(worldCheckpoint){worldCheckpoint=false;checkpoint(true);}
-  persistLater();
+  if(worldCheckpoint){worldCheckpoint=false;checkpoint(!worldNodesChanged);}
+  worldNodesChanged=false;persistLater();
+}
+// A node put in the list at index `at` (Undulation height turning on puts the ground node first): the selection and a pending replay keep naming
+// the same shapes, so the card and the next edit stay on the shape the artist selected.
+function nodesInserted(at) {
+  const shift=i => i>=at?i+1:i;
+  if(selected>=0)selected=shift(selected);
+  alsoSelected=alsoSelected.map(shift);
+  if(pendingEval>=0)pendingEval=Math.min(pendingEval,at);
+  renderLayers();
 }
 // Values must reach the model before a different action reads its recipe.
 document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-knob],.world-colors'))worldInputQueue.flush();},true);

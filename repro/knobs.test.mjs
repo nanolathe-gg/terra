@@ -2,7 +2,7 @@
 // asks the host to run again, the Colors panel's rows and picks, and the panel facts a stroke's water choices turn on.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {KNOBS, applyKnob, createWorldInputQueue, colorRows, pickWorldColor, strokeWaterPicks, worldPanelValues, waterTone} from '../sculpt-knobs.js';
+import {KNOBS, applyKnob, createWorldInputQueue, colorRows, pickWorldColor, strokeWaterPicks, worldPanelValues, waterTone, groundDefaults} from '../sculpt-knobs.js';
 
 const renderer = () => ({variant: new Map(), applied: 0, applyKnobs() { this.applied++; }, transitionBody: false, groundTiled: false});
 
@@ -29,8 +29,17 @@ test('Undulation height puts a ground node first on a map without one, and only 
   const settings = new URLSearchParams(), r = renderer(), nodes = [{kind: 'landform', points: []}];
   assert.deepEqual(applyKnob({key: 'undulation', value: '0', settings, renderer: r, nodes, seed: 2701}), {});
   assert.equal(nodes.length, 1);
-  assert.deepEqual(applyKnob({key: 'undulation', value: '6', settings, renderer: r, nodes, seed: 2701}), {evaluate: 0, checkpoint: true, weather: true});
-  assert.deepEqual(nodes[0], {kind: 'ground', amplitude: 6, wavelength: 160, art: 1, seed: 2701 ^ 0x9e37});
+  // `inserted` tells the host every later node moved up one place (sculpt.js nodesInserted keeps the selection on its shape).
+  assert.deepEqual(applyKnob({key: 'undulation', value: '6', settings, renderer: r, nodes, seed: 2701}), {evaluate: 0, checkpoint: true, weather: true, inserted: 0});
+  assert.deepEqual(nodes[0], {kind: 'ground', amplitude: 6, wavelength: 200, coverage: .45, art: 1, seed: 2701 ^ 0x9e37});
+  // The new node is the world's ground, as a reload makes it (groundDefaults): Green's Undulation size 48 and cover 0.4.
+  const green = new URLSearchParams('undulationScale=48&undulationCover=0.4'), own = [{kind: 'landform', points: []}];
+  applyKnob({key: 'undulation', value: '4', settings: green, renderer: r, nodes: own, seed: 2701});
+  assert.deepEqual(own[0], {kind: 'ground', ...groundDefaults(green), seed: 2701 ^ 0x9e37});
+  assert.deepEqual([own[0].wavelength, own[0].coverage, own[0].amplitude], [48, .4, 4]);
+  // Once there, the rows edit it in place and insert nothing.
+  assert.equal(applyKnob({key: 'undulation', value: '5', settings: green, renderer: r, nodes: own, seed: 2701}).inserted, undefined);
+  assert.equal(own.length, 2);
   // A new ground node takes the page's Undulation in the art.
   const kept = new URLSearchParams('undulationArt=.25'), more = [];
   applyKnob({key: 'undulation', value: '4', settings: kept, renderer: r, nodes: more, seed: 2701});
