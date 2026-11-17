@@ -93,6 +93,27 @@ Both implementers were asked at 22:15 to commit what is proven and leave a statu
 `agent-ux3-find/STATUS-materials-agent.md` (under `/private/tmp/nanolathe-map-editor/`). Read those first if they exist; if one is
 missing, that implementer was cut off before writing it.
 
+**A, update 22:45: the step 2b implementer stopped and handed back.** Its servers and Chrome are stopped. State:
+- The read race fix is **uncommitted** in `sculpt-canvas.js` (`git diff` in the `ux-round3` worktree) and **unproven**. What it
+  does: a read waits only for the draw in flight and queued World inputs, then holds the renderer as a frame does; the frame's
+  plan loops step aside at the next tile for a waiting read; the read's bake leaves the preview lattice as it found it; it
+  retries when pipelines are compiling and once on "already rendering". This is wider than the brief (it touches the frame's
+  plan loops), so read it against "no change to what an ordinary draw does" before keeping it, and run the engine tier if kept.
+- The race is real and reproduced before the fix: a read fired about 1 s after an edit (as the ring bake starts), 40 reads per
+  map, gave 4 "already rendering" errors on 4 × 4 (thrown from the frame's own bake, which shows the red error banner) plus one
+  "Cannot read properties of null (reading '0')", and 13 errors on 8 × 8. After the fix: 0 errors in 7 runs (280 reads), longest
+  wait 146 ms; **but one post-fix 4 × 4 run had 9 errors of unknown origin**, not seen again in three runs that captured sources.
+  That is why it is not committed. Not run after the fix: the broad loop (reads right after a shape move, undo, recolor,
+  pan/zoom) and the browser smoke. Before the fix the broad loop had 0 errors in 80 reads on each map, longest wait 2.1 s and 3.9 s.
+- So the race is a **landing blocker for Pick as it stands**: the error banner can show on main's ring bake a second after an
+  edit if a pick lands then. Finish this fix (or a narrower one) and prove it before landing.
+- Zhon timing: **not started**, no temporary worktree was made.
+- Seen in passing, not from this work: "preview block does not fit the terrain memory budget" when zooming to 2× at a 512 MiB
+  budget (once at 0.5× with 1024 MiB). Check whether main does the same before reporting it to the owner.
+- Scripts and outputs: `agent-ux3/scratch/` (`cdp.mjs`, `race2.mjs` the targeted loop, `stress.mjs` the broad loop,
+  `stress-*-before.txt`); status file `agent-ux3/STATUS-surface-agent.md`.
+The original brief follows for reference.
+
 **A. `ux-round3` worktree: Pick's read race, and a Zhon timing question.** At the time of writing `sculpt-canvas.js` had
 uncommitted edits. Look at `git status` and `git log 12170ed6..HEAD` first.
 
