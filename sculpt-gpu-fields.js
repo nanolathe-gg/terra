@@ -1571,20 +1571,25 @@ export function createPagedFields(opts) {
     maskKeys.forEach((k, m) => { const out = new Int8Array(n); for (let i = 0; i < n; i++) { const word = masks[i * 7 + (m >> 2)]; out[i] = (word << (24 - (m & 3) * 8)) >> 24; } fields[k] = out; });
     return {fields, maskPlanes: maskKeys.map(k => fields[k]), gridWidth: w, gridHeight: h, gridSpacing: spacing, gridOrigin: [rect.x0 * spacing, rect.y0 * spacing], worldSize, worldGrid, revision, bytes: n * (4 * PLANES + maskKeys.length), rect: worldRect(rect)};
   };
-  async function readRect(rect, {weather = true} = {}) {
+  // heights: only the weathered height (the export's corners and passability, sculpt-map.js sampleField): the h plane, and with weather
+  // the r plane and the Time heights its blend reads, are copied back; no other plane or mask. The same arithmetic, so the same bytes.
+  async function readRect(rect, {weather = true, heights = false} = {}) {
     const wantWeather = weather && Boolean(time), lease = await prepareRect(rect, wantWeather);
     try {
       const passes = await feedPasses(device()), gw = rect.x1 - rect.x0 + 1, gh = rect.y1 - rect.y0 + 1, n = gw * gh, set = makeSet(n, 'read'), d = device();
       const weatherRevB=wantWeather?Math.min(...lease.pages.map(pg=>pg.weather?.revB??-1)):time?.revB;
       const enc = d.createCommandEncoder({label: 'read rect'}), tmp = encodeGather(enc, passes, rect, set, wantWeather);
-      const stage = (b, bytes) => { const s = d.createBuffer({label: 'read stage', size: Math.max(16, bytes), usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST}); enc.copyBufferToBuffer(b, 0, s, 0, bytes); return s; };
-      const sF = stage(set.F, n * 4 * PLANES), sM = stage(set.Mk, n * 28), sW = wantWeather ? stage(set.W, n * 8) : null;
+      const stage = (b, bytes, from = 0) => { const s = d.createBuffer({label: 'read stage', size: Math.max(16, bytes), usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST}); enc.copyBufferToBuffer(b, from, s, 0, bytes); return s; };
+      const sF = stage(set.F, heights ? n * 4 : n * 4 * PLANES), sR = heights && wantWeather ? stage(set.F, n * 4, 2 * n * 4) : null;
+      const sM = heights ? null : stage(set.Mk, n * 28), sW = wantWeather ? stage(set.W, n * 8) : null, staged = [sF, sR, sM, sW].filter(Boolean);
       d.queue.submit([enc.finish()]); lease.release();
-      await Promise.all([sF, sM, sW].filter(Boolean).map(b => b.mapAsync(GPUMapMode.READ)));
-      const planes = new Float32Array(sF.getMappedRange().slice(0)), masks = new Uint32Array(sM.getMappedRange().slice(0)), wt = sW ? new Float32Array(sW.getMappedRange().slice(0)) : null;
-      [sF, sM, sW].forEach(b => b?.destroy()); set.destroy(); tmp.forEach(b => b.destroy());
+      await Promise.all(staged.map(b => b.mapAsync(GPUMapMode.READ)));
+      const planes = new Float32Array(sF.getMappedRange().slice(0)), masks = sM ? new Uint32Array(sM.getMappedRange().slice(0)) : null, wt = sW ? new Float32Array(sW.getMappedRange().slice(0)) : null;
+      const route = sR ? new Float32Array(sR.getMappedRange().slice(0)) : wt ? planes.subarray(2 * n, 3 * n) : null;
+      staged.forEach(b => b.destroy()); set.destroy(); tmp.forEach(b => b.destroy());
       let blend = null;
-      if (wt) { blend = new Float32Array(n); const base = wt.subarray(0, n), e = wt.subarray(n); for (let i = 0; i < n; i++) { const h = planes[i]; blend[i] = h + (e[i] - base[i]) * (1 - smooth(0, 10, Math.abs(h - base[i]))) * (1 - planes[2 * n + i]); } }
+      if (wt) { blend = new Float32Array(n); const base = wt.subarray(0, n), e = wt.subarray(n); for (let i = 0; i < n; i++) { const h = planes[i]; blend[i] = h + (e[i] - base[i]) * (1 - smooth(0, 10, Math.abs(h - base[i]))) * (1 - route[i]); } }
+      if (heights) return {fields: {h: blend ?? planes}, gridWidth: gw, gridHeight: gh, gridSpacing: spacing, gridOrigin: [rect.x0 * spacing, rect.y0 * spacing], worldSize, worldGrid, revision, bytes: n * 4, rect: worldRect(rect), weatherRevB};
       return {...cropFrom(rect, planes, masks, blend),weatherRevB};
     } finally { lease.release(); }
   }

@@ -978,14 +978,14 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // while lazy tiles are refining.
   async function sampleHeights(signal){
     await idle();
-    return cellHeights(map,async req=>{const r=await(api.readAsync?api.readAsync(req,signal):api.read(req));checkHeap(r);return r;},{signal,step:async()=>{metrics();await tick();}});
+    return cellHeights(map,async req=>{const r=await((api.readHeights??api.read)(req));checkHeap(r);return r;},{signal,step:async()=>{metrics();await tick();}});
   }
   async function* sampleHeightTiles(signal){
     let v=state();
     const priority=t=>{const r={x:t.x*16,y:t.z*16,width:t.width*16,height:t.height*16};return(intersects(r,v)?0:map.width+map.height)+Math.hypot(r.x+r.width/2-v.x-v.width/2,r.y+r.height/2-v.y-v.height/2);};
     // Regional reads await only their own canonical pages. Do not wait for
     // canvas.idle(): useful access colors can precede the remaining art bakes.
-    for await(const tile of cellHeightTiles(map,async req=>{const r=await(api.readAsync?api.readAsync(req,signal):api.read(req));checkHeap(r);return r;},{signal,priority})){
+    for await(const tile of cellHeightTiles(map,async req=>{const r=await((api.readHeights??api.read)(req));checkHeap(r);return r;},{signal,priority})){
       yield tile;metrics();await tick();v=state();
     }
   }
@@ -1002,7 +1002,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // The export's own numbers for one feature: an anchor cell's four corner bytes, sampled as sampleHeights samples them, and a
   // rectangle of export art. Either answers null when the scene changed while it was read.
   async function exportCorners(x,z){
-    const seq=serial,r=await(api.readAsync?api.readAsync({x:x*16,y:z*16,width:16,height:16}):api.read({x:x*16,y:z*16,width:16,height:16}));checkHeap(r);
+    const seq=serial,r=await((api.readHeights??api.read)({x:x*16,y:z*16,width:16,height:16}));checkHeap(r);
     if(changedSince(seq,{x:x*16-16,y:z*16-16,width:48,height:48}))return null;
     return [[0,0],[1,0],[0,1],[1,1]].map(([dx,dz])=>Math.round(clamp(sampleField(r,(x+dx)*16,(z+dz)*16),0,255)));
   }
