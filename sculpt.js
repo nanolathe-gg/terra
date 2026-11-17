@@ -5,9 +5,9 @@ import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
-import {materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
+import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
-import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
+import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
 import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
@@ -128,6 +128,12 @@ function buildShapeOptions() {
   for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
 }
 let toolSettings={};
+// The card's Rock row adding a rock type (syncRockChoices' "add:" choices): added first, so the row's own input handler gives the shape the new slot, and
+// its change handler's checkpoint holds both in one undo step.
+document.addEventListener('input',event => {
+  const select=event.target;if(select.id!=='lf-rock'||!select.value.startsWith('add:'))return;
+  try{const slot=addRockType(select.value.slice(4));select.value=String(slot);if(selected<0)checkpoint(true);}catch(err){status(err.message);select.value='-1';}
+},true);
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 // Rounded authored knots preserve a long shoulder and a short exposed face.
 // Zero slope at the crown avoids the knife edge of a skewed power-law dome.
@@ -180,6 +186,10 @@ function buildToolbar() {
   }));
   // A toolbar with no water tool (a world without water) shows no Water group.
   $('water-tools').closest('.tool-group').hidden=!shapeTools().some(t => t.group==='water');
+  // The shape card's Look: the same tools, by group (#tool-look).
+  const look=$('tool-look'),value=look.value,group=(label,list) => { const g=document.createElement('optgroup'); g.label=label; g.append(...list.map(t => new Option(t.label,t.id))); return g; };
+  look.replaceChildren(...[['Land',t => t.group!=='water' && !t.card],['Water',t => t.group==='water' && !t.card],['This map’s tools',t => t.card]].map(([label,test]) => group(label,shapeTools().filter(test))).filter(g => g.childElementCount));
+  look.value=value;
 }
 // The map's tools replaced (Save as tool, Delete, undo, a load or a scene): the toolbar and the cards follow, and a selected tool that is gone gives way to
 // Landform. `fresh` gives every map tool its own card again (another map's tools may have had these ids).
@@ -314,7 +324,8 @@ function updateControls() {
   $('material-weathering-value').textContent=$('material-weathering').value+'%';
   $('deposit-spread-value').textContent=$('deposit-spread').value+'%';
   $('transition-detail-value').textContent=$('transition-detail').value+'%';
-  { const id=tool==='move'&&nodes[selected]?.params?strokeTool(nodes[selected],ids):entry; syncToolStyle(id); $('tool-style').value=toolSettings[id]?.preset||'custom'; }
+  { const id=tool==='move'&&nodes[selected]?.params?strokeTool(nodes[selected],ids):entry; syncToolStyle(id); $('tool-style').value=toolSettings[id]?.preset||'custom';
+    $('tool-look-control').hidden=!toolById(id); if (toolById(id)) $('tool-look').value=id; }
   $('tool-help').textContent=toolById(entry)?.card?`Draw a landform with the settings, curves and rock of ${toolLabel(entry)}, a tool saved in this map. Change any setting below.`:toolHelpLine(entry)||'';
   { const can=ready && resettable(); $('reset-strokes').disabled=!can; $('reset-strokes').title=can?'':'Draw a shape first: there is nothing to reset.'; }
   $('undo').disabled=!ready || Boolean(stroke||moving) || historyIndex<=0;
@@ -699,8 +710,18 @@ function syncMaterials() {
   const used=materialsInUse(nodes,mapMaterials,mapRocks),key=JSON.stringify(used);
   if (key===materialUseKey) return;
   // Past the cache budget (sculpt-materials.js materialCacheUsage) the renderer keeps the materials it holds and the status line says why.
-  try { renderer.setMaterials(new Map(used.map(m=>[m.slot,m]))); } catch (error) { status(error.message); return; }
-  materialUseKey=key; worldChanged({stage:'C',world:false}); schedule();
+  let stage; try { stage=setRendererMaterials(new Map(used.map(m=>[m.slot,m]))); } catch (error) { status(error.message); return; }
+  materialUseKey=key; worldChanged({stage,world:false}); schedule();
+}
+// Hands the renderer its materials and says the stage the change reaches: C when the cache's layers or a material's art height change (the
+// bake, the geometry and the solid read them: engine-common.wgsl materialRelief, sculpt-materials.js materialHeightKey), else the earliest
+// stage that reads a uniform it changed, at least F (the material's colors are the color pass's alone).
+function setRendererMaterials(next) {
+  const before=renderer.grounds??new Map(),uniform=renderer.uniformStage(()=>renderer.setMaterials(next)),after=renderer.grounds;
+  // A slot's cache layers and the world surfaces it draws (its roles: the solid reads which slot is the rock's, and no scan covers it).
+  const layers=list=>[...list].sort(([a],[b])=>a-b).map(([slot,m])=>[slot,...materialStates(m),...Object.keys(m).filter(k=>/^world[A-Z]/.test(k)&&m[k]).sort(),m.worldLayer??''].join(':')).join(',');
+  const height=layers(before)===layers(after)&&[...after].every(([slot,m])=>materialHeightKey(m)===materialHeightKey(before.get(slot)));
+  return [height?null:'C',uniform,'F'].filter(Boolean).sort()[0];
 }
 function restoreMaterials(materials) {
   mapMaterials=structuredClone(materials); nodes=keepStrokeMaterials(nodes,mapMaterials); syncMaterialChoices(); syncMaterials(); materialEditor?.refresh(); keepWorldMaterials(); surfacePanel?.refresh();
@@ -792,8 +813,8 @@ function surfaceHost() {
   };
 }
 function editMaterials(materials) {
-  const used=materialsInUse(nodes,materials,mapRocks);renderer.setMaterials(new Map(used.map(m=>[m.slot,m])));
-  mapMaterials=materials;materialUseKey=JSON.stringify(used);syncMaterialChoices();surfacePanel?.refresh();worldChanged({stage:'C',world:false});persistLater();schedule();
+  const used=materialsInUse(nodes,materials,mapRocks),stage=setRendererMaterials(new Map(used.map(m=>[m.slot,m])));
+  mapMaterials=materials;materialUseKey=JSON.stringify(used);syncMaterialChoices();surfacePanel?.refresh();worldChanged({stage,world:false});persistLater();schedule();
 }
 function removeMaterial(slot) {
   const gone=deleteMaterial(mapMaterials,nodes,slot,mapRocks);cancelWeather();nodes=gone.nodes;editMaterials(gone.materials);evaluate(0);checkpoint();queueWeather();updateControls();
@@ -821,6 +842,9 @@ function syncRocks({defer=false}={}) {
 function syncRockChoices() {
   const select=$('lf-rock'),value=select.value;
   select.replaceChildren(new Option('Rock beneath','-1'),new Option(worldRockName(config),'0'),...mapRocks.map(r => new Option(r.name,String(r.slot))));
+  // A recipe or a world's rock type the map lacks (the Rock types pane's Add list, #rock-add): choosing one adds it and gives it to the shape.
+  const held=new Set(mapRocks.map(r => r.key)),recipes=[...$('rock-add').options].filter(o => o.value && !o.hidden && !o.parentElement.hidden && !held.has(o.value));
+  if (recipes.length && mapRocks.length<ROCK_SLOTS-1) { const g=document.createElement('optgroup'); g.label=`Add a rock type (${mapRocks.length} of ${ROCK_SLOTS-1})`; g.append(...recipes.map(o => new Option(o.textContent,'add:'+o.value))); select.append(g); }
   select.value=[...select.options].some(o => o.value===value)?value:'-1';
 }
 // The map's rock presets replaced (a load, an undo, a preset edited): strokes keep only choices the list holds, and the renderer and the Rock option follow.
@@ -1625,6 +1649,22 @@ $('tool-style').addEventListener('change',() => {
   if(selected>=0){editSelectedFromControls({curve:toolSettings[tool].curve,along:toolSettings[tool].along});checkpoint();queueWeather();}
   updateControls();schedule();persistLater();
 });
+// Look (#tool-look): another shape tool for the selected landform and for the next stroke. The size, height, rock and ground the artist set (where
+// they differ from the old tool's own) stay; the rest of the card, its curves included, becomes the new tool's. One undo step.
+const LOOK_KEPT=['diameter','heightReference','elevation','amount','rockPreset','groundPreset'];
+$('tool-look').addEventListener('change',() => {
+  const next=$('tool-look').value,ids=toolIds();if(stroke||moving||!toolById(next))return;
+  const n=nodes[selected],editing=selected>=0&&n?.kind==='landform'&&Boolean(n.params),from=editing?strokeTool(n,ids):tool;
+  const now={};for(const [key,[id]] of Object.entries(TOOL_FIELDS))now[key]=Number($(id).value);
+  const was=toolCard(from),card=toolCard(next);
+  for(const key of LOOK_KEPT)if(Number.isFinite(now[key])&&now[key]!==was[key])card[key]=now[key];
+  mapFeatures?.deactivate();
+  if(!editing||tool!=='move'){rememberTool();tool=next;drawMode=editing?drawMode:'new';toolSettings[next]=card;}
+  showTool(card,toolKind(next));
+  if(editing){n.tool=next;editSelectedFromControls({curve:card.curve,along:card.along});checkpoint();queueWeather();}
+  else{selected=-1;alsoSelected=[];pathPoint=-1;renderLayers();}
+  updateControls();schedule();persistLater();
+});
 // Save as tool (in a selected landform's options): a button in this map's toolbar that draws with the shape's settings as the panel shows them, its curves and
 // its rock, after the world's tools in the group of the tool the shape was drawn with. One undo step; strokes are not changed. Delete (on a map tool's brush)
 // takes the button away; shapes drawn with it keep their numbers and show as Landform.
@@ -2167,6 +2207,14 @@ function setPresetColors(colors,commit) {
   if(commit)worldInputQueue.end();
 }
 function selectRock(slot) { worldInputQueue.flush();rockSelected=slot; syncRockPanel(); }
+// A rock type added from a starting recipe or the world's rock type `key`, with its material where the map has room; its slot. The caller checkpoints.
+function addRockType(key,recipe=null) {
+  const added=addRock(mapRocks,recipe?'soil':key,worldRockName(config),config);let rocks=added.rocks;
+  if(recipe)rocks=renameRock(setRock(rocks,added.slot,recipe),added.slot,uniqueRockName(mapRocks,recipe.name,worldRockName(config)));
+  const given=giveRockMaterials(rocks,mapMaterials,[added.slot],config,r=>r.slot===added.slot?(recipe?.key??key):r.key);noteMissedRocks(given);
+  if(given.materials!==mapMaterials)editMaterials(given.materials);editRocks(given.rocks);
+  status(`Added the rock type ${mapRocks.find(r=>r.slot===added.slot).name}.`);return added.slot;
+}
 function mountRockPanel() {
   $('rock-presets').onchange=()=>selectRock(Number($('rock-presets').value));
   const shown=()=>renderer.slotColors(0);
@@ -2184,7 +2232,7 @@ function mountRockPanel() {
   $('rock-absorb-world').onchange=()=>{const off=$('rock-absorb-world').checked;if(rockSelected===0){worldAbsorb(off?null:shown().absorb);worldInputQueue.end();}else setPresetColors({absorb:off?null:shown().absorb},true);};
   $('rock-add').onchange=()=>{
     const key=$('rock-add').value;$('rock-add').value='';if(!key)return;
-    try{const added=addRock(mapRocks,key,worldRockName(config),config),given=giveRockMaterials(added.rocks,mapMaterials,[added.slot],config);noteMissedRocks(given);if(given.materials!==mapMaterials)editMaterials(given.materials);added.rocks=given.rocks;editRocks(added.rocks);selectRock(added.slot);checkpoint(true);status(`Added the rock preset ${mapRocks.find(r=>r.slot===added.slot).name}.`);}catch(err){rockNote(err.message);}
+    try{const slot=addRockType(key);selectRock(slot);checkpoint(true);}catch(err){rockNote(err.message);}
   };
   $('rock-duplicate').onclick=()=>{
     try{const copy=duplicateRock(mapRocks,rockSelected,selectedRock());editRocks(copy.rocks);selectRock(copy.slot);checkpoint(true);}catch(err){rockNote(err.message);}
@@ -2204,6 +2252,9 @@ function mountRockPanel() {
   // Copy and Paste a recipe (JSON on the clipboard): its name, numbers and beds, to compare two sets of numbers or move one between maps and worlds.
   $('rock-copy').onclick=async()=>{
     try{await navigator.clipboard.writeText(rockRecipeText(selectedRock()));rockNote('');status('Copied the rock recipe to the clipboard.');}catch(err){rockNote('The clipboard could not be written: '+err.message);}
+  };
+  $('rock-paste-new').onclick=async()=>{
+    try{const recipe=parseRockRecipe(await navigator.clipboard.readText()),slot=addRockType(recipe.key,recipe);selectRock(slot);checkpoint(true);rockNote('');}catch(err){rockNote(err.message);}
   };
   $('rock-paste').onclick=async()=>{
     try{

@@ -99,6 +99,13 @@ export function uniformStages(modules) {
       const fields=new Set(),references=/\bu\s*\.\s*(\w+)/g;let reference;
       while((reference=references.exec(body))){
         let field=reference[1];
+        // A Ground slot's member (u.ground[slot].cacheLayer) counts as ground.<member>; a read of the whole slot (let r=u.ground[slot]) as
+        // ground, every member (worldUniformDelta).
+        if(field==='ground'){
+          let at=references.lastIndex;while(/\s/.test(body[at]??'')&&at<body.length)at++;
+          if(body[at]==='['){let depth=1;at++;while(at<body.length&&depth){if(body[at]==='[')depth++;else if(body[at]===']')depth--;at++;}
+            const member=/^\s*\.\s*(\w+)/.exec(body.slice(at));if(member)field='ground.'+member[1];}
+        }
         if(field==='rock'){
           let at=references.lastIndex;while(/\s/.test(body[at]??'')&&at<body.length)at++;
           if(body[at]==='['){let depth=1;at++;while(at<body.length&&depth){if(body[at]==='[')depth++;else if(body[at]===']')depth--;at++;}
@@ -151,6 +158,14 @@ export function worldUniformDelta(before,after,layout,stages) {
   for(const [name,f]of layout.fields){
     if(name==='rock'){
       for(let slot=0;slot<f.count;slot++)for(const [member,m]of f.members)if(differs(m,f.offset+slot*f.stride+m.offset))add(`rock[${slot}].${member}`,member,slot);
+    }else if(f.kind==='struct'){
+      // Any other struct array (Ground): a member changed in any slot, at the earliest stage that reads that member or the whole slot.
+      for(const [member,m]of f.members){
+        let changed=false;for(let slot=0;slot<f.count&&!changed;slot++)changed=differs(m,f.offset+slot*f.stride+m.offset);
+        if(!changed)continue;
+        const s=[stages.get(`${name}.${member}`)?.stage,stages.get(name)?.stage].filter(Boolean).sort()[0]??null;
+        fields.push({name:`${name}.${member}`,stage:s});if(s&&(!stage||s<stage))stage=s;
+      }
     }else if(name==='materialTable'&&stages.get('materialTable.cover')?.row!==undefined){
       // Rows below the cover rows are read where the table is read directly, and where a gated function reads it while its gate is on
       // (before or after the change); the cover rows also where cvr reads them (uniformStages).
