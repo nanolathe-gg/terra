@@ -160,7 +160,7 @@ function switchRule(layer, kind) {
 // roleMaterial(builtin) and slotMaterial(slot) → {name, color} or null, pick() to take the Pick tool, inspect(at) → what the draw laid there;
 // for the sections (layerSection's facts): control(key), role(key), hasLayer(name), fact(name), worldName(), and place(go) → where the control
 // that turns a layer on lives ("Rock types › Exposure & relief"), open(go) to show and focus it.
-// The list's view watch and pending rebuild: the editor mounts the panel again (buildWorldPanel), and only the newest panel may draw its rows.
+// The list's view watch and pending rebuild, kept by the newest mount of the panel (sculpt.js mounts it once a page, in buildKnobs), so only it draws the rows.
 let viewWatch = null, staleTimer = 0;
 export function mountSurfacePanel(host) {
   const list = $('surface-layers');
@@ -417,6 +417,7 @@ export function mountSurfacePanel(host) {
     for (const e of [back, shownRow]) { const section = e?.closest('details.surface-section'); if (section && !section.open) { section.open = true; moved ||= e === back; } }
     back?.focus({preventScroll: true});
     if (moved) back.closest('.surface-layer')?.scrollIntoView({block: 'nearest'});   // its row left for a folded section: follow it
+    sendView();   // a Solo or a hidden layer that is gone (prune) shows the others again
   }
   // After a World setting, a rock type in use or a role material changed: rebuild if a layer has changed section or reason.
   const sync = () => { if (!editing && !picking && JSON.stringify(placeAll(host.surface())) !== placedText) { if (visible()) build(); else later(); } };
