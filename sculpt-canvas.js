@@ -47,7 +47,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const previewLoad=createPreviewLoad();
   const previewRaster=level=>{
     const fastRaster=interacting()&&level>=4*detailLevel(),automatic=(gesture?.previewQuality??quality)==='auto';
-    const load=fastRaster&&automatic&&level<=4*detailLevel()?previewLoad.scale:1;
+    const load=gesture&&fastRaster&&automatic&&level<=4*detailLevel()?previewLoad.scale:1;   // a gesture's own backoff; control edits stay sharp
     // A first Auto picture uses a coarser solid, then the normal one. Under
     // load both raster and solid back off without replacing the source lattice.
     const solid=fastRaster&&automatic?Math.max(load,gesture&&!(gesture.previewPictures>0)?2:1):1;
@@ -558,7 +558,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           const retained=e=>e&&e.bitmap&&!e.fit&&!offLevel(e,detailLevel())&&e.weathered===weatheredView;
           const previewArea=nearArea&&nearArea.width>0&&nearArea.height>0&&stale.every(r=>intersects(r,nearArea)||retained(cache.get(cacheKey(r,size))))?nearArea:clipped;
           // Lock the unsplit edit's resolution before budgeting or awaiting GPU work.
-          if(gesture&&gesture.previewPixels==null){gesture.previewQuality=quality;gesture.previewPixels=previewPixels(quality,previewArea,detailLevel());gesture.previewPictures=0;previewLoad.resetCadence();}
+          if(gesture&&gesture.previewPixels==null){gesture.previewQuality=quality;gesture.previewPixels=previewPixels(quality,previewArea,detailLevel());gesture.previewPictures=0;previewLoad.reset();}
           const coarse=previewPlan(previewArea,coarseLevel).sort((a,b)=>dist(a)-dist(b));
           const coarseReady=coarse.every(r=>blockCurrent(blocks.get(blockKey(r,coarseLevel))));
           // F leaves geometry and Time unchanged. Reuse only measured costs
@@ -673,9 +673,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
               renderer.previousChunk.then(()=>{
                 if(gesture!==owner)return;
                 const now=performance.now(),last=owner.previewCompletion;
-                // Ignore the cold source/Time pass and time when no input was
-                // waiting. Completion gaps measure cadence, including GPU load.
-                if(previewLoad.complete(now,!last||startedAt-last.at>=33||last.timeRuns!==timeRuns))schedule();
+                // Ignore the cold source/Time pass. Waiting for input is not
+                // counted (sculpt-preview.js createPreviewLoad complete).
+                if(previewLoad.complete(now,startedAt,!last||last.timeRuns!==timeRuns))schedule();
                 owner.previewCompletion={at:now,timeRuns};
               },()=>{});
             }
@@ -874,7 +874,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // after that work ends; one that needs pipelines still compiling lets the frames run while it waits for them.
   const offMap=at=>{const x=Math.floor(at.x),y=Math.floor(at.y);return x<0||y<0||x>=Math.floor(map.width)||y>=Math.floor(map.height);};
   let inspecting=Promise.resolve(),readWaiting=0;
-  function inspect(at){const run=inspecting.then(()=>inspectNow(at));inspecting=run.catch(()=>{});return run;}
+  // `current`: whether the asker still wants this read; one superseded while queued (another pick, an undo's refresh, the card closed) is
+  // dropped before it takes the renderer, so a run of reads cannot hold the map's frames off.
+  function inspect(at,current=()=>true){const run=inspecting.then(()=>current()?inspectNow(at):{superseded:true});inspecting=run.catch(()=>{});return run;}
   async function holdForRead(){readWaiting++;try{while(drawing||renderer.busy||api.pendingInputs?.())await tick();}finally{readWaiting--;}drawing=true;}
   function releaseRead(){drawing=false;schedule();}
   async function inspectNow(at){
@@ -885,8 +887,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       await holdForRead();
       let held=true;   // while a retry awaits, a frame can take drawing: release only this attempt's hold
       const release=()=>{if(!held)return;held=false;renderer.setProbe(null);releaseRead();};
-      renderer.setProbe({x,y});
-      try{const e=await bake(rect,false,undefined,null,1,false,false,null,false,{pixelScale:1,fastRaster:false},true);e?.bitmap?.close?.();return await renderer.readProbe()??{unread:true};}
+      try{renderer.setProbe({x,y});const e=await bake(rect,false,undefined,null,1,false,false,null,false,{pixelScale:1,fastRaster:false},true);e?.bitmap?.close?.();return await renderer.readProbe()??{unread:true};}
       catch(error){
         if(error.name==='PipelinesPending'&&compiles++<3){release();await error.ready;continue;}
         if(/already rendering/.test(error.message)&&!retried){retried=true;release();while(renderer.busy)await tick();continue;}

@@ -68,7 +68,9 @@ export function mountMaterialGraph(host) {
   // Cards with their place (the node's own, the gesture's while it is dragged, else Arrange's), type and size.
   const cards = () => {
     const list = nodes(); if (!list.length) return [];
-    if (list.some(n => n.x === undefined)) { const key = JSON.stringify(list.map(n => [n.id, n.in])); if (key !== autoKey) { autoKey = key; auto = graphPositions(list, {aspect: usable().width / usable().height}); } }
+    // Arrange's places follow the graph and the shape of the space it fills (to a tenth), so a layout made while the editor was closed
+    // (a 1x1 canvas) is made again for the real cell.
+    if (list.some(n => n.x === undefined)) { const v = usable(), aspect = Math.round(v.width / v.height * 10) / 10, key = JSON.stringify([aspect, list.map(n => [n.id, n.in])]); if (key !== autoKey) { autoKey = key; auto = graphPositions(list, {aspect: v.width / v.height}); } }
     const types = nodeTypes(list), moved = gesture?.kind === 'move' ? gesture.positions : null;
     return list.map(n => ({n, ...(moved?.get(n.id) ?? (n.x === undefined ? auto.get(n.id) : {x: n.x, y: n.y})), type: types.get(n.id), height: cardHeight(n), inputs: inputsOf(n)}));
   };
@@ -100,8 +102,9 @@ export function mountMaterialGraph(host) {
     return {x: 20, y: top, width: Math.max(1, r.width - 40), height: Math.max(1, r.height - top - bottom)};
   }
   function fit() {
-    const list = cards(), r = canvas.getBoundingClientRect();
-    if (!list.length || r.width < 10 || r.height < 10) { pendingFit = true; return; }
+    const r = canvas.getBoundingClientRect();
+    if (r.width < 10 || r.height < 10) { pendingFit = true; return; }   // closed: fit once it has a size
+    const list = cards(); if (!list.length) { pendingFit = true; return; }
     const fitted = fitGraph([...list.map(c => ({x: c.x, y: c.y, width: CARD.width, height: c.height})), ...frames(list)], usable());
     zoom = fitted.zoom; pan = fitted.pan; viewWidth = r.width; viewHeight = r.height; pendingFit = false; autoFit = true; schedule();
   }

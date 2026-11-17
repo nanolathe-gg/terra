@@ -24,7 +24,7 @@ import {copySurface,layerKey,withSurfaceMaterials} from './sculpt-material-model
 import {mountSurfacePanel,BUILTIN_LABELS} from './sculpt-surface-panel.js';
 import {goTo} from './sculpt-find.js';
 import {mountPick} from './sculpt-pick.js';
-import {worldKit,sameKitData,assertKitMaterials,authoredWorldTool,newWorldKey,instantiateWorldKit,stageWorldKitEdit,publishWorldRock,publishWorldTool,addWorldRockInstance,resetWorldKitInstances,resolvedWorldCard,worldToolUnavailable} from './sculpt-world-kit.js';
+import {worldKit,storedWorldKit,baseRockKeys,sameKitData,assertKitMaterials,authoredWorldTool,newWorldKey,instantiateWorldKit,stageWorldKitEdit,publishWorldRock,publishWorldTool,addWorldRockInstance,resetWorldKitInstances,resolvedWorldCard,worldToolUnavailable} from './sculpt-world-kit.js';
 import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,toolMaterialSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
@@ -179,10 +179,12 @@ function shapeCard(id,preset=config?.biomeId,tables) {
   return card;
 }
 const mapOwnsTool=t=>mapTools.some(m=>m.id===t?.id);
+const builtInWorld=()=>worldId in (config?.biomes??{});   // a built-in world's own rock types stay each map's (sculpt-world-kit.js baseRockKeys)
 const toolUnavailable=t=>worldToolUnavailable(t,mapRocks,mapMaterials,config,currentWorldKit??{rocks:[]});
 const toolCard=(id,own=mapTools,tables) => { const t=toolById(id,own); return authoredWorldTool(t)?resolvedWorldCard(t,tables?.rocks??mapRocks,tables?.materials??mapMaterials,config):t?.card?structuredClone(t.card):shapeCard(id,config?.biomeId,tables); };
 function refreshWorldKit(world=activeWorld()){currentWorldKit=worldKit(baseWorldConfig??config,world);worldToolList=currentWorldKit.tools;}
-function installWorldKit(kit){const checked=worldKit(baseWorldConfig??config,kit);activeWorld().tools=checked.tools;activeWorld().rocks=checked.rocks;worldStoreDirty=true;currentWorldKit=checked;worldToolList=checked.tools;}
+// The world record keeps only what the artist made (storedWorldKit); the built-in tools and the derived rock catalog stay derived.
+function installWorldKit(kit){const checked=worldKit(baseWorldConfig??config,kit),w=activeWorld();delete w.tools;delete w.rocks;Object.assign(w,storedWorldKit(baseWorldConfig??config,checked));worldStoreDirty=true;currentWorldKit=checked;worldToolList=checked.tools;}
 function refreshWorldTools(world=activeWorld()){
   const previous=brushWorldDefinitions;refreshWorldKit(world);
   for(const id of Object.keys(toolSettings))if(id.startsWith('world-')){const before=previous.find(t=>t.id===id),after=worldToolList.find(t=>t.id===id);if(!after||!before||!sameKitData(before.card,after.card)||before.shape!==after.shape)delete toolSettings[id];}
@@ -873,7 +875,7 @@ function surfaceHost() {
     preview:row=>{if(!renderer||renderer.surfacePreview===row)return;const stage=renderer.uniformStage(()=>renderer.setSurfacePreview(row));worldChanged({stage:stage??'F',world:false});schedule();},
     // Pick on the map: the inspector's pixels come from the Pick tool (its card's Surface door, pickHost openSurface).
     pick:()=>{if(!stroke&&!moving)setPicking(true);},
-    inspect:at=>mapCanvas?mapCanvas.inspect(at):Promise.resolve(null),
+    inspect:(at,current)=>mapCanvas?mapCanvas.inspect(at,current):Promise.resolve(null),
     // The material a built-in that draws a world role takes (Materials panel; the rock built-ins the world's rock): its name, or null.
     roleMaterial:builtin=>{const m=roleCopy(builtin);return m?{name:m.name,color:hex(m),own:own(m)}:null;},
     // A layer's material's own Color (sculpt-materials.js recolorMaterial): its copy, or for a built-in that draws a role, the role's.
@@ -906,6 +908,7 @@ function surfaceHost() {
     role:key=>({present:mapMaterials.some(m=>m[key]),name:roleName(key)}),
     hasLayer:name=>(config.layers||[]).includes(name),
     fact:name=>Number(worldPanelValuesOf(panelFacts())[name])||0,
+    hasColumn:()=>Boolean(config.column?.sections?.length||mapRocks.some(r=>r.column?.sections?.length)),   // beds Base band draws on
     worldName:()=>activeWorld().name,
     // Where the control that turns a layer on lives, and going there: its World section and tab opened, its row shown, the focus on it (Find's
     // goTo). A rock type's setting opens the world's rock, which the list's reason speaks of.
@@ -992,7 +995,7 @@ function pickHost() {
   const info=m => ({slot:m.slot,name:m.name,color:hexOfRgb(drawnColor(m)),...scopeOf(materialIsWorld(m)),reach:materialReach(m)});
   return {
     offMap:at => !mapCanvas||mapCanvas.offMap(at),
-    inspect:at => mapCanvas?mapCanvas.inspect(at):Promise.resolve(null),
+    inspect:(at,current) => mapCanvas?mapCanvas.inspect(at,current):Promise.resolve(null),
     client:at => mapCanvas.client(at),
     focusMap:() => overlay.focus({preventScroll:true}),
     shapeAt:p => pickNode(p),
@@ -1445,7 +1448,7 @@ const sculptRegion={
     previewTime:({size:windowSize,spacing:windowSpacing})=>weatherOn()?{...pagedTime({config,renderer,size:windowSize,spacing:windowSpacing,material:materialKnobs()}),revB:mapCanvas?.rev.B??0}:null,fail:error}),
   fitGpuBudget:() => regionalFields?.refit?.(),
   releaseGpuStaging:()=>regionalFields?.releaseStaging?.()??0,
-  setViewFocus:v=>{regionalFields?.setFocus?.({x:(v.x+v.width/2)/spacing,y:(v.y+v.height/2)/spacing});pickCard?.place();syncWorldHome();},
+  setViewFocus:v=>{regionalFields?.setFocus?.({x:(v.x+v.width/2)/spacing,y:(v.y+v.height/2)/spacing});pickCard?.place();syncWorldHome(true);},
   read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:n.frame?.slice()}:undefined; },
   loadGraph:list => { if (!Array.isArray(list)) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); cancelWeather(); nodes=next; selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch:s=>loadSketchFile(s,false),maskKeys:MASK_KEYS,stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
@@ -1805,7 +1808,7 @@ const savedStrokes=(list,carry,own,tables) => { const ids=toolIds(own),saved=inf
 function loadSketch(s,carry=false) {
   if (!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==6 || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n)) throw new Error('Load a map stroke graph with the same canvas and grid size.');
   const column=copyColumn(s.column),rock=copyRockSettings(s.rock),rocks=copyRocks(s.rocks),materials=copyMaterials(s.materials),own=copyMapTools(s.tools)??[],ids=toolIds(own);
-  const supplied=rocks??worldRocks(config),adopted=surfaceMaterials(config.surface,adoptWorldMaterials(materials,config,{carried:carry}),{config,nodes:s.nodes,rocks:supplied}),staged=instantiateWorldKit(config,activeWorld(),{rocks:supplied,materials:adopted,source:s.worldSettings??{},append:s.worldSettings?.rocks!==undefined});
+  const supplied=rocks??worldRocks(config),adopted=surfaceMaterials(config.surface,adoptWorldMaterials(materials,config,{carried:carry}),{config,nodes:s.nodes,rocks:supplied}),staged=instantiateWorldKit(config,activeWorld(),{rocks:supplied,materials:adopted,source:s.worldSettings??{},append:s.worldSettings?.rocks!==undefined,builtIn:builtInWorld()});
   const next=deserializeNodes(savedStrokes(s.nodes,carry,own,staged));
   // Reject damaged saves before committing any pending edit to the old map.
   worldInputQueue.flush();worldStoreTransaction++;try{
@@ -2000,7 +2003,7 @@ $('tool-save-button').onclick=() => {
   const card={...Object.fromEntries(Object.entries(TOOL_FIELDS).map(([key,[id]]) => [key,Number($(id).value)])),...(n.params.curve?{curve:structuredClone(n.params.curve)}:{}),...(n.params.along?{along:structuredClone(n.params.along)}:{})};
   try {
     const toWorld=$('tool-save-to').value==='world',spec={label:$('tool-save-name').value,icon:toolSaveIcon,color:$('tool-save-color').value,group:from.group,shape:shapeFrom(config,toolShape(from)),card};let id;
-    if(toWorld){if(from.group==='shape'&&$('tool-save-family').value)spec.family=$('tool-save-family').value;const added=publishWorldTool(currentWorldKit,mapRocks,mapMaterials,spec);commitKitCandidate(added);id=added.id;}
+    if(toWorld){if(from.group==='shape'&&$('tool-save-family').value)spec.family=$('tool-save-family').value;const added=publishWorldTool(currentWorldKit,mapRocks,mapMaterials,spec,{config,builtIn:builtInWorld()});commitKitCandidate(added);id=added.id;}
     else{const added=addMapTool(mapTools,nodes,spec);restoreMapTools(added.tools);id=added.id;}
     toolSaveFor='';$('tool-save').open=false;checkpoint(true);
     status(`Saved ${toolLabel(id)} to ${toWorld?'the world “'+activeWorld().name+'”':'this map'}.`);
@@ -2167,7 +2170,7 @@ const WORLD_STORE='nanolathe-map-editor-worlds';
 const COLOR_HELP={shallowTone:'The tint of the shallows, kept as a shift of the water material\'s color, so recoloring the water moves its shallows too. Off: the world\'s own tint.',
   sun:'The direct light and the glints it mirrors. A warm sun lights slopes that face it.',sky:'The ambient light that fills the shade. A cool sky keeps shaded ground and the lee of hills blue.'};
 let baseWorldConfig=null,worldStoreTransaction=0;
-let worlds={},worldId=null,openedAsOwnWorld=null;   // the last: set when a map's world opened as a world of its own
+let worlds={},worldId=null,openedAsOwnWorld=null,embeddedWorldError='';   // openedAsOwnWorld: set when a map's world opened as a world of its own; the error: why its world could not be read
 function loadWorlds() { try { worlds=JSON.parse(localStorage.getItem(WORLD_STORE)||'{}')||{}; } catch (_) { worlds={}; } }
 function saveWorlds() { if(worldStoreTransaction)return;try { localStorage.setItem(WORLD_STORE,JSON.stringify(worlds)); } catch (_) {} }
 function activeWorld() { return worlds[worldId] ??= {name:config.biome,base:config.biomeId,colors:{...(config.colors||{})},knobs:{}}; }
@@ -2249,25 +2252,35 @@ const ownWorlds=() => Object.entries(worlds).filter(([id,w]) => !(id in (config.
 // the store. The world this page is in starts from its settings as they are now: its colors, the rows' values, its own materials, the map's
 // feature set and its surface layers. Another world starts from what this browser keeps of it (a built-in nobody changed: nothing, so its
 // defaults), as it would open.
+// Said in the status line and in the Map menu (which a shared map opens) whenever a map, the working copy included, opened as a world of its own.
+function showOwnWorldNote(shared=false){
+  if(embeddedWorldError){status(`The map’s world could not be read (${embeddedWorldError}); the map opened in ${activeWorld().name}.`);return;}
+  if(!openedAsOwnWorld)return;
+  const note=`Opened in its own world, “${openedAsOwnWorld.name}”: the map’s world differs from your ${openedAsOwnWorld.mine}, which is unchanged. World › Use for my ${openedAsOwnWorld.mine} adopts it.`;
+  status(note);$('map-world-note').textContent=note;$('map-world-note').hidden=false;if(shared&&$('pane-map').hidden)$('tab-map').click();
+}
 function makeWorld(name,from=worldId) {
   const id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
   if (from===worldId) {
     const world=activeWorld(),knobs={...world.knobs}; for (const [,list] of KNOBS) for (const [key] of list) if (experiment.has(key)) knobs[key]=experiment.get(key);
-    worlds[id]={...worldKit(baseWorldConfig,world),name,materials:worldOwnMaterials(mapMaterials,config),base:config.biomeId,colors:{...world.colors},knobs,featureSet:mapFeatures?.serialize().featureSet,...(world.surface?{surface:structuredClone(world.surface)}:{})};
+    worlds[id]={...storedWorldKit(baseWorldConfig,world),name,materials:worldOwnMaterials(mapMaterials,config),base:config.biomeId,colors:{...world.colors},knobs,featureSet:mapFeatures?.serialize().featureSet,...(world.surface?{surface:structuredClone(world.surface)}:{})};
   } else {
     const {openedFrom,...kept}=structuredClone(worlds[from]??{});
     worlds[id]={colors:{},knobs:{},...kept,name,base:worlds[from]?.base??from};
   }
   saveWorlds(); return id;
 }
+// Only the rows this build has: a stored world keeps a removed option's value (lowTint) until it is saved again, and it must not reach
+// the defaults, where a map save would carry it (sculpt-save.js savedWorld) and the open would drop it. Boot, Undo and Reset all filter here.
+const knownWorldKnobs=(knobs,base)=>{const known=worldKeys(base);return Object.fromEntries(Object.entries(knobs||{}).filter(([key])=>known.has(key)));};
 // Reset and history share one persistence boundary: intermediate material/surface restores never become saved defaults.
 function configureStoredWorld(world,beach=world.knobs?.beachFrom){
   for(const key of ['defaults','engineDefaults','layers','material','materials','beachTable','featureSet']){
     if(baseWorldConfig[key]===undefined)delete config[key];else config[key]=structuredClone(baseWorldConfig[key]);
   }
-  config.defaults={...config.defaults,...world.knobs};
+  const knobs=knownWorldKnobs(world.knobs,baseWorldConfig);config.defaults={...config.defaults,...knobs};
   refreshWorldTools(world);
-  for(const key of Object.keys(config.engineDefaults||{}))if(world.knobs?.[key]!==undefined)config.engineDefaults[key]=world.knobs[key];
+  for(const key of Object.keys(config.engineDefaults||{}))if(knobs[key]!==undefined)config.engineDefaults[key]=knobs[key];
   if(world.featureSet)config.featureSet=structuredClone(world.featureSet);
   const settings=new Map(beach?[['beachFrom',beach]]:[]);borrowBeach(config,settings);renderer.layers=new Set(config.layers);
 }
@@ -2293,7 +2306,8 @@ function resetWorld(){
     }
     restoreMaterials(next);setSurfaceList(structuredClone(baseSurface),false);
     worldChanged(renderer.setColors(worldColors(),currentDrawOptions()));cancelWeather();evaluate(0);queueWeather();
-    const url=new URL(location.href);for(const key of worldKeys(baseWorldConfig)){const value=experiment.get(key);if(value==null)url.searchParams.delete(key);else url.searchParams.set(key,value);}window.history.replaceState(null,'',url);
+    // The world now draws as the built-in one, so the address names none of its settings (a reload gives the same defaults).
+    const url=new URL(location.href);for(const key of worldKeys(baseWorldConfig))url.searchParams.delete(key);window.history.replaceState(null,'',url);
     worlds[worldId]=reset;checkpoint();
   }finally{worldStoreDirty=false;worldStoreTransaction--;saveWorlds();}
   buildWorldPanel();syncRockChoices();syncRocks();syncRockPanel();syncWorldControls();surfacePanel?.refresh();updateControls();status('Reset world settings to '+baseWorldConfig.biome+'.');
@@ -2301,9 +2315,10 @@ function resetWorld(){
 for(const id of ['wsec-world','tab-world'])$(id).addEventListener('click',()=>requestAnimationFrame(syncWorldHome));
 function openWorldHome(card){openWorldSection('wsec-world');syncWorldHome();const el=$('world-home-'+card);el?.scrollIntoView({block:'start'});el?.querySelector('button,input,select')?.focus({preventScroll:true});}
 let worldHomeSummary='';
-function syncWorldHome(){
+// viewOnly: a pan or zoom changes only which rock types are in view, not the count of changes (which rebuilds the world's kit).
+function syncWorldHome(viewOnly=false){
   if(!baseWorldConfig||!renderer||!worldId||!$('world-home-rock-list')||!$('wpane-world').getClientRects().length)return;
-  const count=worldOverrideCount(activeWorld(),baseWorldConfig);$('world-override-count').textContent=`${count} change${count===1?'':'s'} from ${baseWorldConfig.biome}`;
+  if(!viewOnly){const count=worldOverrideCount(activeWorld(),baseWorldConfig);$('world-override-count').textContent=`${count} change${count===1?'':'s'} from ${baseWorldConfig.biome}`;}
   const view=mapCanvas?.view(),used=new Set(),boxes=new Map();
   const box=n=>{if(boxes.has(n))return boxes.get(n);const p=shapeLines(n).flat(),r=claimReach(n),b={x0:Math.min(...p.map(p=>p.x))-r,x1:Math.max(...p.map(p=>p.x))+r,y0:Math.min(...p.map(p=>p.y))-r,y1:Math.max(...p.map(p=>p.y))+r};boxes.set(n,b);return b;};
   const intersects=(a,b)=>a.x0<=b.x1&&a.x1>=b.x0&&a.y0<=b.y1&&a.y1>=b.y0;
@@ -2361,7 +2376,7 @@ function buildWorldPanel() {
     const name=$('world-new-name').value.trim(); if (!name) { $('world-new-name').focus(); status('Name the new world first.'); return; }
     goToWorld(config.biomeId,makeWorld(name));
   };
-  $('world-export').onclick=() => download(new Blob([JSON.stringify({format:'nanolathe-map-world',version:1,world:{...world,...worldKit(baseWorldConfig,world),materials:structuredClone(worldKept(mapMaterials)),knobs:{...world.knobs},featureSet:mapFeatures?.serialize().featureSet}},null,1)],{type:'application/json'}),(world.name||'world').replace(/[^\w-]+/g,'_')+'.world.json');
+  $('world-export').onclick=() => download(new Blob([JSON.stringify({format:'nanolathe-map-world',version:1,world:{...(({tools,rocks,...rest})=>rest)(world),...storedWorldKit(baseWorldConfig,world),materials:structuredClone(worldKept(mapMaterials)),knobs:{...world.knobs},featureSet:mapFeatures?.serialize().featureSet}},null,1)],{type:'application/json'}),(world.name||'world').replace(/[^\w-]+/g,'_')+'.world.json');
   $('world-import').onclick=() => $('world-file').click();
   $('world-file').onchange=async () => {
     try {
@@ -2642,9 +2657,10 @@ function finishRockAddition(added,scope=$('rock-save-to').value){
 function assertLocalRockAddition(added){if(added.missed?.length)throw Error('This rock type needs another material slot; remove a material first.');}
 function addRockType(key,recipe=null) {
   if(key?.startsWith('world:')){const t=currentWorldKit.rocks.find(r=>r.key===key.slice(6));if(!t)throw Error('That world rock type is missing.');const added=addWorldRockInstance(t,mapRocks,mapMaterials);
-    if($('rock-save-to').value==='world'&&!mapRocks.some(r=>r.worldKey===t.key)){added.existingWorldKey=t.key;added.rocks=added.rocks.map(r=>r.slot===added.slot?{...r,worldKey:t.key}:r);}
+    const own=builtInWorld()&&baseRockKeys(config).has(t.key);   // a built-in world's own type is the map's to add (and edit)
+    if(!own&&$('rock-save-to').value==='world'&&!mapRocks.some(r=>r.worldKey===t.key)){added.existingWorldKey=t.key;added.rocks=added.rocks.map(r=>r.slot===added.slot?{...r,worldKey:t.key}:r);}
     else added.rocks=renameRock(added.rocks,added.slot,uniqueRockName(mapRocks,t.name,worldRockName(config)));
-    return finishRockAddition(added);}
+    return finishRockAddition(added,own?'map':undefined);}
   const added=addRock(mapRocks,recipe?'soil':key,worldRockName(config),config);let rocks=added.rocks;
   if(recipe)rocks=renameRock(setRock(rocks,added.slot,recipe),added.slot,uniqueRockName(mapRocks,recipe.name,worldRockName(config)));
   const given=giveRockMaterials(rocks,mapMaterials,[added.slot],config,r=>r.slot===added.slot?(recipe?.key??key):r.key);assertLocalRockAddition(given);
@@ -2790,7 +2806,7 @@ async function bootMap(pending=null) {
   if (saved) {
     try {
       const s=JSON.parse(saved),same=s.biome===config.biomeId && (s.world||s.biome)===worldId;
-      loadSketch(s,!same); status(same?'Restored your saved map recipe.':'Carried your working map into this world.');
+      loadSketch(s,!same); status(same?'Restored your saved map recipe.':'Carried your working map into this world.');showOwnWorldNote();   // the working copy forks as an opened map does
     } catch (err) { keepSaved=true; error('Saved map could not be loaded: '+err.message+' The saved copy is retained until you edit.'); }
   }
   else status('Blank map ready · draw terrain with the existing tools.');
@@ -2802,10 +2818,7 @@ async function bootMap(pending=null) {
     const shared=experiment.has('shared'),url=new URL(location.href);
     for(const key of ['pendingSketch','shared']){experiment.delete(key);url.searchParams.delete(key);}
     window.history.replaceState(null,'',url);checkpoint();status('Loaded the saved map.');if(shared)announceShared();
-    if(openedAsOwnWorld){   // said in the status line and in the Map menu, which a shared map opens
-      const note=`Opened in its own world, “${openedAsOwnWorld.name}”: the map’s world differs from your ${openedAsOwnWorld.mine}, which is unchanged. World › Use for my ${openedAsOwnWorld.mine} adopts it.`;
-      status(note);$('map-world-note').textContent=note;$('map-world-note').hidden=false;if(shared&&$('pane-map').hidden)$('tab-map').click();
-    }
+    showOwnWorldNote(shared);
   } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
   updateControls(); resize(); schedule(); queueWeather();
@@ -2876,7 +2889,8 @@ async function boot() {
     defaultColumn=config.column;baseWorldConfig=structuredClone(config);
     const pending=await takePendingSketch(experiment.get('pendingSketch'));let automatic=null;
     try{if(!pending&&LOCAL_KEY&&!experiment.has('newMap')){const a=JSON.parse(localStorage.getItem(LOCAL_KEY)||'null');if(a?.biome===config.biomeId&&(a.world||a.biome)===(experiment.get('world')||config.biomeId))automatic=a;}}catch{}
-    const restoring=pending??automatic,embedded=copySavedWorld(restoring?.worldSettings,config);
+    // An unreadable embedded world (a damaged file or working copy) is reported, never fatal: the map opens in the world the address names.
+    const restoring=pending??automatic;let embedded=null;try{embedded=copySavedWorld(restoring?.worldSettings,config);}catch(err){embeddedWorldError=err.message;}
     loadWorlds();
     if(embedded){
       // A map's world never replaces yours. One that draws differently from this browser's world of the same id opens as a world of
@@ -2925,15 +2939,13 @@ async function boot() {
     // layers draw (which needs the layers above); the rest are the library's.
     config.worldMaterials=keptWorldMaterials(worlds[worldId]?.materials,config);
     config.presetDefaults={...config.defaults};
-    // Only the rows this build has: a stored world keeps a removed option's value (lowTint) until it is saved again, and it must not reach
-    // the defaults, where a map save would carry it (sculpt-save.js savedWorld) and the open would drop it.
-    const known=worldKeys(config),worldKnobs=Object.fromEntries(Object.entries(worlds[worldId]?.knobs||{}).filter(([key])=>known.has(key)));
+    const worldKnobs=knownWorldKnobs(worlds[worldId]?.knobs,config);
     config.defaults={...config.defaults,...worldKnobs};
     config.engineDefaults=Object.fromEntries(Object.entries(config.engineDefaults||{}).map(([key,value])=>[key,worldKnobs[key]??value]));
     if (worldId!==config.biomeId) $('world-title').textContent=worlds[worldId].name;
     addDefaults(experiment,config.defaults);
     borrowBeach(config,experiment);   // a beach another world lends (World, Ground): before the renderer and the panel read the world's layers
-    refreshWorldKit();brushWorldDefinitions=structuredClone(worldToolList);buildShapeOptions();{const kit=instantiateWorldKit(config,activeWorld());mapMaterials=kit.materials;mapRocks=kit.rocks;if(kit.reason)status(kit.reason);}syncMaterialChoices();syncRockAdd();syncRockChoices();buildToolbar();
+    refreshWorldKit();brushWorldDefinitions=structuredClone(worldToolList);buildShapeOptions();{const kit=instantiateWorldKit(config,activeWorld(),{builtIn:builtInWorld()});mapMaterials=kit.materials;mapRocks=kit.rocks;if(kit.reason)status(kit.reason);}syncMaterialChoices();syncRockAdd();syncRockChoices();buildToolbar();
     $('rock-save-to').value=worldId in (config.biomes??{})?'map':'world';
     // A new map starts with the world's tools, on the first of them where the world has no Plateau.
     if (!toolIds().has(tool)) tool=firstTool();

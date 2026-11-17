@@ -87,5 +87,18 @@ test('batched GPU completion callbacks measure cadence across every picture',()=
  assert.equal(load.scale,2);
  for(let i=0;i<80;i++){at+=i%2?20:0;load.complete(at);}
  assert.equal(load.scale,1);assert.equal(load.stats().lastMs,10);
- const n=load.stats().samples;load.complete(at+500,true);assert.equal(load.stats().samples,n,'idle time restarts the cadence window');
+ const n=load.stats().samples;load.complete(at+500,-Infinity,true);assert.equal(load.stats().samples,n,'a rebuilt Time source restarts the cadence window');
+});
+
+test('a slow pointer is not load, and each gesture starts sharp',()=>{
+ // Input arrives 25 ms after each completion and each picture takes 20 ms: completion gaps are 45 ms, the GPU's share 20 ms.
+ const load=createPreviewLoad();let at=0;
+ for(let i=0;i<40;i++){const start=at+25;at=start+20;load.complete(at,start);}
+ assert.equal(load.scale,1);assert.equal(load.stats().lastMs,20);
+ // Pictures queued behind each other at 60 ms each back off, as before.
+ for(let i=0;i<20;i++){at+=60;load.complete(at,at-120);}
+ assert.equal(load.scale,2);
+ load.reset();assert.equal(load.scale,1,'the next gesture starts at full detail');
+ for(let i=0;i<4;i++){at+=60;load.complete(at,at-120);}
+ assert.equal(load.scale,1,'one slow window is not enough after a reset');
 });

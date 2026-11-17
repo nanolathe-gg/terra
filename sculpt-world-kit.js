@@ -1,12 +1,15 @@
 // A world's tool and rock kit is portable data. Maps keep their own numeric slots; only explicit worldKey provenance makes a runtime
 // rock a World edit. Material dependencies are ordinary validated graphs inline, or references to the existing world roles/layers.
-import {checkTool,checkCard,worldTools,MAP_TOOLS_MAX} from './sculpt-tools.js';
+import {checkTool,checkCard,worldTools,shapeGone,MAP_TOOLS_MAX} from './sculpt-tools.js';
 import {shapeFrom} from './sculpt-scene.js';
 import {copyRocks,worldRocks,giveRockMaterials,ROCK_SLOTS} from './sculpt-rock-presets.js';
 import {copyMaterial,copyMaterials,addMaterial,setMaterial,worldMaterials,worldOwnMaterials,worldKey,roleName,MAP_ROLES,MATERIAL_SLOTS,materialStates,materialStaged,materialCacheUsage} from './sculpt-materials.js';
 
 const ordered=v=>Array.isArray(v)?v.map(ordered):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,ordered(v[k])])):v;
 export const sameKitData=(a,b)=>JSON.stringify(ordered(a))===JSON.stringify(ordered(b));
+// A map's world kit within yours: each of its tools and rock types is one of yours, unchanged. Yours may hold more (added since the map was
+// saved): opening it there loses nothing, and it gains them.
+export const kitWithin=(theirs,mine)=>theirs.tools.every(t=>mine.tools.some(m=>m.id===t.id&&sameKitData(m,t)))&&theirs.rocks.every(r=>mine.rocks.some(m=>m.key===r.key&&sameKitData(m,r)));
 const same=sameKitData,object=v=>v&&typeof v==='object'&&!Array.isArray(v);
 const KEY=/^[a-z][a-z0-9_-]{0,39}$/,roles=new Set(['worldGround','worldWater',...MAP_ROLES.map(([r])=>r)]);
 const fields=(v,allowed,what)=>{if(!object(v)||Object.keys(v).some(k=>!allowed.includes(k)))throw Error(`Invalid ${what}.`);};
@@ -60,18 +63,29 @@ function baseRocks(config){
   return given.rocks.map(r=>{const m=given.materials.find(m=>m.slot===r.material),ref=m?referenceForMaterial(m.slot,given.materials,{key:'kit-'+(m.source??r.key).slice(0,70)}).ref:{world:'worldRock'};
     return {key:r.key,name:r.name,knobs:r.knobs,column:r.column,colors:r.colors,material:ref};});
 }
+// The world's built-in tools always come from its config, so a later config (a tool removed, renamed or added) reaches every world;
+// a stored list contributes only the tools the artist authored (with a card). Entries without a card carry nothing of the artist's.
 export function worldKit(config,world={}){
   if(!object(world))throw Error('Invalid world kit.');
-  const kit={tools:copyWorldTools(world.tools===undefined?(config.tools??[]):world.tools,config),rocks:copyWorldRocks(world.rocks===undefined?baseRocks(config):world.rocks)};
+  if(world.tools!==undefined&&!Array.isArray(world.tools))throw Error('A world’s tools are a list.');
+  const authored=(world.tools??[]).filter(t=>object(t)&&t.card!==undefined&&!shapeGone(t,s=>shapeFrom(config,s)));   // a removed library shape drops the tool
+  const kit={tools:copyWorldTools([...(config.tools??[]),...authored],config),rocks:copyWorldRocks(world.rocks===undefined?baseRocks(config):world.rocks)};
   const keys=new Set(kit.rocks.map(r=>r.key)),inline=new Map();
   for(const tool of kit.tools)if(authoredWorldTool(tool)&&tool.rock&&!keys.has(tool.rock))throw Error(`The world tool ${tool.label} names a rock type its world does not carry.`);
   for(const ref of [...kit.rocks.map(r=>r.material),...kit.tools.map(t=>t.ground)].filter(Boolean))if(!ref.world){const text=JSON.stringify([ref.name,ref.graph]);if(inline.has(ref.key)&&inline.get(ref.key)!==text)throw Error('Two material dependencies disagree about the same key.');inline.set(ref.key,text);}
   return kit;
 }
-export function optionalWorldKit(world,config){
-  const kit=worldKit(config,world);
-  return {...(world.tools!==undefined?{tools:kit.tools}:{}),...(world.rocks!==undefined?{rocks:kit.rocks}:{})};
+// What a world record, a map's embedded world and a world file store: the tools the artist authored, and the rock catalog only where it
+// differs from the one the config derives. The derived defaults stay derived, so library and config revisions reach the world.
+export function storedWorldKit(config,world={}){
+  const kit=worldKit(config,world),tools=kit.tools.filter(authoredWorldTool);
+  return {...(tools.length?{tools}:{}),...(world.rocks!==undefined&&!same(kit.rocks,worldKit(config).rocks)?{rocks:kit.rocks}:{})};
 }
+export const optionalWorldKit=(world,config)=>storedWorldKit(config,world);
+// A built-in world's own rock types (its config's) stay the map's: editing or deleting one on a map never changes the world. Only types the
+// artist saved to the world, and every type of a world of their own, are world-owned instances.
+export const baseRockKeys=config=>new Set(worldRocks(config).map(r=>r.key));
+const worldOwned=(key,builtIn,config)=>!(builtIn&&baseRockKeys(config).has(key));
 export function materialRefSlot(ref,materials){
   if(!ref)return 0;
   const m=ref.world?materials.find(m=>worldKey(m)===ref.world):materials.find(m=>m.key===ref.key&&m.name===ref.name&&same(copyMaterial(m),ref.graph));
@@ -105,16 +119,20 @@ export function validateWorldRocks(rocks,materials,sourceKit){
   return copyRocks(rocks).map(r=>{if(!r.worldKey)return r;if(seen.has(r.worldKey))throw Error('Two map rock types claim the same world type.');seen.add(r.worldKey);
     const template=catalog.get(r.worldKey);if(template&&agrees(r,template,materials))return r;const {worldKey:_,...local}=r;return local;});
 }
-export function instantiateWorldKit(config,world={}, {rocks=null,materials=null,source=world,append=true}={}){
+export function instantiateWorldKit(config,world={}, {rocks=null,materials=null,source=world,append=true,builtIn=false}={}){
   const kit=worldKit(config,world),fresh=rocks==null;
   let nextMaterials=materials==null?worldMaterials(config):copyMaterials(materials),nextRocks=fresh?[]:validateWorldRocks(rocks,nextMaterials,{rocks:copyWorldRocks(source.rocks===undefined?baseRocks(config):source.rocks)});
-  if(!fresh)nextRocks=validateWorldRocks(nextRocks,nextMaterials,kit);   // carrying to another world may turn a source-owned type into a local copy
-  const missing=(fresh||append&&world.rocks!==undefined)?kit.rocks.filter(t=>!nextRocks.some(r=>r.worldKey===t.key)):[];
+  if(!fresh)nextRocks=validateWorldRocks(nextRocks,nextMaterials,kit).map(r=>r.worldKey&&!worldOwned(r.worldKey,builtIn,config)?(({worldKey:_,...local})=>local)(r):r);   // carrying to another world may turn a source-owned type into a local copy
+  // In a world of your own, a carried map's copy of a built-in type that still agrees with the world's becomes its instance (a map made in the
+  // built-in world kept its types as its own). A copy that disagrees, renamed or edited, stays the map's.
+  if(!fresh&&!builtIn){const base=baseRockKeys(config),claimed=new Set(nextRocks.map(r=>r.worldKey).filter(Boolean));
+    nextRocks=nextRocks.map(r=>{const t=!r.worldKey&&base.has(r.key)&&!claimed.has(r.key)?kit.rocks.find(t=>t.key===r.key):null;if(!t||!agrees(r,t,nextMaterials))return r;claimed.add(r.key);return {...r,worldKey:r.key};});}
+  const missing=(fresh||append&&world.rocks!==undefined)?kit.rocks.filter(t=>!nextRocks.some(r=>r.worldKey===t.key)&&(fresh||worldOwned(t.key,builtIn,config))):[];
   const candidate=structuredClone(nextRocks),unbound=[];let staged=nextMaterials;
   try{
     for(const t of missing){let slot=1;while(candidate.some(r=>r.slot===slot))slot++;if(slot>=ROCK_SLOTS)throw Error('This map’s 15 rock slots are full.');
       const bound=bindMaterial(t.material,staged);if(bound.missing){unbound.push(t.key);continue;}staged=bound.materials;
-      candidate.push({slot,key:candidate.some(r=>r.key===t.key)?null:t.key,worldKey:t.key,name:t.name,knobs:structuredClone(t.knobs),column:structuredClone(t.column),colors:structuredClone(t.colors),...(bound.slot?{material:bound.slot}:{})});
+      candidate.push({slot,key:candidate.some(r=>r.key===t.key)?null:t.key,...(worldOwned(t.key,builtIn,config)?{worldKey:t.key}:{}),name:t.name,knobs:structuredClone(t.knobs),column:structuredClone(t.column),colors:structuredClone(t.colors),...(bound.slot?{material:bound.slot}:{})});
     }
     // Ground materials published by tools are ordinary map materials too; role refs allocate nothing.
     for(const t of kit.tools)if(t.ground)staged=bindMaterial(t.ground,staged).materials;
@@ -122,9 +140,11 @@ export function instantiateWorldKit(config,world={}, {rocks=null,materials=null,
   }catch(error){if(fresh)throw error;return {kit,rocks:nextRocks,materials:nextMaterials,unbound:missing.map(r=>r.key),reason:error.message};}
   return {kit,rocks:nextRocks,materials:nextMaterials,unbound,...(unbound.length?{reason:'A world rock type needs a material role this world does not have.'}:{})};
 }
+// A world tool's rock: the world-owned instance, else (a built-in world's own type, which stays the map's) the map's type of that key.
+const toolRock=(key,rocks,config)=>rocks.find(r=>r.worldKey===key)??(baseRockKeys(config).has(key)?rocks.find(r=>!r.worldKey&&r.key===key):undefined);
 export function resolvedWorldCard(tool,rocks,materials,config){
   const card=structuredClone(tool.card),rock=tool.rock;
-  if(rock!==undefined){const r=rocks.find(r=>r.worldKey===rock);card.rockPreset=r?.slot??-1;}
+  if(rock!==undefined){const r=toolRock(rock,rocks,config);card.rockPreset=r?.slot??-1;}
   if(tool.ground){const slot=materialRefSlot(tool.ground,materials);card.groundPreset=slot?(materials.find(m=>m.slot===slot)?.worldGround?0:slot):-1;}
   return card;
 }
@@ -135,7 +155,7 @@ export function worldToolUnavailable(tool,rocks,materials,config,kit={rocks:[]})
     if(ref?.key){const held=materials.find(m=>m.key===ref.key);if(held&&!materialRefSlot(ref,materials))return `This map keeps a different copy of ${ref.name}.`;}
     return '';
   };
-  if(tool.rock&&!rocks.some(r=>r.worldKey===tool.rock)){
+  if(tool.rock&&!toolRock(tool.rock,rocks,config)){
     const reason=refReason(kit.rocks.find(r=>r.key===tool.rock)?.material);if(reason)return reason;
     return rocks.length>=ROCK_SLOTS-1?'This map’s 15 rock slots are full.':'Add this tool’s world rock type to this map before drawing with it.';
   }
@@ -164,10 +184,12 @@ export function publishWorldRock(kit,rocks,materials,slot){
   const captured=templateOf(from,materials,key),held=kit.rocks.some(r=>r.key===key),next=held?kit.rocks.map(r=>r.key===key?captured.rock:r):[...kit.rocks,captured.rock];copyWorldRocks(next);
   return {kit:{...kit,rocks:next},rocks:rocks.map(r=>r===from?{...r,worldKey:key}:r),materials:captured.materials,key};
 }
-export function publishWorldTool(kit,rocks,materials,tool){
+export function publishWorldTool(kit,rocks,materials,tool,{config=null,builtIn=false}={}){
   let nextKit=structuredClone(kit),nextRocks=rocks,nextMaterials=materials;
   const card=checkCard(tool.card,'The world’s tool'),entry={...tool,id:newWorldKey('world'),card:{...card,preset:'custom'}};
-  if(card.rockPreset>0){const result=publishWorldRock(nextKit,nextRocks,nextMaterials,card.rockPreset);nextKit=result.kit;nextRocks=result.rocks;nextMaterials=result.materials;entry.rock=result.key;delete entry.card.rockPreset;}
+  const from=rocks.find(r=>r.slot===card.rockPreset),template=builtIn&&from&&!from.worldKey&&config?kit.rocks.find(t=>t.key===from.key&&baseRockKeys(config).has(t.key)):null;
+  if(template&&agrees(from,template,materials)){entry.rock=from.key;delete entry.card.rockPreset;}
+  else if(card.rockPreset>0){const result=publishWorldRock(nextKit,nextRocks,nextMaterials,card.rockPreset);nextKit=result.kit;nextRocks=result.rocks;nextMaterials=result.materials;entry.rock=result.key;delete entry.card.rockPreset;}
   if(card.groundPreset>0){const captured=referenceForMaterial(card.groundPreset,nextMaterials,{world:'worldGround'});entry.ground=captured.ref;nextMaterials=captured.materials;delete entry.card.groundPreset;}
   nextKit.tools.push(entry);
   return {kit:nextKit,rocks:nextRocks,materials:nextMaterials,id:entry.id};

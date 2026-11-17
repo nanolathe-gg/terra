@@ -47,7 +47,7 @@ export function mountPick(host) {
     const mine = ++ticket;
     if (host.offMap(at)) { state = 'off'; read = null; shape = -1; show(); return; }
     shape = world ? host.shapeAt(world) : -1; state = 'reading'; show();
-    let result; try { result = await host.inspect(at); } catch (error) { result = {error}; }
+    let result; try { result = await host.inspect(at, () => mine === ticket && !layer.hidden); } catch (error) { result = {error}; }
     if (mine !== ticket || layer.hidden) return;
     if (result?.error) { state = 'failed'; failure = result.error.message; }
     else if (!result || result.unread) state = 'unread';
