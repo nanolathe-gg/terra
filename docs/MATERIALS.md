@@ -153,6 +153,13 @@ the whole window; the map then waits until it is uncovered. Escape closes a
 menu inside it first, then leaves Full size, then (after Pick's card) closes
 it.
 
+- The material's name in the editor's bar opens the library drawer: **In
+  this map** (the map's and the world's materials, each with its role;
+  choosing one switches the editor to it) and **Library** (the shipped
+  materials by world; choosing one adds a copy to the map). One search field
+  filters both by name. Each tile's swatch is the editor's own preview of
+  the material's repeat, made once its tile scrolls into view. **New
+  material** adds a blank one.
 - The graph fills the panel. Each card shows what its node makes.
 - Add a node from its menu: it lists every node and type by name, and a search
   also matches the names other editors use (Perlin, Voronoi, Worley, fBm,
@@ -160,8 +167,8 @@ it.
 - **Starting points** (Start · … in the same menu, `materials/snippets.json`):
   twelve named looks, each two to five wired nodes with their numbers, that
   join the graph being edited at the pointer, selected and ready to tune or
-  wire to the Material node. Unlike Manage's add from the library (a whole
-  material), a starting point joins the open graph, and its nodes count
+  wire to the Material node. Unlike a material from the library drawer (a
+  whole material), a starting point joins the open graph, and its nodes count
   toward the 40-node limit (its menu entry says how many). A few leave an
   input open for you to wire: a height (Moss in hollows) or a base color.
 - Drag from an output dot to an input to connect; drag a wire off an input or
@@ -184,9 +191,9 @@ it.
   renderer.
 - **Palette**: click a game color to put it in or out; *Pick from the
   material* chooses the colors nearest what the graph makes.
-- **Manage**: rename, use as the world's ground or water, duplicate, delete,
-  copy and paste (as text), New seed, Reset to library, add from the library
-  or blank.
+- **Manage**: rename, use as the world's ground or water, another world
+  surface, duplicate, delete, copy and paste (as text), New seed, Reset to
+  library.
 
 The editor holds no reference pictures and no comparison tools.
 

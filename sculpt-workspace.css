@@ -300,7 +300,22 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 #material-editor[open]{display:flex;flex-direction:column}
 .app.material-full #material-editor{position:fixed;inset:0;width:100vw;height:100dvh;border-left:0;z-index:20}
 .material-header{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--line);flex:none}.material-header h2{font-size:14px;margin:0}
-#material-select{width:230px;max-width:30cqw}#material-used{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+/* The material's name opens the library drawer: the map's materials, then the library by world, each a tile with its swatch. */
+.material-choose{display:flex;align-items:baseline;min-width:0;max-width:min(320px,36cqw);padding:6px 10px;white-space:nowrap;text-align:left;flex:0 1 auto}
+.material-choose::after{content:"▾";color:var(--muted);flex:none;margin-left:6px}.material-choose[aria-expanded=true]{background:#344c42;border-color:#78ae8d}
+#material-choose-name,.material-choose-role{overflow:hidden;text-overflow:ellipsis;min-width:0}#material-choose-name{flex:0 1 auto}.material-choose-role{flex:0 100 auto;color:var(--muted);font-size:11px;margin-left:5px}.material-choose-role:empty{display:none}
+#material-new{flex:none;white-space:nowrap}
+#material-editor-fields{position:relative}
+.material-library{position:absolute;z-index:9;top:0;left:0;bottom:0;width:min(520px,100%);box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:10px 12px;background:var(--panel);border-right:1px solid #587265;box-shadow:10px 0 30px #0008}
+.material-library[hidden]{display:none}#library-search{width:100%;box-sizing:border-box}
+.library-scroll{flex:1;min-height:0;overflow:auto;scrollbar-width:thin}
+.library-part{font-size:12px;margin:4px 0 6px}.library-part .small{font-weight:400;color:var(--muted);margin-left:4px}.library-part:not(:first-child){margin-top:14px}
+.library-group h4{font-size:11px;font-weight:600;color:var(--muted);margin:10px 0 4px}
+.library-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px}
+.library-tile{display:grid;grid-template-columns:48px minmax(0,1fr);grid-template-rows:auto 1fr;column-gap:8px;align-items:start;min-width:0;padding:4px;text-align:left}
+.library-tile.current{border-color:#6fae86;background:#2d4a3a}
+.library-swatch{grid-row:1/3;width:48px;height:48px;border-radius:3px;background:#10171a}
+.library-name{font-size:12px;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.library-role{font-size:10.5px;line-height:1.3;color:var(--muted);overflow-wrap:anywhere}#material-used{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .material-note{margin:0 0 0 auto;color:#f0c98a;max-width:38cqw;text-align:right}.material-actions{margin-left:auto;flex:none}.material-actions>*{flex:none;white-space:nowrap}.material-note:not([hidden])+.material-actions{margin-left:0}
 .material-menu{position:relative}.material-menu>summary{cursor:pointer;border:1px solid var(--line);border-radius:5px;padding:6px 10px;font-size:12px;list-style:none;user-select:none}.material-menu>summary::-webkit-details-marker{display:none}.material-menu>summary::after{content:" ▾";color:var(--muted)}
 .material-menu[open]>summary{background:#344c42;border-color:#78ae8d}
@@ -344,7 +359,8 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 #palette-grid{display:block;width:100%;max-width:320px;aspect-ratio:1;height:auto;cursor:pointer;image-rendering:pixelated}
 .material-fine{margin-top:10px}.material-fine>summary{cursor:pointer;font-size:11px;color:var(--muted)}
 @container (max-width:1000px){#material-used{display:none}}
-@container (max-width:660px){.material-layout{grid-template-columns:1fr;grid-template-rows:minmax(220px,45dvh) minmax(0,1fr)}.material-side{border-left:0;border-top:1px solid var(--line)}.material-header{flex-wrap:wrap;gap:8px}.material-header h2{display:none}#graph-help{display:none}}
+@container (max-width:700px){.material-layout{grid-template-columns:minmax(0,1fr) 288px}.material-header h2{display:none}}
+@container (max-width:560px){.material-layout{grid-template-columns:1fr;grid-template-rows:minmax(220px,45dvh) minmax(0,1fr)}.material-side{border-left:0;border-top:1px solid var(--line)}.material-header{flex-wrap:wrap;gap:8px}#graph-help{display:none}}
 /* World › Surface (sculpt-surface-panel.js): one row a layer, top first; a row opens to its settings. */
 .surface-show{display:flex;gap:6px;align-items:flex-start;margin:4px 0}
 .surface-layers{list-style:none;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:3px;overflow-y:auto;min-height:0}

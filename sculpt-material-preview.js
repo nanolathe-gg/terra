@@ -1,11 +1,12 @@
 // The material editor's pictures: the terrain renderer itself over small authored fixtures (a level plain or a deep sea for the tile,
-// a shore and a hill for the material on terrain), and every node's own output for the graph's cards. One renderer serves them all, a
-// job at a time, and only the latest request of each kind is kept, so a drag never queues work.
+// a shore and a hill for the material on terrain), every node's own output for the graph's cards, and the library drawer's swatches. One
+// renderer serves them all, a job at a time, and only the latest request of each kind is kept, so a drag never queues work. Swatches wait
+// in their own queue behind the picture and the thumbnails.
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {MATERIAL_REPEAT, soloMaterial} from './sculpt-materials.js';
 import {MASK_KEYS} from './sculpt-scene.js';
 
-export const TILE = MATERIAL_REPEAT, TERRAIN = 384;
+export const TILE = MATERIAL_REPEAT, TERRAIN = 384, SWATCH = 96;
 // The terrain fixture's height across its width: sea bed, a beach ramp, a level plain, then a hill; for a rock material a cliff, so its
 // faces show the rock.
 function terrainHeight(x, sea, base, cliff = false) {
@@ -27,7 +28,7 @@ function terrainWeather(region, request) {
   return {wear, deposit, fx: level, fy: level};
 }
 export class MaterialPreview {
-  constructor() { this.jobs = new Map(); this.serial = 0; this.pictureSerial = 0; this.running = false; this.renderer = null; this.timer = null; }
+  constructor() { this.jobs = new Map(); this.swatches = []; this.serial = 0; this.pictureSerial = 0; this.running = false; this.renderer = null; this.timer = null; }
   // A picture of `material` beside `companion` (the map's water when the material is ground, its ground when it is water).
   // view: 'tile' (the whole repeat, level and lit) or 'terrain'. solo: a node id to show alone, unlit. done(error, {canvas, tiles, draft}).
   // ground: for a rock material, the map's ground, under which the terrain picture shows it as the rock.
@@ -41,6 +42,10 @@ export class MaterialPreview {
   }
   // Each node's output, by node id (Uint8ClampedArray RGBA, THUMB px square).
   thumbnails(main, material, done) { this.post({kind: 'thumbnails', main, material: structuredClone(material), done, serial: ++this.serial}); }
+  // A swatch for the library drawer: the middle SWATCH px of the material's repeat, level and lit (water as a deep sea), palette included.
+  // done(error, canvas). Queued in order; cancelSwatches drops the ones not started.
+  swatch(main, material, done) { if (this.disposed) return; this.swatches.push({kind: 'swatch', main, material: structuredClone(material), done}); if (!this.running) queueMicrotask(() => this.run()); }
+  cancelSwatches() { this.swatches.length = 0; }
   post(job) { if (this.disposed) return; this.jobs.set(job.kind, job); if (!this.running) queueMicrotask(() => this.run()); }
   async host(main) {
     if (this.renderer && this.world === main) return this.renderer;
@@ -53,8 +58,9 @@ export class MaterialPreview {
   async run() {
     if (this.running || this.disposed) return; this.running = true;
     try {
-      while (this.jobs.size && !this.disposed) {
-        const kind = this.jobs.has('picture') ? 'picture' : 'thumbnails', job = this.jobs.get(kind); this.jobs.delete(kind);
+      while ((this.jobs.size || this.swatches.length) && !this.disposed) {
+        const kind = this.jobs.has('picture') ? 'picture' : this.jobs.has('thumbnails') ? 'thumbnails' : 'swatch';
+        const job = kind === 'swatch' ? this.swatches.shift() : this.jobs.get(kind); this.jobs.delete(kind);
         try {
           const r = await this.host(job.main);
           if (this.disposed) return;
@@ -64,10 +70,10 @@ export class MaterialPreview {
           if (job.draft) shown = {...shown, dither: {...shown.dither, amount: 0}};
           r.variant = new URLSearchParams(job.main.variant); r.applyKnobs(); r.setColors(job.main.colorOverrides);
           r.i('uDiagnosticView', job.solo ? 8 : 0);
-          const asRock = job.ground && job.view === 'terrain' && !job.solo;
-          r.setMaterials(new Map(asRock ? [[1, {...job.ground, worldGround: true, worldWater: false}], [2, {...job.companion, worldGround: false, worldWater: true}], [3, {...shown, worldGround: false, worldWater: false, worldRock: true}]]
-            : [[1, {...shown, worldGround: !water, worldWater: water}], [2, {...job.companion, worldGround: water, worldWater: !water}]]));
-          const size = job.view === 'terrain' ? TERRAIN : TILE, half = size / 2;
+          const asRock = job.ground && job.view === 'terrain' && !job.solo, companion = job.companion ?? job.material;
+          r.setMaterials(new Map(asRock ? [[1, {...job.ground, worldGround: true, worldWater: false}], [2, {...companion, worldGround: false, worldWater: true}], [3, {...shown, worldGround: false, worldWater: false, worldRock: true}]]
+            : [[1, {...shown, worldGround: !water, worldWater: water}], [2, {...companion, worldGround: water, worldWater: !water}]]));
+          const size = kind === 'swatch' ? SWATCH : job.view === 'terrain' ? TERRAIN : TILE, half = size / 2;
           const request = {x: pool * 1.5 - half, y: pool * 1.5 - half, width: size, height: size, worldSize: r.config.worldSize, worldGrid: r.config.worldGrid};
           const region = r.requiredRegion(request), count = region.gridWidth * region.gridHeight, h = new Float32Array(count);
           Object.assign(request, {gridWidth: region.gridWidth, gridHeight: region.gridHeight, gridOrigin: region.gridOrigin});
@@ -76,7 +82,9 @@ export class MaterialPreview {
           request.fields = {h}; request.masks = {ground: new Int8Array(count)};
           if (job.view === 'terrain') request.weather = terrainWeather(region, request);
           const rendered = await r.renderChunk(request, {clay: false, light: 'original'});
-          if (this.disposed || (job.serial !== this.pictureSerial && !job.draft)) continue;
+          if (this.disposed) continue;
+          if (kind === 'swatch') { const canvas = new OffscreenCanvas(size, size); canvas.getContext('2d').drawImage(rendered.canvas, 0, 0); job.done(null, canvas); continue; }
+          if (job.serial !== this.pictureSerial && !job.draft) continue;
           const canvas = new OffscreenCanvas(size, size), ctx = canvas.getContext('2d', {willReadFrequently: true}); ctx.drawImage(rendered.canvas, 0, 0);
           let tiles = null;
           if (!job.draft && job.view === 'tile' && !job.solo) {
@@ -89,6 +97,6 @@ export class MaterialPreview {
       }
     } finally { this.running = false; }
   }
-  cancel() { this.jobs.clear(); clearTimeout(this.timer); this.pictureSerial = ++this.serial; }
+  cancel() { this.jobs.clear(); this.swatches.length = 0; clearTimeout(this.timer); this.pictureSerial = ++this.serial; }
   dispose() { this.cancel(); this.disposed = true; this.renderer?.dispose(); this.renderer = null; }
 }

@@ -347,11 +347,12 @@ function pickFeature(button) {
   if (!shown(button)) [...document.querySelectorAll('.feature-modes button')].find(b => /place/i.test(b.textContent))?.click();
   button.click(); land(button);
 }
+// The editor opens on the material through its library drawer's tile for it (the map's tiles are there whenever the editor is open).
 function openMaterial(slot) {
-  const open = $('materials-toolbar'), select = $('material-select');
+  const open = $('materials-toolbar');
   if (!open || open.disabled) return;
   if (!$('material-editor').open) open.click();   // Materials closes the editor when it is already open
-  if (select && select.value !== slot && [...select.options].some(o => o.value === slot)) { select.value = slot; select.dispatchEvent(new Event('change', {bubbles: true})); }
+  document.querySelector(`#library-map [data-slot="${CSS.escape(slot)}"]:not(.current)`)?.click();
 }
 
 // ---- The box ----

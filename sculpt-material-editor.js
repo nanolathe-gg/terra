@@ -7,7 +7,7 @@ import {NODES, NODE_TYPES, accepts, snippetNodes, DITHER, LIBRARY, MAX_NODES, MA
   nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb, materialColor, recolorMaterial,
   addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText, MAP_ROLES, roleOf, roleName, materialStatesApply} from './sculpt-materials.js';
 import {mountMaterialGraph, graphPositions, CARD, cardHeight} from './sculpt-material-graph.js';
-import {MaterialPreview, TILE, TERRAIN} from './sculpt-material-preview.js';
+import {MaterialPreview, TILE, TERRAIN, SWATCH} from './sculpt-material-preview.js';
 import gamePalette from './materials/palette.json' with {type: 'json'};
 
 const $ = id => document.getElementById(id);
@@ -348,15 +348,84 @@ export function mountMaterialEditor(host) {
   $('mview-zoom').onclick = () => { zoomed = !zoomed; refresh(); };
   $('mview-solo').onclick = () => { solo = solo ? null : primary; refresh(); };
 
+  // The library drawer, opened from the material's name in the header: "In this map" (the map's and the world's materials; choosing one
+  // switches the editor to it) and "Library" (the shipped materials by world; choosing one adds a copy to the map). One search filters both
+  // by name. Each tile's swatch is the preview's own (MaterialPreview.swatch), made only once the tile scrolls into view and kept by what it
+  // draws, so opening the editor costs nothing and the drawer fills as it is looked at.
+  // A copy a surface layer draws names that layer (World › Surface), as a world role names its role.
+  const layerOf = o => o.worldLayer ? host.layerName?.(o.worldLayer) ?? o.worldLayer : null;
+  const roleText = o => layerOf(o) ? `surface layer ${layerOf(o)}` : roleOf(o) ? `world ${roleName(roleOf(o))}` : '';
+  const drawer = $('material-library'), swatches = new Map(), waiting = new Map(), inView = new Set();
+  let mapTilesKey = '', libraryBuilt = false, libraryFull = null;
+  const swatchKey = m => { const r = host.renderer(); return JSON.stringify([materialRenderKey(m), m.worldWater === true, r ? [r.variant.toString(), r.colorOverrides] : null]); };
+  const tileMaterial = t => t.dataset.slot ? materials().find(o => o.slot === Number(t.dataset.slot)) : LIBRARY[t.dataset.key];
+  const seen = new IntersectionObserver(entries => { for (const e of entries) { if (e.isIntersecting) { inView.add(e.target); paintSwatch(e.target); } else inView.delete(e.target); } }, {root: $('library-scroll'), rootMargin: '96px 0px'});
+  function paintSwatch(t) {
+    const m = tileMaterial(t), canvas = t.querySelector('canvas'); if (!m || drawer.hidden) return;
+    const key = swatchKey(m); if (canvas.dataset.key === key) return;
+    canvas.dataset.want = key;
+    const made = swatches.get(key); if (made) { canvas.getContext('2d').drawImage(made, 0, 0); canvas.dataset.key = key; return; }
+    if (waiting.has(key)) { waiting.get(key).add(canvas); return; }
+    waiting.set(key, new Set([canvas]));
+    preview.swatch(host.renderer(), m, (error, picture) => {
+      const canvases = waiting.get(key) ?? []; waiting.delete(key); if (error || !picture) return;
+      swatches.set(key, picture); if (swatches.size > 320) swatches.delete(swatches.keys().next().value);
+      for (const c of canvases) if (c.dataset.want === key) { c.getContext('2d').drawImage(picture, 0, 0); c.dataset.key = key; }
+    });
+  }
+  function tile(data, name, role, onclick) {
+    const b = document.createElement('button'), c = document.createElement('canvas'), n = document.createElement('span');
+    b.type = 'button'; b.className = 'library-tile'; Object.assign(b.dataset, data, {name: name.toLowerCase()}); b.onclick = onclick;
+    c.className = 'library-swatch'; c.width = c.height = SWATCH; c.setAttribute('aria-hidden', 'true');
+    n.className = 'library-name'; n.textContent = name; b.append(c, n);
+    if (role) { const r = document.createElement('span'); r.className = 'library-role'; r.textContent = role; b.append(r); }
+    seen.observe(b); return b;
+  }
+  const chooseTile = next => { setDrawer(false); choose(next); $('material-choose').focus(); };
+  // The map's tiles follow its list; they are made again only when a name, a role or the list changes.
+  function buildMapTiles() {
+    const list = materials(), key = JSON.stringify(list.map(o => [o.slot, o.name, roleText(o)]));
+    if (key !== mapTilesKey) { mapTilesKey = key; for (const t of $('library-map').children) { seen.unobserve(t); inView.delete(t); } $('library-map').replaceChildren(...list.map(o => tile({slot: String(o.slot)}, o.name, roleText(o), () => chooseTile(o.slot)))); if (!drawer.hidden) filterDrawer(); }
+    for (const t of $('library-map').children) { const on = Number(t.dataset.slot) === slot; t.classList.toggle('current', on); if (on) t.setAttribute('aria-current', 'true'); else t.removeAttribute('aria-current'); }
+    if (!drawer.hidden) for (const t of inView) if (t.dataset.slot) paintSwatch(t);
+  }
+  // The library by world (the key's world, named as the world list names it; the current world first), then the materials every world shares.
+  function buildLibrary() {
+    const worlds = host.worlds?.() ?? {}, order = Object.keys(worlds), here = host.world?.(), groups = new Map();
+    for (const [key, m] of Object.entries(LIBRARY)) { const world = key.includes('-') && worlds[key.split('-')[0]] ? key.split('-')[0] : ''; if (!groups.has(world)) groups.set(world, []); groups.get(world).push(tile({key}, m.name, '', () => addFromLibrary(key))); }
+    const rank = world => world === here ? -1 : world === '' ? order.length : order.indexOf(world);
+    $('library-shipped').replaceChildren(...[...groups].sort(([a], [b]) => rank(a) - rank(b)).map(([world, tiles]) => {
+      const group = document.createElement('section'), head = document.createElement('h4'), list = document.createElement('div');
+      group.className = 'library-group'; head.textContent = world ? worlds[world] : 'Every world'; list.className = 'library-tiles'; list.append(...tiles); group.append(head, list); return group;
+    }));
+    libraryBuilt = true; libraryFull = null;
+  }
+  function filterDrawer() {
+    const q = $('library-search').value.trim().toLowerCase(); let any = false;
+    for (const t of drawer.querySelectorAll('.library-tile')) { t.hidden = !!q && !t.dataset.name.includes(q); any ||= !t.hidden; }
+    for (const g of drawer.querySelectorAll('.library-group')) g.hidden = !g.querySelector('.library-tile:not([hidden])');
+    $('library-empty').hidden = any;
+  }
+  function setDrawer(on) {
+    if (drawer.hidden !== on) return false;
+    drawer.hidden = !on; $('material-choose').setAttribute('aria-expanded', String(on));
+    if (on) { if (!libraryBuilt) buildLibrary(); refresh(); filterDrawer(); $('library-search').focus(); }
+    else { preview.cancelSwatches(); waiting.clear(); }
+    return true;
+  }
+  $('material-choose').onclick = () => setDrawer(drawer.hidden);
+  $('library-search').oninput = filterDrawer;
+  $('library-search').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); drawer.querySelector('.library-tile:not([hidden]):not(:disabled)')?.click(); } else if (e.key === 'ArrowDown') { e.preventDefault(); drawer.querySelector('.library-tile:not([hidden])')?.focus(); } };
+
   // The header: which material, where it is used, and the list's own actions.
   function refresh() {
     const list = materials(); if (!list.some(m => m.slot === slot)) { slot = (list.find(m => m.worldGround) ?? list[0])?.slot ?? 0; selection = new Set(); primary = null; frameAt = -1; solo = null; }
-    // A copy a surface layer draws names that layer (World › Surface), as a world role names its role.
-    const layerOf = o => o.worldLayer ? host.layerName?.(o.worldLayer) ?? o.worldLayer : null;
-    const m = material(), role = o => layerOf(o) ? ` · surface layer ${layerOf(o)}` : roleOf(o) ? ` · world ${roleName(roleOf(o))}` : '', full = list.length >= MATERIAL_SLOTS - 1;
+    const m = material(), full = list.length >= MATERIAL_SLOTS - 1;
     refreshWorld();
     if (!dialog.open) return;   // the rest is the editor's own face
-    $('material-select').replaceChildren(...list.map(o => new Option(o.name + role(o), String(o.slot)))); $('material-select').value = String(slot);
+    buildMapTiles();
+    $('material-choose-name').textContent = m?.name ?? ''; $('material-choose-role').textContent = m && roleText(m) ? '· ' + roleText(m) : '';
+    if (libraryBuilt && libraryFull !== full) { libraryFull = full; for (const t of $('library-shipped').querySelectorAll('.library-tile')) { t.disabled = full; t.title = full ? `The map already has ${MATERIAL_SLOTS - 1} materials.` : 'Add a copy to the map'; } }
     if (!m) return;
     if (m.nodes.every(n => n.id !== primary)) { primary = null; selection = new Set([...selection].filter(id => m.nodes.some(n => n.id === id))); }
     if (frameAt >= m.frames.length) frameAt = -1;
@@ -369,7 +438,7 @@ export function mountMaterialEditor(host) {
     if (document.activeElement !== $('material-name')) $('material-name').value = m.name;
     $('material-use-ground').disabled = m.worldGround || m.worldWater; $('material-use-water').disabled = m.worldWater || m.worldGround; $('material-role').value = MAP_ROLES.some(([r]) => m[r]) ? roleOf(m) : ''; $('material-role').disabled = m.worldGround || m.worldWater; $('material-role').title = $('material-role').disabled ? 'The world’s ground and water draw nothing else.' : '';
     $('material-delete').disabled = m.worldGround || m.worldWater; $('material-delete').title = $('material-delete').disabled ? 'The world’s ground and water cannot be deleted. Assign another material first.' : '';
-    for (const id of ['material-duplicate', 'material-paste', 'material-add']) { $(id).disabled = full; $(id).title = full ? `The map already has ${MATERIAL_SLOTS - 1} materials.` : ''; }
+    for (const id of ['material-duplicate', 'material-paste', 'material-new']) { $(id).disabled = full; $(id).title = full ? `The map already has ${MATERIAL_SLOTS - 1} materials.` : ''; }
     $('material-reset').disabled = !LIBRARY[m.source]; $('material-reset').title = LIBRARY[m.source] ? `Back to “${LIBRARY[m.source].name}” from the library. Undo brings your version back.` : 'This material did not come from the library.';
     for (const v of ['tile', 'repeat', 'terrain']) $('mview-' + v).setAttribute('aria-pressed', String(view === v));
     $('mview-zoom').setAttribute('aria-pressed', String(zoomed)); $('mview-zoom').disabled = view === 'repeat';
@@ -382,10 +451,9 @@ export function mountMaterialEditor(host) {
     graph.refresh(slot); drawPicture(); refreshPictures();
   }
   const choose = next => { slot = next; selection = new Set(); primary = null; frameAt = -1; solo = null; picture = null; thumbs = new Map(); thumbPixels = new Map(); pick('controls'); refresh(); };
-  $('material-select').onchange = () => choose(Number($('material-select').value));
   const addToMap = attempt((source, name) => { const added = addMaterial(materials(), source, name); update(added.materials); commit(); $('material-menu').open = false; choose(added.slot); });
-  $('material-add').onchange = () => { const key = $('material-add').value; $('material-add').value = ''; if (key === 'blank') addToMap(blankMaterial(), 'New material'); else if (LIBRARY[key]) addToMap(LIBRARY[key], LIBRARY[key].name); };
-  $('material-add').replaceChildren(new Option('Add a material…', ''), new Option('Blank material', 'blank'), ...Object.entries(LIBRARY).map(([key, m]) => new Option(m.name, key)));
+  const addFromLibrary = key => { setDrawer(false); addToMap(LIBRARY[key], LIBRARY[key].name); $('material-choose').focus(); };
+  $('material-new').onclick = () => addToMap(blankMaterial(), 'New material');
   $('material-duplicate').onclick = attempt(() => { const added = duplicateMaterial(materials(), slot); update(added.materials); commit(); $('material-menu').open = false; choose(added.slot); });
   $('material-rename').onclick = attempt(() => { update(renameMaterial(materials(), slot, $('material-name').value)); commit(); });
   $('material-name').onkeydown = e => { if (e.key === 'Enter') $('material-rename').click(); };
@@ -403,7 +471,7 @@ export function mountMaterialEditor(host) {
   // Docked, the editor is not modal: the map beside it can be drawn on, panned, zoomed and picked while it is open. The side panel gives
   // way to it (sculpt-ui.js dock) and comes back when it closes. Full size covers the map, which then waits (host.suspend).
   function setFull(on) {
-    if (full === on) return; full = on; document.querySelector('.app').classList.toggle('material-full', on); host.suspend(on);
+    if (full === on) return; full = on; document.querySelector('.app').classList.toggle('material-full', on); host.suspend(on); requestAnimationFrame(() => graph.fit());
     $('material-full').setAttribute('aria-pressed', String(on)); $('material-full').textContent = on ? '⤡ Beside the map' : '⤢ Full size';
     $('material-full').title = on ? 'Back beside the map, which shows every change' : 'Spread the editor over the whole window';
   }
@@ -416,14 +484,15 @@ export function mountMaterialEditor(host) {
   // for (its Build or World tab), the focus stays where that click put it.
   function close(returnFocus = true) {
     if (!dialog.open) return;
-    closeMenu(); setFull(false); dialog.close(); preview.cancel(); pictureKey = thumbKey = ''; host.dock(null); $('materials-toolbar').setAttribute('aria-expanded', 'false');
+    closeMenu(); setDrawer(false); setFull(false); dialog.close(); preview.cancel(); pictureKey = thumbKey = ''; host.dock(null); $('materials-toolbar').setAttribute('aria-expanded', 'false');
     if (returnFocus) (opener?.isConnected && !opener.closest('[hidden]') ? opener : $('materials-toolbar')).focus({preventScroll: true});
   }
-  // Escape inside the editor (sculpt-ui.js closeTop), one thing a press: the add menu or Manage, then Full size back to docked. Then Pick's
-  // card, and then the editor itself (closeDocked).
+  // Escape inside the editor (sculpt-ui.js closeTop), one thing a press: the add menu, Manage or the library drawer, then Full size back to
+  // docked. Then Pick's card, and then the editor itself (closeDocked).
   function inner() {
     if (closeMenu()) { $('material-graph').focus(); return true; }
     if ($('material-menu').open) { $('material-menu').open = false; $('material-menu').querySelector('summary').focus(); return true; }
+    if (setDrawer(false)) { $('material-choose').focus(); return true; }
     if (full) { setFull(false); return true; }
     return false;
   }
@@ -434,8 +503,11 @@ export function mountMaterialEditor(host) {
   $('material-done').onclick = () => close();
   $('material-full').onclick = () => setFull(!full);
   dialog.oncancel = e => e.preventDefault();
-  // A press anywhere else, on the map too, closes the add menu and Manage.
-  const outside = e => { if (!dialog.open) return; if (!$('node-menu').contains(e.target) && e.target !== $('graph-add')) closeMenu(); if ($('material-menu').open && !$('material-menu').contains(e.target)) $('material-menu').open = false; };
+  // A press anywhere else, on the map too, closes the add menu, Manage and the library drawer.
+  const outside = e => {
+    if (!dialog.open) return; if (!$('node-menu').contains(e.target) && e.target !== $('graph-add')) closeMenu(); if ($('material-menu').open && !$('material-menu').contains(e.target)) $('material-menu').open = false;
+    if (!drawer.hidden && !drawer.contains(e.target) && !$('material-choose').contains(e.target)) setDrawer(false);
+  };
   document.addEventListener('pointerdown', outside, true);
   // Keys typed in the editor stay in it, so the map's shortcuts (Delete, V, arrows ...) never act on a shape meanwhile. Escape goes on to the
   // editor's one Escape chain (sculpt-ui.js closeTop).

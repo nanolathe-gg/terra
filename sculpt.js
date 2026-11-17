@@ -2251,7 +2251,7 @@ function buildKnobs() {
     syncColumnPanel();syncWorldControls();
   };
   mountRockPanel();
-  materialEditor?.dispose();materialEditor=mountMaterialEditor({suspend:on=>{materialCovers=on;if(!on&&materialTerrainDirty){materialTerrainDirty=false;evaluate(0);}mapCanvas?.setSuspended(on);if(!on&&materialWeatherPending)queueWeather();},dock:editor=>editorUI.dock(editor),materials:()=>mapMaterials,strokes:()=>nodes,rocks:()=>mapRocks,renderer:()=>renderer,edit:editMaterials,delete:removeMaterial,checkpoint:()=>checkpoint(true),status,
+  materialEditor?.dispose();materialEditor=mountMaterialEditor({suspend:on=>{materialCovers=on;if(!on&&materialTerrainDirty){materialTerrainDirty=false;evaluate(0);}mapCanvas?.setSuspended(on);if(!on&&materialWeatherPending)queueWeather();},dock:editor=>editorUI.dock(editor),worlds:()=>config.biomes||{},world:()=>config.biomeId,materials:()=>mapMaterials,strokes:()=>nodes,rocks:()=>mapRocks,renderer:()=>renderer,edit:editMaterials,delete:removeMaterial,checkpoint:()=>checkpoint(true),status,
     layerName:key=>{const names=(config.surface||[]).filter(l=>l.material===key).map(l=>l.name||BUILTIN_LABELS[l.builtin]||l.builtin);return names.length?names.join(', '):null;}});
   surfacePanel=mountSurfacePanel(surfaceHost());
 }
