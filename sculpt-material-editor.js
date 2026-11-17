@@ -507,12 +507,14 @@ export function mountMaterialEditor(host) {
     if (!dialog.open) { dialog.show(); host.dock({close, inner}); $('materials-toolbar').setAttribute('aria-expanded', 'true'); $('material-graph').focus({preventScroll: true}); }
     pictureKey = thumbKey = ''; refresh(); graph.fit();
   }
-  // The side panel comes back before the focus returns, so a button inside it can take the focus. Closed because the side panel was asked
-  // for (its Build or World tab), the focus stays where that click put it.
+  // The side panel comes back before the focus returns, so a button inside it can take the focus. A door its panel built again meanwhile
+  // is found by its id (a Surface row's Edit, say); without one the focus goes to Materials. Closed because the side panel was asked for
+  // (its Build or World tab), the focus stays where that click put it.
   function close(returnFocus = true) {
     if (!dialog.open) return;
     closeMenu(); setDrawer(false); setFull(false); dialog.close(); preview.cancel(); pictureKey = thumbKey = ''; host.dock(null); $('materials-toolbar').setAttribute('aria-expanded', 'false');
-    if (returnFocus) (opener?.isConnected && !opener.closest('[hidden]') ? opener : $('materials-toolbar')).focus({preventScroll: true});
+    const door = opener?.isConnected ? opener : opener?.id ? document.getElementById(opener.id) : null;
+    if (returnFocus) (door && !door.closest('[hidden]') ? door : $('materials-toolbar')).focus({preventScroll: true});
   }
   // A text field of the editor (a node's, frame's or control's name, a range, the material's name, the drawer's search) is left first:
   // Escape puts back what a name field held when it took the focus and moves the focus out, and the editor stays open.
