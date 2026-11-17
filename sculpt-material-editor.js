@@ -1,8 +1,5 @@
-// The material editor: one panel for the map's materials (the world's ground, water, role and surface layer materials, and the map's own),
-// docked beside the map in the side panel's place, so the map stays live and shows every edit on its own terrain; Full size spreads it over
-// the whole window as before. The graph fills the panel; beside it sit one preview and three panes: Controls (what the material publishes,
-// for adjusting it), Node (the selected node) and Palette (the game colors it is reduced to). Every element is in index.html; this fills
-// values and applies edits through the map's own undo and save.
+// The material workspace: the graph above the live map and the material's own texture, with Controls, Node and Palette at the right.
+// Focus graph covers the two previews while settings stay in view. Every element is in index.html; edits use the map's own undo and save.
 import {NODES, NODE_TYPES, accepts, snippetNodes, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
   nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb, materialColor, recolorMaterial,
   addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText, MAP_ROLES, roleOf, roleName, materialStatesApply} from './sculpt-materials.js';
@@ -358,7 +355,7 @@ export function mountMaterialEditor(host) {
     const context = [r.variant.toString(), r.colorOverrides], want = view === 'terrain' ? 'terrain' : 'tile', showing = solo && m.nodes.some(n => n.id === solo) ? solo : null;
     const key = JSON.stringify([materialRenderKey(m), water, materialRenderKey(companion), ground && materialRenderKey(ground), context, want, showing]);
     // Docked, an edit's picture waits for a pause in input, so a drag leaves the GPU to the map, which shows every step; a new view, node or
-    // material, and every edit at Full size (the map covered), draws at once.
+    // material, and every edit with the graph focused (the map covered), draws at once.
     if (key !== pictureKey) {
       pictureKey = key; $('material-preview').setAttribute('aria-busy', 'true'); $('material-preview-note').textContent = 'Updating…';
       const ask = () => preview.picture(r, m, companion, {view: want, solo: showing, ground}, (error, result) => {
@@ -501,12 +498,12 @@ export function mountMaterialEditor(host) {
   $('material-reset').onclick = attempt(() => { const source = LIBRARY[material().source]; if (!source) return; update(setMaterial(materials(), slot, source)); commit(); selection = new Set(); primary = null; frameAt = -1; refresh(); });
   for (const [id, role] of [['ground-world-default', 'worldGround'], ['water-material', 'worldWater']]) $(id).onchange = attempt(() => { update(assignMaterial(materials(), Number($(id).value), role)); commit(); });
 
-  // Docked, the editor is not modal: the map beside it can be drawn on, panned, zoomed and picked while it is open. The side panel gives
-  // way to it (sculpt-ui.js dock) and comes back when it closes. Full size covers the map, which then waits (host.suspend).
+  // The workspace is not modal: its lower-left map can be drawn on, panned, zoomed and picked. The side panel gives way to the
+  // material settings (sculpt-ui.js dock) and comes back on close. Focus graph covers the map, which then waits (host.suspend).
   function setFull(on) {
     if (full === on) return; full = on; document.querySelector('.app').classList.toggle('material-full', on); host.suspend(on); requestAnimationFrame(() => graph.fit());
-    $('material-full').setAttribute('aria-pressed', String(on)); $('material-full').textContent = on ? '⤡ Beside the map' : '⤢ Full size';
-    $('material-full').title = on ? 'Back beside the map, which shows every change' : 'Spread the editor over the whole window';
+    $('material-full').setAttribute('aria-pressed', String(on)); $('material-full').textContent = on ? 'Show map & texture' : 'Focus graph';
+    $('material-full').title = on ? 'Restore the live map and texture below the graph' : 'Give the graph the map and texture preview space';
   }
   function open(which, from) {
     opener = from; if (which !== undefined) slot = which; pick('controls');
@@ -535,7 +532,7 @@ export function mountMaterialEditor(host) {
     return true;
   }
   // Escape inside the editor (sculpt-ui.js closeTop), one thing a press: a control's name being asked, a text field, the add menu, Manage or
-  // the library drawer, then Full size back to docked. Then Pick's card, and then the editor itself (closeDocked).
+  // the library drawer, then Focus graph back to the split workspace. Then Pick's card, and then the editor itself (closeDocked).
   function inner() {
     if (naming) { const pin = naming.pin; cancelName(); pin.focus(); return true; }
     if (leaveField()) return true;
