@@ -93,7 +93,7 @@
 .find-results{position:absolute;top:34px;left:0;width:min(440px,calc(100vw - 24px));max-height:min(70vh,560px);overflow:auto;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 12px 40px #0008;z-index:30}
 .find-group+.find-group{margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}
 .find-group-name{padding:4px 8px 2px;font-size:10px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
-.find-option{display:block;padding:4px 8px;border-radius:5px;cursor:pointer}.find-option[aria-selected=true]{background:#344c42;color:#d9ffe5}
+.find-option{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;align-items:center;padding:4px 8px;border-radius:5px;cursor:pointer}.find-option>.scope-tag{grid-column:2;grid-row:1}.find-path,.find-why{grid-column:1/-1}.find-option[aria-selected=true]{background:#344c42;color:#d9ffe5}
 .find-name,.find-path{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.find-path{font-size:10.5px;color:var(--muted)}.find-option[aria-selected=true] .find-path{color:#b9dcc6}
 .find-option.unavailable .find-name{color:var(--muted)}.find-why{display:block;font-size:10.5px;color:#b6adb5}
 .find-swatch{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:-1px;border-radius:3px;border:1px solid #0008}

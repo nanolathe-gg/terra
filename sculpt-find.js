@@ -170,6 +170,18 @@ function whereOf(el) {
 }
 const kindOf = el => el.type === 'color' ? 'color' : el.tagName === 'SELECT' ? 'choice' : el.type === 'checkbox' || el.type === 'radio' ? 'switch' : el.matches('.scrub, [type=range]') ? 'slider' : 'field';
 const layerName = li => { const n = li.querySelector('.surface-name'); return clean(n?.value ?? n?.textContent); };
+// What editing an element changes, as the page's own scope tag says it (sculpt-workspace.css .scope-tag): the tag of the nearest block that
+// holds the element, sitting directly in it (a map-saved row, the switch or button it follows), in its heading or head row (a group of
+// map-saved rows, the Map menu, the shape and Features cards, the World panel), or in the rock type picker's head (the rock type rows).
+// Null where the page says nothing (Settings, tools, actions, materials).
+const SCOPE_HEADS = ':scope > .scope-tag, :scope > :is(h2, h3, h4, .card-head, .control-search) > .scope-tag, :scope > .rock-picker .scope-tag';
+function scopeOf(el) {
+  for (let a = el?.parentElement; a && a !== document.body; a = a.parentElement) {
+    const tag = a.querySelector(SCOPE_HEADS), text = clean(tag?.textContent);
+    if (text) return {text, variant: [...tag.classList].find(c => c !== 'scope-tag' && c.startsWith('scope-')) || ''};
+  }
+  return null;
+}
 
 function rows(entries) {
   for (const [id, first] of SCOPES) {
@@ -187,7 +199,7 @@ function rows(entries) {
         words: [KIND_WORDS[kind], label?.title, row?.dataset.searchGroup, row?.dataset.knob, row?.dataset.note, el.getAttribute('aria-label'), el.title].filter(Boolean).join(' '),
         // A choice's options count as its note, so "snow" finds the Paint row that offers Snow.
         note: [clean(row?.querySelector(':scope > p.small:not(.control-requirement)')?.textContent), ...(el.tagName === 'SELECT' ? [...el.options].map(o => o.text) : [])].join(' '),
-        swatch: kind === 'color' ? el.value : '', go: () => goTo(el)});
+        swatch: kind === 'color' ? el.value : '', scope: scopeOf(el), go: () => goTo(el)});
     }
   }
 }
@@ -200,25 +212,27 @@ function surface(entries) {
       if (!li.classList.contains('surface-layer')) continue;
       const name = layerName(li), key = li.dataset.key, drawn = clean(li.querySelector('.surface-drawn')?.textContent), chip = li.querySelector('.material-chip');
       if (!name) continue;
-      entries.push({group: 'Surface layers', name, path: ['Surface layer', stage], kind: 'layer', words: `layer ${drawn}`, note: drawn, go: () => openLayer(key)});
+      entries.push({group: 'Surface layers', name, path: ['Surface layer', stage], kind: 'layer', words: `layer ${drawn}`, note: drawn, scope: scopeOf(li), go: () => openLayer(key)});
       // A layer's Color is in its open row; an open row's own controls are found as rows.
       if (chip && !chip.classList.contains('own') && !li.classList.contains('open'))
-        entries.push({group: 'Surface layers', name: `${name} color`, path: ['Surface layer', name], kind: 'color', words: `color ${drawn}`, swatch: chip.style.backgroundColor, bias: -1, go: () => openLayer(key, 'input[type=color]')});
+        entries.push({group: 'Surface layers', name: `${name} color`, path: ['Surface layer', name], kind: 'color', words: `color ${drawn}`, swatch: chip.style.backgroundColor, bias: -1, scope: scopeOf(li), go: () => openLayer(key, 'input[type=color]')});
     }
   }
   const add = $('surface-add');
   if (add && reachable(add)) for (const o of add.options) if (o.value)
     // Going adds the layer (one undo step), so a preset ranks under what the world already has.
-    entries.push({group: 'Surface layers', name: clean(o.text), path: ['Add a layer'], kind: 'action', words: 'add layer new', unavailable: add.disabled, bias: -4, go: () => addLayer(o.value)});
+    entries.push({group: 'Surface layers', name: clean(o.text), path: ['Add a layer'], kind: 'action', words: 'add layer new', unavailable: add.disabled, bias: -4, scope: scopeOf(add), go: () => addLayer(o.value)});
 }
 function tools(entries) {
+  // Features and Starts edit the map: their card says so (its head's tag).
+  const features = scopeOf(document.querySelector('.feature-kinds'));
   for (const b of document.querySelectorAll('.tool-palette [data-tool], #feature-tool, #starts-tool')) {
     const rail = b.closest('.tool-group')?.querySelector('.rail-button'), name = clean(b.getAttribute('aria-label') || b.textContent);
     entries.push({group: 'Tools', name, path: ['Tool', ownText(rail)].filter(Boolean), kind: 'tool', words: ['tool', b.title, b.dataset.shape].filter(Boolean).join(' '), unavailable: b.disabled,
-      go: () => { if (b.disabled) return; b.click(); land(null, shown(b) ? b : rail || b); }});
+      scope: b.matches('#feature-tool, #starts-tool') ? features : null, go: () => { if (b.disabled) return; b.click(); land(null, shown(b) ? b : rail || b); }});
   }
   for (const b of document.querySelectorAll('.feature-kinds [data-feature-kind]'))
-    entries.push({group: 'Features', name: clean(b.textContent), path: ['Tool', 'Features'], kind: 'feature', words: `feature ${b.title}`, unavailable: $('feature-tool')?.disabled, go: () => pickFeature(b)});
+    entries.push({group: 'Features', name: clean(b.textContent), path: ['Tool', 'Features'], kind: 'feature', words: `feature ${b.title}`, unavailable: $('feature-tool')?.disabled, scope: scopeOf(b), go: () => pickFeature(b)});
 }
 function materials(entries) {
   // The map's materials, as the World panel's ground and water choices list them (each leaves out the other's).
@@ -363,7 +377,9 @@ export function mountFind() {
     const name = element('span', 'find-name');
     if (entry.swatch) { const chip = element('span', 'find-swatch'); chip.style.background = entry.swatch; name.append(chip); }
     name.append(entry.name);
-    o.append(name, element('span', 'find-path', entry.path.join(' › ')));
+    o.append(name);
+    if (entry.scope) o.append(element('span', `scope-tag ${entry.scope.variant}`, entry.scope.text));
+    o.append(element('span', 'find-path', entry.path.join(' › ')));
     if (entry.unavailable) o.append(element('span', 'find-why', entry.reason || 'Unavailable now'));
     return o;
   }
