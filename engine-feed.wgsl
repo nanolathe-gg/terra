@@ -5,6 +5,9 @@
 //                                                                          list of active 8 x 8 tiles, from the height, protection and
 //                                                                          erosion-rate planes (sculpt-erosion.js fixedField, in f32)
 //   Time pass output   refinedMain                                         the eroded height beside the authored one
+//   Time pass cells    timeDownMain, timeUpHeightMain, timeUpMapsMain      a lattice finer than the Time pass's cell (sculpt-erosion.js TIME_CELL):
+//                                                                          its height, protection and masks on the pass's cells, then the
+//                                                                          pass's change and maps back on the lattice
 //   Chunk bake         feedMain                                            one chunk's height, route, weather/material and mask textures
 //                                                                          (sculpt-chunk-renderer.js upload, in f32), and the painted flags
 //
@@ -269,4 +272,74 @@ fn gatherMaps(@builtin(global_invocation_id) id: vec3u) {
     let si = u32(a.x); let di = u32(a.y);
     let valid = gatherRefinementValid(id);
     gdM0[di] = select(0u, gsM0[si], valid); gdM1[di] = select(0u, gsM1[si], valid); gdM2[di] = select(0u, gsM2[si], valid);
+}
+
+// ---------------------------------------------------------------- the Time pass's own cells
+
+// The Time pass simulates on cells of TIME_CELL px (sculpt-erosion.js): a finer lattice is read down to them, and the pass's result comes back
+// as a change of the lattice's own heights. Here fu.grid and fu.cells are the fine lattice's, fu.gw is the coarse side, fu.gh the step in fine
+// cells, and (fu.ox, fu.oy) the fine cell of the first coarse one (chosen so coarse cells sit on the same world cells in every window).
+@group(3) @binding(15) var<storage, read_write> tcF: array<f32>;    // coarse h and p, two planes
+@group(3) @binding(16) var<storage, read_write> tcMk: array<u32>;   // coarse masks, 7 words a cell
+@group(3) @binding(17) var<storage, read> tcW: array<f32>;          // the coarse pass's weather: authored, eroded
+@group(3) @binding(18) var<storage, read> tcM0: array<u32>;
+@group(3) @binding(19) var<storage, read> tcM1: array<u32>;
+@group(3) @binding(20) var<storage, read> tcM2: array<u32>;
+@group(3) @binding(21) var<storage, read_write> tfW: array<f32>;    // the fine weather: plane 0 the authored height; plane 1 holds the protection until the eroded height replaces it
+@group(3) @binding(22) var<storage, read> tfH: array<f32>;          // the same buffer, read (the maps pass)
+@group(3) @binding(23) var<storage, read_write> tfM0: array<u32>;
+@group(3) @binding(24) var<storage, read_write> tfM1: array<u32>;
+@group(3) @binding(25) var<storage, read_write> tfM2: array<u32>;
+
+fn tcFine(c: vec2u) -> vec2u { return min(vec2u(u32(fu.ox), u32(fu.oy)) + c * fu.gh, vec2u(fu.grid - 1u)); }
+// A coarse height is the fine heights around its cell under a 1 2 1 tent, so the pass erodes the ground at its own scale and not one fine
+// sample's; protection and the masks are the cell's own (a mean would blur a protected edge).
+@compute @workgroup_size(8, 8)
+fn timeDownMain(@builtin(global_invocation_id) id: vec3u) {
+    let gc = fu.gw;
+    if (id.x >= gc || id.y >= gc) { return; }
+    let f = vec2i(tcFine(id.xy)); let n = i32(fu.grid); let j = id.y * gc + id.x;
+    var h = 0.0;
+    for (var dy = -1; dy <= 1; dy++) { for (var dx = -1; dx <= 1; dx++) {
+        let w = f32((2 - abs(dx)) * (2 - abs(dy))) / 16.0;
+        h += w * F[u32(clamp(f.y + dy, 0, n - 1)) * fu.grid + u32(clamp(f.x + dx, 0, n - 1))];
+    } }
+    let i = u32(f.y) * fu.grid + u32(f.x);
+    tcF[j] = h; tcF[gc * gc + j] = F[fu.cells + i];
+    for (var k = 0u; k < 7u; k++) { tcMk[j * 7u + k] = Mk[i * 7u + k]; }
+}
+// Where a fine cell sits among the coarse ones: the four around it and its weights.
+struct TcAt { i: array<u32, 4>, w: vec4f }
+fn tcAt(id: vec2u) -> TcAt {
+    let gc = fu.gw;
+    let q = clamp((vec2f(id) - vec2f(f32(fu.ox), f32(fu.oy))) / f32(fu.gh), vec2f(0.0), vec2f(f32(gc - 1u)));
+    let a = vec2u(floor(q)); let b = min(a + 1u, vec2u(gc - 1u)); let t = q - vec2f(a);
+    return TcAt(array<u32, 4>(a.y * gc + a.x, a.y * gc + b.x, b.y * gc + a.x, b.y * gc + b.x), vec4f((1.0 - t.x) * (1.0 - t.y), t.x * (1.0 - t.y), (1.0 - t.x) * t.y, t.x * t.y));
+}
+// The pass's change of height, laid on the fine lattice's own heights. The runner's contract holds per fine cell: a submerged or protected
+// cell keeps its height, land stays above the waterline, and every height stays within the heights a map holds.
+@compute @workgroup_size(8, 8)
+fn timeUpHeightMain(@builtin(global_invocation_id) id: vec3u) {
+    if (id.x >= fu.grid || id.y >= fu.grid) { return; }
+    let i = id.y * fu.grid + id.x; let h = tfW[i]; let p = tfW[fu.cells + i];
+    var out = h;
+    if (h > fu.sea && p < 1.0) {
+        let c = tcAt(id.xy); let nc = fu.gw * fu.gw;
+        var d = 0.0;
+        for (var k = 0; k < 4; k++) { d += c.w[k] * (tcW[nc + c.i[k]] - tcW[c.i[k]]); }
+        out = clamp(h + d, max(fu.sea - 90.0, min(h, fu.sea + 1.0)), fu.sea + 300.0);
+    }
+    tfW[fu.cells + i] = out;
+}
+fn tcMix(a: u32, b: u32, c: u32, d: u32, w: vec4f) -> u32 { return pack4x8unorm(unpack4x8unorm(a) * w.x + unpack4x8unorm(b) * w.y + unpack4x8unorm(c) * w.z + unpack4x8unorm(d) * w.w); }
+// The pass's maps on the fine lattice; a submerged cell's are the ones the maps pass gives one (engine-weather.wgsl mapsMain).
+@compute @workgroup_size(8, 8)
+fn timeUpMapsMain(@builtin(global_invocation_id) id: vec3u) {
+    if (id.x >= fu.grid || id.y >= fu.grid) { return; }
+    let i = id.y * fu.grid + id.x;
+    if (tfH[i] <= fu.sea) { tfM0[i] = 0u; tfM1[i] = 0u; tfM2[i] = pack4x8unorm(vec4f(0.5, 0.5, 0.0, 0.0)); return; }
+    let c = tcAt(id.xy);
+    tfM0[i] = tcMix(tcM0[c.i[0]], tcM0[c.i[1]], tcM0[c.i[2]], tcM0[c.i[3]], c.w);
+    tfM1[i] = tcMix(tcM1[c.i[0]], tcM1[c.i[1]], tcM1[c.i[2]], tcM1[c.i[3]], c.w);
+    tfM2[i] = tcMix(tcM2[c.i[0]], tcM2[c.i[1]], tcM2[c.i[2]], tcM2[c.i[3]], c.w);
 }

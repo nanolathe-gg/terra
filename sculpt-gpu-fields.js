@@ -1699,6 +1699,8 @@ export function createPagedFields(opts) {
 const FEED_USES = {
   seedMain: ['0.0', '0.1', '0.2', '1.0', '1.1', '1.2', '1.3', '1.10'], tileFlagMain: ['0.0', '1.3', '1.4'], tileListMain: ['0.0', '1.4', '1.5', '1.6'],
   tileArgsMain: ['1.6', '1.7'], refinedMain: ['0.0', '1.8', '1.9'],
+  // The Time pass's own cells (sculpt-erosion.js runCoarse)
+  timeDownMain: ['0.0', '0.1', '0.2', '3.15', '3.16'], timeUpHeightMain: ['0.0', '3.17', '3.21'], timeUpMapsMain: ['0.0', '3.18', '3.19', '3.20', '3.22', '3.23', '3.24', '3.25'],
   feedMain: ['0.0', '0.1', '0.2', '2.0', '2.1', '2.2', '2.3', '2.4', '2.5', '2.6', '2.7', '2.8', '2.9'],
   // H5b: the gather from pages
   gatherShape: ['3.0', '3.1', '3.2', '3.3', '3.4'], gatherHeight: ['3.0', '3.5', '3.6'], gatherMaps: ['3.0', '3.7', '3.8', '3.9', '3.10', '3.11', '3.12'], gatherField: ['3.0', '3.13', '3.14']};
