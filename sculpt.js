@@ -1226,8 +1226,9 @@ const groupTranslation=edit => edit && typeof edit==='object' && !Array.isArray(
 function previewRegionalMove(edit) {
   if (!moving?.regional) return false;
   if (moving.members && groupTranslation(edit)) {
-    const m=[1,0,0,1,edit.dx??0,edit.dy??0];
+    let m=[1,0,0,1,edit.dx??0,edit.dy??0];
     if (m.some(v => !Number.isFinite(v))) throw new Error('Invalid terrain transform.');
+    m=fitToMap(moving.members.flatMap(g => g.state.points),m); if (!m) return moving.index;   // the group stops at the edge together
     for (const g of moving.members) {
       const before=nodeBounds(nodes[g.index]),node=cloneNodes([g.original])[0];
       transformNode(node,g.state,m); nodes[g.index]=node;
@@ -1240,7 +1241,7 @@ function previewRegionalMove(edit) {
   else {
     const q=Array.isArray(edit)?{matrix:edit}:edit||{},matrix=q.matrix??[1,0,0,1,q.dx??0,q.dy??0];
     if (!Array.isArray(matrix) || matrix.length!==6 || matrix.some(v => !Number.isFinite(v)) || Math.abs(matrix[0]*matrix[3]-matrix[1]*matrix[2])<1e-8) throw new Error('Invalid terrain transform.');
-    transformNode(node,gesture.state,matrix);
+    if (!transformNode(node,gesture.state,matrix)) return gesture.index;   // past the map's size: the last transform that fitted stays
     if(q.point&&Number.isInteger(q.point.index)&&node.points[q.point.index])node.points[q.point.index]={x:clamp(q.point.x,0,config.map.width-1),y:clamp(q.point.y,0,config.map.height-1)};
     if (q.params) node.params={...node.params,...q.params};
     if (Number.isFinite(q.amount)) node.params={...node.params,amount:q.amount};
@@ -1430,7 +1431,7 @@ const sculptRegion={
   // hit-tests) and does nothing else; any other click closes the card.
   pickHere:(event,art,ground)=>{if(!picking&&!event.altKey){pickCard?.close();return false;}if(!stroke&&!moving)pickCard?.pick(art,ground);return true;},picking:()=>picking,
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,selectedShapes,toggleShape,pickAt:pickNode,selectionLabel:shapeName,
-  editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
+  editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); transformSelected(() => [1,0,0,1,dx,dy]); },
   pendingInputs:()=>worldInputQueue.pending,drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
   setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },renderProgress,presented:drawShapePreview,onUpdate:fn => { mapUpdate=fn; }
 };
@@ -1449,12 +1450,34 @@ function nodeDistance(n,p) {
 // Moving, rotating and scaling a shape: the gesture's transform applies to
 // the shape as it was when the gesture began, path and frame together.
 function nodeState(n) { return {params:n.params?{...n.params}:undefined,points:n.points.map(q => ({...q})),frame:n.frame||IDENTITY,radius:n.params?.radius,amount:n.params?.amount}; }
+// A transform kept on the map: the shape moves whole, never squashed onto the edge. The matrix gains the translation that brings the transformed points'
+// box inside the map (a drag past the edge stops there; a turn or scale by the edge is pushed back in). Null where the box is larger than the map.
+function fitToMap(points,m) {
+  const w=(config.map?.width??size)-1,h=(config.map?.height??size)-1;let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
+  for (const q of points) { const r=applyFrame(m,q.x,q.y); ax=Math.min(ax,r.x); ay=Math.min(ay,r.y); bx=Math.max(bx,r.x); by=Math.max(by,r.y); }
+  if (!points.length) return m;
+  if (bx-ax>w+1e-9 || by-ay>h+1e-9) return null;
+  const dx=ax<0?-ax:bx>w?w-bx:0,dy=ay<0?-ay:by>h?h-by:0;
+  return dx||dy?[m[0],m[1],m[2],m[3],m[4]+dx,m[5]+dy]:m;
+}
+// Moving, turning or scaling a shape: its path, frame, radius and a river's drawn line take one matrix, fitted to the map. Answers false, leaving the
+// node as it was, where the shape would not fit on the map.
 function transformNode(n,start,m) {
-  n.points=start.points.map(q => { const r=applyFrame(m,q.x,q.y); return {x:clamp(r.x,0,(config.map?.width??size)-1),y:clamp(r.y,0,(config.map?.height??size)-1)}; });
+  m=fitToMap(start.points,m); if (!m) return false;
+  n.points=start.points.map(q => applyFrame(m,q.x,q.y));
   n.frame=compose(m,start.frame);
   if (n.params && start.radius) n.params={...n.params,radius:clamp(start.radius*Math.hypot(m[0],m[1]),4,600)};
   // A river's drawn line moves with it; one still as migrated stays so, one edited by hand stays edited (sculpt-river.js movedRiver).
   if (start.params?.river&&n.params) n.params={...n.params,river:movedRiver(start.params.river,{points:start.points,params:start.params,seed:n.seed},{points:n.points,params:n.params,seed:n.seed},q => applyFrame(m,q.x,q.y))};
+  return true;
+}
+// A transform of the selected shape from the card, the bar or the keys: one undo step, or none (and a note) where it would leave the map or change nothing.
+function transformSelected(matrixOf) {
+  const n=nodes[selected]; if (!n?.points || stroke || moving || loading || !ready) return;
+  const m=fitToMap(n.points,matrixOf(n));
+  if (!m) { status('The shape would not fit on the map.'); return; }
+  if (isIdentity(m)) return;
+  changeSelected(node => { transformNode(node,nodeState(node),m); });
 }
 function nodePivot(n) {
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
@@ -1469,8 +1492,10 @@ function changeSelected(edit) {
 }
 function moveSelectedShapes(dx,dy) {
   const group=selectedShapes(); if (!group.length || stroke || moving || loading || !ready) return;
+  // The group stops at the edge together, keeping its layout.
+  const m=fitToMap(group.flatMap(i => nodes[i].points),[1,0,0,1,dx,dy]); if (!m || isIdentity(m)) return;
   cancelWeather();
-  for (const i of group) { const n=nodes[i],before=nodeBounds(n); transformNode(n,nodeState(n),[1,0,0,1,dx,dy]); pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); }
+  for (const i of group) { const n=nodes[i],before=nodeBounds(n); transformNode(n,nodeState(n),m); pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); }
   pendingEval=pendingEval<0?group[0]:Math.min(pendingEval,group[0]);
   flushEval(); checkpoint(); queueWeather();const adding=pathAdding,mode=drawMode;selectNode(selected,true);pathAdding=adding;drawMode=mode;updateControls();schedule();
 }
@@ -1878,7 +1903,7 @@ for(const key of ['x','y','rotation','scale']){
     const value=Number(input.value),n=nodes[selected];if(!n?.points||!Number.isFinite(value))return;
     if(Math.abs(value-selectionTransform(n).values[key])<.051){input.blur();updateControls();return;}
     const matrix=selectionTransform(n,{[key]:value}).matrix;
-    changeSelected(node=>transformNode(node,nodeState(node),matrix));input.blur();updateControls();
+    transformSelected(() => matrix);input.blur();updateControls();
   });
   input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur();}if(e.key==='Escape'){e.preventDefault();e.stopPropagation();input.value=String(Math.round(selectionTransform(nodes[selected]).values[key]*10)/10);input.blur();}});
 }
@@ -1888,7 +1913,7 @@ $('path-remove').onclick=()=>changeSelected(n=>{removePath(n,pathIndex);pathInde
 $('path-extend').onclick=()=>{pathAdding=!pathAdding;updateControls();schedule();};
 $('draw-new').onclick=()=>{if(stroke||moving||loading)return;const ids=toolIds(),n=nodes[selected],candidate=n?.params?strokeTool(n,ids):tool,entry=ids.has(candidate)&&candidate!=='move'?candidate:firstTool();document.querySelector(`[data-tool="${CSS.escape(entry)}"]`)?.click();};
 $('draw-add').onclick=()=>{if(stroke||moving||loading||!nodes[selected]?.points||nodes[selected].hidden)return;alsoSelected=[];drawMode='add';pathEditing=false;pathAdding=false;pathPoint=-1;updateControls();schedule();};
-for(const [id,value] of [['rotate-left',-Math.PI/12],['rotate-right',Math.PI/12],['scale-down',1/1.1],['scale-up',1.1]])$(id).onclick=()=>changeSelected(n=>transformNode(n,nodeState(n),about(nodePivot(n),id.startsWith('rotate')?rotation(value):scaling(value))));
+for(const [id,value] of [['rotate-left',-Math.PI/12],['rotate-right',Math.PI/12],['scale-down',1/1.1],['scale-up',1.1]])$(id).onclick=()=>transformSelected(n=>about(nodePivot(n),id.startsWith('rotate')?rotation(value):scaling(value)));
 document.addEventListener('terraform-feature-mode',()=>updateControls());
 document.addEventListener('terraform-status',event=>{featureNotice=event.detail;status(event.detail);});
 $('tool-style').addEventListener('change',() => {
@@ -2099,10 +2124,8 @@ window.addEventListener('keydown',event => {
   const turn={',':-Math.PI/12,'.':Math.PI/12}[event.key],grow={'[':1/1.1,']':1.1}[event.key],lift={PageUp:5,PageDown:-5}[event.key];
   if (selected>=0 && nodes[selected]?.points && (turn || grow || lift) && !event.metaKey && !event.ctrlKey) {
     event.preventDefault();
-    changeSelected(n => {
-      if (lift) { if (n.params && n.kind!=='erase') n.params={...n.params,amount:clamp(n.params.amount+lift,...amountRange(n.kind))}; return; }
-      transformNode(n,nodeState(n),about(nodePivot(n),turn?rotation(turn):scaling(grow)));
-    });
+    if (lift) { changeSelected(n => { if (n.params && n.kind!=='erase') n.params={...n.params,amount:clamp(n.params.amount+lift,...amountRange(n.kind))}; }); return; }
+    transformSelected(n => about(nodePivot(n),turn?rotation(turn):scaling(grow)));
   }
 });
 new ResizeObserver(resize).observe($('viewport'));
