@@ -180,6 +180,10 @@ function buildToolbar() {
   }));
   // A toolbar with no water tool (a world without water) shows no Water group.
   $('water-tools').closest('.tool-group').hidden=!shapeTools().some(t => t.group==='water');
+  // The shape card's Look: the same tools, by group (#tool-look).
+  const look=$('tool-look'),value=look.value,group=(label,list) => { const g=document.createElement('optgroup'); g.label=label; g.append(...list.map(t => new Option(t.label,t.id))); return g; };
+  look.replaceChildren(...[['Land',t => t.group!=='water' && !t.card],['Water',t => t.group==='water' && !t.card],['This map’s tools',t => t.card]].map(([label,test]) => group(label,shapeTools().filter(test))).filter(g => g.childElementCount));
+  look.value=value;
 }
 // The map's tools replaced (Save as tool, Delete, undo, a load or a scene): the toolbar and the cards follow, and a selected tool that is gone gives way to
 // Landform. `fresh` gives every map tool its own card again (another map's tools may have had these ids).
@@ -314,7 +318,8 @@ function updateControls() {
   $('material-weathering-value').textContent=$('material-weathering').value+'%';
   $('deposit-spread-value').textContent=$('deposit-spread').value+'%';
   $('transition-detail-value').textContent=$('transition-detail').value+'%';
-  { const id=tool==='move'&&nodes[selected]?.params?strokeTool(nodes[selected],ids):entry; syncToolStyle(id); $('tool-style').value=toolSettings[id]?.preset||'custom'; }
+  { const id=tool==='move'&&nodes[selected]?.params?strokeTool(nodes[selected],ids):entry; syncToolStyle(id); $('tool-style').value=toolSettings[id]?.preset||'custom';
+    $('tool-look-control').hidden=!toolById(id); if (toolById(id)) $('tool-look').value=id; }
   $('tool-help').textContent=toolById(entry)?.card?`Draw a landform with the settings, curves and rock of ${toolLabel(entry)}, a tool saved in this map. Change any setting below.`:toolHelpLine(entry)||'';
   { const can=ready && resettable(); $('reset-strokes').disabled=!can; $('reset-strokes').title=can?'':'Draw a shape first: there is nothing to reset.'; }
   $('undo').disabled=!ready || Boolean(stroke||moving) || historyIndex<=0;
@@ -1633,6 +1638,22 @@ $('tool-style').addEventListener('change',() => {
   // A selected landform takes that world's version of its tool's shape.
   const n=nodes[selected],id=n?.params?strokeTool(n,toolIds()):tool;toolSettings[tool]=shapeCard(id,preset);showTool(toolSettings[tool],toolKind(id));
   if(selected>=0){editSelectedFromControls({curve:toolSettings[tool].curve,along:toolSettings[tool].along});checkpoint();queueWeather();}
+  updateControls();schedule();persistLater();
+});
+// Look (#tool-look): another shape tool for the selected landform and for the next stroke. The size, height, rock and ground the artist set (where
+// they differ from the old tool's own) stay; the rest of the card, its curves included, becomes the new tool's. One undo step.
+const LOOK_KEPT=['diameter','heightReference','elevation','amount','rockPreset','groundPreset'];
+$('tool-look').addEventListener('change',() => {
+  const next=$('tool-look').value,ids=toolIds();if(stroke||moving||!toolById(next))return;
+  const n=nodes[selected],editing=selected>=0&&n?.kind==='landform'&&Boolean(n.params),from=editing?strokeTool(n,ids):tool;
+  const now={};for(const [key,[id]] of Object.entries(TOOL_FIELDS))now[key]=Number($(id).value);
+  const was=toolCard(from),card=toolCard(next);
+  for(const key of LOOK_KEPT)if(Number.isFinite(now[key])&&now[key]!==was[key])card[key]=now[key];
+  mapFeatures?.deactivate();
+  if(!editing||tool!=='move'){rememberTool();tool=next;drawMode=editing?drawMode:'new';toolSettings[next]=card;}
+  showTool(card,toolKind(next));
+  if(editing){n.tool=next;editSelectedFromControls({curve:card.curve,along:card.along});checkpoint();queueWeather();}
+  else{selected=-1;alsoSelected=[];pathPoint=-1;renderLayers();}
   updateControls();schedule();persistLater();
 });
 // Save as tool (in a selected landform's options): a button in this map's toolbar that draws with the shape's settings as the panel shows them, its curves and
