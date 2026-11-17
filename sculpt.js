@@ -19,7 +19,7 @@ import {shapePaths,clonePaths,pathsWithin,simplifyPath,validatePaths,appendPath,
 import {selectionTransform,toggleSelection} from './sculpt-selection.js';
 import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap} from './sculpt-share.js';
 import {openMapStore,importLegacyMaps,mapMeta,mapToReopen,byRecent,mapsInUse,holdMap,newMapId,readTab,writeTab,cleanAddress,startsMap,LEGACY_KEYS} from './sculpt-maps.js';
-import {isRiver,pointsSignature} from './sculpt-river.js';
+import {isRiver,pointsSignature,movedRiver,seedRiverLine} from './sculpt-river.js';
 import {HELP_TOOLS} from './sculpt-help-examples.js';
 import {copySurface,layerKey,withSurfaceMaterials} from './sculpt-material-model.js';
 import {mountSurfacePanel,BUILTIN_LABELS} from './sculpt-surface-panel.js';
@@ -95,7 +95,10 @@ const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',16,1200],amount:
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldSetting=key => worldSettingIn(config,experiment,key);
 const worldDefault=key => worldDefaultIn(config,key);
-const shapeDefaults=() => shapeDefaultsIn(config);
+// The world's shape option defaults, built once per config.defaults: every replacement of the defaults (a stored world, an undo's world) is a new
+// object, and applyWorldRock writes its recipe's numbers before any shape reads them. nodeShapeParams runs for every later shape on each preview move.
+let shapeDefaultsFor=null,shapeDefaultsKept=null;
+const shapeDefaults=() => { if (shapeDefaultsFor!==config?.defaults || !shapeDefaultsKept) { shapeDefaultsFor=config?.defaults; shapeDefaultsKept=Object.freeze(shapeDefaultsIn(config)); } return shapeDefaultsKept; };
 const nodeShapeParams=n => {const q={...shapeDefaults(),...n.params};return n.kind==='landform'?landformSteps(q):q;};
 const shapeValue=key => { const f=SHAPE_FIELDS.find(f => f[0]===key); return Number($(f[1]).value)/f[7]; };
 // A shape control set from a tool's or a stroke's numbers. A choice its list no longer holds (a rock preset deleted since the tool last used it)
@@ -136,7 +139,7 @@ function buildShapeOptions() {
     rememberTool(true); updateControls(); schedule(); persistLater();
     // A reference switch changes the representation, not the other authored
     // values (which may be between the inspector sliders' ticks).
-    if (selected>=0) editSelectedFromControls(key==='heightReference'?{...nodes[selected].params,heightReference:shapeValue('heightReference'),elevation:shapeValue('elevation')}:key==='stepReference'?{...nodes[selected].params,stepReference:shapeValue('stepReference'),terraces:shapeValue('terraces'),ledge:shapeValue('ledge')}:{});
+    if (selected>=0) editSelectedFromControls(key==='heightReference'?{...nodes[selected].params,heightReference:shapeValue('heightReference'),elevation:shapeValue('elevation')}:key==='stepReference'?{...nodes[selected].params,stepReference:shapeValue('stepReference'),terraces:shapeValue('terraces'),ledge:shapeValue('ledge')}:{},[key]);
   });
   // Releasing a shape option finalizes the edit like the ordinary sliders
   // below: snapshot it for Undo and restart the refinement the input handler
@@ -258,11 +261,18 @@ function rememberTool(custom=false) {
   if (custom) state.preset='custom';
   toolSettings[tool]=state;
 }
-function heightControlRange(p={}) {
+// A landform's Elevation range, which follows its height reference. A Ground offset digs or rises at most as far as a fixed elevation can from the plain.
+function elevationRange(p={}) {
   const ref=Math.round(p.heightReference||0),offset=ref===1?(config?.seaLevel||0):0;
-  // A Ground offset digs or rises at most as far as a fixed elevation can from the plain.
-  if(ref===2){$('lf-elevation').min='-160';$('lf-elevation').max='160';return;}
-  $('lf-elevation').min=String(-80-offset);$('lf-elevation').max=String(300-offset);
+  return ref===2?[-160,160]:[-80-offset,300-offset];
+}
+function heightControlRange(p={}) { const [lo,hi]=elevationRange(p); $('lf-elevation').min=String(lo); $('lf-elevation').max=String(hi); }
+// The setting that sets a shape's height, which Shift + drag and PageUp / PageDown change: a landform's Elevation, the Height of the other kinds (a fissure's
+// Depth, a brush's strength), each in its slider's range and steps. Reset ground has none (null).
+function heightControl(n) {
+  if (!n?.params || !n.points || n.kind==='erase') return null;
+  const [lo,hi]=n.kind==='landform'?elevationRange(n.params):amountRange(n.kind),key=n.kind==='landform'?'elevation':'amount',value=Number(n.params[key]??worldDefault(key));
+  return {key,lo,hi,value:Number.isFinite(value)?value:lo,set:v => clamp(Math.round(v),lo,hi)};
 }
 function stepControlRange(kind,p={}) {
   const shore=kind==='landform'&&Number(p.stepReference)>0;
@@ -371,7 +381,8 @@ function updateControls() {
   const gated=key => !shapeControlAvailable(key,kind,shapeOptions) || modeOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
   for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(kind) || gated(key) ; $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
   // P28: on a river, Wander is how far in px the migration may carry the drawn line (its band), not an outline noise; once the path is edited by hand it cannot be migrated again.
-  { const riv=kind==='landform'&&isRiver(shapeOptions),node=nodes[selected],stale=riv&&Boolean(node?.params)&&(node.params.river?.sig===undefined||node.params.river.sig!==pointsSignature(node.points)),why='The path was edited by hand, so it is not migrated again: draw a new river to change its bends.';
+  { const riv=kind==='landform'&&isRiver(shapeOptions),node=nodes[selected],stale=riv&&Boolean(node?.params)&&(node.params.river?.sig===undefined||node.params.river.sig!==pointsSignature(node.points)),
+      why=node?.params?.river?.drawn?'The path was edited by hand, so it is not migrated again: draw a new river to change its bends.':'A river of several paths keeps them as they are, so it is not migrated: draw a new river to give it bends.';
     $('lf-wander-control').querySelector('.small').textContent=stale?why:riv?'How far, in px, the river may stray from the line you drew, at most four channel widths: its bends grow by the river\'s own rule until they fill that band, and travel downstream. 0 keeps the line as drawn; a braided river\'s whole bed strays the same way. A loop drawn closed is cut off and left as an oxbow lake. A new seed gives other bends.':SHAPE_FIELDS.find(f => f[0]==='wander')[8];
     $('lf-wander').disabled=stale;$('lf-wander').title=stale?why:''; }
   $('lf-ground-control').hidden=!(kind==='landform'||kind==='paint'&&shapeValue('paintChannel')===26); syncGroundChips(kind);
@@ -437,7 +448,7 @@ function curveContext() {
 function setCurve(curve,key='curve') {
   if (selected>=0 && nodes[selected]?.params) {
     const n=nodes[selected],p={...n.params}; if (curve) p[key]=curve; else delete p[key]; n.params=p;
-    updateControls(); editSelectedFromControls(); persistLater(); return;
+    updateControls(); editSelectedFromControls({},[]); persistLater(); return;
   }
   const t={...toolSettings[tool],preset:'custom'}; if (curve) t[key]=curve; else delete t[key]; toolSettings[tool]=t;
   updateControls(); schedule(); persistLater();
@@ -1227,14 +1238,15 @@ function beginRegionalMove(index=selected) {
   updateControls(); return index;
 }
 // Only a plain drag moves the group; rotate, scale, height and point edits stay on the shape they started on.
-const groupTranslation=edit => edit && typeof edit==='object' && !Array.isArray(edit) && !edit.matrix && !edit.point && !edit.params && !Number.isFinite(edit.amount);
+const groupTranslation=edit => edit && typeof edit==='object' && !Array.isArray(edit) && !edit.matrix && !edit.point && !edit.params && !Number.isFinite(edit.height);
 // Transforms and parameter edits are relative to the gesture's first node,
 // regardless of pointer cadence. A release is one undoable history entry.
 function previewRegionalMove(edit) {
   if (!moving?.regional) return false;
   if (moving.members && groupTranslation(edit)) {
-    const m=[1,0,0,1,edit.dx??0,edit.dy??0];
+    let m=[1,0,0,1,edit.dx??0,edit.dy??0];
     if (m.some(v => !Number.isFinite(v))) throw new Error('Invalid terrain transform.');
+    m=fitToMap(moving.members.flatMap(g => g.state.points),m); if (!m) return moving.index;   // the group stops at the edge together
     for (const g of moving.members) {
       const before=nodeBounds(nodes[g.index]),node=cloneNodes([g.original])[0];
       transformNode(node,g.state,m); nodes[g.index]=node;
@@ -1247,10 +1259,10 @@ function previewRegionalMove(edit) {
   else {
     const q=Array.isArray(edit)?{matrix:edit}:edit||{},matrix=q.matrix??[1,0,0,1,q.dx??0,q.dy??0];
     if (!Array.isArray(matrix) || matrix.length!==6 || matrix.some(v => !Number.isFinite(v)) || Math.abs(matrix[0]*matrix[3]-matrix[1]*matrix[2])<1e-8) throw new Error('Invalid terrain transform.');
-    transformNode(node,gesture.state,matrix);
+    if (!transformNode(node,gesture.state,matrix)) return gesture.index;   // past the map's size: the last transform that fitted stays
     if(q.point&&Number.isInteger(q.point.index)&&node.points[q.point.index])node.points[q.point.index]={x:clamp(q.point.x,0,config.map.width-1),y:clamp(q.point.y,0,config.map.height-1)};
     if (q.params) node.params={...node.params,...q.params};
-    if (Number.isFinite(q.amount)) node.params={...node.params,amount:q.amount};
+    if (Number.isFinite(q.height)) { const c=heightControl(node); if (c) node.params={...node.params,[c.key]:c.set(q.height)}; }
   }
   nodes[gesture.index]=node; gesture.changed=true;
   evaluate(gesture.index,unionRect(before,nodeBounds(node))); schedule(); return gesture.index;
@@ -1436,8 +1448,9 @@ const sculptRegion={
   // Pick: a left click on the map with Pick in hand, or with Alt held, reads its pixel (art: the picture's pixel; ground: the point Select
   // hit-tests) and does nothing else; any other click closes the card.
   pickHere:(event,art,ground)=>{if(!picking&&!event.altKey){pickCard?.close();return false;}if(!stroke&&!moving)pickCard?.pick(art,ground);return true;},picking:()=>picking,
+  heightOf:i => heightControl(nodes[i])?.value??null,
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,selectedShapes,toggleShape,pickAt:pickNode,selectionLabel:shapeName,
-  editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
+  editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); transformSelected(() => [1,0,0,1,dx,dy]); },
   pendingInputs:()=>worldInputQueue.pending,drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
   setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },renderProgress,presented:drawShapePreview,onUpdate:fn => { mapUpdate=fn; }
 };
@@ -1455,13 +1468,35 @@ function nodeDistance(n,p) {
 }
 // Moving, rotating and scaling a shape: the gesture's transform applies to
 // the shape as it was when the gesture began, path and frame together.
-function nodeState(n) { return {drawn:n.params?.river?.drawn,points:n.points.map(q => ({...q})),frame:n.frame||IDENTITY,radius:n.params?.radius,amount:n.params?.amount}; }
+function nodeState(n) { return {params:n.params?{...n.params}:undefined,points:n.points.map(q => ({...q})),frame:n.frame||IDENTITY,radius:n.params?.radius,amount:n.params?.amount}; }
+// A transform kept on the map: the shape moves whole, never squashed onto the edge. The matrix gains the translation that brings the transformed points'
+// box inside the map (a drag past the edge stops there; a turn or scale by the edge is pushed back in). Null where the box is larger than the map.
+function fitToMap(points,m) {
+  const w=(config.map?.width??size)-1,h=(config.map?.height??size)-1;let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
+  for (const q of points) { const r=applyFrame(m,q.x,q.y); ax=Math.min(ax,r.x); ay=Math.min(ay,r.y); bx=Math.max(bx,r.x); by=Math.max(by,r.y); }
+  if (!points.length) return m;
+  if (bx-ax>w+1e-9 || by-ay>h+1e-9) return null;
+  const dx=ax<0?-ax:bx>w?w-bx:0,dy=ay<0?-ay:by>h?h-by:0;
+  return dx||dy?[m[0],m[1],m[2],m[3],m[4]+dx,m[5]+dy]:m;
+}
+// Moving, turning or scaling a shape: its path, frame, radius and a river's drawn line take one matrix, fitted to the map. Answers false, leaving the
+// node as it was, where the shape would not fit on the map.
 function transformNode(n,start,m) {
-  n.points=start.points.map(q => { const r=applyFrame(m,q.x,q.y); return {x:clamp(r.x,0,(config.map?.width??size)-1),y:clamp(r.y,0,(config.map?.height??size)-1)}; });
+  m=fitToMap(start.points,m); if (!m) return false;
+  n.points=start.points.map(q => applyFrame(m,q.x,q.y));
   n.frame=compose(m,start.frame);
-  // A river's drawn line moves with it, so Wander can still migrate it from where it now lies.
-  if (start.drawn&&n.params?.river) n.params={...n.params,river:{...n.params.river,drawn:start.drawn.map(q => { const r=applyFrame(m,q.x,q.y); return {x:r.x,y:r.y}; }),sig:pointsSignature(n.points)}};
   if (n.params && start.radius) n.params={...n.params,radius:clamp(start.radius*Math.hypot(m[0],m[1]),4,600)};
+  // A river's drawn line moves with it; one still as migrated stays so, one edited by hand stays edited (sculpt-river.js movedRiver).
+  if (start.params?.river&&n.params) n.params={...n.params,river:movedRiver(start.params.river,{points:start.points,params:start.params,seed:n.seed},{points:n.points,params:n.params,seed:n.seed},q => applyFrame(m,q.x,q.y))};
+  return true;
+}
+// A transform of the selected shape from the card, the bar or the keys: one undo step, or none (and a note) where it would leave the map or change nothing.
+function transformSelected(matrixOf) {
+  const n=nodes[selected]; if (!n?.points || stroke || moving || loading || !ready) return;
+  const m=fitToMap(n.points,matrixOf(n));
+  if (!m) { status('The shape would not fit on the map.'); return; }
+  if (isIdentity(m)) return;
+  changeSelected(node => { transformNode(node,nodeState(node),m); });
 }
 function nodePivot(n) {
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
@@ -1476,8 +1511,10 @@ function changeSelected(edit) {
 }
 function moveSelectedShapes(dx,dy) {
   const group=selectedShapes(); if (!group.length || stroke || moving || loading || !ready) return;
+  // The group stops at the edge together, keeping its layout.
+  const m=fitToMap(group.flatMap(i => nodes[i].points),[1,0,0,1,dx,dy]); if (!m || isIdentity(m)) return;
   cancelWeather();
-  for (const i of group) { const n=nodes[i],before=nodeBounds(n); transformNode(n,nodeState(n),[1,0,0,1,dx,dy]); pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); }
+  for (const i of group) { const n=nodes[i],before=nodeBounds(n); transformNode(n,nodeState(n),m); pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); }
   pendingEval=pendingEval<0?group[0]:Math.min(pendingEval,group[0]);
   flushEval(); checkpoint(); queueWeather();const adding=pathAdding,mode=drawMode;selectNode(selected,true);pathAdding=adding;drawMode=mode;updateControls();schedule();
 }
@@ -1516,14 +1553,20 @@ function toggleShape(i) {
   if (next.primary<0) status('Deselected the shape.');
   return next.primary===i || next.others.includes(i);
 }
-function editSelectedFromControls(overrides={}) {
+// The card's five basic rows: the setting each writes and how.
+const BASIC_ROWS={diameter:['radius',v => v/2],amount:['amount',v => v],roughness:['rough',v => v/100],softness:['softness',v => v/100],cracks:['cracks',v => v/100]};
+// A card edit on the selected shape. `only` names the rows that changed (a basic row's id or a shape option's key): only they are written, so a value the
+// sliders cannot hold (a radius scaled below the Size slider's end, a number between its steps) stays as it is when another row moves. Without `only`
+// every row is written: Look and Defaults from world show a whole card. `overrides` are written as given.
+function editSelectedFromControls(overrides={},only=null) {
   const n=nodes[selected]; if (!n || !n.params) return;
   controlsEditing=true;
-  const before=nodeBounds(n);
-  n.params={...n.params,radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,
-    softness:Number($('softness').value)/100,cracks:Number($('cracks').value)/100,
-    ...Object.fromEntries(SHAPE_FIELDS.filter(f => f[3].includes(n.kind)).map(([key]) => [key,shapeValue(key)])),...overrides};
-  migrateRiverNode(n);
+  const before=nodeBounds(n),take=key => !only || only.includes(key);
+  n.params={...n.params,...Object.fromEntries(Object.entries(BASIC_ROWS).filter(([id]) => take(id)).map(([id,[key,of]]) => [key,of(Number($(id).value))])),
+    ...Object.fromEntries(SHAPE_FIELDS.filter(f => f[3].includes(n.kind) && take(f[0])).map(([key]) => [key,shapeValue(key)])),...overrides};
+  // A stroke that has just become a river takes its path as the line drawn, and is migrated (sculpt-river.js seedRiverLine).
+  if (seedRiverLine(n)) { pathPoint=-1; pathIndex=0; }
+  if (migrateRiverNode(n)) { pathPoint=-1; pathIndex=0; }
   pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n)));
   cancelWeather(); pendingEval=pendingEval<0?selected:Math.min(pendingEval,selected); schedule();
 }
@@ -1886,7 +1929,7 @@ document.querySelector('.tool-groups').addEventListener('click',event => {
   else{selected=-1;alsoSelected=[];pathPoint=-1;renderLayers();showTool(toolSettings[tool]);}
   updateControls();schedule();persistLater();
 });
-for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls(); });
+for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls({},[id]); });
 for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
 for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up','up'],['node-down','down'],['node-hide','hide']]) $(id).addEventListener('click',() => nodeAction(kind));
 // Features and Starts are two entries on the rail for the one tool (sculpt-features.js): Features opens it to place, Starts in its starts mode.
@@ -1903,7 +1946,7 @@ for(const key of ['x','y','rotation','scale']){
     const value=Number(input.value),n=nodes[selected];if(!n?.points||!Number.isFinite(value))return;
     if(Math.abs(value-selectionTransform(n).values[key])<.051){input.blur();updateControls();return;}
     const matrix=selectionTransform(n,{[key]:value}).matrix;
-    changeSelected(node=>transformNode(node,nodeState(node),matrix));input.blur();updateControls();
+    transformSelected(() => matrix);input.blur();updateControls();
   });
   input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur();}if(e.key==='Escape'){e.preventDefault();e.stopPropagation();input.value=String(Math.round(selectionTransform(nodes[selected]).values[key]*10)/10);input.blur();}});
 }
@@ -1913,7 +1956,7 @@ $('path-remove').onclick=()=>changeSelected(n=>{removePath(n,pathIndex);pathInde
 $('path-extend').onclick=()=>{pathAdding=!pathAdding;updateControls();schedule();};
 $('draw-new').onclick=()=>{if(stroke||moving||loading)return;const ids=toolIds(),n=nodes[selected],candidate=n?.params?strokeTool(n,ids):tool,entry=ids.has(candidate)&&candidate!=='move'?candidate:firstTool();document.querySelector(`[data-tool="${CSS.escape(entry)}"]`)?.click();};
 $('draw-add').onclick=()=>{if(stroke||moving||loading||!nodes[selected]?.points||nodes[selected].hidden)return;alsoSelected=[];drawMode='add';pathEditing=false;pathAdding=false;pathPoint=-1;updateControls();schedule();};
-for(const [id,value] of [['rotate-left',-Math.PI/12],['rotate-right',Math.PI/12],['scale-down',1/1.1],['scale-up',1.1]])$(id).onclick=()=>changeSelected(n=>transformNode(n,nodeState(n),about(nodePivot(n),id.startsWith('rotate')?rotation(value):scaling(value))));
+for(const [id,value] of [['rotate-left',-Math.PI/12],['rotate-right',Math.PI/12],['scale-down',1/1.1],['scale-up',1.1]])$(id).onclick=()=>transformSelected(n=>about(nodePivot(n),id.startsWith('rotate')?rotation(value):scaling(value)));
 document.addEventListener('terraform-feature-mode',()=>updateControls());
 document.addEventListener('terraform-status',event=>{featureNotice=event.detail;status(event.detail);});
 $('tool-style').addEventListener('change',() => {
@@ -2108,10 +2151,13 @@ window.addEventListener('keydown',event => {
   const turn={',':-Math.PI/12,'.':Math.PI/12}[event.key],grow={'[':1/1.1,']':1.1}[event.key],lift={PageUp:5,PageDown:-5}[event.key];
   if (selected>=0 && nodes[selected]?.points && (turn || grow || lift) && !event.metaKey && !event.ctrlKey) {
     event.preventDefault();
-    changeSelected(n => {
-      if (lift) { if (n.params && n.kind!=='erase') n.params={...n.params,amount:clamp(n.params.amount+lift,...amountRange(n.kind))}; return; }
-      transformNode(n,nodeState(n),about(nodePivot(n),turn?rotation(turn):scaling(grow)));
-    });
+    if (lift) {
+      // The shape's height setting (heightControl): a step that changes nothing (Reset ground, or already at the end of the range) makes no undo step.
+      const c=heightControl(nodes[selected]),next=c?.set(c.value+lift);
+      if (c && next!==c.value) changeSelected(n => { n.params={...n.params,[c.key]:next}; });
+      return;
+    }
+    transformSelected(n => about(nodePivot(n),turn?rotation(turn):scaling(grow)));
   }
 });
 new ResizeObserver(resize).observe($('viewport'));
@@ -2663,7 +2709,8 @@ function mountRockPanel() {
 }
 // A world row's change: address, world store, panel and renderer settings, then
 // the shape or Time work requested by the shared applyKnob operation.
-let worldStoreDirty=false,worldPanelDirty=false,worldCheckpoint=false;
+// worldNodesChanged: an undulation row edited the node list (its ground node), so the undo step holds the nodes, not only the map's data.
+let worldStoreDirty=false,worldPanelDirty=false,worldCheckpoint=false,worldNodesChanged=false;
 const worldInputQueue=createWorldInputQueue({apply:applyWorldInputs,commit:commitWorldInputs});
 function setKnob(key,value) { worldInputQueue.put('knob:0:'+key,{type:'knob',slot:0,key,value}); }
 function setWorldColor(key,value) { worldInputQueue.put('color:'+key,{type:'color',key,value}); }
@@ -2685,8 +2732,9 @@ function applyWorldInputs(batch) {
       mapRocks=setRock(mapRocks,slot,{knobs:{...rock.knobs,[key]:Number(value)},column:rock.column});presets=worldCheckpoint=true;continue;
     }
     const next=applyKnob({key,value,settings:experiment,renderer,nodes,seed,sync:false});nexts.push(next);reload ||= Boolean(next.reload);
+    if(next.inserted!==undefined)nodesInserted(next.inserted);
     activeWorld().knobs[key]=String(value);worldStoreDirty=true;
-    worldPanelDirty ||= key==='strata';worldCheckpoint ||= !input.restore;
+    worldPanelDirty ||= key==='strata';worldCheckpoint ||= !input.restore;worldNodesChanged ||= !input.restore&&Boolean(next.checkpoint);
   }
   if(reload){commitWorldInputs();location.reload();return;}
   const local=presets?syncRocks({defer:true}):null,onlyPresets=batch.every(input=>input.slot>0);
@@ -2706,8 +2754,17 @@ function commitWorldInputs() {
   if(worldStoreDirty){worldStoreDirty=false;saveWorlds();}
   if(worldPanelDirty){worldPanelDirty=false;buildWorldPanel();}
   syncWorldControls();updateControls();surfacePanel?.sync();   // World › Surface's sections follow the settings that turn layers on
-  if(worldCheckpoint){worldCheckpoint=false;checkpoint(true);}
-  persistLater();
+  if(worldCheckpoint){worldCheckpoint=false;checkpoint(!worldNodesChanged);}
+  worldNodesChanged=false;persistLater();
+}
+// A node put in the list at index `at` (Undulation height turning on puts the ground node first): the selection and a pending replay keep naming
+// the same shapes, so the card and the next edit stay on the shape the artist selected.
+function nodesInserted(at) {
+  const shift=i => i>=at?i+1:i;
+  if(selected>=0)selected=shift(selected);
+  alsoSelected=alsoSelected.map(shift);
+  if(pendingEval>=0)pendingEval=Math.min(pendingEval,at);
+  renderLayers();
 }
 // Values must reach the model before a different action reads its recipe.
 document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-knob],.world-colors'))worldInputQueue.flush();},true);

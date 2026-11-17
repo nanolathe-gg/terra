@@ -90,6 +90,10 @@ export const KNOBS = [
   ['Shore pockets', [['frostGaps','Melt pockets: share of cells at the coast',0,.6,.01,.17],['frostGapReach','Melt pockets: reach inland (share of the band)',.2,1.2,.05,.65],['frostGapSize','Melt pockets: size (px)',3,24,1,11],['frostGapDepth','Melt pockets: depth below the sea',.5,6,.1,3]]],
 ];
 
+// A ground undulation node's numbers from the page's settings (its address over the world's defaults): what a scene, a reload, a world carry and
+// Undulation height turning on make.
+export const groundDefaults=settings => ({amplitude:settings.has('undulation')?Number(settings.get('undulation')):0,wavelength:settings.has('undulationScale')?Number(settings.get('undulationScale')):200,coverage:settings.has('undulationCover')?Number(settings.get('undulationCover')):.45,
+  art:settings.has('undulationArt')?Number(settings.get('undulationArt')):1});   // the share of the undulation the art shows (lit and painted); the game heights keep all of it
 // The ground node's field each undulation row sets.
 const UNDULATION={undulation:'amplitude',undulationScale:'wavelength',undulationCover:'coverage',undulationArt:'art'};
 // World settings the shape reads (sculpt-scene.js shapeContext: the frost gaps and the talus slope), so the shape runs again from the first node.
@@ -114,7 +118,9 @@ export function applyKnob({key,value,settings,renderer,nodes,seed,sync=true}) {
   if (Object.hasOwn(UNDULATION,key)) {
     const i=nodes.findIndex(n => n.kind==='ground');
     if (i>=0) { nodes[i][UNDULATION[key]]=Number(value); return result({evaluate:i,checkpoint:true,weather:true}); }
-    if (key==='undulation' && Number(value)>0) { nodes.unshift({kind:'ground',amplitude:Number(value),wavelength:160,art:settings.has('undulationArt')?Number(settings.get('undulationArt')):1,seed:seed^0x9e37}); return result({evaluate:0,checkpoint:true,weather:true}); }
+    // The new node is the world's ground (its Undulation size, cover and art, as a reload makes it) and goes first: `inserted` tells the host
+    // that every later node moved up one place, so a selection keeps naming the same shape.
+    if (key==='undulation' && Number(value)>0) { nodes.unshift({kind:'ground',...groundDefaults(settings),amplitude:Number(value),seed:seed^0x9e37}); return result({evaluate:0,checkpoint:true,weather:true,inserted:0}); }
     return result({});
   }
   if (SHAPE_KNOBS.has(key)) return result({evaluate:0,weather:true});

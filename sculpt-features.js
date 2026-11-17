@@ -97,16 +97,34 @@ export async function mountMapFeatures(api) {
     return {kept,removed};
   }
   // ---- pixels: a worker draws sprites and paints deposits and vents ----
-  let worker=null,jobId=0,workerError='';
+  // The worker answers every job (a job's own failure comes back as its error). An error on the worker itself (it failed to load, or it died) fails
+  // every job in flight and ends that worker: a job after it starts a new one (one that failed less than 2 s ago fails at once instead, so a
+  // generator that cannot load is not started again on every draw). Such a failure is marked `lost`, so the sprite and thumbnail caches
+  // drop the entry and ask again, where a job's own error is kept (it would fail the same way). A job given an abort signal is rejected, and
+  // forgotten, when it aborts; the worker's answer is then dropped.
+  let worker=null,jobId=0,lost=null;
   const jobs=new Map();
-  function work(message,transfer=[]) {
+  function work(message,transfer=[],signal=null) {
+    if (signal?.aborted) return Promise.reject(signal.reason);
+    if (!worker && lost && performance.now()-lost.at<2000) return Promise.reject(Object.assign(new Error(lost.message),{lost:true}));
     if (!worker) {
-      worker=new Worker(new URL('./sculpt-feature-worker.js',import.meta.url),{type:'module'});
-      worker.onmessage=({data}) => { const job=jobs.get(data.id); jobs.delete(data.id); if (!job) return; if (data.error) job.reject(new Error(data.error)); else job.resolve(data); };
-      worker.onerror=event => { workerError=event.message||'The feature generator could not start.'; for (const job of jobs.values()) job.reject(new Error(workerError)); jobs.clear(); status(workerError); };
+      const own=new Worker(new URL('./sculpt-feature-worker.js',import.meta.url),{type:'module'});
+      own.onmessage=({data}) => { const job=jobs.get(data.id); jobs.delete(data.id); if (!job) return; job.done(); if (data.error) job.reject(new Error(data.error)); else job.resolve(data); };
+      own.onerror=event => {
+        const message=event.message||'The feature generator could not start.';
+        own.terminate(); if (worker===own) worker=null; lost={at:performance.now(),message};
+        for (const [id,job] of jobs) if (job.worker===own) { jobs.delete(id); job.done(); job.reject(Object.assign(new Error(message),{lost:true})); }
+        status(message);
+      };
+      worker=own;
     }
-    const id=++jobId;
-    return new Promise((resolve,reject) => { jobs.set(id,{resolve,reject}); worker.postMessage({...message,id},transfer); });
+    const id=++jobId,own=worker;
+    return new Promise((resolve,reject) => {
+      const abort=() => { if (jobs.delete(id)) reject(signal.reason); };
+      signal?.addEventListener('abort',abort,{once:true});
+      jobs.set(id,{resolve,reject,worker:own,done:() => signal?.removeEventListener('abort',abort)});
+      own.postMessage({...message,id},transfer);
+    });
   }
   // The map's light for the generator: its sun in the sprites' view (TA's view looks down (0, south 1, up 2): x east, y the sun's
   // screen height, z toward the viewer) and, unless both are white, the world's sun and sky colors, its ambient share and the sun's
@@ -136,7 +154,7 @@ export async function mountMapFeatures(api) {
         Object.assign(e,{body:await bitmapOf(r.body),shadow:await bitmapOf(r.shadow),bodyBlend:r.bodyBlend,shadowBlend:r.shadowBlend,gameplay:r.gameplay,ready:true});
         if (sprites.get(k)!==e) return release(e);
         refreshVariants(); refreshSelection(); api.schedule();
-      },err => { e.error=err.message; status('A feature could not be drawn: '+err.message); });
+      },err => { if (err.lost) { if (sprites.get(k)===e) sprites.delete(k); } else e.error=err.message; status('A feature could not be drawn: '+err.message); });
     }
     return e.ready?e:null;
   }
@@ -150,7 +168,7 @@ export async function mountMapFeatures(api) {
     for (const [k,s] of stamps) if (!live.has(k)) { stamps.delete(k); release(s); }
     for (const p of placements) if (GROUND_KINDS.includes(p.kind)) { const o=exactOrigin(p); if (o) origins.add(o.ox+','+o.oy); }
     for (const [k,g] of grounds) if (!origins.has(k) && !g.pending) grounds.delete(k);
-    for (const kind of GROUND_KINDS) for (const v of variantList(kind)) keep.add('ground|'+kind+'|'+v.seed+'|'+JSON.stringify(kind==='deposit'?{...v.params,metal:depositMetal()}:v.params));
+    for (const kind of GROUND_KINDS) for (const v of variantList(kind)) keep.add('ground|'+kind+'|'+v.seed+'|'+JSON.stringify(kind==='deposit'?{...v.params,metal:depositMetal()}:v.params)+'|'+lightKey(sun));   // as thumbnail() keys them
     for (const k of thumbs.keys()) if (!keep.has(k)) thumbs.delete(k);
   }
 
@@ -187,7 +205,7 @@ export async function mountMapFeatures(api) {
   // A deposit whose footprint centre cell lies under the sea (its four corner bytes' mean below the sea level) is drawn as under water.
   const underwater=p => { const c=[corner(p.x+1,p.z+1),corner(p.x+2,p.z+1),corner(p.x+1,p.z+2),corner(p.x+2,p.z+2)]; return c.every(v => v>=0) && (c[0]+c[1]+c[2]+c[3])/4<config.seaLevel; };
   const paintParams=p => p.kind==='deposit'?{...variantOf(p).params,metal:p.metal,...(underwater(p)?{underwater:true}:{})}:variantOf(p).params;
-  const paint=(p,rgba,sun=light()) => { const v=variantOf(p); return work({type:'paint',kind:p.kind,params:paintParams(p),seed:v.seed,light:sun,w:PATCH,h:PATCH,cx:PATCH/2,cy:PATCH/2,rgba},[rgba.buffer]).then(r => r.rgba); };
+  const paint=(p,rgba,sun=light(),signal=null) => { const v=variantOf(p); return work({type:'paint',kind:p.kind,params:paintParams(p),seed:v.seed,light:sun,w:PATCH,h:PATCH,cx:PATCH/2,cy:PATCH/2,rgba},[rgba.buffer],signal).then(r => r.rgba); };
   function stampFor(p) {
     const pk=key(p);
     let s=stamps.get(pk); if (!s) { s={bitmap:null,want:'',painting:'',exact:null,exactStale:true}; stamps.set(pk,s); }
@@ -356,7 +374,7 @@ export async function mountMapFeatures(api) {
     const rgba=flatGround(); for (let i=3;i<rgba.length;i+=4) rgba[i]=255;
     work({type:'paint',kind:v.kind,params,seed:v.seed,light:sun,w:PATCH,h:PATCH,cx:PATCH/2,cy:PATCH/2,rgba},[rgba.buffer]).then(r => {
       const c=new OffscreenCanvas(80,80); c.getContext('2d').putImageData(new ImageData(r.rgba,PATCH,PATCH),-24,-24); Object.assign(entry,{ready:true,canvas:c,close:nothing}); refreshVariants();
-    },() => {});
+    },err => { if (err.lost && thumbs.get(k)===entry) thumbs.delete(k); });
     return null;
   }
   // The selection's values (#feature-selection in the Select tool's panel).
@@ -847,14 +865,14 @@ export async function mountMapFeatures(api) {
     const P=prefix,counts={tree:'Tree',shrub:'Shrub',rock:'Rock',scar:'Scar'};
     return p => p.kind==='deposit'?`${P}Metal${p.metal}`:p.kind==='vent'?`${P}Vent`:`${P}${counts[p.kind]}${p.v+1}`;
   }
-  async function featurePack(name) {
+  async function featurePack(name,signal=null) {
     const sun=light(); if (!sun) throw new Error('Wait for the terrain to draw before exporting its features.');
     const used=[...new Map(placements.map(p => [p.kind+'|'+(p.kind==='deposit'?p.metal:GROUND_KINDS.includes(p.kind)?'':p.v),p])).values()].sort(ordered);
     const prefix='TF'+(hashText(JSON.stringify({name,world:config.biomeId,set,sun,used:used.map(p => [p.kind,p.v,p.metal??null])}))).toString(36).padStart(6,'0').slice(-6);
     const P=prefix,b=prefix.toLowerCase(),nameOf=exportNames(P),defs=[],sequences=[];
     const def=(n,keys) => defs.push({name:n,keys:[...keys,['filename',b]].map(([k,v]) => [k,String(v)])});
     const seq=(n,frames) => { sequences.push({name:n,frames}); return n; };
-    const full=(kind,params,seed) => work({type:'full',kind,params,seed,light:sun});
+    const full=(kind,params,seed) => work({type:'full',kind,params,seed,light:sun},[],signal);
     const successors={},successorSeed=set.scar?.recipes.reduce((a,b) => a.id<b.id?a:b)?.seed??4783;
     const smudge=async () => successors.smudge??=(async () => { const f=await full('scar',{type:'smudge'},hash32(successorSeed,0x5d06e));
       def(`${P}Smudge`,[['description','Scorch Mark'],['footprintx',1],['footprintz',1],['height',0],['seqname',seq(`${b}sm`,[frameOf(f.body)])],['animtrans',1],['reclaimable',0],['blocking',0],['featuredead',`${P}Smudge`]]); return `${P}Smudge`; })();
@@ -896,13 +914,13 @@ export async function mountMapFeatures(api) {
   // its place in the export art (anchored on the exported heights, painted on clean export art, in the order the view draws them).
   async function exportFeatures({name,heights,width,bakeArt,signal}) {
     if (!placements.length) return {pack:null,placements:[],stamps:[]};
-    const sun=light(),{pack,nameOf}=await featurePack(name),out=[];
+    const sun=light(),{pack,nameOf}=await featurePack(name,signal),out=[];
     for (const p of placements.filter(q => GROUND_KINDS.includes(q.kind)).sort(drawOrder)) {
       signal?.throwIfAborted();
       const at=(x,z) => heights[z*width+x],origin=originOf(p,[at(p.x,p.z),at(p.x+1,p.z),at(p.x,p.z+1),at(p.x+1,p.z+1)]),g=grounds.get(origin.ox+','+origin.oy),rect=patchRect(origin);
       let rgba=g?.rgba && !g.stale?g.rgba.slice():null;
       if (!rgba) { const art=rect && await bakeArt(rect); if (rect && !art) throw new Error('The map changed while its deposits were painted; export again.'); rgba=art?patchOf(origin,rect,art.data):flatGround(); }
-      out.push({ox:origin.ox,oy:origin.oy,rgba:await paint(p,rgba,sun)});
+      out.push({ox:origin.ox,oy:origin.oy,rgba:await paint(p,rgba,sun,signal)});
     }
     return {pack,placements:placements.map(p => ({name:nameOf(p),x:p.x,z:p.z})).sort(ordered),stamps:out};
   }

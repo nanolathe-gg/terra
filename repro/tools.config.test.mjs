@@ -105,9 +105,14 @@ test('a map\'s own tools: add, delete, ids never reused, checked before they tou
   assert.equal(nextMapToolId(deleteMapTool(tools, 'map-2'), [{kind: 'landform', tool: 'map-2'}]), 'map-3');
   assert.deepEqual(copyMapTools(JSON.parse(JSON.stringify(tools))), tools);
   assert.equal(copyMapTools(undefined), null);
-  for (const bad of [{}, [{...tools[0], id: 'hill'}], [tools[0], tools[0]], [{...tools[0], icon: 'star'}], [{...tools[0], extra: 1}], [{...tools[0], card: {...tools[0].card, craterlets: 5}}],
-    [{...tools[0], card: {...tools[0].card, diameter: 'wide'}}], [{...tools[0], card: {...tools[0].card, curve: {form: 'lfHill', knots: [[0]]}}}], [{...tools[0], label: ' '}]])
+  for (const bad of [{}, [{...tools[0], id: 'hill'}], [tools[0], tools[0]], [{...tools[0], icon: 'star'}], [{...tools[0], extra: 1}], [{...tools[0], label: ' '}]])
     assert.throws(() => copyMapTools(bad), undefined, JSON.stringify(bad).slice(0, 80));
+  // A setting no card has any more (a removed option) is dropped (AGENTS.md rule 7); a card setting of the wrong kind leaves that one tool out, not the map.
+  assert.deepEqual(copyMapTools([{...tools[0], card: {...tools[0].card, craterlets: 5}}]), [tools[0]]);
+  for (const card of [{...tools[0].card, diameter: 'wide'}, {...tools[0].card, curve: {form: 'lfHill', knots: [[0]]}}])
+    assert.deepEqual(copyMapTools([{...tools[0], card}, tools[1]]), [tools[1]], JSON.stringify(card).slice(0, 80));
+  // Making a tool stays strict.
+  assert.throws(() => addMapTool([], [], {...made(config), card: {...made(config).card, diameter: 'wide'}}), /not a number/);
   let many = [];
   for (let k = 0; k < MAP_TOOLS_MAX; k++) many = addMapTool(many, [], made(config)).tools;
   assert.throws(() => addMapTool(many, [], made(config)), /at most/);

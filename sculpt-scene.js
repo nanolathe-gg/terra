@@ -7,6 +7,7 @@ import {applyRiver,isRiver} from './sculpt-river.js';
 import {createShapeEngine,readBuffer,comparePlanes,DRAWN_KINDS,heightsFields} from './sculpt-gpu-fields.js';
 import {erosionOf} from './sculpt-erosion.js';
 import {MATERIAL_SLOTS} from './sculpt-materials.js';
+import {groundDefaults} from './sculpt-knobs.js';
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 // The shape library: the landform model's named starting shapes, which a world's tools (config.tools, its table's world.tools) and a scene's strokes
 // name. A world lays its own numbers over each (config.worldShapes[world][shape], its table's world.shapes) and may draw them with other tools, so
@@ -296,8 +297,7 @@ export function strokeParams(s) { return {...Object.fromEntries(['shorePlates','
 // other key is a stroke option.
 export const strokeCard=(config,d) => ({radius:d.diameter/2,amount:d.amount,rough:d.roughness/100,softness:d.softness/100,cracks:d.cracks/100,
   ...Object.fromEntries(SHAPE_FIELDS.map(([key,,,,,,,scale]) => [key,d[key]/scale])),curve:d.curve,along:d.along,groundPreset:d.groundPreset??-1});
-export const groundDefaults=settings => ({amplitude:settings.has('undulation')?Number(settings.get('undulation')):0,wavelength:settings.has('undulationScale')?Number(settings.get('undulationScale')):200,coverage:settings.has('undulationCover')?Number(settings.get('undulationCover')):.45,
-  art:settings.has('undulationArt')?Number(settings.get('undulationArt')):1});   // the share of the undulation the art shows (lit and painted); the game heights keep all of it
+export {groundDefaults};   // sculpt-knobs.js: Undulation height makes the same node
 
 // The brush seed a page opens with (index.html's Seed box): a scripted scene's strokes take their seeds from it.
 export const DEFAULT_SEED=2701;

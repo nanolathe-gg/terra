@@ -204,3 +204,8 @@ test('a map tool whose library shape is gone is left out of the save it loads fr
  const mapTool=(id,shape)=>({id,label:'Mine '+id,icon:'hill',color:'#778899',group:'shape',shape,card:{preset:'custom',diameter:300}});
  assert.deepEqual(copyMapTools([mapTool('map-1','hill'),mapTool('map-2','retired-shape')]).map(t=>t.id),['map-1']);
 });
+test('a saved world tool with a removed card setting loads without it; one with a setting of the wrong kind is left out (AGENTS.md rule 7)',()=>{
+ const {card}=tool(),kept=worldKit(config,{tools:[tool({card:{...card,removedOption:5}})]}).tools.find(authoredWorldTool);
+ assert.equal('removedOption' in kept.card,false);assert.deepEqual(kept.card,worldKit(config,{tools:[tool()]}).tools.find(authoredWorldTool).card);
+ assert.deepEqual(worldKit(config,{tools:[tool({card:{...card,diameter:'wide'}}),tool({id:'world-other'})]}).tools.map(t=>t.id),['hill','world-other']);
+});
