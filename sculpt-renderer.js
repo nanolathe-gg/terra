@@ -677,6 +677,9 @@ export class TerrainRenderer {
     const current=()=>{signal?.throwIfAborted();if(stale?.())throw new DOMException('The scene changed during a terrain bake.','AbortError');};
     current();const start = performance.now(), device = this.device;
     this.syncWorld({clay,light,detail,ring,ringSpread,ringVariation,materialWeathering,transitionDetail,exact});
+    // Before the checksum: an edited material graph regenerates its cache layers here, which moves the world version (worldResource) the
+    // checksum holds. Taken first, a check-only draw would match the old picture and the next drawn tile would carry the old version.
+    this.syncMaterialCache();
     this.i('uMaterialReady', this.materialReady);
     this.i('uTransitionBody', Boolean(this.transitionBody&&this.materialReady&&materialWeathering>0));
     // digest {reuse, check}: the checksum of everything the rest of the draw reads (inputDigest). A caller that still holds the picture of the same
