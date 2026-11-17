@@ -274,7 +274,7 @@ export function mountSurfacePanel(host) {
       name.onchange = () => edit(i, l => { l.name = name.value.trim() || 'Material layer'; }, true);
       head.append(el('div', {className: 'surface-label'}, name, line, ...place));
     } else {
-      const name = el('span', {className: 'surface-name', textContent: nameOf(layer)}); name.onclick = () => toggle.click();
+      const name = el('span', {className: 'surface-name', textContent: nameOf(layer)});
       const label = el('div', {className: 'surface-label'}, name, line, ...place); label.onclick = () => toggle.click(); head.append(label);
     }
     const move = (d, text) => {
