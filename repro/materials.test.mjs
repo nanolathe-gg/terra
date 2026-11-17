@@ -444,3 +444,16 @@ test('a surface edit adds only the layers’ copies: a cleared or deleted crysta
   assert.deepEqual(after.map(m => m.slot), cleared.map(m => m.slot), 'cleared: no second copy');
   assert.ok(withWorldMaterials(cleared, config).some(m => m.worldCrystal), 'on load the world’s crystal and highland materials join again (withWorldMaterials)');
 });
+
+test('the role select moves a material from one of the world’s surfaces to another; ground, water and a layer’s copy draw nothing else', () => {
+  const config = {materials: {ground: 'green-ground', water: 'green-water', slope: 'green-slope', debris: 'green-debris'}, surface: [{id: 'snow-1', material: 'green-snow'}]};
+  const list = withWorldMaterials(null, config), slope = list.find(m => m.worldSlope), debris = list.find(m => m.worldDebris);
+  const moved = assignMaterial(list, slope.slot, 'worldDebris');
+  assert.deepEqual(moved.filter(m => m.worldDebris).map(m => m.slot), [slope.slot]);
+  assert.equal(moved.some(m => m.worldSlope), false, 'the slope cover falls back');
+  assert.equal(roleOfSlot(moved, debris.slot), null, 'the old debris material is a map material now');
+  assert.doesNotThrow(() => copyMaterials(moved));
+  assert.throws(() => assignMaterial(list, list.find(m => m.worldGround).slot, 'worldDebris'), /Duplicate/);
+  assert.throws(() => assignMaterial(list, list.find(m => m.worldLayer).slot, 'worldDebris'), /Duplicate/);
+});
+const roleOfSlot = (list, slot) => { const m = list.find(o => o.slot === slot); return Object.keys(m).find(k => /^world[A-Z]/.test(k) && m[k] === true) ?? (m.worldLayer ? 'worldLayer' : null); };

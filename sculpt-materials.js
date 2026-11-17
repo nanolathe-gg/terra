@@ -726,13 +726,16 @@ export const duplicateMaterial = (list, slot) => { const m = find(list, slot); r
 const find = (list, slot) => { const m = list.find(m => m.slot === slot); if (!m) throw Error(`No material in slot ${slot}.`); return m; };
 export const renameMaterial = (list, slot, name) => { find(list, slot); return list.map(m => m.slot === slot ? {...m, name: nameOf(name)} : m); };
 export const setMaterial = (list, slot, material) => { find(list, slot); const copy = copyMaterial(material); return list.map(m => m.slot === slot ? {...m, ...copy} : m); };
+const withoutMapRoles = o => Object.fromEntries(Object.entries(o).filter(([k]) => !MAP_ROLES.some(([r]) => r === k)));
 export function assignMaterial(list, slot, role) {
   const m = find(list, slot);
   const mapRole = MAP_ROLES.find(([r]) => r === role);
   if (mapRole) {
-    const held = roleOf(m);
-    if (held && held !== role) throw Error(`This material is the world’s ${roleName(held)}. Duplicate it to use it as ${mapRole[2]} too.`);
-    return list.map(({[role]: _, ...o}) => o.slot === slot ? {...o, [role]: true} : o);
+    // A material holds one of these roles at most, so choosing another moves it there: the surface it drew falls back (engine-frag.wgsl
+    // roleColor), as when its role is cleared. The ground, the water and a layer's copy draw nothing else.
+    const held = roleOf(m), switching = MAP_ROLES.some(([r]) => r === held);
+    if (held && held !== role && !switching) throw Error(`This material is the world’s ${roleName(held)}. Duplicate it to use it as ${mapRole[2]} too.`);
+    return list.map(({[role]: _, ...o}) => o.slot === slot ? {...withoutMapRoles(o), [role]: true} : o);
   }
   const other = role === 'worldGround' ? 'worldWater' : 'worldGround';
   if (m[other]) throw Error(role === 'worldGround' ? 'This material is the world’s water. Duplicate it to use it as ground too.' : 'This material is the world’s ground. Duplicate it to use it as water too.');
