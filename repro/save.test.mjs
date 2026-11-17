@@ -1,7 +1,7 @@
 import {normalizeSet} from '../sculpt-feature-set.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {savedWorld,worldOverrideCount,resetWorldOverrides,copySavedWorld,savedWorldId} from '../sculpt-save.js';
+import {savedWorld,worldOverrideCount,resetWorldOverrides,copySavedWorld,savedWorldId,sameSavedWorld} from '../sculpt-save.js';
 
 const config={biomeId:'green',biome:'Green Planet',defaults:{rainErode:0,faceWear:.2},engineDefaults:{groundFine:1},colors:{slope:'#123456',sky:'#ffffff'},materials:{ground:'green-ground',water:'green-water'}};
 test('a map world includes defaults, edited controls, URL overrides, disabled colors and its custom identity',()=>{
@@ -41,4 +41,13 @@ test('World home counts stored differences from pristine data and Reset preserve
   assert.equal(worldOverrideCount(world,base),4);
   assert.deepEqual(resetWorldOverrides(world),{name:'Custom',base:'green',colors:{},knobs:{}});
   assert.equal(world.knobs.faceWear,'.5','Reset does not mutate its undo source');
+});
+
+test('a map whose world lacks tools added to yours since opens in yours; one with a tool yours lacks forks',()=>{
+  const tool=id=>({id,label:'Ridge '+id,icon:'mountain',color:'#778899',group:'shape',shape:'mountain',card:{preset:'custom',diameter:320}});
+  const map=copySavedWorld(JSON.parse(JSON.stringify(savedWorld(config,new URLSearchParams(),{name:'Mine',colors:{},knobs:{},tools:[tool('world-a')]}))),config);
+  assert.equal(sameSavedWorld(map,{name:'Mine',colors:{},knobs:{},tools:[tool('world-a')]},config),true);
+  assert.equal(sameSavedWorld(map,{name:'Mine',colors:{},knobs:{},tools:[tool('world-a'),tool('world-b')]},config),true,'yours gained a tool');
+  assert.equal(sameSavedWorld(map,{name:'Mine',colors:{},knobs:{}},config),false,'yours lacks the map’s tool');
+  assert.equal(sameSavedWorld(map,{name:'Mine',colors:{},knobs:{},tools:[{...tool('world-a'),label:'Renamed'}]},config),false,'yours changed it');
 });

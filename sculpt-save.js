@@ -1,4 +1,4 @@
-import {worldKit,storedWorldKit,instantiateWorldKit,sameKitData} from './sculpt-world-kit.js';
+import {worldKit,storedWorldKit,instantiateWorldKit,kitWithin,sameKitData} from './sculpt-world-kit.js';
 import {withWorldMaterials,worldOwnMaterials,worldKept,worldOwnFor,keptWorldMaterials} from './sculpt-materials.js';
 // The map carries its effective world settings, including defaults, URL overrides and the world's ground and water materials.
 // Keep browser/session parameters out of the recipe; removed controls are dropped on load.
@@ -55,7 +55,7 @@ export function sameSavedWorld(theirs,mine,config) {
   const colors=own=>JSON.stringify(Object.entries(worldHexColors(config,new Map(),own||{})).map(([k,v])=>[k,typeof v==='string'?v.toLowerCase():v]).sort(([a],[b])=>a<b?-1:1));
   if(colors(theirs.colors)!==colors(mine.colors))return false;
   if(JSON.stringify(theirs.surface??null)!==JSON.stringify(mine.surface??null))return false;
-  if(!sameKitData(worldKit(config,theirs),worldKit(config,mine)))return false;
+  if(!kitWithin(worldKit(config,theirs),worldKit(config,mine)))return false;   // tools and rock types added to yours since do not fork
   const a=worldOwnFor(theirs.materials,config),b=worldOwnFor(mine.materials,config,{stored:true});
   return JSON.stringify(Object.entries(a).sort())===JSON.stringify(Object.entries(b).sort());
 }

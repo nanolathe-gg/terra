@@ -7,6 +7,9 @@ import {copyMaterial,copyMaterials,addMaterial,setMaterial,worldMaterials,worldO
 
 const ordered=v=>Array.isArray(v)?v.map(ordered):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,ordered(v[k])])):v;
 export const sameKitData=(a,b)=>JSON.stringify(ordered(a))===JSON.stringify(ordered(b));
+// A map's world kit within yours: each of its tools and rock types is one of yours, unchanged. Yours may hold more (added since the map was
+// saved): opening it there loses nothing, and it gains them.
+export const kitWithin=(theirs,mine)=>theirs.tools.every(t=>mine.tools.some(m=>m.id===t.id&&sameKitData(m,t)))&&theirs.rocks.every(r=>mine.rocks.some(m=>m.key===r.key&&sameKitData(m,r)));
 const same=sameKitData,object=v=>v&&typeof v==='object'&&!Array.isArray(v);
 const KEY=/^[a-z][a-z0-9_-]{0,39}$/,roles=new Set(['worldGround','worldWater',...MAP_ROLES.map(([r])=>r)]);
 const fields=(v,allowed,what)=>{if(!object(v)||Object.keys(v).some(k=>!allowed.includes(k)))throw Error(`Invalid ${what}.`);};
