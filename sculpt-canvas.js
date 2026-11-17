@@ -1,4 +1,4 @@
-import {createTerrainBudget,TerrainMemoryError,TERRAIN_BUDGET_MAX} from './sculpt-memory.js';
+import {createTerrainBudget,TerrainMemoryError,TERRAIN_BUDGET_MAX,deviceMemory} from './sculpt-memory.js';
 import {createPreviewFields,createPreviewLattice,planPreviewBlocks} from './sculpt-preview.js';
 import {selectionGeometry,hitSelection,drawSelection} from './sculpt-selection.js';
 import {TerrainRenderer} from './sculpt-renderer.js';
@@ -18,7 +18,7 @@ const number=(q,key,fallback,min,max)=>clamp(Number(q.get(key))||fallback,min,ma
 export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const map=config.map,query=new URLSearchParams(location.search),viewport=$('viewport'),stage=$('stage');
   config.maskKeys=api.maskKeys; config.gpuBudgetBytes=128*MB;
-  const terrainBudget=createTerrainBudget({explicit:query.has('gpuMB')?number(query,'gpuMB',2048,128,TERRAIN_BUDGET_MAX):undefined,deviceMemory:navigator.deviceMemory,preference:api.terrainBudgetPreference?.(),save:value=>api.saveTerrainBudget?.(value)});terrainBudget.begin();addEventListener('pagehide',()=>terrainBudget.leave());
+  const terrainBudget=createTerrainBudget({explicit:query.has('gpuMB')?number(query,'gpuMB',2048,128,TERRAIN_BUDGET_MAX):undefined,deviceMemory:deviceMemory().gb,memoryGuessed:deviceMemory().guessed,preference:api.terrainBudgetPreference?.(),save:value=>api.saveTerrainBudget?.(value)});terrainBudget.begin();addEventListener('pagehide',()=>terrainBudget.leave());
   let restarting=false, suspended=false;
   const restartForMemory=why=>{
     if(restarting)return true;

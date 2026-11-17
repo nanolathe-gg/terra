@@ -7,7 +7,15 @@ export const TERRAIN_BUDGETS=[8192,6144,4096,3072,2048,1536,1024,768,512];
 export const TERRAIN_BUDGET_MAX=16384;
 export const lowerTerrainBudget=mb=>TERRAIN_BUDGETS.find(n=>n<mb)??null;
 const valid=mb=>Number.isFinite(mb)&&mb>=128&&mb<=TERRAIN_BUDGET_MAX;
-export function createTerrainBudget({explicit,deviceMemory,preference,save=()=>{}}={}){
+// The device memory to plan for, in GB: what the browser reports (navigator.deviceMemory: Chrome and Edge, rounded; Chrome 157 on an 18 GB Mac says
+// 16), else a guess, since Safari and Firefox report none: an iPhone or iPad (iPadOS Safari presents itself as a Mac with a touch screen) is taken as
+// 4 GB, anything else as 8. guessed says which. [The iPad branch is untested on a device.]
+export function deviceMemory(nav=globalThis.navigator){
+  const reported=nav?.deviceMemory;if(Number.isFinite(reported)&&reported>0)return {gb:reported,guessed:false};
+  const ua=String(nav?.userAgent||''),touchApple=/iPhone|iPad|iPod/.test(ua)||/Macintosh/.test(ua)&&nav?.maxTouchPoints>1;
+  return {gb:touchApple?4:8,guessed:true};
+}
+export function createTerrainBudget({explicit,deviceMemory,memoryGuessed=false,preference,save=()=>{}}={}){
   const automatic=Number.isFinite(deviceMemory)&&deviceMemory<=4?1024:2048;
   let mb=valid(explicit)?explicit:Math.min(automatic,TERRAIN_BUDGETS.includes(preference?.mb)?preference.mb:automatic),reason='';
   let choice=valid(explicit)?explicit:null,failedChoice=preference?.failedChoice??null;
@@ -15,7 +23,7 @@ export function createTerrainBudget({explicit,deviceMemory,preference,save=()=>{
   const previous=preference?.trying;
   if(valid(previous)&&(!valid(explicit)||explicit===previous)){
     mb=Math.min(mb,lowerTerrainBudget(previous)??512);reason=preference?.mb<previous&&preference.reason?preference.reason:'lowered after an interrupted memory trial';
-  }else if(!valid(explicit)&&mb<2048)reason=mb<automatic?(preference?.reason||'remembered memory budget'):'smaller device memory signal';
+  }else if(!valid(explicit)&&mb<2048)reason=mb<automatic?(preference?.reason||'remembered memory budget'):memoryGuessed?'touch device without a memory signal':'smaller device memory signal';
   let trying=false,restarting=false,remembered=TERRAIN_BUDGETS.includes(preference?.mb)?preference.mb:automatic;
   const write=()=>save({mb:remembered,trying:trying?mb:null,reason,failedChoice});
   return {

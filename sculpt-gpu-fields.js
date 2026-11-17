@@ -1,4 +1,4 @@
-import {terrainAllocation} from './sculpt-memory.js';
+import {terrainAllocation,deviceMemory} from './sculpt-memory.js';
 import {MATERIAL_SLOTS} from './sculpt-materials.js';
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
@@ -1270,10 +1270,10 @@ export function createPagedFields(opts) {
   // only under the stamp it was made with. A shape page keeps no copy: evaluating it again costs no more than restoring a copy did (Chrome on Metal,
   // 16x16 Green, page medians: 3 ms against 2 at ring 4, 5 against 9 at ring 128, 11 against 18 at ring 320), and the copy added a read-back of
   // 15 MiB or more at every eviction (5-17 ms). A page's Time pass costs 8-210 ms (74 on busy ground) against 2-3 ms to restore its weather.
-  // The cap: 1/32 of the device memory the browser reports (navigator.deviceMemory, at most 8 GB), so 256 MiB, 51 results of 5 MiB (27 with a material
-  // field), at most; and no more than the share of the page heap budget the canvas gives the fields (opts.heapBudget). A tour of a busy 16x16 map
-  // (eight views) left 42 copies, 210 MiB. Under heap pressure the canvas lets the copies go (evict).
-  const SPILL_BYTES = Math.min(8, globalThis.navigator?.deviceMemory || 8) / 32 * 1024 ** 3;
+  // The cap: 1/32 of the device memory counted up to 8 GB (sculpt-memory.js deviceMemory: the browser's figure, or a guess where it gives none), so
+  // 256 MiB, 51 results of 5 MiB (27 with a material field), at most; and no more than the share of the page heap budget the canvas gives the fields
+  // (opts.heapBudget). A tour of a busy 16x16 map (eight views) left 42 copies, 210 MiB. Under heap pressure the canvas lets the copies go (evict).
+  const SPILL_BYTES = Math.min(8, deviceMemory().gb) / 32 * 1024 ** 3;
   const spill = createPageSpill(() => opts.spillBytes ?? Math.min(SPILL_BYTES, opts.heapBudget?.() ?? Infinity)), spilling = new Set();
   const weatherStamp = seq => `${seq} ${timeKey}`;
   let weatherRestores = 0, shapeEvaluations = 0;
