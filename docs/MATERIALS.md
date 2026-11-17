@@ -154,7 +154,7 @@ that material. The workspace gives the graph the upper-left two thirds, the live
   filters both by name. Each tile's swatch is the editor's own preview of
   the material's repeat, made once its tile scrolls into view. **New
   material** adds a blank one.
-- The graph fills the panel. Each card shows what its node makes.
+- Each graph card shows what its node makes. Fit includes every card and frame below the toolbar. Arrange uses the graph cell’s aspect; saved node positions stay put until you ask for it. While the view is still fitted, resizing and Focus graph fit it to the space available. After you pan or zoom, edits, reopening the same material, resizing and Focus graph keep your zoom and the graph point at the center. A different material, Restore from library or a newly loaded map fits its graph again.
 - Add a node from its menu: it lists every node and type by name, and a search
   also matches the names other editors use (Perlin, Voronoi, Worley, fBm,
   terrace, posterize, HSL, displace, tile sampler, bomber, motion blur ...).

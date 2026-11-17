@@ -9,7 +9,9 @@ export const cardHeight = n => CARD.head + Math.max(n.type === 'output' ? 0 : CA
 
 // Where Arrange puts every node: columns by depth from the sources, each column ordered and aligned to what it connects to, so wires
 // run left to right and cross little. Positions change only when the artist asks for this.
-export function graphPositions(nodes) {
+export function graphPositions(nodes, {aspect = null} = {}) {
+  if (!nodes.length) return new Map();
+  const compact = Number.isFinite(aspect) && aspect > 0, gap = compact ? 16 : 26, step = compact ? CARD.width + 28 : 236;
   const ordered = orderNodes(nodes), rank = new Map(), consumers = new Map(nodes.map(n => [n.id, []])), columns = [];
   for (const n of ordered) {
     rank.set(n.id, Math.max(-1, ...Object.values(n.in).filter(Boolean).map(id => rank.get(id))) + 1);
@@ -23,7 +25,7 @@ export function graphPositions(nodes) {
   const pack = (column, want) => {   // keep the order, sit as near the wanted heights as the cards' sizes allow
     column.sort((a, b) => want(a) - want(b));
     let y = -Infinity;
-    for (const v of column) { v.y = Math.max(want(v), y); y = v.y + v.height + 26; }
+    for (const v of column) { v.y = Math.max(want(v), y); y = v.y + v.height + gap; }
     const shift = column.reduce((sum, v) => sum + want(v) - v.y, 0) / column.length;
     for (const v of column) v.y += shift;
   };
@@ -35,17 +37,38 @@ export function graphPositions(nodes) {
       return near.length ? near.reduce((sum, id) => sum + item.get(id).y, 0) / near.length : v.y;
     });
   }
-  return new Map(columns.flatMap((column, level) => (column ?? []).map(v => [v.n.id, {x: level * 236, y: Math.round(v.y)}])));
+  const all = columns.flat(), low = Math.min(...all.map(v => v.y)), height = Math.max(...all.map(v => v.y + v.height)) - low;
+  const width = (columns.length - 1) * step + CARD.width;
+  // Compact first, then spread only the spare dimension toward the canvas's aspect. This leaves more room between wires without
+  // making fitted cards smaller; expansion never overlaps cards. Saved positions are never passed through this unless Arrange is pressed.
+  const sx = compact ? Math.max(1, Math.min(1.5, aspect * height / width)) : 1;
+  const sy = compact ? Math.max(1, Math.min(1.5, width / (aspect * height))) : 1;
+  return new Map(columns.flatMap((column, level) => (column ?? []).map(v => [v.n.id, {x: Math.round(level * step * sx), y: Math.round(compact ? (v.y - low) * sy : v.y)}])));
+}
+
+// An overview of every card and frame inside the usable canvas rectangle. No minimum zoom clips an unusually wide graph.
+export function fitGraph(boxes, view) {
+  if (!boxes.length || view.width <= 0 || view.height <= 0) return null;
+  const x = Math.min(...boxes.map(b => b.x)), y = Math.min(...boxes.map(b => b.y));
+  const width = Math.max(...boxes.map(b => b.x + b.width)) - x, height = Math.max(...boxes.map(b => b.y + b.height)) - y;
+  const zoom = Math.min(1, view.width / Math.max(1, width), view.height / Math.max(1, height));
+  return {zoom, pan: {x: view.x + (view.width - width * zoom) / 2 - x * zoom, y: view.y + (view.height - height * zoom) / 2 - y * zoom}};
+}
+
+// At overview scales a coarser world lattice keeps the visible grid sparse and its drawing work bounded.
+export function graphGrid(zoom) {
+  const step = 32 * zoom;
+  return step * 2 ** Math.max(0, Math.ceil(Math.log2(16 / step)));
 }
 
 export function mountMaterialGraph(host) {
   const canvas = document.getElementById('material-graph'), ctx = canvas.getContext('2d');
-  let zoom = 1, pan = {x: 40, y: 40}, shown = null, gesture = null, wire = null, hover = null, frame = 0, disposed = false, pendingFit = true, auto = new Map(), autoKey = '';
+  let zoom = 1, pan = {x: 40, y: 40}, shown = null, gesture = null, wire = null, hover = null, frame = 0, disposed = false, pendingFit = true, auto = new Map(), autoKey = '', viewWidth = 0, viewHeight = 0, autoFit = true;
   const nodes = () => host.material()?.nodes ?? [];
   // Cards with their place (the node's own, the gesture's while it is dragged, else Arrange's), type and size.
   const cards = () => {
     const list = nodes(); if (!list.length) return [];
-    if (list.some(n => n.x === undefined)) { const key = JSON.stringify(list.map(n => [n.id, n.in])); if (key !== autoKey) { autoKey = key; auto = graphPositions(list); } }
+    if (list.some(n => n.x === undefined)) { const key = JSON.stringify(list.map(n => [n.id, n.in])); if (key !== autoKey) { autoKey = key; auto = graphPositions(list, {aspect: usable().width / usable().height}); } }
     const types = nodeTypes(list), moved = gesture?.kind === 'move' ? gesture.positions : null;
     return list.map(n => ({n, ...(moved?.get(n.id) ?? (n.x === undefined ? auto.get(n.id) : {x: n.x, y: n.y})), type: types.get(n.id), height: cardHeight(n), inputs: inputsOf(n)}));
   };
@@ -71,11 +94,16 @@ export function mountMaterialGraph(host) {
   }
   const accepts = (c, key, type) => { const want = c.inputs.find(i => i[0] === key)?.[2]; return !!want && fits(want, type); };
   const schedule = () => { if (!frame && !disposed) frame = requestAnimationFrame(draw); };
+  function usable() {
+    const r = canvas.getBoundingClientRect(), tools = canvas.parentElement.querySelector('.material-graph-tools')?.getBoundingClientRect(), help = canvas.parentElement.querySelector('#graph-help')?.getBoundingClientRect();
+    const top = tools?.height ? tools.bottom - r.top + 12 : 16, bottom = help?.height ? r.bottom - help.top + 12 : 16;
+    return {x: 20, y: top, width: Math.max(1, r.width - 40), height: Math.max(1, r.height - top - bottom)};
+  }
   function fit() {
     const list = cards(), r = canvas.getBoundingClientRect();
     if (!list.length || r.width < 10 || r.height < 10) { pendingFit = true; return; }
-    const x = Math.min(...list.map(c => c.x)) - 40, y = Math.min(...list.map(c => c.y)) - 50, w = Math.max(...list.map(c => c.x + CARD.width)) - x + 40, h = Math.max(...list.map(c => c.y + c.height)) - y + 40;
-    zoom = Math.max(.2, Math.min(1, r.width / w, r.height / h)); pan = {x: (r.width - w * zoom) / 2 - x * zoom, y: (r.height - h * zoom) / 2 - y * zoom}; pendingFit = false; schedule();
+    const fitted = fitGraph([...list.map(c => ({x: c.x, y: c.y, width: CARD.width, height: c.height})), ...frames(list)], usable());
+    zoom = fitted.zoom; pan = fitted.pan; viewWidth = r.width; viewHeight = r.height; pendingFit = false; autoFit = true; schedule();
   }
   function curve(a, b, color, width) {
     const d = Math.max(40, Math.abs(b.x - a.x) * .45);
@@ -90,9 +118,14 @@ export function mountMaterialGraph(host) {
     frame = 0; if (disposed) return;
     const r = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1; if (r.width < 1 || r.height < 1) return;
     if (canvas.width !== Math.round(r.width * dpr) || canvas.height !== Math.round(r.height * dpr)) { canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr); }
-    if (pendingFit) fit();
+    if (pendingFit || autoFit && (viewWidth !== r.width || viewHeight !== r.height)) fit();
+    else if (viewWidth && viewHeight && (viewWidth !== r.width || viewHeight !== r.height)) {
+      // Resizing or focusing the graph keeps the graph point at the center and the artist's zoom, instead of fitting again.
+      pan = {x: pan.x + (r.width - viewWidth) / 2, y: pan.y + (r.height - viewHeight) / 2};
+    }
+    viewWidth = r.width; viewHeight = r.height;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#141d20'; ctx.fillRect(0, 0, r.width, r.height);
-    const grid = 32 * zoom; ctx.fillStyle = '#26333a'; for (let x = pan.x % grid; x < r.width; x += grid) for (let y = pan.y % grid; y < r.height; y += grid) ctx.fillRect(x, y, 1, 1);
+    const grid = graphGrid(zoom); ctx.fillStyle = '#26333a'; for (let x = pan.x % grid; x < r.width; x += grid) for (let y = pan.y % grid; y < r.height; y += grid) ctx.fillRect(x, y, 1, 1);
     ctx.translate(pan.x, pan.y); ctx.scale(zoom, zoom);
     const list = cards(), byId = new Map(list.map(c => [c.n.id, c])), selection = host.selection(), thumbs = host.thumbnails(), frameAt = host.frame();
     for (const f of frames(list)) {
@@ -172,7 +205,7 @@ export function mountMaterialGraph(host) {
       schedule();
     } else if (gesture?.kind === 'pan') {
       gesture.moved ||= Math.hypot(e.clientX - gesture.x, e.clientY - gesture.y) > 3;
-      pan = {x: gesture.origin.x + e.clientX - gesture.x, y: gesture.origin.y + e.clientY - gesture.y}; schedule();
+      pan = {x: gesture.origin.x + e.clientX - gesture.x, y: gesture.origin.y + e.clientY - gesture.y}; if (gesture.moved) autoFit = false; schedule();
     } else {
       hover = hit(p);
       canvas.style.cursor = hover?.port ? 'crosshair' : hover?.c ? 'grab' : hover?.frame ? 'pointer' : 'default';
@@ -196,7 +229,7 @@ export function mountMaterialGraph(host) {
   canvas.oncontextmenu = e => { e.preventDefault(); const target = hit(point(e)); if (!target) host.menu({x: e.clientX, y: e.clientY}, point(e)); };
   canvas.onwheel = e => {
     e.preventDefault(); const p = point(e), r = canvas.getBoundingClientRect();
-    zoom = Math.max(.2, Math.min(2, zoom * Math.exp(-e.deltaY * .0015))); pan = {x: e.clientX - r.left - p.x * zoom, y: e.clientY - r.top - p.y * zoom}; schedule();
+    autoFit = false; zoom = Math.max(1e-6, Math.min(2, zoom * Math.exp(-e.deltaY * .0015))); pan = {x: e.clientX - r.left - p.x * zoom, y: e.clientY - r.top - p.y * zoom}; schedule();
   };
   canvas.onkeydown = e => {
     const r = canvas.getBoundingClientRect(), center = {x: r.left + r.width / 2, y: r.top + r.height / 2};
@@ -208,11 +241,12 @@ export function mountMaterialGraph(host) {
     else return;
     e.preventDefault(); e.stopPropagation();
   };
-  const resize = new ResizeObserver(() => { if (pendingFit) fit(); schedule(); }); resize.observe(canvas);
+  const resize = new ResizeObserver(schedule); resize.observe(canvas);
   return {
     // A different material fits to the view; the same one keeps the artist's zoom and place.
-    refresh(context) { if (context !== shown) { shown = context; wire = null; gesture = null; pendingFit = true; } schedule(); },
+    refresh(context) { if (context !== shown) { shown = context; wire = null; gesture = null; pendingFit = autoFit = true; } schedule(); },
     fit, redraw: schedule,
+    arrangement: () => { const v = usable(); return graphPositions(nodes(), {aspect: v.width / v.height}); },
     // The middle of the view, in graph units: where a node added from the toolbar lands.
     center() { const r = canvas.getBoundingClientRect(); return {x: (r.width / 2 - pan.x) / zoom, y: (r.height / 2 - pan.y) / zoom}; },
     places() { return new Map(cards().map(c => [c.n.id, {x: c.x, y: c.y}])); },

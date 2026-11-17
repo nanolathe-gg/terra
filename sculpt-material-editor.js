@@ -3,7 +3,7 @@
 import {NODES, NODE_TYPES, accepts, snippetNodes, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
   nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb, materialColor, recolorMaterial,
   addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText, MAP_ROLES, roleOf, roleName, materialStatesApply} from './sculpt-materials.js';
-import {mountMaterialGraph, graphPositions, CARD, cardHeight} from './sculpt-material-graph.js';
+import {mountMaterialGraph, CARD, cardHeight} from './sculpt-material-graph.js';
 import {MaterialPreview, TILE, TERRAIN, SWATCH} from './sculpt-material-preview.js';
 import gamePalette from './materials/palette.json' with {type: 'json'};
 
@@ -111,7 +111,7 @@ export function mountMaterialEditor(host) {
   $('graph-fit').onclick = () => graph.fit();
   // The same selection without a pointer: every node by name.
   $('graph-node-select').onchange = () => { const id = $('graph-node-select').value; selection = new Set(id ? [id] : []); primary = id || null; frameAt = -1; stopAt = 0; if (id) pick('node'); refresh(); };
-  $('graph-arrange').onclick = attempt(() => { change(m => { const places = graphPositions(m.nodes); for (const n of m.nodes) Object.assign(n, places.get(n.id)); }); graph.fit(); });
+  $('graph-arrange').onclick = attempt(() => { change(m => { const places = graph.arrangement(); for (const n of m.nodes) Object.assign(n, places.get(n.id)); }); graph.fit(); });
   $('graph-frame').onclick = attempt(() => {
     const ids = [...selection]; if (!ids.length) throw Error('Select the nodes to frame first (Shift-click adds to the selection).');
     if (material().frames.length >= MAX_FRAMES) throw Error(`A material has at most ${MAX_FRAMES} frames.`);
@@ -495,20 +495,20 @@ export function mountMaterialEditor(host) {
   $('material-copy').onclick = async () => { try { await navigator.clipboard.writeText(materialText(material())); host.status('Copied the material.'); note(''); } catch (e) { note(e.message); } };
   $('material-paste').onclick = async () => { try { const m = parseMaterialText(await navigator.clipboard.readText()); addToMap(m, m.name); } catch (e) { note(e.message); } };
   $('material-reseed').onclick = attempt(() => change(m => { m.seed = reseedMaterial(m).seed; }));
-  $('material-reset').onclick = attempt(() => { const source = LIBRARY[material().source]; if (!source) return; update(setMaterial(materials(), slot, source)); commit(); selection = new Set(); primary = null; frameAt = -1; refresh(); });
+  $('material-reset').onclick = attempt(() => { const source = LIBRARY[material().source]; if (!source) return; update(setMaterial(materials(), slot, source)); commit(); selection = new Set(); primary = null; frameAt = -1; refresh(); graph.fit(); });
   for (const [id, role] of [['ground-world-default', 'worldGround'], ['water-material', 'worldWater']]) $(id).onchange = attempt(() => { update(assignMaterial(materials(), Number($(id).value), role)); commit(); });
 
   // The workspace is not modal: its lower-left map can be drawn on, panned, zoomed and picked. The side panel gives way to the
   // material settings (sculpt-ui.js dock) and comes back on close. Focus graph covers the map, which then waits (host.suspend).
   function setFull(on) {
-    if (full === on) return; full = on; document.querySelector('.app').classList.toggle('material-full', on); host.suspend(on); requestAnimationFrame(() => graph.fit());
+    if (full === on) return; full = on; document.querySelector('.app').classList.toggle('material-full', on); host.suspend(on);
     $('material-full').setAttribute('aria-pressed', String(on)); $('material-full').textContent = on ? 'Show map & texture' : 'Focus graph';
     $('material-full').title = on ? 'Restore the live map and texture below the graph' : 'Give the graph the map and texture preview space';
   }
   function open(which, from) {
     opener = from; if (which !== undefined) slot = which; pick('controls');
     if (!dialog.open) { dialog.show(); host.dock({close, inner}); $('materials-toolbar').setAttribute('aria-expanded', 'true'); $('material-graph').focus({preventScroll: true}); }
-    pictureKey = thumbKey = ''; refresh(); graph.fit();
+    pictureKey = thumbKey = ''; refresh();
   }
   // The side panel comes back before the focus returns, so a button inside it can take the focus. A door its panel built again meanwhile
   // is found by its id (a Surface row's Edit, say); without one the focus goes to Materials. Closed because the side panel was asked for
@@ -568,5 +568,5 @@ export function mountMaterialEditor(host) {
   refresh();
   // The Color rows again, once the renderer has read back what the materials are drawn in (sculpt.js renderer.onmeans).
   const refreshColors = () => { for (const [prefix, m] of [['ctl', material()], ...worldRows.map(w => [w.prefix, materials().find(o => o[w.role]) ?? null])]) { const own = $(`${prefix}-matcolor`); if (m && document.activeElement !== own) own.value = hex(drawn(m).map(v => v * 255)); } };
-  return {refresh, refreshColors, open, refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { setFull(false); dialog.close(); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); clearTimeout(pictureTimer); locks.disconnect(); previewBox.disconnect(); graph.dispose(); preview.dispose(); }};
+  return {refresh, refreshColors, open, resetView: () => graph.fit(), refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { setFull(false); dialog.close(); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); clearTimeout(pictureTimer); locks.disconnect(); previewBox.disconnect(); graph.dispose(); preview.dispose(); }};
 }
