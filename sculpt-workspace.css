@@ -242,9 +242,9 @@ footer{grid-row:3;font-size:10px;gap:14px}
 .status-line{color:#cfe0d2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:32%;flex:0 1 auto}
 footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:nowrap}.status-details .popover{right:8px;bottom:28px}
 
-@media(max-width:1439px){.app{--map-menu-left:104px}}
-@media(max-width:1250px){.app{--inspector-width:290px}.version{display:none}.topbar{gap:6px}.brand{font-size:12px}.topbar button,.topbar select{padding:5px 6px}.top-actions{gap:3px}.top-menu>summary{font-size:10px;padding:5px}.mode-switch button{padding:6px 10px}.world-title{max-width:120px}footer #levels{display:none}}
-@media(max-width:1050px){.app{--map-menu-left:36px}.brand{font-size:0;gap:0}.brand-mark{font-size:22px}.topbar{padding:0 7px;gap:5px}.topbar #undo,.topbar #redo{font-size:0}.topbar #undo:first-letter,.topbar #redo:first-letter{font-size:13px}.mode-switch button{padding:6px 9px}.world-title{max-width:96px}.status-line{display:none}}
+@media(max-width:1439px){.app{--map-menu-left:82px}}
+@media(max-width:1250px){.app{--inspector-width:290px;--map-menu-left:73px}.version{display:none}.topbar{gap:6px}.brand{font-size:12px}.topbar button,.topbar select{padding:5px 6px}.top-actions{gap:3px}.top-menu>summary{font-size:10px;padding:5px}.mode-switch button{padding:6px 10px}.world-title{max-width:120px}footer #levels{display:none}}
+@media(max-width:1050px){.app{--map-menu-left:29px}.brand{font-size:0;gap:0}.brand-mark{font-size:22px}.topbar{padding:0 7px;gap:5px}.topbar #undo,.topbar #redo{font-size:0}.topbar #undo:first-letter,.topbar #redo:first-letter{font-size:13px}.mode-switch button{padding:6px 9px}.world-title{max-width:96px}.status-line{display:none}}
 /* Features and Starts: one tool behind two rail entries. The card's switch sits in its header; kinds are tabs over the list behind them. */
 .feature-head{margin:0 0 6px}.feature-head h3{flex:1;min-width:0;margin:0}
 .feature-head .feature-modes{display:flex;gap:2px;margin:0}.feature-head .feature-modes[hidden]{display:none}.feature-head .feature-modes button{width:auto;height:auto;padding:3px 9px;font-size:10.5px}
