@@ -209,6 +209,20 @@ feature.
     - It is a new tool beside plateau, hill and mountain until it can replace
       them. Then their controls go (card H27 lists which).
 
+25. **True color inside, the palette at the end.** *"I want most of the engine
+    to be true color internally, with clamping to a limited 256-color TA
+    palette and dithering to make it look better happening toward the end of
+    the pipeline, and in the future supporting actual true color output."*
+    (2026-11-16)
+    - The output stage (`engine-output.wgsl`) reduces the lit picture to the
+      palette: Knoll pattern dithering with a blue-noise threshold keyed to
+      art pixels, chosen over per-tile error diffusion, which re-patterned
+      whole tiles on every small edit. The draw's old palette step and its
+      World rows went.
+    - A material's palette list stays as an option for palette output (true
+      color ignores it): it alone reproduced the retail hue speckle; graph
+      noise tuned to imitate it did not.
+
 ## The Green slice
 
 Green gets its own engine: new shaders and GPU passes for every stage,

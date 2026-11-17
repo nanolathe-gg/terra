@@ -122,12 +122,22 @@ an input over the whole repeat).
 
 ## The palette
 
-The game draws in 256 colors. A material lists up to 32 of them; after the
-graph makes its continuous color, error diffusion over the whole repeat
-reduces it to that list (`engine-ground-dither.wgsl`). Author colors
-continuously in gradients and let the reduction make the palette grain. With
-no list the color stays continuous and the map's final palette step picks
-each pixel's color.
+The engine draws in true color; the output stage (`engine-output.wgsl`)
+reduces the finished, lit picture to the game's 256 colors, the last step of
+every picture. Each pixel takes one of eight candidate colors (Knoll's
+pattern dithering), picked by a 32 x 32 blue-noise threshold keyed to art
+pixels, so an edit changes only the pixels whose lit color moved, a preview's
+pixels are the export's, and a repeating lit tile stays repeating. With the
+palette off (true color) the stage passes the picture through.
+
+A material's palette list is an option for the game palette's output: it
+lists up to 32 game colors, and error diffusion over the whole repeat
+reduces the material's continuous color to them before light
+(`engine-ground-dither.wgsl`). This gives the hue-to-hue speckle of the
+retail art, which no graph noise reproduces: the speckle depends on where
+the material's color falls between particular palette entries (owner,
+2026-11-16). True-color output ignores the list. With no list the material
+stays continuous and only the output stage picks its colors.
 
 Two machines may place dither dots differently (rule 12).
 
