@@ -30,9 +30,10 @@ try{
   const visibleShine=()=>ev(`[...document.querySelectorAll('#wtp-light-shine-shine [data-knob]')].filter(e=>e.dataset.eligible==='true').map(e=>e.dataset.knob)`);
   let keys=await visibleShine();assert(keys.includes('shineGround'));assert(!keys.includes('shineSand'));assert(keys.includes('shineSlopeGate'),'common slope gate stays');
   await click('[data-shine-material="Sand"]');keys=await visibleShine();assert(!keys.includes('shineGround'));assert(!keys.includes('shineSlope'));assert(keys.includes('shineSand'));
-  await ev(`document.getElementById('world-search').value='polish';document.getElementById('world-search').dispatchEvent(new Event('input'))`);
-  assert(await ev(`[...document.querySelectorAll('#knobs [data-knob]')].some(e=>e.dataset.knob==='shineGroundSharp'&&!e.hidden)`),'parenthetical searchable');
-  await ev(`document.getElementById('world-search').value='';document.getElementById('world-search').dispatchEvent(new Event('input'))`);
+  // The one search is the top bar's Find: a row's parenthetical ("polish") finds it.
+  await ev(`(()=>{const f=document.getElementById('find-input');f.focus();f.value='polish';f.dispatchEvent(new Event('input',{bubbles:true}));})()`);await sleep(100);
+  assert(await ev(`/sharp/i.test(document.getElementById('find-results').textContent)`),'parenthetical searchable');
+  await ev(`(()=>{const f=document.getElementById('find-input');f.value='';f.dispatchEvent(new Event('input',{bubbles:true}));f.blur();})()`);
   await click('#wsec-rock-types');await click('#wtab-rock-types-layers');await click('#column-open');
   assert(await shown('#column-panel'));assert((await ev(`document.getElementById('column-title').textContent`)).includes(await ev(`document.getElementById('rock-current-name').textContent`)));
   const oldBed=await ev(`document.querySelector('#column-panel [data-column-path$="beds.0.0"]').value`);
