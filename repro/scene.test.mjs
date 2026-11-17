@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {sceneNodes, borrowBeach, pageSettings, shapeContext, surfaceSliders, drawOptions, sliderRange, SURFACE_SLIDER_IDS, DEFAULT_SEED, strokeKind, savedToolCard, toolDefaults} from '../sculpt-scene.js';
+import {sceneNodes, borrowBeach, pageSettings, shapeContext, worldShapeKey, surfaceSliders, drawOptions, sliderRange, SURFACE_SLIDER_IDS, DEFAULT_SEED, strokeKind, savedToolCard, toolDefaults} from '../sculpt-scene.js';
 import {landformTool} from '../sculpt-shape-presets.js';
 
 const root = new URL('..', import.meta.url).pathname;
@@ -124,4 +124,15 @@ test('the address may try the light\'s and the low ground\'s colors without chan
   const colors = worldHexColors({colors: {ground: '#102030'}}, new URLSearchParams('lowColor=5c322a&sunColor=%23ffd9a8&skyColor=nothex'));
   assert.deepEqual(colors, {ground: '#102030', sun: '#ffd9a8'}, 'the low ground has no color of its own (a surface layer draws it)');
   assert.deepEqual(rendererColors(colors).sun.map(v => Math.round(v * 255)), [255, 217, 168]);
+});
+
+
+test('world shape inputs track terrain settings while a new brush seed leaves authored nodes alone',()=>{
+  const context=seed=>shapeContext({config,settings:pageSettings(config),seed});
+  const nodes=sceneNodes(config,[['hill',[[100,100]],{}]]),key=worldShapeKey(context(1),nodes);
+  assert.equal(worldShapeKey(context(2),nodes),key,'a completed stroke advances only the next brush seed');
+  for(const change of [{coastRamp:.4},{faceSteep:2},{repose:.5},{frost:{...context(1).frost,gapDepth:20}}])assert.notEqual(worldShapeKey({...context(1),...change},nodes),key,'actual shape settings still invalidate');
+  assert.notEqual(worldShapeKey(context(1),nodes.map(n=>n.kind==='ground'?{...n,amplitude:n.amplitude+1}:n)),key,'ground settings still invalidate');
+  const fallback=nodes.map(n=>n.points?(({seed,...rest})=>rest)(n):n);
+  assert.notEqual(worldShapeKey(context(1),fallback),worldShapeKey(context(2),fallback),'an unseeded node still reads the context seed');
 });
