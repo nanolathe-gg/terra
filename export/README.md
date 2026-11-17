@@ -53,6 +53,8 @@ positions and dimensions are multiples of 32, and the chunks must cover that
 extent exactly once. Each chunk is at most 4096 px on either side. Paths are local files, relative to the manifest or
 absolute; images must be opaque PNGs. Supply final engine-projected art in
 screen coordinates (`worldY-height/2`); the exporter adds no projection shift.
+A manifest may be as large as a 40×40 map with a feature on every play cell
+needs (about 134 MiB of JSON); a larger one is refused with that reason.
 
 Palette conversion uses exact RGB matches, then squared Euclidean RGB
 distance, with the lowest index winning ties. There is no noise or dithering.
