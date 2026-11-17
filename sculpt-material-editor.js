@@ -509,10 +509,23 @@ export function mountMaterialEditor(host) {
     closeMenu(); setDrawer(false); setFull(false); dialog.close(); preview.cancel(); pictureKey = thumbKey = ''; host.dock(null); $('materials-toolbar').setAttribute('aria-expanded', 'false');
     if (returnFocus) (opener?.isConnected && !opener.closest('[hidden]') ? opener : $('materials-toolbar')).focus({preventScroll: true});
   }
-  // Escape inside the editor (sculpt-ui.js closeTop), one thing a press: a control's name being asked, the add menu, Manage or the library
-  // drawer, then Full size back to docked. Then Pick's card, and then the editor itself (closeDocked).
+  // A text field of the editor (a node's, frame's or control's name, a range, the material's name, the drawer's search) is left first:
+  // Escape puts back what a name field held when it took the focus and moves the focus out, and the editor stays open.
+  const TEXT = 'input:not([type]),input[type=text],input[type=search],input[type=number],textarea';
+  let fieldWas = null;
+  dialog.addEventListener('focusin', e => { if (e.target.matches?.(TEXT)) fieldWas = {field: e.target, value: e.target.value}; });
+  function leaveField() {
+    const field = document.activeElement; if (!dialog.contains(field) || !field.matches(TEXT) || field.closest('.publish-name, #node-menu')) return false;
+    if (field === $('library-search')) { $('material-choose').focus(); return true; }   // the filter stays; the next Escape closes the drawer
+    if (fieldWas?.field === field) field.value = fieldWas.value;
+    (field.closest('#material-menu')?.querySelector('summary') ?? $('material-graph')).focus();
+    return true;
+  }
+  // Escape inside the editor (sculpt-ui.js closeTop), one thing a press: a control's name being asked, a text field, the add menu, Manage or
+  // the library drawer, then Full size back to docked. Then Pick's card, and then the editor itself (closeDocked).
   function inner() {
     if (naming) { const pin = naming.pin; cancelName(); pin.focus(); return true; }
+    if (leaveField()) return true;
     if (closeMenu()) { $('material-graph').focus(); return true; }
     if ($('material-menu').open) { $('material-menu').open = false; $('material-menu').querySelector('summary').focus(); return true; }
     if (setDrawer(false)) { $('material-choose').focus(); return true; }

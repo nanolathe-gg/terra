@@ -77,7 +77,7 @@ export function mountEditorUI(){
  // The curves are rows of the card's Profile section: folding it away closes them at full size too.
  $('card-profile').addEventListener('toggle',()=>{if(!$('card-profile').open)setLarge(false);});
  // Escape closes what is open on top of the editor, one thing a press, innermost first: Find, a tool flyout, a folded menu (Share link
- // inside the Map menu, say), a menu, the full-size curves, then what is open inside the docked material editor (a menu, its library drawer, then Full size).
+ // inside the Map menu, say), a menu, the full-size curves, then what is open inside the docked material editor (a text field, a menu, its library drawer, then Full size).
  // Pick's card comes next (sculpt.js), and then closeDocked closes the material editor itself.
  const find=mountFind();
  const closeTop=()=>find.close()||closeFlyouts()||[...document.querySelectorAll('details.top-menu[open],details.share-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||closeSurfaces(true)||setLarge(false)||Boolean(docked?.inner());

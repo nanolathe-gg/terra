@@ -149,9 +149,10 @@ that material. It docks beside the map in the side panel's place: the map
 stays in view and keeps drawing every change on its own terrain, and can be
 panned, zoomed, picked (Alt-click) and drawn on meanwhile. The Build or World
 tab closes it and brings the side panel back. **Full size** spreads it over
-the whole window; the map then waits until it is uncovered. Escape closes a
-menu inside it first, then leaves Full size, then (after Pick's card) closes
-it.
+the whole window; the map then waits until it is uncovered. Escape leaves a
+text field inside it first (a name field takes back what it held), then
+closes a menu or the drawer, then leaves Full size, then (after Pick's card)
+closes it.
 
 - The material's name in the editor's bar opens the library drawer: **In
   this map** (the map's and the world's materials, each with its role;
