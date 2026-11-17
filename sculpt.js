@@ -7,7 +7,7 @@ import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
 import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
-import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
+import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
 import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
@@ -128,6 +128,12 @@ function buildShapeOptions() {
   for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
 }
 let toolSettings={};
+// The card's Rock row adding a rock type (syncRockChoices' "add:" choices): added first, so the row's own input handler gives the shape the new slot, and
+// its change handler's checkpoint holds both in one undo step.
+document.addEventListener('input',event => {
+  const select=event.target;if(select.id!=='lf-rock'||!select.value.startsWith('add:'))return;
+  try{const slot=addRockType(select.value.slice(4));select.value=String(slot);if(selected<0)checkpoint(true);}catch(err){status(err.message);select.value='-1';}
+},true);
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 // Rounded authored knots preserve a long shoulder and a short exposed face.
 // Zero slope at the crown avoids the knife edge of a skewed power-law dome.
@@ -836,6 +842,9 @@ function syncRocks({defer=false}={}) {
 function syncRockChoices() {
   const select=$('lf-rock'),value=select.value;
   select.replaceChildren(new Option('Rock beneath','-1'),new Option(worldRockName(config),'0'),...mapRocks.map(r => new Option(r.name,String(r.slot))));
+  // A recipe or a world's rock type the map lacks (the Rock types pane's Add list, #rock-add): choosing one adds it and gives it to the shape.
+  const held=new Set(mapRocks.map(r => r.key)),recipes=[...$('rock-add').options].filter(o => o.value && !o.hidden && !o.parentElement.hidden && !held.has(o.value));
+  if (recipes.length && mapRocks.length<ROCK_SLOTS-1) { const g=document.createElement('optgroup'); g.label=`Add a rock type (${mapRocks.length} of ${ROCK_SLOTS-1})`; g.append(...recipes.map(o => new Option(o.textContent,'add:'+o.value))); select.append(g); }
   select.value=[...select.options].some(o => o.value===value)?value:'-1';
 }
 // The map's rock presets replaced (a load, an undo, a preset edited): strokes keep only choices the list holds, and the renderer and the Rock option follow.
@@ -2198,6 +2207,14 @@ function setPresetColors(colors,commit) {
   if(commit)worldInputQueue.end();
 }
 function selectRock(slot) { worldInputQueue.flush();rockSelected=slot; syncRockPanel(); }
+// A rock type added from a starting recipe or the world's rock type `key`, with its material where the map has room; its slot. The caller checkpoints.
+function addRockType(key,recipe=null) {
+  const added=addRock(mapRocks,recipe?'soil':key,worldRockName(config),config);let rocks=added.rocks;
+  if(recipe)rocks=renameRock(setRock(rocks,added.slot,recipe),added.slot,uniqueRockName(mapRocks,recipe.name,worldRockName(config)));
+  const given=giveRockMaterials(rocks,mapMaterials,[added.slot],config,r=>r.slot===added.slot?(recipe?.key??key):r.key);noteMissedRocks(given);
+  if(given.materials!==mapMaterials)editMaterials(given.materials);editRocks(given.rocks);
+  status(`Added the rock type ${mapRocks.find(r=>r.slot===added.slot).name}.`);return added.slot;
+}
 function mountRockPanel() {
   $('rock-presets').onchange=()=>selectRock(Number($('rock-presets').value));
   const shown=()=>renderer.slotColors(0);
@@ -2215,7 +2232,7 @@ function mountRockPanel() {
   $('rock-absorb-world').onchange=()=>{const off=$('rock-absorb-world').checked;if(rockSelected===0){worldAbsorb(off?null:shown().absorb);worldInputQueue.end();}else setPresetColors({absorb:off?null:shown().absorb},true);};
   $('rock-add').onchange=()=>{
     const key=$('rock-add').value;$('rock-add').value='';if(!key)return;
-    try{const added=addRock(mapRocks,key,worldRockName(config),config),given=giveRockMaterials(added.rocks,mapMaterials,[added.slot],config);noteMissedRocks(given);if(given.materials!==mapMaterials)editMaterials(given.materials);added.rocks=given.rocks;editRocks(added.rocks);selectRock(added.slot);checkpoint(true);status(`Added the rock preset ${mapRocks.find(r=>r.slot===added.slot).name}.`);}catch(err){rockNote(err.message);}
+    try{const slot=addRockType(key);selectRock(slot);checkpoint(true);}catch(err){rockNote(err.message);}
   };
   $('rock-duplicate').onclick=()=>{
     try{const copy=duplicateRock(mapRocks,rockSelected,selectedRock());editRocks(copy.rocks);selectRock(copy.slot);checkpoint(true);}catch(err){rockNote(err.message);}
