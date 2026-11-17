@@ -89,6 +89,10 @@ Commits 2dce5caf, 4c3d4c45, c60b18cc, 73200ecb, a92c6fdd, 80b9cfa5. The branch a
 
 ### In flight when the session ended (check the worktrees: an implementer may have been cut off mid-edit)
 
+Both implementers were asked at 22:15 to commit what is proven and leave a status note: `agent-ux3/STATUS-surface-agent.md` and
+`agent-ux3-find/STATUS-materials-agent.md` (under `/private/tmp/nanolathe-map-editor/`). Read those first if they exist; if one is
+missing, that implementer was cut off before writing it.
+
 **A. `ux-round3` worktree: Pick's read race, and a Zhon timing question.** At the time of writing `sculpt-canvas.js` had
 uncommitted edits. Look at `git status` and `git log 12170ed6..HEAD` first.
 
