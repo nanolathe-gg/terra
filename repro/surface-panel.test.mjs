@@ -1,7 +1,7 @@
 // World › Surface's list without the DOM (sculpt-surface-panel.js): which section a layer is in, from facts read directly.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {layerSection} from '../sculpt-surface-panel.js';
+import {layerSection, moveLayer} from '../sculpt-surface-panel.js';
 
 // A world as the panel's host reads it: World settings by key (rock: a rock type's setting), roles, surfaces and facts.
 const world = ({controls = {}, roles = [], layers = [], facts = {}, materials = true, rocks = 0} = {}) => ({
@@ -54,4 +54,18 @@ test('what the panel cannot read is no claim', () => {
   for (const builtin of ['rock', 'chips']) assert.equal(layerSection({builtin}, world()).section, 'drawing');
   assert.equal(layerSection({builtin: 'sand', material: 'green-sand'}, world()).section, 'drawing', 'the sand’s sources are not read');
   assert.equal(layerSection({id: 'tufts-1', plants: {kind: 'grass', amount: .6}}, world()).section, 'drawing', 'a plants-only layer');
+});
+
+test('a move steps past the nearest layer it moves among and lands beside it, passing the layers of other sections between', () => {
+  // Stage land, stored bottom first: soil (cannot draw), rock, beach (cannot draw), moss (added on top). The drawing section shows moss over rock.
+  const layers = [{builtin: 'soil'}, {builtin: 'rock'}, {builtin: 'beach'}, {id: 'moss'}], keys = list => list.map(l => l.builtin ?? l.id);
+  const drawing = [1, 3];
+  assert.deepEqual(keys(moveLayer(layers, 3, -1, drawing)), ['soil', 'moss', 'rock', 'beach'], 'lowered: directly under rock, past beach');
+  assert.deepEqual(keys(moveLayer(layers, 1, 1, drawing)), ['soil', 'beach', 'moss', 'rock'], 'rock raised: directly over moss, past beach');
+  assert.equal(moveLayer(layers, 3, 1, drawing), null, 'the top of its peers');
+  assert.equal(moveLayer(layers, 1, -1, drawing), null, 'the bottom of its peers');
+  assert.deepEqual(keys(moveLayer(layers, 0, 1, [0, 2])), ['rock', 'beach', 'soil', 'moss'], 'in its own section: soil over beach');
+  assert.deepEqual(keys(layers), ['soil', 'rock', 'beach', 'moss'], 'the list itself is left as it was');
+  const swap = moveLayer(layers, 1, 1, [1, 2]);
+  assert.deepEqual(keys(swap), ['soil', 'beach', 'rock', 'moss'], 'neighbors swap');
 });

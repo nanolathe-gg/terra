@@ -27,10 +27,22 @@ const BUILTIN_SOURCES = {
 // Built-ins whose strength and placement are World settings of their own (the rows under the list, in this section's "Built-in settings"):
 // their row shows no Coverage, which would only repeat the strength.
 const BUILTIN_SETTINGS = {highland: 'highland', baseBand: 'baseBand'};
-// The stages as the list's group headings, top first in the list; a layer moves only within its group (the engine's effects lie between them).
-const STAGE_TITLES = ['Ground', 'Slope cover', 'Soil, rock and beach', 'Crown rock', 'Bands', 'Loose ground: debris, paint, sand', 'Chips', 'Snow'];
-const STAGE_HELP = ['Over the ground material, under the low-ground tint.', 'Over the ground, under the slope cover’s effects.', 'Under the margin join.', 'Under the beds.',
-  'Under the ground patches and the rock skin.', 'Under the boulders and cracks.', 'Under the weather, crystals and hill light.', 'Over everything but surf and water.'];
+// Where each stage's layers lie, in plain words (SURFACE_STAGE_NAMES order). A layer moves only among its stage's layers: the engine's own steps
+// (tints, beds, cracks, weather) lie between the stages. The open row says it; a closed row only where it helps (CLOSED_PLACE).
+const STAGE_PLACE = ['On the ground itself, under everything else', 'With the slope cover, under soil, rock and beach', 'With bare soil, rock and beach, under crown rock and bands',
+  'With crown rock, over rock and under the bands', 'With the base band, under debris and sand', 'With debris, painted surfaces and sand, under boulders and cracks',
+  'With the chips, over boulders and cracks', 'Over everything but surf and water'];
+const CLOSED_PLACE = {7: 'over everything but surf and water'};
+// Moving layer i one step up the list (d 1: drawn over the next layer, a higher index) or down (d -1) among `peers`, the indices of the layers
+// it moves among (its stage's, in its section). It lands directly after (up) or before (down) the nearest peer in the stored list, so it also
+// passes any layer of its stage that lies between them in another section; every other layer keeps its order. Null at either end.
+export function moveLayer(layers, i, d, peers) {
+  const j = d > 0 ? Math.min(...peers.filter(k => k > i)) : Math.max(...peers.filter(k => k < i));
+  if (!Number.isFinite(j)) return null;
+  const next = layers.filter((_, k) => k !== i), at = next.indexOf(layers[j]);
+  next.splice(d > 0 ? at + 1 : at, 0, layers[i]);
+  return next;
+}
 // Presets a new layer starts from: a material (a library key, or a role of the world's own list) and a rule.
 export const SURFACE_PRESETS = [
   {key: 'snow', name: 'Snow above a height', material: 'ice-ground', stage: 'snow', where: [{fact: 'abovePlain', from: 40, fade: 6}], edge: {width: .2, noise: .6, noiseSize: 1}},
@@ -204,10 +216,12 @@ export function mountSurfacePanel(host) {
     select.onchange = () => edit(i, l => { if (select.value) l.material = select.value; else delete l.material; }, true);   // a plants-only layer keeps its plants
     return el('label', {className: 'surface-number surface-material-row'}, el('span', {textContent: 'Material'}), select);
   }
-  function row(layer, i, layers, layerRows, placed) {
+  function row(layer, i, layers, layerRows, placedAll) {
+    const placed = placedAll[i];
     const key = layerKey(layer), builtin = !isMaterialLayer(layer), stage = stageOf(layer), fixed = builtin && SURFACE_FIXED.includes(layer.builtin);
     rowKey = key;
-    const siblings = layers.map((l, j) => [l, j]).filter(([l]) => stageOf(l) === stage).map(([, j]) => j), at = siblings.indexOf(i);
+    // The layers it moves among: its stage's, in its section (moveLayer).
+    const peers = layers.map((l, j) => j).filter(j => stageOf(layers[j]) === stage && placedAll[j].section === placed.section);
     const material = layer.material != null ? host.material(layer) : null, isOpen = open.has(key);
     const head = el('div', {className: 'surface-head'});
     const toggle = el('button', {type: 'button', className: 'surface-toggle', textContent: isOpen ? '▾' : '▸', title: isOpen ? 'Close this layer' : 'Open this layer’s settings', ariaExpanded: String(isOpen)});
@@ -219,17 +233,23 @@ export function mountSurfacePanel(host) {
     const role = builtin && layer.material == null ? host.roleMaterial?.(layer.builtin) : null;
     const drawn = el('span', {className: 'small surface-drawn', textContent: material?.name ?? role?.name ?? (layer.material != null ? 'its material is missing from this map' : BUILTIN_SOURCES[layer.builtin] ?? 'no material: it draws nothing')});
     if (role) { chip.style.background = role.color; chip.classList.remove('own'); chip.title = role.name; }
+    // Its place, where the stage says something an artist needs (snow lies over everything else).
+    const place = CLOSED_PLACE[stage] ? [el('span', {className: 'small surface-place', textContent: CLOSED_PLACE[stage][0].toUpperCase() + CLOSED_PLACE[stage].slice(1)})] : [];
     if (!builtin) {
       const name = el('input', {type: 'text', value: nameOf(layer), maxLength: 80, className: 'surface-name', title: 'The layer’s name', id: uid('name')});
       name.onchange = () => edit(i, l => { l.name = name.value.trim() || 'Material layer'; }, true);
-      head.append(el('div', {className: 'surface-label'}, name, drawn));
+      head.append(el('div', {className: 'surface-label'}, name, drawn, ...place));
     } else {
       const name = el('span', {className: 'surface-name', textContent: nameOf(layer)}); name.onclick = () => toggle.click();
-      const label = el('div', {className: 'surface-label'}, name, drawn); label.onclick = () => toggle.click(); head.append(label);
+      const label = el('div', {className: 'surface-label'}, name, drawn, ...place); label.onclick = () => toggle.click(); head.append(label);
     }
     const summary = [layer.amount != null && layer.amount !== 1 ? Math.round(layer.amount * 100) + '%' : '', ruleKind(layer) !== 'none' ? 'has a rule' : ''].filter(Boolean).join(' · ');
     if (summary) head.append(el('span', {className: 'small surface-stage', textContent: summary}));
-    const move = (d, text, title) => { const b = el('button', {type: 'button', textContent: text, title, ariaLabel: title, disabled: at + d < 0 || at + d >= siblings.length}); b.onclick = () => { const next = structuredClone(layers), j = siblings[at + d]; [next[i], next[j]] = [next[j], next[i]]; put(next, true); }; return b; };
+    const move = (d, text) => {
+      const next = moveLayer(layers, i, d, peers), past = next && nameOf(layers[d > 0 ? Math.min(...peers.filter(k => k > i)) : Math.max(...peers.filter(k => k < i))]);
+      const title = next ? `${d > 0 ? 'Raise: over' : 'Lower: under'} ${past}` : d > 0 ? 'Already the top of the layers it moves among' : 'Already the bottom of the layers it moves among';
+      const b = el('button', {type: 'button', textContent: text, title, ariaLabel: title, disabled: !next}); b.onclick = () => put(structuredClone(next), true); return b;
+    };
     const eye = el('button', {type: 'button', className: 'surface-eye', textContent: hidden.has(key) ? 'Show' : 'Hide',
       title: hidden.has(key) ? 'Show this layer again' : 'Hide this layer while you design (not saved; an export draws it)', disabled: Boolean(solo)});
     eye.onclick = () => { if (hidden.has(key)) hidden.delete(key); else hidden.add(key); build(); sendView(); list.querySelector(`[data-key="${CSS.escape(key)}"] .surface-eye`)?.focus(); };
@@ -252,8 +272,7 @@ export function mountSurfacePanel(host) {
       const materialRow = own ? el('p', {className: 'small surface-wide', textContent: `Drawn with ${role?.name ?? BUILTIN_SOURCES[layer.builtin]}: choose it in ${ROCK_TYPED.includes(layer.builtin) ? 'Rock types' : 'the Materials panel'}.`}) : el('div', {className: 'surface-wide surface-line'}, materialSelect(layer, i));
       if (material && !own) { const b = el('button', {type: 'button', textContent: 'Edit…', title: 'Open its material in the material editor (the world’s: every map in this world shows your edit)'}); b.onclick = () => host.edit(layer, b); materialRow.append(b); }
       // Its place in the stack (within its stage) and, for a material layer, removing it: in the open row, so the head keeps room for the name.
-      const order = el('div', {className: 'surface-wide surface-line surface-order'}, el('span', {className: 'small', textContent: siblings.length > 1 ? 'Order in its group' : 'Alone in its group'}),
-        move(1, '↑ Raise', 'Raise: over the layer above it'), move(-1, '↓ Lower', 'Lower: under the layer below it'));
+      const order = el('div', {className: 'surface-wide surface-line surface-order'}, el('span', {className: 'small', textContent: STAGE_PLACE[stage] + '.'}), move(1, '↑ Raise'), move(-1, '↓ Lower'));
       if (!builtin) order.append(el('button', {type: 'button', textContent: 'Remove', title: 'Remove this layer (its material leaves the map unless a stroke uses it)', onclick: () => { const next = structuredClone(layers); next.splice(i, 1); put(next, true); }}));
       // Layers that draw one library material share the world's copy of it (one snow for every snow layer).
       const sharing = layer.material != null ? layers.filter((l, j) => j !== i && l.material === layer.material).map(nameOf) : [];
@@ -326,7 +345,7 @@ export function mountSurfacePanel(host) {
     // Shown top first (the topmost layer first), as the map stacks them: the last stage's last layer first.
     const order = layers.map((l, i) => i).sort((a, b) => stageOf(layers[b]) - stageOf(layers[a]) || b - a);
     for (const section of SECTIONS) {
-      const rows = order.filter(i => placed[i].section === section).map(i => row(layers[i], i, layers, layerRows, placed[i]));
+      const rows = order.filter(i => placed[i].section === section).map(i => row(layers[i], i, layers, layerRows, placed));
       $(`surface-${section}-list`).replaceChildren(...rows);
       $(`surface-${section}-count`).textContent = String(rows.length);
       $(`surface-${section}`).hidden = !rows.length;
