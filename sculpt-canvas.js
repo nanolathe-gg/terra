@@ -816,8 +816,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   navigatorCanvas.onkeydown=event=>{const d={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];if(!d||busy||gesture||features?.busy)return;event.preventDefault();event.stopPropagation();if(overview)zoom(1);viewport.scrollLeft+=d[0]*canvas.width*.2;viewport.scrollTop+=d[1]*canvas.height*.2;navigationChanged();};
   // Pick and the Surface section's inspector: what the draw laid at one art pixel ({x, y}: screen(event)), from a small final-scale draw around
   // it that records that pixel (renderer.setProbe); null when the pixel is off the map, {unread: true} when the draw recorded nothing there.
+  // One read at a time: they share the probe and the chunk renderer, so a second click's read waits for the first's.
   const offMap=at=>{const x=Math.floor(at.x),y=Math.floor(at.y);return x<0||y<0||x>=Math.floor(map.width)||y>=Math.floor(map.height);};
-  async function inspect(at){
+  let inspecting=Promise.resolve();
+  function inspect(at){const run=inspecting.then(()=>inspectNow(at));inspecting=run.catch(()=>{});return run;}
+  async function inspectNow(at){
     if(offMap(at))return null;
     const x=Math.floor(at.x),y=Math.floor(at.y),W=Math.floor(map.width),H=Math.floor(map.height),size=Math.min(32,W,H),rect={x:clamp(x-16,0,W-size),y:clamp(y-16,0,H-size),width:size,height:size};
     await idle();renderer.setProbe({x,y});
