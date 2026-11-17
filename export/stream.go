@@ -45,7 +45,15 @@ type tileStore struct {
 	pending []byte // the newest spilled tiles, not yet written
 	ahead   []byte // spilled tiles read ahead, from byte aheadAt of the file
 	aheadAt int
-	next    int // the byte after the last tile read
+	next    int // the byte after the last spilled tile read (tiles in memory leave it)
+	// Calls into the spill file and the bytes they read, for tests of the read pattern.
+	fileReads, fileBytes int
+}
+
+// resident reports whether a tile is read from memory, without a call into the file.
+func (s *tileStore) resident(index uint32) bool {
+	at := int(index) * 1024
+	return at+1024 <= s.held || s.file != nil && at >= s.count*1024-len(s.pending)
 }
 
 func (s *tileStore) append(tile []byte) error {
@@ -85,8 +93,7 @@ func (s *tileStore) append(tile []byte) error {
 }
 
 func (s *tileStore) read(index uint32, out []byte) error {
-	at, next := int(index)*1024, s.next
-	s.next = at + 1024
+	at := int(index) * 1024
 	if at+1024 <= s.held {
 		copy(out, s.memory[at/memoryBlock][at%memoryBlock:])
 		return nil
@@ -94,6 +101,8 @@ func (s *tileStore) read(index uint32, out []byte) error {
 	if s.file == nil || at+1024 > s.count*1024 {
 		return fmt.Errorf("tile %d is absent", index)
 	}
+	next := s.next
+	s.next = at + 1024
 	written := s.count*1024 - len(s.pending)
 	if at >= written {
 		copy(out, s.pending[at-written:])
@@ -104,8 +113,13 @@ func (s *tileStore) read(index uint32, out []byte) error {
 		copy(out, s.ahead[at-s.aheadAt:])
 		return nil
 	}
-	if at != next && (len(s.ahead) == 0 || at < end || at >= end+spillBlock) {
+	// A read moves forward when it lands within a block past the last spilled
+	// tile read, or past the block ahead: a pass in file order that skips
+	// tiles, as the merge's do, still reads a block at a time.
+	forward := at >= next && at < next+spillBlock || len(s.ahead) > 0 && at >= end && at < end+spillBlock
+	if !forward {
 		// Out of order: this tile alone, keeping the block ahead.
+		s.fileReads, s.fileBytes = s.fileReads+1, s.fileBytes+len(out)
 		_, err := s.file.ReadAt(out, int64(at))
 		return err
 	}
@@ -113,6 +127,7 @@ func (s *tileStore) read(index uint32, out []byte) error {
 		s.ahead = make([]byte, spillBlock)
 	}
 	s.ahead = s.ahead[:min(spillBlock, written-at)]
+	s.fileReads, s.fileBytes = s.fileReads+1, s.fileBytes+len(s.ahead)
 	if _, err := s.file.ReadAt(s.ahead, int64(at)); err != nil {
 		s.ahead = s.ahead[:0]
 		return err

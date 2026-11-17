@@ -227,6 +227,85 @@ func TestMergeTilesFillsTheBudgetWhenDescriptorsTie(t *testing.T) {
 	}
 }
 
+// spilled moves a stream's tiles into a store that keeps only `budget` bytes in memory.
+func spilled(t *testing.T, s *terrainStream, budget int) {
+	t.Helper()
+	store := tileStore{budget: budget, dir: t.TempDir()}
+	t.Cleanup(store.close)
+	var tile [1024]byte
+	for id := 0; id < s.store.count; id++ {
+		if err := s.store.read(uint32(id), tile[:]); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.append(tile[:]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.store = store
+}
+
+// A merge over spilled tiles gives the same result, reading the spill file forward a block at a time.
+func TestMergeTilesReadsSpilledTilesInFileOrder(t *testing.T) {
+	a, b := noisyStream(t, 600, 40, 30, 100), noisyStream(t, 600, 40, 30, 100)
+	spilled(t, b, 64<<10)
+	sa, err := a.mergeTiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sb, err := b.mergeTiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sa.Milliseconds, sb.Milliseconds = 0, 0
+	if !reflect.DeepEqual(a.indices, b.indices) || !reflect.DeepEqual(sa, sb) {
+		t.Fatal("merging spilled tiles differs from merging them in memory")
+	}
+	// Three forward passes (descriptors, replacements, merged tiles) over 536 spilled tiles of 64 per block;
+	// reading each replacement after its merged tile took about 500 calls.
+	blocks := (b.store.count*1024 - b.store.held + spillBlock - 1) / spillBlock
+	if b.store.fileReads > 3*blocks+3 {
+		t.Fatalf("merge made %d calls into the spill file, more than three forward passes of %d blocks", b.store.fileReads, blocks)
+	}
+}
+
+// TILECAP_READS=1 go test -run MergeReadsScale -v: the reads of merging a noisy 40x40-unit map (412,804 distinct
+// tiles in 512 px chunks, 64 MiB of them in memory, the rest spilled) and of the TNT's passes over the kept tiles.
+func TestMergeReadsScale(t *testing.T) {
+	if os.Getenv("TILECAP_READS") == "" {
+		t.Skip("set TILECAP_READS=1")
+	}
+	chunkTiles, cols, rows := 16, 641, 644
+	rng := rand.New(rand.NewSource(3))
+	s := &terrainStream{ctx: context.Background(), width: cols * 2, tileLimit: maxTiles, store: tileStore{budget: 64 << 20, dir: t.TempDir()}, indices: make([]uint32, cols*rows)}
+	defer s.close()
+	for i := range s.palette {
+		s.palette[i] = [3]byte{byte(i), byte(i * 3), byte(255 - i)}
+	}
+	var tile [1024]byte
+	for cy := 0; cy < rows; cy += chunkTiles {
+		for cx := 0; cx < cols; cx += chunkTiles {
+			for ty := cy; ty < min(cy+chunkTiles, rows); ty++ {
+				for tx := cx; tx < min(cx+chunkTiles, cols); tx++ {
+					base := byte(rng.Intn(60))
+					for i := range tile {
+						tile[i] = base + byte(rng.Intn(4))
+					}
+					s.indices[ty*cols+tx] = uint32(s.store.count)
+					if err := s.store.append(tile[:]); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+		}
+	}
+	begin := time.Now()
+	summary, err := s.mergeTiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("%d tiles (%d spilled) merged to %d in %v: %d file reads, %.0f MiB", s.store.count, s.store.count-s.store.held/1024, summary.KeptTiles, time.Since(begin), s.store.fileReads, float64(s.store.fileBytes)/(1<<20))
+}
+
 // The merge's result is pinned: the native exporter and the browser's (this
 // package built for WebAssembly) must choose the same tiles and report the
 // same errors. Go may fuse x*y+z into one rounding on arm64, which
