@@ -1500,7 +1500,7 @@ export function createPagedFields(opts) {
         signal?.throwIfAborted();
         // A superseded page releases its working set and retries at the current
         // Time key/revision. A retained stale page still serves a held gesture.
-        while(time&&(!pg.weather||(pg.stale&&!gesture()))){await ensureWeather(pg);signal?.throwIfAborted();}
+        while(time&&(!pg.weather||(pg.stale&&(!gesture()||opts.gestureSettled?.())))){await ensureWeather(pg);signal?.throwIfAborted();}
         // The submitted slice drains, but a canceled camera must not enqueue
         // the remaining pages while the new camera is waiting.
         signal?.throwIfAborted();touch(pg);

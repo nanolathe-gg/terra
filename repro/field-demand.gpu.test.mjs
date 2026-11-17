@@ -28,3 +28,20 @@ test('whole-map fields merge held edits until a GPU or CPU reader, and release d
   assert.deepEqual(s.errors,[]);
  }finally{for(const f of made)f.engine()?.destroy();s.dispose();}
 });
+test('held paged feeds reuse old Time until still, then refine it before release',{timeout:120000},async()=>{
+ const s=await openScene(scene,'biome=green&mapX=4&mapY=4&gpuMB=2048');let held=false,still=false,nodes=s.nodes.slice();const made=[];
+ const common={worldSize:s.worldSize,worldGrid:s.worldGrid,baseHeight:s.config.baseHeight,maskKeys:s.engine.MASK_KEYS,nodes:()=>nodes,device:()=>s.renderer.device,context:s.context,gesture:()=>held,gestureSettled:()=>still};
+ try{
+  const time=s.engine.pagedTime({config:s.config,renderer:s.renderer,size:s.worldSize,spacing:s.spacing,material:s.material});
+  const f=s.fieldsModule.createPagedFields(common);made.push(f);f.changed();f.setTime(time);
+  const rect={x0:0,y0:0,x1:255,y1:255};await f.readRect(rect);const before=f.stats().gpuShape.weatherRuns;
+  held=true;const added=s.engine.sceneNodes(s.config,[['landform',[[120,160],[220,160]],{card:{diameter:100,elevation:110}}]],{ground:false,seed:s.seed,settings:s.settings});nodes=[...s.nodes,...added];f.changed(rect);
+  await f.readRect(rect);assert.equal(f.stats().gpuShape.weatherRuns,before,'moving input keeps retained Time');
+  still=true;const warm=await f.readRect(rect);assert.equal(f.stats().gpuShape.weatherRuns,before+1,'still-held input refines Time');
+  held=false;f.settle();await f.readRect(rect);assert.equal(f.stats().gpuShape.weatherRuns,before+1,'release reuses the warmed result');
+  const fresh=s.fieldsModule.createPagedFields({...common,gesture:()=>false});made.push(fresh);fresh.changed();fresh.setTime(time);
+  assert.equal(hash(warm),hash(await fresh.readRect(rect)));assert.deepEqual(s.errors,[]);
+ }finally{for(const f of made){await f.coarseSettled();for(let i=0;i<500&&f.stats().gpuShape.cpuCopiesPending;i++)await new Promise(r=>setTimeout(r,10));f.destroy();}s.dispose();}
+});
+
+
