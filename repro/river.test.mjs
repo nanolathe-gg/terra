@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {riverCurvature, isBraided, BRAIDED_SPAN, migrateRiver, applyRiver, pointsSignature, riverSteps, riverBand, riverWidth, isRiver, RIVER_MIN_WIDTH, RIVER_BELT, movedRiver, riverKey} from '../sculpt-river.js';
+import {riverCurvature, isBraided, BRAIDED_SPAN, migrateRiver, applyRiver, pointsSignature, riverSteps, riverBand, riverWidth, isRiver, RIVER_MIN_WIDTH, RIVER_BELT, movedRiver, seedRiverLine, riverKey} from '../sculpt-river.js';
 import {landformSides, landformReach} from '../sculpt-shape-presets.js';
 
 const wave = (n = 40, step = 20) => Array.from({length: n}, (_, i) => ({x: 100 + i * step, y: 400 + 30 * Math.sin(i * 0.5) + (i % 3)}));
@@ -130,3 +130,17 @@ test('a migrated river moved, turned or scaled is not migrated again by an unrel
   }
 });
 
+test('a stroke that becomes a river takes its path as the drawn line; one of several paths is left as it is', () => {
+  const points = Array.from({length: 30}, (_, i) => ({x: 200 + i * 40, y: 900 + (i % 4) * 10}));
+  const node = {kind: 'landform', seed: 9, points: points.map(p => ({...p})), params: {radius: 24, wander: 120, curve: {form: 'lfHill'}}};
+  assert.equal(seedRiverLine(node), false, 'not a river');
+  node.params = {...node.params, curve: {form: 'lfRiver'}};
+  assert.equal(seedRiverLine(node), true);
+  assert.deepEqual(node.params.river.drawn, points);
+  assert.equal(applyRiver(node, {w: 4096, h: 4096}), true, 'migrated, so Wander works');
+  assert.equal(node.params.river.sig, pointsSignature(node.points));
+  assert.equal(seedRiverLine(node), false, 'seeded once');
+  const branched = {kind: 'landform', seed: 9, points: points.map(p => ({...p})), paths: [[0, 1, 2, 3, 4], [5, 6, 7, 8]], params: {radius: 24, curve: {form: 'lfRiver'}}};
+  assert.equal(seedRiverLine(branched), false);
+  assert.equal(branched.params.river, undefined);
+});

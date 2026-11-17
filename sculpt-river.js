@@ -180,6 +180,14 @@ export function movedRiver(rv, before, after, apply) {
   const fresh = rv.sig !== undefined && rv.sig === pointsSignature(before.points), current = fresh && rv.key !== undefined && rv.key === riverKey(before.params, before.seed);
   return {...rv, ...(rv.drawn ? {drawn: rv.drawn.map(q => { const r = apply(q); return {x: r.x, y: r.y}; })} : {}), ...(fresh ? {sig: pointsSignature(after.points)} : {}), ...(current ? {key: riverKey(after.params, after.seed)} : {})};
 }
+// A stroke that becomes a river (the Look picker, the Profile form) without a drawn line takes its path as the line drawn, so Wander and a new seed migrate it as
+// they do a drawn river. A shape of several paths keeps them: the migration makes one channel and its oxbows, so it is not migrated. Returns true when seeded.
+export function seedRiverLine(node) {
+  if (!isRiver(node?.params) || node.params.river?.drawn?.length || !node.points?.length || (node.paths && node.paths.length > 1)) return false;
+  const line = node.paths?.length === 1 ? node.paths[0].map(i => node.points[i]) : node.points;
+  node.params = {...node.params, river: {drawn: line.map(p => ({x: p.x, y: p.y}))}};
+  return true;
+}
 // The node carries params.river = {drawn, key, sig}: the line as drawn (so Wander, Width and a new seed can migrate it again), the inputs the stored path was
 // built from, and its fingerprint. The migrated path itself is the node's points and paths (the main river first, then the oxbows).
 // Returns true when the node's path changed.

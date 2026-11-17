@@ -18,7 +18,7 @@ import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBu
 import {shapePaths,clonePaths,pathsWithin,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
 import {selectionTransform,toggleSelection} from './sculpt-selection.js';
 import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap,keepPrevious,takePrevious,dropPrevious} from './sculpt-share.js';
-import {isRiver,pointsSignature,movedRiver} from './sculpt-river.js';
+import {isRiver,pointsSignature,movedRiver,seedRiverLine} from './sculpt-river.js';
 import {HELP_TOOLS} from './sculpt-help-examples.js';
 import {copySurface,layerKey,withSurfaceMaterials} from './sculpt-material-model.js';
 import {mountSurfacePanel,BUILTIN_LABELS} from './sculpt-surface-panel.js';
@@ -373,7 +373,8 @@ function updateControls() {
   const gated=key => !shapeControlAvailable(key,kind,shapeOptions) || modeOff(key) || frostOff(key) || (gate[key] && !(Number($(SHAPE_FIELDS.find(f => f[0]===gate[key])[1]).value)>0));
   for (const [key,id,,kinds,,,,scale] of SHAPE_FIELDS) { $(id+'-control').hidden=!kinds.includes(kind) || gated(key) ; $(id+'-value').textContent=scale===1?$(id).value:scale===10?(Number($(id).value)/scale).toFixed(1):$(id).value+'%'; }
   // P28: on a river, Wander is how far in px the migration may carry the drawn line (its band), not an outline noise; once the path is edited by hand it cannot be migrated again.
-  { const riv=kind==='landform'&&isRiver(shapeOptions),node=nodes[selected],stale=riv&&Boolean(node?.params)&&(node.params.river?.sig===undefined||node.params.river.sig!==pointsSignature(node.points)),why='The path was edited by hand, so it is not migrated again: draw a new river to change its bends.';
+  { const riv=kind==='landform'&&isRiver(shapeOptions),node=nodes[selected],stale=riv&&Boolean(node?.params)&&(node.params.river?.sig===undefined||node.params.river.sig!==pointsSignature(node.points)),
+      why=node?.params?.river?.drawn?'The path was edited by hand, so it is not migrated again: draw a new river to change its bends.':'A river of several paths keeps them as they are, so it is not migrated: draw a new river to give it bends.';
     $('lf-wander-control').querySelector('.small').textContent=stale?why:riv?'How far, in px, the river may stray from the line you drew, at most four channel widths: its bends grow by the river\'s own rule until they fill that band, and travel downstream. 0 keeps the line as drawn; a braided river\'s whole bed strays the same way. A loop drawn closed is cut off and left as an oxbow lake. A new seed gives other bends.':SHAPE_FIELDS.find(f => f[0]==='wander')[8];
     $('lf-wander').disabled=stale;$('lf-wander').title=stale?why:''; }
   $('lf-ground-control').hidden=!(kind==='landform'||kind==='paint'&&shapeValue('paintChannel')===26); syncGroundChips(kind);
@@ -1549,7 +1550,9 @@ function editSelectedFromControls(overrides={}) {
   n.params={...n.params,radius:Number($('diameter').value)/2,amount:Number($('amount').value),rough:Number($('roughness').value)/100,
     softness:Number($('softness').value)/100,cracks:Number($('cracks').value)/100,
     ...Object.fromEntries(SHAPE_FIELDS.filter(f => f[3].includes(n.kind)).map(([key]) => [key,shapeValue(key)])),...overrides};
-  migrateRiverNode(n);
+  // A stroke that has just become a river takes its path as the line drawn, and is migrated (sculpt-river.js seedRiverLine).
+  if (seedRiverLine(n)) { pathPoint=-1; pathIndex=0; }
+  if (migrateRiverNode(n)) { pathPoint=-1; pathIndex=0; }
   pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n)));
   cancelWeather(); pendingEval=pendingEval<0?selected:Math.min(pendingEval,selected); schedule();
 }
