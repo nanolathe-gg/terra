@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {blankMaterial,copyMaterial,worldMaterials,addMaterial} from '../sculpt-materials.js';
 import {copyRocks,duplicateRock,rockByKey} from '../sculpt-rock-presets.js';
-import {worldKit,copyMaterialRef,instantiateWorldKit,validateWorldRocks,captureWorldKit,publishWorldRock,publishWorldTool,resolvedWorldCard,worldToolUnavailable,authoredWorldTool,sameKitData,resetWorldKitInstances,addWorldRockInstance} from '../sculpt-world-kit.js';
+import {worldKit,copyMaterialRef,instantiateWorldKit,validateWorldRocks,captureWorldKit,publishWorldRock,publishWorldTool,resolvedWorldCard,worldToolUnavailable,authoredWorldTool,sameKitData,resetWorldKitInstances,addWorldRockInstance,stageWorldKitEdit} from '../sculpt-world-kit.js';
 const config={biomeId:'fixture',materials:{ground:'green-ground',water:'green-water',rock:'green-rock'},tools:[{id:'hill',label:'Hill',icon:'hill',color:'#778899',group:'shape',rock:'soil'}]};
 const graph=blankMaterial();
 const template=(key='wrock-stone',extra={})=>({key,name:'Stone',knobs:{faceWhole:.8},column:null,colors:null,material:{key:'wmat-stone',name:'Stone grain',graph:copyMaterial(graph)},...extra});
@@ -144,4 +144,17 @@ test('an explicit instance can recover its original world identity after capacit
  assert.deepEqual(rejected.unbound,['wrock-stone']);
  const added=addWorldRockInstance(w.rocks[0],full.slice(0,-1),rejected.materials),bound=added.rocks.map(r=>r.slot===added.slot?{...r,worldKey:w.rocks[0].key}:r);
  assert.equal(worldToolUnavailable(w.tools[1],bound,added.materials,config,worldKit(config,w)),'');assert.equal(resolvedWorldCard(w.tools[1],bound,added.materials,config).rockPreset,15);
+});
+
+
+test('later World material edits preflight uninstantiated dependencies against a fresh map atomically',()=>{
+ const c={...config,materials:{...config.materials,high:'green-rock'}},base=worldMaterials(c);
+ assert.equal(base.length,4);
+ const w={tools:config.tools,rocks:[template('wrock-role',{material:{world:'worldRock'}}),...Array.from({length:14},(_,i)=>template('wrock-extra'+i,{name:'Extra '+i,material:{key:'wmat-extra'+i,name:'Extra grain '+i,graph:copyMaterial(graph)}}))]};
+ assert.equal(instantiateWorldKit(c,w).materials.length,18);
+ const full=[{slot:1,key:'wrock-role',worldKey:'wrock-role',name:'Stone',knobs:{faceWhole:.8},column:null,colors:null},...Array.from({length:14},(_,i)=>({slot:i+2,key:null,name:'Local '+i,knobs:{},column:null,colors:null}))],current=instantiateWorldKit(c,w,{rocks:full,materials:base,source:w});
+ assert.equal(current.materials.length,4);assert.equal(current.rocks.length,15);
+ const added=addMaterial(current.materials,graph,'Private stone'),rocks=current.rocks.map(r=>r.slot===1?{...r,material:added.slot}:r),before=JSON.stringify([w,current]);
+ assert.throws(()=>stageWorldKitEdit(c,w,rocks,added.materials,{before:current.materials}),/material cache budget/i);
+ assert.equal(JSON.stringify([w,current]),before);
 });

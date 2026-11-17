@@ -24,7 +24,7 @@ import {copySurface,layerKey,withSurfaceMaterials} from './sculpt-material-model
 import {mountSurfacePanel,BUILTIN_LABELS} from './sculpt-surface-panel.js';
 import {goTo} from './sculpt-find.js';
 import {mountPick} from './sculpt-pick.js';
-import {worldKit,sameKitData,assertKitMaterials,authoredWorldTool,newWorldKey,instantiateWorldKit,captureWorldKit,publishWorldRock,publishWorldTool,addWorldRockInstance,resetWorldKitInstances,resolvedWorldCard,worldToolUnavailable} from './sculpt-world-kit.js';
+import {worldKit,sameKitData,assertKitMaterials,authoredWorldTool,newWorldKey,instantiateWorldKit,stageWorldKitEdit,publishWorldRock,publishWorldTool,addWorldRockInstance,resetWorldKitInstances,resolvedWorldCard,worldToolUnavailable} from './sculpt-world-kit.js';
 import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,toolMaterialSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
@@ -193,7 +193,7 @@ function refreshWorldTools(world=activeWorld()){
 }
 function keepWorldKit(before=mapMaterials){
   if(worldStoreTransaction||!currentWorldKit)return;
-  const captured=captureWorldKit(currentWorldKit,mapRocks,mapMaterials,{before});mapMaterials=captured.materials;
+  const captured=stageWorldKitEdit(config,currentWorldKit,mapRocks,mapMaterials,{before});mapMaterials=captured.materials;
   if(!sameKitData(captured.kit,currentWorldKit)){installWorldKit(captured.kit);}
 }
 function commitKitCandidate(candidate){
@@ -1003,8 +1003,9 @@ $('pick-tool').onclick=() => { if (!stroke && !moving) setPicking(true); };
 // Beside the map's picture (the view at Fit shows the map with room around it), a pick says the point is off the map.
 $('viewport').addEventListener('pointerdown',e => { if (e.target!==$('viewport') || e.button!==0 || !mapCanvas || stroke || moving || (!picking && !e.altKey)) return; e.preventDefault(); pickCard.pick(mapCanvas.artPoint(e),null); });
 function editMaterials(materials,rocks=mapRocks) {
-  const used=materialsInUse(nodes,materials,rocks),stage=setRendererMaterials(new Map(used.map(m=>[m.slot,m])));
-  const before=mapMaterials;mapRocks=rocks;mapMaterials=materials;keepWorldKit(before);materialUseKey=JSON.stringify(used);syncMaterialChoices();surfacePanel?.refresh();worldChanged({stage,world:false});persistLater();schedule();
+  const captured=worldStoreTransaction?null:stageWorldKitEdit(config,currentWorldKit,rocks,materials,{before:mapMaterials});
+  materials=captured?.materials??materials;const used=materialsInUse(nodes,materials,rocks),stage=setRendererMaterials(new Map(used.map(m=>[m.slot,m])));
+  mapRocks=rocks;mapMaterials=materials;if(captured&&!sameKitData(captured.kit,currentWorldKit))installWorldKit(captured.kit);materialUseKey=JSON.stringify(used);syncMaterialChoices();surfacePanel?.refresh();worldChanged({stage,world:false});persistLater();schedule();
 }
 function removeMaterial(slot) {
   const gone=deleteMaterial(mapMaterials,nodes,slot,mapRocks);cancelWeather();nodes=gone.nodes;editMaterials(gone.materials);evaluate(0);checkpoint();queueWeather();updateControls();
@@ -2377,8 +2378,8 @@ function buildKnobs() {
     if(rockSelected>0){
       if(!key)return;
       const slot=rockSelected,rocks=setRock(mapRocks,slot,recipeRock(key,config)).map(r=>r.slot===slot?(({material,...o})=>o)(r):r);
-      const given=giveRockMaterials(rocks,mapMaterials,[slot],config,()=>key);noteMissedRocks(given);
-      if(given.materials!==mapMaterials)editMaterials(given.materials);editRocks(given.rocks);checkpoint(true);syncRockPanel();return;
+      try{const given=giveRockMaterials(rocks,mapMaterials,[slot],config,()=>key);assertLocalRockAddition(given);
+      editMaterials(given.materials,given.rocks);rockUseKey='';syncRocks();syncRockChoices();checkpoint(true);}catch(error){status(error.message);}syncRockPanel();return;
     }
     const p=ROCK_PRESETS[key]||(key==='soil'?{knobs:recipeRock(key).knobs,sections:null}:null);if(!p)return;
     setRockSettings(p.knobs);
@@ -2438,7 +2439,7 @@ function selectedRock() {
   return mapRocks.find(r=>r.slot===rockSelected)||worldRock(worldRockName(config),Object.fromEntries(ROCK_KEYS.map(k=>[k,renderer.variant.get(k)??config.defaults[k]])),config.column);
 }
 // A new list (an edit of the selected preset, an add or a delete): the renderer follows when a stroke uses a changed preset (syncRocks).
-function editRocks(rocks) { const before=rockUseKey;mapRocks=rocks; nodes=keepStrokeRocks(nodes,mapRocks); syncRockChoices(); syncRocks(); if(before===rockUseKey)worldChanged({stage:null},{world:false});persistLater(); }
+function editRocks(rocks) { const captured=worldStoreTransaction?null:stageWorldKitEdit(config,currentWorldKit,rocks,mapMaterials);const before=rockUseKey;mapRocks=rocks;if(captured){mapMaterials=captured.materials;if(!sameKitData(captured.kit,currentWorldKit))installWorldKit(captured.kit);} nodes=keepStrokeRocks(nodes,mapRocks); syncRockChoices(); syncRocks(); if(before===rockUseKey)worldChanged({stage:null},{world:false});persistLater(); }
 // One rock row moved while a preset is selected: that preset's number, not the world's (no address, no saved world).
 function setPresetKnob(key,value) { worldInputQueue.put('knob:'+rockSelected+':'+key,{type:'knob',slot:rockSelected,key,value}); }
 // The list, the name, the buttons (each disabled one saying why), the rock rows' values and the Rock column panel, for the selected preset.
@@ -2546,7 +2547,7 @@ function syncRockMaterial() {
 $('rock-material').onchange=()=>{
   const v=Number($('rock-material').value);
   if(rockSelected===0){ if(v>0){ try{editMaterials(assignMaterial(mapMaterials,v,'worldRock'));checkpoint();}catch(error){status(error.message);} } }
-  else { mapRocks=mapRocks.map(r=>r.slot===rockSelected?(({material,...o})=>v>0?{...o,material:v}:o)(r):r); rockUseKey=''; syncRocks(); syncMaterials(); worldChanged({stage:'C',world:false}); persistLater(); checkpoint(); }
+  else { try{editRocks(mapRocks.map(r=>r.slot===rockSelected?(({material,...o})=>v>0?{...o,material:v}:o)(r):r));rockUseKey='';syncRocks();syncMaterials();worldChanged({stage:'C',world:false});checkpoint();}catch(error){status(error.message);} }
   materialEditor?.refresh(); syncRockColors();
 };
 // A color of the selected preset changed (live while the picker moves; one undo step when it is let go).

@@ -3,7 +3,7 @@
 import {checkTool,checkCard,worldTools,MAP_TOOLS_MAX} from './sculpt-tools.js';
 import {shapeFrom} from './sculpt-scene.js';
 import {copyRocks,worldRocks,giveRockMaterials,ROCK_SLOTS} from './sculpt-rock-presets.js';
-import {copyMaterial,copyMaterials,addMaterial,setMaterial,worldMaterials,worldKey,roleName,MAP_ROLES,MATERIAL_SLOTS,materialStates,materialStaged,materialCacheUsage} from './sculpt-materials.js';
+import {copyMaterial,copyMaterials,addMaterial,setMaterial,worldMaterials,worldOwnMaterials,worldKey,roleName,MAP_ROLES,MATERIAL_SLOTS,materialStates,materialStaged,materialCacheUsage} from './sculpt-materials.js';
 
 const ordered=v=>Array.isArray(v)?v.map(ordered):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,ordered(v[k])])):v;
 export const sameKitData=(a,b)=>JSON.stringify(ordered(a))===JSON.stringify(ordered(b));
@@ -151,6 +151,12 @@ export function captureWorldKit(kit,rocks,materials,{before=materials}={}){
   for(const t of kit.tools)if(t.ground?.key&&materialRefSlot(t.ground,before))bound.add(t.ground.key);
   const refresh=ref=>{if(!ref?.key||!bound.has(ref.key))return ref;const m=next.find(m=>m.key===ref.key);return m?{key:ref.key,name:m.name,graph:copyMaterial(m)}:ref;};
   return {kit:{rocks:catalog.map(r=>({...r,...(r.material?{material:refresh(r.material)}:{})})),tools:kit.tools.map(t=>({...structuredClone(t),...(t.ground?{ground:refresh(t.ground)}:{})}))},materials:next};
+}
+// A live World edit must still fit a genuinely new map, including dependencies not instantiated in the open map.
+export function stageWorldKitEdit(config,kit,rocks,materials,{before=materials}={}){
+  const captured=captureWorldKit(kit,rocks,materials,{before});
+  instantiateWorldKit({...config,worldMaterials:worldOwnMaterials(captured.materials,config)},captured.kit);
+  return captured;
 }
 export function publishWorldRock(kit,rocks,materials,slot){
   const from=rocks.find(r=>r.slot===slot);if(!from)throw Error('Choose a rock type to save.');
