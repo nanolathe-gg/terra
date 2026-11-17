@@ -595,7 +595,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
               const key=cacheKey(rect,size),e=cache.get(key);
               if(block||color||warm||holding||!intersects(rect,v)||!e?.dirty||!keepable(e,want,weatheredView))continue;
               const controller=new AbortController();activeBake={controller,rect};
-              try{const got=await bake(rect,false,controller.signal,()=>token!==serial||busy||viewToken!==viewEpoch&&!intersects(rect,state()),want,false,false,e,true);if(got)checks.push([key,e,got.pending]);else missed.add(key);}
+              try{const got=await bake(rect,false,controller.signal,()=>token!==serial||busy||viewToken!==viewEpoch&&!intersects(rect,state()),want,false,false,false,e,true);if(got)checks.push([key,e,got.pending]);else missed.add(key);}
               finally{if(activeBake?.controller===controller)activeBake=null;}
             }
           }finally{
