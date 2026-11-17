@@ -226,7 +226,7 @@ function surface(entries) {
 function tools(entries) {
   // Features and Starts edit the map: their card says so (its head's tag).
   const features = scopeOf(document.querySelector('.feature-kinds'));
-  for (const b of document.querySelectorAll('.tool-palette [data-tool], #feature-tool, #starts-tool')) {
+  for (const b of document.querySelectorAll('.tool-palette [data-tool], #feature-tool, #starts-tool, #pick-tool')) {
     const rail = b.closest('.tool-group')?.querySelector('.rail-button'), name = clean(b.getAttribute('aria-label') || b.textContent);
     entries.push({group: 'Tools', name, path: ['Tool', ownText(rail)].filter(Boolean), kind: 'tool', words: ['tool', b.title, b.dataset.shape].filter(Boolean).join(' '), unavailable: b.disabled,
       scope: b.matches('#feature-tool, #starts-tool') ? features : null, go: () => { if (b.disabled) return; b.click(); land(null, shown(b) ? b : rail || b); }});

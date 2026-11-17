@@ -365,7 +365,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     }
     // H27: a landform's section picked on its along-the-path canvas, marked across the path (also while the drawing tool keeps the shape just drawn).
     if(!navigating()&&!features?.active){const mark=api.sectionMark?.();if(mark){const a=project(mark.a),b=project(mark.b);ink.save();ink.strokeStyle='#ffd27a';ink.lineWidth=2.5/scale;ink.beginPath();ink.moveTo(a.x,a.y);ink.lineTo(b.x,b.y);ink.stroke();ink.restore();}}
-    if (!navigating() && hover && !features?.active && (api.currentTool()!=='move'||api.drawMode?.()==='add')) { ink.strokeStyle='#b8eef3'; ink.lineWidth=1/scale; ink.beginPath(); ink.arc(hover[0],hover[1]-(Math.max(config.seaLevel,visibleSample(...hover))-config.baseHeight)/2,Number($('diameter').value)/2,0,Math.PI*2); ink.stroke(); }
+    if (!navigating() && hover && !features?.active && !api.picking?.() && (api.currentTool()!=='move'||api.drawMode?.()==='add')) { ink.strokeStyle='#b8eef3'; ink.lineWidth=1/scale; ink.beginPath(); ink.arc(hover[0],hover[1]-(Math.max(config.seaLevel,visibleSample(...hover))-config.baseHeight)/2,Number($('diameter').value)/2,0,Math.PI*2); ink.stroke(); }
     // H7b: ?levelsOverlay=1 marks each shown chunk with its level: orange Q for a quarter image, green F for a final one.
     if(levelsOverlay)for(const e of cache.values())if(intersects(e,v)){const q=(e.scale??1)>1;ink.strokeStyle=q?'#ff9a3c':'#7dff7d';ink.lineWidth=2/scale;ink.strokeRect(e.x+1/scale,e.y+1/scale,e.width-2/scale,e.height-2/scale);ink.fillStyle=ink.strokeStyle;ink.font=`${16/scale}px monospace`;ink.fillText(q?'Q':'F',e.x+8/scale,e.y+20/scale);}
     ink.restore();
@@ -814,20 +814,23 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const endNavigation=event=>{if(navigationPointer!==event.pointerId)return;navigationPointer=null;if(navigatorCanvas.hasPointerCapture(event.pointerId))navigatorCanvas.releasePointerCapture(event.pointerId);navigationChanged();};
   for(const name of ['pointerup','pointercancel','lostpointercapture'])navigatorCanvas.addEventListener(name,endNavigation);
   navigatorCanvas.onkeydown=event=>{const d={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];if(!d||busy||gesture||features?.busy)return;event.preventDefault();event.stopPropagation();if(overview)zoom(1);viewport.scrollLeft+=d[0]*canvas.width*.2;viewport.scrollTop+=d[1]*canvas.height*.2;navigationChanged();};
-  // The Surface section's inspector: what the draw laid at one art pixel ({x, y}: screen(event)), from a small final-scale draw around it
-  // that records that pixel (renderer.setProbe); null when the pixel is off the map.
+  // Pick and the Surface section's inspector: what the draw laid at one art pixel ({x, y}: screen(event)), from a small final-scale draw around
+  // it that records that pixel (renderer.setProbe); null when the pixel is off the map, {unread: true} when the draw recorded nothing there.
+  const offMap=at=>{const x=Math.floor(at.x),y=Math.floor(at.y);return x<0||y<0||x>=Math.floor(map.width)||y>=Math.floor(map.height);};
   async function inspect(at){
-    const x=Math.floor(at.x),y=Math.floor(at.y);if(x<0||y<0||x>=Math.floor(map.width)||y>=Math.floor(map.height))return null;
-    const W=Math.floor(map.width),H=Math.floor(map.height),size=Math.min(32,W,H),rect={x:clamp(x-16,0,W-size),y:clamp(y-16,0,H-size),width:size,height:size};
+    if(offMap(at))return null;
+    const x=Math.floor(at.x),y=Math.floor(at.y),W=Math.floor(map.width),H=Math.floor(map.height),size=Math.min(32,W,H),rect={x:clamp(x-16,0,W-size),y:clamp(y-16,0,H-size),width:size,height:size};
     await idle();renderer.setProbe({x,y});
-    try{const e=await bake(rect,false,undefined,null,1);e?.bitmap?.close?.();return await renderer.readProbe();}finally{renderer.setProbe(null);}
+    try{const e=await bake(rect,false,undefined,null,1);e?.bitmap?.close?.();return await renderer.readProbe()??{unread:true};}finally{renderer.setProbe(null);}
   }
+  // Where an art pixel's center is on the page now (Pick's card follows it as the view moves).
+  function client(at){const r=overlay.getBoundingClientRect(),v=state();return {x:r.left+(Math.floor(at.x)+.5-v.x)*scale,y:r.top+(Math.floor(at.y)+.5-v.y)*scale};}
   function localPoint(event){const p=screen(event),q=pickWorld(p);return {x:q[0],y:q[1]};}
   function nodeMetadata(index){return api.nodeMetadata?api.nodeMetadata(index):api.graph()[index];}
   const project=p=>({x:p.x,y:p.y-(Math.max(config.seaLevel,visibleSample(p.x,p.y))-config.baseHeight)/2});
   function geometry(index){return selectionGeometry(nodeMetadata(index),project,state());}
   function refreshHover(event){
-    if(gesture||pan||busy||features?.active||api.currentTool()!=='move'||api.drawMode?.()==='add'||api.pathAdding?.()){hoveredNode=-1;overlay.style.cursor=pan?'grabbing':'crosshair';return;}
+    if(gesture||pan||busy||features?.active||api.picking?.()||api.currentTool()!=='move'||api.drawMode?.()==='add'||api.pathAdding?.()){hoveredNode=-1;overlay.style.cursor=pan?'grabbing':'crosshair';return;}
     const q=screen(event),hit=hitSelection(geometry(api.selection()),{x:q.x,y:q.z},api.pathEditing?.());
     const feature=!hit&&!api.pathEditing?.()&&features?.hitAt?.(q);
     hoveredNode=feature?-1:api.pickAt(localPoint(event));
@@ -837,6 +840,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   overlay.addEventListener('pointerdown',event=>{
     if(![0,1].includes(event.button)||busy||gesture||pan||api.gestureActive?.()||!api.ready())return;event.preventDefault();overlay.focus({preventScroll:true});overlay.setPointerCapture(event.pointerId);
     if(space||event.button===1){pan={id:event.pointerId,x:event.clientX,y:event.clientY,left:viewport.scrollLeft,top:viewport.scrollTop};return;}
+    // Pick (sculpt.js pickHere): with the Pick tool, or Alt held whatever the tool, the click reads its pixel and does nothing else (the
+    // features' own handler, which listens first, leaves an Alt-click to this one).
+    if(api.pickHere?.(event,(q=>({x:q.x,y:q.z}))(screen(event)),localPoint(event))){event.stopImmediatePropagation();return;}
     if(features?.active)return;
     const p=localPoint(event),start=performance.now();hover=[p.x,p.y];
     // Select (V) picks a generated feature before a shape, unless a selected shape's handle is under the pointer (sculpt-features.js).
@@ -961,6 +967,6 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(gpuResident()+bytes>gpuBudget)previewLattice.clear();
     return true;
   }
-  const result={inspect,artPoint:event=>{const p=screen(event);return {x:p.x,y:p.z};},setSuspended,get suspended(){return suspended;},renderer,passability,minimumBytes,prepareTime,foregroundPending,previewWorkPending:()=>Boolean(activeBake?.preview)||draftDue&&performance.now()-lastInputAt<DRAFT_REST,gpuWorkPending:()=>drawing||renderer.busy,prepareBackground:bytes=>{if(suspended||drawing||renderer.busy||foregroundPending())return false;if(gpuResident()+bytes>gpuBudget)renderer.evict();return gpuResident()+bytes<=gpuBudget;},schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty||e.weathered&&!(e.weatherRevB>=rev.B)||!colorCovers(e)),colorRect:e.colorRect,serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
+  const result={inspect,offMap,client,artPoint:event=>{const p=screen(event);return {x:p.x,y:p.z};},setSuspended,get suspended(){return suspended;},renderer,passability,minimumBytes,prepareTime,foregroundPending,previewWorkPending:()=>Boolean(activeBake?.preview)||draftDue&&performance.now()-lastInputAt<DRAFT_REST,gpuWorkPending:()=>drawing||renderer.busy,prepareBackground:bytes=>{if(suspended||drawing||renderer.busy||foregroundPending())return false;if(gpuResident()+bytes>gpuBudget)renderer.evict();return gpuResident()+bytes<=gpuBudget;},schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty||e.weathered&&!(e.weatherRevB>=rev.B)||!colorCovers(e)),colorRect:e.colorRect,serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
   window.sculptCanvas=result;resize();budgets();return result;
 }

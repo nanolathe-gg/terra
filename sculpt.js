@@ -5,7 +5,7 @@ import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
-import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,LIBRARY} from './sculpt-materials.js';
+import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,roleName,worldKey,LIBRARY} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials} from './sculpt-rock-presets.js';
 import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
@@ -22,9 +22,12 @@ import {isRiver,pointsSignature} from './sculpt-river.js';
 import {HELP_TOOLS} from './sculpt-help-examples.js';
 import {copySurface,layerKey,withSurfaceMaterials} from './sculpt-material-model.js';
 import {mountSurfacePanel,BUILTIN_LABELS} from './sculpt-surface-panel.js';
+import {mountPick} from './sculpt-pick.js';
 import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,toolMaterialSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
+// Pick (sculpt-pick.js): whether the Pick tool is in hand (it stands in for `tool`, which it leaves as it was), and its card.
+let picking=false,pickCard=null;
 
 // Offline authoring policy. These brushes are new geometry, not retail rules.
 const $ = id => document.getElementById(id);
@@ -242,10 +245,11 @@ function setToolHelp(text,first=false) { const line=$('tool-help'); line.textCon
 function updateControls() {
   const picks=JSON.stringify([strokeWaterPicks(nodes),slopeReplaced(panelFacts())]);if(picks!==panelPicks){panelPicks=picks;syncWorldControls();}   // a stroke's water choice, or the transition replacing the slope color, wakes or idles world rows
   const featureActive=Boolean(mapFeatures?.active);
-  for (const b of document.querySelectorAll('[data-tool]')) b.setAttribute('aria-pressed',String(!featureActive&&b.dataset.tool===tool));
+  for (const b of document.querySelectorAll('[data-tool]')) b.setAttribute('aria-pressed',String(!featureActive&&!picking&&b.dataset.tool===tool));
   $('feature-tool').setAttribute('aria-pressed',String(featureActive&&mapFeatures.mode!=='starts'));$('starts-tool').setAttribute('aria-pressed',String(featureActive&&mapFeatures.mode==='starts'));
   $('feature-tool-host').hidden=!featureActive;
-  $('brush-panel').hidden=featureActive||(tool==='move'&&!nodes[selected]?.params);
+  // Pick shows no tool's settings, only a selected shape's card (its Shape settings door).
+  $('brush-panel').hidden=featureActive||(tool==='move'&&!nodes[selected]?.params)||(picking&&!nodes[selected]?.params);
   $('edit-path').setAttribute('aria-pressed',String(pathEditing));
   $('transform-mode').setAttribute('aria-pressed',String(!pathEditing&&drawMode!=='add'));
   const selectedNode=nodes[selected],hasSelection=Boolean(selectedNode?.points?.length),selectionActive=hasSelection&&tool==='move'&&!featureActive;
@@ -253,7 +257,7 @@ function updateControls() {
   const featureSelection=!featureActive&&tool==='move'&&(mapFeatures?.selectionCount||0)>0;
   // The side panel's Selection block is the Select tool with no shape selected: its hint, or the selected features' values. A selected
   // shape's own actions are the bar on the map (#selection-hud) and the head of its card.
-  $('selection-panel').hidden=featureActive||tool!=='move'||(hasSelection&&!featureSelection);
+  $('selection-panel').hidden=featureActive||picking||tool!=='move'||(hasSelection&&!featureSelection);
   $('feature-selection').hidden=!featureSelection;$('shape-selection-actions').hidden=!selectionActive;
   $('selection-empty').hidden=hasSelection||featureSelection;
   $('path-actions').hidden=$('path-row').hidden=!pathEditing||!hasSelection;
@@ -356,9 +360,10 @@ function updateControls() {
   // The scope tag says what an edit here changes: the selected shape, or the shapes the tool draws next.
   $('brush-scope-tag').textContent=editing?'This shape':'New shapes';$('brush-scope-tag').title=editing?'Edits here change this shape only':'Edits here set up the next shapes this tool draws';
   syncToolGroups(`${tool}:${selected}`);
-  editorUI.syncTools?.(activeTool,editing?nodes[selected].kind:null,locked,featureActive&&(mapFeatures.mode==='starts'?'starts':'features'));
+  editorUI.syncTools?.(activeTool,editing?nodes[selected].kind:null,locked,featureActive&&(mapFeatures.mode==='starts'?'starts':'features'),picking);
   syncToolSave(locked,featureActive);
-  if(featureActive)setToolHelp(mapFeatures.hint||'Place features and starts · Space + drag to pan');
+  if(picking)setToolHelp('Pick: click the map to see what is there, with a door to each setting · Alt-click picks from any tool · Escape closes the card, then leaves Pick');
+  else if(featureActive)setToolHelp(mapFeatures.hint||'Place features and starts · Space + drag to pan');
   else if(featureSelection)setToolHelp('Drag to move the selected features on the cell grid · Shift-click adds or removes · Delete removes · Escape deselects');
 }
 
@@ -851,6 +856,91 @@ function surfaceHost() {
     materialKey:preset=>{const key=preset.material.startsWith('role:')?config.materials?.[preset.material.slice(5)]:preset.material;return LIBRARY[key]?key:config.materials?.ground??'green-ground';},
   };
 }
+// ---- Pick (sculpt-pick.js): the rail's Pick (key I), and Alt-click from any tool. Pick stands in for the tool in hand and leaves `tool` as it
+// was, so leaving it (Escape, or choosing another tool) goes back to that tool. Its card stays until Escape, its close, another pick, or a
+// click on the map that is not a pick. ----
+function leavePick() { picking=false; pickCard?.close(); }
+function setPicking(on) { if (on===picking) return; if (on) { mapFeatures?.deactivate(); picking=true; } else leavePick(); updateControls(); }
+const andList=words => words.length<2?words.join(''):`${words.slice(0,-1).join(', ')} and ${words.at(-1)}`;
+const strokesWith=slot => nodes.filter(n => !n.hidden && n.params?.groundPreset===slot).length;
+const shapesNote=count => count?`the ground of ${count} shape${count>1?'s':''} drawn with it`:'';
+const scopeOf=world => world?{tag:`Every map in ${activeWorld().name}`,scope:'world'}:{tag:'This map',scope:'map'};
+// What a change to a material's Color reaches (the line under a Pick swatch): the world's surface it is, the rock types and shapes that draw it,
+// on every map of the world (a world material, sculpt-materials.js worldKey) or on this map alone.
+function materialReach(m) {
+  const role=roleOf(m),layer=role==='worldLayer'?(config.surface||[]).filter(l => l.material===m.worldLayer).map(l => l.name||BUILTIN_LABELS[l.builtin]||l.builtin).join(', '):'';
+  const surface=m.worldGround?'the world’s ground':m.worldWater?'the world’s water, and the shallows’ tint with it':role==='worldRock'?`${worldRockName(config)} and every rock type without its own material`
+    :layer?`the surface layer ${layer}`:role?`the world’s ${roleName(role)}`:'';
+  const parts=[surface,...mapRocks.filter(r => r.material===m.slot).map(r => r.name),shapesNote(strokesWith(m.slot))].filter(Boolean);
+  return `Recolors ${m.name}: ${andList(parts)||'nothing draws it yet'}, ${worldKey(m)?`on every map in ${activeWorld().name}`:'on this map'}.`;
+}
+// A map rock type shares its material (setRockColor's rule): none of its own, a world surface's, a layer's or another rock type's. Its Rock color
+// first gives it its own copy, so no other surface moves with it.
+const rockColorShared=(rock,m) => !(rock.material>0)||Boolean(roleOf(m))||Boolean(m.worldLayer)||mapRocks.some(r => r!==rock&&r.material===m.slot);
+function rockReach(slot) {
+  const m=rockMaterialOf(slot);if(!m)return 'Nothing to recolor: the world has no rock material, so it draws a plain gray.';
+  const more=shapesNote(strokesWith(m.slot));
+  if(slot===0)return `Recolors ${m.name}: ${worldRockName(config)} and every rock type without its own material${more?`, and ${more}`:''}, on every map in ${activeWorld().name}.`;
+  const rock=mapRocks.find(r => r.slot===slot);
+  if(rockColorShared(rock,m))return `Gives ${rock.name} its own copy of ${m.name} to recolor: ${rock.name} alone changes, on this map.`;
+  return `Recolors ${m.name}: ${rock.name}${more?` and ${more}`:''}, on this map.`;
+}
+// A rock type's headline rows, as World › Rock types shows them for it: the rows the page holds, by their own names.
+const ROCK_HEADLINES=['faceWhole','faceBlockSize','crackSeverity'];
+function rockValues(slot) {
+  const own=slot>0?mapRocks.find(r => r.slot===slot)?.knobs:null;
+  return ROCK_HEADLINES.filter(key => $('knob-'+key)).map(key => {
+    const label=$('knob-'+key).closest('[data-knob]').querySelector('label').title,value=Number(own?.[key]??renderer?.variant.get(key)??config.defaults[key]);
+    return `${label.replace(/\s*\([^)]*\)/g,'')} ${+value.toFixed(2)}${/\(px\)/.test(label)?' px':''}`;
+  }).join(' · ');
+}
+// World on one section, with no search hiding it (as openRockType).
+function openWorldSection(id) {
+  const search=$('world-search'); if (search.value) { search.value=''; search.dispatchEvent(new Event('input')); }
+  $('tab-world').click(); $(id).click();
+}
+function pickHost() {
+  const material=slot => mapMaterials.find(m => m.slot===slot);
+  const info=m => ({slot:m.slot,name:m.name,color:hexOfRgb(drawnColor(m)),...scopeOf(Boolean(worldKey(m))),reach:materialReach(m)});
+  return {
+    offMap:at => !mapCanvas||mapCanvas.offMap(at),
+    inspect:at => mapCanvas?mapCanvas.inspect(at):Promise.resolve(null),
+    client:at => mapCanvas.client(at),
+    focusMap:() => overlay.focus({preventScroll:true}),
+    shapeAt:p => pickNode(p),
+    shape:i => {
+      const n=nodes[i];if(!n)return null;const p=n.params||{},values=[];
+      if(n.kind==='landform'){values.push(`Cracks ${Math.round((p.cracks||0)*100)}%`);if(shapeControlAvailable('gullies','landform',p))values.push(`Gullies ${Math.round((p.gullies??worldDefault('gullies'))*100)}%`);}
+      return {name:shapeName(i),values:values.join(' · ')};
+    },
+    // Select: the shape selected and the Select tool in hand. Shape settings: the shape selected and its card shown, Pick still in hand.
+    selectShape:i => { if (!nodes[i]) return; document.querySelector('[data-tool="move"]').click(); selectNode(i); },
+    shapeSettings:i => { if (!nodes[i]) return; selectNode(i); $('tab-tool').click(); $('brush-panel').scrollIntoView({block:'nearest',behavior:'smooth'}); },
+    rock:slot => {
+      if (slot!==0 && !mapRocks.some(r => r.slot===slot)) return null;
+      const m=rockMaterialOf(slot);
+      return {name:rockName(slot),color:m?rockHex(slot):'',...scopeOf(slot===0),values:rockValues(slot),material:m?{slot:m.slot,name:m.name}:null,reach:rockReach(slot)};
+    },
+    recolorRock:(slot,hex,commit) => setRockColor(hex,commit,slot),
+    openRock:slot => openRockType(slot),
+    ground:slot => { const m=material(slot); return m?info(m):null; },
+    water:() => { const m=mapMaterials.find(o => o.worldWater); return m?{...info(m),shallow:shownColor('shallowTone',mergedColors().shallowTone)}:null; },
+    // A material's Color, as World › Ground and Water's Color rows and each Surface row move it (recolorMaterial): one undo step on release.
+    recolor:(slot,hex,commit) => {
+      const m=material(slot);if(!m)return;
+      try{editMaterials(setMaterial(mapMaterials,m.slot,recolorMaterial(m,[1,3,5].map(i => parseInt(hex.slice(i,i+2),16)/255),drawnColor(m))));}catch(error){status(error.message);return;}
+      if(commit){checkpoint(true);materialEditor?.refresh();}
+    },
+    editMaterial:(slot,button) => materialEditor?.open(slot,button),
+    openSurface:(at,read) => { surfacePanel?.show(at,read); openWorldSection('wsec-surface'); $('surface-inspect-result').scrollIntoView({block:'nearest',behavior:'smooth'}); },
+    openColors:() => { openWorldSection('wsec-colors'); $('world-colors').querySelector('input[type=color][aria-label^="Shallow water"]')?.focus({preventScroll:true}); },
+    surface:() => config.surface||[],
+  };
+}
+pickCard=mountPick(pickHost());
+$('pick-tool').onclick=() => { if (!stroke && !moving) setPicking(true); };
+// Beside the map's picture (the view at Fit shows the map with room around it), a pick says the point is off the map.
+$('viewport').addEventListener('pointerdown',e => { if (e.target!==$('viewport') || e.button!==0 || !mapCanvas || stroke || moving || (!picking && !e.altKey)) return; e.preventDefault(); pickCard.pick(mapCanvas.artPoint(e),null); });
 function editMaterials(materials) {
   const used=materialsInUse(nodes,materials,mapRocks),stage=setRendererMaterials(new Map(used.map(m=>[m.slot,m])));
   mapMaterials=materials;materialUseKey=JSON.stringify(used);syncMaterialChoices();surfacePanel?.refresh();worldChanged({stage,world:false});persistLater();schedule();
@@ -1259,7 +1349,7 @@ const sculptRegion={
     previewTime:({size:windowSize,spacing:windowSpacing})=>weatherOn()?{...pagedTime({config,renderer,size:windowSize,spacing:windowSpacing,material:materialKnobs()}),revB:mapCanvas?.rev.B??0}:null,fail:error}),
   fitGpuBudget:() => regionalFields?.refit?.(),
   releaseGpuStaging:()=>regionalFields?.releaseStaging?.()??0,
-  setViewFocus:v=>regionalFields?.setFocus?.({x:(v.x+v.width/2)/spacing,y:(v.y+v.height/2)/spacing}),
+  setViewFocus:v=>{regionalFields?.setFocus?.({x:(v.x+v.width/2)/spacing,y:(v.y+v.height/2)/spacing});pickCard?.place();},
   read:readRegional,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:n.frame?.slice()}:undefined; },
   loadGraph:list => { if (!Array.isArray(list)) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); cancelWeather(); nodes=next; selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch:s=>loadSketchFile(s,false),maskKeys:MASK_KEYS,stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
@@ -1270,6 +1360,9 @@ const sculptRegion={
   drawMode:()=>drawMode,drawingKind:()=>drawMode==='add'?nodes[selected]?.kind:toolKind(tool),
   selectPathPoint:i=>{pathPoint=i;if(i>=0&&!shapePaths(nodes[selected])[pathIndex]?.includes(i))pathIndex=shapePaths(nodes[selected]).findIndex(path=>path.includes(i));updateControls();},
   addPathPoint:p=>{if(pathAdding&&pathPoint>=0)changeSelected(n=>{const added=extendPoint(n,pathPoint,regionalPoints([p])[0],pathIndex);pathPoint=added.point;pathIndex=added.path;});pathAdding=true;updateControls();},
+  // Pick: a left click on the map with Pick in hand, or with Alt held, reads its pixel (art: the picture's pixel; ground: the point Select
+  // hit-tests) and does nothing else; any other click closes the card.
+  pickHere:(event,art,ground)=>{if(!picking&&!event.altKey){pickCard?.close();return false;}if(!stroke&&!moving)pickCard?.pick(art,ground);return true;},picking:()=>picking,
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,selectedShapes,toggleShape,pickAt:pickNode,selectionLabel:shapeName,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); changeSelected(n => transformNode(n,nodeState(n),[1,0,0,1,dx,dy])); },
   pendingInputs:()=>worldInputQueue.pending,drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
@@ -1420,10 +1513,10 @@ function moveHistory(delta) {
   if(history[next].materials&&JSON.stringify(history[next].materials)!==JSON.stringify(mapMaterials))restoreMaterials(history[next].materials);
   if(history[next].surface&&JSON.stringify(history[next].surface)!==JSON.stringify(config.surface)){setSurfaceList(structuredClone(history[next].surface),JSON.stringify(history[next].surface)!==JSON.stringify(baseSurface));saveWorlds();surfacePanel?.refresh();}
   if(history[next].tools&&JSON.stringify(history[next].tools)!==JSON.stringify(mapTools))restoreMapTools(history[next].tools);
-  if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); return; }
+  if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); pickCard?.refresh(); return; }
   cancelWeather(); nodes=cloneNodes(history[next].nodes); selected=-1;alsoSelected=[];pathAdding=false;drawMode='select';pathPoint=-1;pathIndex=0; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
   if (JSON.stringify(history[next].column)!==JSON.stringify(columnOverride)) { restoreColumn(history[next].column); syncColumnPanel(); }
-  evaluate(0); renderLayers(); updateControls(); persistLater(); status(delta<0?'Undid the last change.':'Restored the change.'); schedule(); queueWeather();
+  evaluate(0); renderLayers(); updateControls(); persistLater(); status(delta<0?'Undid the last change.':'Restored the change.'); schedule(); queueWeather(); pickCard?.refresh();
 }
 
 function clearRendererWeather() { regionalWeather=null; if (gpuWeather) gpuWeather.mapsOn=false; }
@@ -1640,6 +1733,7 @@ async function takePendingSketch(token) {
 }
 let leavingForWorld=false,openingShared=false;   // set while a load hands the map to another world's page; the second marks a shared map
 async function loadSketchFile(s,commit=true) {
+  pickCard?.close();   // another map: the card's pixel is gone
   if(!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==6 || !Array.isArray(s.nodes) || s.nodes.some(n=>!n))throw new Error('Load a map stroke graph.');
   const biome=typeof s?.biome==='string'?s.biome:'';
   const savedId=s.worldSettings?savedWorldId(s):(typeof s.world==='string'&&worlds[s.world]?.base===biome?s.world:biome);
@@ -1685,7 +1779,7 @@ function download(blob,name) { const url=URL.createObjectURL(blob),a=document.cr
 // The palette's buttons, fixed and built, by delegation (the shape buttons are built once the world's config is in).
 document.querySelector('.tool-groups').addEventListener('click',event => {
   const b=event.target.closest('[data-tool]');if(!b)return;
-  if(stroke||moving)return;mapFeatures?.deactivate();rememberTool();tool=b.dataset.tool;drawMode=tool==='move'?'select':'new';pathAdding=false;
+  if(stroke||moving)return;mapFeatures?.deactivate();leavePick();rememberTool();tool=b.dataset.tool;drawMode=tool==='move'?'select':'new';pathAdding=false;
   // A card still on a world's preset is made afresh, so the rock its tool names is the map's preset as the map holds it now (added, moved or gone).
   if(Object.hasOwn(config.worldShapes||{},toolSettings[tool]?.preset))toolSettings[tool]=shapeCard(tool,toolSettings[tool].preset);
   if(tool==='move'&&selected>=0)selectNode(selected);
@@ -1696,7 +1790,7 @@ for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).ad
 for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
 for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up','up'],['node-down','down'],['node-hide','hide']]) $(id).addEventListener('click',() => nodeAction(kind));
 // Features and Starts are two entries on the rail for the one tool (sculpt-features.js): Features opens it to place, Starts in its starts mode.
-const openFeatures=mode=>{if(stroke||moving)return;selected=-1;alsoSelected=[];pathAdding=false;drawMode='select';mapFeatures?.activate(mode);renderLayers();updateControls();};
+const openFeatures=mode=>{if(stroke||moving)return;leavePick();selected=-1;alsoSelected=[];pathAdding=false;drawMode='select';mapFeatures?.activate(mode);renderLayers();updateControls();};
 $('feature-tool').onclick=()=>openFeatures('deposit');$('starts-tool').onclick=()=>openFeatures('starts');
 function setPathMode(on){if(stroke||moving||loading)return;if(on)alsoSelected=[];pathEditing=on;pathPoint=-1;pathAdding=false;drawMode='select';updateControls();schedule();}
 $('edit-path').onclick=()=>setPathMode(!pathEditing);$('transform-mode').onclick=()=>setPathMode(false);
@@ -1896,20 +1990,22 @@ const typing=target => target instanceof HTMLElement && (['INPUT','SELECT','TEXT
 window.addEventListener('keydown',event => {
   if(event.defaultPrevented)return;
   // Escape first closes what is open on top of the editor (a tool flyout, a menu, the full-size curves), wherever the focus is.
-  if(event.key==='Escape'&&!stroke&&!moving&&editorUI.closeTop()){event.preventDefault();return;}
+  // Then Pick's card; once it is closed, Escape leaves Pick (below).
+  if(event.key==='Escape'&&!stroke&&!moving&&(editorUI.closeTop()||pickCard?.close())){event.preventDefault();return;}
   if(!typing(event.target)&&!loading&&!stroke&&!moving&&!event.ctrlKey&&!event.metaKey&&!event.altKey){
     if(event.code==='KeyF'&&event.shiftKey){event.preventDefault();editorUI.toggleFocus();return;}
     if(event.key==='Escape'&&editorUI.exitFocus()){event.preventDefault();return;}
     // Tab on the map (not in a panel, where it moves between controls) hides both panels, and shows them again.
     if(event.key==='Tab'&&!event.shiftKey&&(event.target===overlay||event.target===document.body)){event.preventDefault();editorUI.toggleFocus();return;}
-    if(event.code==='KeyV'){event.preventDefault();if(tool==='move'&&!mapFeatures?.active)setPathMode(false);else document.querySelector('[data-tool="move"]').click();return;}
+    if(event.code==='KeyV'){event.preventDefault();if(tool==='move'&&!mapFeatures?.active&&!picking)setPathMode(false);else document.querySelector('[data-tool="move"]').click();return;}
+    if(event.code==='KeyI'){event.preventDefault();$('pick-tool').click();return;}
   }
   if (mapFeatures?.active && event.code!=='Space' && !(event.ctrlKey||event.metaKey)) return;
   if (event.defaultPrevented || typing(event.target) || loading) return;
   if(event.code==='KeyP'&&tool==='move'&&selected>=0&&!event.ctrlKey&&!event.metaKey&&!stroke&&!moving){event.preventDefault();setPathMode(!pathEditing);return;}
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase()==='z') { event.preventDefault(); moveHistory(event.shiftKey?1:-1); }
   if ((event.key==='Delete' || event.key==='Backspace') && pathEditing && pathPoint>=0 && selected>=0 && !stroke && !moving) {event.preventDefault();$('path-delete').click();return;}
-  if(event.key==='Escape'&&!moving&&!stroke){event.preventDefault();if(!editorUI.exitFocus()){if(pathAdding){pathAdding=false;updateControls();schedule();}else if(drawMode==='add'){drawMode='select';updateControls();schedule();}else if(pathEditing)setPathMode(false);else selectNode(-1);}return;}
+  if(event.key==='Escape'&&!moving&&!stroke){event.preventDefault();if(!editorUI.exitFocus()){if(picking)setPicking(false);else if(pathAdding){pathAdding=false;updateControls();schedule();}else if(drawMode==='add'){drawMode='select';updateControls();schedule();}else if(pathEditing)setPathMode(false);else selectNode(-1);}return;}
   const arrow={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];
   if(arrow&&tool==='move'&&selected>=0&&event.target===overlay&&!event.metaKey&&!event.ctrlKey&&!stroke&&!moving){
     if(pathEditing&&pathPoint<0){event.preventDefault();return;}
@@ -2225,10 +2321,11 @@ function rockHex(slot) { const m=rockMaterialOf(slot); return m?hexOfRgb(drawnCo
 // The selected rock type's Color picked: its material's Color (recolorMaterial). The world's rock recolors the world's rock material; another
 // rock type recolors its own material, or first takes its own copy of the one it shares (the world's rock material, or one another rock type,
 // a world surface or a layer draws), so no other surface moves with it.
-function setRockColor(hex,commit) {
-  const slot=rockSelected,m=rockMaterialOf(slot);if(!m)return;
+// `slot` is the selected rock type's unless another is named (the Pick card's swatch): World's selection stays as it is.
+function setRockColor(hex,commit,slot=rockSelected) {
+  const m=rockMaterialOf(slot);if(!m)return;
   const rgb=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255),rock=mapRocks.find(r=>r.slot===slot);
-  const shared=slot>0&&(!(rock.material>0)||roleOf(m)||m.worldLayer||mapRocks.some(r=>r!==rock&&r.material===m.slot));
+  const shared=slot>0&&rockColorShared(rock,m);
   try{
     if(!shared)editMaterials(setMaterial(mapMaterials,m.slot,recolorMaterial(m,rgb,drawnColor(m))));
     else{
@@ -2236,9 +2333,11 @@ function setRockColor(hex,commit) {
       mapRocks=mapRocks.map(r=>r.slot===slot?{...r,material:added.slot}:r);editMaterials(added.materials);rockUseKey='';syncRocks();materialEditor?.refresh();
     }
   }catch(error){status(error.message);return;}
-  for(const swatch of [$('rock-current-swatch'),$('rock-chips').querySelector('[aria-checked="true"] .rock-swatch')])if(swatch)swatch.style.background=rockHex(slot);
-  const snap=renderer.paletteNearest(hex);$('rock-color-snap').style.background=snap;$('rock-color-snap').title=$('rock-color-snap').ariaLabel=`Palette entry ${snap}`;
-  if(commit){checkpoint(true);syncRockMaterial();}
+  // Every chip's swatch (rock types that share the recolored material move with it), and the selected rock type's own row when it moved.
+  for(const chip of $('rock-chips').children)chip.querySelector('.rock-swatch').style.background=rockHex(Number(chip.dataset.slot));
+  if(slot===rockSelected){$('rock-current-swatch').style.background=rockHex(slot);const snap=renderer.paletteNearest(hex);$('rock-color-snap').style.background=snap;$('rock-color-snap').title=$('rock-color-snap').ariaLabel=`Palette entry ${snap}`;}
+  else if(rockMaterialOf(rockSelected)?.slot===rockMaterialOf(slot)?.slot)$('rock-current-swatch').style.background=rockHex(rockSelected);
+  if(commit){checkpoint(true);syncRockMaterial();if(slot!==rockSelected)syncRockColors();}
 }
 let bedShown=null;   // the bed colors the Rock types pane shows and the tones behind them (a changed picker sets only its own tone)
 // The selected preset's colors: its rock's (its material's Color), and its beds' and absorption's own, or the world's where it takes them
@@ -2249,7 +2348,8 @@ function syncRockColors() {
   const world=rockSelected===0,rock=mapRocks.find(r=>r.slot===rockSelected),own=rock?.colors,shown=renderer.slotColors(0);
   const paint=(id,hex,off)=>{$(id).value=hex;$(id).disabled=off;const snap=renderer.paletteNearest(hex);$(id+'-snap').style.background=snap;$(id+'-snap').title=$(id+'-snap').ariaLabel=`Palette entry ${snap}`;};
   if(document.activeElement!==$('rock-color'))paint('rock-color',rockHex(rockSelected),!rockMaterialOf(rockSelected));
-  for(const swatch of [$('rock-current-swatch'),$('rock-chips').querySelector('[aria-checked="true"] .rock-swatch')])if(swatch)swatch.style.background=rockHex(rockSelected);
+  // Every chip in its own rock type's color: a material another rock type shares (the world's rock) may have moved them all.
+  $('rock-current-swatch').style.background=rockHex(rockSelected);for(const chip of $('rock-chips').children)chip.querySelector('.rock-swatch').style.background=rockHex(Number(chip.dataset.slot));
   // Its beds: its own tones, else the world column's, shown as the colors they draw on this rock type's material.
   const rock2=rockDrawn(rockSelected),tones=own?.beds??columnTones(config.column);bedShown={slot:rockSelected,tones,colors:tones.map(t=>hexOfRgb(toneColor(rock2,t)))};
   BED_COLOR_IDS.forEach((id,k)=>{if(document.activeElement!==$(id))paint(id,bedShown.colors[k],world||!own?.beds);});
@@ -2421,7 +2521,7 @@ async function bootMap(pending=null) {
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); materialUseKey='[]'; syncMaterials();
   // A material's drawn color read back (sculpt-material-cache.js readMeans): the Color pickers show it.
-  renderer.onmeans=()=>{syncRockColors();refreshShallowRow();surfacePanel?.refresh();materialEditor?.refreshColors?.();};   // the world's ground and water are materials: a renderer has none until told
+  renderer.onmeans=()=>{syncRockColors();refreshShallowRow();surfacePanel?.refresh();materialEditor?.refreshColors?.();pickCard?.colors();};   // the world's ground and water are materials: a renderer has none until told
   worldChanged(renderer.setColors(worldColors()));$('export').textContent='Export view PNG';
   buildKnobs(); buildWorldPanel();
   // The Rock column panel edits the selected preset's beds: the world's column for slot 0, a preset's own sections (its copy of the world's

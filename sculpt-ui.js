@@ -33,13 +33,14 @@ export function mountEditorUI(){
  function closeFlyouts(){let any=false;for(const r of rails){if(r.getAttribute('aria-expanded')==='true')any=true;r.setAttribute('aria-expanded','false');}return any;}
  for(const r of rails)r.onclick=()=>{if(panels.palette)return;const open=r.getAttribute('aria-expanded')==='true';closeFlyouts();closeSurfaces();r.setAttribute('aria-expanded',String(!open));};
  grouped.addEventListener('click',e=>{if(e.target.closest('.tool-flyout button'))closeFlyouts();});
- const syncTools=(active,selected,locked,features)=>{
+ // Pick (picking) and Features or Starts (features) stand in for the tool in hand while they are on.
+ const syncTools=(active,selected,locked,features,picking=false)=>{
   for(const b of grouped.querySelectorAll('button')){
    b.disabled=locked;if(b.classList.contains('rail-button'))continue;
-   b.setAttribute('aria-pressed',String(features?b.id===(features==='starts'?'starts-tool':'feature-tool'):b.dataset.tool===active));
+   b.setAttribute('aria-pressed',String(picking?b.id==='pick-tool':features?b.id===(features==='starts'?'starts-tool':'feature-tool'):b.dataset.tool===active));
   }
   // A rail button is lit while the tool in hand is one of its group.
-  for(const r of rails)r.classList.toggle('has-current',!features&&Boolean(r.parentElement.querySelector(`[data-tool="${CSS.escape(active||'')}"]`)));
+  for(const r of rails)r.classList.toggle('has-current',!features&&!picking&&Boolean(r.parentElement.querySelector(`[data-tool="${CSS.escape(active||'')}"]`)));
  };
  mountWorkspace();
  // The side panel: Build (the tool or the selection) or World.

@@ -163,6 +163,24 @@
 #path-row{flex:0 0 auto;width:0;min-width:100%;display:flex;align-items:center;gap:8px}
 #shape-path-list{display:flex;flex-wrap:wrap;gap:3px;max-height:52px;overflow-y:auto;scrollbar-width:thin;min-width:0}
 #path-help{margin:0;font-size:10px;color:#b9c4bf;white-space:normal;min-width:0}
+/* Pick (sculpt-pick.js): a ring at the picked pixel and the card beside it, over the map. The layer spans the workspace and lets the pointer
+   through; script places the ring and the card (left, top) and keeps the card inside the map view. */
+.pick-layer{position:absolute;inset:0;z-index:4;pointer-events:none;overflow:hidden}
+.pick-marker{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;box-sizing:border-box;border:2px solid #f0c36a;border-radius:50%;box-shadow:0 0 0 2px #000a,inset 0 0 0 1px #000a}
+.pick-card{position:absolute;box-sizing:border-box;width:340px;max-width:calc(100% - 16px);overflow-y:auto;scrollbar-width:thin;pointer-events:auto;display:grid;gap:6px;padding:8px 10px 10px;background:var(--panel);border:1px solid #8fd3a8;border-radius:9px;box-shadow:0 10px 30px #000a;font-size:11.5px}
+.pick-head{display:flex;align-items:center;gap:8px}.pick-where{flex:1;min-width:0;color:var(--muted);font-size:10.5px;font-variant-numeric:tabular-nums}
+.pick-close{padding:0 5px;font-size:15px;line-height:18px;background:none;border:0}
+.pick-note{margin:0;color:#e9d3a0}.pick-note button{margin-left:4px;padding:2px 8px;font-size:10.5px}
+.pick-part{display:grid;gap:4px;padding-top:6px;border-top:1px solid var(--line)}
+.pick-line{display:flex;flex-wrap:wrap;align-items:center;gap:4px 7px;margin:0;min-width:0}
+.pick-name{font-weight:600;min-width:0}.pick-kind,.pick-small{color:var(--muted)}.pick-small{font-size:10.5px}
+.pick-line .scope-tag{margin-left:auto}
+.pick-swatch{flex:none;width:26px;height:18px;padding:0;border:1px solid #0c1214;border-radius:3px;background:none;cursor:pointer}.pick-swatch:disabled{cursor:default;opacity:.5}
+.pick-chip{flex:none;width:14px;height:12px;border-radius:2px;border:1px solid #0c1214}
+.pick-door{border:0;background:none;padding:0;color:var(--accent);cursor:pointer;font-size:inherit;white-space:nowrap}.pick-door:hover:not(:disabled){background:none;text-decoration:underline}
+.pick-line .pick-door:last-child{margin-left:auto}
+#pick-select{padding:2px 9px;font-size:10.5px}
+.pick-reach{margin:0;color:var(--muted);font-size:10.5px;line-height:1.35}
 /* The shape card: its name and actions, the sections every shape has, then Details, where a closed part is a chip. */
 .card-head{display:flex;align-items:center;gap:8px}.card-head .panel-title{flex:1;min-width:0;margin:0}
 /* One scope tag, three values: what an edit changes. This shape (or the new shapes a tool draws), this map, or every map in the world. */

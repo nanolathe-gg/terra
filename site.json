@@ -120,6 +120,7 @@
     "sculpt-material-graph.js",
     "sculpt-material-editor.js",
     "sculpt-surface-panel.js",
+    "sculpt-pick.js",
     "materials/textures.json",
     "materials/snippets.json"
   ]

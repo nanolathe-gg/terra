@@ -51,6 +51,20 @@ export const SURFACE_PRESETS = [
 
 const stageOf = layer => isMaterialLayer(layer) ? Math.max(0, SURFACE_STAGE_NAMES.indexOf(layer.stage ?? 'land')) : SURFACE_BUILTINS[layer.builtin]?.[0] ?? 0;
 const nameOf = layer => layer.name || (isMaterialLayer(layer) ? 'Material layer' : BUILTIN_LABELS[layer.builtin] ?? layer.builtin);
+// The layers that drew one pixel (a read of host.inspect: their rows and coverages in draw order), top first, each with its coverage and what
+// of it shows: its coverage less what every layer drawn after it covers. The inspector below and the Pick card's "Layers here" read it.
+export function layersAt(read, layers) {
+  let layerRows = [];
+  try { layerRows = surfaceRows(layers).layerRows; } catch (_) {}
+  const byRow = new Map(layerRows.map((row, i) => [row, i])), out = [];
+  let over = 1;
+  for (let k = read.layers.length - 1; k >= 0; k--) {
+    const l = read.layers[k], layer = layers[byRow.get(l.row)], seen = l.cover * over;
+    over *= 1 - Math.max(0, Math.min(1, l.cover));
+    if (layer) out.push({layer, key: layerKey(layer), name: nameOf(layer), cover: Math.min(1, l.cover), seen});
+  }
+  return out;
+}
 const el = (tag, props = {}, ...children) => { const e = Object.assign(document.createElement(tag), props); for (const c of children) e.append(c); return e; };
 // Controls get ids from their layer and part (uid), so a rebuilt list can give focus back to the control that had it.
 let rowKey = '';
@@ -313,30 +327,24 @@ export function mountSurfacePanel(host) {
     const again = el('button', {type: 'button', textContent: 'Read again'}), close = el('button', {type: 'button', textContent: 'Close'});
     again.onclick = inspect; close.onclick = () => { result.hidden = true; result.replaceChildren(); lastAt = null; };
     const tools = el('div', {className: 'surface-line'}, again, close);
-    if (!read || read.error) { result.replaceChildren(el('p', {textContent: read?.error ? 'The pixel could not be read: ' + read.error.message : 'That point is off the map.'}), tools); return; }
-    const layers = host.surface(); let layerRows = [];
-    try { layerRows = surfaceRows(layers).layerRows; } catch (_) {}
-    const byRow = new Map(layerRows.map((row, i) => [row, i]));
+    if (!read || read.error || read.unread) { result.replaceChildren(el('p', {textContent: read?.error ? 'The pixel could not be read: ' + read.error.message : read?.unread ? 'The pixel could not be read yet: the renderer may still be preparing its pipelines.' : 'That point is off the map.'}), tools); return; }
+    const layers = host.surface();
     const hex = c => '#' + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('');
     const final = hex(read.color), ground = host.slotMaterial(read.slot);
     const swatch = color => { const chip = el('span', {className: 'material-chip'}); chip.style.background = color; return chip; };
     const out = [el('p', {className: 'surface-line'}, swatch(final), el('span', {textContent: `Pixel ${Math.floor(lastAt.x)}, ${Math.floor(lastAt.y)}: ${final}`}))];
     out.push(el('p', {textContent: `Ground: ${ground?.name ?? 'the world’s ground'}${read.ownGround ? ' (the world’s ground)' : ' (a stroke’s material)'}` + (read.aboveSea < 0 ? `; under water, ${(-read.aboveSea).toFixed(1)} below the sea` : '')}));
-    // What of each layer shows: its coverage, less what every layer drawn after it covers.
-    const seen = new Array(read.layers.length); let over = 1;
-    for (let k = read.layers.length - 1; k >= 0; k--) { seen[k] = read.layers[k].cover * over; over *= 1 - Math.max(0, Math.min(1, read.layers[k].cover)); }
+    // What of each layer shows: its coverage, less what every layer drawn after it covers (layersAt).
     if (!read.layers.length) out.push(el('p', {textContent: 'No layer drew here: the ground shows.'}));
     else {
       out.push(el('p', {textContent: 'Layers that drew here, top first:'}));
-      const items = [];
-      read.layers.forEach((l, k) => {
-        const i = byRow.get(l.row), layer = layers[i]; if (!layer) return;
+      const items = layersAt(read, layers).map(({layer, key, name: label, cover, seen}) => {
         const material = layer.material != null ? host.material(layer) : !isMaterialLayer(layer) ? host.roleMaterial?.(layer.builtin) ?? null : null;
         const source = material?.name ?? (isMaterialLayer(layer) || layer.material != null ? 'its material (missing)' : BUILTIN_SOURCES[layer.builtin] ?? 'no material');
-        const name = el('button', {type: 'button', className: 'link', textContent: nameOf(layer), title: 'Open this layer'}); name.onclick = () => openLayer(layerKey(layer));
+        const name = el('button', {type: 'button', className: 'link', textContent: label, title: 'Open this layer'}); name.onclick = () => openLayer(key);
         const chip = material ? swatch(material.color) : el('span', {className: 'material-chip own'});
-        const fate = seen[k] >= .995 ? 'shows' : seen[k] < .005 ? 'covered by a later layer' : `${percent(seen[k])} shows`;
-        items.unshift(el('li', {className: 'surface-line'}, chip, name, el('span', {textContent: `${source} · covers ${percent(Math.min(1, l.cover))} · ${fate}`})));
+        const fate = seen >= .995 ? 'shows' : seen < .005 ? 'covered by a later layer' : `${percent(seen)} shows`;
+        return el('li', {className: 'surface-line'}, chip, name, el('span', {textContent: `${source} · covers ${percent(cover)} · ${fate}`}));
       });
       out.push(el('ol', {className: 'surface-inspect-layers'}, ...items));
     }
@@ -349,5 +357,6 @@ export function mountSurfacePanel(host) {
   $('surface-show').onchange = () => { if (!$('surface-show').checked) host.preview(-1); };
   $('surface-reset').onclick = () => { host.restore(); build(); sendView(); };
   build();
-  return {refresh};
+  // show(at, read): the inspector's detail for a pixel already read (the Pick card's Surface door); it reads again after each committed edit.
+  return {refresh, show: (at, read) => { reading++; lastAt = at; result.hidden = false; showInspect(read); }};
 }
