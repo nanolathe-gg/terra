@@ -87,7 +87,7 @@ function switchRule(layer, kind) {
 // `host`: surface() the list now, apply(next, {commit}), restore() the world's own, preview(row or -1), hide(keys) the layers not shown now, material(layer) → {name, color} or
 // null (height: whether it has art height), edit(layer, button) to open its material, materialKey(preset) → a library key for a preset's material, library() → the materials a
 // layer may draw [{key, name, color}], settings(key) to show a World setting's row and settingNote(key) why it is unavailable ('' if not),
-// roleMaterial(builtin) and slotMaterial(slot) → {name, color} or null, pickPixel(onPick) → cancel, inspect(at) → what the draw laid there.
+// roleMaterial(builtin) and slotMaterial(slot) → {name, color} or null, pick() to take the Pick tool, inspect(at) → what the draw laid there.
 export function mountSurfacePanel(host) {
   const list = $('surface-layers');
   const open = new Set();   // the layers whose rows are open, by key
@@ -298,17 +298,12 @@ export function mountSurfacePanel(host) {
     const stage = stageOf(layer), next = [...layers]; let at = 0; for (let j = next.length - 1; j >= 0; j--) if (stageOf(next[j]) <= stage) { at = j + 1; break; }
     next.splice(at, 0, layer); open.add(layer.id); put(next, true);
   };
-  // The inspector (host.pickPixel, host.inspect): the layers that drew one pixel, top first, with what each covers and what of it shows,
-  // the effects laid after them, and the facts rules read there. It reads again after each committed edit.
-  const inspectButton = $('surface-inspect'), result = $('surface-inspect-result');
-  let cancelPick = null, lastAt = null, reading = 0;
-  const pressed = on => { inspectButton.ariaPressed = String(on); inspectButton.textContent = on ? 'Click the map… (Esc or here to stop)' : 'Inspect a pixel'; };
-  inspectButton.onclick = () => {
-    if (cancelPick) { cancelPick(); cancelPick = null; pressed(false); return; }
-    pressed(true);
-    cancelPick = host.pickPixel(at => { cancelPick = null; pressed(false); lastAt = at; inspect(); });
-  };
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && cancelPick) { cancelPick(); cancelPick = null; pressed(false); } });
+  // The inspector (show, host.inspect): the layers that drew one pixel, top first, with what each covers and what of it shows, the effects
+  // laid after them, and the facts rules read there. A pixel comes from Pick (Pick on the map starts it: host.pick; its card's Surface door
+  // shows the pixel here); it reads again after each committed edit.
+  const result = $('surface-inspect-result');
+  let lastAt = null, reading = 0;
+  $('surface-pick').onclick = () => host.pick();
   async function inspect() {
     if (!lastAt) return;
     const ticket = ++reading;

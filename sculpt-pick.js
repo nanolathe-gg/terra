@@ -14,8 +14,8 @@ const ROCK_SHOWN = .02;
 // `host`: offMap(at); inspect(at) → the probe's read, or {unread: true} when the draw recorded nothing; shapeAt(world) → a shape's index or -1;
 // shape(i) → {name, values} or null; selectShape(i); shapeSettings(i); rock(slot) → {name, color, tag, scope, values, material: {slot, name},
 // reach} or null; recolorRock(slot, hex, commit); openRock(slot); ground(slot) and water() → {slot, name, color, tag, scope, reach} (water also
-// shallow, its tint) or null; recolor(slot, hex, commit); editMaterial(slot, button); openSurface(at, read); openColors(); surface() → the
-// world's layers; client(at) → where the art pixel is on the page {x, y}; focusMap().
+// shallow, its tint) or null; recolor(slot, hex, commit); editMaterial(slot, button); openSurface(at, read); read(at, read) on each new read;
+// openColors(); surface() → the world's layers; client(at) → where the art pixel is on the page {x, y}; focusMap().
 export function mountPick(host) {
   const layer = $('pick'), card = $('pick-card'), marker = $('pick-marker'), view = $('viewport');
   // The picked pixel (art space, as the probe reads it), the ground point under it (as Select hit-tests), and what the last read said.
@@ -31,7 +31,7 @@ export function mountPick(host) {
     if (mine !== ticket || layer.hidden) return;
     if (result?.error) { state = 'failed'; failure = result.error.message; }
     else if (!result || result.unread) state = 'unread';
-    else { state = 'read'; read = result; }
+    else { state = 'read'; read = result; host.read(at, read); }
     show();
   }
   function pick(art, ground) {

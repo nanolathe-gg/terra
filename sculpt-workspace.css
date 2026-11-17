@@ -336,7 +336,6 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .surface-order{flex-wrap:wrap}
 .surface-order>span{flex:1}
 .surface-inspect{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0}
-.surface-inspect button[aria-pressed="true"]{background:var(--accent,#c43b3b);color:#fff}
 .surface-inspect-result{border:1px solid var(--line,#3a3a3a);border-radius:6px;padding:6px;margin:4px 0;display:flex;flex-direction:column;gap:4px}
 .surface-inspect-result p{margin:0}
 .surface-inspect-layers{margin:0;padding-left:1.4em;display:flex;flex-direction:column;gap:2px}

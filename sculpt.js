@@ -831,11 +831,8 @@ function surfaceHost() {
     apply:applySurface,
     restore:()=>{setSurfaceList(structuredClone(baseSurface),false);saveWorlds();checkpoint(true);},
     preview:row=>{if(!renderer||renderer.surfacePreview===row)return;const stage=renderer.uniformStage(()=>renderer.setSurfacePreview(row));worldChanged({stage:stage??'F',world:false});schedule();},
-    // The inspector: the next left click on the map picks an art pixel (that click does nothing else); onPick(at). Returns a cancel function.
-    pickPixel:onPick=>{if(!mapCanvas)return ()=>{};
-      const handler=e=>{if(e.button!==0||!(e.target===overlay||overlay.contains(e.target)))return;e.preventDefault();e.stopImmediatePropagation();cancel();onPick(mapCanvas.artPoint(e));};
-      const cancel=()=>{document.removeEventListener('pointerdown',handler,true);overlay.style.cursor='';};
-      document.addEventListener('pointerdown',handler,true);overlay.style.cursor='crosshair';return cancel;},
+    // Pick on the map: the inspector's pixels come from the Pick tool (its card's Surface door, pickHost openSurface).
+    pick:()=>{if(!stroke&&!moving)setPicking(true);},
     inspect:at=>mapCanvas?mapCanvas.inspect(at):Promise.resolve(null),
     // The material a built-in that draws a world role takes (Materials panel; the rock built-ins the world's rock): its name, or null.
     roleMaterial:builtin=>{const m=roleCopy(builtin);return m?{name:m.name,color:hex(m),own:own(m)}:null;},
@@ -933,6 +930,8 @@ function pickHost() {
     },
     editMaterial:(slot,button) => materialEditor?.open(slot,button),
     openSurface:(at,read) => { surfacePanel?.show(at,read); openWorldSection('wsec-surface'); $('surface-inspect-result').scrollIntoView({block:'nearest',behavior:'smooth'}); },
+    // World › Surface's detail, once open, follows each new pick, so it never describes another pixel than the card.
+    read:(at,read) => { if (!$('surface-inspect-result').hidden) surfacePanel?.show(at,read); },
     openColors:() => { openWorldSection('wsec-colors'); $('world-colors').querySelector('input[type=color][aria-label^="Shallow water"]')?.focus({preventScroll:true}); },
     surface:() => config.surface||[],
   };

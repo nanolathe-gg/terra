@@ -209,8 +209,9 @@ Built (each a commit; the measurements are in their messages):
   covers 70%, 66.5%, 65.4% (the pattern is near even, a little under at patch sizes).
 - **Design view**: the layer preview is stripes over the finished picture, magenta where the layer shows and cyan where a later layer
   covers it, with a checkbox; each row can be hidden or shown alone (Solo), a view of the page only that an export sets aside.
-- **Inspector**: Inspect a pixel, then click the map: the color pass records the layers that drew that pixel (row, coverage, in
-  order), its color, its ground and the facts; the panel lists them top first with their materials and what of each shows.
+- **Inspector**: Pick on the map (the Pick tool, key I) and Surface in its card: the color pass records the layers that drew that
+  pixel (row, coverage, in order), its color, its ground, its rock type and how much rock shows, and the facts; the panel lists them
+  top first with their materials and what of each shows. The Pick card itself names the shape, rock type and materials there.
 - **Naming**: each row shows its material; the material editor names the layers a copy draws.
 - **World-kept materials**: the world keeps every role material and layer material it changed, as its ground and water.
 - **A material's Color** (`recolorMaterial`): moves every color step (the gradients and color constants the color is made of,
