@@ -18,6 +18,7 @@ const BASE_RAIN = 0.006;   // height units a dry sample gains per iteration (tim
 const K_FLUX = 0.12;       // pipe flow per unit of surface difference: stable below .25 with four pipes
 const DAMP = 0.85;         // flow a pipe keeps from the last iteration: sheets spread instead of ringing
 const K_CAP = 0.3;         // sediment capacity per unit of sin(slope) * speed
+const CAP_SPACING = 2;     // the lattice spacing, px, that K_CAP is the capacity at (runGpu scales it for a coarser lattice)
 const K_DISSOLVE = 0.5;    // share of the shortfall dissolved per iteration
 const K_DEPOSIT = 0.3;     // share of the excess dropped per iteration (lower than dissolve: sediment travels)
 const EVAPORATION = 0.01;  // standing water dries slowly, so pits fill and settle their sediment
@@ -79,7 +80,11 @@ export class GpuErosion {
       const {device} = this, {grid, size, seaLevel} = request, n = grid * grid, spacing = request.spacing ?? (size - 1) / (grid - 1);   // H5b: a window of a larger map passes the map's spacing and its own origin
       const age = Math.max(1, Math.round(request.age)), rain = BASE_RAIN * request.rain, started = performance.now();
       const talus = Math.tan(request.talusAngle * Math.PI / 180);
-      const params = new Float32Array([grid, spacing, rain, K_FLUX, DAMP, K_CAP, K_DISSOLVE, K_DEPOSIT, EVAPORATION, WET_FULL,
+      // Water cuts lines a cell wide, so a coarser lattice's are wider: the capacity falls with the root of the spacing, which keeps the
+      // material moved the same from 2 px cells (where the constants were set) to 8 (measured on Green: within 8% at 4 px, 15% at 8 px;
+      // without it 40% and 80% more).
+      const capacity = K_CAP * Math.sqrt(CAP_SPACING / spacing);
+      const params = new Float32Array([grid, spacing, rain, K_FLUX, DAMP, capacity, K_DISSOLVE, K_DEPOSIT, EVAPORATION, WET_FULL,
         this.renderer.variantNumber('columnContrast', 1), ROCK_WEAR, talus, Math.min(request.talusAngle + SOFT_EXTRA, 85) * Math.PI / 180, HARD_ANGLE * Math.PI / 180, THERMAL, request.ox ?? 0, request.oy ?? 0]);
       const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
       const make = (label, bytes, usage = S) => { const b=device.createBuffer({label, size:Math.max(16,bytes),usage});owned.push(b);return b; };
