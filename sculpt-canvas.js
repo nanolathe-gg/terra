@@ -934,8 +934,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       const pointIndex=hit?.action==='point'?hit.index:-1;api.selectPathPoint?.(pointIndex);
       // In path mode empty ground selects; only a point can start a drag.
       if(api.pathEditing?.()&&pointIndex<0)return;
+      // Shift + drag sets the shape's height setting (sculpt.js heightControl: a landform's Elevation); a shape without one (Reset ground) starts no drag.
+      const action=hit?.action==='rotate'||hit?.action==='scale'||pointIndex>=0?hit.action:event.shiftKey&&!group?'height':'move',height=action==='height'?api.heightOf?.(index)??null:null;
+      if(action==='height'&&height===null)return;
       const h=geometry(index);if(api.beginMove(index)===false)return;
-      gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'move',index,start,p,screen:screenPoint,handles:h,amount:nodeMetadata(index)?.params?.amount??0,pointIndex,point:pointIndex>=0?{...nodeMetadata(index).points[pointIndex]}:null,action:hit?.action==='rotate'||hit?.action==='scale'||pointIndex>=0?hit.action:event.shiftKey&&!group?'amount':'move'};
+      gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'move',index,start,p,screen:screenPoint,handles:h,height,pointIndex,point:pointIndex>=0?{...nodeMetadata(index).points[pointIndex]}:null,action};
     }else{
       const q=screen(event),hit=api.drawMode?.()==='add'?hitSelection(geometry(api.selection()),{x:q.x,y:q.z},true):null;
       const anchor=hit?.action==='point'?hit.index:-1,startPoint=anchor>=0?nodeMetadata(api.selection()).points[anchor]:p;
@@ -956,7 +959,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(gesture.action==='point'){let dx=q.x-gesture.screen.x,dy=q.z-gesture.screen.z;if(event.shiftKey){if(Math.abs(dx)>Math.abs(dy))dy=0;else dx=0;}edit={point:{index:gesture.pointIndex,x:gesture.point.x+dx,y:gesture.point.y+dy}};}
       else if(gesture.action==='rotate'){let angle=Math.atan2(q.z-h.centre.y,q.x-h.centre.x)-Math.atan2(gesture.screen.z-h.centre.y,gesture.screen.x-h.centre.x);if(event.shiftKey)angle=Math.round(angle/(Math.PI/12))*Math.PI/12;edit={matrix:around(Math.cos(angle),Math.sin(angle),-Math.sin(angle),Math.cos(angle))};}
       else if(gesture.action==='scale'){let k=clamp(Math.hypot(q.x-h.centre.x,q.z-h.centre.y)/Math.max(1,Math.hypot(gesture.screen.x-h.centre.x,gesture.screen.z-h.centre.y)),.2,4);if(event.shiftKey)k=Math.round(k*10)/10;edit={matrix:around(k,0,0,k)};}
-      else if(gesture.action==='amount')edit={amount:gesture.amount+(gesture.screen.z-q.z)*1.5};
+      else if(gesture.action==='height')edit={height:gesture.height+(gesture.screen.z-q.z)*1.5};
       else edit={dx:q.x-gesture.screen.x,dy:q.z-gesture.screen.z};pendingStrokeTime=performance.now();api.previewMove(edit);
     }
   }

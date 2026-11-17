@@ -253,11 +253,18 @@ function rememberTool(custom=false) {
   if (custom) state.preset='custom';
   toolSettings[tool]=state;
 }
-function heightControlRange(p={}) {
+// A landform's Elevation range, which follows its height reference. A Ground offset digs or rises at most as far as a fixed elevation can from the plain.
+function elevationRange(p={}) {
   const ref=Math.round(p.heightReference||0),offset=ref===1?(config?.seaLevel||0):0;
-  // A Ground offset digs or rises at most as far as a fixed elevation can from the plain.
-  if(ref===2){$('lf-elevation').min='-160';$('lf-elevation').max='160';return;}
-  $('lf-elevation').min=String(-80-offset);$('lf-elevation').max=String(300-offset);
+  return ref===2?[-160,160]:[-80-offset,300-offset];
+}
+function heightControlRange(p={}) { const [lo,hi]=elevationRange(p); $('lf-elevation').min=String(lo); $('lf-elevation').max=String(hi); }
+// The setting that sets a shape's height, which Shift + drag and PageUp / PageDown change: a landform's Elevation, the Height of the other kinds (a fissure's
+// Depth, a brush's strength), each in its slider's range and steps. Reset ground has none (null).
+function heightControl(n) {
+  if (!n?.params || !n.points || n.kind==='erase') return null;
+  const [lo,hi]=n.kind==='landform'?elevationRange(n.params):amountRange(n.kind),key=n.kind==='landform'?'elevation':'amount',value=Number(n.params[key]??worldDefault(key));
+  return {key,lo,hi,value:Number.isFinite(value)?value:lo,set:v => clamp(Math.round(v),lo,hi)};
 }
 function stepControlRange(kind,p={}) {
   const shore=kind==='landform'&&Number(p.stepReference)>0;
@@ -1220,7 +1227,7 @@ function beginRegionalMove(index=selected) {
   updateControls(); return index;
 }
 // Only a plain drag moves the group; rotate, scale, height and point edits stay on the shape they started on.
-const groupTranslation=edit => edit && typeof edit==='object' && !Array.isArray(edit) && !edit.matrix && !edit.point && !edit.params && !Number.isFinite(edit.amount);
+const groupTranslation=edit => edit && typeof edit==='object' && !Array.isArray(edit) && !edit.matrix && !edit.point && !edit.params && !Number.isFinite(edit.height);
 // Transforms and parameter edits are relative to the gesture's first node,
 // regardless of pointer cadence. A release is one undoable history entry.
 function previewRegionalMove(edit) {
@@ -1244,7 +1251,7 @@ function previewRegionalMove(edit) {
     if (!transformNode(node,gesture.state,matrix)) return gesture.index;   // past the map's size: the last transform that fitted stays
     if(q.point&&Number.isInteger(q.point.index)&&node.points[q.point.index])node.points[q.point.index]={x:clamp(q.point.x,0,config.map.width-1),y:clamp(q.point.y,0,config.map.height-1)};
     if (q.params) node.params={...node.params,...q.params};
-    if (Number.isFinite(q.amount)) node.params={...node.params,amount:q.amount};
+    if (Number.isFinite(q.height)) { const c=heightControl(node); if (c) node.params={...node.params,[c.key]:c.set(q.height)}; }
   }
   nodes[gesture.index]=node; gesture.changed=true;
   evaluate(gesture.index,unionRect(before,nodeBounds(node))); schedule(); return gesture.index;
@@ -1430,6 +1437,7 @@ const sculptRegion={
   // Pick: a left click on the map with Pick in hand, or with Alt held, reads its pixel (art: the picture's pixel; ground: the point Select
   // hit-tests) and does nothing else; any other click closes the card.
   pickHere:(event,art,ground)=>{if(!picking&&!event.altKey){pickCard?.close();return false;}if(!stroke&&!moving)pickCard?.pick(art,ground);return true;},picking:()=>picking,
+  heightOf:i => heightControl(nodes[i])?.value??null,
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,selectedShapes,toggleShape,pickAt:pickNode,selectionLabel:shapeName,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); transformSelected(() => [1,0,0,1,dx,dy]); },
   pendingInputs:()=>worldInputQueue.pending,drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
@@ -2124,7 +2132,12 @@ window.addEventListener('keydown',event => {
   const turn={',':-Math.PI/12,'.':Math.PI/12}[event.key],grow={'[':1/1.1,']':1.1}[event.key],lift={PageUp:5,PageDown:-5}[event.key];
   if (selected>=0 && nodes[selected]?.points && (turn || grow || lift) && !event.metaKey && !event.ctrlKey) {
     event.preventDefault();
-    if (lift) { changeSelected(n => { if (n.params && n.kind!=='erase') n.params={...n.params,amount:clamp(n.params.amount+lift,...amountRange(n.kind))}; }); return; }
+    if (lift) {
+      // The shape's height setting (heightControl): a step that changes nothing (Reset ground, or already at the end of the range) makes no undo step.
+      const c=heightControl(nodes[selected]),next=c?.set(c.value+lift);
+      if (c && next!==c.value) changeSelected(n => { n.params={...n.params,[c.key]:next}; });
+      return;
+    }
     transformSelected(n => about(nodePivot(n),turn?rotation(turn):scaling(grow)));
   }
 });
