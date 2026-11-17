@@ -24,7 +24,7 @@ import {copySurface,layerKey,withSurfaceMaterials} from './sculpt-material-model
 import {mountSurfacePanel,BUILTIN_LABELS} from './sculpt-surface-panel.js';
 import {goTo} from './sculpt-find.js';
 import {mountPick} from './sculpt-pick.js';
-import {worldKit,sameKitData,assertKitMaterials,authoredWorldTool,newWorldKey,instantiateWorldKit,stageWorldKitEdit,publishWorldRock,publishWorldTool,addWorldRockInstance,resetWorldKitInstances,resolvedWorldCard,worldToolUnavailable} from './sculpt-world-kit.js';
+import {worldKit,storedWorldKit,sameKitData,assertKitMaterials,authoredWorldTool,newWorldKey,instantiateWorldKit,stageWorldKitEdit,publishWorldRock,publishWorldTool,addWorldRockInstance,resetWorldKitInstances,resolvedWorldCard,worldToolUnavailable} from './sculpt-world-kit.js';
 import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,toolMaterialSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
@@ -182,7 +182,8 @@ const mapOwnsTool=t=>mapTools.some(m=>m.id===t?.id);
 const toolUnavailable=t=>worldToolUnavailable(t,mapRocks,mapMaterials,config,currentWorldKit??{rocks:[]});
 const toolCard=(id,own=mapTools,tables) => { const t=toolById(id,own); return authoredWorldTool(t)?resolvedWorldCard(t,tables?.rocks??mapRocks,tables?.materials??mapMaterials,config):t?.card?structuredClone(t.card):shapeCard(id,config?.biomeId,tables); };
 function refreshWorldKit(world=activeWorld()){currentWorldKit=worldKit(baseWorldConfig??config,world);worldToolList=currentWorldKit.tools;}
-function installWorldKit(kit){const checked=worldKit(baseWorldConfig??config,kit);activeWorld().tools=checked.tools;activeWorld().rocks=checked.rocks;worldStoreDirty=true;currentWorldKit=checked;worldToolList=checked.tools;}
+// The world record keeps only what the artist made (storedWorldKit); the built-in tools and the derived rock catalog stay derived.
+function installWorldKit(kit){const checked=worldKit(baseWorldConfig??config,kit),w=activeWorld();delete w.tools;delete w.rocks;Object.assign(w,storedWorldKit(baseWorldConfig??config,checked));worldStoreDirty=true;currentWorldKit=checked;worldToolList=checked.tools;}
 function refreshWorldTools(world=activeWorld()){
   const previous=brushWorldDefinitions;refreshWorldKit(world);
   for(const id of Object.keys(toolSettings))if(id.startsWith('world-')){const before=previous.find(t=>t.id===id),after=worldToolList.find(t=>t.id===id);if(!after||!before||!sameKitData(before.card,after.card)||before.shape!==after.shape)delete toolSettings[id];}
@@ -2114,7 +2115,7 @@ const WORLD_STORE='nanolathe-map-editor-worlds';
 const COLOR_HELP={shallowTone:'The tint of the shallows, kept as a shift of the water material\'s color, so recoloring the water moves its shallows too. Off: the world\'s own tint.',
   sun:'The direct light and the glints it mirrors. A warm sun lights slopes that face it.',sky:'The ambient light that fills the shade. A cool sky keeps shaded ground and the lee of hills blue.'};
 let baseWorldConfig=null,worldStoreTransaction=0;
-let worlds={},worldId=null,openedAsOwnWorld=null;   // the last: set when a map's world opened as a world of its own
+let worlds={},worldId=null,openedAsOwnWorld=null,embeddedWorldError='';   // openedAsOwnWorld: set when a map's world opened as a world of its own; the error: why its world could not be read
 function loadWorlds() { try { worlds=JSON.parse(localStorage.getItem(WORLD_STORE)||'{}')||{}; } catch (_) { worlds={}; } }
 function saveWorlds() { if(worldStoreTransaction)return;try { localStorage.setItem(WORLD_STORE,JSON.stringify(worlds)); } catch (_) {} }
 function activeWorld() { return worlds[worldId] ??= {name:config.biome,base:config.biomeId,colors:{...(config.colors||{})},knobs:{}}; }
@@ -2173,11 +2174,18 @@ const ownWorlds=() => Object.entries(worlds).filter(([id,w]) => !(id in (config.
 // the store. The world this page is in starts from its settings as they are now: its colors, the rows' values, its own materials, the map's
 // feature set and its surface layers. Another world starts from what this browser keeps of it (a built-in nobody changed: nothing, so its
 // defaults), as it would open.
+// Said in the status line and in the Map menu (which a shared map opens) whenever a map, the working copy included, opened as a world of its own.
+function showOwnWorldNote(shared=false){
+  if(embeddedWorldError){status(`The map’s world could not be read (${embeddedWorldError}); the map opened in ${activeWorld().name}.`);return;}
+  if(!openedAsOwnWorld)return;
+  const note=`Opened in its own world, “${openedAsOwnWorld.name}”: the map’s world differs from your ${openedAsOwnWorld.mine}, which is unchanged. World › Use for my ${openedAsOwnWorld.mine} adopts it.`;
+  status(note);$('map-world-note').textContent=note;$('map-world-note').hidden=false;if(shared&&$('pane-map').hidden)$('tab-map').click();
+}
 function makeWorld(name,from=worldId) {
   const id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
   if (from===worldId) {
     const world=activeWorld(),knobs={...world.knobs}; for (const [,list] of KNOBS) for (const [key] of list) if (experiment.has(key)) knobs[key]=experiment.get(key);
-    worlds[id]={...worldKit(baseWorldConfig,world),name,materials:worldOwnMaterials(mapMaterials,config),base:config.biomeId,colors:{...world.colors},knobs,featureSet:mapFeatures?.serialize().featureSet,...(world.surface?{surface:structuredClone(world.surface)}:{})};
+    worlds[id]={...storedWorldKit(baseWorldConfig,world),name,materials:worldOwnMaterials(mapMaterials,config),base:config.biomeId,colors:{...world.colors},knobs,featureSet:mapFeatures?.serialize().featureSet,...(world.surface?{surface:structuredClone(world.surface)}:{})};
   } else {
     const {openedFrom,...kept}=structuredClone(worlds[from]??{});
     worlds[id]={colors:{},knobs:{},...kept,name,base:worlds[from]?.base??from};
@@ -2285,7 +2293,7 @@ function buildWorldPanel() {
     const name=$('world-new-name').value.trim(); if (!name) { $('world-new-name').focus(); status('Name the new world first.'); return; }
     goToWorld(config.biomeId,makeWorld(name));
   };
-  $('world-export').onclick=() => download(new Blob([JSON.stringify({format:'nanolathe-map-world',version:1,world:{...world,...worldKit(baseWorldConfig,world),materials:structuredClone(worldKept(mapMaterials)),knobs:{...world.knobs},featureSet:mapFeatures?.serialize().featureSet}},null,1)],{type:'application/json'}),(world.name||'world').replace(/[^\w-]+/g,'_')+'.world.json');
+  $('world-export').onclick=() => download(new Blob([JSON.stringify({format:'nanolathe-map-world',version:1,world:{...(({tools,rocks,...rest})=>rest)(world),...storedWorldKit(baseWorldConfig,world),materials:structuredClone(worldKept(mapMaterials)),knobs:{...world.knobs},featureSet:mapFeatures?.serialize().featureSet}},null,1)],{type:'application/json'}),(world.name||'world').replace(/[^\w-]+/g,'_')+'.world.json');
   $('world-import').onclick=() => $('world-file').click();
   $('world-file').onchange=async () => {
     try {
@@ -2714,7 +2722,7 @@ async function bootMap(pending=null) {
   if (saved) {
     try {
       const s=JSON.parse(saved),same=s.biome===config.biomeId && (s.world||s.biome)===worldId;
-      loadSketch(s,!same); status(same?'Restored your saved map recipe.':'Carried your working map into this world.');
+      loadSketch(s,!same); status(same?'Restored your saved map recipe.':'Carried your working map into this world.');showOwnWorldNote();   // the working copy forks as an opened map does
     } catch (err) { keepSaved=true; error('Saved map could not be loaded: '+err.message+' The saved copy is retained until you edit.'); }
   }
   else status('Blank map ready · draw terrain with the existing tools.');
@@ -2726,10 +2734,7 @@ async function bootMap(pending=null) {
     const shared=experiment.has('shared'),url=new URL(location.href);
     for(const key of ['pendingSketch','shared']){experiment.delete(key);url.searchParams.delete(key);}
     window.history.replaceState(null,'',url);checkpoint();status('Loaded the saved map.');if(shared)announceShared();
-    if(openedAsOwnWorld){   // said in the status line and in the Map menu, which a shared map opens
-      const note=`Opened in its own world, “${openedAsOwnWorld.name}”: the map’s world differs from your ${openedAsOwnWorld.mine}, which is unchanged. World › Use for my ${openedAsOwnWorld.mine} adopts it.`;
-      status(note);$('map-world-note').textContent=note;$('map-world-note').hidden=false;if(shared&&$('pane-map').hidden)$('tab-map').click();
-    }
+    showOwnWorldNote(shared);
   } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
   updateControls(); resize(); schedule(); queueWeather();
@@ -2799,7 +2804,8 @@ async function boot() {
     defaultColumn=config.column;baseWorldConfig=structuredClone(config);
     const pending=await takePendingSketch(experiment.get('pendingSketch'));let automatic=null;
     try{if(!pending&&LOCAL_KEY&&!experiment.has('newMap')){const a=JSON.parse(localStorage.getItem(LOCAL_KEY)||'null');if(a?.biome===config.biomeId&&(a.world||a.biome)===(experiment.get('world')||config.biomeId))automatic=a;}}catch{}
-    const restoring=pending??automatic,embedded=copySavedWorld(restoring?.worldSettings,config);
+    // An unreadable embedded world (a damaged file or working copy) is reported, never fatal: the map opens in the world the address names.
+    const restoring=pending??automatic;let embedded=null;try{embedded=copySavedWorld(restoring?.worldSettings,config);}catch(err){embeddedWorldError=err.message;}
     loadWorlds();
     if(embedded){
       // A map's world never replaces yours. One that draws differently from this browser's world of the same id opens as a world of

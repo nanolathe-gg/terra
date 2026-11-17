@@ -1,4 +1,4 @@
-import {worldKit,optionalWorldKit,instantiateWorldKit,sameKitData} from './sculpt-world-kit.js';
+import {worldKit,storedWorldKit,instantiateWorldKit,sameKitData} from './sculpt-world-kit.js';
 import {withWorldMaterials,worldOwnMaterials,worldKept,worldOwnFor,keptWorldMaterials} from './sculpt-materials.js';
 // The map carries its effective world settings, including defaults, URL overrides and the world's ground and water materials.
 // Keep browser/session parameters out of the recipe; removed controls are dropped on load.
@@ -12,7 +12,7 @@ export function savedWorld(config,settings,world) {
   const knobs={};
   for(const key of worldKeys(config)){const value=settings.get(key)??world.knobs?.[key]??config.defaults?.[key]??config.engineDefaults?.[key];if(value!==undefined&&value!==null)knobs[key]=String(value);}
   // The world's surface layers where the artist changed them (docs/SURFACE_LAYERS.md); a world that kept its own carries none.
-  return {...worldKit(config,world),materials:worldKept(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs,...(world.surface?{surface:copySurface(world.surface)}:{})};
+  return {...storedWorldKit(config,world),materials:worldKept(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs,...(world.surface?{surface:copySurface(world.surface)}:{})};
 }
 export function copySavedWorld(value,config) {
   if(value===undefined)return null;
@@ -31,7 +31,7 @@ export function copySavedWorld(value,config) {
     colors[key]=key==='shallowTone'&&v?[...v]:v;
   }
   const surface=value.surface===undefined?null:copySurface(value.surface);
-  const result={...optionalWorldKit(value,config),materials:worldKept(withWorldMaterials(value.materials,config)),name:value.name.slice(0,120),base:value.base,colors,knobs,...(value.featureSet?{featureSet:normalizeSet(value.featureSet,config)}:{}),...(surface?{surface}:{})};
+  const result={...storedWorldKit(config,value),materials:worldKept(withWorldMaterials(value.materials,config)),name:value.name.slice(0,120),base:value.base,colors,knobs,...(value.featureSet?{featureSet:normalizeSet(value.featureSet,config)}:{}),...(surface?{surface}:{})};
   if(value.tools!==undefined||value.rocks!==undefined)instantiateWorldKit({...config,surface:surface??config.surface,worldMaterials:keptWorldMaterials(result.materials,config)},result);
   return result;
 }

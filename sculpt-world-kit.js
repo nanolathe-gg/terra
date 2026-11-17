@@ -60,18 +60,25 @@ function baseRocks(config){
   return given.rocks.map(r=>{const m=given.materials.find(m=>m.slot===r.material),ref=m?referenceForMaterial(m.slot,given.materials,{key:'kit-'+(m.source??r.key).slice(0,70)}).ref:{world:'worldRock'};
     return {key:r.key,name:r.name,knobs:r.knobs,column:r.column,colors:r.colors,material:ref};});
 }
+// The world's built-in tools always come from its config, so a later config (a tool removed, renamed or added) reaches every world;
+// a stored list contributes only the tools the artist authored (with a card). Entries without a card carry nothing of the artist's.
 export function worldKit(config,world={}){
   if(!object(world))throw Error('Invalid world kit.');
-  const kit={tools:copyWorldTools(world.tools===undefined?(config.tools??[]):world.tools,config),rocks:copyWorldRocks(world.rocks===undefined?baseRocks(config):world.rocks)};
+  if(world.tools!==undefined&&!Array.isArray(world.tools))throw Error('A world’s tools are a list.');
+  const authored=(world.tools??[]).filter(t=>object(t)&&t.card!==undefined);
+  const kit={tools:copyWorldTools([...(config.tools??[]),...authored],config),rocks:copyWorldRocks(world.rocks===undefined?baseRocks(config):world.rocks)};
   const keys=new Set(kit.rocks.map(r=>r.key)),inline=new Map();
   for(const tool of kit.tools)if(authoredWorldTool(tool)&&tool.rock&&!keys.has(tool.rock))throw Error(`The world tool ${tool.label} names a rock type its world does not carry.`);
   for(const ref of [...kit.rocks.map(r=>r.material),...kit.tools.map(t=>t.ground)].filter(Boolean))if(!ref.world){const text=JSON.stringify([ref.name,ref.graph]);if(inline.has(ref.key)&&inline.get(ref.key)!==text)throw Error('Two material dependencies disagree about the same key.');inline.set(ref.key,text);}
   return kit;
 }
-export function optionalWorldKit(world,config){
-  const kit=worldKit(config,world);
-  return {...(world.tools!==undefined?{tools:kit.tools}:{}),...(world.rocks!==undefined?{rocks:kit.rocks}:{})};
+// What a world record, a map's embedded world and a world file store: the tools the artist authored, and the rock catalog only where it
+// differs from the one the config derives. The derived defaults stay derived, so library and config revisions reach the world.
+export function storedWorldKit(config,world={}){
+  const kit=worldKit(config,world),tools=kit.tools.filter(authoredWorldTool);
+  return {...(tools.length?{tools}:{}),...(world.rocks!==undefined&&!same(kit.rocks,worldKit(config).rocks)?{rocks:kit.rocks}:{})};
 }
+export const optionalWorldKit=(world,config)=>storedWorldKit(config,world);
 export function materialRefSlot(ref,materials){
   if(!ref)return 0;
   const m=ref.world?materials.find(m=>worldKey(m)===ref.world):materials.find(m=>m.key===ref.key&&m.name===ref.name&&same(copyMaterial(m),ref.graph));
