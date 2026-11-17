@@ -1,8 +1,9 @@
-// World › Surface (docs/SURFACE_LAYERS.md): the world's surface layers as a list, top first. Each row opens to set a layer's material, its
-// Coverage (stored as amount), its edge and its rule (conditions that must all hold, or a score); a row moves within its stage, a material layer can be removed,
-// and a layer is added from a preset. Hovering or focusing a row previews where that layer lies on the map. The list is a world setting:
-// `host.apply(next, {commit})` stores it.
-import {SURFACE_BUILTINS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, PLANT_KINDS, PLANT_LABELS, PLANT_FACTS, surfaceRows, isMaterialLayer, layerKey} from './sculpt-material-model.js';
+// World › Surface (docs/SURFACE_LAYERS.md): the world's surface layers as a list, top first, in three sections by what draws (layerSection):
+// those that draw with the world as it is, the built-ins that draw only where Surface paint has painted, and those that cannot draw yet, each
+// with its reason. Each row opens to set a layer's material, its Coverage (stored as amount), its edge and its rule (conditions that must all
+// hold, or a score); a row moves within its stage, a material layer can be removed, and a layer is added from a preset. Hovering or focusing a
+// row previews where that layer lies on the map. The list is a world setting: `host.apply(next, {commit})` stores it.
+import {SURFACE_BUILTINS, SURFACE_NEEDS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, SURFACE_OWN_AMOUNT, PLANT_KINDS, PLANT_LABELS, PLANT_FACTS, surfaceRows, isMaterialLayer, layerKey} from './sculpt-material-model.js';
 
 const $ = id => document.getElementById(id);
 // Plain names for the facts a rule reads, with the range a window's sliders cover.
@@ -65,6 +66,38 @@ export function layersAt(read, layers) {
   }
   return out;
 }
+// What a surface the world lacks (SURFACE_NEEDS `layer`) needs, and the control that lends one.
+const LAYER_REASONS = {beach: {text: 'This world has no beach of its own; another world can lend one (choosing reloads the page).', go: {id: 'beach-from'}}};
+// Which section of the list a layer belongs in, from facts read directly (no rule is evaluated and no pixel read): 'idle' with its reasons
+// while it draws nothing with the world as it is, 'painted' for a built-in that draws only where Surface paint has painted (SURFACE_NEEDS),
+// else 'drawing'. `facts`: material(layer) → whether the map holds its material; control(key) → {value, label, note, place, rock, rocks} or
+// null (value: the World setting, for a rock type's setting the largest of the world's rock and the rock types in use; note: why the setting
+// itself is unavailable, '' if it is not); role(key) → {present, name} or null; layer(name) → whether the world draws that surface;
+// fact(name) → a world fact (sculpt-knobs.js worldPanelValues). A reason is {text, go}: go names the control that turns it on ({control} or
+// {id}). Anything unknown is no claim.
+export function layerSection(layer, facts) {
+  const reasons = [], builtin = !isMaterialLayer(layer);
+  if (!(builtin && SURFACE_OWN_AMOUNT.includes(layer.builtin)) && Number(layer.amount ?? 1) <= 0) reasons.push({text: 'Coverage is 0.'});
+  if (layer.material != null && !facts.material(layer)) reasons.push({text: 'Its material is missing from this map: open the row to choose one.'});
+  else if (builtin && layer.material == null && SURFACE_DRAWABLE.includes(layer.builtin)) reasons.push({text: 'It has no material, so it draws nothing: open the row to choose one.'});
+  let painted = false;
+  for (const need of builtin ? SURFACE_NEEDS[layer.builtin] ?? [] : []) {
+    if (need.painted) { painted = true; continue; }
+    if (need.control) {
+      if (need.unless && facts.fact(need.unless) > 0) continue;
+      const c = facts.control(need.control);
+      if (!c || !(c.value <= 0)) continue;
+      reasons.push({text: `${c.label} is 0${c.rock ? ` for the world’s rock${c.rocks ? ' and every rock type in use' : ''}` : ''}.`, go: {control: need.control}, note: c.note});
+    } else if (need.role) {
+      const r = facts.role(need.role);
+      if (!r || r.present) continue;
+      reasons.push({text: `The map has no ${r.name} material: in Materials, choose one and set Also the world’s to ${r.name}.`});
+    } else if (need.layer && !facts.layer(need.layer)) reasons.push(LAYER_REASONS[need.layer] ?? {text: `This world draws no ${need.layer}.`});
+  }
+  // A lone setting's own requirement says what else it waits for (with more reasons, those already say it).
+  const out = reasons.map(({note, ...r}) => reasons.length === 1 && note ? {...r, text: `${r.text} ${note}`} : r);
+  return {section: out.length ? 'idle' : painted ? 'painted' : 'drawing', reasons: out};
+}
 const el = (tag, props = {}, ...children) => { const e = Object.assign(document.createElement(tag), props); for (const c of children) e.append(c); return e; };
 // Controls get ids from their layer and part (uid), so a rebuilt list can give focus back to the control that had it.
 let rowKey = '';
@@ -87,9 +120,14 @@ function switchRule(layer, kind) {
 // `host`: surface() the list now, apply(next, {commit}), restore() the world's own, preview(row or -1), hide(keys) the layers not shown now, material(layer) → {name, color} or
 // null (height: whether it has art height), edit(layer, button) to open its material, materialKey(preset) → a library key for a preset's material, library() → the materials a
 // layer may draw [{key, name, color}], settings(key) to show a World setting's row and settingNote(key) why it is unavailable ('' if not),
-// roleMaterial(builtin) and slotMaterial(slot) → {name, color} or null, pick() to take the Pick tool, inspect(at) → what the draw laid there.
+// roleMaterial(builtin) and slotMaterial(slot) → {name, color} or null, pick() to take the Pick tool, inspect(at) → what the draw laid there;
+// for the sections (layerSection's facts): control(key), role(key), hasLayer(name), fact(name), worldName(), and place(go) → where the control
+// that turns a layer on lives ("Rock types › Exposure & relief"), open(go) to show and focus it.
 export function mountSurfacePanel(host) {
   const list = $('surface-layers');
+  const SECTIONS = ['drawing', 'painted', 'idle'];
+  const facts = {material: layer => Boolean(host.material(layer)), control: key => host.control?.(key) ?? null, role: key => host.role?.(key) ?? null,
+    layer: name => host.hasLayer?.(name) ?? true, fact: name => host.fact?.(name) ?? 0};
   const open = new Set();   // the layers whose rows are open, by key
   // The design view, by key: layers hidden for now, or the one layer shown alone (solo). Never saved, undone or exported (host.hide).
   const hidden = new Set();
@@ -166,7 +204,7 @@ export function mountSurfacePanel(host) {
     select.onchange = () => edit(i, l => { if (select.value) l.material = select.value; else delete l.material; }, true);   // a plants-only layer keeps its plants
     return el('label', {className: 'surface-number surface-material-row'}, el('span', {textContent: 'Material'}), select);
   }
-  function row(layer, i, layers, layerRows) {
+  function row(layer, i, layers, layerRows, placed) {
     const key = layerKey(layer), builtin = !isMaterialLayer(layer), stage = stageOf(layer), fixed = builtin && SURFACE_FIXED.includes(layer.builtin);
     rowKey = key;
     const siblings = layers.map((l, j) => [l, j]).filter(([l]) => stageOf(l) === stage).map(([, j]) => j), at = siblings.indexOf(i);
@@ -201,6 +239,12 @@ export function mountSurfacePanel(host) {
     head.append(eye, alone);
     const item = el('li', {className: 'surface-layer' + (isOpen ? ' open' : '') + (shown(key) ? '' : ' unshown'), tabIndex: -1}, head);
     item.dataset.key = key;
+    // Why it draws nothing now, each reason with a door to the control that turns it on (as Pick's doors and the shape card's Edit).
+    if (placed.reasons.length) item.append(el('div', {className: 'small surface-why'}, ...placed.reasons.map(r => {
+      const line = el('p', {textContent: r.text + ' '}), where = r.go && host.place?.(r.go);
+      if (where) { const b = el('button', {type: 'button', className: 'link surface-go', textContent: where + ' ›', title: 'Show this setting'}); b.onclick = () => host.open(r.go); line.append(b); }
+      return line;
+    })));
     if (isOpen) {
       const edge = layer.edge ?? {}, body = el('div', {className: 'surface-body'});
       // A built-in that already draws a role material or its rock type's rock takes it from there (sculpt-material-model.js SURFACE_DRAWABLE).
@@ -262,31 +306,43 @@ export function mountSurfacePanel(host) {
     }
     return wrap;
   }
-  function build() {
-    const focused = document.activeElement?.id?.startsWith('surface-') ? document.activeElement.id : '';
+  // Each layer's section and reasons, as the last build placed them (sync rebuilds only when the world has moved one).
+  let placedText = '';
+  const placeAll = layers => layers.map(l => layerSection(l, facts));
+  // `reveal`: a layer whose section opens so its row shows (a new layer, a layer opened from the inspector). The focused control keeps the
+  // focus across the rebuild (by its id, or a slider by its range's), and a section that receives it opens.
+  let revealNext = null;   // a layer the next build reveals (one just added)
+  function build({reveal = revealNext} = {}) {
+    revealNext = null;
+    const active = document.activeElement, scrub = active?.matches?.('.scrub') ? active.dataset.source : '';
+    const focused = scrub?.startsWith('surface-') ? '' : active?.id?.startsWith('surface-') && list.contains(active) ? active.id : '';
     const layers = host.surface(), keys = new Set(layers.map(layerKey));
     for (const k of hidden) if (!keys.has(k)) hidden.delete(k);
     if (solo && !keys.has(solo)) solo = null;
     let layerRows = [];
     try { layerRows = surfaceRows(layers).layerRows; } catch (_) {}
+    const placed = placeAll(layers);
+    placedText = JSON.stringify(placed);
     // Shown top first (the topmost layer first), as the map stacks them: the last stage's last layer first.
-    const order = layers.map((l, i) => i).sort((a, b) => stageOf(layers[b]) - stageOf(layers[a]) || b - a), items = [];
-    let last = -1;
-    for (const i of order) {
-      const stage = stageOf(layers[i]);
-      if (stage !== last) items.push(el('li', {className: 'surface-group small', textContent: STAGE_TITLES[stage], title: STAGE_HELP[stage]}));
-      last = stage; items.push(row(layers[i], i, layers, layerRows));
+    const order = layers.map((l, i) => i).sort((a, b) => stageOf(layers[b]) - stageOf(layers[a]) || b - a);
+    for (const section of SECTIONS) {
+      const rows = order.filter(i => placed[i].section === section).map(i => row(layers[i], i, layers, layerRows, placed[i]));
+      $(`surface-${section}-list`).replaceChildren(...rows);
+      $(`surface-${section}-count`).textContent = String(rows.length);
+      $(`surface-${section}`).hidden = !rows.length;
     }
+    $('surface-world-name').textContent = host.worldName?.() ?? 'this world';
     const unshown = layers.filter(l => !shown(layerKey(l))).length;
-    if (unshown) {
-      const all = el('button', {type: 'button', textContent: 'Show all', id: 'surface-show-all'});
-      all.onclick = () => { hidden.clear(); solo = null; build(); sendView(); };
-      items.unshift(el('li', {className: 'surface-view small'}, el('span', {textContent: solo ? `Showing “${nameOf(layers.find(l => layerKey(l) === solo))}” alone.` : `${unshown} hidden while you design.`}),
-        el('span', {className: 'small', textContent: ' Saves and exports draw every layer.'}), all));
-    }
-    list.replaceChildren(...items);
-    if (focused) $(focused)?.focus({preventScroll: true});
+    $('surface-view').hidden = !unshown;
+    $('surface-view-text').textContent = solo ? `Showing “${nameOf(layers.find(l => layerKey(l) === solo))}” alone.` : `${unshown} hidden while you design.`;
+    const back = scrub ? list.querySelector(`.scrub[data-source="${CSS.escape(scrub)}"]`) : focused ? $(focused) : null;
+    const shownRow = reveal != null ? list.querySelector(`[data-key="${CSS.escape(reveal)}"]`) : null;
+    for (const e of [back, shownRow]) { const section = e?.closest('details.surface-section'); if (section && !section.open) section.open = true; }
+    back?.focus({preventScroll: true});
   }
+  // After a World setting, a rock type in use or a role material changed: rebuild if a layer has changed section or reason.
+  const sync = () => { if (!editing && !picking && JSON.stringify(placeAll(host.surface())) !== placedText) build(); };
+  $('surface-show-all').onclick = () => { hidden.clear(); solo = null; build(); sendView(); };
   const add = $('surface-add');
   add.replaceChildren(el('option', {value: '', textContent: 'Add a layer…'}), ...SURFACE_PRESETS.map(p => el('option', {value: p.key, textContent: p.name})));
   add.onchange = () => {
@@ -296,7 +352,7 @@ export function mountSurfacePanel(host) {
     if (layer.material == null) delete layer.material;
     // A new layer goes on top of its stage, and opens.
     const stage = stageOf(layer), next = [...layers]; let at = 0; for (let j = next.length - 1; j >= 0; j--) if (stageOf(next[j]) <= stage) { at = j + 1; break; }
-    next.splice(at, 0, layer); open.add(layer.id); put(next, true);
+    next.splice(at, 0, layer); open.add(layer.id); revealNext = layer.id; put(next, true);
   };
   // The inspector (show, host.inspect): the layers that drew one pixel, top first, with what each covers and what of it shows, the effects
   // laid after them, and the facts rules read there. A pixel comes from Pick (Pick on the map starts it: host.pick; its card's Surface door
@@ -315,7 +371,7 @@ export function mountSurfacePanel(host) {
   function reinspect() { if (lastAt && !result.hidden) inspect(); }
   const percent = v => Math.round(v * 100) + '%';
   function openLayer(key) {
-    open.add(key); build();
+    open.add(key); build({reveal: key});
     const row = list.querySelector(`[data-key="${CSS.escape(key)}"]`); row?.scrollIntoView({block: 'nearest', behavior: 'smooth'}); row?.querySelector('.surface-toggle')?.focus({preventScroll: true});
   }
   function showInspect(read) {
@@ -345,13 +401,14 @@ export function mountSurfacePanel(host) {
     }
     const effects = [['wet band', read.wet], ['surf sand', read.surf]].filter(([, v]) => v > .005).map(([n, v]) => `${n} ${percent(Math.min(1, v))}`);
     out.push(el('p', {textContent: (effects.length ? 'Laid after the layers here: ' + effects.join(', ') + '. ' : '') + 'Light, weather, cracks, stones and the palette come after the layers too.'}));
-    const facts = el('details', {}, el('summary', {textContent: 'Facts here (what rules read)'}),
+    const factList = el('details', {}, el('summary', {textContent: 'Facts here (what rules read)'}),
       el('dl', {className: 'surface-facts'}, ...SURFACE_FACTS.flatMap((f, k) => [el('dt', {textContent: FACT_LABELS[f][0]}), el('dd', {textContent: read.facts[k].toFixed(2)})])));
-    result.replaceChildren(...out, facts, tools);
+    result.replaceChildren(...out, factList, tools);
   }
   $('surface-show').onchange = () => { if (!$('surface-show').checked) host.preview(-1); };
   $('surface-reset').onclick = () => { host.restore(); build(); sendView(); };
   build();
   // show(at, read): the inspector's detail for a pixel already read (the Pick card's Surface door); it reads again after each committed edit.
-  return {refresh, show: (at, read) => { reading++; lastAt = at; result.hidden = false; showInspect(read); }};
+  // sync(): after a World setting or the map's rock types in use change, the sections follow.
+  return {refresh, sync, show: (at, read) => { reading++; lastAt = at; result.hidden = false; showInspect(read); }};
 }

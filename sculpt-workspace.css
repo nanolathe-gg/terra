@@ -339,7 +339,15 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 @media(max-width:700px){.material-layout{grid-template-columns:1fr;grid-template-rows:minmax(220px,45dvh) minmax(0,1fr)}.material-side{border-left:0;border-top:1px solid var(--line)}.material-header{flex-wrap:wrap;gap:8px}.material-header h2{display:none}#graph-help{display:none}}
 /* World › Surface (sculpt-surface-panel.js): one row a layer, top first; a row opens to its settings. */
 .surface-show{display:flex;gap:6px;align-items:flex-start;margin:4px 0}
-.surface-layers{list-style:none;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:3px;overflow-y:auto;min-height:0}
+/* The list's three sections (index.html #surface-layers): drawing (open), only where painted and cannot draw yet (folded). */
+.surface-layers{margin:6px 0;display:flex;flex-direction:column;gap:8px;min-height:0}
+.surface-section[hidden]{display:none}
+.surface-section>summary{cursor:pointer;font-size:12px;font-weight:600;padding:2px 0}
+.surface-section-note{display:block;margin:1px 0 0 1.1em;font-weight:400;opacity:.75}
+.surface-list{list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:3px}
+.surface-why{margin:2px 0 1px 1.6em;color:#e9d3a0}
+.surface-why p{margin:2px 0 0}
+.surface-why button.link{border:0;background:none;padding:0;color:var(--accent);text-decoration:underline;cursor:pointer;font-size:inherit;white-space:nowrap}
 .surface-layer{border:1px solid var(--line,#3a3a3a);border-radius:6px;padding:3px 6px;min-width:0}
 .surface-layer.open{padding-bottom:6px}
 .surface-layer:hover,.surface-layer:focus-within{border-color:var(--accent,#c43bd1)}
@@ -365,15 +373,13 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .surface-inspect-result button.link{border:0;background:none;padding:0;text-decoration:underline;cursor:pointer;color:inherit}
 .surface-facts{display:grid;grid-template-columns:1fr auto;gap:1px 8px;margin:4px 0 0}
 .surface-facts dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
-.surface-view{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;padding:4px 6px;border:1px dashed var(--accent,#c43b3b);border-radius:6px}
+.surface-view{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;padding:4px 6px;margin:4px 0;border:1px dashed var(--accent,#c43b3b);border-radius:6px}.surface-view[hidden]{display:none}
 .surface-view button{margin-left:auto}
 .surface-head .surface-stage{opacity:.75;white-space:nowrap}
 .material-chip.own{background:repeating-linear-gradient(45deg,#777 0 2px,#444 2px 4px)}
 .surface-body{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;margin-top:6px}
 .surface-wide,.surface-rule{grid-column:1/-1}
 .surface-line{display:flex;gap:6px;align-items:center}
-.surface-group{margin:8px 0 0;opacity:.7;text-transform:uppercase;letter-spacing:.04em;font-size:10px}
-.surface-group:first-child{margin-top:0}
 .surface-material-row{flex:1;min-width:0}
 .surface-material-row select{flex:1;min-width:0;width:0}
 .surface-body button.link{justify-self:start;border:0;background:none;padding:0;text-decoration:underline;cursor:pointer;font-size:12px}

@@ -143,7 +143,7 @@ function pathOf(el, root, first) {
   for (let a = el.parentElement; a && a !== root; a = a.parentElement) {
     let part = '';
     if (a.matches('[role=tabpanel][aria-labelledby]')) part = ownText($(a.getAttribute('aria-labelledby')));
-    else if (a.tagName === 'DETAILS') part = headText(a.querySelector(':scope > summary'));
+    else if (a.tagName === 'DETAILS') { const title = a.querySelector(':scope > summary > .surface-section-title'); part = title ? clean(title.textContent) : headText(a.querySelector(':scope > summary')); }
     else if (a.classList.contains('surface-layer')) part = layerName(a);
     else if (a.classList.contains('material-control-colors')) part = headText(a.firstElementChild);   // a material's published colors
     else {
@@ -206,13 +206,12 @@ function rows(entries) {
 function surface(entries) {
   const list = $('surface-layers');
   if (list && reachable(list)) {
-    let stage = '';
-    for (const li of list.children) {
-      if (li.classList.contains('surface-group')) { stage = clean(li.textContent); continue; }
-      if (!li.classList.contains('surface-layer')) continue;
+    // The list's sections (drawing, only where painted, cannot draw yet) name a layer's path; going opens a folded one (reveal).
+    for (const li of list.querySelectorAll('.surface-layer')) {
+      const section = clean(li.closest('.surface-section')?.querySelector('.surface-section-title')?.textContent);
       const name = layerName(li), key = li.dataset.key, drawn = clean(li.querySelector('.surface-drawn')?.textContent), chip = li.querySelector('.material-chip');
       if (!name) continue;
-      entries.push({group: 'Surface layers', name, path: ['Surface layer', stage], kind: 'layer', words: `layer ${drawn}`, note: drawn, scope: scopeOf(li), go: () => openLayer(key)});
+      entries.push({group: 'Surface layers', name, path: ['Surface layer', section], kind: 'layer', words: `layer ${drawn}`, note: drawn, scope: scopeOf(li), go: () => openLayer(key)});
       // A layer's Color is in its open row; an open row's own controls are found as rows.
       if (chip && !chip.classList.contains('own') && !li.classList.contains('open'))
         entries.push({group: 'Surface layers', name: `${name} color`, path: ['Surface layer', name], kind: 'color', words: `color ${drawn}`, swatch: chip.style.backgroundColor, bias: -1, scope: scopeOf(li), go: () => openLayer(key, 'input[type=color]')});
@@ -302,7 +301,9 @@ function reveal(el) {
     if (a.tagName === 'DETAILS' && !a.open && !a.querySelector(':scope > summary')?.contains(el)) a.open = true;
   }
 }
-function goTo(el, mark) {
+// Show an element wherever it is (its panel, section, tab, folded group or hidden World row opened) and land on it. World › Surface's doors to
+// the setting that turns a layer on use it too.
+export function goTo(el, mark) {
   if (!el) return;
   reveal(el);
   const search = $('world-search');
@@ -321,7 +322,7 @@ function landLayer(key, inner) {
     if (!li || !lost) return;
     again?.focus({preventScroll: true}); if (!mark.classList.contains('find-flash')) flash(mark);
   });
-  follow.observe(list, {childList: true}); setTimeout(() => follow.disconnect(), 1500);
+  follow.observe(list, {childList: true, subtree: true}); setTimeout(() => follow.disconnect(), 1500);
 }
 function openLayer(key, inner) {
   const li = layerRow(key);

@@ -22,6 +22,7 @@ import {isRiver,pointsSignature} from './sculpt-river.js';
 import {HELP_TOOLS} from './sculpt-help-examples.js';
 import {copySurface,layerKey,withSurfaceMaterials} from './sculpt-material-model.js';
 import {mountSurfacePanel,BUILTIN_LABELS} from './sculpt-surface-panel.js';
+import {goTo} from './sculpt-find.js';
 import {mountPick} from './sculpt-pick.js';
 import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,toolMaterialSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
 const editorUI=mountEditorUI();
@@ -862,6 +863,27 @@ function surfaceHost() {
       (block??row).scrollIntoView({block:'center',behavior:'smooth'});row.querySelector('input,select')?.focus({preventScroll:true});},
     settingNote:key=>document.querySelector(`#wpane-surface [data-knob="${key}"] .control-requirement`)?.textContent??'',
     materialKey:preset=>{const key=preset.material.startsWith('role:')?config.materials?.[preset.material.slice(5)]:preset.material;return LIBRARY[key]?key:config.materials?.ground??'green-ground';},
+    // The list's sections (sculpt-surface-panel.js layerSection): a World setting as the draw reads it (a rock type's: the largest of the
+    // world's rock and the rock types in use), its row's words and requirement; a role, a world surface (config.layers), a world fact.
+    control:key=>{
+      const row=document.querySelector(`#knobs [data-knob="${key}"]`);if(!row||!renderer)return null;
+      const own=Number(renderer.variant.get(key)??config.defaults?.[key]??0),rock=ROCK_KEYS.includes(key);
+      const label=(row.querySelector('label')?.title??key).replace(/\s*\([^)]*\)/g,''),group=row.closest('.world-subsection')?.querySelector('h3')?.textContent??'';
+      return {value:rock?renderer.rockMax(key,own):own,rock,rocks:renderer.rocks.size,label:/\s/.test(label)?label:`${group} ${label.toLowerCase()}`,note:row.querySelector('.control-requirement')?.textContent??''};
+    },
+    role:key=>({present:mapMaterials.some(m=>m[key]),name:roleName(key)}),
+    hasLayer:name=>(config.layers||[]).includes(name),
+    fact:name=>Number(worldPanelValuesOf(panelFacts())[name])||0,
+    worldName:()=>activeWorld().name,
+    // Where the control that turns a layer on lives, and going there: its World section and tab opened, its row shown, the focus on it (Find's
+    // goTo). A rock type's setting opens the world's rock, which the list's reason speaks of.
+    place:go=>{const e=go.control?document.querySelector(`#knobs [data-knob="${go.control}"]`):$(go.id),home=e?.closest('[data-home]')?.dataset.home;if(!home)return '';
+      const parts=home.split('/').filter(Boolean),group=e.closest('.world-subsection')?.querySelector('h3')?.textContent;return [...parts,...(parts.length<2&&group?[group]:[])].join(' › ');},
+    open:go=>{
+      if(go.control&&ROCK_KEYS.includes(go.control)&&rockSelected!==0)selectRock(0);
+      const e=go.control?document.querySelector(`#knobs [data-knob="${go.control}"]`):$(go.id);if(!e)return;
+      goTo(e.querySelector('.scrub,select,input')??e);
+    },
   };
 }
 // ---- Pick (sculpt-pick.js): the rail's Pick (key I), and Alt-click from any tool. Pick stands in for the tool in hand and leaves `tool` as it
@@ -968,7 +990,7 @@ function syncRocks({defer=false}={}) {
   if (key===rockUseKey) return;
   const next=new Map(used.map(r=>[r.slot,r])),slots=[...new Set([...renderer.rocks.keys(),...next.keys()])].filter(k=>JSON.stringify(renderer.rocks.get(k))!==JSON.stringify(next.get(k)));
   let rect=null;for(const slot of slots)rect=mergeWorldRect(rect,mergeWorldRect(before.get(slot),bounds.get(slot)));
-  rockUseKey=key;const delta=renderer.setRocks(next,{sync:!defer});
+  rockUseKey=key;const delta=renderer.setRocks(next,{sync:!defer});surfacePanel?.sync();   // a rock type in use may turn a surface layer on
   if(rect){
     const x=Math.floor(rect.x),y=Math.floor(rect.y);
     const r=renderer.requiredRegion({x,y,width:Math.ceil(rect.x+rect.width)-x,height:Math.ceil(rect.y+rect.height)-y,worldSize,worldGrid},currentDrawOptions());
@@ -2520,7 +2542,7 @@ function commitWorldInputs() {
   if(pendingWorldAddress.size){const url=new URL(location.href);for(const [key,value]of pendingWorldAddress)url.searchParams.set(key,value);window.history.replaceState(null,'',url);pendingWorldAddress.clear();}
   if(worldStoreDirty){worldStoreDirty=false;saveWorlds();}
   if(worldPanelDirty){worldPanelDirty=false;buildWorldPanel();}
-  syncWorldControls();updateControls();
+  syncWorldControls();updateControls();surfacePanel?.sync();   // World › Surface's sections follow the settings that turn layers on
   if(worldCheckpoint){worldCheckpoint=false;checkpoint(true);}
   persistLater();
 }
