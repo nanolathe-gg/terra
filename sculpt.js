@@ -2547,7 +2547,7 @@ function syncRockMaterial() {
 $('rock-material').onchange=()=>{
   const v=Number($('rock-material').value);
   if(rockSelected===0){ if(v>0){ try{editMaterials(assignMaterial(mapMaterials,v,'worldRock'));checkpoint();}catch(error){status(error.message);} } }
-  else { try{editRocks(mapRocks.map(r=>r.slot===rockSelected?(({material,...o})=>v>0?{...o,material:v}:o)(r):r));rockUseKey='';syncRocks();syncMaterials();worldChanged({stage:'C',world:false});checkpoint();}catch(error){status(error.message);} }
+  else { try{editMaterials(mapMaterials,mapRocks.map(r=>r.slot===rockSelected?(({material,...o})=>v>0?{...o,material:v}:o)(r):r));rockUseKey='';syncRocks();syncMaterials();worldChanged({stage:'C',world:false});checkpoint();}catch(error){status(error.message);} }
   materialEditor?.refresh(); syncRockColors();
 };
 // A color of the selected preset changed (live while the picker moves; one undo step when it is let go).
@@ -2561,7 +2561,7 @@ function selectRock(slot) { worldInputQueue.flush();rockSelected=slot; syncRockP
 function finishRockAddition(added,scope=$('rock-save-to').value){
   if(scope==='world'&&added.existingWorldKey){commitKitCandidate({kit:currentWorldKit,rocks:added.rocks,materials:added.materials});}
   else if(scope==='world'){const published=publishWorldRock(currentWorldKit,added.rocks,added.materials,added.slot);commitKitCandidate(published);}
-  else{assertLocalRockAddition(added);if(added.materials!==mapMaterials)editMaterials(added.materials);editRocks(added.rocks);}
+  else{assertLocalRockAddition(added);editMaterials(added.materials,added.rocks);rockUseKey='';syncRockChoices();syncRocks();}
   status(`Added ${mapRocks.find(r=>r.slot===added.slot).name} to ${scope==='world'?'the world “'+activeWorld().name+'”':'this map'}.`);return added.slot;
 }
 function assertLocalRockAddition(added){if(added.missed?.length)throw Error('This rock type needs another material slot; remove a material first.');}
@@ -2857,7 +2857,7 @@ async function boot() {
     if (worldId!==config.biomeId) $('world-title').textContent=worlds[worldId].name;
     addDefaults(experiment,config.defaults);
     borrowBeach(config,experiment);   // a beach another world lends (World, Ground): before the renderer and the panel read the world's layers
-    refreshWorldKit();buildShapeOptions();{const kit=instantiateWorldKit(config,activeWorld());mapMaterials=kit.materials;mapRocks=kit.rocks;if(kit.reason)status(kit.reason);}syncMaterialChoices();syncRockAdd();syncRockChoices();buildToolbar();
+    refreshWorldKit();brushWorldDefinitions=structuredClone(worldToolList);buildShapeOptions();{const kit=instantiateWorldKit(config,activeWorld());mapMaterials=kit.materials;mapRocks=kit.rocks;if(kit.reason)status(kit.reason);}syncMaterialChoices();syncRockAdd();syncRockChoices();buildToolbar();
     $('rock-save-to').value=worldId in (config.biomes??{})?'map':'world';
     // A new map starts with the world's tools, on the first of them where the world has no Plateau.
     if (!toolIds().has(tool)) tool=firstTool();
