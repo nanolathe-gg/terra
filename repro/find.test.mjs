@@ -55,6 +55,7 @@ test('an everyday word finds the editor’s words, below a direct match', () => 
   assert.equal(found[0], 'Drain the lake');
   const [gullies, runoff, rain] = ['Gullies', 'Runoff exposure', 'Rain'].map(name => score(list.find(e => e.name === name), 'drain'));
   assert.ok(gullies > runoff && runoff > rain, 'the first word on the right ranks highest');
+  assert.equal(score(entry('Talus reach', {path: ['Shape card', 'Details', 'Gullies'], note: 'Rock fallen from the gullies'}), 'drain'), 0, 'a synonym looks at names and kind words only');
   assert.ok(score(entry('Tree', {group: 'Features'}), 'forest') > 0);
   assert.ok(score(entry('Sun color'), 'darker') > 0);
   assert.ok(score(entry('Fit'), 'zoom') > 0);

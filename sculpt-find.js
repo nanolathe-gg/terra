@@ -10,7 +10,7 @@ export const SYNONYMS = [
   ['drain drainage flow',               'gully groove runoff rain erosion'],
   ['tree forest wood woods',            'tree shrub vegetation'],
   ['dark darker light lighter bright brightness', 'color tone shade light sun sky'],
-  ['snow snowy',                        'snow ice frost'],
+  ['snow snowy',                        'snow ice frost paint'],
   ['cliff cliffs',                      'rock face wall'],
   ['beach shore coast',                 'beach shore coast sand'],
   ['zoom',                              'fit zoom'],
@@ -49,10 +49,11 @@ function prepare(entry) {
 }
 const wordMatch = (list, s) => { let best = 0; for (const w of list) { if (w.stem === s || w.raw === s) return 2; if (w.raw.startsWith(s) || w.stem.startsWith(s)) best = 1; } return best; };
 // The best field a term matches; a path that agrees with a name or kind words adds a little (Blocks & joints › Block size).
-function fieldScore(p, s, short) {
+// A synonym looks only at names and kind words: in paths and notes it finds more noise than help.
+function fieldScore(p, s, short, synonym = false) {
   let best = 0, path = 0;
   for (const [field, [exact, prefix]] of Object.entries(WEIGHTS)) {
-    if (field === 'note' && short) continue;
+    if ((field === 'note' && short) || (synonym && (field === 'path' || field === 'note'))) continue;
     const m = wordMatch(p[field], s), value = m === 2 ? exact : m ? prefix : 0;
     if (field === 'path') path = value;
     best = Math.max(best, value);
@@ -69,7 +70,7 @@ export function score(entry, query) {
   for (const term of terms) {
     const s = stem(term), short = s.length < 3;
     let best = fieldScore(p, s, short);
-    expand(term).forEach((other, i) => { best = Math.max(best, fieldScore(p, other, false) * Math.max(.3, .5 - .03 * i)); });
+    expand(term).forEach((other, i) => { best = Math.max(best, fieldScore(p, other, false, true) * Math.max(.3, .5 - .03 * i)); });
     if (!best) return 0;
     total += best;
   }
@@ -199,7 +200,7 @@ function surface(entries) {
       if (!li.classList.contains('surface-layer')) continue;
       const name = layerName(li), key = li.dataset.key, drawn = clean(li.querySelector('.surface-drawn')?.textContent), chip = li.querySelector('.material-chip');
       if (!name) continue;
-      entries.push({group: 'Surface layers', name, path: ['Surface layer', stage], kind: 'layer', words: `layer ${drawn} ${stage}`, note: drawn, go: () => openLayer(key)});
+      entries.push({group: 'Surface layers', name, path: ['Surface layer', stage], kind: 'layer', words: `layer ${drawn}`, note: drawn, go: () => openLayer(key)});
       // A layer's Color is in its open row; an open row's own controls are found as rows.
       if (chip && !chip.classList.contains('own') && !li.classList.contains('open'))
         entries.push({group: 'Surface layers', name: `${name} color`, path: ['Surface layer', name], kind: 'color', words: `color ${drawn}`, swatch: chip.style.backgroundColor, bias: -1, go: () => openLayer(key, 'input[type=color]')});
