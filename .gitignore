@@ -3,6 +3,7 @@ __pycache__/
 .DS_Store
 .venv/
 perf-out/
+export-bytes-out/
 deploy/worker/wrangler.toml
 smoke-out/
 .cloudflare/
