@@ -1,6 +1,7 @@
 import {worldControlRequirement,WORLD_PRIMARY_CONTROLS} from './sculpt-control-schema.js';
 import {mountWorkspace} from './sculpt-workspace.js';
 import {COLUMN_BEDS,COLUMN_SECTIONS,COLUMN_SLOTS,FIRST_SECTION} from './sculpt-column.js';
+import {mountFind} from './sculpt-find.js';
 // Presentation helpers; terrain state and history stay in sculpt.js.
 const $=id=>document.getElementById(id);
 export function mountEditorUI(){
@@ -63,8 +64,9 @@ export function mountEditorUI(){
  new MutationObserver(()=>{if($('section-preview-control').hidden)setLarge(false);}).observe($('section-preview-control'),{attributes:true,attributeFilter:['hidden']});
  // The curves are rows of the card's Profile section: folding it away closes them at full size too.
  $('card-profile').addEventListener('toggle',()=>{if(!$('card-profile').open)setLarge(false);});
- // Escape closes what is open on top of the editor, one thing a press: a tool flyout, a menu, the full-size curves.
- const closeTop=()=>closeFlyouts()||closeSurfaces(true)||[...document.querySelectorAll('details.top-menu[open],details.share-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||setLarge(false);
+ // Escape closes what is open on top of the editor, one thing a press: Find, a tool flyout, a menu, the full-size curves.
+ const find=mountFind();
+ const closeTop=()=>find.close()||closeFlyouts()||closeSurfaces(true)||[...document.querySelectorAll('details.top-menu[open],details.share-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||setLarge(false);
  for(const [id,on] of [['view-rendered',false],['view-clay',true]])$(id).onclick=()=>{$('clay').checked=on;$('clay').dispatchEvent(new Event('change'));};
  updateLayout();
  return {toggleFocus,exitFocus,syncTools,closeTop,focused,get terrainBudget(){return panels.terrainBudget;},setTerrainBudget(value){panels.terrainBudget=value;if(beforeFocus)beforeFocus.terrainBudget=value;savePanels();}};
