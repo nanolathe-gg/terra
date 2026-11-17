@@ -432,3 +432,15 @@ test('the Material node is always on: one saved off loads on, and its height and
   assert.equal(m.nodes.find(n => n.type === 'output').enabled, true);
   assert.equal(materialReliefBound(m), 6);
 });
+
+test('a surface edit adds only the layers’ copies: a cleared or deleted crystal or highland material stays gone until the map loads again', async () => {
+  const {surfaceMaterials, deleteMaterial, MAP_ROLES} = await import('../sculpt-materials.js');
+  const config = {materials: {ground: 'green-ground', water: 'green-water', high: 'crystal-ground', crystal: 'crystals'}, surface: [{id: 'snow-1', material: 'green-snow'}]};
+  const list = withWorldMaterials(null, config), crystal = list.find(m => m.worldCrystal);
+  const deleted = deleteMaterial(list, [], crystal.slot).materials;
+  assert.equal(surfaceMaterials(config.surface.map(l => ({...l, amount: .9})), deleted, {config}).some(m => m.worldCrystal), false, 'deleted: a Surface slider tick brings no crystal back');
+  const cleared = list.map(m => m.worldCrystal || m.worldHigh ? Object.fromEntries(Object.entries(m).filter(([k]) => !MAP_ROLES.some(([r]) => r === k))) : m);
+  const after = surfaceMaterials(config.surface, cleared, {config});
+  assert.deepEqual(after.map(m => m.slot), cleared.map(m => m.slot), 'cleared: no second copy');
+  assert.ok(withWorldMaterials(cleared, config).some(m => m.worldCrystal), 'on load the world’s crystal and highland materials join again (withWorldMaterials)');
+});

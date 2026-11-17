@@ -599,14 +599,27 @@ export function addMaterial(list, material, name = 'Material') {
 // is full, the first material that is not the other role takes it.
 const ROLES = [['worldGround', 'ground'], ['worldWater', 'water']];
 const libraryFor = (config, which) => LIBRARY[config.materials?.[which]] ?? LIBRARY[`green-${which}`];
-export function withWorldMaterials(value, config, {carried = false} = {}) {
-  let list = copyMaterials(value) ?? [];
+function withGroundAndWater(list, config) {
   for (const [role, which] of ROLES) {
     if (list.some(m => m[role])) continue;
     const preset = libraryFor(config, which);
     if (list.length >= MATERIAL_SLOTS - 1) { const taker = list.find(m => !m.worldGround && !m.worldWater); list = list.map(m => m === taker ? {...Object.fromEntries(Object.entries(m).filter(([k]) => !MAP_ROLES.some(([r]) => r === k))), [role]: true} : m); continue; }   // the taker gives up any other role
     const added = addMaterial(list, preset, preset.name); list = added.materials.map(m => m.slot === added.slot ? {...m, [role]: true} : m);
   }
+  return list;
+}
+// The world's surface layers that draw a material (config.surface, a layer with `material`, a library key): one copy of each library
+// material they draw, its key as the copy's worldLayer, shared by every layer that draws it (the three snows draw one snow), added
+// while the list has room.
+function withLayerCopies(list, config) {
+  for (const key of new Set((config.surface || []).map(l => l?.material).filter(k => k != null))) {
+    const m = LIBRARY[key];
+    if (m && !list.some(o => o.worldLayer === key) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, worldLayer: key} : o); }
+  }
+  return list;
+}
+export function withWorldMaterials(value, config, {carried = false} = {}) {
+  let list = withGroundAndWater(copyMaterials(value) ?? [], config);
   // The world's other roles (MAP_ROLES: config.materials.high, .rock, .slope, .debris, .beach, .fringe, .body, .ring, .crystal), each a library material
   // added while the list has room. Level raised ground takes the highland material; every rock face shows the rock material's grain, grit and
   // shine under its rock type's color (a rock type may name another, struct Rock material); the slope cover, the debris fragments, the beach
@@ -621,13 +634,7 @@ export function withWorldMaterials(value, config, {carried = false} = {}) {
     const m = LIBRARY[config.materials?.[key]];
     if (m && (role === 'worldHigh' || role === 'worldCrystal' || (role === 'worldBeach' && config.beachTable) || !surfaced) && !list.some(o => o[role]) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, [role]: true} : o); }
   }
-  // The world's surface layers that draw a material (config.surface, a layer with `material`, a library key): one copy of each library
-  // material they draw, its key as the copy's worldLayer, shared by every layer that draws it (the three snows draw one snow), added
-  // while the list has room.
-  for (const key of new Set((config.surface || []).map(l => l?.material).filter(k => k != null))) {
-    const m = LIBRARY[key];
-    if (m && !list.some(o => o.worldLayer === key) && list.length < MATERIAL_SLOTS - 1) { const added = addMaterial(list, m, m.name); list = added.materials.map(o => o.slot === added.slot ? {...o, worldLayer: key} : o); }
-  }
+  list = withLayerCopies(list, config);   // each surface layer's material
   // A world may name more materials its tools lay down (config.materials.extra: library keys; a tool's `material`, sculpt-tools.js
   // toolMaterialSlot). Each the list lacks is added while it has room.
   for (const key of config.materials?.extra || []) {
@@ -748,7 +755,9 @@ export function materialsInUse(nodes, list, rocks = []) {
 // The map's materials as a world's surface list draws them (docs/SURFACE_LAYERS.md; layers bind copies by layerKey). A copy whose layer no
 // longer draws it (removed, cleared to its own color, set to another library material, or a list of another world or map) gives up its
 // binding and leaves the list unless a stroke (hidden ones too) or a rock type uses it; then each layer that draws a material and lacks a
-// copy gets one (withWorldMaterials). Pure: the editor calls it on each surface edit and on loading a map, with that map's strokes.
+// copy gets one. Pure: the editor calls it on each surface edit and on loading a map, with that map's strokes. It adds the layers' copies
+// alone (and a ground and water where a list has none): the world's other roles and extra materials join a map when it loads
+// (withWorldMaterials), so one the artist cleared or deleted stays gone through later surface edits.
 export function surfaceMaterials(surface, materials, {config, nodes = [], rocks = []}) {
   const drawn = new Set((surface || []).map(l => l?.material).filter(k => k != null)), loose = new Set();
   let next = (materials || []).map(m => {
@@ -756,7 +765,7 @@ export function surfaceMaterials(surface, materials, {config, nodes = [], rocks 
     loose.add(m.slot); const {worldLayer, ...rest} = m; return rest;
   });
   if (loose.size) { const used = new Set(materialsInUse(nodes.map(n => n.hidden ? {...n, hidden: false} : n), next, rocks).map(m => m.slot)); next = next.filter(m => !loose.has(m.slot) || used.has(m.slot)); }
-  return withWorldMaterials(next, {...config, surface});
+  return copyMaterials(withLayerCopies(withGroundAndWater(copyMaterials(next) ?? [], config), {...config, surface}));
 }
 export function deleteMaterial(list, nodes, slot, rocks = []) {
   const m = find(list, slot);
