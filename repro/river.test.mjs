@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {riverCurvature, isBraided, BRAIDED_SPAN, migrateRiver, applyRiver, pointsSignature, riverSteps, riverBand, riverWidth, isRiver, RIVER_MIN_WIDTH, RIVER_BELT} from '../sculpt-river.js';
+import {riverCurvature, isBraided, BRAIDED_SPAN, migrateRiver, applyRiver, pointsSignature, riverSteps, riverBand, riverWidth, isRiver, RIVER_MIN_WIDTH, RIVER_BELT, movedRiver, riverKey} from '../sculpt-river.js';
 import {landformSides, landformReach} from '../sculpt-shape-presets.js';
 
 const wave = (n = 40, step = 20) => Array.from({length: n}, (_, i) => ({x: 100 + i * step, y: 400 + 30 * Math.sin(i * 0.5) + (i % 3)}));
@@ -92,3 +92,41 @@ test('a braided river is a river preset with a wider valley, and migrates the sa
   assert.ok(applyRiver(node, {w: 1400, h: 900}));
   assert.equal(node.points.length, migrateRiver(wave(), {width: 40, band: 0, seed: 5}).path.length);   // Wander 0: the line as drawn
 });
+
+// sculpt.js transformNode: the points and the drawn line take the matrix, and the river takes movedRiver.
+const drawnRiver = () => { const drawn = []; for (let i = 0; i <= 40; i++) drawn.push({x: 200 + i * 40, y: 1000}); const node = {kind: 'landform', seed: 1234, points: drawn.map(p => ({...p})), params: {radius: 24, wander: 120, curve: {form: 'lfRiver'}, river: {drawn: drawn.map(p => ({...p}))}}}; applyRiver(node, {w: 4096, h: 4096}); return node; };
+const transform = (node, m) => {
+  const ap = q => ({x: m[0] * q.x + m[2] * q.y + m[4], y: m[1] * q.x + m[3] * q.y + m[5]}), before = {points: node.points.map(p => ({...p})), params: {...node.params}, seed: node.seed};
+  node.points = before.points.map(ap); node.params = {...node.params, radius: Math.max(4, Math.min(600, before.params.radius * Math.hypot(m[0], m[1])))};
+  node.params = {...node.params, river: movedRiver(before.params.river, before, {points: node.points, params: node.params, seed: node.seed}, ap)};
+};
+
+test('a river edited by hand stays so when it is moved: Wander does not migrate it from the old line', () => {
+  const node = drawnRiver(), bounds = {w: 4096, h: 4096};
+  node.points[10] = {x: node.points[10].x, y: node.points[10].y + 300};   // a point dragged in path mode
+  assert.notEqual(node.params.river.sig, pointsSignature(node.points));
+  transform(node, [1, 0, 0, 1, 50, 0]);
+  assert.notEqual(node.params.river.sig, pointsSignature(node.points), 'still edited by hand after the move');
+  const hand = {...node.points[10]};
+  node.params = {...node.params, wander: 121};
+  assert.equal(applyRiver(node, bounds), false);
+  assert.deepEqual(node.points[10], hand);
+  assert.equal(node.params.river.drawn[0].x, 250, 'the drawn line moves with it');
+});
+
+test('a migrated river moved, turned or scaled is not migrated again by an unrelated edit, and is by a river edit', () => {
+  const bounds = {w: 4096, h: 4096};
+  for (const m of [[1, 0, 0, 1, 50, -20], [0, 1, -1, 0, 3000, 0], [1.5, 0, 0, 1.5, -500, -500]]) {
+    const node = drawnRiver();
+    transform(node, m);
+    assert.equal(node.params.river.sig, pointsSignature(node.points));
+    assert.equal(node.params.river.key, riverKey(node.params, node.seed), 'the key follows a scale');
+    const after = node.points.map(p => ({...p}));
+    node.params = {...node.params, rough: .5};   // Roughness, the Rock row: nothing a river is built from
+    assert.equal(applyRiver(node, bounds), false);
+    assert.deepEqual(node.points, after);
+    node.params = {...node.params, wander: 90};   // Wander migrates it again, from the moved drawn line
+    assert.equal(applyRiver(node, bounds), true);
+  }
+});
+

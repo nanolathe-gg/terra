@@ -18,7 +18,7 @@ import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBu
 import {shapePaths,clonePaths,pathsWithin,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
 import {selectionTransform,toggleSelection} from './sculpt-selection.js';
 import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap,keepPrevious,takePrevious,dropPrevious} from './sculpt-share.js';
-import {isRiver,pointsSignature} from './sculpt-river.js';
+import {isRiver,pointsSignature,movedRiver} from './sculpt-river.js';
 import {HELP_TOOLS} from './sculpt-help-examples.js';
 import {copySurface,layerKey,withSurfaceMaterials} from './sculpt-material-model.js';
 import {mountSurfacePanel,BUILTIN_LABELS} from './sculpt-surface-panel.js';
@@ -1448,13 +1448,13 @@ function nodeDistance(n,p) {
 }
 // Moving, rotating and scaling a shape: the gesture's transform applies to
 // the shape as it was when the gesture began, path and frame together.
-function nodeState(n) { return {drawn:n.params?.river?.drawn,points:n.points.map(q => ({...q})),frame:n.frame||IDENTITY,radius:n.params?.radius,amount:n.params?.amount}; }
+function nodeState(n) { return {params:n.params?{...n.params}:undefined,points:n.points.map(q => ({...q})),frame:n.frame||IDENTITY,radius:n.params?.radius,amount:n.params?.amount}; }
 function transformNode(n,start,m) {
   n.points=start.points.map(q => { const r=applyFrame(m,q.x,q.y); return {x:clamp(r.x,0,(config.map?.width??size)-1),y:clamp(r.y,0,(config.map?.height??size)-1)}; });
   n.frame=compose(m,start.frame);
-  // A river's drawn line moves with it, so Wander can still migrate it from where it now lies.
-  if (start.drawn&&n.params?.river) n.params={...n.params,river:{...n.params.river,drawn:start.drawn.map(q => { const r=applyFrame(m,q.x,q.y); return {x:r.x,y:r.y}; }),sig:pointsSignature(n.points)}};
   if (n.params && start.radius) n.params={...n.params,radius:clamp(start.radius*Math.hypot(m[0],m[1]),4,600)};
+  // A river's drawn line moves with it; one still as migrated stays so, one edited by hand stays edited (sculpt-river.js movedRiver).
+  if (start.params?.river&&n.params) n.params={...n.params,river:movedRiver(start.params.river,{points:start.points,params:start.params,seed:n.seed},{points:n.points,params:n.params,seed:n.seed},q => applyFrame(m,q.x,q.y))};
 }
 function nodePivot(n) {
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;

@@ -170,13 +170,23 @@ export function migrateRiver(points, {width = RIVER_MIN_WIDTH, band = 0, steps, 
 // A cheap fingerprint of a point list, so an edit made by hand (which leaves the stored drawn line stale) is told from a Wander change.
 export const pointsSignature = points => { let s = 0; for (let i = 0; i < points.length; i++) s += points[i].x * (1 + (i % 7)) + points[i].y * (2 + (i % 5)); return Math.round(s * 64) / 64 + ':' + points.length; };
 
+// The inputs a migrated path is built from (the node's params and seed): its width, its band and the seed. A change to any of them migrates the drawn line again.
+export const riverKey = (q, seed) => { const width = riverWidth(q); return [Math.round(width * 8), Math.round(riverBand(q?.wander, width) * 8), seed >>> 0].join('|'); };
+// A river moved, turned or scaled as a whole (sculpt.js transformNode): `apply` maps a point. Its drawn line moves with it, so Wander can still migrate it from
+// where it now lies. A river still as migrated keeps that standing: its fingerprint follows the new points and, where the stored path was built from the old
+// params, its key follows the new ones (a scale changes the width), so an unrelated edit later does not migrate it again. A river edited by hand stays so: its
+// fingerprint is kept, and no longer matches.
+export function movedRiver(rv, before, after, apply) {
+  const fresh = rv.sig !== undefined && rv.sig === pointsSignature(before.points), current = fresh && rv.key !== undefined && rv.key === riverKey(before.params, before.seed);
+  return {...rv, ...(rv.drawn ? {drawn: rv.drawn.map(q => { const r = apply(q); return {x: r.x, y: r.y}; })} : {}), ...(fresh ? {sig: pointsSignature(after.points)} : {}), ...(current ? {key: riverKey(after.params, after.seed)} : {})};
+}
 // The node carries params.river = {drawn, key, sig}: the line as drawn (so Wander, Width and a new seed can migrate it again), the inputs the stored path was
 // built from, and its fingerprint. The migrated path itself is the node's points and paths (the main river first, then the oxbows).
 // Returns true when the node's path changed.
 export function applyRiver(node, bounds) {
   const q = node.params, rv = q?.river;
   if (!isRiver(q) || !rv?.drawn?.length) return false;
-  const width = riverWidth(q), band = riverBand(q.wander, width), key = [Math.round(width * 8), Math.round(band * 8), node.seed >>> 0].join('|');
+  const width = riverWidth(q), band = riverBand(q.wander, width), key = riverKey(q, node.seed);
   if (rv.key === key && rv.sig === pointsSignature(node.points)) return false;
   if (rv.sig !== undefined && rv.sig !== pointsSignature(node.points)) return false;   // edited by hand since: the stored path stays as it is
   const m = migrateRiver(rv.drawn, {width, band, seed: node.seed >>> 0, bounds});
