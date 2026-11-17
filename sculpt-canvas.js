@@ -816,9 +816,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     clearTimeout(navigationTimer);
     navigationTimer=setTimeout(()=>{navigationTimer=null;schedule();},navigationDelay);
   }
-  function zoom(next) {
+  // zoom(next, at): to a scale or 'overview', keeping the view's center, or centering on `at` ({x, y} in art pixels) when given.
+  function zoom(next,at=null) {
     $('fit').setAttribute('aria-pressed',String(next==='overview'));$('one').setAttribute('aria-pressed',String(next===1));$('zoom').value=String(next);
-    const v=state(),cx=v.x+v.width/2,cy=v.y+v.height/2;overview=next==='overview';if(!overview)scale=clamp(Number(next)||1,.1,4);
+    const v=state(),cx=at?.x??v.x+v.width/2,cy=at?.y??v.y+v.height/2;overview=next==='overview';if(!overview)scale=clamp(Number(next)||1,.1,4);
     resize();viewport.scrollLeft=Math.max(0,cx*scale-canvas.width/2);viewport.scrollTop=Math.max(0,cy*scale-canvas.height/2);position();schedule();
   }
   $('fit').onclick=()=>zoom('overview');$('one').onclick=()=>zoom(1);$('zoom').onchange=e=>zoom(e.target.value==='overview'?'overview':Number(e.target.value));

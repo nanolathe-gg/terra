@@ -2161,10 +2161,32 @@ function shownColor(key,set) {
   return set||hexColor([1,1,1]);
 }
 let refreshShallowRow=()=>{};
+// Where the artist is, carried through a world switch's reload so they land where they were: the camera (scale and center, or Fit),
+// the view (Build, a World section, or Materials) and the selected shape. Read once on load (restorePlace) and taken off the address.
+function placeParams() {
+  const v=mapCanvas?.view(),out={};
+  if (v) out.view=v.overview?'fit':`${+v.scale.toFixed(3)},${Math.round(v.x+v.width/2)},${Math.round(v.y+v.height/2)}`;
+  const section=document.querySelector('#pane-world .world-nav [role=tab][aria-selected=true]');
+  out.panel=$('material-editor')?.open?'materials':!$('pane-world').hidden?'world'+(section?'.'+section.id:''):'build';
+  if (selected>=0) out.shape=String(selected);
+  return out;
+}
+function restorePlace() {
+  const view=experiment.get('view'),panel=experiment.get('panel'),shape=Number(experiment.get('shape'));
+  if (view==='fit') mapCanvas.zoom('overview');
+  else if (view) { const [scale,x,y]=view.split(',').map(Number); if (scale>0&&Number.isFinite(x)&&Number.isFinite(y)) mapCanvas.zoom(scale,{x,y}); }
+  if (experiment.has('shape') && Number.isInteger(shape) && nodes[shape]) selectNode(shape);
+  if (panel==='materials') { if (!$('materials-toolbar').disabled) $('materials-toolbar').click(); }
+  else if (panel?.startsWith('world')) { $('tab-world').click(); const section=$(panel.slice(6)); if (section?.closest('#pane-world .world-nav')) section.click(); }
+  if (view||panel||experiment.has('shape')) { const url=new URL(location.href); for (const key of ['view','panel','shape']) url.searchParams.delete(key); window.history.replaceState(null,'',url); }
+  return Boolean(view);
+}
 function goToWorld(base,id,extra) {
   worldInputQueue.flush();
   if (!stroke && !moving && !loading) saveWorking();   // the working map goes with the artist to the new world
   const url=new URL(location.origin+location.pathname); url.searchParams.set('biome',base); if (id && id!==base) url.searchParams.set('world',id);
+  if (experiment.has('scratch')) url.searchParams.set('scratch',experiment.get('scratch'));
+  extra={...(extra?.pendingSketch?{}:placeParams()),...extra};   // a map being opened starts at its own place, not this one's
   if (config.map) for (const [key,value] of Object.entries({mapX:config.map.unitsX,mapY:config.map.unitsY,sea:config.seaLevel})) url.searchParams.set(key,value);
   for (const [key,value] of Object.entries(extra||{})) if (value!=='' && value!==null && value!==undefined) url.searchParams.set(key,value); else url.searchParams.delete(key);
   location.href=url.toString();
@@ -2735,7 +2757,8 @@ async function bootMap(pending=null) {
   } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
   updateControls(); resize(); schedule(); queueWeather();
-  $(experiment.has('newMap')?'fit':'one').click();   // a new map opens at Fit, to see all of it; every other load at 1x, centered on the map
+  // A new map opens at Fit, to see all of it; a world switch where the artist was (restorePlace); every other load at 1x, centered on the map.
+  if (!restorePlace()) $(experiment.has('newMap')?'fit':'one').click();
   await openSharedMap();
   $('new-map').disabled=false;showPrevious();
   if(experiment.has('newMap')){const url=new URL(location.href);url.searchParams.delete('newMap');$('map-name').value=url.searchParams.get('mapName')||'Untitled map';$('map-name').dispatchEvent(new Event('input'));url.searchParams.delete('mapName');window.history.replaceState(null,'',url);saveWorking();}
