@@ -100,8 +100,9 @@
 .find-hint{padding:6px 8px;color:var(--muted);font-size:11px}
 .find-flash{animation:find-flash 1.6s ease-out}
 @keyframes find-flash{0%,35%{box-shadow:inset 0 0 0 2px var(--accent);background-color:#9fd7b322}100%{box-shadow:inset 0 0 0 2px transparent;background-color:transparent}}
-/* Below 1250 px it rests as the magnifier alone. */
-@media(max-width:1250px){.find{min-width:28px;max-width:28px}#find-input:not(:focus){padding:4px 0 4px 26px}#find-input:not(:focus)::placeholder{color:transparent}}
+/* Its room below 1440 px is the brand's subtitle; below 1250 px it rests as the magnifier alone, in the room of the brand's name (the mark stays). */
+@media(max-width:1439px){.version{display:none}}
+@media(max-width:1250px){.find{min-width:28px;max-width:28px}#find-input:not(:focus){padding:4px 0 4px 26px}#find-input:not(:focus)::placeholder{color:transparent}.topbar .brand{font-size:0;gap:0}.topbar .brand-mark{font-size:22px}}
 .top-menu{position:relative}.top-menu>summary{list-style:none;color:inherit;background:var(--raised);border:1px solid var(--line);border-radius:5px;padding:5px 8px;font-size:11px;white-space:nowrap}.top-menu>summary::-webkit-details-marker{display:none}.top-menu>summary:hover{background:#344047}
 .top-menu .popover{top:34px;right:0;width:230px;padding:10px 12px;display:flex;flex-direction:column;gap:9px}.top-menu .view-toggle{margin:0}
 .erosion-toggle{margin:10px 0 0}
