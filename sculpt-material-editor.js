@@ -296,7 +296,7 @@ export function mountMaterialEditor(host) {
   }
   function refreshPalette(m) {
     drawPaletteGrid($('palette-grid'), CELL, new Set(m.palette));
-    $('palette-count').textContent = m.palette.length < 2 ? 'No palette: the color stays continuous and the map’s final palette step picks each pixel’s game color.' : `${m.palette.length} of ${MAX_PALETTE} colors. The material is reduced to these by error diffusion.`;
+    $('palette-count').textContent = m.palette.length < 2 ? 'No palette: the color stays continuous and the map’s output picks each pixel’s game color.' : `${m.palette.length} of ${MAX_PALETTE} colors. For the game palette the material is reduced to these by error diffusion; true color keeps its continuous color.`;
     $('palette-clear').disabled = !m.palette.length;
     DITHER.forEach(p => { setScrub('dither-' + p.key, p, m.dither[p.key]); $('dither-' + p.key).disabled = m.palette.length < 2 || (p.key !== 'amount' && m.dither.amount <= 0); });
   }

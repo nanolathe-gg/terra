@@ -29,14 +29,14 @@ test('surface layers: a rule limits a built-in; a material layer draws where its
     assert.ok(share > .03 && share < .6, `the cap covers the mesa's top and nothing else (${(share * 100).toFixed(1)}%)`);
     // The inspector (renderer.setProbe, readProbe): at a pixel the cap took, the draw records the cap last, its coverage, and the pixel's color.
     let at = -1; for (let i = 0; i < capped.pixels.length; i += 4) if (capped.pixels[i] !== base.pixels[i] && capped.pixels[i + 4] !== base.pixels[i + 4] && capped.pixels[i - 4] !== base.pixels[i - 4]) { at = i / 4; break; }
-    const px = at % 512, py = Math.floor(at / 512), probed = await openScene(scene, 'biome=green&mapX=4&mapY=4');
+    const px = at % 512, py = Math.floor(at / 512), probed = await openScene(scene, 'biome=green&mapX=4&mapY=4&palette=off');
     let read;
     try { await probed.fields.ready(); probed.renderer.setProbe({x: px, y: py}); await renderWindow(probed, {x: 0, y: 0, width: 512, height: 512}); read = await probed.renderer.readProbe(); } finally { probed.dispose(); }
     assert.ok(read, 'the draw recorded the inspected pixel');
     const rows = surfaceRows(JSON.parse(readFileSync(file, 'utf8')).surface).layerRows;
     assert.equal(read.layers.at(-1).row, rows.at(-1), 'the cap is the last layer drawn there');
     assert.ok(read.layers.at(-1).cover > .5, `the cap covers it (${read.layers.at(-1).cover})`);
-    // The draw ends in true color; the output stage (engine-output.wgsl) reduces it to the palette after, so the record is the pixel's color
+    // The draw records its lit color; the output stage (engine-output.wgsl) reduces it to the palette after, so the probe reads a picture
     // with the palette off.
     const lit = await view('&palette=off');
     for (let k = 0; k < 3; k++) assert.ok(Math.abs(read.color[k] * 255 - lit.pixels[at * 4 + k]) <= 1, 'the recorded color is the pixel’s lit color');
@@ -45,7 +45,6 @@ test('surface layers: a rule limits a built-in; a material layer draws where its
     assert.ok(changed(capped.pixels, lifted.pixels) > 0, 'height contrast moves the cap’s edge');
     // Bare soil (where the cover thins, soilRim) drawn with a library material in place of the soil color.
     withSurface(s => s);
-    const plainLit = (await view('&palette=off')).pixels;   // coverage below is counted in true color: the palette's diffusion moves a tile's other pixels
     const soil = await view('&soilRim=1');
     withSurface(s => s.map(l => l.builtin === 'soil' ? {...l, material: 'red-ground'} : l));
     const swapped = changed(soil.pixels, (await view('&soilRim=1')).pixels);
@@ -53,12 +52,12 @@ test('surface layers: a rule limits a built-in; a material layer draws where its
     // Coverage (amount): a partial amount covers about that share of the area, each covered pixel as the full layer draws it.
     const everywhere = amount => withSurface(s => [...s, {id: 'all', name: 'All', material: 'ice-ground', stage: 'snow', amount, edge: {noiseSize: 1}}]);
     everywhere(1);
-    const full = (await view('&palette=off')).pixels;
+    const full = (await view()).pixels;
     everywhere(.3);
-    const part = (await view('&palette=off')).pixels;
+    const part = (await view()).pixels;
     let covered = 0, same = 0;
     for (let i = 0; i < part.length; i += 4) {
-      if (part[i] === plainLit[i] && part[i + 1] === plainLit[i + 1] && part[i + 2] === plainLit[i + 2]) continue;
+      if (part[i] === base.pixels[i] && part[i + 1] === base.pixels[i + 1] && part[i + 2] === base.pixels[i + 2]) continue;
       covered++;
       if (part[i] === full[i] && part[i + 1] === full[i + 1] && part[i + 2] === full[i + 2]) same++;
     }

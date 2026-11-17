@@ -1067,10 +1067,11 @@ fn rockMaterialMean(slot: u32) -> vec3f { let m = rockMaterialOf(slot); if (m < 
 fn bedColor(slot: u32, k: i32) -> vec3f { return saturate(rockMaterialMean(slot) + u.rock[slot & rockMask].rockColors[1 + clamp(k, 0, 4)].rgb); }
 fn materialPigment(p:vec2f,slot:u32)->vec3f { return materialPigmentAt(p,slot,u.ground[slot & groundMask].cacheLayer); }
 // A layer of slot's cache as the map draws it: its color, reduced to the slot's palette as far as its dither says (a state's layer shares
-// the slot's palette and its index in the reduced colors).
+// the slot's palette and its index in the reduced colors). The list is an option for the game palette's output: with the palette off
+// (true color) the material keeps its continuous color.
 fn materialPigmentAt(p:vec2f,slot:u32,layer:i32)->vec3f {
  let r=u.ground[slot & groundMask];let raw=materialRawAt(p,layer);
- if(r.dither<=0.0){return raw;}
+ if(r.dither<=0.0||u.quantize==0){return raw;}
  return mix(raw,textureLoad(groundColorTex,vec2i(materialPixel(p)),layer,0).rgb,r.dither);
 }
 // The ground's color where Time's water wore it (wear) or laid sediment (deposit), both 0 to 1: the material's own color, then its Worn and
