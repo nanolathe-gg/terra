@@ -918,13 +918,11 @@ export function createGpuFields(opts) {
   const worldRect = r => ({x: r.x0 * spacing, y: r.y0 * spacing, width: (r.x1 - r.x0) * spacing, height: (r.y1 - r.y0) * spacing});
   let revision = 0, planes = null, engine = null, enginePromise = null, valid = false, gpuValid = false, error = null;
   let lastEval = {}, firstReady = 0;
-  // H6b: a change is requested (queued), submitted to the GPU at once unless two runs are still unfinished, and its rectangle read
-  // back into the CPU copy only when nothing is being edited: during a gesture (opts.gesture) the copy is left, and one read of everything changed
-  // since covers the release. A request that arrives while a run is in flight merges into the one waiting (union rectangle; the newest node list is
-  // read when it starts). Display listeners hear the invalidation immediately;
-  // canonical readers force its merged GPU evaluation. Overview/saving listeners
-  // hear only once the CPU copy holds it. During a gesture the picture uses its
-  // own lattice, so canonical work waits for a reader or release.
+  // H6b: announce a requested change immediately, then merge its rectangle
+  // while a gesture uses the preview lattice. A canonical reader or release
+  // submits the merged request; at most two runs remain in flight. The newest
+  // node list is read when a run starts. CPU copies wait for release or an
+  // explicit reader, and overview/saving listeners hear only after that copy.
   const gesture = opts.gesture || (() => false);
   let submittedRevision = 0, outstanding = 0, starting = null, waiters = [], queued = null, copyDirty = false, copyRect = null, landing = 0, landChain = Promise.resolve(), reported = null, generation = 0, flushWanted = false;
   const submitListeners = new Set(), runLog = [];let gpuReaders=0;
