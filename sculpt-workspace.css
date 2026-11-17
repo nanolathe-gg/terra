@@ -145,6 +145,10 @@
 #path-help{margin:0;font-size:10px;color:#b9c4bf;white-space:normal;min-width:0}
 /* The shape card: its name and actions, the sections every shape has, then Details, where a closed part is a chip. */
 .card-head{display:flex;align-items:center;gap:8px}.card-head .panel-title{flex:1;min-width:0;margin:0}
+/* One scope tag, three values: what an edit changes. This shape (or the new shapes a tool draws), this map, or every map in the world. */
+.scope-tag{display:inline-flex;align-items:center;flex:none;padding:0 6px;border:1px solid;border-radius:8px;font-size:9.5px;font-weight:600;line-height:15px;letter-spacing:.2px;white-space:nowrap;vertical-align:middle}
+.scope-tag.scope-shape{color:#f1d58c;border-color:#6f6136;background:#2d281b}.scope-tag.scope-map{color:#a2ccf0;border-color:#3b5a76;background:#1b2935}.scope-tag.scope-world{color:#a6dbb7;border-color:#41684f;background:#1b2f24}
+.control>.scope-tag,.world-fixed>.scope-tag{margin-top:4px}.world-fixed>button+.scope-tag{margin:0 0 0 6px}
 .card-actions{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:6px 0 8px}.card-actions .top-menu{position:static}
 .card-actions button,.card-actions .top-menu>summary{padding:3px 8px;font-size:10px;min-height:24px;box-sizing:border-box;display:inline-flex;align-items:center}
 #shape-selection-actions,#tool-delete-control{display:contents}#selection-delete,#tool-delete{color:#e8afa2}

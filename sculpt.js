@@ -347,6 +347,8 @@ function updateControls() {
   // A selected shape's card carries its name; a drawing tool's says what the next stroke makes; a brush's is the brush.
   $('brush-title').textContent=editing?shapeName(selected):tool==='move'?'Select':['landform','fissure'].includes(toolKind(tool))?`New ${toolLabel(tool)||NODE_NAMES[toolKind(tool)]}`:toolLabel(tool)||NODE_NAMES[tool]||tool;
   $('brush-scope').textContent=editing?'Shared settings for every path in this shape.':tool==='move'?'Click a shape to select and edit it.':'Settings for your new shape.';
+  // The scope tag says what an edit here changes: the selected shape, or the shapes the tool draws next.
+  $('brush-scope-tag').textContent=editing?'This shape':'New shapes';$('brush-scope-tag').title=editing?'Edits here change this shape only':'Edits here set up the next shapes this tool draws';
   syncToolGroups(`${tool}:${selected}`);
   editorUI.syncTools?.(activeTool,editing?nodes[selected].kind:null,locked,featureActive&&(mapFeatures.mode==='starts'?'starts':'features'));
   syncToolSave(locked,featureActive);
@@ -1967,6 +1969,7 @@ function goToWorld(base,id,extra) {
 function buildWorldPanel() {
   const world=activeWorld();
   $('world-name').textContent=world.name;
+  $('world-scope-tag').textContent=`Every map in ${world.name}`;$('world-scope-tag').title=`World settings: every map drawn in ${world.name} shows them. Rows tagged This map are saved with the map.`;
   const select=$('biome-select');
   const builtIn=Object.entries(config.biomes||{}).map(([id,name]) => new Option(name,'biome:'+id,false,worldId===id));
   const custom=Object.entries(worlds).filter(([id,w]) => !(id in (config.biomes||{})) && w.base in (config.biomes||{})).map(([id,w]) => new Option(w.name+' (custom)','world:'+id,false,worldId===id));
@@ -2172,6 +2175,7 @@ function syncRockPanel() {
   if(focusedChip)$('rock-chips').querySelector('[aria-checked=true]').focus();
   $('rock-current-name').textContent=world?worldRockName(config):mapRocks.find(r=>r.slot===rockSelected).name;
   $('rock-current-scope').textContent=world?'The world\u2019s rock type: every shape\u2019s default. Edits change the world.':'This map\u2019s rock type. Saved with the map.';
+  $('rock-current-tag').textContent=world?`Every map in ${activeWorld().name}`:'This map';$('rock-current-tag').className='scope-tag '+(world?'scope-world':'scope-map');
   $('rock-current-swatch').style.background=rockHex(rockSelected);
   if(document.activeElement!==$('rock-name'))$('rock-name').value=world?worldRockName(config):mapRocks.find(r=>r.slot===rockSelected).name;
   $('rock-name').disabled=$('rock-rename').disabled=world;$('rock-delete').disabled=world;$('rock-duplicate').disabled=$('rock-add').disabled=full;
