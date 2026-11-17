@@ -89,7 +89,14 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     if(resource)this.resources.set(resource,{label,bytes,kind});
     this.recordMemory();return resource;
   }
-  release(resource) { if(!resource||!this.resources.has(resource))return;resource.destroy();this.resources.delete(resource); }
+  release(resource) { if(!resource||!this.resources.has(resource))return;resource.destroy();this.resources.delete(resource);this.settleReleases(); }
+  // Chrome's Dawn gives a destroyed texture or buffer's memory back at the device's next queue operation, not at destroy(). Released with
+  // no GPU work after them (a pan that empties the color cache and leaves nothing to bake), the GPU process kept them while the editor sat
+  // idle: 464 MB of a 4x4 map's color cache. onSubmittedWorkDone is such an operation and draws nothing; one follows each burst of releases.
+  settleReleases() {
+    if(this.releaseTimer||this.disposed)return;
+    this.releaseTimer=setTimeout(()=>{this.releaseTimer=null;const queue=this.device?.queue;if(!this.disposed&&queue?.onSubmittedWorkDone)queue.onSubmittedWorkDone().catch(()=>{});},100);
+  }
   get residentBytes() { let n=this.outputBytes;for(const r of this.resources.values())n+=r.bytes;return n; }
   get cpuRetainedBytes() { let bytes=this.uniformData?.byteLength??0;for(const tile of this.colorTiles??[])bytes+=tile.cpu.byteLength+tile.world.byteLength;return bytes; }
   recordMemory() {
