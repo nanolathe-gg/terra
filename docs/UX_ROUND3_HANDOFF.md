@@ -111,6 +111,16 @@ uncommitted edits. Look at `git status` and `git log 12170ed6..HEAD` first.
 - A temporary worktree of main may have been left under `/Users/daniel/src/` by that implementer: `git worktree list`, and
   remove it with `git worktree remove` only if it is clearly that one (created 2026-11-16 evening, at main's tip, no branch work).
 
+**B, update 22:30: the materials implementer finished and handed back; the tree is clean at 72cac5fe.** All five fixes are settled:
+df330f7f (note's limit), 464cd000 (Escape in a text field), 86936dac (true 1× preview: 288 px box docked, 384 at Full size),
+72cac5fe (docked preview waits 90 ms: map frames over 50 ms during a drag went from 11 in 8 drags to 0), and the swatches needed
+no change (all 155 match their own Tile preview; Red, Moon and Archipelago sand really draw that dark, far darker than their
+library colors, which looks like a material-data or recolor-estimate problem to report to the owner, not part of this round).
+70a3ddd2 adds the editor half of the Surface focus hook; the other half is one line, **not built**: in
+`sculpt-surface-panel.js` give the row's "Edit…" button `id: uid('edit')`. Still owed on that branch: `repro/workspace.mjs` and
+the browser smoke were **not rerun** on these last commits (quick passes), and screenshots 1, 3 and 6 of `review-6` were not
+retaken. Its status file and timing data are in `agent-ux3-find/`. The original list follows for reference.
+
 **B. `ux-round3-materials` worktree: five review fixes.** Three were committed by 22:10 (df330f7f the Manage note's limit; 464cd000
 Escape in a text field leaves the field; 86936dac the preview shows true 1× pixels, item 2 below). Check `git log 86936dac..HEAD`
 and `git status` for the other two:
