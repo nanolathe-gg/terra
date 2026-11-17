@@ -103,7 +103,7 @@ const clean = text => String(text ?? '').replace(/[▾▸▴▶…]/g, '').repla
 // Where generic rows are read from, and the name each starts its path with.
 const SCOPES = [['pane-world', 'World'], ['brush-panel', 'Shape card'], ['pane-map', 'Map'], ['pane-graphics', 'View']];
 const FIELDS = 'input, select, textarea, .scrub';
-// Not rows of their own: the World panel's own search, a part's switch (its row is found), a slider's typed entry and native range,
+// Not rows of their own: the World panel's All switch, a part's switch (its row is found), a slider's typed entry and native range,
 // the Surface list's heads, a closed row's Coverage and Add a layer (found by name below), file pickers.
 const SKIP = '#world-control-search, summary, .scrub-entry, .scrub-native, .surface-head, .surface-layer:not(.open) .surface-cover, #surface-gallery, [type=file], [type=hidden], [type=button], [type=submit]';
 const MARK = '.control, .color-row, .surface-layer, label';

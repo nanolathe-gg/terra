@@ -81,12 +81,16 @@ export function mountPick(host) {
       return;
     }
     box.dataset.keys = keys;
-    box.replaceChildren(...rows.map(r => {
+    // Rows from more than one World tab go under that tab's name (Cracks & bands › Width), as the World panel shows them.
+    const tab = r => r.home.split('/')[1] || r.home.split('/')[0], grouped = new Set(rows.map(tab)).size > 1;
+    let last = '';
+    box.replaceChildren(...rows.flatMap(r => {
+      const head = grouped && tab(r) !== last ? [Object.assign(document.createElement('p'), {className: 'pick-group', textContent: (last = tab(r))})] : [];
       const row = controlRow({id: 'pick-k-' + r.key, label: `${html(r.label)} <output>${html(r.value)}</output>`, range: `min="${r.min}" max="${r.max}" step="${r.step}" value="${r.value}"`});
       const range = row.querySelector('input[type=range]'); range.dataset.pickKey = r.key;
       range.addEventListener('input', () => { row.querySelector('output').textContent = range.value; host.setSetting(r.key, range.value, false, slot); });
       range.addEventListener('change', () => host.setSetting(r.key, range.value, true, slot));
-      return row;
+      return [...head, row];
     }));
   }
   // A folded group of rows: hidden when it has none, its summary saying how many and of what.
@@ -148,7 +152,8 @@ export function mountPick(host) {
     if (ground) {
       swatch('pick-ground-color', ground.color); $('pick-ground-name').textContent = ground.name; tag('pick-ground-tag', ground);
       $('pick-ground-kind').textContent = wet ? 'ground under the water' : 'ground'; $('pick-ground-reach').textContent = ground.reach;
-      group('pick-ground-more', wet ? [] : acting(host.settings(['Ground'])), null, n => `${count(n, 'ground setting')} acting here`);
+      // The world's ground settings, where ground shows: not under water, nor on a pixel that is all rock.
+      group('pick-ground-more', wet || r.rock.share >= .95 ? [] : acting(host.settings(['Ground'])), null, n => `${count(n, 'setting')} of the world’s ground acting here`);
     }
     place();
   }

@@ -537,7 +537,7 @@ export function mountMaterialEditor(host) {
     return true;
   }
   // Escape inside the editor (sculpt-ui.js closeTop), one thing a press: a control's name being asked, a text field, the add menu, Manage or
-  // the library drawer, then Focus graph back to the split workspace. Then Pick's card, and then the editor itself (closeDocked).
+  // the library drawer, then Focus graph back to the split workspace. Then the editor itself (closeDocked), and then Pick's card.
   function inner() {
     if (naming) { const pin = naming.pin; cancelName(); pin.focus(); return true; }
     if (leaveField()) return true;

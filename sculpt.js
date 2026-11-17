@@ -2227,7 +2227,8 @@ function restorePlace() {
   if (view==='fit') mapCanvas.zoom('overview');
   else if (view) { const [scale,x,y]=view.split(',').map(Number); if (scale>0&&Number.isFinite(x)&&Number.isFinite(y)) mapCanvas.zoom(scale,{x,y}); }
   if (experiment.has('shape') && Number.isInteger(shape) && nodes[shape]) selectNode(shape);
-  if (panel==='materials') { if (!$('materials-toolbar').disabled) $('materials-toolbar').click(); }
+  // Materials opens once its tab is enabled (it waits for the editor's lock to lift after load).
+  if (panel==='materials') { const tab=$('materials-toolbar'); if (!tab.disabled) tab.click(); else { const wait=new MutationObserver(() => { if (!tab.disabled) { wait.disconnect(); tab.click(); } }); wait.observe(tab,{attributes:true,attributeFilter:['disabled']}); setTimeout(() => wait.disconnect(),30000); } }
   else if (panel?.startsWith('world')) { $('tab-world').click(); const section=$(panel.slice(6)); if (section?.closest('#pane-world .world-nav')) section.click(); }
   if (view||panel||experiment.has('shape')) { const url=new URL(location.href); for (const key of ['view','panel','shape']) url.searchParams.delete(key); window.history.replaceState(null,'',url); }
   return Boolean(view);

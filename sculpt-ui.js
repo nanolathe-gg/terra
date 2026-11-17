@@ -87,7 +87,7 @@ export function mountEditorUI(){
  // The curves are rows of the card's Profile section: folding it away closes them at full size too.
  $('card-profile').addEventListener('toggle',()=>{if(!$('card-profile').open)setLarge(false);});
  // Escape closes one thing per press: Find, the visible Surface gallery, tool flyouts, menus and full-size curves, then the material editor's
- // text field, menu, library drawer or Full size. Pick's card comes next (sculpt.js), then closeDocked closes the material editor itself.
+ // text field, menu, library drawer or Full size. Then closeDocked closes the material editor itself, and Pick's card comes next (sculpt.js).
  const find=mountFind();
  const closeGallery=()=>{const b=$('surface-add');if(b?.getAttribute('aria-expanded')!=='true'||!b.getClientRects().length)return false;b.click();return true;};   // left open behind another tab, it waits
  const closeTop=()=>find.close()||closeGallery()||closeFlyouts()||[...document.querySelectorAll('details.top-menu[open],details.share-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||closeSurfaces(true)||setLarge(false)||Boolean(docked?.inner());
