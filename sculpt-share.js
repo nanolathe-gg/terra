@@ -1,7 +1,6 @@
 // Save links: the editor's side of the save-link service (services.json "maps"; deploy/worker/ in production, internal/site/server.go in development).
 // Pure functions, no page state, so node can test them.
 
-export const PREVIOUS_KEY = 'terraform-previous-map-v1';   // the one "previous map" slot: the visitor's own map, kept when a shared map replaces it
 export const ID_RE = /^[a-z2-7]{16}$/;
 
 // The text that is shared: the save with sorted keys and without fields that only say "default" (`hidden: false`, undefined values), so a
@@ -83,6 +82,3 @@ export async function getMap(base, id, fetcher = fetch) {
   catch (_) { throw new Error('The shared map is damaged and could not be read. Your current map was left as it was.'); }
 }
 
-export function keepPrevious(storage, text) { try { storage.setItem(PREVIOUS_KEY, text); return true; } catch (_) { return false; } }
-export function takePrevious(storage) { try { return storage.getItem(PREVIOUS_KEY); } catch (_) { return null; } }
-export function dropPrevious(storage) { try { storage.removeItem(PREVIOUS_KEY); } catch (_) {} }

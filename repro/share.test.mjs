@@ -1,8 +1,8 @@
-// Save links in the editor: deterministic gzip, the link and address handling, the service errors, the previous-map slot.
+// Save links in the editor: deterministic gzip, the link and address handling, the service errors.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {gunzipSync, gzipSync} from 'node:zlib';
-import {shareText, gzipText, crc32, shareUrl, mapIdFromSearch, withoutMap, mapsService, postMap, getMap, keepPrevious, takePrevious, dropPrevious, PREVIOUS_KEY} from '../sculpt-share.js';
+import {shareText, gzipText, crc32, shareUrl, mapIdFromSearch, withoutMap, mapsService, postMap, getMap} from '../sculpt-share.js';
 import {mapId} from '../deploy/worker/worker.js';
 
 const text = JSON.stringify({format: 'nanolathe-terrain-sculpt', version: 6, nodes: [{kind: 'hill', x: 1.5}], note: 'é'.repeat(500)});
@@ -57,16 +57,6 @@ test('opening: 404, outage, bad id and damage all leave the map alone and say so
   await assert.rejects(getMap('w', 'abcdefghijklmnop', reply(500, '')), /error 500/);
   await assert.rejects(getMap('w', 'abcdefghijklmnop', reply(200, 'not json')), /damaged/);
   await assert.rejects(getMap('w', '../x', reply(200, {})), /not a valid map link/);
-});
-
-test('the previous-map slot holds one map and survives a failing store', () => {
-  const store = new Map(), storage = {getItem: k => store.has(k) ? store.get(k) : null, setItem: (k, v) => store.set(k, v), removeItem: k => store.delete(k)};
-  assert.equal(takePrevious(storage), null);
-  assert.ok(keepPrevious(storage, 'one')); assert.ok(keepPrevious(storage, 'two'));
-  assert.equal(takePrevious(storage), 'two'); assert.equal([...store.keys()].join(), PREVIOUS_KEY);
-  dropPrevious(storage); assert.equal(takePrevious(storage), null);
-  const full = {getItem() { throw new Error('x'); }, setItem() { throw new Error('full'); }, removeItem() { throw new Error('x'); }};
-  assert.equal(keepPrevious(full, 'x'), false); assert.equal(takePrevious(full), null); dropPrevious(full);
 });
 
 test('share, open, share again gives the same id', async () => {

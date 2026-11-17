@@ -1,4 +1,4 @@
-// Focused spot check: first-run/New and previous-map restoration, numeric curves, live preview, and progress.
+// Focused spot check: first-run/New and reopening the first map from Maps, numeric curves, live preview, and progress.
 // node repro/ui-create-curves.mjs --server http://127.0.0.1:<yours> --port <cdp> --out /tmp/ui-create-curves
 import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import assert from 'node:assert/strict';
@@ -57,8 +57,9 @@ try{
   await send('Page.captureScreenshot',{format:'png'}).then(r=>writeFileSync(join(out,'curves.png'),Buffer.from(r.result.data,'base64')));
   await key('Escape');const kept=await ev('sculptDebug.sketch()');await click('#tab-map');await click('#new-map');await ev(`document.getElementById('new-map-name').value='Second map';document.querySelector('#new-map-worlds [data-world="moon"]').click();document.getElementById('new-map-width').value='2';document.getElementById('new-map-height').value='3';document.getElementById('new-map-create').click()`);await sleep(300);await ready();
   assert.equal(await ev('sculptDebug.biome'),'moon');assert.equal(await ev('document.getElementById("map-name").value'),'Second map');assert.equal((await nodes()).length,0);assert.deepEqual(await ev('sculptDebug.sketch().map.unitsX'),2);
-  await ev(`document.getElementById('share-restore').click()`);await sleep(300);await ready();
+  await click('#new-map');for(let i=0;i<50&&!await ev(`[...document.querySelectorAll('#new-map-list li strong')].some(s=>s.textContent==='First map')`);i++)await sleep(100);
+  await ev(`[...document.querySelectorAll('#new-map-list li')].find(li=>li.querySelector('strong').textContent==='First map').querySelector('button').click()`);await sleep(300);await ready();
   assert.equal(await ev('sculptDebug.biome'),'green');assert.equal(await ev('document.getElementById("map-name").value'),'First map');assert.deepEqual(await ev('sculptDebug.sketch().nodes.map(n=>({...n,hidden:Boolean(n.hidden)}))'),kept.nodes.map(n=>({...n,hidden:Boolean(n.hidden)})));
   assert.equal(await ev('document.getElementById("map-progress").hidden'),true,'progress ends after latest result is displayed');
-  assert.deepEqual(errors,[]);console.log(JSON.stringify({firstRun:true,newFlat:true,worldAndSize:true,previousRestored:true,numericPoint:true,raiseUndo:true,livePreview:true,noOpProgress:true,console:errors}));
+  assert.deepEqual(errors,[]);console.log(JSON.stringify({firstRun:true,newFlat:true,worldAndSize:true,firstMapReopened:true,numericPoint:true,raiseUndo:true,livePreview:true,noOpProgress:true,console:errors}));
 }catch(err){console.error(err);process.exitCode=1;}finally{ws?.close();browser.kill();}

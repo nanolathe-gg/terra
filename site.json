@@ -116,6 +116,7 @@
     "sculpt-passability.js",
     "sculpt-passability-view.js",
     "sculpt-share.js",
+    "sculpt-maps.js",
     "sculpt-preview.js",
     "sculpt-memory.js",
     "sculpt-change-map.js",

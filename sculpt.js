@@ -17,7 +17,8 @@ import {createGpuFields,createPagedFields,createShapeEngine,comparePlanes,readBu
 
 import {shapePaths,clonePaths,pathsWithin,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
 import {selectionTransform,toggleSelection} from './sculpt-selection.js';
-import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap,keepPrevious,takePrevious,dropPrevious} from './sculpt-share.js';
+import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap} from './sculpt-share.js';
+import {openMapStore,importLegacyMaps,mapMeta,mapToReopen,byRecent,mapsInUse,holdMap,newMapId,readTab,writeTab,cleanAddress,startsMap,LEGACY_KEYS} from './sculpt-maps.js';
 import {isRiver,pointsSignature} from './sculpt-river.js';
 import {HELP_TOOLS} from './sculpt-help-examples.js';
 import {copySurface,layerKey,withSurfaceMaterials} from './sculpt-material-model.js';
@@ -35,9 +36,13 @@ let picking=false,pickCard=null;
 const $ = id => document.getElementById(id);
 const canvas = $('terrain'), overlay = $('overlay');
 const experiment = new URLSearchParams(location.search);
-// DEVELOPMENT CONVENIENCE (owner request, revisit before release): one working map per browser, whatever the world or map.
-// It reloads on every page load and a world switch carries its strokes into the new world (see carryNodes). Scratch pages keep none.
-const LOCAL_KEY = experiment.has('scratch')?null:'terraform-working-map-v1';
+// Saved maps (sculpt-maps.js): each map in this browser is its own entry and this tab edits one. The editor writes nothing to the address; its
+// own reloads leave what the next page needs with the tab, read here once as if it were in the address. A world switch carries the tab's map
+// into the new world (see carryNodes). Scratch pages (`scratch`, the checks' comparison sketches) save nothing.
+const sessionStore=(()=>{try{return sessionStorage;}catch(_){return null;}})();
+const tabState=readTab(sessionStore);for(const [key,value] of Object.entries(tabState.next??{}))experiment.set(key,String(value));
+const SAVING=!experiment.has('scratch');
+let mapStore=null,tabMapId=null,workingMap=null,mapsNote='';   // the store, this tab's map, its saved body as boot read it, why the picker opened
 let MIN_HEIGHT = -90, MAX_HEIGHT = 300;
 const HELP = {
   // The shape tools draw landforms: the path is the crest, the section across it is one curve shaped on both sides, the ground is raised, cut or flattened
@@ -1718,9 +1723,11 @@ function workingCopy() {
   s.nodes=markEdited(s.nodes,n => nodeDefaults(n));
   return s;
 }
+// Writes this tab's map to its entry; answers the write (a promise), or false when nothing is saved (a scratch page, no map chosen, no store).
 function saveWorking() {
-  if (!LOCAL_KEY || !ready) return false;
-  try { localStorage.setItem(LOCAL_KEY,JSON.stringify(workingCopy())); return true; } catch (_) { return false; }
+  if (!SAVING || !ready || !tabMapId || !mapStore) return false;
+  let s; try { s=workingCopy(); } catch (_) { return false; }
+  return mapStore.put(tabMapId,s,mapMeta(tabMapId,s)).then(() => true,err => { $('save-state').textContent='Saving in this browser failed ('+err.message+'). Use Save to keep this map as a file.'; return false; });
 }
 // Carry a working copy's strokes into the current world: geometry, kind and tool stay; where this world has the stroke's tool, each setting the artist
 // changed by hand stays and every other one takes this world's default. A stroke whose tool this world lacks shows as the generic landform with every
@@ -1742,13 +1749,14 @@ $('reset-strokes').onclick=() => {
   status('Reset every stroke to this world\'s defaults.');
 };
 function persistLater() {
-  if (!LOCAL_KEY) { $('save-state').textContent='Comparison sketch · use Save sketch to keep it.'; return; }
+  if (!SAVING) { $('save-state').textContent='Comparison sketch · use Save sketch to keep it.'; return; }
+  if (!mapStore) { $('save-state').textContent=mapsNote||'Saving in this browser is unavailable. Use Save to keep this map as a file.'; return; }
   clearTimeout(autosaveTimer); autosaveTimer=setTimeout(() => {
     if (stroke || moving || loading) { persistLater(); return; }
-    keepSaved=false; $('save-state').textContent=saveWorking()?'Terrain recipe autosaved locally.':'Local autosave unavailable. Use Save sketch to keep this heightfield.';
+    keepSaved=false; if (saveWorking()) $('save-state').textContent='Your map is saved in this browser (Maps lists every map you keep here).';
   },450);
 }
-let keepSaved=false;   // set while the saved copy failed to load: leaving the page must not overwrite it with a blank map
+let keepSaved=false;   // set while this tab leaves for another map: leaving the page must not write the old one again
 addEventListener('pagehide',() => { worldInputQueue.flush();if (!stroke && !moving && !loading && !keepSaved) saveWorking(); });
 // A save's strokes with their tools: one saved before strokes named their tool takes the one its section form belongs to, once (inferStrokeTools); a map carried
 // from another world goes through carryNodes, and a loaded one keeps the tools the toolbar has (any other shows as the generic landform). `own`: the map's tools.
@@ -1785,10 +1793,9 @@ function loadSketch(s,carry=false) {
   showTool(toolSettings[tool]); updateControls(); surfacePanel?.refresh();
   }finally{worldStoreTransaction--;saveWorlds();}
 }
-// A sketch remembers the world it was drawn in. Loading one in another world
-// reloads the recorded world first, then plays the sketch there. The file is
-// too large for localStorage (a saved v4 sketch is about 4 MB), so it waits in
-// the Cache API under a one-use token carried in the address (review A2).
+// A sketch remembers the world it was drawn in. Opening a file or a share link adds it to Maps as a map of its own and reloads this tab on
+// it, in its world. A page that keeps no maps (a scratch page, a browser without IndexedDB) hands the sketch over in the Cache API under a
+// one-use token the tab carries (review A2).
 const SKETCH_HANDOFF='nanolathe-sketch-handoff';
 const pendingSketchPath=token => '/pending-sketch-'+encodeURIComponent(token)+'.json';
 async function stashPendingSketch(token,s) {
@@ -1805,29 +1812,45 @@ async function takePendingSketch(token) {
     return data?.format==='nanolathe-sketch-handoff' && data.token===token?data.sketch:null;
   } catch (_) { return null; }
 }
-let leavingForWorld=false,openingShared=false;   // set while a load hands the map to another world's page; the second marks a shared map
+let leavingForWorld=false;   // set while a load hands the map to another page
+// Reloads this tab on map `id` (null: none yet) with `next`, what the new page reads as if it were in the address.
+function leaveFor(id,next) {
+  if(!writeTab(sessionStore,{map:id,next})){error('This tab cannot keep its place (session storage is blocked). Allow site data and reload.');return false;}
+  location.href=cleanAddress(location.href);return true;
+}
 async function loadSketchFile(s,commit=true) {
   pickCard?.close();   // another map: the card's pixel is gone
   if(!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==6 || !Array.isArray(s.nodes) || s.nodes.some(n=>!n))throw new Error('Load a map stroke graph.');
   const biome=typeof s?.biome==='string'?s.biome:'';
   const savedId=s.worldSettings?savedWorldId(s):(typeof s.world==='string'&&worlds[s.world]?.base===biome?s.world:biome);
   const mapChanged=(s?.map?.unitsX??0)!==(config.map?.unitsX??0) || (s?.map?.unitsY??0)!==(config.map?.unitsY??0) || (s?.map && s.seaLevel!==config.seaLevel);
-  if (biome && (biome!==config.biomeId || savedId!==worldId || s.worldSettings!==undefined || mapChanged)) {
+  // Opening a file always makes a map of its own (nothing is replaced); without a store, only a file of another world or size reloads.
+  if (biome && ((mapStore && commit) || biome!==config.biomeId || savedId!==worldId || s.worldSettings!==undefined || mapChanged)) {
     let served=false;
     try {
       const response=await fetch(configUrl(biome));
       const servedConfig=response.ok?await response.json():null;
       served=servedConfig?.biomeId===biome;
       if(served)copySavedWorld(s.worldSettings,servedConfig);
-      copyMapTools(s.tools);copyColumn(s.column);copyRockSettings(s.rock);copyRocks(s.rocks);copyMaterials(s.materials);s.nodes.forEach(checkedHeights);
+      copyMapTools(s.tools);copyColumn(s.column);copyRockSettings(s.rock);copyRocks(s.rocks);copyMaterials(s.materials);s.nodes.forEach(checkedHeights);deserializeNodes(s.nodes);
     } catch (err) { error(err.message); return false; }
     if (!served) { error(`The saved terrain belongs to the ${biome} world, which this server does not have. The current terrain was left as it was.`); return false; }
+    const place={biome,world:savedId!==biome?savedId:'',mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''},next=Object.fromEntries(Object.entries(place).filter(([,v])=>v!==''&&v!==null&&v!==undefined));
+    if (mapStore) {
+      const id=newMapId();
+      try { await mapStore.put(id,s,mapMeta(id,s)); await saveWorking(); }
+      catch (err) { error('The map could not be kept in this browser ('+err.message+'). The current terrain was left as it was.'); return false; }
+      status(`Opening ${s.mapData?.name||'the map'} as a new map…`);
+      clearTimeout(autosaveTimer);leavingForWorld=true;
+      if (leaveFor(id,{...next,...(commit?{opened:1}:{})})) keepSaved=true;
+      return false;
+    }
     const token=Math.random().toString(36).slice(2)+Date.now().toString(36);
     try { await stashPendingSketch(token,s); }
     catch (err) { error('The saved terrain could not be carried to '+biome+': '+err.message); return false; }
     status(`Opening ${biome} for the saved terrain…`);
     leavingForWorld=true;
-    goToWorld(biome,savedId,{pendingSketch:token,shared:openingShared?1:'',mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''});
+    leaveFor(tabMapId,{...next,pendingSketch:token});
     return false;
   }
   loadSketch(s); if(commit)checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather();return true;
@@ -2004,20 +2027,20 @@ $('file').addEventListener('change',async () => {
   try { if (file.size>64*1024*1024) throw new Error('This sculpt sketch is too large to load.'); await loadSketchFile(JSON.parse(await file.text())); } catch (err) { error(err.message); }
   finally { loading=false; $('editor').disabled=false; updateControls(); }
 });
-// Share link: the save, gzipped the same way every time, goes to the save-link service; the link is this page with ?map=<id>.
-// Opening such a link keeps the visitor's own map in the one "previous map" slot first, and offers to bring it back.
+// Share link: the save, gzipped the same way every time, goes to the save-link service; the link is this page with ?map=<id>. Opening such a
+// link adds the map to the visitor's Maps as a new map (boot, openSharedLink); their own maps stay as they were.
 const shareMessage=text => { $('share-message').textContent=text; };
-function showPrevious() { $('share-previous').hidden=takePrevious(localStorage)===null; }
+let lastShare={text:'',id:''};   // the link last made: an unchanged map reuses it instead of uploading again
 $('share-menu').addEventListener('toggle',async () => {
   if (!$('share-menu').open) return;
-  showPrevious();
   $('share-result').hidden=true;
   const service=mapsService(services);
   if (!service.url) { shareMessage(service.reason); return; }
   if (!ready || loading || stroke) { shareMessage('The map is still loading. Try again in a moment.'); return; }
   shareMessage('Making your link…');
   try {
-    const id=await postMap(service.url,await gzipText(shareText(sketch())));
+    const text=shareText(sketch());
+    const id=text===lastShare.text?lastShare.id:await postMap(service.url,await gzipText(text));lastShare={text,id};
     $('share-url').value=shareUrl(location.href,id); $('share-result').hidden=false;
     shareMessage('Anyone with this link opens a copy of your map. Later edits are not included.');
     $('share-url').select();
@@ -2027,41 +2050,25 @@ $('share-copy').addEventListener('click',async () => {
   $('share-url').select();
   try { await navigator.clipboard.writeText($('share-url').value); shareMessage('Link copied.'); } catch (_) { shareMessage('Press Ctrl+C (Cmd+C on a Mac) to copy the selected link.'); }
 });
-$('share-restore').addEventListener('click',async () => {
-  const text=takePrevious(localStorage); if (text===null || stroke || loading) return;
-  loading=true; $('editor').disabled=true;
-  try {
-    const previous=JSON.parse(text);
-    dropPrevious(localStorage);
-    leavingForWorld=false;
-    const done=await loadSketchFile(previous);
-    if (done) { showPrevious(); status('Your previous map is back.'); }
-    else if (!leavingForWorld) keepPrevious(localStorage,text);   // the load failed: the slot stays
-  } catch (err) { keepPrevious(localStorage,text); error(err.message); }
-  finally { loading=false; $('editor').disabled=false; updateControls(); }
-});
 function announceShared() {
-  status('Opened a shared map.'); shareMessage('Opened a shared map.'); showPrevious();
-  if (!$('share-previous').hidden && $('pane-map').hidden) $('tab-map').click();
+  status('Opened a shared map. It is saved as a new map; your other maps are in Maps.'); shareMessage('Opened a shared map.');
 }
-// Called once the editor is ready: a ?map=<id> address opens that shared map.
-async function openSharedMap() {
-  const id=mapIdFromSearch(location.search); if (id===null || experiment.has('pendingSketch')) return;
+// Boot: a ?map=<id> address adds that shared map to Maps and makes it this tab's map. The address loses the id at once, so a refresh reopens
+// the copy; a failure leaves the tab's own map and says why once the editor is up.
+async function openSharedLink() {
+  const id=mapIdFromSearch(location.search); if (id===null) return null;
+  window.history.replaceState(null,'',withoutMap(location.href));
   const service=mapsService(services);
-  if (!service.url) { error(service.reason); return; }
-  loading=true; $('editor').disabled=true;
+  if (!service.url) return service.reason;
   try {
-    status('Opening the shared map…');
     const shared=await getMap(service.url,id);
-    if (nodes.some(n => n.kind!=='ground')) keepPrevious(localStorage,JSON.stringify(workingCopy()));   // the visitor's own map, before it is replaced
-    openingShared=true; leavingForWorld=false;
-    const opened=await loadSketchFile(shared); openingShared=false;
-    if (opened) {
-      window.history.replaceState(null,'',withoutMap(location.href));
-      announceShared(); persistLater();
-    }
-  } catch (err) { error(err.message); }
-  finally { loading=false; $('editor').disabled=false; updateControls(); }
+    if (!shared || shared.format!=='nanolathe-terrain-sculpt' || shared.version!==6 || !Array.isArray(shared.nodes) || shared.nodes.some(n=>!n) || typeof shared.biome!=='string') throw new Error('The shared map is not a map this editor can open. Your maps were left as they were.');
+    if (!mapStore) { const token=Math.random().toString(36).slice(2)+Date.now().toString(36); await stashPendingSketch(token,shared); experiment.set('pendingSketch',token); }
+    else { const mine=newMapId(); await mapStore.put(mine,shared,mapMeta(mine,shared)); tabState.map=mine; }
+    experiment.set('shared','1'); experiment.set('biome',shared.biome); experiment.delete('world');
+    if (shared.map) { experiment.set('mapX',String(shared.map.unitsX)); experiment.set('mapY',String(shared.map.unitsY)); experiment.set('sea',String(shared.seaLevel)); }
+    return null;
+  } catch (err) { return err.message; }
 }
 $('export').addEventListener('click',async () => {
   if (!canExport()) return;
@@ -2162,13 +2169,13 @@ function shownColor(key,set) {
   return set||hexColor([1,1,1]);
 }
 let refreshShallowRow=()=>{};
-function goToWorld(base,id,extra) {
+// Another world for this tab's map: it is saved, then the page reloads in that world and carries it there.
+async function goToWorld(base,id,extra) {
   worldInputQueue.flush();
-  if (!stroke && !moving && !loading) saveWorking();   // the working map goes with the artist to the new world
-  const url=new URL(location.origin+location.pathname); url.searchParams.set('biome',base); if (id && id!==base) url.searchParams.set('world',id);
-  if (config.map) for (const [key,value] of Object.entries({mapX:config.map.unitsX,mapY:config.map.unitsY,sea:config.seaLevel})) url.searchParams.set(key,value);
-  for (const [key,value] of Object.entries(extra||{})) if (value!=='' && value!==null && value!==undefined) url.searchParams.set(key,value); else url.searchParams.delete(key);
-  location.href=url.toString();
+  if (!stroke && !moving && !loading) await saveWorking();
+  const next={biome:base,...(id && id!==base?{world:id}:{}),...(config.map?{mapX:config.map.unitsX,mapY:config.map.unitsY,sea:config.seaLevel}:{})};
+  for (const [key,value] of Object.entries(extra||{})) if (value!=='' && value!==null && value!==undefined) next[key]=value; else delete next[key];
+  if (leaveFor(tabMapId,next)) keepSaved=true;
 }
 // Your own worlds in this browser's store: each on a built-in world this server has.
 const ownWorlds=() => Object.entries(worlds).filter(([id,w]) => !(id in (config.biomes||{})) && w.base in (config.biomes||{}));
@@ -2424,7 +2431,7 @@ function worldUndoState(){
 }
 // Back to a step's World rows and colors, through the same queue the sliders use; a restore adds no undo step of its own.
 function restoreWorldState(w){
-  if(w.stored){configureStoredWorld(w.stored,w.beachFrom);if(w.beachFrom==null)experiment.delete('beachFrom');else experiment.set('beachFrom',w.beachFrom);const url=new URL(location.href);if(w.beachFrom==null)url.searchParams.delete('beachFrom');else url.searchParams.set('beachFrom',w.beachFrom);window.history.replaceState(null,'',url);}
+  if(w.stored){configureStoredWorld(w.stored,w.beachFrom);if(w.beachFrom==null)experiment.delete('beachFrom');else experiment.set('beachFrom',w.beachFrom);}
   let any=false;
   for(const [key,value] of Object.entries(w.knobs||{}))if(String(renderer.variant.get(key)??config.defaults?.[key])!==value){
     worldInputQueue.put('knob:0:'+key,{type:'knob',slot:0,key,value,restore:true});any=true;
@@ -2435,14 +2442,14 @@ function restoreWorldState(w){
 }
 function setRockSettings(values){
   worldInputQueue.flush();
-  const url=new URL(location.href);let changed=false;
+  let changed=false;
   for(const [key,value] of Object.entries(values)){
     if(!ROCK_KEYS.includes(key))continue;
     if(Number(renderer.variant.get(key))!==value)changed=true;
-    experiment.set(key,String(value));renderer.variant.set(key,String(value));activeWorld().knobs[key]=String(value);url.searchParams.set(key,String(value));
+    experiment.set(key,String(value));renderer.variant.set(key,String(value));activeWorld().knobs[key]=String(value);
     const input=$('knob-'+key);if(input){input.value=value;input.closest('[data-knob]').querySelector('output').textContent=value;}
   }
-  window.history.replaceState(null,'',url);saveWorlds();
+  saveWorlds();
   if(!changed)return;
   worldChanged(renderer.applyKnobs());syncWorldControls();persistLater();
 }
@@ -2646,7 +2653,7 @@ function mountRockPanel() {
 }
 // A world row's change: address, world store, panel and renderer settings, then
 // the shape or Time work requested by the shared applyKnob operation.
-const pendingWorldAddress=new Map();let worldStoreDirty=false,worldPanelDirty=false,worldCheckpoint=false;
+let worldStoreDirty=false,worldPanelDirty=false,worldCheckpoint=false;
 const worldInputQueue=createWorldInputQueue({apply:applyWorldInputs,commit:commitWorldInputs});
 function setKnob(key,value) { worldInputQueue.put('knob:0:'+key,{type:'knob',slot:0,key,value}); }
 function setWorldColor(key,value) { worldInputQueue.put('color:'+key,{type:'color',key,value}); }
@@ -2668,7 +2675,7 @@ function applyWorldInputs(batch) {
       mapRocks=setRock(mapRocks,slot,{knobs:{...rock.knobs,[key]:Number(value)},column:rock.column});presets=worldCheckpoint=true;continue;
     }
     const next=applyKnob({key,value,settings:experiment,renderer,nodes,seed,sync:false});nexts.push(next);reload ||= Boolean(next.reload);
-    activeWorld().knobs[key]=String(value);pendingWorldAddress.set(key,String(value));worldStoreDirty=true;
+    activeWorld().knobs[key]=String(value);worldStoreDirty=true;
     worldPanelDirty ||= key==='strata';worldCheckpoint ||= !input.restore;
   }
   if(reload){commitWorldInputs();location.reload();return;}
@@ -2686,7 +2693,6 @@ function applyWorldInputs(batch) {
 }
 function commitWorldInputs() {
   mapCanvas?.releaseInput();
-  if(pendingWorldAddress.size){const url=new URL(location.href);for(const [key,value]of pendingWorldAddress)url.searchParams.set(key,value);window.history.replaceState(null,'',url);pendingWorldAddress.clear();}
   if(worldStoreDirty){worldStoreDirty=false;saveWorlds();}
   if(worldPanelDirty){worldPanelDirty=false;buildWorldPanel();}
   syncWorldControls();updateControls();surfacePanel?.sync();   // World › Surface's sections follow the settings that turn layers on
@@ -2726,42 +2732,76 @@ async function bootMap(pending=null) {
   syncColumnPanel=mountColumnPanel(()=>rockSelected>0?presetColumn():({column:columnForEdit(),bedColors:renderer.slotColors(0).beds,edited:Boolean(columnOverride)}),
     column=>rockSelected>0?editPresetColumn(column):editColumn(column),()=>rockSelected>0?checkpoint(true):commitColumn(),
     ()=>{if(rockSelected>0){const rock=mapRocks.find(r=>r.slot===rockSelected);editRocks(setRock(mapRocks,rockSelected,{knobs:rock.knobs,column:null}));checkpoint(true);}else{editColumn(null);commitColumn();}});
-  let saved=null; try { if (LOCAL_KEY && !experiment.has('pendingSketch') && !experiment.has('newMap')) saved=localStorage.getItem(LOCAL_KEY); } catch (_) {}
+  const saved=experiment.has('newMap')?null:workingMap,shared=experiment.has('shared');let resave=false;
   if (saved) {
     try {
-      const s=JSON.parse(saved),same=s.biome===config.biomeId && (s.world||s.biome)===worldId;
-      loadSketch(s,!same); status(same?'Restored your saved map recipe.':'Carried your working map into this world.');showOwnWorldNote();   // the working copy forks as an opened map does
-    } catch (err) { keepSaved=true; error('Saved map could not be loaded: '+err.message+' The saved copy is retained until you edit.'); }
+      const same=saved.biome===config.biomeId && (saved.world||saved.biome)===worldId;
+      loadSketch(saved,!same);resave=!same||Boolean(tabState.next);   // carried or handed over: saved as it now opens, so a refresh opens it here
+      status(shared?'Opened a shared map. It is saved as a new map; your other maps are in Maps.':experiment.has('opened')?'Opened the map file. It is saved as a new map; your other maps are in Maps.':same?'Reopened your map.':'Carried your map into this world.');
+      if(shared)announceShared();
+      showOwnWorldNote(shared);   // the map forks as an opened map does
+    } catch (err) {
+      // The entry stays as it was: this tab lets go of it and the picker opens (bootMap's end).
+      mapsNote=`Your map “${String(saved.mapData?.name||'Untitled map').slice(0,60)}” could not be opened: ${err.message} It is kept unchanged in Maps.`;
+      tabMapId=null;releaseMap?.();releaseMap=null;error(mapsNote);
+    }
   }
   else status('Blank map ready · draw terrain with the existing tools.');
   ready=true; $('editor').disabled=false; $('world-editor').disabled=false;
+  if (resave) saveWorking();
   history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
-  if (pending) { try {
-    loadSketch(pending);
-    // The one-use handoff is consumed. A refresh must restore the imported working map.
-    const shared=experiment.has('shared'),url=new URL(location.href);
-    for(const key of ['pendingSketch','shared']){experiment.delete(key);url.searchParams.delete(key);}
-    window.history.replaceState(null,'',url);checkpoint();status('Loaded the saved map.');if(shared)announceShared();
+  if (pending) { try {   // a page that keeps no maps: the one-use handoff (Cache API)
+    loadSketch(pending);experiment.delete('pendingSketch');experiment.delete('shared');
+    checkpoint();status('Loaded the saved map.');if(shared)announceShared();
     showOwnWorldNote(shared);
   } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
   updateControls(); resize(); schedule(); queueWeather();
   $(experiment.has('newMap')?'fit':'one').click();   // a new map opens at Fit, to see all of it; every other load at 1x, centered on the map
-  await openSharedMap();
-  $('new-map').disabled=false;showPrevious();
-  if(experiment.has('newMap')){const url=new URL(location.href);url.searchParams.delete('newMap');$('map-name').value=url.searchParams.get('mapName')||'Untitled map';$('map-name').dispatchEvent(new Event('input'));url.searchParams.delete('mapName');window.history.replaceState(null,'',url);saveWorking();}
-  else if(!saved&&!location.search&&!$('new-map-dialog').open)openNewMap(true);
+  if (shareError) error(shareError);
+  $('new-map').disabled=false;
+  if(experiment.has('newMap')){$('map-name').value=experiment.get('mapName')||'Untitled map';$('map-name').dispatchEvent(new Event('input'));saveWorking();}
+  if(needsPicker()&&!$('new-map-dialog').open)openNewMap(true);
+  // The handoff is used: a refresh reopens the tab's map as it is now saved.
+  writeTab(sessionStore,{map:tabMapId});
   newMapReady();
 }
-// New and first run share one picker and the existing previous-map slot. The picker needs no GPU: a first visit opens it as soon as the
-// world list is read (boot), and Create only goes to the new map's address. Open a map file and New world wait for the editor (newMapReady).
-const firstVisit=() => { if (location.search) return false; try { return !LOCAL_KEY || !localStorage.getItem(LOCAL_KEY); } catch (_) { return true; } };
+// Maps, New map and first run share one picker (Maps). It needs no GPU: a tab without a map opens it as soon as the world list is read
+// (boot); Create and Open only reload the tab on another map. Open a map file and New world wait for the editor (newMapReady).
+// A tab opens it when it has no map: none saved yet, the last one open in another tab, or one that failed to open. An address that names a
+// map to start (a world or a size, the checks') starts one instead.
+const needsPicker=() => SAVING && Boolean(mapStore) && !tabMapId;
+let releaseMap=null,shareError=null;   // lets go of this tab's hold on its map; why a share link did not open
+// Boot: which saved map this tab edits. Its own (a refresh), else a new map an address or a handoff starts, else the one edited last when no
+// other tab has it; else none, and the picker asks. The map is held (a Web Lock) for as long as the page lives.
+async function chooseMap() {
+  if (!SAVING) return;
+  try { mapStore=openMapStore(); await importLegacyMaps(mapStore,localStorageOrNull()); }
+  catch (err) { mapStore=null; mapsNote='Saving in this browser is unavailable ('+err.message+'). Use Save to keep your map as a file.'; }
+  shareError=await openSharedLink();
+  if (!mapStore) return;
+  try {
+    const [list,inUse]=await Promise.all([mapStore.list(),mapsInUse()]),known=new Set(list.map(m => m.id));
+    let id=tabState.map&&(known.has(tabState.map)||experiment.has('newMap'))?tabState.map:null;
+    if (id && inUse.has(id)) { mapsNote=`“${list.find(m => m.id===id)?.name||'This map'}” is open in another tab. Open another map or start a new one.`; id=null; }   // a duplicated tab
+    else if (!id && startsMap(experiment)) id=newMapId();   // an address that names a map to start (the checks')
+    else if (!id) { id=mapToReopen(list,inUse); if (!id && list.length) mapsNote=`Your last map, “${byRecent(list)[0].name}”, is open in another tab. Open another map or start a new one.`; }
+    if (!id) return;
+    const release=await holdMap(id);
+    if (!release) { mapsNote='That map was just opened in another tab. Open another map or start a new one.'; return; }
+    tabMapId=id;releaseMap=release;workingMap=known.has(id)?await mapStore.get(id):null;
+    // The map's world, unless the address or a handoff names one (a world switch carries the map there).
+    if (workingMap && !experiment.has('biome') && typeof workingMap.world==='string' && workingMap.world!==workingMap.biome) experiment.set('world',workingMap.world);
+  } catch (err) { mapStore=null; tabMapId=null; mapsNote='Saved maps could not be read ('+err.message+'). Use Save to keep your map as a file.'; }
+}
+const localStorageOrNull=() => { try { return localStorage; } catch (_) { return null; } };
 function newMapReady() { for (const id of ['new-map-open','new-map-world','new-map-world-make']) $(id).disabled=!ready; }
 function openNewMap(first=false, dimensionsFromMap=null) {
   const dialog=$('new-map-dialog'); let picked=worldId;   // a built-in world's id, or one of your own worlds'
-  $('new-map-title').textContent=first?'Start a map':'New map';
-  $('new-map-cancel').hidden=$('new-map-previous').hidden=first;
+  $('new-map-title').textContent=first&&!mapsNote?'Start a map':'Maps';
+  $('new-map-cancel').hidden=first;$('new-map-previous').hidden=first||!tabMapId;
   $('new-map-error').textContent='';
+  savedMapsList();
   // The cards: the built-in worlds, each with its picture and its line (site.json), then your own worlds, each from its built-in one.
   const choices=() => [...Object.entries(config.biomes||{}).map(([id,name]) => ({id,name,line:config.biomeDescriptions?.[id]||'',picture:`ui-previews/world-${id}.png`})),
     ...ownWorlds().map(([id,w]) => ({id,name:w.name,line:`Yours · from ${config.biomes[w.base]}`}))];
@@ -2794,13 +2834,46 @@ function openNewMap(first=false, dimensionsFromMap=null) {
   $('new-map-open').onclick=()=>{if(!ready)return;dialog.close();$('load').click();};
   $('new-map-width').oninput=$('new-map-height').oninput=dimensions;dimensions();
   dialog.oncancel=e=>{if(first)e.preventDefault();};$('new-map-cancel').onclick=()=>dialog.close();
-  $('new-map-form').onsubmit=e=>{e.preventDefault();if(!e.target.reportValidity())return;
-    if(!first&&!keepPrevious(localStorage,JSON.stringify(workingCopy()))){$('new-map-error').textContent='Your previous map could not be kept. Save it as a file before starting a new map.';return;}
-    clearTimeout(autosaveTimer);keepSaved=true;
+  // Create: the map open now stays in Maps (saved first); the tab reloads on a new map of its own.
+  $('new-map-form').onsubmit=async e=>{e.preventDefault();if(!e.target.reportValidity())return;
+    clearTimeout(autosaveTimer);if(!await leaveMap()){$('new-map-error').textContent='Your current map could not be saved in this browser. Save it as a file before starting a new map.';return;}
     const own=!(picked in (config.biomes||{}))&&worlds[picked];
-    const url=new URL(location.origin+location.pathname);url.searchParams.set('biome',own?own.base:picked);if(own)url.searchParams.set('world',picked);url.searchParams.set('mapName',$('new-map-name').value.trim()||'Untitled map');url.searchParams.set('mapX',$('new-map-width').value);url.searchParams.set('mapY',$('new-map-height').value);url.searchParams.set('newMap','1');if(dimensionsFromMap)url.searchParams.set('sea',dimensionsFromMap.sea);location.href=url;
+    const next={biome:own?own.base:picked,...(own?{world:picked}:{}),mapName:$('new-map-name').value.trim()||'Untitled map',mapX:$('new-map-width').value,mapY:$('new-map-height').value,newMap:1,...(dimensionsFromMap?{sea:dimensionsFromMap.sea}:{})};
+    if(leaveFor(mapStore?newMapId():null,next))keepSaved=true;
   };
   dialog.showModal();
+}
+// Saves this tab's map before the tab leaves it; false only when a save was due and failed.
+async function leaveMap() { if (!ready || keepSaved || stroke || moving) return true; const saving=saveWorking(); return saving===false?!(tabMapId&&mapStore):await saving; }
+// Maps: every map this browser keeps, newest first. Open reloads this tab on one (a map open in another tab says so); Delete asks first.
+async function savedMapsList() {
+  const box=$('new-map-saved'),list=$('new-map-list'),note=$('new-map-note');
+  note.textContent=mapsNote;note.hidden=!mapsNote;
+  if (!mapStore) { box.hidden=!mapsNote; list.replaceChildren(); return; }
+  let maps=[],inUse=new Set();
+  try { [maps,inUse]=await Promise.all([mapStore.list(),mapsInUse()]); } catch (err) { note.textContent='Saved maps could not be read ('+err.message+').'; note.hidden=false; box.hidden=false; return; }
+  box.hidden=!maps.length&&!mapsNote;
+  const worldName=m => worlds[m.world]?.name||config.biomes?.[m.biome]||m.biome||'Unknown world';
+  const when=t => { const d=new Date(t); return Number.isFinite(d.getTime())?d.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}):''; };
+  list.replaceChildren(...byRecent(maps).map(m => {
+    const row=document.createElement('li'),here=m.id===tabMapId,elsewhere=!here&&inUse.has(m.id);
+    const text=document.createElement('span');text.className='new-map-saved-text';
+    const name=document.createElement('strong');name.textContent=m.name;
+    const line=document.createElement('span');line.className='small';
+    line.textContent=[worldName(m),m.unitsX&&m.unitsY?`${m.unitsX} × ${m.unitsY}`:'',`${m.strokes} shape${m.strokes===1?'':'s'}`,here?'open in this tab':elsewhere?'open in another tab':'',when(m.updated)].filter(Boolean).join(' · ');
+    text.append(name,line);
+    const open=document.createElement('button');open.type='button';open.textContent='Open';open.setAttribute('aria-label',`Open ${m.name}`);
+    open.disabled=here||elsewhere;open.title=here?'This tab has this map open.':elsewhere?'Another tab has this map open: switch to that tab to edit it.':`Open ${m.name} in this tab. The map open now stays in Maps.`;
+    open.onclick=async () => { if (!await leaveMap()) { $('new-map-error').textContent='Your current map could not be saved in this browser. Save it as a file first.'; return; } if (leaveFor(m.id,null)) keepSaved=true; };
+    const drop=document.createElement('button');drop.type='button';drop.textContent='Delete';drop.setAttribute('aria-label',`Delete ${m.name}`);
+    drop.disabled=here||elsewhere;drop.title=here?'This tab has this map open: open another map first.':elsewhere?'Another tab has this map open.':`Delete ${m.name} from this browser.`;
+    drop.onclick=async () => {
+      if (!confirm(`Delete “${m.name}” from this browser? This cannot be undone. To keep a copy, open it and use Save first.`)) return;
+      try { await mapStore.remove(m.id); } catch (err) { $('new-map-error').textContent='The map could not be deleted ('+err.message+').'; }
+      savedMapsList();
+    };
+    row.append(text,open,drop);return row;
+  }));
 }
 document.addEventListener('terraform-new-map',e=>{if(ready&&!loading&&!stroke&&!moving)openNewMap(false,e.detail);});
 $('new-map').onclick=()=>{if(ready&&!loading&&!stroke&&!moving)openNewMap();};
@@ -2808,10 +2881,19 @@ async function boot() {
   try {
     await requestAdapter();   // a browser without WebGPU, or an adapter below the engine's limits, gets a plain message before anything loads
     services=await (await fetch('services.json')).json();   // which server-side services this host has (export, features, saving to a server)
-    const response=await fetch(configUrl(experiment.get('biome')||services.defaultWorld)); if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=applyWorldRock(await response.json()); config.services=services;
+    await chooseMap();
+    // The world: the address's (the checks'), else the tab's map's, else the first. A map whose world this server lacks is let go.
+    let response=await fetch(configUrl(experiment.get('biome')||workingMap?.biome||services.defaultWorld));
+    if (!response.ok && !experiment.has('biome') && workingMap) {
+      mapsNote=`Your map “${String(workingMap.mapData?.name||'Untitled map').slice(0,60)}” belongs to the ${workingMap.biome} world, which this server does not have. It is kept unchanged in Maps.`;
+      tabMapId=null;releaseMap?.();releaseMap=null;workingMap=null;experiment.delete('world');
+      response=await fetch(configUrl(services.defaultWorld));
+    }
+    if (!response.ok) throw new Error('Could not load the sculpt configuration.'); config=applyWorldRock(await response.json()); config.services=services;
     defaultColumn=config.column;baseWorldConfig=structuredClone(config);
     const pending=await takePendingSketch(experiment.get('pendingSketch'));let automatic=null;
-    try{if(!pending&&LOCAL_KEY&&!experiment.has('newMap')){const a=JSON.parse(localStorage.getItem(LOCAL_KEY)||'null');if(a?.biome===config.biomeId&&(a.world||a.biome)===(experiment.get('world')||config.biomeId))automatic=a;}}catch{}
+    // The tab's map is restored with its world when it was drawn there, or opened (a file, a share link): carried otherwise (bootMap).
+    {const a=workingMap;if(!pending&&a&&!experiment.has('newMap')&&a.biome===config.biomeId&&(experiment.has('opened')||experiment.has('shared')||(a.world||a.biome)===(experiment.get('world')||config.biomeId)))automatic=a;}
     // An unreadable embedded world (a damaged file or working copy) is reported, never fatal: the map opens in the world the address names.
     const restoring=pending??automatic;let embedded=null;try{embedded=copySavedWorld(restoring?.worldSettings,config);}catch(err){embeddedWorldError=err.message;}
     loadWorlds();
@@ -2820,23 +2902,24 @@ async function boot() {
       // its own, named for the map; "Use for my <world>" (World section) adopts it on purpose. A world this browser lacks is added.
       let id=savedWorldId(restoring);const mine=worlds[id]??(id===config.biomeId?{}:null);
       // The same world under another id (a fork opened before, the built-in a fork came from, a world of your own): open in it.
-      const match=mine&&sameSavedWorld(embedded,mine,config)?id:[config.biomeId,...Object.keys(worlds)].find(w=>w!==id&&(w===config.biomeId||worlds[w]?.base===config.biomeId)&&sameSavedWorld(embedded,worlds[w]??{},config));
-      if(match&&match!==id){id=match;const url=new URL(location.href);if(id===config.biomeId){experiment.delete('world');url.searchParams.delete('world');}else{experiment.set('world',id);url.searchParams.set('world',id);}window.history.replaceState(null,'',url);}
+      const same=(a,b)=>{try{return sameSavedWorld(a,b,config);}catch(_){return false;}};   // a stored world that cannot be read matches nothing
+      const match=mine&&same(embedded,mine)?id:[config.biomeId,...Object.keys(worlds)].find(w=>w!==id&&(w===config.biomeId||worlds[w]?.base===config.biomeId)&&same(embedded,worlds[w]??{}));
+      if(match&&match!==id){id=match;if(id===config.biomeId)experiment.delete('world');else experiment.set('world',id);}
       else if(!match&&mine){
         const from=String(restoring.mapData?.name||'a map').trim().slice(0,60)||'a map',name=`${embedded.name} from ${from}`.slice(0,120);
         id=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
         worlds[id]={...embedded,name,openedFrom:{map:from,world:savedWorldId(restoring)},materials:worldOwnMaterials(embedded.materials,config)};
-        experiment.set('world',id);const url=new URL(location.href);url.searchParams.set('world',id);window.history.replaceState(null,'',url);
+        experiment.set('world',id);
         openedAsOwnWorld={name,from,mine:worlds[savedWorldId(restoring)]?.name||config.biome};
       } else if(!match) worlds[id]={...embedded,materials:mergeWorldMaterials(worlds[id]?.materials,worldOwnMaterials(embedded.materials,config),config)};   // the store keeps the two only where they differ from the library's
-      if(automatic&&automatic.world!==id){automatic.world=id;localStorage.setItem(LOCAL_KEY,JSON.stringify(automatic));}
+      if(automatic&&automatic.world!==id)automatic.world=id;   // bootMap restores it in the world it opened in; the next save records it
       saveWorlds();
       for(const [key,value]of Object.entries(embedded.knobs))experiment.set(key,value);
     }
     // H12b: the editor always works on a map; an address without a size opens the default 4x4 one.
     if (!experiment.has('mapX') && !experiment.has('mapY')) {
-      // A bare address reopens the working map's size and sea level.
-      let w=null; try { if (LOCAL_KEY && !experiment.has('pendingSketch')) w=JSON.parse(localStorage.getItem(LOCAL_KEY)||'null'); } catch (_) {}
+      // An address without a size reopens the tab's map at its size and sea level.
+      const w=experiment.has('pendingSketch')?null:workingMap;
       const m=w?.map;
       if (m?.unitsX>0 && m?.unitsY>0) { experiment.set('mapX',String(m.unitsX)); experiment.set('mapY',String(m.unitsY)); if (!experiment.has('sea') && w.biome===config.biomeId && Number.isFinite(w.seaLevel)) experiment.set('sea',String(w.seaLevel)); }
       else { experiment.set('mapX','4'); experiment.set('mapY','4'); }
@@ -2854,7 +2937,7 @@ async function boot() {
     // Its remembered settings come before the biome's own defaults.
     worldId=experiment.has('world') && worlds[experiment.get('world')]?.base===config.biomeId?experiment.get('world'):config.biomeId;
     config.featureSet=worlds[worldId]?.featureSet;
-    if (firstVisit()) openNewMap(true);   // the picker before the renderer starts: Create waits for nothing (newMapReady)
+    if (needsPicker()) openNewMap(true);   // the picker before the renderer starts: Create waits for nothing (newMapReady)
     // The world's surface layers where the artist changed them (the Surface section); a damaged one falls back to the world's own.
     baseSurface=structuredClone(config.surface);
     if (worlds[worldId]?.surface) { try { config.surface=withSurfaceMaterials(copySurface(worlds[worldId].surface),baseSurface); } catch (err) { delete worlds[worldId].surface; } }
@@ -2902,6 +2985,11 @@ window.sculptDebug = {dirty:()=>mapCanvas?.dirty(),inputs:()=>worldInputQueue.st
   sketch: () => JSON.parse(JSON.stringify(sketch())), loadSketch: s => { loadSketch(s); }, nodes: () => JSON.parse(JSON.stringify(serializeNodes())), get biome() { return config.biomeId; }, get grid() { return grid; }, get size() { return size; }, get base() { return config.baseHeight; }, get sea() { return config.seaLevel; }};
 // H5b: the paged shape planes against the whole-map engine's, over the whole map (4x4 with gpuPages=force): max |d| per plane and the mask steps.
 // H10: an optional square rect compares a window (a whole 8x8 map is too large for one readback); the pages are read over the same rect.
+// Saved maps for the checks: this tab's map as saved, replacing it (then reload), and its id.
+window.sculptDebug.savedMap=() => mapStore&&tabMapId?mapStore.get(tabMapId):Promise.resolve(null);
+window.sculptDebug.replaceSavedMap=s => { if(!mapStore||!tabMapId)return Promise.resolve(false); clearTimeout(autosaveTimer); keepSaved=true; return mapStore.put(tabMapId,s,mapMeta(tabMapId,s)).then(() => true); };
+window.sculptDebug.saveNow=() => Promise.resolve(saveWorking());
+window.sculptDebug.tabMap=() => tabMapId;
 window.sculptDebug.pagedShapeCompare=async rect => {
   const eng=await createShapeEngine({device:renderer.device,grid:worldGrid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT});
   const out=await eng.run(nodes.slice(),shapeContext(),rect||null),G=rect?rect.x1-rect.x0+1:worldGrid;

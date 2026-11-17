@@ -50,7 +50,7 @@ try{
   const restored=await recipient.ev('sculptDebug.sketch()');writeFileSync(join(out,'restored.json'),JSON.stringify(restored));
   const a=normalize(saved),b=normalize(restored),changed=[...new Set([...Object.keys(a),...Object.keys(b)])].filter(k=>!isDeepStrictEqual(a[k],b[k]));assert.equal(changed.join(','),'','saved recipe differs after loading');
   assert.equal(await recipient.ev(`new URL(location.href).searchParams.has('pendingSketch')`),false);
-  for(let i=0;i<50&&!await recipient.ev(`localStorage.getItem('terraform-working-map-v1')?.includes('Collaboration fixture')`);i++)await sleep(100);
+  for(let i=0;i<50&&!await recipient.ev(`sculptDebug.savedMap().then(m=>m?.mapData?.name==='Collaboration fixture')`);i++)await sleep(100);
   await recipient.send('Page.reload');await recipient.ready(`sculptRegion.mapData().name==='Collaboration fixture'`);
   const reopened=await recipient.ev('sculptDebug.sketch()');assert.equal(isDeepStrictEqual(normalize(reopened),normalize(saved)),true,'loaded map changed after a refresh');
   const restoredUniforms=await recipient.ev(`Object.fromEntries(Object.keys(sculptDebug.sketch().worldSettings.knobs).map(k=>[k,sculptCanvas.renderer.variant.get(k)]))`);

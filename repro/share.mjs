@@ -1,4 +1,5 @@
-// Share-link check in a real browser: share a map, open the link in a fresh profile, confirm the map is the same, restore the visitor's own map.
+// Share-link check in a real browser: share a map, open the link in a fresh profile, confirm the map is the same and that it was added to
+// Maps beside the visitor's own map, which opens again from Maps.
 //   node repro/share.mjs --server http://127.0.0.1:8851 [--port 9751] [--out dir] [--entry /index.html] [--admin-token-file path]
 // --server is where the page is served (the dev server, or a static build on localhost); the page's own services.json says which save-link
 // service it uses. With --admin-token-file the ids this run created are deleted from that service afterwards (the token is never printed).
@@ -70,7 +71,9 @@ const openShare=async ev=>{
   await ev(`if(document.getElementById('pane-map').hidden)document.getElementById('tab-map').click();document.getElementById('share-menu').open=false;true`);await sleep(100);
   await ev(`document.getElementById('share-result').hidden=true;document.getElementById('share-url').value='';document.getElementById('share-menu').open=true;true`);
 };
-const openMap=ev=>ev(`if(document.getElementById('pane-map').hidden)document.getElementById('tab-map').click();true`);
+// Maps (the picker): the saved maps listed, and opening the one this tab does not have (the visitor's own), which reloads the tab.
+const savedMaps=async ev=>{await ev(`document.getElementById('new-map').click(),true`);for(let i=0;i<50&&!await ev(`document.querySelectorAll('#new-map-list li').length>0`);i++)await sleep(100);return ev(`[...document.querySelectorAll('#new-map-list li')].map(li=>({name:li.querySelector('strong').textContent,here:li.textContent.includes('open in this tab')}))`);};
+const openOtherMap=async ev=>{await ev(`[...document.querySelectorAll('#new-map-list li')].find(li=>!li.textContent.includes('open in this tab')).querySelector('button').click(),true`);await sleep(1500);for(let i=0;i<100&&!await ev(`window.sculptRegion?.ready?.()&&!document.getElementById('editor').disabled`).catch(()=>false);i++)await sleep(300);await ev('sculptCanvas.idle()');};
 const page = `${server}${entry}`;
 let link = '', sharedJson = '', ownJson = '', mapsUrl = '';
 await session(async ({send, ev, shot, open}) => {
@@ -108,15 +111,15 @@ await session(async ({send, ev, shot, open}) => {
   for (let i = 0; i < 100 && !await ev(`document.getElementById('share-url').value`); i++) await sleep(200);
   check('share, open, share again: same link', await ev(`document.getElementById('share-url').value`) === link, await ev(`document.getElementById('share-url').value`));
   check('map= dropped from the address', !(await ev('location.search')).includes('map='));
-  check('previous map offered', await ev(`!document.getElementById('share-previous').hidden`));
+  { const maps = await savedMaps(ev); check('own map kept in Maps beside the shared one', maps.length === 2 && maps.filter(m => m.here).length === 1, JSON.stringify(maps)); }
   await shot('3-opened-shared');
-  await openMap(ev);await ev(`document.getElementById('share-restore').click(); true`); await sleep(1500); await ev('sculptCanvas.idle()');
-  check('restore brings the own map back', nodesOf(await sketchJson(ev)) === nodesOf(ownJson));
+  await openOtherMap(ev);
+  check('Maps opens the own map again', nodesOf(await sketchJson(ev)) === nodesOf(ownJson));
   await shot('4-restored');
-  // A reload keeps the visitor's edits: nothing re-opens the shared map.
-  await open(page); check('reload keeps the restored map', nodesOf(await sketchJson(ev)) === nodesOf(ownJson));
+  // A reload keeps the tab's map: nothing re-opens the shared map.
+  await open(page); check('reload keeps the own map', nodesOf(await sketchJson(ev)) === nodesOf(ownJson));
 });
-// A link to another world: the page navigates and reloads, and the Map menu opens itself with the restore offer.
+// A link to another world: the page opens in that world, and the visitor's own map stays in Maps.
 let redLink = '';
 await session(async ({send, ev, shot, open}) => {
   await open(page + (page.includes('?') ? '&' : '?') + 'biome=red&mapX=4&mapY=4');
@@ -130,17 +133,16 @@ await session(async ({send, ev, shot, open}) => {
   await stroke(send, ev, 'hill', 600, 800);
   const own = await sketchJson(ev); await sleep(1200);
   await open(redLink);
-  for (let i = 0; i < 100 && await ev(`document.getElementById('pane-map').hidden`); i++) await sleep(200);
   check('world switch: world changed', await ev('sculptRegion.sketch().biome') === 'red');
-  check('world switch: Map opened itself with the offer', await ev(`!document.getElementById('pane-map').hidden && !document.getElementById('share-previous').hidden && !document.getElementById('share-menu').open`));
+  check('world switch: the status says where the own map is', /saved as a new map/.test(await ev(`document.getElementById('status').textContent`)));
   check('world switch: no map= or shared= left in the address', !/[?&](map|shared)=/.test(await ev('location.search')), await ev('location.search'));
   await shot('5-world-switch');
-  await openMap(ev);await ev(`document.getElementById('share-restore').click(); true`);
+  { const maps = await savedMaps(ev); check('world switch: own map kept in Maps', maps.length === 2, JSON.stringify(maps)); }
+  await openOtherMap(ev);
   for (let i = 0; i < 100 && await ev('window.sculptRegion?.sketch().biome').catch(() => 'red') !== 'green'; i++) await sleep(300);
-  for (let i = 0; i < 100 && !await ev(`window.sculptRegion?.ready?.() && !document.getElementById('editor').disabled`).catch(() => false); i++) await sleep(300);
   await sleep(1500);
-  check('restore across worlds: own map back', nodesOf(await sketchJson(ev)) === nodesOf(own), differs(own, await sketchJson(ev)));
-  check('restore across worlds: slot cleared, no lingering button', await ev(`localStorage.getItem('terraform-previous-map-v1')===null`));
+  check('own map across worlds: back in its world', nodesOf(await sketchJson(ev)) === nodesOf(own), differs(own, await sketchJson(ev)));
+  check('own map across worlds: the shared one still listed', (await savedMaps(ev)).length === 2);
 });
 check('console clean', logs.filter(l => !/favicon|404/.test(l)).length === 0, logs.join(' | ').slice(0, 300));
 if (tokenFile && link) {

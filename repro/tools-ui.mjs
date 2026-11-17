@@ -128,9 +128,8 @@ try {
   await ev(`sculptDebug.loadSketch(${JSON.stringify(named)}); true`); await ready();
   assert.deepEqual((await nodes()).map(n => n.tool), before.map(n => n.tool));
   // Another world's working copy: a stroke whose tool no world has (as a world without Hill would leave a hill), selected as the brush with its card.
-  // Written from a page of the same server that is not the editor, so the editor's own autosave does not overwrite it as the page is left.
-  await send('Page.navigate', {url: `${server}/services.json`}); await sleep(800);
-  await ev(`(()=>{const k='terraform-working-map-v1',w=JSON.parse(localStorage.getItem(k));const n=w.nodes.findIndex(n=>n.tool==='hill');w.nodes[n].tool='mesa';w.tool='mesa';w.toolSettings.mesa={...w.toolSettings.hill,diameter:336,preset:'custom'};localStorage.setItem(k,JSON.stringify(w));return n;})()`);
+  // Written through the editor's saved-map hooks: saved now, changed, put back; the page then saves nothing over it as it is left.
+  await ev(`(async()=>{await sculptDebug.saveNow();const w=await sculptDebug.savedMap();const n=w.nodes.findIndex(n=>n.tool==='hill');w.nodes[n].tool='mesa';w.tool='mesa';w.toolSettings.mesa={...w.toolSettings.hill,diameter:336,preset:'custom'};await sculptDebug.replaceSavedMap(w);return n;})()`);
   // Switch to Red Planet: its toolbar, the map's tool with the map, the fallback.
   await open('biome=red');
   report.red = await toolbar();
