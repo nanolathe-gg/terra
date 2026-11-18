@@ -16,7 +16,7 @@
 // table of them (Uniforms.rock); slot 0 is the world's own rock, its flat numbers as every address names them. A point reads the slot
 // of the rock it belongs to (rs).
 struct Rock {
-    shineRock: vec4f,     // the rock row of the shine table: x gloss, y sharpness, z roughness, w roughness scale (px)
+    shineRock: vec4f,     // the rock row of the shine table: x gloss, y sharpness, z roughness, w rock and crystal grain width (px)
     // The recipe's colours: rows 1-5 its beds' material slots (rgb). Row 6 is its absorption colour (rgb; a = 1 when chosen, else the rock's
     // own hue); rows 0 and 7 are free (a rock's own colour is its material's Color).
     rockColors: array<vec4f, 8>,
@@ -273,7 +273,7 @@ struct Uniforms {
     shineWhite: f32,      // highlight colour: 0 the material's own hue at full brightness, 1 white
     // Per material (ground, slope cover, rock, sand, crystal): x gloss, y sharpness
     // (Blinn exponent), z roughness (normal slope amplitude), w roughness scale, px. The rock's row is its recipe's (Rock.shineRock); row 2 is unused.
-    shine: array<vec4f, 5>,
+    shine: array<vec4f, 5>,  // xyz: gloss, sharpness, roughness. Ground row w holds the world grain width (px).
     rock: array<Rock, 16>,   // the rock recipes by slot (struct Rock); slot 0 is the world's own rock
     rimReach: f32,        // bare rock at rims: how far in from a drop the soil thins, px (0 none)
     shadowTintAny: f32,   // the largest Tinted shadow of the rocks in use (writeRocks): a cast shadow's occluder may be any of them
