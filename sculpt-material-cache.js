@@ -134,7 +134,9 @@ export class MaterialCache {
   sync(pool, materials) {
     if (this.synced === materials && this.pool === pool) return;
     this.prepare(pool, materials);
-    const r = this.renderer, device = r.device, data = new ArrayBuffer(PROGRAM_BYTES * Math.max(1, this.entries.length)), view = new DataView(data), changed = [];
+    // One program row a material (e.row), which its Worn and Deposit layers share: the upload is sized by rows, not by cache layers.
+    const rows = this.entries.reduce((n, e) => Math.max(n, e.row + 1), 1);
+    const r = this.renderer, device = r.device, data = new ArrayBuffer(PROGRAM_BYTES * rows), view = new DataView(data), changed = [];
     for (const e of this.entries) {
       if (!e.state) writeProgram(view, e.row * PROGRAM_BYTES, e.program);
       const key = JSON.stringify(e.program.instructions.map(i => [i.code, i.links, i.args]));
