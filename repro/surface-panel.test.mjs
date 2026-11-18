@@ -1,7 +1,8 @@
 // World › Surface's list without the DOM (sculpt-surface-panel.js): which section a layer is in, from facts read directly.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {layerSection, moveLayer, whereWords, BUILTIN_WHERE, SURFACE_PRESETS} from '../sculpt-surface-panel.js';
+import {layerSection, moveLayer, whereWords, BUILTIN_WHERE, BUILTIN_PLACED_BY, SURFACE_PRESETS} from '../sculpt-surface-panel.js';
+import {KNOBS} from '../sculpt-knobs.js';
 import {SURFACE_BUILTINS} from '../sculpt-material-model.js';
 
 // A world as the panel's host reads it: World settings by key (rock: a rock type's setting), roles, surfaces and facts.
@@ -92,4 +93,17 @@ test('Base band without a rock column says so',async()=>{
   assert.equal(layerSection(band,facts(true)).section,'drawing');
   assert.equal(layerSection(band,{...facts(true),column:undefined}).section,'drawing','unknown is no claim');
   const none=layerSection(band,facts(false));assert.equal(none.section,'idle');assert.match(none.reasons[0].text,/column of beds/);
+});
+
+test('each built-in names World settings that exist as the ones that place it', () => {
+  const keys = new Set(KNOBS.flatMap(([, rows]) => rows.map(r => r[0])));
+  for (const [builtin, list] of Object.entries(BUILTIN_PLACED_BY)) {
+    assert.ok(SURFACE_BUILTINS[builtin], `${builtin} is a built-in`);
+    for (const key of list) assert.ok(keys.has(key), `${builtin}: ${key} is a World setting`);
+  }
+});
+
+test('every fact a rule may read has a name for the artist', async () => {
+  const {FACT_LABELS} = await import('../sculpt-surface-panel.js'), {SURFACE_FACTS} = await import('../sculpt-material-model.js');
+  for (const f of SURFACE_FACTS) assert.ok(FACT_LABELS[f]?.[0], f);
 });

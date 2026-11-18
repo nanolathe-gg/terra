@@ -118,11 +118,7 @@ fn mineralMargin(p: vec2f, slope: f32, n: vec4f) -> f32 {
     // Nearby fractured slopes feed irregular outcrops into their level crown
     // and foot. The support dies outside that neighbourhood, leaving broad
     // patterned flats quiet. Width and gaps belong to one world-space field.
-    var reach = mix(9.0, 26.0, smoothstep(0.28, 0.72, n.g));
-    if (u.groundFringe != 0 && u.ringAmount > 0.0) {
-        let varied = mix(8.0, 48.0, smoothstep(0.20, 0.80, n.r * 0.6 + n.g * 0.4));
-        reach = mix(22.0, varied, u.ringVariation) * mix(0.65, 1.60, u.ringSpread);
-    }
+    let reach = mix(9.0, 26.0, smoothstep(0.28, 0.72, n.g));
     let neighbours = vec4f(baseHeight(p + vec2f(reach, 0.0)), baseHeight(p - vec2f(reach, 0.0)),
                            baseHeight(p + vec2f(0.0, reach)), baseHeight(p - vec2f(0.0, reach)));
     let neighbourhood = vec2f(neighbours.x - neighbours.y, neighbours.z - neighbours.w) / (2.0 * reach);
@@ -290,7 +286,7 @@ fn coverZ(p: vec2f, scale: f32) -> f32 {
 // is Amount times its rule. Coverage: with an edge of width under 1 or noise, clamp((share + noise - .5) / width + .5); a score's coverage is
 // its smoothstep. Noise is Noise times an even value from -.5 to .5, by the art pixel at a size of 1 or less and in patches of that size above
 // (the cover classes' pick), both repeating with the ground's pool. Width 1 and no noise lay the share itself, as the draw always has.
-var<private> surfaceFacts: array<f32, 14>;
+var<private> surfaceFacts: array<f32, 18>;
 var<private> surfacePreviewCover: f32 = 0.0;   // the previewed layer's coverage (diagnostic view 13)
 var<private> surfacePreviewSeen: f32 = -1.0;   // what of it the layers after it leave showing (-1 until it is drawn)
 // The inspector's pixel (GeometryFrame.probe): this invocation draws it, and how many layers it has recorded (probeOut).
@@ -313,6 +309,8 @@ fn surfaceEdge(share: f32, e: vec4f, p: vec2f, pixel: vec2f) -> f32 {
 }
 // The stage's layers over `color` in place; `cover` gets each built-in slot's coverage (a union where several layers draw one slot), and
 // `over` the share material layers cover (they lie over what is below, so the built-ins' coverage under them shrinks).
+// Where a pixel reads its ground materials (fragmentMain sets it: the world point, moved on the solid's cut faces to the native pixel they show at).
+var<private> groundAt: vec2f;
 fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, array<vec3f, 7>>, mask: ptr<function, array<f32, 7>>, cover: ptr<function, array<f32, 7>>, over: ptr<function, f32>, p: vec2f, pixel: vec2f) {
     let head = u.materialTable[SURFACE_HEAD + stage / 2u];
     let odd = (stage & 1u) == 1u;
@@ -343,7 +341,7 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
             // Height contrast (the rule head's w): the layer's material against the ground below, art height in units of 4, so the taller
             // wins where the layer meets what it covers. Windows feel it only inside their edge (4 share (1 - share)); a score at its threshold;
             // a partial Amount where its coverage pattern decides.
-            if (rule.w > 0.0 && r0.z >= 0.0) { lift = rule.w * 0.25 * (materialRelief(p, u32(r0.z)) - ownGroundRelief(p, gs)); }
+            if (rule.w > 0.0 && r0.z >= 0.0) { lift = rule.w * 0.25 * (materialRelief(groundAt, u32(r0.z)) - ownGroundRelief(groundAt, gs)); }
             if (rule.x < 1.5) {
                 share = surfaceWindows(ruleAt, rules, surfaceFacts, share);
                 if (share == 0.0) { continue; }
@@ -364,12 +362,12 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
         if (builtin) {
             // A built-in that draws a material (docs/SURFACE_LAYERS.md phase 4) lays that material's color by its own share.
             var source = (*src)[k];
-            if (r0.z >= 0.0) { source = groundPigment(p, u32(r0.z), surfaceFacts[3], surfaceFacts[4]); }
+            if (r0.z >= 0.0) { source = groundPigment(groundAt, u32(r0.z), surfaceFacts[3], surfaceFacts[4]); }
             if (stage == 5u && k >= 5u) { source = mix(source, riverBedOver.rgb, riverBedOver.a); }   // sand dust and sand: a braided river's gravel
             *color = mix(*color, source, c);
             (*cover)[k] = select(1.0 - (1.0 - (*cover)[k]) * (1.0 - c), c, (*cover)[k] == 0.0);   // layers of one slot join as a union
         } else {
-            *color = mix(*color, groundPigment(p, u32(r0.z), surfaceFacts[3], surfaceFacts[4]), c);
+            *color = mix(*color, groundPigment(groundAt, u32(r0.z), surfaceFacts[3], surfaceFacts[4]), c);
             for (var j = 0u; j < 7u; j++) { (*cover)[j] *= 1.0 - c; }
             *over = 1.0 - (1.0 - *over) * (1.0 - c);
         }
@@ -878,7 +876,7 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     var scale = 0.0;
     for (var i = 0; i < 5; i++) {
         var m = select(u.shine[i], u.rock[rs & rockMask].shineRock, i == 2);
-        if(i==0){m.x=max(m.x,materialShine(p,gs));m.y=select(m.y,16.0,m.y<=0.0);}   // a material's own shine adds to the world's ground row
+        if(i==0){m.x=max(m.x,materialShine(groundAt,gs));m.y=select(m.y,16.0,m.y<=0.0);}   // a material's own shine adds to the world's ground row
         if(i==2){let rm=rockMaterialOf(rs);if(rm>=0){m.x=max(m.x,materialShine(grainPixel(pixel),u32(rm)));}}   // and the rock material's to the rock's (read at the native pixel, as its grain)
         gloss += weight[i] * m.x;
         focus += weight[i] * m.x * m.y;
@@ -1011,112 +1009,6 @@ fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32) -> f32 {
     return smoothstep(-0.5, 0.5, (d - (at + wander * smoothstep(1.0, at, depth))) / (max(grad, 0.04) * max(u.stepSoftPx, 1.0)));
 }
 
-// E11: contour lines in Archipelago's red fringe. Retail's fringe is a stack of thin wavy
-// lines 2-4 px apart that follow the hill's outline (a hill's border, not a texture laid on
-// the screen). The mineral field's own falloff is the outline's distance measure: the
-// Time pass's source falls off about exponentially from the hill, so lines at equal
-// steps of its logarithm are equally spaced in px, whatever the hill's shape. Pixel width
-// comes from the field's gradient. field: the material field's source (.b); returns the
-// line colour and its weight.
-fn fringeField(q: vec2f) -> f32 {
-    return log(max(materialFieldAt((q / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid).b, 1e-4));
-}
-fn fringeContours(p: vec2f, field: f32) -> vec4f {
-    if (u.ringContrast <= 0.0 || u.materialReady == 0) { return vec4f(0.0); }
-    let outer = 0.004 / max(u.ringSize * u.ringSize, 0.05);
-    if (field < outer * 0.5 || field > 0.65) { return vec4f(0.0); }
-    const e = 2.0;
-    let grad = 0.5 / e * length(vec2f(fringeField(p + vec2f(e, 0.0)) - fringeField(p - vec2f(e, 0.0)),
-                                      fringeField(p + vec2f(0.0, e)) - fringeField(p - vec2f(0.0, e))));
-    let scale = max(u.ringCount, 1.0) / max(log(0.3 / outer), 0.5);
-    let wobble = (shelfNoise(p / 7.0 + 13.0) - 0.5) * 1.7 + (shelfNoise(p / 2.6 + 71.0) - 0.5) * 0.8;
-    let k = -log(max(field, 1e-4)) * scale + wobble;
-    let rate = max(grad * scale, 0.02);
-    let f = fract(k);
-    let line = 1.0 - smoothstep(0.3, 0.9, min(f, 1.0 - f) / rate);
-    let dash = smoothstep(0.25, 0.6, shelfNoise(p / 8.0 + 91.0));
-    let zone = smoothstep(outer * 0.5, outer * 3.0, field) * (1.0 - smoothstep(0.25, 0.6, field)) * smoothstep(0.04, 0.12, rate);
-    let tone = mix(vec3f(0.50, 0.16, 0.28), vec3f(0.30, 0.12, 0.13), smoothstep(0.02, 0.3, field));
-    return vec4f(tone, line * dash * zone * u.ringContrast);
-}
-
-// G3: the red fringe as stacked, offset copies of the hill's outline. Retail steps out from the
-// hill in many thin crimson outlines, each a copy of the foot moved a few px from the last, so
-// they cross and scallop instead of nesting (the owner's "offset faded copies"). Copy j is the
-// same softened outline the concentric lines read, at its own level and at its own offset (a
-// hashed direction around ringShiftDir, wandering slowly across the map, a length up to
-// ringShift), with scalloped lobes in its edge. The field is a Gaussian blur of the hill, whose
-// tail falls as exp(-d^2): the square root of its negative logarithm is therefore about
-// proportional to the distance from the hill, so levels at equal steps of that measure are
-// equally spaced in px, where equal steps of the logarithm would crowd into the far tail. Its edge
-// is a line one px wide, whose distance in px comes from the measure's gradient at the pixel
-// (copies sit within a few px, where it barely changes). Outer copies are drawn first so inner
-// lines lie over them. base: the ground so far.
-fn ringHash(k: f32) -> f32 { return fract(sin(k * 12.9898 + 78.233) * 43758.5453); }
-// How far a copy's outline bulges at p, -0.4..0.6 of ringWobble: round lobes about jittered centres (one per
-// ringLobe px cell, new for each copy) that meet in inward cusps, as a union of discs outlines. A noise waver
-// would only ripple the line; retail's copies read as overlapping scales.
-fn ringScallop(p: vec2f, seed: f32) -> f32 {
-    let q = p / max(u.ringLobe, 4.0);
-    let c = floor(q);
-    var nearest = 4.0;
-    for (var dy = -1; dy <= 1; dy++) {
-        for (var dx = -1; dx <= 1; dx++) {
-            let cell = c + vec2f(f32(dx), f32(dy)) + vec2f(seed * 17.0, seed * 5.0);
-            let at = c + vec2f(f32(dx), f32(dy)) + vec2f(shelfHash(cell), shelfHash(cell + vec2f(57.3, 31.1)));
-            nearest = min(nearest, distance(q, at));
-        }
-    }
-    let x = clamp(nearest / 0.7, 0.0, 1.0);
-    return sqrt(1.0 - x * x) - 0.4;
-}
-fn ringReachMeasure(q: vec2f) -> f32 { return sqrt(max(-fringeField(q), 0.01)); }
-// H24: the outermost copy's line is this much fainter than the innermost's, the same on every world.
-const RING_TAPER = 0.35;
-fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
-    if (u.ringContrast <= 0.0 || u.materialReady == 0) { return base; }
-    let outer = 0.004 / max(u.ringSize * u.ringSize, 0.05);
-    if (field < outer * 0.3 || field > 0.65) { return base; }
-    let zone = smoothstep(outer * 0.3, outer * 1.5, field) * (1.0 - smoothstep(0.45, 0.7, field));
-    if (zone <= 0.0) { return base; }
-    let count = i32(clamp(u.ringCount, 1.0, 24.0));
-    let inner = sqrt(-log(0.45));
-    let far = sqrt(-log(outer));
-    let tone = mix(vec3f(0.50, 0.16, 0.28), vec3f(0.30, 0.12, 0.13), smoothstep(0.02, 0.3, field));
-    // Each copy tints what it covers (ringFill: the tint where every copy overlaps, so the skirt steps
-    // lighter outward) and the reach of the stack varies along the outline (ringPatch).
-    let fillStep = 1.0 - pow(1.0 - clamp(u.ringFill, 0.0, 0.95), 1.0 / f32(count));
-    let fillTone = vec3f(0.70, 0.70, 0.50);
-    let span = (shelfNoise(p / max(u.ringPatchSize, 20.0) + 53.0) * 0.65 + shelfNoise(p / (0.37 * max(u.ringPatchSize, 20.0)) + 11.0) * 0.35);
-    let reach = mix(2.0, smoothstep(0.3, 0.7, span) * 1.05, u.ringPatch);
-    var rgb = base;
-    for (var n = 0; n < count; n++) {
-        let j = f32(count - 1 - n);
-        let t = j / max(f32(count - 1), 1.0);
-        let vis = 1.0 - smoothstep(reach - 0.12, reach + 0.12, t);
-        let level = mix(inner, far, (j + 0.5) / f32(count));
-        let wander = (shelfNoise(p / 170.0 + j * 7.3) - 0.5) * 2.0;
-        let angle = radians(u.ringShiftDir) + ((ringHash(j + 1.0) - 0.5) * 2.0 + wander * 0.5) * u.ringScatter * 3.14159;
-        let shift = u.ringShift * (0.45 + 0.55 * ringHash(j + 41.0));
-        let at = p - shift * vec2f(cos(angle), sin(angle));
-        let waver = ringScallop(p, j) * u.ringWobble;
-        // The copy's own gradient: the field's tail is not uniform, and a line drawn from the pixel's
-        // gradient fattens into blobs where the copy lies on a flatter stretch.
-        const e = 3.0;
-        let here = ringReachMeasure(at);
-        let slope = length(vec2f(ringReachMeasure(at + vec2f(e, 0.0)) - here, ringReachMeasure(at + vec2f(0.0, e)) - here)) / e;
-        let d = (here - level) / max(slope, 0.012) + waver;
-        let line = 1.0 - smoothstep(0.3, 0.75, abs(d));
-        let gap = 0.75 + 0.25 * smoothstep(0.15, 0.5, shelfNoise(p / 11.0 + 91.0 + j * 5.1));
-        let inside = 1.0 - smoothstep(-0.7, 0.7, d);
-        rgb = mix(rgb, fillTone, inside * fillStep * zone * vis);
-        // Retail's lines run from a dusky rose (155, 91, 99) on the inner copies to a pale one (215, 163, 179) on the outer.
-        let lineTone = mix(tone, mix(vec3f(0.55, 0.27, 0.31), vec3f(0.84, 0.62, 0.68), t), u.ringTone);
-        rgb = mix(rgb, lineTone, line * gap * zone * vis * (1.0 - RING_TAPER * t) * u.ringContrast);
-    }
-    return rgb;
-}
-
 // Shallow water as the bed under it (card E1): the ground colour already lit at
 // this pixel, moved toward the shallows' tint: the water material's mean plus the world's shallow tone (Colors: Shallow water),
 // so recoloring the water moves its shallows with it. The tint keeps the bed's light
@@ -1143,9 +1035,9 @@ fn litBed(bed: vec3f, rockShare: f32, rockLevel: f32) -> vec3f {
 fn frostDry(near: f32, route: f32) -> f32 { return near * (1.0 - u.frostWet * smoothstep(0.02, 0.04, route)); }
 
 // ---- The mineral margins and the sediment transition ----
-// Nearby fractured slopes feed outcrops into their level crown and foot (the mineral margins); a table with a fringe, a ring or a body
-// layer adds the fringe, the ring veins and the sediment transition. Each block is gated by a uniform, never by a world. The materials
-// it reads are the map's in their roles (roleColor): the slope cover, the margin fringe, ring and body.
+// Nearby fractured slopes feed outcrops into their level crown and foot (the mineral margins); the fringe and body materials
+// supply the sediment transition. Each block is gated by a uniform, never by a world. The materials
+// it reads are the map's in their roles (roleColor): the slope cover, the margin fringe and body.
 // The state drawMineralMargins leaves for joinSedimentTransition to finish:
 var<private> transitionGround: vec3f;
 var<private> transitionFace: vec3f;
@@ -1155,8 +1047,8 @@ var<private> transitionCore: f32;
 var<private> transitionShared: bool;
 
 // Edits the slope cover and, for the shared transition, leaves the state joinSedimentTransition finishes.
-fn drawMineralMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, grass: vec3f, sediments: vec4f, brokenSediments: vec4f,
-                      materialWeather: f32, fringeVariation: f32, slopeGrass: ptr<function, vec3f>, slopeCover: ptr<function, f32>) {
+fn drawMineralMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, grass: vec3f, sediments: vec4f,
+                      materialWeather: f32, slopeGrass: ptr<function, vec3f>, slopeCover: ptr<function, f32>) {
     transitionGround = grass; transitionFace = grass; transitionLow = grass; transitionPower = 1.0; transitionCore = 0.0; transitionShared = false;
     if (u.mineralMargins == 0) { return; }
     var cover = mineralMargin(p, slope, n);
@@ -1177,49 +1069,18 @@ fn drawMineralMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, gras
     let face = slopeGrassSource(pixel);
     let detail = (0.35 - dot(face, vec3f(0.299, 0.587, 0.114))) * 0.12;
     *slopeGrass = mix(fringe, face, smoothstep(0.20, 0.78, cover + detail));
-    if (u.ringAmount > 0.0) {
-        // A connected native vein material occupies its own irregular zone before the brown core.
-        let zone = cover + ((n.r - 0.5) * 0.38 + (n.g - 0.5) * 0.22) * u.ringVariation * smoothstep(0.0, 0.12, cover);
-        let spread = mix(0.60, 1.80, u.ringSpread);
-        let ring = roleColor(u.ringGround, u.slopeGround, pixel);
-        let vein = smoothstep(u.fringeRange.x, u.fringeRange.y, dot(ring, u.fringeSignal.rgb) + u.fringeSignal.a);
-        let tail = smoothstep(0.005, 0.19, max(0.0, zone));
-        let ringMask = smoothstep(0.06, 0.42, zone * spread + vein * 0.15) * tail * mix(0.30, 1.0, max(vein, smoothstep(0.16, 0.40, zone)));
-        var margin = mix(grass, fringe, tail * mix(0.25, 1.0, vein));
-        margin = mix(margin, ring, ringMask * u.ringAmount);
-        *slopeGrass = mix(margin, face, smoothstep(0.22, 0.96, zone + detail));
-    }
     *slopeCover = smoothstep(0.01, 0.28, cover) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, baseHeight(p));
     if (materialWeather > 0.0 && u.transitionBody != 0) {
         // The worker's spatially softened source measures a join across world pixels; all three materials use that coordinate.
-        var source = sediments.b;
-        let variation = ((n.r - 0.5) * 0.08 + (n.g - 0.5) * 0.04) * fringeVariation;
-        source = clamp(source + variation * 4.0 * source * (1.0 - source), 0.0, 1.0);
-        let ring = roleColor(u.ringGround, u.slopeGround, pixel);
+        let source = sediments.b;
         let body = roleColor(u.bodyGround, u.slopeGround, pixel);
-        let vein = smoothstep(u.fringeRange.x, u.fringeRange.y, dot(ring, u.fringeSignal.rgb) + u.fringeSignal.a);
-        let arrivals = max(source * 1.30, sediments.r * 0.55) * exp2((u.ringSpread - 0.70) * 2.0);
-        var fine = smoothstep(0.002, 0.23 + 0.5 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
-        fine *= 1.0 - sediments.g * smoothstep(0.38, 0.63, n.r * 0.55 + n.g * 0.45) * 0.75;
-        let fill = smoothstep(0.018, 0.17 + 0.4 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
-        let ringWeight = fine * mix(fill, 1.0, vein) * u.ringAmount;
-        transitionGround = mix(grass, ring, ringWeight);
         var warm = smoothstep(0.02, 0.54, source);
         let warmGrain = 0.52 - dot(body, vec3f(0.299, 0.587, 0.114));
         warm = clamp(warm + warmGrain * 0.5 * 4.0 * warm * (1.0 - warm), 0.0, 1.0);
-        transitionGround = mix(transitionGround, body, warm);
-        if (u.ringShift > 0.0) { transitionGround = fringeCopies(transitionGround, p, sediments.b); }
-        else {
-            let contours = fringeContours(p, sediments.b);
-            transitionGround = mix(transitionGround, contours.rgb, contours.a);
-        }
+        transitionGround = mix(grass, body, warm);
         if (u.transitionDetail > 0.0) {
-            let uv = grainPixel(pixel) / 512.0;
-            let groundLow = groundMean();
-            let ringLow = roleMean(u.ringGround, u.slopeGround);   // the materials' broad colors (their caches keep no coarse levels)
-            let bodyLow = roleMean(u.bodyGround, u.slopeGround);
-            transitionLow = mix(mix(groundLow, ringLow, ringWeight), bodyLow, warm);
-            transitionPower = ((1.0 - ringWeight) * (1.0 - ringWeight) + ringWeight * ringWeight) * (1.0 - warm) * (1.0 - warm) + warm * warm;
+            transitionLow = mix(groundMean(), roleMean(u.bodyGround, u.slopeGround), warm);
+            transitionPower = (1.0 - warm) * (1.0 - warm) + warm * warm;
         }
         transitionFace = face;
         transitionCore = smoothstep(0.23, 0.88, source);
@@ -1227,25 +1088,9 @@ fn drawMineralMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, gras
         transitionCore = clamp(transitionCore + faceGrain * 0.35 * 4.0 * transitionCore * (1.0 - transitionCore), 0.0, 1.0);
         transitionShared = true;
     } else if (materialWeather > 0.0) {
-        let interruption = max(0.0, sediments.a - brokenSediments.a) * (1.0 - smoothstep(0.40, 0.90, cover));
-        let crust = max(0.0, cover - interruption * 1.35);
-        var zone = weatheredCover(crust, sediments, n);
-        zone = max(zone, brokenSediments.a * 0.36 * (1.0 - smoothstep(0.05, 0.35, sediments.a)));
-        let ring = roleColor(u.ringGround, u.slopeGround, pixel);
-        let vein = smoothstep(u.fringeRange.x, u.fringeRange.y, dot(ring, u.fringeSignal.rgb) + u.fringeSignal.a);
-        let arrivals = max(sediments.b * 1.30, sediments.r * 0.55) * exp2((u.ringSpread - 0.70) * 2.0);
-        var fine = smoothstep(0.002, 0.23 + 0.5 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
-        fine *= 1.0 - sediments.g * smoothstep(0.38, 0.63, n.r * 0.55 + n.g * 0.45) * 0.75;
-        let veil = smoothstep(0.06, 0.78, zone);
+        let veil = smoothstep(0.06, 0.78, weatheredCover(cover, sediments, n));
         var margin = mix(grass, fringe, veil * 0.55);
-        let fill = smoothstep(0.018, 0.17 + 0.4 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
-        margin = mix(margin, ring, fine * mix(fill, 1.0, vein) * u.ringAmount);
-        if (u.ringShift > 0.0) { margin = fringeCopies(margin, p, sediments.b); }
-        else {
-            let contours = fringeContours(p, sediments.b);
-            margin = mix(margin, contours.rgb, contours.a);
-        }
-        let core = smoothstep(0.22, 0.96, max(0.0, cover - interruption * 0.6) + (n.b - 0.5) * 0.12) * smoothstep(0.02, 0.35, sediments.a);
+        let core = smoothstep(0.22, 0.96, cover + (n.b - 0.5) * 0.12) * smoothstep(0.02, 0.35, sediments.a);
         margin = mix(margin, face, core);
         *slopeGrass = mix(mix(grass, *slopeGrass, *slopeCover), margin, materialWeather);
         *slopeCover = 1.0;
@@ -1498,9 +1343,9 @@ fn geometryMain(v:VertexOut)->@location(0) vec4f {
     let pixel=v.position.xy-vec2f(1);
     let fragCoord=vec2f(pixel.x*u.chunkScale+u.chunkScreenOrigin.x,u.size-(pixel.y*u.chunkScale+u.chunkScreenOrigin.y));
     let hit=voxelHit(vec2f(fragCoord.x,u.size-fragCoord.y));
-    let p=round(hit.xy*64.0)/64.0;useRock(p);let normal=voxelNormal(hit);
+    let p=round(hit.xy*64.0)/64.0;useRock(p);let hitGradient=voxelGradient(hit);let normal=select(vec3f(0,0,1),normalize(hitGradient),dot(hitGradient,hitGradient)>1e-12);   // voxelNormal, keeping the gradient for voxelCavity
     let authored=voxelAuthored(p);let soft=-authored.yz/max(authored.w,.015);
-    var lit=normal;var sun=voxelShadow(hit,normal);var cavity=voxelCavity(hit,normal);
+    var lit=normal;var sun=voxelShadow(hit,normal);var cavity=voxelCavity(hit,normal,length(hitGradient));
     // Rock finer than the solid's voxels (rockDetail, a height outward), read as a 1 px solid's normal reads its field: it bends the normal the light reads,
     // deepens the cavity where it hollows (voxelCavity's first ring: its weight and its reach) and casts its own short shadow.
     // Keep fine rock when a pixel is at most half a voxel wide. At 3 px or coarser in a 4 px solid, it reads as single-pixel noise.
@@ -1589,9 +1434,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let gSoft=vec2f(geometry.gx,geometry.gy);
     let n = terrainNoise(p);
     let sediments = select(vec4f(0.0), materialFieldAt((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid), u.materialReady != 0);
-    let fringeVariation = u.ringVariation / 0.75;
-    let drift = ((terrainNoise(poolPos(p) * poolScale(0.65) + vec2f(133.0, 71.0)).rg - 0.5) * 66.0 + (n.gb - 0.5) * 16.0) * fringeVariation;
-    let brokenSediments = select(sediments, materialFieldAt(((p + drift) / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid), u.materialReady != 0);
     let materialWeather = select(0.0, u.materialWeathering, u.materialReady != 0);
     let weather = weatherAt(p / (u.size - 1.0)).rg;
     let slope = length(broad);
@@ -1607,11 +1449,22 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     painted.x = max(painted.x, max(rimRockAt(p), shoreRockAt(p)));   // bare rock at a rim or a shore is painted rock (engine-common.wgsl rimRockAt, shoreRockAt)
     let place = landPlace(p, baseHeight(p), broad, broad, slope, n, weather, route);
     let bare=clamp(1.0-place.vegetation,0.0,1.0);
-    let faceGate=rockFaceGate(slope/(1.0-.5*bare),painted.x,route)*(1.0-softBankAt(p));
+    // The solid's own faces. Where the drawn surface stands off the surface it was built from (whole blocks and displaced faces cut into or out
+    // of it) by more than the ground's grain and the lattice's interpolation (1.5 units at 1x, more for coarser previews), the rock decision reads
+    // the solid's slope and its face gate, whatever the authored slope under it (the authored slope alone left those faces level ground). The
+    // world's placement (exposure, vegetation) still decides how much of it is rock, so a grassy hill stays grassy.
+    let offDead=1.5*max(u.chunkScale,1.0);
+    let solidOff=h-voxelSourceHeight(p);
+    let solidRock=smoothstep(offDead,offDead+2.5*max(u.chunkScale,1.0),abs(solidOff));
+    // Ground on such a face is read at the native pixel the camera shows it at: past the dead zone each unit of offset moves the read half a pixel
+    // (a height unit rises half a pixel), so a wall gives a texel a row and not one texel smeared down it. Within it, level ground keeps the
+    // world point, and with it the repeat its tiles share.
+    groundAt=vec2f(p.x,p.y-.5*sign(solidOff)*max(abs(solidOff)-offDead,0.0));
+    let faceGate=max(rockFaceGate(slope/(1.0-.5*bare),painted.x,route)*(1.0-softBankAt(p)),solidRock);
     let rain=geometry.rain;
     let footing=u.rock[rs & rockMask].faceGrass*rain*smoothstep(.6,.95,normal.z)*smoothstep(u.sea,u.sea+2.0,h);
     let solidSlope=length(normal.xy)/max(normal.z,.1);
-    let rockSlope=max(slope,solidSlope*.7*smoothstep(.12,.5,slope));
+    let rockSlope=max(slope,solidSlope*.7*max(smoothstep(.12,.5,slope),solidRock));
     let rise=mix(smoothstep(u.rock[rs & rockMask].rockFaceFrom,u.rock[rs & rockMask].rockFaceFrom+1.3,rockSlope),smoothstep(.5*u.rock[rs & rockMask].rockFaceFrom,.5*u.rock[rs & rockMask].rockFaceFrom+.5,rockSlope),bare);
     let share=max(clamp(u.rock[rs & rockMask].faceRock*rise*place.exposure*(2.0-clamp(place.vegetation,0.0,2.0)),0.0,1.0),smoothstep(.15,.95,painted.x)*.9);
     let patches=voxelNoise(hit/vec3f(13,13,8));
@@ -1705,7 +1558,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.lavaDusk > 0.0 && shading < 1.0) { shading = pow(max(shading, 0.0), 1.0 + u.lavaDusk * smoothstep(u.base + 20.0, u.base + 60.0, baseHeight(p)) * (1.0 - smoothstep(0.1, 0.5, dot(normal, u.light)))); }
     let timeMaps = timeMapsAt(p);
     gs=groundSlotAt(p);
-    var grass = groundPigment(p,gs,timeMaps.wear,timeMaps.deposit);
+    var grass = groundPigment(groundAt,gs,timeMaps.wear,timeMaps.deposit);
     // The world's own settings for level ground (its low-ground tint, its cover table, its patches) belong to its ground material;
     // a material a stroke chose keeps its own look.
     let ownGround = gs == u32(u.groundDefault);
@@ -1713,13 +1566,21 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var surfMask: array<f32, 7>;
     var layerCover: array<f32, 7>;
     var layerOver = 0.0;
-    if (u.materialTable[SURFACE_FLAGS].x > 0.0 || probeHere) {
+    if (u.materialTable[SURFACE_FLAGS].x > 0.0 || probeHere || u.diagnosticView >= 14) {
         // The surface layers' facts (surfaceFacts), once a pixel and only when a layer reads them or draws a material.
         let site = coverSite(broad, timeMaps);
-        surfaceFacts = array<f32, 14>(slope, baseHeight(p) - u.sea, baseHeight(p) - u.base, timeMaps.wear, timeMaps.deposit, timeMaps.wet,
-            site.x, coverSoil(slope, place.top, timeMaps, site.x), site.y, place.top, place.convexity, 0.0, 0.0, 0.0);
+        let facing = surfaceFacing(broad);
+        // The facts that look around the pixel cost up to 24 and 168 height taps: only where a rule reads them, the inspector's pixel and the fact view.
+        let looks = u32(u.materialTable[SURFACE_FLAGS].y);
+        let every = probeHere || u.diagnosticView >= 14;
+        var shelter = 0.0;
+        if ((looks & SURFACE_LOOK_SHELTER) != 0u || every) { shelter = surfaceShelter(p); }
+        var toWater = 0.0;
+        if ((looks & SURFACE_LOOK_WATER) != 0u || every) { toWater = surfaceToWater(p); }
+        surfaceFacts = array<f32, 18>(slope, baseHeight(p) - u.sea, baseHeight(p) - u.base, timeMaps.wear, timeMaps.deposit, timeMaps.wet,
+            site.x, coverSoil(slope, place.top, timeMaps, site.x), site.y, place.top, place.convexity, 0.0, 0.0, 0.0, facing.x, facing.y, shelter, toWater);
     }
-    if (ownGround) { let hs = highShare(p); if (hs > 0.0) { surfSrc[0] = groundPigment(p, u32(u.highGround), timeMaps.wear, timeMaps.deposit); surfMask[0] = hs; } }
+    if (ownGround) { let hs = highShare(p); if (hs > 0.0) { surfSrc[0] = groundPigment(groundAt, u32(u.highGround), timeMaps.wear, timeMaps.deposit); surfMask[0] = hs; } }
     surfaceStage(0u, &grass, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 0: highland ground
     // Low ground: the ground from the sea up to lowReach above it keeps Grain kept of its grain, by the authored height (the relief's
     // grit would speckle the edge); the edge is ragged by 20-px noise and fades over the upper half of the reach. Under the sea it is all
@@ -1745,7 +1606,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // This is an appearance material, not recovered albedo or geometry.
         var slopeGrass = slopeBased;
         var slopeCover = smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, baseHeight(p));
-        drawMineralMargins(p, h, slope, n, pixel, grass, sediments, brokenSediments, materialWeather, fringeVariation, &slopeGrass, &slopeCover);
+        drawMineralMargins(p, h, slope, n, pixel, grass, sediments, materialWeather, &slopeGrass, &slopeCover);
         // Level dry ground can receive mineral tails from a nearby hill.
         // Only banks below that plane need the high-coast admission check.
         if (u.slopeOnLowBanks == 0 && h < u.base - 0.25) {
@@ -2318,8 +2179,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         var mottle = ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, bedDepth);
         if (u.lowGrain < 1.0) { mottle *= lowGrain; }
         colorDepth += mottle;
-        // Optional contour rings in the water colour, every 6 depth units.
-        if (u.bandWater > 0.0) { colorDepth = mix(colorDepth, (floor(colorDepth / 6.0) + 0.5) * 6.0, u.bandWater * 0.7); }
         // A deep or shallow stroke's water choices (card E1), painted into the
         // masks: +1 hard, -1 faded, 0 the world's own.
         // The plane is bilinear, so a half threshold keeps a stroke's footprint
@@ -2379,19 +2238,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // far from shore; there is no fixed-width coastal blue collar.
         var submerged = smoothstep(-0.2, 2.8, depth);
         if (shoreHard > 0.0) {
-            // Retail waterlines are hard edges with small stair-step notches,
-            // not soft fades: threshold depth against pixel-block jitter.
+            // Vary the crisp edge over two-pixel blocks. Only ground below the sea can be water: the jitter's low end (a threshold under 0)
+            // would paint dry ground up to a unit above the sea, and on a steep bank that is water stranded above the land under it.
             let block = floor(grainPixel(pixel) / 2.0);
             let jitter = fract(sin(dot(block, vec2f(12.9898, 78.233))) * 43758.5453) - 0.5;
-            var crisp = step(0.6 + jitter * 1.4, depth);
-            if (u.shoalStairs > 0.0) {
-                // G1: retail's waterline steps in runs of 1-3 px on any bank. The earlier jitter is in depth, so
-                // a steep bank is cut straight and a gentle one in 6-px notches; here the depth is read where a
-                // point displaced by smooth noise of 3 and 7 px sits, up to shoalStairs px (smooth, so the cut
-                // leaves runs and no isolated pixels, which per-pixel hashes did).
-                let off = ((vec2f(shelfNoise(p / 3.0 + 5.3), shelfNoise(p / 3.0 + 37.9)) - 0.5) * 1.0 + (vec2f(shelfNoise(p / 7.0 + 9.1), shelfNoise(p / 7.0 + 77.3)) - 0.5) * 1.6) * u.shoalStairs;
-                crisp = step(0.6, depth + baseHeight(p) - baseHeight(p + off));
-            }
+            var crisp = select(0.0, step(0.6 + jitter * 1.4, depth), h < u.sea);
             if (u.shoalShoreSoft > 0.0) {
                 // G1: retail's Archipelago shore is not a clean line: 2-4 px of sand and water pixels mix at it. The
                 // depth is turned into a coverage over shoalShoreSoft px (the bank's gradient, floored for flat
@@ -2458,6 +2309,28 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let at = vec2u(max(floor(v.position.xy + u.chunkScreenOrigin / u.chunkScale), vec2f(0.0)));   // screen pixels, so tiles' stripes meet
         if ((at.x + at.y) % 6u < 2u && cover > 0.0) { color = mix(color, (vec3f(1.0, 0.1, 0.9) * seen + vec3f(0.1, 0.9, 1.0) * (cover - seen)) / cover, min(cover * 1.5, 1.0)); }
     }
+    // The Surface section's fact view: the fact one condition of the previewed layer reads (views 14 to 17: its term 0 to 3, the layer at
+    // u.surfacePreview), in gray from its range's low end (dark gray) to its high end (light gray, SURFACE_FACT_GRAY_LO and _HI; a square root of the way across
+    // for SURFACE_FACT_ROOT's facts), magenta where that condition holds (a score: where
+    // the whole score passes, without its edge noise). Green stays the gray alone, so the page reads the view's own pixels for its histogram.
+    // The rock, debris and sand shares are their final values here, not what an earlier stage's layer saw.
+    if (u.diagnosticView >= 14 && u.diagnosticView <= 17 && u.surfacePreview >= 0) {
+        let at = u32(u.surfacePreview);
+        let rules = u32(u.materialTable[at].w);
+        let k = u32(u.diagnosticView - 14);
+        if (k + 1u < rules) {
+            let head = u.materialTable[at + 2u];
+            let term = u.materialTable[at + 3u + k];
+            let f = min(u32(term.x), SURFACE_FACTS - 1u);
+            let t = clamp((surfaceFacts[f] - SURFACE_FACT_LO[f]) / (SURFACE_FACT_HI[f] - SURFACE_FACT_LO[f]), 0.0, 1.0);
+            let g = mix(SURFACE_FACT_GRAY_LO, SURFACE_FACT_GRAY_HI, select(t, sqrt(t), SURFACE_FACT_ROOT[f] > 0.5));
+            var holds = 0.0;
+            if (head.x < 1.5) { holds = surfaceWindow(surfaceFacts[f], term.y, term.z, term.w); }
+            else { holds = smoothstep(head.y - head.z, head.y + head.z, surfaceScore(at + 2u, rules, surfaceFacts, 0.0)); }
+            let tint = min(0.55 + 0.6 * g, 1.0);   // red and blue at least 0.15 over green, so held pixels stay apart at both ends
+            color = select(vec3f(g), vec3f(tint, g, tint), holds > 0.5);
+        }
+    }
     if (u.diagnosticView >= 8 && u.diagnosticView <= 12) {
         let slot=select(gs,u32(max(0,u.waterGround)),h<u.sea && u.waterGround>0);
         if(u.diagnosticView==8){color=materialRaw(p,slot);}
@@ -2467,7 +2340,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.diagnosticView == 7) { let code = bakedFields(p).b; color = vec3f(clamp(-code, 0.0, 1.0), clamp(code - 1.0, 0.0, 1.0), clamp(0.5 + bakedFields(p).r * 0.08, 0.0, 1.0) * 0.6); }
     if (probeHere) {
         probeOut[0] = 1.0; probeOut[1] = color.r; probeOut[2] = color.g; probeOut[3] = color.b; probeOut[4] = f32(gs); probeOut[5] = h - u.sea;
-        for (var k = 0u; k < SURFACE_FACTS; k++) { probeOut[6u + k] = surfaceFacts[k]; }
+        for (var k = 0u; k < 14u; k++) { probeOut[6u + k] = surfaceFacts[k]; }
+        for (var k = 14u; k < SURFACE_FACTS; k++) { probeOut[76u + k] = surfaceFacts[k]; }   // facts 14 to 17 at 90 to 93, past the layers' record
         probeOut[21] = nearWater; probeOut[22] = surfCover; probeOut[23] = select(0.0, 1.0, ownGround); probeOut[24] = f32(probeCount);
         probeOut[20] = f32(rs & rockMask); probeOut[89] = exposed;   // the rock type drawn here, and how much of its rock shows
     }

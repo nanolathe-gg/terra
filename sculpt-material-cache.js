@@ -1,5 +1,6 @@
-// The GPU side of materials (sculpt-materials.js): each material in use has one layer of a cached repeat holding its unlit color, art
-// height and shine (and one more layer for each state it draws: Worn, Deposit), a layer of that color reduced to its game-palette colors, and one texel of its mean color. A graph is compiled to a
+// The GPU side of materials (sculpt-materials.js): each material in use has one layer of a cached repeat holding its unlit color and shine
+// (half floats), one of its art height (a full float: relief is lit from its differences), one more layer of each for each state it draws (Worn,
+// Deposit), a layer of that color reduced to its game-palette colors, and one texel of its mean color. A graph is compiled to a
 // pipeline once per shape; its numbers are a buffer upload. A palette-only edit redoes the reduction, not the fields.
 import {MATERIAL_SLOTS, materialColor, compileMaterial, PROGRAM_BYTES, STEP_STRIDE, MAX_NODES, MAX_STAGES, materialRenderKey, programKey, programSource, stagePlan, materialCacheUsage, paletteRgb, THUMB, THUMB_STRIDE, materialStates, MATERIAL_STATES} from './sculpt-materials.js';
 
@@ -40,11 +41,11 @@ export class MaterialCache {
   }
   allocate(pool, count) {
     const r = this.renderer, read = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING;
-    this.fieldTexture = this.texture(this.fieldTexture, 'material color and height', [pool, pool, count], 'rgba32float', read | GPUTextureUsage.COPY_SRC, pool * pool * count * 16);
-    this.colorTexture = this.texture(this.colorTexture, 'material palette color', [pool, pool, count], 'rgba8unorm', read | GPUTextureUsage.COPY_SRC, pool * pool * count * 4);
-    this.shineTexture = this.texture(this.shineTexture, 'material shine', [pool, pool, count], 'rgba16float', read, pool * pool * count * 8);
+    this.fieldTexture = this.texture(this.fieldTexture, 'material color and shine', [pool, pool, count], 'rgba16float', read, pool * pool * count * 8);
+    this.heightTexture = this.texture(this.heightTexture, 'material art height', [pool, pool, count], 'r32float', read, pool * pool * count * 4);
+    this.colorTexture = this.texture(this.colorTexture, 'material palette color', [pool, pool, count], 'rgba8unorm', read, pool * pool * count * 4);
     this.meanTexture = this.texture(this.meanTexture, 'material mean color', [1, 1, count], 'rgba32float', read | GPUTextureUsage.COPY_SRC, count * 16);
-    for (const t of [this.fieldTexture, this.colorTexture, this.shineTexture, this.meanTexture]) r.worldResource?.(t);
+    for (const t of [this.fieldTexture, this.heightTexture, this.colorTexture, this.meanTexture]) r.worldResource?.(t);
     if (r.resources) r.fixedBytes = [...r.resources.values()].filter(v => v.kind === 'materials' || v.kind === 'shared').reduce((n, v) => n + v.bytes, 0);
     r.bindGroups = {}; this.keys.clear(); this.colorKeys.clear(); this.synced = null;
   }
@@ -150,7 +151,7 @@ export class MaterialCache {
         const pass = encoder.beginComputePass({label: 'material graph'}); pass.setPipeline(pipeline);
         pass.setBindGroup(0, device.createBindGroup({layout: pipeline.getBindGroupLayout(0), entries: [{binding: 15, resource: {buffer: this.programBuffer}}]}));
         pass.setBindGroup(1, device.createBindGroup({layout: pipeline.getBindGroupLayout(1), entries: [
-          {binding: 0, resource: this.fieldTexture.createView({dimension: '2d-array'})}, {binding: 1, resource: {buffer: job}}, {binding: 2, resource: this.shineTexture.createView({dimension: '2d-array'})},
+          {binding: 0, resource: this.fieldTexture.createView({dimension: '2d-array'})}, {binding: 1, resource: {buffer: job}}, {binding: 2, resource: this.heightTexture.createView({dimension: '2d-array'})},
           ...(stagePlan(e.program).mainReads ? [{binding: 3, resource: this.stageTexture.createView({dimension: '2d-array'})}] : [])]}));
         pass.dispatchWorkgroups(Math.ceil(pool / 8), Math.ceil(pool / 8)); pass.end();
         this.keys.set(e.layer, key); this.generations++;

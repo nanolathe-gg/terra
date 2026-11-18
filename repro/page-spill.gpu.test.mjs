@@ -1,5 +1,6 @@
-// GPU integration check of the paged fields' spill (sculpt-gpu-fields.js): pages evicted from VRAM come back from their CPU copy with the same
-// bytes as pages that never left, and an edit that reaches a page makes it evaluate again: when the page is next read, not as the edit arrives. Run with repro/check.sh engine. Needs Dawn.
+// GPU integration check of the paged fields' spill (sculpt-gpu-fields.js): Time results evicted from VRAM come back from their CPU copy, shape pages by
+// evaluation, with the same bytes as pages that never left, and an edit that reaches a page makes it evaluate again: when the page is next read, not as
+// the edit arrives. Run with repro/check.sh engine. Needs Dawn.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -11,15 +12,15 @@ async function spillSettled(fields) {
   for (let i = 0; i < 500; i++) { const s = fields.stats().gpuShape.spill; if (!s.inFlight) return s; await new Promise(r => setTimeout(r, 10)); }
   throw new Error('the spill copies did not finish');
 }
-// Everything a read gives (the planes, the masks, the weathered height) and the gathered weather and maps; with what the read took from the spill and
-// how many Time passes it ran. Each read waits for the copies its release started, so the next read finds them.
+// Everything a read gives (the planes, the masks, the weathered height) and the gathered weather and maps; with the Time results the read took from the
+// spill, the shape pages it evaluated and the Time passes it ran. Each read waits for the copies its release started, so the next read finds them.
 async function pageBytes(fields, rect) {
   const before = fields.stats().gpuShape, r = await fields.readRect(rect), after = fields.stats().gpuShape;
   await spillSettled(fields);
   const g = await fields.debugGather(rect);
   await spillSettled(fields);
-  return {bytes: {shape: digest([...Object.values(r.fields)]), weather: digest([g.W, ...g.maps])},
-    restored: [after.spill.shapeRestores - before.spill.shapeRestores, after.spill.weatherRestores - before.spill.weatherRestores], runs: after.weatherRuns - before.weatherRuns};
+  return {bytes: {shape: digest([...Object.values(r.fields)]), weather: digest([g.W, ...g.maps, ...(g.field ? [g.field] : [])])},
+    restored: after.spill.weatherRestores - before.spill.weatherRestores, evaluated: after.shapeEvaluations - before.shapeEvaluations, runs: after.weatherRuns - before.weatherRuns};
 }
 
 // The resident pages' CPU copies and the coarse lattice are read in the background; letting the fields go while one is read aborts the read
@@ -28,7 +29,7 @@ async function cpuCopiesIdle(fields) {
   for (let i = 0; i < 500; i++) { const g = fields.stats().gpuShape; if (!g.cpuCopiesPending && g.cpuCopyBytes >= g.shapePages * 8 * fields.pageInfo().side ** 2) return; await new Promise(r => setTimeout(r, 10)); }
 }
 
-test('evicted pages come back from the spill with the bytes of resident pages, and an edit evaluates them again', async () => {
+test('evicted pages come back, weather from the spill and shape by evaluation, with the bytes of resident pages, and an edit weathers them again', async () => {
   const headless = await import('./headless.mjs');
   const s = await headless.openScene(scene, 'biome=green&mapX=4&mapY=4&scratch=1&gpuMB=512&heapMB=1536&gpuPages=force');
   const made = [];
@@ -36,7 +37,7 @@ test('evicted pages come back from the spill with the bytes of resident pages, a
     const {fieldsModule, engine, renderer, config} = s;
     let nodes = s.nodes.slice();
     const common = {worldSize: s.worldSize, worldGrid: s.worldGrid, baseHeight: config.baseHeight, maskKeys: engine.MASK_KEYS, nodes: () => nodes, device: () => renderer.device, context: s.context, gesture: () => false};
-    const time = engine.pagedTime({config, renderer, size: s.worldSize, spacing: s.spacing, material: s.material});
+    const time = engine.pagedTime({config, renderer, size: s.worldSize, spacing: s.spacing, material: {depositSpread: .65, seed: s.refinementSeed, mineral: false}});
     // A keeps no page resident once its readers let go (every page goes to the spill); B keeps them all.
     const A = fieldsModule.createPagedFields({...common, shapeBudget: 1, weatherBudget: 1}), B = fieldsModule.createPagedFields(common);
     made.push(A, B);
@@ -49,10 +50,10 @@ test('evicted pages come back from the spill with the bytes of resident pages, a
     const first = {near: await pageBytes(A, near), far: await pageBytes(A, far)};
     const g = A.stats().gpuShape;
     assert.equal(g.shapePages, 0); assert.equal(g.weatherPages, 0);
-    assert(g.spill.ready >= 4, `${g.spill.ready} copies ready`);
-    assert.deepEqual([first.near.restored, first.near.runs], [[0, 0], 1]);
+    assert(g.spill.ready >= 2, `${g.spill.ready} copies ready`);
+    assert.deepEqual([first.near.restored, first.near.runs], [0, 1]);
     const again = await pageBytes(A, near);
-    assert.deepEqual([again.restored, again.runs], [[1, 1], 0], 'a restored page runs no shape evaluation or Time pass');
+    assert.deepEqual([again.restored, again.evaluated, again.runs], [1, 1, 0], 'a returning page is evaluated and takes its Time result from the spill');
     assert.deepEqual(again.bytes, first.near.bytes);
     const resident = await pageBytes(B, near);
     assert.deepEqual(resident.bytes, first.near.bytes, 'the same bytes as a page that stayed resident');
@@ -65,11 +66,11 @@ test('evicted pages come back from the spill with the bytes of resident pages, a
     assert(edit.x1 + 6 < s.worldGrid - 768, "the edit lies outside the far page's Time window");
     for (const f of [A, B]) f.changed(edit);
     const edited = await pageBytes(A, near);
-    assert.deepEqual([edited.restored, edited.runs], [[0, 0], 1], 'an edited page is evaluated and weathered again');
+    assert.deepEqual([edited.restored, edited.runs], [0, 1], 'an edited page is weathered again');
     assert.notEqual(edited.bytes.shape, first.near.bytes.shape, 'the edit shows');
     assert.deepEqual((await pageBytes(B, near)).bytes, edited.bytes);
     const farAgain = await pageBytes(A, far);
-    assert.deepEqual([farAgain.restored, farAgain.runs], [[1, 1], 0], 'a page the edit does not reach comes back from its copy');
+    assert.deepEqual([farAgain.restored, farAgain.runs], [1, 0], 'a page the edit does not reach takes its Time result from its copy');
     assert.deepEqual(farAgain.bytes, first.far.bytes);
     assert.deepEqual((await pageBytes(B, far)).bytes, first.far.bytes);
 
@@ -83,7 +84,7 @@ test('evicted pages come back from the spill with the bytes of resident pages, a
 });
 
 // A drag is many edits with no read between them (its previews read the preview lattice). The pages evaluate the cells the edits reached once, at
-// the next read, and hold what fields made from the final nodes hold; so does a page evicted with edits still to evaluate.
+// the next read, and hold what fields made from the final nodes hold; so does a page evicted with edits still to evaluate, evaluated again on its return.
 test('the edits of a drag are evaluated once, at the next read, and give the bytes of a fresh evaluation', async () => {
   const headless = await import('./headless.mjs');
   const s = await headless.openScene(scene, 'biome=green&mapX=4&mapY=4&scratch=1&gpuMB=512&heapMB=1536&gpuPages=force');
@@ -110,9 +111,11 @@ test('the edits of a drag are evaluated once, at the next read, and give the byt
     for (let k = 0; k < 6; k++) { nodes = [...base, at(k)]; for (const f of [kept, evicted]) f.changed(k ? {...reach(k - 1), x1: reach(k).x1} : reach(k)); }
     assert.deepEqual([evals(kept), evals(evicted)], [was.kept, was.evicted], 'an edit alone evaluates no page');
 
-    // The second fields lose their pages now, the edits not yet evaluated: the copy the spill takes must hold them.
+    // The second fields lose their pages now, the edits not yet evaluated: evaluated again on their return, they must hold them. A page whose CPU
+    // copy is being read is pinned; the reader trims when it finishes.
     evicting.shapeBudget = 1;
     await pageBytes(evicted, far);
+    await cpuCopiesIdle(evicted);
     assert.equal(evicted.stats().gpuShape.shapePages, 0);
     delete evicting.shapeBudget;
 
@@ -122,8 +125,8 @@ test('the edits of a drag are evaluated once, at the next read, and give the byt
     assert.notEqual(want.bytes.shape, before.kept.bytes.shape, 'the drag shows');
     assert.deepEqual(got.bytes, want.bytes, 'pages that stayed resident hold the final nodes');
     assert(evals(kept) > was.kept, 'the read evaluated them');
-    assert(back.restored[0] > 0, 'the evicted pages came back from their copies');
-    assert.deepEqual(back.bytes, want.bytes, 'and the copies held the edits');
+    assert(back.evaluated > 0, 'the evicted pages were evaluated again');
+    assert.deepEqual(back.bytes, want.bytes, 'and hold the edits');
     for (const f of [kept, evicted, fresh, s.fields]) await f.coarseSettled();
     for (const f of [kept, evicted, fresh]) await cpuCopiesIdle(f);
     assert.deepEqual(s.errors, []);

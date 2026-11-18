@@ -88,9 +88,9 @@ test("a stroke's water choices count as the world switches they turn on", () => 
   const nodes = [{kind: 'ground'}, {kind: 'landform', params: {waterDeep: 2}}];
   assert.deepEqual(strokeWaterPicks(nodes), {deepEdge: 0, fadedEdge: 1});
   const r = renderer(); r.variant.set('deepEdge', '1');
-  const v = worldPanelValues({config: {layers: ['ring'], water: {}}, renderer: r, nodes, colors: {shallowTone: [.1, 0, 0]}, weathering: true, materialWeathering: 0});
+  const v = worldPanelValues({config: {layers: [], water: {}}, renderer: r, nodes, colors: {shallowTone: [.1, 0, 0]}, weathering: true, materialWeathering: 0});
   assert.equal(v.deepEdge, 1); assert.equal(v.rampWater, 1);
-  assert.equal(v.waterColored, 1); assert.equal(v.waterTones, 2); assert.equal(v.ringLayer, 1); assert.equal(v.beachLayer, 0);
+  assert.equal(v.waterColored, 1); assert.equal(v.waterTones, 2); assert.equal(v.beachLayer, 0);
 });
 
 test('the column facts follow the active column: the map\'s own, or none', () => {

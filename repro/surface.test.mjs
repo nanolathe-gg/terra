@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {surfaceRows, copySurface, SURFACE_BUILTINS, SURFACE_STAGES, SURFACE_FACTS, SURFACE_FLAGS_ROW, SURFACE_DRAWABLE} from '../sculpt-material-model.js';
+import {surfaceRows, copySurface, spreadRule, ruleHere, SURFACE_SPREAD_STEP, SURFACE_FACT_RANGE, SURFACE_FACT_GRAY, SURFACE_FACT_ROOT, factPosition, factAtPosition, SURFACE_BUILTINS, SURFACE_STAGES, SURFACE_FACTS, SURFACE_FLAGS_ROW, SURFACE_DRAWABLE} from '../sculpt-material-model.js';
 import {withWorldMaterials, materialsInUse, copyMaterials, roleOf, LIBRARY, surfaceMaterials, deleteMaterial, assignMaterial, worldMaterials, worldOwnMaterials, keptWorldMaterials, worldKept} from '../sculpt-materials.js';
 
 const defaults = JSON.parse(readFileSync(new URL('../materials/defaults.json', import.meta.url), 'utf8'));
@@ -203,4 +203,55 @@ test('plants grow on material layers: one kind each, a plants-only layer draws n
   assert.deepEqual(rows[3], [2, 1, 1.5, 2], 'heights times Vegetation relief, then the entries');
   assert.deepEqual(rows[4], [out.plants[0].row, out.plants[0].kind, out.plants[0].amount, 0]);
   assert.deepEqual(coverRows(site, [], 1)[3], [0, 0, 0, 0], 'no plants: no plant rows');
+});
+
+test('Spread moves every limit of a rule together, never inverts a window, and at 0 packs the rule as written', () => {
+  const moss = {id: 'moss-1', material: 'lush-ground', where: [{fact: 'moisture', from: .4, fade: .1}, {fact: 'light', from: .2, to: .8, fade: .1}]};
+  const ledge = {id: 'ledge-1', material: 'lush-ground', score: {terms: [{fact: 'slope', weight: 1}, {fact: 'convexity', weight: 1.5}], from: 1.2, fade: .2}};
+  for (const layer of [moss, ledge]) assert.deepEqual(surfaceRows([{...layer, spread: 0}], () => 3).rows, surfaceRows([layer], () => 3).rows, 'Spread 0 is the rule as written');
+  const wide = spreadRule({...moss, spread: 1}).where, step = SURFACE_SPREAD_STEP;
+  assert.ok(Math.abs(wide[0].from - (.4 - step.moisture)) < 1e-9 && wide[0].to === undefined, 'an open end stays open');
+  assert.ok(Math.abs(wide[1].from - (.2 - step.light)) < 1e-9 && Math.abs(wide[1].to - (.8 + step.light)) < 1e-9, 'both ends move apart');
+  const narrow = spreadRule({...moss, where: [{fact: 'light', from: .45, to: .55}], spread: -1}).where[0];
+  assert.ok(narrow.from <= narrow.to && Math.abs(narrow.from - .5) < 1e-9, 'narrowed past its middle, the ends meet there');
+  const lower = spreadRule({...ledge, spread: .5}).score.from;
+  assert.ok(Math.abs(lower - (1.2 - .5 * (1 * step.slope + 1.5 * step.convexity) / 2)) < 1e-9, 'the threshold falls by the mean weighted step');
+  // The draw and the inspector agree: the packed window and ruleHere both read the spread limits.
+  const rows = surfaceRows([{...moss, spread: 1}], () => 3).rows;
+  assert.ok(Math.abs(rows[3][1] - wide[0].from) < 1e-6, 'the packed window is the spread one');
+  const facts = SURFACE_FACTS.map(f => f === 'moisture' ? .3 : f === 'light' ? .5 : 0);
+  assert.equal(ruleHere(moss, facts).share, 0, 'moisture .3 is below the written window');
+  assert.ok(ruleHere({...moss, spread: 1}, facts).share > .9, 'and inside the spread one');
+});
+
+test('a surface keeps a layer’s Spread through a save, clamped, and Highland ground takes none', () => {
+  const list = copySurface([{id: 'moss-1', material: 'lush-ground', where: [{fact: 'moisture', from: .4}], spread: 3}, {builtin: 'highland', spread: .5}]);
+  assert.equal(list[0].spread, 1);
+  assert.equal(list[1].spread, undefined);
+});
+
+test('the fact view’s ranges in the shader are the model’s', () => {
+  const wgsl = readFileSync(new URL('../engine-common.wgsl', import.meta.url), 'utf8');
+  const list = name => wgsl.match(new RegExp(`const ${name} = array<f32, ${SURFACE_FACTS.length}>\\(([^)]*)\\)`))[1].split(',').map(Number);
+  assert.deepEqual(list('SURFACE_FACT_LO'), SURFACE_FACTS.map(f => SURFACE_FACT_RANGE[f][0]));
+  assert.deepEqual(list('SURFACE_FACT_HI'), SURFACE_FACTS.map(f => SURFACE_FACT_RANGE[f][1]));
+  assert.deepEqual(['LO', 'HI'].map(end => Number(wgsl.match(new RegExp(`const SURFACE_FACT_GRAY_${end} = ([0-9.]+);`))[1])), SURFACE_FACT_GRAY);
+  assert.deepEqual(list('SURFACE_FACT_ROOT'), SURFACE_FACTS.map(f => SURFACE_FACT_ROOT.includes(f) ? 1 : 0));
+});
+
+test('Steepness spreads its low end across the fact view, and a position maps back to its value', () => {
+  assert.ok(factPosition('slope', 1) > .2, 'a slope of 1 sits past a fifth of the gray');
+  assert.equal(factPosition('slope', 20), 1);
+  assert.equal(factPosition('slope', 40), 1);
+  assert.equal(factPosition('moisture', .25), .25);
+  for (const [fact, v] of [['slope', 3], ['slope', .4], ['moisture', .7], ['aboveSea', 50]]) assert.ok(Math.abs(factAtPosition(fact, factPosition(fact, v)) - v) < 1e-9);
+});
+
+test('every fact has a range and a Spread step, and only a rule that reads Sheltered or Distance to water asks the draw to look around', () => {
+  for (const f of SURFACE_FACTS) { assert.equal(SURFACE_FACT_RANGE[f]?.length, 2, f); assert.ok(SURFACE_SPREAD_STEP[f] > 0, f); }
+  const flags = list => surfaceRows(list, () => 3).flags;
+  assert.deepEqual(flags([{id: 'a', material: 'm', where: [{fact: 'north', from: .3}]}]), [1, 0, 0, 0]);
+  assert.deepEqual(flags([{id: 'a', material: 'm', where: [{fact: 'sheltered', from: .3}]}]), [1, 1, 0, 0]);
+  assert.deepEqual(flags([{id: 'a', material: 'm', score: {terms: [{fact: 'toWater', weight: -1}, {fact: 'slope'}]}}]), [1, 2, 0, 0]);
+  assert.deepEqual(flags([{id: 'a', material: 'm', where: [{fact: 'sheltered', from: .3}]}, {id: 'b', material: 'm', where: [{fact: 'toWater', to: 40}]}]), [1, 3, 0, 0]);
 });

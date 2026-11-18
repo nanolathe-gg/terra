@@ -223,7 +223,7 @@
    {"id":"step-7","type":"combine","kind":"multiply","name":"Multiply grain","params":{"amount":1,"offset":0},"in":{"a":"step-5","b":"step-6","mask":null},"x":1180,"y":38},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"step-7","height":null,"shine":null},"x":1416,"y":38}
   ],
-  "controls": [{"label":"Patch size","node":"step-2-broad","param":"size","min":4,"max":64},{"label":"Water colors","node":"step-5","param":"stops"}],
+  "controls": [{"label":"Water colors","node":"step-5","param":"stops"}],
   "palette": [137,138,135,136,134,133,139,140],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -1076,33 +1076,6 @@
   ],
   "controls": [{"label":"Colors","node":"colors","param":"stops"}],
   "palette": [24,23,22,21,69,20,68,67,66],
-  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
- },
- "archipelago-ring": {
-  "name": "Archipelago margin ring",
-  "seed": 0,
-  "nodes": [
-   {"id":"mid","type":"constant","name":"Middle","params":{"value":0.5},"x":0,"y":0},
-   {"id":"band1","type":"noise","kind":"smooth","name":"Grain 2 px","params":{"size":2,"detail":0,"layers":0,"seed":151},"x":0,"y":80},
-   {"id":"add1","type":"combine","kind":"add","name":"Add 2 px","params":{"amount":0.2375,"offset":0.5},"in":{"a":"mid","b":"band1","mask":null},"x":240,"y":80},
-   {"id":"band2","type":"noise","kind":"smooth","name":"Grain 4 px","params":{"size":4,"detail":0,"layers":0,"seed":152},"x":0,"y":160},
-   {"id":"add2","type":"combine","kind":"add","name":"Add 4 px","params":{"amount":0.1188,"offset":0.5},"in":{"a":"add1","b":"band2","mask":null},"x":240,"y":160},
-   {"id":"band3","type":"noise","kind":"smooth","name":"Grain 8 px","params":{"size":8,"detail":0,"layers":0,"seed":153},"x":0,"y":240},
-   {"id":"add3","type":"combine","kind":"add","name":"Add 8 px","params":{"amount":0.19,"offset":0.5},"in":{"a":"add2","b":"band3","mask":null},"x":240,"y":240},
-   {"id":"band4","type":"noise","kind":"smooth","name":"Grain 16 px","params":{"size":16,"detail":0,"layers":0,"seed":154},"x":0,"y":320},
-   {"id":"add4","type":"combine","kind":"add","name":"Add 16 px","params":{"amount":0.19,"offset":0.5},"in":{"a":"add3","b":"band4","mask":null},"x":240,"y":320},
-   {"id":"band5","type":"noise","kind":"smooth","name":"Grain 32 px","params":{"size":32,"detail":0,"layers":0,"seed":155},"x":0,"y":400},
-   {"id":"add5","type":"combine","kind":"add","name":"Add 32 px","params":{"amount":0.475,"offset":0.5},"in":{"a":"add4","b":"band5","mask":null},"x":240,"y":400},
-   {"id":"band6","type":"noise","kind":"smooth","name":"Grain 64 px","params":{"size":64,"detail":0,"layers":0,"seed":156},"x":0,"y":480},
-   {"id":"add6","type":"combine","kind":"add","name":"Add 64 px","params":{"amount":0.7125,"offset":0.5},"in":{"a":"add5","b":"band6","mask":null},"x":240,"y":480},
-   {"id":"band0","type":"noise","kind":"pixel","name":"Pixel grain","params":{"seed":150},"x":0,"y":560},
-   {"id":"add0","type":"combine","kind":"add","name":"Add 1 px","params":{"amount":0.0784,"offset":0.5},"in":{"a":"add6","b":"band0","mask":null},"x":240,"y":560},
-   {"id":"levels","type":"levels","name":"Spread","params":{"low":-0.3261,"high":1.3261,"gamma":1,"invert":0},"in":{"in":"add0"},"x":480,"y":80},
-   {"id":"colors","type":"gradient","name":"Colors","stops":[[0,0.5894,0.358,0.3824],[0,0.7128,0.5317,0.5467],[0.3409,0.6725,0.6703,0.5167],[0.4468,0.7647,0.7647,0.6078],[0.5192,0.7682,0.7651,0.6122],[0.5725,0.8749,0.8737,0.7186],[0.5918,0.8794,0.8789,0.7227],[0.6031,0.9039,0.9008,0.7478]],"params":{"ease":0},"in":{"in":"levels"},"x":720,"y":80},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"colors","height":null,"shine":null},"x":960,"y":80}
-  ],
-  "controls": [{"label":"Colors","node":"colors","param":"stops"}],
-  "palette": [21,20,19,67,18,66,65],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
  "crystal-slope": {

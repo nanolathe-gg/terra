@@ -23,6 +23,8 @@ const uniformSpan = f => f.stride ? f.stride * f.count : (f.width || 1) * 4;
 
 // The mask planes when the config names none: as many as MASK_KEYS (sculpt-scene.js, which says what each holds). The masks texture array has a layer per 4 planes.
 const MASK_PLANE_COUNT = 25;
+// The output stage's candidate table (engine-output.wgsl): CELLS^3 grid points, N = 8 one-byte palette indices each.
+const OUTPUT_TABLE_CELLS = 64 ** 3, OUTPUT_TABLE_BYTES = OUTPUT_TABLE_CELLS * 8;
 
 // The shaders keep their GLSL origins' structure: the common source is
 // pasted at /*COMMON*/, and #ifdef / #ifndef / #else / #endif keep or drop
@@ -118,6 +120,7 @@ class PipelinesPending extends Error { constructor(state,ready) { super('Terrain
 // the per-chunk textures, the memory accounting and renderChunk.
 // The diagnostic views (engine-frag.wgsl u.diagnosticView, from 1): the page's `view`, and the Surface section's layer preview (setSurfacePreview).
 const DIAGNOSTIC_VIEWS = ['diffuse','occlusion','shadow','exposure','shading','material','cracks','color','relief','roughness','wetness','palette-color','surface-layer'];
+const SURFACE_FACT_VIEW = DIAGNOSTIC_VIEWS.length + 1;   // 14 to 17: the Surface section's fact view of a previewed layer's condition 0 to 3
 export class TerrainRenderer {
   static async createChunked(canvas, config) {
     const {ChunkTerrainRenderer} = await import('./sculpt-chunk-renderer.js');
@@ -306,8 +309,6 @@ export class TerrainRenderer {
     this.means.rock = materialTint(LIBRARY[this.config.materials?.rock] ?? {nodes: [{type: 'output', in: {}}]});
     // The slope cover's broad color the same way: the Colors row Slope cover starts from it (sculpt.js defaultColor).
     this.means.slope = materialTint(LIBRARY[this.config.materials?.slope] ?? {nodes: [{type: 'output', in: {}}]});
-    // The transition body is generated layer 5 and the transition (ring, body, contours) needs the flag; the ring is layer 7. The beach is the
-    // table's `beach` layer (6 in a world's own table, the last when borrowed).
     this.transitionBody = this.layers.has('body');
     this.applyKnobs();
   }
@@ -351,6 +352,13 @@ export class TerrainRenderer {
     this.outputPalette = this.worldResource(this.device.createBuffer({label: 'output palette', size: Math.max(16, colours.length * 16), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST}));
     this.device.queue.writeBuffer(this.outputPalette, 0, new Float32Array(colours.flatMap(c => [c[0], c[1], c[2], 0])));
     this.outputCount = colours.length;
+    // Its candidate table (engine-output.wgsl buildTable, 64^3 grid points x 8 indices, 2 MiB), built before the next output pass reads it.
+    for (const b of [this.outputTable, this.outputPaletteCount]) if (b) { this.worldTextures.delete(b); b.destroy(); }
+    this.outputTable = this.worldResource(this.device.createBuffer({label: 'output palette table', size: OUTPUT_TABLE_BYTES, usage: GPUBufferUsage.STORAGE}));
+    this.outputPaletteCount = this.worldResource(this.device.createBuffer({label: 'output palette count', size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}));
+    this.device.queue.writeBuffer(this.outputPaletteCount, 0, new Uint32Array([colours.length, 0, 0, 0]));
+    this.track?.(this.outputTable, 'output palette table', OUTPUT_TABLE_BYTES, 'shared');
+    this.outputTableBuilt = false;
   }
 
 
@@ -498,7 +506,7 @@ export class TerrainRenderer {
       {binding:10,resource:(kind==='rock-weather'?source.rockWeather.empty:(source.rockWeather.final??source.rockWeather.empty)).createView()},
       {binding:11,resource:(kind==='rock-weather'?source.rockWeather.empty:(source.rockWeather.source??source.rockWeather.empty)).createView()},
       {binding:12,resource:(kind==='rock-weather'?source.rockWeather.empty:(source.rockWeather.rim??source.rockWeather.empty)).createView()},
-      {binding:13,resource:this.groundCache.fieldTexture.createView({dimension:'2d-array'})},{binding:14,resource:this.groundCache.colorTexture.createView({dimension:'2d-array'})},{binding:15,resource:{buffer:this.groundCache.programBuffer}},{binding:16,resource:this.groundCache.shineTexture.createView({dimension:'2d-array'})},{binding:17,resource:this.groundCache.meanTexture.createView({dimension:'2d-array'})}]});
+      {binding:13,resource:this.groundCache.fieldTexture.createView({dimension:'2d-array'})},{binding:14,resource:this.groundCache.colorTexture.createView({dimension:'2d-array'})},{binding:15,resource:{buffer:this.groundCache.programBuffer}},{binding:16,resource:this.groundCache.heightTexture.createView({dimension:'2d-array'})},{binding:17,resource:this.groundCache.meanTexture.createView({dimension:'2d-array'})}]});
     if(source===this)this.bindGroups[kind]=group;return group;
   }
 
@@ -529,6 +537,7 @@ export class TerrainRenderer {
     const head = [...surface.rows, ...Array.from({length: SURFACE_FLAGS_ROW - surface.rows.length}, () => [0, 0, 0, 0]), surface.flags, ...surface.head];
     // The layers that grow plants (engine-bake.wgsl plantMask), and the switch for the bake's plant pass.
     this.plantLayers = surface.plants.length; if (this.layout) this.i('uPlantsOn', this.plantLayers > 0);
+    this.surfaceLooks = surface.flags[1];   // the facts that look around a pixel which a rule reads: the plant bake's apron grows by their reach
     return [...head, ...rows, ...coverRows(this.config.material?.site, surface.plants, variant?.get?.('plantRelief') ?? 1)];
   }
 
@@ -598,7 +607,7 @@ export class TerrainRenderer {
     try{await read.mapAsync(GPUMapMode.READ);const v=[...new Float32Array(read.getMappedRange().slice(0))];read.unmap();if(!v[0])return null;
       const count=Math.min(32,Math.round(v[24])),layers=Array.from({length:count},(_,k)=>({row:Math.round(v[25+2*k]),cover:v[26+2*k]}));
       // rock: the rock type whose numbers the pixel read (its slot: 0 the world's) and how much of its rock shows there (0-1).
-      return {color:v.slice(1,4),slot:Math.round(v[4]),aboveSea:v[5],facts:v.slice(6,20),wet:v[21],surf:v[22],ownGround:v[23]>.5,layers,rock:{slot:Math.round(v[20]),share:v[89]}};}
+      return {color:v.slice(1,4),slot:Math.round(v[4]),aboveSea:v[5],facts:[...v.slice(6,20),...v.slice(90,94)],wet:v[21],surf:v[22],ownGround:v[23]>.5,layers,rock:{slot:Math.round(v[20]),share:v[89]}};}
     finally{read.destroy();}
   }
 
@@ -610,14 +619,30 @@ export class TerrainRenderer {
   // The output stage (engine-output.wgsl): the draw's lit color in `source` reduced to the game palette, pixel by pixel, and drawn
   // into `target` at `offset`. `chunk` holds the raster's place and scale (a cached tile's own settings); the world's settings are current:
   // palette off, Clay, a diagnostic view, or a raster coarser than art pixels pass the true color through.
+  // The palette's candidate table is built here, in its own submission: the queue runs in order, so every output pass encoded after this
+  // call reads the finished table.
   async outputPipelines() {
-    if (this.outputPipeline) return;
-    const device = this.device, module = device.createShaderModule({label: 'engine-output.wgsl', code: this.outputSource});
-    const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
-    if (errors.length) throw new Error('nanolathe: engine-output.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
-    [this.outputPipeline, this.outputBlit] = await Promise.all([
-      device.createComputePipelineAsync({label: 'output stage', layout: 'auto', compute: {module, entryPoint: 'patternPixels'}}),
-      device.createRenderPipelineAsync({label: 'output blit', layout: 'auto', vertex: {module, entryPoint: 'blitVertex'}, fragment: {module, entryPoint: 'blitFragment', targets: [{format: this.format}]}, primitive: {topology: 'triangle-list'}})]);
+    if (!this.outputPipeline) {
+      const device = this.device, module = device.createShaderModule({label: 'engine-output.wgsl', code: this.outputSource});
+      const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
+      if (errors.length) throw new Error('nanolathe: engine-output.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
+      const [pipeline, blit, build] = await Promise.all([
+        device.createComputePipelineAsync({label: 'output stage', layout: 'auto', compute: {module, entryPoint: 'patternPixels'}}),
+        device.createRenderPipelineAsync({label: 'output blit', layout: 'auto', vertex: {module, entryPoint: 'blitVertex'}, fragment: {module, entryPoint: 'blitFragment', targets: [{format: this.format}]}, primitive: {topology: 'triangle-list'}}),
+        device.createComputePipelineAsync({label: 'output palette table', layout: 'auto', compute: {module, entryPoint: 'buildTable'}})]);
+      this.outputTableBuild = build; this.outputBlit = blit; this.outputPipeline = pipeline;
+    }
+    if (!this.outputTableBuilt) this.buildOutputTable();
+  }
+  buildOutputTable() {
+    const device = this.device, count = this.outputPaletteCount;
+    const encoder = device.createCommandEncoder({label: 'output palette table'}), pass = encoder.beginComputePass({label: 'output palette table'});
+    pass.setPipeline(this.outputTableBuild);
+    pass.setBindGroup(0, device.createBindGroup({layout: this.outputTableBuild.getBindGroupLayout(0), entries: [{binding: 2, resource: {buffer: this.outputPalette}}, {binding: 6, resource: {buffer: this.outputTable}}, {binding: 7, resource: {buffer: count}}]}));
+    pass.dispatchWorkgroups(OUTPUT_TABLE_CELLS / 64);
+    pass.end();
+    device.queue.submit([encoder.finish()]);
+    this.outputTableBuilt = true;
   }
   // The output stage's working texture, at least width x height. A batch sizes it once before its first pass: a release mid-encoder would
   // take it from the passes already encoded. An eviction releases it with the other working textures.
@@ -646,7 +671,7 @@ export class TerrainRenderer {
     const compute = encoder.beginComputePass({label: 'output stage'});
     compute.setPipeline(this.outputPipeline);
     compute.setBindGroup(0, device.createBindGroup({layout: this.outputPipeline.getBindGroupLayout(0), entries: [
-      {binding: 0, resource: source.createView()}, {binding: 1, resource: this.outputTexture.createView()}, {binding: 2, resource: {buffer: this.outputPalette}}, {binding: 3, resource: {buffer: job}}]}));
+      {binding: 0, resource: source.createView()}, {binding: 1, resource: this.outputTexture.createView()}, {binding: 2, resource: {buffer: this.outputPalette}}, {binding: 3, resource: {buffer: job}}, {binding: 5, resource: {buffer: this.outputTable}}]}));
     compute.dispatchWorkgroups(Math.ceil(width / 8), Math.ceil(height / 8));
     compute.end();
     const blit = encoder.beginRenderPass({label: 'output blit', colorAttachments: [{view: target.createView(), loadOp: 'load', storeOp: 'store'}]});
@@ -673,10 +698,10 @@ export class TerrainRenderer {
     } finally { this._busy=false; }
   }
 
-  async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false, signal, stale, digest = null} = {}) {
+  async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false, signal, stale, digest = null} = {}) {
     const current=()=>{signal?.throwIfAborted();if(stale?.())throw new DOMException('The scene changed during a terrain bake.','AbortError');};
     current();const start = performance.now(), device = this.device;
-    this.syncWorld({clay,light,detail,ring,ringSpread,ringVariation,materialWeathering,transitionDetail,exact});
+    this.syncWorld({clay,light,detail,materialWeathering,transitionDetail,exact});
     // Before the checksum: an edited material graph regenerates its cache layers here, which moves the world version (worldResource) the
     // checksum holds. Taken first, a check-only draw would match the old picture and the next drawn tile would carry the old version.
     this.syncMaterialCache();
@@ -805,7 +830,7 @@ export class TerrainRenderer {
     // Also the color pass's geometry record and frame (allocateGeometry; the frame holds the canvas size) and its mask staging (packColorMasks).
     // The inspector's record (probeBuffer) is written by the color pass and read only by the page.
     // The output stage (encodeOutput) reads the color pass's picture (voxelColor), writes its working texture and takes its job from the
-    // chunk's settings and the palette's length; the palette itself is a world resource (outputPaletteBuffer).
+    // chunk's settings and the palette's length; the palette and its candidate table are world resources (outputPaletteBuffer).
     const own = new Set([this.fieldsTexture, this.looseBuffer, voxel?.uniform, this.geometryRecord, this.geometrySettings, this.maskPackBuffer, this.maskPackSettings, this.probeBuffer, this.voxelColor, this.outputTexture, ...(this.outputJobs ?? [])].filter(Boolean));
     const produced = {has: r => own.has(r) || Boolean(voxel?.made?.has(r) || rock?.made?.has(r))};
     // volatile: produced resources whose bytes may differ between two draws of the same checksum without changing the picture. The voxel
@@ -829,8 +854,8 @@ export class TerrainRenderer {
   // the chunk. Repeated draws reuse the synchronized world; public setters
   // force a refresh when their data changes.
   syncWorld(options=this.worldOptions??{}) {
-    const {clay=false,light='original',detail=this.config.material?.surfaceRelief??1,ring=.85,ringSpread=.65,ringVariation=.7,materialWeathering=this.config.material?.materialWeathering??0,transitionDetail=this.config.material?.transitionDetail??.65,exact=false}=options;
-    const values={clay,light,detail,ring,ringSpread,ringVariation,materialWeathering,transitionDetail,exact};
+    const {clay=false,light='original',detail=this.config.material?.surfaceRelief??1,materialWeathering=this.config.material?.materialWeathering??0,transitionDetail=this.config.material?.transitionDetail??.65,exact=false}=options;
+    const values={clay,light,detail,materialWeathering,transitionDetail,exact};
     // exact changes only the review sun: without one, an export's options are the view's and its draw reuses the view's sync.
     const key=JSON.stringify([{...values,exact:exact&&Boolean(this.reviewSun())},this.grid,this.size]);
     if(!this.worldDirty&&this.worldSyncKey===key)return {fields:[],stage:null,rockSlots:[],channels:[]};
@@ -887,9 +912,6 @@ export class TerrainRenderer {
     // E11: shallow water round 2; every default is the earlier look.
     this.f('uShelfWander', variant.has('shelfWander') ? Number(variant.get('shelfWander')) : 0);
     this.f('uStepSoftPx', variant.has('stepSoftPx') ? Number(variant.get('stepSoftPx')) : 1);
-    this.f('uRingContrast', variant.has('ringContrast') ? Number(variant.get('ringContrast')) : 0);
-    this.f('uRingCount', variant.has('ringCount') ? Number(variant.get('ringCount')) : 7);
-    this.f('uRingSize', variant.has('ringSize') ? Number(variant.get('ringSize')) : 1);
     this.f('uBedFlat', variant.has('bedFlat') ? Number(variant.get('bedFlat')) : 0);
     this.f('uSandCrown', variant.has('sandCrown') ? Number(variant.get('sandCrown')) : 0);
     this.f('uFlatBank', variant.has('flatBank') ? Number(variant.get('flatBank')) : 0.0);
@@ -904,7 +926,6 @@ export class TerrainRenderer {
     this.f('uStrata', variant.has('strata') ? Number(variant.get('strata')) : 0);
     this.f('uStrataContrast', variant.has('strataContrast') ? Number(variant.get('strataContrast')) : 0.6);
     this.f('uStrataGrain', variant.has('strataGrain') ? Number(variant.get('strataGrain')) : 1);
-    this.f('uBandWater', variant.has('bandWater') ? Number(variant.get('bandWater')) : 0);
     this.f('uSandGrass', variant.has('sandGrass') ? Number(variant.get('sandGrass')) : 0.6);
     this.f('uSandDust', variant.has('sandDust') ? Number(variant.get('sandDust')) : 0.5);
     this.f('uPool', groundPool(this.config.material));   // card tilepool: the period level ground repeats with
@@ -918,7 +939,6 @@ export class TerrainRenderer {
     // Water looks (card E1): every default is the earlier water.
     this.f('uBedTint', variant.has('bedTint') ? Number(variant.get('bedTint')) : 0.85);
     this.f('uBedBright', variant.has('bedBright') ? Number(variant.get('bedBright')) : 1);
-    this.f('uRingFade', variant.has('ringFade') ? Number(variant.get('ringFade')) : 0);
     this.f('uHillLight', variant.has('hillLight') ? Number(variant.get('hillLight')) : 1);
     this.f('uBedContrast', variant.has('bedContrast') ? Number(variant.get('bedContrast')) : 1);
     this.f('uDeepEdge', variant.has('deepEdge') ? Number(variant.get('deepEdge')) : 0);
@@ -949,16 +969,6 @@ export class TerrainRenderer {
     this.f('uMoonFoldSpacing', variant.has('moonFoldSpacing') ? Number(variant.get('moonFoldSpacing')) : .9);
     this.f('uIceCrystal', variant.has('iceCrystal') ? Number(variant.get('iceCrystal')) : 0);
     this.f('uIceCrest', variant.has('iceCrest') ? Number(variant.get('iceCrest')) : 0);
-    // G3: the fringe's offset copies (ringShift 0: the earlier concentric lines).
-    this.f('uRingShift', variant.has('ringShift') ? Number(variant.get('ringShift')) : 0);
-    this.f('uRingShiftDir', variant.has('ringShiftDir') ? Number(variant.get('ringShiftDir')) : 315);
-    this.f('uRingScatter', variant.has('ringScatter') ? Number(variant.get('ringScatter')) : 0.5);
-    this.f('uRingWobble', variant.has('ringWobble') ? Number(variant.get('ringWobble')) : 3);
-    this.f('uRingLobe', variant.has('ringLobe') ? Number(variant.get('ringLobe')) : 22);
-    this.f('uRingFill', variant.has('ringFill') ? Number(variant.get('ringFill')) : 0);
-    this.f('uRingPatch', variant.has('ringPatch') ? Number(variant.get('ringPatch')) : 0);
-    this.f('uRingPatchSize', variant.has('ringPatchSize') ? Number(variant.get('ringPatchSize')) : 120);
-    this.f('uRingTone', variant.has('ringTone') ? Number(variant.get('ringTone')) : 0);
     // G6: Ice blocks and mesas (0: the earlier look exactly).
     this.f('uIceSoft', variant.has('iceSoft') ? Number(variant.get('iceSoft')) : 0);
     this.f('uIceSnow', variant.has('iceSnow') ? Number(variant.get('iceSnow')) : 0);
@@ -967,12 +977,10 @@ export class TerrainRenderer {
     this.f('uIceFrost', variant.has('iceFrost') ? Number(variant.get('iceFrost')) : 0);
     // G1: shallow water round 3; every default is the earlier look.
     this.f('uShoalRag', variant.has('shoalRag') ? Number(variant.get('shoalRag')) : 0);
-    this.f('uShoalStairs', variant.has('shoalStairs') ? Number(variant.get('shoalStairs')) : 0);
     this.f('uShoalShoreSoft', variant.has('shoalShoreSoft') ? Number(variant.get('shoalShoreSoft')) : 0);
     // Low ground: its tint and reach (0: none, as before); its color is set with the others (setColors).
     this.f('uLowReach', variant.has('lowReach') ? Number(variant.get('lowReach')) : 6);
     this.f('uLowGrain', variant.has('lowGrain') ? Number(variant.get('lowGrain')) : 1);
-    this.f('uLooseKnoll', variant.has('looseKnoll') ? Number(variant.get('looseKnoll')) : 0);
     this.f('uGougeWeb', variant.has('gougeWeb') ? Number(variant.get('gougeWeb')) : 0);
     this.f('uCreaseShade', variant.has('creaseShade') ? Number(variant.get('creaseShade')) : 0);
     this.fieldsDirty = true;
@@ -989,7 +997,7 @@ export class TerrainRenderer {
     this.f('uDetail', this.config.material?.surfaceRelief ?? 1.0);
     this.i('uSlopeMaterial', ['slopes', 'structured'].includes(variant.get('surface')));
     this.i('uMineralMargins', variant.get('transition') === 'mineral');
-    this.i('uDiagnosticView', this.surfacePreview >= 0 ? DIAGNOSTIC_VIEWS.indexOf('surface-layer') + 1 : DIAGNOSTIC_VIEWS.indexOf(variant.get('view')) + 1);
+    this.i('uDiagnosticView', this.previewView(variant));
     this.i('uSurfacePreview', this.surfacePreview ?? -1);
     this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
     const material = this.config.material || {};
@@ -1003,8 +1011,6 @@ export class TerrainRenderer {
     this.i('uGroundFringe', material.groundFringe === true);
     // A preset can retain coloured veins or dark neutral grain at its edge.
     // The blending algorithm does not choose a biome's material colour.
-    this.set('uFringeSignal', material.fringeSignal || [-.299, -.587, -.114, 1]);
-    this.set('uFringeRange', material.fringeRange || [.08, .28]);
     this.f('uWetBand', material.wetBand ?? 13);
     // E6: mineralDetail scales the rock art's contrast about its mean (1: as drawn).
     const bed = this.config.water?.riverBedRGB;   // riverfix: a braided bed's gravel, world data (absent: the draw darkens the world's rock)
@@ -1016,9 +1022,6 @@ export class TerrainRenderer {
     this.f('uMaterialWeathering', weatherAmount);
     this.f('uTransitionDetail', transitionDetail);
     this.f('uDetail', this.variant.get('relief') === 'base' ? 0 : detail);
-    this.f('uRingAmount', this.layers.has('ring') ? ring : 0);
-    this.f('uRingSpread', ringSpread);
-    this.f('uRingVariation', ringVariation);
     this.i('uQuantize', (this.variant.get('palette') || 'nearest') !== 'off');
     this.f('uShoreEdge', Number(this.variant.get('shoreEdge')) || 0);
     this.f('uCrystalGrain', Number(this.variant.get('crystalGrain')) || 0);
@@ -1051,12 +1054,10 @@ export class TerrainRenderer {
     }
     set('uReliefScale', number('reliefScale', 28));
     set('uReliefAmount', number('reliefAmount', 0.5));
-    set('uReliefBranch', number('reliefBranch', 2.0));
     set('uReliefLumps', number('reliefLumps', 0.7));
     set('uReliefGain', number('reliefGain', 0.55));
     set('uReliefWarp', number('reliefWarp', 10));
     set('uReliefPatchy', number('reliefPatchy', 1));
-    set('uReliefJitter', number('reliefJitter', 0.8));
     set('uFaceStreak', number('faceStreak', 0));
     for (const [key, fallback] of [['rockFace', 0], ['rockFaceFrom', 0.6], ['faceBed', 5.5], ['faceLedge', 2.2], ['faceRun', 90], ['faceLean', 28], ['faceScratch', 2.5],
       ['faceScratchSize', 7], ['faceBlock', 3], ['faceBlockSize', 11], ['faceGrass', 0.8], ['faceRock', 0.9], ['faceCrease', 2.5], ['faceCreaseSize', 6],
@@ -1102,7 +1103,6 @@ export class TerrainRenderer {
     set('uHasBeach', this.layers.has('beach'));
     set('uSandBanding', number('sandBanding', 0));
     set('uSandBandSpacing', number('sandBandSpacing', 2));
-    set('uReliefOctaves', number('reliefOctaves', 5));
     }
     {
     const column = this.config.column, v = this.variant;
@@ -1320,20 +1320,27 @@ export class TerrainRenderer {
   // a Surface section edit stays in the surface rows, which only the color pass reads.
   uniformStage(write) { const before = new Uint32Array(this.uniformData.slice(0)); write(); return worldUniformDelta(before, this.uniformData, this.layout, this.uniformStages).stage; }
   // The Surface section's preview of one layer (its first row, surfaceRows layerRows), or none (-1): the draw shows where that layer lies.
-  setSurfacePreview(row = -1) {
-    this.surfacePreview = row;
+  // `term` (0 to 3): the fact view of that condition of the layer in place of its coverage (engine-frag.wgsl views 14 to 17).
+  setSurfacePreview(row = -1, term = -1) {
+    this.surfacePreview = row; this.surfaceFact = row >= 0 ? term : -1;
     this.i('uSurfacePreview', row);
-    this.i('uDiagnosticView', row >= 0 ? DIAGNOSTIC_VIEWS.indexOf('surface-layer') + 1 : DIAGNOSTIC_VIEWS.indexOf(this.variant?.get('view')) + 1);
+    this.i('uDiagnosticView', this.previewView(this.variant));
+  }
+  // The diagnostic view the draw shows: the Surface section's preview (a layer's coverage, 13, or one of its conditions' fact, 14 to 17), else
+  // the variant's own view.
+  previewView(variant) {
+    if (this.surfacePreview >= 0) return this.surfaceFact >= 0 ? SURFACE_FACT_VIEW + Math.min(this.surfaceFact, 3) : DIAGNOSTIC_VIEWS.indexOf('surface-layer') + 1;
+    return DIAGNOSTIC_VIEWS.indexOf(variant?.get('view')) + 1;
   }
   // The layers the Surface section hides while an artist designs (their keys): a view only. An export draws every layer (designView).
   setSurfaceHidden(keys = []) { this.surfaceHidden = keys.length ? new Set(keys) : null; this.set('uMaterialTable', this.placementTable(this.variant)); }
   // Clears the Surface section's design view (hidden layers, the coverage preview) for an export's tiles; returns the function that puts it back,
   // or null when there is none.
   suspendDesignView() {
-    const hidden = this.surfaceHidden, preview = this.surfacePreview ?? -1;
+    const hidden = this.surfaceHidden, preview = this.surfacePreview ?? -1, term = this.surfaceFact ?? -1;
     if (!hidden && preview < 0) return null;
     this.surfaceHidden = null; this.set('uMaterialTable', this.placementTable(this.variant)); this.setSurfacePreview(-1);
-    return () => { this.surfaceHidden = hidden; this.set('uMaterialTable', this.placementTable(this.variant)); this.setSurfacePreview(preview); };
+    return () => { this.surfaceHidden = hidden; this.set('uMaterialTable', this.placementTable(this.variant)); this.setSurfacePreview(preview, term); };
   }
   // An export tile draws the world as saved and leaves the view's state as it found it; returns the function that puts the view back.
   // The design view is set aside for the draw (suspendDesignView). When the draw's own sync rewrote the world (the review sun, which exports

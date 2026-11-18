@@ -1,9 +1,9 @@
-import {terrainAllocation} from './sculpt-memory.js';
+import {terrainAllocation,deviceMemory} from './sculpt-memory.js';
 import {MATERIAL_SLOTS} from './sculpt-materials.js';
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {isRiver, isBraided, riverWidth, riverCurvature} from './sculpt-river.js';
-import {strokeCurve, scatterSize, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, landformDigs, impactOn, bucklingOn, secondaryNear, impactSetup, impactPoint, impactEnd, impactSpread, impactWeight, landformPeak} from './sculpt-shape-presets.js';
+import {strokeCurve, scatterSize, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, landformDigs, impactOn, bucklingOn, secondaryNear, impactSetup, impactPoint, impactEnd, impactSpread, impactWeight, landformPeak, rockClaimMargin} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -140,6 +140,8 @@ const NODE_FIELDS = [
   ...['talusLumps'].map(k => [k, 'f']),
   // lfcrater: an impact's groove: the along curve's value at its end (the groove's width is scaled by the curve over it); 0: none.
   ...['grooveEnd'].map(k => [k, 'f']),
+  // How far past the ground it moves a landform claims its rock (rockClaimMargin, sculpt-shape-presets.js); 0: it claims none.
+  ...['lfClaim'].map(k => [k, 'f']),
   // lfimpact2: the buckled ground's height (Buckling x .3 of the relief; BK_AMP in engine-shape.wgsl scales it), apart from the ejecta's; 0: none.
   ...['bkAmt'].map(k => [k, 'f']),
   // lfcrystal: a landform's faceted structure (Facet shape, the share of sites with an element, its polygon's sides, how square it turns to the path, corner cuts).
@@ -489,7 +491,7 @@ export function prepareNode(n, geom, c) {
       // Face steepness: a raised section (Raise to, above the plain or its ground; not a crater's signed section or a river's valley).
       lfFace: Math.round(q.combine || 0) === 0 && !landformSigned(q) && !isRiver(q) && (Math.round(q.heightReference || 0) === 2 ? q.elevation > 0 : landformElevation(q, c.sea) > c.baseHeight) ? clamp(c.faceSteep ?? 1, 1, 4) : 1,
       // lfcrater: an impact's groove (its first segment the landing): the along curve's value at the end, which the groove's width is scaled by; 0: no groove.
-      grooveEnd: grooved ? impactEnd(q) : 0});
+      grooveEnd: grooved ? impactEnd(q) : 0, lfClaim: rockClaimMargin(q)});
     if (impact) Object.assign(main.u, impactUniforms(q, sd, impact, c));
   }
   const satellites = kind === 'landform' && !n.satellite ? [...(impact && Math.round(q.secondaries || 0) >= 1 ? secondaryNodes(n, q, impact, seed, geom, c) : []), ...(Math.round(q.scatterCount || 0) >= 1 ? scatterNodes(n, q, seed, geom, c) : [])] : [];
@@ -1070,7 +1072,7 @@ export function createGpuFields(opts) {
   };
 }
 
-// The CPU copies of pages evicted from VRAM (createPagedFields' spill), an LRU by bytes under cap(). An entry is reserved at eviction with the stamp
+// The CPU copies of page Time results evicted from VRAM (createPagedFields' spill), an LRU by bytes under cap(). An entry is reserved at eviction with the stamp
 // of its inputs (begin) and holds its bytes once the GPU copy is read back (fill). take() gives the bytes only to a caller with the same stamp, and only
 // once: the page is resident again and its copy is let go. A stale or unfinished copy is dropped where it is found, never returned.
 export function createPageSpill(cap) {
@@ -1106,6 +1108,8 @@ export function createPageSpill(cap) {
     drop: key => remove(key),
     clear(match = null) { for (const k of [...entries.keys()]) if (!match || match(k)) remove(k); },
     trim,
+    // The copies' bytes (the page heap counts them: sculpt-canvas.js ownedBytes).
+    buffers: () => [...entries.values()].filter(e => e.data).map(e => e.data),
     stats: () => ({bytes, entries: entries.size, ready: [...entries.values()].filter(e => e.data).length, cap: cap(), hits, misses, stale, unfinished, dropped}),
   };
 }
@@ -1150,7 +1154,7 @@ export function createPagedFields(opts) {
     let pg = pagesMap.get(key(px, py));
     if (!pg) {
       const x0 = px * CORE, y0 = py * CORE;
-      pg = {px, py, x0, y0, cw: Math.min(CORE, worldGrid - x0), ch: Math.min(CORE, worldGrid - y0), target: null, rev: 0, shapeSeq: 0, weatherSeq: 0, cpu: null, cpuW: null, cpuBusy: false, cpuRev: -1, weather: null, stale: false, staleSeq: 0, weatherJob: null, used: 0, pins: 0, key: key(px, py)};
+      pg = {px, py, x0, y0, cw: Math.min(CORE, worldGrid - x0), ch: Math.min(CORE, worldGrid - y0), target: null, rev: 0, weatherSeq: 0, cpu: null, cpuW: null, cpuBusy: false, cpuRev: -1, weather: null, stale: false, staleSeq: 0, weatherJob: null, used: 0, pins: 0, key: key(px, py)};
       pagesMap.set(pg.key, pg);
     }
     return pg;
@@ -1209,18 +1213,21 @@ export function createPagedFields(opts) {
   // H12: the budget the pages may use: the GPU budget less what the renderer needs at least (materials and one chunk), or null when no budget is given.
   // The resident set of a ring is the 2 x 3 pages a chunk's feed gathers at once (shape and weather, with the material field), the feed's staging set and the
   // shape engine's scratch (about 16 MB and 44 bytes a cell of a page's side); a ring is allowed when that set fits.
-  const STAGING_BYTES = 700 * 850 * (4 * PLANES + 64), FEED_PAGES = 6, PAGE_FIELD = CORE * CORE * 36;
+  const PAGE_FIELD = WEATHER_BYTES + CORE * CORE * 4, STAGING_CELL = PAGE_CELL + 24;
+  const STAGING_BYTES = 700 * 850 * STAGING_CELL, FEED_PAGES = 6;
   const engineEstimate = ring => 16e6 + (CORE + 2 * ring) ** 2 * 44;
   const available = (preview=false) => { const b = opts.budget?.(); return b ? b.total - (preview?(b.previewMinimum??b.minimum):b.minimum) : Infinity; };
   const residentSet = ring => FEED_PAGES * (CORE + 2 * ring) ** 2 * PAGE_CELL + FEED_PAGES * PAGE_FIELD + STAGING_BYTES + engineEstimate(ring);
   // Time results first (a page's Time pass costs far more than evaluating its shape), then as many shape pages as the rest holds: after an edit a
   // view's tiles gather from 20-odd pages, and a cap of 9 had them evict each other tile after tile (24 pages evaluated 144 times in one settle).
-  // At most 24 weather and 64 shape pages for each 2 GiB of the budget: at the default 2 GiB the pages hold about 1.2 GB (the smallest ring) and the rest of the room
-  // stays with the renderer's caches, and a larger budget keeps proportionally more pages resident (96 and 256 at 8 GiB).
+  // At most 24 weather and 24 shape pages for each 2 GiB of the budget (96 and 96 at 8 GiB). A shape page evicted is evaluated again when read (2-11 ms
+  // a page, about what restoring a CPU copy cost), so keeping more than a view's tiles gather buys little: on a busy 16x16 map (eight-view tour, a
+  // pan back, a hill stroke) a cap of 24 against the 35-38 the room held evaluated 96/18/10 pages against 91/16/0 at a 1352x962 view and 119/30/16
+  // against 108/24/14 at 2184x1285; 16 evaluated 170/69/27 at the larger view, and 12 moved a stroke's pixels.
   function fitCaps() {
     const room = 0.92 * available(true) - STAGING_BYTES - engineEstimate(RING), per = Math.max(1, (opts.budget?.()?.total || 0) / 2 ** 31);
     WEATHER_PAGES = clamp(Math.floor(0.4 * room / PAGE_FIELD), FEED_PAGES, Math.round(24 * per));
-    SHAPE_PAGES = clamp(Math.floor((room - WEATHER_PAGES * PAGE_FIELD) / SHAPE_BYTES), FEED_PAGES, Math.round(64 * per));
+    SHAPE_PAGES = clamp(Math.floor((room - WEATHER_PAGES * PAGE_FIELD) / SHAPE_BYTES), FEED_PAGES, Math.round(24 * per));
     if (!(room > 0)) SHAPE_PAGES = WEATHER_PAGES = FEED_PAGES;
   }
   function setRing(need) {
@@ -1238,7 +1245,6 @@ export function createPagedFields(opts) {
     if (ring !== RING) {
       RING = ring; SIDE = CORE + 2 * RING; SHAPE_BYTES = SIDE * SIDE * PAGE_CELL; ringChanges++;
       for (const pg of pagesMap.values()) dropShape(pg);
-      spill.clear(k => k[0] === 's');
       scratchT?.destroy(); scratchT = null;
     }
     fitCaps(); trim();
@@ -1259,25 +1265,29 @@ export function createPagedFields(opts) {
 
   // ---- resources
   const shapeBytes = () => { let n = 0; for (const pg of pagesMap.values()) if (pg.target) n += pg.target.bytes; return n; };
-  const weatherBytes = () => { let n = 0; for (const pg of pagesMap.values()) if (pg.weather) n += WEATHER_BYTES + (pg.weather.field ? CORE * CORE * 16 : 0); return n; };
+  const weatherBytes = () => { let n = 0; for (const pg of pagesMap.values()) if (pg.weather) n += WEATHER_BYTES + (pg.weather.field?.size ?? 0); return n; };
   const stagingBytes = () => (staging?.bytes || 0) + (scratchT?.bytes || 0);
   const cpuBytes = () => { let n = 0; for (const pg of pagesMap.values()) n += (pg.cpu ? 8 * SIDE * SIDE : 0) + (pg.cpuW ? 8 * CORE * CORE : 0); return n; };
   const gpuBytes = () => shapeBytes() + weatherBytes() + stagingBytes() + (engine?.bytes() || 0);
   // A page that is read or gathered right now (pinned) keeps its buffers until the last reader lets go.
   function dropShape(pg) { if (pg.target) { if (pg.pins) (pg.zombies ??= []).push(pg.target); else pg.target.destroy(); } pg.target = null; pg.late = null; pg.cpu = null; pg.cpuRev = -1; }
   function unpin(pg) { pg.pins--; if (!pg.pins && pg.zombies?.length) { for (const t of pg.zombies) t.destroy(); pg.zombies = []; } }
-  function dropWeather(pg) { if (pg.weather) { pg.weather.weather.destroy(); pg.weather.maps.forEach(b => b.destroy()); pg.weather.field?.destroy(); pg.weather = null; pg.cpuW = null; } }
+  function destroyWeather(w) { w.weather.destroy(); w.maps.forEach(b => b.destroy()); w.field?.destroy(); }
+  function dropWeather(pg) { if (pg.weather) { destroyWeather(pg.weather); pg.weather = null; pg.cpuW = null; } }
 
-  // ---- the spill: a CPU copy of each page the LRU evicts, its buffers' bytes in their GPU layout, so the page comes back with writeBuffer instead of
-  // its shape evaluation or its Time pass. A copy is stamped with the inputs it holds: the ring and the page's shapeSeq (shape), the weather's own
-  // weatherSeq and the Time key (weather). changed() bumps those for every page an edit reaches (resident or not) and drops the copies there, a ring or
-  // Time key change drops them all, and take() returns a copy only under the stamp it was made with. The cap: a quarter of the device memory the
-  // browser reports (navigator.deviceMemory, at most 8 GB), at most 2 GiB: about 130 shape pages or 210 weather pages, more than the default GPU
-  // budget holds resident, while a 4 GB machine keeps 1 GiB.
-  const SPILL_BYTES = Math.min(2, (globalThis.navigator?.deviceMemory || 8) / 4) * 1024 ** 3;
-  const spill = createPageSpill(() => opts.spillBytes ?? SPILL_BYTES), spilling = new Set();
-  const shapeStamp = pg => `${RING} ${pg.shapeSeq}`, weatherStamp = seq => `${seq} ${timeKey}`;
-  let shapeRestores = 0, weatherRestores = 0, shapeEvals = 0;
+  // ---- the spill: a CPU copy of each Time result the LRU evicts, its buffers' bytes in their GPU layout, so the page's weather comes back with
+  // writeBuffer instead of its Time pass. A copy is stamped with the inputs it holds: the weather's own weatherSeq and the Time key. changed() bumps
+  // the seq of every page an edit reaches (resident or not) and drops the copies there, a Time key change drops them all, and take() returns a copy
+  // only under the stamp it was made with. A shape page keeps no copy: evaluating it again costs no more than restoring a copy did (Chrome on Metal,
+  // 16x16 Green, page medians: 3 ms against 2 at ring 4, 5 against 9 at ring 128, 11 against 18 at ring 320), and the copy added a read-back of
+  // 15 MiB or more at every eviction (5-17 ms). A page's Time pass costs 8-210 ms (74 on busy ground) against 2-3 ms to restore its weather.
+  // The cap: 1/32 of the device memory counted up to 8 GB (sculpt-memory.js deviceMemory: the browser's figure, or a guess where it gives none), so
+  // 256 MiB, 51 results of 5 MiB (42 with a material field), at most; and no more than the share of the page heap budget the canvas gives the fields
+  // (opts.heapBudget). A tour of a busy 16x16 map (eight views) left 42 copies, 210 MiB. Under heap pressure the canvas lets the copies go (evict).
+  const SPILL_BYTES = Math.min(8, deviceMemory().gb) / 32 * 1024 ** 3;
+  const spill = createPageSpill(() => opts.spillBytes ?? Math.min(SPILL_BYTES, opts.heapBudget?.() ?? Infinity)), spilling = new Set();
+  const weatherStamp = seq => `${seq} ${timeKey}`;
+  let weatherRestores = 0, shapeEvaluations = 0, shapeEvals = 0;   // full evaluations; every evaluation, an edit's late cells included
   // The copy is submitted now, ahead of the buffers' destruction (WebGPU keeps them until the copy has run), and read back without waiting: the copy
   // becomes usable when its map completes. A staging buffer that cannot be made (out of memory) leaves the page without a copy, never an error.
   function spillOut(key, stamp, meta, sources) {
@@ -1301,29 +1311,18 @@ export function createPagedFields(opts) {
       spill.fill(key, entry, data);
     }).catch(() => spill.fill(key, entry, null)).finally(() => { spilling.delete(stage); stage.destroy(); });
   }
-  // Eviction (the LRU in trim): the page's buffers go to the spill first. A resident shape page holds its current inputs once the cells an edit
-  // reached have been evaluated again (current(), ahead of the copy); a weather result only while no edit reached its window since its pass read the shape (w.seq) and it is not stale.
-  function evictShape(pg) { const t = pg.target; if (t && !pg.pins) { current(pg); spillOut('s' + pg.key, shapeStamp(pg), null, [t.F, t.Mk]); } dropShape(pg); }
+  // Eviction (the LRU in trim): a weather result goes to the spill first, while no edit reached its window since its pass read the shape (w.seq)
+  // and it is not stale. A shape page is let go.
   function evictWeather(pg) {
     const w = pg.weather;
     if (w && time && !pg.pins && !pg.stale && !w.invalidRect && !pg.weatherJob && w.seq === pg.weatherSeq)
-      spillOut('w' + pg.key, weatherStamp(w.seq), {seq: w.seq, field: Boolean(w.field)}, [w.weather, ...w.maps, ...(w.field ? [w.field] : [])]);
+      spillOut(pg.key, weatherStamp(w.seq), {seq: w.seq, field: Boolean(w.field)}, [w.weather, ...w.maps, ...(w.field ? [w.field] : [])]);
     dropWeather(pg);
   }
-  // A page's shape or weather from its copy, when one holds its current stamp: the same bytes in new buffers, and the CPU copies the sync reads use.
+  // A page's weather from its copy, when one holds its current stamp: the same bytes in new buffers, and the CPU copy the sync reads use.
   // Restored weather carries the current Time revision (revB), as a pass run now would: its inputs are the same as when the pass ran.
-  function restoreShape(pg) {
-    const got = spill.take('s' + pg.key, shapeStamp(pg));
-    if (!got) return false;
-    const t = engine.makeTarget(pg.x0 - RING, pg.y0 - RING, SIDE, SIDE), q = device().queue, n = SIDE * SIDE;
-    if (t.F.size + t.Mk.size !== got.data.byteLength) { t.destroy(); return false; }
-    q.writeBuffer(t.F, 0, got.data, 0, t.F.size); q.writeBuffer(t.Mk, 0, got.data, t.F.size, t.Mk.size);
-    pg.target = t; pg.rev++; shapeRestores++;
-    pg.cpu = {h: new Float32Array(got.data.slice(0, n * 4)), r: new Float32Array(got.data.slice(2 * n * 4, 3 * n * 4))}; pg.cpuRev = pg.rev;
-    return true;
-  }
   function restoreWeather(pg) {
-    const got = spill.take('w' + pg.key, weatherStamp(pg.weatherSeq));
+    const got = spill.take(pg.key, weatherStamp(pg.weatherSeq));
     if (!got) return false;
     const d = device(), w = {revB: time.revB, seq: got.meta.seq, ...weatherBuffers(d, got.meta.field)}, parts = [w.weather, ...w.maps, ...(w.field ? [w.field] : [])], n = CORE * CORE;
     if (parts.reduce((s, b) => s + b.size, 0) !== got.data.byteLength) { parts.forEach(b => b.destroy()); return false; }
@@ -1335,7 +1334,7 @@ export function createPagedFields(opts) {
   const weatherBuffers = (d, field) => {
     const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
     return {weather: d.createBuffer({label: 'page weather', size: 2 * CORE * CORE * 4, usage: S}), maps: [0, 1, 2].map(k => d.createBuffer({label: 'page map ' + k, size: CORE * CORE * 4, usage: S})),
-      field: field ? d.createBuffer({label: 'page material field', size: CORE * CORE * 16, usage: S}) : null};
+      field: field ? d.createBuffer({label: 'page material field', size: CORE * CORE * 4, usage: S}) : null};
   };
   function trim() {
     const lru = (has, free, budget, size) => {
@@ -1345,7 +1344,7 @@ export function createPagedFields(opts) {
         if (!victim) break; free(victim); total -= size;
       }
     };
-    lru(pg => pg.target, evictShape, shapeBudget(), SHAPE_BYTES);
+    lru(pg => pg.target, dropShape, shapeBudget(), SHAPE_BYTES);
     lru(pg => pg.weather, evictWeather, weatherBudget(), WEATHER_BYTES);
     spill.trim();
     let withCpu = 0; for (const pg of pagesMap.values()) if (pg.cpu) withCpu++;
@@ -1356,15 +1355,15 @@ export function createPagedFields(opts) {
   function evalPage(pg, rect = null) {
     if (!pg.target) { pg.target = engine.makeTarget(pg.x0 - RING, pg.y0 - RING, SIDE, SIDE); rect = null; }
     engine.submit(nodes(), context(), rect, {readback: false, target: pg.target, prepare});
-    pg.rev++; touch(pg); shapeEvals++;
+    pg.rev++; touch(pg); shapeEvals++; if (!rect) shapeEvaluations++;
   }
   // An edit leaves the cells it reached on a resident page to be evaluated when the page is next read (a tile's gather, the CPU copy, the coarse
-  // lattice, the spill), not as it arrives: a gesture's own previews read the preview lattice, never the pages, and a pointer that moved faster
+  // lattice), not as it arrives: a gesture's own previews read the preview lattice, never the pages, and a pointer that moved faster
   // than the pictures queued three or four page evaluations an event that nothing read. The cells of every edit since the last read are evaluated
   // once, from the nodes as they are then: the same result, since a cell outside an edit's rectangle is not changed by it.
   const late = (pg, r) => { const a = pg.late; pg.late = a ? {x0: Math.min(a.x0, r.x0), y0: Math.min(a.y0, r.y0), x1: Math.max(a.x1, r.x1), y1: Math.max(a.y1, r.y1)} : {...r}; pg.rev++; touch(pg); };
   const current = pg => { if (pg.late && pg.target) { const r = pg.late; pg.late = null; evalPage(pg, r); } };
-  const ensureShape = pg => { if (!pg.target && !restoreShape(pg)) { evalPage(pg); wantCpu(pg); } current(pg); touch(pg); };
+  const ensureShape = pg => { if (!pg.target) { evalPage(pg); wantCpu(pg); } current(pg); touch(pg); };
 
   // ---- CPU copies of resident pages: h and r (shape), the authored and eroded height (weather)
   const cpuWanted = new Set(); let cpuTimer = 0, cpuReading = 0;
@@ -1440,7 +1439,7 @@ export function createPagedFields(opts) {
     if (k === timeKey && !!t === !!time) { time = t; return false; }
     time = t; timeKey = k;
     for (const pg of pagesMap.values()) { dropWeather(pg); pg.stale = false; pg.staleSeq++; }
-    spill.clear(k => k[0] === 'w');
+    spill.clear();
     return true;
   }
   let weatherChain = Promise.resolve();
@@ -1453,32 +1452,37 @@ export function createPagedFields(opts) {
   async function computeWeather(pg) {
     if (!time || restoreWeather(pg)) return;
     const t0 = performance.now(), side = weatherSide, {x0: wx0, y0: wy0} = weatherWindow(pg), seq = pg.staleSeq, wseq = pg.weatherSeq, tm = time, key = timeKey;
-    const T = engine.makeTarget(wx0, wy0, side, side);
+    const d = device(), passes = await feedPasses(d);
+    if (key !== timeKey || pg.staleSeq !== seq) return;
+    const T = engine.makeTarget(wx0, wy0, side, side), uniforms = [];
+    let result, cropped;
     try {
       engine.submit(nodes(), context(), null, {readback: false, target: T, prepare});
-      const r = await tm.run({planes: T.F, masks: T.Mk, grid: side, ox: wx0, oy: wy0, stale: () => timeKey!==key || pg.staleSeq!==seq});
-      if (timeKey !== key) { r.weather.destroy(); r.maps.forEach(b => b.destroy()); r.field?.destroy(); return; }
-      const d = device(), w = {revB: tm.revB, seq: wseq, ...weatherBuffers(d, Boolean(r.field))};
-      const enc = d.createCommandEncoder({label: 'page weather crop'}), wn = side * side;
-      for (let row = 0; row < pg.ch; row++) {
-        const from = (pg.y0 - wy0 + row) * side + (pg.x0 - wx0), to = row * CORE;
-        for (let p = 0; p < 2; p++) enc.copyBufferToBuffer(r.weather, (p * wn + from) * 4, w.weather, (p * CORE * CORE + to) * 4, pg.cw * 4);
-        for (let k = 0; k < 3; k++) enc.copyBufferToBuffer(r.maps[k], from * 4, w.maps[k], to * 4, pg.cw * 4);
-        if (r.field) enc.copyBufferToBuffer(r.field, from * 16, w.field, to * 16, pg.cw * 16);
-      }
+      result = await tm.run({planes: T.F, masks: T.Mk, grid: side, ox: wx0, oy: wy0, stale: () => timeKey!==key || pg.staleSeq!==seq});
+      if (timeKey !== key) return;
+      cropped = {revB: tm.revB, seq: wseq, ...weatherBuffers(d, Boolean(result.field))};
+      const enc = d.createCommandEncoder({label: 'page weather crop'});
+      const from = {x: wx0, y: wy0, width: side, height: side};
+      const to = {x: pg.x0, y: pg.y0, width: CORE, height: CORE};
+      const gather = regionGather(enc, passes, uniforms, from, to, coreRect(pg));
+      gatherWeather(gather, result, cropped);
       d.queue.submit([enc.finish()]);
       await d.queue.onSubmittedWorkDone();
-      r.weather.destroy(); r.maps.forEach(b => b.destroy()); r.field?.destroy();
-      if(timeKey!==key){w.weather.destroy();w.maps.forEach(b=>b.destroy());w.field?.destroy();return;}
+      if (timeKey !== key) return;
       // An edit can arrive while this page refines. Keep its invalid footprint
       // on the late result too; the next settled read will compute it again.
-      if(pg.staleSeq!==seq){w.invalidRect=pg.weather?.invalidRect??coreRect(pg);pg.stale=true;}
-      dropWeather(pg); pg.weather = w; if (pg.staleSeq === seq) pg.stale = false;
+      if(pg.staleSeq!==seq){cropped.invalidRect=pg.weather?.invalidRect??coreRect(pg);pg.stale=true;}
+      dropWeather(pg); pg.weather = cropped; cropped = null; if (pg.staleSeq === seq) pg.stale = false;
       pg.weatherMs = performance.now() - t0; weatherRuns++; weatherMsTotal += pg.weatherMs;
       touch(pg); wantCpu(pg);
     } catch (err) {
       if(err.name!=='AbortError'||timeKey===key&&pg.staleSeq===seq)throw err;
-    } finally { T.destroy(); }
+    } finally {
+      uniforms.forEach(b => b.destroy());
+      if (result) destroyWeather(result);
+      if (cropped) destroyWeather(cropped);
+      T.destroy();
+    }
   }
   let weatherRuns = 0, weatherMsTotal = 0;
 
@@ -1508,40 +1512,54 @@ export function createPagedFields(opts) {
     return lease;
   }
 
-  // ---- gather: encode the copy of `rect` from the pages' buffers into the destination set (encoder passes; pipelines from feedPasses)
+  // A gather copies a rectangle of world cells between two row-major windows. A partial
+  // page still has CORE-wide rows and CORE² cells per plane. All its weather passes share the uniform.
+  function regionGather(enc, passes, uniforms, from, to, box, invalid) {
+    const d = device(), u = d.createBuffer({label: 'gather uniform', size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
+    uniforms.push(u);
+    d.queue.writeBuffer(u, 0, new Int32Array([
+      from.x, from.y, from.width, from.height, box.x0, box.y0, box.x1, box.y1,
+      to.x, to.y, to.width, to.height, invalid?.x0 ?? 1, invalid?.y0 ?? 1, invalid?.x1 ?? 0, invalid?.y1 ?? 0,
+    ]));
+    const groupsX = Math.ceil((box.x1 - box.x0 + 1) / 8), groupsY = Math.ceil((box.y1 - box.y0 + 1) / 8);
+    return (entry, firstBinding, buffers) => {
+      const resources = {'3.0': {buffer: u}};
+      buffers.forEach((buffer, i) => { resources['3.' + (firstBinding + i)] = {buffer}; });
+      const pass = enc.beginComputePass({label: entry});
+      pass.setPipeline(passes.pipes[entry]);
+      for (const [group, bindings] of passes.groups(entry, resources)) pass.setBindGroup(group, bindings);
+      pass.dispatchWorkgroups(groupsX, groupsY);
+      pass.end();
+    };
+  }
+  function gatherWeather(gather, src, dst) {
+    gather('gatherHeight', 5, [src.weather, dst.weather]);
+    gather('gatherMaps', 7, [...src.maps, ...dst.maps]);
+    if (src.field) gather('gatherField', 13, [src.field, dst.field]);
+  }
   function encodeGather(enc, passes, rect, dst, wantWeather) {
-    const d = device(), gw = rect.x1 - rect.x0 + 1, gh = rect.y1 - rect.y0 + 1, tmp = [];
+    const to = {x: rect.x0, y: rect.y0, width: rect.x1 - rect.x0 + 1, height: rect.y1 - rect.y0 + 1}, uniforms = [];
     for (const pg of overlapping(rect)) {
-      // The lease pins the page, but a ring change or a whole-map change during the lease's awaits (weather, feed passes) drops its target.
-      // The gather re-acquires it here, on the current ring, ahead of this encoder on the queue.
+      const box = meet(rect, coreRect(pg));
+      if (!box) continue;
+      // The ring or the map can change while the lease awaits its inputs.
       ensureShape(pg);
-      const dispatch = (entry, src, box, res) => {
-        const o = {x0: Math.max(rect.x0, box.x0), y0: Math.max(rect.y0, box.y0), x1: Math.min(rect.x1, box.x1), y1: Math.min(rect.y1, box.y1)};
-        if (o.x1 < o.x0 || o.y1 < o.y0) return;
-        const u = d.createBuffer({label: 'gather uniform', size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}), dv = new DataView(new ArrayBuffer(64));
-        [src.ox, src.oy, src.pw, src.ph, o.x0, o.y0, o.x1, o.y1, rect.x0, rect.y0, gw, gh].forEach((v, i) => { if ([0, 1, 4, 5, 6, 7, 8, 9].includes(i)) dv.setInt32(i * 4, v, true); else dv.setUint32(i * 4, v, true); });
-        const invalid=pg.weather?.invalidRect;[invalid?.x0??1,invalid?.y0??1,invalid?.x1??0,invalid?.y1??0].forEach((v,i)=>dv.setInt32(48+i*4,v,true));
-        d.queue.writeBuffer(u, 0, dv.buffer); tmp.push(u);
-        const r = {'3.0': {buffer: u}, ...res}, pass = enc.beginComputePass({label: entry});
-        pass.setPipeline(passes.pipes[entry]); for (const [g, bg] of passes.groups(entry, r)) pass.setBindGroup(g, bg);
-        pass.dispatchWorkgroups(Math.ceil((o.x1 - o.x0 + 1) / 8), Math.ceil((o.y1 - o.y0 + 1) / 8)); pass.end();
-      };
-      const core = coreRect(pg);
-      dispatch('gatherShape', {ox: pg.x0 - RING, oy: pg.y0 - RING, pw: SIDE, ph: SIDE}, core, {'3.1': {buffer: pg.target.F}, '3.2': {buffer: pg.target.Mk}, '3.3': {buffer: dst.F}, '3.4': {buffer: dst.Mk}});
+      const shape = {x: pg.x0 - RING, y: pg.y0 - RING, width: SIDE, height: SIDE};
+      const gather = regionGather(enc, passes, uniforms, shape, to, box);
+      gather('gatherShape', 1, [pg.target.F, pg.target.Mk, dst.F, dst.Mk]);
       if (wantWeather && pg.weather) {
-        const src = {ox: pg.x0, oy: pg.y0, pw: CORE, ph: CORE};
-        dispatch('gatherHeight', src, core, {'3.5': {buffer: pg.weather.weather}, '3.6': {buffer: dst.W}});
-        if (pg.weather.field) dispatch('gatherField', src, core, {'3.13': {buffer: pg.weather.field}, '3.14': {buffer: dst.Fd}});
-        dispatch('gatherMaps', src, core, {'3.7': {buffer: pg.weather.maps[0]}, '3.8': {buffer: pg.weather.maps[1]}, '3.9': {buffer: pg.weather.maps[2]}, '3.10': {buffer: dst.M[0]}, '3.11': {buffer: dst.M[1]}, '3.12': {buffer: dst.M[2]}});
+        const page = {x: pg.x0, y: pg.y0, width: CORE, height: CORE};
+        gatherWeather(regionGather(enc, passes, uniforms, page, to, box, pg.weather.invalidRect),
+          pg.weather, {weather: dst.W, maps: dst.M, field: dst.Fd});
       }
     }
-    return tmp;
+    return uniforms;
   }
   function makeSet(cells, label) {
     const d = device(), S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, owned=[],mk = (n, l) => {const b=d.createBuffer({label: label + ' ' + l, size: Math.max(16, n), usage: S});owned.push(b);return b;};
     try{
-    const set = {cells, F: mk(cells * 4 * PLANES, 'planes'), Mk: mk(cells * 28, 'masks'), W: mk(cells * 8, 'height'), M: [0, 1, 2].map(k => mk(cells * 4, 'map ' + k)), Fd: mk(cells * 16, 'material field')};
-    set.bytes = cells * (4 * PLANES + 64); set.destroy = () => { set.F.destroy(); set.Mk.destroy(); set.W.destroy(); set.M.forEach(b => b.destroy()); set.Fd.destroy(); };
+    const set = {cells, F: mk(cells * 4 * PLANES, 'planes'), Mk: mk(cells * 28, 'masks'), W: mk(cells * 8, 'height'), M: [0, 1, 2].map(k => mk(cells * 4, 'map ' + k)), Fd: mk(cells * 4, 'material field')};
+    set.bytes = cells * STAGING_CELL; set.destroy = () => { set.F.destroy(); set.Mk.destroy(); set.W.destroy(); set.M.forEach(b => b.destroy()); set.Fd.destroy(); };
     return set;
     }catch(error){for(const b of owned)b.destroy();throw error;}
   }
@@ -1571,20 +1589,25 @@ export function createPagedFields(opts) {
     maskKeys.forEach((k, m) => { const out = new Int8Array(n); for (let i = 0; i < n; i++) { const word = masks[i * 7 + (m >> 2)]; out[i] = (word << (24 - (m & 3) * 8)) >> 24; } fields[k] = out; });
     return {fields, maskPlanes: maskKeys.map(k => fields[k]), gridWidth: w, gridHeight: h, gridSpacing: spacing, gridOrigin: [rect.x0 * spacing, rect.y0 * spacing], worldSize, worldGrid, revision, bytes: n * (4 * PLANES + maskKeys.length), rect: worldRect(rect)};
   };
-  async function readRect(rect, {weather = true} = {}) {
+  // heights: only the weathered height (the export's corners and passability, sculpt-map.js sampleField): the h plane, and with weather
+  // the r plane and the Time heights its blend reads, are copied back; no other plane or mask. The same arithmetic, so the same bytes.
+  async function readRect(rect, {weather = true, heights = false} = {}) {
     const wantWeather = weather && Boolean(time), lease = await prepareRect(rect, wantWeather);
     try {
       const passes = await feedPasses(device()), gw = rect.x1 - rect.x0 + 1, gh = rect.y1 - rect.y0 + 1, n = gw * gh, set = makeSet(n, 'read'), d = device();
       const weatherRevB=wantWeather?Math.min(...lease.pages.map(pg=>pg.weather?.revB??-1)):time?.revB;
       const enc = d.createCommandEncoder({label: 'read rect'}), tmp = encodeGather(enc, passes, rect, set, wantWeather);
-      const stage = (b, bytes) => { const s = d.createBuffer({label: 'read stage', size: Math.max(16, bytes), usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST}); enc.copyBufferToBuffer(b, 0, s, 0, bytes); return s; };
-      const sF = stage(set.F, n * 4 * PLANES), sM = stage(set.Mk, n * 28), sW = wantWeather ? stage(set.W, n * 8) : null;
+      const stage = (b, bytes, from = 0) => { const s = d.createBuffer({label: 'read stage', size: Math.max(16, bytes), usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST}); enc.copyBufferToBuffer(b, from, s, 0, bytes); return s; };
+      const sF = stage(set.F, heights ? n * 4 : n * 4 * PLANES), sR = heights && wantWeather ? stage(set.F, n * 4, 2 * n * 4) : null;
+      const sM = heights ? null : stage(set.Mk, n * 28), sW = wantWeather ? stage(set.W, n * 8) : null, staged = [sF, sR, sM, sW].filter(Boolean);
       d.queue.submit([enc.finish()]); lease.release();
-      await Promise.all([sF, sM, sW].filter(Boolean).map(b => b.mapAsync(GPUMapMode.READ)));
-      const planes = new Float32Array(sF.getMappedRange().slice(0)), masks = new Uint32Array(sM.getMappedRange().slice(0)), wt = sW ? new Float32Array(sW.getMappedRange().slice(0)) : null;
-      [sF, sM, sW].forEach(b => b?.destroy()); set.destroy(); tmp.forEach(b => b.destroy());
+      await Promise.all(staged.map(b => b.mapAsync(GPUMapMode.READ)));
+      const planes = new Float32Array(sF.getMappedRange().slice(0)), masks = sM ? new Uint32Array(sM.getMappedRange().slice(0)) : null, wt = sW ? new Float32Array(sW.getMappedRange().slice(0)) : null;
+      const route = sR ? new Float32Array(sR.getMappedRange().slice(0)) : wt ? planes.subarray(2 * n, 3 * n) : null;
+      staged.forEach(b => b.destroy()); set.destroy(); tmp.forEach(b => b.destroy());
       let blend = null;
-      if (wt) { blend = new Float32Array(n); const base = wt.subarray(0, n), e = wt.subarray(n); for (let i = 0; i < n; i++) { const h = planes[i]; blend[i] = h + (e[i] - base[i]) * (1 - smooth(0, 10, Math.abs(h - base[i]))) * (1 - planes[2 * n + i]); } }
+      if (wt) { blend = new Float32Array(n); const base = wt.subarray(0, n), e = wt.subarray(n); for (let i = 0; i < n; i++) { const h = planes[i]; blend[i] = h + (e[i] - base[i]) * (1 - smooth(0, 10, Math.abs(h - base[i]))) * (1 - route[i]); } }
+      if (heights) return {fields: {h: blend ?? planes}, gridWidth: gw, gridHeight: gh, gridSpacing: spacing, gridOrigin: [rect.x0 * spacing, rect.y0 * spacing], worldSize, worldGrid, revision, bytes: n * 4, rect: worldRect(rect), weatherRevB};
       return {...cropFrom(rect, planes, masks, blend),weatherRevB};
     } finally { lease.release(); }
   }
@@ -1619,7 +1642,7 @@ export function createPagedFields(opts) {
     const announce = event.rect;
     for (const pg of pagesMap.values()) {
       if (!r) {
-        dropShape(pg);pg.staleSeq++;pg.shapeSeq++;pg.weatherSeq++;
+        dropShape(pg);pg.staleSeq++;pg.weatherSeq++;
         // A held whole-map shape row uses the same authored-first behavior as
         // a local stroke. Keep the weather allocation, invalidate its contents
         // for the gather, and refine once input is quiet.
@@ -1628,9 +1651,9 @@ export function createPagedFields(opts) {
         continue;
       }
       if ((pg.weather||pg.weatherJob) && hits(windowRect(pg), {x0: r.x0 - 6, y0: r.y0 - 6, x1: r.x1 + 6, y1: r.y1 + 6})) { if(pg.weather)pg.weather.invalidRect=invalidateRefinement(pg.weather.invalidRect,r,worldGrid);pg.stale = true; pg.staleSeq++; pendingStale = pendingStale ? joinWorld(pendingStale, worldRect(r)) : worldRect(r); }
-      // The spill's stamps: the window the Time pass actually reads (windowRect moved inside the world), and the shape page's whole buffer.
-      if (hits(grow(weatherWindow(pg), 6), r)) { pg.weatherSeq++; spill.drop('w' + pg.key); }
-      if (hits(bufRect(pg), r)) { pg.shapeSeq++; spill.drop('s' + pg.key); if (pg.target && engine) { late(pg, r); wantCpu(pg); } }
+      // The spill's stamp: the window the Time pass actually reads (windowRect moved inside the world).
+      if (hits(grow(weatherWindow(pg), 6), r)) { pg.weatherSeq++; spill.drop(pg.key); }
+      if (hits(bufRect(pg), r) && pg.target && engine) { late(pg, r); wantCpu(pg); }
     }
     if (!r) spill.clear();
     if (!r) { pendingStale = gesture()?{x:0,y:0,width:worldSize-1,height:worldSize-1}:null; for (let py = 0; py < np; py++) for (let px = 0; px < np; px++) coarseAdd(page(px, py), null); }
@@ -1677,12 +1700,15 @@ export function createPagedFields(opts) {
     return {revision, residentBytes: cpuBytes() + coarse.byteLength, cacheBytes: cpuBytes(), cacheEntries: resident, lastWorkingBytes: 0, peakBytes: cpuBytes(), budget: shapeBudget() + weatherBudget(), hits: 0, misses: 0, replays: 0, evictions: 0,
       chunkCells: CORE, worldSize, worldGrid, gridSpacing: spacing, bytesPerCell: PAGE_CELL, workspaceBytesPerCell: 0, maxWorkingCells: 0, pointSamples: 0, connectionTiles: 0, connectionCells: 0,
       gpuShape: {...g, gpuBytes: gpuBytes(), paged: true, core: CORE, ring: RING, ringChanges, apron: APRON, shapePages: resident, shapeEvals, weatherPages: weathers, pagesTotal: np * np, shapeBytes: shapeBytes(), weatherBytes: weatherBytes(), stagingBytes: stagingBytes(), stagingDrops, cpuCopyBytes: cpuBytes(), cpuCopiesPending: cpuWanted.size + cpuReading,
-        coarse: {points: coarse.length, filled: coarseFilled, done: coarseDone, queued: coarseQueue.size, fullAt: coarseFullAt}, weatherRuns, weatherMsTotal, spill: {...spill.stats(), inFlight: spilling.size, shapeRestores, weatherRestores}, error: (error || firstError)?.message || null}};
+        coarse: {points: coarse.length, filled: coarseFilled, done: coarseDone, queued: coarseQueue.size, fullAt: coarseFullAt}, weatherRuns, weatherMsTotal, spill: {...spill.stats(), inFlight: spilling.size, weatherRestores}, shapeEvaluations, error: (error || firstError)?.message || null}};
   };
 
   return {
     paged: true, core: CORE, apron: APRON, ring: RING,
-    buffers: () => [],
+    // The CPU memory the fields hold (the page heap counts it): the spill's copies, the resident pages' CPU copies and the coarse lattice.
+    buffers: () => { const out = new Set([...spill.buffers(), coarse.buffer]); for (const pg of pagesMap.values()) for (const a of [pg.cpu?.h, pg.cpu?.r, pg.cpuW?.base, pg.cpuW?.e]) if (a) out.add(a.buffer); return [...out]; },
+    // Heap pressure: the spill's copies go (their pages run their Time pass again when next read); the buffers let go, for the canvas's accounting.
+    evict: () => { const out = spill.buffers(); spill.clear(); return out; },
     read: () => { throw new Error('nanolathe: a paged map is read with readAsync'); }, readCells: () => { throw new Error('nanolathe: a paged map is read with readAsync'); },
     sample: (x, y, k = 'h') => bilinear(x, y, (ix, iy) => cell(ix, iy, k)), cell: (ix, iy, k) => cell(ix, iy, k),
     sampleEroded: (x, y) => bilinear(x, y, erodedCell),
@@ -1721,9 +1747,10 @@ export function createPagedFields(opts) {
       const lease = await prepareRect(rect, true), passes = await feedPasses(device()), d = device(), n = (rect.x1 - rect.x0 + 1) * (rect.y1 - rect.y0 + 1), set = makeSet(n, 'dbg');
       const enc = d.createCommandEncoder(), tmp = encodeGather(enc, passes, rect, set, true); d.queue.submit([enc.finish()]); lease.release();
       const W = new Float32Array(await readBuffer(d, set.W, 0, n * 8)), maps = await Promise.all(set.M.map(b => readBuffer(d, b, 0, n * 4).then(x => new Uint8Array(x))));
-      set.destroy(); tmp.forEach(b => b.destroy()); return {W, maps, n};
+      const field = time?.material ? new Uint8Array(await readBuffer(d, set.Fd, 0, n * 4)) : null;
+      set.destroy(); tmp.forEach(b => b.destroy()); return {W, maps, field, n};
     },
-    debugPages: () => [...pagesMap.values()].filter(p => p.weather).map(p => ({x0: p.x0, y0: p.y0, cw: p.cw, ch: p.ch, weather: p.weather.weather, maps: p.weather.maps, core: CORE})),
+    debugPages: () => [...pagesMap.values()].filter(p => p.weather).map(p => ({x0: p.x0, y0: p.y0, cw: p.cw, ch: p.ch, weather: p.weather.weather, maps: p.weather.maps, field: p.weather.field ?? null, core: CORE})),
     pageInfo: () => ({np, core: CORE, need: lastNeed, ring: RING, apron: APRON, side: SIDE}),
     destroy() { for (const pg of pagesMap.values()) { dropShape(pg); dropWeather(pg); } spill.clear(); for (const s of spilling) s.destroy(); staging?.destroy(); scratchT?.destroy(); engine?.destroy(); },
   };
@@ -1773,6 +1800,7 @@ export function feedUniform(device, f) {
   u.forEach((k, i) => { if (['ox', 'oy'].includes(k)) dv.setInt32(i * 4, f[k] ?? 0, true); else dv.setUint32(i * 4, (f[k] ?? 0) >>> 0, true); });
   fl.forEach((k, i) => dv.setFloat32((10 + i) * 4, f[k] ?? 0, true));
   dv.setUint32(13 * 4, f.tilesWide ?? 0, true);
+  dv.setUint32(14 * 4, f.maskStride ?? 7, true);
   const r=f.invalidRect;[r?.x0??1,r?.y0??1,r?.x1??0,r?.y1??0].forEach((v,i)=>dv.setInt32(64+i*4,v,true));
   device.queue.writeBuffer(buffer, 0, dv.buffer);
   return buffer;

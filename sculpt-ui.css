@@ -58,7 +58,7 @@ fieldset{min-width:0;border:0;padding:0;margin:0}
 .row button{padding:6px;font-size:11px}
 .panel,.knobs-group{border-top:1px solid var(--line);margin-top:14px;padding-top:10px}
 .brush{margin:0;padding:0;border:0}
-.brush.editing .panel-title{color:#e9cf92}
+.brush.editing .panel-title{color:#e9cf92}.brush:not(.editing) #brush-scope-tag{border-style:dashed}
 .feature-group{margin:9px 0 0;border:1px solid var(--line);border-radius:6px;background:#20292d;overflow:hidden}
 .feature-group>summary{display:flex;align-items:center;gap:7px;list-style:none;padding:9px 10px;font-weight:550;font-size:11px;user-select:none}
 .feature-group>summary:before{content:'›';color:var(--muted);font-size:16px;line-height:14px;width:8px}

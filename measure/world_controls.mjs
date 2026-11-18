@@ -55,7 +55,7 @@ const ALLOWED = {};
 // A cancelled term leaves float rounding (a pixel or two), not a control.
 const HIDDEN_PX = 8;
 // The rows a picked water color changes the answer for; no scene picks one, so the sweep does (H25).
-const COLORED_ROWS = new Set(['deepEdge', 'shallowDepth', 'deepDepth', 'waterSoft', 'bandWater', 'bedTint', 'bedBright', 'bedContrast', 'bedFlat']);
+const COLORED_ROWS = new Set(['deepEdge', 'shallowDepth', 'deepDepth', 'waterSoft', 'bedTint', 'bedBright', 'bedContrast', 'bedFlat']);
 const reasonFor = r => ALLOWED[(r.stroke ? r.stroke + ':' : '') + r.key] || ALLOWED[r.key] || null;
 const failed = r => (r.zero && !r.allowed) || r.leak || r.hides;
 const named = r => `${r.world} ${r.stroke ? r.stroke + ':' : ''}${r.key}${r.hides ? ' moves while the panel says "' + r.reason + '"' : ''}`;
@@ -67,7 +67,7 @@ if (args.includes('--recheck')) {
   for (const b of bad) console.log('!', b);
   process.exit(bad.length || f.console.length ? 1 : 0);
 }
-const SURFACE = [['relief', 0, 160], ['transition-detail', 0, 100], ['mineral-ring', 0, 100], ['ring-spread', 0, 100], ['ring-variation', 0, 100], ['material-weathering', 0, 100], ['deposit-spread', 0, 100]];
+const SURFACE = [['relief', 0, 160], ['transition-detail', 0, 100], ['material-weathering', 0, 100], ['deposit-spread', 0, 100]];
 // The stroke kinds that carry SHAPE_FIELDS rows, drawn one each on a grid of the 1024 px window.
 // The Crater and Crystals buttons draw landforms, so the retired crater and crystal kinds have no rows here (BUTTONS_AT keeps a stroke of each button).
 const KIND_AT = {fissure: [130, 830], erase: [380, 830], paint: [630, 830], landform: [880, 830]};

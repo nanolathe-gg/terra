@@ -55,7 +55,7 @@ function worldFor(group,key){
  if(/^moon|^pock|^slopeMarks$|^wrinkles$/.test(key))return 'moon';
  if(/^lava|^layerCrease|^shineSlopeGate|^shoreEdge/.test(key))return 'lava';
  if(/^baseBand|^desert|^strata/.test(key))return 'desert';
- if(/^ring|^hillLight$/.test(key)||key==='apron'||key==='beachWidth')return 'archipelago';
+ if(key==='hillLight'||key==='apron'||key==='beachWidth')return 'archipelago';
  if(group.includes('Shine'))return 'crystal';
  return 'green';
 }
@@ -70,7 +70,6 @@ function worldGates(group,key){
  if(/^moonCup/.test(key))x.moonCups=.7;
  if(/^moonRib/.test(key))x.moonRibs=.7;
  if(/^moonFold/.test(key))x.moonFolds=.7;
- if(/^ring/.test(key))Object.assign(x,{ringContrast:.8,ringShift:8,ringPatch:.6});
  return x;
 }
 $('world').onclick=()=>run('World visual sensitivity',async()=>{
@@ -101,9 +100,11 @@ $('perf').onclick=()=>run('Pipeline alternatives',async()=>{
  const rows=[],cases=[Object.keys(scenes).sort()[Number($('start').value)]];$('progress').max=cases.length;
  for(const [i,name] of cases.entries()){
   if(stop)break;const s=scenes[name],api=await load(s.biome,s.query||'');api.scene(s.strokes,{ground:s.ground!==false});const base=await api.capture();const baseStats=api.stats();await png(`${$('label').value}/perf/${name}/default.png`,base.canvas);
-  for(const [key,value,id] of [['erosionAge',16,'relax16'],['reliefOctaves',3,'relief3']]){
-   const old=api.renderer.variant.get(key)??api.config.defaults[key],started=performance.now();await api.knob(key,value);const trial=await api.capture(),settledMs=performance.now()-started;await png(`${$('label').value}/perf/${name}/${id}.png`,trial.canvas);rows.push({scene:name,candidate:id,baseMs:base.ms,trialMs:trial.ms,settledMs,baseStats,stats:api.stats(),...summarize(base.canvas,trial.canvas)});await api.knob(key,old);
-  }
+  const old=api.renderer.variant.get('erosionAge')??api.config.defaults.erosionAge,started=performance.now();
+  await api.knob('erosionAge',16);const trial=await api.capture(),settledMs=performance.now()-started;
+  await png(`${$('label').value}/perf/${name}/relax16.png`,trial.canvas);
+  rows.push({scene:name,candidate:'relax16',baseMs:base.ms,trialMs:trial.ms,settledMs,baseStats,stats:api.stats(),...summarize(base.canvas,trial.canvas)});
+  await api.knob('erosionAge',old);
   await save(`${$('label').value}/performance-${name}.json`,rows);line(name+' measured');$('progress').value=i+1;
  }
 });
@@ -169,14 +170,13 @@ $('diagnostic').onclick=()=>run('Conditional controls on explicit feature fixtur
  const world=$('world-filter').value,api=await load(world),rows=[];
  const fixture=[['landform',[[270,300],[550,300]],{card:{diameter:400,heightReference:1,elevation:134,cracks:100}}],['landform',[[800,150],[860,430]],{card:{diameter:320,heightReference:1,elevation:154,cracks:100,wander:8,widthVary:0},curve:{form:'lfMountain'}}],['landform',[[0,850],[1024,850]],{card:{diameter:600,heightReference:1,elevation:-55,combine:1,cracks:0,shorePlates:1,plateMaterial:world==='ice'?2:1},curve:{form:'lfShore'},waterDeep:0}],['sand',[[350,470],[650,470]],{card:{diameter:280,amount:100}}],['paint',[[350,100],[500,270]],{card:{diameter:220,amount:100,paintChannel:1}}]];
  api.scene(fixture,{ground:true});await api.idle();const original=new Map(api.renderer.variant);
- const keys=world==='desert'?['strataContrast']:world==='zhon'?['beachWidth','apron']:world==='ice'?['frostGaps','frostGapReach','frostGapSize','frostGapDepth','iceFrost']:world==='green'?['bedDip','bedDipDir']:world==='archipelago'?['ringShiftDir','beachWidth','apron']:world==='crystal'?['shineSand','shineSandSharp','shineSandRough','shineSandScale']:['undulationScale','undulationCover','sandCrown','bedDipDir','bandWater','sandBanding','sandBandSpacing','shallowDepth','deepDepth','waterSoft','bankRock','debris','debrisReach','debrisSize','debrisSort','repose','facetCoarse','crackWidth','crackHairline','boulderRound'];
+ const keys=world==='desert'?['strataContrast']:world==='zhon'?['beachWidth','apron']:world==='ice'?['frostGaps','frostGapReach','frostGapSize','frostGapDepth','iceFrost']:world==='green'?['bedDip','bedDipDir']:world==='archipelago'?['beachWidth','apron']:world==='crystal'?['shineSand','shineSandSharp','shineSandRough','shineSandScale']:['undulationScale','undulationCover','sandCrown','bedDipDir','sandBanding','sandBandSpacing','shallowDepth','deepDepth','waterSoft','bankRock','debris','debrisReach','debrisSize','debrisSort','repose','facetCoarse','crackWidth','crackHairline','boulderRound'];
  const tasks=inventory.knobs.flatMap(([group,list])=>list.map(f=>({group,f}))).filter(t=>keys.includes(t.f[0]));
  for(const {group,f:[key,,lo,hi,step]} of tasks){
   if(stop)break;const gates={...worldGates(group,key),undulation:10};
   if(key==='bedDipDir')gates.bedDip=.7;
   if(group==='Contour bands')Object.assign(gates,{banding:.8,sandBanding:.8});
-  if(['shallowDepth','deepDepth','waterSoft','bandWater'].includes(key))Object.assign(gates,{deepEdge:0});
-  if(key.startsWith('ring'))Object.assign(gates,{ringContrast:1,ringShift:20});
+  if(['shallowDepth','deepDepth','waterSoft'].includes(key))Object.assign(gates,{deepEdge:0});
   if(key.startsWith('frost'))gates.frostGaps=.35;
   const saved={};for(const [k,v] of Object.entries(gates)){saved[k]=api.renderer.variant.get(k);await api.knob(k,v);}
   const high=key.endsWith('Dir')?180:hi;await api.knob(key,lo);const a=await api.capture();await api.knob(key,high);const b=await api.capture();
@@ -219,18 +219,17 @@ $('internal').onclick=()=>run('Preset/internal sensitivity',async()=>{
 $('repeat-perf').onclick=()=>run('Warm interleaved alternatives',async()=>{
  const name=Object.keys(scenes).sort()[Number($('start').value)],s=scenes[name],api=await load(s.biome,s.query||''),rows=[];
  api.scene(s.strokes,{ground:s.ground!==false});await api.capture();
- for(const [key,value] of [['reliefOctaves',3],['erosionAge',16]]){
-  const original=api.renderer.variant.get(key)??api.config.defaults[key];
-  for(let i=0;i<6;i++)for(const [label,v] of i%2?[['trial',value],['default',original]]:[['default',original],['trial',value]]){
-   const t=performance.now();await api.knob(key,v);const c=await api.capture();rows.push({scene:name,key,label,iteration:i,captureMs:c.ms,settledMs:performance.now()-t,refinementMs:api.stats().gpuErosionMs});
-  }await api.knob(key,original);
+ const key='erosionAge',value=16,original=api.renderer.variant.get(key)??api.config.defaults[key];
+ for(let i=0;i<6;i++)for(const [label,v] of i%2?[['trial',value],['default',original]]:[['default',original],['trial',value]]){
+  const t=performance.now();await api.knob(key,v);const c=await api.capture();rows.push({scene:name,key,label,iteration:i,captureMs:c.ms,settledMs:performance.now()-t,refinementMs:api.stats().gpuErosionMs});
  }
+ await api.knob(key,original);
  await save(`${$('label').value}/repeat-${name}.json`,rows);line(name+' complete; discard iteration zero for warm medians');
 });
 
 $('surface').onclick=()=>run('Surface and legacy-control sensitivity',async()=>{
  const world=$('world-filter').value,api=await load(world),s=scenes[world+'-1'];api.scene(s.strokes,{ground:s.ground!==false});const rows=[];
- for(const [id,lo,hi] of [['relief',0,160],['transition-detail',0,100],['mineral-ring',0,100],['ring-spread',0,100],['ring-variation',0,100],['material-weathering',0,100],['deposit-spread',0,100]]){
+ for(const [id,lo,hi] of [['relief',0,160],['transition-detail',0,100],['material-weathering',0,100],['deposit-spread',0,100]]){
   const original=frame.contentDocument.getElementById(id).value;await api.control(id,lo);const a=await api.capture();await api.control(id,hi);const b=await api.capture();await api.control(id,original);const r={key:id,world,lo,hi,...summarize(a.canvas,b.canvas)};rows.push(r);line(`${id}: ${(r.changedBlocks*100).toFixed(1)}% blocks, max RGB ${r.maxRGB}`);
  }await save(`${$('label').value}/surface-${world}.json`,rows);
 });

@@ -1236,6 +1236,50 @@ fn lfBetter(cand: vec3f, pick: vec3f, seen: bool, base: f32) -> bool {
 }
 // lfcrater: how far past a section's peak (in shares of its half width, toward the path) a rim spur's root fades into the bowl's wall.
 const SPUR_INNER = 0.05;
+// A landform's variation noise at (lx, ly) in its own frame: the wander (x), the width variation (y) and the height variation (z), 0 where off.
+fn lfNoise(lx: f32, ly: f32) -> vec3f {
+  var nA = 0.0; var nB = 0.0; var nC = 0.0;
+  if (u.lfWander > 0.0 || u.lfWidth > 0.0 || u.lfHeight > 0.0) {
+    let sz = max(u.lfSize, 8.0);
+    // Broad scallops carry smaller notches on the same outline. The two section weights let the shoulder break up more than the foot, without another control.
+    if (u.lfWander > 0.0) { nA = 0.7 * noiseValue(3u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz) + 0.3 * noiseValue(2u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); if (u.lfVary > 0.0) { nA = wanderVaried(nA, lx, ly); } }
+    if (u.lfWidth > 0.0) { nB = noiseValue(5u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); }
+    if (u.lfHeight > 0.0) { nC = lfFractal(lx / sz + 37.1, ly / sz - 19.7, 0x5c9u); }
+  }
+  return vec3f(nA, nB, nC);
+}
+// Coast ramp below 1 (the host sets it on a stroke whose crest is under the sea): the dry part of the section keeps only the last lfCoast of its fall to
+// the waterline (the drop as a share of base - sea), easing off the plain and meeting the water in a bank 1 / lfCoast times as steep; under water it is
+// as drawn. From 1 to .75 the reshaped ramp blends in, so the row moves the coast by degrees from the drawn section.
+fn lfCoastRamp(value: f32, base: f32) -> f32 {
+  if (u.lfCoast >= 1.0 || base <= u.sea || value <= u.sea || value >= base) { return value; }
+  let keep = max(u.lfCoast, 0.02);
+  let fx = clamp(((base - value) / (base - u.sea) - (1.0 - keep)) / keep, 0.0, 1.0);
+  let ramp = base - fx * fx * (2.0 - fx) * (base - u.sea);
+  let blend = min(1.0, (1.0 - keep) / 0.25);
+  return select(mix(value, ramp, blend), ramp, blend >= 1.0);
+}
+// The rock claim's margin (u.lfClaim px, sculpt-shape-presets.js rockClaimMargin): a cell the stroke leaves as it is takes the stroke's rock when the
+// stroke moves the ground u.lfClaim px nearer its path (the trunk's nearest point, read through the coast ramp as the cell's own height is), so the strip
+// Time wears past a cut's edge is the stroke's rock and not a cut bank of the world's. Only the rock plane, and only where no stroke has claimed a rock
+// yet: a margin never takes an earlier stroke's rock.
+fn claimRockMargin(i: u32, wx: f32, wy: f32, trunk: u32, share: f32, base: f32, x: i32, y: i32, cells: u32) {
+  if (u.lfClaim <= 0.0 || trunk == 0xffffffffu || maskGet(i, 20u) != 0) { return; }
+  let s0 = Seg[(u.segBase + trunk) * 4u];
+  let dx = s0.z - s0.x; let dy = s0.w - s0.y; let len2 = max(dx * dx + dy * dy, 1e-8);
+  let t = clamp(((wx - s0.x) * dx + (wy - s0.y) * dy) / len2, 0.0, 1.0);
+  let to = vec2f(s0.x + dx * t - wx, s0.y + dy * t - wy); let dn = length(to);
+  let at = vec2f(wx, wy) + to * (min(u.lfClaim, dn) / max(dn, 1e-4));
+  // The outline there wanders by the noise there (the cell's own would move it by up to the whole Wander); terraces keep the cell's own tables.
+  var l = at; if (u.framed != 0u) { l = vec2f(u.inv0 * at.x + u.inv2 * at.y + u.inv4, u.inv1 * at.x + u.inv3 * at.y + u.inv5); }
+  let nz = lfNoise(l.x, l.y);
+  let cand = lfEval(s0, Seg[(u.segBase + trunk) * 4u + 1u], Seg[(u.segBase + trunk) * 4u + 2u], at.x, at.y, base, nz.x, nz.y, nz.z, share, x, y, i, cells);
+  if (cand.y <= 0.0) { return; }
+  var v = lfCoastRamp(cand.x, base);
+  if (u.combine == 0u) { v = max(base, v); } else if (u.combine == 1u) { v = min(base, v); }
+  if (v == base) { return; }
+  for (var m = 0u; m < u.nwrites; m++) { let mw = MW[u.mwBase + m]; if (u32(mw.x) == 20u) { maskSet(i, 20u, i32(mw.y)); } }
+}
 
 @compute @workgroup_size(8, 8)
 fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
@@ -1251,14 +1295,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   if (u.framed != 0u) { lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5; }
   let base = F[PH * cells + i];
   // The variation noise: functions of the position in the shape's frame only (never of a tile or a page), at a few scales; one cell's three values serve every segment.
-  var nA = 0.0; var nB = 0.0; var nC = 0.0;
-  if (u.lfWander > 0.0 || u.lfWidth > 0.0 || u.lfHeight > 0.0) {
-    let sz = max(u.lfSize, 8.0);
-    // Broad scallops carry smaller notches on the same outline. The two section weights let the shoulder break up more than the foot, without another control.
-    if (u.lfWander > 0.0) { nA = 0.7 * noiseValue(3u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz) + 0.3 * noiseValue(2u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); if (u.lfVary > 0.0) { nA = wanderVaried(nA, lx, ly); } }
-    if (u.lfWidth > 0.0) { nB = noiseValue(5u, u.seed, lx * 210.0 / sz, ly * 210.0 / sz); }
-    if (u.lfHeight > 0.0) { nC = lfFractal(lx / sz + 37.1, ly / sz - 19.7, 0x5c9u); }
-  }
+  let nz = lfNoise(lx, ly); let nA = nz.x; let nB = nz.y; let nC = nz.z;
   var nearest = 3.0e38; var trunk = 0xffffffffu;
   var pick = vec3f(base, 0.0, 0.0); var seen = false; var pk = 0u; var psh = 0.0;
   var land = vec3f(base, 0.0, 0.0);
@@ -1343,22 +1380,13 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   if ((u.ejAmt > 0.0 || u.bkAmt > 0.0) && trunk != 0xffffffffu) { let ev = lfCraterEjecta(wx, wy, select(trunk, 0u, u.grooveEnd != 0.0)); ej = ev.x; lipK = ev.y; }   // an impact's round its landing
   if (!seen) {
     if (talus > 0.0) { F[PH * cells + i] = clamp(base + talus, u.minH, u.maxH); talusGround(i, sm(0.0, 8.0, talus)); claimRock(i); }
+    else { claimRockMargin(i, wx, wy, trunk, tShare, base, x, y, cells); }
     if (ej > 0.0) { F[PH * cells + i] = clamp(F[PH * cells + i] + ej, u.minH, u.maxH); }
     return;
   }
   // Shared shore features seed the actual sea crossings inside this shape, including cuts and joined paths.
   if (u.coPutW != 0u) { Sc[4u * cells + i] = pick.y; }
-  var value = pick.x;
-  // Coast ramp below 1 (the host sets it on a stroke whose crest is under the sea): the dry part of the section keeps only the last lfCoast of its fall to
-  // the waterline (the drop as a share of base - sea), easing off the plain and meeting the water in a bank 1 / lfCoast times as steep; under water it is
-  // as drawn. From 1 to .75 the reshaped ramp blends in, so the row moves the coast by degrees from the drawn section.
-  if (u.lfCoast < 1.0 && base > u.sea && value > u.sea && value < base) {
-    let keep = max(u.lfCoast, 0.02);
-    let fx = clamp(((base - value) / (base - u.sea) - (1.0 - keep)) / keep, 0.0, 1.0);
-    let ramp = base - fx * fx * (2.0 - fx) * (base - u.sea);
-    let blend = min(1.0, (1.0 - keep) / 0.25);
-    value = select(mix(value, ramp, blend), ramp, blend >= 1.0);
-  }
+  var value = lfCoastRamp(pick.x, base);
   if (u.gully > 0.0 && value > base) { value = landformGullies(value, pick.y, pk, psh, wx, wy, lx, ly, base, nA, nB, nC, x, y, i, cells); }
   if (u.bedN >= 1.0 && u.bedSoft > 0.0 && u.combine == 0u && value > base) { value = hardBeds(value, base, pick.x, pick.y, lx, ly); }
   var scree = 0.0;   // how far the talus covers the cell: loose ground takes no cracks
@@ -1386,7 +1414,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   let route = u.lfRoute * sm(0.30, 0.92, pick.y);
   F[PR * cells + i] = max(F[PR * cells + i] * (1.0 - inf), route);
   F[PP * cells + i] = max(max(F[PP * cells + i] * (1.0 - inf), sm(0.65, 0.95, inf)), u.lfRoute * sm(0.55, 0.92, pick.y));
-  if (inf <= 0.0) { return; }
+  if (inf <= 0.0) { claimRockMargin(i, wx, wy, trunk, tShare, base, x, y, cells); return; }
   // Ground edge: over the outer part of the section the stroke lays its ground material only where a scalloped noise lets it, so the material's
   // edge breaks into lobes and specks instead of a line (0: everywhere the stroke moves the height).
   let groundCut = u.lfGroundEdge > 0.0 && pick.y < u.lfGroundEdge * clamp(0.5 + 0.38 * vnoise(wx / 46.0, wy / 46.0, u.seed ^ 0x3e1du) + 0.2 * vnoise(wx / 7.0, wy / 7.0, u.seed ^ 0x77a1u), 0.02, 1.0);

@@ -1,4 +1,4 @@
-import {createTerrainBudget,TerrainMemoryError,TERRAIN_BUDGET_MAX} from './sculpt-memory.js';
+import {createTerrainBudget,TerrainMemoryError,TERRAIN_BUDGET_MAX,deviceMemory} from './sculpt-memory.js';
 import {createPreviewFields,createPreviewLattice,planPreviewBlocks,previewQuality,previewPixels,createPreviewLoad} from './sculpt-preview.js';
 import {selectionGeometry,hitSelection,drawSelection} from './sculpt-selection.js';
 import {TerrainRenderer} from './sculpt-renderer.js';
@@ -18,7 +18,7 @@ const number=(q,key,fallback,min,max)=>clamp(Number(q.get(key))||fallback,min,ma
 export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const map=config.map,query=new URLSearchParams(location.search),viewport=$('viewport'),stage=$('stage');
   config.maskKeys=api.maskKeys; config.gpuBudgetBytes=128*MB;
-  const terrainBudget=createTerrainBudget({explicit:query.has('gpuMB')?number(query,'gpuMB',2048,128,TERRAIN_BUDGET_MAX):undefined,deviceMemory:navigator.deviceMemory,preference:api.terrainBudgetPreference?.(),save:value=>api.saveTerrainBudget?.(value)});terrainBudget.begin();addEventListener('pagehide',()=>terrainBudget.leave());
+  const terrainBudget=createTerrainBudget({explicit:query.has('gpuMB')?number(query,'gpuMB',2048,128,TERRAIN_BUDGET_MAX):undefined,deviceMemory:deviceMemory().gb,memoryGuessed:deviceMemory().guessed,preference:api.terrainBudgetPreference?.(),save:value=>api.saveTerrainBudget?.(value)});terrainBudget.begin();addEventListener('pagehide',()=>terrainBudget.leave());
   let restarting=false, suspended=false;
   // decide: the budget's verdict (restart: one notch lower; lost: lower only when memory caused the loss), true when the page reloads.
   const restartForMemory=(why,decide=()=>terrainBudget.restart(why))=>{
@@ -106,14 +106,26 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function gpuResident() { return renderer.stats().residentBytes+cacheBytes+fixedGPU(); }
   function ownedBytes(extra=[]){const buffers=new Set(api.residentBuffers?.()||[]);for(const e of cache.values())if(e.heightPatch)buffers.add(e.heightPatch.fields.h.buffer);for(const a of extra)if(ArrayBuffer.isView(a))buffers.add(a.buffer);const r=renderer.stats();return [...buffers].reduce((n,b)=>n+b.byteLength,0)+r.cpuRetainedBytes+(r.cpuWorkingBytes??0)+(api.workingBytes?.()??0);}
   function fieldArrays(r){return [...Object.values(r.fields),...Object.values(r.weather??{}),r.materialField??r.material].filter(ArrayBuffer.isView);}
-  function checkHeap(r,upload=0){const arrays=fieldArrays(r),used=()=> (performance.memory?.usedJSHeapSize??0)+ownedBytes(arrays)+upload;if(used()>heapBudget){api.evict?.();for(const e of cache.values())e.heightPatch=null;if(used()>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}}
-  api.checkMemory=(extra=0)=>{let m=metrics();if(m.accountedHeapBytes+extra>heapBudget){api.evict?.();for(const e of cache.values())e.heightPatch=null;m=metrics();if(m.accountedHeapBytes+extra>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}};
+  // The page heap counts each byte once: our own arrays (ownedBytes), and the rest of the JS heap where the browser reports one. Chrome's usedJSHeapSize
+  // already holds ArrayBuffers (measured in Chrome 157, with and without --enable-precise-memory-info; without it the figure lags by up to about two
+  // seconds), so the rest is what it reports beyond our arrays. Safari and Firefox report none: the figure is our arrays alone.
+  // Arrays let go under pressure (relieve) leave usedJSHeapSize only once they are collected; until then (a FinalizationRegistry says when) they are
+  // not counted as the rest of the heap. Without that, the next check after an eviction saw them there and threw (measured, heapMB=256). Without
+  // --enable-precise-memory-info Chrome's figure is a cached one that lags the collection (by up to about two seconds, measured): collected bytes
+  // stay deducted until the figure changes from the one it showed when they were collected.
+  let unreclaimed=0,collected=[];
+  const reclaimed=typeof FinalizationRegistry==='function'?new FinalizationRegistry(bytes=>{unreclaimed-=bytes;collected.push({bytes,used:performance.memory?.usedJSHeapSize});}):null;
+  const otherHeap=owned=>{const used=performance.memory?.usedJSHeapSize;if(!Number.isFinite(used))return 0;collected=collected.filter(c=>c.used===used);return Math.max(0,used-owned-unreclaimed-collected.reduce((n,c)=>n+c.bytes,0));};
+  // Over the budget, the fields let go of what they can (api.evict: the spill's copies) and the tiles their height patches.
+  function relieve(){const gone=new Set(api.evict?.()||[]);for(const e of cache.values()){if(e.heightPatch)gone.add(e.heightPatch.fields.h.buffer);e.heightPatch=null;}if(reclaimed)for(const b of gone){unreclaimed+=b.byteLength;reclaimed.register(b,b.byteLength);}}
+  function checkHeap(r,upload=0){const arrays=fieldArrays(r),owned=ownedBytes(arrays),other=otherHeap(owned);if(owned+other+upload>heapBudget){relieve();if(ownedBytes(arrays)+other+upload>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}}
+  api.checkMemory=(extra=0)=>{const m=metrics();if(m.accountedHeapBytes+extra>heapBudget){relieve();if(ownedBytes()+(passability?.stats().bytes||0)+m.otherHeapBytes+extra>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}};
   function metrics() {
     const fields=api.stats?.()??{},render=renderer.stats(),heap=performance.memory?.usedJSHeapSize??0,gpu=gpuResident();
-    const heightBytes=[...new Set([...cache.values()].map(e=>e.heightPatch?.fields.h.buffer).filter(Boolean))].reduce((n,b)=>n+b.byteLength,0),owned=ownedBytes()+(passability?.stats().bytes||0),accounted=heap+owned;
+    const heightBytes=[...new Set([...cache.values()].map(e=>e.heightPatch?.fields.h.buffer).filter(Boolean))].reduce((n,b)=>n+b.byteLength,0),owned=ownedBytes()+(passability?.stats().bytes||0),other=otherHeap(owned),accounted=owned+other;
     peakGPU=Math.max(peakGPU,gpu);peakHeap=Math.max(peakHeap,heap);peakAccountedHeap=Math.max(peakAccountedHeap,accounted);
     find('[data-memory]').textContent=`Terrain ${(gpu/MB).toFixed(1)} / ${gpuBudget/MB} MiB · heap ${(accounted/MB).toFixed(1)} / ${heapBudget/MB} MiB · ${cache.size} cached · ${evictions} evictions · ${canonicalSize}px bake${terrainBudget.reason?' · '+terrainBudget.reason:''}`;
-    return {reusedBakes:reused,gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,gpuBudget,budgetReason:terrainBudget.reason,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,previewQuality:quality,previewPixels:gesture?.previewPixels??null,previewLoad:previewLoad.stats(),previewBlocks:blocks.size,previewBlockBytes:blockBytes,preview:previewFields.stats(),previewLattice:previewLattice?.stats()??null,finalizing,dirtyChunks:[...cache.values()].filter(e=>e.dirty).length,dirtyMarks,retainedInvalidations,evictions,bakes,hits,rebakes,levels:{quarter:[...cache.values()].filter(e=>(e.scale??1)>1).length,final:[...cache.values()].filter(e=>(e.scale??1)===1).length,quarterBytes:[...cache.values()].filter(e=>(e.scale??1)>1).reduce((n,e)=>n+e.bytes,0)},canonicalChunkSize:canonicalSize,displayChunkSize:viewChunkSize(),field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
+    return {reusedBakes:reused,gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,otherHeapBytes:other,gpuBudget,budgetReason:terrainBudget.reason,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,previewQuality:quality,previewPixels:gesture?.previewPixels??null,previewLoad:previewLoad.stats(),previewBlocks:blocks.size,previewBlockBytes:blockBytes,preview:previewFields.stats(),previewLattice:previewLattice?.stats()??null,finalizing,dirtyChunks:[...cache.values()].filter(e=>e.dirty).length,dirtyMarks,retainedInvalidations,evictions,bakes,hits,rebakes,levels:{quarter:[...cache.values()].filter(e=>(e.scale??1)>1).length,final:[...cache.values()].filter(e=>(e.scale??1)===1).length,quarterBytes:[...cache.values()].filter(e=>(e.scale??1)>1).reduce((n,e)=>n+e.bytes,0)},canonicalChunkSize:canonicalSize,displayChunkSize:viewChunkSize(),field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
   }
   function remove(key) { const e=cache.get(key);if(!e)return;renderer.releaseColorTile(e.color);e.bitmap.close?.();cacheBytes-=e.bytes;cache.delete(key);evictions++; }
   // H6b: a bake from the GPU buffers records how many changes had been announced when it took them; it is still good if none announced since touched
@@ -790,7 +802,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   // H7b: during a gesture a change is answered at once, not at the next animation frame (a pointer move is already one event a frame): the bake of
   // the change's chunks starts as soon as the one in flight ends, and nothing waits for a frame between them.
-  let pendingFrame=null;
+  let pendingFrame=null,readWaiting=0;   // readWaiting: pixel reads waiting for the renderer (holdForRead)
   function setSuspended(on) {
     if(suspended===on)return;suspended=on;
     if(on){cancelBake();viewEpoch++;clearTimeout(ladderTimer);ladderTimer=null;if(pendingFrame!==null)cancelAnimationFrame(pendingFrame);pendingFrame=null;pending=false;rerun=false;}
@@ -800,7 +812,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(suspended)return;
     // Input may have queued a presentation while the last bake was pending.
     // Once it ends, start the latest interactive refresh immediately as well.
-    const immediate=levels&&interacting()&&!drawing;
+    // Not while a pixel read waits: a frame steps aside for it (readWaiting), and the read waits for an animation frame to take the
+    // renderer. Frames chained by microtasks never let one through, so a read during a World slider drag (Pick's card) hung the page.
+    const immediate=levels&&interacting()&&!drawing&&!readWaiting;
     if(pending&&(!immediate||pendingFrame===null))return;
     if(pendingFrame!==null){cancelAnimationFrame(pendingFrame);pendingFrame=null;}
     pending=true;
@@ -826,9 +840,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     clearTimeout(navigationTimer);
     navigationTimer=setTimeout(()=>{navigationTimer=null;schedule();},navigationDelay);
   }
-  function zoom(next) {
+  // zoom(next, at): to a scale or 'overview', keeping the view's center, or centering on `at` ({x, y} in art pixels) when given.
+  function zoom(next,at=null) {
     $('fit').setAttribute('aria-pressed',String(next==='overview'));$('one').setAttribute('aria-pressed',String(next===1));$('zoom').value=String(next);
-    const v=state(),cx=v.x+v.width/2,cy=v.y+v.height/2;overview=next==='overview';if(!overview)scale=clamp(Number(next)||1,.1,4);
+    const v=state(),cx=at?.x??v.x+v.width/2,cy=at?.y??v.y+v.height/2;overview=next==='overview';if(!overview)scale=clamp(Number(next)||1,.1,4);
     resize();viewport.scrollLeft=Math.max(0,cx*scale-canvas.width/2);viewport.scrollTop=Math.max(0,cy*scale-canvas.height/2);position();schedule();
   }
   $('fit').onclick=()=>zoom('overview');$('one').onclick=()=>zoom(1);$('zoom').onchange=e=>zoom(e.target.value==='overview'?'overview':Number(e.target.value));
@@ -882,7 +897,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // starts under it; the frame it held off runs after it. A read that still meets the renderer busy (work outside the frames) tries once more
   // after that work ends; one that needs pipelines still compiling lets the frames run while it waits for them.
   const offMap=at=>{const x=Math.floor(at.x),y=Math.floor(at.y);return x<0||y<0||x>=Math.floor(map.width)||y>=Math.floor(map.height);};
-  let inspecting=Promise.resolve(),readWaiting=0;
+  let inspecting=Promise.resolve();
   // `current`: whether the asker still wants this read; one superseded while queued (another pick, an undo's refresh, the card closed) is
   // dropped before it takes the renderer, so a run of reads cannot hold the map's frames off.
   function inspect(at,current=()=>true){const run=inspecting.then(()=>current()?inspectNow(at):{superseded:true});inspecting=run.catch(()=>{});return run;}
@@ -995,14 +1010,14 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // while lazy tiles are refining.
   async function sampleHeights(signal){
     await idle();
-    return cellHeights(map,async req=>{const r=await(api.readAsync?api.readAsync(req,signal):api.read(req));checkHeap(r);return r;},{signal,step:async()=>{metrics();await tick();}});
+    return cellHeights(map,async req=>{const r=await((api.readHeights??api.read)(req));checkHeap(r);return r;},{signal,step:async()=>{metrics();await tick();}});
   }
   async function* sampleHeightTiles(signal){
     let v=state();
     const priority=t=>{const r={x:t.x*16,y:t.z*16,width:t.width*16,height:t.height*16};return(intersects(r,v)?0:map.width+map.height)+Math.hypot(r.x+r.width/2-v.x-v.width/2,r.y+r.height/2-v.y-v.height/2);};
     // Regional reads await only their own canonical pages. Do not wait for
     // canvas.idle(): useful access colors can precede the remaining art bakes.
-    for await(const tile of cellHeightTiles(map,async req=>{const r=await(api.readAsync?api.readAsync(req,signal):api.read(req));checkHeap(r);return r;},{signal,priority})){
+    for await(const tile of cellHeightTiles(map,async req=>{const r=await((api.readHeights??api.read)(req));checkHeap(r);return r;},{signal,priority})){
       yield tile;metrics();await tick();v=state();
     }
   }
@@ -1019,7 +1034,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // The export's own numbers for one feature: an anchor cell's four corner bytes, sampled as sampleHeights samples them, and a
   // rectangle of export art. Either answers null when the scene changed while it was read.
   async function exportCorners(x,z){
-    const seq=serial,r=await(api.readAsync?api.readAsync({x:x*16,y:z*16,width:16,height:16}):api.read({x:x*16,y:z*16,width:16,height:16}));checkHeap(r);
+    const seq=serial,r=await((api.readHeights??api.read)({x:x*16,y:z*16,width:16,height:16}));checkHeap(r);
     if(changedSince(seq,{x:x*16-16,y:z*16-16,width:48,height:48}))return null;
     return [[0,0],[1,0],[0,1],[1,1]].map(([dx,dz])=>Math.round(clamp(sampleField(r,(x+dx)*16,(z+dz)*16),0,255)));
   }

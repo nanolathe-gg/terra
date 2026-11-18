@@ -1,6 +1,6 @@
 import {createPagedFields} from '../sculpt-gpu-fields.js';
 import test from 'node:test';import assert from 'node:assert/strict';
-import {createTerrainBudget,terrainAllocation,TerrainMemoryError} from '../sculpt-memory.js';
+import {createTerrainBudget,terrainAllocation,TerrainMemoryError,deviceMemory} from '../sculpt-memory.js';
 test('automatic budget uses optional signals while an explicit choice wins',()=>{
  assert.equal(createTerrainBudget().mb,2048);assert.equal(createTerrainBudget({deviceMemory:4}).mb,1024);
  assert.equal(createTerrainBudget({deviceMemory:4,explicit:3072,preference:{mb:512}}).mb,3072);
@@ -55,9 +55,9 @@ test('the page caches grow with a budget above 2 GiB and keep their caps at 2 Gi
  const MB=1048576,caps=gpuMB=>{const fields=createPagedFields({worldSize:16385,worldGrid:8193,baseHeight:24,maskKeys:[],nodes:()=>[],device:()=>null,context:()=>({}),forceRing:4,budget:()=>({total:gpuMB*MB,minimum:300*MB})});
   try{fields.refit();return fields.stats().budget;}finally{fields.destroy();}};
  const side=512+8,shape=side*side*56,weather=512*512*20;
- assert.equal(caps(2048),64*shape+24*weather);
- assert.equal(caps(8192),256*shape+96*weather);
- assert(caps(1024)<caps(2048));
+ assert.equal(caps(2048),24*shape+24*weather);
+ assert.equal(caps(8192),96*shape+96*weather);
+ assert(caps(768)<caps(2048),"a budget whose room is smaller than the caps holds fewer pages");
 });
 test('reserving preview memory reduces page counts without shrinking the shape ring',t=>{
  t.mock.timers.enable({apis:['setTimeout']});
@@ -65,6 +65,26 @@ test('reserving preview memory reduces page counts without shrinking the shape r
  const fields=createPagedFields({worldSize:1025,worldGrid:513,baseHeight:24,maskKeys:[],nodes:()=>[],device:()=>null,context:()=>({}),forceRing:320,budget:()=>({total:2048*MB,minimum:200*MB,previewMinimum})});
  try{fields.refit();const before=fields.stats();assert.equal(before.gpuShape.ring,320);previewMinimum=1900*MB;fields.refit();const after=fields.stats();assert.equal(after.gpuShape.ring,before.gpuShape.ring);assert(after.budget<before.budget);}
  finally{fields.destroy();}
+});
+test('the spill stays within the share of the page heap budget the fields are given, and lets go under pressure',t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const MB=1048576;let heap=Infinity;
+ const fields=createPagedFields({worldSize:1025,worldGrid:513,baseHeight:24,maskKeys:[],nodes:()=>[],device:()=>null,context:()=>({}),forceRing:4,heapBudget:()=>heap});
+ try{
+  assert.equal(fields.stats().gpuShape.spill.cap,256*MB,'1/32 of the 8 GB assumed where the browser reports no device memory and is not a touch Apple device');
+  heap=100*MB;assert.equal(fields.stats().gpuShape.spill.cap,100*MB);
+  assert.deepEqual(fields.evict(),[]);
+  assert.equal(fields.buffers().length,1,'the coarse lattice, before any page is read');
+ }finally{fields.destroy();}
+});
+test('without a memory signal, an iPhone or iPad is planned as 4 GB and anything else as 8',()=>{
+ const mac='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';
+ assert.deepEqual(deviceMemory({deviceMemory:4,userAgent:mac,maxTouchPoints:5}),{gb:4,guessed:false},'a reported figure wins');
+ assert.deepEqual(deviceMemory({userAgent:mac,maxTouchPoints:5}),{gb:4,guessed:true},'iPadOS Safari: a Mac with a touch screen');
+ assert.deepEqual(deviceMemory({userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',maxTouchPoints:5}),{gb:4,guessed:true});
+ assert.deepEqual(deviceMemory({userAgent:mac,maxTouchPoints:0}),{gb:8,guessed:true},'Safari on a Mac');
+ assert.deepEqual(deviceMemory({userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',maxTouchPoints:0}),{gb:8,guessed:true});
+ const ipad=createTerrainBudget({deviceMemory:4,memoryGuessed:true});assert.equal(ipad.mb,1024);assert.equal(ipad.reason,'touch device without a memory signal');
 });
 
 test('the artist\'s budget choice is remembered without the address; an address gpuMB is not', async () => {

@@ -345,6 +345,59 @@ Limits: a world's tones are measured against its water material as drawn on this
 material editor keeps the tone, which is the intent. Lava's and Moon's tones are their measured -1 to +3 level offsets, kept so
 their look does not move.
 
+## Round 8 (branch `placement`, 2026-11-17): placing surfaces by hand
+
+The owner asked how an artist gets more rock face or rock from another slope, more grass or moss over the rock, and control over shores and
+snow, and what would make that easy. I proposed seven items and asked whether to plan the first three; the owner said "Go for it", and they
+were built on the branch, not landed (each a commit; the measurements are in their messages):
+- **Each built-in row lists what places it** (`BUILTIN_PLACED_BY`): the World settings the draw reads for its share, each with its value and a
+  door to it. Rock: Rock share of steep faces and Starts at slope (its rock type's; the row shows the world's rock), Bare rock at rims, Rock at
+  shores, Rock on low banks, Lushness. Beach: Beach width. Slope cover: Sampled slope texture. Highland ground and Base band's link becomes the
+  same list. Rows stay where they are: moved alone, a setting would leave its group's heading and siblings behind.
+- **Spread** (a layer's `spread`, -1 to 1): one slider beside Coverage that moves every limit of the layer's rule together, so "more of this"
+  widens where it may show (Coverage is how much of that area it covers). The packed rows carry the moved limits (`spreadRule`), so the shader
+  is unchanged and Spread 0 packs the rule as written. Each condition says where its limits are with Spread.
+- **The fact view**: pointing at a condition shows its fact over the map in gray across its range (`SURFACE_FACT_RANGE`), magenta where it
+  holds, with a histogram of the view and the share that holds it. Diagnostic views 14 to 17 read the previewed layer's own rows; the
+  histogram reads the view's pixels once the map is idle (after an edit, that waits for the map to finish drawing). The gray runs from 0.1
+  to 0.85 (`SURFACE_FACT_GRAY`) so held pixels stay apart at both ends and the black canvas outside the map is not counted.
+
+Found on the way: on Green's default view the Moss in damp shade preset draws nothing (moisture never passes .4 there); at Spread +1 it covers
+most of the flat ground. The presets' numbers may want a look per world, with the fact view.
+
+Not done: the "More here / not here" buttons on Pick, new facts (distance to water, which way a slope faces, a broad breakup pattern), a snow
+layer that sheds off slopes and stays in shade, rock placement as a rule the rock solid reads, and moving setting rows into Surface.
+The Spread steps (`SURFACE_SPREAD_STEP`) are first guesses; Moss at +1 on Green is strong.
+
+## Round 9 (branch `facts`, 2026-11-17): facts for snow and shores
+
+The owner tried round 8 ("Looks good") and asked for the next three: fix the Steepness view, add the new facts, add Pick's "more here / not
+here". Built on the branch, not landed.
+- **Steepness's view runs to 20, on a square-root scale** (`SURFACE_FACT_ROOT`): a Plateau's faces read up to about 16 (1x on Green), so the
+  old 0 to 3 drew every cliff white. Rules did not change.
+- **Four facts** (`SURFACE_FACTS` 14 to 17), so a snow or shore layer can be placed by what places them in the world:
+  - *Faces north* and *Faces east* (-1 to 1): which way the ground falls, 0 on level ground, whole from a slope of 0.25. Two signed facts, not
+    an angle, so a window never wraps and a score weighs any direction. Sunlight already reads the sun's side, but it moves with the Light
+    settings and mixes in steepness; facing is the compass alone (snow on the shaded side, lee slopes, a wet side). Under TA's camera a
+    north face steeper than about 2 is hidden behind its own top, so east and west read most on screen.
+  - *Sheltered* (0 to 1): how much of the sky round a pixel the ground hides, eight looks at 24, 48 and 96 px. A cliff's foot and a gorge
+    read high, a top and the open plain 0.
+  - *Distance to water* (0 to 192 px, square-root view): twelve rays to the first ground under the sea.
+  The last two look around the pixel (24 and up to 168 height taps), so the draw computes them only where a rule reads them (the flags row's
+  y, `SURFACE_LOOKS`), for Pick's pixel and in the fact view. Both reach less than the draw's own 203.6 px (the shadow march), so a tile
+  already holds every height they read and no margin moved. The plant bake reads all four too: it walks every material layer, so a
+  shore layer reading Distance to water as 0 would have covered every plant under it. Its height apron grows by their reach
+  (`surfaceLookReach`) only when plants are placed and a rule reads one.
+  Measured headless on Dawn: a 1024 px window takes the same time with a rule on either of them as with one on
+  Steepness (120 to 200 ms each way, within run-to-run noise); the color pass was not timed alone.
+- **Show here / Not here on Pick's card**: each layer with a rule gets a button on its line, Not here where it shows and Show here where its
+  rule keeps it out (`ruleToShow`, `ruleToHide`, from the facts the draw recorded at the pixel; a score's margin covers half its edge noise,
+  not its height contrast). Show moves each failing window just past
+  the value, and a limit that would leave its fact's range goes instead. Not here moves the one limit that cuts least of its fact's gray,
+  never one that would cross the window's other end, drawn or stored. A score moves its threshold. The stored limit is the drawn one less
+  the layer's Spread. The card says what moved, one undo step. It says why instead when no limit can help: no rule (Coverage or edge noise
+  decides), the rule already holds, or a Rock, Debris or Sand share decides it, since the draw finishes those after the layer.
+
 ## Sources (phase 1)
 
 Built-in sources are the surfaces the engine draws today without a material: rock (the rock type's color and
@@ -366,3 +419,4 @@ Phase 4 turns them into materials one by one.
 - Low ground (round 7): the "Low ground by the water" preset draws Red's ground as a band along the shore; judge its material and reach.
 - Shallow water (round 7): a picked tone is kept in the world's colors (`shallowTone`); say if it should live elsewhere.
 - Converting highland, base band and rock face into rules means their World rows move into the Surface section.
+- Spread (round 8): kept; the owner tried it on 2026-11-17 and said it looks good.

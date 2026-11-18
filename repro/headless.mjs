@@ -145,7 +145,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   let scene_ = null;
   play(strokes, {ground: scene.ground !== false});
   if (paged) await fields.startCoarse();   // bootMap: a paged map's coarse lattice fills from the start
-  const sliders = engine.surfaceSliders(config, settings);
+  const sliders = engine.surfaceSliders(config);
   scene_ = {config, settings, renderer, canvas, fields, nodes, errors, play, context, engine, fieldsModule, worldSize, worldGrid, spacing, minH, maxH, seed, refinementSeed, sliders, paged, ownColors, worldColumn, columnOverride,
     material: engine.materialKnobs(sliders, refinementSeed, renderer.variant.get('transition')), drawOptions: options => engine.drawOptions(sliders, options),
     // The map's rock presets, and a new list for them (a preset edited, added or removed), as sculpt.js editRocks takes it: an edited preset is a
@@ -226,10 +226,10 @@ async function timeHeights(s) {
   if (!s.time.cpu) { const n = s.worldGrid ** 2, raw = await s.fieldsModule.readBuffer(s.renderer.device, s.time.weather, 0, n * 8); s.time.cpu = {refinedBase: new Float32Array(raw, 0, n), refined: new Float32Array(raw, n * 4, n)}; }
   return s.time.cpu;
 }
-// The weathered field over a region, as the page's export reads it (sculpt.js readRegional): a paged map's pages, or the fields' CPU copy with
+// The weathered height over a region, as the page's export reads it (sculpt.js readHeights): a paged map's pages, or the fields' CPU copy with
 // the Time pass's height laid on (sculpt-scene.js weatheredHeights).
 async function readWeathered(s, request) {
-  if (s.paged) return s.fields.readAsync(request);
+  if (s.paged) return s.fields.readAsync(request, {heights: true});
   await s.fields.ready();
   const r = s.fields.read(request);
   return s.time ? {...r, fields: {...r.fields, h: s.engine.weatheredHeights(r, {...await timeHeights(s), grid: s.worldGrid, spacing: s.spacing})}} : r;

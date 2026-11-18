@@ -194,11 +194,6 @@ struct Uniforms {
     slopeOnLowBanks: i32,
     rampMaterial: f32,
     groundFringe: i32,
-    ringAmount: f32,
-    ringSpread: f32,
-    ringVariation: f32,
-    fringeSignal: vec4f,
-    fringeRange: vec2f,
     transitionBody: i32,
     // The shallows' tint: a tone, a shift of the water material's mean (a = 1 where the world chose its own, else its data's).
     shallowTone: vec4f,
@@ -212,7 +207,6 @@ struct Uniforms {
     // Crystals: their own colour (world base colour 'crystal', else the world's).
     sandDust: f32,
     sandGrass: f32,
-    bandWater: f32,
     highland: f32,      // Highland ground: how far level raised ground takes the world's highland material (0: none)
     highFrom: f32,      // the rise above the plain where the highland material starts
     highReach: f32,     // the rise over which it comes in fully
@@ -237,13 +231,10 @@ struct Uniforms {
     // Bake (engine-bake.wgsl).
     reliefScale: f32,     // wavelength of the first octave, world px
     reliefAmount: f32,    // height per unit slope per wavelength
-    reliefBranch: f32,    // how strongly octaves follow earlier gullies
     reliefLumps: f32,     // share of isotropic lumps mixed in
-    reliefOctaves: i32,
     reliefGain: f32,      // amplitude ratio between octaves
     reliefWarp: f32,      // domain warp, world px
     reliefPatchy: f32,    // spatial variation of relief strength
-    reliefJitter: f32,    // per-kernel phase and wavelength variation
     faceStreak: f32,      // 0: ribs down steep faces; 1: ledges along the contours
     faceStreakFrom: f32,  // slope where the turn toward the contours starts
     gentleRelief: f32,    // relief on gentle slopes
@@ -309,7 +300,6 @@ struct Uniforms {
     bedBright: f32,       // brightness of the tinted bed (1: the tint as it is)
     bedContrast: f32,     // how much of the bed's light carries through the tint (1: all, 0: flat tint)
     hillLight: f32,       // brightness of the hill cover's material (Archipelago; 1: as drawn)
-    ringFade: f32,        // how gradually the mineral ring fades out from the hill (0: as drawn; Archipelago)
     // Ice (card E5).
     shadeBlue: f32,       // shaded ice keeps its blue: how far the blue (and a little green) stay lit as the light falls (0: grey shade, as before)
     // Light colour (card P12b). White leaves the light grey, as before.
@@ -342,9 +332,6 @@ struct Uniforms {
     // E11: shallow water round 2 (Green, Red) and Archipelago's fringe. Every default is the earlier look.
     shelfWander: f32,     // Green, Red: how far broad noise moves the step's depth, in depth units (0: the step follows the shore)
     stepSoftPx: f32,      // Archipelago's reef bars: the true-threshold step's ramp width in px (1: a one-pixel edge, as Green and Red)
-    ringContrast: f32,    // Archipelago: contour lines in the red fringe, following the hill's outline (0: none)
-    ringCount: f32,       // how many lines the fringe carries from its inner to its outer edge
-    ringSize: f32,        // how far out the lines reach, against the fringe's own reach (1: as far as the ring's texture)
     bedFlat: f32,         // the lit bed takes only the bed's own relief for its light, not its slope's (0: the pixel's full shading, as before)
     // E10 (Lava).
     layerCrease: f32,     // dark crease at the foot of each step of the banks between the sea and the plain, whatever its facing (0: none)
@@ -363,21 +350,11 @@ struct Uniforms {
     // G8 (Moon): the surface read from retail pictures.
     // E6 (Ice mountains).
     // G3 (Archipelago rings): the fringe as stacked, offset copies of the hill's outline. Every default is the earlier look.
-    ringShift: f32,       // px each copy sits from the hill's own outline (0: the earlier concentric lines; ringCount copies otherwise)
-    ringShiftDir: f32,    // degrees the copies drift towards on average, clockwise from east in the world (90: south)
-    ringScatter: f32,     // how far each copy's direction wanders from that mean, as a share of a half turn
-    ringWobble: f32,      // px of waver in each copy's outline: lobes with inward cusps, the scalloped look (0: smooth)
-    ringLobe: f32,        // px across one lobe
-    ringFill: f32,        // the pale tint where every copy overlaps; each copy adds its share, so the skirt steps lighter outward (0: none)
-    ringPatch: f32,       // how far the stack's reach varies along the outline, from a few copies to all of them (0: every copy everywhere)
-    ringPatchSize: f32,   // px over which that reach varies
-    ringTone: f32,        // the copies' lines take retail's rose, darker on the inner copies and paler on the outer (0: the earlier crimson)
     // G6 (Ice blocks and mesas, retail ice-3 and Polar Range).
     iceSoft: f32,         // raised ice is lit by its height blurred over ~13 px, so crests are rounded and faces smooth (0: the full relief lights it, as before)
     iceFrost: f32,        // Ice frost band: fine dark-blue hairlines in parallel runs, thinning inland (0: none)
     // G1 (shallow water round 3: Green, Red, Archipelago). Every default is the earlier look.
     shoalRag: f32,        // the shallow-to-deep step's outline: pixel notches of up to this many px, whatever the bed's slope (0: as before)
-    shoalStairs: f32,     // the hard waterline's stairs: runs of 1-3 px moving it up to this many px, whatever the bank's slope (0: as before)
     shoalShoreSoft: f32,  // Archipelago: the waterline the world draws (a stroke's Hard and Faded stay) is a dithered blend this many px wide (0: a clean line)
     // Low ground (Zhon's mud lowland): the ground from the sea up to lowReach above it, and the shallows, keep lowGrain of their grain.
     lowReach: f32,        // height above the sea where low ground ends (its ragged edge fades over the upper half)
@@ -385,7 +362,6 @@ struct Uniforms {
     soilRim: f32,         // 0..1: bare soil where the plant cover thins against rock, and a ragged line (not a blend) for rock's edge off the faces (0: as before)
     wetGround: f32,       // 0..1: ground that water wets (the band above a waterline, hollows and channels, runoff off rock) is darker, more saturated and glossy (0: as before)
     boulders: f32,        // 0..1: blocks fallen from a wall and lying under it, up to 60 px and more across (0: none; the runout blocks as before)
-    looseKnoll: f32,      // 0..1: the share of loose stones drawn as knolls, a low pale ring of ground round a hollow (0: all stones, as before)
     creaseShade: f32,     // 0..1: how much light a crease (a gully or valley floor, the authored height below its rings 6 and 12 px out) loses, whatever its facing (0: none)
     // H1 (lit relief, Green). Every default is the earlier look.
     closeShadow: f32,     // how much a ledge 1-6 px toward the sun darkens the direct light on the ground behind it, 0..1 (0: only the far taps)
@@ -429,9 +405,8 @@ struct Uniforms {
     slopeGround: i32,   // the map's slope cover material slot (worldSlope), -1 none: slopes, moss and the margins' face read it
     debrisGround: i32,  // its debris material (worldDebris): the fragments of loose stone and sand
     beachGround: i32,   // its beach material (worldBeach): the beach sand (the slope cover's grain recolored where there is none)
-    fringeGround: i32,  // its mineral margins' fringe, body and ring materials (worldFringe, worldBody, worldRing)
+    fringeGround: i32,  // its mineral margins' fringe and body materials (worldFringe, worldBody)
     bodyGround: i32,
-    ringGround: i32,
     crystalGround: i32, // its crystal material (worldCrystal): the crystals' color, -1 none (then the rock material's)
     waterGround: i32,
     groundAny: i32,
@@ -640,9 +615,9 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), sel
 @group(0) @binding(12) var rockRimTex: texture_2d<f32>;
 @group(0) @binding(14) var groundColorTex: texture_2d_array<f32>;
 @group(0) @binding(15) var<storage,read> materialGraphs:array<MaterialGraph>;
-@group(0) @binding(16) var materialFinishTex:texture_2d_array<f32>;
+@group(0) @binding(16) var materialHeightTex:texture_2d_array<f32>;   // a material's art height (r32float)
 @group(0) @binding(17) var materialMeanTex:texture_2d_array<f32>;   // one texel a material: the mean color of its repeat
-@group(0) @binding(13) var groundTex: texture_2d_array<f32>;
+@group(0) @binding(13) var groundTex: texture_2d_array<f32>;   // a material's unlit color and shine (rgba16float)
 @group(0) @binding(7) var linearClamp: sampler;
 @group(0) @binding(8) var linearRepeat: sampler;
 // Painted masks (card C5), grid resolution, signed bytes so unpainted is 0.0.
@@ -780,21 +755,87 @@ fn timeMapsAt(p: vec2f) -> TimeMaps {
 const SURFACE_HEAD = 152u;
 const SURFACE_FLAGS = 151u;
 // Facts (surfaceFacts): 0 slope, 1 height above the sea, 2 above the plain, 3 wear, 4 deposit, 5 wetness, 6 moisture, 7 soil depth, 8 light
-// (level 1, sunward slopes more), 9 top (a lump 1, a hollow -1), 10 convexity, 11 the rock's share, 12 the debris', 13 the sand's. The shares
-// exist from their stage on (0 before it).
-const SURFACE_FACTS = 14u;
+// (level 1, sunward slopes more), 9 top (a lump 1, a hollow -1), 10 convexity, 11 the rock's share, 12 the debris', 13 the sand's, 14 faces
+// north and 15 faces east (surfaceFacing), 16 sheltered and 17 distance to water (engine-frag.wgsl surfaceShelter, surfaceToWater: computed
+// only where a rule reads them, the flags row's y). The shares exist from their stage on (0 before it).
+const SURFACE_FACTS = 18u;
+// Each fact's range for the Surface section's fact view (diagnostic views 14 to 17), SURFACE_FACTS order: sculpt-material-model.js
+// SURFACE_FACT_RANGE holds the same numbers (repro/surface.test.mjs compares them).
+const SURFACE_FACT_LO = array<f32, 18>(0.0, -20.0, -60.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0);
+const SURFACE_FACT_HI = array<f32, 18>(20.0, 200.0, 200.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.6, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 192.0);
+// The fact view's gray at a range's low and high ends (sculpt-material-model.js SURFACE_FACT_GRAY): over black, which is the canvas outside the
+// map, and under white, so the magenta where a condition holds stays apart from the gray at both ends.
+const SURFACE_FACT_GRAY_LO = 0.1;
+const SURFACE_FACT_GRAY_HI = 0.85;
+// 1 for a fact the fact view draws on a square-root scale (sculpt-material-model.js SURFACE_FACT_ROOT: Steepness and Distance to water,
+// whose limits bunch low).
+const SURFACE_FACT_ROOT = array<f32, 18>(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+// The flags row's y: the facts that look around a pixel which some rule reads (sculpt-material-model.js surfaceRows), so a world that reads
+// neither pays for neither.
+const SURFACE_LOOK_SHELTER = 1u;
+const SURFACE_LOOK_WATER = 2u;
+// Facing (facts 14 and 15): which way the ground falls, as its north and east parts (the map's top is north), 0 on level ground and whole from
+// a slope of 0.25 (14 degrees) up. Two signed facts rather than an angle, so a window never wraps and a score can weigh any direction.
+fn surfaceFacing(broad: vec2f) -> vec2f {
+    let s = length(broad);
+    if (s < 1e-4) { return vec2f(0.0); }
+    let down = -broad / s;
+    return vec2f(-down.y, down.x) * smoothstep(0.03, 0.25, s);
+}
 fn surfaceWindow(v: f32, lo: f32, hi: f32, fade: f32) -> f32 {
     let f = max(fade, 0.0001);
     return smoothstep(lo - f, lo + f, v) * (1.0 - smoothstep(hi - f, hi + f, v));
 }
+// The surface facts that look around a pixel (SURFACE_LOOK_*), over the authored height, for the color pass and the plant bake. Both reach
+// less than the draw's own reach (sculpt-chunk-renderer.js reaches: the shadow march's 203.6 px), so a tile already holds every height they
+// read; the bake's apron grows by SURFACE_LOOK_REACH when plants are placed and a rule reads one.
+// Sheltered (fact 16): how much of the sky round the pixel the ground hides, 0 open (a top, a plain) to 1 closed (a narrow gorge). Eight looks
+// at 24, 48 and 96 px, each the steepest rise that way, from 3 degrees (nothing) to 31 (all), averaged. The sea counts as level ground.
+fn surfaceShelter(p: vec2f) -> f32 {
+    let h = max(baseHeight(p), u.sea);
+    var s = 0.0;
+    for (var k = 0; k < 8; k++) {
+        let a = f32(k) * 0.785398 + 0.39;
+        let dir = vec2f(cos(a), sin(a));
+        var rise = 0.0;
+        for (var i = 0; i < 3; i++) { let d = 24.0 * exp2(f32(i)); rise = max(rise, (max(baseHeight(p + dir * d), u.sea) - h) / d); }
+        s += smoothstep(0.05, 0.6, rise);
+    }
+    return s / 8.0;
+}
+// Distance to water (fact 17): px to the nearest ground under the sea, up to SURFACE_WATER_REACH, 0 in the water. Twelve rays, each to its first
+// crossing of the sea, placed between two taps by their heights (as surfShore does), so the distance is smooth between taps.
+const SURFACE_WATER_REACH = 192.0;
+fn surfaceToWater(p: vec2f) -> f32 {
+    let h0 = baseHeight(p) - u.sea;
+    if (h0 < 0.0) { return 0.0; }
+    var radii = array<f32, 14>(2.0, 4.0, 7.0, 11.0, 16.0, 23.0, 32.0, 43.0, 57.0, 74.0, 95.0, 120.0, 152.0, 192.0);
+    var best = SURFACE_WATER_REACH;
+    for (var k = 0; k < 12; k++) {
+        let a = f32(k) * 0.523599 + 0.2;
+        let dir = vec2f(cos(a), sin(a));
+        var lastR = 0.0;
+        var lastH = h0;
+        for (var i = 0; i < 14; i++) {
+            if (lastR >= best) { break; }
+            let r = radii[i];
+            let hr = baseHeight(p + dir * r) - u.sea;
+            if (hr < 0.0) { best = min(best, lastR + (r - lastR) * lastH / (lastH - hr)); break; }
+            lastR = r;
+            lastH = hr;
+        }
+    }
+    return best;
+}
+
 // A layer's rule over the facts, its rows from ruleAt (the head, then rules - 1 terms), one evaluator for the color pass and the bake: a
 // windows rule multiplies `share` by each window in turn; a score rule adds each weighted fact to `score` (the caller's noise and lift).
-fn surfaceWindows(ruleAt: u32, rules: u32, facts: array<f32, 14>, share: f32) -> f32 {
+fn surfaceWindows(ruleAt: u32, rules: u32, facts: array<f32, 18>, share: f32) -> f32 {
     var s = share;
     for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; s *= surfaceWindow(facts[min(u32(w.x), SURFACE_FACTS - 1u)], w.y, w.z, w.w); }
     return s;
 }
-fn surfaceScore(ruleAt: u32, rules: u32, facts: array<f32, 14>, score: f32) -> f32 {
+fn surfaceScore(ruleAt: u32, rules: u32, facts: array<f32, 18>, score: f32) -> f32 {
     var s = score;
     for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; s += w.y * facts[min(u32(w.x), SURFACE_FACTS - 1u)]; }
     return s;
@@ -1032,7 +1073,7 @@ fn groundHeight(p:vec2f)->f32 {
 }
 fn materialPixel(p:vec2f)->vec2f {return poolWrap(floor(p),f32(textureDimensions(groundTex).x));}
 
-// A material's cached repeat: unlit color and art height, its shine, and its color reduced to its palette.
+// A material's cached repeat: unlit color and shine, art height, and its color reduced to its palette.
 // A rock slot's surface material (its rock type's, else the world's rock material), -1 none.
 fn rockMaterialOf(slot:u32)->i32 {
  let m=u.rock[slot & rockMask].material;
@@ -1043,8 +1084,8 @@ fn rockMaterialOf(slot:u32)->i32 {
 // A cache layer's art height at a native pixel q, bilinear between texels (the taps that light it read between pixels).
 fn materialReliefBilinear(q:vec2f,layer:i32)->f32 {
  let size=f32(textureDimensions(groundTex).x);let b=floor(q-.5);let f=q-.5-b;
- let a00=textureLoad(groundTex,vec2i(poolWrap(b,size)),layer,0).w;let a10=textureLoad(groundTex,vec2i(poolWrap(b+vec2f(1,0),size)),layer,0).w;
- let a01=textureLoad(groundTex,vec2i(poolWrap(b+vec2f(0,1),size)),layer,0).w;let a11=textureLoad(groundTex,vec2i(poolWrap(b+vec2f(1,1),size)),layer,0).w;
+ let a00=textureLoad(materialHeightTex,vec2i(poolWrap(b,size)),layer,0).x;let a10=textureLoad(materialHeightTex,vec2i(poolWrap(b+vec2f(1,0),size)),layer,0).x;
+ let a01=textureLoad(materialHeightTex,vec2i(poolWrap(b+vec2f(0,1),size)),layer,0).x;let a11=textureLoad(materialHeightTex,vec2i(poolWrap(b+vec2f(1,1),size)),layer,0).x;
  return mix(mix(a00,a10,f.x),mix(a01,a11,f.x),f.y);
 }
 fn materialRaw(p:vec2f,slot:u32)->vec3f { return materialRawAt(p,u.ground[slot & groundMask].cacheLayer); }
@@ -1052,10 +1093,10 @@ fn materialRawAt(p:vec2f,layer:i32)->vec3f {
  return textureLoad(groundTex,vec2i(materialPixel(p)),layer,0).rgb;
 }
 fn materialRelief(p:vec2f,slot:u32)->f32 {
- return textureLoad(groundTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).w;
+ return textureLoad(materialHeightTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).x;
 }
 fn materialShine(p:vec2f,slot:u32)->f32 {
- return textureLoad(materialFinishTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).x;
+ return textureLoad(groundTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).a;
 }
 fn materialMean(slot:u32)->vec3f {
  return textureLoad(materialMeanTex,vec2i(0),u.ground[slot & groundMask].cacheLayer,0).rgb;

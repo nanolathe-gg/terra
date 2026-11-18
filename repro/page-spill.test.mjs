@@ -51,3 +51,12 @@ test('the cap holds the most recently evicted copies, reserved bytes included', 
   assert.equal(spill.take('d', '0'), null, 'unfinished');
   assert.equal(spill.take('c', '0'), null, 'trimmed');
 });
+
+test('the page heap counts the copies that hold their bytes', () => {
+  const spill = createPageSpill(() => 100), a = spill.begin('a', '0', 10), data = bytes(10);
+  spill.begin('b', '0', 10);   // still reading back: reserved, not yet held
+  spill.fill('a', a, data);
+  assert.deepEqual(spill.buffers(), [data]);
+  spill.take('a', '0');
+  assert.deepEqual(spill.buffers(), []);
+});

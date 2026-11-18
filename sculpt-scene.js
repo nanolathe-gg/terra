@@ -221,7 +221,7 @@ export const SHAPE_FIELDS=[
   // Rock presets (B2): the rock this landform is made of, one of the map's presets (sculpt-rock-presets.js); -1, Rock beneath, keeps the rock that is
   // already there. Its choices are the map's presets (sculpt.js syncRockChoices).
   ['groundPreset','lf-ground','Ground',['landform','paint'],-1,MATERIAL_SLOTS-1,1,1,'The material this stroke lays down: the world’s ground or another of the map’s materials. Ground beneath leaves the previous surface alone.',[[-1,'Ground beneath']]],
-  ['rockPreset','lf-rock','Rock',['landform'],-1,15,1,1,'The rock this shape is made of, one of the map\'s rock presets (World pane, Rock & cliffs). Rock beneath keeps whatever rock is already there: the world\'s own, or an earlier shape\'s. The shape claims its rock wherever it moves the ground, so a later shape wins where it overlaps an earlier one.',[[-1,'Rock beneath']]],
+  ['rockPreset','lf-rock','Rock',['landform'],-1,15,1,1,'The rock this shape is made of, one of the map\'s rock presets (World pane, Rock & cliffs). Rock beneath keeps whatever rock is already there: the world\'s own, or an earlier shape\'s. The shape claims its rock wherever it moves the ground and a few pixels past that, where Time wears its edge, so a later shape wins where it overlaps an earlier one.',[[-1,'Rock beneath']]],
   // Local vegetation inside the shape (card C5 stage 2): a change about the world's own cover, 0 none.
   ['styleVegetation','style-vegetation','Local vegetation',['landform'],-100,100,5,100,'Grass and moss cover inside the shape, times 1 + this: below 0 more bare rock, above 0 more cover.'],
   // E10 (Lava): finger size; layer width variation; circle size of the circular layers.
@@ -374,7 +374,7 @@ export function pagedTime({config,renderer,size,spacing,material}) {
     const erosion=await erosionOf(renderer);
     const r=await erosion.runGpu({...p,planes:win.planes,masks:win.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid:win.grid,size,spacing,seaLevel:config.seaLevel,ox:win.ox,oy:win.oy,stale:win.stale});
     // The window's eroded height (plane 1 of the pass's weather buffer) makes the material field; the page keeps its core of it.
-    if (material) r.field=await erosion.materialField(materialRequest(config,material,{heightBuffer:r.weather,heightOffset:win.grid*win.grid,grid:win.grid,size,ox:win.ox,oy:win.oy}));
+    if (material) r.field=await erosion.materialField(materialRequest(config,material,{heightBuffer:r.weather,heightOffset:win.grid*win.grid,grid:win.grid,size,spacing,ox:win.ox,oy:win.oy}));
     return r;
   }};
 }
@@ -394,26 +394,26 @@ export function pagedBudget({gpuMB,renderer,chunk,maskCount,view,preview=false,f
   return {total:gpuMB*MB,minimum,previewMinimum:minimum+Math.max(0,previewWorking)};
 }
 // The surface sliders (index.html's range inputs, by id): the material value each opens at and its default, then the slider's min, max and
-// step. A page opens each at round(value x 100), clamped and snapped to its step as the browser does; the address may set the ring's three.
+// step. A page opens each at round(value x 100), clamped and snapped to its step as the browser does.
 const SURFACE_SLIDERS={relief:['surfaceRelief',1,0,160,5],'material-weathering':['materialWeathering',0,0,100,1],'deposit-spread':['depositSpread',.65,0,100,1],
-  'transition-detail':['transitionDetail',.65,0,100,1],'mineral-ring':['ringAmount',0,0,100,1],'ring-spread':['ringSpread',.65,0,100,1],'ring-variation':['ringVariation',.7,0,100,1]};
+  'transition-detail':['transitionDetail',.65,0,100,1]};
 export const SURFACE_SLIDER_IDS=Object.keys(SURFACE_SLIDERS);
 // The slider groups the World panel shows or hides by the world's layers (sculpt.js boot sets these containers' hidden; the rest of the panel is
-// its markup): Transition detail needs a body layer, the fringe's three a ring layer.
-export const surfaceGroupsHidden=config => ({'transition-detail-control':!config.layers.includes('body'),'ring-controls':!config.layers.includes('ring')});
+// its markup): Transition detail needs a body layer.
+export const surfaceGroupsHidden=config => ({'transition-detail-control':!config.layers.includes('body')});
 // The sliders the material field reads (materialKnobs): moving one runs the Time pass again; the others only redraw.
 export const TIME_SLIDER_IDS=['material-weathering','deposit-spread'];
 export const sliderRange=id => SURFACE_SLIDERS[id].slice(2);
 export const sliderValue=(id,v) => { const [,,lo,hi,step]=SURFACE_SLIDERS[id]; return clamp(lo+step*Math.round((clamp(v,lo,hi)-lo)/step),lo,hi); };
-export const surfaceSliders=(config,settings) => Object.fromEntries(Object.entries(SURFACE_SLIDERS).map(([id,[key,fallback]]) =>
-  [id,sliderValue(id,Math.round((['ringAmount','ringSpread','ringVariation'].includes(key)&&settings.has(key)?Number(settings.get(key)):config.material?.[key]??fallback)*100))]));
+export const surfaceSliders=config => Object.fromEntries(Object.entries(SURFACE_SLIDERS).map(([id,[key,fallback]]) =>
+  [id,sliderValue(id,Math.round((config.material?.[key]??fallback)*100))]));
 // The draw's options from the slider values (by id) and the view switches.
-export const drawOptions=(s,{clay=false,light='original'}={}) => ({clay,light,detail:s.relief/100,ring:s['mineral-ring']/100,ringSpread:s['ring-spread']/100,ringVariation:s['ring-variation']/100,
+export const drawOptions=(s,{clay=false,light='original'}={}) => ({clay,light,detail:s.relief/100,
   materialWeathering:s['material-weathering']/100,transitionDetail:s['transition-detail']/100});
 // The material field's knobs, or null when Material weathering is 0 (sculpt-erosion.js materialField; `seed` is the refinement seed), and its
 // request over the Time pass's eroded height (heightBuffer, heightOffset cells in; ox, oy a page's first lattice cell).
 export const materialKnobs=(s,seed,transition) => s['material-weathering']/100>0?{depositSpread:s['deposit-spread']/100,seed,mineral:transition==='mineral'}:null;
-export const materialRequest=(config,material,{heightBuffer,heightOffset,grid,size,ox,oy}) => ({heightBuffer,heightOffset,grid,size,ox,oy,seaLevel:config.seaLevel,baseHeight:config.baseHeight,
+export const materialRequest=(config,material,{heightBuffer,heightOffset,grid,size,spacing,ox,oy}) => ({heightBuffer,heightOffset,grid,size,spacing,ox,oy,seaLevel:config.seaLevel,baseHeight:config.baseHeight,
   seed:material.seed,depositSpread:material.depositSpread,profile:{...config.material,mineral:material.mineral}});
 // A world's colors for the renderer ([r, g, b], 0..1): the world's hex colors (null is off: the texture's own) and Shallow water's tone
 // (shallowTone, three shifts of the water material's mean, sculpt-knobs.js waterTone), ?sunColor=ffd9a8&skyColor=8fb0ff

@@ -135,12 +135,17 @@ export function landformBackSide(lean, turn, dx, dy) {
   const bx = lean.bx * Math.cos(turn) - lean.by * Math.sin(turn), by = lean.bx * Math.sin(turn) + lean.by * Math.cos(turn);
   return lean.side || ((dy * bx - dx * by) < 0 ? -1 : 1);
 }
+// How far past the ground it moves a landform claims its rock (world px; 0 for Rock beneath). Time slumps the ground just past a cut's edge (up to
+// about 8 px lower on the owner's river banks, at any Rain), and the draw reads the rock mask up to 4 px off (engine-common.wgsl rockSlotAt). Left
+// to the world's rock, that worn strip counted as a cut bank, and its rock structure carved it below the sea above a smooth bank of the stroke's rock.
+export const ROCK_CLAIM_MARGIN = 12;
+export const rockClaimMargin = q => { const k = Math.round(q?.rockPreset ?? -1); return k >= 0 && k < 16 ? ROCK_CLAIM_MARGIN : 0; };
 // H27: the most a cell can stand from a landform's path and still be on it (world px; `scale` is the frame's), over the widest side grown by the width
-// variation at its largest weight, the wander, and the spurs. The segment boxes (stamp: the ejecta, not the secondaries or copies, which are nodes of their
-// own) and nodeBounds (all of it) both use it.
+// variation at its largest weight, the wander, the rock claim's margin and the spurs. The segment boxes (stamp: the ejecta, not the secondaries or
+// copies, which are nodes of their own) and nodeBounds (all of it) both use it.
 export function landformReach(q, scale = 1, widthMul = 1, stamp = false) {
   const {front, back} = landformSides(q), weight = Math.max(q.varyFoot ?? 1, q.varyMiddle ?? 1);
-  const own = Math.max(front, back) * widthMul * Math.exp(1.35 * (q.widthVary || 0) * weight) + (isRiver(q) ? 0 : (q.wander || 0) * scale * weight) + 2 + (talusOn(q) ? clamp(q.talus, 0, 400) : 0);
+  const own = Math.max(front, back) * widthMul * Math.exp(1.35 * (q.widthVary || 0) * weight) + (isRiver(q) ? 0 : (q.wander || 0) * scale * weight) + 2 + (talusOn(q) ? clamp(q.talus, 0, 400) : 0) + rockClaimMargin(q);
   return own + (stamp ? ejectaReach(q) : Math.max(impactReach(q), scatterReach(q, own))) * widthMul;
 }
 // Copies (scatterCount): smaller copies of a landform within Copies' spread of its path, each at most twice Copy size of the shape (scatterNodes,

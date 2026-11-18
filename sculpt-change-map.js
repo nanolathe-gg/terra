@@ -29,7 +29,7 @@ export async function changedWeatherTiles(device,before,after,grid,spacing,tile=
   for(var lane=0u;lane<p.lanes;lane++){let i=cell*p.stride+lane*p.step;if(a[i]!=b[i]){atomicOr(&dirty[(id.y/p.tile)*p.columns+id.x/p.tile],1u);break;}}
  }`});pipe=device.createComputePipeline({label:'changed refinement tiles',layout:'auto',compute:{module,entryPoint:'main'}});pipelines.set(device,pipe);}
  const columns=Math.ceil(grid/tile),bytes=columns*columns*4,S=GPUBufferUsage,dirty=device.createBuffer({size:bytes,usage:S.STORAGE|S.COPY_SRC}),read=device.createBuffer({size:bytes,usage:S.COPY_DST|S.MAP_READ});
- const pairs=[[before.weather,after.weather,2,1,grid*grid],...before.maps.map((a,i)=>[a,after.maps[i],1,1,1]),...(before.field?[[before.field,after.field,4,4,1]]:[])];
+ const pairs=[[before.weather,after.weather,2,1,grid*grid],...before.maps.map((a,i)=>[a,after.maps[i],1,1,1]),...(before.field?[[before.field,after.field,1,1,1]]:[])];
  const uniform=device.createBuffer({size:pairs.length*256,usage:S.UNIFORM|S.COPY_DST}),data=new Uint32Array(pairs.length*64);pairs.forEach((p,i)=>data.set([grid,tile,columns,...p.slice(2)],i*64));device.queue.writeBuffer(uniform,0,data);
  const enc=device.createCommandEncoder({label:'changed refinement tiles'});
  try{

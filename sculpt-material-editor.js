@@ -513,9 +513,12 @@ export function mountMaterialEditor(host) {
     if (on) { clearTimeout(pictureTimer); pictureTimer = null; pictureKey = pictureMaterial = ''; preview.cancelPicture(); }
     else refreshPictures();
   }
+  // Where the editor was opened from, when that is not the Materials tab: Back returns there (the door gets the focus, as on any close).
+  const origin = from => from?.closest?.('#pick') ? 'Pick' : from?.closest?.('#pane-world') ? 'World' : from?.closest?.('#pane-tool') ? 'the shape' : '';
   function open(which, from) {
     opener = from; if (which !== undefined && which !== slot) choose(which); pick('controls');   // another material: not the last one's selection, frame or solo node
-    if (!dialog.open) { dialog.show(); host.dock({close, inner}); $('materials-toolbar').setAttribute('aria-expanded', 'true'); $('material-graph').focus({preventScroll: true}); }
+    const back = origin(from); $('material-back').hidden = !back; $('material-back').textContent = back ? `← Back to ${back}` : '';
+    if (!dialog.open) { dialog.show(); host.dock({close, inner}); $('material-graph').focus({preventScroll: true}); }
     pictureKey = thumbKey = ''; refresh();
   }
   // The side panel comes back before the focus returns, so a button inside it can take the focus. A door its panel built again meanwhile
@@ -523,7 +526,7 @@ export function mountMaterialEditor(host) {
   // (its Build or World tab), the focus stays where that click put it.
   function close(returnFocus = true) {
     if (!dialog.open) return;
-    closeMenu(); setDrawer(false); dialog.close(); setFull(false); clearTimeout(pictureTimer); preview.cancel(); pictureKey = thumbKey = pictureMaterial = ''; host.dock(null); $('materials-toolbar').setAttribute('aria-expanded', 'false');
+    closeMenu(); setDrawer(false); dialog.close(); setFull(false); clearTimeout(pictureTimer); preview.cancel(); pictureKey = thumbKey = pictureMaterial = ''; host.dock(null);
     const door = opener?.isConnected ? opener : opener?.id ? document.getElementById(opener.id) : null;
     if (returnFocus) (door && !door.closest('[hidden]') ? door : $('materials-toolbar')).focus({preventScroll: true});
   }
@@ -543,7 +546,7 @@ export function mountMaterialEditor(host) {
     return true;
   }
   // Escape inside the editor (sculpt-ui.js closeTop), one thing a press: a control's name being asked, a text field, the add menu, Manage or
-  // the library drawer, then Focus graph back to the split workspace. Then Pick's card, and then the editor itself (closeDocked).
+  // the library drawer, then Focus graph back to the split workspace. Then the editor itself (closeDocked), and then Pick's card.
   function inner() {
     if (naming) { const pin = naming.pin; cancelName(); pin.focus(); return true; }
     if (leaveField()) return true;
@@ -554,11 +557,12 @@ export function mountMaterialEditor(host) {
     return false;
   }
   const roleSlot = key => materials().find(m => m[key])?.slot;
-  $('materials-toolbar').onclick = () => dialog.open ? close(false) : open(undefined, $('materials-toolbar'));
+  // Materials, the third of the editor's views (Build, World, Materials): selecting it opens the editor; Build or World, or Escape, closes it.
+  $('materials-toolbar').onclick = () => { if (!dialog.open) open(undefined, $('materials-toolbar')); };
   $('material-open').onclick = () => open(roleSlot('worldGround'), $('material-open'));
   $('water-material-edit').onclick = () => open(roleSlot('worldWater'), $('water-material-edit'));
-  $('material-done').onclick = () => close();
   $('material-full').onclick = () => setFull(!full);
+  $('material-back').onclick = () => close();
   dialog.oncancel = e => e.preventDefault();
   // A press anywhere else, on the map too, closes the add menu, Manage and the library drawer.
   const outside = e => {
@@ -573,9 +577,8 @@ export function mountMaterialEditor(host) {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.target.matches('input:not([type=range]),textarea')) { e.preventDefault(); $(e.shiftKey ? 'redo' : 'undo').click(); }
     e.stopPropagation();
   };
-  $('material-undo').onclick = () => $('undo').click(); $('material-redo').onclick = () => $('redo').click();
-  const lock = () => { $('materials-toolbar').disabled = $('editor').disabled; $('material-editor-fields').disabled = $('editor').disabled; $('material-undo').disabled = $('undo').disabled; $('material-redo').disabled = $('redo').disabled; };
-  const locks = new MutationObserver(lock); for (const id of ['editor', 'undo', 'redo']) locks.observe($(id), {attributes: true, attributeFilter: ['disabled']}); lock();
+  const lock = () => { $('materials-toolbar').disabled = $('editor').disabled; $('material-editor-fields').disabled = $('editor').disabled; };
+  const locks = new MutationObserver(lock); for (const id of ['editor']) locks.observe($(id), {attributes: true, attributeFilter: ['disabled']}); lock();
   refresh();
   // The Color rows again, once the renderer has read back what the materials are drawn in (sculpt.js renderer.onmeans).
   const refreshColors = () => { for (const [prefix, m] of [['ctl', material()], ...worldRows.map(w => [w.prefix, materials().find(o => o[w.role]) ?? null])]) { const own = $(`${prefix}-matcolor`); if (m && document.activeElement !== own) own.value = hex(drawn(m).map(v => v * 255)); } };

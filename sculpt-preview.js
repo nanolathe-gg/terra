@@ -1,5 +1,6 @@
 import {createShapeEngine,createNodePreparer,nodeContextKey,shapeScratchBytes,shapeRequestBytes} from './sculpt-gpu-fields.js';
 import {terrainAllocation} from './sculpt-memory.js';
+import {timePassBytes} from './sculpt-erosion.js';
 // Resolution is a display preference, separate from shape/voxel levels. Choose
 // from the unsplit edit area, then hold that choice for the whole gesture.
 export const previewQuality=value=>['2','3','4','8'].includes(String(value))?String(value):'auto';
@@ -101,9 +102,9 @@ export function createPreviewLattice(device,scene,memoryChanged=()=>{}){
     const recipe=recipeFor(s,w);
     const prepared=[...recipe.values()].flatMap(p=>p.multi??[p]),scratch=shapeScratchBytes(w.cells,prepared);
     const shapeBytes=w.cells*56+Math.max(scratch,engine?.bytes()??0)+shapeRequestBytes(prepared);
-    const peakBytes=shapeBytes+(tm?w.cells*144+65536:0);
+    const timeBytes=tm?timePassBytes(w.side,w.spacing,tm.material):0,peakBytes=shapeBytes+timeBytes;
     const requestPeak=runTime?peakBytes:shapeBytes+(weather?.bytes??0)+(weather?.field?.size??0);
-    return {...w,s,tm,sk,wk,reuse,held,recipe,nodes:[...recipe.keys()],peakBytes,additionalBytes:key===held&&target?0:Math.max(0,requestPeak-bytes())};
+    return {...w,s,tm,sk,wk,reuse,held,recipe,nodes:[...recipe.keys()],timeBytes,peakBytes,additionalBytes:key===held&&target?0:Math.max(0,requestPeak-bytes())};
   };
   return {
     grid:level=>{const s=scene();return previewGrid(s.size,s.grid,level);},plan,bytes,
@@ -132,7 +133,7 @@ export function createPreviewLattice(device,scene,memoryChanged=()=>{}){
         if(key!==p.held){
           if(!p.reuse)dropWeather();else weatherReuses++;key='';
           if(tm&&!p.reuse){
-            working=p.cells*144+65536;peak=Math.max(peak,bytes());memoryChanged();
+            working=p.timeBytes;peak=Math.max(peak,bytes());memoryChanged();
             try{weather=await tm.run({planes:target.F,masks:target.Mk,grid:p.side,ox:p.x,oy:p.y,stale:()=>Boolean(signal?.aborted)||Boolean(stale?.())});timeRuns++;}
             finally{working=0;}
             current();weatherKey=p.wk;weatherWindow={x:p.x,y:p.y,side:p.side,spacing:p.spacing,grid:p.grid,cells:p.cells};weatherRevision=s.revision;weatherAtRest=!deferTime;

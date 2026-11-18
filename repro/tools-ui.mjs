@@ -72,7 +72,7 @@ try {
   await draw(380, 300, 640, 330);
   let ns = await nodes(); const hill = ns.length - 1;
   assert.deepEqual([ns[hill].kind, ns[hill].tool], ['landform', 'hill']);
-  assert.equal(await title(), `${hillTool.label} ${hill + 1}`);
+  assert.equal(await title(), `Editing ${hillTool.label} ${hill + 1}`);
   // A tool that names its rock by a preset's key draws on that preset of the map's list (Hill on Smooth soil), the save holds the preset and the
   // stroke's choice, and a scene stroke with that choice is the same stroke.
   if (hillTool.rock) {
@@ -143,7 +143,7 @@ try {
   assert.equal(await ev(`sculptDebug.state().tool`), 'landform', 'the brush this world lacks gives way to Landform');
   assert.equal(Number(await ev(`document.getElementById('diameter').value`)), 336, 'which takes its card\'s numbers');
   await shot('.tool-groups', 'toolbar-red.png');
-  await select(lone); assert.equal(await title(), `Landform ${lone + 1}`);
+  await select(lone); assert.equal(await title(), `Editing Landform ${lone + 1}`);
   await shot('#brush-title', 'fallback.png', true);
   // It keeps its shape for good: on to Desert, whose own landform is the mesa (terraces 6), and its numbers stay as they started.
   await open('biome=desert');
@@ -159,9 +159,9 @@ try {
   assert.ok(!(await toolbar()).Shape.includes('map-1'));
   ns = await nodes(); const orphan = ns.findIndex(n => n.tool === 'map-1');
   assert.deepEqual(without(ns[orphan].params), without(carried.params), 'Delete keeps its strokes\' numbers');
-  await select(orphan); assert.equal(await title(), `Landform ${orphan + 1}`);
+  await select(orphan); assert.equal(await title(), `Editing Landform ${orphan + 1}`);
   await click('#undo'); assert.ok((await toolbar()).Shape.includes('map-1'), 'undo brings the deleted tool back');
-  assert.equal(await title(), `Broad hill ${orphan + 1}`, 'and its stroke shows as it again');
+  assert.equal(await title(), `Editing Broad hill ${orphan + 1}`, 'and its stroke shows as it again');
   assert.deepEqual(errors, []);
   report.result = 'toolbars, draw, Save as tool, draw with it, undo, redo, reload, biome switch with the fallback, Delete and undo: all as expected';
 } finally {

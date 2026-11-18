@@ -153,7 +153,9 @@ test('an explicit instance can recover its original world identity after capacit
 test('later World material edits preflight uninstantiated dependencies against a fresh map atomically',()=>{
  const c={...config,materials:{...config.materials,high:'green-rock'}},base=worldMaterials(c);
  assert.equal(base.length,4);
- const w={tools:config.tools,rocks:[template('wrock-role',{material:{world:'worldRock'}}),...Array.from({length:14},(_,i)=>template('wrock-extra'+i,{name:'Extra '+i,material:{key:'wmat-extra'+i,name:'Extra grain '+i,graph:copyMaterial(graph)}}))]};
+ // Each extra draws a Worn color (two cache layers): the four built-ins and fourteen extras fill the cache's 32 layers, so one more overflows it.
+ const worn=copyMaterial(graph);worn.nodes=worn.nodes.map(n=>n.type==='output'?{...n,in:{...n.in,worn:'gradient'}}:n);
+ const w={tools:config.tools,rocks:[template('wrock-role',{material:{world:'worldRock'}}),...Array.from({length:14},(_,i)=>template('wrock-extra'+i,{name:'Extra '+i,material:{key:'wmat-extra'+i,name:'Extra grain '+i,graph:copyMaterial(worn)}}))]};
  assert.equal(instantiateWorldKit(c,w).materials.length,18);
  const full=[{slot:1,key:'wrock-role',worldKey:'wrock-role',name:'Stone',knobs:{faceWhole:.8},column:null,colors:null},...Array.from({length:14},(_,i)=>({slot:i+2,key:null,name:'Local '+i,knobs:{},column:null,colors:null}))],current=instantiateWorldKit(c,w,{rocks:full,materials:base,source:w});
  assert.equal(current.materials.length,4);assert.equal(current.rocks.length,15);

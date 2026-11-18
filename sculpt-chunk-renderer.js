@@ -5,7 +5,7 @@ import {rockWeatherBytes} from './sculpt-rock-weather.js';
 // belong to this renderer once; callers own the LRU of copied output images.
 import {TerrainRenderer,INPUT_TEXTURES,SURFACE_RECORD_BYTES} from './sculpt-renderer.js';
 import {columnRows} from './sculpt-column.js';
-import {PLANT_REACH} from './sculpt-material-model.js';
+import {PLANT_REACH,surfaceLookReach} from './sculpt-material-model.js';
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
 import {worldUniformDelta,PER_CHUNK_UNIFORMS} from './sculpt-gates.js';
 import {MASK_KEYS} from './sculpt-scene.js';
@@ -145,9 +145,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     // P16: the largest class drawn has radius min(16, 3.3 x the median); a stone reaches 1.6 radii from its candidate (1.41 of a class radius at most) and a larger stone that suppresses it a little further, and the mask reads the heights 14 px out for a cliff's foot plus its gradient (5).
     const stones=n('boulders',0)>0?3.6*32+90:3.6*Math.min(16,3.3*rock('looseSize',6))+24;   // Boulders: a 32 px class, and the mask looks for the wall 80 px out
     const beach=Math.max(this.config.layers.includes('beach')?(this.config.material?.beachWidth??120)*n('beachWidth',.6):0,n('apron',0))*1.35*1.15;
-    const bake=Math.max(19,stones,beach,rock('runoff',0)>0||rock('debrisAmount',0)>0||n('rimReach',0)>0||n('shoreRock',0)>0||n('shoreShelf',0)>0?180:0,this.plantLayers>0?PLANT_REACH:0);
-    // G3: the fringe's copies read the material field up to ringShift px from the pixel, and a few px more for each copy's gradient.
-    const direct=Math.max(61,48*Math.max(.65,1.6*n('ringSpread',.65)),Math.abs(n('waterSoft',32)),41*Math.abs(n('ringVariation',.7)/.75),n('ringShift',0)>0?Math.abs(n('ringShift',0))+4:0);
+    const bake=Math.max(19,stones,beach,rock('runoff',0)>0||rock('debrisAmount',0)>0||n('rimReach',0)>0||n('shoreRock',0)>0||n('shoreShelf',0)>0?180:0,this.plantLayers>0?PLANT_REACH+surfaceLookReach(this.surfaceLooks):0);   // plants placed by a rule that reads Sheltered or Distance to water read heights that far from each cell
+    const direct=Math.max(61,Math.abs(n('waterSoft',32)));
     // A projection apron includes appearance displacement too. These are
     // bounds from the actual terms: cosine/value noise <=1, the crack search
     // visits at most +/-4 cells (point delta <4.9 cells per axis), and signed

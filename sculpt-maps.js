@@ -11,8 +11,8 @@ export const TAB_KEY = 'terraform-tab-v1';
 // The single working copy and "previous map" slot of earlier builds: imported once into an empty list so no map is lost.
 export const LEGACY_KEYS = ['terraform-working-map-v1', 'terraform-previous-map-v1'];
 const LOCK = 'terraform-map:';
-// Address switches for the checks and diagnostics. The editor's own reloads keep these and drop every other parameter (`scratch` too, as
-// before: a scratch page that opens a map or another world saves from then on).
+// Address switches for the checks and diagnostics. The editor's own reloads keep these and drop every other parameter. A world switch
+// carries `scratch` with the tab (sculpt.js goToWorld: a scratch page stays one); a scratch page that opens a map saves from then on.
 export const DEV_SWITCHES = ['gpuMB', 'heapMB', 'gpuPages', 'digestGuard', 'levels', 'levelsOverlay', 'weatheredView', 'noJoin', 'timeApron', 'pageRing'];
 // Parameters that name a map to start (a world, a size, a sea level): with one present a tab without a map starts one instead of the picker.
 export const MAP_SWITCHES = ['biome', 'world', 'mapX', 'mapY', 'sea', 'newMap'];

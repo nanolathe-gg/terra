@@ -17,6 +17,13 @@ export const SYNONYMS = [
   ['colour',                            'color'],
   ['plant plants grass',                'vegetation grass moss shrub'],
   ['lake sea ocean',                    'water sea'],
+  // Artists' words for the review's tasks (2026-11-17) and the outputs' older names.
+  ['crossing ford pass',                'shallow ramp passability'],
+  ['grain texture pattern',             'grain material pattern'],
+  ['png screenshot picture image',      'view image'],
+  ['share link url',                    'map link'],
+  ['ufo export game archive',           'export game map'],
+  ['save download file',                'save editable map'],
 ];
 
 // A word in plain form: lower case, no accents, "&" read as "and", camelCase split.
@@ -96,7 +103,7 @@ const clean = text => String(text ?? '').replace(/[▾▸▴▶…]/g, '').repla
 // Where generic rows are read from, and the name each starts its path with.
 const SCOPES = [['pane-world', 'World'], ['brush-panel', 'Shape card'], ['pane-map', 'Map'], ['pane-graphics', 'View']];
 const FIELDS = 'input, select, textarea, .scrub';
-// Not rows of their own: the World panel's own search, a part's switch (its row is found), a slider's typed entry and native range,
+// Not rows of their own: the World panel's All switch, a part's switch (its row is found), a slider's typed entry and native range,
 // the Surface list's heads, a closed row's Coverage and Add a layer (found by name below), file pickers.
 const SKIP = '#world-control-search, summary, .scrub-entry, .scrub-native, .surface-head, .surface-layer:not(.open) .surface-cover, #surface-gallery, [type=file], [type=hidden], [type=button], [type=submit]';
 const MARK = '.control, .color-row, .surface-layer, label';
@@ -280,13 +287,12 @@ function land(target, mark = target) {
   else if (mark) bringIntoView(mark, false);
   flash(mark);
 }
-// A World row the panel hides: by its search, by "All" (a fine setting), by the Shine tab's material, or in "Show N unavailable settings".
+// A World row the panel hides: by "All" (a fine setting), by the Shine tab's material, or in "Show N unavailable settings".
 // A control of a World group that is not a row of its own (Cracks' Style) shows when its group does, with "All".
 function showWorldRow(el) {
-  const row = el.closest('[data-knob]'), group = el.closest('.world-subsection'), search = $('world-search'), fine = $('world-fine');
+  const row = el.closest('[data-knob]'), group = el.closest('.world-subsection'), fine = $('world-fine');
   const hidden = () => row ? row.hidden : Boolean(group?.hidden), eligible = () => row ? row.dataset.eligible === 'true' : !group?.hidden;
   if (!hidden()) return;
-  if (search?.value) { search.value = ''; search.dispatchEvent(new Event('input', {bubbles: true})); }
   if (hidden() && !eligible() && fine && !fine.checked) { fine.checked = true; fine.dispatchEvent(new Event('change', {bubbles: true})); }
   if (!row) return;
   if (row.hidden && !eligible()) for (const b of row.closest('.world-tab')?.querySelectorAll('[data-shine-material]') ?? []) { b.click(); if (eligible()) break; }
@@ -309,8 +315,6 @@ function reveal(el) {
 export function goTo(el, mark) {
   if (!el) return;
   reveal(el);
-  const search = $('world-search');
-  if (!shown(el) && el.closest('#pane-world') && search?.value) { search.value = ''; search.dispatchEvent(new Event('input', {bubbles: true})); reveal(el); }
   land(el, mark || el.closest(MARK) || el);
 }
 const layerRow = key => $('surface-layers')?.querySelector(`.surface-layer[data-key="${CSS.escape(key)}"]`);
@@ -355,7 +359,7 @@ function pickFeature(button) {
 function openMaterial(slot) {
   const open = $('materials-toolbar');
   if (!open || open.disabled) return;
-  if (!$('material-editor').open) open.click();   // Materials closes the editor when it is already open
+  if (!$('material-editor').open) open.click();
   document.querySelector(`#library-map [data-slot="${CSS.escape(slot)}"]:not(.current)`)?.click();
 }
 
