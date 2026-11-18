@@ -172,6 +172,7 @@ export async function mountMapFeatures(api) {
     for (const [k,s] of stamps) if (!live.has(k)) { stamps.delete(k); release(s); }
     for (const p of placements) if (GROUND_KINDS.includes(p.kind)) { const o=exactOrigin(p); if (o) origins.add(o.ox+','+o.oy); }
     for (const [k,g] of grounds) if (!origins.has(k) && !g.pending) grounds.delete(k);
+    const placed=new Set(placements.map(key)); for (const k of lifts.keys()) if (!placed.has(k)) lifts.delete(k);
     for (const kind of GROUND_KINDS) for (const v of variantList(kind)) keep.add('ground|'+kind+'|'+v.seed+'|'+JSON.stringify(kind==='deposit'?{...v.params,metal:depositMetal()}:v.params)+'|'+lightKey(sun));   // as thumbnail() keys them
     for (const k of thumbs.keys()) if (!keep.has(k)) thumbs.delete(k);
   }
@@ -179,11 +180,17 @@ export async function mountMapFeatures(api) {
   // ---- positions (client.featureScreenPos/featureAnchorY: the footprint centre, lifted by half the mean of the anchor cell's four
   // rounded, clamped corner bytes). `anchor` is in the export art's (TA screen) pixels; the view is lower by half the base height. ----
   const corner=(x,z) => { const h=api.sample(x*CELL,z*CELL); return Number.isFinite(h)?Math.round(clamp(h,0,255)):-1; };
+  // The lift waits for heights the fields hold now (api.known): until the anchor cell's corners are read (a map just opened, an edit not yet
+  // copied back), a placement keeps the lift it last had, and one with none yet is not drawn (anchor answers null). No sprite jumps as the
+  // base height, then the shapes' heights, then the Time pass's arrive.
+  const lifts=new Map(),CORNERS=[[0,0],[1,0],[0,1],[1,1]];
   function anchor(p) {
-    const [fw,fz]=footprint(p),sum=corner(p.x,p.z)+corner(p.x+1,p.z)+corner(p.x,p.z+1)+corner(p.x+1,p.z+1);
-    return {x:p.x*CELL+fw*8,y:p.z*CELL+fz*8-(sum>>3)};
+    const [fw,fz]=footprint(p),k=key(p);
+    if (!api.known || CORNERS.every(([i,j]) => api.known((p.x+i)*CELL,(p.z+j)*CELL))) lifts.set(k,(corner(p.x,p.z)+corner(p.x+1,p.z)+corner(p.x,p.z+1)+corner(p.x+1,p.z+1))>>3);
+    const lift=lifts.get(k);
+    return lift===undefined?null:{x:p.x*CELL+fw*8,y:p.z*CELL+fz*8-lift};
   }
-  const viewPoint=p => { const a=anchor(p); return {x:a.x,y:Math.floor(a.y+config.baseHeight/2)}; };
+  const viewPoint=p => { const a=anchor(p); return a && {x:a.x,y:Math.floor(a.y+config.baseHeight/2)}; };
   function project(p) { const h=api.sample(p.x,p.z); return {x:p.x,z:p.z-Math.floor(clamp(Number.isFinite(h)?h:0,0,255)/2)+config.baseHeight/2}; }
 
   // ---- deposits and vents: painted into a 128 px patch of the export art centred on the anchor. The anchor is the export's: the
@@ -192,7 +199,7 @@ export async function mountMapFeatures(api) {
   const grounds=new Map(),stamps=new Map(),thumbs=new Map();let groundGen=0;
   const originOf=(p,corners) => { const [fw,fz]=footprint(p),sum=corners[0]+corners[1]+corners[2]+corners[3]; return {ox:p.x*CELL+fw*8-PATCH/2,oy:p.z*CELL+fz*8-(sum>>3)-PATCH/2}; };
   const exactOrigin=p => { const s=stamps.get(key(p)); return s?.exact && !s.exactStale?s.exact:null; };
-  function groundOrigin(p) { const exact=exactOrigin(p); if (exact) return exact; const a=anchor(p); return {ox:a.x-PATCH/2,oy:a.y-PATCH/2}; }
+  function groundOrigin(p) { const exact=exactOrigin(p); if (exact) return exact; const a=anchor(p); return a && {ox:a.x-PATCH/2,oy:a.y-PATCH/2}; }
   function flatGround() {
     const c=(api.groundColor?.()||[.21,.36,.1]).map(v => Math.round(clamp(v,0,1)*255)),rgba=new Uint8ClampedArray(PATCH*PATCH*4);
     for (let i=0;i<PATCH*PATCH;i++) { rgba[i*4]=c[0]; rgba[i*4+1]=c[1]; rgba[i*4+2]=c[2]; }
@@ -707,14 +714,14 @@ export async function mountMapFeatures(api) {
   // The feature under a screen point, the frontmost first: a drawn body pixel, then a body's box, then a deposit's or vent's
   // footprint, then any footprint under the picked ground cell.
   function hitAt(screen) {
-    const near=placements.filter(p => Math.abs(p.x*CELL+8-screen.x)<112 && screen.z>p.z*CELL-160 && screen.z<p.z*CELL+200).filter(p => { const a=viewPoint(p); return Math.abs(a.x-screen.x)<96 && screen.z<a.y+96 && screen.z>a.y-128; }).sort(drawOrder).reverse();
+    const near=placements.filter(p => Math.abs(p.x*CELL+8-screen.x)<112 && screen.z>p.z*CELL-160 && screen.z<p.z*CELL+200).filter(p => { const a=viewPoint(p); return a && Math.abs(a.x-screen.x)<96 && screen.z<a.y+96 && screen.z>a.y-128; }).sort(drawOrder).reverse();
     for (const pass of [0,1]) for (const p of near) {
       if (GROUND_KINDS.includes(p.kind)) continue;
       const e=sprite(variantOf(p)); if (!e) continue;
       const a=viewPoint(p),x=Math.floor(screen.x)-(a.x-e.body.ax),y=Math.floor(screen.z)-(a.y-e.body.ay),pad=pass?2:0;
       if (x>=-pad && y>=-pad && x<e.body.w+pad && y<e.body.h+pad && (pass || e.body.alpha[y*e.body.w+x])) return p;
     }
-    for (const p of near) if (GROUND_KINDS.includes(p.kind)) { const a=viewPoint(p),[fw,fz]=footprint(p); if (Math.abs(screen.x-a.x)<=fw*8+4 && Math.abs(screen.z-a.y)<=fz*8+4) return p; }
+    for (const p of near) if (GROUND_KINDS.includes(p.kind)) { const a=viewPoint(p),[fw,fz]=footprint(p); if (a && Math.abs(screen.x-a.x)<=fw*8+4 && Math.abs(screen.z-a.y)<=fz*8+4) return p; }
     const ground=pick(screen),i=ground?hitFeature(ground):-1;
     return i>=0?placements[i]:null;
   }
@@ -835,14 +842,15 @@ export async function mountMapFeatures(api) {
     // Deposits and vents are ground: under every sprite, in row order (as the export paints them).
     for (const {p,source} of shown) {
       if (!GROUND_KINDS.includes(p.kind)) continue;
-      const s=stampFor(source),o=groundOrigin(p);   // a dragged copy has no anchor read yet: the view's height places it
+      const o=groundOrigin(p); if (!o) continue;   // no height read here yet (anchor); a dragged copy has no exact anchor yet: the view's height places it
+      const s=stampFor(source);
       if (s.bitmap) ink.drawImage(s.bitmap,o.ox,o.oy+shift);
       else outline(p,'#b8eef3',[3,3]);
     }
     for (const {p} of shown) {
       if (GROUND_KINDS.includes(p.kind)) continue;
+      const a=viewPoint(p); if (!a) continue;   // no height read here yet (anchor)
       const e=sprite(variantOf(p)); if (!e) { outline(p,'#b8eef3',[3,3]); continue; }
-      const a=viewPoint(p);
       if (e.shadow) { ink.globalAlpha=e.shadowBlend; ink.drawImage(e.shadow.bitmap,a.x-e.shadow.ax,a.y-e.shadow.ay); }
       ink.globalAlpha=e.bodyBlend; ink.drawImage(e.body.bitmap,a.x-e.body.ax,a.y-e.body.ay);
     }
