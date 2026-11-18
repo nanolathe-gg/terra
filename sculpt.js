@@ -872,7 +872,17 @@ function surfaceHost() {
     surface:()=>config.surface,
     apply:applySurface,
     restore:()=>{setSurfaceList(structuredClone(baseSurface),false);saveWorlds();checkpoint(true);},
-    preview:row=>{if(!renderer||renderer.surfacePreview===row)return;const stage=renderer.uniformStage(()=>renderer.setSurfacePreview(row));worldChanged({stage:stage??'F',world:false});schedule();},
+    // term (0 to 3): the fact view of that condition of the layer at `row` in place of its coverage stripes (engine-frag.wgsl views 14 to 17).
+    preview:(row,term=-1)=>{if(!renderer||renderer.surfacePreview===row&&(renderer.surfaceFact??-1)===(row>=0?term:-1))return;const stage=renderer.uniformStage(()=>renderer.setSurfacePreview(row,term));worldChanged({stage:stage??'F',world:false});schedule();},
+    // The fact view's pixels once the view has settled (the map canvas idle): the count of each gray level (the fact across its range, green
+    // carries it alone) and of the pixels where the condition holds (tinted), over the map's own pixels in view. Null when it cannot be read.
+    factSample:async()=>{
+      if(!mapCanvas?.idle)return null;await mapCanvas.idle();
+      let data;try{data=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;}catch(_){return null;}
+      const levels=new Uint32Array(256);let holds=0,total=0;
+      for(let k=0;k<data.length;k+=4){if(data[k+3]<255)continue;const r=data[k],g=data[k+1],b=data[k+2];const tinted=r>g+8&&b>g+8;if(!tinted&&(Math.abs(r-g)>2||Math.abs(b-g)>2))continue;levels[g]++;total++;if(tinted)holds++;}
+      return total?{levels,holds,total}:null;
+    },
     // Pick on the map: the inspector's pixels come from the Pick tool (its card's Surface door, pickHost openSurface).
     pick:()=>{if(!stroke&&!moving)setPicking(true);},
     inspect:(at,current)=>mapCanvas?mapCanvas.inspect(at,current):Promise.resolve(null),

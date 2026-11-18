@@ -3,16 +3,16 @@
 // with its reason. Each row opens to set a layer's material, its Coverage (stored as amount), its edge and its rule (conditions that must all
 // hold, or a score); a row moves within its stage, a material layer can be removed, and a layer is added from a preset. Hovering or focusing a
 // row previews where that layer lies on the map. The list is a world setting: `host.apply(next, {commit})` stores it.
-import {SURFACE_BUILTINS, SURFACE_NEEDS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, SURFACE_OWN_AMOUNT, PLANT_KINDS, PLANT_LABELS, PLANT_FACTS, surfaceRows, spreadRule, isMaterialLayer, layerKey} from './sculpt-material-model.js';
+import {SURFACE_BUILTINS, SURFACE_NEEDS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, SURFACE_OWN_AMOUNT, PLANT_KINDS, PLANT_LABELS, PLANT_FACTS, surfaceRows, spreadRule, SURFACE_FACT_RANGE, isMaterialLayer, layerKey} from './sculpt-material-model.js';
 import {controlRow} from './sculpt-workspace.js';
 
 const $ = id => document.getElementById(id);
 // Plain names for the facts a rule reads, with the range a window's sliders cover.
+// Each fact's name for an artist (its range: sculpt-material-model.js SURFACE_FACT_RANGE).
 export const FACT_LABELS = {
-  slope: ['Steepness', 0, 3, .05], aboveSea: ['Height above the sea', -20, 200, 1], abovePlain: ['Height above the plain', -60, 200, 1],
-  wear: ['Worn by water', 0, 1, .01], deposit: ['Sediment laid down', 0, 1, .01], wetness: ['Wetness', 0, 1, .01], moisture: ['Moisture', 0, 1, .01],
-  soilDepth: ['Soil depth', 0, 1, .01], light: ['Sunlight', 0, 1.6, .01], top: ['Lumps (1) and hollows (-1)', -1, 1, .02], convexity: ['Convexity', -1, 1, .02],
-  rockShare: ['Rock', 0, 1, .01], debrisShare: ['Debris', 0, 1, .01], sandShare: ['Sand', 0, 1, .01],
+  slope: ['Steepness'], aboveSea: ['Height above the sea'], abovePlain: ['Height above the plain'], wear: ['Worn by water'], deposit: ['Sediment laid down'],
+  wetness: ['Wetness'], moisture: ['Moisture'], soilDepth: ['Soil depth'], light: ['Sunlight'], top: ['Lumps (1) and hollows (-1)'], convexity: ['Convexity'],
+  rockShare: ['Rock'], debrisShare: ['Debris'], sandShare: ['Sand'],
 };
 export const BUILTIN_LABELS = {
   highland: 'Highland ground', slopeCover: 'Slope cover', soil: 'Bare soil', rock: 'Rock', beach: 'Beach', crown: 'Crown rock', baseBand: 'Base band',
@@ -224,7 +224,44 @@ export function mountSurfacePanel(host) {
       number('×', t.weight ?? 1, v => edit(i, l => { l.score.terms[k].weight = v ?? 1; }, true), 'Its weight in the sum (negative: it counts against)', '1', `t${k}-weight`),
       remover('Remove this term', () => edit(i, l => { l.score.terms.splice(k, 1); if (!l.score.terms.length) delete l.score; }, true)));
   }
-  function ruleBlock(layer, i) {
+  // The fact view (engine-frag.wgsl views 14 to 17): pointing at or focusing a condition shows its fact over the map in gray, magenta where the
+  // condition holds, while "Stripes where the layer under the pointer lies" is on; the block's legend then gives the fact's range, a histogram
+  // of the map in view across it (from the view's own pixels, host.factSample) with the condition's limits marked, and the share that holds it.
+  let sampling = 0;
+  function factView(term, k, layer, layerRow, legend) {
+    const fact = layer.score ? layer.score.terms[k]?.fact : layer.where?.[k]?.fact, drawn = layer.score ? null : spreadRule(layer).where[k];
+    const on = () => {
+      if (!$('surface-show').checked || layerRow == null || !fact) return;
+      host.preview(layerRow, k);
+      const ticket = ++sampling, [lo, hi] = SURFACE_FACT_RANGE[fact];
+      legend.hidden = false;
+      legend.replaceChildren(el('p', {className: 'small', textContent: `On the map: ${factName(fact)} in gray, black at ${fmt(lo)} to white at ${fmt(hi)}; magenta where ${layer.score ? 'the score passes' : 'this condition holds'}. Reading the view…`}));
+      host.factSample?.().then(read => {
+        if (ticket !== sampling) return;
+        const words = el('p', {className: 'small', textContent: read ? `On the map: ${factName(fact)} in gray, black at ${fmt(lo)} to white at ${fmt(hi)}; magenta where ${layer.score ? 'the score passes' : 'this condition holds'}: ${percent(read.holds / read.total)} of the map in view.`
+          : `On the map: ${factName(fact)} in gray, black at ${fmt(lo)} to white at ${fmt(hi)}. The view could not be read for a histogram.`});
+        const parts = [words];
+        if (read) parts.push(histogram(read.levels, lo, hi, drawn));
+        if (['rockShare', 'debrisShare', 'sandShare'].includes(fact)) parts.push(el('p', {className: 'small', textContent: 'The map shows its final share; a layer drawn before that share is complete saw less.'}));
+        legend.replaceChildren(...parts);
+      });
+    };
+    const off = event => { if (term.contains(event?.relatedTarget)) return; sampling++; legend.hidden = true; if ($('surface-show').checked && layerRow != null) host.preview(layerRow); };
+    term.addEventListener('pointerenter', on); term.addEventListener('focusin', event => { if (!term.contains(event.relatedTarget)) on(); });
+    term.addEventListener('pointerleave', event => { if (!term.contains(document.activeElement)) off(event); }); term.addEventListener('focusout', off);
+  }
+  // A histogram of the fact over the map in view (the gray levels' counts, 0 to 255 across [lo, hi]) in 48 bars, the condition's limits shaded.
+  function histogram(levels, lo, hi, drawn) {
+    const W = 240, H = 40, BARS = 48, c = el('canvas', {width: W, height: H, className: 'surface-histogram', title: `How much of the map in view has each value, ${fmt(lo)} to ${fmt(hi)}`});
+    const g = c.getContext('2d'), bars = new Array(BARS).fill(0);
+    levels.forEach((n, v) => { bars[Math.min(BARS - 1, Math.floor(v * BARS / 256))] += n; });
+    const top = Math.max(...bars, 1), x = v => (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * W;
+    if (drawn) { g.fillStyle = 'rgba(230, 60, 220, .28)'; const a = drawn.from != null ? x(drawn.from) : 0, b = drawn.to != null ? x(drawn.to) : W; g.fillRect(a, 0, Math.max(1, b - a), H); }
+    g.fillStyle = '#d8d8d8';
+    bars.forEach((n, k) => { const h = n ? Math.max(1, Math.sqrt(n / top) * (H - 2)) : 0; g.fillRect(k * W / BARS + .5, H - h, W / BARS - 1, h); });
+    return el('div', {className: 'surface-histogram-row'}, el('span', {className: 'small', textContent: fmt(lo)}), c, el('span', {className: 'small', textContent: fmt(hi)}));
+  }
+  function ruleBlock(layer, i, layerRow) {
     const kind = ruleKind(layer), block = el('div', {className: 'surface-rule'});
     const select = el('select', {title: 'Where the layer may show', id: uid('rule')},
       el('option', {value: 'none', textContent: 'Everywhere', selected: kind === 'none'}),
@@ -232,10 +269,10 @@ export function mountSurfacePanel(host) {
       el('option', {value: 'score', textContent: 'Where a score passes (a weighted sum)', selected: kind === 'score'}));
     select.onchange = () => edit(i, l => switchRule(l, select.value), true);
     block.append(el('label', {className: 'surface-number surface-rule-kind'}, el('span', {textContent: 'Shows'}), select));
-    const drawn = spreadRule(layer);
-    if (kind === 'where') layer.where.forEach((w, k) => block.append(windowRow(i, k, w, drawn.where[k])));
+    const drawn = spreadRule(layer), legend = el('div', {className: 'surface-fact-view', hidden: true});
+    if (kind === 'where') layer.where.forEach((w, k) => { const term = windowRow(i, k, w, drawn.where[k]); factView(term, k, layer, layerRow, legend); block.append(term); });
     if (kind === 'score') {
-      layer.score.terms.forEach((t, k) => block.append(termRow(i, k, t)));
+      layer.score.terms.forEach((t, k) => { const term = termRow(i, k, t); factView(term, k, layer, layerRow, legend); block.append(term); });
       block.append(el('div', {className: 'surface-term'}, el('span', {className: 'small', textContent: 'The sum, with the edge noise, passes'}),
         number('at', layer.score.from ?? .5, v => edit(i, l => { l.score.from = v ?? .5; }, true), 'The sum it shows from', '.5', 'score-at'),
         number('fade', layer.score.fade ?? .05, v => edit(i, l => { l.score.fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts', '', 'score-fade'),
@@ -252,6 +289,7 @@ export function mountSurfacePanel(host) {
       add.onclick = () => edit(i, l => { if (kind === 'where') l.where.push({fact: 'slope', from: .5, fade: .1}); else l.score.terms.push({fact: 'slope', weight: 1}); }, true);
       block.append(add);
     }
+    block.append(legend);
     return block;
   }
   function materialSelect(layer, i) {
@@ -354,12 +392,12 @@ export function mountSurfacePanel(host) {
       if (!builtin && !layer.where?.length && !layer.score && (layer.amount ?? 1) >= 1) body.append(el('p', {className: 'small', textContent: 'At full Coverage everywhere it has no edge, so Height contrast does nothing: give it a rule or a Coverage under 1.'}));
       if (material && !material.height && (edge.height ?? 0) > 0) body.append(el('p', {className: 'small', textContent: 'This material has no art height, so Height contrast only lets a ground with height push it back: choose one with height (a rock material, for one) for blocks that stand out.'}));
       if (!builtin) body.append(plantsBlock(layer, i));
-      if (!fixed) body.append(ruleBlock(layer, i));
+      if (!fixed) body.append(ruleBlock(layer, i, layerRows[i]));
       item.append(body);
     }
     // Chrome has no onfocusin/onfocusout properties: the focus events are listened for.
     const preview = () => host.preview($('surface-show').checked ? layerRows[i] : -1);
-    item.onpointerenter = preview; item.addEventListener('focusin', preview);
+    item.onpointerenter = preview; item.addEventListener('focusin', event => { if (!event.target.closest?.('.surface-term')) preview(); });   // a condition shows its fact (factView)
     item.onpointerleave = () => { if (!item.contains(document.activeElement)) host.preview(-1); };
     item.addEventListener('focusout', event => { if (!item.contains(event.relatedTarget)) host.preview(-1); });
     return item;

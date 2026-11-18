@@ -1713,7 +1713,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var surfMask: array<f32, 7>;
     var layerCover: array<f32, 7>;
     var layerOver = 0.0;
-    if (u.materialTable[SURFACE_FLAGS].x > 0.0 || probeHere) {
+    if (u.materialTable[SURFACE_FLAGS].x > 0.0 || probeHere || u.diagnosticView >= 14) {
         // The surface layers' facts (surfaceFacts), once a pixel and only when a layer reads them or draws a material.
         let site = coverSite(broad, timeMaps);
         surfaceFacts = array<f32, 14>(slope, baseHeight(p) - u.sea, baseHeight(p) - u.base, timeMaps.wear, timeMaps.deposit, timeMaps.wet,
@@ -2457,6 +2457,25 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let seen = clamp(surfacePreviewSeen, 0.0, cover);
         let at = vec2u(max(floor(v.position.xy + u.chunkScreenOrigin / u.chunkScale), vec2f(0.0)));   // screen pixels, so tiles' stripes meet
         if ((at.x + at.y) % 6u < 2u && cover > 0.0) { color = mix(color, (vec3f(1.0, 0.1, 0.9) * seen + vec3f(0.1, 0.9, 1.0) * (cover - seen)) / cover, min(cover * 1.5, 1.0)); }
+    }
+    // The Surface section's fact view: the fact one condition of the previewed layer reads (views 14 to 17: its term 0 to 3, the layer at
+    // u.surfacePreview), in gray from its range's low end (black) to its high end (white), magenta where that condition holds (a score: where
+    // the whole score passes, without its edge noise). Green stays the gray alone, so the page reads the view's own pixels for its histogram.
+    // The rock, debris and sand shares are their final values here, not what an earlier stage's layer saw.
+    if (u.diagnosticView >= 14 && u.diagnosticView <= 17 && u.surfacePreview >= 0) {
+        let at = u32(u.surfacePreview);
+        let rules = u32(u.materialTable[at].w);
+        let k = u32(u.diagnosticView - 14);
+        if (k + 1u < rules) {
+            let head = u.materialTable[at + 2u];
+            let term = u.materialTable[at + 3u + k];
+            let f = min(u32(term.x), SURFACE_FACTS - 1u);
+            let g = clamp((surfaceFacts[f] - SURFACE_FACT_LO[f]) / (SURFACE_FACT_HI[f] - SURFACE_FACT_LO[f]), 0.0, 1.0);
+            var holds = 0.0;
+            if (head.x < 1.5) { holds = surfaceWindow(surfaceFacts[f], term.y, term.z, term.w); }
+            else { holds = smoothstep(head.y - head.z, head.y + head.z, surfaceScore(at + 2u, rules, surfaceFacts, 0.0)); }
+            color = select(vec3f(g), vec3f(0.45 + 0.55 * g, g, 0.45 + 0.55 * g), holds > 0.5);
+        }
     }
     if (u.diagnosticView >= 8 && u.diagnosticView <= 12) {
         let slot=select(gs,u32(max(0,u.waterGround)),h<u.sea && u.waterGround>0);

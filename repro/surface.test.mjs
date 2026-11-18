@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {surfaceRows, copySurface, spreadRule, ruleHere, SURFACE_SPREAD_STEP, SURFACE_BUILTINS, SURFACE_STAGES, SURFACE_FACTS, SURFACE_FLAGS_ROW, SURFACE_DRAWABLE} from '../sculpt-material-model.js';
+import {surfaceRows, copySurface, spreadRule, ruleHere, SURFACE_SPREAD_STEP, SURFACE_FACT_RANGE, SURFACE_BUILTINS, SURFACE_STAGES, SURFACE_FACTS, SURFACE_FLAGS_ROW, SURFACE_DRAWABLE} from '../sculpt-material-model.js';
 import {withWorldMaterials, materialsInUse, copyMaterials, roleOf, LIBRARY, surfaceMaterials, deleteMaterial, assignMaterial, worldMaterials, worldOwnMaterials, keptWorldMaterials, worldKept} from '../sculpt-materials.js';
 
 const defaults = JSON.parse(readFileSync(new URL('../materials/defaults.json', import.meta.url), 'utf8'));
@@ -228,4 +228,11 @@ test('a surface keeps a layer’s Spread through a save, clamped, and Highland g
   const list = copySurface([{id: 'moss-1', material: 'lush-ground', where: [{fact: 'moisture', from: .4}], spread: 3}, {builtin: 'highland', spread: .5}]);
   assert.equal(list[0].spread, 1);
   assert.equal(list[1].spread, undefined);
+});
+
+test('the fact view’s ranges in the shader are the model’s', () => {
+  const wgsl = readFileSync(new URL('../engine-common.wgsl', import.meta.url), 'utf8');
+  const list = name => wgsl.match(new RegExp(`const ${name} = array<f32, 14>\\(([^)]*)\\)`))[1].split(',').map(Number);
+  assert.deepEqual(list('SURFACE_FACT_LO'), SURFACE_FACTS.map(f => SURFACE_FACT_RANGE[f][0]));
+  assert.deepEqual(list('SURFACE_FACT_HI'), SURFACE_FACTS.map(f => SURFACE_FACT_RANGE[f][1]));
 });
