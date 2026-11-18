@@ -109,7 +109,9 @@ fn lsMaskCompute(c: vec2f) -> vec4f {
     var rise = 0.0;
     for (var j = 0; j < 8; j++) { rise = max(rise, baseHeight(c + LS_WAYS[j] * 14.0) - h0); }
     let foot = smoothstep(2.0, 5.0, rise) * (1.0 - smoothstep(0.5, 1.0, slope));
-    let loose = smoothstep(0.10, 0.5, slope) * (1.0 - smoothstep(1.6, 2.6, slope));
+    // Loose ground is a slope's (an apron's toe, a bank), not level ground's: a level top or plain undulates by up to about .65 (a plateau's top
+    // with Height variation 3: median .33, nine tenths under .65), and stones begun at .10 lay across it. They begin at .7 and are whole by 1.4.
+    let loose = smoothstep(0.7, 1.4, slope) * (1.0 - smoothstep(1.6, 2.6, slope));
     let channel = smoothstep(0.03, 0.22, tm.channel);
     let fan = smoothstep(0.05, 0.3, deposit) * (1.0 - smoothstep(0.2, 0.6, tm.slope));
     let carried = max(channel, fan);
