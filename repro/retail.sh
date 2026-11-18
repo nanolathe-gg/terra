@@ -25,7 +25,7 @@ while [ $# -gt 0 ]; do
     *) echo "retail.sh: unknown argument $1" >&2; exit 2 ;;
   esac
 done
-scenes=$(ls "$here"/scenes/"$world"-[0-9].json 2>/dev/null)
+scenes=${RETAIL_SCENES:-$(ls "$here"/scenes/"$world"-[0-9].json 2>/dev/null)}   # RETAIL_SCENES: a subset (repro/match.sh holds one window out)
 [ -n "$scenes" ] || { echo "retail.sh: no scenes repro/scenes/$world-<n>.json" >&2; exit 2; }
 tag=$world; [ -n "$query" ] && tag=$world-$(printf '%s' "$query" | cksum | cut -d' ' -f1)
 out=${out:-$R/retail/$(basename "$repo")/$tag}
