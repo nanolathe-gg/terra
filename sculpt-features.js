@@ -638,21 +638,6 @@ export async function mountMapFeatures(api) {
     }
     return mask;
   }
-  // A fill's rocks lie where rock falls, as a cliff's debris does: most at the foot of steep ground, fewer along the rim above it, and few across
-  // open level ground (a plateau's top, a plain). Any of eight ways: ground that rises 8 to 40 height units within six cells (96 px) is a wall
-  // above the cell (full weight), ground that falls as far within three cells (48 px) is the rim of a drop (a third); nearer counts more. Open
-  // ground keeps 8% of the fill's density. Heights below the sea count as the sea, so a shore is no drop. Trees and shrubs fill evenly.
-  const ROCK_REACH=6,ROCK_RIM_REACH=3,ROCK_OPEN=.08,ROCK_RIM=.35,WAYS8=[[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]];
-  const ground=(x,z) => { const h=api.sample(x*CELL,z*CELL); return Math.max(config.seaLevel,Number.isFinite(h)?h:0); };
-  const rise=d => clamp((d-8)/32,0,1)**2*(3-2*clamp((d-8)/32,0,1));
-  function rockWeight(x,z) {
-    const h=ground(x+.5,z+.5);let foot=0,rim=0;
-    for (const [dx,dz] of WAYS8) for (let k=1;k<=ROCK_REACH;k++) {
-      const d=ground(x+.5+dx*k,z+.5+dz*k)-h;
-      foot=Math.max(foot,rise(d)*(1-(k-1)/ROCK_REACH)); if (k<=ROCK_RIM_REACH) rim=Math.max(rim,rise(-d)*(1-(k-1)/ROCK_RIM_REACH));
-    }
-    return ROCK_OPEN+(1-ROCK_OPEN)*Math.max(foot,ROCK_RIM*rim);
-  }
   function fillRegion(kind,region,options={}) {
     if (!guard()) return {added:0};
     const settings=fillOptions({...options,kind},fill),list=kinds.includes(settings.kind)?variantList(settings.kind):[];
@@ -662,8 +647,7 @@ export async function mountMapFeatures(api) {
     // accepted candidates retain exactly the same relative placement order.
     for (let z=bounds.z0;z<bounds.z1;z++) for (let x=bounds.x0;x<bounds.x1;x++) if (area[z*cols+x]) {
       const cluster=clamp((noise(x/12,z/12,settings.seed^0x713c6a91)-.25)*2,0,1),probability=settings.density/100*(1-settings.clustering+settings.clustering*cluster*2);
-      const r=hash(x,z,settings.seed^0x517ad0f3);
-      if (r<probability && (settings.kind!=='rock' || r<probability*rockWeight(x,z))) candidates.push({x,z,rank:hash(x,z,settings.seed^0x34da72f1)});
+      if (hash(x,z,settings.seed^0x517ad0f3)<probability) candidates.push({x,z,rank:hash(x,z,settings.seed^0x34da72f1)});
     }
     candidates.sort((a,b) => a.rank-b.rank || a.z-b.z || a.x-b.x);
     const occupied=new Uint8Array(cols*rows),put=p => { const [fw,fz]=footprint(p); for (let z=p.z;z<p.z+fz;z++) for (let x=p.x;x<p.x+fw;x++) occupied[z*cols+x]=1; };
