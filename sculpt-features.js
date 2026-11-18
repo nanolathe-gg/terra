@@ -785,7 +785,7 @@ export async function mountMapFeatures(api) {
   canvas.addEventListener('pointerleave',() => { if (!gesture) { hover=null; api.schedule(); } },true);
   const typing=target => ['INPUT','SELECT','TEXTAREA'].includes(target?.tagName) || target?.isContentEditable;
   doc.addEventListener('keydown',event => {
-    if (typing(event.target)) return;
+    if (typing(event.target) || doc.querySelector('dialog:modal')) return;   // a modal dialog (sculpt.js) has the keys
     if (event.code==='Space') { if (event.target?.tagName!=='BUTTON') space=true; return; }
     if (!mode && selection.size && !event.metaKey && !event.ctrlKey && !event.altKey) {
       if (['Delete','Backspace'].includes(event.key)) { stop(event); if (!event.repeat) removeSelected(); return; }

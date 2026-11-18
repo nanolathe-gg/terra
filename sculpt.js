@@ -2195,8 +2195,10 @@ $('export').addEventListener('click',async () => {
   catch (err) { error(err.message); }
 });
 const typing=target => target instanceof HTMLElement && (['INPUT','SELECT','TEXTAREA'].includes(target.tagName) || target.isContentEditable);
+// A modal dialog (Start a map, Maps) has the keys: Escape closes it, and no key reaches the editor behind it.
+const modalOpen=() => Boolean(document.querySelector('dialog:modal'));
 window.addEventListener('keydown',event => {
-  if(event.defaultPrevented)return;
+  if(event.defaultPrevented||modalOpen())return;
   // Escape first closes what is open on top of the editor (a tool flyout, a menu, the full-size curves, a menu inside the material editor),
   // wherever the focus is. Then the docked material editor, then Pick's card; once they are closed, Escape leaves Pick (below).
   // The docked material editor closes before Pick's card, so Pick › Edit material › Escape comes back to the picked pixel.
