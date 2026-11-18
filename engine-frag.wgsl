@@ -1271,47 +1271,6 @@ fn joinSedimentTransition(material: vec3f, pixel: vec2f, rock: vec3f, exposed: f
     return mix(material, refined, materialWeather);
 }
 
-// The surface facts that look around a pixel (engine-common.wgsl SURFACE_LOOK_*), over the authored height. Both reach less than the draw's
-// own reach (sculpt-chunk-renderer.js reaches: the shadow march's 203.6 px), so a tile already holds every height they read.
-// Sheltered (fact 16): how much of the sky round the pixel the ground hides, 0 open (a top, a plain) to 1 closed (a narrow gorge). Eight looks
-// at 24, 48 and 96 px, each the steepest rise that way, from 3 degrees (nothing) to 31 (all), averaged. The sea counts as level ground.
-fn surfaceShelter(p: vec2f) -> f32 {
-    let h = max(baseHeight(p), u.sea);
-    var s = 0.0;
-    for (var k = 0; k < 8; k++) {
-        let a = f32(k) * 0.785398 + 0.39;
-        let dir = vec2f(cos(a), sin(a));
-        var rise = 0.0;
-        for (var i = 0; i < 3; i++) { let d = 24.0 * exp2(f32(i)); rise = max(rise, (max(baseHeight(p + dir * d), u.sea) - h) / d); }
-        s += smoothstep(0.05, 0.6, rise);
-    }
-    return s / 8.0;
-}
-// Distance to water (fact 17): px to the nearest ground under the sea, up to SURFACE_WATER_REACH, 0 in the water. Twelve rays, each to its first
-// crossing of the sea, placed between two taps by their heights (as surfShore does), so the distance is smooth between taps.
-const SURFACE_WATER_REACH = 192.0;
-fn surfaceToWater(p: vec2f) -> f32 {
-    let h0 = baseHeight(p) - u.sea;
-    if (h0 < 0.0) { return 0.0; }
-    var radii = array<f32, 14>(2.0, 4.0, 7.0, 11.0, 16.0, 23.0, 32.0, 43.0, 57.0, 74.0, 95.0, 120.0, 152.0, 192.0);
-    var best = SURFACE_WATER_REACH;
-    for (var k = 0; k < 12; k++) {
-        let a = f32(k) * 0.523599 + 0.2;
-        let dir = vec2f(cos(a), sin(a));
-        var lastR = 0.0;
-        var lastH = h0;
-        for (var i = 0; i < 14; i++) {
-            if (lastR >= best) { break; }
-            let r = radii[i];
-            let hr = baseHeight(p + dir * r) - u.sea;
-            if (hr < 0.0) { best = min(best, lastR + (r - lastR) * lastH / (lastH - hr)); break; }
-            lastR = r;
-            lastH = hr;
-        }
-    }
-    return best;
-}
-
 // Card P27, Surf: the shore as one cross-shore coordinate. surfShore marches 8 rays from the pixel over the height field and returns x, the signed
 // distance in world px to the drawn waterline (onshore +; the drawn edge sits where the bed is 0.6 under the sea, so the bank's own run is added),
 // the nearest shore point q, a coordinate along the coast that value noise can use, and the bed's slope there (units per px). Beyond SURF_REACH, or where the height is more than a beach

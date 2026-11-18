@@ -539,6 +539,7 @@ export class TerrainRenderer {
     const head = [...surface.rows, ...Array.from({length: SURFACE_FLAGS_ROW - surface.rows.length}, () => [0, 0, 0, 0]), surface.flags, ...surface.head];
     // The layers that grow plants (engine-bake.wgsl plantMask), and the switch for the bake's plant pass.
     this.plantLayers = surface.plants.length; if (this.layout) this.i('uPlantsOn', this.plantLayers > 0);
+    this.surfaceLooks = surface.flags[1];   // the facts that look around a pixel which a rule reads: the plant bake's apron grows by their reach
     return [...head, ...rows, ...coverRows(this.config.material?.site, surface.plants, variant?.get?.('plantRelief') ?? 1)];
   }
 

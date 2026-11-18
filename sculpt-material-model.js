@@ -88,6 +88,9 @@ export const SURFACE_FACTS = ['slope', 'aboveSea', 'abovePlain', 'wear', 'deposi
   'rockShare', 'debrisShare', 'sandShare', 'north', 'east', 'sheltered', 'toWater'];
 // The facts that look around a pixel, by their bit in the flags row's y (engine-common.wgsl SURFACE_LOOK_SHELTER, SURFACE_LOOK_WATER).
 export const SURFACE_LOOKS = {sheltered: 1, toWater: 2};
+// How far from a pixel those facts read heights (engine-common.wgsl surfaceShelter: 96 px; surfaceToWater: SURFACE_WATER_REACH), for the bits
+// a world's rules read: the plant bake's height apron grows by it (sculpt-chunk-renderer.js reaches).
+export const surfaceLookReach = looks => (looks & SURFACE_LOOKS.toWater ? 192 : 0) || (looks & SURFACE_LOOKS.sheltered ? 96 : 0);
 // Each fact's range, [low, high] (SURFACE_FACTS order as keys): the Surface section's fact view draws a fact in gray across it, and its histogram
 // spans it. engine-common.wgsl SURFACE_FACT_LO and SURFACE_FACT_HI hold the same numbers. Steepness (rise per px, 5 px each side) reaches about
 // 16 on a Plateau's cliff faces (measured at 1x on Green), so its range runs to 20.
@@ -145,7 +148,7 @@ export const PLANT_KINDS = ['grass', 'meadow', 'moss', 'shrubs'];
 export const PLANT_LABELS = {grass: 'Grass tufts', meadow: 'Meadow tufts', moss: 'Moss cushions', shrubs: 'Shrubs'};
 export const PLANT_MAX = 8;
 // The facts the bake knows where it places plants (the shares of rock, debris and sand and the convexity exist only in the color pass).
-export const PLANT_FACTS = ['slope', 'aboveSea', 'abovePlain', 'wear', 'deposit', 'wetness', 'moisture', 'soilDepth', 'light', 'top', 'north', 'east'];
+export const PLANT_FACTS = ['slope', 'aboveSea', 'abovePlain', 'wear', 'deposit', 'wetness', 'moisture', 'soilDepth', 'light', 'top', 'north', 'east', 'sheltered', 'toWater'];
 // A stored list (this browser's world store, a save's world settings) made before the engine's surfaces drew materials: each engine
 // surface without one takes the world's (its own list, `base`), so it does not draw nothing.
 export const withSurfaceMaterials = (list, base) => list.map(l => l?.builtin != null && SURFACE_DRAWABLE.includes(l.builtin) && l.material == null

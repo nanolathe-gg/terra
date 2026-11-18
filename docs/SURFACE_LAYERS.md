@@ -385,8 +385,10 @@ here". Built on the branch, not landed.
   - *Distance to water* (0 to 192 px, square-root view): twelve rays to the first ground under the sea.
   The last two look around the pixel (24 and up to 168 height taps), so the draw computes them only where a rule reads them (the flags row's
   y, `SURFACE_LOOKS`), for Pick's pixel and in the fact view. Both reach less than the draw's own 203.6 px (the shadow march), so a tile
-  already holds every height they read and no margin moved. Plants know the facing facts; shelter and distance to water stay 0 for them
-  (the panel says so). Measured headless on Dawn: a 1024 px window takes the same time with a rule on either of them as with one on
+  already holds every height they read and no margin moved. The plant bake reads all four too: it walks every material layer, so a
+  shore layer reading Distance to water as 0 would have covered every plant under it. Its height apron grows by their reach
+  (`surfaceLookReach`) only when plants are placed and a rule reads one.
+  Measured headless on Dawn: a 1024 px window takes the same time with a rule on either of them as with one on
   Steepness (120 to 200 ms each way, within run-to-run noise); the color pass was not timed alone.
 - **Show here / Not here on Pick's card**: each layer with a rule gets a button on its line, Not here where it shows and Show here where its
   rule keeps it out (`ruleToShow`, `ruleToHide`, from the facts the draw recorded at the pixel). Show moves each failing window just past

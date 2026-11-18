@@ -808,6 +808,48 @@ fn surfaceWindow(v: f32, lo: f32, hi: f32, fade: f32) -> f32 {
     let f = max(fade, 0.0001);
     return smoothstep(lo - f, lo + f, v) * (1.0 - smoothstep(hi - f, hi + f, v));
 }
+// The surface facts that look around a pixel (SURFACE_LOOK_*), over the authored height, for the color pass and the plant bake. Both reach
+// less than the draw's own reach (sculpt-chunk-renderer.js reaches: the shadow march's 203.6 px), so a tile already holds every height they
+// read; the bake's apron grows by SURFACE_LOOK_REACH when plants are placed and a rule reads one.
+// Sheltered (fact 16): how much of the sky round the pixel the ground hides, 0 open (a top, a plain) to 1 closed (a narrow gorge). Eight looks
+// at 24, 48 and 96 px, each the steepest rise that way, from 3 degrees (nothing) to 31 (all), averaged. The sea counts as level ground.
+fn surfaceShelter(p: vec2f) -> f32 {
+    let h = max(baseHeight(p), u.sea);
+    var s = 0.0;
+    for (var k = 0; k < 8; k++) {
+        let a = f32(k) * 0.785398 + 0.39;
+        let dir = vec2f(cos(a), sin(a));
+        var rise = 0.0;
+        for (var i = 0; i < 3; i++) { let d = 24.0 * exp2(f32(i)); rise = max(rise, (max(baseHeight(p + dir * d), u.sea) - h) / d); }
+        s += smoothstep(0.05, 0.6, rise);
+    }
+    return s / 8.0;
+}
+// Distance to water (fact 17): px to the nearest ground under the sea, up to SURFACE_WATER_REACH, 0 in the water. Twelve rays, each to its first
+// crossing of the sea, placed between two taps by their heights (as surfShore does), so the distance is smooth between taps.
+const SURFACE_WATER_REACH = 192.0;
+fn surfaceToWater(p: vec2f) -> f32 {
+    let h0 = baseHeight(p) - u.sea;
+    if (h0 < 0.0) { return 0.0; }
+    var radii = array<f32, 14>(2.0, 4.0, 7.0, 11.0, 16.0, 23.0, 32.0, 43.0, 57.0, 74.0, 95.0, 120.0, 152.0, 192.0);
+    var best = SURFACE_WATER_REACH;
+    for (var k = 0; k < 12; k++) {
+        let a = f32(k) * 0.523599 + 0.2;
+        let dir = vec2f(cos(a), sin(a));
+        var lastR = 0.0;
+        var lastH = h0;
+        for (var i = 0; i < 14; i++) {
+            if (lastR >= best) { break; }
+            let r = radii[i];
+            let hr = baseHeight(p + dir * r) - u.sea;
+            if (hr < 0.0) { best = min(best, lastR + (r - lastR) * lastH / (lastH - hr)); break; }
+            lastR = r;
+            lastH = hr;
+        }
+    }
+    return best;
+}
+
 // A layer's rule over the facts, its rows from ruleAt (the head, then rules - 1 terms), one evaluator for the color pass and the bake: a
 // windows rule multiplies `share` by each window in turn; a score rule adds each weighted fact to `score` (the caller's noise and lift).
 fn surfaceWindows(ruleAt: u32, rules: u32, facts: array<f32, 18>, share: f32) -> f32 {
