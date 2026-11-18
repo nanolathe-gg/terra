@@ -110,8 +110,8 @@ fieldset{min-width:0;border:0;padding:0;margin:0}
 #layers .layer-visibility{font-size:15px;color:var(--accent)}
 #layers .is-hidden .layer-name{opacity:.4}
 #layers .layer-index{color:#758b91;font-size:9px}
-.layer-actions{display:flex;gap:4px;padding-top:9px;border-top:1px solid var(--line);margin-top:7px}
-.layer-actions button{padding:5px 6px;font-size:10px}
+.layer-actions{display:flex;flex-wrap:wrap;gap:4px;padding-top:9px;border-top:1px solid var(--line);margin-top:7px}
+.layer-actions button{padding:5px 6px;font-size:10px;white-space:nowrap}
 .layer-actions #node-delete{margin-left:auto;color:#edb1a4}
 .empty{color:var(--muted);padding:16px;font-size:11px}
 footer{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 12px;border-top:1px solid var(--line);background:#1b2428;position:relative;z-index:4}

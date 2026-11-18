@@ -68,7 +68,7 @@ const HELP = {
   fissure:'Cut a fissure along the stroke, or (Mode 1) a network of cuts over its footprint. Branches, jaggedness, width and depth are brush options; the world\'s own crack field is raised along the cut.',
   erase:'Paint plain ground: hills, water, craters, cracks, painted masks and style under the brush return to the dry base level, with a natural edge.',
   crater:'Strike a crater: a bowl dug into the ground where you click, a raised rim and secondaries. Drag to aim the impact: a short drag throws them downrange, a drag longer than the crater stretches it along the drag.',
-  move:'Drag to move · Shift-click adds or removes shapes · Shift + drag for height · Shift snaps rotate / scale · P: path · V: transform · arrows: nudge · Shift F: focus canvas'
+  move:'Drag to move · Shift-click adds or removes shapes · Shift + drag for height · Shift snaps rotate / scale · P: path · V: transform · arrows: nudge · ⌘ C / V: copy / paste · Shift F: focus canvas'
 };
 let mapUpdate=() => {},mapFeatures=null,mapMetadata=null,mapRevision=0;
 const mapData=() => ({...mapFeatures?.serialize(),...mapMetadata?.serialize()});
@@ -1564,6 +1564,30 @@ function moveSelectedShapes(dx,dy) {
   pendingEval=pendingEval<0?group[0]:Math.min(pendingEval,group[0]);
   flushEval(); checkpoint(); queueWeather();const adding=pathAdding,mode=drawMode;selectNode(selected,true);pathAdding=adding;drawMode=mode;updateControls();schedule();
 }
+// Copy, Paste and Duplicate (⌘ / Ctrl C, V, D, and the Shapes list's Duplicate): the selected shapes whole (path, settings, seed, rock), so a
+// copy looks as the shape does. Each paste lands 32 px further down and right of the copied shapes, on top of the list as a newly drawn shape
+// does, inside the map, and the copies become the selection: one undo step. The clipboard is this page's own: a shape's rock and materials
+// belong to its map.
+let shapeClipboard=null;
+function copyShapes() {
+  const group=selectedShapes(); if (!group.length || stroke || moving || loading || !ready) return false;
+  shapeClipboard={nodes:cloneNodes(group.map(i => nodes[i])),pastes:0};
+  status(group.length>1?`Copied ${group.length} shapes.`:`Copied ${shapeName(group[0])}.`); return true;
+}
+function pasteShapes() {
+  if (!shapeClipboard || stroke || moving || loading || !ready) return false;
+  const copies=cloneNodes(shapeClipboard.nodes),step=32*(shapeClipboard.pastes+1);
+  const m=fitToMap(copies.flatMap(n => n.points),[1,0,0,1,step,step]);
+  if (!m) { status('The copied shapes do not fit on this map.'); return true; }
+  shapeClipboard.pastes++; cancelWeather();
+  for (const n of copies) transformNode(n,nodeState(n),m);
+  const first=nodes.length; nodes.push(...copies);
+  evaluate(first,copies.reduce((r,n) => unionRect(r,nodeBounds(n)),null));
+  checkpoint(); pathEditing=false; alsoSelected=copies.slice(1).map((_,k) => first+1+k); selectNode(first,true);
+  status(copies.length>1?`Pasted ${copies.length} shapes.`:`Pasted ${shapeName(first)}.`);
+  renderLayers(); updateControls(); schedule(); queueWeather(); return true;
+}
+function duplicateShapes() { return copyShapes() && pasteShapes(); }
 function pickNode(p) {
   let best=-1,bestScore=Infinity;
   nodes.forEach((n,i) => { const d=nodeDistance(n,p),reach=Math.max(24,(n.params?.radius||40)); if (d<reach && d/reach<=bestScore) { bestScore=d/reach; best=i; } });
@@ -1642,6 +1666,7 @@ function renderLayers() {
   }).reverse());
   if(!nodes.length){const empty=document.createElement('p');empty.className='empty';empty.textContent='Draw a path to create a shape.';list.append(empty);}
   for (const id of ['node-seed','node-delete','node-up','node-down','node-hide']) $(id).disabled=selected<0||loading||Boolean(stroke||moving);
+  $('shape-duplicate').disabled=!selectedShapes().length||loading||Boolean(stroke||moving);
   $('node-up').disabled||=selected>=nodes.length-1;$('node-down').disabled||=selected<=0;
   $('node-seed').disabled||=nodes[selected]?.seed===undefined;
   $('node-hide').textContent=nodes[selected]?.hidden?'Show':'Hide';
@@ -2007,6 +2032,7 @@ document.querySelector('.tool-groups').addEventListener('click',event => {
 for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls({},[id]); });
 for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
 for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up','up'],['node-down','down'],['node-hide','hide']]) $(id).addEventListener('click',() => nodeAction(kind));
+$('shape-duplicate').addEventListener('click',duplicateShapes);
 // Features and Starts are two entries on the rail for the one tool (sculpt-features.js): Features opens it to place, Starts in its starts mode.
 const openFeatures=mode=>{if(stroke||moving)return;leavePick();selected=-1;alsoSelected=[];pathAdding=false;drawMode='select';mapFeatures?.activate(mode);renderLayers();updateControls();};
 $('feature-tool').onclick=()=>openFeatures('deposit');$('starts-tool').onclick=()=>openFeatures('starts');
@@ -2218,6 +2244,11 @@ window.addEventListener('keydown',event => {
   if (event.defaultPrevented || typing(event.target) || loading) return;
   if(event.code==='KeyP'&&tool==='move'&&selected>=0&&!event.ctrlKey&&!event.metaKey&&!stroke&&!moving){event.preventDefault();setPathMode(!pathEditing);return;}
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase()==='z') { event.preventDefault(); moveHistory(event.shiftKey?1:-1); }
+  // Copy, paste, duplicate shapes: only when there is something to copy or paste, so text keeps its own keys.
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && !window.getSelection()?.toString()) {
+    const act={c:copyShapes,v:pasteShapes,d:duplicateShapes}[event.key.toLowerCase()];
+    if (act && !stroke && !moving && act()) { event.preventDefault(); return; }
+  }
   if ((event.key==='Delete' || event.key==='Backspace') && pathEditing && pathPoint>=0 && selected>=0 && !stroke && !moving) {event.preventDefault();$('path-delete').click();return;}
   if(event.key==='Escape'&&!moving&&!stroke){event.preventDefault();if(!editorUI.exitFocus()){if(picking)setPicking(false);else if(pathAdding){pathAdding=false;updateControls();schedule();}else if(drawMode==='add'){drawMode='select';updateControls();schedule();}else if(pathEditing)setPathMode(false);else selectNode(-1);}return;}
   const arrow={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];
