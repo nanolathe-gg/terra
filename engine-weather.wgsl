@@ -115,7 +115,7 @@ struct MF {
 @group(2) @binding(7) var<storage, read_write> mfFlow: array<atomic<u32>>;
 @group(2) @binding(8) var<storage, read> mfIn: array<f32>;
 @group(2) @binding(9) var<storage, read_write> mfOut: array<f32>;
-@group(2) @binding(10) var<storage, read_write> mfField: array<vec4f>;
+@group(2) @binding(10) var<storage, read_write> mfField: array<u32>;
 @group(2) @binding(11) var<storage, read> mfSettled: array<f32>;
 @group(2) @binding(12) var<storage, read> mfBroad: array<f32>;
 @group(2) @binding(13) var<storage, read> mfRunoff: array<f32>;
@@ -253,10 +253,13 @@ fn mfCombineMain(@builtin(global_invocation_id) id: vec3u) {
     let g = i32(mf.grid);
     if (i32(id.x) >= g || i32(id.y) >= g) { return; }
     let i = i32(id.y) * g + i32(id.x);
-    if (mfHeight[i] <= mf.sea + 0.2) { mfField[i] = vec4f(0.0); return; }
+    if (mfHeight[i] <= mf.sea + 0.2) { mfField[i] = 0u; return; }
     let wx = (f32(id.x) + mf.ox) * mf.spacing; let wy = (f32(id.y) + mf.oy) * mf.spacing;
     let clusters = 0.65 * mfNoise(wx / 31.0, wy / 31.0, mf.seed ^ 0x941au) + 0.35 * mfNoise(wx / 11.0, wy / 11.0, mf.seed ^ 0x4b79u);
     let arrival = 1.0 - exp(-(mfSettled[i] * 0.75 + mfBroad[i] * 0.25) * 2.8);
     let soil = (1.0 - mfSource[i]) * 0.22 + mfBasin[i] * 0.6 + mfRunoff[i] / (mfRunoff[i] + 3.0) * 0.26;
-    mfField[i] = vec4f(arrival, clamp(soil * (0.35 + clusters * 1.1), 0.0, 1.0), mfSoft[i], mfSource[i]);
+    // Store the same four bytes the terrain feed puts into its rgba8unorm texture.
+    let channels = vec4f(arrival, soil * (0.35 + clusters * 1.1), mfSoft[i], mfSource[i]);
+    let b = vec4u(floor(clamp(channels, vec4f(0.0), vec4f(1.0)) * 255.0 + 0.5));
+    mfField[i] = b.x | (b.y << 8u) | (b.z << 16u) | (b.w << 24u);
 }
