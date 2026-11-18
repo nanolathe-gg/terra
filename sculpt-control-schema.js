@@ -178,7 +178,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'shineRockSharp','shineRockRough','shineRockScale',
  'absorbDepth','shadowTint',
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
- 'looseSupply','looseSize','boulders','looseKnoll','sand','sandLight','ripple','rippleHeight','wind',
+ 'looseSupply','looseSize','boulders','sand','sandLight','ripple','rippleHeight','wind',
  'crackSeverity','crackSpacing',
  'banding','sandBanding','strata','strataContrast',
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedTint','bedBright','bedContrast','bedRelief','bedCracks','shoreEdge',

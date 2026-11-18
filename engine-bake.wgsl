@@ -383,24 +383,6 @@ fn lsStone(q0: vec2f, st: LsCand) -> vec2f {
     return vec2f(hv, dv * st.r);
 }
 
-// Round 3 (Desert): a knoll in a stone's place. Retail desert-2's plain is strewn with small pale knolls 8-16 px across, a rounded rim
-// lit on the sun's side and shaded on the other round a dark pit, where a stone is a solid lump in the rock's colour. The knoll is ground
-// (its cover 0, so it takes the ground's colour) heaped into a low ring: a mound to its edge, a rim at .7 of its radius standing over
-// it, and a hollow at its centre; its outline wavers as a round stone's does. Same returns as lsStone.
-const KNOLL_HEIGHT = 0.45;   // a knoll's height as a share of a stone's of its size: retail's are low, lit softly
-fn lsKnoll(q0: vec2f, st: LsCand) -> vec2f {
-    let h1 = lsPcg(st.h0 ^ 0x2545f491u); let h2 = lsPcg(h1 ^ 0x9e3779b9u); let h3 = lsPcg(h2 ^ 0x85ebca6bu);
-    let ang = lsU(h1) * TAU;
-    let asp = 0.75 + 0.25 * lsU(h2);
-    let q = turn(-ang) * q0 / st.r;
-    let a = atan2(q.y, q.x);
-    let wob = 1.0 + 0.10 * sin(2.0 * a + lsU(h2) * TAU) + 0.07 * sin(3.0 * a + lsU(h3) * TAU);
-    let l = length(vec2f(q.x, q.y / asp)) / wob;
-    let rim = (l - 0.65) / 0.25;
-    let h = max(0.0, 0.5 * (1.0 - l * l) + 0.5 * exp(-rim * rim) - 0.3 * exp(-l * l / 0.09));
-    return vec2f(h, (l - 1.0) * st.r);
-}
-
 // Card P31: plants as heights the draw lights, the shape families of the one scatter. Each is a jittered-grid scatter (2 x 2 candidates, a pure
 // function of position) admitted by its own hash against the share the plant mask gives at its centre:
 //  - fine tufts (turf and dry grass): star-shaped bumps 1-1.4 px in radius, on a 2.5-px grid;
@@ -539,19 +521,12 @@ fn looseStones(p: vec2f) -> LsOut {
                 st = lsAdmit(k, st);
                 if (!st.ok) { continue; }
                 if (lsSuppressed(k, st)) { continue; }
-                var s = lsStone(p - st.c, st);
-                var knoll = false;
-                if (u.looseKnoll > 0.0) {
-                    knoll = lsU(lsPcg(st.h0 ^ 0x3c6ef372u)) < u.looseKnoll;
-                    if (knoll) { s = lsKnoll(p - st.c, st); }
-                }
+                let s = lsStone(p - st.c, st);
                 if (s.y < edge) { edge = s.y; edgeFines = st.fines; }
-                var hh = s.x * st.r * LS_HEIGHT * (0.75 + 0.5 * lsU(lsPcg(st.h0 ^ 0x51u)));
-                if (knoll) { hh *= KNOLL_HEIGHT; }
+                let hh = s.x * st.r * LS_HEIGHT * (0.75 + 0.5 * lsU(lsPcg(st.h0 ^ 0x51u)));
                 if (hh > best) {
                     best = hh; bestR = st.r;
                     cover = smoothstep(0.0, 0.15, s.x) * select(1.0, 0.55, lsU(lsPcg(st.h0 ^ 0x7f4a7c15u)) < u.stoneMoss);
-                    if (knoll) { cover = 0.0; }
                 }
             }
         }
