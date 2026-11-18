@@ -79,9 +79,12 @@ export function mountEditorUI(){
  // The curve editors at full size: the same element, laid over the map view while the button is pressed.
  // Its header names what the curves belong to, as the card does (#brush-title, #brush-scope-tag), and closes back to the card.
  function setLarge(on){if(app.classList.contains('curves-large')===on)return false;app.classList.toggle('curves-large',on);$('curve-large').setAttribute('aria-pressed',String(on));
-  if(on){$('curve-large-title').textContent='Profile · '+$('brush-title').textContent.replace(/^Editing /,'');$('curve-large-scope').textContent=$('brush-scope-tag').textContent;$('curve-close').focus({preventScroll:true});}
+  if(on){nameLarge();$('curve-close').focus({preventScroll:true});}
   else if(app.contains(document.activeElement)&&document.activeElement.closest('.curve-large-head'))$('curve-large').focus({preventScroll:true});
   return true;}
+ // The header follows the card while open: an Undo or another selection changes what the curves belong to.
+ function nameLarge(){$('curve-large-title').textContent='Profile · '+$('brush-title').textContent.replace(/^Editing /,'');$('curve-large-scope').textContent=$('brush-scope-tag').textContent;}
+ for(const id of ['brush-title','brush-scope-tag'])new MutationObserver(()=>{if(app.classList.contains('curves-large'))nameLarge();}).observe($(id),{childList:true,characterData:true,subtree:true});
  $('curve-large').onclick=()=>setLarge(true);$('curve-close').onclick=()=>setLarge(false);
  new MutationObserver(()=>{if($('section-preview-control').hidden)setLarge(false);}).observe($('section-preview-control'),{attributes:true,attributeFilter:['hidden']});
  // The curves are rows of the card's Profile section: folding it away closes them at full size too.

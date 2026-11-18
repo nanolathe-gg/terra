@@ -1660,23 +1660,33 @@ function flushEval() {
   const from=pendingEval,rect=pendingRect; pendingEval=-1; pendingRect=null;
   evaluate(from,rect);
 }
-// What a history entry changed against the one before it, in the editor's words, for Undo and Redo ("Undo change to Plateau 1").
+// What a history entry changed against the one before it, in the editor's words, for Undo and Redo: "the change to Plateau 1", "deleting
+// Hill 2", "adding Ramp 3", "renaming the map", joined with "and".
 function changeName(prev,next) {
   if (!prev) return '';
-  const same=k => JSON.stringify(prev[k])===JSON.stringify(next[k]),parts=[];
+  const same=k => JSON.stringify(prev[k])===JSON.stringify(next[k]),acts=[],changes=[];
+  const named=(list,i) => list[i]?`${shapeLabel(list[i])} ${i+1}`:'';
   if (!same('nodes')) {
     const a=prev.nodes,b=next.nodes,i=b.findIndex((n,j) => JSON.stringify(n)!==JSON.stringify(a[j]));
-    parts.push(b.length<a.length?'deleted shapes':i>=0?shapeName(i):'the shapes');
+    if (b.length<a.length) acts.push(a.length-b.length>1?`deleting ${a.length-b.length} shapes`:`deleting ${named(a,i<0?b.length:i)||'a shape'}`);
+    else if (b.length>a.length) acts.push(b.length-a.length>1?`adding ${b.length-a.length} shapes`:`adding ${named(b,i<0?a.length:i)||'a shape'}`);
+    else changes.push(i>=0?named(b,i):'the shapes');
   }
-  if (!same('world')||!same('surface')||!same('rock')) parts.push(`${activeWorld().name} (every map in it)`);
-  else if (!same('materials')||!same('rocks')||!same('column')) parts.push('this map’s materials and rock types');
-  if (!same('mapData')) parts.push('features and starts');
-  if (!same('tools')) parts.push('this map’s tools');
-  return parts.join(' and ');
+  if (!same('world')||!same('surface')||!same('rock')) changes.push(`${activeWorld().name} (every map in it)`);
+  else if (!same('materials')||!same('rocks')||!same('column')) changes.push('this map’s materials and rock types');
+  // The map's data: its features and starts (sculpt-features.js serialize), its name, description and game settings (sculpt-export.js serialize).
+  const data=keys => keys.some(k => JSON.stringify(prev.mapData?.[k])!==JSON.stringify(next.mapData?.[k]));
+  if (data(['name'])) acts.push('renaming the map');
+  if (data(['description'])) changes.push('the map’s description');
+  if (data(['settings'])) changes.push('the map’s game settings');
+  if (data(['features','featureSet','fill'])) changes.push('features');
+  if (data(['starts'])) changes.push('start positions');
+  if (!same('tools')) changes.push('this map’s tools');
+  return [...acts,...(changes.length?[`the change to ${changes.join(' and ')}`]:[])].join(' and ');
 }
 function syncHistoryNames() {
   const back=historyIndex>0?history[historyIndex].name:'',ahead=history[historyIndex+1]?.name??'';
-  $('undo').title=`Undo${back?' change to '+back:''} · ⌘ / Ctrl Z`;$('redo').title=`Redo${ahead?' change to '+ahead:''} · ⌘ / Ctrl Shift Z`;
+  $('undo').title=`Undo${back?' '+back:''} · ⌘ / Ctrl Z`;$('redo').title=`Redo${ahead?' '+ahead:''} · ⌘ / Ctrl Shift Z`;
 }
 function checkpoint(mapOnly=false) {
   flushEval(); keepWorldMaterials();
@@ -1695,7 +1705,7 @@ function moveHistory(delta) {
   if(history[next].materials&&JSON.stringify(history[next].materials)!==JSON.stringify(mapMaterials))restoreMaterials(history[next].materials);
   if(history[next].surface&&JSON.stringify(history[next].surface)!==JSON.stringify(config.surface)){setSurfaceList(structuredClone(history[next].surface),JSON.stringify(history[next].surface)!==JSON.stringify(baseSurface));saveWorlds();surfacePanel?.refresh();}
   if(history[next].tools&&JSON.stringify(history[next].tools)!==JSON.stringify(mapTools))restoreMapTools(history[next].tools);
-  const named=history[delta<0?historyIndex:next].name,said=named?`${delta<0?'Undid':'Redid'} the change to ${named}.`:delta<0?'Undid the last change.':'Restored the change.';
+  const named=history[delta<0?historyIndex:next].name,said=named?`${delta<0?'Undid':'Redid'} ${named}.`:delta<0?'Undid the last change.':'Restored the change.';
   if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); pickCard?.refresh(); status(said); return; }
   cancelWeather(); nodes=cloneNodes(history[next].nodes); selected=-1;alsoSelected=[];pathAdding=false;drawMode='select';pathPoint=-1;pathIndex=0; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
   if (JSON.stringify(history[next].column)!==JSON.stringify(columnOverride)) { restoreColumn(history[next].column); syncColumnPanel(); }

@@ -792,7 +792,8 @@ export async function mountMapFeatures(api) {
       if (event.key==='Escape') { stop(event); if (gesture) finishGesture(false); else clearSelection(); return; }
     }
     if (!mode) return;
-    if ((event.metaKey||event.ctrlKey) && event.key.toLowerCase()==='z') { deactivate(); return; }
+    // Undo and Redo (sculpt.js) act with the tool still in hand; a gesture under way is dropped first.
+    if ((event.metaKey||event.ctrlKey) && event.key.toLowerCase()==='z') { if (gesture) finishGesture(false); return; }
     if (event.key==='Escape') { if (doc.querySelector('#map-features-panel details.top-menu[open]')) return;   // the open menu closes first (sculpt-ui.js closeTop)
       stop(event); deactivate(); }
     else if (['Delete','Backspace'].includes(event.key)) { stop(event); if (!event.repeat && mode==='starts') removeStart(selectedStart); }
