@@ -2302,14 +2302,16 @@ function placeParams() {
   if (v) out.view=v.overview?'fit':`${+v.scale.toFixed(3)},${Math.round(v.x+v.width/2)},${Math.round(v.y+v.height/2)}`;
   const section=document.querySelector('#pane-world .world-nav [role=tab][aria-selected=true]');
   out.panel=$('material-editor')?.open?'materials':!$('pane-world').hidden?'world'+(section?'.'+section.id:''):'build';
-  if (selected>=0) out.shape=String(selected);
+  // The selected shape by its place among the shapes: the ground node (Undulation) may be first in one world and absent in the other.
+  if (selected>=0 && nodes[selected]?.kind!=='ground') out.shape=String(nodes.slice(0,selected).filter(n=>n.kind!=='ground').length);
   return out;
 }
 function restorePlace() {
   const view=experiment.get('view'),panel=experiment.get('panel'),shape=Number(experiment.get('shape'));
   if (view==='fit') mapCanvas.zoom('overview');
   else if (view) { const [scale,x,y]=view.split(',').map(Number); if (scale>0&&Number.isFinite(x)&&Number.isFinite(y)) mapCanvas.zoom(scale,{x,y}); }
-  if (experiment.has('shape') && Number.isInteger(shape) && nodes[shape]) selectNode(shape);
+  const at=Number.isInteger(shape)&&shape>=0?nodes.map((n,i)=>[n,i]).filter(([n])=>n.kind!=='ground')[shape]?.[1]:undefined;
+  if (experiment.has('shape') && at!==undefined) selectNode(at);
   // Materials opens once its tab is enabled (it waits for the editor's lock to lift after load).
   if (panel==='materials') { const tab=$('materials-toolbar'); if (!tab.disabled) tab.click(); else { const wait=new MutationObserver(() => { if (!tab.disabled) { wait.disconnect(); tab.click(); } }); wait.observe(tab,{attributes:true,attributeFilter:['disabled']}); setTimeout(() => wait.disconnect(),30000); } }
   else if (panel?.startsWith('world')) { $('tab-world').click(); const section=$(panel.slice(6)); if (section?.closest('#pane-world .world-nav')) section.click(); }
