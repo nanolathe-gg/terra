@@ -253,6 +253,12 @@ export function mountSurfacePanel(host) {
   // the list (a material measured, a World setting changed) keeps it: the new row's legend shows it again (showFact, called by build).
   let sampling = 0, factShown = null;
   const showFact = () => {
+    // A condition removed (its × takes its row away, and no focusout says so) or changed to another fact ends its view: the map goes back to
+    // the layer's stripes, as when the pointer leaves the condition.
+    if (factShown) {
+      const l = host.surface().find(x => layerKey(x) === factShown.key), now = l?.score ? l.score.terms?.[factShown.k]?.fact : l?.where?.[factShown.k]?.fact;
+      if (now !== factShown.fact) { sampling++; if (l && $('surface-show').checked && factShown.row != null) host.preview(factShown.row); factShown = null; }
+    }
     // A rebuild drops the focus from the row (its focusout clears the map's preview): the fact view is asked for again (a no-op when it is on).
     if (factShown) host.preview(factShown.row, factShown.k);
     for (const l of list.querySelectorAll('.surface-fact-view')) {
@@ -268,11 +274,11 @@ export function mountSurfacePanel(host) {
       const ticket = ++sampling, [lo, hi] = SURFACE_FACT_RANGE[fact], holds = layer.score ? 'the score passes' : 'this condition holds';
       const range = `On the map: ${factName(fact)} in gray, dark at ${fmt(lo)} to light at ${fmt(hi)}${SURFACE_FACT_ROOT.includes(fact) ? ` (${fmt(factAtPosition(fact, .5))} at the middle: the low end spread out)` : ''}`;
       const late = () => ['rockShare', 'debrisShare', 'sandShare'].includes(fact) ? [el('p', {className: 'small', textContent: 'The map shows its final share; a layer drawn before that share is complete saw less.'})] : [];
-      factShown = {key, k, row: layerRow, parts: () => [el('p', {className: 'small', textContent: `${range}; magenta where ${holds}. Reading the view once the map has finished drawing…`}), ...late()]};
+      factShown = {key, k, fact, row: layerRow, parts: () => [el('p', {className: 'small', textContent: `${range}; magenta where ${holds}. Reading the view once the map has finished drawing…`}), ...late()]};
       showFact();
       host.factSample?.().then(read => {
         if (ticket !== sampling) return;
-        factShown = {key, k, row: layerRow, parts: () => [el('p', {className: 'small', textContent: read ? `${range}; magenta where ${holds}: ${percent(read.holds / read.total)} of the map in view.` : `${range}. The view could not be read for a histogram.`}),
+        factShown = {key, k, fact, row: layerRow, parts: () => [el('p', {className: 'small', textContent: read ? `${range}; magenta where ${holds}: ${percent(read.holds / read.total)} of the map in view.` : `${range}. The view could not be read for a histogram.`}),
           ...(read ? [histogram(read.levels, fact, drawn)] : []), ...late()]};
         showFact();
       });
