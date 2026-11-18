@@ -37,8 +37,9 @@ then unpacks every mask, while the corner sampler (`sampleField`,
 `sculpt-map.js`) uses only `h`, plus `r` and the weather heights for the
 blend. That is 64 bytes a cell read for 20 used.
 
-- Add an option that copies the leading planes (`h`, `p`, `r`) and the
-  weather, with no masks, and use it for export corners and passability.
+- Add an option that copies the `h` plane, plus the `r` plane and the
+  weather heights when the blend needs them, with no masks, and use it for
+  export corners and passability.
   Sampling stays in JavaScript, so the bytes cannot change.
 - Time an export of a 16 x 16 map before and after. The audit's 993 MiB is
   data moved over a whole export, not memory held; no export time was
